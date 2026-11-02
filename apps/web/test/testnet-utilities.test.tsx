@@ -13,7 +13,7 @@ import type { ChainCtx } from '../src/admin/ui';
 import { Kb } from '../src/design';
 import { adminApi, type BotAdminView } from '../src/site/api';
 import { FaucetPage } from '../src/site/faucet/FaucetPage';
-import { faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
+import { claimErrorText, faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
 import { emblemPerks } from '../src/site/mint/logic';
 import { isLazyPage, loadedPage, resetPages, warmPage } from '../src/site/pages';
 import { navigate } from '../src/site/router';
@@ -101,6 +101,13 @@ describe('the faucet', () => {
     expect(holderMultiple({ amount: 1n, holderAmount: 2n, holderNft: null })).toBeNull();
     expect(watchAssetParams('0xabc', 'tELYMUM', 18)).toEqual({ type: 'ERC20', options: { address: '0xabc', symbol: 'tELYMUM', decimals: 18 } });
     expect(watchAssetParams('0xabc', 'AVERYLONGSYMBOL', 18).options.symbol).toHaveLength(11);
+  });
+
+  it('a failed claim from a wallet with no HYPE says it is the gas, not the contract', () => {
+    expect(claimErrorText({ kind: 'revert' }, true, 'The contract refused the transaction.')).toMatch(/no HYPE for the network fee/);
+    expect(claimErrorText({ kind: 'insufficient-funds' }, false, 'x')).toMatch(/no HYPE/);
+    expect(claimErrorText({ kind: 'revert' }, false, 'The contract refused the transaction.')).toBe('The contract refused the transaction.');
+    expect(claimErrorText({ kind: 'rejected' }, true, 'You cancelled.')).toBe('You cancelled.');
   });
 
   it("takes the server's faucet settings (GET /api/site/faucet)", () => {
