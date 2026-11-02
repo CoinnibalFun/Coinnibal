@@ -501,7 +501,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
           Join the WL
         </LinkButton>
         <WlNote tone="idle" glyph="info">
-          Three small chores get you on the list. <b>About a minute, all told.</b>
+          A few small chores get you on the list. <b>About a minute, all told.</b>
         </WlNote>
       </>
     );
