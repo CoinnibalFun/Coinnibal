@@ -516,6 +516,10 @@ export class GameEngine {
         this.reclaiming = false;
         this.wasArena = m.room.mode === 'arena' ? (m.room.arenaId ?? null) : null;
         this.world.value = m.value ?? null;
+        useUi.setState((s) => ({
+          // lobby notes (a purchase, a copied link) would hang over the HUD: only warnings and errors come along
+          toasts: s.toasts.filter((x) => x.kind === 'error' || x.kind === 'warn'),
+        }));
         useUi.setState({
           screen: 'playing',
           room: m.room,
