@@ -50,7 +50,7 @@ export function settlementFor<T extends { session: string | null }>(settled: T |
 /**
  * "Round over", the landing report: the bell rang while my coin was alive, so the till is paid.
  * After a beat (the bell wave over the frozen world) the report flies out of the worth sticker: the
- * till, the fee on profit and what was paid (an estimate until `settled` arrives, then a PAID
+ * till, the fee (paid at the entry; on profit on the legacy arena) and what was paid (an estimate until `settled` arrives, then a PAID
  * stamp and the transaction link), my place and the room's top 5 at the bell. "Next round"
  * goes back to the lobby with this arena's ticket ready to buy.
  *
