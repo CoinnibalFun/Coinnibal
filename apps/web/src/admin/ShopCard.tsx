@@ -117,12 +117,12 @@ export function ShopCard({ ctx }: { ctx: ChainCtx }) {
       />
       {draft.sink === 'treasury' && (
         <label className="ad-field">
-          <span className="ad-field__label mono">Treasury wallet (empty: the owner {view.owner ?? 'not set'})</span>
-          <input className="ad-input mono" value={draft.treasury ?? ''} placeholder={view.owner ?? '0x…'} onChange={(e) => setDraft({ ...draft, treasury: e.target.value.trim() || null })} />
+          <span className="ad-field__label mono">Treasury wallet (empty: the owner <span className="ad-hex">{view.owner ?? 'not set'}</span>)</span>
+          <input className="ad-input mono ad-hex" value={draft.treasury ?? ''} placeholder={view.owner ?? '0x…'} onChange={(e) => setDraft({ ...draft, treasury: e.target.value.trim() || null })} />
         </label>
       )}
       <p className="ad-note mono" data-testid="shop-sink-now">
-        Sink now: {view.sink ?? 'none (set a treasury wallet)'}
+        Sink now: <span className="ad-hex">{view.sink ?? 'none (set a treasury wallet)'}</span>
       </p>
       <div className="ad-tablewrap">
         <table className="ad-table" data-testid="shop-table">

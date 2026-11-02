@@ -1,6 +1,8 @@
 import { setFeeBpsCall } from '@elymum/sdk';
 import type { StatusSnapshot } from '@elymum/sdk/ops';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminPanel } from '../src/admin/AdminPanel';
@@ -500,5 +502,18 @@ describe('the chain panel', () => {
     ui(<AdminPanel net={resolveNetwork(null)} api={null} tab="network" go={() => {}} reloadNet={async () => {}} />);
     expect(screen.getByText('SIGNING BLOCKED.')).toBeTruthy();
     expect(screen.queryByTestId('mainnet-banner')).toBeNull();
+  });
+});
+
+describe('addresses keep their case', () => {
+  it('the capitalised mono style is undone for addresses (custom rooms treasury, shop sink, avatars)', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/admin/admin.css'), 'utf8');
+    expect(css).toMatch(/\.ad-hex,\s*\.ad-hex::placeholder\s*\{\s*text-transform: none;/);
+    for (const f of ['src/admin/CustomRoomsCard.tsx', 'src/admin/ShopCard.tsx', 'src/admin/site/AvatarsTab.tsx']) {
+      const src = readFileSync(resolve(process.cwd(), f), 'utf8');
+      // every address-bearing mono element carries ad-hex
+      expect(src).toMatch(/ad-hex/);
+      expect(src).not.toMatch(/className="ad-input mono"/);
+    }
   });
 });

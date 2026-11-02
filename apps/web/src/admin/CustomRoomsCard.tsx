@@ -123,7 +123,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
         <label className="ad-field">
           <span className="ad-field__label mono">Treasury (empty: owner)</span>
           <input
-            className="ad-input mono"
+            className="ad-input mono ad-hex"
             value={draft.treasury ?? ''}
             placeholder={view.treasury ?? '0x…'}
             onChange={(e) => setDraft({ ...draft, treasury: e.target.value.trim() || null })}
@@ -133,7 +133,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
         </label>
       </div>
       <p className="ad-note">
-        Fees go to <span className="mono">{view.treasury ?? 'nobody yet (set ADMIN_WALLETS or a treasury)'}</span>.
+        Fees go to <span className="mono ad-hex">{view.treasury ?? 'nobody yet (set ADMIN_WALLETS or a treasury)'}</span>.
       </p>
       <SwitchRow
         label="NFT holder perk"
@@ -183,7 +183,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
                 <tr key={r.code}>
                   <td className="mono">{r.code}</td>
                   <td>{r.name}</td>
-                  <td className="mono">{`${r.creator.slice(0, 6)}…${r.creator.slice(-4)}`}</td>
+                  <td className="mono ad-hex">{`${r.creator.slice(0, 6)}…${r.creator.slice(-4)}`}</td>
                   <td className="num">
                     {r.players}/{r.maxPlayers} · {r.bots} bots
                   </td>
