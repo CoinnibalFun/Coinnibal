@@ -647,7 +647,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
           <div className="mt-card__right">{right}</div>
         </motion.div>
         {/* under the lede on wide screens, under the mint card on phones (the card comes first there) */}
-        <EmblemPerks perks={emblemPerks(isTestnetChain(chain), { feeBps: chain?.feeBps ?? null })} />
+        <EmblemPerks perks={emblemPerks(isTestnetChain(chain), { feeBps: chain?.feeBps ?? null, gameAccess: state.gameAccess })} />
       </div>
     </NightPlate>
   );
