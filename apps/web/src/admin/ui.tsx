@@ -23,6 +23,8 @@ export interface ChainCtx {
   open: (plan: Plan) => void;
   /** The server's registered contracts (`GET /api/site/contracts`; null while loading, absent in tests). */
   registry?: ContractsRegistry | null;
+  /** Tells the panel that a server setting changed (game access): its summary line re-reads them. */
+  settingsChanged?: () => void;
 }
 
 /**

@@ -83,6 +83,7 @@ function StartStopCard({ ctx }: { ctx: ChainCtx }) {
       const r = await ctx.api.saveSettings({ gameAccess: m });
       setAccess(r.settings.gameAccess);
       setEnv(r.gameAccessEnv ?? null);
+      ctx.settingsChanged?.();
     } catch (e) {
       setErr((e as Error).message);
     } finally {
