@@ -146,6 +146,11 @@ describe('what the emblem does', () => {
     expect(t[0].note).toMatch(/testnet the ring is open to everyone/);
     expect(t[1].title).toBe('3% fee instead of 5%');
   });
+  it('on testnet: says "open to everyone" only while the server lets everyone in', () => {
+    expect(emblemPerks(true, { gameAccess: 'public' })[0].note).toMatch(/open to everyone/);
+    expect(emblemPerks(true, { gameAccess: 'holders' })[0].note).toMatch(/open to holders only/);
+    expect(emblemPerks(true, { gameAccess: 'admins' })[0].note).not.toMatch(/open to everyone/);
+  });
   it('on mainnet: no testnet lines', () => {
     expect(emblemPerks(false).map((p) => p.id)).toEqual(['access', 'fee', 'isles', 'skin']);
     expect(emblemPerks(false, { holderBps: 250, feeBps: 500 })[1].title).toBe('2.5% fee instead of 5%');
