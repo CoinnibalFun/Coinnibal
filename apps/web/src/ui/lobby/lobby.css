@@ -969,6 +969,13 @@
 .kl-root.is-phone .kl-mast__brand {
   gap: 7px;
 }
+/* the narrowest phones (360 px): coin + wordmark + shop + "Connect wallet" do not fit in one row
+   and the wordmark slid under the shop button. The coin mark alone stays the home link. */
+@media (max-width: 379px) {
+  .kl-root.is-phone .kl-mast__word {
+    display: none;
+  }
+}
 .kl-root.is-phone .kl-mast__right {
   gap: 8px;
 }
@@ -1003,7 +1010,11 @@
   box-shadow: var(--sh-3);
 }
 .kl-root.is-phone .kl-board__title {
-  font-size: 36px;
+  /* 36 px pushed the bell badge ("joins closed") past the board and the screen on 360 px phones */
+  font-size: clamp(26px, 8.4vw, 36px);
+}
+.kl-board__titles {
+  min-width: 0;
 }
 .kl-root.is-phone .kl-bell {
   padding: 7px 10px 6px;
