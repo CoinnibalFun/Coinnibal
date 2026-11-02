@@ -351,7 +351,7 @@ describe('boosts: buying', () => {
     expect(() => applyShopSettings(SHOP_DEFAULTS, { arenaUsesPerRound: 99 })).toThrow(ShopSettingsError);
     expect(() => applyShopSettings(SHOP_DEFAULTS, { surprise: 1 })).toThrow(ShopSettingsError);
     expect(applyShopSettings(SHOP_DEFAULTS, { prices: { speed: '12.5' }, arenaUsesPerRound: 1, kinds: { magnet: false } })).toMatchObject({
-      prices: { speed: '12.5', magnet: '300' },
+      prices: { speed: '12.5', magnet: SHOP_DEFAULTS.prices.magnet },
       arenaUsesPerRound: 1,
       kinds: { magnet: false, shock: true },
     });
