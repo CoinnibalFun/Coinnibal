@@ -363,7 +363,8 @@ describe('Mint tab', () => {
 
   it('"Open mint" with "activate the game for holders" (checked) also saves gameAccess = holders', async () => {
     const saveSettings = vi.fn(async () => ({ settings: {} }));
-    const ctx = mintCtx({ saveSettings } as never);
+    const mintRefresh = vi.fn(async () => ({ refreshed: true }));
+    const ctx = mintCtx({ saveSettings, mintRefresh } as never);
     const settingsChanged = vi.fn();
     ctx.settingsChanged = settingsChanged;
     ui(<MintTab ctx={ctx} />);
@@ -375,8 +376,9 @@ describe('Mint tab', () => {
     expect(p.ownerOf?.toLowerCase()).toBe(NFT.toLowerCase());
     await p.onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: null });
     expect(saveSettings).toHaveBeenCalledWith({ gameAccess: 'holders' });
-    // the panel's summary line re-reads the settings
+    // the panel's summary line re-reads the settings; the server re-reads the NFT for the public mint page
     expect(settingsChanged).toHaveBeenCalled();
+    expect(mintRefresh).toHaveBeenCalledTimes(1);
   });
 
   it('never narrows a public game to holders, and leaves GAME_ACCESS alone', async () => {

@@ -73,9 +73,26 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
       />
     );
 
-  /** A plan on the NFT: owner-checked, re-reads the status after. */
+  /**
+   * A plan on the NFT: owner-checked, re-reads the status after, and has the server re-read the NFT
+   * (the public mint page shows the new phase, root or price at once instead of a cached state).
+   */
   const open = (title: string, call: Plan['call'], extra: Partial<Plan> = {}) =>
-    ctx.open({ title, contract: 'ElymumNFT', call, ownerOf: nft, owner: nftOwner, onDone: () => ctx.refresh(), ...extra });
+    ctx.open({
+      title,
+      contract: 'ElymumNFT',
+      call,
+      ownerOf: nft,
+      owner: nftOwner,
+      ...extra,
+      onDone: async (r) => {
+        try {
+          await (extra.onDone ?? (() => ctx.refresh()))(r);
+        } finally {
+          void ctx.api?.mintRefresh?.().catch(() => {});
+        }
+      },
+    });
   const balance = ctx.status?.nft?.balance ?? 0n;
   const usdOf = (wei: bigint) => (hypeUsd !== null ? (Number(wei) / 1e18) * hypeUsd : null);
 
