@@ -214,7 +214,13 @@ export async function createApp(
       stakedBots = new TestnetBotSource({
         chain: () => {
           const st = chain.status();
-          return { chainId: st.chainId, stakeEnabled: chain.stakeEnabled, arena: st.arenaAddress, token: st.token ? { address: st.token.address, decimals: st.token.decimals } : null };
+          return {
+            chainId: st.chainId,
+            stakeEnabled: chain.stakeEnabled,
+            arena: st.arenaAddress,
+            token: st.token ? { address: st.token.address, decimals: st.token.decimals } : null,
+            feeModel: st.feeModel ?? null,
+          };
         },
         client: () => chain.evm?.() ?? null,
         serverKey: key,
