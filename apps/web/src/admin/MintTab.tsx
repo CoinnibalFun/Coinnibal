@@ -18,7 +18,7 @@ import {
   type MintPhaseName,
 } from '@elymum/sdk';
 import { parseAddressInput, parseHypeInput, parseIntInput } from '@elymum/sdk/ops';
-import type { AllowlistStatus, HolderWlView, MintPriceQuote } from '@elymum/shared';
+import type { AllowlistStatus, GameAccess, HolderWlView, MintPriceQuote } from '@elymum/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { formatEther, type Address, type Hex } from 'viem';
 import { ArcGauge, HypeAmount, Icon, type CoinMood } from '../design';
@@ -166,11 +166,34 @@ const PHASE_COPY: Record<MintPhaseName, { title: string; line: string; mood: Coi
   public: { title: 'Public', line: 'Anyone with a dollar of HYPE.', mood: 'happy' },
 };
 
+/**
+ * Whether the phase switch may also open the game to holders: only while the game is still closed to
+ * everyone but the admins (never narrows "public" down to "holders"), and not when GAME_ACCESS pins it.
+ */
+export function offerHolderAccess(access: { settings: { gameAccess: GameAccess }; gameAccessEnv?: GameAccess | null } | null): boolean {
+  return !!access && !access.gameAccessEnv && access.settings.gameAccess === 'admins';
+}
+
 function PhaseCard({ ctx, current, open }: { ctx: ChainCtx; current: MintPhaseName; open: OpenFn }) {
   const [phase, setPhase] = useState<MintPhaseName>(current === 'closed' ? 'allowlist' : current);
   const [activate, setActivate] = useState(true);
+  // who may play now: the holders switch is offered only while the game is admins-only
+  const [access, setAccess] = useState<{ settings: { gameAccess: GameAccess }; gameAccessEnv?: GameAccess | null } | null>(null);
+  useEffect(() => {
+    if (!ctx.api) return;
+    let live = true;
+    ctx.api.settings().then(
+      (r) => live && setAccess(r),
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [ctx.api, current]);
   const nft = ctx.net.nftAddress!;
   const opening = phase !== 'closed' && current === 'closed';
+  const offer = phase !== 'closed' && offerHolderAccess(access);
+  const withAccess = offer && activate;
   return (
     <Card title="Start / stop the mint" id="mint-phase" kicker={`Now: ${current}`} lede="Closed → Allowlist → Public. Pick one, then preview the switch. Opening the mint can open the game to holders in the same go.">
       <div className="ad-switchrow" role="radiogroup" aria-label="Mint phase">
@@ -186,7 +209,7 @@ function PhaseCard({ ctx, current, open }: { ctx: ChainCtx; current: MintPhaseNa
           ))}
         </div>
       </div>
-      {phase !== 'closed' && (
+      {offer && (
         <label className="ad-check" data-testid="mint-activate">
           <input type="checkbox" checked={activate} onChange={() => setActivate(!activate)} />
           <span>
@@ -198,15 +221,16 @@ function PhaseCard({ ctx, current, open }: { ctx: ChainCtx; current: MintPhaseNa
       <div className="ad-actions">
         <Btn
           sun
-          disabled={phase === current && !(phase !== 'closed' && activate)}
+          disabled={phase === current}
           testId="mint-set-phase"
           onClick={() =>
             open(opening ? `Open the mint (${phase})` : `Set the mint phase to ${phase}`, setPhaseCall(nft, phase), {
-              note: phase !== 'closed' && activate ? 'After the receipt, the game access setting is saved as “NFT holders”.' : undefined,
+              note: withAccess ? 'After the receipt, the game access setting is saved as “NFT holders”.' : undefined,
               onDone: async () => {
-                if (phase !== 'closed' && activate) {
+                if (withAccess) {
                   if (!ctx.api) throw new Error('The phase is set, but the game access was not saved: sign in as the admin and save it in Settings.');
                   await ctx.api.saveSettings({ gameAccess: 'holders' });
+                  ctx.settingsChanged?.();
                 }
                 await ctx.refresh();
               },

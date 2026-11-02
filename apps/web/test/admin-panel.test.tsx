@@ -354,9 +354,9 @@ describe('Setup with the contracts registered', () => {
 
 describe('Mint tab', () => {
   const state = { phase: 0, phaseName: 'closed', price: 30_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'0'.repeat(64)}`, maxSupply: 5000, totalSupply: 0, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
-  const mintCtx = (api: Partial<AdminApi>) =>
+  const mintCtx = (api: Partial<AdminApi>, gameAccess = 'admins', gameAccessEnv: string | null = null) =>
     ctxOf({
-      api: { allowlist: vi.fn(async () => ({ snapshot: null, diff: { added: [], removed: [] }, onchainRoot: null, published: false })), mintPrice: vi.fn(async () => ({ hypeUsd: 33.3, targetUsdCents: 100, priceWei: '30000000000000000', fetchedAt: 1 })), ...api } as unknown as AdminApi,
+      api: { settings: vi.fn(async () => ({ settings: { gameAccess }, gameAccessEnv })), allowlist: vi.fn(async () => ({ snapshot: null, diff: { added: [], removed: [] }, onchainRoot: null, published: false })), mintPrice: vi.fn(async () => ({ hypeUsd: 33.3, targetUsdCents: 100, priceWei: '30000000000000000', fetchedAt: 1 })), ...api } as unknown as AdminApi,
       net: resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT })),
       status: { nft: { address: NFT, code: 'ok', balance: 0n, state } } as unknown as StatusSnapshot,
     });
@@ -364,8 +364,10 @@ describe('Mint tab', () => {
   it('"Open mint" with "activate the game for holders" (checked) also saves gameAccess = holders', async () => {
     const saveSettings = vi.fn(async () => ({ settings: {} }));
     const ctx = mintCtx({ saveSettings } as never);
+    const settingsChanged = vi.fn();
+    ctx.settingsChanged = settingsChanged;
     ui(<MintTab ctx={ctx} />);
-    expect((within(screen.getByTestId('mint-activate')).getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+    expect((within(await screen.findByTestId('mint-activate')).getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
     act(() => screen.getByTestId('mint-set-phase').click());
     const p = ctx.plans[0];
     expect(p.title).toBe('Open the mint (allowlist)');
@@ -373,13 +375,42 @@ describe('Mint tab', () => {
     expect(p.ownerOf?.toLowerCase()).toBe(NFT.toLowerCase());
     await p.onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: null });
     expect(saveSettings).toHaveBeenCalledWith({ gameAccess: 'holders' });
+    // the panel's summary line re-reads the settings
+    expect(settingsChanged).toHaveBeenCalled();
+  });
+
+  it('never narrows a public game to holders, and leaves GAME_ACCESS alone', async () => {
+    for (const [access, env] of [
+      ['public', null],
+      ['holders', null],
+      ['admins', 'public'],
+    ] as const) {
+      const saveSettings = vi.fn();
+      const ctx = mintCtx({ saveSettings } as never, access, env);
+      const view = ui(<MintTab ctx={ctx} />);
+      await settle();
+      expect(screen.queryByTestId('mint-activate')).toBeNull();
+      act(() => screen.getByTestId('mint-set-phase').click());
+      expect(ctx.plans[0].note).toBeUndefined();
+      await ctx.plans[0].onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: null });
+      expect(saveSettings).not.toHaveBeenCalled();
+      view.unmount();
+    }
+  });
+
+  it('the live phase cannot be re-sent (no transaction that changes nothing)', async () => {
+    const ctx = mintCtx({});
+    (ctx.status as unknown as { nft: { state: { phaseName: string; phase: number } } }).nft.state = { ...state, phase: 2, phaseName: 'public' };
+    ui(<MintTab ctx={ctx} />);
+    await settle();
+    expect((screen.getByTestId('mint-set-phase') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('unchecking it leaves the game access alone', async () => {
     const saveSettings = vi.fn();
     const ctx = mintCtx({ saveSettings } as never);
     ui(<MintTab ctx={ctx} />);
-    fireEvent.click(within(screen.getByTestId('mint-activate')).getByRole('checkbox'));
+    fireEvent.click(within(await screen.findByTestId('mint-activate')).getByRole('checkbox'));
     act(() => screen.getByTestId('mint-set-phase').click());
     await ctx.plans[0].onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: null });
     expect(saveSettings).not.toHaveBeenCalled();
@@ -437,6 +468,23 @@ describe('Mint and Game: only the owner decisions up front', () => {
     expect((screen.getByTestId('arena-advanced') as HTMLDetailsElement).open).toBe(false);
     expect((screen.getByLabelText('Fee wallet') as HTMLInputElement).value).toBe(ALICE);
     expect((screen.getByLabelText('To') as HTMLInputElement).value).toBe(ALICE);
+  });
+});
+
+describe('Game: who may play', () => {
+  it('saving the switch tells the panel, so its summary line is not stale', async () => {
+    const saveSettings = vi.fn(async () => ({ settings: { gameAccess: 'public' }, gameAccessEnv: null }));
+    const known: Record<string, unknown> = { settings: vi.fn(async () => ({ settings: { gameAccess: 'admins' }, gameAccessEnv: null })), saveSettings };
+    // every other card's call fails quietly (they show their own error)
+    const api = new Proxy(known, { get: (t, k: string) => t[k] ?? (async () => Promise.reject(new Error('not in this test'))) }) as unknown as AdminApi;
+    const settingsChanged = vi.fn();
+    ui(<GameTab ctx={ctxOf({ api, settingsChanged })} />);
+    await settle();
+    const pub = within(screen.getByTestId('game-access')).getByText('Public');
+    act(() => pub.click());
+    await settle();
+    expect(saveSettings).toHaveBeenCalledWith({ gameAccess: 'public' });
+    expect(settingsChanged).toHaveBeenCalledTimes(1);
   });
 });
 
