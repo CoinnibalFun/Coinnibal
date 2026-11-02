@@ -657,6 +657,7 @@ export const en = {
   'pf.totalScore': 'Total score',
   'pf.coin': 'Your coin',
   'pf.coinNote': 'Basic coins are free for everyone.',
+  'pf.coinNoteHolder': 'Basic coins are free for everyone. The Emblem frames your picture too: wear both.',
   'pf.pic': 'Your picture',
   'pf.picAdd': 'Add',
   'pf.picGuest': 'Connect a wallet to play with your own picture. Basic coins need none.',
