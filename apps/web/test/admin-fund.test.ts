@@ -22,3 +22,16 @@ describe('fund the server key', () => {
     expect(sendTransaction).toHaveBeenCalledWith(expect.objectContaining({ to: KEY, value: 10n ** 18n, account: ME }));
   });
 });
+
+describe('the server key balance after funding', () => {
+  it("shows this page's own chain read first: the server's figure lags until its next balance check", async () => {
+    const { serverKeyBalance } = await import('../src/admin/NetworkTab');
+    const info = { serverBalanceWei: (10n ** 17n).toString(), low: false };
+    // 0.1 HYPE on the server's last check; 1.1 HYPE read just now after sending 1 HYPE
+    expect(serverKeyBalance(info, 11n * 10n ** 17n)).toEqual({ wei: 11n * 10n ** 17n, low: false });
+    expect(serverKeyBalance(info, null)).toEqual({ wei: 10n ** 17n, low: false });
+    expect(serverKeyBalance({ serverBalanceWei: '0', low: true }, 10n ** 18n).low).toBe(false);
+    expect(serverKeyBalance({ serverBalanceWei: null, low: true }, null)).toEqual({ wei: null, low: true });
+    expect(serverKeyBalance(null, 1n).low).toBe(true);
+  });
+});
