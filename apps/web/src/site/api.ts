@@ -90,6 +90,9 @@ const FALLBACK: Partial<Record<SiteApiError['code'], string>> = {
   price_unavailable: 'The HYPE price feed is unavailable right now.',
 };
 
+/** A 5xx with no JSON error: the proxy answered for a server that is down or waking up. */
+export const SERVER_DOWN = 'The game server is not answering right now. Try again in a moment.';
+
 export interface RequestOpts {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
@@ -115,6 +118,9 @@ async function send(path: string, { method = 'GET', body, token, signal }: Reque
     } catch {
       /* not JSON */
     }
+    // a 5xx without the server's JSON error is the proxy in front of it (the server is down, restarting or
+    // waking up): not "Something in the form is not right"
+    if (!data.error && res.status >= 500) throw new SiteApiError(res.status, 'network', SERVER_DOWN);
     const code = data.error ?? (res.status === 429 ? 'rate_limited' : res.status === 401 ? 'unauthorized' : 'bad_request');
     throw new SiteApiError(res.status, code, data.message || FALLBACK[code] || 'Something went wrong.', data.field);
   }
