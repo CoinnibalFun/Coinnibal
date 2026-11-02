@@ -2,7 +2,7 @@ import { CUSTOM_HOLDER_PERKS, CUSTOM_SETTINGS_LIMITS, type CustomHolderPerk, typ
 import { useCallback, useEffect, useState } from 'react';
 import { SiteApiError, type CustomRoomsAdminView } from '../site/api';
 import { SwitchRow } from './GameTab';
-import { Btn, Card, FormError, type ChainCtx } from './ui';
+import { Btn, Card, FormError, saveErrorText, type ChainCtx } from './ui';
 
 const PERK_LABEL: Record<CustomHolderPerk, { label: string; note: string }> = {
   discount: { label: 'Discount', note: 'NFT holders pay less (the percent below).' },
@@ -69,8 +69,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
       setDraft({ ...v.settings });
       setMsg('Saved: new rooms use it at once.');
     } catch (e) {
-      const f = e instanceof SiteApiError && e.field ? ` (${e.field})` : '';
-      setErr(`${(e as Error).message}${f}`);
+      setErr(saveErrorText(e));
     } finally {
       setBusy(false);
     }
