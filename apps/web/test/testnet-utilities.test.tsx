@@ -149,6 +149,9 @@ describe('what the emblem does', () => {
   it('on mainnet: no testnet lines', () => {
     expect(emblemPerks(false).map((p) => p.id)).toEqual(['access', 'fee', 'isles', 'skin']);
     expect(emblemPerks(false, { holderBps: 250, feeBps: 500 })[1].title).toBe('2.5% fee instead of 5%');
+    expect(emblemPerks(true)[1].note).toMatch(/every entry fee/);
+    expect(emblemPerks(true, { feeModel: 'profit' })[1].note).toMatch(/profit only/);
+    expect(emblemPerks(true, { feeModel: 'profit' })[1].note).not.toMatch(/entry fee/);
   });
 });
 
