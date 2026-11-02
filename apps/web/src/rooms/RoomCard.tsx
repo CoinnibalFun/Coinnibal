@@ -58,7 +58,7 @@ export function RoomCard() {
   };
 
   return (
-    <section className="cr-card" aria-labelledby="cr-card-h" data-testid="room-card">
+    <section className="cr-card kb-island" aria-labelledby="cr-card-h" data-testid="room-card">
       <CoinCharacter paint="foam" mood="happy" size={56} bob />
       <div>
         <span className="cr-card__kicker mono">{t('cr.card.kicker')}</span>
