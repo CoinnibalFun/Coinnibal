@@ -303,6 +303,8 @@
   line-height: 1.15;
 }
 .kl-wallet__top {
+  /* a checksummed address keeps its case (the mono style capitalises) */
+  text-transform: none;
   font-size: 11px;
   color: #6b655a;
 }

@@ -226,6 +226,8 @@ export function adminApi(token: string) {
     /** `POST /api/admin/mint/allowlist`: builds a snapshot of the allowlist. */
     buildAllowlist: () => request<AllowlistBuildResponse>('/api/admin/mint/allowlist', { method: 'POST', token, body: {} }),
     allowlist: () => request<AllowlistStatus>('/api/admin/mint/allowlist', { token }),
+    /** `POST /api/admin/mint/refresh`: the server re-reads the NFT now (after an owner transaction), for the public mint page. */
+    mintRefresh: () => request<{ refreshed: boolean }>('/api/admin/mint/refresh', { method: 'POST', token, body: {} }),
     /** `GET /api/admin/mint/price`: HYPE/USD and the $1 price in wei. */
     mintPrice: () => request<MintPriceQuote>('/api/admin/mint/price', { token }),
     tasks: () => request<{ tasks: WlTask[] }>('/api/admin/tasks', { token }).then((r) => r.tasks),
