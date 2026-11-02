@@ -272,3 +272,57 @@ export function Mark({ state }: { state: 'ok' | 'todo' | 'unknown' | 'active' })
     </span>
   );
 }
+
+/** Words for the setting keys the server names in a refused save (bots, power-ups, custom rooms). */
+const FIELD_WORDS: Record<string, string> = {
+  kinds: '',
+  practiceRookie: 'Practice · rookie',
+  practicePro: 'Practice · pro',
+  arena: 'Arenas',
+  private: 'Private rooms',
+  enabled: 'on',
+  cap: 'cap',
+  min: 'min',
+  target: 'target',
+  massCap: 'mass cap',
+  mix: 'difficulty mix',
+  testnet: 'Staked bots',
+  stakedPerArena: 'per arena',
+  stakedBots: 'staked bots',
+  bankroll: 'bankroll',
+  gasHype: 'gas per bot',
+  arenas: 'arena',
+  prices: 'Pack price',
+  magnet: 'Magnet',
+  shock: 'Shockwave',
+  speed: 'Speed burst',
+  packSize: 'Charges per pack',
+  holderDiscountPct: 'Holder discount %',
+  arenaUsesPerRound: 'Arena uses per round',
+  holderExtraArenaUses: 'Extra arena uses for holders',
+  sink: 'Payments go to',
+  treasury: 'Treasury',
+  priceHype: 'Price (HYPE)',
+  maxLive: 'Live rooms (server)',
+  maxPerWallet: 'Per wallet',
+  holderPerk: 'NFT holder perk',
+};
+
+/** `kinds.practiceRookie.massCap` → "Practice · rookie mass cap" (unknown keys as plain words). */
+export function fieldLabel(field: string): string {
+  const words = field
+    .split('.')
+    .map((k) => (k in FIELD_WORDS ? FIELD_WORDS[k] : /^\d+$/.test(k) ? `#${k}` : k.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()))
+    .filter(Boolean)
+    .join(' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** A refused settings save in the panel's words: the server's key path becomes the field's label (no raw "prices.magnet"). */
+export function saveErrorText(e: unknown): string {
+  const msg = (e as Error)?.message ?? String(e);
+  const field = (e as { field?: string | null })?.field ?? null;
+  if (!field) return msg;
+  const label = fieldLabel(field);
+  return msg.startsWith(field) ? `${label}${msg.slice(field.length)}` : `${label}: ${msg}`;
+}

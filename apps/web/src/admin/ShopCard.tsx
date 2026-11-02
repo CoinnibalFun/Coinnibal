@@ -2,7 +2,7 @@ import { BOOST_KINDS, BURN_ADDRESS, SHOP_LIMITS, formatToken, type BoostKind, ty
 import { useCallback, useEffect, useState } from 'react';
 import { SiteApiError, type ShopAdminView } from '../site/api';
 import { SwitchRow } from './GameTab';
-import { Btn, Card, FormError, type ChainCtx } from './ui';
+import { Btn, Card, FormError, saveErrorText, type ChainCtx } from './ui';
 
 const KIND_LABEL: Record<BoostKind, string> = { magnet: 'Magnet', shock: 'Shockwave', speed: 'Speed burst' };
 
@@ -81,8 +81,7 @@ export function ShopCard({ ctx }: { ctx: ChainCtx }) {
       setDraft(structuredClone(v.settings));
       setMsg('Shop saved: prices and limits apply at once.');
     } catch (e) {
-      const f = e instanceof SiteApiError && e.field ? ` (${e.field})` : '';
-      setErr(`${(e as Error).message}${f}`);
+      setErr(saveErrorText(e));
     } finally {
       setBusy(false);
     }
