@@ -12,6 +12,7 @@ import type {
 } from '@elymum/shared';
 import { create } from 'zustand';
 import { AUDIO_DEFAULTS } from './audio/mixer';
+import { DEFAULT_TRACK, musicChoice, type MusicChoice } from './audio/tracks';
 
 export type Screen = 'lobby' | 'playing' | 'dead' | 'spectating' | 'roundover';
 export type Quality = 'high' | 'low';
@@ -29,7 +30,10 @@ export interface Settings {
   volume: number;
   /** Per-bus levels and switches (audio/mixer.ts). */
   music: number;
+  /** The music switch: off is "No music". */
   musicOn: boolean;
+  /** The soundtrack (audio/tracks.ts); `custom` is a file from the player's device. */
+  musicTrack: MusicChoice;
   sfx: number;
   sfxOn: boolean;
   voice: number;
@@ -170,6 +174,19 @@ export interface UiState {
   /** The server refused a room entry with `game_closed`: the game is admin-only and this session is no admin. */
   gameClosed: boolean;
   settings: Settings;
+  /** "Your own music" this session: the file's name and its blob URL (audio/custom.ts); never uploaded. */
+  customMusic: CustomMusic | null;
+  /** The last file picked was not audio (or too big). */
+  customMusicRefused: boolean;
+}
+
+export interface CustomMusic {
+  name: string;
+  url: string;
+  /** A copy is kept in this browser (IndexedDB) for the next visit. */
+  saved: boolean;
+  /** The browser would not play it. */
+  error: boolean;
 }
 
 const SETTINGS_KEY = 'elymum.settings.v1';
@@ -185,6 +202,7 @@ function loadSettings(): Settings {
     volume: AUDIO_DEFAULTS.master,
     music: AUDIO_DEFAULTS.music,
     musicOn: true,
+    musicTrack: DEFAULT_TRACK,
     sfx: AUDIO_DEFAULTS.sfx,
     sfxOn: true,
     voice: AUDIO_DEFAULTS.voice,
@@ -201,7 +219,9 @@ function loadSettings(): Settings {
     if (raw) {
       // retired fields: `lang` (the interface is English only) and `passSkin` (the old pass is gone)
       const { lang: _lang, passSkin: _passSkin, ...saved } = JSON.parse(raw) as Partial<Settings> & { lang?: unknown; passSkin?: unknown };
-      return { ...defaults, ...saved };
+      const out = { ...defaults, ...saved };
+      out.musicTrack = musicChoice(out.musicTrack);
+      return out;
     }
   } catch {
     /* storage unavailable */
@@ -246,6 +266,8 @@ export const useUi = create<UiState>(() => ({
   auth: null,
   gameClosed: false,
   settings: loadSettings(),
+  customMusic: null,
+  customMusicRefused: false,
 }));
 
 export function updateSettings(patch: Partial<Settings>): void {
