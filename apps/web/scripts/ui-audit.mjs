@@ -183,14 +183,16 @@ async function stressPlay(page, { token = 'max', hype = 'huge' } = {}) {
         E.__auditWrapped = true;
         const orig = E.onMessage.bind(E);
         const long = (i) => (i % 2 ? LONG_M : LONG);
+        // flags by the names: drawn ones, a code badge (TV) and none
+        const flag = (i) => ['US', 'GB', 'TV', undefined, 'BR', 'JP'][i % 6];
         E.onMessage = (m) => {
           try {
             if (m.t === 'lb') {
-              m = { ...m, top: m.top.map((e, i) => ({ ...e, name: long(i), score: 99_999 - i * 997, value: e.value !== undefined ? 99_999_999_999_000_000 - i * 1e12 : undefined })), players: Math.max(m.players, 50) };
+              m = { ...m, top: m.top.map((e, i) => ({ ...e, name: long(i), country: flag(i), score: 99_999 - i * 997, value: e.value !== undefined ? 99_999_999_999_000_000 - i * 1e12 : undefined })), players: Math.max(m.players, 50) };
               if (m.me) m.me = { ...m.me, rank: 50, score: 99_999, value: m.me.value !== undefined ? 999_999_999_999_123_456 : undefined };
             } else if (m.t === 'standings') {
               const rows = [];
-              for (let i = 0; i < 50; i++) rows.push({ pid: 1000 + i, name: long(i), skin: i % 8, score: 99_999 - i * 1999, value: 99_999_999_999_000_000 - i * 1e15, isBot: i % 3 === 0, verified: i % 4 === 1, holder: i % 5 === 2 });
+              for (let i = 0; i < 50; i++) rows.push({ pid: 1000 + i, name: long(i), country: flag(i), skin: i % 8, score: 99_999 - i * 1999, value: 99_999_999_999_000_000 - i * 1e15, isBot: i % 3 === 0, verified: i % 4 === 1, holder: i % 5 === 2 });
               if (m.rows[0]) rows[7] = { ...m.rows[0], name: long(7), score: 99_999 };
               m = { ...m, rows, players: 50, watching: 1234 };
             } else if (m.t === 'kf') {
@@ -319,6 +321,24 @@ const SCENES = [
   { id: 'lobby', app: 'play', auth: 'signed', run: (page, h) => openPlay(page, h) },
   { id: 'lobby-zero', app: 'play', auth: 'signed', run: (page, h) => openPlay(page, h, { token: 'zero', hype: 'zero' }) },
   { id: 'lobby-ranks', app: 'play', auth: 'signed', run: (page, h) => openPlay(page, h, { hash: '#ranks', wait: 1500 }) },
+  {
+    // the Countries tab with a full board: 50 long-named players with flags, 50 countries with whale numbers
+    id: 'lobby-ranks-countries',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      const codes = ['US', 'GB', 'TV', 'BR', 'JP', 'DE', 'CD', 'VC', 'GS', 'KR', 'ZA', 'IN', 'TR', 'AU', 'CA', 'FR', 'IT', 'ES', 'MX', 'AR'];
+      const players = Array.from({ length: 50 }, (_, i) => ({ name: i % 2 ? LONG_M : LONG, score: 99_999 - i * 997, skin: i % 8, wallet: null, kills: 999 - i, at: 0, country: codes[i % codes.length] }));
+      const countries = Array.from({ length: 50 }, (_, i) => ({ country: codes[i % codes.length], mass: 99_999_999_999 - i * 1e9, games: 9_999_999 - i, paid: i % 3 ? 999_999_999_999_123_456 - i * 1e15 : 0 }));
+      await page.route('**/api/leaderboard', (r) =>
+        r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ day: '2026-11-03', daily: players, allTime: players, countries: { daily: countries, allTime: countries } }) }),
+      );
+      await openPlay(page, h, { hash: '#ranks', wait: 1200 });
+      await h.check('today-flags');
+      await page.getByRole('tab', { name: /countries/i }).click();
+      await settle(page, 1200);
+    },
+  },
   {
     id: 'lobby-profile',
     app: 'play',

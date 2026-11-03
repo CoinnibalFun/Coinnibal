@@ -2164,3 +2164,8 @@
 .g-hud.is-narrow .g-pu__chip {
   max-width: 100%;
 }
+
+/* the flag picker heads the settings sheet */
+.g-settings__country {
+  margin-bottom: 18px;
+}

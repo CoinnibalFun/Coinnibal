@@ -260,7 +260,8 @@ export class GameEngine {
     const { settings } = useUi.getState();
     this.lastJoin = { room };
     // `pic`: wear the profile picture (the server takes it from the signed-in wallet's profile; guests get the basic coin)
-    this.net.send({ t: 'join', room, name: settings.name || 'Coinie', skin: settings.skin, fp: fingerprint(), ...(settings.picture ? { pic: true } : {}) });
+    // `country`: the flag by the name ('' for none: the server then shows no flag, not the profile's)
+    this.net.send({ t: 'join', room, name: settings.name || 'Coinie', skin: settings.skin, fp: fingerprint(), country: settings.country, ...(settings.picture ? { pic: true } : {}) });
   }
 
   spectate(room?: string): void {

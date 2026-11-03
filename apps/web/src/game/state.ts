@@ -9,6 +9,7 @@ import {
   avatarIdFromBytes,
   decodeUtf8,
   readSnapshot,
+  unpackCountry,
   type PlayerInfo,
   type ServerMessage,
   type SnapshotData,
@@ -150,7 +151,7 @@ export class ClientWorld implements SnapshotSink {
   apply(s: SnapshotData, now: number): void {
     this.applyAt = now;
     this.snapshotBegin(s.tick, s.view.x, s.view.y, s.view.h);
-    for (const p of s.players) this.setPlayer(p.id, p.skin, p.flags, p.name, p.isBot ? undefined : p.avatar);
+    for (const p of s.players) this.setPlayer(p.id, p.skin, p.flags, p.name, p.isBot ? undefined : p.avatar, p.country ?? null);
     for (const u of s.upserts) {
       const has = (u.playerId !== undefined || u.flags !== undefined ? HAS_PLAYER : 0) | (u.variant !== undefined ? HAS_VARIANT : 0);
       this.upsert(u.id, u.kind, u.x, u.y, u.r, has, u.playerId, u.flags, u.variant);
@@ -174,7 +175,7 @@ export class ClientWorld implements SnapshotSink {
     v.at = now;
   }
 
-  snapshotPlayer(id: number, skin: number, flags: number, bytes: Uint8Array, at: number, len: number, avatarAt = -1): void {
+  snapshotPlayer(id: number, skin: number, flags: number, bytes: Uint8Array, at: number, len: number, avatarAt = -1, country = 0): void {
     // the name is decoded only when its bytes change (a snapshot carries every visible player 30 times a second)
     let known = this.nameBytes.get(id);
     const p = this.players.get(id);
@@ -187,10 +188,11 @@ export class ClientWorld implements SnapshotSink {
     // the avatar id (bots never wear one) is turned into a string only when it changes
     let avatar: string | undefined;
     if (avatarAt >= 0 && (flags & PlayerFlag.Bot) === 0) avatar = p && avatarIdEquals(p.avatar, bytes, avatarAt) ? p.avatar : avatarIdFromBytes(bytes, avatarAt);
-    this.setPlayer(id, skin, flags, same ? p!.name : decodeUtf8(bytes, at, len), avatar);
+    // the country: an interned allowlisted code (no string built), null when off the allowlist
+    this.setPlayer(id, skin, flags, same ? p!.name : decodeUtf8(bytes, at, len), avatar, country ? unpackCountry(country) : null);
   }
 
-  private setPlayer(id: number, skin: number, flags: number, name: string, avatar?: string): void {
+  private setPlayer(id: number, skin: number, flags: number, name: string, avatar: string | undefined, country: string | null): void {
     const existing = this.players.get(id);
     if (existing) {
       existing.skin = skin;
@@ -201,10 +203,13 @@ export class ClientWorld implements SnapshotSink {
       else if (existing.holder) delete existing.holder;
       if (avatar && !existing.isBot) existing.avatar = avatar;
       else if (existing.avatar) delete existing.avatar;
+      if (country) existing.country = country;
+      else if (existing.country) delete existing.country;
     } else {
       const p: CPlayer = { id, skin, flags, name, isBot: (flags & PlayerFlag.Bot) !== 0, emote: null };
       if ((flags & PlayerFlag.Holder) !== 0) p.holder = true;
       if (avatar && !p.isBot) p.avatar = avatar;
+      if (country) p.country = country;
       this.players.set(id, p);
     }
   }
