@@ -1229,6 +1229,7 @@
   border-top: 2px dashed var(--rule);
 }
 .wl-bal > div {
+  min-width: 0;
   padding: 10px 12px 10px 0;
   border-bottom: 2px dashed var(--rule);
 }
@@ -1240,10 +1241,12 @@
   text-transform: none;
 }
 .wl-bal__big {
-  font-size: 26px;
+  font-size: clamp(18px, 5.4vw, 26px);
+  overflow-wrap: anywhere;
 }
 .wl-bal__mid {
   font-size: 18px;
+  overflow-wrap: anywhere;
 }
 .wl-verify {
   display: flex;
