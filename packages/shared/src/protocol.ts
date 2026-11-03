@@ -128,9 +128,22 @@ export interface SnapshotData {
   tick: number;
   /** Server-side view centre and visible height (used for spectating). */
   view: { x: number; y: number; h: number };
+  /**
+   * The world's playable rectangle (v8), sent when it changed since this connection last heard it
+   * (and with the first snapshot of a fresh view). Absent: unchanged.
+   */
+  bounds?: WorldBounds;
   players: PlayerInfo[];
   upserts: EntityRecord[];
   removals: Removal[];
+}
+
+/** A world's playable rectangle in world units: [x0, x1) x [y0, y1). Adaptive maps grow it in play. */
+export interface WorldBounds {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -143,8 +156,12 @@ export interface RoomInfo {
   name: string;
   /** Practice rooms only. */
   league?: League;
+  /** Playable size now (an adaptive map grows in play: snapshots carry the live `bounds`). */
   width: number;
   height: number;
+  /** Origin of the playable square (v8; absent: 0). Adaptive maps sit centred in `MAP_SPACE`. */
+  x0?: number;
+  y0?: number;
   players: number;
   bots: number;
   maxPlayers: number;

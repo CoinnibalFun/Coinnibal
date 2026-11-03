@@ -159,13 +159,14 @@ describe('snapshot codec', () => {
         removals: [],
       }),
     );
-    // op u8 | tick u32 | view 3×f32 → 17 bytes, then nPlayers u8
+    // op u8 | tick u32 | view 3×f32 → 17 bytes, then the extras u8 (v8; 0: no bounds), then nPlayers u8
     expect(Array.from(bytes.subarray(0, 5))).toEqual([1, 1, 0, 0, 0]);
-    expect(bytes[17]).toBe(1);
+    expect(bytes[17]).toBe(0);
+    expect(bytes[18]).toBe(1);
     // player record: u16 id (LE) | u8 skin | u8 flags | str8 name
-    expect(Array.from(bytes.subarray(18, 18 + 2 + 1 + 1 + 1 + 2))).toEqual([0x02, 0x01, 5, PlayerFlag.Staker, 2, 0x61, 0x62]);
+    expect(Array.from(bytes.subarray(19, 19 + 2 + 1 + 1 + 1 + 2))).toEqual([0x02, 0x01, 5, PlayerFlag.Staker, 2, 0x61, 0x62]);
     // nUpserts u16 | u32 id | u8 kind | 3×f32 | u8 variant
-    const up = 18 + 7;
+    const up = 19 + 7;
     expect(Array.from(bytes.subarray(up, up + 2))).toEqual([1, 0]);
     expect(Array.from(bytes.subarray(up + 2, up + 7))).toEqual([7, 0, 0, 0, EntityKind.Loot]);
     expect(bytes[up + 7 + 12]).toBe(3);
@@ -177,8 +178,8 @@ describe('snapshot codec', () => {
     const bytes = new Uint8Array(
       encodeSnapshot({ tick: 1, view: { x: 0, y: 0, h: 0 }, players: [], upserts: [{ id: 1, kind: EntityKind.Virus, x: 0, y: 0, r: 0 }], removals: [] }),
     );
-    // players=0 → nUpserts at 18, then u32 id (20..23), then the kind byte
-    bytes[24] = 99;
+    // extras at 17, players=0 at 18 → nUpserts at 19, then u32 id (21..24), then the kind byte
+    bytes[25] = 99;
     expect(() => decodeSnapshot(bytes)).toThrow(/unknown entity kind 99/);
   });
 });
@@ -299,15 +300,15 @@ describe('avatar ids in player records (v7)', () => {
       snapshotRemoval() {},
     });
     expect(seen).toBe('a1b2c3d4e5f60718');
-    // cut inside the avatar id: header (18) + player (5 + 2 name bytes) + 4 of the 8 id bytes
-    const cut = buf.slice(0, 18 + 7 + 4);
+    // cut inside the avatar id: header (19 since v8's extras byte) + player (5 + 2 name bytes) + 4 of the 8 id bytes
+    const cut = buf.slice(0, 19 + 7 + 4);
     const noop = { snapshotBegin() {}, snapshotPlayer() {}, snapshotUpsert() {}, snapshotRemoval() {} };
     expect(() => readSnapshot(cut, noop)).toThrow(RangeError);
     expect(() => decodeSnapshot(cut)).toThrow(RangeError);
   });
 });
 
-describe('country codes in player records (v8)', () => {
+describe('country codes in player records (v9)', () => {
   const base = (players: PlayerInfo[]): SnapshotData => ({ tick: 1, view: { x: 0, y: 0, h: 1000 }, players, upserts: [], removals: [] });
 
   it('round-trips a country after the avatar id and sets the Country flag', () => {
@@ -363,16 +364,51 @@ describe('country codes in player records (v8)', () => {
 
     // a hostile server spelling "ZZ": decoded as no country
     const bytes = new Uint8Array(encodeSnapshot(base([{ id: 6, skin: 0, flags: 0, name: 'x', country: 'FR' }])));
-    const at = 18 + 5 + 1;
+    const at = 19 + 5 + 1;
     expect(String.fromCharCode(bytes[at], bytes[at + 1])).toBe('FR');
     bytes[at] = 90;
     bytes[at + 1] = 90;
     expect(decodeSnapshot(bytes.buffer).players[0].country).toBeUndefined();
 
-    // cut inside the country: header (18) + player (5 + 1 name byte) + 1 of the 2 bytes
-    const cut = bytes.buffer.slice(0, 18 + 6 + 1);
+    // cut inside the country: header (19) + player (5 + 1 name byte) + 1 of the 2 bytes
+    const cut = bytes.buffer.slice(0, 19 + 6 + 1);
     const noop = { snapshotBegin() {}, snapshotPlayer() {}, snapshotUpsert() {}, snapshotRemoval() {} };
     expect(() => readSnapshot(cut, noop)).toThrow(RangeError);
     expect(() => decodeSnapshot(cut)).toThrow(RangeError);
+  });
+});
+
+describe('world bounds in snapshots (v8)', () => {
+  const base = (bounds?: SnapshotData['bounds']): SnapshotData => ({ tick: 3, view: { x: 10, y: 20, h: 1000 }, ...(bounds ? { bounds } : {}), players: [], upserts: [], removals: [] });
+
+  it('round-trips the bounds and costs 16 bytes only when sent', () => {
+    const b = { x0: 4500, y0: 4500, x1: 7500, y1: 7500.5 };
+    const withB = encodeSnapshot(base(b));
+    const without = encodeSnapshot(base());
+    expect(withB.byteLength - without.byteLength).toBe(16);
+    expect(decodeSnapshot(withB).bounds).toEqual(b);
+    expect(decodeSnapshot(without).bounds).toBeUndefined();
+    expect('bounds' in decodeSnapshot(without)).toBe(false);
+  });
+
+  it('streams the bounds to the sink before any record, and refuses unknown extras bits', async () => {
+    const { readSnapshot, SNAP_BOUNDS } = await import('../src/index');
+    const order: string[] = [];
+    const buf = encodeSnapshot({ ...base({ x0: 0, y0: 0, x1: 3000, y1: 3000 }), upserts: [{ id: 1, kind: EntityKind.Virus, x: 5, y: 6, r: 100 }] });
+    readSnapshot(buf, {
+      snapshotBegin: () => order.push('begin'),
+      snapshotBounds: (x0, y0, x1, y1) => order.push(`bounds ${x0},${y0},${x1},${y1}`),
+      snapshotPlayer() {},
+      snapshotUpsert: () => order.push('upsert'),
+      snapshotRemoval() {},
+    });
+    expect(order).toEqual(['begin', 'bounds 0,0,3000,3000', 'upsert']);
+    // a sink without the hook still reads the rest
+    const noop = { snapshotBegin() {}, snapshotPlayer() {}, snapshotUpsert() {}, snapshotRemoval() {} };
+    expect(() => readSnapshot(buf, noop)).not.toThrow();
+    const bad = new Uint8Array(encodeSnapshot(base()));
+    bad[17] = SNAP_BOUNDS | 2;
+    expect(() => decodeSnapshot(bad.buffer)).toThrow(/extras/);
+    expect(() => readSnapshot(bad.buffer, noop)).toThrow(/extras/);
   });
 });

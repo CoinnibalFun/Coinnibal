@@ -1,5 +1,6 @@
 import type {
   CustomRoomSettings,
+  MapScaleSettings,
   CustomRoomView,
   AdminAvatarEntry,
   BoostKind,
@@ -410,6 +411,8 @@ export interface BotSettings {
     gasHype: string;
     arenas: Record<string, { stakedBots?: number; bankroll?: string }>;
   };
+  /** Adaptive map size per room kind (older servers leave it out). */
+  maps?: Record<string, MapScaleSettings>;
 }
 
 export interface BotRoomCount {
@@ -420,6 +423,9 @@ export interface BotRoomCount {
   humans: number;
   bots: number;
   stakedBots: number;
+  /** The room's map side now and whether it follows the player count (older servers leave them out). */
+  mapSide?: number;
+  mapAuto?: boolean;
 }
 
 export interface BotTotals {
@@ -443,6 +449,7 @@ export interface BotAdminView {
 
 export type BotSettingsPatch = {
   kinds?: Record<string, Partial<Omit<BotKindSettings, 'mix'>> & { mix?: Record<string, number> }>;
+  maps?: Record<string, Partial<MapScaleSettings>>;
   testnet?: Partial<Omit<BotSettings['testnet'], 'arenas'>> & { arenas?: Record<string, { stakedBots?: number; bankroll?: string } | null> };
 };
 
