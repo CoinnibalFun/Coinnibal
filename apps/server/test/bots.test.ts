@@ -29,6 +29,11 @@ const hard: Personality = {
   wallSense: 1.25,
   doubleSplit: true,
   chaseMs: 9000,
+  // the brain mechanics below are tested without the holding back on people (see 'fair to people')
+  humanBias: 1,
+  humanSplit: 1,
+  humanSplitCooldownMs: 0,
+  lapseRate: 0,
 };
 
 const emptyCfg = (over: Partial<WorldConfig> = {}): WorldConfig => ({
@@ -279,7 +284,7 @@ describe('bots', () => {
   it('hard bots double-split prey just beyond one split', () => {
     const world = new World(emptyCfg());
     const bot = world.addPlayer({ spawnShield: false, name: 'bot', skin: 0, x: 900, y: 1500, mass: 900 });
-    const prey = world.addPlayer({ spawnShield: false, name: 'snack', skin: 2, x: 900 + 650, y: 1500, mass: 60 });
+    const prey = world.addPlayer({ spawnShield: false, name: 'snack', skin: 2, x: 900 + 650, y: 1500, mass: 60, isBot: true });
     prey.stats.joinedAt = -60_000;
     world.setTarget(prey.id, 900 + 650, 1500);
     const brain = new BotBrain(hard, mulberry32(2));
