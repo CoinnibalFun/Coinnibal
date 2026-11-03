@@ -393,7 +393,29 @@ export class GameEngine {
   }
 
   authToken(token: string): void {
+    this.tokenSent = token;
     this.net.send({ t: 'auth', token });
+  }
+
+  /** The session token last sent (`auth` by token), until the server answers it. */
+  private tokenSent: string | null = null;
+
+  /**
+   * The server refused the session token we sent (expired, or signed with a secret it no longer
+   * has): forget it, here and in storage, so the lobby asks for a fresh sign-in instead of looking
+   * signed in while the server treats this connection as a guest.
+   */
+  private dropRefusedToken(): void {
+    const token = this.tokenSent;
+    this.tokenSent = null;
+    if (!token) return;
+    if (useUi.getState().auth?.token === token) useUi.setState({ auth: null });
+    try {
+      const raw = localStorage.getItem(TOKEN_KEY);
+      if (raw && (JSON.parse(raw) as { token?: unknown }).token === token) localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      /* storage blocked or garbled: nothing kept to forget */
+    }
   }
 
   /** SIWE sign-in: `message` is the rebuilt `siweMessage`, `signature` the wallet's `personal_sign` (0x hex). */
@@ -465,7 +487,9 @@ export class GameEngine {
           this.reclaiming = true;
           this.play(`arena:${this.wasArena}`);
         } else {
-          if (screen === 'playing') useUi.setState({ screen: 'lobby' });
+          // a free game is not kept across a reconnect: back to the lobby, with nothing of that game
+          // left over (an open chat line would pop up again over the next game)
+          if (screen === 'playing') useUi.setState({ screen: 'lobby', chatOpen: false, powerups: [], boosts: null, valueDelta: null });
           this.net.send({ t: 'spectate' });
         }
         return;
@@ -478,6 +502,7 @@ export class GameEngine {
         useUi.setState({ rooms: m.rooms, online: m.online, blockedArenas: (m.blocked ?? []).map((b) => b.arenaId) });
         return;
       case 'authed': {
+        this.tokenSent = null;
         useUi.setState({ auth: { address: m.address, token: m.token, profile: m.profile } });
         try {
           localStorage.setItem(TOKEN_KEY, JSON.stringify({ address: m.address, token: m.token, exp: Date.now() + 23 * 3600_000 }));
@@ -696,6 +721,7 @@ export class GameEngine {
         return;
       }
       case 'error': {
+        if (m.code === 'auth_failed') this.dropRefusedToken();
         if (this.reclaiming && m.code !== 'rate_limited' && m.code !== 'round_ended' && m.code !== 'game_closed') {
           // the coin we came back for is gone (eaten while the socket was down, or settled when the
           // server restarted): nothing is left to hold or retry; leave the empty game for the lobby
