@@ -81,7 +81,7 @@ describe('playtest tuning: rookie pond bots', () => {
     expect(longestOver).toBeLessThan(3000);
   });
 
-  it('pro / arena bots stop growing at 2500 (no more absurd whales)', { timeout: 30_000 }, () => {
+  it('pro / arena bots stop growing at 2500 (no more absurd whales)', () => {
     const world = new World({ ...WORLD_PRESETS.practice, powerUps: true, coinRain: true, seed: 41 });
     const bots = new BotManager(world, { target: 12, min: 4, max: 12, mix: 'standard', massCap: BOT_MASS_CAP }, mulberry32(42));
     const over = new Map<number, number>();
