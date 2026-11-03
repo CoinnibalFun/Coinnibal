@@ -224,7 +224,7 @@ export class Renderer {
   private readonly coin: CoinOpts = { time: 0, lookX: 0, lookY: 0, expression: 'happy', pxPerUnit: 1, jelly: null, flags: 0, seed: 0, interior: undefined, minPrintPx: 14, picture: null };
   /** Profile pictures of the players in view (shared with the portraits). */
   private readonly avatars: AvatarCache = avatars;
-  private readonly label: StickerLabel = { name: null, value: null, verified: false, bot: false, holder: false, mine: false, x: 0, y: 0, fs: 1, devicePx: 1, zoom: 1, alpha: 1 };
+  private readonly label: StickerLabel = { name: null, value: null, verified: false, bot: false, holder: false, country: null, mine: false, x: 0, y: 0, fs: 1, devicePx: 1, zoom: 1, alpha: 1 };
 
   /** Sorts a visible entity into its layer (culled against `this.view`; see `draw`). */
   private readonly collect = (e: CEntity): void => {
@@ -796,6 +796,7 @@ export class Renderer {
     l.verified = (player.flags & PlayerFlag.Verified) !== 0;
     l.bot = (player.flags & PlayerFlag.Bot) !== 0;
     l.holder = (player.flags & PlayerFlag.Holder) !== 0;
+    l.country = player.country ?? null;
     l.mine = mine;
     l.x = e.x;
     l.y = y;

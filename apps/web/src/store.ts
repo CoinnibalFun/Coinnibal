@@ -1,3 +1,4 @@
+import { isCountryCode, suggestCountry } from '@elymum/shared';
 import type {
   BoostKind,
   BoostState,
@@ -22,6 +23,13 @@ export interface Settings {
   skin: number;
   /** Wear the uploaded profile picture on the coin (signed-in wallets with a picture; `join.pic`). */
   picture: boolean;
+  /** The country the player plays for (ISO 3166-1 alpha-2, a flag by the name; `join.country`); '' for none. */
+  country: string;
+  /**
+   * `country` is only the first-visit guess (from the browser's languages), not a choice: a signed-in
+   * profile's saved country replaces it. Picking a country (or none) clears it.
+   */
+  countryAuto: boolean;
   theme: Theme;
   quality: Quality;
   /** Master switch (the header's mute) and master volume. */
@@ -174,11 +182,36 @@ export interface UiState {
 
 const SETTINGS_KEY = 'elymum.settings.v1';
 
+/** The first-visit guess at the player's country: the browser's language regions (`suggestCountry`). */
+export function guessCountry(): string {
+  try {
+    return suggestCountry(typeof navigator !== 'undefined' ? (navigator.languages?.length ? navigator.languages : [navigator.language]) : null) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** Saved settings over the defaults; a country is kept only when it is on the allowlist. */
+export function mergeSettings(defaults: Settings, saved: Partial<Settings>): Settings {
+  const out = { ...defaults, ...saved };
+  if (typeof saved.country !== 'string') {
+    // saved before countries existed: the guess, until the player picks
+    out.country = defaults.country;
+    out.countryAuto = true;
+  } else if (saved.country !== '' && !isCountryCode(saved.country)) {
+    out.country = '';
+  }
+  out.countryAuto = out.countryAuto === true;
+  return out;
+}
+
 function loadSettings(): Settings {
   const defaults: Settings = {
     name: '',
     skin: 0,
     picture: false,
+    country: guessCountry(),
+    countryAuto: true,
     theme: 'light',
     quality: 'high',
     sound: true,
@@ -201,7 +234,7 @@ function loadSettings(): Settings {
     if (raw) {
       // retired fields: `lang` (the interface is English only) and `passSkin` (the old pass is gone)
       const { lang: _lang, passSkin: _passSkin, ...saved } = JSON.parse(raw) as Partial<Settings> & { lang?: unknown; passSkin?: unknown };
-      return { ...defaults, ...saved };
+      return mergeSettings(defaults, saved);
     }
   } catch {
     /* storage unavailable */
@@ -256,6 +289,15 @@ export function updateSettings(patch: Partial<Settings>): void {
   } catch {
     /* ignore */
   }
+}
+
+/**
+ * A signed-in profile was loaded: its saved country (or its "none") replaces the first-visit guess.
+ * A country the player picked on this device stays (saving the profile sends it to the server).
+ */
+export function adoptProfileCountry(profile: { country?: string | null } | null): void {
+  if (!profile || profile.country === undefined || !useUi.getState().settings.countryAuto) return;
+  updateSettings({ country: isCountryCode(profile.country) ? profile.country : '', countryAuto: false });
 }
 
 let toastId = 1;
