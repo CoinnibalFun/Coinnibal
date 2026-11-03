@@ -2169,3 +2169,14 @@
 .g-settings__country {
   margin-bottom: 18px;
 }
+
+/* the compact top-five card (narrow phones) has no room for a flag: the name keeps the space */
+.g-standings.is-compact .g-standings__flag {
+  display: none;
+}
+
+/* portrait phones: with power-up timers stacked in the centre column, the fps / ping readout would
+   reach the thumb buttons; it steps aside until the timers run out */
+.g-hud.is-narrow.is-touch .g-center:has(.g-pu) > .g-net {
+  display: none;
+}
