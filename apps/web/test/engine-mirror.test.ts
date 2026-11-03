@@ -109,4 +109,15 @@ describe('engine: the world mirror starts afresh with the server view', () => {
     welcome();
     expect(engine.world.entities.size).toBe(0);
   });
+
+  it('a reconnect out of a free game goes back to the lobby with nothing of that game left over', () => {
+    joined(A);
+    useUi.setState({ chatOpen: true, powerups: [{ type: 1 as never, until: Date.now() + 9000 }] });
+    welcome();
+    const s = useUi.getState();
+    expect(s.screen).toBe('lobby');
+    // the open chat line would otherwise pop up over the next game
+    expect(s.chatOpen).toBe(false);
+    expect(s.powerups).toEqual([]);
+  });
 });
