@@ -71,7 +71,8 @@
   left: calc(var(--hud-gap) + env(safe-area-inset-left, 0px));
   top: calc(var(--hud-gap) + env(safe-area-inset-top, 0px));
   align-items: flex-start;
-  max-width: min(380px, 42vw);
+  /* ends before the centre column (the till and the power-up chips, at most 260 px wide) */
+  max-width: min(380px, 42vw, calc(50vw - 150px));
 }
 .g-corner--tr {
   right: calc(var(--hud-gap) + env(safe-area-inset-right, 0px));
@@ -477,6 +478,7 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
+  max-width: 260px;
 }
 .g-pu__chip {
   position: relative;
