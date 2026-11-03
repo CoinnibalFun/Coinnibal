@@ -18,3 +18,4 @@ export * from './avatar';
 export * from './custom-rooms';
 export * from './boosts';
 export * from './countries';
+export * from './map-scale';

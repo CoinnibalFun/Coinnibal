@@ -1,6 +1,6 @@
 import { AVATAR_ID_BYTES, avatarIdFromBytes, avatarIdToBytes, isAvatarId } from './avatar';
 import { COUNTRY_BYTES, isCountryCode, unpackCountry } from './countries';
-import { ClientOp, EntityKind, PlayerFlag, ServerOp, type EntityRecord, type PlayerInfo, type SnapshotData } from './protocol';
+import { ClientOp, EntityKind, PlayerFlag, ServerOp, type EntityRecord, type PlayerInfo, type SnapshotData, type WorldBounds } from './protocol';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -154,9 +154,10 @@ export class BinaryReader {
 /**
  * Layout (little endian):
  *   u8 op=1 | u32 tick | f32 viewX | f32 viewY | f32 viewH
+ *   u8 extras (v8; bit 0 `SNAP_BOUNDS`) [f32 x0 | f32 y0 | f32 x1 | f32 y1 with SNAP_BOUNDS]
  *   u8 nPlayers   { u16 id | u8 skin | u8 flags | str8 name | [8 bytes avatar id] | [2 bytes country] }
  *        (flags: PlayerFlag; Bot ⇒ `isBot`; the avatar id follows only with `PlayerFlag.Avatar`, v7;
- *        the country code, two ASCII capitals, only with `PlayerFlag.Country`, v8)
+ *        the country code, two ASCII capitals, only with `PlayerFlag.Country`, v9)
  *   u16 nUpserts  { u32 id | u8 kind | f32 x | f32 y | f32 r | kind data }
  *        Cell: u16 playerId | u8 flags ; Food/Eject/PowerUp/Loot: u8 variant ; Virus: –
  *   u16 nRemovals { u32 id | u32 eaterId }
@@ -167,6 +168,14 @@ export function writeSnapshot(w: BinaryWriter, s: SnapshotData): void {
   w.f32(s.view.x);
   w.f32(s.view.y);
   w.f32(s.view.h);
+  const b = s.bounds;
+  w.u8(b ? SNAP_BOUNDS : 0);
+  if (b) {
+    w.f32(b.x0);
+    w.f32(b.y0);
+    w.f32(b.x1);
+    w.f32(b.y1);
+  }
 
   const nPlayers = Math.min(s.players.length, 255);
   w.u8(nPlayers);
@@ -221,8 +230,11 @@ export function writeEntity(w: BinaryWriter, e: EntityRecord): void {
   }
 }
 
+/** Snapshot extras bit: the world's bounds follow (16 bytes). Unknown bits are refused. */
+export const SNAP_BOUNDS = 1;
+
 export function encodeSnapshot(s: SnapshotData): ArrayBuffer {
-  const w = new BinaryWriter(64 + s.upserts.length * 24 + s.removals.length * 8 + s.players.length * 32);
+  const w = new BinaryWriter(80 + s.upserts.length * 24 + s.removals.length * 8 + s.players.length * 32);
   writeSnapshot(w, s);
   return w.finish();
 }
@@ -233,6 +245,10 @@ export function decodeSnapshot(buf: ArrayBuffer | ArrayBufferView): SnapshotData
   if (op !== ServerOp.Snapshot) throw new Error(`not a snapshot (op ${op})`);
   const tick = r.u32();
   const view = { x: r.f32(), y: r.f32(), h: r.f32() };
+  const extras = r.u8();
+  if ((extras & ~SNAP_BOUNDS) !== 0) throw new Error(`unknown snapshot extras ${extras}`);
+  let bounds: WorldBounds | undefined;
+  if (extras & SNAP_BOUNDS) bounds = { x0: r.f32(), y0: r.f32(), x1: r.f32(), y1: r.f32() };
 
   const nPlayers = r.u8();
   const players: PlayerInfo[] = new Array(nPlayers);
@@ -285,7 +301,7 @@ export function decodeSnapshot(buf: ArrayBuffer | ArrayBufferView): SnapshotData
   const removals = new Array(nRemovals);
   for (let i = 0; i < nRemovals; i++) removals[i] = { id: r.u32(), eaterId: r.u32() };
 
-  return { tick, view, players, upserts, removals };
+  return bounds ? { tick, view, bounds, players, upserts, removals } : { tick, view, players, upserts, removals };
 }
 
 /**
@@ -295,6 +311,8 @@ export function decodeSnapshot(buf: ArrayBuffer | ArrayBufferView): SnapshotData
  */
 export interface SnapshotSink {
   snapshotBegin(tick: number, viewX: number, viewY: number, viewH: number): void;
+  /** The world's playable bounds changed (v8): called right after `snapshotBegin`, before any record. */
+  snapshotBounds?(x0: number, y0: number, x1: number, y1: number): void;
   /**
    * `name` is the snapshot's bytes: the name is UTF-8 at `[nameAt, nameAt + nameLen)` (`decodeUtf8`).
    * `avatarAt`: offset of the 8 avatar id bytes in the same array (`avatarIdFromBytes`), -1 without one.
@@ -326,6 +344,12 @@ export function readSnapshot(buf: ArrayBuffer, sink: SnapshotSink): void {
   o += 4;
   sink.snapshotBegin(tick, v.getFloat32(o, true), v.getFloat32(o + 4, true), v.getFloat32(o + 8, true));
   o += 12;
+  const extras = v.getUint8(o++);
+  if ((extras & ~SNAP_BOUNDS) !== 0) throw new Error(`unknown snapshot extras ${extras}`);
+  if (extras & SNAP_BOUNDS) {
+    sink.snapshotBounds?.(v.getFloat32(o, true), v.getFloat32(o + 4, true), v.getFloat32(o + 8, true), v.getFloat32(o + 12, true));
+    o += 16;
+  }
   const nPlayers = v.getUint8(o++);
   for (let i = 0; i < nPlayers; i++) {
     const id = v.getUint16(o, true);

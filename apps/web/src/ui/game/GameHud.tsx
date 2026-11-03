@@ -270,7 +270,7 @@ function MapSheet({ size, inline = false }: { size: number; inline?: boolean }) 
       const e = engine();
       const me = e?.world.myStats();
       const c = me ?? (e ? { x: e.camera.x, y: e.camera.y } : null);
-      if (e && c) setSector(sectorOf(c.x, c.y, e.world.width, e.world.height));
+      if (e && c) setSector(sectorOf(c.x - e.world.x0, c.y - e.world.y0, e.world.width, e.world.height));
     }, 400);
     return () => clearInterval(id);
   }, [show]);
