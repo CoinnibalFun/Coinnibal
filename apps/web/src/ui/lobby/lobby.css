@@ -998,6 +998,12 @@
     display: none;
   }
 }
+/* translations of the kicker run longer ("Арена · в Elysium"): they need a wider window still */
+@media (max-width: 1599px) {
+  html:not(:lang(en)) .kl-root.is-wide .kl-mast__kicker {
+    display: none;
+  }
+}
 /* the plate's status line ("arenas open · fee · N online") wraps instead of running off a 768 px screen */
 .kl-root.is-mid .kl-plate .kb-plate__aside {
   flex: 0 1 auto;

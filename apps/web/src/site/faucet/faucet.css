@@ -326,8 +326,20 @@
   }
 }
 @media (max-width: 479px) {
+  /* phones: the tap shrinks into the kicker's corner and the headline takes the full width under
+     it; beside the tap a 320 px phone broke "paraları." and "Бесплат-ные мо-неты." mid-word */
+  .fc-copy {
+    grid-template-columns: minmax(0, 1fr) 104px;
+  }
+  .fc-tap {
+    grid-row: 1;
+    transform: scale(0.42);
+    margin-bottom: -145px;
+  }
+  .fc-copy > .fc-h {
+    grid-column: 1 / -1;
+  }
   .fc-h {
-    /* beside the tap: a 320 px phone broke Turkish "paraları." before its last letter */
     font-size: clamp(32px, 10.4vw, 40px);
   }
   .fc-lede {

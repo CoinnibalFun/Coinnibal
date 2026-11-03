@@ -152,6 +152,9 @@ h2,
 .display {
   overflow-wrap: break-word;
   hyphens: auto;
+  /* only long words, and never a stub of a few letters: Chrome had split "мо-неты" and "paralar-ı"
+     where the whole word fitted on the next line */
+  hyphenate-limit-chars: 10 4 4;
 }
 /* Chinese has no capitals and reads badly spaced out: the label tracking stays tight */
 :lang(zh) .kicker,
