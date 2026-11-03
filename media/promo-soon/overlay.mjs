@@ -359,6 +359,8 @@ function jaws(t) {
 
 /* ------------------------------------------------------------------ the SOON card */
 const CARD = cues.card;
+// `brand: false` -> SOON alone on the card (no wordmark, no handle), centred vertically
+if (CARD.brand === false) L.soonY = L.h / 2;
 const burst = (() => {
   const r = rng(4242);
   const paints = ['cyan', 'teal', 'foam', 'cream', 'up', 'cyan', 'teal'];
@@ -390,7 +392,7 @@ function card(t) {
     const p = (a) => `${(Math.cos((a * Math.PI) / 180) * R).toFixed(0)} ${(Math.sin((a * Math.PI) / 180) * R).toFixed(0)}`;
     rr += `<path d="M0 0 L ${p(a0)} L ${p(a1)} Z"/>`;
   }
-  const cyR = V ? L.soonY : L.soonY;
+  const cyR = L.soonY;
   s += `<svg class="abs" style="left:0;top:0" width="${w}" height="${h}"><g transform="translate(${w / 2} ${cyR}) rotate(${(d * 9).toFixed(2)})" fill="#F5CD66" opacity="${clamp(d / 0.3).toFixed(2)}">${rr}</g>
     <circle cx="${w / 2}" cy="${cyR}" r="${V ? 470 : 520}" fill="${C.sun}" opacity=".55"/></svg>`;
   // halftone dots in the corners
@@ -487,13 +489,14 @@ function card(t) {
 
   // wordmark + handle
   let foot = '';
-  const wu = prog(t, CARD.wordmark, CARD.wordmark + 0.45);
+  const brand = CARD.brand !== false;
+  const wu = brand ? prog(t, CARD.wordmark, CARD.wordmark + 0.45) : 0;
   if (wu > 0) {
     const ww = V ? 560 : 520;
     const y = L.soonY + fs * 0.72 + (V ? 30 : 10);
     foot += `<div class="abs" style="left:${px(w / 2 - ww / 2)};top:${px(y)};transform:translateY(${((1 - easeOut(wu)) * 80).toFixed(1)}px) scale(${backOut(wu).toFixed(3)}) rotate(${(-2 + Math.sin(t * 2.3)).toFixed(2)}deg);opacity:${clamp(wu * 4).toFixed(2)}">${wordmark({ width: ww, diecut: true })}</div>`;
   }
-  const hu = prog(t, CARD.handle, CARD.handle + 0.4);
+  const hu = brand ? prog(t, CARD.handle, CARD.handle + 0.4) : 0;
   if (hu > 0) {
     const y = L.soonY + fs * 0.72 + (V ? 230 : 180);
     foot += `<div class="abs" style="left:0;width:${w}px;top:${px(y)};display:flex;justify-content:center;opacity:${clamp(hu * 4).toFixed(2)}">
