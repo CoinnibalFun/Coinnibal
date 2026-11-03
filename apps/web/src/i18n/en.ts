@@ -396,6 +396,12 @@ export const en = {
   'pf.countryHint': 'A small flag by your name, and points for your country on the board',
   'pf.countryGuess': 'Guessed from your browser · pick yours, or no flag',
   'pf.countryFail': 'Your flag is set here, but the profile did not save it: {msg}',
+  'pf.flagSkin': 'Wear the flag on my coin',
+  'pf.flagSkinNote': 'Your coin is painted with your flag, face and all',
+  'pf.flagSkinNone': 'Pick a country first',
+  'pf.flagSkinPicture': 'Your picture is on the coin: it wins over the flag',
+  'pf.flagSkinColours': 'No drawn flag yet: your coin wears its colours',
+  'pf.flagSkinPlain': 'No drawn flag yet: your coin stays as it is',
 
   'tf.kicker': 'Boarding',
   'tf.title': 'Board this round?',
