@@ -374,7 +374,8 @@
     "handle": 23.78,
     "burstSpeed": 1.7,
     "burp": false,
-    "short": true
+    "short": true,
+    "brand": false
   },
   "stills": {
     "beauty-after": 3.6,
