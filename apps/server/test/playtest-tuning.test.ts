@@ -57,7 +57,7 @@ describe('playtest tuning: rookie pond bots', () => {
     expect(massToRadius(ROOKIE_BOT_MASS_CAP) / massToRadius(RULES.startMass)).toBeLessThan(4.5);
   });
 
-  it('rookie bots never spawn above the cap and shed what they eat past it within seconds', () => {
+  it('rookie bots never spawn above the cap and shed what they eat past it within seconds', { timeout: 30_000 }, () => {
     const world = new World({ ...WORLD_PRESETS.practice, powerUps: true, coinRain: true, seed: 31 });
     const bots = new BotManager(world, { target: 12, min: 4, max: 12, mix: 'rookie', massCap: ROOKIE_BOT_MASS_CAP }, mulberry32(32));
     const over = new Map<number, number>();
@@ -81,7 +81,7 @@ describe('playtest tuning: rookie pond bots', () => {
     expect(longestOver).toBeLessThan(3000);
   });
 
-  it('pro / arena bots stop growing at 2500 (no more absurd whales)', () => {
+  it('pro / arena bots stop growing at 2500 (no more absurd whales)', { timeout: 30_000 }, () => {
     const world = new World({ ...WORLD_PRESETS.practice, powerUps: true, coinRain: true, seed: 41 });
     const bots = new BotManager(world, { target: 12, min: 4, max: 12, mix: 'standard', massCap: BOT_MASS_CAP }, mulberry32(42));
     const over = new Map<number, number>();

@@ -54,6 +54,11 @@ export interface Settings {
   showChat: boolean;
   /** Last arena the player bought a ticket for (Quick Play goes back there). */
   lastArena: number | null;
+  /**
+   * "Approve only this ticket": each ticket approves exactly its entry fee (two wallet prompts
+   * every time). Off (default): the first ticket approves once for all later ones.
+   */
+  exactApprove: boolean;
 }
 
 export interface KillItem {
@@ -246,6 +251,7 @@ function loadSettings(): Settings {
     showMinimap: true,
     showChat: true,
     lastArena: null,
+    exactApprove: false,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
