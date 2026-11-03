@@ -678,6 +678,15 @@
 .g-standings.is-compact .g-standings__title {
   font-size: 14px;
 }
+/* landscape phones: the left column runs down to the thumb stick, so the card drops its name
+   (the crown and the arrow say what it is; screen readers keep the section's label) */
+.g-hud.is-short .g-standings.is-compact .g-standings__title {
+  display: none;
+}
+.g-hud.is-short .g-standings.is-compact .g-standings__head {
+  justify-content: flex-end;
+  margin-bottom: 0;
+}
 /* the smallest phones: the corner is too thin for a BOT tag beside a name */
 @media (max-width: 359px) {
   .g-hud.is-narrow .g-standings.is-compact .g-standings__name > .g-bot {
