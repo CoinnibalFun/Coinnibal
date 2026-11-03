@@ -1,4 +1,4 @@
-import { BASIC_SKINS, PlayerFlag, botCountry, clamp, pickBotName, type LeftReason } from '@elymum/shared';
+import { BASIC_SKINS, PlayerFlag, botCountry, botWearsFlag, clamp, pickBotName, type LeftReason } from '@elymum/shared';
 import type { Player } from '../game/entities';
 import { randRange, type Rng } from '../game/rng';
 import type { World } from '../game/world';
@@ -157,7 +157,8 @@ export class BotManager {
     const player = this.world.addPlayer({
       name,
       skin: this.pickSkin(),
-      flags: staked ? PlayerFlag.Bot | PlayerFlag.Staker : PlayerFlag.Bot,
+      // some bots paint their coin with their flag (the flag skin), always the same ones by name
+      flags: (staked ? PlayerFlag.Bot | PlayerFlag.Staker : PlayerFlag.Bot) | (botWearsFlag(name) ? PlayerFlag.FlagSkin : 0),
       isBot: true,
       // a plausible flag, the same one every time this name plays
       country: botCountry(name),
