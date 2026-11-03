@@ -631,6 +631,11 @@
       const fg0 = rgba(fgStr);
       if (fg0[3] < 0.05) return; // transparent text (gradient text via background-clip): skipped
       const op = opacityOf(el);
+      // a slip fading in or out (an exit animation, an entrance in flight) is not its resting colour
+      if (op < 0.95 && op > 0) {
+        add({ detector: 'contrast', severity: 'info', kind: 'fading', selector: sel(el), text: label, detail: `opacity ${op.toFixed(2)}: in a fade, not checked`, rect: R(r) });
+        return;
+      }
       const dom = domBackground(el, r.left + r.width / 2, r.top + r.height / 2);
       const fgOnDom = over([fg0[0], fg0[1], fg0[2], fg0[3] * op], dom.color);
       let bg = dom.color;
@@ -692,7 +697,10 @@
       for (const { el, r } of controls) {
         if (r.bottom < 0 || r.top > H || r.right < 0 || r.left > W) continue;
         if (r.width >= 40 && r.height >= 40) continue;
-        if (disabled(el) || !visiblePart(el, r)) continue;
+        if (disabled(el)) continue;
+        // half scrolled under a sheet's header: judge it where it rests, not mid-scroll
+        const vis = visiblePart(el, r);
+        if (!vis || vis.width * vis.height < r.width * r.height * 0.95) continue;
         if (el.matches('input[type=range]')) continue;
         // inline text links inside running text
         if (el.tagName === 'A' && getComputedStyle(el).display === 'inline' && el.parentElement && /\S/.test([...el.parentElement.childNodes].filter((n) => n.nodeType === 3).map((n) => n.nodeValue).join(''))) continue;
