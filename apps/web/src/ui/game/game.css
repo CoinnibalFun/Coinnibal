@@ -1172,6 +1172,13 @@
 }
 .g-sheet .kb-sheet__foot .kb-btn {
   white-space: nowrap;
+  max-width: 100%;
+}
+/* phones: a long label (other languages) wraps inside the button rather than leave the sheet */
+@media (max-width: 479px) {
+  .g-sheet .kb-sheet__foot .kb-btn {
+    white-space: normal;
+  }
 }
 .g-sheet:not(.is-bottom) .kb-sheet__foot > .kb-btn:first-child {
   flex: 1 1 auto;
@@ -1520,9 +1527,10 @@
 }
 .g-set__row {
   display: flex;
+  flex-wrap: wrap; /* a long label (other languages) pushes the controls to their own line */
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 6px 14px;
   min-height: 52px;
   padding: 6px 0;
   border-bottom: 2px dashed var(--rule);
@@ -1532,6 +1540,7 @@
 }
 .gs-label {
   display: flex;
+  flex: 1 1 7em;
   flex-direction: column;
   min-width: 0;
 }
@@ -1546,6 +1555,10 @@
 .g-set__ctl {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
+  margin-left: auto;
   align-items: center;
   gap: 8px;
 }

@@ -1,18 +1,21 @@
 import { COUNTRY_CODES, isCountryCode } from '@elymum/shared';
 import { memo, useId, useMemo, type SelectHTMLAttributes } from 'react';
+import { intlLocale, useLocale } from '../i18n';
 import { FLAG_H, FLAG_W, flagArt, type FlagOp } from '../render/flags';
 import './flag.css';
 
-let names: Intl.DisplayNames | null | undefined;
+const namers = new Map<string, Intl.DisplayNames | null>();
 
-/** The English name of a country (`Intl.DisplayNames`), the code itself where the browser has none. */
-export function countryName(code: string): string {
+/** A country's name in the reader's language (`Intl.DisplayNames`), the code itself where the browser has none. */
+export function countryName(code: string, locale: string = intlLocale()): string {
+  let names = namers.get(locale);
   if (names === undefined) {
     try {
-      names = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'code' });
+      names = new Intl.DisplayNames([locale, 'en'], { type: 'region', fallback: 'code' });
     } catch {
       names = null;
     }
+    namers.set(locale, names);
   }
   try {
     return names?.of(code) ?? code;
@@ -96,6 +99,7 @@ export interface FlagProps {
  */
 export const Flag = memo(function Flag({ code, size = 14, className, label = true }: FlagProps) {
   const clip = useId();
+  useLocale();
   if (!isCountryCode(code)) return null;
   const art = flagArt(code);
   const name = countryName(code);
@@ -123,9 +127,14 @@ export const Flag = memo(function Flag({ code, size = 14, className, label = tru
   );
 });
 
-/** Every country, by English name. */
+/** Every country, by name in the reader's language. */
 function useCountryOptions(): { code: string; name: string }[] {
-  return useMemo(() => COUNTRY_CODES.map((code) => ({ code, name: countryName(code) })).sort((a, b) => a.name.localeCompare(b.name, 'en')), []);
+  const locale = useLocale();
+  return useMemo(() => {
+    const tag = intlLocale();
+    return COUNTRY_CODES.map((code) => ({ code, name: countryName(code, tag) })).sort((a, b) => a.name.localeCompare(b.name, tag));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale]);
 }
 
 export interface CountryFieldProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'value' | 'onChange'> {
