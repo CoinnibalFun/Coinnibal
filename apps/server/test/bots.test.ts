@@ -1,4 +1,4 @@
-import { TICK_MS, WORLD_PRESETS, botCountry, isCountryCode } from '@elymum/shared';
+import { PlayerFlag, TICK_MS, WORLD_PRESETS, botCountry, botWearsFlag, isCountryCode } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { BotBrain } from '../src/bots/brain';
 import { BotManager } from '../src/bots/manager';
@@ -244,6 +244,23 @@ describe('bots', () => {
       flags.add(p.country!);
     }
     expect(flags.size).toBeGreaterThan(3);
+  });
+
+  it('some bots paint their coin with their flag (the flag skin), the same ones by name', () => {
+    const world = new World(emptyCfg());
+    const manager = new BotManager(world, { target: 0, min: 0, max: 0, mix: 'standard' }, mulberry32(9));
+    let worn = 0;
+    const n = 120;
+    for (let i = 0; i < n; i++) {
+      const p = manager.spawnBot(30).player;
+      const on = (p.flags & PlayerFlag.FlagSkin) !== 0;
+      expect(on).toBe(botWearsFlag(p.name));
+      if (on) worn++;
+      world.removePlayer(p.id);
+    }
+    // about BOT_FLAG_SKIN_PERCENT (30 %): some, not all
+    expect(worn).toBeGreaterThan(n * 0.1);
+    expect(worn).toBeLessThan(n * 0.6);
   });
 
   it('anticipates a charging threat from beyond its static danger zone', () => {
