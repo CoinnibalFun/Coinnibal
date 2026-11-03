@@ -42,6 +42,8 @@ const WHALE_MASS = 500;
 /** The world stands still this long on the bell (the receipt prints over it), then catches up. */
 export const BELL_FREEZE_MS = 2500;
 
+/** No frame for this long (a hidden tab): the snapshots themselves keep the mirror tidy, this often. */
+const BACKGROUND_STEP_MS = 500;
 /** A near miss: scared this long (ms) and then safe again, still alive. */
 const NEAR_MISS_MS = 450;
 /** At most one "phew" this often (ms). */
@@ -461,8 +463,22 @@ export class GameEngine {
       this.snapQueue.push(decodeSnapshot(buf));
       return;
     }
-    this.world.applyBinary(buf, performance.now());
+    // the freeze is over but no frame has thawed it yet: the held (older) deltas go first, else they
+    // would land on top of this one (an entity it removed would come back as a ghost)
+    if (this.snapQueue.length > 0) this.thaw();
+    const now = performance.now();
+    this.world.applyBinary(buf, now);
+    // no frames (a hidden tab: the browser stops requestAnimationFrame) while the snapshots keep
+    // coming: the mirror still lets go of what left or was eaten, and nobody sees the eats
+    if (now - this.last > BACKGROUND_STEP_MS && now - this.lastBackgroundStep > BACKGROUND_STEP_MS) {
+      this.lastBackgroundStep = now;
+      this.world.update(now, 0);
+      this.world.drainEats();
+      this.world.drainFloats();
+    }
   }
+
+  private lastBackgroundStep = 0;
 
   private onMessage(m: ServerMessage): void {
     const now = performance.now();
