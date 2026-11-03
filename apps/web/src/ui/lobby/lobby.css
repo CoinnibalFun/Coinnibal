@@ -1008,6 +1008,13 @@
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+/* portrait tablets: every ticket row already prints its fee, so the caption drops it and
+   "N online" stays beside the pill instead of wrapping alone under it */
+@media (max-width: 959px) {
+  .kl-root.is-mid .kl-plate .kl-status > li:nth-child(2):nth-last-child(2) {
+    display: none;
+  }
+}
 @media (max-width: 959px) {
   .kl-root.is-mid .kl-sections__item {
     padding: 0 11px;
