@@ -329,7 +329,9 @@ const SCENES = [
     run: async (page, h) => {
       const codes = ['US', 'GB', 'TV', 'BR', 'JP', 'DE', 'CD', 'VC', 'GS', 'KR', 'ZA', 'IN', 'TR', 'AU', 'CA', 'FR', 'IT', 'ES', 'MX', 'AR'];
       const players = Array.from({ length: 50 }, (_, i) => ({ name: i % 2 ? LONG_M : LONG, score: 99_999 - i * 997, skin: i % 8, wallet: null, kills: 999 - i, at: 0, country: codes[i % codes.length] }));
-      const countries = Array.from({ length: 50 }, (_, i) => ({ country: codes[i % codes.length], mass: 99_999_999_999 - i * 1e9, games: 9_999_999 - i, paid: i % 3 ? 999_999_999_999_123_456 - i * 1e15 : 0 }));
+      // one row per country (the server's board is keyed by code): the 20 above, then 30 more
+      const board = [...codes, 'NL', 'SE', 'NO', 'PL', 'UA', 'GR', 'PT', 'IE', 'NZ', 'CH', 'AT', 'BE', 'DK', 'FI', 'CZ', 'HU', 'RO', 'CL', 'CO', 'PE', 'PH', 'ID', 'TH', 'VN', 'EG', 'NG', 'KE', 'MA', 'SA', 'AE'];
+      const countries = Array.from({ length: 50 }, (_, i) => ({ country: board[i], mass: 99_999_999_999 - i * 1e9, games: 9_999_999 - i, paid: i % 3 ? 999_999_999_999_123_456 - i * 1e15 : 0 }));
       await page.route('**/api/leaderboard', (r) =>
         r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ day: '2026-11-03', daily: players, allTime: players, countries: { daily: countries, allTime: countries } }) }),
       );
