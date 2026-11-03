@@ -1,4 +1,5 @@
 import { AVATAR_ID_BYTES, avatarIdFromBytes, avatarIdToBytes, isAvatarId } from './avatar';
+import { COUNTRY_BYTES, isCountryCode, unpackCountry } from './countries';
 import { ClientOp, EntityKind, PlayerFlag, ServerOp, type EntityRecord, type PlayerInfo, type SnapshotData } from './protocol';
 
 const encoder = new TextEncoder();
@@ -153,8 +154,9 @@ export class BinaryReader {
 /**
  * Layout (little endian):
  *   u8 op=1 | u32 tick | f32 viewX | f32 viewY | f32 viewH
- *   u8 nPlayers   { u16 id | u8 skin | u8 flags | str8 name | [8 bytes avatar id] }
- *        (flags: PlayerFlag; Bot ⇒ `isBot`; the avatar id follows only with `PlayerFlag.Avatar`, v7)
+ *   u8 nPlayers   { u16 id | u8 skin | u8 flags | str8 name | [8 bytes avatar id] | [2 bytes country] }
+ *        (flags: PlayerFlag; Bot ⇒ `isBot`; the avatar id follows only with `PlayerFlag.Avatar`, v7;
+ *        the country code, two ASCII capitals, only with `PlayerFlag.Country`, v8)
  *   u16 nUpserts  { u32 id | u8 kind | f32 x | f32 y | f32 r | kind data }
  *        Cell: u16 playerId | u8 flags ; Food/Eject/PowerUp/Loot: u8 variant ; Virus: –
  *   u16 nRemovals { u32 id | u32 eaterId }
@@ -174,10 +176,17 @@ export function writeSnapshot(w: BinaryWriter, s: SnapshotData): void {
     w.u8(p.skin);
     // bots never wear a picture; the bit is the wire's, set from `avatar` alone
     const avatar = !p.isBot && (p.flags & PlayerFlag.Bot) === 0 && isAvatarId(p.avatar) ? p.avatar : null;
-    const flags = (p.isBot ? p.flags | PlayerFlag.Bot : p.flags) | (p.holder ? PlayerFlag.Holder : 0);
-    w.u8(avatar ? flags | PlayerFlag.Avatar : flags & ~PlayerFlag.Avatar);
+    const country = isCountryCode(p.country) ? p.country : null;
+    let flags = (p.isBot ? p.flags | PlayerFlag.Bot : p.flags) | (p.holder ? PlayerFlag.Holder : 0);
+    flags = avatar ? flags | PlayerFlag.Avatar : flags & ~PlayerFlag.Avatar;
+    flags = country ? flags | PlayerFlag.Country : flags & ~PlayerFlag.Country;
+    w.u8(flags);
     w.str8(p.name);
     if (avatar) w.avatarId(avatar);
+    if (country) {
+      w.u8(country.charCodeAt(0));
+      w.u8(country.charCodeAt(1));
+    }
   }
 
   w.u16(s.upserts.length);
@@ -234,6 +243,13 @@ export function decodeSnapshot(buf: ArrayBuffer | ArrayBufferView): SnapshotData
     const p: PlayerInfo = { id, skin, flags, name: r.str8(), isBot: (flags & PlayerFlag.Bot) !== 0 };
     if ((flags & PlayerFlag.Holder) !== 0) p.holder = true;
     if ((flags & PlayerFlag.Avatar) !== 0) p.avatar = r.avatarId();
+    if ((flags & PlayerFlag.Country) !== 0) {
+      if (r.remaining < COUNTRY_BYTES) throw new RangeError('snapshot truncated');
+      const hi = r.u8();
+      // off the allowlist: no country (the bytes are still consumed)
+      const country = unpackCountry((hi << 8) | r.u8());
+      if (country) p.country = country;
+    }
     players[i] = p;
   }
 
@@ -282,8 +298,9 @@ export interface SnapshotSink {
   /**
    * `name` is the snapshot's bytes: the name is UTF-8 at `[nameAt, nameAt + nameLen)` (`decodeUtf8`).
    * `avatarAt`: offset of the 8 avatar id bytes in the same array (`avatarIdFromBytes`), -1 without one.
+   * `country`: the country code packed into 16 bits (`unpackCountry`), 0 without one.
    */
-  snapshotPlayer(id: number, skin: number, flags: number, name: Uint8Array, nameAt: number, nameLen: number, avatarAt: number): void;
+  snapshotPlayer(id: number, skin: number, flags: number, name: Uint8Array, nameAt: number, nameLen: number, avatarAt: number, country: number): void;
   snapshotUpsert(id: number, kind: EntityKind, x: number, y: number, r: number, has: number, playerId: number, flags: number, variant: number): void;
   snapshotRemoval(id: number, eaterId: number): void;
 }
@@ -325,7 +342,13 @@ export function readSnapshot(buf: ArrayBuffer, sink: SnapshotSink): void {
       avatarAt = o;
       o += AVATAR_ID_BYTES;
     }
-    sink.snapshotPlayer(id, skin, flags, bytes, nameAt, len, avatarAt);
+    let country = 0;
+    if ((flags & PlayerFlag.Country) !== 0) {
+      if (o + COUNTRY_BYTES > bytes.length) throw new RangeError('snapshot truncated');
+      country = (bytes[o] << 8) | bytes[o + 1];
+      o += COUNTRY_BYTES;
+    }
+    sink.snapshotPlayer(id, skin, flags, bytes, nameAt, len, avatarAt, country);
   }
   const nUpserts = v.getUint16(o, true);
   o += 2;

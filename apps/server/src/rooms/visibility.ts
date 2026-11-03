@@ -59,10 +59,13 @@ export class ViewState {
       if (e.kind === EntityKind.Cell) {
         const p = e.player;
         const avatar = p.isBot ? undefined : avatars?.get(p.id);
-        const sig = avatar ? `${p.skin}|${p.flags}|${p.name}|${avatar}` : `${p.skin}|${p.flags}|${p.name}`;
+        const sig = `${p.skin}|${p.flags}|${p.name}|${avatar ?? ''}|${p.country ?? ''}`;
         if (this.knownPlayers.get(p.id) !== sig) {
           this.knownPlayers.set(p.id, sig);
-          players.push(avatar ? { id: p.id, skin: p.skin, flags: p.flags, name: p.name, isBot: p.isBot, avatar } : { id: p.id, skin: p.skin, flags: p.flags, name: p.name, isBot: p.isBot });
+          const info: PlayerInfo = { id: p.id, skin: p.skin, flags: p.flags, name: p.name, isBot: p.isBot };
+          if (avatar) info.avatar = avatar;
+          if (p.country) info.country = p.country;
+          players.push(info);
         }
       }
     });

@@ -1,5 +1,5 @@
-/** Bumped whenever the wire format changes in an incompatible way (v6: bot flags on every player-facing message, `feed` left lines; v7: player avatar ids in snapshots). */
-export const PROTOCOL_VERSION = 7;
+/** Bumped whenever the wire format changes in an incompatible way (v6: bot flags on every player-facing message, `feed` left lines; v7: player avatar ids in snapshots; v8: player country codes in snapshots). */
+export const PROTOCOL_VERSION = 8;
 
 /** Simulation + snapshot rate. */
 export const TICK_RATE = 30;

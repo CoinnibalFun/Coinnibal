@@ -93,6 +93,8 @@ export interface AddPlayerOptions {
   skin: number;
   flags?: number;
   isBot?: boolean;
+  /** ISO 3166-1 alpha-2 (the caller validated it); absent / null: no flag. */
+  country?: string | null;
   /** Fixed spawn position (tests); otherwise a safe spot is chosen. */
   x?: number;
   y?: number;
@@ -176,6 +178,7 @@ export class World {
     const mass = opts.mass ?? RULES.startMass;
     const spot = opts.x !== undefined && opts.y !== undefined ? { x: opts.x, y: opts.y } : this.findSpawnSpot(massToRadius(mass));
     const p = new Player(this.newPlayerId(), opts.name, opts.skin, opts.flags ?? 0, opts.isBot ?? false, this.now, spot.x, spot.y);
+    p.country = opts.country ?? null;
     this.players.set(p.id, p);
     this.addCell(p, spot.x, spot.y, mass);
     p.stats.maxMass = mass;
