@@ -103,7 +103,7 @@ export interface PendingClaim {
 
 const CLAIM_KEY = 'elymum.shop.claim.v1';
 /** Refusals that are final for a payment (it was credited already, or it is not a valid payment). */
-const FINAL: readonly string[] = ['tx_used', 'tx_failed', 'no_transfer', 'wrong_token', 'wrong_sender', 'wrong_recipient', 'wrong_amount'];
+const FINAL: readonly string[] = ['tx_used', 'tx_failed', 'no_transfer', 'wrong_token', 'wrong_sender', 'wrong_recipient', 'wrong_amount', 'tx_stale'];
 
 export function savePendingClaim(p: PendingClaim | null): void {
   try {
