@@ -23,7 +23,7 @@ import dsp  # noqa: E402
 import sfx as kit  # noqa: E402
 from dsp import SR, bp, hp, lp, place, t_  # noqa: E402
 
-CUES = json.load(open(os.path.join(HERE, 'cues.json')))
+CUES = json.load(open(os.environ.get('PROMO_CUES') or os.path.join(HERE, 'cues.json')))
 M, CARD = CUES['monster'], CUES['card']
 DUR = CUES['duration']
 rng = np.random.default_rng(11)
@@ -165,21 +165,22 @@ def build_sfx():
                 place(buf, pop(1400), w[1], 0.10, 0.2)
                 place(buf, glock(mtof(84), 0.4), w[1] + 0.01, 0.045, 0.2)
     # the creature: peek boing, hops (boing on take-off, bonk on landing), a sneaky pizzicato walk
-    hops = M['hops']
-    walk = [43, 46, 48, 50, 51]  # G2 Bb2 C3 D3 Eb3 (a minor-ish sneak)
+    hops = M['hops'] + M.get('postHops', [])
+    walk = [43, 46, 48, 50, 51, 53, 55]  # G2 Bb2 C3 D3 Eb3 F3 G3 (a minor-ish sneak)
     for k, h in enumerate(hops):
         s = h['size'] / 200
-        place(buf, boing(260 / s ** 0.5, 560 / s ** 0.4, 0.34), h['t'], 0.26, -0.55 + 0.1 * k)
-        place(buf, footstep(s, seed=k), h['land'], 0.42 + 0.06 * k, -0.5 + 0.1 * k)
+        place(buf, boing(260 / s ** 0.5, 560 / s ** 0.4, 0.34), h['t'], 0.26, (h['x'] - 0.5) * 1.3)
+        place(buf, footstep(s, seed=k), h['land'], 0.42 + 0.06 * k, (h['x'] - 0.5) * 1.3)
         place(buf, pluck(mtof(walk[k]), 0.6, 0.35, seed=k), h['land'], 0.32, -0.2)
         place(buf, pluck(mtof(walk[k] + 12), 0.4, 0.5, seed=k + 9), h['land'] + 0.18, 0.14, 0.2)
         duck.append((h['t'] - 0.05, h['land'] + 0.3))
     # the hop up onto her fingertip, a tiny landing plink, then the 'uh-oh' slide when the finger drops
     P = M['perch']
-    place(buf, boing(300, 760, 0.36, 13), P['jump'], 0.24, -0.3)
-    place(buf, marimba(mtof(83), 0.4), P['land'], 0.2, -0.3)
-    place(buf, pop(1500), P['land'], 0.12, -0.3)
-    place(buf, slide(P['leave'] + 0.02), P['leave'] + 0.02, 0.2, -0.2)
+    side = 0.3 if M.get('from', -0.14) > 0.5 else -0.3
+    place(buf, boing(300, 760, 0.36, 13), P['jump'], 0.24, side)
+    place(buf, marimba(mtof(83), 0.4), P['land'], 0.2, side)
+    place(buf, pop(1500), P['land'], 0.12, side)
+    place(buf, slide(P['leave'] + 0.02), P['leave'] + 0.02, 0.2, side)
     duck.append((P['jump'] - 0.05, P['land'] + 0.2))
     # rising tension from the second stop to the leap
     r0, r1 = 15.0, M['jaws']
@@ -197,7 +198,8 @@ def build_sfx():
     place(buf, kit.chomp(small=True, seed=5), M['impact'] + 0.22, 0.25, 0.1)
     for k in range(9):
         place(buf, jingle(40 + k), M['impact'] + 0.06 + k * 0.07, 0.11, float(np.sin(k * 2.1)) * 0.7)
-    place(buf, burp(), CARD['soon'] + 1.02, 0.45, 0.35)
+    if CARD.get('burp', True):
+        place(buf, burp(), CARD['soon'] + 1.02, 0.45, 0.35)
     # SOON sting: letters land on rising marimba notes, then a bright pluck chord + glock sparkle
     for i, m in enumerate((72, 76, 79, 84)):
         place(buf, marimba(mtof(m), 0.7), CARD['soon'] + 0.12 + i * 0.06, 0.38, -0.3 + 0.2 * i)
@@ -211,10 +213,11 @@ def build_sfx():
     place(buf, pop(1000), CARD['wordmark'] + 0.05, 0.22, -0.2)
     place(buf, kit.tick(), CARD['handle'] + 0.05, 0.25, 0.2)
     # a final little two-note "ta-da" button
-    place(buf, marimba(mtof(79), 0.5), 22.15, 0.3, -0.1)
-    for i, m in enumerate((60, 67, 72, 76, 84)):
-        place(buf, pluck(mtof(m), 1.6, 0.5, seed=60 + i), 22.35 + i * 0.012, 0.2, -0.3 + 0.15 * i)
-    place(buf, glock(mtof(96), 1.4), 22.37, 0.12, 0.3)
+    if not CARD.get('short'):
+        place(buf, marimba(mtof(79), 0.5), 22.15, 0.3, -0.1)
+        for i, m in enumerate((60, 67, 72, 76, 84)):
+            place(buf, pluck(mtof(m), 1.6, 0.5, seed=60 + i), 22.35 + i * 0.012, 0.2, -0.3 + 0.15 * i)
+        place(buf, glock(mtof(96), 1.4), 22.37, 0.12, 0.3)
     # a soft reverb send so everything sits in one space
     irs = [dsp.reverb_ir(1.1, 0.4, seed=s, bright=6000) for s in (3, 4)]
     wet = np.stack([dsp.fftconv(buf[c], irs[c])[:buf.shape[1]] for c in (0, 1)])

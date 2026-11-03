@@ -14,7 +14,7 @@ import { requireFrom, resolveChromium } from '../../scripts/lib/common.mjs';
 import { C, baseCss, coin, coinMark, wordmark, star } from '../../brand/lib/art.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const cues = JSON.parse(readFileSync(join(HERE, 'cues.json'), 'utf8'));
+const cues = JSON.parse(readFileSync(process.env.PROMO_CUES || join(HERE, 'cues.json'), 'utf8'));
 const [layoutName = '16x9', work = 'out/promo/work', ...rest] = process.argv.slice(2);
 const arg = (k, d) => (rest.includes(k) ? Number(rest[rest.indexOf(k) + 1]) : d);
 const FPS = cues.fps;
@@ -58,7 +58,7 @@ try {
     .filter(([k]) => k / FPS >= P.land - 0.35 && k / FPS <= P.leave + 0.001).sort((a, b) => a[0] - b[0]);
 } catch { /* no track: the creature stays on the floor */ }
 function tipAt(t) {
-  if (!fingerFrames.length) return [cues.monster.hops.at(-1).x * L.w, L.ground];
+  if (!fingerFrames.length) return [cues.monster.hops.at(-1).x * L.w, L.ground - 300];
   const i = t * FPS;
   let sx = 0, sy = 0, n = 0;
   for (const [k, [x, y]] of fingerFrames) {
@@ -96,6 +96,7 @@ const px = (n) => `${n.toFixed(1)}px`;
 
 /* ------------------------------------------------------------------ corner bug */
 function bug(t) {
+  if (cues.bug === false) return '';
   const end = cues.monster.lunge;
   if (t < 0.4 || t > end + 0.2) return '';
   const u = prog(t, 0.4, 0.85);
@@ -131,170 +132,172 @@ function captions(t) {
       return `<span class="w${cur ? ' cur' : ''}" style="opacity:${said ? 1 : 0.32}">${w}</span>`;
     })
     .join(' ');
-  const shift = !V && c.t0 >= M.enter ? 260 : 0; // make room for the creature on the left
+  const shift = !V && c.t0 >= M.enter ? (M.capShift ?? 260) : 0; // make room for the creature
   return `<div class="abs cap" style="left:${shift}px;width:${L.w}px;top:${L.capY}px;opacity:${op.toFixed(3)}">
     <div class="capbox" style="transform:translate(-50%,-50%) scale(${s.toFixed(3)}) rotate(${(-1 + 0.6 * Math.sin(c.t0 * 3)).toFixed(2)}deg)">${words}</div></div>`;
 }
 
 /* ------------------------------------------------------------------ the creature */
 const M = cues.monster;
+const FROM = M.from ?? -0.14; // where it comes from (fraction of the width; >1 = off the right edge)
+
+/*
+ * The creature's path: floor hops (M.hops), an optional jump onto her fingertip that follows the tracked
+ * tip (M.perch: jump, land, leave), a cartoon hang when the finger drops, then optional floor hops again
+ * (M.postHops). Each segment is a jump from one anchor to the next; an anchor is a floor spot or the tip.
+ */
+const anchors = [];
+{
+  let prev = { at: -99, pos: () => [FROM * L.w, L.ground], size: M.hops[0].size };
+  anchors.push(prev);
+  const add = (t0, t1, pos, size, kind) => anchors.push({ t0, t1, pos, size, kind });
+  for (const h of M.hops) add(h.t, h.land, () => [h.x * L.w, L.ground], h.size, 'floor');
+  if (M.perch) {
+    const P = M.perch;
+    add(P.jump, P.land, (t) => { const tp = tipAt(Math.min(t, P.leave)); return [tp[0] + P.dx + (P.hangDx ?? 0) * easeOut(prog(t, P.leave, P.leave + 0.3)), tp[1] + 6 - (P.hangDy ?? 0) * easeOut(prog(t, P.leave, P.leave + 0.3))]; }, P.size, 'tip');
+  }
+  for (const h of M.postHops ?? []) add(h.t, h.land, () => [h.x * L.w, L.ground], h.size, 'floor');
+}
+function pathAt(t) {
+  // index of the last anchor whose jump has started
+  let k = 0;
+  for (let i = 1; i < anchors.length; i++) if (t >= anchors[i].t0) k = i;
+  const a = anchors[k];
+  if (k === 0) return { cx: a.pos(t)[0], base: a.pos(t)[1], size: a.size, air: false, u: 0, kind: 'floor', land: -9, dir: 1 };
+  const b = anchors[k - 1];
+  const bEnd = b.t1 ?? -99;
+  if (t < a.t1) {
+    const u = prog(t, a.t0, a.t1);
+    const e = easeInOut(u);
+    const [x0, y0] = b.pos(Math.max(bEnd, a.t0));
+    const [x1, y1] = a.pos(t);
+    const size = lerp(b.size, a.size, u);
+    const hh = 0.42 * Math.max(b.size, a.size) + 50 + Math.max(0, (y0 - y1) * 0.25);
+    return { cx: lerp(x0, x1, e), base: lerp(y0, y1, e) - Math.sin(Math.PI * u) * hh, size, air: true, u, kind: a.kind, land: a.t1, dir: Math.sign(x1 - x0) || 1 };
+  }
+  const [x, y] = a.pos(t);
+  const prevX = b.pos(bEnd)[0];
+  return { cx: x, base: y, size: a.size, air: false, u: 1, kind: a.kind, land: a.t1, dir: Math.sign(x - prevX) || 1 };
+}
+function moodAt(t) {
+  let m = ['smug', null, false];
+  for (const e of M.moods ?? []) if (t >= e[0]) m = [e[1], e[2] ?? null, !!e[3]];
+  return m; // [mood, look override, sweat]
+}
+
 function monster(t) {
   if (t < M.enter || t >= M.jaws) return { html: '', fx: '' }; // smash cut: the jaws take over
-  const hops = M.hops;
-  // position along the floor
-  let x = -0.14, size = hops[0].size, y = 0, sx = 1, sy = 1, rot = 0;
-  let prevX = -0.14, prevSize = hops[0].size;
-  let air = false;
-  let lastLand = -9;
-  for (const h of hops) {
-    if (t >= h.land) { prevX = h.x; prevSize = h.size; lastLand = h.land; continue; }
-    if (t >= h.t) {
-      const u = prog(t, h.t, h.land);
-      x = lerp(prevX, h.x, easeInOut(u));
-      size = lerp(prevSize, h.size, u);
-      const hh = 0.42 * size + 50;
-      y = -Math.sin(Math.PI * u) * hh;
-      sy = 1 + 0.14 * Math.sin(Math.PI * u);
-      sx = 1 - 0.08 * Math.sin(Math.PI * u);
-      rot = 8 * Math.cos(Math.PI * u) * -1;
-      air = true;
-    }
-    break;
-  }
-  if (!air) {
-    x = prevX; size = prevSize;
-    // anticipation squash before the next hop
-    const nxt = hops.find((h) => h.t > t);
-    if (nxt && nxt.t - t < 0.12) {
-      const a = 1 - (nxt.t - t) / 0.12;
+  const st = pathAt(t);
+  let { cx, base, size } = st;
+  let sx = 1, sy = 1, rot = 0;
+  const air = st.air;
+  if (air) {
+    const u = st.u;
+    sy = 1 + 0.14 * Math.sin(Math.PI * u);
+    sx = 1 - 0.08 * Math.sin(Math.PI * u);
+    rot = -8 * st.dir * Math.cos(Math.PI * u);
+  } else {
+    // anticipation squash before the next jump
+    const nxt = anchors.find((a) => a.t0 > t);
+    if (nxt && nxt.t0 - t < 0.12) {
+      const a = 1 - (nxt.t0 - t) / 0.12;
       sx = 1 + 0.14 * a; sy = 1 - 0.16 * a;
     }
-  }
-  // landing squash, springy
-  const dl = t - lastLand;
-  if (!air && dl >= 0 && dl < 0.5) {
-    const k = 0.26 * Math.exp(-dl / 0.09) * Math.cos(dl * 34);
-    sx *= 1 + k; sy *= 1 - k;
-  }
-  // idle bob after the walk
-  const last = hops[hops.length - 1];
-  if (t > last.land + 0.45) sy *= 1 + 0.025 * Math.sin((t - last.land) * 2 * Math.PI * 1.6);
-
-  let mood = 'smug';
-  if (t >= 14.62 && t < 15.05) mood = 'happy'; // she gasps: it grins
-  let cx = x * L.w;
-  let base = L.ground;
-  let wiggle = 0;
-  let scaleBoost = 1;
-  let excl = 0;
-  let sweat = false;
-  let lookOverride = null;
-  // perch on her raised fingertip ("Can you see that?"), then hang in mid-air when the finger drops
-  const P = M.perch;
-  if (P && t >= P.jump) {
-    const tipNow = tipAt(Math.min(t, P.leave));
-    const fx = tipNow[0] + P.dx, fy = tipNow[1] + 6;
-    if (t < P.land) {
-      const u = prog(t, P.jump, P.land);
-      const e = easeInOut(u);
-      cx = lerp(last.x * L.w, fx, e);
-      base = lerp(L.ground, fy, e) - Math.sin(Math.PI * u) * 150;
-      size = lerp(last.size, P.size, u);
-      sy = 1 + 0.16 * Math.sin(Math.PI * u); sx = 1 - 0.09 * Math.sin(Math.PI * u);
-      rot = -12 * Math.cos(Math.PI * u);
-      y = 0;
-      air = true;
-      if (t < M.open) mood = 'happy';
-    } else {
-      cx = fx; base = fy; size = P.size;
-      const d = t - P.land;
-      const k = 0.24 * Math.exp(-d / 0.08) * Math.cos(d * 34);
-      sx = 1 + k; sy = 1 - k;
+    const dl = t - st.land;
+    if (dl >= 0 && dl < 0.5) {
+      const k = 0.26 * Math.exp(-dl / 0.09) * Math.cos(dl * 34);
+      sx *= 1 + k; sy *= 1 - k;
+    }
+    if (st.kind === 'tip') {
+      const d = t - st.land;
       rot = 7 * Math.sin(d * 2 * Math.PI * 1.7) * Math.exp(-d / 0.9);
-      y = 0;
-      if (t < M.open) mood = d < 0.22 ? 'happy' : 'smug';
-      if (t >= P.leave) {
-        // the finger is gone: cartoon hang-time, little legs kicking, a look down
-        const h = t - P.leave;
+      if (M.perch && t >= M.perch.leave) {
+        const h = t - M.perch.leave; // finger gone: cartoon hang-time, legs kicking
         sy *= 1 + 0.035 * Math.sin(h * 46);
         rot = 4 * Math.sin(h * 30);
-        if (t < M.open) { mood = 'scared'; sweat = true; lookOverride = [0, 5]; }
       }
+    } else if (dl > 0.45) {
+      sy *= 1 + 0.025 * Math.sin(dl * 2 * Math.PI * 1.6); // idle breathing
     }
   }
+  let [mood, lookOverride, sweat] = moodAt(t);
+  let wiggle = 0, scaleBoost = 1, excl = 0;
   if (t >= M.open) {
     mood = 'open';
+    sweat = false;
     const u = prog(t, M.open, M.lunge);
-    scaleBoost = 1 + 0.18 * easeOut(u);
+    scaleBoost = 1 + (M.openGrow ?? 0.18) * easeOut(u);
     wiggle = Math.sin((t - M.open) * 38) * 5 * u;
     excl = prog(t, M.open, M.open + 0.18);
-    sy *= 1 - 0.06 * u; sx *= 1 + 0.05 * u; // crouch before the leap
+    if (!air) { sy *= 1 - 0.06 * u; sx *= 1 + 0.05 * u; } // crouch before the leap
   }
   size *= L.mScale * scaleBoost;
   let cy = base - (52 / 112) * size * sy;
   if (t >= M.lunge) {
-    // the leap at the camera
     mood = 'chomp';
     const u = easeIn(prog(t, M.lunge, M.jaws));
-    const target = V ? 1500 : 1500;
-    size = lerp(size, target, u);
-    cx = lerp(cx, L.w / 2, easeOut(prog(t, M.lunge, M.jaws)));
-    cy = lerp(cy, L.h * 0.5, easeOut(prog(t, M.lunge, M.jaws))) - Math.sin(Math.PI * prog(t, M.lunge, M.jaws)) * 120;
+    size = lerp(size, 1500, u);
+    const v = easeOut(prog(t, M.lunge, M.jaws));
+    cx = lerp(cx, L.w / 2, v);
+    cy = lerp(cy, L.h * 0.5, v) - Math.sin(Math.PI * prog(t, M.lunge, M.jaws)) * 120;
     sx = 1 + 0.08 * Math.sin(Math.PI * u); sy = 1 - 0.05 * Math.sin(Math.PI * u);
     rot = -6 * (1 - u);
     excl = 0;
+    lookOverride = [0, 0.5];
   }
-  cy += y;
   // eyes on her face
   const [fx0, fy0] = faceAt(t);
-  let lx = fx0 - cx, ly = fy0 - (cy - size * 0.05);
+  const lx = fx0 - cx, ly = fy0 - (cy - size * 0.05);
   const n = Math.hypot(lx, ly) || 1;
   let look = [(lx / n) * 3.6, (ly / n) * 3.6];
-  if (mood === 'happy' || t >= M.lunge) look = [0, 0.5];
+  if (mood === 'happy') look = [0, 0.5];
   if (lookOverride) look = lookOverride;
   const svg = coin('sun', { mood, look, size, feet: true, sweat });
-  const shadowY = L.ground - 4;
-  const shOp = t >= M.lunge || (M.perch && t >= M.perch.jump + 0.1) ? 0 : 0.28 * clamp(1 - -y / 300);
-  const shW = size * 0.62 * clamp(1 - (-y / 400) * 0.5);
-  let html = `<div class="abs" style="left:${px(cx - shW / 2)};top:${px(shadowY - size * 0.035)};width:${px(shW)};height:${px(size * 0.07)};border-radius:50%;background:rgba(4,24,28,${shOp.toFixed(3)})"></div>`;
+  const onFloor = st.kind === 'floor' && t < M.lunge;
+  const lift = Math.max(0, L.ground - base);
+  const shOp = onFloor ? 0.28 * clamp(1 - lift / 300) : 0;
+  const shW = size * 0.62 * clamp(1 - (lift / 400) * 0.5);
+  let html = shOp > 0 ? `<div class="abs" style="left:${px(cx - shW / 2)};top:${px(L.ground - 4 - size * 0.035)};width:${px(shW)};height:${px(size * 0.07)};border-radius:50%;background:rgba(4,24,28,${shOp.toFixed(3)})"></div>` : '';
   html += `<div class="abs mon" style="left:${px(cx - size / 2)};top:${px(cy - size / 2)};width:${px(size)};height:${px(size)};transform-origin:50% 96%;transform:translateX(${wiggle.toFixed(1)}px) rotate(${(rot + wiggle * 0.3).toFixed(2)}deg) scale(${sx.toFixed(3)},${sy.toFixed(3)})">${svg}</div>`;
   if (excl > 0) {
     const es = backOut(excl, 3);
-    html += `<div class="abs" style="left:${px(cx + size * 0.28)};top:${px(cy - size * 0.95)};transform:scale(${es.toFixed(3)}) rotate(12deg);transform-origin:0 100%">
+    const side = cx > L.w * 0.6 ? -1 : 1; // keep the "!" on screen and toward her
+    const ex = side > 0 ? cx + size * 0.28 : cx - size * 0.28 - size * 0.3;
+    html += `<div class="abs" style="left:${px(ex)};top:${px(cy - size * 0.95)};transform:scale(${es.toFixed(3)}) rotate(${12 * side}deg);transform-origin:50% 100%">
       <div class="sticker" style="padding:2px 22px 10px;border-radius:22px;font-family:var(--display);font-weight:900;font-size:${Math.round(size * 0.3)}px;line-height:1;background:var(--cream)">!</div></div>`;
   }
-  // dust puffs at each landing + speed lines while airborne
+  // dust puffs at each floor landing + speed lines while airborne
   let fx = '';
-  for (const h of hops) {
-    const d = t - h.land;
+  for (const a of anchors.slice(1)) {
+    if (a.kind !== 'floor') continue;
+    const d = t - a.t1;
     if (d < 0 || d > 0.55) continue;
-    const s = h.size * L.mScale;
+    const s = a.size * L.mScale;
     const u = d / 0.55;
+    const ax = a.pos(t)[0];
     for (const side of [-1, 1]) {
       for (let k = 0; k < 3; k++) {
         const r = (8 + 20 * easeOut(u)) * (1 - k * 0.22) * (s / 260);
         const dx = side * (s * 0.3 + (s * 0.35 + k * 26) * easeOut(u));
         const dy = -k * 14 * (s / 260) - 18 * easeOut(u);
-        fx += `<div class="abs puff" style="left:${px(h.x * L.w + dx - r)};top:${px(L.ground + dy - r)};width:${px(2 * r)};height:${px(2 * r)};opacity:${(1 - u).toFixed(3)}"></div>`;
+        fx += `<div class="abs puff" style="left:${px(ax + dx - r)};top:${px(L.ground + dy - r)};width:${px(2 * r)};height:${px(2 * r)};opacity:${(1 - u).toFixed(3)}"></div>`;
       }
     }
   }
-  if (air || (t >= M.lunge && t < M.jaws)) {
-    const dir = t >= M.lunge ? 0 : 1;
+  if (air && t < M.lunge) {
     for (let k = 0; k < 3; k++) {
       const len = size * (0.32 - k * 0.06);
-      const lx2 = dir ? cx - size * 0.55 - len - k * 10 : cx;
+      const lx2 = st.dir > 0 ? cx - size * 0.55 - len - k * 10 : cx + size * 0.55 + k * 10;
       const ly2 = cy - size * 0.2 + k * size * 0.2;
-      if (dir) fx += `<div class="abs" style="left:${px(lx2)};top:${px(ly2)};width:${px(len)};height:7px;border-radius:4px;background:var(--ink);opacity:.85"></div>`;
+      fx += `<div class="abs" style="left:${px(lx2)};top:${px(ly2)};width:${px(len)};height:7px;border-radius:4px;background:var(--ink);opacity:.85"></div>`;
     }
-    if (!dir) {
-      // radial whoosh lines around the leaping creature
-      const u = prog(t, M.lunge, M.jaws);
-      for (let k = 0; k < 14; k++) {
-        const a = (k / 14) * Math.PI * 2 + 0.2;
-        const r0 = size * 0.62 + 40, r1 = r0 + 90 + 60 * u;
-        fx += `<div class="abs" style="left:${px(cx + Math.cos(a) * r0)};top:${px(cy + Math.sin(a) * r0)};width:${px(r1 - r0)};height:8px;border-radius:4px;background:var(--ink);opacity:${(0.8 * (1 - u * 0.5)).toFixed(2)};transform-origin:0 50%;transform:rotate(${(a * 180) / Math.PI}deg)"></div>`;
-      }
+  }
+  if (t >= M.lunge && t < M.jaws) {
+    const u = prog(t, M.lunge, M.jaws);
+    for (let k = 0; k < 14; k++) {
+      const a = (k / 14) * Math.PI * 2 + 0.2;
+      const r0 = size * 0.62 + 40, r1 = r0 + 90 + 60 * u;
+      fx += `<div class="abs" style="left:${px(cx + Math.cos(a) * r0)};top:${px(cy + Math.sin(a) * r0)};width:${px(r1 - r0)};height:8px;border-radius:4px;background:var(--ink);opacity:${(0.8 * (1 - u * 0.5)).toFixed(2)};transform-origin:0 50%;transform:rotate(${(a * 180) / Math.PI}deg)"></div>`;
     }
   }
   return { html, fx };
@@ -406,6 +409,9 @@ function card(t) {
   let bits = '';
   const g = 2600;
   const oy = h / 2;
+  const dCard = d;
+  {
+  const d = dCard * (CARD.burstSpeed ?? 1); // faster physics for a short card
   for (const c of burst.conf) {
     const x = w / 2 + Math.cos(c.a) * c.sp * d * (V ? 0.75 : 1);
     const y = oy + Math.sin(c.a) * c.sp * d * 0.6 + c.vy * d + 0.5 * g * d * d;
@@ -418,6 +424,7 @@ function card(t) {
     if (y > h + 200 || d > 2.6) continue;
     const sz = c.size * (V ? 1.1 : 1) * Math.min(1, d * 8);
     bits += `<div class="abs" style="left:${px(x - sz / 2)};top:${px(y - sz / 2)};transform:rotate(${(c.spin * d).toFixed(0)}deg)">${coin(c.paint, { mood: c.mood, size: sz, feet: false })}</div>`;
+  }
   }
 
   // SOON, letter by letter
@@ -458,7 +465,7 @@ function card(t) {
     mon = `<div class="abs" style="left:${px(mx - sz / 2)};top:${px(my - sz / 2)};transform:rotate(${tilt.toFixed(2)}deg);filter:drop-shadow(6px 6px 0 ${C.ink})">${coin('sun', { mood, look: [-2, 2], size: sz, diecut: 6 })}</div>`;
     // a little burp puff after the meal
     const bu = prog(t, CARD.soon + 1.0, CARD.soon + 1.7);
-    if (bu > 0 && bu < 1) {
+    if (CARD.burp !== false && bu > 0 && bu < 1) {
       for (let k = 0; k < 3; k++) {
         const r = (10 + k * 7) * easeOut(bu);
         mon += `<div class="abs puff" style="left:${px(mx - sz * 0.55 - k * 26 - r)};top:${px(my - sz * 0.05 - k * 22 - r)};width:${px(2 * r)};height:${px(2 * r)};opacity:${(1 - bu).toFixed(2)}"></div>`;

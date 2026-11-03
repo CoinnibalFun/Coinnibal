@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CUES = json.load(open(os.path.join(HERE, 'cues.json')))
+CUES = json.load(open(os.environ.get('PROMO_CUES') or os.path.join(HERE, 'cues.json')))
 M, CARD = CUES['monster'], CUES['card']
 W, H, FPS = 1920, 1080, CUES['fps']
 SUN = np.array([0x4E, 0xC1, 0xF2], np.float32) / 255  # BGR
@@ -35,7 +35,7 @@ def env_decay(t, t0, tau, dur):
 def shake_amp(t):
     """(translation px, rotation deg) envelope."""
     a, r = 0.0, 0.0
-    for h in M['hops']:
+    for h in M['hops'] + M.get('postHops', []):
         k = env_decay(t, h['land'], 0.06, 0.3)
         a = max(a, k * (2 + h['size'] / 90))
     if M['open'] <= t < M['jaws']:
@@ -101,7 +101,7 @@ def main():
     vid = read_video(os.path.join(a.work, 'graded.mp4'))
     last = None
     prev_shake = (0.0, 0.0, 0.0)
-    want = {int(round(v * FPS)): k for k, v in STILLS.items()}
+    want = {int(round(v * FPS)): k for k, v in CUES.get('stills', STILLS).items()}
     for i in range(N):
         t = i / FPS
         if t < CUES['footageEnd']:
