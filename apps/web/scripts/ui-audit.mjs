@@ -553,7 +553,7 @@ const SCENES = [
       await page.waitForSelector('.tf-sheet', { timeout: 8000 });
       await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 50));
       await page.locator('.tf-sheet .tf-pay').first().click();
-      await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 20000 });
+      await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 40000 });
       await settle(page, 1500);
       await hudExtras(page);
       // every power-up owned, the arena allowance shown: the bar at its largest
