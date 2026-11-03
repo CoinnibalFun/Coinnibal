@@ -928,3 +928,11 @@ html[data-turn='back']::view-transition-old(root) {
   flex-wrap: wrap;
   gap: 12px;
 }
+
+/* wide screens: the plate captions line up with the header's 1312 px column instead of running to
+   the far edges of a 2560 px window (their rules still span the page) */
+@media (min-width: 1440px) {
+  .st-root .kb-plate {
+    padding-inline: calc((100vw - 1312px) / 2 + var(--gutter));
+  }
+}
