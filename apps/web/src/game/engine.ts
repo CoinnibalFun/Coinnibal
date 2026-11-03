@@ -17,7 +17,7 @@ import {
 import { ledgerDecimals } from '@elymum/sdk';
 import { SERVER } from '../config';
 import { DROP_LAND, DUR, SLOWMO_TOTAL, slowmoScale } from '../design/curves';
-import { t } from '../i18n';
+import { serverText, t } from '../i18n';
 import { FrameGovernor } from '../render/governor';
 import { Renderer, type FrameInput } from '../render/renderer';
 import { FOOD_COLORS } from '../render/sprites';
@@ -782,7 +782,8 @@ export class GameEngine {
           // a custom room closed (time up, or closed by its creator): back to the lobby with the reason
           if (useUi.getState().screen !== 'lobby') this.backToLobby();
           else this.net.send({ t: 'spectate' });
-          toast('info', m.message || t('err.room_closed'), undefined, 8000);
+          // the server's reason (creator / admin / time up) is English: other languages get their own line
+          toast('info', serverText(m.message, t('err.room_closed')), undefined, 8000);
           return;
         }
         if (m.code === 'game_closed') {
