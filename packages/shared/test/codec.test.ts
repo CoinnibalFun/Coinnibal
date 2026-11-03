@@ -112,9 +112,9 @@ describe('snapshot codec', () => {
       { id: 65535, skin: 255, flags: 255, name: 'Renée🚀' },
     ];
     const decoded = decodeSnapshot(encodeSnapshot({ tick: 9, view: { x: 1, y: 2, h: 3 }, players, upserts: [], removals: [] }));
-    // the Avatar bit travels only with an avatar id (a bare bit is dropped)
+    // the Avatar and Country bits travel only with an avatar id / a country (a bare bit is dropped)
     expect(decoded.players).toEqual(
-      players.map((p) => ({ ...p, flags: p.flags & ~PlayerFlag.Avatar, isBot: (p.flags & PlayerFlag.Bot) !== 0, ...((p.flags & PlayerFlag.Holder) !== 0 ? { holder: true } : {}) })),
+      players.map((p) => ({ ...p, flags: p.flags & ~PlayerFlag.Avatar & ~PlayerFlag.Country, isBot: (p.flags & PlayerFlag.Bot) !== 0, ...((p.flags & PlayerFlag.Holder) !== 0 ? { holder: true } : {}) })),
     );
     expect(decoded.players.map((p) => (p.flags & PlayerFlag.Staker) !== 0)).toEqual([false, false, true, true]);
   });
@@ -301,6 +301,76 @@ describe('avatar ids in player records (v7)', () => {
     expect(seen).toBe('a1b2c3d4e5f60718');
     // cut inside the avatar id: header (18) + player (5 + 2 name bytes) + 4 of the 8 id bytes
     const cut = buf.slice(0, 18 + 7 + 4);
+    const noop = { snapshotBegin() {}, snapshotPlayer() {}, snapshotUpsert() {}, snapshotRemoval() {} };
+    expect(() => readSnapshot(cut, noop)).toThrow(RangeError);
+    expect(() => decodeSnapshot(cut)).toThrow(RangeError);
+  });
+});
+
+describe('country codes in player records (v8)', () => {
+  const base = (players: PlayerInfo[]): SnapshotData => ({ tick: 1, view: { x: 0, y: 0, h: 1000 }, players, upserts: [], removals: [] });
+
+  it('round-trips a country after the avatar id and sets the Country flag', () => {
+    const snap = base([
+      { id: 1, skin: 3, flags: 0, name: 'flag', country: 'DE' },
+      { id: 2, skin: 1, flags: 0, name: 'both', avatar: '0123456789abcdef', country: 'BR' },
+      { id: 3, skin: 2, flags: PlayerFlag.Bot, name: 'bot', isBot: true, country: 'US' },
+      { id: 4, skin: 0, flags: 0, name: 'none' },
+    ]);
+    const d = decodeSnapshot(encodeSnapshot(snap));
+    expect(d.players[0]).toEqual({ id: 1, skin: 3, flags: PlayerFlag.Country, name: 'flag', isBot: false, country: 'DE' });
+    expect(d.players[1]).toEqual({ id: 2, skin: 1, flags: PlayerFlag.Avatar | PlayerFlag.Country, name: 'both', isBot: false, avatar: '0123456789abcdef', country: 'BR' });
+    expect(d.players[2]).toEqual({ id: 3, skin: 2, flags: PlayerFlag.Bot | PlayerFlag.Country, name: 'bot', isBot: true, country: 'US' });
+    expect(d.players[3]).toEqual({ id: 4, skin: 0, flags: 0, name: 'none', isBot: false });
+    // two bytes per country
+    const without = encodeSnapshot(base(snap.players.map(({ country: _c, ...p }) => p)));
+    expect(encodeSnapshot(snap).byteLength - without.byteLength).toBe(6);
+  });
+
+  it('never writes a code off the allowlist and clears a stray Country flag', () => {
+    const d = decodeSnapshot(
+      encodeSnapshot(
+        base([
+          { id: 1, skin: 0, flags: 0, name: 'lower', country: 'de' },
+          { id: 2, skin: 0, flags: 0, name: 'made up', country: 'XX' },
+          { id: 3, skin: 0, flags: PlayerFlag.Country, name: 'stray' },
+          { id: 4, skin: 0, flags: 0, name: 'long', country: 'USA' },
+        ]),
+      ),
+    );
+    for (const p of d.players) {
+      expect(p.country).toBeUndefined();
+      expect(p.flags & PlayerFlag.Country).toBe(0);
+    }
+  });
+
+  it('streams the packed country to the sink, drops unknown codes on decode and rejects a truncated record', async () => {
+    const { readSnapshot, unpackCountry, packCountry } = await import('../src/index');
+    const buf = encodeSnapshot(base([{ id: 5, skin: 1, flags: 0, name: 'me', avatar: 'a1b2c3d4e5f60718', country: 'JP' }]));
+    let seen = -1;
+    readSnapshot(buf, {
+      snapshotBegin() {},
+      snapshotPlayer: (_id, _skin, flags, _bytes, _at, _len, avatarAt, country) => {
+        expect(flags & PlayerFlag.Country).toBe(PlayerFlag.Country);
+        expect(avatarAt).toBeGreaterThan(0);
+        seen = country;
+      },
+      snapshotUpsert() {},
+      snapshotRemoval() {},
+    });
+    expect(seen).toBe(packCountry('JP'));
+    expect(unpackCountry(seen)).toBe('JP');
+
+    // a hostile server spelling "ZZ": decoded as no country
+    const bytes = new Uint8Array(encodeSnapshot(base([{ id: 6, skin: 0, flags: 0, name: 'x', country: 'FR' }])));
+    const at = 18 + 5 + 1;
+    expect(String.fromCharCode(bytes[at], bytes[at + 1])).toBe('FR');
+    bytes[at] = 90;
+    bytes[at + 1] = 90;
+    expect(decodeSnapshot(bytes.buffer).players[0].country).toBeUndefined();
+
+    // cut inside the country: header (18) + player (5 + 1 name byte) + 1 of the 2 bytes
+    const cut = bytes.buffer.slice(0, 18 + 6 + 1);
     const noop = { snapshotBegin() {}, snapshotPlayer() {}, snapshotUpsert() {}, snapshotRemoval() {} };
     expect(() => readSnapshot(cut, noop)).toThrow(RangeError);
     expect(() => decodeSnapshot(cut)).toThrow(RangeError);

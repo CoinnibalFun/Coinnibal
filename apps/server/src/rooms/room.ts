@@ -102,6 +102,8 @@ export interface JoinOptions {
   flags: number;
   /** The wallet's profile picture (`isAvatarId`), worn on the coin; null / absent: none. */
   avatar?: string | null;
+  /** The country the player plays for (`isCountryCode`, the gateway checked it); null / absent: no flag. */
+  country?: string | null;
   /** Arena ticket. */
   stake?: Omit<ArenaEntry, 'pid'>;
 }
@@ -314,7 +316,7 @@ export class Room {
     this.attach(conn);
     // `joined` starts the client's world mirror afresh: the view starts afresh with it (see `freshView`)
     this.freshView(conn);
-    const player = this.world.addPlayer({ name: opts.name, skin: opts.skin, flags: opts.flags, mass: RULES.startMass });
+    const player = this.world.addPlayer({ name: opts.name, skin: opts.skin, flags: opts.flags, country: opts.country ?? null, mass: RULES.startMass });
     this.humans.set(player.id, conn);
     // the human always gets in: a bot over the target goes home at once ("<name> went home")
     if (this.bots) {
@@ -657,7 +659,7 @@ export class Room {
     const score = stats.maxMass;
 
     // custom rooms play by their own rules: they keep their own board (see `RoomManager`), not the global one
-    if (!this.opts.custom) this.deps.leaderboards.submit({ name: p.name, score, skin: p.skin, wallet, kills: stats.playersEaten, at: now });
+    if (!this.opts.custom) this.deps.leaderboards.submit({ name: p.name, score, skin: p.skin, wallet, kills: stats.playersEaten, at: now, ...(p.country ? { country: p.country } : {}) });
 
     const enqueue: SettlementItem[] = [];
     const loss = this.losses.get(p.id);
@@ -678,6 +680,11 @@ export class Room {
       this.integrity?.settle(this, p.id, item, { reason, payout: entry.value, killer, killerIsBot: !!killer && this.bots?.isBot(killer.id) === true });
       enqueue.push(item);
     }
+    // the countries board: this game's mass (and an alive arena game's payout) for the player's flag
+    if (!this.opts.custom && p.country) {
+      this.deps.leaderboards.countryGame({ country: p.country, mass: score, paid: cause === 'death' ? 0 : (stats.payout ?? 0), at: now });
+    }
+
     if (batch) batch.push(...enqueue);
     else if (enqueue.length > 0 || this.ledger) {
       this.commitJournal(enqueue);
@@ -961,6 +968,7 @@ export class Room {
       bot: p.isBot || undefined,
       isBot: p.isBot || undefined,
       verified: (p.flags & PlayerFlag.Verified) !== 0 || undefined,
+      country: p.country ?? undefined,
     }));
     const leaders = ranking.slice(0, 3).map((p) => {
       const c = p.center();
@@ -1010,6 +1018,7 @@ export class Room {
       if ((p.flags & PlayerFlag.Holder) !== 0) row.holder = true;
       const avatar = p.isBot ? undefined : this.avatarOf.get(p.id);
       if (avatar) row.avatar = avatar;
+      if (p.country) row.country = p.country;
       if (!p.isBot && this.humans.has(p.id) && this.humans.get(p.id) === null) row.away = true;
       return row;
     });
