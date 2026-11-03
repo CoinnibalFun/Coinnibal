@@ -1,4 +1,5 @@
 import { formatHypeAmount } from '@elymum/sdk';
+import { formatToken } from '@elymum/shared';
 import { useState } from 'react';
 import { Button, Chip, CoinCharacter, Icon, Sheet, WalletPicker } from '../design';
 import { useT } from '../i18n';
@@ -141,7 +142,7 @@ export function WalletModal() {
                 <span className="mono">{t('wl.tokenSoonLong')}</span>
               ) : (
                 <>
-                  <span className="wl-bal__big num">{tokens === null ? '…' : tok.exact(tokens)}</span> <span className="mono">{tok.symbol}</span>
+                  <span className="wl-bal__big num" title={tokens === null ? undefined : `${tok.exact(tokens)} ${tok.symbol}`}>{tokens === null ? '…' : formatToken(tokens, tok.decimals, { maxFrac: 2 })}</span> <span className="mono">{tok.symbol}</span>
                 </>
               )}
             </dd>
