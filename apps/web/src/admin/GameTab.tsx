@@ -1,6 +1,6 @@
 import { setPausedCall, updateArenaFrom } from '@elymum/sdk';
 import { arenaName } from '@elymum/sdk/ops';
-import { GAME_ACCESS_MODES, type GameAccess } from '@elymum/shared';
+import { GAME_ACCESS_MODES, MAP_SCALE_LIMITS, mapSideFor, type GameAccess, type MapScaleSettings } from '@elymum/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { SiteApiError, type BotAdminView, type BotKindSettings, type BotSettingsPatch } from '../site/api';
 import { ArenaTab } from './ArenaTab';
@@ -183,7 +183,75 @@ export function botsPatch(saved: BotAdminView['settings'], draft: BotAdminView['
   }
   if (Object.keys(arenas).length) t.arenas = arenas;
   if (Object.keys(t).length) out.testnet = t as never;
+  for (const [kind, d] of Object.entries(draft.maps ?? {})) {
+    const s = saved.maps?.[kind];
+    if (!s) continue;
+    const p: Partial<MapScaleSettings> = {};
+    for (const f of ['auto', 'perPlayer', 'min', 'max'] as const) if (d[f] !== s[f]) (p as Record<string, unknown>)[f] = d[f];
+    if (Object.keys(p).length) (out.maps ??= {})[kind] = p;
+  }
   return out;
+}
+
+/** The players the map table previews the curve for. */
+const MAP_PREVIEW = [5, 10, 25, 50, 100] as const;
+
+/** Game → bots → map size: per room kind, auto on/off and the curve (side = per player x sqrt(players), within min..max). */
+function MapScaleTable({ draft, view, setMap }: { draft: Record<string, MapScaleSettings>; view: BotAdminView; setMap: (kind: string, p: Partial<MapScaleSettings>) => void }) {
+  const L = MAP_SCALE_LIMITS;
+  return (
+    <div className="ad-tablewrap">
+      <p className="ad-note">
+        Map size: with Auto on, each room&apos;s map is sized for the players it expects (people plus the bots that fill it): side = per player x &radic;players, kept within min..max. At a
+        round start the map takes its new size; during play it only grows, a step every few seconds. Custom rooms set to Auto follow the private rooms&apos; curve.
+      </p>
+      <table className="ad-table ad-bots" data-testid="maps-table">
+        <thead>
+          <tr>
+            <th scope="col">Rooms</th>
+            <th scope="col">Auto</th>
+            <th scope="col" className="is-num" title={`Side of the square each player gets (${L.perPlayerMin}..${L.perPlayerMax})`}>
+              Per player
+            </th>
+            <th scope="col" className="is-num">Min side</th>
+            <th scope="col" className="is-num">Max side</th>
+            <th scope="col" className="is-num" title={`Map side for ${MAP_PREVIEW.join(' / ')} players`}>
+              {MAP_PREVIEW.join(' / ')} players
+            </th>
+            <th scope="col" className="is-num">Live</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(draft).map(([kind, m]) => {
+            const live = view.live.rooms.filter((r) => r.kind === kind && r.mapSide !== undefined).map((r) => r.mapSide!);
+            return (
+              <tr key={kind} data-kind={kind}>
+                <td>
+                  <strong>{kindLabel(kind)}</strong>
+                </td>
+                <td>
+                  <label className="ad-switch ad-switch--inline">
+                    <input type="checkbox" role="switch" checked={m.auto} onChange={() => setMap(kind, { auto: !m.auto })} aria-label={`${kindLabel(kind)} map auto size`} />
+                  </label>
+                </td>
+                <td className="is-num">
+                  <NumCell value={m.perPlayer} max={L.perPlayerMax} label={`${kind} map per player`} onChange={(n) => setMap(kind, { perPlayer: n })} />
+                </td>
+                <td className="is-num">
+                  <NumCell value={m.min} max={L.sideMax} label={`${kind} map min`} onChange={(n) => setMap(kind, { min: n })} />
+                </td>
+                <td className="is-num">
+                  <NumCell value={m.max} max={L.sideMax} label={`${kind} map max`} onChange={(n) => setMap(kind, { max: n })} />
+                </td>
+                <td className="num is-num mono">{m.auto ? MAP_PREVIEW.map((n) => mapSideFor(n, m)).join(' / ') : 'preset'}</td>
+                <td className="num is-num">{live.length ? live.join(', ') : '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function NumCell({ value, onChange, label, max }: { value: number; onChange: (n: number) => void; label: string; max: number }) {
@@ -248,6 +316,7 @@ export function BotsCard({ ctx, arenaIds }: { ctx: ChainCtx; arenaIds: number[] 
   const patch = botsPatch(view.settings, draft);
   const dirty = Object.keys(patch).length > 0;
   const setKind = (kind: string, p: Partial<BotKindSettings>) => setDraft({ ...draft, kinds: { ...draft.kinds, [kind]: { ...draft.kinds[kind], ...p } } });
+  const setMap = (kind: string, p: Partial<MapScaleSettings>) => setDraft({ ...draft, maps: { ...draft.maps, [kind]: { ...draft.maps![kind], ...p } } });
   const save = async () => {
     setBusy(true);
     setErr(null);
@@ -335,6 +404,8 @@ export function BotsCard({ ctx, arenaIds }: { ctx: ChainCtx; arenaIds: number[] 
           </tbody>
         </table>
       </div>
+
+      {draft.maps && <MapScaleTable draft={draft.maps} view={view} setMap={setMap} />}
 
       {view.staked?.problem && (
         <div className="ad-blocked ad-bots__problem" role="alert" data-testid="bots-problem">

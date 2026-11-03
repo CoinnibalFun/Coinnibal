@@ -17,3 +17,4 @@ export * from './integrity';
 export * from './avatar';
 export * from './custom-rooms';
 export * from './boosts';
+export * from './map-scale';

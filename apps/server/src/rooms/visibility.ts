@@ -17,11 +17,14 @@ export class ViewState {
   readonly known = new Map<number, Known>();
   readonly knownPlayers = new Map<number, string>();
   private gen = 0;
+  /** `World.boundsVersion` this client last heard (-1: never, the next snapshot carries the bounds). */
+  private boundsSent = -1;
 
   reset(): void {
     this.known.clear();
     this.knownPlayers.clear();
     this.gen = 0;
+    this.boundsSent = -1;
   }
 
   forgetPlayer(pid: number): void {
@@ -75,6 +78,10 @@ export class ViewState {
       }
     }
 
+    if (this.boundsSent !== world.boundsVersion) {
+      this.boundsSent = world.boundsVersion;
+      return { tick: world.tickCount, view, bounds: { x0: world.x0, y0: world.y0, x1: world.x1, y1: world.y1 }, players, upserts, removals };
+    }
     return { tick: world.tickCount, view, players, upserts, removals };
   }
 }
