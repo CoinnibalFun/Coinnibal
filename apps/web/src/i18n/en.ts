@@ -709,6 +709,8 @@ export const en = {
   'cr.duration': 'Duration',
   'cr.minutes': '{n} min',
   'cr.map': 'Map size',
+  'cr.map.auto': 'Auto',
+  'cr.mapHintAuto': 'Sized for the players in the room ({min} to {max} units a side) and grows as people join.',
   'cr.map.XS': 'Tiny',
   'cr.map.S': 'Small',
   'cr.map.M': 'Medium',

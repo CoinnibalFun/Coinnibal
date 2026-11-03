@@ -103,9 +103,14 @@ export class BotManager {
 
   /** Bots wanted for this many humans: `clamp(target − humans, min, cap)`, 0 when bots are off. */
   desired(humans: number): number {
-    if (!this.enabled) return 0;
-    const cap = this.cap;
-    return clamp(this.opts.target - humans, Math.min(this.opts.min, cap), cap);
+    return BotManager.desiredOf(this.opts, humans);
+  }
+
+  /** `desired` for a set of options (a room sizes its map before its bot manager exists). */
+  static desiredOf(o: BotManagerOptions, humans: number): number {
+    if (o.enabled === false) return 0;
+    const cap = Math.max(0, o.max);
+    return clamp(o.target - humans, Math.min(o.min, cap), cap);
   }
 
   isBot(pid: number): boolean {
