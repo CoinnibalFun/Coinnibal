@@ -4,6 +4,7 @@ import { sound } from '../../audio';
 import { APP_VERSION } from '../../config';
 import { useT, type TKey } from '../../i18n';
 import { openModal, updateSettings, useUi, type Settings } from '../../store';
+import { LanguagePicker } from '../LanguagePicker';
 import { MusicPicker } from './MusicPicker';
 
 type Flag = 'showNames' | 'showMass' | 'showChat' | 'showFps';
@@ -90,6 +91,9 @@ export function SettingsPage({ headings = true }: { headings?: boolean }) {
     <div className="gs-page">
       {headings && <h3 className="gs-h mono">{t('st.look')}</h3>}
       <div className="g-set">
+        <Row label={t('site.lang')}>
+          <LanguagePicker className="gs-lang" />
+        </Row>
         <Row label={t('gs.theme')}>
           <Chip icon="sun" selected={s.theme === 'light'} onClick={() => set({ theme: 'light' })}>
             {t('gs.paper')}

@@ -22,6 +22,8 @@
 // --full-shots also saves a viewport screenshot of every audited state (states/*.png).
 // --selftest checks the detectors against a fixture page with one known bug each.
 // --scenes takes id prefixes (`lobby` runs lobby-*); --list prints the scene ids.
+// --locale ru runs every scene in that interface language (en, tr, es, pt, ru, zh; default en): the
+//           browser locale and the stored language pick are set before the app boots.
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -46,6 +48,9 @@ const OUT_ROOT = resolve(opt('--out', '/home/user/Solagel/out/work/ui-audit'));
 const LABEL = opt('--label', 'run');
 const OUT = join(OUT_ROOT, LABEL);
 const WORKERS = Number(opt('--workers', '3'));
+const LOCALE = opt('--locale', 'en');
+const LOCALE_TAG = { en: 'en-US', tr: 'tr-TR', es: 'es-ES', pt: 'pt-BR', ru: 'ru-RU', zh: 'zh-CN' }[LOCALE];
+if (!LOCALE_TAG) throw new Error(`--locale must be one of en, tr, es, pt, ru, zh (got ${LOCALE})`);
 const MAX_SHOTS = Number(opt('--max-shots', '500'));
 const SHOTS = !flag('--no-shots');
 const log = (...a) => console.error('[ui-audit]', ...a);
@@ -337,7 +342,8 @@ const SCENES = [
       );
       await openPlay(page, h, { hash: '#ranks', wait: 1200 });
       await h.check('today-flags');
-      await page.getByRole('tab', { name: /countries/i }).click();
+      // the third tab (today, all time, countries): by position, so every language runs it
+      await page.getByRole('tab').nth(2).click();
       await settle(page, 1200);
     },
   },
@@ -469,7 +475,7 @@ const SCENES = [
       await openPlay(page, h);
       await page.getByTestId('room-create').click();
       await page.waitForSelector('[data-testid="cr-setup"]');
-      await page.getByLabel('Room name').fill(LONG_ROOM);
+      await page.locator('input[data-autofocus]').first().fill(LONG_ROOM); // the room name (any language)
       await settle(page, 700);
       await h.check('setup');
       await page.getByTestId('cr-continue').click();
@@ -504,7 +510,7 @@ const SCENES = [
       await openPlay(page, h);
       await page.getByTestId('room-create').click();
       await page.waitForSelector('[data-testid="cr-setup"]');
-      await page.getByLabel('Room name').fill(LONG_ROOM);
+      await page.locator('input[data-autofocus]').first().fill(LONG_ROOM); // the room name (any language)
       await page.getByTestId('cr-continue').click();
       await page.waitForSelector('[data-testid="cr-payment"]');
       await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 100));
@@ -623,7 +629,7 @@ const SCENES = [
       await playPractice(page);
       await feed(page, { t: 'death', stats: DEATH_STATS, killer: LONG, killerSkin: 2 });
       await settle(page, 800);
-      const b = page.locator('.g-death button', { hasText: /watch|spectate/i }).first();
+      const b = page.locator('.g-death button.g-link').first();
       if (await b.count()) {
         await b.click();
         await settle(page, 1500);
@@ -854,20 +860,21 @@ async function newContext(browser, vp, theme, auth, app, brief = false, key = AU
     deviceScaleFactor: vp.dpr,
     isMobile: vp.touch,
     hasTouch: vp.touch,
-    locale: 'en-US',
+    locale: LOCALE_TAG,
     colorScheme: theme === 'night' ? 'dark' : 'light',
     reducedMotion: 'reduce',
   });
   await ctx.addInitScript(
-    ([theme, brief, name]) => {
+    ([theme, brief, name, locale]) => {
       try {
+        localStorage.setItem('elymum.locale.v1', locale);
         localStorage.setItem('elymum.settings.v1', JSON.stringify({ name, skin: 4, theme: theme === 'night' ? 'dark' : 'light', quality: 'low', sound: false, showMinimap: true, showChat: true, showNames: true, showMass: true, showFps: true }));
         if (!brief) localStorage.setItem('elymum.brief', '1');
         else localStorage.removeItem('elymum.brief');
         localStorage.setItem('elymum.autoQuality', 'off');
       } catch {}
     },
-    [theme, brief, LONG],
+    [theme, brief, LONG, LOCALE],
   );
   if (auth !== 'guest') await installEvmWallet(ctx, { privateKey: key, autoConnect: true, allowTransactions: false });
   return ctx;
