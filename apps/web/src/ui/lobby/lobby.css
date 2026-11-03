@@ -134,6 +134,9 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+  /* a 44 px tap target around the 24-40 px wordmark */
+  min-height: 44px;
+  min-width: 44px;
   color: inherit;
   text-decoration: none;
 }
@@ -659,7 +662,8 @@
 }
 .kl-owed__kicker {
   font-size: var(--t-label);
-  color: var(--teal-ink);
+  /* a deeper teal: the plain teal ink read 4.4:1 on the sun slip */
+  color: #225a6b;
 }
 .kl-owed__amount {
   font-family: var(--font-mono);
@@ -1070,6 +1074,10 @@
 }
 .kl-board__titles {
   min-width: 0;
+}
+.kl-root.is-phone .kl-board__title {
+  font-size: clamp(26px, 9vw, 34px);
+  overflow-wrap: anywhere;
 }
 .kl-root.is-phone .kl-bell {
   padding: 7px 10px 6px;
