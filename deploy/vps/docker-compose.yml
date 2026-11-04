@@ -30,6 +30,9 @@ services:
       HOST: 0.0.0.0
       TRUST_PROXY: "1"
       TRUST_PROXY_HOPS: "1"
+      # TEMPORARY (owner's request, 2026-11-04): the game is closed for maintenance. While this is set the
+      # /admin "Who may play" switch is locked; delete this line (and push) to hand control back to /admin.
+      GAME_ACCESS: maintenance
     volumes:
       - elymum-data:/data
     expose:
