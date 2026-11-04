@@ -25,7 +25,8 @@ import type { BotManagerOptions } from '../bots/manager';
 import type { BotMixWeights } from '../bots/personality';
 import { PaymentChainBusy, TX_HASH_RE, checkPayment, type PaymentReader, type UsedPayments } from '../chain/payment';
 import type { CustomRoomHooks, RoomManager } from './manager';
-import type { Room, WorldShape } from './room';
+import type { RoomHandle } from './handle';
+import type { WorldShape } from './room';
 
 /** A refusal of the custom room API: HTTP status, code and a friendly message. */
 export class CustomRoomFail extends Error {
@@ -270,7 +271,7 @@ export class CustomRoomService implements CustomRoomHooks {
         dropped++;
         continue;
       }
-      if (this.d.rooms.rooms.has(`priv-${code}`)) continue;
+      if (this.d.rooms.get(`priv-${code}`)) continue;
       this.open(r);
       n++;
     }
@@ -281,14 +282,14 @@ export class CustomRoomService implements CustomRoomHooks {
     return n;
   }
 
-  private open(r: CustomRecord): Room {
+  private open(r: CustomRecord): RoomHandle {
     return this.d.rooms.createCustomRoom(r.code, {
       name: r.config.name,
       maxPlayers: r.config.maxPlayers,
       bots: customBots(r.config),
       world: customWorld(r.config),
       // "Auto": the private rooms' curve, sized for the bots plus the people in the room
-      ...(r.config.mapSize === 'auto' ? { map: { scale: this.d.rooms.customMapScale(), shape: (side: number) => customWorld(r.config, side) } } : {}),
+      ...(r.config.mapSize === 'auto' ? { map: { scale: this.d.rooms.customMapScale(), shape: (side: number) => customWorld(r.config, side), config: r.config } } : {}),
       powerUps: r.config.powerUps,
       custom: this.summary(r),
     });
@@ -334,13 +335,13 @@ export class CustomRoomService implements CustomRoomHooks {
   }
 
   view(r: CustomRecord): CustomRoomView {
-    const room = this.d.rooms.rooms.get(`priv-${r.code}`);
+    const room = this.d.rooms.get(`priv-${r.code}`);
     return {
       ...this.summary(r),
       code: r.code,
       name: r.config.name,
       maxPlayers: r.config.maxPlayers,
-      players: room?.humans.size ?? 0,
+      players: room?.humanCount ?? 0,
       best: r.best.slice(0, BEST_KEPT),
       paidWith: r.paidWith,
       txHash: r.txHash,
@@ -507,7 +508,7 @@ export class CustomRoomService implements CustomRoomHooks {
       }
       if (!r.warned && r.endsAt - now <= CUSTOM_WARN_MS) {
         r.warned = true;
-        this.d.rooms.rooms.get(`priv-${r.code}`)?.announce('1 minute left in this room!');
+        this.d.rooms.get(`priv-${r.code}`)?.announce('1 minute left in this room!');
         this.bestDirty = true;
       }
     }
@@ -515,7 +516,7 @@ export class CustomRoomService implements CustomRoomHooks {
   }
 
   /** A game ended in a custom room: its own leaderboard keeps the best 10 games. */
-  onGame(room: Room, e: { name: string; score: number; kills: number }): void {
+  onGame(room: RoomHandle, e: { name: string; score: number; kills: number }): void {
     const code = room.opts.code;
     const r = code ? this.records.get(code) : undefined;
     if (!r || e.score <= 0) return;

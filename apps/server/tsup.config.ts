@@ -1,7 +1,8 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  // the room worker (GAME_WORKERS) is its own bundle next to index.js: dist/room-worker.js
+  entry: { index: 'src/index.ts', 'room-worker': 'src/rooms/remote/worker-main.ts' },
   format: ['esm'],
   platform: 'node',
   target: 'node22',

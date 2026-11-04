@@ -22,6 +22,7 @@ import {
   type ClientInput,
   type MapScaleSettings,
   type WorldShape,
+  type CustomRoomConfig,
   type CustomRoomSummary,
   type DeathStats,
   type LbEntry,
@@ -44,7 +45,7 @@ import { World, type CellEatenEvent } from '../game/world';
 import type { IntegrityService } from '../integrity/service';
 import type { ShopService, UseContext } from '../shop/service';
 import type { Leaderboards } from '../leaderboards';
-import type { Conn } from '../net/conn';
+import type { RoomConn as Conn, RoomHandle } from './handle';
 import { sweepKey, type Journal, type JournalItem, type LiveStake, type SettleReason, type SettlementItem } from '../stake/journal';
 import { ArenaLedger, type ArenaEntry } from '../stake/ledger';
 import { RoundClock } from './round-clock';
@@ -60,10 +61,15 @@ const CHAT_HISTORY = 20;
 /** Arena rooms ask the staked-bot source for another ticket at most this often. */
 const STAKED_BOT_ASK_MS = 3000;
 
+/** What a room writes to the journal (the main thread's `Journal`; a room worker forwards it there). */
+export type RoomJournal = Pick<Journal, 'commit' | 'adoptLoot' | 'pending'>;
+/** The integrity hooks a room calls (`IntegrityService`; a room worker runs the monitor itself). */
+export type RoomIntegrity = Pick<IntegrityService, 'monitor' | 'join' | 'settle'>;
+
 export interface RoomDeps {
-  chain: ChainGateway;
-  journal: Journal;
-  leaderboards: Leaderboards;
+  chain: Pick<ChainGateway, 'kick'>;
+  journal: RoomJournal;
+  leaderboards: Pick<Leaderboards, 'submit' | 'countryGame'>;
   log: (msg: string) => void;
   /** Wall clock (Unix ms) the arena rounds run on; defaults to `Date.now`. Tests inject their own. */
   now?: () => number;
@@ -82,13 +88,13 @@ export interface RoomDeps {
    */
   onBellSettled?: (e: BellSettled) => void;
   /** Cheat and collusion telemetry of the arena tickets (and the optional auto-hold of payouts). */
-  integrity?: IntegrityService;
+  integrity?: RoomIntegrity;
   /** Testnet staked bots (wallet + real ticket); absent: arenas field zero-value bots only. */
   stakedBots?: StakedBotSource;
   /** How often an arena room asks the staked-bot source for another ticket (default 3 s; tests: 0). */
   stakedAskMs?: number;
   /** Bought power-ups (charges, cooldowns, the arena cap); absent: the `boost` message is ignored. */
-  shop?: ShopService;
+  shop?: Pick<ShopService, 'state' | 'use'>;
 }
 
 /** An AFK staker's ticket settled at a round's bell (see `RoomDeps.onBellSettled`). */
@@ -152,6 +158,11 @@ export interface RoomMapOptions {
   scale: MapScaleSettings;
   /** The population of a world of `side` (default `worldForSide(side)`; custom rooms apply their food and traps choices). */
   shape?: (side: number) => WorldShape;
+  /**
+   * A custom room's config: `shape` is `customWorld(config, side)`. A function does not cross to a
+   * room worker, so a worker rebuilds `shape` from this.
+   */
+  config?: CustomRoomConfig;
 }
 
 /**
@@ -171,7 +182,7 @@ interface ChatLine {
 
 type FinishCause = 'death' | 'left' | 'round' | 'maxage' | 'kicked';
 
-export class Room {
+export class Room implements RoomHandle {
   readonly world: World;
   readonly bots: BotManager | null;
   readonly ledger: ArenaLedger | null;
@@ -196,7 +207,7 @@ export class Room {
   private roundEndsAt = Infinity;
   private readonly clock: RoundClock;
   /** Arena rooms only: the integrity telemetry (null elsewhere and when not configured). */
-  private readonly integrity: IntegrityService | null;
+  private readonly integrity: RoomIntegrity | null;
   private tickN = 0;
   /** Staked-bot tickets being bought for this room right now (0 or 1). */
   private stakedPending = 0;
@@ -296,6 +307,22 @@ export class Room {
     return this.humans.size >= this.opts.maxPlayers;
   }
 
+  get humanCount(): number {
+    return this.humans.size;
+  }
+
+  get connCount(): number {
+    return this.conns.size;
+  }
+
+  lootCount(): number {
+    return this.world.loot().length;
+  }
+
+  mapSide(): number {
+    return this.world.cfg.width;
+  }
+
   /** Stake sessions currently represented in this room. */
   liveSessions(): string[] {
     return this.ledger ? this.ledger.all().map((e) => e.session) : [];
@@ -307,7 +334,7 @@ export class Room {
 
   private broadcast(msg: ServerMessage): void {
     const json = JSON.stringify(msg);
-    for (const c of this.conns) if (c.open) c.ws.send(json);
+    for (const c of this.conns) c.sendText(json);
   }
 
   private attach(conn: Conn): void {
@@ -1069,7 +1096,9 @@ export class Room {
       if (!snap) continue;
       this.writer.reset();
       writeSnapshot(this.writer, snap);
-      conn.sendBinary(this.writer.finish());
+      // a room worker copies the bytes into its batch at once; a socket keeps the buffer it is given
+      if (conn.sendBytes) conn.sendBytes(this.writer.written());
+      else conn.sendBinary(this.writer.finish());
     }
   }
 

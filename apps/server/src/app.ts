@@ -390,7 +390,7 @@ export async function createApp(
       if (botTimer) clearInterval(botTimer);
       stopRpcLog();
       mint.flush();
-      rooms.shutdown();
+      await rooms.shutdown();
       customRooms.flush();
       integrity.close();
       priceKeeper?.stop();

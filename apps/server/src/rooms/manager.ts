@@ -1,19 +1,46 @@
-import { TICK_MS, arenaMeta, type BlockedArena, type League, type MapScaleSettings, type RoomInfo, type RoundWindow } from '@elymum/shared';
+import { availableParallelism } from 'node:os';
+import { TICK_MS, arenaMeta, type BlockedArena, type DeathStats, type League, type MapScaleSettings, type RoomInfo, type RoundWindow } from '@elymum/shared';
 import { BotSettingsStore, botKindOf, defaultBotSettings, type BotRoomKind } from '../bots/settings';
 import type { ChainGateway } from '../chain/types';
 import type { ServerConfig } from '../config';
+import type { IntegrityService } from '../integrity/service';
+import type { Leaderboards } from '../leaderboards';
 import type { Conn } from '../net/conn';
-import type { ArenaEntry } from '../stake/ledger';
+import type { ShopService } from '../shop/service';
+import type { Journal } from '../stake/journal';
 import type { BotManagerOptions } from '../bots/manager';
+import type { RoomHandle, StakeSeat } from './handle';
 import { Room, type BellSettled, type RoomDeps, type RoomOptions } from './room';
 import { RoundClock } from './round-clock';
+import { ThreadMeter, TickStats, roomTickStats, startTickLoop, wsOut, type RoomLoad, type ServerLoad, type ThreadLoad } from './load';
+import { RemoteRoom, WorkerPool } from './remote/pool';
 
 /** What the room manager asks of the custom-room service (`CustomRoomService`). */
 export interface CustomRoomHooks {
   /** Closes rooms whose time ran out (called about once a second from the tick loop). */
   sweep(now: number): void;
   /** A human's game ended in a custom room (its own leaderboard). */
-  onGame(room: Room, e: { name: string; score: number; kills: number }): void;
+  onGame(room: RoomHandle, e: { name: string; score: number; kills: number }): void;
+  /** Rooms were lost with a crashed room worker: reopen the custom rooms that still have time. */
+  restore?(): number;
+}
+
+/** A human's game ended (death, leave, bell, operator exit), in a room on this thread or in a room worker. */
+export interface GameOverEvent {
+  room: RoomHandle;
+  conn: Conn | null;
+  player: { name: string };
+  stats: DeathStats;
+}
+
+/** The services the rooms use: the main thread's own (journal, chain, stores), whichever thread runs the rooms. */
+export interface ManagerDeps extends Omit<RoomDeps, 'chain' | 'journal' | 'leaderboards' | 'integrity' | 'shop' | 'onGameOver'> {
+  chain: ChainGateway;
+  journal: Journal;
+  leaderboards: Leaderboards;
+  integrity?: IntegrityService;
+  shop?: ShopService;
+  onGameOver?: (e: GameOverEvent) => void;
 }
 
 /** A custom room that closed is remembered this long (a late joiner hears `room_closed`, not "no such room"). */
@@ -44,15 +71,34 @@ interface ArenaData {
   pot: number | null;
 }
 
+/**
+ * The room directory: every room (practice leagues, private and custom rooms, arena instances),
+ * matchmaking, arena discovery and the vault guard, the bell memo. With `GAME_WORKERS` = 0 the rooms
+ * run here (`rooms`); otherwise they run in room workers (`WorkerPool`) and this keeps their proxies
+ * (`RemoteRoom`), placing each new room on the least-loaded worker.
+ */
 export class RoomManager {
+  /** Rooms running on this thread (single-thread mode; empty with room workers). */
   readonly rooms = new Map<string, Room>();
+  /** Rooms running in room workers. */
+  private readonly remote = new Map<string, RemoteRoom>();
+  /** The room workers (null: single-thread mode). */
+  readonly pool: WorkerPool | null;
+  private housekeepingTimer: NodeJS.Timeout | null = null;
   readonly conns = new Set<Conn>();
-  private timer: NodeJS.Timeout | null = null;
+  private stopLoop: (() => void) | null = null;
+  /** The whole tick of this thread (single-thread mode) and its event-loop meter. */
+  private readonly tickStats = new TickStats();
+  private readonly meter = new ThreadMeter();
+  private lastLoadAt = performance.now();
+  private lastOut = { bytes: 0, msgs: 0 };
   private lastCleanup = Date.now();
   private arenaCache: { at: number; ids: Map<number, ArenaData> } | null = null;
   /** IP → time of the promotion to the pro league. */
   private readonly promotions = new Map<string, number>();
-  private readonly deps: RoomDeps;
+  private readonly deps: ManagerDeps;
+  /** What a room on this thread is given. */
+  private readonly roomDeps: RoomDeps;
   /** Arenas kept disabled because their vault cannot cover the journal (id → message). */
   private readonly underfunded = new Map<number, string>();
   /** `enabled` of each arena at the last chain read (detects a disabled → enabled flip). */
@@ -68,29 +114,121 @@ export class RoomManager {
 
   constructor(
     private readonly cfg: ServerConfig,
-    deps: RoomDeps,
+    deps: ManagerDeps,
     private readonly chain: ChainGateway,
     botSettings?: BotSettingsStore,
   ) {
     this.botSettings = botSettings ?? new BotSettingsStore(null, defaultBotSettings(cfg.bots));
     this.botSettings.onChange(() => this.applyBotSettings());
-    this.deps = {
-      ...deps,
-      round: deps.round ?? cfg.round,
-      // one clock for the gateway and every room
-      clock: deps.clock ?? new RoundClock(deps.now, deps.round ?? cfg.round),
-      onGameOver: (e) => {
-        this.onGameOver(e);
-        if (e.room.opts.custom) this.custom?.onGame(e.room, { name: e.player.name, score: Math.floor(e.stats.maxMass), kills: e.stats.playersEaten });
-        deps.onGameOver?.(e);
-      },
-      onBellSettled: (e) => {
-        this.bellMemo.set(`${e.arenaId}:${e.wallet}`, { ...e, at: Date.now() });
-        deps.onBellSettled?.(e);
-      },
+    const round = deps.round ?? cfg.round;
+    // one clock for the gateway and every room
+    const clock = deps.clock ?? new RoundClock(deps.now, round);
+    const gameOver = (e: GameOverEvent) => {
+      this.onGameOver(e);
+      if (e.room.opts.custom) this.custom?.onGame(e.room, { name: e.player.name, score: Math.floor(e.stats.maxMass), kills: e.stats.playersEaten });
+      deps.onGameOver?.(e);
     };
+    const bellSettled = (e: BellSettled) => {
+      this.bellMemo.set(`${e.arenaId}:${e.wallet}`, { ...e, at: Date.now() });
+      deps.onBellSettled?.(e);
+    };
+    this.deps = { ...deps, round, clock, onGameOver: gameOver, onBellSettled: bellSettled };
+    // a room on this thread hands its own connection (a `Conn`) to the hooks
+    this.roomDeps = { ...this.deps, onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: e.player, stats: e.stats }) };
+    const workers = cfg.gameWorkers ?? 0;
+    this.pool =
+      workers > 0
+        ? new WorkerPool(workers, {
+            journal: deps.journal,
+            chain: deps.chain,
+            leaderboards: deps.leaderboards,
+            log: deps.log,
+            clock,
+            round,
+            clockOffset: () => clock.now() - Date.now(),
+            integrity: deps.integrity,
+            shop: deps.shop,
+            stakedBots: deps.stakedBots,
+            stakedAskMs: deps.stakedAskMs,
+            onGameOver: gameOver,
+            onBellSettled: bellSettled,
+            onLost: (rooms) => this.onRoomsLost(rooms),
+            onClosed: (room, ok) => {
+              if (ok && this.remote.get(room.id) === room) this.remote.delete(room.id);
+            },
+            hangMs: cfg.gameWorkerHangMs,
+          })
+        : null;
+    if (this.pool && deps.integrity) {
+      const pool = this.pool;
+      deps.integrity.setRemoteLive(() => pool.liveSessions());
+    }
     this.createPractice('rookie');
     this.createPractice('pro');
+  }
+
+  /** Every room, wherever it runs. */
+  private handles(): IterableIterator<RoomHandle> {
+    return this.pool ? this.remote.values() : this.rooms.values();
+  }
+
+  /** The room with this id, wherever it runs. */
+  get(id: string): RoomHandle | undefined {
+    return this.pool ? this.remote.get(id) : this.rooms.get(id);
+  }
+
+  private has(id: string): boolean {
+    return this.pool ? this.remote.has(id) : this.rooms.has(id);
+  }
+
+  /** Rooms in the directory. */
+  get roomCount(): number {
+    return this.pool ? this.remote.size : this.rooms.size;
+  }
+
+  private drop(room: RoomHandle): void {
+    if (room instanceof RemoteRoom) {
+      if (this.remote.get(room.id) === room) this.remote.delete(room.id);
+    } else this.rooms.delete(room.id);
+  }
+
+  /** Opens a room: here, or on the least-loaded room worker (an arena's first instance adopts the journaled loot). */
+  private open(opts: RoomOptions): RoomHandle {
+    if (this.pool) {
+      const loot = opts.mode === 'arena' && opts.stake && (opts.instance ?? 1) === 1 ? this.deps.journal.adoptLoot(opts.stake.arenaId, opts.id) : [];
+      const room = this.pool.createRoom(opts, loot);
+      this.remote.set(room.id, room);
+      return room;
+    }
+    const room = new Room(opts, this.roomDeps);
+    this.rooms.set(room.id, room);
+    return room;
+  }
+
+  /** A connection opened (the gateway); `removeConn` when it closes. */
+  addConn(conn: Conn): void {
+    this.conns.add(conn);
+  }
+
+  removeConn(conn: Conn): void {
+    this.conns.delete(conn);
+    this.pool?.forget(conn);
+  }
+
+  /**
+   * A room worker died: its rooms are gone (the pool recovered their tickets and loot from the
+   * journal). The standing rooms open again: the first pond of each league, every arena's first
+   * instance, the custom rooms with time left.
+   */
+  private onRoomsLost(rooms: RemoteRoom[]): void {
+    for (const r of rooms) this.drop(r);
+    for (const league of ['rookie', 'pro'] as const) if (!this.has(`practice-${league}-1`)) this.createPractice(league);
+    try {
+      this.custom?.restore?.();
+    } catch (err) {
+      this.deps.log(`custom rooms: restore after a room worker crash failed: ${(err as Error).message}`);
+    }
+    void this.ensureArenaRooms();
   }
 
   /** The wall clock arena rounds run on (Unix ms; injectable through `RoomDeps.now`). */
@@ -123,11 +261,10 @@ export class RoomManager {
   /* Practice leagues                                                 */
   /* ---------------------------------------------------------------- */
 
-  private createPractice(league: League): Room {
+  private createPractice(league: League): RoomHandle {
     let n = 1;
-    while (this.rooms.has(`practice-${league}-${n}`)) n++;
-    const room = new Room(
-      {
+    while (this.has(`practice-${league}-${n}`)) n++;
+    return this.open({
         id: `practice-${league}-${n}`,
         mode: 'practice',
         league,
@@ -135,11 +272,7 @@ export class RoomManager {
         maxPlayers: this.cfg.practiceCapacity,
         bots: this.botSettings.options(league === 'rookie' ? 'practiceRookie' : 'practicePro'),
         map: { scale: this.botSettings.mapScale(league === 'rookie' ? 'practiceRookie' : 'practicePro') },
-      },
-      this.deps,
-    );
-    this.rooms.set(room.id, room);
-    return room;
+    });
   }
 
   /**
@@ -147,12 +280,12 @@ export class RoomManager {
    * else a new one. `prefer` (the room the connection is already in) wins when
    * it serves that league and has space.
    */
-  practiceRoom(league: League, prefer?: Room | null): Room {
+  practiceRoom(league: League, prefer?: RoomHandle | null): RoomHandle {
     if (prefer && prefer.opts.mode === 'practice' && prefer.opts.league === league && !prefer.isFull) return prefer;
-    let best: Room | null = null;
-    for (const r of this.rooms.values()) {
+    let best: RoomHandle | null = null;
+    for (const r of this.handles()) {
       if (r.opts.mode !== 'practice' || r.opts.league !== league || r.isFull) continue;
-      if (!best || r.humans.size > best.humans.size) best = r;
+      if (!best || r.humanCount > best.humanCount) best = r;
     }
     return best ?? this.createPractice(league);
   }
@@ -164,7 +297,7 @@ export class RoomManager {
     return at !== undefined && now - at < PROMOTION_MS ? 'pro' : 'rookie';
   }
 
-  private onGameOver(e: Parameters<NonNullable<RoomDeps['onGameOver']>>[0]): void {
+  private onGameOver(e: GameOverEvent): void {
     if (e.room.opts.mode !== 'practice' || e.room.opts.league !== 'rookie' || !e.conn) return;
     if (e.stats.maxMass > PROMOTE_MAX_MASS || e.stats.playersEaten >= PROMOTE_KILLS) {
       const first = !this.promotions.has(e.conn.ip);
@@ -174,9 +307,9 @@ export class RoomManager {
   }
 
   /** Default room for lobby spectators. */
-  lobbyRoom(): Room {
-    let best: Room | null = null;
-    for (const r of this.rooms.values()) if (r.opts.mode === 'practice' && (!best || r.humans.size > best.humans.size)) best = r;
+  lobbyRoom(): RoomHandle {
+    let best: RoomHandle | null = null;
+    for (const r of this.handles()) if (r.opts.mode === 'practice' && (!best || r.humanCount > best.humanCount)) best = r;
     return best ?? this.createPractice('rookie');
   }
 
@@ -185,15 +318,14 @@ export class RoomManager {
     let c = '';
     do {
       c = Array.from({ length: 5 }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join('');
-    } while (this.rooms.has(`priv-${c}`) || this.closedCodes.has(c));
+    } while (this.has(`priv-${c}`) || this.closedCodes.has(c));
     return c;
   }
 
-  privateRoom(code: string | null): Room | null {
-    if (code) return this.rooms.get(`priv-${code}`) ?? null;
+  privateRoom(code: string | null): RoomHandle | null {
+    if (code) return this.get(`priv-${code}`) ?? null;
     const c = this.newPrivateCode();
-    const room = new Room(
-      {
+    return this.open({
         id: `priv-${c}`,
         mode: 'private',
         name: `Private · ${c}`,
@@ -201,11 +333,7 @@ export class RoomManager {
         maxPlayers: this.cfg.privateRoomCapacity,
         bots: this.botSettings.options('private'),
         map: { scale: this.botSettings.mapScale('private') },
-      },
-      this.deps,
-    );
-    this.rooms.set(room.id, room);
-    return room;
+    });
   }
 
   /* ---------------------------------------------------------------- */
@@ -221,23 +349,22 @@ export class RoomManager {
    * Opens a custom room `priv-<code>` (its bots are its own: the admin's bot settings never touch it).
    * Throws when the code is taken.
    */
-  createCustomRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots'> & { bots: BotManagerOptions | null }): Room {
+  createCustomRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots'> & { bots: BotManagerOptions | null }): RoomHandle {
     const id = `priv-${code}`;
-    if (this.rooms.has(id)) throw new Error(`room ${id} exists`);
+    if (this.has(id)) throw new Error(`room ${id} exists`);
     this.closedCodes.delete(code);
-    const room = new Room({ ...opts, id, mode: 'private', code }, this.deps);
-    this.rooms.set(id, room);
-    return room;
+    return this.open({ ...opts, id, mode: 'private', code });
   }
 
   /** Closes a custom room: everyone in it goes back to the lobby with `message`. False when it is not open. */
   closeCustomRoom(code: string, message: string): boolean {
-    const room = this.rooms.get(`priv-${code}`);
+    const room = this.get(`priv-${code}`);
     if (!room?.opts.custom) return false;
     try {
-      room.evict(message);
+      if (room instanceof RemoteRoom) this.pool!.closeRoom(room, message);
+      else (room as Room).evict(message);
     } finally {
-      this.rooms.delete(room.id);
+      this.drop(room);
       this.closedCodes.set(code, Date.now());
     }
     return true;
@@ -250,8 +377,8 @@ export class RoomManager {
   }
 
   /** Live custom rooms. */
-  customRooms(): Room[] {
-    return [...this.rooms.values()].filter((r) => !!r.opts.custom);
+  customRooms(): RoomHandle[] {
+    return [...this.handles()].filter((r) => !!r.opts.custom);
   }
 
   /* ---------------------------------------------------------------- */
@@ -315,19 +442,18 @@ export class RoomManager {
   }
 
   /** Every open instance of an arena, by instance number. */
-  arenaInstances(arenaId: number): Room[] {
-    return [...this.rooms.values()]
+  arenaInstances(arenaId: number): RoomHandle[] {
+    return [...this.handles()]
       .filter((r) => r.opts.mode === 'arena' && r.opts.stake?.arenaId === arenaId)
       .sort((a, b) => (a.opts.instance ?? 1) - (b.opts.instance ?? 1));
   }
 
-  private createArenaInstance(arenaId: number, arena: ArenaData): Room {
+  private createArenaInstance(arenaId: number, arena: ArenaData): RoomHandle {
     const taken = new Set(this.arenaInstances(arenaId).map((r) => r.opts.instance ?? 1));
     let n = 1;
     while (taken.has(n)) n++;
     const meta = arenaMeta(arenaId);
-    const room = new Room(
-      {
+    return this.open({
         id: `arena-${arenaId}-${n}`,
         mode: 'arena',
         name: n === 1 ? meta.name : `${meta.name} #${n}`,
@@ -336,11 +462,7 @@ export class RoomManager {
         bots: this.botSettings.options('arena'),
         map: { scale: this.botSettings.mapScale('arena') },
         stake: { arenaId, buyIn: arena.buyIn },
-      },
-      this.deps,
-    );
-    this.rooms.set(room.id, room);
-    return room;
+    });
   }
 
   /**
@@ -388,7 +510,7 @@ export class RoomManager {
    * fewer humans than the instance cap, else a new instance. Null when the
    * arena does not exist or is disabled.
    */
-  async arenaRoom(arenaId: number): Promise<Room | null> {
+  async arenaRoom(arenaId: number): Promise<RoomHandle | null> {
     if (!this.arenaAllowed(arenaId)) return null;
     let arena: ArenaData | undefined;
     try {
@@ -401,10 +523,10 @@ export class RoomManager {
     if (!arena || !arena.enabled) return null;
     if (this.underfunded.has(arenaId)) return null;
     if (this.arenaInstances(arenaId).length === 0 && !this.vaultCovers(arenaId, arena)) return null;
-    let best: Room | null = null;
+    let best: RoomHandle | null = null;
     for (const r of this.arenaInstances(arenaId)) {
-      if (r.humans.size >= this.cfg.arenaInstanceCap) continue;
-      if (!best || r.humans.size > best.humans.size) best = r;
+      if (r.humanCount >= this.cfg.arenaInstanceCap) continue;
+      if (!best || r.humanCount > best.humanCount) best = r;
     }
     const room = best ?? this.createArenaInstance(arenaId, arena);
     // a join is under way: keep cleanup from closing this (possibly idle) instance meanwhile
@@ -417,8 +539,8 @@ export class RoomManager {
    * still be in the map (cleanup may have closed it) and have space. Otherwise
    * picks again, with the same checks. Null when no live room is available.
    */
-  async confirmArenaRoom(arenaId: number, room: Room): Promise<Room | null> {
-    const live = (r: Room | null): r is Room => r !== null && this.rooms.get(r.id) === r && !r.isFull;
+  async confirmArenaRoom(arenaId: number, room: RoomHandle): Promise<RoomHandle | null> {
+    const live = (r: RoomHandle | null): r is RoomHandle => r !== null && this.get(r.id) === r && !r.isFull;
     if (live(room)) {
       room.lastActivity = Date.now();
       return room;
@@ -440,8 +562,8 @@ export class RoomManager {
    * last good list when the RPC refuses us): a restart while the RPC is rate-limited must not answer
    * "Room not found" for a running arena. Null when there is no such room or arena.
    */
-  async spectateRoom(id: string): Promise<Room | null> {
-    const room = this.rooms.get(id);
+  async spectateRoom(id: string): Promise<RoomHandle | null> {
+    const room = this.get(id);
     if (room) return room;
     const m = /^arena-(\d{1,5})-\d{1,4}$/.exec(id);
     if (!m) return null;
@@ -464,7 +586,7 @@ export class RoomManager {
   }
 
   /** The instance of `arenaId` in which `wallet` holds a live ticket, if any. */
-  findArenaStake(arenaId: number, wallet: string): { room: Room; entry: ArenaEntry } | null {
+  findArenaStake(arenaId: number, wallet: string): { room: RoomHandle; entry: StakeSeat } | null {
     for (const room of this.arenaInstances(arenaId)) {
       const entry = room.findStakeByWallet(wallet);
       if (entry) return { room, entry };
@@ -489,7 +611,7 @@ export class RoomManager {
         if (!a.enabled || !this.arenaAllowed(id)) continue;
         if (this.underfunded.has(id)) continue;
         if (this.arenaInstances(id).length === 0 && !this.vaultCovers(id, a)) continue;
-        if (!this.rooms.has(`arena-${id}-1`)) this.createArenaInstance(id, a);
+        if (!this.has(`arena-${id}-1`)) this.createArenaInstance(id, a);
       }
     } catch (err) {
       this.deps.log(`arena discovery failed: ${(err as Error).message}`);
@@ -502,7 +624,7 @@ export class RoomManager {
 
   /** Re-applies the bot and map settings to every room (an admin change, no restart). */
   applyBotSettings(): void {
-    for (const room of this.rooms.values()) {
+    for (const room of this.handles()) {
       // custom rooms keep the bots and the map their creator chose
       if (room.opts.custom) continue;
       const kind = botKindOf(room.opts.mode, room.opts.league);
@@ -518,19 +640,19 @@ export class RoomManager {
 
   /** Live bot counts per room (for `GET /api/admin/bots`). */
   botCounts(): { id: string; kind: BotRoomKind; name: string; arenaId?: number; humans: number; bots: number; stakedBots: number; mapSide: number; mapAuto: boolean }[] {
-    return [...this.rooms.values()].map((r) => ({
+    return [...this.handles()].map((r) => ({
       id: r.id,
       kind: botKindOf(r.opts.mode, r.opts.league),
       name: r.opts.name,
       ...(r.opts.stake ? { arenaId: r.opts.stake.arenaId } : {}),
       ...r.botCounts(),
-      mapSide: r.world.cfg.width,
+      mapSide: r.mapSide(),
       mapAuto: r.mapScale()?.auto ?? false,
     }));
   }
 
   list(): RoomInfo[] {
-    return [...this.rooms.values()].filter((r) => r.opts.mode !== 'private').map((r) => r.info());
+    return [...this.handles()].filter((r) => r.opts.mode !== 'private').map((r) => r.info());
   }
 
   online(): number {
@@ -539,12 +661,13 @@ export class RoomManager {
 
   liveSessions(): Set<string> {
     const s = new Set<string>();
-    for (const r of this.rooms.values()) for (const k of r.liveSessions()) s.add(k);
+    for (const r of this.handles()) for (const k of r.liveSessions()) s.add(k);
     return s;
   }
 
   /** Takes a wallet's profile picture off its live coins in every room (moderation, a new upload). */
   clearAvatar(wallet: string): number {
+    this.pool?.clearAvatar(wallet);
     let n = 0;
     for (const r of this.rooms.values()) n += r.clearAvatar(wallet);
     return n;
@@ -565,35 +688,38 @@ export class RoomManager {
   /* ---------------------------------------------------------------- */
 
   start(): void {
-    let next = performance.now();
-    const loop = () => {
-      const now = performance.now();
-      let n = 0;
-      while (now >= next && n < 3) {
-        this.tickAll(TICK_MS);
-        next += TICK_MS;
-        n++;
-      }
-      if (now - next > 250) next = now + TICK_MS; // fell far behind: resync
-      this.timer = setTimeout(loop, Math.max(0, next - performance.now()));
-    };
-    this.timer = setTimeout(loop, 0);
+    if (this.pool) {
+      // the rooms tick in their workers; this thread keeps the directory's own chores
+      this.housekeepingTimer = setInterval(() => this.housekeeping(Date.now()), 1000);
+      return;
+    }
+    this.stopLoop = startTickLoop(() => this.tickAll(TICK_MS), TICK_MS);
   }
 
   stop(): void {
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = null;
+    this.stopLoop?.();
+    this.stopLoop = null;
+    if (this.housekeepingTimer) clearInterval(this.housekeepingTimer);
+    this.housekeepingTimer = null;
   }
 
   tickAll(dt: number): void {
+    const t0 = performance.now();
     for (const room of this.rooms.values()) {
+      const r0 = performance.now();
       try {
         room.tick(dt);
       } catch (err) {
         this.deps.log(`room ${room.id} tick failed: ${(err as Error).stack ?? err}`);
       }
+      roomTickStats(room).record(performance.now() - r0);
     }
-    const now = Date.now();
+    this.tickStats.record(performance.now() - t0);
+    this.housekeeping(Date.now());
+  }
+
+  /** Expired custom rooms (every second) and idle rooms (every 15 s). */
+  private housekeeping(now: number): void {
     if (this.custom && now - this.lastCustomSweep >= 1000) {
       this.lastCustomSweep = now;
       try {
@@ -610,29 +736,73 @@ export class RoomManager {
 
   private cleanup(now: number): void {
     for (const [key, m] of this.bellMemo) if (now - m.at > BELL_MEMO_MS) this.bellMemo.delete(key);
-    for (const room of [...this.rooms.values()]) {
-      const idle = room.conns.size === 0 && room.humans.size === 0;
+    for (const room of [...this.handles()]) {
+      const idle = room.connCount === 0 && room.humanCount === 0;
       if (!idle) continue;
-      // custom rooms live until their time runs out (the custom-room service closes them)
-      if (room.opts.mode === 'private' && !room.opts.custom && now - room.lastActivity > 120_000) this.rooms.delete(room.id);
-      // every league keeps its first room
-      if (room.opts.mode === 'practice' && !room.id.endsWith('-1') && now - room.lastActivity > 300_000) this.rooms.delete(room.id);
-      // extra arena instances close once empty, with no ticket and no loot left on their floor
-      if (
-        room.opts.mode === 'arena' &&
-        (room.opts.instance ?? 1) > 1 &&
-        room.liveSessions().length === 0 &&
-        room.world.loot().length === 0 &&
-        now - room.lastActivity > 300_000
-      )
-        this.rooms.delete(room.id);
+      const close =
+        // custom rooms live until their time runs out (the custom-room service closes them)
+        (room.opts.mode === 'private' && !room.opts.custom && now - room.lastActivity > 120_000) ||
+        // every league keeps its first room
+        (room.opts.mode === 'practice' && !room.id.endsWith('-1') && now - room.lastActivity > 300_000) ||
+        // extra arena instances close once empty, with no ticket and no loot left on their floor
+        (room.opts.mode === 'arena' && (room.opts.instance ?? 1) > 1 && room.liveSessions().length === 0 && room.lootCount() === 0 && now - room.lastActivity > 300_000);
+      if (!close) continue;
+      // a room worker drops it only if it is still idle there (a join may be on its way)
+      if (room instanceof RemoteRoom) {
+        if (!room.closing) this.pool!.closeIdle(room);
+      } else this.drop(room);
     }
     for (const [ip, at] of this.promotions) if (now - at >= PROMOTION_MS) this.promotions.delete(ip);
     for (const [code, at] of this.closedCodes) if (now - at >= CLOSED_MEMO_MS) this.closedCodes.delete(code);
   }
 
-  shutdown(): void {
+  /** Per-thread load (`GET /api/admin/load`, the load test). `rooms`: with every room's own figures. */
+  loadStats(opts: { rooms?: boolean } = {}): ServerLoad {
+    const now = performance.now();
+    const secs = Math.max(0.001, (now - this.lastLoadAt) / 1000);
+    this.lastLoadAt = now;
+    const out = { bytes: wsOut.bytes - this.lastOut.bytes, msgs: wsOut.msgs - this.lastOut.msgs };
+    this.lastOut = { bytes: wsOut.bytes, msgs: wsOut.msgs };
+    let humans = 0;
+    let bots = 0;
+    let conns = 0;
+    const roomLoads: RoomLoad[] = [];
+    for (const r of this.rooms.values()) {
+      const c = r.botCounts();
+      humans += c.humans;
+      bots += c.bots;
+      conns += r.conns.size;
+      if (opts.rooms) roomLoads.push({ id: r.id, humans: c.humans, conns: r.conns.size, bots: c.bots, tick: roomTickStats(r).summary() });
+    }
+    const threads = this.pool ? this.pool.threads().map((t) => (opts.rooms ? t : { ...t, roomLoads: undefined })) : [];
+    if (this.pool) {
+      for (const t of threads) {
+        humans += t.humans;
+        bots += t.bots;
+        conns += t.conns;
+      }
+    }
+    const tick = this.pool ? this.pool.relayStats.summary() : this.tickStats.summary();
+    const main: ThreadLoad = { id: 'main', rooms: this.rooms.size, humans, conns, bots, tick, ...this.meter.sample(), ...(opts.rooms ? { roomLoads } : {}) };
+    return {
+      mode: this.pool ? 'workers' : 'single',
+      workers: this.pool?.size ?? 0,
+      cpus: availableParallelism(),
+      rssMb: Math.round(process.memoryUsage().rss / 1e6),
+      main,
+      threads,
+      sentBytesPerSec: Math.round(out.bytes / secs),
+      sentMsgsPerSec: Math.round(out.msgs / secs),
+      conns: this.conns.size,
+      at: Date.now(),
+    };
+  }
+
+  /** Settles every staker (an operator exit). With room workers it waits for them (`await` it). */
+  shutdown(): void | Promise<void> {
     this.stop();
+    this.meter.stop();
     for (const room of this.rooms.values()) room.shutdown();
+    return this.pool?.shutdown();
   }
 }

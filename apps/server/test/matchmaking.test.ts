@@ -36,7 +36,7 @@ const lootSum = (room: Room) => room.world.loot().reduce((s, l) => s + l.value, 
 describe('matchmaking', () => {
   it('practice picks busiest non-full room per league', () => {
     const m = manager({ PRACTICE_CAPACITY: '3' });
-    const r1 = m.practiceRoom('rookie');
+    const r1 = m.practiceRoom('rookie') as Room;
     expect(r1.id).toBe('practice-rookie-1');
     expect(r1.info().league).toBe('rookie');
     expect(r1.opts.maxPlayers).toBe(3);
@@ -44,7 +44,7 @@ describe('matchmaking', () => {
     for (const [i, c] of c1.entries()) r1.join(c, practiceJoin(i));
     expect(r1.isFull).toBe(true);
 
-    const r2 = m.practiceRoom('rookie');
+    const r2 = m.practiceRoom('rookie') as Room;
     expect(r2.id).toBe('practice-rookie-2');
     r2.join(fakeConn(), practiceJoin(9));
     // r1 2 humans, r2 1 human → r1 is the busiest non-full room
@@ -56,7 +56,7 @@ describe('matchmaking', () => {
     expect(m.practiceRoom('rookie')).toBe(r2);
 
     // the pro league never shares rooms with rookies
-    const pro = m.practiceRoom('pro');
+    const pro = m.practiceRoom('pro') as Room;
     expect(pro.id).toBe('practice-pro-1');
     expect(pro.info().league).toBe('pro');
     expect(m.practiceRoom('pro')).toBe(pro);
@@ -70,7 +70,7 @@ describe('matchmaking', () => {
   it('arena opens a second instance at 50 humans', async () => {
     const chain = new ArenaChain([arena(1, FEE), arena(3, 5 * FEE)]);
     const m = manager({}, chain);
-    const a1 = (await m.arenaRoom(1))!;
+    const a1 = (await m.arenaRoom(1)) as Room;
     expect(a1.id).toBe('arena-1-1');
     const first = stakeJoin(1, FEE);
     a1.join(fakeConn(first.stake.player), first);
@@ -79,7 +79,7 @@ describe('matchmaking', () => {
     a1.join(fakeConn('w49'), stakeJoin(1, FEE));
     expect(a1.humans.size).toBe(50);
 
-    const a2 = (await m.arenaRoom(1))!;
+    const a2 = (await m.arenaRoom(1)) as Room;
     expect(a2.id).toBe('arena-1-2');
     expect(a2).not.toBe(a1);
     const late = stakeJoin(1, FEE);
@@ -91,7 +91,7 @@ describe('matchmaking', () => {
       ['arena-1-1', 1, FEE, 0],
       ['arena-1-2', 2, FEE, 0],
     ]);
-    const gold = (await m.arenaRoom(3))!;
+    const gold = (await m.arenaRoom(3)) as Room;
     expect(gold.info()).toMatchObject({ id: 'arena-3-1', arenaId: 3, entryFee: 5 * FEE, instance: 1 });
     expect(await m.arenaRoom(7)).toBeNull();
     // arena data is cached for 30 s
@@ -106,10 +106,10 @@ describe('matchmaking', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'elymum-mm-')), 'journal.json');
     const j1 = new Journal(path);
     const m1 = manager({ ARENA_INSTANCE_CAP: '1' }, undefined, j1);
-    const a1 = (await m1.arenaRoom(1))!;
+    const a1 = (await m1.arenaRoom(1)) as Room;
     spillStaker(a1, FEE);
     a1.join(fakeConn('keeper'), stakeJoin(1, FEE)); // keeps instance 1 "full"
-    const a2 = (await m1.arenaRoom(1))!;
+    const a2 = (await m1.arenaRoom(1)) as Room;
     expect(a2.id).toBe('arena-1-2');
     expect(a2.info().arenaId).toBe(1);
     spillStaker(a2, 3 * FEE);
@@ -189,7 +189,7 @@ describe('matchmaking', () => {
       await m.ensureArenaRooms();
     };
     // an instance runs and a player's value lies on its floor as loot (the vault holds it)
-    const a1 = (await m.arenaRoom(1))!;
+    const a1 = (await m.arenaRoom(1)) as Room;
     spillStaker(a1, FEE);
     expect(journal.owedByArena(1)).toBe(FEE);
     chain.arenas[0] = { ...chain.arenas[0], pot: FEE };
@@ -226,7 +226,7 @@ describe('matchmaking', () => {
     const chain = new ArenaChain([{ ...arena(1, FEE), pot: 0 }]);
     const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-mm-')) });
     const m = new RoomManager(cfg, { ...roomDeps(chain, journal), log: (l) => logs.push(l) }, chain);
-    const a1 = (await m.arenaRoom(1))!;
+    const a1 = (await m.arenaRoom(1)) as Room;
     spillStaker(a1, FEE);
     chain.arenas[0] = { ...chain.arenas[0], pot: FEE };
     (m as unknown as { arenaCache: unknown }).arenaCache = null;
@@ -255,7 +255,7 @@ describe('matchmaking', () => {
     const chain = new ArenaChain([{ ...arena(1, FEE), pot: 0 }]);
     const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-mm-')) });
     const m = new RoomManager(cfg, { ...roomDeps(chain, journal), log: () => {} }, chain);
-    const a1 = (await m.arenaRoom(1))!;
+    const a1 = (await m.arenaRoom(1)) as Room;
     spillStaker(a1, FEE);
     // the cached read trails a join the journal already counts; the fresh read has it
     chain.listArenas = async (fresh?: boolean) => [{ ...arena(1, FEE), pot: fresh ? FEE : 0 }];
@@ -283,9 +283,9 @@ describe('matchmaking', () => {
 
   it('an instance closed during a join is replaced by a live, mapped room', async () => {
     const m = manager({ ARENA_INSTANCE_CAP: '1' });
-    const a1 = (await m.arenaRoom(1))!;
+    const a1 = (await m.arenaRoom(1)) as Room;
     a1.join(fakeConn('keeper'), stakeJoin(1, FEE));
-    const a2 = (await m.arenaRoom(1))!;
+    const a2 = (await m.arenaRoom(1)) as Room;
     expect(a2.id).toBe('arena-1-2');
     // picking a room counts as activity, so cleanup leaves it alone while the join awaits the chain
     a2.lastActivity = 0;
@@ -315,7 +315,7 @@ describe('matchmaking', () => {
     expect(m.leagueFor(conn)).toBe('rookie');
 
     // a modest rookie game does not promote
-    const r = m.practiceRoom('rookie');
+    const r = m.practiceRoom('rookie') as Room;
     let p = r.join(conn, practiceJoin(1));
     p.stats.maxMass = 3000;
     p.stats.playersEaten = 7;

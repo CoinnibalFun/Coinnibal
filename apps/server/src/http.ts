@@ -165,7 +165,7 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
               ok: true,
               uptimeS: Math.round((Date.now() - ctx.startedAt) / 1000),
               online: ctx.rooms.online(),
-              rooms: ctx.rooms.rooms.size,
+              rooms: ctx.rooms.roomCount,
             });
           case '/api/rooms':
             return json(res, 200, { rooms: ctx.rooms.list(), online: ctx.rooms.online(), blocked: ctx.rooms.blockedArenas() });
