@@ -17,7 +17,7 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://slana-wo00.onrender.com/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://game.elymum.io/api/:path*" },
     { "source": "/favicon.ico", "destination": "/favicon-32.png" },
     { "source": "/((?!api/|ws|assets/).*)", "destination": "/index.html" }
   ]
