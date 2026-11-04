@@ -137,6 +137,12 @@ class Client {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * `TEST_GAME_WORKERS=2 vitest run test/integration.test.ts` (`pnpm test:workers`) runs this whole suite
+ * with the rooms in room workers; the few looks inside a room object are skipped then.
+ */
+const WORKERS = Number(process.env.TEST_GAME_WORKERS ?? 0);
+
 let sessionSeq = 100;
 function session(player: string, opts: Partial<ChainSession> = {}): ChainSession {
   const id = opts.id ?? ++sessionSeq;
@@ -209,6 +215,7 @@ beforeAll(async () => {
     GAME_ACCESS: 'public',
     // no PUBLIC_URL: only development derives the SIWE origin from the request host
     NODE_ENV: 'development',
+    ...(WORKERS ? { GAME_WORKERS: String(WORKERS) } : {}),
   });
   chain = new FakeChain();
   app = await createApp(cfg, { chain, log: () => {}, persist: true, now: serverNow });
@@ -587,8 +594,8 @@ describe('server over websocket', () => {
     const j1 = await a.wait('joined');
     a.close();
     await sleep(200);
-    const room = app.rooms.rooms.get('arena-1-1')!;
-    expect(room.world.players.get(j1.playerId)?.afk).toBe(true);
+    const room = WORKERS ? null : app.rooms.rooms.get('arena-1-1')!;
+    if (room) expect(room.world.players.get(j1.playerId)?.afk).toBe(true);
 
     const b = await Client.connect(port);
     b.send({ t: 'hello', v: PROTOCOL_VERSION });
@@ -599,7 +606,7 @@ describe('server over websocket', () => {
     const j2 = await b.wait('joined');
     expect(j2.playerId).toBe(j1.playerId);
     expect(j2.value).toBe(19_000_000);
-    expect(room.world.players.get(j1.playerId)?.afk).toBe(false);
+    if (room) expect(room.world.players.get(j1.playerId)?.afk).toBe(false);
     b.close();
   });
 
@@ -675,10 +682,12 @@ describe('server over websocket', () => {
     expect(joined.room.arenaId).toBe(2);
     expect(joined.value).toBe(47_500_000);
     expect('hasPass' in joined).toBe(false);
-    const p = app.rooms.rooms.get(joined.room.id)!.world.players.get(joined.playerId)!;
-    // no Pass power: everyone starts at the same mass (a Pass used to add 15 %)
-    expect(p.totalMass()).toBeGreaterThan(RULES.startMass * 0.9);
-    expect(p.totalMass()).toBeLessThan(RULES.startMass * 1.1);
+    if (!WORKERS) {
+      const p = app.rooms.rooms.get(joined.room.id)!.world.players.get(joined.playerId)!;
+      // no Pass power: everyone starts at the same mass (a Pass used to add 15 %)
+      expect(p.totalMass()).toBeGreaterThan(RULES.startMass * 0.9);
+      expect(p.totalMass()).toBeLessThan(RULES.startMass * 1.1);
+    }
     await sleep(200);
     expect(playerInfo(c, joined.playerId)).toMatchObject({ skin: 2, name: 'Gold' });
     expect('pass' in playerInfo(c, joined.playerId)!).toBe(false);

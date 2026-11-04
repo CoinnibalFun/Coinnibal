@@ -9,6 +9,7 @@ import {
   type DeathStats,
   type MapScaleSettings,
   type RoomInfo,
+  type RoundWindow,
 } from '@elymum/shared';
 import type { BotManagerOptions } from '../../bots/manager';
 import type { StakedBotSource } from '../../bots/staked';
@@ -75,6 +76,8 @@ class Slot {
   bye: (() => void) | null = null;
   liveSessions: SessionSummary[] = [];
   readonly startedAt = Date.now();
+  /** The round-clock offset this worker was last told. */
+  offset = 0;
   /** Deaths in a row soon after a start (the respawn backs off). */
   failures = 0;
   /** Requests waiting for this worker's answer. */
@@ -104,7 +107,6 @@ export class WorkerPool {
   private reqSeq = 0;
   private stopping = false;
   private timers: NodeJS.Timeout[] = [];
-  private lastOffset = 0;
   private lastWanted = '';
   /** Time this thread spends delivering the workers' batches (`main.tick` in the load view). */
   readonly relayStats = new TickStats(600);
@@ -113,16 +115,12 @@ export class WorkerPool {
     readonly size: number,
     private readonly deps: PoolDeps,
   ) {
-    this.lastOffset = deps.clockOffset();
     for (let i = 0; i < size; i++) this.slots.push(this.spawn(i, 0));
     this.timers.push(
       setInterval(() => this.watch(), 1000),
-      // an injected round clock (tests) moves: the workers follow within a tick
+      // an injected round clock (tests) moves: the workers follow within a tick (and before any command)
       setInterval(() => {
-        const off = deps.clockOffset();
-        if (Math.abs(off - this.lastOffset) < 1) return;
-        this.lastOffset = off;
-        for (const s of this.slots) this.send(s, { k: 'clock', offset: off });
+        for (const s of this.slots) if (Math.abs(deps.clockOffset() - s.offset) >= 1) this.flush(s, true);
       }, 20),
     );
     for (const t of this.timers) t.unref();
@@ -144,6 +142,7 @@ export class WorkerPool {
     };
     const worker = new Worker(file, { workerData: init });
     const slot = new Slot(index, worker, restarts);
+    slot.offset = init.clockOffset;
     worker.on('message', (b: OutBatch) => {
       if (slot.dead) return;
       slot.lastMsgAt = Date.now();
@@ -171,11 +170,19 @@ export class WorkerPool {
     setImmediate(() => this.flush(slot));
   }
 
-  private flush(slot: Slot): void {
-    slot.queued = false;
-    if (slot.dead || slot.queue.length === 0) return;
-    const cmds = slot.queue;
-    slot.queue = [];
+  private flush(slot: Slot, clockOnly = false): void {
+    if (!clockOnly) slot.queued = false;
+    if (slot.dead) return;
+    // the round clock first: a join must never land in a round the main thread has already left
+    const off = this.deps.clockOffset();
+    const clock = Math.abs(off - slot.offset) >= 1;
+    if (!clock && (clockOnly || slot.queue.length === 0)) return;
+    const cmds: Cmd[] = clock ? [{ k: 'clock', offset: off }] : [];
+    slot.offset = off;
+    if (!clockOnly) {
+      cmds.push(...slot.queue);
+      slot.queue = [];
+    }
     slot.worker.postMessage({ cmds });
   }
 
@@ -389,7 +396,7 @@ export class WorkerPool {
         room.joinDone(c.conn);
         room.humansNow = c.humans;
         const conn = this.conns.get(c.conn);
-        if (conn && conn.room === room && conn.player && conn.player.id < 0) {
+        if (conn && conn.room === room && !conn.pendingReattach) {
           conn.player = remotePlayer(c.pid);
           // the power-up state follows `joined`, as on one thread
           room.sendBoosts(conn);
@@ -643,6 +650,10 @@ export class WorkerPool {
   roundN(): number {
     return this.deps.clock.window().n;
   }
+
+  round(): RoundWindow {
+    return this.deps.clock.window();
+  }
 }
 
 const hidOf = (r: RoomHandle | null | undefined): number => (r instanceof RemoteRoom ? r.hid : 0);
@@ -712,9 +723,13 @@ export class RemoteRoom implements RoomHandle {
   }
 
   info(): RoomInfo {
-    if (this.summary) return { ...this.summary.info, players: this.humanCount };
+    // the round comes from this thread's clock (the summary may be a second old)
+    const r = this.opts.mode === 'arena' ? this.pool.round() : undefined;
+    const round = r ? { round: { n: r.n, endsAt: r.endsAt, joinsCloseAt: r.joinsCloseAt } } : {};
+    if (this.summary) return { ...this.summary.info, players: this.humanCount, ...round };
     const w = this.opts.world ?? WORLD_PRESETS[this.opts.mode];
     return {
+      ...round,
       id: this.opts.id,
       mode: this.opts.mode,
       name: this.opts.name,
