@@ -196,3 +196,85 @@ Consequences, stated plainly in the player guide:
 - **Dev fake chain** (`chain/dev-fake.ts`, `DEV_FAKE_CHAIN=1` with `NODE_ENV=development` only): an in-memory
   chain with free tickets and simulated settlements, for `pnpm demo` and the screenshot tours. It refuses to
   start next to `EVM_RPC_URL` or `SERVER_PRIVATE_KEY`.
+
+## Threads (`GAME_WORKERS`)
+
+The game server is one process. With `GAME_WORKERS` = N > 0 (default in production:
+`availableParallelism() - 1`, at least 1; default elsewhere: 0) the rooms run in N `worker_threads`;
+with 0 everything runs on the main thread exactly as before (tests, `pnpm dev`).
+
+```
+              main thread                                         room worker k (one per core but one)
+ ws accept, HTTP, site/admin API, auth             cmds ──►       Room × n: World tick, BotManager,
+ chain (evm.ts) + journal (ONE writer)        (batched, FIFO)     ViewState snapshots, integrity monitor
+ profiles, leaderboards, shop, custom rooms     ◄── ctl + frames   (WorkerConn: frames into one buffer
+ room directory + placement (RoomManager)      (one transferred    per batch, tagged with conn + room)
+ sockets: ws.send of the workers' frames        ArrayBuffer/tick)
+```
+
+- **What runs where.** A worker (`rooms/remote/host.ts`) runs whole rooms with the unchanged `Room` class:
+  simulation, bots, snapshot building and encoding. The main thread keeps every socket, the HTTP/site API,
+  auth, the chain gateway, the journal, the stores (profiles, leaderboards, shop charges, custom-room
+  records, integrity flags) and the room directory (`RoomManager` with `RemoteRoom` proxies,
+  `rooms/remote/pool.ts`). A new room instance goes to the least-loaded worker (measured tick time, plus the
+  rooms placed since its last report).
+- **Sockets.** Terminating ws in a worker is not possible (a `net.Socket` cannot move between threads), so
+  the main thread keeps them; it forwards inputs (batched per event-loop turn) and writes the frames a
+  worker produced. A worker writes every frame of a tick (snapshots straight from the room's writer, JSON
+  messages UTF-8 encoded) into one buffer that is transferred, not copied, to the main thread; the main
+  thread sends `subarray` views of it. Each frame names its room: frames of a room the connection has left
+  are dropped (its next room starts the client afresh with `joined` / `spectating`), and while a reattach is
+  being answered the frames of both rooms wait, so the client never sees a frame of the wrong room. A socket
+  backed up past 768 KB makes the worker skip its snapshots, as on one thread.
+- **Money paths are main-thread only and keep their order.** A room's journal writes (`commit`: settlements,
+  live stakes, floor loot, in one atomic write) reach the main thread as `commit` entries in the order the
+  room made them, together with the frames and events around them (one FIFO port per worker), and are
+  applied there with `Journal.commit`; the main thread kicks the chain worker after each one that queues an
+  item. The directory's view of seated tickets comes from those writes plus the stake joins it has sent and
+  not yet seen answered, so `liveSessions` (the stale sweeper, double-seat checks) never misses a ticket.
+  The integrity auto-hold is decided on the main thread before the settlement is written (the worker only
+  runs the telemetry); power-up charges are taken on the main thread and given back when the worker could
+  not apply the effect (the player died meanwhile); staked-bot tickets are bought on the main thread and
+  handed to the worker; a loot-sweep key that is already pending is renamed there, as a room on one thread
+  does.
+- **A worker that dies or hangs** (no message for `GAME_WORKER_HANG_S`, default 10 s; the main thread's own
+  stalls are not counted) is terminated and nothing it sends afterwards is applied. Its rooms are recovered
+  from the journal like a process restart (`Journal.recoverRooms`, one atomic write): every ticket journaled
+  live in them is settled at its last journaled value (reason `crash`; a ticket already pending is never
+  queued twice), and their floor loot is queued to burn (a `sweep` item per room, since those rooms are
+  gone; a restart would put it back on the first instance's floor). What the room did after its last journal
+  write is lost, exactly as with a crash of the whole process. The sockets of those rooms are closed (1012),
+  the clients reconnect; the worker is started again (backing off if it keeps dying) and the directory
+  reopens the standing rooms (first ponds, every arena's first instance, custom rooms with time left).
+- **Shutdown.** `SIGTERM` asks every worker to settle its stakers (`Room.shutdown`, an operator exit) and
+  waits for their last journal writes (5 s each; a worker that does not answer is recovered as above).
+- **Load.** Each thread reports its tick (mean / p95 / max), event-loop utilisation and lag, rooms and
+  players every second: `GET /api/admin/load`, the Network tab ("Game server load") and `game` in
+  `/api/health`.
+- **Tests.** The usual suite runs with 0 workers; `pnpm -F @elymum/server test:workers` runs the WebSocket
+  integration suite with two workers (`TEST_GAME_WORKERS=2`) plus `test/workers.test.ts` (bell settlement,
+  reattach, crash and hang recovery, custom-room close, shutdown).
+
+### Capacity (measured)
+
+`pnpm -F @elymum/server load` (`scripts/bench/load.ts`) runs the real app with N WebSocket clients in child
+processes (35 % arena players with tickets on the dev fake chain, 45 % practice, 10 % private, 10 % custom
+rooms; aim updates at 30 Hz, rejoin after a death), default bots in every room. Measured on a 4-core
+sandbox with the clients on the same machine (about 0.45 cores for 500 clients):
+
+| Clients | Threads | Worst thread tick p95 | Main event-loop lag p99 | Server CPU | RSS | Out |
+|---|---|---|---|---|---|---|
+| 100 | 1 (`GAME_WORKERS=0`) | 16 ms | 18 ms | 0.43 cores | 0.2 GB | 0.55 MB/s |
+| 150 | 1 | 25 ms | 28 ms | 0.58 cores | 0.2 GB | 1.2 MB/s |
+| 250 | 1 | 36 ms | 58 ms | 0.95 cores | 0.3 GB | 1.6 MB/s |
+| 500 | 1 | 64 ms (busy 100 %, snapshots every 50 ms) | 233 ms | 1.09 cores | 0.3 GB | 2.3 MB/s |
+| 250 | main + 3 workers | 7.4 ms | 3.6 ms | 0.93 cores | 0.5 GB | 1.5 MB/s |
+| 500 | main + 3 workers | 19 ms | 7.6 ms | 1.67 cores | 0.6 GB | 3.4 MB/s |
+| 600 | main + 3 workers | 24 ms | 12 ms | 1.99 cores | 0.7 GB | 4.2 MB/s |
+
+One thread tops out near 150 clients. The cost is mostly per connection (building and sending each
+client's snapshot 30 times a second), then bots, then the simulation. With workers the main thread costs
+about 0.09 % of a core per client (sockets, inputs, frame delivery: 0.42 at 500) and each worker about
+0.065 ms of tick per player. On a 6-vCore VPS (main + 5 workers), 500 players are about 95 per worker:
+a tick of ~6 ms mean (of 33 ms), the main thread under half busy, about 1.7 cores used in all. Each client
+receives about 6.8 KB/s (500 clients: 27 Mbit/s of the 2 Gbit/s link).

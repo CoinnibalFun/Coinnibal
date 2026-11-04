@@ -26,7 +26,8 @@ Files here: `install.sh` (the installer), `docker-compose.yml` (the app and Cadd
 ## 1. Buy the VPS
 
 1. OVHcloud → **VPS**. 4 to 6 vCores, 8 GB RAM or more, location **Gravelines** or **Frankfurt** (close to
-   most players), image **Ubuntu 24.04**.
+   most players), image **Ubuntu 24.04**. The rooms run on every core but one (`GAME_WORKERS`, see
+   `env.example`): 6 vCores carry 500 players with room to spare (docs/ARCHITECTURE.md, "Threads").
 2. During the order, add your **SSH public key** (the content of `~/.ssh/id_ed25519.pub` on your laptop; create
    one with `ssh-keygen -t ed25519` if you have none). OVH emails you the server's **IPv4 address**; the user
    is `ubuntu`.
