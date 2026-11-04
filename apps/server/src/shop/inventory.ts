@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { BOOST_KINDS, emptyBoostCounts, type BoostCounts, type BoostKind } from '@elymum/shared';
+import { emptyBoostCounts, migrateBoostCounts, type BoostCounts, type BoostKind } from '@elymum/shared';
 import { getAddress } from 'viem';
 
 /** One credited purchase (the audit trail and the replay guard). */
@@ -9,7 +9,8 @@ export interface PurchaseRecord {
   tx: string;
   /** EIP-55 wallet. */
   wallet: string;
-  kind: BoostKind;
+  /** What was bought; records from before 2026-11 may name the retired `shock` (now counted as Leap). */
+  kind: BoostKind | 'shock';
   charges: number;
   /** Raw base units paid (decimal string). */
   paid: string;
@@ -32,11 +33,6 @@ export class InventoryError extends Error {
     super(message);
   }
 }
-
-const nat = (v: unknown): number => {
-  const n = Math.floor(Number(v));
-  return Number.isFinite(n) && n > 0 ? Math.min(n, 1_000_000) : 0;
-};
 
 /**
  * Power-up charges per wallet and every purchase ever credited (its tx hash is never credited
@@ -64,9 +60,12 @@ export class BoostInventory {
       if (!data || data.version !== 1 || !Array.isArray(data.wallets) || !Array.isArray(data.purchases)) throw new Error('bad shape');
       for (const w of data.wallets) {
         if (typeof w?.wallet !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(w.wallet)) continue;
-        const c = emptyBoostCounts();
-        for (const k of BOOST_KINDS) c[k] = nat(w.charges?.[k]);
-        this.charges.set(w.wallet.toLowerCase(), c);
+        // charges of a retired power-up become the one that replaced it, 1:1 (Shockwave -> Leap)
+        const c = migrateBoostCounts(w.charges);
+        const key = w.wallet.toLowerCase();
+        const prev = this.charges.get(key);
+        if (prev) for (const k of Object.keys(c) as BoostKind[]) c[k] += prev[k];
+        this.charges.set(key, c);
       }
       for (const p of data.purchases) {
         if (typeof p?.tx !== 'string' || !/^0x[0-9a-f]{64}$/.test(p.tx)) continue;

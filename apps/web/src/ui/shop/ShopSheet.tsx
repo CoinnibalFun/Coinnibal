@@ -54,7 +54,7 @@ function PackCard({
       <div className="sh-pack__buy">
         {discounted && <s className="sh-pack__was mono">{priceText(pack.fullPriceRaw, view)}</s>}
         <Button
-          variant={kind === 'shock' ? 'teal' : 'secondary'}
+          variant={kind === 'leap' || kind === 'invis' ? 'teal' : 'secondary'}
           size="sm"
           loading={busy}
           disabled={!canBuy || !pack.enabled || busy}

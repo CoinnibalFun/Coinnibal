@@ -1,5 +1,5 @@
 import { ELYSIUM, INK, PICTURE_R, SHADE, type CoinInterior, type CoinLook, type Expression } from '@elymum/art';
-import { EntityKind, PlayerFlag, shockRange } from '@elymum/shared';
+import { CellFlag, EntityKind, PlayerFlag } from '@elymum/shared';
 import { DROP_LAND, dropScale } from '../design/curves';
 import type { Camera } from '../game/camera';
 import type { Particles } from '../game/particles';
@@ -15,8 +15,10 @@ import { LabelCache, type StickerLabel } from './labels';
 import { LookCache } from './looks';
 import { SpriteCache, drawGlint, drawSprite } from './sprites';
 
-/** How long the shockwave ring sweeps out (ms, client clock). */
-export const SHOCK_RING_MS = 520;
+/** How long a leap's trail and landing ring show (ms, client clock). */
+export const LEAP_TRAIL_MS = 420;
+/** How see-through my own coin is drawn while I am invisible (others are not sent it at all). */
+export const INVISIBLE_SELF_ALPHA = 0.42;
 
 const TAU = Math.PI * 2;
 
@@ -711,7 +713,7 @@ export class Renderer {
       ctx.fill();
       ctx.restore();
     }
-    if (e.shockAt > 0 && f.now - e.shockAt < SHOCK_RING_MS) this.drawShockRing(e, f.now - e.shockAt, z);
+    if (e.leapAt > 0 && f.now - e.leapAt < LEAP_TRAIL_MS) this.drawLeapTrail(e, f.now - e.leapAt, z);
     // "you": a dotted sun ring turning slowly around my coins
     if (mine && screenR > 8) {
       ctx.save();
@@ -747,37 +749,44 @@ export class Renderer {
     const flag = !o.picture && player && (player.flags & PlayerFlag.FlagSkin) !== 0 ? player.country : undefined;
     o.skinFill = flag ? this.flagSkins.fill(flag, r * this.ppu * 2) : null;
     if (flag && o.skinFill) look = this.flagSkins.look(look, flag);
-    drawCoinLook(ctx, e.x, e.y, r, look, o);
+    // invisible (only ever my own coin: the server sends nobody else's): drawn see-through
+    if (e.flags & CellFlag.Invisible) {
+      ctx.save();
+      ctx.globalAlpha = INVISIBLE_SELF_ALPHA * (still ? 1 : 0.9 + 0.1 * Math.sin(f.now / 260));
+      drawCoinLook(ctx, e.x, e.y, r, look, o);
+      ctx.restore();
+    } else drawCoinLook(ctx, e.x, e.y, r, look, o);
   }
 
   /**
-   * A bought Shockwave: one flat spray band and an ink ring sweeping out to the push reach
-   * (`shockRange`), fading as it goes, with a thin sun line on its inner edge. Under the coin, two
-   * arcs and no allocation; it plays for `SHOCK_RING_MS` from the flag's rising edge.
+   * A bought Leap: three fading ghost rings along the hop, from the take-off point to the coin, and
+   * a sun ring opening where it landed. Under the coin, a few arcs and no allocation; it plays for
+   * `LEAP_TRAIL_MS` from the flag's rising edge.
    */
-  private drawShockRing(e: CEntity, age: number, z: number): void {
+  private drawLeapTrail(e: CEntity, age: number, z: number): void {
     const { ctx } = this;
-    const p = Math.min(1, Math.max(0, age / SHOCK_RING_MS));
-    const ease = 1 - (1 - p) * (1 - p) * (1 - p);
-    const R = e.r + (shockRange(e.r) - e.r) * ease;
-    const band = Math.max(10 / z, e.r * 0.22) * (1 - p * 0.6);
+    const p = Math.min(1, Math.max(0, age / LEAP_TRAIL_MS));
+    const fade = 1 - p;
     ctx.save();
-    ctx.globalAlpha = 0.45 * (1 - p);
-    ctx.strokeStyle = ELYSIUM.spray;
-    ctx.lineWidth = band;
-    ctx.beginPath();
-    ctx.arc(e.x, e.y, R - band / 2, 0, TAU);
-    ctx.stroke();
-    ctx.globalAlpha = 1 - p * 0.85;
-    ctx.strokeStyle = INK;
+    const dx = e.x - e.leapX;
+    const dy = e.y - e.leapY;
+    if (dx * dx + dy * dy > e.r * e.r) {
+      ctx.strokeStyle = ELYSIUM.spray;
+      ctx.lineWidth = Math.max(3 / z, e.r * 0.16);
+      for (let i = 0; i < 3; i++) {
+        const t = i / 3;
+        ctx.globalAlpha = 0.5 * fade * (0.4 + 0.6 * t);
+        ctx.beginPath();
+        ctx.arc(e.leapX + dx * t, e.leapY + dy * t, e.r * (0.7 + 0.3 * t), 0, TAU);
+        ctx.stroke();
+      }
+    }
+    const ease = 1 - (1 - p) * (1 - p);
+    ctx.globalAlpha = fade;
+    ctx.strokeStyle = ELYSIUM.sun;
     ctx.lineWidth = 3 / z;
     ctx.beginPath();
-    ctx.arc(e.x, e.y, R, 0, TAU);
-    ctx.stroke();
-    ctx.strokeStyle = ELYSIUM.sun;
-    ctx.lineWidth = 2 / z;
-    ctx.beginPath();
-    ctx.arc(e.x, e.y, Math.max(e.r, R - 4 / z), 0, TAU);
+    ctx.arc(e.x, e.y, e.r * (1 + 0.5 * ease), 0, TAU);
     ctx.stroke();
     ctx.restore();
   }
@@ -817,7 +826,7 @@ export class Renderer {
     l.fs = fs;
     l.devicePx = z * this.dpr;
     l.zoom = z;
-    l.alpha = e.dying ? 0.6 : 1;
+    l.alpha = e.dying ? 0.6 : e.flags & CellFlag.Invisible ? INVISIBLE_SELF_ALPHA : 1;
     // one cached bitmap per coin, redrawn when its text or size bucket changes
     this.labels.drawSticker(this.ctx, l, e);
   }

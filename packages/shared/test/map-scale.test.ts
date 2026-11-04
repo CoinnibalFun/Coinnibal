@@ -8,6 +8,7 @@ import {
   MAP_SPACE,
   MAP_WORLD_CAPS,
   OLD_MAP_SCALE_DEFAULT,
+  isFormerMapScaleDefault,
   VIRUS_PER_AREA,
   WORLD_PRESETS,
   mapScaleFieldError,
@@ -17,9 +18,14 @@ import {
 } from '../src';
 
 describe('adaptive map size curve', () => {
-  it('gives the documented sides for 5 / 12 / 50 / 100 / 121 / 144 / 200 players', () => {
-    expect(MAP_SCALE_DEFAULT).toEqual({ auto: true, perPlayer: 1000, min: 10_000, max: 12_000 });
-    expect([5, 12, 50, 100, 121, 144, 200].map((n) => mapSideFor(n, MAP_SCALE_DEFAULT))).toEqual([10_000, 10_000, 10_000, 10_000, 11_000, 12_000, 12_000]);
+  it('gives the documented sides for 5 / 12 / 50 / 126 / 144 / 200 / 225 players', () => {
+    expect(MAP_SCALE_DEFAULT).toEqual({ auto: true, perPlayer: 800, min: 9000, max: 12_000 });
+    expect([5, 12, 50, 126, 144, 200, 225, 400].map((n) => mapSideFor(n, MAP_SCALE_DEFAULT))).toEqual([9000, 9000, 9000, 9000, 9600, 11_400, 12_000, 12_000]);
+    // the former defaults are recognized (saved settings equal to them are upgraded on load)
+    expect(isFormerMapScaleDefault({ perPlayer: 1000, min: 10_000, max: 12_000 })).toBe(true);
+    expect(isFormerMapScaleDefault({ perPlayer: 900, min: 3000, max: 9000 })).toBe(true);
+    expect(isFormerMapScaleDefault(MAP_SCALE_DEFAULT)).toBe(false);
+    expect(isFormerMapScaleDefault({ perPlayer: 1000, min: 10_000, max: 11_000 })).toBe(false);
     // the old curve, still reachable from the admin page
     expect([5, 10, 25, 50, 100].map((n) => mapSideFor(n, OLD_MAP_SCALE_DEFAULT))).toEqual([3000, 3000, 4500, 6400, 9000]);
   });
@@ -47,7 +53,7 @@ describe('adaptive map size curve', () => {
     expect(mapSideFor(1000, { perPlayer: 2000, min: 2000, max: 99_999 })).toBe(MAP_SPACE);
     // a min above the max never wins
     expect(mapSideFor(1, { perPlayer: 900, min: 8000, max: 5000 })).toBe(8000);
-    expect(mapSideFor(Number.NaN, MAP_SCALE_DEFAULT)).toBe(10_000);
+    expect(mapSideFor(Number.NaN, MAP_SCALE_DEFAULT)).toBe(9000);
   });
 
   it('fits the coordinate space and the admin limits; the custom sizes (XS..XL) are fixed choices below it', () => {
@@ -55,7 +61,7 @@ describe('adaptive map size curve', () => {
     expect(MAP_SCALE_DEFAULT.max).toBeLessThanOrEqual(MAP_SCALE_LIMITS.sideMax);
     expect(MAP_SCALE_DEFAULT.perPlayer).toBeLessThanOrEqual(MAP_SCALE_LIMITS.perPlayerMax);
     expect([OLD_MAP_SCALE_DEFAULT.min, OLD_MAP_SCALE_DEFAULT.max]).toEqual([CUSTOM_MAP_WIDTH.XS, CUSTOM_MAP_WIDTH.XL]);
-    expect(CUSTOM_MAP_WIDTH.XL).toBeLessThan(MAP_SCALE_DEFAULT.min);
+    expect(CUSTOM_MAP_WIDTH.XL).toBeLessThanOrEqual(MAP_SCALE_DEFAULT.min);
   });
 
   it('a 10000..12000 room stays populated: food at pond density (capped), cacti and power-ups', () => {

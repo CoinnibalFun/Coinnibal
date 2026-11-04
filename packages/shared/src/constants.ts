@@ -2,9 +2,11 @@
  * Bumped whenever the wire format changes in an incompatible way (v6: bot flags on every
  * player-facing message, `feed` left lines; v7: player avatar ids in snapshots; v8: snapshots carry
  * an extras byte and, when the world was resized, its playable bounds; v9: player country codes; v10: the
- * flag coin skin, `PlayerFlag.FlagSkin`, and `join.flag`).
+ * flag coin skin, `PlayerFlag.FlagSkin`, and `join.flag`; v11: the Shockwave power-up gave way to Leap
+ * and Invisibility (`CellFlag.Leap` reuses the Shock bit, `CellFlag.Invisible`); the "Trash talk"
+ * stickers append emote ids 8..15).
  */
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 
 /** Simulation + snapshot rate. */
 export const TICK_RATE = 30;

@@ -840,6 +840,36 @@
   background: var(--sticker);
   box-shadow: var(--sh-2);
 }
+/* the page switch: "Hype" / "Trash talk", stacked to the left of the row */
+.g-emotes__pages {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  margin-right: 2px;
+}
+.g-emotes__page {
+  min-height: 20px;
+  padding: 0 7px;
+  border: 2px solid var(--outline);
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: #04181c;
+  cursor: pointer;
+}
+.g-emotes__page.is-on {
+  background: var(--sun, #f2c14e);
+}
+.g-emotes__page:focus-visible {
+  outline: 3px solid var(--focus, #2d7388);
+  outline-offset: 2px;
+}
 .g-emote {
   position: relative;
   display: grid;
@@ -1099,6 +1129,16 @@
   display: grid;
   grid-template-columns: repeat(4, 48px);
   gap: 4px;
+}
+.g-touch__emotes .g-emotes__pages {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  margin: 0 0 2px;
+}
+.g-touch__emotes .g-emotes__page {
+  flex: 1;
+  min-height: 32px;
+  font-size: 12px;
 }
 
 /* ── narrow screens ───────────────────────────────────────────────────── */
@@ -1997,8 +2037,11 @@
 .g-boost--magnet {
   background: #fbe3dc;
 }
-.g-boost--shock {
+.g-boost--leap {
   background: #dff3f9;
+}
+.g-boost--invis {
+  background: #e8e1f6;
 }
 .g-boost--speed {
   background: #fdf0c8;

@@ -1,4 +1,4 @@
-import type { BoostCounts, BoostKind, ChainStatus, ShopBuyError, ShopBuyResult, ShopPack, ShopView } from '@elymum/shared';
+import { BOOST_KINDS, type BoostCounts, type BoostKind, type ChainStatus, type ShopBuyError, type ShopBuyResult, type ShopPack, type ShopView } from '@elymum/shared';
 import { erc20Abi, type Address, type Hash } from 'viem';
 import { SERVER } from '../config';
 import { isDevFake, loadDevFake } from './devFakeLoader';
@@ -139,5 +139,5 @@ export async function settleClaim(token: string, owner: string, kind: BoostKind,
 
 /** Total charges (the HUD shows the shop button with a count). */
 export function totalCharges(c: BoostCounts | null | undefined): number {
-  return c ? c.magnet + c.shock + c.speed : 0;
+  return c ? BOOST_KINDS.reduce((n, k) => n + (c[k] ?? 0), 0) : 0;
 }

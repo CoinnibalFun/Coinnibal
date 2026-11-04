@@ -2,10 +2,13 @@ import { BOOST_KEYS, BOOST_KINDS, type BoostKind } from '@elymum/shared';
 
 export interface InputActions {
   split(): void;
-  /** A bought power-up key (R magnet, F shockwave, G speed). Optional: tests may leave it out. */
+  /** A bought power-up key (R magnet, F leap, G speed, V invisibility). Optional: tests may leave it out. */
   boost?(kind: BoostKind): void;
   eject(): void;
-  emote(id: number): void;
+  /** Keys 1-8: the sticker in that slot (0..7) of the page on show. */
+  emote(slot: number): void;
+  /** Key 9: the other sticker page. Optional: tests may leave it out. */
+  emotePage?(): void;
   openChat(): void;
   escape(): void;
   spectateNext(): void;
@@ -151,6 +154,17 @@ export class Input {
       this.keys.mouseMoved(e.clientX, e.clientY);
     });
     on(this.target, 'mousedown', () => this.onGesture());
+    // a left click on the floor splits too (desktop). HUD controls are their own elements, so a click
+    // on one never reaches the canvas; touch taps are not mouse pointers (the Split button splits).
+    on(this.target, 'pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || e.target !== this.target || !this.actions.steering()) return;
+      e.preventDefault();
+      this.actions.split();
+    });
+    // a right click on the floor does nothing (no browser menu over the game)
+    on(this.target, 'contextmenu', (e) => {
+      if (this.actions.steering()) e.preventDefault();
+    });
     on(
       this.target,
       'wheel',
@@ -220,6 +234,11 @@ export class Input {
         e.preventDefault();
         this.actions.openChat();
         return;
+    }
+    if (e.code === 'Digit9' && !e.repeat && this.actions.emotePage) {
+      // 9, right after the stickers' 1-8: the other sticker page
+      this.actions.emotePage();
+      return;
     }
     if (/^Digit[1-8]$/.test(e.code) && !e.repeat) {
       this.actions.emote(Number(e.code.slice(5)) - 1);

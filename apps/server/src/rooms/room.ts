@@ -461,7 +461,8 @@ export class Room implements RoomHandle {
     this.attach(conn);
     if (conn.player?.alive) return;
     conn.spectating = true;
-    const ranking = this.world.ranking();
+    // nobody gets to watch an invisible coin
+    const ranking = this.world.ranking().filter((q) => !this.world.isInvisible(q));
     if (ranking.length === 0) conn.spectatePid = null;
     else if (next && conn.spectatePid !== null) {
       const i = ranking.findIndex((p) => p.id === conn.spectatePid);
@@ -1065,11 +1066,12 @@ export class Room implements RoomHandle {
     } else {
       const target = conn.spectatePid !== null ? this.world.players.get(conn.spectatePid) : undefined;
       if (conn.spectating && (!target || !target.alive)) {
-        const top = this.world.ranking()[0];
+        const top = this.world.ranking().find((q) => !this.world.isInvisible(q));
         conn.spectatePid = top?.id ?? null;
       }
       const t = conn.spectatePid !== null ? this.world.players.get(conn.spectatePid) : undefined;
-      if (conn.spectating && t && t.alive) {
+      // an invisible target: the camera waits where it last saw it (following it would give it away)
+      if (conn.spectating && t && t.alive && !this.world.isInvisible(t)) {
         const c = t.center();
         cx = c.x;
         cy = c.y;
@@ -1092,7 +1094,7 @@ export class Room implements RoomHandle {
       if (!conn.open) continue;
       if (conn.buffered > 768 * 1024) continue; // slow client: skip a frame
       const { rect, view } = this.viewFor(conn);
-      const snap = conn.view.build(this.world, rect, view, this.entryFee, this.avatarOf);
+      const snap = conn.view.build(this.world, rect, view, this.entryFee, this.avatarOf, conn.player?.alive ? conn.player.id : null);
       if (!snap) continue;
       this.writer.reset();
       writeSnapshot(this.writer, snap);
@@ -1115,7 +1117,8 @@ export class Room implements RoomHandle {
       verified: (p.flags & PlayerFlag.Verified) !== 0 || undefined,
       country: p.country ?? undefined,
     }));
-    const leaders = ranking.slice(0, 3).map((p) => {
+    // the minimap's leader dots: an invisible leader has none (the others keep theirs)
+    const leaders = ranking.slice(0, 3).filter((p) => !this.world.isInvisible(p)).map((p) => {
       const c = p.center();
       return { x: Math.round(c.x), y: Math.round(c.y) };
     });

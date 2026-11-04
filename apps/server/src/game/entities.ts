@@ -37,8 +37,6 @@ export class Cell extends Entity {
   mergeAt: number;
   /** Own-cell collisions are skipped until this time. */
   noCollideUntil = 0;
-  /** Pushed by a shockwave: it neither eats nor is eaten by another coin until this time. */
-  pushedUntil = 0;
   flags = 0;
 
   constructor(
@@ -173,10 +171,15 @@ export class Player {
   magnetUntil = 0;
   pumpUntil = 0;
   shieldUntil = 0;
-  /** A bought Shockwave fires at the start of the next tick. */
-  shockQueued = false;
-  /** The shockwave ring shows (`CellFlag.Shock`) until this time. */
-  shockFxUntil = 0;
+  /** A bought Leap jumps at the start of the next tick. */
+  leapQueued = false;
+  /** The leap trail shows (`CellFlag.Leap`) until this time. */
+  leapFxUntil = 0;
+  /**
+   * A bought Invisibility: until this time no other player is sent these cells (`ViewState`), bots
+   * do not see them and the minimap leader dots skip them. Eating works as usual.
+   */
+  invisUntil = 0;
   /** Stake rooms: disconnected and waiting for a reconnect. */
   afk = false;
   /** The country the player plays for (`isCountryCode`), shown as a flag by the name; null: none. */
