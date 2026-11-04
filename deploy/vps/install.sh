@@ -6,7 +6,8 @@
 #   bash install.sh --from https://slana-wo00.onrender.com --token <admin session token> --yes
 #       the whole move in one command: copies the old server's settings (.env) AND its data
 #       (/admin → Network → Backup & move → "Copy new-server command" writes this line for you)
-# Options: --domain D, --repo SSH_URL, --branch B, --yes (no questions; defaults or the given values).
+# Options: --domain D, --repo SSH_URL, --branch B, --set KEY=VALUE (a .env setting; repeatable),
+#          --yes (no questions; defaults or the given values).
 # Safe to run again: every step checks what is already done. Full guide: deploy/vps/README.md.
 set -euo pipefail
 
@@ -27,6 +28,7 @@ restore_file=""
 restore_url=""
 restore_token=""
 from_url=""
+sets=()
 yes=0
 
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -45,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --restore-url) restore_url="${2:?--restore-url needs a value}"; shift 2 ;;
     --from) from_url="${2:?--from needs the old server URL}"; restore_url="$from_url"; shift 2 ;;
     --token) restore_token="${2:?--token needs a value}"; shift 2 ;;
+    --set) [[ "${2:-}" =~ ^[A-Z][A-Z0-9_]*=[^[:space:]]*$ ]] || die "--set needs KEY=VALUE (no spaces)"; sets+=("$2"); shift 2 ;;
     --yes | -y) yes=1; shift ;;
     -h | --help) sed -n '2,8p' "$0"; exit 0 ;;
     *) die "unknown argument: $1 (see --help)" ;;
@@ -253,6 +256,9 @@ else
 fi
 chmod 600 "$ELYMUM_ENV"
 env_set GAME_DOMAIN "$domain"
+for kv in "${sets[@]}"; do
+  env_set "${kv%%=*}" "${kv#*=}"
+done
 if [[ -n "$from_url" ]]; then
   [[ -n "$restore_token" ]] || die "--from needs --token (copy the command from /admin → Network → Backup & move)"
   note "copying the settings from $from_url"
