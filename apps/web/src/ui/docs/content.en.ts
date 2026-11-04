@@ -70,11 +70,11 @@ export const docsEn = (symbol: string = sym, feeBps: number = F.fee.bps, feeMode
           rows: [
             { key: 'Mouse', action: 'Move toward the pointer (joystick on phones)' },
             { key: 'WASD / arrows', action: 'Move with the keyboard (move the mouse to take it back)' },
-            { key: 'Space', action: 'Split: launch a half at runners' },
+            { key: 'Space / left click', action: 'Split: launch a half at runners' },
             { key: 'E', action: 'Tip out a little mass (hold to repeat)' },
             { key: 'Enter', action: 'Chat' },
-            { key: '1–8', action: 'Stickers (emotes)' },
-            { key: 'R / F / G', action: 'Bought power-ups: Magnet, Shockwave, Speed burst (buttons by Split on phones)' },
+            { key: '1–8', action: 'Stickers (emotes) on the page on show: Hype or Trash talk (the switch on the sticker bar)' },
+            { key: 'R / F / G / V', action: 'Bought power-ups: Magnet, Leap, Speed burst, Invisibility (buttons by Split on phones)' },
             { key: 'Q', action: 'Next player while spectating' },
             { key: 'Esc', action: 'Close the chat or an open panel' },
           ],
@@ -87,7 +87,7 @@ export const docsEn = (symbol: string = sym, feeBps: number = F.fee.bps, feeMode
             { term: 'Spawn shield:', text: `A fresh coin cannot be eaten for ${R.spawnShieldS} s.` },
             {
               term: 'Bought power-ups:',
-              text: `signed-in players can buy packs of ${SHOP_DEFAULTS.packSize} charges with ${symbol} in the lobby shop (the bolt in the lobby masthead; nothing is sold during a game): ${num(Number(SHOP_DEFAULTS.prices.magnet))} ${symbol} for Magnet, ${num(Number(SHOP_DEFAULTS.prices.shock))} for Shockwave and ${num(Number(SHOP_DEFAULTS.prices.speed))} for Speed burst by default (the admin can change them). Magnet pulls nearby food to you for ${BOOST_RULES.magnet.durationMs / 1000} s (never coins or loot). Shockwave pushes coins your size or smaller, and food, away from you; pushed coins can neither eat nor be eaten for a moment, so nobody eats through it. Speed burst gives ${BOOST_RULES.speed.durationMs / 1000} s of extra speed. Each has a cooldown. Use them freely in practice and private rooms; in paid arenas at most ${SHOP_DEFAULTS.arenaUsesPerRound} per round. Elymum emblem holders pay ${SHOP_DEFAULTS.holderDiscountPct}% less and get ${SHOP_DEFAULTS.holderExtraArenaUses} extra arena use per round. Payments are burned by default. Bots never use them.`,
+              text: `signed-in players can buy packs of ${SHOP_DEFAULTS.packSize} charges with ${symbol} in the lobby shop (the bolt in the lobby masthead; nothing is sold during a game): ${num(Number(SHOP_DEFAULTS.prices.magnet))} ${symbol} for Magnet, ${num(Number(SHOP_DEFAULTS.prices.leap))} for Leap, ${num(Number(SHOP_DEFAULTS.prices.speed))} for Speed burst and ${num(Number(SHOP_DEFAULTS.prices.invis))} for Invisibility by default (the admin can change them). Magnet pulls nearby food to you for ${BOOST_RULES.magnet.durationMs / 1000} s (never coins or loot). Leap jumps you instantly toward your aim, about five coin widths (further when you are big), never through the wall: good for getting out of a corner. Speed burst gives ${BOOST_RULES.speed.durationMs / 1000} s of extra speed. Invisibility hides you for ${BOOST_RULES.invis.durationMs / 1000} s: other players and bots cannot see your coin, your name or your minimap dot (you see yourself see-through), but you still eat and can be eaten. Each has a cooldown. Use them freely in practice and private rooms; in paid arenas at most ${SHOP_DEFAULTS.arenaUsesPerRound} per round. Elymum emblem holders pay ${SHOP_DEFAULTS.holderDiscountPct}% less and get ${SHOP_DEFAULTS.holderExtraArenaUses} extra arena use per round. Payments are burned by default. Bots never use them.`,
             },
           ],
         },

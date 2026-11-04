@@ -1,5 +1,5 @@
 import { lookForSkin as lookForBasicSkin } from '../../render/looks';
-import { PowerUpType, RULES } from '@elymum/shared';
+import { BOOST_KEY_LABELS, BOOST_KINDS, PowerUpType, RULES } from '@elymum/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { Counter, DUR, Icon, Stamp, springs, useReducedMotion } from '../../design';
@@ -396,14 +396,14 @@ function KeyHints() {
   const t = useT();
   const showChat = useUi((s) => s.settings.showChat);
   const chatOpen = useUi((s) => s.chatOpen);
-  const hasBoosts = useUi((s) => !!s.boosts?.signedIn && (s.boosts.charges.magnet > 0 || s.boosts.charges.shock > 0 || s.boosts.charges.speed > 0));
+  const hasBoosts = useUi((s) => !!s.boosts?.signedIn && BOOST_KINDS.some((k) => (s.boosts?.charges[k] ?? 0) > 0));
   return (
     <div className="g-keys mono" aria-label={t('g.keysLabel')}>
       <span className="g-keys__item">
         <kbd className="kb-key">{t('g.key.mouse')}</kbd>/<kbd className="kb-key">{t('g.key.wasd')}</kbd> {t('g.key.steer')}
       </span>
       <span className="g-keys__item">
-        <kbd className="kb-key">{t('g.key.space')}</kbd> {t('hud.split').toLowerCase()}
+        <kbd className="kb-key">{t('g.key.space')}</kbd>/<kbd className="kb-key">{t('g.key.click')}</kbd> {t('hud.split').toLowerCase()}
       </span>
       <span className="g-keys__item">
         <kbd className="kb-key">E</kbd> {t('hud.eject').toLowerCase()}
@@ -413,9 +413,12 @@ function KeyHints() {
       </span>
       {hasBoosts && (
         <span className="g-keys__item">
-          <kbd className="kb-key">R</kbd>
-          <kbd className="kb-key">F</kbd>
-          <kbd className="kb-key">G</kbd> {t('boost.label').toLowerCase()}
+          {BOOST_KINDS.map((k) => (
+            <kbd key={k} className="kb-key">
+              {BOOST_KEY_LABELS[k]}
+            </kbd>
+          ))}{' '}
+          {t('boost.label').toLowerCase()}
         </span>
       )}
       {showChat && !chatOpen && (

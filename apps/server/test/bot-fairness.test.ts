@@ -207,6 +207,8 @@ describe('bot strength settings and the upgrade of old saved defaults', () => {
     saved.maps.practiceRookie = { auto: true, perPlayer: 900, min: 3000, max: 9000 };
     saved.maps.arena = { auto: false, perPlayer: 900, min: 3000, max: 9000 };
     saved.maps.private = { auto: true, perPlayer: 800, min: 3000, max: 9000 };
+    // the defaults of early 2026-11 (1000 / 10000 / 12000) are upgraded too
+    saved.maps.practicePro = { auto: true, perPlayer: 1000, min: 10_000, max: 12_000 };
     writeFileSync(join(dir, BOT_SETTINGS_FILE), JSON.stringify(saved));
     const logs: string[] = [];
     const store = new BotSettingsStore(dir, base, (m) => logs.push(m));
@@ -216,6 +218,8 @@ describe('bot strength settings and the upgrade of old saved defaults', () => {
     expect(s.kinds.arena.mix).toEqual({ easy: 20, medium: 40, hard: 40 });
     expect(s.kinds.arena).toMatchObject({ strength: 100, maxChasers: 2 });
     expect(s.maps.practiceRookie).toEqual(MAP_SCALE_DEFAULT);
+    expect(s.maps.practicePro).toEqual(MAP_SCALE_DEFAULT);
+    expect(MAP_SCALE_DEFAULT).toMatchObject({ perPlayer: 800, min: 9000, max: 12_000 });
     // auto off is the admin's choice: kept, with the new curve
     expect(s.maps.arena).toEqual({ ...MAP_SCALE_DEFAULT, auto: false });
     expect(s.maps.private).toEqual({ auto: true, perPlayer: 800, min: 3000, max: 9000 });

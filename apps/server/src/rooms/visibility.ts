@@ -34,7 +34,12 @@ export class ViewState {
   /**
    * Builds the delta for a view rectangle. Returns null when nothing changed.
    * `entryFee` (arena rooms) sizes loot pieces (`lootTier`). `avatars`: player id → profile picture
-   * id (humans who wear one; a player's info is sent again when it changes).
+   * id (humans who wear one; a player's info is sent again when it changes). `selfPid`: the
+   * viewer's own player (null: a spectator).
+   *
+   * Anti-cheat: the cells of an invisible player (a bought Invisibility) are left out for everyone
+   * but that player, so a hacked client has nothing to show. The client already holding them sees
+   * them removed (no eater) and gets them again, as new entities, when the effect ends.
    */
   build(
     world: World,
@@ -42,12 +47,15 @@ export class ViewState {
     view: SnapshotData['view'],
     entryFee = 0,
     avatars?: ReadonlyMap<number, string>,
+    selfPid: number | null = null,
   ): SnapshotData | null {
     const gen = ++this.gen;
     const upserts: EntityRecord[] = [];
     const players: PlayerInfo[] = [];
+    const now = world.now;
 
     world.forEachVisible(rect.x0, rect.y0, rect.x1, rect.y1, (e: StaticEntity | DynamicEntity) => {
+      if (e.kind === EntityKind.Cell && e.player.invisUntil > now && e.player.id !== selfPid) return;
       const k = this.known.get(e.id);
       if (!k) {
         this.known.set(e.id, { v: e.version, g: gen });

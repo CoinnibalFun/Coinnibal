@@ -67,8 +67,11 @@ export interface CEntity {
   vy: number;
   seed: number;
   expression: Expression;
-  /** When this cell's `CellFlag.Shock` last rose (the shockwave ring starts then); 0: never. */
-  shockAt: number;
+  /** When this cell's `CellFlag.Leap` last rose (the leap trail starts then); 0: never. */
+  leapAt: number;
+  /** Where the coin took off from (the trail runs from here to the coin). */
+  leapX: number;
+  leapY: number;
 }
 
 export interface CPlayer extends PlayerInfo {
@@ -319,7 +322,10 @@ export class ClientWorld implements SnapshotSink {
         vy: 0,
         seed: ((id * 2654435761) % 1000) / 1000,
         expression: 'happy',
-        shockAt: (flags ?? 0) & CellFlag.Shock ? now : 0,
+        // landed in view mid-leap: no take-off point known, the landing puff only
+        leapAt: (flags ?? 0) & CellFlag.Leap ? now : 0,
+        leapX: x,
+        leapY: y,
       });
       return;
     }
@@ -331,8 +337,12 @@ export class ClientWorld implements SnapshotSink {
     e.nr = r;
     e.t0 = now;
     if (has & HAS_PLAYER) {
-      // a shockwave just fired: its ring plays from here (the flag is up for a few snapshots)
-      if (flags !== undefined && flags & CellFlag.Shock && !(e.flags & CellFlag.Shock)) e.shockAt = now;
+      // a leap just happened: the trail runs from where the coin was drawn (the flag is up for a few snapshots)
+      if (flags !== undefined && flags & CellFlag.Leap && !(e.flags & CellFlag.Leap)) {
+        e.leapAt = now;
+        e.leapX = e.ox;
+        e.leapY = e.oy;
+      }
       if (flags !== undefined) e.flags = flags;
       if (playerId !== undefined) e.playerId = playerId;
     }

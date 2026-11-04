@@ -61,7 +61,7 @@ async function newPage(size) {
 
 async function buyAll(page) {
   await page.evaluate(() => window.__elymum.useUi.setState({ modal: 'shop' }));
-  for (const k of ['magnet', 'shock', 'speed']) {
+  for (const k of ['magnet', 'leap', 'speed', 'invis']) {
     await page.waitForSelector(`[data-testid="shop-buy-${k}"]`);
     await page.getByTestId(`shop-buy-${k}`).click();
     await page.waitForFunction((x) => (document.querySelector(`[data-testid="shop-buy-${x}"]`)?.getAttribute('aria-busy') ?? 'false') !== 'true', k, { timeout: 20000 });

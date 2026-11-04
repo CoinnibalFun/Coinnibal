@@ -595,6 +595,26 @@ const SCENES = [
   },
   // ── in game ──
   { id: 'hud-practice', app: 'play', auth: 'signed', run: async (page, h) => (await openPlay(page, h), await playPractice(page), await hudExtras(page)) },
+  {
+    // a practice game with all four power-ups owned (Leap recharging) and the "Trash talk" sticker page
+    id: 'hud-powers',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      await page.evaluate(() => {
+        const s = window.__elymum.useUi.getState();
+        const now = Date.now();
+        window.__elymum.useUi.setState({
+          emoteSet: 'trash',
+          boosts: { ...(s.boosts ?? {}), usable: true, signedIn: true, disabled: [], cooldownMs: { magnet: 0, leap: 6000, speed: 0, invis: 0 }, charges: { magnet: 3, leap: 2, speed: 3, invis: 3 } },
+          boostReady: { magnet: 0, leap: now + 6000, speed: 0, invis: 0 },
+        });
+      });
+      await settle(page, 900);
+    },
+  },
   { id: 'hud-guest', app: 'play', auth: 'guest', run: async (page, h) => (await openPlay(page, h, { signed: false }), await playPractice(page)) },
   {
     id: 'hud-arena',
@@ -629,7 +649,7 @@ const SCENES = [
       // every power-up owned, the arena allowance shown: the bar at its largest
       await page.evaluate(() => {
         const s = window.__elymum.useUi.getState();
-        window.__elymum.useUi.setState({ boosts: { ...(s.boosts ?? {}), usable: true, signedIn: true, disabled: [], cooldownMs: { magnet: 0, shock: 0, speed: 0 }, charges: { magnet: 3, shock: 3, speed: 3 }, arena: { left: 3, max: 3 } } });
+        window.__elymum.useUi.setState({ boosts: { ...(s.boosts ?? {}), usable: true, signedIn: true, disabled: [], cooldownMs: { magnet: 0, leap: 0, speed: 0, invis: 0 }, charges: { magnet: 3, leap: 3, speed: 3, invis: 3 }, arena: { left: 3, max: 3 } } });
       });
       await settle(page, 600);
     },

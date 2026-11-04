@@ -1,5 +1,10 @@
-import { BOOST_RULES, BURN_ADDRESS, CellFlag, PlayerFlag, RULES, SHOP_DEFAULTS, TICK_MS, packPriceRaw, shockRange, type ServerMessage } from '@elymum/shared';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { BOOST_RULES, BURN_ADDRESS, CellFlag, PlayerFlag, RULES, SHOP_DEFAULTS, TICK_MS, leapDistance, packPriceRaw, type ServerMessage } from '@elymum/shared';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { BotBrain } from '../src/bots/brain';
+import { rollPersonality } from '../src/bots/personality';
+import { mulberry32 } from '../src/game/rng';
+import { ViewState } from '../src/rooms/visibility';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -71,70 +76,131 @@ describe('boosts: world effects', () => {
     expect(a.cells[0].flags & CellFlag.Pump).toBe(0);
   });
 
-  it('shockwave pushes smaller and similar coins and food away, not bigger coins; flag shows briefly', () => {
+  it('leap: every cell jumps the same step toward the aim; the flag shows briefly', () => {
     const w = new World(cfg());
-    const p = w.addPlayer({ spawnShield: false, name: 'me', skin: 0, x: 2000, y: 2000, mass: 100 });
-    const small = w.addPlayer({ spawnShield: false, name: 's', skin: 0, x: 2150, y: 2000, mass: 30 });
-    const similar = w.addPlayer({ spawnShield: false, name: 'm', skin: 0, x: 2000, y: 1820, mass: 110 });
-    const big = w.addPlayer({ spawnShield: false, name: 'b', skin: 0, x: 1700, y: 2000, mass: 400 });
-    const far = w.addPlayer({ spawnShield: false, name: 'f', skin: 0, x: 3600, y: 3600, mass: 20 });
-    const food = w.spawnFood(2050, 2050, 0);
-    for (const q of [p, small, similar, big, far]) w.setTarget(q.id, q.cells[0].x, q.cells[0].y);
-    const s0 = small.cells[0].x;
-    const m0 = similar.cells[0].y;
-    const b0 = { x: big.cells[0].x, y: big.cells[0].y };
-    const fd0 = Math.hypot(food.x - 2000, food.y - 2000);
-    expect(w.useBoost(p.id, 'shock')).toBe(true);
+    const p = w.addPlayer({ spawnShield: false, name: 'me', skin: 0, x: 2000, y: 2000, mass: 20 });
+    w.setTarget(p.id, 3000, 2000);
+    const x0 = p.cells[0].x;
+    expect(w.useBoost(p.id, 'leap')).toBe(true);
     w.tick(TICK_MS);
-    expect(p.cells[0].flags & CellFlag.Shock).toBeTruthy();
-    expect(Math.hypot(food.x - 2000, food.y - 2000)).toBeGreaterThan(fd0 + 50);
-    // launched straight away from me (a split-like boost; they steer back afterwards)
-    expect(small.cells[0].vx).toBeGreaterThan(300);
-    expect(similar.cells[0].vy).toBeLessThan(-300);
-    expect(big.cells[0].vx).toBe(0);
-    run(w, 200);
-    expect(small.cells[0].x - s0).toBeGreaterThan(60);
-    expect(m0 - similar.cells[0].y).toBeGreaterThan(40);
-    // the big coin is not pushed (it may walk toward its own target only)
-    expect(Math.hypot(big.cells[0].x - b0.x, big.cells[0].y - b0.y)).toBeLessThan(20);
-    expect(far.cells[0].x).toBeCloseTo(3600, 0);
-    run(w, BOOST_RULES.shock.fxMs);
-    expect(p.cells[0].flags & CellFlag.Shock).toBe(0);
+    const jumped = p.cells[0].x - x0;
+    // the leap plus at most one tick of walking
+    expect(jumped).toBeGreaterThan(leapDistance(p.cells[0].r) - 5);
+    expect(jumped).toBeLessThan(leapDistance(p.cells[0].r) + 30);
+    expect(Math.abs(p.cells[0].y - 2000)).toBeLessThan(2);
+    expect(p.cells[0].flags & CellFlag.Leap).toBeTruthy();
+    run(w, BOOST_RULES.leap.fxMs + 50);
+    expect(p.cells[0].flags & CellFlag.Leap).toBe(0);
   });
 
-  it('the shockwave never feeds a kill: pushed coins are not eaten (by the user or a third coin) during the grace', () => {
+  it('leap never crosses the border, and gets a coin out of a corner', () => {
     const w = new World(cfg());
-    const me = w.addPlayer({ spawnShield: false, name: 'me', skin: 0, x: 2000, y: 2000, mass: 300 });
-    const prey = w.addPlayer({ spawnShield: false, name: 'prey', skin: 0, x: 2200, y: 2000, mass: 60 });
-    // a third, much bigger coin sits right where the push sends the prey
-    const shark = w.addPlayer({ spawnShield: false, name: 'shark', skin: 0, x: 2420, y: 2000, mass: 900 });
-    for (const q of [me, prey, shark]) w.setTarget(q.id, q.cells[0].x, q.cells[0].y);
-    w.useBoost(me.id, 'shock');
+    const p = w.addPlayer({ spawnShield: false, name: 'me', skin: 0, x: 3950, y: 3950, mass: 100 });
+    // into the wall: it lands inside (then walks against the wall like any coin)
+    w.setTarget(p.id, 6000, 6000);
+    w.useBoost(p.id, 'leap');
     w.tick(TICK_MS);
-    expect(prey.cells[0].pushedUntil).toBeGreaterThan(w.now);
-    run(w, BOOST_RULES.shock.graceMs - 200);
-    expect(prey.alive).toBe(true);
-    // the user chasing the prey cannot eat it through the push either
-    w.setTarget(me.id, prey.cells[0].x, prey.cells[0].y);
+    const c = p.cells[0];
+    expect(c.x + c.r * 0.5).toBeLessThanOrEqual(w.x1 + 1e-6);
+    expect(c.y + c.r * 0.5).toBeLessThanOrEqual(w.y1 + 1e-6);
+    expect(c.x).toBeGreaterThan(3800);
+    // out of the corner toward the middle
+    const before = { x: c.x, y: c.y };
+    w.setTarget(p.id, 2000, 2000);
     w.tick(TICK_MS);
-    expect(prey.alive).toBe(true);
-    expect(me.totalMass()).toBeLessThan(310);
+    (w as unknown as { now: number }).now += BOOST_RULES.leap.cooldownMs;
+    w.useBoost(p.id, 'leap');
+    w.tick(TICK_MS);
+    expect(Math.hypot(c.x - before.x, c.y - before.y)).toBeGreaterThan(leapDistance(c.r) * 0.9);
   });
 
-  it('a pushed coin cannot eat during the grace either', () => {
+  it('leap moves a split player as one (the formation keeps) and eating works where it lands', () => {
     const w = new World(cfg());
-    const me = w.addPlayer({ spawnShield: false, name: 'me', skin: 0, x: 2000, y: 2000, mass: 200 });
-    const pushed = w.addPlayer({ spawnShield: false, name: 'p', skin: 0, x: 2100, y: 2000, mass: 180 });
-    const crumb = w.addPlayer({ spawnShield: false, name: 'c', skin: 0, x: 2340, y: 2000, mass: 20 });
-    for (const q of [me, pushed, crumb]) w.setTarget(q.id, q.cells[0].x, q.cells[0].y);
-    w.useBoost(me.id, 'shock');
-    run(w, 600);
-    expect(crumb.alive).toBe(true);
+    const p = w.addPlayer({ spawnShield: false, name: 'me', skin: 0, x: 1000, y: 2000, mass: 200 });
+    w.setTarget(p.id, 3000, 2000);
+    w.splitPlayer(p);
+    run(w, 100);
+    const big = p.biggestCell()!;
+    const d = leapDistance(big.r);
+    // a crumb waits where the leap lands
+    const c = p.center();
+    const crumb = w.addPlayer({ spawnShield: false, name: 'crumb', skin: 0, x: big.x + d, y: big.y, mass: 10 });
+    w.setTarget(crumb.id, big.x + d, big.y);
+    const gaps = p.cells.map((q) => q.x - big.x);
+    w.useBoost(p.id, 'leap');
+    w.tick(TICK_MS);
+    expect(p.center().x - c.x).toBeGreaterThan(d * 0.8);
+    p.cells.forEach((q, i) => expect(Math.abs(q.x - big.x - gaps[i])).toBeLessThan(60));
+    expect(crumb.alive).toBe(false);
   });
 
-  it('shock range grows with the radius', () => {
-    expect(shockRange(100)).toBeGreaterThan(shockRange(20));
-    expect(shockRange(0)).toBe(BOOST_RULES.shock.rangeBase);
+  it('invisibility: 10 s of the flag; the coins still eat and can be eaten', () => {
+    const w = new World(cfg());
+    const p = w.addPlayer({ spawnShield: false, name: 'ghost', skin: 0, x: 2000, y: 2000, mass: 100 });
+    const crumb = w.addPlayer({ spawnShield: false, name: 'crumb', skin: 0, x: 2030, y: 2000, mass: 10 });
+    w.setTarget(crumb.id, 2030, 2000);
+    expect(w.useBoost(p.id, 'invis')).toBe(true);
+    w.tick(TICK_MS);
+    expect(w.isInvisible(p)).toBe(true);
+    expect(p.cells[0].flags & CellFlag.Invisible).toBeTruthy();
+    expect(crumb.alive).toBe(false);
+    const whale = w.addPlayer({ spawnShield: false, name: 'whale', skin: 0, x: 2000, y: 2000, mass: 900 });
+    w.setTarget(whale.id, p.cells[0].x, p.cells[0].y);
+    run(w, 300);
+    expect(p.alive).toBe(false);
+    expect(whale.alive).toBe(true);
+  });
+
+  it('invisibility ends after its duration', () => {
+    const w = new World(cfg());
+    const p = w.addPlayer({ spawnShield: false, name: 'ghost', skin: 0, x: 2000, y: 2000, mass: 100 });
+    w.useBoost(p.id, 'invis');
+    run(w, BOOST_RULES.invis.durationMs - 200);
+    expect(p.cells[0].flags & CellFlag.Invisible).toBeTruthy();
+    run(w, 400);
+    expect(w.isInvisible(p)).toBe(false);
+    expect(p.cells[0].flags & CellFlag.Invisible).toBe(0);
+  });
+
+  it('anti-cheat: other viewers are not sent an invisible coin at all; its owner is, and it comes back after', () => {
+    const w = new World(cfg());
+    const ghost = w.addPlayer({ spawnShield: false, name: 'ghost', skin: 0, x: 2000, y: 2000, mass: 100 });
+    const other = w.addPlayer({ spawnShield: false, name: 'other', skin: 0, x: 2300, y: 2000, mass: 100 });
+    const rect = { x0: 1000, y0: 1000, x1: 3000, y1: 3000 };
+    const v = { x: 2000, y: 2000, h: 2000 };
+    const theirs = new ViewState();
+    const mine = new ViewState();
+    const ids = (s: ReturnType<ViewState['build']>) => (s?.upserts ?? []).map((u) => u.id);
+    const ghostCell = ghost.cells[0].id;
+    expect(ids(theirs.build(w, rect, v, 0, undefined, other.id))).toContain(ghostCell);
+    w.useBoost(ghost.id, 'invis');
+    w.tick(TICK_MS);
+    const snap = theirs.build(w, rect, v, 0, undefined, other.id)!;
+    expect(ids(snap)).not.toContain(ghostCell);
+    expect(snap.removals.map((r) => r.id)).toContain(ghostCell);
+    expect(snap.players.map((p) => p.id)).not.toContain(ghost.id);
+    // a spectator (no player) does not get it either
+    expect(ids(new ViewState().build(w, rect, v, 0, undefined, null))).not.toContain(ghostCell);
+    // the owner does, with the flag
+    const own = mine.build(w, rect, v, 0, undefined, ghost.id)!;
+    expect(own.upserts.find((u) => u.id === ghostCell)?.flags! & CellFlag.Invisible).toBeTruthy();
+    run(w, BOOST_RULES.invis.durationMs + 100);
+    expect(ids(theirs.build(w, rect, v, 0, undefined, other.id))).toContain(ghostCell);
+  });
+
+  it('bots cannot see an invisible coin', () => {
+    const w = new World(cfg());
+    const bot = w.addPlayer({ spawnShield: false, name: 'bot', skin: 0, x: 2000, y: 2000, mass: 400, isBot: true });
+    const prey = w.addPlayer({ spawnShield: false, name: 'prey', skin: 0, x: 2250, y: 2000, mass: 30 });
+    w.setTarget(prey.id, 2250, 2000);
+    const brain = new BotBrain(rollPersonality(mulberry32(3)), mulberry32(4));
+    const seen = () => (brain as unknown as { others: { player: { id: number } }[] }).others.map((c) => c.player.id);
+    brain.think(w, bot, w.now + 10_000);
+    expect(seen()).toContain(prey.id);
+    w.useBoost(prey.id, 'invis');
+    w.tick(TICK_MS);
+    brain.think(w, bot, w.now + 60_000);
+    expect(seen()).not.toContain(prey.id);
   });
 
   it('useBoost refuses a dead or unknown player', () => {
@@ -142,7 +208,8 @@ describe('boosts: world effects', () => {
     expect(w.useBoost(99, 'magnet')).toBe(false);
     const p = w.addPlayer({ name: 'x', skin: 0, x: 100, y: 100 });
     w.removePlayer(p.id);
-    expect(w.useBoost(p.id, 'shock')).toBe(false);
+    expect(w.useBoost(p.id, 'leap')).toBe(false);
+    expect(w.useBoost(p.id, 'invis')).toBe(false);
   });
 });
 
@@ -251,7 +318,7 @@ describe('boosts: buying', () => {
     const { chain, shop } = shopFixture();
     pay(chain, hash(1), 1500n * ONE);
     const r = await shop.buy(WALLET, { kind: 'magnet', txHash: hash(1) });
-    expect(r).toMatchObject({ ok: true, kind: 'magnet', added: 3, charges: { magnet: 3, shock: 0, speed: 0 } });
+    expect(r).toMatchObject({ ok: true, kind: 'magnet', added: 3, charges: { magnet: 3, leap: 0, speed: 0, invis: 0 } });
   });
 
   it('refuses a duplicate hash (also in another case), a forged one, wrong amount and wrong sender', async () => {
@@ -264,9 +331,9 @@ describe('boosts: buying', () => {
     expect(await buyFails(shop.buy(WALLET, { kind: 'speed', txHash: hash(2) }))).toBe('tx_pending');
     pay(chain, hash(3), 1499n * ONE);
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(3) }))).toBe('wrong_amount');
-    // the shock pack costs more: a magnet price is the wrong amount for it
+    // the leap pack costs more: a magnet price is the wrong amount for it
     pay(chain, hash(4), 1500n * ONE);
-    expect(await buyFails(shop.buy(WALLET, { kind: 'shock', txHash: hash(4) }))).toBe('wrong_amount');
+    expect(await buyFails(shop.buy(WALLET, { kind: 'leap', txHash: hash(4) }))).toBe('wrong_amount');
     // someone else's payment cannot be claimed
     pay(chain, hash(5), 1500n * ONE, { from: OTHER });
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(5) }))).toBe('wrong_sender');
@@ -306,8 +373,10 @@ describe('boosts: buying', () => {
     chain.busy = true;
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(1) }))).toBe('chain_busy');
     chain.busy = false;
-    settings.update({ kinds: { shock: false } });
-    expect(await buyFails(shop.buy(WALLET, { kind: 'shock', txHash: hash(1) }))).toBe('kind_disabled');
+    settings.update({ kinds: { invis: false } });
+    expect(await buyFails(shop.buy(WALLET, { kind: 'invis', txHash: hash(1) }))).toBe('kind_disabled');
+    // the retired Shockwave is no setting any more
+    expect(() => settings.update({ kinds: { shock: false } })).toThrow(ShopSettingsError);
     settings.update({ enabled: false });
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(1) }))).toBe('shop_closed');
   });
@@ -344,19 +413,57 @@ describe('boosts: buying', () => {
     dirs.push(dir);
     const a = shopFixture({ dir });
     pay(a.chain, hash(9), 2500n * ONE);
-    await a.shop.buy(WALLET, { kind: 'shock', txHash: hash(9) });
+    await a.shop.buy(WALLET, { kind: 'leap', txHash: hash(9) });
     const b = shopFixture({ dir });
-    expect(b.inventory.get(WALLET).shock).toBe(3);
+    expect(b.inventory.get(WALLET).leap).toBe(3);
     pay(b.chain, hash(9), 2500n * ONE);
-    expect(await buyFails(b.shop.buy(WALLET, { kind: 'shock', txHash: hash(9) }))).toBe('tx_used');
+    expect(await buyFails(b.shop.buy(WALLET, { kind: 'leap', txHash: hash(9) }))).toBe('tx_used');
   });
 
-  it('the default prices: Magnet 1,500, Shockwave 2,500, Speed 1,500 per pack of 3; holders pay 30% less', () => {
+  it('backward compatibility: saved Shockwave charges load as Leap charges 1:1, old purchase records stay', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'boosts-'));
+    dirs.push(dir);
+    const file = join(dir, 'boosts.json');
+    const old = {
+      version: 1,
+      wallets: [{ wallet: WALLET.toLowerCase(), charges: { magnet: 1, shock: 4, speed: 2 } }],
+      purchases: [{ tx: hash(77), wallet: WALLET, kind: 'shock', charges: 3, paid: (2500n * ONE).toString(), at: 1 }],
+    };
+    writeFileSync(file, JSON.stringify(old));
+    const inv = new BoostInventory(file);
+    expect(inv.get(WALLET)).toEqual({ magnet: 1, leap: 4, speed: 2, invis: 0 });
+    expect(inv.isUsed(hash(77))).toBe(true);
+    expect(inv.recent()[0].kind).toBe('shock');
+    // the next write stores the new kinds only
+    expect(inv.consume(WALLET, 'leap')).toBe(true);
+    const saved = JSON.parse(readFileSync(file, 'utf8')) as { wallets: { charges: Record<string, number> }[] };
+    expect(saved.wallets[0].charges).toEqual({ magnet: 1, leap: 3, speed: 2, invis: 0 });
+  });
+
+  it('backward compatibility: a pending claim for a Shockwave pack credits a Leap pack (same price)', async () => {
+    const { chain, shop } = shopFixture();
+    pay(chain, hash(5), 2500n * ONE);
+    expect(await shop.buy(WALLET, { kind: 'shock', txHash: hash(5) })).toMatchObject({ ok: true, kind: 'leap', added: 3, charges: { leap: 3 } });
+  });
+
+  it('backward compatibility: saved shop settings with the Shockwave load, its price and switch go to Leap', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'shop-'));
+    dirs.push(dir);
+    mkdirSync(join(dir, 'site'), { recursive: true });
+    writeFileSync(join(dir, 'site', 'shop.json'), JSON.stringify({ ...SHOP_DEFAULTS, prices: { magnet: '1500', shock: '2200', speed: '1500' }, kinds: { magnet: true, shock: false, speed: true } }));
+    const s = new ShopSettingsStore(dir).settings;
+    expect(s.prices).toEqual({ magnet: '1500', leap: '2200', speed: '1500', invis: SHOP_DEFAULTS.prices.invis });
+    expect(s.kinds).toEqual({ magnet: true, leap: false, speed: true, invis: true });
+    expect(existsSync(join(dir, 'site', 'shop.json'))).toBe(true);
+  });
+
+  it('the default prices: Magnet 1,500, Leap 2,500, Speed 1,500, Invisibility 3,000 per pack of 3; holders pay 30% less', () => {
     expect(SHOP_DEFAULTS.packSize).toBe(3);
     expect(packPriceRaw(SHOP_DEFAULTS.prices.magnet, 18, 0)).toBe(1500n * ONE);
-    expect(packPriceRaw(SHOP_DEFAULTS.prices.shock, 18, 0)).toBe(2500n * ONE);
+    expect(packPriceRaw(SHOP_DEFAULTS.prices.leap, 18, 0)).toBe(2500n * ONE);
     expect(packPriceRaw(SHOP_DEFAULTS.prices.speed, 18, 0)).toBe(1500n * ONE);
-    expect(packPriceRaw(SHOP_DEFAULTS.prices.shock, 18, SHOP_DEFAULTS.holderDiscountPct)).toBe(1750n * ONE);
+    expect(packPriceRaw(SHOP_DEFAULTS.prices.invis, 18, 0)).toBe(3000n * ONE);
+    expect(packPriceRaw(SHOP_DEFAULTS.prices.leap, 18, SHOP_DEFAULTS.holderDiscountPct)).toBe(1750n * ONE);
     expect(packPriceRaw(SHOP_DEFAULTS.prices.magnet, 18, SHOP_DEFAULTS.holderDiscountPct)).toBe(1050n * ONE);
     expect(SHOP_DEFAULTS.sink).toBe('burn');
   });
@@ -371,7 +478,7 @@ describe('boosts: buying', () => {
     expect(applyShopSettings(SHOP_DEFAULTS, { prices: { speed: '12.5' }, arenaUsesPerRound: 1, kinds: { magnet: false } })).toMatchObject({
       prices: { speed: '12.5', magnet: SHOP_DEFAULTS.prices.magnet },
       arenaUsesPerRound: 1,
-      kinds: { magnet: false, shock: true },
+      kinds: { magnet: false, leap: true, invis: true },
     });
   });
 });
@@ -386,8 +493,9 @@ describe('boosts: use limits', () => {
     const f = shopFixture({ holder, settings: { packSize: 10 } });
     for (const [i, kind, price] of [
       [1, 'magnet', 1500n],
-      [2, 'shock', 2500n],
+      [2, 'leap', 2500n],
       [3, 'speed', 1500n],
+      [4, 'invis', 3000n],
     ] as const) {
       pay(f.chain, hash(i), price * ONE);
       await f.shop.buy(WALLET, { kind, txHash: hash(i) });
@@ -402,7 +510,7 @@ describe('boosts: use limits', () => {
     expect(shop.use(ctx(), 'magnet', ok)).toEqual({ ok: false, reason: 'cooldown' });
     // another power-up has its own cooldown
     expect(shop.use(ctx(), 'speed', ok)).toEqual({ ok: true });
-    expect(shop.use(ctx(), 'shock', ok)).toEqual({ ok: true });
+    expect(shop.use(ctx(), 'leap', ok)).toEqual({ ok: true });
     tick(BOOST_RULES.magnet.cooldownMs);
     expect(shop.use(ctx(), 'magnet', ok)).toEqual({ ok: true });
     tick(BOOST_RULES.magnet.cooldownMs);
@@ -418,7 +526,7 @@ describe('boosts: use limits', () => {
     const ok = () => true;
     const a = ctx({ arena: true, round: 5 });
     expect(shop.use(a, 'magnet', ok).ok).toBe(true);
-    expect(shop.use(a, 'shock', ok).ok).toBe(true);
+    expect(shop.use(a, 'leap', ok).ok).toBe(true);
     expect(shop.use(a, 'speed', ok)).toEqual({ ok: false, reason: 'round_limit' });
     expect(shop.state(a).arena).toEqual({ left: 0, max: 2 });
     // the holder's extra use
@@ -433,16 +541,16 @@ describe('boosts: use limits', () => {
     const { shop, settings, inventory } = await stocked();
     settings.update({ arenaUsesPerRound: 1, holderExtraArenaUses: 0 });
     expect(shop.use(ctx({ arena: true, round: 1, holder: true }), 'magnet', () => true).ok).toBe(true);
-    expect(shop.use(ctx({ arena: true, round: 1, holder: true }), 'shock', () => true)).toEqual({ ok: false, reason: 'round_limit' });
-    expect(shop.use(ctx({ wallet: null }), 'shock', () => true)).toEqual({ ok: false, reason: 'guest' });
-    expect(shop.use(ctx({ isBot: true }), 'shock', () => true)).toEqual({ ok: false, reason: 'bot' });
-    expect(shop.use(ctx({ wallet: OTHER }), 'shock', () => true)).toEqual({ ok: false, reason: 'no_charges' });
-    const before = inventory.get(WALLET).shock;
-    expect(shop.use(ctx(), 'shock', () => false)).toEqual({ ok: false, reason: 'dead' });
-    expect(inventory.get(WALLET).shock).toBe(before);
-    settings.update({ kinds: { shock: false } });
-    expect(shop.use(ctx(), 'shock', () => true)).toEqual({ ok: false, reason: 'disabled' });
-    expect(shop.state(ctx()).disabled).toEqual(['shock']);
+    expect(shop.use(ctx({ arena: true, round: 1, holder: true }), 'leap', () => true)).toEqual({ ok: false, reason: 'round_limit' });
+    expect(shop.use(ctx({ wallet: null }), 'leap', () => true)).toEqual({ ok: false, reason: 'guest' });
+    expect(shop.use(ctx({ isBot: true }), 'leap', () => true)).toEqual({ ok: false, reason: 'bot' });
+    expect(shop.use(ctx({ wallet: OTHER }), 'leap', () => true)).toEqual({ ok: false, reason: 'no_charges' });
+    const before = inventory.get(WALLET).leap;
+    expect(shop.use(ctx(), 'leap', () => false)).toEqual({ ok: false, reason: 'dead' });
+    expect(inventory.get(WALLET).leap).toBe(before);
+    settings.update({ kinds: { leap: false } });
+    expect(shop.use(ctx(), 'leap', () => true)).toEqual({ ok: false, reason: 'disabled' });
+    expect(shop.state(ctx()).disabled).toEqual(['leap']);
   });
 });
 
@@ -454,7 +562,7 @@ describe('boosts: rooms', () => {
   async function roomWith(mode: 'practice' | 'arena') {
     const f = shopFixture();
     pay(f.chain, hash(1), 2500n * ONE);
-    await f.shop.buy(WALLET, { kind: 'shock', txHash: hash(1) });
+    await f.shop.buy(WALLET, { kind: 'leap', txHash: hash(1) });
     const room = new Room(
       { id: `${mode}-1`, mode, name: 'Test', maxPlayers: 10, bots: null, ...(mode === 'arena' ? { stake: { arenaId: 1, buyIn: 1000 } } : {}) },
       { ...roomDeps(f.chain), shop: f.shop },
@@ -463,25 +571,65 @@ describe('boosts: rooms', () => {
   }
   const last = (msgs: ServerMessage[], t: string) => [...msgs].reverse().find((m) => m.t === t);
 
-  it('a signed-in player gets the state on join and can fire a shockwave; guests cannot', async () => {
+  it('a signed-in player gets the state on join and can leap; guests cannot', async () => {
     const { room } = await roomWith('practice');
     const conn = fakeConn(WALLET);
     room.join(conn, { name: 'me', skin: 0, flags: PlayerFlag.Verified });
-    expect(last(conn.msgs, 'boosts')).toMatchObject({ state: { usable: true, signedIn: true, charges: { shock: 3 } } });
-    room.boost(conn, 'shock');
-    expect(last(conn.msgs, 'boost')).toEqual({ t: 'boost', kind: 'shock', ok: true, ms: 0 });
-    expect(last(conn.msgs, 'boosts')).toMatchObject({ state: { charges: { shock: 2 } } });
+    expect(last(conn.msgs, 'boosts')).toMatchObject({ state: { usable: true, signedIn: true, charges: { leap: 3 } } });
+    room.boost(conn, 'leap');
+    expect(last(conn.msgs, 'boost')).toEqual({ t: 'boost', kind: 'leap', ok: true, ms: 0 });
+    expect(last(conn.msgs, 'boosts')).toMatchObject({ state: { charges: { leap: 2 } } });
     room.tick(TICK_MS);
-    expect(conn.player!.cells[0].flags & CellFlag.Shock).toBeTruthy();
-    room.boost(conn, 'shock');
+    expect(conn.player!.cells[0].flags & CellFlag.Leap).toBeTruthy();
+    room.boost(conn, 'leap');
     expect(last(conn.msgs, 'boost')).toMatchObject({ ok: false, reason: 'cooldown' });
     room.boost(conn, 'laser');
 
     const guest = fakeConn(null);
     room.join(guest, { name: 'guest', skin: 0, flags: 0 });
     expect(last(guest.msgs, 'boosts')).toMatchObject({ state: { usable: false, signedIn: false } });
-    room.boost(guest, 'shock');
+    room.boost(guest, 'leap');
     expect(last(guest.msgs, 'boost')).toMatchObject({ ok: false, reason: 'guest' });
+  });
+
+  it('an invisible leader has no minimap dot', async () => {
+    const f = shopFixture();
+    pay(f.chain, hash(2), 3000n * ONE);
+    await f.shop.buy(WALLET, { kind: 'invis', txHash: hash(2) });
+    const room = new Room({ id: 'practice-9', mode: 'practice', name: 'Test', maxPlayers: 10, bots: null }, { ...roomDeps(f.chain), shop: f.shop });
+    const conn = fakeConn(WALLET);
+    room.join(conn, { name: 'me', skin: 0, flags: PlayerFlag.Verified });
+    const watcher = fakeConn(null);
+    const lead = () => (last(watcher.msgs, 'lb') as Extract<ServerMessage, { t: 'lb' }> | undefined)?.leaders.length ?? -1;
+    room.spectate(watcher);
+    (room as unknown as { lastLbAt: number }).lastLbAt = 0;
+    room.tick(TICK_MS);
+    expect(lead()).toBe(1);
+    room.boost(conn, 'invis');
+    expect(last(conn.msgs, 'boost')).toEqual({ t: 'boost', kind: 'invis', ok: true, ms: BOOST_RULES.invis.durationMs });
+    watcher.msgs.length = 0;
+    // the leaderboard goes out once a wall-clock second
+    (room as unknown as { lastLbAt: number }).lastLbAt = 0;
+    room.tick(TICK_MS);
+    expect(lead()).toBe(0);
+  });
+
+  it('stickers: the trash-talk page (ids 8..15) is accepted like the first page; others are not', async () => {
+    const { room } = await roomWith('practice');
+    const a = fakeConn(WALLET);
+    const b = fakeConn(null);
+    room.join(a, { name: 'a', skin: 0, flags: PlayerFlag.Verified });
+    room.join(b, { name: 'b', skin: 0, flags: 0 });
+    const emotes = () => b.msgs.filter((m) => m.t === 'emote').map((m) => (m as Extract<ServerMessage, { t: 'emote' }>).id);
+    room.emote(a, 15);
+    expect(emotes()).toEqual([15]);
+    // the rate limit is unchanged (one per 900 ms)
+    room.emote(a, 8);
+    expect(emotes()).toEqual([15]);
+    (a as unknown as { lastEmoteAt: number }).lastEmoteAt = 0;
+    room.emote(a, 16);
+    room.emote(a, -1);
+    expect(emotes()).toEqual([15]);
   });
 
   it('arena rooms report the round allowance', async () => {
@@ -489,7 +637,7 @@ describe('boosts: rooms', () => {
     const conn = fakeConn(WALLET);
     room.join(conn, { name: 'me', skin: 0, flags: PlayerFlag.Verified | PlayerFlag.Holder });
     expect(last(conn.msgs, 'boosts')).toMatchObject({ state: { arena: { left: 3, max: 3 } } });
-    room.boost(conn, 'shock');
+    room.boost(conn, 'leap');
     expect(last(conn.msgs, 'boosts')).toMatchObject({ state: { arena: { left: 2, max: 3 } } });
     expect(MID_ROUND).toBeGreaterThan(0);
     expect(RULES.roundMs).toBeGreaterThan(0);

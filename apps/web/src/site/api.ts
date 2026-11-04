@@ -417,7 +417,8 @@ export interface LeaderboardAdminInfo {
 export interface ShopPurchase {
   tx: string;
   wallet: string;
-  kind: BoostKind;
+  /** Records from before 2026-11 may name the retired Shockwave (`shock`, now counted as Leap). */
+  kind: BoostKind | 'shock';
   charges: number;
   /** Raw base units (decimal string). */
   paid: string;
