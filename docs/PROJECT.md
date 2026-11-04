@@ -45,17 +45,18 @@ the code is laid out and how it is run. The source of truth for everything is
 | Maximum cell mass | 12,000 |
 | Food | pastel coins (1 mass), gems (2), golden coins (8); refills at 60 per second |
 | Power-ups | Magnet (10 s), Pump (6 s, × 1.4 speed), Shield (8 s), Bag (+15 % mass, at least 40) |
+| Bought power-ups (lobby shop, `packages/shared/src/boosts.ts`) | Magnet `R` (8 s), Leap `F` (instant hop toward the aim, 420 + 0.9·r units, at most 900, never through the wall), Speed `G` (3 s), Invisibility `V` (10 s: the server sends the coins to nobody else, bots and minimap leader dots skip them; eating works as usual). The Shockwave was retired in 2026-11: saved charges, prices and switches load as Leap 1:1 |
 | Spawn shield | 3 s |
-| Room sizes | Adaptive (default): side = 900 · √(expected players), 3,000..9,000 (5 / 10 / 25 / 50 / 100 players: 3,000 / 3,000 / 4,500 / 6,400 / 9,000); auto off: Practice 6800², Private 4600², Arena 7800². Humans per instance: Practice 40, Arena 50 |
+| Room sizes | Adaptive (default): side = 800 · √(expected players), 9,000..12,000 (up to 126 players 9,000, 144 players 9,600, 200 players 11,400, 225+ 12,000); auto off: Practice 6800², Private 4600², Arena 7800². Humans per instance: Practice 40, Arena 50 |
 
 ### 2.2 Controls
 
 | Action | Desktop | Phone |
 |---|---|---|
 | Move | mouse | joystick |
-| Split | `Space` | split button |
+| Split | `Space` or left click | split button |
 | Drop mass | `W` (can be held) | tip button |
-| Chat / sticker | `Enter` / `1`–`8` | chat / sticker buttons |
+| Chat / sticker | `Enter` / `1`–`8` (`9` flips the sticker page: Hype or Trash talk) | chat / sticker buttons (with a page switch) |
 | Next player while spectating | `Q` | |
 
 ### 2.2.1 Bots
@@ -93,10 +94,10 @@ the code is laid out and how it is run. The source of truth for everything is
   practice pond's density (capped at 4,000 food and 40 cacti): a 10,000 room has about 3,500 coins, 30 cacti and
   6 power-up slots.
 - Admin (`/api/admin/bots` `maps`, stored in `DATA_DIR/site/bots.json`): per room kind, `auto` on/off,
-  `perPlayer` (300..2,000, default 1,000), `min` and `max` side (2,000..12,000, default 10,000 and 12,000; 2026-11,
-  the owner wants rooms of ~12 players much bigger: every room up to 100 players is 10,000, 121 players 11,000, 144
-  and more 12,000). A saved curve still equal to the old default (900, 3,000, 9,000) gets the new one on load
-  (`auto` kept). Auto off keeps the mode's fixed preset.
+  `perPlayer` (300..2,000, default 800), `min` and `max` side (2,000..12,000, default 9,000 and 12,000; 2026-11
+  owner: every room up to 126 players is 9,000, 144 players 9,600, 200 players 11,400, 225 and more 12,000). A
+  saved curve still equal to a former default (900, 3,000, 9,000 or 1,000, 10,000, 12,000) gets the new one on
+  load (`auto` kept). Auto off keeps the mode's fixed preset.
 - When: arenas take the new size at each round start (sized for the people at the bell); during a round the map
   only grows, by at most 600 units every 4 s, so nobody is trapped against a closing wall. Free rooms (no
   rounds) grow the same way and shrink step by step only over empty floor (no person's coin near the band

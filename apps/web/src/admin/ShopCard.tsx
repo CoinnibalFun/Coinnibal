@@ -4,7 +4,9 @@ import { SiteApiError, type ShopAdminView } from '../site/api';
 import { SwitchRow } from './GameTab';
 import { Btn, Card, FormError, saveErrorText, type ChainCtx } from './ui';
 
-const KIND_LABEL: Record<BoostKind, string> = { magnet: 'Magnet', shock: 'Shockwave', speed: 'Speed burst' };
+const KIND_LABEL: Record<BoostKind, string> = { magnet: 'Magnet', leap: 'Leap', speed: 'Speed burst', invis: 'Invisibility' };
+/** Purchase records may name the retired Shockwave (its charges now count as Leap). */
+const PURCHASE_LABEL: Record<BoostKind | 'shock', string> = { ...KIND_LABEL, shock: 'Shockwave (now Leap)' };
 
 /** The fields that changed (a partial PUT). */
 export function shopPatch(saved: ShopSettings, draft: ShopSettings): Partial<ShopSettings> {
@@ -191,7 +193,7 @@ export function ShopCard({ ctx }: { ctx: ChainCtx }) {
             {view.purchases.map((p) => (
               <li key={p.tx}>
                 <span className="mono">
-                  {p.wallet.slice(0, 8)}… · {p.charges} {KIND_LABEL[p.kind]}
+                  {p.wallet.slice(0, 8)}… · {p.charges} {PURCHASE_LABEL[p.kind] ?? p.kind}
                 </span>
                 <span className="num ad-dim">
                   {formatToken(BigInt(p.paid), decimals, { maxFrac: 2 })} · {new Date(p.at).toISOString().slice(0, 16).replace('T', ' ')}

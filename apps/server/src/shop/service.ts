@@ -3,7 +3,7 @@ import {
   BURN_ADDRESS,
   boostCooldownMs,
   emptyBoostCounts,
-  isBoostKind,
+  normalizeBoostKind,
   packPriceRaw,
   type BoostCounts,
   type BoostKind,
@@ -166,9 +166,10 @@ export class ShopService {
     const fail = (status: number, code: ShopBuyError): never => {
       throw new ShopFail(status, code, BUY_MESSAGES[code]);
     };
-    const kind = body.kind;
+    // a claim a client saved before the Shockwave was retired names `shock`: it buys the Leap (same price)
+    const kind = normalizeBoostKind(body.kind);
     const txHash = typeof body.txHash === 'string' ? body.txHash.toLowerCase() : '';
-    if (!isBoostKind(kind) || !/^0x[0-9a-f]{64}$/.test(txHash)) return fail(400, 'bad_request');
+    if (!kind || !/^0x[0-9a-f]{64}$/.test(txHash)) return fail(400, 'bad_request');
     if (this.closedReason(s)) return fail(403, 'shop_closed');
     if (!s.kinds[kind]) return fail(403, 'kind_disabled');
     const token = this.token()!;

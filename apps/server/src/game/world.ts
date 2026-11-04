@@ -2,7 +2,7 @@ import {
   BOOST_RULES,
   CellFlag,
   boostDurationMs,
-  shockRange,
+  leapDistance,
   type BoostKind,
   EntityKind,
   FOOD_GEM,
@@ -324,8 +324,9 @@ export class World {
 
   /**
    * Applies a bought power-up (the room checked charges, cooldowns and limits). Magnet and Speed
-   * start now (they add to a running map power-up of the same kind); the Shockwave fires at the
-   * start of the next tick. False when the player is not alive (nothing happened).
+   * start now (they add to a running map power-up of the same kind), Invisibility starts now (and
+   * adds to a running one); the Leap jumps at the start of the next tick. False when the player is
+   * not alive (nothing happened).
    */
   useBoost(pid: number, kind: BoostKind): boolean {
     const p = this.players.get(pid);
@@ -337,67 +338,41 @@ export class World {
       case 'speed':
         p.pumpUntil = Math.max(p.pumpUntil, this.now) + boostDurationMs('speed');
         return true;
-      case 'shock':
-        p.shockQueued = true;
+      case 'invis':
+        p.invisUntil = Math.max(p.invisUntil, this.now) + boostDurationMs('invis');
+        return true;
+      case 'leap':
+        p.leapQueued = true;
         return true;
     }
     return false;
   }
 
+  /** The player's coins are hidden from everyone else right now (a bought Invisibility). */
+  isInvisible(p: Player): boolean {
+    return p.invisUntil > this.now;
+  }
+
   /**
-   * Shockwave: every coin of another player within `shockRange` of one of `p`'s cells and at most
-   * `massRatio` times that cell's mass is launched straight away from it (a split-like boost that
-   * decays), and food and ejected mass in reach are pushed out too. Thorn bushes, loot and bigger
-   * coins do not move. Pushed coins get `graceMs` in which they neither eat nor are eaten by any
-   * coin, so the push never feeds the user (or a third player) a kill. No mass changes hands.
+   * Leap: every cell of `p` jumps by the same step toward the aim (`leapDistance` of the biggest
+   * cell), so the formation keeps. The border stops it: each cell lands at least its radius inside
+   * the playable square (a leap out of a corner works; a leap into the wall just slides along it).
+   * Nothing else moves and no mass changes hands; whatever it lands on is eaten (or eats it) by the
+   * usual rules in this same tick.
    */
-  private fireShock(p: Player): void {
-    const s = BOOST_RULES.shock;
-    p.shockFxUntil = this.now + s.fxMs;
-    const graceUntil = this.now + s.graceMs;
+  private fireLeap(p: Player): void {
+    const big = p.biggestCell();
+    if (!big) return;
+    const from = p.center();
+    const { dx, dy } = this.aimDir(p, from);
+    const dist = leapDistance(big.r);
+    p.leapFxUntil = this.now + BOOST_RULES.leap.fxMs;
     for (const c of p.cells) {
       if (c.removed) continue;
-      const R = shockRange(c.r);
-      // the grid was built last tick: a little slack for what moved since
-      const pad = R + this.maxCellRadius + 64;
-      this.dynGrid.forEachIn(c.x - pad, c.y - pad, c.x + pad, c.y + pad, (e) => {
-        if (e.removed) return;
-        const dx = e.x - c.x;
-        const dy = e.y - c.y;
-        const d = Math.hypot(dx, dy);
-        if (e.kind === EntityKind.Cell) {
-          if (e.player === p || d - e.r >= R || e.mass > c.mass * s.massRatio) return;
-        } else if (d >= R) return;
-        let ux = 1;
-        let uy = 0;
-        if (d > 1e-6) {
-          ux = dx / d;
-          uy = dy / d;
-        } else {
-          const a = this.rng() * Math.PI * 2;
-          ux = Math.cos(a);
-          uy = Math.sin(a);
-        }
-        const speed = s.pushSpeed * (0.4 + 0.6 * clamp(1 - d / R, 0, 1));
-        e.vx += ux * speed;
-        e.vy += uy * speed;
-        if (e.kind === EntityKind.Cell) e.pushedUntil = Math.max(e.pushedUntil, graceUntil);
-        e.version = this.tickCount;
-      });
-      this.staticGrid.forEachIn(c.x - R, c.y - R, c.x + R, c.y + R, (f) => {
-        if (f.kind !== EntityKind.Food || f.removed) return;
-        const dx = f.x - c.x;
-        const dy = f.y - c.y;
-        const d = Math.hypot(dx, dy);
-        if (d >= R) return;
-        const ux = d > 1e-6 ? dx / d : 1;
-        const uy = d > 1e-6 ? dy / d : 0;
-        const nd = d + (R - d) * s.foodPush;
-        f.x = clamp(c.x + ux * nd, this.x0 + f.r, this.x1 - f.r);
-        f.y = clamp(c.y + uy * nd, this.y0 + f.r, this.y1 - f.r);
-        f.version = this.tickCount;
-        this.staticGrid.update(f);
-      });
+      const m = Math.min(c.r, this.cfg.width / 2, this.cfg.height / 2);
+      c.x = clamp(c.x + dx * dist, this.x0 + m, this.x1 - m);
+      c.y = clamp(c.y + dy * dist, this.y0 + m, this.y1 - m);
+      c.version = this.tickCount;
     }
   }
 
@@ -664,9 +639,9 @@ export class World {
       let passes = Math.min(p.splitQueued, 2);
       p.splitQueued -= passes;
       while (passes-- > 0) this.splitPlayer(p);
-      if (p.shockQueued) {
-        p.shockQueued = false;
-        this.fireShock(p);
+      if (p.leapQueued) {
+        p.leapQueued = false;
+        this.fireLeap(p);
       }
       if (p.ejectQueued) {
         p.ejectQueued = false;
@@ -1052,8 +1027,6 @@ export class World {
         const bp = b.player;
         if (bp === ap) return;
         if (aShield || bp.shieldUntil > this.now) return;
-        // a shockwave's push never feeds anyone: pushed coins neither eat nor are eaten for a moment
-        if (a.pushedUntil > this.now || b.pushedUntil > this.now) return;
         if (!canEat(a.mass, b.mass) || !coversVictim(a.r, b.r, d)) return;
         const victimTotalBefore = bp.totalMass();
         const last = bp.cells.length === 1;
@@ -1159,7 +1132,8 @@ export class World {
       if (p.shieldUntil > this.now) flags |= CellFlag.Shield;
       if (p.magnetUntil > this.now) flags |= CellFlag.Magnet;
       if (p.pumpUntil > this.now) flags |= CellFlag.Pump;
-      if (p.shockFxUntil > this.now) flags |= CellFlag.Shock;
+      if (p.leapFxUntil > this.now) flags |= CellFlag.Leap;
+      if (p.invisUntil > this.now) flags |= CellFlag.Invisible;
       if (p.afk) flags |= CellFlag.Afk;
       let total = 0;
       for (const c of p.cells) {

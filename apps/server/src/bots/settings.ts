@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAP_SCALE_DEFAULT, OLD_MAP_SCALE_DEFAULT, RULES, mapScaleFieldError, type MapScaleSettings, type RoomMode, type League } from '@elymum/shared';
+import { MAP_SCALE_DEFAULT, RULES, isFormerMapScaleDefault, mapScaleFieldError, type MapScaleSettings, type RoomMode, type League } from '@elymum/shared';
 import type { BotManagerOptions } from './manager';
 import { BOT_MIX_PRESETS, OLD_BOT_MIX_PRESETS, mixWeights, type BotMixWeights } from './personality';
 
@@ -309,7 +309,7 @@ export function upgradeSavedBotSettings(raw: Record<string, unknown>): string[] 
   if (isObj(raw.maps)) {
     for (const [kind, m] of Object.entries(raw.maps)) {
       if (!isObj(m)) continue;
-      if (m.perPlayer === OLD_MAP_SCALE_DEFAULT.perPlayer && m.min === OLD_MAP_SCALE_DEFAULT.min && m.max === OLD_MAP_SCALE_DEFAULT.max) {
+      if (isFormerMapScaleDefault(m)) {
         m.perPlayer = MAP_SCALE_DEFAULT.perPlayer;
         m.min = MAP_SCALE_DEFAULT.min;
         m.max = MAP_SCALE_DEFAULT.max;

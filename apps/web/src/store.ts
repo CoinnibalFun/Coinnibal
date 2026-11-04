@@ -1,7 +1,8 @@
-import { isCountryCode, suggestCountry } from '@elymum/shared';
+import { emptyBoostCounts, isCountryCode, suggestCountry } from '@elymum/shared';
 import type {
   BoostKind,
   BoostState,
+  EmoteSet,
   ChainStatus,
   DeathStats,
   LbEntry,
@@ -154,6 +155,8 @@ export interface UiState {
   boosts: BoostState | null;
   /** Local clock (`Date.now`) at which each bought power-up is ready again (cooldown rings). */
   boostReady: Record<BoostKind, number>;
+  /** The sticker page on show (keys 1-8 fire its stickers): "Hype" or "Trash talk". Remembered per browser. */
+  emoteSet: EmoteSet;
   banner: { kind: 'coinrain' | 'airdrop'; until: number; text?: string } | null;
   death: { stats: DeathStats; killer: string | null; killerSkin: number | null } | null;
   /**
@@ -304,7 +307,8 @@ export const useUi = create<UiState>(() => ({
   chatOpen: false,
   powerups: [],
   boosts: null,
-  boostReady: { magnet: 0, shock: 0, speed: 0 },
+  boostReady: emptyBoostCounts(),
+  emoteSet: loadEmoteSet(),
   banner: null,
   death: null,
   roundResult: null,
@@ -322,6 +326,27 @@ export const useUi = create<UiState>(() => ({
   customMusic: null,
   customMusicRefused: false,
 }));
+
+const EMOTE_SET_KEY = 'elymum.emoteSet.v1';
+
+function loadEmoteSet(): EmoteSet {
+  try {
+    return localStorage.getItem(EMOTE_SET_KEY) === 'trash' ? 'trash' : 'hype';
+  } catch {
+    return 'hype';
+  }
+}
+
+/** Shows the other sticker page (or `set`); remembered for the next game. */
+export function setEmoteSet(set?: EmoteSet): void {
+  const next: EmoteSet = set ?? (useUi.getState().emoteSet === 'hype' ? 'trash' : 'hype');
+  useUi.setState({ emoteSet: next });
+  try {
+    localStorage.setItem(EMOTE_SET_KEY, next);
+  } catch {
+    /* ignore */
+  }
+}
 
 export function updateSettings(patch: Partial<Settings>): void {
   const settings = { ...useUi.getState().settings, ...patch };

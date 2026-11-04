@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BOOST_KINDS, SHOP_DEFAULTS, SHOP_LIMITS, parseToken, type ShopSettings } from '@elymum/shared';
+import { BOOST_KINDS, LEGACY_BOOST_KINDS, SHOP_DEFAULTS, SHOP_LIMITS, parseToken, type ShopSettings } from '@elymum/shared';
 import { getAddress, isAddress } from 'viem';
 
 /** A bad admin value: `field` names it (`prices.magnet`, `arenaUsesPerRound`, …). */
@@ -71,6 +71,23 @@ export function applyShopSettings(cur: ShopSettings, body: Record<string, unknow
   return next;
 }
 
+/**
+ * A file written while a retired power-up was sold (`shock`): its price and on/off switch carry over
+ * to the kind that replaced it (`LEGACY_BOOST_KINDS`, Shockwave -> Leap) unless the file already
+ * sets that kind, and the retired key is dropped. Mutates `raw`.
+ */
+export function upgradeLegacyKinds(raw: Record<string, unknown>): void {
+  for (const group of ['prices', 'kinds'] as const) {
+    const g = raw[group];
+    if (!isObj(g)) continue;
+    for (const [old, kind] of Object.entries(LEGACY_BOOST_KINDS)) {
+      if (!(old in g)) continue;
+      if (g[kind] === undefined) g[kind] = g[old];
+      delete g[old];
+    }
+  }
+}
+
 /** Where the settings live under `DATA_DIR`. */
 export const SHOP_SETTINGS_FILE = join('site', 'shop.json');
 
@@ -100,6 +117,7 @@ export class ShopSettingsStore {
       // the launch prices (300 / 450 / 300) were raised: a file still holding them untouched takes the new defaults
       const pr = (raw as { prices?: Record<string, unknown> }).prices;
       if (pr && String(pr.magnet) === '300' && String(pr.shock) === '450' && String(pr.speed) === '300') delete (raw as { prices?: unknown }).prices;
+      upgradeLegacyKinds(raw);
       this.cur = applyShopSettings(this.defaults, raw, { strict: false });
     } catch (err) {
       const backup = `${p}.corrupt-${Date.now()}`;
