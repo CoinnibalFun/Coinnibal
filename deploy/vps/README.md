@@ -64,7 +64,7 @@ bash /home/ubuntu/install.sh
 ```
 
 It asks three questions (press Enter for the defaults): the domain (`game.elymum.io`), the repository
-(`git@github.com:furkan3152/Solagel.git`) and the branch. Then it:
+(`https://github.com/furkan3152/Solagel.git`; the repository is public, so no deploy key is asked for; pass an SSH URL with `--repo` for a private one, and the script then asks for a read-only deploy key) and the branch. Then it:
 
 1. updates Ubuntu, installs Docker from Docker's own repository, automatic security updates, the firewall and
    fail2ban, a swapfile on small machines, and network settings for many connections;

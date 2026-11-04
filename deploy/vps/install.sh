@@ -8,7 +8,7 @@
 set -euo pipefail
 
 DOMAIN_DEFAULT="game.elymum.io"
-REPO_DEFAULT="git@github.com:furkan3152/Solagel.git"
+REPO_DEFAULT="https://github.com/furkan3152/Solagel.git"  # public repo: no deploy key needed (an SSH URL still works for a private one)
 BRANCH_DEFAULT="ccr-8d9a5642-4vfmef"
 DIR="/opt/elymum"
 STATE="/var/lib/elymum"
