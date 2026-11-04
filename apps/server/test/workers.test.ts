@@ -12,6 +12,7 @@ import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
 import type { ChainArena, ChainGateway, ChainSession, ServerKeyInfo } from '../src/chain/types';
 import { loadConfig } from '../src/config';
+import { gameLoad } from '../src/rooms/load';
 import { RemoteRoom } from '../src/rooms/remote/pool';
 import { BoostInventory } from '../src/shop/inventory';
 import { ShopService } from '../src/shop/service';
@@ -338,6 +339,11 @@ describe('room workers', () => {
       expect(t.tick.n).toBeGreaterThan(0);
       expect(Array.isArray(t.roomLoads)).toBe(true);
     }
+    const view = gameLoad(load);
+    expect(view.threads.map((t) => t.id)).toEqual([0, 1]);
+    expect(view.main.id).toBe('main');
+    const health = (await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()) as { game: { mode: string; workers: number; up: number } };
+    expect(health.game).toEqual({ mode: 'workers', workers: 2, up: 2 });
   });
 });
 

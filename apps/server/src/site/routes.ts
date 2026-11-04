@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AVATAR_LIMITS, AVATAR_TYPES, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type ProfileResponse, type SiteError, type SiteSettings } from '@elymum/shared';
+import { AVATAR_LIMITS, AVATAR_TYPES, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import type { ChainGateway } from '../chain/types';
@@ -188,6 +188,13 @@ export class SiteApi {
   setBots(admin: BotAdmin | null): void {
     this.bots = admin;
   }
+
+  /** The game server's load per thread (`GET /api/admin/load`, `NetworkInfo.load`). */
+  setLoad(fn: (() => GameServerLoad) | null): void {
+    this.load = fn;
+  }
+
+  private load: (() => GameServerLoad) | null = null;
 
   setCustomRooms(svc: CustomRoomService | null): void {
     this.customRooms = svc;
@@ -550,7 +557,13 @@ export class SiteApi {
       case 'network': {
         if (seg.length !== 1 || !this.ext.chain) break;
         this.method(req, 'GET');
-        return send(res, 200, await networkInfo({ chain: this.ext.chain, contracts: this.ext.contracts ?? null, dataDir: this.ext.dataDir ?? null }));
+        const info = await networkInfo({ chain: this.ext.chain, contracts: this.ext.contracts ?? null, dataDir: this.ext.dataDir ?? null });
+        return send(res, 200, this.load ? { ...info, load: this.load() } : info);
+      }
+      case 'load': {
+        if (seg.length !== 1 || !this.load) break;
+        this.method(req, 'GET');
+        return send(res, 200, this.load());
       }
       case 'contracts': {
         if (seg.length !== 1) break;
