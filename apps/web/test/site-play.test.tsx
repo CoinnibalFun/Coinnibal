@@ -27,6 +27,20 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     expect(onAllowed).not.toHaveBeenCalled();
   });
 
+  it('maintenance: visitors see "Back soon" (no WL or mint pitch); the admin still gets in', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, gameAccess: 'maintenance' } } }));
+    const onAllowed = vi.fn();
+    render(<PlayGate onAllowed={onAllowed} />);
+    expect(await screen.findByRole('heading', { name: /Back soon/ })).toBeTruthy();
+    expect(screen.getByTestId('pg-maintenance')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Join the WL' })).toBeNull();
+    expect(onAllowed).not.toHaveBeenCalled();
+    restore();
+    store(ADMIN, 'admin-token');
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, gameAccess: 'maintenance' } }, 'GET /api/auth/me': { address: ADMIN, admin: true } }));
+    expect((await playAccess()).allowed).toBe(true);
+  });
+
   it('blocks a signed-in wallet that is not an admin', async () => {
     store(USER, 'user-token');
     const { calls, restore: r } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS }, 'GET /api/auth/me': { address: USER, admin: false, canPlay: false } });

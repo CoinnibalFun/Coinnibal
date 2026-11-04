@@ -80,7 +80,7 @@ function Hero({ collabOpen, gameAccess, wlOpen, sound }: { collabOpen: boolean; 
                     <span className="ld-soon__tag mono">{t('ld.soon')}</span>
                   </Link>
                 )}
-                {gameAccess !== 'admins' && (
+                {gameAccess !== 'admins' && gameAccess !== 'maintenance' && (
                   <a href="/play" className="kb-btn kb-btn--teal kb-btn--md st-btn" onClick={sound.click}>
                     <Icon name="play" size={20} className="kb-btn__lead" />
                     <span className="kb-btn__label">

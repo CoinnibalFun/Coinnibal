@@ -327,7 +327,7 @@
 }
 @media (max-width: 479px) {
   /* phones: the tap shrinks into the kicker's corner and the headline takes the full width under
-     it; beside the tap a 320 px phone broke "paraları." and "Бесплат-ные мо-неты." mid-word */
+     it; beside the tap a 320 px phone broke a Turkish word and "Бесплат-ные мо-неты." mid-word */
   .fc-copy {
     grid-template-columns: minmax(0, 1fr) 104px;
   }

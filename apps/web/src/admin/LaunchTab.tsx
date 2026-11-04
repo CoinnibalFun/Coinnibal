@@ -72,7 +72,7 @@ export function launchChecklist(i: {
     {
       id: 'access',
       label: 'The game is open to holders',
-      ok: i.settings ? i.settings.gameAccess !== 'admins' : null,
+      ok: i.settings ? i.settings.gameAccess !== 'admins' && i.settings.gameAccess !== 'maintenance' : null,
       detail: i.settings ? `Who may play: ${i.settings.gameAccess}` : 'Sign in to check.',
       tab: 'settings',
     },

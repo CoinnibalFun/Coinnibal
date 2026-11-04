@@ -153,7 +153,7 @@ describe('admin: site tabs (Bearer session, mocked fetch)', { timeout: 30_000 },
     expect(sent('PUT', '/api/admin/settings')?.body).toEqual({ collabOpen: true });
   });
 
-  it('Settings: who may play is a three-way choice (admins, NFT holders, everyone); the env override is shown', async () => {
+  it('Settings: who may play is a four-way choice (admins, NFT holders, everyone, maintenance); the env override is shown', async () => {
     ({ calls, restore } = mockFetch({
       'GET /api/admin/settings': { settings: SETTINGS, gameAccessEnv: null },
       'PUT /api/admin/settings': (c: Call) => ({ settings: { ...SETTINGS, ...(c.body as object) }, gameAccessEnv: null }),
@@ -161,7 +161,7 @@ describe('admin: site tabs (Bearer session, mocked fetch)', { timeout: 30_000 },
     ui(<SettingsTab api={api} />);
     const holders = (await screen.findByRole('radio', { name: /NFT holders/ })) as HTMLInputElement;
     expect((screen.getByRole('radio', { name: /Admins only/ }) as HTMLInputElement).checked).toBe(true);
-    expect(screen.getAllByRole('radio')).toHaveLength(3);
+    expect(screen.getAllByRole('radio')).toHaveLength(4);
     fireEvent.click(holders);
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
     await screen.findByText('Settings saved.');

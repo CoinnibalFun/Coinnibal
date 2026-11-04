@@ -77,7 +77,7 @@ export function SwitchRow<T extends string>({
 
 const ACCESS_OPTS = GAME_ACCESS_MODES.map((m) => ({
   id: m,
-  label: m === "admins" ? "Admins" : m === "holders" ? "Holders" : "Public",
+  label: m === "admins" ? "Admins" : m === "holders" ? "Holders" : m === "maintenance" ? "Maintenance" : "Public",
   note: GAME_ACCESS_LABEL[m].note,
 }));
 

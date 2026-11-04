@@ -13,7 +13,7 @@ const ArenaSoon = lazy(() => import('./ArenaSoon').then((m) => ({ default: m.Are
 export type PlayAccess =
   | { allowed: true; reason: 'public' | 'admin' | 'holder'; session: SiteSession | null }
   /** `holders`: the game is open to NFT holders and this visitor is not a signed-in holder (yet). */
-  | { allowed: false; reason: 'closed' | 'holders'; session: null };
+  | { allowed: false; reason: 'closed' | 'holders' | 'maintenance'; session: null };
 
 /**
  * Who may open `/play` (`gameAccess`, the server's `GAME_ACCESS` overrides it): everyone when
@@ -40,7 +40,7 @@ export async function playAccess(): Promise<PlayAccess> {
       /* expired or unreachable */
     }
   }
-  return { allowed: false, reason: access === 'holders' ? 'holders' : 'closed', session: null };
+  return { allowed: false, reason: access === 'holders' ? 'holders' : access === 'maintenance' ? 'maintenance' : 'closed', session: null };
 }
 
 /** `/play`: checks access, then hands over to the game (`onAllowed`) or shows "The arena opens soon". */
@@ -54,7 +54,7 @@ export function PlayGate({
   onOpening?: () => void;
   check?: () => Promise<PlayAccess>;
 }) {
-  const [state, setState] = useState<'checking' | 'closed' | 'holders' | 'open'>('checking');
+  const [state, setState] = useState<'checking' | 'closed' | 'holders' | 'maintenance' | 'open'>('checking');
   const [round, setRound] = useState(0);
   const reduced = useReducedMotion();
   useEffect(() => {
@@ -68,7 +68,7 @@ export function PlayGate({
         // the barrier swings up before the arena takes over (a beat, not a wait)
         if (reduced) onAllowed(r.session);
         else lift = setTimeout(() => onAllowed(r.session), 560);
-      } else setState(r.reason === 'holders' ? 'holders' : 'closed');
+      } else setState(r.reason);
     });
     return () => {
       live = false;
@@ -76,10 +76,10 @@ export function PlayGate({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round]);
-  if (state === 'closed' || state === 'holders')
+  if (state === 'closed' || state === 'holders' || state === 'maintenance')
     return (
       <Suspense fallback={<GateWait state="checking" />}>
-        {state === 'closed' ? <ArenaSoon /> : <ArenaSoon holders onSignedIn={() => setRound((n) => n + 1)} />}
+        {state === 'closed' ? <ArenaSoon /> : state === 'maintenance' ? <ArenaSoon maintenance /> : <ArenaSoon holders onSignedIn={() => setRound((n) => n + 1)} />}
       </Suspense>
     );
   return <GateWait state={state} />;

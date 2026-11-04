@@ -71,7 +71,7 @@ export interface SummaryInput {
   bots?: { bots: number; humans: number; rooms: number } | null;
 }
 
-const ACCESS: Record<GameAccess, string> = { admins: 'admins only', holders: 'emblem holders', public: 'everyone' };
+const ACCESS: Record<GameAccess, string> = { admins: 'admins only', holders: 'emblem holders', public: 'everyone', maintenance: 'maintenance (admins only)' };
 
 /**
  * "Status now / next step" for each drawer (pure, tested). The next step is always something only
