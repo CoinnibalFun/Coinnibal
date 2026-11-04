@@ -379,3 +379,48 @@ describe('bots', () => {
     }
   });
 });
+
+describe('bot level of detail', () => {
+  it('a zero-value bot far from every human thinks less often; near ones and rooms without humans keep the full rate', () => {
+    const world = new World({ width: 12_000, height: 12_000, foodTarget: 0, virusTarget: 0, maxPowerUps: 0, powerUps: false, coinRain: false, seed: 3 });
+    const mgr = new BotManager(world, { target: 2, min: 2, max: 2 }, mulberry32(9));
+    mgr.update(0, 0);
+    const [near, far] = [...mgr.bots.values()];
+    const thinks = new Map<number, number>();
+    for (const b of [near, far]) {
+      const orig = b.brain.think.bind(b.brain);
+      b.brain.think = (w, p, now) => {
+        thinks.set(p.id, (thinks.get(p.id) ?? 0) + 1);
+        return orig(w, p, now);
+      };
+    }
+    const pin = (p: Player, x: number, y: number) => {
+      for (const c of p.cells) {
+        c.x = x;
+        c.y = y;
+      }
+    };
+    // no human: both at the full rate
+    for (let t = 0; t < 3000; t += TICK_MS) {
+      pin(near.player, 1000, 1000);
+      pin(far.player, 11_000, 11_000);
+      mgr.update(t, 0);
+    }
+    const alone = { near: thinks.get(near.player.id) ?? 0, far: thinks.get(far.player.id) ?? 0 };
+    expect(alone.far).toBeGreaterThan(alone.near * 0.6);
+    thinks.clear();
+    const human = world.addPlayer({ name: 'me', skin: 0, x: 1200, y: 1200, mass: 50 });
+    for (let t = 3000; t < 9000; t += TICK_MS) {
+      pin(near.player, 1000, 1000);
+      pin(far.player, 11_000, 11_000);
+      pin(human, 1200, 1200);
+      mgr.update(t, 1);
+    }
+    const n = thinks.get(near.player.id) ?? 0;
+    const f = thinks.get(far.player.id) ?? 0;
+    expect(n).toBeGreaterThan(10);
+    expect(f).toBeGreaterThan(0);
+    expect(f).toBeLessThan(n * 0.75);
+    expect(f).toBeLessThanOrEqual(Math.ceil(6000 / 600) + 1);
+  });
+});

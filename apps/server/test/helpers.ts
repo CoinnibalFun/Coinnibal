@@ -3,6 +3,7 @@ import { roundAt, type ChainStatus, type ServerMessage } from '@elymum/shared';
 import type { ChainArena, ChainGateway, ChainSession, ServerKeyInfo } from '../src/chain/types';
 import { Leaderboards } from '../src/leaderboards';
 import { Conn } from '../src/net/conn';
+import type { ManagerDeps } from '../src/rooms/manager';
 import type { RoomDeps } from '../src/rooms/room';
 import { Journal } from '../src/stake/journal';
 
@@ -77,7 +78,7 @@ export const arena = (id: number, entryFee: number): ChainArena => ({
 /** A fixed wall-clock instant one minute into a 5-minute round: room tests never hit a round end by accident. */
 export const MID_ROUND = roundAt(1_791_000_000_000).startsAt + 60_000;
 
-export function roomDeps(chain: ChainGateway, journal = new Journal(null), now: () => number = () => MID_ROUND): RoomDeps {
+export function roomDeps(chain: ChainGateway, journal = new Journal(null), now: () => number = () => MID_ROUND): RoomDeps & ManagerDeps {
   return {
     chain,
     journal,

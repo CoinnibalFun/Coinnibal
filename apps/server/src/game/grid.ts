@@ -14,6 +14,9 @@ export class Grid<T extends Gridded> {
   readonly cols: number;
   readonly rows: number;
   private readonly buckets: T[][];
+  /** Buckets that may hold items since the last `clear` (so `clear` skips the empty ones). */
+  private readonly used: number[] = [];
+  private readonly usedFlag: Uint8Array;
   size = 0;
 
   constructor(
@@ -24,6 +27,14 @@ export class Grid<T extends Gridded> {
     this.cols = Math.max(1, Math.ceil(width / cellSize));
     this.rows = Math.max(1, Math.ceil(height / cellSize));
     this.buckets = Array.from({ length: this.cols * this.rows }, () => []);
+    this.usedFlag = new Uint8Array(this.cols * this.rows);
+  }
+
+  private touch(k: number): void {
+    if (this.usedFlag[k] === 0) {
+      this.usedFlag[k] = 1;
+      this.used.push(k);
+    }
   }
 
   private col(x: number): number {
@@ -44,6 +55,7 @@ export class Grid<T extends Gridded> {
     const k = this.keyOf(item.x, item.y);
     item.gk = k;
     this.buckets[k].push(item);
+    this.touch(k);
     this.size++;
   }
 
@@ -66,14 +78,19 @@ export class Grid<T extends Gridded> {
     this.remove(item);
     item.gk = k;
     this.buckets[k].push(item);
+    this.touch(k);
     this.size++;
   }
 
+  /** Empties the grid: only the buckets used since the last clear are visited (the dynamic grid is rebuilt every tick). */
   clear(): void {
-    for (const b of this.buckets) {
+    for (const k of this.used) {
+      const b = this.buckets[k];
       for (const item of b) item.gk = -1;
       b.length = 0;
+      this.usedFlag[k] = 0;
     }
+    this.used.length = 0;
     this.size = 0;
   }
 

@@ -84,6 +84,11 @@ export class BinaryWriter {
     return this.buf.slice(0, this.offset);
   }
 
+  /** The bytes written so far, without a copy (valid until the next write or `reset`). */
+  written(): Uint8Array {
+    return this.bytes.subarray(0, this.offset);
+  }
+
   reset(): void {
     this.offset = 0;
   }

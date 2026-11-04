@@ -181,6 +181,13 @@ export class Player {
   afk = false;
   /** The country the player plays for (`isCountryCode`), shown as a flag by the name; null: none. */
   country: string | null = null;
+  /**
+   * Snapshot cache (`ViewState.build`): the player-info signature, built at most once per tick and
+   * avatar instead of once per viewer and visible cell.
+   */
+  infoSig = '';
+  infoSigTick = -1;
+  infoSigAvatar: string | undefined = undefined;
 
   stats: PlayerStats;
 
