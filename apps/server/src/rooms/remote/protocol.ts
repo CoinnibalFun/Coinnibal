@@ -66,6 +66,8 @@ export type Cmd =
   | { k: 'wanted'; wanted: Record<number, number> }
   | { k: 'ticket'; req: number; ticket: StakedBotTicket | null; error?: string }
   | { k: 'clock'; offset: number }
+  /** Test hook: keeps the worker busy for `ms` (the hang watchdog's test). */
+  | { k: 'block'; ms: number }
   | { k: 'shutdown' };
 
 /** A room's figures for the directory (sent every second, and with acks where they matter). */

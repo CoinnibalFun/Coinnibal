@@ -368,6 +368,37 @@ describe('room workers: shutdown', () => {
   });
 });
 
+describe('room workers: a hung worker', () => {
+  it('is stopped by the watchdog, its tickets settled from the journal, and it comes back', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-hang-'));
+    const ch = new FakeChain();
+    const logs: string[] = [];
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
+    const a = await createApp(cfg, { chain: ch, log: (m) => logs.push(m), persist: true });
+    const p = await a.listen();
+    try {
+      const w = testWallet(0xc001);
+      const t = ticket(w);
+      ch.sessions.set(`1:${w}`, t);
+      const c = await Client.open(p, a.auth.issueToken(w));
+      c.send({ t: 'join', room: 'arena:1', name: 'Stuck', skin: 0 });
+      await c.wait('joined');
+      await until(() => a.journal.live().some((l) => l.session === t.key));
+      a.rooms.pool!.block(0, 6000);
+      await until(() => a.journal.settlements().some((x) => x.key === t.key), 9000);
+      expect(a.journal.settlements().filter((x) => x.key === t.key)).toEqual([expect.objectContaining({ reason: 'crash', payout: 9_500_000 })]);
+      expect(logs.some((l) => /room worker 0 stopped \(no message for/.test(l))).toBe(true);
+      await until(() => a.rooms.pool!.threads()[0].restarts === 1 && !!a.rooms.get('arena-1-1'), 9000);
+      const q = await Client.open(p);
+      q.send({ t: 'join', room: 'practice', name: 'Next', skin: 0 });
+      await q.wait('joined', 8000);
+      q.ws.close();
+    } finally {
+      await a.close();
+    }
+  }, 30_000);
+});
+
 describe('room workers: the money helpers', () => {
   it('Journal.recoverRooms settles live tickets once and queues the floor loot to burn', () => {
     const j = new Journal(null);
