@@ -39,6 +39,15 @@ const MASS_CAP_KEEP_PER_SEC = 0.2;
  */
 const thinkBudget = (bots: number): number => Math.max(3, Math.ceil(bots / 4));
 
+/**
+ * Level of detail: a zero-value bot this far (world units) from every human coin is out of every
+ * player's view, so it thinks less often (at most every `FAR_THINK_MS`). Rooms without a human keep
+ * the full rate (spectators may watch them), and staked bots always do (they carry value).
+ */
+export const FAR_FROM_HUMANS = 3200;
+export const FAR_THINK_MS = 600;
+const FAR_CHECK_MS = 500;
+
 export interface Bot {
   player: Player;
   brain: BotBrain;
@@ -86,6 +95,9 @@ export class BotManager {
   private order: Bot[] = [];
   private orderDirty = true;
   private cursor = 0;
+  /** Bots far from every human (recomputed every `FAR_CHECK_MS`), and when each may think next. */
+  private readonly far = new Map<number, number>();
+  private farCheckAt = 0;
 
   constructor(
     private readonly world: World,
@@ -276,6 +288,39 @@ export class BotManager {
     if (this.bots.has(pid) && this.rng() < 0.3) this.pendingEmotes.push({ pid, id: this.rng() < 0.7 ? EMOTE_YUM : EMOTE_ROCKET });
   }
 
+  /** Recomputes which zero-value bots are far from every human coin (see `FAR_FROM_HUMANS`). */
+  private updateFar(now: number): void {
+    if (now < this.farCheckAt) return;
+    this.farCheckAt = now + FAR_CHECK_MS;
+    const hx: number[] = [];
+    const hy: number[] = [];
+    for (const p of this.world.players.values()) {
+      if (p.isBot || !p.alive) continue;
+      for (const c of p.cells) {
+        hx.push(c.x);
+        hy.push(c.y);
+      }
+    }
+    const far2 = FAR_FROM_HUMANS * FAR_FROM_HUMANS;
+    for (const bot of this.bots.values()) {
+      const p = bot.player;
+      let far = hx.length > 0 && !bot.staked && p.cells.length > 0;
+      for (let i = 0; far && i < hx.length; i++) {
+        for (const c of p.cells) {
+          const dx = c.x - hx[i];
+          const dy = c.y - hy[i];
+          if (dx * dx + dy * dy < far2) {
+            far = false;
+            break;
+          }
+        }
+      }
+      if (!far) this.far.delete(p.id);
+      else if (!this.far.has(p.id)) this.far.set(p.id, 0);
+    }
+    for (const pid of this.far.keys()) if (!this.bots.has(pid)) this.far.delete(pid);
+  }
+
   /** Called once per tick after `world.tick`. */
   update(now: number, humans: number): { emotes: { pid: number; id: number }[] } {
     this.retired = [];
@@ -333,6 +378,7 @@ export class BotManager {
       this.orderDirty = false;
       if (this.cursor >= this.order.length) this.cursor = 0;
     }
+    this.updateFar(now);
     const n = this.order.length;
     let budget = thinkBudget(n);
     const start = this.cursor;
@@ -341,6 +387,11 @@ export class BotManager {
       const p = bot.player;
       if (!p.alive || p.cells.length === 0) continue;
       if (!bot.brain.shouldThink(now)) continue;
+      const farAt = this.far.get(p.id);
+      if (farAt !== undefined) {
+        if (now < farAt) continue;
+        this.far.set(p.id, now + FAR_THINK_MS);
+      }
       budget--;
       this.cursor = (start + i + 1) % n;
       const d = bot.brain.think(this.world, p, now);
