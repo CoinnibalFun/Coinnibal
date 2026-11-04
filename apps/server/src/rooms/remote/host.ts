@@ -403,6 +403,7 @@ export class RoomHost {
             if (cmd.message !== undefined) room.evict(cmd.message);
           } finally {
             this.rooms.delete(cmd.hid);
+            this.out.push({ k: 'closed', hid: cmd.hid, ok: true });
           }
           return;
         }
@@ -538,6 +539,13 @@ export class RoomHost {
       case 'clock':
         this.offset = cmd.offset;
         return;
+      case 'block': {
+        const end = Date.now() + cmd.ms;
+        while (Date.now() < end) {
+          /* a hung room */
+        }
+        return;
+      }
       case 'shutdown':
         this.shutdown();
         return;

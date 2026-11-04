@@ -510,8 +510,18 @@ export class WorkerPool {
 
   /* ------------------------------ failure ------------------------------ */
 
+  private lastWatchAt = Date.now();
+
   private watch(): void {
     const now = Date.now();
+    const gap = now - this.lastWatchAt;
+    this.lastWatchAt = now;
+    if (gap > 3000) {
+      // this thread itself stalled (its timers came late): the workers' messages may still be queued
+      // behind them, so silence is not judged this round
+      for (const s of this.slots) s.lastMsgAt = Math.max(s.lastMsgAt, now);
+      return;
+    }
     const hang = this.deps.hangMs ?? HANG_MS_DEFAULT;
     for (const s of this.slots) if (!s.dead && now - s.lastMsgAt > hang) this.lost(s, `no message for ${Math.round((now - s.lastMsgAt) / 1000)} s (hung)`);
     // staked-bot targets per arena, for the workers' rooms
@@ -621,6 +631,12 @@ export class WorkerPool {
       s.dead = true;
       await s.worker.terminate().catch(() => 0);
     }
+  }
+
+  /** Test hook: makes a worker unresponsive for `ms` (the hang watchdog stops it). */
+  block(index: number, ms: number): void {
+    const s = this.slots[index];
+    if (s) this.send(s, { k: 'block', ms });
   }
 
   /** Test hook: kills a worker as a crash would. */
