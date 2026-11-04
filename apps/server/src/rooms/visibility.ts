@@ -62,7 +62,13 @@ export class ViewState {
       if (e.kind === EntityKind.Cell) {
         const p = e.player;
         const avatar = p.isBot ? undefined : avatars?.get(p.id);
-        const sig = `${p.skin}|${p.flags}|${p.name}|${avatar ?? ''}|${p.country ?? ''}`;
+        // one signature per player and tick (every viewer of every one of its cells compares it)
+        if (p.infoSigTick !== world.tickCount || p.infoSigAvatar !== avatar) {
+          p.infoSig = `${p.skin}|${p.flags}|${p.name}|${avatar ?? ''}|${p.country ?? ''}`;
+          p.infoSigTick = world.tickCount;
+          p.infoSigAvatar = avatar;
+        }
+        const sig = p.infoSig;
         if (this.knownPlayers.get(p.id) !== sig) {
           this.knownPlayers.set(p.id, sig);
           const info: PlayerInfo = { id: p.id, skin: p.skin, flags: p.flags, name: p.name, isBot: p.isBot };

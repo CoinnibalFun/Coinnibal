@@ -10,6 +10,8 @@
     "start": "node dist/index.js",
     "build": "tsup",
     "test": "vitest run",
+    "test:workers": "TEST_GAME_WORKERS=2 vitest run test/integration.test.ts test/workers.test.ts",
+    "load": "node --import tsx scripts/bench/load.ts",
     "typecheck": "tsc --noEmit",
     "sim": "tsx scripts/sim.ts",
     "integrity-sim": "tsx scripts/integrity-sim.ts",

@@ -562,6 +562,42 @@ export interface NetworkInfo {
   contracts: NetworkContractCheck[];
   /** Other chain ids with stored state under `DATA_DIR/chains/`. */
   otherChains: number[];
+  /** The game server's threads (absent on an older server). */
+  load?: GameServerLoad;
+}
+
+/** One game thread: the main thread (HTTP, sockets, chain, journal; with `GAME_WORKERS=0` also every room) or a room worker. */
+export interface GameThreadLoad {
+  id: 'main' | number;
+  rooms: number;
+  humans: number;
+  bots: number;
+  conns: number;
+  /** The thread's whole tick (every room it runs) over the last seconds; the budget is 33 ms. Main thread with workers: delivering their frames. */
+  tickMeanMs: number;
+  tickP95Ms: number;
+  tickMaxMs: number;
+  /** Event-loop utilisation since the previous reading (0..1). */
+  elu: number;
+  lagP99Ms: number;
+  heapMb: number;
+  up: boolean;
+  /** Restarts after a crash or a hang (room workers). */
+  restarts: number;
+}
+
+/** `GET /api/admin/load` (and `NetworkInfo.load`): the game server's load per thread. */
+export interface GameServerLoad {
+  mode: 'single' | 'workers';
+  workers: number;
+  cpus: number;
+  rssMb: number;
+  conns: number;
+  sentBytesPerSec: number;
+  sentMsgsPerSec: number;
+  main: GameThreadLoad;
+  threads: GameThreadLoad[];
+  at: number;
 }
 
 /* ------------------------------------------------------------------ */

@@ -1,6 +1,6 @@
 import { formatHypeAmount } from '@elymum/sdk';
 import { checkDeployedCode, type CodeCheck, type StatusSnapshot } from '@elymum/sdk/ops';
-import { CONTRACT_KINDS, type ContractKind, type ContractsRegistry, type NetworkInfo } from '@elymum/shared';
+import { CONTRACT_KINDS, type ContractKind, type ContractsRegistry, type GameServerLoad, type GameThreadLoad, type NetworkInfo } from '@elymum/shared';
 import { useEffect, useState } from 'react';
 import { parseEther, type Address } from 'viem';
 import { HYPE_FAUCET_URL } from '../site/faucet/logic';
@@ -222,6 +222,8 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
         )}
       </Card>
 
+      {info?.load && <LoadCard load={info.load} />}
+
       <Card
         title="Mainnet launch"
         id="net-mainnet"
@@ -248,6 +250,62 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
 
       <BackupCard ctx={ctx} />
     </div>
+  );
+}
+
+/** A thread is busy past this share of its time, or its tick nears the 33 ms frame (pure, tested). */
+export function threadHot(t: GameThreadLoad): boolean {
+  return !t.up || t.elu >= 0.75 || t.tickP95Ms >= 25 || t.lagP99Ms >= 20;
+}
+
+/**
+ * "Game server load": the main thread (sockets, HTTP, chain, journal) and each room worker
+ * (`GAME_WORKERS`): rooms, players, tick time against the 33 ms frame, event-loop use and lag.
+ */
+export function LoadCard({ load }: { load: GameServerLoad }) {
+  const rows = [load.main, ...load.threads];
+  const lede =
+    load.mode === 'workers'
+      ? `${load.workers} room worker${load.workers === 1 ? '' : 's'} on ${load.cpus} cores. Rooms are placed on the least-loaded worker; a worker that stops is restarted and its tickets are settled from the journal.`
+      : `One thread runs every room (GAME_WORKERS=0) on a ${load.cpus}-core machine.`;
+  return (
+    <Card title="Game server load" id="net-load" lede={lede} kicker={`${load.conns} connections · ${(load.sentBytesPerSec / 1e6).toFixed(2)} MB/s out · ${load.rssMb} MB`}>
+      <div className="ad-tablewrap">
+        <table className="ad-table" data-testid="load-threads">
+          <thead>
+            <tr>
+              <th scope="col">Thread</th>
+              <th scope="col" className="is-num">Rooms</th>
+              <th scope="col" className="is-num">Players</th>
+              <th scope="col" className="is-num">Bots</th>
+              <th scope="col" className="is-num">Tick mean / p95 / max</th>
+              <th scope="col" className="is-num">Busy</th>
+              <th scope="col" className="is-num">Lag p99</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((t) => (
+              <tr key={String(t.id)} data-thread={String(t.id)} className={threadHot(t) ? 'ad-bad' : undefined}>
+                <td>
+                  <strong>{t.id === 'main' ? 'main' : `worker ${t.id}`}</strong>
+                  {!t.up && <span className="ad-bad"> · down</span>}
+                  {t.restarts > 0 && <span className="ad-dim num"> · {t.restarts} restart{t.restarts === 1 ? '' : 's'}</span>}
+                </td>
+                <td className="num is-num">{t.id === 'main' && load.mode === 'workers' ? '—' : t.rooms}</td>
+                <td className="num is-num">{t.humans}</td>
+                <td className="num is-num">{t.bots}</td>
+                <td className="num is-num">
+                  {t.tickMeanMs.toFixed(1)} / {t.tickP95Ms.toFixed(1)} / {t.tickMaxMs.toFixed(1)} ms
+                </td>
+                <td className="num is-num">{Math.round(t.elu * 100)} %</td>
+                <td className="num is-num">{t.lagP99Ms.toFixed(1)} ms</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="ad-note">A tick has 33 ms. Red: a thread busy 75 % of the time or more, a p95 tick of 25 ms or more, or a lag of 20 ms or more.</p>
+    </Card>
   );
 }
 

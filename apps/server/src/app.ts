@@ -23,6 +23,7 @@ import { chainDir, isTestChain, migrateLegacyState, resolveStateChainId, stateDi
 import { HolderWlStore } from './site/holder-wl';
 import { FaucetInfo } from './site/network';
 import { RoomManager } from './rooms/manager';
+import { gameLoad } from './rooms/load';
 import { CustomRoomService } from './rooms/custom';
 import { UsedPayments, devFakePaymentReader, viemPaymentReader, type PaymentReader } from './chain/payment';
 import { checksumAddress } from './auth';
@@ -316,6 +317,7 @@ export async function createApp(
   shop.onCharges((wallet) => rooms.pushBoosts(wallet));
   // a removed (or replaced) picture comes off the live coins at once
   site.onAvatarChange((wallet) => void rooms.clearAvatar(wallet));
+  site.setLoad(() => gameLoad(rooms.loadStats()));
   site.setBots({
     store: rooms.botSettings,
     live: () => rooms.botCounts(),
@@ -390,7 +392,7 @@ export async function createApp(
       if (botTimer) clearInterval(botTimer);
       stopRpcLog();
       mint.flush();
-      rooms.shutdown();
+      await rooms.shutdown();
       customRooms.flush();
       integrity.close();
       priceKeeper?.stop();
