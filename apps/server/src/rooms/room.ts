@@ -1178,7 +1178,8 @@ export class Room implements RoomHandle {
    * `room_closed` and is detached. The caller drops the room from the manager. Never for arenas.
    */
   evict(message: string): number {
-    if (this.ledger) throw new Error('arena rooms are never evicted');
+    // an arena room holding a ticket or loot is never evicted (`closeSettled` waits for its bell)
+    if (this.ledger && !this.settledOut()) throw new Error('arena rooms are never evicted');
     let n = 0;
     for (const [pid, c] of [...this.humans]) {
       const p = this.world.players.get(pid);
@@ -1194,6 +1195,22 @@ export class Room implements RoomHandle {
       this.detach(c);
     }
     return n;
+  }
+
+  /** Nothing of value is left: no player (connected or AFK), no ticket (staked bots too), no loot on the floor. */
+  private settledOut(): boolean {
+    return this.humans.size === 0 && (this.ledger?.all().length ?? 0) === 0 && this.world.loot().length === 0;
+  }
+
+  /**
+   * A paid custom room's end: closes it (its spectators hear `room_closed` with `message`) only once
+   * nothing of value is left in it (see `settledOut`): its bell settles every ticket and burns the
+   * floor loot first. False while a ticket or loot remains (the caller asks again later).
+   */
+  closeSettled(message: string): boolean {
+    if (!this.settledOut()) return false;
+    this.evict(message);
+    return true;
   }
 
   /** Server shutdown: settle every stake player at their current value (an operator exit). */

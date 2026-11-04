@@ -655,6 +655,7 @@ export class EvmChain implements ChainGateway {
             openSessions: a.openSessions,
             enabled: a.enabled,
             pot: toLedger(a.vault, t.decimals, 'floor'),
+            ...(a.holdersOnly ? { holdersOnly: true } : {}),
           }),
         );
       this.arenaCache = { at: this.now(), value };

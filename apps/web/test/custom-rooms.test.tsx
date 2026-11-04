@@ -1,7 +1,9 @@
 import type { CustomRoomQuote, CustomRoomView } from '@elymum/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { customRoomsPatch } from '../src/admin/CustomRoomsCard';
+import { CUSTOM_SETTINGS_DEFAULT } from '@elymum/shared';
+import { customRoomsPatch, feeLadder, feeText, roomKindText } from '../src/admin/CustomRoomsCard';
+import { arenaTarget, leavePaidSeat, openInvite, seatInPaidRoom } from '../src/rooms/invite';
 import { Kb } from '../src/design';
 import { RoomApiError, loadPendingPayment, roomLink, savePendingPayment } from '../src/rooms/api';
 import { RoomCreator, hypeText } from '../src/rooms/RoomCreator';
@@ -19,10 +21,10 @@ const HASH = `0x${'ab'.repeat(32)}`;
 const TREASURY = '0x3333333333333333333333333333333333333333';
 const PRICE = 5n * 10n ** 16n;
 
-const spies = vi.hoisted(() => ({ quote: vi.fn(), create: vi.fn(), pay: vi.fn(), play: vi.fn() }));
+const spies = vi.hoisted(() => ({ quote: vi.fn(), create: vi.fn(), pay: vi.fn(), play: vi.fn(), get: vi.fn() }));
 vi.mock('../src/rooms/api', async (orig) => {
   const real = await orig<typeof import('../src/rooms/api')>();
-  return { ...real, roomsApi: { ...real.roomsApi, quote: spies.quote, create: spies.create, mine: async () => [] } };
+  return { ...real, roomsApi: { ...real.roomsApi, quote: spies.quote, create: spies.create, get: spies.get, mine: async () => [] } };
 });
 vi.mock('../src/rooms/pay', () => ({ payRoomFee: spies.pay }));
 vi.mock('../src/game/instance', () => ({ engine: () => ({ play: spies.play }) }));
@@ -41,6 +43,15 @@ const quote = (o: Partial<CustomRoomQuote> = {}): CustomRoomQuote => ({
   mine: 0,
   maxPerWallet: 2,
   chainId: 99801,
+  capacityStepPct: 50,
+  maxPlayers: 50,
+  seatsLeft: 200,
+  paidRooms: true,
+  tiers: [
+    { arenaId: 1, entryFee: 1_000_000_000, holdersOnly: false },
+    { arenaId: 2, entryFee: 10_000_000_000, holdersOnly: false },
+    { arenaId: 4, entryFee: 250_000_000_000, holdersOnly: true },
+  ],
   ...o,
 });
 const roomView = (o: Partial<CustomRoomView> = {}): CustomRoomView => ({
@@ -79,8 +90,9 @@ beforeEach(() => {
     onPhase('confirming', HASH);
     return { ok: true, hash: HASH };
   });
+  spies.get.mockRejectedValue(new RoomApiError(404, 'not_found', 'No open room with that code.'));
   resetWallets();
-  useUi.setState({ chain: chainStatus(), auth: null });
+  useUi.setState({ chain: chainStatus(), auth: null, paidSeat: null, lobbyIntent: null });
   savePendingPayment(null);
 });
 afterEach(() => savePendingPayment(null));
@@ -186,6 +198,89 @@ describe('the room creator', () => {
     expect(spies.create).toHaveBeenCalledWith('tok', expect.anything(), null);
   });
 
+  it('the fee follows the capacity live: x1.5 from 11 players, x2 from 21; the payment is the scaled fee', async () => {
+    signIn();
+    await open();
+    const range = screen.getByTestId('cr-capacity-range') as HTMLInputElement;
+    expect(screen.getByTestId('cr-capacity').textContent).toMatch(/^Max players10/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.05/);
+    expect(screen.getByTestId('cr-capacity-note').textContent).toMatch(/up to 10 players/);
+    // the steps: 2 4 6 8 10 15 20 25 30 40 50 (the server's biggest room is 50)
+    expect(range.max).toBe('10');
+    fireEvent.change(range, { target: { value: '6' } }); // 20 players
+    expect(screen.getByTestId('cr-capacity').textContent).toMatch(/20/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.075/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/for up to 20 players/);
+    expect(screen.getByTestId('cr-capacity-note').textContent).toMatch(/1\.5 times the base/);
+    fireEvent.change(range, { target: { value: '8' } }); // 30 players
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.10/);
+    fireEvent.change(range, { target: { value: '10' } }); // 50 players: x3
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.15/);
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Big pond' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+    expect(screen.getByTestId('cr-payment').textContent).toMatch(/up to 50/);
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(spies.pay.mock.calls[0][2]).toBe(PRICE * 3n);
+    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ maxPlayers: 50, kind: 'free', arenaId: null }), HASH);
+  });
+
+  it('a holder discount applies to the scaled fee; too many seats for the server is said and blocks', async () => {
+    signIn();
+    spies.quote.mockResolvedValue(quote({ holder: true, seatsLeft: 12 }));
+    await open();
+    const range = screen.getByTestId('cr-capacity-range') as HTMLInputElement;
+    fireEvent.change(range, { target: { value: '6' } }); // 20 players: 0.075, half off
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.0375/);
+    expect(screen.getByTestId('cr-seats').textContent).toMatch(/room for 12 more players/);
+    expect((screen.getByTestId('cr-continue') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('a ticket room: picks an arena tier (holders-only tiers for holders only), opens, and its entry is the arena ticket', async () => {
+    signIn();
+    spies.create.mockResolvedValue({ room: roomView({ kind: 'paid', arenaId: 2, endsAt: Date.now() + 20 * 60_000 }), invite: 'http://localhost/play?room=AB2CD' });
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Ticket room' }));
+    const tiers = screen.getByRole('group', { name: 'Arena tier' });
+    expect(tiers.querySelectorAll('button')).toHaveLength(2); // not the holders-only tier
+    expect(tiers.querySelector('[aria-pressed="true"]')?.getAttribute('data-value')).toBe('1');
+    fireEvent.click(tiers.querySelector('[data-value="2"]')!);
+    expect(screen.getByTestId('cr-kind-hint').textContent).toMatch(/Lethe Shore ticket/);
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Whale Club' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+    const payment = screen.getByTestId('cr-payment');
+    expect(payment.textContent).toMatch(/Arena tierLethe Shore/);
+    expect(payment.textContent).toMatch(/never holds anyone's tokens/);
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ kind: 'paid', arenaId: 2 }), HASH);
+    expect(screen.getByTestId('cr-done').textContent).toMatch(/buys a Lethe Shore ticket/);
+    fireEvent.click(screen.getByTestId('cr-enter'));
+    expect(spies.play).not.toHaveBeenCalled();
+    expect(useUi.getState().paidSeat).toMatchObject({ code: 'AB2CD', arenaId: 2, name: 'Friday Pond' });
+    expect(useUi.getState().lobbyIntent).toMatchObject({ ticket: 'arena:2', open: true });
+  });
+
+  it('a holder sees the holders-only tier; ticket rooms closed are said', async () => {
+    signIn();
+    spies.quote.mockResolvedValue(quote({ holder: true }));
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Ticket room' }));
+    expect(screen.getByRole('group', { name: 'Arena tier' }).querySelectorAll('button')).toHaveLength(3);
+  });
+
+  it('ticket rooms off: the creator says so and does not continue', async () => {
+    signIn();
+    spies.quote.mockResolvedValue(quote({ paidRooms: false, tiers: [] }));
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Ticket room' }));
+    expect(screen.getByTestId('cr-paid-off')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Whale Club' } });
+    expect((screen.getByTestId('cr-continue') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('says so when every room slot is busy', async () => {
     signIn();
     spies.quote.mockResolvedValue(quote({ live: 6, maxLive: 6 }));
@@ -205,9 +300,21 @@ describe('room helpers', () => {
   });
 
   it('the admin card sends only the changed settings', () => {
-    const s = { enabled: true, priceHype: '0.05', treasury: null, holderPerk: 'discount' as const, holderDiscountPct: 50, maxLive: 6, maxPerWallet: 2 };
+    const s = { ...CUSTOM_SETTINGS_DEFAULT };
     expect(customRoomsPatch(s, { ...s })).toEqual({});
-    expect(customRoomsPatch(s, { ...s, priceHype: '0.1', maxLive: 4 })).toEqual({ priceHype: '0.1', maxLive: 4 });
+    expect(customRoomsPatch(s, { ...s, priceHype: '0.1', maxLive: 4, capacityStepPct: 25, paidRooms: false })).toEqual({ priceHype: '0.1', maxLive: 4, capacityStepPct: 25, paidRooms: false });
+  });
+
+  it('the admin card lists the kind, tier and fee of each room, and the fee by size', () => {
+    expect(roomKindText({ kind: 'paid', arenaId: 2 })).toBe('paid · Lethe Shore #2');
+    expect(roomKindText({ kind: 'free' })).toBe('free');
+    expect(roomKindText({})).toBe('free');
+    expect(feeText({ feeWei: (PRICE * 3n).toString() })).toBe('0.15');
+    expect(feeText({ feeWei: '0' })).toBe('0');
+    expect(feeText({})).toBe('0');
+    expect(feeLadder('0.05', 50, 100)).toBe('10: 0.05 · 20: 0.075 · 50: 0.15 · 100: 0.275');
+    expect(feeLadder('0.05', 50, 36)).toBe('10: 0.05 · 20: 0.075 · 36: 0.125');
+    expect(feeLadder('nope', 50, 50)).toBeNull();
   });
 
   it('a kept payment belongs to its wallet and expires', () => {
@@ -220,15 +327,51 @@ describe('room helpers', () => {
 });
 
 describe('invite links', () => {
-  it('opens ?room=CODE once per page load, not again when the lobby mounts after the game', () => {
+  it('opens ?room=CODE once per page load, not again when the lobby mounts after the game', async () => {
     resetInviteLink();
     window.history.replaceState(null, '', '/play?room=ab2cd');
     act(() => useUi.setState({ connected: true }));
     const first = render(<Probe />);
+    await settle();
     expect(spies.play).toHaveBeenCalledWith('private:AB2CD');
     first.unmount();
     render(<Probe />);
+    await settle();
     expect(spies.play).toHaveBeenCalledTimes(1);
     window.history.replaceState(null, '', '/');
+  });
+
+  it("a paid room's invite goes to its arena's ticket, seated there; quick play goes public again once let go", async () => {
+    spies.get.mockResolvedValue(roomView({ kind: 'paid', arenaId: 3, name: 'Gold Club', endsAt: Date.now() + 20 * 60_000 }));
+    await openInvite('AB2CD');
+    expect(spies.play).not.toHaveBeenCalled();
+    expect(useUi.getState().paidSeat).toMatchObject({ code: 'AB2CD', arenaId: 3, name: 'Gold Club' });
+    expect(useUi.getState().lobbyIntent).toMatchObject({ ticket: 'arena:3', open: true });
+    // a ticket of that arena joins the private room; any other arena plays its public rooms
+    expect(arenaTarget(3)).toBe('arena:3:AB2CD');
+    expect(arenaTarget(1)).toBe('arena:1');
+    // the room's time is up: the seat no longer applies
+    expect(arenaTarget(3, Date.now() + 21 * 60_000)).toBe('arena:3');
+    leavePaidSeat();
+    expect(arenaTarget(3)).toBe('arena:3');
+  });
+
+  it('a closing ticket room sends nobody to buy a ticket', async () => {
+    spies.get.mockResolvedValueOnce(roomView({ kind: 'paid', arenaId: 3, closing: true, endsAt: Date.now() + 60_000 }));
+    await openInvite('AB2CD');
+    expect(useUi.getState().paidSeat).toBeNull();
+    expect(useUi.getState().lobbyIntent).toBeNull();
+    expect(spies.play).not.toHaveBeenCalled();
+  });
+
+  it('a free room (or a code the API does not know) is joined as a private room', async () => {
+    spies.get.mockResolvedValueOnce(roomView({ kind: 'free' }));
+    await openInvite('AB2CD');
+    expect(spies.play).toHaveBeenLastCalledWith('private:AB2CD');
+    await openInvite('ZZ2ZZ');
+    expect(spies.play).toHaveBeenLastCalledWith('private:ZZ2ZZ');
+    expect(useUi.getState().paidSeat).toBeNull();
+    seatInPaidRoom({ code: 'AB2CD', name: 'x', endsAt: Date.now() + 60_000, arenaId: undefined });
+    expect(useUi.getState().paidSeat).toBeNull();
   });
 });

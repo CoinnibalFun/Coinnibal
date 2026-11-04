@@ -1,3 +1,4 @@
+import { joinTargetArena } from '@elymum/shared';
 import { useUi } from '../store';
 import { serverClock } from './clock';
 
@@ -70,7 +71,7 @@ export class HeldTicket {
 
   /** Joins were closed: hold (or keep holding) this ticket until `opensAt` (server clock). */
   hold(room: string, opensAt: number): void {
-    const arenaId = Number(room.slice('arena:'.length));
+    const arenaId = joinTargetArena(room) ?? -1;
     const attempts = this.job && this.job.room === room ? this.job.attempts : 0;
     this.cancel();
     if (attempts >= HELD_MAX_ATTEMPTS) {
@@ -118,7 +119,7 @@ export class HeldTicket {
     const job = this.job;
     const held = useUi.getState().held;
     if (!job) return;
-    if (!held || held.arenaId !== Number(job.room.slice('arena:'.length))) {
+    if (!held || held.arenaId !== joinTargetArena(job.room)) {
       this.clear();
       return;
     }

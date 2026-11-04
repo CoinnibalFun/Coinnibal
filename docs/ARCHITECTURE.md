@@ -190,6 +190,31 @@ Consequences, stated plainly in the player guide:
 - **Rooms** (`rooms/manager.ts`): practice instances (Rookie and Pro leagues, 40 humans), arena instances
   `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) humans on the same vault; rounds of 300 s aligned to Unix
   time, joins closed in the final 60 s.
+- **Custom rooms** (`rooms/custom.ts`, `site/custom-rooms.ts`, `DATA_DIR/site/custom-rooms*.json`): a
+  signed-in wallet pays a native HYPE fee to the treasury (checked on chain by tx hash, each hash used once)
+  and gets a room `priv-<CODE>` with its own rules. The capacity is the creator's (2 to the admin's
+  `maxPlayers`, at most 100); the fee is `base x (1 + step% x (ceil(capacity / 10) - 1))` (default step 50 %:
+  11-20 players x1.5, 21-30 x2, ... 91-100 x5.5), computed by the server whatever the client showed, then
+  the holder perk (the free room of the day covers rooms of up to 10 players). `maxSeats` caps the capacity of
+  all live custom rooms together. Two kinds:
+  - **free**: a `private` room, no stakes, joined with `private:<CODE>` (guests too); it closes at its time.
+  - **paid** (a "ticket room"): a private, invite-only **instance of an existing arena** (`mode: 'arena'`,
+    `instance: 0`, `stake: { arenaId, buyIn }`). There is no escrow of its own: players buy the normal
+    on-chain ticket of that arena (`join`, fee on entry, the arena vault holds the tokens) and join with
+    `arena:<id>:<CODE>`; the gateway runs the usual ticket checks (session on chain, not pending, age, holders
+    gate, ban, round closed) and seats it there instead of a public instance. Settlement is the normal path:
+    the bell settles every ticket in it at value and burns its floor loot (`sweep:priv-<CODE>:<round>`), the
+    journal keys are the usual session keys, an unseated ticket is refunded by the stale sweeper, a crash or
+    restart recovers it like any other. It is never in the room directory (`list`, `/api/rooms`), never one of
+    `arenaInstances` (so quick play, matchmaking and the spectate fallback never pick it), never fields staked
+    bots, and the idle cleanup never closes it. A live ticket comes back to wherever its coin is
+    (`findArenaStake` covers paid rooms), so a resume or reconnect works either way. `private:<CODE>` on a
+    paid room answers `paid_room`. **Timing**: a paid room follows the arena's round clock: it ends on the
+    first bell at or after its duration (15/30/60 min are whole rounds), and when its time is up or it is
+    closed early (creator, admin) it takes no new seat and closes only once nothing of value is left in it
+    (no ticket, no loot, no player: `Room.closeSettled`, also in a room worker), i.e. right after its bell. A
+    ticket is never evicted. Holders-only arenas are offered to emblem holders only (and the contract refuses
+    other buyers anyway). The admin card turns paid rooms on or off.
 - **Other REST**: `/api/health`, `/api/rooms`, `/api/leaderboard`, `/api/config`, `/api/pending?wallet=`,
   `/api/profile` (names and skins live on the server), the site API `/api/site/*` and the admin API
   `/api/admin/*`. With `WEB_DIST` the server also serves the web build.

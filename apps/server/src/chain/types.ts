@@ -74,6 +74,8 @@ export interface ChainArena {
    * which skips the vault-vs-journal guard.
    */
   pot: number | null;
+  /** Emblem holders only (on-chain `holdersOnly`; the contract refuses other buyers). Absent: open to all. */
+  holdersOnly?: boolean;
 }
 
 export interface SettledEvent {

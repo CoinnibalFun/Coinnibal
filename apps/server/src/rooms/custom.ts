@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path';
 import {
   CUSTOM_HOLDER_PERKS,
+  CUSTOM_LIMITS,
   CUSTOM_MAP_SIZES,
   CUSTOM_MAP_WIDTH,
   CUSTOM_SETTINGS_DEFAULT,
@@ -9,8 +10,11 @@ import {
   CUSTOM_TRAP_MUL,
   CUSTOM_WORLD_CAPS,
   WORLD_PRESETS,
+  customRoomFee,
   customRoomPrice,
+  customUsesFreeRoom,
   validateCustomConfig,
+  type CustomArenaTier,
   type CustomBest,
   type CustomMapSize,
   type CustomRoomConfig,
@@ -24,7 +28,8 @@ import { getAddress, parseEther } from 'viem';
 import type { BotManagerOptions } from '../bots/manager';
 import type { BotMixWeights } from '../bots/personality';
 import { PaymentChainBusy, TX_HASH_RE, checkPayment, type PaymentReader, type UsedPayments } from '../chain/payment';
-import type { CustomRoomHooks, RoomManager } from './manager';
+import { ChainBusyError } from '../chain/types';
+import type { CustomRoomHooks, PaidArena, RoomManager } from './manager';
 import type { RoomHandle } from './handle';
 import type { WorldShape } from './room';
 
@@ -56,6 +61,13 @@ export interface CustomRecord {
   best: CustomBest[];
   /** The "1 minute left" line was said. */
   warned?: boolean;
+  /** Paid rooms: the arena's ticket price when the room was made (ledger units; the instance's `stake.buyIn`). */
+  buyIn?: number;
+  /**
+   * Paid rooms: time is up or it was closed early. No new seat; the room closes once its bell
+   * settled every ticket in it (`RoomManager.closePaidRoom`), then this record goes.
+   */
+  closing?: boolean;
 }
 
 interface RoomsFile {
@@ -118,11 +130,15 @@ const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string, unknown>, strict = true): CustomRoomSettings {
   const next = { ...cur };
   const bad = (field: string, message: string) => new CustomRoomFail(400, 'bad_request', message, field);
-  const keys: (keyof CustomRoomSettings)[] = ['enabled', 'priceHype', 'treasury', 'holderPerk', 'holderDiscountPct', 'maxLive', 'maxPerWallet'];
+  const keys: (keyof CustomRoomSettings)[] = ['enabled', 'priceHype', 'treasury', 'holderPerk', 'holderDiscountPct', 'maxLive', 'maxPerWallet', 'capacityStepPct', 'maxPlayers', 'maxSeats', 'paidRooms'];
   for (const k of Object.keys(body)) if (!keys.includes(k as keyof CustomRoomSettings) && strict) throw bad(k, `unknown field ${k}`);
   if (body.enabled !== undefined) {
     if (typeof body.enabled !== 'boolean') throw bad('enabled', 'enabled must be true or false');
     next.enabled = body.enabled;
+  }
+  if (body.paidRooms !== undefined) {
+    if (typeof body.paidRooms !== 'boolean') throw bad('paidRooms', 'paidRooms must be true or false');
+    next.paidRooms = body.paidRooms;
   }
   if (body.priceHype !== undefined) {
     const p = body.priceHype;
@@ -152,6 +168,10 @@ export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string
   if (body.holderDiscountPct !== undefined) next.holderDiscountPct = int(body.holderDiscountPct, 'holderDiscountPct', 0, 100);
   if (body.maxLive !== undefined) next.maxLive = int(body.maxLive, 'maxLive', 0, CUSTOM_SETTINGS_LIMITS.maxLive);
   if (body.maxPerWallet !== undefined) next.maxPerWallet = int(body.maxPerWallet, 'maxPerWallet', 1, CUSTOM_SETTINGS_LIMITS.maxPerWallet);
+  if (body.capacityStepPct !== undefined) next.capacityStepPct = int(body.capacityStepPct, 'capacityStepPct', 0, CUSTOM_SETTINGS_LIMITS.capacityStepPct);
+  if (body.maxPlayers !== undefined) next.maxPlayers = int(body.maxPlayers, 'maxPlayers', CUSTOM_LIMITS.playersMin, CUSTOM_SETTINGS_LIMITS.maxPlayers);
+  if (body.maxSeats !== undefined) next.maxSeats = int(body.maxSeats, 'maxSeats', CUSTOM_SETTINGS_LIMITS.maxSeatsMin, CUSTOM_SETTINGS_LIMITS.maxSeats);
+  if (next.maxSeats < next.maxPlayers) throw bad('maxSeats', `maxSeats (${next.maxSeats}) must be at least the biggest room (maxPlayers ${next.maxPlayers})`);
   return next;
 }
 
@@ -237,6 +257,8 @@ export class CustomRoomService implements CustomRoomHooks {
       for (const r of Array.isArray(raw.rooms) ? raw.rooms : []) {
         const v = validateCustomConfig(r?.config);
         if (!v.ok || typeof r.code !== 'string' || !Number.isFinite(r.endsAt)) continue;
+        // a paid room is an arena instance: it cannot open again without its ticket price
+        if (v.config.kind === 'paid' && !(typeof r.buyIn === 'number' && Number.isSafeInteger(r.buyIn) && r.buyIn > 0)) continue;
         this.records.set(r.code, { ...r, config: v.config, best: Array.isArray(r.best) ? r.best.slice(0, BEST_KEPT) : [] });
       }
     } catch (err) {
@@ -266,12 +288,14 @@ export class CustomRoomService implements CustomRoomHooks {
     let n = 0;
     let dropped = 0;
     for (const [code, r] of [...this.records]) {
-      if (r.endsAt <= now) {
+      if (this.d.rooms.get(`priv-${code}`)) continue;
+      // gone with the restart (or the room worker): a paid room's tickets were settled from the
+      // journal (shutdown or crash recovery), by session, whatever room they were in
+      if (r.endsAt <= now || r.closing) {
         this.records.delete(code);
         dropped++;
         continue;
       }
-      if (this.d.rooms.get(`priv-${code}`)) continue;
       this.open(r);
       n++;
     }
@@ -283,7 +307,7 @@ export class CustomRoomService implements CustomRoomHooks {
   }
 
   private open(r: CustomRecord): RoomHandle {
-    return this.d.rooms.createCustomRoom(r.code, {
+    const opts = {
       name: r.config.name,
       maxPlayers: r.config.maxPlayers,
       bots: customBots(r.config),
@@ -292,7 +316,12 @@ export class CustomRoomService implements CustomRoomHooks {
       ...(r.config.mapSize === 'auto' ? { map: { scale: this.d.rooms.customMapScale(), shape: (side: number) => customWorld(r.config, side), config: r.config } } : {}),
       powerUps: r.config.powerUps,
       custom: this.summary(r),
-    });
+    };
+    if (r.config.kind === 'paid' && r.config.arenaId !== null) {
+      // an invite-only instance of the arena: its tickets, its vault, its bell
+      return this.d.rooms.createPaidRoom(r.code, { ...opts, stake: { arenaId: r.config.arenaId, buyIn: r.buyIn ?? 0 } });
+    }
+    return this.d.rooms.createCustomRoom(r.code, opts);
   }
 
   /* ------------------------------ settings ------------------------------ */
@@ -312,8 +341,31 @@ export class CustomRoomService implements CustomRoomHooks {
     return this.cur.treasury ?? this.d.ownerWallet;
   }
 
+  /** Base price (rooms of up to 10 players), wei. */
   priceWei(): bigint {
     return parseEther(this.cur.priceHype);
+  }
+
+  /** The fee of a room of `capacity` before any holder perk (`customRoomFee`), wei. */
+  feeWei(capacity: number): bigint {
+    return customRoomFee(this.priceWei(), capacity, this.cur.capacityStepPct);
+  }
+
+  /** Seats taken by the live custom rooms (Σ capacity). */
+  seatsUsed(): number {
+    let n = 0;
+    for (const r of this.records.values()) n += r.config.maxPlayers;
+    return n;
+  }
+
+  /** The arenas a paid room can be made of now ([] when the chain cannot be read and never was). */
+  private async tiers(): Promise<PaidArena[]> {
+    if (!this.cur.paidRooms) return [];
+    try {
+      return await this.d.rooms.paidArenas();
+    } catch {
+      return [];
+    }
   }
 
   /* ------------------------------ views ------------------------------ */
@@ -328,6 +380,7 @@ export class CustomRoomService implements CustomRoomHooks {
       food: c.food,
       traps: c.traps ?? 'normal',
       powerUps: c.powerUps,
+      ...(c.kind === 'paid' && c.arenaId !== null ? { kind: 'paid' as const, arenaId: c.arenaId } : { kind: 'free' as const }),
       creator: r.creator,
       createdAt: r.createdAt,
       endsAt: r.endsAt,
@@ -345,6 +398,8 @@ export class CustomRoomService implements CustomRoomHooks {
       best: r.best.slice(0, BEST_KEPT),
       paidWith: r.paidWith,
       txHash: r.txHash,
+      feeWei: r.paidWei,
+      ...(r.closing ? { closing: true } : {}),
     };
   }
 
@@ -375,10 +430,16 @@ export class CustomRoomService implements CustomRoomHooks {
     const free = !!wallet && holder && this.freeAvailable(wallet);
     const price = this.priceWei();
     const treasury = this.treasury();
+    const tiers: CustomArenaTier[] = (await this.tiers()).map((a) => ({ arenaId: a.arenaId, entryFee: a.buyIn, holdersOnly: a.holdersOnly }));
     return {
       enabled: this.cur.enabled && !!treasury,
       priceWei: price.toString(),
       youPayWei: customRoomPrice(price, this.cur, holder, free).toString(),
+      capacityStepPct: this.cur.capacityStepPct,
+      maxPlayers: this.cur.maxPlayers,
+      seatsLeft: Math.max(0, this.cur.maxSeats - this.seatsUsed()),
+      paidRooms: this.cur.paidRooms && tiers.length > 0,
+      tiers,
       treasury,
       holderPerk: this.cur.holderPerk,
       holderDiscountPct: this.cur.holderDiscountPct,
@@ -394,13 +455,58 @@ export class CustomRoomService implements CustomRoomHooks {
 
   /* ------------------------------ create ------------------------------ */
 
-  private checkCaps(wallet: string, extra: number): void {
+  private checkCaps(wallet: string, extra: number, capacity: number): void {
     if (this.live + extra > this.cur.maxLive) {
       throw new CustomRoomFail(503, 'slots_busy', 'All room slots are busy right now. Try again in a few minutes, when a room closes.');
     }
     if (this.mine(wallet).length >= this.cur.maxPerWallet) {
       throw new CustomRoomFail(409, 'wallet_limit', `You already have ${this.cur.maxPerWallet} rooms open. Close one or wait for it to end.`);
     }
+    const left = this.cur.maxSeats - this.seatsUsed();
+    if (capacity > left) {
+      throw new CustomRoomFail(
+        503,
+        'seats_busy',
+        left >= CUSTOM_LIMITS.playersMin
+          ? `The server has room for ${left} more players in custom rooms right now. Pick a smaller room or try again later.`
+          : 'The custom rooms are full right now. Try again in a few minutes, when a room closes.',
+        'maxPlayers',
+      );
+    }
+  }
+
+  /**
+   * A paid room's arena: open on chain, allowed here, not kept closed by the vault guard; a
+   * holders-only arena for an emblem holder only. Throws `CustomRoomFail`.
+   */
+  private async paidArena(arenaId: number, holder: boolean): Promise<PaidArena> {
+    if (!this.cur.paidRooms) throw new CustomRoomFail(503, 'paid_closed', 'Paid rooms are closed right now. Free rooms are open.', 'kind');
+    let list: PaidArena[];
+    try {
+      list = await this.d.rooms.paidArenas();
+    } catch (err) {
+      if (err instanceof ChainBusyError) throw new CustomRoomFail(503, 'chain_busy', 'The network is busy. Try again in a moment.');
+      throw err;
+    }
+    const a = list.find((x) => x.arenaId === arenaId);
+    if (!a) throw new CustomRoomFail(400, 'bad_request', 'That arena tier is not open right now. Pick another one.', 'arenaId');
+    if (a.holdersOnly && !holder) throw new CustomRoomFail(403, 'holders_only', 'That arena tier is for Elymum emblem holders.', 'arenaId');
+    return a;
+  }
+
+  /**
+   * When a room made at `now` closes. A paid room ends on an arena bell (at or after its duration):
+   * its tickets are settled there, so it never closes in the middle of a round.
+   */
+  private endsAt(c: CustomRoomConfig, now: number): number {
+    const end = now + c.durationMin * 60_000;
+    return c.kind === 'paid' ? this.d.rooms.roundWindow(end - 1).endsAt : end;
+  }
+
+  /** A paid room `code` takes new seats now (it exists, has time left and is not closing). */
+  seatable(code: string): boolean {
+    const r = this.records.get(code);
+    return !!r && r.config.kind === 'paid' && !r.closing && r.endsAt > this.now();
   }
 
   /**
@@ -414,15 +520,24 @@ export class CustomRoomService implements CustomRoomHooks {
     if (!treasury) throw new CustomRoomFail(503, 'rooms_closed', 'Creating rooms is not set up on this server yet.');
     const v = validateCustomConfig(body.config);
     if (!v.ok) throw new CustomRoomFail(400, 'bad_request', v.message, v.field);
+    const config = v.config;
+    const capacity = config.maxPlayers;
+    if (capacity > this.cur.maxPlayers) {
+      throw new CustomRoomFail(400, 'bad_request', `Rooms on this server hold at most ${this.cur.maxPlayers} players.`, 'maxPlayers');
+    }
+    if (config.kind === 'paid' && !this.cur.paidRooms) throw new CustomRoomFail(503, 'paid_closed', 'Paid rooms are closed right now. Free rooms are open.', 'kind');
     const w = wallet.toLowerCase();
     if (this.creating.has(w)) throw new CustomRoomFail(409, 'bad_request', 'Your room is being created. Wait a moment.');
-    this.checkCaps(wallet, 1);
+    this.checkCaps(wallet, 1, capacity);
     this.creating.add(w);
     let claimed: string | null = null;
     try {
       const holder = await this.d.isHolder(wallet).catch(() => false);
+      // a paid room's arena is checked before any payment is looked at (a refused tier never claims a hash)
+      const arena = config.kind === 'paid' && config.arenaId !== null ? await this.paidArena(config.arenaId, holder) : null;
       const free = holder && this.freeAvailable(wallet);
-      const price = customRoomPrice(this.priceWei(), this.cur, holder, free);
+      // the fee grows with the capacity; the server computes it, whatever the client showed
+      const price = customRoomPrice(this.feeWei(capacity), this.cur, holder, free, capacity);
       let txHash: string | null = null;
       if (price > 0n) {
         const hash = typeof body.txHash === 'string' ? body.txHash.trim() : '';
@@ -445,7 +560,7 @@ export class CustomRoomService implements CustomRoomHooks {
       }
       // the awaits above let other rooms open meanwhile: a paid hash stays unused when the slots filled up
       try {
-        this.checkCaps(wallet, 1);
+        this.checkCaps(wallet, 1, capacity);
       } catch (err) {
         if (err instanceof CustomRoomFail && txHash) throw new CustomRoomFail(err.status, err.code, `${err.message} Your payment is kept: open the room with it later.`, undefined, true);
         throw err;
@@ -454,23 +569,27 @@ export class CustomRoomService implements CustomRoomHooks {
       const code = this.d.rooms.newPrivateCode();
       const rec: CustomRecord = {
         code,
-        config: v.config,
+        config,
         creator: getAddress(w),
         createdAt: now,
-        endsAt: now + v.config.durationMin * 60_000,
+        endsAt: this.endsAt(config, now),
         paidWith: txHash ? 'paid' : 'free',
         txHash,
         paidWei: price.toString(),
         best: [],
+        ...(arena ? { buyIn: arena.buyIn } : {}),
       };
       // the hash is used for good before the room opens (a crash between the two loses the room, never doubles it)
       if (txHash) this.d.used.markUsed(txHash, { at: now, wallet: rec.creator, code });
       claimed = null;
-      if (!txHash && holder && this.cur.holderPerk === 'free_daily') this.freeUsed[w] = utcDay(now);
+      if (!txHash && customUsesFreeRoom(this.cur, holder, free, capacity)) this.freeUsed[w] = utcDay(now);
       this.records.set(code, rec);
       this.open(rec);
       this.saveRooms();
-      this.log(`custom rooms: ${code} "${rec.config.name}" opened by ${rec.creator} (${rec.paidWith}${txHash ? ` ${txHash}` : ''}, ${rec.config.durationMin} min)`);
+      this.log(
+        `custom rooms: ${code} "${rec.config.name}" opened by ${rec.creator} (${rec.paidWith}${txHash ? ` ${txHash}` : ''}, ${rec.config.durationMin} min, ` +
+          `${capacity} players, ${arena ? `paid on arena #${arena.arenaId}` : 'free'})`,
+      );
       return this.view(rec);
     } finally {
       if (claimed) this.d.used.release(claimed);
@@ -486,8 +605,20 @@ export class CustomRoomService implements CustomRoomHooks {
     if (!r) throw new CustomRoomFail(404, 'not_found', 'No open room with that code.');
     const creator = r.creator.toLowerCase() === by.wallet.toLowerCase();
     if (!creator && !by.admin) throw new CustomRoomFail(403, 'forbidden', 'Only the room creator can close it.');
+    const message = creator ? 'The room creator closed this room.' : 'An admin closed this room.';
+    if (r.config.kind === 'paid') {
+      // tickets are never evicted: no new seat now, the room closes once its bell settled them
+      if (!r.closing) {
+        r.closing = true;
+        this.saveRooms();
+        this.d.rooms.get(`priv-${r.code}`)?.announce(`${message} It closes at the bell: every ticket is settled there.`);
+      }
+      this.finishPaid(r, message);
+      this.log(`custom rooms: ${code} closing early (at its bell) by ${by.wallet}${creator ? ' (creator)' : ' (admin)'}`);
+      return this.view(r);
+    }
     const view = this.view(r);
-    this.shut(r, creator ? 'The room creator closed this room.' : 'An admin closed this room.');
+    this.shut(r, message);
     this.log(`custom rooms: ${code} closed early by ${by.wallet}${creator ? ' (creator)' : ' (admin)'}`);
     return view;
   }
@@ -498,9 +629,26 @@ export class CustomRoomService implements CustomRoomHooks {
     this.saveRooms();
   }
 
+  /** A closing paid room: gone once nothing of value is left in it (its bell settled every ticket). */
+  private finishPaid(r: CustomRecord, message: string): void {
+    if (this.d.rooms.closePaidRoom(r.code, message) !== 'closed') return;
+    this.records.delete(r.code);
+    this.saveRooms();
+    this.log(`custom rooms: ${r.code} closed (every ticket settled)`);
+  }
+
   /** Closes rooms whose time ran out; says "1 minute left" before. Called from the tick loop. */
   sweep(now = this.now()): void {
     for (const r of [...this.records.values()]) {
+      if (r.config.kind === 'paid' && (r.closing || r.endsAt <= now)) {
+        if (!r.closing) {
+          r.closing = true;
+          this.saveRooms();
+          this.log(`custom rooms: ${r.code} expired (closes once its bell settled every ticket)`);
+        }
+        this.finishPaid(r, 'Time is up: this room has closed. Thanks for playing!');
+        continue;
+      }
       if (r.endsAt <= now) {
         this.shut(r, 'Time is up: this room has closed. Thanks for playing!');
         this.log(`custom rooms: ${r.code} expired`);
@@ -508,7 +656,7 @@ export class CustomRoomService implements CustomRoomHooks {
       }
       if (!r.warned && r.endsAt - now <= CUSTOM_WARN_MS) {
         r.warned = true;
-        this.d.rooms.get(`priv-${r.code}`)?.announce('1 minute left in this room!');
+        this.d.rooms.get(`priv-${r.code}`)?.announce(r.config.kind === 'paid' ? '1 minute left: this room closes at the bell.' : '1 minute left in this room!');
         this.bestDirty = true;
       }
     }

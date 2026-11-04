@@ -157,6 +157,12 @@ On screen:
 Ids 1 to 4, created from `/admin` → Deploy (or `pnpm admin create-arena --defaults`) once the token is set, all open
 to everyone, 300 open tickets each. A new 50-player instance opens on the same vault when the others are full.
 
+Custom rooms: a player pays a small HYPE fee for a room with their own rules and capacity (2 to 100; the fee
+grows 50 % of the base for every started 10 players above 10). A **free** room has no stakes. A **ticket
+room** is an invite-only instance of one of the arenas above: its players buy that arena's normal ticket and
+are seated there by the invite code; it plays on the arena's round clock (it ends on a bell) and is settled at
+the bell like any arena. Quick play never lands in one. Details: [ARCHITECTURE.md](ARCHITECTURE.md), "Custom rooms".
+
 ## 3. Money
 
 ### 3.1 Fees

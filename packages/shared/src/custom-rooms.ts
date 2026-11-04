@@ -1,12 +1,17 @@
-import { CAPACITY } from './constants';
-
 /**
  * Custom rooms: a signed-in wallet pays a small native HYPE fee (to the treasury) and gets a
- * private room with its own rules (map size, bots, duration, ...). Anyone with the invite code
- * joins (guests too). No token stakes: pure fun, with the room's own leaderboard.
+ * private room with its own rules (map size, bots, duration, capacity, ...). The fee grows with the
+ * capacity (`customRoomFee`). Two kinds:
  *
- * A custom room is a `private` room (`RoomInfo.mode`), joined with `private:<CODE>` like any
- * other; `RoomInfo.custom` carries its rules and its end time.
+ *  - `free`: no stakes, pure fun (like practice). A `private` room (`RoomInfo.mode`), joined with
+ *    `private:<CODE>`; anyone with the invite code joins (guests too).
+ *  - `paid`: a private, invite-only instance of an existing on-chain arena (`arenaId`, its entry
+ *    tier). Players buy the normal ticket of that arena and are seated in the private instance with
+ *    `arena:<id>:<CODE>`; the ticket is settled by the server at the arena's bell like any other.
+ *    No custody: the room never holds tokens, the arena vault does. Its `RoomInfo.mode` is `arena`
+ *    and it is never listed, quick-played or picked by matchmaking.
+ *
+ * `RoomInfo.custom` carries the rules and the end time either way.
  */
 
 export const CUSTOM_DURATIONS_MIN = [15, 30, 60] as const;
@@ -40,14 +45,48 @@ export const CUSTOM_TRAP_MUL: Record<CustomTraps, number> = { none: 0, few: 0.5,
 export const CUSTOM_HOLDER_PERKS = ['discount', 'free_daily', 'none'] as const;
 export type CustomHolderPerk = (typeof CUSTOM_HOLDER_PERKS)[number];
 
-/** Bounds of the creator's choices. */
+/** Free room (no stakes) or paid room (an invite-only instance of an on-chain arena). */
+export const CUSTOM_KINDS = ['free', 'paid'] as const;
+export type CustomRoomKind = (typeof CUSTOM_KINDS)[number];
+
+/** Bounds of the creator's choices (the admin's `maxPlayers` caps the capacity further). */
 export const CUSTOM_LIMITS = {
   nameMin: 2,
   nameMax: 24,
   botsMax: 12,
   playersMin: 2,
-  playersMax: CAPACITY.private,
+  /** The biggest room the server could ever host (the admin setting `maxPlayers` is at most this). */
+  playersMax: 100,
 } as const;
+
+/** The capacities the creator steps through (any whole number in range is valid on the server). */
+export const CUSTOM_CAPACITY_STEPS = [2, 4, 6, 8, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100] as const;
+
+/** Players per fee tier: the fee grows by `capacityStepPct` of the base for every started tier above the first. */
+export const CUSTOM_CAPACITY_TIER = 10;
+
+/** Fee tiers of a capacity: 1 for up to 10 players, 2 for 11..20, 3 for 21..30, ... */
+export function customCapacityTiers(capacity: number): number {
+  return Math.max(1, Math.ceil(Math.max(1, Math.floor(capacity)) / CUSTOM_CAPACITY_TIER));
+}
+
+/**
+ * The creation fee of a room of `capacity` (wei, before any holder perk): the base for up to 10
+ * players, plus `stepPct` % of the base for every started 10 players above the first 10.
+ * With the default 50 %: 11..20 → x1.5, 21..30 → x2, ..., 91..100 → x5.5. Rounded down to the wei.
+ */
+export function customRoomFee(baseWei: bigint, capacity: number, stepPct: number): bigint {
+  const steps = BigInt(customCapacityTiers(capacity) - 1);
+  const pct = BigInt(Math.max(0, Math.floor(stepPct)));
+  return baseWei + (baseWei * pct * steps) / 100n;
+}
+
+/** The capacity steps a creator may pick under the admin's cap (`maxPlayers`). */
+export function customCapacityChoices(maxPlayers: number): number[] {
+  const list: number[] = CUSTOM_CAPACITY_STEPS.filter((n) => n <= maxPlayers);
+  if (maxPlayers >= CUSTOM_LIMITS.playersMin && !list.includes(maxPlayers)) list.push(maxPlayers);
+  return list;
+}
 
 /**
  * World sizes (square) per map size: XS is a quick brawl, S smaller than a private room, L about a
@@ -69,12 +108,16 @@ export interface CustomRoomConfig {
   /** Bots in the room, 0..12 (they stay at this count whatever the humans do). */
   bots: number;
   difficulty: CustomDifficulty;
-  /** Most humans at once, 2..20. */
+  /** Most humans at once (the room's capacity), 2..100 (and at most the admin's `maxPlayers`). */
   maxPlayers: number;
   food: CustomFood;
   /** Rug cacti on the map (absent in rooms made before it existed: `normal`). */
   traps: CustomTraps;
   powerUps: boolean;
+  /** `free` (no stakes) or `paid` (an invite-only instance of arena `arenaId`). Rooms made before it: `free`. */
+  kind: CustomRoomKind;
+  /** Paid rooms: the arena whose tickets seat players here (its entry fee is the stake); null for free rooms. */
+  arenaId: number | null;
 }
 
 export const CUSTOM_DEFAULTS: CustomRoomConfig = {
@@ -87,6 +130,8 @@ export const CUSTOM_DEFAULTS: CustomRoomConfig = {
   food: 'normal',
   traps: 'normal',
   powerUps: true,
+  kind: 'free',
+  arenaId: null,
 };
 
 /** The rules of a live custom room as clients see them (`RoomInfo.custom`). */
@@ -99,6 +144,15 @@ export interface CustomRoomSummary {
   /** Rug cacti on the map. Old servers leave it out (read it as `normal`). */
   traps?: CustomTraps;
   powerUps: boolean;
+  /** `paid`: an arena instance (tickets of `arenaId`). Old servers leave it out (read it as `free`). */
+  kind?: CustomRoomKind;
+  /** Paid rooms: the arena whose tickets seat players here. */
+  arenaId?: number;
+  /**
+   * Paid rooms closing (time is up, or closed early): no new seats; the room closes at its next
+   * bell, once every ticket in it is settled.
+   */
+  closing?: boolean;
   /** Creator wallet (EIP-55). */
   creator: string;
   /** Unix ms: the room opened. */
@@ -129,6 +183,8 @@ export interface CustomRoomView extends CustomRoomSummary {
   paidWith: 'paid' | 'free';
   /** The payment transaction (0x hash), when paid. */
   txHash: string | null;
+  /** The creation fee paid, wei (decimal string; "0" for a free room). */
+  feeWei?: string;
 }
 
 /** The admin settings (`/api/admin/custom-rooms`). */
@@ -146,6 +202,17 @@ export interface CustomRoomSettings {
   maxLive: number;
   /** Most live custom rooms per creator wallet. */
   maxPerWallet: number;
+  /** The fee grows by this percent of the base price for every started 10 players above the first 10 (0..500). */
+  capacityStepPct: number;
+  /** The biggest room a creator may open (2..100). */
+  maxPlayers: number;
+  /**
+   * Seats of all live custom rooms together (Σ capacity, 10..500): keeps them inside what the
+   * server is sized for (about 500 players at once) next to the public rooms.
+   */
+  maxSeats: number;
+  /** Paid rooms (invite-only arena instances) may be created. */
+  paidRooms: boolean;
 }
 
 export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
@@ -156,10 +223,23 @@ export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
   holderDiscountPct: 50,
   maxLive: 6,
   maxPerWallet: 2,
+  capacityStepPct: 50,
+  maxPlayers: 50,
+  maxSeats: 200,
+  paidRooms: true,
 };
 
 /** Bounds of the admin caps. */
-export const CUSTOM_SETTINGS_LIMITS = { maxLive: 24, maxPerWallet: 10 } as const;
+export const CUSTOM_SETTINGS_LIMITS = { maxLive: 24, maxPerWallet: 10, capacityStepPct: 500, maxPlayers: CUSTOM_LIMITS.playersMax, maxSeats: 500, maxSeatsMin: 10 } as const;
+
+/** An arena tier a paid room can be made of (`CustomRoomQuote.tiers`). */
+export interface CustomArenaTier {
+  arenaId: number;
+  /** Ticket price, ledger units (the server's `RoomInfo.entryFee` units). */
+  entryFee: number;
+  /** Emblem holders only (on chain): offered to holders only. */
+  holdersOnly: boolean;
+}
 
 /** A payment older than this is refused (`payment_stale`). */
 export const CUSTOM_PAYMENT_MAX_AGE_MS = 2 * 3600_000;
@@ -167,10 +247,20 @@ export const CUSTOM_PAYMENT_MAX_AGE_MS = 2 * 3600_000;
 /** `GET /api/rooms/custom/quote`: what creating a room costs this wallet right now. */
 export interface CustomRoomQuote {
   enabled: boolean;
-  /** Base price, wei (decimal string). */
+  /** Base price (rooms of up to 10 players), wei (decimal string). */
   priceWei: string;
-  /** What this wallet pays, wei (decimal string; "0" with a free room). */
+  /** What this wallet pays for a room of the base size, wei (decimal string; "0" with a free room). */
   youPayWei: string;
+  /** The fee grows by this percent of the base for every started 10 players above 10 (`customRoomFee`). */
+  capacityStepPct: number;
+  /** The biggest room this server lets a creator open. */
+  maxPlayers: number;
+  /** Seats left under the server's `maxSeats` (Σ capacity of the live rooms). */
+  seatsLeft: number;
+  /** Paid rooms may be created now (setting on, chain arenas open). */
+  paidRooms: boolean;
+  /** The arena tiers a paid room can be made of (holders-only tiers are listed; the creator must hold). */
+  tiers: CustomArenaTier[];
   /** Fee receiver (EIP-55); null: none configured (creating is closed). */
   treasury: string | null;
   holderPerk: CustomHolderPerk;
@@ -203,7 +293,10 @@ export type CustomRoomError =
   | 'payment_low'
   | 'chain_busy'
   | 'not_found'
-  | 'forbidden';
+  | 'forbidden'
+  | 'seats_busy'
+  | 'paid_closed'
+  | 'holders_only';
 
 const NAME_RE = /^[\p{L}\p{N} .,'!?&#@:()_-]+$/u;
 
@@ -230,6 +323,14 @@ export function validateCustomConfig(x: unknown): { ok: true; config: CustomRoom
   if (maxPlayers === null) return { ok: false, field: 'maxPlayers', message: `maxPlayers must be a whole number from ${CUSTOM_LIMITS.playersMin} to ${CUSTOM_LIMITS.playersMax}` };
   const powerUps = o.powerUps === undefined ? true : o.powerUps;
   if (typeof powerUps !== 'boolean') return { ok: false, field: 'powerUps', message: 'powerUps must be true or false' };
+  // rooms made before kinds existed are free rooms
+  const kind = o.kind === undefined ? 'free' : o.kind;
+  if (kind !== 'free' && kind !== 'paid') return { ok: false, field: 'kind', message: 'kind must be free or paid' };
+  let arenaId: number | null = null;
+  if (kind === 'paid') {
+    arenaId = int(o.arenaId, 1, 65535);
+    if (arenaId === null) return { ok: false, field: 'arenaId', message: 'Pick the arena tier of the paid room.' };
+  } else if (o.arenaId !== undefined && o.arenaId !== null) return { ok: false, field: 'arenaId', message: 'A free room has no arena tier.' };
   return {
     ok: true,
     config: {
@@ -242,6 +343,8 @@ export function validateCustomConfig(x: unknown): { ok: true; config: CustomRoom
       food: food as CustomFood,
       traps: traps as CustomTraps,
       powerUps,
+      kind,
+      arenaId,
     },
   };
 }
@@ -261,18 +364,39 @@ export function inviteUrl(origin: string, code: string): string {
   return `${origin.replace(/\/+$/, '')}/play?room=${encodeURIComponent(code)}`;
 }
 
-/** What a wallet pays for a room (wei) given the settings and its holder status. */
+/**
+ * What a wallet pays for a room (wei) given its fee (`customRoomFee`), the settings and its holder
+ * status. The holders' free room of the day covers rooms of the base size (up to 10 players,
+ * `capacity`); a bigger room pays its full fee (and the free room is kept for later).
+ */
 export function customRoomPrice(
   priceWei: bigint,
   s: Pick<CustomRoomSettings, 'holderPerk' | 'holderDiscountPct'>,
   holder: boolean,
   freeAvailable: boolean,
+  capacity: number = CUSTOM_CAPACITY_TIER,
 ): bigint {
   if (!holder) return priceWei;
-  if (s.holderPerk === 'free_daily' && freeAvailable) return 0n;
+  if (customUsesFreeRoom(s, holder, freeAvailable, capacity)) return 0n;
   if (s.holderPerk === 'discount') {
     const pct = BigInt(Math.max(0, Math.min(100, Math.floor(s.holderDiscountPct))));
     return (priceWei * (100n - pct)) / 100n;
   }
   return priceWei;
+}
+
+/** Whether a free-daily holder's room of `capacity` is their free room of the day (only rooms of the base size are). */
+export function customUsesFreeRoom(s: Pick<CustomRoomSettings, 'holderPerk'>, holder: boolean, freeAvailable: boolean, capacity: number): boolean {
+  return holder && freeAvailable && s.holderPerk === 'free_daily' && customCapacityTiers(capacity) === 1;
+}
+
+/** What the quoted wallet pays for a room of `capacity` (wei): the creator sheet's live price. */
+export function quotePrice(q: Pick<CustomRoomQuote, 'priceWei' | 'capacityStepPct' | 'holderPerk' | 'holderDiscountPct' | 'holder' | 'freeAvailable'>, capacity: number): bigint {
+  const fee = customRoomFee(BigInt(q.priceWei), capacity, q.capacityStepPct ?? 0);
+  return customRoomPrice(fee, q, q.holder, q.freeAvailable, capacity);
+}
+
+/** A paid room's share link lands here too (`/play?room=CODE`): the client reads the room's kind first. */
+export function paidRoomTarget(arenaId: number, code: string): string {
+  return `arena:${arenaId}:${code}`;
 }

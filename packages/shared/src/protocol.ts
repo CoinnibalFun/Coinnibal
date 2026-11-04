@@ -542,12 +542,20 @@ export type ErrorCode =
    * The custom room the player was in closed (its time ran out, or its creator or an admin closed it):
    * back to the lobby. Also the answer to joining a custom room that just closed.
    */
-  | 'room_closed';
+  | 'room_closed'
+  /**
+   * The room is a paid custom room (an invite-only arena instance): it is entered with a ticket of
+   * its arena (`arena:<id>:<CODE>`), not with `private:<CODE>`.
+   */
+  | 'paid_room';
 
-/** Parse a join target into its parts. Returns null for malformed input. */
+/**
+ * Parse a join target into its parts. Returns null for malformed input. `arena:<id>:<CODE>` seats
+ * an arena ticket in the paid custom room `CODE` (an invite-only instance of that arena).
+ */
 export function parseJoinTarget(
   target: string,
-): { mode: 'practice' } | { mode: 'private'; code: string | null } | { mode: 'arena'; arenaId: number } | null {
+): { mode: 'practice' } | { mode: 'private'; code: string | null } | { mode: 'arena'; arenaId: number; code?: string } | null {
   if (target === 'practice') return { mode: 'practice' };
   if (target.startsWith('private:')) {
     const code = target.slice(8).toUpperCase();
@@ -555,10 +563,17 @@ export function parseJoinTarget(
     return /^[A-Z0-9]{5}$/.test(code) ? { mode: 'private', code } : null;
   }
   if (target.startsWith('arena:')) {
-    const digits = target.slice(6);
-    if (!/^\d{1,5}$/.test(digits)) return null;
-    const id = Number(digits);
-    return id <= 65535 ? { mode: 'arena', arenaId: id } : null;
+    const m = /^(\d{1,5})(?::([A-Za-z0-9]{5}))?$/.exec(target.slice(6));
+    if (!m) return null;
+    const id = Number(m[1]);
+    if (id > 65535) return null;
+    return m[2] ? { mode: 'arena', arenaId: id, code: m[2].toUpperCase() } : { mode: 'arena', arenaId: id };
   }
   return null;
+}
+
+/** The arena id of an arena join target (`arena:3`, `arena:3:AB2CD`); null for anything else. */
+export function joinTargetArena(target: string): number | null {
+  const t = parseJoinTarget(target);
+  return t?.mode === 'arena' ? t.arenaId : null;
 }

@@ -188,6 +188,12 @@ export interface UiState {
   page: LobbyPage;
   /** Death / receipt "New ticket": the lobby selects this ticket and opens its confirm sheet. */
   lobbyIntent: { ticket: 'practice' | `arena:${number}`; open: boolean; at: number } | null;
+  /**
+   * A paid custom room's invite was opened: the next ticket of `arenaId` (bought or resumed) is seated
+   * in that private arena instance (`arena:<id>:<code>`) instead of a public one, until `endsAt` or
+   * until the player lets it go (`rooms/invite.ts`).
+   */
+  paidSeat: { code: string; arenaId: number; name: string; endsAt: number } | null;
   auth: AuthState | null;
   /** The server refused a room entry with `game_closed`: the game is admin-only and this session is no admin. */
   gameClosed: boolean;
@@ -309,6 +315,7 @@ export const useUi = create<UiState>(() => ({
   modal: null,
   page: pageFromLocation(),
   lobbyIntent: null,
+  paidSeat: null,
   auth: null,
   gameClosed: false,
   settings: loadSettings(),

@@ -250,6 +250,12 @@ export class WorkerPool {
     this.send(room.slot, { k: 'close', hid: room.hid, force: true, message });
   }
 
+  /** Asks the worker to close a paid custom room once its tickets and loot are settled (answered through `onClosed`). */
+  closeSettled(room: RemoteRoom, message: string): void {
+    room.closing = true;
+    this.send(room.slot, { k: 'close', hid: room.hid, force: false, message });
+  }
+
   /** Asks the worker to drop an idle room (answered through `onClosed`). */
   closeIdle(room: RemoteRoom): void {
     room.closing = true;
@@ -470,7 +476,10 @@ export class WorkerPool {
         const room = this.rooms.get(c.hid);
         if (!room) return;
         room.closing = false;
-        if (c.ok) this.rooms.delete(c.hid);
+        if (c.ok) {
+          room.closed = true;
+          this.rooms.delete(c.hid);
+        }
         d.onClosed(room, c.ok);
         return;
       }

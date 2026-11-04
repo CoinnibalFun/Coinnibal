@@ -7,6 +7,7 @@ import { Button, CoinCharacter, Icon, Sheet, Stamp, StampSpinner, markTransition
 import { engine } from '../game/instance';
 import { sound } from '../audio';
 import { useT } from '../i18n';
+import { arenaTarget } from '../rooms/invite';
 import { toast, updateSettings, useUi } from '../store';
 import { ticketName, useTokenText } from '../ui/lobby/useLobby';
 import { refreshChain, useChainData, useReadClient } from './chain';
@@ -60,6 +61,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   const model = useUi((s) => feeModelOf(s.chain));
   const tokenReady = useUi((s) => s.chain?.tokenReady === true);
   const exactApprove = useUi((s) => s.settings.exactApprove === true);
+  const paidSeat = useUi((s) => s.paidSeat);
 
   const [phase, setPhase] = useState<Phase>('review');
   /** The call in flight (buy: approve or join). */
@@ -149,7 +151,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     later(reduced ? 700 : PLAY_AT_MS, () => {
       // the page opens onto the room from the VALID stamp
       markTransitionOrigin(document.querySelector('.tf-ticket__stamp') ?? document.querySelector('.tf-ticket'));
-      engine()?.play(`arena:${arenaId}`, { awaitTicket: true });
+      engine()?.play(arenaTarget(arenaId), { awaitTicket: true });
       onClose();
     });
   };
@@ -158,7 +160,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     sound.punch();
     updateSettings({ lastArena: arenaId });
     markTransitionOrigin(document.querySelector('.tf-ticket'));
-    engine()?.play(`arena:${arenaId}`);
+    engine()?.play(arenaTarget(arenaId));
     onClose();
   };
 
@@ -353,6 +355,12 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
           <TicketPreview ticket={ticket} room={room} fee={tok.fee(v.fee)} sym={tok.symbol} stamped={phase === 'stamped'} reduced={reduced} />
         )}
 
+        {mode === 'buy' && paidSeat && paidSeat.arenaId === arenaId && (
+          <p className="tf-seat" data-testid="tf-paid-seat">
+            <Icon name="key" size={16} />
+            <span>{t('cr.seat.ticketNote', { name: paidSeat.name, code: paidSeat.code })}</span>
+          </p>
+        )}
         {landed ? (
           <p className="tf-ok" role="status">
             <Icon name="check" size={18} />

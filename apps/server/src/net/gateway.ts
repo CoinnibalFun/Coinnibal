@@ -20,6 +20,7 @@ import type { Auth } from '../auth';
 import { ChainBusyError, type ChainGateway, type ChainSession, type SettledEvent } from '../chain/types';
 import type { ServerConfig } from '../config';
 import type { ProfileStore } from '../profiles';
+import type { RoomHandle } from '../rooms/handle';
 import type { RoomManager } from '../rooms/manager';
 import { MAX_STAKE_SESSION_AGE_S } from '../rooms/room';
 import type { Journal } from '../stake/journal';
@@ -420,6 +421,11 @@ export class Gateway {
           return;
         }
         if (conn.player?.alive && conn.room === room) return;
+        // a paid custom room (an arena instance) seats arena tickets only: `arena:<id>:<CODE>`
+        if (room.opts.mode !== 'private') {
+          this.error(conn, 'paid_room', 'This room is played with an arena ticket. Open its invite link to buy one.');
+          return;
+        }
         if (room.isFull) {
           this.error(conn, 'room_full', 'That room is full.');
           return;
@@ -450,7 +456,7 @@ export class Gateway {
         return;
       }
       try {
-        await this.joinArena(conn, target.arenaId, { name, skin, flags, avatar, country });
+        await this.joinArena(conn, target.arenaId, { name, skin, flags, avatar, country }, target.code ?? null);
       } catch (err) {
         if (!(err instanceof ChainBusyError)) throw err;
         // the RPC refused us even after the retries: the ticket is untouched on chain, the player tries again
@@ -483,8 +489,17 @@ export class Gateway {
     }
   }
 
-  /** The arena part of a join (the caller checked the wallet, the gate and the ban). Throws `ChainBusyError`. */
-  private async joinArena(conn: Conn, arenaId: number, look: { name: string; skin: number; flags: number; avatar: string | null; country: string | null }): Promise<void> {
+  /**
+   * The arena part of a join (the caller checked the wallet, the gate and the ban). `code`: seat the
+   * ticket in that paid custom room (an invite-only instance of this arena) instead of a public
+   * instance; a live ticket comes back to wherever its coin is, either way. Throws `ChainBusyError`.
+   */
+  private async joinArena(
+    conn: Conn,
+    arenaId: number,
+    look: { name: string; skin: number; flags: number; avatar: string | null; country: string | null },
+    code: string | null = null,
+  ): Promise<void> {
     if (!conn.wallet) return;
     const wallet = conn.wallet;
     const target = { arenaId };
@@ -506,11 +521,20 @@ export class Gateway {
         this.error(conn, 'session_busy', 'You are already playing in this arena.');
         return;
       }
-      let room = await this.rooms.arenaRoom(target.arenaId);
-      if (!room) {
+      const pick = code ? await this.rooms.paidRoom(target.arenaId, code) : await this.rooms.arenaRoom(target.arenaId);
+      if (pick === 'closed') {
+        this.error(conn, 'room_closed', 'This room has closed.');
+        return;
+      }
+      if (pick === 'missing') {
+        this.error(conn, 'room_not_found', 'No paid room with that code for this arena.');
+        return;
+      }
+      if (!pick || pick === 'arena') {
         this.error(conn, 'room_not_found', 'Arena not available.');
         return;
       }
+      let room: RoomHandle | null = pick;
       if (!conn.wallet) return; // signed out during the await
       // a player back after a bell that settled their ticket while they were away (AFK)
       const bell = this.rooms.bellSettled(target.arenaId, conn.wallet);
@@ -555,7 +579,16 @@ export class Gateway {
       // join), so an NFT sold since the sign-in no longer seats its former holder
       if (await this.gameClosed(conn, true)) return;
       // the instance may have filled up or been closed during the awaits above: pick again (arena data is cached)
-      room = await this.rooms.confirmArenaRoom(target.arenaId, room);
+      if (code) {
+        // a paid room is never swapped for another room: it is this one or none
+        const picked: RoomHandle = room;
+        room = this.rooms.confirmPaidRoom(picked);
+        if (!room) {
+          if (this.rooms.get(picked.id) === picked && picked.isFull) this.error(conn, 'room_full', 'That room is full.');
+          else this.error(conn, 'room_closed', 'This room has closed.');
+          return;
+        }
+      } else room = await this.rooms.confirmArenaRoom(target.arenaId, room);
       if (!room) {
         this.error(conn, 'room_full', 'Arena is full — try again in a moment.');
         return;
