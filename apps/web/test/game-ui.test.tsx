@@ -1,4 +1,4 @@
-import { EMOTES, type DeathStats, type RoomInfo } from '@elymum/shared';
+import { EMOTES, emoteForSlot, type DeathStats, type RoomInfo } from '@elymum/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chainStatus } from './evm-helpers';
@@ -8,6 +8,7 @@ import type { GameEngine } from '../src/game/engine';
 import { useUi } from '../src/store';
 import { setReducedMotion } from '../src/test/media';
 import { DeathSheet, receiptNumbers, settlementFor, stickerSvg } from '../src/ui/game';
+import { EmoteBar } from '../src/ui/game/EmoteBar';
 import { roomName, tokenFormat } from '../src/ui/game/format';
 
 const M = 1_000_000; // one whole token in ledger units (6 decimals)
@@ -70,12 +71,46 @@ describe('format helpers', () => {
 });
 
 describe('emote stickers', () => {
-  it('draws every system emote as an SVG without text or emoji', () => {
+  it('draws every system emote (both pages) as an SVG without text or emoji, each its own art', () => {
+    expect(EMOTES).toHaveLength(16);
+    const seen = new Set<string>();
     for (const e of EMOTES) {
       const svg = stickerSvg(e.id);
       expect(svg.startsWith('<svg')).toBe(true);
       expect(svg).not.toMatch(/<text|\p{Extended_Pictographic}/u);
+      seen.add(svg);
     }
+    expect(seen.size).toBe(16);
+  });
+
+  it('the bar shows the Hype page first; the switch shows the Trash talk page and keys follow it', async () => {
+    const emote = vi.fn();
+    setEngine({ emote } as unknown as GameEngine);
+    render(
+      <Kb>
+        <EmoteBar />
+      </Kb>,
+    );
+    expect(screen.getByRole('button', { name: 'GM' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Cursing' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Hype' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Trash talk' }));
+    expect(useUi.getState().emoteSet).toBe('trash');
+    expect(screen.queryByRole('button', { name: 'GM' })).toBeNull();
+    const cursing = screen.getByRole('button', { name: 'Cursing' });
+    expect(cursing.getAttribute('aria-keyshortcuts')).toBe('1');
+    expect(screen.getByRole('button', { name: 'Take the L' }).getAttribute('aria-keyshortcuts')).toBe('8');
+    fireEvent.click(cursing);
+    expect(emote).toHaveBeenCalledWith(8);
+    setEngine(null);
+    // a key fires the slot on the page on show
+    const { GameEngine } = await import('../src/game/engine');
+    const send = vi.fn();
+    const fake = Object.create(GameEngine.prototype) as GameEngine;
+    Object.assign(fake, { net: { send } });
+    act(() => useUi.setState({ screen: 'playing' }));
+    fake.emote(emoteForSlot(useUi.getState().emoteSet, 2)!);
+    expect(send).toHaveBeenCalledWith({ t: 'emote', id: 10 });
   });
 });
 

@@ -1,7 +1,10 @@
 import { CARD_PAPER, ELYSIUM, INK, RISO } from '@elymum/art';
 import {
   PowerUpType,
+  BOOST_KINDS,
   clamp,
+  emptyBoostCounts,
+  emoteForSlot,
   formatToken,
   encodeEject,
   encodeSplit,
@@ -21,7 +24,7 @@ import { serverText, t } from '../i18n';
 import { FrameGovernor } from '../render/governor';
 import { Renderer, type FrameInput } from '../render/renderer';
 import { FOOD_COLORS } from '../render/sprites';
-import { toast, useUi } from '../store';
+import { setEmoteSet, toast, useUi } from '../store';
 import { Camera } from './camera';
 import { worldCovered } from './backdrop';
 import { serverClock } from './clock';
@@ -143,7 +146,12 @@ export class GameEngine {
         split: () => this.split(),
         boost: (kind) => this.boost(kind),
         eject: () => this.eject(),
-        emote: (id) => this.emote(id),
+        // keys 1-8 fire the sticker page on show
+        emote: (slot) => {
+          const id = emoteForSlot(useUi.getState().emoteSet, slot);
+          if (id !== null) this.emote(id);
+        },
+        emotePage: () => setEmoteSet(),
         openChat: () => {
           const s = useUi.getState();
           if (s.screen === 'playing' && s.settings.showChat) {
@@ -334,6 +342,8 @@ export class GameEngine {
       this.buyHint();
       return;
     }
+    // a leap jumps toward the aim: the server hears the latest one first
+    if (kind === 'leap') this.sendTarget(true);
     this.net.send({ t: 'boost', kind });
   }
 
@@ -704,7 +714,9 @@ export class GameEngine {
       case 'boosts': {
         const now = Date.now();
         const c = m.state.cooldownMs;
-        useUi.setState({ boosts: m.state, boostReady: { magnet: now + c.magnet, shock: now + c.shock, speed: now + c.speed } });
+        const ready = emptyBoostCounts();
+        for (const k of BOOST_KINDS) ready[k] = now + (c[k] ?? 0);
+        useUi.setState({ boosts: m.state, boostReady: ready });
         return;
       }
       case 'boost': {
@@ -713,8 +725,9 @@ export class GameEngine {
           else toast(m.reason === 'cooldown' ? 'info' : 'warn', t(`boost.err.${m.reason}` as 'boost.err.guest'));
           return;
         }
-        // the pickup chime plus the caster's magnet / push / generic line (caller.ts)
-        caller.powerUp(m.kind === 'magnet' ? 'magnet' : m.kind === 'shock' ? 'push' : 'other');
+        // the pickup chime plus the caster's magnet / generic line (caller.ts)
+        caller.powerUp(m.kind === 'magnet' ? 'magnet' : 'other');
+        if (m.kind === 'invis') toast('info', t('boost.invis.on', { s: Math.round(m.ms / 1000) }));
         // magnet and speed show as the map power-up chips they share an effect with
         const type = m.kind === 'magnet' ? PowerUpType.Magnet : m.kind === 'speed' ? PowerUpType.Pump : null;
         if (type !== null && m.ms > 0) {

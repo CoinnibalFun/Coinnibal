@@ -1,5 +1,7 @@
 /**
- * Emote stickers (no emoji in UI chrome). Each system emote is a
+ * Emote stickers (no emoji in UI chrome), two pages: "Hype" (ids 0..7) and "Trash talk" (ids 8..15,
+ * attitude in the same hand: cursing grawlix, fuming, shades, LOL, ROFL, skull, eye roll, take the L;
+ * PG-13). Each system emote is a
  * die-cut risograph sticker: a card-stock border with an ink hairline, flat
  * riso inks with a misregistered second pass (multiply) and hand-lettered
  * stroke type (no fonts: SVG used as an image cannot load web fonts).
@@ -19,6 +21,7 @@ const BLUE = RISO.blue;
 const AQUA = RISO.aqua;
 const ORANGE = RISO.orange;
 const MINT = RISO.mint;
+const RED = RISO.red;
 /** Pale mint stock behind the rocket. */
 const MINT_PALE = '#D6F7E8';
 
@@ -29,10 +32,16 @@ const GLYPHS: Record<string, { d: string; w: number }> = {
   W: { d: 'M.6 1.2 2.6 13 5 5.2 7.4 13 9.4 1.2', w: 10 },
   A: { d: 'M1 13 5 1.2 9 13M2.5 9h5', w: 10 },
   I: { d: 'M2 1.2V13', w: 4 },
+  L: { d: 'M2 1.2V13h7', w: 10 },
+  // grawlix (the cursing sticker): # @ $ !
+  '#': { d: 'M4 1.2 2.8 13M7.6 1.2 6.4 13M1 5h8.4M.6 9.2h8.4', w: 10 },
+  '@': { d: 'M6.9 7.1a1.9 2.3 0 1 0 0 .1M6.9 4.8v3.6c0 1.6 2.6 1.6 2.6-1.2 0-3.8-2.2-6-4.6-6C2.2 1.2.6 3.8.6 7c0 3.6 2.2 6 5 6 1.2 0 2.2-.3 3-.9', w: 10 },
+  $: { d: 'M8.2 3.4C7.2 1.6 2.6 1.2 2 3.8 1.4 6.6 8.8 6.6 8.4 9.8 8 12.8 3 13 1.6 10.6M5 .2v13.6', w: 10 },
+  '!': { d: 'M2 1.2v7.6M2 12.6v.4', w: 4 },
 };
 
 /** Hand-lettered word centred on `cx`, cap height `h`. */
-function letters(text: string, cx: number, top: number, h: number, color = INK, weight = 2.6): string {
+function letters(text: string, cx: number, top: number, h: number, color: string = INK, weight = 2.6): string {
   const s = h / 14;
   const gap = 1.6;
   const total = [...text].reduce((n, ch) => n + (GLYPHS[ch]?.w ?? 6) + gap, -gap) * s;
@@ -149,7 +158,83 @@ const BODIES: Record<number, string> = {
       2.2,
       2,
     ) +
-    `<path d="M19.5 22q1-4.5 5.5-5" fill="none" stroke="${CARD}" stroke-width="2.6" stroke-linecap="round"/>`,
+    `<path d="M19.5 22q1-4.5 5.5-5" fill="none" stroke="${CARD}" stroke-width="2.6" stroke-linecap="round"/>`,  // ── "Trash talk" page (ids 8..15, protocol v11): attitude in the same riso hand, PG-13 ──
+  // 8 · cursing: a red furious coin under a mustard banner of grawlix (#@$!), its mouth censored
+  8:
+    dieCut(`<circle cx="32" cy="38" r="22"/><rect x="7" y="3" width="50" height="19" rx="5"/>`) +
+    face(32, 39, 16, RED, ORANGE) +
+    `<path d="M21.5 31.5l7.5 3.4M42.5 31.5L35 34.9" fill="none" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/>` +
+    `<circle cx="26" cy="37.6" r="2" fill="${INK}"/><circle cx="38" cy="37.6" r="2" fill="${INK}"/>` +
+    `<rect x="23.5" y="43" width="17" height="6" rx="1.6" fill="${INK}"/>` +
+    `<path d="M26 46h12" stroke="${CARD}" stroke-width="1.2" stroke-dasharray="2 1.6"/>` +
+    riso(`<rect x="9.5" y="5.5" width="45" height="14" rx="3.5"/>`, MUSTARD, PINK, 1.4, 1.4, 1.8) +
+    letters('#@$!', 32, 7.5, 10, INK, 2.3),
+  // 9 · fuming: a scowling red coin blowing steam from both sides
+  9:
+    dieCut(circleBase) +
+    face(32, 35, 16.5, RED, PINK) +
+    `<g fill="${CARD}" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round">` +
+    `<path d="M9.5 21.5q-3.6-1.4-2-4.8 .4-3.8 4.4-3.2 2-3.4 5.6-1.2 3.4 0 2.8 3.6 2.4 2.6-.4 5.2z"/>` +
+    `<path d="M54.5 21.5q3.6-1.4 2-4.8-.4-3.8-4.4-3.2-2-3.4-5.6-1.2-3.4 0-2.8 3.6-2.4 2.6.4 5.2z"/>` +
+    `</g>` +
+    `<path d="M21 28.5l8 3M43 28.5l-8 3" fill="none" stroke="${INK}" stroke-width="2.8" stroke-linecap="round"/>` +
+    `<path d="M23.5 34.2h5M35.5 34.2h5" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>` +
+    `<path d="M25 44.5q7-5.4 14 0" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>`,
+  // 10 · too cool: a sun coin in ink shades with a smirk
+  10:
+    dieCut(circleBase) +
+    face(32, 33, 17, MUSTARD, ORANGE) +
+    `<path d="M12.5 26.5h39v2.6c-1 6.6-3.6 9.4-8.6 9.4-5.4 0-7.6-4.4-8.4-8.4h-5c-.8 4-3 8.4-8.4 8.4-5 0-7.6-2.8-8.6-9.4z" fill="${INK}"/>` +
+    `<path d="M18 30.5l3.6-2.4M38.6 30.5l3.6-2.4" stroke="${CARD}" stroke-width="1.8" stroke-linecap="round"/>` +
+    `<path d="M26.5 44.5q6 3 11.5-2.2" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>` +
+    `<path d="M49 12l1.2 3 3 1.2-3 1.2L49 20.4l-1.2-3-3-1.2 3-1.2z" fill="${CARD}" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>`,
+  // 11 · LOL: eyes squeezed shut, mouth wide open, tears flying
+  11:
+    dieCut(circleBase) +
+    face(32, 33, 17, MUSTARD, ORANGE) +
+    `<path d="M21.5 30l4.5-3.6 4.5 3.6M33.5 30l4.5-3.6 4.5 3.6" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<path d="M22.5 35.5h19c0 7.4-4.2 11.4-9.5 11.4s-9.5-4-9.5-11.4z" fill="${INK}"/>` +
+    `<path d="M26.6 43.4q5.4-3.6 10.8 0q-2.2 2.6-5.4 2.6t-5.4-2.6z" fill="${PINK}"/>` +
+    `<g fill="${AQUA}" stroke="${INK}" stroke-width="1.5" stroke-linejoin="round">` +
+    `<path d="M14.5 27q-6 3.4-5.4 7.4 2.6 2.4 5.6-.6 1.4-3.4-.2-6.8z"/>` +
+    `<path d="M49.5 27q6 3.4 5.4 7.4-2.6 2.4-5.6-.6-1.4-3.4.2-6.8z"/>` +
+    `</g>`,
+  // 12 · ROFL: the laughing coin rolled on its side, with motion strokes
+  12:
+    dieCut(circleBase, MINT_PALE) +
+    `<path d="M8 50q4-1.4 8 0M48 14q4-1.4 8 0M50 21q3-1 6 0" fill="none" stroke="${INK}" stroke-width="2" stroke-linecap="round"/>` +
+    `<g transform="rotate(-32 32 34)">` +
+    face(32, 34, 16, ORANGE, PINK) +
+    `<path d="M22 31l4.4-3.4 4.4 3.4M33.2 31l4.4-3.4 4.4 3.4" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<path d="M23 36h18c0 6.8-4 10.6-9 10.6s-9-3.8-9-10.6z" fill="${INK}"/>` +
+    `<path d="M27 43.2q5-3.4 10 0q-2 2.4-5 2.4t-5-2.4z" fill="${PINK}"/>` +
+    `<path d="M15.6 28q-5.6 3-5 6.8 2.4 2.2 5.2-.6 1.2-3.2-.2-6.2z" fill="${AQUA}" stroke="${INK}" stroke-width="1.4"/>` +
+    `</g>`,
+  // 13 · dead: a cream skull with ink sockets
+  13:
+    dieCut(circleBase, MINT_PALE) +
+    riso(`<path d="M32 10.5c-11.2 0-18.5 7.2-18.5 17.2 0 6 2.8 10.2 7 12.4v6.4c0 1.4 1 2.4 2.4 2.4h18.2c1.4 0 2.4-1 2.4-2.4v-6.4c4.2-2.2 7-6.4 7-12.4 0-10-7.3-17.2-18.5-17.2z"/>`, CARD, AQUA, 1.8, 1.8) +
+    `<path d="M20.6 28.6c0-3.4 2.4-5.4 5-5.4s4.6 2.2 4.6 4.8c0 3-2.4 5.4-5.2 5.4-2.6 0-4.4-2-4.4-4.8zM43.4 28.6c0-3.4-2.4-5.4-5-5.4s-4.6 2.2-4.6 4.8c0 3 2.4 5.4 5.2 5.4 2.6 0 4.4-2 4.4-4.8z" fill="${INK}"/>` +
+    `<path d="M32 34.5l-2.6 4.4h5.2z" fill="${INK}" stroke="${INK}" stroke-width="1" stroke-linejoin="round"/>` +
+    `<path d="M26.5 43.5v4.6M30.8 43.5v4.6M35.2 43.5v4.6M39.5 43.5v4.6" stroke="${INK}" stroke-width="1.8" stroke-linecap="round"/>` +
+    `<path d="M22 49.5h20" stroke="${INK}" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>`,
+  // 14 · eye roll: pupils parked at the top, a flat unimpressed mouth
+  14:
+    dieCut(circleBase) +
+    face(32, 33, 17, TEAL, MINT) +
+    `<circle cx="25" cy="30" r="5.4" fill="${CARD}" stroke="${INK}" stroke-width="1.8"/><circle cx="39" cy="30" r="5.4" fill="${CARD}" stroke="${INK}" stroke-width="1.8"/>` +
+    `<circle cx="25.4" cy="26.6" r="2.4" fill="${INK}"/><circle cx="39.4" cy="26.6" r="2.4" fill="${INK}"/>` +
+    `<path d="M20 22.4q4.4-2.6 9 -.6M35 21.8q4.6-2 9 .6" fill="none" stroke="${INK}" stroke-width="2" stroke-linecap="round"/>` +
+    `<path d="M26 42.6h10.4q2 0 3-1.4" fill="none" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>`,
+  // 15 · take the L: a pink stamp with one big cream L
+  15:
+    dieCut(`<rect x="7" y="7" width="50" height="50" rx="9" transform="rotate(-6 32 32)"/>`) +
+    `<g transform="rotate(-6 32 32)">` +
+    riso(`<rect x="11.5" y="11.5" width="41" height="41" rx="6"/>`, PINK, MUSTARD, 1.8, 1.8) +
+    `<g transform="translate(1.6 1.6)">${letters('L', 32, 15, 34, INK, 7.5)}</g>` +
+    letters('L', 32, 15, 34, CARD, 7.5) +
+    `<path d="M18 48.5h7M39 17.5h7" stroke="${INK}" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>` +
+    `</g>`,
 };
 
 /** Full SVG markup of an emote sticker (64 × 64 viewBox). */

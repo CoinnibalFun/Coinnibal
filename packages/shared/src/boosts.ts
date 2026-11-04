@@ -5,24 +5,41 @@ import { parseToken } from './token';
  * Bought power-ups ("boosts"): charges a signed-in wallet buys with the game token and spends in
  * any room. They are separate from the map power-ups (`PowerUpType`, picked up off the floor);
  * Magnet and Speed reuse the map power-up effects (and their `CellFlag.Magnet` / `CellFlag.Pump`
- * visuals), Shockwave is new (`CellFlag.Shock`).
+ * visuals). Leap is an instant jump toward the aim (`CellFlag.Leap`), Invisibility hides the
+ * player's coins from every other player and from the bots (`CellFlag.Invisible`, only ever sent to
+ * the player itself: the server does not send hidden coins to anyone else).
+ *
+ * The Shockwave (`shock`, sold until 2026-11) is gone: saved charges and settings are converted to
+ * Leap on load (`LEGACY_BOOST_KINDS`: same price, same key F, also an instant "get me out" tool).
  */
-export const BOOST_KINDS = ['magnet', 'shock', 'speed'] as const;
+export const BOOST_KINDS = ['magnet', 'leap', 'speed', 'invis'] as const;
 export type BoostKind = (typeof BOOST_KINDS)[number];
 
 export function isBoostKind(x: unknown): x is BoostKind {
   return typeof x === 'string' && (BOOST_KINDS as readonly string[]).includes(x);
 }
 
-/** Desktop keys (`KeyboardEvent.code`): clear of Space split, E tip, WASD / arrows, Q spectate, Enter chat and 1-8 emotes. */
-export const BOOST_KEYS: Readonly<Record<BoostKind, string>> = { magnet: 'KeyR', shock: 'KeyF', speed: 'KeyG' };
-/** The key caps printed on the HUD buttons. */
-export const BOOST_KEY_LABELS: Readonly<Record<BoostKind, string>> = { magnet: 'R', shock: 'F', speed: 'G' };
+/** Retired kinds and the kind their saved charges, prices and switches now count as. */
+export const LEGACY_BOOST_KINDS: Readonly<Record<string, BoostKind>> = { shock: 'leap' };
+
+/** A current kind, or the kind a retired one became (`shock` -> `leap`); null for anything else. */
+export function normalizeBoostKind(x: unknown): BoostKind | null {
+  if (isBoostKind(x)) return x;
+  return typeof x === 'string' && Object.hasOwn(LEGACY_BOOST_KINDS, x) ? LEGACY_BOOST_KINDS[x] : null;
+}
 
 /**
- * Effect tuning (server-authoritative; the client reads it for the HUD rings and the shockwave ring).
- * They help but do not decide a fight: Magnet only pulls food, Speed is short, Shockwave only moves
- * coins no bigger than about yours and never lets anyone eat through it.
+ * Desktop keys (`KeyboardEvent.code`): clear of Space / left click split, E tip, WASD / arrows,
+ * Q spectate, Enter chat and 1-8 emotes. F stays the instant one (it was the Shockwave's).
+ */
+export const BOOST_KEYS: Readonly<Record<BoostKind, string>> = { magnet: 'KeyR', leap: 'KeyF', speed: 'KeyG', invis: 'KeyV' };
+/** The key caps printed on the HUD buttons. */
+export const BOOST_KEY_LABELS: Readonly<Record<BoostKind, string>> = { magnet: 'R', leap: 'F', speed: 'G', invis: 'V' };
+
+/**
+ * Effect tuning (server-authoritative; the client reads it for the HUD rings and the leap trail).
+ * They help but do not decide a fight: Magnet only pulls food, Speed is short, Leap is one hop that
+ * cannot cross the border, and an invisible coin still eats and is eaten like any other.
  */
 export const BOOST_RULES = {
   magnet: {
@@ -35,36 +52,43 @@ export const BOOST_RULES = {
     durationMs: 3_000,
     cooldownMs: 18_000,
   },
-  shock: {
-    cooldownMs: 15_000,
-    /** Reach of the push from each cell of the user: `r * rangeFactor + rangeBase` (world units). */
-    rangeFactor: 1.4,
-    rangeBase: 240,
-    /** Launch speed (units/s) of a pushed coin at the user's edge; falls to 40 % at the rim. Decays like a split. */
-    pushSpeed: 1090, // 950 x 1.15: scales with the 15 % faster movement, like split and eject
-    /** Coins up to this many times the pushing cell's mass are pushed; bigger ones are not moved. */
-    massRatio: 1.15,
-    /** A pushed coin can neither eat nor be eaten by another coin this long (no eating through the push). */
-    graceMs: 1_200,
-    /** Food inside the reach is moved this fraction of the way to the rim. */
-    foodPush: 0.7,
-    /** How long the ring shows (`CellFlag.Shock` on the user's cells). */
-    fxMs: 450,
+  leap: {
+    cooldownMs: 12_000,
+    /**
+     * Jump length (world units) for a player whose biggest cell has radius `r`:
+     * `base + r * perRadius`, at most `max`. A starting coin (r 45, about "1 m" across) hops about
+     * five of its widths ("5 m"), a big one about ten ("10 m"). Every cell of the player moves by
+     * the same step (the formation keeps); the border stops it.
+     */
+    base: 420,
+    perRadius: 0.9,
+    max: 900,
+    /** How long the trail shows (`CellFlag.Leap` on the user's cells). */
+    fxMs: 400,
+  },
+  invis: {
+    /**
+     * Ten seconds unseen: other players get no snapshot of the coins (so no name tag, no minimap
+     * leader dot, no spectator camera on them), bots do not see them. Eating works as usual.
+     */
+    durationMs: 10_000,
+    cooldownMs: 30_000,
   },
 } as const;
 
 /** Duration (ms) a boost's effect lasts (0: instant). */
 export function boostDurationMs(kind: BoostKind): number {
-  return kind === 'magnet' ? BOOST_RULES.magnet.durationMs : kind === 'speed' ? BOOST_RULES.speed.durationMs : 0;
+  return kind === 'magnet' ? BOOST_RULES.magnet.durationMs : kind === 'speed' ? BOOST_RULES.speed.durationMs : kind === 'invis' ? BOOST_RULES.invis.durationMs : 0;
 }
 
 export function boostCooldownMs(kind: BoostKind): number {
   return BOOST_RULES[kind].cooldownMs;
 }
 
-/** The shockwave's reach from a cell of radius `r` (the server pushes inside it, the ring is drawn to it). */
-export function shockRange(r: number): number {
-  return r * BOOST_RULES.shock.rangeFactor + BOOST_RULES.shock.rangeBase;
+/** How far (world units) a Leap carries a player whose biggest cell has radius `r`. */
+export function leapDistance(r: number): number {
+  const L = BOOST_RULES.leap;
+  return Math.min(L.max, L.base + Math.max(0, r) * L.perRadius);
 }
 
 /** The speed burst multiplier (the map pump's). */
@@ -106,8 +130,8 @@ export const SHOP_DEFAULTS: ShopSettings = {
   sink: 'burn',
   treasury: null,
   packSize: 3,
-  prices: { magnet: '1500', shock: '2500', speed: '1500' },
-  kinds: { magnet: true, shock: true, speed: true },
+  prices: { magnet: '1500', leap: '2500', speed: '1500', invis: '3000' },
+  kinds: { magnet: true, leap: true, speed: true, invis: true },
   holderDiscountPct: 30,
   arenaUsesPerRound: 2,
   holderExtraArenaUses: 1,
@@ -128,7 +152,22 @@ export function packPriceRaw(price: string, decimals: number, discountPct: numbe
 
 export type BoostCounts = Record<BoostKind, number>;
 
-export const emptyBoostCounts = (): BoostCounts => ({ magnet: 0, shock: 0, speed: 0 });
+export const emptyBoostCounts = (): BoostCounts => ({ magnet: 0, leap: 0, speed: 0, invis: 0 });
+
+/**
+ * Saved charges (any shape) as counts of the current kinds: a retired kind's charges are added 1:1 to
+ * the kind it became (`LEGACY_BOOST_KINDS`); negative, fractional and unknown entries are dropped.
+ */
+export function migrateBoostCounts(raw: unknown, cap = 1_000_000): BoostCounts {
+  const out = emptyBoostCounts();
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const kind = normalizeBoostKind(k);
+    const n = Math.floor(Number(v));
+    if (kind && Number.isFinite(n) && n > 0) out[kind] = Math.min(cap, out[kind] + n);
+  }
+  return out;
+}
 
 /** One pack in the shop, for one wallet. */
 export interface ShopPack {

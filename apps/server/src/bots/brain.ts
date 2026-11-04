@@ -206,11 +206,14 @@ export class BotBrain {
   private nearR = 0;
   private range = 0;
   private greedNow = 1;
+  /** The world clock of the current gather pass (an invisible coin's `invisUntil` is on it). */
+  private worldNow = 0;
   private readonly visitDynamic = (e: { kind: EntityKind }): void => {
     if (e.kind === EntityKind.Cell) {
       const c = e as Cell;
-      // in sight: the cell's edge is inside the bot's view square
-      if (!c.removed && c.player !== this.me && Math.abs(c.x - this.cx) - c.r < this.range && Math.abs(c.y - this.cy) - c.r < this.range) this.others.push(c);
+      // in sight: the cell's edge is inside the bot's view square (an invisible coin is never in sight)
+      if (!c.removed && c.player !== this.me && !(c.player.invisUntil > this.worldNow) && Math.abs(c.x - this.cx) - c.r < this.range && Math.abs(c.y - this.cy) - c.r < this.range)
+        this.others.push(c);
     } else if (e.kind === EntityKind.Eject) {
       const j = e as Eject;
       if (!j.removed && j.ownerId !== this.me!.id) this.ejects.push(j);
@@ -403,6 +406,7 @@ export class BotBrain {
     this.cx = cx;
     this.cy = cy;
     this.range = range;
+    this.worldNow = world.now;
     // padded by the largest possible cell radius: a whale's edge can be in view while its centre is not
     const pad = MAX_CELL_R;
     world.dynGrid.forEachIn(cx - range - pad, cy - range - pad, cx + range + pad, cy + range + pad, this.visitDynamic);

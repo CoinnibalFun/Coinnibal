@@ -33,10 +33,16 @@ export const CellFlag = {
   Pump: 8,
   Afk: 16,
   /**
-   * The player just fired a bought Shockwave (`BOOST_RULES.shock.fxMs`): viewers draw a ring out to
-   * `shockRange(r)` from the flag's rising edge. Old clients ignore the bit.
+   * The player just used a bought Leap (`BOOST_RULES.leap.fxMs`): viewers draw a short trail from
+   * where the coin was to where it landed, from the flag's rising edge (v11; the bit was the
+   * retired Shockwave's ring before).
    */
-  Shock: 32,
+  Leap: 32,
+  /**
+   * The player is invisible (a bought Invisibility, `BOOST_RULES.invis`). Only the player itself ever
+   * receives these cells (the server sends them to nobody else): it draws them see-through (v11).
+   */
+  Invisible: 64,
 } as const;
 
 /** Per-player flags carried in snapshots. */
@@ -495,7 +501,7 @@ export type ServerMessage =
   | { t: 'powerup'; type: PowerUpType; ms: number }
   // Bought power-ups: the player's charges, cooldowns and arena allowance (on join, after a use or a purchase).
   | { t: 'boosts'; state: BoostState }
-  // The answer to `boost`: used (`ms`: how long the effect lasts, 0 for the instant shockwave) or refused.
+  // The answer to `boost`: used (`ms`: how long the effect lasts, 0 for the instant leap) or refused.
   | { t: 'boost'; kind: BoostKind; ok: true; ms: number }
   | { t: 'boost'; kind: BoostKind; ok: false; reason: BoostRefusal }
   | { t: 'xp'; xp: number; level: number }

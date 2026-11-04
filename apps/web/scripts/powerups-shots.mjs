@@ -1,4 +1,4 @@
-// Screenshots of the power-up shop, the HUD buttons and the shockwave against a DEV_FAKE_CHAIN server.
+// Screenshots of the power-up shop, the HUD buttons and a leap against a DEV_FAKE_CHAIN server.
 //   node scripts/powerups-shots.mjs http://127.0.0.1:5173 ./out
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -36,14 +36,14 @@ async function buy(page, kind) {
   await page.waitForTimeout(400);
 }
 
-// ── desktop: shop from the lobby, buy, then the HUD and a shockwave ──
+// ── desktop: shop from the lobby, buy, then the HUD and a leap ──
 {
   const { ctx, page } = await newPage({ viewport: { width: 1440, height: 900 } });
   await page.getByTestId('lobby-shop').click();
   await page.waitForSelector('[data-testid="shop-buy-magnet"]');
   await page.waitForTimeout(600);
   await page.screenshot({ path: join(out, 'shop-lobby-desktop.png') });
-  for (const k of ['magnet', 'shock', 'speed']) await buy(page, k);
+  for (const k of ['magnet', 'leap', 'speed', 'invis']) await buy(page, k);
   await page.screenshot({ path: join(out, 'shop-after-buy-desktop.png') });
   await page.keyboard.press('Escape');
   await ev(page, () => window.__elymum.engine.play('practice'));
@@ -51,7 +51,7 @@ async function buy(page, kind) {
   await page.waitForFunction(() => !!window.__elymum.useUi.getState().boosts, null, { timeout: 10000 });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: join(out, 'hud-desktop.png') });
-  // magnet and speed, then a shockwave caught mid-ring
+  // magnet and speed, then a leap caught mid-trail
   await page.keyboard.press('KeyR');
   await page.waitForTimeout(400);
   await page.keyboard.press('KeyG');
@@ -59,19 +59,19 @@ async function buy(page, kind) {
   await page.screenshot({ path: join(out, 'hud-magnet-speed-desktop.png') });
   await page.keyboard.press('KeyF');
   await page.waitForTimeout(230);
-  await page.screenshot({ path: join(out, 'shockwave-desktop.png') });
+  await page.screenshot({ path: join(out, 'leap-desktop.png') });
   await page.waitForTimeout(900);
   await page.screenshot({ path: join(out, 'hud-cooldowns-desktop.png') });
   // nothing is sold during a game: a power-up key with no charge left only hints at the lobby shop
   await ctx.close();
 }
 
-// ── phone: HUD buttons by Split, a shockwave, the shop as a bottom sheet ──
+// ── phone: HUD buttons by Split, a leap, the shop as a bottom sheet ──
 {
   const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, mobile: true });
   await ev(page, () => window.__elymum.useUi.setState({ modal: 'shop' }));
-  await page.waitForSelector('[data-testid="shop-buy-shock"]');
-  await buy(page, 'shock');
+  await page.waitForSelector('[data-testid="shop-buy-leap"]');
+  await buy(page, 'leap');
   await buy(page, 'magnet');
   await page.waitForTimeout(400);
   await page.screenshot({ path: join(out, 'shop-phone.png') });
@@ -81,9 +81,9 @@ async function buy(page, kind) {
   await page.waitForFunction(() => !!window.__elymum.useUi.getState().boosts, null, { timeout: 10000 });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: join(out, 'hud-phone.png') });
-  await page.locator('.g-boost--shock').dispatchEvent('pointerdown');
+  await page.locator('.g-boost--leap').dispatchEvent('pointerdown');
   await page.waitForTimeout(230);
-  await page.screenshot({ path: join(out, 'shockwave-phone.png') });
+  await page.screenshot({ path: join(out, 'leap-phone.png') });
   await ctx.close();
 }
 

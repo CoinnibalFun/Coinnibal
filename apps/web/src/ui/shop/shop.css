@@ -63,8 +63,11 @@
   border-radius: 50%;
   background: #fbe3dc;
 }
-.sh-pack--shock .sh-pack__glyph {
+.sh-pack--leap .sh-pack__glyph {
   background: #dff3f9;
+}
+.sh-pack--invis .sh-pack__glyph {
+  background: #e8e1f6;
 }
 .sh-pack--speed .sh-pack__glyph {
   background: #fdf0c8;
