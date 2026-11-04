@@ -201,7 +201,7 @@ export class Gateway {
   private onConnection(ws: WebSocket, ip: string): void {
     this.perIp.set(ip, (this.perIp.get(ip) ?? 0) + 1);
     const conn = new Conn(ws, ip);
-    this.rooms.conns.add(conn);
+    this.rooms.addConn(conn);
     this.alive.set(ws, true);
     ws.on('pong', () => this.alive.set(ws, true));
     ws.on('message', (data, isBinary) => {
@@ -215,7 +215,7 @@ export class Gateway {
     const n = (this.perIp.get(conn.ip) ?? 1) - 1;
     if (n <= 0) this.perIp.delete(conn.ip);
     else this.perIp.set(conn.ip, n);
-    this.rooms.conns.delete(conn);
+    this.rooms.removeConn(conn);
     conn.room?.leave(conn, 'disconnect');
   }
 
@@ -309,7 +309,10 @@ export class Gateway {
       case 'viewport': {
         const w = Number(msg.w);
         const h = Number(msg.h);
-        if (w > 0 && h > 0 && Number.isFinite(w / h)) conn.aspect = clamp(w / h, 0.3, 3);
+        if (w > 0 && h > 0 && Number.isFinite(w / h)) {
+          conn.aspect = clamp(w / h, 0.3, 3);
+          conn.room?.connChanged?.(conn);
+        }
         return;
       }
       case 'chat':
@@ -330,6 +333,7 @@ export class Gateway {
         conn.standings = on;
         // the sheet fills at once instead of waiting for the next second
         if (on && !was) conn.room?.sendStandings(conn);
+        else if (on !== was) conn.room?.connChanged?.(conn);
         return;
       }
       case 'ping':
@@ -489,7 +493,11 @@ export class Gateway {
       // a live ticket comes back first, with no chain read at all: its coin is in this process already
       const existing = this.rooms.findArenaStake(target.arenaId, conn.wallet);
       if (existing) {
-        if (conn.player === null && existing.room.reattach(conn, existing.entry.pid)) return;
+        if (conn.player === null) {
+          // a room worker answers asynchronously; a room on this thread at once
+          const back = existing.room.reattach(conn, existing.entry.pid);
+          if (back === true || (back !== false && (await back))) return;
+        }
         // `reattach` rings a due bell first: the ticket may have been settled at that bell just now
         if (!this.rooms.findArenaStake(target.arenaId, conn.wallet) && this.rooms.bellSettled(target.arenaId, conn.wallet)) {
           this.roundEnded(conn);

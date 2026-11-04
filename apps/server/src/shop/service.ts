@@ -264,6 +264,22 @@ export class ShopService {
     return { ok: true };
   }
 
+  /**
+   * Undoes a `use` whose effect could not be applied after all (a room worker found the player dead
+   * by the time the effect arrived): the charge comes back, the cooldown and the arena use are
+   * cleared.
+   */
+  refund(ctx: UseContext, kind: BoostKind): void {
+    if (!ctx.wallet) return;
+    const wallet = ctx.wallet.toLowerCase();
+    this.deps.inventory.restore(wallet, kind);
+    this.readyAt.delete(`${wallet}:${kind}`);
+    if (ctx.arena) {
+      const used = this.arenaUsed(wallet, ctx.round);
+      if (used > 0) this.arenaUses.set(wallet, { round: ctx.round ?? 0, used: used - 1 });
+    }
+  }
+
   private prune(now: number): void {
     if (this.readyAt.size < 4096) return;
     for (const [k, t] of this.readyAt) if (t <= now) this.readyAt.delete(k);

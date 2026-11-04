@@ -1,3 +1,4 @@
+import { availableParallelism } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -27,6 +28,15 @@ export interface ServerConfig {
   privateRoomCapacity: number;
   /** Humans per arena instance before another instance opens (`ARENA_INSTANCE_CAP`). */
   arenaInstanceCap: number;
+  /**
+   * Room worker threads (`GAME_WORKERS`): rooms (simulation, bots, snapshots) run in this many
+   * `worker_threads`, the main thread keeps HTTP, sockets, the chain and the journal. 0: every room
+   * runs on the main thread (today's single-thread mode). Default: `availableParallelism() - 1` (at
+   * least 1) with `NODE_ENV=production`, else 0 (tests, `pnpm dev`).
+   */
+  gameWorkers: number;
+  /** A room worker silent this long is stopped and its rooms recovered (`GAME_WORKER_HANG_S`, default 10). */
+  gameWorkerHangMs: number;
   /** Bot population per room kind: the defaults of the admin's bot settings (`BotSettingsStore`). */
   bots: { practiceRookie: BotManagerOptions; practicePro: BotManagerOptions; arena: BotManagerOptions; private: BotManagerOptions };
   /**
@@ -244,6 +254,16 @@ export function persistedAuthSecret(dataDir: string): Buffer {
   }
 }
 
+/** `GAME_WORKERS`: a whole number (at most 64); unset: one per core but one in production, 0 elsewhere. */
+export function gameWorkers(env: NodeJS.ProcessEnv): number {
+  const raw = env.GAME_WORKERS?.trim();
+  if (raw) {
+    const n = Math.floor(Number(raw));
+    if (Number.isFinite(n) && n >= 0) return Math.min(64, n);
+  }
+  return env.NODE_ENV === 'production' ? Math.max(1, availableParallelism() - 1) : 0;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const rpcUrl = blank(env.EVM_RPC_URL)?.replace(/\/+$/, '') ?? null;
   const secret = env.AUTH_SECRET ? Buffer.from(env.AUTH_SECRET, 'utf8') : persistedAuthSecret(resolve(env.DATA_DIR ?? 'data'));
@@ -259,6 +279,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     practiceCapacity: Math.max(1, int(env.PRACTICE_CAPACITY ?? env.FREE_ROOM_CAPACITY, CAPACITY.practice)),
     privateRoomCapacity: int(env.PRIVATE_ROOM_CAPACITY, CAPACITY.private),
     arenaInstanceCap: Math.max(1, int(env.ARENA_INSTANCE_CAP, CAPACITY.arena)),
+    gameWorkers: gameWorkers(env),
+    gameWorkerHangMs: Math.max(2, int(env.GAME_WORKER_HANG_S, 10)) * 1000,
     // env defaults of the admin's bot settings (`/api/admin/bots`, DATA_DIR/site/bots.json wins): cap 12 per room
     bots: {
       practiceRookie: {

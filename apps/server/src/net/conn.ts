@@ -1,15 +1,23 @@
 import type { ProfileSummary, ServerMessage } from '@elymum/shared';
 import { WebSocket } from 'ws';
 import type { Player } from '../game/entities';
+import { wsOut } from '../rooms/load';
 import { ViewState } from '../rooms/visibility';
-import type { Room } from '../rooms/room';
+import type { RoomConn, RoomHandle } from '../rooms/handle';
 
 let nextConnId = 1;
 
+/** A frame of a room worker held back while a reattach is answered (worker mode). */
+export interface HeldFrame {
+  hid: number;
+  binary: boolean;
+  data: Buffer;
+}
+
 /** One WebSocket client. */
-export class Conn {
+export class Conn implements RoomConn {
   readonly id = nextConnId++;
-  room: Room | null = null;
+  room: RoomHandle | null = null;
   player: Player | null = null;
   spectating = false;
   spectatePid: number | null = null;
@@ -31,6 +39,15 @@ export class Conn {
   /** The client has the full standings sheet open (`standings` on): it gets `standings` with the leaderboard. */
   standings = false;
   readonly view = new ViewState();
+  /**
+   * Worker mode: a reattach on its way to a room worker. Frames of the room it leaves and of the one
+   * it asks for wait here until the worker answers; then one side is delivered and the other dropped.
+   */
+  pendingReattach: { old: RoomHandle | null; target: RoomHandle; held: HeldFrame[] } | null = null;
+  /** Worker mode: who plays the current game (the power-up rules need it on this thread). */
+  game: { wallet: string | null; holder: boolean } | null = null;
+  /** Worker mode: the room worker was told this socket is backed up (it skips snapshots). */
+  slowSent = false;
 
   private tokens = 120;
   private lastRefill = Date.now();
@@ -66,11 +83,22 @@ export class Conn {
   }
 
   send(msg: ServerMessage): void {
-    if (this.open) this.ws.send(JSON.stringify(msg));
+    if (this.open) this.sendText(JSON.stringify(msg));
+  }
+
+  /** A message already serialised (a room's broadcast stringifies once for every viewer). */
+  sendText(json: string): void {
+    if (!this.open) return;
+    wsOut.bytes += json.length;
+    wsOut.msgs++;
+    this.ws.send(json);
   }
 
   sendBinary(buf: ArrayBuffer): void {
-    if (this.open) this.ws.send(buf, { binary: true });
+    if (!this.open) return;
+    wsOut.bytes += buf.byteLength;
+    wsOut.msgs++;
+    this.ws.send(buf, { binary: true });
   }
 
   get buffered(): number {

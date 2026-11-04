@@ -134,7 +134,25 @@ export class IntegrityService {
 
   /** Every ticket (finished in the window and still in play) and transfer, for the detectors. */
   snapshot(): IntegritySnapshot {
-    return { now: this.now(), sessions: [...this.sessions.values(), ...this.monitor.live()], transfers: this.transfers };
+    return { now: this.now(), sessions: [...this.sessions.values(), ...this.monitor.live(), ...this.remoteLive()], transfers: this.transfers };
+  }
+
+  /** Tickets in play in room workers (their monitors report them; empty in single-thread mode). */
+  private remoteLive: () => SessionSummary[] = () => [];
+
+  /** Room workers run the telemetry: the main thread receives what their monitors finish. */
+  setRemoteLive(provider: () => SessionSummary[]): void {
+    this.remoteLive = provider;
+  }
+
+  /** A ticket summary finished by a room worker's monitor (`onSession` there). */
+  ingestSession(s: SessionSummary): void {
+    this.addSession(s);
+  }
+
+  /** A staker-to-staker transfer seen by a room worker's monitor. */
+  ingestTransfer(t: IntegrityTransfer): void {
+    this.addTransfer(t);
   }
 
   /** Writes the unsaved summaries as one log chunk and the state when it changed. */
@@ -227,9 +245,22 @@ export class IntegrityService {
     try {
       const s = this.monitor.onEnd(room, pid, end);
       if (!s || !item) return;
+      this.holdDecision(item, s.entryFee);
+    } catch (err) {
+      this.log(`integrity: settle hook failed (${(err as Error).stack ?? err})`);
+    }
+  }
+
+  /**
+   * The auto-hold part of `settle`, for a ticket whose telemetry is finished (`entryFee`: the stake it
+   * played with). A room worker finishes the telemetry there; the main thread decides here, before the
+   * settlement is written, so the hold lands in the same journal write. Never throws.
+   */
+  holdDecision(item: SettlementItem, entryFee: number): void {
+    try {
       const st = this.state.settings;
       const payout = item.payout ?? 0;
-      if (!st.autoHold || payout <= s.entryFee || !(item.reason === 'round' || item.reason === 'kicked' || item.reason === 'maxage')) return;
+      if (!st.autoHold || payout <= entryFee || !(item.reason === 'round' || item.reason === 'kicked' || item.reason === 'maxage')) return;
       const risk = this.evaluate(item.player);
       if (risk.score < st.holdScore) return;
       const top = risk.flags.map((id) => this.flags.get(id)).filter((f): f is IntegrityFlag => !!f && f.status !== 'dismissed');

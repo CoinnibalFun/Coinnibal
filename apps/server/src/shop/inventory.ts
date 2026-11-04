@@ -139,6 +139,19 @@ export class BoostInventory {
     return true;
   }
 
+  /** Gives back one charge `consume` took (a room worker could not apply the power-up). */
+  restore(wallet: string, kind: BoostKind): void {
+    const key = wallet.toLowerCase();
+    const c = this.charges.get(key) ?? emptyBoostCounts();
+    c[kind] += 1;
+    this.charges.set(key, c);
+    try {
+      this.save();
+    } catch (err) {
+      this.log(`boosts: could not save a restored charge (${(err as Error).message})`);
+    }
+  }
+
   /** Purchases, newest first (admin view). */
   recent(limit = 50): PurchaseRecord[] {
     return this.purchases.slice(-Math.max(1, limit)).reverse();

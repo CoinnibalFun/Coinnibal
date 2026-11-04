@@ -304,6 +304,54 @@ export class Journal {
   }
 
   /**
+   * A room worker died (or hung and was stopped): what its rooms held is recovered from this
+   * journal the way a process restart recovers everything (`recoverLive`), in one atomic write:
+   * every live ticket of those rooms becomes a settlement at its last journaled value (reason
+   * `crash`), and the floor loot of those rooms is queued to burn (a `sweep` item per room, as at a
+   * bell), since the rooms are gone. A ticket already pending is never queued twice. `round`: the
+   * round in play (it names the sweep). Returns what was queued.
+   */
+  recoverRooms(roomIds: readonly string[], round: number, now = Date.now()): { settled: number; swept: number } {
+    const ids = new Set(roomIds);
+    let settled = 0;
+    let swept = 0;
+    for (const id of ids) {
+      for (const l of this.liveByRoom.get(id) ?? []) {
+        if (this.pendingItems.some((p) => p.key === l.session)) continue;
+        this.pendingItems.push({
+          kind: 'settle',
+          key: l.session,
+          player: l.player,
+          arenaId: l.arenaId,
+          session: l.session,
+          sessionId: l.sessionId,
+          payout: l.value,
+          score: l.score,
+          kills: l.kills,
+          xp: 0,
+          reason: 'crash',
+          attempts: 0,
+          nextAttemptAt: now,
+          createdAt: now,
+        });
+        settled++;
+      }
+      this.liveByRoom.delete(id);
+      const loot = this.lootByRoom.get(id);
+      if (loot && loot.length > 0) {
+        const amount = loot.reduce((s, l) => s + l.value, 0);
+        let key = `${sweepKey(id, round)}:lost`;
+        for (let k = 2; this.pendingItems.some((p) => p.key === key); k++) key = `${sweepKey(id, round)}:lost:${k}`;
+        this.pendingItems.push({ kind: 'sweep', key, arenaId: loot[0].arenaId, roomId: id, round, amount, attempts: 0, nextAttemptAt: now, createdAt: now });
+        swept += amount;
+      }
+      this.lootByRoom.delete(id);
+    }
+    this.persist();
+    return { settled, swept };
+  }
+
+  /**
    * Atomically enqueue settlements, replace a room's live snapshot and
    * replace an arena instance's loot records. An item whose key is already pending is dropped, with one
    * exception: a real settlement (any reason but `stale`) replaces a pending `stale` one (the sweeper's

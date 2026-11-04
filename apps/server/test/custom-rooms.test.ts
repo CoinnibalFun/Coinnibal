@@ -8,6 +8,7 @@ import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
 import { PaymentChainBusy, UsedPayments, checkPayment, devFakePaymentReader, type NativeTransfer, type PaymentReader } from '../src/chain/payment';
 import { NullChain } from '../src/chain/types';
+import type { Room } from '../src/rooms/room';
 import { loadConfig } from '../src/config';
 import { Limiter } from '../src/net/limiter';
 import { CustomRoomFail, CustomRoomService, customWorld } from '../src/rooms/custom';
@@ -135,7 +136,7 @@ describe('custom rooms: create, caps, perks', () => {
     expect(view.code).toMatch(/^[A-HJ-NP-Z2-9]{5}$/);
     expect(view).toMatchObject({ name: 'Friday Pond', paidWith: 'paid', txHash: h, maxPlayers: 6, creator: alice, durationMin: 30 });
     expect(view.endsAt - view.createdAt).toBe(30 * 60_000);
-    const room = rooms.privateRoom(view.code)!;
+    const room = rooms.privateRoom(view.code) as Room;
     expect(room.opts.custom?.creator).toBe(alice);
     expect(room.world.cfg.width).toBe(CUSTOM_MAP_WIDTH.S);
     expect(room.world.cfg.powerUps).toBe(false);
@@ -255,7 +256,7 @@ describe('custom rooms: lifecycle', () => {
     const { svc, rooms, reader, clock } = setup();
     const a = testSigner().address;
     const view = await svc.create(a, { config: cfgOf({ durationMin: 15, bots: 0 }), txHash: reader.pay(1, a) });
-    const room = rooms.privateRoom(view.code)!;
+    const room = rooms.privateRoom(view.code) as Room;
     const player = fakeConn(null, '10.0.0.1');
     const watcher = fakeConn(null, '10.0.0.2');
     room.join(player, { name: 'Guest', skin: 1, flags: 0 });
@@ -297,7 +298,7 @@ describe('custom rooms: lifecycle', () => {
     const { svc, rooms, reader } = setup();
     const a = testSigner().address;
     const view = await svc.create(a, { config: cfgOf({ bots: 0 }), txHash: reader.pay(1, a) });
-    const room = rooms.privateRoom(view.code)!;
+    const room = rooms.privateRoom(view.code) as Room;
     const submitted: unknown[] = [];
     (room as unknown as { deps: { leaderboards: { submit: (e: unknown) => void } } }).deps.leaderboards.submit = (e) => submitted.push(e);
     const c = fakeConn(null);
@@ -315,7 +316,7 @@ describe('custom rooms: lifecycle', () => {
     const h = first.reader.pay(1, a);
     const keep = await first.svc.create(a, { config: cfgOf({ durationMin: 60, name: 'Long one', mapSize: 'L' }), txHash: h });
     const gone = await first.svc.create(a, { config: cfgOf({ durationMin: 15 }), txHash: first.reader.pay(2, a) });
-    first.svc.onGame(first.rooms.privateRoom(keep.code)!, { name: 'Pip', score: 300, kills: 1 });
+    first.svc.onGame(first.rooms.privateRoom(keep.code) as Room, { name: 'Pip', score: 300, kills: 1 });
     first.svc.flush();
     expect(existsSync(join(first.dir!, 'site', 'custom-rooms.json'))).toBe(true);
     first.rooms.shutdown();
@@ -324,7 +325,7 @@ describe('custom rooms: lifecycle', () => {
     clock.t += 20 * 60_000;
     const second = setup({ clock, dir: first.dir, reader: first.reader });
     expect(second.svc.restore()).toBe(1);
-    const back = second.rooms.privateRoom(keep.code)!;
+    const back = second.rooms.privateRoom(keep.code) as Room;
     expect(back.opts.custom?.endsAt).toBe(keep.endsAt);
     expect(back.world.cfg.width).toBe(CUSTOM_MAP_WIDTH.L);
     expect(back.opts.name).toBe('Long one');
