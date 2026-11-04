@@ -3,6 +3,7 @@ import type { Cell, Eject, Player, PowerUp, Virus } from '../game/entities';
 import type { Rng } from '../game/rng';
 import type { World } from '../game/world';
 import type { Personality } from './personality';
+import { squadIntel, type Op, type OpRole } from './squad';
 import { ContextMap, angleDiff, angleTo } from './steering';
 
 export interface BotDecision {
@@ -34,6 +35,18 @@ const MAX_CELL_R = massToRadius(RULES.maxCellMass);
 const AT_CAP_DRIVE = 0.35;
 /** Memory of other cells (for velocities) is pruned of entries unseen this long. */
 const FORGET_MS = 3000;
+/**
+ * Prey weight of another bot (a teammate) against a person's 1: bots mostly leave each other alone,
+ * but a careless teammate in reach still gets eaten now and then (it looks natural, and it is).
+ */
+const BOT_APPETITE = 0.38;
+/** Interest of the squad roles (comparable to a nearby prey or a rich coin field). */
+const FLANK_W = 1.5;
+const AMBUSH_W = 1.7;
+const LURE_W = 0.95;
+const PATROL_W = 0.32;
+/** A feeder tips at most this many blobs per operation. */
+const FEED_MAX = 7;
 
 /**
  * Coin density of a room in coarse buckets, rebuilt at most every `FIELD_REFRESH_MS` and shared
@@ -68,6 +81,8 @@ class FoodField {
     world.staticGrid.forEachIn(0, 0, this.width, this.height, this.addFood);
   }
 }
+
+const isCrew = (op: Op, pid: number): boolean => op.pusher === pid || op.flanker === pid || op.feeder === pid || op.ambusher === pid;
 
 /** The caller gets its own copy (callers may queue decisions); the scratch one is reused inside. */
 const emit = (d: BotDecision): BotDecision => ({ target: { x: d.target.x, y: d.target.y }, split: d.split, eject: d.eject });
@@ -244,6 +259,12 @@ export class BotBrain {
   maxChasers = Infinity;
   /** This bot's player id (for chase claims; set by the manager). */
   pid = -1;
+  /** Squad play (traps, lures, feeding, map-wide tracking) is on in this room (set by the manager). */
+  teamplay = true;
+  /** Holds a squad role right now (the manager does not send it home mid-operation). */
+  busy = false;
+  private feedCount = 0;
+  private readonly spot = { x: 0, y: 0 };
   /** Exposed for tests / debugging. */
   lastDanger = 0;
 
@@ -304,6 +325,13 @@ export class BotBrain {
 
   /** Gives back the chase seat on a person (the bot died, left or chases something else). */
   releaseClaim(world: World): void {
+    this.dropClaim(world);
+    squadIntel(world).release(this.pid);
+    this.busy = false;
+  }
+
+  /** Gives back only the chase seat (the squad role, if any, is kept). */
+  private dropClaim(world: World): void {
     if (this.claimId >= 0) huntClaims(world).release(this.claimId, this.pid);
     this.claimId = -1;
   }
@@ -387,6 +415,11 @@ export class BotBrain {
     }
     this.shooting = false;
 
+    const squad = squadIntel(world);
+    squad.setSkill(this.pid, P.skill);
+    const team = this.teamplay && squad.teamplay;
+    const role: { op: Op; role: OpRole } | null = team ? squad.roleFor(this.pid, now) : null;
+
     const view = viewSize(total, 16 / 9);
     const range = (view.w / 2) * P.perception;
     const shielded = me.shieldUntil > now;
@@ -439,6 +472,8 @@ export class BotBrain {
     const caution = P.caution * (split && P.skill > 0 ? 1.25 : 1);
     if (!distracted && !shielded) {
       for (const t of threats) {
+        // a teammate working the same operation is not a threat
+        if (role && t.player.isBot && isCrew(role.op, t.player.id)) continue;
         // only reacts after the reaction delay (out of sight a while: noticed afresh)
         if (!this.noticedLongEnough(this.noticed, t.player.id, now, reactionMs)) continue;
         const s = this.seen.get(t.id)!;
@@ -480,6 +515,12 @@ export class BotBrain {
       }
     }
     this.lastDanger = dangerLevel;
+
+    /* ---------- the lure: chased by a person, run to a big teammate who can eat them ---------- */
+    if (team && P.skill > 0 && chaser && !chaser.player.isBot && dangerLevel > 0.3) {
+      const ally = squad.lure(this.pid, chaser.player.id, now);
+      if (ally) map.addInterest(angleTo(cx, cy, ally.x, ally.y), LURE_W * Math.min(1, dangerLevel), 2);
+    }
 
     /* ---------- newcomers: steer around fresh human spawns ---------- */
     for (const n of newbies) {
@@ -601,11 +642,15 @@ export class BotBrain {
         // a cell that just came into view is not chased yet (the same delay as for threats)
         if (!this.noticedLongEnough(this.spotted, q.player.id, now, reactionMs)) continue;
         const human = !q.player.isBot;
-        // never a pack: a person already chased by enough bots is left to them
-        if (human && q.player.id !== this.claimId && hunts.others(q.player.id, this.pid, now) >= this.maxChasers) continue;
+        const onOp = role !== null && role.op.target === q.player.id;
+        // a crew is enough: a person already worked by the room's limit is left to them (unless this bot is in the crew)
+        if (human && !onOp && q.player.id !== this.claimId && hunts.others(q.player.id, this.pid, now) >= this.maxChasers) continue;
+        // a teammate on an operation is never eaten
+        if (!human && team && squad.busy(q.player.id, now)) continue;
         const dist = Math.hypot(q.x - big.x, q.y - big.y);
         let w = (aggression * q.mass * 6) / Math.pow(dist + 80, 1.05);
-        if (human) w *= P.humanBias;
+        if (human) w *= P.humanBias * squad.worth(q.player.id) * (onOp ? 1.6 : 1);
+        else w *= BOT_APPETITE;
         // a chase that went nowhere: leave that one alone for a while (unless it is right here);
         // a person is left alone entirely
         if (q.player.id === this.giveUpId && now < this.giveUpUntil && dist > big.r + 120) {
@@ -649,6 +694,9 @@ export class BotBrain {
       const q: Cell = bestPrey;
       const human = !q.player.isBot;
       let limit = P.chaseMs * S * (human ? 1 : 1.6);
+      // a chase with a flanker cutting the way off is worth sticking with
+      const trap = human && team ? squad.op(q.player.id) : undefined;
+      if (trap && trap.pusher === this.pid && trap.flanker >= 0) limit *= 1.7;
       if (human) {
         let cover = Math.min(q.x - X0, q.y - Y0, X1 - q.x, Y1 - q.y) < q.r + 350;
         if (!cover && canPop) for (const v of viruses) if (Math.hypot(v.x - q.x, v.y - q.y) < v.r + q.r + 200) cover = true;
@@ -663,11 +711,82 @@ export class BotBrain {
     }
     // the chase seat on a person: taken while chasing them, given back otherwise
     const chasingHuman = bestPrey !== null && !bestPrey.player.isBot ? bestPrey.player.id : -1;
-    if (chasingHuman !== this.claimId) this.releaseClaim(world);
+    if (chasingHuman !== this.claimId) this.dropClaim(world);
     if (chasingHuman >= 0) {
       hunts.claim(chasingHuman, this.pid, now + Math.max(CLAIM_MS, P.thinkMs * 3));
       this.claimId = chasingHuman;
     }
+
+    /* ---------- squad play: push, flank, ambush, feed, patrol ---------- */
+    let roleDriven = false;
+    let feedNow: { x: number; y: number } | null = null;
+    if (team) {
+      if (chasingHuman >= 0 && P.skill > 0 && bestPrey) {
+        // the pusher: herd the person toward the flanker, or (good bots) into the wall
+        const op = squad.hunt(this.pid, chasingHuman, now, this.maxChasers);
+        if (op && op.pusher === this.pid) {
+          const q: Cell = bestPrey;
+          const f = op.flanker >= 0 ? squad.mates.get(op.flanker) : undefined;
+          let hx = NaN;
+          let hy = NaN;
+          if (f) {
+            const n = Math.hypot(q.x - f.x, q.y - f.y) || 1;
+            hx = q.x + ((q.x - f.x) / n) * (q.r + big.r * 0.5 + 120);
+            hy = q.y + ((q.y - f.y) / n) * (q.r + big.r * 0.5 + 120);
+          } else if (P.skill === 2 && Math.min(q.x - X0, q.y - Y0, X1 - q.x, Y1 - q.y) < q.r + 600) {
+            // pin against the wall: come from the open side
+            const n = Math.hypot(MX - q.x, MY - q.y) || 1;
+            hx = q.x + ((MX - q.x) / n) * (q.r + big.r + 80);
+            hy = q.y + ((MY - q.y) / n) * (q.r + big.r + 80);
+          }
+          if (Number.isFinite(hx) && Math.hypot(hx - cx, hy - cy) > big.r) map.addInterest(angleTo(cx, cy, hx, hy), bestPreyScore * 0.8, 2);
+          roleDriven = true;
+        }
+      } else if (role?.role === 'push') squad.release(this.pid);
+
+      const r = chasingHuman >= 0 ? null : role;
+      if (r && r.role !== 'push') {
+        const m = squad.marks.get(r.op.target);
+        // a flanker or ambusher that can no longer eat the person (it grew, or we shrank) stands down; a feeder never could
+        if (!m || (r.role !== 'feed' && !canEat(big.mass, m.big * 1.05)) || dangerLevel > 0.6) squad.release(this.pid);
+        else if (r.role === 'flank' && squad.interceptPoint(r.op, this.spot)) {
+          map.addInterest(angleTo(cx, cy, this.spot.x, this.spot.y), FLANK_W * S, 2);
+          squad.renew(this.pid, now);
+          roleDriven = true;
+        } else if (r.role === 'ambush') {
+          const lead = Math.min(1.2, Math.hypot(m.x - cx, m.y - cy) / Math.max(60, mySpeed));
+          map.addInterest(angleTo(cx, cy, m.x + m.vx * lead, m.y + m.vy * lead), AMBUSH_W * S, 2);
+          squad.renew(this.pid, now);
+          roleDriven = true;
+        } else if (r.role === 'feed') {
+          const pusher = squad.mates.get(r.op.pusher);
+          if (!pusher || this.feedCount >= FEED_MAX || total < RULES.ejectMinMass + 20 || dangerLevel > 0.3) {
+            this.feedCount = 0;
+            squad.release(this.pid);
+          } else {
+            const dP = Math.hypot(pusher.x - cx, pusher.y - cy);
+            map.addInterest(angleTo(cx, cy, pusher.x, pusher.y), FLANK_W, 2);
+            if (dP < 420 + Math.sqrt(pusher.mass) * 10) feedNow = { x: pusher.x, y: pusher.y };
+            roleDriven = true;
+          }
+        }
+      }
+
+      // patrol: no prey in sight, nothing chasing us: drift toward the most promising person on the squad's reports
+      if (!roleDriven && !bestPrey && dangerLevel < 0.2 && !atCap) {
+        const m = squad.patrolTarget(this.pid, cx, cy, big.mass, now, this.maxChasers);
+        if (m) {
+          // reports are a little stale and every bot reads them its own way
+          const off = 120 + 380 * (1 - P.skill / 2);
+          const px = m.x + Math.cos(this.wander * 1.7) * off;
+          const py = m.y + Math.sin(this.wander * 1.7) * off;
+          const dist = Math.hypot(px - cx, py - cy);
+          const k = PATROL_W * P.aggression * S * (P.skill === 0 ? 0.45 : 1) * clamp(1.4 - dist / 6000, 0.3, 1.2);
+          map.addInterest(angleTo(cx, cy, px, py), k, 1);
+        }
+      }
+    }
+    this.busy = roleDriven;
 
     /* ---------- power-ups ---------- */
     for (const pu of powerUps) {
@@ -713,8 +832,8 @@ export class BotBrain {
     const splitOnHuman = bestPrey !== null && !bestPrey.player.isBot;
     if (bestPrey && !shielded && now >= this.splitCooldownUntil && (!splitOnHuman || now >= this.humanSplitUntil) && nCells <= maxCellsForSplit && P.splitBravery > 0) {
       let splits = this.splitPlan(bestPrey, big, me, now, mistake, dangerLevel);
-      // no double split on a person
-      if (splitOnHuman && splits === 2) splits = 0;
+      // a double split on a person only from a good bot working a trap (a long shot otherwise)
+      if (splitOnHuman && splits === 2 && !(team && P.skill === 2 && squad.op(bestPrey.player.id)?.flanker !== undefined && (squad.op(bestPrey.player.id)?.flanker ?? -1) >= 0)) splits = 0;
       const chance = Math.min(0.95, P.splitBravery * 0.65 * S * (splitOnHuman ? P.humanSplit : 1));
       if (splits > 0 && rng() < chance) {
         const q = bestPrey;
@@ -759,6 +878,14 @@ export class BotBrain {
           break;
         }
       }
+    }
+
+    /* ---------- feeding a teammate (tip mass so its split reaches) ---------- */
+    if (feedNow && !d.split && !d.eject) {
+      d.target.x = feedNow.x;
+      d.target.y = feedNow.y;
+      d.eject = true;
+      this.feedCount++;
     }
 
     // think a little sooner while in danger (good bots), never every tick

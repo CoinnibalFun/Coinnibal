@@ -362,6 +362,8 @@ export class WorkerPool {
           ...(c.roomId !== undefined ? { roomId: c.roomId } : {}),
           ...(c.live ? { live: c.live } : {}),
           ...(c.loot ? { loot: c.loot } : {}),
+          ...(c.purses ? { purses: c.purses } : {}),
+          ...(c.house ? { house: c.house } : {}),
         });
         const room = this.rooms.get(c.hid);
         if (room && c.live) room.setSeats(c.seats, enqueue.map((i) => i.key));

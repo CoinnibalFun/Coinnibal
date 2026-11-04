@@ -172,12 +172,13 @@ describe('arena rounds (room)', () => {
     const bell = commits.filter((c) => c.enqueue && c.enqueue.length > 0);
     expect(bell).toHaveLength(1);
     const enqueued = bell[0].enqueue as JournalItem[];
+    // Bob won 350,000: 20 % of it is the cut (52,500 burned with the round's sweep, 17,500 kept in the vault)
     expect(enqueued.map((i) => [i.kind, i.key, itemAmount(i)])).toEqual([
       ['settle', ja.stake.session, 400_000],
-      ['settle', jb.stake.session, 1_350_000],
-      ['sweep', `sweep:arena-1-1:${round.n}`, 250_000],
+      ['settle', jb.stake.session, 1_280_000],
+      ['sweep', `sweep:arena-1-1:${round.n}`, 250_000 + 52_500],
     ]);
-    expect(enqueued[2]).toMatchObject({ kind: 'sweep', arenaId: 1, roomId: 'arena-1-1', round: round.n, amount: 250_000 });
+    expect(enqueued[2]).toMatchObject({ kind: 'sweep', arenaId: 1, roomId: 'arena-1-1', round: round.n, amount: 302_500 });
     expect(enqueued.filter((i) => i.kind === 'settle').every((i) => i.kind === 'settle' && i.reason === 'round')).toBe(true);
     // the same write cleared the live tickets and the floor loot
     expect(bell[0].live).toEqual([]);
@@ -186,7 +187,8 @@ describe('arena rounds (room)', () => {
 
     // conserved on disk: what the vault owes is unchanged
     const disk = new Journal(path);
-    expect(disk.owedByArena(1)).toBe(2 * FEE);
+    expect(disk.owedByArena(1) + disk.houseByArena(1)).toBe(2 * FEE);
+    expect(disk.houseByArena(1)).toBe(17_500);
     expect(disk.live()).toEqual([]);
     expect(disk.recoverLoot(1)).toEqual([]);
     expect(room.world.loot()).toEqual([]);
@@ -216,15 +218,17 @@ describe('arena rounds (room)', () => {
     const conn = fakeConn('w1');
     room.join(conn, stakeJoin(1, FEE));
     tick(room, 5);
-    expect(room.bots!.bots.size).toBe(6);
+    room.bots!.fill();
+    expect(room.bots!.bots.size).toBeGreaterThanOrEqual(3);
     expect(room.world.loot()).toEqual([]);
 
     clock.now = round.endsAt;
     tick(room);
     expect(journal.pending.map((i) => i.kind)).toEqual(['settle']);
     expect(of(conn, 'roundOver')).toHaveLength(1);
-    tick(room, 2);
-    expect(room.bots!.bots.size).toBe(6);
+    // the squad left with the bell and walks back in, a few right away
+    tick(room, 30 * 15);
+    expect(room.bots!.bots.size).toBeGreaterThanOrEqual(3);
     for (const b of room.bots!.bots.values()) expect(b.player.alive).toBe(true);
   });
 

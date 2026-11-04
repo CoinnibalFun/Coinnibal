@@ -13,6 +13,8 @@ export interface ArenaEntry {
   value: number;
   /** On-chain session open time (unix seconds). */
   openedAt: number;
+  /** The value the ticket was seated with: the base of the cut on winnings (defaults to `value` at join). */
+  start?: number;
 }
 
 /**
@@ -27,7 +29,7 @@ export class ArenaLedger {
   join(entry: ArenaEntry): void {
     if (this.entries.has(entry.pid)) throw new Error(`pid ${entry.pid} already staked`);
     if (!Number.isSafeInteger(entry.value) || entry.value < 0) throw new Error('invalid stake value');
-    this.entries.set(entry.pid, { ...entry });
+    this.entries.set(entry.pid, { ...entry, start: entry.start ?? entry.value });
   }
 
   has(pid: number): boolean {
@@ -86,7 +88,7 @@ export class ArenaLedger {
     return true;
   }
 
-  /** Removes a player and returns their final entry (value = payout owed). */
+  /** Removes a player and returns their final entry (value = payout owed before the cut on winnings). */
   leave(pid: number): ArenaEntry | undefined {
     const e = this.entries.get(pid);
     if (e) this.entries.delete(pid);

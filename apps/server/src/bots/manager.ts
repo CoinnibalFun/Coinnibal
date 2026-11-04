@@ -1,15 +1,19 @@
-import { BASIC_SKINS, PlayerFlag, botCountry, botWearsFlag, clamp, pickBotName, type LeftReason } from '@elymum/shared';
+import { BASIC_SKINS, PlayerFlag, RULES, botCountry, botWearsFlag, clamp, pickBotName, type LeftReason } from '@elymum/shared';
 import type { Player } from '../game/entities';
 import { randRange, type Rng } from '../game/rng';
 import type { World } from '../game/world';
 import { BotBrain } from './brain';
+import { squadIntel } from './squad';
 import { rollPersonality, type BotMix } from './personality';
 import type { StakedBotTicket } from './staked';
 
 export interface BotManagerOptions {
-  /** Desired total population (humans + bots). */
+  /**
+   * Typical squad size: the bots a room fields, whoever else plays. The live plan drifts around it
+   * (see `BotManager.planned`), within `min..max`. People never replace bots.
+   */
   target: number;
-  /** Bots kept even when many humans are online. */
+  /** Fewest bots in a room (never below `BOT_FLOOR` unless the cap is lower). */
   min: number;
   /** The bot cap of the room (admin `cap`). */
   max: number;
@@ -27,9 +31,36 @@ export interface BotManagerOptions {
    * faster and aim better; below, the reverse (see `BotBrain.strength`).
    */
   strength?: number;
-  /** Most bots chasing one person at once (admin `maxChasers`; absent: no limit). */
+  /** Most bots working one person at once (admin `maxChasers`; absent: no limit). */
   maxChasers?: number;
+  /** Squad play: traps, lures, feeding and map-wide tracking (default on; off in the rookie league). */
+  teamplay?: boolean;
 }
+
+/** Every room (every round of an arena) fields at least this many bots, unless the admin cap is lower. */
+export const BOT_FLOOR = 3;
+
+/**
+ * Arrival pacing. Bots join one by one like people do: the first `BOT_FLOOR` within a few seconds
+ * of a room opening (or an arena round starting), the rest spread over the game.
+ */
+export const ARRIVAL = {
+  /** Gap between two arrivals while the room is below its floor (ms). */
+  openingMin: 1200,
+  openingMax: 4500,
+  /** Gap between two arrivals above the floor (ms). */
+  steadyMin: 5000,
+  steadyMax: 20_000,
+  /** A bot that was eaten comes back (as itself or someone new) after this long (ms). */
+  rejoinMin: 3000,
+  rejoinMax: 12_000,
+  /** The planned squad size is re-rolled around the target this often (ms). */
+  driftMin: 90_000,
+  driftMax: 180_000,
+  /** Above the plan, one bot leaves at most this often (ms). */
+  leaveMin: 12_000,
+  leaveMax: 35_000,
+} as const;
 
 /** Share of a capped bot's excess mass that stays after one second (the rest is shed). */
 const MASS_CAP_KEEP_PER_SEC = 0.2;
@@ -75,14 +106,20 @@ const EMOTE_ROCKET = 2;
 const EMOTE_YUM = 5;
 
 /**
- * Keeps a room populated with bots when there are few humans, and drives
- * every bot's brain. Bots leave gradually as humans arrive.
+ * The room's bot squad: bots are players of the house's own team, not seat fillers. They join one
+ * at a time over the game (a few right away, the rest spread out), leave and come back now and then,
+ * and the squad size drifts naturally around the admin's target. People joining or leaving never
+ * changes it. Also drives every bot's brain.
  */
 export class BotManager {
   readonly bots = new Map<number, Bot>();
-  private spawnQueue: number[] = [];
-  private lastTrimAt = 0;
-  private initialized = false;
+  /** When the next bot walks in (0: not scheduled yet). */
+  private nextArrivalAt = 0;
+  /** When a bot over the plan may leave next. */
+  private nextLeaveAt = 0;
+  /** The squad size the room is heading for now (drifts around the target). */
+  private plan = -1;
+  private nextDriftAt = 0;
   private pendingEmotes: { pid: number; id: number }[] = [];
   /** Player ids of bots that left this tick (rooms forget their player info). */
   retired: number[] = [];
@@ -120,16 +157,60 @@ export class BotManager {
     return this.enabled ? Math.max(0, this.opts.max) : 0;
   }
 
-  /** Bots wanted for this many humans: `clamp(target − humans, min, cap)`, 0 when bots are off. */
-  desired(humans: number): number {
-    return BotManager.desiredOf(this.opts, humans);
+  /** The squad size the admin asked for: `clamp(target, max(min, BOT_FLOOR), cap)`, 0 when bots are off. */
+  desired(): number {
+    return BotManager.desiredOf(this.opts);
   }
 
   /** `desired` for a set of options (a room sizes its map before its bot manager exists). */
-  static desiredOf(o: BotManagerOptions, humans: number): number {
+  static desiredOf(o: BotManagerOptions): number {
     if (o.enabled === false) return 0;
     const cap = Math.max(0, o.max);
-    return clamp(o.target - humans, Math.min(o.min, cap), cap);
+    return clamp(o.target, BotManager.floorOf(o), cap);
+  }
+
+  /** Fewest bots a room of these options fields: `max(min, BOT_FLOOR)`, never above the cap. */
+  static floorOf(o: BotManagerOptions): number {
+    if (o.enabled === false) return 0;
+    const cap = Math.max(0, o.max);
+    return Math.min(cap, Math.max(BOT_FLOOR, o.min));
+  }
+
+  /** The squad size the room is heading for right now (the plan drifts around `desired`). */
+  get planned(): number {
+    return this.plan < 0 ? this.desired() : this.plan;
+  }
+
+  /** Re-rolls the plan: about the target, sometimes a little under or over it. */
+  private rollPlan(now: number): void {
+    const want = this.desired();
+    const floor = BotManager.floorOf(this.opts);
+    this.plan = clamp(Math.round(want * (0.75 + this.rng() * 0.45)), floor, this.cap);
+    this.nextDriftAt = now + randRange(this.rng, ARRIVAL.driftMin, ARRIVAL.driftMax);
+  }
+
+  /**
+   * Seats the whole planned squad at once (natural size mix). Rooms never do this (bots walk in one by
+   * one); it is for tests, benchmarks and tools that need a full room right away.
+   */
+  fill(now = this.world.now): number {
+    if (this.plan < 0) this.rollPlan(now);
+    const want = this.enabled ? this.plan : 0;
+    const cap = this.opts.massCap;
+    let n = 0;
+    while (this.bots.size < want) {
+      const mass = Math.round(20 + Math.pow(this.rng(), 2.2) * 420);
+      this.spawnBot(cap !== undefined ? Math.min(mass, Math.max(20, Math.round(cap * 0.9))) : mass);
+      n++;
+    }
+    this.scheduleArrival(now);
+    return n;
+  }
+
+  /** Schedules the next arrival (sooner while the room is below its floor). */
+  private scheduleArrival(now: number): void {
+    const opening = this.bots.size < BotManager.floorOf(this.opts);
+    this.nextArrivalAt = now + (opening ? randRange(this.rng, ARRIVAL.openingMin, ARRIVAL.openingMax) : randRange(this.rng, ARRIVAL.steadyMin, ARRIVAL.steadyMax));
   }
 
   isBot(pid: number): boolean {
@@ -196,6 +277,8 @@ export class BotManager {
     b.massCap = this.opts.massCap ?? Infinity;
     b.strength = (this.opts.strength ?? 100) / 100;
     b.maxChasers = this.opts.maxChasers !== undefined && this.opts.maxChasers > 0 ? this.opts.maxChasers : Infinity;
+    b.teamplay = this.opts.teamplay !== false;
+    squadIntel(this.world).teamplay = this.opts.teamplay !== false;
   }
 
   /** The world reported this bot's death: forget it and maybe respawn later. */
@@ -206,7 +289,9 @@ export class BotManager {
     this.bots.delete(pid);
     this.orderDirty = true;
     this.remember(bot.player.name);
-    this.spawnQueue.push(now + randRange(this.rng, 1500, 5000));
+    // the eaten one (or a friend) comes back after a while
+    const back = now + randRange(this.rng, ARRIVAL.rejoinMin, ARRIVAL.rejoinMax);
+    if (this.nextArrivalAt === 0 || back < this.nextArrivalAt) this.nextArrivalAt = back;
   }
 
   /** A bot goes home now: it leaves the world and a departure is recorded. */
@@ -242,23 +327,16 @@ export class BotManager {
       this.sendHome(pick, reason);
       n++;
     }
-    if (this.bots.size >= want) this.spawnQueue.length = 0;
     return n;
   }
 
-  /**
-   * A human just took a seat (`humans` counts them): bots over the wanted number go home at once
-   * (zero-value bots only), so humans + bots stays at the target and bots never hold a seat.
-   */
-  makeRoom(humans: number): number {
-    return this.trimTo(this.desired(humans), 'make_room');
-  }
-
-  /** New admin settings, applied live: bots over the new cap (or all, when off) go home now. */
-  setOptions(opts: BotManagerOptions, humans: number): number {
+  /** New admin settings, applied live: bots over the new cap (or all, when off) go home now; the plan is re-rolled. */
+  setOptions(opts: BotManagerOptions, now = this.world.now): number {
     this.opts = { ...opts };
     for (const b of this.bots.values()) this.tune(b);
-    return this.trimTo(this.desired(humans), 'settings');
+    this.rollPlan(now);
+    if (this.nextArrivalAt === 0 || this.nextArrivalAt > now + ARRIVAL.openingMax) this.scheduleArrival(now);
+    return this.trimTo(this.enabled ? this.cap : 0, 'settings');
   }
 
   /** Bots that went home since the last call (the room broadcasts the feed lines). */
@@ -269,17 +347,21 @@ export class BotManager {
   }
 
   /**
-   * Round reset: every bot leaves the world and a fresh population (natural size mix) spawns
-   * on the next `update`, so bots keep playing into the new round. Returns the removed player ids.
+   * Round reset: every bot leaves the world with the bell, like the people who were paid, and the
+   * squad walks back in one by one in the new round (a few at once, the rest over the round).
+   * Returns the removed player ids.
    */
   resetRound(): number[] {
     const gone = [...this.bots.keys()];
-    for (const b of this.bots.values()) this.remember(b.player.name);
+    for (const b of this.bots.values()) {
+      b.brain.releaseClaim(this.world);
+      this.remember(b.player.name);
+    }
     for (const pid of gone) this.world.removePlayer(pid);
     this.bots.clear();
     this.orderDirty = true;
-    this.spawnQueue = [];
-    this.initialized = false;
+    this.nextArrivalAt = 0;
+    this.plan = -1;
     return gone;
   }
 
@@ -321,20 +403,13 @@ export class BotManager {
     for (const pid of this.far.keys()) if (!this.bots.has(pid)) this.far.delete(pid);
   }
 
-  /** Called once per tick after `world.tick`. */
-  update(now: number, humans: number): { emotes: { pid: number; id: number }[] } {
+  /** Called once per tick after `world.tick`. `humans` is only used for the squad's tactics, never for its size. */
+  update(now: number, _humans = 0): { emotes: { pid: number; id: number }[] } {
     this.retired = [];
-    const want = this.desired(humans);
-
     const cap = this.opts.massCap;
-    if (!this.initialized) {
-      this.initialized = true;
-      // seed a natural size distribution so a fresh room looks alive
-      for (let i = 0; i < want; i++) {
-        const mass = Math.round(20 + Math.pow(this.rng(), 2.2) * 420);
-        this.spawnBot(cap !== undefined ? Math.min(mass, Math.max(20, Math.round(cap * 0.9))) : mass);
-      }
-    }
+    if (this.plan < 0 || now >= this.nextDriftAt) this.rollPlan(now);
+    const plan = this.enabled ? this.plan : 0;
+    if (this.nextArrivalAt === 0) this.scheduleArrival(now);
 
     // the mass cap: whatever a bot eats past it melts away
     const dt = this.lastUpdateAt === null ? 0 : Math.max(0, now - this.lastUpdateAt) / 1000;
@@ -344,33 +419,30 @@ export class BotManager {
       for (const bot of this.bots.values()) if (bot.player.alive) this.world.shedMass(bot.player, cap, shed);
     }
 
-    // spawn queued bots that are still needed
-    this.spawnQueue.sort((a, b) => a - b);
-    while (this.spawnQueue.length > 0 && this.spawnQueue[0] <= now) {
-      this.spawnQueue.shift();
-      if (this.bots.size < want) this.spawnBot();
+    // arrivals: one bot at a time walks in, like a person pressing Play
+    if (now >= this.nextArrivalAt) {
+      if (this.bots.size < plan) this.spawnBot(cap !== undefined ? Math.min(RULES.startMass, cap) : RULES.startMass);
+      this.scheduleArrival(now);
     }
-    // top up if below target (e.g. a human left)
-    const queued = this.spawnQueue.length;
-    if (this.bots.size + queued < want) this.spawnQueue.push(now + randRange(this.rng, 400, 2500));
-    // joins make room at once (`makeRoom`); anything else over the wanted number leaves slowly
-    if (this.bots.size > want && now - this.lastTrimAt > 8000) {
-      this.lastTrimAt = now;
+    // over the plan (the plan drifted down, the admin lowered it): one leaves now and then
+    if (this.bots.size > plan && now >= this.nextLeaveAt) {
+      this.nextLeaveAt = now + randRange(this.rng, ARRIVAL.leaveMin, ARRIVAL.leaveMax);
       this.trimTo(this.bots.size - 1, 'retired');
     }
-    if (queued > 0 && this.bots.size >= want) this.spawnQueue.length = 0;
 
-    // retire old bots (one at a time, only when they are not mid-fight)
+    // a bot whose time is up goes home (one at a time, never mid-fight); someone else walks in later
     for (const bot of this.bots.values()) {
       if (now < bot.retireAt) continue;
-      if (bot.brain.lastDanger > 0.2) {
+      if (bot.brain.lastDanger > 0.2 || bot.brain.busy) {
         bot.retireAt = now + 10_000;
         continue;
       }
       this.sendHome(bot, 'retired');
-      this.spawnQueue.push(now + randRange(this.rng, 1500, 4000));
       break;
     }
+
+    // the squad's shared picture of the map (who is where), refreshed on its own slow clock
+    squadIntel(this.world).refresh(this.world, now);
 
     // brains think on their own staggered clocks; a round-robin budget flattens bursts
     if (this.orderDirty) {

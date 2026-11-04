@@ -33,32 +33,44 @@ const joinHuman = (room: Room, name: string, conn = fakeConn()) => {
   return conn;
 };
 
-describe('bot seats: cap and make-room', () => {
-  it('a human joining a room at the target sends a bot home at once, with a "went home" feed line', () => {
+/** Seats the room's whole planned squad now (rooms let bots walk in one by one). */
+const fill = (room: Room) => {
+  tick(room);
+  room.bots!.fill();
+};
+
+describe('bot seats: the house squad', () => {
+  it('people joining never send a bot home: the squad keeps its seats', () => {
     const room = practice({ target: 12, min: 0, max: 12 });
-    tick(room);
-    expect(room.bots!.bots.size).toBe(12);
+    fill(room);
+    const squad = room.bots!.bots.size;
+    expect(squad).toBeGreaterThanOrEqual(3);
     const watcher = fakeConn();
     room.spectate(watcher);
     const a = joinHuman(room, 'alice');
-    expect(room.bots!.bots.size).toBe(11);
-    expect(room.info()).toMatchObject({ players: 1, bots: 11 });
-    const lines = of(watcher, 'feed');
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatchObject({ kind: 'left', isBot: true, reason: 'make_room' });
-    expect(isNaturalBotName(lines[0].name)).toBe(true);
-    expect(room.world.players.has(lines[0].pid)).toBe(false);
-    // the joiner sees it too, and the room info in `joined` already counts the bot gone
-    expect(of(a, 'feed')).toHaveLength(1);
-    expect(of(a, 'joined')[0].room.bots).toBe(11);
-    // every further join: one more bot leaves, humans + bots stays at the target
     for (let i = 0; i < 5; i++) joinHuman(room, `p${i}`);
-    expect(room.humans.size + room.bots!.bots.size).toBe(12);
+    expect(room.bots!.bots.size).toBe(squad);
+    expect(of(watcher, 'feed').filter((f) => f.kind === 'left')).toHaveLength(0);
+    expect(of(a, 'joined')[0].room.bots).toBe(squad);
+  });
+
+  it('a room opens with no bot and the squad walks in one at a time, with at least 3 inside a dozen seconds', () => {
+    const room = practice({ target: 12, min: 0, max: 12 });
+    tick(room);
+    expect(room.bots!.bots.size).toBe(0);
+    let last = 0;
+    for (let i = 0; i < 12 * 30; i++) {
+      tick(room);
+      const n = room.bots!.bots.size;
+      expect(n - last).toBeLessThanOrEqual(1);
+      last = n;
+    }
+    expect(room.bots!.bots.size).toBeGreaterThanOrEqual(3);
   });
 
   it('bots never block a join: humans fill up to the room capacity whatever the bots', () => {
     const room = practice({ target: 12, min: 12, max: 12 }, 3);
-    tick(room);
+    fill(room);
     expect(room.bots!.bots.size).toBe(12);
     for (let i = 0; i < 3; i++) {
       expect(room.isFull).toBe(false);
@@ -66,24 +78,23 @@ describe('bot seats: cap and make-room', () => {
     }
     expect(room.humans.size).toBe(3);
     expect(room.isFull).toBe(true); // full of humans, not bots
-    // `min` keeps bots around even past the target
     expect(room.bots!.bots.size).toBe(12);
   });
 
   it('never more bots than the cap, however high the target', () => {
     const room = practice({ target: 40, min: 0, max: 12 });
-    for (let i = 0; i < 400; i++) {
+    for (let i = 0; i < 30 * 200; i++) {
       tick(room);
       expect(room.bots!.bots.size).toBeLessThanOrEqual(12);
     }
-    expect(room.bots!.bots.size).toBeGreaterThanOrEqual(10);
+    expect(room.bots!.bots.size).toBeGreaterThanOrEqual(9);
   });
 
-  it('admin settings apply live: lower cap trims now, off sends every bot home, on refills', () => {
-    const room = practice({ target: 12, min: 0, max: 12 });
+  it('admin settings apply live: lower cap trims now, off sends every bot home, on refills (gradually)', () => {
+    const room = practice({ target: 12, min: 12, max: 12 });
     const c = fakeConn();
     room.spectate(c);
-    tick(room);
+    fill(room);
     room.setBotOptions({ target: 12, min: 0, max: 5 });
     expect(room.bots!.bots.size).toBe(5);
     expect(of(c, 'feed').filter((f) => f.reason === 'settings')).toHaveLength(7);
@@ -91,8 +102,8 @@ describe('bot seats: cap and make-room', () => {
     expect(room.bots!.bots.size).toBe(0);
     tick(room, 200);
     expect(room.bots!.bots.size).toBe(0);
-    room.setBotOptions({ target: 12, min: 0, max: 8, enabled: true });
-    tick(room, 400);
+    room.setBotOptions({ target: 8, min: 8, max: 8, enabled: true });
+    tick(room, 30 * 200);
     expect(room.bots!.bots.size).toBe(8);
   });
 
@@ -101,11 +112,13 @@ describe('bot seats: cap and make-room', () => {
     world.addPlayer({ name: 'MARCO88', skin: 0 });
     const m = new BotManager(world, { target: 60, min: 0, max: 60 }, mulberry32(3));
     m.update(0, 1);
+    m.fill(0);
     const names = [...world.players.values()].map((p) => p.name.toLowerCase());
     expect(new Set(names).size).toBe(names.length);
     const first = new Set([...m.bots.values()].map((b) => b.player.name));
     m.resetRound();
     m.update(1000, 1);
+    m.fill(1000);
     const second = [...m.bots.values()].map((b) => b.player.name);
     const back = second.filter((n) => first.has(n)).length;
     expect(back).toBeGreaterThan(0); // some regulars return…
@@ -127,7 +140,7 @@ describe('isBot on the wire', () => {
       },
     };
     const conn = new Conn(ws as never, '127.0.0.1');
-    tick(room);
+    fill(room);
     const me = room.join(conn, { name: 'human', skin: 1, flags: 0 });
     me.shieldUntil = 0;
     tick(room); // the first snapshot (the human's own player info)
@@ -206,19 +219,19 @@ function eat(room: Room, eater: Player, victim: Player): void {
 }
 
 describe('staked bots (testnet seam)', () => {
-  it('a staked bot is a staker: tagged bot + staker, in the ledger, never sent home to make room', () => {
+  it('a staked bot is a staker: tagged bot + staker, in the ledger, and keeps its seat', () => {
     const { room } = stakedArena();
-    tick(room);
-    expect(room.bots!.bots.size).toBe(4);
+    fill(room);
+    const squad = room.bots!.bots.size;
     const p = room.seatStakedBot(botTicket(1))!;
     expect(p.flags).toBe(PlayerFlag.Bot | PlayerFlag.Staker);
     expect(room.ledger!.value(p.id)).toBe(FEE);
-    // the cap holds: a zero-value bot went home for it
-    expect(room.bots!.bots.size).toBe(4);
-    expect(room.botCounts()).toEqual({ humans: 0, bots: 4, stakedBots: 1 });
+    // the plan holds: a zero-value bot went home for it
+    expect(room.bots!.bots.size).toBe(squad);
+    expect(room.botCounts()).toEqual({ humans: 0, bots: squad, stakedBots: 1 });
     for (let i = 0; i < 4; i++) room.join(fakeConn(`w${i}`), stakeJoin(1, FEE));
-    // humans took every target seat; only the staked bot (it holds a ticket) stays
-    expect(room.bots!.bots.size).toBe(1);
+    // people joining never send bots home
+    expect(room.bots!.bots.size).toBe(squad);
     expect(room.bots!.isBot(p.id)).toBe(true);
     expect(room.liveStakes().some((s) => s.player === botTicket(1).stake.player)).toBe(true);
   });
@@ -237,15 +250,43 @@ describe('staked bots (testnet seam)', () => {
     expect(released).toEqual([[botTicket(2).stake.session, 'death']]);
   });
 
-  it('a zero-value bot eating a staker still spills the value as loot (economics unchanged)', () => {
-    const { room } = stakedArena();
-    tick(room);
-    const conn = fakeConn('wz');
-    const human = room.join(conn, stakeJoin(1, FEE));
+  it('a house bot eating a staker keeps the value in its purse; a person who eats the bot wins it back', () => {
+    const { room, journal } = stakedArena();
+    fill(room);
+    const human = room.join(fakeConn('wz'), stakeJoin(1, FEE));
     const bot = [...room.bots!.bots.values()].find((b) => !b.staked)!.player;
     eat(room, bot, human);
-    expect(room.lootValue()).toBe(FEE);
+    expect(room.lootValue()).toBe(0);
     expect(room.ledger!.has(bot.id)).toBe(false);
+    expect(room.purseOf(bot.id)).toBe(FEE);
+    // journaled: the purse still counts as owed (a person can win it back)
+    tick(room, 40);
+    expect(journal.purses()).toEqual([{ roomId: 'arena-1-1', arenaId: 1, value: FEE }]);
+    expect(journal.owedByArena(1)).toBe(FEE);
+    const winner = room.join(fakeConn('wy'), stakeJoin(1, FEE));
+    eat(room, winner, bot);
+    expect(room.ledger!.value(winner.id)).toBe(2 * FEE);
+    expect(room.purseTotal()).toBe(0);
+  });
+
+  it('what the bots hold at the bell is the team reserve; a winner pays 20 % of the winnings (15 % burned, 5 % kept)', () => {
+    const { room, journal, clock } = stakedArena();
+    fill(room);
+    const victim = room.join(fakeConn('wv'), stakeJoin(1, FEE));
+    const winner = room.join(fakeConn('ww'), stakeJoin(1, FEE));
+    const victim2 = room.join(fakeConn('wu'), stakeJoin(1, FEE));
+    const bot = [...room.bots!.bots.values()].find((b) => !b.staked)!.player;
+    eat(room, bot, victim);
+    eat(room, winner, victim2);
+    expect(room.ledger!.value(winner.id)).toBe(2 * FEE);
+    clock.now += ROUND.roundMs;
+    tick(room);
+    const item = journal.settlements().find((i) => i.reason === 'round' && (i.payout ?? 0) > 0)!;
+    expect(item.payout).toBe(2 * FEE - FEE * 0.2);
+    const sweep = journal.pending.find((p) => p.kind === 'sweep')!;
+    expect(sweep.amount).toBe(FEE * 0.15);
+    expect(journal.houseByArena(1)).toBe(FEE + FEE * 0.05);
+    expect(journal.purses()).toEqual([]);
   });
 
   it('the bell settles staked bots with everyone; the room buys tickets from the source up to the wanted count', async () => {
@@ -290,7 +331,7 @@ describe('bot settings (validation)', () => {
   const base = defaultBotSettings(loadConfig({}).bots);
 
   it('defaults: cap 12, presets as weights, 6 staked bots per testnet arena', () => {
-    expect(base.kinds.arena).toEqual({ massCap: 2500, enabled: true, cap: 12, min: 2, target: 12, mix: { easy: 50, medium: 40, hard: 10 }, strength: 100, maxChasers: 2 });
+    expect(base.kinds.arena).toEqual({ massCap: 2500, enabled: true, cap: 12, min: 3, target: 12, mix: { easy: 50, medium: 40, hard: 10 }, strength: 100, maxChasers: 3 });
     expect(base.kinds.practiceRookie.mix).toEqual({ easy: 80, medium: 20, hard: 0 });
     expect(base.kinds.practiceRookie).toMatchObject({ strength: 85, maxChasers: 1 });
     expect(base.testnet).toEqual({ stakedPerArena: 6, bankroll: '1000000', gasHype: '0.05', arenas: {} });
@@ -366,16 +407,19 @@ describe('/api/admin/bots', () => {
     expect((await call('GET', testSigner().address)).status).toBe(403);
     expect((await call('PUT', testSigner().address, { kinds: { arena: { cap: 1 } } })).status).toBe(403);
 
-    app.rooms.tickAll(TICK_MS);
+    // the squad walks in over the first seconds
+    for (let i = 0; i < 30 * 20; i++) app.rooms.tickAll(TICK_MS);
     const got = await call('GET', admin);
     expect(got.status).toBe(200);
     expect(got.body.settings.kinds.practiceRookie).toMatchObject({ enabled: true, cap: 6, target: 6, min: 0 });
     expect(got.body.testnet).toBe(false);
     expect(got.body.stakedActive).toBe(false);
     const rookie = got.body.live.rooms.find((r: { id: string }) => r.id === 'practice-rookie-1');
-    expect(rookie).toMatchObject({ kind: 'practiceRookie', humans: 0, bots: 6, stakedBots: 0 });
-    expect(got.body.live.byKind.practiceRookie.bots).toBe(6);
-    expect(got.body.live.totals.bots).toBeGreaterThanOrEqual(6);
+    expect(rookie).toMatchObject({ kind: 'practiceRookie', humans: 0, stakedBots: 0 });
+    expect(rookie.bots).toBeGreaterThanOrEqual(3);
+    expect(rookie.bots).toBeLessThanOrEqual(6);
+    expect(got.body.live.byKind.practiceRookie.bots).toBe(rookie.bots);
+    expect(got.body.live.totals.bots).toBeGreaterThanOrEqual(rookie.bots);
 
     const put = await call('PUT', admin, { kinds: { practiceRookie: { cap: 2, mix: { hard: 0 } } }, testnet: { stakedPerArena: 3, arenas: { '1': { stakedBots: 2, bankroll: '250000' } } } });
     expect(put.status).toBe(200);

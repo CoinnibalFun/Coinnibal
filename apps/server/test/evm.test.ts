@@ -370,17 +370,21 @@ describe('testnet staked bots on a hardhat node', () => {
     room.tick(TICK_MS);
     expect(journal.settlements().filter((i) => i.reason === 'round').map((i) => [i.player, i.payout]).sort()).toEqual(
       [
-        [p1.address, 1_900 * 1e6],
+        // the human won 950: 20 % of that is the cut (142.5 burned, 47.5 kept in the vault); bot 2 broke even
+        [p1.address, 1_710 * 1e6],
         [bot2, 950 * 1e6],
       ].sort(),
     );
     await chain.processPending();
     expect(journal.pending).toHaveLength(0);
-    expect(await getTokenBalance(client, token, p1.address)).toBe(before1 + 1_900n * T);
+    expect(await getTokenBalance(client, token, p1.address)).toBe(before1 + 1_710n * T);
     expect(await getTokenBalance(client, token, bot1)).toBe(4_000n * T);
     expect(await getTokenBalance(client, token, bot2)).toBe(4_950n * T);
     for (const b of [bot1, bot2, p1.address]) expect((await getSession(client, arena, 1, b)).id).toBe(0n);
-    expect((await getArena(client, arena, 1)).vault).toBe(0n);
+    // the burn share went out with the round's sweep; the vault share stays as the team's reserve
+    expect((await getArena(client, arena, 1)).vault).toBe((475n * T) / 10n);
+    expect((await getArena(client, arena, 1)).totalBurned).toBe((1425n * T) / 10n);
+    expect(journal.houseByArena(1)).toBe(47.5 * 1e6);
     await chain.stop();
   }, 120_000);
   it('three short rounds in a row: bots re-buy every round on the same wallets, survive an RPC failure, skip the holders-only arena', async (ctx) => {
@@ -491,7 +495,7 @@ describe('testnet staked bots on a hardhat node', () => {
       await chain.processPending();
       expect(journal.pending.filter((p) => p.kind === 'settle')).toHaveLength(0);
       for (const b of bots) expect((await getSession(client, arena, 1, b)).id).toBe(0n);
-      expect(r1.bots!.bots.size).toBeGreaterThan(0); // zero-value bots keep playing into the next round
+      // the zero-value squad left with the bell and walks back in over the next seconds
     }
     // 3 rounds × 2 tickets on the same 2 wallets (settled, reused: no churn), the RPC failure retried
     expect(bought()).toHaveLength(6);

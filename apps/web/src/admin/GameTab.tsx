@@ -573,7 +573,7 @@ export function BotsCard({
           ? `${tot.bots} bots · ${tot.humans} people · ${tot.rooms} rooms`
           : undefined
       }
-      lede="Bots fill quiet rooms and always wear a BOT tag. When a person joins a full room, a bot goes home to make the seat. Off testnet bots are worth nothing; they never buy tickets."
+      lede="The house squad: every room fields at least 3 bots and about Target, whoever else plays (people never send a bot home). Bots walk in one at a time and play as a team (map-wide tracking, traps, lures, feeding; not in the rookie league). In arenas a bot keeps what it eats; what it holds at the bell stays in the arena vault. They always wear a BOT tag."
     >
       <div className="ad-tablewrap">
         <table className="ad-table ad-bots" data-testid="bots-table">
@@ -587,7 +587,7 @@ export function BotsCard({
               <th scope="col" className="is-num">
                 Min
               </th>
-              <th scope="col" className="is-num">
+              <th scope="col" className="is-num" title="Typical squad size per room (at least 3, at most the cap); the live plan drifts around it">
                 Target
               </th>
               {hasMassCap && (
@@ -611,7 +611,7 @@ export function BotsCard({
                   <th
                     scope="col"
                     className="is-num"
-                    title="Most bots chasing one person at once; 0 = no limit"
+                    title="Most bots working one person at once (pusher, flanker, feeder); 0 = no limit"
                   >
                     Chasers
                   </th>

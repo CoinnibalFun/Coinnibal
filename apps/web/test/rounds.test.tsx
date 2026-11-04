@@ -197,14 +197,15 @@ describe('Round over sheet', () => {
     { name: 'Sixth', value: 900 * M },
   ];
 
-  it('fee on entry (arena v2): the till is paid in full, the fee line says it was paid at the entry', () => {
+  it('fee on entry (arena v2): the till, the cut on winnings and what is paid; the fee line says it was paid at the entry', () => {
     setReducedMotion(true);
     clockAt(R.endsAt + 500);
     useUi.setState({
       screen: 'roundover',
       room: ARENA,
       ticket: { entryFee: 1000 * M, arenaId: 1, session: 'SessV2' },
-      roundResult: { kind: 'round', round: N, payout: 3000 * M, stats: STATS, standings },
+      // the server paid 3,000 after a 500 cut on a 3,500 till
+      roundResult: { kind: 'round', round: N, payout: 3000 * M, stats: { ...STATS, gross: 3500 * M, cut: 500 * M }, standings },
       lastSettlement: null,
     });
     render(
@@ -215,7 +216,10 @@ describe('Round over sheet', () => {
     expect(screen.getByText('Fee 5% · paid at entry')).toBeTruthy();
     expect(screen.getByText('≈ 50')).toBeTruthy();
     expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 3,000$ELYMUM');
-    expect(screen.getByText(/the whole till is yours/)).toBeTruthy();
+    expect(screen.getByText('3,500')).toBeTruthy();
+    expect(screen.getByText('Cut 20% of winnings')).toBeTruthy();
+    expect(screen.getByText('−500')).toBeTruthy();
+    expect(screen.getByText(/no winnings, no cut/)).toBeTruthy();
     act(() => useUi.setState({ lastSettlement: { session: 'SessV2', arenaId: 1, txHash: `0x${'5b'.repeat(32)}`, payout: 3000 * M, fee: 50 * M, net: 3000 * M, feeOnEntry: true, at: Date.now() } }));
     expect(document.querySelector('.g-receipt__net')?.textContent).toBe('3,000$ELYMUM');
   });
