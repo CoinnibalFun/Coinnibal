@@ -18,7 +18,7 @@ describe('the language picker', () => {
     expect(tag.getAttribute('aria-expanded')).toBe('true');
     const list = screen.getByRole('listbox');
     const opts = screen.getAllByRole('option');
-    expect(opts.map((o) => o.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Türkçe'), expect.stringContaining('Русский')]));
+    expect(opts.map((o) => o.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('T\u00fcrk\u00e7e'), expect.stringContaining('Русский')]));
     expect(opts.find((o) => o.getAttribute('aria-selected') === 'true')?.textContent).toContain('English');
     expect(document.activeElement).toBe(list);
   });

@@ -14,23 +14,29 @@ import { GateScene } from './GateScene';
  */
 
 /** The friendly page for everyone the arena is not open to yet (holders mode: sign in with the wallet that holds the NFT). */
-export function ArenaSoon({ holders = false, onSignedIn }: { holders?: boolean; onSignedIn?: () => void }) {
+export function ArenaSoon({ holders = false, maintenance = false, onSignedIn }: { holders?: boolean; maintenance?: boolean; onSignedIn?: () => void }) {
   // the guard looks over while the visitor is at the sign-in
   const [attention, setAttention] = useState(false);
   const t = useT();
   return (
     <SitePage className="pg-root">
-      <PlateLabel numeral="III" title={holders ? t('pg.plateHolders') : t('pg.plate')} aside="/play" className="pg-platelabel" />
+      <PlateLabel numeral="III" title={holders ? t('pg.plateHolders') : maintenance ? t('pg.plateMaint') : t('pg.plate')} aside="/play" className="pg-platelabel" />
       <Kb theme="night" className="pg-night">
         <RingScene time="night" variant="full" className="pg-scene">
           <div className="pg-wrap">
             <Sticker tone="cream" lift="lg" pad="lg" round="lg" tape className="pg-card" as="section">
-              <span className="kicker pg-kicker">{holders ? t('pg.kickerHolders') : t('pg.kicker')}</span>
+              <span className="kicker pg-kicker">{holders ? t('pg.kickerHolders') : maintenance ? t('pg.kickerMaint') : t('pg.kicker')}</span>
               {holders ? (
                 <h1 className="pg-h display">
                   {t('pg.hHolders1')}
                   <br />
                   <T k="pg.hHolders2" tags={{ em }} />
+                </h1>
+              ) : maintenance ? (
+                <h1 className="pg-h display">
+                  {t('pg.hMaint1')}
+                  <br />
+                  <em>{t('pg.hMaint2')}</em>
                 </h1>
               ) : (
                 <h1 className="pg-h display">
@@ -62,6 +68,10 @@ export function ArenaSoon({ holders = false, onSignedIn }: { holders?: boolean; 
                     </LinkButton>
                   </div>
                 </>
+              ) : maintenance ? (
+                <p className="pg-lede" data-testid="pg-maintenance">
+                  {t('pg.ledeMaint')}
+                </p>
               ) : (
                 <>
                   <p className="pg-lede">{t('pg.lede')}</p>

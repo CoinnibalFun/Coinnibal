@@ -152,7 +152,7 @@ h2,
 .display {
   overflow-wrap: break-word;
   hyphens: auto;
-  /* only long words, and never a stub of a few letters: Chrome had split "мо-неты" and "paralar-ı"
+  /* only long words, and never a stub of a few letters: Chrome had split "мо-неты" and a Turkish word
      where the whole word fitted on the next line */
   hyphenate-limit-chars: 10 4 4;
 }

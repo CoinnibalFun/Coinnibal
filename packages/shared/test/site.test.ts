@@ -50,7 +50,7 @@ describe('site helpers', () => {
   });
 
   it('knows the game access modes', () => {
-    expect(GAME_ACCESS_MODES).toEqual(['admins', 'holders', 'public']);
+    expect(GAME_ACCESS_MODES).toEqual(['admins', 'holders', 'public', 'maintenance']);
     expect(GAME_ACCESS_DEFAULT).toBe('admins');
     for (const m of GAME_ACCESS_MODES) expect(isGameAccess(m)).toBe(true);
     for (const bad of ['', 'Admins', 'everyone', true, null, undefined, 1]) expect(isGameAccess(bad)).toBe(false);

@@ -12,8 +12,9 @@ export const SITE_X_HANDLE_DEFAULT = 'elymumio';
  * Who may play (practice, arenas, private rooms, spectating): `admins` only, NFT `holders`
  * (wallets with `balanceOf > 0` on the NFT) plus admins, or the `public`.
  */
-export type GameAccess = 'admins' | 'holders' | 'public';
-export const GAME_ACCESS_MODES: readonly GameAccess[] = ['admins', 'holders', 'public'];
+export type GameAccess = 'admins' | 'holders' | 'public' | 'maintenance';
+/** `maintenance`: only admins play (like `admins`), and /play tells everyone else the game is down for maintenance. */
+export const GAME_ACCESS_MODES: readonly GameAccess[] = ['admins', 'holders', 'public', 'maintenance'];
 export const GAME_ACCESS_DEFAULT: GameAccess = 'admins';
 
 export function isGameAccess(s: unknown): s is GameAccess {
