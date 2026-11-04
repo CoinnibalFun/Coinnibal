@@ -42,6 +42,8 @@ import { SplitFlap } from './SplitFlap';
 import { TicketList } from './TicketList';
 import { useLobbyModel, useMedia } from './useLobby';
 import { RoomCard } from '../../rooms/RoomCard';
+import { PaidSeatBanner } from '../../rooms/PaidSeatBanner';
+import { arenaTarget } from '../../rooms/invite';
 
 /**
  * The lobby, a page of the picture book: the masthead (mark, page tabs, wallet), a plate
@@ -151,8 +153,8 @@ export function Lobby() {
         sound.punch();
         updateSettings({ lastArena: id });
         setPunched(ticket.key);
-        // no transaction: the ticket is already open on chain
-        engine()?.play(`arena:${id}`);
+        // no transaction: the ticket is already open on chain (a paid room's invite seats it there)
+        engine()?.play(arenaTarget(id!));
         return;
       }
       case 'collect':
@@ -186,6 +188,7 @@ export function Lobby() {
     <section className="kl-col kl-col--tickets" aria-labelledby="kl-tickets-h">
       {mid && <PendingBanner onCollect={collect} />}
       <HeldBanner />
+      <PaidSeatBanner />
       <div className="kl-board">
         <div className="kl-board__head">
           <div className="kl-board__titles">

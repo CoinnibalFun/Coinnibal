@@ -407,6 +407,13 @@ export class RoomHost {
           }
           return;
         }
+        if (cmd.message !== undefined) {
+          // a paid custom room's end: only once its bell settled every ticket and burned its loot
+          const done = room.closeSettled(cmd.message);
+          if (done) this.rooms.delete(cmd.hid);
+          this.out.push({ k: 'closed', hid: cmd.hid, ok: done });
+          return;
+        }
         const idle = room.conns.size === 0 && room.humans.size === 0 && room.liveSessions().length === 0 && room.lootCount() === 0;
         if (idle) this.rooms.delete(cmd.hid);
         this.out.push({ k: 'closed', hid: cmd.hid, ok: idle });

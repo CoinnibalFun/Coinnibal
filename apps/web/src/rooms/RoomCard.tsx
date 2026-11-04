@@ -5,6 +5,7 @@ import { engine } from '../game/instance';
 import { useT } from '../i18n';
 import { useUi } from '../store';
 import { roomsApi } from './api';
+import { openInvite, seatInPaidRoom } from './invite';
 import { RoomCreator } from './RoomCreator';
 import './rooms.css';
 
@@ -35,7 +36,8 @@ export function useInviteLink(): void {
     }
     if (!code) return;
     inviteUsed = true;
-    engine()?.play(`private:${code}`);
+    // a paid room's invite goes to its arena's ticket first
+    void openInvite(code).catch(() => engine()?.play(`private:${code}`));
   }, [connected]);
 }
 
@@ -64,7 +66,7 @@ export function RoomCard() {
   const join = () => {
     const c = parseInviteCode(code);
     setBad(!c);
-    if (c) engine()?.play(`private:${c}`);
+    if (c) void openInvite(c).catch(() => engine()?.play(`private:${c}`));
   };
 
   return (
@@ -106,7 +108,7 @@ export function RoomCard() {
           {mine.length > 0 && (
             <div className="cr-card__mine">
               {mine.map((r) => (
-                <Chip key={r.code} tone="sun" icon="play" onClick={() => engine()?.play(`private:${r.code}`)}>
+                <Chip key={r.code} tone="sun" icon="play" onClick={() => (r.kind === 'paid' ? seatInPaidRoom(r) : engine()?.play(`private:${r.code}`))}>
                   {`${r.name} · ${r.code}`}
                 </Chip>
               ))}

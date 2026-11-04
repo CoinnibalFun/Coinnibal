@@ -659,6 +659,14 @@
 .kl-held .kl-owed__slip {
   background: var(--mist);
 }
+/* a paid room's invite: the next ticket of its arena is seated there */
+.kl-seat .kl-owed__slip {
+  background: var(--mist);
+}
+.kl-seat__left {
+  font-size: var(--t-label);
+  color: var(--ink-2, currentColor);
+}
 .kl-owed__top {
   display: flex;
   align-items: baseline;
@@ -1600,6 +1608,7 @@
 
 .tf-error,
 .tf-warn,
+.tf-seat,
 .tf-ok {
   display: flex;
   align-items: flex-start;
@@ -1621,6 +1630,15 @@
 }
 .tf-ok {
   background: #e3f1ec;
+}
+/* the ticket is for a paid room's invite: it is seated in that private room */
+.tf-seat {
+  background: var(--mist);
+  color: #04181c;
+}
+.tf-seat .kb-icon {
+  flex: none;
+  color: #2d7388;
 }
 .tf-ok .kb-icon {
   flex: none;

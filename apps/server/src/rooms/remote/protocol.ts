@@ -43,7 +43,11 @@ export type RoomSpec = RoomOptions;
 
 export type Cmd =
   | { k: 'create'; hid: number; spec: RoomSpec; loot: LootRecord[] }
-  /** Cleanup (`force` false: only when the room is idle, answered by `closed`) or a custom room's end (`message`: evict everyone). */
+  /**
+   * Cleanup (`force` false: only when the room is idle, answered by `closed`), a custom room's end
+   * (`force` and `message`: evict everyone) or a paid custom room's end (`message` without `force`:
+   * only once nothing of value is left in it, `Room.closeSettled`; answered by `closed`).
+   */
   | { k: 'close'; hid: number; force: boolean; message?: string }
   | { k: 'join'; hid: number; conn: ConnMeta; opts: JoinOptions }
   | { k: 'reattach'; hid: number; conn: ConnMeta; pid: number; req: number }

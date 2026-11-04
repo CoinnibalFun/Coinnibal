@@ -530,6 +530,37 @@ const SCENES = [
     },
   },
   {
+    // a ticket room (an invite-only arena instance) of the biggest size: the tier chips, the capacity
+    // slider and its live fee, the receipt with the arena's stakes, then the lobby's seat banner
+    id: 'room-creator-paid',
+    fresh: true,
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await page.getByTestId('room-create').click();
+      await page.waitForSelector('[data-testid="cr-setup"]');
+      await page.locator('input[data-autofocus]').first().fill(LONG_ROOM); // the room name (any language)
+      await page.locator('[data-testid="cr-setup"] button[data-value="paid"]').click();
+      await page.getByTestId('cr-capacity-range').focus();
+      await page.keyboard.press('End');
+      await settle(page, 700);
+      await h.check('setup');
+      await page.getByTestId('cr-continue').click();
+      await page.waitForSelector('[data-testid="cr-payment"]');
+      await settle(page, 800);
+      await h.check('payment');
+      await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 100));
+      await page.getByTestId('cr-pay').click();
+      await page.waitForSelector('[data-testid="cr-done"]', { timeout: 20000 });
+      await settle(page, 900);
+      await h.check('done');
+      await page.getByTestId('cr-enter').click();
+      await page.waitForSelector('[data-testid="paid-seat"]', { timeout: 10000 });
+      await settle(page, 1200);
+    },
+  },
+  {
     id: 'room-creator-guest',
     app: 'play',
     auth: 'guest',

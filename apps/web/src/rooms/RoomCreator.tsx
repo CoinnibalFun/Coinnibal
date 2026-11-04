@@ -3,23 +3,31 @@ import {
   CUSTOM_DIFFICULTIES,
   CUSTOM_DURATIONS_MIN,
   CUSTOM_FOOD,
+  CUSTOM_KINDS,
   CUSTOM_LIMITS,
   CUSTOM_MAP_CHOICES,
   CUSTOM_MAP_WIDTH,
   MAP_SCALE_DEFAULT,
   CUSTOM_TRAPS,
+  arenaMeta,
+  customCapacityChoices,
+  customCapacityTiers,
+  customRoomFee,
+  quotePrice,
   validateCustomConfig,
+  type CustomArenaTier,
   type CustomRoomConfig,
   type CustomRoomQuote,
   type CustomRoomView,
 } from '@elymum/shared';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { Address, Hash } from 'viem';
 import { AddressChip, Button, Chip, CoinCharacter, Field, HypeAmount, QuantityStepper, Receipt, Sheet, Stamp, StampSpinner } from '../design';
 import { engine } from '../game/instance';
 import { sound } from '../audio';
 import { useT, type TKey } from '../i18n';
 import { openModal, toast, useUi } from '../store';
+import { useTokenText, type TokenText } from '../ui/lobby/useLobby';
 import { isFakeHash } from '../wallet/devFake';
 import { explorerTx } from '../wallet/links';
 import { serverChainInfo } from '../wallet/network';
@@ -27,8 +35,12 @@ import { signInWithWallet } from '../wallet/signIn';
 import { useAddress } from '../wallet/store';
 import type { TxPhase } from '../wallet/tx';
 import { RoomApiError, loadPendingPayment, roomLink, roomsApi, savePendingPayment } from './api';
+import { seatInPaidRoom } from './invite';
+import { hypeDecimals, hypeText } from './hype';
 import { payRoomFee } from './pay';
 import './rooms.css';
+
+export { hypeText };
 
 type Step = 'setup' | 'pay' | 'working' | 'done';
 
@@ -52,6 +64,56 @@ const MAP_KEY: Record<CustomRoomConfig['mapSize'], TKey> = { auto: 'cr.map.auto'
 const TRAPS_KEY: Record<CustomRoomConfig['traps'], TKey> = { none: 'cr.traps.none', few: 'cr.traps.few', normal: 'cr.traps.normal', many: 'cr.traps.many' };
 const DIFF_KEY: Record<CustomRoomConfig['difficulty'], TKey> = { easy: 'cr.diff.easy', mixed: 'cr.diff.mixed', hard: 'cr.diff.hard' };
 const FOOD_KEY: Record<CustomRoomConfig['food'], TKey> = { low: 'cr.food.low', normal: 'cr.food.normal', high: 'cr.food.high' };
+const KIND_KEY: Record<CustomRoomConfig['kind'], TKey> = { free: 'cr.kind.free', paid: 'cr.kind.paid' };
+
+/** "Arena · 10,000 $ELYMUM": a paid room's tier. */
+const tierText = (x: CustomArenaTier, tok: TokenText) => `${arenaMeta(x.arenaId).name} · ${tok.wire(x.entryFee)} ${tok.symbol}`;
+
+/** The fee multiplier of a capacity as text: "1.5" for x1.5 (`stepPct` per started 10 players above 10). */
+const multText = (capacity: number, stepPct: number) => String((100 + stepPct * (customCapacityTiers(capacity) - 1)) / 100);
+
+/**
+ * The capacity: a slider over the sensible steps (2 to the server's biggest room) with the count
+ * written large. Its fee multiplier shows under it, the price box above the footer follows live.
+ */
+function Capacity({ value, steps, onPick, label, note }: { value: number; steps: number[]; onPick: (n: number) => void; label: string; note: string }) {
+  const id = useId();
+  const t = useT();
+  const idx = Math.max(0, steps.findIndex((n) => n >= value));
+  const max = steps.length - 1;
+  return (
+    <div className="cr-row cr-cap" data-testid="cr-capacity">
+      <label className="cr-row__label mono" htmlFor={id}>
+        {label}
+      </label>
+      <div className="cr-cap__body">
+        <b className="cr-cap__n num" aria-hidden="true">
+          {value}
+        </b>
+        <input
+          id={id}
+          className="cr-range"
+          type="range"
+          min={0}
+          max={max}
+          step={1}
+          value={idx}
+          aria-valuetext={t('cr.capValue', { n: value })}
+          style={{ ['--v' as string]: max > 0 ? idx / max : 1 }}
+          onChange={(e) => onPick(steps[Number(e.target.value)] ?? value)}
+          data-testid="cr-capacity-range"
+        />
+      </div>
+      <div className="cr-cap__scale mono" aria-hidden="true">
+        <span>{steps[0]}</span>
+        <span>{steps[max]}</span>
+      </div>
+      <p className="cr-hint mono" data-testid="cr-capacity-note">
+        {note}
+      </p>
+    </div>
+  );
+}
 
 /**
  * "Create your own room": the creator picks the rules, pays the small HYPE fee to the treasury
@@ -67,6 +129,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   const chain = useUi((s) => s.chain);
   const auth = useUi((s) => s.auth);
   const address = useAddress();
+  const tok = useTokenText();
   const [cfg, setCfg] = useState<CustomRoomConfig>(() => ({ ...CUSTOM_DEFAULTS, name: '' }));
   const [step, setStep] = useState<Step>('setup');
   const [quote, setQuote] = useState<CustomRoomQuote | null>(null);
@@ -101,13 +164,36 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
     };
   }, [open, token]);
 
+  // the server's biggest room (an older server without the setting: the old private-room size)
+  const maxPlayers = quote?.maxPlayers ?? 20;
+  const steps = customCapacityChoices(maxPlayers);
+  useEffect(() => {
+    if (cfg.maxPlayers > maxPlayers) setCfg((c) => ({ ...c, maxPlayers }));
+  }, [maxPlayers, cfg.maxPlayers]);
+
   const set = <K extends keyof CustomRoomConfig>(k: K, v: CustomRoomConfig[K]) => setCfg((c) => ({ ...c, [k]: v }));
-  const youPay = quote ? BigInt(quote.youPayWei) : null;
-  const base = quote ? BigInt(quote.priceWei) : null;
+  // paid rooms: the arena tiers offered (a holders-only tier to emblem holders only)
+  const tiers = (quote?.tiers ?? []).filter((x) => !x.holdersOnly || quote?.holder);
+  const paidOpen = !!quote?.paidRooms && tiers.length > 0;
+  const tier = cfg.kind === 'paid' ? (tiers.find((x) => x.arenaId === cfg.arenaId) ?? null) : null;
+  const setKind = (kind: CustomRoomConfig['kind']) => setCfg((c) => ({ ...c, kind, arenaId: kind === 'paid' ? (c.arenaId ?? tiers[0]?.arenaId ?? null) : null }));
+  // the tiers came after "Ticket room" was picked (or the picked one is gone): the first one offered
+  const firstTier = tiers[0]?.arenaId ?? null;
+  useEffect(() => {
+    if (cfg.kind === 'paid' && !tier && firstTier !== null) setCfg((c) => ({ ...c, arenaId: firstTier }));
+  }, [cfg.kind, tier, firstTier]);
+  const stepPct = quote?.capacityStepPct ?? 0;
+  // the price follows the capacity live; the server computes it again and checks the payment
+  const youPay = quote ? quotePrice({ ...quote, capacityStepPct: stepPct }, cfg.maxPlayers) : null;
+  const base = quote ? customRoomFee(BigInt(quote.priceWei), cfg.maxPlayers, stepPct) : null;
   const free = youPay === 0n;
   const full = !!quote && quote.live >= quote.maxLive;
   const capped = !!quote && quote.mine >= quote.maxPerWallet;
+  const noSeats = !!quote && typeof quote.seatsLeft === 'number' && cfg.maxPlayers > quote.seatsLeft;
+  const paidBlocked = cfg.kind === 'paid' && !tier;
   const chainName = serverChainInfo(chain)?.name ?? 'Elysium';
+  // a kept payment opens only a room it covers (a bigger room costs more)
+  const kept = pending && (!frozen || BigInt(pending.wei) >= frozen.wei) ? pending : null;
 
   const toPay = () => {
     const v = validateCustomConfig(cfg);
@@ -119,6 +205,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
     setNameError(null);
     setError(null);
     if (!quote?.treasury || youPay === null) return;
+    if (noSeats || (v.config.kind === 'paid' && !tier)) return;
     setCfg(v.config);
     setFrozen({ wei: youPay, to: quote.treasury as Address });
     setStep('pay');
@@ -154,7 +241,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
     setError(null);
     setStep('working');
     if (frozen.wei === 0n) return create(null);
-    if (pending) return create(pending.hash);
+    if (kept) return create(kept.hash);
     const res = await payRoomFee(chain, frozen.to, frozen.wei, (p, h) => {
       setPhase(p);
       if (h) setHash(h);
@@ -201,7 +288,9 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   const enter = () => {
     if (!made) return;
     onClose();
-    engine()?.play(`private:${made.code}`);
+    // a paid room is entered with a ticket of its arena: the lobby opens that ticket, seated here
+    if (made.kind === 'paid' && made.arenaId) seatInPaidRoom(made);
+    else engine()?.play(`private:${made.code}`);
   };
 
   const copy = (text: string) => {
@@ -234,12 +323,12 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
         size="lg"
         block
         icon="arrow"
-        disabled={!quote || !quote.enabled || full || capped}
+        disabled={!quote || !quote.enabled || full || capped || noSeats || paidBlocked}
         onClick={toPay}
         sub={quote ? (free ? t('cr.freeSub') : t('cr.paySub', { chain: chainName })) : undefined}
         data-testid="cr-continue"
       >
-        {full ? t('cr.full') : capped ? t('cr.capped', { n: quote!.maxPerWallet }) : free ? t('cr.createFree') : t('cr.continue')}
+        {full ? t('cr.full') : capped ? t('cr.capped', { n: quote!.maxPerWallet }) : noSeats ? t('cr.seatsFull') : free ? t('cr.createFree') : t('cr.continue')}
       </Button>
     );
   } else if (step === 'pay' || step === 'working') {
@@ -248,15 +337,15 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
         <Button variant="ghost" onClick={() => setStep('setup')} disabled={step === 'working'}>
           {t('cr.back')}
         </Button>
-        <Button variant="primary" size="lg" loading={step === 'working'} onClick={() => void pay()} data-testid="cr-pay" lead={pending || free ? 'key' : 'wallet'}>
-          {pending ? t('cr.useKept') : free ? t('cr.createFree') : t('cr.pay', { amount: hypeText(frozen?.wei ?? 0n) })}
+        <Button variant="primary" size="lg" loading={step === 'working'} onClick={() => void pay()} data-testid="cr-pay" lead={kept || free ? 'key' : 'wallet'}>
+          {free ? t('cr.createFree') : kept ? t('cr.useKept') : t('cr.pay', { amount: hypeText(frozen?.wei ?? 0n) })}
         </Button>
       </div>
     );
   } else {
     footer = (
       <Button variant="primary" size="lg" block icon="arrow" onClick={enter} data-testid="cr-enter">
-        {t('cr.enter')}
+        {made?.kind === 'paid' ? t('cr.enterPaid') : t('cr.enter')}
       </Button>
     );
   }
@@ -283,6 +372,32 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
             onChange={(e) => set('name', e.target.value)}
             data-autofocus
           />
+          <Choice label={t('cr.kind')} options={CUSTOM_KINDS} value={cfg.kind} onPick={setKind} text={(v) => t(KIND_KEY[v])} />
+          {cfg.kind === 'free' ? (
+            <p className="cr-hint mono" data-testid="cr-kind-hint">
+              {t('cr.kindFreeHint')}
+            </p>
+          ) : paidOpen ? (
+            <>
+              <div className="cr-row" role="group" aria-label={t('cr.tier')}>
+                <span className="cr-row__label mono">{t('cr.tier')}</span>
+                <div className="cr-row__chips">
+                  {tiers.map((x) => (
+                    <Chip key={x.arenaId} selected={x.arenaId === cfg.arenaId} onClick={() => set('arenaId', x.arenaId)} data-value={String(x.arenaId)} icon={x.holdersOnly ? 'lock' : undefined}>
+                      {tierText(x, tok)}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+              <p className="cr-note cr-paid" data-testid="cr-kind-hint">
+                {t('cr.kindPaidHint', { arena: tier ? arenaMeta(tier.arenaId).name : '', fee: tier ? `${tok.wire(tier.entryFee)} ${tok.symbol}` : '' })}
+              </p>
+            </>
+          ) : (
+            <p className="cr-error" role="alert" data-testid="cr-paid-off">
+              {t('cr.paidOff')}
+            </p>
+          )}
           <Choice label={t('cr.duration')} options={CUSTOM_DURATIONS_MIN} value={cfg.durationMin} onPick={(v) => set('durationMin', v)} text={(v) => t('cr.minutes', { n: v })} />
           <Choice label={t('cr.map')} options={CUSTOM_MAP_CHOICES} value={cfg.mapSize} onPick={(v) => set('mapSize', v)} text={(v) => t(MAP_KEY[v])} />
           <p className="cr-hint mono" data-testid="cr-map-hint">
@@ -291,15 +406,21 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
               : t('cr.mapHint', { w: CUSTOM_MAP_WIDTH[cfg.mapSize].toLocaleString('en-US') })}
           </p>
           <Choice label={t('cr.traps')} options={CUSTOM_TRAPS} value={cfg.traps} onPick={(v) => set('traps', v)} text={(v) => t(TRAPS_KEY[v])} />
-          <div className="cr-pair">
-            <div className="cr-row">
-              <span className="cr-row__label mono">{t('cr.bots')}</span>
-              <QuantityStepper value={cfg.bots} min={0} max={CUSTOM_LIMITS.botsMax} onChange={(v) => set('bots', v)} label={t('cr.bots')} />
-            </div>
-            <div className="cr-row">
-              <span className="cr-row__label mono">{t('cr.players')}</span>
-              <QuantityStepper value={cfg.maxPlayers} min={CUSTOM_LIMITS.playersMin} max={CUSTOM_LIMITS.playersMax} onChange={(v) => set('maxPlayers', v)} label={t('cr.players')} />
-            </div>
+          <Capacity
+            value={cfg.maxPlayers}
+            steps={steps}
+            onPick={(n) => set('maxPlayers', n)}
+            label={t('cr.players')}
+            note={customCapacityTiers(cfg.maxPlayers) > 1 && stepPct > 0 ? t('cr.capFee', { x: multText(cfg.maxPlayers, stepPct) }) : t('cr.capBase')}
+          />
+          {noSeats && (
+            <p className="cr-error" role="alert" data-testid="cr-seats">
+              {t('cr.seatsLeft', { n: quote!.seatsLeft })}
+            </p>
+          )}
+          <div className="cr-row">
+            <span className="cr-row__label mono">{t('cr.bots')}</span>
+            <QuantityStepper value={cfg.bots} min={0} max={CUSTOM_LIMITS.botsMax} onChange={(v) => set('bots', v)} label={t('cr.bots')} />
           </div>
           {cfg.bots > 0 && <Choice label={t('cr.difficulty')} options={CUSTOM_DIFFICULTIES} value={cfg.difficulty} onPick={(v) => set('difficulty', v)} text={(v) => t(DIFF_KEY[v])} />}
           <Choice label={t('cr.food')} options={CUSTOM_FOOD} value={cfg.food} onPick={(v) => set('food', v)} text={(v) => t(FOOD_KEY[v])} />
@@ -309,7 +430,8 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
               <span className="cr-row__label mono">{t('cr.price')}</span>
               {free ? <b className="cr-price__free">{t('cr.free')}</b> : <HypeAmount wei={youPay ?? 0n} decimals={hypeDecimals(youPay ?? 0n)} />}
               {base !== null && youPay !== null && youPay < base && !free && <s className="cr-price__was mono">{hypeText(base)} HYPE</s>}
-              <span className="cr-price__note">{perkNote(quote, t)}</span>
+              <span className="cr-price__for mono">{t('cr.priceFor', { n: cfg.maxPlayers })}</span>
+              <span className="cr-price__note">{perkNote(quote, t, cfg.maxPlayers)}</span>
             </div>
           )}
           {quote && <p className="cr-slots mono">{t('cr.slots', { live: quote.live, max: quote.maxLive })}</p>}
@@ -330,7 +452,12 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
               { label: t('cr.bots'), value: cfg.bots > 0 ? `${cfg.bots} · ${t(DIFF_KEY[cfg.difficulty])}` : t('cr.noBots') },
               { label: t('cr.players'), value: t('cr.upTo', { n: cfg.maxPlayers }) },
               { label: t('cr.powerUps'), value: t(cfg.powerUps ? 'cr.on' : 'cr.off'), muted: true },
-              { label: t('cr.stakes'), value: t('cr.noStakes'), muted: true },
+              ...(tier
+                ? [
+                    { label: t('cr.tier'), value: arenaMeta(tier.arenaId).name },
+                    { label: t('cr.stakes'), value: `${tok.wire(tier.entryFee)} ${tok.symbol}` },
+                  ]
+                : [{ label: t('cr.stakes'), value: t('cr.noStakes'), muted: true }]),
               { label: t('cr.total'), value: frozen.wei === 0n ? t('cr.free') : `${hypeText(frozen.wei)} HYPE`, strong: true },
             ]}
           />
@@ -340,7 +467,8 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
               <AddressChip address={frozen.to} label={t('cr.treasury')} size="sm" copyLabel={t('cr.copy')} />
             </div>
           )}
-          <p className="cr-note">{pending ? t('cr.keptNote') : frozen.wei === 0n ? t('cr.freeNote') : t('cr.payNote', { chain: chainName })}</p>
+          {tier && <p className="cr-note cr-paid">{t('cr.paidNote', { arena: arenaMeta(tier.arenaId).name })}</p>}
+          <p className="cr-note">{kept ? t('cr.keptNote') : frozen.wei === 0n ? t('cr.freeNote') : t('cr.payNote', { chain: chainName })}</p>
           {step === 'working' && (
             <p className="cr-phase" role="status">
               <StampSpinner size="sm" /> {phaseText}
@@ -361,7 +489,11 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
             <CoinCharacter paint="sun" mood="smile" size={72} bob />
             <Stamp text={t('cr.stamp')} tone="up" animateIn size="md" rotate={-10} />
           </div>
-          <p className="cr-lede">{t('cr.doneLede', { name: made.name, n: made.durationMin })}</p>
+          <p className="cr-lede">
+            {made.kind === 'paid' && made.arenaId
+              ? t('cr.doneLedePaid', { name: made.name, arena: arenaMeta(made.arenaId).name })
+              : t('cr.doneLede', { name: made.name, n: made.durationMin })}
+          </p>
           <div className="cr-code" aria-label={t('cr.codeLabel')}>
             <span className="cr-row__label mono">{t('cr.codeLabel')}</span>
             <button type="button" className="cr-code__value mono" onClick={() => copy(made.code)} data-testid="cr-code">
@@ -386,20 +518,9 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   );
 }
 
-/** HYPE with as few decimals as it needs (0.05, 0.025). */
-function hypeDecimals(wei: bigint): number {
-  for (let d = 2; d <= 6; d++) if (wei % 10n ** BigInt(18 - d) === 0n) return d;
-  return 6;
-}
-
-export function hypeText(wei: bigint): string {
-  const d = hypeDecimals(wei);
-  const s = (wei / 10n ** BigInt(18 - d)).toString().padStart(d + 1, '0');
-  return `${s.slice(0, -d)}.${s.slice(-d)}`;
-}
-
-function perkNote(q: CustomRoomQuote, t: ReturnType<typeof useT>): string {
+function perkNote(q: CustomRoomQuote, t: ReturnType<typeof useT>, capacity: number): string {
   if (q.holderPerk === 'none') return t('cr.perk.none');
+  if (q.holder && q.holderPerk === 'free_daily' && q.freeAvailable && customCapacityTiers(capacity) > 1) return t('cr.perk.freeSmall');
   if (q.holder) return q.holderPerk === 'discount' ? t('cr.perk.youDiscount', { pct: q.holderDiscountPct }) : q.freeAvailable ? t('cr.perk.youFree') : t('cr.perk.freeUsed');
   return q.holderPerk === 'discount' ? t('cr.perk.discount', { pct: q.holderDiscountPct }) : t('cr.perk.free');
 }

@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  CUSTOM_DEFAULTS,
   EntityKind,
   PROTOCOL_VERSION,
   RULES,
@@ -752,4 +753,73 @@ describe('server over websocket', () => {
     expect((await fetch(`http://127.0.0.1:${port}/api/pending?wallet=nope`)).status).toBe(400);
     app.journal.remove(`Owed-${player}`);
   });
+
+  it('paid custom room: an invite-only arena instance seated by code with a normal ticket, never by quick play; settled at the bell; closes once settled', async () => {
+    const svc = app.customRooms;
+    // a free fee (no HYPE transfer to check) and a treasury: the room itself is what is tested here
+    svc.updateSettings({ priceHype: '0', treasury: '0x1111111111111111111111111111111111111111' });
+    const creator = newWallet();
+    const view = await svc.create(creator, { config: { ...CUSTOM_DEFAULTS, name: 'Whale Club', kind: 'paid', arenaId: 1, bots: 0, maxPlayers: 4, durationMin: 15 } });
+    expect(view).toMatchObject({ kind: 'paid', arenaId: 1, maxPlayers: 4 });
+    expect(view.endsAt % RULES.roundMs).toBe(0); // it ends on a bell
+    const code = view.code;
+    const host = newWallet();
+    const hostTicket = session(host, { id: 501 });
+    chain.sessions.set(`1:${host}`, hostTicket);
+    const c = await signedIn(host);
+    // `private:<CODE>` never seats anybody in a paid room
+    c.send({ t: 'join', room: `private:${code}`, name: 'Host', skin: 0 });
+    expect((await c.wait('error', 2000, (m) => m.code === 'paid_room')).code).toBe('paid_room');
+    // a wrong arena for the code
+    c.send({ t: 'join', room: `arena:2:${code}`, name: 'Host', skin: 0 });
+    expect((await c.wait('error', 2000, (m) => m.code === 'room_not_found')).code).toBe('room_not_found');
+    // the ticket of arena 1 seats here by code
+    c.send({ t: 'join', room: `arena:1:${code}`, name: 'Host', skin: 0 });
+    const joined = await c.wait('joined');
+    expect(joined.room).toMatchObject({ id: `priv-${code}`, mode: 'arena', arenaId: 1, code, custom: { kind: 'paid', arenaId: 1 } });
+    expect(joined.value).toBe(9_500_000);
+    expect(app.journal.live().map((l) => l.session)).toContain(hostTicket.key);
+
+    // quick play with another ticket of the same arena lands in a public instance, never here
+    const other = newWallet();
+    const otherTicket = session(other, { id: 502 });
+    chain.sessions.set(`1:${other}`, otherTicket);
+    const o = await signedIn(other);
+    o.send({ t: 'join', room: 'arena:1', name: 'Walker', skin: 0 });
+    expect((await o.wait('joined')).room.id).toMatch(/^arena-1-\d+$/);
+    // the directory never lists it
+    const listed = (await (await fetch(`http://127.0.0.1:${port}/api/rooms`)).json()) as { rooms: { id: string }[] };
+    expect(listed.rooms.some((r) => r.id === `priv-${code}`)).toBe(false);
+
+    // closed early: no new seat, the ticket in play keeps playing to the bell
+    expect(svc.close(code, { wallet: creator, admin: false })).toMatchObject({ closing: true });
+    const late = newWallet();
+    chain.sessions.set(`1:${late}`, session(late, { id: 503 }));
+    const l = await signedIn(late);
+    l.send({ t: 'join', room: `arena:1:${code}`, name: 'Late', skin: 0 });
+    expect((await l.wait('error', 2000, (m) => m.code === 'room_closed')).code).toBe('room_closed');
+    expect(app.journal.live().map((x) => x.session)).toContain(hostTicket.key);
+
+    // the bell settles both tickets by the normal server path; then the paid room closes
+    jumpTo(roundAt(serverNow()).endsAt);
+    const over = await c.wait('roundOver', 4000);
+    expect(over.payout).toBe(9_500_000);
+    expect(app.journal.pending.find((p) => p.key === hostTicket.key)).toMatchObject({ kind: 'settle', reason: 'round', payout: 9_500_000, player: host });
+    await o.wait('roundOver', 4000);
+    expect((await c.wait('error', 4000, (m) => m.code === 'room_closed')).code).toBe('room_closed');
+    for (let i = 0; i < 50 && svc.get(code); i++) await sleep(50);
+    expect(svc.get(code)).toBeNull();
+    expect(app.rooms.get(`priv-${code}`)).toBeUndefined();
+
+    for (const [w, t] of [
+      [host, hostTicket],
+      [other, otherTicket],
+    ] as const) {
+      app.journal.remove(t.key);
+      chain.sessions.delete(`1:${w}`);
+    }
+    chain.sessions.delete(`1:${late}`);
+    svc.updateSettings({ priceHype: '0.05', treasury: null });
+    for (const x of [c, o, l]) x.close();
+  }, 20_000);
 });

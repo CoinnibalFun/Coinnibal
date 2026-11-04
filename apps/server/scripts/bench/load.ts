@@ -84,7 +84,7 @@ for (let i = 0; i < nCustom; i += 10) {
     world: customWorld(c),
     map: { scale: app.rooms.customMapScale(), shape: (side: number) => customWorld(c, side), config: c },
     powerUps: c.powerUps,
-    custom: { ...c, creator: '0x0000000000000000000000000000000000000001', createdAt: Date.now(), endsAt: Date.now() + 3600_000 },
+    custom: { ...c, arenaId: undefined, creator: '0x0000000000000000000000000000000000000001', createdAt: Date.now(), endsAt: Date.now() + 3600_000 },
   });
   for (let k = 0; k < Math.min(10, nCustom - i); k++) specs.push({ room: `private:${code}` });
 }

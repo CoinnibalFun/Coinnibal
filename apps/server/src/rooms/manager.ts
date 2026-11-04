@@ -23,6 +23,16 @@ export interface CustomRoomHooks {
   onGame(room: RoomHandle, e: { name: string; score: number; kills: number }): void;
   /** Rooms were lost with a crashed room worker: reopen the custom rooms that still have time. */
   restore?(): number;
+  /**
+   * A paid custom room `code` takes new seats now (it exists, has time left and is not closing).
+   * Absent: every paid room is seatable (tests without the service).
+   */
+  seatable?(code: string): boolean;
+}
+
+/** A paid custom room: an invite-only arena instance (`priv-<CODE>`, mode `arena`), never matched by quick play. */
+export function isPaidCustom(opts: Pick<RoomOptions, 'mode' | 'code'>): boolean {
+  return opts.mode === 'arena' && !!opts.code;
 }
 
 /** A human's game ended (death, leave, bell, operator exit), in a room on this thread or in a room worker. */
@@ -69,6 +79,16 @@ interface ArenaData {
   enabled: boolean;
   /** Vault balance (raw units); null = not tracked (dev-fake). */
   pot: number | null;
+  /** Emblem holders only (on chain). */
+  holdersOnly?: boolean;
+}
+
+/** An arena a paid custom room can be opened on (`RoomManager.paidArenas`). */
+export interface PaidArena {
+  arenaId: number;
+  /** Ticket price, ledger units. */
+  buyIn: number;
+  holdersOnly: boolean;
 }
 
 /**
@@ -154,7 +174,10 @@ export class RoomManager {
             onBellSettled: bellSettled,
             onLost: (rooms) => this.onRoomsLost(rooms),
             onClosed: (room, ok) => {
-              if (ok && this.remote.get(room.id) === room) this.remote.delete(room.id);
+              if (!ok || this.remote.get(room.id) !== room) return;
+              this.remote.delete(room.id);
+              // a paid custom room closes in its worker once settled (`closePaidRoom`)
+              if (room.opts.custom && room.opts.code) this.closedCodes.set(room.opts.code, Date.now());
             },
             hangMs: cfg.gameWorkerHangMs,
           })
@@ -360,6 +383,8 @@ export class RoomManager {
   closeCustomRoom(code: string, message: string): boolean {
     const room = this.get(`priv-${code}`);
     if (!room?.opts.custom) return false;
+    // a paid room's tickets are never evicted: it closes once its bell settled them all
+    if (isPaidCustom(room.opts)) return this.closePaidRoom(code, message) === 'closed';
     try {
       if (room instanceof RemoteRoom) this.pool!.closeRoom(room, message);
       else (room as Room).evict(message);
@@ -376,9 +401,98 @@ export class RoomManager {
     return at !== undefined && now - at < CLOSED_MEMO_MS;
   }
 
+  /**
+   * Closes a paid custom room only when nothing of value is left in it: no ticket (live or AFK), no
+   * loot on its floor, no player. Then its spectators go back to the lobby with `message`. The room's
+   * bell settles every ticket and burns the floor loot, so a closing room (no new seats) drains at its
+   * next bell. `closed`: gone now (or was gone); `pending`: still holds a ticket or loot, or a room
+   * worker was asked (it answers through `onClosed`). Never settles or evicts a ticket.
+   */
+  closePaidRoom(code: string, message: string): 'closed' | 'pending' {
+    const room = this.get(`priv-${code}`);
+    if (!room) return 'closed';
+    if (!isPaidCustom(room.opts)) return 'pending';
+    if (room instanceof RemoteRoom) {
+      if (!room.closing && !room.closed) this.pool!.closeSettled(room, message);
+      return 'pending';
+    }
+    if (!(room as Room).closeSettled(message)) return 'pending';
+    this.drop(room);
+    this.closedCodes.set(code, Date.now());
+    return 'closed';
+  }
+
   /** Live custom rooms. */
   customRooms(): RoomHandle[] {
     return [...this.handles()].filter((r) => !!r.opts.custom);
+  }
+
+  /**
+   * The arenas a paid custom room can be opened on now: allowed, enabled on chain, not kept closed by
+   * the vault guard. Throws `ChainBusyError` only when no arena list was ever read.
+   */
+  async paidArenas(): Promise<PaidArena[]> {
+    if (!this.chain.stakeEnabled) return [];
+    const out: PaidArena[] = [];
+    for (const [id, a] of await this.arenas()) {
+      if (!a.enabled || !this.arenaAllowed(id) || this.underfunded.has(id)) continue;
+      out.push({ arenaId: id, buyIn: a.buyIn, holdersOnly: a.holdersOnly === true });
+    }
+    return out.sort((a, b) => a.buyIn - b.buyIn || a.arenaId - b.arenaId);
+  }
+
+  /**
+   * Opens a paid custom room `priv-<code>`: a private instance (number 0) of arena `stake.arenaId`
+   * with the creator's rules. Joined only with `arena:<id>:<code>` and a ticket of that arena; never
+   * listed, never picked by `arenaRoom` (quick play), never closed by the idle cleanup. Throws when
+   * the code is taken.
+   */
+  createPaidRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots' | 'instance' | 'stake'> & { bots: BotManagerOptions | null; stake: { arenaId: number; buyIn: number } }): RoomHandle {
+    const id = `priv-${code}`;
+    if (this.has(id)) throw new Error(`room ${id} exists`);
+    this.closedCodes.delete(code);
+    return this.open({ ...opts, id, mode: 'arena', code, instance: 0 });
+  }
+
+  /**
+   * The paid custom room `code` for a new seat with a ticket of `arenaId`: the arena must be
+   * allowed, enabled on chain and not kept closed by the vault guard (as for `arenaRoom`), the room
+   * must be an instance of that arena and take seats (not closing, time left). Otherwise why not:
+   * `missing` (no paid room of this arena with that code), `closed` (it closed or is closing),
+   * `arena` (the arena itself is not available).
+   */
+  async paidRoom(arenaId: number, code: string): Promise<RoomHandle | 'missing' | 'closed' | 'arena'> {
+    const room = this.get(`priv-${code}`);
+    if (!room) return this.customClosedLately(code) ? 'closed' : 'missing';
+    if (!isPaidCustom(room.opts) || room.opts.stake?.arenaId !== arenaId) return 'missing';
+    if (!this.paidSeatable(room)) return 'closed';
+    if (!this.arenaAllowed(arenaId) || this.underfunded.has(arenaId)) return 'arena';
+    let arena: ArenaData | undefined;
+    try {
+      arena = (await this.arenas()).get(arenaId);
+    } catch (err) {
+      // no list was ever read: a paid room only seats while its arena runs here
+      arena = this.arenaFromRooms(arenaId) ?? undefined;
+      if (!arena) throw err;
+    }
+    if (!arena || !arena.enabled || this.underfunded.has(arenaId)) return 'arena';
+    if (this.get(room.id) !== room || !this.paidSeatable(room)) return 'closed';
+    room.lastActivity = Date.now();
+    return room;
+  }
+
+  /** Re-validates a paid room after a join's awaits: still open here, not full, still taking seats. */
+  confirmPaidRoom(room: RoomHandle): RoomHandle | null {
+    if (this.get(room.id) !== room || room.isFull || !this.paidSeatable(room)) return null;
+    if (room.opts.stake && this.underfunded.has(room.opts.stake.arenaId)) return null;
+    room.lastActivity = Date.now();
+    return room;
+  }
+
+  private paidSeatable(room: RoomHandle): boolean {
+    if (room instanceof RemoteRoom && (room.closed || room.closing)) return false;
+    const code = room.opts.code;
+    return !!code && (this.custom?.seatable ? this.custom.seatable(code) : true);
   }
 
   /* ---------------------------------------------------------------- */
@@ -401,7 +515,7 @@ export class RoomManager {
       return this.arenaCache.ids;
     }
     const ids = new Map<number, ArenaData>(
-      list.map((a) => [a.id, { buyIn: a.entryFee, maxPlayers: a.maxSessions, enabled: a.enabled, pot: a.pot }]),
+      list.map((a) => [a.id, { buyIn: a.entryFee, maxPlayers: a.maxSessions, enabled: a.enabled, pot: a.pot, holdersOnly: a.holdersOnly === true }]),
     );
     this.arenaCache = { at: Date.now(), ids };
     await this.recheckVaults(ids);
@@ -441,11 +555,19 @@ export class RoomManager {
     }
   }
 
-  /** Every open instance of an arena, by instance number. */
+  /**
+   * Every open public instance of an arena, by instance number: what quick play, matchmaking and
+   * spectating pick from. Paid custom rooms (private instances) are never among them.
+   */
   arenaInstances(arenaId: number): RoomHandle[] {
     return [...this.handles()]
-      .filter((r) => r.opts.mode === 'arena' && r.opts.stake?.arenaId === arenaId)
+      .filter((r) => r.opts.mode === 'arena' && r.opts.stake?.arenaId === arenaId && !isPaidCustom(r.opts))
       .sort((a, b) => (a.opts.instance ?? 1) - (b.opts.instance ?? 1));
+  }
+
+  /** Every room that seats tickets of an arena: its public instances and its paid custom rooms. */
+  private ticketRooms(arenaId: number): RoomHandle[] {
+    return [...this.handles()].filter((r) => r.opts.mode === 'arena' && r.opts.stake?.arenaId === arenaId);
   }
 
   private createArenaInstance(arenaId: number, arena: ArenaData): RoomHandle {
@@ -585,9 +707,9 @@ export class RoomManager {
     return this.createArenaInstance(arenaId, a);
   }
 
-  /** The instance of `arenaId` in which `wallet` holds a live ticket, if any. */
+  /** The room of `arenaId` (a public instance or a paid custom room) in which `wallet` holds a live ticket, if any. */
   findArenaStake(arenaId: number, wallet: string): { room: RoomHandle; entry: StakeSeat } | null {
-    for (const room of this.arenaInstances(arenaId)) {
+    for (const room of this.ticketRooms(arenaId)) {
       const entry = room.findStakeByWallet(wallet);
       if (entry) return { room, entry };
     }
@@ -651,8 +773,9 @@ export class RoomManager {
     }));
   }
 
+  /** The public room directory (lobby, `/api/rooms`): private rooms and paid custom rooms are never in it. */
   list(): RoomInfo[] {
-    return [...this.handles()].filter((r) => r.opts.mode !== 'private').map((r) => r.info());
+    return [...this.handles()].filter((r) => r.opts.mode !== 'private' && !isPaidCustom(r.opts)).map((r) => r.info());
   }
 
   online(): number {
@@ -745,7 +868,8 @@ export class RoomManager {
         // every league keeps its first room
         (room.opts.mode === 'practice' && !room.id.endsWith('-1') && now - room.lastActivity > 300_000) ||
         // extra arena instances close once empty, with no ticket and no loot left on their floor
-        (room.opts.mode === 'arena' && (room.opts.instance ?? 1) > 1 && room.liveSessions().length === 0 && room.lootCount() === 0 && now - room.lastActivity > 300_000);
+        // (paid custom rooms are closed by the custom-room service, at their end)
+        (room.opts.mode === 'arena' && !isPaidCustom(room.opts) && (room.opts.instance ?? 1) > 1 && room.liveSessions().length === 0 && room.lootCount() === 0 && now - room.lastActivity > 300_000);
       if (!close) continue;
       // a room worker drops it only if it is still idle there (a join may be on its way)
       if (room instanceof RemoteRoom) {

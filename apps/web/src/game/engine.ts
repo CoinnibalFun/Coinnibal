@@ -13,6 +13,7 @@ import {
   type ServerMessage,
   type SnapshotData,
   decodeSnapshot,
+  joinTargetArena,
 } from '@elymum/shared';
 import { ledgerDecimals } from '@elymum/sdk';
 import { SERVER } from '../config';
@@ -754,10 +755,15 @@ export class GameEngine {
           // joins are closed until the next round: hold the ticket and join when it opens
           const join = this.lastJoin;
           this.ticketRetry = null;
-          if (join?.room.startsWith('arena:')) {
-            const arenaId = Number(join.room.slice('arena:'.length));
-            this.heldTicket.hold(join.room, m.opensAt ?? currentRound(arenaId)?.endsAt ?? serverClock.now());
-          }
+          const arenaId = join ? joinTargetArena(join.room) : null;
+          if (join && arenaId !== null) this.heldTicket.hold(join.room, m.opensAt ?? currentRound(arenaId)?.endsAt ?? serverClock.now());
+          return;
+        }
+        if (m.code === 'paid_room') {
+          // a paid room's code entered as a free room: its invite flow (a ticket of its arena) takes over
+          this.ticketRetry = null;
+          const code = this.lastJoin?.room.startsWith('private:') ? this.lastJoin.room.slice('private:'.length) : null;
+          if (code) void import('../rooms/invite').then((x) => x.openInvite(code));
           return;
         }
         if (m.code === 'round_ended') {
@@ -780,7 +786,10 @@ export class GameEngine {
         }
         this.ticketRetry = null;
         if (m.code === 'room_closed') {
-          // a custom room closed (time up, or closed by its creator): back to the lobby with the reason
+          // a custom room closed (time up, or closed by its creator): back to the lobby with the reason;
+          // a paid room's seat goes with it (a ticket not seated yet plays in the public arena)
+          this.heldTicket.refused();
+          if (useUi.getState().paidSeat) useUi.setState({ paidSeat: null });
           if (useUi.getState().screen !== 'lobby') this.backToLobby();
           else this.net.send({ t: 'spectate' });
           // the server's reason (creator / admin / time up) is English: other languages get their own line
