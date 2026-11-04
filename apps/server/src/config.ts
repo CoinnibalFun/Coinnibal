@@ -52,7 +52,7 @@ export interface ServerConfig {
    */
   adminWallets: string[];
   /**
-   * `GAME_ACCESS` (`admins`, `holders` or `public`): overrides the admin's `gameAccess` setting.
+   * `GAME_ACCESS` (`admins`, `holders`, `public` or `maintenance`): overrides the admin's `gameAccess` setting.
    * Null: the site setting decides (default `admins`).
    */
   gameAccess: GameAccess | null;
@@ -187,7 +187,7 @@ export function invalidAdminWallets(v: string | undefined): string[] {
     .filter((s) => s.length > 0 && !isAddress(s, { strict: false }));
 }
 
-/** `GAME_ACCESS`: `admins`, `holders` or `public`; anything else (or unset) is null (the site setting decides). */
+/** `GAME_ACCESS`: `admins`, `holders`, `public` or `maintenance`; anything else (or unset) is null (the site setting decides). */
 export function parseGameAccess(v: string | undefined): GameAccess | null {
   const s = v?.trim().toLowerCase();
   return isGameAccess(s) ? s : null;
