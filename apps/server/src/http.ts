@@ -166,6 +166,8 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
               uptimeS: Math.round((Date.now() - ctx.startedAt) / 1000),
               online: ctx.rooms.online(),
               rooms: ctx.rooms.roomCount,
+              // single-thread, or room workers (and how many answer)
+              game: ctx.rooms.pool ? { mode: 'workers', workers: ctx.rooms.pool.size, up: ctx.rooms.pool.threads().filter((t) => t.up).length } : { mode: 'single', workers: 0, up: 0 },
             });
           case '/api/rooms':
             return json(res, 200, { rooms: ctx.rooms.list(), online: ctx.rooms.online(), blocked: ctx.rooms.blockedArenas() });

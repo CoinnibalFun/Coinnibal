@@ -1,4 +1,5 @@
 import { monitorEventLoopDelay, performance, type EventLoopUtilization, type IntervalHistogram } from 'node:perf_hooks';
+import type { GameServerLoad, GameThreadLoad } from '@elymum/shared';
 
 /** Tick time of the last few seconds: mean, p95 and max (ms). */
 export interface TickSummary {
@@ -120,6 +121,26 @@ export class ThreadMeter {
   stop(): void {
     this.lag.disable();
   }
+}
+
+/** The admin's view of `ServerLoad` (`GET /api/admin/load`, the Network tab). */
+export function gameLoad(s: ServerLoad): GameServerLoad {
+  const t = (x: ThreadLoad): GameThreadLoad => ({
+    id: x.id,
+    rooms: x.rooms,
+    humans: x.humans,
+    bots: x.bots,
+    conns: x.conns,
+    tickMeanMs: x.tick.meanMs,
+    tickP95Ms: x.tick.p95Ms,
+    tickMaxMs: x.tick.maxMs,
+    elu: x.elu,
+    lagP99Ms: x.lagP99Ms,
+    heapMb: x.heapMb,
+    up: x.up ?? true,
+    restarts: x.restarts ?? 0,
+  });
+  return { mode: s.mode, workers: s.workers, cpus: s.cpus, rssMb: s.rssMb, conns: s.conns, sentBytesPerSec: s.sentBytesPerSec, sentMsgsPerSec: s.sentMsgsPerSec, main: t(s.main), threads: s.threads.map(t), at: s.at };
 }
 
 /** Bytes and messages written to WebSockets by this process (counted where frames are sent). */
