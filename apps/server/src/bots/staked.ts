@@ -12,7 +12,7 @@ import type { ArenaEntry } from '../stake/ledger';
  * player's (`ArenaLedger.transfer`), it is journaled as a live stake, and at its death, at the
  * bell (or at a server stop) the room queues its settlement in the same journal as everyone else
  * (the chain worker settles it on chain). Bots never take a seat a human needs: staked bots
- * count towards the room's bot cap but are never sent home to make room (they hold a ticket);
+ * count towards the room's bot cap and are never sent home (they hold a ticket);
  * zero-value bots go first, and bots never block a join.
  *
  * The room does the in-game part (`Room.seatStakedBot`, the settlements). The chain part — bot

@@ -96,6 +96,10 @@ export type Ctl =
       roomId?: string;
       live?: LiveStake[];
       loot?: { roomId: string; arenaId: number; items: { x: number; y: number; value: number }[] };
+      /** What the room's house bots hold (`Journal.commit` `purses`). */
+      purses?: { roomId: string; arenaId: number; value: number };
+      /** Value that became the team's reserve in this write (`Journal.commit` `house`). */
+      house?: { arenaId: number; amount: number }[];
       /** Seated stakes after this write: session → player id (the directory's `findStakeByWallet`). */
       seats: [session: string, pid: number, player: string][];
       /** Settlements the integrity auto-hold must look at: key → the ticket's stake (`IntegrityService.holdDecision`). */

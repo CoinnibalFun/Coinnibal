@@ -16,7 +16,7 @@ export interface BotKindSettings {
   cap: number;
   /** Bots kept even when the room is busy (≤ cap). */
   min: number;
-  /** Wanted population, humans + bots: bots fill `target − humans` (within min..cap). */
+  /** Typical squad size per room, whoever else plays (within max(min, 3)..cap; see `BotManager.desiredOf`). */
   target: number;
   /** Difficulty mix, as weights (percent by convention). */
   mix: BotMixWeights;
@@ -75,8 +75,17 @@ export const BOT_LIMITS = { cap: 64, target: 200, stakedPerArena: 32, arenaIds: 
 /** Default bot strength (percent) per room kind: the rookie league a little softer. */
 export const DEFAULT_BOT_STRENGTH: Record<BotRoomKind, number> = { practiceRookie: 85, practicePro: 100, arena: 100, private: 100 };
 
-/** Default most bots chasing one person at once: one in rookie and private rooms, two in pro ponds and arenas. */
-export const DEFAULT_MAX_CHASERS: Record<BotRoomKind, number> = { practiceRookie: 1, practicePro: 2, arena: 2, private: 1 };
+/**
+ * Default most bots working one person at once (a pusher, a flanker and a feeder make a trap): one in
+ * the rookie league, two in private rooms, three in pro ponds and arenas.
+ */
+export const DEFAULT_MAX_CHASERS: Record<BotRoomKind, number> = { practiceRookie: 1, practicePro: 3, arena: 3, private: 2 };
+
+/** The chaser limits before squad play: a saved file still holding them is upgraded on load. */
+export const OLD_MAX_CHASERS: Record<BotRoomKind, number> = { practiceRookie: 1, practicePro: 2, arena: 2, private: 1 };
+
+/** Squad play (traps, lures, feeding, map-wide tracking) per room kind: off in the rookie league. */
+export const TEAMPLAY: Record<BotRoomKind, boolean> = { practiceRookie: false, practicePro: true, arena: true, private: true };
 
 export const BOT_TESTNET_DEFAULT: BotTestnetSettings = { stakedPerArena: 6, bankroll: '1000000', gasHype: '0.05', arenas: {} };
 
@@ -306,6 +315,18 @@ export function upgradeSavedBotSettings(raw: Record<string, unknown>): string[] 
       }
     }
   }
+  // the chaser limits before squad play (2026-11): one in rookie and private rooms, two in pro ponds and arenas
+  if (isObj(raw.kinds)) {
+    for (const [kind, k] of Object.entries(raw.kinds)) {
+      if (!isObj(k) || !(kind in OLD_MAX_CHASERS)) continue;
+      const old = OLD_MAX_CHASERS[kind as BotRoomKind];
+      const now = DEFAULT_MAX_CHASERS[kind as BotRoomKind];
+      if (k.maxChasers === old && old !== now) {
+        k.maxChasers = now;
+        out.push(`kinds.${kind}.maxChasers -> ${now}`);
+      }
+    }
+  }
   if (isObj(raw.maps)) {
     for (const [kind, m] of Object.entries(raw.maps)) {
       if (!isObj(m)) continue;
@@ -381,7 +402,7 @@ export class BotSettingsStore {
 
   /** Bot-manager options of a room kind (what rooms run with). */
   options(kind: BotRoomKind): BotManagerOptions {
-    return managerOptions(this.cur.kinds[kind]);
+    return { ...managerOptions(this.cur.kinds[kind]), teamplay: TEAMPLAY[kind] };
   }
 
   /** Adaptive map settings of a room kind. */

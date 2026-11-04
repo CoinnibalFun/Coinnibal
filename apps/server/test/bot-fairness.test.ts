@@ -75,7 +75,7 @@ function veteran(world: World, x: number, y: number, mass: number): Player {
   return p;
 }
 
-describe('bots are fair to people (2026-11 playtest)', () => {
+describe('bots play people hard but like people (limits, delays, give-ups)', () => {
   it('never more than the room limit chase one person at once (1 in rookie rooms, 2 in arenas)', () => {
     for (const limit of [1, 2]) {
       const world = new World(emptyCfg());
@@ -132,7 +132,7 @@ describe('bots are fair to people (2026-11 playtest)', () => {
     expect(back).toBe(false);
   });
 
-  it('no double split on a person, and no second split attack on people within the cooldown', () => {
+  it('no double split on a person outside a trap, and no second split attack on people within the cooldown', () => {
     // just beyond one split: a bot would double-split another bot here (see bots.test.ts)
     const world = new World(emptyCfg());
     const b = bot(world, 900, 1500, 900, { ...hunter, reactionMs: 0 }, 41);
@@ -158,6 +158,7 @@ describe('bots are fair to people (2026-11 playtest)', () => {
     const world = new World(emptyCfg());
     const m = new BotManager(world, { target: 4, min: 4, max: 4, strength: 60, maxChasers: 1 }, mulberry32(5));
     m.update(0, 0);
+    m.fill(0);
     expect(m.bots.size).toBe(4);
     for (const b of m.bots.values()) {
       expect(b.brain.strength).toBeCloseTo(0.6);
@@ -180,7 +181,10 @@ describe('bot strength settings and the upgrade of old saved defaults', () => {
       expect(base.kinds[k].strength).toBe(DEFAULT_BOT_STRENGTH[k]);
       expect(base.kinds[k].maxChasers).toBe(DEFAULT_MAX_CHASERS[k]);
     }
-    expect(DEFAULT_MAX_CHASERS).toEqual({ practiceRookie: 1, practicePro: 2, arena: 2, private: 1 });
+    expect(DEFAULT_MAX_CHASERS).toEqual({ practiceRookie: 1, practicePro: 3, arena: 3, private: 2 });
+    // squad play everywhere but the rookie league
+    expect(new BotSettingsStore(null, base).options('practiceRookie').teamplay).toBe(false);
+    expect(new BotSettingsStore(null, base).options('arena').teamplay).toBe(true);
     const next = applyBotSettings(base, { kinds: { arena: { strength: 70, maxChasers: 0 } } });
     expect(next.kinds.arena).toMatchObject({ strength: 70, maxChasers: 0 });
     const store = new BotSettingsStore(null, next);
@@ -199,10 +203,13 @@ describe('bot strength settings and the upgrade of old saved defaults', () => {
     saved.kinds.practiceRookie.mix = { ...OLD_BOT_MIX_PRESETS.rookie };
     saved.kinds.practicePro.mix = { ...OLD_BOT_MIX_PRESETS.standard };
     saved.kinds.arena.mix = { easy: 20, medium: 40, hard: 40 };
+    // the old chaser limit is upgraded; an admin's own value stays
+    saved.kinds.practicePro.maxChasers = 2;
+    saved.kinds.private.maxChasers = 4;
     // written before strength and chasers existed
-    for (const k of Object.values(saved.kinds) as Record<string, unknown>[]) {
+    for (const [name, k] of Object.entries(saved.kinds) as [string, Record<string, unknown>][]) {
       delete k.strength;
-      delete k.maxChasers;
+      if (name === 'arena' || name === 'practiceRookie') delete k.maxChasers;
     }
     saved.maps.practiceRookie = { auto: true, perPlayer: 900, min: 3000, max: 9000 };
     saved.maps.arena = { auto: false, perPlayer: 900, min: 3000, max: 9000 };
@@ -216,7 +223,9 @@ describe('bot strength settings and the upgrade of old saved defaults', () => {
     expect(s.kinds.practiceRookie.mix).toEqual(BOT_MIX_PRESETS.rookie);
     expect(s.kinds.practicePro.mix).toEqual(BOT_MIX_PRESETS.standard);
     expect(s.kinds.arena.mix).toEqual({ easy: 20, medium: 40, hard: 40 });
-    expect(s.kinds.arena).toMatchObject({ strength: 100, maxChasers: 2 });
+    expect(s.kinds.arena).toMatchObject({ strength: 100, maxChasers: 3 });
+    expect(s.kinds.practicePro.maxChasers).toBe(3);
+    expect(s.kinds.private.maxChasers).toBe(4);
     expect(s.maps.practiceRookie).toEqual(MAP_SCALE_DEFAULT);
     expect(s.maps.practicePro).toEqual(MAP_SCALE_DEFAULT);
     expect(MAP_SCALE_DEFAULT).toMatchObject({ perPlayer: 800, min: 9000, max: 12_000 });

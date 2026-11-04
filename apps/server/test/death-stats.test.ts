@@ -73,17 +73,18 @@ describe('arena death stats (the death sheet)', () => {
     expect(room.ledger!.value(a.p.id)).toBe(2 * FEE);
   });
 
-  it('a staker eaten by a bot reports the value spilled as loot', () => {
+  it('a staker eaten by a house bot reports the value lost (the bot keeps it, nothing spills)', () => {
     const room = arena(1);
     const b = staker(room, 2);
-    for (let i = 0; i < 60 && room.world.players.size < 2; i++) room.tick(TICK_MS); // the bot manager fills the room
+    for (let i = 0; i < 600 && room.world.players.size < 2; i++) room.tick(TICK_MS); // the first bot walks in
     const bot = [...room.world.players.values()].find((p) => room.bots!.isBot(p.id))!;
     expect(bot).toBeDefined();
     bot.shieldUntil = 0;
     feed(room, bot, b.p);
     const death = b.conn.msgs.find((m) => m.t === 'death');
     if (death?.t !== 'death') throw new Error('no death message');
-    expect(death.stats).toMatchObject({ payout: 0, valueLost: FEE, lootSpilled: FEE, byBot: true });
-    expect(room.world.loot().reduce((s, l) => s + l.value, 0)).toBe(FEE);
+    expect(death.stats).toMatchObject({ payout: 0, valueLost: FEE, lootSpilled: 0, byBot: true });
+    expect(room.world.loot()).toEqual([]);
+    expect(room.purseOf(bot.id)).toBe(FEE);
   });
 });

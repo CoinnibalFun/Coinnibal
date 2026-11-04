@@ -59,7 +59,7 @@ function mapRoom(o: { players: number; humans: number; map: MapScaleSettings | n
       mode: 'private',
       name: 'Bench',
       maxPlayers: o.humans + 1,
-      bots: bots > 0 ? { target: o.players, min: bots, max: bots, mix: 'standard' } : null,
+      bots: bots > 0 ? { target: bots, min: bots, max: bots, mix: 'standard' } : null,
       seed: o.seed ?? 7,
       ...(o.world ? { world: o.world } : {}),
       ...(o.map ? { map: { scale: o.map } } : {}),
@@ -69,6 +69,8 @@ function mapRoom(o: { players: number; humans: number; map: MapScaleSettings | n
   const rng = mulberry32(o.seed ?? 7);
   const conns = Array.from({ length: o.humans }, (_, i) => fakeConn(`bench${i}`));
   for (const c of conns) room.join(c, { name: 'p', skin: 1, flags: 0 });
+  // a bench measures a full room: seat the whole squad now (rooms let bots walk in one by one)
+  room.bots?.fill();
   const steer = () => {
     const w = room.world;
     for (const c of conns) {
