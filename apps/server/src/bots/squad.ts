@@ -31,6 +31,17 @@ export const AMBUSH_RANGE = 1700;
 export const FEED_RANGE = 650;
 /** People who joined less than this long ago are never the target of an operation (ms). */
 export const OP_GRACE_MS = 25_000;
+/**
+ * Cover: a teammate this small (fresh in the room) gets a big one keeping an eye on it from a
+ * distance; the cover ends once it has grown past `WARD_MASS * 1.6`.
+ */
+export const WARD_MASS = 140;
+/** A guard is at least this big, and this many times its ward. */
+export const GUARD_MIN_MASS = 260;
+export const GUARD_RATIO = 3;
+/** A guard is recruited only this close to its ward (world units), for this long (renewed while it lasts). */
+export const GUARD_RANGE = 2600;
+export const GUARD_TTL_MS = 15_000;
 
 /** What the squad knows of one person (as of `at`). */
 export interface Mark {
@@ -81,6 +92,9 @@ export class SquadIntel {
   private readonly ops = new Map<number, Op>();
   /** Bot pid → the target of the operation it holds a role in. */
   private readonly roleOf = new Map<number, number>();
+  /** Cover: ward (a small bot) → its guard, and guard → ward. */
+  private readonly guardOf = new Map<number, { guard: number; until: number }>();
+  private readonly wardOf = new Map<number, number>();
   private refreshedAt = -Infinity;
   /** What a person is worth (the room plugs in its ledger; 0 by default). */
   valueOf: (pid: number) => number = () => 0;
@@ -136,6 +150,73 @@ export class SquadIntel {
     for (const id of this.marks.keys()) if (!seen.has(id)) this.marks.delete(id);
     for (const id of this.mates.keys()) if (!seen.has(id)) this.mates.delete(id);
     for (const [t, op] of this.ops) if (op.until <= now || !this.marks.has(t)) this.dropOp(t);
+    this.coverSmallOnes(now);
+  }
+
+  /**
+   * Every small teammate gets a big one nearby to look after it (not glued to it: see `BotBrain`), and
+   * keeps it while it is small; a guard that died, grew too small or left is replaced.
+   */
+  private coverSmallOnes(now: number): void {
+    for (const [ward, g] of this.guardOf) {
+      const w = this.mates.get(ward);
+      const gm = this.mates.get(g.guard);
+      if (!this.teamplay || !w || !gm || w.mass > WARD_MASS * 1.6 || gm.mass < w.mass * GUARD_RATIO || g.until <= now) {
+        this.guardOf.delete(ward);
+        if (this.wardOf.get(g.guard) === ward) this.wardOf.delete(g.guard);
+      }
+    }
+    if (!this.teamplay) return;
+    for (const w of this.mates.values()) {
+      if (w.mass > WARD_MASS) continue;
+      const g = this.guardOf.get(w.pid);
+      if (g) {
+        g.until = now + GUARD_TTL_MS;
+        continue;
+      }
+      let best: Mate | null = null;
+      let bestD = GUARD_RANGE;
+      for (const m of this.mates.values()) {
+        if (m.pid === w.pid || m.skill < 1 || m.mass < GUARD_MIN_MASS || m.mass < w.mass * GUARD_RATIO) continue;
+        if (this.wardOf.has(m.pid) || this.roleOf.has(m.pid) || this.guardOf.has(m.pid)) continue;
+        const d = Math.hypot(m.x - w.x, m.y - w.y);
+        if (d < bestD) {
+          bestD = d;
+          best = m;
+        }
+      }
+      if (best) {
+        this.guardOf.set(w.pid, { guard: best.pid, until: now + GUARD_TTL_MS });
+        this.wardOf.set(best.pid, w.pid);
+      }
+    }
+  }
+
+  /** The small teammate bot `pid` looks after (null: none). */
+  wardFor(pid: number): Mate | null {
+    const w = this.wardOf.get(pid);
+    return w === undefined ? null : (this.mates.get(w) ?? null);
+  }
+
+  /** The guard looking after bot `pid` (null: none). */
+  guardFor(pid: number): Mate | null {
+    const g = this.guardOf.get(pid);
+    return g ? (this.mates.get(g.guard) ?? null) : null;
+  }
+
+  /** The nearest person in the reports who could eat a cell of `mass` at (x, y), within `range` (null: none). */
+  threatNear(x: number, y: number, mass: number, range: number): Mark | null {
+    let best: Mark | null = null;
+    let bestD = range;
+    for (const m of this.marks.values()) {
+      if (!canEat(m.big, mass)) continue;
+      const d = Math.hypot(m.x - x, m.y - y);
+      if (d < bestD) {
+        bestD = d;
+        best = m;
+      }
+    }
+    return best;
   }
 
   /** A bot tells the squad its skill (0 easy .. 2 hard): easy bots are never recruited. */
@@ -176,7 +257,7 @@ export class SquadIntel {
 
   /** True while bot `pid` holds any role (it does not wander off or go home mid-operation). */
   busy(pid: number, now: number): boolean {
-    return this.roleFor(pid, now) !== null;
+    return this.roleFor(pid, now) !== null || this.wardOf.has(pid);
   }
 
   /** Bots holding a role against person `target`. */
@@ -270,6 +351,17 @@ export class SquadIntel {
 
   /** The bot gives up its role (it died, left, or the chase is over). */
   release(pid: number): void {
+    // cover: a guard or a ward that leaves ends that cover
+    const ward = this.wardOf.get(pid);
+    if (ward !== undefined) {
+      this.wardOf.delete(pid);
+      this.guardOf.delete(ward);
+    }
+    const g = this.guardOf.get(pid);
+    if (g) {
+      this.guardOf.delete(pid);
+      this.wardOf.delete(g.guard);
+    }
     const t = this.roleOf.get(pid);
     this.roleOf.delete(pid);
     if (t === undefined) return;
@@ -331,7 +423,7 @@ export class SquadIntel {
     let best: Mate | null = null;
     let bestD = range;
     for (const b of this.mates.values()) {
-      if (this.roleOf.has(b.pid)) continue;
+      if (this.roleOf.has(b.pid) || this.wardOf.has(b.pid)) continue;
       if (!ok(b)) continue;
       const d = Math.hypot(b.x - x, b.y - y);
       if (d < bestD) {

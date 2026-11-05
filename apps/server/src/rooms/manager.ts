@@ -154,7 +154,10 @@ export class RoomManager {
     };
     this.deps = { ...deps, round, clock, onGameOver: gameOver, onBellSettled: bellSettled };
     // a room on this thread hands its own connection (a `Conn`) to the hooks
-    this.roomDeps = { ...this.deps, onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: e.player, stats: e.stats }) };
+    this.roomDeps = {
+      ...this.deps,
+      houseBank: { draw: async (arenaId, amount) => this.deps.journal.drawHouse(arenaId, amount) },
+      onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: e.player, stats: e.stats }) };
     const workers = cfg.gameWorkers ?? 0;
     this.pool =
       workers > 0
@@ -583,8 +586,15 @@ export class RoomManager {
         maxPlayers: this.cfg.arenaInstanceCap,
         bots: this.botSettings.options('arena'),
         map: { scale: this.botSettings.mapScale('arena') },
-        stake: { arenaId, buyIn: arena.buyIn },
+        stake: { arenaId, buyIn: arena.buyIn, botStake: this.ticketValue(arena.buyIn) },
     });
+  }
+
+  /** What a ticket bought now plays with (the entry fee less the arena's fee on entry): a house bot's bankroll. */
+  private ticketValue(buyIn: number): number {
+    const st = this.deps.chain.status();
+    const bps = st.feeModel === 'profit' ? 0 : Math.max(0, Math.min(10_000, st.feeBps ?? 0));
+    return buyIn - Math.floor((buyIn * bps) / 10_000);
   }
 
   /**

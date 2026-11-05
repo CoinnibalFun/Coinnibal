@@ -65,17 +65,24 @@ the code is laid out and how it is run. The source of truth for everything is
   everywhere else 50 / 40 / 10). Bots react with a delay (about 400 / 310 / 230 ms, to threats and to prey), aim a
   little off, slip now and then and have short lapses where they ignore threats; people who joined less than 25 s
   ago are spared.
-- The house squad (2026-11 update): bots are the team's own players, not seat fillers. Every room fields at
-  least 3 (`BOT_FLOOR`; a lower admin cap or a custom room's own count wins) and about the admin `target`, whoever
-  else plays: people joining never send a bot home. Bots walk in one at a time (the first 3 within a few seconds of
-  a room opening or an arena round starting, the rest every 5-20 s), go home after 4-12 min and come back; the
-  planned squad size drifts around the target every 1.5-3 min. A bell sends the squad home with the paid people and
-  it walks back in.
+- The house squad (2026-11 update): bots are the team's own players, not seat fillers. Every room fields `min`
+  to `cap` bots (6-9 by default, rolled evenly; at least 3, `BOT_FLOOR`), whoever else plays: people joining never
+  send a bot home. Bots walk in one at a time at random moments, the first 3 within seconds and all of them within
+  the first minute (`ARRIVAL.windowMs`) of a room opening or an arena round starting. In arenas (`rounds`) the squad
+  size is fixed per round, no bot goes home before the bell and none walks in after the round's joins close; a bot
+  that was eaten comes back 3-12 s later while joins are open. Free rooms let bots go home after 4-12 min.
+- Bankroll: in arenas each bot walks in with a ticket's worth (the value a person's ticket starts with) drawn
+  from the team reserve (`Journal.drawHouse`, on the main thread, also from room workers), so eating a bot pays
+  like eating a person. What bots hold at the bell goes back to the reserve. With too little reserve a bot enters
+  with nothing; the team can never lose more than the reserve. The admin tops it up by turning an unplayed ticket
+  of their own wallet into reserve (`POST /api/admin/bots/bankroll`, /admin → Bots: the ticket settles at 0 and its
+  value stays in the vault).
 - Squad play (`bots/squad.ts`, off in the rookie league): the squad keeps a map-wide picture of every person
   (refreshed every 1.2 s, never live sight) and runs operations with roles that lapse unless renewed: a *pusher*
   herds the person toward a *flanker* that cuts off the way out (the trap) or, for hard bots, into a wall; a small
   *feeder* tips mass into a pusher that is just short of a split kill; a small bot chased by a person runs to a
-  big teammate who *ambushes* the chaser (the lure). Idle bots *patrol* toward the most promising person on the
+  big teammate who *ambushes* the chaser (the lure); a small teammate (under 140 mass) gets a big one keeping an eye
+  on it from a distance and cutting in when a person goes for it (*cover*). Idle bots *patrol* toward the most promising person on the
   reports. Targets weigh more when they hold more value, in the last two minutes of a round, and when split into
   pieces. At most `maxChasers` bots work one person (rookie 1, private 2, pro and arenas 3). Teammates on an
   operation are never eaten; otherwise bots still eat each other now and then (`BOT_APPETITE`). A chase on a person

@@ -309,6 +309,9 @@ export function adminApi(token: string) {
     bots: () => request<BotAdminView>('/api/admin/bots', { token }),
     /** `PUT /api/admin/bots`: a partial settings update; answers like the GET. */
     saveBots: (patch: BotSettingsPatch) => request<BotAdminView>('/api/admin/bots', { method: 'PUT', token, body: patch }),
+    /** `POST /api/admin/bots/bankroll`: the admin's unplayed ticket in `arenaId` becomes bot bankroll (team reserve). */
+    bankrollBots: (arenaId: number) =>
+      request<{ arenaId: number; amount: number; reserve: number; view: BotAdminView }>('/api/admin/bots/bankroll', { method: 'POST', token, body: { arenaId } }),
     /** `GET /api/admin/custom-rooms`: the custom room settings, the effective treasury and the live rooms. */
     customRooms: () => request<CustomRoomsAdminView>('/api/admin/custom-rooms', { token }),
     /** `PUT /api/admin/custom-rooms`: a partial settings update; answers like the GET. */
@@ -502,6 +505,8 @@ export interface BotAdminView {
   /** The staked-bot wallets and what is in their way (`problem`: shown with its fix). */
   staked?: { active: boolean; chainId: number | null; wallets: number; playing: number; problem: string | null };
   live: { rooms: BotRoomCount[]; byKind?: Record<string, BotTotals>; totals?: BotTotals };
+  /** The team reserve per arena id (ledger units): what the house bots enter arenas with. */
+  reserve?: Record<string, number>;
 }
 
 export type BotSettingsPatch = {

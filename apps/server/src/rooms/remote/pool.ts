@@ -449,6 +449,13 @@ export class WorkerPool {
       case 'liveSessions':
         slot.liveSessions = c.list;
         return;
+      case 'draw': {
+        const ok = d.journal.drawHouse(c.arenaId, c.amount);
+        // the room's worker is gone: the bankroll goes straight back to the reserve
+        if (ok && slot.dead) d.journal.commit({ house: [{ arenaId: c.arenaId, amount: c.amount }] });
+        else this.send(slot, { k: 'drawn', req: c.req, ok });
+        return;
+      }
       case 'acquire': {
         const src = d.stakedBots;
         if (!src) {

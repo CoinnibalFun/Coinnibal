@@ -29,6 +29,13 @@ export interface BotAdmin {
   stakedSource?: () => boolean;
   /** The staked-bot wallets and what is in their way (`TestnetBotSource.status`). */
   stakedStatus?: () => StakedBotStatus;
+  /** The team reserve per arena id (ledger units): the house bots' bankroll. */
+  reserve?: () => Record<string, number>;
+  /**
+   * Turns the admin's own unplayed ticket in `arenaId` into bot bankroll: the ticket is settled at 0 and
+   * its value stays in the arena vault as team reserve. Throws `SiteFail` when there is no such ticket.
+   */
+  bankroll?: (wallet: string, arenaId: number) => Promise<{ arenaId: number; amount: number; reserve: number }>;
   log?: (m: string) => void;
 }
 
@@ -50,6 +57,8 @@ export interface BotAdminView {
   stakedActive: boolean;
   /** The staked-bot wallets (absent without a source): wallet count, live tickets, the current problem. */
   staked?: StakedBotStatus;
+  /** The team reserve per arena id (ledger units), the house bots' bankroll; absent when unknown. */
+  reserve?: Record<string, number>;
   live: {
     rooms: BotRoomCount[];
     byKind: Record<BotRoomKind, KindTotals>;
@@ -78,6 +87,7 @@ export function botAdminView(a: BotAdmin): BotAdminView {
     testnet,
     stakedActive: isTestChain(a.chainId()) && (a.stakedSource?.() ?? false),
     ...(staked ? { staked } : {}),
+    ...(a.reserve ? { reserve: a.reserve() } : {}),
     live: { rooms, byKind, totals },
   };
 }
@@ -97,7 +107,20 @@ export async function botRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   wallet: string,
+  sub?: string,
 ): Promise<void> {
+  if (sub === 'bankroll') {
+    // POST /api/admin/bots/bankroll {arenaId}: the admin's unplayed ticket becomes bot bankroll
+    h.method(req, 'POST');
+    if (!a.bankroll) throw new SiteFail(404, 'not_found', 'No chain: there is no bankroll to fund');
+    const body = await h.readJson(req);
+    const arenaId = body.arenaId;
+    if (typeof arenaId !== 'number' || !Number.isInteger(arenaId) || arenaId < 0 || arenaId > 65535) throw new SiteFail(400, 'bad_request', 'arenaId must be an arena id', 'arenaId');
+    const r = await a.bankroll(wallet, arenaId);
+    a.log?.(`bots: ${wallet} turned a ticket of arena #${arenaId} into bot bankroll (${r.amount}; reserve now ${r.reserve})`);
+    h.send(res, 200, { ...r, view: botAdminView(a) });
+    return;
+  }
   if (h.method(req, 'GET', 'PUT') === 'PUT') {
     const body = await h.readJson(req);
     try {

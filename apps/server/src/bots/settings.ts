@@ -81,6 +81,9 @@ export const DEFAULT_BOT_STRENGTH: Record<BotRoomKind, number> = { practiceRooki
  */
 export const DEFAULT_MAX_CHASERS: Record<BotRoomKind, number> = { practiceRookie: 1, practicePro: 3, arena: 3, private: 2 };
 
+/** The default squad of the practice leagues and arenas: 6-9 bots (target 8). */
+export const SQUAD_DEFAULT = { min: 6, target: 8, cap: 9 } as const;
+
 /** The chaser limits before squad play: a saved file still holding them is upgraded on load. */
 export const OLD_MAX_CHASERS: Record<BotRoomKind, number> = { practiceRookie: 1, practicePro: 2, arena: 2, private: 1 };
 
@@ -313,6 +316,17 @@ export function upgradeSavedBotSettings(raw: Record<string, unknown>): string[] 
           break;
         }
       }
+    }
+  }
+  // the squad sizes before the 2026-11 squad (cap 12, target 12, min 2-4): the 6-9 squad
+  if (isObj(raw.kinds)) {
+    for (const kind of ['practiceRookie', 'practicePro', 'arena']) {
+      const k = (raw.kinds as Record<string, unknown>)[kind];
+      if (!isObj(k) || k.cap !== 12 || k.target !== 12 || ![2, 3, 4].includes(k.min as number)) continue;
+      k.cap = SQUAD_DEFAULT.cap;
+      k.target = SQUAD_DEFAULT.target;
+      k.min = SQUAD_DEFAULT.min;
+      out.push(`kinds.${kind} -> squad ${SQUAD_DEFAULT.min}-${SQUAD_DEFAULT.cap}`);
     }
   }
   // the chaser limits before squad play (2026-11): one in rookie and private rooms, two in pro ponds and arenas

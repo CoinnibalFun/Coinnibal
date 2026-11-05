@@ -645,8 +645,8 @@ export class BotBrain {
         const onOp = role !== null && role.op.target === q.player.id;
         // a crew is enough: a person already worked by the room's limit is left to them (unless this bot is in the crew)
         if (human && !onOp && q.player.id !== this.claimId && hunts.others(q.player.id, this.pid, now) >= this.maxChasers) continue;
-        // a teammate on an operation is never eaten
-        if (!human && team && squad.busy(q.player.id, now)) continue;
+        // a teammate on an operation (or the small one this bot looks after) is never eaten
+        if (!human && team && (squad.busy(q.player.id, now) || squad.wardFor(this.pid)?.pid === q.player.id)) continue;
         const dist = Math.hypot(q.x - big.x, q.y - big.y);
         let w = (aggression * q.mass * 6) / Math.pow(dist + 80, 1.05);
         if (human) w *= P.humanBias * squad.worth(q.player.id) * (onOp ? 1.6 : 1);
@@ -772,8 +772,31 @@ export class BotBrain {
         }
       }
 
+      // cover: a guard keeps a small teammate in reach, loosely, and cuts in when a person goes for it
+      const ward = !roleDriven && P.skill > 0 ? squad.wardFor(this.pid) : null;
+      let covering = false;
+      if (ward && dangerLevel < 0.5) {
+        covering = true;
+        const t = squad.threatNear(ward.x, ward.y, ward.mass, 520 + Math.sqrt(ward.mass) * 20);
+        if (t && canEat(big.mass, t.big * 1.05)) {
+          // between the person and the small one, closer to the person: the bite comes before theirs
+          const ix = t.x + (ward.x - t.x) * 0.3 + t.vx * 0.4;
+          const iy = t.y + (ward.y - t.y) * 0.3 + t.vy * 0.4;
+          map.addInterest(angleTo(cx, cy, ix, iy), AMBUSH_W * S, 2);
+          roleDriven = true;
+        } else {
+          // not glued to it: drift back when it is far, graze freely otherwise
+          const far = Math.hypot(ward.x - cx, ward.y - cy) - (650 + big.r);
+          if (far > 0) {
+            const ox = ward.x + Math.cos(this.wander) * 380;
+            const oy = ward.y + Math.sin(this.wander) * 380;
+            map.addInterest(angleTo(cx, cy, ox, oy), Math.min(0.9, 0.25 + far / 2500), 1);
+          }
+        }
+      }
+
       // patrol: no prey in sight, nothing chasing us: drift toward the most promising person on the squad's reports
-      if (!roleDriven && !bestPrey && dangerLevel < 0.2 && !atCap) {
+      if (!roleDriven && !covering && !bestPrey && dangerLevel < 0.2 && !atCap) {
         const m = squad.patrolTarget(this.pid, cx, cy, big.mass, now, this.maxChasers);
         if (m) {
           // reports are a little stale and every bot reads them its own way
