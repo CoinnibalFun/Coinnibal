@@ -29,8 +29,10 @@ vi.mock('@elymum/sdk', async (orig) => ({
   planJoin: spies.planJoin,
   getArenaConfig: spies.getArenaConfig,
   getSession: spies.getSession,
+  // the approval is visible at once (the join waits for it before estimating its gas)
+  getAllowance: async () => 10n ** 30n,
 }));
-vi.mock('../src/wallet/chain', async (orig) => ({ ...(await orig<typeof import('../src/wallet/chain')>()), useReadClient: () => ({}) }));
+vi.mock('../src/wallet/chain', async (orig) => ({ ...(await orig<typeof import('../src/wallet/chain')>()), useReadClient: () => ({ estimateGas: async () => 130_000n }) }));
 vi.mock('../src/wallet/tx', async (orig) => ({ ...(await orig<typeof import('../src/wallet/tx')>()), sendWalletCall: spies.sendWalletCall }));
 
 const CHAIN = chainStatus();
