@@ -47,17 +47,21 @@ afterEach(() => {
 
 describe('round math on the client', () => {
   it('derives the round length from RoundInfo and rolls past the bell with roundAt', () => {
-    expect(roundLengths(R)).toEqual({ roundMs: 300_000, closeMs: 60_000 });
+    expect(roundLengths(R)).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 0 });
     // a server running 30 s rounds with a 5 s close (ROUND_SECONDS / ROUND_JOIN_CLOSE_SECONDS)
     const short = { n: 100, endsAt: 101 * 30_000, joinsCloseAt: 101 * 30_000 - 5_000 };
-    expect(roundLengths(short)).toEqual({ roundMs: 30_000, closeMs: 5_000 });
+    expect(roundLengths(short)).toEqual({ roundMs: 30_000, closeMs: 5_000, breakMs: 0 });
     expect(roundStateAt(short, short.endsAt + 1)).toMatchObject({ n: 101, endsAt: 102 * 30_000, phase: 'open', msLeft: 29_999 });
 
     expect(roundStateAt(R, START + 108_000)).toMatchObject({ n: N, msLeft: 192_000, phase: 'open' });
     expect(roundStateAt(R, R.joinsCloseAt)).toMatchObject({ n: N, msLeft: 60_000, phase: 'closing' });
     // at the bell the next round is open (no intermission)
     const next = roundAt(R.endsAt);
-    expect(roundStateAt(R, R.endsAt)).toEqual({ n: N + 1, endsAt: next.endsAt, joinsCloseAt: next.joinsCloseAt, msLeft: RULES.roundMs, phase: 'open' });
+    expect(roundStateAt(R, R.endsAt)).toEqual({ n: N + 1, endsAt: next.endsAt, joinsCloseAt: next.joinsCloseAt, opensAt: next.endsAt - RULES.roundMs, msLeft: RULES.roundMs, phase: 'open' });
+    // a server with a 15 s break after each bell: the next round opens to joins 15 s in
+    const withBreak = { ...R, opensAt: R.endsAt - RULES.roundMs + 15_000 };
+    expect(roundLengths(withBreak).breakMs).toBe(15_000);
+    expect(roundStateAt(withBreak, R.endsAt + 1)).toMatchObject({ n: N + 1, opensAt: R.endsAt + 15_000 });
     expect(formatCountdown(192_000)).toBe('3:12');
     expect(formatCountdown(41_200)).toBe('0:42');
     expect(formatCountdown(0)).toBe('0:00');

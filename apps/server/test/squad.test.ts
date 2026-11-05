@@ -2,6 +2,8 @@ import { RULES, TICK_MS, WORLD_PRESETS } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { BotBrain } from '../src/bots/brain';
 import { BotManager } from '../src/bots/manager';
+import { BotSettingsStore, defaultBotSettings } from '../src/bots/settings';
+import { loadConfig } from '../src/config';
 import { rollPersonality, type Personality } from '../src/bots/personality';
 import { OP_GRACE_MS, squadIntel } from '../src/bots/squad';
 import type { Player } from '../src/game/entities';
@@ -251,7 +253,26 @@ describe('the bot squad', () => {
     expect(squad.worth(rich.id)).toBeGreaterThan(squad.worth(poor.id));
     const before = squad.worth(poor.id);
     squad.roundLeftMs = 30_000;
-    expect(squad.worth(poor.id)).toBeGreaterThan(before);
+    const late = squad.worth(poor.id);
+    expect(late).toBeGreaterThan(before);
+    // the admin's final-minute push: the last minute is a hunt on people
+    squad.finalPush = true;
+    expect(squad.pushing()).toBe(true);
+    expect(squad.worth(poor.id)).toBeGreaterThan(late * 1.3);
+    squad.roundLeftMs = 90_000;
+    expect(squad.pushing()).toBe(false);
+  });
+
+  it('the final-minute push is an admin switch, on by default, for arenas only', () => {
+    const store = new BotSettingsStore(null, defaultBotSettings(loadConfig({}).bots));
+    expect(store.options('arena').finalPush).toBe(true);
+    expect(store.options('practicePro').finalPush).toBe(false);
+    store.update({ finalPush: false });
+    expect(store.options('arena').finalPush).toBe(false);
+    expect(() => store.update({ finalPush: 'yes' })).toThrow(/finalPush/);
+    const world = new World(cfg());
+    new BotManager(world, { target: 3, min: 3, max: 3, finalPush: true }, mulberry32(2)).fill(0);
+    expect(squadIntel(world).finalPush).toBe(true);
   });
 
   it('roles lapse unless renewed, and a dead or departed bot gives its role back', () => {

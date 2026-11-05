@@ -1,4 +1,4 @@
-import { BASIC_SKINS, PlayerFlag, RULES, botCountry, botWearsFlag, clamp, pickBotName, type LeftReason } from '@elymum/shared';
+import { BASIC_SKINS, PlayerFlag, RULES, VIEW, botCountry, botWearsFlag, clamp, pickBotName, viewSize, type LeftReason } from '@elymum/shared';
 import type { Player } from '../game/entities';
 import { randRange, type Rng } from '../game/rng';
 import type { World } from '../game/world';
@@ -35,6 +35,8 @@ export interface BotManagerOptions {
   maxChasers?: number;
   /** Squad play: traps, lures, feeding and map-wide tracking (default on; off in the rookie league). */
   teamplay?: boolean;
+  /** Arenas: the final-minute push on people (admin `finalPush`; absent: off). */
+  finalPush?: boolean;
   /**
    * Rooms that play rounds (arenas): the squad size is rolled once per round, every bot of it walks in
    * within the round's first minute, and no bot goes home before the bell (a person cannot leave a
@@ -336,6 +338,7 @@ export class BotManager {
     b.maxChasers = this.opts.maxChasers !== undefined && this.opts.maxChasers > 0 ? this.opts.maxChasers : Infinity;
     b.teamplay = this.opts.teamplay !== false;
     squadIntel(this.world).teamplay = this.opts.teamplay !== false;
+    squadIntel(this.world).finalPush = this.opts.finalPush === true;
   }
 
   /** The world reported this bot's death: forget it and maybe respawn later. */
@@ -364,16 +367,36 @@ export class BotManager {
   }
 
   /**
+   * Whether a person could have this bot on screen (inside the view a player of that size gets on a
+   * wide screen, with the server's margin). A bot never leaves under someone's eyes: going home is a
+   * walk off the edge of the screen, not a vanishing act.
+   */
+  inSight(bot: Bot): boolean {
+    const p = bot.player;
+    if (!p.alive || p.cells.length === 0) return false;
+    const b = p.center();
+    for (const h of this.world.players.values()) {
+      if (h.isBot || !h.alive || h.cells.length === 0) continue;
+      const c = h.center();
+      const v = viewSize(h.totalMass(), 16 / 9);
+      const hw = (v.w / 2) * VIEW.serverMargin + (p.biggestCell()?.r ?? 0);
+      const hh = (v.h / 2) * VIEW.serverMargin + (p.biggestCell()?.r ?? 0);
+      if (Math.abs(b.x - c.x) <= hw && Math.abs(b.y - c.y) <= hh) return true;
+    }
+    return false;
+  }
+
+  /**
    * Sends zero-value bots home until at most `want` bots are left (staked bots hold a ticket and
    * stay until death or the bell). Picks bots out of danger first, then the smallest. Returns how many left.
    */
-  trimTo(want: number, reason: LeftReason): number {
+  trimTo(want: number, reason: LeftReason, unseen = false): number {
     let n = 0;
     while (this.bots.size > want) {
       let pick: Bot | null = null;
       let pickScore = Infinity;
       for (const b of this.bots.values()) {
-        if (b.staked) continue;
+        if (b.staked || (unseen && this.inSight(b))) continue;
         const score = b.player.totalMass() + (b.brain.lastDanger > 0.2 ? 1e9 : 0);
         if (score < pickScore) {
           pick = b;
@@ -501,7 +524,7 @@ export class BotManager {
     // over the plan (the plan drifted down in a free room): one leaves now and then; a round keeps its bots
     if (!this.opts.rounds && this.bots.size > plan && now >= this.nextLeaveAt) {
       this.nextLeaveAt = now + randRange(this.rng, ARRIVAL.leaveMin, ARRIVAL.leaveMax);
-      this.trimTo(this.bots.size - 1, 'retired');
+      this.trimTo(this.bots.size - 1, 'retired', true);
     }
 
     // a bot whose time is up goes home (one at a time, never mid-fight); someone else walks in later
@@ -509,6 +532,11 @@ export class BotManager {
       if (this.opts.rounds || now < bot.retireAt) continue;
       if (bot.brain.lastDanger > 0.2 || bot.brain.busy) {
         bot.retireAt = now + 10_000;
+        continue;
+      }
+      // someone is looking: it heads home a little later, out of their sight
+      if (this.inSight(bot)) {
+        bot.retireAt = now + 5_000;
         continue;
       }
       this.sendHome(bot, 'retired');

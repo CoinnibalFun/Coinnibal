@@ -234,3 +234,33 @@ describe('cover: a big bot looks after a small one', () => {
     expect(m.bots.size).toBe(0);
   });
 });
+
+describe('a bot never vanishes in front of someone', () => {
+  it('a bot whose time is up waits until no person has it on screen, then goes home', () => {
+    const world = new World({ width: 12_000, height: 12_000, foodTarget: 0, virusTarget: 0, maxPowerUps: 0, powerUps: false, coinRain: false, seed: 3 });
+    const m = new BotManager(world, { target: 1, min: 1, max: 1 }, mulberry32(3));
+    m.update(0, 0);
+    m.fill(0);
+    const bot = [...m.bots.values()][0];
+    const c = bot.player.center();
+    const person = world.addPlayer({ spawnShield: false, name: 'person', skin: 2, x: c.x + 300, y: c.y, mass: 8000 });
+    expect(m.inSight(bot)).toBe(true);
+    (bot as unknown as { retireAt: number }).retireAt = 0;
+    for (let i = 0; i < 60; i++) {
+      world.setTarget(person.id, bot.player.center().x + 300, bot.player.center().y);
+      world.tick(TICK_MS);
+      m.update(world.now, 1);
+    }
+    expect(m.bots.has(bot.player.id)).toBe(true);
+    expect(m.takeDepartures()).toEqual([]);
+    // the person goes far away: once out of sight, it slips off home
+    world.removePlayer(person.id);
+    world.addPlayer({ spawnShield: false, name: 'far', skin: 2, x: c.x > 6000 ? 200 : 11_800, y: c.y > 6000 ? 200 : 11_800, mass: 30 });
+    (bot as unknown as { retireAt: number }).retireAt = 0;
+    for (let i = 0; i < 30 && m.bots.has(bot.player.id); i++) {
+      world.tick(TICK_MS);
+      m.update(world.now, 1);
+    }
+    expect(m.bots.has(bot.player.id)).toBe(false);
+  });
+});

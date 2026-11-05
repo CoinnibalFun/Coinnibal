@@ -67,6 +67,12 @@ export interface BotSettings {
    * whose creator picked "Auto" follow the `private` curve (always on); a chosen size is kept.
    */
   maps: Record<BotRoomKind, MapScaleSettings>;
+  /**
+   * The final-minute push (arenas): in a round's last minute the squad goes after people, harder
+   * than the rest of the round (they are worth the most then: the bell pays what a coin holds) and
+   * one more bot may join a hunt. Absent in files written before it: on.
+   */
+  finalPush?: boolean;
 }
 
 /** Bounds of the admin values. */
@@ -152,7 +158,7 @@ export function kindFromOptions(o: BotManagerOptions, kind?: BotRoomKind): BotKi
 export function defaultBotSettings(defaults: Record<BotRoomKind, BotManagerOptions>): BotSettings {
   const kinds = {} as Record<BotRoomKind, BotKindSettings>;
   for (const k of BOT_ROOM_KINDS) kinds[k] = kindFromOptions(defaults[k], k);
-  return { kinds, testnet: { ...BOT_TESTNET_DEFAULT, arenas: {} }, maps: defaultMapSettings() };
+  return { kinds, testnet: { ...BOT_TESTNET_DEFAULT, arenas: {} }, maps: defaultMapSettings(), finalPush: true };
 }
 
 /** Every kind starts on the default curve (auto on). */
@@ -207,8 +213,13 @@ export function applyBotSettings(cur: BotSettings, body: Record<string, unknown>
 }
 
 function applyInner(cur: BotSettings, body: Record<string, unknown>): BotSettings {
-  onlyKeys(body, ['kinds', 'testnet', 'maps'], '');
+  onlyKeys(body, ['kinds', 'testnet', 'maps', 'finalPush'], '');
   const next: BotSettings = structuredClone(cur);
+  next.finalPush ??= true;
+  if (body.finalPush !== undefined) {
+    if (typeof body.finalPush !== 'boolean') throw new BotSettingsError('finalPush must be true or false', 'finalPush');
+    next.finalPush = body.finalPush;
+  }
   // settings written before the map curve existed
   next.maps ??= defaultMapSettings();
   for (const k of BOT_ROOM_KINDS) next.maps[k] ??= { ...MAP_SCALE_DEFAULT };
@@ -422,7 +433,7 @@ export class BotSettingsStore {
 
   /** Bot-manager options of a room kind (what rooms run with). */
   options(kind: BotRoomKind): BotManagerOptions {
-    return { ...managerOptions(this.cur.kinds[kind]), teamplay: TEAMPLAY[kind] };
+    return { ...managerOptions(this.cur.kinds[kind]), teamplay: TEAMPLAY[kind], finalPush: kind === 'arena' && this.cur.finalPush !== false };
   }
 
   /** Adaptive map settings of a room kind. */

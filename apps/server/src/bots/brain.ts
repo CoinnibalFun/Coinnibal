@@ -638,6 +638,9 @@ export class BotBrain {
     let bestPreyScore = 0;
     const mySpeed = speedForRadius(big.r);
     const hunts = huntClaims(world);
+    // the final-minute push (arenas): people first, and one more bot may join a hunt
+    const push = squad.pushing();
+    const chasers = push ? this.maxChasers + 1 : this.maxChasers;
     if (!shielded) {
       const aggression = P.aggression * (atCap ? AT_CAP_DRIVE : 1) * S;
       for (const q of prey) {
@@ -646,13 +649,13 @@ export class BotBrain {
         const human = !q.player.isBot;
         const onOp = role !== null && role.op.target === q.player.id;
         // a crew is enough: a person already worked by the room's limit is left to them (unless this bot is in the crew)
-        if (human && !onOp && q.player.id !== this.claimId && hunts.others(q.player.id, this.pid, now) >= this.maxChasers) continue;
+        if (human && !onOp && q.player.id !== this.claimId && hunts.others(q.player.id, this.pid, now) >= chasers) continue;
         // a teammate on an operation (or the small one this bot looks after) is never eaten
         if (!human && team && (squad.busy(q.player.id, now) || squad.wardFor(this.pid)?.pid === q.player.id)) continue;
         const dist = Math.hypot(q.x - big.x, q.y - big.y);
         let w = (aggression * q.mass * 6) / Math.pow(dist + 80, 1.05);
         if (human) w *= P.humanBias * squad.worth(q.player.id) * (onOp ? 1.6 : 1);
-        else w *= BOT_APPETITE;
+        else w *= push ? BOT_APPETITE * 0.4 : BOT_APPETITE;
         // a chase that went nowhere: leave that one alone for a while (unless it is right here);
         // a person is left alone entirely
         if (q.player.id === this.giveUpId && now < this.giveUpUntil && dist > big.r + 120) {
@@ -725,7 +728,7 @@ export class BotBrain {
     if (team) {
       if (chasingHuman >= 0 && P.skill > 0 && bestPrey) {
         // the pusher: herd the person toward the flanker, or (good bots) into the wall
-        const op = squad.hunt(this.pid, chasingHuman, now, this.maxChasers);
+        const op = squad.hunt(this.pid, chasingHuman, now, chasers);
         if (op && op.pusher === this.pid) {
           const q: Cell = bestPrey;
           const f = op.flanker >= 0 ? squad.mates.get(op.flanker) : undefined;
@@ -799,7 +802,7 @@ export class BotBrain {
 
       // patrol: no prey in sight, nothing chasing us: drift toward the most promising person on the squad's reports
       if (!roleDriven && !covering && !bestPrey && dangerLevel < 0.2 && !atCap) {
-        const m = squad.patrolTarget(this.pid, cx, cy, big.mass, now, this.maxChasers);
+        const m = squad.patrolTarget(this.pid, cx, cy, big.mass, now, chasers);
         if (m) {
           // reports are a little stale and every bot reads them its own way
           const off = 120 + 380 * (1 - P.skill / 2);
