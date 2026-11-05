@@ -864,6 +864,105 @@ contract ElymumArenaTest is Test {
         assertEq(tt.totalSupply(), supply - 150 ether);
     }
 
+    // ---------------------------------------------------------------- pay (power-ups and other off-chain sales)
+
+    event PaymentBurnBpsSet(uint16 paymentBurnBps);
+    event Paid(address indexed payer, bytes32 indexed ref, uint128 amount, uint128 burned, uint128 toVault, bool viaBurnCall);
+
+    function test_pay_splitsBurnAndFeeWallet() public {
+        _join(bob); // an open vault is never touched by a payment
+        bytes32 ref = keccak256("order-1");
+        uint256 a0 = token.balanceOf(alice);
+        vm.expectEmit(address(arena));
+        emit Paid(alice, ref, 601 ether + 1, 300.5 ether, 300.5 ether + 1, false);
+        vm.prank(alice);
+        arena.pay(601 ether + 1, ref);
+        assertEq(a0 - token.balanceOf(alice), 601 ether + 1);
+        assertEq(token.balanceOf(DEAD), 300.5 ether); // rounds down: the odd wei goes to the fee wallet
+        assertEq(token.balanceOf(feeWallet), 300.5 ether + 1);
+        assertEq(token.balanceOf(address(arena)), FEE); // only bob's ticket
+        ElymumArena.ConfigView memory c = arena.config();
+        assertEq(c.paymentBurnBps, 5_000);
+        assertEq(c.totalPayments, 601 ether + 1);
+        assertEq(c.totalPaymentBurned, 300.5 ether);
+        _assertSolvent(arena, address(token));
+    }
+
+    function test_pay_ratesAndReverts() public {
+        vm.expectEmit(address(arena));
+        emit PaymentBurnBpsSet(10_000);
+        vm.prank(admin);
+        arena.setPaymentBurnBps(10_000);
+        vm.prank(alice);
+        arena.pay(100 ether, bytes32(0));
+        assertEq(token.balanceOf(DEAD), 100 ether);
+        assertEq(token.balanceOf(feeWallet), 0);
+        vm.prank(admin);
+        arena.setPaymentBurnBps(0);
+        vm.prank(alice);
+        arena.pay(100 ether, bytes32(0));
+        assertEq(token.balanceOf(feeWallet), 100 ether);
+        vm.prank(admin);
+        vm.expectRevert(ElymumArena.InvalidFee.selector);
+        arena.setPaymentBurnBps(10_001);
+        vm.prank(stranger);
+        vm.expectRevert(_unauthorized(stranger));
+        arena.setPaymentBurnBps(1);
+        vm.prank(alice);
+        vm.expectRevert(ElymumArena.EntryFeeZero.selector);
+        arena.pay(0, bytes32(0));
+        // works while paused (it is not a ticket)
+        vm.prank(admin);
+        arena.setPaused(true);
+        vm.prank(alice);
+        arena.pay(1 ether, bytes32(0));
+        // needs the token
+        ElymumArena a = new ElymumArena(admin, server, feeWallet);
+        vm.prank(alice);
+        vm.expectRevert(ElymumArena.TokenNotSet.selector);
+        a.pay(1, bytes32(0));
+        // refuses fee-on-transfer tokens
+        FeeOnTransferToken fot = new FeeOnTransferToken();
+        ElymumArena b = _arenaWith(address(fot));
+        fot.mint(alice, 10 ether);
+        vm.prank(alice);
+        fot.approve(address(b), type(uint256).max);
+        vm.prank(alice);
+        vm.expectRevert(ElymumArena.FeeOnTransferToken.selector);
+        b.pay(1 ether, bytes32(0));
+    }
+
+    function test_pay_burnCall() public {
+        BurnableMock brn = new BurnableMock();
+        ElymumArena a = _arenaWith(address(brn));
+        vm.prank(admin);
+        a.setBurnMode(1);
+        brn.mint(alice, 10 ether);
+        vm.prank(alice);
+        brn.approve(address(a), type(uint256).max);
+        uint256 supply = brn.totalSupply();
+        vm.expectEmit(address(a));
+        emit Paid(alice, bytes32(uint256(7)), 4 ether, 2 ether, 2 ether, true);
+        vm.prank(alice);
+        a.pay(4 ether, bytes32(uint256(7)));
+        assertEq(brn.totalSupply(), supply - 2 ether);
+        assertEq(brn.balanceOf(feeWallet), 2 ether);
+        assertEq(brn.balanceOf(address(a)), 0);
+    }
+
+    function testFuzz_pay(uint128 amount, uint16 bps) public {
+        bps = uint16(bound(bps, 0, 10_000));
+        amount = uint128(bound(amount, 1, 1_000_000 ether));
+        vm.prank(admin);
+        arena.setPaymentBurnBps(bps);
+        uint256 before = token.balanceOf(address(arena));
+        vm.prank(alice);
+        arena.pay(amount, bytes32(0));
+        assertEq(token.balanceOf(address(arena)), before);
+        assertEq(token.balanceOf(DEAD) + token.balanceOf(feeWallet), amount);
+        assertEq(token.balanceOf(DEAD), (uint256(amount) * bps) / 10_000);
+    }
+
     // ---------------------------------------------------------------- cancel
 
     function test_cancel_refundsTheFullEntryFee() public {

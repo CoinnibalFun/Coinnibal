@@ -18,7 +18,8 @@ import {HolderCheck} from "./HolderCheck.sol";
 ///         never played is cancelled by the server with `cancel` (full entry fee back), and a ticket the server never
 ///         settles can be refunded by its player after 24 h.
 ///         Holders of the Elymum emblem (`setHolderPerks`) may get their own (lower) rates and may enter holders-only
-///         arenas.
+///         arenas. `pay` takes payments for what the game sells off chain (power-ups): `paymentBurnBps` (default 50 %)
+///         is burned and the rest goes to the fee wallet at once.
 /// @dev    Accounting is internal: `Arena.vault` is what settlements, cancels, refunds, loot burns and sweeps may
 ///         spend and `Arena.owed` is held for players whose transfer failed (two-phase settle). The contract's token
 ///         balance is always `sum(vault) + sum(owed)` plus anything sent to it directly (which stays locked: `rescue`
@@ -40,6 +41,8 @@ contract ElymumArena is Ownable2Step, ReentrancyGuard {
     uint16 public constant DEFAULT_BURN_BPS = 1_500;
     /// @notice Share of the profit sent to the fee wallet at deploy (5 %).
     uint16 public constant DEFAULT_VAULT_BPS = 500;
+    /// @notice Share of a `pay` payment (power-ups, ...) burned at deploy (50 %); the rest goes to the fee wallet.
+    uint16 public constant DEFAULT_PAYMENT_BURN_BPS = 5_000;
     /// @notice Contract version.
     uint16 public constant VERSION = 3;
     /// @notice Bounds of `Arena.maxSessions`.
@@ -135,6 +138,9 @@ contract ElymumArena is Ownable2Step, ReentrancyGuard {
         uint128 totalFeeBurned;
         uint128 totalFeeToVault;
         uint128 totalLootBurned;
+        uint16 paymentBurnBps;
+        uint128 totalPayments;
+        uint128 totalPaymentBurned;
     }
 
     struct ArenaView {
@@ -194,6 +200,9 @@ contract ElymumArena is Ownable2Step, ReentrancyGuard {
     uint128 private _totalFeeBurned;
     uint128 private _totalFeeToVault;
     uint128 private _totalLootBurned;
+    uint128 private _totalPayments;
+    uint128 private _totalPaymentBurned;
+    uint16 private _paymentBurnBps;
 
     uint16[] private _arenaIds;
     mapping(uint16 arenaId => Arena) private _arenas;
@@ -249,6 +258,10 @@ contract ElymumArena is Ownable2Step, ReentrancyGuard {
     event LootBurned(uint16 indexed arenaId, uint64 indexed sweepId, uint128 amount, bool viaBurnCall);
     event ArenaSwept(uint16 indexed arenaId, address indexed feeWallet, uint128 amount);
     event Rescued(address indexed token, address indexed to, uint256 amount);
+    event PaymentBurnBpsSet(uint16 paymentBurnBps);
+    /// @notice A payment for something sold off chain (power-ups, ...): `burned` was burned, `toVault` sent to the
+    ///         fee wallet. `ref` is the payer's order reference (the game server matches it).
+    event Paid(address indexed payer, bytes32 indexed ref, uint128 amount, uint128 burned, uint128 toVault, bool viaBurnCall);
 
     // ------------------------------------------------------------------------------------------------------------
     // Errors
@@ -299,6 +312,7 @@ contract ElymumArena is Ownable2Step, ReentrancyGuard {
         _vaultBps = DEFAULT_VAULT_BPS;
         _holderBurnBps = DEFAULT_BURN_BPS;
         _holderVaultBps = DEFAULT_VAULT_BPS;
+        _paymentBurnBps = DEFAULT_PAYMENT_BURN_BPS;
         emit ServerAuthoritySet(serverAuthority);
         emit FeeWalletSet(feeWallet);
         emit FeeRatesSet(DEFAULT_BURN_BPS, DEFAULT_VAULT_BPS);
@@ -344,6 +358,13 @@ contract ElymumArena is Ownable2Step, ReentrancyGuard {
         if (mode > BURN_MODE_CALL) revert InvalidBurnMode();
         _burnMode = mode;
         emit BurnModeSet(mode);
+    }
+
+    /// @notice Share of every `pay` payment that is burned (the rest goes to the fee wallet), in bps (<= 10 000).
+    function setPaymentBurnBps(uint16 bps) external onlyOwner {
+        if (bps > BPS) revert InvalidFee();
+        _paymentBurnBps = bps;
+        emit PaymentBurnBpsSet(bps);
     }
 
     function setFeeWallet(address w) external onlyOwner {
@@ -518,6 +539,26 @@ contract ElymumArena is Ownable2Step, ReentrancyGuard {
         emit Refunded(arenaId, msg.sender, sessionId, amount);
     }
 
+    /// @notice Pays `amount` of the game token for something the game sells off chain (power-up packs, ...):
+    ///         `paymentBurnBps` of it is burned and the rest goes to the fee wallet, in this call. Nothing stays in the
+    ///         contract. Works while paused (it is not a ticket). The game server credits the purchase from the `Paid`
+    ///         event (payer, ref, amount).
+    function pay(uint128 amount, bytes32 ref) external nonReentrant {
+        IERC20 token = _token;
+        if (address(token) == address(0)) revert TokenNotSet();
+        if (amount == 0) revert EntryFeeZero();
+        uint256 before = token.balanceOf(address(this));
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        if (token.balanceOf(address(this)) - before != amount) revert FeeOnTransferToken();
+        uint128 burned = uint128((uint256(amount) * _paymentBurnBps) / BPS);
+        uint128 toVault = amount - burned;
+        _totalPayments += amount;
+        _totalPaymentBurned += burned;
+        bool viaCall = burned != 0 && _burnTokens(token, burned);
+        if (toVault != 0) token.safeTransfer(_feeWallet, toVault);
+        emit Paid(msg.sender, ref, amount, burned, toVault, viaCall);
+    }
+
     // ------------------------------------------------------------------------------------------------------------
     // Server
     // ------------------------------------------------------------------------------------------------------------
@@ -599,6 +640,9 @@ contract ElymumArena is Ownable2Step, ReentrancyGuard {
         v.totalFeeBurned = _totalFeeBurned;
         v.totalFeeToVault = _totalFeeToVault;
         v.totalLootBurned = _totalLootBurned;
+        v.paymentBurnBps = _paymentBurnBps;
+        v.totalPayments = _totalPayments;
+        v.totalPaymentBurned = _totalPaymentBurned;
     }
 
     function arenaIds() external view returns (uint16[] memory) {
