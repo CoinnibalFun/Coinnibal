@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FEE_RATES,
@@ -87,5 +88,24 @@ describe('fee on profit (mirrors ElymumArena v3)', () => {
     expect(bpsToPercent(1500)).toBe('15');
     expect(bpsToPercent(250)).toBe('2.5');
     expect(bpsToPercent(2000)).toBe('20');
+  });
+
+  it('the worked examples and defaults of docs/ECONOMY.md are what the code computes', () => {
+    const doc = readFileSync(new URL('../../../docs/ECONOMY.md', import.meta.url), 'utf8');
+    const n = (c: string) => Number(c.replace(/[^\d]/g, ''));
+    const rows = doc
+      .split('\n')
+      .filter((l) => /^\| [\d,]+ \| [\d,]+/.test(l))
+      .map((l) => l.split('|').slice(1, -1).map((c) => c.trim()));
+    expect(rows.length).toBeGreaterThanOrEqual(6);
+    for (const r of rows) {
+      const holder = r[1].includes('holder');
+      const f = profitFee(n(r[0]), n(r[1].split(' ')[0]), holder ? { burnBps: 1500, vaultBps: 0 } : DEFAULT_FEE_RATES);
+      expect([n(r[2]), n(r[3].split(' ')[0]), n(r[4]), n(r[5])], r.join(' | ')).toEqual([f.profit, f.burned, f.toVault, f.net]);
+    }
+    expect(doc).toContain(`**15 % is burned**`);
+    expect(DEFAULT_FEE_RATES).toEqual({ burnBps: 1500, vaultBps: 500 });
+    expect(MAX_TOTAL_FEE_BPS).toBe(2500);
+    expect(DEFAULT_PAYMENT_BURN_BPS).toBe(5000);
   });
 });
