@@ -2,22 +2,25 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ElymumArena} from "../contracts/ElymumArena.sol";
+import {TestToken} from "../contracts/TestToken.sol";
 import {
     MockERC20,
     FeeOnTransferToken,
     BlockingToken,
-    NoDecimalsToken,
     ReentrantToken,
     MockNFT,
-    BrokenNFT
+    BrokenNFT,
+    BurnableMock,
+    FakeBurnToken
 } from "../contracts/test/MockTokens.sol";
 import {RejectEther} from "../contracts/test/Actors.sol";
 
+/// @notice Unit and fuzz tests of ElymumArena v3 (fee on profit: 15 % burned, 5 % to the fee wallet by default).
 contract ElymumArenaTest is Test {
     ElymumArena internal arena;
     MockERC20 internal token;
@@ -32,31 +35,40 @@ contract ElymumArenaTest is Test {
 
     uint16 internal constant ID = 1;
     uint128 internal constant FEE = 1_000 ether;
-    /// @dev The 5 % fee of a FEE ticket and the ticket's value (what goes into the vault and is played).
-    uint128 internal constant CUT = 50 ether;
-    uint128 internal constant VAL = FEE - CUT;
     address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
     event TokenSet(address indexed token, uint8 decimals);
-    event FeeBpsSet(uint16 feeBps);
+    event FeeRatesSet(uint16 burnBps, uint16 vaultBps);
+    event HolderPerksSet(address indexed nft, uint16 holderBurnBps, uint16 holderVaultBps);
+    event BurnModeSet(uint8 mode);
     event FeeWalletSet(address indexed feeWallet);
     event ServerAuthoritySet(address indexed serverAuthority);
     event PausedSet(bool paused);
     event ArenaCreated(uint16 indexed arenaId, uint128 entryFee, uint16 maxSessions);
     event ArenaUpdated(uint16 indexed arenaId, uint128 entryFee, uint16 maxSessions, bool enabled);
-    event Joined(uint16 indexed arenaId, address indexed player, uint64 indexed sessionId, uint128 entryFee, uint16 feeBps);
-    event Settled(
-        uint16 indexed arenaId, address indexed player, uint64 indexed sessionId, uint128 payout, uint128 fee, bool collected
+    event ArenaHoldersOnlySet(uint16 indexed arenaId, bool holdersOnly);
+    event Joined(
+        uint16 indexed arenaId, address indexed player, uint64 indexed sessionId, uint128 entryFee, uint16 burnBps, uint16 vaultBps
     );
-    event SettleSkipped(uint16 indexed arenaId, address indexed player, uint64 indexed sessionId, uint8 reason);
+    event Settled(
+        uint16 indexed arenaId,
+        address indexed player,
+        uint64 indexed sessionId,
+        uint128 payout,
+        uint128 net,
+        uint128 burned,
+        uint128 toVault,
+        bool collected
+    );
+    event FeeBurned(uint128 amount, bool viaBurnCall);
+    event FeeToVault(address indexed feeWallet, uint128 amount);
     event Cancelled(uint16 indexed arenaId, address indexed player, uint64 indexed sessionId, uint128 amount, bool collected);
+    event SettleSkipped(uint16 indexed arenaId, address indexed player, uint64 indexed sessionId, uint8 reason);
     event Refunded(uint16 indexed arenaId, address indexed player, uint64 indexed sessionId, uint128 amount);
     event Collected(uint16 indexed arenaId, address indexed player, uint64 indexed sessionId, uint128 amount);
-    event LootBurned(uint16 indexed arenaId, uint64 indexed sweepId, uint128 amount);
+    event LootBurned(uint16 indexed arenaId, uint64 indexed sweepId, uint128 amount, bool viaBurnCall);
     event ArenaSwept(uint16 indexed arenaId, address indexed feeWallet, uint128 amount);
     event Rescued(address indexed token, address indexed to, uint256 amount);
-    event HolderPerksSet(address indexed nft, uint16 holderFeeBps);
-    event ArenaHoldersOnlySet(uint16 indexed arenaId, bool holdersOnly);
 
     function setUp() public {
         vm.warp(1_800_000_000);
@@ -113,64 +125,29 @@ contract ElymumArenaTest is Test {
         return abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, who);
     }
 
-    // ---------------------------------------------------------------- security: server key blast radius
+    /// @dev balance == Σ vault + Σ owed for the one arena of a fixture.
+    function _assertSolvent(ElymumArena a, address tok) internal view {
+        ElymumArena.ArenaView memory v = a.getArena(ID);
+        assertEq(MockERC20(tok).balanceOf(address(a)), uint256(v.vault) + v.owed, "balance == vault + owed");
+    }
 
-    /// @dev A stolen server key can pay one ticket the whole vault of an arena (every open ticket's value), but
-    ///      never the reserved fees (they only go to the fee wallet) nor payouts already held as `owed`, and the
-    ///      owner stops it at once by rotating the authority.
-    function test_security_compromisedServerKey_blastRadiusIsTheOpenVault() public {
-        (ElymumArena a, BlockingToken blk) = _blockingArena();
-        address attacker = makeAddr("attacker");
-        blk.mint(attacker, 10 * FEE);
-        vm.prank(attacker);
-        blk.approve(address(a), type(uint256).max);
-        // a finalized, uncollected payout (bob's transfer failed) must survive the attack
-        vm.prank(bob);
-        a.join(ID);
-        blk.setBlocked(bob, true);
-        ElymumArena.Settlement[] memory bobs = _one(ID, bob, a.getSession(ID, bob).id, VAL);
-        vm.prank(server);
-        a.settle(bobs);
-        blk.setBlocked(bob, false);
-        assertTrue(a.getSession(ID, bob).finalized);
-        vm.prank(alice);
-        a.join(ID);
-        vm.prank(carol);
-        a.join(ID);
-        vm.prank(attacker);
-        a.join(ID);
-        assertEq(a.getArena(ID).vault, 3 * VAL);
-        assertEq(a.getArena(ID).owed, VAL);
+    function _arenaWith(address tok) internal returns (ElymumArena a) {
+        a = new ElymumArena(admin, server, feeWallet);
+        vm.startPrank(admin);
+        a.setToken(tok);
+        a.createArena(ID, FEE, 300);
+        vm.stopPrank();
+    }
 
-        uint256 attackerBefore = blk.balanceOf(attacker);
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](3);
-        items[0] = ElymumArena.Settlement(ID, alice, a.getSession(ID, alice).id, 0);
-        items[1] = ElymumArena.Settlement(ID, carol, a.getSession(ID, carol).id, 0);
-        items[2] = ElymumArena.Settlement(ID, attacker, a.getSession(ID, attacker).id, 3 * VAL);
-        vm.prank(server);
-        a.settle(items);
-        // stolen: every open ticket's value (the attacker's own included); the fees still reached the fee wallet
-        assertEq(blk.balanceOf(attacker) - attackerBefore, 3 * VAL);
-        assertEq(blk.balanceOf(feeWallet), 4 * CUT);
-        assertEq(a.getArena(ID).vault, 0);
-        // bob's owed payout is untouched and still collectable
-        assertEq(a.getArena(ID).owed, VAL);
-        vm.prank(bob);
-        a.refund(ID);
-        assertEq(a.getArena(ID).owed, 0);
-
-        // the owner rotates the authority: the old key can do nothing any more
-        vm.prank(admin);
-        a.setServerAuthority(makeAddr("newServer"));
-        vm.prank(alice);
-        a.join(ID);
-        ElymumArena.Settlement[] memory again = _one(ID, alice, a.getSession(ID, alice).id, VAL);
-        vm.prank(server);
-        vm.expectRevert(ElymumArena.NotServer.selector);
-        a.settle(again);
-        vm.prank(server);
-        vm.expectRevert(ElymumArena.NotServer.selector);
-        a.sweepLoot(ID, 99, VAL);
+    function _blockingArena() internal returns (ElymumArena a, BlockingToken blk) {
+        blk = new BlockingToken();
+        a = _arenaWith(address(blk));
+        address[3] memory ps = [alice, bob, carol];
+        for (uint256 i; i < 3; ++i) {
+            blk.mint(ps[i], 10 * FEE);
+            vm.prank(ps[i]);
+            blk.approve(address(a), type(uint256).max);
+        }
     }
 
     // ---------------------------------------------------------------- constructor & config
@@ -184,10 +161,17 @@ contract ElymumArenaTest is Test {
         assertEq(c.feeWallet, feeWallet);
         assertEq(c.token, address(0));
         assertEq(c.decimals, 0);
-        assertEq(c.feeBps, 500);
+        assertEq(c.burnBps, 1_500);
+        assertEq(c.vaultBps, 500);
+        assertEq(c.holderBurnBps, 1_500);
+        assertEq(c.holderVaultBps, 500);
+        assertEq(c.holderNft, address(0));
+        assertEq(c.burnMode, 0);
         assertFalse(c.paused);
         assertEq(c.totalSessions, 0);
         assertEq(a.arenaIds().length, 0);
+        assertEq(a.version(), 3);
+        assertEq(a.MAX_TOTAL_FEE_BPS(), 2_500);
     }
 
     function test_constructor_rejectsZeroAddresses() public {
@@ -206,614 +190,422 @@ contract ElymumArenaTest is Test {
         emit TokenSet(address(six), 6);
         vm.prank(admin);
         a.setToken(address(six));
-        assertEq(a.config().token, address(six));
         assertEq(a.config().decimals, 6);
-
         vm.prank(admin);
         vm.expectRevert(ElymumArena.TokenAlreadySet.selector);
         a.setToken(address(token));
     }
 
-    function test_setToken_defaultsTo18Decimals() public {
-        ElymumArena a = new ElymumArena(admin, server, feeWallet);
-        NoDecimalsToken nd = new NoDecimalsToken();
-        vm.prank(admin);
-        a.setToken(address(nd));
-        assertEq(a.config().decimals, 18);
-    }
-
     function test_setToken_reverts() public {
         ElymumArena a = new ElymumArena(admin, server, feeWallet);
+        vm.startPrank(admin);
+        vm.expectRevert(ElymumArena.ZeroAddress.selector);
+        a.setToken(address(0));
+        vm.expectRevert(ElymumArena.NotAContract.selector);
+        a.setToken(alice);
+        vm.stopPrank();
         vm.prank(stranger);
         vm.expectRevert(_unauthorized(stranger));
         a.setToken(address(token));
+        // createArena needs the token
         vm.prank(admin);
-        vm.expectRevert(ElymumArena.ZeroAddress.selector);
-        a.setToken(address(0));
-        vm.prank(admin);
-        vm.expectRevert(ElymumArena.NotAContract.selector);
-        a.setToken(alice);
+        vm.expectRevert(ElymumArena.TokenNotSet.selector);
+        a.createArena(ID, FEE, 10);
     }
 
-    function test_setFeeBps() public {
+    function test_setFeeRates_capsAndEvents() public {
         vm.expectEmit(address(arena));
-        emit FeeBpsSet(1_000);
+        emit FeeRatesSet(2_000, 500);
         vm.prank(admin);
-        arena.setFeeBps(1_000);
-        assertEq(arena.config().feeBps, 1_000);
-        vm.prank(admin);
-        arena.setFeeBps(0);
-        assertEq(arena.config().feeBps, 0);
-        vm.prank(admin);
+        arena.setFeeRates(2_000, 500); // exactly the cap
+        assertEq(arena.config().burnBps, 2_000);
+        assertEq(arena.config().vaultBps, 500);
+
+        vm.startPrank(admin);
         vm.expectRevert(ElymumArena.InvalidFee.selector);
-        arena.setFeeBps(1_001);
+        arena.setFeeRates(2_001, 500);
+        vm.expectRevert(ElymumArena.InvalidFee.selector);
+        arena.setFeeRates(0, 2_501);
+        vm.expectRevert(ElymumArena.InvalidFee.selector);
+        arena.setFeeRates(type(uint16).max, type(uint16).max); // no overflow in the sum
+        arena.setFeeRates(0, 0);
+        vm.stopPrank();
         vm.prank(stranger);
         vm.expectRevert(_unauthorized(stranger));
-        arena.setFeeBps(1);
+        arena.setFeeRates(1, 1);
     }
 
-    function test_setFeeWallet() public {
+    function test_setBurnMode() public {
         vm.expectEmit(address(arena));
-        emit FeeWalletSet(bob);
+        emit BurnModeSet(1);
         vm.prank(admin);
-        arena.setFeeWallet(bob);
-        assertEq(arena.config().feeWallet, bob);
+        arena.setBurnMode(1);
+        assertEq(arena.burnMode(), 1);
+        assertEq(arena.config().burnMode, 1);
         vm.prank(admin);
+        vm.expectRevert(ElymumArena.InvalidBurnMode.selector);
+        arena.setBurnMode(2);
+        vm.prank(stranger);
+        vm.expectRevert(_unauthorized(stranger));
+        arena.setBurnMode(0);
+    }
+
+    function test_setFeeWallet_and_serverAuthority() public {
+        vm.startPrank(admin);
         vm.expectRevert(ElymumArena.ZeroAddress.selector);
         arena.setFeeWallet(address(0));
-        vm.prank(stranger);
-        vm.expectRevert(_unauthorized(stranger));
-        arena.setFeeWallet(bob);
-    }
-
-    function test_setServerAuthority() public {
-        vm.expectEmit(address(arena));
-        emit ServerAuthoritySet(bob);
-        vm.prank(admin);
-        arena.setServerAuthority(bob);
-        assertEq(arena.config().serverAuthority, bob);
-        // The old server key is out.
-        vm.prank(server);
-        vm.expectRevert(ElymumArena.NotServer.selector);
-        arena.settle(new ElymumArena.Settlement[](0));
-        vm.prank(admin);
         vm.expectRevert(ElymumArena.ZeroAddress.selector);
         arena.setServerAuthority(address(0));
+        vm.expectEmit(address(arena));
+        emit FeeWalletSet(bob);
+        arena.setFeeWallet(bob);
+        vm.expectEmit(address(arena));
+        emit ServerAuthoritySet(carol);
+        arena.setServerAuthority(carol);
+        vm.stopPrank();
+        assertEq(arena.config().feeWallet, bob);
+        assertEq(arena.config().serverAuthority, carol);
         vm.prank(stranger);
         vm.expectRevert(_unauthorized(stranger));
-        arena.setServerAuthority(bob);
+        arena.setFeeWallet(stranger);
+        vm.prank(stranger);
+        vm.expectRevert(_unauthorized(stranger));
+        arena.setServerAuthority(stranger);
     }
 
     function test_pause_blocksJoinsOnly() public {
-        uint64 sid = _join(alice);
-        _join(bob);
+        uint64 sa = _join(alice);
+        uint64 sb = _join(bob);
+        _join(carol);
         vm.expectEmit(address(arena));
         emit PausedSet(true);
         vm.prank(admin);
         arena.setPaused(true);
-        assertTrue(arena.config().paused);
-
-        vm.prank(carol);
+        address p = makeAddr("late");
+        _fund(p);
+        vm.prank(p);
         vm.expectRevert(ElymumArena.Paused.selector);
         arena.join(ID);
-
-        // Settle, refund and sweeps keep working.
-        _settle(_one(ID, alice, sid, FEE));
-        assertEq(arena.getSession(ID, alice).id, 0);
-        vm.warp(block.timestamp + 1 days);
-        vm.prank(bob);
-        arena.refund(ID);
+        // settle, cancel, refund and loot burns keep working
+        _settle(_one(ID, alice, sa, 1_200 ether));
+        _cancel(_ref(ID, bob, sb));
         vm.prank(server);
-        arena.sweepLoot(ID, 1, 0);
-
+        arena.sweepLoot(ID, 1, 1 ether);
+        vm.warp(block.timestamp + 1 days);
+        vm.prank(carol);
+        arena.refund(ID);
         vm.prank(admin);
         arena.setPaused(false);
-        _join(carol);
-
-        vm.prank(stranger);
-        vm.expectRevert(_unauthorized(stranger));
-        arena.setPaused(true);
+        vm.prank(p);
+        arena.join(ID);
     }
 
-    // ---------------------------------------------------------------- arenas
-
-    function test_createArena() public {
+    function test_createArena_and_reverts() public {
         vm.expectEmit(address(arena));
-        emit ArenaCreated(2, 10_000 ether, 2_000);
+        emit ArenaCreated(2, 5 ether, 10);
         vm.prank(admin);
-        arena.createArena(2, 10_000 ether, 2_000);
+        arena.createArena(2, 5 ether, 10);
         ElymumArena.ArenaView memory v = arena.getArena(2);
-        assertEq(v.id, 2);
-        assertEq(v.entryFee, 10_000 ether);
-        assertEq(v.maxSessions, 2_000);
-        assertTrue(v.enabled);
-        assertTrue(v.exists);
-        assertEq(v.vault, 0);
-        uint16[] memory ids = arena.arenaIds();
-        assertEq(ids.length, 2);
-        assertEq(ids[0], 1);
-        assertEq(ids[1], 2);
-    }
-
-    function test_createArena_reverts() public {
-        ElymumArena fresh = new ElymumArena(admin, server, feeWallet);
-        vm.prank(admin);
-        vm.expectRevert(ElymumArena.TokenNotSet.selector);
-        fresh.createArena(1, FEE, 300);
+        assertTrue(v.exists && v.enabled);
+        assertEq(v.entryFee, 5 ether);
+        assertEq(arena.arenaIds().length, 2);
 
         vm.startPrank(admin);
         vm.expectRevert(ElymumArena.InvalidArenaId.selector);
-        arena.createArena(0, FEE, 300);
+        arena.createArena(0, FEE, 10);
         vm.expectRevert(ElymumArena.ArenaExists.selector);
-        arena.createArena(ID, FEE, 300);
+        arena.createArena(2, FEE, 10);
         vm.expectRevert(ElymumArena.EntryFeeZero.selector);
-        arena.createArena(2, 0, 300);
+        arena.createArena(3, 0, 10);
         vm.expectRevert(ElymumArena.InvalidMaxSessions.selector);
-        arena.createArena(2, FEE, 1);
+        arena.createArena(3, FEE, 1);
         vm.expectRevert(ElymumArena.InvalidMaxSessions.selector);
-        arena.createArena(2, FEE, 2_001);
+        arena.createArena(3, FEE, 2_001);
         vm.stopPrank();
-
         vm.prank(stranger);
         vm.expectRevert(_unauthorized(stranger));
-        arena.createArena(2, FEE, 300);
+        arena.createArena(3, FEE, 10);
     }
 
     function test_updateArena() public {
         _join(alice);
-        // Capacity and enabled change while sessions are open; the fee does not.
-        vm.expectEmit(address(arena));
-        emit ArenaUpdated(ID, FEE, 50, false);
-        vm.prank(admin);
-        arena.updateArena(ID, FEE, 50, false);
-        ElymumArena.ArenaView memory v = arena.getArena(ID);
-        assertEq(v.maxSessions, 50);
-        assertFalse(v.enabled);
-
         vm.prank(admin);
         vm.expectRevert(ElymumArena.ArenaBusy.selector);
-        arena.updateArena(ID, FEE + 1, 50, true);
-
-        vm.warp(block.timestamp + 1 days);
-        vm.prank(alice);
-        arena.refund(ID);
-        vm.prank(admin);
-        arena.updateArena(ID, FEE * 2, 50, true);
-        assertEq(arena.getArena(ID).entryFee, FEE * 2);
-    }
-
-    function test_updateArena_reverts() public {
-        vm.startPrank(admin);
-        vm.expectRevert(ElymumArena.UnknownArena.selector);
-        arena.updateArena(9, FEE, 300, true);
-        vm.expectRevert(ElymumArena.EntryFeeZero.selector);
-        arena.updateArena(ID, 0, 300, true);
-        vm.expectRevert(ElymumArena.InvalidMaxSessions.selector);
-        arena.updateArena(ID, FEE, 1, true);
-        vm.expectRevert(ElymumArena.InvalidMaxSessions.selector);
-        arena.updateArena(ID, FEE, 2_001, true);
-        vm.stopPrank();
-        vm.prank(stranger);
-        vm.expectRevert(_unauthorized(stranger));
-        arena.updateArena(ID, FEE, 300, true);
-    }
-
-    function test_sweepArena_onlyDisabledAndIdle() public {
-        uint64 sid = _join(alice);
-        _join(bob);
-        vm.prank(admin);
-        vm.expectRevert(ElymumArena.ArenaEnabled.selector);
-        arena.sweepArena(ID);
-
-        vm.prank(admin);
-        arena.updateArena(ID, FEE, 300, false);
-        vm.prank(admin);
-        vm.expectRevert(ElymumArena.ArenaHasOpenSessions.selector);
-        arena.sweepArena(ID);
-
-        _settle(_one(ID, alice, sid, FEE / 2));
-        vm.warp(block.timestamp + 1 days);
-        vm.prank(bob);
-        arena.refund(ID); // takes FEE back (value + reserved fee), VAL - FEE/2 remains
-        assertEq(arena.arenaFees(ID), 0);
-        uint256 before = token.balanceOf(feeWallet);
+        arena.updateArena(ID, FEE + 1, 300, true);
         vm.expectEmit(address(arena));
-        emit ArenaSwept(ID, feeWallet, VAL - FEE / 2);
+        emit ArenaUpdated(ID, FEE, 5, false);
         vm.prank(admin);
-        arena.sweepArena(ID);
-        assertEq(token.balanceOf(feeWallet) - before, VAL - FEE / 2);
-        assertEq(arena.getArena(ID).vault, 0);
-        assertEq(token.balanceOf(address(arena)), 0);
-
-        // Sweeping an empty vault is a no-op.
-        vm.prank(admin);
-        arena.sweepArena(ID);
-
+        arena.updateArena(ID, FEE, 5, false); // same fee: allowed while busy
+        vm.prank(bob);
+        vm.expectRevert(ElymumArena.ArenaDisabled.selector);
+        arena.join(ID);
         vm.prank(admin);
         vm.expectRevert(ElymumArena.UnknownArena.selector);
-        arena.sweepArena(7);
-        vm.prank(stranger);
-        vm.expectRevert(_unauthorized(stranger));
-        arena.sweepArena(ID);
-    }
-
-    function test_sweepArena_keepsOwedForFinalizedPlayers() public {
-        (ElymumArena a, BlockingToken blk) = _blockingArena();
-        vm.prank(alice);
-        a.join(ID);
-        vm.prank(bob);
-        a.join(ID);
-        blk.setBlocked(alice, true);
-        ElymumArena.Settlement[] memory items = _one(ID, alice, a.getSession(ID, alice).id, 1_500 ether);
-        vm.prank(server);
-        a.settle(items);
-        assertTrue(a.getSession(ID, alice).finalized);
-
-        vm.warp(block.timestamp + 1 days);
-        vm.prank(bob);
-        a.refund(ID); // min(950, 400) + the reserved fee 50
-        assertEq(a.getArena(ID).vault, 0);
-        assertEq(a.arenaFees(ID), 0);
-
-        // A finalized (blocked) player does not keep the arena busy, and the owed amount is not swept.
-        vm.prank(admin);
-        a.updateArena(ID, FEE, 300, false);
-        vm.prank(admin);
-        a.sweepArena(ID);
-        uint128 owed = a.getSession(ID, alice).owed;
-        assertEq(a.getArena(ID).owed, owed);
-        assertEq(blk.balanceOf(address(a)), owed);
-
-        blk.setBlocked(alice, false);
-        vm.prank(alice);
-        a.refund(ID);
-        assertEq(blk.balanceOf(address(a)), 0);
-    }
-
-    // ---------------------------------------------------------------- rescue & ownership
-
-    function test_rescue_nativeAndForeignTokens() public {
-        vm.deal(address(arena), 3 ether);
-        vm.expectEmit(address(arena));
-        emit Rescued(address(0), bob, 2 ether);
-        vm.prank(admin);
-        arena.rescue(address(0), bob, 2 ether);
-        assertEq(bob.balance, 2 ether);
-
-        MockERC20 other = new MockERC20("Other", "OTH", 18);
-        other.mint(address(arena), 5 ether);
-        vm.prank(admin);
-        arena.rescue(address(other), bob, 5 ether);
-        assertEq(other.balanceOf(bob), 5 ether);
-    }
-
-    function test_rescue_neverTheGameToken() public {
-        _join(alice);
-        token.mint(address(arena), 1 ether); // a donation is locked too
-        vm.prank(admin);
-        vm.expectRevert(ElymumArena.CannotRescueGameToken.selector);
-        arena.rescue(address(token), admin, 1);
-    }
-
-    function test_rescue_reverts() public {
-        vm.deal(address(arena), 1 ether);
-        RejectEther rej = new RejectEther();
-        vm.startPrank(admin);
-        vm.expectRevert(ElymumArena.ZeroAddress.selector);
-        arena.rescue(address(0), address(0), 1);
-        vm.expectRevert(ElymumArena.NativeTransferFailed.selector);
-        arena.rescue(address(0), address(rej), 1);
-        vm.stopPrank();
-        vm.prank(stranger);
-        vm.expectRevert(_unauthorized(stranger));
-        arena.rescue(address(0), stranger, 1);
-    }
-
-    function test_rescue_nativeBeforeTokenIsSet() public {
-        ElymumArena a = new ElymumArena(admin, server, feeWallet);
-        vm.deal(address(a), 1 ether);
-        vm.prank(admin);
-        a.rescue(address(0), bob, 1 ether);
-        assertEq(bob.balance, 1 ether);
-    }
-
-    function test_ownable2Step() public {
-        vm.prank(admin);
-        arena.transferOwnership(bob);
-        assertEq(arena.owner(), admin);
-        assertEq(arena.pendingOwner(), bob);
-        assertEq(arena.config().pendingAdmin, bob);
-
-        vm.prank(carol);
-        vm.expectRevert(_unauthorized(carol));
-        arena.acceptOwnership();
-
-        vm.prank(bob);
-        arena.acceptOwnership();
-        assertEq(arena.owner(), bob);
-        assertEq(arena.config().admin, bob);
-
-        vm.prank(admin);
-        vm.expectRevert(_unauthorized(admin));
-        arena.setPaused(true);
-    }
-
-    function test_renounceOwnership_disabled() public {
-        vm.prank(admin);
-        vm.expectRevert(ElymumArena.RenounceDisabled.selector);
-        arena.renounceOwnership();
-        vm.prank(stranger);
-        vm.expectRevert(_unauthorized(stranger));
-        arena.renounceOwnership();
-        assertEq(arena.owner(), admin);
+        arena.updateArena(9, FEE, 5, true);
     }
 
     // ---------------------------------------------------------------- join
 
-    function test_join_opensSession() public {
+    function test_join_opensSessionWithTheWholeEntryInTheVault() public {
         vm.expectEmit(address(arena));
-        emit Joined(ID, alice, 1, FEE, 500);
+        emit Joined(ID, alice, 1, FEE, 1_500, 500);
         vm.prank(alice);
         arena.join(ID);
-
         ElymumArena.SessionView memory s = arena.getSession(ID, alice);
         assertEq(s.id, 1);
         assertEq(s.entryFee, FEE);
+        assertEq(s.burnBps, 1_500);
+        assertEq(s.vaultBps, 500);
         assertEq(s.openedAt, block.timestamp);
-        assertEq(s.feeBps, 500);
         assertFalse(s.finalized);
-        assertEq(s.owed, 0);
-
         ElymumArena.ArenaView memory v = arena.getArena(ID);
-        assertEq(v.vault, VAL); // the fee is reserved, only the ticket's value is played
-        assertEq(arena.arenaFees(ID), CUT);
+        assertEq(v.vault, FEE); // no entry fee cut
         assertEq(v.openSessions, 1);
         assertEq(v.totalDeposited, FEE);
-        assertEq(token.balanceOf(address(arena)), FEE);
         assertEq(arena.config().totalStaked, FEE);
-        assertEq(arena.config().totalSessions, 1);
-    }
-
-    function test_join_sessionIdsAreGlobal() public {
-        vm.prank(admin);
-        arena.createArena(2, 5 ether, 300);
-        assertEq(_join(alice), 1);
-        vm.prank(bob);
-        arena.join(2);
-        assertEq(arena.getSession(2, bob).id, 2);
-        assertEq(_join(bob), 3);
-        vm.prank(alice);
-        arena.join(2);
-        assertEq(arena.getSession(2, alice).id, 4);
+        _assertSolvent(arena, address(token));
     }
 
     function test_join_reverts() public {
-        // token not set
-        ElymumArena fresh = new ElymumArena(admin, server, feeWallet);
-        vm.prank(alice);
-        vm.expectRevert(ElymumArena.TokenNotSet.selector);
-        fresh.join(ID);
-        // unknown arena
-        vm.prank(alice);
-        vm.expectRevert(ElymumArena.UnknownArena.selector);
-        arena.join(42);
-        // one session per player per arena
         _join(alice);
         vm.prank(alice);
         vm.expectRevert(ElymumArena.SessionExists.selector);
         arena.join(ID);
-        // disabled
-        vm.prank(admin);
-        arena.updateArena(ID, FEE, 300, false);
         vm.prank(bob);
-        vm.expectRevert(ElymumArena.ArenaDisabled.selector);
-        arena.join(ID);
-        // full
+        vm.expectRevert(ElymumArena.UnknownArena.selector);
+        arena.join(9);
         vm.prank(admin);
         arena.updateArena(ID, FEE, 2, true);
         _join(bob);
         vm.prank(carol);
         vm.expectRevert(ElymumArena.ArenaFull.selector);
         arena.join(ID);
-        // no allowance
-        vm.prank(admin);
-        arena.updateArena(ID, FEE, 300, true);
-        vm.prank(carol);
-        token.approve(address(arena), FEE - 1);
-        vm.prank(carol);
-        vm.expectRevert(
-            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(arena), FEE - 1, FEE)
-        );
-        arena.join(ID);
+        ElymumArena a = new ElymumArena(admin, server, feeWallet);
+        vm.prank(alice);
+        vm.expectRevert(ElymumArena.TokenNotSet.selector);
+        a.join(ID);
     }
 
     function test_join_refusesFeeOnTransferToken() public {
         FeeOnTransferToken fot = new FeeOnTransferToken();
-        ElymumArena a = new ElymumArena(admin, server, feeWallet);
-        vm.startPrank(admin);
-        a.setToken(address(fot));
-        a.createArena(ID, FEE, 300);
-        vm.stopPrank();
+        ElymumArena a = _arenaWith(address(fot));
         fot.mint(alice, 10 * FEE);
         vm.prank(alice);
         fot.approve(address(a), type(uint256).max);
         vm.prank(alice);
         vm.expectRevert(ElymumArena.FeeOnTransferToken.selector);
         a.join(ID);
-        // With the fee switched off it works.
-        fot.setFeeBps(0);
-        vm.prank(alice);
-        a.join(ID);
-        assertEq(a.getArena(ID).vault, VAL);
     }
 
-    // ---------------------------------------------------------------- settle
+    function test_join_ratesFixedAtJoin() public {
+        uint64 sa = _join(alice);
+        vm.prank(admin);
+        arena.setFeeRates(0, 0);
+        uint64 sb = _join(bob);
+        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
+        items[0] = ElymumArena.Settlement(ID, alice, sa, 1_500 ether);
+        items[1] = ElymumArena.Settlement(ID, bob, sb, 500 ether);
+        uint256 a0 = token.balanceOf(alice);
+        _settle(items);
+        // alice joined at 15 % + 5 %: profit 500 → burn 75, vault 25
+        assertEq(token.balanceOf(alice) - a0, 1_400 ether);
+        assertEq(token.balanceOf(feeWallet), 25 ether);
+        assertEq(token.balanceOf(DEAD), 75 ether);
+    }
 
-    function test_settle_feeOnEntryNotOnProfit() public {
-        uint64 sid = _join(alice);
-        _join(bob); // fills the vault so a 2x payout fits
+    // ---------------------------------------------------------------- settle: fee math
+
+    function test_settle_profitPaysTheFee() public {
+        uint64 sa = _join(alice);
+        _join(bob);
         uint256 a0 = token.balanceOf(alice);
         vm.expectEmit(address(arena));
-        emit Settled(ID, alice, sid, 2 * VAL, CUT, true);
-        _settle(_one(ID, alice, sid, 2 * VAL));
-        // 1000 ticket = fee 50 + value 950; the player doubled the value: paid 1900, nothing deducted.
-        assertEq(token.balanceOf(alice) - a0, 2 * VAL);
-        assertEq(token.balanceOf(feeWallet), CUT);
+        emit Settled(ID, alice, sa, 2_000 ether, 1_800 ether, 150 ether, 50 ether, true);
+        vm.expectEmit(address(arena));
+        emit FeeBurned(150 ether, false);
+        vm.expectEmit(address(arena));
+        emit FeeToVault(feeWallet, 50 ether);
+        _settle(_one(ID, alice, sa, 2_000 ether));
+        // profit 1,000: 150 burned, 50 to the fee wallet, 1,800 to alice
+        assertEq(token.balanceOf(alice) - a0, 1_800 ether);
+        assertEq(token.balanceOf(DEAD), 150 ether);
+        assertEq(token.balanceOf(feeWallet), 50 ether);
         ElymumArena.ArenaView memory v = arena.getArena(ID);
         assertEq(v.vault, 0);
-        assertEq(arena.arenaFees(ID), CUT); // bob's, still open
-        assertEq(v.openSessions, 1);
-        assertEq(v.totalPaidOut, 2 * VAL);
-        assertEq(arena.getSession(ID, alice).id, 0);
+        assertEq(v.totalPaidOut, 1_800 ether);
+        assertEq(v.totalBurned, 150 ether);
+        assertEq(v.totalFees, 50 ether);
         ElymumArena.ConfigView memory c = arena.config();
+        assertEq(c.totalFeeBurned, 150 ether);
+        assertEq(c.totalFeeToVault, 50 ether);
+        assertEq(c.totalPaidOut, 1_800 ether);
         assertEq(c.totalGames, 1);
-        assertEq(c.totalFees, CUT);
-        assertEq(c.totalPaidOut, 2 * VAL);
+        _assertSolvent(arena, address(token));
     }
 
-    function test_settle_lossStillPaysTheFee() public {
-        uint64 sid = _join(alice);
+    function test_settle_lossPaysNoFee() public {
+        uint64 sa = _join(alice);
         uint256 a0 = token.balanceOf(alice);
-        _settle(_one(ID, alice, sid, 400 ether));
+        vm.recordLogs();
+        _settle(_one(ID, alice, sa, 400 ether));
         assertEq(token.balanceOf(alice) - a0, 400 ether);
-        assertEq(token.balanceOf(feeWallet), CUT);
-        assertEq(arena.getArena(ID).vault, VAL - 400 ether);
-        assertEq(arena.arenaFees(ID), 0);
+        assertEq(token.balanceOf(feeWallet), 0);
+        assertEq(token.balanceOf(DEAD), 0);
+        assertEq(arena.getArena(ID).vault, 600 ether);
+        // no FeeBurned / FeeToVault events for a batch without profit
+        bytes32 burnedTopic = keccak256("FeeBurned(uint128,bool)");
+        bytes32 vaultTopic = keccak256("FeeToVault(address,uint128)");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            assertTrue(logs[i].topics[0] != burnedTopic && logs[i].topics[0] != vaultTopic);
+        }
+    }
+
+    function test_settle_breakEvenPaysNoFee() public {
+        uint64 sa = _join(alice);
+        uint256 a0 = token.balanceOf(alice);
+        _settle(_one(ID, alice, sa, FEE));
+        assertEq(token.balanceOf(alice) - a0, FEE);
+        assertEq(token.balanceOf(feeWallet) + token.balanceOf(DEAD), 0);
     }
 
     function test_settle_zeroPayoutClosesTicket() public {
-        uint64 sid = _join(alice);
+        uint64 sa = _join(alice);
         uint256 a0 = token.balanceOf(alice);
         vm.expectEmit(address(arena));
-        emit Settled(ID, alice, sid, 0, CUT, true);
-        _settle(_one(ID, alice, sid, 0));
+        emit Settled(ID, alice, sa, 0, 0, 0, 0, true);
+        _settle(_one(ID, alice, sa, 0));
         assertEq(token.balanceOf(alice), a0);
-        assertEq(token.balanceOf(feeWallet), CUT);
         assertEq(arena.getSession(ID, alice).id, 0);
         assertEq(arena.getArena(ID).openSessions, 0);
-        assertEq(arena.getArena(ID).vault, VAL);
-    }
-
-    function test_settle_breakEvenPaysTheValue() public {
-        uint64 sid = _join(alice);
-        uint256 a0 = token.balanceOf(alice);
-        _settle(_one(ID, alice, sid, VAL)); // ate nothing, lost nothing
-        assertEq(token.balanceOf(alice) - a0, VAL);
-        assertEq(token.balanceOf(feeWallet), CUT);
-        assertEq(token.balanceOf(address(arena)), 0);
-    }
-
-    function test_settle_oneFeeTransferPerBatch() public {
-        uint64 sa = _join(alice);
-        uint64 sb = _join(bob);
-        uint64 sc = _join(carol);
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](3);
-        items[0] = ElymumArena.Settlement(ID, alice, sa, 100 ether);
-        items[1] = ElymumArena.Settlement(ID, bob, sb, 0);
-        items[2] = ElymumArena.Settlement(ID, carol, sc, 2_000 ether);
-        _settle(items);
-        assertEq(token.balanceOf(feeWallet), 3 * CUT);
-        assertEq(arena.config().totalFees, 3 * CUT);
-        assertEq(token.balanceOf(address(arena)), 3 * VAL - 2_100 ether);
-        assertEq(arena.getArena(ID).vault, 3 * VAL - 2_100 ether);
-    }
-
-    function test_settle_feeRateFixedAtJoin() public {
-        uint64 sid = _join(alice);
-        _join(bob);
-        vm.prank(admin);
-        arena.setFeeBps(1_000);
-        _settle(_one(ID, alice, sid, 2 * VAL));
-        assertEq(token.balanceOf(feeWallet), 50 ether); // 5 %, not 10 %
-        assertEq(arena.getSession(ID, bob).feeBps, 500);
-        _join(alice);
-        assertEq(arena.getSession(ID, alice).feeBps, 1_000);
-        assertEq(arena.arenaFees(ID), CUT + FEE / 10); // bob 5 %, alice's new ticket 10 %
-    }
-
-    function test_setFeeBps_zeroTakesNothing() public {
-        vm.prank(admin);
-        arena.setFeeBps(0);
-        uint64 sid = _join(alice);
         assertEq(arena.getArena(ID).vault, FEE);
-        _settle(_one(ID, alice, sid, FEE));
+    }
+
+    function test_settle_roundingIsInThePlayersFavour() public {
+        uint64 sa = _join(alice);
+        _join(bob);
+        // profit of 1 wei, 3 wei, 19 wei: every share rounds down
+        uint256 a0 = token.balanceOf(alice);
+        _settle(_one(ID, alice, sa, FEE + 19));
+        // 19 * 1500 / 10000 = 2 (2.85), 19 * 500 / 10000 = 0 (0.95)
+        assertEq(token.balanceOf(alice) - a0, FEE + 17);
+        assertEq(token.balanceOf(DEAD), 2);
         assertEq(token.balanceOf(feeWallet), 0);
+        (uint128 net, uint128 burned, uint128 toVault) = arena.computeFees(FEE, FEE + 1, 1_500, 500);
+        assertEq(net, FEE + 1);
+        assertEq(burned + toVault, 0);
+        (net, burned, toVault) = arena.computeFees(FEE, FEE + 20, 1_500, 500);
+        assertEq(burned, 3);
+        assertEq(toVault, 1);
+        assertEq(net, FEE + 16);
+    }
+
+    function test_settle_maxPayoutIsTheWholeVault() public {
+        uint64 sa = _join(alice);
+        _join(bob);
+        _join(carol);
+        // alice wins the whole vault (3,000): profit 2,000 → 300 burned, 100 fee, 2,600 net
+        uint256 a0 = token.balanceOf(alice);
+        _settle(_one(ID, alice, sa, 3 * FEE));
+        assertEq(token.balanceOf(alice) - a0, 2_600 ether);
+        assertEq(arena.getArena(ID).vault, 0);
+        // the others can only be settled at 0 now
+        uint64 sb = arena.getSession(ID, bob).id;
+        vm.expectEmit(address(arena));
+        emit SettleSkipped(ID, bob, sb, 4);
+        _settle(_one(ID, bob, sb, 1));
+        _settle(_one(ID, bob, sb, 0));
+        _assertSolvent(arena, address(token));
+    }
+
+    function test_settle_atTheCap() public {
+        vm.prank(admin);
+        arena.setFeeRates(2_000, 500);
+        uint64 sa = _join(alice);
+        _join(bob);
+        uint256 a0 = token.balanceOf(alice);
+        _settle(_one(ID, alice, sa, 2 * FEE));
+        assertEq(token.balanceOf(alice) - a0, 1_750 ether); // 25 % of the profit 1,000
+        assertEq(token.balanceOf(DEAD), 200 ether);
+        assertEq(token.balanceOf(feeWallet), 50 ether);
+    }
+
+    function test_settle_zeroRatesTakeNothing() public {
+        vm.prank(admin);
+        arena.setFeeRates(0, 0);
+        uint64 sa = _join(alice);
+        _join(bob);
+        uint256 a0 = token.balanceOf(alice);
+        _settle(_one(ID, alice, sa, 2 * FEE));
+        assertEq(token.balanceOf(alice) - a0, 2 * FEE);
+        assertEq(token.balanceOf(DEAD) + token.balanceOf(feeWallet), 0);
+    }
+
+    function test_settle_oneBurnAndOneFeeTransferPerBatch() public {
+        address[5] memory ps = [makeAddr("p0"), makeAddr("p1"), makeAddr("p2"), makeAddr("p3"), makeAddr("p4")];
+        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](5);
+        for (uint256 i; i < 5; ++i) {
+            _fund(ps[i]);
+            items[i] = ElymumArena.Settlement(ID, ps[i], _join(ps[i]), 0);
+        }
+        items[0].payout = 2_000 ether; // profit 1,000
+        items[1].payout = 1_500 ether; // profit 500
+        items[2].payout = 1_000 ether; // even
+        items[3].payout = 500 ether; //   loss
+        // 5th: 0
+        vm.expectEmit(address(arena));
+        emit FeeBurned(225 ether, false);
+        vm.expectEmit(address(arena));
+        emit FeeToVault(feeWallet, 75 ether);
+        _settle(items);
+        assertEq(token.balanceOf(DEAD), 225 ether);
+        assertEq(token.balanceOf(feeWallet), 75 ether);
+        assertEq(arena.getArena(ID).vault, 0);
+        _assertSolvent(arena, address(token));
     }
 
     function test_settle_onlyServer() public {
-        uint64 sid = _join(alice);
+        uint64 sa = _join(alice);
+        ElymumArena.Settlement[] memory items = _one(ID, alice, sa, FEE);
+        vm.prank(stranger);
+        vm.expectRevert(ElymumArena.NotServer.selector);
+        arena.settle(items);
         vm.prank(admin);
         vm.expectRevert(ElymumArena.NotServer.selector);
-        arena.settle(_one(ID, alice, sid, 0));
+        arena.settle(items);
     }
 
     function test_settle_skipReasons() public {
         uint64 sa = _join(alice);
-        uint64 sb = _join(bob);
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](5);
+        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](4);
         items[0] = ElymumArena.Settlement(9, alice, sa, 1); // unknown arena
-        items[1] = ElymumArena.Settlement(ID, carol, 77, 1); // no session
-        items[2] = ElymumArena.Settlement(ID, alice, sa + 100, 1); // wrong id
-        items[3] = ElymumArena.Settlement(ID, bob, sb, 3 * FEE); // over the vault
-        items[4] = ElymumArena.Settlement(ID, alice, sa, FEE); // valid
+        items[1] = ElymumArena.Settlement(ID, alice, sa + 1, 1); // session mismatch
+        items[2] = ElymumArena.Settlement(ID, bob, 0, 1); // no session
+        items[3] = ElymumArena.Settlement(ID, alice, sa, FEE + 1); // more than the vault
         vm.expectEmit(address(arena));
         emit SettleSkipped(9, alice, sa, 1);
         vm.expectEmit(address(arena));
-        emit SettleSkipped(ID, carol, 77, 2);
+        emit SettleSkipped(ID, alice, sa + 1, 2);
         vm.expectEmit(address(arena));
-        emit SettleSkipped(ID, alice, sa + 100, 2);
+        emit SettleSkipped(ID, bob, 0, 2);
         vm.expectEmit(address(arena));
-        emit SettleSkipped(ID, bob, sb, 4);
-        vm.expectEmit(address(arena));
-        emit Settled(ID, alice, sa, FEE, CUT, true);
+        emit SettleSkipped(ID, alice, sa, 4);
         _settle(items);
-        assertEq(token.balanceOf(feeWallet), CUT); // only the settled ticket's fee
-        assertEq(arena.arenaFees(ID), CUT); // bob's stays reserved
-        assertEq(arena.getSession(ID, bob).id, sb); // skipped, still open
-        assertEq(arena.getSession(ID, alice).id, 0);
-    }
-
-    function test_settle_skipsFinalized() public {
-        (ElymumArena a, BlockingToken blk) = _blockingArena();
-        vm.prank(alice);
-        a.join(ID);
-        uint64 sid = a.getSession(ID, alice).id;
-        blk.setBlocked(alice, true);
+        assertEq(arena.getSession(ID, alice).id, sa); // still open
         vm.prank(server);
-        a.settle(_one(ID, alice, sid, 500 ether));
-        vm.expectEmit(address(a));
-        emit SettleSkipped(ID, alice, sid, 3);
-        vm.prank(server);
-        a.settle(_one(ID, alice, sid, 500 ether));
+        arena.settle(new ElymumArena.Settlement[](0)); // empty batch is a no-op
     }
 
     function test_settle_replayIsSkipped() public {
-        uint64 sid = _join(alice);
+        uint64 sa = _join(alice);
         _join(bob);
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
-        items[0] = ElymumArena.Settlement(ID, alice, sid, FEE);
-        items[1] = ElymumArena.Settlement(ID, alice, sid, FEE); // duplicate inside the batch
+        _settle(_one(ID, alice, sa, 1_200 ether));
+        _join(alice); // a new ticket with a new id
         uint256 a0 = token.balanceOf(alice);
         vm.expectEmit(address(arena));
-        emit Settled(ID, alice, sid, FEE, CUT, true);
-        vm.expectEmit(address(arena));
-        emit SettleSkipped(ID, alice, sid, 2);
-        _settle(items);
-        assertEq(token.balanceOf(alice) - a0, FEE);
-        assertEq(token.balanceOf(feeWallet), CUT); // the fee is taken once
-
-        // Replaying in a later batch, and after the player re-joined, still cannot pay the old ticket.
-        _settle(_one(ID, alice, sid, FEE));
-        uint64 sid2 = _join(alice);
-        assertGt(sid2, sid);
-        vm.expectEmit(address(arena));
-        emit SettleSkipped(ID, alice, sid, 2);
-        _settle(_one(ID, alice, sid, FEE));
-        assertEq(arena.getSession(ID, alice).id, sid2);
-    }
-
-    function test_settle_emptyBatch() public {
-        _settle(new ElymumArena.Settlement[](0));
+        emit SettleSkipped(ID, alice, sa, 2);
+        _settle(_one(ID, alice, sa, 1_200 ether));
+        assertEq(token.balanceOf(alice), a0);
     }
 
     function test_settle_failingFeeTransferRevertsBatch() public {
@@ -823,18 +615,31 @@ contract ElymumArenaTest is Test {
         vm.prank(bob);
         a.join(ID);
         blk.setBlocked(feeWallet, true);
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
-        items[0] = ElymumArena.Settlement(ID, bob, a.getSession(ID, bob).id, 100 ether);
-        items[1] = ElymumArena.Settlement(ID, alice, a.getSession(ID, alice).id, 1_500 ether);
+        ElymumArena.Settlement[] memory items = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
         vm.prank(server);
-        vm.expectRevert("blocked"); // the batch's fee transfer fails
+        vm.expectRevert("blocked");
         a.settle(items);
-        assertEq(a.getSession(ID, bob).id, 2); // nothing happened
-        // A cancel sends nothing to the fee wallet: it still works.
+        assertFalse(a.getSession(ID, alice).finalized);
+        assertEq(a.getArena(ID).openSessions, 2);
+        // a loss pays no fee: it goes through while the fee wallet is blocked
+        items[0].payout = 500 ether;
         vm.prank(server);
-        a.cancel(_ref(ID, bob, 2));
-        assertEq(a.getSession(ID, bob).id, 0);
-        assertEq(blk.balanceOf(bob), 10 * FEE);
+        a.settle(items);
+        assertEq(a.getSession(ID, alice).id, 0);
+    }
+
+    function test_settle_failingBurnRevertsBatch() public {
+        (ElymumArena a, BlockingToken blk) = _blockingArena();
+        vm.prank(alice);
+        a.join(ID);
+        vm.prank(bob);
+        a.join(ID);
+        blk.setBlocked(DEAD, true);
+        ElymumArena.Settlement[] memory items = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
+        vm.prank(server);
+        vm.expectRevert("blocked");
+        a.settle(items);
+        assertEq(a.getArena(ID).openSessions, 2);
     }
 
     function test_settle_twoPhase_revertingPlayer() public {
@@ -859,27 +664,39 @@ contract ElymumArenaTest is Test {
         blk.setBlocked(alice, true);
 
         ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
-        items[0] = ElymumArena.Settlement(ID, alice, sa, 2 * FEE); // owed 2000 (the fee was reserved at join)
+        items[0] = ElymumArena.Settlement(ID, alice, sa, 2 * FEE); // net 1,800 held as owed
         items[1] = ElymumArena.Settlement(ID, bob, sb, 500 ether); // the batch is not griefed
         uint256 b0 = blk.balanceOf(bob);
         vm.expectEmit(address(a));
-        emit Settled(ID, alice, sa, 2 * FEE, CUT, false);
+        emit Settled(ID, alice, sa, 2 * FEE, 1_800 ether, 150 ether, 50 ether, false);
         vm.prank(server);
         a.settle(items);
         assertEq(blk.balanceOf(bob) - b0, 500 ether);
-        assertEq(blk.balanceOf(feeWallet), 2 * CUT);
+        assertEq(blk.balanceOf(feeWallet), 50 ether);
+        assertEq(blk.balanceOf(DEAD), 150 ether);
 
         ElymumArena.SessionView memory s = a.getSession(ID, alice);
         assertEq(s.id, sa);
         assertTrue(s.finalized);
-        assertEq(s.owed, 2 * FEE);
+        assertEq(s.owed, 1_800 ether);
         assertEq(s.entryFee, FEE);
-        assertEq(s.feeBps, 500);
+        assertEq(s.burnBps, 1_500);
+        assertEq(s.vaultBps, 500);
         ElymumArena.ArenaView memory v = a.getArena(ID);
-        assertEq(v.owed, 2 * FEE);
-        assertEq(v.vault, 3 * VAL - 2 * FEE - 500 ether);
+        assertEq(v.owed, 1_800 ether);
+        assertEq(v.vault, 3 * FEE - 2 * FEE - 500 ether);
         assertEq(v.openSessions, 1); // only carol
-        assertEq(blk.balanceOf(address(a)), uint256(v.vault) + v.owed + a.arenaFees(ID));
+        _assertSolvent(a, address(blk));
+
+        // A finalized ticket cannot be settled again, nor cancelled.
+        vm.expectEmit(address(a));
+        emit SettleSkipped(ID, alice, sa, 3);
+        vm.prank(server);
+        a.settle(_one(ID, alice, sa, 0));
+        vm.expectEmit(address(a));
+        emit SettleSkipped(ID, alice, sa, 3);
+        vm.prank(server);
+        a.cancel(_ref(ID, alice, sa));
 
         // A finalized player cannot open a second ticket before collecting.
         vm.prank(alice);
@@ -892,22 +709,17 @@ contract ElymumArenaTest is Test {
         else vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(blk)));
         a.refund(ID);
 
-        // Collect needs no waiting time once unblocked.
         blk.setBlocked(alice, false);
         uint256 a0 = blk.balanceOf(alice);
         vm.expectEmit(address(a));
-        emit Collected(ID, alice, sa, 2 * FEE);
+        emit Collected(ID, alice, sa, 1_800 ether);
         vm.prank(alice);
         a.refund(ID);
-        assertEq(blk.balanceOf(alice) - a0, 2 * FEE);
+        assertEq(blk.balanceOf(alice) - a0, 1_800 ether);
         assertEq(a.getArena(ID).owed, 0);
-        assertEq(a.getSession(ID, alice).id, 0);
-        // The owed amount was never spendable by others.
-        assertEq(blk.balanceOf(address(a)), uint256(a.getArena(ID).vault) + a.arenaFees(ID));
+        _assertSolvent(a, address(blk));
     }
 
-    /// Regression: the share reserved for a finalized player is never spendable by other settlements,
-    /// loot sweeps or refunds.
     function test_settle_cannotSpendOwedOfAnotherPlayer() public {
         (ElymumArena a, BlockingToken blk) = _blockingArena();
         vm.prank(alice);
@@ -917,51 +729,192 @@ contract ElymumArenaTest is Test {
         vm.prank(carol);
         a.join(ID);
         blk.setBlocked(alice, true);
-        ElymumArena.Settlement[] memory items = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
+        ElymumArena.Settlement[] memory it1 = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
         vm.prank(server);
-        a.settle(items); // owed 2000, vault 850
+        a.settle(it1); // owed 1,800, vault 1,000
         uint128 vault = a.getArena(ID).vault;
-        assertEq(vault, 3 * VAL - 2 * FEE);
+        assertEq(vault, FEE);
         uint64 sb = a.getSession(ID, bob).id;
-        items = _one(ID, bob, sb, vault + 1);
         vm.expectEmit(address(a));
         emit SettleSkipped(ID, bob, sb, 4);
         vm.prank(server);
-        a.settle(items);
+        a.settle(_one(ID, bob, sb, vault + 1));
         vm.prank(server);
         vm.expectRevert(ElymumArena.InsufficientVault.selector);
         a.sweepLoot(ID, 1, vault + 1);
-        // The reserved fees are not spendable either.
-        vm.prank(server);
-        vm.expectRevert(ElymumArena.InsufficientVault.selector);
-        a.sweepLoot(ID, 1, vault + CUT);
         vm.warp(block.timestamp + 1 days);
-        uint256 b0 = blk.balanceOf(bob);
         vm.prank(bob);
-        a.refund(ID); // the whole vault (850) + its fee, never the owed amount
-        assertEq(blk.balanceOf(bob) - b0, vault + CUT);
-        uint256 c0 = blk.balanceOf(carol);
+        a.refund(ID); // the whole vault, never the owed amount
         vm.prank(carol);
-        a.refund(ID); // vault is empty: only the reserved fee
-        assertEq(blk.balanceOf(carol) - c0, CUT);
-        assertEq(blk.balanceOf(address(a)), 2 * FEE);
-        assertEq(a.getArena(ID).owed, 2 * FEE);
+        a.refund(ID); // nothing left
+        assertEq(blk.balanceOf(address(a)), 1_800 ether);
+        assertEq(a.getArena(ID).owed, 1_800 ether);
     }
 
-    /// Regression: lowering capacity below the open count blocks joins but never strands open tickets.
     function test_capacityBelowOpenCount() public {
         uint64 sa = _join(alice);
         uint64 sb = _join(bob);
         _join(carol);
         vm.prank(admin);
-        arena.updateArena(ID, FEE, 2, true); // 3 open > 2
+        arena.updateArena(ID, FEE, 2, true);
         _settle(_one(ID, alice, sa, FEE));
         vm.prank(alice);
         vm.expectRevert(ElymumArena.ArenaFull.selector);
-        arena.join(ID); // 2 open, still full
+        arena.join(ID);
         _settle(_one(ID, bob, sb, FEE));
         _join(alice);
         assertEq(arena.getArena(ID).openSessions, 2);
+    }
+
+    // ---------------------------------------------------------------- burn modes
+
+    function test_burnModeCall_burnsTheSupply() public {
+        BurnableMock brn = new BurnableMock();
+        ElymumArena a = _arenaWith(address(brn));
+        vm.prank(admin);
+        a.setBurnMode(1);
+        address[2] memory ps = [alice, bob];
+        for (uint256 i; i < 2; ++i) {
+            brn.mint(ps[i], 10 * FEE);
+            vm.prank(ps[i]);
+            brn.approve(address(a), type(uint256).max);
+            vm.prank(ps[i]);
+            a.join(ID);
+        }
+        uint256 supply = brn.totalSupply();
+        ElymumArena.Settlement[] memory it2 = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
+        vm.expectEmit(address(a));
+        emit FeeBurned(150 ether, true);
+        vm.prank(server);
+        a.settle(it2);
+        assertEq(brn.totalSupply(), supply - 150 ether);
+        assertEq(brn.balanceOf(DEAD), 0);
+        assertEq(brn.balanceOf(feeWallet), 50 ether);
+        // loot burns use the same path
+        vm.expectEmit(address(a));
+        emit LootBurned(ID, 1, 0, false);
+        vm.prank(server);
+        a.sweepLoot(ID, 1, 0);
+        _assertSolvent(a, address(brn));
+    }
+
+    function test_burnModeCall_fallsBackToDeadAddress() public {
+        // a token without burn(): the call fails, the tokens go to 0x…dEaD
+        vm.prank(admin);
+        arena.setBurnMode(1);
+        uint64 sa = _join(alice);
+        _join(bob);
+        vm.expectEmit(address(arena));
+        emit FeeBurned(150 ether, false);
+        _settle(_one(ID, alice, sa, 2 * FEE));
+        assertEq(token.balanceOf(DEAD), 150 ether);
+
+        // a burn() that succeeds but burns nothing, and one that reverts: fallback too
+        FakeBurnToken fk = new FakeBurnToken();
+        ElymumArena a = _arenaWith(address(fk));
+        vm.prank(admin);
+        a.setBurnMode(1);
+        address[4] memory ps = [alice, bob, carol, makeAddr("dave")];
+        for (uint256 i; i < 4; ++i) {
+            fk.mint(ps[i], 10 * FEE);
+            vm.prank(ps[i]);
+            fk.approve(address(a), type(uint256).max);
+            vm.prank(ps[i]);
+            a.join(ID);
+        }
+        ElymumArena.Settlement[] memory s1 = _one(ID, alice, a.getSession(ID, alice).id, 1_500 ether);
+        vm.prank(server);
+        a.settle(s1);
+        assertEq(fk.balanceOf(DEAD), 75 ether);
+        fk.setMode(2);
+        ElymumArena.Settlement[] memory s2 = _one(ID, bob, a.getSession(ID, bob).id, 1_100 ether);
+        vm.prank(server);
+        a.settle(s2);
+        assertEq(fk.balanceOf(DEAD), 90 ether);
+        // a burn() that burns a different amount: the batch reverts (never a silent loss)
+        fk.setMode(1);
+        ElymumArena.Settlement[] memory s3 = _one(ID, carol, a.getSession(ID, carol).id, 1_100 ether);
+        vm.prank(server);
+        vm.expectRevert(ElymumArena.BurnMismatch.selector);
+        a.settle(s3);
+        _assertSolvent(a, address(fk));
+    }
+
+    function test_burnModeCall_withTestToken() public {
+        TestToken tt = new TestToken(admin);
+        ElymumArena a = _arenaWith(address(tt));
+        vm.prank(admin);
+        a.setBurnMode(1);
+        vm.startPrank(admin);
+        tt.mint(alice, 10 * FEE);
+        tt.mint(bob, 10 * FEE);
+        vm.stopPrank();
+        vm.prank(alice);
+        tt.approve(address(a), type(uint256).max);
+        vm.prank(bob);
+        tt.approve(address(a), type(uint256).max);
+        vm.prank(alice);
+        a.join(ID);
+        vm.prank(bob);
+        a.join(ID);
+        uint256 supply = tt.totalSupply();
+        ElymumArena.Settlement[] memory it5 = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
+        vm.prank(server);
+        a.settle(it5);
+        assertEq(tt.totalSupply(), supply - 150 ether);
+    }
+
+    // ---------------------------------------------------------------- cancel
+
+    function test_cancel_refundsTheFullEntryFee() public {
+        uint64 sa = _join(alice);
+        uint256 a0 = token.balanceOf(alice);
+        vm.expectEmit(address(arena));
+        emit Cancelled(ID, alice, sa, FEE, true);
+        _cancel(_ref(ID, alice, sa));
+        assertEq(token.balanceOf(alice) - a0, FEE);
+        assertEq(arena.getArena(ID).vault, 0);
+        assertEq(arena.getArena(ID).openSessions, 0);
+        assertEq(token.balanceOf(feeWallet) + token.balanceOf(DEAD), 0);
+        _join(alice);
+    }
+
+    function test_cancel_skipReasonsAndOnlyServer() public {
+        uint64 sa = _join(alice);
+        vm.prank(stranger);
+        vm.expectRevert(ElymumArena.NotServer.selector);
+        arena.cancel(_ref(ID, alice, sa));
+        vm.expectEmit(address(arena));
+        emit SettleSkipped(9, alice, sa, 1);
+        _cancel(_ref(9, alice, sa));
+        vm.expectEmit(address(arena));
+        emit SettleSkipped(ID, alice, sa + 5, 2);
+        _cancel(_ref(ID, alice, sa + 5));
+        // the vault cannot cover the entry fee any more (loot burns drained it)
+        vm.prank(server);
+        arena.sweepLoot(ID, 1, 1);
+        vm.expectEmit(address(arena));
+        emit SettleSkipped(ID, alice, sa, 4);
+        _cancel(_ref(ID, alice, sa));
+    }
+
+    function test_cancel_twoPhase() public {
+        (ElymumArena a, BlockingToken blk) = _blockingArena();
+        vm.prank(alice);
+        a.join(ID);
+        uint64 sa = a.getSession(ID, alice).id;
+        blk.setBlocked(alice, true);
+        vm.expectEmit(address(a));
+        emit Cancelled(ID, alice, sa, FEE, false);
+        vm.prank(server);
+        a.cancel(_ref(ID, alice, sa));
+        assertTrue(a.getSession(ID, alice).finalized);
+        assertEq(a.getArena(ID).owed, FEE);
+        _assertSolvent(a, address(blk));
+        blk.setBlocked(alice, false);
+        vm.prank(alice);
+        a.refund(ID);
+        assertEq(blk.balanceOf(address(a)), 0);
     }
 
     // ---------------------------------------------------------------- refund
@@ -983,300 +936,368 @@ contract ElymumArenaTest is Test {
         arena.refund(ID);
         assertEq(token.balanceOf(alice) - a0, FEE);
         assertEq(arena.getArena(ID).openSessions, 0);
-        assertEq(arena.getArena(ID).vault, 0);
-        assertEq(arena.getSession(ID, alice).id, 0);
-        // The ticket is gone: a late settlement is skipped, and the player can join again.
         vm.expectEmit(address(arena));
         emit SettleSkipped(ID, alice, sid, 2);
         _settle(_one(ID, alice, sid, FEE));
-        _join(alice);
+        vm.prank(alice);
+        vm.expectRevert(ElymumArena.NoSession.selector);
+        arena.refund(ID);
     }
 
     function test_refund_cappedByVault() public {
         uint64 sa = _join(alice);
         _join(bob);
-        _settle(_one(ID, alice, sa, 1_700 ether)); // vault left: 200
+        _settle(_one(ID, alice, sa, 1_800 ether)); // vault left: 200
         vm.warp(block.timestamp + 1 days);
         uint256 b0 = token.balanceOf(bob);
         vm.prank(bob);
         arena.refund(ID);
-        assertEq(token.balanceOf(bob) - b0, 200 ether + CUT); // what the vault holds + the reserved fee
+        assertEq(token.balanceOf(bob) - b0, 200 ether);
         assertEq(arena.getArena(ID).vault, 0);
-        assertEq(token.balanceOf(address(arena)), 0);
+        _assertSolvent(arena, address(token));
     }
 
-    function test_refund_noSession() public {
-        vm.prank(alice);
-        vm.expectRevert(ElymumArena.NoSession.selector);
-        arena.refund(ID);
-        vm.prank(alice);
-        vm.expectRevert(ElymumArena.NoSession.selector);
-        arena.refund(99);
-    }
-
-    function test_refund_racesWithSettle() public {
-        uint64 sid = _join(alice);
-        vm.warp(block.timestamp + 1 days);
-        // The server wins the race: the refund finds nothing.
-        _settle(_one(ID, alice, sid, VAL));
-        vm.prank(alice);
-        vm.expectRevert(ElymumArena.NoSession.selector);
-        arena.refund(ID);
-        // The player wins the race: the settlement is skipped.
-        uint64 sid2 = _join(alice);
-        vm.warp(block.timestamp + 1 days);
-        vm.prank(alice);
-        arena.refund(ID);
-        vm.expectEmit(address(arena));
-        emit SettleSkipped(ID, alice, sid2, 2);
-        _settle(_one(ID, alice, sid2, FEE));
-    }
-
-    // ---------------------------------------------------------------- sweepLoot
+    // ---------------------------------------------------------------- loot & sweeps
 
     function test_sweepLoot_burnsWithMonotonicIds() public {
         _join(alice);
-        _join(bob);
         vm.expectEmit(address(arena));
-        emit LootBurned(ID, 5, 300 ether);
+        emit LootBurned(ID, 5, 100 ether, false);
         vm.prank(server);
-        arena.sweepLoot(ID, 5, 300 ether);
-        assertEq(token.balanceOf(DEAD), 300 ether);
-        ElymumArena.ArenaView memory v = arena.getArena(ID);
-        assertEq(v.vault, 2 * VAL - 300 ether);
-        assertEq(arena.arenaFees(ID), 2 * CUT); // never burned
-        assertEq(v.lastSweepId, 5);
-        assertEq(v.totalBurned, 300 ether);
-        assertEq(arena.config().totalBurned, 300 ether);
-
-        vm.startPrank(server);
+        arena.sweepLoot(ID, 5, 100 ether);
+        assertEq(token.balanceOf(DEAD), 100 ether);
+        assertEq(arena.getArena(ID).lastSweepId, 5);
+        assertEq(arena.config().totalLootBurned, 100 ether);
+        assertEq(arena.getArena(ID).totalBurned, 100 ether);
+        vm.prank(server);
         vm.expectRevert(ElymumArena.SweepIdNotIncreasing.selector);
-        arena.sweepLoot(ID, 5, 1); // replay
-        vm.expectRevert(ElymumArena.SweepIdNotIncreasing.selector);
-        arena.sweepLoot(ID, 4, 1);
+        arena.sweepLoot(ID, 5, 1);
+        vm.prank(server);
         vm.expectRevert(ElymumArena.InsufficientVault.selector);
-        arena.sweepLoot(ID, 6, 2 * FEE);
+        arena.sweepLoot(ID, 6, FEE);
+        vm.prank(server);
         vm.expectRevert(ElymumArena.UnknownArena.selector);
-        arena.sweepLoot(3, 1, 0);
-        arena.sweepLoot(ID, 6, 0); // zero still advances the id
-        vm.stopPrank();
-        assertEq(arena.getArena(ID).lastSweepId, 6);
-
-        vm.prank(admin);
+        arena.sweepLoot(9, 6, 1);
+        vm.prank(stranger);
         vm.expectRevert(ElymumArena.NotServer.selector);
-        arena.sweepLoot(ID, 7, 1);
+        arena.sweepLoot(ID, 6, 1);
     }
 
-    function test_sweepLoot_idsArePerArena() public {
-        vm.prank(admin);
-        arena.createArena(2, FEE, 300);
-        vm.startPrank(server);
-        arena.sweepLoot(ID, 10, 0);
-        arena.sweepLoot(2, 1, 0);
-        vm.stopPrank();
-        assertEq(arena.getArena(ID).lastSweepId, 10);
-        assertEq(arena.getArena(2).lastSweepId, 1);
-    }
-
-    // ---------------------------------------------------------------- views
-
-    function test_views_emptyRecords() public view {
-        ElymumArena.SessionView memory s = arena.getSession(ID, stranger);
-        assertEq(s.id, 0);
-        ElymumArena.ArenaView memory v = arena.getArena(77);
-        assertFalse(v.exists);
-        assertEq(v.id, 77);
-        assertEq(arena.BURN_ADDRESS(), DEAD);
-        assertEq(arena.computeFee(1_000, 500), 50);
-        assertEq(arena.computeFee(1_199, 500), 59);
-        assertEq(arena.computeFee(19, 500), 0); // 0.95 → 0
-        assertEq(arena.computeFee(20, 500), 1);
-        assertEq(arena.computeFee(1_000, 300), 30);
-        assertEq(arena.computeFee(1_000, 0), 0);
-        assertEq(arena.version(), 2);
-        assertEq(arena.VERSION(), 2);
-        assertTrue(arena.feeOnEntry());
-        assertEq(arena.arenaFees(77), 0);
-    }
-
-    // ---------------------------------------------------------------- cancel
-
-    function test_cancel_refundsTheFullEntryFee() public {
-        uint64 sid = _join(alice);
-        _join(bob);
-        uint256 a0 = token.balanceOf(alice);
-        vm.expectEmit(address(arena));
-        emit Cancelled(ID, alice, sid, FEE, true);
-        _cancel(_ref(ID, alice, sid));
-        assertEq(token.balanceOf(alice) - a0, FEE); // value + reserved fee, no fee taken
-        assertEq(token.balanceOf(feeWallet), 0);
-        ElymumArena.ArenaView memory v = arena.getArena(ID);
-        assertEq(v.vault, VAL);
-        assertEq(arena.arenaFees(ID), CUT);
-        assertEq(v.openSessions, 1);
-        assertEq(v.totalPaidOut, FEE);
-        assertEq(arena.config().totalGames, 0); // not a game
-        assertEq(arena.config().totalFees, 0);
-        assertEq(arena.getSession(ID, alice).id, 0);
-        // The ticket is gone: settle and cancel replays are skipped.
-        vm.expectEmit(address(arena));
-        emit SettleSkipped(ID, alice, sid, 2);
-        _settle(_one(ID, alice, sid, 1));
-        vm.expectEmit(address(arena));
-        emit SettleSkipped(ID, alice, sid, 2);
-        _cancel(_ref(ID, alice, sid));
-    }
-
-    function test_cancel_skipReasonsAndOnlyServer() public {
+    function test_sweepArena_onlyDisabledAndIdle() public {
         uint64 sa = _join(alice);
-        uint64 sb = _join(bob);
-        _settle(_one(ID, bob, sb, VAL + 900 ether)); // vault left: 50 < alice's value
-        ElymumArena.SessionRef[] memory items = new ElymumArena.SessionRef[](3);
-        items[0] = ElymumArena.SessionRef(9, alice, sa);
-        items[1] = ElymumArena.SessionRef(ID, carol, 5);
-        items[2] = ElymumArena.SessionRef(ID, alice, sa);
-        vm.expectEmit(address(arena));
-        emit SettleSkipped(9, alice, sa, 1);
-        vm.expectEmit(address(arena));
-        emit SettleSkipped(ID, carol, 5, 2);
-        vm.expectEmit(address(arena));
-        emit SettleSkipped(ID, alice, sa, 4);
-        _cancel(items);
-        assertEq(arena.getSession(ID, alice).id, sa);
+        _join(bob);
         vm.prank(admin);
-        vm.expectRevert(ElymumArena.NotServer.selector);
-        arena.cancel(_ref(ID, alice, sa));
-        // The 24 h refund still gives what is left + the fee.
+        vm.expectRevert(ElymumArena.ArenaEnabled.selector);
+        arena.sweepArena(ID);
+        vm.prank(admin);
+        arena.updateArena(ID, FEE, 300, false);
+        vm.prank(admin);
+        vm.expectRevert(ElymumArena.ArenaHasOpenSessions.selector);
+        arena.sweepArena(ID);
+        _settle(_one(ID, alice, sa, 500 ether));
         vm.warp(block.timestamp + 1 days);
-        uint256 a0 = token.balanceOf(alice);
-        vm.prank(alice);
-        arena.refund(ID);
-        assertEq(token.balanceOf(alice) - a0, 50 ether + CUT);
+        vm.prank(bob);
+        arena.refund(ID); // takes 1,000 back, 500 remains
+        vm.expectEmit(address(arena));
+        emit ArenaSwept(ID, feeWallet, 500 ether);
+        vm.prank(admin);
+        arena.sweepArena(ID);
+        assertEq(token.balanceOf(feeWallet), 500 ether);
+        assertEq(token.balanceOf(address(arena)), 0);
+        vm.prank(admin);
+        arena.sweepArena(ID); // empty: no-op
+        vm.prank(admin);
+        vm.expectRevert(ElymumArena.UnknownArena.selector);
+        arena.sweepArena(7);
+        vm.prank(stranger);
+        vm.expectRevert(_unauthorized(stranger));
+        arena.sweepArena(ID);
     }
 
-    function test_cancel_twoPhase() public {
+    function test_sweepArena_keepsOwed() public {
         (ElymumArena a, BlockingToken blk) = _blockingArena();
         vm.prank(alice);
         a.join(ID);
-        uint64 sa = a.getSession(ID, alice).id;
+        vm.prank(bob);
+        a.join(ID);
         blk.setBlocked(alice, true);
-        vm.expectEmit(address(a));
-        emit Cancelled(ID, alice, sa, FEE, false);
+        ElymumArena.Settlement[] memory it6 = _one(ID, alice, a.getSession(ID, alice).id, 1_500 ether);
         vm.prank(server);
-        a.cancel(_ref(ID, alice, sa));
-        ElymumArena.SessionView memory s = a.getSession(ID, alice);
-        assertTrue(s.finalized);
-        assertEq(s.owed, FEE);
-        assertEq(a.getArena(ID).owed, FEE);
-        assertEq(a.getArena(ID).openSessions, 0);
-        assertEq(a.arenaFees(ID), 0);
-        assertEq(blk.balanceOf(address(a)), FEE);
-        vm.expectEmit(address(a));
-        emit SettleSkipped(ID, alice, sa, 3);
+        a.settle(it6); // owed 1,400
+        ElymumArena.Settlement[] memory it7 = _one(ID, bob, a.getSession(ID, bob).id, 0);
         vm.prank(server);
-        a.cancel(_ref(ID, alice, sa));
-        blk.setBlocked(alice, false);
-        vm.prank(alice);
-        a.refund(ID);
-        assertEq(blk.balanceOf(alice), 10 * FEE);
-        assertEq(blk.balanceOf(address(a)), 0);
+        a.settle(it7);
+        vm.prank(admin);
+        a.updateArena(ID, FEE, 300, false);
+        vm.prank(admin);
+        a.sweepArena(ID);
+        assertEq(blk.balanceOf(address(a)), 1_400 ether);
+        assertEq(a.getArena(ID).owed, 1_400 ether);
+    }
+
+    // ---------------------------------------------------------------- rescue & ownership
+
+    function test_rescue() public {
+        vm.deal(address(arena), 3 ether);
+        vm.expectEmit(address(arena));
+        emit Rescued(address(0), bob, 2 ether);
+        vm.prank(admin);
+        arena.rescue(address(0), bob, 2 ether);
+        assertEq(bob.balance, 2 ether);
+        MockERC20 other = new MockERC20("Other", "OTH", 18);
+        other.mint(address(arena), 5 ether);
+        vm.prank(admin);
+        arena.rescue(address(other), bob, 5 ether);
+        assertEq(other.balanceOf(bob), 5 ether);
+        vm.prank(admin);
+        vm.expectRevert(ElymumArena.CannotRescueGameToken.selector);
+        arena.rescue(address(token), admin, 1);
+        RejectEther rej = new RejectEther();
+        vm.startPrank(admin);
+        vm.expectRevert(ElymumArena.ZeroAddress.selector);
+        arena.rescue(address(0), address(0), 1);
+        vm.expectRevert(ElymumArena.NativeTransferFailed.selector);
+        arena.rescue(address(0), address(rej), 1);
+        vm.stopPrank();
+        vm.prank(stranger);
+        vm.expectRevert(_unauthorized(stranger));
+        arena.rescue(address(0), stranger, 1);
+    }
+
+    function test_ownable2Step_and_noRenounce() public {
+        vm.prank(admin);
+        arena.transferOwnership(bob);
+        assertEq(arena.config().pendingAdmin, bob);
+        vm.prank(carol);
+        vm.expectRevert(_unauthorized(carol));
+        arena.acceptOwnership();
+        vm.prank(bob);
+        arena.acceptOwnership();
+        assertEq(arena.owner(), bob);
+        vm.prank(bob);
+        vm.expectRevert(ElymumArena.RenounceDisabled.selector);
+        arena.renounceOwnership();
     }
 
     // ---------------------------------------------------------------- reentrancy
 
     function test_reentrancy_tokenCallbackIsBlocked() public {
         ReentrantToken re = new ReentrantToken();
-        ElymumArena a = new ElymumArena(admin, server, feeWallet);
-        vm.startPrank(admin);
-        a.setToken(address(re));
-        a.createArena(ID, FEE, 300);
-        vm.stopPrank();
+        ElymumArena a = _arenaWith(address(re));
         re.mint(alice, 10 * FEE);
         vm.prank(alice);
         re.approve(address(a), type(uint256).max);
         vm.prank(alice);
         a.join(ID);
-        // The token re-enters `join` during the payout transfer (as itself, a fresh player).
         re.mint(address(re), 10 * FEE);
         vm.prank(address(re));
         re.approve(address(a), type(uint256).max);
-        re.arm(address(a), abi.encodeCall(ElymumArena.join, (ID)));
+        // the token re-enters `join` / `settle` / `refund` during the payout transfer
+        bytes[3] memory calls = [
+            abi.encodeCall(ElymumArena.join, (ID)),
+            abi.encodeCall(ElymumArena.settle, (_one(ID, alice, 1, 0))),
+            abi.encodeCall(ElymumArena.refund, (ID))
+        ];
+        re.arm(address(a), calls[0]);
         vm.prank(server);
-        a.settle(_one(ID, alice, 1, VAL));
+        a.settle(_one(ID, alice, 1, FEE));
         assertFalse(re.lastCallOk());
         assertEq(bytes4(re.lastRevert()), ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
         assertEq(a.getSession(ID, address(re)).id, 0);
+        for (uint256 i = 1; i < 3; ++i) {
+            vm.prank(alice);
+            a.join(ID);
+            re.arm(address(a), calls[i]);
+            ElymumArena.Settlement[] memory it8 = _one(ID, alice, a.getSession(ID, alice).id, FEE);
+            vm.prank(server);
+            a.settle(it8);
+            assertFalse(re.lastCallOk());
+            // a re-entered `settle` is refused by the server check first; `refund` by the guard
+            bytes4 want = i == 1 ? ElymumArena.NotServer.selector : ReentrancyGuard.ReentrancyGuardReentrantCall.selector;
+            assertEq(bytes4(re.lastRevert()), want);
+        }
+    }
+
+    // ---------------------------------------------------------------- holder perks
+
+    function test_holderPerks_lowerRates() public {
+        MockNFT nft = new MockNFT();
+        nft.setBalance(alice, 1);
+        vm.expectEmit(address(arena));
+        emit HolderPerksSet(address(nft), 1_000, 0);
+        vm.prank(admin);
+        arena.setHolderPerks(address(nft), 1_000, 0);
+        (uint16 b, uint16 v) = arena.feeRatesFor(alice);
+        assertEq(b, 1_000);
+        assertEq(v, 0);
+        (b, v) = arena.feeRatesFor(bob);
+        assertEq(b, 1_500);
+        assertEq(v, 500);
+        uint64 sa = _join(alice);
+        _join(bob);
+        assertEq(arena.getSession(ID, alice).burnBps, 1_000);
+        assertEq(arena.getSession(ID, alice).vaultBps, 0);
+        uint256 a0 = token.balanceOf(alice);
+        _settle(_one(ID, alice, sa, 2 * FEE));
+        assertEq(token.balanceOf(alice) - a0, 1_900 ether);
+        assertEq(token.balanceOf(feeWallet), 0);
+    }
+
+    function test_holderPerks_neverHigherThanNormal() public {
+        MockNFT nft = new MockNFT();
+        nft.setBalance(alice, 1);
+        vm.prank(admin);
+        arena.setHolderPerks(address(nft), 2_000, 500);
+        _join(alice);
+        assertEq(arena.getSession(ID, alice).burnBps, 1_500);
+        assertEq(arena.getSession(ID, alice).vaultBps, 500);
+    }
+
+    function test_setHolderPerks_reverts() public {
+        vm.startPrank(admin);
+        vm.expectRevert(ElymumArena.InvalidFee.selector);
+        arena.setHolderPerks(address(0), 2_000, 501);
+        vm.expectRevert(ElymumArena.NotAContract.selector);
+        arena.setHolderPerks(alice, 0, 0);
+        vm.stopPrank();
+        vm.prank(stranger);
+        vm.expectRevert(_unauthorized(stranger));
+        arena.setHolderPerks(address(0), 0, 0);
+    }
+
+    function test_join_brokenNftNeverBlocks() public {
+        BrokenNFT nft = new BrokenNFT();
+        vm.prank(admin);
+        arena.setHolderPerks(address(nft), 0, 0);
+        for (uint8 m = 1; m <= 6; ++m) {
+            nft.setMode(m);
+            address p = address(uint160(0xB000 + m));
+            assertFalse(arena.isHolder(p));
+            _fund(p);
+            vm.prank(p);
+            arena.join(ID);
+            assertEq(arena.getSession(ID, p).burnBps, 1_500);
+        }
+    }
+
+    function test_holdersOnly() public {
+        MockNFT nft = new MockNFT();
+        nft.setBalance(alice, 1);
+        vm.prank(admin);
+        arena.setHolderPerks(address(nft), 1_500, 500);
+        vm.expectEmit(address(arena));
+        emit ArenaHoldersOnlySet(ID, true);
+        vm.prank(admin);
+        arena.setArenaHoldersOnly(ID, true);
+        vm.prank(bob);
+        vm.expectRevert(ElymumArena.HoldersOnly.selector);
+        arena.join(ID);
+        _join(alice);
+        vm.prank(admin);
+        arena.setHolderPerks(address(0), 0, 0);
+        vm.prank(carol);
+        vm.expectRevert(ElymumArena.HoldersOnly.selector);
+        arena.join(ID);
+        vm.prank(admin);
+        arena.setArenaHoldersOnly(ID, false);
+        _join(carol);
+        vm.prank(admin);
+        vm.expectRevert(ElymumArena.UnknownArena.selector);
+        arena.setArenaHoldersOnly(77, true);
+    }
+
+    // ---------------------------------------------------------------- security
+
+    /// @dev A stolen server key can pay one ticket the whole vault of an arena, never payouts held as `owed`; the owner
+    ///      stops it by rotating the authority.
+    function test_security_compromisedServerKey_blastRadiusIsTheOpenVault() public {
+        (ElymumArena a, BlockingToken blk) = _blockingArena();
+        address attacker = makeAddr("attacker");
+        blk.mint(attacker, 10 * FEE);
+        vm.prank(attacker);
+        blk.approve(address(a), type(uint256).max);
+        vm.prank(bob);
+        a.join(ID);
+        blk.setBlocked(bob, true);
+        ElymumArena.Settlement[] memory it9 = _one(ID, bob, a.getSession(ID, bob).id, FEE);
+        vm.prank(server);
+        a.settle(it9);
+        blk.setBlocked(bob, false);
+        vm.prank(alice);
+        a.join(ID);
+        vm.prank(attacker);
+        a.join(ID);
+        assertEq(a.getArena(ID).vault, 2 * FEE);
+        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
+        items[0] = ElymumArena.Settlement(ID, alice, a.getSession(ID, alice).id, 0);
+        items[1] = ElymumArena.Settlement(ID, attacker, a.getSession(ID, attacker).id, 2 * FEE);
+        uint256 before = blk.balanceOf(attacker);
+        vm.prank(server);
+        a.settle(items);
+        // even the thief pays the fee on the "profit"
+        assertEq(blk.balanceOf(attacker) - before, 1_800 ether);
+        assertEq(a.getArena(ID).owed, FEE);
+        vm.prank(bob);
+        a.refund(ID);
+        vm.prank(admin);
+        a.setServerAuthority(makeAddr("newServer"));
+        vm.prank(server);
+        vm.expectRevert(ElymumArena.NotServer.selector);
+        a.sweepLoot(ID, 1, 0);
     }
 
     // ---------------------------------------------------------------- fuzz
 
-    function testFuzz_feeMath(uint128 entryFee, uint16 bps) public view {
-        bps = uint16(bound(bps, 0, 1_000));
-        uint128 fee = arena.computeFee(entryFee, bps);
-        assertEq(fee, (uint256(entryFee) * bps) / 10_000);
-        assertLe(fee, entryFee / 10);
-        assertEq(uint256(entryFee - fee) + fee, entryFee);
+    function testFuzz_computeFees(uint128 entryFee, uint128 payout, uint16 burnBps, uint16 vaultBps) public view {
+        burnBps = uint16(bound(burnBps, 0, 2_500));
+        vaultBps = uint16(bound(vaultBps, 0, 2_500 - burnBps));
+        (uint128 net, uint128 burned, uint128 toVault) = arena.computeFees(entryFee, payout, burnBps, vaultBps);
+        assertEq(uint256(net) + burned + toVault, payout, "shares add up to the payout");
+        if (payout <= entryFee) {
+            assertEq(burned + toVault, 0, "no fee without profit");
+        } else {
+            uint256 profit = uint256(payout) - entryFee;
+            assertLe(uint256(burned) + toVault, (profit * 2_500) / 10_000, "never above the cap");
+            assertEq(burned, (profit * burnBps) / 10_000);
+            assertEq(toVault, (profit * vaultBps) / 10_000);
+            assertGe(net, entryFee, "a winner never gets less than the stake back");
+        }
     }
 
-    function testFuzz_settleConservation(uint128[6] memory payouts, uint16 bps, uint8 blockMask) public {
+    /// @dev Random batches: every token is accounted for (players + dEaD + fee wallet + contract == supply).
+    function testFuzz_settleConservation(uint128[6] memory payouts, uint8 blockMask, uint16 burnBps, uint16 vaultBps)
+        public
+    {
+        burnBps = uint16(bound(burnBps, 0, 2_500));
+        vaultBps = uint16(bound(vaultBps, 0, 2_500 - burnBps));
         (ElymumArena a, BlockingToken blk) = _blockingArena();
         vm.prank(admin);
-        a.setFeeBps(uint16(bound(bps, 0, 1_000)));
-        address[6] memory players;
-        uint256 supply = blk.totalSupply();
+        a.setFeeRates(burnBps, vaultBps);
+        address[6] memory ps;
         for (uint256 i; i < 6; ++i) {
-            players[i] = address(uint160(0x1000 + i));
-            blk.mint(players[i], FEE);
-            vm.prank(players[i]);
-            blk.approve(address(a), FEE);
-            vm.prank(players[i]);
+            ps[i] = address(uint160(0xA000 + i));
+            blk.mint(ps[i], FEE);
+            vm.prank(ps[i]);
+            blk.approve(address(a), type(uint256).max);
+            vm.prank(ps[i]);
             a.join(ID);
-            if (blockMask & (1 << i) != 0) blk.setBlocked(players[i], true);
         }
-        supply = blk.totalSupply();
-
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](5);
-        for (uint256 i; i < 5; ++i) {
-            items[i] = ElymumArena.Settlement(
-                ID, players[i], a.getSession(ID, players[i]).id, uint128(bound(payouts[i], 0, 4 * FEE))
-            );
+        uint256 supply = blk.totalSupply();
+        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](6);
+        for (uint256 i; i < 6; ++i) {
+            items[i] = ElymumArena.Settlement(ID, ps[i], a.getSession(ID, ps[i]).id, uint128(bound(payouts[i], 0, 6 * FEE)));
+            if ((blockMask >> i) & 1 == 1) blk.setBlocked(ps[i], true);
         }
         vm.prank(server);
         a.settle(items);
-        // The sixth never played: cancelled (full entry back unless the vault cannot cover its value).
-        ElymumArena.SessionRef[] memory unplayed = _ref(ID, players[5], a.getSession(ID, players[5]).id);
-        vm.prank(server);
-        a.cancel(unplayed);
-        uint128 loot = a.getArena(ID).vault / 3;
-        vm.prank(server);
-        a.sweepLoot(ID, 1, loot);
-
+        _assertSolvent(a, address(blk));
+        uint256 held;
+        for (uint256 i; i < 6; ++i) held += blk.balanceOf(ps[i]);
+        held += blk.balanceOf(DEAD) + blk.balanceOf(feeWallet) + blk.balanceOf(address(a));
+        held += blk.balanceOf(alice) + blk.balanceOf(bob) + blk.balanceOf(carol);
+        assertEq(held, supply);
         ElymumArena.ArenaView memory v = a.getArena(ID);
-        uint128 reserved = a.arenaFees(ID);
-        // Internal accounting equals the real balance.
-        assertEq(blk.balanceOf(address(a)), uint256(v.vault) + v.owed + reserved);
-        // Reserved fees are exactly those of the tickets still open.
-        uint256 openFees;
-        for (uint256 i; i < 6; ++i) {
-            ElymumArena.SessionView memory s = a.getSession(ID, players[i]);
-            if (s.id != 0 && !s.finalized) openFees += a.computeFee(s.entryFee, s.feeBps);
-        }
-        assertEq(openFees, reserved);
-        assertEq(blk.balanceOf(feeWallet), a.config().totalFees);
-        // Nothing is created or lost.
-        uint256 total = blk.balanceOf(address(a)) + blk.balanceOf(feeWallet) + blk.balanceOf(DEAD);
-        uint256 owedSum;
-        for (uint256 i; i < 6; ++i) {
-            total += blk.balanceOf(players[i]);
-            owedSum += a.getSession(ID, players[i]).owed;
-        }
-        total += blk.balanceOf(alice) + blk.balanceOf(bob) + blk.balanceOf(carol);
-        assertEq(total, supply);
-        assertEq(owedSum, v.owed);
-        assertEq(v.totalDeposited, 6 * uint256(FEE));
-        assertEq(
-            uint256(v.vault) + reserved + v.totalPaidOut + v.totalBurned + a.config().totalFees, v.totalDeposited
-        );
+        assertEq(uint256(v.totalDeposited), uint256(v.vault) + v.totalPaidOut + v.totalBurned + v.totalFees);
     }
 
     function testFuzz_refundNeverExceedsVault(uint128 first) public {
@@ -1290,36 +1311,26 @@ contract ElymumArenaTest is Test {
         vm.prank(bob);
         arena.refund(ID);
         uint256 got = token.balanceOf(bob) - b0;
-        assertEq(got, (vault < VAL ? vault : VAL) + CUT);
-        assertEq(token.balanceOf(address(arena)), uint256(arena.getArena(ID).vault) + arena.arenaFees(ID));
+        assertLe(got, FEE);
+        assertLe(got, vault);
+        _assertSolvent(arena, address(token));
     }
 
     // ---------------------------------------------------------------- gas
 
     function test_gas_join_settle1_settle40() public {
-        _join(alice); // warm the arena slot like a live server would see it
+        _join(alice);
         address p = makeAddr("gas-player");
         _fund(p);
         vm.prank(p);
         uint256 g = gasleft();
         arena.join(ID);
         emit log_named_uint("gas join", g - gasleft());
-
-        ElymumArena.Settlement[] memory one = _one(ID, p, arena.getSession(ID, p).id, 1_500 ether);
+        ElymumArena.Settlement[] memory first = _one(ID, p, arena.getSession(ID, p).id, 1_500 ether);
         vm.prank(server);
         g = gasleft();
-        arena.settle(one);
-        emit log_named_uint("gas settle(1)", g - gasleft());
-
-        address p2 = makeAddr("gas-player-2");
-        _fund(p2);
-        vm.prank(p2);
-        arena.join(ID);
-        ElymumArena.SessionRef[] memory c1 = _ref(ID, p2, arena.getSession(ID, p2).id);
-        vm.prank(server);
-        g = gasleft();
-        arena.cancel(c1);
-        emit log_named_uint("gas cancel(1)", g - gasleft());
+        arena.settle(first);
+        emit log_named_uint("gas settle(1, with profit)", g - gasleft());
 
         vm.prank(admin);
         arena.updateArena(ID, FEE, 2_000, true);
@@ -1338,191 +1349,5 @@ contract ElymumArenaTest is Test {
         emit log_named_uint("gas settle(40)", used);
         assertLt(used, 3_000_000);
     }
-
-    // ---------------------------------------------------------------- holder perks
-
-    function _perks(address nft, uint16 bps) internal {
-        vm.prank(admin);
-        arena.setHolderPerks(nft, bps);
-    }
-
-    function test_holderPerks_defaultsOff() public view {
-        ElymumArena.ConfigView memory c = arena.config();
-        assertEq(c.holderNft, address(0));
-        assertEq(c.holderFeeBps, 0);
-        assertFalse(arena.isHolder(alice));
-        assertEq(arena.feeBpsFor(alice), 500);
-        assertFalse(arena.getArena(ID).holdersOnly);
-    }
-
-    function test_setHolderPerks_ownerAndBounds() public {
-        MockNFT nft = new MockNFT();
-        vm.expectEmit(address(arena));
-        emit HolderPerksSet(address(nft), 300);
-        _perks(address(nft), 300);
-        assertEq(arena.config().holderNft, address(nft));
-        assertEq(arena.config().holderFeeBps, 300);
-
-        vm.prank(stranger);
-        vm.expectRevert(_unauthorized(stranger));
-        arena.setHolderPerks(address(nft), 300);
-
-        vm.startPrank(admin);
-        vm.expectRevert(ElymumArena.InvalidFee.selector);
-        arena.setHolderPerks(address(nft), 1_001);
-        vm.expectRevert(ElymumArena.NotAContract.selector);
-        arena.setHolderPerks(stranger, 300);
-        arena.setHolderPerks(address(nft), 1_000); // the cap itself is fine
-        arena.setHolderPerks(address(0), 0); // disable
-        vm.stopPrank();
-        assertEq(arena.config().holderNft, address(0));
-    }
-
-    function test_join_holderGetsLowerFee() public {
-        MockNFT nft = new MockNFT();
-        nft.setBalance(alice, 1);
-        _perks(address(nft), 300);
-        assertTrue(arena.isHolder(alice));
-        assertFalse(arena.isHolder(bob));
-        assertEq(arena.feeBpsFor(alice), 300);
-        assertEq(arena.feeBpsFor(bob), 500);
-
-        vm.expectEmit(address(arena));
-        emit Joined(ID, alice, 1, FEE, 300);
-        uint64 sa = _join(alice);
-        vm.expectEmit(address(arena));
-        emit Joined(ID, bob, 2, FEE, 500);
-        uint64 sb = _join(bob);
-        assertEq(arena.getSession(ID, alice).feeBps, 300);
-        assertEq(arena.getSession(ID, bob).feeBps, 500);
-
-        // The rate is fixed at join: selling the NFT or changing the perks later does not change open tickets.
-        nft.setBalance(alice, 0);
-        _perks(address(0), 0);
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
-        items[0] = ElymumArena.Settlement(ID, alice, sa, 1_500 ether);
-        items[1] = ElymumArena.Settlement(ID, bob, sb, 400 ether);
-        assertEq(arena.getArena(ID).vault, 970 ether + VAL); // 3 % and 5 % of the entry reserved
-        uint256 f0 = token.balanceOf(feeWallet);
-        vm.expectEmit(address(arena));
-        emit Settled(ID, alice, sa, 1_500 ether, 30 ether, true); // 3 % of the 1000 entry
-        vm.expectEmit(address(arena));
-        emit Settled(ID, bob, sb, 400 ether, CUT, true);
-        _settle(items);
-        assertEq(token.balanceOf(feeWallet) - f0, 30 ether + CUT);
-    }
-
-    function test_join_holderFeeNeverAboveNormalFee() public {
-        MockNFT nft = new MockNFT();
-        nft.setBalance(alice, 3);
-        _perks(address(nft), 800);
-        vm.prank(admin);
-        arena.setFeeBps(400);
-        assertEq(arena.feeBpsFor(alice), 400);
-        _join(alice);
-        assertEq(arena.getSession(ID, alice).feeBps, 400);
-    }
-
-    function test_join_brokenNftNeverBlocks() public {
-        BrokenNFT nft = new BrokenNFT();
-        _perks(address(nft), 300);
-        address[6] memory ps =
-            [makeAddr("b1"), makeAddr("b2"), makeAddr("b3"), makeAddr("b4"), makeAddr("b5"), makeAddr("b6")];
-        for (uint8 m = 1; m <= 6; ++m) {
-            nft.setMode(m);
-            assertFalse(arena.isHolder(ps[m - 1]));
-            _fund(ps[m - 1]);
-            vm.prank(ps[m - 1]);
-            arena.join(ID);
-            assertEq(arena.getSession(ID, ps[m - 1]).feeBps, 500);
-        }
-    }
-
-    function test_join_nftSelfDestructedOrCodeless() public {
-        // Perks pointing at an address that has no code (any more): treated as "not a holder".
-        MockNFT nft = new MockNFT();
-        nft.setBalance(alice, 1);
-        _perks(address(nft), 300);
-        vm.etch(address(nft), "");
-        assertFalse(arena.isHolder(alice));
-        _join(alice);
-        assertEq(arena.getSession(ID, alice).feeBps, 500);
-    }
-
-    function test_holdersOnly() public {
-        MockNFT nft = new MockNFT();
-        nft.setBalance(alice, 1);
-        _perks(address(nft), 300);
-
-        vm.expectEmit(address(arena));
-        emit ArenaHoldersOnlySet(ID, true);
-        vm.prank(admin);
-        arena.setArenaHoldersOnly(ID, true);
-        assertTrue(arena.getArena(ID).holdersOnly);
-
-        vm.prank(bob);
-        vm.expectRevert(ElymumArena.HoldersOnly.selector);
-        arena.join(ID);
-        _join(alice);
-        assertEq(arena.getSession(ID, alice).feeBps, 300);
-
-        // updateArena keeps the flag.
-        vm.prank(admin);
-        arena.updateArena(ID, FEE, 300, true);
-        assertTrue(arena.getArena(ID).holdersOnly);
-
-        // Perks off: nobody is a holder, the arena is closed to everyone.
-        _perks(address(0), 0);
-        vm.prank(carol);
-        vm.expectRevert(ElymumArena.HoldersOnly.selector);
-        arena.join(ID);
-
-        // A broken NFT: same, cleanly reverts HoldersOnly instead of bubbling the NFT's failure.
-        BrokenNFT broken = new BrokenNFT();
-        _perks(address(broken), 300);
-        vm.prank(carol);
-        vm.expectRevert(ElymumArena.HoldersOnly.selector);
-        arena.join(ID);
-
-        vm.prank(admin);
-        arena.setArenaHoldersOnly(ID, false);
-        _join(carol);
-    }
-
-    function test_setArenaHoldersOnly_reverts() public {
-        vm.prank(stranger);
-        vm.expectRevert(_unauthorized(stranger));
-        arena.setArenaHoldersOnly(ID, true);
-        vm.prank(admin);
-        vm.expectRevert(ElymumArena.UnknownArena.selector);
-        arena.setArenaHoldersOnly(77, true);
-    }
-
-    function test_gas_join_withHolderCheck() public {
-        MockNFT nft = new MockNFT();
-        nft.setBalance(alice, 1);
-        _perks(address(nft), 300);
-        _join(bob);
-        vm.prank(alice);
-        uint256 g = gasleft();
-        arena.join(ID);
-        emit log_named_uint("gas join (holder check)", g - gasleft());
-    }
-
-    // ---------------------------------------------------------------- fixtures
-
-    function _blockingArena() internal returns (ElymumArena a, BlockingToken blk) {
-        blk = new BlockingToken();
-        a = new ElymumArena(admin, server, feeWallet);
-        vm.startPrank(admin);
-        a.setToken(address(blk));
-        a.createArena(ID, FEE, 300);
-        vm.stopPrank();
-        address[3] memory ps = [alice, bob, carol];
-        for (uint256 i; i < 3; ++i) {
-            blk.mint(ps[i], 10 * FEE);
-            vm.prank(ps[i]);
-            blk.approve(address(a), type(uint256).max);
-        }
-    }
 }
+

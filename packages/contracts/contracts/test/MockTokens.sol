@@ -110,6 +110,39 @@ contract ReentrantToken is ERC20 {
     }
 }
 
+/// @notice Test-only: a mintable ERC-20 with `burn(uint256)` that really burns (ERC20Burnable-style).
+contract BurnableMock is ERC20 {
+    constructor() ERC20("Burnable", "BRN") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function burn(uint256 amount) external {
+        _burn(msg.sender, amount);
+    }
+}
+
+/// @notice Test-only: `burn(uint256)` succeeds but burns nothing (mode 0), burns half (mode 1) or reverts (mode 2).
+contract FakeBurnToken is ERC20 {
+    uint8 public mode;
+
+    constructor() ERC20("Fake Burn", "FKB") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function setMode(uint8 m) external {
+        mode = m;
+    }
+
+    function burn(uint256 amount) external {
+        if (mode == 1) _burn(msg.sender, amount / 2);
+        if (mode == 2) revert("no burn");
+    }
+}
+
 /// @notice Test-only: a minimal NFT that only answers `balanceOf` (enough for the holder checks).
 contract MockNFT {
     mapping(address => uint256) public balanceOf;
