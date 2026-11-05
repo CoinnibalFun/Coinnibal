@@ -122,20 +122,25 @@ export interface ShopSettings {
 }
 
 /**
- * Testnet defaults: a pack of 3 costs about one and a half to two and a half of the cheapest arena
- * tickets (1,000 tELYMUM), so a pack is a real decision, not pocket change.
+ * Default prices, tied to the cheapest arena ticket (1,000 `$ELYMUM`, `DEFAULT_ARENAS`): one charge
+ * costs 20-40 % of that ticket (a pack of 3: Magnet and Speed 600, Leap 900, Invisibility 1,200).
+ * A charge is cheap next to what a round can win, so buying one is an easy call, while the per-round
+ * cap in paid arenas (`arenaUsesPerRound`) keeps them from deciding a fight. Payments are burned.
  */
 export const SHOP_DEFAULTS: ShopSettings = {
   enabled: true,
   sink: 'burn',
   treasury: null,
   packSize: 3,
-  prices: { magnet: '1500', leap: '2500', speed: '1500', invis: '3000' },
+  prices: { magnet: '600', leap: '900', speed: '600', invis: '1200' },
   kinds: { magnet: true, leap: true, speed: true, invis: true },
   holderDiscountPct: 30,
   arenaUsesPerRound: 2,
   holderExtraArenaUses: 1,
 };
+
+/** The default prices before the 2026-11 economy update (a saved file still holding all of them takes the new ones). */
+export const OLD_SHOP_PRICES: Readonly<Record<BoostKind, string>> = { magnet: '1500', leap: '2500', speed: '1500', invis: '3000' };
 
 /** Bounds of the admin values. */
 export const SHOP_LIMITS = { packSize: 20, holderDiscountPct: 90, arenaUsesPerRound: 20, holderExtraArenaUses: 10, priceTokens: 1_000_000_000 } as const;

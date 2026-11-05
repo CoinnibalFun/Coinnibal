@@ -1,4 +1,4 @@
-import { CAPACITY, DEFAULT_ARENAS, RULES, arenaMeta } from '@elymum/shared';
+import { CAPACITY, DEFAULT_ARENAS, ECONOMY, RULES, SHOP_DEFAULTS, WINNINGS_CUT_BPS, arenaMeta, winningsCut, type WinningsCut } from '@elymum/shared';
 import { DEFAULT_FEE_BPS, MAX_FEE_BPS, REFUND_DELAY_SECS, splitPayout, ticketValue, type PayoutSplit } from '@elymum/sdk';
 
 /**
@@ -27,8 +27,18 @@ export const SERVER = {
   privateCodeLength: 5,
 } as const;
 
-/** The worked fee example of the guide: a 1,000-token ticket with 1,900 tokens in the till at the bell (its 950 doubled). */
+/** The worked example of the guide: a 1,000-token ticket with 1,900 tokens in the till at the bell. */
 export const EXAMPLE = { entry: 1000, cashout: 1900 } as const;
+
+/**
+ * The worked payout at the arena's entry fee rate `bps` (0 in the recommended setup): the coin starts at
+ * the entry fee less that fee, the till at the bell is 1,900, and 20 % of the winnings above the start is
+ * the cut (15 % burned, 5 % kept in the arena vault). Exactly the server's `winningsCut`.
+ */
+export function payoutExample(bps: number): WinningsCut & { fee: number; start: number } {
+  const start = Number(ticketValue(EXAMPLE.entry, bps));
+  return { ...winningsCut(EXAMPLE.cashout, start), fee: EXAMPLE.entry - start, start };
+}
 
 /**
  * The worked example at `bps` (the server's `feeBps`), exactly as the arena splits it: the fee comes off the
@@ -41,6 +51,9 @@ export function feeExample(bps: number): PayoutSplit & { value: bigint } {
 
 export interface DocsFacts {
   fee: { bps: number; maxBps: number };
+  /** The cut on winnings (basis points): total, burned, kept in the vault. */
+  cut: { bps: number; burnBps: number; vaultBps: number };
+  shop: { packSize: number; prices: Record<'magnet' | 'leap' | 'speed' | 'invis', number>; holderDiscountPct: number; arenaUses: number; holderExtraUses: number };
   example: { entry: number; cashout: number };
   arenas: { id: number; name: string; entry: number; maxSessions: number }[];
   capacity: { practice: number; private: number; arena: number };
@@ -60,6 +73,19 @@ export interface DocsFacts {
 
 export const FACTS: DocsFacts = {
   fee: { bps: DEFAULT_FEE_BPS, maxBps: MAX_FEE_BPS },
+  cut: { bps: WINNINGS_CUT_BPS, burnBps: ECONOMY.burnBps, vaultBps: ECONOMY.vaultBps },
+  shop: {
+    packSize: SHOP_DEFAULTS.packSize,
+    prices: {
+      magnet: Number(SHOP_DEFAULTS.prices.magnet),
+      leap: Number(SHOP_DEFAULTS.prices.leap),
+      speed: Number(SHOP_DEFAULTS.prices.speed),
+      invis: Number(SHOP_DEFAULTS.prices.invis),
+    },
+    holderDiscountPct: SHOP_DEFAULTS.holderDiscountPct,
+    arenaUses: SHOP_DEFAULTS.arenaUsesPerRound,
+    holderExtraUses: SHOP_DEFAULTS.holderExtraArenaUses,
+  },
   example: EXAMPLE,
   arenas: DEFAULT_ARENAS.map((a) => ({ id: a.id, name: arenaMeta(a.id).name, entry: a.entryTokens, maxSessions: a.maxSessions })),
   capacity: { practice: CAPACITY.practice, private: CAPACITY.private, arena: CAPACITY.arena },
@@ -91,7 +117,7 @@ export type DocBlock =
   | { kind: 'table'; caption: string; head: string[]; rows: string[][]; numeric?: number[] }
   /** Boxes joined by arrows: how value moves. */
   | { kind: 'flow'; label: string; steps: { title: string; text: string }[]; diagram?: { ticket: string; vault: string; wallet: string; fee: string } }
-  /** The worked fee example as a receipt (at the server's fee rate). */
+  /** The worked payout example as a receipt (at the server's fee rate). */
   | { kind: 'fee-example' }
   /** Two columns compared side by side. */
   | { kind: 'compare'; left: { title: string; items: string[] }; right: { title: string; items: string[] } }
@@ -124,17 +150,20 @@ export interface DocsContent {
   /** Short facts for the dateline strip under the head. */
   dateline: string[];
   tocLabel: string;
-  /** The worked fee example receipt (its numbers come from `feeExample(feeBps)`). */
+  /** The worked payout receipt (its numbers come from `payoutExample(feeBps)`). */
   receipt: {
     title: string;
     meta: string;
     entry: string;
-    cashout: string;
-    /** What the coin starts at (the entry fee minus the fee). */
-    starts: string;
+    /** The arena's entry fee line (shown only when the rate is above 0). */
     fee: (pct: string) => string;
+    /** What the coin starts at. */
+    starts: string;
+    cashout: string;
+    winnings: string;
+    burn: (pct: string) => string;
+    vault: (pct: string) => string;
     net: string;
-    /** Where the fee goes (the receipt's footer). */
     footer: string;
     caption: string;
   };

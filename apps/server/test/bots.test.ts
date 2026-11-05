@@ -132,13 +132,14 @@ describe('bots', () => {
     expect(Math.max(c.x, c.y)).toBeGreaterThan(250);
   });
 
-  it('headless 2-minute room: stable population, finite state, bots grow', () => {
-    const world = new World({ ...WORLD_PRESETS.practice, powerUps: true, coinRain: true, seed: 11 });
-    const rng = mulberry32(12);
-    const manager = new BotManager(world, { target: 18, min: 3, max: 18 }, rng);
-    let maxSeen = 0;
+  it('headless 3-minute rooms: stable population, finite state, bots grow, and now and then eat each other', () => {
+    // bots mostly leave teammates alone (BOT_APPETITE): over two rooms a few still get eaten
     let kills = 0;
-    for (let i = 0; i < (120_000 / TICK_MS); i++) {
+    for (const seed of [11, 12]) {
+      const world = new World({ ...WORLD_PRESETS.practice, powerUps: true, coinRain: true, seed });
+      const manager = new BotManager(world, { target: 18, min: 3, max: 18 }, mulberry32(seed + 1));
+      let maxSeen = 0;
+      for (let i = 0; i < 180_000 / TICK_MS; i++) {
       const events = world.tick(TICK_MS);
       for (const k of events.kills) {
         kills++;
@@ -157,24 +158,50 @@ describe('bots', () => {
       }
     }
     expect(maxSeen).toBeLessThanOrEqual(18);
-    expect(manager.bots.size).toBeGreaterThanOrEqual(12);
+    expect(manager.bots.size).toBeGreaterThanOrEqual(8);
     const masses = [...manager.bots.values()].map((b) => b.player.totalMass());
     const avg = masses.reduce((a, b) => a + b, 0) / masses.length;
-    expect(avg).toBeGreaterThan(60);
-    expect(kills).toBeGreaterThan(0);
-  }, 60_000);
-
-  it('bots make room for humans', () => {
-    const world = new World({ ...WORLD_PRESETS.practice, powerUps: false, coinRain: false, seed: 4 });
-    const manager = new BotManager(world, { target: 18, min: 3, max: 18 }, mulberry32(4));
-    manager.update(0, 0);
-    expect(manager.bots.size).toBe(18);
-    for (let t = 0; t < 120_000; t += 1000) {
-      world.tick(TICK_MS);
-      manager.update(world.now + t, 14);
+      expect(avg).toBeGreaterThan(60);
     }
-    expect(manager.bots.size).toBeLessThanOrEqual(5);
-    expect(manager.desired(30)).toBe(3);
+    expect(kills).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('the squad walks in one by one at random moments, all of it inside the first minute, and people never send it home', () => {
+    const world = new World({ ...WORLD_PRESETS.practice, powerUps: false, coinRain: false, seed: 4 });
+    const manager = new BotManager(world, { target: 9, min: 6, max: 9 }, mulberry32(4));
+    manager.update(0, 0);
+    // a room never opens full
+    expect(manager.bots.size).toBe(0);
+    const sizes: number[] = [];
+    const at: number[] = [];
+    for (let t = 0; t <= 120_000; t += 250) {
+      const before = manager.bots.size;
+      manager.update(t, 14);
+      if (manager.bots.size > before) at.push(t);
+      sizes.push(manager.bots.size);
+    }
+    // never a burst: at most one more bot per update
+    for (let i = 1; i < sizes.length; i++) expect(sizes[i] - sizes[i - 1]).toBeLessThanOrEqual(1);
+    // the squad is 6-9, the first 3 within 15 s, every one of them by 55 s; 14 people never pushed one out
+    expect(manager.planned).toBeGreaterThanOrEqual(6);
+    expect(manager.planned).toBeLessThanOrEqual(9);
+    expect(at.length).toBe(manager.planned);
+    expect(at[2]).toBeLessThanOrEqual(15_000);
+    expect(at[at.length - 1]).toBeLessThanOrEqual(55_000);
+    // not all at once either: spread over at least a quarter of a minute
+    expect(at[at.length - 1] - at[0]).toBeGreaterThan(15_000);
+    expect(manager.bots.size).toBe(manager.planned);
+  });
+
+  it('the squad size is rolled evenly from min to the cap (6-9 by default)', () => {
+    const seen = new Set<number>();
+    for (let seed = 1; seed <= 60; seed++) {
+      const world = new World({ ...WORLD_PRESETS.practice, powerUps: false, coinRain: false, seed });
+      const m = new BotManager(world, { target: 8, min: 6, max: 9 }, mulberry32(seed));
+      m.update(0, 0);
+      seen.add(m.planned);
+    }
+    expect([...seen].sort()).toEqual([6, 7, 8, 9]);
   });
 
   it('rookie mix has ≥ 60% easy bots over 200 rolls', () => {
@@ -207,24 +234,22 @@ describe('bots', () => {
     expect(world.loot().length).toBe(12);
   });
 
-  it('bot count drops as humans join', () => {
+  it('every room fields at least 3 bots, whatever the people and the admin minimum', () => {
     const cfg = loadConfig({});
-    // default cap 12 per room
-    expect(cfg.bots.arena).toEqual({ target: 12, min: 2, max: 12, mix: 'standard' });
-    expect(cfg.bots.practiceRookie).toEqual({ target: 12, min: 4, max: 12, mix: 'rookie' });
-    expect(cfg.bots.practicePro).toEqual({ target: 12, min: 4, max: 12, mix: 'standard' });
-    expect(cfg.bots.private).toEqual({ target: 8, min: 2, max: 8, mix: 'standard' });
+    expect(cfg.bots.arena).toEqual({ target: 8, min: 6, max: 9, mix: 'standard' });
+    expect(cfg.bots.practiceRookie).toEqual({ target: 8, min: 6, max: 9, mix: 'rookie' });
+    expect(cfg.bots.practicePro).toEqual({ target: 8, min: 6, max: 9, mix: 'standard' });
+    expect(cfg.bots.private).toEqual({ target: 8, min: 3, max: 8, mix: 'standard' });
+    expect(BotManager.desiredOf({ target: 0, min: 0, max: 12 })).toBe(3);
+    expect(BotManager.desiredOf({ target: 1, min: 1, max: 12 })).toBe(3);
+    // only a cap below 3 (or bots off) fields fewer
+    expect(BotManager.desiredOf({ target: 5, min: 3, max: 2 })).toBe(2);
+    expect(BotManager.desiredOf({ target: 5, min: 3, max: 12, enabled: false })).toBe(0);
 
     const world = new World({ ...WORLD_PRESETS.arena, powerUps: false, coinRain: false, seed: 8 });
-    const manager = new BotManager(world, cfg.bots.arena, mulberry32(8));
-    expect([0, 1, 4, 10, 11, 30].map((h) => manager.desired(h))).toEqual([12, 11, 8, 2, 2, 2]);
-    manager.update(0, 0);
-    expect(manager.bots.size).toBe(12);
-    for (let t = 0; t < 120_000; t += 1000) {
-      world.tick(TICK_MS);
-      manager.update(world.now + t, 9);
-    }
-    expect(manager.bots.size).toBeLessThanOrEqual(3);
+    const manager = new BotManager(world, { target: 0, min: 0, max: 12 }, mulberry32(8));
+    for (let t = 0; t < 120_000; t += 500) manager.update(t, 40);
+    expect(manager.bots.size).toBeGreaterThanOrEqual(3);
   });
 
   it('bots wear basic skins only', () => {
@@ -353,6 +378,9 @@ describe('bots', () => {
   it('thoughts are staggered: a 12-bot room never has more than a quarter of its bots think in one tick', () => {
     const world = new World({ ...WORLD_PRESETS.practice, powerUps: false, coinRain: false, seed: 9 });
     const manager = new BotManager(world, { target: 12, min: 4, max: 12, mix: 'standard' }, mulberry32(9));
+    manager.update(0, 0);
+    manager.fill();
+    const squad = manager.bots.size;
     let thinks = 0;
     const orig = BotBrain.prototype.think;
     BotBrain.prototype.think = function (this: BotBrain, ...args: Parameters<BotBrain['think']>) {
@@ -371,7 +399,7 @@ describe('bots', () => {
       }
       expect(most).toBeLessThanOrEqual(3);
       // every bot still thinks several times a second, well below the 30 Hz tick
-      const perBotPerSec = all / 12 / (600 / 30);
+      const perBotPerSec = all / squad / (600 / 30);
       expect(perBotPerSec).toBeGreaterThan(2.5);
       expect(perBotPerSec).toBeLessThan(10);
     } finally {
@@ -385,6 +413,7 @@ describe('bot level of detail', () => {
     const world = new World({ width: 12_000, height: 12_000, foodTarget: 0, virusTarget: 0, maxPowerUps: 0, powerUps: false, coinRain: false, seed: 3 });
     const mgr = new BotManager(world, { target: 2, min: 2, max: 2 }, mulberry32(9));
     mgr.update(0, 0);
+    mgr.fill();
     const [near, far] = [...mgr.bots.values()];
     const thinks = new Map<number, number>();
     for (const b of [near, far]) {

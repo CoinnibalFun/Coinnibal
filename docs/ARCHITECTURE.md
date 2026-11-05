@@ -121,9 +121,11 @@ On chain (`ElymumArena`, custom errors, forge-std unit and fuzz tests):
 
 Off chain (the server, tests in `apps/server/test`):
 
-10. Value conservation per arena: Σ live values + Σ floor loot + Σ pending payouts (+ Σ forfeited) =
-    Σ entry fees − Σ paid. The journal (`DATA_DIR/journal.json`) is written with write-to-temp + rename.
-11. Bots carry no value and never pick up loot.
+10. Value conservation per arena: Σ live values + Σ floor loot + Σ bot purses + Σ pending payouts and sweeps
+    (+ Σ forfeited) + house reserve = Σ entry fees − Σ paid. The journal (`DATA_DIR/journal.json`) is written with
+    write-to-temp + rename. Bot purses count as owed (a person can win them back); the house reserve (the vault
+    share of the cut on winnings, purses taken home) is owed to nobody and stays in the vault.
+11. Bots never pick up loot. A house bot's purse holds only value taken from stakers it ate.
 12. Crash recovery: live tickets found in the journal at start are settled at their last journaled value;
     loot is restored. An arena whose vault does not cover what the journal owes it stays disabled
     (`!!! arena #N KEPT DISABLED`).

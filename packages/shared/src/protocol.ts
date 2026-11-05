@@ -385,8 +385,12 @@ export interface DeathStats {
   playersEaten: number;
   bestRank: number;
   xp?: number;
-  /** Arena rooms: raw token units paid out (0 on death). */
+  /** Arena rooms: raw token units paid out (0 on death), after the cut on winnings. */
   payout?: number;
+  /** Arena rooms: the value held at the payout, before the cut on winnings. */
+  gross?: number;
+  /** Arena rooms: the cut on winnings (`WINNINGS_CUT_BPS` of the profit; 0 without profit). */
+  cut?: number;
   /** Arena rooms: value lost on death, raw token units. */
   valueLost?: number;
   /** Arena rooms: the killer was a bot. */

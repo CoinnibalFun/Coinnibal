@@ -69,6 +69,7 @@ export type Cmd =
   | { k: 'announce'; hid: number; text: string }
   | { k: 'wanted'; wanted: Record<number, number> }
   | { k: 'ticket'; req: number; ticket: StakedBotTicket | null; error?: string }
+  | { k: 'drawn'; req: number; ok: boolean }
   | { k: 'clock'; offset: number }
   /** Test hook: keeps the worker busy for `ms` (the hang watchdog's test). */
   | { k: 'block'; ms: number }
@@ -96,6 +97,10 @@ export type Ctl =
       roomId?: string;
       live?: LiveStake[];
       loot?: { roomId: string; arenaId: number; items: { x: number; y: number; value: number }[] };
+      /** What the room's house bots hold (`Journal.commit` `purses`). */
+      purses?: { roomId: string; arenaId: number; value: number };
+      /** Value that became the team's reserve in this write (`Journal.commit` `house`). */
+      house?: { arenaId: number; amount: number }[];
       /** Seated stakes after this write: session → player id (the directory's `findStakeByWallet`). */
       seats: [session: string, pid: number, player: string][];
       /** Settlements the integrity auto-hold must look at: key → the ticket's stake (`IntegrityService.holdDecision`). */
@@ -116,6 +121,8 @@ export type Ctl =
   | { k: 'transfer'; t: IntegrityTransfer }
   | { k: 'liveSessions'; list: SessionSummary[] }
   | { k: 'acquire'; req: number; arenaId: number; roomId: string }
+  /** A house bot asks the team reserve for its bankroll (`Journal.drawHouse`, answered with `drawn`). */
+  | { k: 'draw'; req: number; arenaId: number; amount: number }
   | { k: 'released'; ticket: StakedBotTicket; reason: SettleReason; item: SettlementItem }
   | { k: 'stats'; load: ThreadLoad; rooms: RoomSummary[]; roomLoads: RoomLoad[] }
   | { k: 'closed'; hid: number; ok: boolean }

@@ -6,14 +6,14 @@ import { useUi } from '../../store';
 import { useTokenText } from '../lobby/useLobby';
 import { PageHead } from '../PageHead';
 import { docsEn } from './content.en';
-import { EXAMPLE, feeExample, type DocBlock, type DocsContent } from './facts';
+import { EXAMPLE, FACTS, payoutExample, type DocBlock, type DocsContent } from './facts';
 import { ComicStrip } from './Comics';
 import { ValueFlow } from './ValueFlow';
 import './docs.css';
 
 /**
- * The player guide (`/docs`, `#docs`): how to play, rooms, value flow, rounds and
- * fees, what is on-chain, wallet safety and an FAQ. Typed content lives in
+ * The player guide (`/docs`, `#docs`): how to play, rooms and tickets, value flow, rounds and
+ * the cut on winnings, the Elymum NFT, the $ELYMUM token, what is on-chain, wallet safety and an FAQ. Typed content lives in
  * content.en.ts; every number comes from the code through facts.ts, and the fee
  * rate is the server's (`ChainStatus.feeBps`) when it is known.
  */
@@ -258,18 +258,21 @@ function KeysFig({ caption, rows }: { caption: string; rows: { key: string; acti
   );
 }
 
-/** The worked example: a 1,000-token ticket whose coin doubles by the bell, at the server's fee rate. */
+/** The worked example: a 1,000-token ticket with 1,900 in the till at the bell, with the cut on winnings. */
 function FeeExample({ c }: { c: DocsContent }) {
-  const { entry, cashout } = EXAMPLE;
-  const split = feeExample(c.feeBps);
+  const { entry } = EXAMPLE;
+  const x = payoutExample(c.feeBps);
   const r = c.receipt;
   const n = (v: bigint | number) => c.num(Number(v));
   const lines: ReceiptLine[] = [
     { label: r.entry, value: n(entry) },
-    { label: r.fee(c.pct(c.feeBps)), value: `−${n(split.fee)}`, muted: true },
-    { label: r.starts, value: n(split.value) },
-    { label: r.cashout, value: n(cashout) },
-    { label: r.net, value: n(split.player), strong: true },
+    ...(x.fee > 0 ? [{ label: r.fee(c.pct(c.feeBps)), value: `−${n(x.fee)}`, muted: true }] : []),
+    { label: r.starts, value: n(x.start) },
+    { label: r.cashout, value: n(x.gross) },
+    { label: r.winnings, value: n(x.profit) },
+    { label: r.burn(c.pct(FACTS.cut.burnBps)), value: `−${n(x.burn)}`, muted: true },
+    { label: r.vault(c.pct(FACTS.cut.vaultBps)), value: `−${n(x.vault)}`, muted: true },
+    { label: r.net, value: n(x.net), strong: true },
   ];
   return (
     <figure className="dc-fee">

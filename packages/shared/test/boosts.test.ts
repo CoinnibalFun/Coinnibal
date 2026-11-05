@@ -108,7 +108,7 @@ describe('boosts: rules', () => {
     expect(packPriceRaw('12.5', 6, 0)).toBe(12_500_000n);
     expect(() => packPriceRaw('abc', 18, 0)).toThrow();
     expect(SHOP_DEFAULTS).toMatchObject({ sink: 'burn', packSize: 3, holderDiscountPct: 30, arenaUsesPerRound: 2, holderExtraArenaUses: 1 });
-    expect(SHOP_DEFAULTS.prices).toEqual({ magnet: '1500', leap: '2500', speed: '1500', invis: '3000' });
+    expect(SHOP_DEFAULTS.prices).toEqual({ magnet: '600', leap: '900', speed: '600', invis: '1200' });
     expect(Object.values(SHOP_DEFAULTS.kinds).every(Boolean)).toBe(true);
   });
 });

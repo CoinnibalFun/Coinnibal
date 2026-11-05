@@ -114,10 +114,10 @@ const PANELS: Record<string, [Panel, Panel, Panel]> = {
           <SceneCoin x={100} y={84} r={20} paint="cyan" mood="happy" feet />
         </g>
         <g className="cs-bounce" style={{ animationDelay: '-0.4s' }}>
-          <SceneCoin x={46} y={92} r={13} paint="bot" mood="smile" antenna feet />
+          <SceneCoin x={46} y={92} r={13} paint="blush" mood="smile" feet />
         </g>
         <g className="cs-bounce" style={{ animationDelay: '-0.8s' }}>
-          <SceneCoin x={154} y={92} r={13} paint="bot" mood="smile" antenna feet />
+          <SceneCoin x={154} y={92} r={13} paint="spray" mood="smile" feet />
         </g>
         <g transform="rotate(-8 150 34)">
           <rect x={126} y={22} width={50} height={22} rx={5} fill={ELYSIUM.up} {...ln} strokeWidth={2} />
@@ -179,12 +179,12 @@ const PANELS: Record<string, [Panel, Panel, Panel]> = {
       <g>
         <Ground />
         <g className="cs-wobble" style={{ transformOrigin: '96px 92px' }}>
-          <SceneCoin x={96} y={86} r={22} paint="bot" mood="smile" antenna feet />
+          <SceneCoin x={96} y={86} r={22} paint="cyan" mood="happy" feet />
         </g>
         <g transform="rotate(6 152 46)">
-          <rect x={132} y={34} width={40} height={24} rx={5} fill={ELYSIUM.cream} {...ln} strokeWidth={2} />
+          <rect x={126} y={34} width={52} height={24} rx={5} fill={ELYSIUM.cream} {...ln} strokeWidth={2} />
           <text x={152} y={51} textAnchor="middle" className="cs-tag cs-tag--ink">
-            0
+            PAID
           </text>
         </g>
         <path d="M128 52 L118 62" {...ln} strokeWidth={2} />

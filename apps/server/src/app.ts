@@ -1,3 +1,4 @@
+import { SiteFail } from './site/validate';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
 import { ELYSIUM_TESTNET_CHAIN_ID, chainByKey } from '@elymum/shared';
@@ -324,6 +325,22 @@ export async function createApp(
     chainId: () => chain.status().chainId,
     stakedSource: () => (stakedBots ? stakedBots.active() : !!opts.stakedBots),
     ...(stakedBots ? { stakedStatus: () => stakedBots!.status() } : {}),
+    reserve: () => journal.house(),
+    bankroll: async (wallet, arenaId) => {
+      const s = await chain.getSession(arenaId, wallet);
+      if (!s || s.finalized) throw new SiteFail(404, 'no_ticket', `This wallet holds no open ticket in arena #${arenaId}: buy one in the lobby first and do not play it`);
+      if (rooms.liveSessions().has(s.key) || journal.pending.some((p) => p.key === s.key)) {
+        throw new SiteFail(409, 'ticket_in_use', 'That ticket is in a room or already being settled');
+      }
+      const now = Date.now();
+      // one write: the ticket settles at 0 and its value becomes reserve (it never leaves the vault)
+      journal.commit({
+        enqueue: [{ kind: 'settle', key: s.key, player: s.player, arenaId, session: s.key, sessionId: s.id, payout: 0, score: 0, kills: 0, xp: 0, reason: 'house', attempts: 0, nextAttemptAt: now, createdAt: now }],
+        house: [{ arenaId, amount: s.value }],
+      });
+      chain.kick();
+      return { arenaId, amount: s.value, reserve: journal.houseByArena(arenaId) };
+    },
     log,
   });
   chain.setLiveSessionProvider(() => rooms.liveSessions());

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BOOST_KINDS, LEGACY_BOOST_KINDS, SHOP_DEFAULTS, SHOP_LIMITS, parseToken, type ShopSettings } from '@elymum/shared';
+import { BOOST_KINDS, LEGACY_BOOST_KINDS, OLD_SHOP_PRICES, SHOP_DEFAULTS, SHOP_LIMITS, parseToken, type ShopSettings } from '@elymum/shared';
 import { getAddress, isAddress } from 'viem';
 
 /** A bad admin value: `field` names it (`prices.magnet`, `arenaUsesPerRound`, …). */
@@ -118,6 +118,12 @@ export class ShopSettingsStore {
       const pr = (raw as { prices?: Record<string, unknown> }).prices;
       if (pr && String(pr.magnet) === '300' && String(pr.shock) === '450' && String(pr.speed) === '300') delete (raw as { prices?: unknown }).prices;
       upgradeLegacyKinds(raw);
+      // the pre-2026-11 defaults, untouched: the new economy's prices
+      const pr2 = (raw as { prices?: Record<string, unknown> }).prices;
+      if (pr2 && BOOST_KINDS.every((k) => String(pr2[k]) === OLD_SHOP_PRICES[k])) {
+        delete (raw as { prices?: unknown }).prices;
+        this.log('shop: the old default prices were upgraded to the new defaults');
+      }
       this.cur = applyShopSettings(this.defaults, raw, { strict: false });
     } catch (err) {
       const backup = `${p}.corrupt-${Date.now()}`;

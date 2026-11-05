@@ -32,7 +32,8 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
 - Real-time arena game: a 30 Hz authoritative server (physics, bots, rounds) and a canvas client with
   split, eject, viruses, power-ups and floor loot.
 - Rounds, not cash-outs: paid arenas play 5-minute wall-clock rounds. Join late or buy back in;
-  everyone alive at the bell is paid their whole value; the only fee is a flat 5 % of each played entry fee.
+  everyone alive at the bell is paid their value less a 20 % cut of the winnings only (15 % burned, 5 % kept in
+  the arena vault); no winnings, no cut.
 - Four arenas on the ring: Asphodel Meadow (1,000), Lethe Shore (10,000), Golden Bough (50,000) and
   Isles of the Blessed (250,000 `$ELYMUM`), all open to everyone.
 - On-chain money in one contract: `ElymumArena` holds the entry fees in per-arena vaults; a payout
@@ -45,7 +46,9 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
 - Owner-run admin panel: deploy both contracts from your wallet, register them, set the token,
   create arenas, publish the allowlist, open the mint, review the WL and collabs, integrity flags,
   bans and held payouts. Every transaction is previewed before the wallet prompt.
-- Practice and bots: two leagues of practice rooms with bots; nothing touches the chain.
+- Practice: two leagues of free practice rooms; nothing touches the chain.
+- The house squad: every room fields at least 3 team bots that walk in one by one and play as a team
+  (map-wide tracking, traps, lures, feeding); see [docs/PROJECT.md](docs/PROJECT.md#221-bots).
 
 ## How it works
 

@@ -573,8 +573,46 @@ export function BotsCard({
           ? `${tot.bots} bots · ${tot.humans} people · ${tot.rooms} rooms`
           : undefined
       }
-      lede="Bots fill quiet rooms and always wear a BOT tag. When a person joins a full room, a bot goes home to make the seat. Off testnet bots are worth nothing; they never buy tickets."
+      lede="The house squad: every room fields Min to Cap bots (6-9 by default), whoever else plays; people never send a bot home. Bots walk in one at a time within the first minute of a room or an arena round and play as a team (map-wide tracking, traps, lures, feeding, covering their small ones; not in the rookie league). In arenas a bot enters with a ticket's worth from the team reserve, keeps what it eats and stays to the bell, when what it holds goes back to the reserve. They always wear a BOT tag."
     >
+      {view.reserve && (
+        <div className="ad-note" data-testid="bots-bankroll">
+          <p>
+            <strong>Bot bankroll (team reserve):</strong>{" "}
+            {ids.length === 0
+              ? "no arena yet"
+              : ids
+                  .map((id) => `#${id} ${((view.reserve?.[String(id)] ?? 0) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })}`)
+                  .join(" · ")}
+            . A bot enters an arena with one ticket's worth from it; with too little, bots enter with nothing. To add to it, buy a ticket
+            in that arena from this wallet in the lobby, do not play it, and press the arena's button: the ticket is settled at 0 and its
+            value stays in the vault as reserve.
+          </p>
+          <div className="ad-row">
+            {ids.map((id) => (
+              <Btn
+                key={id}
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setErr(null);
+                  try {
+                    const r = await ctx.api!.bankrollBots(id);
+                    setView(r.view);
+                    setMsg(`Arena #${id}: ${(r.amount / 1e6).toLocaleString("en-US")} added to the bot bankroll.`);
+                  } catch (e) {
+                    setErr(saveErrorText(e));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Ticket to bankroll #{id}
+              </Btn>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="ad-tablewrap">
         <table className="ad-table ad-bots" data-testid="bots-table">
           <thead>
@@ -587,7 +625,7 @@ export function BotsCard({
               <th scope="col" className="is-num">
                 Min
               </th>
-              <th scope="col" className="is-num">
+              <th scope="col" className="is-num" title="Typical squad size per room (at least 3, at most the cap); the live plan drifts around it">
                 Target
               </th>
               {hasMassCap && (
@@ -611,7 +649,7 @@ export function BotsCard({
                   <th
                     scope="col"
                     className="is-num"
-                    title="Most bots chasing one person at once; 0 = no limit"
+                    title="Most bots working one person at once (pusher, flanker, feeder); 0 = no limit"
                   >
                     Chasers
                   </th>

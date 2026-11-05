@@ -45,9 +45,9 @@ export interface Personality {
    * is chased up to 1.6x as long. Halved when the person is next to a thorn bush or a wall.
    */
   chaseMs: number;
-  /** Prey weight of a person relative to a bot (below 1: bots go for each other a little more). */
+  /** Prey weight of a person (bots weigh other bots at `BOT_APPETITE`, see brain.ts). */
   humanBias: number;
-  /** Multiplier on the split-attack chance against a person (bots split on bots more readily). */
+  /** Multiplier on the split-attack chance against a person. */
   humanSplit: number;
   /** Least time between two split attacks on people (ms). */
   humanSplitCooldownMs: number;
@@ -66,11 +66,10 @@ type SkillFields = Exclude<keyof Personality, 'style' | 'skill' | 'aggression' |
 
 /**
  * Per difficulty. Easy bots stay beatable for newcomers: slow to react, short-sighted, often
- * distracted, sloppy aim, no virus tricks. Hard bots play like a decent human (they still react
- * with a delay, aim a little off, give up long chases and slip now and then). Against people
- * every level holds back: shorter chases, rarer split attacks with a long cooldown, and a
- * slightly lower prey weight than other bots (people should be a little favoured; 2026-11
- * playtest: "they're like cannibals, I can't escape").
+ * distracted, sloppy aim, no virus tricks, no squad roles. Medium and hard bots play like decent
+ * players on one team: they go for people first (the richer, the more), keep a chase up longer when a
+ * teammate cuts the way off, and split on people readily. They still react with a delay, aim a little
+ * off, give up hopeless chases and slip now and then, so they read as people, not as machines.
  */
 const SKILL_BASE: Record<BotSkill, Pick<Personality, SkillFields>> = {
   0: {
@@ -87,10 +86,10 @@ const SKILL_BASE: Record<BotSkill, Pick<Personality, SkillFields>> = {
     foodRouting: 0.35,
     wallSense: 0.6,
     doubleSplit: false,
-    chaseMs: 2500,
-    humanBias: 0.65,
-    humanSplit: 0.2,
-    humanSplitCooldownMs: 12_000,
+    chaseMs: 3_000,
+    humanBias: 1.05,
+    humanSplit: 0.35,
+    humanSplitCooldownMs: 9_000,
     lapseRate: 0.025,
   },
   1: {
@@ -107,10 +106,10 @@ const SKILL_BASE: Record<BotSkill, Pick<Personality, SkillFields>> = {
     foodRouting: 0.8,
     wallSense: 1,
     doubleSplit: false,
-    chaseMs: 3500,
-    humanBias: 0.7,
-    humanSplit: 0.4,
-    humanSplitCooldownMs: 9000,
+    chaseMs: 5_000,
+    humanBias: 1.25,
+    humanSplit: 0.65,
+    humanSplitCooldownMs: 6_000,
     lapseRate: 0.01,
   },
   2: {
@@ -127,10 +126,10 @@ const SKILL_BASE: Record<BotSkill, Pick<Personality, SkillFields>> = {
     foodRouting: 1,
     wallSense: 1.25,
     doubleSplit: true,
-    chaseMs: 4500,
-    humanBias: 0.75,
-    humanSplit: 0.55,
-    humanSplitCooldownMs: 7000,
+    chaseMs: 7_000,
+    humanBias: 1.4,
+    humanSplit: 0.85,
+    humanSplitCooldownMs: 4_000,
     lapseRate: 0.004,
   },
 };
