@@ -2,6 +2,7 @@ import {
   CUSTOM_DEFAULTS,
   CUSTOM_DIFFICULTIES,
   CUSTOM_DURATIONS_MIN,
+  CUSTOM_DURATION_LIMITS,
   CUSTOM_FOOD,
   CUSTOM_KINDS,
   CUSTOM_LIMITS,
@@ -172,6 +173,9 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   }, [maxPlayers, cfg.maxPlayers]);
 
   const set = <K extends keyof CustomRoomConfig>(k: K, v: CustomRoomConfig[K]) => setCfg((c) => ({ ...c, [k]: v }));
+  // bots switched off and on again come back at the count the creator had
+  const lastBots = useRef(cfg.bots > 0 ? cfg.bots : CUSTOM_DEFAULTS.bots);
+  if (cfg.bots > 0) lastBots.current = cfg.bots;
   // paid rooms: the arena tiers offered (a holders-only tier to emblem holders only)
   const tiers = (quote?.tiers ?? []).filter((x) => !x.holdersOnly || quote?.holder);
   const paidOpen = !!quote?.paidRooms && tiers.length > 0;
@@ -389,6 +393,9 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
                   ))}
                 </div>
               </div>
+              <p className="cr-hint mono" data-testid="cr-price-range">
+                {t('cr.priceRange', { min: `${tok.wire(Math.min(...tiers.map((x) => x.entryFee)))} ${tok.symbol}`, max: `${tok.wire(Math.max(...tiers.map((x) => x.entryFee)))} ${tok.symbol}` })}
+              </p>
               <p className="cr-note cr-paid" data-testid="cr-kind-hint">
                 {t('cr.kindPaidHint', { arena: tier ? arenaMeta(tier.arenaId).name : '', fee: tier ? `${tok.wire(tier.entryFee)} ${tok.symbol}` : '' })}
               </p>
@@ -398,7 +405,24 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
               {t('cr.paidOff')}
             </p>
           )}
-          <Choice label={t('cr.duration')} options={CUSTOM_DURATIONS_MIN} value={cfg.durationMin} onPick={(v) => set('durationMin', v)} text={(v) => t('cr.minutes', { n: v })} />
+          <div className="cr-row" role="group" aria-label={t('cr.duration')} data-testid="cr-duration">
+            <span className="cr-row__label mono">{t('cr.duration')}</span>
+            <div className="cr-row__chips">
+              {CUSTOM_DURATIONS_MIN.map((n) => (
+                <Chip key={n} selected={n === cfg.durationMin} onClick={() => set('durationMin', n)} data-value={String(n)}>
+                  {t('cr.minutes', { n })}
+                </Chip>
+              ))}
+              <QuantityStepper
+                value={cfg.durationMin}
+                min={CUSTOM_DURATION_LIMITS.min}
+                max={CUSTOM_DURATION_LIMITS.max}
+                step={CUSTOM_DURATION_LIMITS.step}
+                onChange={(v) => set('durationMin', v)}
+                label={t('cr.durationCustom')}
+              />
+            </div>
+          </div>
           <Choice label={t('cr.map')} options={CUSTOM_MAP_CHOICES} value={cfg.mapSize} onPick={(v) => set('mapSize', v)} text={(v) => t(MAP_KEY[v])} />
           <p className="cr-hint mono" data-testid="cr-map-hint">
             {cfg.mapSize === 'auto'
@@ -418,10 +442,19 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
               {t('cr.seatsLeft', { n: quote!.seatsLeft })}
             </p>
           )}
-          <div className="cr-row">
-            <span className="cr-row__label mono">{t('cr.bots')}</span>
-            <QuantityStepper value={cfg.bots} min={0} max={CUSTOM_LIMITS.botsMax} onChange={(v) => set('bots', v)} label={t('cr.bots')} />
-          </div>
+          <Choice
+            label={t('cr.bots')}
+            options={['on', 'off'] as const}
+            value={cfg.bots > 0 ? 'on' : 'off'}
+            onPick={(v) => set('bots', v === 'on' ? Math.max(1, lastBots.current) : 0)}
+            text={(v) => t(v === 'on' ? 'cr.on' : 'cr.off')}
+          />
+          {cfg.bots > 0 && (
+            <div className="cr-row">
+              <span className="cr-row__label mono">{t('cr.botCount')}</span>
+              <QuantityStepper value={cfg.bots} min={1} max={CUSTOM_LIMITS.botsMax} onChange={(v) => set('bots', v)} label={t('cr.botCount')} />
+            </div>
+          )}
           {cfg.bots > 0 && <Choice label={t('cr.difficulty')} options={CUSTOM_DIFFICULTIES} value={cfg.difficulty} onPick={(v) => set('difficulty', v)} text={(v) => t(DIFF_KEY[v])} />}
           <Choice label={t('cr.food')} options={CUSTOM_FOOD} value={cfg.food} onPick={(v) => set('food', v)} text={(v) => t(FOOD_KEY[v])} />
           <Choice label={t('cr.powerUps')} options={['on', 'off'] as const} value={cfg.powerUps ? 'on' : 'off'} onPick={(v) => set('powerUps', v === 'on')} text={(v) => t(v === 'on' ? 'cr.on' : 'cr.off')} />
@@ -454,7 +487,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
               { label: t('cr.powerUps'), value: t(cfg.powerUps ? 'cr.on' : 'cr.off'), muted: true },
               ...(tier
                 ? [
-                    { label: t('cr.tier'), value: arenaMeta(tier.arenaId).name },
+                    { label: t('cr.arena'), value: arenaMeta(tier.arenaId).name },
                     { label: t('cr.stakes'), value: `${tok.wire(tier.entryFee)} ${tok.symbol}` },
                   ]
                 : [{ label: t('cr.stakes'), value: t('cr.noStakes'), muted: true }]),

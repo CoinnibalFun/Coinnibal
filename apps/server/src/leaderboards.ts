@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { LEADERBOARD_SIZE, isCountryCode, type CountryBoardRow } from '@elymum/shared';
+import { LEADERBOARD_SIZE, ROUND_BOARD_KEEP, ROUND_BOARD_TOP, isCountryCode, type CountryBoardRow, type RoundBoard } from '@elymum/shared';
 
 export interface LbRecord {
   name: string;
@@ -38,6 +38,8 @@ interface LbFile {
   /** When the boards were last reset (Unix ms) and by whom (`epoch` for the automatic reset of a deploy). */
   resetAt?: number;
   resetBy?: string;
+  /** The last arena rounds (newest first). */
+  rounds?: RoundBoard[];
 }
 
 /**
@@ -75,6 +77,8 @@ export class Leaderboards {
   private epoch = LEADERBOARD_EPOCH;
   private resetAt: number | null = null;
   private resetBy: string | null = null;
+  /** The last finished arena rounds, newest first (kept across a reset: they are results, not records). */
+  private rounds: RoundBoard[] = [];
 
   constructor(
     private readonly path: string | null,
@@ -98,6 +102,7 @@ export class Leaderboards {
           this.flush();
           return;
         }
+        this.rounds = Array.isArray(data.rounds) ? data.rounds.slice(0, ROUND_BOARD_KEEP) : [];
         this.allTime = Array.isArray(data.allTime) ? data.allTime : [];
         this.daily = data.day === this.day && Array.isArray(data.daily) ? data.daily : [];
         this.countriesAllTime = countryMap(data.countriesAllTime);
@@ -156,6 +161,24 @@ export class Leaderboards {
     this.dirty = true;
   }
 
+  /**
+   * An arena's bell: its standings go on the "Last rounds" board. Instances of one arena ringing the
+   * same bell merge into one entry (their standings together).
+   */
+  roundOver(r: RoundBoard): void {
+    if (!Number.isInteger(r.n) || !Array.isArray(r.top) || r.top.length === 0) return;
+    const same = this.rounds.find((x) => x.n === r.n && x.arenaId === r.arenaId);
+    if (same) {
+      same.top = [...same.top, ...r.top].sort((a, b) => b.value - a.value).slice(0, ROUND_BOARD_TOP);
+      same.players += r.players;
+    } else {
+      this.rounds.unshift({ ...r, top: r.top.slice(0, ROUND_BOARD_TOP) });
+      this.rounds.sort((a, b) => b.endedAt - a.endedAt || b.arenaId - a.arenaId);
+      this.rounds = this.rounds.slice(0, ROUND_BOARD_KEEP);
+    }
+    this.dirty = true;
+  }
+
   private rollover(now: number): void {
     const d = dayOf(now);
     if (d !== this.day) {
@@ -169,10 +192,11 @@ export class Leaderboards {
   snapshot(
     limit = LEADERBOARD_SIZE,
     now = Date.now(),
-  ): { day: string; daily: LbRecord[]; allTime: LbRecord[]; countries: { daily: CountryBoardRow[]; allTime: CountryBoardRow[] } } {
+  ): { day: string; daily: LbRecord[]; allTime: LbRecord[]; countries: { daily: CountryBoardRow[]; allTime: CountryBoardRow[] }; rounds: RoundBoard[] } {
     this.rollover(now);
     return {
       day: this.day,
+      rounds: this.rounds.map((r) => ({ ...r, top: r.top.map((x) => ({ ...x })) })),
       daily: this.daily.slice(0, limit),
       allTime: this.allTime.slice(0, limit),
       countries: { daily: rankCountries(this.countriesDaily), allTime: rankCountries(this.countriesAllTime) },
@@ -229,6 +253,7 @@ export class Leaderboards {
       allTime: this.allTime,
       countriesDaily: [...this.countriesDaily.values()],
       countriesAllTime: [...this.countriesAllTime.values()],
+      rounds: this.rounds,
       ...(this.resetAt !== null ? { resetAt: this.resetAt } : {}),
       ...(this.resetBy !== null ? { resetBy: this.resetBy } : {}),
     };

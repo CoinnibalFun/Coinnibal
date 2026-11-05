@@ -242,7 +242,7 @@ describe('the room creator', () => {
     spies.create.mockResolvedValue({ room: roomView({ kind: 'paid', arenaId: 2, endsAt: Date.now() + 20 * 60_000 }), invite: 'http://localhost/play?room=AB2CD' });
     await open();
     fireEvent.click(screen.getByRole('button', { name: 'Ticket room' }));
-    const tiers = screen.getByRole('group', { name: 'Arena tier' });
+    const tiers = screen.getByRole('group', { name: 'Ticket price' });
     expect(tiers.querySelectorAll('button')).toHaveLength(2); // not the holders-only tier
     expect(tiers.querySelector('[aria-pressed="true"]')?.getAttribute('data-value')).toBe('1');
     fireEvent.click(tiers.querySelector('[data-value="2"]')!);
@@ -251,7 +251,7 @@ describe('the room creator', () => {
     fireEvent.click(screen.getByTestId('cr-continue'));
     await settle();
     const payment = screen.getByTestId('cr-payment');
-    expect(payment.textContent).toMatch(/Arena tierLethe Shore/);
+    expect(payment.textContent).toMatch(/ArenaLethe Shore/);
     expect(payment.textContent).toMatch(/never holds anyone's tokens/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
@@ -268,7 +268,7 @@ describe('the room creator', () => {
     spies.quote.mockResolvedValue(quote({ holder: true }));
     await open();
     fireEvent.click(screen.getByRole('button', { name: 'Ticket room' }));
-    expect(screen.getByRole('group', { name: 'Arena tier' }).querySelectorAll('button')).toHaveLength(3);
+    expect(screen.getByRole('group', { name: 'Ticket price' }).querySelectorAll('button')).toHaveLength(3);
   });
 
   it('ticket rooms off: the creator says so and does not continue', async () => {

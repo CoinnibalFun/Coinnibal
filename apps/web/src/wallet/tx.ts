@@ -18,6 +18,8 @@ export interface SendOpts {
   onPhase?: (phase: TxPhase, hash?: Hash) => void;
   /** Overrides (tests, the admin panel's own wallet); default: the connected wallet. */
   wallet?: { provider: Eip1193Provider; address: Address } | null;
+  /** Gas limit to send with (default: the wallet estimates it). */
+  gas?: bigint;
   /** Read client for the receipt; default `publicClientFor(chain, provider)`. */
   publicClient?: PublicClient | null;
 }
@@ -58,7 +60,7 @@ export async function sendWithWallet(send: (wallet: WalletClient, from: Address)
 
 /** `sendWithWallet` for a contract call of the SDK. */
 export function sendWalletCall(call: ContractCall, opts: SendOpts): Promise<TxResult> {
-  return sendWithWallet((wallet, from) => sendCall(wallet, call, { account: from }), opts);
+  return sendWithWallet((wallet, from) => sendCall(wallet, call, { account: from, ...(opts.gas !== undefined ? { gas: opts.gas } : {}) }), opts);
 }
 
 /** Translated, player-facing text for a failed transaction (SDK English as the fallback). */

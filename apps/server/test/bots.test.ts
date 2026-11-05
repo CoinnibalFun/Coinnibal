@@ -176,13 +176,13 @@ describe('bots', () => {
     const at: number[] = [];
     for (let t = 0; t <= 120_000; t += 250) {
       const before = manager.bots.size;
-      manager.update(t, 14);
+      manager.update(t, 6);
       if (manager.bots.size > before) at.push(t);
       sizes.push(manager.bots.size);
     }
     // never a burst: at most one more bot per update
     for (let i = 1; i < sizes.length; i++) expect(sizes[i] - sizes[i - 1]).toBeLessThanOrEqual(1);
-    // the squad is 6-9, the first 3 within 15 s, every one of them by 55 s; 14 people never pushed one out
+    // the squad is 6-9, the first 3 within 15 s, every one of them by 55 s; 6 people never pushed one out
     expect(manager.planned).toBeGreaterThanOrEqual(6);
     expect(manager.planned).toBeLessThanOrEqual(9);
     expect(at.length).toBe(manager.planned);

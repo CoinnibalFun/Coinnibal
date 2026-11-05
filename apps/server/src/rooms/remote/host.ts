@@ -239,7 +239,7 @@ export class RoomHost {
       // the main thread kicks the chain worker after every commit that queues a settlement
       chain: { kick: () => {} },
       journal,
-      leaderboards: { submit: (rec) => ctl({ k: 'lb', rec }), countryGame: (g) => ctl({ k: 'country', g }) },
+      leaderboards: { submit: (rec) => ctl({ k: 'lb', rec }), countryGame: (g) => ctl({ k: 'country', g }), roundOver: (r) => ctl({ k: 'roundBoard', r }) },
       log: (m) => ctl({ k: 'log', m }),
       clock: this.clock,
       round: init.round,

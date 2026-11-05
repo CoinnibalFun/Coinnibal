@@ -17,6 +17,8 @@ export interface RoundState {
   n: number;
   endsAt: number;
   joinsCloseAt: number;
+  /** Joins open here (the break after the previous bell ends); `n·roundMs` on servers without a break. */
+  opensAt: number;
   /** Until the bell (ms, never negative). */
   msLeft: number;
   /** `open`: joins open; `closing`: the final minute, joins closed until the next round. */
@@ -30,21 +32,19 @@ export const COUNTDOWN_MS = 10_000;
  * Round and join-close lengths implied by a `RoundInfo` (the server may run shorter rounds for
  * tests and demos: `ROUND_SECONDS`). Round n ends at (n + 1) · roundMs.
  */
-export function roundLengths(info: RoundInfo): { roundMs: number; closeMs: number } {
+export function roundLengths(info: RoundInfo): { roundMs: number; closeMs: number; breakMs: number } {
   const roundMs = info.endsAt / (info.n + 1);
   const closeMs = info.endsAt - info.joinsCloseAt;
-  if (!Number.isInteger(roundMs) || roundMs <= 0 || closeMs < 0 || closeMs > roundMs) return { roundMs: RULES.roundMs, closeMs: RULES.roundJoinCloseMs };
-  return { roundMs, closeMs };
+  if (!Number.isInteger(roundMs) || roundMs <= 0 || closeMs < 0 || closeMs > roundMs) return { roundMs: RULES.roundMs, closeMs: RULES.roundJoinCloseMs, breakMs: 0 };
+  const breakMs = info.opensAt !== undefined ? Math.max(0, info.opensAt - info.n * roundMs) : 0;
+  return { roundMs, closeMs, breakMs };
 }
 
 /** The round in play at server time `now`, from the last known `RoundInfo` (rolled forward with `roundAt`). */
 export function roundStateAt(info: RoundInfo, now: number): RoundState {
-  let w: Pick<RoundState, 'n' | 'endsAt' | 'joinsCloseAt'> = info;
-  if (now >= info.endsAt) {
-    const { roundMs, closeMs } = roundLengths(info);
-    w = roundAt(now, roundMs, closeMs);
-  }
-  return { n: w.n, endsAt: w.endsAt, joinsCloseAt: w.joinsCloseAt, msLeft: Math.max(0, w.endsAt - now), phase: now >= w.joinsCloseAt ? 'closing' : 'open' };
+  const { roundMs, closeMs, breakMs } = roundLengths(info);
+  const w: Pick<RoundState, 'n' | 'endsAt' | 'joinsCloseAt' | 'opensAt'> = now >= info.endsAt ? roundAt(now, roundMs, closeMs, breakMs) : { ...info, opensAt: info.opensAt ?? info.endsAt - roundMs };
+  return { n: w.n, endsAt: w.endsAt, joinsCloseAt: w.joinsCloseAt, opensAt: w.opensAt, msLeft: Math.max(0, w.endsAt - now), phase: now >= w.joinsCloseAt ? 'closing' : 'open' };
 }
 
 /**

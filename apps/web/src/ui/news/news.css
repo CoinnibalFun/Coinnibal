@@ -338,3 +338,14 @@
     gap: 9px;
   }
 }
+
+/* ── last rounds: one bell per block ─────────────────────────────────── */
+.nw-round + .nw-round {
+  margin-top: 22px;
+}
+.nw-round__head {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}

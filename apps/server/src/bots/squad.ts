@@ -20,6 +20,8 @@ import type { World } from '../game/world';
  */
 
 /** Reports are refreshed this often (ms): a team calls out positions, it does not stream them. */
+/** The final-minute push lasts the last minute of an arena round (ms before the bell). */
+export const FINAL_PUSH_MS = 60_000;
 export const INTEL_MS = 1200;
 /** An operation role lapses this long after its last renewal (ms). */
 export const OP_TTL_MS = 2600;
@@ -104,6 +106,13 @@ export class SquadIntel {
   roundLeftMs = Infinity;
   /** Operations are allowed in this room (off in the rookie league). */
   teamplay = true;
+  /** The final-minute push (arenas, admin `finalPush`): the last minute is a hunt on people. */
+  finalPush = false;
+
+  /** The squad is in its final-minute push now. */
+  pushing(): boolean {
+    return this.finalPush && this.roundLeftMs < FINAL_PUSH_MS;
+  }
 
   refresh(world: World, now: number): void {
     if (now - this.refreshedAt < INTEL_MS && now >= this.refreshedAt) return;
@@ -231,7 +240,8 @@ export class SquadIntel {
     let w = 1;
     if (m && this.entryFee > 0 && m.value > 0) w += Math.min(1.5, Math.log2(1 + m.value / this.entryFee) * 0.6);
     // the bell pays whatever a coin holds: the last minute is when it pays to take it
-    if (this.roundLeftMs < 60_000) w *= 1.35;
+    if (this.pushing()) w *= 1.9;
+    else if (this.roundLeftMs < 60_000) w *= 1.35;
     else if (this.roundLeftMs < 120_000) w *= 1.12;
     // a person in pieces is at their weakest
     if (m && m.cells > 1 && m.small < m.mass * 0.3) w *= 1.25;

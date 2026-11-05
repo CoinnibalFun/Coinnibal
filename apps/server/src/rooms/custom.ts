@@ -240,6 +240,11 @@ export class CustomRoomService implements CustomRoomHooks {
     try {
       const raw: unknown = JSON.parse(readFileSync(p, 'utf8'));
       if (!isObj(raw)) throw new Error('not an object');
+      // a file still holding the old caps (50 players, 200 seats) gets the bigger rooms; an admin's own caps stay
+      if (raw.maxPlayers === 50 && (raw.maxSeats === undefined || raw.maxSeats === 200)) {
+        raw.maxPlayers = CUSTOM_SETTINGS_DEFAULT.maxPlayers;
+        raw.maxSeats = CUSTOM_SETTINGS_DEFAULT.maxSeats;
+      }
       this.cur = applyCustomSettings(this.cur, raw, false);
     } catch (err) {
       const backup = `${p}.corrupt-${Date.now()}`;

@@ -25,7 +25,7 @@ import { serverText, t } from '../i18n';
 import { FrameGovernor } from '../render/governor';
 import { Renderer, type FrameInput } from '../render/renderer';
 import { FOOD_COLORS } from '../render/sprites';
-import { setEmoteSet, toast, useUi } from '../store';
+import { toast, useUi } from '../store';
 import { Camera } from './camera';
 import { worldCovered } from './backdrop';
 import { serverClock } from './clock';
@@ -147,12 +147,11 @@ export class GameEngine {
         split: () => this.split(),
         boost: (kind) => this.boost(kind),
         eject: () => this.eject(),
-        // keys 1-8 fire the sticker page on show
+        // keys 1-8 fire the emoji bar
         emote: (slot) => {
-          const id = emoteForSlot(useUi.getState().emoteSet, slot);
+          const id = emoteForSlot(slot);
           if (id !== null) this.emote(id);
         },
-        emotePage: () => setEmoteSet(),
         openChat: () => {
           const s = useUi.getState();
           if (s.screen === 'playing' && s.settings.showChat) {
@@ -562,7 +561,7 @@ export class GameEngine {
         this.world.reset();
         this.clearHeld();
         caller.life();
-        // no join sound or welcome line: the owner turned the start sounds off
+        // no welcome line (voices stay off at the start); the landing makes a small sound (see the drop)
         this.world.myPid = m.playerId;
         this.world.setBounds(m.room.x0 ?? 0, m.room.y0 ?? 0, (m.room.x0 ?? 0) + m.room.width, (m.room.y0 ?? 0) + m.room.height, performance.now(), true);
         this.ticketRetry = null;
@@ -654,7 +653,8 @@ export class GameEngine {
           // a bot ate a staker: the tokens spill onto the map
           if (m.stats.byBot && (m.stats.lootSpilled ?? 0) > 0) this.particles.coinBurst(me.x, me.y, Math.max(60, me.maxR), 22);
         }
-        // no death sound or announcer line (turned off on purpose): the ink splash says it
+        // a small gulp, no announcer line: the ink splash does the rest
+        sound.gulp();
         caller.end();
         this.world.myPid = null;
         this.wasArena = null;
@@ -680,7 +680,12 @@ export class GameEngine {
           hud: { ...s.hud, value: m.value },
           valueDelta: m.delta !== 0 ? { id: (s.valueDelta?.id ?? 0) + 1, delta: m.delta, reason: m.reason } : s.valueDelta,
         }));
-        if (m.delta > 0) sound.coin();
+        // a ticket's worth or more in one bite: the jackpot; less: a coin clink
+        if (m.delta > 0) {
+          const entry = useUi.getState().room?.entryFee ?? 0;
+          if (entry > 0 && m.delta >= entry * 0.9) sound.jackpot();
+          else sound.coin();
+        }
         return;
       }
       case 'settled':
@@ -726,7 +731,8 @@ export class GameEngine {
           else toast(m.reason === 'cooldown' ? 'info' : 'warn', t(`boost.err.${m.reason}` as 'boost.err.guest'));
           return;
         }
-        // the pickup chime plus the caster's magnet / generic line (caller.ts)
+        // each bought power-up has its own sound, plus the caster's magnet / generic line (caller.ts)
+        sound.boost(m.kind);
         caller.powerUp(m.kind === 'magnet' ? 'magnet' : 'other');
         if (m.kind === 'invis') toast('info', t('boost.invis.on', { s: Math.round(m.ms / 1000) }));
         // magnet and speed show as the map power-up chips they share an effect with
@@ -1018,8 +1024,9 @@ export class GameEngine {
       this.camera.follow(me.x, me.y, short, dt, this.snapNext);
       this.snapNext = false;
       if (this.drop && !this.drop.rung && (now - this.drop.at) / (DUR.drop * 1000) >= DROP_LAND) {
-        // the coin lands: an ink ring goes off on the paper (silently: the start sounds are off)
+        // the coin lands: an ink ring goes off on the paper, with the drop's sound (a paid arena: the doors open too)
         this.drop.rung = true;
+        sound.land(this.wasArena !== null);
         this.particles.ring(me.x, me.y, Math.max(40, me.maxR * 1.25), INK);
         this.particles.dots(me.x, me.y, Math.max(40, me.maxR), RISO.fluoPink, 8);
       }

@@ -47,6 +47,10 @@ export const GAPS = {
   rank: 1500,
   coinRain: 3000,
   powerup: 200,
+  land: 1200,
+  gulp: 1500,
+  boost: 250,
+  jackpot: 2500,
 } as const;
 /** Food eaten within this of the last one climbs the little scale (ms). */
 const COMBO_MS = 380;
@@ -428,6 +432,66 @@ export class Sfx {
       for (const [ratio, gain, dur] of partials) this.tone(659 * ratio, dur, { type: 'sine', gain: gain * soft, delay: at, attack: 0.004 });
     }
     this.mixer.duck(2.2);
+  }
+
+  /**
+   * Into the game: the coin drops onto the paper. A short spin (a wobbling ring that settles), a
+   * soft paper thud under it and, into a paid arena, a low brass "doors open" fifth.
+   */
+  land(arena = false): void {
+    if (!this.may('land', 'high')) return;
+    this.noise(0.06, 900, 300, { type: 'lowpass', q: 0.7, gain: 0.06 });
+    this.tone(110, 0.18, { type: 'sine', slideTo: 70, gain: 0.08, attack: 0.004 });
+    // the spin: the ring rises a hair while it settles, faster and faster
+    for (let i = 0; i < 5; i++) {
+      const at = 0.03 + (1 - Math.pow(0.72, i + 1)) * 0.32;
+      this.tone(2093 + i * 40, 0.09, { type: 'triangle', gain: 0.022 * (1 - i * 0.14), delay: at, attack: 0.002 });
+    }
+    this.tone(1568, 0.5, { type: 'sine', gain: 0.025, delay: 0.36 });
+    if (arena) {
+      this.tone(196, 0.9, { type: 'sawtooth', gain: 0.012, delay: 0.12, attack: 0.08 });
+      this.tone(294, 0.9, { type: 'triangle', gain: 0.02, delay: 0.16, attack: 0.08 });
+      this.tone(392, 0.7, { type: 'sine', gain: 0.018, delay: 0.24, attack: 0.05 });
+    }
+  }
+
+  /** Eaten: a short gulp down and a paper crumple, kept small (the ink splash does the talking). */
+  gulp(): void {
+    if (!this.may('gulp', 'high')) return;
+    this.tone(420, 0.32, { type: 'triangle', slideTo: 70, gain: 0.07, attack: 0.004 });
+    this.tone(210, 0.38, { type: 'sine', slideTo: 45, gain: 0.06, delay: 0.05 });
+    for (let i = 0; i < 4; i++) this.noise(0.04, 2400 - i * 300, 900, { gain: 0.035, q: 1.3, delay: 0.12 + i * 0.045 + this.random() * 0.02 });
+  }
+
+  /** A bought power-up goes off: each kind has its own voice. */
+  boost(kind: 'magnet' | 'leap' | 'speed' | 'invis'): void {
+    if (!this.may('boost', 'high')) return;
+    if (kind === 'leap') {
+      // a spring and a whoosh up: the jump
+      this.tone(180, 0.22, { type: 'sine', slideTo: 900, gain: 0.07, attack: 0.004 });
+      this.noise(0.22, 500, 5200, { type: 'bandpass', q: 0.7, gain: 0.05, attack: 0.06 });
+      this.tone(1320, 0.12, { type: 'triangle', gain: 0.025, delay: 0.2 });
+    } else if (kind === 'speed') {
+      // an engine revving up: a buzzy climb with a flutter
+      for (let i = 0; i < 6; i++) this.tone(220 + i * 70, 0.07, { type: 'sawtooth', gain: 0.018, delay: i * 0.035, attack: 0.004 });
+      this.noise(0.35, 800, 3500, { type: 'bandpass', q: 0.9, gain: 0.035, attack: 0.1 });
+    } else if (kind === 'invis') {
+      // a shimmer that fades out downward: gone
+      for (let i = 0; i < 7; i++) this.tone(3136 - i * 260, 0.18, { type: 'sine', gain: 0.02 * (1 - i / 9), delay: i * 0.05, attack: 0.01 });
+      this.noise(0.5, 7000, 2500, { type: 'bandpass', q: 0.6, gain: 0.02, attack: 0.05 });
+    } else {
+      // the magnet: a low hum that wobbles up, food starts to come
+      this.tone(98, 0.6, { type: 'sawtooth', slideTo: 147, gain: 0.02, attack: 0.08 });
+      this.tone(196, 0.6, { type: 'sine', slideTo: 294, gain: 0.03, attack: 0.08 });
+      [880, 1046, 1318].forEach((f, i) => this.tone(f, 0.1, { type: 'triangle', gain: 0.02, delay: 0.25 + i * 0.06 }));
+    }
+  }
+
+  /** A big bite of value (a ticket's worth or more): a coin shower and a bright chord. */
+  jackpot(): void {
+    if (!this.may('jackpot', 'high')) return;
+    this.coinCascade(12);
+    [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.6, { type: 'triangle', gain: 0.035, delay: 0.1 + i * 0.03, attack: 0.01 }));
   }
 
   /** Coin rain: a shimmer of little bells falling over a second and a half, and a high sparkle. */

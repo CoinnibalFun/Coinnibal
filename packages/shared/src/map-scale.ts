@@ -8,13 +8,12 @@ import { clamp } from './formulas';
  *
  *   side(n) = clamp(perPlayer * sqrt(n), min, max), rounded up to `MAP_SIDE_STEP`
  *
- * Every player gets about `perPlayer^2` units of floor (default 800 x 800). Food, rug cacti and
+ * Every player gets about `perPlayer^2` units of floor (default 900 x 900). Food, rug cacti and
  * power-ups follow the area at a practice pond's density (`worldForSide`, food capped by
  * `MAP_WORLD_CAPS`).
  *
- * Defaults (perPlayer 800, min 9000, max 12000; 2026-11 owner, a little tighter than the 1000 / 10000
- * / 12000 before it): up to 126 players 9000, 144 players 9600, 200 players 11400, 225 and more
- * 12000. The custom room sizes XS..XL (3000..9000) are chosen sizes and do not follow the curve.
+ * Defaults (perPlayer 900, min 9000, max 12000; 2026-11 owner): up to 100 players 9000, 144 players
+ * 10800, 178 and more 12000. The custom room sizes XS..XL (3000..9000) are chosen sizes and do not follow the curve.
  */
 export interface MapScaleSettings {
   /** The world follows the player count (off: the room keeps its mode's fixed preset). */
@@ -40,7 +39,7 @@ export const MAP_SIDE_STEP = 100;
 /** Bounds of the admin values. */
 export const MAP_SCALE_LIMITS = { perPlayerMin: 300, perPlayerMax: 2000, sideMin: 2000, sideMax: MAP_SPACE } as const;
 
-export const MAP_SCALE_DEFAULT: MapScaleSettings = { auto: true, perPlayer: 800, min: 9000, max: 12_000 };
+export const MAP_SCALE_DEFAULT: MapScaleSettings = { auto: true, perPlayer: 900, min: 9000, max: 12_000 };
 
 /** The first defaults (before 2026-11): saved settings still equal to them are upgraded on load. */
 export const OLD_MAP_SCALE_DEFAULT: Readonly<Omit<MapScaleSettings, 'auto'>> = { perPlayer: 900, min: 3000, max: 9000 };
@@ -48,8 +47,11 @@ export const OLD_MAP_SCALE_DEFAULT: Readonly<Omit<MapScaleSettings, 'auto'>> = {
 /** The defaults of early 2026-11 (perPlayer 1000, min 10000, max 12000): also upgraded on load. */
 export const PREV_MAP_SCALE_DEFAULT: Readonly<Omit<MapScaleSettings, 'auto'>> = { perPlayer: 1000, min: 10_000, max: 12_000 };
 
+/** The defaults of mid 2026-11 (perPlayer 800, min 9000, max 12000): also upgraded on load. */
+export const MID_MAP_SCALE_DEFAULT: Readonly<Omit<MapScaleSettings, 'auto'>> = { perPlayer: 800, min: 9000, max: 12_000 };
+
 /** Every former default: saved map settings still exactly equal to one of them take `MAP_SCALE_DEFAULT`. */
-export const FORMER_MAP_SCALE_DEFAULTS: readonly Readonly<Omit<MapScaleSettings, 'auto'>>[] = [OLD_MAP_SCALE_DEFAULT, PREV_MAP_SCALE_DEFAULT];
+export const FORMER_MAP_SCALE_DEFAULTS: readonly Readonly<Omit<MapScaleSettings, 'auto'>>[] = [OLD_MAP_SCALE_DEFAULT, PREV_MAP_SCALE_DEFAULT, MID_MAP_SCALE_DEFAULT];
 
 /** The saved values equal a former default (`FORMER_MAP_SCALE_DEFAULTS`), so they were never tuned by hand. */
 export function isFormerMapScaleDefault(m: { perPlayer?: unknown; min?: unknown; max?: unknown }): boolean {

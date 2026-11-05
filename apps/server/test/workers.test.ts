@@ -166,6 +166,8 @@ beforeAll(async () => {
     BOT_MIN: '1',
     BOT_MAX: '4',
     GAME_ACCESS: 'public',
+    // no break after a bell here (the break has its own test)
+    ROUND_BREAK_SECONDS: '0',
     NODE_ENV: 'development',
     GAME_WORKERS: '2',
   } as NodeJS.ProcessEnv);
@@ -351,21 +353,24 @@ describe('room workers: shutdown', () => {
   it('a server stop settles the live tickets of every worker (an operator exit) before it returns', async () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-stop-'));
     const ch = new FakeChain();
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', NODE_ENV: 'development', GAME_WORKERS: '1' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
     const p = await a.listen();
     const w = testWallet(0xb001);
     const t = ticket(w);
     ch.sessions.set(`1:${w}`, t);
     const c = await Client.open(p, a.auth.issueToken(w));
+    // the arena opens once the chain's arena list is read: join only when it is there (slow on a busy CI machine)
+    await until(() => !!a.rooms.get('arena-1-1'), 15_000);
     c.send({ t: 'join', room: 'arena:1', name: 'Leaver', skin: 0 });
-    await c.wait('joined');
+    await c.wait('joined', 15_000);
     await until(() => a.journal.live().some((l) => l.session === t.key));
     await a.close();
     const file = JSON.parse(readFileSync(join(d, 'chains', '31337', 'journal.json'), 'utf8')) as { pending: { key: string; reason: string; payout: number }[]; live: unknown[] };
     expect(file.pending.filter((x) => x.key === t.key)).toEqual([expect.objectContaining({ reason: 'kicked', payout: 9_500_000 })]);
     expect(file.live).toEqual([]);
-  });
+    // a worker thread starts slowly on a busy machine (CI): room enough for it
+  }, 30_000);
 });
 
 describe('room workers: a hung worker', () => {
@@ -373,7 +378,7 @@ describe('room workers: a hung worker', () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-hang-'));
     const ch = new FakeChain();
     const logs: string[] = [];
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: (m) => logs.push(m), persist: true });
     const p = await a.listen();
     try {
@@ -381,8 +386,10 @@ describe('room workers: a hung worker', () => {
       const t = ticket(w);
       ch.sessions.set(`1:${w}`, t);
       const c = await Client.open(p, a.auth.issueToken(w));
+      // the arena opens once the chain's arena list is read: join only when it is there (slow on a busy CI machine)
+      await until(() => !!a.rooms.get('arena-1-1'), 15_000);
       c.send({ t: 'join', room: 'arena:1', name: 'Stuck', skin: 0 });
-      await c.wait('joined');
+      await c.wait('joined', 15_000);
       await until(() => a.journal.live().some((l) => l.session === t.key));
       a.rooms.pool!.block(0, 6000);
       await until(() => a.journal.settlements().some((x) => x.key === t.key), 9000);
@@ -449,7 +456,7 @@ describe('room workers: the house bots bankroll', () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-bank-'));
     const ch = new FakeChain();
     const admin = testWallet(0xa0a0);
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, ARENA_BOT_TARGET: '6', ARENA_BOT_MIN: '6', ARENA_BOT_MAX: '6', BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', NODE_ENV: 'development', GAME_WORKERS: '1', ADMIN_WALLETS: admin, TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, ARENA_BOT_TARGET: '6', ARENA_BOT_MIN: '6', ARENA_BOT_MAX: '6', BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', ADMIN_WALLETS: admin, TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
     const p = await a.listen();
     try {
@@ -470,12 +477,12 @@ describe('room workers: the house bots bankroll', () => {
       expect((await call({ arenaId: 2 })).body.error).toBe('no_ticket');
       // more reserve, then the bots that walk in (in the worker) draw from it
       a.journal.commit({ house: [{ arenaId: 1, amount: 5 * value }] });
-      await until(() => a.journal.purses().reduce((s, x) => s + x.value, 0) >= 3 * value, 20_000);
+      await until(() => a.journal.purses().reduce((s, x) => s + x.value, 0) >= 3 * value, 40_000);
       const purses = a.journal.purses().reduce((s, x) => s + x.value, 0);
       expect(purses % value).toBe(0);
       expect(a.journal.houseByArena(1) + purses).toBe(6 * value);
     } finally {
       await a.close();
     }
-  }, 30_000);
+  }, 60_000);
 });

@@ -8,6 +8,7 @@
  * are converted with `fromLedger` before they meet a chain amount.
  */
 import { DEFAULT_ARENAS, type FeeModel, type RoomInfo } from '@elymum/shared';
+import type { Address, Hex } from 'viem';
 import { DEFAULT_FEE_BPS, MAX_ALLOWANCE, REFUND_DELAY_SECS, fromLedger, ticketValue } from '@elymum/sdk';
 
 /* ── the ticket calls ───────────────────────────────────────────────── */
@@ -356,4 +357,34 @@ export function sessionsToCollect(sessions: Readonly<Record<number, OpenSession 
   return Object.entries(sessions)
     .filter(([, s]) => s?.finalized)
     .map(([id, s]) => ({ arenaId: Number(id), owed: s!.owed ?? 0n }));
+}
+
+/** Gas for `join` when the estimate cannot be read (a ticket uses about 125k, a holder's a little more). */
+export const JOIN_GAS_FALLBACK = 260_000n;
+
+/**
+ * Right after an approval the wallet's node may not see it yet: its own gas estimate for `join` then
+ * fails, and a wallet that sends anyway with a guessed limit gets a reverted ticket. So: wait until
+ * the allowance is visible on our read client (at most `waitMs`), estimate `join` there, and send it
+ * with a margin (+30 %); a failed estimate falls back to `JOIN_GAS_FALLBACK`.
+ */
+export async function joinGasAfterApprove(
+  client: { estimateGas: (a: never) => Promise<bigint> },
+  readAllowance: () => Promise<bigint>,
+  p: { owner: Address; arena: Address; data: Hex; fee: bigint },
+  o: { waitMs?: number; stepMs?: number } = {},
+): Promise<bigint> {
+  const until = Date.now() + (o.waitMs ?? 20_000);
+  for (;;) {
+    const a = await readAllowance().catch(() => 0n);
+    if (a >= p.fee || Date.now() >= until) break;
+    await new Promise((r) => setTimeout(r, o.stepMs ?? 700));
+  }
+  try {
+    const est = await client.estimateGas({ account: p.owner, to: p.arena, data: p.data } as never);
+    const g = (est * 13n) / 10n;
+    return g > JOIN_GAS_FALLBACK ? g : JOIN_GAS_FALLBACK;
+  } catch {
+    return JOIN_GAS_FALLBACK;
+  }
 }

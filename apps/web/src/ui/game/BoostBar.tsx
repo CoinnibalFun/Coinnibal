@@ -4,6 +4,7 @@ import { engine } from '../../game/instance';
 import { useT } from '../../i18n';
 import { useUi } from '../../store';
 import { useTicker } from '../ticker';
+import { Peek } from './Peek';
 
 /** Bought power-up glyphs in the icon set's hand (24 grid, round 2.2 px strokes). */
 export const BOOST_PATH: Record<BoostKind, string> = {
@@ -91,7 +92,7 @@ export function BoostBar({ touch = false }: { touch?: boolean }) {
   if (!state || !state.signedIn || !charges) return null;
   const kinds = shownKinds(charges, state.disabled);
   if (kinds.length === 0) return null;
-  return (
+  const bar = (
     <div className={`g-boosts${touch ? ' is-touch' : ' is-rail'}`} role="group" aria-label={t('boost.label')} data-testid="boost-bar">
       {state.arena && <span className={`g-boosts__arena mono${state.arena.left === 0 ? ' is-out' : ''}`}>{t('boost.arenaLeft', { left: state.arena.left, max: state.arena.max })}</span>}
       <span className="g-boosts__row">
@@ -100,5 +101,20 @@ export function BoostBar({ touch = false }: { touch?: boolean }) {
         ))}
       </span>
     </div>
+  );
+  if (touch) return bar;
+  // desktop: open for the first seconds, then a tab of key caps that opens on hover
+  return (
+    <Peek
+      className="g-boosts-dock"
+      label={t('boost.label')}
+      tab={kinds.map((k) => (
+        <kbd key={k} className="kb-key">
+          {BOOST_KEY_LABELS[k]}
+        </kbd>
+      ))}
+    >
+      {bar}
+    </Peek>
   );
 }

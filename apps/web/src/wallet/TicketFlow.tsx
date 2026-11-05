@@ -1,8 +1,8 @@
-import { getArenaConfig, getSession, planJoin, refundCall, sessionRefundState, formatHypeAmount } from '@elymum/sdk';
+import { getAllowance, getArenaConfig, getSession, planJoin, refundCall, sessionRefundState, formatHypeAmount } from '@elymum/sdk';
 import { arenaMeta } from '@elymum/shared';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { Address, Hash } from 'viem';
+import { encodeFunctionData, type Address, type Hash, type Hex } from 'viem';
 import { Button, CoinCharacter, Icon, Sheet, Stamp, StampSpinner, markTransitionOrigin, useReducedMotion } from '../design';
 import { engine } from '../game/instance';
 import { sound } from '../audio';
@@ -16,7 +16,7 @@ import { loadDevFake } from './devFakeLoader';
 import { explorerTx } from './links';
 import { serverChainInfo } from './network';
 import { useAddress } from './store';
-import { approveAmount, approveMode, bpsPercent, feeBps, feeModelOf, planErrorName, ticketFeeBps, ticketPlays, ticketSteps, type ApproveMode, type TicketModel, type TicketStep } from './ticket';
+import { approveAmount, approveMode, bpsPercent, joinGasAfterApprove, feeBps, feeModelOf, planErrorName, ticketFeeBps, ticketPlays, ticketSteps, type ApproveMode, type TicketModel, type TicketStep } from './ticket';
 import { sendWalletCall, txErrorText, type TxPhase } from './tx';
 
 /** `collect`: a finalized session's payout; `refund`: an unsettled ticket after 24 h. */
@@ -205,7 +205,16 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
       const ok = await sendWalletCall(plan.approve, { chain, onPhase: onPhase('approve') });
       if (!ok.ok) return fail(txErrorText(ok.error));
     }
-    const res = await sendWalletCall(plan.join, { chain, onPhase: onPhase('join') });
+    // the join goes out with its own gas limit, estimated once the allowance is visible (a wallet whose
+    // node has not seen the approval yet would otherwise guess, and the ticket would be refused)
+    let joinData: Hex | null = null;
+    try {
+      joinData = encodeFunctionData({ abi: plan.join.abi, functionName: plan.join.functionName, args: plan.join.args } as never);
+    } catch {
+      joinData = null;
+    }
+    const gas = joinData ? await joinGasAfterApprove(client, () => getAllowance(client, config.token!, owner, arenaAddress), { owner, arena: arenaAddress, data: joinData, fee: plan.entryFee }) : undefined;
+    const res = await sendWalletCall(plan.join, { chain, onPhase: onPhase('join'), ...(gas !== undefined ? { gas } : {}) });
     if (!res.ok) return fail(txErrorText(res.error));
     enterRoom(res.hash);
   };
