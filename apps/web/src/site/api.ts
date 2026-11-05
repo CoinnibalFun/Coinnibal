@@ -185,7 +185,7 @@ export function backupCurlCommand(serverHttp: string, token: string): string {
 /** The whole move to a new server as one line (deploy/vps/install.sh --from): settings and data. */
 export function installCommand(serverHttp: string, token: string): string {
   const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-  const raw = 'https://raw.githubusercontent.com/furkan3152/Solagel/ccr-8d9a5642-4vfmef/deploy/vps/install.sh';
+  const raw = 'https://raw.githubusercontent.com/furkan3152/Solagel/main/deploy/vps/install.sh';
   return `curl -fsSL ${raw} -o install.sh && sudo bash install.sh --yes --from ${quote(serverHttp.replace(/\/+$/, ''))} --token ${quote(token)}`;
 }
 
