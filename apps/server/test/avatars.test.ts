@@ -206,7 +206,7 @@ interface Harness {
 async function harness(limits: { avatarWallet?: Limiter } = {}): Promise<Harness> {
   const dir = mkdtempSync(join(tmpdir(), 'elymum-avatar-'));
   const admin = wallet();
-  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, BOT_TARGET: '3', BOT_MIN: '3', BOT_MAX: '3', ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public' } as NodeJS.ProcessEnv);
+  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public' } as NodeJS.ProcessEnv);
   const big = () => new Limiter(10_000, 60_000);
   const app = await createApp(cfg, {
     chain: new ArenaChain([arena(1, 1000)]),

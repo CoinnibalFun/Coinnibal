@@ -15,7 +15,7 @@ import { ShopFail, type ShopService } from '../shop/service';
 import { ShopSettingsError, type ShopSettingsStore } from '../shop/settings';
 import type { BoostInventory } from '../shop/inventory';
 import { migrationEnv, streamBackup } from './backup';
-import { botRoutes, type BotAdmin } from './bots';
+import { mapRoutes, type MapAdmin } from './maps';
 import { customRoomAdminRoutes, customRoomRoutes } from './custom-rooms';
 import type { CustomRoomService } from '../rooms/custom';
 import { importHolders, type HolderWlStore } from './holder-wl';
@@ -143,8 +143,8 @@ export class SiteApi {
   private readonly admins: Set<string>;
   /** Cheat and collusion detection (`/api/admin/integrity/*`); absent in bare unit tests. */
   private integrity: IntegrityService | null = null;
-  /** Bot settings and live counts (`/api/admin/bots`); absent in bare unit tests. */
-  private bots: BotAdmin | null = null;
+  /** Map settings and live room counts (`/api/admin/maps`); absent in bare unit tests. */
+  private maps: MapAdmin | null = null;
   /** Custom rooms (`/api/rooms/custom/*`, `/api/admin/custom-rooms`); absent in bare unit tests. */
   private customRooms: CustomRoomService | null = null;
   /** The power-up shop (`/api/shop`, `/api/shop/buy`, `/api/admin/shop`); absent in bare unit tests. */
@@ -185,8 +185,8 @@ export class SiteApi {
     this.integrity = svc;
   }
 
-  setBots(admin: BotAdmin | null): void {
-    this.bots = admin;
+  setMaps(admin: MapAdmin | null): void {
+    this.maps = admin;
   }
 
   /** The game server's load per thread (`GET /api/admin/load`, `NetworkInfo.load`). */
@@ -497,7 +497,7 @@ export class SiteApi {
       case 'faucet': {
         if (seg.length !== 1) break;
         this.method(req, 'GET');
-        const faucet = this.ext.faucet ?? (this.ext.chain ? new FaucetInfo({ chain: this.ext.chain, contracts: this.ext.contracts ?? null, hypeFaucetUrl: this.cfg.chain.hypeFaucetUrl }) : null);
+        const faucet = this.ext.faucet ?? (this.ext.chain ? new FaucetInfo({ chain: this.ext.chain, contracts: this.ext.contracts ?? null }) : null);
         if (!faucet) throw new SiteFail(503, 'chain_off', 'The faucet is not available on this server.');
         return send(res, 200, await faucet.get());
       }
@@ -630,7 +630,7 @@ export class SiteApi {
         if (seg.length === 2 && seg[1] === 'price') {
           this.method(req, 'GET');
           const quote = await mint.priceQuote();
-          if (quote.hypeUsd === null) throw new SiteFail(502, 'price_unavailable', 'The HYPE/USD price feed is unavailable right now.');
+          if (quote.gasUsd === null) throw new SiteFail(502, 'price_unavailable', 'The HYPE/USD price feed is unavailable right now.');
           return send(res, 200, quote);
         }
         break;
@@ -706,9 +706,9 @@ export class SiteApi {
       case 'custom-rooms':
         if (seg.length > 2 || !this.customRooms) break;
         return customRoomAdminRoutes(this.customRooms, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, seg.slice(1), wallet);
-      case 'bots':
-        if (seg.length > 2 || (seg.length === 2 && seg[1] !== 'bankroll') || !this.bots) break;
-        return botRoutes(this.bots, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, wallet, seg[1]);
+      case 'maps':
+        if (seg.length !== 1 || !this.maps) break;
+        return mapRoutes(this.maps, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, wallet);
       case 'shop': {
         // power-up prices, the sink (burn or treasury), on/off per power-up and the arena limits; plus recent purchases
         const shop = this.shop;
@@ -725,8 +725,8 @@ export class SiteApi {
         return send(res, 200, {
           settings: shop.settings.settings,
           defaults: shop.settings.defaults,
-          sink: shop.service.sink(),
-          owner: this.cfg.adminWallets[0] ?? null,
+          payTo: shop.service.payTo(),
+          burnBps: this.ext.chain?.status().fees?.paymentBurnBps ?? null,
           purchases: shop.inventory.recent(Number(q.get('limit') ?? 30) || 30),
           purchaseCount: shop.inventory.purchaseCount,
         });

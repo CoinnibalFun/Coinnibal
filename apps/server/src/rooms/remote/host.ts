@@ -1,5 +1,4 @@
 import { ClientOp, PlayerFlag, TICK_MS, type ClientInput, type ServerMessage } from '@elymum/shared';
-import type { StakedBotSource, StakedBotTicket } from '../../bots/staked';
 import { IntegrityMonitor } from '../../integrity/telemetry';
 import type { Player } from '../../game/entities';
 import type { LootRecord } from '../../stake/journal';
@@ -157,11 +156,6 @@ export class RoomHost {
   private readonly deps: RoomDeps;
   private readonly clock: RoundClock;
   private offset: number;
-  private wanted: Record<number, number> = {};
-  private reqSeq = 0;
-  /** Bankroll requests waiting for the main thread's answer (`drawn`). */
-  private readonly draws = new Map<number, (ok: boolean) => void>();
-  private readonly tickets = new Map<number, { resolve: (t: StakedBotTicket | null) => void; reject: (e: Error) => void }>();
   private readonly monitor: IntegrityMonitor | null;
   /** Settlements whose auto-hold the main thread decides (filled by `integrity.settle`, drained by the next commit). */
   private holds: [string, number][] = [];
@@ -222,19 +216,6 @@ export class RoomHost {
           },
         } as RoomIntegrity)
       : undefined;
-    const stakedBots: StakedBotSource | undefined = init.stakedBots
-      ? {
-          wanted: (arenaId) => this.wanted[arenaId] ?? 0,
-          acquire: (arenaId, roomId) =>
-            new Promise<StakedBotTicket | null>((resolve, reject) => {
-              const req = ++this.reqSeq;
-              this.tickets.set(req, { resolve, reject });
-              ctl({ k: 'acquire', req, arenaId, roomId });
-              this.flushSoon();
-            }),
-          released: (ticket, reason, item) => ctl({ k: 'released', ticket, reason, item }),
-        }
-      : undefined;
     this.deps = {
       // the main thread kicks the chain worker after every commit that queues a settlement
       chain: { kick: () => {} },
@@ -246,17 +227,6 @@ export class RoomHost {
       onGameOver: (e) => ctl({ k: 'go', hid: this.hidOf(e.room), conn: e.conn?.id ?? null, name: e.player.name, stats: e.stats }),
       onBellSettled: (e) => ctl({ k: 'bell', e }),
       integrity,
-      stakedBots,
-      houseBank: {
-        draw: (arenaId, amount) =>
-          new Promise<boolean>((resolve) => {
-            const req = ++this.reqSeq;
-            this.draws.set(req, resolve);
-            ctl({ k: 'draw', req, arenaId, amount });
-            this.flushSoon();
-          }),
-      },
-      ...(init.stakedAskMs !== undefined ? { stakedAskMs: init.stakedAskMs } : {}),
       // power-ups: the main thread holds the charges and asks this worker to apply the effect (`boost`)
     };
   }
@@ -328,7 +298,7 @@ export class RoomHost {
 
   private summary(hid: number, r: Room): RoomSummary {
     const c = r.botCounts();
-    return { hid, info: r.info(), humans: c.humans, conns: r.conns.size, bots: c.bots, stakedBots: c.stakedBots, loot: r.lootCount(), side: r.mapSide(), mapScale: r.mapScale(), lastActivity: r.lastActivity };
+    return { hid, info: r.info(), humans: c.humans, conns: r.conns.size, bots: c.bots, loot: r.lootCount(), side: r.mapSide(), mapScale: r.mapScale(), lastActivity: r.lastActivity };
   }
 
   private sendStats(): void {
@@ -531,9 +501,6 @@ export class RoomHost {
         this.out.push({ k: 'boost', req: cmd.req, ok });
         return;
       }
-      case 'bots':
-        this.rooms.get(cmd.hid)?.setBotOptions(cmd.opts);
-        return;
       case 'map':
         this.rooms.get(cmd.hid)?.setMapScale(cmd.scale);
         return;
@@ -543,23 +510,6 @@ export class RoomHost {
       case 'announce':
         this.rooms.get(cmd.hid)?.announce(cmd.text);
         return;
-      case 'wanted':
-        this.wanted = cmd.wanted;
-        return;
-      case 'drawn': {
-        const f = this.draws.get(cmd.req);
-        this.draws.delete(cmd.req);
-        f?.(cmd.ok);
-        return;
-      }
-      case 'ticket': {
-        const t = this.tickets.get(cmd.req);
-        this.tickets.delete(cmd.req);
-        if (!t) return;
-        if (cmd.error !== undefined) t.reject(new Error(cmd.error));
-        else t.resolve(cmd.ticket);
-        return;
-      }
       case 'clock':
         this.offset = cmd.offset;
         return;

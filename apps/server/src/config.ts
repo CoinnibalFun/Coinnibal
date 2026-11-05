@@ -2,10 +2,9 @@ import { availableParallelism } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { CAPACITY, HYPE_FAUCET_URL_DEFAULT, RULES, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, chainByKey, isGameAccess, type GameAccess } from '@elymum/shared';
-import { HYPE_PRICE_URL_DEFAULT } from '@elymum/sdk';
+import { CAPACITY, CHAINS, RULES, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, chainByKey, configuredChainId, isGameAccess, type GameAccess } from '@elymum/shared';
+import { GAS_PRICE_URL_DEFAULT } from '@elymum/sdk';
 import { getAddress, isAddress } from 'viem';
-import type { BotManagerOptions } from './bots/manager';
 
 export interface ServerConfig {
   port: number;
@@ -37,8 +36,6 @@ export interface ServerConfig {
   gameWorkers: number;
   /** A room worker silent this long is stopped and its rooms recovered (`GAME_WORKER_HANG_S`, default 10). */
   gameWorkerHangMs: number;
-  /** Bot population per room kind: the defaults of the admin's bot settings (`BotSettingsStore`). */
-  bots: { practiceRookie: BotManagerOptions; practicePro: BotManagerOptions; arena: BotManagerOptions; private: BotManagerOptions };
   /**
    * Arena round clock (`ROUND_SECONDS`, `ROUND_JOIN_CLOSE_SECONDS`; defaults `RULES.roundMs` /
    * `RULES.roundJoinCloseMs`). Tests, the localnet e2e and demo recordings shorten it;
@@ -71,17 +68,29 @@ export interface ServerConfig {
    */
   devFakeToken: boolean;
   chain: {
+    /**
+     * The chain this deployment runs on (`CHAIN_ID`, a `CHAINS` registry id or any id the environment names;
+     * default `DEFAULT_CHAIN_ID`, Robinhood Chain Testnet). The RPC must serve exactly this id: otherwise arenas
+     * stay off (`EvmChain` compares `eth_chainId` with it).
+     */
+    chainId: number;
+    /** `CHAIN_ID` was set explicitly (the RPC is held to it); false: the RPC's own id is used. */
+    chainIdExplicit: boolean;
     /** Server RPC (`EVM_RPC_URL`, may hold an API key). Null: chain off, practice only. */
     rpcUrl: string | null;
     /**
-     * RPC handed to browsers (`PUBLIC_RPC_URL`, no secrets). Default: `EVM_RPC_URL` when it is the public
-     * testnet RPC, else null (the wallet's own RPC is used).
+     * RPC handed to browsers (`PUBLIC_RPC_URL`, no secrets). Default: `EVM_RPC_URL` when it is a registry
+     * chain's public RPC, else null (the wallet's own RPC is used).
      */
     publicRpcUrl: string | null;
-    /** Display name for a chain id the table does not know (`CHAIN_NAME`, default "Elysium"). */
+    /** Display name for a chain id the registry does not know (`CHAIN_NAME`). */
     chainName: string | null;
-    /** Blockscout-style explorer for a chain id the table does not know (`EXPLORER_URL`). */
+    /** Gas-token symbol for a chain id the registry does not know (`GAS_SYMBOL`). */
+    gasSymbol: string | null;
+    /** Blockscout-style explorer (`EXPLORER_URL`), overrides the registry's. */
     explorerUrl: string | null;
+    /** The gas faucet the `/faucet` page links to (`GAS_FAUCET_URL`, formerly `HYPE_FAUCET_URL`), overrides the registry's. */
+    gasFaucetUrl: string | null;
     /** `ARENA_ADDRESS`: overrides the registry's arena (normally written by the admin panel after a deploy). */
     arenaAddress: string | null;
     /** `NFT_ADDRESS`: overrides the registry's NFT. */
@@ -120,26 +129,22 @@ export interface ServerConfig {
     logChunkBlocks: number;
     /**
      * `RPC_MAX_RPS` / `RPC_BURST`: the server's own request budget on the RPC (calls per second and burst,
-     * defaults 4 and 8). The public Elysium RPC answers 429 above its limit; every call of the process
-     * (settlements, joins, bots, mint page, indexes) shares this budget, by priority.
+     * defaults 4 and 8). Public RPCs answer 429 above their limit; every call of the process
+     * (settlements, joins, mint page, indexes) shares this budget, by priority.
      */
     rpcMaxRps: number;
     rpcBurst: number;
     /**
-     * `BOT_TICKETS_PER_MIN`: testnet staked-bot ticket purchases per minute at most, over every arena
-     * (default 4). Each bot slot also buys at most one ticket per round.
-     */
-    botTicketsPerMinute: number;
-    /**
-     * `TESTNET_RPC_URL`: Elysium Testnet RPC for reading the testnet emblem holders after `EVM_RPC_URL`
-     * moved to mainnet (`POST /api/admin/mint/import-holders`). Default: the public testnet RPC.
+     * `TESTNET_RPC_URL`: the RPC of the testnet whose emblem holders are imported into the mainnet allowlist
+     * (`POST /api/admin/mint/import-holders`). Default: the Elysium Testnet public RPC (where the first emblems live).
      */
     testnetRpcUrl: string;
-    /** `HYPE_FAUCET_URL`: the HYPE (gas) faucet the `/faucet` page links to (default Kinetiq's testnet faucet). */
-    hypeFaucetUrl: string;
   };
-  /** NFT mint: the USD target (`MINT_USD_CENTS`, default 100) and the HYPE/USD feed (`HYPE_PRICE_URL`). */
-  mint: { usdCents: number; hypePriceUrl: string };
+  /**
+   * NFT mint: the USD target (`MINT_USD_CENTS`, default 100) and the gas-token/USD feed (`GAS_PRICE_URL`, formerly
+   * `HYPE_PRICE_URL`; the coin is the chain's `priceCoin`).
+   */
+  mint: { usdCents: number; gasPriceUrl: string };
 }
 
 /**
@@ -193,13 +198,13 @@ export function parseGameAccess(v: string | undefined): GameAccess | null {
   return isGameAccess(s) ? s : null;
 }
 
-/** `PUBLIC_RPC_URL`, else `EVM_RPC_URL` when it is the public testnet RPC (no secrets in it), else null. */
+/** `PUBLIC_RPC_URL`, else `EVM_RPC_URL` when it is a registry chain's public RPC (no secrets in it), else null. */
 export function defaultPublicRpc(rpcUrl: string | null, publicRpcUrl: string | undefined): string | null {
   const explicit = publicRpcUrl?.trim();
   if (explicit) return explicit.replace(/\/+$/, '');
-  const testnet = chainByKey('elysium-testnet').rpcUrl;
-  if (rpcUrl && testnet && rpcUrl.replace(/\/+$/, '') === testnet) return testnet;
-  return null;
+  const url = rpcUrl?.replace(/\/+$/, '');
+  const known = CHAINS.find((c) => c.rpcUrl !== null && c.rpcUrl === url && !/127\.0\.0\.1|localhost/.test(c.rpcUrl));
+  return known?.rpcUrl ?? null;
 }
 
 const blank = (v: string | undefined): string | null => (v?.trim() ? v.trim() : null);
@@ -286,34 +291,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     arenaInstanceCap: Math.max(1, int(env.ARENA_INSTANCE_CAP, CAPACITY.arena)),
     gameWorkers: gameWorkers(env),
     gameWorkerHangMs: Math.max(2, int(env.GAME_WORKER_HANG_S, 10)) * 1000,
-    // env defaults of the admin's bot settings (`/api/admin/bots`, DATA_DIR/site/bots.json wins): a squad of
-    // min..cap bots per room (6-9; rolled evenly per arena round), whoever else plays
-    bots: {
-      practiceRookie: {
-        target: int(env.BOT_TARGET, 8),
-        min: int(env.BOT_MIN, 6),
-        max: int(env.BOT_MAX, 9),
-        mix: 'rookie',
-      },
-      practicePro: {
-        target: int(env.BOT_TARGET, 8),
-        min: int(env.BOT_MIN, 6),
-        max: int(env.BOT_MAX, 9),
-        mix: 'standard',
-      },
-      arena: {
-        target: int(env.ARENA_BOT_TARGET, 8),
-        min: int(env.ARENA_BOT_MIN, 6),
-        max: int(env.ARENA_BOT_MAX, 9),
-        mix: 'standard',
-      },
-      private: {
-        target: int(env.PRIVATE_BOT_TARGET, 8),
-        min: Math.min(3, int(env.PRIVATE_BOT_TARGET, 8)),
-        max: int(env.PRIVATE_BOT_TARGET, 8),
-        mix: 'standard',
-      },
-    },
     round: parseRoundConfig(env),
     authSecret: secret,
     adminWallets: parseAdminWallets(env.ADMIN_WALLETS),
@@ -324,8 +301,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     chain: {
       rpcUrl,
       publicRpcUrl: defaultPublicRpc(rpcUrl, env.PUBLIC_RPC_URL),
+      chainId: configuredChainId(env.CHAIN_ID),
+      chainIdExplicit: configuredChainId(env.CHAIN_ID, -1) !== -1,
       chainName: blank(env.CHAIN_NAME),
+      gasSymbol: blank(env.GAS_SYMBOL),
       explorerUrl: blank(env.EXPLORER_URL)?.replace(/\/+$/, '') ?? null,
+      gasFaucetUrl: blank(env.GAS_FAUCET_URL) ?? blank(env.HYPE_FAUCET_URL),
       arenaAddress: blank(env.ARENA_ADDRESS),
       nftAddress: blank(env.NFT_ADDRESS),
       tokenAddress: blank(env.TOKEN_ADDRESS),
@@ -344,13 +325,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       logChunkBlocks: Math.max(100, int(env.LOG_CHUNK_BLOCKS, 50_000)),
       rpcMaxRps: Math.max(0.2, Number(env.RPC_MAX_RPS) > 0 ? Number(env.RPC_MAX_RPS) : 4),
       rpcBurst: Math.max(1, int(env.RPC_BURST, 8)),
-      botTicketsPerMinute: Math.max(0, int(env.BOT_TICKETS_PER_MIN, 4)),
       testnetRpcUrl: blank(env.TESTNET_RPC_URL)?.replace(/\/+$/, '') ?? chainByKey('elysium-testnet').rpcUrl!,
-      hypeFaucetUrl: blank(env.HYPE_FAUCET_URL) ?? HYPE_FAUCET_URL_DEFAULT,
     },
     mint: {
       usdCents: Math.max(1, int(env.MINT_USD_CENTS, MINT_USD_CENTS_DEFAULT)),
-      hypePriceUrl: blank(env.HYPE_PRICE_URL) ?? HYPE_PRICE_URL_DEFAULT,
+      gasPriceUrl: blank(env.GAS_PRICE_URL) ?? blank(env.HYPE_PRICE_URL) ?? GAS_PRICE_URL_DEFAULT,
     },
   };
 }

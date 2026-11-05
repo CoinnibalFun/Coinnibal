@@ -212,14 +212,14 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             const changed = dev.devSetToken();
             return json(res, 200, { changed, chain: ctx.chain.status() });
           }
-          case '/api/dev/transfer': {
-            // DEV ONLY: the web's fake wallet "sends" a game-token transfer (a power-up purchase); answers its fake hash
+          case '/api/dev/pay': {
+            // DEV ONLY: the web's fake wallet "pays" a power-up pack (`ElymumArena.pay`); answers its fake hash
             const dev = cfg.devFakeChain ? (ctx.chain as Partial<DevFakeChainActions>) : null;
-            if (!dev?.devTransfer) return json(res, 404, { error: 'not found' });
+            if (!dev?.devPay) return json(res, 404, { error: 'not found' });
             if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
             const body = await readSmallJson(req);
             const value = typeof body?.value === 'string' && /^\d{1,40}$/.test(body.value) ? BigInt(body.value) : 0n;
-            const hash = dev.devTransfer(String(body?.from ?? ''), String(body?.to ?? ''), value);
+            const hash = dev.devPay(String(body?.from ?? ''), value, String(body?.ref ?? ''));
             return hash ? json(res, 200, { hash }) : json(res, 400, { error: 'bad_request' });
           }
           default:

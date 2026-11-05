@@ -25,7 +25,7 @@ interface Harness {
 async function harness(): Promise<Harness> {
   const dir = mkdtempSync(join(tmpdir(), 'elymum-integrity-'));
   const admin = wallet();
-  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, BOT_TARGET: '2', BOT_MIN: '0', BOT_MAX: '2', ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public', ROUND_JOIN_CLOSE_SECONDS: '0' } as NodeJS.ProcessEnv);
+  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public', ROUND_JOIN_CLOSE_SECONDS: '0' } as NodeJS.ProcessEnv);
   const app = await createApp(cfg, {
     chain: new ArenaChain([arena(1, 1000)]),
     log: () => {},

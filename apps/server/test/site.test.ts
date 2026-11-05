@@ -33,7 +33,7 @@ async function harness(env: Record<string, string> = {}, limits?: ConstructorPar
   const dir = mkdtempSync(join(tmpdir(), 'elymum-site-'));
   const admin = wallet();
   const clock = { t: Date.now() };
-  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, BOT_TARGET: '2', BOT_MIN: '0', BOT_MAX: '2', ADMIN_WALLETS: admin, TRUST_PROXY: '0', ...env } as NodeJS.ProcessEnv);
+  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', ...env } as NodeJS.ProcessEnv);
   const app = await createApp(cfg, { chain: new ArenaChain([arena(1, 1000)]), log: () => {}, persist: true, siteNow: () => clock.t,
     siteLimits: limits ?? { writeIp: new Limiter(10_000, 60_000), writeWallet: new Limiter(10_000, 60_000), login: new Limiter(10_000, 60_000) },
     apiLimiter: new Limiter(10_000, 60_000),

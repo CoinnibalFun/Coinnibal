@@ -1,5 +1,4 @@
 import type { ClientInput, MapScaleSettings, RoomInfo, ServerMessage } from '@elymum/shared';
-import type { BotManagerOptions } from '../bots/manager';
 import type { Player } from '../game/entities';
 import type { Conn } from '../net/conn';
 import type { JoinOptions, RoomOptions } from './room';
@@ -71,8 +70,8 @@ export interface RoomHandle extends RoomConnRoom {
   /** Current world side. */
   mapSide(): number;
   mapScale(): MapScaleSettings | null;
-  botCounts(): { humans: number; bots: number; stakedBots: number };
-  setBotOptions(opts: BotManagerOptions): void;
+  /** People and practice bots in the room. */
+  botCounts(): { humans: number; bots: number };
   setMapScale(scale: MapScaleSettings): void;
   clearAvatar(wallet: string): number;
   announce(text: string): void;

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Authoritative Elymum game server: simulation, rooms, smart bots, settlement on Elysium",
+  "description": "Authoritative Elymum game server: simulation, rooms, settlement on chain (ElymumArena v3)",
   "main": "./dist/index.js",
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",
@@ -13,11 +13,8 @@
     "test:workers": "TEST_GAME_WORKERS=2 vitest run test/integration.test.ts test/workers.test.ts",
     "load": "node --import tsx scripts/bench/load.ts",
     "typecheck": "tsc --noEmit",
-    "sim": "tsx scripts/sim.ts",
     "integrity-sim": "tsx scripts/integrity-sim.ts",
-    "bot-bench": "tsx scripts/bench/bot-bench.ts",
-    "e2e": "tsx scripts/e2e.ts",
-    "e2e:migration": "tsx scripts/e2e-migration.ts"
+    "e2e": "tsx scripts/e2e.ts"
   },
   "dependencies": {
     "@elymum/sdk": "workspace:*",

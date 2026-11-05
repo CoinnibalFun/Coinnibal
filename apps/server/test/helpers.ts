@@ -36,6 +36,9 @@ export class ArenaChain implements ChainGateway {
       enabled: true,
       chainId: 31337,
       chainName: 'Localnet',
+      gasSymbol: 'ETH',
+      testnet: true,
+      faucetUrl: null,
       rpcUrl: null,
       explorerUrl: null,
       arenaAddress: '0x00000000000000000000000000000000000A7e4A',
@@ -43,7 +46,7 @@ export class ArenaChain implements ChainGateway {
       arenasEnabled: true,
       tokenReady: true,
       token: { address: '0x0000000000000000000000000000000000000707', symbol: '$ELYMUM', decimals: 18 },
-      feeBps: 500,
+      fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 500, holderPerks: false, paymentBurnBps: 5000, burnMode: 0 },
       serverKey: null,
     };
   }
@@ -113,3 +116,18 @@ export function stakeJoin(arenaId: number, fee: number) {
     },
   };
 }
+
+/** The `RoomOptions.custom` of a free custom room with `bots` practice bots (tests). */
+export const freeCustom = (bots = 0): import('@elymum/shared').CustomRoomSummary => ({
+  durationMin: 30,
+  mapSize: 'M',
+  bots,
+  difficulty: 'mixed',
+  food: 'normal',
+  traps: 'normal',
+  powerUps: true,
+  kind: 'free',
+  creator: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+  createdAt: 0,
+  endsAt: 1e15,
+});

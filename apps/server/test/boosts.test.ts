@@ -1,7 +1,6 @@
-import { BOOST_RULES, BURN_ADDRESS, CellFlag, PlayerFlag, RULES, OLD_SHOP_PRICES, SHOP_DEFAULTS, TICK_MS, leapDistance, packPriceRaw, type ServerMessage } from '@elymum/shared';
+import { BOOST_RULES, CellFlag, PlayerFlag, RULES, OLD_SHOP_PRICES, SHOP_DEFAULTS, TICK_MS, leapDistance, packPriceRaw, shopPaymentRef, type ServerMessage } from '@elymum/shared';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { BotBrain } from '../src/bots/brain';
-import { rollPersonality } from '../src/bots/personality';
 import { mulberry32 } from '../src/game/rng';
 import { ViewState } from '../src/rooms/visibility';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -193,14 +192,17 @@ describe('boosts: world effects', () => {
     const bot = w.addPlayer({ spawnShield: false, name: 'bot', skin: 0, x: 2000, y: 2000, mass: 400, isBot: true });
     const prey = w.addPlayer({ spawnShield: false, name: 'prey', skin: 0, x: 2250, y: 2000, mass: 30 });
     w.setTarget(prey.id, 2250, 2000);
-    const brain = new BotBrain(rollPersonality(mulberry32(3)), mulberry32(4));
-    const seen = () => (brain as unknown as { others: { player: { id: number } }[] }).others.map((c) => c.player.id);
-    brain.think(w, bot, w.now + 10_000);
-    expect(seen()).toContain(prey.id);
+    // a hard bot hunts the prey it sees (its aim goes right, toward it); invisible, the prey is not there for it
+    const aimX = () => new BotBrain('hard', mulberry32(4), w.now).think(w, bot, w.now)!.target.x;
+    expect(aimX()).toBeGreaterThan(2000);
     w.useBoost(prey.id, 'invis');
     w.tick(TICK_MS);
-    brain.think(w, bot, w.now + 60_000);
-    expect(seen()).not.toContain(prey.id);
+    w.removePlayer(prey.id);
+    const alone = aimX();
+    const p2 = w.addPlayer({ spawnShield: false, name: 'prey', skin: 0, x: 2250, y: 2000, mass: 30 });
+    w.useBoost(p2.id, 'invis');
+    w.tick(TICK_MS);
+    expect(aimX()).toBe(alone);
   });
 
   it('useBoost refuses a dead or unknown player', () => {
@@ -217,44 +219,47 @@ describe('boosts: world effects', () => {
 /* Purchase verification                                               */
 /* ------------------------------------------------------------------ */
 
-const receipt = (over: Partial<TokenReceipt> & { transfers?: TokenReceipt['transfers'] } = {}): TokenReceipt => ({
+/** The arena of the test chains (`ArenaChain.status().arenaAddress`): power-ups are paid to it with `pay`. */
+const ARENA_ADDR = '0x00000000000000000000000000000000000A7e4A';
+const REF = shopPaymentRef('magnet');
+
+/** The receipt of `ElymumArena.pay(value, ref)` from `from`: the token transfer to the arena and the `Paid` event. */
+const payReceipt = (value: bigint, o: { from?: string; ref?: string; contract?: string; token?: string; transferValue?: bigint } = {}): TokenReceipt => ({
   status: 'success',
   blockNumber: 10n,
-  transfers: [{ token: TOKEN, from: WALLET, to: BURN_ADDRESS, value: 300n * ONE }],
-  ...over,
+  transfers: [{ token: o.token ?? TOKEN, from: o.from ?? WALLET, to: o.contract ?? ARENA_ADDR, value: o.transferValue ?? value }],
+  payments: [{ contract: o.contract ?? ARENA_ADDR, payer: o.from ?? WALLET, ref: o.ref ?? REF, amount: value }],
 });
 
-describe('boosts: verifyPurchase', () => {
-  const exp = { token: TOKEN, from: WALLET, to: BURN_ADDRESS, amounts: [300n * ONE] };
+describe('boosts: verifyPurchase (a Paid event of ElymumArena.pay)', () => {
+  const exp = { token: TOKEN, from: WALLET, arena: ARENA_ADDR, ref: REF, amounts: [300n * ONE] };
   it('accepts the exact payment (any address case)', () => {
-    expect(verifyPurchase(receipt(), { ...exp, from: WALLET.toUpperCase().replace('0X', '0x'), to: BURN_ADDRESS.toLowerCase() })).toEqual({ ok: true, paid: 300n * ONE });
+    expect(verifyPurchase(payReceipt(300n * ONE), { ...exp, from: WALLET.toUpperCase().replace('0X', '0x'), arena: ARENA_ADDR.toLowerCase() })).toEqual({ ok: true, paid: 300n * ONE });
   });
-  it('refuses pending, reverted, empty, other token, wrong recipient, wrong sender, wrong amount', () => {
+  it('refuses pending, reverted, no payment, another contract, another payer, another pack, a wrong amount, no token move', () => {
     expect(verifyPurchase(null, exp)).toEqual({ ok: false, code: 'tx_pending' });
-    expect(verifyPurchase(receipt({ status: 'reverted' }), exp)).toEqual({ ok: false, code: 'tx_failed' });
-    expect(verifyPurchase(receipt({ transfers: [] }), exp)).toEqual({ ok: false, code: 'no_transfer' });
-    expect(verifyPurchase(receipt({ transfers: [{ token: OTHER, from: WALLET, to: BURN_ADDRESS, value: 300n * ONE }] }), exp)).toEqual({ ok: false, code: 'wrong_token' });
-    expect(verifyPurchase(receipt({ transfers: [{ token: TOKEN, from: WALLET, to: OTHER, value: 300n * ONE }] }), exp)).toEqual({ ok: false, code: 'wrong_recipient' });
-    expect(verifyPurchase(receipt({ transfers: [{ token: TOKEN, from: OTHER, to: BURN_ADDRESS, value: 300n * ONE }] }), exp)).toEqual({ ok: false, code: 'wrong_sender' });
-    expect(verifyPurchase(receipt({ transfers: [{ token: TOKEN, from: WALLET, to: BURN_ADDRESS, value: 299n * ONE }] }), exp)).toEqual({ ok: false, code: 'wrong_amount' });
-    expect(verifyPurchase(receipt({ transfers: [{ token: TOKEN, from: WALLET, to: BURN_ADDRESS, value: 301n * ONE }] }), exp)).toEqual({ ok: false, code: 'wrong_amount' });
+    expect(verifyPurchase({ ...payReceipt(300n * ONE), status: 'reverted' }, exp)).toEqual({ ok: false, code: 'tx_failed' });
+    // a plain token transfer is not a payment any more
+    expect(verifyPurchase({ ...payReceipt(300n * ONE), payments: [] }, exp)).toEqual({ ok: false, code: 'no_payment' });
+    expect(verifyPurchase(payReceipt(300n * ONE, { contract: OTHER }), exp)).toEqual({ ok: false, code: 'wrong_recipient' });
+    expect(verifyPurchase(payReceipt(300n * ONE, { from: OTHER }), exp)).toEqual({ ok: false, code: 'wrong_sender' });
+    expect(verifyPurchase(payReceipt(300n * ONE, { ref: shopPaymentRef('leap') }), exp)).toEqual({ ok: false, code: 'wrong_pack' });
+    expect(verifyPurchase(payReceipt(299n * ONE), exp)).toEqual({ ok: false, code: 'wrong_amount' });
+    expect(verifyPurchase(payReceipt(301n * ONE), exp)).toEqual({ ok: false, code: 'wrong_amount' });
+    expect(verifyPurchase(payReceipt(300n * ONE, { token: OTHER }), exp)).toEqual({ ok: false, code: 'wrong_token' });
+    expect(verifyPurchase(payReceipt(300n * ONE, { transferValue: 1n }), exp)).toEqual({ ok: false, code: 'wrong_token' });
   });
-  it('finds the matching log among others (a router moving other tokens first)', () => {
-    const r = receipt({
-      transfers: [
-        { token: OTHER, from: WALLET, to: OTHER, value: 1n },
-        { token: TOKEN, from: WALLET, to: BURN_ADDRESS, value: 300n * ONE },
-      ],
-    });
-    expect(verifyPurchase(r, exp).ok).toBe(true);
+  it('the pack ref is elymum.shop.<kind> in ASCII, 32 bytes', () => {
+    expect(shopPaymentRef('magnet')).toBe(`0x${Buffer.from('elymum.shop.magnet').toString('hex').padEnd(64, '0')}`);
+    expect(new Set(['magnet', 'leap', 'speed', 'invis'].map((k) => shopPaymentRef(k as 'magnet'))).size).toBe(4);
   });
   it('refuses a payment older than SHOP_PAYMENT_MAX_AGE_MS (a lost used-hash list cannot re-credit old purchases)', () => {
     const now = 1_900_000_000_000;
-    expect(verifyPurchase(receipt({ timestamp: now - SHOP_PAYMENT_MAX_AGE_MS + 1 }), { ...exp, now })).toEqual({ ok: true, paid: 300n * ONE });
-    expect(verifyPurchase(receipt({ timestamp: now - SHOP_PAYMENT_MAX_AGE_MS - 1 }), { ...exp, now })).toEqual({ ok: false, code: 'tx_stale' });
-    expect(verifyPurchase(receipt({ timestamp: now - 10 * 60_000 }), { ...exp, now, maxAgeMs: 60_000 })).toEqual({ ok: false, code: 'tx_stale' });
+    expect(verifyPurchase({ ...payReceipt(300n * ONE), timestamp: now - SHOP_PAYMENT_MAX_AGE_MS + 1 }, { ...exp, now })).toEqual({ ok: true, paid: 300n * ONE });
+    expect(verifyPurchase({ ...payReceipt(300n * ONE), timestamp: now - SHOP_PAYMENT_MAX_AGE_MS - 1 }, { ...exp, now })).toEqual({ ok: false, code: 'tx_stale' });
+    expect(verifyPurchase({ ...payReceipt(300n * ONE), timestamp: now - 10 * 60_000 }, { ...exp, now, maxAgeMs: 60_000 })).toEqual({ ok: false, code: 'tx_stale' });
     // a wrong payment keeps its own, more specific reason
-    expect(verifyPurchase(receipt({ timestamp: 0, transfers: [{ token: TOKEN, from: WALLET, to: BURN_ADDRESS, value: 1n }] }), { ...exp, now })).toEqual({ ok: false, code: 'wrong_amount' });
+    expect(verifyPurchase({ ...payReceipt(1n), timestamp: 0 }, { ...exp, now })).toEqual({ ok: false, code: 'wrong_amount' });
   });
 });
 
@@ -287,7 +292,6 @@ function shopFixture(opts: { holder?: boolean; dir?: string | null; settings?: R
     settings,
     inventory,
     chain,
-    owner: () => OTHER,
     holder: async (w) => holders.has(w.toLowerCase()),
     now: () => now,
     receiptRetryMs: [0, 1],
@@ -295,8 +299,13 @@ function shopFixture(opts: { holder?: boolean; dir?: string | null; settings?: R
   return { chain, settings, inventory, shop, holders, tick: (ms: number) => (now += ms) };
 }
 
-const pay = (chain: ShopChain, h: string, value: bigint, over: Partial<TokenReceipt['transfers'][number]> = {}) =>
-  chain.receipts.set(h, { status: 'success', blockNumber: 1n, transfers: [{ token: TOKEN, from: WALLET, to: BURN_ADDRESS, value, ...over }] });
+/** Records a `pay` of `value` for the pack `kind` (default: the one the test buys, read from the claim). */
+const pay = (
+  chain: ShopChain,
+  h: string,
+  value: bigint,
+  o: { kind?: 'magnet' | 'leap' | 'speed' | 'invis'; contract?: string; from?: string; token?: string } = {},
+) => chain.receipts.set(h, payReceipt(value, { ref: shopPaymentRef(o.kind ?? 'magnet'), ...(o.contract ? { contract: o.contract } : {}), ...(o.from ? { from: o.from } : {}), ...(o.token ? { token: o.token } : {}) }));
 
 async function buyFails(p: Promise<unknown>): Promise<string> {
   try {
@@ -332,12 +341,12 @@ describe('boosts: buying', () => {
     pay(chain, hash(3), 1499n * ONE);
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(3) }))).toBe('wrong_amount');
     // the leap pack costs more: a magnet price is the wrong amount for it
-    pay(chain, hash(4), 600n * ONE);
+    pay(chain, hash(4), 600n * ONE, { kind: 'leap' });
     expect(await buyFails(shop.buy(WALLET, { kind: 'leap', txHash: hash(4) }))).toBe('wrong_amount');
     // someone else's payment cannot be claimed
     pay(chain, hash(5), 600n * ONE, { from: OTHER });
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(5) }))).toBe('wrong_sender');
-    pay(chain, hash(6), 600n * ONE, { to: OTHER });
+    pay(chain, hash(6), 600n * ONE, { contract: OTHER });
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(6) }))).toBe('wrong_recipient');
     pay(chain, hash(7), 600n * ONE, { token: OTHER });
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(7) }))).toBe('wrong_token');
@@ -351,10 +360,10 @@ describe('boosts: buying', () => {
   it('refuses a payment mined more than a day ago (tx_stale), credits a recent one', async () => {
     const { chain, shop, inventory, tick } = shopFixture();
     const now = tick(0);
-    chain.receipts.set(hash(1), { status: 'success', blockNumber: 1n, timestamp: now - SHOP_PAYMENT_MAX_AGE_MS - 1000, transfers: [{ token: TOKEN, from: WALLET, to: BURN_ADDRESS, value: 600n * ONE }] });
+    chain.receipts.set(hash(1), { ...payReceipt(600n * ONE), timestamp: now - SHOP_PAYMENT_MAX_AGE_MS - 1000 });
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(1) }))).toBe('tx_stale');
     expect(inventory.isUsed(hash(1))).toBe(false);
-    chain.receipts.set(hash(2), { status: 'success', blockNumber: 2n, timestamp: now - 60_000, transfers: [{ token: TOKEN, from: WALLET, to: BURN_ADDRESS, value: 600n * ONE }] });
+    chain.receipts.set(hash(2), { ...payReceipt(600n * ONE), timestamp: now - 60_000 });
     expect(await shop.buy(WALLET, { kind: 'magnet', txHash: hash(2) })).toMatchObject({ ok: true, added: 3 });
   });
 
@@ -397,26 +406,32 @@ describe('boosts: buying', () => {
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(3) }))).toBe('wrong_amount');
   });
 
-  it('the treasury sink pays the owner wallet (or the admin-set treasury)', async () => {
-    const { chain, shop, settings } = shopFixture({ settings: { sink: 'treasury' } });
-    expect(shop.sink()).toBe(OTHER);
-    pay(chain, hash(1), 600n * ONE);
+  it('payments go to the arena contract (it burns half and pays the fee wallet half); saved sink settings are ignored', async () => {
+    const { chain, shop, settings } = shopFixture();
+    expect(shop.payTo()).toBe(ARENA_ADDR);
+    const view = await shop.view(WALLET);
+    expect(view).toMatchObject({ payTo: ARENA_ADDR, burnBps: 5000 });
+    pay(chain, hash(1), 600n * ONE, { contract: OTHER });
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(1) }))).toBe('wrong_recipient');
-    pay(chain, hash(2), 600n * ONE, { to: OTHER });
+    pay(chain, hash(2), 600n * ONE);
     expect((await shop.buy(WALLET, { kind: 'magnet', txHash: hash(2) })).ok).toBe(true);
-    settings.update({ treasury: '0x3333333333333333333333333333333333333333' });
-    expect(shop.sink()).toBe('0x3333333333333333333333333333333333333333');
+    // a pack paid as another kind is refused
+    pay(chain, hash(3), 600n * ONE, { kind: 'speed' });
+    expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(3) }))).toBe('wrong_pack');
+    // the retired sink fields are refused from an admin and dropped from saved files
+    expect(() => settings.update({ sink: 'treasury' })).toThrow(ShopSettingsError);
+    expect('sink' in applyShopSettings(SHOP_DEFAULTS, { sink: 'burn', treasury: OTHER }, { strict: false })).toBe(false);
   });
 
   it('charges and used hashes survive a restart (per-chain file)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'boosts-'));
     dirs.push(dir);
     const a = shopFixture({ dir });
-    pay(a.chain, hash(9), 900n * ONE);
+    pay(a.chain, hash(9), 900n * ONE, { kind: 'leap' });
     await a.shop.buy(WALLET, { kind: 'leap', txHash: hash(9) });
     const b = shopFixture({ dir });
     expect(b.inventory.get(WALLET).leap).toBe(3);
-    pay(b.chain, hash(9), 900n * ONE);
+    pay(b.chain, hash(9), 900n * ONE, { kind: 'leap' });
     expect(await buyFails(b.shop.buy(WALLET, { kind: 'leap', txHash: hash(9) }))).toBe('tx_used');
   });
 
@@ -442,7 +457,7 @@ describe('boosts: buying', () => {
 
   it('backward compatibility: a pending claim for a Shockwave pack credits a Leap pack (same price)', async () => {
     const { chain, shop } = shopFixture();
-    pay(chain, hash(5), 900n * ONE);
+    pay(chain, hash(5), 900n * ONE, { kind: 'leap' });
     expect(await shop.buy(WALLET, { kind: 'shock', txHash: hash(5) })).toMatchObject({ ok: true, kind: 'leap', added: 3, charges: { leap: 3 } });
   });
 
@@ -465,7 +480,7 @@ describe('boosts: buying', () => {
     expect(packPriceRaw(SHOP_DEFAULTS.prices.invis, 18, 0)).toBe(1200n * ONE);
     expect(packPriceRaw(SHOP_DEFAULTS.prices.leap, 18, SHOP_DEFAULTS.holderDiscountPct)).toBe(630n * ONE);
     expect(packPriceRaw(SHOP_DEFAULTS.prices.magnet, 18, SHOP_DEFAULTS.holderDiscountPct)).toBe(420n * ONE);
-    expect(SHOP_DEFAULTS.sink).toBe('burn');
+    expect('sink' in SHOP_DEFAULTS).toBe(false);
   });
 
   it('a saved shop file still holding every pre-2026-11 default price takes the new ones; an admin price stays', () => {
@@ -506,7 +521,7 @@ describe('boosts: use limits', () => {
       [3, 'speed', 600n],
       [4, 'invis', 1200n],
     ] as const) {
-      pay(f.chain, hash(i), price * ONE);
+      pay(f.chain, hash(i), price * ONE, { kind });
       await f.shop.buy(WALLET, { kind, txHash: hash(i) });
     }
     return f;
@@ -570,7 +585,7 @@ describe('boosts: use limits', () => {
 describe('boosts: rooms', () => {
   async function roomWith(mode: 'practice' | 'arena') {
     const f = shopFixture();
-    pay(f.chain, hash(1), 900n * ONE);
+    pay(f.chain, hash(1), 900n * ONE, { kind: 'leap' });
     await f.shop.buy(WALLET, { kind: 'leap', txHash: hash(1) });
     const room = new Room(
       { id: `${mode}-1`, mode, name: 'Test', maxPlayers: 10, bots: null, ...(mode === 'arena' ? { stake: { arenaId: 1, buyIn: 1000 } } : {}) },
@@ -603,7 +618,7 @@ describe('boosts: rooms', () => {
 
   it('an invisible leader has no minimap dot', async () => {
     const f = shopFixture();
-    pay(f.chain, hash(2), 1200n * ONE);
+    pay(f.chain, hash(2), 1200n * ONE, { kind: 'invis' });
     await f.shop.buy(WALLET, { kind: 'invis', txHash: hash(2) });
     const room = new Room({ id: 'practice-9', mode: 'practice', name: 'Test', maxPlayers: 10, bots: null }, { ...roomDeps(f.chain), shop: f.shop });
     const conn = fakeConn(WALLET);

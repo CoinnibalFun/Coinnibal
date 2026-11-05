@@ -1,7 +1,8 @@
 import { SiteFail } from './site/validate';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
-import { ELYSIUM_TESTNET_CHAIN_ID, chainByKey } from '@elymum/shared';
+import { ELYSIUM_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID, chainByKey, chainInfo, isTestChainId, setActiveChain } from '@elymum/shared';
+import { chainOverridesFor } from './chain/evm';
 import type { Hex } from 'viem';
 import { Auth } from './auth';
 import { assertDevFakeChainAllowed, createChain, dataFileNames } from './chain';
@@ -14,9 +15,7 @@ import { IntegrityStore } from './integrity/store';
 import { Leaderboards } from './leaderboards';
 import type { Limiter } from './net/limiter';
 import { Gateway } from './net/gateway';
-import { BotSettingsStore, defaultBotSettings } from './bots/settings';
-import type { StakedBotSource } from './bots/staked';
-import { TestnetBotSource } from './bots/testnet-source';
+import { MapSettingsStore } from './rooms/map-settings';
 import { viemHolderReader, type HolderReader } from './chain/evm-client';
 import { configureRpcBudgets, startRpcMinuteLog } from './chain/rpc-budget';
 import { loadServerKeySecret } from './chain/server-key';
@@ -54,8 +53,6 @@ export interface App {
   contracts: ContractsStore;
   /** The chain id the chain-keyed state was opened for (`DATA_DIR/chains/<id>/`); null: none (chain off, dev fake chain). */
   stateChainId: number | null;
-  /** Testnet staked bots (null on any other chain, or without a server key). */
-  stakedBots: TestnetBotSource | null;
   /** Imported testnet emblem holders (`DATA_DIR/site/holder-wl.json`). */
   holderWl: HolderWlStore;
   /** The NFT mint: state, HYPE/USD, holders, allowlist, metadata. */
@@ -91,10 +88,6 @@ export async function createApp(
     fetchPrice?: PriceFetcher;
     /** The chain id to key the state on (default: the injected chain's, else `eth_chainId` of `EVM_RPC_URL`). */
     chainId?: number | null;
-    /** The key testnet bot wallets are derived from (default: `SERVER_PRIVATE_KEY`); tests inject one with an injected chain. */
-    stakedBotKey?: Hex;
-    /** A staked-bot source to use instead of the testnet one (tests). */
-    stakedBots?: StakedBotSource;
     /** Holder readers per chain (default: the server's client on its own chain, `TESTNET_RPC_URL` for the testnet). */
     holderReaderFor?: (chainId: number) => HolderReader | null;
     /** Reads custom-room payments (default: the server's RPC; the fake chain's own on `DEV_FAKE_CHAIN`); tests inject one. */
@@ -136,9 +129,9 @@ export async function createApp(
   // profile pictures: content-addressed files next to the profiles (DATA_DIR/avatars/<id>.png|webp)
   const avatars = new AvatarStore(persist ? join(cfg.dataDir, cfg.devFakeChain ? 'avatars.dev-fake' : 'avatars') : null, log);
   // on Elysium Testnet the game is open to everyone unless the admin already chose otherwise
-  const siteStore = new SiteStore(persist ? cfg.dataDir : null, { now: opts.siteNow, log, ...(stateChainId === ELYSIUM_TESTNET_CHAIN_ID ? { defaults: { gameAccess: 'public' } } : {}) });
+  const siteStore = new SiteStore(persist ? cfg.dataDir : null, { now: opts.siteNow, log, ...(isTestChainId(stateChainId) && stateChainId !== LOCALNET_CHAIN_ID ? { defaults: { gameAccess: 'public' } } : {}) });
   const holderWl = new HolderWlStore(persist ? cfg.dataDir : null, log);
-  const fetchPrice = opts.fetchPrice ?? hyperliquidPrice(cfg.mint.hypePriceUrl);
+  const fetchPrice = opts.fetchPrice ?? hyperliquidPrice(cfg.mint.gasPriceUrl);
   const nftRecord = () => {
     const r = contracts.effective(null).nft;
     return r ? { address: r.address, txHash: r.txHash } : null;
@@ -179,7 +172,7 @@ export async function createApp(
     holderWl,
     nftOf,
     holderReaderFor,
-    faucet: new FaucetInfo({ chain, contracts, hypeFaucetUrl: cfg.chain.hypeFaucetUrl }),
+    faucet: new FaucetInfo({ chain, contracts }),
     avatars,
     leaderboards,
     log,
@@ -199,54 +192,8 @@ export async function createApp(
   const held = journal.held().length;
   if (held > 0) log(`integrity: ${held} settlement(s) held for admin review (/admin → Integrity)`);
 
-  // the admin's bot settings (DATA_DIR/site/bots.json; the BOT_* env vars are the defaults), applied live
-  const botSettings = new BotSettingsStore(persist ? cfg.dataDir : null, defaultBotSettings(cfg.bots), log);
-  // testnet staked bots: their own wallets (derived from the server key), real tickets; never on mainnet
-  let roomsRef: RoomManager | null = null;
-  let stakedBots: TestnetBotSource | null = null;
-  const botChainId = stateChainId ?? chain.status().chainId;
-  if (!opts.stakedBots && chain.evm && isTestChain(botChainId)) {
-    let key: Hex | null = opts.stakedBotKey ?? null;
-    if (!key && !opts.chain && cfg.chain.serverKey) {
-      try {
-        key = loadServerKeySecret(cfg.chain.serverKey, cfg.dataDir).privateKey;
-      } catch (err) {
-        log(`bots: staked bots off — the server key cannot be read (${(err as Error).message})`);
-      }
-    }
-    if (key) {
-      stakedBots = new TestnetBotSource({
-        chain: () => {
-          const st = chain.status();
-          return {
-            chainId: st.chainId,
-            stakeEnabled: chain.stakeEnabled,
-            arena: st.arenaAddress,
-            token: st.token ? { address: st.token.address, decimals: st.token.decimals } : null,
-            feeModel: st.feeModel ?? null,
-          };
-        },
-        client: () => chain.evm?.() ?? null,
-        serverKey: key,
-        settings: botSettings,
-        journal,
-        stateDir: chainState,
-        joinsOpen: () => {
-          if (!roomsRef) return false;
-          const now = roomsRef.now();
-          return now < roomsRef.roundWindow(now).joinsCloseAt;
-        },
-        // reconciles in-use flags with the rooms and adopts open sessions no room plays
-        liveSessions: () => roomsRef?.liveSessions() ?? new Set<string>(),
-        // each bot slot buys at most one ticket per round (no re-buy after a death), and a global cap
-        round: () => (roomsRef ? roomsRef.roundWindow().n : 0),
-        maxTicketsPerMinute: cfg.chain.botTicketsPerMinute,
-        log,
-      });
-      log(`bots: testnet staked bots on (chain ${botChainId}; ${stakedBots.addresses().length} bot wallet(s) known; the server key must be a TestToken minter and hold HYPE)`);
-    }
-  }
-  const stakedSource: StakedBotSource | undefined = opts.stakedBots ?? stakedBots ?? undefined;
+  // the admin's map settings per room kind (DATA_DIR/site/maps.json; taken over once from the old bots.json)
+  const mapSettings = new MapSettingsStore(persist ? cfg.dataDir : null, log);
 
   // bought power-ups: the admin's prices (DATA_DIR/site/shop.json), the charges and used payments per chain
   const shopSettings = new ShopSettingsStore(persist ? cfg.dataDir : null, undefined, log);
@@ -255,7 +202,6 @@ export async function createApp(
     settings: shopSettings,
     inventory: boostInventory,
     chain,
-    owner: () => cfg.adminWallets[0] ?? null,
     holder: (wallet, fresh) => mint.isHolder(wallet, fresh),
     log,
   });
@@ -264,7 +210,6 @@ export async function createApp(
   const rooms = new RoomManager(
     cfg,
     {
-      stakedBots: stakedSource,
       chain,
       journal,
       leaderboards,
@@ -283,9 +228,8 @@ export async function createApp(
       },
     },
     chain,
-    botSettings,
+    mapSettings,
   );
-  roomsRef = rooms;
   // custom rooms: paid with a HYPE transfer to the treasury (checked on chain), restored after a restart
   let paymentReader: PaymentReader | null | undefined = opts.paymentReader;
   const customRooms = new CustomRoomService({
@@ -319,30 +263,7 @@ export async function createApp(
   // a removed (or replaced) picture comes off the live coins at once
   site.onAvatarChange((wallet) => void rooms.clearAvatar(wallet));
   site.setLoad(() => gameLoad(rooms.loadStats()));
-  site.setBots({
-    store: rooms.botSettings,
-    live: () => rooms.botCounts(),
-    chainId: () => chain.status().chainId,
-    stakedSource: () => (stakedBots ? stakedBots.active() : !!opts.stakedBots),
-    ...(stakedBots ? { stakedStatus: () => stakedBots!.status() } : {}),
-    reserve: () => journal.house(),
-    bankroll: async (wallet, arenaId) => {
-      const s = await chain.getSession(arenaId, wallet);
-      if (!s || s.finalized) throw new SiteFail(404, 'no_ticket', `This wallet holds no open ticket in arena #${arenaId}: buy one in the lobby first and do not play it`);
-      if (rooms.liveSessions().has(s.key) || journal.pending.some((p) => p.key === s.key)) {
-        throw new SiteFail(409, 'ticket_in_use', 'That ticket is in a room or already being settled');
-      }
-      const now = Date.now();
-      // one write: the ticket settles at 0 and its value becomes reserve (it never leaves the vault)
-      journal.commit({
-        enqueue: [{ kind: 'settle', key: s.key, player: s.player, arenaId, session: s.key, sessionId: s.id, payout: 0, score: 0, kills: 0, xp: 0, reason: 'house', attempts: 0, nextAttemptAt: now, createdAt: now }],
-        house: [{ arenaId, amount: s.value }],
-      });
-      chain.kick();
-      return { arenaId, amount: s.value, reserve: journal.houseByArena(arenaId) };
-    },
-    log,
-  });
+  site.setMaps({ store: rooms.mapSettings, live: () => rooms.roomCounts(), log });
   chain.setLiveSessionProvider(() => rooms.liveSessions());
   // the game token was set on chain (picked up by the 30 s config watcher, no restart): attach the
   // arenas now (a fresh read of the arena list) instead of waiting for the next arena timer
@@ -350,6 +271,13 @@ export async function createApp(
     if (chain.tokenReady) void rooms.refreshArenas();
   });
   await chain.start();
+  // what this process shows amounts in (logs, the price feed's coin): the chain it runs on, else the configured one
+  const showChain = () => {
+    const st = chain.status();
+    setActiveChain(chainInfo(st.chainId ?? cfg.chain.chainId, chainOverridesFor(cfg, st.chainId ?? cfg.chain.chainId)));
+  };
+  showChain();
+  chain.onStatusChange(showChain);
   await rooms.ensureArenaRooms();
 
   const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, priceKeeper, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
@@ -369,10 +297,6 @@ export async function createApp(
   // arenas created (or a chain / token that came online) after startup show up in the lobby without a restart
   const arenaTimer = setInterval(() => void rooms.ensureArenaRooms(), 30_000);
   arenaTimer.unref();
-  // staked bots: in-use flags are reconciled with the rooms at boot and every minute
-  stakedBots?.reconcile();
-  const botTimer = stakedBots ? setInterval(() => stakedBots!.reconcile(), 60_000) : null;
-  botTimer?.unref();
 
   let closed = false;
   return {
@@ -386,7 +310,6 @@ export async function createApp(
     profiles,
     contracts,
     stateChainId,
-    stakedBots,
     holderWl,
     mint,
     priceKeeper,
@@ -406,7 +329,6 @@ export async function createApp(
       closed = true;
       clearInterval(flushTimer);
       clearInterval(arenaTimer);
-      if (botTimer) clearInterval(botTimer);
       stopRpcLog();
       mint.flush();
       await rooms.shutdown();

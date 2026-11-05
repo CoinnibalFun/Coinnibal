@@ -17,18 +17,21 @@ import {
   type MapScaleSettings,
 } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
-import { BotSettingsError, applyBotSettings, defaultBotSettings } from '../src/bots/settings';
+import { MapSettingsError, MapSettingsStore, applyMapSettings, defaultMapSettings } from '../src/rooms/map-settings';
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { World } from '../src/game/world';
 import { customBots, customWorld } from '../src/rooms/custom';
 import { Room } from '../src/rooms/room';
 import { ViewState } from '../src/rooms/visibility';
 import { Journal } from '../src/stake/journal';
-import { ArenaChain, arena, fakeConn, roomDeps, stakeJoin } from './helpers';
+import { ArenaChain, arena, fakeConn, freeCustom, roomDeps, stakeJoin } from './helpers';
 
 const ROUND = { roundMs: 60_000, closeMs: 10_000 };
 /**
  * The resize mechanics are tested on the old default curve (3000..9000): it spans many growth steps.
- * The live default (10000..12000) is checked in 'map settings with the bot settings'.
+ * The live default (10000..12000) is checked in 'map settings (/api/admin/maps)'.
  */
 const CURVE: MapScaleSettings = { auto: true, ...OLD_MAP_SCALE_DEFAULT };
 const scale = (p: Partial<MapScaleSettings> = {}): MapScaleSettings => ({ ...CURVE, ...p });
@@ -138,7 +141,7 @@ const ticks = (room: Room, ms: number) => {
 
 describe('room map sizing', () => {
   it('opens at the size its bots call for and reports the origin in room info', () => {
-    const room = new Room({ id: 'p', mode: 'practice', name: 'Pond', maxPlayers: 40, bots: { target: 12, min: 4, max: 12 }, seed: 1, map: { scale: scale() } }, roomDeps(new ArenaChain([])));
+    const room = new Room({ id: 'priv-POND', mode: 'private', code: 'PONDS', name: 'Pond', maxPlayers: 40, bots: { count: 12, difficulty: 'mixed' }, custom: freeCustom(12), seed: 1, map: { scale: scale() } }, roomDeps(new ArenaChain([])));
     expect(room.world.cfg.width).toBe(mapSideFor(12, CURVE));
     const info = room.info();
     expect(info.width).toBe(room.world.cfg.width);
@@ -263,9 +266,9 @@ describe('custom rooms: "Auto" or a chosen size', () => {
   });
 
   it('an auto custom room is sized for its bots plus its people and grows; a chosen size never moves', { timeout: 60_000 }, () => {
-    const c = cfg({ mapSize: 'auto', bots: 12 });
+    const c = cfg({ mapSize: 'auto', bots: 12, difficulty: 'easy' });
     const auto = new Room(
-      { id: 'priv-AUTOS', mode: 'private', code: 'AUTOS', name: 'Auto', maxPlayers: 20, bots: customBots(c), seed: 3, world: customWorld(c), map: { scale: scale(), shape: (side) => customWorld(c, side) } },
+      { id: 'priv-AUTOS', mode: 'private', code: 'AUTOS', name: 'Auto', maxPlayers: 20, bots: customBots(c), custom: freeCustom(12), seed: 3, world: customWorld(c), map: { scale: scale(), shape: (side) => customWorld(c, side) } },
       roomDeps(new ArenaChain([])),
     );
     expect(auto.world.cfg.width).toBe(mapSideFor(12, CURVE));
@@ -276,47 +279,59 @@ describe('custom rooms: "Auto" or a chosen size', () => {
     expect(auto.world.cfg.width).toBeLessThanOrEqual(mapSideFor(32, CURVE));
     expect(auto.world.cfg.foodTarget).toBe(customWorld(c, auto.world.cfg.width).foodTarget);
     const fixed = cfg({ mapSize: 'S', bots: 12 });
-    const room = new Room({ id: 'priv-FIXED', mode: 'private', code: 'FIXED', name: 'Fixed', maxPlayers: 20, bots: customBots(fixed), seed: 3, world: customWorld(fixed) }, roomDeps(new ArenaChain([])));
+    const room = new Room({ id: 'priv-FIXED', mode: 'private', code: 'FIXED', name: 'Fixed', maxPlayers: 20, bots: customBots(fixed), custom: freeCustom(12), seed: 3, world: customWorld(fixed) }, roomDeps(new ArenaChain([])));
     for (let i = 0; i < 20; i++) room.join(fakeConn(`d${i}`), { name: 'p', skin: 1, flags: 0 });
     ticks(room, 30_000);
     expect(room.world.cfg.width).toBe(CUSTOM_MAP_WIDTH.S);
   });
 });
 
-describe('map settings with the bot settings', () => {
-  const base = defaultBotSettings({
-    practiceRookie: { target: 12, min: 4, max: 12 },
-    practicePro: { target: 12, min: 4, max: 12 },
-    arena: { target: 12, min: 2, max: 12 },
-    private: { target: 8, min: 2, max: 8 },
-  });
+describe('map settings (/api/admin/maps)', () => {
+  const base = defaultMapSettings();
 
   it('defaults every kind to the default curve and validates a patch', () => {
-    expect(base.maps.arena).toEqual(MAP_SCALE_DEFAULT);
-    const next = applyBotSettings(base, { maps: { arena: { perPlayer: 1000, max: 10_000 }, private: { auto: false } } });
-    expect(next.maps.arena).toEqual({ ...MAP_SCALE_DEFAULT, perPlayer: 1000, max: 10_000 });
-    expect(next.maps.private.auto).toBe(false);
-    expect(next.maps.practicePro).toEqual(MAP_SCALE_DEFAULT);
+    expect(base.arena).toEqual(MAP_SCALE_DEFAULT);
+    const next = applyMapSettings(base, { arena: { perPlayer: 1000, max: 10_000 }, private: { auto: false } });
+    expect(next.arena).toEqual({ ...MAP_SCALE_DEFAULT, perPlayer: 1000, max: 10_000 });
+    expect(next.private.auto).toBe(false);
+    expect(next.practicePro).toEqual(MAP_SCALE_DEFAULT);
     // min above max is pulled down to it
-    expect(applyBotSettings(base, { maps: { arena: { min: 9000, max: 5000 } } }).maps.arena).toMatchObject({ min: 5000, max: 5000 });
+    expect(applyMapSettings(base, { arena: { min: 9000, max: 5000 } }).arena).toMatchObject({ min: 5000, max: 5000 });
   });
 
-  it('refuses bad fields and unknown keys, and loads files from before the curve', () => {
+  it('refuses bad fields and unknown keys from an admin; ignores them in a saved file', () => {
     const bad = (body: Record<string, unknown>) => {
       try {
-        applyBotSettings(base, body);
+        applyMapSettings(base, body);
       } catch (e) {
-        return (e as BotSettingsError).field;
+        return (e as MapSettingsError).field;
       }
       return null;
     };
-    expect(bad({ maps: { arena: { perPlayer: 100 } } })).toBe('maps.arena.perPlayer');
-    expect(bad({ maps: { arena: { max: 50_000 } } })).toBe('maps.arena.max');
-    expect(bad({ maps: { arena: { auto: 1 } } })).toBe('maps.arena.auto');
-    expect(bad({ maps: { arena: { speed: 1 } } })).toBe('maps.arena.speed');
-    expect(bad({ maps: { lobby: {} } })).toBe('maps.lobby');
-    const { maps: _m, ...old } = structuredClone(base);
-    const loaded = applyBotSettings(old as typeof base, { kinds: { arena: { cap: 4 } } }, { strict: false });
-    expect(loaded.maps.arena).toEqual(MAP_SCALE_DEFAULT);
+    expect(bad({ arena: { perPlayer: 100 } })).toBe('arena.perPlayer');
+    expect(bad({ arena: { max: 50_000 } })).toBe('arena.max');
+    expect(bad({ arena: { auto: 1 } })).toBe('arena.auto');
+    expect(bad({ arena: { speed: 1 } })).toBe('arena.speed');
+    expect(bad({ lobby: {} })).toBe('lobby');
+    expect(applyMapSettings(base, { lobby: {}, arena: { speed: 1, perPlayer: 1000 } }, { strict: false }).arena.perPlayer).toBe(1000);
+  });
+
+  it('takes the maps over from an old bots.json once; its bot settings are ignored', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'elymum-maps-'));
+    mkdirSync(join(dir, 'site'), { recursive: true });
+    writeFileSync(
+      join(dir, 'site', 'bots.json'),
+      JSON.stringify({ kinds: { arena: { cap: 9 } }, testnet: { stakedPerArena: 9 }, finalPush: true, maps: { arena: { auto: false, perPlayer: 1100, min: 3000, max: 9000 }, private: { auto: true } } }),
+    );
+    const logs: string[] = [];
+    const store = new MapSettingsStore(dir, (m) => logs.push(m));
+    expect(store.mapScale('arena')).toMatchObject({ auto: false, perPlayer: 1100 });
+    expect(store.mapScale('practiceRookie')).toEqual(MAP_SCALE_DEFAULT);
+    expect(logs.some((m) => /taken over from site\/bots.json/.test(m))).toBe(true);
+    expect(existsSync(join(dir, 'site', 'maps.json'))).toBe(true);
+    expect(JSON.parse(readFileSync(join(dir, 'site', 'maps.json'), 'utf8')).arena.perPlayer).toBe(1100);
+    // the next start reads maps.json (an admin change survives)
+    store.update({ arena: { perPlayer: 1200 } });
+    expect(new MapSettingsStore(dir).mapScale('arena').perPlayer).toBe(1200);
   });
 });

@@ -1,6 +1,5 @@
 import { availableParallelism } from 'node:os';
 import { TICK_MS, arenaMeta, type BlockedArena, type DeathStats, type League, type MapScaleSettings, type RoomInfo, type RoundWindow } from '@elymum/shared';
-import { BotSettingsStore, botKindOf, defaultBotSettings, type BotRoomKind } from '../bots/settings';
 import type { ChainGateway } from '../chain/types';
 import type { ServerConfig } from '../config';
 import type { IntegrityService } from '../integrity/service';
@@ -8,7 +7,8 @@ import type { Leaderboards } from '../leaderboards';
 import type { Conn } from '../net/conn';
 import type { ShopService } from '../shop/service';
 import type { Journal } from '../stake/journal';
-import type { BotManagerOptions } from '../bots/manager';
+import type { PracticeBotsOptions } from '../bots/practice';
+import { MapSettingsStore, mapKindOf, type MapRoomKind } from './map-settings';
 import type { RoomHandle, StakeSeat } from './handle';
 import { Room, type BellSettled, type RoomDeps, type RoomOptions } from './room';
 import { RoundClock } from './round-clock';
@@ -125,8 +125,8 @@ export class RoomManager {
   private readonly lastEnabled = new Map<number, boolean>();
   /** `arenaId:wallet` → the AFK ticket the last bell settled while its player was away. */
   private readonly bellMemo = new Map<string, BellSettled & { at: number }>();
-  /** The admin's bot settings (`/api/admin/bots`), applied live to every room. */
-  readonly botSettings: BotSettingsStore;
+  /** The admin's map settings (`/api/admin/maps`), applied live to every room. */
+  readonly mapSettings: MapSettingsStore;
   private custom: CustomRoomHooks | null = null;
   private lastCustomSweep = 0;
   /** Codes of custom rooms that closed lately → when. */
@@ -136,10 +136,10 @@ export class RoomManager {
     private readonly cfg: ServerConfig,
     deps: ManagerDeps,
     private readonly chain: ChainGateway,
-    botSettings?: BotSettingsStore,
+    mapSettings?: MapSettingsStore,
   ) {
-    this.botSettings = botSettings ?? new BotSettingsStore(null, defaultBotSettings(cfg.bots));
-    this.botSettings.onChange(() => this.applyBotSettings());
+    this.mapSettings = mapSettings ?? new MapSettingsStore(null);
+    this.mapSettings.onChange(() => this.applyMapSettings());
     const round = deps.round ?? cfg.round;
     // one clock for the gateway and every room
     const clock = deps.clock ?? new RoundClock(deps.now, round);
@@ -154,10 +154,7 @@ export class RoomManager {
     };
     this.deps = { ...deps, round, clock, onGameOver: gameOver, onBellSettled: bellSettled };
     // a room on this thread hands its own connection (a `Conn`) to the hooks
-    this.roomDeps = {
-      ...this.deps,
-      houseBank: { draw: async (arenaId, amount) => this.deps.journal.drawHouse(arenaId, amount) },
-      onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: e.player, stats: e.stats }) };
+    this.roomDeps = { ...this.deps, onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: e.player, stats: e.stats }) };
     const workers = cfg.gameWorkers ?? 0;
     this.pool =
       workers > 0
@@ -171,8 +168,6 @@ export class RoomManager {
             clockOffset: () => clock.now() - Date.now(),
             integrity: deps.integrity,
             shop: deps.shop,
-            stakedBots: deps.stakedBots,
-            stakedAskMs: deps.stakedAskMs,
             onGameOver: gameOver,
             onBellSettled: bellSettled,
             onLost: (rooms) => this.onRoomsLost(rooms),
@@ -296,8 +291,7 @@ export class RoomManager {
         league,
         name: `${league === 'rookie' ? 'Rookie' : 'Pro'} Pond #${n}`,
         maxPlayers: this.cfg.practiceCapacity,
-        bots: this.botSettings.options(league === 'rookie' ? 'practiceRookie' : 'practicePro'),
-        map: { scale: this.botSettings.mapScale(league === 'rookie' ? 'practiceRookie' : 'practicePro') },
+        map: { scale: this.mapSettings.mapScale(league === 'rookie' ? 'practiceRookie' : 'practicePro') },
     });
   }
 
@@ -357,8 +351,7 @@ export class RoomManager {
         name: `Private · ${c}`,
         code: c,
         maxPlayers: this.cfg.privateRoomCapacity,
-        bots: this.botSettings.options('private'),
-        map: { scale: this.botSettings.mapScale('private') },
+        map: { scale: this.mapSettings.mapScale('private') },
     });
   }
 
@@ -372,10 +365,10 @@ export class RoomManager {
   }
 
   /**
-   * Opens a custom room `priv-<code>` (its bots are its own: the admin's bot settings never touch it).
+   * Opens a free custom room `priv-<code>` (with the practice bots its creator asked for, if any).
    * Throws when the code is taken.
    */
-  createCustomRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots'> & { bots: BotManagerOptions | null }): RoomHandle {
+  createCustomRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots'> & { bots: PracticeBotsOptions | null }): RoomHandle {
     const id = `priv-${code}`;
     if (this.has(id)) throw new Error(`room ${id} exists`);
     this.closedCodes.delete(code);
@@ -450,7 +443,7 @@ export class RoomManager {
    * listed, never picked by `arenaRoom` (quick play), never closed by the idle cleanup. Throws when
    * the code is taken.
    */
-  createPaidRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots' | 'instance' | 'stake'> & { bots: BotManagerOptions | null; stake: { arenaId: number; buyIn: number } }): RoomHandle {
+  createPaidRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots' | 'instance' | 'stake'> & { stake: { arenaId: number; buyIn: number } }): RoomHandle {
     const id = `priv-${code}`;
     if (this.has(id)) throw new Error(`room ${id} exists`);
     this.closedCodes.delete(code);
@@ -584,17 +577,9 @@ export class RoomManager {
         name: n === 1 ? meta.name : `${meta.name} #${n}`,
         instance: n,
         maxPlayers: this.cfg.arenaInstanceCap,
-        bots: this.botSettings.options('arena'),
-        map: { scale: this.botSettings.mapScale('arena') },
-        stake: { arenaId, buyIn: arena.buyIn, botStake: this.ticketValue(arena.buyIn) },
+        map: { scale: this.mapSettings.mapScale('arena') },
+        stake: { arenaId, buyIn: arena.buyIn },
     });
-  }
-
-  /** What a ticket bought now plays with (the entry fee less the arena's fee on entry): a house bot's bankroll. */
-  private ticketValue(buyIn: number): number {
-    const st = this.deps.chain.status();
-    const bps = st.feeModel === 'profit' ? 0 : Math.max(0, Math.min(10_000, st.feeBps ?? 0));
-    return buyIn - Math.floor((buyIn * bps) / 10_000);
   }
 
   /**
@@ -751,30 +736,27 @@ export class RoomManager {
   }
 
   /* ---------------------------------------------------------------- */
-  /* Bots                                                             */
+  /* Map settings                                                     */
   /* ---------------------------------------------------------------- */
 
-  /** Re-applies the bot and map settings to every room (an admin change, no restart). */
-  applyBotSettings(): void {
+  /** Re-applies the map settings to every room (an admin change, no restart); custom rooms keep their creator's map. */
+  applyMapSettings(): void {
     for (const room of this.handles()) {
-      // custom rooms keep the bots and the map their creator chose
       if (room.opts.custom) continue;
-      const kind = botKindOf(room.opts.mode, room.opts.league);
-      room.setBotOptions(this.botSettings.options(kind));
-      room.setMapScale(this.botSettings.mapScale(kind));
+      room.setMapScale(this.mapSettings.mapScale(mapKindOf(room.opts.mode, room.opts.league)));
     }
   }
 
   /** The curve a custom room whose creator picked "Auto" sizes its map by (the private rooms' curve, always on). */
   customMapScale(): MapScaleSettings {
-    return { ...this.botSettings.mapScale('private'), auto: true };
+    return { ...this.mapSettings.mapScale('private'), auto: true };
   }
 
-  /** Live bot counts per room (for `GET /api/admin/bots`). */
-  botCounts(): { id: string; kind: BotRoomKind; name: string; arenaId?: number; humans: number; bots: number; stakedBots: number; mapSide: number; mapAuto: boolean }[] {
+  /** Every room's people, bots and map now (`GET /api/admin/maps`). */
+  roomCounts(): { id: string; kind: MapRoomKind; name: string; arenaId?: number; humans: number; bots: number; mapSide: number; mapAuto: boolean }[] {
     return [...this.handles()].map((r) => ({
       id: r.id,
-      kind: botKindOf(r.opts.mode, r.opts.league),
+      kind: mapKindOf(r.opts.mode, r.opts.league),
       name: r.opts.name,
       ...(r.opts.stake ? { arenaId: r.opts.stake.arenaId } : {}),
       ...r.botCounts(),

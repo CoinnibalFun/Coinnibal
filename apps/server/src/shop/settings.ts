@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BOOST_KINDS, LEGACY_BOOST_KINDS, OLD_SHOP_PRICES, SHOP_DEFAULTS, SHOP_LIMITS, parseToken, type ShopSettings } from '@elymum/shared';
-import { getAddress, isAddress } from 'viem';
 
 /** A bad admin value: `field` names it (`prices.magnet`, `arenaUsesPerRound`, …). */
 export class ShopSettingsError extends Error {
@@ -33,7 +32,9 @@ function price(x: unknown, field: string): string {
   return x;
 }
 
-const KEYS = ['enabled', 'sink', 'treasury', 'packSize', 'prices', 'kinds', 'holderDiscountPct', 'arenaUsesPerRound', 'holderExtraArenaUses'] as const;
+const KEYS = ['enabled', 'packSize', 'prices', 'kinds', 'holderDiscountPct', 'arenaUsesPerRound', 'holderExtraArenaUses'] as const;
+/** Fields of older files that are read and ignored (the payment split is on chain now: `ElymumArena.pay`). */
+const RETIRED_KEYS = ['sink', 'treasury'] as const;
 
 /**
  * Applies a partial update (`PUT /api/admin/shop`) to `cur`. Every given field is checked; unknown
@@ -43,16 +44,8 @@ export function applyShopSettings(cur: ShopSettings, body: Record<string, unknow
   const strict = opts.strict !== false;
   if (strict) for (const k of Object.keys(body)) if (!(KEYS as readonly string[]).includes(k)) throw new ShopSettingsError(`unknown field ${k}`, k);
   const next: ShopSettings = structuredClone(cur);
+  for (const k of RETIRED_KEYS) delete (next as unknown as Record<string, unknown>)[k];
   if (body.enabled !== undefined) next.enabled = bool(body.enabled, 'enabled');
-  if (body.sink !== undefined) {
-    if (body.sink !== 'burn' && body.sink !== 'treasury') throw new ShopSettingsError('sink must be "burn" or "treasury"', 'sink');
-    next.sink = body.sink;
-  }
-  if (body.treasury !== undefined) {
-    if (body.treasury === null || body.treasury === '') next.treasury = null;
-    else if (typeof body.treasury === 'string' && isAddress(body.treasury, { strict: false })) next.treasury = getAddress(body.treasury);
-    else throw new ShopSettingsError('treasury must be a 0x wallet address (or empty for the owner)', 'treasury');
-  }
   if (body.packSize !== undefined) next.packSize = int(body.packSize, 'packSize', 1, SHOP_LIMITS.packSize);
   if (body.holderDiscountPct !== undefined) next.holderDiscountPct = int(body.holderDiscountPct, 'holderDiscountPct', 0, SHOP_LIMITS.holderDiscountPct);
   if (body.arenaUsesPerRound !== undefined) next.arenaUsesPerRound = int(body.arenaUsesPerRound, 'arenaUsesPerRound', 0, SHOP_LIMITS.arenaUsesPerRound);

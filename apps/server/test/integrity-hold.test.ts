@@ -112,7 +112,7 @@ describe('auto-hold keeps arena money conservation', () => {
     const integrity = new FixedRisk(journal, (w) => Number(w.slice(6)) % 3 !== 0);
     let clock = roundAt(1_791_000_000_000, ROUND.roundMs, ROUND.closeMs).startsAt + 5_000;
     const room = new Room(
-      { id: 'arena-1-1', mode: 'arena', name: 'Arena', maxPlayers: 50, bots: { target: 8, min: 8, max: 8 }, stake: { arenaId: 1, buyIn: FEE }, seed: 99 },
+      { id: 'arena-1-1', mode: 'arena', name: 'Arena', maxPlayers: 50, stake: { arenaId: 1, buyIn: FEE }, seed: 99 },
       { chain: new NullChain(), journal, leaderboards: new Leaderboards(null), log: () => {}, now: () => clock, round: ROUND, integrity },
     );
     const world = room.world;
@@ -194,9 +194,8 @@ describe('auto-hold keeps arena money conservation', () => {
       }
       const pending = journal.pending.reduce((s, p) => s + itemAmount(p), 0);
       const loot = world.loot().reduce((s, l) => s + l.value, 0);
-      // the house bots' purses and the team's reserve (vault share of the cut on winnings, purses taken home) stay in the vault too
-      const lhs = ledger.total() + loot + pending + journal.forfeitedByArena(1) + room.purseTotal() + journal.houseByArena(1);
-      if (lhs !== fees - paid) throw new Error(`tick ${t}: ${ledger.total()} + ${loot} + ${pending} + ${journal.forfeitedByArena(1)} + purses ${room.purseTotal()} + house ${journal.houseByArena(1)} != ${fees} - ${paid}`);
+      const lhs = ledger.total() + loot + pending + journal.forfeitedByArena(1);
+      if (lhs !== fees - paid) throw new Error(`tick ${t}: ${ledger.total()} + ${loot} + ${pending} + ${journal.forfeitedByArena(1)} != ${fees} - ${paid}`);
     }
     expect(held).toBeGreaterThan(0);
     expect(released).toBeGreaterThan(0);

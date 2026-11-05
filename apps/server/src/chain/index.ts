@@ -1,6 +1,7 @@
 import type { ServerConfig } from '../config';
 import type { Journal } from '../stake/journal';
-import type { ContractsView } from './evm';
+import { chainInfo } from '@elymum/shared';
+import { chainOverridesFor, type ContractsView } from './evm';
 import { NullChain, type ChainGateway } from './types';
 
 /**
@@ -45,10 +46,11 @@ export async function createChain(
     );
     return new DevFakeChain(journal, log, undefined, { tokenSet: cfg.devFakeToken });
   }
-  const { rpcUrl, serverKey, chainName } = cfg.chain;
+  const { rpcUrl, serverKey } = cfg.chain;
+  const want = chainInfo(cfg.chain.chainId, chainOverridesFor(cfg, cfg.chain.chainId));
   if (!rpcUrl || !serverKey) {
-    log('chain: off (set EVM_RPC_URL and SERVER_PRIVATE_KEY to enable the arenas and the mint) — practice only');
-    return new NullChain(chainName ?? undefined);
+    log(`chain: off (set EVM_RPC_URL and SERVER_PRIVATE_KEY to enable the arenas and the mint on ${want.name}) — practice only`);
+    return new NullChain(want);
   }
   try {
     const { EvmChain } = await import('./evm');
@@ -59,6 +61,6 @@ export async function createChain(
     });
   } catch (err) {
     log(`chain: failed to initialise (${(err as Error).message}); running without chain`);
-    return new NullChain(chainName ?? undefined);
+    return new NullChain(want);
   }
 }

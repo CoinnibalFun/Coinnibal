@@ -39,7 +39,7 @@ afterAll(async () => {
 async function start(dir: string, chainId: number, extra: Parameters<typeof createApp>[1] = {}) {
   const evm = new FakeEvm();
   evm.chainId = chainId;
-  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, BOT_TARGET: '1', BOT_MIN: '0', BOT_MAX: '1', ADMIN_WALLETS: ADMIN, PUBLIC_URL: 'https://elymum.example' } as NodeJS.ProcessEnv);
+  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: ADMIN, PUBLIC_URL: 'https://elymum.example' } as NodeJS.ProcessEnv);
   const app = await createApp(cfg, {
     chain: new EvmTestChain(evm),
     log: () => {},
@@ -182,7 +182,8 @@ describe('faucet config (GET /api/site/faucet)', () => {
       holderAmount: (2_000_000n * 10n ** 18n).toString(),
       cooldownSecs: 3600,
       holderNft: NFT,
-      hypeFaucetUrl: 'https://elysium.kinetiq.xyz/testnet-faucet',
+      // the chain's own faucet (`ChainStatus.faucetUrl`): this stub chain has none
+      gasFaucetUrl: null,
     });
   });
 
@@ -280,17 +281,13 @@ describe('NFT utilities: emblem skin and laurel flag', () => {
   });
 });
 
-describe('staked bots wiring', () => {
-  const KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d' as const;
-
-  it('on a test chain the app runs the testnet source and the bots admin shows it; on mainnet it does not exist', async () => {
-    const t = await start(mkdtempSync(join(tmpdir(), 'elymum-app-')), 31337, { stakedBotKey: KEY });
-    expect(t.app.stakedBots).not.toBeNull();
-    const bots = (await t.call('GET', '/api/admin/bots', { wallet: ADMIN })).body;
-    expect(bots).toMatchObject({ stakedActive: true, staked: { active: true, chainId: 31337, wallets: 0, playing: 0, problem: null } });
-    expect(t.app.stakedBots!.wanted(1)).toBe(9); // the default: the whole squad (up to 9) on real tickets
-    const m = await start(mkdtempSync(join(tmpdir(), 'elymum-app-')), 4242, { stakedBotKey: KEY });
-    expect(m.app.stakedBots).toBeNull();
-    expect((await m.call('GET', '/api/admin/bots', { wallet: ADMIN })).body).toMatchObject({ testnet: false, stakedActive: false });
+describe('no house bots', () => {
+  it('the app has no staked-bot source and no bots admin; the maps admin replaces it', async () => {
+    const t = await start(mkdtempSync(join(tmpdir(), 'elymum-app-')), 31337);
+    expect((t.app as unknown as Record<string, unknown>).stakedBots).toBeUndefined();
+    expect((await t.call('GET', '/api/admin/bots', { wallet: ADMIN })).status).toBe(404);
+    const maps = (await t.call('GET', '/api/admin/maps', { wallet: ADMIN })).body as { settings: Record<string, unknown>; rooms: unknown[] };
+    expect(Object.keys(maps.settings).sort()).toEqual(['arena', 'practicePro', 'practiceRookie', 'private']);
+    expect(maps.rooms.length).toBeGreaterThan(0);
   });
 });
