@@ -18,12 +18,13 @@ import {
 } from '../src';
 
 describe('adaptive map size curve', () => {
-  it('gives the documented sides for 5 / 12 / 50 / 126 / 144 / 200 / 225 players', () => {
-    expect(MAP_SCALE_DEFAULT).toEqual({ auto: true, perPlayer: 800, min: 9000, max: 12_000 });
-    expect([5, 12, 50, 126, 144, 200, 225, 400].map((n) => mapSideFor(n, MAP_SCALE_DEFAULT))).toEqual([9000, 9000, 9000, 9000, 9600, 11_400, 12_000, 12_000]);
+  it('gives the documented sides for 5 / 12 / 50 / 100 / 144 / 178 / 400 players', () => {
+    expect(MAP_SCALE_DEFAULT).toEqual({ auto: true, perPlayer: 900, min: 9000, max: 12_000 });
+    expect([5, 12, 50, 100, 144, 178, 400].map((n) => mapSideFor(n, MAP_SCALE_DEFAULT))).toEqual([9000, 9000, 9000, 9000, 10_800, 12_000, 12_000]);
     // the former defaults are recognized (saved settings equal to them are upgraded on load)
     expect(isFormerMapScaleDefault({ perPlayer: 1000, min: 10_000, max: 12_000 })).toBe(true);
     expect(isFormerMapScaleDefault({ perPlayer: 900, min: 3000, max: 9000 })).toBe(true);
+    expect(isFormerMapScaleDefault({ perPlayer: 800, min: 9000, max: 12_000 })).toBe(true);
     expect(isFormerMapScaleDefault(MAP_SCALE_DEFAULT)).toBe(false);
     expect(isFormerMapScaleDefault({ perPlayer: 1000, min: 10_000, max: 11_000 })).toBe(false);
     // the old curve, still reachable from the admin page

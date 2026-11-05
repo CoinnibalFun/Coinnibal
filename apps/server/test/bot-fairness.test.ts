@@ -228,7 +228,7 @@ describe('bot strength settings and the upgrade of old saved defaults', () => {
     expect(s.kinds.private.maxChasers).toBe(4);
     expect(s.maps.practiceRookie).toEqual(MAP_SCALE_DEFAULT);
     expect(s.maps.practicePro).toEqual(MAP_SCALE_DEFAULT);
-    expect(MAP_SCALE_DEFAULT).toMatchObject({ perPlayer: 800, min: 9000, max: 12_000 });
+    expect(MAP_SCALE_DEFAULT).toMatchObject({ perPlayer: 900, min: 9000, max: 12_000 });
     // auto off is the admin's choice: kept, with the new curve
     expect(s.maps.arena).toEqual({ ...MAP_SCALE_DEFAULT, auto: false });
     expect(s.maps.private).toEqual({ auto: true, perPlayer: 800, min: 3000, max: 9000 });
