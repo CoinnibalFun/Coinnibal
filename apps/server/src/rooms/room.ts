@@ -760,7 +760,7 @@ export class Room implements RoomHandle {
       const reason: SettleReason = cause === 'left' ? 'kicked' : cause;
       const item = settlementOf(entry, { score, kills: stats.playersEaten, xp: stats.xp ?? 0, reason, now });
       // integrity: finish the ticket's telemetry; with auto-hold on, a high-risk payout is held (same journal write)
-      this.integrity?.settle(this, p.id, item, { reason, payout: fee.net, killer, killerIsBot: !!killer && killer.isBot });
+      this.integrity?.settle(this, p.id, item, { reason, payout: fee.net, killer });
       enqueue.unshift(item);
     }
     // the countries board: this game's mass (and an alive arena game's payout) for the player's flag

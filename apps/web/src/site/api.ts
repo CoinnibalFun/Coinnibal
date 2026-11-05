@@ -377,6 +377,7 @@ export interface IntegrityFilter {
 export interface IntegritySettingsPatch {
   autoHold?: boolean;
   holdScore?: number;
+  autoReleaseHours?: number;
   thresholds?: Partial<IntegrityThresholds>;
   reset?: true;
 }

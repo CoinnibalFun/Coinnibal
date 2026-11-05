@@ -266,8 +266,8 @@ describe('integrity admin API', () => {
     svc.join(room, 9001, { ip: '9.9.9.9', fp: 'cd'.repeat(16) }, { player: a, session: 'sa', sessionId: 1, arenaId: 1, entryFee: 1000 });
     svc.join(room, 9002, { ip: '9.9.9.9', fp: 'cd'.repeat(16) }, { player: b, session: 'sb', sessionId: 2, arenaId: 1, entryFee: 1000 });
     const late = { ...room, now: () => Date.now() + 120_000 };
-    svc.settle(late, 9001, null, { reason: 'round', payout: 1000, killer: null, killerIsBot: false });
-    svc.settle(late, 9002, null, { reason: 'round', payout: 1000, killer: null, killerIsBot: false });
+    svc.settle(late, 9001, null, { reason: 'round', payout: 1000, killer: null });
+    svc.settle(late, 9002, null, { reason: 'round', payout: 1000, killer: null });
 
     const scan = await h.call('POST', '/api/admin/integrity/scan', { wallet: h.admin, body: {} });
     expect(scan.status).toBe(200);
