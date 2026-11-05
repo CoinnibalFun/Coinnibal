@@ -1,3 +1,4 @@
+import { elymumArenaArtifact } from '@elymum/contracts';
 import { elymumArenaAbi, elymumNFTAbi, testTokenAbi } from '@elymum/contracts';
 import { decodeFunctionData, erc20Abi, type Address } from 'viem';
 import { describe, expect, it } from 'vitest';
@@ -9,7 +10,11 @@ import {
   createDefaultArenaCalls,
   defaultArenaParams,
   deployArenaParams,
-  effectiveFeeBps,
+  effectiveFeeRates,
+  isBundledArena,
+  payCall,
+  setBurnModeCall,
+  setPaymentBurnBpsCall,
   getFaucetInfo,
   getTestTokenFaucet,
   joinCall,
@@ -18,7 +23,7 @@ import {
   rescueCall,
   sessionRefundState,
   setArenaHoldersOnlyCall,
-  setFeeBpsCall,
+  setFeeRatesCall,
   setHolderPerksCall,
   setTokenCall,
   settleCall,
@@ -27,7 +32,6 @@ import {
   testTokenMintCall,
   testTokenSetFaucetCall,
   testTokenSetHolderNftCall,
-  testTokenSetMinterCall,
   updateArenaFrom,
 } from '../src/arena';
 import { describeCall, describeCallLine, encodeCall } from '../src/call';
@@ -54,7 +58,7 @@ const P1 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as Address;
 describe('constants mirror the contracts', () => {
   it('public constants exist in the ABI', () => {
     const names = elymumArenaAbi.filter((x) => x.type === 'function').map((x) => (x as { name: string }).name);
-    for (const n of ['BPS', 'MAX_FEE_BPS', 'DEFAULT_FEE_BPS', 'MIN_ARENA_SESSIONS', 'MAX_ARENA_SESSIONS', 'REFUND_DELAY', 'BURN_ADDRESS']) expect(names).toContain(n);
+    for (const n of ['BPS', 'MAX_TOTAL_FEE_BPS', 'DEFAULT_BURN_BPS', 'DEFAULT_VAULT_BPS', 'DEFAULT_PAYMENT_BURN_BPS', 'BURN_MODE_DEAD', 'BURN_MODE_CALL', 'MIN_ARENA_SESSIONS', 'MAX_ARENA_SESSIONS', 'REFUND_DELAY', 'BURN_ADDRESS']) expect(names).toContain(n);
     expect(C.BURN_ADDRESS.toLowerCase()).toBe('0x000000000000000000000000000000000000dead');
   });
 });
@@ -94,8 +98,20 @@ describe('arena calls', () => {
   it('builds owner calls with the contract limits', () => {
     expect(setTokenCall(ARENA, TOKEN.toLowerCase() as Address).args).toEqual([TOKEN]);
     expect(() => setTokenCall(ARENA, '0x0000000000000000000000000000000000000000')).toThrow(RangeError);
-    expect(setFeeBpsCall(ARENA, 1000).args).toEqual([1000]);
-    expect(() => setFeeBpsCall(ARENA, 1001)).toThrow(RangeError);
+    expect(setFeeRatesCall(ARENA, { burnBps: 2000, vaultBps: 500 }).args).toEqual([2000, 500]);
+    expect(() => setFeeRatesCall(ARENA, { burnBps: 2001, vaultBps: 500 })).toThrow(RangeError);
+    expect(() => setFeeRatesCall(ARENA, { burnBps: -1, vaultBps: 0 })).toThrow(RangeError);
+    expect(setBurnModeCall(ARENA, 1).args).toEqual([1]);
+    expect(() => setBurnModeCall(ARENA, 2)).toThrow(RangeError);
+    expect(setPaymentBurnBpsCall(ARENA, 10_000).args).toEqual([10_000]);
+    expect(() => setPaymentBurnBpsCall(ARENA, 10_001)).toThrow(RangeError);
+    const ref = `0x${'ab'.repeat(32)}` as const;
+    expect(payCall(ARENA, 5n, ref)).toMatchObject({ functionName: 'pay', args: [5n, ref] });
+    expect(() => payCall(ARENA, 0n, ref)).toThrow(RangeError);
+    expect(() => payCall(ARENA, 1n, '0x12')).toThrow(TypeError);
+    expect(isBundledArena(elymumArenaArtifact.runtimeCodeHash.toUpperCase())).toBe(true);
+    expect(isBundledArena('0x00')).toBe(false);
+    expect(isBundledArena(null)).toBe(false);
     expect(() => createArenaCall(ARENA, { id: 1, entryFee: 0n, maxSessions: 10 })).toThrow(RangeError);
     expect(() => createArenaCall(ARENA, { id: 1, entryFee: 1n, maxSessions: 1 })).toThrow(RangeError);
     expect(() => createArenaCall(ARENA, { id: 1, entryFee: 1n, maxSessions: 2001 })).toThrow(RangeError);
@@ -177,23 +193,24 @@ describe('holder perks', () => {
   const ZERO = '0x0000000000000000000000000000000000000000';
 
   it('builds the owner calls', () => {
-    const c = setHolderPerksCall(ARENA, NFT.toLowerCase() as Address, 300);
-    expect(c).toMatchObject({ functionName: 'setHolderPerks', args: [NFT, 300] });
-    expect(decodeFunctionData({ abi: elymumArenaAbi, data: encodeCall(c).data }).args).toEqual([NFT, 300]);
-    expect(setHolderPerksCall(ARENA, null, 0).args).toEqual([ZERO, 0]);
-    expect(() => setHolderPerksCall(ARENA, NFT, 1001)).toThrow(RangeError);
-    expect(() => setHolderPerksCall(ARENA, '0x12' as Address, 300)).toThrow(TypeError);
+    const r = { burnBps: 1500, vaultBps: 0 };
+    const c = setHolderPerksCall(ARENA, NFT.toLowerCase() as Address, r);
+    expect(c).toMatchObject({ functionName: 'setHolderPerks', args: [NFT, 1500, 0] });
+    expect(decodeFunctionData({ abi: elymumArenaAbi, data: encodeCall(c).data }).args).toEqual([NFT, 1500, 0]);
+    expect(setHolderPerksCall(ARENA, null, { burnBps: 0, vaultBps: 0 }).args).toEqual([ZERO, 0, 0]);
+    expect(() => setHolderPerksCall(ARENA, NFT, { burnBps: 2000, vaultBps: 501 })).toThrow(RangeError);
+    expect(() => setHolderPerksCall(ARENA, '0x12' as Address, r)).toThrow(TypeError);
     expect(setArenaHoldersOnlyCall(ARENA, 4, true)).toMatchObject({ functionName: 'setArenaHoldersOnly', args: [4, true] });
     expect(() => setArenaHoldersOnlyCall(ARENA, 0, true)).toThrow(RangeError);
-    expect(describeCall(setHolderPerksCall(ARENA, NFT, 300)).signature).toBe('setHolderPerks(address,uint16)');
+    expect(describeCall(setHolderPerksCall(ARENA, NFT, r)).signature).toBe('setHolderPerks(address,uint16,uint16)');
   });
 
-  it('effective fee: min(fee, holder fee) for holders while the perks are on', () => {
-    const on = { feeBps: 500, holderNft: NFT, holderFeeBps: 300 };
-    expect(effectiveFeeBps(on, true)).toBe(300);
-    expect(effectiveFeeBps(on, false)).toBe(500);
-    expect(effectiveFeeBps({ ...on, holderFeeBps: 800 }, true)).toBe(500);
-    expect(effectiveFeeBps({ ...on, holderNft: null }, true)).toBe(500);
+  it('effective rates: the holder pair for holders while the perks are on and it is lower', () => {
+    const on = { burnBps: 1500, vaultBps: 500, holderNft: NFT, holderBurnBps: 1500, holderVaultBps: 0 };
+    expect(effectiveFeeRates(on, true)).toEqual({ burnBps: 1500, vaultBps: 0 });
+    expect(effectiveFeeRates(on, false)).toEqual({ burnBps: 1500, vaultBps: 500 });
+    expect(effectiveFeeRates({ ...on, holderVaultBps: 600 }, true)).toEqual({ burnBps: 1500, vaultBps: 500 });
+    expect(effectiveFeeRates({ ...on, holderNft: null }, true)).toEqual({ burnBps: 1500, vaultBps: 500 });
   });
 
   /** A full read client: the arena (holders-only or not), its config with the perks, the holder check. */
@@ -203,7 +220,12 @@ describe('holder perks', () => {
         case 'getArena':
           return { id: 4, entryFee: 1000n, vault: 0n, owed: 0n, maxSessions: 10, openSessions: 0, enabled: true, exists: true, totalDeposited: 0n, totalPaidOut: 0n, totalBurned: 0n, lastSweepId: 0n, holdersOnly: o.holdersOnly ?? false };
         case 'config':
-          return { admin: P1, pendingAdmin: ZERO, serverAuthority: P1, feeWallet: P1, token: TOKEN, decimals: 18, feeBps: 500, paused: false, totalSessions: 0n, totalGames: 0n, totalStaked: 0n, totalPaidOut: 0n, totalFees: 0n, totalBurned: 0n, holderNft: NFT, holderFeeBps: 300 };
+          return {
+            admin: P1, pendingAdmin: ZERO, serverAuthority: P1, feeWallet: P1, token: TOKEN, decimals: 18, burnBps: 1500, vaultBps: 500,
+            holderBurnBps: 1500, holderVaultBps: 0, holderNft: NFT, burnMode: 0, paused: false, totalSessions: 0n, totalGames: 0n,
+            totalStaked: 0n, totalPaidOut: 0n, totalFeeBurned: 0n, totalFeeToVault: 0n, totalLootBurned: 0n, paymentBurnBps: 5000,
+            totalPayments: 0n, totalPaymentBurned: 0n,
+          };
         case 'isHolder':
           return o.holder;
         case 'allowance':
@@ -218,24 +240,23 @@ describe('holder perks', () => {
 
   it('planJoin reports the holder discount', async () => {
     const h = await planJoin(chain({ holder: true }) as never, { arena: ARENA, arenaId: 4, player: P1 });
-    expect(h).toMatchObject({ feeBps: 300, standardFeeBps: 500, holder: true, holderDiscount: true, holdersOnly: false });
+    expect(h).toMatchObject({ rates: { burnBps: 1500, vaultBps: 0 }, standardRates: { burnBps: 1500, vaultBps: 500 }, holder: true, holderDiscount: true, holdersOnly: false });
     const n = await planJoin(chain({ holder: false }) as never, { arena: ARENA, arenaId: 4, player: P1 });
-    expect(n).toMatchObject({ feeBps: 500, standardFeeBps: 500, holder: false, holderDiscount: false });
+    expect(n).toMatchObject({ rates: { burnBps: 1500, vaultBps: 500 }, standardRates: { burnBps: 1500, vaultBps: 500 }, holder: false, holderDiscount: false });
     expect(n.approve!.address).toBe(TOKEN);
   });
 
   it('planJoin refuses a holders-only arena early for a wallet without an emblem', async () => {
     await expect(planJoin(chain({ holder: false, holdersOnly: true, balance: 0n }) as never, { arena: ARENA, arenaId: 4, player: P1 })).rejects.toThrow(/holders only/);
     const ok = await planJoin(chain({ holder: true, holdersOnly: true }) as never, { arena: ARENA, arenaId: 4, player: P1 });
-    expect(ok).toMatchObject({ holdersOnly: true, feeBps: 300 });
+    expect(ok).toMatchObject({ holdersOnly: true, rates: { burnBps: 1500, vaultBps: 0 } });
   });
 });
 
 describe('TestToken calls', () => {
-  it('builds owner and minter calls', () => {
-    const m = testTokenSetMinterCall(TOKEN, P1.toLowerCase() as Address, true);
-    expect(m).toMatchObject({ abi: testTokenAbi, functionName: 'setMinter', args: [P1, true] });
-    expect(() => testTokenSetMinterCall(TOKEN, '0x0000000000000000000000000000000000000000', true)).toThrow(RangeError);
+  it('builds owner calls (the minter role is gone)', () => {
+    expect(testTokenAbi.some((x) => x.type === 'function' && (x.name as string) === 'setMinter')).toBe(false);
+    expect(testTokenAbi.some((x) => x.type === 'function' && x.name === 'burn')).toBe(true);
     expect(testTokenSetHolderNftCall(TOKEN, NFT).args).toEqual([NFT]);
     expect(testTokenSetHolderNftCall(TOKEN, null).args).toEqual(['0x0000000000000000000000000000000000000000']);
     const f = testTokenSetFaucetCall(TOKEN, { amount: 1n, holderAmount: 2n, cooldownSecs: 3600 });
@@ -309,12 +330,15 @@ describe('nft calls', () => {
 
 describe('describeCall', () => {
   it('names arguments from the ABI', () => {
-    const d = describeCall(setFeeBpsCall(ARENA, 300));
-    expect(d.signature).toBe('setFeeBps(uint16)');
-    expect(d.args).toEqual([{ name: 'bps', type: 'uint16', value: '300' }]);
+    const d = describeCall(setFeeRatesCall(ARENA, { burnBps: 1500, vaultBps: 500 }));
+    expect(d.signature).toBe('setFeeRates(uint16,uint16)');
+    expect(d.args).toEqual([
+      { name: 'burnBps', type: 'uint16', value: '1500' },
+      { name: 'vaultBps', type: 'uint16', value: '500' },
+    ]);
     expect(d.valueText).toBeNull();
     const m = describeCall(mintPublicCall(NFT, { qty: 1, price: 10n ** 16n, bufferBps: 0 }));
-    expect(m.valueText).toBe('0.01 HYPE');
+    expect(m.valueText).toBe('0.01 ETH');
     expect(describeCallLine(createArenaCall(ARENA, { id: 1, entryFee: 5n, maxSessions: 10 }))).toBe(`createArena(id=1, entryFee=5, maxSessions=10) → ${ARENA}`);
   });
 });
