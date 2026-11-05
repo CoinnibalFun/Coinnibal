@@ -74,16 +74,8 @@ export type MintPhaseName = (typeof MINT_PHASE_NAMES)[number];
 export const MAX_ROYALTY_BPS = 1_000;
 /** Default overpayment on a mint (1 %): the contract refunds the excess, so a price change in between cannot fail the mint. */
 export const DEFAULT_MINT_BUFFER_BPS = 100;
-/** Mint target in US cents ($1). */
-export const DEFAULT_MINT_USD_CENTS = 100;
 /** Hyperliquid's public info API (POST `{"type":"allMids"}`): ETH's USD price (the $1 NFT mint). */
 export const GAS_PRICE_URL_DEFAULT = 'https://api.hyperliquid.xyz/info';
-
-/** TestToken faucet defaults (owner-settable with `setFaucet`): 1,000,000 tokens (18 decimals) per call, once per hour. */
-export const TEST_TOKEN_FAUCET_AMOUNT = 1_000_000n * 10n ** 18n;
-/** TestToken faucet default for holders of the holder NFT: 2,000,000 tokens. */
-export const TEST_TOKEN_HOLDER_FAUCET_AMOUNT = 2_000_000n * 10n ** 18n;
-export const TEST_TOKEN_FAUCET_COOLDOWN_SECS = 3_600;
 
 /**
  * Holder rates the admin panel suggests for `setHolderPerks` (the contract starts with the perks off): an emblem

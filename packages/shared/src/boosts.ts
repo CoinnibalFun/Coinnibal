@@ -91,9 +91,6 @@ export function leapDistance(r: number): number {
   return Math.min(L.max, L.base + Math.max(0, r) * L.perRadius);
 }
 
-/** The speed burst multiplier (the map pump's). */
-export const BOOST_SPEED_MUL = RULES.pumpSpeedMul;
-
 /** Where burned tokens go when the arena's burn mode is `0` (and the fallback of mode `1`). */
 export const BURN_ADDRESS = '0x000000000000000000000000000000000000dEaD';
 

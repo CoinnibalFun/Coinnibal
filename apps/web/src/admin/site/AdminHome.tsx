@@ -16,7 +16,6 @@ import { TasksTab } from './TasksTab';
 import { WlTab } from './WlTab';
 import './admin-site.css';
 
-export type AdminTab = AdminGroup;
 const TABS: TabItem<AdminGroup>[] = ADMIN_GROUPS.map((id) => ({ id, label: GROUP_LABEL[id] }));
 const IDS = TABS.map((t) => t.id);
 const COMMUNITY_ITEMS: TabItem<CommunityTab>[] = [
