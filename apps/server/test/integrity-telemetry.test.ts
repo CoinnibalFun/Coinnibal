@@ -34,7 +34,7 @@ describe('integrity telemetry', () => {
     }
     mon.onInput(room.id, p, { op: ClientOp.Split });
     mon.onInput(room.id, p, { op: ClientOp.Target, x: 900, y: 900 });
-    mon.onEnd(room, p.id, { reason: 'round', payout: 100, killer: null, killerIsBot: false });
+    mon.onEnd(room, p.id, { reason: 'round', payout: 100, killer: null });
     const s = done[0];
     expect(s.input.aims).toBe(11);
     expect(s.input.intAims).toBe(1);
@@ -56,7 +56,7 @@ describe('integrity telemetry', () => {
     mon.sample(room.id, world.players.values(), clock.wall);
     clock.mono += 230;
     mon.onInput(room.id, me, { op: ClientOp.Target, x: 600, y: 1000 }); // turns west
-    mon.onEnd(room, me.id, { reason: 'round', payout: 100, killer: null, killerIsBot: false });
+    mon.onEnd(room, me.id, { reason: 'round', payout: 100, killer: null });
     expect(done[0].input.reactionMs).toEqual([230]);
     void big;
   });
@@ -75,10 +75,10 @@ describe('integrity telemetry', () => {
     mon.onEjectEaten(room.id, small.id, whale.id);
     mon.onEjectEaten(room.id, small.id, 9999); // a bot or anyone untracked
     mon.onTransfer(room, small.id, whale.id, 100, 1, true);
-    mon.onEnd(room, small.id, { reason: 'death', payout: 0, killer: whale, killerIsBot: false });
-    mon.onEnd(room, whale.id, { reason: 'round', payout: 200, killer: null, killerIsBot: false });
+    mon.onEnd(room, small.id, { reason: 'death', payout: 0, killer: whale });
+    mon.onEnd(room, whale.id, { reason: 'round', payout: 200, killer: null });
     const [s, w] = done;
-    expect(s.death).toMatchObject({ by: 'whale', byBot: false, samples: 8 });
+    expect(s.death).toMatchObject({ by: 'whale', samples: 8 });
     expect(s.death!.approach).toBe(1);
     expect(s.ejects).toEqual({ eatenBy: { whale: 2 }, eatenOther: 1 });
     expect(transfers).toHaveLength(1);

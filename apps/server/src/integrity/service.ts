@@ -187,6 +187,7 @@ export class IntegrityService {
       try {
         this.trim();
         this.scan();
+        this.autoRelease();
       } catch (err) {
         this.log(`integrity: scan failed (${(err as Error).stack ?? err})`);
       }
@@ -243,7 +244,7 @@ export class IntegrityService {
    * wallet's risk score is at or above `holdScore` (`item.held`, written by the caller in the same
    * journal write that queues the settlement). Never throws: integrity must not break a settlement.
    */
-  settle(room: MonitorRoom, pid: number, item: SettlementItem | null, end: { reason: string; payout: number; killer: Player | null; killerIsBot: boolean }): void {
+  settle(room: MonitorRoom, pid: number, item: SettlementItem | null, end: { reason: string; payout: number; killer: Player | null }): void {
     try {
       const s = this.monitor.onEnd(room, pid, end);
       if (!s || !item) return;
@@ -417,6 +418,26 @@ export class IntegrityService {
     }));
   }
 
+  /**
+   * Auto-held payouts nobody decided on within `autoReleaseHours` are paid as settled (the player would otherwise
+   * be able to refund the ticket at its entry fee after 24 h and lose the winnings to a false positive). Holds of the
+   * payout guard and holds by hand wait for a person. Returns the keys released.
+   */
+  autoRelease(now = this.now()): string[] {
+    const hours = this.state.settings.autoReleaseHours;
+    if (!(hours > 0)) return [];
+    const out: string[] = [];
+    for (const item of this.opts.journal.held()) {
+      const h = item.held!;
+      if (h.flags.includes('payout_guard') || h.flags.includes('admin_hold') || now - h.at < hours * 3_600_000) continue;
+      this.opts.journal.release(item.key, now);
+      out.push(item.key);
+      this.log(`integrity: held settlement ${item.key} AUTO-RELEASED after ${hours} h without a decision (risk ${h.score}: ${h.why})`);
+    }
+    if (out.length > 0) this.opts.kick();
+    return out;
+  }
+
   /** Pays a held settlement as it was. */
   release(key: string, by: string): void {
     try {
@@ -519,7 +540,4 @@ export class IntegrityService {
     }
     return csv(rows);
   }
-
-  /** Kinds, for validating a filter. */
-  static readonly kinds: readonly IntegrityFlagKind[] = ['pair_transfer', 'eject_feed', 'suicide_feed', 'shared_device', 'bot_input', 'bell_abuse'];
 }

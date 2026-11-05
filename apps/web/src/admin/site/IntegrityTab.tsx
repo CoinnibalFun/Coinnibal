@@ -25,6 +25,7 @@ const KIND_LABEL: Record<IntegrityFlagKind, string> = {
   shared_device: 'Shared IP or browser',
   bot_input: 'Bot-like input',
   bell_abuse: 'Round-bell pattern',
+  input_twin: 'Input twins (one script, two wallets)',
 };
 
 const STATUS_TONE: Record<IntegrityFlagStatus, 'sun' | 'up' | 'ink'> = { open: 'sun', reviewed: 'up', dismissed: 'ink' };
@@ -53,6 +54,9 @@ const THRESHOLD_LABEL: Record<keyof IntegrityThresholds, string> = {
   bellMinSessions: 'Bell: suspicious tickets',
   bellLateJoinMs: 'Bell: late join window (ms)',
   bellMinAfkShare: 'Bell: idle share',
+  twinMinInputs: 'Twins: inputs per wallet',
+  twinMaxJsd: 'Twins: max divergence (bits)',
+  twinMinRounds: 'Twins: rounds together',
 };
 
 const HOUR = 3_600_000;
@@ -487,6 +491,17 @@ function SettingsCard({ api, overview, onSaved }: { api: IntegrityApi; overview:
         <span className="mono ad-cap">Hold score (50 to 100)</span>
         <input className="st-input" type="number" min={50} max={100} value={draft.holdScore} onChange={(e) => setDraft({ ...draft, holdScore: Number(e.target.value) })} />
       </label>
+      <label className="ad-int__field ad-int__narrow">
+        <span className="mono ad-cap">Pay undecided holds after (hours, 0 to 23; 0: never)</span>
+        <input
+          className="st-input"
+          type="number"
+          min={0}
+          max={23}
+          value={draft.autoReleaseHours}
+          onChange={(e) => setDraft({ ...draft, autoReleaseHours: Number(e.target.value) })}
+        />
+      </label>
       <details className="ad-more ad-int__details">
         <summary>Thresholds ({keys.length})</summary>
         <div className="ad-int__grid">
@@ -515,7 +530,7 @@ function SettingsCard({ api, overview, onSaved }: { api: IntegrityApi; overview:
           variant="pink"
           onClick={() => {
             if (draft.autoHold && !overview.settings.autoHold && !window.confirm('Turn auto-hold on? Risky payouts will wait for your decision in this tab.')) return;
-            void save({ autoHold: draft.autoHold, holdScore: draft.holdScore, thresholds: draft.thresholds }, 'Settings saved.');
+            void save({ autoHold: draft.autoHold, holdScore: draft.holdScore, autoReleaseHours: draft.autoReleaseHours, thresholds: draft.thresholds }, 'Settings saved.');
           }}
           disabled={busy || !dirty}
         >

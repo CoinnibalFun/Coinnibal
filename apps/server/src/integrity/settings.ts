@@ -17,7 +17,8 @@ export function sanitizeSettings(raw: unknown): IntegritySettings {
     if (typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi) th[k] = v;
   }
   const hold = typeof r.holdScore === 'number' && Number.isFinite(r.holdScore) && r.holdScore >= 50 && r.holdScore <= 100 ? r.holdScore : INTEGRITY_SETTINGS_DEFAULT.holdScore;
-  return { autoHold: r.autoHold === true, holdScore: hold, thresholds: th };
+  const rel = typeof r.autoReleaseHours === 'number' && Number.isInteger(r.autoReleaseHours) && r.autoReleaseHours >= 0 && r.autoReleaseHours <= 23 ? r.autoReleaseHours : INTEGRITY_SETTINGS_DEFAULT.autoReleaseHours;
+  return { autoHold: r.autoHold === true, holdScore: hold, autoReleaseHours: rel, thresholds: th };
 }
 
 export class SettingsError extends Error {
@@ -37,7 +38,12 @@ export function applySettingsPatch(cur: IntegritySettings, body: Record<string, 
   if (body.reset === true) return structuredClone(INTEGRITY_SETTINGS_DEFAULT);
   const next: IntegritySettings = { ...cur, thresholds: { ...cur.thresholds } };
   for (const key of Object.keys(body)) {
-    if (key !== 'autoHold' && key !== 'holdScore' && key !== 'thresholds') throw new SettingsError(`Unknown setting ${key}`, key);
+    if (key !== 'autoHold' && key !== 'holdScore' && key !== 'autoReleaseHours' && key !== 'thresholds') throw new SettingsError(`Unknown setting ${key}`, key);
+  }
+  if (body.autoReleaseHours !== undefined) {
+    const v = body.autoReleaseHours;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 23) throw new SettingsError('autoReleaseHours must be a whole number from 0 to 23', 'autoReleaseHours');
+    next.autoReleaseHours = v;
   }
   if (body.autoHold !== undefined) {
     if (typeof body.autoHold !== 'boolean') throw new SettingsError('autoHold must be true or false', 'autoHold');
