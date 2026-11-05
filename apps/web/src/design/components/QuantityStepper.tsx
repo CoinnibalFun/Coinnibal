@@ -6,6 +6,8 @@ export interface QuantityStepperProps extends Omit<HTMLAttributes<HTMLDivElement
   onChange: (value: number) => void;
   min?: number;
   max: number;
+  /** Change per press (default 1). */
+  step?: number;
   /** Accessible name, e.g. "How many emblems". */
   label: string;
   /** Labels for − / + (translated). */
@@ -20,14 +22,14 @@ export interface QuantityStepperProps extends Omit<HTMLAttributes<HTMLDivElement
  * figure in Geist Mono. The figure is a spinbutton (Up/Down/Home/End work on
  * it); the buttons are the 44 px touch targets.
  */
-export function QuantityStepper({ value, onChange, min = 1, max, label, lessLabel = t('ui.oneFewer'), moreLabel = t('mn.qtyMore'), disabled = false, size = 'md', className, ...rest }: QuantityStepperProps) {
+export function QuantityStepper({ value, onChange, min = 1, max, step = 1, label, lessLabel = t('ui.oneFewer'), moreLabel = t('mn.qtyMore'), disabled = false, size = 'md', className, ...rest }: QuantityStepperProps) {
   const set = (v: number) => {
     const n = Math.min(max, Math.max(min, v));
     if (n !== value) onChange(n);
   };
   return (
     <div {...rest} className={`kb-qty kb-qty--${size}${disabled ? ' is-disabled' : ''}${className ? ` ${className}` : ''}`} role="group" aria-label={label}>
-      <button type="button" className="kb-qty__btn" onClick={() => set(value - 1)} disabled={disabled || value <= min} aria-label={lessLabel}>
+      <button type="button" className="kb-qty__btn" onClick={() => set(value - step)} disabled={disabled || value <= min} aria-label={lessLabel}>
         −
       </button>
       <span
@@ -42,8 +44,8 @@ export function QuantityStepper({ value, onChange, min = 1, max, label, lessLabe
         onKeyDown={(e) => {
           if (disabled) return;
           let next: number | null = null;
-          if (e.key === 'ArrowUp' || e.key === 'ArrowRight') next = value + 1;
-          else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') next = value - 1;
+          if (e.key === 'ArrowUp' || e.key === 'ArrowRight') next = value + step;
+          else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') next = value - step;
           else if (e.key === 'Home') next = min;
           else if (e.key === 'End') next = max;
           if (next === null) return;
@@ -53,7 +55,7 @@ export function QuantityStepper({ value, onChange, min = 1, max, label, lessLabe
       >
         {value}
       </span>
-      <button type="button" className="kb-qty__btn" onClick={() => set(value + 1)} disabled={disabled || value >= max} aria-label={moreLabel}>
+      <button type="button" className="kb-qty__btn" onClick={() => set(value + step)} disabled={disabled || value >= max} aria-label={moreLabel}>
         +
       </button>
     </div>
