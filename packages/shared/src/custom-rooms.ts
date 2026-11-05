@@ -14,8 +14,18 @@
  * `RoomInfo.custom` carries the rules and the end time either way.
  */
 
+/** Quick picks of the creator sheet; any whole multiple of `step` in `min..max` minutes is valid. */
 export const CUSTOM_DURATIONS_MIN = [15, 30, 60] as const;
-export type CustomDuration = (typeof CUSTOM_DURATIONS_MIN)[number];
+/** The creator sets the room's length: 5 to 180 minutes, in steps of 5. */
+export const CUSTOM_DURATION_LIMITS = { min: 5, max: 180, step: 5 } as const;
+/** Minutes a room stays open (a multiple of 5 from 5 to 180). */
+export type CustomDuration = number;
+
+/** Whether `n` is a room length the creator may pick. */
+export function isCustomDuration(n: unknown): n is CustomDuration {
+  const L = CUSTOM_DURATION_LIMITS;
+  return typeof n === 'number' && Number.isInteger(n) && n >= L.min && n <= L.max && n % L.step === 0;
+}
 
 /** Map sizes, smallest first (S / M / L keep the sizes rooms were made with before XS and XL). */
 export const CUSTOM_MAP_SIZES = ['XS', 'S', 'M', 'L', 'XL'] as const;
@@ -224,8 +234,8 @@ export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
   maxLive: 6,
   maxPerWallet: 2,
   capacityStepPct: 50,
-  maxPlayers: 50,
-  maxSeats: 200,
+  maxPlayers: 100,
+  maxSeats: 300,
   paidRooms: true,
 };
 
@@ -310,7 +320,7 @@ export function validateCustomConfig(x: unknown): { ok: true; config: CustomRoom
   }
   const pick = <T extends string | number>(v: unknown, list: readonly T[], field: string): T | { field: string } =>
     (list as readonly unknown[]).includes(v) ? (v as T) : { field };
-  const durationMin = pick(o.durationMin, CUSTOM_DURATIONS_MIN, 'durationMin');
+  const durationMin = isCustomDuration(o.durationMin) ? o.durationMin : { field: 'durationMin' };
   const mapSize = pick(o.mapSize, CUSTOM_MAP_CHOICES, 'mapSize');
   const difficulty = pick(o.difficulty, CUSTOM_DIFFICULTIES, 'difficulty');
   const food = o.food === undefined ? CUSTOM_DEFAULTS.food : pick(o.food, CUSTOM_FOOD, 'food');
