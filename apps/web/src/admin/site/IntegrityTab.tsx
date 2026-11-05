@@ -270,6 +270,58 @@ function FlagSheet({
 /* Held settlements                                                    */
 /* ------------------------------------------------------------------ */
 
+/** The settlements waiting to be sent, each with a Hold button (shown while an arena's payouts are stopped). */
+function PendingList({ api, money, onChanged }: { api: IntegrityApi; money: (n: number) => string; onChanged: () => void }) {
+  const [items, setItems] = useState<IntegrityHeld[] | null>(null);
+  const [flashNode, flash] = useFlash();
+  useEffect(() => void api.pending().then(setItems, (e) => flash('err', errText(e))), [api, flash]);
+  const hold = async (h: IntegrityHeld) => {
+    const reason = window.prompt(`Hold ${money(h.payout)} for ${h.player}? Reason:`);
+    if (!reason) return;
+    try {
+      await api.hold(h.key, reason);
+      setItems(await api.pending());
+      onChanged();
+    } catch (e) {
+      flash('err', errText(e));
+    }
+  };
+  if (!items) return <StampSpinner label="Loading" />;
+  return (
+    <div className="ad-tablewrap">
+      {flashNode}
+      <table className="ad-table">
+        <thead>
+          <tr>
+            <th scope="col">Wallet</th>
+            <th scope="col">Arena</th>
+            <th scope="col">Payout</th>
+            <th scope="col">Last error</th>
+            <th scope="col">
+              <span className="kb-sr">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((h) => (
+            <tr key={h.key}>
+              <td className="mono">{shortW(h.player)}</td>
+              <td className="num">#{h.arenaId ?? '?'}</td>
+              <td className="num">{money(h.payout)}</td>
+              <td>{h.why}</td>
+              <td>
+                <InkButton variant="paper" size="sm" onClick={() => void hold(h)}>
+                  Hold
+                </InkButton>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function HeldCard({ api, held, money, onChanged }: { api: IntegrityApi; held: IntegrityHeld[]; money: (n: number) => string; onChanged: () => void }) {
   const [zero, setZero] = useState<IntegrityHeld | null>(null);
   const [reason, setReason] = useState('');
@@ -607,6 +659,26 @@ export function IntegrityTab({ api: adminApi }: TabProps) {
         </p>
         {flashNode}
       </section>
+
+      {overview.books.length > 0 && (
+        <section className="ad-card" role="alert" aria-labelledby="ad-int-books-h">
+          <h2 className="ad-card__title" id="ad-int-books-h">
+            Payouts stopped
+          </h2>
+          <p className="ad-note">
+            The server stopped paying out of these arenas because the vault does not cover what the journal owes. Nothing leaves such a vault until the books add up again (the
+            stakes stay there; players can refund after 24 h). Look at the pending settlements of the arena, hold the wrong one and settle it at 0, or fix the vault.
+          </p>
+          <ul>
+            {overview.books.map((b) => (
+              <li key={b.arenaId} className="mono">
+                Arena #{b.arenaId}: {b.why}
+              </li>
+            ))}
+          </ul>
+          <PendingList api={api} money={money} onChanged={() => void loadOverview()} />
+        </section>
+      )}
 
       <HeldCard api={api} held={overview.held} money={money} onChanged={() => void loadOverview()} />
 

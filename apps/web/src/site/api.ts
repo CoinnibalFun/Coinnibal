@@ -398,6 +398,8 @@ function integrityApi(token: string) {
     release: (key: string) => request<{ ok: true; held: IntegrityHeld[] }>(`${base}/held/${id(key)}/release`, { method: 'POST', token, body: {} }).then((r) => r.held),
     settleZero: (key: string, reason: string) =>
       request<{ ok: true; forfeited: number; held: IntegrityHeld[] }>(`${base}/held/${id(key)}/settle-zero`, { method: 'POST', token, body: { reason } }),
+    pending: () => request<{ pending: IntegrityHeld[] }>(`${base}/pending`, { token }).then((r) => r.pending),
+    hold: (key: string, reason: string) => request<{ ok: true; held: IntegrityHeld[] }>(`${base}/pending/${id(key)}/hold`, { method: 'POST', token, body: { reason } }).then((r) => r.held),
     saveSettings: (patch: IntegritySettingsPatch) => request<{ settings: IntegritySettings }>(`${base}/settings`, { method: 'PUT', token, body: patch }).then((r) => r.settings),
   };
 }
