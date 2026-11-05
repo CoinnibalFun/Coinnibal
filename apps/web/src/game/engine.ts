@@ -294,6 +294,7 @@ export class GameEngine {
       screen: 'lobby',
       death: null,
       roundResult: null,
+      roomResult: null,
       chatOpen: false,
       powerups: [],
       boosts: null,
@@ -578,6 +579,9 @@ export class GameEngine {
           me: { pid: m.playerId, name: m.name, skin: m.skin },
           death: null,
           roundResult: null,
+          roomResult: null,
+          // a countdown belongs to its room (the server repeats it to whoever joins meanwhile)
+          closing: useUi.getState().room?.id === m.room.id ? useUi.getState().closing : null,
           powerups: [],
           boosts: null,
           hud: { ...useUi.getState().hud, value: m.value ?? null },
@@ -601,7 +605,7 @@ export class GameEngine {
         // a fresh view on the server with every `spectating` (same room or not): a fresh mirror here
         this.world.reset();
         this.world.setBounds(m.room.x0 ?? 0, m.room.y0 ?? 0, (m.room.x0 ?? 0) + m.room.width, (m.room.y0 ?? 0) + m.room.height, performance.now(), true);
-        useUi.setState({ room: m.room, spectateTarget: m.targetPid });
+        useUi.setState((s) => ({ room: m.room, spectateTarget: m.targetPid, closing: s.room?.id === m.room.id ? s.closing : null }));
         return;
       }
       case 'left':
@@ -674,6 +678,25 @@ export class GameEngine {
       case 'roundOver':
         this.endGame('round', m.round, m.payout, m.stats, m.standings);
         return;
+      case 'closing':
+        useUi.setState({ closing: { endsAt: m.endsAt, message: m.message } });
+        return;
+      case 'roomOver': {
+        // a free custom room ended: its final board over the frozen world; the button (or the timer) goes to the lobby
+        caller.end();
+        this.world.myPid = null;
+        this.wasArena = null;
+        useUi.setState((s) => ({
+          screen: 'roomover',
+          roomResult: { message: m.message, players: m.players, standings: m.standings, stats: m.stats, room: s.room },
+          closing: null,
+          death: null,
+          powerups: [],
+          boosts: null,
+          chatOpen: false,
+        }));
+        return;
+      }
       case 'value': {
         this.world.applyValue(m, now);
         useUi.setState((s) => ({
@@ -809,6 +832,11 @@ export class GameEngine {
           // a paid room's seat goes with it (a ticket not seated yet plays in the public arena)
           this.heldTicket.refused();
           if (useUi.getState().paidSeat) useUi.setState({ paidSeat: null });
+          useUi.setState({ closing: null });
+          // a results sheet stays up (a room's final board, a bell's receipt before a drained instance closed):
+          // its own buttons go to the lobby
+          const shown = useUi.getState().screen;
+          if (shown === 'roomover' || shown === 'roundover') return;
           if (useUi.getState().screen !== 'lobby') this.backToLobby();
           else this.net.send({ t: 'spectate' });
           // the server's reason (creator / admin / time up) is English: other languages get their own line

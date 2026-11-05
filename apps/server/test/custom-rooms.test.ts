@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CUSTOM_DEFAULTS, PROTOCOL_VERSION, CUSTOM_MAP_WIDTH, CUSTOM_WORLD_CAPS, CUSTOM_PAYMENT_MAX_AGE_MS, type CustomRoomConfig, type ServerMessage } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, PROTOCOL_VERSION, ROOM_CLOSE_COUNTDOWN_MS, TICK_MS, CUSTOM_MAP_WIDTH, CUSTOM_WORLD_CAPS, CUSTOM_PAYMENT_MAX_AGE_MS, type CustomRoomConfig, type ServerMessage } from '@elymum/shared';
 import { parseEther } from 'viem';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
@@ -200,7 +200,7 @@ describe('custom rooms: create, caps, perks', () => {
   });
 
   it('slots that fill up while a payment is checked: the payment is kept unused for a retry', async () => {
-    const { svc, reader } = setup();
+    const { svc, reader, clock } = setup();
     svc.updateSettings({ maxLive: 1 });
     const [a, b] = [testSigner().address, testSigner().address];
     const ha = reader.pay(1, a);
@@ -212,6 +212,9 @@ describe('custom rooms: create, caps, perks', () => {
     const err = await fail(pb);
     expect(err).toMatchObject({ code: 'slots_busy', paid: true });
     svc.close(svc.mine(a)[0].code, { wallet: a, admin: false });
+    // the room ends after its countdown, then the slot is free
+    clock.t += ROOM_CLOSE_COUNTDOWN_MS;
+    svc.sweep();
     expect((await svc.create(b, { config: cfgOf(), txHash: hb })).txHash).toBe(hb);
   });
 
@@ -283,17 +286,71 @@ describe('custom rooms: lifecycle', () => {
     for (let i = 0; i < 200; i++) expect(rooms.newPrivateCode()).not.toBe(view.code);
   });
 
-  it('the creator (or an admin) closes early; nobody else can', async () => {
-    const { svc, rooms, reader } = setup();
+  it('the creator (or an admin) closes early, after the 10 s countdown and the final board; nobody else can', async () => {
+    const { svc, rooms, reader, clock } = setup();
     const [a, b] = [testSigner().address, testSigner().address];
-    const v1 = await svc.create(a, { config: cfgOf(), txHash: reader.pay(1, a) });
+    const v1 = await svc.create(a, { config: cfgOf({ bots: 2 }), txHash: reader.pay(1, a) });
+    const room = rooms.privateRoom(v1.code) as Room;
+    // the practice bots take their places
+    for (let i = 0; i < 30; i++) room.tick(TICK_MS);
+    const player = fakeConn(null);
+    const p = room.join(player, { name: 'Pip', skin: 1, flags: 0 });
+    const watcher = fakeConn(null);
+    room.spectate(watcher);
     expect(() => svc.close(v1.code, { wallet: b, admin: false })).toThrow(/Only the room creator/);
-    svc.close(v1.code, { wallet: a.toLowerCase(), admin: false });
+    const closing = svc.close(v1.code, { wallet: a.toLowerCase(), admin: false });
+    // not abruptly: everyone sees the countdown with the reason; the room still plays
+    expect(closing.endsAt).toBe(clock.t + ROOM_CLOSE_COUNTDOWN_MS);
+    for (const c of [player, watcher]) expect(c.msgs.find((m) => m.t === 'closing')).toEqual({ t: 'closing', endsAt: clock.t + ROOM_CLOSE_COUNTDOWN_MS, message: 'The room creator closed this room.' });
+    expect(rooms.privateRoom(v1.code)).toBe(room);
+    // closing twice does not move the end
+    clock.t += 3000;
+    expect(svc.close(v1.code, { wallet: a, admin: false }).endsAt).toBe(closing.endsAt);
+    // a late joiner gets the countdown too
+    const late = fakeConn(null);
+    room.spectate(late);
+    expect(late.msgs.some((m) => m.t === 'closing')).toBe(true);
+    p.stats.playersEaten = 3;
+    clock.t = closing.endsAt;
+    svc.sweep();
     expect(rooms.privateRoom(v1.code)).toBeNull();
+    // the final board (everyone by mass, the practice bots included), then room_closed
+    const over = player.msgs.find((m) => m.t === 'roomOver') as Extract<ServerMessage, { t: 'roomOver' }>;
+    expect(over).toMatchObject({ message: 'The room creator closed this room.', players: 1 });
+    expect(over.standings).toHaveLength(3);
+    expect(over.standings.filter((s) => s.isBot)).toHaveLength(2);
+    expect(over.standings.map((s) => s.rank)).toEqual([1, 2, 3]);
+    expect(over.standings.find((s) => s.you)).toMatchObject({ name: 'Pip', kills: 3 });
+    expect(over.stats).toMatchObject({ playersEaten: 3 });
+    expect(player.msgs.findIndex((m) => m.t === 'roomOver')).toBeLessThan(player.msgs.findIndex((m) => m.t === 'error' && m.code === 'room_closed'));
+    const seen = watcher.msgs.find((m) => m.t === 'roomOver') as Extract<ServerMessage, { t: 'roomOver' }>;
+    expect(seen.stats).toBeNull();
+    expect(seen.standings.some((s) => s.you)).toBe(false);
     const v2 = await svc.create(a, { config: cfgOf(), txHash: reader.pay(2, a) });
     svc.close(v2.code, { wallet: b, admin: true });
+    clock.t += ROOM_CLOSE_COUNTDOWN_MS;
+    svc.sweep();
     expect(svc.live).toBe(0);
     expect(() => svc.close(v2.code, { wallet: a, admin: false })).toThrow(/No open room/);
+  });
+
+  it('a room whose time runs out shows the countdown 10 s before its end', async () => {
+    const { svc, rooms, reader, clock } = setup();
+    const a = testSigner().address;
+    const v = await svc.create(a, { config: cfgOf({ durationMin: 5 }), txHash: reader.pay(1, a) });
+    const c = fakeConn(null);
+    (rooms.privateRoom(v.code) as Room).join(c, { name: 'Pip', skin: 1, flags: 0 });
+    clock.t = v.endsAt - ROOM_CLOSE_COUNTDOWN_MS - 1000;
+    svc.sweep(clock.t);
+    expect(c.msgs.some((m) => m.t === 'closing')).toBe(false);
+    clock.t += 1000;
+    svc.sweep(clock.t);
+    expect(c.msgs.filter((m) => m.t === 'closing')).toEqual([{ t: 'closing', endsAt: v.endsAt, message: expect.stringMatching(/Time is up/) }]);
+    svc.sweep(clock.t + 500);
+    expect(c.msgs.filter((m) => m.t === 'closing')).toHaveLength(1);
+    clock.t = v.endsAt;
+    svc.sweep(clock.t);
+    expect(c.msgs.find((m) => m.t === 'roomOver')).toMatchObject({ message: expect.stringMatching(/Time is up/), players: 1 });
   });
 
   it('keeps its own leaderboard (best games) and stays off the global one', async () => {
@@ -376,7 +433,7 @@ describe('custom rooms over HTTP and WebSocket', () => {
     app = null;
   });
 
-  async function boot(reader: PaymentReader, admin: string) {
+  async function boot(reader: PaymentReader, admin: string, customNow?: () => number) {
     const dir = mkdtempSync(join(tmpdir(), 'elymum-custom-http-'));
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public' } as NodeJS.ProcessEnv);
     app = await createApp(cfg, {
@@ -384,6 +441,7 @@ describe('custom rooms over HTTP and WebSocket', () => {
       log: () => {},
       persist: true,
       paymentReader: reader,
+      customNow,
       siteLimits: { writeIp: new Limiter(10_000, 60_000), writeWallet: new Limiter(10_000, 60_000), login: new Limiter(10_000, 60_000) },
       apiLimiter: new Limiter(10_000, 60_000),
     });
@@ -410,6 +468,7 @@ describe('custom rooms over HTTP and WebSocket', () => {
         },
       },
       admin,
+      () => clock.t,
     );
     const alice = testSigner().address;
     expect((await call('GET', '/api/rooms/custom/quote')).body).toMatchObject({ enabled: true, priceWei: PRICE.toString(), treasury: admin, chainId: 31337 });
@@ -455,7 +514,11 @@ describe('custom rooms over HTTP and WebSocket', () => {
     expect(list.body.settings).toMatchObject({ priceGas: '0.0005', maxLive: 6, maxPerWallet: 2 });
     expect((await call('PUT', '/api/admin/custom-rooms', { wallet: admin, body: { maxLive: 0 } })).body.settings.maxLive).toBe(0);
     expect((await call('DELETE', `/api/rooms/custom/${code}`, { wallet: bob })).status).toBe(403);
-    expect((await call('DELETE', `/api/admin/custom-rooms/${code}`, { wallet: admin })).body.rooms).toEqual([]);
+    // closing: the countdown first, the room still listed until it ends
+    expect((await call('DELETE', `/api/admin/custom-rooms/${code}`, { wallet: admin })).body.rooms.map((r: { code: string }) => r.code)).toEqual([code]);
+    expect(await waitFor((m) => m.t === 'closing')).toMatchObject({ message: 'An admin closed this room.' });
+    clock.t += ROOM_CLOSE_COUNTDOWN_MS;
+    expect(await waitFor((m) => m.t === 'roomOver')).toMatchObject({ message: 'An admin closed this room.' });
     await waitFor((m) => m.t === 'error' && m.code === 'room_closed');
     msgs.length = 0;
     ws.send(JSON.stringify({ t: 'join', room: `private:${code}`, name: 'Guest', skin: 1 }));

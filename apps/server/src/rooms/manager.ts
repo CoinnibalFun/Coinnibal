@@ -19,7 +19,7 @@ import { RemoteRoom, WorkerPool } from './remote/pool';
 /** What the room manager asks of the custom-room service (`CustomRoomService`). */
 export interface CustomRoomHooks {
   /** Closes rooms whose time ran out (called about once a second from the tick loop). */
-  sweep(now: number): void;
+  sweep(): void;
   /** A human's game ended in a custom room (its own leaderboard). */
   onGame(room: RoomHandle, e: { name: string; score: number; kills: number }): void;
   /** Rooms were lost with a crashed room worker: reopen the custom rooms that still have time. */
@@ -888,7 +888,7 @@ export class RoomManager {
     if (this.custom && now - this.lastCustomSweep >= 1000) {
       this.lastCustomSweep = now;
       try {
-        this.custom.sweep(now);
+        this.custom.sweep();
       } catch (err) {
         this.deps.log(`custom rooms: sweep failed: ${(err as Error).stack ?? err}`);
       }

@@ -75,6 +75,8 @@ export interface RoomHandle extends RoomConnRoom {
   setMapScale(scale: MapScaleSettings): void;
   clearAvatar(wallet: string): number;
   announce(text: string): void;
+  /** A custom room closes at `endsAt` (server clock): the countdown for everyone in it (`closing`). */
+  closingSoon(endsAt: number, message: string): void;
   sendBoosts(conn: Conn): void;
   join(conn: Conn, opts: JoinOptions): unknown;
   /** A remote room answers asynchronously (the worker decides). */

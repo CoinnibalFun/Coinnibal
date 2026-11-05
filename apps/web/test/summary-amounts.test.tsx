@@ -97,8 +97,8 @@ describe('the round-over receipt with whale amounts', () => {
         payout: whale,
         stats: STATS,
         standings: [
-          { name: 'WWWWWWWWWWWWWWWW', value: whale, you: true },
-          { name: 'MMMMMMMMMMMMMMMM', value: whale - 1e15, isBot: true },
+          { rank: 1, name: 'WWWWWWWWWWWWWWWW', value: whale, mass: 99_999, kills: 12, you: true },
+          { rank: 2, name: 'MMMMMMMMMMMMMMMM', value: whale - 1e15, mass: 88_888, kills: 9, isBot: true },
         ],
       },
       lastSettlement: { session: 'SessW', arenaId: 1, txHash: `0x${'5b'.repeat(32)}`, payout: whale, fee: 0, net: whale, at: Date.now() },

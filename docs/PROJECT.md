@@ -130,7 +130,8 @@ On screen:
 
 - Round chip: shows `m:ss`, switches to "Final minute" for the last 60 s and shows a large countdown in the last 10 s.
 - Bell: the world freezes and the Round over receipt appears, with your till, the fee on your profit, the amount paid, your
-  place, the top 5 and a PAID stamp.
+  place, the top 5 (value at the bell, mass and kills; your own row when you are below them) and a PAID stamp. It is the
+  same final board a custom room shows at its end (`FinalBoard`, `RoundStanding` rows).
 - Lobby rows: each arena shows either "Round ends in 3:12" or "Joins closed · next round in 0:42".
 - Death sheet: offers "Buy back in", or "Next round in" while joins are closed.
 - Sound: a soft tick each second in the last 10 s and a bell at the end.
@@ -146,13 +147,21 @@ On screen:
 | Isles of the Blessed | 250,000 `$ELYMUM` |
 
 Ids 1 to 4, created from `/admin` → Setup → Finish setup (or `pnpm admin create-arena --defaults`) once the token is
-set, 300 open tickets each; the Isles are for emblem holders. A new 50-player instance opens on the same vault when the others are full.
+set, 300 open tickets each; the Isles are for emblem holders. Each arena runs as 50-player instances on the same vault:
+another opens when they keep filling up, a quiet one drains (no new seats) and closes after its bell, nobody evicted
+(OPERATIONS.md, "Arena instances").
 
 Custom rooms: a player pays a small ETH fee (default 0.0005 ETH, ECONOMY.md) for a room with their own rules and capacity (2 to 100; the fee
 grows 50 % of the base for every started 10 players above 10). A **free** room has no stakes and may add practice bots. A **ticket
 room** is an invite-only instance of one of the arenas above: its players buy that arena's normal ticket and
 are seated there by the invite code; it plays on the arena's round clock (it ends on a bell) and is settled at
 the bell like any arena. Quick play never lands in one. Details: [ARCHITECTURE.md](ARCHITECTURE.md), "Custom rooms".
+
+A custom room never closes abruptly. Ten seconds before its end (time up, or closed early by its creator or an admin)
+everyone in it, players and spectators, sees a countdown with the reason; then a free room shows its **final standings**
+(everyone by mass, practice bots included, with kills; your own row) and goes back to the lobby on "Lobby" or after
+30 s. A ticket room ends on its bell: the countdown runs into the bell, whose receipt carries the same board with the
+values. A free room closed early ends 10 s later; a ticket room closed early ends at the round's bell.
 
 ## 3. Money
 

@@ -196,9 +196,10 @@ describe('arena rounds (room)', () => {
     expect(over.stats.payout).toBe(400_000);
     expect(over.stats.finalMass).toBeGreaterThan(0);
     expect(over.standings).toEqual([
-      { name: 'Bob', value: 1_350_000 },
-      { name: 'Alice', value: 400_000, you: true },
+      { rank: 1, name: 'Bob', value: 1_350_000, mass: expect.any(Number), kills: 0 },
+      { rank: 2, name: 'Alice', value: 400_000, mass: expect.any(Number), kills: 0, you: true },
     ]);
+    expect(over.standings[1].mass).toBe(Math.floor(over.stats.finalMass));
     expect(of(a, 'cashout')).toEqual([]);
     expect(of(a, 'death')).toEqual([]);
     expect(of(b, 'roundOver')).toEqual([]);

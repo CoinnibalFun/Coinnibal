@@ -16,7 +16,7 @@ import { AUDIO_DEFAULTS } from './audio/mixer';
 import { DEFAULT_TRACK, musicChoice, type MusicChoice } from './audio/tracks';
 import { showChain } from './chainText';
 
-export type Screen = 'lobby' | 'playing' | 'dead' | 'spectating' | 'roundover';
+export type Screen = 'lobby' | 'playing' | 'dead' | 'spectating' | 'roundover' | 'roomover';
 export type Quality = 'high' | 'low';
 export type Theme = 'light' | 'dark';
 
@@ -163,6 +163,10 @@ export interface UiState {
    * the current value).
    */
   roundResult: RoundResult | null;
+  /** A custom room closes at `endsAt` (server clock; `closing`): the countdown everyone in it sees, and why. */
+  closing: { endsAt: number; message: string } | null;
+  /** A free custom room ended (`roomOver`): its final board (everyone by mass), the room it was, my game in it. */
+  roomResult: { message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null; room: RoomInfo | null } | null;
   /**
    * A ticket bought (or resumed) while the round's joins were closed: it is held, and joins by
    * itself when the next round opens (`opensAt`, server clock).
@@ -297,6 +301,8 @@ export const useUi = create<UiState>(() => ({
   banner: null,
   death: null,
   roundResult: null,
+  closing: null,
+  roomResult: null,
   held: null,
   lastSettlement: null,
   spectateTarget: null,

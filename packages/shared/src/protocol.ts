@@ -215,16 +215,32 @@ export interface RoundInfo {
   opensAt?: number;
 }
 
-/** A row of the round-end standings (`roundOver`): stakers by value at the bell. */
+/**
+ * A row of the final standings, the same for every room that ends: an arena's bell (`roundOver`: tickets by value,
+ * then mass) and a custom room's end (`roomOver`: everyone by mass, practice bots included). Up to 10 rows, plus
+ * the receiver's own row when it is below them (its `rank` tells).
+ */
 export interface RoundStanding {
+  /** Place in the room, from 1. */
+  rank: number;
   name: string;
-  /** The row is a server bot (a testnet staked bot; zero-value bots hold no ticket and never stand). */
+  /** A practice bot of a free custom room. */
   isBot?: boolean;
-  /** Value at the bell, raw token units. */
-  value: number;
+  /** Mass at the end (whole units). */
+  mass: number;
+  /** Players eaten this game. */
+  kills: number;
+  /** Arena rooms (official and ticket rooms): value at the bell, raw token units (the payout before the fee on profit). */
+  value?: number;
   /** This row is the receiving player. */
   you?: boolean;
 }
+
+/** Rows of the final standings sent to each player (`RoundStanding`): the top ones, plus the receiver's own. */
+export const FINAL_STANDINGS_ROWS = 10;
+
+/** A custom room shows its end this long before it closes (`closing`, then `roomOver`). */
+export const ROOM_CLOSE_COUNTDOWN_MS = 10_000;
 
 /**
  * An arena the server keeps closed although it is enabled on chain (its vault
@@ -481,6 +497,11 @@ export type ServerMessage =
   // less the fee on its profit, `stats.gross` / `stats.cut`) is being settled (a `settled` message follows).
   // `standings`: top 10 tickets by value.
   | { t: 'roundOver'; round: number; payout: number; stats: DeathStats; standings: RoundStanding[] }
+  // Custom rooms: the room closes at `endsAt` (server clock): a countdown for everyone in it. `paid`: at that bell.
+  | { t: 'closing'; endsAt: number; message: string }
+  // Free custom rooms: the room closed; its final standings (everyone by mass). `stats`: the receiver's game, if it
+  // was playing. A `room_closed` error follows (the sheet stays; its button goes to the lobby).
+  | { t: 'roomOver'; message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null }
   // Arena rooms: the player's in-game value changed.
   | {
       t: 'value';

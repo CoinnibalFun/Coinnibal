@@ -2,18 +2,17 @@ import { activeChain, bpsToPercent, profitFee, totalFeeBps, type FeeRates } from
 import { AnimatePresence, motion, type TargetAndTransition } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon, Receipt, Sheet, Stamp, useReducedMotion, type ReceiptLine } from '../../design';
-import { CoinPortrait } from './CoinPortrait';
+import { FinalBoard } from './FinalBoard';
 import { engine } from '../../game/instance';
 import { roundStartLabel } from '../../game/round';
 import { useChainData } from '../../wallet/chain';
 import { isFakeHash } from '../../wallet/devFake';
 import { arenaRates } from '../../wallet/ticket';
 import { announce, sound } from '../../audio';
-import { BotTag } from './BotTag';
 import { useT } from '../../i18n';
 import { explorerTx } from '../../wallet/links';
 import { requestTicket, useUi } from '../../store';
-import { formatClock, ordinal, roomName, useTokenFormat } from './format';
+import { formatClock, roomName, useTokenFormat } from './format';
 
 /** The receipt waits for the bell to swing in and ring over the frozen world (ms). */
 export const ROUND_SHEET_DELAY_MS = 1500;
@@ -48,7 +47,8 @@ export function settlementFor<T extends { session: string | null }>(settled: T |
  * "Round over", the landing report: the bell rang while my coin was alive, so the till is paid.
  * After a beat (the bell wave over the frozen world) the report flies out of the worth sticker: the
  * till, the fee on its profit and what was paid (an estimate until `settled` arrives, then a PAID
- * stamp and the transaction link), my place and the room's top 5 at the bell. "Next round"
+ * stamp and the transaction link), my place and the room's top 5 at the bell (`FinalBoard`, the same board a custom
+ * room shows at its end: value, mass and kills). "Next round"
  * goes back to the lobby with this arena's ticket ready to buy.
  *
  * The same receipt, without the standings, serves an operator exit (`exit`: an admin kick or
@@ -166,8 +166,6 @@ export function RoundOverSheet() {
   );
 
   const standings = res?.standings ?? [];
-  const mine = standings.findIndex((s) => s.you);
-  const place = mine >= 0 ? ordinal(mine + 1) : standings.length > 0 ? t('gr.placeOut', { n: standings.length }) : '—';
 
   return (
     <Sheet
@@ -215,33 +213,7 @@ export function RoundOverSheet() {
         )}
         <p className="g-roundover__note mono">{exit ? t('gr.exitNote') : t('gr.feeNote', { pct: bpsToPercent(totalFeeBps(rates)), burn: bpsToPercent(rates.burnBps), vault: bpsToPercent(rates.vaultBps) })}</p>
 
-        {!exit && (
-          <section className="g-board" aria-label={t('gr.top')}>
-            <div className="g-board__landing">
-              <CoinPortrait skin={mySkin} size={76} expression="happy" seed={5} className="g-board__coin" />
-              <dl className="g-board__place">
-                <dt className="mono">{t('gr.place')}</dt>
-                <dd>{place}</dd>
-              </dl>
-            </div>
-            <h3 className="g-board__title mono">{t('gr.top')}</h3>
-            <ol className="g-board__list">
-              {standings.slice(0, TOP).map((s, i) => (
-                <li key={`${i}-${s.name}`} className={`g-board__row${s.you ? ' is-me' : ''}`}>
-                  <span className="g-board__rank num">{String(i + 1).padStart(2, '0')}</span>
-                  <span className="g-board__name">
-                    <span className="g-board__nm" title={s.name}>
-                      {s.name}
-                    </span>
-                    {s.isBot && <BotTag />}
-                    {s.you && <span className="g-you mono">{t('gr.you')}</span>}
-                  </span>
-                  <span className="g-board__value num">{tf.fmt(s.value, { compact: true, maxFrac: 1 })}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
+        {!exit && <FinalBoard rows={standings} title={t('gr.top')} skin={mySkin} top={TOP} />}
       </div>
     </Sheet>
   );
