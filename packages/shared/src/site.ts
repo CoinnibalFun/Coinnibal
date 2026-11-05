@@ -197,18 +197,6 @@ export interface CollabAdmin extends Omit<CollabPublic, 'wallets'> {
   wallets: CollabWalletRowAdmin[];
 }
 
-/** `PUT /api/site/collab/:id/wallets` body (a draft; allowed until submit). */
-export interface CollabWalletsRequest {
-  wallets: CollabWalletRow[];
-  raffleUrl?: string | null;
-}
-
-/** `POST /api/site/collab/:id/submit` body. `wallets` omitted: the saved draft is submitted. */
-export interface CollabSubmitRequest {
-  wallets?: CollabWalletRow[];
-  raffleUrl: string;
-}
-
 export interface SiteCounts {
   wl: Record<WlStatus, number> & { total: number };
   collab: Record<CollabStatus, number> & { total: number; closed: number; wallets: number };

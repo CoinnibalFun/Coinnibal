@@ -1,4 +1,4 @@
-import { ClientOp, PlayerFlag, TICK_MS, type ClientInput, type ServerMessage } from '@elymum/shared';
+import { PlayerFlag, TICK_MS, type ClientInput, type ServerMessage } from '@elymum/shared';
 import { IntegrityMonitor } from '../../integrity/telemetry';
 import type { Player } from '../../game/entities';
 import type { LootRecord } from '../../stake/journal';
@@ -544,6 +544,3 @@ export class RoomHost {
     this.meter.stop();
   }
 }
-
-/** Ops a client input can carry (`decodeClientInput`). */
-export const INPUT_OPS = new Set<number>([ClientOp.Target, ClientOp.Split, ClientOp.Eject]);

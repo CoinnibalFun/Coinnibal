@@ -233,16 +233,6 @@ function blushFor(body: string): string {
 }
 
 /**
- * The coin's shadow on the floor: a flat ink ellipse under it (no blur). Draw
- * every coin's shadow before the coins, at the caller's alpha (about 0.45 on night).
- */
-export function drawCoinShadow(ctx: CanvasRenderingContext2D, r: number): void {
-  ctx.beginPath();
-  ctx.ellipse(0, r * 1.06, r * 0.76, r * 0.12, 0, 0, TAU);
-  ctx.fill();
-}
-
-/**
  * Draws a Storybook coin character at the origin with radius r: confident ink
  * outline (~3 screen px), a flat cel fill with one hard shade tone on the
  * lower right, an inner groove and a white highlight, big eyes, a mood mouth
@@ -354,9 +344,6 @@ export function drawRisoCoin(ctx: CanvasRenderingContext2D, look: CoinLook, r: n
   drawFront(ctx, look, r, state, detail, anchor, acc, W, !!picture);
   ctx.restore();
 }
-
-/** Alias with the Storybook name. */
-export const drawCoinCharacter = drawRisoCoin;
 
 /** True when there is no jelly, or its outline stays close enough to the circle for a cached interior. */
 function jellyCalm(jelly: JellyLike | null | undefined, tol: number): boolean {

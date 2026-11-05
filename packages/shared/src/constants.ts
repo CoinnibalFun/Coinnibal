@@ -164,7 +164,6 @@ export const WORLD_PRESETS = {
 /** Maximum human players per room instance. */
 export const CAPACITY = { practice: 40, private: 20, arena: 50 } as const satisfies Record<RoomMode, number>;
 
-export const FOOD_VARIANTS = 8;
 /** Food variants 0..5 are pastel coins (mass 1), 6 is a gem (mass 2), 7 is a golden coin. */
 export const FOOD_GEM = 6;
 export const FOOD_GOLD = 7;
