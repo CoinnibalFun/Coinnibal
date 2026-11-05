@@ -314,12 +314,12 @@ describe('admin groups', () => {
 
   const MAPS: MapAdminView = {
     settings: {
-      practiceRookie: { auto: true, perPlayer: 900, min: 3000, max: 9000 },
-      arena: { auto: true, perPlayer: 900, min: 3000, max: 9000 },
+      practiceRookie: { auto: true, base: 3000, perPlayer: 60, max: 9000 },
+      arena: { auto: true, base: 3000, perPlayer: 60, max: 9000 },
     },
     defaults: {
-      practiceRookie: { auto: true, perPlayer: 900, min: 3000, max: 9000 },
-      arena: { auto: true, perPlayer: 900, min: 3000, max: 9000 },
+      practiceRookie: { auto: true, base: 3000, perPlayer: 60, max: 9000 },
+      arena: { auto: true, base: 3000, perPlayer: 60, max: 9000 },
     },
     rooms: [
       { id: 'r1', kind: 'arena', name: 'Asphodel Meadow', arenaId: 1, humans: 2, bots: 0, mapSide: 3600, mapAuto: true },
@@ -329,13 +329,14 @@ describe('admin groups', () => {
 
   it('sends only the map fields that changed', () => {
     const draft = structuredClone(MAPS.settings);
-    draft.arena.perPlayer = 1000;
+    draft.arena.perPlayer = 100;
+    draft.arena.base = 4000;
     draft.practiceRookie.auto = false;
-    expect(mapsPatch(MAPS.settings, draft)).toEqual({ arena: { perPlayer: 1000 }, practiceRookie: { auto: false } });
+    expect(mapsPatch(MAPS.settings, draft)).toEqual({ arena: { base: 4000, perPlayer: 100 }, practiceRookie: { auto: false } });
     expect(mapsPatch(MAPS.settings, structuredClone(MAPS.settings))).toEqual({});
   });
 
-  it('shows the map curve per room kind with a preview and the live rooms, and saves only what changed', async () => {
+  it('shows the map model per room kind with a preview and the live rooms, and saves only what changed', async () => {
     let put: unknown = null;
     ({ restore } = mockFetch({
       'GET /api/admin/maps': MAPS,
@@ -349,14 +350,14 @@ describe('admin groups', () => {
     // people only in arenas and practice; the practice bots of a free custom room are counted apart
     expect(screen.getByText('3 people · 2 rooms · 3 practice bots')).toBeTruthy();
     expect(document.body.textContent).toMatch(/Practice bots exist only in free custom rooms/);
-    // the curve at 5 / 10 / 25 / 50 / 100 players, and the live room's side
-    expect(table.textContent).toContain('3000 / 3000 / 4500 / 6400 / 9000');
+    // the side at 1 / 10 / 25 / 50 / 100 people, and the live room's side
+    expect(table.textContent).toContain('3060 / 3600 / 4500 / 6000 / 9000');
     expect(table.textContent).toContain('3600');
-    fireEvent.change(screen.getByLabelText('arena map per player'), { target: { value: '1000' } });
+    fireEvent.change(screen.getByLabelText('arena map per person'), { target: { value: '100' } });
     fireEvent.click(screen.getByLabelText('Practice · rookie map auto size'));
     expect(table.textContent).toContain('preset');
     fireEvent.click(screen.getByTestId('maps-save'));
-    await waitFor(() => expect(put).toEqual({ arena: { perPlayer: 1000 }, practiceRookie: { auto: false } }));
+    await waitFor(() => expect(put).toEqual({ arena: { perPlayer: 100 }, practiceRookie: { auto: false } }));
   });
 
   it('says so when the server has no map route yet', async () => {

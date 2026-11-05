@@ -3,7 +3,6 @@ import {
   ClientOp,
   EMOTES,
   MAP_GROW,
-  MAP_SIDE_STEP,
   MAP_SPACE,
   PlayerFlag,
   RULES,
@@ -136,7 +135,7 @@ export interface RoomOptions {
   /** The world size and population (default `WORLD_PRESETS[mode]`; custom rooms bring their own). */
   world?: WorldShape;
   /**
-   * Adaptive map size (`map-scale.ts`): with it the world is resizable (it sits centred in
+   * Dynamic map size (`map-scale.ts`): with it the world is resizable (it sits centred in
    * `MAP_SPACE`) and, while `auto` is on, sized for the expected player count; with `auto` off it
    * keeps `world` (the preset). Absent: a fixed world (custom rooms with a chosen size).
    */
@@ -165,11 +164,12 @@ export interface RoomMapOptions {
 }
 
 /**
- * Free rooms (no rounds) shrink only over empty floor: no human cell within this of the band that
- * goes, and only once the target is this far below the current side (no flip-flop on one leave).
+ * Rooms without rounds shrink only over empty floor: no human cell within this of the band that
+ * goes, and only once the target is this far below the current side (a person or two coming and
+ * going does not move the wall back and forth).
  */
 const SHRINK_CLEARANCE = 300;
-const SHRINK_HYSTERESIS = 3 * MAP_SIDE_STEP;
+const SHRINK_HYSTERESIS = 200;
 
 interface ChatLine {
   pid: number;
@@ -209,7 +209,7 @@ export class Room implements RoomHandle {
   private readonly integrity: RoomIntegrity | null;
   private tickN = 0;
   lastActivity = Date.now();
-  /** Adaptive map (null: a fixed world). */
+  /** Dynamic map (null: a fixed world). */
   private map: RoomMapOptions | null;
   private readonly preset: WorldShape;
   /** World clock (ms) of the next growth check and of the last resize. */
@@ -875,7 +875,7 @@ export class Room implements RoomHandle {
   }
 
   /* ---------------------------------------------------------------- */
-  /* Adaptive map size                                                */
+  /* Dynamic map size                                                 */
   /* ---------------------------------------------------------------- */
 
   /** Players this room expects with `humans` people in it: them plus its practice bots. */

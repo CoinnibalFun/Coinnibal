@@ -73,30 +73,35 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 - Bots carry no value, never pick up loot, never use power-ups, are named "Bot N" and always wear a BOT tag. An eaten
   bot comes back 3 to 7 s later.
 
-### 2.2.2 Adaptive map size
+### 2.2.2 Dynamic map size
 
-- Each room's square map is sized for the players it expects: the people in it (plus a free custom room's practice bots)
-  (`packages/shared/src/map-scale.ts`). Side = `perPlayer · √players`, rounded up to 100 and kept within
-  `min..max`; every player gets about `perPlayer²` of floor. Food, cacti and power-ups follow the area at a
-  practice pond's density (capped at 4,000 food and 40 cacti): a 10,000 room has about 3,500 coins, 30 cacti and
-  6 power-up slots.
+- Every room's square map grows a little with every person who joins (plus a free custom room's practice bots) and
+  shrinks back as they leave, only when that is safe (`packages/shared/src/map-scale.ts`, one model):
+  `side = min(max, base + perPlayer × people)`, rounded up to 10, never below `base`. Food, cacti and power-ups
+  follow the area at a practice pond's density (capped at 4,000 food and 40 cacti): a 10,000 room has about 3,500
+  coins, 30 cacti and 6 power-up slots.
+- Defaults (every room kind): base 8,000, 40 per person, max 12,000. 1 person 8,040, 25 people 9,000, a full pond
+  (40) 9,600, a full arena instance (50) 10,000, 100 and more 12,000.
 - Admin (`/admin` → Game → Maps, `/api/admin/maps`, stored in `DATA_DIR/site/maps.json`; the maps of an older
-  `site/bots.json` are taken over once): per room kind, `auto` on/off,
-  `perPlayer` (300..2,000, default 800), `min` and `max` side (2,000..12,000, default 9,000 and 12,000; 2026-11
-  owner: every room up to 126 players is 9,000, 144 players 9,600, 200 players 11,400, 225 and more 12,000). A
-  saved curve still equal to a former default (900, 3,000, 9,000 or 1,000, 10,000, 12,000) gets the new one on
-  load (`auto` kept). Auto off keeps the mode's fixed preset.
-- When: arenas take the new size at each round start (sized for the people at the bell); during a round the map
-  only grows, by at most 600 units every 4 s, so nobody is trapped against a closing wall. Free rooms (no
-  rounds) grow the same way and shrink step by step only over empty floor (no person's coin near the band
-  that goes). The playable square sits centred in a fixed 12,000 space, so it opens on every side and the
-  server's spatial grids never need rebuilding. Clients get the bounds in the snapshot (protocol v8) and ease the
-  border, minimap and camera over 1.5 s.
-- Custom rooms: "Auto" (the default) follows the private rooms' curve for its people plus its practice bots (so 10,000 by
-  default); a chosen size (XS 3,000 .. XL 9,000) never changes.
+  `site/bots.json` are taken over once): per room kind (practice rookie / pro, arenas, private rooms), `auto`
+  on/off, `base` and `max` side (2,000..12,000) and `perPlayer` (0..300 per person). A kind saved in the former
+  square-root model (`min`, no `base`) keeps its `auto` and takes the defaults on load. Auto off keeps the mode's
+  fixed preset.
+- When: during play the map only grows, by at most 600 units every 4 s (a burst of joins opens the floor in a few
+  gentle steps). **An arena (public instance or ticket room) never shrinks during a round**, whatever it reached:
+  it takes its new size at the round start, right after the bell settled every coin, sized for the people at the
+  bell. Rooms without rounds (ponds, free custom rooms) shrink step by step, at most 600 every 4 s, only once the
+  target is 200 or more below the current side (a person or two coming and going does not move the wall) and only
+  over empty floor (no person's coin within 300 of the band that goes): nobody is trapped. The playable square sits
+  centred in a fixed 12,000 space, so it opens on every side and the server's spatial grids never need rebuilding.
+  Clients get the bounds in the snapshot and ease the border, minimap and camera over 1.5 s.
+- Cost: a room checks its size once a second and resizes at most every 4 s; a resize is one pass over the entities
+  (growing is next to free), so 500 people cost nothing measurable (`test/map-bench.test.ts`).
+- Custom rooms: "Auto" (the default) follows the private rooms' settings for its people plus its practice bots; a
+  chosen size (XS 3,000 .. XL 9,000) never changes.
 - `pnpm -F @elymum/server exec tsx scripts/bench/map-bench.ts [players] [people] [seconds]` times a full room on
-  the adaptive map against the fixed arena preset, and the resizes themselves; `map-bench.ts rooms [rooms]
-  [players] [people] [seconds]` times several quiet rooms in one process on the new and the old curve.
+  the dynamic map against the fixed arena preset, and the resizes themselves; `map-bench.ts rooms [rooms]
+  [players] [people] [seconds]` times several quiet rooms in one process on the default and a small model.
 
 ### 2.3 Value inside an arena (off-chain ledger)
 

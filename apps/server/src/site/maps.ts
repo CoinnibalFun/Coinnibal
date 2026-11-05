@@ -33,7 +33,7 @@ export function mapAdminView(a: MapAdmin): MapAdminView {
 }
 
 /**
- * `GET /api/admin/maps` (the adaptive map settings per room kind and every room's live numbers) and
+ * `GET /api/admin/maps` (the dynamic map settings per room kind and every room's live numbers) and
  * `PUT /api/admin/maps` (a partial update, stored in `DATA_DIR/site/maps.json` and applied to every room at
  * once). The caller checked that the session is an admin.
  */

@@ -5,7 +5,6 @@ import {
   MAP_GROW,
   MAP_SCALE_DEFAULT,
   MAP_SPACE,
-  OLD_MAP_SCALE_DEFAULT,
   TICK_MS,
   WORLD_PRESETS,
   decodeSnapshot,
@@ -30,10 +29,10 @@ import { ArenaChain, arena, fakeConn, freeCustom, roomDeps, stakeJoin } from './
 
 const ROUND = { roundMs: 60_000, closeMs: 10_000 };
 /**
- * The resize mechanics are tested on the old default curve (3000..9000): it spans many growth steps.
- * The live default (10000..12000) is checked in 'map settings (/api/admin/maps)'.
+ * The resize mechanics are tested on a small model (3000 + 60 per person, at most 9000): it spans many growth
+ * steps. The live default is checked in 'map settings (/api/admin/maps)'.
  */
-const CURVE: MapScaleSettings = { auto: true, ...OLD_MAP_SCALE_DEFAULT };
+const CURVE: MapScaleSettings = { auto: true, base: 3000, perPlayer: 60, max: 9000 };
 const scale = (p: Partial<MapScaleSettings> = {}): MapScaleSettings => ({ ...CURVE, ...p });
 
 function resizable(side: number, seed = 3): World {
@@ -195,7 +194,7 @@ describe('room map sizing', () => {
     clock.now = next.endsAt;
     room.tick(TICK_MS);
     expect(room.world.cfg.width).toBe(mapSideFor(6, CURVE));
-    expect(room.world.cfg.foodTarget).toBe(worldForSide(3000).foodTarget);
+    expect(room.world.cfg.foodTarget).toBe(worldForSide(mapSideFor(6, CURVE)).foodTarget);
   });
 
   it('a free room shrinks only over empty floor, and only well below its size', { timeout: 60_000 }, () => {
@@ -223,7 +222,7 @@ describe('room map sizing', () => {
     const c = w.center();
     w.setTarget(last.id, c.x, c.y);
     ticks(room, 60_000);
-    expect(room.world.cfg.width).toBe(CURVE.min);
+    expect(room.world.cfg.width).toBe(mapSideFor(1, CURVE));
   });
 
   it('admin changes reach a live room: auto off returns to the preset (growing now, shrinking when allowed)', () => {
@@ -234,7 +233,7 @@ describe('room map sizing', () => {
     expect(room.world.cfg.width).toBe(6800);
     expect(room.world.cfg.foodTarget).toBe(WORLD_PRESETS.practice.foodTarget);
     // nobody inside: a free room may close in at once, step by step, to the new curve's size
-    room.setMapScale(scale({ perPlayer: 2000, min: 2000, max: 4000 }));
+    room.setMapScale(scale({ base: 2000, perPlayer: 0, max: 4000 }));
     ticks(room, 60_000);
     expect(room.world.cfg.width).toBe(2000);
   });
@@ -275,7 +274,7 @@ describe('custom rooms: "Auto" or a chosen size', () => {
     for (let i = 0; i < 20; i++) auto.join(fakeConn(`c${i}`), { name: 'p', skin: 1, flags: 0 });
     ticks(auto, 30_000);
     // 12 bots + 20 people (a few may be eaten meanwhile: the map never shrinks back while people play)
-    expect(auto.world.cfg.width).toBeGreaterThan(mapSideFor(24, CURVE));
+    expect(auto.world.cfg.width).toBeGreaterThanOrEqual(mapSideFor(24, CURVE));
     expect(auto.world.cfg.width).toBeLessThanOrEqual(mapSideFor(32, CURVE));
     expect(auto.world.cfg.foodTarget).toBe(customWorld(c, auto.world.cfg.width).foodTarget);
     const fixed = cfg({ mapSize: 'S', bots: 12 });
@@ -289,14 +288,14 @@ describe('custom rooms: "Auto" or a chosen size', () => {
 describe('map settings (/api/admin/maps)', () => {
   const base = defaultMapSettings();
 
-  it('defaults every kind to the default curve and validates a patch', () => {
+  it('defaults every kind to the default model and validates a patch', () => {
     expect(base.arena).toEqual(MAP_SCALE_DEFAULT);
-    const next = applyMapSettings(base, { arena: { perPlayer: 1000, max: 10_000 }, private: { auto: false } });
-    expect(next.arena).toEqual({ ...MAP_SCALE_DEFAULT, perPlayer: 1000, max: 10_000 });
+    const next = applyMapSettings(base, { arena: { perPlayer: 50, max: 10_000 }, private: { auto: false } });
+    expect(next.arena).toEqual({ ...MAP_SCALE_DEFAULT, perPlayer: 50, max: 10_000 });
     expect(next.private.auto).toBe(false);
     expect(next.practicePro).toEqual(MAP_SCALE_DEFAULT);
-    // min above max is pulled down to it
-    expect(applyMapSettings(base, { arena: { min: 9000, max: 5000 } }).arena).toMatchObject({ min: 5000, max: 5000 });
+    // a base above the max is pulled down to it
+    expect(applyMapSettings(base, { arena: { base: 9000, max: 5000 } }).arena).toMatchObject({ base: 5000, max: 5000 });
   });
 
   it('refuses bad fields and unknown keys from an admin; ignores them in a saved file', () => {
@@ -308,15 +307,18 @@ describe('map settings (/api/admin/maps)', () => {
       }
       return null;
     };
-    expect(bad({ arena: { perPlayer: 100 } })).toBe('arena.perPlayer');
+    expect(bad({ arena: { perPlayer: 301 } })).toBe('arena.perPlayer');
+    expect(bad({ arena: { base: 100 } })).toBe('arena.base');
+    // the former model's field is refused
+    expect(bad({ arena: { min: 3000 } })).toBe('arena.min');
     expect(bad({ arena: { max: 50_000 } })).toBe('arena.max');
     expect(bad({ arena: { auto: 1 } })).toBe('arena.auto');
     expect(bad({ arena: { speed: 1 } })).toBe('arena.speed');
     expect(bad({ lobby: {} })).toBe('lobby');
-    expect(applyMapSettings(base, { lobby: {}, arena: { speed: 1, perPlayer: 1000 } }, { strict: false }).arena.perPlayer).toBe(1000);
+    expect(applyMapSettings(base, { lobby: {}, arena: { speed: 1, perPlayer: 100 } }, { strict: false }).arena.perPlayer).toBe(100);
   });
 
-  it('takes the maps over from an old bots.json once; its bot settings are ignored', () => {
+  it('takes the maps over from an old bots.json once (former model: auto kept, new defaults); its bot settings are ignored', () => {
     const dir = mkdtempSync(join(tmpdir(), 'elymum-maps-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
     writeFileSync(
@@ -325,13 +327,22 @@ describe('map settings (/api/admin/maps)', () => {
     );
     const logs: string[] = [];
     const store = new MapSettingsStore(dir, (m) => logs.push(m));
-    expect(store.mapScale('arena')).toMatchObject({ auto: false, perPlayer: 1100 });
+    expect(store.mapScale('arena')).toEqual({ ...MAP_SCALE_DEFAULT, auto: false });
     expect(store.mapScale('practiceRookie')).toEqual(MAP_SCALE_DEFAULT);
     expect(logs.some((m) => /taken over from site\/bots.json/.test(m))).toBe(true);
     expect(existsSync(join(dir, 'site', 'maps.json'))).toBe(true);
-    expect(JSON.parse(readFileSync(join(dir, 'site', 'maps.json'), 'utf8')).arena.perPlayer).toBe(1100);
+    expect(JSON.parse(readFileSync(join(dir, 'site', 'maps.json'), 'utf8')).arena).toEqual({ ...MAP_SCALE_DEFAULT, auto: false });
     // the next start reads maps.json (an admin change survives)
-    store.update({ arena: { perPlayer: 1200 } });
-    expect(new MapSettingsStore(dir).mapScale('arena').perPlayer).toBe(1200);
+    store.update({ arena: { perPlayer: 120 } });
+    expect(new MapSettingsStore(dir).mapScale('arena').perPlayer).toBe(120);
+  });
+
+  it('a maps.json in the former square-root model keeps auto and takes the new defaults', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'elymum-maps-'));
+    mkdirSync(join(dir, 'site'), { recursive: true });
+    writeFileSync(join(dir, 'site', 'maps.json'), JSON.stringify({ arena: { auto: false, perPlayer: 900, min: 9000, max: 12_000 }, private: { auto: true, base: 5000, perPlayer: 10, max: 7000 } }));
+    const store = new MapSettingsStore(dir);
+    expect(store.mapScale('arena')).toEqual({ ...MAP_SCALE_DEFAULT, auto: false });
+    expect(store.mapScale('private')).toEqual({ auto: true, base: 5000, perPlayer: 10, max: 7000 });
   });
 });

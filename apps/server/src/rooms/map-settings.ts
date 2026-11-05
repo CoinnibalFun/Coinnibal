@@ -1,15 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAP_SCALE_DEFAULT, isFormerMapScaleDefault, mapScaleFieldError, type League, type MapScaleSettings, type RoomMode } from '@elymum/shared';
+import { MAP_SCALE_DEFAULT, MAP_SCALE_FIELDS, mapScaleFieldError, type League, type MapScaleSettings, type RoomMode } from '@elymum/shared';
 
 /**
- * The admin's adaptive map settings per room kind (`/api/admin/maps`, `DATA_DIR/site/maps.json`): on/off and the
- * curve of `map-scale.ts`. Custom rooms whose creator picked "Auto" follow the `private` curve (always on); a
- * chosen size is kept.
+ * The admin's dynamic map settings per room kind (`/api/admin/maps`, `DATA_DIR/site/maps.json`): on/off, `base`,
+ * `perPlayer` and `max` of `map-scale.ts`. Custom rooms whose creator picked "Auto" follow the `private` settings
+ * (always on); a chosen size is kept.
  *
  * Migration: these settings used to live in `site/bots.json` next to the house-bot settings (both are gone with
  * the house bots). When `maps.json` does not exist yet, the `maps` of an old `bots.json` are read once and written
- * to `maps.json`; every other field of that file (and any unknown field) is ignored.
+ * to `maps.json`; every other field of that file (and any unknown field) is ignored. A kind saved in the former
+ * square-root model (`perPlayer · √n` within `min..max`) keeps its `auto` and takes the new defaults.
  */
 
 export const MAP_ROOM_KINDS = ['practiceRookie', 'practicePro', 'arena', 'private'] as const;
@@ -64,18 +65,18 @@ export function applyMapSettings(cur: MapSettings, body: Record<string, unknown>
     }
     const m = next[kind];
     for (const [f, v] of Object.entries(patch)) {
-      if (f !== 'auto' && f !== 'perPlayer' && f !== 'min' && f !== 'max') {
+      if (!(MAP_SCALE_FIELDS as readonly string[]).includes(f)) {
         if (strict) throw new MapSettingsError(`unknown field ${kind}.${f}`, `${kind}.${f}`);
         continue;
       }
-      const err = mapScaleFieldError(f, v);
+      const err = mapScaleFieldError(f as keyof MapScaleSettings, v);
       if (err) {
         if (strict) throw new MapSettingsError(`${kind}.${f} ${err}`, `${kind}.${f}`);
         continue;
       }
       (m as unknown as Record<string, unknown>)[f] = v;
     }
-    if (m.min > m.max) m.min = m.max;
+    if (m.base > m.max) m.base = m.max;
   }
   return next;
 }
@@ -120,9 +121,9 @@ export class MapSettingsStore {
       const raw: unknown = JSON.parse(readFileSync(path, 'utf8'));
       if (!isObj(raw)) throw new Error('not an object');
       const maps = pick(raw);
-      // a curve still on the former default moves to the current one
-      for (const m of Object.values(maps)) {
-        if (isObj(m) && isFormerMapScaleDefault(m)) Object.assign(m, { perPlayer: MAP_SCALE_DEFAULT.perPlayer, min: MAP_SCALE_DEFAULT.min, max: MAP_SCALE_DEFAULT.max });
+      // a kind saved in the former square-root model (`min` instead of `base`) keeps its `auto`, takes the new defaults
+      for (const [k, m] of Object.entries(maps)) {
+        if (isObj(m) && 'min' in m && !('base' in m)) maps[k] = { auto: typeof m.auto === 'boolean' ? m.auto : MAP_SCALE_DEFAULT.auto };
       }
       return applyMapSettings(defaultMapSettings(), maps, { strict: false });
     } catch (err) {
@@ -146,7 +147,7 @@ export class MapSettingsStore {
     return structuredClone(this.cur);
   }
 
-  /** Adaptive map settings of a room kind. */
+  /** Dynamic map settings of a room kind. */
   mapScale(kind: MapRoomKind): MapScaleSettings {
     return { ...this.cur[kind] };
   }

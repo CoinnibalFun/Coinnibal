@@ -2,6 +2,7 @@ import { setPausedCall, updateArenaFrom } from "@elymum/sdk";
 import { arenaName } from "@elymum/sdk/ops";
 import {
   GAME_ACCESS_MODES,
+  MAP_SCALE_FIELDS,
   MAP_SCALE_LIMITS,
   mapSideFor,
   type GameAccess,
@@ -220,17 +221,17 @@ export function mapsPatch(saved: MapAdminView["settings"], draft: MapAdminView["
     const s = saved[kind];
     if (!s) continue;
     const p: Partial<MapScaleSettings> = {};
-    for (const f of ["auto", "perPlayer", "min", "max"] as const)
+    for (const f of MAP_SCALE_FIELDS)
       if (d[f] !== s[f]) (p as Record<string, unknown>)[f] = d[f];
     if (Object.keys(p).length) out[kind] = p;
   }
   return out;
 }
 
-/** The players the map table previews the curve for. */
-const MAP_PREVIEW = [5, 10, 25, 50, 100] as const;
+/** The people the map table previews the side for. */
+const MAP_PREVIEW = [1, 10, 25, 50, 100] as const;
 
-/** Game → map size: per room kind, auto on/off and the curve (side = per player x sqrt(players), within min..max). */
+/** Game → map size: per room kind, auto on/off, the base side, the growth per person and the max side. */
 function MapScaleTable({
   draft,
   view,
@@ -244,11 +245,13 @@ function MapScaleTable({
   return (
     <>
       <p className="ad-note">
-        Map size: with Auto on, each room&apos;s map is sized for the players it
-        expects (its people, plus the practice bots of a free custom room): side = per player x
-        &radic;players, kept within min..max. At a round start the map takes its
-        new size; during play it only grows, a step every few seconds. Custom
-        rooms set to Auto follow the private rooms&apos; curve.
+        Map size: with Auto on, each room&apos;s map grows a little with every person in
+        it (and every practice bot of a free custom room): side = base + per person x
+        people, at most max. It grows during play a step every few seconds. An arena
+        never shrinks during a round: it takes its new size at the round start, after
+        the bell. Other rooms shrink back only over empty floor, so nobody is trapped.
+        Food, cacti and power-ups follow the area. Custom rooms set to Auto follow the
+        private rooms&apos; settings.
       </p>
       <div className="ad-tablewrap">
         <table className="ad-table ad-bots" data-testid="maps-table">
@@ -259,12 +262,16 @@ function MapScaleTable({
               <th
                 scope="col"
                 className="is-num"
-                title={`Side of the square each player gets (${L.perPlayerMin}..${L.perPlayerMax})`}
+                title={`Side of an empty room, and the smallest side (${L.sideMin}..${L.sideMax})`}
               >
-                Per player
+                Base side
               </th>
-              <th scope="col" className="is-num">
-                Min side
+              <th
+                scope="col"
+                className="is-num"
+                title={`Side each person adds (${L.perPlayerMin}..${L.perPlayerMax})`}
+              >
+                Per person
               </th>
               <th scope="col" className="is-num">
                 Max side
@@ -272,9 +279,9 @@ function MapScaleTable({
               <th
                 scope="col"
                 className="is-num"
-                title={`Map side for ${MAP_PREVIEW.join(" / ")} players`}
+                title={`Map side for ${MAP_PREVIEW.join(" / ")} people`}
               >
-                {MAP_PREVIEW.join(" / ")} players
+                {MAP_PREVIEW.join(" / ")} people
               </th>
               <th scope="col" className="is-num">
                 Live
@@ -302,18 +309,18 @@ function MapScaleTable({
                   </td>
                   <td className="is-num">
                     <NumCell
-                      value={m.perPlayer}
-                      max={L.perPlayerMax}
-                      label={`${kind} map per player`}
-                      onChange={(n) => setMap(kind, { perPlayer: n })}
+                      value={m.base}
+                      max={L.sideMax}
+                      label={`${kind} map base`}
+                      onChange={(n) => setMap(kind, { base: n })}
                     />
                   </td>
                   <td className="is-num">
                     <NumCell
-                      value={m.min}
-                      max={L.sideMax}
-                      label={`${kind} map min`}
-                      onChange={(n) => setMap(kind, { min: n })}
+                      value={m.perPlayer}
+                      max={L.perPlayerMax}
+                      label={`${kind} map per person`}
+                      onChange={(n) => setMap(kind, { perPlayer: n })}
                     />
                   </td>
                   <td className="is-num">
