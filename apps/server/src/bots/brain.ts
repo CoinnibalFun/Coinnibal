@@ -202,6 +202,8 @@ export class BotBrain {
   private giveUpId = -1;
   private giveUpUntil = 0;
   private shootUntil = 0;
+  /** No offensive cactus shot before then. */
+  private cactusUntil = 0;
   private readonly shootTarget = { x: 0, y: 0 };
   private shooting = false;
   private readonly map = new ContextMap();
@@ -636,6 +638,9 @@ export class BotBrain {
     let bestPreyScore = 0;
     const mySpeed = speedForRadius(big.r);
     const hunts = huntClaims(world);
+    // the final-minute push (arenas): people first, and one more bot may join a hunt
+    const push = squad.pushing();
+    const chasers = push ? this.maxChasers + 1 : this.maxChasers;
     if (!shielded) {
       const aggression = P.aggression * (atCap ? AT_CAP_DRIVE : 1) * S;
       for (const q of prey) {
@@ -644,13 +649,13 @@ export class BotBrain {
         const human = !q.player.isBot;
         const onOp = role !== null && role.op.target === q.player.id;
         // a crew is enough: a person already worked by the room's limit is left to them (unless this bot is in the crew)
-        if (human && !onOp && q.player.id !== this.claimId && hunts.others(q.player.id, this.pid, now) >= this.maxChasers) continue;
+        if (human && !onOp && q.player.id !== this.claimId && hunts.others(q.player.id, this.pid, now) >= chasers) continue;
         // a teammate on an operation (or the small one this bot looks after) is never eaten
         if (!human && team && (squad.busy(q.player.id, now) || squad.wardFor(this.pid)?.pid === q.player.id)) continue;
         const dist = Math.hypot(q.x - big.x, q.y - big.y);
         let w = (aggression * q.mass * 6) / Math.pow(dist + 80, 1.05);
         if (human) w *= P.humanBias * squad.worth(q.player.id) * (onOp ? 1.6 : 1);
-        else w *= BOT_APPETITE;
+        else w *= push ? BOT_APPETITE * 0.4 : BOT_APPETITE;
         // a chase that went nowhere: leave that one alone for a while (unless it is right here);
         // a person is left alone entirely
         if (q.player.id === this.giveUpId && now < this.giveUpUntil && dist > big.r + 120) {
@@ -723,7 +728,7 @@ export class BotBrain {
     if (team) {
       if (chasingHuman >= 0 && P.skill > 0 && bestPrey) {
         // the pusher: herd the person toward the flanker, or (good bots) into the wall
-        const op = squad.hunt(this.pid, chasingHuman, now, this.maxChasers);
+        const op = squad.hunt(this.pid, chasingHuman, now, chasers);
         if (op && op.pusher === this.pid) {
           const q: Cell = bestPrey;
           const f = op.flanker >= 0 ? squad.mates.get(op.flanker) : undefined;
@@ -797,7 +802,7 @@ export class BotBrain {
 
       // patrol: no prey in sight, nothing chasing us: drift toward the most promising person on the squad's reports
       if (!roleDriven && !covering && !bestPrey && dangerLevel < 0.2 && !atCap) {
-        const m = squad.patrolTarget(this.pid, cx, cy, big.mass, now, this.maxChasers);
+        const m = squad.patrolTarget(this.pid, cx, cy, big.mass, now, chasers);
         if (m) {
           // reports are a little stale and every bot reads them its own way
           const off = 120 + 380 * (1 - P.skill / 2);
@@ -909,6 +914,34 @@ export class BotBrain {
       d.target.y = feedNow.y;
       d.eject = true;
       this.feedCount++;
+    }
+
+    /* ---------- cactus shot: pop a big person into pieces for the squad ---------- */
+    // a person too big to eat, a thorn bush between us and them: feed the bush until it flies at them
+    if (team && !d.split && !d.eject && P.skill > 0 && dangerLevel < 0.2 && now >= this.cactusUntil && total > RULES.ejectMinMass + 140) {
+      const popMass = RULES.virusMass * RULES.virusPopRatio * 1.5;
+      for (const h of others) {
+        if (h.player.isBot || h.mass < popMass || canEat(big.mass, h.mass)) continue;
+        let hit: Virus | null = null;
+        for (const v of viruses) {
+          const dV = Math.hypot(v.x - big.x, v.y - big.y);
+          if (dV < big.r + v.r + 50 || dV > big.r + 480) continue;
+          if (Math.hypot(h.x - v.x, h.y - v.y) > 750) continue;
+          if (Math.abs(angleDiff(angleTo(big.x, big.y, v.x, v.y), angleTo(v.x, v.y, h.x, h.y))) > 0.3) continue;
+          hit = v;
+          break;
+        }
+        if (!hit) continue;
+        this.shooting = true;
+        this.shootTarget.x = hit.x;
+        this.shootTarget.y = hit.y;
+        this.shootUntil = now + 1300;
+        this.cactusUntil = now + 15_000 + this.rng() * 10_000;
+        d.target.x = hit.x;
+        d.target.y = hit.y;
+        d.eject = true;
+        break;
+      }
     }
 
     // think a little sooner while in danger (good bots), never every tick

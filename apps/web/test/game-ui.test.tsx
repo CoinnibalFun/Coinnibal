@@ -1,4 +1,4 @@
-import { EMOTES, emoteForSlot, type DeathStats, type RoomInfo } from '@elymum/shared';
+import { EMOTES, EMOTE_BAR, emoteEmoji, emoteForSlot, type DeathStats, type RoomInfo } from '@elymum/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chainStatus } from './evm-helpers';
@@ -7,7 +7,7 @@ import { setEngine } from '../src/game/instance';
 import type { GameEngine } from '../src/game/engine';
 import { useUi } from '../src/store';
 import { setReducedMotion } from '../src/test/media';
-import { DeathSheet, receiptNumbers, settlementFor, stickerSvg } from '../src/ui/game';
+import { DeathSheet, receiptNumbers, settlementFor } from '../src/ui/game';
 import { EmoteBar } from '../src/ui/game/EmoteBar';
 import { roomName, tokenFormat } from '../src/ui/game/format';
 
@@ -70,20 +70,13 @@ describe('format helpers', () => {
   });
 });
 
-describe('emote stickers', () => {
-  it('draws every system emote (both pages) as an SVG without text or emoji, each its own art', () => {
-    expect(EMOTES).toHaveLength(16);
-    const seen = new Set<string>();
-    for (const e of EMOTES) {
-      const svg = stickerSvg(e.id);
-      expect(svg.startsWith('<svg')).toBe(true);
-      expect(svg).not.toMatch(/<text|\p{Extended_Pictographic}/u);
-      seen.add(svg);
-    }
-    expect(seen.size).toBe(16);
+describe('emoji bar', () => {
+  it('every emote has its own emoji; the bar is laughing, shades, the crown, fuming, cursing, crying, the clown', () => {
+    expect(new Set(EMOTES.map((e) => e.emoji)).size).toBe(EMOTES.length);
+    expect(EMOTE_BAR.map((id) => emoteEmoji(id))).toEqual(['😂', '🤣', '😎', '👑', '😡', '🤬', '😭', '🤡']);
   });
 
-  it('the bar shows the Hype page first; the switch shows the Trash talk page and keys follow it', async () => {
+  it('shows the eight emoji with keys 1-8; a click and a key both send the emote', async () => {
     const emote = vi.fn();
     setEngine({ emote } as unknown as GameEngine);
     render(
@@ -91,25 +84,20 @@ describe('emote stickers', () => {
         <EmoteBar />
       </Kb>,
     );
-    expect(screen.getByRole('button', { name: 'GM' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Cursing' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Hype' }).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: 'Trash talk' }));
-    expect(useUi.getState().emoteSet).toBe('trash');
-    expect(screen.queryByRole('button', { name: 'GM' })).toBeNull();
-    const cursing = screen.getByRole('button', { name: 'Cursing' });
-    expect(cursing.getAttribute('aria-keyshortcuts')).toBe('1');
-    expect(screen.getByRole('button', { name: 'Take the L' }).getAttribute('aria-keyshortcuts')).toBe('8');
-    fireEvent.click(cursing);
+    expect(screen.getAllByRole('button')).toHaveLength(8);
+    const king = screen.getByRole('button', { name: 'King' });
+    expect(king.getAttribute('aria-keyshortcuts')).toBe('4');
+    expect(king.textContent).toContain('👑');
+    expect(screen.getByRole('button', { name: 'Clown' }).getAttribute('aria-keyshortcuts')).toBe('8');
+    fireEvent.click(screen.getByRole('button', { name: 'Cursing' }));
     expect(emote).toHaveBeenCalledWith(8);
     setEngine(null);
-    // a key fires the slot on the page on show
     const { GameEngine } = await import('../src/game/engine');
     const send = vi.fn();
     const fake = Object.create(GameEngine.prototype) as GameEngine;
     Object.assign(fake, { net: { send } });
     act(() => useUi.setState({ screen: 'playing' }));
-    fake.emote(emoteForSlot(useUi.getState().emoteSet, 2)!);
+    fake.emote(emoteForSlot(2)!);
     expect(send).toHaveBeenCalledWith({ t: 'emote', id: 10 });
   });
 });

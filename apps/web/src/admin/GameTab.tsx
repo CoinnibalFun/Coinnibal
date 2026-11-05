@@ -575,6 +575,32 @@ export function BotsCard({
       }
       lede="The house squad: every room fields Min to Cap bots (6-9 by default), whoever else plays; people never send a bot home. Bots walk in one at a time within the first minute of a room or an arena round and play as a team (map-wide tracking, traps, lures, feeding, covering their small ones; not in the rookie league). In arenas a bot enters with a ticket's worth from the team reserve, keeps what it eats and stays to the bell, when what it holds goes back to the reserve. They always wear a BOT tag."
     >
+      {view.settings.finalPush !== undefined && (
+        <SwitchRow
+          label="Final-minute push (arenas)"
+          options={[
+            { id: "on", label: "On", note: "the last minute is a hunt on people" },
+            { id: "off", label: "Off" },
+          ]}
+          value={view.settings.finalPush ? "on" : "off"}
+          busy={busy}
+          testId="bots-final-push"
+          onPick={async (v) => {
+            setBusy(true);
+            setErr(null);
+            try {
+              const next = await ctx.api!.saveBots({ finalPush: v === "on" });
+              setView(next);
+              setDraft(structuredClone(next.settings));
+              setMsg(v === "on" ? "Final-minute push on: in an arena's last minute the bots go after people." : "Final-minute push off.");
+            } catch (e) {
+              setErr(saveErrorText(e));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      )}
       {view.reserve && (
         <div className="ad-note" data-testid="bots-bankroll">
           <p>

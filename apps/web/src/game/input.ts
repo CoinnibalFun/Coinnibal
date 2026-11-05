@@ -5,10 +5,8 @@ export interface InputActions {
   /** A bought power-up key (R magnet, F leap, G speed, V invisibility). Optional: tests may leave it out. */
   boost?(kind: BoostKind): void;
   eject(): void;
-  /** Keys 1-8: the sticker in that slot (0..7) of the page on show. */
+  /** Keys 1-8: the emoji in that slot (0..7) of the bar. */
   emote(slot: number): void;
-  /** Key 9: the other sticker page. Optional: tests may leave it out. */
-  emotePage?(): void;
   openChat(): void;
   escape(): void;
   spectateNext(): void;
@@ -234,11 +232,6 @@ export class Input {
         e.preventDefault();
         this.actions.openChat();
         return;
-    }
-    if (e.code === 'Digit9' && !e.repeat && this.actions.emotePage) {
-      // 9, right after the stickers' 1-8: the other sticker page
-      this.actions.emotePage();
-      return;
     }
     if (/^Digit[1-8]$/.test(e.code) && !e.repeat) {
       this.actions.emote(Number(e.code.slice(5)) - 1);

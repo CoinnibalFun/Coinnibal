@@ -288,7 +288,7 @@ describe('staked bots wiring', () => {
     expect(t.app.stakedBots).not.toBeNull();
     const bots = (await t.call('GET', '/api/admin/bots', { wallet: ADMIN })).body;
     expect(bots).toMatchObject({ stakedActive: true, staked: { active: true, chainId: 31337, wallets: 0, playing: 0, problem: null } });
-    expect(t.app.stakedBots!.wanted(1)).toBe(6); // the default: 6 staked bots per arena
+    expect(t.app.stakedBots!.wanted(1)).toBe(9); // the default: the whole squad (up to 9) on real tickets
     const m = await start(mkdtempSync(join(tmpdir(), 'elymum-app-')), 4242, { stakedBotKey: KEY });
     expect(m.app.stakedBots).toBeNull();
     expect((await m.call('GET', '/api/admin/bots', { wallet: ADMIN })).body).toMatchObject({ testnet: false, stakedActive: false });

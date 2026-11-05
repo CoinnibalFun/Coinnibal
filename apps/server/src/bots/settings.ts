@@ -67,6 +67,12 @@ export interface BotSettings {
    * whose creator picked "Auto" follow the `private` curve (always on); a chosen size is kept.
    */
   maps: Record<BotRoomKind, MapScaleSettings>;
+  /**
+   * The final-minute push (arenas): in a round's last minute the squad goes after people, harder
+   * than the rest of the round (they are worth the most then: the bell pays what a coin holds) and
+   * one more bot may join a hunt. Absent in files written before it: on.
+   */
+  finalPush?: boolean;
 }
 
 /** Bounds of the admin values. */
@@ -90,7 +96,8 @@ export const OLD_MAX_CHASERS: Record<BotRoomKind, number> = { practiceRookie: 1,
 /** Squad play (traps, lures, feeding, map-wide tracking) per room kind: off in the rookie league. */
 export const TEAMPLAY: Record<BotRoomKind, boolean> = { practiceRookie: false, practicePro: true, arena: true, private: true };
 
-export const BOT_TESTNET_DEFAULT: BotTestnetSettings = { stakedPerArena: 6, bankroll: '1000000', gasHype: '0.05', arenas: {} };
+/** Testnet: the whole squad (up to the 9 of the default cap) plays with real tickets. */
+export const BOT_TESTNET_DEFAULT: BotTestnetSettings = { stakedPerArena: 9, bankroll: '1000000', gasHype: '0.05', arenas: {} };
 
 /** The bot kind of a room. */
 export function botKindOf(mode: RoomMode, league?: League): BotRoomKind {
@@ -151,7 +158,7 @@ export function kindFromOptions(o: BotManagerOptions, kind?: BotRoomKind): BotKi
 export function defaultBotSettings(defaults: Record<BotRoomKind, BotManagerOptions>): BotSettings {
   const kinds = {} as Record<BotRoomKind, BotKindSettings>;
   for (const k of BOT_ROOM_KINDS) kinds[k] = kindFromOptions(defaults[k], k);
-  return { kinds, testnet: { ...BOT_TESTNET_DEFAULT, arenas: {} }, maps: defaultMapSettings() };
+  return { kinds, testnet: { ...BOT_TESTNET_DEFAULT, arenas: {} }, maps: defaultMapSettings(), finalPush: true };
 }
 
 /** Every kind starts on the default curve (auto on). */
@@ -206,8 +213,13 @@ export function applyBotSettings(cur: BotSettings, body: Record<string, unknown>
 }
 
 function applyInner(cur: BotSettings, body: Record<string, unknown>): BotSettings {
-  onlyKeys(body, ['kinds', 'testnet', 'maps'], '');
+  onlyKeys(body, ['kinds', 'testnet', 'maps', 'finalPush'], '');
   const next: BotSettings = structuredClone(cur);
+  next.finalPush ??= true;
+  if (body.finalPush !== undefined) {
+    if (typeof body.finalPush !== 'boolean') throw new BotSettingsError('finalPush must be true or false', 'finalPush');
+    next.finalPush = body.finalPush;
+  }
   // settings written before the map curve existed
   next.maps ??= defaultMapSettings();
   for (const k of BOT_ROOM_KINDS) next.maps[k] ??= { ...MAP_SCALE_DEFAULT };
@@ -329,6 +341,11 @@ export function upgradeSavedBotSettings(raw: Record<string, unknown>): string[] 
       out.push(`kinds.${kind} -> squad ${SQUAD_DEFAULT.min}-${SQUAD_DEFAULT.cap}`);
     }
   }
+  // testnet: 6 staked bots per arena before the squad played with real tickets only
+  if (isObj(raw.testnet) && raw.testnet.stakedPerArena === 6) {
+    raw.testnet.stakedPerArena = BOT_TESTNET_DEFAULT.stakedPerArena;
+    out.push(`testnet.stakedPerArena -> ${BOT_TESTNET_DEFAULT.stakedPerArena}`);
+  }
   // the chaser limits before squad play (2026-11): one in rookie and private rooms, two in pro ponds and arenas
   if (isObj(raw.kinds)) {
     for (const [kind, k] of Object.entries(raw.kinds)) {
@@ -416,7 +433,7 @@ export class BotSettingsStore {
 
   /** Bot-manager options of a room kind (what rooms run with). */
   options(kind: BotRoomKind): BotManagerOptions {
-    return { ...managerOptions(this.cur.kinds[kind]), teamplay: TEAMPLAY[kind] };
+    return { ...managerOptions(this.cur.kinds[kind]), teamplay: TEAMPLAY[kind], finalPush: kind === 'arena' && this.cur.finalPush !== false };
   }
 
   /** Adaptive map settings of a room kind. */

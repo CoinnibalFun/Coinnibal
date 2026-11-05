@@ -463,6 +463,8 @@ export interface BotKindSettings {
 
 export interface BotSettings {
   kinds: Record<string, BotKindSettings>;
+  /** Arenas: the squad's final-minute push on people (older servers leave it out). */
+  finalPush?: boolean;
   testnet: {
     stakedPerArena: number;
     /** Whole tokens, decimal string. */
@@ -510,6 +512,7 @@ export interface BotAdminView {
 }
 
 export type BotSettingsPatch = {
+  finalPush?: boolean;
   kinds?: Record<string, Partial<Omit<BotKindSettings, 'mix'>> & { mix?: Record<string, number> }>;
   maps?: Record<string, Partial<MapScaleSettings>>;
   testnet?: Partial<Omit<BotSettings['testnet'], 'arenas'>> & { arenas?: Record<string, { stakedBots?: number; bankroll?: string } | null> };

@@ -33,7 +33,13 @@ describe('custom room config', () => {
     expect(ok({ name: 'x' })).toMatchObject({ ok: false, field: 'name' });
     expect(ok({ name: 'a'.repeat(25) })).toMatchObject({ ok: false, field: 'name' });
     expect(ok({ name: '<script>' })).toMatchObject({ ok: false, field: 'name' });
-    expect(ok({ durationMin: 45 })).toMatchObject({ ok: false, field: 'durationMin' });
+    expect(ok({ durationMin: 47 })).toMatchObject({ ok: false, field: 'durationMin' });
+    expect(ok({ durationMin: 185 })).toMatchObject({ ok: false, field: 'durationMin' });
+    expect(ok({ durationMin: 0 })).toMatchObject({ ok: false, field: 'durationMin' });
+    // the creator sets any length in 5-minute steps
+    expect(ok({ durationMin: 45 })).toMatchObject({ ok: true, config: { durationMin: 45 } });
+    expect(ok({ durationMin: 5 })).toMatchObject({ ok: true });
+    expect(ok({ durationMin: 180 })).toMatchObject({ ok: true });
     expect(ok({ mapSize: 'XXL' })).toMatchObject({ ok: false, field: 'mapSize' });
     expect(ok({ mapSize: 5000 })).toMatchObject({ ok: false, field: 'mapSize' });
     expect(ok({ traps: 'lots' })).toMatchObject({ ok: false, field: 'traps' });
@@ -156,8 +162,8 @@ describe('room price', () => {
     expect(customRoomPrice(price, { ...s, holderPerk: 'free_daily' }, true, false)).toBe(price);
     expect(customRoomPrice(price, { ...s, holderPerk: 'none' }, true, true)).toBe(price);
   });
-  it('defaults: 0.05 HYPE, a 50 % holder discount, 6 live rooms, 2 per wallet, +50 % per 10 players, rooms up to 50, 200 seats', () => {
+  it('defaults: 0.05 HYPE, a 50 % holder discount, 6 live rooms, 2 per wallet, +50 % per 10 players, rooms up to 100, 300 seats', () => {
     expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ priceHype: '0.05', holderPerk: 'discount', holderDiscountPct: 50, maxLive: 6, maxPerWallet: 2, treasury: null });
-    expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ capacityStepPct: 50, maxPlayers: 50, maxSeats: 200, paidRooms: true });
+    expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ capacityStepPct: 50, maxPlayers: 100, maxSeats: 300, paidRooms: true });
   });
 });

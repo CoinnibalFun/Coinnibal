@@ -623,7 +623,7 @@ describe('boosts: rooms', () => {
     expect(lead()).toBe(0);
   });
 
-  it('stickers: the trash-talk page (ids 8..15) is accepted like the first page; others are not', async () => {
+  it('emotes: every id on the wire (0..16, the crown included) is accepted; others are not', async () => {
     const { room } = await roomWith('practice');
     const a = fakeConn(WALLET);
     const b = fakeConn(null);
@@ -636,7 +636,7 @@ describe('boosts: rooms', () => {
     room.emote(a, 8);
     expect(emotes()).toEqual([15]);
     (a as unknown as { lastEmoteAt: number }).lastEmoteAt = 0;
-    room.emote(a, 16);
+    room.emote(a, 17);
     room.emote(a, -1);
     expect(emotes()).toEqual([15]);
   });

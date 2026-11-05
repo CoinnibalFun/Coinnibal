@@ -85,7 +85,7 @@ describe('testnet staked bots: wallets', () => {
 describe('testnet staked bots: funding and tickets', () => {
   it('funds a bot (HYPE for gas from the server key, tELYMUM minted to the bankroll), approves once, joins: a real ticket', async () => {
     const t = setup();
-    expect(t.source.wanted(1)).toBe(6);
+    expect(t.source.wanted(1)).toBe(9); // the whole default squad plays real tickets
     const ticket = (await t.source.acquire(1, 'arena-1-1'))!;
     const bot = ticket.stake.player as Address;
     // bots pay the fee like players: the 1,000 ticket plays 950 (5 % taken at the entry)
@@ -225,7 +225,7 @@ describe('testnet staked bots: retries, wallets in use, holders-only arenas', ()
   it('skips a holders-only arena quietly: one log line, no wallet created or funded, wanted 0 until the 5-min re-check', async () => {
     const clock = { now: 1_800_000_000_000 };
     const t = setup({ now: () => clock.now });
-    expect(t.source.wanted(4)).toBe(6); // not seen yet
+    expect(t.source.wanted(4)).toBe(9); // not seen yet
     for (let i = 0; i < 50; i++) {
       expect(await t.source.acquire(4, 'arena-4-1')).toBeNull();
       clock.now += 3_000;
@@ -237,7 +237,7 @@ describe('testnet staked bots: retries, wallets in use, holders-only arenas', ()
     // with wallets: holder checks are cached (no storm of reads), still no ticket and no new wallet
     await t.source.acquire(1, 'arena-1-1');
     clock.now += 5 * 60_000;
-    expect(t.source.wanted(4)).toBe(6); // re-check due
+    expect(t.source.wanted(4)).toBe(9); // re-check due
     expect(await t.source.acquire(4, 'arena-4-1')).toBeNull();
     expect(t.source.wanted(4)).toBe(0);
     expect(t.source.addresses()).toHaveLength(1);
@@ -246,6 +246,7 @@ describe('testnet staked bots: retries, wallets in use, holders-only arenas', ()
 
   it('the wallet pool grows to what the settings need (4 arenas × 6 + spare), not a fixed number', async () => {
     const t = setup();
+    t.settings.update({ testnet: { stakedPerArena: 6 } });
     for (const id of [2, 3]) t.evm.addArena(id, 1000n);
     const tickets = [];
     for (const id of [1, 2, 3]) for (let i = 0; i < 6; i++) tickets.push(await t.source.acquire(id, `arena-${id}-1`));

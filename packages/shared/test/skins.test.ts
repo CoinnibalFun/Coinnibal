@@ -3,7 +3,8 @@ import {
   BASIC_SKINS,
   EMOTES,
   emoteForSlot,
-  emotesOf,
+  EMOTE_BAR,
+  emoteEmoji,
   SKINS,
   getSkin,
   isBasicSkin,
@@ -41,17 +42,16 @@ describe('skin catalog', () => {
     expect(getSkin(999).id).toBe(0);
   });
 
-  it('has two pages of 8 emotes; the first page keeps ids 0..7, the trash talk appends 8..15', () => {
-    expect(EMOTES).toHaveLength(16);
-    expect(EMOTES.map((e) => e.id)).toEqual(Array.from({ length: 16 }, (_, i) => i));
+  it('emote ids stay put on the wire (0..15, the crown appended as 16); the bar is eight emoji on keys 1-8', () => {
+    expect(EMOTES.map((e) => e.id)).toEqual(Array.from({ length: 17 }, (_, i) => i));
     expect(EMOTES.slice(0, 8).map((e) => e.key)).toEqual(['gm', 'wagmi', 'rocket', 'diamond', 'cry', 'yum', 'salute', 'love']);
-    expect(emotesOf('hype').map((e) => e.id)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
-    expect(emotesOf('trash').map((e) => e.id)).toEqual([8, 9, 10, 11, 12, 13, 14, 15]);
-    expect(emoteForSlot('hype', 0)).toBe(0);
-    expect(emoteForSlot('trash', 0)).toBe(8);
-    expect(emoteForSlot('trash', 7)).toBe(15);
-    expect(emoteForSlot('trash', 8)).toBeNull();
+    expect(EMOTE_BAR).toHaveLength(8);
+    expect(emoteForSlot(0)).toBe(11);
+    expect(emoteForSlot(3)).toBe(16);
+    expect(emoteForSlot(8)).toBeNull();
+    expect(emoteEmoji(16)).toBe('👑');
   });
+
 });
 
 describe('text sanitizing', () => {

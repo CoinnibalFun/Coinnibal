@@ -18,8 +18,9 @@ import { fakeConn } from './helpers';
 const FEE = 1_000_000;
 const ROUND = { roundMs: 300_000, closeMs: 60_000 };
 
-function arena(o: { reserve?: number; bank?: boolean; seed?: number } = {}) {
+function arena(o: { reserve?: number; bank?: boolean; seed?: number; breakMs?: number } = {}) {
   const journal = new Journal(null);
+  const lb = new Leaderboards(null);
   if (o.reserve) journal.commit({ house: [{ arenaId: 1, amount: o.reserve }] });
   const clock = { now: roundAt(1_791_000_000_000, ROUND.roundMs, ROUND.closeMs).startsAt + 500 };
   const bots = new BotSettingsStore(null, defaultBotSettings(loadConfig({}).bots)).options('arena');
@@ -28,10 +29,10 @@ function arena(o: { reserve?: number; bank?: boolean; seed?: number } = {}) {
     {
       chain: new NullChain(),
       journal,
-      leaderboards: new Leaderboards(null),
+      leaderboards: lb,
       log: () => {},
       now: () => clock.now,
-      round: ROUND,
+      round: { ...ROUND, breakMs: o.breakMs ?? 0 },
       ...(o.bank === false ? {} : { houseBank: { draw: async (a: number, amt: number) => journal.drawHouse(a, amt) } }),
     },
   );
@@ -42,7 +43,7 @@ function arena(o: { reserve?: number; bank?: boolean; seed?: number } = {}) {
       await Promise.resolve();
     }
   };
-  return { room, journal, clock, tick };
+  return { room, journal, clock, tick, lb };
 }
 
 let seq = 0;
@@ -83,12 +84,17 @@ describe('house bots play with a budget from the team reserve', () => {
     expect(t.room.ledger!.value(p.id)).toBe(2 * FEE);
   }, 60_000);
 
-  it('with an empty reserve the bots enter with nothing (the team never pays out of thin air)', async () => {
+  it('a bot never shows a value of 0: without a stake from the reserve it does not walk in (the team never pays out of thin air)', async () => {
     const t = arena({ reserve: 2 * FEE });
     await t.tick(30 * 20);
-    const funded = [...t.room.bots!.bots.values()].filter((b) => t.room.purseOf(b.player.id) > 0);
-    expect(funded).toHaveLength(2);
+    expect(t.room.bots!.bots.size).toBe(2);
+    for (const b of t.room.bots!.bots.values()) expect(t.room.purseOf(b.player.id)).toBe(FEE);
     expect(t.journal.houseByArena(1)).toBe(0);
+    // topped up: the rest of the squad walks in while the round's joins are open
+    t.journal.commit({ house: [{ arenaId: 1, amount: 10 * FEE }] });
+    await t.tick(30 * 25);
+    expect(t.room.bots!.bots.size).toBeGreaterThanOrEqual(6);
+    for (const b of t.room.bots!.bots.values()) expect(t.room.purseOf(b.player.id)).toBe(FEE);
     // no bank at all: none is funded
     const u = arena({ bank: false });
     await u.tick(30 * 20);
@@ -99,8 +105,15 @@ describe('house bots play with a budget from the team reserve', () => {
     const t = arena({ reserve: 30 * FEE });
     await t.tick(30 * 20);
     const n = t.room.bots!.bots.size;
+    const p = t.room.join(fakeConn('wr'), stake());
     t.clock.now = roundAt(t.clock.now, ROUND.roundMs, ROUND.closeMs).endsAt;
     await t.tick();
+    // the bell's standings went on the public board: the person and the bots, best first
+    const board = t.lb.snapshot().rounds;
+    expect(board).toHaveLength(1);
+    expect(board[0]).toMatchObject({ arenaId: 1, entryFee: FEE, players: n + 1 });
+    expect(board[0].top.some((x) => x.name === p.name && !x.isBot)).toBe(true);
+    expect(board[0].top.filter((x) => x.isBot)).toHaveLength(Math.min(n, 9));
     expect(t.room.purseTotal()).toBe(0);
     expect(t.journal.houseByArena(1)).toBe(30 * FEE);
     await t.tick(30 * 60);
@@ -114,7 +127,7 @@ describe('house bots play with a budget from the team reserve', () => {
 describe('an arena round and its squad', () => {
   it('6 to 9 bots, all inside the first minute of the round, none after the joins close, none going home before the bell', async () => {
     for (const seed of [1, 2, 3]) {
-      const t = arena({ seed });
+      const t = arena({ seed, reserve: 40 * FEE });
       const watcher = fakeConn(null);
       t.room.spectate(watcher);
       const at: number[] = [];
@@ -136,7 +149,7 @@ describe('an arena round and its squad', () => {
       expect(watcher.msgs.filter((m) => m.t === 'feed' && m.kind === 'left')).toEqual([]);
     }
     // a bot eaten in the last minute (joins closed) is not replaced before the bell
-    const t = arena({ seed: 4 });
+    const t = arena({ seed: 4, reserve: 40 * FEE });
     t.clock.now = roundAt(t.clock.now, ROUND.roundMs, ROUND.closeMs).joinsCloseAt - 50_000;
     await t.tick(30 * 60);
     const before = t.room.bots!.bots.size;
@@ -147,6 +160,14 @@ describe('an arena round and its squad', () => {
     expect(t.room.bots!.bots.size).toBe(before - 1);
   }, 60_000);
 
+  it('a busy room lets fewer bots in (one fewer per 3 people past 8, never under 3)', () => {
+    expect(BotManager.crowdCut(9, 0)).toBe(9);
+    expect(BotManager.crowdCut(9, 8)).toBe(9);
+    expect(BotManager.crowdCut(9, 14)).toBe(7);
+    expect(BotManager.crowdCut(9, 40)).toBe(3);
+    expect(BotManager.crowdCut(2, 40)).toBe(2);
+  });
+
   it('a saved bots.json still holding the old squad sizes gets the 6-9 squad; an admin size stays', () => {
     const raw = { kinds: { arena: { cap: 12, target: 12, min: 2 }, practicePro: { cap: 12, target: 12, min: 4 }, private: { cap: 8, target: 8, min: 2 }, practiceRookie: { cap: 20, target: 12, min: 4 } } };
     const out = upgradeSavedBotSettings(raw as unknown as Record<string, unknown>);
@@ -156,6 +177,22 @@ describe('an arena round and its squad', () => {
     expect(raw.kinds.practiceRookie).toMatchObject({ cap: 20 });
     expect(out.join(' ')).toMatch(/squad 6-9/);
   });
+});
+
+describe('the break after a bell', () => {
+  it('nobody walks in for the first 15 s of a round slot; then the squad comes in and joins stay open', async () => {
+    const t = arena({ reserve: 40 * FEE, breakMs: 15_000 });
+    const w = roundAt(t.clock.now, ROUND.roundMs, ROUND.closeMs, 15_000);
+    expect(w.opensAt).toBe(w.startsAt + 15_000);
+    expect(t.room.round()).toMatchObject({ n: w.n, opensAt: w.opensAt });
+    expect(t.room.inBreak()).toBe(true);
+    await t.tick(30 * 14);
+    expect(t.room.bots!.bots.size).toBe(0);
+    expect(t.room.bots!.joinsOpen()).toBe(false);
+    await t.tick(30 * 30);
+    expect(t.room.inBreak()).toBe(false);
+    expect(t.room.bots!.bots.size).toBeGreaterThanOrEqual(3);
+  }, 60_000);
 });
 
 describe('cover: a big bot looks after a small one', () => {
@@ -195,5 +232,35 @@ describe('cover: a big bot looks after a small one', () => {
     // the guard never eats its ward
     const m = new BotManager(world, { target: 0, min: 0, max: 0 }, mulberry32(1));
     expect(m.bots.size).toBe(0);
+  });
+});
+
+describe('a bot never vanishes in front of someone', () => {
+  it('a bot whose time is up waits until no person has it on screen, then goes home', () => {
+    const world = new World({ width: 12_000, height: 12_000, foodTarget: 0, virusTarget: 0, maxPowerUps: 0, powerUps: false, coinRain: false, seed: 3 });
+    const m = new BotManager(world, { target: 1, min: 1, max: 1 }, mulberry32(3));
+    m.update(0, 0);
+    m.fill(0);
+    const bot = [...m.bots.values()][0];
+    const c = bot.player.center();
+    const person = world.addPlayer({ spawnShield: false, name: 'person', skin: 2, x: c.x + 300, y: c.y, mass: 8000 });
+    expect(m.inSight(bot)).toBe(true);
+    (bot as unknown as { retireAt: number }).retireAt = 0;
+    for (let i = 0; i < 60; i++) {
+      world.setTarget(person.id, bot.player.center().x + 300, bot.player.center().y);
+      world.tick(TICK_MS);
+      m.update(world.now, 1);
+    }
+    expect(m.bots.has(bot.player.id)).toBe(true);
+    expect(m.takeDepartures()).toEqual([]);
+    // the person goes far away: once out of sight, it slips off home
+    world.removePlayer(person.id);
+    world.addPlayer({ spawnShield: false, name: 'far', skin: 2, x: c.x > 6000 ? 200 : 11_800, y: c.y > 6000 ? 200 : 11_800, mass: 30 });
+    (bot as unknown as { retireAt: number }).retireAt = 0;
+    for (let i = 0; i < 30 && m.bots.has(bot.player.id); i++) {
+      world.tick(TICK_MS);
+      m.update(world.now, 1);
+    }
+    expect(m.bots.has(bot.player.id)).toBe(false);
   });
 });

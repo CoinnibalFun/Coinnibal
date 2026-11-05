@@ -1,4 +1,4 @@
-import type { CountryBoardRow } from '@elymum/shared';
+import { arenaMeta, type CountryBoardRow, type RoundBoard } from '@elymum/shared';
 import { motion } from 'motion/react';
 import { useAddress } from '../../wallet/store';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -6,13 +6,14 @@ import { Chip, Icon, STAGGER, Skeleton, StampSpinner, Tabs, springs, tabPanelPro
 import { SERVER } from '../../config';
 import { useUi } from '../../store';
 import { useT } from '../../i18n';
+import { BotTag } from '../game/BotTag';
 import { CoinPortrait } from '../game/CoinPortrait';
 import { useTokenFormat } from '../game/format';
 import { Flag, countryName } from '../Flag';
 import { PageHead } from '../PageHead';
 import './news.css';
 
-type Board = 'today' | 'all' | 'countries';
+type Board = 'today' | 'all' | 'rounds' | 'countries';
 
 /** `/api/leaderboard`: off-chain best single games (bots excluded). */
 interface LbRecord {
@@ -27,7 +28,7 @@ interface CountryBoards {
   daily: CountryBoardRow[];
   allTime: CountryBoardRow[];
 }
-type Boards = { state: 'loading' } | { state: 'error' } | { state: 'ok'; daily: LbRecord[]; allTime: LbRecord[]; countries: CountryBoards };
+type Boards = { state: 'loading' } | { state: 'error' } | { state: 'ok'; daily: LbRecord[]; allTime: LbRecord[]; countries: CountryBoards; rounds: RoundBoard[] };
 
 function useOffchainBoards(active: boolean): Boards {
   const [boards, setBoards] = useState<Boards>({ state: 'loading' });
@@ -36,7 +37,7 @@ function useOffchainBoards(active: boolean): Boards {
     let alive = true;
     const load = () =>
       fetch(`${SERVER.http}/api/leaderboard`)
-        .then((r) => (r.ok ? (r.json() as Promise<{ daily?: LbRecord[]; allTime?: LbRecord[]; countries?: Partial<CountryBoards> }>) : Promise.reject(new Error(String(r.status)))))
+        .then((r) => (r.ok ? (r.json() as Promise<{ daily?: LbRecord[]; allTime?: LbRecord[]; countries?: Partial<CountryBoards>; rounds?: RoundBoard[] }>) : Promise.reject(new Error(String(r.status)))))
         .then(
           (d) =>
             alive &&
@@ -46,6 +47,8 @@ function useOffchainBoards(active: boolean): Boards {
               allTime: d.allTime ?? [],
               // older servers have no countries board
               countries: { daily: d.countries?.daily ?? [], allTime: d.countries?.allTime ?? [] },
+              // older servers have no round results
+              rounds: d.rounds ?? [],
             }),
         )
         .catch(() => alive && setBoards((b) => (b.state === 'ok' ? b : { state: 'error' })));
@@ -71,6 +74,7 @@ export function Leaderboards() {
   const items: TabItem<Board>[] = [
     { id: 'today', label: t('nw.tab.today'), icon: 'sun' },
     { id: 'all', label: t('nw.tab.all'), icon: 'crown' },
+    { id: 'rounds', label: t('nw.tab.rounds'), icon: 'trophy' },
     { id: 'countries', label: t('nw.tab.countries'), icon: 'globe' },
   ];
   return (
@@ -78,7 +82,7 @@ export function Leaderboards() {
       <PageHead kicker={t('nw.kicker')} title={t('nw.title')} />
       <Tabs items={items} value={tab} onChange={setTab} label={t('nw.tabs')} idBase="nw" className="nw-tabs" />
       <motion.div key={tab} {...tabPanelProps('nw', tab)} className="nw-panel" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
-        {tab === 'countries' ? <CountriesFront boards={boards} /> : <OffchainFront kind={tab} boards={boards} />}
+        {tab === 'countries' ? <CountriesFront boards={boards} /> : tab === 'rounds' ? <RoundsFront boards={boards} /> : <OffchainFront kind={tab} boards={boards} />}
       </motion.div>
     </div>
   );
@@ -134,6 +138,47 @@ function OffchainFront({ kind, boards }: { kind: 'today' | 'all'; boards: Boards
             extraLabel={t('nw.col.kills')}
           />
         )}
+      </article>
+    </div>
+  );
+}
+
+/* ── last rounds ─────────────────────────────────────────────────────── */
+
+/** The bell time of a round ("15:45"). */
+const bellTime = (ms: number) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+/** The last arena rounds, newest first: each bell's standings (what every coin held when the bell rang). */
+function RoundsFront({ boards }: { boards: Boards }) {
+  const t = useT();
+  const tf = useTokenFormat();
+  const me = useUi((s) => s.me?.name ?? null);
+  const rounds = boards.state === 'ok' ? boards.rounds : [];
+  return (
+    <div className="nw-cols">
+      <article className="nw-lead">
+        <h3 className="nw-headline">{t('nw.rounds.title')}</h3>
+        <p className="nw-deck">{t('nw.rounds.sub')}</p>
+        {boards.state === 'error' && <p className="nw-note">{t('nw.offline')}</p>}
+        {boards.state === 'loading' && <Skeleton rows={6} />}
+        {boards.state === 'ok' && rounds.length === 0 && <p className="nw-note">{t('nw.rounds.empty')}</p>}
+        {rounds.map((r) => (
+          <section key={`${r.n}:${r.arenaId}`} className="nw-round" data-testid="round-board">
+            <h4 className="nw-round__head mono">{t('nw.rounds.head', { time: bellTime(r.endedAt), arena: arenaMeta(r.arenaId).name, n: r.players })}</h4>
+            <Standings
+              rows={r.top.map((x, i) => ({
+                key: `${r.n}:${r.arenaId}:${i}`,
+                name: x.name,
+                skin: x.skin,
+                me: !x.isBot && me !== null && x.name === me,
+                country: x.country,
+                bot: x.isBot,
+                value: `${tf.fmt(x.value, { compact: true, maxFrac: 1 })} ${tf.symbol}`,
+              }))}
+              valueLabel={t('nw.col.held')}
+            />
+          </section>
+        ))}
       </article>
     </div>
   );
@@ -300,6 +345,8 @@ interface Row {
   extra?: string;
   /** The player's country (a flag before the name). */
   country?: string;
+  /** A house bot (tagged like in the game). */
+  bot?: boolean;
 }
 
 function Standings({
@@ -350,6 +397,7 @@ function Standings({
                 <CoinPortrait skin={r.skin} size={i < 3 ? 38 : 30} still seed={i + 1} className="nw-table__coin" />
                 {r.country && <Flag code={r.country} size={13} className="nw-table__flag" />}
                 <span className="nw-table__label">{r.name}</span>
+                {r.bot && <BotTag />}
                 {r.me && (
                   <Chip tone="sun" className="nw-table__me">
                     {t('nw.you')}
