@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { PlayerFlag, TICK_MS, decodeSnapshot, isNaturalBotName, roundAt, type ServerMessage, type SnapshotData } from '@elymum/shared';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createApp, type App } from '../src/app';
-import { BotManager } from '../src/bots/manager';
+import { ARRIVAL, BOT_FLOOR, BotManager } from '../src/bots/manager';
 import { BotSettingsError, BotSettingsStore, applyBotSettings, defaultBotSettings } from '../src/bots/settings';
 import type { StakedBotSource, StakedBotTicket } from '../src/bots/staked';
 import { loadConfig } from '../src/config';
@@ -54,12 +54,14 @@ describe('bot seats: the house squad', () => {
     expect(of(a, 'joined')[0].room.bots).toBe(squad);
   });
 
-  it('a room opens with no bot and the squad walks in one at a time, with at least 3 inside a dozen seconds', () => {
+  it('a room opens with no bot and the squad walks in one at a time, with at least 3 inside 15 seconds', () => {
     const room = practice({ target: 12, min: 0, max: 12 });
     tick(room);
     expect(room.bots!.bots.size).toBe(0);
     let last = 0;
-    for (let i = 0; i < 12 * 30; i++) {
+    // worst case: 3 arrivals at most ARRIVAL.openingMax apart (3 x 4.5 s)
+    expect(BOT_FLOOR * ARRIVAL.openingMax).toBeLessThanOrEqual(15_000);
+    for (let i = 0; i < 15 * 30; i++) {
       tick(room);
       const n = room.bots!.bots.size;
       expect(n - last).toBeLessThanOrEqual(1);

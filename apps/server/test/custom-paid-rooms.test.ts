@@ -252,8 +252,8 @@ describe('custom rooms: paid rooms (invite-only arena instances)', () => {
     const view = await svc.create(a, { config: paid(1, { bots: 3 }), txHash: reader.pay(1, a, BASE) });
     const room = rooms.get(`priv-${view.code}`) as Room;
     expect(room.stakedTarget()).toBe(0);
-    // the creator's bots walk in over the first seconds
-    tick(room, 30 * 15);
+    // the creator's bots walk in over the first seconds (3 within 13.5 s at most)
+    tick(room, 30 * 20);
     expect(room.bots?.bots.size).toBe(3);
     svc.close(view.code, { wallet: a, admin: true });
     expect(rooms.get(room.id)).toBeUndefined();

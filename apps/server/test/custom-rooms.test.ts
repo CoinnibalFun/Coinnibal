@@ -143,8 +143,8 @@ describe('custom rooms: create, caps, perks', () => {
     expect(room.opts.maxPlayers).toBe(6);
     expect(room.info().custom).toMatchObject({ mapSize: 'S', bots: 4, difficulty: 'hard' });
     // its bots are its own: an admin bot change leaves them alone
-    // the creator's bots walk in over the first seconds
-    for (let i = 0; i < 30 * 20; i++) room.tick(33);
+    // the creator's bots walk in one by one: the first 3 within 13.5 s at most, the 4th up to 20 s later
+    for (let i = 0; i < 30 * 40; i++) room.tick(33);
     expect(room.bots?.bots.size).toBe(4);
     rooms.applyBotSettings();
     room.tick(33);
