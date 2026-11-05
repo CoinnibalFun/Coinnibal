@@ -94,19 +94,28 @@ export function leapDistance(r: number): number {
 /** The speed burst multiplier (the map pump's). */
 export const BOOST_SPEED_MUL = RULES.pumpSpeedMul;
 
-/** The burn address the default sink sends to. */
+/** Where burned tokens go when the arena's burn mode is `0` (and the fallback of mode `1`). */
 export const BURN_ADDRESS = '0x000000000000000000000000000000000000dEaD';
 
-export type ShopSink = 'burn' | 'treasury';
+/**
+ * The `ref` of a power-up payment (`ElymumArena.pay(amount, ref)`): `elymum.shop.<kind>` in ASCII, right-padded to
+ * 32 bytes. The server credits a payment only when its ref names the pack bought.
+ */
+export function shopPaymentRef(kind: BoostKind): `0x${string}` {
+  const ascii = `elymum.shop.${kind}`;
+  let hex = '';
+  for (let i = 0; i < ascii.length; i++) hex += ascii.charCodeAt(i).toString(16).padStart(2, '0');
+  return `0x${hex.padEnd(64, '0')}`;
+}
 
-/** The admin's shop settings (`/api/admin/shop`, stored in `DATA_DIR/site/shop.json`). */
+/**
+ * The admin's shop settings (`/api/admin/shop`, stored in `DATA_DIR/site/shop.json`). Where the money goes is not a
+ * setting here: every pack is paid with `ElymumArena.pay`, which burns `paymentBurnBps` of it (default 50 %) and
+ * sends the rest to the arena's fee wallet on chain (`fees.ts`). Older files' `sink` / `treasury` are ignored.
+ */
 export interface ShopSettings {
   /** Buying and using bought power-ups is on. */
   enabled: boolean;
-  /** Where payments go: the burn address (default) or the treasury wallet. */
-  sink: ShopSink;
-  /** The treasury wallet (EIP-55); null: the first `ADMIN_WALLETS` entry (the owner). */
-  treasury: string | null;
   /** Charges in one pack. */
   packSize: number;
   /** Price of one pack, whole game tokens as a decimal string ("300", "12.5"). */
@@ -122,15 +131,14 @@ export interface ShopSettings {
 }
 
 /**
- * Default prices, tied to the cheapest arena ticket (1,000 `$ELYMUM`, `DEFAULT_ARENAS`): one charge
- * costs 20-40 % of that ticket (a pack of 3: Magnet and Speed 600, Leap 900, Invisibility 1,200).
- * A charge is cheap next to what a round can win, so buying one is an easy call, while the per-round
- * cap in paid arenas (`arenaUsesPerRound`) keeps them from deciding a fight. Payments are burned.
+ * Default prices, tied to the cheapest arena ticket (1,000 `$ELYMUM`, `DEFAULT_ARENAS`; docs/ECONOMY.md): one
+ * charge costs 20-40 % of that ticket (a pack of 3: Magnet and Speed 600, Leap 900, Invisibility 1,200). A charge
+ * is cheap next to what a round can win, so buying one is an easy call, while the per-round cap in paid arenas
+ * (`arenaUsesPerRound`) keeps them from deciding a fight. Half of every payment is burned, half goes to the fee
+ * wallet (`DEFAULT_PAYMENT_BURN_BPS`).
  */
 export const SHOP_DEFAULTS: ShopSettings = {
   enabled: true,
-  sink: 'burn',
-  treasury: null,
   packSize: 3,
   prices: { magnet: '600', leap: '900', speed: '600', invis: '1200' },
   kinds: { magnet: true, leap: true, speed: true, invis: true },
@@ -192,12 +200,13 @@ export interface ShopView {
   /** The shop is on and a game token is set (buying is possible). */
   open: boolean;
   /** Why buying is not possible right now, when `open` is false. */
-  closedReason?: 'disabled' | 'no_token' | 'no_chain' | 'no_sink';
+  closedReason?: 'disabled' | 'no_token' | 'no_chain' | 'no_arena';
   /** The game token (null until it is set). */
   token: { address: string; symbol: string; decimals: number } | null;
-  /** Where the transfer goes (EIP-55). */
-  sink: string | null;
-  sinkKind: ShopSink;
+  /** The arena contract the wallet approves and calls `pay(amount, shopPaymentRef(kind))` on (EIP-55). */
+  payTo: string | null;
+  /** Share of a payment the contract burns (bps); the rest goes to its fee wallet. Null while unknown. */
+  burnBps: number | null;
   packs: ShopPack[];
   /** The wallet holds an Elymum emblem (its prices carry the discount). */
   holder: boolean;
@@ -225,10 +234,11 @@ export type ShopBuyError =
   | 'tx_used'
   | 'tx_pending'
   | 'tx_failed'
-  | 'no_transfer'
+  | 'no_payment'
   | 'wrong_token'
   | 'wrong_sender'
   | 'wrong_recipient'
+  | 'wrong_pack'
   | 'wrong_amount'
   | 'tx_stale'
   | 'chain_busy';

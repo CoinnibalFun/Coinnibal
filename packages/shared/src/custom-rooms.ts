@@ -1,6 +1,6 @@
 /**
- * Custom rooms: a signed-in wallet pays a small native HYPE fee (to the treasury) and gets a
- * private room with its own rules (map size, bots, duration, capacity, ...). The fee grows with the
+ * Custom rooms: a signed-in wallet pays a small fee in the chain's gas token (to the treasury) and gets a
+ * private room with its own rules (map size, practice bots in free rooms, duration, capacity, ...). The fee grows with the
  * capacity (`customRoomFee`). Two kinds:
  *
  *  - `free`: no stakes, pure fun (like practice). A `private` room (`RoomInfo.mode`), joined with
@@ -115,8 +115,12 @@ export interface CustomRoomConfig {
   durationMin: CustomDuration;
   /** `auto` or a fixed size (rooms made before `auto` existed always carry a size). */
   mapSize: CustomMapChoice;
-  /** Bots in the room, 0..12 (they stay at this count whatever the humans do). */
+  /**
+   * Practice bots in the room, 0..12 (0: off). FREE rooms only: a paid room (stakes) always has 0. They are
+   * labelled BOT, hold no value and see only what a person would.
+   */
   bots: number;
+  /** How well the bots play (`mixed`: a third each of easy, normal and hard). */
   difficulty: CustomDifficulty;
   /** Most humans at once (the room's capacity), 2..100 (and at most the admin's `maxPlayers`). */
   maxPlayers: number;
@@ -134,7 +138,7 @@ export const CUSTOM_DEFAULTS: CustomRoomConfig = {
   name: '',
   durationMin: 30,
   mapSize: 'auto',
-  bots: 6,
+  bots: 0,
   difficulty: 'mixed',
   maxPlayers: 10,
   food: 'normal',
@@ -189,7 +193,7 @@ export interface CustomRoomView extends CustomRoomSummary {
   players: number;
   /** The room's own leaderboard, best first (up to 10). */
   best: CustomBest[];
-  /** How it was paid: `paid` (a HYPE transfer) or `free` (the holder perk: a free room of the day, or a 100 % discount). */
+  /** How it was paid: `paid` (a gas-token transfer) or `free` (the holder perk: a free room of the day, or a 100 % discount). */
   paidWith: 'paid' | 'free';
   /** The payment transaction (0x hash), when paid. */
   txHash: string | null;
@@ -201,8 +205,8 @@ export interface CustomRoomView extends CustomRoomSummary {
 export interface CustomRoomSettings {
   /** Creating rooms is open. */
   enabled: boolean;
-  /** Price in HYPE, decimal string (e.g. "0.05"). */
-  priceHype: string;
+  /** Price in the chain's gas token, decimal string (e.g. "0.05"). */
+  priceGas: string;
   /** Where the fee goes (EIP-55); null: the first `ADMIN_WALLETS` wallet (the owner). */
   treasury: string | null;
   holderPerk: CustomHolderPerk;
@@ -227,7 +231,7 @@ export interface CustomRoomSettings {
 
 export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
   enabled: true,
-  priceHype: '0.05',
+  priceGas: '0.05',
   treasury: null,
   holderPerk: 'discount',
   holderDiscountPct: 50,
@@ -341,6 +345,8 @@ export function validateCustomConfig(x: unknown): { ok: true; config: CustomRoom
     arenaId = int(o.arenaId, 1, 65535);
     if (arenaId === null) return { ok: false, field: 'arenaId', message: 'Pick the arena tier of the paid room.' };
   } else if (o.arenaId !== undefined && o.arenaId !== null) return { ok: false, field: 'arenaId', message: 'A free room has no arena tier.' };
+  // bots are for free practice only: a room with stakes is people only
+  if (kind === 'paid' && bots > 0) return { ok: false, field: 'bots', message: 'Bots play in free rooms only: a paid room is for people.' };
   return {
     ok: true,
     config: {

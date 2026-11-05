@@ -1,3 +1,5 @@
+import { GAS_DECIMALS } from './chains';
+
 /**
  * Token amounts.
  *
@@ -5,7 +7,7 @@
  * read from the contract). The SDK keeps them as `bigint`; the server and web
  * use `number` only after `toSafeAmount`, which refuses anything above
  * `Number.MAX_SAFE_INTEGER` (note: 1,000 tokens of an 18-decimal token is 1e21
- * base units, which does not fit). HYPE amounts (wei) always stay `bigint`.
+ * base units, which does not fit). Gas-token amounts (wei) always stay `bigint`.
  * All formatting and parsing here is exact integer arithmetic, so there is no
  * floating point drift and no dependence on the runtime's ICU data.
  */
@@ -135,10 +137,7 @@ export function parseToken(text: string, decimals: number): bigint {
   return BigInt(whole + fracText.slice(0, decimals).padEnd(decimals, '0') || '0');
 }
 
-/** Decimals of HYPE, the gas token (wei). */
-export const HYPE_DECIMALS = 18;
-
-/** A HYPE amount in wei for display: `0.0312 HYPE` (at most `maxFrac` decimals, default 4). */
-export function formatHype(wei: bigint | number, maxFrac = 4): string {
-  return `${formatToken(wei, HYPE_DECIMALS, { maxFrac })} HYPE`;
+/** A gas-token amount in wei for display: `0.0312 ETH` (the active chain's `symbol`; at most `maxFrac` decimals, default 4). */
+export function formatGas(wei: bigint | number, symbol: string, maxFrac = 4): string {
+  return `${formatToken(wei, GAS_DECIMALS, { maxFrac })} ${symbol}`;
 }
