@@ -941,6 +941,20 @@ export class RoomManager {
     for (const [code, at] of this.closedCodes) if (now - at >= CLOSED_MEMO_MS) this.closedCodes.delete(code);
   }
 
+  /**
+   * The tick p95 (ms) of the game thread with the most headroom: the worker a new room would go to, or the main
+   * thread in single-thread mode. Null while nothing was measured. Read by the load shedder (`net/shedder.ts`).
+   */
+  bestTickP95Ms(): number | null {
+    if (!this.pool) {
+      const s = this.tickStats.summary();
+      return s.n > 0 ? s.p95Ms : null;
+    }
+    let best: number | null = null;
+    for (const t of this.pool.threads()) if (t.up !== false && t.tick.n > 0) best = best === null ? t.tick.p95Ms : Math.min(best, t.tick.p95Ms);
+    return best;
+  }
+
   /** Per-thread load (`GET /api/admin/load`, the load test). `rooms`: with every room's own figures. */
   loadStats(opts: { rooms?: boolean } = {}): ServerLoad {
     const now = performance.now();

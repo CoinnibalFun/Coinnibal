@@ -266,6 +266,9 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   async function makeChain(): Promise<EvmChain> {
     const c = new EvmChain(cfg, journal, log, { client, contracts: () => ({ arena: sim.arenaAddress, nft: null }), loops: false, now: () => clock, receiptTimeoutMs: 5_000, cacheDir: dir });
     c.setLiveSessionProvider(() => liveSessions());
+    // the simulation runs every worker pass itself, between its checks: a pass the chain would start on its own
+    // (`kick` after the stale sweep) could land in the middle of a conservation check on a real node
+    (c as unknown as { kick: () => void }).kick = () => {};
     faulty.on = false;
     await c.start();
     faulty.on = true;

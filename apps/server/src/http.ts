@@ -141,16 +141,49 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   return true;
 }
 
+/**
+ * The `Access-Control-Allow-Origin` answer for a request: `*` when `CORS_ORIGIN` is `*` (sessions are bearer
+ * tokens, never cookies, so no browser sends credentials either way), else the request's `Origin` when it is one
+ * of the comma-separated allowed origins, else nothing (the browser blocks the read).
+ */
+export function corsAllow(corsOrigin: string, origin: string | undefined): string | null {
+  const allowed = corsOrigin.split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
+  if (allowed.includes('*')) return '*';
+  return origin && allowed.includes(origin) ? origin : null;
+}
+
+/** Slow or idle HTTP clients (slowloris): headers within 15 s, the whole request within 30 s, idle keep-alive 5 s. */
+export const HTTP_TIMEOUTS = { headersMs: 15_000, requestMs: 30_000, keepAliveMs: 5_000, maxHeaders: 64 } as const;
+
+/** Public reads answered from a copy at most this old (a flood of them costs one build per period). */
+const MICRO_CACHE_MS = 1_000;
+
 export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
   const apiLimiter = ctx.apiLimiter ?? new Limiter(240, 60_000);
   const nonceLimiter = new Limiter(20, 60_000);
   const trustProxy = trustProxyHops();
+  const cached = new Map<string, { at: number; body: string }>();
+  /** A public JSON read, built at most once a second. */
+  const publicJson = (res: ServerResponse, key: string, build: () => unknown): void => {
+    const now = Date.now();
+    let hit = cached.get(key);
+    if (!hit || now - hit.at >= MICRO_CACHE_MS) {
+      hit = { at: now, body: JSON.stringify(build()) };
+      cached.set(key, hit);
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=1' });
+    res.end(hit.body);
+  };
 
-  return createServer(async (req, res) => {
+  // the request and header timeouts are enforced by a sweep every `connectionsCheckingInterval` (Node default 30 s)
+  const server = createServer({ connectionsCheckingInterval: 2_000 }, async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
-    res.setHeader('Access-Control-Allow-Origin', cfg.corsOrigin);
+    const allow = corsAllow(cfg.corsOrigin, req.headers.origin);
+    if (allow) res.setHeader('Access-Control-Allow-Origin', allow);
+    if (allow && allow !== '*') res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Max-Age', '600');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
@@ -173,10 +206,10 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
               game: ctx.rooms.pool ? { mode: 'workers', workers: ctx.rooms.pool.size, up: ctx.rooms.pool.threads().filter((t) => t.up).length } : { mode: 'single', workers: 0, up: 0 },
             });
           case '/api/rooms':
-            return json(res, 200, { rooms: ctx.rooms.list(), online: ctx.rooms.online(), blocked: ctx.rooms.blockedArenas() });
+            return publicJson(res, 'rooms', () => ({ rooms: ctx.rooms.list(), online: ctx.rooms.online(), blocked: ctx.rooms.blockedArenas() }));
           case '/api/leaderboard':
             // the standings: off-chain daily / all-time best scores, no prizes
-            return json(res, 200, ctx.leaderboards.snapshot());
+            return publicJson(res, 'leaderboard', () => ctx.leaderboards.snapshot());
           case '/api/config': {
             // `chain.tokenReady` false: practice only, arenas "opening soon" (the server picks the token up by itself)
             const body: Record<string, unknown> = { protocol: PROTOCOL_VERSION, chain: ctx.chain.status() };
@@ -244,4 +277,9 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
       else res.end();
     }
   });
+  server.headersTimeout = HTTP_TIMEOUTS.headersMs;
+  server.requestTimeout = HTTP_TIMEOUTS.requestMs;
+  server.keepAliveTimeout = HTTP_TIMEOUTS.keepAliveMs;
+  server.maxHeadersCount = HTTP_TIMEOUTS.maxHeaders;
+  return server;
 }

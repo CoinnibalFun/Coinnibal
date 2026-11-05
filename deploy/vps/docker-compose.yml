@@ -64,6 +64,9 @@ services:
       - "443:443/udp"
     environment:
       GAME_DOMAIN: ${GAME_DOMAIN:?set GAME_DOMAIN in /opt/elymum/.env}
+    # Caddyfile (players connect straight to this server) or Caddyfile.cloudflare (behind Cloudflare, README
+    # "Cloudflare in front"): CADDY_CONFIG in /opt/elymum/.env
+    command: ["caddy", "run", "--config", "/etc/caddy/${CADDY_CONFIG:-Caddyfile}", "--adapter", "caddyfile"]
     volumes:
       # the folder, not the file: a git update replaces the file and a file mount would keep the old one
       - ./caddy:/etc/caddy:ro

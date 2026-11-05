@@ -1,19 +1,24 @@
-/** Where the game server lives. Same origin by default (Vite dev proxies /ws and /api). */
-function resolveServer(): { http: string; ws: string } {
-  const env = import.meta.env.VITE_SERVER_URL as string | undefined;
-  if (env) {
-    const http = env.replace(/\/$/, '').replace(/^ws/, 'http');
+/**
+ * Where the game server lives. Same origin by default (Vite dev proxies /ws and /api; the Docker image serves the
+ * client itself). On a static host (Vercel) the browser talks to the game server DIRECTLY, for the API as well as
+ * the WebSocket (`VITE_SERVER_URL`, or the origin of `VITE_WS_URL`): requests through the host's proxy would all
+ * arrive from the host's few addresses, so the server's per-IP limits could not tell players apart. The static
+ * host only proxies what must live on the site's own domain (the NFT metadata, the share cards).
+ */
+export function resolveServer(env: { server?: string; ws?: string }, loc: { protocol: string; host: string }): { http: string; ws: string } {
+  const direct = env.server || env.ws;
+  if (direct) {
+    const http = direct.replace(/\/+$/, '').replace(/\/ws$/, '').replace(/^ws/, 'http');
     return { http, ws: `${http.replace(/^http/, 'ws')}/ws` };
   }
-  const { protocol, host } = window.location;
-  const http = `${protocol}//${host}`;
-  // A static host (Vercel) proxies /api to the game server but cannot carry the WebSocket:
-  // VITE_WS_URL points the socket straight at the game server.
-  const ws = (import.meta.env.VITE_WS_URL as string | undefined)?.replace(/\/$/, '');
-  return { http, ws: ws ? `${ws.replace(/^http/, 'ws')}/ws` : `${protocol === 'https:' ? 'wss' : 'ws'}://${host}/ws` };
+  const http = `${loc.protocol}//${loc.host}`;
+  return { http, ws: `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws` };
 }
 
-export const SERVER = resolveServer();
+export const SERVER = resolveServer(
+  { server: import.meta.env.VITE_SERVER_URL as string | undefined, ws: import.meta.env.VITE_WS_URL as string | undefined },
+  window.location,
+);
 
 /** Optional client-side overrides for the chain settings the server advertises. */
 export const CHAIN_OVERRIDES = {
