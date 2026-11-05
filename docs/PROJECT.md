@@ -71,10 +71,12 @@ the code is laid out and how it is run. The source of truth for everything is
   the first minute (`ARRIVAL.windowMs`) of a room opening or an arena round starting. In arenas (`rounds`) the squad
   size is fixed per round, no bot goes home before the bell and none walks in after the round's joins close; a bot
   that was eaten comes back 3-12 s later while joins are open. Free rooms let bots go home after 4-12 min.
+- Busy rooms let fewer bots in: one fewer per 3 people past 8, never under 3 (`CROWD`, practice and arenas).
 - Bankroll: in arenas each bot walks in with a ticket's worth (the value a person's ticket starts with) drawn
   from the team reserve (`Journal.drawHouse`, on the main thread, also from room workers), so eating a bot pays
-  like eating a person. What bots hold at the bell goes back to the reserve. With too little reserve a bot enters
-  with nothing; the team can never lose more than the reserve. The admin tops it up by turning an unplayed ticket
+  like eating a person. What bots hold at the bell goes back to the reserve. A bot walks in only once its stake is
+  drawn (no bot ever shows a value of 0): with too little reserve fewer bots come; the team can never lose more than
+  the reserve. On a test chain the whole squad plays real tickets instead (`stakedPerArena` 9). The admin tops it up by turning an unplayed ticket
   of their own wallet into reserve (`POST /api/admin/bots/bankroll`, /admin → Bots: the ticket settles at 0 and its
   value stays in the vault).
 - Squad play (`bots/squad.ts`, off in the rookie league): the squad keeps a map-wide picture of every person
@@ -82,7 +84,8 @@ the code is laid out and how it is run. The source of truth for everything is
   herds the person toward a *flanker* that cuts off the way out (the trap) or, for hard bots, into a wall; a small
   *feeder* tips mass into a pusher that is just short of a split kill; a small bot chased by a person runs to a
   big teammate who *ambushes* the chaser (the lure); a small teammate (under 140 mass) gets a big one keeping an eye
-  on it from a distance and cutting in when a person goes for it (*cover*). Idle bots *patrol* toward the most promising person on the
+  on it from a distance and cutting in when a person goes for it (*cover*); lined up behind a thorn bush, a bot feeds
+  it toward a person too big to eat so the squad can take the pieces (*cactus shot*). Idle bots *patrol* toward the most promising person on the
   reports. Targets weigh more when they hold more value, in the last two minutes of a round, and when split into
   pieces. At most `maxChasers` bots work one person (rookie 1, private 2, pro and arenas 3). Teammates on an
   operation are never eaten; otherwise bots still eat each other now and then (`BOT_APPETITE`). A chase on a person

@@ -216,6 +216,22 @@ describe('the bot squad', () => {
     }
   });
 
+  it('the cactus shot: lined up behind a thorn bush, a bot feeds it toward a person too big to eat', () => {
+    const world = new World(cfg({ virusTarget: 0 }));
+    const b = bot(world, 2000, 3000, 400, 71);
+    // a bush between the bot and a big person, on one line
+    world.spawnVirus(2400, 3000);
+    const big = person(world, 2900, 3000, 900);
+    world.setTarget(big.id, 2900, 3000);
+    let ejects = 0;
+    drive(world, [b], 2000, undefined, () => ejects++);
+    expect(ejects).toBeGreaterThan(2);
+    // and not again right away
+    const before = ejects;
+    drive(world, [b], 3000, undefined, () => ejects++);
+    expect(ejects - before).toBeLessThan(2);
+  });
+
   it('the rookie league plays without squad roles; arenas weigh rich people and the last minute higher', () => {
     const world = new World({ ...WORLD_PRESETS.practice, powerUps: false, coinRain: false, seed: 9 });
     const m = new BotManager(world, { target: 6, min: 3, max: 6, teamplay: false }, mulberry32(9));
