@@ -6,6 +6,7 @@ import { serverClock } from '../src/game/clock';
 import { useUi } from '../src/store';
 import { setReducedMotion } from '../src/test/media';
 import { RoomClosingNotice, RoomOverSheet, RoundCountdown } from '../src/ui/game';
+import { KillShare, KILL_SHARE_MS, SHARE_COIN, shareUrl } from '../src/ui/game/ShareOnX';
 import { boardPlace } from '../src/ui/game/FinalBoard';
 
 HTMLCanvasElement.prototype.getContext = (() => null) as never;
@@ -100,5 +101,44 @@ describe('a custom room ends: countdown, then the final board', () => {
     expect(boardPlace([{ ...BOARD[0] }, { rank: 14, name: 'Me', mass: 10, kills: 0, you: true }], (n) => `out ${n}`)).toBe('14th');
     expect(boardPlace(BOARD.map(({ you: _y, ...r }) => r), (n) => `out ${n}`)).toBe('out 3');
     expect(boardPlace([], (n) => `out ${n}`)).toBe('—');
+  });
+
+  it('Share on X: the final board links X\'s composer to my card once the server made it', () => {
+    const stats = { aliveMs: 1, finalMass: 1800, maxMass: 1800, foodEaten: 1, cellsEaten: 0, playersEaten: 1, bestRank: 3, finalRank: 3, finalOf: 3 };
+    useUi.setState({ screen: 'roomover', roomResult: { message: 'Time is up.', players: 2, standings: BOARD, stats, room: ROOM }, share: null });
+    const { rerender } = render(
+      <Kb>
+        <RoomOverSheet />
+      </Kb>,
+    );
+    expect(screen.queryByTestId('share-x')).toBeNull();
+    act(() => useUi.setState({ share: { kind: 'room', id: 'AbCdE12345', at: Date.now() } }));
+    rerender(
+      <Kb>
+        <RoomOverSheet />
+      </Kb>,
+    );
+    const link = screen.getByTestId('share-x') as HTMLAnchorElement;
+    expect(link.textContent).toContain('Share on X');
+    expect(link.target).toBe('_blank');
+    expect(link.rel).toContain('noopener');
+    const url = new URL(link.href);
+    expect(url.origin + url.pathname).toBe('https://x.com/intent/post');
+    expect(url.searchParams.get('text')).toBe(`I finished #3 of 3 in Friday Pond on Elymum! ${SHARE_COIN}`);
+    expect(url.searchParams.get('url')).toBe(shareUrl('AbCdE12345'));
+    expect(shareUrl('AbCdE12345')).toMatch(/\/share\/AbCdE12345$/);
+  });
+
+  it('a notable kill shows "You ate ..." with Share on X for a few seconds', () => {
+    useUi.setState({ screen: 'playing', share: { kind: 'kill', id: 'KiLL123456', victim: 'Nakamoto', at: Date.now() } });
+    render(
+      <Kb>
+        <KillShare />
+      </Kb>,
+    );
+    const sticker = screen.getByTestId('kill-share');
+    expect(sticker.textContent).toContain('You ate Nakamoto!');
+    expect(new URL((screen.getByTestId('share-x') as HTMLAnchorElement).href).searchParams.get('text')).toBe(`I just ate Nakamoto on Elymum! ${SHARE_COIN}`);
+    expect(KILL_SHARE_MS).toBeGreaterThanOrEqual(5000);
   });
 });

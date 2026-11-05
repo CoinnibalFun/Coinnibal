@@ -317,6 +317,7 @@ describe('room helpers', () => {
     expect(roomKindText({ kind: 'paid', arenaId: 2 })).toBe('paid · Lethe Shore #2');
     expect(roomKindText({ kind: 'free' })).toBe('free');
     expect(roomKindText({})).toBe('free');
+    expect(roomKindText({ kind: 'free', practice: true })).toBe('practice with bots');
     expect(feeText({ feeWei: (PRICE * 3n).toString() })).toBe('0.15');
     expect(feeText({ feeWei: '0' })).toBe('0');
     expect(feeText({})).toBe('0');

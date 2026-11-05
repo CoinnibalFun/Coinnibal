@@ -134,6 +134,15 @@ export interface CustomRoomConfig {
   arenaId: number | null;
 }
 
+/**
+ * "Practice with bots" (the ponds are people only, so they may look empty at quiet hours): one click opens a FREE,
+ * short-lived custom room with practice bots for the player (guests too) and up to three friends with its code. No
+ * creation fee; abuse limits instead: one live practice room per player (asking again returns it), a few creations
+ * per IP per half hour, at most `CustomRoomSettings.practiceMaxLive` at once (outside the paid rooms' slots and
+ * seats), `durationMin` long, and closed as soon as it has stood empty for `idleMs`.
+ */
+export const PRACTICE_ROOM = { name: 'Practice with bots', durationMin: 15, bots: 8, maxPlayers: 4, idleMs: 120_000, perIp: 4, perIpWindowMs: 30 * 60_000 } as const;
+
 export const CUSTOM_DEFAULTS: CustomRoomConfig = {
   name: '',
   durationMin: 30,
@@ -147,6 +156,11 @@ export const CUSTOM_DEFAULTS: CustomRoomConfig = {
   kind: 'free',
   arenaId: null,
 };
+
+/** The rules of a "Practice with bots" room (`PRACTICE_ROOM`): auto map, the creator's mix of bots, power-ups on. */
+export function practiceRoomConfig(): CustomRoomConfig {
+  return { ...CUSTOM_DEFAULTS, name: PRACTICE_ROOM.name, durationMin: PRACTICE_ROOM.durationMin, bots: PRACTICE_ROOM.bots, maxPlayers: PRACTICE_ROOM.maxPlayers, kind: 'free', arenaId: null };
+}
 
 /** The rules of a live custom room as clients see them (`RoomInfo.custom`). */
 export interface CustomRoomSummary {
@@ -162,6 +176,8 @@ export interface CustomRoomSummary {
   kind?: CustomRoomKind;
   /** Paid rooms: the arena whose tickets seat players here. */
   arenaId?: number;
+  /** A "Practice with bots" room (`PRACTICE_ROOM`): free, short-lived, opened in one click (its creator may be a guest). */
+  practice?: boolean;
   /**
    * Paid rooms closing (time is up, or closed early): no new seats; the room closes at its next
    * bell, once every ticket in it is settled.
@@ -227,6 +243,10 @@ export interface CustomRoomSettings {
   maxSeats: number;
   /** Paid rooms (invite-only arena instances) may be created. */
   paidRooms: boolean;
+  /** "Practice with bots" rooms (free, one click, `PRACTICE_ROOM`) may be opened. */
+  practiceRooms: boolean;
+  /** Most "Practice with bots" rooms live at once (0..50; outside `maxLive` and `maxSeats`). */
+  practiceMaxLive: number;
 }
 
 export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
@@ -242,10 +262,12 @@ export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
   maxPlayers: 100,
   maxSeats: 300,
   paidRooms: true,
+  practiceRooms: true,
+  practiceMaxLive: 12,
 };
 
 /** Bounds of the admin caps. */
-export const CUSTOM_SETTINGS_LIMITS = { maxLive: 24, maxPerWallet: 10, capacityStepPct: 500, maxPlayers: CUSTOM_LIMITS.playersMax, maxSeats: 500, maxSeatsMin: 10 } as const;
+export const CUSTOM_SETTINGS_LIMITS = { maxLive: 24, maxPerWallet: 10, capacityStepPct: 500, maxPlayers: CUSTOM_LIMITS.playersMax, maxSeats: 500, maxSeatsMin: 10, practiceMaxLive: 50 } as const;
 
 /** An arena tier a paid room can be made of (`CustomRoomQuote.tiers`). */
 export interface CustomArenaTier {

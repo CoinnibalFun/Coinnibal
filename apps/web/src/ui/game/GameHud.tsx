@@ -18,6 +18,8 @@ import { MobileControls, useIsTouch } from './MobileControls';
 import { RoundIntro, SunsetSky, ValueFlyers } from './Moments';
 import { RoundChip, RoundCountdown } from './RoundChip';
 import { RoomClosingNotice } from './RoomClosing';
+import { KillShare } from './ShareOnX';
+import { PracticeQuiet, QUIET_BELOW } from '../../rooms/PracticeQuiet';
 import { SpectateBar } from './SpectateBar';
 import { CustomRoomBar } from '../../rooms/CustomRoomBar';
 
@@ -91,6 +93,12 @@ function WorthSticker() {
 /* ───────────────────────── practice / private room tag (top left) ───────────────────────── */
 
 /** Outside arenas there is no bell: the timer's place says which pond this is. */
+/** Alone in a people-only pond: the honest empty state, with one click to practice with bots (it can be hidden). */
+function PondQuiet() {
+  const alone = useUi((s) => s.screen === 'playing' && s.room?.mode === 'practice' && s.hud.players > 0 && s.hud.players < QUIET_BELOW);
+  return alone ? <PracticeQuiet hud /> : null;
+}
+
 function PondTag() {
   const t = useT();
   const room = useUi((s) => s.room);
@@ -527,6 +535,8 @@ export function GameHud() {
         {/* in the column's flow, so it never covers a banner or my coin */}
         {!roundOver && <RoundCountdown />}
         <RoomClosingNotice />
+        <KillShare />
+        <PondQuiet />
         <Banner />
         <PowerUps />
         <NetStats />

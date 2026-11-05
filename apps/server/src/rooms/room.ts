@@ -3,6 +3,7 @@ import {
   ClientOp,
   EMOTES,
   FINAL_STANDINGS_ROWS,
+  NOTABLE_KILL_MASS,
   MAP_GROW,
   MAP_SPACE,
   PlayerFlag,
@@ -89,6 +90,8 @@ export interface RoomDeps {
   integrity?: RoomIntegrity;
   /** Bought power-ups (charges, cooldowns, the arena cap); absent: the `boost` message is ignored. */
   shop?: Pick<ShopService, 'state' | 'use'>;
+  /** A person ate a person whose coin reached `NOTABLE_KILL_MASS` this game (the killer may share it). */
+  onNotableKill?: (e: { room: Room; conn: Conn; killer: Player; victim: string; victimMass: number }) => void;
 }
 
 /** An AFK staker's ticket settled at a round's bell (see `RoomDeps.onBellSettled`). */
@@ -720,9 +723,14 @@ export class Room implements RoomHandle {
    * Ends a human's game. With `batch`, the settlement is appended to it and nothing is written
    * (the caller commits the whole batch in one journal write) and no message is sent.
    */
-  private finishHuman(p: Player, conn: Conn | null, cause: FinishCause, killer: Player | null = null, batch?: JournalItem[]): DeathStats {
+  /** `end`: a room's end (bell, custom room end): the player's place on the final board, in the stats the hooks get. */
+  private finishHuman(p: Player, conn: Conn | null, cause: FinishCause, killer: Player | null = null, batch?: JournalItem[], end?: { rank: number; of: number }): DeathStats {
     const stillAlive = cause !== 'death';
     const stats = this.statsFor(p, stillAlive);
+    if (end) {
+      stats.finalRank = end.rank;
+      stats.finalOf = end.of;
+    }
     const wallet = this.walletOf.get(p.id) ?? null;
     const now = Date.now();
     const score = stats.maxMass;
@@ -771,6 +779,15 @@ export class Room implements RoomHandle {
       this.deps.onGameOver?.({ room: this, conn: c, player: p, stats });
     } catch (err) {
       this.deps.log(`room ${this.id}: game-over hook failed: ${(err as Error).message}`);
+    }
+    // a person ate a big person: the killer may share it
+    const killerConn = killer && !killer.isBot && !p.isBot ? this.humans.get(killer.id) : null;
+    if (cause === 'death' && killerConn && stats.maxMass >= NOTABLE_KILL_MASS) {
+      try {
+        this.deps.onNotableKill?.({ room: this, conn: killerConn, killer: killer!, victim: p.name, victimMass: Math.floor(stats.maxMass) });
+      } catch (err) {
+        this.deps.log(`room ${this.id}: notable-kill hook failed: ${(err as Error).message}`);
+      }
     }
     this.world.removePlayer(p.id);
     this.humans.delete(p.id);
@@ -838,7 +855,7 @@ export class Room implements RoomHandle {
       if (!p?.alive) continue;
       const c = conn ?? null;
       const entry = ledger.get(pid);
-      const stats = this.finishHuman(p, c, 'round', null, batch);
+      const stats = this.finishHuman(p, c, 'round', null, batch, { rank: board.findIndex((b) => b.pid === pid) + 1, of: board.length });
       const payout = stats.payout ?? 0;
       if (c) results.push({ conn: c, pid, payout, stats });
       else if (entry) away.push({ arenaId: entry.arenaId, wallet: entry.player, session: entry.session, sessionId: entry.sessionId, round });
@@ -1203,7 +1220,8 @@ export class Room implements RoomHandle {
     for (const [pid, c] of [...this.humans]) {
       const p = this.world.players.get(pid);
       if (p?.alive) {
-        const stats = this.finishHuman(p, c, 'left');
+        const rank = board.findIndex((b) => b.pid === pid) + 1;
+        const stats = this.finishHuman(p, c, 'left', null, undefined, final && rank > 0 ? { rank, of: board.length } : undefined);
         if (c) played.set(c, { pid, stats });
         n++;
       }

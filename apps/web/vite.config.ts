@@ -18,6 +18,8 @@ process.env.VITE_PUBLIC_URL = (process.env.VITE_PUBLIC_URL || process.env.PUBLIC
 export function gameServerProxy(target: string) {
   return {
     '/api': { target, changeOrigin: false },
+    // "Share on X" cards (`/share/<id>` and its image) are served by the game server
+    '/share': { target, changeOrigin: false },
     '/ws': { target: target.replace(/^http/, 'ws'), ws: true, changeOrigin: true },
   };
 }

@@ -1,3 +1,4 @@
+import type { ShareKind } from './share';
 import type { BoostKind, BoostRefusal, BoostState } from './boosts';
 import type { League, RoomMode } from './constants';
 import type { CustomRoomSummary } from './custom-rooms';
@@ -427,6 +428,9 @@ export interface DeathStats {
   valueLost?: number;
   /** Arena rooms: part of `valueLost` that spilled as loot (anyone may pick it up until the bell; then it is burned). */
   lootSpilled?: number;
+  /** A room's end (an arena's bell, a custom room's end): my place on its final board, and how many stood on it. */
+  finalRank?: number;
+  finalOf?: number;
 }
 
 export type ServerMessage =
@@ -502,6 +506,9 @@ export type ServerMessage =
   // Free custom rooms: the room closed; its final standings (everyone by mass). `stats`: the receiver's game, if it
   // was playing. A `room_closed` error follows (the sheet stays; its button goes to the lobby).
   | { t: 'roomOver'; message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null }
+  // "Share on X": a public card of my result (`round`, `room`) or of a notable kill (`kill`, eating a big coin) is ready
+  // at `/share/<id>` on the site (with its Open Graph image). `victim`: the coin eaten (kills).
+  | { t: 'share'; kind: ShareKind; id: string; victim?: string }
   // Arena rooms: the player's in-game value changed.
   | {
       t: 'value';

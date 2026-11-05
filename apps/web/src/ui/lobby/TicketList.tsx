@@ -101,7 +101,7 @@ export function TicketList({
       ? [t('lo.practiceMeta'), tk.humans > 0 ? count(tk.humans, 'lo.humans1', 'lo.humans') : null].filter(Boolean).join(' · ')
       : soon
         ? t('lo.soonMeta')
-        : [count(tk.humans, 'lo.humans1', 'lo.humans'), count(tk.bots, 'lo.bots1', 'lo.bots')].join(' · ');
+        : [count(tk.humans, 'lo.humans1', 'lo.humans'), tk.bots > 0 ? count(tk.bots, 'lo.bots1', 'lo.bots') : null].filter(Boolean).join(' · ');
     const loot = !practice && !soon ? t('lo.onFloor', { n: tok.wireCompact(tk.loot), sym: tok.symbol }) : null;
     const style = { '--kl-ink': practice ? 'var(--foam)' : arenaMeta(tk.arenaId!).ink } as CSSProperties;
     return (

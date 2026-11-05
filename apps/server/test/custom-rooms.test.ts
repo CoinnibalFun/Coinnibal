@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CUSTOM_DEFAULTS, PROTOCOL_VERSION, ROOM_CLOSE_COUNTDOWN_MS, TICK_MS, CUSTOM_MAP_WIDTH, CUSTOM_WORLD_CAPS, CUSTOM_PAYMENT_MAX_AGE_MS, type CustomRoomConfig, type ServerMessage } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, PRACTICE_ROOM, PROTOCOL_VERSION, ROOM_CLOSE_COUNTDOWN_MS, TICK_MS, CUSTOM_MAP_WIDTH, CUSTOM_WORLD_CAPS, CUSTOM_PAYMENT_MAX_AGE_MS, type CustomRoomConfig, type ServerMessage } from '@elymum/shared';
 import { parseEther } from 'viem';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
@@ -256,6 +256,72 @@ describe('custom rooms: create, caps, perks', () => {
   });
 });
 
+describe('practice with bots (one click, free, short-lived)', () => {
+  it('opens a free room with practice bots for a guest; asking again returns it; it is outside the paid caps', async () => {
+    const { svc, rooms, reader, clock } = setup();
+    const guest = svc.practice({ wallet: null, ip: '10.0.0.1' });
+    expect(guest).toMatchObject({ practice: true, kind: 'free', bots: PRACTICE_ROOM.bots, maxPlayers: PRACTICE_ROOM.maxPlayers, paidWith: 'free', feeWei: '0', name: PRACTICE_ROOM.name });
+    expect(guest.creator).toBe('0x0000000000000000000000000000000000000000');
+    expect(guest.endsAt - clock.t).toBe(PRACTICE_ROOM.durationMin * 60_000);
+    const room = rooms.privateRoom(guest.code) as Room;
+    for (let i = 0; i < 30; i++) room.tick(TICK_MS);
+    expect(room.botCounts().bots).toBe(PRACTICE_ROOM.bots);
+    expect(room.info().custom).toMatchObject({ practice: true });
+    // the same player (same IP, no wallet) gets the same room back
+    expect(svc.practice({ wallet: null, ip: '10.0.0.1' }).code).toBe(guest.code);
+    // a signed-in player is keyed by wallet
+    const a = testSigner().address;
+    const mine = svc.practice({ wallet: a, ip: '10.0.0.1' });
+    expect(mine.code).not.toBe(guest.code);
+    expect(mine.creator).toBe(a);
+    expect(svc.practice({ wallet: a.toLowerCase(), ip: '10.9.9.9' }).code).toBe(mine.code);
+    // practice rooms take no paid slot, seat or per-wallet room
+    expect(svc.live).toBe(0);
+    expect(svc.practiceLive).toBe(2);
+    expect(svc.seatsUsed()).toBe(0);
+    expect(svc.mine(a)).toEqual([]);
+    svc.updateSettings({ maxLive: 1, maxPerWallet: 1 });
+    expect((await svc.create(a, { config: cfgOf(), txHash: reader.pay(1, a) })).practice).toBeUndefined();
+  });
+
+  it('caps the live practice rooms, can be turned off, and a room nears its end is not handed back', () => {
+    const { svc, clock } = setup();
+    svc.updateSettings({ practiceMaxLive: 2 });
+    svc.practice({ wallet: null, ip: '1.1.1.1' });
+    const second = svc.practice({ wallet: null, ip: '2.2.2.2' });
+    expect(() => svc.practice({ wallet: null, ip: '3.3.3.3' })).toThrow(expect.objectContaining({ code: 'slots_busy' }));
+    svc.updateSettings({ practiceRooms: false });
+    expect(() => svc.practice({ wallet: null, ip: '1.1.1.1' })).toThrow(expect.objectContaining({ code: 'rooms_closed' }));
+    svc.updateSettings({ practiceRooms: true, practiceMaxLive: 3 });
+    // two minutes left: a fresh room, not the old one
+    clock.t = second.endsAt - 2 * 60_000;
+    expect(svc.practice({ wallet: null, ip: '2.2.2.2' }).code).not.toBe(second.code);
+    expect(() => svc.updateSettings({ practiceMaxLive: 51 })).toThrow(/practiceMaxLive must be a whole number from 0 to 50/);
+  });
+
+  it('closes once it stood empty for two minutes; while someone plays it runs to its end (countdown, final board)', () => {
+    const { svc, rooms, clock } = setup();
+    const empty = svc.practice({ wallet: null, ip: '1.1.1.1' });
+    const busy = svc.practice({ wallet: null, ip: '2.2.2.2' });
+    const c = fakeConn(null);
+    (rooms.privateRoom(busy.code) as Room).join(c, { name: 'Pip', skin: 1, flags: 0 });
+    svc.sweep(clock.t);
+    clock.t += PRACTICE_ROOM.idleMs - 1000;
+    svc.sweep(clock.t);
+    expect(rooms.privateRoom(empty.code)).not.toBeNull();
+    clock.t += 1000;
+    svc.sweep(clock.t);
+    expect(rooms.privateRoom(empty.code)).toBeNull();
+    expect(svc.practiceLive).toBe(1);
+    svc.sweep(busy.endsAt - 5000);
+    clock.t = busy.endsAt;
+    svc.sweep(clock.t);
+    expect(rooms.privateRoom(busy.code)).toBeNull();
+    expect(c.msgs.some((m) => m.t === 'closing')).toBe(true);
+    expect(c.msgs.find((m) => m.t === 'roomOver')).toMatchObject({ players: 1 });
+  });
+});
+
 describe('custom rooms: lifecycle', () => {
   it('expires at its end time: players and spectators hear room_closed, a late joiner too', async () => {
     const { svc, rooms, reader, clock } = setup();
@@ -455,6 +521,21 @@ describe('custom rooms over HTTP and WebSocket', () => {
     };
     return { port, call, dir };
   }
+
+  it('practice with bots over HTTP: a guest gets a room and an invite; creations are rate-limited per IP', async () => {
+    const admin = testSigner().address;
+    const { call } = await boot(devFakePaymentReader(), admin);
+    const first = await call('POST', '/api/rooms/custom/practice');
+    expect(first.status).toBe(200);
+    expect(first.body.room).toMatchObject({ practice: true, bots: PRACTICE_ROOM.bots });
+    expect(first.body.invite).toMatch(new RegExp(`/play\\?room=${first.body.room.code}$`));
+    // asking again returns the same room (still counted against the IP's creations)
+    expect((await call('POST', '/api/rooms/custom/practice')).body.room.code).toBe(first.body.room.code);
+    expect((await call('GET', '/api/rooms/custom/practice')).status).toBe(405);
+    for (let i = 2; i < PRACTICE_ROOM.perIp; i++) await call('POST', '/api/rooms/custom/practice');
+    const limited = await call('POST', '/api/rooms/custom/practice');
+    expect(limited).toMatchObject({ status: 429, body: { error: 'rate_limited' } });
+  });
 
   it('guests cannot create; a wallet pays and gets an invite; anyone joins with the code; admin lists and closes', async () => {
     const admin = testSigner().address;

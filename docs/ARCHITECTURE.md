@@ -198,12 +198,24 @@ Off chain (the server; tests in `apps/server/test`):
   any other instance; it fields no bots. Capacity 2 to 100. The end is announced `ROOM_CLOSE_COUNTDOWN_MS` (10 s)
   ahead (`closing`, repeated to late joiners); a free room then sends its final board (`roomOver`, the same
   `RoundStanding` rows as a bell's `roundOver`) before `room_closed`; a ticket room closes after its bell.
+  **Practice with bots** (`POST /api/rooms/custom/practice`, `CustomRoomService.practice`): a free custom room with
+  practice bots in one click, for guests too, no fee; limited to one live room per player, 4 per IP per 30 min,
+  `practiceMaxLive` at once, 15 minutes, closed after 2 minutes empty.
 - **Power-up shop** (`shop/`): `GET /api/shop`, `POST /api/shop/buy {kind, txHash}`; the server checks the
   receipt's `Paid` event (the arena, the payer, the pack's `ref` = `elymum.shop.<kind>`, the price) and the token
   transfer, then credits the charges (each hash once, payments older than 24 h refused).
 - **Mint and NFT API:** `GET /api/site/mint` (state, ETH/USD, the price in USD, holders, game access), proofs, the
   allowlist snapshot, `GET /api/admin/mint/price`; metadata at `/api/nft/<id>`, `/api/nft/<id>.svg`,
   `/api/nft/contract`.
+- **Share on X** (`site/shares.ts`, `site/share-card.ts`, `shared/share.ts`): when a room ends (a bell, a custom
+  room's end) the main thread makes a card of each connected player's place from the game-over it already gets
+  (`DeathStats.finalRank` / `finalOf`, the player's look, the wallet's short form, the net paid), and when a person
+  eats a person whose coin reached `NOTABLE_KILL_MASS` (1,000) the killer's card (at most one per 20 s); the client
+  gets `share { kind, id }`. Nothing of a card comes from a client. `GET /share/<id>` is a page with the Open
+  Graph / Twitter `summary_large_image` tags; `GET /share/<id>.png` the 1200 x 630 card drawn with `@elymum/art` on
+  `@napi-rs/canvas` with the site's own fonts (cached; 30 renders per IP a minute). Cards are kept in
+  `DATA_DIR/site/shares.json` (the newest 5,000). The web opens X's web intent (`x.com/intent/post`) with a
+  localized line and the card's link: no X API.
 - **Other REST:** `/api/health`, `/api/rooms`, `/api/leaderboard`, `/api/config`, `/api/pending?wallet=`,
   `/api/profile`, the site API `/api/site/*` and the admin API `/api/admin/*`. With `WEB_DIST` the server also serves
   the web build.

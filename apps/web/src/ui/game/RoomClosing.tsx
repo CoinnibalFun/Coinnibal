@@ -7,6 +7,7 @@ import { serverText, useT } from '../../i18n';
 import { useUi } from '../../store';
 import { FinalBoard } from './FinalBoard';
 import { roomName } from './format';
+import { ShareOnX, useShare } from './ShareOnX';
 
 /** The final board goes back to the lobby by itself after this long (ms), unless a button did first. */
 export const ROOM_OVER_AUTO_MS = 30_000;
@@ -68,6 +69,7 @@ export function RoomOverSheet() {
   const t = useT();
   const res = useUi((s) => (s.screen === 'roomover' ? s.roomResult : null));
   const skin = useUi((s) => s.me?.skin ?? s.settings.skin);
+  const share = useShare('room');
   const [left, setLeft] = useState(ROOM_OVER_AUTO_MS);
   const open = res !== null;
   useEffect(() => {
@@ -98,6 +100,9 @@ export function RoomOverSheet() {
           <Button variant="primary" size="lg" icon="menu" onClick={toLobby} data-autofocus>
             {t('gr.lobby')}
           </Button>
+          {share && res?.stats?.finalRank && (
+            <ShareOnX id={share.id} text={t('share.result', { rank: res.stats.finalRank, n: res.stats.finalOf ?? res.stats.finalRank, room: roomName(res.room) })} />
+          )}
           <span className="g-roomover__auto mono" aria-live="off">
             {t('ro.auto', { s: Math.max(0, Math.ceil(left / 1000)) })}
           </span>

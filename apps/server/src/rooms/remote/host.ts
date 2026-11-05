@@ -4,6 +4,7 @@ import type { Player } from '../../game/entities';
 import type { LootRecord } from '../../stake/journal';
 import { customWorld } from '../custom';
 import type { RoomConn, RoomConnRoom } from '../handle';
+import { lookOf } from '../handle';
 import { ThreadMeter, TickStats, roomTickStats, startTickLoop, type RoomLoad } from '../load';
 import { Room, type RoomDeps, type RoomIntegrity, type RoomJournal } from '../room';
 import { RoundClock } from '../round-clock';
@@ -224,7 +225,9 @@ export class RoomHost {
       log: (m) => ctl({ k: 'log', m }),
       clock: this.clock,
       round: init.round,
-      onGameOver: (e) => ctl({ k: 'go', hid: this.hidOf(e.room), conn: e.conn?.id ?? null, name: e.player.name, stats: e.stats }),
+      onGameOver: (e) => ctl({ k: 'go', hid: this.hidOf(e.room), conn: e.conn?.id ?? null, player: lookOf(e.player), stats: e.stats }),
+      onNotableKill: (e) =>
+        ctl({ k: 'nk', hid: this.hidOf(e.room), conn: e.conn.id, player: lookOf(e.killer), mass: Math.floor(e.killer.totalMass()), kills: e.killer.stats.playersEaten, victim: e.victim, victimMass: e.victimMass }),
       onBellSettled: (e) => ctl({ k: 'bell', e }),
       integrity,
       // power-ups: the main thread holds the charges and asks this worker to apply the effect (`boost`)

@@ -329,7 +329,10 @@ describe('room workers', () => {
     // the final board first (its player's own row and game), then room_closed
     const over = await c.wait('roomOver', 3000);
     expect(over.standings.find((s) => s.you)).toMatchObject({ rank: 1, name: 'Guest' });
-    expect(over.stats).not.toBeNull();
+    expect(over.stats).toMatchObject({ finalRank: 1, finalOf: 1 });
+    // the main thread makes my result card from the worker's game-over (with how the player looked)
+    const share = await c.wait('share', 3000);
+    expect(app.shares.get(share.id)).toMatchObject({ kind: 'room', name: 'Guest', rank: 1, players: 1 });
     const err = await c.wait('error', 3000, (m) => m.code === 'room_closed');
     expect(err.message).toMatch(/creator closed/);
     expect(app.rooms.get(`priv-${code}`)).toBeUndefined();

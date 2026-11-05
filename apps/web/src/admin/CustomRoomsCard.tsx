@@ -1,4 +1,4 @@
-import { CUSTOM_HOLDER_PERKS, CUSTOM_LIMITS, CUSTOM_SETTINGS_LIMITS, arenaMeta, customRoomFee, type CustomHolderPerk, type CustomRoomSettings, type CustomRoomView, GAS_SYMBOL } from '@elymum/shared';
+import { PRACTICE_ROOM, CUSTOM_HOLDER_PERKS, CUSTOM_LIMITS, CUSTOM_SETTINGS_LIMITS, arenaMeta, customRoomFee, type CustomHolderPerk, type CustomRoomSettings, type CustomRoomView, GAS_SYMBOL } from '@elymum/shared';
 import { parseEther } from 'viem';
 import { gasText } from '../rooms/gas';
 import { useCallback, useEffect, useState } from 'react';
@@ -21,8 +21,9 @@ export function customRoomsPatch(saved: CustomRoomSettings, draft: CustomRoomSet
 
 const minutesLeft = (endsAt: number) => Math.max(0, Math.ceil((endsAt - Date.now()) / 60_000));
 
-/** "free" or "paid · Lethe Shore #2" (a paid room is an invite-only instance of that arena). */
-export const roomKindText = (r: Pick<CustomRoomView, 'kind' | 'arenaId'>): string => (r.kind === 'paid' && r.arenaId ? `paid · ${arenaMeta(r.arenaId).name} #${r.arenaId}` : 'free');
+/** "free", "practice with bots" or "paid · Lethe Shore #2" (a paid room is an invite-only instance of that arena). */
+export const roomKindText = (r: Pick<CustomRoomView, 'kind' | 'arenaId' | 'practice'>): string =>
+  r.kind === 'paid' && r.arenaId ? `paid · ${arenaMeta(r.arenaId).name} #${r.arenaId}` : r.practice ? 'practice with bots' : 'free';
 
 /** The fee a room paid, in the gas token ("0" for a free one). */
 export const feeText = (r: Pick<CustomRoomView, 'feeWei'>): string => {
@@ -116,7 +117,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
       setErr((e as Error).message);
     }
   };
-  const num = (k: 'holderDiscountPct' | 'maxLive' | 'maxPerWallet' | 'capacityStepPct' | 'maxPlayers' | 'maxSeats', max: number, min = 0) => (
+  const num = (k: 'holderDiscountPct' | 'maxLive' | 'maxPerWallet' | 'capacityStepPct' | 'maxPlayers' | 'maxSeats' | 'practiceMaxLive', max: number, min = 0) => (
     <input
       className="ad-input ad-input--num num"
       type="number"
@@ -155,6 +156,25 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
         onPick={(v) => setDraft({ ...draft, paidRooms: v === 'on' })}
         testId="cr-paid-rooms"
       />
+      <SwitchRow
+        label="Practice with bots"
+        options={[
+          { id: 'on', label: 'Open', note: `One click from a quiet pond: a free ${PRACTICE_ROOM.durationMin}-minute room with ${PRACTICE_ROOM.bots} practice bots for the player (guests too) and up to ${PRACTICE_ROOM.maxPlayers - 1} friends; closes after ${PRACTICE_ROOM.idleMs / 60_000} minutes empty.` },
+          { id: 'off', label: 'Closed', note: 'The ponds only.' },
+        ]}
+        value={draft.practiceRooms ? 'on' : 'off'}
+        onPick={(v) => setDraft({ ...draft, practiceRooms: v === 'on' })}
+        testId="cr-practice-rooms"
+      />
+      <div className="ad-form2 ad-form3">
+        <label className="ad-field">
+          <span className="ad-field__label mono">Practice rooms at once</span>
+          {num('practiceMaxLive', CUSTOM_SETTINGS_LIMITS.practiceMaxLive)}
+        </label>
+      </div>
+      <p className="ad-note">
+        Practice rooms are free and limited instead: one per player, {PRACTICE_ROOM.perIp} per IP every {PRACTICE_ROOM.perIpWindowMs / 60_000} minutes, and this many at once (outside the slots and seats above).
+      </p>
       <div className="ad-form2 ad-form3">
         <label className="ad-field">
           <span className="ad-field__label mono">Base price ({GAS_SYMBOL}, up to 10 players)</span>

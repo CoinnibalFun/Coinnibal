@@ -165,6 +165,8 @@ export interface UiState {
   roundResult: RoundResult | null;
   /** A custom room closes at `endsAt` (server clock; `closing`): the countdown everyone in it sees, and why. */
   closing: { endsAt: number; message: string } | null;
+  /** The last "Share on X" card the server made for me (`share`): a result's or a notable kill's; `at`: local ms. */
+  share: { kind: 'round' | 'room' | 'kill'; id: string; victim?: string; at: number } | null;
   /** A free custom room ended (`roomOver`): its final board (everyone by mass), the room it was, my game in it. */
   roomResult: { message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null; room: RoomInfo | null } | null;
   /**
@@ -302,6 +304,7 @@ export const useUi = create<UiState>(() => ({
   death: null,
   roundResult: null,
   closing: null,
+  share: null,
   roomResult: null,
   held: null,
   lastSettlement: null,

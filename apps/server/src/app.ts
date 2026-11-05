@@ -17,6 +17,7 @@ import type { Limiter } from './net/limiter';
 import { Gateway } from './net/gateway';
 import { ArenaScalingStore } from './rooms/arena-scaler';
 import { MapSettingsStore } from './rooms/map-settings';
+import { ShareService } from './site/shares';
 import { viemHolderReader, type HolderReader } from './chain/evm-client';
 import { configureRpcBudgets, startRpcMinuteLog } from './chain/rpc-budget';
 import { loadServerKeySecret } from './chain/server-key';
@@ -66,6 +67,8 @@ export interface App {
   customRooms: CustomRoomService;
   /** Bought power-ups: prices, purchases (`DATA_DIR/chains/<id>/boosts.json`) and the in-room rules. */
   shop: ShopService;
+  /** "Share on X" cards. */
+  shares: ShareService;
   /** Resolves once the HTTP server is listening; returns the bound port. */
   listen(): Promise<number>;
   close(): Promise<void>;
@@ -208,6 +211,16 @@ export async function createApp(
   });
   site.setShop({ service: shop, settings: shopSettings, inventory: boostInventory });
 
+  // "Share on X": cards of results and notable kills, made from the server's own records (DATA_DIR/site/shares.json)
+  const shares = new ShareService({
+    dataDir: persist ? cfg.dataDir : null,
+    baseUrl: (req) => publicBaseUrl(cfg, req),
+    token: () => {
+      const t = chain.status().token;
+      return t ? { decimals: t.decimals, symbol: t.symbol } : null;
+    },
+    log,
+  });
   const rooms = new RoomManager(
     cfg,
     {
@@ -220,12 +233,23 @@ export async function createApp(
       shop,
       // the server's own records: every finished game of a signed-in wallet counts in its profile
       onGameOver: (e) => {
+        const s = e.stats;
+        // a room's end (a bell, a custom room's end): the card of my place on its final board, for "Share on X"
+        if (e.conn && s.finalRank && s.finalOf) {
+          const card = shares.result({ room: e.room, player: e.player, wallet: e.conn.wallet }, { rank: s.finalRank, of: s.finalOf, mass: s.finalMass, kills: s.playersEaten, payout: s.payout });
+          e.conn.send({ t: 'share', kind: card.kind, id: card.id });
+        }
         const wallet = e.conn?.wallet;
         if (!wallet) return;
-        const xp = profiles.recordGame(wallet, { score: e.stats.maxMass, kills: e.stats.playersEaten, xp: e.stats.xp ?? 0 });
+        const xp = profiles.recordGame(wallet, { score: s.maxMass, kills: s.playersEaten, xp: s.xp ?? 0 });
         const level = profiles.level(wallet);
         if (e.conn!.profile) e.conn!.profile = { ...e.conn!.profile, xp, level };
         e.conn!.send({ t: 'xp', xp, level });
+      },
+      // a person ate a big person: the killer's card (one every few seconds at most)
+      onNotableKill: (e) => {
+        const card = shares.kill({ room: e.room, player: e.player, wallet: e.conn.wallet }, e.conn.wallet ?? `conn:${e.conn.id}`, e);
+        if (card) e.conn.send({ t: 'share', kind: 'kill', id: card.id, victim: e.victim });
       },
     },
     chain,
@@ -261,6 +285,7 @@ export async function createApp(
     integrity.flush();
     leaderboards.flush();
     profiles.flush();
+    shares.flush();
   });
   shop.onCharges((wallet) => rooms.pushBoosts(wallet));
   // a removed (or replaced) picture comes off the live coins at once
@@ -284,7 +309,7 @@ export async function createApp(
   chain.onStatusChange(showChain);
   await rooms.ensureArenaRooms();
 
-  const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, priceKeeper, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
+  const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, shares, priceKeeper, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
   const gateway = new Gateway(cfg, rooms, auth, chain, journal, log);
   gateway.setProfiles(profiles);
   // who may play: `gameAccess` (setting) or `GAME_ACCESS`: admins, NFT holders + admins, or everyone
@@ -320,6 +345,7 @@ export async function createApp(
     integrity,
     customRooms,
     shop,
+    shares,
     listen: () =>
       new Promise((resolve) => {
         server.listen(cfg.port, cfg.host, () => {
@@ -341,6 +367,7 @@ export async function createApp(
       priceKeeper?.stop();
       leaderboards.flush();
       profiles.flush();
+      shares.flush();
       gateway.close();
       await chain.stop().catch(() => {});
       await new Promise<void>((resolve) => server.close(() => resolve()));
