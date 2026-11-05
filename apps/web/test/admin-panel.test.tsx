@@ -1,4 +1,4 @@
-import { setFeeBpsCall } from '@elymum/sdk';
+import { setPaymentBurnBpsCall } from '@elymum/sdk';
 import type { StatusSnapshot } from '@elymum/sdk/ops';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
@@ -29,9 +29,9 @@ let provider: FakeProvider;
 beforeEach(() => {
   resetWallets();
   localStorage.clear();
-  provider = fakeProvider({ chainId: 99801, known: [99801] });
+  provider = fakeProvider({ chainId: 46630, known: [46630] });
   provider.handlers.eth_sendTransaction = () => HASH;
-  useWallet.setState({ status: 'connected', address: ALICE, chainId: 99801, current: detail(provider) });
+  useWallet.setState({ status: 'connected', address: ALICE, chainId: 46630, current: detail(provider) });
 });
 afterEach(() => act(() => resetWallets()));
 
@@ -45,16 +45,16 @@ const client = (owner = ALICE) =>
   }) as never;
 
 describe('TxPreview: every write is previewed, checked and sent once', () => {
-  const plan = (extra: Partial<Plan> = {}): Plan => ({ title: 'Set the fee', contract: 'ElymumArena', call: setFeeBpsCall(ARENA, 300), ownerOf: ARENA, owner: ALICE, ...extra });
+  const plan = (extra: Partial<Plan> = {}): Plan => ({ title: 'Set the fee', contract: 'ElymumArena', call: setPaymentBurnBpsCall(ARENA, 300), ownerOf: ARENA, owner: ALICE, ...extra });
 
   it('shows the function, the named arguments, the network and the signer before the wallet opens', () => {
     ui(<TxPreview plan={plan()} net={resolveNetwork(chainStatus())} me={ALICE} client={client()} blockers={[]} onClose={() => {}} />);
     const box = screen.getByTestId('tx-preview');
-    expect(box.textContent).toContain('setFeeBps(uint16)');
+    expect(box.textContent).toContain('setPaymentBurnBps(uint16)');
     expect(within(box).getByText('bps')).toBeTruthy();
     expect(within(box).getByText('uint16')).toBeTruthy();
     expect(within(box).getByText('300')).toBeTruthy();
-    expect(box.textContent).toContain('Elysium Testnet (99801)');
+    expect(box.textContent).toContain('Robinhood Chain Testnet (46630)');
     expect(box.textContent).toContain(ALICE);
     expect(provider.calls.some((c) => c.method === 'eth_sendTransaction')).toBe(false);
     expect(screen.queryByText(/MAINNET/)).toBeNull();
@@ -92,7 +92,7 @@ describe('TxPreview: every write is previewed, checked and sent once', () => {
     expect(provider.calls.filter((c) => c.method === 'eth_sendTransaction')).toHaveLength(1);
     await waitFor(() => expect(screen.getByTestId('tx-done')).toBeTruthy());
     expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ hash: HASH }));
-    expect(onSigned).toHaveBeenCalledWith(expect.objectContaining({ hash: HASH, url: `https://explorer-elysium-testnet.t.conduit.xyz/tx/${HASH}` }));
+    expect(onSigned).toHaveBeenCalledWith(expect.objectContaining({ hash: HASH, url: `https://explorer.testnet.chain.robinhood.com/tx/${HASH}` }));
   });
 
   it('a receipt timeout after the broadcast offers "Check status" on that hash, never a resend', async () => {
@@ -150,7 +150,7 @@ describe('TxPreview: every write is previewed, checked and sent once', () => {
   });
 
   it('irreversible actions need the typed confirmation; mainnet shows the red banner', () => {
-    ui(<TxPreview plan={plan({ confirmText: 'FREEZE' })} net={resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Elysium', rpcUrl: null }))} me={ALICE} client={client()} blockers={[]} onClose={() => {}} />);
+    ui(<TxPreview plan={plan({ confirmText: 'FREEZE' })} net={resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain', rpcUrl: null }))} me={ALICE} client={client()} blockers={[]} onClose={() => {}} />);
     expect(screen.getByText('MAINNET.')).toBeTruthy();
     expect((screen.getByTestId('tx-confirm') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText(/Type FREEZE to confirm/), { target: { value: 'FREEZE' } });
@@ -167,7 +167,7 @@ function ctxOf(over: Partial<ChainCtx> = {}): ChainCtx & { plans: Plan[] } {
     refresh: vi.fn(async () => {}),
     reloadNet: vi.fn(async () => {}),
     me: ALICE,
-    walletChainId: 99801,
+    walletChainId: 46630,
     client: null,
     api: null,
     open: (p: Plan) => plans.push(p),
@@ -182,7 +182,7 @@ describe('Deploy wizard', () => {
     expect(screen.getByTestId('deploy-steps').querySelector('[data-step="connect"]')?.getAttribute('data-state')).toBe('active');
     view.unmount();
     ui(<DeployTab ctx={ctxOf({ walletChainId: 1 })} />);
-    expect(screen.getByTestId('deploy-switch').textContent).toBe('Switch to Elysium Testnet');
+    expect(screen.getByTestId('deploy-switch').textContent).toBe('Switch to Robinhood Chain Testnet');
   });
 
   it('deploys the arena with admin = you, server authority = the server key, fee wallet = you, then registers it', async () => {
@@ -201,7 +201,7 @@ describe('Deploy wizard', () => {
 
   it('then the NFT with the spec defaults and the $1 price from the server', async () => {
     const registerContract = vi.fn(async () => ({ arena: null, nft: null, token: null }));
-    const api = { registerContract, mintPrice: vi.fn(async () => ({ hypeUsd: 33.3, targetUsdCents: 100, priceWei: '30000000000000000', fetchedAt: 1 })) } as unknown as AdminApi;
+    const api = { registerContract, mintPrice: vi.fn(async () => ({ gasUsd: 33.3, targetUsdCents: 100, priceWei: '30000000000000000', fetchedAt: 1 })) } as unknown as AdminApi;
     const ctx = ctxOf({ api, net: resolveNetwork(chainStatus({ arenaAddress: ARENA })), status: { arena: { code: 'ok', config: { token: null }, arenas: [] }, nft: null } as unknown as StatusSnapshot });
     ui(<DeployTab ctx={ctx} />);
     await waitFor(() => expect((screen.getByLabelText(/Mint price/) as HTMLInputElement).value).toBe('0.03'));
@@ -260,12 +260,12 @@ describe('Deploy wizard', () => {
     ui(<SetupTab ctx={ctx} />);
     expect(screen.getByTestId('deploy-nft')).toBeTruthy();
     const outside = [...document.querySelectorAll('input')].filter((i) => !i.closest('details[data-advanced]')).map((i) => i.labels?.[0]?.textContent);
-    expect(outside).toEqual(['Max supply', 'Mint price (HYPE)', 'Allowlist limit per wallet', 'Public limit per wallet']);
+    expect(outside).toEqual(['Max supply', 'Mint price (ETH)', 'Allowlist limit per wallet', 'Public limit per wallet']);
     expect(screen.getByTestId('nft-advanced').hasAttribute('open')).toBe(false);
   });
 
   it('registers a contract deployed while signed out as soon as the admin signs in', async () => {
-    localStorage.setItem('elymum.admin.deploy.v1', JSON.stringify({ '99801': { arena: { address: NEW, txHash: HASH } } }));
+    localStorage.setItem('elymum.admin.deploy.v1', JSON.stringify({ '46630': { arena: { address: NEW, txHash: HASH } } }));
     const registerContract = vi.fn(async () => ({ arena: null, nft: null, token: null }));
     const api = { registerContract, mintPrice: vi.fn(async () => ({ priceWei: null })) } as unknown as AdminApi;
     const ctx = ctxOf({ net: resolveNetwork(chainStatus({ arenaAddress: null })) });
@@ -295,7 +295,7 @@ describe('Deploy wizard', () => {
     const view = ui(<DeployTab ctx={ctxOf()} />);
     expect(screen.getByTestId('deploy-test-token')).toBeTruthy();
     view.unmount();
-    ui(<DeployTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Elysium', arenaAddress: null })) })} />);
+    ui(<DeployTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain', arenaAddress: null })) })} />);
     expect(screen.queryByTestId('deploy-test-token')).toBeNull();
   });
 });
@@ -304,9 +304,9 @@ describe('Setup with the contracts registered', () => {
   const KEY = '0x000000000000000000000000000000000000bEEF';
   const registeredStatus = (over: Record<string, unknown> = {}) =>
     ({
-      arena: { address: ARENA, code: 'ok', config: { admin: ALICE, serverAuthority: KEY, token: null, feeBps: 500, holderNft: null, holderFeeBps: 0, decimals: 18 }, token: null, arenas: [] },
+      arena: { address: ARENA, code: 'ok', config: { admin: ALICE, serverAuthority: KEY, token: null, burnBps: 1500, vaultBps: 500, holderNft: null, holderBurnBps: 1500, holderVaultBps: 500, decimals: 18 }, token: null, arenas: [] },
       nft: { address: NFT, code: 'ok', state: { phaseName: 'closed' } },
-      testToken: { address: TOKEN, code: 'ok', serverIsMinter: false, faucet: null },
+      testToken: { address: TOKEN, code: 'ok', faucet: null },
       ...over,
     }) as unknown as StatusSnapshot;
   const noInputOutsideAdvanced = () => {
@@ -325,14 +325,16 @@ describe('Setup with the contracts registered', () => {
     expect(advanced.open).toBe(false);
     expect(advanced.querySelector('summary')?.textContent).toBe('Advanced: manual controls');
     // the manual controls are all inside it: the wizard, register-existing, the perks and the TestToken forms
-    for (const id of ['deploy-steps', 'register-existing', 'holder-perks', 'tt-minter', 'tt-faucet', 'deploy-test-token']) expect(advanced.contains(screen.getByTestId(id)), id).toBe(true);
+    for (const id of ['deploy-steps', 'register-existing', 'holder-perks', 'tt-holder-nft', 'tt-faucet', 'deploy-test-token']) expect(advanced.contains(screen.getByTestId(id)), id).toBe(true);
+    // the server key never mints: no minter switch
+    expect(screen.queryByTestId('tt-minter')).toBeNull();
     // the addresses Finish setup uses are shown read-only
     expect(within(screen.getByTestId('quick-setup-uses')).getByText('Game token')).toBeTruthy();
     noInputOutsideAdvanced();
   });
 
   it('mainnet: the registered token takes one confirmation, outside Advanced; still no address to type', async () => {
-    const net = resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Elysium', arenaAddress: ARENA, nftAddress: NFT }));
+    const net = resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain', arenaAddress: ARENA, nftAddress: NFT }));
     const registry = { arena: { address: ARENA }, nft: { address: NFT }, token: { address: TOKEN } } as never;
     const ctx = ctxOf({ net, status: registeredStatus({ testToken: null }), registry });
     ui(<SetupTab ctx={ctx} />);
@@ -358,7 +360,7 @@ describe('Mint tab', () => {
   const state = { phase: 0, phaseName: 'closed', price: 30_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'0'.repeat(64)}`, maxSupply: 5000, totalSupply: 0, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
   const mintCtx = (api: Partial<AdminApi>, gameAccess = 'admins', gameAccessEnv: string | null = null) =>
     ctxOf({
-      api: { settings: vi.fn(async () => ({ settings: { gameAccess }, gameAccessEnv })), allowlist: vi.fn(async () => ({ snapshot: null, diff: { added: [], removed: [] }, onchainRoot: null, published: false })), mintPrice: vi.fn(async () => ({ hypeUsd: 33.3, targetUsdCents: 100, priceWei: '30000000000000000', fetchedAt: 1 })), ...api } as unknown as AdminApi,
+      api: { settings: vi.fn(async () => ({ settings: { gameAccess }, gameAccessEnv })), allowlist: vi.fn(async () => ({ snapshot: null, diff: { added: [], removed: [] }, onchainRoot: null, published: false })), mintPrice: vi.fn(async () => ({ gasUsd: 33.3, targetUsdCents: 100, priceWei: '30000000000000000', fetchedAt: 1 })), ...api } as unknown as AdminApi,
       net: resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT })),
       status: { nft: { address: NFT, code: 'ok', balance: 0n, state } } as unknown as StatusSnapshot,
     });
@@ -461,8 +463,8 @@ describe('Mint and Game: only the owner decisions up front', () => {
   });
 
   it('Game: no address field outside Advanced; the fee wallet and the rescue form are prefilled in there', () => {
-    const totals = { sessions: 0n, staked: 0n, paidOut: 0n, fees: 0n, burned: 0n };
-    const cfg = { admin: ALICE, pendingAdmin: null, serverAuthority: '0x000000000000000000000000000000000000bEEF', feeWallet: ALICE, feeBps: 500, paused: false, token: TOKEN, decimals: 18, totals, holderNft: null, holderFeeBps: 0 };
+    const totals = { sessions: 0n, staked: 0n, paidOut: 0n, feeBurned: 0n, feeToVault: 0n, lootBurned: 0n, payments: 0n, paymentBurned: 0n };
+    const cfg = { admin: ALICE, pendingAdmin: null, serverAuthority: '0x000000000000000000000000000000000000bEEF', feeWallet: ALICE, burnBps: 1500, vaultBps: 500, paused: false, token: TOKEN, decimals: 18, totals, holderNft: null, holderBurnBps: 1500, holderVaultBps: 500, burnMode: 0, paymentBurnBps: 5000 };
     const arenas = [{ id: 1, exists: true, enabled: true, entryFee: 1000n * 10n ** 18n, maxSessions: 300, openSessions: 0, vault: 0n, owed: 0n, holdersOnly: false }];
     const status = { arena: { address: ARENA, code: 'ok', config: cfg, arenas, serverBalance: 10n ** 18n, token: { symbol: 'tELYMUM', decimals: 18, feeWalletBalance: 0n } } } as unknown as StatusSnapshot;
     ui(<GameTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT })), status })} />);
@@ -494,7 +496,7 @@ describe('Game: who may play', () => {
 
 describe('the chain panel', () => {
   it('shows the red MAINNET banner on mainnet and blocks signing without a server chain', () => {
-    const view = ui(<AdminPanel net={resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Elysium', rpcUrl: null, arenaAddress: null }))} api={null} tab="network" go={() => {}} reloadNet={async () => {}} />);
+    const view = ui(<AdminPanel net={resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain', rpcUrl: null, arenaAddress: null }))} api={null} tab="network" go={() => {}} reloadNet={async () => {}} />);
     expect(screen.getByTestId('mainnet-banner')).toBeTruthy();
     // the launch checklist opens with its construction scene (decorative, described by its label)
     expect(screen.getByTestId('launch-scene').querySelector('svg[role="img"]')?.getAttribute('aria-label')).toMatch(/terraces built/);

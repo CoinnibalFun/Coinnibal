@@ -173,7 +173,7 @@ export interface SiteStoreOptions {
   /** Wall clock (Unix ms); tests inject one. */
   now?: () => number;
   /**
-   * Defaults of settings the file does not hold yet (a fresh settings file). On Elysium Testnet the
+   * Defaults of settings the file does not hold yet (a fresh settings file). On a public testnet the
    * app passes `gameAccess: 'public'`; a stored value always wins.
    */
   defaults?: Partial<SiteSettings>;

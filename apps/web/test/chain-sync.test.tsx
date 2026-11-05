@@ -25,7 +25,7 @@ function Sync() {
 }
 const json = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
 const flush = () => act(async () => new Promise((r) => setTimeout(r, 20)));
-const connect = (address: `0x${string}`) => useWallet.setState({ status: 'connected', address, chainId: 99801, current: detail(fakeProvider({ accounts: [address] })) });
+const connect = (address: `0x${string}`) => useWallet.setState({ status: 'connected', address, chainId: 46630, current: detail(fakeProvider({ accounts: [address] })) });
 
 describe('useChainSync', () => {
   it("a slow refresh for wallet A that resolves after switching to wallet B does not change B's state", async () => {
@@ -82,16 +82,25 @@ describe('readChain', () => {
     feeWallet: ALICE,
     token: TOKEN,
     decimals: 18,
-    feeBps: 500,
+    burnBps: 1500,
+    vaultBps: 500,
     paused: false,
+    holderNft: '0x0000000000000000000000000000000000000000',
+    holderBurnBps: 1500,
+    holderVaultBps: 500,
+    burnMode: 0,
+    paymentBurnBps: 5000,
     totalSessions: 0n,
     totalGames: 0n,
     totalStaked: 0n,
     totalPaidOut: 0n,
-    totalFees: 0n,
-    totalBurned: 0n,
+    totalFeeBurned: 0n,
+    totalFeeToVault: 0n,
+    totalLootBurned: 0n,
+    totalPayments: 0n,
+    totalPaymentBurned: 0n,
   };
-  const arena = (id: number, entryFee: bigint) => ({ id, entryFee, vault: 0n, owed: 0n, maxSessions: 300, openSessions: 0, enabled: true, exists: true, totalDeposited: 0n, totalPaidOut: 0n, totalBurned: 0n, lastSweepId: 0n });
+  const arena = (id: number, entryFee: bigint) => ({ id, entryFee, vault: 0n, owed: 0n, maxSessions: 300, openSessions: 0, enabled: true, exists: true, totalDeposited: 0n, totalPaidOut: 0n, totalBurned: 0n, totalFees: 0n, lastSweepId: 0n });
   const client = (over: Record<string, unknown> = {}) =>
     ({
       getBalance: async () => 5n * 10n ** 17n,
@@ -105,7 +114,7 @@ describe('readChain', () => {
           case 'getArena':
             return args![0] === 1 ? arena(1, 1000n * ONE) : arena(2, 10_000n * ONE);
           case 'getSession':
-            return args![0] === 1 ? { id: 4n, entryFee: 1000n * ONE, openedAt: 10n, feeBps: 500, finalized: true, owed: 3n * ONE } : { id: 0n, entryFee: 0n, openedAt: 0n, feeBps: 0, finalized: false, owed: 0n };
+            return args![0] === 1 ? { id: 4n, entryFee: 1000n * ONE, openedAt: 10n, burnBps: 1500, vaultBps: 500, finalized: true, owed: 3n * ONE } : { id: 0n, entryFee: 0n, openedAt: 0n, burnBps: 0, vaultBps: 0, finalized: false, owed: 0n };
           case 'balanceOf':
             return 12_450n * ONE;
           case 'allowance':

@@ -8,6 +8,7 @@ import '@fontsource-variable/dm-sans/opsz-italic.css';
 import '@fontsource-variable/geist-mono/wght.css';
 import './design/tokens.css';
 import './design/storybook.css';
+import './chainText';
 import { initLocale, t } from './i18n';
 
 const root = document.getElementById('root')!;

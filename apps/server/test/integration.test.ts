@@ -760,7 +760,7 @@ describe('server over websocket', () => {
 
   it('paid custom room: an invite-only arena instance seated by code with a normal ticket, never by quick play; settled at the bell; closes once settled', async () => {
     const svc = app.customRooms;
-    // a free fee (no HYPE transfer to check) and a treasury: the room itself is what is tested here
+    // a free fee (no gas-token transfer to check) and a treasury: the room itself is what is tested here
     svc.updateSettings({ priceGas: '0', treasury: '0x1111111111111111111111111111111111111111' });
     const creator = newWallet();
     const view = await svc.create(creator, { config: { ...CUSTOM_DEFAULTS, name: 'Whale Club', kind: 'paid', arenaId: 1, bots: 0, maxPlayers: 4, durationMin: 15 } });

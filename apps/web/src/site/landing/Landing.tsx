@@ -158,7 +158,7 @@ function Feast() {
               <span className="mono">{t('ld.fact.room')}</span>
             </li>
             <li>
-              <b className="num">{pct(FACTS.fee.bps)}</b>
+              <b className="num">{pct(FACTS.fee.burnBps + FACTS.fee.vaultBps)}</b>
               <span className="mono">{t('ld.fact.fee')}</span>
             </li>
           </ul>
@@ -195,7 +195,7 @@ const STATIONS: { no: string; title: TKey; body: TKey }[] = [
   { no: '03', title: 'ld.stop.bell', body: 'ld.stop.bellBody' },
   { no: '04', title: 'ld.stop.paid', body: 'ld.stop.paidBody' },
 ];
-const stationVars = () => ({ sym: SYMBOL, s: FACTS.rules.joinCloseS, fee: pct(FACTS.fee.bps) });
+const stationVars = () => ({ sym: SYMBOL, s: FACTS.rules.joinCloseS, fee: pct(FACTS.fee.burnBps + FACTS.fee.vaultBps) });
 
 function Round() {
   const m = useMoves();

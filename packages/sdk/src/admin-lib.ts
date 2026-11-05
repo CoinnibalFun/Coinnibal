@@ -236,6 +236,7 @@ export function formatStatus(s: StatusSnapshot, rpcUrl: string): string[] {
       out.push(row('fee wallet', `${c.feeWallet}${a.token ? `  (${formatTokenAmount(a.token.feeWalletBalance, d)}${sym})` : ''}`));
       out.push(row('token', c.token ? `${c.token}  (${a.token?.name ?? '?'}${sym ? `,${sym}` : ''}, ${d} decimals)` : 'not set (run `pnpm admin set-token --token <addr> --confirm <addr>`)'));
       out.push(row('fee on profit', `${formatBps(c.burnBps)} burned + ${formatBps(c.vaultBps)} to the fee wallet (burn mode ${c.burnMode === 1 ? "the token's burn()" : '0x…dEaD'})`));
+      if (a.burnSupport !== null) out.push(row('token burn()', a.burnSupport ? 'works (burn mode 1 can be used)' : 'missing (keep burn mode 0)'));
       out.push(row('payments', `${formatBps(c.paymentBurnBps)} burned, the rest to the fee wallet`));
       out.push(row('holder perks', c.holderNft ? `${c.holderNft}  (holders: ${formatBps(c.holderBurnBps)} burned + ${formatBps(c.holderVaultBps)} to the fee wallet, when lower)` : 'off'));
       out.push(row('paused', c.paused ? 'YES (arena joins blocked)' : 'no'));

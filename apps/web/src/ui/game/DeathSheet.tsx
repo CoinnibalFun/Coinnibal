@@ -44,9 +44,8 @@ export function DeathSheet() {
 
   const s = death?.stats;
   const arena = room?.mode === 'arena';
-  const byBot = arena && s?.byBot === true;
   const lost = arena ? (s?.valueLost ?? 0) : 0;
-  const spilled = byBot ? (s?.lootSpilled ?? lost) : 0;
+  const spilled = arena ? (s?.lootSpilled ?? 0) : 0;
   const startOver = () => {
     if (arena) {
       // a new ticket: the lobby selects this arena's ticket and opens its flow (once the old one is paid out)
@@ -64,7 +63,7 @@ export function DeathSheet() {
     : closed
       ? t('gd.nextRoundIn', { time: formatCountdown(round.msLeft) })
       : t('gd.newTicketFee', { fee: tf.fmt(fee, { compact: true, maxFrac: 1 }), sym: tf.symbol });
-  const killerLine = death?.killer ? (byBot ? t('gd.byBot') : t('gd.byPlayer', { name: death.killer })) : t('gd.byNobody');
+  const killerLine = death?.killer ? t('gd.byPlayer', { name: death.killer }) : t('gd.byNobody');
 
   return (
     <Sheet

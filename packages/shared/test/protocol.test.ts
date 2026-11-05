@@ -148,7 +148,7 @@ describe('v2 message shapes', () => {
       { t: 'value', value: 750, delta: -750, reason: 'spill' },
       {
         t: 'death',
-        stats: { aliveMs: 1, finalMass: 1, maxMass: 1, foodEaten: 0, cellsEaten: 0, playersEaten: 0, bestRank: 1, valueLost: 1500, byBot: true, lootSpilled: 1500 },
+        stats: { aliveMs: 1, finalMass: 1, maxMass: 1, foodEaten: 0, cellsEaten: 0, playersEaten: 0, bestRank: 1, valueLost: 1500, lootSpilled: 1500 },
         killer: 'Bot',
         killerSkin: 1,
       },

@@ -4,7 +4,7 @@ import { WOBBLE } from './InkDefs';
 import { useOffscreenPause } from './useOffscreenPause';
 
 /**
- * The Elysium ring habitat as a picture-book plate (spec §6.5): the ground
+ * The ring habitat as a picture-book plate (spec §6.5): the ground
  * curving up both sides in terraces, the far side of the ring arching overhead
  * with its spokes and lights, the planet seen through the sky band, a moon,
  * chubby clouds, tiny houses, lollipop trees and pines, a canal and a

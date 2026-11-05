@@ -73,7 +73,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     render(<Landing />);
     await waitFor(() => expect(screen.getAllByRole('link', { name: /@feastbot/ }).length).toBeGreaterThan(0));
     expect(screen.getAllByRole('link', { name: /@feastbot/ }).every((a) => a.getAttribute('href') === 'https://x.com/feastbot')).toBe(true);
-    expect(screen.getByText(/Kinetiq ecosystem/)).toBeTruthy();
+    expect(screen.getByText(/Gas is ETH/)).toBeTruthy();
   });
 
   it('keeps working when the server cannot be reached (defaults: WL open, collab soon)', async () => {

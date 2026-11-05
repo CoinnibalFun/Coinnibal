@@ -1,5 +1,17 @@
-import { CAPACITY, DEFAULT_ARENAS, ECONOMY, RULES, SHOP_DEFAULTS, WINNINGS_CUT_BPS, arenaMeta, winningsCut, type WinningsCut } from '@elymum/shared';
-import { DEFAULT_FEE_BPS, MAX_FEE_BPS, REFUND_DELAY_SECS, splitPayout, ticketValue, type PayoutSplit } from '@elymum/sdk';
+import {
+  CAPACITY,
+  DEFAULT_ARENAS,
+  DEFAULT_FEE_RATES,
+  DEFAULT_PAYMENT_BURN_BPS,
+  MAX_TOTAL_FEE_BPS,
+  RULES,
+  SHOP_DEFAULTS,
+  arenaMeta,
+  feeExample,
+  type FeeRates,
+  type ProfitFee,
+} from '@elymum/shared';
+import { REFUND_DELAY_SECS } from '@elymum/sdk';
 
 /**
  * Every number the player guide quotes, taken from the code that enforces it, so the
@@ -31,28 +43,17 @@ export const SERVER = {
 export const EXAMPLE = { entry: 1000, cashout: 1900 } as const;
 
 /**
- * The worked payout at the arena's entry fee rate `bps` (0 in the recommended setup): the coin starts at
- * the entry fee less that fee, the till at the bell is 1,900, and 20 % of the winnings above the start is
- * the cut (15 % burned, 5 % kept in the arena vault). Exactly the server's `winningsCut`.
+ * The worked payout at `rates` (the arena's live fee rates on profit, else the contract defaults), exactly as the
+ * arena contract splits it (`fees.ts`): the coin starts at the whole entry fee, the till at the bell is 1,900, the
+ * profit is 900 and the fee is taken from it (15 % burned = 135, 5 % to the fee wallet = 45); the player gets 1,720.
  */
-export function payoutExample(bps: number): WinningsCut & { fee: number; start: number } {
-  const start = Number(ticketValue(EXAMPLE.entry, bps));
-  return { ...winningsCut(EXAMPLE.cashout, start), fee: EXAMPLE.entry - start, start };
-}
-
-/**
- * The worked example at `bps` (the server's `feeBps`), exactly as the arena splits it: the fee comes off the
- * entry fee at the entry (5 % → fee 50, the coin starts at 950) and the whole till is paid (player 1,900).
- */
-export function feeExample(bps: number): PayoutSplit & { value: bigint } {
-  const split = splitPayout(EXAMPLE.cashout, EXAMPLE.entry, bps);
-  return { ...split, value: ticketValue(EXAMPLE.entry, bps) };
+export function payoutExample(rates: FeeRates = DEFAULT_FEE_RATES): ProfitFee<number> & { entry: number } {
+  return feeExample(EXAMPLE.entry, EXAMPLE.cashout, rates);
 }
 
 export interface DocsFacts {
-  fee: { bps: number; maxBps: number };
-  /** The cut on winnings (basis points): total, burned, kept in the vault. */
-  cut: { bps: number; burnBps: number; vaultBps: number };
+  /** The contract's default fee rates on profit (bps), their on-chain cap, and the burned share of a shop payment. */
+  fee: { burnBps: number; vaultBps: number; maxBps: number; paymentBurnBps: number };
   shop: { packSize: number; prices: Record<'magnet' | 'leap' | 'speed' | 'invis', number>; holderDiscountPct: number; arenaUses: number; holderExtraUses: number };
   example: { entry: number; cashout: number };
   arenas: { id: number; name: string; entry: number; maxSessions: number }[];
@@ -72,8 +73,7 @@ export interface DocsFacts {
 }
 
 export const FACTS: DocsFacts = {
-  fee: { bps: DEFAULT_FEE_BPS, maxBps: MAX_FEE_BPS },
-  cut: { bps: WINNINGS_CUT_BPS, burnBps: ECONOMY.burnBps, vaultBps: ECONOMY.vaultBps },
+  fee: { burnBps: DEFAULT_FEE_RATES.burnBps, vaultBps: DEFAULT_FEE_RATES.vaultBps, maxBps: MAX_TOTAL_FEE_BPS, paymentBurnBps: DEFAULT_PAYMENT_BURN_BPS },
   shop: {
     packSize: SHOP_DEFAULTS.packSize,
     prices: {
@@ -150,15 +150,11 @@ export interface DocsContent {
   /** Short facts for the dateline strip under the head. */
   dateline: string[];
   tocLabel: string;
-  /** The worked payout receipt (its numbers come from `payoutExample(feeBps)`). */
+  /** The worked payout receipt (its numbers come from `payoutExample(rates)`). */
   receipt: {
     title: string;
     meta: string;
     entry: string;
-    /** The arena's entry fee line (shown only when the rate is above 0). */
-    fee: (pct: string) => string;
-    /** What the coin starts at. */
-    starts: string;
     cashout: string;
     winnings: string;
     burn: (pct: string) => string;
@@ -167,8 +163,8 @@ export interface DocsContent {
     footer: string;
     caption: string;
   };
-  /** The fee rate the guide quotes (basis points): the server's `feeBps`, else the contract default. */
-  feeBps: number;
+  /** The fee rates on profit the guide quotes: the server's (`ChainStatus.fees`), else the contract defaults. */
+  rates: FeeRates;
   colophon: string;
   backToTop: string;
   sections: DocSection[];

@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { ELYSIUM_TESTNET_CHAIN_ID, PROTOCOL_VERSION } from '@elymum/shared';
+import { PROTOCOL_VERSION } from '@elymum/shared';
 import { checksumAddress, type Auth, type SiweOrigin } from './auth';
 import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
@@ -79,11 +79,11 @@ export function publicBaseUrl(cfg: ServerConfig, req: IncomingMessage, _trustPro
 /**
  * SIWE origin of a login: the domain is the `PUBLIC_URL` host (the request host only in
  * development, as in `publicBaseUrl`); the URI is that base URL; the chain id is the server's
- * (`eth_chainId` of its RPC), or the Elysium testnet's while the chain is off.
+ * (`eth_chainId` of its RPC), or the configured `CHAIN_ID` while the chain is off.
  */
 export function siweOrigin(cfg: ServerConfig, req: IncomingMessage, _trustProxy: boolean | number, chainId: number | null): SiweOrigin {
   const uri = publicBaseUrl(cfg, req);
-  return { domain: new URL(uri).host, uri, chainId: chainId ?? ELYSIUM_TESTNET_CHAIN_ID };
+  return { domain: new URL(uri).host, uri, chainId: chainId ?? cfg.chain.chainId };
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {

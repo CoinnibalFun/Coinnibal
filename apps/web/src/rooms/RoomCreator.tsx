@@ -1,5 +1,4 @@
-import {
-  CUSTOM_DEFAULTS,
+import { CUSTOM_DEFAULTS,
   CUSTOM_DIFFICULTIES,
   CUSTOM_DURATIONS_MIN,
   CUSTOM_DURATION_LIMITS,
@@ -19,11 +18,10 @@ import {
   type CustomArenaTier,
   type CustomRoomConfig,
   type CustomRoomQuote,
-  type CustomRoomView,
-} from '@elymum/shared';
+  type CustomRoomView, activeChain, gasSymbol } from '@elymum/shared';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Address, Hash } from 'viem';
-import { AddressChip, Button, Chip, CoinCharacter, Field, HypeAmount, QuantityStepper, Receipt, Sheet, Stamp, StampSpinner } from '../design';
+import { AddressChip, Button, Chip, CoinCharacter, Field, GasAmount, QuantityStepper, Receipt, Sheet, Stamp, StampSpinner } from '../design';
 import { engine } from '../game/instance';
 import { sound } from '../audio';
 import { useT, type TKey } from '../i18n';
@@ -37,11 +35,11 @@ import { useAddress } from '../wallet/store';
 import type { TxPhase } from '../wallet/tx';
 import { RoomApiError, loadPendingPayment, roomLink, roomsApi, savePendingPayment } from './api';
 import { seatInPaidRoom } from './invite';
-import { hypeDecimals, hypeText } from './hype';
+import { gasDecimals, gasText } from './gas';
 import { payRoomFee } from './pay';
 import './rooms.css';
 
-export { hypeText };
+export { gasText };
 
 type Step = 'setup' | 'pay' | 'working' | 'done';
 
@@ -60,6 +58,9 @@ function Choice<T extends string | number>({ label, options, value, onPick, text
     </div>
   );
 }
+
+/** Practice bots a free room starts with when the creator turns them on. */
+const BOTS_SUGGESTED = 6;
 
 const MAP_KEY: Record<CustomRoomConfig['mapSize'], TKey> = { auto: 'cr.map.auto', XS: 'cr.map.XS', S: 'cr.map.S', M: 'cr.map.M', L: 'cr.map.L', XL: 'cr.map.XL' };
 const TRAPS_KEY: Record<CustomRoomConfig['traps'], TKey> = { none: 'cr.traps.none', few: 'cr.traps.few', normal: 'cr.traps.normal', many: 'cr.traps.many' };
@@ -117,7 +118,7 @@ function Capacity({ value, steps, onPick, label, note }: { value: number; steps:
 }
 
 /**
- * "Create your own room": the creator picks the rules, pays the small HYPE fee to the treasury
+ * "Create your own room": the creator picks the rules, pays the small gas-token fee to the treasury
  * (one native transfer; NFT holders get the perk the admin chose), the server checks the payment
  * on chain and opens the room; the sheet ends on the invite code and share link.
  *
@@ -173,14 +174,16 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   }, [maxPlayers, cfg.maxPlayers]);
 
   const set = <K extends keyof CustomRoomConfig>(k: K, v: CustomRoomConfig[K]) => setCfg((c) => ({ ...c, [k]: v }));
-  // bots switched off and on again come back at the count the creator had
-  const lastBots = useRef(cfg.bots > 0 ? cfg.bots : CUSTOM_DEFAULTS.bots);
+  // bots switched off and on again come back at the count the creator had (first time: BOTS_SUGGESTED)
+  const lastBots = useRef(cfg.bots > 0 ? cfg.bots : BOTS_SUGGESTED);
   if (cfg.bots > 0) lastBots.current = cfg.bots;
   // paid rooms: the arena tiers offered (a holders-only tier to emblem holders only)
   const tiers = (quote?.tiers ?? []).filter((x) => !x.holdersOnly || quote?.holder);
   const paidOpen = !!quote?.paidRooms && tiers.length > 0;
   const tier = cfg.kind === 'paid' ? (tiers.find((x) => x.arenaId === cfg.arenaId) ?? null) : null;
-  const setKind = (kind: CustomRoomConfig['kind']) => setCfg((c) => ({ ...c, kind, arenaId: kind === 'paid' ? (c.arenaId ?? tiers[0]?.arenaId ?? null) : null }));
+  // practice bots play free rooms only (no value, no stakes): a ticket room has none
+  const setKind = (kind: CustomRoomConfig['kind']) =>
+    setCfg((c) => ({ ...c, kind, arenaId: kind === 'paid' ? (c.arenaId ?? tiers[0]?.arenaId ?? null) : null, bots: kind === 'paid' ? 0 : c.bots }));
   // the tiers came after "Ticket room" was picked (or the picked one is gone): the first one offered
   const firstTier = tiers[0]?.arenaId ?? null;
   useEffect(() => {
@@ -195,7 +198,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   const capped = !!quote && quote.mine >= quote.maxPerWallet;
   const noSeats = !!quote && typeof quote.seatsLeft === 'number' && cfg.maxPlayers > quote.seatsLeft;
   const paidBlocked = cfg.kind === 'paid' && !tier;
-  const chainName = serverChainInfo(chain)?.name ?? 'Elysium';
+  const chainName = serverChainInfo(chain)?.name ?? activeChain().name;
   // a kept payment opens only a room it covers (a bigger room costs more)
   const kept = pending && (!frozen || BigInt(pending.wei) >= frozen.wei) ? pending : null;
 
@@ -342,7 +345,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
           {t('cr.back')}
         </Button>
         <Button variant="primary" size="lg" loading={step === 'working'} onClick={() => void pay()} data-testid="cr-pay" lead={kept || free ? 'key' : 'wallet'}>
-          {free ? t('cr.createFree') : kept ? t('cr.useKept') : t('cr.pay', { amount: hypeText(frozen?.wei ?? 0n) })}
+          {free ? t('cr.createFree') : kept ? t('cr.useKept') : t('cr.pay', { amount: gasText(frozen?.wei ?? 0n) })}
         </Button>
       </div>
     );
@@ -442,27 +445,30 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
               {t('cr.seatsLeft', { n: quote!.seatsLeft })}
             </p>
           )}
-          <Choice
-            label={t('cr.bots')}
-            options={['on', 'off'] as const}
-            value={cfg.bots > 0 ? 'on' : 'off'}
-            onPick={(v) => set('bots', v === 'on' ? Math.max(1, lastBots.current) : 0)}
-            text={(v) => t(v === 'on' ? 'cr.on' : 'cr.off')}
-          />
-          {cfg.bots > 0 && (
+          {cfg.kind === 'free' && (
+            <Choice
+              label={t('cr.bots')}
+              options={['on', 'off'] as const}
+              value={cfg.bots > 0 ? 'on' : 'off'}
+              onPick={(v) => set('bots', v === 'on' ? Math.max(1, lastBots.current) : 0)}
+              text={(v) => t(v === 'on' ? 'cr.on' : 'cr.off')}
+            />
+          )}
+          {cfg.kind === 'free' && cfg.bots > 0 && <p className="cr-hint mono">{t('cr.botsHint')}</p>}
+          {cfg.kind === 'free' && cfg.bots > 0 && (
             <div className="cr-row">
               <span className="cr-row__label mono">{t('cr.botCount')}</span>
               <QuantityStepper value={cfg.bots} min={1} max={CUSTOM_LIMITS.botsMax} onChange={(v) => set('bots', v)} label={t('cr.botCount')} />
             </div>
           )}
-          {cfg.bots > 0 && <Choice label={t('cr.difficulty')} options={CUSTOM_DIFFICULTIES} value={cfg.difficulty} onPick={(v) => set('difficulty', v)} text={(v) => t(DIFF_KEY[v])} />}
+          {cfg.kind === 'free' && cfg.bots > 0 && <Choice label={t('cr.difficulty')} options={CUSTOM_DIFFICULTIES} value={cfg.difficulty} onPick={(v) => set('difficulty', v)} text={(v) => t(DIFF_KEY[v])} />}
           <Choice label={t('cr.food')} options={CUSTOM_FOOD} value={cfg.food} onPick={(v) => set('food', v)} text={(v) => t(FOOD_KEY[v])} />
           <Choice label={t('cr.powerUps')} options={['on', 'off'] as const} value={cfg.powerUps ? 'on' : 'off'} onPick={(v) => set('powerUps', v === 'on')} text={(v) => t(v === 'on' ? 'cr.on' : 'cr.off')} />
           {quote && (
             <div className="cr-price" data-testid="cr-price">
               <span className="cr-row__label mono">{t('cr.price')}</span>
-              {free ? <b className="cr-price__free">{t('cr.free')}</b> : <HypeAmount wei={youPay ?? 0n} decimals={hypeDecimals(youPay ?? 0n)} />}
-              {base !== null && youPay !== null && youPay < base && !free && <s className="cr-price__was mono">{hypeText(base)} HYPE</s>}
+              {free ? <b className="cr-price__free">{t('cr.free')}</b> : <GasAmount wei={youPay ?? 0n} decimals={gasDecimals(youPay ?? 0n)} />}
+              {base !== null && youPay !== null && youPay < base && !free && <s className="cr-price__was mono">{gasText(base)} {gasSymbol()}</s>}
               <span className="cr-price__for mono">{t('cr.priceFor', { n: cfg.maxPlayers })}</span>
               <span className="cr-price__note">{perkNote(quote, t, cfg.maxPlayers)}</span>
             </div>
@@ -491,7 +497,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
                     { label: t('cr.stakes'), value: `${tok.wire(tier.entryFee)} ${tok.symbol}` },
                   ]
                 : [{ label: t('cr.stakes'), value: t('cr.noStakes'), muted: true }]),
-              { label: t('cr.total'), value: frozen.wei === 0n ? t('cr.free') : `${hypeText(frozen.wei)} HYPE`, strong: true },
+              { label: t('cr.total'), value: frozen.wei === 0n ? t('cr.free') : `${gasText(frozen.wei)} ${gasSymbol()}`, strong: true },
             ]}
           />
           {frozen.wei > 0n && (

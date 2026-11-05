@@ -32,7 +32,7 @@ export { Sticker, type StickerProps, type StickerTone } from './components/Stick
 export { PlateLabel, type PlateLabelProps } from './components/PlateLabel';
 export { StatusPill, type StatusPillProps, type StatusTone } from './components/StatusPill';
 export { AddressChip, shortAddress, type AddressChipProps } from './components/AddressChip';
-export { HypeAmount, formatWei, formatHype, formatUsd, type HypeAmountProps } from './components/HypeAmount';
+export { GasAmount, formatWei, formatGas, formatUsd, type GasAmountProps } from './components/GasAmount';
 export { ArcGauge, type ArcGaugeProps } from './components/ArcGauge';
 export { Countdown, type CountdownProps } from './components/Countdown';
 export { Stepper, type StepperProps, type StepItem, type StepState } from './components/Stepper';

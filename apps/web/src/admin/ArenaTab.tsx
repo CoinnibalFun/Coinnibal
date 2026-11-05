@@ -1,30 +1,45 @@
-import { createArenaCall, deployArenaParams, formatHypeAmount, rescueCall, setFeeBpsCall, setFeeWalletCall, setServerAuthorityCall, sweepArenaCall, updateArenaFrom } from '@elymum/sdk';
+import {
+  BURN_MODE_CALL,
+  BURN_MODE_DEAD,
+  createArenaCall,
+  formatGasAmount,
+  rescueCall,
+  setBurnModeCall,
+  setFeeRatesCall,
+  setFeeWalletCall,
+  setPaymentBurnBpsCall,
+  setServerAuthorityCall,
+  sweepArenaCall,
+  updateArenaFrom,
+} from '@elymum/sdk';
 import {
   SWEEP_WARNING,
   arenaName,
   createArenaRefusal,
+  feeRatesRefusal,
   fmtPct,
   fmtTok,
   parseAddressInput,
   parseBigIntInput,
-  parseHypeInput,
+  parseGasInput,
   parseIntInput,
   parseTokenInput,
   sweepArenaRefusal,
   updateArenaRefusal,
 } from '@elymum/sdk/ops';
 import { sameAddress } from '@elymum/sdk';
+import { BPS, MAX_TOTAL_FEE_BPS, feeExample, gasSymbol } from '@elymum/shared';
 import { useState } from 'react';
 import type { Address } from 'viem';
 import { DefaultArenas, SetTokenForm } from './DeployTab';
-import { arenaDeployArgs, saveLocalDeploy } from './deploy';
 import type { Plan } from './plan';
 import { Addr, Advanced, Btn, Card, FormError, Input, Row, useFormError, type ChainCtx } from './ui';
 
 /**
  * `/admin → Game → the arena contract`: its status, the settler fix when it is not this server's
- * key (one click, the key comes from the server), and every manual control (token, arenas, fee and
- * fee wallet, sweeps, rescue) under one collapsed Advanced section, prefilled. The pause and the
+ * key (one click, the key comes from the server), and every manual control (token, arenas, the fee rates on
+ * profit, the burn mode, the power-up payment split and the fee wallet, sweeps, rescue) under one collapsed
+ * Advanced section, prefilled. The pause and the
  * per-arena open / close are on Start / stop above.
  */
 export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
@@ -68,17 +83,16 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
             <strong className="num">{fmtTok(cfg.totals.paidOut, d)}</strong>
           </div>
           <div>
-            <span className="mono">Fees · burned</span>
+            <span className="mono">Burned · to fee wallet</span>
             <strong className="num">
-              {fmtTok(cfg.totals.fees, d)} <small>· {fmtTok(cfg.totals.burned, d)}</small>
+              {fmtTok(cfg.totals.feeBurned + cfg.totals.lootBurned + cfg.totals.paymentBurned, d)} <small>· {fmtTok(cfg.totals.feeToVault + (cfg.totals.payments - cfg.totals.paymentBurned), d)}</small>
             </strong>
           </div>
         </div>
         <dl className="ad-kv">
           <Row label="Contract">
             <Addr value={arena} net={ctx.net} /> <span className={`ad-code mono${a.code === 'ok' ? ' is-ok' : ' is-bad'}`}>{a.code === 'ok' ? 'code hash ok' : `code ${a.code}`}</span>
-            {a.version === 1 && <span className="ad-code mono is-bad">legacy v1 · fee on profit</span>}
-            {a.version === 2 && <span className="ad-code mono is-ok">v2 · fee on entry</span>}
+            <span className="ad-code mono is-ok">v3 · fee on profit</span>
           </Row>
           <Row label="Owner">
             <Addr value={cfg.admin} net={ctx.net} />
@@ -91,8 +105,8 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
           </Row>
           <Row label="Server authority">
             <Addr value={cfg.serverAuthority} net={ctx.net} />
-            {a.serverBalance !== null && <span className="ad-role num">{formatHypeAmount(a.serverBalance, 4)} for gas</span>}
-            {a.serverBalance === 0n && <span className="ad-bad"> no HYPE for gas: settlements cannot be sent</span>}
+            {a.serverBalance !== null && <span className="ad-role num">{formatGasAmount(a.serverBalance, 4)} for gas</span>}
+            {a.serverBalance === 0n && <span className="ad-bad"> no {gasSymbol()} for gas: settlements cannot be sent</span>}
             {serverMismatch && <span className="ad-bad"> not this server's key ({ctx.net.serverKey})</span>}
           </Row>
           <Row label="Fee wallet">
@@ -104,9 +118,21 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
               </span>
             )}
           </Row>
-          <Row label="Fee">
-            <span className="num">{cfg.feeBps} bps</span>{' '}
-            <span className="ad-role">{a.version === 1 ? `${fmtPct(cfg.feeBps)} of profit (legacy v1 arena)` : `${fmtPct(cfg.feeBps)} of every played entry fee`}</span>
+          <Row label="Fee on profit">
+            <span className="num">
+              {cfg.burnBps} + {cfg.vaultBps} bps
+            </span>{' '}
+            <span className="ad-role">
+              {fmtPct(cfg.burnBps)} burned + {fmtPct(cfg.vaultBps)} to the fee wallet, of each ticket&apos;s profit only (no entry fee)
+            </span>
+          </Row>
+          <Row label="Burn mode">
+            {cfg.burnMode === BURN_MODE_CALL ? "the token's own burn() (falls back to 0x…dEaD)" : 'transfer to 0x…dEaD'}
+            {a.burnSupport === true && cfg.burnMode !== BURN_MODE_CALL && <span className="ad-role"> · the token has burn(): mode 1 would shrink its supply</span>}
+            {a.burnSupport === false && cfg.burnMode === BURN_MODE_CALL && <span className="ad-bad"> · the token has no working burn(): every burn falls back to 0x…dEaD</span>}
+          </Row>
+          <Row label="Power-up payments">
+            {fmtPct(cfg.paymentBurnBps)} burned, {fmtPct(BPS - cfg.paymentBurnBps)} to the fee wallet
           </Row>
           <Row label="Paused">{cfg.paused ? <strong className="ad-bad">PAUSED: joins blocked</strong> : 'no'}</Row>
           <Row label="Token">{cfg.token ? <><Addr value={cfg.token} net={ctx.net} /> <span className="ad-role num">{d} decimals{sym}</span></> : <span className="ad-none">not set</span>}</Row>
@@ -148,7 +174,6 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
           </div>
         )}
       </Card>
-      {a.version === 1 && <LegacyArenaCard ctx={ctx} />}
       {serverMismatch && <SwitchCard ctx={ctx} open={open} serverMismatch={serverMismatch} />}
       <Advanced title="Advanced: arena contract controls" testId="arena-advanced" section>
         <div className="ad-mint__forms">
@@ -168,66 +193,6 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
 }
 
 type OpenFn = (title: string, call: Plan['call'], extra?: Partial<Plan>) => void;
-
-/**
- * The registered arena is the legacy v1 build (fee on profit). The fee rule lives in the contract's code, so the
- * only way to the fee-on-entry rule is a new arena: what a redeploy means, step by step.
- */
-function LegacyArenaCard({ ctx }: { ctx: ChainCtx }) {
-  const [err, guard, setErr] = useFormError();
-  const [done, setDone] = useState<string | null>(null);
-  const deploy = () =>
-    guard(() => {
-      const params = deployArenaParams(arenaDeployArgs(ctx.me, ctx.net.serverKey));
-      ctx.open({
-        title: 'Deploy the new ElymumArena (v2: fee on entry)',
-        contract: 'ElymumArena',
-        deploy: { name: 'ElymumArena', params },
-        onDone: async ({ address, hash }) => {
-          if (!address || !ctx.net.info) return;
-          saveLocalDeploy(ctx.net.info.id, 'arena', { address, txHash: hash });
-          if (!ctx.api) {
-            setDone(`Deployed at ${address}. Sign in as the admin, then register it (Setup → Register a contract that is already deployed).`);
-            return;
-          }
-          try {
-            await ctx.api.registerContract({ kind: 'arena', address, txHash: hash });
-            setDone(`New arena ${address} registered: set the game token and create the arenas (Setup).`);
-            await ctx.reloadNet();
-            await ctx.refresh();
-          } catch (e) {
-            setErr(`Deployed at ${address}, but the server did not switch yet: ${(e as Error).message} Register it later (Setup → Register a contract that is already deployed).`);
-          }
-        },
-      });
-    });
-  return (
-    <Card
-      title="This arena takes the fee on profit (legacy v1)"
-      id="arena-legacy"
-      tone="danger"
-      lede="The new fee rule (the fee comes off every played entry fee, win or lose; unplayed tickets are refunded in full) needs the new ElymumArena contract. It cannot be switched on this one: redeploy the arena to migrate."
-    >
-      <ol className="ad-steps">
-        <li>Close every arena here (Start / stop) and wait until every open ticket is settled (the open-ticket column at 0; unplayed tickets are refunded by the server within about 15 minutes).</li>
-        <li>Still on this (old) arena: sweep each disabled arena's vault to the fee wallet (Advanced → sweep). What is left there is loot dust and rounding; payouts waiting to be collected stay reserved for their players and remain collectable on the old address.</li>
-        <li>Deploy the new arena (the button below, the bundled v2 contract; it gets a NEW address). It registers with the server by itself: the server switches only when its journal owes nothing on the old arena and no ticket is open there (step 1) and reads the new fee rule by itself.</li>
-        <li>Setup: set the same game token on the new arena, create the four arenas, set the holder perks (and holders-only #4) and, if wanted, the fee wallet again.</li>
-        <li>On testnet, the staked bots buy their tickets on the new arena by themselves: no re-funding needed (their wallets keep their tokens; the bankroll is minted again when low).</li>
-        <li>If the server has ARENA_ADDRESS set (Render), it overrides the registry: change it to the new address instead.</li>
-      </ol>
-      <Btn sun icon="arrow" onClick={deploy} testId="redeploy-arena">
-        Preview the new arena deploy
-      </Btn>
-      {done && (
-        <p className="ad-ok" role="status">
-          {done}
-        </p>
-      )}
-      <FormError error={err} />
-    </Card>
-  );
-}
 
 function ArenaEdit({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
   const a = ctx.status!.arena!;
@@ -287,33 +252,81 @@ function ArenaEdit({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
   );
 }
 
+/**
+ * The fee rules of the arena v3: the pair taken from a ticket's profit (burned + to the fee wallet, at most 25 %
+ * together; new tickets only), the burn mode, the burned share of a power-up payment, and the fee wallet.
+ */
 function FeeCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
-  const cfg = ctx.status!.arena!.config!;
-  const legacy = ctx.status!.arena!.version === 1;
+  const a = ctx.status!.arena!;
+  const cfg = a.config!;
   const arena = ctx.net.arenaAddress!;
-  const [bps, setBps] = useState(String(cfg.feeBps));
+  const [burn, setBurn] = useState(String(cfg.burnBps));
+  const [vault, setVault] = useState(String(cfg.vaultBps));
+  const [payBurn, setPayBurn] = useState(String(cfg.paymentBurnBps));
   const [wallet, setWallet] = useState<string>(cfg.feeWallet);
   const [err, guard] = useFormError();
+  const rates = { burnBps: Math.floor(Number(burn)) || 0, vaultBps: Math.floor(Number(vault)) || 0 };
+  const ex = feeExample(1000, 2000, rates);
   return (
     <Card
-      title="Fee"
+      title="Fees"
       id="arena-config"
-      kicker={`Now ${cfg.feeBps} bps`}
-      lede={
-        legacy
-          ? 'This legacy (v1) arena takes the fee from profit only. Redeploy the arena to take it from every entry. At most 1000 bps (10 %).'
-          : 'Taken from the entry fee of every played ticket, win or lose (an unplayed ticket is refunded in full). New tickets only; open ones keep their rate. At most 1000 bps (10 %).'
-      }
+      kicker={`Now ${cfg.burnBps} + ${cfg.vaultBps} bps of profit`}
+      lede={`Taken from a ticket's profit only (payout above its entry fee); a loss or a break-even pays nothing and there is no entry fee. The burned share leaves the supply, the rest goes to the fee wallet. At most ${MAX_TOTAL_FEE_BPS} bps (25 %) together; new tickets only, open ones keep the rates they were bought with.`}
     >
+      <div className="ad-form ad-form--grid">
+        <Input label="Burned" suffix="bps" value={burn} onChange={setBurn} hint={`${fmtPct(rates.burnBps)} of the profit`} />
+        <Input label="To the fee wallet" suffix="bps" value={vault} onChange={setVault} hint={`${fmtPct(rates.vaultBps)} of the profit`} />
+      </div>
+      <p className="ad-note num">
+        Example: entry 1,000, payout 2,000: {ex.burned} burned, {ex.toVault} to the fee wallet, {ex.net} to the player.
+      </p>
+      <div className="ad-actions">
+        <Btn
+          onClick={() =>
+            guard(() => {
+              const r = {
+                burnBps: parseIntInput('Burned (bps)', burn, 0, MAX_TOTAL_FEE_BPS),
+                vaultBps: parseIntInput('To the fee wallet (bps)', vault, 0, MAX_TOTAL_FEE_BPS),
+              };
+              const bad = feeRatesRefusal(r);
+              if (bad) throw new Error(bad);
+              open('Set the fee rates on profit', setFeeRatesCall(arena, r));
+            })
+          }
+        >
+          Preview fee rates
+        </Btn>
+      </div>
       <div className="ad-inlineform">
         <Input
-          label={legacy ? 'Fee on profit' : 'Fee on each entry'}
+          label="Power-up payments burned"
           suffix="bps"
-          value={bps}
-          onChange={setBps}
-          hint={`${(Number(bps) / 100 || 0).toFixed(2)} % of ${legacy ? 'profit' : 'the entry fee'}`}
+          value={payBurn}
+          onChange={setPayBurn}
+          hint={`${fmtPct(Math.floor(Number(payBurn)) || 0)} burned, the rest to the fee wallet`}
         />
-        <Btn onClick={() => guard(() => open('Set the fee', setFeeBpsCall(arena, parseIntInput('Fee (bps)', bps, 0, 1000))))}>Preview fee</Btn>
+        <Btn onClick={() => guard(() => open('Set the burned share of power-up payments', setPaymentBurnBpsCall(arena, parseIntInput('Payment burn (bps)', payBurn, 0, BPS))))}>
+          Preview payment split
+        </Btn>
+      </div>
+      <div className="ad-inlineform">
+        <span className="ad-note">
+          Burn mode: {cfg.burnMode === BURN_MODE_CALL ? "the token's burn()" : '0x…dEaD'}
+          {a.burnSupport === null ? '' : a.burnSupport ? ' · the token has a working burn()' : ' · the token has no working burn()'}
+        </span>
+        <Btn
+          testId="arena-burn-mode"
+          onClick={() =>
+            guard(() => {
+              const next = cfg.burnMode === BURN_MODE_CALL ? BURN_MODE_DEAD : BURN_MODE_CALL;
+              if (next === BURN_MODE_CALL && a.burnSupport === false) throw new Error("The game token has no working burn(): keep burn mode 0 (0x…dEaD).");
+              open(next === BURN_MODE_CALL ? "Burn with the token's own burn()" : 'Burn to 0x…dEaD', setBurnModeCall(arena, next));
+            })
+          }
+        >
+          {cfg.burnMode === BURN_MODE_CALL ? 'Preview mode 0 (0x…dEaD)' : "Preview mode 1 (token's burn())"}
+        </Btn>
       </div>
       <div className="ad-inlineform">
         <Input label="Fee wallet" value={wallet} onChange={setWallet} />
@@ -381,11 +394,11 @@ function RescueCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
   const [amount, setAmount] = useState('');
   const [err, guard] = useFormError();
   return (
-    <Card title="Rescue" id="arena-rescue" tone="danger" lede="Recovers HYPE (leave the token empty) or a foreign ERC-20 sent to the arena by mistake. Never the game token.">
+    <Card title="Rescue" id="arena-rescue" tone="danger" lede={`Recovers ${gasSymbol()} (leave the token empty) or a foreign ERC-20 sent to the arena by mistake. Never the game token.`}>
       <div className="ad-form">
-        <Input label="Token (empty = HYPE)" value={token} onChange={setToken} placeholder="0x… or empty" />
+        <Input label={`Token (empty = ${gasSymbol()})`} value={token} onChange={setToken} placeholder="0x… or empty" />
         <Input label="To" value={to} onChange={setTo} />
-        <Input label={token.trim() ? 'Amount (base units)' : 'Amount (HYPE)'} value={amount} onChange={setAmount} />
+        <Input label={token.trim() ? 'Amount (base units)' : `Amount (${gasSymbol()})`} value={amount} onChange={setAmount} />
       </div>
       <Btn
         onClick={() =>
@@ -393,7 +406,7 @@ function RescueCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
             const t = token.trim() ? parseAddressInput('Token', token) : null;
             const cfg = ctx.status?.arena?.config;
             if (t && cfg?.token && sameAddress(t, cfg.token)) throw new Error('The game token can never be rescued.');
-            const value = t ? parseBigIntInput('Amount', amount, 1n) : parseHypeInput('Amount', amount);
+            const value = t ? parseBigIntInput('Amount', amount, 1n) : parseGasInput('Amount', amount);
             open('Rescue funds from the arena', rescueCall(arena, { token: t, to: parseAddressInput('To', to), amount: value }));
           })
         }

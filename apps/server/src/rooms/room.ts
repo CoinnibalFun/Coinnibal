@@ -735,7 +735,6 @@ export class Room implements RoomHandle {
         // the death sheet's "value lost" / "spilled as loot" lines (DeathStats)
         stats.valueLost = loss?.lost ?? 0;
         stats.lootSpilled = loss?.spilled ?? 0;
-        stats.byBot = !!killer && killer.isBot;
       }
       // arena humans never `leave` (they go AFK); an operator exit settles at value like a kick
       const reason: SettleReason = cause === 'left' ? 'kicked' : cause;

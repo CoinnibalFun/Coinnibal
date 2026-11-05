@@ -1,5 +1,6 @@
-import { isMainnet, type ChainStatus } from '@elymum/shared';
+import { isTestChainId, type ChainStatus } from '@elymum/shared';
 import { useEffect, useState } from 'react';
+import { showChain } from '../chainText';
 import { SERVER } from '../config';
 
 /**
@@ -29,6 +30,7 @@ export function fetchServerChain(opts: { fresh?: boolean; timeoutMs?: number } =
   cache = p;
   void p.then((c) => {
     if (cache === p) last = c;
+    if (c) showChain(c);
     if (c === null && cache === p) cache = null;
   });
   return p;
@@ -41,12 +43,12 @@ export function resetServerChain(): void {
 }
 
 /**
- * The faucet's network rule: any chain that is not mainnet (Elysium Testnet, a localnet) has
+ * The faucet's network rule: any chain that is not a mainnet (a public testnet, a localnet) has
  * test tokens. null while unknown (no chain, or the server is not answering).
  */
 export function isTestnetChain(chain: Pick<ChainStatus, 'enabled' | 'chainId'> | null | undefined): boolean | null {
   if (!chain || !chain.enabled || chain.chainId === null || chain.chainId === undefined) return null;
-  return !isMainnet(chain.chainId);
+  return isTestChainId(chain.chainId);
 }
 
 /** The server's chain status, loaded once per page (undefined while loading). */

@@ -37,7 +37,7 @@ export function drawCoinLook(ctx: CanvasRenderingContext2D, x: number, y: number
 
 /**
  * Draws a coin character centred at (x, y) with world radius r using the
- * shared Storybook coin drawing from `@elymum/art` (basic skins map onto Elysium looks).
+ * shared Storybook coin drawing from `@elymum/art` (basic skins map onto the Storybook looks).
  */
 export function drawCoin(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, skin: SkinDef, o: CoinOpts): void {
   drawCoinLook(ctx, x, y, r, lookForSkin(skin.id), o);

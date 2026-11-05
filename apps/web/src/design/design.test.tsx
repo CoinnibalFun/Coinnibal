@@ -245,7 +245,7 @@ describe('Storybook building blocks', () => {
       <TxPreview
         fn="setToken"
         args={[{ name: 'token', type: 'address', value: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' }]}
-        network={{ name: 'Elysium Testnet', chainId: 4207 }}
+        network={{ name: 'Robinhood Chain Testnet', chainId: 46630 }}
         onConfirm={() => {
           calls++;
           return new Promise<void>((r) => (release = r));

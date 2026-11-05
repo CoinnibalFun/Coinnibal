@@ -7,17 +7,17 @@ const ME = '0x08b2B32E932D5f429073A441E6EfD8e3d42369b2' as const;
 describe('fund the server key', () => {
   const plan: Plan = { title: 'Fund the server key', contract: 'Server key', transfer: { to: KEY, value: 10n ** 18n } };
 
-  it('previews a plain 1 HYPE transfer to the server key', () => {
+  it('previews a plain 1 ETH transfer to the server key', () => {
     const p = previewOf(plan);
     expect(p.to).toBe(KEY);
     expect(p.value).toBe(10n ** 18n);
-    expect(p.valueText).toBe('1 HYPE');
+    expect(p.valueText).toBe('1 ETH');
     expect(p.args).toEqual([]);
   });
 
   it('asks the wallet for a value transfer, not a contract call', async () => {
     const sendTransaction = vi.fn().mockResolvedValue('0xhash');
-    const wallet = { sendTransaction, chain: { id: 99801 } } as never;
+    const wallet = { sendTransaction, chain: { id: 46630 } } as never;
     await expect(sendPlan(plan, wallet, ME)).resolves.toBe('0xhash');
     expect(sendTransaction).toHaveBeenCalledWith(expect.objectContaining({ to: KEY, value: 10n ** 18n, account: ME }));
   });
@@ -29,7 +29,7 @@ describe('a refused settings save reads in the panel words', () => {
     const err = (message: string, field: string | null) => Object.assign(new Error(message), { field });
     expect(saveErrorText(err('prices.magnet must be above 0 and at most 1000000000', 'prices.magnet'))).toBe('Pack price Magnet must be above 0 and at most 1000000000');
     expect(saveErrorText(err('kinds.practiceRookie.massCap must be 0 (no cap) or at least 200', 'kinds.practiceRookie.massCap'))).toBe('Practice · rookie mass cap must be 0 (no cap) or at least 200');
-    expect(saveErrorText(err('priceHype must be a HYPE amount like "0.05"', 'priceHype'))).toBe('Price (HYPE) must be a HYPE amount like "0.05"');
+    expect(saveErrorText(err('priceGas must be an amount of the gas token like "0.05"', 'priceGas'))).toBe('Price (gas token) must be an amount of the gas token like "0.05"');
     expect(saveErrorText(err('Not allowed', 'testnet.arenas.2.bankroll'))).toBe('Staked bots arena #2 bankroll: Not allowed');
     expect(saveErrorText(err('The server is busy', null))).toBe('The server is busy');
     expect(fieldLabel('someNewKey')).toBe('Some new key');
@@ -40,7 +40,7 @@ describe('the server key balance after funding', () => {
   it("shows this page's own chain read first: the server's figure lags until its next balance check", async () => {
     const { serverKeyBalance } = await import('../src/admin/NetworkTab');
     const info = { serverBalanceWei: (10n ** 17n).toString(), low: false };
-    // 0.1 HYPE on the server's last check; 1.1 HYPE read just now after sending 1 HYPE
+    // 0.1 ETH on the server's last check; 1.1 ETH read just now after sending 1 ETH
     expect(serverKeyBalance(info, 11n * 10n ** 17n)).toEqual({ wei: 11n * 10n ** 17n, low: false });
     expect(serverKeyBalance(info, null)).toEqual({ wei: 10n ** 17n, low: false });
     expect(serverKeyBalance({ serverBalanceWei: '0', low: true }, 10n ** 18n).low).toBe(false);

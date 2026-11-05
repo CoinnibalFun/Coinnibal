@@ -1,7 +1,19 @@
-import { DEFAULT_HOLDER_FEE_BPS, DEFAULT_HOLDERS_ONLY_ARENA_IDS, createDefaultArenaCalls, sameAddress, setArenaHoldersOnlyCall, setHolderNftCall, setHolderPerksCall, setMinterCall, setPhaseCall, setTokenCall, type ContractCall } from '@elymum/sdk';
+import {
+  DEFAULT_HOLDERS_ONLY_ARENA_IDS,
+  SUGGESTED_HOLDER_BURN_BPS,
+  SUGGESTED_HOLDER_VAULT_BPS,
+  createDefaultArenaCalls,
+  sameAddress,
+  setArenaHoldersOnlyCall,
+  setHolderNftCall,
+  setHolderPerksCall,
+  setPhaseCall,
+  setTokenCall,
+  type ContractCall,
+} from '@elymum/sdk';
+import { bpsToPercent } from '@elymum/shared';
 import { arenaName, type StatusSnapshot } from '@elymum/sdk/ops';
 import type { Address } from 'viem';
-import type { AdminNetwork } from './net';
 
 /** One step of the setup: what it does, and the call the owner's wallet signs. */
 export interface SetupStep {
@@ -12,17 +24,16 @@ export interface SetupStep {
 
 /**
  * What is still missing for a playable chain, in order: the game token on the arena, the four
- * arenas, the server key as TestToken minter (bots), the emblem as the faucet's 2x and as the arena's
- * holder perk, the Isles as holders-only, and (testnet) the mint opened to the public. Steps already
+ * arenas, the emblem as the faucet's 2x and as the arena's holder perk (the suggested holder pair: 15 % burned +
+ * 0 % to the fee wallet, against the normal 15 % + 5 %), the Isles as holders-only, and (testnet) the mint opened to the public. Steps already
  * done on chain are left out, so the button can be pressed again after an interruption.
  */
-export function setupSteps(ctx: { status: StatusSnapshot | null; net: Pick<AdminNetwork, 'serverKey'> }, opts: { openMint: boolean }): SetupStep[] {
+export function setupSteps(ctx: { status: StatusSnapshot | null }, opts: { openMint: boolean }): SetupStep[] {
   const s = ctx.status;
   const arena = s?.arena?.address ?? null;
   const cfg = s?.arena?.config ?? null;
   const nft = s?.nft?.address ?? null;
   const tt = s?.testToken ?? null;
-  const serverKey = (cfg?.serverAuthority ?? ctx.net.serverKey ?? null) as Address | null;
   const out: SetupStep[] = [];
   if (!arena || !cfg) return out;
   const token = (cfg.token ?? tt?.address ?? null) as Address | null;
@@ -35,9 +46,12 @@ export function setupSteps(ctx: { status: StatusSnapshot | null; net: Pick<Admin
       out.push({ id: `arena-${id}`, label: `Create ${arenaName(id)}`, call });
     }
   }
-  if (tt?.address && serverKey && tt.serverIsMinter !== true) out.push({ id: 'minter', label: 'Let the server key mint tELYMUM (testnet bots)', call: setMinterCall(tt.address, serverKey, true) });
   if (tt?.address && nft && !sameAddress(tt.faucet?.holderNft ?? null, nft)) out.push({ id: 'faucet-nft', label: 'Emblem holders get 2x from the faucet', call: setHolderNftCall(tt.address, nft) });
-  if (nft && !sameAddress(cfg.holderNft ?? null, nft)) out.push({ id: 'perks', label: `Emblem holders pay ${DEFAULT_HOLDER_FEE_BPS / 100} % instead of ${cfg.feeBps / 100} %`, call: setHolderPerksCall(arena, nft, DEFAULT_HOLDER_FEE_BPS) });
+  if (nft && !sameAddress(cfg.holderNft ?? null, nft)) {
+    const holder = { burnBps: SUGGESTED_HOLDER_BURN_BPS, vaultBps: SUGGESTED_HOLDER_VAULT_BPS };
+    const label = `Emblem holders pay ${bpsToPercent(holder.burnBps + holder.vaultBps)} % of profit instead of ${bpsToPercent(cfg.burnBps + cfg.vaultBps)} %`;
+    out.push({ id: 'perks', label, call: setHolderPerksCall(arena, nft, holder) });
+  }
   if (nft) {
     const known = new Map((s?.arena?.arenas ?? []).map((a) => [a.id, a]));
     for (const id of DEFAULT_HOLDERS_ONLY_ARENA_IDS) {

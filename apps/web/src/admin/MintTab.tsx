@@ -1,5 +1,6 @@
+import { gasSymbol } from '@elymum/shared';
 import {
-  formatHypeAmount,
+  formatGasAmount,
   freezeMetadataCall,
   ownerMintCall,
   priceDeviationBps,
@@ -17,11 +18,11 @@ import {
   MINT_PHASE_NAMES,
   type MintPhaseName,
 } from '@elymum/sdk';
-import { parseAddressInput, parseHypeInput, parseIntInput } from '@elymum/sdk/ops';
+import { parseAddressInput, parseGasInput, parseIntInput } from '@elymum/sdk/ops';
 import type { AllowlistStatus, GameAccess, HolderWlView, MintPriceQuote } from '@elymum/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { formatEther, type Address, type Hex } from 'viem';
-import { ArcGauge, HypeAmount, Icon, type CoinMood } from '../design';
+import { ArcGauge, GasAmount, Icon, type CoinMood } from '../design';
 import { Addr, Advanced, Btn, Card, FormError, Input, NeedsSession, Row, useFormError, type ChainCtx } from './ui';
 import { readOwner, type Plan } from './plan';
 
@@ -49,7 +50,7 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
   const nft = ctx.net.nftAddress;
   const s = ctx.status?.nft?.state ?? null;
   const [nftOwner, setNftOwner] = useState<Address | null>(null);
-  const [hypeUsd, setHypeUsd] = useState<number | null>(null);
+  const [gasUsd, setGasUsd] = useState<number | null>(null);
   useEffect(() => {
     if (!nft || !ctx.client) return;
     let live = true;
@@ -94,7 +95,7 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
       },
     });
   const balance = ctx.status?.nft?.balance ?? 0n;
-  const usdOf = (wei: bigint) => (hypeUsd !== null ? (Number(wei) / 1e18) * hypeUsd : null);
+  const usdOf = (wei: bigint) => (gasUsd !== null ? (Number(wei) / 1e18) * gasUsd : null);
 
   return (
     <div className="ad-mint">
@@ -115,13 +116,13 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
           <div>
             <dt className="mono">Price</dt>
             <dd>
-              <HypeAmount wei={s.price} decimals={6} usd={usdOf(s.price)} />
+              <GasAmount wei={s.price} decimals={6} usd={usdOf(s.price)} />
             </dd>
           </div>
           <div>
             <dt className="mono">In the contract</dt>
             <dd>
-              <HypeAmount wei={balance} decimals={4} />
+              <GasAmount wei={balance} decimals={4} />
             </dd>
           </div>
         </dl>
@@ -145,13 +146,13 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
       <ImportHoldersCard ctx={ctx} />
       <div className="ad-mint__pair">
         <AllowlistCard ctx={ctx} root={s.root} open={open} />
-        <PriceCard ctx={ctx} price={s.price} open={open} keeper={s.keeper} minPrice={s.minPrice} maxPrice={s.maxPrice} onHypeUsd={setHypeUsd} />
+        <PriceCard ctx={ctx} price={s.price} open={open} keeper={s.keeper} minPrice={s.minPrice} maxPrice={s.maxPrice} onGasUsd={setGasUsd} />
       </div>
       <div className="ad-mint__forms">
         <LimitsCard wl={s.wlLimit} pub={s.publicLimit} max={s.maxSupply} total={s.totalSupply} open={open} nft={nft} />
-        <Card title="Withdraw" id="mint-withdraw" lede="Sends the whole HYPE balance of the NFT contract to the treasury.">
+        <Card title="Withdraw" id="mint-withdraw" lede={`Sends the whole ${gasSymbol()} balance of the NFT contract to the treasury.`}>
           <p className="ad-bigfig">
-            <HypeAmount wei={balance} decimals={6} usd={usdOf(balance)} size="lg" />
+            <GasAmount wei={balance} decimals={6} usd={usdOf(balance)} size="lg" />
           </p>
           <dl className="ad-kv">
             <Row label="To the treasury">
@@ -160,7 +161,7 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
             </Row>
           </dl>
           <Btn primary onClick={() => open('Withdraw the mint proceeds to the treasury', withdrawCall(nft))} disabled={balance === 0n} testId="mint-withdraw">
-            Withdraw {formatHypeAmount(balance, 6)}
+            Withdraw {formatGasAmount(balance, 6)}
           </Btn>
         </Card>
       </div>
@@ -180,7 +181,7 @@ type OpenFn = (title: string, call: Plan['call'], extra?: Partial<Plan>) => void
 const PHASE_COPY: Record<MintPhaseName, { title: string; line: string; mood: CoinMood }> = {
   closed: { title: 'Closed', line: 'Sealed. For now.', mood: 'sleepy' },
   allowlist: { title: 'Allowlist', line: 'Only wallets in the root may mint.', mood: 'smug' },
-  public: { title: 'Public', line: 'Anyone with a dollar of HYPE.', mood: 'happy' },
+  public: { title: 'Public', line: `Anyone with a dollar of ${gasSymbol()}.`, mood: 'happy' },
 };
 
 /**
@@ -370,7 +371,7 @@ function PriceCard({
   minPrice,
   maxPrice,
   open,
-  onHypeUsd,
+  onGasUsd,
 }: {
   ctx: ChainCtx;
   price: bigint;
@@ -378,7 +379,7 @@ function PriceCard({
   minPrice: bigint;
   maxPrice: bigint;
   open: OpenFn;
-  onHypeUsd?: (v: number | null) => void;
+  onGasUsd?: (v: number | null) => void;
 }) {
   const [quote, setQuote] = useState<MintPriceQuote | null>(null);
   const [min, setMin] = useState(minPrice > 0n ? formatEther(minPrice) : '');
@@ -390,18 +391,18 @@ function PriceCard({
     ctx.api.mintPrice().then(
       (q) => {
         setQuote(q);
-        onHypeUsd?.(q.hypeUsd);
+        onGasUsd?.(q.gasUsd);
       },
       (e: Error) => setErr(e.message),
     );
-  }, [ctx.api, setErr, onHypeUsd]);
+  }, [ctx.api, setErr, onGasUsd]);
   const nft = ctx.net.nftAddress!;
   const target = quote?.priceWei ? BigInt(quote.priceWei) : null;
   const dev = target && target > 0n ? priceDeviationBps(price, target) : null;
   const serverKey = ctx.net.serverKey;
   const targetUsd = ((quote?.targetUsdCents ?? 100) / 100).toFixed(2);
   const off = dev !== null && Math.abs(dev) > 200;
-  const usd = quote?.hypeUsd ? (Number(price) / 1e18) * quote.hypeUsd : null;
+  const usd = quote?.gasUsd ? (Number(price) / 1e18) * quote.gasUsd : null;
   const mainnet = ctx.net.mainnet;
   const sync = (
     <div className="ad-actions">
@@ -415,20 +416,20 @@ function PriceCard({
       title="Price"
       id="mint-price"
       kicker={mainnet ? `Pinned to $${targetUsd}` : 'Testnet · fixed'}
-      lede={mainnet ? `Held in wei, kept at $${targetUsd} in HYPE. The number wiggles with the market; the dollar does not.` : 'Testnet HYPE is free, so the price stays what it is. Nothing to keep in sync here.'}
+      lede={mainnet ? `Held in wei, kept at $${targetUsd} in ${gasSymbol()}. The number wiggles with the market; the dollar does not.` : `Testnet ${gasSymbol()} is free, so the price stays what it is. Nothing to keep in sync here.`}
     >
       <div className="ad-pricebox">
         <div className="ad-pricebox__now">
           <span className="mono">On the contract</span>
-          <HypeAmount wei={price} decimals={6} usd={mainnet ? usd : null} size="md" stack />
+          <GasAmount wei={price} decimals={6} usd={mainnet ? usd : null} size="md" stack />
         </div>
         {mainnet && (
         <div className="ad-pricebox__target">
           <span className="mono">Target</span>
           {target ? (
             <>
-              <span className="num ad-pricebox__fig">{formatHypeAmount(target, 6)}</span>
-              <span className="ad-tick num">HYPE/USD {quote?.hypeUsd}</span>
+              <span className="num ad-pricebox__fig">{formatGasAmount(target, 6)}</span>
+              <span className="ad-tick num">{gasSymbol()}/USD {quote?.gasUsd}</span>
             </>
           ) : (
             <span className="ad-none">price feed unavailable</span>
@@ -441,8 +442,8 @@ function PriceCard({
       <Advanced title="Advanced: set a price by hand, the keeper">
         {!mainnet && sync}
         <div className="ad-inlineform">
-          <Input label="Price" suffix="HYPE" value={manual} onChange={setManual} />
-          <Btn onClick={() => guard(() => open('Set the mint price', setPriceCall(nft, parseHypeInput('Price', manual))))}>Preview setPrice</Btn>
+          <Input label="Price" suffix={gasSymbol()} value={manual} onChange={setManual} />
+          <Btn onClick={() => guard(() => open('Set the mint price', setPriceCall(nft, parseGasInput('Price', manual))))}>Preview setPrice</Btn>
         </div>
         <h3 className="ad-h3">Keeper</h3>
         <p className="ad-note">With the server key as keeper, the server re-prices every 5 minutes when off by more than 2 %, always inside the bounds.</p>
@@ -453,16 +454,16 @@ function PriceCard({
           </Row>
           <Row label="Bounds">
             <span className="num">
-              {formatHypeAmount(minPrice, 6)} – {formatHypeAmount(maxPrice, 6)}
+              {formatGasAmount(minPrice, 6)} – {formatGasAmount(maxPrice, 6)}
             </span>
           </Row>
         </dl>
         <div className="ad-form ad-form--grid">
-          <Input label="Min price" suffix="HYPE" value={min} onChange={setMin} />
-          <Input label="Max price" suffix="HYPE" value={max} onChange={setMax} />
+          <Input label="Min price" suffix={gasSymbol()} value={min} onChange={setMin} />
+          <Input label="Max price" suffix={gasSymbol()} value={max} onChange={setMax} />
         </div>
         <div className="ad-actions">
-          <Btn onClick={() => guard(() => open('Set the keeper price bounds', setPriceBoundsCall(nft, parseHypeInput('Min price', min), parseHypeInput('Max price', max))))}>Preview bounds</Btn>
+          <Btn onClick={() => guard(() => open('Set the keeper price bounds', setPriceBoundsCall(nft, parseGasInput('Min price', min), parseGasInput('Max price', max))))}>Preview bounds</Btn>
           <Btn disabled={!serverKey} testId="mint-keeper" onClick={() => serverKey && open('Make the server key the price keeper', setPriceKeeperCall(nft, serverKey))}>
             Keeper = server key
           </Btn>

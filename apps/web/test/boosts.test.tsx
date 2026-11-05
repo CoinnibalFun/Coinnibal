@@ -180,8 +180,8 @@ describe('BoostBar', () => {
 const VIEW: ShopView = {
   open: true,
   token: { address: '0x0000000000000000000000000000000000000707', symbol: 'tELYMUM', decimals: 18 },
-  sink: '0x000000000000000000000000000000000000dEaD',
-  sinkKind: 'burn',
+  payTo: '0x00000000000000000000000000000000000a4e4a',
+  burnBps: 5000,
   packs: [
     { kind: 'magnet', charges: 3, priceRaw: (1050n * ONE).toString(), fullPriceRaw: (1500n * ONE).toString(), enabled: true },
     { kind: 'leap', charges: 3, priceRaw: (1750n * ONE).toString(), fullPriceRaw: (2500n * ONE).toString(), enabled: true },
@@ -196,7 +196,7 @@ const VIEW: ShopView = {
 };
 
 describe('ShopSheet', () => {
-  it('lists the packs with holder prices, owned charges and the burn note', async () => {
+  it('lists the packs with holder prices, owned charges and where a payment goes', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(VIEW), { status: 200 })));
     act(() => useUi.setState({ chain: chainStatus(), modal: 'shop', auth: { address: '0x1111111111111111111111111111111111111111', token: 'tok', profile: null } }));
     render(
@@ -209,7 +209,7 @@ describe('ShopSheet', () => {
     expect(screen.getAllByText('1,500 tELYMUM')).toHaveLength(2);
     expect(screen.getByText(/You have 4/)).toBeTruthy();
     expect(screen.getByText(/30% off and \+1 arena use per round/)).toBeTruthy();
-    expect(screen.getByText(/Payments are burned/)).toBeTruthy();
+    expect(screen.getByText(/Each pack is paid to the arena contract \(0x0000…4e4a\): 50% is burned, 50% goes to the fee wallet\./)).toBeTruthy();
     expect((screen.getByTestId('shop-buy-speed') as HTMLButtonElement).disabled).toBe(true);
     // the two new power-ups are on sale, the Shockwave is gone
     expect(screen.getByTestId('shop-buy-leap').textContent).toContain('Buy 3 for 1,750 tELYMUM');
@@ -337,8 +337,7 @@ describe('admin shop patch', () => {
     expect(shopPatch(a, b)).toEqual({});
     b.prices.leap = '500';
     b.kinds.invis = false;
-    b.sink = 'treasury';
     b.arenaUsesPerRound = 1;
-    expect(shopPatch(a, b)).toEqual({ prices: { leap: '500' }, kinds: { invis: false }, sink: 'treasury', arenaUsesPerRound: 1 });
+    expect(shopPatch(a, b)).toEqual({ prices: { leap: '500' }, kinds: { invis: false }, arenaUsesPerRound: 1 });
   });
 });
