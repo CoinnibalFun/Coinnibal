@@ -30,8 +30,7 @@ services:
       HOST: 0.0.0.0
       TRUST_PROXY: "1"
       TRUST_PROXY_HOPS: "1"
-      # forced maintenance (owner asked); comment this out again (and push) to hand control back to /admin
-      GAME_ACCESS: maintenance
+      # GAME_ACCESS: maintenance   <- uncomment (and push) to force maintenance; otherwise /admin decides
     volumes:
       - elymum-data:/data
     expose:
