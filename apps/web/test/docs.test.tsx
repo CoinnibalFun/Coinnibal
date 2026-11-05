@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { CAPACITY, RULES } from '@elymum/shared';
+import { CAPACITY, DEFAULT_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, MAX_TOTAL_FEE_BPS, RULES, profitFee } from '@elymum/shared';
 import { act, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { chainStatus } from './evm-helpers';
@@ -181,6 +181,27 @@ describe('player guide page', () => {
     expect(screen.getByText('−0')).toBeTruthy();
     expect(screen.queryByText(/Entry fee rate/)).toBeNull();
   }, 20_000);
+});
+
+describe('docs/ECONOMY.md', () => {
+  it('the worked examples and defaults of docs/ECONOMY.md are what the code computes', () => {
+    const doc = readFileSync(resolve(process.cwd(), '../../docs/ECONOMY.md'), 'utf8');
+    const n = (c: string) => Number(c.replace(/[^\d]/g, ''));
+    const rows = doc
+      .split('\n')
+      .filter((l: string) => /^\| [\d,]+ \| [\d,]+/.test(l))
+      .map((l: string) => l.split('|').slice(1, -1).map((c: string) => c.trim()));
+    expect(rows.length).toBeGreaterThanOrEqual(6);
+    for (const r of rows) {
+      const holder = r[1].includes('holder');
+      const f = profitFee(n(r[0]), n(r[1].split(' ')[0]), holder ? { burnBps: 1500, vaultBps: 0 } : DEFAULT_FEE_RATES);
+      expect([n(r[2]), n(r[3].split(' ')[0]), n(r[4]), n(r[5])], r.join(' | ')).toEqual([f.profit, f.burned, f.toVault, f.net]);
+    }
+    expect(doc).toContain(`**15 % is burned**`);
+    expect(DEFAULT_FEE_RATES).toEqual({ burnBps: 1500, vaultBps: 500 });
+    expect(MAX_TOTAL_FEE_BPS).toBe(2500);
+    expect(DEFAULT_PAYMENT_BURN_BPS).toBe(5000);
+  });
 });
 
 describe('docs routes', () => {
