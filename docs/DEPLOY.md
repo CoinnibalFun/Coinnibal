@@ -74,6 +74,10 @@ One Docker container serves the game server and the web client on the same origi
 | `ADMIN_WALLETS` | your owner wallet's 0x address (comma-separated for more). **No default**: unset, nobody is admin |
 | `AUTH_SECRET` | `openssl rand -hex 32` (otherwise players sign in again after each restart) |
 | `TRUST_PROXY` | `1` (set by the image already): the client IP is the right-most `X-Forwarded-For` hop; with more than one proxy in front, set `TRUST_PROXY_HOPS` to their number (default 1) |
+| `CORS_ORIGIN` | the site's origin(s), comma-separated, when the web is hosted elsewhere (e.g. `https://elymum.io`); `*` when the server serves the web itself |
+| `PAYOUT_GUARD_MULTIPLE` | `100` (default): a payout above this many entry fees is held for an admin; see OPERATIONS.md, "The server key" |
+| `MAX_CONNECTIONS`, `MAX_CONNECTIONS_PER_IP`, `MAX_CONNECTIONS_PER_SUBNET` | `600`, `8`, `48` (defaults): WebSocket caps (total, per IP, per IPv4 /24 or IPv6 /64) |
+| `LOAD_SHED` | on by default in production: new free games, then new sockets and arena seats wait while the server is overloaded |
 | `MINT_USD_CENTS` | `100` (the $1 target; default) |
 | `TOKEN_SYMBOL` | `$ELYMUM` (default; display only) |
 | `GAME_ACCESS` | leave empty: the `/admin` setting decides (`public` on the testnet, `admins` on mainnet until you open the mint) |

@@ -40,6 +40,35 @@ with the reason.
 - `!!! chain: the server key ... is NOT the arena's server authority` means the arena points at another key: set
   the server authority again (Game tab, the arena contract) or run the server with the right key.
 
+### What the server key can do, and the limits around it
+
+The arena contract lets its server authority settle any open ticket with any payout up to that arena's vault. So
+whoever holds the key could buy a ticket from a wallet of their own and settle it with the whole vault (less the fee
+on profit): **the open stakes of the arenas are what a stolen key can take** (never owed payouts, never the fee
+wallet, never another contract; the contract test `test_security_compromisedServerKey_blastRadiusIsTheOpenVault`).
+Rounds settle every 5 minutes, so a vault normally holds only the tickets in play (plus forfeits).
+
+The server limits what a bug, a tampered journal or a confused process can pay through it:
+
+| Guard | What it does |
+|---|---|
+| **Payout guard** (`PAYOUT_GUARD_MULTIPLE`, default 100) | a settlement paying one ticket more than 100 entry fees is not sent: it is held in `/admin` → Integrity → Held settlements (`payout guard: ...`, `!!! chain: settlement ... HELD for review`). **Release** pays it exactly as it was; **Settle at 0** keeps it in the vault. It is never released by itself |
+| **Books guard** | before anything leaves an arena vault, what the journal owes that arena (pending payouts and burns of tickets still open on chain, live tickets, floor loot) must fit in the vault. If not (`!!! chain: arena #N PAYOUTS STOPPED`), nothing is paid from that arena until the books add up again: the stakes stay in the vault, the Integrity tab shows "Payouts stopped" with the pending settlements, and each can be **held** by hand and settled at 0 |
+| **Settled log** (`DATA_DIR/chains/<id>/settled.jsonl`) | every settlement, cancel and loot burn the server saw confirmed, for 14 days: a settlement reorged out (the ticket open again) is sent again with the same payout instead of being refunded at the entry fee by the stale sweeper; the record of what each ticket was paid, and in which transaction, for appeals |
+| **Sweep ids** | a `lastSweepId` beyond 2^53 (only a server key can set it) stops loot burns of that arena loudly instead of guessing |
+
+**Key management.**
+
+- The server key is a **hot key with gas only**: it never holds tokens, never owns a contract, never is the fee wallet
+  or the NFT treasury. Keep about 0.05 ETH on it and top it up; anything more is risk without use.
+- The **owner** of both contracts should be a **multisig** (a Safe on Robinhood Chain, 2 of 3 with keys on separate
+  hardware wallets): it is the key that can rotate the server key, pause, and change fees. "Ownership" below moves it.
+- `DATA_DIR/server-key.json` is mode 0600 and inside the backup: keep backups encrypted (they hold this key).
+- **Rotate** the server key at least once a year, at once when the VPS or a backup may have been exposed, and whenever
+  a person with server access leaves ("Rotating the server key" below). After a suspected leak: **pause** the arena
+  first (no new tickets), then `setServerAuthority` to a fresh key from the multisig; the stolen key is useless
+  from that block on.
+
 ## WL, collabs and the allowlist
 
 The site's applications are run from `/admin` with an admin wallet signed in. Nothing here touches the chain
@@ -119,6 +148,7 @@ demand with **Run detectors now**). Each flag has a score from 0 to 100 and its 
 | Shared IP or browser | two wallets in one arena at the same time (30 s+) from one browser hash (60, both 80, +10 in one instance) or one IP hash (30, below the flag score: households, cafes and mobile carriers share IPs). Value moving between them adds 10 to 15 |
 | Bot-like input | 2+ of: aim timing variation under 1 % (the web client sends on a 33 ms frame budget, so timing alone is weak), no mouse jitter (direction-change entropy at most 0.6 bits, or 95 % whole-number aims), median reaction under 110 ms over 20+ threats, play in 21+ hours of the last 24. The reaction signal alone also flags |
 | Round-bell pattern | 3+ tickets that joined in the last 20 s before joins close and sat idle (80 %+) until the bell, or that gained half an entry fee or more while idle |
+| Input twins | two wallets with automated input (the bot-like input tests) whose input statistics match (direction-change distributions within 0.02 bits, the same timing) and that played the same room at the same time in 2+ rounds: one script, several accounts. Only automated wallets are compared, so people never match; the score (60 to 75) stays below the hold score on its own |
 
 Every threshold is editable under **Detector settings → Thresholds** (with its default next to it); **Restore defaults**
 puts them back. Flags scoring below `flagMinScore` (40) are not kept.
@@ -145,8 +175,13 @@ guard, the settlement worker never sends it, and the stale sweeper never refunds
   only through `sweepArena` when the arena is retired.
 
 **Decide within 24 hours.** A held ticket is still open on chain, and after 24 h its player may refund it themselves at
-the entry fee (`refund`). The tab marks items older than 12 h in red. Every hold, release, settle at 0, ban and
-unban is logged (`integrity: HELD …`, `RELEASED`, `SETTLED AT 0`, `BANNED`).
+the entry fee (`refund`). The tab marks items older than 12 h in red. So that a false positive never costs a player
+the winnings, an auto-held payout nobody decided on is **paid as settled after `autoReleaseHours`** (default 20 h,
+Detector settings; 0 turns it off; `integrity: ... AUTO-RELEASED`). Holds of the payout guard and holds by hand wait for
+a person. If a player does refund a held ticket, the server drops the item and journals the difference (payout −
+entry fee) as a forfeit, so the books keep matching the vault. Every hold, release, settle at 0, ban and unban is
+logged (`integrity: HELD …`, `RELEASED`, `SETTLED AT 0`, `BANNED`), and every admin write is in the audit log
+(`DATA_DIR/admin-audit.jsonl`, `GET /api/admin/audit`: who, what path, when, from which address, the answer).
 
 **Files.** `DATA_DIR/integrity/state.json` (settings, bans, flags; atomic writes), `secret.key` (keep it with the
 backup: without it old hashes no longer match new ones), and `log/*.json` (immutable chunks of ticket summaries and
@@ -325,6 +360,22 @@ seats, draining, the worker each runs on) and the last 100 decisions (`open`, `o
 directory and prints the instances minute by minute and every decision, then checks that every seated ticket was
 settled exactly once.
 
+## Abuse and DDoS
+
+| Layer | Limit |
+|---|---|
+| Cloudflare (recommended, deploy/vps/README.md "Cloudflare in front") | volumetric floods, bad bots at the edge; WebSockets pass |
+| Caddy | headers in 10 s, bodies in 30 s and at most 1 MB, headers at most 16 KB, idle keep-alive 2 min |
+| WebSocket front door | `MAX_CONNECTIONS` (600), per IP (8), per IPv4 /24 or IPv6 /64 (48), 60 upgrades per IP a minute; a socket without a valid `hello` in 10 s is closed; 90 messages/s per socket (bursts of 120), a socket that floods or sends garbage (300 strikes in 10 s) is closed with 1008; at most 4 KB per message; sign-ins and ticket reads 1 per 2 s |
+| HTTP | 240 API requests per IP a minute, 20 sign-in nonces per IP a minute, headers in 15 s, the whole request in 30 s, 64 KiB bodies, `/api/rooms` and `/api/leaderboard` built at most once a second, 30 share-card renders per IP and 120 in all a minute |
+| Load shedding (`LOAD_SHED`, on in production) | when the game thread with the most headroom runs a tick p95 over 28 ms or the main thread lags over 150 ms (p99): new free games wait (`server_full`); over 45 ms / 400 ms: new sockets (503) and new arena seats wait too (the ticket stays on chain). Live games and reconnects always go on. Logged as `!!! load: BUSY` / `CRITICAL` |
+
+The per-IP limits need the real client address: Caddy hands it on (one hop), and the website must call the game
+server directly (`VITE_SERVER_URL`): `vercel.json` proxies only `/api/nft/*` and `/share/*`.
+
+`node --import tsx scripts/bench/flood.ts` (in `apps/server`) plays 60 people and runs four attacks from thousands of
+spoofed addresses (idle sockets, a message flood, an HTTP flood, slowloris) and prints what the players saw.
+
 ## Pausing and emergencies
 
 | What | How | Effect |
@@ -385,6 +436,8 @@ with any amount up to a vault and burn up to a vault with `sweepLoot`.
 | `chains/<id>/contracts.json` | the registered arena, NFT and test token | register them again from `/admin` |
 | `site/*.json`, `profiles.json`, `leaderboards.json` | WL, collabs, tasks, settings, map sizes, arena scaling, shop and custom room settings, share cards, names and skins, standings | the site data and profiles are gone; keep backups (lost share cards only break old links) |
 | `integrity/` | integrity state, the hashing secret, ticket summaries | flags and bans are gone |
+| `chains/<id>/settled.jsonl` | every confirmed settlement, cancel and loot burn of the last 14 days | reorg protection and the payout record start empty |
+| `admin-audit.jsonl` | every admin write (who, what, when, from where) | the audit trail is gone |
 
 - The journal is written to a temporary file and renamed, so the file on disk is always a complete snapshot. Copy
   `DATA_DIR` regularly and keep the copies encrypted (they hold a private key and wallet addresses).

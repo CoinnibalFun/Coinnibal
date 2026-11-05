@@ -137,24 +137,39 @@ Off chain (the server; tests in `apps/server/test`):
     switch to another one (`POST /api/admin/contracts` answers 409 `wrong_state`).
 14. **Stale tickets:** a ticket nobody played for `STALE_SESSION_AFTER_S` (15 min) is cancelled (full entry fee
     back). While a quarantined journal (`journal.json.corrupt-*`) exists the stale sweeper stays off.
+15. **Guards before money leaves:** a payout above `PAYOUT_GUARD_MULTIPLE` entry fees is held, an arena whose vault
+    does not cover its journal pays nothing (the books guard), and a ticket the server settled that is open again (a
+    reorg) is re-sent with the same payout (`settled.jsonl`), never refunded at the entry fee.
+16. **Refunds the server did not send:** a held (or never-sent) settlement whose ticket the player refunded after
+    24 h is dropped and the difference (payout − entry fee) journaled as a forfeit, so (11) keeps holding.
+
+The money simulation (`test/money-sim.ts`, `pnpm -F @elymum/server money-sim`) checks 11 to 16 together: the real
+rooms, journal and settlement worker against the contract model or a hardhat node with the real contract, with
+random joins, eats, disconnects, unplayed tickets, holds, failed transfers, RPC errors, ambiguous sends, lost
+receipts, outages, worker crashes, restarts and days passing; after every chain pass the vault must equal the rooms +
+the journal + forfeits + unseated tickets exactly, and at the end every ticket is closed exactly once.
 
 ## Trust model
 
 | Actor | Can | Cannot |
 |---|---|---|
 | Player | buy tickets, collect `owed`, refund an unsettled ticket after 24 h, pay for power-ups, mint NFTs, edit the profile | settle a ticket, undo a result, move other players' tokens |
-| Server key (`serverAuthority`, optionally the NFT `priceKeeper`) | settle any open session with any payout up to the vault; cancel unplayed tickets; burn floor loot up to the vault; re-price the NFT inside the owner's bounds | move tokens to a wallet of its choice, touch the fee wallet or the config, mint any token, price the NFT outside the bounds |
+| Server key (`serverAuthority`, optionally the NFT `priceKeeper`) | settle any open session with any payout up to the vault (so, with a ticket bought from a wallet of its own, take an arena's open stakes less the fee on profit); cancel unplayed tickets; burn floor loot up to the vault; re-price the NFT inside the owner's bounds | touch owed payouts, the fee wallet or the config, mint any token, price the NFT outside the bounds |
 | Owner (Ownable2Step) | arena: set the token once, the fee pair (≤ 25 % of profit), the holder pair and NFT, the burn mode, the payment burn share, the fee wallet, the server authority, pause, create / update / sweep arenas, rescue non-game tokens; NFT: phase, root, price, bounds, keeper, limits, supply (down only), metadata, royalty, treasury, owner mint, withdraw | change the token once set, change an open ticket's rates, take an arena vault directly |
 | Fee wallet | receives the fee wallet's share of profits and payments, and a swept arena's vault | nothing else on chain |
 | Server operator | rooms, round length (`ROUND_SECONDS`, `ROUND_JOIN_CLOSE_SECONDS`), who may play (`GAME_ACCESS`), map sizes | anything on chain except through the server key |
 
 - **The game outcome is trusted.** A buggy or malicious server could split a vault wrongly between that arena's
   players or burn the wrong amount of it (never more than the vault). The owner can replace the server key, so
-  trusting the server means trusting the owner. **Protect the server key.**
+  trusting the server means trusting the owner. **Protect the server key** (OPERATIONS.md, "What the server key can
+  do"). The server itself refuses to pay what its own books do not support: a payout above `PAYOUT_GUARD_MULTIPLE`
+  (100) entry fees is held for an admin, and nothing leaves a vault that does not cover what the journal owes it
+  (the books guard).
 - **Fair play in arenas:** only people play there. Practice bots exist only in free custom rooms (no value), see only
   what a player's view shows (invisible players excluded) and are tagged BOT.
 - Collusion, multi-accounting and scripted input are detected off chain and shown to the owner (OPERATIONS.md,
-  "Integrity"); an optional auto-hold keeps a high-risk payout in the journal until the owner decides.
+  "Integrity"); an optional auto-hold keeps a high-risk payout in the journal until the owner decides (or, for an
+  auto-hold, until `autoReleaseHours` pass: a false positive delays a payout, never loses it).
 - The contracts are not upgradeable and not audited.
 
 ## Server internals
@@ -239,8 +254,9 @@ Off chain (the server; tests in `apps/server/test`):
 
 `pnpm check` runs what CI runs, one suite at a time: the English-only guard, the dead-export check
 (`scripts/check-exports.mjs`), `pnpm -r typecheck`, the contracts build (artifacts in sync) and Solidity tests, the
-shared, art, SDK, server (also with room workers) and web tests, and the web build. `pnpm check:fast` skips the
-contracts and the web build.
+shared, art, SDK, server tests, the room-worker suite (`test:workers`), the money simulation (`test:money`: three
+seeds on the contract model and a short run on a hardhat node), the web tests and the web build. `pnpm check:fast`
+skips the contracts and the web build.
 
 ## Threads (`GAME_WORKERS`)
 
@@ -297,7 +313,7 @@ with 0 everything runs on the main thread exactly as before (tests, `pnpm dev`).
   `/api/health`.
 - **Tests.** The usual suite runs with 0 workers; `pnpm -F @elymum/server test:workers` runs the WebSocket
   integration suite with two workers (`TEST_GAME_WORKERS=2`) plus `test/workers.test.ts` (bell settlement,
-  reattach, crash and hang recovery, custom-room close, shutdown).
+  reattach, crash and hang recovery, custom-room close, shutdown); `workers.test.ts` runs only there (vitest.config.ts).
 
 ### Capacity (measured)
 
