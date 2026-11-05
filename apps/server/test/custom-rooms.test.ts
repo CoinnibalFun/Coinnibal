@@ -144,11 +144,17 @@ describe('custom rooms: create, caps, perks', () => {
     expect(room.info().custom).toMatchObject({ mapSize: 'S', bots: 4, difficulty: 'hard' });
     // its bots are its own: an admin bot change leaves them alone
     // the creator's bots walk in one by one: the first 3 within 13.5 s at most, the 4th up to 20 s later
-    for (let i = 0; i < 30 * 40; i++) room.tick(33);
-    expect(room.bots?.bots.size).toBe(4);
+    // (a hard bot may be eaten meanwhile and walk back in a few seconds later: count the most seen)
+    let most = 0;
+    for (let i = 0; i < 30 * 40; i++) {
+      room.tick(33);
+      most = Math.max(most, room.bots?.bots.size ?? 0);
+    }
+    expect(most).toBe(4);
     rooms.applyBotSettings();
     room.tick(33);
-    expect(room.bots?.bots.size).toBe(4);
+    expect(room.bots?.options).toMatchObject({ target: 4, min: 4, max: 4 });
+    expect(room.bots?.planned).toBe(4);
     // not listed publicly (invite only)
     expect(rooms.list().some((r) => r.code === view.code)).toBe(false);
     // duplicate payment
