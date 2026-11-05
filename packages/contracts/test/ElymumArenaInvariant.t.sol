@@ -111,6 +111,13 @@ contract ArenaHandler is Test {
         ghostLootBurned += amt;
     }
 
+    function pay(uint256 who, uint256 amount, uint16 bps) external {
+        vm.prank(admin);
+        arena.setPaymentBurnBps(uint16(bound(bps, 0, 10_000)));
+        vm.prank(_p(who));
+        arena.pay(uint128(bound(amount, 1, 5_000 ether)), bytes32(amount));
+    }
+
     function setRates(uint16 burnBps, uint16 vaultBps) external {
         burnBps = uint16(bound(burnBps, 0, 2_500));
         vaultBps = uint16(bound(vaultBps, 0, 2_500 - burnBps));
@@ -172,8 +179,8 @@ contract ElymumArenaInvariantTest is Test {
         assertEq(c.totalFeeBurned, handler.ghostFeeBurned());
         assertEq(c.totalFeeToVault, handler.ghostFeeToVault());
         assertEq(c.totalLootBurned, handler.ghostLootBurned());
-        assertEq(token.balanceOf(DEAD), uint256(c.totalFeeBurned) + c.totalLootBurned);
-        assertEq(token.balanceOf(feeWallet), c.totalFeeToVault);
+        assertEq(token.balanceOf(DEAD), uint256(c.totalFeeBurned) + c.totalLootBurned + c.totalPaymentBurned);
+        assertEq(token.balanceOf(feeWallet), uint256(c.totalFeeToVault) + c.totalPayments - c.totalPaymentBurned);
     }
 
     /// Fees never exceed the cap on the profit (checked globally: Σ fees <= 25 % of Σ payouts).
