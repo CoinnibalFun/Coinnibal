@@ -21,8 +21,5 @@ export {
   testTokenArtifact,
   type ElymumArtifact,
   type ElymumContractName,
-  ELYMUM_ARENA_V1_RUNTIME_CODE_HASH,
   ELYMUM_ARENA_VERSION,
-  arenaVersionOfCodeHash,
-  type ArenaVersion,
 } from '@elymum/contracts';

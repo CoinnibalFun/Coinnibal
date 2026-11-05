@@ -1,3 +1,4 @@
+import { gasSymbol } from '@elymum/shared';
 import {
   encodeFunctionData,
   formatEther,
@@ -21,7 +22,7 @@ export interface ContractCall<TAbi extends Abi = Abi> {
   abi: TAbi;
   functionName: string;
   args: readonly unknown[];
-  /** HYPE (wei) sent with the call. */
+  /** Gas token (wei) sent with the call. */
   value?: bigint;
 }
 
@@ -70,12 +71,12 @@ export interface DescribedArg {
 export interface DescribedCall {
   to: Address;
   functionName: string;
-  /** `setFeeBps(uint16)` */
+  /** `setFeeRates(uint16,uint16)` */
   signature: string;
   args: DescribedArg[];
   /** Wei sent (0n when none). */
   value: bigint;
-  /** e.g. `0.0312 HYPE`, or null without value. */
+  /** e.g. `0.0312 ETH`, or null without value. */
   valueText: string | null;
 }
 
@@ -99,11 +100,11 @@ export function describeCall(call: ContractCall): DescribedCall {
     signature: `${call.functionName}(${inputs.map((i) => i.type).join(',')})`,
     args: call.args.map((a, i) => ({ name: inputs[i]?.name || `arg${i}`, type: inputs[i]?.type ?? 'unknown', value: show(a) })),
     value,
-    valueText: value > 0n ? `${formatEther(value)} HYPE` : null,
+    valueText: value > 0n ? `${formatEther(value)} ${gasSymbol()}` : null,
   };
 }
 
-/** One-line preview: `setFeeBps(bps=300) → 0xAbc…` (plus the value). */
+/** One-line preview: `setFeeRates(burnBps=1500, vaultBps=500) → 0xAbc…` (plus the value). */
 export function describeCallLine(call: ContractCall): string {
   const d = describeCall(call);
   const args = d.args.map((a) => `${a.name}=${a.value}`).join(', ');
