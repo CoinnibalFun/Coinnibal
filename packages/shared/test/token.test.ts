@@ -187,9 +187,9 @@ describe('parseToken', () => {
 describe('formatGas', () => {
   it('formats wei in the chain gas token with up to 4 decimals', () => {
     expect(GAS_DECIMALS).toBe(18);
-    expect(formatGas(31_250_000_000_000_000n, 'ETH')).toBe('0.0313 ETH');
-    expect(formatGas(10n ** 18n, 'ETH')).toBe('1 ETH');
-    expect(formatGas(0n, 'HYPE')).toBe('0 HYPE');
-    expect(formatGas(1_234_567_890_000_000_000_000n, 'ETH', 2)).toBe('1,234.57 ETH');
+    expect(formatGas(31_250_000_000_000_000n)).toBe('0.0313 ETH');
+    expect(formatGas(10n ** 18n)).toBe('1 ETH');
+    expect(formatGas(0n)).toBe('0 ETH');
+    expect(formatGas(1_234_567_890_000_000_000_000n, 2)).toBe('1,234.57 ETH');
   });
 });

@@ -93,7 +93,7 @@ const BAL = {
   zero: 0n,
   tiny: 1_000_000_000_000n, // 0.000001
 };
-const HYPE = { huge: 12_345_678_900_000_000_000_000n, zero: 0n, tiny: 1_000_000_000_000n };
+const GAS = { huge: 12_345_678_900_000_000_000_000n, zero: 0n, tiny: 1_000_000_000_000n };
 
 // ───────────────────────────── the stack (optional) ─────────────────────────────
 const kids = [];
@@ -220,7 +220,7 @@ async function stressPlay(page, { token = 'max', hype = 'huge' } = {}) {
         };
       }
     },
-    [String(BAL[token]), String(HYPE[hype]), LONG, LONG_M],
+    [String(BAL[token]), String(GAS[hype]), LONG, LONG_M],
   );
 }
 
@@ -1092,7 +1092,7 @@ body{margin:0;font:16px/1.4 sans-serif;background:#fff;color:#111}
 .pad{height:120px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style></head><body>
-<div class="row" id="t-overlap"><span class="bal">1,109,986.25799155 ELY</span><span>HYPE · network fees</span></div>
+<div class="row" id="t-overlap"><span class="bal">1,109,986.25799155 ELY</span><span>ETH · network fees</span></div>
 <div class="fixed-h" id="t-clip">a long line of text that wraps to a second and a third line here</div>
 <div class="dark" id="t-contrast"><input value="ABCDEF" aria-label="code"></div>
 <button class="tiny" id="t-touch">x</button>

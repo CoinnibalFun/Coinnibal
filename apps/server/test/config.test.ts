@@ -16,24 +16,28 @@ describe('Elymum config', () => {
 });
 
 describe('chain env (EVM)', () => {
-  it('reads every Elysium variable and ignores the old chain variables', () => {
+  it('reads every chain variable and ignores the retired ones (CHAIN_NAME, GAS_SYMBOL, HYPE_*)', () => {
     const cfg = loadConfig({
       EVM_RPC_URL: 'https://rpc.example/key123/',
       PUBLIC_RPC_URL: 'https://public.example/',
-      CHAIN_NAME: 'Elysium',
+      CHAIN_NAME: 'Retired',
+      GAS_SYMBOL: 'NOPE',
+      HYPE_FAUCET_URL: 'https://old-faucet.example',
       EXPLORER_URL: 'https://explorer.example/',
       ARENA_ADDRESS: '0x00000000000000000000000000000000000000a1',
       NFT_ADDRESS: '0x00000000000000000000000000000000000000b2',
       SERVER_PRIVATE_KEY: 'auto',
       MINT_USD_CENTS: '250',
-      HYPE_PRICE_URL: 'https://price.example/info',
+      GAS_PRICE_URL: 'https://price.example/info',
+      HYPE_PRICE_URL: 'https://old.example/info',
       TOKEN_SYMBOL: '$TEST',
       GAME_ACCESS: 'holders',
     } as NodeJS.ProcessEnv);
     expect(cfg.chain).toMatchObject({
       rpcUrl: 'https://rpc.example/key123',
       publicRpcUrl: 'https://public.example',
-      chainName: 'Elysium',
+      chainId: 46630,
+      gasFaucetUrl: null,
       explorerUrl: 'https://explorer.example',
       arenaAddress: '0x00000000000000000000000000000000000000a1',
       nftAddress: '0x00000000000000000000000000000000000000b2',
@@ -42,6 +46,17 @@ describe('chain env (EVM)', () => {
     });
     expect(cfg.mint).toEqual({ usdCents: 250, gasPriceUrl: 'https://price.example/info' });
     expect(cfg.gameAccess).toBe('holders');
+    expect('chainName' in cfg.chain || 'gasSymbol' in cfg.chain).toBe(false);
+  });
+
+  it('CHAIN_ID picks a Robinhood Chain network (testnet by default); any other chain refuses to start', () => {
+    expect(loadConfig({} as NodeJS.ProcessEnv).chain).toMatchObject({ chainId: 46630, chainIdExplicit: false });
+    expect(loadConfig({ CHAIN_ID: '4663' } as NodeJS.ProcessEnv).chain).toMatchObject({ chainId: 4663, chainIdExplicit: true });
+    expect(loadConfig({ CHAIN_ID: '31337' } as NodeJS.ProcessEnv).chain.chainId).toBe(31337);
+    expect(() => loadConfig({ CHAIN_ID: '99801' } as NodeJS.ProcessEnv)).toThrow(/CHAIN_ID: chain 99801 is not Robinhood Chain/);
+    expect(() => loadConfig({ CHAIN_ID: 'mainnet' } as NodeJS.ProcessEnv)).toThrow(/not Robinhood Chain/);
+    // the testnet emblem import reads Robinhood Chain Testnet by default
+    expect(loadConfig({} as NodeJS.ProcessEnv).chain.testnetRpcUrl).toBe('https://rpc.testnet.chain.robinhood.com');
   });
 
   it('defaults: chain off, $ELYMUM, $1 mint on Hyperliquid, the setting decides who plays', () => {
@@ -54,7 +69,8 @@ describe('chain env (EVM)', () => {
   });
 
   it('hands the public testnet RPC to browsers, never a private one', () => {
-    expect(loadConfig({ EVM_RPC_URL: 'https://testnet-rpc.elysium.kinetiq.xyz' } as NodeJS.ProcessEnv).chain.publicRpcUrl).toBe('https://testnet-rpc.elysium.kinetiq.xyz');
+    expect(loadConfig({ EVM_RPC_URL: 'https://rpc.testnet.chain.robinhood.com' } as NodeJS.ProcessEnv).chain.publicRpcUrl).toBe('https://rpc.testnet.chain.robinhood.com');
+    expect(loadConfig({ EVM_RPC_URL: 'https://rpc.mainnet.chain.robinhood.com/' } as NodeJS.ProcessEnv).chain.publicRpcUrl).toBe('https://rpc.mainnet.chain.robinhood.com');
     expect(loadConfig({ EVM_RPC_URL: 'https://paid.example/secret' } as NodeJS.ProcessEnv).chain.publicRpcUrl).toBeNull();
   });
 

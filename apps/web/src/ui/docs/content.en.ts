@@ -1,4 +1,4 @@
-import { BOOST_RULES, BPS, activeChain, gasSymbol, totalFeeBps, type FeeRates } from '@elymum/shared';
+import { BOOST_RULES, BPS, activeChain, GAS_SYMBOL, totalFeeBps, type FeeRates } from '@elymum/shared';
 import { FACTS as F, payoutExample, type DocsContent } from './facts';
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
@@ -14,13 +14,12 @@ const sym = '$ELYMUM';
 /**
  * The player guide in English: how to play, what the Elymum NFT and the token are for, and how the money
  * moves, kept short. Every number comes from `FACTS` (see facts.ts); the fee rates on profit are the server's
- * (`ChainStatus.fees`, the arena contract's `config()`) when known, else the contract defaults. `gas` / `chain` name
- * the network (the active chain of the `@elymum/shared` registry by default).
+ * (`ChainStatus.fees`, the arena contract's `config()`) when known, else the contract defaults. `chain` names the
+ * Robinhood Chain network (testnet or mainnet; the active one by default). Gas is ETH.
  */
 export const docsEn = (
   symbol: string = sym,
   rates: FeeRates = { burnBps: F.fee.burnBps, vaultBps: F.fee.vaultBps },
-  gas: string = gasSymbol(),
   chain: string = activeChain().name,
 ): DocsContent => {
   const ex = payoutExample(rates);
@@ -135,7 +134,7 @@ export const docsEn = (
           },
           {
             kind: 'p',
-            text: `A ticket needs an EVM wallet (MetaMask, Rabby or any browser wallet), the entry fee in ${symbol} and a little of the network's gas token (${gas} on ${chain}) for network fees. Buying takes at most two signatures: one approval for the arena contract (given once; tick "Approve only this ticket" to approve just the entry fee each time), then the ticket itself. There is no entry fee rate: the whole entry fee goes into the vault and your coin starts at it.`,
+            text: `A ticket needs an EVM wallet (MetaMask, Rabby or any browser wallet), the entry fee in ${symbol} and a little of the network's gas token (${GAS_SYMBOL} on ${chain}) for network fees. Buying takes at most two signatures: one approval for the arena contract (given once; tick "Approve only this ticket" to approve just the entry fee each time), then the ticket itself. There is no entry fee rate: the whole entry fee goes into the vault and your coin starts at it.`,
           },
         ],
       },

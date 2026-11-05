@@ -1,5 +1,5 @@
 /**
- * The "Ring Storybook" palette (spec §6.3): Elysium / Kinetiq colours drawn
+ * The "Ring Storybook" palette (spec §6.3): the game's colours drawn
  * like a picture book. Every fill has ONE hard-edged shadow tone (`SHADE`),
  * every outline is `INK`.
  *

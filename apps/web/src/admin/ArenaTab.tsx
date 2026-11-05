@@ -28,7 +28,7 @@ import {
   updateArenaRefusal,
 } from '@elymum/sdk/ops';
 import { sameAddress } from '@elymum/sdk';
-import { BPS, MAX_TOTAL_FEE_BPS, feeExample, gasSymbol } from '@elymum/shared';
+import { BPS, MAX_TOTAL_FEE_BPS, feeExample, GAS_SYMBOL } from '@elymum/shared';
 import { useState } from 'react';
 import type { Address } from 'viem';
 import { DefaultArenas, SetTokenForm } from './DeployTab';
@@ -106,7 +106,7 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
           <Row label="Server authority">
             <Addr value={cfg.serverAuthority} net={ctx.net} />
             {a.serverBalance !== null && <span className="ad-role num">{formatGasAmount(a.serverBalance, 4)} for gas</span>}
-            {a.serverBalance === 0n && <span className="ad-bad"> no {gasSymbol()} for gas: settlements cannot be sent</span>}
+            {a.serverBalance === 0n && <span className="ad-bad"> no {GAS_SYMBOL} for gas: settlements cannot be sent</span>}
             {serverMismatch && <span className="ad-bad"> not this server's key ({ctx.net.serverKey})</span>}
           </Row>
           <Row label="Fee wallet">
@@ -394,11 +394,11 @@ function RescueCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
   const [amount, setAmount] = useState('');
   const [err, guard] = useFormError();
   return (
-    <Card title="Rescue" id="arena-rescue" tone="danger" lede={`Recovers ${gasSymbol()} (leave the token empty) or a foreign ERC-20 sent to the arena by mistake. Never the game token.`}>
+    <Card title="Rescue" id="arena-rescue" tone="danger" lede={`Recovers ${GAS_SYMBOL} (leave the token empty) or a foreign ERC-20 sent to the arena by mistake. Never the game token.`}>
       <div className="ad-form">
-        <Input label={`Token (empty = ${gasSymbol()})`} value={token} onChange={setToken} placeholder="0x… or empty" />
+        <Input label={`Token (empty = ${GAS_SYMBOL})`} value={token} onChange={setToken} placeholder="0x… or empty" />
         <Input label="To" value={to} onChange={setTo} />
-        <Input label={token.trim() ? 'Amount (base units)' : `Amount (${gasSymbol()})`} value={amount} onChange={setAmount} />
+        <Input label={token.trim() ? 'Amount (base units)' : `Amount (${GAS_SYMBOL})`} value={amount} onChange={setAmount} />
       </div>
       <Btn
         onClick={() =>

@@ -10,7 +10,6 @@ import {
   type AllowlistTree,
   type MintState as ChainMintState,
 } from '@elymum/sdk';
-import { activeChain } from '@elymum/shared';
 import type {
   AllowlistBuildResponse,
   AllowlistSnapshot,
@@ -84,11 +83,11 @@ export interface MintServiceDeps {
   now?: () => number;
 }
 
-/** The default feed: Hyperliquid's `allMids` at `url`, the coin of the active chain's gas token (`ChainDef.priceCoin`). */
+/** The default feed: ETH (Robinhood Chain's gas token) on Hyperliquid's `allMids` at `url`. */
 export const hyperliquidPrice =
-  (url: string, coin: () => string = () => activeChain().priceCoin ?? activeChain().nativeCurrency.symbol): PriceFetcher =>
+  (url: string): PriceFetcher =>
   () =>
-    fetchGasUsd({ url, coin: coin(), timeoutMs: 10_000 });
+    fetchGasUsd({ url, timeoutMs: 10_000 });
 
 /**
  * The mint side of the site: the NFT's state, gas-token/USD and the $1 price, holders (for the game gate
@@ -470,7 +469,7 @@ export class MintService {
     const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
     return {
       name: `Elymum No. ${id}`,
-      description: `An Elymum emblem: a coin of the ring. Holders play Elymum, the arena where the coins eat, on ${activeChain().name}.`,
+      description: `An Elymum emblem: a coin of the ring. Holders play Elymum, the arena where the coins eat, on Robinhood Chain.`,
       image: `${baseUrl}/api/nft/${id}.svg`,
       external_url: baseUrl,
       attributes: [
@@ -509,7 +508,7 @@ export class MintService {
     const royalty = nft && client ? await this.royalty(nft.address, client) : null;
     return {
       name: 'Elymum',
-      description: `Elymum emblems: the coins of the ring. Holders play Elymum on ${activeChain().name}.`,
+      description: `Elymum emblems: the coins of the ring. Holders play Elymum on Robinhood Chain.`,
       image: `${baseUrl}/api/nft/1.svg`,
       external_link: baseUrl,
       ...(royalty && royalty.bps > 0 ? { seller_fee_basis_points: royalty.bps, fee_recipient: royalty.receiver } : {}),

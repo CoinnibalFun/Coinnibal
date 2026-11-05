@@ -11,7 +11,6 @@ export function chainStatus(over: Partial<ChainStatus> = {}): ChainStatus {
     enabled: true,
     chainId: 46630,
     chainName: 'Robinhood Chain Testnet',
-    gasSymbol: 'ETH',
     testnet: true,
     faucetUrl: 'https://faucet.testnet.chain.robinhood.com',
     rpcUrl: 'https://rpc.testnet.chain.robinhood.com',

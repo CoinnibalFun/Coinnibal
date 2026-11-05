@@ -167,7 +167,7 @@ describe('ensureChain: exactly the chain the server says', () => {
     const p = fakeProvider({ chainId: 1, known: [1] });
     await ensureChain(p, chain);
     const add = p.calls.find((c) => c.method === 'wallet_addEthereumChain');
-    expect(add?.params).toEqual([addEthereumChainParams(chainInfo(46630, { name: 'Robinhood Chain Testnet', rpcUrl: chain.rpcUrl, explorerUrl: chain.explorerUrl }))]);
+    expect(add?.params).toEqual([addEthereumChainParams(chainInfo(46630, { rpcUrl: chain.rpcUrl, explorerUrl: chain.explorerUrl }))]);
     expect((add?.params as { nativeCurrency: { symbol: string } }[])[0].nativeCurrency.symbol).toBe('ETH');
     expect(p.calls.filter((c) => c.method === 'wallet_switchEthereumChain')).toHaveLength(2);
     expect(p.chainId).toBe(46630);

@@ -1,10 +1,10 @@
-// A local Elysium stand-in: `hardhat node` (chain id 31337, gas token shown as HYPE) with the Elymum
+// A local Robinhood Chain stand-in: `hardhat node` (chain id 31337, gas in ETH) with the Elymum
 // contracts deployed in the same order as /admin → Deploy, through the SDK:
 //   TestToken → ElymumArena (server authority = the game server's key) → ElymumNFT
 //   → setToken → the four default arenas (→ optionally the mint opened to the public).
 // Shared by scripts/localnet.mjs, scripts/localnet-fund.mjs and scripts/demo.mjs.
 //
-// Accounts are Hardhat's well-known dev accounts (public keys, local only, 10,000 HYPE each):
+// Accounts are Hardhat's well-known dev accounts (public keys, local only, 10,000 ETH each):
 //   #0 owner / admin (contract owner, fee wallet, NFT treasury; in ADMIN_WALLETS)
 //   #1 game server key (SERVER_PRIVATE_KEY, the arena's server authority)
 //   #2 the Dev Wallet player of `--browser`
@@ -53,7 +53,7 @@ export async function startHardhatNode({ port = LOCALNET_RPC_PORT, onLine = null
 
 function clients(sdk, rpcUrl, chainId, key) {
   const { privateKeyToAccount } = viem('/accounts');
-  const chain = sdk.elysiumChain(chainId);
+  const chain = sdk.viemChain(chainId);
   const account = privateKeyToAccount(key);
   return {
     account,
@@ -86,7 +86,7 @@ export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http:/
   const token = await sdk.deployedAddress(publicClient, await sdk.deployTestToken(wallet, { owner: owner.address }));
   log(`deploying ElymumArena (server authority ${server}, fee wallet = owner)`);
   const arena = await sdk.deployedAddress(publicClient, await sdk.deployArena(wallet, { admin: owner.address, serverAuthority: server, feeWallet: owner.address }));
-  log('deploying ElymumNFT (supply 5,000, 0.02 HYPE, WL 2 / public 5 per wallet)');
+  log('deploying ElymumNFT (supply 5,000, 0.02 ETH, WL 2 / public 5 per wallet)');
   const nft = await sdk.deployedAddress(
     publicClient,
     await sdk.deployNft(wallet, {
@@ -137,7 +137,7 @@ export function readAddresses() {
   }
 }
 
-/** Sends `hype` HYPE and `tokens` test tokens from the owner to `to`. */
+/** Sends `hype` ETH and `tokens` test tokens from the owner to `to`. */
 export async function fundAddress(to, { hype = 10, tokens = 100_000, log = console.log } = {}) {
   const { token, rpcUrl } = readAddresses();
   const sdk = await importSdk();
@@ -149,7 +149,7 @@ export async function fundAddress(to, { hype = 10, tokens = 100_000, log = conso
   if (hype > 0) {
     const hash = await wallet.sendTransaction({ to: addr, value: parseEther(String(hype)) });
     await publicClient.waitForTransactionReceipt({ hash });
-    log(`sent ${hype} HYPE to ${addr}`);
+    log(`sent ${hype} ETH to ${addr}`);
   }
   if (tokens > 0) {
     const hash = await sdk.sendCall(wallet, sdk.testTokenMintCall(token, addr, BigInt(tokens) * 10n ** 18n));
@@ -158,5 +158,5 @@ export async function fundAddress(to, { hype = 10, tokens = 100_000, log = conso
   }
   const bal = await publicClient.getBalance({ address: addr });
   const tbal = await sdk.getTokenBalance(publicClient, token, addr);
-  log(`balance of ${addr}: ${viem().formatEther(bal)} HYPE, ${sdk.formatTokenAmount(tbal, 18)} test tokens`);
+  log(`balance of ${addr}: ${viem().formatEther(bal)} ETH, ${sdk.formatTokenAmount(tbal, 18)} test tokens`);
 }

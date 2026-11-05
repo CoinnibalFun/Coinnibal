@@ -2,7 +2,7 @@ import { availableParallelism } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { CAPACITY, CHAINS, RULES, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, chainByKey, configuredChainId, isGameAccess, type GameAccess } from '@elymum/shared';
+import { CAPACITY, NETWORKS, RULES, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, type GameAccess } from '@elymum/shared';
 import { GAS_PRICE_URL_DEFAULT } from '@elymum/sdk';
 import { getAddress, isAddress } from 'viem';
 
@@ -69,8 +69,8 @@ export interface ServerConfig {
   devFakeToken: boolean;
   chain: {
     /**
-     * The chain this deployment runs on (`CHAIN_ID`, a `CHAINS` registry id or any id the environment names;
-     * default `DEFAULT_CHAIN_ID`, Robinhood Chain Testnet). The RPC must serve exactly this id: otherwise arenas
+     * The Robinhood Chain network this deployment runs on (`CHAIN_ID`: 46630 testnet, the default, or 4663 mainnet;
+     * 31337 for a local development node). The RPC must serve exactly this id: otherwise arenas
      * stay off (`EvmChain` compares `eth_chainId` with it).
      */
     chainId: number;
@@ -79,17 +79,13 @@ export interface ServerConfig {
     /** Server RPC (`EVM_RPC_URL`, may hold an API key). Null: chain off, practice only. */
     rpcUrl: string | null;
     /**
-     * RPC handed to browsers (`PUBLIC_RPC_URL`, no secrets). Default: `EVM_RPC_URL` when it is a registry
-     * chain's public RPC, else null (the wallet's own RPC is used).
+     * RPC handed to browsers (`PUBLIC_RPC_URL`, no secrets). Default: `EVM_RPC_URL` when it is Robinhood Chain's
+     * public RPC, else null (the wallet's own RPC is used).
      */
     publicRpcUrl: string | null;
-    /** Display name for a chain id the registry does not know (`CHAIN_NAME`). */
-    chainName: string | null;
-    /** Gas-token symbol for a chain id the registry does not know (`GAS_SYMBOL`). */
-    gasSymbol: string | null;
-    /** Blockscout-style explorer (`EXPLORER_URL`), overrides the registry's. */
+    /** Blockscout explorer (`EXPLORER_URL`), overrides the network's. */
     explorerUrl: string | null;
-    /** The gas faucet the `/faucet` page links to (`GAS_FAUCET_URL`, formerly `HYPE_FAUCET_URL`), overrides the registry's. */
+    /** The gas faucet the `/faucet` page links to (`GAS_FAUCET_URL`), overrides the testnet's. */
     gasFaucetUrl: string | null;
     /** `ARENA_ADDRESS`: overrides the registry's arena (normally written by the admin panel after a deploy). */
     arenaAddress: string | null;
@@ -136,13 +132,12 @@ export interface ServerConfig {
     rpcBurst: number;
     /**
      * `TESTNET_RPC_URL`: the RPC of the testnet whose emblem holders are imported into the mainnet allowlist
-     * (`POST /api/admin/mint/import-holders`). Default: the Elysium Testnet public RPC (where the first emblems live).
+     * (`POST /api/admin/mint/import-holders`). Default: the Robinhood Chain Testnet public RPC.
      */
     testnetRpcUrl: string;
   };
   /**
-   * NFT mint: the USD target (`MINT_USD_CENTS`, default 100) and the gas-token/USD feed (`GAS_PRICE_URL`, formerly
-   * `HYPE_PRICE_URL`; the coin is the chain's `priceCoin`).
+   * NFT mint: the USD target (`MINT_USD_CENTS`, default 100) and the ETH/USD feed (`GAS_PRICE_URL`).
    */
   mint: { usdCents: number; gasPriceUrl: string };
 }
@@ -198,16 +193,24 @@ export function parseGameAccess(v: string | undefined): GameAccess | null {
   return isGameAccess(s) ? s : null;
 }
 
-/** `PUBLIC_RPC_URL`, else `EVM_RPC_URL` when it is a registry chain's public RPC (no secrets in it), else null. */
+/** `PUBLIC_RPC_URL`, else `EVM_RPC_URL` when it is a Robinhood Chain public RPC (no secrets in it), else null. */
 export function defaultPublicRpc(rpcUrl: string | null, publicRpcUrl: string | undefined): string | null {
   const explicit = publicRpcUrl?.trim();
   if (explicit) return explicit.replace(/\/+$/, '');
   const url = rpcUrl?.replace(/\/+$/, '');
-  const known = CHAINS.find((c) => c.rpcUrl !== null && c.rpcUrl === url && !/127\.0\.0\.1|localhost/.test(c.rpcUrl));
+  const known = Object.values(NETWORKS).find((c) => c.rpcUrl === url && !/127\.0\.0\.1|localhost/.test(c.rpcUrl));
   return known?.rpcUrl ?? null;
 }
 
 const blank = (v: string | undefined): string | null => (v?.trim() ? v.trim() : null);
+
+/** `CHAIN_ID`: 46630 (Robinhood Chain Testnet, the default), 4663 (Robinhood Chain) or 31337 (a local node). Anything else refuses to start. */
+export function chainIdOf(raw: string | undefined): number {
+  if (blank(raw) === null) return configuredChainId(undefined);
+  const id = configuredChainId(raw, -1);
+  if (id === -1) throw new Error(`CHAIN_ID: ${unsupportedChainMessage(raw?.trim())}`);
+  return id;
+}
 
 const int = (v: string | undefined, d: number): number => {
   const n = Number(v);
@@ -301,12 +304,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     chain: {
       rpcUrl,
       publicRpcUrl: defaultPublicRpc(rpcUrl, env.PUBLIC_RPC_URL),
-      chainId: configuredChainId(env.CHAIN_ID),
-      chainIdExplicit: configuredChainId(env.CHAIN_ID, -1) !== -1,
-      chainName: blank(env.CHAIN_NAME),
-      gasSymbol: blank(env.GAS_SYMBOL),
+      chainId: chainIdOf(env.CHAIN_ID),
+      chainIdExplicit: blank(env.CHAIN_ID) !== null,
       explorerUrl: blank(env.EXPLORER_URL)?.replace(/\/+$/, '') ?? null,
-      gasFaucetUrl: blank(env.GAS_FAUCET_URL) ?? blank(env.HYPE_FAUCET_URL),
+      gasFaucetUrl: blank(env.GAS_FAUCET_URL),
       arenaAddress: blank(env.ARENA_ADDRESS),
       nftAddress: blank(env.NFT_ADDRESS),
       tokenAddress: blank(env.TOKEN_ADDRESS),
@@ -325,11 +326,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       logChunkBlocks: Math.max(100, int(env.LOG_CHUNK_BLOCKS, 50_000)),
       rpcMaxRps: Math.max(0.2, Number(env.RPC_MAX_RPS) > 0 ? Number(env.RPC_MAX_RPS) : 4),
       rpcBurst: Math.max(1, int(env.RPC_BURST, 8)),
-      testnetRpcUrl: blank(env.TESTNET_RPC_URL)?.replace(/\/+$/, '') ?? chainByKey('elysium-testnet').rpcUrl!,
+      testnetRpcUrl: blank(env.TESTNET_RPC_URL)?.replace(/\/+$/, '') ?? NETWORKS.testnet.rpcUrl,
     },
     mint: {
       usdCents: Math.max(1, int(env.MINT_USD_CENTS, MINT_USD_CENTS_DEFAULT)),
-      gasPriceUrl: blank(env.GAS_PRICE_URL) ?? blank(env.HYPE_PRICE_URL) ?? GAS_PRICE_URL_DEFAULT,
+      gasPriceUrl: blank(env.GAS_PRICE_URL) ?? GAS_PRICE_URL_DEFAULT,
     },
   };
 }

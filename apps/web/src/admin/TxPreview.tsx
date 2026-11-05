@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Address, Hash, PublicClient, TransactionReceipt } from 'viem';
-import { explorerAddressUrl, explorerTxUrl, gasSymbol } from '@elymum/shared';
+import { explorerAddressUrl, explorerTxUrl, GAS_SYMBOL } from '@elymum/shared';
 import { Button, Stamp, StatusPill } from '../design';
 import { sendWithWallet, txErrorText, type TxPhase } from '../wallet/tx';
 import type { AdminNetwork } from './net';
@@ -291,7 +291,7 @@ export function TxPreview({
         <dl className="kb-tx__meta ad-txp__meta">
           <div>
             <dt>Value</dt>
-            <dd className="num">{p.valueText ?? `0 ${gasSymbol()}`}</dd>
+            <dd className="num">{p.valueText ?? `0 ${GAS_SYMBOL}`}</dd>
           </div>
           <div>
             <dt>Network</dt>

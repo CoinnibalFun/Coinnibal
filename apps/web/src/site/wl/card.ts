@@ -392,7 +392,7 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
   ctx.textAlign = 'center';
   ctx.fillText(handle ? 'WL' : 'BLANK', 0, handle ? 8 : 6);
   ctx.font = `600 13px ${MONO}`;
-  ctx.fillText(handle ? activeChain().shortName.toUpperCase() : 'ADD HANDLE', 0, 30);
+  ctx.fillText(handle ? activeChain().name.toUpperCase() : 'ADD HANDLE', 0, 30);
   ctx.fillText('ROUND 001', 0, -26);
   ctx.restore();
 

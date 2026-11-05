@@ -17,7 +17,7 @@ import { ArenaChain, arena, fakeConn, roomDeps } from './helpers';
 import { testSigner } from './signers';
 
 const TREASURY = '0x1111111111111111111111111111111111111111';
-const PRICE = parseEther('0.05');
+const PRICE = parseEther('0.0005');
 const hash = (n: number) => `0x${n.toString(16).padStart(64, '0')}`;
 const cfgOf = (extra: Partial<CustomRoomConfig> = {}): CustomRoomConfig => ({ ...CUSTOM_DEFAULTS, name: 'Friday Pond', ...extra });
 
@@ -45,13 +45,13 @@ function setup(o: { dir?: string | null; holder?: boolean; clock?: { t: number }
   const rooms = new RoomManager(loadConfig({} as NodeJS.ProcessEnv), roomDeps(chain), chain);
   const reader = o.reader ?? new FakeTransfers(clock);
   const dir = o.dir === undefined ? mkdtempSync(join(tmpdir(), 'elymum-custom-')) : o.dir;
-  const used = new UsedPayments(dir ? join(dir, 'chains', '99801', 'room-payments.json') : null);
+  const used = new UsedPayments(dir ? join(dir, 'chains', '46630', 'room-payments.json') : null);
   const svc = new CustomRoomService({
     rooms,
     dataDir: dir,
     used,
     reader: () => reader,
-    chainId: () => 99801,
+    chainId: () => 46630,
     isHolder: async () => o.holder ?? false,
     ownerWallet: TREASURY,
     now: () => clock.t,
@@ -452,7 +452,7 @@ describe('custom rooms over HTTP and WebSocket', () => {
     expect((await call('GET', '/api/admin/custom-rooms', { wallet: bob })).status).toBe(403);
     const list = await call('GET', '/api/admin/custom-rooms', { wallet: admin });
     expect(list.body.rooms.map((r: { code: string }) => r.code)).toEqual([code]);
-    expect(list.body.settings).toMatchObject({ priceGas: '0.05', maxLive: 6, maxPerWallet: 2 });
+    expect(list.body.settings).toMatchObject({ priceGas: '0.0005', maxLive: 6, maxPerWallet: 2 });
     expect((await call('PUT', '/api/admin/custom-rooms', { wallet: admin, body: { maxLive: 0 } })).body.settings.maxLive).toBe(0);
     expect((await call('DELETE', `/api/rooms/custom/${code}`, { wallet: bob })).status).toBe(403);
     expect((await call('DELETE', `/api/admin/custom-rooms/${code}`, { wallet: admin })).body.rooms).toEqual([]);

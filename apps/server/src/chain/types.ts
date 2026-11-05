@@ -205,7 +205,6 @@ export class NullChain implements ChainGateway {
       enabled: false,
       chainId: null,
       chainName: this.chain.name,
-      gasSymbol: this.chain.nativeCurrency.symbol,
       testnet: this.chain.testnet,
       faucetUrl: this.chain.faucetUrl,
       rpcUrl: null,

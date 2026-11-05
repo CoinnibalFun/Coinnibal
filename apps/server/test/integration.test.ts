@@ -1,19 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  CUSTOM_DEFAULTS,
-  EntityKind,
-  PROTOCOL_VERSION,
-  RULES,
-  decodeSnapshot,
-  encodeTarget,
-  type ChainStatus,
-  type ServerMessage,
-  type SnapshotData,
-  roundAt,
-  siweMessage,
-} from '@elymum/shared';
+import { CUSTOM_DEFAULTS, EntityKind, PROTOCOL_VERSION, RULES, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@elymum/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
@@ -32,7 +20,6 @@ class FakeChain implements ChainGateway {
       enabled: true,
       chainId: 31337,
       chainName: 'Localnet',
-      gasSymbol: 'ETH',
       testnet: true,
       faucetUrl: null,
       rpcUrl: null,
@@ -246,7 +233,8 @@ describe('server over websocket', () => {
     const pong = await c.wait('pong');
     expect(Math.abs(pong.serverNow - serverNow())).toBeLessThan(1000);
     // the token and the fee rules ride along with the chain status (no Pass, no season)
-    expect(welcome.chain).toMatchObject({ tokenReady: true, fees: { burnBps: 1500, vaultBps: 500 }, token: { decimals: 18 }, gasSymbol: 'ETH' });
+    expect(welcome.chain).toMatchObject({ tokenReady: true, fees: { burnBps: 1500, vaultBps: 500 }, token: { decimals: 18 }, testnet: true });
+    expect('gasSymbol' in welcome.chain).toBe(false);
     expect('pass' in welcome.chain).toBe(false);
     expect(welcome.blocked).toEqual([]);
     c.close();

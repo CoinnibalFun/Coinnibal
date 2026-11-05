@@ -158,7 +158,6 @@ describe('status and reads', () => {
       enabled: true,
       chainId: 31337,
       chainName: 'Localnet',
-      gasSymbol: 'ETH',
       testnet: true,
       faucetUrl: null,
       rpcUrl: 'https://rpc.public.example',
@@ -177,19 +176,20 @@ describe('status and reads', () => {
     expect(old.logs.join()).toMatch(/is not the bundled ElymumArena/);
   });
 
-  it('names an unknown chain id by CHAIN_NAME, GAS_SYMBOL and EXPLORER_URL; registry chains keep their own names', async () => {
-    const h = await harness({ env: { CHAIN_NAME: 'Other L2', GAS_SYMBOL: 'FOO', EXPLORER_URL: 'https://scan.example/' }, setup: (e) => (e.chainId = 4242) });
-    expect(h.chain.status()).toMatchObject({ chainId: 4242, chainName: 'Other L2', gasSymbol: 'FOO', testnet: false, explorerUrl: 'https://scan.example', rpcUrl: null });
-    const t = await harness({ env: { CHAIN_NAME: 'Not used', GAS_SYMBOL: 'NOPE' }, setup: (e) => (e.chainId = 46630) });
+  it('names the Robinhood Chain network the RPC serves (EXPLORER_URL overrides its explorer); any other chain stays off', async () => {
+    const h = await harness({ env: { EXPLORER_URL: 'https://scan.example/' }, setup: (e) => (e.chainId = 4663) });
+    expect(h.chain.status()).toMatchObject({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, explorerUrl: 'https://scan.example', rpcUrl: null });
+    const t = await harness({ setup: (e) => (e.chainId = 46630) });
     expect(t.chain.status()).toMatchObject({
       chainName: 'Robinhood Chain Testnet',
-      gasSymbol: 'ETH',
       testnet: true,
       explorerUrl: 'https://explorer.testnet.chain.robinhood.com',
       faucetUrl: 'https://faucet.testnet.chain.robinhood.com',
     });
-    const e = await harness({ setup: (x) => (x.chainId = 99801) });
-    expect(e.chain.status()).toMatchObject({ chainName: 'Elysium Testnet', gasSymbol: 'HYPE' });
+    // an RPC of another chain: no arenas, and the log says Elymum runs on Robinhood Chain only
+    const other = await harness({ setup: (x) => (x.chainId = 99801) });
+    expect(other.chain.status()).toMatchObject({ enabled: false, chainId: null, arenasEnabled: false, chainName: 'Robinhood Chain Testnet' });
+    expect(other.logs.join('\n')).toMatch(/serves chain 99801: chain 99801 is not Robinhood Chain/);
   });
 
   it('converts 18-decimal amounts to ledger units at the boundary (vaults rounded down)', async () => {

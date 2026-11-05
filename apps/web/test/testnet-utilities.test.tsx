@@ -127,7 +127,7 @@ describe('the faucet', () => {
   });
 
   it('on mainnet the route says the faucet is testnet only', async () => {
-    ({ restore } = mockFetch({ 'GET /api/config': { chain: chainStatus({ chainId: 4242, chainName: 'Some Chain' }) } }));
+    ({ restore } = mockFetch({ 'GET /api/config': { chain: chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null }) } }));
     ui(<FaucetPage />);
     expect(await screen.findByText('Faucet is testnet only')).toBeTruthy();
     expect(screen.getByRole('navigation', { name: 'Site' }).textContent).not.toContain('Faucet');
@@ -259,7 +259,7 @@ describe('admin groups', () => {
       testToken: { address: '0x0000000000000000000000000000000000007e57', faucet: { holderNft: null } },
     } as unknown as StatusSnapshot;
     expect(groupSummary('setup', { net: both, status: registered }).next).toMatch(/^Finish setup: 9 steps left/);
-    const mainnet = resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain', nftAddress: '0x0000000000000000000000000000000000000f7e' }));
+    const mainnet = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, nftAddress: '0x0000000000000000000000000000000000000f7e' }));
     const noTt = { ...registered, testToken: null } as unknown as StatusSnapshot;
     expect(groupSummary('setup', { net: mainnet, status: noTt, registry: { token: { address: '0x0000000000000000000000000000000000007e57' } } as never }).next).toMatch(/Confirm the game token/);
     expect(groupSummary('setup', { net: mainnet, status: noTt }).next).toMatch(/TOKEN_ADDRESS/);
@@ -272,7 +272,7 @@ describe('admin groups', () => {
     const steps = mainnetChecklist(resolveNetwork(chainStatus()), null);
     expect(steps[0].label).toMatch(/Set EVM_RPC_URL \(and CHAIN_ID\) in Render/);
     expect(steps.filter((s) => s.ok === true)).toHaveLength(0);
-    const main = mainnetChecklist(resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain' })), null);
+    const main = mainnetChecklist(resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null })), null);
     expect(main[0].ok).toBe(true);
   });
 

@@ -217,7 +217,7 @@ const codeText = (c: 'ok' | 'missing' | 'mismatch'): string =>
 
 /** The `status` report, one string per line. */
 export function formatStatus(s: StatusSnapshot, rpcUrl: string): string[] {
-  const gas = (wei: bigint, maxFrac = 6) => formatGasAmount(wei, maxFrac, s.chain.nativeCurrency.symbol);
+  const gas = (wei: bigint, maxFrac = 6) => formatGasAmount(wei, maxFrac);
   const out: string[] = [
     `Elymum on ${s.chain.name} (chain id ${s.chain.id}${s.mainnet ? ', MAINNET' : ''}) via ${rpcUrl} · block ${s.block}`,
   ];

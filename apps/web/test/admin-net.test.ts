@@ -20,7 +20,7 @@ describe('admin network: exactly the server chain (no pinned program id)', () =>
     expect(net.arenaAddress?.toLowerCase()).toBe(chainStatus().arenaAddress);
     expect(net.nftAddress?.toLowerCase()).toBe(NFT.toLowerCase());
     expect(net.serverKey).toMatch(/^0x/);
-    expect(resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain', rpcUrl: null })).mainnet).toBe(true);
+    expect(resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, rpcUrl: null })).mainnet).toBe(true);
     expect(resolveNetwork(null)).toMatchObject({ chain: null, info: null, mainnet: false, arenaAddress: null });
     expect(resolveNetwork(chainStatus({ arenaAddress: DEV_FAKE_ARENA_ADDRESS })).fake).toBe(true);
   });

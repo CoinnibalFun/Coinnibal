@@ -36,7 +36,6 @@ export class ArenaChain implements ChainGateway {
       enabled: true,
       chainId: 31337,
       chainName: 'Localnet',
-      gasSymbol: 'ETH',
       testnet: true,
       faucetUrl: null,
       rpcUrl: null,

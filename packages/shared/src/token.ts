@@ -1,4 +1,4 @@
-import { GAS_DECIMALS } from './chains';
+import { GAS_DECIMALS, GAS_SYMBOL } from './chains';
 
 /**
  * Token amounts.
@@ -137,7 +137,7 @@ export function parseToken(text: string, decimals: number): bigint {
   return BigInt(whole + fracText.slice(0, decimals).padEnd(decimals, '0') || '0');
 }
 
-/** A gas-token amount in wei for display: `0.0312 ETH` (the active chain's `symbol`; at most `maxFrac` decimals, default 4). */
-export function formatGas(wei: bigint | number, symbol: string, maxFrac = 4): string {
-  return `${formatToken(wei, GAS_DECIMALS, { maxFrac })} ${symbol}`;
+/** A gas amount in wei for display: `0.0312 ETH` (at most `maxFrac` decimals, default 4). */
+export function formatGas(wei: bigint | number, maxFrac = 4): string {
+  return `${formatToken(wei, GAS_DECIMALS, { maxFrac })} ${GAS_SYMBOL}`;
 }

@@ -80,7 +80,6 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
       enabled: true,
       chainId: LOCALNET_CHAIN_ID,
       chainName: 'Localnet (dev fake)',
-      gasSymbol: chainInfo(LOCALNET_CHAIN_ID).nativeCurrency.symbol,
       testnet: true,
       faucetUrl: null,
       rpcUrl: null,

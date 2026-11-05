@@ -1,6 +1,6 @@
 import { formatGasAmount } from '@elymum/sdk';
 import { checkDeployedCode, type CodeCheck, type StatusSnapshot } from '@elymum/sdk/ops';
-import { CONTRACT_KINDS, type ContractKind, type ContractsRegistry, type GameServerLoad, type GameThreadLoad, type NetworkInfo, chainById, gasSymbol } from '@elymum/shared';
+import { CONTRACT_KINDS, type ContractKind, type ContractsRegistry, type GameServerLoad, type GameThreadLoad, type NetworkInfo, GAS_SYMBOL, networkOf } from '@elymum/shared';
 import { useEffect, useState } from 'react';
 import { parseEther, type Address } from 'viem';
 import { gasFaucetUrl } from '../site/faucet/logic';
@@ -43,7 +43,7 @@ export function mainnetChecklist(net: AdminNetwork, status: StatusSnapshot | nul
   return [
     { id: 'rpc', label: 'Set EVM_RPC_URL (and CHAIN_ID) in Render to the mainnet RPC', detail: 'Render → the game service → Environment → EVM_RPC_URL and CHAIN_ID, then redeploy. The server follows that chain; testnet records stay on file.', ok: on, where: 'Render' },
     { id: 'access', label: 'Set Game access explicitly', detail: 'The site settings carry over from testnet (where the game is public): pick Admins or Holders in Game before anything else opens.', ok: null, where: 'Game' },
-    { id: 'fund', label: `Fund the server key with ${gasSymbol()}`, detail: 'It sends every settlement; a little gas lasts a long time.', ok: when(a?.serverBalance != null ? a.serverBalance >= LOW_SERVER_GAS : null), where: 'Render' },
+    { id: 'fund', label: `Fund the server key with ${GAS_SYMBOL}`, detail: 'It sends every settlement; a little gas lasts a long time.', ok: when(a?.serverBalance != null ? a.serverBalance >= LOW_SERVER_GAS : null), where: 'Render' },
     { id: 'arena', label: 'Deploy ElymumArena from the owner wallet', detail: 'Setup → the deploy wizard. No address to type; it registers with the server by itself (code hash, owner and settler checked).', ok: when(!!net.arenaAddress && a?.code === 'ok'), where: 'Setup' },
     { id: 'nft', label: 'Deploy ElymumNFT from the owner wallet', detail: 'Setup → the deploy wizard, right after the arena. Treasury = you, base URI = this site.', ok: when(!!net.nftAddress && status?.nft?.code === 'ok'), where: 'Setup' },
     { id: 'token', label: 'Confirm the game token ($ELYMUM) on the arena', detail: 'Once, and only the real token (TOKEN_ADDRESS on the server): Setup shows it, you confirm once.', ok: when(cfg ? !!cfg.token : null), where: 'Setup' },
@@ -150,7 +150,7 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
         </dl>
       </Card>
 
-      <Card title="Server key" id="net-key" lede={`The game server's own key: it settles every round on the arena, so it pays the gas in ${gasSymbol()}.`}>
+      <Card title="Server key" id="net-key" lede={`The game server's own key: it settles every round on the arena, so it pays the gas in ${GAS_SYMBOL}.`}>
         <dl className="ad-kv">
           <Row label="Address">
             <Addr value={net.serverKey} net={net} />
@@ -170,13 +170,13 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
         />
         {low && (
           <p className="ad-warn" data-testid="fund-hint">
-            <strong>Fund it.</strong> Send {gasSymbol()} to the address above (a little lasts a long time); without gas, settlements cannot be sent.
+            <strong>Fund it.</strong> Send {GAS_SYMBOL} to the address above (a little lasts a long time); without gas, settlements cannot be sent.
             {!net.mainnet && gasFaucetUrl(ctx.net.chain?.faucetUrl) && (
               <>
                 {' '}
                 On testnet:{' '}
                 <a href={gasFaucetUrl(ctx.net.chain?.faucetUrl)!} target="_blank" rel="noreferrer">
-                  the {gasSymbol()} faucet
+                  the {GAS_SYMBOL} faucet
                 </a>
                 .
               </>
@@ -217,7 +217,7 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
         </div>
         {info && info.otherChains.length > 0 && (
           <p className="ad-note" data-testid="other-chains">
-            Records kept for other chains: {info.otherChains.map((id) => `${chainById(id)?.name ?? 'chain'} (${id})`).join(', ')}. They come back if the server follows that chain again.
+            Records kept for other networks: {info.otherChains.map((id) => `${networkOf(id)?.name ?? 'a retired chain'} (${id})`).join(', ')}. They come back if CHAIN_ID points at that network again.
           </p>
         )}
       </Card>
@@ -394,13 +394,13 @@ function FundServerKey({ ctx, text, setText, onFunded }: { ctx: ChainCtx; text: 
       title: 'Fund the server key',
       contract: 'Server key',
       transfer: { to, value },
-      note: `Sends ${text.trim()} ${gasSymbol()} from your wallet to the game server's key. It pays settlement gas.`,
+      note: `Sends ${text.trim()} ${GAS_SYMBOL} from your wallet to the game server's key. It pays settlement gas.`,
       onDone: onFunded,
     });
   };
   return (
     <div className="ad-fund" data-testid="fund-server-key">
-      <Input label={`Send ${gasSymbol()} from your wallet`} value={text} onChange={setText} suffix={gasSymbol()} hint={bad ? 'Type an amount, e.g. 1 or 0.5.' : undefined} />
+      <Input label={`Send ${GAS_SYMBOL} from your wallet`} value={text} onChange={setText} suffix={GAS_SYMBOL} hint={bad ? 'Type an amount, e.g. 1 or 0.5.' : undefined} />
       <Btn sun icon="wallet" testId="fund-send" disabled={!to || bad || !ctx.me} onClick={send}>
         Send to server key
       </Btn>

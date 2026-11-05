@@ -1,4 +1,4 @@
-import { gasSymbol } from '@elymum/shared';
+import { GAS_SYMBOL } from '@elymum/shared';
 import { elymumArenaAbi, elymumNFTAbi, testTokenAbi } from '@elymum/contracts';
 import { BaseError, ContractFunctionRevertedError, decodeErrorResult, type Abi, type Hex } from 'viem';
 
@@ -109,8 +109,6 @@ export interface DescribedError {
 }
 
 export interface DescribeContext {
-  /** Gas token symbol for the funds message (default: the active chain's, `gasSymbol()`). */
-  gasSymbol?: string;
   /** Name of the chain the wallet should be on. */
   chainName?: string;
 }
@@ -166,7 +164,7 @@ function textOf(err: unknown): string {
 
 /** Classifies and explains an error from viem, a wallet or an RPC. */
 export function describeError(err: unknown, ctx: DescribeContext = {}): DescribedError {
-  const gas = ctx.gasSymbol ?? gasSymbol();
+  const gas = GAS_SYMBOL;
   const code = findCode(err);
   const names: string[] = [];
   if (err instanceof BaseError) err.walk((e) => (names.push((e as Error).name), false));

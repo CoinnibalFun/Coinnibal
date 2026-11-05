@@ -1,4 +1,4 @@
-import { gasSymbol } from '@elymum/shared';
+import { GAS_SYMBOL } from '@elymum/shared';
 import type { HTMLAttributes } from 'react';
 
 export interface GasAmountProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'children'> {
@@ -10,7 +10,7 @@ export interface GasAmountProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'c
   decimals?: number;
   /** USD value to show as "≈ $1.00" (omit or null to hide; the sun tag only shows with a value). */
   usd?: number | null;
-  /** Unit after the number (default: the active chain's gas token, `gasSymbol()`). */
+  /** Unit after the number (default: the active chain's gas token, `GAS_SYMBOL`). */
   unit?: string;
   /** `sm` inline in text, `md` card figures (default), `lg` the price on the mint card. */
   size?: 'sm' | 'md' | 'lg';
@@ -46,7 +46,7 @@ export function formatUsd(usd: number): string {
  * the dollar value in a little sun tag ("≈ $1.00"). Screen readers hear
  * "0.0213 ETH, about $1.00".
  */
-export function GasAmount({ value, wei, decimals = 4, usd, unit = gasSymbol(), size = 'md', stack = false, className, ...rest }: GasAmountProps) {
+export function GasAmount({ value, wei, decimals = 4, usd, unit = GAS_SYMBOL, size = 'md', stack = false, className, ...rest }: GasAmountProps) {
   const fig = wei !== undefined ? formatWei(wei, decimals) : value !== undefined ? formatGas(value, decimals) : '—';
   const hasUsd = usd != null && Number.isFinite(usd);
   return (

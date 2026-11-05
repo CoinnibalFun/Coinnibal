@@ -196,10 +196,8 @@ function requireToken(config: ArenaConfig): { token: Address; decimals: number }
 async function gasUsd(ctx: Ctx): Promise<string> {
   const given = str(ctx.opts, 'gas-usd');
   if (given) return given;
-  const info = chainInfo(ctx.chainId);
-  const coin = info.priceCoin ?? info.nativeCurrency.symbol;
-  const { price } = await fetchGasUsd({ url: process.env.GAS_PRICE_URL || process.env.HYPE_PRICE_URL || undefined, coin });
-  console.log(`  ${coin}/USD ${price} (Hyperliquid)`);
+  const { price } = await fetchGasUsd({ url: process.env.GAS_PRICE_URL || undefined });
+  console.log(`  ETH/USD ${price} (Hyperliquid info API)`);
   return price;
 }
 
@@ -561,7 +559,8 @@ async function main(argv: string[]): Promise<number> {
     url = str(opts, 'rpc') ?? process.env.EVM_RPC_URL ?? 'http://127.0.0.1:8545';
     const probe = createElymumPublicClient(url);
     const chainId = await probe.getChainId();
-    const overrides = { name: process.env.CHAIN_NAME, explorerUrl: process.env.EXPLORER_URL, gasSymbol: process.env.GAS_SYMBOL, rpcUrl: url };
+    // Robinhood Chain only: an RPC of any other chain is refused here (chainInfo throws)
+    const overrides = { explorerUrl: process.env.EXPLORER_URL, rpcUrl: url };
     setActiveChain(chainInfo(chainId, overrides));
     const chain = viemChain(chainId, overrides);
     const client = createElymumPublicClient(url, chain);

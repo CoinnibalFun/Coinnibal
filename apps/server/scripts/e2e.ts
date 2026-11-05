@@ -56,7 +56,7 @@ const nodePort = Number(process.env.NODE_PORT ?? 8545);
 const rpcUrl = process.env.RPC_URL ?? `http://127.0.0.1:${nodePort}`;
 const httpUrl = `http://127.0.0.1:${port}`;
 const wsUrl = `ws://127.0.0.1:${port}/ws`;
-/** Hardhat's well-known dev accounts (funded with 10,000 HYPE each on the node). */
+/** Hardhat's well-known dev accounts (funded with 10,000 ETH each on the node). */
 const KEYS = [
   '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
   '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
@@ -66,7 +66,7 @@ const KEYS = [
 ] as const;
 const [admin, hunter, prey, idle, feeWallet] = KEYS.map((k) => privateKeyToAccount(k));
 const ARENA_ID = 1;
-const ROUND_ENV = { ROUND_SECONDS: '20', ROUND_JOIN_CLOSE_SECONDS: '3', ARENA_BOT_TARGET: '0', ARENA_BOT_MIN: '0', ARENA_BOT_MAX: '0' };
+const ROUND_ENV = { ROUND_SECONDS: '20', ROUND_JOIN_CLOSE_SECONDS: '3' };
 
 const t0 = Date.now();
 const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`.padStart(6);
@@ -251,7 +251,7 @@ async function main(): Promise<void> {
   for (const a of [admin, hunter, prey, idle, feeWallet]) wallets.set(a.address, createElymumWalletClient(rpcUrl, { account: a, chain, pollingInterval: 100 }));
   const serverKey = generatePrivateKey();
   const server = privateKeyToAccount(serverKey);
-  // the server key pays gas in HYPE
+  // the server key pays gas in ETH
   const fund = await wallets.get(admin.address)!.sendTransaction({ account: admin, chain, to: server.address, value: 10n ** 18n });
   await client.waitForTransactionReceipt({ hash: fund });
 

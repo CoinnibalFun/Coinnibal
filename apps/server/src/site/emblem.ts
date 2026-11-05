@@ -9,7 +9,7 @@ const NIGHT = '#0F2A30';
 const CREAM = '#F6EEDA';
 const BLUSH = '#F39B86';
 
-/** Paints (fill, hard shade) from the Elysium palette. */
+/** Paints (fill, hard shade) from the Ring Storybook palette. */
 export const EMBLEM_PAINTS = {
   teal: ['#2D7388', '#1F5566'],
   cyan: ['#34B7DD', '#2490B0'],

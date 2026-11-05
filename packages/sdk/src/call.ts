@@ -1,4 +1,4 @@
-import { gasSymbol } from '@elymum/shared';
+import { GAS_SYMBOL } from '@elymum/shared';
 import {
   encodeFunctionData,
   formatEther,
@@ -100,7 +100,7 @@ export function describeCall(call: ContractCall): DescribedCall {
     signature: `${call.functionName}(${inputs.map((i) => i.type).join(',')})`,
     args: call.args.map((a, i) => ({ name: inputs[i]?.name || `arg${i}`, type: inputs[i]?.type ?? 'unknown', value: show(a) })),
     value,
-    valueText: value > 0n ? `${formatEther(value)} ${gasSymbol()}` : null,
+    valueText: value > 0n ? `${formatEther(value)} ${GAS_SYMBOL}` : null,
   };
 }
 

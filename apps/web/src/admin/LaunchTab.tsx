@@ -1,4 +1,4 @@
-import { gasSymbol } from '@elymum/shared';
+import { GAS_SYMBOL } from '@elymum/shared';
 import { formatGasAmount, needsReprice, sameAddress } from '@elymum/sdk';
 import { planDefaultArenas, type StatusSnapshot } from '@elymum/sdk/ops';
 import type { AllowlistStatus, MintPriceQuote, SiteCounts, SiteSettings } from '@elymum/shared';
@@ -39,7 +39,7 @@ export function launchChecklist(i: {
     { id: 'chain', label: 'The server is on a chain', ok: !!i.net.info, detail: i.net.info ? `${i.net.info.name} (${i.net.info.id})${i.net.mainnet ? ' · MAINNET' : ''}` : 'EVM_RPC_URL is unset on the server.', tab: 'deploy' },
     {
       id: 'server-key',
-      label: `The server key has ${gasSymbol()} for gas`,
+      label: `The server key has ${GAS_SYMBOL} for gas`,
       ok: !i.net.serverKey ? false : a?.serverBalance === null || a?.serverBalance === undefined ? null : a.serverBalance > 0n,
       detail: i.net.serverKey ? `${i.net.serverKey}${a?.serverBalance != null ? ` · ${formatGasAmount(a.serverBalance, 4)}` : ''}` : 'The server publishes no key.',
       tab: 'arena',
@@ -64,7 +64,7 @@ export function launchChecklist(i: {
     },
     {
       id: 'price',
-      label: `The mint price is $1 in ${gasSymbol()}`,
+      label: `The mint price is $1 in ${GAS_SYMBOL}`,
       ok: n?.state && target ? !needsReprice(n.state.price, target) : null,
       detail: n?.state ? `${formatGasAmount(n.state.price, 6)}${target ? ` · target ${formatGasAmount(target, 6)}` : ''}` : '—',
       tab: 'mint',
@@ -85,7 +85,7 @@ const STAGES: { id: string; title: string; blurb: string; items: string[]; paint
   { id: 'wl', title: 'Whitelist', blurb: 'People ask in; you approve them.', items: [], paint: 'cream' },
   { id: 'deploy', title: 'Deploy', blurb: 'Both contracts live, owned by you, wired to the server.', items: ['chain', 'server-key', 'arena', 'authority', 'nft', 'token', 'arenas'], paint: 'teal' },
   { id: 'allowlist', title: 'Allowlist', blurb: 'The approved wallets, hashed into one root on chain.', items: ['allowlist'], paint: 'spray' },
-  { id: 'mint', title: 'Mint', blurb: `One dollar in ${gasSymbol()}, and the doors open.`, items: ['price', 'phase'], paint: 'sun' },
+  { id: 'mint', title: 'Mint', blurb: `One dollar in ${GAS_SYMBOL}, and the doors open.`, items: ['price', 'phase'], paint: 'sun' },
   { id: 'game', title: 'Game', blurb: 'Holders walk onto the floor. Lunch is served.', items: ['access'], paint: 'up' },
 ];
 

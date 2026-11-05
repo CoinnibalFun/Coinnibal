@@ -76,7 +76,7 @@ export const MAX_ROYALTY_BPS = 1_000;
 export const DEFAULT_MINT_BUFFER_BPS = 100;
 /** Mint target in US cents ($1). */
 export const DEFAULT_MINT_USD_CENTS = 100;
-/** Hyperliquid's public info API (POST `{"type":"allMids"}`): the gas token's USD price (`ChainDef.priceCoin`). */
+/** Hyperliquid's public info API (POST `{"type":"allMids"}`): ETH's USD price (the $1 NFT mint). */
 export const GAS_PRICE_URL_DEFAULT = 'https://api.hyperliquid.xyz/info';
 
 /** TestToken faucet defaults (owner-settable with `setFaucet`): 1,000,000 tokens (18 decimals) per call, once per hour. */

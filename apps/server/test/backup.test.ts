@@ -91,7 +91,7 @@ describe('GET /api/admin/backup', () => {
   });
 
   it('names the file after the chain and the UTC time', () => {
-    expect(backupFileName(99801, Date.UTC(2026, 10, 4, 3, 5, 9))).toBe('elymum-data-99801-20261104-030509.tar.gz');
+    expect(backupFileName(46630, Date.UTC(2026, 10, 4, 3, 5, 9))).toBe('elymum-data-46630-20261104-030509.tar.gz');
     expect(backupFileName(null, Date.UTC(2026, 0, 1))).toBe('elymum-data-nochain-20260101-000000.tar.gz');
   });
 });
@@ -111,7 +111,8 @@ describe('migrationEnv', () => {
       PATH: '/usr/bin',
       RENDER_SERVICE_ID: 'srv-x',
       PUBLIC_URL: 'https://elymum.io',
-      CHAIN_NAME: 'bad\nINJECT=1',
+      EXPLORER_URL: 'bad\nINJECT=1',
+      CHAIN_NAME: 'Retired',
       GAME_ACCESS: 'admins',
       STAKE_ENABLED: 'false',
     });

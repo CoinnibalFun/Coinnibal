@@ -1,5 +1,5 @@
 import { clampPrice, describeError, formatGasAmount, needsReprice, priceDeviationBps, setPriceCall, usdCentsToWei } from '@elymum/sdk';
-import { gasSymbol } from '@elymum/shared';
+import { GAS_SYMBOL } from '@elymum/shared';
 import type { Address } from 'viem';
 import type { EvmClient } from './evm-client';
 
@@ -105,7 +105,7 @@ export class PriceKeeper {
     this.prevTarget = { nft: nft.toLowerCase(), wei: target };
     if (clampPrice(target, state.minPrice, state.maxPrice) === state.price || !needsReprice(state.price, target, PRICE_KEEPER_THRESHOLD_BPS)) return 'in-range';
     if (prev === null || priceDeviationBps(prev, target) > PRICE_KEEPER_CONFIRM_BPS) {
-      this.deps.log(`price keeper: ${gasSymbol()} $${price.value} puts the price off target; waiting for a second reading within 3 % before moving it`);
+      this.deps.log(`price keeper: ${GAS_SYMBOL} $${price.value} puts the price off target; waiting for a second reading within 3 % before moving it`);
       return 'unconfirmed';
     }
     const next = clampPrice(stepLimited(state.price, target), state.minPrice, state.maxPrice);
@@ -118,7 +118,7 @@ export class PriceKeeper {
         return 'failed';
       }
       this.deps.log(
-        `price keeper: ${gasSymbol()} $${price.value} → price ${formatGasAmount(state.price)} → ${formatGasAmount(next)} ` +
+        `price keeper: ${GAS_SYMBOL} $${price.value} → price ${formatGasAmount(state.price)} → ${formatGasAmount(next)} ` +
           `(target ${formatGasAmount(target)}, off ${(priceDeviationBps(state.price, target) / 100).toFixed(2)} %${
             next !== target ? (next !== stepLimited(state.price, target) ? ', clamped to the bounds' : ', limited to a 20 % step') : ''
           }) · ${hash}`,

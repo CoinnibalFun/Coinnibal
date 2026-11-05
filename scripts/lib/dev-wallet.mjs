@@ -63,7 +63,7 @@ export async function installDevWallet(ctx, key = viem('/accounts').generatePriv
   currentChainId ??= LOCALNET_CHAIN_ID;
 
   const chainFor = (id) =>
-    defineChain({ id, name: `chain ${id}`, nativeCurrency: { name: 'HYPE', symbol: 'HYPE', decimals: 18 }, rpcUrls: { default: { http: [rpcUrl ?? 'http://127.0.0.1:8545'] } } });
+    defineChain({ id, name: `chain ${id}`, nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpcUrl ?? 'http://127.0.0.1:8545'] } } });
   const forward = async (method, params) => {
     if (!rpcUrl) throw new RpcError(4200, `Dev Wallet: ${method} needs a real chain (no RPC on the fake chain)`);
     const res = await fetch(rpcUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: params ?? [] }) });

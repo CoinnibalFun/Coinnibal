@@ -150,7 +150,7 @@ describe('TxPreview: every write is previewed, checked and sent once', () => {
   });
 
   it('irreversible actions need the typed confirmation; mainnet shows the red banner', () => {
-    ui(<TxPreview plan={plan({ confirmText: 'FREEZE' })} net={resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain', rpcUrl: null }))} me={ALICE} client={client()} blockers={[]} onClose={() => {}} />);
+    ui(<TxPreview plan={plan({ confirmText: 'FREEZE' })} net={resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, rpcUrl: null }))} me={ALICE} client={client()} blockers={[]} onClose={() => {}} />);
     expect(screen.getByText('MAINNET.')).toBeTruthy();
     expect((screen.getByTestId('tx-confirm') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText(/Type FREEZE to confirm/), { target: { value: 'FREEZE' } });
@@ -295,7 +295,7 @@ describe('Deploy wizard', () => {
     const view = ui(<DeployTab ctx={ctxOf()} />);
     expect(screen.getByTestId('deploy-test-token')).toBeTruthy();
     view.unmount();
-    ui(<DeployTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain', arenaAddress: null })) })} />);
+    ui(<DeployTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, arenaAddress: null })) })} />);
     expect(screen.queryByTestId('deploy-test-token')).toBeNull();
   });
 });
@@ -334,7 +334,7 @@ describe('Setup with the contracts registered', () => {
   });
 
   it('mainnet: the registered token takes one confirmation, outside Advanced; still no address to type', async () => {
-    const net = resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain', arenaAddress: ARENA, nftAddress: NFT }));
+    const net = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, arenaAddress: ARENA, nftAddress: NFT }));
     const registry = { arena: { address: ARENA }, nft: { address: NFT }, token: { address: TOKEN } } as never;
     const ctx = ctxOf({ net, status: registeredStatus({ testToken: null }), registry });
     ui(<SetupTab ctx={ctx} />);
@@ -496,7 +496,7 @@ describe('Game: who may play', () => {
 
 describe('the chain panel', () => {
   it('shows the red MAINNET banner on mainnet and blocks signing without a server chain', () => {
-    const view = ui(<AdminPanel net={resolveNetwork(chainStatus({ chainId: 4242, chainName: 'Some Chain', rpcUrl: null, arenaAddress: null }))} api={null} tab="network" go={() => {}} reloadNet={async () => {}} />);
+    const view = ui(<AdminPanel net={resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, rpcUrl: null, arenaAddress: null }))} api={null} tab="network" go={() => {}} reloadNet={async () => {}} />);
     expect(screen.getByTestId('mainnet-banner')).toBeTruthy();
     // the launch checklist opens with its construction scene (decorative, described by its label)
     expect(screen.getByTestId('launch-scene').querySelector('svg[role="img"]')?.getAttribute('aria-label')).toMatch(/terraces built/);
