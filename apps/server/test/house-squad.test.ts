@@ -83,12 +83,17 @@ describe('house bots play with a budget from the team reserve', () => {
     expect(t.room.ledger!.value(p.id)).toBe(2 * FEE);
   }, 60_000);
 
-  it('with an empty reserve the bots enter with nothing (the team never pays out of thin air)', async () => {
+  it('a bot never shows a value of 0: without a stake from the reserve it does not walk in (the team never pays out of thin air)', async () => {
     const t = arena({ reserve: 2 * FEE });
     await t.tick(30 * 20);
-    const funded = [...t.room.bots!.bots.values()].filter((b) => t.room.purseOf(b.player.id) > 0);
-    expect(funded).toHaveLength(2);
+    expect(t.room.bots!.bots.size).toBe(2);
+    for (const b of t.room.bots!.bots.values()) expect(t.room.purseOf(b.player.id)).toBe(FEE);
     expect(t.journal.houseByArena(1)).toBe(0);
+    // topped up: the rest of the squad walks in while the round's joins are open
+    t.journal.commit({ house: [{ arenaId: 1, amount: 10 * FEE }] });
+    await t.tick(30 * 25);
+    expect(t.room.bots!.bots.size).toBeGreaterThanOrEqual(6);
+    for (const b of t.room.bots!.bots.values()) expect(t.room.purseOf(b.player.id)).toBe(FEE);
     // no bank at all: none is funded
     const u = arena({ bank: false });
     await u.tick(30 * 20);
@@ -114,7 +119,7 @@ describe('house bots play with a budget from the team reserve', () => {
 describe('an arena round and its squad', () => {
   it('6 to 9 bots, all inside the first minute of the round, none after the joins close, none going home before the bell', async () => {
     for (const seed of [1, 2, 3]) {
-      const t = arena({ seed });
+      const t = arena({ seed, reserve: 40 * FEE });
       const watcher = fakeConn(null);
       t.room.spectate(watcher);
       const at: number[] = [];
@@ -136,7 +141,7 @@ describe('an arena round and its squad', () => {
       expect(watcher.msgs.filter((m) => m.t === 'feed' && m.kind === 'left')).toEqual([]);
     }
     // a bot eaten in the last minute (joins closed) is not replaced before the bell
-    const t = arena({ seed: 4 });
+    const t = arena({ seed: 4, reserve: 40 * FEE });
     t.clock.now = roundAt(t.clock.now, ROUND.roundMs, ROUND.closeMs).joinsCloseAt - 50_000;
     await t.tick(30 * 60);
     const before = t.room.bots!.bots.size;
@@ -146,6 +151,14 @@ describe('an arena round and its squad', () => {
     await t.tick(30 * 20);
     expect(t.room.bots!.bots.size).toBe(before - 1);
   }, 60_000);
+
+  it('a busy room lets fewer bots in (one fewer per 3 people past 8, never under 3)', () => {
+    expect(BotManager.crowdCut(9, 0)).toBe(9);
+    expect(BotManager.crowdCut(9, 8)).toBe(9);
+    expect(BotManager.crowdCut(9, 14)).toBe(7);
+    expect(BotManager.crowdCut(9, 40)).toBe(3);
+    expect(BotManager.crowdCut(2, 40)).toBe(2);
+  });
 
   it('a saved bots.json still holding the old squad sizes gets the 6-9 squad; an admin size stays', () => {
     const raw = { kinds: { arena: { cap: 12, target: 12, min: 2 }, practicePro: { cap: 12, target: 12, min: 4 }, private: { cap: 8, target: 8, min: 2 }, practiceRookie: { cap: 20, target: 12, min: 4 } } };

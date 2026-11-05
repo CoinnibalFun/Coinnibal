@@ -332,11 +332,11 @@ describe('staked bots (testnet seam)', () => {
 describe('bot settings (validation)', () => {
   const base = defaultBotSettings(loadConfig({}).bots);
 
-  it('defaults: cap 12, presets as weights, 6 staked bots per testnet arena', () => {
+  it('defaults: cap 9, presets as weights, 9 staked bots per testnet arena', () => {
     expect(base.kinds.arena).toEqual({ massCap: 2500, enabled: true, cap: 9, min: 6, target: 8, mix: { easy: 50, medium: 40, hard: 10 }, strength: 100, maxChasers: 3 });
     expect(base.kinds.practiceRookie.mix).toEqual({ easy: 80, medium: 20, hard: 0 });
     expect(base.kinds.practiceRookie).toMatchObject({ strength: 85, maxChasers: 1 });
-    expect(base.testnet).toEqual({ stakedPerArena: 6, bankroll: '1000000', gasHype: '0.05', arenas: {} });
+    expect(base.testnet).toEqual({ stakedPerArena: 9, bankroll: '1000000', gasHype: '0.05', arenas: {} });
   });
 
   it('refuses bad values with the field name and clamps min to cap', () => {
@@ -360,7 +360,7 @@ describe('bot settings (validation)', () => {
 
   it('stakedWanted: per-arena override, else the default; never above the arena cap; 0 when arena bots are off', () => {
     const s = new BotSettingsStore(null, base);
-    s.update({ testnet: { arenas: { '2': { stakedBots: 9, bankroll: '500' } } } });
+    s.update({ testnet: { stakedPerArena: 6, arenas: { '2': { stakedBots: 9, bankroll: '500' } } } });
     expect(s.stakedWanted(1)).toBe(6);
     expect(s.stakedWanted(2)).toBe(9);
     expect(s.bankroll(2)).toBe('500');
