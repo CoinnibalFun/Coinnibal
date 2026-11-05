@@ -26,8 +26,11 @@ function fakeConn(wallet: string): Conn & { msgs: ServerMessage[] } {
   return conn;
 }
 
-describe('arena money conservation', () => {
-  it('ledger + loot + pending == entry fees − settled, every tick, across round ends with loot (seeded)', () => {
+describe.each([
+  { purses: true, label: 'house bots keep what they eat (purses)' },
+  { purses: false, label: 'bot kills spill as floor loot' },
+])('arena money conservation: $label', ({ purses }) => {
+  it('ledger + loot + purses + pending + house == entry fees − settled, every tick, across round ends (seeded)', () => {
     const rng = mulberry32(20261014);
     const journal = new Journal(null);
     // the wall clock advances with the simulation; it starts 5 s into a round
@@ -39,7 +42,7 @@ describe('arena money conservation', () => {
         name: 'Arena',
         maxPlayers: 50,
         bots: { target: 8, min: 8, max: 8 },
-        stake: { arenaId: 1, buyIn: FEE },
+        stake: { arenaId: 1, buyIn: FEE, botPurses: purses },
         seed: 4242,
       },
       {
@@ -85,6 +88,7 @@ describe('arena money conservation', () => {
     const pendingTotal = () => journal.pending.reduce((s, p) => s + itemAmount(p), 0);
     const lootTotal = () => world.loot().reduce((s, l) => s + l.value, 0);
     let spills = 0;
+    let eatenByBots = 0;
     let picks = 0;
     let transfers = 0;
     let roundEnds = 0;
@@ -161,22 +165,30 @@ describe('arena money conservation', () => {
         for (const m of conn.msgs.splice(0)) {
           if (m.t !== 'value') continue;
           if (m.reason === 'spill') spills++;
+          else if (m.reason === 'eaten') eatenByBots++;
           else if (m.reason === 'loot') picks++;
           else if (m.reason === 'eat') transfers++;
         }
       }
 
-      const lhs = ledger.total() + lootTotal() + pendingTotal();
+      const house = journal.houseByArena(1);
+      const lhs = ledger.total() + lootTotal() + room.purseTotal() + pendingTotal() + house;
       if (lhs !== fees - settled) {
-        throw new Error(`tick ${t}: ledger ${ledger.total()} + loot ${lootTotal()} + pending ${pendingTotal()} != ${fees} - ${settled}`);
+        throw new Error(`tick ${t}: ledger ${ledger.total()} + loot ${lootTotal()} + purses ${room.purseTotal()} + pending ${pendingTotal()} + house ${house} != ${fees} - ${settled}`);
       }
       for (const e of ledger.all()) expect(Number.isSafeInteger(e.value) && e.value >= 0).toBe(true);
       for (const l of world.loot()) expect(Number.isSafeInteger(l.value) && l.value > 0).toBe(true);
     }
 
     // the scenario actually exercised every money path
-    expect(spills).toBeGreaterThan(0);
-    expect(picks).toBeGreaterThan(0);
+    if (purses) {
+      expect(spills).toBe(0);
+      expect(eatenByBots).toBeGreaterThan(0);
+      expect(journal.houseByArena(1)).toBeGreaterThan(0);
+    } else {
+      expect(spills).toBeGreaterThan(0);
+      expect(picks).toBeGreaterThan(0);
+    }
     expect(transfers).toBeGreaterThan(0);
     expect(roundEnds).toBeGreaterThanOrEqual(3);
     expect(roundSettles).toBeGreaterThan(0);

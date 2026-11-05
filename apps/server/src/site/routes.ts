@@ -707,8 +707,8 @@ export class SiteApi {
         if (seg.length > 2 || !this.customRooms) break;
         return customRoomAdminRoutes(this.customRooms, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, seg.slice(1), wallet);
       case 'bots':
-        if (seg.length !== 1 || !this.bots) break;
-        return botRoutes(this.bots, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, wallet);
+        if (seg.length > 2 || (seg.length === 2 && seg[1] !== 'bankroll') || !this.bots) break;
+        return botRoutes(this.bots, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, wallet, seg[1]);
       case 'shop': {
         // power-up prices, the sink (burn or treasury), on/off per power-up and the arena limits; plus recent purchases
         const shop = this.shop;

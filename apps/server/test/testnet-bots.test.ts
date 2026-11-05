@@ -373,7 +373,8 @@ describe('testnet staked bots: rooms, round after round', () => {
     const check = () => {
       for (const r of rooms) {
         expect(r.bots!.bots.size).toBeLessThanOrEqual(cap);
-        expect(r.bots!.bots.size).toBeGreaterThan(0); // never empty
+        // never empty for long: the squad walks back in right after a bell
+        if (roundClock.now() - roundClock.window().startsAt > 10_000) expect(r.bots!.bots.size).toBeGreaterThan(0);
       }
       expect(r4.bots!.stakedCount).toBe(0);
     };
@@ -393,6 +394,7 @@ describe('testnet staked bots: rooms, round after round', () => {
       if (round === 2) {
         // a bot dies mid-round: its ticket is settled, a new ticket is bought (its wallet comes back once settled)
         const victim = staked(r1)[0];
+        r1.bots!.fill(); // the squad's zero-value bots (they walk in over a round; seated now for the test)
         const eater = [...r1.bots!.bots.values()].find((b) => !b.staked)!.player;
         eat(r1, eater, victim);
         expect(journal.settlements().filter((i) => i.reason === 'death')).toHaveLength(1);
@@ -415,6 +417,7 @@ describe('testnet staked bots: rooms, round after round', () => {
         // a death after joins closed: no purchase until the next round
         clock.now = w.joinsCloseAt + 1_000;
         const victim = staked(r1)[0];
+        r1.bots!.fill(); // the squad's zero-value bots (they walk in over a round; seated now for the test)
         const eater = [...r1.bots!.bots.values()].find((b) => !b.staked)!.player;
         eat(r1, eater, victim);
         confirmAll();
@@ -428,7 +431,7 @@ describe('testnet staked bots: rooms, round after round', () => {
         expect(r1.bots!.bots.size).toBeGreaterThan(2); // zero-value bots hold the seats
       }
 
-      // the bell: every staked bot is settled with everyone; zero-value bots keep the room alive
+      // the bell: every staked bot is settled with everyone
       perRound.push(joins().length - before);
       const playing = staked(r1).map((p) => p.id);
       const bellSettles = () => journal.settlements().filter((i) => i.reason === 'round' && i.arenaId === 1).length;
@@ -442,7 +445,8 @@ describe('testnet staked bots: rooms, round after round', () => {
       const wallets = t.source.addresses().length;
       await pump(3);
       expect(t.source.addresses()).toHaveLength(wallets);
-      expect(r1.bots!.bots.size).toBeGreaterThan(0);
+      // the zero-value squad left with the bell and walks back in over the next seconds (see bot-seats.test.ts)
+      expect(r1.bots!.bots.size).toBeGreaterThanOrEqual(r1.bots!.stakedCount);
       confirmAll();
     }
     // the 4th round buys again too

@@ -49,6 +49,8 @@ function makeRoom(seed: number, preset: 'practice' | 'arena', opts: BotManagerOp
     team?.(b, n++);
     return b;
   };
+  // a bench measures a full room: seat the squad now (rooms let bots walk in one by one)
+  bots.fill(0);
   return { world, bots };
 }
 

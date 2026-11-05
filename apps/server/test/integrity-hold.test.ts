@@ -171,7 +171,7 @@ describe('auto-hold keeps arena money conservation', () => {
           held++;
           // only profitable payouts of risky wallets are held
           expect(Number(h.player.slice(6)) % 3).not.toBe(0);
-          expect(h.payout!).toBeGreaterThan(FEE);
+          expect(h.payout!).toBeGreaterThan(FEE * 0.8);
           expect(h.reason).toBe('round');
         }
       }
@@ -194,14 +194,15 @@ describe('auto-hold keeps arena money conservation', () => {
       }
       const pending = journal.pending.reduce((s, p) => s + itemAmount(p), 0);
       const loot = world.loot().reduce((s, l) => s + l.value, 0);
-      const lhs = ledger.total() + loot + pending + journal.forfeitedByArena(1);
-      if (lhs !== fees - paid) throw new Error(`tick ${t}: ${ledger.total()} + ${loot} + ${pending} + ${journal.forfeitedByArena(1)} != ${fees} - ${paid}`);
+      // the house bots' purses and the team's reserve (vault share of the cut on winnings, purses taken home) stay in the vault too
+      const lhs = ledger.total() + loot + pending + journal.forfeitedByArena(1) + room.purseTotal() + journal.houseByArena(1);
+      if (lhs !== fees - paid) throw new Error(`tick ${t}: ${ledger.total()} + ${loot} + ${pending} + ${journal.forfeitedByArena(1)} + purses ${room.purseTotal()} + house ${journal.houseByArena(1)} != ${fees} - ${paid}`);
     }
     expect(held).toBeGreaterThan(0);
     expect(released).toBeGreaterThan(0);
     expect(zeroed).toBeGreaterThan(0);
     // settled at 0: the payout is 0 and the forfeit equals what the ticket held
-    expect(journal.forfeits().every((f) => f.amount > FEE)).toBe(true);
+    expect(journal.forfeits().every((f) => f.amount > FEE * 0.8)).toBe(true);
   }, 120_000);
 
   it('auto-hold off (the default) never holds', () => {

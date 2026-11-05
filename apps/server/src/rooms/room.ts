@@ -9,6 +9,7 @@ import {
   RULES,
   STANDINGS_MAX_ROWS,
   clamp,
+  winningsCut,
   VIEW,
   WORLD_PRESETS,
   boostDurationMs,
@@ -35,6 +36,7 @@ import {
   type StandingRow,
 } from '@elymum/shared';
 import type { BotManagerOptions } from '../bots/manager';
+import { squadIntel } from '../bots/squad';
 import { BotManager } from '../bots/manager';
 import type { StakedBotSource, StakedBotTicket } from '../bots/staked';
 import type { ChainGateway } from '../chain/types';
@@ -46,7 +48,7 @@ import type { IntegrityService } from '../integrity/service';
 import type { ShopService, UseContext } from '../shop/service';
 import type { Leaderboards } from '../leaderboards';
 import type { RoomConn as Conn, RoomHandle } from './handle';
-import { sweepKey, type Journal, type JournalItem, type LiveStake, type SettleReason, type SettlementItem } from '../stake/journal';
+import { cutSweep, sweepKey, type Journal, type JournalItem, type LiveStake, type SettleReason, type SettlementItem } from '../stake/journal';
 import { ArenaLedger, type ArenaEntry } from '../stake/ledger';
 import { RoundClock } from './round-clock';
 
@@ -91,6 +93,12 @@ export interface RoomDeps {
   integrity?: RoomIntegrity;
   /** Testnet staked bots (wallet + real ticket); absent: arenas field zero-value bots only. */
   stakedBots?: StakedBotSource;
+  /**
+   * The team reserve as a bankroll (`Journal.drawHouse` on the main thread): a house bot entering an
+   * arena asks it for a ticket's worth and plays with that like a person. Absent, or the reserve
+   * empty: the bot enters with nothing.
+   */
+  houseBank?: { draw(arenaId: number, amount: number): Promise<boolean> };
   /** How often an arena room asks the staked-bot source for another ticket (default 3 s; tests: 0). */
   stakedAskMs?: number;
   /** Bought power-ups (charges, cooldowns, the arena cap); absent: the `boost` message is ignored. */
@@ -132,7 +140,15 @@ export interface RoomOptions {
   /** Arena rooms: instance (shard) number within the arena, from 1. */
   instance?: number;
   bots: BotManagerOptions | null;
-  stake?: { arenaId: number; buyIn: number };
+  /**
+   * Paid rooms. `botPurses` (default true): a house bot that eats a staker keeps the value in its purse
+   * (a person who eats that bot wins it back; whatever it holds when it leaves or at the bell is the
+   * team's reserve). False: the value spills as floor loot instead (the older rule). `botBudget` (default
+   * true, with purses): a bot enters with a ticket's worth drawn from the team reserve (`RoomDeps.houseBank`),
+   * so eating it pays like eating a person; when the reserve cannot cover it the bot enters with nothing.
+   * `botStake`: that bankroll, the value a person's ticket starts with (default `buyIn`).
+   */
+  stake?: { arenaId: number; buyIn: number; botPurses?: boolean; botBudget?: boolean; botStake?: number };
   seed?: number;
   /** The world size and population (default `WORLD_PRESETS[mode]`; custom rooms bring their own). */
   world?: WorldShape;
@@ -192,6 +208,15 @@ export class Room implements RoomHandle {
   private readonly afkSince = new Map<number, number>();
   /** Arena rooms: value each staker lost this game (`valueLost` / `lootSpilled` in the death stats). */
   private readonly losses = new Map<number, { lost: number; spilled: number }>();
+  /** Arena rooms: what each house bot (zero-value bot) holds, taken from the people it ate. */
+  private readonly purses = new Map<number, number>();
+  /** Arena rooms: house bots whose bankroll was asked for (answered or not) and those still waiting. */
+  private readonly bankrolled = new Set<number>();
+  private readonly bankrolling = new Set<number>();
+  /** Arena rooms: burn share of this round's cuts on winnings, burned with the bell's sweep. */
+  private bellBurn = 0;
+  /** Arena rooms: the team's reserve gathered during a bell (written with the bell's batch). */
+  private bellHouse: { arenaId: number; amount: number }[] = [];
   private readonly walletOf = new Map<number, string>();
   /** Human players wearing a profile picture → its id (bots never have one). */
   readonly avatarOf = new Map<number, string>();
@@ -229,9 +254,10 @@ export class Room implements RoomHandle {
     this.map = opts.map ? { ...opts.map, scale: { ...opts.map.scale } } : null;
     const seed = opts.seed ?? (Math.random() * 2 ** 32) >>> 0;
     // a resizable room opens at the size its bots alone call for (the first joins grow it)
-    const first = this.map ? this.shapeFor(this.wantedSide(0, opts.bots ? BotManager.desiredOf(opts.bots, 0) : 0)) : preset;
+    const first = this.map ? this.shapeFor(this.wantedSide(0, opts.bots ? BotManager.desiredOf(opts.bots) : 0)) : preset;
     this.world = new World({ ...first, powerUps: opts.powerUps ?? true, coinRain: opts.mode !== 'arena', seed, ...(this.map ? { space: MAP_SPACE } : {}) });
-    this.bots = opts.bots ? new BotManager(this.world, opts.bots, mulberry32(seed ^ 0xb07)) : null;
+    // arenas play rounds: the squad is rolled per round, walks in during its first minute and stays to the bell
+    this.bots = opts.bots ? new BotManager(this.world, { ...opts.bots, rounds: opts.mode === 'arena' }, mulberry32(seed ^ 0xb07)) : null;
     this.ledger = opts.mode === 'arena' ? new ArenaLedger() : null;
     this.clock = deps.clock ?? new RoundClock(deps.now, deps.round);
     this.integrity = this.ledger ? (deps.integrity ?? null) : null;
@@ -241,6 +267,14 @@ export class Room implements RoomHandle {
       const r = this.clock.window();
       this.roundN = r.n;
       this.roundEndsAt = r.endsAt;
+    }
+    // the squad weighs people by what they hold (arenas)
+    if (this.bots) {
+      // like a person, a bot cannot buy into a round whose joins have closed
+      if (this.ledger) this.bots.joinsOpen = () => this.now() < this.clock.window().joinsCloseAt;
+      const squad = squadIntel(this.world);
+      squad.entryFee = this.entryFee;
+      if (this.ledger) squad.valueOf = (pid) => this.ledger!.value(pid);
     }
   }
 
@@ -376,11 +410,7 @@ export class Room implements RoomHandle {
     this.freshView(conn);
     const player = this.world.addPlayer({ name: opts.name, skin: opts.skin, flags: opts.flags, country: opts.country ?? null, mass: RULES.startMass });
     this.humans.set(player.id, conn);
-    // the human always gets in: a bot over the target goes home at once ("<name> went home")
-    if (this.bots) {
-      this.bots.makeRoom(this.humans.size);
-      this.flushBotDepartures();
-    }
+    // the human always gets in; the bot squad is the house's own team and keeps its seats (bots never block a join)
     conn.player = player;
     conn.spectating = false;
     conn.spectatePid = null;
@@ -624,6 +654,7 @@ export class Room implements RoomHandle {
         player: e.player,
         arenaId: e.arenaId,
         value: e.value,
+        ...(e.start !== undefined ? { start: e.start } : {}),
         score: Math.floor(p?.stats.maxMass ?? 0),
         kills: p?.stats.playersEaten ?? 0,
       };
@@ -640,7 +671,7 @@ export class Room implements RoomHandle {
    * atomic journal write, so Σ live + Σ loot + Σ pending never changes on disk
    * except by settlements being confirmed.
    */
-  private commitJournal(enqueue?: JournalItem[]): void {
+  private commitJournal(enqueue?: JournalItem[], house?: { arenaId: number; amount: number }[]): void {
     if (!this.ledger) {
       if (enqueue && enqueue.length > 0) this.deps.journal.commit({ enqueue });
       return;
@@ -648,7 +679,8 @@ export class Room implements RoomHandle {
     const loot = this.opts.stake
       ? { roomId: this.id, arenaId: this.opts.stake.arenaId, items: this.world.loot().map((l) => ({ x: l.x, y: l.y, value: l.value })) }
       : undefined;
-    this.deps.journal.commit({ enqueue, roomId: this.id, live: this.liveStakes(), loot });
+    const purses = this.opts.stake ? { roomId: this.id, arenaId: this.opts.stake.arenaId, value: this.purseTotal() } : undefined;
+    this.deps.journal.commit({ enqueue, roomId: this.id, live: this.liveStakes(), loot, purses, house: house && house.length > 0 ? house : undefined });
     this.journalDirty = false;
     this.lastJournalAt = Date.now();
   }
@@ -666,7 +698,23 @@ export class Room implements RoomHandle {
    */
   private onCellEaten(ce: CellEatenEvent): void {
     const ledger = this.ledger;
-    if (!ledger || !ledger.has(ce.victim.id)) return;
+    if (!ledger) return;
+    // a house bot holding value: its share goes to whoever eats it (a staker, or another bot's purse)
+    if (!ledger.has(ce.victim.id)) {
+      const held = this.purses.get(ce.victim.id) ?? 0;
+      if (held <= 0) return;
+      let t = ce.last ? held : ce.victimTotalBefore > 0 ? Math.floor(held * Math.min(1, Math.max(0, ce.mass / ce.victimTotalBefore))) : 0;
+      t = Math.max(0, Math.min(held, t));
+      if (t <= 0) return;
+      this.journalDirty = true;
+      this.setPurse(ce.victim.id, held - t);
+      if (ledger.has(ce.eater.id)) {
+        ledger.credit(ce.eater.id, t);
+        this.sendValue(ce.eater.id, t, 'eat');
+      } else if (this.bots?.isBot(ce.eater.id)) this.setPurse(ce.eater.id, (this.purses.get(ce.eater.id) ?? 0) + t);
+      else this.world.spawnLoot(ce.x, ce.y, t, clamp(Math.ceil(t / (this.entryFee * RULES.lootPieceEntryFraction)), RULES.lootPiecesMin, RULES.lootPiecesMax));
+      return;
+    }
     this.journalDirty = true;
     if (ledger.has(ce.eater.id)) {
       const t = ledger.transfer(ce.victim.id, ce.eater.id, ce.mass, ce.victimTotalBefore, ce.last);
@@ -678,6 +726,13 @@ export class Room implements RoomHandle {
     }
     const t = ledger.spill(ce.victim.id, ce.mass, ce.victimTotalBefore, ce.last);
     if (t <= 0) return;
+    // a house bot keeps what it eats (it plays for the team)
+    if (this.opts.stake?.botPurses !== false && this.bots?.isBot(ce.eater.id)) {
+      this.setPurse(ce.eater.id, (this.purses.get(ce.eater.id) ?? 0) + t);
+      this.noteLoss(ce.victim.id, t, 0);
+      this.sendValue(ce.victim.id, -t, 'eaten');
+      return;
+    }
     this.noteLoss(ce.victim.id, t, t);
     const pieces = clamp(Math.ceil(t / (this.entryFee * RULES.lootPieceEntryFraction)), RULES.lootPiecesMin, RULES.lootPiecesMax);
     this.world.spawnLoot(ce.x, ce.y, t, pieces);
@@ -691,6 +746,74 @@ export class Room implements RoomHandle {
     l.lost += lost;
     l.spilled += spilled;
     this.losses.set(pid, l);
+  }
+
+  private setPurse(pid: number, value: number): void {
+    if (value > 0) this.purses.set(pid, value);
+    else this.purses.delete(pid);
+  }
+
+  /** Σ what the house bots hold. */
+  purseTotal(): number {
+    let sum = 0;
+    for (const v of this.purses.values()) sum += v;
+    return sum;
+  }
+
+  /** What one house bot holds (0 for anyone else). */
+  purseOf(pid: number): number {
+    return this.purses.get(pid) ?? 0;
+  }
+
+  /**
+   * Bots that left the world (went home, or the bell): what they held becomes the team's reserve,
+   * written now (or added to `house` for the caller's write).
+   */
+  private pursesHome(pids: Iterable<number>, house?: { arenaId: number; amount: number }[]): void {
+    if (!this.opts.stake) return;
+    let amount = 0;
+    for (const pid of pids) {
+      amount += this.purses.get(pid) ?? 0;
+      this.purses.delete(pid);
+      this.bankrolled.delete(pid);
+    }
+    if (amount <= 0) return;
+    const rec = { arenaId: this.opts.stake.arenaId, amount };
+    if (house) house.push(rec);
+    else this.commitJournal(undefined, [rec]);
+  }
+
+  /**
+   * Arena rooms: every house bot that walked in asks the team reserve for a ticket's worth, once. It is
+   * still under its spawn shield when the answer comes, so nobody can eat it with an empty purse. A bot
+   * gone by then (eaten, the bell) sends the bankroll straight back to the reserve.
+   */
+  private bankrollBots(): void {
+    const bank = this.deps.houseBank;
+    const st = this.opts.stake;
+    if (!bank || !st || !this.ledger || !this.bots || st.botPurses === false || st.botBudget === false) return;
+    const amount = st.botStake ?? this.entryFee;
+    if (!(amount > 0)) return;
+    for (const b of this.bots.bots.values()) {
+      const pid = b.player.id;
+      if (b.staked || this.bankrolled.has(pid) || this.bankrolling.has(pid)) continue;
+      this.bankrolling.add(pid);
+      void bank.draw(st.arenaId, amount).then(
+        (ok) => {
+          this.bankrolling.delete(pid);
+          if (!ok) {
+            this.bankrolled.add(pid);
+            return;
+          }
+          if (this.bots?.isBot(pid) && this.world.players.get(pid)?.alive) {
+            this.bankrolled.add(pid);
+            this.setPurse(pid, this.purseOf(pid) + amount);
+            this.commitJournal();
+          } else this.commitJournal(undefined, [{ arenaId: st.arenaId, amount }]);
+        },
+        () => this.bankrolling.delete(pid),
+      );
+    }
   }
 
   /** Arena rooms: credits picked-up loot (put back on the floor if nobody can hold it). */
@@ -720,12 +843,25 @@ export class Room implements RoomHandle {
     // custom rooms play by their own rules: they keep their own board (see `RoomManager`), not the global one
     if (!this.opts.custom) this.deps.leaderboards.submit({ name: p.name, score, skin: p.skin, wallet, kills: stats.playersEaten, at: now, ...(p.country ? { country: p.country } : {}) });
 
-    const enqueue: SettlementItem[] = [];
+    const enqueue: JournalItem[] = [];
+    const house: { arenaId: number; amount: number }[] = [];
     const loss = this.losses.get(p.id);
     this.losses.delete(p.id);
     if (this.ledger?.has(p.id)) {
       const entry = this.ledger.leave(p.id)!;
-      stats.payout = entry.value;
+      // the cut on winnings: 20 % of what the ticket holds above its start (15 % burned, 5 % kept in the vault)
+      const cut = winningsCut(entry.value, entry.start ?? entry.value);
+      stats.payout = cut.net;
+      if (cut.cut > 0) {
+        stats.gross = cut.gross;
+        stats.cut = cut.cut;
+        if (cut.vault > 0) house.push({ arenaId: entry.arenaId, amount: cut.vault });
+        if (cut.burn > 0) {
+          // at the bell the burn rides on the round's sweep; otherwise it gets its own
+          if (batch) this.bellBurn += cut.burn;
+          else enqueue.push(cutSweep(this.id, entry.arenaId, entry.session, cut.burn, now));
+        }
+      }
       if (cause === 'death') {
         // the death sheet's "value lost" / "spilled as loot" lines (DeathStats)
         stats.valueLost = loss?.lost ?? 0;
@@ -734,19 +870,21 @@ export class Room implements RoomHandle {
       }
       // arena humans never `leave` (they go AFK); an operator exit settles at value like a kick
       const reason: SettleReason = cause === 'left' ? 'kicked' : cause;
-      const item = settlementOf(entry, { score, kills: stats.playersEaten, xp: stats.xp ?? 0, reason, now });
+      const item = settlementOf({ ...entry, value: cut.net }, { score, kills: stats.playersEaten, xp: stats.xp ?? 0, reason, now });
       // integrity: finish the ticket's telemetry; with auto-hold on, a high-risk payout is held (same journal write)
-      this.integrity?.settle(this, p.id, item, { reason, payout: entry.value, killer, killerIsBot: !!killer && this.bots?.isBot(killer.id) === true });
-      enqueue.push(item);
+      this.integrity?.settle(this, p.id, item, { reason, payout: cut.net, killer, killerIsBot: !!killer && this.bots?.isBot(killer.id) === true });
+      enqueue.unshift(item);
     }
     // the countries board: this game's mass (and an alive arena game's payout) for the player's flag
     if (!this.opts.custom && p.country) {
       this.deps.leaderboards.countryGame({ country: p.country, mass: score, paid: cause === 'death' ? 0 : (stats.payout ?? 0), at: now });
     }
 
-    if (batch) batch.push(...enqueue);
-    else if (enqueue.length > 0 || this.ledger) {
-      this.commitJournal(enqueue);
+    if (batch) {
+      batch.push(...enqueue);
+      this.bellHouse.push(...house);
+    } else if (enqueue.length > 0 || this.ledger) {
+      this.commitJournal(enqueue, house);
       if (enqueue.length > 0) this.deps.chain.kick();
     }
 
@@ -787,9 +925,10 @@ export class Room implements RoomHandle {
    */
   private endRound(round: number): void {
     const ledger = this.ledger!;
-    // standings at the bell: stakers by value (ties: bigger mass first)
-    const ranked = ledger
-      .all()
+    // standings at the bell: everyone holding value (stakers and the house bots' purses), ties: bigger mass first
+    const holders: { pid: number; value: number }[] = ledger.all().map((e) => ({ pid: e.pid, value: e.value }));
+    for (const [pid, value] of this.purses) holders.push({ pid, value });
+    const ranked = holders
       .map((e) => ({ e, p: this.world.players.get(e.pid) }))
       .sort((a, b) => b.e.value - a.e.value || (b.p?.totalMass() ?? 0) - (a.p?.totalMass() ?? 0));
     const top = ranked.slice(0, 10);
@@ -802,10 +941,10 @@ export class Room implements RoomHandle {
     for (const [pid, conn] of [...this.humans]) {
       const p = this.world.players.get(pid);
       if (!p?.alive) continue;
-      const payout = ledger.value(pid);
       const c = conn ?? null;
       const entry = ledger.get(pid);
       const stats = this.finishHuman(p, c, 'round', null, batch);
+      const payout = stats.payout ?? 0;
       if (c) results.push({ conn: c, pid, payout, stats });
       else if (entry) away.push({ arenaId: entry.arenaId, wallet: entry.player, session: entry.session, sessionId: entry.sessionId, round });
     }
@@ -813,7 +952,13 @@ export class Room implements RoomHandle {
     // staked bots are settled at the bell like everyone (same journal write)
     const botsSettled = this.settleStakedBots('round', batch);
 
-    const amount = this.world.takeLoot();
+    // what the bots hold at the bell is the team's (they leave with the bell, see `resetRound` below)
+    const house = this.bellHouse;
+    this.bellHouse = [];
+    if (this.bots) this.pursesHome([...this.bots.bots.keys()], house);
+    const loot = this.world.takeLoot();
+    const amount = loot + this.bellBurn;
+    this.bellBurn = 0;
     const now = Date.now();
     if (amount > 0 && this.opts.stake) {
       // a key can repeat only if the wall clock stepped back across a round boundary while the
@@ -835,12 +980,12 @@ export class Room implements RoomHandle {
         createdAt: now,
       });
     }
-    this.commitJournal(batch);
+    this.commitJournal(batch, house);
     if (batch.length > 0) this.deps.chain.kick();
     for (const a of away) this.deps.onBellSettled?.(a);
     for (const b of botsSettled) this.deps.stakedBots?.released(b.ticket, 'round', b.item);
     const settled = batch.filter((i) => i.kind === 'settle').length;
-    if (settled > 0 || amount > 0) this.deps.log(`room ${this.id}: round ${round} over · ${settled} settled · loot ${amount} queued to burn`);
+    if (settled > 0 || amount > 0) this.deps.log(`room ${this.id}: round ${round} over · ${settled} settled · ${amount} queued to burn (loot ${loot}, cut ${amount - loot})`);
 
     for (const r of results) {
       const standings: RoundStanding[] = top.map(({ e, p }) => ({
@@ -866,7 +1011,7 @@ export class Room implements RoomHandle {
 
   /** Players this room expects with `humans` people in it: them plus the bots that fill it. */
   expectedPlayers(humans = this.humans.size): number {
-    return humans + (this.bots ? this.bots.desired(humans) : 0);
+    return humans + (this.bots ? Math.max(this.bots.desired(), this.bots.bots.size) : 0);
   }
 
   /** The side the room wants now: auto from the expected count, else its preset. */
@@ -987,6 +1132,9 @@ export class Room implements RoomHandle {
         // a staked bot's ticket ends like a player's: settled at its (now zero) value
         if (this.ledger?.has(k.victim.id)) this.settleStakedBot(k.victim, 'death');
         this.bots.onDeath(k.victim.id, world.now);
+        // anything a bot still held after its last cell went (rounding) is the team's
+        if (this.purses.has(k.victim.id)) this.pursesHome([k.victim.id]);
+        this.bankrolled.delete(k.victim.id);
         world.removePlayer(k.victim.id);
         for (const c of this.conns) c.view.forgetPlayer(k.victim.id);
       } else if (this.humans.has(k.victim.id)) {
@@ -1009,9 +1157,11 @@ export class Room implements RoomHandle {
     }
 
     if (this.bots) {
+      if (this.ledger) squadIntel(world).roundLeftMs = Math.max(0, this.roundEndsAt - this.now());
       const { emotes } = this.bots.update(world.now, this.humans.size);
       for (const e of emotes) this.broadcast({ t: 'emote', pid: e.pid, id: e.id });
       this.flushBotDepartures();
+      this.bankrollBots();
       this.askStakedBot();
     }
 
@@ -1111,7 +1261,7 @@ export class Room implements RoomHandle {
       name: p.name,
       skin: p.skin,
       score: Math.floor(p.totalMass()),
-      value: this.ledger ? this.ledger.value(p.id) : undefined,
+      value: this.ledger ? this.ledger.value(p.id) + this.purseOf(p.id) : undefined,
       bot: p.isBot || undefined,
       isBot: p.isBot || undefined,
       verified: (p.flags & PlayerFlag.Verified) !== 0 || undefined,
@@ -1131,7 +1281,7 @@ export class Room implements RoomHandle {
       const p = conn.player;
       const me =
         p && p.alive
-          ? { rank: rankOf.get(p.id) ?? ranking.length, score: Math.floor(p.totalMass()), value: this.ledger ? this.ledger.value(p.id) : undefined }
+          ? { rank: rankOf.get(p.id) ?? ranking.length, score: Math.floor(p.totalMass()), value: this.ledger ? this.ledger.value(p.id) + this.purseOf(p.id) : undefined }
           : null;
       conn.send({ t: 'lb', top, me, leaders, players: ranking.length });
     }
@@ -1160,7 +1310,7 @@ export class Room implements RoomHandle {
   private standingsMessage(ranking: Player[]): ServerMessage {
     const rows: StandingRow[] = ranking.slice(0, STANDINGS_MAX_ROWS).map((p) => {
       const row: StandingRow = { pid: p.id, name: p.name, skin: p.skin, score: Math.floor(p.totalMass()) };
-      if (this.ledger) row.value = this.ledger.value(p.id);
+      if (this.ledger) row.value = this.ledger.value(p.id) + this.purseOf(p.id);
       if (p.isBot) row.isBot = true;
       if ((p.flags & PlayerFlag.Verified) !== 0) row.verified = true;
       if ((p.flags & PlayerFlag.Holder) !== 0) row.holder = true;
@@ -1202,7 +1352,7 @@ export class Room implements RoomHandle {
 
   /** Nothing of value is left: no player (connected or AFK), no ticket (staked bots too), no loot on the floor. */
   private settledOut(): boolean {
-    return this.humans.size === 0 && (this.ledger?.all().length ?? 0) === 0 && this.world.loot().length === 0;
+    return this.humans.size === 0 && (this.ledger?.all().length ?? 0) === 0 && this.world.loot().length === 0 && this.purses.size === 0;
   }
 
   /**
@@ -1225,8 +1375,11 @@ export class Room implements RoomHandle {
     if (this.ledger) {
       const batch: JournalItem[] = [];
       const settled = this.settleStakedBots('kicked', batch);
-      if (batch.length > 0) {
-        this.commitJournal(batch);
+      // the bots' purses: the team's from here (the house reserve)
+      const house: { arenaId: number; amount: number }[] = [];
+      if (this.bots) this.pursesHome([...this.bots.bots.keys()], house);
+      if (batch.length > 0 || house.length > 0) {
+        this.commitJournal(batch, house);
         this.deps.chain.kick();
       }
       for (const b of settled) this.deps.stakedBots?.released(b.ticket, 'kicked', b.item);
@@ -1240,14 +1393,16 @@ export class Room implements RoomHandle {
   /** Live bot settings from the admin: applied at once (bots over the new cap go home). */
   setBotOptions(opts: BotManagerOptions): void {
     if (!this.bots) return;
-    this.bots.setOptions(opts, this.humans.size);
+    this.bots.setOptions({ ...opts, rounds: this.opts.mode === 'arena' });
     this.flushBotDepartures();
   }
 
   /** Broadcasts "<name> went home" for every bot that left and drops it from every view. */
   private flushBotDepartures(): void {
     if (!this.bots) return;
-    for (const d of this.bots.takeDepartures()) {
+    const gone = this.bots.takeDepartures();
+    this.pursesHome(gone.map((d) => d.pid));
+    for (const d of gone) {
       for (const c of this.conns) c.view.forgetPlayer(d.pid);
       this.broadcast({ t: 'feed', kind: 'left', pid: d.pid, name: d.name, skin: d.skin, isBot: true, reason: d.reason });
     }
@@ -1271,14 +1426,14 @@ export class Room implements RoomHandle {
     this.ledger.join({ ...ticket.stake, pid: bot.player.id });
     this.walletOf.set(bot.player.id, ticket.stake.player);
     this.commitJournal();
-    this.bots.trimTo(this.bots.desired(this.humans.size), 'retired');
+    this.bots.trimTo(Math.max(this.bots.planned, this.bots.stakedCount), 'retired');
     this.flushBotDepartures();
     return bot.player;
   }
 
   /**
-   * Staked bots this room fields now: the arena's staked target, capped by the room's bot cap and
-   * by the humans present (the make-room rule, `BotManager.desired`). Only an arena's first
+   * Staked bots this room fields now: the arena's staked target, capped by the room's squad size
+   * (`BotManager.desired`). Only an arena's first
    * instance fields staked bots (extra instances open for humans and close once empty).
    */
   stakedTarget(): number {
@@ -1286,7 +1441,7 @@ export class Room implements RoomHandle {
     const bots = this.bots;
     if (!src || !bots || !this.ledger || !this.opts.stake || !bots.enabled) return 0;
     if ((this.opts.instance ?? 1) !== 1) return 0;
-    return Math.max(0, Math.min(src.wanted(this.opts.stake.arenaId), bots.desired(this.humans.size)));
+    return Math.max(0, Math.min(src.wanted(this.opts.stake.arenaId), bots.desired()));
   }
 
   /**

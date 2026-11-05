@@ -443,3 +443,39 @@ describe('room workers: the money helpers', () => {
     expect(shop.use(ctx, 'magnet', () => true)).toEqual({ ok: true });
   });
 });
+
+describe('room workers: the house bots bankroll', () => {
+  it('bots in a worker arena draw their budget from the reserve on the main thread; an admin ticket tops the reserve up', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-bank-'));
+    const ch = new FakeChain();
+    const admin = testWallet(0xa0a0);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, ARENA_BOT_TARGET: '6', ARENA_BOT_MIN: '6', ARENA_BOT_MAX: '6', BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', NODE_ENV: 'development', GAME_WORKERS: '1', ADMIN_WALLETS: admin, TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
+    const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
+    const p = await a.listen();
+    try {
+      const value = 10_000_000 - Math.floor((10_000_000 * 500) / 10_000);
+      // the admin's unplayed ticket becomes reserve: settled at 0, its value kept in the vault
+      const t = ticket(admin);
+      ch.sessions.set(`1:${admin}`, t);
+      const call = async (body: unknown) => {
+        const res = await fetch(`http://127.0.0.1:${p}/api/admin/bots/bankroll`, { method: 'POST', headers: { Authorization: `Bearer ${a.auth.issueToken(admin)}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        return { status: res.status, body: (await res.json()) as { amount?: number; reserve?: number; error?: string } };
+      };
+      const r = await call({ arenaId: 1 });
+      expect(r.status).toBe(200);
+      expect(r.body).toMatchObject({ amount: value, reserve: value });
+      expect(a.journal.settlements()).toEqual([expect.objectContaining({ key: t.key, payout: 0, reason: 'house' })]);
+      // the same ticket twice, and no ticket at all, are refused
+      expect((await call({ arenaId: 1 })).status).toBe(409);
+      expect((await call({ arenaId: 2 })).body.error).toBe('no_ticket');
+      // more reserve, then the bots that walk in (in the worker) draw from it
+      a.journal.commit({ house: [{ arenaId: 1, amount: 5 * value }] });
+      await until(() => a.journal.purses().reduce((s, x) => s + x.value, 0) >= 3 * value, 20_000);
+      const purses = a.journal.purses().reduce((s, x) => s + x.value, 0);
+      expect(purses % value).toBe(0);
+      expect(a.journal.houseByArena(1) + purses).toBe(6 * value);
+    } finally {
+      await a.close();
+    }
+  }, 30_000);
+});

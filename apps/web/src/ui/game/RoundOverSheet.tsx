@@ -1,3 +1,4 @@
+import { WINNINGS_CUT_BPS } from '@elymum/shared';
 import { AnimatePresence, motion, type TargetAndTransition } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon, Receipt, Sheet, Stamp, useReducedMotion, type ReceiptLine } from '../../design';
@@ -122,8 +123,12 @@ export function RoundOverSheet() {
   const n = receiptNumbers(payout, entry, sessionBps ?? feeBps(serverBps, config), settled, feeModelOf(chain));
   const roundTime = res?.round != null ? roundStartLabel(res.round, room?.round) : '';
   const approx = n.final ? '' : `${t('gr.estimate')} `;
+  // the cut on winnings (20 % of what the till holds above the coin's start; 0 without winnings)
+  const cut = res?.stats?.cut ?? 0;
+  const gross = res?.stats?.gross ?? payout;
   const lines: ReceiptLine[] = [
-    { label: t('gr.till'), value: tf.fmt(payout) },
+    { label: t('gr.till'), value: tf.fmt(gross) },
+    ...(cut > 0 ? [{ label: t('gr.cut', { pct: WINNINGS_CUT_BPS / 100 }), value: `−${tf.fmt(cut)}`, muted: true }] : []),
     {
       label: <>{t(n.onEntry ? 'gr.feeEntry' : 'gr.fee', { pct: n.pct.toLocaleString('en-US', { maximumFractionDigits: 1 }) })}</>,
       // fee on entry: already paid out of the entry fee, nothing comes off this till

@@ -65,12 +65,29 @@ the code is laid out and how it is run. The source of truth for everything is
   everywhere else 50 / 40 / 10). Bots react with a delay (about 400 / 310 / 230 ms, to threats and to prey), aim a
   little off, slip now and then and have short lapses where they ignore threats; people who joined less than 25 s
   ago are spared.
-- Fair to people (2026-11 playtest: "they're like cannibals, I can't escape"): each bot only knows what is in its
-  own view (no shared sight); at most `maxChasers` bots chase one person at once (rookie and private rooms 1, pro
-  league and arenas 2: a seat count, not shared information); a person weighs less as prey than another bot; a
-  chase on a person is given up after 2.5 / 3.5 / 4.5 s (half that when the person is by a thorn bush or a wall)
-  and that person is then left alone for 8-14 s; split attacks on people are rarer (20 / 40 / 55 % of the bot
-  chance), never double splits, aim wider and wait 12 / 9 / 7 s between them.
+- The house squad (2026-11 update): bots are the team's own players, not seat fillers. Every room fields `min`
+  to `cap` bots (6-9 by default, rolled evenly; at least 3, `BOT_FLOOR`), whoever else plays: people joining never
+  send a bot home. Bots walk in one at a time at random moments, the first 3 within seconds and all of them within
+  the first minute (`ARRIVAL.windowMs`) of a room opening or an arena round starting. In arenas (`rounds`) the squad
+  size is fixed per round, no bot goes home before the bell and none walks in after the round's joins close; a bot
+  that was eaten comes back 3-12 s later while joins are open. Free rooms let bots go home after 4-12 min.
+- Bankroll: in arenas each bot walks in with a ticket's worth (the value a person's ticket starts with) drawn
+  from the team reserve (`Journal.drawHouse`, on the main thread, also from room workers), so eating a bot pays
+  like eating a person. What bots hold at the bell goes back to the reserve. With too little reserve a bot enters
+  with nothing; the team can never lose more than the reserve. The admin tops it up by turning an unplayed ticket
+  of their own wallet into reserve (`POST /api/admin/bots/bankroll`, /admin → Bots: the ticket settles at 0 and its
+  value stays in the vault).
+- Squad play (`bots/squad.ts`, off in the rookie league): the squad keeps a map-wide picture of every person
+  (refreshed every 1.2 s, never live sight) and runs operations with roles that lapse unless renewed: a *pusher*
+  herds the person toward a *flanker* that cuts off the way out (the trap) or, for hard bots, into a wall; a small
+  *feeder* tips mass into a pusher that is just short of a split kill; a small bot chased by a person runs to a
+  big teammate who *ambushes* the chaser (the lure); a small teammate (under 140 mass) gets a big one keeping an eye
+  on it from a distance and cutting in when a person goes for it (*cover*). Idle bots *patrol* toward the most promising person on the
+  reports. Targets weigh more when they hold more value, in the last two minutes of a round, and when split into
+  pieces. At most `maxChasers` bots work one person (rookie 1, private 2, pro and arenas 3). Teammates on an
+  operation are never eaten; otherwise bots still eat each other now and then (`BOT_APPETITE`). A chase on a person
+  is given up after 3 / 5 / 7 s (longer with a flanker, shorter by a thorn bush or a wall); split attacks on people
+  wait 9 / 6 / 4 s between them; a double split on a person only in a trap (hard bots).
 - Strength per room kind (admin `strength`, percent 25..200, default 100, rookie league 85): scales hunting drive,
   split attacks and chase length up and reaction delay, aim error and lapses down. `maxChasers` (0 = no limit) is
   admin-set too. A saved `bots.json` whose mix still equals an old preset (70/30/0, 45/40/15) gets the new one on
@@ -117,11 +134,11 @@ the code is laid out and how it is run. The source of truth for everything is
 - A ticket's value starts at its entry fee.
 - Eating a cell moves `floor(V · m / M)` of the victim's value to the eater: `V` is the victim's value, `m` the
   mass of the eaten cell and `M` the victim's total mass. The last cell moves whatever is left.
-- Bots are worth 0. Eating a bot gives mass only.
-- Loot: when a bot eats a player, that share of the player's value spills across the map as loot.
-  - The value is split into `clamp(ceil(V / (fee × 0.25)), 3, 24)` pieces whose values add up exactly.
-  - Only real players can pick loot up.
-  - Loot stays on the floor until the round ends.
+- Bot purses: a house bot that eats a staker keeps that share in its purse (`Room.purses`, journaled). A person
+  who eats the bot wins its share back like any eat; what bots hold when they go home, at the bell or at a
+  server stop becomes the team's reserve in the arena vault (`Journal.house`).
+- Loot (rooms with `stake.botPurses: false`, the older rule): the share spills across the map as loot in
+  `clamp(ceil(V / (fee × 0.25)), 3, 24)` pieces that only people pick up; it stays until the round ends and is burned.
 
 ### 2.4 Rounds (paid arenas only)
 
@@ -166,7 +183,15 @@ the bell like any arena. Quick play never lands in one. Details: [ARCHITECTURE.m
 
 ## 3. Money
 
-### 3.1 Fees
+### 3.1 The cut on winnings
+
+When a ticket is paid (the bell, an operator exit, crash recovery), 20 % of its *winnings* (what it holds above
+the value it was seated with) is the team's cut: 15 % is burned (added to the room's `sweepLoot` at the bell, or
+its own `sweep:cut:<session>` item) and 5 % stays in the arena vault as the team's reserve (`Journal.house`). No
+winnings, no cut. Numbers: `ECONOMY` / `winningsCut` in `packages/shared/src/economy.ts`. The on-chain entry fee
+rate below still applies when the owner sets one; the recommended rate with the cut is 0 (`setFeeBps(0)`).
+
+### 3.2 On-chain entry fee rate
 
 The fee is a share of the entry fee of every played ticket, whatever the result, at the rate fixed when the ticket
 was bought: a flat 5 % by default (500 bps; at most 10 %), and **all of it goes to the fee wallet** (the owner's

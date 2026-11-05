@@ -29,6 +29,7 @@ describe('full standings (standings sheet)', () => {
 
     // nothing unasked
     room.tick(TICK_MS);
+    room.bots!.fill();
     await nextSecond(room);
     expect(standingsOf(me.msgs)).toHaveLength(0);
 
