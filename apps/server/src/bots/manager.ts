@@ -35,16 +35,27 @@ export interface BotManagerOptions {
   maxChasers?: number;
   /** Squad play: traps, lures, feeding and map-wide tracking (default on; off in the rookie league). */
   teamplay?: boolean;
+  /**
+   * Rooms that play rounds (arenas): the squad size is rolled once per round, every bot of it walks in
+   * within the round's first minute, and no bot goes home before the bell (a person cannot leave a
+   * round either). Set by the room.
+   */
+  rounds?: boolean;
 }
 
 /** Every room (every round of an arena) fields at least this many bots, unless the admin cap is lower. */
 export const BOT_FLOOR = 3;
 
 /**
- * Arrival pacing. Bots join one by one like people do: the first `BOT_FLOOR` within a few seconds
- * of a room opening (or an arena round starting), the rest spread over the game.
+ * Arrival pacing. Bots join one by one like people do, at random moments: the first `BOT_FLOOR`
+ * within a few seconds of a room opening (or an arena round starting), the rest of the planned squad
+ * before `windowMs` is out (a bot that turns up late would be easy prey for coins that already grew).
  */
 export const ARRIVAL = {
+  /** Every planned bot is in by this long after a room opens or a round starts (ms). */
+  windowMs: 55_000,
+  /** Least gap between two arrivals inside the window (ms). */
+  windowGapMin: 1500,
   /** Gap between two arrivals while the room is below its floor (ms). */
   openingMin: 1200,
   openingMax: 4500,
@@ -120,6 +131,10 @@ export class BotManager {
   /** The squad size the room is heading for now (drifts around the target). */
   private plan = -1;
   private nextDriftAt = 0;
+  /** When the current arrival window (room open / round start) began (-1: not yet). */
+  private windowStart = -1;
+  /** Arrivals are allowed now (the room closes them with its round's joins). */
+  joinsOpen: () => boolean = () => true;
   private pendingEmotes: { pid: number; id: number }[] = [];
   /** Player ids of bots that left this tick (rooms forget their player info). */
   retired: number[] = [];
@@ -181,12 +196,13 @@ export class BotManager {
     return this.plan < 0 ? this.desired() : this.plan;
   }
 
-  /** Re-rolls the plan: about the target, sometimes a little under or over it. */
+  /** Rolls the plan: any whole number from the floor (`max(min, BOT_FLOOR)`) to the cap, evenly (6-9 by default). */
   private rollPlan(now: number): void {
-    const want = this.desired();
     const floor = BotManager.floorOf(this.opts);
-    this.plan = clamp(Math.round(want * (0.75 + this.rng() * 0.45)), floor, this.cap);
-    this.nextDriftAt = now + randRange(this.rng, ARRIVAL.driftMin, ARRIVAL.driftMax);
+    const cap = this.cap;
+    this.plan = cap <= floor ? cap : floor + Math.floor(this.rng() * (cap - floor + 1));
+    // a round keeps its squad size until the bell; free rooms drift now and then
+    this.nextDriftAt = this.opts.rounds ? Infinity : now + randRange(this.rng, ARRIVAL.driftMin, ARRIVAL.driftMax);
   }
 
   /**
@@ -207,10 +223,25 @@ export class BotManager {
     return n;
   }
 
-  /** Schedules the next arrival (sooner while the room is below its floor). */
+  /**
+   * Schedules the next arrival: the floor first (a few seconds apart), then the rest of the plan at
+   * random moments that still land inside the arrival window; after the window, the slow pace of
+   * people dropping in (a bot that was eaten comes back sooner, see `onDeath`).
+   */
   private scheduleArrival(now: number): void {
-    const opening = this.bots.size < BotManager.floorOf(this.opts);
-    this.nextArrivalAt = now + (opening ? randRange(this.rng, ARRIVAL.openingMin, ARRIVAL.openingMax) : randRange(this.rng, ARRIVAL.steadyMin, ARRIVAL.steadyMax));
+    if (this.windowStart < 0) this.windowStart = now;
+    const remaining = Math.max(0, this.planned - this.bots.size);
+    const windowEnd = this.windowStart + ARRIVAL.windowMs;
+    if (this.bots.size < BotManager.floorOf(this.opts) && now < windowEnd) {
+      this.nextArrivalAt = now + randRange(this.rng, ARRIVAL.openingMin, ARRIVAL.openingMax);
+    } else if (remaining > 0 && now < windowEnd) {
+      // spread what is left over the time left, at random; the last one still makes the window
+      const room = windowEnd - now;
+      const gap = randRange(this.rng, Math.min(ARRIVAL.windowGapMin, room), Math.max(ARRIVAL.windowGapMin, (room / remaining) * 1.6));
+      this.nextArrivalAt = now + Math.min(gap, room);
+    } else {
+      this.nextArrivalAt = now + randRange(this.rng, ARRIVAL.steadyMin, ARRIVAL.steadyMax);
+    }
   }
 
   isBot(pid: number): boolean {
@@ -362,6 +393,8 @@ export class BotManager {
     this.orderDirty = true;
     this.nextArrivalAt = 0;
     this.plan = -1;
+    // a new arrival window opens with the new round
+    this.windowStart = -1;
     return gone;
   }
 
@@ -419,20 +452,20 @@ export class BotManager {
       for (const bot of this.bots.values()) if (bot.player.alive) this.world.shedMass(bot.player, cap, shed);
     }
 
-    // arrivals: one bot at a time walks in, like a person pressing Play
+    // arrivals: one bot at a time walks in, like a person pressing Play (never while the round's joins are closed)
     if (now >= this.nextArrivalAt) {
-      if (this.bots.size < plan) this.spawnBot(cap !== undefined ? Math.min(RULES.startMass, cap) : RULES.startMass);
+      if (this.bots.size < plan && this.joinsOpen()) this.spawnBot(cap !== undefined ? Math.min(RULES.startMass, cap) : RULES.startMass);
       this.scheduleArrival(now);
     }
-    // over the plan (the plan drifted down, the admin lowered it): one leaves now and then
-    if (this.bots.size > plan && now >= this.nextLeaveAt) {
+    // over the plan (the plan drifted down in a free room): one leaves now and then; a round keeps its bots
+    if (!this.opts.rounds && this.bots.size > plan && now >= this.nextLeaveAt) {
       this.nextLeaveAt = now + randRange(this.rng, ARRIVAL.leaveMin, ARRIVAL.leaveMax);
       this.trimTo(this.bots.size - 1, 'retired');
     }
 
     // a bot whose time is up goes home (one at a time, never mid-fight); someone else walks in later
     for (const bot of this.bots.values()) {
-      if (now < bot.retireAt) continue;
+      if (this.opts.rounds || now < bot.retireAt) continue;
       if (bot.brain.lastDanger > 0.2 || bot.brain.busy) {
         bot.retireAt = now + 10_000;
         continue;

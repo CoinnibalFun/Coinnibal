@@ -159,6 +159,8 @@ export class RoomHost {
   private offset: number;
   private wanted: Record<number, number> = {};
   private reqSeq = 0;
+  /** Bankroll requests waiting for the main thread's answer (`drawn`). */
+  private readonly draws = new Map<number, (ok: boolean) => void>();
   private readonly tickets = new Map<number, { resolve: (t: StakedBotTicket | null) => void; reject: (e: Error) => void }>();
   private readonly monitor: IntegrityMonitor | null;
   /** Settlements whose auto-hold the main thread decides (filled by `integrity.settle`, drained by the next commit). */
@@ -245,6 +247,15 @@ export class RoomHost {
       onBellSettled: (e) => ctl({ k: 'bell', e }),
       integrity,
       stakedBots,
+      houseBank: {
+        draw: (arenaId, amount) =>
+          new Promise<boolean>((resolve) => {
+            const req = ++this.reqSeq;
+            this.draws.set(req, resolve);
+            ctl({ k: 'draw', req, arenaId, amount });
+            this.flushSoon();
+          }),
+      },
       ...(init.stakedAskMs !== undefined ? { stakedAskMs: init.stakedAskMs } : {}),
       // power-ups: the main thread holds the charges and asks this worker to apply the effect (`boost`)
     };
@@ -535,6 +546,12 @@ export class RoomHost {
       case 'wanted':
         this.wanted = cmd.wanted;
         return;
+      case 'drawn': {
+        const f = this.draws.get(cmd.req);
+        this.draws.delete(cmd.req);
+        f?.(cmd.ok);
+        return;
+      }
       case 'ticket': {
         const t = this.tickets.get(cmd.req);
         this.tickets.delete(cmd.req);

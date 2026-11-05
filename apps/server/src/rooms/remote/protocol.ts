@@ -69,6 +69,7 @@ export type Cmd =
   | { k: 'announce'; hid: number; text: string }
   | { k: 'wanted'; wanted: Record<number, number> }
   | { k: 'ticket'; req: number; ticket: StakedBotTicket | null; error?: string }
+  | { k: 'drawn'; req: number; ok: boolean }
   | { k: 'clock'; offset: number }
   /** Test hook: keeps the worker busy for `ms` (the hang watchdog's test). */
   | { k: 'block'; ms: number }
@@ -120,6 +121,8 @@ export type Ctl =
   | { k: 'transfer'; t: IntegrityTransfer }
   | { k: 'liveSessions'; list: SessionSummary[] }
   | { k: 'acquire'; req: number; arenaId: number; roomId: string }
+  /** A house bot asks the team reserve for its bankroll (`Journal.drawHouse`, answered with `drawn`). */
+  | { k: 'draw'; req: number; arenaId: number; amount: number }
   | { k: 'released'; ticket: StakedBotTicket; reason: SettleReason; item: SettlementItem }
   | { k: 'stats'; load: ThreadLoad; rooms: RoomSummary[]; roomLoads: RoomLoad[] }
   | { k: 'closed'; hid: number; ok: boolean }

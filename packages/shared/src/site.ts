@@ -220,6 +220,9 @@ export type SiteErrorCode =
   | 'unauthorized'
   | 'forbidden'
   | 'not_found'
+  /** Admin bot bankroll: the wallet holds no open ticket in that arena, or it is in use. */
+  | 'no_ticket'
+  | 'ticket_in_use'
   | 'method_not_allowed'
   | 'unsupported_media_type'
   | 'body_too_large'

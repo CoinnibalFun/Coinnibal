@@ -6,7 +6,7 @@ import { winningsCut } from '@elymum/shared';
  * Why a ticket was settled. `round`: alive at the round end (paid arenas). `cashout` and `afk` are
  * no longer produced by arena rooms (timed rounds) but stay readable in old journals.
  */
-export type SettleReason = 'cashout' | 'death' | 'afk' | 'crash' | 'stale' | 'maxage' | 'kicked' | 'round';
+export type SettleReason = 'cashout' | 'death' | 'afk' | 'crash' | 'stale' | 'maxage' | 'kicked' | 'round' | 'house';
 
 export interface SettlementItem {
   /** v1 journals also held free-play `record` items; v2 drops them on load. */
@@ -313,6 +313,19 @@ export class Journal {
   /** What the bots of every arena instance hold right now. */
   purses(): PurseRecord[] {
     return [...this.pursesByRoom.values()].map((p) => ({ ...p }));
+  }
+
+  /**
+   * Takes `amount` out of an arena's team reserve to bankroll a house bot (its purse), when the reserve
+   * holds it; false (nothing taken) otherwise. The caller writes the purse right after: until then the
+   * books undercount the vault, never the other way round.
+   */
+  drawHouse(arenaId: number, amount: number): boolean {
+    const k = String(arenaId);
+    if (!Number.isSafeInteger(amount) || amount <= 0 || (this.houseV[k] ?? 0) < amount) return false;
+    this.houseV[k] -= amount;
+    this.persist();
+    return true;
   }
 
   private addHouse(arenaId: number, amount: number): void {

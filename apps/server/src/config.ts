@@ -281,25 +281,25 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     arenaInstanceCap: Math.max(1, int(env.ARENA_INSTANCE_CAP, CAPACITY.arena)),
     gameWorkers: gameWorkers(env),
     gameWorkerHangMs: Math.max(2, int(env.GAME_WORKER_HANG_S, 10)) * 1000,
-    // env defaults of the admin's bot settings (`/api/admin/bots`, DATA_DIR/site/bots.json wins): a squad of about
-    // `target` bots per room (at least 3, at most the cap), whoever else plays
+    // env defaults of the admin's bot settings (`/api/admin/bots`, DATA_DIR/site/bots.json wins): a squad of
+    // min..cap bots per room (6-9; rolled evenly per arena round), whoever else plays
     bots: {
       practiceRookie: {
-        target: int(env.BOT_TARGET, 12),
-        min: int(env.BOT_MIN, 3),
-        max: int(env.BOT_MAX, 12),
+        target: int(env.BOT_TARGET, 8),
+        min: int(env.BOT_MIN, 6),
+        max: int(env.BOT_MAX, 9),
         mix: 'rookie',
       },
       practicePro: {
-        target: int(env.BOT_TARGET, 12),
-        min: int(env.BOT_MIN, 3),
-        max: int(env.BOT_MAX, 12),
+        target: int(env.BOT_TARGET, 8),
+        min: int(env.BOT_MIN, 6),
+        max: int(env.BOT_MAX, 9),
         mix: 'standard',
       },
       arena: {
-        target: int(env.ARENA_BOT_TARGET, 12),
-        min: int(env.ARENA_BOT_MIN, 3),
-        max: int(env.ARENA_BOT_MAX, 12),
+        target: int(env.ARENA_BOT_TARGET, 8),
+        min: int(env.ARENA_BOT_MIN, 6),
+        max: int(env.ARENA_BOT_MAX, 9),
         mix: 'standard',
       },
       private: {

@@ -93,6 +93,12 @@ export interface RoomDeps {
   integrity?: RoomIntegrity;
   /** Testnet staked bots (wallet + real ticket); absent: arenas field zero-value bots only. */
   stakedBots?: StakedBotSource;
+  /**
+   * The team reserve as a bankroll (`Journal.drawHouse` on the main thread): a house bot entering an
+   * arena asks it for a ticket's worth and plays with that like a person. Absent, or the reserve
+   * empty: the bot enters with nothing.
+   */
+  houseBank?: { draw(arenaId: number, amount: number): Promise<boolean> };
   /** How often an arena room asks the staked-bot source for another ticket (default 3 s; tests: 0). */
   stakedAskMs?: number;
   /** Bought power-ups (charges, cooldowns, the arena cap); absent: the `boost` message is ignored. */
@@ -137,9 +143,12 @@ export interface RoomOptions {
   /**
    * Paid rooms. `botPurses` (default true): a house bot that eats a staker keeps the value in its purse
    * (a person who eats that bot wins it back; whatever it holds when it leaves or at the bell is the
-   * team's reserve). False: the value spills as floor loot instead (the older rule).
+   * team's reserve). False: the value spills as floor loot instead (the older rule). `botBudget` (default
+   * true, with purses): a bot enters with a ticket's worth drawn from the team reserve (`RoomDeps.houseBank`),
+   * so eating it pays like eating a person; when the reserve cannot cover it the bot enters with nothing.
+   * `botStake`: that bankroll, the value a person's ticket starts with (default `buyIn`).
    */
-  stake?: { arenaId: number; buyIn: number; botPurses?: boolean };
+  stake?: { arenaId: number; buyIn: number; botPurses?: boolean; botBudget?: boolean; botStake?: number };
   seed?: number;
   /** The world size and population (default `WORLD_PRESETS[mode]`; custom rooms bring their own). */
   world?: WorldShape;
@@ -201,6 +210,9 @@ export class Room implements RoomHandle {
   private readonly losses = new Map<number, { lost: number; spilled: number }>();
   /** Arena rooms: what each house bot (zero-value bot) holds, taken from the people it ate. */
   private readonly purses = new Map<number, number>();
+  /** Arena rooms: house bots whose bankroll was asked for (answered or not) and those still waiting. */
+  private readonly bankrolled = new Set<number>();
+  private readonly bankrolling = new Set<number>();
   /** Arena rooms: burn share of this round's cuts on winnings, burned with the bell's sweep. */
   private bellBurn = 0;
   /** Arena rooms: the team's reserve gathered during a bell (written with the bell's batch). */
@@ -244,7 +256,8 @@ export class Room implements RoomHandle {
     // a resizable room opens at the size its bots alone call for (the first joins grow it)
     const first = this.map ? this.shapeFor(this.wantedSide(0, opts.bots ? BotManager.desiredOf(opts.bots) : 0)) : preset;
     this.world = new World({ ...first, powerUps: opts.powerUps ?? true, coinRain: opts.mode !== 'arena', seed, ...(this.map ? { space: MAP_SPACE } : {}) });
-    this.bots = opts.bots ? new BotManager(this.world, opts.bots, mulberry32(seed ^ 0xb07)) : null;
+    // arenas play rounds: the squad is rolled per round, walks in during its first minute and stays to the bell
+    this.bots = opts.bots ? new BotManager(this.world, { ...opts.bots, rounds: opts.mode === 'arena' }, mulberry32(seed ^ 0xb07)) : null;
     this.ledger = opts.mode === 'arena' ? new ArenaLedger() : null;
     this.clock = deps.clock ?? new RoundClock(deps.now, deps.round);
     this.integrity = this.ledger ? (deps.integrity ?? null) : null;
@@ -257,6 +270,8 @@ export class Room implements RoomHandle {
     }
     // the squad weighs people by what they hold (arenas)
     if (this.bots) {
+      // like a person, a bot cannot buy into a round whose joins have closed
+      if (this.ledger) this.bots.joinsOpen = () => this.now() < this.clock.window().joinsCloseAt;
       const squad = squadIntel(this.world);
       squad.entryFee = this.entryFee;
       if (this.ledger) squad.valueOf = (pid) => this.ledger!.value(pid);
@@ -760,11 +775,45 @@ export class Room implements RoomHandle {
     for (const pid of pids) {
       amount += this.purses.get(pid) ?? 0;
       this.purses.delete(pid);
+      this.bankrolled.delete(pid);
     }
     if (amount <= 0) return;
     const rec = { arenaId: this.opts.stake.arenaId, amount };
     if (house) house.push(rec);
     else this.commitJournal(undefined, [rec]);
+  }
+
+  /**
+   * Arena rooms: every house bot that walked in asks the team reserve for a ticket's worth, once. It is
+   * still under its spawn shield when the answer comes, so nobody can eat it with an empty purse. A bot
+   * gone by then (eaten, the bell) sends the bankroll straight back to the reserve.
+   */
+  private bankrollBots(): void {
+    const bank = this.deps.houseBank;
+    const st = this.opts.stake;
+    if (!bank || !st || !this.ledger || !this.bots || st.botPurses === false || st.botBudget === false) return;
+    const amount = st.botStake ?? this.entryFee;
+    if (!(amount > 0)) return;
+    for (const b of this.bots.bots.values()) {
+      const pid = b.player.id;
+      if (b.staked || this.bankrolled.has(pid) || this.bankrolling.has(pid)) continue;
+      this.bankrolling.add(pid);
+      void bank.draw(st.arenaId, amount).then(
+        (ok) => {
+          this.bankrolling.delete(pid);
+          if (!ok) {
+            this.bankrolled.add(pid);
+            return;
+          }
+          if (this.bots?.isBot(pid) && this.world.players.get(pid)?.alive) {
+            this.bankrolled.add(pid);
+            this.setPurse(pid, this.purseOf(pid) + amount);
+            this.commitJournal();
+          } else this.commitJournal(undefined, [{ arenaId: st.arenaId, amount }]);
+        },
+        () => this.bankrolling.delete(pid),
+      );
+    }
   }
 
   /** Arena rooms: credits picked-up loot (put back on the floor if nobody can hold it). */
@@ -1085,6 +1134,7 @@ export class Room implements RoomHandle {
         this.bots.onDeath(k.victim.id, world.now);
         // anything a bot still held after its last cell went (rounding) is the team's
         if (this.purses.has(k.victim.id)) this.pursesHome([k.victim.id]);
+        this.bankrolled.delete(k.victim.id);
         world.removePlayer(k.victim.id);
         for (const c of this.conns) c.view.forgetPlayer(k.victim.id);
       } else if (this.humans.has(k.victim.id)) {
@@ -1111,6 +1161,7 @@ export class Room implements RoomHandle {
       const { emotes } = this.bots.update(world.now, this.humans.size);
       for (const e of emotes) this.broadcast({ t: 'emote', pid: e.pid, id: e.id });
       this.flushBotDepartures();
+      this.bankrollBots();
       this.askStakedBot();
     }
 
@@ -1342,7 +1393,7 @@ export class Room implements RoomHandle {
   /** Live bot settings from the admin: applied at once (bots over the new cap go home). */
   setBotOptions(opts: BotManagerOptions): void {
     if (!this.bots) return;
-    this.bots.setOptions(opts);
+    this.bots.setOptions({ ...opts, rounds: this.opts.mode === 'arena' });
     this.flushBotDepartures();
   }
 

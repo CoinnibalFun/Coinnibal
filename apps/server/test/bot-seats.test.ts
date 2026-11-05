@@ -84,7 +84,7 @@ describe('bot seats: the house squad', () => {
   });
 
   it('never more bots than the cap, however high the target', () => {
-    const room = practice({ target: 40, min: 0, max: 12 });
+    const room = practice({ target: 40, min: 10, max: 12 });
     for (let i = 0; i < 30 * 200; i++) {
       tick(room);
       expect(room.bots!.bots.size).toBeLessThanOrEqual(12);
@@ -333,7 +333,7 @@ describe('bot settings (validation)', () => {
   const base = defaultBotSettings(loadConfig({}).bots);
 
   it('defaults: cap 12, presets as weights, 6 staked bots per testnet arena', () => {
-    expect(base.kinds.arena).toEqual({ massCap: 2500, enabled: true, cap: 12, min: 3, target: 12, mix: { easy: 50, medium: 40, hard: 10 }, strength: 100, maxChasers: 3 });
+    expect(base.kinds.arena).toEqual({ massCap: 2500, enabled: true, cap: 9, min: 6, target: 8, mix: { easy: 50, medium: 40, hard: 10 }, strength: 100, maxChasers: 3 });
     expect(base.kinds.practiceRookie.mix).toEqual({ easy: 80, medium: 20, hard: 0 });
     expect(base.kinds.practiceRookie).toMatchObject({ strength: 85, maxChasers: 1 });
     expect(base.testnet).toEqual({ stakedPerArena: 6, bankroll: '1000000', gasHype: '0.05', arenas: {} });
@@ -453,7 +453,7 @@ describe('/api/admin/bots', () => {
     const admin = testSigner().address;
     const { call } = await start(dir, admin);
     const got = await call('GET', admin);
-    expect(got.body.settings.kinds.arena.cap).toBe(12);
+    expect(got.body.settings.kinds.arena.cap).toBe(9);
     expect(existsSync(join(dir, 'site', 'bots.json'))).toBe(false);
   });
 });
