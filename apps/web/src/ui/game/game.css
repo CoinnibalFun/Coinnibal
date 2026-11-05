@@ -1852,31 +1852,6 @@
   color: var(--ink-fixed);
   opacity: 0.78;
 }
-.gs-own {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0 16px;
-  min-width: 0;
-}
-.gs-own__note {
-  flex: 1 1 200px;
-  min-width: 0;
-}
-.gs-own__acts {
-  display: flex;
-  flex: none;
-  gap: 16px;
-}
-.gs-own__note,
-.gs-own__warn {
-  margin: 0;
-}
-.gs-own__warn {
-  color: var(--down-ink, var(--ink));
-  font-weight: 600;
-}
 
 /* ── how to play ──────────────────────────────────────────────────────── */
 .g-howto__list {
