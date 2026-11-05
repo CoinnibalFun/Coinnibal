@@ -15,9 +15,11 @@ import { IntegrityStore } from './integrity/store';
 import { Leaderboards } from './leaderboards';
 import type { Limiter } from './net/limiter';
 import { Gateway } from './net/gateway';
+import { LoadShedder } from './net/shedder';
 import { ArenaScalingStore } from './rooms/arena-scaler';
 import { MapSettingsStore } from './rooms/map-settings';
 import { ShareService } from './site/shares';
+import { shareCardSelfCheck } from './site/share-card';
 import { viemHolderReader, type HolderReader } from './chain/evm-client';
 import { configureRpcBudgets, startRpcMinuteLog } from './chain/rpc-budget';
 import { loadServerKeySecret } from './chain/server-key';
@@ -69,6 +71,10 @@ export interface App {
   shop: ShopService;
   /** "Share on X" cards. */
   shares: ShareService;
+  /** The WebSocket front door (connection limits, abuse counters). */
+  gateway: Gateway;
+  /** Graceful degradation under load (active with `LOAD_SHED`, default on in production). */
+  shedder: LoadShedder;
   /** Resolves once the HTTP server is listening; returns the bound port. */
   listen(): Promise<number>;
   close(): Promise<void>;
@@ -222,6 +228,13 @@ export async function createApp(
     },
     log,
   });
+  // the native canvas addon draws the share cards: checked once at startup (the server runs without it)
+  const cards = shareCardSelfCheck();
+  if (cards.ok) log('share cards: @napi-rs/canvas ready');
+  else {
+    shares.setRenderBroken(cards.error);
+    log(`!!! share cards: @napi-rs/canvas cannot draw here (${cards.error}) — share images fall back to the site's picture; everything else works`);
+  }
   const rooms = new RoomManager(
     cfg,
     {
@@ -319,6 +332,12 @@ export async function createApp(
   gateway.setBanGate((wallet) => integrity.isBanned(wallet));
   // emblem holders wear a laurel and may play the emblem skin (cached holder check of the NFT)
   gateway.setHolderCheck((wallet) => mint.isHolder(wallet));
+  // graceful degradation: new joins are shed before the live rooms lose their tick budget
+  const shedder = new LoadShedder({ bestTickP95Ms: () => rooms.bestTickP95Ms() }, log);
+  if (cfg.loadShed) {
+    gateway.setShedder(shedder);
+    shedder.start();
+  }
   integrity.start();
   priceKeeper?.start();
   gateway.attach(server);
@@ -347,6 +366,8 @@ export async function createApp(
     customRooms,
     shop,
     shares,
+    gateway,
+    shedder,
     listen: () =>
       new Promise((resolve) => {
         server.listen(cfg.port, cfg.host, () => {
@@ -360,6 +381,7 @@ export async function createApp(
       closed = true;
       clearInterval(flushTimer);
       clearInterval(arenaTimer);
+      shedder.stop();
       stopRpcLog();
       mint.flush();
       await rooms.shutdown();

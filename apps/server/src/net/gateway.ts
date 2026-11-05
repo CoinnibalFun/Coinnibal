@@ -25,6 +25,29 @@ import type { RoomManager } from '../rooms/manager';
 import { MAX_STAKE_SESSION_AGE_S } from '../rooms/room';
 import type { Journal } from '../stake/journal';
 import { Conn } from './conn';
+import { Limiter } from './limiter';
+import type { LoadShedder } from './shedder';
+
+/** A socket that has not said a valid `hello` this long after the upgrade is closed (idle sockets cost memory). */
+export const HELLO_TIMEOUT_MS = 10_000;
+/** WebSocket upgrades per IP a minute (reconnect storms of a real client stay far below it). */
+export const UPGRADES_PER_IP_PER_MIN = 60;
+
+/**
+ * The network an address belongs to for the per-subnet connection limit: IPv4 /24, IPv6 /64 (an IPv4-mapped
+ * IPv6 address counts as IPv4). One provider customer usually gets a whole IPv6 /64, so a per-IP limit alone does
+ * not hold there.
+ */
+export function subnetOf(ip: string): string {
+  const v4 = /^(?:::ffff:)?(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/i.exec(ip);
+  if (v4) return `${v4[1]}.${v4[2]}.${v4[3]}.0/24`;
+  if (!ip.includes(':')) return ip;
+  const [head, tail = ''] = ip.toLowerCase().split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail ? tail.split(':') : [];
+  const groups = ip.includes('::') ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':')}::/64`;
+}
 
 /**
  * How many reverse proxies in front of this server append to `X-Forwarded-For`: 0 unless `TRUST_PROXY=1`,
@@ -94,6 +117,12 @@ export function settledMessage(e: SettledEvent): Extract<ServerMessage, { t: 'se
 export class Gateway {
   private readonly wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false });
   private readonly perIp = new Map<string, number>();
+  private readonly perSubnet = new Map<string, number>();
+  private readonly upgrades = new Limiter(UPGRADES_PER_IP_PER_MIN, 60_000);
+  /** Graceful degradation (new joins shed before live rooms suffer); null: never sheds (bare unit tests). */
+  private shedder: LoadShedder | null = null;
+  /** Connections closed for abuse (flood, garbage, no hello), for the load test and the logs. */
+  readonly dropped = { noHello: 0, flood: 0, limit: 0 };
   private readonly alive = new WeakMap<WebSocket, boolean>();
   private timers: NodeJS.Timeout[] = [];
   /** Who may enter a room (join or spectate); null: everyone (unit tests that build a bare gateway). */
@@ -138,6 +167,11 @@ export class Gateway {
     this.holderCheck = check;
   }
 
+  /** Sets the load shedder (see `net/shedder.ts`). */
+  setShedder(s: LoadShedder | null): void {
+    this.shedder = s;
+  }
+
   /** Sets who is banned from arena joins (the integrity ban list). Practice is never gated by it. */
   setBanGate(gate: ((wallet: string) => boolean) | null): void {
     this.banGate = gate;
@@ -169,12 +203,27 @@ export class Gateway {
         return;
       }
       const ip = clientIp(req, this.trustProxy);
-      if (this.rooms.conns.size >= this.cfg.maxConnections || (this.perIp.get(ip) ?? 0) >= this.cfg.maxConnectionsPerIp) {
-        socket.write('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n');
+      const net = subnetOf(ip);
+      const refuse = (status: string) => {
+        this.dropped.limit++;
+        socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
         socket.destroy();
+      };
+      if (
+        this.rooms.conns.size >= this.cfg.maxConnections ||
+        (this.perIp.get(ip) ?? 0) >= this.cfg.maxConnectionsPerIp ||
+        (this.perSubnet.get(net) ?? 0) >= this.cfg.maxConnectionsPerSubnet ||
+        !this.upgrades.allow(ip)
+      ) {
+        refuse('429 Too Many Requests');
         return;
       }
-      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, ip));
+      // overloaded: live games keep their budget, new sockets wait
+      if (this.shedder && !this.shedder.admitCritical()) {
+        refuse('503 Service Unavailable');
+        return;
+      }
+      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, ip, net));
     });
     // heartbeat + lobby room list
     this.timers.push(
@@ -200,23 +249,47 @@ export class Gateway {
     for (const ws of this.wss.clients) ws.close(1001, 'server shutting down');
   }
 
-  private onConnection(ws: WebSocket, ip: string): void {
+  private onConnection(ws: WebSocket, ip: string, net = subnetOf(ip)): void {
     this.perIp.set(ip, (this.perIp.get(ip) ?? 0) + 1);
+    this.perSubnet.set(net, (this.perSubnet.get(net) ?? 0) + 1);
     const conn = new Conn(ws, ip);
     this.rooms.addConn(conn);
     this.alive.set(ws, true);
+    // a socket that never says hello is closed (it would hold a slot and memory for nothing)
+    const helloTimer = setTimeout(() => {
+      if (conn.helloed) return;
+      this.dropped.noHello++;
+      ws.terminate();
+    }, this.cfg.wsHelloTimeoutMs ?? HELLO_TIMEOUT_MS);
+    helloTimer.unref();
     ws.on('pong', () => this.alive.set(ws, true));
     ws.on('message', (data, isBinary) => {
       this.onMessage(conn, data, isBinary).catch((err) => this.log(`message handling failed: ${(err as Error).stack ?? err}`));
     });
-    ws.on('close', () => this.onClose(conn));
+    ws.on('close', () => {
+      clearTimeout(helloTimer);
+      this.onClose(conn, net);
+    });
     ws.on('error', () => {});
   }
 
-  private onClose(conn: Conn): void {
+  /** A strike against the connection (see `Conn.strike`): closed once it floods or speaks garbage for long. */
+  private strike(conn: Conn): void {
+    if (!conn.strike()) return;
+    if (conn.ws.readyState > 1) return;
+    this.dropped.flood++;
+    this.log(`ws: closed a flooding connection from ${conn.ip}${conn.wallet ? ` (${conn.wallet})` : ''}`);
+    conn.ws.close(1008, 'rate limit');
+    setTimeout(() => conn.ws.terminate(), 1_000).unref();
+  }
+
+  private onClose(conn: Conn, net = subnetOf(conn.ip)): void {
     const n = (this.perIp.get(conn.ip) ?? 1) - 1;
     if (n <= 0) this.perIp.delete(conn.ip);
     else this.perIp.set(conn.ip, n);
+    const s = (this.perSubnet.get(net) ?? 1) - 1;
+    if (s <= 0) this.perSubnet.delete(net);
+    else this.perSubnet.set(net, s);
     this.rooms.removeConn(conn);
     conn.room?.leave(conn, 'disconnect');
   }
@@ -251,20 +324,21 @@ export class Gateway {
   }
 
   async onMessage(conn: Conn, data: RawData, isBinary: boolean): Promise<void> {
-    if (!conn.allow(isBinary ? 1 : 3)) return;
+    if (!conn.allow(isBinary ? 1 : 3)) return this.strike(conn);
     if (isBinary) {
       const input = decodeClientInput(toBytes(data));
-      if (input && conn.room) conn.room.input(conn, input);
+      if (!input || !conn.helloed) return this.strike(conn);
+      if (conn.room) conn.room.input(conn, input);
       return;
     }
     let msg: Record<string, unknown>;
     try {
       msg = JSON.parse(data.toString());
     } catch {
-      return;
+      return this.strike(conn);
     }
-    if (!msg || typeof msg !== 'object' || typeof msg.t !== 'string') return;
-    if (msg.t !== 'hello' && !conn.helloed) return;
+    if (!msg || typeof msg !== 'object' || typeof msg.t !== 'string') return this.strike(conn);
+    if (msg.t !== 'hello' && !conn.helloed) return this.strike(conn);
 
     switch (msg.t) {
       case 'hello': {
@@ -410,6 +484,11 @@ export class Gateway {
       const wantsFlag = msg.flag === true || (msg.flag === undefined && !!conn.wallet && (this.profiles?.flagSkin(conn.wallet) ?? false));
       if (wantsFlag && country && !avatar) flags |= PlayerFlag.FlagSkin;
 
+      // overloaded: a new free game waits (live games, reconnects and paid seats go on)
+      if (target.mode !== 'arena' && !(conn.player?.alive) && this.shedder && !this.shedder.admitFree()) {
+        this.error(conn, 'server_full', 'The server is very busy right now. Try again in a minute.');
+        return;
+      }
       if (target.mode === 'practice') {
         if (conn.player?.alive && conn.room?.opts.mode === 'practice') return; // already playing
         const room = this.rooms.practiceRoom(this.rooms.leagueFor(conn), conn.room);
@@ -557,6 +636,11 @@ export class Gateway {
       }
       // a new join (not the AFK return above): only while the round's joins are open
       if (this.roundClosed(conn)) return;
+      // badly overloaded: a new seat waits; the ticket stays on chain (seated later, or refunded in full if never played)
+      if (this.shedder && !this.shedder.admitCritical()) {
+        this.error(conn, 'server_full', 'The server is very busy right now. Your ticket is safe on chain: press Resume again in a minute.');
+        return;
+      }
       if (!conn.allowChainOp()) {
         this.error(conn, 'rate_limited', 'Too many join attempts — wait a moment.');
         return;

@@ -1,7 +1,49 @@
 import { createRequire } from 'node:module';
 import { drawRisoCoin, lookForBasicSkin } from '@elymum/art';
 import { SHARE_IMAGE, ordinal, type ShareCard } from '@elymum/shared';
-import { GlobalFonts, createCanvas, type SKRSContext2D } from '@napi-rs/canvas';
+import type { SKRSContext2D } from '@napi-rs/canvas';
+
+type Canvas = typeof import('@napi-rs/canvas');
+let canvasLib: Canvas | null | undefined;
+let canvasError: string | null = null;
+
+/**
+ * @napi-rs/canvas, loaded on first use: a native addon (a prebuilt binary per platform). When it cannot load
+ * (a platform without a prebuilt binary, a missing system library) the server still starts and serves everything
+ * else; share images then fall back to the site's own picture (`ShareService`). Null when it failed.
+ */
+function canvasModule(): Canvas | null {
+  if (canvasLib !== undefined) return canvasLib;
+  try {
+    canvasLib = createRequire(import.meta.url)('@napi-rs/canvas') as Canvas;
+  } catch (err) {
+    canvasLib = null;
+    canvasError = String((err as Error)?.message ?? err).split('\n')[0];
+  }
+  return canvasLib;
+}
+
+/**
+ * Startup self-check: loads the canvas, registers the fonts and draws a tiny image. `ok: false` with the reason
+ * when share cards cannot be drawn on this machine.
+ */
+export function shareCardSelfCheck(): { ok: true } | { ok: false; error: string } {
+  const lib = canvasModule();
+  if (!lib) return { ok: false, error: canvasError ?? 'unknown' };
+  try {
+    fonts();
+    const c = lib.createCanvas(8, 8);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = SUN;
+    ctx.fillRect(0, 0, 8, 8);
+    ctx.font = '700 6px "DM Sans"';
+    ctx.fillText('E', 1, 6);
+    if (c.toBuffer('image/png').length < 8) throw new Error('empty PNG');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String((err as Error)?.message ?? err).split('\n')[0] };
+  }
+}
 
 /**
  * The "Share on X" card image (1200 x 630 PNG, X's summary_large_image): the player's coin drawn by the same
@@ -23,6 +65,7 @@ function fonts(): void {
   if (fontsReady) return;
   fontsReady = true;
   const require = createRequire(import.meta.url);
+  const { GlobalFonts } = canvasModule()!;
   GlobalFonts.registerFromPath(require.resolve('@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2'), 'Fraunces');
   GlobalFonts.registerFromPath(require.resolve('@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2'), 'DM Sans');
 }
@@ -66,11 +109,13 @@ function chip(ctx: SKRSContext2D, x: number, y: number, text: string, fill: stri
   return w;
 }
 
-/** Draws the card; returns PNG bytes. */
+/** Draws the card; returns PNG bytes. Throws when the canvas cannot load (see `shareCardSelfCheck`). */
 export function renderShareCard(c: ShareCard): Buffer {
+  const lib = canvasModule();
+  if (!lib) throw new Error(`@napi-rs/canvas is not available: ${canvasError}`);
   fonts();
   const { width: W, height: H } = SHARE_IMAGE;
-  const canvas = createCanvas(W, H);
+  const canvas = lib.createCanvas(W, H);
   const ctx = canvas.getContext('2d');
   // the night floor with a few food dots, and a cream sticker for the words
   ctx.fillStyle = NIGHT;

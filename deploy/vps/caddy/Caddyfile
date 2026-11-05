@@ -5,12 +5,38 @@
 # - Client IP: reverse_proxy sets X-Forwarded-For (and -Proto, -Host) itself. With no `trusted_proxies`
 #   configured (none here, on purpose) Caddy ignores any X-Forwarded-For a client sends and passes exactly
 #   one hop, the real client address. The app reads it with TRUST_PROXY=1 / TRUST_PROXY_HOPS=1 (set in
-#   docker-compose.yml), so per-IP limits see each player's own address. Do not add `trusted_proxies`.
-#   Keep the DNS record "DNS only" (no CDN proxy in front), or every player would share the CDN's IPs.
+#   docker-compose.yml), so per-IP limits see each player's own address. Do not add `trusted_proxies` here.
+#   Behind Cloudflare use Caddyfile.cloudflare instead (deploy/vps/README.md, "Cloudflare"): it trusts only
+#   Cloudflare's ranges and hands the app the same single hop.
+# - Slow and oversized requests (slowloris, header and body floods) are cut here, before they reach the app;
+#   the app has its own limits too (15 s for headers, 30 s per request, 64 KiB bodies, per-IP rate limits).
+#   A WebSocket is not affected by these timeouts once it is upgraded.
 # Reload after an edit: deploy/vps/compose.sh exec caddy caddy reload --config /etc/caddy/Caddyfile
+
+{
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 30s
+			idle 2m
+		}
+		max_header_size 16KB
+	}
+}
 
 {$GAME_DOMAIN} {
 	encode zstd gzip
+
+	# the largest real body is a 64 KiB profile picture
+	request_body {
+		max_size 1MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
 
 	reverse_proxy app:8787 {
 		# stream responses (the admin backup download) instead of buffering them

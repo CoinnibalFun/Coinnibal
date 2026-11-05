@@ -47,6 +47,8 @@ describe('production bundle (tsup)', () => {
       expect(log).toMatch(/Elymum server on/);
       expect(log).not.toMatch(/failed to initialise|Dynamic require|ReferenceError/);
       expect(log).toMatch(/chain: server key 0x[0-9a-fA-F]{40}/);
+      // the native canvas addon loads from the bundle (share cards), checked at startup
+      expect(log).toMatch(/share cards: @napi-rs\/canvas ready/);
       // the gateway itself loaded; the RPC URL is logged redacted (it may carry an API key in its path or query)
       expect(log).toMatch(/chain: RPC http:\/\/127\.0\.0\.1:1\/<redacted> unreachable/);
     } finally {

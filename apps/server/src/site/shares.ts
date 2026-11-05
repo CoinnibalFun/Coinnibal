@@ -19,6 +19,11 @@ import { renderShareCard, shareFacts, shareHeadline } from './share-card';
 export const SHARES_KEPT = 5000;
 export const KILL_SHARE_EVERY_MS = 20_000;
 const RENDERS_PER_MIN = 30;
+/**
+ * Renders a minute for the whole server (each one is ~20-50 ms of the main thread's CPU): a crowd of IPs (or the
+ * one IP of a CDN) cannot turn card rendering into a CPU flood. Cached cards are served without a render.
+ */
+const RENDERS_PER_MIN_ALL = 120;
 const PNG_CACHE = 64;
 const SAVE_EVERY_MS = 5000;
 const ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -46,6 +51,9 @@ export class ShareService {
   private readonly cards = new Map<string, ShareCard>();
   private readonly png = new Map<string, Buffer>();
   private readonly renders = new Limiter(RENDERS_PER_MIN, 60_000);
+  private readonly rendersAll = new Limiter(RENDERS_PER_MIN_ALL, 60_000);
+  /** Drawing failed on this machine (the canvas addon did not load): images fall back to the site's picture. */
+  private renderBroken: string | null = null;
   /** Connection or wallet → when it last got a kill card. */
   private readonly lastKill = new Map<string, number>();
   private dirty = false;
@@ -127,6 +135,11 @@ export class ShareService {
     return this.add({ kind: 'kill', ...this.base(o), mass: Math.floor(k.mass), kills: k.kills, victim: k.victim, victimMass: k.victimMass });
   }
 
+  /** Startup self-check result (`shareCardSelfCheck`): when drawing cannot work here, images fall back at once. */
+  setRenderBroken(why: string | null): void {
+    this.renderBroken = why;
+  }
+
   get(id: string): ShareCard | null {
     return SHARE_ID_RE.test(id) ? (this.cards.get(id) ?? null) : null;
   }
@@ -149,21 +162,41 @@ export class ShareService {
     if (m[2]) {
       let png = this.png.get(card.id);
       if (!png) {
-        if (!this.renders.allow(ip)) {
+        if (this.renderBroken) {
+          // no canvas here: the site's own Open Graph picture, so a shared link still shows an image
+          res.writeHead(302, { Location: `${this.d.baseUrl(req).replace(/\/$/, '')}/og-elymum.png`, 'Cache-Control': 'public, max-age=300' });
+          res.end();
+          return true;
+        }
+        if (!this.renders.allow(ip) || !this.rendersAll.allow('all')) {
           res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' });
           res.end('Too many cards. Try again in a minute.');
           return true;
         }
-        png = renderShareCard(card);
+        try {
+          png = renderShareCard(card);
+        } catch (err) {
+          this.renderBroken = String((err as Error)?.message ?? err).split('\n')[0];
+          this.d.log?.(`!!! share cards: drawing failed (${this.renderBroken}) — share images fall back to the site's picture until a restart`);
+          res.writeHead(302, { Location: `${this.d.baseUrl(req).replace(/\/$/, '')}/og-elymum.png` });
+          res.end();
+          return true;
+        }
         this.png.set(card.id, png);
         if (this.png.size > PNG_CACHE) this.png.delete(this.png.keys().next().value!);
       }
-      res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'public, max-age=86400, immutable' });
+      // a card never changes: CDNs (the Vercel rewrite, Cloudflare) may keep it as long as they like
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable' });
       res.end(req.method === 'HEAD' ? undefined : png);
       return true;
     }
     const html = sharePage(card, this.d.baseUrl(req).replace(/\/$/, ''));
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600, s-maxage=86400',
+      // the page runs no script at all
+      'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+    });
     res.end(req.method === 'HEAD' ? undefined : html);
     return true;
   }

@@ -21,7 +21,16 @@ export interface ServerConfig {
   /** Optional path to the built web app (apps/web/dist) to serve statically. */
   webDist: string | null;
   maxConnectionsPerIp: number;
+  /** WebSockets per IPv4 /24 or IPv6 /64 (`MAX_CONNECTIONS_PER_SUBNET`, default 48). */
+  maxConnectionsPerSubnet: number;
   maxConnections: number;
+  /**
+   * Graceful degradation (`LOAD_SHED`; default on with `NODE_ENV=production`): new free games, then new sockets and
+   * new arena seats are refused while the server is overloaded, so live rooms keep their tick budget.
+   */
+  loadShed: boolean;
+  /** A WebSocket that sends no valid `hello` within this is closed (`WS_HELLO_TIMEOUT_MS`, default 10 000). */
+  wsHelloTimeoutMs: number;
   /** Humans per practice room (`PRACTICE_CAPACITY`). */
   practiceCapacity: number;
   privateRoomCapacity: number;
@@ -296,6 +305,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     publicUrl: env.PUBLIC_URL?.trim() ? env.PUBLIC_URL.trim().replace(/\/+$/, '') : null,
     webDist: env.WEB_DIST ? resolve(env.WEB_DIST) : null,
     maxConnectionsPerIp: int(env.MAX_CONNECTIONS_PER_IP, 8),
+    maxConnectionsPerSubnet: Math.max(1, int(env.MAX_CONNECTIONS_PER_SUBNET, 48)),
+    loadShed: bool(env.LOAD_SHED, env.NODE_ENV === 'production'),
+    wsHelloTimeoutMs: Math.max(200, int(env.WS_HELLO_TIMEOUT_MS, 10_000)),
     maxConnections: int(env.MAX_CONNECTIONS, 600),
     practiceCapacity: Math.max(1, int(env.PRACTICE_CAPACITY ?? env.FREE_ROOM_CAPACITY, CAPACITY.practice)),
     privateRoomCapacity: int(env.PRIVATE_ROOM_CAPACITY, CAPACITY.private),

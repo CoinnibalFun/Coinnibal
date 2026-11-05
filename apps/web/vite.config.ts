@@ -8,6 +8,13 @@ const gameServer = process.env.GAME_SERVER ?? 'http://127.0.0.1:8787';
 // server's PUBLIC_URL, else the planned public domain. Set VITE_PUBLIC_URL (or PUBLIC_URL) at build time.
 process.env.VITE_PUBLIC_URL = (process.env.VITE_PUBLIC_URL || process.env.PUBLIC_URL || 'https://elymum.io').replace(/\/+$/, '');
 
+// On Vercel (a static host) the browser must reach the game server directly: vercel.json proxies only the NFT
+// metadata and the share cards, and proxied API calls would all come from Vercel's addresses (the server's per-IP
+// limits could not tell players apart). Fail the build loudly instead of shipping a site whose API calls 404.
+if (process.env.VERCEL === '1' && !process.env.VITE_SERVER_URL && !process.env.VITE_WS_URL) {
+  throw new Error('VITE_SERVER_URL is not set: set it to the game server (e.g. https://game.elymum.io) in the Vercel project settings');
+}
+
 /**
  * Dev / preview proxy to the game server. `/api` keeps the browser's Host header
  * (no `changeOrigin`): the server names the request host in the SIWE sign-in

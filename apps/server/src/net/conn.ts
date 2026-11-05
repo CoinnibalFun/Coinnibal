@@ -7,6 +7,10 @@ import type { RoomConn, RoomHandle } from '../rooms/handle';
 
 let nextConnId = 1;
 
+/** Strikes (dropped, malformed or premature messages) a connection may collect per window before it is closed. */
+export const STRIKE_LIMIT = 300;
+export const STRIKE_WINDOW_MS = 10_000;
+
 /** A frame of a room worker held back while a reattach is answered (worker mode). */
 export interface HeldFrame {
   hid: number;
@@ -67,6 +71,22 @@ export class Conn implements RoomConn {
     if (this.tokens < cost) return false;
     this.tokens -= cost;
     return true;
+  }
+
+  private strikes = 0;
+  private strikeWindow = 0;
+
+  /**
+   * Abuse counter: a message dropped by the rate limit, a malformed one or one before `hello`. True when the
+   * connection passed `STRIKE_LIMIT` strikes within `STRIKE_WINDOW_MS` and should be closed (a client that floods
+   * or speaks garbage; a real client never gets near it).
+   */
+  strike(now = Date.now()): boolean {
+    if (now - this.strikeWindow > STRIKE_WINDOW_MS) {
+      this.strikeWindow = now;
+      this.strikes = 0;
+    }
+    return ++this.strikes > STRIKE_LIMIT;
   }
 
   /** RPC-touching ops: bursts of 6, then one every 2 s (an RPC call per message would be an amplifier). */
