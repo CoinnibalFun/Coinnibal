@@ -14,7 +14,7 @@ import { ArenaChain, MID_ROUND, arena, fakeConn, roomDeps, stakeJoin } from './h
 import { testSigner } from './signers';
 
 const TREASURY = '0x1111111111111111111111111111111111111111';
-const BASE = parseEther('0.05');
+const BASE = parseEther('0.0005');
 const FEE = 1_000_000;
 const hash = (n: number) => `0x${n.toString(16).padStart(64, '0')}`;
 const cfgOf = (extra: Partial<CustomRoomConfig> = {}): CustomRoomConfig => ({ ...CUSTOM_DEFAULTS, name: 'Whale Club', bots: 0, ...extra });
