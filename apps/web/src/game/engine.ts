@@ -25,7 +25,7 @@ import { serverText, t } from '../i18n';
 import { FrameGovernor } from '../render/governor';
 import { Renderer, type FrameInput } from '../render/renderer';
 import { FOOD_COLORS } from '../render/sprites';
-import { setEmoteSet, toast, useUi } from '../store';
+import { toast, useUi } from '../store';
 import { Camera } from './camera';
 import { worldCovered } from './backdrop';
 import { serverClock } from './clock';
@@ -147,12 +147,11 @@ export class GameEngine {
         split: () => this.split(),
         boost: (kind) => this.boost(kind),
         eject: () => this.eject(),
-        // keys 1-8 fire the sticker page on show
+        // keys 1-8 fire the emoji bar
         emote: (slot) => {
-          const id = emoteForSlot(useUi.getState().emoteSet, slot);
+          const id = emoteForSlot(slot);
           if (id !== null) this.emote(id);
         },
-        emotePage: () => setEmoteSet(),
         openChat: () => {
           const s = useUi.getState();
           if (s.screen === 'playing' && s.settings.showChat) {

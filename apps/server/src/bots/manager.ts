@@ -119,7 +119,8 @@ const REGULARS_KEPT = 40;
 const EMOTE_GM = 0;
 const EMOTE_WAGMI = 1;
 const EMOTE_ROCKET = 2;
-const EMOTE_YUM = 5;
+/** After a bite, the ones people throw at the coin they just ate. */
+const EMOTE_GLOAT = [11, 12, 10, 16, 15] as const;
 
 /**
  * The room's bot squad: bots are players of the house's own team, not seat fillers. They join one
@@ -426,7 +427,7 @@ export class BotManager {
 
   /** A bot ate a player: sometimes it gloats. */
   onKill(pid: number): void {
-    if (this.bots.has(pid) && this.rng() < 0.3) this.pendingEmotes.push({ pid, id: this.rng() < 0.7 ? EMOTE_YUM : EMOTE_ROCKET });
+    if (this.bots.has(pid) && this.rng() < 0.3) this.pendingEmotes.push({ pid, id: EMOTE_GLOAT[Math.floor(this.rng() * EMOTE_GLOAT.length)] });
   }
 
   /** Recomputes which zero-value bots are far from every human coin (see `FAR_FROM_HUMANS`). */

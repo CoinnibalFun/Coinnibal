@@ -1,5 +1,5 @@
 import { lookForSkin as lookForBasicSkin } from '../../render/looks';
-import { BOOST_KEY_LABELS, BOOST_KINDS, PowerUpType, RULES } from '@elymum/shared';
+import { BOOST_KEY_LABELS, BOOST_KINDS, EMOTE_BAR, PowerUpType, RULES, emoteEmoji } from '@elymum/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { Counter, DUR, Icon, Stamp, springs, useReducedMotion } from '../../design';
@@ -12,6 +12,7 @@ import { openModal, useUi } from '../../store';
 import { useTicker } from '../ticker';
 import { EmoteBar } from './EmoteBar';
 import { Feed } from './Feed';
+import { Peek } from './Peek';
 import { compactCount, counterFrac, roomName, sectorOf, useTokenFormat } from './format';
 import { MobileControls, useIsTouch } from './MobileControls';
 import { RoundIntro, SunsetSky, ValueFlyers } from './Moments';
@@ -475,6 +476,7 @@ export const MAP_SIZE: Record<HudClass, number> = { phone: 84, 'phone-land': 76,
  *   settings and a small minimap top right; chat folds into its button.
  */
 export function GameHud() {
+  const t = useT();
   const screen = useUi((s) => s.screen);
   const touch = useIsTouch();
   const narrow = useNarrow();
@@ -510,7 +512,7 @@ export function GameHud() {
           <PondTag />
         </div>
         {compact && <Standings compact />}
-        <Feed narrow={compact} fold={compact && touch} />
+        {(touch || compact) && <Feed narrow={compact} fold={compact && touch} />}
       </motion.div>
 
       <div className="g-center">
@@ -536,13 +538,25 @@ export function GameHud() {
       </motion.div>
 
       {!narrow && !touch && !short && <MapSheet size={mapSize} />}
+      {/* desktop: the feed and chat sit bottom left, over the key hints */}
+      {!touch && !compact && (
+        <div className="g-bl">
+          <Feed narrow={false} />
+          {playing && (
+            <Peek className="g-keys-peek" tab={<kbd className="kb-key">{t('g.keysLabel')}</kbd>} label={t('g.keysLabel')}>
+              <KeyHints />
+            </Peek>
+          )}
+        </div>
+      )}
       {playing && !touch && (
         <>
           <BoostBar />
           <div className="g-dock">
-            <EmoteBar />
+            <Peek className="g-emotes-peek" tab={<span className="g-peek__emoji">{emoteEmoji(EMOTE_BAR[0])}</span>} label={t('g.emotes')}>
+              <EmoteBar />
+            </Peek>
           </div>
-          {!compact && <KeyHints />}
         </>
       )}
       {playing && touch && <MobileControls />}

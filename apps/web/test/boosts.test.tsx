@@ -90,13 +90,13 @@ describe('boost keys', () => {
     hud.remove();
   });
 
-  it('keys 1-8 pass the slot on, 9 flips the sticker page', () => {
-    const actions: InputActions = { split: vi.fn(), eject: vi.fn(), emote: vi.fn(), emotePage: vi.fn(), openChat: vi.fn(), escape: vi.fn(), spectateNext: vi.fn(), steering: () => true };
+  it('keys 1-8 pass the slot on; 9 does nothing', () => {
+    const actions: InputActions = { split: vi.fn(), eject: vi.fn(), emote: vi.fn(), openChat: vi.fn(), escape: vi.fn(), spectateNext: vi.fn(), steering: () => true };
     const input = new Input(document.createElement('div'), actions, () => {}, () => {});
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit8', key: '8' }));
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit9', key: '9' }));
     expect(actions.emote).toHaveBeenCalledWith(7);
-    expect(actions.emotePage).toHaveBeenCalledTimes(1);
+    expect(actions.emote).toHaveBeenCalledTimes(1);
     input.destroy();
   });
 });
