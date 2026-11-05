@@ -295,6 +295,7 @@ export class GameEngine {
       death: null,
       roundResult: null,
       roomResult: null,
+      share: null,
       chatOpen: false,
       powerups: [],
       boosts: null,
@@ -395,6 +396,8 @@ export class GameEngine {
     useUi.setState({
       screen: 'roundover',
       roundResult: { kind, round, payout, stats, standings },
+      // this result's card follows (`share`); an older one must not stand in for it
+      share: null,
       powerups: [],
       boosts: null,
       chatOpen: false,
@@ -681,6 +684,10 @@ export class GameEngine {
       case 'closing':
         useUi.setState({ closing: { endsAt: m.endsAt, message: m.message } });
         return;
+      case 'share':
+        // the card the server made of my result or of a notable kill: the sheets and the HUD offer "Share on X"
+        useUi.setState({ share: { kind: m.kind, id: m.id, ...(m.victim ? { victim: m.victim } : {}), at: Date.now() } });
+        return;
       case 'roomOver': {
         // a free custom room ended: its final board over the frozen world; the button (or the timer) goes to the lobby
         caller.end();
@@ -690,6 +697,7 @@ export class GameEngine {
           screen: 'roomover',
           roomResult: { message: m.message, players: m.players, standings: m.standings, stats: m.stats, room: s.room },
           closing: null,
+          share: null,
           death: null,
           powerups: [],
           boosts: null,

@@ -21,3 +21,4 @@ export * from './countries';
 export * from './map-scale';
 export * from './fees';
 export * from './arena-scaling';
+export * from './share';

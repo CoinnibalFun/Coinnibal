@@ -1,3 +1,4 @@
+import type { ShareService } from './site/shares';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
@@ -43,6 +44,8 @@ interface Ctx {
   site?: SiteApi;
   /** The NFT price keeper (its last outcome is shown to admins in `/api/config`). */
   priceKeeper?: PriceKeeper | null;
+  /** "Share on X" cards (`/share/<id>`, `/share/<id>.png`). */
+  shares?: ShareService;
   /** The per-IP limiter of every `/api/*` request (default 240 a minute); tests inject a larger one. */
   apiLimiter?: Limiter;
   /** Server log (unexpected errors of a request go here, never to the client). Default: console.error. */
@@ -226,6 +229,7 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             return json(res, 404, { error: 'not found' });
         }
       }
+      if (url.pathname.startsWith('/share/') && ctx.shares?.handle(req, res, url.pathname, ip)) return;
       if (cfg.webDist && (req.method === 'GET' || req.method === 'HEAD') && serveStatic(cfg.webDist, req, res, url.pathname)) return;
       if (url.pathname === '/') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });

@@ -163,6 +163,19 @@ everyone in it, players and spectators, sees a countdown with the reason; then a
 30 s. A ticket room ends on its bell: the countdown runs into the bell, whose receipt carries the same board with the
 values. A free room closed early ends 10 s later; a ticket room closed early ends at the round's bell.
 
+**Share on X.** A bell's receipt and a custom room's final board carry "Share on X"; eating a person whose coin reached
+1,000 mass shows "You ate …!" with the same button for a few seconds. It opens X's composer with a localized line ("I
+just ate Nakamoto on Elymum!") and a link to `/share/<id>`, whose card image (the coin, the place or the kill, mass,
+kills, what was paid, the flag code and emblem badge, the wallet's short form) the server draws from its own records.
+
+**Practice with bots.** The ponds are people only, so at quiet hours they say so honestly: with fewer than two
+people in the ponds the lobby shows "Quiet right now" (invite friends, or practice with bots), and a player alone in
+a pond sees the same as a small sticker. "Practice with bots" opens, in one click and free (guests too), a short-lived
+free custom room of their own (`PRACTICE_ROOM`: 8 practice bots of mixed difficulty, auto map, 15 minutes, room for
+3 friends with its code). Abuse limits instead of the creation fee: one live practice room per player (asking again
+returns it), 4 creations per IP per 30 minutes, at most `practiceMaxLive` (12) at once outside the paid rooms' slots
+and seats, and it closes as soon as it has stood empty for 2 minutes. `POST /api/rooms/custom/practice`.
+
 ## 3. Money
 
 ### 3.1 The fee on profit (ElymumArena v3)

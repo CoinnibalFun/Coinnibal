@@ -690,14 +690,37 @@ const SCENES = [
       await page.evaluate(([stats, standings]) => {
         const s = window.__elymum.useUi.getState();
         window.__elymum.useUi.setState({ room: { ...(s.room ?? {}), mode: 'arena' }, ticket: { entryFee: 999_999_999_999_000_000, arenaId: 1, session: '1' } });
-        window.__elymum.engine.endGame('round', 12345, 999_999_999_999_123_456, { ...stats, payout: 999_999_999_999_123_456 }, standings);
+        window.__elymum.engine.endGame('round', 12345, 999_999_999_999_123_456, { ...stats, payout: 999_999_999_999_123_456, finalRank: 4, finalOf: 999 }, standings);
       }, [DEATH_STATS, ROUND_STANDINGS]);
+      await feed(page, { t: 'share', kind: 'round', id: 'AuDiT00001' });
       await settle(page, 1500);
       await h.check('result');
       await page.evaluate(() =>
         window.__elymum.useUi.setState({ lastSettlement: { session: '1', arenaId: 1, txHash: '0xde7fa4e0' + '0'.repeat(56), payout: 999_999_999_999_123_456, fee: 49_999_999_999_956_172, net: 949_999_999_999_167_284, at: Date.now() } }),
       );
       await settle(page, 1200);
+    },
+  },
+  {
+    // the people-only pond to oneself: the honest empty state with one click to practice with bots
+    id: 'pond-alone',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      // alone on the floor (the audit's stress data says 50 players otherwise)
+      await page.evaluate(() => {
+        const E = window.__elymum.engine;
+        const o = E.onMessage;
+        E.onMessage = (m) => {
+          o(m);
+          if (m.t === 'lb') window.__elymum.useUi.setState((s) => ({ hud: { ...s.hud, players: 1 } }));
+        };
+        window.__elymum.useUi.setState((s) => ({ hud: { ...s.hud, players: 1 } }));
+      });
+      await page.waitForSelector('[data-testid="practice-quiet-hud"]', { timeout: 8000 }).catch(() => h.note('no quiet-pond sticker'));
+      await settle(page, 600);
     },
   },
   {
@@ -714,6 +737,18 @@ const SCENES = [
       await h.check('fresh');
       await page.waitForTimeout(7500);
       await settle(page, 300);
+    },
+  },
+  {
+    // eating a big coin: "You ate ..." with Share on X, for a few seconds
+    id: 'kill-share',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      await feed(page, { t: 'share', kind: 'kill', id: 'AuDiT00003', victim: LONG });
+      await settle(page, 900);
     },
   },
   {
@@ -739,7 +774,8 @@ const SCENES = [
     run: async (page, h) => {
       await openPlay(page, h);
       await playPractice(page);
-      await feed(page, { t: 'roomOver', message: 'Time is up: this room has closed. Thanks for playing!', players: 99, standings: ROOM_STANDINGS, stats: DEATH_STATS });
+      await feed(page, { t: 'roomOver', message: 'Time is up: this room has closed. Thanks for playing!', players: 99, standings: ROOM_STANDINGS, stats: { ...DEATH_STATS, finalRank: 87, finalOf: 99 } });
+      await feed(page, { t: 'share', kind: 'room', id: 'AuDiT00002' });
       await settle(page, 1200);
     },
   },

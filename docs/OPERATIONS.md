@@ -269,6 +269,26 @@ journaled as a sweep and sent with `sweepLoot(arenaId, sweepId, amount)`, which 
 - `sweepLoot` is capped only by the vault (the same trust as a payout): **protect the server key**.
 - Unplayed tickets are cancelled with their full entry fee after `STALE_SESSION_AFTER_S` (15 minutes).
 
+## Custom rooms and practice with bots
+
+`/admin` → Game → **Custom rooms** (`/api/admin/custom-rooms`, `DATA_DIR/site/custom-rooms-settings.json`): creating
+on / off, ticket rooms on / off, the base price and its step per 10 players, the biggest room (up to 100 players),
+the seats of all live rooms together, the holder perk, the live rooms (close one: a free room ends after a 10 s
+countdown and its final board, a ticket room at its bell). **Practice with bots** on / off and "practice rooms at
+once" (`practiceMaxLive`, default 12, 0..50): the free one-click rooms the quiet ponds offer (8 bots, 15 minutes, one
+per player, 4 per IP per 30 minutes, closed after 2 minutes empty). They take none of the paid rooms' slots or seats;
+each costs about 8 bots of CPU, so 12 at once is about 100 practice bots.
+
+## Share on X
+
+Players get a "Share on X" button on a bell's receipt, a custom room's final board and, for a few seconds, after
+eating a big coin (1,000+ mass). It opens X's composer (`x.com/intent/post`, no X API or keys) with a localized line
+and a link to `/share/<id>`, whose Open Graph image X shows as the card. The server makes each card from its own
+records (name, the wallet's short form, the coin's paint, flag code, emblem badge, place, mass, kills, net paid):
+nothing else, and nothing a client sends. Cards live in `DATA_DIR/site/shares.json` (the newest 5,000). The image is
+rendered on demand and cached (30 renders per IP a minute). On Vercel, `vercel.json` rewrites `/share/*` to the game
+server like `/api/*`; in Docker the server serves it on the same origin; `pnpm dev` proxies it.
+
 ## Arena instances (auto-scaling)
 
 Each official arena (ticket tier) runs as public instances `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) seats
@@ -363,7 +383,7 @@ with any amount up to a vault and burn up to a vault with `sweepLoot`.
 | `chains/<id>/journal.json` | pending settlements, live values, floor loot, the last `sweepId`, the arena contract it belongs to | owed payouts drop out of the queue (players can only refund the entry fee after 24 h); the stale sweeper stays off while a quarantined copy exists |
 | `server-key.json` | the server key (`auto`) | a new key: set it as server authority again |
 | `chains/<id>/contracts.json` | the registered arena, NFT and test token | register them again from `/admin` |
-| `site/*.json`, `profiles.json`, `leaderboards.json` | WL, collabs, tasks, settings, map sizes, shop and custom room settings, names and skins, standings | the site data and profiles are gone; keep backups |
+| `site/*.json`, `profiles.json`, `leaderboards.json` | WL, collabs, tasks, settings, map sizes, arena scaling, shop and custom room settings, share cards, names and skins, standings | the site data and profiles are gone; keep backups (lost share cards only break old links) |
 | `integrity/` | integrity state, the hashing secret, ticket summaries | flags and bans are gone |
 
 - The journal is written to a temporary file and renamed, so the file on disk is always a complete snapshot. Copy

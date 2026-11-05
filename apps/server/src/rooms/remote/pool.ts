@@ -19,7 +19,8 @@ import type { Leaderboards } from '../../leaderboards';
 import type { Conn } from '../../net/conn';
 import type { ShopService, UseContext } from '../../shop/service';
 import type { Journal, LootRecord } from '../../stake/journal';
-import type { RoomConn, RoomHandle, StakeSeat } from '../handle';
+import type { PlayerLook, RoomConn, RoomHandle, StakeSeat } from '../handle';
+import type { NotableKillEvent } from '../manager';
 import { TickStats, wsOut, type RoomLoad, type ThreadLoad } from '../load';
 import type { BellSettled, JoinOptions, RoomOptions } from '../room';
 import type { RoundClock } from '../round-clock';
@@ -46,7 +47,8 @@ export interface PoolDeps {
   integrity?: IntegrityService;
   shop?: ShopService;
   /** A human's game ended in a room worker (the profile, the league, the custom room's board). */
-  onGameOver: (e: { room: RemoteRoom; conn: Conn | null; player: { name: string }; stats: DeathStats }) => void;
+  onGameOver: (e: { room: RemoteRoom; conn: Conn | null; player: PlayerLook; stats: DeathStats }) => void;
+  onNotableKill: (e: NotableKillEvent) => void;
   onBellSettled: (e: BellSettled) => void;
   /** A worker died: its rooms are gone (already recovered from the journal); the directory opens the standing ones again. */
   onLost: (rooms: RemoteRoom[]) => void;
@@ -363,7 +365,13 @@ export class WorkerPool {
       }
       case 'go': {
         const room = this.rooms.get(c.hid);
-        if (room) d.onGameOver({ room, conn: c.conn !== null ? (this.conns.get(c.conn) ?? null) : null, player: { name: c.name }, stats: c.stats });
+        if (room) d.onGameOver({ room, conn: c.conn !== null ? (this.conns.get(c.conn) ?? null) : null, player: c.player, stats: c.stats });
+        return;
+      }
+      case 'nk': {
+        const room = this.rooms.get(c.hid);
+        const conn = this.conns.get(c.conn);
+        if (room && conn) d.onNotableKill({ room, conn, player: c.player, mass: c.mass, kills: c.kills, victim: c.victim, victimMass: c.victimMass });
         return;
       }
       case 'bell':

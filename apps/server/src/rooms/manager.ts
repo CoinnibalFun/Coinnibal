@@ -10,7 +10,7 @@ import type { Journal } from '../stake/journal';
 import type { PracticeBotsOptions } from '../bots/practice';
 import { ArenaScaler, ArenaScalingStore } from './arena-scaler';
 import { MapSettingsStore, mapKindOf, type MapRoomKind } from './map-settings';
-import type { RoomHandle, StakeSeat } from './handle';
+import { lookOf, type PlayerLook, type RoomHandle, type StakeSeat } from './handle';
 import { Room, type BellSettled, type RoomDeps, type RoomOptions } from './room';
 import { RoundClock } from './round-clock';
 import { ThreadMeter, TickStats, roomTickStats, startTickLoop, wsOut, type RoomLoad, type ServerLoad, type ThreadLoad } from './load';
@@ -40,18 +40,32 @@ export function isPaidCustom(opts: Pick<RoomOptions, 'mode' | 'code'>): boolean 
 export interface GameOverEvent {
   room: RoomHandle;
   conn: Conn | null;
-  player: { name: string };
+  player: PlayerLook;
   stats: DeathStats;
 }
 
+/** A person ate a person whose coin reached `NOTABLE_KILL_MASS` (in a room on this thread or in a room worker). */
+export interface NotableKillEvent {
+  room: RoomHandle;
+  /** The killer's connection. */
+  conn: Conn;
+  player: PlayerLook;
+  /** The killer's mass and kills now. */
+  mass: number;
+  kills: number;
+  victim: string;
+  victimMass: number;
+}
+
 /** The services the rooms use: the main thread's own (journal, chain, stores), whichever thread runs the rooms. */
-export interface ManagerDeps extends Omit<RoomDeps, 'chain' | 'journal' | 'leaderboards' | 'integrity' | 'shop' | 'onGameOver'> {
+export interface ManagerDeps extends Omit<RoomDeps, 'chain' | 'journal' | 'leaderboards' | 'integrity' | 'shop' | 'onGameOver' | 'onNotableKill'> {
   chain: ChainGateway;
   journal: Journal;
   leaderboards: Leaderboards;
   integrity?: IntegrityService;
   shop?: ShopService;
   onGameOver?: (e: GameOverEvent) => void;
+  onNotableKill?: (e: NotableKillEvent) => void;
 }
 
 /** A custom room that closed is remembered this long (a late joiner hears `room_closed`, not "no such room"). */
@@ -171,7 +185,13 @@ export class RoomManager {
     };
     this.deps = { ...deps, round, clock, onGameOver: gameOver, onBellSettled: bellSettled };
     // a room on this thread hands its own connection (a `Conn`) to the hooks
-    this.roomDeps = { ...this.deps, onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: e.player, stats: e.stats }) };
+    const notable = (e: NotableKillEvent) => deps.onNotableKill?.(e);
+    this.roomDeps = {
+      ...this.deps,
+      onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: lookOf(e.player), stats: e.stats }),
+      onNotableKill: (e) =>
+        notable({ room: e.room, conn: e.conn as Conn, player: lookOf(e.killer), mass: Math.floor(e.killer.totalMass()), kills: e.killer.stats.playersEaten, victim: e.victim, victimMass: e.victimMass }),
+    };
     const workers = cfg.gameWorkers ?? 0;
     this.pool =
       workers > 0
@@ -186,6 +206,7 @@ export class RoomManager {
             integrity: deps.integrity,
             shop: deps.shop,
             onGameOver: gameOver,
+            onNotableKill: notable,
             onBellSettled: bellSettled,
             onLost: (rooms) => this.onRoomsLost(rooms),
             onClosed: (room, ok) => {

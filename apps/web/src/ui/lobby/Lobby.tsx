@@ -41,6 +41,7 @@ import { PendingBanner } from './PendingBanner';
 import { QuickPlay } from './QuickPlay';
 import { SplitFlap } from './SplitFlap';
 import { TicketList } from './TicketList';
+import { PracticeQuiet, QUIET_BELOW } from '../../rooms/PracticeQuiet';
 import { useLobbyModel, useMedia } from './useLobby';
 import { RoomCard } from '../../rooms/RoomCard';
 import { PaidSeatBanner } from '../../rooms/PaidSeatBanner';
@@ -218,6 +219,8 @@ export function Lobby() {
           onActivate={act}
           punched={punched}
         />
+        {/* the ponds are people only: an honest word when they are quiet, and one click to practice with bots */}
+        {ticket?.arenaId === null && ticket.humans < QUIET_BELOW && <PracticeQuiet />}
         {mid && (
           <div className="kl-cta-slot">
             <QuickPlay ticket={ticket} gate={gate} onPress={act} busy={!connected} />

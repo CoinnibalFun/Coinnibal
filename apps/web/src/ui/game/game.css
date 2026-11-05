@@ -1614,6 +1614,33 @@
 .g-board__value {
   text-align: right;
 }
+/* "Share on X": a link styled as the cream sticker button, X's mark after the label */
+.g-share {
+  text-decoration: none;
+  gap: 10px;
+}
+.g-share__x {
+  flex: none;
+}
+/* a notable kill: "You ate Nakamoto!" with Share on X, for a few seconds */
+.g-killshare {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  max-width: min(92vw, 420px);
+  padding: 8px 12px;
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  background: var(--cream);
+  box-shadow: var(--sh-2);
+  color: var(--ink-fixed);
+  pointer-events: auto;
+}
+.g-killshare__title {
+  font-size: 16px;
+}
 /* a custom room's end, ten seconds ahead: a sticker under the top of the world */
 .g-closing {
   display: flex;

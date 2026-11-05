@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AVATAR_LIMITS, AVATAR_TYPES, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, GAS_SYMBOL } from '@elymum/shared';
+import { AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, GAS_SYMBOL } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import type { ChainGateway } from '../chain/types';
@@ -153,6 +153,8 @@ export class SiteApi {
   /** The power-up shop (`/api/shop`, `/api/shop/buy`, `/api/admin/shop`); absent in bare unit tests. */
   private shop: { service: ShopService; settings: ShopSettingsStore; inventory: BoostInventory } | null = null;
   private readonly shopBuys = new Limiter(30, 60_000);
+  /** "Practice with bots" rooms opened per IP (`PRACTICE_ROOM.perIp` per window). */
+  private readonly practiceIps = new Limiter(PRACTICE_ROOM.perIp, PRACTICE_ROOM.perIpWindowMs);
   /** `GET /api/admin/backup` per admin wallet (a full copy of DATA_DIR each time). */
   private readonly backups = new Limiter(6, 60 * 60_000);
   /** Writes every store's unsaved state to disk (before a backup); set by the app. */
@@ -478,6 +480,10 @@ export class SiteApi {
         writer: (r) => this.writer(r, ip),
         isAdmin: (w) => this.isAdmin(w),
         origin: (r) => this.baseUrl(r),
+        practiceIp: () => {
+          if (!this.practiceIps.allow(ip)) throw new SiteFail(429, 'rate_limited', 'You opened several practice rooms lately. Try again in a while, or play in a pond.');
+          return ip;
+        },
       },
       req,
       res,

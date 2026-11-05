@@ -7,7 +7,7 @@
  * stickers append emote ids 8..15; v12: arena contract v3 (fee on profit): `chain.fees`, `settled.burned` /
  * `settled.toVault`, no `feeModel` / `feeOnEntry`; `chain.faucetUrl` / `chain.testnet`; Robinhood Chain only, gas in ETH);
  * v13: one final-standings row for every room end (`RoundStanding`: rank, mass, kills, value in arenas), a custom
- * room's `closing` countdown and `roomOver` final board.
+ * room's `closing` countdown and `roomOver` final board, `DeathStats.finalRank` / `finalOf`, `share` cards.
  */
 export const PROTOCOL_VERSION = 13;
 

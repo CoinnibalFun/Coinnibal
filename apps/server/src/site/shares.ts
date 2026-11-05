@@ -1,0 +1,207 @@
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { join } from 'node:path';
+import { ledgerDecimals } from '@elymum/sdk';
+import { PlayerFlag, SHARE_ID_RE, SHARE_IMAGE, arenaMeta, formatToken, shortAddress, type ShareCard, type ShareKind } from '@elymum/shared';
+import { Limiter } from '../net/limiter';
+import type { PlayerLook, RoomHandle } from '../rooms/handle';
+import { renderShareCard, shareFacts, shareHeadline } from './share-card';
+
+/**
+ * "Share on X" (`packages/shared/src/share.ts`): the cards of results and notable kills, made by the server from its
+ * own game records when they happen (a client never sends a card's content), kept in `DATA_DIR/site/shares.json`
+ * (the newest `SHARES_KEPT`) and served at `/share/<id>` (a page with the Open Graph / Twitter tags) and
+ * `/share/<id>.png` (the image, rendered once and cached). Limits: a connection gets at most one kill card every
+ * `KILL_SHARE_EVERY_MS`; an IP renders at most `RENDERS_PER_MIN` images a minute (crawlers fetch each card once).
+ */
+
+export const SHARES_KEPT = 5000;
+export const KILL_SHARE_EVERY_MS = 20_000;
+const RENDERS_PER_MIN = 30;
+const PNG_CACHE = 64;
+const SAVE_EVERY_MS = 5000;
+const ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+export interface ShareDeps {
+  dataDir: string | null;
+  /** The site's public origin for the absolute card URLs (`publicBaseUrl`: `PUBLIC_URL`; never a forwarded header). */
+  baseUrl: (req: IncomingMessage) => string;
+  /** The game token's decimals and symbol (for "took home 1,234.5 $ELYMUM"). */
+  token: () => { decimals: number; symbol: string } | null;
+  now?: () => number;
+  log?: (m: string) => void;
+}
+
+/** Where a card was made: the room, the player and (signed in) the wallet. */
+export interface ShareOrigin {
+  room: RoomHandle;
+  player: PlayerLook;
+  wallet: string | null;
+}
+
+export class ShareService {
+  private readonly cards = new Map<string, ShareCard>();
+  private readonly png = new Map<string, Buffer>();
+  private readonly renders = new Limiter(RENDERS_PER_MIN, 60_000);
+  /** Connection or wallet → when it last got a kill card. */
+  private readonly lastKill = new Map<string, number>();
+  private dirty = false;
+  private saveTimer: NodeJS.Timeout | null = null;
+  private readonly now: () => number;
+
+  constructor(private readonly d: ShareDeps) {
+    this.now = d.now ?? Date.now;
+    this.load();
+  }
+
+  private file(): string | null {
+    return this.d.dataDir ? join(this.d.dataDir, 'site', 'shares.json') : null;
+  }
+
+  private load(): void {
+    const p = this.file();
+    if (!p || !existsSync(p)) return;
+    try {
+      const raw = JSON.parse(readFileSync(p, 'utf8')) as { cards?: ShareCard[] };
+      for (const c of Array.isArray(raw.cards) ? raw.cards.slice(-SHARES_KEPT) : []) if (c && typeof c.id === 'string' && SHARE_ID_RE.test(c.id)) this.cards.set(c.id, c);
+    } catch (err) {
+      const backup = `${p}.corrupt-${Date.now()}`;
+      renameSync(p, backup);
+      this.d.log?.(`shares: ${p} unreadable (${(err as Error).message}); moved to ${backup}`);
+    }
+  }
+
+  /** Writes the cards now (shutdown, backups); otherwise at most every few seconds after a change. */
+  flush(): void {
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    const p = this.file();
+    if (!p || !this.dirty) return;
+    this.dirty = false;
+    mkdirSync(join(this.d.dataDir!, 'site'), { recursive: true });
+    writeFileSync(`${p}.tmp`, JSON.stringify({ v: 1, cards: [...this.cards.values()] }));
+    renameSync(`${p}.tmp`, p);
+  }
+
+  private add(card: Omit<ShareCard, 'id' | 'at'>): ShareCard {
+    let id = '';
+    do {
+      id = [...randomBytes(10)].map((b) => ID_CHARS[b % ID_CHARS.length]).join('');
+    } while (this.cards.has(id));
+    const full: ShareCard = { id, at: this.now(), ...card };
+    this.cards.set(id, full);
+    while (this.cards.size > SHARES_KEPT) this.cards.delete(this.cards.keys().next().value!);
+    this.dirty = true;
+    this.saveTimer ??= setTimeout(() => this.flush(), SAVE_EVERY_MS);
+    this.saveTimer.unref?.();
+    return full;
+  }
+
+  private base(o: ShareOrigin): Pick<ShareCard, 'name' | 'wallet' | 'skin' | 'country' | 'holder' | 'room'> {
+    const r = o.room.opts;
+    const room = r.stake && !r.custom ? arenaMeta(r.stake.arenaId).name : r.name;
+    return { name: o.player.name, wallet: o.wallet ? shortAddress(o.wallet) : null, skin: o.player.skin, country: o.player.country, holder: (o.player.flags & PlayerFlag.Holder) !== 0, room };
+  }
+
+  /**
+   * A room's end (an arena's bell, a custom room's end): the card of my place on its final board. `payout`: what
+   * reached the wallet (ledger units), arenas only.
+   */
+  result(o: ShareOrigin, r: { rank: number; of: number; mass: number; kills: number; payout?: number }): ShareCard {
+    const kind: ShareKind = o.room.opts.stake ? 'round' : 'room';
+    const t = this.d.token();
+    const paid = r.payout && r.payout > 0 && t ? `${formatToken(r.payout, ledgerDecimals(t.decimals), { maxFrac: 2 })} ${t.symbol}` : undefined;
+    return this.add({ kind, ...this.base(o), rank: r.rank, players: r.of, mass: Math.floor(r.mass), kills: r.kills, ...(paid ? { paid } : {}) });
+  }
+
+  /** A notable kill; null when this player (`key`: its connection or wallet) got one in the last `KILL_SHARE_EVERY_MS`. */
+  kill(o: ShareOrigin, key: string, k: { mass: number; kills: number; victim: string; victimMass: number }): ShareCard | null {
+    const now = this.now();
+    const last = this.lastKill.get(key);
+    if (last !== undefined && now - last < KILL_SHARE_EVERY_MS) return null;
+    this.lastKill.set(key, now);
+    if (this.lastKill.size > 10_000) for (const [k2, at] of this.lastKill) if (now - at >= KILL_SHARE_EVERY_MS) this.lastKill.delete(k2);
+    return this.add({ kind: 'kill', ...this.base(o), mass: Math.floor(k.mass), kills: k.kills, victim: k.victim, victimMass: k.victimMass });
+  }
+
+  get(id: string): ShareCard | null {
+    return SHARE_ID_RE.test(id) ? (this.cards.get(id) ?? null) : null;
+  }
+
+  /** `GET /share/<id>` (the page) and `GET /share/<id>.png` (the image). False when the path is not a share's. */
+  handle(req: IncomingMessage, res: ServerResponse, path: string, ip: string): boolean {
+    const m = /^\/share\/([^/]+?)(\.png)?$/.exec(path);
+    if (!m) return false;
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405, { Allow: 'GET, HEAD' });
+      res.end();
+      return true;
+    }
+    const card = this.get(m[1]);
+    if (!card) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('No such card.');
+      return true;
+    }
+    if (m[2]) {
+      let png = this.png.get(card.id);
+      if (!png) {
+        if (!this.renders.allow(ip)) {
+          res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' });
+          res.end('Too many cards. Try again in a minute.');
+          return true;
+        }
+        png = renderShareCard(card);
+        this.png.set(card.id, png);
+        if (this.png.size > PNG_CACHE) this.png.delete(this.png.keys().next().value!);
+      }
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'public, max-age=86400, immutable' });
+      res.end(req.method === 'HEAD' ? undefined : png);
+      return true;
+    }
+    const html = sharePage(card, this.d.baseUrl(req).replace(/\/$/, ''));
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+    res.end(req.method === 'HEAD' ? undefined : html);
+    return true;
+  }
+}
+
+/** The share page: the Open Graph and Twitter card tags (X shows the image), the card, and the way into the game. */
+export function sharePage(card: ShareCard, origin: string): string {
+  const title = `${card.name} · ${shareHeadline(card)} · Elymum`;
+  const desc = `${shareFacts(card).join(' · ')}. Coin eats coin on Robinhood Chain.`;
+  const page = `${origin}/share/${card.id}`;
+  const img = `${page}.png`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}">
+<link rel="canonical" href="${esc(page)}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Elymum">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:url" content="${esc(page)}">
+<meta property="og:image" content="${esc(img)}">
+<meta property="og:image:width" content="${SHARE_IMAGE.width}">
+<meta property="og:image:height" content="${SHARE_IMAGE.height}">
+<meta property="og:image:alt" content="${esc(title)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:description" content="${esc(desc)}">
+<meta name="twitter:image" content="${esc(img)}">
+<style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;background:#0F2A30;color:#F6EEDA;font-family:system-ui,sans-serif;padding:24px;box-sizing:border-box}img{max-width:min(100%,900px);height:auto;border-radius:18px;border:4px solid #04181C}a{display:inline-block;padding:14px 28px;border-radius:999px;background:#F2C14E;color:#04181C;font-weight:700;text-decoration:none;border:3px solid #04181C}</style>
+</head>
+<body>
+<img src="/share/${esc(card.id)}.png" width="${SHARE_IMAGE.width}" height="${SHARE_IMAGE.height}" alt="${esc(title)}">
+<a href="/play">Play Elymum</a>
+</body>
+</html>
+`;
+}

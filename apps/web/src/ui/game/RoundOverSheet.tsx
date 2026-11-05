@@ -3,6 +3,7 @@ import { AnimatePresence, motion, type TargetAndTransition } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon, Receipt, Sheet, Stamp, useReducedMotion, type ReceiptLine } from '../../design';
 import { FinalBoard } from './FinalBoard';
+import { ShareOnX, useShare } from './ShareOnX';
 import { engine } from '../../game/instance';
 import { roundStartLabel } from '../../game/round';
 import { useChainData } from '../../wallet/chain';
@@ -166,6 +167,7 @@ export function RoundOverSheet() {
   );
 
   const standings = res?.standings ?? [];
+  const share = useShare('round');
 
   return (
     <Sheet
@@ -184,6 +186,9 @@ export function RoundOverSheet() {
           <Button variant="secondary" size="lg" icon="menu" onClick={toLobby}>
             {t('gr.lobby')}
           </Button>
+          {share && !exit && res?.stats?.finalRank && (
+            <ShareOnX id={share.id} text={t('share.result', { rank: res.stats.finalRank, n: res.stats.finalOf ?? res.stats.finalRank, room: roomName(room) })} />
+          )}
         </>
       }
     >

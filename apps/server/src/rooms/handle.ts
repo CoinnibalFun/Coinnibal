@@ -4,6 +4,17 @@ import type { Conn } from '../net/conn';
 import type { JoinOptions, RoomOptions } from './room';
 import type { ViewState } from './visibility';
 
+/** How a player looks on a share card (`share.ts`): what the room tells the main thread about a game's player. */
+export interface PlayerLook {
+  name: string;
+  skin: number;
+  country: string | null;
+  /** `PlayerFlag` bits (the emblem holder's badge). */
+  flags: number;
+}
+
+export const lookOf = (p: Pick<Player, 'name' | 'skin' | 'country' | 'flags'>): PlayerLook => ({ name: p.name, skin: p.skin, country: p.country, flags: p.flags });
+
 /**
  * What a `Room` needs of a connection. The main thread's `Conn` (a WebSocket) is one; inside a
  * room worker a `WorkerConn` (frames go to the main thread, which owns the socket) is the other.
