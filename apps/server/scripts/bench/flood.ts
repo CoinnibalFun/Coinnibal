@@ -85,7 +85,7 @@ interface Row {
 }
 const rows: Row[] = [];
 
-async function phase(name: string, kind: string | null): Promise<void> {
+async function phase(name: string, kind: string | null, seconds = SECONDS): Promise<void> {
   await ask(players, { t: 'stats' }, 'stats');
   app.rooms.loadStats();
   const before = { ...app.gateway.dropped, ...app.shedder.refused };
@@ -98,13 +98,13 @@ async function phase(name: string, kind: string | null): Promise<void> {
     worstLag = Math.max(worstLag, s.main.lagP99Ms);
     if (app.shedder.level !== 'ok') level = app.shedder.level;
   }, 2_000);
-  const attack = kind ? ask<{ stats: unknown }>(attacker, { t: 'run', kind, url, seconds: SECONDS }, 'done') : sleep(SECONDS * 1000);
+  const attack = kind ? ask<{ stats: unknown }>(attacker, { t: 'run', kind, url, seconds }, 'done') : sleep(seconds * 1000);
   const result = await attack;
   clearInterval(watch);
   const st = (await ask<{ stats: ClientStats }>(players, { t: 'stats' }, 'stats')).stats;
   const after = { ...app.gateway.dropped, ...app.shedder.refused };
   const refused = Object.fromEntries(Object.entries(after).map(([k, v]) => [k, v - (before as Record<string, number>)[k]]).filter(([, v]) => (v as number) > 0));
-  rows.push({ phase: name, playersOpen: st.open, snapshotP95Ms: p95(st.hist), worstTickP95Ms: worstTick, mainLagP99Ms: worstLag, level, attack: kind ? { ...(result as { stats: object }).stats, serverRefused: refused } : null });
+  rows.push({ phase: name, playersOpen: st.open, snapshotP95Ms: p95(st.hist), worstTickP95Ms: Math.round(worstTick * 10) / 10, mainLagP99Ms: Math.round(worstLag * 10) / 10, level, attack: kind ? { ...(result as { stats: object }).stats, serverRefused: refused } : null });
   console.log(JSON.stringify(rows.at(-1)));
   await sleep(3_000);
 }
@@ -115,7 +115,8 @@ await phase('baseline', null);
 await phase('idle sockets (never hello)', 'idle-sockets');
 await phase('message flood (garbage)', 'message-flood');
 await phase('HTTP flood (public endpoints)', 'http-flood');
-await phase('slowloris', 'slowloris');
+// longer than the 15 s header timeout, so the server's drops show
+await phase('slowloris (headers never finish)', 'slowloris', Math.max(SECONDS, 25));
 await phase('after', null);
 
 console.log('\n| Phase | Players connected | Their snapshot interval p95 | Worst game thread tick p95 | Main lag p99 | Shedder |');

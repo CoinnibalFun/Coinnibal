@@ -70,6 +70,31 @@ describe('share cards (made from the server records only)', () => {
       `https://x.com/intent/post?text=I%20just%20ate%20Penny%20on%20Elymum!%20%F0%9F%AA%99&url=https%3A%2F%2Felymum.io%2Fshare%2F${c.id}`,
     );
   });
+
+  it('without a working canvas the image falls back to the site picture; the page itself runs no script', () => {
+    const s = service();
+    const c = s.result({ room: arenaRoom, player: look, wallet: null }, { rank: 1, of: 2, mass: 10, kills: 0 });
+    const out: { status?: number; headers?: Record<string, string | number> } = {};
+    const res = {
+      writeHead(status: number, headers: Record<string, string | number>) {
+        out.status = status;
+        out.headers = headers;
+      },
+      end() {},
+    } as never;
+    const req = (path: string) => ({ method: 'GET', url: path, headers: {} }) as never;
+    s.setRenderBroken('Cannot find module @napi-rs/canvas-linux-x64-gnu');
+    expect(s.handle(req(`/share/${c.id}.png`), res, `/share/${c.id}.png`, '1.2.3.4')).toBe(true);
+    expect(out).toMatchObject({ status: 302, headers: { Location: 'https://elymum.io/og-elymum.png' } });
+    s.handle(req(`/share/${c.id}`), res, `/share/${c.id}`, '1.2.3.4');
+    expect(out.status).toBe(200);
+    expect(String(out.headers!['Content-Security-Policy'])).toMatch(/default-src 'none'/);
+  });
+
+  it('the startup self-check draws with the real addon here', async () => {
+    const { shareCardSelfCheck } = await import('../src/site/share-card');
+    expect(shareCardSelfCheck()).toEqual({ ok: true });
+  });
 });
 
 describe('the notable-kill hook of a room', () => {

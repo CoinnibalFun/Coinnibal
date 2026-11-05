@@ -1345,6 +1345,69 @@ contract ElymumArenaTest is Test {
         a.sweepLoot(ID, 1, 0);
     }
 
+    /// @dev Griefing by capacity: wallets that buy tickets and never play fill `maxSessions` and lock real players
+    ///      out (`ArenaFull`) until the server cancels them. Each such ticket ties up a whole entry fee and comes back
+    ///      in full, so the attack costs capital and gas, nothing more: the server's stale sweeper (15 min) and a
+    ///      high `maxSessions` (the server caps seats per instance anyway) are the defence.
+    function test_security_capacityGriefing_cancelFreesTheSeats() public {
+        vm.prank(admin);
+        arena.updateArena(ID, FEE, 2, true);
+        address g1 = makeAddr("griefer1");
+        address g2 = makeAddr("griefer2");
+        _fund(g1);
+        _fund(g2);
+        uint64 s1 = _join(g1);
+        uint64 s2 = _join(g2);
+        vm.prank(alice);
+        vm.expectRevert(ElymumArena.ArenaFull.selector);
+        arena.join(ID);
+        ElymumArena.SessionRef[] memory refs = new ElymumArena.SessionRef[](2);
+        refs[0] = ElymumArena.SessionRef(ID, g1, s1);
+        refs[1] = ElymumArena.SessionRef(ID, g2, s2);
+        _cancel(refs);
+        // the griefers got exactly their stakes back, the seats are free again
+        assertEq(token.balanceOf(g1), token.balanceOf(g2));
+        _join(alice);
+        assertEq(arena.getArena(ID).openSessions, 1);
+        _assertSolvent(arena, address(token));
+    }
+
+    /// @dev A misused server key can push `lastSweepId` to the top of uint64: loot burns of that arena stop for good
+    ///      (no value moves; floor loot then stays in the vault as surplus). The server refuses to work past a
+    ///      lastSweepId beyond 2^53 and says so loudly; the owner's remedy is a new arena id.
+    function test_security_sweepIdCanBeExhaustedOnlyByTheServerKey() public {
+        _join(alice);
+        vm.prank(stranger);
+        vm.expectRevert(ElymumArena.NotServer.selector);
+        arena.sweepLoot(ID, type(uint64).max, 0);
+        vm.prank(server);
+        arena.sweepLoot(ID, type(uint64).max, 0);
+        vm.prank(server);
+        vm.expectRevert(ElymumArena.SweepIdNotIncreasing.selector);
+        arena.sweepLoot(ID, type(uint64).max, 0);
+        // nothing left the vault
+        assertEq(arena.getArena(ID).vault, FEE);
+        _assertSolvent(arena, address(token));
+    }
+
+    /// @dev A held or delayed settlement races the player's own refund after 24 h: whichever lands first wins and the
+    ///      other is skipped (session mismatch); the vault never pays twice.
+    function test_security_refundAfter24hBeatsALateSettlement_noDoublePay() public {
+        uint64 sa = _join(alice);
+        _join(bob);
+        vm.warp(block.timestamp + 24 hours + 1);
+        uint256 before = token.balanceOf(alice);
+        vm.prank(alice);
+        arena.refund(ID);
+        assertEq(token.balanceOf(alice) - before, FEE);
+        vm.expectEmit(address(arena));
+        emit SettleSkipped(ID, alice, sa, 2);
+        _settle(_one(ID, alice, sa, 2 * FEE));
+        assertEq(token.balanceOf(alice) - before, FEE);
+        assertEq(arena.getArena(ID).vault, FEE);
+        _assertSolvent(arena, address(token));
+    }
+
     // ---------------------------------------------------------------- fuzz
 
     function testFuzz_computeFees(uint128 entryFee, uint128 payout, uint16 burnBps, uint16 vaultBps) public view {

@@ -257,6 +257,29 @@ describe('integrity admin API', () => {
     j.remove(k2);
   });
 
+  it('a pending settlement can be held by hand; every admin write lands in the audit log', async () => {
+    const j = h.app.journal;
+    const p = wallet();
+    const k = `1:${p.toLowerCase()}:9`;
+    j.commit({ enqueue: [{ ...held(k, p, 4200), held: undefined }] });
+    const pending = await h.call('GET', '/api/admin/integrity/pending', { wallet: h.admin });
+    expect(pending.body.pending.map((x: { key: string }) => x.key)).toContain(k);
+    expect((await h.call('POST', `/api/admin/integrity/pending/${k}/hold`, { wallet: h.admin, body: { reason: 'x' } })).status).toBe(400);
+    const r = await h.call('POST', `/api/admin/integrity/pending/${k}/hold`, { wallet: h.admin, body: { reason: 'books guard stop, checking' } });
+    expect(r.status).toBe(200);
+    expect((j.pending.find((x) => x.key === k) as SettlementItem).held).toMatchObject({ flags: ['admin_hold'] });
+    // not an admin: refused, and no audit line for it
+    expect((await h.call('POST', `/api/admin/integrity/pending/${k}/hold`, { wallet: wallet(), body: { reason: 'nope nope' } })).status).toBe(403);
+    const audit = await h.call('GET', '/api/admin/audit?limit=10', { wallet: h.admin });
+    expect(audit.status).toBe(200);
+    expect(audit.body.entries.slice(0, 2).map((e: { path: string; status: number; wallet: string }) => [e.path, e.status, e.wallet])).toEqual([
+      [`/api/admin/integrity/pending/${k}/hold`, 200, h.admin],
+      [`/api/admin/integrity/pending/${k}/hold`, 400, h.admin],
+    ]);
+    expect(readFileSync(join(h.dir, 'admin-audit.jsonl'), 'utf8')).toContain('"method":"POST"');
+    j.remove(k);
+  });
+
   it('flags: list, filter, review, dismiss, CSV; wallet view', async () => {
     const svc = h.app.integrity;
     // two wallets sharing a browser in one arena: a shared-device flag

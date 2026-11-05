@@ -154,12 +154,11 @@ Do it at a quiet hour; the whole switch takes about 15 minutes.
    - Vercel → the project → Settings → Environment Variables → Production:
      `VITE_SERVER_URL=https://game.elymum.io`. Remove `VITE_WS_URL` if it is set (unused once
      `VITE_SERVER_URL` is set).
-   - `vercel.json`: keep the `/api` rewrite (NFT metadata lives at `https://elymum.io/api/nft/...`, the base
-     URI on chain), but point it at the VPS instead of Render:
-     ```diff
-     -    { "source": "/api/:path*", "destination": "https://slana-wo00.onrender.com/api/:path*" },
-     +    { "source": "/api/:path*", "destination": "https://game.elymum.io/api/:path*" },
-     ```
+   - `vercel.json` (in the repository) proxies only what must live on the site's domain: `/api/nft/*` (the NFT
+     metadata, the base URI on chain) and `/share/*` (the share cards). Every other API call goes from the browser
+     straight to `game.elymum.io`: through a proxy, every player would arrive from Vercel's few addresses and the
+     server's per-IP limits (sign-in nonces, the API's 240 a minute) would be shared by everyone. A Vercel build
+     without `VITE_SERVER_URL` (or `VITE_WS_URL`) fails on purpose.
    - Commit, push, and let Vercel redeploy (or Deployments → Redeploy). `VITE_*` values are baked in at build
      time, so a redeploy is required.
 6. **Check.** Open `https://elymum.io` in a private window: the browser's network tab shows requests to
@@ -209,11 +208,59 @@ need `sudo cp` it to your home first, or use `/admin` → Network → Download b
 with **encryption** (the "crypt" remote type: the files hold secrets), then add
 `rclone copy /opt/elymum/backups <remote>:elymum-backups --max-age 25h` at the end of `backup.sh`.
 
+## Cloudflare in front (recommended for DDoS protection)
+
+The server and Caddy cut slow, oversized and abusive traffic (per-IP and per-subnet connection caps, sockets
+that never say hello, message floods, slowloris, HTTP rate limits, load shedding; `pnpm -F @elymum/server`
+`node --import tsx scripts/bench/flood.ts` shows each). A volumetric attack fills the VPS's link before any of that
+runs: only a network in front absorbs it. Cloudflare's free plan proxies WebSockets and is enough.
+
+What to click (about 20 minutes; do it at a quiet hour):
+
+1. **Cloudflare → Add a site → elymum.io** (Free plan). Cloudflare lists the domain's DNS records; check that
+   `game` (A record to the VPS) and the Vercel records are there. At your registrar, replace the nameservers with
+   the two Cloudflare names it shows. Wait until Cloudflare says the site is active.
+2. **DNS:** the `game` A record **Proxied** (orange cloud). Leave the Vercel records (`@`, `www`) **DNS only** (grey
+   cloud): Vercel has its own edge, and a proxied Vercel record needs extra Vercel settings.
+3. **SSL/TLS → Overview: Full (strict)** (Caddy keeps its own certificate; Cloudflare checks it). SSL/TLS → Edge
+   Certificates: minimum TLS 1.2; leave **Always Use HTTPS off** (Caddy redirects to HTTPS itself, and its
+   certificate renewals answer Let's Encrypt on plain HTTP through Cloudflare).
+4. **Network:** WebSockets **on** (the default). **Security → Settings:** Security level Medium; Bot Fight Mode **off**
+   (it challenges the game's WebSocket and API calls, which cannot answer a challenge).
+5. **Caching → Configuration:** Standard; no "cache everything" rule (`/api/*` is answered with `no-store` or short
+   `max-age` by the server itself).
+6. **Security → WAF → Rate limiting rules** (the free plan has one rule): path starts with `/api/auth/` → 30 requests
+   per 10 s per IP → Block for 10 s. Optional; the server limits it too.
+7. **On the VPS:** switch Caddy to the Cloudflare config (it trusts `CF-Connecting-IP` only from Cloudflare's ranges,
+   so per-IP limits keep seeing players):
+   ```bash
+   echo 'CADDY_CONFIG=Caddyfile.cloudflare' >> /opt/elymum/.env
+   elymum-compose up -d caddy
+   ```
+8. **Close the back door** so attackers cannot hit the VPS address directly (Docker publishes 80/443 past ufw, so the
+   rule goes into Docker's own `DOCKER-USER` chain). As root:
+   ```bash
+   apt-get install -y iptables-persistent
+   for r in $(curl -fsS https://www.cloudflare.com/ips-v4); do iptables -I DOCKER-USER -p tcp -m multiport --dports 80,443 -s "$r" -j RETURN; done
+   iptables -A DOCKER-USER -p tcp -m multiport --dports 80,443 -j DROP
+   for r in $(curl -fsS https://www.cloudflare.com/ips-v6); do ip6tables -I DOCKER-USER -p tcp -m multiport --dports 80,443 -s "$r" -j RETURN; done
+   ip6tables -A DOCKER-USER -p tcp -m multiport --dports 80,443 -j DROP
+   netfilter-persistent save
+   ```
+   Check from your laptop: `curl -sS https://game.elymum.io/api/health` works, `curl -k https://<VPS IP>/api/health`
+   times out. Certificate renewals keep working (Let's Encrypt reaches Caddy through Cloudflare on port 80).
+9. **Check:** play a practice round; `/admin` → Network shows players' own addresses in the integrity tab, not
+   Cloudflare's.
+
+To undo: the `game` record back to DNS only, `CADDY_CONFIG` removed (`elymum-compose up -d caddy`), and
+`iptables -F DOCKER-USER && ip6tables -F DOCKER-USER && netfilter-persistent save`.
+
 ## Notes
 
 - **Client IPs.** Caddy sets `X-Forwarded-For` itself and ignores the header when a client sends it (no
   `trusted_proxies` configured), so the app sees exactly one hop, the player's address. `docker-compose.yml`
-  sets `TRUST_PROXY=1` and `TRUST_PROXY_HOPS=1` for it. Do not put a CDN proxy in front without changing both.
+  sets `TRUST_PROXY=1` and `TRUST_PROXY_HOPS=1` for it. Behind Cloudflare, `Caddyfile.cloudflare` keeps that single
+  hop (above); do not put any other proxy in front without a config of its own.
 - **Ports.** Only Caddy publishes ports (80, 443, 443/udp for HTTP/3). The app listens on 8787 inside the
   Docker network only. Docker opens its published ports itself; ufw covers everything else.
 - **Shutdown.** On a restart or deploy the server gets SIGTERM and pays out every live stake player before it
