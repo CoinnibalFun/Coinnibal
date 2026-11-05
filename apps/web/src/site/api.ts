@@ -89,7 +89,7 @@ const FALLBACK: Partial<Record<SiteApiError['code'], string>> = {
   not_owner: 'The contract owner is not the signed-in admin wallet.',
   wrong_authority: "The arena's server authority is not this server's key.",
   chain_off: 'The server has no chain configured, or the contract is not registered.',
-  price_unavailable: 'The HYPE price feed is unavailable right now.',
+  price_unavailable: 'The gas token price feed is unavailable right now.',
 };
 
 /**
@@ -239,7 +239,7 @@ export const site = {
     request<{ collab: CollabPublic }>(`/api/site/collab/${encodeURIComponent(id)}/wallets`, { method: 'PUT', token, body: { wallets, raffleUrl } }).then((r) => r.collab),
   submitWallets: (token: string, id: string, wallets: CollabWalletRow[], raffleUrl: string) =>
     request<{ collab: CollabPublic }>(`/api/site/collab/${encodeURIComponent(id)}/submit`, { method: 'POST', token, body: { wallets, raffleUrl } }).then((r) => r.collab),
-  /** `GET /api/site/mint`: contract state, HYPE/USD, the price in USD, holders, game access. */
+  /** `GET /api/site/mint`: contract state, the gas token's USD price, the price in USD, holders, game access. */
   mint: (signal?: AbortSignal) => request<MintState>('/api/site/mint', { signal }),
   /** `GET /api/site/mint/proof?wallet=0x…`. */
   mintProof: (wallet: string, signal?: AbortSignal) => request<MintProofResponse>(`/api/site/mint/proof${q({ wallet })}`, { signal }),
@@ -276,7 +276,7 @@ export function adminApi(token: string) {
     allowlist: () => request<AllowlistStatus>('/api/admin/mint/allowlist', { token }),
     /** `POST /api/admin/mint/refresh`: the server re-reads the NFT now (after an owner transaction), for the public mint page. */
     mintRefresh: () => request<{ refreshed: boolean }>('/api/admin/mint/refresh', { method: 'POST', token, body: {} }),
-    /** `GET /api/admin/mint/price`: HYPE/USD and the $1 price in wei. */
+    /** `GET /api/admin/mint/price`: the gas token's USD price and the $1 price in wei. */
     mintPrice: () => request<MintPriceQuote>('/api/admin/mint/price', { token }),
     tasks: () => request<{ tasks: WlTask[] }>('/api/admin/tasks', { token }).then((r) => r.tasks),
     createTask: (t: TaskInput) => request<{ task: WlTask }>('/api/admin/tasks', { method: 'POST', token, body: t }).then((r) => r.task),
@@ -305,13 +305,10 @@ export function adminApi(token: string) {
     avatars: (limit = 200) => request<{ items: AdminAvatarEntry[]; total: number }>(`/api/admin/avatars${q({ limit })}`, { token }),
     /** `DELETE /api/admin/avatars/<wallet>`: removes (and blocks) the wallet's picture; its coin goes back to the basic skin. */
     removeAvatar: (wallet: string) => request<{ removed: string }>(`/api/admin/avatars/${id(wallet)}`, { method: 'DELETE', token }),
-    /** `GET /api/admin/bots`: the bot settings, their env defaults and the live counts (shape: `BotAdminView`). */
-    bots: () => request<BotAdminView>('/api/admin/bots', { token }),
-    /** `PUT /api/admin/bots`: a partial settings update; answers like the GET. */
-    saveBots: (patch: BotSettingsPatch) => request<BotAdminView>('/api/admin/bots', { method: 'PUT', token, body: patch }),
-    /** `POST /api/admin/bots/bankroll`: the admin's unplayed ticket in `arenaId` becomes bot bankroll (team reserve). */
-    bankrollBots: (arenaId: number) =>
-      request<{ arenaId: number; amount: number; reserve: number; view: BotAdminView }>('/api/admin/bots/bankroll', { method: 'POST', token, body: { arenaId } }),
+    /** `GET /api/admin/maps`: the adaptive map settings per room kind, their defaults and every room's live numbers. */
+    maps: () => request<MapAdminView>('/api/admin/maps', { token }),
+    /** `PUT /api/admin/maps`: a partial update (per room kind); answers like the GET. */
+    saveMaps: (patch: MapSettingsPatch) => request<MapAdminView>('/api/admin/maps', { method: 'PUT', token, body: patch }),
     /** `GET /api/admin/custom-rooms`: the custom room settings, the effective treasury and the live rooms. */
     customRooms: () => request<CustomRoomsAdminView>('/api/admin/custom-rooms', { token }),
     /** `PUT /api/admin/custom-rooms`: a partial settings update; answers like the GET. */
@@ -432,90 +429,36 @@ export interface ShopPurchase {
 export interface ShopAdminView {
   settings: ShopSettings;
   defaults: ShopSettings;
-  /** Where payments go now (null: treasury chosen but no owner wallet). */
-  sink: string | null;
-  /** The first `ADMIN_WALLETS` entry (the treasury when none is set). */
-  owner: string | null;
+  /** The arena contract every pack is paid to (`pay`); null without an arena. */
+  payTo: string | null;
+  /** Share of a payment the arena burns (bps; the rest goes to its fee wallet); null while unknown. */
+  burnBps: number | null;
   purchases: ShopPurchase[];
   purchaseCount: number;
 }
 
-/* ── bots (`/api/admin/bots`) ─────────────────────────────────────── */
+/* ── maps (`/api/admin/maps`) ─────────────────────────────────────── */
 
-/** One kind of room's bot settings (`practiceRookie`, `practicePro`, `arena`, `private`). */
-export interface BotKindSettings {
-  enabled: boolean;
-  /** Most bots in one room (0..64). */
-  cap: number;
-  /** Bots kept even when the room is busy (<= cap). */
-  min: number;
-  /** Wanted population, people + bots (0..200). */
-  target: number;
-  /** Difficulty mix, as weights. */
-  mix: Record<string, number>;
-  /** Most mass one bot keeps (0: no cap; older servers leave it out). */
-  massCap?: number;
-  /** Bot strength, percent (25..200, 100 = as tuned; older servers leave it out). */
-  strength?: number;
-  /** Most bots chasing one person at once (0: no limit; older servers leave it out). */
-  maxChasers?: number;
-}
-
-export interface BotSettings {
-  kinds: Record<string, BotKindSettings>;
-  /** Arenas: the squad's final-minute push on people (older servers leave it out). */
-  finalPush?: boolean;
-  testnet: {
-    stakedPerArena: number;
-    /** Whole tokens, decimal string. */
-    bankroll: string;
-    /** HYPE per bot wallet for gas, decimal string. */
-    gasHype: string;
-    arenas: Record<string, { stakedBots?: number; bankroll?: string }>;
-  };
-  /** Adaptive map size per room kind (older servers leave it out). */
-  maps?: Record<string, MapScaleSettings>;
-}
-
-export interface BotRoomCount {
+/** One room's live numbers (`/api/admin/maps`): people, the practice bots of a free custom room, its map now. */
+export interface MapRoomCount {
   id: string;
   kind: string;
   name: string;
   arenaId?: number;
   humans: number;
   bots: number;
-  stakedBots: number;
-  /** The room's map side now and whether it follows the player count (older servers leave them out). */
-  mapSide?: number;
-  mapAuto?: boolean;
+  mapSide: number;
+  mapAuto: boolean;
 }
 
-export interface BotTotals {
-  rooms: number;
-  humans: number;
-  bots: number;
-  stakedBots: number;
+/** `GET` / `PUT /api/admin/maps`. */
+export interface MapAdminView {
+  settings: Record<string, MapScaleSettings>;
+  defaults: Record<string, MapScaleSettings>;
+  rooms: MapRoomCount[];
 }
 
-export interface BotAdminView {
-  settings: BotSettings;
-  defaults?: BotSettings;
-  /** The chain is Elysium Testnet: arenas may field staked bots. */
-  testnet: boolean;
-  /** Staked bots really run. */
-  stakedActive?: boolean;
-  /** The staked-bot wallets and what is in their way (`problem`: shown with its fix). */
-  staked?: { active: boolean; chainId: number | null; wallets: number; playing: number; problem: string | null };
-  live: { rooms: BotRoomCount[]; byKind?: Record<string, BotTotals>; totals?: BotTotals };
-  /** The team reserve per arena id (ledger units): what the house bots enter arenas with. */
-  reserve?: Record<string, number>;
-}
-
-export type BotSettingsPatch = {
-  finalPush?: boolean;
-  kinds?: Record<string, Partial<Omit<BotKindSettings, 'mix'>> & { mix?: Record<string, number> }>;
-  maps?: Record<string, Partial<MapScaleSettings>>;
-  testnet?: Partial<Omit<BotSettings['testnet'], 'arenas'>> & { arenas?: Record<string, { stakedBots?: number; bankroll?: string } | null> };
-};
+/** A partial map settings update, per room kind. */
+export type MapSettingsPatch = Record<string, Partial<MapScaleSettings>>;
 
 const emptyImport = (): HolderWlView => ({ entries: [], counts: { wallets: 0, tokens: 0, alsoWl: 0 }, importedAt: null, importedFrom: null });

@@ -16,6 +16,7 @@ import {
   getTokenBalance,
   getTokenInfo,
   listArenas,
+  probeBurnSupport,
   type ArenaConfig,
   type ArenaInfo,
   type ArenaParams,
@@ -231,6 +232,11 @@ export interface StatusSnapshot {
     token: (TokenInfo & { feeWalletBalance: bigint }) | null;
     arenas: ArenaInfo[];
     serverBalance: bigint | null;
+    /**
+     * The game token has a working `burn(uint256)` (an `eth_call` of `burn(0)` from the arena succeeds): burn mode 1
+     * can be used. null when no token is set or the probe could not run.
+     */
+    burnSupport: boolean | null;
   } | null;
   nft: { address: Address; code: CodeCheck; state: MintState | null; balance: bigint } | null;
   /**
@@ -273,15 +279,17 @@ export async function fetchStatus(
     let token: (TokenInfo & { feeWalletBalance: bigint }) | null = null;
     let arenas: ArenaInfo[] = [];
     let serverBalance: bigint | null = null;
+    let burnSupport: boolean | null = null;
     if (code !== 'missing') {
       config = await getArenaConfig(client, where.arena);
       [arenas, serverBalance] = await Promise.all([listArenas(client, where.arena), client.getBalance({ address: config.serverAuthority })]);
       if (config.token) {
         const info = await getTokenInfo(client, config.token);
         token = { ...info, feeWalletBalance: await getTokenBalance(client, config.token, config.feeWallet) };
+        burnSupport = await probeBurnSupport(client, config.token, getAddress(where.arena));
       }
     }
-    arena = { address: getAddress(where.arena), code, config, token, arenas, serverBalance };
+    arena = { address: getAddress(where.arena), code, config, token, arenas, serverBalance, burnSupport };
   }
   let nft: StatusSnapshot['nft'] = null;
   if (where.nft) {

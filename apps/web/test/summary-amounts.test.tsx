@@ -86,7 +86,7 @@ describe('the round-over receipt with whale amounts', () => {
     setReducedMotion(true);
     const whale = 999_999_999_999_123_456;
     useUi.setState({
-      chain: chainStatus({ feeBps: null }),
+      chain: chainStatus({ fees: null }),
       rooms: [ARENA],
       screen: 'roundover',
       room: ARENA,
@@ -101,7 +101,7 @@ describe('the round-over receipt with whale amounts', () => {
           { name: 'MMMMMMMMMMMMMMMM', value: whale - 1e15, isBot: true },
         ],
       },
-      lastSettlement: { session: 'SessW', arenaId: 1, txHash: `0x${'5b'.repeat(32)}`, payout: whale, fee: 50 * M, net: whale, feeOnEntry: true, at: Date.now() },
+      lastSettlement: { session: 'SessW', arenaId: 1, txHash: `0x${'5b'.repeat(32)}`, payout: whale, fee: 0, net: whale, at: Date.now() },
     });
     render(
       <Kb>

@@ -1,5 +1,5 @@
-import { DEFAULT_FEE_BPS, MAX_ALLOWANCE, type ArenaConfig, type SessionInfo } from '@elymum/sdk';
-import type { ChainStatus } from '@elymum/shared';
+import { MAX_ALLOWANCE, type ArenaConfig, type SessionInfo } from '@elymum/sdk';
+import { DEFAULT_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, type ChainStatus, type FeeRates } from '@elymum/shared';
 import type { Address, Hash } from 'viem';
 import { SERVER } from '../config';
 import { DEV_FAKE_ARENA_ADDRESS } from './devFakeLoader';
@@ -19,7 +19,7 @@ import type { TxPhase } from './tx';
 export interface FakeWallet {
   /** Game-token balance, base units of an 18-decimal token. */
   tokenBalance: bigint;
-  /** HYPE, wei. */
+  /** The chain's gas token, wei. */
   wei: bigint;
   /** Allowance granted to the arena, base units. */
   allowance: bigint;
@@ -59,11 +59,15 @@ export function fakeConfig(chain: ChainStatus): ArenaConfig {
     feeWallet: addr,
     token: (token?.address as Address | undefined) ?? null,
     decimals: token?.decimals ?? 18,
-    feeBps: chain.feeBps ?? DEFAULT_FEE_BPS,
+    burnBps: chain.fees?.burnBps ?? DEFAULT_FEE_RATES.burnBps,
+    vaultBps: chain.fees?.vaultBps ?? DEFAULT_FEE_RATES.vaultBps,
     paused: false,
-    totals: { sessions: 0n, games: 0n, staked: 0n, paidOut: 0n, fees: 0n, burned: 0n },
+    totals: { sessions: 0n, games: 0n, staked: 0n, paidOut: 0n, feeBurned: 0n, feeToVault: 0n, lootBurned: 0n, payments: 0n, paymentBurned: 0n },
     holderNft: FAKE_HOLDER_NFT,
-    holderFeeBps: fakePerks.holderFeeBps,
+    holderBurnBps: fakePerks.holderRates.burnBps,
+    holderVaultBps: fakePerks.holderRates.vaultBps,
+    burnMode: chain.fees?.burnMode ?? 0,
+    paymentBurnBps: chain.fees?.paymentBurnBps ?? DEFAULT_PAYMENT_BURN_BPS,
   };
 }
 
@@ -85,7 +89,7 @@ export async function fakeSendTicket(
   arenaId: number,
   entryFee: bigint,
   steps: readonly TicketStep[],
-  feeBps: number,
+  rates: FeeRates,
   onPhase: (step: TicketStep, phase: TxPhase, hash?: Hash) => void,
   approveAmount: bigint = entryFee,
 ): Promise<{ ok: true; hash: Hash } | { ok: false; name: string }> {
@@ -111,7 +115,8 @@ export async function fakeSendTicket(
     id: nextSession++,
     entryFee,
     openedAt: Math.floor(Date.now() / 1000),
-    feeBps,
+    burnBps: rates.burnBps,
+    vaultBps: rates.vaultBps,
     finalized: false,
     owed: 0n,
   };
@@ -135,12 +140,12 @@ export const fakeFaucet = {
   cooldownSecs: 3600,
   /** Unix seconds of the next claim (0: never claimed). */
   nextAt: 0,
-  /** The fake wallet holds an emblem (2x faucet, the holder fee, holders-only arenas). */
+  /** The fake wallet holds an emblem (2x faucet, the holder rates, holders-only arenas). */
   holder: false,
 };
 
-/** The fake chain's holder perks: arena ids reserved for emblem holders, and the holder fee. */
-export const fakePerks = { holdersOnly: [4] as number[], holderFeeBps: 300 };
+/** The fake chain's holder perks: arena ids reserved for emblem holders, and the holder rates on profit (15 % + 0 %). */
+export const fakePerks = { holdersOnly: [4] as number[], holderRates: { burnBps: 1_500, vaultBps: 0 } as FeeRates };
 
 /** "Claims" from the fake faucet. */
 export async function fakeFaucetClaim(onPhase: (p: TxPhase, hash?: Hash) => void): Promise<Hash> {
@@ -154,8 +159,8 @@ export async function fakeFaucetClaim(onPhase: (p: TxPhase, hash?: Hash) => void
   return h;
 }
 
-/** "Sends" a native HYPE transfer (the custom room fee): the server's fake chain accepts this hash as the payment. */
-export async function fakeHypePayment(wei: bigint, onPhase: (p: TxPhase, hash?: Hash) => void): Promise<{ ok: true; hash: Hash } | { ok: false; name: string }> {
+/** "Sends" a native gas-token transfer (the custom room fee): the server's fake chain accepts this hash as the payment. */
+export async function fakeGasPayment(wei: bigint, onPhase: (p: TxPhase, hash?: Hash) => void): Promise<{ ok: true; hash: Hash } | { ok: false; name: string }> {
   onPhase('signing');
   await sleep(fakeWallet.delayMs);
   if (fakeWallet.failNext) {
@@ -172,10 +177,10 @@ export async function fakeHypePayment(wei: bigint, onPhase: (p: TxPhase, hash?: 
 }
 
 /**
- * "Pays" a power-up pack: the game server's fake chain records the token transfer
- * (`POST /api/dev/transfer`) and answers its hash, which the shop then claims like a real one.
+ * "Pays" a power-up pack: the game server's fake chain records the `ElymumArena.pay` (`POST /api/dev/pay`) and
+ * answers its hash, which the shop then claims like a real one.
  */
-export async function fakeShopTransfer(from: string, to: string, value: bigint, onPhase: (p: TxPhase) => void): Promise<Hash> {
+export async function fakeShopPay(from: string, value: bigint, ref: string, onPhase: (p: TxPhase) => void): Promise<Hash> {
   onPhase('signing');
   await sleep(fakeWallet.delayMs);
   if (fakeWallet.failNext) {
@@ -183,13 +188,13 @@ export async function fakeShopTransfer(from: string, to: string, value: bigint, 
     fakeWallet.failNext = null;
     throw Object.assign(new Error(name), { name });
   }
-  const res = await fetch(`${SERVER.http}/api/dev/transfer`, {
+  const res = await fetch(`${SERVER.http}/api/dev/pay`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to, value: value.toString() }),
+    body: JSON.stringify({ from, value: value.toString(), ref }),
   });
   const body = (await res.json().catch(() => null)) as { hash?: Hash } | null;
-  if (!res.ok || !body?.hash) throw new Error('The fake chain refused the transfer.');
+  if (!res.ok || !body?.hash) throw new Error('The fake chain refused the payment.');
   onPhase('confirming');
   await sleep(fakeWallet.delayMs);
   fakeWallet.tokenBalance -= value;

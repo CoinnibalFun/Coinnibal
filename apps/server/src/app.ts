@@ -55,9 +55,9 @@ export interface App {
   stateChainId: number | null;
   /** Imported testnet emblem holders (`DATA_DIR/site/holder-wl.json`). */
   holderWl: HolderWlStore;
-  /** The NFT mint: state, HYPE/USD, holders, allowlist, metadata. */
+  /** The NFT mint: state, the gas token's USD price, holders, allowlist, metadata. */
   mint: MintService;
-  /** Keeps the mint price at $1 in HYPE when the server key is the NFT's price keeper; null without a chain. */
+  /** Keeps the mint price at $1 in the gas token when the server key is the NFT's price keeper; null without a chain. */
   priceKeeper: PriceKeeper | null;
   /** Cheat and collusion detection: telemetry, flags, bans, auto-hold (`/api/admin/integrity/*`). */
   integrity: IntegrityService;
@@ -128,7 +128,7 @@ export async function createApp(
   const profiles = new ProfileStore(persist ? join(cfg.dataDir, files.profiles) : null, log);
   // profile pictures: content-addressed files next to the profiles (DATA_DIR/avatars/<id>.png|webp)
   const avatars = new AvatarStore(persist ? join(cfg.dataDir, cfg.devFakeChain ? 'avatars.dev-fake' : 'avatars') : null, log);
-  // on Elysium Testnet the game is open to everyone unless the admin already chose otherwise
+  // on a public testnet the game is open to everyone unless the admin already chose otherwise
   const siteStore = new SiteStore(persist ? cfg.dataDir : null, { now: opts.siteNow, log, ...(isTestChainId(stateChainId) && stateChainId !== LOCALNET_CHAIN_ID ? { defaults: { gameAccess: 'public' } } : {}) });
   const holderWl = new HolderWlStore(persist ? cfg.dataDir : null, log);
   const fetchPrice = opts.fetchPrice ?? hyperliquidPrice(cfg.mint.gasPriceUrl);
@@ -230,7 +230,7 @@ export async function createApp(
     chain,
     mapSettings,
   );
-  // custom rooms: paid with a HYPE transfer to the treasury (checked on chain), restored after a restart
+  // custom rooms: paid with a gas-token transfer to the treasury (checked on chain), restored after a restart
   let paymentReader: PaymentReader | null | undefined = opts.paymentReader;
   const customRooms = new CustomRoomService({
     rooms,

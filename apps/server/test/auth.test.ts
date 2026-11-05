@@ -124,8 +124,9 @@ describe('SIWE login message (EIP-4361)', () => {
       chainId: 99801,
     });
     const dev = loadConfig({ NODE_ENV: 'development' } as NodeJS.ProcessEnv);
-    // chain off: the testnet id
-    expect(siweOrigin(dev, req, false, null)).toEqual({ domain: 'game.local:8787', uri: 'http://game.local:8787', chainId: 99801 });
+    // chain off: the configured CHAIN_ID (default Robinhood Chain Testnet)
+    expect(siweOrigin(dev, req, false, null)).toEqual({ domain: 'game.local:8787', uri: 'http://game.local:8787', chainId: 46630 });
+    expect(siweOrigin(loadConfig({ NODE_ENV: 'development', CHAIN_ID: '4663' } as NodeJS.ProcessEnv), req, false, null).chainId).toBe(4663);
     expect(siweOrigin(dev, req, false, 31337).chainId).toBe(31337);
   });
 

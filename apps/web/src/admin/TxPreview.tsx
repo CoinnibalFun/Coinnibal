@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Address, Hash, PublicClient, TransactionReceipt } from 'viem';
-import { explorerAddressUrl, explorerTxUrl } from '@elymum/shared';
+import { explorerAddressUrl, explorerTxUrl, gasSymbol } from '@elymum/shared';
 import { Button, Stamp, StatusPill } from '../design';
 import { sendWithWallet, txErrorText, type TxPhase } from '../wallet/tx';
 import type { AdminNetwork } from './net';
@@ -86,7 +86,7 @@ function Hex({ value, href }: { value: string; href: string | null }) {
 
 /**
  * The step before every wallet prompt of the admin panel: the call (function, arguments with
- * names, types and values, the HYPE value), the network and the signer. The wallet only opens
+ * names, types and values, the gas-token value), the network and the signer. The wallet only opens
  * from here, after the chain check (the server's chain is known and the RPC agrees; the wallet is
  * switched to it) and the owner check (the contract's `owner()` re-read right now). A ref guard
  * makes a double click (or a held Enter) send once. Drawn as the design system's `kb-tx`
@@ -291,7 +291,7 @@ export function TxPreview({
         <dl className="kb-tx__meta ad-txp__meta">
           <div>
             <dt>Value</dt>
-            <dd className="num">{p.valueText ?? '0 HYPE'}</dd>
+            <dd className="num">{p.valueText ?? `0 ${gasSymbol()}`}</dd>
           </div>
           <div>
             <dt>Network</dt>

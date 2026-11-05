@@ -1,4 +1,4 @@
-import { BOOST_KINDS, BURN_ADDRESS, SHOP_LIMITS, formatToken, type BoostKind, type ShopSettings } from '@elymum/shared';
+import { BOOST_KINDS, BPS, SHOP_LIMITS, bpsToPercent, formatToken, type BoostKind, type ShopSettings } from '@elymum/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { SiteApiError, type ShopAdminView } from '../site/api';
 import { SwitchRow } from './GameTab';
@@ -11,7 +11,7 @@ const PURCHASE_LABEL: Record<BoostKind | 'shock', string> = { ...KIND_LABEL, sho
 /** The fields that changed (a partial PUT). */
 export function shopPatch(saved: ShopSettings, draft: ShopSettings): Partial<ShopSettings> {
   const out: Record<string, unknown> = {};
-  for (const f of ['enabled', 'sink', 'treasury', 'packSize', 'holderDiscountPct', 'arenaUsesPerRound', 'holderExtraArenaUses'] as const) if (draft[f] !== saved[f]) out[f] = draft[f];
+  for (const f of ['enabled', 'packSize', 'holderDiscountPct', 'arenaUsesPerRound', 'holderExtraArenaUses'] as const) if (draft[f] !== saved[f]) out[f] = draft[f];
   const prices: Record<string, string> = {};
   const kinds: Record<string, boolean> = {};
   for (const k of BOOST_KINDS) {
@@ -38,9 +38,9 @@ function Num({ value, onChange, label, min, max }: { value: number; onChange: (n
 }
 
 /**
- * Game → power-ups: on/off (all, and per power-up), pack prices in whole tokens, where payments go
- * (burned by default, or the treasury), the holder discount and the paid arenas' per-round limit,
- * and the last purchases. Saved on the server (`DATA_DIR/site/shop.json`), applied at once.
+ * Game → power-ups: on/off (all, and per power-up), pack prices in whole tokens, the holder discount and the paid
+ * arenas' per-round limit, and the last purchases. Every pack is paid to the arena contract (`pay`), which burns
+ * its `paymentBurnBps` share (50 % by default; Advanced on the arena) and sends the rest to the fee wallet. Saved on the server (`DATA_DIR/site/shop.json`), applied at once.
  */
 export function ShopCard({ ctx }: { ctx: ChainCtx }) {
   const [view, setView] = useState<ShopAdminView | null>(null);
@@ -94,7 +94,7 @@ export function ShopCard({ ctx }: { ctx: ChainCtx }) {
       title="Power-ups"
       id="shop"
       kicker={`${view.purchaseCount} purchases`}
-      lede="Players buy packs of power-up charges with the game token (one transfer to the sink; the server checks the receipt). Practice and private rooms: free use with cooldowns. Paid arenas: a per-round limit. Bots never use them."
+      lede="Players buy packs of power-up charges with the game token: one ElymumArena.pay call (the server checks its Paid event). Practice and private rooms: free use with cooldowns. Paid arenas: a per-round limit. Practice bots never use them."
     >
       <SwitchRow
         label="Shop"
@@ -106,24 +106,9 @@ export function ShopCard({ ctx }: { ctx: ChainCtx }) {
         onPick={(v) => setDraft({ ...draft, enabled: v === 'on' })}
         testId="shop-enabled"
       />
-      <SwitchRow
-        label="Payments go to"
-        options={[
-          { id: 'burn', label: 'Burn', note: BURN_ADDRESS },
-          { id: 'treasury', label: 'Treasury' },
-        ]}
-        value={draft.sink}
-        onPick={(v) => setDraft({ ...draft, sink: v })}
-        testId="shop-sink"
-      />
-      {draft.sink === 'treasury' && (
-        <label className="ad-field">
-          <span className="ad-field__label mono">Treasury wallet (empty: the owner <span className="ad-hex">{view.owner ?? 'not set'}</span>)</span>
-          <input className="ad-input mono ad-hex" value={draft.treasury ?? ''} placeholder={view.owner ?? '0x…'} onChange={(e) => setDraft({ ...draft, treasury: e.target.value.trim() || null })} />
-        </label>
-      )}
-      <p className="ad-note mono" data-testid="shop-sink-now">
-        Sink now: <span className="ad-hex">{view.sink ?? 'none (set a treasury wallet)'}</span>
+      <p className="ad-note mono" data-testid="shop-pay-to">
+        Paid to the arena <span className="ad-hex">{view.payTo ?? 'none (deploy the arena first)'}</span>
+        {view.burnBps !== null && ` · ${bpsToPercent(view.burnBps)} % burned, ${bpsToPercent(BPS - view.burnBps)} % to the fee wallet`}
       </p>
       <div className="ad-tablewrap">
         <table className="ad-table" data-testid="shop-table">

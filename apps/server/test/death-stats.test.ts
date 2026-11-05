@@ -68,7 +68,7 @@ describe('arena death stats (the death sheet)', () => {
     const death = b.conn.msgs.find((m) => m.t === 'death');
     expect(death?.t).toBe('death');
     if (death?.t !== 'death') return;
-    expect(death.stats).toMatchObject({ payout: 0, valueLost: FEE, lootSpilled: 0, byBot: false });
+    expect(death.stats).toMatchObject({ payout: 0, valueLost: FEE, lootSpilled: 0 });
     expect(death.killer).toBe('staker1');
     expect(room.ledger!.value(a.p.id)).toBe(2 * FEE);
   });
@@ -81,7 +81,7 @@ describe('arena death stats (the death sheet)', () => {
     feed(room, stray, b.p);
     const death = b.conn.msgs.find((m) => m.t === 'death');
     if (death?.t !== 'death') throw new Error('no death message');
-    expect(death.stats).toMatchObject({ payout: 0, valueLost: FEE, lootSpilled: FEE, byBot: false });
+    expect(death.stats).toMatchObject({ payout: 0, valueLost: FEE, lootSpilled: FEE });
     expect(room.lootValue()).toBe(FEE);
   });
 });

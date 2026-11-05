@@ -411,9 +411,7 @@ export interface DeathStats {
   cut?: number;
   /** Arena rooms: value lost on death, raw token units. */
   valueLost?: number;
-  /** Arena rooms: the killer was a bot. */
-  byBot?: boolean;
-  /** Arena rooms: part of `valueLost` that spilled as loot (all of it on a bot kill). */
+  /** Arena rooms: part of `valueLost` that spilled as loot (anyone may pick it up until the bell; then it is burned). */
   lootSpilled?: number;
 }
 

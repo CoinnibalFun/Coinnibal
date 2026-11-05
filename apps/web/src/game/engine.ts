@@ -650,8 +650,8 @@ export class GameEngine {
           this.particles.splat(me.x, me.y, INK, Math.max(26, me.maxR * 0.7));
           if (!this.reduced) this.slowmoAt = now;
           this.particles.scraps(me.x, me.y, Math.max(60, me.maxR), 34);
-          // a bot ate a staker: the tokens spill onto the map
-          if (m.stats.byBot && (m.stats.lootSpilled ?? 0) > 0) this.particles.coinBurst(me.x, me.y, Math.max(60, me.maxR), 22);
+          // part of the value spilled onto the map as loot
+          if ((m.stats.lootSpilled ?? 0) > 0) this.particles.coinBurst(me.x, me.y, Math.max(60, me.maxR), 22);
         }
         // a small gulp, no announcer line: the ink splash does the rest
         sound.gulp();
@@ -689,8 +689,7 @@ export class GameEngine {
         return;
       }
       case 'settled':
-        // `net` is what reached the wallet: the whole payout when the fee was taken at the entry (`feeOnEntry`, arena
-        // v2), the payout minus the fee on profit otherwise (the legacy v1 arena)
+        // `payout` is the ticket's gross value; `net` is what reached the wallet (the payout less the fee on its profit)
         useUi.setState({
           lastSettlement: {
             session: m.session ?? null,
@@ -699,7 +698,8 @@ export class GameEngine {
             payout: m.payout,
             fee: m.fee,
             net: m.net,
-            ...(m.feeOnEntry ? { feeOnEntry: true } : {}),
+            ...(m.burned !== undefined ? { burned: m.burned } : {}),
+            ...(m.toVault !== undefined ? { toVault: m.toVault } : {}),
             ...(m.collect ? { collect: true } : {}),
             at: Date.now(),
           },

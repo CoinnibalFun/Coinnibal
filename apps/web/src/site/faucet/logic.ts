@@ -1,9 +1,14 @@
-import type { ContractsRegistry, FaucetConfig } from '@elymum/shared';
+import { activeChain, type ContractsRegistry, type FaucetConfig } from '@elymum/shared';
 import type { TestTokenFaucetConfig } from '@elymum/sdk';
 import { t } from '../../i18n';
 
-/** Kinetiq's HYPE faucet for Elysium Testnet gas. */
-export const HYPE_FAUCET_URL = 'https://elysium.kinetiq.xyz/testnet-faucet';
+/**
+ * The gas faucet to send players to: the server's `GAS_FAUCET_URL` when it is known, else the active chain's
+ * (`faucetUrl` in the `@elymum/shared` chain registry). null on a chain without one (a mainnet, a localnet).
+ */
+export function gasFaucetUrl(served?: string | null): string | null {
+  return served || activeChain().faucetUrl || null;
+}
 
 /** The display symbol of the faucet token. */
 export const TEST_SYMBOL_DEFAULT = 'tELYMUM';
@@ -82,7 +87,7 @@ export function servedConfig(f: FaucetConfig | null | undefined, token: string):
   }
 }
 
-/** What a failed claim says. A wallet with no HYPE gets the gas reason, whatever the wallet or RPC reported (often a vague revert). */
+/** What a failed claim says. A wallet with no gas gets the gas reason, whatever the wallet or RPC reported (often a vague revert). */
 export function claimErrorText(error: { kind: string }, noGas: boolean, generic: string): string {
   if (error.kind === 'rejected') return generic;
   if (noGas || error.kind === 'insufficient-funds') return t('fc.err.gas');

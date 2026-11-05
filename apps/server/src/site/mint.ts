@@ -470,7 +470,7 @@ export class MintService {
     const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
     return {
       name: `Elymum No. ${id}`,
-      description: 'An Elymum emblem: a coin of the ring. Holders play Elymum, the arena where the coins eat, on Elysium.',
+      description: `An Elymum emblem: a coin of the ring. Holders play Elymum, the arena where the coins eat, on ${activeChain().name}.`,
       image: `${baseUrl}/api/nft/${id}.svg`,
       external_url: baseUrl,
       attributes: [
@@ -509,7 +509,7 @@ export class MintService {
     const royalty = nft && client ? await this.royalty(nft.address, client) : null;
     return {
       name: 'Elymum',
-      description: 'Elymum emblems: the coins of the ring. Holders play Elymum on Elysium.',
+      description: `Elymum emblems: the coins of the ring. Holders play Elymum on ${activeChain().name}.`,
       image: `${baseUrl}/api/nft/1.svg`,
       external_link: baseUrl,
       ...(royalty && royalty.bps > 0 ? { seller_fee_basis_points: royalty.bps, fee_recipient: royalty.receiver } : {}),

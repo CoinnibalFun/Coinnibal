@@ -7,9 +7,9 @@
  * **ledger units** (at most 6 decimals, see `fromLedger` / `ledgerDecimals` in the SDK); they
  * are converted with `fromLedger` before they meet a chain amount.
  */
-import { DEFAULT_ARENAS, type FeeModel, type RoomInfo } from '@elymum/shared';
+import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, ratesFor, totalFeeBps, type ArenaFees, type FeeRates, type RoomInfo } from '@elymum/shared';
 import type { Address, Hex } from 'viem';
-import { DEFAULT_FEE_BPS, MAX_ALLOWANCE, REFUND_DELAY_SECS, fromLedger, ticketValue } from '@elymum/sdk';
+import { MAX_ALLOWANCE, REFUND_DELAY_SECS, fromLedger } from '@elymum/sdk';
 
 /* ── the ticket calls ───────────────────────────────────────────────── */
 
@@ -308,49 +308,33 @@ export function ticketGate(g: GateInput): TicketGate {
 
 /* ── fee policy ─────────────────────────────────────────────────────────── */
 
-export { DEFAULT_FEE_BPS };
-
 /**
- * The fee rate of a new ticket, basis points: the server's `ChainStatus.feeBps` (the
- * arena's `config().feeBps` it reads), else the loaded config, else the contract default (5 %).
- * What it is taken from is `feeModelOf`. The ticket sheet re-reads the config before signing and
+ * The fee rates on profit of a new ticket (arena v3: no entry fee; a winning ticket pays `burnBps` + `vaultBps` of
+ * its profit, a losing one nothing): the server's `ChainStatus.fees` (the arena's `config()` it reads), else the
+ * loaded config, else the contract defaults (15 % + 5 %). The ticket sheet re-reads the config before signing and
  * refuses a change.
  */
-export function feeBps(server: number | null | undefined, config: { feeBps: number } | null = null): number {
-  return server ?? config?.feeBps ?? DEFAULT_FEE_BPS;
+export function arenaRates(server: Pick<ArenaFees, 'burnBps' | 'vaultBps'> | null | undefined, config: FeeRates | null = null): FeeRates {
+  const r = server ?? config ?? DEFAULT_FEE_RATES;
+  return { burnBps: r.burnBps, vaultBps: r.vaultBps };
 }
 
 /**
- * The fee a ticket of this wallet gets (`planJoin`'s `feeBps`): the holder rate for emblem holders
- * while the perks are on (`min(feeBps, holderFeeBps)`), else the normal rate.
+ * The rates a ticket of this wallet gets (`planJoin`'s `rates`): the holder pair for emblem holders while the perks
+ * are on and it totals less (`ElymumArena._ratesFor`), else the normal pair.
  */
-export function ticketFeeBps(
-  normal: number,
-  config: { holderNft: string | null; holderFeeBps: number } | null,
+export function ticketRates(
+  normal: FeeRates,
+  config: { holderNft: string | null; holderBurnBps: number; holderVaultBps: number } | null,
   holder: boolean | null | undefined,
-): { bps: number; discount: boolean } {
-  if (holder === true && config?.holderNft && config.holderFeeBps < normal) return { bps: config.holderFeeBps, discount: true };
-  return { bps: normal, discount: false };
+): { rates: FeeRates; discount: boolean } {
+  const pair = config?.holderNft ? { burnBps: config.holderBurnBps, vaultBps: config.holderVaultBps } : null;
+  const rates = ratesFor(normal, pair, holder === true);
+  return { rates, discount: totalFeeBps(rates) < totalFeeBps(normal) };
 }
 
-/**
- * What the fee is taken from: `entry` (the arena contract v2 and every new deployment: each played
- * ticket pays it from its entry fee, win or lose, and plays the rest) or `profit` (the legacy v1
- * contract still live on the testnet until it is redeployed). Unknown → `entry`.
- */
-export function feeModelOf(chain: { feeModel?: FeeModel | null } | null | undefined): FeeModel {
-  return chain?.feeModel === 'profit' ? 'profit' : 'entry';
-}
-
-/** What a ticket plays with (base units): `entry − fee` on a fee-on-entry arena, the whole entry on the legacy one. */
-export function ticketPlays(entryFee: bigint, bps: number, model: FeeModel): bigint {
-  return ticketValue(entryFee, bps, model === 'profit' ? 1 : 2);
-}
-
-/** `500` → `5`, `250` → `2.5`. */
-export function bpsPercent(bps: number): string {
-  return (bps / 100).toFixed(2).replace(/\.?0+$/, '');
-}
+/** The two pairs are the same rates. */
+export const sameRates = (a: FeeRates, b: FeeRates): boolean => a.burnBps === b.burnBps && a.vaultBps === b.vaultBps;
 
 /** Arenas whose last game is settled with a payout waiting to be collected (base units). */
 export function sessionsToCollect(sessions: Readonly<Record<number, OpenSession | null>>): { arenaId: number; owed: bigint }[] {

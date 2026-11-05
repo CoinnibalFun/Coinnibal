@@ -1,6 +1,6 @@
-import { CUSTOM_HOLDER_PERKS, CUSTOM_LIMITS, CUSTOM_SETTINGS_LIMITS, arenaMeta, customRoomFee, type CustomHolderPerk, type CustomRoomSettings, type CustomRoomView } from '@elymum/shared';
+import { CUSTOM_HOLDER_PERKS, CUSTOM_LIMITS, CUSTOM_SETTINGS_LIMITS, arenaMeta, customRoomFee, type CustomHolderPerk, type CustomRoomSettings, type CustomRoomView, gasSymbol } from '@elymum/shared';
 import { parseEther } from 'viem';
-import { hypeText } from '../rooms/hype';
+import { gasText } from '../rooms/gas';
 import { useCallback, useEffect, useState } from 'react';
 import { SiteApiError, type CustomRoomsAdminView } from '../site/api';
 import { SwitchRow } from './GameTab';
@@ -24,31 +24,31 @@ const minutesLeft = (endsAt: number) => Math.max(0, Math.ceil((endsAt - Date.now
 /** "free" or "paid · Lethe Shore #2" (a paid room is an invite-only instance of that arena). */
 export const roomKindText = (r: Pick<CustomRoomView, 'kind' | 'arenaId'>): string => (r.kind === 'paid' && r.arenaId ? `paid · ${arenaMeta(r.arenaId).name} #${r.arenaId}` : 'free');
 
-/** The fee a room paid, in HYPE ("0" for a free one). */
+/** The fee a room paid, in the gas token ("0" for a free one). */
 export const feeText = (r: Pick<CustomRoomView, 'feeWei'>): string => {
   try {
     const wei = BigInt(r.feeWei ?? '0');
-    return wei === 0n ? '0' : hypeText(wei);
+    return wei === 0n ? '0' : gasText(wei);
   } catch {
     return '?';
   }
 };
 
 /** What the base price makes at a few capacities with this step ("10: 0.05 · 20: 0.075 · ..."), or null for a bad price. */
-export function feeLadder(priceHype: string, stepPct: number, maxPlayers: number): string | null {
+export function feeLadder(priceGas: string, stepPct: number, maxPlayers: number): string | null {
   let base: bigint;
   try {
-    base = parseEther(priceHype);
+    base = parseEther(priceGas);
   } catch {
     return null;
   }
   const caps = [10, 20, 50, 100].filter((n) => n <= maxPlayers);
   if (!caps.includes(maxPlayers)) caps.push(maxPlayers);
-  return caps.map((n) => `${n}: ${hypeText(customRoomFee(base, n, stepPct))}`).join(' · ');
+  return caps.map((n) => `${n}: ${gasText(customRoomFee(base, n, stepPct))}`).join(' · ');
 }
 
 /**
- * Game → custom rooms: the price (HYPE), the treasury the fee goes to (empty: the owner wallet),
+ * Game → custom rooms: the price (in the chain's gas token), the treasury the fee goes to (empty: the owner wallet),
  * the NFT holder perk, the caps (the server is small) and the live rooms, each with a close button.
  */
 export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
@@ -133,7 +133,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
     <Card
       title="Custom rooms"
       id="custom-rooms"
-      lede="Players pay a small HYPE fee to open a private room with their own rules: a free room (no stakes) or a ticket room (an invite-only instance of an arena: players buy that arena's normal ticket, settled at its bell). The fee grows with the room's size. The server checks every payment on chain before the room opens."
+      lede={`Players pay a small ${gasSymbol()} fee to open a private room with their own rules: a free room (no stakes) or a ticket room (an invite-only instance of an arena: players buy that arena's normal ticket, settled at its bell). The fee grows with the room's size. The server checks every payment on chain before the room opens.`}
     >
       <SwitchRow
         label="Creating rooms"
@@ -157,8 +157,8 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
       />
       <div className="ad-form2 ad-form3">
         <label className="ad-field">
-          <span className="ad-field__label mono">Base price (HYPE, up to 10 players)</span>
-          <input className="ad-input num" value={draft.priceHype} onChange={(e) => setDraft({ ...draft, priceHype: e.target.value.trim() })} data-testid="cr-price" />
+          <span className="ad-field__label mono">Base price ({gasSymbol()}, up to 10 players)</span>
+          <input className="ad-input num" value={draft.priceGas} onChange={(e) => setDraft({ ...draft, priceGas: e.target.value.trim() })} data-testid="cr-price" />
         </label>
         <label className="ad-field">
           <span className="ad-field__label mono">Treasury (empty: owner)</span>
@@ -190,7 +190,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
         </label>
       </div>
       <p className="ad-note" data-testid="cr-fee-ladder">
-        Fee by size (HYPE, before holder perks): <span className="mono">{feeLadder(draft.priceHype, draft.capacityStepPct, draft.maxPlayers) ?? 'enter a valid price'}</span>. Seats cap the players of all live custom rooms
+        Fee by size ({gasSymbol()}, before holder perks): <span className="mono">{feeLadder(draft.priceGas, draft.capacityStepPct, draft.maxPlayers) ?? 'enter a valid price'}</span>. Seats cap the players of all live custom rooms
         together (the server is sized for about 500 at once, public rooms included).
       </p>
       <SwitchRow
@@ -233,7 +233,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
                 <th>Creator</th>
                 <th>Players</th>
                 <th>Left</th>
-                <th>Fee (HYPE)</th>
+                <th>Fee ({gasSymbol()})</th>
                 <th />
               </tr>
             </thead>

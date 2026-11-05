@@ -24,23 +24,16 @@ afterEach(() => {
 });
 
 describe('round receipt numbers', () => {
-  it('fee on entry (arena v2): the fee is the entry\'s cut, the whole till is paid', () => {
-    expect(receiptNumbers(3000 * M, 1000 * M, 500, null)).toEqual({ gain: 2000 * M, fee: 50 * M, net: 3000 * M, pct: 5, final: false, onEntry: true });
-    // a loss still paid its fee at the entry; nothing comes off the till
-    expect(receiptNumbers(400 * M, 1000 * M, 500, null)).toMatchObject({ fee: 50 * M, net: 400 * M, onEntry: true });
-    expect(receiptNumbers(400 * M, 1000 * M, 300, null, 'entry')).toMatchObject({ fee: 30 * M, pct: 3 });
+  it('arena v3: estimates the fee on profit at the ticket\'s rates until the settlement arrives', () => {
+    const R = { burnBps: 1500, vaultBps: 500 };
+    // profit 2,000: 300 burned + 100 to the fee wallet; the player gets 2,600
+    expect(receiptNumbers(3000 * M, 1000 * M, R, null)).toEqual({ gain: 2000 * M, fee: 400 * M, net: 2600 * M, pct: 20, final: false });
+    expect(receiptNumbers(3000 * M, 1000 * M, { burnBps: 1000, vaultBps: 0 }, null)).toMatchObject({ fee: 200 * M, net: 2800 * M, pct: 10 });
+    // a loss or a break-even pays no fee
+    expect(receiptNumbers(400 * M, 1000 * M, R, null)).toMatchObject({ gain: -600 * M, fee: 0, net: 400 * M });
+    expect(receiptNumbers(1000 * M, 1000 * M, R, null)).toMatchObject({ fee: 0, net: 1000 * M });
     // the settlement's own numbers win
-    expect(receiptNumbers(3000 * M, 1000 * M, 500, { fee: 30 * M, net: 3000 * M, feeOnEntry: true })).toMatchObject({ fee: 30 * M, net: 3000 * M, final: true, pct: 3, onEntry: true });
-  });
-
-  it('legacy fee on profit (arena v1): estimates at the ticket\'s rate until the settlement arrives', () => {
-    expect(receiptNumbers(3000 * M, 1000 * M, 500, null, 'profit')).toEqual({ gain: 2000 * M, fee: 100 * M, net: 2900 * M, pct: 5, final: false, onEntry: false });
-    expect(receiptNumbers(3000 * M, 1000 * M, 200, null, 'profit')).toMatchObject({ fee: 40 * M, net: 2960 * M, pct: 2 });
-    // a loss pays no fee
-    expect(receiptNumbers(400 * M, 1000 * M, 500, null, 'profit')).toMatchObject({ gain: -600 * M, fee: 0, net: 400 * M });
-    // the settlement's own numbers win (a settlement without `feeOnEntry` is a v1 one), and the fee % label follows the real fee
-    expect(receiptNumbers(3000 * M, 1000 * M, 500, { fee: 99 * M, net: 2901 * M })).toMatchObject({ fee: 99 * M, net: 2901 * M, final: true, pct: 5, onEntry: false });
-    expect(receiptNumbers(3000 * M, 1000 * M, 500, { fee: 30 * M, net: 2970 * M })).toMatchObject({ pct: 1.5 });
+    expect(receiptNumbers(3000 * M, 1000 * M, R, { fee: 399 * M, net: 2601 * M })).toMatchObject({ fee: 399 * M, net: 2601 * M, final: true, pct: 20 });
   });
 
   it('adopts only the settlement of the ticket that was paid (by session address)', () => {
@@ -103,11 +96,11 @@ describe('emoji bar', () => {
 });
 
 describe('death sheet', () => {
-  it('says Game over, names the bot line, shows the value lost and one Start over button', async () => {
+  it('says Game over, names the eater, shows the value lost and one Start over button', async () => {
     useUi.setState({
       screen: 'dead',
       room: ARENA,
-      death: { stats: { ...STATS, valueLost: 1450 * M, byBot: true, lootSpilled: 1450 * M }, killer: 'Bot Rocky', killerSkin: 6 },
+      death: { stats: { ...STATS, valueLost: 1450 * M, lootSpilled: 0 }, killer: 'Rocky', killerSkin: 6 },
     });
     render(
       <Kb>
@@ -117,7 +110,7 @@ describe('death sheet', () => {
     // the sheet waits out the death slow motion
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(await screen.findByRole('dialog', { name: 'Game over' })).toBeTruthy();
-    expect(screen.getByText('Bot · your tokens spilled across the map')).toBeTruthy();
+    expect(screen.getByText('Rocky ate you')).toBeTruthy();
     expect(screen.getByText('−1,450')).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Start over/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Practice|Buy back in/ })).toBeNull();

@@ -1,3 +1,4 @@
+import { activeChain } from '@elymum/shared';
 import { faucetCall, getFaucetInfo, getTestTokenFaucet, getTokenInfo, type FaucetInfo, type TestTokenFaucetConfig } from '@elymum/sdk';
 import type { ContractsRegistry, FaucetConfig } from '@elymum/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -13,7 +14,7 @@ import { b, em, T } from '../../i18n/rich';
 import { site } from '../api';
 import { isTestnetChain, useServerChain } from '../serverChain';
 import { SiteLinkButton, SitePage } from '../Shell';
-import { claimErrorText, faucetTokenAddress, servedConfig, faucetView, formatWait, HYPE_FAUCET_URL, holderMultiple, TEST_SYMBOL_DEFAULT, watchAssetParams, wholeTokens } from './logic';
+import { claimErrorText, faucetTokenAddress, servedConfig, faucetView, formatWait, gasFaucetUrl, holderMultiple, TEST_SYMBOL_DEFAULT, watchAssetParams, wholeTokens } from './logic';
 import '../wallet/wallet.css';
 import './faucet.css';
 
@@ -116,7 +117,7 @@ function Faucet() {
 
   // the dev fake chain registers no TestToken: its game token stands in
   const tokenAddr = (fake ? (chain?.token?.address ?? null) : served ? served.token : served === null ? faucetTokenAddress(registry ?? null, chain?.token?.address) : null) as Address | null;
-  const hypeUrl = served?.hypeFaucetUrl || HYPE_FAUCET_URL;
+  const gasUrl = gasFaucetUrl(served?.gasFaucetUrl);
 
   // the token's faucet settings (amounts, cooldown, holder NFT), symbol and decimals
   useEffect(() => {
@@ -201,7 +202,7 @@ function Faucet() {
   if (view === 'mainnet' || view === 'offline' || view === 'no-token') return <Quiet view={view} />;
   const m = meta as TokenMeta;
   const chainInfo = serverChainInfo(chain);
-  const chainName = chainInfo?.name ?? 'Elysium Testnet';
+  const chainName = chainInfo?.name ?? activeChain().name;
   const onChain = walletChainId !== null && chainInfo?.id === walletChainId;
   const mult = holderMultiple(m.cfg);
   const isHolder = !!info && mult !== null && info.amount >= m.cfg.holderAmount;
@@ -347,13 +348,15 @@ function Faucet() {
               </div>
             </>
           )}
-          <a className="fc-hype" href={hypeUrl} target="_blank" rel="noreferrer">
-            <span className="fc-hype__dot" aria-hidden="true" />
-            <span>
-              <T k="fc.hype" tags={{ b }} />
-            </span>
-            <Icon name="arrow" size={16} />
-          </a>
+          {gasUrl && (
+            <a className="fc-hype" href={gasUrl} target="_blank" rel="noreferrer">
+              <span className="fc-hype__dot" aria-hidden="true" />
+              <span>
+                <T k="fc.gasFaucet" tags={{ b }} />
+              </span>
+              <Icon name="arrow" size={16} />
+            </a>
+          )}
         </Sticker>
       </div>
     </Plate>

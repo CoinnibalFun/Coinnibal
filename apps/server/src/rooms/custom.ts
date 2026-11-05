@@ -136,8 +136,8 @@ export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string
   }
   if (body.priceGas !== undefined) {
     const p = body.priceGas;
-    if (typeof p !== 'string' || !/^\d{1,6}(\.\d{1,18})?$/.test(p)) throw bad('priceGas', 'priceGas must be a HYPE amount like "0.05"');
-    if (parseEther(p) > parseEther('1000')) throw bad('priceGas', 'priceGas must be at most 1000 HYPE');
+    if (typeof p !== 'string' || !/^\d{1,6}(\.\d{1,18})?$/.test(p)) throw bad('priceGas', 'priceGas must be an amount of the gas token like "0.05"');
+    if (parseEther(p) > parseEther('1000')) throw bad('priceGas', 'priceGas must be at most 1000 of the gas token');
     next.priceGas = p;
   }
   if (body.treasury !== undefined) {

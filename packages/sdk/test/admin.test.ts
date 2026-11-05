@@ -165,6 +165,7 @@ describe('ops (shared with the admin panel)', () => {
           { id: 4, entryFee: T, vault: 0n, owed: 0n, maxSessions: 300, openSessions: 0, enabled: true, exists: true, totalDeposited: 0n, totalPaidOut: 0n, totalBurned: 0n, totalFees: 0n, lastSweepId: 0n, holdersOnly: true },
         ],
         serverBalance: null,
+        burnSupport: null,
       },
       nft: null,
       testToken: {

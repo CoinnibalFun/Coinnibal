@@ -1,4 +1,4 @@
-import { arenaMeta } from '@elymum/shared';
+import { arenaMeta, bpsToPercent, totalFeeBps } from '@elymum/shared';
 import { motion } from 'motion/react';
 import type { CSSProperties } from 'react';
 import { Laurel, STAGGER, Ticket, TicketGroup, TicketStub, springs, useReducedMotion } from '../../design';
@@ -6,7 +6,7 @@ import { useChainData } from '../../wallet/chain';
 import { formatCountdown, useRound } from '../../game/round';
 import { useT } from '../../i18n';
 import { useUi } from '../../store';
-import { bpsPercent, feeBps, feeModelOf, ticketFeeBps, type TicketGate, type TicketKey, type TicketModel } from '../../wallet/ticket';
+import { arenaRates, ticketRates, type TicketGate, type TicketKey, type TicketModel } from '../../wallet/ticket';
 import { ArenaVignette } from './ArenaVignette';
 import { ticketName, useTokenText } from './useLobby';
 
@@ -65,19 +65,18 @@ export function TicketList({
   punched?: TicketKey | null;
 }) {
   const t = useT();
-  const serverBps = useUi((s) => s.chain?.feeBps ?? null);
-  const onProfit = useUi((s) => feeModelOf(s.chain) === 'profit');
+  const serverFees = useUi((s) => s.chain?.fees ?? null);
   const tok = useTokenText();
   const reduced = useReducedMotion();
   const held = useUi((s) => s.held);
   const holder = useChainData((s) => s.holder);
   const config = useChainData((s) => s.config);
-  const normalBps = feeBps(serverBps, config);
-  const mine = ticketFeeBps(normalBps, config, holder);
-  // emblem holders see the rate their ticket gets (fixed at join)
+  const normal = arenaRates(serverFees, config);
+  const mine = ticketRates(normal, config, holder);
+  // emblem holders see the rates their ticket gets (fixed at join)
   const feeLine = mine.discount
-    ? t('lo.feeLineHolder', { fee: bpsPercent(mine.bps), std: bpsPercent(normalBps) })
-    : t(onProfit ? 'lo.feeLine.profit' : 'lo.feeLine', { fee: bpsPercent(normalBps) });
+    ? t('lo.feeLineHolder', { fee: bpsToPercent(totalFeeBps(mine.rates)), std: bpsToPercent(totalFeeBps(normal)) })
+    : t('lo.feeLine', { fee: bpsToPercent(totalFeeBps(normal)) });
 
   const count = (n: number, one: 'lo.humans1' | 'lo.bots1', many: 'lo.humans' | 'lo.bots') => (n === 1 ? t(one) : t(many, { n }));
 

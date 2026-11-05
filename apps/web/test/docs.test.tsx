@@ -8,7 +8,7 @@ import { Kb } from '../src/design';
 import { pageFromUrl, urlForPage, useUi } from '../src/store';
 import { DocsPage } from '../src/ui/docs/DocsPage';
 import { docsEn } from '../src/ui/docs/content.en';
-import { FACTS, SERVER, feeExample, payoutExample } from '../src/ui/docs/facts';
+import { FACTS, SERVER, payoutExample } from '../src/ui/docs/facts';
 
 const initial = useUi.getState();
 const en0 = docsEn();
@@ -20,24 +20,17 @@ afterEach(() => {
 const SECTION_IDS = ['play', 'rooms', 'value', 'payout', 'nft', 'token', 'fair', 'wallet', 'faq'];
 
 describe('player guide facts', () => {
-  it('works the fee example through splitPayout: entry 1,000 → fee 50 at the entry, coin 950, till 1,900 at the bell all paid', () => {
+  it('works the payout example through the shared fee module: entry 1,000, till 1,900, profit 900 → 135 burned, 45 to the fee wallet, 1,720 paid', () => {
     expect(FACTS.example).toEqual({ entry: 1000, cashout: 1900 });
-    expect(feeExample(500)).toEqual({ fee: 50n, value: 950n, player: 1900n });
-    // the server's own rate when it differs
-    expect(feeExample(450)).toEqual({ fee: 45n, value: 955n, player: 1900n });
-  });
-
-  it('works the payout example: 20 % of the winnings is the cut, 15 % burned and 5 % kept in the vault', () => {
-    expect(FACTS.cut).toEqual({ bps: 2000, burnBps: 1500, vaultBps: 500 });
-    // no entry fee rate (the recommended setup): the coin starts at 1,000, 900 won, 180 cut
-    expect(payoutExample(0)).toMatchObject({ fee: 0, start: 1000, gross: 1900, profit: 900, burn: 135, vault: 45, cut: 180, net: 1720 });
-    // with a 5 % entry fee rate the coin starts at 950 and 950 is won
-    expect(payoutExample(500)).toMatchObject({ fee: 50, start: 950, profit: 950, burn: 142, vault: 47, net: 1711 });
+    expect(payoutExample()).toEqual({ entry: 1000, payout: 1900, profit: 900, burned: 135, toVault: 45, fee: 180, net: 1720 });
+    // the server's own rates when they differ (each share rounds down)
+    expect(payoutExample({ burnBps: 1000, vaultBps: 0 })).toMatchObject({ burned: 90, toVault: 0, net: 1810 });
+    expect(payoutExample({ burnBps: 333, vaultBps: 333 })).toMatchObject({ burned: 29, toVault: 29, net: 1842 });
     expect(FACTS.shop.prices).toEqual({ magnet: 600, leap: 900, speed: 600, invis: 1200 });
   });
 
   it('quotes the contract defaults', () => {
-    expect(FACTS.fee).toEqual({ bps: 500, maxBps: 1000 });
+    expect(FACTS.fee).toEqual({ burnBps: 1500, vaultBps: 500, maxBps: 2500, paymentBurnBps: 5000 });
     expect(FACTS.refundHours).toBe(24);
     expect(FACTS.rules).toMatchObject({ roundMin: 5, joinCloseS: 60, afkS: 45, lootMin: 3, lootMax: 24, lootEntryDiv: 4 });
     expect(FACTS.rules.roundMin).toBe(RULES.roundMs / 60_000);
@@ -70,23 +63,22 @@ describe('player guide facts', () => {
 describe('player guide content', () => {
   const en = docsEn('$ELYMUM');
 
-  it('explains the cut on winnings with the worked example, and the entry fee rate only when there is one', () => {
+  it('explains the fee on profit with the worked example, at the live rates', () => {
     const text = (c: typeof en) => JSON.stringify([c.dateline, c.sections]);
-    const none = docsEn('$ELYMUM', 0);
-    expect(text(none)).toContain('Cut 20% of winnings only');
-    expect(text(none)).toContain('so you won 900: 135 is burned, 45 stays in the vault and you get 1,720');
-    expect(text(none)).not.toContain('entry fee rate of');
-    const live = docsEn('$ELYMUM', 300);
-    expect(live.feeBps).toBe(300);
-    expect(text(live)).toContain('entry fee rate of 3%');
-    expect(text(live)).toContain('your coin starts at 970');
+    expect(en.rates).toEqual({ burnBps: 1500, vaultBps: 500 });
+    expect(text(en)).toContain('Fee 20% of profit only');
+    expect(text(en)).toContain('so your profit is 900: 135 is burned, 45 goes to the fee wallet and you get 1,720');
+    expect(text(en)).toContain('there is no fee to enter');
+    expect(text(en)).not.toMatch(/entry fee rate of|the cut|arena vault for the team|played by the team/);
+    const live = docsEn('$ELYMUM', { burnBps: 1000, vaultBps: 200 });
+    expect(live.rates).toEqual({ burnBps: 1000, vaultBps: 200 });
+    expect(text(live)).toContain('Fee 12% of profit only');
+    expect(text(live)).toContain('90 is burned, 18 goes to the fee wallet and you get 1,792');
   });
 
-  it('says what the live legacy arena takes when the server reports feeModel profit', () => {
-    const legacy = docsEn('$ELYMUM', 500, 'profit');
-    const payout = legacy.sections.find((s) => s.id === 'payout')!;
-    expect(payout.blocks[0]).toMatchObject({ kind: 'note', title: 'The live arena takes its fee from the profit' });
-    expect(JSON.stringify(docsEn('$ELYMUM').sections)).not.toContain('The live arena takes its fee from the profit');
+  it('says the arenas are played by people only', () => {
+    const value = JSON.stringify(en.sections.find((s) => s.id === 'value'));
+    expect(value).toContain('Every coin in an arena is a player who bought a ticket; the game fields no coins of its own there.');
   });
 
   it('covers the NFT and the token: what each is for, with the shop prices and holder perks from the code', () => {
@@ -95,7 +87,9 @@ describe('player guide content', () => {
     expect(nft).toContain('holders play first');
     const token = JSON.stringify(en.sections.find((s) => s.id === 'token'));
     expect(token).toContain('Magnet 600, Leap 900, Speed burst 600 and Invisibility 1,200 $ELYMUM');
-    expect(token).toContain('15% of every winning payout is burned');
+    expect(token).toContain('15% of every profit is burned');
+    expect(token).toContain('which burns 50% of it and sends 50% to the fee wallet');
+    expect(token).toContain('Nothing mints new $ELYMUM');
     const t = JSON.stringify([en.receipt, en.sections]);
     expect(t).toMatch(/what is left then is burned/);
     expect(t).toContain('Opening soon');
@@ -129,11 +123,11 @@ describe('player guide content', () => {
     }
   });
 
-  it('uses no emoji and no Turkish, and names the network (Elysium, gas HYPE)', () => {
+  it('uses no emoji and no Turkish, and names the network (the active chain and its gas token)', () => {
     const text = JSON.stringify(en);
     expect(text).not.toMatch(/\brent\b|token account/);
-    expect(text).toContain('HYPE');
-    expect(text).toContain('Elysium');
+    expect(text).toContain('ETH on Robinhood Chain Testnet');
+    expect(JSON.stringify(docsEn('$ELYMUM', undefined, 'HYPE', 'Elysium Testnet'))).toContain('HYPE on Elysium Testnet');
     expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
     expect(text).not.toMatch(/record_game/);
     // the CI guard's Turkish letters, written as escapes so this file passes the guard itself
@@ -158,11 +152,11 @@ describe('player guide page', () => {
     const toc = screen.getByRole('navigation', { name: en0.tocLabel });
     expect(within(toc).getAllByRole('button')).toHaveLength(SECTION_IDS.length);
     for (const s of en0.sections) expect(screen.getByRole('heading', { level: 3, name: s.title })).toBeTruthy();
-    expect(screen.getByRole('heading', { level: 3, name: 'Rounds, payout and the cut' })).toBeTruthy();
-    // the receipt at the contract default rate (5 %): the coin starts at 950, 1,900 at the bell, 950 won
-    expect(screen.getByText('−142')).toBeTruthy();
-    expect(screen.getByText('−47')).toBeTruthy();
-    expect(screen.getByText('1,711')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 3, name: 'Rounds, payout and the fee' })).toBeTruthy();
+    // the receipt at the contract default rates (15 % + 5 % of profit): 1,900 at the bell, 900 profit
+    expect(screen.getByText('−135')).toBeTruthy();
+    expect(screen.getByText('−45')).toBeTruthy();
+    expect(screen.getByText('1,720')).toBeTruthy();
     // the comic strips open the chapters that have drawings; the value flow has its moving diagram
     const strips = document.querySelectorAll('figure.cs');
     expect(strips).toHaveLength(6);
@@ -170,10 +164,10 @@ describe('player guide page', () => {
     expect(document.querySelector('figure.vf svg[aria-hidden="true"]')).toBeTruthy();
   }, 20_000);
 
-  it("follows the server's fee rate (ChainStatus.feeBps)", () => {
+  it("follows the server's fee rates (ChainStatus.fees)", () => {
     act(() =>
       useUi.setState({
-        chain: chainStatus({ token: null, feeBps: 0 }),
+        chain: chainStatus({ token: null, fees: { ...chainStatus().fees!, burnBps: 1000, vaultBps: 0 } }),
       }),
     );
     render(
@@ -181,9 +175,10 @@ describe('player guide page', () => {
         <DocsPage />
       </Kb>,
     );
-    // no entry fee rate: no fee line, the coin starts at the whole 1,000 and 1,720 is paid
-    expect(screen.getByText('1,720')).toBeTruthy();
-    expect(screen.getByText('−135')).toBeTruthy();
+    // 10 % burned, nothing to the fee wallet: 90 of the 900 profit burned, 1,810 paid
+    expect(screen.getByText('1,810')).toBeTruthy();
+    expect(screen.getByText('−90')).toBeTruthy();
+    expect(screen.getByText('−0')).toBeTruthy();
     expect(screen.queryByText(/Entry fee rate/)).toBeNull();
   }, 20_000);
 });
