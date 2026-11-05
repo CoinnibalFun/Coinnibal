@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Elymum smart contracts for Elysium: the arena (tickets, settlements, loot burn) and the NFT (allowlist + public mint)",
+  "description": "Elymum smart contracts: the arena v3 (tickets, settlements with an on-chain fee on profit, burns) and the NFT (allowlist + public mint)",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
