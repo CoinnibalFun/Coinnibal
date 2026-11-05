@@ -701,6 +701,22 @@ const SCENES = [
     },
   },
   {
+    id: 'feed-fade',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      // chat with emoji and a few kills, then idle: the feed fades to semi-transparent
+      for (const [i, text] of ['gg 😂😂', 'who ate me 😭', 'nice split 👑'].entries()) await feed(page, { t: 'chat', pid: 900 + i, from: i % 2 ? LONG_M : LONG, skin: i + 1, text });
+      for (let i = 0; i < 3; i++) await feed(page, { t: 'kf', killer: LONG, killerSkin: 2, victim: LONG_M, victimSkin: 3, cause: 'eat' });
+      await settle(page, 600);
+      await h.check('fresh');
+      await page.waitForTimeout(7500);
+      await settle(page, 300);
+    },
+  },
+  {
     id: 'room-closing',
     app: 'play',
     auth: 'signed',
