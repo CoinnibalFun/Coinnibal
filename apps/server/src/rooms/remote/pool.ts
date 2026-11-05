@@ -775,6 +775,10 @@ export class RemoteRoom implements RoomHandle {
     return 0;
   }
 
+  closingSoon(endsAt: number, message: string): void {
+    this.pool.send(this.slot, { k: 'closing', hid: this.hid, endsAt, message });
+  }
+
   announce(text: string): void {
     this.pool.send(this.slot, { k: 'announce', hid: this.hid, text });
   }

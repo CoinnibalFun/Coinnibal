@@ -5,9 +5,11 @@
  * flag coin skin, `PlayerFlag.FlagSkin`, and `join.flag`; v11: the Shockwave power-up gave way to Leap
  * and Invisibility (`CellFlag.Leap` reuses the Shock bit, `CellFlag.Invisible`); the "Trash talk"
  * stickers append emote ids 8..15; v12: arena contract v3 (fee on profit): `chain.fees`, `settled.burned` /
- * `settled.toVault`, no `feeModel` / `feeOnEntry`; `chain.faucetUrl` / `chain.testnet`; Robinhood Chain only, gas in ETH).
+ * `settled.toVault`, no `feeModel` / `feeOnEntry`; `chain.faucetUrl` / `chain.testnet`; Robinhood Chain only, gas in ETH);
+ * v13: one final-standings row for every room end (`RoundStanding`: rank, mass, kills, value in arenas), a custom
+ * room's `closing` countdown and `roomOver` final board.
  */
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 
 /** Simulation + snapshot rate. */
 export const TICK_RATE = 30;

@@ -17,6 +17,7 @@ import { compactCount, counterFrac, roomName, sectorOf, useTokenFormat } from '.
 import { MobileControls, useIsTouch } from './MobileControls';
 import { RoundIntro, SunsetSky, ValueFlyers } from './Moments';
 import { RoundChip, RoundCountdown } from './RoundChip';
+import { RoomClosingNotice } from './RoomClosing';
 import { SpectateBar } from './SpectateBar';
 import { CustomRoomBar } from '../../rooms/CustomRoomBar';
 
@@ -525,6 +526,7 @@ export function GameHud() {
         {narrow && <MapSheet inline size={mapSize} />}
         {/* in the column's flow, so it never covers a banner or my coin */}
         {!roundOver && <RoundCountdown />}
+        <RoomClosingNotice />
         <Banner />
         <PowerUps />
         <NetStats />

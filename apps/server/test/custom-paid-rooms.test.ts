@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CUSTOM_DEFAULTS, TICK_MS, roundAt, type CustomRoomConfig } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, TICK_MS, roundAt, type CustomRoomConfig, type ServerMessage } from '@elymum/shared';
 import { parseEther } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { UsedPayments, type NativeTransfer, type PaymentReader } from '../src/chain/payment';
@@ -238,8 +238,17 @@ describe('custom rooms: paid rooms (invite-only arena instances)', () => {
     expect(p.alive).toBe(true);
     svc.sweep(clock.t);
     expect(rooms.get(room.id)).toBe(room);
-    clock.t = roundAt(clock.t).endsAt;
+    // it now ends at this round's bell: the countdown comes 10 s before it, with the reason
+    const bell = roundAt(clock.t).endsAt;
+    expect(svc.get(view.code)!.endsAt).toBe(bell);
+    clock.t = bell - 9_000;
+    svc.sweep(clock.t);
+    expect(conn.msgs.find((m) => m.t === 'closing')).toEqual({ t: 'closing', endsAt: bell, message: expect.stringMatching(/creator closed this room\. It closes at the bell/) });
+    clock.t = bell;
     tick(room);
+    // the bell's board: every ticket with its value, mass and kills (the same rows as a free room's end)
+    const over = conn.msgs.find((m) => m.t === 'roundOver') as Extract<ServerMessage, { t: 'roundOver' }>;
+    expect(over.standings).toEqual([{ rank: 1, name: j.name, mass: expect.any(Number), kills: 0, value: FEE, you: true }]);
     expect(journal.pending.find((i) => i.key === j.stake.session)).toMatchObject({ reason: 'round' });
     svc.sweep(clock.t);
     expect(rooms.get(room.id)).toBeUndefined();

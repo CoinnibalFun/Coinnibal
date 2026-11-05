@@ -2,6 +2,7 @@ import {
   BinaryWriter,
   ClientOp,
   EMOTES,
+  FINAL_STANDINGS_ROWS,
   MAP_GROW,
   MAP_SPACE,
   PlayerFlag,
@@ -215,6 +216,8 @@ export class Room implements RoomHandle {
   /** World clock (ms) of the next growth check and of the last resize. */
   private nextMapCheckAt = 0;
   private lastResizeAt = -Infinity;
+  /** A custom room's coming end (`closingSoon`): told to everyone who joins or watches meanwhile. */
+  private closing: { endsAt: number; message: string } | null = null;
 
   constructor(
     readonly opts: RoomOptions,
@@ -406,6 +409,7 @@ export class Room implements RoomHandle {
       round: this.round(),
     });
     conn.send({ t: 'history', chat: this.chatLog });
+    if (this.closing) conn.send({ t: 'closing', ...this.closing });
     this.sendBoosts(conn);
     return player;
   }
@@ -469,6 +473,13 @@ export class Room implements RoomHandle {
     } else conn.spectatePid = ranking[0].id;
     this.freshView(conn);
     conn.send({ t: 'spectating', room: this.info(), targetPid: conn.spectatePid });
+    if (this.closing) conn.send({ t: 'closing', ...this.closing });
+  }
+
+  /** A custom room closes at `endsAt` (server clock): everyone in it (and who comes meanwhile) gets the countdown. */
+  closingSoon(endsAt: number, message: string): void {
+    this.closing = { endsAt, message };
+    this.broadcast({ t: 'closing', endsAt, message });
   }
 
   /**
@@ -797,7 +808,9 @@ export class Room implements RoomHandle {
     const ranked = holders
       .map((e) => ({ e, p: this.world.players.get(e.pid) }))
       .sort((a, b) => b.e.value - a.e.value || (b.p?.totalMass() ?? 0) - (a.p?.totalMass() ?? 0));
-    const top = ranked.slice(0, 10);
+    const top = ranked.slice(0, FINAL_STANDINGS_ROWS);
+    // the final board (the same rows as a custom room's end), read before the coins go home
+    const board: BoardEntry[] = ranked.map(({ e, p }) => ({ pid: e.pid, name: p?.name ?? '???', mass: Math.floor(p?.totalMass() ?? 0), kills: p?.stats.playersEaten ?? 0, value: e.value }));
     // the bell's standings go on the public "Last rounds" board (private paid rooms keep theirs to themselves)
     if (!this.opts.custom && this.opts.stake && top.length > 0) {
       this.deps.leaderboards.roundOver?.({
@@ -859,14 +872,7 @@ export class Room implements RoomHandle {
     const settled = batch.filter((i) => i.kind === 'settle').length;
     if (settled > 0 || amount > 0) this.deps.log(`room ${this.id}: round ${round} over · ${settled} settled · ${amount} floor loot queued to burn`);
 
-    for (const r of results) {
-      const standings: RoundStanding[] = top.map(({ e, p }) => ({
-        name: p?.name ?? '???',
-        value: e.value,
-        ...(e.pid === r.pid ? { you: true } : {}),
-      }));
-      r.conn.send({ t: 'roundOver', round, payout: r.payout, stats: r.stats, standings });
-    }
+    for (const r of results) r.conn.send({ t: 'roundOver', round, payout: r.payout, stats: r.stats, standings: boardRows(board, r.pid) });
 
     // the next round starts on a fresh floor
     this.world.clearEjects();
@@ -1186,16 +1192,28 @@ export class Room implements RoomHandle {
   evict(message: string): number {
     // an arena room holding a ticket or loot is never evicted (`closeSettled` waits for its bell)
     if (this.ledger && !this.settledOut()) throw new Error('arena rooms are never evicted');
+    // a free custom room ends on its final board: everyone by mass (practice bots too), read before anyone leaves
+    // (an arena showed its board at the bell, `roundOver`)
+    const final = !this.ledger && !!this.opts.custom;
+    const board: BoardEntry[] = final
+      ? this.world.ranking().map((p) => ({ pid: p.id, name: p.name, mass: Math.floor(p.totalMass()), kills: p.stats.playersEaten, ...(p.isBot ? { isBot: true } : {}) }))
+      : [];
+    const played = new Map<Conn, { pid: number; stats: DeathStats }>();
     let n = 0;
     for (const [pid, c] of [...this.humans]) {
       const p = this.world.players.get(pid);
       if (p?.alive) {
-        this.finishHuman(p, c, 'left');
+        const stats = this.finishHuman(p, c, 'left');
+        if (c) played.set(c, { pid, stats });
         n++;
       }
     }
     for (const pid of this.bots?.removeAll() ?? []) for (const c of this.conns) c.view.forgetPlayer(pid);
     for (const c of [...this.conns]) {
+      if (final) {
+        const mine = played.get(c);
+        c.send({ t: 'roomOver', message, players: board.filter((b) => !b.isBot).length, standings: boardRows(board, mine?.pid ?? -1), stats: mine?.stats ?? null });
+      }
       c.player = null;
       c.spectating = false;
       c.send({ t: 'error', code: 'room_closed', message });
@@ -1232,6 +1250,36 @@ export class Room implements RoomHandle {
   botCounts(): { humans: number; bots: number } {
     return { humans: this.humans.size, bots: this.bots?.size ?? 0 };
   }
+}
+
+/** One coin on a final board (`boardRows`), ranked already. */
+interface BoardEntry {
+  pid: number;
+  name: string;
+  mass: number;
+  kills: number;
+  value?: number;
+  isBot?: boolean;
+}
+
+/**
+ * The final standings one player gets (`RoundStanding`, the same at an arena's bell and at a custom room's end): the
+ * top `FINAL_STANDINGS_ROWS` of `ranked`, plus their own row when it is below them.
+ */
+export function boardRows(ranked: readonly BoardEntry[], pid: number): RoundStanding[] {
+  const row = (b: BoardEntry, i: number): RoundStanding => ({
+    rank: i + 1,
+    name: b.name,
+    mass: b.mass,
+    kills: b.kills,
+    ...(b.value !== undefined ? { value: b.value } : {}),
+    ...(b.isBot ? { isBot: true } : {}),
+    ...(b.pid === pid ? { you: true } : {}),
+  });
+  const rows = ranked.slice(0, FINAL_STANDINGS_ROWS).map(row);
+  const mine = ranked.findIndex((b) => b.pid === pid);
+  if (mine >= FINAL_STANDINGS_ROWS) rows.push(row(ranked[mine], mine));
+  return rows;
 }
 
 /** The journal item that settles an arena ticket at its gross value (the contract takes the fee on profit). */

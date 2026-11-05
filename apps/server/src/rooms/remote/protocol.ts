@@ -61,6 +61,7 @@ export type Cmd =
   | { k: 'map'; hid: number; scale: MapScaleSettings }
   | { k: 'avatar'; wallet: string }
   | { k: 'announce'; hid: number; text: string }
+  | { k: 'closing'; hid: number; endsAt: number; message: string }
   | { k: 'clock'; offset: number }
   /** Test hook: keeps the worker busy for `ms` (the hang watchdog's test). */
   | { k: 'block'; ms: number }

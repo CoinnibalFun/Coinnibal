@@ -4,6 +4,7 @@ import { springs, useReducedMotion } from '../../design';
 import { COUNTDOWN_MS, formatCountdown, roundLengths, useRound, type RoundState } from '../../game/round';
 import { useT } from '../../i18n';
 import { useUi } from '../../store';
+import { useRoomClosing } from './RoomClosing';
 
 /** The arena round on screen (null outside arenas). */
 function useArenaRound(): RoundState | null {
@@ -75,11 +76,15 @@ export function RoundChip() {
   );
 }
 
-/** The last ten seconds: a big sticker numeral dropped in once a second over the top of the world. */
+/**
+ * The last ten seconds: a big sticker numeral dropped in once a second over the top of the world. The arena's bell,
+ * or a custom room's end (`useRoomClosing`): a ticket room closes on its bell, so the two count together.
+ */
 export function RoundCountdown() {
   const round = useArenaRound();
+  const closing = useRoomClosing();
   const reduced = useReducedMotion();
-  const count = round ? countOf(round) : null;
+  const count = (round ? countOf(round) : null) ?? (closing !== null ? Math.max(1, Math.ceil(closing / 1000)) : null);
   return (
     <div className={`g-count${count !== null ? ' is-on' : ''}`} aria-hidden="true">
       <AnimatePresence initial={false}>

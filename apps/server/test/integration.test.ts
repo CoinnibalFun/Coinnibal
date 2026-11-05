@@ -412,7 +412,7 @@ describe('server over websocket', () => {
     expect(over.round).toBe(r.n);
     expect(over.payout).toBe(10_000_000);
     expect(over.stats.payout).toBe(10_000_000);
-    expect(over.standings.find((s) => s.you)).toEqual({ name: 'Whale', value: 10_000_000, you: true });
+    expect(over.standings.find((s) => s.you)).toEqual({ rank: 1, name: 'Whale', value: 10_000_000, mass: expect.any(Number), kills: 0, you: true });
     const item = app.journal.pending.find((p) => p.key === ticket.key);
     expect(item).toMatchObject({ kind: 'settle', payout: 10_000_000, reason: 'round', player: player });
     expect(chain.kicked).toBeGreaterThan(0);

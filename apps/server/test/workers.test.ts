@@ -311,7 +311,7 @@ describe('room workers', () => {
     p.ws.close();
   });
 
-  it('a custom room closed early evicts its players with room_closed', async () => {
+  it('a custom room closed early: the countdown, the final board, then room_closed', async () => {
     const code = app.rooms.newPrivateCode();
     app.rooms.createCustomRoom(code, {
       name: 'Party',
@@ -322,7 +322,14 @@ describe('room workers', () => {
     const c = await Client.open(port);
     c.send({ t: 'join', room: `private:${code}`, name: 'Guest', skin: 0 });
     await c.wait('joined');
+    // the countdown crosses to the worker and back to everyone in the room
+    app.rooms.get(`priv-${code}`)!.closingSoon(Date.now() + 10_000, 'The room creator closed this room.');
+    expect((await c.wait('closing', 3000)).message).toMatch(/creator closed/);
     expect(app.rooms.closeCustomRoom(code, 'The room creator closed this room.')).toBe(true);
+    // the final board first (its player's own row and game), then room_closed
+    const over = await c.wait('roomOver', 3000);
+    expect(over.standings.find((s) => s.you)).toMatchObject({ rank: 1, name: 'Guest' });
+    expect(over.stats).not.toBeNull();
     const err = await c.wait('error', 3000, (m) => m.code === 'room_closed');
     expect(err.message).toMatch(/creator closed/);
     expect(app.rooms.get(`priv-${code}`)).toBeUndefined();

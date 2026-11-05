@@ -510,6 +510,9 @@ export class RoomHost {
       case 'announce':
         this.rooms.get(cmd.hid)?.announce(cmd.text);
         return;
+      case 'closing':
+        this.rooms.get(cmd.hid)?.closingSoon(cmd.endsAt, cmd.message);
+        return;
       case 'clock':
         this.offset = cmd.offset;
         return;

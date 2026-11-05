@@ -9,6 +9,7 @@ import {
   CUSTOM_SETTINGS_LIMITS,
   CUSTOM_TRAP_MUL,
   CUSTOM_WORLD_CAPS,
+  ROOM_CLOSE_COUNTDOWN_MS,
   WORLD_PRESETS,
   customRoomFee,
   customRoomPrice,
@@ -67,7 +68,13 @@ export interface CustomRecord {
    * settled every ticket in it (`RoomManager.closePaidRoom`), then this record goes.
    */
   closing?: boolean;
+  /** Closed early by its creator or an admin: the reason everyone sees in the countdown and on the final board. */
+  closeMessage?: string;
 }
+
+/** What everyone in a room reads when its time is up (the countdown, then the final board). */
+const TIME_UP = 'Time is up: this room has closed. Thanks for playing!';
+const TIME_UP_PAID = 'Time is up: this room closes at the bell, where every ticket is settled. Thanks for playing!';
 
 interface RoomsFile {
   v: 1;
@@ -200,6 +207,8 @@ export class CustomRoomService implements CustomRoomHooks {
   private freeUsed: Record<string, string> = {};
   /** Wallets with a create under way (one at a time per wallet). */
   private readonly creating = new Set<string>();
+  /** Rooms whose end countdown was shown (`closing`). */
+  private readonly counting = new Set<string>();
   private bestDirty = false;
   private lastBestFlush = 0;
   private readonly now: () => number;
@@ -597,32 +606,43 @@ export class CustomRoomService implements CustomRoomHooks {
 
   /* ------------------------------ close / expire ------------------------------ */
 
-  /** Closes a room early: its creator (`by` = creator wallet) or an admin. */
+  /**
+   * Closes a room early: its creator (`by` = creator wallet) or an admin. Never abruptly: a free room ends
+   * `ROOM_CLOSE_COUNTDOWN_MS` from now (the countdown, then the final board); a paid room at its next bell.
+   */
   close(code: string, by: { wallet: string; admin: boolean }): CustomRoomView {
     const r = this.records.get(code);
     if (!r) throw new CustomRoomFail(404, 'not_found', 'No open room with that code.');
     const creator = r.creator.toLowerCase() === by.wallet.toLowerCase();
     if (!creator && !by.admin) throw new CustomRoomFail(403, 'forbidden', 'Only the room creator can close it.');
     const message = creator ? 'The room creator closed this room.' : 'An admin closed this room.';
+    const now = this.now();
     if (r.config.kind === 'paid') {
       // tickets are never evicted: no new seat now, the room closes once its bell settled them
       if (!r.closing) {
         r.closing = true;
+        r.closeMessage = `${message} It closes at the bell: every ticket is settled there.`;
+        r.endsAt = Math.min(r.endsAt, this.d.rooms.roundWindow(now).endsAt);
         this.saveRooms();
-        this.d.rooms.get(`priv-${r.code}`)?.announce(`${message} It closes at the bell: every ticket is settled there.`);
+        this.d.rooms.get(`priv-${r.code}`)?.announce(r.closeMessage);
       }
       this.finishPaid(r, message);
       this.log(`custom rooms: ${code} closing early (at its bell) by ${by.wallet}${creator ? ' (creator)' : ' (admin)'}`);
       return this.view(r);
     }
-    const view = this.view(r);
-    this.shut(r, message);
-    this.log(`custom rooms: ${code} closed early by ${by.wallet}${creator ? ' (creator)' : ' (admin)'}`);
-    return view;
+    if (!r.closeMessage) {
+      r.closeMessage = message;
+      r.endsAt = Math.min(r.endsAt, now + ROOM_CLOSE_COUNTDOWN_MS);
+      this.saveRooms();
+      this.sweep(now);
+    }
+    this.log(`custom rooms: ${code} closing early (in ${Math.round((r.endsAt - now) / 1000)} s) by ${by.wallet}${creator ? ' (creator)' : ' (admin)'}`);
+    return this.view(r);
   }
 
   private shut(r: CustomRecord, message: string): void {
     this.records.delete(r.code);
+    this.counting.delete(r.code);
     this.d.rooms.closeCustomRoom(r.code, message);
     this.saveRooms();
   }
@@ -631,25 +651,34 @@ export class CustomRoomService implements CustomRoomHooks {
   private finishPaid(r: CustomRecord, message: string): void {
     if (this.d.rooms.closePaidRoom(r.code, message) !== 'closed') return;
     this.records.delete(r.code);
+    this.counting.delete(r.code);
     this.saveRooms();
     this.log(`custom rooms: ${r.code} closed (every ticket settled)`);
   }
 
-  /** Closes rooms whose time ran out; says "1 minute left" before. Called from the tick loop. */
+  /**
+   * Closes rooms whose time ran out; says "1 minute left" before, and shows everyone the countdown
+   * `ROOM_CLOSE_COUNTDOWN_MS` before the end (`closing`). Called from the tick loop.
+   */
   sweep(now = this.now()): void {
     for (const r of [...this.records.values()]) {
-      if (r.config.kind === 'paid' && (r.closing || r.endsAt <= now)) {
+      const paid = r.config.kind === 'paid';
+      if (r.endsAt > now && r.endsAt - now <= ROOM_CLOSE_COUNTDOWN_MS && !this.counting.has(r.code)) {
+        this.counting.add(r.code);
+        this.d.rooms.get(`priv-${r.code}`)?.closingSoon(r.endsAt, r.closeMessage ?? (paid ? TIME_UP_PAID : TIME_UP));
+      }
+      if (paid && (r.closing || r.endsAt <= now)) {
         if (!r.closing) {
           r.closing = true;
           this.saveRooms();
           this.log(`custom rooms: ${r.code} expired (closes once its bell settled every ticket)`);
         }
-        this.finishPaid(r, 'Time is up: this room has closed. Thanks for playing!');
+        this.finishPaid(r, r.closeMessage ?? TIME_UP);
         continue;
       }
       if (r.endsAt <= now) {
-        this.shut(r, 'Time is up: this room has closed. Thanks for playing!');
-        this.log(`custom rooms: ${r.code} expired`);
+        this.shut(r, r.closeMessage ?? TIME_UP);
+        this.log(`custom rooms: ${r.code} ${r.closeMessage ? 'closed early' : 'expired'}`);
         continue;
       }
       if (!r.warned && r.endsAt - now <= CUSTOM_WARN_MS) {

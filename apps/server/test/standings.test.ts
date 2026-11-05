@@ -1,7 +1,7 @@
 import { PlayerFlag, TICK_MS, type ServerMessage } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { Gateway } from '../src/net/gateway';
-import { Room } from '../src/rooms/room';
+import { Room, boardRows } from '../src/rooms/room';
 import { ArenaChain, fakeConn, freeCustom, roomDeps } from './helpers';
 
 type Standings = Extract<ServerMessage, { t: 'standings' }>;
@@ -81,5 +81,23 @@ describe('full standings (standings sheet)', () => {
     // anything but `true` is off
     await gw.onMessage(conn, Buffer.from(JSON.stringify({ t: 'standings', on: 'yes' })), false);
     expect(conn.standings).toBe(false);
+  });
+});
+
+describe('final standings rows (the same at a bell and at a custom room end)', () => {
+  const ranked = Array.from({ length: 14 }, (_, i) => ({ pid: i + 1, name: `p${i + 1}`, mass: 1000 - i * 10, kills: i % 3, ...(i === 2 ? { isBot: true } : {}) }));
+
+  it('sends the top 10 with their rank, mass and kills, plus the receiver\'s own row below them', () => {
+    const top = boardRows(ranked, 3);
+    expect(top).toHaveLength(10);
+    expect(top[2]).toEqual({ rank: 3, name: 'p3', mass: 980, kills: 2, isBot: true, you: true });
+    const low = boardRows(ranked, 13);
+    expect(low).toHaveLength(11);
+    expect(low.at(-1)).toEqual({ rank: 13, name: 'p13', mass: 880, kills: 0, you: true });
+    expect(low.filter((r) => r.you)).toHaveLength(1);
+    // a spectator: no own row
+    expect(boardRows(ranked, -1).some((r) => r.you)).toBe(false);
+    // arenas carry the value
+    expect(boardRows([{ pid: 1, name: 'a', mass: 50, kills: 1, value: 7 }], 1)).toEqual([{ rank: 1, name: 'a', mass: 50, kills: 1, value: 7, you: true }]);
   });
 });

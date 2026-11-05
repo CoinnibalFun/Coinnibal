@@ -1,4 +1,4 @@
-import { RULES, roundAt, type DeathStats, type RoomInfo, type RoundInfo } from '@elymum/shared';
+import { RULES, roundAt, type DeathStats, type RoomInfo, type RoundInfo, type RoundStanding } from '@elymum/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Kb } from '../src/design';
@@ -192,13 +192,13 @@ describe('no cash-out in arenas', () => {
 });
 
 describe('Round over sheet', () => {
-  const standings = [
-    { name: 'Nakamoto', value: 9100 * M },
-    { name: 'Penny', value: 5200 * M },
-    { name: 'Daphne', value: 3000 * M, you: true },
-    { name: 'Rocky', value: 2100 * M },
-    { name: 'Lulu', value: 1500 * M },
-    { name: 'Sixth', value: 900 * M },
+  const standings: RoundStanding[] = [
+    { rank: 1, name: 'Nakamoto', value: 9100 * M, mass: 4200, kills: 6 },
+    { rank: 2, name: 'Penny', value: 5200 * M, mass: 2600, kills: 3 },
+    { rank: 3, name: 'Daphne', value: 3000 * M, mass: 1800, kills: 2, you: true },
+    { rank: 4, name: 'Rocky', value: 2100 * M, mass: 900, kills: 1 },
+    { rank: 5, name: 'Lulu', value: 1500 * M, mass: 700, kills: 0 },
+    { rank: 6, name: 'Sixth', value: 900 * M, mass: 300, kills: 0 },
   ];
 
   it('arena v3: the till, the fee on its profit and what is paid; then the settlement\'s own numbers', () => {
@@ -260,7 +260,9 @@ describe('Round over sheet', () => {
     expect(screen.getByText('Your place').nextElementSibling?.textContent).toBe('3rd');
     const top = screen.getByRole('region', { name: 'Top 5 at the bell' });
     const rows = [...top.querySelectorAll('li')].map((li) => li.textContent);
-    expect(rows).toEqual(['01Nakamoto9.1K', '02Penny5.2K', '03DaphneYou3K', '04Rocky2.1K', '05Lulu1.5K']);
+    expect(rows).toEqual(['01Nakamoto4,20069.1K', '02Penny2,60035.2K', '03DaphneYou1,80023K', '04Rocky90012.1K', '05Lulu70001.5K']);
+    // the same board as a custom room's end: mass and kills next to the value
+    expect(top.querySelector('.g-board__head')?.textContent).toBe('MassKillsValue');
     expect(top.querySelector('.is-me')?.textContent).toContain('Daphne');
     expect(screen.getByRole('button', { name: /Next round/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Lobby/ })).toBeTruthy();
@@ -276,7 +278,7 @@ describe('Round over sheet', () => {
       screen: 'roundover',
       room: ARENA,
       ticket: { entryFee: 1000 * M, arenaId: 1, session: 'S2' },
-      roundResult: { kind: 'round', round: N, payout: 400 * M, stats: STATS, standings: standings.map((s) => ({ name: s.name, value: s.value })) },
+      roundResult: { kind: 'round', round: N, payout: 400 * M, stats: STATS, standings: standings.map(({ you: _you, ...s }) => s) },
     });
     render(
       <Kb>

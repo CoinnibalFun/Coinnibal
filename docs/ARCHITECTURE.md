@@ -195,7 +195,9 @@ Off chain (the server; tests in `apps/server/test`):
   treasury (checked on chain by tx hash, each hash used once) and gets a room `priv-<CODE>` with its own rules
   (duration, map, traps, food, power-ups, capacity, practice bots in free rooms). A **ticket room** is an
   invite-only instance of an arena: players buy that arena's normal ticket and it settles at the arena's bell like
-  any other instance; it fields no bots.
+  any other instance; it fields no bots. Capacity 2 to 100. The end is announced `ROOM_CLOSE_COUNTDOWN_MS` (10 s)
+  ahead (`closing`, repeated to late joiners); a free room then sends its final board (`roomOver`, the same
+  `RoundStanding` rows as a bell's `roundOver`) before `room_closed`; a ticket room closes after its bell.
 - **Power-up shop** (`shop/`): `GET /api/shop`, `POST /api/shop/buy {kind, txHash}`; the server checks the
   receipt's `Paid` event (the arena, the payer, the pack's `ref` = `elymum.shop.<kind>`, the price) and the token
   transfer, then credits the charges (each hash once, payments older than 24 h refused).
