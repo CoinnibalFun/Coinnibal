@@ -1,5 +1,10 @@
 # Elymum on Elysium: contracts, mint, and the Elysian design language
 
+> **Historical (superseded 2026-11-05).** This spec describes the earlier Elysium build. Elymum now runs on
+> Robinhood Chain only, with ElymumArena v3 (a fee on profit, no entry fee) and no house bots. Current docs:
+> [ARCHITECTURE.md](../ARCHITECTURE.md), [ECONOMY.md](../ECONOMY.md), [RESEARCH.md](../RESEARCH.md),
+> [OPERATIONS.md](../OPERATIONS.md).
+
 Status: accepted (2026-10-29). This spec is the single source of truth for Elymum on Elysium: the contracts, the
 server and web chain layer, the site and mint, and the interface.
 
