@@ -564,6 +564,18 @@ body {
   align-items: center;
   gap: 8px;
 }
+/* an arena instance (Game → Arena instances): people / seats, dashed while draining */
+.ad-inst {
+  padding: 2px 8px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ad-inst.is-draining {
+  border-style: dashed;
+  color: var(--ink-2);
+}
 
 .ad-field {
   display: flex;

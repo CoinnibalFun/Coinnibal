@@ -14,6 +14,7 @@
     "load": "node --import tsx scripts/bench/load.ts",
     "typecheck": "tsc --noEmit",
     "integrity-sim": "tsx scripts/integrity-sim.ts",
+    "arena-sim": "tsx scripts/arena-scaling-sim.ts",
     "e2e": "tsx scripts/e2e.ts"
   },
   "dependencies": {

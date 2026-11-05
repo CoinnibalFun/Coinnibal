@@ -8,6 +8,7 @@ import type { Conn } from '../net/conn';
 import type { ShopService } from '../shop/service';
 import type { Journal } from '../stake/journal';
 import type { PracticeBotsOptions } from '../bots/practice';
+import { ArenaScaler, ArenaScalingStore } from './arena-scaler';
 import { MapSettingsStore, mapKindOf, type MapRoomKind } from './map-settings';
 import type { RoomHandle, StakeSeat } from './handle';
 import { Room, type BellSettled, type RoomDeps, type RoomOptions } from './room';
@@ -131,14 +132,30 @@ export class RoomManager {
   private lastCustomSweep = 0;
   /** Codes of custom rooms that closed lately → when. */
   private readonly closedCodes = new Map<string, number>();
+  /** How many public instances of each arena take seats, and which one a seat goes to (`arena-scaler.ts`). */
+  readonly scaler: ArenaScaler;
 
   constructor(
     private readonly cfg: ServerConfig,
     deps: ManagerDeps,
     private readonly chain: ChainGateway,
     mapSettings?: MapSettingsStore,
+    scaling?: ArenaScalingStore,
   ) {
     this.mapSettings = mapSettings ?? new MapSettingsStore(null);
+    this.scaler = new ArenaScaler(
+      {
+        instances: (arenaId) => this.arenaInstances(arenaId),
+        arenaIds: () => [...new Set(this.publicInstances().map((r) => r.opts.stake!.arenaId))].sort((a, b) => a - b),
+        capacity: () => this.cfg.arenaInstanceCap,
+        openInstance: (arenaId) => this.openScaledInstance(arenaId),
+        closeDrained: (room) => this.closeDrained(room),
+        threadOf: (room) => (room instanceof RemoteRoom ? `w${room.slot.index}` : undefined),
+        now: () => this.now(),
+        log: (m) => this.deps.log(m),
+      },
+      scaling ?? new ArenaScalingStore(null),
+    );
     this.mapSettings.onChange(() => this.applyMapSettings());
     const round = deps.round ?? cfg.round;
     // one clock for the gateway and every room
@@ -556,9 +573,41 @@ export class RoomManager {
    * spectating pick from. Paid custom rooms (private instances) are never among them.
    */
   arenaInstances(arenaId: number): RoomHandle[] {
-    return [...this.handles()]
-      .filter((r) => r.opts.mode === 'arena' && r.opts.stake?.arenaId === arenaId && !isPaidCustom(r.opts))
+    return this.publicInstances()
+      .filter((r) => r.opts.stake?.arenaId === arenaId)
       .sort((a, b) => (a.opts.instance ?? 1) - (b.opts.instance ?? 1));
+  }
+
+  /** Every public arena instance (of every arena). */
+  private publicInstances(): RoomHandle[] {
+    return [...this.handles()].filter((r) => r.opts.mode === 'arena' && !!r.opts.stake && !isPaidCustom(r.opts));
+  }
+
+  /**
+   * The scaler opens one more instance of an arena (ahead of demand, an overflow seat or the minimum): only while
+   * the arena is allowed, enabled at the last chain read and not kept closed by the vault guard.
+   */
+  private openScaledInstance(arenaId: number): RoomHandle | null {
+    if (!this.arenaAllowed(arenaId) || this.underfunded.has(arenaId)) return null;
+    const arena = this.arenaCache?.ids.get(arenaId) ?? this.arenaFromRooms(arenaId);
+    if (!arena || !arena.enabled) return null;
+    if (this.arenaInstances(arenaId).length === 0 && !this.vaultCovers(arenaId, arena)) return null;
+    return this.createArenaInstance(arenaId, arena);
+  }
+
+  /**
+   * A drained instance closes once nothing of value is left in it (no player, no ticket, no loot: its bell settled
+   * them); its spectators go back to the lobby. Never evicts a ticket.
+   */
+  private closeDrained(room: RoomHandle): 'closed' | 'pending' {
+    const message = 'Fewer players now: this arena instance closed. Pick the arena again to play.';
+    if (room instanceof RemoteRoom) {
+      if (!room.closing && !room.closed) this.pool!.closeSettled(room, message);
+      return 'pending';
+    }
+    if (!(room as Room).closeSettled(message)) return 'pending';
+    this.drop(room);
+    return 'closed';
   }
 
   /** Every room that seats tickets of an arena: its public instances and its paid custom rooms. */
@@ -623,9 +672,9 @@ export class RoomManager {
   }
 
   /**
-   * Room for a new arena player: the busiest instance `arena-<id>-<n>` with
-   * fewer humans than the instance cap, else a new instance. Null when the
-   * arena does not exist or is disabled.
+   * Room for a new arena player: the fullest instance `arena-<id>-<n>` that takes seats and is not full, else a
+   * draining one taken back, else a new instance (`ArenaScaler.seatFor`). Null when the arena does not exist or
+   * is disabled.
    */
   async arenaRoom(arenaId: number): Promise<RoomHandle | null> {
     if (!this.arenaAllowed(arenaId)) return null;
@@ -640,12 +689,8 @@ export class RoomManager {
     if (!arena || !arena.enabled) return null;
     if (this.underfunded.has(arenaId)) return null;
     if (this.arenaInstances(arenaId).length === 0 && !this.vaultCovers(arenaId, arena)) return null;
-    let best: RoomHandle | null = null;
-    for (const r of this.arenaInstances(arenaId)) {
-      if (r.humanCount >= this.cfg.arenaInstanceCap) continue;
-      if (!best || r.humanCount > best.humanCount) best = r;
-    }
-    const room = best ?? this.createArenaInstance(arenaId, arena);
+    const room = this.scaler.seatFor(arenaId);
+    if (!room) return null;
     // a join is under way: keep cleanup from closing this (possibly idle) instance meanwhile
     room.lastActivity = Date.now();
     return room;
@@ -657,7 +702,7 @@ export class RoomManager {
    * picks again, with the same checks. Null when no live room is available.
    */
   async confirmArenaRoom(arenaId: number, room: RoomHandle): Promise<RoomHandle | null> {
-    const live = (r: RoomHandle | null): r is RoomHandle => r !== null && this.get(r.id) === r && !r.isFull;
+    const live = (r: RoomHandle | null): r is RoomHandle => r !== null && this.get(r.id) === r && this.scaler.seatable(r);
     if (live(room)) {
       room.lastActivity = Date.now();
       return room;
@@ -833,8 +878,13 @@ export class RoomManager {
     this.housekeeping(Date.now());
   }
 
-  /** Expired custom rooms (every second) and idle rooms (every 15 s). */
+  /** Expired custom rooms (every second), the arena scaler (every 5 s) and idle rooms (every 15 s). */
   private housekeeping(now: number): void {
+    try {
+      this.scaler.tick();
+    } catch (err) {
+      this.deps.log(`arena scaling failed: ${(err as Error).stack ?? err}`);
+    }
     if (this.custom && now - this.lastCustomSweep >= 1000) {
       this.lastCustomSweep = now;
       try {
@@ -858,10 +908,8 @@ export class RoomManager {
         // custom rooms live until their time runs out (the custom-room service closes them)
         (room.opts.mode === 'private' && !room.opts.custom && now - room.lastActivity > 120_000) ||
         // every league keeps its first room
-        (room.opts.mode === 'practice' && !room.id.endsWith('-1') && now - room.lastActivity > 300_000) ||
-        // extra arena instances close once empty, with no ticket and no loot left on their floor
-        // (paid custom rooms are closed by the custom-room service, at their end)
-        (room.opts.mode === 'arena' && !isPaidCustom(room.opts) && (room.opts.instance ?? 1) > 1 && room.liveSessions().length === 0 && room.lootCount() === 0 && now - room.lastActivity > 300_000);
+        // (arena instances are consolidated by the scaler; paid custom rooms by the custom-room service, at their end)
+        (room.opts.mode === 'practice' && !room.id.endsWith('-1') && now - room.lastActivity > 300_000);
       if (!close) continue;
       // a room worker drops it only if it is still idle there (a join may be on its way)
       if (room instanceof RemoteRoom) {

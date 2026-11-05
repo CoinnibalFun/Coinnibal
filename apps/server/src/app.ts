@@ -15,6 +15,7 @@ import { IntegrityStore } from './integrity/store';
 import { Leaderboards } from './leaderboards';
 import type { Limiter } from './net/limiter';
 import { Gateway } from './net/gateway';
+import { ArenaScalingStore } from './rooms/arena-scaler';
 import { MapSettingsStore } from './rooms/map-settings';
 import { viemHolderReader, type HolderReader } from './chain/evm-client';
 import { configureRpcBudgets, startRpcMinuteLog } from './chain/rpc-budget';
@@ -229,6 +230,8 @@ export async function createApp(
     },
     chain,
     mapSettings,
+    // the arena instance scaler's settings (DATA_DIR/site/arena-scaling.json)
+    new ArenaScalingStore(persist ? cfg.dataDir : null, log),
   );
   // custom rooms: paid with a gas-token transfer to the treasury (checked on chain), restored after a restart
   let paymentReader: PaymentReader | null | undefined = opts.paymentReader;
@@ -264,6 +267,7 @@ export async function createApp(
   site.onAvatarChange((wallet) => void rooms.clearAvatar(wallet));
   site.setLoad(() => gameLoad(rooms.loadStats()));
   site.setMaps({ store: rooms.mapSettings, live: () => rooms.roomCounts(), log });
+  site.setScaler(rooms.scaler);
   chain.setLiveSessionProvider(() => rooms.liveSessions());
   // the game token was set on chain (picked up by the 30 s config watcher, no restart): attach the
   // arenas now (a fresh read of the arena list) instead of waiting for the next arena timer
