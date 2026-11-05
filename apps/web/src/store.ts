@@ -46,7 +46,7 @@ export interface Settings {
   music: number;
   /** The music switch: off is "No music". */
   musicOn: boolean;
-  /** The soundtrack (audio/tracks.ts); `custom` is a file from the player's device. */
+  /** The soundtrack (audio/tracks.ts). */
   musicTrack: MusicChoice;
   sfx: number;
   sfxOn: boolean;
@@ -201,19 +201,6 @@ export interface UiState {
   /** The server refused a room entry with `game_closed`: the game is admin-only and this session is no admin. */
   gameClosed: boolean;
   settings: Settings;
-  /** "Your own music" this session: the file's name and its blob URL (audio/custom.ts); never uploaded. */
-  customMusic: CustomMusic | null;
-  /** The last file picked was not audio (or too big). */
-  customMusicRefused: boolean;
-}
-
-export interface CustomMusic {
-  name: string;
-  url: string;
-  /** A copy is kept in this browser (IndexedDB) for the next visit. */
-  saved: boolean;
-  /** The browser would not play it. */
-  error: boolean;
 }
 
 const SETTINGS_KEY = 'elymum.settings.v1';
@@ -323,8 +310,6 @@ export const useUi = create<UiState>(() => ({
   auth: null,
   gameClosed: false,
   settings: loadSettings(),
-  customMusic: null,
-  customMusicRefused: false,
 }));
 
 const EMOTE_SET_KEY = 'elymum.emoteSet.v1';
