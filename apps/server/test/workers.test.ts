@@ -31,6 +31,9 @@ class FakeChain implements ChainGateway {
       enabled: true,
       chainId: 31337,
       chainName: 'Localnet',
+      gasSymbol: 'ETH',
+      testnet: true,
+      faucetUrl: null,
       rpcUrl: null,
       explorerUrl: null,
       arenaAddress: '0x00000000000000000000000000000000000A7e4A',
@@ -38,7 +41,7 @@ class FakeChain implements ChainGateway {
       arenasEnabled: true,
       tokenReady: true,
       token: { address: '0x0000000000000000000000000000000000000707', symbol: '$ELYMUM', decimals: 18 },
-      feeBps: 500,
+      fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 500, holderPerks: false, paymentBurnBps: 5000, burnMode: 0 },
       serverKey: null,
     };
   }
@@ -137,8 +140,8 @@ function ticket(player: string, arenaId = 1, entryFee = 10_000_000): ChainSessio
     player,
     arenaId,
     entryFee,
-    feeBps: 500,
-    value: entryFee - Math.floor((entryFee * 500) / 10_000),
+    rates: { burnBps: 1500, vaultBps: 500 },
+    value: entryFee,
     openedAt: Math.floor(Date.now() / 1000),
     finalized: false,
     owed: 0,
@@ -162,9 +165,6 @@ beforeAll(async () => {
     PORT: '0',
     HOST: '127.0.0.1',
     DATA_DIR: dir,
-    BOT_TARGET: '4',
-    BOT_MIN: '1',
-    BOT_MAX: '4',
     GAME_ACCESS: 'public',
     // no break after a bell here (the break has its own test)
     ROUND_BREAK_SECONDS: '0',
@@ -220,7 +220,7 @@ describe('room workers', () => {
     c.send({ t: 'join', room: 'arena:1', name: 'Staker', skin: 0 });
     const j = await c.wait('joined');
     expect(j.session).toBe(t.key);
-    expect(j.value).toBe(9_500_000);
+    expect(j.value).toBe(10_000_000);
     await until(() => app.journal.live().some((l) => l.session === t.key));
     expect(app.rooms.liveSessions().has(t.key)).toBe(true);
     expect(app.rooms.findArenaStake(1, w)?.entry.pid).toBe(j.playerId);
@@ -233,10 +233,10 @@ describe('room workers', () => {
     jumpTo(r.endsAt + 50);
     const over = await c.wait('roundOver', 5000);
     expect(over.round).toBe(r.n);
-    expect(over.payout).toBe(9_500_000);
+    expect(over.payout).toBe(10_000_000);
     const items = app.journal.settlements().filter((p) => p.key === t.key);
     expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ reason: 'round', payout: 9_500_000, player: w });
+    expect(items[0]).toMatchObject({ reason: 'round', payout: 10_000_000, player: w });
     expect(app.journal.live().some((l) => l.session === t.key)).toBe(false);
     expect(chain.kicked).toBeGreaterThan(0);
     // on disk too: the journal is the only writer, on this thread
@@ -288,7 +288,7 @@ describe('room workers', () => {
     await until(() => app.journal.settlements().some((p) => p.key === t.key));
     const items = app.journal.settlements().filter((p) => p.key === t.key);
     expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ reason: 'crash', payout: 9_500_000, player: w });
+    expect(items[0]).toMatchObject({ reason: 'crash', payout: 10_000_000, player: w });
     expect(app.journal.live().some((l) => l.session === t.key)).toBe(false);
     await until(() => c.closeCode !== null);
     expect(c.closeCode).toBe(1012);
@@ -353,7 +353,7 @@ describe('room workers: shutdown', () => {
   it('a server stop settles the live tickets of every worker (an operator exit) before it returns', async () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-stop-'));
     const ch = new FakeChain();
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
     const p = await a.listen();
     const w = testWallet(0xb001);
@@ -367,7 +367,7 @@ describe('room workers: shutdown', () => {
     await until(() => a.journal.live().some((l) => l.session === t.key));
     await a.close();
     const file = JSON.parse(readFileSync(join(d, 'chains', '31337', 'journal.json'), 'utf8')) as { pending: { key: string; reason: string; payout: number }[]; live: unknown[] };
-    expect(file.pending.filter((x) => x.key === t.key)).toEqual([expect.objectContaining({ reason: 'kicked', payout: 9_500_000 })]);
+    expect(file.pending.filter((x) => x.key === t.key)).toEqual([expect.objectContaining({ reason: 'kicked', payout: 10_000_000 })]);
     expect(file.live).toEqual([]);
     // a worker thread starts slowly on a busy machine (CI): room enough for it
   }, 30_000);
@@ -378,7 +378,7 @@ describe('room workers: a hung worker', () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-hang-'));
     const ch = new FakeChain();
     const logs: string[] = [];
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: (m) => logs.push(m), persist: true });
     const p = await a.listen();
     try {
@@ -393,7 +393,7 @@ describe('room workers: a hung worker', () => {
       await until(() => a.journal.live().some((l) => l.session === t.key));
       a.rooms.pool!.block(0, 6000);
       await until(() => a.journal.settlements().some((x) => x.key === t.key), 9000);
-      expect(a.journal.settlements().filter((x) => x.key === t.key)).toEqual([expect.objectContaining({ reason: 'crash', payout: 9_500_000 })]);
+      expect(a.journal.settlements().filter((x) => x.key === t.key)).toEqual([expect.objectContaining({ reason: 'crash', payout: 10_000_000 })]);
       expect(logs.some((l) => /room worker 0 stopped \(no message for/.test(l))).toBe(true);
       await until(() => a.rooms.pool!.threads()[0].restarts === 1 && !!a.rooms.get('arena-1-1'), 9000);
       const q = await Client.open(p);
@@ -439,7 +439,7 @@ describe('room workers: the money helpers', () => {
     const wallet = '0x1111111111111111111111111111111111111111';
     const inv = new BoostInventory(null);
     inv.credit(wallet, 'magnet', 2, `0x${'1'.padStart(64, '0')}`, 1n);
-    const shop = new ShopService({ settings: new ShopSettingsStore(null), inventory: inv, chain: new FakeChain() as never, owner: () => null, holder: async () => false });
+    const shop = new ShopService({ settings: new ShopSettingsStore(null), inventory: inv, chain: new FakeChain() as never, holder: async () => false });
     const ctx = { wallet, isBot: false, arena: true, round: 7, holder: false };
     expect(shop.use(ctx, 'magnet', () => true)).toEqual({ ok: true });
     expect(inv.get(wallet).magnet).toBe(1);
@@ -451,36 +451,24 @@ describe('room workers: the money helpers', () => {
   });
 });
 
-describe('room workers: the house bots bankroll', () => {
-  it('bots in a worker arena draw their budget from the reserve on the main thread; an admin ticket tops the reserve up', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-bank-'));
+describe('room workers: practice bots', () => {
+  it('a free custom room in a worker fields its practice bots; arenas in a worker have none', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-bots-'));
     const ch = new FakeChain();
-    const admin = testWallet(0xa0a0);
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, ARENA_BOT_TARGET: '6', ARENA_BOT_MIN: '6', ARENA_BOT_MAX: '6', BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', ADMIN_WALLETS: admin, TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
-    const p = await a.listen();
+    await a.listen();
     try {
-      const value = 10_000_000 - Math.floor((10_000_000 * 500) / 10_000);
-      // the admin's unplayed ticket becomes reserve: settled at 0, its value kept in the vault
-      const t = ticket(admin);
-      ch.sessions.set(`1:${admin}`, t);
-      const call = async (body: unknown) => {
-        const res = await fetch(`http://127.0.0.1:${p}/api/admin/bots/bankroll`, { method: 'POST', headers: { Authorization: `Bearer ${a.auth.issueToken(admin)}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        return { status: res.status, body: (await res.json()) as { amount?: number; reserve?: number; error?: string } };
-      };
-      const r = await call({ arenaId: 1 });
-      expect(r.status).toBe(200);
-      expect(r.body).toMatchObject({ amount: value, reserve: value });
-      expect(a.journal.settlements()).toEqual([expect.objectContaining({ key: t.key, payout: 0, reason: 'house' })]);
-      // the same ticket twice, and no ticket at all, are refused
-      expect((await call({ arenaId: 1 })).status).toBe(409);
-      expect((await call({ arenaId: 2 })).body.error).toBe('no_ticket');
-      // more reserve, then the bots that walk in (in the worker) draw from it
-      a.journal.commit({ house: [{ arenaId: 1, amount: 5 * value }] });
-      await until(() => a.journal.purses().reduce((s, x) => s + x.value, 0) >= 3 * value, 40_000);
-      const purses = a.journal.purses().reduce((s, x) => s + x.value, 0);
-      expect(purses % value).toBe(0);
-      expect(a.journal.houseByArena(1) + purses).toBe(6 * value);
+      const room = a.rooms.createCustomRoom('BOTSS', {
+        name: 'Bots',
+        maxPlayers: 10,
+        bots: { count: 3, difficulty: 'easy' },
+        custom: { durationMin: 30, mapSize: 'M', bots: 3, difficulty: 'easy', food: 'normal', traps: 'normal', powerUps: true, kind: 'free', creator: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', createdAt: 0, endsAt: Date.now() + 3600_000 },
+      });
+      await until(() => room.botCounts().bots === 3, 20_000);
+      await a.rooms.ensureArenaRooms();
+      await until(() => a.rooms.roomCounts().some((r) => r.kind === 'arena'), 20_000);
+      for (const r of a.rooms.roomCounts()) if (r.kind !== 'private') expect(r.bots).toBe(0);
     } finally {
       await a.close();
     }

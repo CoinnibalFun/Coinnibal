@@ -1,10 +1,10 @@
 import {
   BOOST_KINDS,
-  BURN_ADDRESS,
   boostCooldownMs,
   emptyBoostCounts,
   normalizeBoostKind,
   packPriceRaw,
+  shopPaymentRef,
   type BoostCounts,
   type BoostKind,
   type BoostRefusal,
@@ -15,7 +15,6 @@ import {
   type ShopSettings,
   type ShopView,
 } from '@elymum/shared';
-import { getAddress } from 'viem';
 import { ChainBusyError, type ChainGateway } from '../chain/types';
 import { InventoryError, type BoostInventory } from './inventory';
 import type { ShopSettingsStore } from './settings';
@@ -39,10 +38,11 @@ const BUY_MESSAGES: Record<ShopBuyError, string> = {
   tx_used: 'This transaction was already used for a purchase.',
   tx_pending: 'The payment is not confirmed on chain yet. Try again in a moment.',
   tx_failed: 'The payment transaction failed on chain.',
-  no_transfer: 'That transaction moved no tokens.',
-  wrong_token: 'That transaction did not pay with the game token.',
+  no_payment: 'That transaction is not a power-up payment.',
+  wrong_token: 'That transaction did not move the game token.',
   wrong_sender: 'That payment was not sent from your signed-in wallet.',
-  wrong_recipient: 'That payment did not go to the shop address.',
+  wrong_recipient: 'That payment did not go to the Elymum arena contract.',
+  wrong_pack: 'That payment was made for another power-up.',
   wrong_amount: 'That payment does not match the pack price.',
   tx_stale: 'That payment is too old to be credited as a new purchase.',
   chain_busy: 'The network is busy. Your payment is safe: try again in a moment.',
@@ -65,8 +65,6 @@ export interface ShopDeps {
   settings: ShopSettingsStore;
   inventory: BoostInventory;
   chain: ChainGateway;
-  /** The owner's wallet (the first `ADMIN_WALLETS` entry): the treasury when none is set. */
-  owner: () => string | null;
   /** Emblem holder check (cached; `fresh` re-reads the chain). */
   holder: (wallet: string, fresh?: boolean) => Promise<boolean>;
   /** Wall clock (cooldowns). */
@@ -79,10 +77,10 @@ export interface ShopDeps {
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref?.());
 
 /**
- * The power-up shop: prices and packs (`GET /api/shop`), purchase verification
- * (`POST /api/shop/buy`: the receipt of a game-token transfer from the signed-in wallet to the sink,
- * exactly the pack price, a hash credited once) and the in-room rules (charges, cooldowns per
- * power-up and wallet, the paid arenas' per-round cap). Bots never use bought power-ups.
+ * The power-up shop: prices and packs (`GET /api/shop`), purchase verification (`POST /api/shop/buy`: the receipt
+ * of an `ElymumArena.pay` from the signed-in wallet, exactly the pack price and the pack's ref, a hash credited
+ * once; the contract burned half and sent half to the fee wallet in that call) and the in-room rules (charges,
+ * cooldowns per power-up and wallet, the paid arenas' per-round cap). Bots never use bought power-ups.
  */
 export class ShopService {
   private readonly now: () => number;
@@ -106,15 +104,9 @@ export class ShopService {
     this.chargeListeners.push(fn);
   }
 
-  /** The address payments go to; null when the treasury is chosen but no owner wallet is known. */
-  sink(s: ShopSettings = this.settings): string | null {
-    if (s.sink === 'burn') return BURN_ADDRESS;
-    const w = s.treasury ?? this.deps.owner();
-    try {
-      return w ? getAddress(w) : null;
-    } catch {
-      return null;
-    }
+  /** The arena contract payments are made to (`pay`); null while none is registered. */
+  payTo(): string | null {
+    return this.deps.chain.status().arenaAddress;
   }
 
   private token(): { address: string; symbol: string; decimals: number } | null {
@@ -126,7 +118,7 @@ export class ShopService {
     if (!s.enabled) return 'disabled';
     if (!this.deps.chain.enabled || !this.deps.chain.tokenReceipt) return 'no_chain';
     if (!this.token()) return 'no_token';
-    if (!this.sink(s)) return 'no_sink';
+    if (!this.payTo()) return 'no_arena';
     return null;
   }
 
@@ -146,8 +138,8 @@ export class ShopService {
       open: closed === null,
       ...(closed ? { closedReason: closed } : {}),
       token,
-      sink: this.sink(s),
-      sinkKind: s.sink,
+      payTo: this.payTo(),
+      burnBps: this.deps.chain.status().fees?.paymentBurnBps ?? null,
       packs,
       holder,
       holderDiscountPct: s.holderDiscountPct,
@@ -173,7 +165,7 @@ export class ShopService {
     if (this.closedReason(s)) return fail(403, 'shop_closed');
     if (!s.kinds[kind]) return fail(403, 'kind_disabled');
     const token = this.token()!;
-    const sink = this.sink(s)!;
+    const arena = this.payTo()!;
     if (this.deps.inventory.isUsed(txHash) || this.inflight.has(txHash)) return fail(409, 'tx_used');
     this.inflight.add(txHash);
     try {
@@ -190,7 +182,14 @@ export class ShopService {
         }
         if (receipt) break;
       }
-      const check = verifyPurchase(receipt, { token: token.address, from: wallet, to: sink, amounts: discounted === full ? [full] : [full, discounted], now: this.now() });
+      const check = verifyPurchase(receipt, {
+        token: token.address,
+        from: wallet,
+        arena,
+        ref: shopPaymentRef(kind),
+        amounts: discounted === full ? [full] : [full, discounted],
+        now: this.now(),
+      });
       if (!check.ok) return fail(check.code === 'tx_pending' ? 409 : 400, check.code);
       // the discounted price is only for emblem holders (re-read on chain when the cache says no)
       if (check.paid !== full) {

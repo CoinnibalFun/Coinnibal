@@ -1,3 +1,5 @@
+import type { FeeRates } from '@elymum/shared';
+
 export interface ArenaEntry {
   pid: number;
   /** Wallet, EIP-55 checksummed. */
@@ -13,13 +15,16 @@ export interface ArenaEntry {
   value: number;
   /** On-chain session open time (unix seconds). */
   openedAt: number;
-  /** The value the ticket was seated with: the base of the cut on winnings (defaults to `value` at join). */
-  start?: number;
+  /**
+   * The ticket's fee rates on profit, fixed on chain at join (`getSession`). Absent: the contract defaults.
+   * Only used to show the player what the contract will take; the contract computes the real fee.
+   */
+  rates?: FeeRates;
 }
 
 /**
  * In-game value accounting for an arena room. Value moves between stakers
- * (`transfer`), leaves a staker as loot when a bot eats them (`spill`) and
+ * (`transfer`), leaves a staker as floor loot when something without a ticket eats them (`spill`) and
  * comes back from loot (`credit`). The room keeps
  * Σ ledger + Σ loot on the floor == what the arena vault owes the room's players.
  */
@@ -29,7 +34,7 @@ export class ArenaLedger {
   join(entry: ArenaEntry): void {
     if (this.entries.has(entry.pid)) throw new Error(`pid ${entry.pid} already staked`);
     if (!Number.isSafeInteger(entry.value) || entry.value < 0) throw new Error('invalid stake value');
-    this.entries.set(entry.pid, { ...entry, start: entry.start ?? entry.value });
+    this.entries.set(entry.pid, { ...entry });
   }
 
   has(pid: number): boolean {
@@ -69,7 +74,7 @@ export class ArenaLedger {
   }
 
   /**
-   * A bot ate (part of) a staker: removes the same share `transfer` would
+   * Something without a ticket ate (part of) a staker: removes the same share `transfer` would
    * move and returns it. The caller must put exactly that much on the floor as loot.
    */
   spill(victimPid: number, massEaten: number, victimTotalBefore: number, last: boolean): number {

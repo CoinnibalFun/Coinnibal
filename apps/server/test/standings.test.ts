@@ -2,13 +2,13 @@ import { PlayerFlag, TICK_MS, type ServerMessage } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { Gateway } from '../src/net/gateway';
 import { Room } from '../src/rooms/room';
-import { ArenaChain, fakeConn, roomDeps } from './helpers';
+import { ArenaChain, fakeConn, freeCustom, roomDeps } from './helpers';
 
 type Standings = Extract<ServerMessage, { t: 'standings' }>;
 const standingsOf = (msgs: ServerMessage[]) => msgs.filter((m): m is Standings => m.t === 'standings');
 
 const pond = () =>
-  new Room({ id: 'practice-rookie-1', mode: 'practice', league: 'rookie', name: 'Rookie', maxPlayers: 40, bots: { target: 6, min: 2, max: 6 }, seed: 7 }, roomDeps(new ArenaChain([])));
+  new Room({ id: 'priv-PONDS', mode: 'private', code: 'PONDS', name: 'Practice', maxPlayers: 40, bots: { count: 6, difficulty: 'easy' }, custom: freeCustom(6), seed: 7 }, roomDeps(new ArenaChain([])));
 
 /** Ticks until the room's once-a-second leaderboard went out (the room reads the wall clock for it). */
 async function nextSecond(room: Room): Promise<void> {
@@ -29,7 +29,6 @@ describe('full standings (standings sheet)', () => {
 
     // nothing unasked
     room.tick(TICK_MS);
-    room.bots!.fill();
     await nextSecond(room);
     expect(standingsOf(me.msgs)).toHaveLength(0);
 
@@ -44,7 +43,11 @@ describe('full standings (standings sheet)', () => {
     const mine = first.rows.find((r) => r.pid === p.id)!;
     expect(mine).toMatchObject({ name: 'Daphne', skin: 4, holder: true, verified: true, avatar: '0123456789abcdef', country: 'NL' });
     expect(first.rows.find((r) => r.name === 'Guest')?.country).toBeUndefined();
-    for (const b of first.rows.filter((r) => r.isBot)) expect(b.country).toMatch(/^[A-Z]{2}$/);
+    // practice bots are labelled BOT and pretend nothing: no flag, a "Bot N" name
+    for (const b of first.rows.filter((r) => r.isBot)) {
+      expect(b.country).toBeUndefined();
+      expect(b.name).toMatch(/^Bot \d+$/);
+    }
     expect(mine.isBot).toBeUndefined();
     const bots = first.rows.filter((r) => r.isBot);
     expect(bots.length).toBeGreaterThan(0);

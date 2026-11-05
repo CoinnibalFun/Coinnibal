@@ -40,14 +40,14 @@ describe('chain env (EVM)', () => {
       serverKey: 'auto',
       tokenSymbol: '$TEST',
     });
-    expect(cfg.mint).toEqual({ usdCents: 250, hypePriceUrl: 'https://price.example/info' });
+    expect(cfg.mint).toEqual({ usdCents: 250, gasPriceUrl: 'https://price.example/info' });
     expect(cfg.gameAccess).toBe('holders');
   });
 
   it('defaults: chain off, $ELYMUM, $1 mint on Hyperliquid, the setting decides who plays', () => {
     const cfg = loadConfig({} as NodeJS.ProcessEnv);
     expect(cfg.chain).toMatchObject({ rpcUrl: null, publicRpcUrl: null, serverKey: null, arenaAddress: null, nftAddress: null, tokenSymbol: '$ELYMUM' });
-    expect(cfg.mint).toEqual({ usdCents: 100, hypePriceUrl: 'https://api.hyperliquid.xyz/info' });
+    expect(cfg.mint).toEqual({ usdCents: 100, gasPriceUrl: 'https://api.hyperliquid.xyz/info' });
     expect(cfg.gameAccess).toBeNull();
     expect(loadConfig({ GAME_ACCESS: 'everyone' } as NodeJS.ProcessEnv).gameAccess).toBeNull();
     expect(loadConfig({ GAME_ACCESS: ' PUBLIC ' } as NodeJS.ProcessEnv).gameAccess).toBe('public');

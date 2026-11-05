@@ -25,8 +25,7 @@ import {
   type CustomRoomView,
 } from '@elymum/shared';
 import { getAddress, parseEther } from 'viem';
-import type { BotManagerOptions } from '../bots/manager';
-import type { BotMixWeights } from '../bots/personality';
+import type { PracticeBotsOptions } from '../bots/practice';
 import { PaymentChainBusy, TX_HASH_RE, checkPayment, type PaymentReader, type UsedPayments } from '../chain/payment';
 import { ChainBusyError } from '../chain/types';
 import type { CustomRoomHooks, PaidArena, RoomManager } from './manager';
@@ -77,13 +76,6 @@ interface RoomsFile {
   freeUsed: Record<string, string>;
 }
 
-/** Bot difficulty weights per choice. */
-export const CUSTOM_BOT_MIX: Record<CustomRoomConfig['difficulty'], BotMixWeights> = {
-  easy: { easy: 100, medium: 0, hard: 0 },
-  mixed: { easy: 45, medium: 40, hard: 15 },
-  hard: { easy: 0, medium: 35, hard: 65 },
-};
-
 const FOOD_MUL: Record<CustomRoomConfig['food'], number> = { low: 0.6, normal: 1, high: 1.6 };
 const POWERUPS: Record<CustomMapSize, number> = { XS: 2, S: 2, M: 3, L: 4, XL: 5 };
 
@@ -111,11 +103,13 @@ export function customWorld(c: CustomRoomConfig, side?: number): WorldShape {
   };
 }
 
-/** Bots of a config: exactly `bots` of them, whatever the humans do. */
-export function customBots(c: CustomRoomConfig): BotManagerOptions | null {
-  if (c.bots <= 0) return null;
-  // never a pack on one person: one chaser at a time (two on hard)
-  return { enabled: true, target: c.bots, min: c.bots, max: c.bots, mix: { ...CUSTOM_BOT_MIX[c.difficulty] }, maxChasers: c.difficulty === 'hard' ? 2 : 1 };
+/**
+ * Practice bots of a config: exactly `bots` of them, at the chosen difficulty, in a FREE room only. A paid room
+ * (stakes) never has bots, whatever an old saved record says.
+ */
+export function customBots(c: CustomRoomConfig): PracticeBotsOptions | null {
+  if (c.kind === 'paid' || c.bots <= 0) return null;
+  return { count: c.bots, difficulty: c.difficulty };
 }
 
 const BEST_KEPT = 10;
@@ -130,7 +124,7 @@ const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string, unknown>, strict = true): CustomRoomSettings {
   const next = { ...cur };
   const bad = (field: string, message: string) => new CustomRoomFail(400, 'bad_request', message, field);
-  const keys: (keyof CustomRoomSettings)[] = ['enabled', 'priceHype', 'treasury', 'holderPerk', 'holderDiscountPct', 'maxLive', 'maxPerWallet', 'capacityStepPct', 'maxPlayers', 'maxSeats', 'paidRooms'];
+  const keys: (keyof CustomRoomSettings)[] = ['enabled', 'priceGas', 'treasury', 'holderPerk', 'holderDiscountPct', 'maxLive', 'maxPerWallet', 'capacityStepPct', 'maxPlayers', 'maxSeats', 'paidRooms'];
   for (const k of Object.keys(body)) if (!keys.includes(k as keyof CustomRoomSettings) && strict) throw bad(k, `unknown field ${k}`);
   if (body.enabled !== undefined) {
     if (typeof body.enabled !== 'boolean') throw bad('enabled', 'enabled must be true or false');
@@ -140,11 +134,11 @@ export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string
     if (typeof body.paidRooms !== 'boolean') throw bad('paidRooms', 'paidRooms must be true or false');
     next.paidRooms = body.paidRooms;
   }
-  if (body.priceHype !== undefined) {
-    const p = body.priceHype;
-    if (typeof p !== 'string' || !/^\d{1,6}(\.\d{1,18})?$/.test(p)) throw bad('priceHype', 'priceHype must be a HYPE amount like "0.05"');
-    if (parseEther(p) > parseEther('1000')) throw bad('priceHype', 'priceHype must be at most 1000 HYPE');
-    next.priceHype = p;
+  if (body.priceGas !== undefined) {
+    const p = body.priceGas;
+    if (typeof p !== 'string' || !/^\d{1,6}(\.\d{1,18})?$/.test(p)) throw bad('priceGas', 'priceGas must be a HYPE amount like "0.05"');
+    if (parseEther(p) > parseEther('1000')) throw bad('priceGas', 'priceGas must be at most 1000 HYPE');
+    next.priceGas = p;
   }
   if (body.treasury !== undefined) {
     if (body.treasury === null || body.treasury === '') next.treasury = null;
@@ -315,7 +309,6 @@ export class CustomRoomService implements CustomRoomHooks {
     const opts = {
       name: r.config.name,
       maxPlayers: r.config.maxPlayers,
-      bots: customBots(r.config),
       world: customWorld(r.config),
       // "Auto": the private rooms' curve, sized for the bots plus the people in the room
       ...(r.config.mapSize === 'auto' ? { map: { scale: this.d.rooms.customMapScale(), shape: (side: number) => customWorld(r.config, side), config: r.config } } : {}),
@@ -326,7 +319,7 @@ export class CustomRoomService implements CustomRoomHooks {
       // an invite-only instance of the arena: its tickets, its vault, its bell
       return this.d.rooms.createPaidRoom(r.code, { ...opts, stake: { arenaId: r.config.arenaId, buyIn: r.buyIn ?? 0 } });
     }
-    return this.d.rooms.createCustomRoom(r.code, opts);
+    return this.d.rooms.createCustomRoom(r.code, { ...opts, bots: customBots(r.config) });
   }
 
   /* ------------------------------ settings ------------------------------ */
@@ -348,7 +341,7 @@ export class CustomRoomService implements CustomRoomHooks {
 
   /** Base price (rooms of up to 10 players), wei. */
   priceWei(): bigint {
-    return parseEther(this.cur.priceHype);
+    return parseEther(this.cur.priceGas);
   }
 
   /** The fee of a room of `capacity` before any holder perk (`customRoomFee`), wei. */
@@ -380,7 +373,7 @@ export class CustomRoomService implements CustomRoomHooks {
     return {
       durationMin: c.durationMin,
       mapSize: c.mapSize,
-      bots: c.bots,
+      bots: customBots(c)?.count ?? 0,
       difficulty: c.difficulty,
       food: c.food,
       traps: c.traps ?? 'normal',

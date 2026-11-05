@@ -60,9 +60,6 @@ async function harness(env: Record<string, string> = {}, setupDir?: (dir: string
     PORT: '0',
     HOST: '127.0.0.1',
     DATA_DIR: dir,
-    BOT_TARGET: '2',
-    BOT_MIN: '0',
-    BOT_MAX: '2',
     ADMIN_WALLETS: ADMIN,
     PUBLIC_URL: 'https://elymum.example',
     ROUND_JOIN_CLOSE_SECONDS: '0',
@@ -262,9 +259,9 @@ describe('mint: allowlist, proofs, state, price', () => {
     expect(diff.diff.removed).toEqual([]);
   });
 
-  it('GET /api/site/mint: contract state, HYPE/USD, price in USD, holders, game access', async () => {
+  it('GET /api/site/mint: contract state, gas-token/USD, price in USD, holders, game access', async () => {
     h.evm.mint.phase = 1;
-    h.evm.mint.price = 25n * 10n ** 15n; // 0.025 HYPE at $40 = $1.00
+    h.evm.mint.price = 25n * 10n ** 15n; // 0.025 of the gas token at $40 = $1.00
     h.evm.mintNft(wallet(), 2);
     h.evm.mintNft(wallet(), 1);
     await h.app.mint.chainState(true);
@@ -273,7 +270,7 @@ describe('mint: allowlist, proofs, state, price', () => {
       nftAddress: NFT,
       chainId: 31337,
       contract: { phase: 'allowlist', priceWei: '25000000000000000', maxSupply: 1000, totalSupply: 3, keeper: '0x0000000000000000000000000000000000000000' },
-      hypeUsd: 40,
+      gasUsd: 40,
       priceUsd: 1,
       targetUsdCents: 100,
       holders: 2,
@@ -281,7 +278,7 @@ describe('mint: allowlist, proofs, state, price', () => {
       gameAccess: 'admins',
     });
     const q = (await h.call('GET', '/api/admin/mint/price', { wallet: ADMIN })).body;
-    expect(q).toMatchObject({ hypeUsd: 40, targetUsdCents: 100, priceWei: '25000000000000000' });
+    expect(q).toMatchObject({ gasUsd: 40, targetUsdCents: 100, priceWei: '25000000000000000' });
     expect(q.fetchedAt).toBeGreaterThan(0);
   });
 

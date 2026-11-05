@@ -1,12 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
-import { winningsCut } from '@elymum/shared';
 
 /**
  * Why a ticket was settled. `round`: alive at the round end (paid arenas). `cashout` and `afk` are
  * no longer produced by arena rooms (timed rounds) but stay readable in old journals.
  */
-export type SettleReason = 'cashout' | 'death' | 'afk' | 'crash' | 'stale' | 'maxage' | 'kicked' | 'round' | 'house';
+export type SettleReason = 'cashout' | 'death' | 'afk' | 'crash' | 'stale' | 'maxage' | 'kicked' | 'round';
 
 export interface SettlementItem {
   /** v1 journals also held free-play `record` items; v2 drops them on load. */
@@ -19,7 +18,10 @@ export interface SettlementItem {
   session?: string;
   /** On-chain session id: `settle` refuses (skips) an item whose id no longer matches. */
   sessionId?: number;
-  /** Ledger units owed (the token with at most 6 decimals; converted to base units only when sent). */
+  /**
+   * The ticket's gross value, ledger units (the token with at most 6 decimals; converted to base units only
+   * when sent). The arena contract takes its fee on the profit from it; this is what leaves the vault.
+   */
   payout?: number;
   score: number;
   kills: number;
@@ -91,14 +93,6 @@ export const itemAmount = (item: JournalItem): number => (item.kind === 'sweep' 
 
 export const sweepKey = (roomId: string, round: number): string => `sweep:${roomId}:${round}`;
 
-/** Key of the sweep that burns the burn share of one ticket's cut on winnings (outside a bell). */
-export const cutSweepKey = (session: string): string => `sweep:cut:${session}`;
-
-/** A sweep item burning `amount` (the burn share of a ticket's cut on winnings). */
-export function cutSweep(roomId: string, arenaId: number, session: string, amount: number, now: number): SweepItem {
-  return { kind: 'sweep', key: cutSweepKey(session), arenaId, roomId, round: 0, amount, attempts: 0, nextAttemptAt: now, createdAt: now };
-}
-
 export interface LiveStake {
   roomId: string;
   session: string;
@@ -106,21 +100,8 @@ export interface LiveStake {
   player: string;
   arenaId: number;
   value: number;
-  /** The ticket's value when it was seated (the base of the cut on winnings); absent in older files. */
-  start?: number;
   score: number;
   kills: number;
-}
-
-/**
- * Value the house's bots hold in an arena instance right now (taken from people they ate). A person
- * who eats such a bot takes its share; whatever the bots still hold when they leave or at the bell
- * becomes the team's reserve in the arena vault (`house`).
- */
-export interface PurseRecord {
-  roomId: string;
-  arenaId: number;
-  value: number;
 }
 
 /** A loot piece lying on an arena instance's floor (value in ledger units). */
@@ -143,13 +124,13 @@ interface JournalFile {
   loot: LootRecord[];
   /** Integrity: value forfeited from held settlements (absent in older files). */
   forfeits?: ForfeitRecord[];
-  /** What the house's bots hold per arena instance (absent in older files). */
-  purses?: PurseRecord[];
   /**
-   * The team's reserve per arena id, ledger units: the vault share of the cut on winnings and what the
-   * bots took home. It stays in the arena vault, owed to no player.
+   * Retired fields of journals written while house bots played arenas (`purses`, value bots held) and the
+   * off-chain cut on winnings existed (`house`, the vault share). They are read and ignored: that value
+   * stayed in the arena vault and is owed to nobody (`Journal.retiredValue` reports it once).
    */
-  house?: Record<string, number>;
+  purses?: unknown;
+  house?: unknown;
   /** Highest sweep id assigned per arena id (monotonic, never reused). */
   sweepSeq?: Record<string, number>;
   /** The arena contract the items belong to (lower-case 0x); null until bound. */
@@ -168,8 +149,8 @@ interface JournalFileV1 {
  * Crash-safe record of money the server owes. Every change is written with
  * write-to-temp + rename, so the file on disk is always a complete snapshot.
  *
- * Invariant: at any instant, Σ live values + Σ loot + Σ purses + Σ pending amounts (payouts and
- * sweeps, per arena) + the house reserve + forfeits equals what is in the arena vault, because value only leaves
+ * Invariant: at any instant, Σ live values + Σ loot + Σ pending amounts (payouts and sweeps, per arena) + Σ
+ * forfeits equals what the journal owes out of the arena vault, because value only leaves
  * `live` in the same write that adds the matching pending settlement, loot only leaves
  * the floor records in the same write that adds its sweep, and the room writes live
  * values and loot together.
@@ -186,8 +167,6 @@ export class Journal {
   private liveByRoom = new Map<string, LiveStake[]>();
   private lootByRoom = new Map<string, LootRecord[]>();
   private forfeitList: ForfeitRecord[] = [];
-  private pursesByRoom = new Map<string, PurseRecord>();
-  private houseV: Record<string, number> = {};
   private sweepSeqV: Record<string, number> = {};
   private contractV: string | null = null;
   /** Arenas whose loot was already adopted in this process (restored once only). */
@@ -224,8 +203,8 @@ export class Journal {
         this.lootByRoom.set(l.roomId, list);
       }
       this.forfeitList = data.forfeits ?? [];
-      for (const p of data.purses ?? []) if (p.value > 0) this.pursesByRoom.set(p.roomId, { ...p });
-      this.houseV = { ...(data.house ?? {}) };
+      const retired = retiredValue(data);
+      if (retired > 0) this.log(`journal: ignored ${retired} ledger unit(s) of retired house-bot purses and team reserve (they stay in the arena vault, owed to nobody)`);
       this.sweepSeqV = { ...(data.sweepSeq ?? {}) };
       this.contractV = typeof data.contract === 'string' ? data.contract.toLowerCase() : null;
       if (legacy > 0) this.persist();
@@ -295,52 +274,14 @@ export class Journal {
     for (const p of this.pendingItems) if (p.arenaId === arenaId) sum += itemAmount(p);
     for (const list of this.lootByRoom.values()) for (const l of list) if (l.arenaId === arenaId) sum += l.value;
     for (const list of this.liveByRoom.values()) for (const l of list) if (l.arenaId === arenaId) sum += l.value;
-    // a person can still win the bots' purses back
-    for (const p of this.pursesByRoom.values()) if (p.arenaId === arenaId) sum += p.value;
     return sum;
   }
 
-  /** The team's reserve in an arena's vault (vault share of the cut + what the bots took home). */
-  houseByArena(arenaId: number): number {
-    return this.houseV[String(arenaId)] ?? 0;
-  }
-
-  /** The team's reserve per arena id. */
-  house(): Record<string, number> {
-    return { ...this.houseV };
-  }
-
-  /** What the bots of every arena instance hold right now. */
-  purses(): PurseRecord[] {
-    return [...this.pursesByRoom.values()].map((p) => ({ ...p }));
-  }
-
   /**
-   * Takes `amount` out of an arena's team reserve to bankroll a house bot (its purse), when the reserve
-   * holds it; false (nothing taken) otherwise. The caller writes the purse right after: until then the
-   * books undercount the vault, never the other way round.
-   */
-  drawHouse(arenaId: number, amount: number): boolean {
-    const k = String(arenaId);
-    if (!Number.isSafeInteger(amount) || amount <= 0 || (this.houseV[k] ?? 0) < amount) return false;
-    this.houseV[k] -= amount;
-    this.persist();
-    return true;
-  }
-
-  private addHouse(arenaId: number, amount: number): void {
-    if (!(amount > 0)) return;
-    const k = String(arenaId);
-    this.houseV[k] = (this.houseV[k] ?? 0) + amount;
-  }
-
-  /**
-   * A settlement of a live ticket at its value with the cut on winnings applied: the payout is the net,
-   * the burn share becomes its own sweep item (`sweep:cut:<session>`) and the vault share goes to the
-   * house reserve. Used by crash recovery (rooms apply the cut themselves).
+   * A settlement of a live ticket at its last journaled value (crash recovery). The payout is the gross
+   * value: the arena contract takes the fee on the profit when it settles.
    */
   private settleLive(l: LiveStake, now: number): void {
-    const cut = winningsCut(l.value, l.start ?? l.value);
     this.pendingItems.push({
       kind: 'settle',
       key: l.session,
@@ -348,7 +289,7 @@ export class Journal {
       arenaId: l.arenaId,
       session: l.session,
       sessionId: l.sessionId,
-      payout: cut.net,
+      payout: l.value,
       score: l.score,
       kills: l.kills,
       xp: 0,
@@ -357,8 +298,6 @@ export class Journal {
       nextAttemptAt: now,
       createdAt: now,
     });
-    if (cut.burn > 0) this.pendingItems.push(cutSweep(l.roomId, l.arenaId, l.session, cut.burn, now));
-    this.addHouse(l.arenaId, cut.vault);
   }
 
   /** Σ loot value over every arena. */
@@ -380,9 +319,6 @@ export class Journal {
       this.settleLive(l, now);
     }
     this.liveByRoom.clear();
-    // the bots' purses: the bots are gone, what they held is the team's
-    for (const p of this.pursesByRoom.values()) this.addHouse(p.arenaId, p.value);
-    this.pursesByRoom.clear();
     this.persist();
     return live.length;
   }
@@ -406,9 +342,6 @@ export class Journal {
         settled++;
       }
       this.liveByRoom.delete(id);
-      const purse = this.pursesByRoom.get(id);
-      if (purse) this.addHouse(purse.arenaId, purse.value);
-      this.pursesByRoom.delete(id);
       const loot = this.lootByRoom.get(id);
       if (loot && loot.length > 0) {
         const amount = loot.reduce((s, l) => s + l.value, 0);
@@ -434,10 +367,6 @@ export class Journal {
     roomId?: string;
     live?: LiveStake[];
     loot?: { roomId: string; arenaId: number; items: { x: number; y: number; value: number }[] };
-    /** The room's bots' purses now (replaces the room's record). */
-    purses?: { roomId: string; arenaId: number; value: number };
-    /** Value that became the team's reserve in this write (the vault share of cuts, purses taken home). */
-    house?: { arenaId: number; amount: number }[];
   }): void {
     if (opts.enqueue) {
       for (const item of opts.enqueue) {
@@ -455,12 +384,6 @@ export class Journal {
       if (items.length > 0) this.lootByRoom.set(roomId, items.map((i) => ({ roomId, arenaId, x: i.x, y: i.y, value: i.value })));
       else this.lootByRoom.delete(roomId);
     }
-    if (opts.purses) {
-      const { roomId, arenaId, value } = opts.purses;
-      if (value > 0) this.pursesByRoom.set(roomId, { roomId, arenaId, value });
-      else this.pursesByRoom.delete(roomId);
-    }
-    for (const h of opts.house ?? []) this.addHouse(h.arenaId, h.amount);
     this.persist();
   }
 
@@ -504,7 +427,7 @@ export class Journal {
 
   /** Nothing is owed: no pending items, no live stakes and no loot. */
   isIdle(): boolean {
-    return this.pendingItems.length === 0 && this.liveByRoom.size === 0 && this.lootByRoom.size === 0 && this.pursesByRoom.size === 0;
+    return this.pendingItems.length === 0 && this.liveByRoom.size === 0 && this.lootByRoom.size === 0;
   }
 
   /**
@@ -516,10 +439,7 @@ export class Journal {
     const a = address.toLowerCase();
     if (this.contractV === a) return true;
     if (this.contractV !== null && !this.isIdle()) return false;
-    if (this.contractV !== null) {
-      this.sweepSeqV = {};
-      this.houseV = {};
-    }
+    if (this.contractV !== null) this.sweepSeqV = {};
     this.contractV = a;
     this.persist();
     return true;
@@ -547,8 +467,6 @@ export class Journal {
     this.pendingItems = [];
     this.liveByRoom.clear();
     this.lootByRoom.clear();
-    this.pursesByRoom.clear();
-    this.houseV = {};
     this.adopted.clear();
     this.persist();
     return n;
@@ -651,8 +569,6 @@ export class Journal {
       live: this.live(),
       loot: [...this.lootByRoom.values()].flat(),
       ...(this.forfeitList.length > 0 ? { forfeits: this.forfeitList } : {}),
-      ...(this.pursesByRoom.size > 0 ? { purses: [...this.pursesByRoom.values()] } : {}),
-      ...(Object.keys(this.houseV).length > 0 ? { house: this.houseV } : {}),
       ...(Object.keys(this.sweepSeqV).length > 0 ? { sweepSeq: this.sweepSeqV } : {}),
       ...(this.contractV ? { contract: this.contractV } : {}),
       updatedAt: Date.now(),
@@ -693,14 +609,6 @@ function migrate(data: JournalFile | JournalFileV1): JournalFile {
     if (!Number.isInteger(sw.arenaId) || sw.arenaId < 0 || typeof sw.roomId !== 'string' || !Number.isInteger(sw.round)) throw new Error('bad sweep item');
     if (sw.sweepId !== undefined && (!Number.isSafeInteger(sw.sweepId) || sw.sweepId <= 0)) throw new Error('bad sweep item');
   }
-  if (data.purses !== undefined) {
-    if (!Array.isArray(data.purses)) throw new Error('bad journal shape');
-    for (const pr of data.purses) if (typeof pr?.roomId !== 'string' || !Number.isSafeInteger(pr.value) || pr.value < 0 || !Number.isInteger(pr.arenaId)) throw new Error('bad purse record');
-  }
-  if (data.house !== undefined) {
-    if (typeof data.house !== 'object' || data.house === null) throw new Error('bad journal shape');
-    for (const v of Object.values(data.house)) if (!Number.isSafeInteger(v) || v < 0) throw new Error('bad house record');
-  }
   if (data.sweepSeq !== undefined && (typeof data.sweepSeq !== 'object' || data.sweepSeq === null)) throw new Error('bad journal shape');
   for (const l of data.loot) {
     if (!Number.isSafeInteger(l.value) || l.value <= 0 || !Number.isFinite(l.x) || !Number.isFinite(l.y)) throw new Error('bad loot record');
@@ -709,10 +617,21 @@ function migrate(data: JournalFile | JournalFileV1): JournalFile {
     if (l.roomId === undefined) l.roomId = firstArenaInstance(l.arenaId);
     else if (typeof l.roomId !== 'string' || l.roomId.length === 0) throw new Error('bad loot record');
   }
-  // written while the old Pass existed: drop the field so it is not carried on
+  // retired fields of live stakes (the old Pass, the base of the off-chain cut): not carried on
   data.live = data.live.map((l) => {
-    const { hasPass: _gone, ...rest } = l as LiveStake & { hasPass?: unknown };
+    const { hasPass: _pass, start: _start, ...rest } = l as LiveStake & { hasPass?: unknown; start?: unknown };
     return rest;
   });
   return data;
+}
+
+/**
+ * Value held by retired journal fields (house-bot `purses`, the off-chain cut's `house` reserve), ledger units.
+ * Malformed entries count as 0: the fields are ignored either way.
+ */
+export function retiredValue(data: { purses?: unknown; house?: unknown }): number {
+  let sum = 0;
+  if (Array.isArray(data.purses)) for (const p of data.purses) if (Number.isSafeInteger(p?.value) && p.value > 0) sum += p.value;
+  if (data.house && typeof data.house === 'object') for (const v of Object.values(data.house)) if (Number.isSafeInteger(v) && (v as number) > 0) sum += v as number;
+  return sum;
 }

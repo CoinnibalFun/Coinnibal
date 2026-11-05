@@ -4,11 +4,9 @@ import {
   getAllowance,
   getArena,
   getArenaConfig,
-  getArenaVersion,
   getTestTokenFaucet,
   getTokenBalance,
   isArenaHolder,
-  isTestTokenMinter,
   getMintState,
   getNftBalance,
   getSession,
@@ -18,7 +16,6 @@ import {
   toViemChain,
   type ArenaConfig,
   type ArenaInfo,
-  type ArenaVersion,
   type ContractCall,
   type MintState,
   type SessionInfo,
@@ -49,8 +46,9 @@ export type ContractKindCode = 'arena' | 'nft' | 'token';
 
 /** An `ElymumArena` event the settlement worker reads from a receipt. */
 export type ArenaEvent =
-  | { name: 'Settled'; arenaId: number; player: Address; sessionId: bigint; payout: bigint; fee: bigint; collected: boolean }
-  /** v2 `cancel`: an unplayed ticket's full entry fee went back (no fee). */
+  /** `settle`: `payout` (gross) left the vault; `burned` + `toVault` is the fee on its profit, `net` reached the player. */
+  | { name: 'Settled'; arenaId: number; player: Address; sessionId: bigint; payout: bigint; net: bigint; burned: bigint; toVault: bigint; collected: boolean }
+  /** `cancel`: an unplayed ticket's full entry fee went back (no fee). */
   | { name: 'Cancelled'; arenaId: number; player: Address; sessionId: bigint; amount: bigint; collected: boolean }
   | { name: 'SettleSkipped'; arenaId: number; player: Address; sessionId: bigint; reason: number }
   | { name: 'LootBurned'; arenaId: number; sweepId: bigint; amount: bigint };
@@ -88,15 +86,13 @@ export interface EvmClient {
   blockNumber(): Promise<bigint>;
   /** Code at `address` vs the bundled artifact of `kind`. */
   codeCheck(address: Address, kind: ContractKindCode): Promise<CodeCheck>;
-  /** The fee rule of the arena at `address` (from its code hash): 2 fee on entry, 1 legacy fee on profit, null unknown. */
-  arenaVersion(address: Address): Promise<ArenaVersion | null>;
   /** Whether there is any code at `address`. */
   hasCode(address: Address): Promise<boolean>;
   arenaConfig(arena: Address): Promise<ArenaConfig>;
   arenas(arena: Address): Promise<ArenaInfo[]>;
   arena(arena: Address, id: number): Promise<ArenaInfo>;
   session(arena: Address, arenaId: number, player: Address): Promise<SessionInfo>;
-  /** HYPE balance (wei). */
+  /** Gas-token balance (wei). */
   balance(address: Address): Promise<bigint>;
   /** `Joined` events of an arena contract in `[from, to]` (the caller chunks). */
   joinedLogs(arena: Address, from: bigint, to: bigint): Promise<JoinedLog[]>;
@@ -108,8 +104,20 @@ export interface EvmClient {
   txBlock(hash: Hash): Promise<bigint | null>;
   /** Simulates (throws the decoded revert) then sends `call` signed by the server key. */
   send(call: ContractCall): Promise<Hash>;
-  /** One look at a receipt: status and its ERC-20 `Transfer` logs; null when it is not mined. Throws on RPC errors. */
-  tokenReceipt?(hash: Hash): Promise<{ status: 'success' | 'reverted'; blockNumber: bigint; timestamp?: number; transfers: { token: Address; from: Address; to: Address; value: bigint }[] } | null>;
+  /**
+   * One look at a receipt: status, its ERC-20 `Transfer` logs and the `Paid` events of `arena` (power-up payments);
+   * null when it is not mined. Throws on RPC errors.
+   */
+  tokenReceipt?(
+    hash: Hash,
+    arena?: Address | null,
+  ): Promise<{
+    status: 'success' | 'reverted';
+    blockNumber: bigint;
+    timestamp?: number;
+    transfers: { token: Address; from: Address; to: Address; value: bigint }[];
+    payments?: { contract: Address; payer: Address; ref: Hex; amount: bigint }[];
+  } | null>;
   /** The receipt of `hash`; null when it is not mined within `timeoutMs`. */
   receipt(hash: Hash, arena: Address | null, timeoutMs: number): Promise<TxReceipt | null>;
   /** On-chain signature check (EOA, ERC-1271 and ERC-6492). */
@@ -124,22 +132,10 @@ export interface EvmClient {
   tokenBalance(token: Address, owner: Address): Promise<bigint>;
   /** ERC-20 `allowance`. */
   allowance(token: Address, owner: Address, spender: Address): Promise<bigint>;
-  /** `TestToken.isMinter(who)` (the owner may always mint). */
-  isMinter(token: Address, who: Address): Promise<boolean>;
   /** The TestToken's faucet settings. */
   testTokenFaucet(token: Address): Promise<TestTokenFaucetConfig>;
   /** `ElymumArena.isHolder(who)`: holds the arena's holder NFT. */
   isArenaHolder(arena: Address, who: Address): Promise<boolean>;
-  /** Sends `wei` HYPE from the server key to `to`. */
-  sendValue(to: Address, wei: bigint): Promise<Hash>;
-  /** A signer for another key on the same RPC (the testnet bot wallets). */
-  signer(privateKey: Hex): EvmSigner;
-}
-
-/** Another key on the server's RPC: simulates (throws the decoded revert) then sends. */
-export interface EvmSigner {
-  readonly address: Address;
-  send(call: ContractCall): Promise<Hash>;
 }
 
 /** What reading an NFT's holders needs (also on a chain the server does not run on: `TESTNET_RPC_URL`). */
@@ -163,7 +159,7 @@ const ownableAbi = [
 ] as const;
 
 const RPC_TIMEOUT_MS = 20_000;
-/** Multicall3 (same address on every chain that has it; Elysium Testnet does). */
+/** Multicall3 (same address on every chain that has it; `hasMulticall3` checks the server's chain). */
 export const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as Address;
 /** Outer timeout of one viem request: it includes the wait for the RPC budget and the 429 retries. */
 const TRANSPORT_TIMEOUT_MS = 120_000;
@@ -173,7 +169,7 @@ const RECEIPT_MAX_POLL_MS = 3_000;
 
 /**
  * viem transport on `rpcUrl` through the process-wide RPC budget (`rpc-budget.ts`): rate-limited,
- * prioritised, 429-aware. `batch`: JSON-RPC batching (reads only; the signers send one request each).
+ * prioritised, 429-aware. `batch`: JSON-RPC batching (reads only; the server key sends one request each).
  */
 export function budgetTransport(rpcUrl: string, opts: { batch?: boolean } = {}): Transport {
   if (!/^https?:\/\//i.test(rpcUrl)) throw new TypeError(`RPC URL must start with http:// or https://, got ${JSON.stringify(rpcUrl)}`);
@@ -213,7 +209,9 @@ export function decodeArenaEvents(logs: readonly { address: string; data: Hex; t
         player: getAddress(a.player as string),
         sessionId: a.sessionId as bigint,
         payout: a.payout as bigint,
-        fee: a.fee as bigint,
+        net: a.net as bigint,
+        burned: a.burned as bigint,
+        toVault: a.toVault as bigint,
         collected: a.collected as boolean,
       });
     } else if (e.eventName === 'Cancelled') {
@@ -298,16 +296,13 @@ export function viemEvmClient(
   const chain = toViemChain(chainInfo(opts.chainId, { ...opts.overrides, rpcUrl }));
   const pollingInterval = opts.pollingInterval ?? 2_000;
   const publicClient: PublicClient = budgetPublicClient(rpcUrl, chain, { pollingInterval, multicall: opts.multicall });
-  const walletOf = (a: PrivateKeyAccount): WalletClient => createWalletClient({ account: a, chain, transport: budgetTransport(rpcUrl), pollingInterval });
-  const wallet: WalletClient = walletOf(account);
-  // one server-key transaction at a time (the settlement worker, the price keeper and the bot funding share the key)
+  const wallet: WalletClient = createWalletClient({ account, chain, transport: budgetTransport(rpcUrl), pollingInterval });
+  // one server-key transaction at a time (the settlement worker and the price keeper share the key)
   const queue = serial();
-  const signers = new Map<string, EvmSigner>();
   return {
     ...viemReads(publicClient),
     address: account.address,
     codeCheck: (address, kind) => checkDeployedCode(publicClient, address, kind),
-    arenaVersion: (address) => getArenaVersion(publicClient, address),
     hasCode: async (address) => {
       const code = await publicClient.getCode({ address });
       return !!code && code !== '0x';
@@ -332,26 +327,7 @@ export function viemEvmClient(
         await simulateCall(publicClient, call, account);
         return sendCall(wallet, call, { account, chain });
       }),
-    sendValue: (to, wei) => queue(() => wallet.sendTransaction({ account, chain, to, value: wei })),
-    signer: (privateKey) => {
-      const bot = privateKeyToAccount(privateKey);
-      let s = signers.get(bot.address);
-      if (!s) {
-        const w = walletOf(bot);
-        const q = serial();
-        s = {
-          address: bot.address,
-          send: (call) =>
-            q(async () => {
-              await simulateCall(publicClient, call, bot);
-              return sendCall(w, call, { account: bot, chain });
-            }),
-        };
-        signers.set(bot.address, s);
-      }
-      return s;
-    },
-    tokenReceipt: async (hash) => {
+    tokenReceipt: async (hash, arena) => {
       let r;
       try {
         r = await publicClient.getTransactionReceipt({ hash });
@@ -360,6 +336,8 @@ export function viemEvmClient(
         throw err;
       }
       const logs = parseEventLogs({ abi: erc20TransferAbi, eventName: 'Transfer', logs: r.logs, strict: true });
+      const own = arena ? r.logs.filter((l) => l.address.toLowerCase() === arena.toLowerCase()) : [];
+      const paid = parseEventLogs({ abi: elymumArenaAbi, eventName: 'Paid', logs: own, strict: true });
       // the block time: a purchase is credited only for a recent payment (see `SHOP_PAYMENT_MAX_AGE_MS`)
       const block = await publicClient.getBlock({ blockNumber: r.blockNumber });
       return {
@@ -367,6 +345,7 @@ export function viemEvmClient(
         blockNumber: r.blockNumber,
         timestamp: Number(block.timestamp) * 1000,
         transfers: logs.map((l) => ({ token: getAddress(l.address), from: getAddress(l.args.from), to: getAddress(l.args.to), value: l.args.value })),
+        payments: paid.map((l) => ({ contract: getAddress(l.address), payer: getAddress(l.args.payer), ref: l.args.ref, amount: l.args.amount })),
       };
     },
     // one `eth_getTransactionReceipt` per look, slowing down (viem's waiter also polls the block number)
@@ -404,7 +383,6 @@ export function viemEvmClient(
     },
     tokenBalance: (token, owner) => getTokenBalance(publicClient, token, owner),
     allowance: (token, owner, spender) => getAllowance(publicClient, token, owner, spender),
-    isMinter: (token, who) => isTestTokenMinter(publicClient, token, who),
     testTokenFaucet: (token) => getTestTokenFaucet(publicClient, token),
     isArenaHolder: (arena, who) => isArenaHolder(publicClient, arena, who),
   };

@@ -82,9 +82,10 @@ export function settledMessage(e: SettledEvent): Extract<ServerMessage, { t: 'se
     ...(e.arenaId === undefined ? {} : { arenaId: e.arenaId }),
     txHash: e.txHash,
     payout: e.payout,
-    // v2: the fee was taken from the entry fee, the whole payout reaches the wallet
-    ...(e.fee === undefined ? {} : { fee: e.fee, net: e.feeOnEntry ? e.payout : e.payout - e.fee }),
-    ...(e.feeOnEntry ? { feeOnEntry: true } : {}),
+    // the contract took the fee from the profit: `net` reached the wallet (or waits to be collected)
+    ...(e.fee === undefined ? {} : { fee: e.fee, net: e.net ?? e.payout - e.fee }),
+    ...(e.burned ? { burned: e.burned } : {}),
+    ...(e.toVault ? { toVault: e.toVault } : {}),
     ...(e.collect ? { collect: true } : {}),
   };
 }

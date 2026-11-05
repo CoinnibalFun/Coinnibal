@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { ELYSIUM_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID, isChainId, isMainnet } from '@elymum/shared';
+import { ELYSIUM_TESTNET_CHAIN_ID, isChainId, isTestChainId } from '@elymum/shared';
 import type { ServerConfig } from '../config';
 import { readChainId } from './evm-client';
 
@@ -11,10 +11,9 @@ import { readChainId } from './evm-client';
  *
  * - `contracts.json`  the contracts registry (arena, NFT, token),
  * - `journal.json`    the money journal (live tickets, pending settlements, floor loot),
- * - `bots.json`       the testnet staked-bot wallets (addresses only; keys are re-derived),
  * - `allowlist.json`  the allowlist snapshots (Merkle root + wallets) of that chain's NFT.
  *
- * Off-chain records (WL, collabs, tasks, site settings, bot settings, profiles, leaderboards,
+ * Off-chain records (WL, collabs, tasks, site settings, map settings, profiles, leaderboards,
  * integrity, the server key) stay where they are. Moving `EVM_RPC_URL` to another chain starts a
  * clean state for it and keeps the old chain's records for reference.
  */
@@ -23,7 +22,7 @@ export const CHAINS_DIR = 'chains';
 export const RPC_IDS_FILE = join(CHAINS_DIR, 'rpc-ids.json');
 
 /** File names inside a chain directory. */
-export const CHAIN_FILES = { contracts: 'contracts.json', journal: 'journal.json', bots: 'bots.json', allowlist: 'allowlist.json' } as const;
+export const CHAIN_FILES = { contracts: 'contracts.json', journal: 'journal.json', allowlist: 'allowlist.json' } as const;
 
 /** The legacy (pre chain-keyed) locations, relative to `DATA_DIR`. */
 export const LEGACY_FILES = { contracts: 'contracts.json', journal: 'journal.json', allowlist: join('site', 'allowlist.json') } as const;
@@ -55,9 +54,9 @@ export function storedChains(dataDir: string): number[] {
   }
 }
 
-/** Staked bots and the faucet run on the Elysium testnet and the localnet only. */
+/** A testnet or a localnet of the registry (the faucet, the TestToken and the journal escape hatch run there only). */
 export function isTestChain(chainId: number | null | undefined): boolean {
-  return chainId === ELYSIUM_TESTNET_CHAIN_ID || chainId === LOCALNET_CHAIN_ID;
+  return isTestChainId(chainId);
 }
 
 const rpcKey = (rpcUrl: string): string => createHash('sha256').update(rpcUrl.trim().replace(/\/+$/, '')).digest('hex').slice(0, 16);
@@ -100,6 +99,10 @@ export async function resolveStateChainId(
   const rpcUrl = cfg.chain.rpcUrl;
   try {
     const id = await (opts.readId ?? readChainId)(rpcUrl);
+    if (cfg.chain.chainIdExplicit && id !== cfg.chain.chainId) {
+      opts.log(`!!! chain: CHAIN_ID is ${cfg.chain.chainId} but EVM_RPC_URL serves chain ${id}: arena money stays OFF (fix CHAIN_ID or the RPC and restart)`);
+      return null;
+    }
     if (opts.persist) rememberChainId(cfg.dataDir, rpcUrl, id);
     return id;
   } catch (err) {
@@ -127,7 +130,7 @@ function legacyChainId(dataDir: string, bootChainId: number): number {
     /* no registry: decide below */
   }
   // the records before this layout were made on the testnet (production) or a localnet (development)
-  return isMainnet(bootChainId) ? ELYSIUM_TESTNET_CHAIN_ID : bootChainId;
+  return isTestChainId(bootChainId) ? bootChainId : ELYSIUM_TESTNET_CHAIN_ID;
 }
 
 /**

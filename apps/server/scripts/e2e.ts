@@ -33,7 +33,7 @@ import {
   deployTestToken,
   deployedAddress,
   describeError,
-  elysiumChain,
+  viemChain,
   faucetCall,
   formatTokenAmount,
   getArena,
@@ -246,7 +246,7 @@ async function httpLogin(account: PrivateKeyAccount): Promise<string> {
 async function main(): Promise<void> {
   step(`EVM node at ${rpcUrl}`);
   await startNode();
-  const chain = elysiumChain(31337, { rpcUrl });
+  const chain = viemChain(31337, { rpcUrl });
   client = createElymumPublicClient(rpcUrl, chain, { pollingInterval: 100 });
   for (const a of [admin, hunter, prey, idle, feeWallet]) wallets.set(a.address, createElymumWalletClient(rpcUrl, { account: a, chain, pollingInterval: 100 }));
   const serverKey = generatePrivateKey();

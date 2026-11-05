@@ -78,12 +78,6 @@ beforeAll(async () => {
     DEV_FAKE_CHAIN: '1',
     // joins stay open the whole round (the suite runs on the real clock)
     ROUND_JOIN_CLOSE_SECONDS: '0',
-    BOT_TARGET: '4',
-    BOT_MIN: '2',
-    BOT_MAX: '4',
-    ARENA_BOT_TARGET: '2',
-    ARENA_BOT_MIN: '0',
-    ARENA_BOT_MAX: '2',
     // the game gate (site setting `gameAccess`) is covered in site.test.ts
     GAME_ACCESS: 'public',
   });
@@ -100,12 +94,12 @@ describe('token set after deploy', () => {
     expect(app.chain).toBeInstanceOf(DevFakeChain);
 
     // before set-token: tokenReady false everywhere, no arena room
-    const config = async () => ((await (await fetch(`${base()}/api/config`)).json()) as { chain: { tokenReady: boolean; arenasEnabled: boolean; feeBps: number | null } }).chain;
-    expect(await config()).toMatchObject({ tokenReady: false, arenasEnabled: false, feeBps: 500 });
+    const config = async () => ((await (await fetch(`${base()}/api/config`)).json()) as { chain: { tokenReady: boolean; arenasEnabled: boolean; fees: { burnBps: number } | null } }).chain;
+    expect(await config()).toMatchObject({ tokenReady: false, arenasEnabled: false, fees: { burnBps: 1500 } });
     const wallet = newWallet();
     const c = await signedIn(wallet);
     const welcome = await c.wait('welcome');
-    expect(welcome.chain).toMatchObject({ enabled: true, tokenReady: false, token: null, feeBps: 500 });
+    expect(welcome.chain).toMatchObject({ enabled: true, tokenReady: false, token: null, fees: { burnBps: 1500 } });
     expect(welcome.rooms.filter((r) => r.mode === 'arena')).toEqual([]);
 
     c.send({ t: 'join', room: 'arena:1', name: 'Early', skin: 0 });

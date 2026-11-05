@@ -42,7 +42,7 @@ class FakeTransfers implements PaymentReader {
 function setup(o: { dir?: string | null; holder?: boolean; clock?: { t: number }; reader?: FakeTransfers } = {}) {
   const clock = o.clock ?? { t: 1_800_000_000_000 };
   const chain = new NullChain();
-  const rooms = new RoomManager(loadConfig({ BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0' } as NodeJS.ProcessEnv), roomDeps(chain), chain);
+  const rooms = new RoomManager(loadConfig({} as NodeJS.ProcessEnv), roomDeps(chain), chain);
   const reader = o.reader ?? new FakeTransfers(clock);
   const dir = o.dir === undefined ? mkdtempSync(join(tmpdir(), 'elymum-custom-')) : o.dir;
   const used = new UsedPayments(dir ? join(dir, 'chains', '99801', 'room-payments.json') : null);
@@ -142,19 +142,14 @@ describe('custom rooms: create, caps, perks', () => {
     expect(room.world.cfg.powerUps).toBe(false);
     expect(room.opts.maxPlayers).toBe(6);
     expect(room.info().custom).toMatchObject({ mapSize: 'S', bots: 4, difficulty: 'hard' });
-    // its bots are its own: an admin bot change leaves them alone
-    // the creator's bots walk in one by one: the first 3 within 13.5 s at most, the 4th up to 20 s later
-    // (a hard bot may be eaten meanwhile and walk back in a few seconds later: count the most seen)
-    let most = 0;
-    for (let i = 0; i < 30 * 40; i++) {
-      room.tick(33);
-      most = Math.max(most, room.bots?.bots.size ?? 0);
-    }
-    expect(most).toBe(4);
-    rooms.applyBotSettings();
+    // the creator's practice bots walk in at once and stay at the count (an eaten one comes back)
     room.tick(33);
-    expect(room.bots?.options).toMatchObject({ target: 4, min: 4, max: 4 });
-    expect(room.bots?.planned).toBe(4);
+    expect(room.bots?.size).toBe(4);
+    expect(room.bots?.opts).toEqual({ count: 4, difficulty: 'hard' });
+    // a map settings change leaves a custom room alone
+    rooms.applyMapSettings();
+    room.tick(33);
+    expect(room.bots?.count).toBe(4);
     // not listed publicly (invite only)
     expect(rooms.list().some((r) => r.code === view.code)).toBe(false);
     // duplicate payment
@@ -246,12 +241,12 @@ describe('custom rooms: create, caps, perks', () => {
     expect(await svc.quote(null)).toMatchObject({ holder: false, mine: 0, enabled: true });
     svc.updateSettings({ enabled: false });
     expect((await fail(svc.create(a, { config: cfgOf() }))).code).toBe('rooms_closed');
-    expect(() => svc.updateSettings({ priceHype: 'free' })).toThrow(CustomRoomFail);
+    expect(() => svc.updateSettings({ priceGas: 'free' })).toThrow(CustomRoomFail);
     expect(() => svc.updateSettings({ treasury: 'nope' })).toThrow(/treasury/);
     expect(() => svc.updateSettings({ maxLive: 1000 })).toThrow(/maxLive/);
     expect(() => svc.updateSettings({ surprise: 1 })).toThrow(/unknown field/);
-    const s = svc.updateSettings({ enabled: true, priceHype: '0.1', treasury: TREASURY.replace('0x1', '0x2'), holderPerk: 'none' });
-    expect(s).toMatchObject({ priceHype: '0.1', holderPerk: 'none' });
+    const s = svc.updateSettings({ enabled: true, priceGas: '0.1', treasury: TREASURY.replace('0x1', '0x2'), holderPerk: 'none' });
+    expect(s).toMatchObject({ priceGas: '0.1', holderPerk: 'none' });
     expect(svc.treasury()).toBe('0x2111111111111111111111111111111111111111');
     svc.updateSettings({ treasury: null });
     expect(svc.treasury()).toBe(TREASURY);
@@ -383,7 +378,7 @@ describe('custom rooms over HTTP and WebSocket', () => {
 
   async function boot(reader: PaymentReader, admin: string) {
     const dir = mkdtempSync(join(tmpdir(), 'elymum-custom-http-'));
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public' } as NodeJS.ProcessEnv);
     app = await createApp(cfg, {
       chain: new ArenaChain([arena(1, 1000)]),
       log: () => {},
@@ -457,7 +452,7 @@ describe('custom rooms over HTTP and WebSocket', () => {
     expect((await call('GET', '/api/admin/custom-rooms', { wallet: bob })).status).toBe(403);
     const list = await call('GET', '/api/admin/custom-rooms', { wallet: admin });
     expect(list.body.rooms.map((r: { code: string }) => r.code)).toEqual([code]);
-    expect(list.body.settings).toMatchObject({ priceHype: '0.05', maxLive: 6, maxPerWallet: 2 });
+    expect(list.body.settings).toMatchObject({ priceGas: '0.05', maxLive: 6, maxPerWallet: 2 });
     expect((await call('PUT', '/api/admin/custom-rooms', { wallet: admin, body: { maxLive: 0 } })).body.settings.maxLive).toBe(0);
     expect((await call('DELETE', `/api/rooms/custom/${code}`, { wallet: bob })).status).toBe(403);
     expect((await call('DELETE', `/api/admin/custom-rooms/${code}`, { wallet: admin })).body.rooms).toEqual([]);
