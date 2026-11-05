@@ -4,9 +4,10 @@
  * an extras byte and, when the world was resized, its playable bounds; v9: player country codes; v10: the
  * flag coin skin, `PlayerFlag.FlagSkin`, and `join.flag`; v11: the Shockwave power-up gave way to Leap
  * and Invisibility (`CellFlag.Leap` reuses the Shock bit, `CellFlag.Invisible`); the "Trash talk"
- * stickers append emote ids 8..15).
+ * stickers append emote ids 8..15; v12: arena contract v3 (fee on profit): `chain.fees`, `settled.burned` /
+ * `settled.toVault`, no `feeModel` / `feeOnEntry`; the chain registry's `gasSymbol` / `faucetUrl` / `testnet`).
  */
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 
 /** Simulation + snapshot rate. */
 export const TICK_RATE = 30;
@@ -113,7 +114,7 @@ export const RULES = {
   roundBreakMs: 15_000,
 
   /**
-   * Loot: when a bot eats a staker, the victim's tokens spill as
+   * Loot: when something without a ticket eats a staker (never in a room of people only), the victim's tokens spill as
    * `clamp(ceil(value / (entryFee × lootPieceEntryFraction)), lootPiecesMin, lootPiecesMax)`
    * pieces that fly out at `lootSpeed` and slow down (fraction of speed kept
    * after one second = `lootFrictionPerSec`). Loot never despawns.
@@ -140,13 +141,13 @@ export const VIEW = {
 } as const;
 
 /**
- * Room modes: `practice` is free play against bots (no wallet, no tokens),
- * `private` is a friends' room by code, `arena` is a paid room entered with a
- * fixed token entry fee.
+ * Room modes: `practice` is free play (no wallet, no tokens, people only), `private` is a friends' room by code
+ * (a free custom room may add practice bots), `arena` is a paid room entered with a fixed token entry fee
+ * (people only).
  */
 export type RoomMode = 'practice' | 'private' | 'arena';
 
-/** Practice rooms come in two leagues: `rookie` (gentler bots, for newcomers) and `pro`. */
+/** Practice rooms come in two leagues: `rookie` (newcomers) and `pro` (experienced players, see `RoomManager.leagueFor`). */
 export type League = 'rookie' | 'pro';
 
 /** World presets per room mode. */

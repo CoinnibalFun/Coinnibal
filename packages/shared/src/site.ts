@@ -246,7 +246,7 @@ export type SiteErrorCode =
   | 'wrong_authority'
   /** The server has no chain (`EVM_RPC_URL` unset) or the contract is not registered. */
   | 'chain_off'
-  /** The upstream price feed (HYPE/USD) could not be read. */
+  /** The upstream price feed (gas token / USD) could not be read. */
   | 'price_unavailable'
   /** Profile picture: not a PNG or WebP square of the allowed size (`AVATAR_LIMITS`). */
   | 'bad_image'
@@ -398,9 +398,9 @@ export interface MintState {
   chainId: number | null;
   /** Null when there is no contract (or the chain is off). */
   contract: MintContractState | null;
-  /** HYPE price in USD; null when the feed is unavailable. */
-  hypeUsd: number | null;
-  /** Current mint price in USD at `hypeUsd`; null when either is unknown. */
+  /** The gas token's price in USD; null when the feed is unavailable. */
+  gasUsd: number | null;
+  /** Current mint price in USD at `gasUsd`; null when either is unknown. */
   priceUsd: number | null;
   /** The target the price is kept at (`MINT_USD_CENTS`). */
   targetUsdCents: number;
@@ -455,12 +455,12 @@ export interface AllowlistStatus {
 
 /** `GET /api/admin/mint/price`. */
 export interface MintPriceQuote {
-  /** HYPE price in USD; null when the feed is unavailable. */
-  hypeUsd: number | null;
+  /** The gas token's price in USD; null when the feed is unavailable. */
+  gasUsd: number | null;
   targetUsdCents: number;
-  /** `targetUsdCents` in wei at `hypeUsd` (decimal string); null without a price. */
+  /** `targetUsdCents` in wei at `gasUsd` (decimal string); null without a price. */
   priceWei: string | null;
-  /** Unix ms of the HYPE/USD reading. */
+  /** Unix ms of the gas-token/USD reading. */
   fetchedAt: number | null;
 }
 
@@ -552,7 +552,7 @@ export interface NetworkInfo {
   /** Null while the chain is off. */
   chainId: number | null;
   chainName: string;
-  /** Elysium Testnet or a localnet (not mainnet). */
+  /** A testnet or a localnet (not mainnet; `isTestChainId`). */
   testnet: boolean;
   rpcOk: boolean;
   rpcLatencyMs: number | null;
@@ -560,7 +560,7 @@ export interface NetworkInfo {
   block: string | null;
   serverKey: string | null;
   serverBalanceWei: string | null;
-  /** The server key's HYPE is below 0.01 (fund it: it pays every settlement). */
+  /** The server key's gas balance is below 0.01 of the gas token (fund it: it pays every settlement). */
   low: boolean;
   /** The registered contracts of the current chain, with a code check. */
   contracts: NetworkContractCheck[];
@@ -608,9 +608,6 @@ export interface GameServerLoad {
 /* Faucet (`GET /api/site/faucet`)                                      */
 /* ------------------------------------------------------------------ */
 
-/** Kinetiq's HYPE faucet (gas on Elysium Testnet). */
-export const HYPE_FAUCET_URL_DEFAULT = 'https://elysium.kinetiq.xyz/testnet-faucet';
-
 /** `GET /api/site/faucet`: the TestToken faucet (testnet only). Amounts in base units (decimal strings). */
 export interface FaucetConfig {
   /** A test chain with a registered TestToken. */
@@ -626,7 +623,8 @@ export interface FaucetConfig {
   cooldownSecs: number | null;
   /** The NFT the holder bonus reads; null: no bonus. */
   holderNft: string | null;
-  hypeFaucetUrl: string;
+  /** The chain's gas faucet (`ChainDef.faucetUrl`, `GAS_FAUCET_URL` overrides it); null when there is none. */
+  gasFaucetUrl: string | null;
 }
 
 /* ------------------------------------------------------------------ */

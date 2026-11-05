@@ -236,16 +236,36 @@ export interface BlockedArena {
   reason: 'vault_short';
 }
 
-/** What the arena fee is taken from (see `ChainStatus.feeModel`). */
-export type FeeModel = 'entry' | 'profit';
+/** The arena contract's fee settings (`config()` of ElymumArena v3), basis points. */
+export interface ArenaFees {
+  /** Share of a ticket's profit burned. */
+  burnBps: number;
+  /** Share of a ticket's profit sent to the fee wallet. */
+  vaultBps: number;
+  /** The emblem holders' pair (used when it totals less and the perks are on). */
+  holderBurnBps: number;
+  holderVaultBps: number;
+  /** The holder perks are on (an NFT is set). */
+  holderPerks: boolean;
+  /** Share of a power-up payment (`pay`) burned; the rest goes to the fee wallet. */
+  paymentBurnBps: number;
+  /** 0: burned tokens go to 0x…dEaD; 1: the token's own `burn()` (falling back to 0x…dEaD). */
+  burnMode: number;
+}
 
 export interface ChainStatus {
   /** The server has an EVM RPC (`EVM_RPC_URL`) and talks to the chain. */
   enabled: boolean;
   /** `eth_chainId` of the server's RPC (the source of truth); null while the chain is off or unknown. */
   chainId: number | null;
-  /** Display name (`chainInfo(chainId).name`, `CHAIN_NAME` for ids not in the table). */
+  /** Display name (`chainInfo(chainId).name`, `CHAIN_NAME` overrides it). */
   chainName: string;
+  /** The gas token's symbol (`chainInfo(chainId).nativeCurrency.symbol`, `GAS_SYMBOL` overrides it). */
+  gasSymbol: string;
+  /** A testnet (test tokens, faucet). */
+  testnet: boolean;
+  /** The gas token's faucet (testnets), null when there is none. */
+  faucetUrl: string | null;
   /** Public RPC handed to browsers (no secrets); null: the wallet uses its own RPC. */
   rpcUrl: string | null;
   /** Blockscout-style explorer base URL (`/tx/<hash>`, `/address/<addr>`); null when there is none. */
@@ -265,18 +285,11 @@ export interface ChainStatus {
   /** The game token (ERC-20 address), null until it is set; `symbol` is display only (server `TOKEN_SYMBOL`). */
   token: { address: string; symbol: string; decimals: number } | null;
   /**
-   * The platform fee of new tickets (`config().feeBps`, basis points); null while the config is unknown.
-   * Its base depends on `feeModel`: the entry fee of every played ticket (`entry`) or the profit (`profit`).
+   * The fee rules of the arena contract (fee on profit, `fees.ts`); null while its config is unknown (clients then
+   * explain the contract defaults, `DEFAULT_FEE_RATES`).
    */
-  feeBps: number | null;
-  /**
-   * What `feeBps` is taken from. `entry` (arena contract v2): every played ticket pays it from its entry
-   * fee, whatever the result; the ticket plays `entry − fee` and a payout is paid in full. `profit` (the
-   * legacy v1 contract still live on the testnet until it is redeployed): only on profit, at the payout.
-   * Absent or null when unknown (clients then assume `entry`, the model of every new deployment).
-   */
-  feeModel?: FeeModel | null;
-  /** Address of the server key that sends settlements (pays gas in HYPE): the arena's server authority. */
+  fees: ArenaFees | null;
+  /** Address of the server key that sends settlements (pays the gas): the arena's server authority. */
   serverKey: string | null;
 }
 
@@ -390,11 +403,11 @@ export interface DeathStats {
   playersEaten: number;
   bestRank: number;
   xp?: number;
-  /** Arena rooms: raw token units paid out (0 on death), after the cut on winnings. */
+  /** Arena rooms: what reaches the wallet (0 on death): the value at the payout less the fee on its profit. */
   payout?: number;
-  /** Arena rooms: the value held at the payout, before the cut on winnings. */
+  /** Arena rooms: the value held at the payout, before the fee (only when there was a fee). */
   gross?: number;
-  /** Arena rooms: the cut on winnings (`WINNINGS_CUT_BPS` of the profit; 0 without profit). */
+  /** Arena rooms: the fee on the profit the contract takes (burned + to the fee wallet; `fees.ts`). */
   cut?: number;
   /** Arena rooms: value lost on death, raw token units. */
   valueLost?: number;
@@ -468,8 +481,9 @@ export type ServerMessage =
   | { t: 'emote'; pid: number; id: number }
   | { t: 'death'; stats: DeathStats; killer: string | null; killerSkin: number | null; killerIsBot?: boolean }
   | { t: 'cashout'; state: 'started' | 'canceled' | 'done'; ms?: number; value?: number; stats?: DeathStats }
-  // Arena rooms: the round ended with this player alive; `payout` (= value at the bell, raw token units,
-  // before the fee) is being settled (a `settled` message follows). `standings`: top 10 stakers by value.
+  // Arena rooms: the round ended with this player alive; `payout` (what reaches the wallet: the value at the bell
+  // less the fee on its profit, `stats.gross` / `stats.cut`) is being settled (a `settled` message follows).
+  // `standings`: top 10 tickets by value.
   | { t: 'roundOver'; round: number; payout: number; stats: DeathStats; standings: RoundStanding[] }
   // Arena rooms: the player's in-game value changed.
   | {
@@ -478,12 +492,11 @@ export type ServerMessage =
       value: number;
       /** Signed change that was just applied. */
       delta: number;
-      /** eat: took a share from a player; loot: picked up loot; eaten: a player took a share from us; spill: a bot ate a cell and the share spilled as loot. */
+      /** eat: took a share from a player; loot: picked up loot; eaten: a player took a share from us; spill: the share spilled as floor loot. */
       reason: 'eat' | 'loot' | 'eaten' | 'spill';
     }
-  // Amounts are raw token units. `feeOnEntry` (arena v2): `fee` was the ticket's cut of its entry fee, taken at
-  // the entry, and the whole payout reaches the wallet (`net` = payout). Otherwise (legacy v1) `fee` is taken
-  // from the profit and `net` (= payout - fee) reaches the wallet. `kind: 'refund'`: an unplayed ticket's full
+  // Amounts are ledger units. `payout` is the ticket's gross value; the contract took `fee` (= `burned` + `toVault`)
+  // from its profit and `net` (= payout - fee) reached the wallet. `kind: 'refund'`: an unplayed ticket's full
   // entry fee came back (no fee).
   // `session` is the settled ticket's session key `<arenaId>:<player lowercase>:<sessionId>` (= `joined.session`)
   // and `arenaId` its arena; clients match a receipt by `session`. `txHash` is the settlement transaction (0x hex).
@@ -495,9 +508,11 @@ export type ServerMessage =
       txHash: string;
       payout: number;
       fee?: number;
+      /** The burned share of the fee. */
+      burned?: number;
+      /** The fee wallet's share of the fee. */
+      toVault?: number;
       net?: number;
-      /** The fee was taken from the entry fee (arena v2), not from this payout: `net` = `payout`. */
-      feeOnEntry?: boolean;
       /**
        * The token transfer to the player failed, so the session was finalized with `owed`.
        * The result is final but `net` waits in the arena vault: the player collects it with `refund`
