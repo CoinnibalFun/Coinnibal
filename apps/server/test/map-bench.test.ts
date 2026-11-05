@@ -1,10 +1,10 @@
-import { MAP_SCALE_DEFAULT, MAP_SPACE, TICK_MS, worldForSide } from '@elymum/shared';
+import { MAP_SCALE_DEFAULT, MAP_SPACE, TICK_MS, mapSideFor, worldForSide } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { World } from '../src/game/world';
 import { runMapRoom } from './map-room';
 
 /**
- * CPU budget of a full room on the adaptive map. A tick has 33 ms; production runs on half a CPU,
+ * CPU budget of a full room on the dynamic map. A tick has 33 ms; production runs on half a CPU,
  * so the room must stay well under half of that here. Generous bounds (CI machines vary): the
  * point is to catch an O(n^2) or a per-tick rebuild, not to time the machine.
  */
@@ -12,15 +12,15 @@ describe('100-player room on the auto-sized map (bench)', () => {
   it('grows to the 100-player size and ticks well inside the budget', { timeout: 120_000 }, () => {
     const r = runMapRoom({ players: 100, humans: 40, seconds: 5, map: { ...MAP_SCALE_DEFAULT } });
     console.log(`100-player room: side ${r.side}, ${r.players} players, ${r.food} food, ${r.cacti} cacti; tick mean ${r.mean.toFixed(2)} ms, p95 ${r.p95.toFixed(2)} ms, max ${r.max.toFixed(2)} ms`);
-    expect(r.side).toBe(MAP_SCALE_DEFAULT.min);
+    expect(r.side).toBeGreaterThanOrEqual(mapSideFor(90, MAP_SCALE_DEFAULT));
     expect(r.players).toBeGreaterThanOrEqual(90);
     expect(r.mean).toBeLessThan(20);
   });
 
-  it('six quiet rooms (12 bots and a person each) at the 9000 default tick well inside the budget', { timeout: 180_000 }, () => {
+  it('six quiet rooms (12 bots and a person each) at the default model tick well inside the budget', { timeout: 180_000 }, () => {
     const r = runMapRoom({ players: 13, humans: 1, seconds: 3, rooms: 6, map: { ...MAP_SCALE_DEFAULT } });
     console.log(`6 rooms x 13 players: side ${r.side}, ${r.food} food, ${r.cacti} cacti each; all rooms per tick mean ${r.mean.toFixed(2)} ms, p95 ${r.p95.toFixed(2)} ms`);
-    expect(r.side).toBe(MAP_SCALE_DEFAULT.min);
+    expect(r.side).toBe(mapSideFor(13, MAP_SCALE_DEFAULT));
     // food at pond density: a big room is not a desert
     expect(r.food).toBeGreaterThan(2500);
     expect(r.cacti).toBeGreaterThanOrEqual(20);

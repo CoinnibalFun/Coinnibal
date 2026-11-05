@@ -409,7 +409,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
           <Choice label={t('cr.map')} options={CUSTOM_MAP_CHOICES} value={cfg.mapSize} onPick={(v) => set('mapSize', v)} text={(v) => t(MAP_KEY[v])} />
           <p className="cr-hint mono" data-testid="cr-map-hint">
             {cfg.mapSize === 'auto'
-              ? t('cr.mapHintAuto', { min: MAP_SCALE_DEFAULT.min.toLocaleString('en-US'), max: MAP_SCALE_DEFAULT.max.toLocaleString('en-US') })
+              ? t('cr.mapHintAuto', { min: MAP_SCALE_DEFAULT.base.toLocaleString('en-US'), max: MAP_SCALE_DEFAULT.max.toLocaleString('en-US') })
               : t('cr.mapHint', { w: CUSTOM_MAP_WIDTH[cfg.mapSize].toLocaleString('en-US') })}
           </p>
           <Choice label={t('cr.traps')} options={CUSTOM_TRAPS} value={cfg.traps} onPick={(v) => set('traps', v)} text={(v) => t(TRAPS_KEY[v])} />

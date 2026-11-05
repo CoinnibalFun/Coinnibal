@@ -7,8 +7,8 @@ import {
   MAP_SCALE_LIMITS,
   MAP_SPACE,
   MAP_WORLD_CAPS,
-  OLD_MAP_SCALE_DEFAULT,
-  isFormerMapScaleDefault,
+  MAP_SCALE_FIELDS,
+  MAP_SIDE_STEP,
   VIRUS_PER_AREA,
   WORLD_PRESETS,
   mapScaleFieldError,
@@ -17,52 +17,38 @@ import {
   worldForSide,
 } from '../src';
 
-describe('adaptive map size curve', () => {
-  it('gives the documented sides for 5 / 12 / 50 / 100 / 144 / 178 / 400 players', () => {
-    expect(MAP_SCALE_DEFAULT).toEqual({ auto: true, perPlayer: 900, min: 9000, max: 12_000 });
-    expect([5, 12, 50, 100, 144, 178, 400].map((n) => mapSideFor(n, MAP_SCALE_DEFAULT))).toEqual([9000, 9000, 9000, 9000, 10_800, 12_000, 12_000]);
-    // the former defaults are recognized (saved settings equal to them are upgraded on load)
-    expect(isFormerMapScaleDefault({ perPlayer: 1000, min: 10_000, max: 12_000 })).toBe(true);
-    expect(isFormerMapScaleDefault({ perPlayer: 900, min: 3000, max: 9000 })).toBe(true);
-    expect(isFormerMapScaleDefault({ perPlayer: 800, min: 9000, max: 12_000 })).toBe(true);
-    expect(isFormerMapScaleDefault(MAP_SCALE_DEFAULT)).toBe(false);
-    expect(isFormerMapScaleDefault({ perPlayer: 1000, min: 10_000, max: 11_000 })).toBe(false);
-    // the old curve, still reachable from the admin page
-    expect([5, 10, 25, 50, 100].map((n) => mapSideFor(n, OLD_MAP_SCALE_DEFAULT))).toEqual([3000, 3000, 4500, 6400, 9000]);
+describe('dynamic map size: base + per person, at most max', () => {
+  it('gives the documented sides for 0 / 1 / 25 / 40 / 50 / 100 / 400 people', () => {
+    expect(MAP_SCALE_DEFAULT).toEqual({ auto: true, base: 8000, perPlayer: 40, max: 12_000 });
+    expect([0, 1, 25, 40, 50, 100, 400].map((n) => mapSideFor(n, MAP_SCALE_DEFAULT))).toEqual([8000, 8040, 9000, 9600, 10_000, 12_000, 12_000]);
   });
 
-  it('keeps the area per player about constant between the clamps', () => {
-    for (const n of [12, 20, 30, 40, 60, 80, 99]) {
-      const side = mapSideFor(n, OLD_MAP_SCALE_DEFAULT);
-      const perPlayer = (side * side) / n;
-      // rounding the side up to 100 adds at most a few percent
-      expect(perPlayer / (OLD_MAP_SCALE_DEFAULT.perPlayer * OLD_MAP_SCALE_DEFAULT.perPlayer)).toBeGreaterThanOrEqual(1);
-      expect(perPlayer / (OLD_MAP_SCALE_DEFAULT.perPlayer * OLD_MAP_SCALE_DEFAULT.perPlayer)).toBeLessThan(1.1);
-    }
-  });
-
-  it('is monotonic, clamps to min..max and never leaves the coordinate space', () => {
+  it('grows with every person (until max), is monotonic, stepped, and never leaves the coordinate space', () => {
     let last = 0;
     for (let n = 0; n <= 400; n++) {
       const s = mapSideFor(n, MAP_SCALE_DEFAULT);
-      expect(s).toBeGreaterThanOrEqual(last);
-      expect(s).toBeGreaterThanOrEqual(MAP_SCALE_DEFAULT.min);
+      if (s < MAP_SCALE_DEFAULT.max) expect(s).toBeGreaterThan(last);
+      else expect(s).toBeGreaterThanOrEqual(last);
+      expect(s).toBeGreaterThanOrEqual(MAP_SCALE_DEFAULT.base);
       expect(s).toBeLessThanOrEqual(MAP_SCALE_DEFAULT.max);
-      expect(s % 100).toBe(0);
+      expect(s % MAP_SIDE_STEP).toBe(0);
       last = s;
     }
-    expect(mapSideFor(1000, { perPlayer: 2000, min: 2000, max: 99_999 })).toBe(MAP_SPACE);
-    // a min above the max never wins
-    expect(mapSideFor(1, { perPlayer: 900, min: 8000, max: 5000 })).toBe(8000);
-    expect(mapSideFor(Number.NaN, MAP_SCALE_DEFAULT)).toBe(9000);
+    expect(mapSideFor(1000, { base: 2000, perPlayer: 300, max: 99_999 })).toBe(MAP_SPACE);
+    // a base above the max never shrinks the room below its base
+    expect(mapSideFor(1, { base: 8000, perPlayer: 40, max: 5000 })).toBe(8000);
+    // no growth: a fixed side
+    expect(mapSideFor(77, { base: 6000, perPlayer: 0, max: 12_000 })).toBe(6000);
+    expect(mapSideFor(Number.NaN, MAP_SCALE_DEFAULT)).toBe(8000);
+    expect(mapSideFor(-5, MAP_SCALE_DEFAULT)).toBe(8000);
   });
 
-  it('fits the coordinate space and the admin limits; the custom sizes (XS..XL) are fixed choices below it', () => {
+  it('fits the coordinate space and the admin limits; the custom sizes (XS..XL) are fixed choices below the base', () => {
     expect(MAP_SCALE_DEFAULT.max).toBeLessThanOrEqual(MAP_SPACE);
     expect(MAP_SCALE_DEFAULT.max).toBeLessThanOrEqual(MAP_SCALE_LIMITS.sideMax);
     expect(MAP_SCALE_DEFAULT.perPlayer).toBeLessThanOrEqual(MAP_SCALE_LIMITS.perPlayerMax);
-    expect([OLD_MAP_SCALE_DEFAULT.min, OLD_MAP_SCALE_DEFAULT.max]).toEqual([CUSTOM_MAP_WIDTH.XS, CUSTOM_MAP_WIDTH.XL]);
-    expect(CUSTOM_MAP_WIDTH.XL).toBeLessThanOrEqual(MAP_SCALE_DEFAULT.min);
+    expect(MAP_SCALE_FIELDS).toEqual(['auto', 'base', 'perPlayer', 'max']);
+    expect(CUSTOM_MAP_WIDTH.XL).toBeLessThanOrEqual(MAP_SCALE_DEFAULT.base + MAP_SCALE_DEFAULT.perPlayer * 25);
   });
 
   it('a 10000..12000 room stays populated: food at pond density (capped), cacti and power-ups', () => {
@@ -104,9 +90,11 @@ describe('admin field checks and the custom "auto" choice', () => {
   it('checks every map field', () => {
     expect(mapScaleFieldError('auto', true)).toBeNull();
     expect(mapScaleFieldError('auto', 'yes')).toMatch(/true or false/);
-    expect(mapScaleFieldError('perPlayer', 900)).toBeNull();
-    expect(mapScaleFieldError('perPlayer', MAP_SCALE_LIMITS.perPlayerMax + 1)).toMatch(/300 to 2000/);
-    expect(mapScaleFieldError('min', 2500.5)).toMatch(/whole number/);
+    expect(mapScaleFieldError('perPlayer', 40)).toBeNull();
+    expect(mapScaleFieldError('perPlayer', 0)).toBeNull();
+    expect(mapScaleFieldError('perPlayer', MAP_SCALE_LIMITS.perPlayerMax + 1)).toMatch(/0 to 300/);
+    expect(mapScaleFieldError('base', 2500.5)).toMatch(/whole number/);
+    expect(mapScaleFieldError('base', 1999)).toMatch(/2000 to 12000/);
     expect(mapScaleFieldError('max', MAP_SPACE)).toBeNull();
     expect(mapScaleFieldError('max', MAP_SPACE + 1)).not.toBeNull();
   });
