@@ -90,7 +90,8 @@ export const OLD_MAX_CHASERS: Record<BotRoomKind, number> = { practiceRookie: 1,
 /** Squad play (traps, lures, feeding, map-wide tracking) per room kind: off in the rookie league. */
 export const TEAMPLAY: Record<BotRoomKind, boolean> = { practiceRookie: false, practicePro: true, arena: true, private: true };
 
-export const BOT_TESTNET_DEFAULT: BotTestnetSettings = { stakedPerArena: 6, bankroll: '1000000', gasHype: '0.05', arenas: {} };
+/** Testnet: the whole squad (up to the 9 of the default cap) plays with real tickets. */
+export const BOT_TESTNET_DEFAULT: BotTestnetSettings = { stakedPerArena: 9, bankroll: '1000000', gasHype: '0.05', arenas: {} };
 
 /** The bot kind of a room. */
 export function botKindOf(mode: RoomMode, league?: League): BotRoomKind {
@@ -328,6 +329,11 @@ export function upgradeSavedBotSettings(raw: Record<string, unknown>): string[] 
       k.min = SQUAD_DEFAULT.min;
       out.push(`kinds.${kind} -> squad ${SQUAD_DEFAULT.min}-${SQUAD_DEFAULT.cap}`);
     }
+  }
+  // testnet: 6 staked bots per arena before the squad played with real tickets only
+  if (isObj(raw.testnet) && raw.testnet.stakedPerArena === 6) {
+    raw.testnet.stakedPerArena = BOT_TESTNET_DEFAULT.stakedPerArena;
+    out.push(`testnet.stakedPerArena -> ${BOT_TESTNET_DEFAULT.stakedPerArena}`);
   }
   // the chaser limits before squad play (2026-11): one in rookie and private rooms, two in pro ponds and arenas
   if (isObj(raw.kinds)) {

@@ -41,6 +41,8 @@ export interface BotManagerOptions {
    * round either). Set by the room.
    */
   rounds?: boolean;
+  /** Fewer bots walk in as the room fills up (`BotManager.crowdCut`; default true; off in private rooms). */
+  crowd?: boolean;
 }
 
 /** Every room (every round of an arena) fields at least this many bots, unless the admin cap is lower. */
@@ -72,6 +74,9 @@ export const ARRIVAL = {
   leaveMin: 12_000,
   leaveMax: 35_000,
 } as const;
+
+/** Busy rooms: from this many people on, one bot fewer per `per` more people (see `BotManager.crowdCut`). */
+export const CROWD = { free: 8, per: 3 } as const;
 
 /** Share of a capped bot's excess mass that stays after one second (the rest is shed). */
 const MASS_CAP_KEEP_PER_SEC = 0.2;
@@ -135,6 +140,16 @@ export class BotManager {
   private windowStart = -1;
   /** Arrivals are allowed now (the room closes them with its round's joins). */
   joinsOpen: () => boolean = () => true;
+  /**
+   * Paid rooms: a bot walks in only once its stake is there. The room gets `done` and calls it with
+   * true (the bot is spawned and returned, for the room to give it its purse) or false (nobody comes).
+   * Absent: bots walk in at once.
+   */
+  beforeArrival: ((done: (ok: boolean) => Bot | null) => void) | null = null;
+  /** Arrivals waiting for `beforeArrival` to answer. */
+  private pendingArrivals = 0;
+  /** The plan less the crowd cut (see `update`). */
+  private effPlan = -1;
   private pendingEmotes: { pid: number; id: number }[] = [];
   /** Player ids of bots that left this tick (rooms forget their player info). */
   retired: number[] = [];
@@ -191,9 +206,19 @@ export class BotManager {
     return Math.min(cap, Math.max(BOT_FLOOR, o.min));
   }
 
-  /** The squad size the room is heading for right now (the plan drifts around `desired`). */
+  /** The squad size the room is heading for right now (the rolled plan, less the crowd cut). */
   get planned(): number {
+    if (this.effPlan >= 0) return this.effPlan;
     return this.plan < 0 ? this.desired() : this.plan;
+  }
+
+  /**
+   * A busy room needs fewer bots: past `CROWD.free` people, one bot fewer per `CROWD.per` more people,
+   * never below `BOT_FLOOR` (or the cap, when lower). Bots already in stay; fewer walk in.
+   */
+  static crowdCut(plan: number, humans: number, floor = BOT_FLOOR): number {
+    const cut = Math.floor(Math.max(0, humans - CROWD.free) / CROWD.per);
+    return Math.max(Math.min(floor, plan), plan - cut);
   }
 
   /** Rolls the plan: any whole number from the floor (`max(min, BOT_FLOOR)`) to the cap, evenly (6-9 by default). */
@@ -393,6 +418,7 @@ export class BotManager {
     this.orderDirty = true;
     this.nextArrivalAt = 0;
     this.plan = -1;
+    this.effPlan = -1;
     // a new arrival window opens with the new round
     this.windowStart = -1;
     return gone;
@@ -437,11 +463,12 @@ export class BotManager {
   }
 
   /** Called once per tick after `world.tick`. `humans` is only used for the squad's tactics, never for its size. */
-  update(now: number, _humans = 0): { emotes: { pid: number; id: number }[] } {
+  update(now: number, humans = 0): { emotes: { pid: number; id: number }[] } {
     this.retired = [];
     const cap = this.opts.massCap;
     if (this.plan < 0 || now >= this.nextDriftAt) this.rollPlan(now);
-    const plan = this.enabled ? this.plan : 0;
+    this.effPlan = !this.enabled ? 0 : this.opts.crowd === false ? this.plan : BotManager.crowdCut(this.plan, humans);
+    const plan = this.effPlan;
     if (this.nextArrivalAt === 0) this.scheduleArrival(now);
 
     // the mass cap: whatever a bot eats past it melts away
@@ -454,7 +481,20 @@ export class BotManager {
 
     // arrivals: one bot at a time walks in, like a person pressing Play (never while the round's joins are closed)
     if (now >= this.nextArrivalAt) {
-      if (this.bots.size < plan && this.joinsOpen()) this.spawnBot(cap !== undefined ? Math.min(RULES.startMass, cap) : RULES.startMass);
+      if (this.bots.size + this.pendingArrivals < plan && this.joinsOpen()) {
+        const mass = cap !== undefined ? Math.min(RULES.startMass, cap) : RULES.startMass;
+        if (!this.beforeArrival) this.spawnBot(mass);
+        else {
+          this.pendingArrivals++;
+          let answered = false;
+          this.beforeArrival((ok) => {
+            if (answered) return null;
+            answered = true;
+            this.pendingArrivals--;
+            return ok && this.enabled ? this.spawnBot(mass) : null;
+          });
+        }
+      }
       this.scheduleArrival(now);
     }
     // over the plan (the plan drifted down in a free room): one leaves now and then; a round keeps its bots
