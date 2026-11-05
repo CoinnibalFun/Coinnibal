@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Funds a wallet on the local chain started by scripts/localnet.mjs (or `pnpm demo:localnet`): HYPE
+// Funds a wallet on the local chain started by scripts/localnet.mjs (or `pnpm demo:localnet`): ETH
 // from the owner account and test tokens minted by the TestToken owner.
 //
 //   node scripts/localnet-fund.mjs <0x-address> [hype=10] [tokens=100000]

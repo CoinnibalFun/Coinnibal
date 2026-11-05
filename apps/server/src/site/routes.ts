@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AVATAR_LIMITS, AVATAR_TYPES, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, gasSymbol } from '@elymum/shared';
+import { AVATAR_LIMITS, AVATAR_TYPES, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, GAS_SYMBOL } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import type { ChainGateway } from '../chain/types';
@@ -630,7 +630,7 @@ export class SiteApi {
         if (seg.length === 2 && seg[1] === 'price') {
           this.method(req, 'GET');
           const quote = await mint.priceQuote();
-          if (quote.gasUsd === null) throw new SiteFail(502, 'price_unavailable', `The ${gasSymbol()}/USD price feed is unavailable right now.`);
+          if (quote.gasUsd === null) throw new SiteFail(502, 'price_unavailable', `The ${GAS_SYMBOL}/USD price feed is unavailable right now.`);
           return send(res, 200, quote);
         }
         break;

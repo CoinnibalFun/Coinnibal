@@ -1,6 +1,6 @@
 import { formatGasAmount } from '@elymum/sdk';
 import { testTokenRefusal, type StatusSnapshot } from '@elymum/sdk/ops';
-import { gasSymbol } from '@elymum/shared';
+import { GAS_SYMBOL } from '@elymum/shared';
 import type { ContractsRegistry, GameAccess, SiteCounts, SiteSettings } from '@elymum/shared';
 import type { AdminNetwork } from './net';
 import { setupSteps } from './setup';
@@ -91,7 +91,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
       if (!net.info) return { now: 'The server has no chain.', next: 'Set EVM_RPC_URL in Render and redeploy.' };
       const bal = a?.serverBalance ?? null;
       const now = `${chain}${status ? ` · block ${status.block.toString()}` : ''}${bal !== null ? ` · server key ${formatGasAmount(bal, 4)}` : ''}`;
-      if (bal === 0n) return { now, next: `Fund the server key with ${gasSymbol()}: it pays the gas of every settlement.` };
+      if (bal === 0n) return { now, next: `Fund the server key with ${GAS_SYMBOL}: it pays the gas of every settlement.` };
       if (!net.mainnet) return { now, next: 'Mainnet launch: follow the checklist below, step by step.' };
       return { now, next: null };
     }

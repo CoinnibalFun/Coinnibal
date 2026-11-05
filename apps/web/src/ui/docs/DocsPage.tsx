@@ -21,11 +21,10 @@ export function DocsPage() {
   const tok = useTokenText();
   const burnBps = useUi((s) => s.chain?.fees?.burnBps ?? null);
   const vaultBps = useUi((s) => s.chain?.fees?.vaultBps ?? null);
-  const gas = useUi((s) => s.chain?.gasSymbol ?? null);
   const chainName = useUi((s) => s.chain?.chainName ?? null);
   const c = useMemo(
-    () => docsEn(tok.symbol, arenaRates(burnBps !== null && vaultBps !== null ? { burnBps, vaultBps } : null), gas ?? undefined, chainName ?? undefined),
-    [tok.symbol, burnBps, vaultBps, gas, chainName],
+    () => docsEn(tok.symbol, arenaRates(burnBps !== null && vaultBps !== null ? { burnBps, vaultBps } : null), chainName ?? undefined),
+    [tok.symbol, burnBps, vaultBps, chainName],
   );
   const reduced = useReducedMotion();
   const top = useRef<HTMLDivElement>(null);

@@ -1,4 +1,4 @@
-import { gasSymbol } from '@elymum/shared';
+import { GAS_SYMBOL } from '@elymum/shared';
 import {
   formatGasAmount,
   freezeMetadataCall,
@@ -150,7 +150,7 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
       </div>
       <div className="ad-mint__forms">
         <LimitsCard wl={s.wlLimit} pub={s.publicLimit} max={s.maxSupply} total={s.totalSupply} open={open} nft={nft} />
-        <Card title="Withdraw" id="mint-withdraw" lede={`Sends the whole ${gasSymbol()} balance of the NFT contract to the treasury.`}>
+        <Card title="Withdraw" id="mint-withdraw" lede={`Sends the whole ${GAS_SYMBOL} balance of the NFT contract to the treasury.`}>
           <p className="ad-bigfig">
             <GasAmount wei={balance} decimals={6} usd={usdOf(balance)} size="lg" />
           </p>
@@ -181,7 +181,7 @@ type OpenFn = (title: string, call: Plan['call'], extra?: Partial<Plan>) => void
 const PHASE_COPY: Record<MintPhaseName, { title: string; line: string; mood: CoinMood }> = {
   closed: { title: 'Closed', line: 'Sealed. For now.', mood: 'sleepy' },
   allowlist: { title: 'Allowlist', line: 'Only wallets in the root may mint.', mood: 'smug' },
-  public: { title: 'Public', line: `Anyone with a dollar of ${gasSymbol()}.`, mood: 'happy' },
+  public: { title: 'Public', line: `Anyone with a dollar of ${GAS_SYMBOL}.`, mood: 'happy' },
 };
 
 /**
@@ -416,7 +416,7 @@ function PriceCard({
       title="Price"
       id="mint-price"
       kicker={mainnet ? `Pinned to $${targetUsd}` : 'Testnet · fixed'}
-      lede={mainnet ? `Held in wei, kept at $${targetUsd} in ${gasSymbol()}. The number wiggles with the market; the dollar does not.` : `Testnet ${gasSymbol()} is free, so the price stays what it is. Nothing to keep in sync here.`}
+      lede={mainnet ? `Held in wei, kept at $${targetUsd} in ${GAS_SYMBOL}. The number wiggles with the market; the dollar does not.` : `Testnet ${GAS_SYMBOL} is free, so the price stays what it is. Nothing to keep in sync here.`}
     >
       <div className="ad-pricebox">
         <div className="ad-pricebox__now">
@@ -429,7 +429,7 @@ function PriceCard({
           {target ? (
             <>
               <span className="num ad-pricebox__fig">{formatGasAmount(target, 6)}</span>
-              <span className="ad-tick num">{gasSymbol()}/USD {quote?.gasUsd}</span>
+              <span className="ad-tick num">{GAS_SYMBOL}/USD {quote?.gasUsd}</span>
             </>
           ) : (
             <span className="ad-none">price feed unavailable</span>
@@ -442,7 +442,7 @@ function PriceCard({
       <Advanced title="Advanced: set a price by hand, the keeper">
         {!mainnet && sync}
         <div className="ad-inlineform">
-          <Input label="Price" suffix={gasSymbol()} value={manual} onChange={setManual} />
+          <Input label="Price" suffix={GAS_SYMBOL} value={manual} onChange={setManual} />
           <Btn onClick={() => guard(() => open('Set the mint price', setPriceCall(nft, parseGasInput('Price', manual))))}>Preview setPrice</Btn>
         </div>
         <h3 className="ad-h3">Keeper</h3>
@@ -459,8 +459,8 @@ function PriceCard({
           </Row>
         </dl>
         <div className="ad-form ad-form--grid">
-          <Input label="Min price" suffix={gasSymbol()} value={min} onChange={setMin} />
-          <Input label="Max price" suffix={gasSymbol()} value={max} onChange={setMax} />
+          <Input label="Min price" suffix={GAS_SYMBOL} value={min} onChange={setMin} />
+          <Input label="Max price" suffix={GAS_SYMBOL} value={max} onChange={setMax} />
         </div>
         <div className="ad-actions">
           <Btn onClick={() => guard(() => open('Set the keeper price bounds', setPriceBoundsCall(nft, parseGasInput('Min price', min), parseGasInput('Max price', max))))}>Preview bounds</Btn>
@@ -574,7 +574,7 @@ function OwnerMintCard({ me, open, nft }: { me: Address | null; open: OpenFn; nf
   );
 }
 
-/** "12 wallets (15 emblems) · 3 also on the WL · imported 20:15 from chain 99801". */
+/** "12 wallets (15 emblems) · 3 also on the WL · imported 20:15 from chain 46630". */
 export function importLine(v: HolderWlView): string {
   const c = v.counts;
   const parts = [`${c.wallets} ${c.wallets === 1 ? 'wallet' : 'wallets'} (${c.tokens} ${c.tokens === 1 ? 'emblem' : 'emblems'})`, `${c.alsoWl} also on the WL`];

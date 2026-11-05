@@ -1,9 +1,9 @@
-import { GAS_DECIMALS, formatToken, gasSymbol, parseToken } from '@elymum/shared';
+import { GAS_DECIMALS, formatToken, GAS_SYMBOL, parseToken } from '@elymum/shared';
 import { getAddress, isAddress } from 'viem';
 
 /**
  * Display helpers. Token amounts are bigint base units of the ERC-20 (its `decimals()`); gas-token
- * amounts are wei (shown with the active chain's symbol, `gasSymbol()`). All arithmetic is exact (no floating point).
+ * amounts are wei of ETH, Robinhood Chain's gas token (`GAS_SYMBOL`). All arithmetic is exact (no floating point).
  */
 
 /** `1,234.5` (at most `maxFrac` decimals, default 6, never more than the token has). */
@@ -21,9 +21,9 @@ export function parseTokenAmount(text: string, decimals: number): bigint {
   return parseToken(text.replace(/_/g, ''), decimals);
 }
 
-/** `0.0312 ETH` (at most `maxFrac` decimals, default 6; the active chain's gas symbol unless `symbol` is given). */
-export function formatGasAmount(wei: bigint | number, maxFrac = 6, symbol: string = gasSymbol()): string {
-  return `${formatToken(wei, GAS_DECIMALS, { maxFrac })} ${symbol}`;
+/** `0.0312 ETH` (at most `maxFrac` decimals, default 6). */
+export function formatGasAmount(wei: bigint | number, maxFrac = 6): string {
+  return `${formatToken(wei, GAS_DECIMALS, { maxFrac })} ${GAS_SYMBOL}`;
 }
 
 /** A gas-token amount typed by a person (`0.03`, `0.03 ETH`) → wei. */

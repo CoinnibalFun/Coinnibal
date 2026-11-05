@@ -165,8 +165,8 @@ describe('room price', () => {
     expect(customRoomPrice(price, { ...s, holderPerk: 'free_daily' }, true, false)).toBe(price);
     expect(customRoomPrice(price, { ...s, holderPerk: 'none' }, true, true)).toBe(price);
   });
-  it('defaults: 0.05 HYPE, a 50 % holder discount, 6 live rooms, 2 per wallet, +50 % per 10 players, rooms up to 100, 300 seats', () => {
-    expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ priceGas: '0.05', holderPerk: 'discount', holderDiscountPct: 50, maxLive: 6, maxPerWallet: 2, treasury: null });
+  it('defaults: 0.0005 ETH, a 50 % holder discount, 6 live rooms, 2 per wallet, +50 % per 10 players, rooms up to 100, 300 seats', () => {
+    expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ priceGas: '0.0005', holderPerk: 'discount', holderDiscountPct: 50, maxLive: 6, maxPerWallet: 2, treasury: null });
     expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ capacityStepPct: 50, maxPlayers: 100, maxSeats: 300, paidRooms: true });
   });
 });

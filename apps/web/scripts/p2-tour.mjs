@@ -73,7 +73,7 @@ for (const [tag, viewport, mobile] of [
     await shot(page, `faucet-claimed-${tag}`);
     await ctx.close();
     const off = await open('/faucet', { viewport, mobile, wallet: false });
-    await off.page.route('**/api/config', (r) => r.fulfill({ json: { chain: { enabled: true, chainId: 4242, chainName: 'Elysium', rpcUrl: null, explorerUrl: null, arenaAddress: null, nftAddress: null, arenasEnabled: false, tokenReady: false, token: null, feeBps: 500, serverKey: null } } }));
+    await off.page.route('**/api/config', (r) => r.fulfill({ json: { chain: { enabled: true, chainId: 4663, chainName: 'Robinhood Chain', rpcUrl: null, explorerUrl: null, arenaAddress: null, nftAddress: null, arenasEnabled: false, tokenReady: false, token: null, feeBps: 500, serverKey: null } } }));
     await off.page.reload({ waitUntil: 'networkidle' });
     await off.page.waitForTimeout(900);
     await shot(off.page, `faucet-mainnet-${tag}`);

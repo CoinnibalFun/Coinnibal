@@ -90,7 +90,7 @@ describe('ops (shared with the admin panel)', () => {
     expect(ownerRefusal(A, A.toLowerCase() as `0x${string}`)).toBeNull();
     expect(ownerRefusal(A, null)).toMatch(/connect/);
     expect(testTokenRefusal(4242)).toMatch(/testnet/);
-    expect(testTokenRefusal(99801)).toBeNull();
+    expect(testTokenRefusal(46630)).toBeNull();
     expect(planDefaultArenas(18, [2])).toMatchObject({ skip: [2] });
     expect(planDefaultArenas(18, [2]).create.map((a) => a.id)).toEqual([1, 3, 4]);
   });

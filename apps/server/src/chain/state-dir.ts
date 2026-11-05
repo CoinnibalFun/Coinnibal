@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { ELYSIUM_TESTNET_CHAIN_ID, isChainId, isTestChainId } from '@elymum/shared';
+import { LOCALNET_CHAIN_ID, isChainId, isSupportedChainId, isTestChainId, unsupportedChainMessage } from '@elymum/shared';
+
+/** The chain id the files written before the chain-keyed layout belong to (the retired pre-Robinhood testnet). */
+const RETIRED_LEGACY_CHAIN_ID = 99801;
 import type { ServerConfig } from '../config';
 import { readChainId } from './evm-client';
 
@@ -99,6 +102,10 @@ export async function resolveStateChainId(
   const rpcUrl = cfg.chain.rpcUrl;
   try {
     const id = await (opts.readId ?? readChainId)(rpcUrl);
+    if (!isSupportedChainId(id)) {
+      opts.log(`!!! chain: EVM_RPC_URL serves chain ${id}: ${unsupportedChainMessage(id)}. Arena money stays OFF`);
+      return null;
+    }
     if (cfg.chain.chainIdExplicit && id !== cfg.chain.chainId) {
       opts.log(`!!! chain: CHAIN_ID is ${cfg.chain.chainId} but EVM_RPC_URL serves chain ${id}: arena money stays OFF (fix CHAIN_ID or the RPC and restart)`);
       return null;
@@ -129,8 +136,10 @@ function legacyChainId(dataDir: string, bootChainId: number): number {
   } catch {
     /* no registry: decide below */
   }
-  // the records before this layout were made on the testnet (production) or a localnet (development)
-  return isTestChainId(bootChainId) ? bootChainId : ELYSIUM_TESTNET_CHAIN_ID;
+  // records without a chain id predate this layout: they come from the retired pre-Robinhood testnet (production)
+  // or a local node (development). They are filed under that retired chain's id so they never mix with
+  // Robinhood Chain state; a local node keeps its own.
+  return bootChainId === LOCALNET_CHAIN_ID ? bootChainId : RETIRED_LEGACY_CHAIN_ID;
 }
 
 /**

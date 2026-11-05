@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Journal, type LiveStake } from '../src/stake/journal';
-import { ELYSIUM_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID } from '@elymum/shared';
+import { ROBINHOOD_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID } from '@elymum/shared';
 import { journalAbandonDecision } from '../src/chain/evm';
 
 const live = (session: string, value: number): LiveStake => ({
@@ -207,12 +207,13 @@ describe('sweep ids and the contract binding (EVM)', () => {
   it('JOURNAL_ABANDON_CONTRACT is honoured on the testnet and the localnet only (never on mainnet)', () => {
     const old = '0x00000000000000000000000000000000000000AA';
     const arena = '0x00000000000000000000000000000000000000BB';
-    expect(journalAbandonDecision(old, arena, ELYSIUM_TESTNET_CHAIN_ID)).toBe('abandon');
+    expect(journalAbandonDecision(old, arena, ROBINHOOD_TESTNET_CHAIN_ID)).toBe('abandon');
     expect(journalAbandonDecision(old, arena, LOCALNET_CHAIN_ID)).toBe('abandon');
     // any other chain id is mainnet: the journal holds real unpaid winnings there
+    expect(journalAbandonDecision(old, arena, 4663)).toBe('refused');
     expect(journalAbandonDecision(old, arena, 999_999)).toBe('refused');
     expect(journalAbandonDecision(old, arena, null)).toBe('refused');
-    expect(journalAbandonDecision(null, arena, ELYSIUM_TESTNET_CHAIN_ID)).toBeNull();
+    expect(journalAbandonDecision(null, arena, ROBINHOOD_TESTNET_CHAIN_ID)).toBeNull();
     expect(journalAbandonDecision(arena.toLowerCase(), arena, 999_999)).toBeNull();
   });
 });

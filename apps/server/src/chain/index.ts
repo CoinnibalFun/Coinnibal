@@ -47,7 +47,7 @@ export async function createChain(
     return new DevFakeChain(journal, log, undefined, { tokenSet: cfg.devFakeToken });
   }
   const { rpcUrl, serverKey } = cfg.chain;
-  const want = chainInfo(cfg.chain.chainId, chainOverridesFor(cfg, cfg.chain.chainId));
+  const want = chainInfo(cfg.chain.chainId, chainOverridesFor(cfg));
   if (!rpcUrl || !serverKey) {
     log(`chain: off (set EVM_RPC_URL and SERVER_PRIVATE_KEY to enable the arenas and the mint on ${want.name}) — practice only`);
     return new NullChain(want);

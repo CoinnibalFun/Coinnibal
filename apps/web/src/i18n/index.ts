@@ -1,4 +1,4 @@
-import { activeChain, gasSymbol } from '@elymum/shared';
+import { activeChain } from '@elymum/shared';
 import { useSyncExternalStore } from 'react';
 import { en } from './en';
 import { LOCALES, type Locale } from './locales/meta';
@@ -66,16 +66,17 @@ export function formatMessage(s: string, vars: TVars | undefined, locale: Locale
 }
 
 /**
- * Placeholders every string may use without the caller passing them: `{gas}` (the chain's gas token symbol, `ETH`
- * on Robinhood Chain) and `{chain}` (its name). They follow the active chain (`setActiveChain` in
- * `@elymum/shared`: `VITE_CHAIN_ID` at boot, then the server's chain); `refreshChainText` re-renders on a change.
+ * The placeholder every string may use without the caller passing it: `{chain}`, the name of the Robinhood Chain
+ * network the game runs on ("Robinhood Chain Testnet" now, "Robinhood Chain" at mainnet). It follows the active
+ * network (`setActiveChain` in `@elymum/shared`: `VITE_CHAIN_ID` at boot, then the server's); `refreshChainText`
+ * re-renders on a change.
  */
-let chainVars: { gas: string; chain: string } = { gas: gasSymbol(), chain: activeChain().name };
+let chainVars: { chain: string } = { chain: activeChain().name };
 
-/** Re-reads `{gas}` / `{chain}` from the active chain; components using `useT` re-render when they changed. */
+/** Re-reads `{chain}` from the active network; components using `useT` re-render when it changed. */
 export function refreshChainText(): void {
-  const next = { gas: gasSymbol(), chain: activeChain().name };
-  if (next.gas === chainVars.gas && next.chain === chainVars.chain) return;
+  const next = { chain: activeChain().name };
+  if (next.chain === chainVars.chain) return;
   chainVars = next;
   fns.clear();
   for (const fn of listeners) fn();
@@ -115,7 +116,7 @@ function fnFor(k: string) {
   }
   return f;
 }
-const textKey = (): string => `${current}|${chainVars.gas}|${chainVars.chain}`;
+const textKey = (): string => `${current}|${chainVars.chain}`;
 
 /** React hook: `const t = useT(); t('lo.tab.play')`. Re-renders when the language or the chain changes. */
 export function useT(): (key: TKey, vars?: TVars) => string {

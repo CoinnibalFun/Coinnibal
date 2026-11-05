@@ -108,11 +108,11 @@ describe('mint and registry types', () => {
 
   it('type-checks the payloads', () => {
     const reg: ContractsRegistry = {
-      arena: { address: ADDR, txHash: '0x' + 'a'.repeat(64), chainId: 99801, registeredAt: 1, registeredBy: ADDR },
+      arena: { address: ADDR, txHash: '0x' + 'a'.repeat(64), chainId: 46630, registeredAt: 1, registeredBy: ADDR },
       nft: null,
       token: null,
     };
     const proof: MintProofResponse = { eligible: false, proof: [], root: null, onchainRoot: null };
-    expect([reg.arena?.chainId, proof.eligible]).toEqual([99801, false]);
+    expect([reg.arena?.chainId, proof.eligible]).toEqual([46630, false]);
   });
 });

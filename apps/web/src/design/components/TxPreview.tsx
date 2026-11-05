@@ -1,4 +1,4 @@
-import { gasSymbol } from '@elymum/shared';
+import { GAS_SYMBOL } from '@elymum/shared';
 import { useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { AddressChip } from './AddressChip';
 import { Button } from './Button';
@@ -123,7 +123,7 @@ export function TxPreview({
       <dl className="kb-tx__meta">
         <div>
           <dt>Value</dt>
-          <dd>{value && value.wei > 0n ? <GasAmount wei={value.wei} usd={value.usd} size="sm" decimals={6} /> : <span className="kb-tx__zero">0 {gasSymbol()}</span>}</dd>
+          <dd>{value && value.wei > 0n ? <GasAmount wei={value.wei} usd={value.usd} size="sm" decimals={6} /> : <span className="kb-tx__zero">0 {GAS_SYMBOL}</span>}</dd>
         </div>
         {contract && (
           <div>

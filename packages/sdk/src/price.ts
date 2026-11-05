@@ -1,10 +1,10 @@
 import { GAS_PRICE_URL_DEFAULT } from './constants';
 
 /**
- * The gas token's USD price and the $1 mint price.
+ * ETH's USD price (Robinhood Chain's gas token) and the $1 mint price.
  *
- * The price comes from Hyperliquid's public info API: `POST {"type":"allMids"}` returns a map of mid prices as
- * decimal strings, keyed by coin (`ETH`, `HYPE`, ...: the active chain's `ChainDef.priceCoin`). All conversions are
+ * The price comes from Hyperliquid's public info API (a price source only, any exchange API would do):
+ * `POST {"type":"allMids"}` returns a map of mid prices as decimal strings, keyed by coin (`ETH`). All conversions are
  * exact bigint math on the decimal string (no floating point): `usdCentsToWei` rounds **up** to a multiple of 1e12
  * wei (0.000001 of the gas token), so the price is never below the target and stays readable.
  */
@@ -93,12 +93,12 @@ export function clampPrice(wei: bigint, min: bigint, max: bigint): bigint {
 }
 
 /**
- * The USD price of `coin` (the chain's gas token, `ChainDef.priceCoin`; default `ETH`) from Hyperliquid's info API.
+ * ETH's USD price (Robinhood Chain's gas token) from Hyperliquid's info API.
  * Returns the decimal string the API sent (exact, for `usdCentsToWei`) and its number value. Throws on HTTP errors,
  * a missing key, or an implausible value.
  */
-export async function fetchGasUsd(opts: { url?: string; coin?: string; fetch?: FetchLike; signal?: AbortSignal; timeoutMs?: number } = {}): Promise<{ price: string; value: number }> {
-  const coin = opts.coin ?? 'ETH';
+export async function fetchGasUsd(opts: { url?: string; fetch?: FetchLike; signal?: AbortSignal; timeoutMs?: number } = {}): Promise<{ price: string; value: number }> {
+  const coin = 'ETH';
   const f: FetchLike = opts.fetch ?? (globalThis.fetch as unknown as FetchLike);
   if (typeof f !== 'function') throw new Error('no fetch available: pass opts.fetch');
   let signal = opts.signal;

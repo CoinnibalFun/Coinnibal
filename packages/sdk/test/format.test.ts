@@ -28,14 +28,14 @@ describe('format', () => {
     expect(parseTokenAmount('0.5', 6)).toBe(500_000n);
     expect(() => parseTokenAmount('1,5', 18)).toThrow();
     expect(parseGasAmount('0.03')).toBe(3n * 10n ** 16n);
-    expect(parseGasAmount('0.03 HYPE')).toBe(3n * 10n ** 16n);
+    expect(parseGasAmount('0.03 ETH')).toBe(3n * 10n ** 16n);
     expect(parseGasAmount('0.03 ETH')).toBe(3n * 10n ** 16n);
   });
 
   it('formats gas-token amounts (the active chain symbol), bps and cents', () => {
     expect(formatGasAmount(31_234_567_000_000_000n)).toBe('0.031235 ETH');
     expect(formatGasAmount(31_234_567_000_000_000n, 4)).toBe('0.0312 ETH');
-    expect(formatGasAmount(31_234_567_000_000_000n, 4, 'HYPE')).toBe('0.0312 HYPE');
+    expect(formatGasAmount(31_234_567_000_000_000n, 4)).toBe('0.0312 ETH');
     expect(formatBps(500)).toBe('5.00 %');
     expect(formatUsdCents(100)).toBe('$1.00');
     expect(formatUsdCents(123456)).toBe('$1,234.56');

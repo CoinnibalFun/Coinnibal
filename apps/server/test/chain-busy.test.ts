@@ -1,5 +1,5 @@
 /**
- * The 2026-11-01 incident: the public Elysium RPC answered HTTP 429 to most calls. A player who had
+ * The 2026-11-01 incident: a public RPC (the pre-Robinhood testnet's) answered HTTP 429 to most calls. A player who had
  * paid a ticket (arena #3, session 3877) could not get back into the arena: the arena list read failed
  * right after a settlement had dropped the cached list, so `arenaRoom` answered null ("Arena not
  * available." → the client's "Room not found."), even for the resume of a ticket whose coin was in

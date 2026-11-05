@@ -31,7 +31,6 @@ class FakeChain implements ChainGateway {
       enabled: true,
       chainId: 31337,
       chainName: 'Localnet',
-      gasSymbol: 'ETH',
       testnet: true,
       faucetUrl: null,
       rpcUrl: null,

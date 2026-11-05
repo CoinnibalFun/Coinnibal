@@ -1,24 +1,4 @@
-import { CUSTOM_DEFAULTS,
-  CUSTOM_DIFFICULTIES,
-  CUSTOM_DURATIONS_MIN,
-  CUSTOM_DURATION_LIMITS,
-  CUSTOM_FOOD,
-  CUSTOM_KINDS,
-  CUSTOM_LIMITS,
-  CUSTOM_MAP_CHOICES,
-  CUSTOM_MAP_WIDTH,
-  MAP_SCALE_DEFAULT,
-  CUSTOM_TRAPS,
-  arenaMeta,
-  customCapacityChoices,
-  customCapacityTiers,
-  customRoomFee,
-  quotePrice,
-  validateCustomConfig,
-  type CustomArenaTier,
-  type CustomRoomConfig,
-  type CustomRoomQuote,
-  type CustomRoomView, activeChain, gasSymbol } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, CUSTOM_DIFFICULTIES, CUSTOM_DURATIONS_MIN, CUSTOM_DURATION_LIMITS, CUSTOM_FOOD, CUSTOM_KINDS, CUSTOM_LIMITS, CUSTOM_MAP_CHOICES, CUSTOM_MAP_WIDTH, MAP_SCALE_DEFAULT, CUSTOM_TRAPS, arenaMeta, customCapacityChoices, customCapacityTiers, customRoomFee, quotePrice, validateCustomConfig, type CustomArenaTier, type CustomRoomConfig, type CustomRoomQuote, type CustomRoomView, activeChain, GAS_SYMBOL } from '@elymum/shared';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Address, Hash } from 'viem';
 import { AddressChip, Button, Chip, CoinCharacter, Field, GasAmount, QuantityStepper, Receipt, Sheet, Stamp, StampSpinner } from '../design';
@@ -468,7 +448,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
             <div className="cr-price" data-testid="cr-price">
               <span className="cr-row__label mono">{t('cr.price')}</span>
               {free ? <b className="cr-price__free">{t('cr.free')}</b> : <GasAmount wei={youPay ?? 0n} decimals={gasDecimals(youPay ?? 0n)} />}
-              {base !== null && youPay !== null && youPay < base && !free && <s className="cr-price__was mono">{gasText(base)} {gasSymbol()}</s>}
+              {base !== null && youPay !== null && youPay < base && !free && <s className="cr-price__was mono">{gasText(base)} {GAS_SYMBOL}</s>}
               <span className="cr-price__for mono">{t('cr.priceFor', { n: cfg.maxPlayers })}</span>
               <span className="cr-price__note">{perkNote(quote, t, cfg.maxPlayers)}</span>
             </div>
@@ -497,7 +477,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
                     { label: t('cr.stakes'), value: `${tok.wire(tier.entryFee)} ${tok.symbol}` },
                   ]
                 : [{ label: t('cr.stakes'), value: t('cr.noStakes'), muted: true }]),
-              { label: t('cr.total'), value: frozen.wei === 0n ? t('cr.free') : `${gasText(frozen.wei)} ${gasSymbol()}`, strong: true },
+              { label: t('cr.total'), value: frozen.wei === 0n ? t('cr.free') : `${gasText(frozen.wei)} ${GAS_SYMBOL}`, strong: true },
             ]}
           />
           {frozen.wei > 0n && (

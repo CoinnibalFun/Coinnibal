@@ -68,24 +68,28 @@ describe('the English string table', () => {
     expect(translate('nope.missing' as TKey)).toBe('nope.missing');
   });
 
-  it('names no chain: the network and its gas token are the {chain} / {gas} placeholders, in every language', async () => {
+  it('names the network only through {chain} (testnet or mainnet) and the gas token as ETH, in every language', async () => {
     const all: [string, Dict][] = [['en', en as Dict]];
     for (const l of LOCALES) if (l.code !== 'en') all.push([l.code, await loadLocale(l.code)]);
     for (const [code, dict] of all)
-      for (const [key, value] of Object.entries(dict)) expect(value, `${code} ${key}`).not.toMatch(/HYPE|Elysium|Kinetiq|HyperEVM|Robinhood/);
-    expect(en['tf.lowGas']).toContain('{gas}');
+      for (const [key, value] of Object.entries(dict)) {
+        // Robinhood Chain only: no other chain, gas token or faucet is named anywhere
+        expect(value, `${code} ${key}`).not.toMatch(/HYPE|Elysium|Kinetiq|HyperEVM|\{gas\}/);
+        // the network's name is the placeholder, so the copy is right on the testnet and on mainnet
+        expect(value, `${code} ${key}`).not.toMatch(/Robinhood/);
+      }
+    expect(en['tf.lowGas']).toBe('You have no ETH on {chain} for the network fee. Add a little ETH to this wallet first.');
   });
 
-  it('fills {gas} and {chain} from the active chain (the server\'s, once known); a caller\'s value wins', () => {
+  it('fills {chain} from the active network (the server\'s, once known); a caller\'s value wins', () => {
     const before = activeChain();
     try {
       setActiveChain(chainInfo(46630));
       refreshChainText();
-      expect(translate('fc.noGas')).toContain('ETH');
       expect(translate('tx.confirmed')).toBe('Confirmed on Robinhood Chain Testnet');
-      setActiveChain(chainInfo(99801));
+      setActiveChain(chainInfo(4663));
       refreshChainText();
-      expect(translate('fc.noGas')).toContain('HYPE');
+      expect(translate('tx.confirmed')).toBe('Confirmed on Robinhood Chain');
       expect(translate('tf.lowGas', { chain: 'Somewhere' })).toContain('Somewhere');
     } finally {
       setActiveChain(before);
@@ -98,9 +102,11 @@ describe('the English string table', () => {
     try {
       // VITE_CHAIN_ID is unset in tests: the default chain, Robinhood Chain Testnet
       expect(BUILD_CHAIN_ID).toBe(46630);
-      useUi.setState({ chain: chainStatus({ chainId: 99801, chainName: 'Elysium Testnet', gasSymbol: 'HYPE' }) });
-      expect(translate('tx.confirmed')).toBe('Confirmed on Elysium Testnet');
-      expect(translate('fc.noGas')).toContain('HYPE');
+      useUi.setState({ chain: chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null }) });
+      expect(translate('tx.confirmed')).toBe('Confirmed on Robinhood Chain');
+      // a server on any other chain is not named: the build's network stays
+      useUi.setState({ chain: chainStatus({ chainId: 99801, chainName: 'Elsewhere' }) });
+      expect(translate('tx.confirmed')).toBe('Confirmed on Robinhood Chain Testnet');
       useUi.setState({ chain: null });
       expect(translate('tx.confirmed')).toBe('Confirmed on Robinhood Chain Testnet');
     } finally {

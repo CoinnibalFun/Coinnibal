@@ -203,7 +203,7 @@ export function RoundOverSheet() {
           <AnimatePresence>
             {settled && printed && (
               <motion.div className="g-roundover__stamp" initial={false} exit={{ opacity: 0 }}>
-                <Stamp text={t('gr.paid')} sub={activeChain().shortName.toUpperCase()} round size="md" tone="up" rotate={-12} animateIn={!reduced} />
+                <Stamp text={t('gr.paid')} sub={activeChain().name.toUpperCase()} round size="md" tone="up" rotate={-12} animateIn={!reduced} />
               </motion.div>
             )}
           </AnimatePresence>

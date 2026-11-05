@@ -30,7 +30,7 @@ export function useAdminStatus(client: PublicClient | null, net: AdminNetwork, a
         nft: net.nftAddress,
         testToken,
         account,
-        chainOverrides: net.info ? { name: net.info.name, rpcUrl: net.info.rpcUrl, explorerUrl: net.info.explorerUrl } : undefined,
+        chainOverrides: net.info ? { rpcUrl: net.info.rpcUrl, explorerUrl: net.info.explorerUrl } : undefined,
       });
       if (mine !== seq.current) return;
       setStatus(s);

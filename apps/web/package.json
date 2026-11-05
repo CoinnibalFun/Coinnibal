@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Elymum web client: site, mint, game and admin panel for Elysium",
+  "description": "Elymum web client: site, mint, game and admin panel on Robinhood Chain",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

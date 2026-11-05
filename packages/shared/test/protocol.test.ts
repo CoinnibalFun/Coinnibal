@@ -70,8 +70,8 @@ describe('v2 message shapes', () => {
   it('type-checks the lobby and chain payloads', () => {
     const chain: ChainStatus = {
       enabled: true,
-      chainId: 99801,
-      chainName: 'Elysium Testnet',
+      chainId: 46630,
+      chainName: 'Robinhood Chain Testnet',
       rpcUrl: 'https://testnet-rpc.elysium.kinetiq.xyz',
       explorerUrl: 'https://explorer-elysium-testnet.t.conduit.xyz',
       arenaAddress: '0x1111111111111111111111111111111111111111',
@@ -79,7 +79,6 @@ describe('v2 message shapes', () => {
       arenasEnabled: true,
       tokenReady: true,
       token: { address: '0x2222222222222222222222222222222222222222', symbol: '$ELYMUM', decimals: 18 },
-      gasSymbol: 'HYPE',
       testnet: true,
       faucetUrl: null,
       fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 0, holderPerks: true, paymentBurnBps: 5000, burnMode: 0 },

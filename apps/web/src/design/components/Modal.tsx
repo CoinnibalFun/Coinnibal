@@ -53,7 +53,7 @@ export function WalletPicker({
   busyId = null,
   error,
   title = 'Pick a wallet',
-  kicker = `Connect · ${activeChain().shortName}`,
+  kicker = `Connect · ${activeChain().name}`,
   closeLabel = 'Close',
   empty = 'No wallet found in this browser. Install an EVM wallet (MetaMask, Rabby or similar), then come back.',
   footnote = 'We only ask you to sign a message. We will never ask for your seed phrase. Nobody should.',

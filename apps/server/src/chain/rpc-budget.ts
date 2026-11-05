@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
  * One request budget per RPC URL, shared by every viem client of the process (the server key, the bot
- * signers, the holder reader). A public RPC (Elysium's, Robinhood Chain's) answers HTTP 429 ("Rate Limit Exceeded") as soon
+ * signers, the holder reader). Robinhood Chain's public RPC (like any public RPC) answers HTTP 429 ("Rate Limit Exceeded") as soon
  * as it is pushed, and the owner provides no private endpoint, so the server keeps itself under the
  * limit:
  *

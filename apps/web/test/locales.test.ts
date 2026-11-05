@@ -39,7 +39,7 @@ describe('the translations', () => {
     for (const code of OTHERS) {
       const dict = await loadLocale(code as Locale);
       for (const [key, value] of Object.entries(en)) {
-        for (const brand of ['$ELYMUM', '{gas}', '{chain}', '@elymumio']) {
+        for (const brand of ['$ELYMUM', 'ETH', '{chain}', '@elymumio']) {
           if (value.includes(brand) && !dict[key as TKey].includes(brand)) bad.push(`${code} ${key}: ${brand}`);
         }
       }

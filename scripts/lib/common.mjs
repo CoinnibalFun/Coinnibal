@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/** The mnemonic of Hardhat's built-in dev accounts (each funded with 10,000 HYPE on `hardhat node`). Public; local only. */
+/** The mnemonic of Hardhat's built-in dev accounts (each funded with 10,000 ETH on `hardhat node`). Public; local only. */
 export const HARDHAT_MNEMONIC = 'test test test test test test test test test test test junk';
 
 /** Local chain defaults (`hardhat node`). */

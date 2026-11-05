@@ -1,5 +1,5 @@
 /**
- * Soak: the real app in this process (DEV_FAKE_CHAIN, bots in every room) with churning WebSocket
+ * Soak: the real app in this process (DEV_FAKE_CHAIN; the soak clients are the players) with churning WebSocket
  * clients (connect, hello, join practice / an arena, steer, chat, leave, reconnect, disconnect) for
  * SOAK_MINUTES (default 5). Every 15 s it prints the heap after a GC, RSS, the active handles, the
  * connections and rooms, and the slowest room tick of the window.
@@ -25,9 +25,6 @@ const cfg = loadConfig({
   HOST: '127.0.0.1',
   DATA_DIR: dir,
   GAME_ACCESS: 'public',
-  BOT_TARGET: '20',
-  BOT_MAX: '20',
-  ARENA_BOT_TARGET: '12',
   ROUND_SECONDS: '30',
   ROUND_JOIN_CLOSE_SECONDS: '5',
   MAX_CONNECTIONS_PER_IP: '1000',

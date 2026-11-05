@@ -1,4 +1,4 @@
-import { CUSTOM_HOLDER_PERKS, CUSTOM_LIMITS, CUSTOM_SETTINGS_LIMITS, arenaMeta, customRoomFee, type CustomHolderPerk, type CustomRoomSettings, type CustomRoomView, gasSymbol } from '@elymum/shared';
+import { CUSTOM_HOLDER_PERKS, CUSTOM_LIMITS, CUSTOM_SETTINGS_LIMITS, arenaMeta, customRoomFee, type CustomHolderPerk, type CustomRoomSettings, type CustomRoomView, GAS_SYMBOL } from '@elymum/shared';
 import { parseEther } from 'viem';
 import { gasText } from '../rooms/gas';
 import { useCallback, useEffect, useState } from 'react';
@@ -133,7 +133,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
     <Card
       title="Custom rooms"
       id="custom-rooms"
-      lede={`Players pay a small ${gasSymbol()} fee to open a private room with their own rules: a free room (no stakes) or a ticket room (an invite-only instance of an arena: players buy that arena's normal ticket, settled at its bell). The fee grows with the room's size. The server checks every payment on chain before the room opens.`}
+      lede={`Players pay a small ${GAS_SYMBOL} fee to open a private room with their own rules: a free room (no stakes) or a ticket room (an invite-only instance of an arena: players buy that arena's normal ticket, settled at its bell). The fee grows with the room's size. The server checks every payment on chain before the room opens.`}
     >
       <SwitchRow
         label="Creating rooms"
@@ -157,7 +157,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
       />
       <div className="ad-form2 ad-form3">
         <label className="ad-field">
-          <span className="ad-field__label mono">Base price ({gasSymbol()}, up to 10 players)</span>
+          <span className="ad-field__label mono">Base price ({GAS_SYMBOL}, up to 10 players)</span>
           <input className="ad-input num" value={draft.priceGas} onChange={(e) => setDraft({ ...draft, priceGas: e.target.value.trim() })} data-testid="cr-price" />
         </label>
         <label className="ad-field">
@@ -190,7 +190,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
         </label>
       </div>
       <p className="ad-note" data-testid="cr-fee-ladder">
-        Fee by size ({gasSymbol()}, before holder perks): <span className="mono">{feeLadder(draft.priceGas, draft.capacityStepPct, draft.maxPlayers) ?? 'enter a valid price'}</span>. Seats cap the players of all live custom rooms
+        Fee by size ({GAS_SYMBOL}, before holder perks): <span className="mono">{feeLadder(draft.priceGas, draft.capacityStepPct, draft.maxPlayers) ?? 'enter a valid price'}</span>. Seats cap the players of all live custom rooms
         together (the server is sized for about 500 at once, public rooms included).
       </p>
       <SwitchRow
@@ -233,7 +233,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
                 <th>Creator</th>
                 <th>Players</th>
                 <th>Left</th>
-                <th>Fee ({gasSymbol()})</th>
+                <th>Fee ({GAS_SYMBOL})</th>
                 <th />
               </tr>
             </thead>

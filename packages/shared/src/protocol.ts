@@ -258,10 +258,8 @@ export interface ChainStatus {
   enabled: boolean;
   /** `eth_chainId` of the server's RPC (the source of truth); null while the chain is off or unknown. */
   chainId: number | null;
-  /** Display name (`chainInfo(chainId).name`, `CHAIN_NAME` overrides it). */
+  /** Display name of the Robinhood Chain network (`chainInfo(chainId).name`). */
   chainName: string;
-  /** The gas token's symbol (`chainInfo(chainId).nativeCurrency.symbol`, `GAS_SYMBOL` overrides it). */
-  gasSymbol: string;
   /** A testnet (test tokens, faucet). */
   testnet: boolean;
   /** The gas token's faucet (testnets), null when there is none. */

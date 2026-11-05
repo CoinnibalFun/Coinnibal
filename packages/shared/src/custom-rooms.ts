@@ -205,7 +205,7 @@ export interface CustomRoomView extends CustomRoomSummary {
 export interface CustomRoomSettings {
   /** Creating rooms is open. */
   enabled: boolean;
-  /** Price in the chain's gas token, decimal string (e.g. "0.05"). */
+  /** Price in ETH (Robinhood Chain's gas token), decimal string (e.g. "0.0005"). */
   priceGas: string;
   /** Where the fee goes (EIP-55); null: the first `ADMIN_WALLETS` wallet (the owner). */
   treasury: string | null;
@@ -231,7 +231,8 @@ export interface CustomRoomSettings {
 
 export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
   enabled: true,
-  priceGas: '0.05',
+  // about $1.50 at ETH = $3,000 (docs/ECONOMY.md); the admin re-prices it in /admin as ETH moves
+  priceGas: '0.0005',
   treasury: null,
   holderPerk: 'discount',
   holderDiscountPct: 50,

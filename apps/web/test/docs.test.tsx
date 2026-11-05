@@ -127,7 +127,7 @@ describe('player guide content', () => {
     const text = JSON.stringify(en);
     expect(text).not.toMatch(/\brent\b|token account/);
     expect(text).toContain('ETH on Robinhood Chain Testnet');
-    expect(JSON.stringify(docsEn('$ELYMUM', undefined, 'HYPE', 'Elysium Testnet'))).toContain('HYPE on Elysium Testnet');
+    expect(JSON.stringify(docsEn('$ELYMUM', undefined, 'Robinhood Chain'))).toContain('ETH on Robinhood Chain)');
     expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
     expect(text).not.toMatch(/record_game/);
     // the CI guard's Turkish letters, written as escapes so this file passes the guard itself

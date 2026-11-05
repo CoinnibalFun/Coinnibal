@@ -71,7 +71,6 @@ const UNSET: ChainStatus = {
   enabled: true,
   chainId: 46630,
   chainName: 'Robinhood Chain Testnet',
-  gasSymbol: 'ETH',
   testnet: true,
   faucetUrl: null,
   rpcUrl: null,

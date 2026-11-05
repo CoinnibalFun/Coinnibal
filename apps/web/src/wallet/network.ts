@@ -19,7 +19,7 @@ export type ServerChain = Pick<ChainStatus, 'chainId' | 'chainName' | 'rpcUrl' |
 export function serverChainInfo(chain: ServerChain | null | undefined): ChainInfo | null {
   if (!chain || chain.chainId === null || chain.chainId === undefined) return null;
   try {
-    return chainInfo(chain.chainId, { name: chain.chainName || null, rpcUrl: CHAIN_OVERRIDES.rpcUrl ?? chain.rpcUrl, explorerUrl: chain.explorerUrl });
+    return chainInfo(chain.chainId, { rpcUrl: CHAIN_OVERRIDES.rpcUrl ?? chain.rpcUrl, explorerUrl: chain.explorerUrl });
   } catch {
     return null;
   }

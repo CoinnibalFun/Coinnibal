@@ -1,7 +1,7 @@
 import { SiteFail } from './site/validate';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
-import { ELYSIUM_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID, chainByKey, chainInfo, isTestChainId, setActiveChain } from '@elymum/shared';
+import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain } from '@elymum/shared';
 import { chainOverridesFor } from './chain/evm';
 import type { Hex } from 'viem';
 import { Auth } from './auth';
@@ -84,7 +84,7 @@ export async function createApp(
     siteLimits?: SiteLimits;
     /** The per-IP limiter of every `/api/*` request; tests inject a larger one. */
     apiLimiter?: Limiter;
-    /** HYPE/USD feed (default: Hyperliquid at `HYPE_PRICE_URL`); tests inject one. */
+    /** ETH/USD feed (default: Hyperliquid at `GAS_PRICE_URL`); tests inject one. */
     fetchPrice?: PriceFetcher;
     /** The chain id to key the state on (default: the injected chain's, else `eth_chainId` of `EVM_RPC_URL`). */
     chainId?: number | null;
@@ -148,7 +148,7 @@ export async function createApp(
     logChunkBlocks: cfg.chain.logChunkBlocks,
     log,
   });
-  // the NFT of another chain comes from that chain's registry (the testnet emblem import after the move to mainnet)
+  // the testnet's NFT comes from the testnet's registry (the testnet emblem import after the move to mainnet)
   const nftOf = (id: number) => {
     const r = id === chain.status().chainId || id === stateChainId ? contracts.effective(id).nft : persist ? new ContractsStore(chainDir(cfg.dataDir, id)).stored().nft : null;
     return r ? { address: r.address, txHash: r.txHash } : null;
@@ -158,7 +158,7 @@ export async function createApp(
     ((id: number): HolderReader | null => {
       const own = chain.evm?.() ?? null;
       if (own && id === chain.status().chainId) return own;
-      if (id === ELYSIUM_TESTNET_CHAIN_ID) return viemHolderReader(cfg.chain.testnetRpcUrl || chainByKey('elysium-testnet').rpcUrl!);
+      if (id === ROBINHOOD_TESTNET_CHAIN_ID) return viemHolderReader(cfg.chain.testnetRpcUrl || NETWORKS.testnet.rpcUrl);
       return null;
     });
   const site = new SiteApi(cfg, auth, siteStore, opts.siteLimits, {
@@ -271,10 +271,10 @@ export async function createApp(
     if (chain.tokenReady) void rooms.refreshArenas();
   });
   await chain.start();
-  // what this process shows amounts in (logs, the price feed's coin): the chain it runs on, else the configured one
+  // the network this process names (testnet or mainnet): the one it runs on, else the configured one
   const showChain = () => {
     const st = chain.status();
-    setActiveChain(chainInfo(st.chainId ?? cfg.chain.chainId, chainOverridesFor(cfg, st.chainId ?? cfg.chain.chainId)));
+    setActiveChain(chainInfo(st.chainId ?? cfg.chain.chainId, chainOverridesFor(cfg)));
   };
   showChain();
   chain.onStatusChange(showChain);

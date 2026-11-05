@@ -15,7 +15,7 @@ import {
   type SessionRef,
   type Settlement,
 } from '@elymum/sdk';
-import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatGas, formatToken, type ArenaFees, type ChainStatus } from '@elymum/shared';
+import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatGas, isSupportedChainId, unsupportedChainMessage, formatToken, type ArenaFees, type ChainStatus } from '@elymum/shared';
 import { getAddress, isAddress, type Address, type Hash, type Hex } from 'viem';
 import type { PrivateKeyAccount } from 'viem/accounts';
 import type { ServerConfig } from '../config';
@@ -80,15 +80,9 @@ export function journalAbandonDecision(abandon: string | null, arena: string, ch
   return isTestChain(chainId) ? 'abandon' : 'refused';
 }
 
-/**
- * The chain overrides of the server's environment for `chainId`: `CHAIN_NAME` and `GAS_SYMBOL` name an id the
- * registry does not know, `EXPLORER_URL` and `GAS_FAUCET_URL` apply whenever they are set.
- */
-export function chainOverridesFor(cfg: Pick<ServerConfig, 'chain'>, chainId: number) {
-  const unknown = chainInfo(chainId).key === null;
+/** The server's overrides of the network's values: `EXPLORER_URL` and `GAS_FAUCET_URL`, whenever they are set. */
+export function chainOverridesFor(cfg: Pick<ServerConfig, 'chain'>) {
   return {
-    ...(unknown && cfg.chain.chainName ? { name: cfg.chain.chainName } : {}),
-    ...(unknown && cfg.chain.gasSymbol ? { gasSymbol: cfg.chain.gasSymbol } : {}),
     ...(cfg.chain.explorerUrl ? { explorerUrl: cfg.chain.explorerUrl } : {}),
     ...(cfg.chain.gasFaucetUrl ? { faucetUrl: cfg.chain.gasFaucetUrl } : {}),
   };
@@ -281,13 +275,16 @@ export class EvmChain implements ChainGateway {
       if (!this.client) {
         const rpcUrl = this.cfg.chain.rpcUrl!;
         const chainId = await readChainId(rpcUrl);
+        if (!isSupportedChainId(chainId)) return this.refuseChain(chainId);
         // concurrent eth_calls are merged into one Multicall3 call where the chain has it
         const multicall = await hasMulticall3(rpcUrl);
-        this.client = viemEvmClient(rpcUrl, this.account!, { chainId, overrides: this.overrides(chainId), multicall });
+        this.client = viemEvmClient(rpcUrl, this.account!, { chainId, overrides: this.overrides(), multicall });
         if (multicall) this.log('chain: Multicall3 found — concurrent reads are batched into one eth_call');
       }
       if (this.chainId === null) {
-        this.chainId = await withTimeout(this.client.getChainId(), 20_000, 'eth_chainId');
+        const id = await withTimeout(this.client.getChainId(), 20_000, 'eth_chainId');
+        if (!isSupportedChainId(id)) return this.refuseChain(id);
+        this.chainId = id;
         const info = this.chainInfo();
         this.log(`chain: ${info.name} (chain id ${this.chainId}) via ${where}`);
         const want = this.deps.stateChainId;
@@ -309,12 +306,18 @@ export class EvmChain implements ChainGateway {
     }
   }
 
-  private overrides(chainId: number) {
-    return chainOverridesFor(this.cfg, chainId);
+  /** The RPC serves a chain that is not Robinhood Chain: the arenas stay off (logged every 5 minutes). */
+  private refuseChain(id: number): false {
+    this.warn('chain', `!!! chain: EVM_RPC_URL serves chain ${id}: ${unsupportedChainMessage(id)} — arenas stay OFF`, 300_000);
+    return false;
+  }
+
+  private overrides() {
+    return chainOverridesFor(this.cfg);
   }
 
   private chainInfo() {
-    return chainInfo(this.chainId!, this.overrides(this.chainId!));
+    return chainInfo(this.chainId!, this.overrides());
   }
 
   /**
@@ -496,7 +499,7 @@ export class EvmChain implements ChainGateway {
       const who = this.serverAddress;
       this.balance = await withRpcPriority('low', () => client.balance(who));
       if (this.balance < LOW_BALANCE_WEI) {
-        this.warn('balance', `chain: WARNING the server key ${this.serverAddress} holds only ${formatGas(this.balance, this.chainInfo().nativeCurrency.symbol, 6)} — fund it, it pays the gas of every settlement`, 30 * 60_000);
+        this.warn('balance', `chain: WARNING the server key ${this.serverAddress} holds only ${formatGas(this.balance, 6)} — fund it, it pays the gas of every settlement`, 30 * 60_000);
       }
     } catch {
       /* best effort */
@@ -527,12 +530,11 @@ export class EvmChain implements ChainGateway {
     const view = this.deps.contracts?.() ?? { arena: this.cfg.chain.arenaAddress, nft: this.cfg.chain.nftAddress };
     const nftAddress = view.nft && isEvm(view.nft) ? getAddress(view.nft) : null;
     if (!this.enabled || this.chainId === null) {
-      const want = chainInfo(this.cfg.chain.chainId, this.overrides(this.cfg.chain.chainId));
+      const want = chainInfo(this.cfg.chain.chainId, this.overrides());
       return {
         enabled: false,
         chainId: null,
         chainName: want.name,
-        gasSymbol: want.nativeCurrency.symbol,
         testnet: want.testnet,
         faucetUrl: want.faucetUrl,
         rpcUrl: null,
@@ -552,7 +554,6 @@ export class EvmChain implements ChainGateway {
       enabled: true,
       chainId: this.chainId,
       chainName: info.name,
-      gasSymbol: info.nativeCurrency.symbol,
       testnet: info.testnet,
       faucetUrl: info.faucetUrl,
       rpcUrl: this.cfg.chain.publicRpcUrl,
