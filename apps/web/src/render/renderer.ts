@@ -6,7 +6,7 @@ import type { Particles } from '../game/particles';
 import type { CEntity, ClientWorld } from '../game/state';
 import type { Quality, Settings } from '../store';
 import { qualityLevels, type QualityLevel } from './governor';
-import { stickerImage } from '../ui/game/stickers';
+import { emojiImage } from '../ui/game/emoji';
 import { avatars, type AvatarCache } from './avatars';
 import { drawCoinLook, type CoinOpts } from './coin';
 import { flagSkins, type FlagSkinCache } from './flagskin';
@@ -847,7 +847,7 @@ export class Renderer {
     if (best.size === 0) return;
     for (const c of best.values()) {
       const emote = f.world.players.get(c.playerId)!.emote!;
-      const img = stickerImage(emote.id);
+      const img = emojiImage(emote.id);
       if (!img) continue;
       const age = f.now - emote.at;
       const t = Math.min(1, age / 260);

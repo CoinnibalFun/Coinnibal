@@ -6,5 +6,5 @@ export { RoundChip, RoundCountdown } from './RoundChip';
 export { HowToSheet, SettingsSheet } from './SettingsSheet';
 export { StandingsSheet } from './StandingsSheet';
 export { FirstPlayBrief } from './FirstPlayBrief';
-export { stickerSvg, stickerUrl, stickerImage } from './stickers';
+export { emojiImage, EMOJI_FONT } from './emoji';
 export { BellMoment, DeathMoment, RoundIntro, SunsetSky, ValueFlyers, VALUE_FLY_EVENT, type ValueFlyDetail } from './Moments';

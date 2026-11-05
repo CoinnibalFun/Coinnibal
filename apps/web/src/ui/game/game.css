@@ -772,16 +772,74 @@
   transform: rotate(-6deg);
 }
 
-/* ── key stickers (bottom left) ───────────────────────────────────────── */
-.g-keys {
+/* ── bottom left (desktop): the kill feed and chat over the key stickers ── */
+.g-bl {
   position: absolute;
   left: calc(var(--hud-gap) + env(safe-area-inset-left, 0px));
   bottom: calc(var(--hud-gap) + env(safe-area-inset-bottom, 0px));
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: min(380px, calc(50vw - 260px));
+  pointer-events: none;
+}
+.g-bl > * {
+  pointer-events: auto;
+  max-width: 100%;
+}
+
+/* ── peeking bars: open for the first seconds, then a small tab that opens on hover ── */
+.g-peek {
+  pointer-events: auto;
+}
+.g-peek__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--r-tag);
+  background: var(--floor-strip);
+  color: var(--floor-text-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 120ms linear;
+}
+.g-peek__tab:hover,
+.g-peek__tab:focus-visible {
+  opacity: 1;
+}
+.g-peek__tab .kb-key {
+  font-size: 11px;
+}
+.g-peek__emoji {
+  font-size: 20px;
+  line-height: 1;
+}
+.g-peek.is-open > :not(.g-peek__tab) {
+  animation: g-peek-in 160ms ease-out;
+}
+@keyframes g-peek-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .g-peek.is-open > :not(.g-peek__tab) {
+    animation: none;
+  }
+}
+
+.g-keys {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 14px;
-  max-width: calc(50vw - 260px);
   /* on an ink strip like the kill feed: the hints sat straight on the bright map */
   padding: 4px 10px;
   border-radius: var(--r-tag);
@@ -814,7 +872,7 @@
   background: var(--sun);
 }
 @media (max-width: 1080px) {
-  .g-keys {
+  .g-keys-peek {
     display: none;
   }
 }
@@ -840,36 +898,6 @@
   background: var(--sticker);
   box-shadow: var(--sh-2);
 }
-/* the page switch: "Hype" / "Trash talk", stacked to the left of the row */
-.g-emotes__pages {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  margin-right: 2px;
-}
-.g-emotes__page {
-  min-height: 20px;
-  padding: 0 7px;
-  border: 2px solid var(--outline);
-  border-radius: 7px;
-  background: none;
-  font: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  color: #04181c;
-  cursor: pointer;
-}
-.g-emotes__page.is-on {
-  background: var(--sun, #f2c14e);
-}
-.g-emotes__page:focus-visible {
-  outline: 3px solid var(--focus, #2d7388);
-  outline-offset: 2px;
-}
 .g-emote {
   position: relative;
   display: grid;
@@ -883,10 +911,11 @@
   cursor: pointer;
   transition: transform var(--dur-micro) var(--ease-spring), background-color 120ms linear;
 }
-.g-emote img {
+.g-emote__glyph {
   display: block;
-  width: 40px;
-  height: 40px;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Twemoji Mozilla', sans-serif;
+  font-size: 30px;
+  line-height: 1;
 }
 .g-emote:hover {
   background: #fbe7b0;
@@ -1129,16 +1158,6 @@
   display: grid;
   grid-template-columns: repeat(4, 48px);
   gap: 4px;
-}
-.g-touch__emotes .g-emotes__pages {
-  grid-column: 1 / -1;
-  flex-direction: row;
-  margin: 0 0 2px;
-}
-.g-touch__emotes .g-emotes__page {
-  flex: 1;
-  min-height: 32px;
-  font-size: 12px;
 }
 
 /* ── narrow screens ───────────────────────────────────────────────────── */
@@ -1910,18 +1929,18 @@
   gap: 10px;
   pointer-events: auto;
 }
-.g-boosts.is-rail {
+.g-boosts-dock {
   position: absolute;
-  /* centred over the 140 px minimap */
-  right: calc(var(--hud-gap) + 47px + env(safe-area-inset-right, 0px));
+  /* a small row of 40 px buttons above the minimap, so it never reaches the standings */
+  right: calc(var(--hud-gap) + env(safe-area-inset-right, 0px));
   bottom: calc(var(--hud-gap) + 182px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  justify-content: flex-end;
+}
+.g-boosts.is-rail {
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
-}
-/* desktop rail: a small row of 40 px buttons above the minimap, so it never reaches the standings */
-.g-boosts.is-rail {
-  right: calc(var(--hud-gap) + env(safe-area-inset-right, 0px));
 }
 .g-boosts.is-rail .g-boost {
   width: 40px;
@@ -1966,7 +1985,7 @@
     flex-direction: column;
   }
 }
-.g-hud.is-desktop-small .g-boosts.is-rail {
+.g-hud.is-desktop-small .g-boosts-dock {
   right: calc(var(--hud-gap) + env(safe-area-inset-right, 0px));
   bottom: calc(var(--hud-gap) + env(safe-area-inset-bottom, 0px));
 }
