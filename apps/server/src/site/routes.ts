@@ -15,6 +15,7 @@ import { ShopFail, type ShopService } from '../shop/service';
 import { ShopSettingsError, type ShopSettingsStore } from '../shop/settings';
 import type { BoostInventory } from '../shop/inventory';
 import { migrationEnv, streamBackup } from './backup';
+import { ArenaScalingFail, type ArenaScaler } from '../rooms/arena-scaler';
 import { mapRoutes, type MapAdmin } from './maps';
 import { customRoomAdminRoutes, customRoomRoutes } from './custom-rooms';
 import type { CustomRoomService } from '../rooms/custom';
@@ -145,6 +146,8 @@ export class SiteApi {
   private integrity: IntegrityService | null = null;
   /** Map settings and live room counts (`/api/admin/maps`); absent in bare unit tests. */
   private maps: MapAdmin | null = null;
+  /** The arena instance scaler (`/api/admin/arena-scaling`); absent in bare unit tests. */
+  private scaler: ArenaScaler | null = null;
   /** Custom rooms (`/api/rooms/custom/*`, `/api/admin/custom-rooms`); absent in bare unit tests. */
   private customRooms: CustomRoomService | null = null;
   /** The power-up shop (`/api/shop`, `/api/shop/buy`, `/api/admin/shop`); absent in bare unit tests. */
@@ -187,6 +190,10 @@ export class SiteApi {
 
   setMaps(admin: MapAdmin | null): void {
     this.maps = admin;
+  }
+
+  setScaler(scaler: ArenaScaler | null): void {
+    this.scaler = scaler;
   }
 
   /** The game server's load per thread (`GET /api/admin/load`, `NetworkInfo.load`). */
@@ -706,6 +713,21 @@ export class SiteApi {
       case 'custom-rooms':
         if (seg.length > 2 || !this.customRooms) break;
         return customRoomAdminRoutes(this.customRooms, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, seg.slice(1), wallet);
+      case 'arena-scaling': {
+        // the arena instance scaler: its settings (thresholds, min / max instances), every arena's instances, its decisions
+        const scaler = this.scaler;
+        if (seg.length !== 1 || !scaler) break;
+        if (this.method(req, 'GET', 'PUT') === 'PUT') {
+          try {
+            scaler.store.update(await readJson(req));
+          } catch (err) {
+            if (err instanceof ArenaScalingFail) throw new SiteFail(400, 'bad_request', err.message, err.field);
+            throw err;
+          }
+          this.ext.log?.(`arena scaling: settings updated by ${wallet}`);
+        }
+        return send(res, 200, scaler.view());
+      }
       case 'maps':
         if (seg.length !== 1 || !this.maps) break;
         return mapRoutes(this.maps, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, wallet);

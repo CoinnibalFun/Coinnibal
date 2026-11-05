@@ -10,6 +10,7 @@ import {
 } from "@elymum/shared";
 import { useCallback, useEffect, useState } from "react";
 import { SiteApiError, type MapAdminView, type MapSettingsPatch } from "../site/api";
+import { ArenaScalingCard } from "./ArenaScalingCard";
 import { ArenaTab } from "./ArenaTab";
 import { CustomRoomsCard } from "./CustomRoomsCard";
 import { LeaderboardCard } from "./LeaderboardCard";
@@ -378,7 +379,7 @@ function NumCell({
 }
 
 /**
- * Game → maps: the adaptive map size per room kind and every room's live numbers. Arenas and practice ponds have
+ * Game → maps: the dynamic map size per room kind and every room's live numbers. Arenas and practice ponds have
  * people only; practice bots exist only in free custom rooms (their creator turns them on).
  */
 export function MapsCard({ ctx }: { ctx: ChainCtx }) {
@@ -486,6 +487,7 @@ export function GameTab({ ctx }: { ctx: ChainCtx }) {
     <div className="ad-game">
       <StartStopCard ctx={ctx} />
       <MapsCard ctx={ctx} />
+      <ArenaScalingCard ctx={ctx} />
       <CustomRoomsCard ctx={ctx} />
       <ShopCard ctx={ctx} />
       <LeaderboardCard ctx={ctx} />

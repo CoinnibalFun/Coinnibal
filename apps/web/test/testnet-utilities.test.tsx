@@ -2,6 +2,8 @@ import type { StatusSnapshot } from '@elymum/sdk/ops';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ARENA_SCALING_DEFAULT, ARENA_SCALING_LIMITS, type ArenaScalingView } from '@elymum/shared';
+import { ArenaScalingCard, scalingPatch } from '../src/admin/ArenaScalingCard';
 import { MapsCard, mapsPatch } from '../src/admin/GameTab';
 import { adminHash, groupSummary, parseAdminHash } from '../src/admin/groups';
 import { ImportHoldersCard } from '../src/admin/MintTab';
@@ -364,5 +366,46 @@ describe('admin groups', () => {
     ({ restore } = mockFetch({}));
     ui(<MapsCard ctx={ctxOf({ api: adminApi('t') })} />);
     expect(await screen.findByText(/no map settings route yet/)).toBeTruthy();
+  });
+
+  const SCALING: ArenaScalingView = {
+    settings: { ...ARENA_SCALING_DEFAULT },
+    defaults: { ...ARENA_SCALING_DEFAULT },
+    limits: ARENA_SCALING_LIMITS,
+    arenas: [
+      {
+        arenaId: 1,
+        name: 'Asphodel Meadow',
+        fillPct: 90,
+        fullHits: 2,
+        lastActionAt: null,
+        instances: [
+          { id: 'arena-1-1', instance: 1, people: 50, capacity: 50, draining: false, thread: 'w0' },
+          { id: 'arena-1-2', instance: 2, people: 4, capacity: 50, draining: true, thread: 'w1' },
+        ],
+      },
+    ],
+    log: [{ at: Date.UTC(2026, 10, 5, 12, 0, 5), arenaId: 1, action: 'drain', room: 'arena-1-2', reason: 'peak fill 20 % under 35 % for 10 min', people: 54, instances: 1 }],
+  };
+
+  it('arena instances: shows every instance (draining marked, its worker) and the decisions; saves only what changed', async () => {
+    let put: unknown = null;
+    ({ restore } = mockFetch({
+      'GET /api/admin/arena-scaling': SCALING,
+      'PUT /api/admin/arena-scaling': (c: { body: unknown }) => {
+        put = c.body;
+        return { ...SCALING, settings: { ...SCALING.settings, maxInstances: 8 } };
+      },
+    }));
+    ui(<ArenaScalingCard ctx={ctxOf({ api: adminApi('t') })} />);
+    const table = await screen.findByTestId('scaling-table');
+    expect(table.textContent).toContain('#1 50/50 · w0');
+    expect(table.textContent).toContain('#2 4/50 draining · w1');
+    expect(screen.getByTestId('scaling-log').textContent).toMatch(/Draining arena-1-2: peak fill 20 % under 35 % for 10 min/);
+    expect((screen.getByTestId('scaling-save') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Max instances per arena'), { target: { value: '8' } });
+    fireEvent.click(screen.getByTestId('scaling-save'));
+    await waitFor(() => expect(put).toEqual({ maxInstances: 8 }));
+    expect(scalingPatch(SCALING.settings, { ...SCALING.settings, enabled: false, lowPct: 20 })).toEqual({ enabled: false, lowPct: 20 });
   });
 });

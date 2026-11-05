@@ -473,3 +473,55 @@ describe('room workers: practice bots', () => {
     }
   }, 60_000);
 });
+
+describe('room workers: arena instance scaling', () => {
+  it('an overflow instance opens on a worker; drained once empty, it closes there after its bell settled it', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-scale-'));
+    const ch = new FakeChain();
+    const base = Date.now();
+    let off = roundAt(base).startsAt + 2_000 - base;
+    const now = () => Date.now() + off;
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '2', ARENA_INSTANCE_CAP: '1' } as NodeJS.ProcessEnv);
+    const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true, now });
+    const p = await a.listen();
+    try {
+      a.rooms.scaler.store.update({ lowMin: 1, cooldownMin: 0 });
+      const w1 = testWallet(0xb001);
+      const w2 = testWallet(0xb002);
+      ch.sessions.set(`1:${w1}`, ticket(w1));
+      const t2 = ticket(w2);
+      ch.sessions.set(`1:${w2}`, t2);
+      const c1 = await Client.open(p, a.auth.issueToken(w1));
+      c1.send({ t: 'join', room: 'arena:1', name: 'One', skin: 0 });
+      expect((await c1.wait('joined')).room.id).toBe('arena-1-1');
+      const c2 = await Client.open(p, a.auth.issueToken(w2));
+      c2.send({ t: 'join', room: 'arena:1', name: 'Two', skin: 0 });
+      // one seat per instance: the second ticket overflows into a new instance, placed on a worker
+      expect((await c2.wait('joined')).room.id).toBe('arena-1-2');
+      const second = a.rooms.get('arena-1-2') as RemoteRoom;
+      expect(second).toBeInstanceOf(RemoteRoom);
+      expect(a.rooms.scaler.log()[0]).toMatchObject({ action: 'overflow', room: 'arena-1-2' });
+      // the bell settles both tickets (once each, on the main thread)
+      const r = roundAt(now());
+      off += r.endsAt + 50 - now();
+      await c2.wait('roundOver', 5000);
+      await until(() => a.journal.settlements().filter((s) => s.key === t2.key).length === 1);
+      await until(() => a.rooms.arenaInstances(1).every((x) => x.humanCount === 0 && x.liveSessions().length === 0));
+      // a minute of an empty #2: it drains, and its worker closes it (its spectator goes to the lobby)
+      const t = now();
+      for (let k = 0; k <= 13; k++) a.rooms.scaler.step(t + k * 5000);
+      expect(a.rooms.scaler.log().some((x) => x.action === 'drain' && x.room === 'arena-1-2')).toBe(true);
+      const closed = await c2.wait('error', 5000, (m) => m.code === 'room_closed');
+      expect(closed.message).toMatch(/instance closed/);
+      await until(() => a.rooms.get('arena-1-2') === undefined);
+      a.rooms.scaler.step(t + 15 * 5000);
+      expect(a.rooms.scaler.log()[0]).toMatchObject({ action: 'close', room: 'arena-1-2' });
+      expect(a.rooms.get('arena-1-1')).toBeDefined();
+      expect(a.journal.settlements().filter((s) => s.key === t2.key)).toHaveLength(1);
+      c1.ws.close();
+      c2.ws.close();
+    } finally {
+      await a.close();
+    }
+  }, 60_000);
+});

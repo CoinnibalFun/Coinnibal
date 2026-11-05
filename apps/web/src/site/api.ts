@@ -1,4 +1,6 @@
 import type {
+  ArenaScalingSettings,
+  ArenaScalingView,
   CustomRoomSettings,
   MapScaleSettings,
   CustomRoomView,
@@ -305,7 +307,11 @@ export function adminApi(token: string) {
     avatars: (limit = 200) => request<{ items: AdminAvatarEntry[]; total: number }>(`/api/admin/avatars${q({ limit })}`, { token }),
     /** `DELETE /api/admin/avatars/<wallet>`: removes (and blocks) the wallet's picture; its coin goes back to the basic skin. */
     removeAvatar: (wallet: string) => request<{ removed: string }>(`/api/admin/avatars/${id(wallet)}`, { method: 'DELETE', token }),
-    /** `GET /api/admin/maps`: the adaptive map settings per room kind, their defaults and every room's live numbers. */
+    /** `GET /api/admin/arena-scaling`: the arena instance scaler's settings, every arena's instances and its decisions. */
+    arenaScaling: () => request<ArenaScalingView>('/api/admin/arena-scaling', { token }),
+    /** `PUT /api/admin/arena-scaling`: a partial update of the settings; answers like the GET. */
+    saveArenaScaling: (patch: Partial<ArenaScalingSettings>) => request<ArenaScalingView>('/api/admin/arena-scaling', { method: 'PUT', token, body: patch }),
+    /** `GET /api/admin/maps`: the dynamic map settings per room kind, their defaults and every room's live numbers. */
     maps: () => request<MapAdminView>('/api/admin/maps', { token }),
     /** `PUT /api/admin/maps`: a partial update (per room kind); answers like the GET. */
     saveMaps: (patch: MapSettingsPatch) => request<MapAdminView>('/api/admin/maps', { method: 'PUT', token, body: patch }),

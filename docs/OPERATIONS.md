@@ -19,7 +19,7 @@ price at $1.
 | **Launch** | The live checklist: chain, server key gas, contracts deployed and registered, token, arenas, allowlist root, $1 price, mint phase, game access. Each line links to the tab that fixes it |
 | **Setup** | The deploy wizard (ElymumArena v3, ElymumNFT and, on the testnet, the TestToken), Finish setup, holder perks, the TestToken faucet, register an already deployed contract |
 | **Mint** | Phase (closed / allowlist / public), publish the allowlist root, Sync to $1, price bounds and keeper, per-wallet limits, max supply (down only), base URI and freeze, contract URI, royalty, treasury, withdraw, owner mint |
-| **Game** | Who may play, pause and per-arena open / close, map sizes, custom rooms, power-ups, leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance |
+| **Game** | Who may play, pause and per-arena open / close, map sizes, arena instances (auto-scaling), custom rooms, power-ups, leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance |
 | **Play** | Play the arenas yourself before launch |
 | **WL**, **Tasks**, **Collabs** | The whitelist applications, the WL steps, the community collabs |
 | **Integrity** | Cheat and collusion flags, bans, held payouts, detector settings |
@@ -268,6 +268,42 @@ journaled as a sweep and sent with `sweepLoot(arenaId, sweepId, amount)`, which 
   with backoff. Check the arena in `/admin` → Arena before doing anything.
 - `sweepLoot` is capped only by the vault (the same trust as a payout): **protect the server key**.
 - Unplayed tickets are cancelled with their full entry fee after `STALE_SESSION_AFTER_S` (15 minutes).
+
+## Arena instances (auto-scaling)
+
+Each official arena (ticket tier) runs as public instances `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) seats
+on the same vault. The scaler (`apps/server/src/rooms/arena-scaler.ts`, rules in
+`packages/shared/src/arena-scaling.ts`) samples every 5 s and decides per arena:
+
+- **Seating:** a ticket goes to the fullest instance taking seats that is not full (rooms stay lively). When every
+  one is full a draining instance is taken back first, else a new instance opens on the least-loaded room worker.
+  At the maximum a bought ticket still gets a seat (an `overflow`, logged): a paid ticket is never left waiting.
+- **Scale up** (ahead of demand, up to `maxInstances`): an instance reached capacity `fullHits` times in
+  `windowMin` minutes while the arena was at least `highPct` % full, or the arena stayed at least `highPct` % full
+  for `sustainMin` minutes.
+- **Scale down** (down to `minInstances`): the arena's peak fill over `lowMin` minutes stayed under `lowPct` %, and
+  one instance fewer would still hold that peak under `highPct` %. The emptiest extra instance (never #1) starts
+  **draining**: it takes no new seat, its people play on, their tickets settle at the bell like everywhere else, and
+  it closes once nothing of value is left in it (no player, ticket or loot); its spectators go back to the lobby.
+  Nobody is evicted.
+- **Hysteresis:** `lowPct` must stay below `highPct`, a consolidation must leave room under the busy line, and the
+  scaler's own moves are at most one per arena per `cooldownMin` minutes.
+
+| Setting | Default | Range |
+|---|---|---|
+| Scale ahead of demand (`enabled`; off: overflow only, and only empty extra instances close) | on | on / off |
+| `minInstances` / `maxInstances` per arena | 1 / 6 | 1..10 / 1..20 |
+| `fullHits` in `windowMin` | 3 in 10 min | 1..50 / 1..120 |
+| `highPct` for `sustainMin` | 80 % for 2 min | 10..100 / 1..60 |
+| `lowPct` for `lowMin` | 35 % for 10 min | 0..90 / 1..240 |
+| `cooldownMin` | 3 min | 0..60 |
+
+`/admin` → Game → **Arena instances** (`GET` / `PUT /api/admin/arena-scaling`, stored in
+`DATA_DIR/site/arena-scaling.json`, applied at the next sample): the settings, every arena's instances (people /
+seats, draining, the worker each runs on) and the last 100 decisions (`open`, `overflow`, `drain`, `undrain`,
+`close`, each with its reason). `pnpm -F @elymum/server arena-sim` plays arrival waves against the real room
+directory and prints the instances minute by minute and every decision, then checks that every seated ticket was
+settled exactly once.
 
 ## Pausing and emergencies
 

@@ -182,7 +182,9 @@ Off chain (the server; tests in `apps/server/test`):
   holders are wallets with `balanceOf > 0` on the NFT (cached 15 s, re-read uncached at every arena seat) plus the
   admins. On the testnet the default is `public`.
 - **Rooms** (`rooms/manager.ts`, `rooms/room.ts`): practice ponds (Rookie and Pro leagues, 40 people), arena
-  instances `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) people on the same vault; rounds of 300 s aligned to Unix
+  instances `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) people on the same vault, opened ahead of demand and
+  drained when quiet by the instance scaler (`rooms/arena-scaler.ts`, OPERATIONS.md "Arena instances"; a draining
+  instance takes no new seat and closes after its bell, nobody is evicted); rounds of 300 s aligned to Unix
   time, joins closed in the final 60 s. **No bots in practice ponds or arenas.** Maps grow with every person and
   shrink back only when safe (base + per person, at most max; `rooms/map-settings.ts`, `DATA_DIR/site/maps.json`, `/api/admin/maps`).
 - **Practice bots** (`bots/brain.ts`, `bots/practice.ts`): only in **free custom rooms**, when the creator turns them
