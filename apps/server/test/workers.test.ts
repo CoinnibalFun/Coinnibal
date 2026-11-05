@@ -358,6 +358,8 @@ describe('room workers: shutdown', () => {
     const t = ticket(w);
     ch.sessions.set(`1:${w}`, t);
     const c = await Client.open(p, a.auth.issueToken(w));
+    // the arena opens once the chain's arena list is read: join only when it is there (slow on a busy CI machine)
+    await until(() => !!a.rooms.get('arena-1-1'), 15_000);
     c.send({ t: 'join', room: 'arena:1', name: 'Leaver', skin: 0 });
     await c.wait('joined', 15_000);
     await until(() => a.journal.live().some((l) => l.session === t.key));
@@ -382,6 +384,8 @@ describe('room workers: a hung worker', () => {
       const t = ticket(w);
       ch.sessions.set(`1:${w}`, t);
       const c = await Client.open(p, a.auth.issueToken(w));
+      // the arena opens once the chain's arena list is read: join only when it is there (slow on a busy CI machine)
+      await until(() => !!a.rooms.get('arena-1-1'), 15_000);
       c.send({ t: 'join', room: 'arena:1', name: 'Stuck', skin: 0 });
       await c.wait('joined', 15_000);
       await until(() => a.journal.live().some((l) => l.session === t.key));
