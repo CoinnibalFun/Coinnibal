@@ -18,8 +18,9 @@ import { fakeConn } from './helpers';
 const FEE = 1_000_000;
 const ROUND = { roundMs: 300_000, closeMs: 60_000 };
 
-function arena(o: { reserve?: number; bank?: boolean; seed?: number } = {}) {
+function arena(o: { reserve?: number; bank?: boolean; seed?: number; breakMs?: number } = {}) {
   const journal = new Journal(null);
+  const lb = new Leaderboards(null);
   if (o.reserve) journal.commit({ house: [{ arenaId: 1, amount: o.reserve }] });
   const clock = { now: roundAt(1_791_000_000_000, ROUND.roundMs, ROUND.closeMs).startsAt + 500 };
   const bots = new BotSettingsStore(null, defaultBotSettings(loadConfig({}).bots)).options('arena');
@@ -28,10 +29,10 @@ function arena(o: { reserve?: number; bank?: boolean; seed?: number } = {}) {
     {
       chain: new NullChain(),
       journal,
-      leaderboards: new Leaderboards(null),
+      leaderboards: lb,
       log: () => {},
       now: () => clock.now,
-      round: ROUND,
+      round: { ...ROUND, breakMs: o.breakMs ?? 0 },
       ...(o.bank === false ? {} : { houseBank: { draw: async (a: number, amt: number) => journal.drawHouse(a, amt) } }),
     },
   );
@@ -42,7 +43,7 @@ function arena(o: { reserve?: number; bank?: boolean; seed?: number } = {}) {
       await Promise.resolve();
     }
   };
-  return { room, journal, clock, tick };
+  return { room, journal, clock, tick, lb };
 }
 
 let seq = 0;
@@ -104,8 +105,15 @@ describe('house bots play with a budget from the team reserve', () => {
     const t = arena({ reserve: 30 * FEE });
     await t.tick(30 * 20);
     const n = t.room.bots!.bots.size;
+    const p = t.room.join(fakeConn('wr'), stake());
     t.clock.now = roundAt(t.clock.now, ROUND.roundMs, ROUND.closeMs).endsAt;
     await t.tick();
+    // the bell's standings went on the public board: the person and the bots, best first
+    const board = t.lb.snapshot().rounds;
+    expect(board).toHaveLength(1);
+    expect(board[0]).toMatchObject({ arenaId: 1, entryFee: FEE, players: n + 1 });
+    expect(board[0].top.some((x) => x.name === p.name && !x.isBot)).toBe(true);
+    expect(board[0].top.filter((x) => x.isBot)).toHaveLength(Math.min(n, 9));
     expect(t.room.purseTotal()).toBe(0);
     expect(t.journal.houseByArena(1)).toBe(30 * FEE);
     await t.tick(30 * 60);
@@ -169,6 +177,22 @@ describe('an arena round and its squad', () => {
     expect(raw.kinds.practiceRookie).toMatchObject({ cap: 20 });
     expect(out.join(' ')).toMatch(/squad 6-9/);
   });
+});
+
+describe('the break after a bell', () => {
+  it('nobody walks in for the first 15 s of a round slot; then the squad comes in and joins stay open', async () => {
+    const t = arena({ reserve: 40 * FEE, breakMs: 15_000 });
+    const w = roundAt(t.clock.now, ROUND.roundMs, ROUND.closeMs, 15_000);
+    expect(w.opensAt).toBe(w.startsAt + 15_000);
+    expect(t.room.round()).toMatchObject({ n: w.n, opensAt: w.opensAt });
+    expect(t.room.inBreak()).toBe(true);
+    await t.tick(30 * 14);
+    expect(t.room.bots!.bots.size).toBe(0);
+    expect(t.room.bots!.joinsOpen()).toBe(false);
+    await t.tick(30 * 30);
+    expect(t.room.inBreak()).toBe(false);
+    expect(t.room.bots!.bots.size).toBeGreaterThanOrEqual(3);
+  }, 60_000);
 });
 
 describe('cover: a big bot looks after a small one', () => {

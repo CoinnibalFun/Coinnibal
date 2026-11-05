@@ -214,6 +214,8 @@ beforeAll(async () => {
     BOT_MAX: '6',
     // the game gate (site setting `gameAccess`) is covered in site.test.ts
     GAME_ACCESS: 'public',
+    // no break after a bell here (the break has its own test)
+    ROUND_BREAK_SECONDS: '0',
     // no PUBLIC_URL: only development derives the SIWE origin from the request host
     NODE_ENV: 'development',
     ...(WORKERS ? { GAME_WORKERS: String(WORKERS) } : {}),

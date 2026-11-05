@@ -42,7 +42,7 @@ export interface PoolDeps {
   leaderboards: Leaderboards;
   log: (m: string) => void;
   clock: RoundClock;
-  round: { roundMs: number; closeMs: number };
+  round: { roundMs: number; closeMs: number; breakMs?: number };
   /** The main thread's round clock minus `Date.now()` (non-zero only with an injected clock). */
   clockOffset: () => number;
   integrity?: IntegrityService;
@@ -380,6 +380,9 @@ export class WorkerPool {
         return;
       case 'lb':
         d.leaderboards.submit(c.rec);
+        return;
+      case 'roundBoard':
+        d.leaderboards.roundOver(c.r);
         return;
       case 'country':
         d.leaderboards.countryGame(c.g);
@@ -759,7 +762,7 @@ export class RemoteRoom implements RoomHandle {
   info(): RoomInfo {
     // the round comes from this thread's clock (the summary may be a second old)
     const r = this.opts.mode === 'arena' ? this.pool.round() : undefined;
-    const round = r ? { round: { n: r.n, endsAt: r.endsAt, joinsCloseAt: r.joinsCloseAt } } : {};
+    const round = r ? { round: { n: r.n, endsAt: r.endsAt, joinsCloseAt: r.joinsCloseAt, ...(r.opensAt > r.startsAt ? { opensAt: r.opensAt } : {}) } } : {};
     if (this.summary) return { ...this.summary.info, players: this.humanCount, ...round };
     const w = this.opts.world ?? WORLD_PRESETS[this.opts.mode];
     return {

@@ -8,7 +8,7 @@ import { RULES, roundAt, type RoundWindow } from '@elymum/shared';
 export class RoundClock {
   constructor(
     private readonly clock: () => number = Date.now,
-    readonly cfg: { roundMs: number; closeMs: number } = { roundMs: RULES.roundMs, closeMs: RULES.roundJoinCloseMs },
+    readonly cfg: { roundMs: number; closeMs: number; breakMs?: number } = { roundMs: RULES.roundMs, closeMs: RULES.roundJoinCloseMs, breakMs: RULES.roundBreakMs },
   ) {}
 
   now(): number {
@@ -17,6 +17,6 @@ export class RoundClock {
 
   /** The round running at `now`. */
   window(now = this.now()): RoundWindow {
-    return roundAt(now, this.cfg.roundMs, this.cfg.closeMs);
+    return roundAt(now, this.cfg.roundMs, this.cfg.closeMs, this.cfg.breakMs ?? 0);
   }
 }

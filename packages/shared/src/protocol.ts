@@ -208,6 +208,11 @@ export interface RoundInfo {
   endsAt: number;
   /** New joins are refused (`round_closed`) from this time until `endsAt`. */
   joinsCloseAt: number;
+  /**
+   * The break after the previous bell ends here: joins are refused (`round_closed`) before it.
+   * Old servers leave it out (no break).
+   */
+  opensAt?: number;
 }
 
 /** A row of the round-end standings (`roundOver`): stakers by value at the bell. */

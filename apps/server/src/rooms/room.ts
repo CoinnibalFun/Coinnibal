@@ -72,12 +72,12 @@ export type RoomIntegrity = Pick<IntegrityService, 'monitor' | 'join' | 'settle'
 export interface RoomDeps {
   chain: Pick<ChainGateway, 'kick'>;
   journal: RoomJournal;
-  leaderboards: Pick<Leaderboards, 'submit' | 'countryGame'>;
+  leaderboards: Pick<Leaderboards, 'submit' | 'countryGame'> & Partial<Pick<Leaderboards, 'roundOver'>>;
   log: (msg: string) => void;
   /** Wall clock (Unix ms) the arena rounds run on; defaults to `Date.now`. Tests inject their own. */
   now?: () => number;
   /** Arena round clock (defaults to `RULES.roundMs` / `RULES.roundJoinCloseMs`). */
-  round?: { roundMs: number; closeMs: number };
+  round?: { roundMs: number; closeMs: number; breakMs?: number };
   /**
    * The shared round clock (the room manager passes its own, so the gateway and every room
    * agree on the round). Without it the room builds one from `now` and `round`.
@@ -272,7 +272,11 @@ export class Room implements RoomHandle {
     if (this.bots) {
       // like a person, a bot cannot buy into a round whose joins have closed
       if (this.ledger) {
-        this.bots.joinsOpen = () => this.now() < this.clock.window().joinsCloseAt;
+        this.bots.joinsOpen = () => {
+          const now = this.now();
+          const r = this.clock.window(now);
+          return now >= r.opensAt && now < r.joinsCloseAt;
+        };
         this.bots.beforeArrival = (done) => this.admitBot(done);
       }
       const squad = squadIntel(this.world);
@@ -290,7 +294,12 @@ export class Room implements RoomHandle {
   round(now = this.now()): RoundInfo | undefined {
     if (!this.ledger) return undefined;
     const r = this.clock.window(now);
-    return { n: r.n, endsAt: r.endsAt, joinsCloseAt: r.joinsCloseAt };
+    return { n: r.n, endsAt: r.endsAt, joinsCloseAt: r.joinsCloseAt, ...(r.opensAt > r.startsAt ? { opensAt: r.opensAt } : {}) };
+  }
+
+  /** Arena rooms: the break after a bell (joins not open yet). */
+  inBreak(now = this.now()): boolean {
+    return !!this.ledger && now < this.clock.window(now).opensAt;
   }
 
   /**
@@ -930,6 +939,23 @@ export class Room implements RoomHandle {
       .map((e) => ({ e, p: this.world.players.get(e.pid) }))
       .sort((a, b) => b.e.value - a.e.value || (b.p?.totalMass() ?? 0) - (a.p?.totalMass() ?? 0));
     const top = ranked.slice(0, 10);
+    // the bell's standings go on the public "Last rounds" board (private paid rooms keep theirs to themselves)
+    if (!this.opts.custom && this.opts.stake && top.length > 0) {
+      this.deps.leaderboards.roundOver?.({
+        n: round,
+        endedAt: Date.now(),
+        arenaId: this.opts.stake.arenaId,
+        entryFee: this.opts.stake.buyIn,
+        players: holders.length,
+        top: top.map(({ e, p }) => ({
+          name: p?.name ?? '???',
+          value: e.value,
+          skin: p?.skin ?? 0,
+          ...(p?.isBot ? { isBot: true } : {}),
+          ...(p?.country ? { country: p.country } : {}),
+        })),
+      });
+    }
 
     const batch: JournalItem[] = [];
     const results: { conn: Conn; pid: number; payout: number; stats: DeathStats }[] = [];
@@ -1153,7 +1179,8 @@ export class Room implements RoomHandle {
       if (ev.coinRain === 'start') this.pushChat({ pid: 0, from: 'Elymum', skin: 1, text: 'COIN RAIN!', system: true });
     }
 
-    if (this.bots) {
+    // the break after a bell: the floor waits, the squad walks in once joins open (its minute starts then)
+    if (this.bots && !this.inBreak()) {
       if (this.ledger) squadIntel(world).roundLeftMs = Math.max(0, this.roundEndsAt - this.now());
       const { emotes } = this.bots.update(world.now, this.humans.size);
       for (const e of emotes) this.broadcast({ t: 'emote', pid: e.pid, id: e.id });
