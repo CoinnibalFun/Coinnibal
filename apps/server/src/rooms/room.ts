@@ -637,6 +637,7 @@ export class Room implements RoomHandle {
         player: e.player,
         arenaId: e.arenaId,
         value: e.value,
+        entryFee: e.entryFee,
         score: Math.floor(p?.stats.maxMass ?? 0),
         kills: p?.stats.playersEaten ?? 0,
       };
@@ -1313,6 +1314,7 @@ function settlementOf(
     session: entry.session,
     sessionId: entry.sessionId,
     payout: entry.value,
+    entryFee: entry.entryFee,
     score: o.score,
     kills: o.kills,
     xp: o.xp,

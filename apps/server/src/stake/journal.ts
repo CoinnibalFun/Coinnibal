@@ -23,6 +23,8 @@ export interface SettlementItem {
    * when sent). The arena contract takes its fee on the profit from it; this is what leaves the vault.
    */
   payout?: number;
+  /** The ticket's entry fee (ledger units), when known: what a refund after 24 h would take out of the vault. */
+  entryFee?: number;
   score: number;
   kills: number;
   xp: number;
@@ -41,6 +43,8 @@ export interface SettlementItem {
    * hold it again.
    */
   guardCleared?: boolean;
+  /** When this server first broadcast a transaction with this item (Unix ms): from then on it may be settled by us. */
+  sentAt?: number;
 }
 
 /**
@@ -52,6 +56,10 @@ export interface ForfeitRecord {
   key: string;
   player: string;
   arenaId: number | null;
+  /**
+   * Ledger units left in the vault, owed to nobody. Negative for a correction that took value out of what was
+   * counted there (a held ticket refunded after 24 h at an entry fee above its payout).
+   */
   amount: number;
   reason: string;
   by: string;
@@ -108,6 +116,8 @@ export interface LiveStake {
   player: string;
   arenaId: number;
   value: number;
+  /** The ticket's entry fee (ledger units); absent in older journals. */
+  entryFee?: number;
   score: number;
   kills: number;
 }
@@ -304,6 +314,7 @@ export class Journal {
       session: l.session,
       sessionId: l.sessionId,
       payout: l.value,
+      ...(l.entryFee !== undefined ? { entryFee: l.entryFee } : {}),
       score: l.score,
       kills: l.kills,
       xp: 0,
@@ -423,6 +434,19 @@ export class Journal {
   /** Highest sweep id this journal assigned for an arena (0 when none). */
   lastSweepId(arenaId: number): number {
     return this.sweepSeqV[String(arenaId)] ?? 0;
+  }
+
+  /** Marks settlements as sent (right before their batch is broadcast; persisted first). */
+  markSettleSent(keys: readonly string[], at = Date.now()): void {
+    const want = new Set(keys);
+    let changed = false;
+    for (const p of this.pendingItems) {
+      if (p.kind === 'settle' && want.has(p.key) && p.sentAt === undefined) {
+        p.sentAt = at;
+        changed = true;
+      }
+    }
+    if (changed) this.persist();
   }
 
   /** Records the transaction just sent for a sweep item. */
@@ -552,6 +576,24 @@ export class Journal {
     return { item, forfeit };
   }
 
+  /**
+   * A held settlement whose ticket the player refunded on chain (24 h after the join, at the entry fee): the item
+   * is dropped, and the difference between what it owed and what the refund took (payout − entry fee) is recorded
+   * as a forfeit in the same write, so the books keep matching the vault (a winner's surplus stays there, owed to
+   * nobody; a loser's refund took more than the ticket was worth). Returns the recorded amount (0: none).
+   */
+  dropRefunded(key: string, by: string, now = Date.now()): number {
+    const item = this.pendingItems.find((p) => p.key === key);
+    if (!item || item.kind !== 'settle') return 0;
+    this.pendingItems = this.pendingItems.filter((p) => p !== item);
+    const amount = item.entryFee === undefined ? 0 : (item.payout ?? 0) - item.entryFee;
+    if (amount !== 0) {
+      this.forfeitList.push({ key, player: item.player, arenaId: item.arenaId ?? null, amount, reason: 'held past 24 h: the player refunded the ticket at its entry fee', by, at: now });
+    }
+    this.persist();
+    return amount;
+  }
+
   /** Marks an item as done (settled on-chain or no longer applicable). */
   remove(key: string): void {
     const before = this.pendingItems.length;
@@ -663,7 +705,7 @@ function migrate(data: JournalFile | JournalFileV1): JournalFile {
   if (data.version !== 2 || !Array.isArray(data.loot)) throw new Error('bad journal shape');
   if (data.forfeits !== undefined) {
     if (!Array.isArray(data.forfeits)) throw new Error('bad journal shape');
-    for (const f of data.forfeits) if (typeof f?.key !== 'string' || !Number.isSafeInteger(f.amount) || f.amount < 0) throw new Error('bad forfeit record');
+    for (const f of data.forfeits) if (typeof f?.key !== 'string' || !Number.isSafeInteger(f.amount)) throw new Error('bad forfeit record');
   }
   for (const p of data.pending) {
     if ((p as { kind: string }).kind !== 'sweep') continue;

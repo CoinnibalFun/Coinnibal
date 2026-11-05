@@ -36,6 +36,7 @@ const steps = [
   ['sdk tests', ['pnpm', '-F', '@elymum/sdk', 'test']],
   ['server tests', ['pnpm', '-F', '@elymum/server', 'test']],
   ['server tests with room workers', ['pnpm', '-F', '@elymum/server', 'test:workers']],
+  ['server money simulation (conservation under faults; contract model + hardhat)', ['pnpm', '-F', '@elymum/server', 'test:money']],
   ['web tests', ['pnpm', '-F', '@elymum/web', 'test']],
   ...(fast ? [] : [['web build', ['pnpm', '-F', '@elymum/web', 'build']]]),
 ];

@@ -52,6 +52,10 @@ export class FakeEvm implements EvmClient {
   burned = 0n;
   /** Tokens the fee wallet received, base units. */
   toFeeWallet = 0n;
+  /** The chain's clock (Unix seconds): ticket open times and the 24 h refund. */
+  nowS: () => number = () => Math.floor(Date.now() / 1000);
+  /** Every ticket closure, in order: `Settled`, `Cancelled`, `Refunded` (24 h) and `Collected` (owed). */
+  closures: { name: 'Settled' | 'Cancelled' | 'Refunded' | 'Collected'; arenaId: number; player: Address; sessionId: bigint; amount: bigint }[] = [];
   /** Runs right before a `settle` is executed (lets a test change state between the pre-check and the tx). */
   beforeSettle: (() => void) | null = null;
   deployAt = 10n;
@@ -160,7 +164,7 @@ export class FakeEvm implements EvmClient {
       player: getAddress(player),
       id,
       entryFee: a.entryFee,
-      openedAt: opts.openedAt ?? Math.floor(Date.now() / 1000),
+      openedAt: opts.openedAt ?? this.nowS(),
       burnBps: this.config.burnBps,
       vaultBps: this.config.vaultBps,
       finalized: false,
@@ -169,6 +173,7 @@ export class FakeEvm implements EvmClient {
     this.sessions.set(`${arenaId}:${player.toLowerCase()}`, s);
     // no entry fee cut: the whole ticket price goes into the vault
     a.vault += a.entryFee;
+    a.totalDeposited += a.entryFee;
     a.openSessions += 1;
     this.block += 1n;
     this.joined.push({ arena: ARENA, arenaId, player: getAddress(player), sessionId: id, entryFee: a.entryFee, blockNumber: this.block });
@@ -284,9 +289,22 @@ export class FakeEvm implements EvmClient {
     } else if (call.functionName === 'refund') {
       const [arenaId] = call.args as [number];
       const s = this.sessions.get(`${arenaId}:${key}`);
-      if (!s?.finalized) throw revert('NothingToRefund');
-      this.addTokens(from, s.owed);
-      this.arenaMap.get(arenaId)!.owed -= s.owed;
+      if (!s) throw revert('NoSession');
+      const a = this.arenaMap.get(arenaId)!;
+      if (s.finalized) {
+        this.addTokens(from, s.owed);
+        a.owed -= s.owed;
+        this.closures.push({ name: 'Collected', arenaId, player: getAddress(from), sessionId: s.id, amount: s.owed });
+      } else {
+        // ElymumArena.refund: an unsettled ticket 24 h after its join pays min(entryFee, vault)
+        if (this.nowS() < s.openedAt + 24 * 3600) throw revert('RefundTooEarly');
+        const amount = s.entryFee < a.vault ? s.entryFee : a.vault;
+        a.vault -= amount;
+        a.openSessions -= 1;
+        a.totalPaidOut += amount;
+        this.addTokens(from, amount);
+        this.closures.push({ name: 'Refunded', arenaId, player: getAddress(from), sessionId: s.id, amount });
+      }
       this.sessions.delete(`${arenaId}:${key}`);
     } else {
       throw new Error(`FakeEvm: ${call.functionName} from a player key is not modelled`);
@@ -390,6 +408,7 @@ export class FakeEvm implements EvmClient {
     } else {
       this.addTokens(it.player, s.entryFee);
     }
+    this.closures.push({ name: 'Cancelled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, amount: s.entryFee });
     return { name: 'Cancelled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, amount: s.entryFee, collected };
   }
 
@@ -420,6 +439,7 @@ export class FakeEvm implements EvmClient {
     } else if (toPlayer > 0n) {
       this.addTokens(it.player, toPlayer);
     }
+    this.closures.push({ name: 'Settled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, amount: it.payout });
     return { name: 'Settled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, payout: it.payout, net, burned, toVault, collected };
   }
 

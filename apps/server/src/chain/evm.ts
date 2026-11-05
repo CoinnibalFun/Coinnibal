@@ -845,10 +845,17 @@ export class EvmChain implements ChainGateway {
       } catch {
         continue;
       }
-      if (s.id === BigInt(item.sessionId!) && !s.finalized) continue;
+      if (s.id === BigInt(item.sessionId!) && !s.finalized) {
+        // what a refund after 24 h would take out of the vault (older journals did not record it)
+        item.entryFee ??= toLedger(s.entryFee, this.token()!.decimals, 'floor');
+        continue;
+      }
       this.heldCheckedAt.delete(item.key);
-      this.journal.remove(item.key);
-      this.log(`!!! chain: held settlement ${short(item.key)} dropped — its ticket is no longer open on chain (the player refunded it after 24 h, or it was settled elsewhere)`);
+      const kept = this.journal.dropRefunded(item.key, 'chain');
+      this.log(
+        `!!! chain: held settlement ${short(item.key)} dropped — its ticket is no longer open on chain (the player refunded it after 24 h)` +
+          (kept ? `; ${this.units(Math.abs(kept))} ${kept > 0 ? 'stays in the vault (journaled as forfeited)' : 'more than its value left the vault (journaled)'}` : ''),
+      );
     }
     for (const k of this.heldCheckedAt.keys()) if (!this.isPending(k)) this.heldCheckedAt.delete(k);
   }
@@ -1001,7 +1008,7 @@ export class EvmChain implements ChainGateway {
         }
         const id = BigInt(item.sessionId!);
         if (s.id !== id) {
-          await this.dropFinished(item, s.id === 0n ? 'session already closed' : `on-chain session is #${s.id}, item is for #${id}`);
+          await this.dropFinished(item, s.id === 0n ? 'session already closed' : `on-chain session is #${s.id}, item is for #${id}`, true);
           return;
         }
         if (s.finalized) {
@@ -1055,6 +1062,8 @@ export class EvmChain implements ChainGateway {
     }
     let hash: Hash;
     try {
+      // from here on an item may be settled by this very transaction (even when the send seems to fail)
+      this.journal.markSettleSent(send.map((c) => c.item.key), this.now());
       hash = await client.send(call);
     } catch (err) {
       await this.onBatchError(send.map((c) => c.item), err);
@@ -1146,7 +1155,12 @@ export class EvmChain implements ChainGateway {
   }
 
   /** The session is gone (or re-opened, or finalized): drop the item, reporting our own earlier transaction if it settled it. */
-  private async dropFinished(item: SettlementItem, why: string): Promise<void> {
+  /**
+   * `closed`: the ticket is closed (or re-opened) on chain. When this server never sent the item, someone else
+   * closed it (the player's refund after 24 h, at the entry fee): `Journal.dropRefunded` keeps the books matching
+   * the vault.
+   */
+  private async dropFinished(item: SettlementItem, why: string, closed = false): Promise<void> {
     const hash = this.sentTx.get(item.key);
     if (hash) {
       const receipt = await this.client!.receipt(hash, this.arena, LATE_RECEIPT_TIMEOUT_MS).catch(() => null);
@@ -1164,6 +1178,14 @@ export class EvmChain implements ChainGateway {
       }
     }
     this.sentTx.delete(item.key);
+    if (closed && item.sentAt === undefined) {
+      const kept = this.journal.dropRefunded(item.key, 'chain');
+      this.log(
+        `!!! chain: dropping settlement ${short(item.key)} for ${short(item.player)} — ${why}, never sent by this server (refunded by the player after 24 h?)` +
+          (kept ? `; ${this.units(Math.abs(kept))} journaled as ${kept > 0 ? 'left in' : 'taken from'} the vault` : ''),
+      );
+      return;
+    }
     this.journal.remove(item.key);
     this.log(`chain: dropping settlement ${short(item.key)} for ${short(item.player)} — ${why} (already settled or refunded)`);
   }
@@ -1402,6 +1424,7 @@ export class EvmChain implements ChainGateway {
               session: key,
               sessionId: Number(s.id),
               payout: done.amount,
+              entryFee: toLedger(s.entryFee, t.decimals, 'floor'),
               score: 0,
               kills: 0,
               xp: 0,
@@ -1422,6 +1445,7 @@ export class EvmChain implements ChainGateway {
             session: key,
             sessionId: Number(s.id),
             payout: toLedger(s.entryFee, t.decimals, 'floor'),
+            entryFee: toLedger(s.entryFee, t.decimals, 'floor'),
             score: 0,
             kills: 0,
             xp: 0,
