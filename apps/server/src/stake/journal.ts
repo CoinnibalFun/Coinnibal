@@ -36,6 +36,11 @@ export interface SettlementItem {
    * `Journal.settleZero`). The chain worker never sends a held item; it still counts as owed.
    */
   held?: { at: number; score: number; why: string; flags: string[] };
+  /**
+   * An admin released this item after the chain worker's payout guard held it (`EvmChain`): the guard does not
+   * hold it again.
+   */
+  guardCleared?: boolean;
 }
 
 /**
@@ -90,6 +95,9 @@ export type JournalItem = SettlementItem | SweepItem;
 
 /** Ledger units a journal item still owes out of its arena vault. */
 export const itemAmount = (item: JournalItem): number => (item.kind === 'sweep' ? item.amount : (item.payout ?? 0));
+
+/** `held.flags` of an item the chain worker's payout guard held (`EvmChain`). */
+export const PAYOUT_GUARD_FLAG = 'payout_guard';
 
 export const sweepKey = (roomId: string, round: number): string => `sweep:${roomId}:${round}`;
 
@@ -270,8 +278,14 @@ export class Journal {
    * on its floors + Σ live ticket values (ledger units). The vault must hold at least this.
    */
   owedByArena(arenaId: number): number {
-    let sum = 0;
+    let sum = this.liveAndLootByArena(arenaId);
     for (const p of this.pendingItems) if (p.arenaId === arenaId) sum += itemAmount(p);
+    return sum;
+  }
+
+  /** Σ live ticket values + Σ floor loot of an arena (ledger units): `owedByArena` without the pending items. */
+  liveAndLootByArena(arenaId: number): number {
+    let sum = 0;
     for (const list of this.lootByRoom.values()) for (const l of list) if (l.arenaId === arenaId) sum += l.value;
     for (const list of this.liveByRoom.values()) for (const l of list) if (l.arenaId === arenaId) sum += l.value;
     return sum;
@@ -504,10 +518,23 @@ export class Journal {
    */
   release(key: string, now = Date.now()): SettlementItem {
     const item = this.heldItem(key);
+    if (item.held?.flags.includes(PAYOUT_GUARD_FLAG)) item.guardCleared = true;
     delete item.held;
     item.nextAttemptAt = now;
     this.persist();
     return item;
+  }
+
+  /**
+   * Holds a pending settlement for an admin decision (the chain worker's payout guard; the integrity auto-hold
+   * holds in the room's own write instead). Nothing moves between buckets. False when there is no such item.
+   */
+  hold(key: string, held: NonNullable<SettlementItem['held']>): boolean {
+    const item = this.pendingItems.find((p) => p.key === key);
+    if (!item || item.kind !== 'settle' || item.held) return false;
+    item.held = held;
+    this.persist();
+    return true;
   }
 
   /**
@@ -561,7 +588,43 @@ export class Journal {
     }
   }
 
+  /** The last write failed (disk full, permissions): retried with every change and every second. */
+  private persistFailing = false;
+  private persistRetry: NodeJS.Timeout | null = null;
+  private lastPersistWarn = 0;
+
+  /**
+   * Writes the whole journal. A failed write (disk full, ...) never throws into the room or chain code that
+   * changed it: the in-memory journal stays the truth, the failure is logged loudly, and the write is retried
+   * every second (and with every change) until it succeeds.
+   */
   private persist(): void {
+    if (!this.path) return;
+    try {
+      this.write();
+      if (this.persistFailing) this.log('journal: writes succeed again');
+      this.persistFailing = false;
+    } catch (err) {
+      this.persistFailing = true;
+      const now = Date.now();
+      if (now - this.lastPersistWarn > 30_000) {
+        this.lastPersistWarn = now;
+        this.log(`!!! journal: could not write ${this.path} (${(err as Error).message}) — money records are only in memory until it works again; free disk space now`);
+      }
+      this.persistRetry ??= setTimeout(() => {
+        this.persistRetry = null;
+        if (this.persistFailing) this.persist();
+      }, 1_000);
+      this.persistRetry.unref?.();
+    }
+  }
+
+  /** The journal could not be written lately (the records are only in memory). */
+  get writeFailing(): boolean {
+    return this.persistFailing;
+  }
+
+  private write(): void {
     if (!this.path) return;
     const data: JournalFile = {
       version: 2,

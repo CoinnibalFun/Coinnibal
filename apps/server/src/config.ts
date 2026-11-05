@@ -135,6 +135,11 @@ export interface ServerConfig {
      * (`POST /api/admin/mint/import-holders`). Default: the Robinhood Chain Testnet public RPC.
      */
     testnetRpcUrl: string;
+    /**
+     * `PAYOUT_GUARD_MULTIPLE` (default 100; 0 turns it off): a settlement paying a ticket more than this many entry
+     * fees is held for an admin decision instead of being sent (limits what a bug or a tampered journal can pay).
+     */
+    payoutGuardMultiple: number;
   };
   /**
    * NFT mint: the USD target (`MINT_USD_CENTS`, default 100) and the ETH/USD feed (`GAS_PRICE_URL`).
@@ -201,6 +206,9 @@ export function defaultPublicRpc(rpcUrl: string | null, publicRpcUrl: string | u
   const known = Object.values(NETWORKS).find((c) => c.rpcUrl === url && !/127\.0\.0\.1|localhost/.test(c.rpcUrl));
   return known?.rpcUrl ?? null;
 }
+
+/** `PAYOUT_GUARD_MULTIPLE` default: twice a full 50-seat arena instance of entry fees for one ticket. */
+export const PAYOUT_GUARD_MULTIPLE_DEFAULT = 100;
 
 const blank = (v: string | undefined): string | null => (v?.trim() ? v.trim() : null);
 
@@ -327,6 +335,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       rpcMaxRps: Math.max(0.2, Number(env.RPC_MAX_RPS) > 0 ? Number(env.RPC_MAX_RPS) : 4),
       rpcBurst: Math.max(1, int(env.RPC_BURST, 8)),
       testnetRpcUrl: blank(env.TESTNET_RPC_URL)?.replace(/\/+$/, '') ?? NETWORKS.testnet.rpcUrl,
+      payoutGuardMultiple: Math.max(0, int(env.PAYOUT_GUARD_MULTIPLE, PAYOUT_GUARD_MULTIPLE_DEFAULT)),
     },
     mint: {
       usdCents: Math.max(1, int(env.MINT_USD_CENTS, MINT_USD_CENTS_DEFAULT)),

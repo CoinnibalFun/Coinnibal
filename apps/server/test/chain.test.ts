@@ -449,13 +449,38 @@ describe('settlement worker (batched settle)', () => {
     expect(h.logs.join()).toMatch(/settled elsewhere/);
   });
 
+  it('books guard: nothing leaves a vault that does not cover what the journal owes; payouts resume when it does', async () => {
+    const h = await harness();
+    const a = wallet();
+    const b = wallet();
+    const sa = h.evm.join(1, a);
+    const sb = h.evm.join(1, b);
+    // the journal owes 6 entry fees out of a vault of 2: paying a first would pay it with b's (or anyone's) stake
+    h.journal.commit({ enqueue: [settleItem(sa, K), settleItem(sb, 5 * K, { createdAt: T0 + 1 })] });
+    await h.chain.processPending();
+    expect(settleCalls(h.evm)).toHaveLength(0);
+    expect(h.journal.pending.map((p) => p.lastError)).toEqual([expect.stringMatching(/books guard/), expect.stringMatching(/books guard/)]);
+    expect(h.logs.join()).toMatch(/arena #1 PAYOUTS STOPPED/);
+    expect(h.chain.booksGuard().get(1)).toMatch(/the vault holds/);
+    // items whose ticket already closed on chain do not count: the exact recount is what decides
+    h.evm.close(1, b);
+    h.clock.now += 60_000;
+    await h.chain.processPending();
+    expect(h.settled.map((e) => e.player)).toEqual([a]);
+    expect(h.chain.booksGuard().size).toBe(0);
+    expect(h.logs.join()).toMatch(/books add up again/);
+  });
+
   it('a skipped item (vault short) is retried with backoff; the rest of the batch settles', async () => {
     const h = await harness();
     const a = wallet();
     const b = wallet();
     const sa = h.evm.join(1, a);
     const sb = h.evm.join(1, b);
+    for (let i = 0; i < 4; i++) h.evm.join(1, wallet());
     h.journal.commit({ enqueue: [settleItem(sa, K), settleItem(sb, 5 * K, { createdAt: T0 + 1 })] });
+    // the vault covers the journal at the books check, then falls (e.g. other tickets refunded) before the batch
+    h.evm.beforeSettle = () => (h.evm.arenaMap.get(1)!.vault -= 4_000n * E18);
     await h.chain.processPending();
     expect(h.settled.map((e) => e.player)).toEqual([a]);
     const left = h.journal.pending[0] as SettlementItem;
@@ -679,7 +704,7 @@ describe('loot sweeps (sweepLoot burns, monotonic sweep ids)', () => {
     await h.chain.processPending();
     // round 7 is older and too big for the vault: it waits, and round 8 is not started before it
     expect(h.evm.sent).toHaveLength(0);
-    expect(h.journal.pending.find((p) => p.key === sweepKey('arena-1-1', 7))!.lastError).toMatch(/vault cannot cover/);
+    expect(h.journal.pending.find((p) => p.key === sweepKey('arena-1-1', 7))!.lastError).toMatch(/books guard|vault cannot cover/);
     expect((h.journal.pending.find((p) => p.key === sweepKey('arena-1-1', 8)) as SweepItem).sweepId).toBeUndefined();
     for (let i = 0; i < 5; i++) h.evm.join(1, wallet());
     h.clock.now += 600_000;

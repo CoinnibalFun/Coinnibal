@@ -228,6 +228,11 @@ export interface IntegrityOverview {
   bans: IntegrityBan[];
   /** When the detectors last ran (Unix ms). */
   scannedAt: number | null;
+  /**
+   * Arenas whose payouts the server's books guard stopped: the vault does not cover what the journal owes
+   * (nothing leaves such a vault until the books add up again). Empty when every arena is fine.
+   */
+  books: { arenaId: number; why: string }[];
 }
 
 export interface IntegrityWalletView {

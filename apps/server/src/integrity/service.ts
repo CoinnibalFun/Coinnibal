@@ -32,6 +32,8 @@ export interface IntegrityOptions {
   journal: Journal;
   /** Wakes the settlement worker after a release or a settle at 0. */
   kick: () => void;
+  /** Arenas the chain worker's books guard stopped (`EvmChain.booksGuard`); absent: none. */
+  books?: () => ReadonlyMap<number, string>;
   log?: (m: string) => void;
   /** Wall clock (Unix ms). */
   now?: () => number;
@@ -426,6 +428,27 @@ export class IntegrityService {
     this.opts.kick();
   }
 
+  /**
+   * Holds a pending (not yet sent) settlement for review by hand, e.g. the item behind a books-guard stop. It is
+   * then released or settled at 0 like any held item.
+   */
+  hold(key: string, reason: unknown, by: string): void {
+    if (typeof reason !== 'string' || reason.trim().length < 3 || reason.length > 500) throw new IntegrityError(400, 'bad_request', 'Give a reason (3 to 500 characters).', 'reason');
+    const ok = this.opts.journal.hold(key, { at: this.now(), score: 0, why: `held by ${by}: ${reason.trim()}`, flags: ['admin_hold'] });
+    if (!ok) throw new IntegrityError(404, 'not_found', 'No pending settlement with that key (or it is held already).');
+    this.log(`integrity: settlement ${key} HELD by ${by}: ${reason.trim()}`);
+  }
+
+  /** Pending settlements (not held), newest first: what the admin may hold by hand. */
+  pendingList(): IntegrityHeld[] {
+    return this.opts.journal
+      .settlements()
+      .filter((i) => !i.held)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 500)
+      .map((i) => ({ key: i.key, player: i.player, arenaId: i.arenaId ?? null, payout: i.payout ?? 0, reason: i.reason ?? null, createdAt: i.createdAt, heldAt: 0, score: 0, why: i.lastError ?? '', flags: [] }));
+  }
+
   /** Settles a held settlement at 0 (the value stays in the arena vault as a journaled forfeit). */
   settleZero(key: string, reason: unknown, by: string): number {
     if (typeof reason !== 'string' || reason.trim().length < 3 || reason.length > 500) throw new IntegrityError(400, 'bad_request', 'Give a reason (3 to 500 characters).', 'reason');
@@ -452,6 +475,7 @@ export class IntegrityService {
       held,
       bans: [...this.bans.values()].sort((a, b) => b.at - a.at),
       scannedAt: this.state.scannedAt,
+      books: [...(this.opts.books?.() ?? new Map<number, string>())].map(([arenaId, why]) => ({ arenaId, why })),
     };
   }
 

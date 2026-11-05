@@ -1,4 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { join } from 'node:path';
+import { AdminAudit } from './audit';
 import { AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, GAS_SYMBOL } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
@@ -174,7 +176,11 @@ export class SiteApi {
     this.admins = new Set(cfg.adminWallets.map((w) => w.toLowerCase()));
     this.avatarIp = limits.avatarIp ?? new Limiter(20, 60 * 60_000);
     this.avatarWallet = limits.avatarWallet ?? new Limiter(6, 60 * 60_000);
+    this.audit = new AdminAudit(ext.dataDir ? join(ext.dataDir, 'admin-audit.jsonl') : null, ext.log);
   }
+
+  /** Every admin write (`DATA_DIR/admin-audit.jsonl`, `GET /api/admin/audit`). */
+  readonly audit: AdminAudit;
 
   /** `fn(wallet)`: the wallet's picture was removed or replaced (the rooms take it off live coins). */
   onAvatarChange(fn: ((wallet: string) => void) | null): void {
@@ -278,7 +284,7 @@ export class SiteApi {
       else if (path.startsWith('/api/nft/')) await this.nftRoutes(req, res, url);
       else if (path.startsWith('/api/site/')) await this.siteRoutes(req, res, url, ip);
       else if (path.startsWith('/api/rooms/custom')) await this.customRoutes(req, res, path, ip);
-      else await this.adminRoutes(req, res, url);
+      else await this.audited(req, res, url, ip);
     } catch (err) {
       if (err instanceof SiteFail && err.status === 413) res.setHeader('Connection', 'close');
       if (err instanceof SiteFail) fail(res, err.status, { error: err.code, message: err.message, ...(err.field ? { field: err.field } : {}) });
@@ -556,6 +562,23 @@ export class SiteApi {
     throw new SiteFail(404, 'not_found', 'Not found');
   }
 
+  /** `adminRoutes` with every write of a signed-in admin recorded in the audit log (status included, failures too). */
+  private async audited(req: IncomingMessage, res: ServerResponse, url: URL, ip: string): Promise<void> {
+    const write = req.method !== 'GET' && req.method !== 'HEAD';
+    const wallet = write ? bearerWallet(this.auth, req) : null;
+    if (!write || !wallet || !this.isAdmin(wallet)) return this.adminRoutes(req, res, url);
+    let status = 500;
+    try {
+      await this.adminRoutes(req, res, url);
+      status = res.statusCode;
+    } catch (err) {
+      status = err instanceof SiteFail ? err.status : 500;
+      throw err;
+    } finally {
+      this.audit.record({ at: Date.now(), wallet, method: req.method ?? '?', path: url.pathname, status, ip });
+    }
+  }
+
   private async adminRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const wallet = this.session(req);
     if (!this.isAdmin(wallet)) throw new SiteFail(403, 'forbidden', 'This wallet is not an admin.');
@@ -567,6 +590,12 @@ export class SiteApi {
       case 'me':
         this.method(req, 'GET');
         return send(res, 200, { address: wallet, admin: true });
+      case 'audit': {
+        if (seg.length !== 1) break;
+        this.method(req, 'GET');
+        const limit = Math.min(5000, Math.max(1, Math.floor(Number(q.get('limit') ?? 500)) || 500));
+        return send(res, 200, { entries: this.audit.recent(limit) });
+      }
       case 'network': {
         if (seg.length !== 1 || !this.ext.chain) break;
         this.method(req, 'GET');

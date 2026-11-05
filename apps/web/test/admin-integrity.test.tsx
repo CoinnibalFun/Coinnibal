@@ -36,6 +36,7 @@ const overview = (over: Partial<IntegrityOverview> = {}): IntegrityOverview => (
   held: [{ key: KEY, player: B, arenaId: 1, payout: 5_000_000_000, reason: 'round', createdAt: 1, heldAt: Date.now(), score: 93, why: flag.summary, flags: [flag.id] }],
   bans: [],
   scannedAt: 1,
+  books: [],
   ...over,
 });
 

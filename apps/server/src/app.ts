@@ -190,6 +190,7 @@ export async function createApp(
     store: new IntegrityStore(integrityDir, { log }),
     journal,
     kick: () => chain.kick(),
+    books: () => (chain as Partial<{ booksGuard(): ReadonlyMap<number, string> }>).booksGuard?.() ?? new Map(),
     log,
   });
   site.setIntegrity(integrity);
