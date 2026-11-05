@@ -206,6 +206,13 @@ describe('sfx', () => {
       () => sfx.ouch(),
       () => sfx.roundTick(3),
       () => sfx.bell(),
+      () => sfx.land(true),
+      () => sfx.gulp(),
+      () => sfx.boost('leap'),
+      () => sfx.boost('speed'),
+      () => sfx.boost('invis'),
+      () => sfx.boost('magnet'),
+      () => sfx.jackpot(),
     ];
     for (const f of all) f();
     const peaks = ctx.nodes

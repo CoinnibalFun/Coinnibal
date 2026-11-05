@@ -202,6 +202,8 @@ export class BotBrain {
   private giveUpId = -1;
   private giveUpUntil = 0;
   private shootUntil = 0;
+  /** No offensive cactus shot before then. */
+  private cactusUntil = 0;
   private readonly shootTarget = { x: 0, y: 0 };
   private shooting = false;
   private readonly map = new ContextMap();
@@ -909,6 +911,34 @@ export class BotBrain {
       d.target.y = feedNow.y;
       d.eject = true;
       this.feedCount++;
+    }
+
+    /* ---------- cactus shot: pop a big person into pieces for the squad ---------- */
+    // a person too big to eat, a thorn bush between us and them: feed the bush until it flies at them
+    if (team && !d.split && !d.eject && P.skill > 0 && dangerLevel < 0.2 && now >= this.cactusUntil && total > RULES.ejectMinMass + 140) {
+      const popMass = RULES.virusMass * RULES.virusPopRatio * 1.5;
+      for (const h of others) {
+        if (h.player.isBot || h.mass < popMass || canEat(big.mass, h.mass)) continue;
+        let hit: Virus | null = null;
+        for (const v of viruses) {
+          const dV = Math.hypot(v.x - big.x, v.y - big.y);
+          if (dV < big.r + v.r + 50 || dV > big.r + 480) continue;
+          if (Math.hypot(h.x - v.x, h.y - v.y) > 750) continue;
+          if (Math.abs(angleDiff(angleTo(big.x, big.y, v.x, v.y), angleTo(v.x, v.y, h.x, h.y))) > 0.3) continue;
+          hit = v;
+          break;
+        }
+        if (!hit) continue;
+        this.shooting = true;
+        this.shootTarget.x = hit.x;
+        this.shootTarget.y = hit.y;
+        this.shootUntil = now + 1300;
+        this.cactusUntil = now + 15_000 + this.rng() * 10_000;
+        d.target.x = hit.x;
+        d.target.y = hit.y;
+        d.eject = true;
+        break;
+      }
     }
 
     // think a little sooner while in danger (good bots), never every tick

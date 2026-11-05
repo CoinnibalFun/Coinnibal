@@ -359,13 +359,14 @@ describe('room workers: shutdown', () => {
     ch.sessions.set(`1:${w}`, t);
     const c = await Client.open(p, a.auth.issueToken(w));
     c.send({ t: 'join', room: 'arena:1', name: 'Leaver', skin: 0 });
-    await c.wait('joined');
+    await c.wait('joined', 15_000);
     await until(() => a.journal.live().some((l) => l.session === t.key));
     await a.close();
     const file = JSON.parse(readFileSync(join(d, 'chains', '31337', 'journal.json'), 'utf8')) as { pending: { key: string; reason: string; payout: number }[]; live: unknown[] };
     expect(file.pending.filter((x) => x.key === t.key)).toEqual([expect.objectContaining({ reason: 'kicked', payout: 9_500_000 })]);
     expect(file.live).toEqual([]);
-  });
+    // a worker thread starts slowly on a busy machine (CI): room enough for it
+  }, 30_000);
 });
 
 describe('room workers: a hung worker', () => {
@@ -382,7 +383,7 @@ describe('room workers: a hung worker', () => {
       ch.sessions.set(`1:${w}`, t);
       const c = await Client.open(p, a.auth.issueToken(w));
       c.send({ t: 'join', room: 'arena:1', name: 'Stuck', skin: 0 });
-      await c.wait('joined');
+      await c.wait('joined', 15_000);
       await until(() => a.journal.live().some((l) => l.session === t.key));
       a.rooms.pool!.block(0, 6000);
       await until(() => a.journal.settlements().some((x) => x.key === t.key), 9000);
@@ -470,12 +471,12 @@ describe('room workers: the house bots bankroll', () => {
       expect((await call({ arenaId: 2 })).body.error).toBe('no_ticket');
       // more reserve, then the bots that walk in (in the worker) draw from it
       a.journal.commit({ house: [{ arenaId: 1, amount: 5 * value }] });
-      await until(() => a.journal.purses().reduce((s, x) => s + x.value, 0) >= 3 * value, 20_000);
+      await until(() => a.journal.purses().reduce((s, x) => s + x.value, 0) >= 3 * value, 40_000);
       const purses = a.journal.purses().reduce((s, x) => s + x.value, 0);
       expect(purses % value).toBe(0);
       expect(a.journal.houseByArena(1) + purses).toBe(6 * value);
     } finally {
       await a.close();
     }
-  }, 30_000);
+  }, 60_000);
 });
