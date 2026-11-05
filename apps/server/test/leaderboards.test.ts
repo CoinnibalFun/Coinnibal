@@ -55,3 +55,35 @@ describe('leaderboards: epochs and the reset', () => {
     expect(mem.reset('x', NOW)).toEqual({ daily: 1, allTime: 1, backup: null });
   });
 });
+
+describe('leaderboards: the last rounds', () => {
+  const row = (name: string, value: number, isBot = false) => ({ name, value, skin: 1, ...(isBot ? { isBot: true } : {}) });
+
+  it('keeps each bell newest first, merges instances of one arena, and survives a restart', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'elymum-rounds-'));
+    const path = join(dir, 'lb.json');
+    const lb = new Leaderboards(path);
+    lb.roundOver({ n: 10, endedAt: 1000, arenaId: 1, entryFee: 50, players: 2, top: [row('ann', 120), row('bo', 30, true)] });
+    lb.roundOver({ n: 10, endedAt: 1001, arenaId: 1, entryFee: 50, players: 1, top: [row('cy', 80)] });
+    lb.roundOver({ n: 11, endedAt: 2000, arenaId: 2, entryFee: 500, players: 1, top: [row('di', 900)] });
+    lb.roundOver({ n: 12, endedAt: 3000, arenaId: 1, entryFee: 50, players: 0, top: [] });
+    const r = lb.snapshot().rounds;
+    expect(r.map((x) => [x.n, x.arenaId])).toEqual([
+      [11, 2],
+      [10, 1],
+    ]);
+    expect(r[1].top.map((x) => x.name)).toEqual(['ann', 'cy', 'bo']);
+    expect(r[1].players).toBe(3);
+    expect(r[1].top[2].isBot).toBe(true);
+    lb.flush();
+    expect(new Leaderboards(path).snapshot().rounds).toEqual(r);
+  });
+
+  it('keeps the last 30 bells', () => {
+    const lb = new Leaderboards(null);
+    for (let n = 0; n < 40; n++) lb.roundOver({ n, endedAt: n * 1000, arenaId: 1, entryFee: 50, players: 1, top: [row('x', n)] });
+    const r = lb.snapshot().rounds;
+    expect(r).toHaveLength(30);
+    expect(r[0].n).toBe(39);
+  });
+});

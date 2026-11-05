@@ -44,7 +44,7 @@ export interface ServerConfig {
    * `RULES.roundJoinCloseMs`). Tests, the localnet e2e and demo recordings shorten it;
    * production uses the defaults. The closed window is at most half a round.
    */
-  round: { roundMs: number; closeMs: number };
+  round: { roundMs: number; closeMs: number; breakMs: number };
   authSecret: Buffer;
   /**
    * Admin wallets (`ADMIN_WALLETS`, comma-separated 0x addresses, EIP-55 checksummed here): a SIWE session of
@@ -214,13 +214,18 @@ const num = (v: string | undefined, d: number): number => {
   return v !== undefined && v.trim() !== '' && Number.isFinite(n) ? n : d;
 };
 
-/** `ROUND_SECONDS` / `ROUND_JOIN_CLOSE_SECONDS`: whole seconds, a round of at least 2 s, joins closed for at most half of it. */
-export function parseRoundConfig(env: NodeJS.ProcessEnv): { roundMs: number; closeMs: number } {
+/**
+ * `ROUND_SECONDS` / `ROUND_JOIN_CLOSE_SECONDS` / `ROUND_BREAK_SECONDS`: whole seconds, a round of at
+ * least 2 s, joins closed for at most half of it, the break after a bell at most a tenth of it.
+ */
+export function parseRoundConfig(env: NodeJS.ProcessEnv): { roundMs: number; closeMs: number; breakMs: number } {
   const roundS = Math.floor(num(env.ROUND_SECONDS, RULES.roundMs / 1000));
   const roundMs = Math.max(2, roundS) * 1000;
   const closeS = Math.floor(num(env.ROUND_JOIN_CLOSE_SECONDS, RULES.roundJoinCloseMs / 1000));
   const closeMs = Math.min(Math.max(0, closeS) * 1000, Math.floor(roundMs / 2000) * 1000);
-  return { roundMs, closeMs };
+  const breakS = Math.floor(num(env.ROUND_BREAK_SECONDS, RULES.roundBreakMs / 1000));
+  const breakMs = Math.min(Math.max(0, breakS) * 1000, Math.floor(roundMs / 10_000) * 1000);
+  return { roundMs, closeMs, breakMs };
 }
 
 const bool = (v: string | undefined, d: boolean): boolean => (v === undefined ? d : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase()));

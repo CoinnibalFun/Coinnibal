@@ -1,4 +1,4 @@
-import type { DeathStats, IntegrityTransfer, MapScaleSettings, RoomInfo } from '@elymum/shared';
+import type { DeathStats, IntegrityTransfer, MapScaleSettings, RoomInfo, RoundBoard } from '@elymum/shared';
 import type { BotManagerOptions } from '../../bots/manager';
 import type { StakedBotTicket } from '../../bots/staked';
 import type { SessionSummary } from '../../integrity/types';
@@ -16,7 +16,7 @@ import type { BellSettled, JoinOptions, RoomOptions } from '../room';
 /** Set once, through `workerData`. */
 export interface WorkerInit {
   index: number;
-  round: { roundMs: number; closeMs: number };
+  round: { roundMs: number; closeMs: number; breakMs?: number };
   /** The main thread's clock minus `Date.now()` (tests run the rounds on an injected clock). */
   clockOffset: number;
   /** Arena rooms run the integrity telemetry (the main thread has an `IntegrityService`). */
@@ -110,6 +110,7 @@ export type Ctl =
   | { k: 'bell'; e: BellSettled }
   | { k: 'lb'; rec: LbRecord }
   | { k: 'country'; g: CountryGame }
+  | { k: 'roundBoard'; r: RoundBoard }
   | { k: 'log'; m: string }
   /** A connection's state in a room changed: its player (or none) and whether it is still attached. */
   | { k: 'cs'; conn: number; hid: number; attached: boolean; pid: number | null }

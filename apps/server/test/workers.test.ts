@@ -166,6 +166,8 @@ beforeAll(async () => {
     BOT_MIN: '1',
     BOT_MAX: '4',
     GAME_ACCESS: 'public',
+    // no break after a bell here (the break has its own test)
+    ROUND_BREAK_SECONDS: '0',
     NODE_ENV: 'development',
     GAME_WORKERS: '2',
   } as NodeJS.ProcessEnv);
@@ -351,7 +353,7 @@ describe('room workers: shutdown', () => {
   it('a server stop settles the live tickets of every worker (an operator exit) before it returns', async () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-stop-'));
     const ch = new FakeChain();
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', NODE_ENV: 'development', GAME_WORKERS: '1' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
     const p = await a.listen();
     const w = testWallet(0xb001);
@@ -376,7 +378,7 @@ describe('room workers: a hung worker', () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-hang-'));
     const ch = new FakeChain();
     const logs: string[] = [];
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: (m) => logs.push(m), persist: true });
     const p = await a.listen();
     try {
@@ -454,7 +456,7 @@ describe('room workers: the house bots bankroll', () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-bank-'));
     const ch = new FakeChain();
     const admin = testWallet(0xa0a0);
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, ARENA_BOT_TARGET: '6', ARENA_BOT_MIN: '6', ARENA_BOT_MAX: '6', BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', NODE_ENV: 'development', GAME_WORKERS: '1', ADMIN_WALLETS: admin, TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, ARENA_BOT_TARGET: '6', ARENA_BOT_MIN: '6', ARENA_BOT_MAX: '6', BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', ADMIN_WALLETS: admin, TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
     const p = await a.listen();
     try {

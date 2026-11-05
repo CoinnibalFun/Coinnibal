@@ -233,15 +233,19 @@ export class Gateway {
   }
 
   /**
-   * New arena joins are refused from `joinsCloseAt` until the round ends (`round_closed` with
-   * `opensAt` = the end). Returns true when refused. Reconnects of a live staker never come here.
+   * New arena joins are refused from `joinsCloseAt` until the bell, and in the break after a bell
+   * (`round_closed` with `opensAt` = when joins open again; the client holds the ticket until then).
+   * Returns true when refused. Reconnects of a live staker never come here.
    */
   private roundClosed(conn: Conn): boolean {
     const now = this.rooms.now();
     const r = this.rooms.roundWindow(now);
-    if (now < r.joinsCloseAt) return false;
-    const secs = Math.max(1, Math.ceil((r.endsAt - now) / 1000));
-    this.error(conn, 'round_closed', `Joins are closed for the rest of this round. The next round opens in ${secs} s.`, { opensAt: r.endsAt });
+    if (now >= r.opensAt && now < r.joinsCloseAt) return false;
+    // in the break: this round opens soon; in the last minute: the next one opens after its break
+    const opensAt = now < r.opensAt ? r.opensAt : this.rooms.roundWindow(r.endsAt).opensAt;
+    const secs = Math.max(1, Math.ceil((opensAt - now) / 1000));
+    const what = now < r.opensAt ? 'The round opens after a short break' : 'Joins are closed for the rest of this round';
+    this.error(conn, 'round_closed', `${what}. The next round opens in ${secs} s.`, { opensAt });
     return true;
   }
 

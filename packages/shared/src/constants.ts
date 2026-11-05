@@ -105,6 +105,12 @@ export const RULES = {
   roundMs: 300_000,
   /** New arena joins close this long before a round ends (`round_closed` until the next round opens). */
   roundJoinCloseMs: 60_000,
+  /**
+   * The break at the start of every round slot: after the bell the payouts go out and people see
+   * the results; the floor opens to new joins `roundBreakMs` after the bell (a ticket bought in the
+   * break is held and seated when it opens).
+   */
+  roundBreakMs: 15_000,
 
   /**
    * Loot: when a bot eats a staker, the victim's tokens spill as
