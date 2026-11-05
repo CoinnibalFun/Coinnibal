@@ -237,6 +237,18 @@
   flex-direction: column;
   gap: 8px;
   max-width: 100%;
+  transition: opacity 0.18s ease-out;
+}
+/* idle a few seconds: semi-transparent over the floor (the pointer or a new line brings it back) */
+.g-feed.is-faded {
+  opacity: 0.3;
+  transition: opacity 0.9s ease-in;
+}
+@media (prefers-reduced-motion: reduce) {
+  .g-feed,
+  .g-feed.is-faded {
+    transition: none;
+  }
 }
 .g-kills {
   display: flex;
