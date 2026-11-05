@@ -11,6 +11,8 @@
     "build": "tsup",
     "test": "vitest run",
     "test:workers": "TEST_GAME_WORKERS=2 vitest run test/integration.test.ts test/workers.test.ts",
+    "test:money": "ELYMUM_MONEY_SIM=1 vitest run test/money-conservation.test.ts",
+    "money-sim": "tsx scripts/money-sim.ts",
     "load": "node --import tsx scripts/bench/load.ts",
     "typecheck": "tsc --noEmit",
     "integrity-sim": "tsx scripts/integrity-sim.ts",
