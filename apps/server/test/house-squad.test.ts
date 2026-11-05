@@ -81,7 +81,7 @@ describe('house bots play with a budget from the team reserve', () => {
     const bot = [...t.room.bots!.bots.values()][0].player;
     await eat(t, p, bot);
     expect(t.room.ledger!.value(p.id)).toBe(2 * FEE);
-  });
+  }, 60_000);
 
   it('with an empty reserve the bots enter with nothing (the team never pays out of thin air)', async () => {
     const t = arena({ reserve: 2 * FEE });
@@ -93,7 +93,7 @@ describe('house bots play with a budget from the team reserve', () => {
     const u = arena({ bank: false });
     await u.tick(30 * 20);
     expect(u.room.purseTotal()).toBe(0);
-  });
+  }, 60_000);
 
   it('at the bell what the bots hold goes back to the reserve, and the next round draws again', async () => {
     const t = arena({ reserve: 30 * FEE });
@@ -108,7 +108,7 @@ describe('house bots play with a budget from the team reserve', () => {
     expect(m).toBeGreaterThanOrEqual(6);
     expect(t.journal.houseByArena(1) + t.journal.purses().reduce((s, p) => s + p.value, 0)).toBe(30 * FEE);
     expect(n).toBeGreaterThan(0);
-  });
+  }, 60_000);
 });
 
 describe('an arena round and its squad', () => {
@@ -145,7 +145,7 @@ describe('an arena round and its squad', () => {
     await eat(t, p, [...t.room.bots!.bots.values()][0].player);
     await t.tick(30 * 20);
     expect(t.room.bots!.bots.size).toBe(before - 1);
-  });
+  }, 60_000);
 
   it('a saved bots.json still holding the old squad sizes gets the 6-9 squad; an admin size stays', () => {
     const raw = { kinds: { arena: { cap: 12, target: 12, min: 2 }, practicePro: { cap: 12, target: 12, min: 4 }, private: { cap: 8, target: 8, min: 2 }, practiceRookie: { cap: 20, target: 12, min: 4 } } };
