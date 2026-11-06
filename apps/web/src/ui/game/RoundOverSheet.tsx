@@ -3,7 +3,7 @@ import { AnimatePresence, motion, type TargetAndTransition } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon, Receipt, Sheet, Stamp, useReducedMotion, type ReceiptLine } from '../../design';
 import { FinalBoard } from './FinalBoard';
-import { ShareOnX, useShare } from './ShareOnX';
+import { EatenNames, ShareOnX, resultShareText, useShare } from './ShareOnX';
 import { engine } from '../../game/instance';
 import { roundStartLabel } from '../../game/round';
 import { useChainData } from '../../wallet/chain';
@@ -192,7 +192,17 @@ export function RoundOverSheet() {
             {t('gr.lobby')}
           </Button>
           {share && !exit && res?.stats?.finalRank && (
-            <ShareOnX id={share.id} text={t('share.result', { rank: res.stats.finalRank, n: res.stats.finalOf ?? res.stats.finalRank, room: roomName(room) })} />
+            <ShareOnX
+              id={share.id}
+              text={resultShareText(t, {
+                rank: res.stats.finalRank,
+                n: res.stats.finalOf ?? res.stats.finalRank,
+                room: roomName(room),
+                eaten: res.stats.eaten,
+                eatenMore: res.stats.eatenMore,
+                test: !!(share.test || room?.test),
+              })}
+            />
           )}
         </>
       }
@@ -223,6 +233,7 @@ export function RoundOverSheet() {
             {usd.stale && <span className="g-roundover__stale">{usd.setAt ? t('usd.stale', { h: PRICE_STALE_HOURS }) : t('usd.staleUnknown')}</span>}
           </p>
         )}
+        <EatenNames eaten={res?.stats?.eaten} more={res?.stats?.eatenMore} />
         {settled?.collect && (
           <p className="g-roundover__note" role="status">
             {t('gr.collect')}
