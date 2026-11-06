@@ -428,8 +428,12 @@ export class Gateway {
       return;
     }
     let wallet: string | null = null;
-    if (typeof msg.token === 'string') wallet = this.auth.verifyToken(msg.token);
-    else if (typeof msg.address === 'string' && typeof msg.message === 'string' && typeof msg.signature === 'string') {
+    let token: string | null = null;
+    if (typeof msg.token === 'string') {
+      wallet = this.auth.verifyToken(msg.token);
+      // a player's session slides on; an admin's short token comes back unchanged (never extended)
+      if (wallet) token = this.auth.refreshToken(msg.token);
+    } else if (typeof msg.address === 'string' && typeof msg.message === 'string' && typeof msg.signature === 'string') {
       wallet = await this.auth.verifySignature(msg.address, msg.message, msg.signature);
     }
     if (!wallet) {
@@ -438,7 +442,7 @@ export class Gateway {
     }
     conn.wallet = wallet;
     conn.profile = this.profiles?.summary(wallet) ?? null;
-    conn.send({ t: 'authed', address: wallet, token: this.auth.issueToken(wallet), profile: conn.profile });
+    conn.send({ t: 'authed', address: wallet, token: token ?? this.auth.issueToken(wallet), profile: conn.profile });
   }
 
   private async onJoin(conn: Conn, msg: Record<string, unknown>): Promise<void> {

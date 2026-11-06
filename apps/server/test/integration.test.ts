@@ -319,7 +319,7 @@ describe('server over websocket', () => {
     const got = await b.wait('chat', 2000, (m) => m.from === 'Alice');
     expect(got.text).toBe('gm frens');
     await sleep(1300);
-    a.send({ t: 'chat', text: 'free hype at https://scam.xyz' });
+    a.send({ t: 'chat', text: 'free tokens at https://scam.xyz' });
     const err = await a.wait('error', 2000, (m) => m.code === 'bad_request');
     expect(err.message).toMatch(/Links/);
     a.close();
@@ -740,7 +740,11 @@ describe('server over websocket', () => {
     const player = newWallet();
     const now = Date.now();
     app.journal.enqueue({ kind: 'settle', key: `Owed-${player}`, player: player, arenaId: 1, session: `Owed-${player}`, sessionId: 9, payout: 12_000_000, score: 1, kills: 0, xp: 0, attempts: 0, nextAttemptAt: now + 60_000, createdAt: now });
-    const res = (await (await fetch(`http://127.0.0.1:${port}/api/pending?wallet=${player}`)).json()) as unknown;
+    const url = `http://127.0.0.1:${port}/api/pending?wallet=${player}`;
+    // only that wallet's own session (or an admin's) reads it
+    expect((await fetch(url)).status).toBe(401);
+    expect((await fetch(url, { headers: { Authorization: `Bearer ${app.auth.issueToken(newWallet())}` } })).status).toBe(403);
+    const res = (await (await fetch(url, { headers: { Authorization: `Bearer ${app.auth.issueToken(player)}` } })).json()) as unknown;
     expect(res).toEqual({ pending: [{ key: `Owed-${player}`, arenaId: 1, payout: 12_000_000 }] });
     expect((await fetch(`http://127.0.0.1:${port}/api/pending?wallet=nope`)).status).toBe(400);
     app.journal.remove(`Owed-${player}`);
@@ -850,7 +854,7 @@ describe('server over websocket', () => {
     const otherTicket = session(other);
     chain.sessions.set(`1:${other}`, otherTicket);
     const o = await signedIn(other);
-    o.send({ t: 'join', room: 'arena:1', name: 'Official', skin: 0 });
+    o.send({ t: 'join', room: 'arena:1', name: 'Regular', skin: 0 });
     expect((await o.wait('joined')).room.id).toMatch(/^arena-1-\d+$/);
 
     // the bell: settled at value like any instance; value + the floor loot queued to burn = the entry fee
@@ -868,7 +872,7 @@ describe('server over websocket', () => {
     const lb = app.leaderboards.snapshot();
     expect([...lb.daily, ...lb.allTime].some((x) => x.name === 'TestArenaPlayer')).toBe(false);
     expect(lb.rounds.some((x) => x.top.some((t) => t.name === 'TestArenaPlayer'))).toBe(false);
-    expect(lb.rounds.some((x) => x.top.some((t) => t.name === 'Official'))).toBe(true);
+    expect(lb.rounds.some((x) => x.top.some((t) => t.name === 'Regular'))).toBe(true);
     expect(c.msgs.some((m) => m.t === 'share')).toBe(false);
     expect(o.msgs.some((m) => m.t === 'share')).toBe(true);
 

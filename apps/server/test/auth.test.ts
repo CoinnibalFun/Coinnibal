@@ -1,6 +1,6 @@
 import { SIWE_STATEMENT, siweMessage } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
-import { Auth, MAX_NONCES, MAX_NONCE_FAILURES, NONCE_TTL_MS, checksumAddress, loginMessage, type SiweOrigin } from '../src/auth';
+import { Auth, MAX_NONCES, MAX_NONCES_PER_CLIENT, MAX_NONCE_FAILURES, NONCE_TTL_MS, NonceLimitError, checksumAddress, loginMessage, type SiweOrigin } from '../src/auth';
 import { assertPublicUrl, loadConfig } from '../src/config';
 import { siweOrigin } from '../src/http';
 import { testSigner } from './signers';
@@ -171,5 +171,29 @@ describe('nonce map', () => {
     expect(await auth.verifySignature(address, first.message, await sign(first.message), 2)).toBeNull();
     const last = auth.issueNonce(address, origin, 3);
     expect(await auth.verifySignature(address, last.message, await sign(last.message), 4)).toBe(address);
+  });
+});
+
+describe('nonce pool under a flood', () => {
+  it('a flooding client fills only its own share; an honest sign-in started meanwhile still works', async () => {
+    const auth = new Auth(Buffer.alloc(32, 2));
+    const honest = testSigner();
+    const mine = auth.issueNonce(honest.address, origin, 1_000, '198.51.100.7');
+    // one client: refused past its cap, whatever addresses it names
+    let refused = 0;
+    for (let i = 0; i < 200; i++) {
+      try {
+        auth.issueNonce(testSigner().address, origin, 1_001, '203.0.113.9');
+      } catch (err) {
+        expect(err).toBeInstanceOf(NonceLimitError);
+        refused++;
+      }
+    }
+    expect(refused).toBe(200 - MAX_NONCES_PER_CLIENT);
+    // many clients (a botnet) fill the pool: the biggest holders lose their own nonces first
+    const someone = (i: number) => `0x${'1'.repeat(32)}${i.toString(16).padStart(8, '0')}`;
+    for (let i = 0; i < MAX_NONCES + 500; i++) auth.issueNonce(someone(i), origin, 1_002, `10.0.${(i >> 2) & 255}.${i & 3}`);
+    expect(auth.nonceCount).toBeLessThanOrEqual(MAX_NONCES);
+    expect(await auth.verifySignature(honest.address, mine.message, await honest.sign(mine.message), 2_000)).toBe(honest.address);
   });
 });

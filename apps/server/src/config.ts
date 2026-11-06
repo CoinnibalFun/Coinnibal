@@ -2,7 +2,7 @@ import { availableParallelism } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { CAPACITY, NETWORKS, RULES, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, type GameAccess } from '@elymum/shared';
+import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, type GameAccess } from '@elymum/shared';
 import { GAS_PRICE_URL_DEFAULT } from '@elymum/sdk';
 import { getAddress, isAddress } from 'viem';
 import { DEFAULT_ART_STYLE, parseArtStyle, type ArtStyle } from './site/nft/render';
@@ -53,6 +53,15 @@ export interface ServerConfig {
    */
   round: { roundMs: number; closeMs: number; breakMs: number };
   authSecret: Buffer;
+  /** `AUTH_SECRET` came from the environment (false: the generated `DATA_DIR/auth-secret`). */
+  authSecretFromEnv: boolean;
+  /** Lifetime of an admin wallet's session token (`ADMIN_TOKEN_TTL_MIN`, default 120, 5 to 1440). */
+  adminTokenTtlMs: number;
+  /**
+   * `ADMIN_SECRET_EXPORT=1`: `GET /api/admin/backup` and `/api/admin/migration-env` (they hand out the server key)
+   * work on the mainnet. Off by default there; on a testnet they work unless `ADMIN_SECRET_EXPORT=0`.
+   */
+  adminSecretExport: boolean | null;
   /**
    * Admin wallets (`ADMIN_WALLETS`, comma-separated 0x addresses, EIP-55 checksummed here): a SIWE session of
    * one of them may use `/api/admin/*` and always play. No default: unset means nobody is admin (logged loudly).
@@ -201,6 +210,21 @@ export function assertPublicUrl(cfg: Pick<ServerConfig, 'publicUrl' | 'nodeEnv'>
   );
 }
 
+/** The least `AUTH_SECRET` may hold (bytes): it signs every session token, so it must not be guessable. */
+export const AUTH_SECRET_MIN_BYTES = 32;
+
+/**
+ * A weak `AUTH_SECRET` (under `AUTH_SECRET_MIN_BYTES` bytes) lets anyone who guesses it forge an admin session
+ * offline. On the mainnet (`CHAIN_ID=4663`) the server refuses to start with one; elsewhere it returns the
+ * warning to log (null: fine). The generated `DATA_DIR/auth-secret` (64 hex characters) always passes.
+ */
+export function checkAuthSecret(cfg: Pick<ServerConfig, 'authSecret' | 'authSecretFromEnv' | 'chain'>): string | null {
+  if (!cfg.authSecretFromEnv || cfg.authSecret.length >= AUTH_SECRET_MIN_BYTES) return null;
+  const msg = `AUTH_SECRET is ${cfg.authSecret.length} byte(s): it must be at least ${AUTH_SECRET_MIN_BYTES} (e.g. openssl rand -hex 32), or unset to use a generated one`;
+  if (cfg.chain.chainId === ROBINHOOD_CHAIN_ID) throw new Error(`${msg}; refusing to start on the mainnet`);
+  return `!!! ${msg} (a mainnet server refuses to start with it)`;
+}
+
 export function invalidAdminWallets(v: string | undefined): string[] {
   return (v ?? '')
     .split(',')
@@ -323,6 +347,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     gameWorkerHangMs: Math.max(2, int(env.GAME_WORKER_HANG_S, 10)) * 1000,
     round: parseRoundConfig(env),
     authSecret: secret,
+    authSecretFromEnv: !!env.AUTH_SECRET,
+    adminTokenTtlMs: Math.min(1440, Math.max(5, int(env.ADMIN_TOKEN_TTL_MIN, 120))) * 60_000,
+    adminSecretExport: env.ADMIN_SECRET_EXPORT === undefined || env.ADMIN_SECRET_EXPORT.trim() === '' ? null : bool(env.ADMIN_SECRET_EXPORT, false),
     adminWallets: parseAdminWallets(env.ADMIN_WALLETS),
     gameAccess: parseGameAccess(env.GAME_ACCESS),
     nodeEnv: env.NODE_ENV?.trim() || null,

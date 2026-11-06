@@ -1,7 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { AdminAudit } from './audit';
-import { ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL } from '@elymum/shared';
+import { SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
+
+import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import type { ChainGateway } from '../chain/types';
@@ -32,6 +34,9 @@ import { CollectionFail, type NftCollection } from './nft/collection';
 import { parseArtStyle } from './nft/render';
 import type { SiteStore } from './store';
 import { SiteFail, obj } from './validate';
+
+/** Admin routes whose every request (reads too) goes to the audit log: they hand out secrets. */
+const SECRET_ROUTES = new Set(['backup', 'migration-env', 'secret-proof', 'auth']);
 
 /** What the site needs besides its own store; every part is optional (bare unit tests). */
 export interface SiteExtras {
@@ -167,6 +172,8 @@ export class SiteApi {
   private readonly shopBuys = new Limiter(30, 60_000);
   /** "Practice with bots" rooms opened per IP (`PRACTICE_ROOM.perIp` per window). */
   private readonly practiceIps = new Limiter(PRACTICE_ROOM.perIp, PRACTICE_ROOM.perIpWindowMs);
+  /** Fresh, purpose-bound owner signatures for the secret exports (`/api/admin/secret-proof`). */
+  private readonly proofs: SecretProofs;
   /** `GET /api/admin/backup` per admin wallet (a full copy of DATA_DIR each time). */
   private readonly backups = new Limiter(6, 60 * 60_000);
   /** Writes every store's unsaved state to disk (before a backup); set by the app. */
@@ -184,9 +191,12 @@ export class SiteApi {
     private readonly ext: SiteExtras = {},
   ) {
     this.admins = new Set(cfg.adminWallets.map((w) => w.toLowerCase()));
+    // the admin list decides which tokens are short-lived admin sessions
+    auth.setAdminCheck((w) => this.isAdmin(w));
     this.avatarIp = limits.avatarIp ?? new Limiter(20, 60 * 60_000);
     this.avatarWallet = limits.avatarWallet ?? new Limiter(6, 60 * 60_000);
     this.audit = new AdminAudit(ext.dataDir ? join(ext.dataDir, 'admin-audit.jsonl') : null, ext.log);
+    this.proofs = new SecretProofs((w, m, sig) => this.auth.signedBy(w, m, sig));
   }
 
   /** Every admin write (`DATA_DIR/admin-audit.jsonl`, `GET /api/admin/audit`). */
@@ -645,14 +655,18 @@ export class SiteApi {
     throw new SiteFail(404, 'not_found', 'Not found');
   }
 
-  /** `adminRoutes` with every write of a signed-in admin recorded in the audit log (status included, failures too). */
+  /**
+   * `adminRoutes` with every write of a signed-in admin recorded in the audit log (status included, failures too),
+   * and every request of the routes that hand out secrets (`SECRET_ROUTES`), reads included.
+   */
   private async audited(req: IncomingMessage, res: ServerResponse, url: URL, ip: string): Promise<void> {
-    const write = req.method !== 'GET' && req.method !== 'HEAD';
+    const sensitive = SECRET_ROUTES.has(url.pathname.slice('/api/admin/'.length).split('/')[0]);
+    const write = sensitive || (req.method !== 'GET' && req.method !== 'HEAD');
     const wallet = write ? bearerWallet(this.auth, req) : null;
-    if (!write || !wallet || !this.isAdmin(wallet)) return this.adminRoutes(req, res, url);
+    if (!write || !wallet || !this.isAdmin(wallet)) return this.adminRoutes(req, res, url, ip);
     let status = 500;
     try {
-      await this.adminRoutes(req, res, url);
+      await this.adminRoutes(req, res, url, ip);
       status = res.statusCode;
     } catch (err) {
       status = err instanceof SiteFail ? err.status : 500;
@@ -662,9 +676,32 @@ export class SiteApi {
     }
   }
 
-  private async adminRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  /** Whether the secret exports (backup, migration settings) may run: `ADMIN_SECRET_EXPORT`, else on every chain but the mainnet. */
+  secretExportAllowed(): boolean {
+    if (this.cfg.adminSecretExport !== null) return this.cfg.adminSecretExport;
+    return this.chainId() !== ROBINHOOD_CHAIN_ID && this.cfg.chain.chainId !== ROBINHOOD_CHAIN_ID;
+  }
+
+  /** The secret exports: refused on the mainnet without `ADMIN_SECRET_EXPORT=1`, then a fresh purpose-bound signature. */
+  private async secretGate(req: IncomingMessage, wallet: string, route: SecretRoute): Promise<void> {
+    if (!this.secretExportAllowed()) {
+      throw new SiteFail(403, 'disabled', 'Secret exports are off on the mainnet. Set ADMIN_SECRET_EXPORT=1 on the server (and restart) for the time of the move, then remove it.');
+    }
+    try {
+      await this.proofs.consume(req.headers[SECRET_PROOF_HEADER], wallet, route);
+    } catch (err) {
+      if (err instanceof SecretProofError) throw new SiteFail(401, 'proof_required', err.message);
+      throw err;
+    }
+  }
+
+  private async adminRoutes(req: IncomingMessage, res: ServerResponse, url: URL, ip = ''): Promise<void> {
     const wallet = this.session(req);
     if (!this.isAdmin(wallet)) throw new SiteFail(403, 'forbidden', 'This wallet is not an admin.');
+    // admin sessions are short and revocable: a player-length (or revoked) token of an admin wallet is not enough
+    if (!this.auth.verifyAdminToken(/^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization ?? '').trim())?.[1])) {
+      throw new SiteFail(401, 'admin_session_expired', 'Your admin session ended (they last a short time). Sign in again.');
+    }
     const seg = url.pathname.slice('/api/admin/'.length).split('/');
     const q = url.searchParams;
     const s = this.store;
@@ -762,11 +799,36 @@ export class SiteApi {
       }
       case 'nft':
         return this.nftAdmin(req, res, seg);
+      case 'secret-proof': {
+        // the text an admin signs to open one secret export (backup, migration settings), single use, 10 minutes
+        if (seg.length !== 1) break;
+        this.method(req, 'POST');
+        const purpose = (await readJson(req)).purpose;
+        if (!SECRET_PURPOSES.includes(purpose as SecretPurpose)) throw new SiteFail(400, 'bad_request', `purpose must be one of ${SECRET_PURPOSES.join(', ')}`, 'purpose');
+        if (!this.secretExportAllowed()) throw new SiteFail(403, 'disabled', 'Secret exports are off on the mainnet. Set ADMIN_SECRET_EXPORT=1 on the server for the time of the move.');
+        const domain = new URL(this.baseUrl(req)).host;
+        return send(res, 200, { ...this.proofs.issue(wallet, purpose as SecretPurpose, { domain, chainId: this.chainId() }), header: 'X-Elymum-Proof' });
+      }
+      case 'auth': {
+        // POST /api/admin/auth/revoke {"wallet": "0x…"} ends that wallet's sessions; {"wallet": "admins"} every admin session
+        if (seg.length !== 2 || seg[1] !== 'revoke') break;
+        this.method(req, 'POST');
+        const who = (await readJson(req)).wallet;
+        if (who === 'admins') this.auth.revoke(null);
+        else {
+          const target = checksumAddress(who);
+          if (!target) throw new SiteFail(400, 'bad_request', 'wallet must be a 0x address or "admins"', 'wallet');
+          this.auth.revoke(target);
+        }
+        this.ext.log?.(`auth: sessions of ${who === 'admins' ? 'every admin' : String(who)} revoked by ${wallet}${ip ? ` from ${ip}` : ''}`);
+        return send(res, 200, { revoked: who });
+      }
       case 'backup': {
         // a gzip tar of DATA_DIR (server key and secrets included): moving the server, offsite copies
         if (seg.length !== 1) break;
         this.method(req, 'GET');
         if (!this.backups.allow(wallet.toLowerCase())) throw new SiteFail(429, 'rate_limited', 'Too many backups in the last hour. Try again later.');
+        await this.secretGate(req, wallet, 'backup');
         return streamBackup(req, res, wallet, { dataDir: this.ext.dataDir ?? null, chainId: this.chainId(), flush: () => this.flushAll?.(), log: this.ext.log });
       }
       case 'migration-env': {
@@ -775,11 +837,10 @@ export class SiteApi {
         if (seg.length !== 1) break;
         this.method(req, 'GET');
         if (!this.backups.allow(wallet.toLowerCase())) throw new SiteFail(429, 'rate_limited', 'Too many backups in the last hour. Try again later.');
-        this.ext.log?.(`backup: settings for a server move requested by ${wallet}`);
+        await this.secretGate(req, wallet, 'migration-env');
+        this.ext.log?.(`backup: settings for a server move (secrets included) handed to ${wallet}${ip ? ` at ${ip}` : ''}`);
         res.setHeader('Cache-Control', 'no-store');
-        // directUrl: this host's own address (Render sets RENDER_EXTERNAL_URL), so the new server downloads the
-        // backup straight from here and not through the site's /api rewrite
-        return send(res, 200, { env: migrationEnv(process.env), directUrl: process.env.RENDER_EXTERNAL_URL || null });
+        return send(res, 200, { env: migrationEnv(process.env), directUrl: null });
       }
       case 'counts':
         this.method(req, 'GET');

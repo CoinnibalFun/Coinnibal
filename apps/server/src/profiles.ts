@@ -8,6 +8,7 @@ import {
   isBasicSkin,
   levelFromXp,
   sanitizeName,
+  isReservedName,
   utf8Length,
   type ProfileStats,
   type ProfileSummary,
@@ -189,6 +190,7 @@ export class ProfileStore {
   update(wallet: string, body: { name?: unknown; skin?: unknown; country?: unknown; flagSkin?: unknown }, opts: { emblem?: boolean } = {}): ProfileView {
     if (typeof body.name !== 'string') throw new ProfileError('name', 'name is required');
     if ([...body.name.replace(/\s+/g, ' ').trim()].length > MAX_NAME_LENGTH) throw new ProfileError('name', `name is longer than ${MAX_NAME_LENGTH} characters`);
+    if (isReservedName(body.name.replace(/\s+/g, ' ').trim())) throw new ProfileError('name', 'this name is reserved');
     const name = sanitizeName(body.name, '');
     if (name.length === 0) throw new ProfileError('name', 'name is required');
     if ([...name].length > MAX_NAME_LENGTH || utf8Length(name) > PROFILE_NAME_MAX_BYTES) throw new ProfileError('name', `name is longer than ${MAX_NAME_LENGTH} characters`);

@@ -272,7 +272,13 @@ export type SiteErrorCode =
   /** Profile picture: not a PNG or WebP square of the allowed size (`AVATAR_LIMITS`). */
   | 'bad_image'
   /** Profile picture: an admin removed this picture; it cannot be uploaded again. */
-  | 'image_blocked';
+  | 'image_blocked'
+  /** A secret export (backup, migration settings) without a fresh, purpose-bound admin signature (`X-Elymum-Proof`). */
+  | 'proof_required'
+  /** The admin session is too old for admin routes (short-lived, revocable), or of the earlier long form: sign in again. */
+  | 'admin_session_expired'
+  /** Turned off on this server (secret exports on the mainnet without `ADMIN_SECRET_EXPORT=1`). */
+  | 'disabled';
 
 export interface SiteError {
   error: SiteErrorCode;

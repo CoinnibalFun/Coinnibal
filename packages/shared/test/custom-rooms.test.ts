@@ -99,7 +99,9 @@ describe('invites', () => {
   it('parses codes in any case and builds the share link; the code is a private-room join target', () => {
     expect(parseInviteCode(' ab2cd ')).toBe('AB2CD');
     expect(parseInviteCode('AB0CD')).toBeNull(); // no 0 / O / 1 / I in codes
-    expect(parseInviteCode('ABCDEF')).toBeNull();
+    expect(parseInviteCode('ABCDEFGH')).toBe('ABCDEFGH');
+    expect(parseInviteCode('ABCDEFGHJKL')).toBeNull();
+    expect(parseInviteCode('ABC1EFGH')).toBeNull();
     expect(parseInviteCode(null)).toBeNull();
     expect(inviteUrl('https://elymum.io/', 'AB2CD')).toBe('https://elymum.io/play?room=AB2CD');
     expect(parseJoinTarget('private:AB2CD')).toEqual({ mode: 'private', code: 'AB2CD' });
@@ -110,7 +112,8 @@ describe('invites', () => {
     expect(parseJoinTarget('arena:2:AB2CD')).toEqual({ mode: 'arena', arenaId: 2, code: 'AB2CD' });
     expect(parseJoinTarget('arena:2:ab2cd')).toEqual({ mode: 'arena', arenaId: 2, code: 'AB2CD' });
     expect(parseJoinTarget('arena:2')).toEqual({ mode: 'arena', arenaId: 2 });
-    for (const bad of ['arena:2:', 'arena:2:AB2C', 'arena:2:AB2CDE', 'arena::AB2CD', 'arena:2:AB-CD']) expect(parseJoinTarget(bad), bad).toBeNull();
+    expect(parseJoinTarget('arena:2:AB2CDEFG')).toEqual({ mode: 'arena', arenaId: 2, code: 'AB2CDEFG' });
+    for (const bad of ['arena:2:', 'arena:2:AB2C', 'arena:2:AB2CDEFGHJK', 'arena::AB2CD', 'arena:2:AB-CD']) expect(parseJoinTarget(bad), bad).toBeNull();
     expect(joinTargetArena('arena:4:AB2CD')).toBe(4);
     expect(joinTargetArena('arena:4')).toBe(4);
     expect(joinTargetArena('private:AB2CD')).toBeNull();
