@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ARENA_META, DEFAULT_ARENAS, arenaMeta } from '../src';
 
 describe('arena catalog', () => {
-  it('ships the four default tiers, all open to everyone', () => {
+  it('ships the four USD tiers ($1, $3, $5, $10; the $10 one for holders), created at the reference price', () => {
     expect(DEFAULT_ARENAS).toEqual([
-      { id: 1, entryTokens: 1000, maxSessions: 300 },
-      { id: 2, entryTokens: 10000, maxSessions: 300 },
-      { id: 3, entryTokens: 50000, maxSessions: 300 },
-      { id: 4, entryTokens: 250000, maxSessions: 300 },
+      { id: 1, usdCents: 100, entryTokens: 1000, maxSessions: 300, holdersOnly: false },
+      { id: 2, usdCents: 300, entryTokens: 3000, maxSessions: 300, holdersOnly: false },
+      { id: 3, usdCents: 500, entryTokens: 5000, maxSessions: 300, holdersOnly: false },
+      { id: 4, usdCents: 1000, entryTokens: 10000, maxSessions: 300, holdersOnly: true },
     ]);
   });
 

@@ -24,8 +24,8 @@ export interface SetupStep {
 
 /**
  * What is still missing for a playable chain, in order: the game token on the arena, the four
- * arenas, the emblem as the faucet's 2x and as the arena's holder perk (the suggested holder pair: 15 % burned +
- * 0 % to the fee wallet, against the normal 15 % + 5 %), the Isles as holders-only, and (testnet) the mint opened to the public. Steps already
+ * arenas, the emblem as the faucet's 2x and as the arena's holder perk (the owner's holder pair: 8 % burned +
+ * 2 % to the fee wallet, against the normal 15 % + 5 %), the Isles ($10 tier) as holders-only, and (testnet) the mint opened to the public. Steps already
  * done on chain are left out, so the button can be pressed again after an interruption.
  */
 export function setupSteps(ctx: { status: StatusSnapshot | null }, opts: { openMint: boolean }): SetupStep[] {

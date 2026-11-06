@@ -23,10 +23,10 @@ describe('finish setup', () => {
     expect(ids).toEqual(['token', 'arena-1', 'arena-2', 'arena-3', 'arena-4', 'faucet-nft', 'perks', 'holders-4', 'mint']);
   });
 
-  it('suggests the holder pair 15 % + 0 % of profit (the fee wallet share waived), against the arena\'s normal pair', () => {
+  it('sets the owner\'s holder pair 8 % + 2 % of profit (10 % in all), against the arena\'s normal pair', () => {
     const perks = setupSteps(ctx(), { openMint: true }).find((s) => s.id === 'perks')!;
-    expect(perks.label).toBe('Emblem holders pay 15 % of profit instead of 20 %');
-    expect(perks.call).toMatchObject({ functionName: 'setHolderPerks', args: [expect.stringMatching(/^0x/i), 1500, 0] });
+    expect(perks.label).toBe('Emblem holders pay 10 % of profit instead of 20 %');
+    expect(perks.call).toMatchObject({ functionName: 'setHolderPerks', args: [expect.stringMatching(/^0x/i), 800, 200] });
   });
 
   it('leaves out what is already done on chain', () => {

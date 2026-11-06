@@ -104,7 +104,7 @@ export function emblemPerks(
   fee: { fees?: ArenaFees | null; gameAccess?: GameAccess | null } = {},
 ): EmblemPerk[] {
   const pct = (bps: number) => `${bpsToPercent(bps)}%`;
-  // the live arena's pairs (the fee on profit); before it is known, the suggested holder setup (15 % + 0 % vs 15 % + 5 %)
+  // the live arena's pairs (the fee on profit); before it is known, the suggested holder setup (8 % + 2 % vs 15 % + 5 %)
   const normal = pct(fee.fees ? fee.fees.burnBps + fee.fees.vaultBps : totalFeeBps(DEFAULT_FEE_RATES));
   const holder = pct(fee.fees?.holderPerks ? fee.fees.holderBurnBps + fee.fees.holderVaultBps : SUGGESTED_HOLDER_BURN_BPS + SUGGESTED_HOLDER_VAULT_BPS);
   // "open to everyone" only while the server really lets everyone in (the admin may have closed it to holders)

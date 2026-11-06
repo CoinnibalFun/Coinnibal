@@ -157,7 +157,7 @@ describe('room fee by capacity', () => {
 describe('room price', () => {
   const price = 5n * 10n ** 16n;
   it('holders get the perk the admin picked', () => {
-    const s = CUSTOM_SETTINGS_DEFAULT;
+    const s = { ...CUSTOM_SETTINGS_DEFAULT, holderPerk: 'discount' as const };
     expect(customRoomPrice(price, s, false, false)).toBe(price);
     expect(customRoomPrice(price, s, true, false)).toBe(price / 2n);
     expect(customRoomPrice(price, { ...s, holderDiscountPct: 100 }, true, false)).toBe(0n);
@@ -165,8 +165,8 @@ describe('room price', () => {
     expect(customRoomPrice(price, { ...s, holderPerk: 'free_daily' }, true, false)).toBe(price);
     expect(customRoomPrice(price, { ...s, holderPerk: 'none' }, true, true)).toBe(price);
   });
-  it('defaults: 0.0005 ETH, a 50 % holder discount, 6 live rooms, 2 per wallet, +50 % per 10 players, rooms up to 100, 300 seats', () => {
-    expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ priceGas: '0.0005', holderPerk: 'discount', holderDiscountPct: 50, maxLive: 6, maxPerWallet: 2, treasury: null });
+  it('defaults: 0.0005 ETH, a free room of the day for holders (50 % off when the admin picks the discount), 6 live rooms, 2 per wallet, +50 % per 10 players, rooms up to 100, 300 seats', () => {
+    expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ priceGas: '0.0005', holderPerk: 'free_daily', holderDiscountPct: 50, maxLive: 6, maxPerWallet: 2, treasury: null });
     expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ capacityStepPct: 50, maxPlayers: 100, maxSeats: 300, paidRooms: true });
   });
 });

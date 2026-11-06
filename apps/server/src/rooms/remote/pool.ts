@@ -784,6 +784,12 @@ export class RemoteRoom implements RoomHandle {
     if (this.opts.test) this.pool.send(this.slot, { k: 'bots', hid: this.hid, count, difficulty });
   }
 
+  setBuyIn(buyIn: number): void {
+    if (!this.opts.stake || !Number.isSafeInteger(buyIn) || buyIn <= 0) return;
+    this.opts.stake.buyIn = buyIn;
+    this.pool.send(this.slot, { k: 'buyIn', hid: this.hid, buyIn });
+  }
+
   /** Done for every room at once (`WorkerPool.clearAvatar`); the count is not known here. */
   clearAvatar(_wallet: string): number {
     return 0;

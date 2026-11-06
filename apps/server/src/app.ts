@@ -42,6 +42,7 @@ import { Journal } from './stake/journal';
 import { BoostInventory } from './shop/inventory';
 import { ShopService } from './shop/service';
 import { ShopSettingsStore } from './shop/settings';
+import { ArenaPriceStore } from './site/arena-prices';
 import { NFT_COLLECTION_FILE, NftCollection } from './site/nft/collection';
 
 export interface App {
@@ -223,6 +224,8 @@ export async function createApp(
     log,
   });
   site.setShop({ service: shop, settings: shopSettings, inventory: boostInventory });
+  // arena tiers in US dollars and the token's USD price (DATA_DIR/chains/<id>/arena-prices.json): the owner re-prices on chain
+  site.setArenaPrices(new ArenaPriceStore(chainState, log));
 
   // "Share on X": cards of results and notable kills, made from the server's own records (DATA_DIR/site/shares.json)
   const shares = new ShareService({

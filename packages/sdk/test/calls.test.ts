@@ -2,8 +2,10 @@ import { elymumArenaArtifact } from '@elymum/contracts';
 import { elymumArenaAbi, elymumNFTAbi, testTokenAbi } from '@elymum/contracts';
 import { decodeFunctionData, erc20Abi, type Address } from 'viem';
 import { describe, expect, it } from 'vitest';
+import { ARENA_PRICING_DEFAULT, arenaPriceDiff, parseUsdPrice, type ChainArenaState } from '@elymum/shared';
 import {
   approveCall,
+  arenaPriceSyncCalls,
   MAX_ALLOWANCE,
   chunkSettlements,
   createArenaCall,
@@ -123,7 +125,9 @@ describe('arena calls', () => {
     const p = defaultArenaParams(18);
     expect(p.map((a) => a.id)).toEqual([1, 2, 3, 4]);
     expect(p[0].entryFee).toBe(1000n * 10n ** 18n);
-    expect(p[3].entryFee).toBe(250_000n * 10n ** 18n);
+    expect(p[3].entryFee).toBe(10_000n * 10n ** 18n);
+    expect(C.DEFAULT_HOLDERS_ONLY_ARENA_IDS).toEqual([4]);
+    expect([C.SUGGESTED_HOLDER_BURN_BPS, C.SUGGESTED_HOLDER_VAULT_BPS]).toEqual([800, 200]);
     expect(createDefaultArenaCalls(ARENA, 18, [1, 3]).map((c) => c.args[0])).toEqual([2, 4]);
   });
 
@@ -250,6 +254,36 @@ describe('holder perks', () => {
     await expect(planJoin(chain({ holder: false, holdersOnly: true, balance: 0n }) as never, { arena: ARENA, arenaId: 4, player: P1 })).rejects.toThrow(/holders only/);
     const ok = await planJoin(chain({ holder: true, holdersOnly: true }) as never, { arena: ARENA, arenaId: 4, player: P1 });
     expect(ok).toMatchObject({ holdersOnly: true, rates: { burnBps: 1500, vaultBps: 0 } });
+  });
+});
+
+describe('sync arena prices to USD', () => {
+  const E18 = 10n ** 18n;
+  const arena = (id: number, tokens: bigint, o: Partial<ChainArenaState> = {}): ChainArenaState => ({ id, exists: true, entryFee: tokens * E18, maxSessions: 300, enabled: true, openSessions: 0, holdersOnly: false, ...o });
+
+  it('builds updateArena (entry only) and setArenaHoldersOnly for the rows that can be signed', () => {
+    const rows = arenaPriceDiff({
+      tiers: ARENA_PRICING_DEFAULT.tiers,
+      price: parseUsdPrice('0.00081'),
+      decimals: 18,
+      sigFigs: 2,
+      holderNft: true,
+      arenas: [arena(1, 1_000n, { maxSessions: 120, enabled: false }), arena(2, 3_700n), arena(3, 5_000n, { openSessions: 2 }), arena(4, 10_000n)],
+    });
+    const calls = arenaPriceSyncCalls(ARENA, rows);
+    expect(calls.map((c) => [c.label, c.call.functionName, c.call.args])).toEqual([
+      // max open tickets and the enabled state are kept as they are on chain
+      ['Arena #1: $1 ticket', 'updateArena', [1, 1_200n * E18, 120, false]],
+      ['Arena #4: $10 ticket', 'updateArena', [4, 12_000n * E18, 300, true]],
+      ['Arena #4: emblem holders only', 'setArenaHoldersOnly', [4, true]],
+    ]);
+    // #2 is already at its price; #3 has open tickets (ArenaBusy on chain): not built
+    for (const c of calls) expect(decodeFunctionData({ abi: elymumArenaAbi, data: encodeCall(c.call).data }).functionName).toBe(c.call.functionName);
+  });
+
+  it('nothing to sign without a price', () => {
+    const rows = arenaPriceDiff({ tiers: ARENA_PRICING_DEFAULT.tiers, price: null, decimals: 18, sigFigs: 2, holderNft: true, arenas: [arena(1, 1_000n)] });
+    expect(arenaPriceSyncCalls(ARENA, rows)).toEqual([]);
   });
 });
 

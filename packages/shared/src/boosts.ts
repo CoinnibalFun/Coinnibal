@@ -132,14 +132,14 @@ export interface ShopSettings {
  * charge costs 20-40 % of that ticket (a pack of 3: Magnet and Speed 600, Leap 900, Invisibility 1,200). A charge
  * is cheap next to what a round can win, so buying one is an easy call, while the per-round cap in paid arenas
  * (`arenaUsesPerRound`) keeps them from deciding a fight. Half of every payment is burned, half goes to the fee
- * wallet (`DEFAULT_PAYMENT_BURN_BPS`).
+ * wallet (`DEFAULT_PAYMENT_BURN_BPS`). Emblem holders pay 20 % less (`holderDiscountPct`, owner decision 2026-11).
  */
 export const SHOP_DEFAULTS: ShopSettings = {
   enabled: true,
   packSize: 3,
   prices: { magnet: '600', leap: '900', speed: '600', invis: '1200' },
   kinds: { magnet: true, leap: true, speed: true, invis: true },
-  holderDiscountPct: 30,
+  holderDiscountPct: 20,
   arenaUsesPerRound: 2,
   holderExtraArenaUses: 1,
 };

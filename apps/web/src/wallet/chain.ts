@@ -9,7 +9,7 @@ import {
   type ArenaInfo,
   type SessionInfo,
 } from '@elymum/sdk';
-import type { ChainStatus, ProfileView } from '@elymum/shared';
+import type { ArenaPricesView, ChainStatus, ProfileView } from '@elymum/shared';
 import type { Address, PublicClient } from 'viem';
 import { useCallback, useEffect, useMemo } from 'react';
 import { create } from 'zustand';
@@ -46,6 +46,8 @@ export interface ChainData {
   holder: boolean | null;
   /** Arena ids marked holders-only on chain. */
   holdersOnly: number[];
+  /** The arena tiers in US dollars and the token's USD price (`/api/site/arena-prices`); null while unknown. */
+  prices: ArenaPricesView | null;
   loading: boolean;
 }
 
@@ -63,6 +65,7 @@ export const useChainData = create<ChainData>(() => ({
   pending: [],
   holder: null,
   holdersOnly: [],
+  prices: null,
   loading: false,
 }));
 
@@ -90,6 +93,12 @@ async function getJson<T>(path: string, token?: string | null): Promise<T | null
   } catch {
     return null;
   }
+}
+
+/** `GET /api/site/arena-prices` (null when the server has none or cannot be reached). */
+export async function loadArenaPrices(): Promise<ArenaPricesView | null> {
+  const v = await getJson<ArenaPricesView>('/api/site/arena-prices');
+  return v && Array.isArray(v.tiers) && (v.usdPerToken === null || typeof v.usdPerToken === 'string') ? v : null;
 }
 
 export async function loadPending(owner: string): Promise<PendingPayout[]> {
@@ -171,8 +180,10 @@ export function useChainSync(): void {
     const set = (patch: Partial<ChainData>) => {
       if (!stale()) useChainData.setState(patch);
     };
-    const [pending, profile] = owner ? await Promise.all([loadPending(owner), loadProfile(token)]) : [[] as PendingPayout[], null];
+    const [pending, profile, prices] = await Promise.all([owner ? loadPending(owner) : Promise.resolve([] as PendingPayout[]), owner ? loadProfile(token) : Promise.resolve(null), loadArenaPrices()]);
     if (!stale()) adoptProfileCountry(profile);
+    // the dollar labels of the tickets: kept when the server cannot be reached this time
+    if (prices && !stale()) useChainData.setState({ prices });
     if (fake && chain) {
       const dev = await loadDevFake();
       if (!dev) return;

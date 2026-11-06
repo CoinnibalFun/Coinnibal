@@ -221,6 +221,7 @@ describe('custom rooms: create, caps, perks', () => {
   it('holder perks: a discount, or one free room a day', async () => {
     const { svc, reader, clock } = setup({ holder: true });
     const a = testSigner().address;
+    svc.updateSettings({ holderPerk: 'discount' });
     let q = await svc.quote(a);
     expect(q).toMatchObject({ holder: true, holderPerk: 'discount', holderDiscountPct: 50, youPayWei: (PRICE / 2n).toString(), treasury: TREASURY });
     // half the price is enough for a holder
@@ -236,6 +237,50 @@ describe('custom rooms: create, caps, perks', () => {
     expect((await fail(svc.create(a, { config: cfgOf() }))).code).toBe('payment_required');
     clock.t += 24 * 3600_000;
     expect((await svc.create(a, { config: cfgOf() })).paidWith).toBe('free');
+  });
+
+  it('the free room of the day is the default perk: one per UTC day, kept across a restart, new at 00:00 UTC', async () => {
+    const day = Date.UTC(2027, 0, 15);
+    const clock = { t: day + 23 * 3600_000 + 59 * 60_000 + 59_000 }; // 23:59:59 UTC
+    const first = setup({ holder: true, clock });
+    const a = testSigner().address;
+    const b = testSigner().address;
+    expect(first.svc.settings.holderPerk).toBe('free_daily');
+    expect(await first.svc.quote(a)).toMatchObject({ holderPerk: 'free_daily', freeAvailable: true, youPayWei: '0' });
+    // two creates at once: one free room, the other is refused while the first is under way
+    const [r1, r2] = await Promise.allSettled([first.svc.create(a, { config: cfgOf() }), first.svc.create(a, { config: cfgOf() })]);
+    expect([r1.status, r2.status].sort()).toEqual(['fulfilled', 'rejected']);
+    expect((await first.svc.quote(a)).freeAvailable).toBe(false);
+    expect((await fail(first.svc.create(a, { config: cfgOf() }))).code).toBe('payment_required');
+    // a bigger room than the base size is never the free one (it is paid in full)
+    expect((await first.svc.quote(b)).freeAvailable).toBe(true);
+    expect((await fail(first.svc.create(b, { config: cfgOf({ maxPlayers: 20 }) }))).code).toBe('payment_required');
+    expect((await first.svc.quote(b)).freeAvailable).toBe(true);
+
+    // a restart the same UTC day: the record is on disk, no second free room
+    clock.t += 500;
+    const again = setup({ holder: true, clock, dir: first.dir });
+    expect((await again.svc.quote(a)).freeAvailable).toBe(false);
+    expect((await fail(again.svc.create(a, { config: cfgOf() }))).code).toBe('payment_required');
+    const stored = JSON.parse(readFileSync(join(first.dir!, 'site', 'custom-rooms.json'), 'utf8')) as { freeUsed: Record<string, string> };
+    expect(stored.freeUsed).toEqual({ [a.toLowerCase()]: '2027-01-15' });
+
+    // 00:00:00 UTC: a new day, a new free room (also after another restart)
+    clock.t = day + 24 * 3600_000;
+    const nextDay = setup({ holder: true, clock, dir: first.dir });
+    expect((await nextDay.svc.quote(a)).freeAvailable).toBe(true);
+    expect((await nextDay.svc.create(a, { config: cfgOf() })).paidWith).toBe('free');
+    expect((await nextDay.svc.quote(a)).freeAvailable).toBe(false);
+    // yesterday's records are dropped from the file
+    const later = JSON.parse(readFileSync(join(first.dir!, 'site', 'custom-rooms.json'), 'utf8')) as { freeUsed: Record<string, string> };
+    expect(later.freeUsed).toEqual({ [a.toLowerCase()]: '2027-01-16' });
+  });
+
+  it('the free room of the day is for emblem holders only', async () => {
+    const { svc } = setup({ holder: false });
+    const a = testSigner().address;
+    expect(await svc.quote(a)).toMatchObject({ holder: false, freeAvailable: false, youPayWei: PRICE.toString() });
+    expect((await fail(svc.create(a, { config: cfgOf() }))).code).toBe('payment_required');
   });
 
   it('closed creation, no treasury, guests and admin settings validation', async () => {

@@ -1242,6 +1242,59 @@ contract ElymumArenaTest is Test {
         assertEq(token.balanceOf(feeWallet), 0);
     }
 
+    /// @dev The USD tiers (2026-11): holders pay 8 % + 2 % of their profit, others 15 % + 5 %; the owner re-prices an
+    ///      arena in token units only once no ticket is open, and every ticket settles at the entry fee it recorded.
+    function test_usdTiers_holderPairAndReprice() public {
+        MockNFT nft = new MockNFT();
+        nft.setBalance(alice, 1);
+        vm.prank(admin);
+        arena.setHolderPerks(address(nft), 800, 200);
+        uint64 sa = _join(alice);
+        uint64 sb = _join(bob);
+        assertEq(arena.getSession(ID, alice).burnBps, 800);
+        assertEq(arena.getSession(ID, alice).vaultBps, 200);
+        assertEq(arena.getSession(ID, bob).burnBps, 1_500);
+        assertEq(arena.getSession(ID, bob).vaultBps, 500);
+
+        // a new price while tickets are open is refused: their entry fee cannot move under them
+        vm.prank(admin);
+        vm.expectRevert(ElymumArena.ArenaBusy.selector);
+        arena.updateArena(ID, 1_200 ether, 300, true);
+
+        // alice (holder) doubles up: profit 1,000 → 80 burned + 20 to the fee wallet; bob loses half: no fee
+        uint256 a0 = token.balanceOf(alice);
+        uint256 b0 = token.balanceOf(bob);
+        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
+        items[0] = ElymumArena.Settlement(ID, alice, sa, 1_500 ether);
+        items[1] = ElymumArena.Settlement(ID, bob, sb, 500 ether);
+        _settle(items);
+        assertEq(token.balanceOf(alice) - a0, 1_450 ether);
+        assertEq(token.balanceOf(bob) - b0, 500 ether);
+        assertEq(token.balanceOf(feeWallet), 10 ether);
+        assertEq(token.balanceOf(DEAD), 40 ether);
+
+        // no ticket open: the owner's sync re-prices the arena; new tickets pay the new entry fee
+        vm.prank(admin);
+        arena.updateArena(ID, 1_200 ether, 300, true);
+        uint64 sc = _join(carol);
+        uint64 sb2 = _join(bob);
+        assertEq(arena.getSession(ID, carol).entryFee, 1_200 ether);
+        uint256 c0 = token.balanceOf(carol);
+        items[0] = ElymumArena.Settlement(ID, carol, sc, 2_000 ether);
+        items[1] = ElymumArena.Settlement(ID, bob, sb2, 400 ether);
+        _settle(items);
+        // profit against carol's own 1,200 entry: 800 → 120 burned + 40 to the fee wallet
+        assertEq(token.balanceOf(carol) - c0, 1_840 ether);
+        assertEq(token.balanceOf(feeWallet), 50 ether);
+        assertEq(arena.getArena(ID).vault, 0);
+        _assertSolvent(arena, address(token));
+
+        // the cap holds for the holder pair too
+        vm.prank(admin);
+        vm.expectRevert(ElymumArena.InvalidFee.selector);
+        arena.setHolderPerks(address(nft), 2_000, 501);
+    }
+
     function test_holderPerks_neverHigherThanNormal() public {
         MockNFT nft = new MockNFT();
         nft.setBalance(alice, 1);
