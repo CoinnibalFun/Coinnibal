@@ -14,8 +14,6 @@ import {
   type DeathStats,
   type RoundStanding,
   type ServerMessage,
-  type SnapshotData,
-  decodeSnapshot,
   joinTargetArena,
 } from '@elymum/shared';
 import { ledgerDecimals } from '@elymum/sdk';
@@ -32,6 +30,7 @@ import { serverClock } from './clock';
 import { holdForBrief } from './brief';
 import { HeldTicket } from './held';
 import { Input } from './input';
+import { EXTRAPOLATE_MS, SnapshotTimeline } from './jitter';
 import { Net } from './net';
 import { Particles } from './particles';
 import { announce, caller, music, powerUpKind, sound, unlockAudio } from '../audio';
@@ -98,8 +97,11 @@ export class GameEngine {
   private slowmoAt = -Infinity;
   /** The bell rang on my game: the world stands still until then (performance.now()). */
   private frozenUntil = -Infinity;
-  /** Snapshots held back while frozen (they are deltas: applied in order on the thaw). */
-  private snapQueue: SnapshotData[] = [];
+  /**
+   * The jitter buffer: snapshots wait here for their place on a steady timeline, `RENDER_DELAY_MS` behind (they are
+   * deltas: always applied in order, by the frame loop). While the bell freezes the world they simply wait.
+   */
+  private readonly timeline = new SnapshotTimeline<ArrayBuffer>();
   /** The last join asked for (a held ticket repeats it when the next round opens). */
   private lastJoin: { room: string } | null = null;
   /** A ticket held through the closed window; it joins when the next round opens. */
@@ -135,8 +137,8 @@ export class GameEngine {
     this.net = new Net(
       SERVER.ws,
       {
-        onOpen: () => useUi.setState({ connected: true, connecting: false }),
-        onClose: () => useUi.setState({ connected: false, connecting: true }),
+        onOpen: () => useUi.setState({ connected: true, connecting: false, netDown: null }),
+        onClose: (down) => useUi.setState({ connected: false, connecting: down.kind === 'lost', netDown: down }),
         onMessage: (m) => this.onMessage(m),
         onSnapshot: (s) => this.onSnapshot(s),
       },
@@ -193,6 +195,7 @@ export class GameEngine {
     this.unsub = useUi.subscribe((s, prev) => {
       if (s.settings !== prev.settings) applySettings();
     });
+    this.world.extrapolateMs = EXTRAPOLATE_MS;
     this.reducedQuery = typeof window.matchMedia === 'function' ? window.matchMedia(REDUCED_QUERY) : null;
     this.reducedQuery?.addEventListener?.('change', this.onReducedChange);
     this.onReducedChange();
@@ -202,6 +205,11 @@ export class GameEngine {
     window.addEventListener('resize', this.resize);
     this.net.connect();
     this.raf = requestAnimationFrame(this.frame);
+  }
+
+  /** Reconnects now: "Retry now", or "Play here" after another tab took the coin over (it comes back here). */
+  reconnect(): void {
+    this.net.resume();
   }
 
   private onReducedChange = (): void => {
@@ -464,32 +472,44 @@ export class GameEngine {
     return performance.now() < this.frozenUntil;
   }
 
-  /** Ends the bell's freeze: the world catches up with what the server sent meanwhile. */
+  /** Ends the bell's freeze: the world catches up with everything the server sent meanwhile, in order. */
   private thaw(): void {
     this.frozenUntil = -Infinity;
-    const now = performance.now();
-    for (const s of this.snapQueue) this.world.apply(s, now);
-    this.snapQueue = [];
+    this.applySnapshots(performance.now(), true);
+  }
+
+  /** Applies the snapshots whose time on the timeline has come (`all`: every one queued). */
+  applySnapshots(now: number, all = false): void {
+    for (const d of this.timeline.due(now, all)) {
+      try {
+        this.world.applyBinary(d.item, now, d.step);
+      } catch (err) {
+        console.warn('bad snapshot', err);
+      }
+    }
+  }
+
+  /** A new view on the server (`welcome`, `joined`, `spectating`): nothing queued for the old one may land. */
+  private freshView(): void {
+    this.timeline.restart();
+    this.world.reset();
   }
 
   private onSnapshot(buf: ArrayBuffer): void {
-    // the bell froze the world: the next round's snapshots wait (in order, decoded) until the thaw
-    if (this.frozen) {
-      this.snapQueue.push(decodeSnapshot(buf));
-      return;
-    }
-    // the freeze is over but no frame has thawed it yet: the held (older) deltas go first, else they
-    // would land on top of this one (an entity it removed would come back as a ghost)
-    if (this.snapQueue.length > 0) this.thaw();
     const now = performance.now();
-    this.world.applyBinary(buf, now);
+    // the server tick, from the header (op byte, then u32): the snapshot's place on the timeline
+    if (buf.byteLength < 5) return;
+    this.timeline.push(buf, new DataView(buf).getUint32(1, true), now);
     // no frames (a hidden tab: the browser stops requestAnimationFrame) while the snapshots keep
     // coming: the mirror still lets go of what left or was eaten, and nobody sees the eats
-    if (now - this.last > BACKGROUND_STEP_MS && now - this.lastBackgroundStep > BACKGROUND_STEP_MS) {
-      this.lastBackgroundStep = now;
-      this.world.update(now, 0);
-      this.world.drainEats();
-      this.world.drainFloats();
+    if (now - this.last > BACKGROUND_STEP_MS && !this.frozen) {
+      this.applySnapshots(now, true);
+      if (now - this.lastBackgroundStep > BACKGROUND_STEP_MS) {
+        this.lastBackgroundStep = now;
+        this.world.update(now, 0);
+        this.world.drainEats();
+        this.world.drainFloats();
+      }
     }
   }
 
@@ -501,12 +521,12 @@ export class GameEngine {
       case 'welcome': {
         serverClock.sync(m.serverNow);
         // a new socket has a new (empty) view on the server: nothing it sent before will be removed
-        this.snapQueue = [];
-        this.world.reset();
+        this.frozenUntil = -Infinity;
+        this.freshView();
         this.reclaiming = false;
         // a held ticket whose join was lost with the old socket (or still waits) goes again
         this.heldTicket.rearm();
-        useUi.setState({ connected: true, connecting: false, rooms: m.rooms, chain: m.chain, online: m.online, blockedArenas: (m.blocked ?? []).map((b) => b.arenaId) });
+        useUi.setState({ connected: true, connecting: false, netDown: null, rooms: m.rooms, chain: m.chain, online: m.online, blockedArenas: (m.blocked ?? []).map((b) => b.arenaId) });
         const auth = useUi.getState().auth;
         if (auth) this.authToken(auth.token);
         // the standings sheet stays live across a reconnect
@@ -559,10 +579,10 @@ export class GameEngine {
           this.camera.zoomIntro(fromPaper ? DUR.zoomIn : 0);
         }
         this.slowmoAt = -Infinity;
-        this.thaw();
+        this.frozenUntil = -Infinity;
         // the server starts this connection's view afresh with every `joined`: so does the mirror
         // (anything kept from another room, or from before a reconnect, would never be removed)
-        this.world.reset();
+        this.freshView();
         this.clearHeld();
         caller.life();
         // no welcome line (voices stay off at the start); the landing makes a small sound (see the drop)
@@ -609,9 +629,9 @@ export class GameEngine {
         return;
       }
       case 'spectating': {
-        this.thaw();
+        this.frozenUntil = -Infinity;
         // a fresh view on the server with every `spectating` (same room or not): a fresh mirror here
-        this.world.reset();
+        this.freshView();
         this.world.setBounds(m.room.x0 ?? 0, m.room.y0 ?? 0, (m.room.x0 ?? 0) + m.room.width, (m.room.y0 ?? 0) + m.room.height, performance.now(), true);
         useUi.setState((s) => ({ room: m.room, spectateTarget: m.targetPid, closing: s.room?.id === m.room.id ? s.closing : null }));
         return;
@@ -1037,8 +1057,9 @@ export class GameEngine {
     const rdt = dt * ts;
     this.camera.push = 1 + 0.1 * ((1 - ts) / 0.7);
 
-    if (this.snapQueue.length > 0 && !this.frozen) this.thaw();
     if (!this.frozen) {
+      // the jitter buffer: the snapshots whose time has come (all of them at once after the bell's freeze)
+      this.applySnapshots(now);
       world.update(now, dt);
       if (now - this.lastExpr > 150) {
         this.lastExpr = now;
