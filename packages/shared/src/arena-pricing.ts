@@ -285,7 +285,7 @@ export function arenaPriceDiff(p: {
       let blocked: string | null = null;
       if (!chain) blocked = `arena #${t.arenaId} does not exist on chain: create it first (Setup → Finish setup, or Advanced → Create)`;
       else if (entryChange && chain.openSessions > 0) {
-        blocked = `${chain.openSessions} open ticket${chain.openSessions === 1 ? '' : 's'}: the contract changes an entry fee only when none is open. Pause joins (or close this arena), let the bell settle them, then sync again`;
+        blocked = `${chain.openSessions} open ticket${chain.openSessions === 1 ? '' : 's'}: the contract changes an entry fee only when none is open. Use "Re-price at next bell" below (it closes the arena at the bell and refunds unseated tickets), then sync again`;
       } else if (holdersOnlyChange === true && !p.holderNft) blocked = 'set the holder NFT first (Setup → Holder perks): a holders-only arena without it admits nobody';
       return { arenaId: t.arenaId, usdCents: t.usdCents, chain, oldEntry: chain?.entryFee ?? null, newEntry, oldUsd: usd(chain?.entryFee ?? null), newUsd: usd(newEntry), entryChange, holdersOnlyChange, blocked, error };
     });
