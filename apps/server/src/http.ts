@@ -239,7 +239,7 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             const wallet = bearer ? ctx.auth.verifyAdminToken(bearer) : null;
             if (wallet && ctx.site?.isAdmin(wallet)) {
               const info = ctx.chain.serverInfo();
-              body.server = { address: info.address, balanceWei: info.balanceWei, low: info.low, priceKeeper: ctx.priceKeeper?.last ?? null };
+              body.server = { address: info.address, balanceWei: info.balanceWei, low: info.low, ...(info.gas ? { gas: info.gas } : {}), priceKeeper: ctx.priceKeeper?.last ?? null };
             }
             return json(res, 200, body);
           }
