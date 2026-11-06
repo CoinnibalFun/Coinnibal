@@ -1,3 +1,4 @@
+import type { EmblemClaims } from '../site/emblem-claims';
 import {
   BOOST_KINDS,
   boostCooldownMs,
@@ -67,6 +68,9 @@ export interface ShopDeps {
   chain: ChainGateway;
   /** Emblem holder check (cached; `fresh` re-reads the chain). */
   holder: (wallet: string, fresh?: boolean) => Promise<boolean>;
+  /** The emblem token ids a wallet owns (null: unknown); with `claims`, the discount is one wallet per token id a day. */
+  emblemTokens?: (wallet: string, fresh?: boolean) => Promise<string[] | null>;
+  claims?: EmblemClaims;
   /** Wall clock (cooldowns). */
   now?: () => number;
   /** Waits before re-reading a receipt that is not visible yet (default 0, 1.5 s, 3 s, 5 s). */
@@ -122,11 +126,25 @@ export class ShopService {
     return null;
   }
 
+  /**
+   * Whether `wallet` gets the holder discount today: it holds the emblem, and (with the token index) one of its token
+   * ids has not given the discount to another wallet today. `commit`: the discounted purchase happens now.
+   */
+  private async discountFor(wallet: string, fresh: boolean, commit = false): Promise<boolean> {
+    const holds = (await this.deps.holder(wallet).catch(() => false)) || (fresh && (await this.deps.holder(wallet, true).catch(() => false)));
+    if (!holds) return false;
+    const claims = this.deps.claims;
+    const tokens = claims && this.deps.emblemTokens ? await this.deps.emblemTokens(wallet, fresh).catch(() => null) : null;
+    // the index cannot name the wallet's token yet: balanceOf decides alone
+    if (!claims || !tokens || tokens.length === 0) return true;
+    return claims.daily('shop', wallet, tokens, commit) !== null;
+  }
+
   /** `GET /api/shop`: packs priced for `wallet` (public prices for guests) and its charges. */
   async view(wallet: string | null): Promise<ShopView> {
     const s = this.settings;
     const token = this.token();
-    const holder = wallet ? await this.deps.holder(wallet).catch(() => false) : false;
+    const holder = wallet ? await this.discountFor(wallet, false) : false;
     const closed = this.closedReason(s);
     const decimals = token?.decimals ?? 18;
     const packs: ShopPack[] = BOOST_KINDS.map((kind) => {
@@ -191,11 +209,9 @@ export class ShopService {
         now: this.now(),
       });
       if (!check.ok) return fail(check.code === 'tx_pending' ? 409 : 400, check.code);
-      // the discounted price is only for emblem holders (re-read on chain when the cache says no)
-      if (check.paid !== full) {
-        const holder = (await this.deps.holder(wallet).catch(() => false)) || (await this.deps.holder(wallet, true).catch(() => false));
-        if (!holder) return fail(400, 'wrong_amount');
-      }
+      // the discounted price is only for emblem holders (re-read on chain when the cache says no), and one emblem
+      // token id gives it to one wallet a day (passing the emblem around does not discount every wallet)
+      if (check.paid !== full && !(await this.discountFor(wallet, true, true))) return fail(400, 'wrong_amount');
       let charges: BoostCounts;
       try {
         charges = this.deps.inventory.credit(wallet, kind, s.packSize, txHash, check.paid);

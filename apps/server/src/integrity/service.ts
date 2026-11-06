@@ -287,6 +287,11 @@ export class IntegrityService {
     return structuredClone(this.state.settings);
   }
 
+  /** A flag raised outside the detectors (an emblem caught serving two holder tickets): merged like theirs. */
+  raise(c: Candidate): IntegrityFlag[] {
+    return this.merge([c]);
+  }
+
   /** Runs every detector over the whole window and merges the results into the flags. */
   scan(): IntegrityFlag[] {
     const cands = runDetectors(this.snapshot(), this.state.settings.thresholds);

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { IntegrityEvidence, IntegrityFlagKind, IntegrityThresholds, IntegrityTransfer } from '@elymum/shared';
+import type { IntegrityEvidence, IntegrityFlagKind, IntegrityFlagSubtype, IntegrityThresholds, IntegrityTransfer } from '@elymum/shared';
 import { TURN_BINS, type IntegritySnapshot, type SessionSummary } from './types';
 
 /**
@@ -10,6 +10,7 @@ import { TURN_BINS, type IntegritySnapshot, type SessionSummary } from './types'
 
 export interface Candidate {
   kind: IntegrityFlagKind;
+  subtype?: IntegrityFlagSubtype;
   /** Stable id from the kind and the subject. */
   id: string;
   score: number;
