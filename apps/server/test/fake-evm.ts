@@ -329,6 +329,11 @@ export class FakeEvm implements EvmClient {
   async txBlock() {
     return null;
   }
+  async blockHash(n: bigint): Promise<Hash | null> {
+    this.check();
+    if (n > this.block) return null;
+    return keccak256(toHex(`fake-block-${n}`));
+  }
 
   async send(call: ContractCall): Promise<Hash> {
     this.check();

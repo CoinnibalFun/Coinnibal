@@ -1,4 +1,6 @@
 import type {
+  NftCollectionAdminView,
+  NftProvenance,
   ArenaScalingSettings,
   ArenaScalingView,
   CustomRoomSettings,
@@ -346,6 +348,12 @@ export function adminApi(token: string) {
         throw err;
       }
     },
+    /** `GET /api/admin/nft`: the emblem collection (provenance, rarity counts, reveal state, the mint). */
+    nftCollection: () => request<NftCollectionAdminView>('/api/admin/nft', { token }),
+    /** `POST /api/admin/nft/reveal/schedule` (`{ block? }`, default 50 blocks ahead): mint closed or sold out first. */
+    nftScheduleReveal: (block?: string) => request<NftProvenance>('/api/admin/nft/reveal/schedule', { method: 'POST', token, body: block ? { block } : {} }),
+    /** `POST /api/admin/nft/reveal`: once the scheduled block is mined. */
+    nftReveal: () => request<NftProvenance>('/api/admin/nft/reveal', { method: 'POST', token, body: {} }),
     /** `GET /api/admin/network`: the server's chain, RPC health, server key and the contracts' code checks. */
     network: () => request<NetworkInfo>('/api/admin/network', { token }),
     /** `GET /api/admin/backup`: a gzip tar of the server's DATA_DIR (server key and secrets included), saved as a file. */

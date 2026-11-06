@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { CAPACITY, NETWORKS, RULES, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, type GameAccess } from '@elymum/shared';
 import { GAS_PRICE_URL_DEFAULT } from '@elymum/sdk';
 import { getAddress, isAddress } from 'viem';
+import { DEFAULT_ART_STYLE, parseArtStyle, type ArtStyle } from './site/nft/render';
 
 export interface ServerConfig {
   port: number;
@@ -154,6 +155,12 @@ export interface ServerConfig {
    * NFT mint: the USD target (`MINT_USD_CENTS`, default 100) and the ETH/USD feed (`GAS_PRICE_URL`).
    */
   mint: { usdCents: number; gasPriceUrl: string };
+  /**
+   * The emblem collection (docs/NFT-DESIGN.md): `NFT_COLLECTION_SIZE` (default 5000; the contract's max supply),
+   * `NFT_COLLECTION_SEED` (default: 32 random bytes, generated once and committed to the chain's state directory),
+   * `NFT_ART_STYLE` (`vector`, the default, or `pixel`).
+   */
+  nft: { size: number; seed: string | null; style: ArtStyle };
 }
 
 /**
@@ -352,6 +359,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     mint: {
       usdCents: Math.max(1, int(env.MINT_USD_CENTS, MINT_USD_CENTS_DEFAULT)),
       gasPriceUrl: blank(env.GAS_PRICE_URL) ?? GAS_PRICE_URL_DEFAULT,
+    },
+    nft: {
+      size: Math.max(1, int(env.NFT_COLLECTION_SIZE, 5000)),
+      seed: blank(env.NFT_COLLECTION_SEED),
+      style: parseArtStyle(blank(env.NFT_ART_STYLE)) ?? DEFAULT_ART_STYLE,
     },
   };
 }

@@ -24,7 +24,6 @@ import { getAddress, type Address, type Hash } from 'viem';
 import { ChainCache } from '../chain/chain-cache';
 import type { EvmClient } from '../chain/evm-client';
 import { isRateLimited, withRpcPriority } from '../chain/rpc-budget';
-import { emblemTraits } from './emblem';
 import type { SiteStore } from './store';
 import { SiteFail, userWallet } from './validate';
 
@@ -463,25 +462,6 @@ export class MintService {
     return !!s && id <= s.totalSupply;
   }
 
-  /** ERC-721 metadata JSON of a minted token. */
-  metadata(id: number, baseUrl: string): Record<string, unknown> {
-    const t = emblemTraits(id);
-    const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
-    return {
-      name: `Elymum No. ${id}`,
-      description: `An Elymum emblem: a coin of the ring. Holders play Elymum, the arena where the coins eat, on Robinhood Chain.`,
-      image: `${baseUrl}/api/nft/${id}.svg`,
-      external_url: baseUrl,
-      attributes: [
-        { trait_type: 'Coin', value: cap(t.coin) },
-        { trait_type: 'Ring', value: cap(t.ring) },
-        { trait_type: 'Mood', value: cap(t.mood) },
-        { trait_type: 'Feet', value: t.feet ? 'Yes' : 'No' },
-        { trait_type: 'Sweat', value: t.sweat ? 'Yes' : 'No' },
-      ],
-    };
-  }
-
   /** `royaltyInfo` of the NFT, cached 5 min (a failed read is retried after 30 s); one read in flight at a time. */
   private async royalty(nft: string, client: EvmClient): Promise<{ bps: number; receiver: string } | null> {
     const c = this.royaltyV;
@@ -501,8 +481,8 @@ export class MintService {
     return this.royaltyFetch;
   }
 
-  /** The collection's `contractURI` JSON. */
-  async contractMetadata(baseUrl: string): Promise<Record<string, unknown>> {
+  /** The collection's `contractURI` JSON (`provenance`: the emblem collection's commitment, when known). */
+  async contractMetadata(baseUrl: string, provenance?: { seedHash: string; provenance: string } | null): Promise<Record<string, unknown>> {
     const nft = this.deps.nft();
     const client = this.deps.client();
     const royalty = nft && client ? await this.royalty(nft.address, client) : null;
@@ -512,6 +492,7 @@ export class MintService {
       image: `${baseUrl}/api/nft/1.svg`,
       external_link: baseUrl,
       ...(royalty && royalty.bps > 0 ? { seller_fee_basis_points: royalty.bps, fee_recipient: royalty.receiver } : {}),
+      ...(provenance ? { provenance_hash: provenance.provenance, seed_hash: provenance.seedHash, provenance_url: `${baseUrl}/api/nft/provenance` } : {}),
     };
   }
 }
