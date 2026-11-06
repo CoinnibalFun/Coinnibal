@@ -1,6 +1,7 @@
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import {
+  CLOSE_REPLACED,
   PROTOCOL_VERSION,
   PlayerFlag,
   SKIN_COUNT,
@@ -123,6 +124,8 @@ export class Gateway {
   private shedder: LoadShedder | null = null;
   /** Connections closed for abuse (flood, garbage, no hello), for the load test and the logs. */
   readonly dropped = { noHello: 0, flood: 0, limit: 0 };
+  /** Sockets closed because a newer one of the same wallet took their arena coin over (`CLOSE_REPLACED`). */
+  replaced = 0;
   private readonly alive = new WeakMap<WebSocket, boolean>();
   private timers: NodeJS.Timeout[] = [];
   /** Who may enter a room (join or spectate); null: everyone (unit tests that build a bare gateway). */
@@ -559,6 +562,28 @@ export class Gateway {
   }
 
   /**
+   * Hands a live arena coin from the sockets that hold it to `conn` (same wallet, see `joinArena`): each old one
+   * leaves the room (the coin waits, AFK, for the reattach that follows in the same command order) and is closed with
+   * `CLOSE_REPLACED`, so its client does not reconnect and fight for the coin.
+   */
+  private replaceHolders(conn: Conn, room: RoomHandle, pid: number): void {
+    for (const old of this.rooms.conns) {
+      if (old === conn || old.room !== room || !old.player?.alive || old.player.id !== pid) continue;
+      this.log(`ws: ${conn.wallet} took its arena coin over on a new connection (${old.ip} → ${conn.ip})`);
+      room.leave(old, 'disconnect');
+      old.player = null;
+      this.replaced++;
+      try {
+        old.ws.close(CLOSE_REPLACED, 'replaced by a newer connection of this wallet');
+      } catch {
+        /* already closing */
+      }
+      // a dead socket (the network switch) never answers the close handshake: drop it after a moment
+      setTimeout(() => old.ws.terminate(), 2_000).unref();
+    }
+  }
+
+  /**
    * The ticket read of a paid join: on `ChainBusyError` (RPC rate-limited) it is retried after
    * `JOIN_CHAIN_RETRY_MS`, and the player is told once that the network is busy. Throws
    * `ChainBusyError` when every try failed (or the connection closed meanwhile).
@@ -600,6 +625,10 @@ export class Gateway {
       // a live ticket comes back first, with no chain read at all: its coin is in this process already
       const existing = this.rooms.findArenaStake(target.arenaId, conn.wallet);
       if (existing) {
+        // the same signed-in wallet on a new socket (a reconnect after a network switch, a reload, another tab): it
+        // takes the coin over at once. The old socket, often a dead one the heartbeat has not noticed yet, is closed
+        // with CLOSE_REPLACED. Only this wallet's own session reaches here (`findArenaStake` is by the signed-in wallet)
+        if (conn.player === null) this.replaceHolders(conn, existing.room, existing.entry.pid);
         if (conn.player === null) {
           // a room worker answers asynchronously; a room on this thread at once
           const back = existing.room.reattach(conn, existing.entry.pid);
