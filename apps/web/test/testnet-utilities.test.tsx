@@ -17,7 +17,7 @@ import { Kb } from '../src/design';
 import { adminApi, type MapAdminView } from '../src/site/api';
 import { FaucetPage } from '../src/site/faucet/FaucetPage';
 import { claimErrorText, faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
-import { emblemPerks } from '../src/site/mint/logic';
+import { emblemPerks, livePerks } from '../src/site/mint/logic';
 import { isLazyPage, loadedPage, resetPages, warmPage } from '../src/site/pages';
 import { navigate } from '../src/site/router';
 import { resetServerChain } from '../src/site/serverChain';
@@ -152,11 +152,30 @@ describe('the faucet', () => {
 describe('what the emblem does', () => {
   it('on testnet: open game, the WL carry-over and the faucet bonus; never mainnet access as live', () => {
     const t = emblemPerks(true);
-    expect(t.map((p) => p.id)).toEqual(['access', 'fee', 'isles', 'wl', 'skin', 'faucet']);
+    // nothing that depends on a setting while the settings are unknown
+    expect(t.map((p) => p.id)).toEqual(['access', 'wl', 'skin', 'faucet']);
     expect(t[0].note).toMatch(/testnet the ring is open to everyone/);
-    // before the server's rates are known: the owner's holder pair (8 % + 2 %) against the defaults (15 % + 5 %)
-    expect(t[1].title).toBe('10% fee instead of 20%');
-    expect(t[1].note).toMatch(/profit only/);
+  });
+  it('lists only the perks that are live: the holder fee, the Isles, the shop discount, the private-room perk', () => {
+    const fees = { ...chainStatus().fees!, holderPerks: true, holderBurnBps: 800, holderVaultBps: 200 };
+    const all = emblemPerks(false, { fees }, { isles: true, shopPct: 20, room: { perk: 'free_daily', pct: 50 } });
+    expect(all.map((p) => p.id)).toEqual(['access', 'fee', 'isles', 'shop', 'room', 'skin']);
+    expect(all[1].title).toBe('10% fee instead of 20%');
+    expect(all[1].note).toMatch(/profit only/);
+    expect(all[3].title).toBe('20% off power-ups');
+    expect(all[4].title).toBe('A free private room every day');
+    expect(emblemPerks(false, { fees }, { room: { perk: 'discount', pct: 50 } }).find((p) => p.id === 'room')?.title).toBe('50% off private rooms');
+    // perks off on chain (no holder NFT set), or a holder pair that is not lower: no fee line
+    expect(emblemPerks(false, { fees: { ...fees, holderPerks: false } }).map((p) => p.id)).not.toContain('fee');
+    expect(emblemPerks(false, { fees: { ...fees, holderBurnBps: 1500, holderVaultBps: 500 } }).map((p) => p.id)).not.toContain('fee');
+    // no holders-only arena, a closed shop, no room perk: none of those lines
+    expect(emblemPerks(false, { fees }, { isles: false, shopPct: null, room: { perk: 'none', pct: 0 } }).map((p) => p.id)).toEqual(['access', 'fee', 'skin']);
+  });
+  it('reads the live perks from the server: tiers, the shop, private rooms', () => {
+    const quote = { enabled: true, tiers: [{ holdersOnly: false }, { holdersOnly: true }], holderPerk: 'free_daily' as const, holderDiscountPct: 50 };
+    expect(livePerks(quote, { open: true, holderDiscountPct: 20 })).toEqual({ isles: true, shopPct: 20, room: { perk: 'free_daily', pct: 50 } });
+    expect(livePerks({ ...quote, enabled: false, tiers: [] }, { open: false, holderDiscountPct: 20 })).toEqual({ isles: false, shopPct: null, room: null });
+    expect(livePerks(null, null)).toEqual({ isles: null, shopPct: null, room: null });
   });
   it('on testnet: says "open to everyone" only while the server lets everyone in', () => {
     expect(emblemPerks(true, { gameAccess: 'public' })[0].note).toMatch(/open to everyone/);
@@ -164,7 +183,7 @@ describe('what the emblem does', () => {
     expect(emblemPerks(true, { gameAccess: 'admins' })[0].note).not.toMatch(/open to everyone/);
   });
   it('on mainnet: no testnet lines', () => {
-    expect(emblemPerks(false).map((p) => p.id)).toEqual(['access', 'fee', 'isles', 'skin']);
+    expect(emblemPerks(false).map((p) => p.id)).toEqual(['access', 'skin']);
     const fees = { ...chainStatus().fees!, holderPerks: true, holderBurnBps: 1000, holderVaultBps: 250 };
     expect(emblemPerks(false, { fees })[1].title).toBe('12.5% fee instead of 20%');
     expect(emblemPerks(true, { fees })[1].note).not.toMatch(/entry fee/);
