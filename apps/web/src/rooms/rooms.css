@@ -208,9 +208,10 @@
   flex: none;
 }
 .cr-card__code {
-  width: 7.5em;
+  /* room codes are 8 characters (older ones 5) */
+  width: 9.5em;
   min-width: 0;
-  flex: 0 1 7.5em;
+  flex: 0 1 9.5em;
   padding: 8px 10px;
   border: var(--stroke-sm) solid var(--outline);
   border-radius: var(--r-pill);

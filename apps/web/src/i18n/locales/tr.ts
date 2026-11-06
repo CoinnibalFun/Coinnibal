@@ -723,7 +723,7 @@ const tr: Dict = {
   'cr.card.create': "Oda kur",
   'cr.card.join': "Katıl",
   'cr.card.code': "Oda kodu",
-  'cr.card.badCode': "Oda kodları 5 harf ve rakamdan oluşur.",
+  'cr.card.badCode': "Oda kodları 8 harf ve rakamdan oluşur.",
   'cr.kind': "Oda türü",
   'cr.kind.free': "Ücretsiz oda",
   'cr.kind.paid': "Biletli oda",

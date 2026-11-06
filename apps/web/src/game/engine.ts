@@ -33,6 +33,7 @@ import { HeldTicket } from './held';
 import { Input } from './input';
 import { EXTRAPOLATE_MS, SnapshotTimeline } from './jitter';
 import { Net } from './net';
+import { readStoredSession } from '../site/storedSession';
 import { Particles } from './particles';
 import { announce, caller, music, powerUpKind, sound, unlockAudio } from '../audio';
 import { VALUE_FLY_EVENT } from './moments';
@@ -143,6 +144,9 @@ export class GameEngine {
         onMessage: (m) => this.onMessage(m),
         onSnapshot: (s) => this.onSnapshot(s),
       },
+      undefined,
+      // signed in (or a stored session the welcome will sign in with): the socket offers the token as it opens
+      () => useUi.getState().auth?.token ?? readStoredSession()?.token,
     );
     this.input = new Input(
       canvas,
