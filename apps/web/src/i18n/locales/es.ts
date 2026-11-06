@@ -723,7 +723,7 @@ const es: Dict = {
   'cr.card.create': "Crear sala",
   'cr.card.join': "Entrar",
   'cr.card.code': "Código de sala",
-  'cr.card.badCode': "Los códigos de sala tienen 5 letras y números.",
+  'cr.card.badCode': "Los códigos de sala tienen 8 letras y números.",
   'cr.kind': "Tipo de sala",
   'cr.kind.free': "Sala gratis",
   'cr.kind.paid': "Sala con ticket",

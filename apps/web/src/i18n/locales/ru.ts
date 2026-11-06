@@ -723,7 +723,7 @@ const ru: Dict = {
   'cr.card.create': "Создать комнату",
   'cr.card.join': "Войти",
   'cr.card.code': "Код комнаты",
-  'cr.card.badCode': "Код комнаты — это 5 букв и цифр.",
+  'cr.card.badCode': "Код комнаты — это 8 букв и цифр.",
   'cr.kind': "Тип комнаты",
   'cr.kind.free': "Бесплатная",
   'cr.kind.paid': "С билетами",

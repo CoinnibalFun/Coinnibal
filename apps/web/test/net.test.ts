@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CLOSE_REPLACED, Net, WATCHDOG_MS, retryDelay, type NetDown } from '../src/game/net';
+import { CLOSE_REPLACED as SHARED_CLOSE_REPLACED } from '@elymum/shared';
+import * as netModule from '../src/game/net';
+import { Net, WATCHDOG_MS, gameProtocols, retryDelay, type NetDown } from '../src/game/net';
+
+const CLOSE_REPLACED = SHARED_CLOSE_REPLACED;
 
 /** A stand-in socket: records every instance; the test closes them as the network would. */
 class FakeSocket {
@@ -14,7 +18,10 @@ class FakeSocket {
   onclose: ((ev?: { code: number }) => void) | null = null;
   onmessage: ((ev: { data: unknown }) => void) | null = null;
   onerror: (() => void) | null = null;
-  constructor(readonly url: string) {
+  constructor(
+    readonly url: string,
+    readonly protocols?: string[],
+  ) {
     FakeSocket.all.push(this);
   }
   send() {}
@@ -134,5 +141,36 @@ describe('Net: replaced by a newer connection', () => {
     expect(FakeSocket.all).toHaveLength(2);
     FakeSocket.all[1].accept();
     expect(net.open).toBe(true);
+  });
+});
+
+describe('Net: the shared close code and the subprotocols', () => {
+  it('uses the shared CLOSE_REPLACED (no local copy of it)', () => {
+    expect(SHARED_CLOSE_REPLACED).toBe(4000);
+    expect('CLOSE_REPLACED' in netModule).toBe(false);
+  });
+
+  it('a guest offers `elymum` alone; a signed-in socket adds `elymum.auth.<token>`, read at each connect', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('WebSocket', FakeSocket);
+    let token: string | null = null;
+    const net = new Net('ws://x/ws', { onOpen() {}, onClose() {}, onMessage() {}, onSnapshot() {} }, WATCHDOG_MS, () => token);
+    net.connect();
+    expect(FakeSocket.all[0].url).toBe('ws://x/ws');
+    expect(FakeSocket.all[0].protocols).toEqual(['elymum']);
+    // signed in meanwhile: the reconnect carries the token (never in the URL)
+    token = '0xAbC0000000000000000000000000000000000001.1700000000000.1690000000000.mAc_-x';
+    FakeSocket.all[0].close();
+    vi.advanceTimersByTime(600);
+    expect(FakeSocket.all[1].protocols).toEqual(['elymum', `elymum.auth.${token}`]);
+    expect(FakeSocket.all[1].url).toBe('ws://x/ws');
+    net.close();
+  });
+
+  it('a token that is not a valid subprotocol token is not offered (the socket still opens as a guest)', () => {
+    expect(gameProtocols(null)).toEqual(['elymum']);
+    expect(gameProtocols('')).toEqual(['elymum']);
+    expect(gameProtocols('bad token,with=chars')).toEqual(['elymum']);
+    expect(gameProtocols('a.b.c')).toEqual(['elymum', 'elymum.auth.a.b.c']);
   });
 });

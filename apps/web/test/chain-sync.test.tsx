@@ -46,10 +46,16 @@ describe('useChainSync', () => {
       return json({});
     }) as typeof fetch;
     act(() => useUi.setState({ chain: chainStatus({ arenaAddress: DEV_FAKE_ARENA_ADDRESS }) }));
-    act(() => connect(ALICE));
+    act(() => {
+      useUi.setState({ auth: { address: ALICE, token: 'tokA', profile: null } });
+      connect(ALICE);
+    });
     const view = render(<Sync />);
     await flush();
-    act(() => connect(BOB));
+    act(() => {
+      useUi.setState({ auth: { address: BOB, token: 'tokB', profile: null } });
+      connect(BOB);
+    });
     await flush();
     expect(useChainData.getState().pending.map((p) => p.key)).toEqual(['SessionOfB']);
     // A's reads finally land
@@ -76,6 +82,59 @@ describe('useChainSync', () => {
     await flush();
     expect(seen.some((s) => s.endsWith('/api/profile Bearer tok'))).toBe(true);
     expect(useChainData.getState().profile?.name).toBe('Daphne');
+    view.unmount();
+  });
+});
+
+describe('pending payouts (/api/pending needs the wallet\'s session)', () => {
+  it("sends the connected wallet's bearer token", async () => {
+    const seen: string[] = [];
+    globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      seen.push(`${url} ${(init?.headers as Record<string, string> | undefined)?.Authorization ?? ''}`);
+      if (url.includes('/api/pending')) return json({ pending: [{ key: 'Mine', arenaId: 1, payout: 5 }] });
+      return json({});
+    }) as typeof fetch;
+    act(() => {
+      useUi.setState({ chain: chainStatus({ arenaAddress: DEV_FAKE_ARENA_ADDRESS }), auth: { address: ALICE, token: 'tokA', profile: null } });
+      connect(ALICE);
+    });
+    const view = render(<Sync />);
+    await flush();
+    expect(seen.some((s) => s.includes(`/api/pending?wallet=${ALICE}`) && s.endsWith('Bearer tokA'))).toBe(true);
+    expect(useChainData.getState().pending.map((p) => p.key)).toEqual(['Mine']);
+    view.unmount();
+  });
+
+  it('signed out (or signed in as another wallet): no request, no error, nothing pending', async () => {
+    const seen: string[] = [];
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      seen.push(String(input));
+      return json({});
+    }) as typeof fetch;
+    act(() => {
+      useUi.setState({ chain: chainStatus({ arenaAddress: DEV_FAKE_ARENA_ADDRESS }), auth: { address: BOB, token: 'tokB', profile: null } });
+      connect(ALICE);
+    });
+    const view = render(<Sync />);
+    await flush();
+    expect(seen.some((u) => u.includes('/api/pending'))).toBe(false);
+    expect(useChainData.getState().pending).toEqual([]);
+    view.unmount();
+  });
+
+  it('a refused token (401) shows nothing rather than an error', async () => {
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) =>
+      String(input).includes('/api/pending') ? Promise.resolve(new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })) : json({}),
+    ) as typeof fetch;
+    act(() => {
+      useUi.setState({ chain: chainStatus({ arenaAddress: DEV_FAKE_ARENA_ADDRESS }), auth: { address: ALICE, token: 'expired', profile: null } });
+      connect(ALICE);
+    });
+    const view = render(<Sync />);
+    await flush();
+    expect(useChainData.getState().pending).toEqual([]);
+    expect(useChainData.getState().rpcDown).toBe(false);
     view.unmount();
   });
 });

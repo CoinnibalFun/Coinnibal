@@ -65,6 +65,33 @@ const idleGuests = () => {
 };
 
 describe('connection slots', () => {
+  it('guests and old clients: no subprotocol, plain `elymum`, or a bad token all get in as guests; the token is never echoed', async () => {
+    const withProtocols = (ip: string, protocols: string[]) =>
+      new Promise<WebSocket>((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, protocols, { headers: { 'X-Forwarded-For': ip } });
+        opened.push(ws);
+        ws.once('open', () => {
+          ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));
+          resolve(ws);
+        });
+        ws.once('unexpected-response', (_req, res) => reject(new Error(`HTTP ${res.statusCode}`)));
+        ws.once('error', reject);
+      });
+    const none = await withProtocols('192.0.2.10', []);
+    expect(none.protocol).toBe('');
+    const plain = await withProtocols('192.0.2.11', ['elymum']);
+    expect(plain.protocol).toBe('elymum');
+    const forged = await withProtocols('192.0.2.12', ['elymum', 'elymum.auth.not-a-token']);
+    expect(forged.protocol).toBe('elymum');
+    const signed = await withProtocols('192.0.2.13', ['elymum', `elymum.auth.${app.auth.issueToken(testSigner().address)}`]);
+    expect(signed.protocol).toBe('elymum');
+    await sleep(50);
+    const conns = [...app.rooms.conns];
+    expect(conns.filter((c) => c.priority === 'signed')).toHaveLength(1);
+    expect(conns.filter((c) => !c.priority)).toHaveLength(3);
+    await closeAll();
+  });
+
   it('guests fill at most 80 %; a signed-in socket still gets in; an idle guest makes room for a newcomer', async () => {
     for (let i = 0; i < 8; i++) await open(`198.51.${i}.1`);
     await expect(open('198.51.100.1')).rejects.toThrow(/HTTP 429/);

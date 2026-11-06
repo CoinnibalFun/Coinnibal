@@ -740,7 +740,7 @@ export const en = {
   'cr.card.create': 'Create a room',
   'cr.card.join': 'Join',
   'cr.card.code': 'Room code',
-  'cr.card.badCode': 'Room codes are 5 letters and digits.',
+  'cr.card.badCode': 'Room codes are 8 letters and digits.',
   'cr.kind': 'Room type',
   'cr.kind.free': 'Free room',
   'cr.kind.paid': 'Ticket room',

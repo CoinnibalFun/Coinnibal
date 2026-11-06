@@ -723,7 +723,7 @@ const zh: Dict = {
   'cr.card.create': "创建房间",
   'cr.card.join': "加入",
   'cr.card.code': "房间码",
-  'cr.card.badCode': "房间码是 5 位字母和数字。",
+  'cr.card.badCode': "房间码是 8 位字母和数字。",
   'cr.kind': "房间类型",
   'cr.kind.free': "免费房间",
   'cr.kind.paid': "门票房间",

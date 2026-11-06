@@ -7,7 +7,7 @@ import { arenaTarget, leavePaidSeat, openInvite, seatInPaidRoom } from '../src/r
 import { Kb } from '../src/design';
 import { RoomApiError, loadPendingPayment, roomLink, savePendingPayment } from '../src/rooms/api';
 import { RoomCreator, gasText } from '../src/rooms/RoomCreator';
-import { resetInviteLink, useInviteLink } from '../src/rooms/RoomCard';
+import { RoomCard, resetInviteLink, useInviteLink } from '../src/rooms/RoomCard';
 
 function Probe() {
   useInviteLink();
@@ -382,5 +382,40 @@ describe('invite links', () => {
     expect(useUi.getState().paidSeat).toBeNull();
     seatInPaidRoom({ code: 'AB2CD', name: 'x', endsAt: Date.now() + 60_000, arenaId: undefined });
     expect(useUi.getState().paidSeat).toBeNull();
+  });
+});
+
+describe('join by code (8-character room codes)', () => {
+  const mount = async () => {
+    render(
+      <Kb>
+        <RoomCard />
+      </Kb>,
+    );
+    await settle();
+    return screen.getByLabelText('Room code') as HTMLInputElement;
+  };
+
+  it('takes a whole 8-character code (any case) and joins it', async () => {
+    const input = await mount();
+    expect(input.maxLength).toBeGreaterThanOrEqual(8);
+    fireEvent.change(input, { target: { value: 'ab2cd3ef' } });
+    expect(input.value).toBe('AB2CD3EF');
+    fireEvent.submit(input.closest('form')!);
+    await settle();
+    expect(spies.play).toHaveBeenLastCalledWith('private:AB2CD3EF');
+    expect(screen.queryByText('Room codes are 8 letters and digits.')).toBeNull();
+  });
+
+  it('older 5-character codes still join; a malformed code says how long codes are', async () => {
+    const input = await mount();
+    fireEvent.change(input, { target: { value: 'AB2CD' } });
+    fireEvent.submit(input.closest('form')!);
+    await settle();
+    expect(spies.play).toHaveBeenLastCalledWith('private:AB2CD');
+    fireEvent.change(input, { target: { value: 'AB1' } });
+    fireEvent.submit(input.closest('form')!);
+    await settle();
+    expect(screen.getByText('Room codes are 8 letters and digits.')).toBeTruthy();
   });
 });
