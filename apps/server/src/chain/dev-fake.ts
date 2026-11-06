@@ -86,7 +86,7 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
       explorerUrl: null,
       arenaAddress: FAKE_ARENA,
       nftAddress: null,
-      arenasEnabled: this.tokenSet,
+      arenasEnabled: this.tokenSet && !this.journal.writeFailing,
       tokenReady: this.tokenSet,
       token: this.tokenSet ? { address: FAKE_TOKEN, symbol: TOKEN_SYMBOL_DEFAULT, decimals: DECIMALS } : null,
       fees: { ...DEFAULT_FEE_RATES, holderBurnBps: DEFAULT_FEE_RATES.burnBps, holderVaultBps: DEFAULT_FEE_RATES.vaultBps, holderPerks: false, paymentBurnBps: DEFAULT_PAYMENT_BURN_BPS, burnMode: 0 },

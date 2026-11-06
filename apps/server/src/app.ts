@@ -1,17 +1,18 @@
 import { SiteFail } from './site/validate';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
-import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain } from '@elymum/shared';
+import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain } from '@elymum/shared';
 import { chainOverridesFor } from './chain/evm';
 import type { Hex } from 'viem';
 import { Auth } from './auth';
 import { assertDevFakeChainAllowed, createChain, dataFileNames } from './chain';
 import { PriceKeeper } from './chain/price-keeper';
 import type { ChainGateway } from './chain/types';
-import type { ServerConfig } from './config';
+import { checkAuthSecret, type ServerConfig } from './config';
 import { createHttpServer, publicBaseUrl, redactUrls } from './http';
 import { IntegrityService } from './integrity/service';
 import { IntegrityStore } from './integrity/store';
+import { integrityDefaults } from './integrity/settings';
 import { Leaderboards } from './leaderboards';
 import type { Limiter } from './net/limiter';
 import { Gateway } from './net/gateway';
@@ -22,7 +23,7 @@ import { MapSettingsStore } from './rooms/map-settings';
 import { ShareService } from './site/shares';
 import { shareCardSelfCheck } from './site/share-card';
 import { viemHolderReader, type HolderReader } from './chain/evm-client';
-import { configureRpcBudgets, startRpcMinuteLog } from './chain/rpc-budget';
+import { configureRpcBudgetFor, configureRpcBudgets, startRpcMinuteLog } from './chain/rpc-budget';
 import { loadServerKeySecret } from './chain/server-key';
 import { chainDir, isTestChain, migrateLegacyState, resolveStateChainId, stateDir } from './chain/state-dir';
 import { HolderWlStore } from './site/holder-wl';
@@ -43,6 +44,9 @@ import { BoostInventory } from './shop/inventory';
 import { ShopService } from './shop/service';
 import { ShopSettingsStore } from './shop/settings';
 import { ArenaPriceStore } from './site/arena-prices';
+import { EmblemClaims } from './site/emblem-claims';
+import { EmblemGate } from './site/emblem-gate';
+import { RepriceScheduler } from './site/reprice';
 import { NFT_COLLECTION_FILE, NftCollection } from './site/nft/collection';
 
 export interface App {
@@ -115,8 +119,14 @@ export async function createApp(
   const persist = opts.persist ?? true;
   // refuse a misconfigured DEV_FAKE_CHAIN before any file is opened
   assertDevFakeChainAllowed(cfg);
+  // the secret signs every session token (admin sessions too): a short one can be brute-forced offline from any
+  // token. The mainnet refuses to start with one (throws); a testnet logs it
+  const weakSecret = checkAuthSecret(cfg);
+  if (weakSecret) log(`auth: ${weakSecret}`);
   // one request budget per RPC URL for the whole process (the public RPC answers 429 above its limit)
   configureRpcBudgets({ ratePerSec: cfg.chain.rpcMaxRps, burst: cfg.chain.rpcBurst });
+  // EVM_RPC_URLS: each URL its own budget (RPC_MAX_RPS may give one rate per URL: a provider allows far more than a public RPC)
+  cfg.chain.rpcUrls.forEach((u, i) => configureRpcBudgetFor(u, { ratePerSec: cfg.chain.rpcMaxRpsPerUrl[i] ?? cfg.chain.rpcMaxRps, burst: cfg.chain.rpcBurst }));
   const stopRpcLog = startRpcMinuteLog(log);
   const files = dataFileNames(cfg);
   // chain-keyed state: DATA_DIR/chains/<chainId>/ (registry, journal, bot wallets, allowlist snapshots)
@@ -139,7 +149,15 @@ export async function createApp(
   const chain = opts.chain ?? (await createChain(cfg, journal, log, { contracts: () => contracts.view(), stateChainId, cacheDir: chainState }));
   // a newly registered (or cleared) contract is picked up at once, without a restart
   contracts.onChange(() => void chain.refresh?.());
-  const auth = new Auth(cfg.authSecret, { onChain: chain.verifyMessage ? (a, m, sig) => chain.verifyMessage!(a, m, sig) : null });
+  const adminSet = new Set(cfg.adminWallets.map((w) => w.toLowerCase()));
+  const auth = new Auth(cfg.authSecret, {
+    onChain: chain.verifyMessage ? (a, m, sig) => chain.verifyMessage!(a, m, sig) : null,
+    // admin sessions are short (ADMIN_TOKEN_TTL_MIN) and can be revoked (POST /api/admin/auth/revoke)
+    isAdmin: (w) => adminSet.has(w.toLowerCase()),
+    adminTtlMs: cfg.adminTokenTtlMs,
+    revocationsFile: persist ? join(cfg.dataDir, 'auth-revoked.json') : null,
+    log,
+  });
   const profiles = new ProfileStore(persist ? join(cfg.dataDir, files.profiles) : null, log);
   // profile pictures: content-addressed files next to the profiles (DATA_DIR/avatars/<id>.png|webp)
   const avatars = new AvatarStore(persist ? join(cfg.dataDir, cfg.devFakeChain ? 'avatars.dev-fake' : 'avatars') : null, log);
@@ -200,7 +218,8 @@ export async function createApp(
   // integrity data lives next to the journal; the fake chain keeps its own directory
   const integrityDir = persist ? join(cfg.dataDir, cfg.devFakeChain ? 'integrity.dev-fake' : 'integrity') : null;
   const integrity = new IntegrityService({
-    store: new IntegrityStore(integrityDir, { log }),
+    // auto-hold of high-risk payouts: on by default on the mainnet (an admin may still turn it off), off on a testnet
+    store: new IntegrityStore(integrityDir, { log, defaults: integrityDefaults(cfg.chain.chainId === ROBINHOOD_CHAIN_ID || stateChainId === ROBINHOOD_CHAIN_ID ? ROBINHOOD_CHAIN_ID : stateChainId) }),
     journal,
     kick: () => chain.kick(),
     books: () => (chain as Partial<{ booksGuard(): ReadonlyMap<number, string> }>).booksGuard?.() ?? new Map(),
@@ -213,19 +232,31 @@ export async function createApp(
   // the admin's map settings per room kind (DATA_DIR/site/maps.json; taken over once from the old bots.json)
   const mapSettings = new MapSettingsStore(persist ? cfg.dataDir : null, log);
 
+  // one emblem, one holder perk at a time: token id claims of holder tickets and of the daily perks (per chain)
+  const emblemClaims = new EmblemClaims(chainState ? join(chainState, 'emblem-claims.json') : null, log);
+  const emblemTokens = (wallet: string, fresh = false) => mint.emblemTokens(wallet, fresh);
+
   // bought power-ups: the admin's prices (DATA_DIR/site/shop.json), the charges and used payments per chain
   const shopSettings = new ShopSettingsStore(persist ? cfg.dataDir : null, undefined, log);
   const boostInventory = new BoostInventory(chainState ? join(chainState, files.boosts) : null, log);
+  // arena tiers in US dollars and the token's USD price (DATA_DIR/chains/<id>/arena-prices.json): the owner re-prices on chain
+  const arenaPrices = new ArenaPriceStore(chainState, log);
   const shop = new ShopService({
     settings: shopSettings,
     inventory: boostInventory,
     chain,
     holder: (wallet, fresh) => mint.isHolder(wallet, fresh),
+    emblemTokens,
+    claims: emblemClaims,
+    // power-up packs priced in dollars convert at the arenas' price and rounding (the manual price today)
+    usdPrice: async () => {
+      const r = await arenaPrices.price();
+      return r.ok ? { price: r.price, usdPerToken: r.usdPerToken, sigFigs: arenaPrices.settings.sigFigs } : null;
+    },
     log,
   });
   site.setShop({ service: shop, settings: shopSettings, inventory: boostInventory });
-  // arena tiers in US dollars and the token's USD price (DATA_DIR/chains/<id>/arena-prices.json): the owner re-prices on chain
-  site.setArenaPrices(new ArenaPriceStore(chainState, log));
+  site.setArenaPrices(arenaPrices);
 
   // "Share on X": cards of results and notable kills, made from the server's own records (DATA_DIR/site/shares.json)
   const shares = new ShareService({
@@ -302,10 +333,12 @@ export async function createApp(
       if (paymentReader !== undefined) return paymentReader;
       if (cfg.devFakeChain) return (paymentReader = devFakePaymentReader());
       if (!chain.enabled || !cfg.chain.rpcUrl) return null;
-      return (paymentReader = viemPaymentReader(cfg.chain.rpcUrl));
+      return (paymentReader = viemPaymentReader(cfg.chain.rpcUrls));
     },
     chainId: () => chain.status().chainId,
     isHolder: (wallet) => mint.isHolder(wallet),
+    emblemTokens,
+    claims: emblemClaims,
     ownerWallet: checksumAddress(cfg.adminWallets[0] ?? null),
     now: opts.customNow,
     log,
@@ -329,6 +362,32 @@ export async function createApp(
   site.setScaler(rooms.scaler);
   site.setTestArenas(rooms);
   chain.setLiveSessionProvider(() => rooms.liveSessions());
+  // "Re-price at next bell": the arena closes at the round's last minute, drains after its bell, waits for the owner
+  const reprice = new RepriceScheduler({
+    listArenas: (fresh) => chain.listArenas(fresh),
+    journal,
+    roundWindow: (n) => rooms.roundWindow(n),
+    now: () => rooms.now(),
+    liveStakes: (id) => rooms.liveStakesOf(id),
+    sweepNow: () => void (chain as Partial<{ sweepStale(): Promise<number> }>).sweepStale?.(),
+    file: chainState ? join(chainState, 'reprice.json') : null,
+    log,
+  });
+  (chain as Partial<{ setClosedArenaProvider(fn: () => Set<number>): void }>).setClosedArenaProvider?.(() => reprice.closedArenas());
+  rooms.repricingArenas = () => reprice.view().filter((e) => reprice.closedForSeats(e.arenaId)).map((e) => e.arenaId);
+  site.setReprice(reprice);
+  const repriceTimer = setInterval(() => void reprice.tick().catch((err) => log(`reprice: ${(err as Error).message}`)), 2_000);
+  repriceTimer.unref();
+  const emblems = new EmblemGate({
+    chain,
+    journal,
+    claims: emblemClaims,
+    isHolder: (w, fresh) => mint.isHolder(w, fresh),
+    emblemTokens,
+    flag: (c) => void integrity.raise(c),
+    liveSessions: () => rooms.liveSessions(),
+    log,
+  });
   // the game token was set on chain (picked up by the 30 s config watcher, no restart): attach the
   // arenas now (a fresh read of the arena list) instead of waiting for the next arena timer
   chain.onStatusChange(() => {
@@ -353,6 +412,12 @@ export async function createApp(
   gateway.setBanGate((wallet) => integrity.isBanned(wallet));
   // emblem holders wear a laurel and may play the emblem skin (cached holder check of the NFT)
   gateway.setHolderCheck((wallet) => mint.isHolder(wallet));
+  gateway.setRepricing((id) => reprice.closedForSeats(id));
+  // holder tickets: the emblem is there at the seat (read fresh) and one token id serves one open holder ticket
+  gateway.setEmblemGate((wallet, session) => emblems.seat(wallet, session));
+  chain.onSettled((e) => emblems.settled(e.key));
+  const emblemTimer = setInterval(() => emblems.sweep(), 60_000);
+  emblemTimer.unref();
   // graceful degradation: new joins are shed before the live rooms lose their tick budget
   const shedder = new LoadShedder({ bestTickP95Ms: () => rooms.bestTickP95Ms() }, log);
   if (cfg.loadShed) {
@@ -403,9 +468,15 @@ export async function createApp(
       closed = true;
       clearInterval(flushTimer);
       clearInterval(arenaTimer);
+      clearInterval(emblemTimer);
+      clearInterval(repriceTimer);
       shedder.stop();
       stopRpcLog();
       mint.flush();
+      // no new socket or request from here on: a client that reconnects during the shutdown would keep the HTTP
+      // server open (and the process alive) until the hard exit
+      gateway.stopAccepting();
+      server.close();
       await rooms.shutdown();
       customRooms.flush();
       integrity.close();
@@ -415,7 +486,8 @@ export async function createApp(
       shares.flush();
       gateway.close();
       await chain.stop().catch(() => {});
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => (server.listening ? server.close(() => resolve()) : resolve()));
     },
   };
 }

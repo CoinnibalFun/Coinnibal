@@ -5,7 +5,7 @@ import { fromLedger, type SessionInfo } from '@elymum/sdk';
 import { generatePrivateKey } from 'viem/accounts';
 import { describe, expect, it } from 'vitest';
 import { createChain } from '../src/chain';
-import { CONFIG_TTL_MS, EvmChain, LOW_BALANCE_WEI, RECHECK_MS, type ContractsView } from '../src/chain/evm';
+import { CONFIG_TTL_MS, EvmChain, RECHECK_MS, type ContractsView } from '../src/chain/evm';
 import { NullChain, parseSessionKey, sessionKey, type SettledEvent } from '../src/chain/types';
 import { loadConfig, type ServerConfig } from '../src/config';
 import { Journal, sweepKey, type SettlementItem, type SweepItem } from '../src/stake/journal';
@@ -41,6 +41,8 @@ async function harness(
   const evm = new FakeEvm();
   evm.addArena(1, 1_000n);
   evm.addArena(2, 10_000n);
+  // the contract model's clock follows the harness clock, like a real chain's block time
+  evm.nowS = () => Math.floor(h.clock.now / 1000);
   opts.setup?.(evm);
   const journal = opts.journal ?? new Journal(null);
   const h: Harness = {
@@ -226,14 +228,55 @@ describe('status and reads', () => {
     expect((await h.chain.listArenas(true)).length).toBe(3);
   });
 
-  it('server key info and the low-balance warning', async () => {
-    const h = await harness({ setup: (e) => (e.balanceWei = LOW_BALANCE_WEI - 1n) });
+  it('server key info: under the floor it is low at once', async () => {
+    const floor = 2n * 10n ** 15n;
+    const h = await harness({ setup: (e) => (e.balanceWei = floor - 1n) });
     await h.chain.checkBalance();
-    expect(h.chain.serverInfo()).toEqual({ address: SERVER, balanceWei: (LOW_BALANCE_WEI - 1n).toString(), low: true });
-    expect(h.logs.join()).toMatch(/WARNING the server key .* holds only/);
+    expect(h.chain.serverInfo()).toMatchObject({ address: SERVER, balanceWei: (floor - 1n).toString(), low: true, gas: { level: 'critical', days: null } });
+    expect(h.logs.join()).toMatch(/!!! chain: gas LOW — the server key .* holds/);
     h.evm.balanceWei = E18;
+    h.clock.now += 120_000;
     await h.chain.checkBalance();
     expect(h.chain.serverInfo().low).toBe(false);
+  });
+
+  it('gas runway: the trailing spend decides, warning under 7 days, alert under 2; a top-up is not spend', async () => {
+    const h = await harness({ setup: (e) => (e.balanceWei = E18 / 10n) }); // 0.1 ETH, far above the floor
+    const step = 5 * 60_000;
+    // 0.01 ETH a day: 10 days of runway
+    const perStep = (E18 / 100n) / BigInt((24 * 3600_000) / step);
+    for (let i = 0; i < 24; i++) {
+      await h.chain.checkBalance();
+      h.clock.now += step;
+      h.evm.balanceWei -= perStep;
+    }
+    let gas = h.chain.gasRunway();
+    expect(gas.level).toBe('ok');
+    expect(gas.days).toBeGreaterThan(9);
+    expect(gas.days).toBeLessThan(11);
+    // the spend quadruples (a busy evening): about 2.3 days left, a warning
+    for (let i = 0; i < 60; i++) {
+      h.evm.balanceWei -= perStep * 4n;
+      h.clock.now += step;
+      await h.chain.checkBalance();
+    }
+    gas = h.chain.gasRunway();
+    expect(gas.level).toBe('warn');
+    expect(h.logs.join('\n')).toMatch(/WARNING gas runway under 7 days/);
+    // and faster still: under 2 days, the alert (and /admin's "low")
+    for (let i = 0; i < 60; i++) {
+      h.evm.balanceWei -= perStep * 20n;
+      h.clock.now += step;
+      await h.chain.checkBalance();
+    }
+    expect(h.chain.gasRunway().level).toBe('critical');
+    expect(h.chain.serverInfo().low).toBe(true);
+    // a top-up: the balance jumps, the runway is long again (the jump is not counted as spend)
+    h.evm.balanceWei += E18;
+    h.clock.now += step;
+    await h.chain.checkBalance();
+    expect(h.chain.gasRunway().level).toBe('ok');
+    // the samples survive a restart (kept in the chain cache)
   });
 
   it('verifies smart-wallet signatures through the chain', async () => {
@@ -726,6 +769,54 @@ describe('loot sweeps (sweepLoot burns, monotonic sweep ids)', () => {
   });
 });
 
+describe('death settlements are batched (DEATH_SETTLE_BATCH_S)', () => {
+  it('deaths within the window go out as one settle batch; a payout in the arena takes them along at once', async () => {
+    const h = await harness();
+    const s = [0, 1, 2, 3].map(() => h.evm.join(1, wallet()));
+    // three tickets eaten 2 s apart: nothing is sent until the first is 6 s old, then one batch with all three
+    for (const [i, t] of s.slice(0, 3).entries()) {
+      h.journal.enqueue(settleItem(t, 0, { reason: 'death', createdAt: h.clock.now, nextAttemptAt: h.clock.now }));
+      await h.chain.processPending();
+      expect(settleCalls(h.evm)).toHaveLength(0);
+      if (i < 2) h.clock.now += 2_000;
+    }
+    h.clock.now += 2_000;
+    await h.chain.processPending();
+    expect(settleCalls(h.evm)).toHaveLength(1);
+    expect(settleArgs(h.evm, 0).map((x) => x.sessionId)).toEqual(s.slice(0, 3).map((t) => t.id));
+    expect(h.journal.pending).toHaveLength(0);
+    // a fresh death waits, but a bell payout in the same arena takes it along in the same transaction
+    const b = h.evm.join(1, wallet());
+    h.journal.enqueue(settleItem(s[3], 0, { reason: 'death', createdAt: h.clock.now, nextAttemptAt: h.clock.now }));
+    h.journal.enqueue(settleItem(b, 1_000_000, { reason: 'round', createdAt: h.clock.now, nextAttemptAt: h.clock.now }));
+    await h.chain.processPending();
+    expect(settleCalls(h.evm)).toHaveLength(2);
+    expect(settleArgs(h.evm, 1)).toHaveLength(2);
+    expect(h.journal.pending).toHaveLength(0);
+  });
+
+  it('DEATH_SETTLE_BATCH_S=0 sends each at once', async () => {
+    const h = await harness({ env: { DEATH_SETTLE_BATCH_S: '0' } });
+    const t = h.evm.join(1, wallet());
+    h.journal.enqueue(settleItem(t, 0, { reason: 'death', createdAt: h.clock.now, nextAttemptAt: h.clock.now }));
+    await h.chain.processPending();
+    expect(settleCalls(h.evm)).toHaveLength(1);
+  });
+
+  it('nothing is sent while the journal cannot be written', async () => {
+    const h = await harness();
+    const t = h.evm.join(1, wallet());
+    h.journal.enqueue(settleItem(t, 1_000_000));
+    Object.defineProperty(h.journal, 'writeFailing', { get: () => true, configurable: true });
+    await h.chain.processPending();
+    expect(h.evm.sent).toHaveLength(0);
+    expect(h.logs.join('\n')).toMatch(/the journal cannot be written — settlements wait/);
+    Object.defineProperty(h.journal, 'writeFailing', { get: () => false, configurable: true });
+    await h.chain.processPending();
+    expect(settleCalls(h.evm)).toHaveLength(1);
+  });
+});
+
 describe('stale sessions (the full entry fee back: cancel)', () => {
   it('queues unplayed sessions from the Joined logs; live, queued, fresh and finalized ones are skipped', async () => {
     const h = await harness({ env: { LOG_CHUNK_BLOCKS: '100' } });
@@ -820,6 +911,8 @@ describe('stale sessions (the full entry fee back: cancel)', () => {
       return s;
     };
     await h.chain.processPending();
+    // the death (payout 0) waits a few seconds for other deaths of the arena (DEATH_SETTLE_BATCH_S), then goes out
+    h.clock.now += 10_000;
     await h.chain.processPending();
     expect(h.settled).toHaveLength(1);
     expect(h.settled[0]).toMatchObject({ player: p, payout: 0 });

@@ -58,6 +58,23 @@ describe('arena rounds (room)', () => {
     expect(of(conn, 'joined')[0].room.round).toEqual(want);
   });
 
+  it('every settlement carries the round pool (entries seated in the instance this round); the next round starts afresh', () => {
+    const { room, journal, clock, round } = setup();
+    for (let i = 0; i < 3; i++) room.join(fakeConn(`p${i}`), stakeJoin(1, FEE));
+    clock.now = round.endsAt;
+    tick(room);
+    const items = journal.settlements();
+    expect(items).toHaveLength(3);
+    expect(items.map((i) => i.roundPool)).toEqual([3 * FEE, 3 * FEE, 3 * FEE]);
+    // the next round: one ticket, its own pool
+    const next = roundAt(clock.now, ROUND.roundMs, ROUND.closeMs);
+    clock.now = next.opensAt + 1;
+    room.join(fakeConn('late'), stakeJoin(1, FEE));
+    clock.now = next.endsAt;
+    tick(room);
+    expect(journal.settlements().at(-1)?.roundPool).toBe(FEE);
+  });
+
   it('a join at the bell, before the next tick, plays the new round (the bell rings first)', () => {
     const { room, journal, clock, round } = setup();
     const early = fakeConn('w-early');

@@ -5,9 +5,10 @@
 # the newest 14. The game keeps running: the journal is written atomically on every change, other stores
 # at most 30 s behind. Output goes to journald: journalctl -u elymum-backup -n 50
 #
-# Offsite copy (optional, not installed): install rclone, `rclone config` a remote (e.g. "b2"), then add
-#   rclone copy /opt/elymum/backups b2:elymum-backups --max-age 25h
-# to the end of this script, or as a separate timer. Encrypt the remote (rclone "crypt"): the files hold secrets.
+# Offsite copy (optional): BACKUP_RCLONE_REMOTE in .env names an rclone remote of type "crypt" (encrypted before it
+# leaves the server: the files hold the server key), e.g. elymum-offsite: over a B2 / S3 / R2 bucket (README "Offsite
+# backups"). Each new backup is copied there, copies older than BACKUP_RCLONE_KEEP_DAYS (30) are deleted, a failure
+# is alerted (alert.sh's Telegram). A remote that is not "crypt" is refused (BACKUP_RCLONE_ALLOW_PLAIN=1 overrides).
 set -euo pipefail
 # shellcheck source=lib.sh
 . "$(dirname "$(readlink -f "$0")")/lib.sh"
@@ -58,3 +59,25 @@ for f in "${old[@]}"; do
   rm -f -- "$f"
   log "removed old backup $(basename "$f")"
 done
+
+# offsite copy (optional): encrypted with rclone crypt, see the top of this file
+remote="$(env_get BACKUP_RCLONE_REMOTE)"
+if [[ -n "$remote" ]]; then
+  if ! command -v rclone >/dev/null 2>&1; then
+    notify "offsite backup: BACKUP_RCLONE_REMOTE is set but rclone is not installed (apt-get install rclone)"
+    exit 0
+  fi
+  rtype="$(rclone config show "${remote%%:*}" 2>/dev/null | awk -F' = ' '$1 == "type" { print $2 }')"
+  if [[ "$rtype" != "crypt" && "$(env_get BACKUP_RCLONE_ALLOW_PLAIN)" != "1" ]]; then
+    notify "offsite backup refused: rclone remote ${remote%%:*} is \"${rtype:-unknown}\", not \"crypt\" (the backups hold the server key)"
+    exit 0
+  fi
+  days="$(env_get BACKUP_RCLONE_KEEP_DAYS)"
+  [[ "$days" =~ ^[0-9]+$ ]] || days=30
+  if rclone copy --no-traverse "$ELYMUM_BACKUPS/$name" "$remote" 2>&1 | tail -n 5; then
+    log "offsite copy done: $name -> ${remote%%:*}"
+    rclone delete --min-age "${days}d" "$remote" --include 'elymum-data-*.tar.gz' >/dev/null 2>&1 || log "offsite: pruning old copies failed"
+  else
+    notify "offsite backup of $name to ${remote%%:*} failed (journalctl -u elymum-backup -n 50)"
+  fi
+fi

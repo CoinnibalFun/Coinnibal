@@ -1,6 +1,8 @@
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import {
+  CLOSE_REPLACED,
+  REFUSAL_CODES,
   PROTOCOL_VERSION,
   PlayerFlag,
   SKIN_COUNT,
@@ -32,6 +34,21 @@ import type { LoadShedder } from './shedder';
 export const HELLO_TIMEOUT_MS = 10_000;
 /** WebSocket upgrades per IP a minute (reconnect storms of a real client stay far below it). */
 export const UPGRADES_PER_IP_PER_MIN = 60;
+/** Guests (sockets not signed in) may hold at most this share of `MAX_CONNECTIONS`: the rest is kept for signed-in players. */
+export const GUEST_SHARE = 0.8;
+/** A guest with no message for this long, not playing, is idle: it is closed when a newcomer needs its slot. */
+export const IDLE_GUEST_MS = 30_000;
+/** Above this share of `MAX_CONNECTIONS` the heartbeat closes guests idle for `2 × IDLE_GUEST_MS` (down to the share). */
+const IDLE_SWEEP_SHARE = 0.9;
+/** Live-stake holders reconnecting get this much room above `MAX_CONNECTIONS` (they always get in). */
+const STAKE_HEADROOM = 0.05;
+/**
+ * Signed-in sockets per IP: `MAX_CONNECTIONS_PER_IP` times this (64 by default). Far above a household, enough for a
+ * carrier NAT address, and still a bound on one address that signs in with many throwaway wallets.
+ */
+export const SIGNED_PER_IP_FACTOR = 8;
+/** A browser may offer its session token as a WebSocket subprotocol `elymum.auth.<token>` (no token in the URL). */
+export const AUTH_SUBPROTOCOL = 'elymum.auth.';
 
 /**
  * The network an address belongs to for the per-subnet connection limit: IPv4 /24, IPv6 /64 (an IPv4-mapped
@@ -115,14 +132,24 @@ export function settledMessage(e: SettledEvent): Extract<ServerMessage, { t: 'se
 
 /** WebSocket front door: connection limits, message parsing and routing. */
 export class Gateway {
-  private readonly wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false });
+  private readonly wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: 4096,
+    perMessageDeflate: false,
+    // the session token offered as a subprotocol (`elymum.auth.<token>`) is never echoed back: answer `elymum`
+    handleProtocols: (protocols) => (protocols.has('elymum') ? 'elymum' : false),
+  });
   private readonly perIp = new Map<string, number>();
   private readonly perSubnet = new Map<string, number>();
+  /** Signed-in sockets per IP (limited at `SIGNED_PER_IP_FACTOR` × the guest limit). */
+  private readonly signedPerIp = new Map<string, number>();
   private readonly upgrades = new Limiter(UPGRADES_PER_IP_PER_MIN, 60_000);
   /** Graceful degradation (new joins shed before live rooms suffer); null: never sheds (bare unit tests). */
   private shedder: LoadShedder | null = null;
   /** Connections closed for abuse (flood, garbage, no hello), for the load test and the logs. */
-  readonly dropped = { noHello: 0, flood: 0, limit: 0 };
+  readonly dropped = { noHello: 0, flood: 0, limit: 0, idle: 0 };
+  /** Sockets closed because a newer one of the same wallet took their arena coin over (`CLOSE_REPLACED`). */
+  replaced = 0;
   private readonly alive = new WeakMap<WebSocket, boolean>();
   private timers: NodeJS.Timeout[] = [];
   /** Who may enter a room (join or spectate); null: everyone (unit tests that build a bare gateway). */
@@ -133,6 +160,10 @@ export class Gateway {
   private banGate: ((wallet: string) => boolean) | null = null;
   /** Whether a wallet holds an Elymum emblem (laurel flag, emblem skin); null: nobody does. */
   private holderCheck: ((wallet: string) => Promise<boolean>) | null = null;
+  /** Arenas closed for a re-price at their bell (`RepriceScheduler.closedForSeats`); absent: none. */
+  private repricing: ((arenaId: number) => boolean) | null = null;
+  /** The seat check of holder tickets (`EmblemGate.seat`): null to seat, else the refusal; absent: none. */
+  private emblemGate: ((wallet: string, session: ChainSession) => Promise<{ code: ErrorCode; message: string } | null>) | null = null;
 
   constructor(
     private readonly cfg: ServerConfig,
@@ -150,6 +181,8 @@ export class Gateway {
     });
     // the token was set (or another status change clients must see): push the new chain status
     chain.onStatusChange(() => this.broadcastChain());
+    // the journal stopped (or resumed) being writable: the lobby stops (or resumes) offering tickets
+    journal.onWriteStateChange?.(() => this.broadcastChain());
   }
 
   /** Sets who may enter rooms (the site's game gate: admins, NFT holders, or everyone). */
@@ -165,6 +198,16 @@ export class Gateway {
   /** Sets the emblem holder check (cached by the mint service): holders wear a laurel and may pick the emblem skin. */
   setHolderCheck(check: ((wallet: string) => Promise<boolean>) | null): void {
     this.holderCheck = check;
+  }
+
+  /** Sets which arenas take no new seat because they close for a re-price (`site/reprice.ts`). */
+  setRepricing(fn: ((arenaId: number) => boolean) | null): void {
+    this.repricing = fn;
+  }
+
+  /** Sets the seat check of holder tickets (one emblem token id per open holder ticket; see `site/emblem-gate.ts`). */
+  setEmblemGate(gate: ((wallet: string, session: ChainSession) => Promise<{ code: ErrorCode; message: string } | null>) | null): void {
+    this.emblemGate = gate;
   }
 
   /** Sets the load shedder (see `net/shedder.ts`). */
@@ -209,21 +252,21 @@ export class Gateway {
         socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
         socket.destroy();
       };
-      if (
-        this.rooms.conns.size >= this.cfg.maxConnections ||
-        (this.perIp.get(ip) ?? 0) >= this.cfg.maxConnectionsPerIp ||
-        (this.perSubnet.get(net) ?? 0) >= this.cfg.maxConnectionsPerSubnet ||
-        !this.upgrades.allow(ip)
-      ) {
-        refuse('429 Too Many Requests');
-        return;
-      }
-      // overloaded: live games keep their budget, new sockets wait
-      if (this.shedder && !this.shedder.admitCritical()) {
+      if (!this.accepting) {
         refuse('503 Service Unavailable');
         return;
       }
-      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, ip, net));
+      const priority = this.priorityOf(req);
+      if (!this.admit(ip, net, priority)) {
+        refuse('429 Too Many Requests');
+        return;
+      }
+      // overloaded: live games keep their budget, new sockets wait (a live stake's reconnect always gets in)
+      if (priority !== 'stake' && this.shedder && !this.shedder.admitCritical()) {
+        refuse('503 Service Unavailable');
+        return;
+      }
+      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, ip, net, priority));
     });
     // heartbeat + lobby room list
     this.timers.push(
@@ -236,6 +279,9 @@ export class Gateway {
           this.alive.set(ws, false);
           ws.ping();
         }
+        // close to the cap: lobby guests idle for a minute make room before anyone is refused
+        const max = this.cfg.maxConnections;
+        while (this.rooms.conns.size > max * IDLE_SWEEP_SHARE && this.evictIdleGuest(2 * IDLE_GUEST_MS));
       }, 25_000),
       setInterval(() => {
         const msg = { t: 'rooms', rooms: this.rooms.list(), online: this.rooms.online(), blocked: this.rooms.blockedArenas() } as const;
@@ -244,15 +290,119 @@ export class Gateway {
     );
   }
 
+  /** The server is shutting down: every new WebSocket is refused (503) from now on. */
+  stopAccepting(): void {
+    this.accepting = false;
+  }
+
+  private accepting = true;
+
   close(): void {
+    this.accepting = false;
     for (const t of this.timers) clearInterval(t);
     for (const ws of this.wss.clients) ws.close(1001, 'server shutting down');
   }
 
-  private onConnection(ws: WebSocket, ip: string, net = subnetOf(ip)): void {
-    this.perIp.set(ip, (this.perIp.get(ip) ?? 0) + 1);
-    this.perSubnet.set(net, (this.perSubnet.get(net) ?? 0) + 1);
+  /**
+   * The session token a browser offered as a subprotocol (`elymum.auth.<token>`): `stake` when its wallet holds a
+   * live arena coin here (a reconnect: it always gets in), `signed` for any other valid session, null without one.
+   */
+  private priorityOf(req: IncomingMessage): 'stake' | 'signed' | null {
+    const offered = String(req.headers['sec-websocket-protocol'] ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .find((s) => s.startsWith(AUTH_SUBPROTOCOL));
+    const wallet = offered ? this.auth.verifyToken(offered.slice(AUTH_SUBPROTOCOL.length)) : null;
+    if (!wallet) return null;
+    return this.rooms.holdsLiveStake(wallet) ? 'stake' : 'signed';
+  }
+
+  /** Sockets not signed in, per IP and per subnet, are limited; the whole server keeps a reserve for signed-in players. */
+  private admit(ip: string, net: string, priority: 'stake' | 'signed' | null): boolean {
+    const max = this.cfg.maxConnections;
+    if (priority === 'stake') {
+      // a ticket holder coming back: past every per-IP limit (a carrier NAT), into the headroom above the cap
+      if (this.rooms.conns.size < max) return true;
+      return this.evictIdleGuest(IDLE_GUEST_MS) || this.rooms.conns.size < max * (1 + STAKE_HEADROOM);
+    }
+    if (!this.upgrades.allow(ip)) return false;
+    if (priority === 'signed') {
+      if (!this.signedRoom(ip)) return false;
+      return this.rooms.conns.size < max || this.evictIdleGuest(IDLE_GUEST_MS);
+    }
+    if ((this.perIp.get(ip) ?? 0) >= this.cfg.maxConnectionsPerIp || (this.perSubnet.get(net) ?? 0) >= this.cfg.maxConnectionsPerSubnet) return false;
+    // guests use at most GUEST_SHARE of the slots; at the cap (or the guest share) an idle guest makes room
+    if (this.rooms.conns.size < max && this.guestCount() < max * GUEST_SHARE) return true;
+    return this.evictIdleGuest(IDLE_GUEST_MS);
+  }
+
+  /** This IP may hold one more signed-in socket. */
+  private signedRoom(ip: string): boolean {
+    return (this.signedPerIp.get(ip) ?? 0) < this.cfg.maxConnectionsPerIp * SIGNED_PER_IP_FACTOR;
+  }
+
+  /** The socket counts as signed in for its IP (a stake holder's reconnect is counted, never refused). */
+  private countSigned(conn: Conn): void {
+    if (conn.countedAsSigned) return;
+    conn.countedAsSigned = true;
+    this.signedPerIp.set(conn.ip, (this.signedPerIp.get(conn.ip) ?? 0) + 1);
+  }
+
+  private uncountSigned(conn: Conn): void {
+    if (!conn.countedAsSigned) return;
+    conn.countedAsSigned = false;
+    const n = (this.signedPerIp.get(conn.ip) ?? 1) - 1;
+    if (n <= 0) this.signedPerIp.delete(conn.ip);
+    else this.signedPerIp.set(conn.ip, n);
+  }
+
+  private guestCount(): number {
+    let n = 0;
+    for (const c of this.rooms.conns) if (!c.wallet) n++;
+    return n;
+  }
+
+  /** Closes the longest-idle guest (not signed in, not playing, silent for `idleMs`). False when there is none. */
+  private evictIdleGuest(idleMs: number): boolean {
+    const now = Date.now();
+    let worst: Conn | null = null;
+    for (const c of this.rooms.conns) {
+      if (c.wallet || c.player?.alive || c.joining || c.ws.readyState > 1 || now - c.lastMsgAt < idleMs) continue;
+      if (!worst || c.lastMsgAt < worst.lastMsgAt) worst = c;
+    }
+    if (!worst) return false;
+    this.dropped.idle++;
+    // gone from the counts now: the newcomer takes its slot at once
+    this.rooms.removeConn(worst);
+    this.uncountGuest(worst);
+    worst.ws.close(1013, 'idle: the server is full');
+    setTimeout(() => worst.ws.terminate(), 1_000).unref();
+    return true;
+  }
+
+  /** The socket stops counting in its IP's and subnet's guest limit (it signed in, or it is gone). */
+  private uncountGuest(conn: Conn, net = subnetOf(conn.ip)): void {
+    if (!conn.countedAsGuest) return;
+    conn.countedAsGuest = false;
+    const n = (this.perIp.get(conn.ip) ?? 1) - 1;
+    if (n <= 0) this.perIp.delete(conn.ip);
+    else this.perIp.set(conn.ip, n);
+    const s = (this.perSubnet.get(net) ?? 1) - 1;
+    if (s <= 0) this.perSubnet.delete(net);
+    else this.perSubnet.set(net, s);
+  }
+
+  private onConnection(ws: WebSocket, ip: string, net = subnetOf(ip), priority: 'stake' | 'signed' | null = null): void {
     const conn = new Conn(ws, ip);
+    conn.priority = priority;
+    // a session-token socket is not a guest: it never counts in its IP's guest limit (players behind a carrier NAT)
+    if (priority) {
+      conn.countedAsGuest = false;
+      this.countSigned(conn);
+    } else {
+      this.perIp.set(ip, (this.perIp.get(ip) ?? 0) + 1);
+      this.perSubnet.set(net, (this.perSubnet.get(net) ?? 0) + 1);
+    }
     this.rooms.addConn(conn);
     this.alive.set(ws, true);
     // a socket that never says hello is closed (it would hold a slot and memory for nothing)
@@ -284,12 +434,8 @@ export class Gateway {
   }
 
   private onClose(conn: Conn, net = subnetOf(conn.ip)): void {
-    const n = (this.perIp.get(conn.ip) ?? 1) - 1;
-    if (n <= 0) this.perIp.delete(conn.ip);
-    else this.perIp.set(conn.ip, n);
-    const s = (this.perSubnet.get(net) ?? 1) - 1;
-    if (s <= 0) this.perSubnet.delete(net);
-    else this.perSubnet.set(net, s);
+    this.uncountGuest(conn, net);
+    this.uncountSigned(conn);
     this.rooms.removeConn(conn);
     conn.room?.leave(conn, 'disconnect');
   }
@@ -324,6 +470,7 @@ export class Gateway {
   }
 
   async onMessage(conn: Conn, data: RawData, isBinary: boolean): Promise<void> {
+    conn.lastMsgAt = Date.now();
     if (!conn.allow(isBinary ? 1 : 3)) return this.strike(conn);
     if (isBinary) {
       const input = decodeClientInput(toBytes(data));
@@ -428,8 +575,12 @@ export class Gateway {
       return;
     }
     let wallet: string | null = null;
-    if (typeof msg.token === 'string') wallet = this.auth.verifyToken(msg.token);
-    else if (typeof msg.address === 'string' && typeof msg.message === 'string' && typeof msg.signature === 'string') {
+    let token: string | null = null;
+    if (typeof msg.token === 'string') {
+      wallet = this.auth.verifyToken(msg.token);
+      // a player's session slides on; an admin's short token comes back unchanged (never extended)
+      if (wallet) token = this.auth.refreshToken(msg.token);
+    } else if (typeof msg.address === 'string' && typeof msg.message === 'string' && typeof msg.signature === 'string') {
       wallet = await this.auth.verifySignature(msg.address, msg.message, msg.signature);
     }
     if (!wallet) {
@@ -437,8 +588,13 @@ export class Gateway {
       return;
     }
     conn.wallet = wallet;
+    // signed in: no longer a guest of its IP (many players share a carrier's NAT address), up to the signed-in bound
+    if (conn.countedAsGuest && this.signedRoom(conn.ip)) {
+      this.uncountGuest(conn);
+      this.countSigned(conn);
+    }
     conn.profile = this.profiles?.summary(wallet) ?? null;
-    conn.send({ t: 'authed', address: wallet, token: this.auth.issueToken(wallet), profile: conn.profile });
+    conn.send({ t: 'authed', address: wallet, token: token ?? this.auth.issueToken(wallet), profile: conn.profile });
   }
 
   private async onJoin(conn: Conn, msg: Record<string, unknown>): Promise<void> {
@@ -553,6 +709,28 @@ export class Gateway {
   }
 
   /**
+   * Hands a live arena coin from the sockets that hold it to `conn` (same wallet, see `joinArena`): each old one
+   * leaves the room (the coin waits, AFK, for the reattach that follows in the same command order) and is closed with
+   * `CLOSE_REPLACED`, so its client does not reconnect and fight for the coin.
+   */
+  private replaceHolders(conn: Conn, room: RoomHandle, pid: number): void {
+    for (const old of this.rooms.conns) {
+      if (old === conn || old.room !== room || !old.player?.alive || old.player.id !== pid) continue;
+      this.log(`ws: ${conn.wallet} took its arena coin over on a new connection (${old.ip} → ${conn.ip})`);
+      room.leave(old, 'disconnect');
+      old.player = null;
+      this.replaced++;
+      try {
+        old.ws.close(CLOSE_REPLACED, 'replaced by a newer connection of this wallet');
+      } catch {
+        /* already closing */
+      }
+      // a dead socket (the network switch) never answers the close handshake: drop it after a moment
+      setTimeout(() => old.ws.terminate(), 2_000).unref();
+    }
+  }
+
+  /**
    * The ticket read of a paid join: on `ChainBusyError` (RPC rate-limited) it is retried after
    * `JOIN_CHAIN_RETRY_MS`, and the player is told once that the network is busy. Throws
    * `ChainBusyError` when every try failed (or the connection closed meanwhile).
@@ -594,6 +772,10 @@ export class Gateway {
       // a live ticket comes back first, with no chain read at all: its coin is in this process already
       const existing = this.rooms.findArenaStake(target.arenaId, conn.wallet);
       if (existing) {
+        // the same signed-in wallet on a new socket (a reconnect after a network switch, a reload, another tab): it
+        // takes the coin over at once. The old socket, often a dead one the heartbeat has not noticed yet, is closed
+        // with CLOSE_REPLACED. Only this wallet's own session reaches here (`findArenaStake` is by the signed-in wallet)
+        if (conn.player === null) this.replaceHolders(conn, existing.room, existing.entry.pid);
         if (conn.player === null) {
           // a room worker answers asynchronously; a room on this thread at once
           const back = existing.room.reattach(conn, existing.entry.pid);
@@ -638,6 +820,16 @@ export class Gateway {
       }
       // a new join (not the AFK return above): only while the round's joins are open
       if (this.roundClosed(conn)) return;
+      // closing for a re-price at its bell: the round plays out, nobody new sits down until the owner signed
+      if (this.repricing?.(target.arenaId)) {
+        this.error(conn, REFUSAL_CODES.repricing, 'This arena is closing for a moment to update its ticket price. Your ticket is safe on chain: an unseated one is refunded in full.');
+        return;
+      }
+      // the journal cannot be written (disk full): a new seat would hold money the server could not record
+      if (this.journal.writeFailing) {
+        this.error(conn, REFUSAL_CODES.storage, 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
+        return;
+      }
       // badly overloaded: a new seat waits; the ticket stays on chain (seated later, or refunded in full if never played)
       if (this.shedder && !this.shedder.admitCritical()) {
         this.error(conn, 'server_full', 'The server is very busy right now. Your ticket is safe on chain: press Resume again in a minute.');
@@ -662,13 +854,23 @@ export class Gateway {
         this.error(conn, 'no_session', 'Your previous game in this arena is still being settled.');
         return;
       }
-      if (Date.now() / 1000 - session.openedAt > MAX_STAKE_SESSION_AGE_S - 600) {
+      // `openedAt` is a block timestamp: the chain's clock decides the ticket's age
+      if ((this.chain.chainNow?.() ?? Date.now()) / 1000 - session.openedAt > MAX_STAKE_SESSION_AGE_S - 600) {
         this.error(conn, 'no_session', 'This arena ticket expired and will be refunded.');
         return;
       }
       // holders gate: re-checked uncached right before every arena seat (each round needs a new ticket and
       // join), so an NFT sold since the sign-in no longer seats its former holder
       if (await this.gameClosed(conn, true)) return;
+      // a holder ticket (holders-only arena, holder fee rates): the emblem is there now, and serves no other open ticket
+      if (this.emblemGate) {
+        const refused = await this.emblemGate(wallet, session);
+        if (refused) {
+          this.error(conn, refused.code, refused.message);
+          return;
+        }
+        if (!conn.wallet || conn.wallet !== wallet) return;
+      }
       // the instance may have filled up or been closed during the awaits above: pick again (arena data is cached)
       if (code || test) {
         // a paid room (or a test arena) is never swapped for another room: it is this one or none
@@ -694,8 +896,12 @@ export class Gateway {
         this.error(conn, 'no_session', 'Your previous game in this arena is still being settled.');
         return;
       }
-      // the awaits above may have crossed into the closed window
+      // the awaits above may have crossed into the closed window (or the disk filled meanwhile)
       if (this.roundClosed(conn)) return;
+      if (this.journal.writeFailing) {
+        this.error(conn, REFUSAL_CODES.storage, 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
+        return;
+      }
       // a new arena game (not a resumed ticket): refused for a banned wallet (the ban may be new since the check above)
       if (this.banGate?.(conn.wallet) === true) {
         this.error(conn, 'banned', 'This wallet is banned from paid arenas after an integrity review. Practice is open.');

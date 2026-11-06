@@ -254,8 +254,8 @@ export const ROOM_CLOSE_COUNTDOWN_MS = 10_000;
  */
 export interface BlockedArena {
   arenaId: number;
-  /** `vault_short`: the vault holds less than the journal owes. */
-  reason: 'vault_short';
+  /** `vault_short`: the vault holds less than the journal owes. `repricing`: closed for a re-price at its bell. */
+  reason: 'vault_short' | 'repricing';
 }
 
 /** The arena contract's fee settings (`config()` of ElymumArena v3), basis points. */
@@ -615,6 +615,22 @@ export type ErrorCode =
   | 'paid_room';
 
 /**
+ * Refusals that reuse a code above (the client shows the code's text; the server's `message` says more):
+ * - the journal cannot be written (disk full): `server_full`, no new arena seat until it can;
+ * - an arena closing for a re-price at its bell (`/admin` "Re-price at next bell"): `arenas_disabled`;
+ * - a holder ticket whose wallet holds no emblem now, or whose emblem already serves another open holder ticket:
+ *   `game_closed` (the ticket is refunded in full).
+ */
+export const REFUSAL_CODES = { storage: 'server_full', repricing: 'arenas_disabled', emblem: 'game_closed' } as const satisfies Record<string, ErrorCode>;
+
+/**
+ * WebSocket close code: this socket was replaced by a newer one of the same signed-in wallet that took over its live
+ * arena coin (a reconnect after a network switch). The client must not reconnect this socket by itself: the newer
+ * one is already playing.
+ */
+export const CLOSE_REPLACED = 4000;
+
+/**
  * Parse a join target into its parts. Returns null for malformed input. `arena:<id>:<CODE>` seats
  * an arena ticket in the paid custom room `CODE` (an invite-only instance of that arena);
  * `arena:<id>:test` in that arena's test arena (testnet only, `test-arenas.ts`).
@@ -626,10 +642,10 @@ export function parseJoinTarget(
   if (target.startsWith('private:')) {
     const code = target.slice(8).toUpperCase();
     if (code === 'NEW') return { mode: 'private', code: null };
-    return /^[A-Z0-9]{5}$/.test(code) ? { mode: 'private', code } : null;
+    return /^[A-Z0-9]{5,10}$/.test(code) ? { mode: 'private', code } : null;
   }
   if (target.startsWith('arena:')) {
-    const m = /^(\d{1,5})(?::([A-Za-z0-9]{5}|test))?$/.exec(target.slice(6));
+    const m = /^(\d{1,5})(?::([A-Za-z0-9]{5,10}|test))?$/.exec(target.slice(6));
     if (!m) return null;
     const id = Number(m[1]);
     if (id > 65535) return null;

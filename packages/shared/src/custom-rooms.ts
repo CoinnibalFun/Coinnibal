@@ -389,8 +389,8 @@ export function validateCustomConfig(x: unknown): { ok: true; config: CustomRoom
   };
 }
 
-/** Invite codes are the private-room codes: 5 of these characters (no 0/O, 1/I). */
-export const INVITE_CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
+/** Invite codes are the private-room codes: 8 of these characters (no 0/O, 1/I); codes of 5 from before stay valid. */
+export const INVITE_CODE_RE = /^[A-HJ-NP-Z2-9]{5,10}$/;
 
 /** The code in an invite (`?room=CODE`, any case); null when it is not one. */
 export function parseInviteCode(raw: string | null | undefined): string | null {

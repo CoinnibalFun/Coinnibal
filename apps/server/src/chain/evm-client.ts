@@ -26,8 +26,10 @@ import { chainInfo, type ChainOverrides } from '@elymum/shared';
 import {
   createPublicClient,
   createWalletClient,
+  fallback,
   getAddress,
   http,
+  zeroAddress,
   parseEventLogs,
   verifyMessage as verifyEoaMessage,
   type Address,
@@ -104,6 +106,8 @@ export interface EvmClient {
   txBlock(hash: Hash): Promise<bigint | null>;
   /** Hash of block `n`; null when it is not mined yet (the NFT reveal's entropy). */
   blockHash(n: bigint): Promise<Hash | null>;
+  /** The latest block's number and timestamp (Unix seconds): the chain's clock. */
+  latestBlock?(): Promise<{ number: bigint; timestamp: number }>;
   /** Simulates (throws the decoded revert) then sends `call` signed by the server key. */
   send(call: ContractCall): Promise<Hash>;
   /**
@@ -169,29 +173,53 @@ const TRANSPORT_TIMEOUT_MS = 120_000;
 const RECEIPT_FIRST_POLL_MS = 500;
 const RECEIPT_MAX_POLL_MS = 3_000;
 
+/** One RPC URL, or several in order of preference (`EVM_RPC_URLS`: a provider first, the public RPC as fallback). */
+export type RpcUrls = string | readonly string[];
+
+const urlList = (rpc: RpcUrls): string[] => (typeof rpc === 'string' ? [rpc] : [...rpc]);
+
 /**
- * viem transport on `rpcUrl` through the process-wide RPC budget (`rpc-budget.ts`): rate-limited,
- * prioritised, 429-aware. `batch`: JSON-RPC batching (reads only; the server key sends one request each).
+ * viem transport on `rpc` through the process-wide RPC budget (`rpc-budget.ts`), one budget per URL: rate-limited,
+ * prioritised, 429-aware. With several URLs it is a viem `fallback` in the given order: a URL that fails or keeps
+ * answering 429 hands the call to the next one (after two tries instead of the full backoff), and the first URL is
+ * tried first again for every new call. `batch`: JSON-RPC batching (reads only; the server key sends one request each).
+ * A transaction resent through the next URL is the same signed transaction (same hash and nonce), never a second one.
  */
-export function budgetTransport(rpcUrl: string, opts: { batch?: boolean } = {}): Transport {
-  if (!/^https?:\/\//i.test(rpcUrl)) throw new TypeError(`RPC URL must start with http:// or https://, got ${JSON.stringify(rpcUrl)}`);
-  return http(rpcUrl, {
-    fetchFn: rpcBudgetFor(rpcUrl).fetchFn(),
-    // 429s are retried inside the budget (with its backoff); viem must not multiply them
-    retryCount: 0,
-    timeout: TRANSPORT_TIMEOUT_MS,
-    batch: opts.batch ? { batchSize: 8, wait: 10 } : false,
-  });
+export function budgetTransport(rpc: RpcUrls, opts: { batch?: boolean } = {}): Transport {
+  const urls = urlList(rpc);
+  if (urls.length === 0) throw new TypeError('no RPC URL');
+  for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new TypeError(`RPC URL must start with http:// or https://, got ${JSON.stringify(u)}`);
+  const one = (u: string, maxAttempts?: number) =>
+    http(u, {
+      fetchFn: rpcBudgetFor(u).fetchFn(fetch, { maxAttempts }),
+      // 429s are retried inside the budget (with its backoff); viem must not multiply them
+      retryCount: 0,
+      timeout: TRANSPORT_TIMEOUT_MS,
+      batch: opts.batch ? { batchSize: 8, wait: 10 } : false,
+    });
+  if (urls.length === 1) return one(urls[0]);
+  return fallback(
+    urls.map((u) => one(u, 2)),
+    { rank: false, retryCount: 1, retryDelay: 250 },
+  );
 }
 
+/**
+ * How concurrent `eth_call`s are merged: `multicall3` (the chain has Multicall3 at its usual address),
+ * `deployless` (no Multicall3: viem's counterfactual Multicall3, one `eth_call` carrying the aggregator's code), or
+ * `none` (plain calls, merged into JSON-RPC batches of 8 only).
+ */
+export type MulticallMode = 'multicall3' | 'deployless' | 'none';
+
 /** A public client through the budget; `multicall` merges concurrent `eth_call`s into one Multicall3 call. */
-function budgetPublicClient(rpcUrl: string, chain: Chain | undefined, opts: { pollingInterval?: number; multicall?: boolean } = {}): PublicClient {
-  const withMc = opts.multicall && chain ? { ...chain, contracts: { ...(chain.contracts ?? {}), multicall3: { address: MULTICALL3 } } } : chain;
+function budgetPublicClient(rpc: RpcUrls, chain: Chain | undefined, opts: { pollingInterval?: number; multicall?: boolean | MulticallMode } = {}): PublicClient {
+  const mode: MulticallMode = opts.multicall === true ? 'multicall3' : opts.multicall === false || opts.multicall === undefined ? 'none' : opts.multicall;
+  const withMc = mode === 'multicall3' && chain ? { ...chain, contracts: { ...(chain.contracts ?? {}), multicall3: { address: MULTICALL3 } } } : chain;
   return createPublicClient({
     chain: withMc,
-    transport: budgetTransport(rpcUrl, { batch: true }),
+    transport: budgetTransport(rpc, { batch: true }),
     ...(opts.pollingInterval ? { pollingInterval: opts.pollingInterval } : {}),
-    ...(opts.multicall && chain ? { batch: { multicall: { wait: 10, batchSize: 4_096 } } } : {}),
+    ...(mode !== 'none' && chain ? { batch: { multicall: { wait: 10, batchSize: 4_096, ...(mode === 'deployless' ? { deployless: true } : {}) } } } : {}),
   }) as PublicClient;
 }
 
@@ -291,14 +319,14 @@ function serial(): <T>(job: () => Promise<T>) => Promise<T> {
 
 /** `EvmClient` over viem: a public client on `rpcUrl` and a wallet client with the server key. */
 export function viemEvmClient(
-  rpcUrl: string,
+  rpc: RpcUrls,
   account: PrivateKeyAccount,
-  opts: { chainId: number; overrides?: ChainOverrides; pollingInterval?: number; multicall?: boolean },
+  opts: { chainId: number; overrides?: ChainOverrides; pollingInterval?: number; multicall?: boolean | MulticallMode },
 ): EvmClient {
-  const chain = toViemChain(chainInfo(opts.chainId, { ...opts.overrides, rpcUrl }));
+  const chain = toViemChain(chainInfo(opts.chainId, { ...opts.overrides, rpcUrl: urlList(rpc)[0] }));
   const pollingInterval = opts.pollingInterval ?? 2_000;
-  const publicClient: PublicClient = budgetPublicClient(rpcUrl, chain, { pollingInterval, multicall: opts.multicall });
-  const wallet: WalletClient = createWalletClient({ account, chain, transport: budgetTransport(rpcUrl), pollingInterval });
+  const publicClient: PublicClient = budgetPublicClient(rpc, chain, { pollingInterval, multicall: opts.multicall });
+  const wallet: WalletClient = createWalletClient({ account, chain, transport: budgetTransport(rpc), pollingInterval });
   // one server-key transaction at a time (the settlement worker and the price keeper share the key)
   const queue = serial();
   return {
@@ -311,6 +339,10 @@ export function viemEvmClient(
         if ((err as Error)?.name === 'BlockNotFoundError') return null;
         throw err;
       }
+    },
+    latestBlock: async () => {
+      const b = await publicClient.getBlock({ blockTag: 'latest' });
+      return { number: b.number, timestamp: Number(b.timestamp) };
     },
     codeCheck: (address, kind) => checkDeployedCode(publicClient, address, kind),
     hasCode: async (address) => {
@@ -411,6 +443,31 @@ export async function hasMulticall3(rpcUrl: string): Promise<boolean> {
     return !!code && code !== '0x';
   } catch {
     return false;
+  }
+}
+
+const balanceOfAbi = [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] }] as const;
+
+/**
+ * How this RPC can merge reads (`MulticallMode`): Multicall3 when the chain has it; else a deployless Multicall3
+ * (an `eth_call` without `to` carrying the aggregator's code) when the RPC runs one (probed with a throwaway call);
+ * else none. A bell of 200 tickets then costs a handful of `eth_call`s instead of one per ticket.
+ */
+export async function multicallMode(rpc: RpcUrls, chainId: number): Promise<MulticallMode> {
+  const first = urlList(rpc)[0];
+  if (await hasMulticall3(first)) return 'multicall3';
+  try {
+    const chain = toViemChain(chainInfo(chainId, { rpcUrl: first }));
+    const probe = budgetPublicClient(first, chain, { multicall: 'deployless' });
+    // two reads of an address with no code: both "fail" inside the aggregator, the eth_call itself must succeed
+    await withTimeout(
+      probe.multicall({ deployless: true, allowFailure: true, contracts: [0, 1].map(() => ({ address: zeroAddress, abi: balanceOfAbi, functionName: 'balanceOf', args: [zeroAddress] }) as const) }),
+      RPC_TIMEOUT_MS,
+      'deployless multicall probe',
+    );
+    return 'deployless';
+  } catch {
+    return 'none';
   }
 }
 

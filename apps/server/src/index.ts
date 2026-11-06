@@ -10,8 +10,6 @@ async function main(): Promise<void> {
   const cfg = loadConfig();
   assertPublicUrl(cfg);
   if (!process.env.AUTH_SECRET) log('auth: AUTH_SECRET not set — using the generated secret kept in DATA_DIR/auth-secret');
-  // the secret signs every session token (admin sessions too): a short one can be brute-forced offline from any token
-  else if (process.env.AUTH_SECRET.length < 32) log('!!! auth: AUTH_SECRET is shorter than 32 characters — use a long random value (e.g. `openssl rand -hex 32`)');
   const badAdmins = invalidAdminWallets(process.env.ADMIN_WALLETS);
   if (badAdmins.length > 0) log(`!!! ADMIN_WALLETS: ignoring ${badAdmins.length} entr${badAdmins.length === 1 ? 'y' : 'ies'} that are not 0x addresses (${badAdmins.join(', ')})`);
   const app = await createApp(cfg, { log });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { RpcBudget, bodyRateLimited, formatRpcMinute, isRateLimited, methodsOf, retryAfterMs, withRpcPriority } from '../src/chain/rpc-budget';
+import { RpcBudget, bodyRateLimited, configureRpcBudgetFor, formatRpcMinute, isRateLimited, methodsOf, retryAfterMs, withRpcPriority } from '../src/chain/rpc-budget';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { createPublicClient } from 'viem';
+import { budgetTransport } from '../src/chain/evm-client';
+import { loadConfig, parseRpcRates, parseRpcUrls } from '../src/config';
 
 const body = (method: string | string[]) =>
   JSON.stringify(Array.isArray(method) ? method.map((m, i) => ({ jsonrpc: '2.0', id: i, method: m, params: [] })) : { jsonrpc: '2.0', id: 1, method, params: [] });
@@ -90,5 +95,72 @@ describe('rpc budget', () => {
     const t0 = Date.now();
     await budget.acquire(1, 'high');
     expect(Date.now() - t0).toBeGreaterThanOrEqual(35);
+  });
+});
+
+describe('several RPCs (EVM_RPC_URLS)', () => {
+  /** A JSON-RPC server answering eth_chainId, or 429 / dropping the connection when `mode` says so. */
+  const rpcServer = async (mode: { v: 'ok' | '429' | 'down' }, chainId = 46630) => {
+    const seen = { calls: 0 };
+    const server = createServer((req, res) => {
+      seen.calls++;
+      if (mode.v === 'down') return req.socket.destroy();
+      if (mode.v === '429') {
+        res.writeHead(429, { 'content-type': 'text/plain' });
+        return res.end('Rate Limit Exceeded');
+      }
+      let raw = '';
+      req.on('data', (c) => (raw += c));
+      req.on('end', () => {
+        const j = JSON.parse(raw) as { id: number } | { id: number }[];
+        const one = (x: { id: number }) => ({ jsonrpc: '2.0', id: x.id, result: `0x${chainId.toString(16)}` });
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(Array.isArray(j) ? j.map(one) : one(j)));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/rpc`;
+    return { url, seen, close: () => new Promise<void>((r) => server.close(() => r())) };
+  };
+
+  it('reads EVM_RPC_URLS in order (EVM_RPC_URL still works) and RPC_MAX_RPS per URL', () => {
+    expect(parseRpcUrls('https://a.example/v2/k/, https://b.example ,https://a.example/v2/k', undefined)).toEqual(['https://a.example/v2/k', 'https://b.example']);
+    expect(parseRpcUrls(undefined, 'https://only.example/')).toEqual(['https://only.example']);
+    expect(parseRpcUrls('', '')).toEqual([]);
+    expect(parseRpcRates('25,4', 2)).toEqual([25, 4]);
+    expect(parseRpcRates('10', 3)).toEqual([10, 10, 10]);
+    expect(parseRpcRates(undefined, 2)).toEqual([4, 4]);
+    const cfg = loadConfig({ EVM_RPC_URLS: 'https://robinhood-mainnet.g.alchemy.com/v2/KEY,https://rpc.testnet.chain.robinhood.com', RPC_MAX_RPS: '25,4' } as NodeJS.ProcessEnv);
+    expect(cfg.chain.rpcUrl).toBe('https://robinhood-mainnet.g.alchemy.com/v2/KEY');
+    expect(cfg.chain.rpcMaxRpsPerUrl).toEqual([25, 4]);
+    // the browser gets the public one, never the provider URL with its key
+    expect(cfg.chain.publicRpcUrl).toBe('https://rpc.testnet.chain.robinhood.com');
+  });
+
+  it('a provider that answers 429 or is down hands the call to the next URL; it is tried first again afterwards', async () => {
+    const a = { v: 'ok' as 'ok' | '429' | 'down' };
+    const primary = await rpcServer(a);
+    const backup = await rpcServer({ v: 'ok' });
+    try {
+      configureRpcBudgetFor(primary.url, { ratePerSec: 1000, burst: 1000, backoffBaseMs: 5, backoffMaxMs: 10 });
+      configureRpcBudgetFor(backup.url, { ratePerSec: 1000, burst: 1000 });
+      const client = createPublicClient({ transport: budgetTransport([primary.url, backup.url]) });
+      expect(await client.getChainId()).toBe(46630);
+      expect(backup.seen.calls).toBe(0);
+      a.v = '429';
+      expect(await withRpcPriority('high', () => createPublicClient({ transport: budgetTransport([primary.url, backup.url]) }).getChainId())).toBe(46630);
+      expect(backup.seen.calls).toBe(1);
+      a.v = 'down';
+      expect(await createPublicClient({ transport: budgetTransport([primary.url, backup.url]) }).getChainId()).toBe(46630);
+      expect(backup.seen.calls).toBe(2);
+      a.v = 'ok';
+      const before = primary.seen.calls;
+      expect(await createPublicClient({ transport: budgetTransport([primary.url, backup.url]) }).getChainId()).toBe(46630);
+      expect(primary.seen.calls).toBe(before + 1);
+      expect(backup.seen.calls).toBe(2);
+    } finally {
+      await primary.close();
+      await backup.close();
+    }
   });
 });

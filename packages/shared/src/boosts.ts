@@ -115,7 +115,15 @@ export interface ShopSettings {
   enabled: boolean;
   /** Charges in one pack. */
   packSize: number;
-  /** Price of one pack, whole game tokens as a decimal string ("300", "12.5"). */
+  /**
+   * `usd` (default): a pack costs `usdCents`, converted to tokens with the arenas' price source and rounding (Game →
+   * Arena prices: the token's USD price and its significant figures). `token`: `prices` in whole tokens. With `usd`
+   * and no token price set yet, `prices` is used.
+   */
+  priceIn: 'usd' | 'token';
+  /** Price of one pack in US cents (`priceIn: 'usd'`). */
+  usdCents: Record<BoostKind, number>;
+  /** Price of one pack, whole game tokens as a decimal string ("300", "12.5"): `priceIn: 'token'`, or no USD price yet. */
   prices: Record<BoostKind, string>;
   /** Per power-up on/off (off: not sold and not usable). */
   kinds: Record<BoostKind, boolean>;
@@ -128,15 +136,19 @@ export interface ShopSettings {
 }
 
 /**
- * Default prices, tied to the cheapest arena ticket (1,000 `$ELYMUM`, `DEFAULT_ARENAS`; docs/ECONOMY.md): one
- * charge costs 20-40 % of that ticket (a pack of 3: Magnet and Speed 600, Leap 900, Invisibility 1,200). A charge
- * is cheap next to what a round can win, so buying one is an easy call, while the per-round cap in paid arenas
- * (`arenaUsesPerRound`) keeps them from deciding a fight. Half of every payment is burned, half goes to the fee
- * wallet (`DEFAULT_PAYMENT_BURN_BPS`). Emblem holders pay 20 % less (`holderDiscountPct`, owner decision 2026-11).
+ * Default prices, tied to the cheapest arena ticket ($1, `DEFAULT_ARENAS`; docs/ECONOMY.md) and priced in US dollars
+ * like it, so the tie holds whatever the token's price: one charge costs 20-40 % of that ticket (a pack of 3: Magnet
+ * and Speed $0.60, Leap $0.90, Invisibility $1.20; in tokens at the reference price of $0.001: 600 / 900 / 1,200, the
+ * `prices` used until a token price is set). A charge is cheap next to what a round can win, so buying one is an
+ * easy call, while the per-round cap in paid arenas (`arenaUsesPerRound`) keeps them from deciding a fight. Half of
+ * every payment is burned, half goes to the fee wallet (`DEFAULT_PAYMENT_BURN_BPS`). Emblem holders pay 20 % less
+ * (`holderDiscountPct`, owner decision 2026-11).
  */
 export const SHOP_DEFAULTS: ShopSettings = {
   enabled: true,
   packSize: 3,
+  priceIn: 'usd',
+  usdCents: { magnet: 60, leap: 90, speed: 60, invis: 120 },
   prices: { magnet: '600', leap: '900', speed: '600', invis: '1200' },
   kinds: { magnet: true, leap: true, speed: true, invis: true },
   holderDiscountPct: 20,
@@ -148,7 +160,7 @@ export const SHOP_DEFAULTS: ShopSettings = {
 export const OLD_SHOP_PRICES: Readonly<Record<BoostKind, string>> = { magnet: '1500', leap: '2500', speed: '1500', invis: '3000' };
 
 /** Bounds of the admin values. */
-export const SHOP_LIMITS = { packSize: 20, holderDiscountPct: 90, arenaUsesPerRound: 20, holderExtraArenaUses: 10, priceTokens: 1_000_000_000 } as const;
+export const SHOP_LIMITS = { packSize: 20, holderDiscountPct: 90, arenaUsesPerRound: 20, holderExtraArenaUses: 10, priceTokens: 1_000_000_000, usdCents: 100_000 } as const;
 
 /**
  * Raw base units of one pack for a wallet: the price in whole tokens scaled by `decimals`, less the
@@ -188,6 +200,9 @@ export interface ShopPack {
   priceRaw: string;
   /** The full price, raw base units (decimal string); equal to `priceRaw` without a holder discount. */
   fullPriceRaw: string;
+  /** What this wallet pays and the full price in US cents, when the pack is priced in dollars (absent: in tokens). */
+  usdCents?: number;
+  fullUsdCents?: number;
   /** Sold right now. */
   enabled: boolean;
 }
@@ -208,6 +223,8 @@ export interface ShopView {
   /** The wallet holds an Elymum emblem (its prices carry the discount). */
   holder: boolean;
   holderDiscountPct: number;
+  /** The token's USD price the packs were converted at (USD per whole token); absent when priced in tokens. */
+  usdPerToken?: string;
   /** Paid arenas: uses per round (the wallet's, holder bonus included). */
   arenaUsesPerRound: number;
   holderExtraArenaUses: number;

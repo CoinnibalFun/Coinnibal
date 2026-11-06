@@ -6,7 +6,7 @@
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION, encodeTarget, roundAt, type ChainStatus, type ServerMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, PROTOCOL_VERSION, encodeTarget, roundAt, type ChainStatus, type ServerMessage } from '@elymum/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
@@ -223,14 +223,16 @@ describe('room workers', () => {
     await until(() => app.journal.live().some((l) => l.session === t.key));
     expect(app.rooms.liveSessions().has(t.key)).toBe(true);
     expect(app.rooms.findArenaStake(1, w)?.entry.pid).toBe(j.playerId);
-    // a second tab with the same ticket is refused while the first plays
+    // a second tab of the same wallet takes the coin over (the first is closed with CLOSE_REPLACED); never a second seat
     const c2 = await Client.open(port, app.auth.issueToken(w));
+    const closed = new Promise<number>((r) => c.ws.once('close', (code) => r(code)));
     c2.send({ t: 'join', room: 'arena:1', name: 'Again', skin: 0 });
-    expect((await c2.wait('error')).code).toBe('session_busy');
+    expect((await c2.wait('joined')).playerId).toBe(j.playerId);
+    expect(await closed).toBe(CLOSE_REPLACED);
 
     const r = roundAt(serverNow());
     jumpTo(r.endsAt + 50);
-    const over = await c.wait('roundOver', 5000);
+    const over = await c2.wait('roundOver', 5000);
     expect(over.round).toBe(r.n);
     expect(over.payout).toBe(10_000_000);
     const items = app.journal.settlements().filter((p) => p.key === t.key);
