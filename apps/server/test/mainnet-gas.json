@@ -1,0 +1,77 @@
+{
+  "settle_death_1": {
+    "gas": 61865,
+    "inputBytes": 196
+  },
+  "settle_death_2": {
+    "gas": 79500,
+    "inputBytes": 324
+  },
+  "settle_death_3": {
+    "gas": 99588,
+    "inputBytes": 452
+  },
+  "settle_death_5": {
+    "gas": 139764,
+    "inputBytes": 708
+  },
+  "settle_death_10": {
+    "gas": 240204,
+    "inputBytes": 1348
+  },
+  "settle_winner_1": {
+    "gas": 113855,
+    "inputBytes": 196
+  },
+  "settle_bell_1": {
+    "gas": 113843,
+    "inputBytes": 196
+  },
+  "settle_bell_2": {
+    "gas": 137902,
+    "inputBytes": 324
+  },
+  "settle_bell_5": {
+    "gas": 210233,
+    "inputBytes": 708
+  },
+  "settle_bell_10": {
+    "gas": 343586,
+    "inputBytes": 1348
+  },
+  "settle_bell_20": {
+    "gas": 613166,
+    "inputBytes": 2628
+  },
+  "settle_bell_40": {
+    "gas": 1152326,
+    "inputBytes": 5188
+  },
+  "cancel_1": {
+    "gas": 73814,
+    "inputBytes": 164
+  },
+  "cancel_10": {
+    "gas": 272069,
+    "inputBytes": 1028
+  },
+  "sweepLoot": {
+    "gas": 85844,
+    "inputBytes": 100
+  },
+  "join_holder_arena4": {
+    "gas": 153122,
+    "inputBytes": 36
+  },
+  "nft_transfer": {
+    "gas": 54657,
+    "inputBytes": 100
+  },
+  "join_holder_arena4_after_transfer": {
+    "gas": 136022,
+    "inputBytes": 36
+  },
+  "join_typical": 135539,
+  "network": "hardhat (in-process), ElymumArena v3, TestToken (OpenZeppelin ERC-20), ElymumNFT holder NFT, burn mode 0 (0x…dEaD)",
+  "measuredAt": "2026-11-06"
+}

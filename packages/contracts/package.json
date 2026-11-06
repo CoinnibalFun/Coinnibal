@@ -15,7 +15,9 @@
     "export": "node scripts/export-artifacts.mjs",
     "build": "hardhat build && node scripts/export-artifacts.mjs",
     "typecheck": "tsc --noEmit",
-    "gas": "hardhat run scripts/gas-report.ts"
+    "gas": "hardhat run scripts/gas-report.ts",
+    "gas:mainnet": "hardhat run scripts/mainnet-gas.ts",
+    "test:econ-findings": "ELYMUM_ECON_FINDINGS=true hardhat test solidity test/ElymumArenaEconFindings.t.sol"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.7",
