@@ -152,6 +152,8 @@ export class Gateway {
   private banGate: ((wallet: string) => boolean) | null = null;
   /** Whether a wallet holds an Elymum emblem (laurel flag, emblem skin); null: nobody does. */
   private holderCheck: ((wallet: string) => Promise<boolean>) | null = null;
+  /** Arenas closed for a re-price at their bell (`RepriceScheduler.closedForSeats`); absent: none. */
+  private repricing: ((arenaId: number) => boolean) | null = null;
   /** The seat check of holder tickets (`EmblemGate.seat`): null to seat, else the refusal; absent: none. */
   private emblemGate: ((wallet: string, session: ChainSession) => Promise<{ code: ErrorCode; message: string } | null>) | null = null;
 
@@ -188,6 +190,11 @@ export class Gateway {
   /** Sets the emblem holder check (cached by the mint service): holders wear a laurel and may pick the emblem skin. */
   setHolderCheck(check: ((wallet: string) => Promise<boolean>) | null): void {
     this.holderCheck = check;
+  }
+
+  /** Sets which arenas take no new seat because they close for a re-price (`site/reprice.ts`). */
+  setRepricing(fn: ((arenaId: number) => boolean) | null): void {
+    this.repricing = fn;
   }
 
   /** Sets the seat check of holder tickets (one emblem token id per open holder ticket; see `site/emblem-gate.ts`). */
@@ -764,6 +771,11 @@ export class Gateway {
       }
       // a new join (not the AFK return above): only while the round's joins are open
       if (this.roundClosed(conn)) return;
+      // closing for a re-price at its bell: the round plays out, nobody new sits down until the owner signed
+      if (this.repricing?.(target.arenaId)) {
+        this.error(conn, 'arena_repricing', 'This arena is closing for a moment to update its ticket price. Your ticket is safe on chain: an unseated one is refunded in full.');
+        return;
+      }
       // the journal cannot be written (disk full): a new seat would hold money the server could not record
       if (this.journal.writeFailing) {
         this.error(conn, 'storage_failing', 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
