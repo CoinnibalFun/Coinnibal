@@ -34,9 +34,11 @@ export async function sendWithWallet(send: (wallet: WalletClient, from: Address)
   if (!w) return noWallet();
   const chainName = serverChainInfo(opts.chain)?.name;
   let hash: Hash | null = null;
+  let switching = true;
   try {
     opts.onPhase?.('switching');
     await ensureChain(w.provider, opts.chain);
+    switching = false;
     const wallet = walletClientFor(w.provider, w.address, opts.chain);
     opts.onPhase?.('signing');
     hash = await send(wallet, w.address);
@@ -49,8 +51,10 @@ export async function sendWithWallet(send: (wallet: WalletClient, from: Address)
     }
     return { ok: true, hash, receipt };
   } catch (err) {
-    const error: DescribedError =
+    const described: DescribedError =
       err instanceof WrongChainError ? { kind: 'wrong-chain', name: 'WrongChain', args: [], code: null, message: err.message } : describeError(err, { chainName });
+    // the player declined the network switch: say what is needed ("Switch to Robinhood Chain to continue"), not "cancelled"
+    const error: DescribedError = switching && described.kind === 'rejected' ? { ...described, kind: 'wrong-chain', name: 'SwitchRejected' } : described;
     if (error.kind !== 'rejected') console.warn('transaction failed', err);
     return { ok: false, error, hash };
   }

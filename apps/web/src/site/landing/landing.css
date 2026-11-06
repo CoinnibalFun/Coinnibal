@@ -90,6 +90,24 @@
   font-size: 16.5px;
   color: var(--ink-2);
 }
+.ld-hero__money {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 48ch;
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border: 2px solid var(--outline);
+  border-radius: 12px;
+  background: #fbe7b0;
+  color: #04181c;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.ld-hero__money-icon {
+  flex: none;
+  margin-top: 2px;
+}
 .ld-hero__homer {
   margin: 18px 0 22px;
   padding-left: 14px;

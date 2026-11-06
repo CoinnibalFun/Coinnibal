@@ -19,7 +19,7 @@ import {
   type IconName,
   type TabItem,
 } from '../../design';
-import { formatCountdown, useRound } from '../../game/round';
+import { formatCountdown, roundMinutes, useRound } from '../../game/round';
 import { setWorldCovered } from '../../game/backdrop';
 import { engine } from '../../game/instance';
 import { sound } from '../../audio';
@@ -28,6 +28,8 @@ import { ProfileCard } from '../../wallet/ProfileCard';
 import { signInWithWallet } from '../../wallet/signIn';
 import { TicketFlow, type FlowMode } from '../../wallet/TicketFlow';
 import { arenaRates, sessionsToCollect, type TicketKey } from '../../wallet/ticket';
+import { useChainData } from '../../wallet/chain';
+import { GetTokensLink } from '../../wallet/GetTokensLink';
 import { WalletButton } from '../../wallet/WalletButton';
 import { BOOST_PATH } from '../game/BoostBar';
 import { goPage, openModal, updateSettings, useUi, type LobbyPage } from '../../store';
@@ -59,6 +61,8 @@ export function Lobby() {
   const theme = useUi((s) => s.settings.theme);
   const connected = useUi((s) => s.connected);
   const intent = useUi((s) => s.lobbyIntent);
+  const rooms = useUi((s) => s.rooms);
+  const room = useUi((s) => s.room);
   const model = useLobbyModel();
   const wide = useMedia('(min-width: 1100px)');
   const mid = useMedia('(min-width: 760px)');
@@ -187,6 +191,10 @@ export function Lobby() {
   };
 
   const flowTicket = flow ? (model.tickets.find((x) => x.key === flow.key) ?? null) : null;
+  // the real round length (the server may run shorter rounds), from the round the server announced
+  const minutes = roundMinutes(rooms, room);
+  // not enough tokens for the picked ticket: one tap to the way of getting some
+  const short = gate?.kind === 'insufficient';
 
   const tickets = (
     <section className="kl-col kl-col--tickets" aria-labelledby="kl-tickets-h">
@@ -196,7 +204,7 @@ export function Lobby() {
       <div className="kl-board">
         <div className="kl-board__head">
           <div className="kl-board__titles">
-            <span className="kl-board__kicker mono">{t('lo.ticketsSub')}</span>
+            <span className="kl-board__kicker mono">{t('lo.ticketsSub', { min: minutes })}</span>
             <h2 id="kl-tickets-h" className="kl-board__title">
               {t('lo.boardTitle')}
             </h2>
@@ -226,6 +234,7 @@ export function Lobby() {
         {mid && (
           <div className="kl-cta-slot">
             <QuickPlay ticket={ticket} gate={gate} onPress={act} busy={!connected} />
+            {short && <GetTokensLink />}
           </div>
         )}
       </div>
@@ -242,7 +251,7 @@ export function Lobby() {
         </section>
       )}
       <ProfileCard onEdit={() => setTab('profile')} />
-      {wide && <Deck />}
+      {wide && <Deck minutes={minutes} />}
     </aside>
   );
 
@@ -288,6 +297,7 @@ export function Lobby() {
           {tab === 'play' && (
             <div className="kl-dock__cta">
               <QuickPlay ticket={ticket} gate={gate} onPress={act} busy={!connected} />
+              {short && <GetTokensLink />}
             </div>
           )}
           <PhoneTabs tab={tab} setTab={setTab} />
@@ -319,8 +329,20 @@ function Plate({ page, inline }: { page: LobbyPage; inline: boolean }) {
   const online = useUi((st) => st.online);
   const connected = useUi((st) => st.connected);
   const chain = useUi((st) => st.chain);
+  const rpcDown = useChainData((d) => d.rpcDown);
+  const badPin = useChainData((d) => d.pin !== null && !d.pin.ok && d.pin.reason !== 'unreadable');
+  // the first item is the arenas' state: never "open" while this page cannot read the chain or trust its contract
+  const arenas = !chain?.enabled
+    ? null
+    : badPin
+      ? { text: t('lo.contractBad'), tone: 'danger' as const }
+      : rpcDown
+        ? { text: t('lo.rpcDown'), tone: 'warn' as const }
+        : chain.tokenReady
+          ? { text: t('lo.arenasOpen'), tone: 'live' as const }
+          : { text: t('lo.arenasSoon'), tone: 'warn' as const };
   const items = [
-    chain?.enabled ? (chain.tokenReady ? t('lo.arenasOpen') : t('lo.arenasSoon')) : null,
+    arenas?.text ?? null,
     chain?.enabled ? t('lo.feeDate', { pct: bpsToPercent(totalFeeBps(arenaRates(chain.fees))) }) : null,
     connected ? t('lo.online', { n: online }) : t('lo.live.connecting'),
   ].filter((x): x is string => x !== null);
@@ -330,8 +352,8 @@ function Plate({ page, inline }: { page: LobbyPage; inline: boolean }) {
     <ul className="kl-status" aria-label={t('lo.dateline')}>
       {items.map((x, i) => (
         <li key={x}>
-          {i === 0 && chain?.enabled ? (
-            <StatusPill tone={chain.tokenReady ? 'live' : 'warn'} size="sm">
+          {i === 0 && arenas ? (
+            <StatusPill tone={arenas.tone} size="sm" data-testid="lobby-arenas">
               {x}
             </StatusPill>
           ) : (
@@ -432,7 +454,7 @@ function Colophon({ onDocs, night }: { onDocs: () => void; night: boolean }) {
 }
 
 /** A short note under the live window: how a round goes, with three coins acting it out. */
-function Deck() {
+function Deck({ minutes }: { minutes: number }) {
   const t = useT();
   return (
     <div className="kl-deck">
@@ -442,7 +464,7 @@ function Deck() {
       </div>
       <div>
         <h2 className="kl-deck__title">{t('lo.deck.title')}</h2>
-        <p className="kl-deck__body">{t('lo.deck.body')}</p>
+        <p className="kl-deck__body">{t('lo.deck.body', { min: minutes })}</p>
       </div>
     </div>
   );

@@ -2120,3 +2120,18 @@
     width: 92px;
   }
 }
+
+/* "Get $ELYMUM" under a ticket the wallet cannot pay for (GetTokensLink) */
+.kl-gettokens {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.kl-dock__cta .kl-gettokens {
+  min-height: 32px;
+  margin-top: 4px;
+}
