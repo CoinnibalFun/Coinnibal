@@ -79,6 +79,33 @@ if ! dc build app; then
   exit 0
 fi
 
+# Swap in the break after an arena bell: rounds are aligned to Unix time (ROUND_SECONDS, default 300) and the
+# floor reopens ROUND_BREAK_SECONDS (default 15, at most a tenth of the round) after the bell. A swap there finds
+# no live stake (every ticket was just settled at the bell); anywhere else SIGTERM cashes every arena player out
+# mid-round. The swap itself takes a few seconds. ELYMUM_DEPLOY_NOW=1 skips the wait (an urgent fix).
+wait_for_round_break() {
+  [[ "${ELYMUM_DEPLOY_NOW:-0}" == "1" ]] && return 0
+  local round brk s
+  round="$(env_get ROUND_SECONDS)"
+  [[ "$round" =~ ^[0-9]+$ ]] || round=300
+  brk="$(env_get ROUND_BREAK_SECONDS)"
+  [[ "$brk" =~ ^[0-9]+$ ]] || brk=15
+  ((brk > round / 10)) && brk=$((round / 10))
+  # the swap must fit in the break with a margin; otherwise go right after the bell
+  local last=$((brk - 8))
+  ((last < 2)) && last=2
+  for _ in $(seq 1 $((round * 2 + 10))); do
+    s=$(($(date +%s) % round))
+    if ((s >= 2 && s <= last)); then
+      log "in the break after the bell (${s} s into the round): swapping now"
+      return 0
+    fi
+    sleep 0.5
+  done
+  log "no round break found in time; swapping anyway"
+}
+wait_for_round_break
+
 log "swapping the app container (players reconnect in a few seconds)"
 if ! dc up -d --remove-orphans; then
   echo "$remote" >"$ELYMUM_STATE/failed"

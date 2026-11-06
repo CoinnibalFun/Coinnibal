@@ -41,5 +41,8 @@
 		# one hop, the player (from CF-Connecting-IP when the peer is Cloudflare, else the peer itself)
 		header_up X-Forwarded-For {client_ip}
 		flush_interval -1
+		# keep WebSockets open across a Caddy config reload (update.sh reloads Caddy when this file changes);
+		# without it Caddy closes every game socket at once on a reload (the default delay is 0)
+		stream_close_delay 10m
 	}
 }
