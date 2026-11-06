@@ -34,7 +34,10 @@ describe('VITE_SERVER_URL (web and game server on different origins)', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://game.elymum.io/api/admin/me');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok.en');
-    expect(api.backupCommand()).toBe("curl -fsS -H 'Authorization: Bearer tok.en' 'https://game.elymum.io/api/admin/backup' -o elymum-backup.tar.gz");
+    expect(api.backupCommand('pr00f')).toBe(
+      "curl -fsS -H 'Authorization: Bearer tok.en' -H 'X-Elymum-Proof: pr00f' 'https://game.elymum.io/api/admin/backup' -o elymum-backup.tar.gz",
+    );
+    expect(api.installCommand('pr00f')).toMatch(/install\.sh --yes --from 'https:\/\/game\.elymum\.io' --token 'tok\.en' --proof 'pr00f'$/);
   });
 
   it('loads profile pictures from the game server', async () => {
@@ -47,6 +50,8 @@ describe('VITE_SERVER_URL (web and game server on different origins)', () => {
 
   it('quotes a token safely in the shell command', async () => {
     const { backupCurlCommand } = await import('../src/site/api');
-    expect(backupCurlCommand('https://game.elymum.io/', "a'b")).toBe("curl -fsS -H 'Authorization: Bearer a'\\''b' 'https://game.elymum.io/api/admin/backup' -o elymum-backup.tar.gz");
+    expect(backupCurlCommand('https://game.elymum.io/', "a'b", 'p')).toBe(
+      "curl -fsS -H 'Authorization: Bearer a'\\''b' -H 'X-Elymum-Proof: p' 'https://game.elymum.io/api/admin/backup' -o elymum-backup.tar.gz",
+    );
   });
 });

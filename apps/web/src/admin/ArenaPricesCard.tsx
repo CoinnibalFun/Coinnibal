@@ -13,7 +13,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Hash } from 'viem';
 import { sendWithWallet, txErrorText } from '../wallet/tx';
-import { SiteApiError, type ArenaPricesAdminView } from '../site/api';
+import { SiteApiError, type AdminApi, type ArenaPricesAdminView, type RepriceEntry } from '../site/api';
 import { sendPlan, type Plan } from './plan';
 import { Btn, Card, FormError, Input, Mark, saveErrorText, type ChainCtx } from './ui';
 
@@ -35,6 +35,117 @@ const centsOf = (text: string): number | null => {
 const dollarsOf = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
 
 type Run = { at: number; done: number; total: number; error: string | null; busy: boolean; hashes: Hash[] };
+
+const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16) + ' UTC';
+
+/** Where an arena is on its way to a re-price, in words, with its tone (pure, tested). */
+export function repriceText(e: RepriceEntry | undefined): { tone: 'ok' | 'warn' | 'bad' | 'unknown'; label: string } {
+  if (!e) return { tone: 'unknown', label: 'open' };
+  switch (e.phase) {
+    case 'waiting':
+      return { tone: 'warn', label: "closes at this round's last minute" };
+    case 'closing':
+      return { tone: 'warn', label: e.bellAt ? `joins closed · bell at ${hhmm(e.bellAt)}` : 'joins closed until the bell' };
+    case 'draining': {
+      const o = e.open;
+      const left = o ? o.onChain + o.journal + o.live : null;
+      return { tone: 'bad', label: left === null ? 'closed · refunding unseated tickets' : `closed · ${left} ticket${left === 1 ? '' : 's'} still open` };
+    }
+    case 'ready':
+      return { tone: 'ok', label: 'ready: sign the new entry fee now' };
+  }
+}
+
+/**
+ * "Re-price at next bell": the contract changes an entry fee only while none of the arena's tickets is open. This
+ * closes the arena's joins at the round's last minute, lets the round play out to its bell, refunds unseated tickets
+ * and says "ready"; the owner then signs the sync above, and the arena opens again by itself once the chain shows the
+ * new entry fee (or on Cancel).
+ */
+export function RepriceAtBell({ api, arenaIds, pending }: { api: AdminApi; arenaIds: number[]; pending: number[] }) {
+  const [entries, setEntries] = useState<RepriceEntry[] | null>(null);
+  const [state, setState] = useState<'loading' | 'ok' | 'missing'>('loading');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const load = useCallback(() => {
+    api.reprice().then(
+      (e) => {
+        setEntries(e);
+        setState('ok');
+      },
+      (e) => {
+        if (e instanceof SiteApiError && (e.status === 404 || e.status === 405)) setState('missing');
+        else setErr((e as Error).message);
+      },
+    );
+  }, [api]);
+  useEffect(load, [load]);
+  // an arena on its way moves by itself: re-read while one is
+  useEffect(() => {
+    if (!entries?.length) return;
+    const t = window.setInterval(load, 5000);
+    return () => window.clearInterval(t);
+  }, [entries, load]);
+  if (state === 'missing') return null;
+  const of = (id: number) => entries?.find((e) => e.arenaId === id);
+  const act = async (ids: number[], cancel: boolean) => {
+    if (busy || ids.length === 0) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      setEntries(cancel ? await api.cancelReprice(ids) : await api.scheduleReprice(ids));
+    } catch (e) {
+      setErr(saveErrorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const due = pending.filter((id) => !of(id));
+  return (
+    <section className="ad-reprice" aria-labelledby="ad-reprice-h" data-testid="reprice">
+      <h3 className="ad-h3" id="ad-reprice-h">
+        Re-price at next bell
+      </h3>
+      <p className="ad-note">
+        An arena with open tickets cannot change its entry fee. This closes its joins at the round&apos;s last minute, lets the round finish at the bell, refunds tickets that were never
+        seated, and turns ready: then sign the sync above. It opens again by itself once the new entry fee is on chain.
+      </p>
+      <ul className="ad-reprice__list">
+        {arenaIds.map((id) => {
+          const e = of(id);
+          const v = repriceText(e);
+          return (
+            <li key={id} className="ad-reprice__row" data-arena={id}>
+              <span>
+                <span className="num ad-dim">#{id}</span> <strong>{arenaName(id)}</strong>
+              </span>
+              <span className={`ad-code mono is-${v.tone}`} data-testid={`reprice-state-${id}`}>
+                {v.label}
+              </span>
+              {e ? (
+                <Btn testId={`reprice-cancel-${id}`} disabled={busy} onClick={() => void act([id], true)}>
+                  Cancel
+                </Btn>
+              ) : (
+                <Btn testId={`reprice-go-${id}`} disabled={busy || entries === null} onClick={() => void act([id], false)}>
+                  Re-price at next bell
+                </Btn>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {due.length > 1 && (
+        <div className="ad-actions">
+          <Btn sun testId="reprice-all" disabled={busy || entries === null} onClick={() => void act(due, false)}>
+            {`Re-price the ${due.length} changed arenas at next bell`}
+          </Btn>
+        </div>
+      )}
+      <FormError error={err} />
+    </section>
+  );
+}
 
 /**
  * Game → Arena prices (USD): the tiers ($1 / $3 / $5 / $10, the $10 one holders-only), where the token's USD price
@@ -322,6 +433,7 @@ export function ArenaPricesCard({ ctx }: { ctx: ChainCtx }) {
         {blocked && <span className="ad-note">{blocked}</span>}
       </div>
       <FormError error={run?.error ?? null} />
+      {typeof ctx.api.reprice === 'function' && <RepriceAtBell api={ctx.api} arenaIds={draft.tiers.map((t) => t.arenaId)} pending={rows.filter((r) => r.entryChange && !r.error).map((r) => r.arenaId)} />}
     </Card>
   );
 }

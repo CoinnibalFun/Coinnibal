@@ -1,9 +1,11 @@
 import { formatGasAmount } from '@elymum/sdk';
 import { checkDeployedCode, type CodeCheck, type StatusSnapshot } from '@elymum/sdk/ops';
-import { CONTRACT_KINDS, type ContractKind, type ContractsRegistry, type GameServerLoad, type GameThreadLoad, type NetworkInfo, GAS_SYMBOL, networkOf } from '@elymum/shared';
+import { CONTRACT_KINDS, type ContractKind, type ContractsRegistry, type GameServerLoad, type GameThreadLoad, type GasRunway, type NetworkInfo, GAS_SYMBOL, networkOf } from '@elymum/shared';
 import { useEffect, useState } from 'react';
 import { parseEther, type Address } from 'viem';
 import { gasFaucetUrl } from '../site/faucet/logic';
+import { signOut } from '../site/session';
+import { secretErrorText, walletProofSigner, withSecretProof, type ProofSigner } from './secrets';
 import { NetPill } from './NetPill';
 import type { AdminNetwork } from './net';
 import { Addr, Btn, Card, Input, Mark, NeedsSession, Row, type ChainCtx } from './ui';
@@ -18,6 +20,33 @@ export const LOW_SERVER_GAS = 10n ** 16n; // 0.01 of the gas token
 export function serverKeyBalance(info: { serverBalanceWei: string | null; low: boolean } | null, keyWei: bigint | null): { wei: bigint | null; low: boolean } {
   const wei = keyWei ?? (info?.serverBalanceWei != null ? BigInt(info.serverBalanceWei) : null);
   return { wei, low: wei !== null ? wei < LOW_SERVER_GAS : !!info?.low };
+}
+
+/**
+ * The server key's gas runway in words, with its tone (pure, tested): `critical` under the floor or under 2 days at the
+ * trailing spend (the server alerts and /api/health answers 503), `warn` under 7 days, `unknown` while there is less
+ * than an hour of samples.
+ */
+export function gasRunwayView(gas: GasRunway): { tone: 'ok' | 'warn' | 'bad' | 'unknown'; label: string; detail: string } {
+  const spend = gas.spendWeiPerDay !== null ? `${formatGasAmount(BigInt(gas.spendWeiPerDay), 5)} a day` : null;
+  const days = gas.days === null ? null : gas.days >= 100 ? '100+ days' : gas.days >= 10 ? `${Math.round(gas.days)} days` : `${gas.days.toFixed(1)} days`;
+  const floor = formatGasAmount(BigInt(gas.floorWei), 4);
+  const over = `measured over ${gas.sampledHours.toFixed(gas.sampledHours < 10 ? 1 : 0)} h`;
+  const label =
+    gas.level === 'critical'
+      ? `critical · ${days ?? `under the ${floor} floor`}`
+      : gas.level === 'warn'
+        ? `low · ${days ?? 'soon'}`
+        : gas.level === 'ok'
+          ? days
+            ? `ok · ${days}`
+            : 'ok · nothing spent lately'
+          : 'measuring';
+  const detail =
+    gas.level === 'unknown'
+      ? `Less than an hour of balance readings: only the ${floor} floor is checked so far.`
+      : `${spend ? `Spends ${spend} (${over}). ` : `Nothing spent (${over}). `}Warning under ${gas.warnDays} days, alert under ${gas.criticalDays} days or ${floor}.`;
+  return { tone: gas.level === 'critical' ? 'bad' : gas.level === 'warn' ? 'warn' : gas.level === 'ok' ? 'ok' : 'unknown', label, detail };
 }
 
 export interface MainnetStep {
@@ -41,7 +70,7 @@ export function mainnetChecklist(net: AdminNetwork, status: StatusSnapshot | nul
   const nft = status?.nft?.state ?? null;
   const when = (v: boolean | null | undefined): boolean | null => (on ? (v ?? null) : false);
   return [
-    { id: 'rpc', label: 'Set EVM_RPC_URL (and CHAIN_ID) on the server to the mainnet RPC', detail: 'deploy/vps/docker-compose.yml → CHAIN_ID 4663 and the mainnet RPC, then push (the server updates itself). The server follows that chain; testnet records stay on file.', ok: on, where: 'Server' },
+    { id: 'rpc', label: 'Point the server at the mainnet (ELYMUM_CHAIN_ID and ELYMUM_RPC_URLS)', detail: '/opt/elymum/.env on the VPS → ELYMUM_CHAIN_ID=4663 and ELYMUM_RPC_URLS=<Alchemy URL>,https://rpc.mainnet.chain.robinhood.com, then elymum-compose up -d app. The server follows that chain; testnet records stay on file.', ok: on, where: 'Server' },
     { id: 'access', label: 'Set Game access explicitly', detail: 'The site settings carry over from testnet (where the game is public): pick Admins or Holders in Game before anything else opens.', ok: null, where: 'Game' },
     { id: 'fund', label: `Fund the server key with ${GAS_SYMBOL}`, detail: 'It sends every settlement; a little gas lasts a long time.', ok: when(a?.serverBalance != null ? a.serverBalance >= LOW_SERVER_GAS : null), where: 'Server' },
     { id: 'arena', label: 'Deploy ElymumArena from the owner wallet', detail: 'Setup → the deploy wizard. No address to type; it registers with the server by itself (code hash, owner and settler checked).', ok: when(!!net.arenaAddress && a?.code === 'ok'), where: 'Setup' },
@@ -158,6 +187,7 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
           <Row label="Balance">
             {serverWei === null ? <span className="ad-none">…</span> : <span className={`num${low ? ' ad-bad' : ''}`}>{formatGasAmount(serverWei, 4)}</span>}
           </Row>
+          {info?.gas && <RunwayRow gas={info.gas} />}
         </dl>
         <FundServerKey
           ctx={ctx}
@@ -168,8 +198,8 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
             void ctx.refresh();
           }}
         />
-        {low && (
-          <p className="ad-warn" data-testid="fund-hint">
+        {(low || info?.gas?.level === 'critical' || info?.gas?.level === 'warn') && (
+          <p className={info?.gas?.level === 'critical' ? 'ad-err' : 'ad-warn'} data-testid="fund-hint">
             <strong>Fund it.</strong> Send {GAS_SYMBOL} to the address above (a little lasts a long time); without gas, settlements cannot be sent.
             {!net.mainnet && gasFaucetUrl(ctx.net.chain?.faucetUrl) && (
               <>
@@ -249,7 +279,83 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
       </Card>
 
       <BackupCard ctx={ctx} />
+      <SessionsCard ctx={ctx} />
     </div>
+  );
+}
+
+/** The gas runway line of the server key: how long its balance lasts at the trailing spend, coloured by level. */
+export function RunwayRow({ gas }: { gas: GasRunway }) {
+  const v = gasRunwayView(gas);
+  return (
+    <Row label="Runway">
+      <span className={`ad-code mono is-${v.tone}`} data-testid="gas-runway" data-level={gas.level}>
+        {v.label}
+      </span>
+      <span className="ad-note ad-runway__detail">{v.detail}</span>
+    </Row>
+  );
+}
+
+/**
+ * "Admin sessions": admin sessions last 2 hours and are never extended; "Sign out everywhere" ends every session of
+ * this wallet (other browsers, a copied migration command), "End every admin session" those of every admin wallet.
+ */
+export function SessionsCard({ ctx }: { ctx: ChainCtx }) {
+  const api = ctx.api;
+  const [busy, setBusy] = useState<'me' | 'admins' | null>(null);
+  const [confirm, setConfirm] = useState<'me' | 'admins' | null>(null);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const revoke = async (who: 'me' | 'admins') => {
+    if (!api) return;
+    setBusy(who);
+    setNote(null);
+    try {
+      const me = await api.me();
+      await api.revokeSessions(who === 'admins' ? 'admins' : me.address);
+      setConfirm(null);
+      // this session was one of them: sign in again for the next admin step
+      signOut();
+      setNote({ ok: true, text: who === 'admins' ? 'Every admin session ended, this one too. Sign in again at the top right.' : 'Every session of this wallet ended, this one too. Sign in again at the top right.' });
+    } catch (e) {
+      setNote({ ok: false, text: secretErrorText(e, 'the sign-out') });
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <Card title="Admin sessions" id="net-sessions" lede="An admin sign-in lasts 2 hours and is never extended. If a session token may have leaked (a shared screen, a copied command), end it here: the server refuses it at once, also after a restart.">
+      <div className="ad-fund ad-sessions">
+        {confirm === null ? (
+          <>
+            <Btn danger icon="lock" testId="revoke-me" disabled={!api || busy !== null} onClick={() => setConfirm('me')}>
+              Sign out everywhere
+            </Btn>
+            <Btn testId="revoke-admins" disabled={!api || busy !== null} onClick={() => setConfirm('admins')}>
+              End every admin session
+            </Btn>
+          </>
+        ) : (
+          <>
+            <span className="ad-note" data-testid="revoke-confirm">
+              {confirm === 'me' ? 'End every session of this wallet, in every browser, this one included?' : 'End the sessions of every admin wallet, this one included?'}
+            </span>
+            <Btn danger testId="revoke-yes" disabled={busy !== null} onClick={() => void revoke(confirm)}>
+              {busy ? 'Ending…' : 'Yes, end them'}
+            </Btn>
+            <Btn disabled={busy !== null} onClick={() => setConfirm(null)}>
+              Cancel
+            </Btn>
+          </>
+        )}
+      </div>
+      <NeedsSession api={api} />
+      {note && (
+        <p className={note.ok ? 'ad-note' : 'ad-bad'} role={note.ok ? 'status' : 'alert'} data-testid="revoke-note">
+          {note.text}
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -310,59 +416,59 @@ export function LoadCard({ load }: { load: GameServerLoad }) {
 }
 
 /**
- * "Backup & move": downloads a gzip tar of the server's DATA_DIR, or copies the `curl` command that does
- * the same from another machine (the new server), with this admin session's token in it.
+ * "Backup & move": downloads a gzip tar of the server's DATA_DIR, or copies the `curl` command that does the same from
+ * another machine (the new server), or the whole new-server command. Each one hands out the server key, so each asks
+ * the admin wallet for a fresh, purpose-bound signature first (`X-Elymum-Proof`): one download within 10 minutes.
  */
-function BackupCard({ ctx }: { ctx: ChainCtx }) {
+export function BackupCard({ ctx, sign = walletProofSigner() }: { ctx: ChainCtx; sign?: ProofSigner }) {
   const api = ctx.api;
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'download' | 'copy' | 'install' | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
-  const download = async () => {
-    if (!api) return;
-    setBusy(true);
+  const run = async (what: 'download' | 'copy' | 'install') => {
+    if (!api || busy) return;
+    setBusy(what);
     setNote(null);
     try {
-      await api.backup();
-      setNote({ ok: true, text: 'Backup downloaded. Keep it somewhere private.' });
+      if (what === 'download') {
+        await withSecretProof(api, 'backup', sign, (proof) => api.backup(proof));
+        setNote({ ok: true, text: 'Backup downloaded. Keep it somewhere private.' });
+      } else {
+        const command = await withSecretProof(api, what === 'copy' ? 'backup' : 'migration', sign, async (proof) => (what === 'copy' ? api.backupCommand(proof) : api.installCommand(proof)));
+        try {
+          await navigator.clipboard.writeText(command);
+        } catch {
+          setNote({ ok: false, text: 'The browser refused the clipboard. Use Download backup instead.' });
+          return;
+        }
+        setNote({
+          ok: true,
+          text:
+            what === 'copy'
+              ? 'Command copied. Paste it on the new server within 10 minutes: the signature opens one download, and your session ends within 2 hours.'
+              : 'New-server command copied. Paste it into the new server (SSH, logged in as ubuntu) within 10 minutes. It copies the settings and the data once.',
+        });
+      }
     } catch (e) {
-      setNote({ ok: false, text: (e as Error).message || 'The backup could not be downloaded.' });
+      setNote({ ok: false, text: secretErrorText(e, what === 'download' ? 'the download' : 'the copy') });
     } finally {
-      setBusy(false);
-    }
-  };
-  const copy = async () => {
-    if (!api) return;
-    try {
-      await navigator.clipboard.writeText(api.backupCommand());
-      setNote({ ok: true, text: 'Command copied. Paste it on the new server; it works until your session expires (24 h).' });
-    } catch {
-      setNote({ ok: false, text: 'The browser refused the clipboard. Use Download backup instead.' });
-    }
-  };
-  const copyInstall = async () => {
-    if (!api) return;
-    try {
-      await navigator.clipboard.writeText(api.installCommand());
-      setNote({ ok: true, text: 'New-server command copied. Paste it into the new server (SSH, logged in as ubuntu). It copies the settings and the data; it works for 24 h.' });
-    } catch {
-      setNote({ ok: false, text: 'The browser refused the clipboard.' });
+      setBusy(null);
     }
   };
   return (
     <Card title="Backup & move" id="net-backup" lede="Everything the server keeps (journal, contracts registry, server key, profiles, pictures, site data) as one .tar.gz file: for moving the server to a new host, or a copy to keep.">
       <p className="ad-warn" data-testid="backup-warning">
-        <strong>The file contains the server key and secrets.</strong> Anyone holding it can sign settlements as the server. Never share it or upload it anywhere public. The copied command
-        contains your admin session token, which expires in 24 h: paste it only into your own server&apos;s terminal.
+        <strong>The file contains the server key and secrets.</strong> Anyone holding it can sign settlements as the server. Never share it or upload it anywhere public. Each button asks
+        your admin wallet for one free signature first (no transaction); a copied command works once, within 10 minutes: paste it only into your own server&apos;s terminal.
       </p>
       <div className="ad-fund">
-        <Btn sun icon="lock" testId="backup-download" disabled={!api || busy} onClick={() => void download()}>
-          {busy ? 'Preparing backup…' : 'Download backup'}
+        <Btn sun icon="lock" testId="backup-download" disabled={!api || busy !== null} onClick={() => void run('download')}>
+          {busy === 'download' ? 'Check your wallet…' : 'Download backup'}
         </Btn>
-        <Btn testId="backup-copy" disabled={!api} onClick={() => void copy()}>
-          Copy migration command
+        <Btn testId="backup-copy" disabled={!api || busy !== null} onClick={() => void run('copy')}>
+          {busy === 'copy' ? 'Check your wallet…' : 'Copy migration command'}
         </Btn>
-        <Btn testId="backup-install" disabled={!api} onClick={() => void copyInstall()}>
-          Copy new-server command
+        <Btn testId="backup-install" disabled={!api || busy !== null} onClick={() => void run('install')}>
+          {busy === 'install' ? 'Check your wallet…' : 'Copy new-server command'}
         </Btn>
       </div>
       <NeedsSession api={api} />
