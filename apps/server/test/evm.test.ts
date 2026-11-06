@@ -276,7 +276,9 @@ describe('EvmChain on a hardhat node', () => {
     if (!up) return ctx.skip();
     for (const call of (await planJoin(client, { arena, arenaId: 2, player: p2.address, token })).calls) await send(p2.address, call);
     expect(await chain.sweepStale()).toBe(0); // fresh tickets are not stale
-    skewMs = 3_600_000;
+    // an hour passes on the chain (ticket ages are measured on the chain's clock, not the server's)
+    await client.request({ method: 'evm_increaseTime' as never, params: [3600] as never });
+    await client.request({ method: 'evm_mine' as never, params: [] as never });
     const before2 = await getTokenBalance(client, token, p2.address);
     expect(await chain.sweepStale()).toBe(1); // every arena-1 ticket was settled: only p2's in arena 2
     // the journal counts what leaves the vault: the whole 3,000 entry fee

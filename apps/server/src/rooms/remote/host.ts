@@ -157,6 +157,8 @@ export class RoomHost {
   private readonly deps: RoomDeps;
   private readonly clock: RoundClock;
   private offset: number;
+  /** The chain's clock minus `Date.now()` (the main thread's `chainNow`). */
+  private chainOffset: number;
   private readonly monitor: IntegrityMonitor | null;
   /** Settlements whose auto-hold the main thread decides (filled by `integrity.settle`, drained by the next commit). */
   private holds: [string, number][] = [];
@@ -171,6 +173,7 @@ export class RoomHost {
     private readonly post: (batch: OutBatch, transfer: ArrayBuffer[]) => void,
   ) {
     this.offset = init.clockOffset;
+    this.chainOffset = init.chainOffset ?? 0;
     this.clock = new RoundClock(() => Date.now() + this.offset, init.round);
     const ctl = (c: Ctl) => this.out.push(c);
     const journal: RoomJournal = {
@@ -225,6 +228,7 @@ export class RoomHost {
       log: (m) => ctl({ k: 'log', m }),
       clock: this.clock,
       round: init.round,
+      chainNow: () => Date.now() + this.chainOffset,
       onGameOver: (e) => ctl({ k: 'go', hid: this.hidOf(e.room), conn: e.conn?.id ?? null, player: lookOf(e.player), stats: e.stats }),
       onNotableKill: (e) =>
         ctl({ k: 'nk', hid: this.hidOf(e.room), conn: e.conn.id, player: lookOf(e.killer), mass: Math.floor(e.killer.totalMass()), kills: e.killer.stats.playersEaten, victim: e.victim, victimMass: e.victimMass }),
@@ -524,6 +528,7 @@ export class RoomHost {
         return;
       case 'clock':
         this.offset = cmd.offset;
+        if (cmd.chain !== undefined) this.chainOffset = cmd.chain;
         return;
       case 'block': {
         const end = Date.now() + cmd.ms;

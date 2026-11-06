@@ -150,6 +150,8 @@ export class Gateway {
     });
     // the token was set (or another status change clients must see): push the new chain status
     chain.onStatusChange(() => this.broadcastChain());
+    // the journal stopped (or resumed) being writable: the lobby stops (or resumes) offering tickets
+    journal.onWriteStateChange?.(() => this.broadcastChain());
   }
 
   /** Sets who may enter rooms (the site's game gate: admins, NFT holders, or everyone). */
@@ -642,6 +644,11 @@ export class Gateway {
       }
       // a new join (not the AFK return above): only while the round's joins are open
       if (this.roundClosed(conn)) return;
+      // the journal cannot be written (disk full): a new seat would hold money the server could not record
+      if (this.journal.writeFailing) {
+        this.error(conn, 'storage_failing', 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
+        return;
+      }
       // badly overloaded: a new seat waits; the ticket stays on chain (seated later, or refunded in full if never played)
       if (this.shedder && !this.shedder.admitCritical()) {
         this.error(conn, 'server_full', 'The server is very busy right now. Your ticket is safe on chain: press Resume again in a minute.');
@@ -666,7 +673,8 @@ export class Gateway {
         this.error(conn, 'no_session', 'Your previous game in this arena is still being settled.');
         return;
       }
-      if (Date.now() / 1000 - session.openedAt > MAX_STAKE_SESSION_AGE_S - 600) {
+      // `openedAt` is a block timestamp: the chain's clock decides the ticket's age
+      if ((this.chain.chainNow?.() ?? Date.now()) / 1000 - session.openedAt > MAX_STAKE_SESSION_AGE_S - 600) {
         this.error(conn, 'no_session', 'This arena ticket expired and will be refunded.');
         return;
       }
@@ -698,8 +706,12 @@ export class Gateway {
         this.error(conn, 'no_session', 'Your previous game in this arena is still being settled.');
         return;
       }
-      // the awaits above may have crossed into the closed window
+      // the awaits above may have crossed into the closed window (or the disk filled meanwhile)
       if (this.roundClosed(conn)) return;
+      if (this.journal.writeFailing) {
+        this.error(conn, 'storage_failing', 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
+        return;
+      }
       // a new arena game (not a resumed ticket): refused for a banned wallet (the ban may be new since the check above)
       if (this.banGate?.(conn.wallet) === true) {
         this.error(conn, 'banned', 'This wallet is banned from paid arenas after an integrity review. Practice is open.');

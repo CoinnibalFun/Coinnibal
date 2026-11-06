@@ -106,6 +106,8 @@ export interface EvmClient {
   txBlock(hash: Hash): Promise<bigint | null>;
   /** Hash of block `n`; null when it is not mined yet (the NFT reveal's entropy). */
   blockHash(n: bigint): Promise<Hash | null>;
+  /** The latest block's number and timestamp (Unix seconds): the chain's clock. */
+  latestBlock?(): Promise<{ number: bigint; timestamp: number }>;
   /** Simulates (throws the decoded revert) then sends `call` signed by the server key. */
   send(call: ContractCall): Promise<Hash>;
   /**
@@ -337,6 +339,10 @@ export function viemEvmClient(
         if ((err as Error)?.name === 'BlockNotFoundError') return null;
         throw err;
       }
+    },
+    latestBlock: async () => {
+      const b = await publicClient.getBlock({ blockTag: 'latest' });
+      return { number: b.number, timestamp: Number(b.timestamp) };
     },
     codeCheck: (address, kind) => checkDeployedCode(publicClient, address, kind),
     hasCode: async (address) => {

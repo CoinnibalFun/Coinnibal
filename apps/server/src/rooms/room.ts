@@ -73,6 +73,11 @@ export interface RoomDeps {
   log: (msg: string) => void;
   /** Wall clock (Unix ms) the arena rounds run on; defaults to `Date.now`. Tests inject their own. */
   now?: () => number;
+  /**
+   * The chain's clock (Unix ms; the chain gateway's `chainNow`): ticket ages (the `MAX_STAKE_SESSION_AGE_S` cap) are
+   * measured with it, since a ticket's `openedAt` is a block timestamp. Defaults to `Date.now`.
+   */
+  chainNow?: () => number;
   /** Arena round clock (defaults to `RULES.roundMs` / `RULES.roundJoinCloseMs`). */
   round?: { roundMs: number; closeMs: number; breakMs?: number };
   /**
@@ -1098,8 +1103,10 @@ export class Room implements RoomHandle {
     const now = Date.now();
     if (now - this.lastAgeCheckAt >= 5000) {
       this.lastAgeCheckAt = now;
+      // `openedAt` is a block timestamp: compare it with the chain's clock, not this server's
+      const chainNowS = (this.deps.chainNow?.() ?? now) / 1000;
       for (const e of this.ledger!.all()) {
-        if (now / 1000 - e.openedAt < MAX_STAKE_SESSION_AGE_S) continue;
+        if (chainNowS - e.openedAt < MAX_STAKE_SESSION_AGE_S) continue;
         const p = world.players.get(e.pid);
         if (p?.alive) this.finishHuman(p, this.humans.get(e.pid) ?? null, 'maxage');
       }

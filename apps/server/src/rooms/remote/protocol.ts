@@ -18,6 +18,8 @@ export interface WorkerInit {
   round: { roundMs: number; closeMs: number; breakMs?: number };
   /** The main thread's clock minus `Date.now()` (tests run the rounds on an injected clock). */
   clockOffset: number;
+  /** The chain's clock minus `Date.now()` (ms): ticket ages. */
+  chainOffset?: number;
   /** Arena rooms run the integrity telemetry (the main thread has an `IntegrityService`). */
   integrity: boolean;
 }
@@ -67,7 +69,7 @@ export type Cmd =
   | { k: 'avatar'; wallet: string }
   | { k: 'announce'; hid: number; text: string }
   | { k: 'closing'; hid: number; endsAt: number; message: string }
-  | { k: 'clock'; offset: number }
+  | { k: 'clock'; offset: number; chain?: number }
   /** Test hook: keeps the worker busy for `ms` (the hang watchdog's test). */
   | { k: 'block'; ms: number }
   | { k: 'shutdown' };

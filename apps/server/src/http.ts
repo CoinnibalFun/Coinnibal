@@ -8,6 +8,7 @@ import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
 import type { ServerConfig } from './config';
 import type { Leaderboards } from './leaderboards';
+import { healthReport } from './health';
 import { clientIp, trustProxyHops } from './net/gateway';
 import { Limiter } from './net/limiter';
 import type { PriceKeeper } from './chain/price-keeper';
@@ -196,15 +197,13 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
         if (!apiLimiter.allow(ip)) return json(res, 429, { error: 'rate_limited' });
         if (ctx.site && (await ctx.site.handle(req, res, url, ip))) return;
         switch (url.pathname) {
-          case '/api/health':
-            return json(res, 200, {
-              ok: true,
-              uptimeS: Math.round((Date.now() - ctx.startedAt) / 1000),
-              online: ctx.rooms.online(),
-              rooms: ctx.rooms.roomCount,
-              // single-thread, or room workers (and how many answer)
-              game: ctx.rooms.pool ? { mode: 'workers', workers: ctx.rooms.pool.size, up: ctx.rooms.pool.threads().filter((t) => t.up).length } : { mode: 'single', workers: 0, up: 0 },
-            });
+          case '/api/health': {
+            // `?live=1`: the container's liveness check (Docker HEALTHCHECK): the process answers. A server that only
+            // waits on the RPC, or whose disk is full, is not restarted for it (a restart fixes neither)
+            if (url.searchParams.get('live') === '1') return json(res, 200, { ok: true, live: true, uptimeS: Math.round((Date.now() - ctx.startedAt) / 1000) });
+            const report = healthReport({ cfg, rooms: ctx.rooms, journal: ctx.journal, chain: ctx.chain, startedAt: ctx.startedAt });
+            return json(res, report.ok ? 200 : 503, report);
+          }
           case '/api/rooms':
             return publicJson(res, 'rooms', () => ({ rooms: ctx.rooms.list(), online: ctx.rooms.online(), blocked: ctx.rooms.blockedArenas() }));
           case '/api/leaderboard':

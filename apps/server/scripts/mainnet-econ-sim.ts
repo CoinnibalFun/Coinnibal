@@ -9,7 +9,6 @@
  */
 import { writeFileSync } from 'node:fs';
 import { DEFAULT_ARENAS, SHOP_DEFAULTS } from '@elymum/shared';
-import { LOW_BALANCE_WEI } from '../src/chain/evm';
 import {
   ABUSE_CASES,
   ETH_USD,
@@ -75,11 +74,9 @@ for (const r of reports) {
   console.log(`  ${Object.entries(r.gas.txByKind).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}: ${num(v * (24 / r.scenario.hours))}`).join(', ')}`);
   for (const g of GAS_PRICES_GWEI) console.log(`  at ${g} gwei: ${r.gas.ethPerDay[`${g} gwei`].toFixed(5)} ETH a day ($${r.gas.usdPerDay[`${g} gwei`].toFixed(2)} at ETH $${ETH_USD})`);
   {
-    const low = Number(LOW_BALANCE_WEI) / 1e18;
-    const mid = r.gas.ethPerDay['0.1 gwei'];
     const worst = r.gas.ethPerDay['0.25 gwei'];
-    console.log(`  runway of the server's low-balance warning (${low} ETH): ${((low / r.gas.ethPerDay['0.01 gwei']) * 24).toFixed(1)} h at 0.01 gwei, ${((low / mid) * 24).toFixed(1)} h at 0.1 gwei, ${((low / worst) * 24).toFixed(1)} h at 0.25 gwei`);
-    console.log(`  suggested: keep >= 7 days at 0.25 gwei (${(7 * worst).toFixed(3)} ETH), alert below 3 days (${(3 * worst).toFixed(3)} ETH)`);
+    // the server warns by runway (trailing spend): under 7 days a warning, under 2 days an alert (GAS_RUNWAY_*_DAYS)
+    console.log(`  runway alerts at 0.25 gwei: warning below ${(7 * worst).toFixed(4)} ETH (7 days), alert below ${(2 * worst).toFixed(4)} ETH (2 days); floor GAS_FLOOR_ETH 0.002`);
   }
   console.log(r.violations.length ? `VIOLATIONS: ${r.violations.slice(0, 5).join('; ')}` : 'conservation: every instance-round balanced exactly (deposited = paid + burned + fee wallet, nothing minted)');
 }

@@ -211,7 +211,7 @@ export class RoomManager {
       this.bellMemo.set(`${e.arenaId}:${e.wallet}`, { ...e, at: Date.now() });
       deps.onBellSettled?.(e);
     };
-    this.deps = { ...deps, round, clock, onGameOver: gameOver, onBellSettled: bellSettled };
+    this.deps = { ...deps, round, clock, onGameOver: gameOver, onBellSettled: bellSettled, chainNow: deps.chainNow ?? (() => chain.chainNow?.() ?? Date.now()) };
     // a room on this thread hands its own connection (a `Conn`) to the hooks
     const notable = (e: NotableKillEvent) => deps.onNotableKill?.(e);
     this.roomDeps = {
@@ -231,6 +231,7 @@ export class RoomManager {
             clock,
             round,
             clockOffset: () => clock.now() - Date.now(),
+            chainOffset: () => (chain.chainNow?.() ?? Date.now()) - Date.now(),
             integrity: deps.integrity,
             shop: deps.shop,
             onGameOver: gameOver,

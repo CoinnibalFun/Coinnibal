@@ -45,6 +45,8 @@ export interface PoolDeps {
   round: { roundMs: number; closeMs: number; breakMs?: number };
   /** The main thread's round clock minus `Date.now()` (non-zero only with an injected clock). */
   clockOffset: () => number;
+  /** The chain's clock minus `Date.now()` (ticket ages in the workers' rooms); absent: 0. */
+  chainOffset?: () => number;
   integrity?: IntegrityService;
   shop?: ShopService;
   /** A human's game ended in a room worker (the profile, the league, the custom room's board). */
@@ -77,6 +79,8 @@ class Slot {
   readonly startedAt = Date.now();
   /** The round-clock offset this worker was last told. */
   offset = 0;
+  /** The chain-clock offset this worker was last told. */
+  chainOffset = 0;
   /** Deaths in a row soon after a start (the respawn backs off). */
   failures = 0;
   /** Requests waiting for this worker's answer. */
@@ -118,7 +122,7 @@ export class WorkerPool {
       setInterval(() => this.watch(), 1000),
       // an injected round clock (tests) moves: the workers follow within a tick (and before any command)
       setInterval(() => {
-        for (const s of this.slots) if (Math.abs(deps.clockOffset() - s.offset) >= 1) this.flush(s, true);
+        for (const s of this.slots) if (Math.abs(deps.clockOffset() - s.offset) >= 1 || Math.abs((deps.chainOffset?.() ?? 0) - s.chainOffset) >= 1000) this.flush(s, true);
       }, 20),
     );
     for (const t of this.timers) t.unref();
@@ -134,11 +138,13 @@ export class WorkerPool {
       index,
       round: this.deps.round,
       clockOffset: this.deps.clockOffset(),
+      chainOffset: Math.round(this.deps.chainOffset?.() ?? 0),
       integrity: !!this.deps.integrity,
     };
     const worker = new Worker(file, { workerData: init });
     const slot = new Slot(index, worker, restarts);
     slot.offset = init.clockOffset;
+    slot.chainOffset = init.chainOffset ?? 0;
     worker.on('message', (b: OutBatch) => {
       if (slot.dead) return;
       slot.lastMsgAt = Date.now();
@@ -171,10 +177,13 @@ export class WorkerPool {
     if (slot.dead) return;
     // the round clock first: a join must never land in a round the main thread has already left
     const off = this.deps.clockOffset();
-    const clock = Math.abs(off - slot.offset) >= 1;
+    const chainOff = Math.round(this.deps.chainOffset?.() ?? 0);
+    // the chain clock follows within a second (ticket ages are measured in minutes)
+    const clock = Math.abs(off - slot.offset) >= 1 || Math.abs(chainOff - slot.chainOffset) >= 1000;
     if (!clock && (clockOnly || slot.queue.length === 0)) return;
-    const cmds: Cmd[] = clock ? [{ k: 'clock', offset: off }] : [];
+    const cmds: Cmd[] = clock ? [{ k: 'clock', offset: off, chain: chainOff }] : [];
     slot.offset = off;
+    slot.chainOffset = chainOff;
     if (!clockOnly) {
       cmds.push(...slot.queue);
       slot.queue = [];

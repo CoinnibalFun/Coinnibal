@@ -751,12 +751,15 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   for (const item of journal.held()) journal.release(item.key, clock);
   clock += staleAfterS * 1000 + 60_000;
   {
+    // ticket ages are measured on the chain's clock: it moves on at least as far as the game's (a chain that ran
+    // ahead, one second per block on an automining node, still has to see every unplayed ticket age past the limit)
     const want = Math.floor(clock / 1000);
     const nowS = await sim.nowS();
-    if (want > nowS) await sim.advance(want - nowS);
+    await sim.advance(Math.max(want - nowS, staleAfterS + 60));
   }
   for (let i = 0; i < 40 && (journal.pending.length > 0 || i < 3); i++) {
     clock += 400_000; // past every backoff
+    await sim.advance(400);
     await chain.sweepStale();
     await pass();
   }

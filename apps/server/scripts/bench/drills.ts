@@ -21,7 +21,7 @@
  *   DRILLS=worker,sigterm,sigkill,disk DRILL_PLAYERS=40 node --import tsx scripts/bench/drills.ts
  */
 import { execFileSync, fork, type ChildProcess } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -79,7 +79,10 @@ async function startServer(dataDir: string): Promise<number> {
   const t0 = Date.now();
   const child = fork(join(here, 'drill-server.ts'), [], { execArgv: ['--import', 'tsx'], env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   const onLine = (b: Buffer) => {
-    for (const l of b.toString().split('\n')) if (l.trim()) serverLog.push(l);
+    for (const l of b.toString().split('\n')) if (l.trim()) {
+      serverLog.push(l);
+      if (process.env.DRILL_SERVER_LOG) appendFileSync(process.env.DRILL_SERVER_LOG, l + '\n');
+    }
   };
   child.stdout!.on('data', onLine);
   child.stderr!.on('data', onLine);

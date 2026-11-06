@@ -63,7 +63,9 @@ export interface HardhatArena {
 export async function startHardhatArena(opts: { players: number; intervalMs?: number }): Promise<HardhatArena> {
   const port = await freePort();
   const url = `http://127.0.0.1:${port}`;
-  const child: ChildProcess = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
+  // the `bench` network keeps block timestamps on the real clock (several blocks a second share a timestamp, as on
+  // Robinhood Chain); the default node adds a second per block, so its time would run 4x fast at 250 ms blocks
+  const child: ChildProcess = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', '--network', 'bench', 'node', '--port', String(port)], {
     cwd: repoRoot,
     detached: true,
     stdio: 'ignore',
