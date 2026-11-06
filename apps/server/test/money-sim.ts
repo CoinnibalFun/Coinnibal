@@ -21,7 +21,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { computeProfitFee, PlayerFlag, roundAt, TICK_MS, type ServerMessage } from '@elymum/shared';
+import { computeProfitFee, PlayerFlag, ROBINHOOD_TESTNET_CHAIN_ID, roundAt, TEST_ARENA_ARRIVE_MS, TEST_ARENA_BOTS, testArenaRoomId, TICK_MS, type CustomDifficulty, type ServerMessage } from '@elymum/shared';
 import type { ArenaInfo, SessionInfo } from '@elymum/sdk';
 import { getAddress, type Address } from 'viem';
 import { generatePrivateKey } from 'viem/accounts';
@@ -128,6 +128,11 @@ export interface SimOptions {
   faults?: Partial<SimFaults>;
   /** Unplayed tickets are cancelled after this (the chain clock moves on by `advance` between rounds). */
   staleAfterS?: number;
+  /**
+   * The testnet's test arenas: every arena also gets its test arena `test-<id>` (the same tickets and vault, practice
+   * bots that carry no value), seated like any instance. The books must balance exactly as without them.
+   */
+  testArenas?: { bots: number; difficulty: CustomDifficulty };
   log?: (m: string) => void;
 }
 
@@ -144,6 +149,8 @@ export interface SimReport {
   /** Per arena (base units): deposited, paid to players, burned (fees + loot), fees to the fee wallet, forfeited. */
   books: Record<number, { deposited: string; paidOut: string; burned: string; fees: string; vaultLeft: string; forfeited: number }>;
   faults: { rpcErrors: number; ambiguousSends: number; lostReceipts: number; outages: number; workerCrashes: number; restarts: number; hardKills: number; holds: number; released: number; zeroed: number; refusingPlayers: number; spills: number; daysPassed: number; dayRefunds: number };
+  /** The test-arena scenario: bots eaten by players (mass, no value) and stake cells eaten by bots (value spilled as loot). */
+  testArenas: { rooms: number; botsEaten: number; botSpills: number; botSpillValue: number } | null;
   /** Settled tickets paid more than their entry fee / less than it (eaten or shrunk). */
   winners: number;
   losers: number;
@@ -279,17 +286,36 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   const instances = opts.instances ?? 2;
   const rooms = new Map<string, Room>();
   const leaderboards = new Leaderboards(null);
+  const testBots = { botsEaten: 0, botSpills: 0, botSpillValue: 0 };
+  /** Counts a test arena's bot figures before the room goes (crash, restart) or at the end. */
+  const tallyBots = (r: Room) => {
+    if (!r.opts.test) return;
+    testBots.botsEaten += r.bots?.eaten ?? 0;
+    testBots.botSpills += r.botSpills.n;
+    testBots.botSpillValue += r.botSpills.value;
+  };
+  /** Instance `n` of an arena; `n` 0 with `opts.testArenas`: its test arena (`test-<id>`, practice bots). */
   function openRoom(arenaId: number, n: number): Room {
-    const id = `arena-${arenaId}-${n}`;
+    const test = n === 0 && !!opts.testArenas;
+    const id = test ? testArenaRoomId(arenaId) : `arena-${arenaId}-${n}`;
     const r = new Room(
-      { id, mode: 'arena', name: id, maxPlayers: 50, instance: n, stake: { arenaId, buyIn: ledger(sim.entryFee(arenaId)) }, seed: Math.floor(rng() * 1e9) },
+      {
+        id,
+        mode: 'arena',
+        name: id,
+        maxPlayers: 50,
+        instance: n,
+        stake: { arenaId, buyIn: ledger(sim.entryFee(arenaId)) },
+        seed: Math.floor(rng() * 1e9),
+        ...(test ? { test: { chainId: ROBINHOOD_TESTNET_CHAIN_ID }, bots: { count: opts.testArenas!.bots, difficulty: opts.testArenas!.difficulty, max: TEST_ARENA_BOTS.max, arriveMs: TEST_ARENA_ARRIVE_MS / 8 } } : {}),
+      },
       { chain: { kick: () => {} }, journal, leaderboards, log: () => {}, now: () => clock, round: roundCfg },
     );
     rooms.set(id, r);
     return r;
   }
   const openAll = () => {
-    for (const a of arenaIds) for (let n = 1; n <= instances; n++) openRoom(a, n);
+    for (const a of arenaIds) for (let n = opts.testArenas ? 0 : 1; n <= instances; n++) openRoom(a, n);
   };
   openAll();
 
@@ -349,8 +375,31 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
     stats.seated++;
   }
 
+  /**
+   * Test arenas: now and then a bot meets a staker (put side by side, one clearly bigger), so both value paths run
+   * often in a short round: a staker eating a bot (mass, no value) and a bot eating a staker (the value spills as loot).
+   */
+  function botEncounters(): void {
+    for (const room of rooms.values()) {
+      if (!room.opts.test || !room.bots || rng() > 0.05) continue;
+      const bots = [...room.bots.bots.values()].map((b) => b.player).filter((b) => b.alive && b.cells.length > 0);
+      const stakers = room.ledger!.all().map((e) => room.world.players.get(e.pid)).filter((p) => !!p && p.alive && p.cells.length > 0);
+      if (bots.length === 0 || stakers.length === 0) continue;
+      const bot = bots[Math.floor(rng() * bots.length)];
+      const staker = stakers[Math.floor(rng() * stakers.length)]!;
+      const big = staker.biggestCell()!;
+      const mass = rng() < 0.5 ? big.mass * 3 : big.mass * 0.3;
+      bot.cells[0].setMass(Math.max(20, mass));
+      bot.cells[0].x = big.x + 4;
+      bot.cells[0].y = big.y;
+      bot.shieldUntil = 0;
+      staker.shieldUntil = 0;
+    }
+  }
+
   /** Steering, disconnects, reconnects and spills for one tick. */
   function play(): void {
+    if (opts.testArenas) botEncounters();
     for (const p of players) {
       if (!p.seat) continue;
       const room = rooms.get(p.seat.roomId);
@@ -493,6 +542,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
     journal = new Journal(journalPath, log);
     journal.recoverLive(clock);
     forgetSeats(new Set(rooms.keys()));
+    for (const r of rooms.values()) tallyBots(r);
     rooms.clear();
     chain = await makeChain();
     openAll();
@@ -596,6 +646,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
         const list = [...rooms.values()];
         const victim = list[Math.floor(rng() * list.length)];
         journal.recoverRooms([victim.id], n, clock);
+        tallyBots(victim);
         rooms.delete(victim.id);
         forgetSeats(new Set([victim.id]));
         openRoom(victim.opts.stake!.arenaId, victim.opts.instance ?? 1);
@@ -670,6 +721,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
     if (ledger(info.vault) !== forfeited) violate(`drain: arena #${a} vault ${ledger(info.vault)} != forfeited ${forfeited}`);
   }
   await chain.stop();
+  for (const r of rooms.values()) tallyBots(r);
   return {
     chain: sim.name,
     seed: opts.seed,
@@ -697,6 +749,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
       daysPassed: stats.daysPassed,
       dayRefunds: stats.dayRefunds,
     },
+    testArenas: opts.testArenas ? { rooms: arenaIds.length, ...testBots } : null,
     winners: closures.filter((c) => c.name === 'Settled' && c.amount > sim.entryFee(c.arenaId)).length,
     losers: closures.filter((c) => c.name === 'Settled' && c.amount < sim.entryFee(c.arenaId)).length,
     violations,

@@ -6,6 +6,7 @@ import {
   isBoostKind,
   type BoostKind,
   type ClientInput,
+  type CustomDifficulty,
   type DeathStats,
   type MapScaleSettings,
   type RoomInfo,
@@ -745,6 +746,7 @@ export class RemoteRoom implements RoomHandle {
       loot: this.opts.stake ? 0 : undefined,
       code: this.opts.code,
       ...(this.opts.custom ? { custom: this.opts.custom } : {}),
+      ...(this.opts.test ? { test: true as const } : {}),
     };
   }
 
@@ -776,6 +778,10 @@ export class RemoteRoom implements RoomHandle {
 
   setMapScale(scale: MapScaleSettings): void {
     this.pool.send(this.slot, { k: 'map', hid: this.hid, scale });
+  }
+
+  setBots(count: number, difficulty: CustomDifficulty): void {
+    if (this.opts.test) this.pool.send(this.slot, { k: 'bots', hid: this.hid, count, difficulty });
   }
 
   /** Done for every room at once (`WorkerPool.clearAvatar`); the count is not known here. */

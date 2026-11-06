@@ -27,6 +27,18 @@ describe('money conservation under faults (simulation)', () => {
     }, 120_000);
   }
 
+  for (const seed of [4, 5]) {
+    it(`contract model with test arenas (practice bots in a test instance of every arena), seed ${seed}: the same books, to the unit`, async () => {
+      const r = await runMoneySim(fakeSimChain({ players: 14, seed }), { seed, rounds: 200, faults: DEFAULT_FAULTS, testArenas: { bots: 10, difficulty: 'mixed' } });
+      expect(r.violations).toEqual([]);
+      expect(r.closures.Settled).toBeGreaterThan(150);
+      // the bots really played: players ate bots (mass, no value) and bots ate stake cells (value spilled as loot)
+      expect(r.testArenas!.botsEaten).toBeGreaterThan(0);
+      expect(r.testArenas!.botSpills).toBeGreaterThan(0);
+      console.log(`${brief(r)}; test arenas: ${r.testArenas!.botsEaten} bots eaten, ${r.testArenas!.botSpills} stake cells eaten by bots (${r.testArenas!.botSpillValue} spilled as loot)`);
+    }, 180_000);
+  }
+
   it('the real ElymumArena v3 on a hardhat node: the same checks', async (ctx) => {
     const { hardhatSimChain } = await import('./money-sim-hardhat');
     let sim;
@@ -37,7 +49,8 @@ describe('money conservation under faults (simulation)', () => {
       return ctx.skip();
     }
     try {
-      const r = await runMoneySim(sim, { seed: 7, rounds: 6, faults: DEFAULT_FAULTS });
+      // with a test arena per arena (practice bots): the real contract's books must not see them either
+      const r = await runMoneySim(sim, { seed: 7, rounds: 6, faults: DEFAULT_FAULTS, testArenas: { bots: 6, difficulty: 'mixed' } });
       expect(r.violations).toEqual([]);
       expect(r.closures.Settled).toBeGreaterThan(5);
       console.log(brief(r));

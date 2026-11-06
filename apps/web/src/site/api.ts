@@ -3,6 +3,8 @@ import type {
   NftProvenance,
   ArenaScalingSettings,
   ArenaScalingView,
+  TestArenaSettings,
+  TestArenaView,
   CustomRoomSettings,
   MapScaleSettings,
   CustomRoomView,
@@ -313,6 +315,10 @@ export function adminApi(token: string) {
     arenaScaling: () => request<ArenaScalingView>('/api/admin/arena-scaling', { token }),
     /** `PUT /api/admin/arena-scaling`: a partial update of the settings; answers like the GET. */
     saveArenaScaling: (patch: Partial<ArenaScalingSettings>) => request<ArenaScalingView>('/api/admin/arena-scaling', { method: 'PUT', token, body: patch }),
+    /** `GET /api/admin/test-arenas`: the testnet's test arenas (the switch, bots per arena, difficulty, every test arena now). */
+    testArenas: () => request<TestArenaView>('/api/admin/test-arenas', { token }),
+    /** `PUT /api/admin/test-arenas`: a partial update (refused on the mainnet); answers like the GET. */
+    saveTestArenas: (patch: Partial<TestArenaSettings>) => request<TestArenaView>('/api/admin/test-arenas', { method: 'PUT', token, body: patch }),
     /** `GET /api/admin/maps`: the dynamic map settings per room kind, their defaults and every room's live numbers. */
     maps: () => request<MapAdminView>('/api/admin/maps', { token }),
     /** `PUT /api/admin/maps`: a partial update (per room kind); answers like the GET. */

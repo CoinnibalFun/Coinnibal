@@ -2,8 +2,9 @@ import type { StatusSnapshot } from '@elymum/sdk/ops';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ARENA_SCALING_DEFAULT, ARENA_SCALING_LIMITS, type ArenaScalingView } from '@elymum/shared';
+import { ARENA_SCALING_DEFAULT, ARENA_SCALING_LIMITS, TEST_ARENA_DEFAULT, type ArenaScalingView, type TestArenaView } from '@elymum/shared';
 import { ArenaScalingCard, scalingPatch } from '../src/admin/ArenaScalingCard';
+import { TestArenasCard, testArenaPatch } from '../src/admin/TestArenasCard';
 import { MapsCard, mapsPatch } from '../src/admin/GameTab';
 import { adminHash, groupSummary, parseAdminHash } from '../src/admin/groups';
 import { ImportHoldersCard } from '../src/admin/MintTab';
@@ -407,5 +408,47 @@ describe('admin groups', () => {
     fireEvent.click(screen.getByTestId('scaling-save'));
     await waitFor(() => expect(put).toEqual({ maxInstances: 8 }));
     expect(scalingPatch(SCALING.settings, { ...SCALING.settings, enabled: false, lowPct: 20 })).toEqual({ enabled: false, lowPct: 20 });
+  });
+  const TESTS: TestArenaView = {
+    available: true,
+    chainId: 46630,
+    active: true,
+    settings: { ...TEST_ARENA_DEFAULT },
+    defaults: { ...TEST_ARENA_DEFAULT },
+    limits: { botsMin: 3, botsMax: 20 },
+    rooms: [
+      { arenaId: 1, id: 'test-1', name: 'Test · Asphodel Meadow', people: 2, bots: 10, capacity: 50, closing: false, thread: 'w0' },
+      { arenaId: 2, id: 'test-2', name: 'Test · Lethe', people: 0, bots: 10, capacity: 50, closing: true },
+    ],
+  };
+
+  it('test arenas (testnet): on/off, bots per arena, difficulty and every test arena live; saves only what changed', async () => {
+    let put: unknown = null;
+    ({ restore } = mockFetch({
+      'GET /api/admin/test-arenas': TESTS,
+      'PUT /api/admin/test-arenas': (c: { body: unknown }) => {
+        put = c.body;
+        return { ...TESTS, settings: { ...TESTS.settings, bots: 6, difficulty: 'hard' } };
+      },
+    }));
+    ui(<TestArenasCard ctx={ctxOf({ api: adminApi('t') })} />);
+    const table = await screen.findByTestId('test-arenas-table');
+    expect(table.textContent).toContain('Test · Asphodel Meadow');
+    expect(table.textContent).toContain('2/50');
+    expect(table.textContent).toContain('open · w0');
+    expect(table.textContent).toContain('closing after its bell');
+    expect((screen.getByTestId('test-arenas-save') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Bots per test arena'), { target: { value: '6' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Hard' }));
+    fireEvent.click(screen.getByTestId('test-arenas-save'));
+    await waitFor(() => expect(put).toEqual({ bots: 6, difficulty: 'hard' }));
+    expect(testArenaPatch(TEST_ARENA_DEFAULT, { ...TEST_ARENA_DEFAULT, enabled: false })).toEqual({ enabled: false });
+  });
+
+  it('test arenas on the mainnet: the card says they do not exist there, nothing to change', async () => {
+    ({ restore } = mockFetch({ 'GET /api/admin/test-arenas': { ...TESTS, available: false, active: false, chainId: 4663, rooms: [] } }));
+    ui(<TestArenasCard ctx={ctxOf({ api: adminApi('t') })} />);
+    expect(await screen.findByText(/exist on a testnet only/)).toBeTruthy();
+    expect(screen.queryByTestId('test-arenas-save')).toBeNull();
   });
 });
