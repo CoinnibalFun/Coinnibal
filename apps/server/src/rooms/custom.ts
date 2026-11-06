@@ -1,3 +1,4 @@
+import type { EmblemClaims } from '../site/emblem-claims';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
@@ -201,6 +202,9 @@ export interface CustomRoomDeps {
   chainId: () => number | null;
   /** Whether a wallet holds an Elymum NFT (cached by the mint service). */
   isHolder: (wallet: string) => Promise<boolean>;
+  /** The emblem token ids a wallet owns (null: unknown); with `claims` the free daily room is one per token id a day. */
+  emblemTokens?: (wallet: string, fresh?: boolean) => Promise<string[] | null>;
+  claims?: EmblemClaims;
   /** The treasury when the admin set none: the owner (first `ADMIN_WALLETS` wallet); null: none. */
   ownerWallet: string | null;
   now?: () => number;
@@ -496,13 +500,20 @@ export class CustomRoomService implements CustomRoomHooks {
    * `custom-rooms.json` (`freeUsed`) in the same write that stores the room, so a restart never hands out a second
    * one. A new UTC day (00:00 UTC) makes it available again.
    */
-  private freeAvailable(wallet: string): boolean {
-    return this.cur.holderPerk === 'free_daily' && this.freeUsed[wallet.toLowerCase()] !== utcDay(this.now());
+  private freeAvailable(wallet: string, tokens: string[] | null = null): boolean {
+    if (this.cur.holderPerk !== 'free_daily' || this.freeUsed[wallet.toLowerCase()] === utcDay(this.now())) return false;
+    // one free room a day per emblem token id: a passed-on emblem does not open a free room for every wallet
+    return !this.d.claims || !tokens || tokens.length === 0 || this.d.claims.daily('room', wallet, tokens) !== null;
+  }
+
+  /** The wallet's emblem token ids (null: unknown or no index). */
+  private async tokensOf(wallet: string, fresh: boolean): Promise<string[] | null> {
+    return this.d.claims && this.d.emblemTokens ? this.d.emblemTokens(wallet, fresh).catch(() => null) : null;
   }
 
   async quote(wallet: string | null): Promise<CustomRoomQuote> {
     const holder = wallet ? await this.d.isHolder(wallet).catch(() => false) : false;
-    const free = !!wallet && holder && this.freeAvailable(wallet);
+    const free = !!wallet && holder && this.freeAvailable(wallet, await this.tokensOf(wallet, false));
     const price = this.priceWei();
     const treasury = this.treasury();
     const tiers: CustomArenaTier[] = (await this.tiers()).map((a) => ({ arenaId: a.arenaId, entryFee: a.buyIn, holdersOnly: a.holdersOnly }));
@@ -610,7 +621,8 @@ export class CustomRoomService implements CustomRoomHooks {
       const holder = await this.d.isHolder(wallet).catch(() => false);
       // a paid room's arena is checked before any payment is looked at (a refused tier never claims a hash)
       const arena = config.kind === 'paid' && config.arenaId !== null ? await this.paidArena(config.arenaId, holder) : null;
-      const free = holder && this.freeAvailable(wallet);
+      const tokens = holder ? await this.tokensOf(wallet, true) : null;
+      const free = holder && this.freeAvailable(wallet, tokens);
       // the fee grows with the capacity; the server computes it, whatever the client showed
       const price = customRoomPrice(this.feeWei(capacity), this.cur, holder, free, capacity);
       let txHash: string | null = null;
@@ -657,7 +669,10 @@ export class CustomRoomService implements CustomRoomHooks {
       // the hash is used for good before the room opens (a crash between the two loses the room, never doubles it)
       if (txHash) this.d.used.markUsed(txHash, { at: now, wallet: rec.creator, code });
       claimed = null;
-      if (!txHash && customUsesFreeRoom(this.cur, holder, free, capacity)) this.freeUsed[w] = utcDay(now);
+      if (!txHash && customUsesFreeRoom(this.cur, holder, free, capacity)) {
+        this.freeUsed[w] = utcDay(now);
+        if (tokens && tokens.length > 0) this.d.claims?.daily('room', wallet, tokens, true);
+      }
       this.records.set(code, rec);
       this.open(rec);
       this.saveRooms();

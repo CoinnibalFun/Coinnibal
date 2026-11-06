@@ -101,7 +101,7 @@ export class MintService {
   /** When `minted()` last forced a fresh state read for an id above the cached supply. */
   private missReadAt = -Infinity;
   private readonly holderCache = new Map<string, { at: number; value: boolean }>();
-  private holders: { nft: string; next: bigint | null; balances: Map<string, number>; at: number } | null = null;
+  private holders: HolderIndex | null = null;
   private holdersScan: Promise<number> | null = null;
   /** Holder scans failed in a row, and when the next may run. */
   private holdersFail = { n: 0, until: -Infinity };
@@ -129,9 +129,17 @@ export class MintService {
   private loadCached(): void {
     const st = this.cache.get<{ nft: string; value: ChainMintState }>('state');
     if (st && typeof st.nft === 'string' && st.value && typeof st.value.totalSupply === 'number') this.state = { nft: st.nft, at: -Infinity, value: st.value };
-    const h = this.cache.get<{ nft: string; next: bigint | null; balances: Record<string, number> }>('holders');
+    const h = this.cache.get<{ nft: string; next: bigint | null; balances: Record<string, number>; owners?: Record<string, string> }>('holders');
     if (h && typeof h.nft === 'string' && h.balances && typeof h.balances === 'object') {
-      this.holders = { nft: h.nft, next: typeof h.next === 'bigint' ? h.next : null, balances: new Map(Object.entries(h.balances)), at: -Infinity };
+      // an index written before token owners were kept is read again from the start (once), to learn them
+      const owners = h.owners && typeof h.owners === 'object' ? h.owners : null;
+      this.holders = {
+        nft: h.nft,
+        next: owners && typeof h.next === 'bigint' ? h.next : null,
+        balances: owners ? new Map(Object.entries(h.balances)) : new Map(),
+        owners: new Map(Object.entries(owners ?? {})),
+        at: -Infinity,
+      };
     }
   }
 
@@ -352,7 +360,7 @@ export class MintService {
     const nft = this.deps.nft();
     const client = this.deps.client();
     if (!nft || !client) return 0;
-    if (this.holders?.nft !== nft.address) this.holders = { nft: nft.address, next: null, balances: new Map(), at: -Infinity };
+    if (this.holders?.nft !== nft.address) this.holders = { nft: nft.address, next: null, balances: new Map(), owners: new Map(), at: -Infinity };
     const h = this.holders;
     const due = this.now() - h.at >= HOLDERS_INDEX_TTL_MS && this.now() >= this.holdersFail.until;
     if (!due) return countHolders(h.balances);
@@ -361,11 +369,29 @@ export class MintService {
     return h.next === null ? atMost(scan, FIRST_READ_WAIT_MS, countHolders(h.balances)) : countHolders(h.balances);
   }
 
-  private async scanHolders(
-    nft: { address: string; txHash: string | null },
-    client: EvmClient,
-    h: { nft: string; next: bigint | null; balances: Map<string, number>; at: number },
-  ): Promise<number> {
+  /**
+   * The emblem token ids `wallet` owns, from the NFT's `Transfer` logs (the holder index). `fresh`: the index first
+   * catches up to the latest block (an incremental read: one `eth_getLogs` of the new blocks, at most every 2 s).
+   * Null when it cannot tell (no NFT, the index never read, or the scan failed while it is behind).
+   */
+  async emblemTokens(wallet: string, fresh = false): Promise<string[] | null> {
+    const nft = this.deps.nft();
+    const client = this.deps.client();
+    if (!nft || !client) return null;
+    if (this.holders?.nft !== nft.address) this.holders = { nft: nft.address, next: null, balances: new Map(), owners: new Map(), at: -Infinity };
+    const h = this.holders;
+    if (fresh && this.now() - h.at >= 2_000 && this.now() >= this.holdersFail.until) {
+      const scan = (this.holdersScan ??= withRpcPriority('high', () => this.scanHolders(nft, client, h)).finally(() => (this.holdersScan = null)));
+      await scan;
+    }
+    if (h.next === null) return null;
+    const w = wallet.toLowerCase();
+    const out: string[] = [];
+    for (const [id, owner] of h.owners) if (owner === w) out.push(id);
+    return out.sort((a, b) => Number(a) - Number(b));
+  }
+
+  private async scanHolders(nft: { address: string; txHash: string | null }, client: EvmClient, h: HolderIndex): Promise<number> {
     try {
       const latest = await client.blockNumber();
       if (h.next === null) {
@@ -389,6 +415,9 @@ export class MintService {
         for (const t of logs) {
           if (t.from !== ZERO) h.balances.set(t.from.toLowerCase(), (h.balances.get(t.from.toLowerCase()) ?? 0) - 1);
           if (t.to !== ZERO) h.balances.set(t.to.toLowerCase(), (h.balances.get(t.to.toLowerCase()) ?? 0) + 1);
+          // who holds each token id now (a burn, to the zero address, removes it)
+          if (t.to === ZERO) h.owners.delete(t.tokenId.toString());
+          else h.owners.set(t.tokenId.toString(), t.to.toLowerCase());
         }
         if (to - from + 1n === chunk && chunk < HOLDERS_CHUNK_MAX) this.holdersChunk = chunk * 2n < HOLDERS_CHUNK_MAX ? chunk * 2n : HOLDERS_CHUNK_MAX;
         h.next = to + 1n;
@@ -402,7 +431,7 @@ export class MintService {
       this.log(`mint: holder index failed (${firstLine(err)}); next try in ${Math.round(wait / 1000)} s`);
     }
     // what is indexed so far is kept, also across restarts
-    if (h.next !== null) this.cache.set('holders', { nft: h.nft, next: h.next, balances: Object.fromEntries(h.balances) });
+    if (h.next !== null) this.cache.set('holders', { nft: h.nft, next: h.next, balances: Object.fromEntries(h.balances), owners: Object.fromEntries(h.owners) });
     return countHolders(h.balances);
   }
 
@@ -509,6 +538,16 @@ function atMost<T, F>(p: Promise<T>, ms: number, fallback: F): Promise<T | F> {
       timer.unref();
     }),
   ]).finally(() => clearTimeout(timer));
+}
+
+/** The NFT's holder index: balances and the owner of every token id, from its `Transfer` logs up to block `next - 1`. */
+interface HolderIndex {
+  nft: string;
+  next: bigint | null;
+  balances: Map<string, number>;
+  /** Token id (decimal) → owner (lower-case). */
+  owners: Map<string, string>;
+  at: number;
 }
 
 function countHolders(balances: Map<string, number>): number {

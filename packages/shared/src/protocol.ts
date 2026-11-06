@@ -613,7 +613,11 @@ export type ErrorCode =
    */
   | 'storage_failing'
   /** The arena is closing for a re-price at its bell (`/admin` "Re-price at next bell"): no new seat this round. */
-  | 'arena_repricing';
+  | 'arena_repricing'
+  /** A holder ticket (holders-only arena, or the holder fee rates) whose wallet holds no emblem now: refunded in full. */
+  | 'emblem_required'
+  /** A holder ticket whose wallet's emblem already serves another open holder ticket: refunded in full. */
+  | 'emblem_in_use';
 
 /**
  * WebSocket close code: this socket was replaced by a newer one of the same signed-in wallet that took over its live

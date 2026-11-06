@@ -1,6 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { FIRST_READ_WAIT_MS, HOLDERS_INDEX_TTL_MS, HOLDERS_RETRY_MS, MintService } from '../src/site/mint';
 import { SiteStore } from '../src/site/store';
@@ -102,5 +103,23 @@ describe('mint page state while the RPC is rate-limited (stale-while-revalidate)
     await mint.holdersCount();
     await new Promise((r) => setTimeout(r, 10));
     expect(await mint.holdersCount()).toBe(2);
+  });
+});
+
+describe('emblem token owners (the Transfer index)', () => {
+  it('names the token ids a wallet owns now, following transfers (fresh catches up first)', async () => {
+    const evm = new FakeEvm();
+    const a = testSigner().address;
+    const b = testSigner().address;
+    evm.mintNft(a, 2);
+    const clock = { now: 1_800_000_000_000 };
+    const { mint } = service(evm, clock);
+    expect(await mint.emblemTokens(a, true)).toEqual(['1', '2']);
+    // A passes #2 to B (one Transfer log)
+    evm.block += 1n;
+    evm.transfers.push({ from: getAddress(a), to: getAddress(b), tokenId: 2n, blockNumber: evm.block });
+    clock.now += 5_000;
+    expect(await mint.emblemTokens(b, true)).toEqual(['2']);
+    expect(await mint.emblemTokens(a)).toEqual(['1']);
   });
 });

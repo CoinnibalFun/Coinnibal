@@ -43,6 +43,8 @@ import { BoostInventory } from './shop/inventory';
 import { ShopService } from './shop/service';
 import { ShopSettingsStore } from './shop/settings';
 import { ArenaPriceStore } from './site/arena-prices';
+import { EmblemClaims } from './site/emblem-claims';
+import { EmblemGate } from './site/emblem-gate';
 import { NFT_COLLECTION_FILE, NftCollection } from './site/nft/collection';
 
 export interface App {
@@ -227,6 +229,10 @@ export async function createApp(
   // the admin's map settings per room kind (DATA_DIR/site/maps.json; taken over once from the old bots.json)
   const mapSettings = new MapSettingsStore(persist ? cfg.dataDir : null, log);
 
+  // one emblem, one holder perk at a time: token id claims of holder tickets and of the daily perks (per chain)
+  const emblemClaims = new EmblemClaims(chainState ? join(chainState, 'emblem-claims.json') : null, log);
+  const emblemTokens = (wallet: string, fresh = false) => mint.emblemTokens(wallet, fresh);
+
   // bought power-ups: the admin's prices (DATA_DIR/site/shop.json), the charges and used payments per chain
   const shopSettings = new ShopSettingsStore(persist ? cfg.dataDir : null, undefined, log);
   const boostInventory = new BoostInventory(chainState ? join(chainState, files.boosts) : null, log);
@@ -235,6 +241,8 @@ export async function createApp(
     inventory: boostInventory,
     chain,
     holder: (wallet, fresh) => mint.isHolder(wallet, fresh),
+    emblemTokens,
+    claims: emblemClaims,
     log,
   });
   site.setShop({ service: shop, settings: shopSettings, inventory: boostInventory });
@@ -314,6 +322,8 @@ export async function createApp(
     },
     chainId: () => chain.status().chainId,
     isHolder: (wallet) => mint.isHolder(wallet),
+    emblemTokens,
+    claims: emblemClaims,
     ownerWallet: checksumAddress(cfg.adminWallets[0] ?? null),
     now: opts.customNow,
     log,
@@ -337,6 +347,16 @@ export async function createApp(
   site.setScaler(rooms.scaler);
   site.setTestArenas(rooms);
   chain.setLiveSessionProvider(() => rooms.liveSessions());
+  const emblems = new EmblemGate({
+    chain,
+    journal,
+    claims: emblemClaims,
+    isHolder: (w, fresh) => mint.isHolder(w, fresh),
+    emblemTokens,
+    flag: (c) => void integrity.raise(c),
+    liveSessions: () => rooms.liveSessions(),
+    log,
+  });
   // the game token was set on chain (picked up by the 30 s config watcher, no restart): attach the
   // arenas now (a fresh read of the arena list) instead of waiting for the next arena timer
   chain.onStatusChange(() => {
@@ -361,6 +381,11 @@ export async function createApp(
   gateway.setBanGate((wallet) => integrity.isBanned(wallet));
   // emblem holders wear a laurel and may play the emblem skin (cached holder check of the NFT)
   gateway.setHolderCheck((wallet) => mint.isHolder(wallet));
+  // holder tickets: the emblem is there at the seat (read fresh) and one token id serves one open holder ticket
+  gateway.setEmblemGate((wallet, session) => emblems.seat(wallet, session));
+  chain.onSettled((e) => emblems.settled(e.key));
+  const emblemTimer = setInterval(() => emblems.sweep(), 60_000);
+  emblemTimer.unref();
   // graceful degradation: new joins are shed before the live rooms lose their tick budget
   const shedder = new LoadShedder({ bestTickP95Ms: () => rooms.bestTickP95Ms() }, log);
   if (cfg.loadShed) {
@@ -411,6 +436,7 @@ export async function createApp(
       closed = true;
       clearInterval(flushTimer);
       clearInterval(arenaTimer);
+      clearInterval(emblemTimer);
       shedder.stop();
       stopRpcLog();
       mint.flush();

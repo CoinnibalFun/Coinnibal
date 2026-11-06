@@ -152,6 +152,8 @@ export class Gateway {
   private banGate: ((wallet: string) => boolean) | null = null;
   /** Whether a wallet holds an Elymum emblem (laurel flag, emblem skin); null: nobody does. */
   private holderCheck: ((wallet: string) => Promise<boolean>) | null = null;
+  /** The seat check of holder tickets (`EmblemGate.seat`): null to seat, else the refusal; absent: none. */
+  private emblemGate: ((wallet: string, session: ChainSession) => Promise<{ code: ErrorCode; message: string } | null>) | null = null;
 
   constructor(
     private readonly cfg: ServerConfig,
@@ -186,6 +188,11 @@ export class Gateway {
   /** Sets the emblem holder check (cached by the mint service): holders wear a laurel and may pick the emblem skin. */
   setHolderCheck(check: ((wallet: string) => Promise<boolean>) | null): void {
     this.holderCheck = check;
+  }
+
+  /** Sets the seat check of holder tickets (one emblem token id per open holder ticket; see `site/emblem-gate.ts`). */
+  setEmblemGate(gate: ((wallet: string, session: ChainSession) => Promise<{ code: ErrorCode; message: string } | null>) | null): void {
+    this.emblemGate = gate;
   }
 
   /** Sets the load shedder (see `net/shedder.ts`). */
@@ -794,6 +801,15 @@ export class Gateway {
       // holders gate: re-checked uncached right before every arena seat (each round needs a new ticket and
       // join), so an NFT sold since the sign-in no longer seats its former holder
       if (await this.gameClosed(conn, true)) return;
+      // a holder ticket (holders-only arena, holder fee rates): the emblem is there now, and serves no other open ticket
+      if (this.emblemGate) {
+        const refused = await this.emblemGate(wallet, session);
+        if (refused) {
+          this.error(conn, refused.code, refused.message);
+          return;
+        }
+        if (!conn.wallet || conn.wallet !== wallet) return;
+      }
       // the instance may have filled up or been closed during the awaits above: pick again (arena data is cached)
       if (code || test) {
         // a paid room (or a test arena) is never swapped for another room: it is this one or none
