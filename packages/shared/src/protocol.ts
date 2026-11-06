@@ -620,10 +620,10 @@ export function parseJoinTarget(
   if (target.startsWith('private:')) {
     const code = target.slice(8).toUpperCase();
     if (code === 'NEW') return { mode: 'private', code: null };
-    return /^[A-Z0-9]{5}$/.test(code) ? { mode: 'private', code } : null;
+    return /^[A-Z0-9]{5,10}$/.test(code) ? { mode: 'private', code } : null;
   }
   if (target.startsWith('arena:')) {
-    const m = /^(\d{1,5})(?::([A-Za-z0-9]{5}|test))?$/.exec(target.slice(6));
+    const m = /^(\d{1,5})(?::([A-Za-z0-9]{5,10}|test))?$/.exec(target.slice(6));
     if (!m) return null;
     const id = Number(m[1]);
     if (id > 65535) return null;

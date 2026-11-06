@@ -3,7 +3,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { PROTOCOL_VERSION } from '@elymum/shared';
-import { checksumAddress, type Auth, type SiweOrigin } from './auth';
+import { NonceLimitError, checksumAddress, type Auth, type SiweOrigin } from './auth';
 import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
 import type { ServerConfig } from './config';
@@ -214,7 +214,8 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             // `chain.tokenReady` false: practice only, arenas "opening soon" (the server picks the token up by itself)
             const body: Record<string, unknown> = { protocol: PROTOCOL_VERSION, chain: ctx.chain.status() };
             // admins also see the server key's gas balance (and the price keeper)
-            const wallet = bearerWallet(ctx.auth, req);
+            const bearer = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization ?? '').trim())?.[1];
+            const wallet = bearer ? ctx.auth.verifyAdminToken(bearer) : null;
             if (wallet && ctx.site?.isAdmin(wallet)) {
               const info = ctx.chain.serverInfo();
               body.server = { address: info.address, balanceWei: info.balanceWei, low: info.low, priceKeeper: ctx.priceKeeper?.last ?? null };
@@ -225,13 +226,22 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             if (!nonceLimiter.allow(ip)) return json(res, 429, { error: 'rate_limited' });
             const address = checksumAddress(url.searchParams.get('address'));
             if (!address) return json(res, 400, { error: 'bad_request', message: 'address must be an EVM address (0x…)' });
-            return json(res, 200, ctx.auth.issueNonce(address, siweOrigin(cfg, req, trustProxy, ctx.chain.status().chainId)));
+            try {
+              return json(res, 200, ctx.auth.issueNonce(address, siweOrigin(cfg, req, trustProxy, ctx.chain.status().chainId), Date.now(), ip));
+            } catch (err) {
+              if (err instanceof NonceLimitError) return json(res, 429, { error: 'rate_limited', message: 'Too many sign-in attempts. Wait a few minutes.' });
+              throw err;
+            }
           }
           case '/api/pending': {
             // settlements the server still has to send for a wallet (payouts in ledger units). Finalized sessions
             // (settled, payout waiting to be collected) live on chain; the web reads them there (getSession)
             const wallet = checksumAddress(url.searchParams.get('wallet'));
             if (!wallet) return json(res, 400, { error: 'bad_request', message: 'wallet must be an EVM address (0x…)' });
+            // what a wallet is owed (and when it played) is that wallet's business: its own session, or an admin's
+            const caller = bearerWallet(ctx.auth, req);
+            if (!caller) return json(res, 401, { error: 'unauthorized', message: 'Sign in with your wallet first.' });
+            if (caller.toLowerCase() !== wallet.toLowerCase() && !ctx.site?.isAdmin(caller)) return json(res, 403, { error: 'forbidden', message: 'Only that wallet (or an admin) may read its pending payouts.' });
             const pending = (ctx.journal?.pending ?? [])
               // loot sweeps (`kind: 'sweep'`) belong to no wallet
               .flatMap((p) =>

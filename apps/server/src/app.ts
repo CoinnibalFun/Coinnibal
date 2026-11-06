@@ -8,7 +8,7 @@ import { Auth } from './auth';
 import { assertDevFakeChainAllowed, createChain, dataFileNames } from './chain';
 import { PriceKeeper } from './chain/price-keeper';
 import type { ChainGateway } from './chain/types';
-import type { ServerConfig } from './config';
+import { checkAuthSecret, type ServerConfig } from './config';
 import { createHttpServer, publicBaseUrl, redactUrls } from './http';
 import { IntegrityService } from './integrity/service';
 import { IntegrityStore } from './integrity/store';
@@ -115,6 +115,10 @@ export async function createApp(
   const persist = opts.persist ?? true;
   // refuse a misconfigured DEV_FAKE_CHAIN before any file is opened
   assertDevFakeChainAllowed(cfg);
+  // the secret signs every session token (admin sessions too): a short one can be brute-forced offline from any
+  // token. The mainnet refuses to start with one (throws); a testnet logs it
+  const weakSecret = checkAuthSecret(cfg);
+  if (weakSecret) log(`auth: ${weakSecret}`);
   // one request budget per RPC URL for the whole process (the public RPC answers 429 above its limit)
   configureRpcBudgets({ ratePerSec: cfg.chain.rpcMaxRps, burst: cfg.chain.rpcBurst });
   const stopRpcLog = startRpcMinuteLog(log);
@@ -139,7 +143,15 @@ export async function createApp(
   const chain = opts.chain ?? (await createChain(cfg, journal, log, { contracts: () => contracts.view(), stateChainId, cacheDir: chainState }));
   // a newly registered (or cleared) contract is picked up at once, without a restart
   contracts.onChange(() => void chain.refresh?.());
-  const auth = new Auth(cfg.authSecret, { onChain: chain.verifyMessage ? (a, m, sig) => chain.verifyMessage!(a, m, sig) : null });
+  const adminSet = new Set(cfg.adminWallets.map((w) => w.toLowerCase()));
+  const auth = new Auth(cfg.authSecret, {
+    onChain: chain.verifyMessage ? (a, m, sig) => chain.verifyMessage!(a, m, sig) : null,
+    // admin sessions are short (ADMIN_TOKEN_TTL_MIN) and can be revoked (POST /api/admin/auth/revoke)
+    isAdmin: (w) => adminSet.has(w.toLowerCase()),
+    adminTtlMs: cfg.adminTokenTtlMs,
+    revocationsFile: persist ? join(cfg.dataDir, 'auth-revoked.json') : null,
+    log,
+  });
   const profiles = new ProfileStore(persist ? join(cfg.dataDir, files.profiles) : null, log);
   // profile pictures: content-addressed files next to the profiles (DATA_DIR/avatars/<id>.png|webp)
   const avatars = new AvatarStore(persist ? join(cfg.dataDir, cfg.devFakeChain ? 'avatars.dev-fake' : 'avatars') : null, log);

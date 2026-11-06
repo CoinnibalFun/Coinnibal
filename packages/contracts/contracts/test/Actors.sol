@@ -6,7 +6,7 @@ interface IElymumNFTMint {
     function withdraw() external;
 }
 
-/// @notice Test-only: a contract that refuses HYPE.
+/// @notice Test-only: a contract that refuses ETH.
 contract RejectEther {
     function call(address target, bytes calldata data) external payable returns (bytes memory) {
         (bool ok, bytes memory ret) = target.call{value: msg.value}(data);

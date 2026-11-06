@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHmac } from 'node:crypto';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,13 +16,16 @@ describe('GET /api/admin/backup', () => {
   let app: App;
   let port: number;
   let dir: string;
-  const admin = testSigner().address;
+  const signer = testSigner();
+  const admin = signer.address;
   const logs: string[] = [];
+  let cfgSecret: Buffer = Buffer.alloc(0);
 
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'elymum-backup-'));
     writeFileSync(join(dir, 'marker.txt'), 'known contents 42\n');
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', CORS_ORIGIN: 'https://elymum.io' } as NodeJS.ProcessEnv);
+    cfgSecret = cfg.authSecret;
     app = await createApp(cfg, {
       chain: new ArenaChain([arena(1, 1000)]),
       log: (m) => logs.push(m),
@@ -35,7 +39,39 @@ describe('GET /api/admin/backup', () => {
     await app.close();
   });
 
-  const get = (token?: string) => fetch(`http://127.0.0.1:${port}/api/admin/backup`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const get = (token?: string, proof?: string) =>
+    fetch(`http://127.0.0.1:${port}/api/admin/backup`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(proof ? { 'X-Elymum-Proof': proof } : {}) } });
+  /** A fresh, purpose-bound signature of the admin wallet (what the admin panel asks the wallet for). */
+  const proofFor = async (token: string, purpose = 'backup', by = signer) => {
+    const r = await fetch(`http://127.0.0.1:${port}/api/admin/secret-proof`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ purpose }) });
+    expect(r.status).toBe(200);
+    const { message } = (await r.json()) as { message: string };
+    return Buffer.from(JSON.stringify({ message, signature: await by.sign(message) })).toString('base64url');
+  };
+
+  it('needs a fresh signature of the admin wallet, once, for that purpose; every try is in the audit log', async () => {
+    const token = app.auth.issueToken(admin);
+    // the session token alone (what sits in the browser) is not enough
+    const bare = await get(token);
+    expect(bare.status).toBe(401);
+    expect(((await bare.json()) as { error: string }).error).toBe('proof_required');
+    // a signature by another wallet is refused
+    expect((await get(token, await proofFor(token, 'backup', testSigner()))).status).toBe(401);
+    // a good proof opens it once
+    const proof = await proofFor(token);
+    const ok = await get(token, proof);
+    expect(ok.status).toBe(200);
+    await ok.arrayBuffer();
+    expect((await get(token, proof)).status).toBe(401);
+    // a player-length (24 h) token of the admin wallet is not an admin session
+    const long = `${admin}.${Date.now() + 23 * 3600_000}`;
+    const legacy = `${long}.${createHmac('sha256', cfgSecret).update(long).digest('base64url')}`;
+    expect(app.auth.verifyToken(legacy)).toBe(admin);
+    expect((await get(legacy)).status).toBe(401);
+    const entries = app.site.audit.recent(100).filter((e) => e.path === '/api/admin/backup');
+    expect(entries.map((e) => e.status)).toEqual(expect.arrayContaining([401, 200]));
+    expect(entries.every((e) => e.method === 'GET' && e.wallet === admin)).toBe(true);
+  });
 
   it('refuses without a session (401) and for a non-admin wallet (403)', async () => {
     expect((await get()).status).toBe(401);
@@ -46,7 +82,8 @@ describe('GET /api/admin/backup', () => {
   it('streams a valid tar.gz of DATA_DIR to the admin, logs the wallet but not the contents', async () => {
     // an unsaved profile change is flushed into the snapshot
     app.profiles.recordGame(admin, { score: 10, kills: 1, xp: 5 });
-    const res = await get(app.auth.issueToken(admin));
+    const token = app.auth.issueToken(admin);
+    const res = await get(token, await proofFor(token));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('application/gzip');
     expect(res.headers.get('cache-control')).toBe('no-store');
@@ -83,7 +120,7 @@ describe('GET /api/admin/backup', () => {
     const token = app.auth.issueToken(admin);
     const statuses: number[] = [];
     for (let i = 0; i < 7; i++) {
-      const r = await get(token);
+      const r = await get(token, await proofFor(token));
       await r.arrayBuffer();
       statuses.push(r.status);
     }
@@ -93,6 +130,67 @@ describe('GET /api/admin/backup', () => {
   it('names the file after the chain and the UTC time', () => {
     expect(backupFileName(46630, Date.UTC(2026, 10, 4, 3, 5, 9))).toBe('elymum-data-46630-20261104-030509.tar.gz');
     expect(backupFileName(null, Date.UTC(2026, 0, 1))).toBe('elymum-data-nochain-20260101-000000.tar.gz');
+  });
+});
+
+describe('secret exports on the mainnet', () => {
+  it('are off unless ADMIN_SECRET_EXPORT=1', async () => {
+    const signer = testSigner();
+    const base = { PORT: '0', HOST: '127.0.0.1', ADMIN_WALLETS: signer.address, TRUST_PROXY: '0', CHAIN_ID: '4663', AUTH_SECRET: 'x'.repeat(64) };
+    for (const [flag, want] of [[undefined, 403], ['1', 200]] as const) {
+      const dir = mkdtempSync(join(tmpdir(), 'elymum-backup-main-'));
+      const cfg = loadConfig({ ...base, DATA_DIR: dir, ...(flag ? { ADMIN_SECRET_EXPORT: flag } : {}) } as NodeJS.ProcessEnv);
+      const app = await createApp(cfg, { chain: new ArenaChain([arena(1, 1000)]), chainId: 4663, log: () => {}, persist: true, apiLimiter: new Limiter(10_000, 60_000) });
+      const port = await app.listen();
+      try {
+        const token = app.auth.issueToken(signer.address);
+        const r = await fetch(`http://127.0.0.1:${port}/api/admin/secret-proof`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ purpose: 'migration' }) });
+        expect(r.status).toBe(want);
+        if (want === 200) {
+          const { message } = (await r.json()) as { message: string };
+          expect(message).toMatch(/Purpose: migration/);
+          const proof = Buffer.from(JSON.stringify({ message, signature: await signer.sign(message) })).toString('base64url');
+          const headers = { Authorization: `Bearer ${token}`, 'X-Elymum-Proof': proof };
+          // one proof of purpose "migration": the settings once and the backup once
+          expect((await fetch(`http://127.0.0.1:${port}/api/admin/migration-env`, { headers })).status).toBe(200);
+          expect((await fetch(`http://127.0.0.1:${port}/api/admin/migration-env`, { headers })).status).toBe(401);
+          const b = await fetch(`http://127.0.0.1:${port}/api/admin/backup`, { headers });
+          expect(b.status).toBe(200);
+          await b.arrayBuffer();
+        } else {
+          expect((await fetch(`http://127.0.0.1:${port}/api/admin/backup`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(403);
+        }
+      } finally {
+        await app.close();
+      }
+    }
+  });
+});
+
+describe('admin sessions', () => {
+  it('are short, not extended by a refresh, and revocable', async () => {
+    const { Auth, ADMIN_TOKEN_TTL_MS, TOKEN_TTL_MS } = await import('../src/auth');
+    const admin = testSigner().address;
+    const player = testSigner().address;
+    const auth = new Auth(Buffer.alloc(32, 7), { isAdmin: (w) => w === admin });
+    const t0 = 1_800_000_000_000;
+    const a = auth.issueToken(admin, t0);
+    expect(auth.verifyAdminToken(a, t0 + ADMIN_TOKEN_TTL_MS - 1)).toBe(admin);
+    expect(auth.verifyAdminToken(a, t0 + ADMIN_TOKEN_TTL_MS + 1)).toBeNull();
+    // the WebSocket refresh hands an admin the same token (no sliding session); a player gets a new 24 h one
+    expect(auth.refreshToken(a, t0 + 1000)).toBe(a);
+    const p = auth.issueToken(player, t0);
+    expect(auth.verifyToken(p, t0 + TOKEN_TTL_MS - 1)).toBe(player);
+    expect(auth.verifyAdminToken(p, t0)).toBeNull();
+    expect(auth.refreshToken(p, t0 + 1000)).not.toBe(p);
+    // revoking every admin session ends this one; a new sign-in works; players are untouched
+    auth.revoke(null, t0 + 10);
+    expect(auth.verifyAdminToken(a, t0 + 20)).toBeNull();
+    expect(auth.verifyToken(a, t0 + 20)).toBeNull();
+    expect(auth.verifyAdminToken(auth.issueToken(admin, t0 + 30), t0 + 40)).toBe(admin);
+    expect(auth.verifyToken(p, t0 + 20)).toBe(player);
+    auth.revoke(player, t0 + 50);
+    expect(auth.verifyToken(p, t0 + 60)).toBeNull();
   });
 });
 

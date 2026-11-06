@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { availableParallelism } from 'node:os';
 import {
   TEST_ARENA_ARRIVE_MS,
@@ -92,6 +93,8 @@ export const CLOSED_MEMO_MS = 3600_000;
 export const BELL_MEMO_MS = 30 * 60_000;
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+/** Characters of a new invite code (codes of 5, from before, stay valid). */
+const INVITE_CODE_LENGTH = 8;
 /** On-chain arena list is re-read at most this often. */
 export const ARENA_CACHE_MS = 60_000;
 /** After a failed arena-list read the last good list is used this long before the next try. */
@@ -396,11 +399,14 @@ export class RoomManager {
     return best ?? this.createPractice('rookie');
   }
 
-  /** A fresh private-room code (5 characters of `CODE_ALPHABET`), not used by a live or lately closed room. */
+  /**
+   * A fresh private-room code (`INVITE_CODE_LENGTH` characters of `CODE_ALPHABET`, drawn with `crypto.randomInt`: 32^8,
+   * about 10^12 codes, so an invite cannot be guessed), not used by a live or lately closed room.
+   */
   newPrivateCode(): string {
     let c = '';
     do {
-      c = Array.from({ length: 5 }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join('');
+      c = Array.from({ length: INVITE_CODE_LENGTH }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
     } while (this.has(`priv-${c}`) || this.closedCodes.has(c));
     return c;
   }

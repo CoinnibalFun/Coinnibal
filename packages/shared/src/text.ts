@@ -11,11 +11,33 @@ function takeCodePoints(s: string, max: number): string {
   return Array.from(s).slice(0, max).join('');
 }
 
-/** Cleans a player name; returns the fallback when nothing usable remains. */
+/** Look-alikes folded before the reserved-name check (digits and symbols that read as letters). */
+const LOOKALIKE: Record<string, string> = { '0': 'o', '1': 'l', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', $: 's', '|': 'l', '!': 'i' };
+/** Words no player name may be (the system speaker of the chat, staff roles). */
+const RESERVED_WORDS = new Set(['admin', 'admins', 'administrator', 'moderator', 'mod', 'mods', 'support', 'official', 'system', 'staff', 'helpdesk']);
+
+/**
+ * Names that impersonate the game or its staff: anything spelling "Elymum" (also "E1ymum", "ELYMUM Support",
+ * "e.l.y.m.u.m"), and names made of a staff word ("Admin", "Support", "Official Mod"). Case, accents, full-width
+ * letters, separators and digit look-alikes are folded first.
+ */
+export function isReservedName(name: string): boolean {
+  const folded = name
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[0-9@$|!]/g, (c) => LOOKALIKE[c] ?? c);
+  if (folded.replace(/[^\p{L}]/gu, '').includes('elymum')) return true;
+  const words = folded.split(/[^\p{L}]+/u).filter(Boolean);
+  return words.length > 0 && words.length <= 3 && words.some((w) => RESERVED_WORDS.has(w));
+}
+
+/** Cleans a player name; returns the fallback when nothing usable remains or the name is reserved (`isReservedName`). */
 export function sanitizeName(raw: unknown, fallback = 'Coinie'): string {
   if (typeof raw !== 'string') return fallback;
   const cleaned = takeCodePoints(raw.replace(INVISIBLE, '').replace(/\s+/g, ' ').trim(), MAX_NAME_LENGTH).trim();
-  return cleaned.length > 0 ? cleaned : fallback;
+  return cleaned.length > 0 && !isReservedName(cleaned) ? cleaned : fallback;
 }
 
 /** Cleans a chat line; returns '' when nothing is left. */
