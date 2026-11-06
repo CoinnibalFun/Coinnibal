@@ -17,6 +17,7 @@ import {
   isBoostKind,
   mapSideFor,
   sanitizeChat,
+  testArenasAllowedOn,
   viewSize,
   worldForSide,
   writeSnapshot,
@@ -129,10 +130,17 @@ export interface RoomOptions {
   /** Arena rooms: instance (shard) number within the arena, from 1. */
   instance?: number;
   /**
-   * Practice bots: only a FREE custom room (`mode: 'private'` with `custom`, no `stake`) may have them; the
-   * constructor refuses them anywhere else. Null / absent / a count of 0: no bots.
+   * Practice bots: only a FREE custom room (`mode: 'private'` with `custom`, no `stake`) and a test arena (`test`,
+   * on a testnet chain) may have them; the constructor refuses them anywhere else. Null / absent / a count of 0: no
+   * bots.
    */
   bots?: PracticeBotsOptions | null;
+  /**
+   * A test arena (testnet only, `test-arenas.ts` in shared): an arena instance on the official arena's tickets and
+   * vault, with practice bots. `chainId` is the server's chain: the constructor refuses a test arena on any chain
+   * but a testnet (`testArenasAllowedOn`). Its games stay off every official board.
+   */
+  test?: { chainId: number };
   /** Paid rooms: the arena whose tickets play here and its entry fee (ledger units). */
   stake?: { arenaId: number; buyIn: number };
   seed?: number;
@@ -219,6 +227,8 @@ export class Room implements RoomHandle {
   /** World clock (ms) of the next growth check and of the last resize. */
   private nextMapCheckAt = 0;
   private lastResizeAt = -Infinity;
+  /** Test arenas: stake cells eaten by a bot (their value spilled as floor loot, never to the bot). */
+  readonly botSpills = { n: 0, value: 0 };
   /** A custom room's coming end (`closingSoon`): told to everyone who joins or watches meanwhile. */
   private closing: { endsAt: number; message: string } | null = null;
 
@@ -231,8 +241,13 @@ export class Room implements RoomHandle {
     this.map = opts.map ? { ...opts.map, scale: { ...opts.map.scale } } : null;
     const seed = opts.seed ?? (Math.random() * 2 ** 32) >>> 0;
     const botCount = opts.bots?.count ?? 0;
-    // bots are for free practice only: never in a room with stakes, never in a public room
-    if (botCount > 0 && (opts.mode !== 'private' || opts.stake || !opts.custom)) throw new Error(`room ${opts.id}: bots are only allowed in free custom rooms`);
+    // a test arena is an arena instance of the official tickets, on a testnet only (never the mainnet)
+    if (opts.test && (opts.mode !== 'arena' || !opts.stake || opts.custom || opts.code || !testArenasAllowedOn(opts.test.chainId))) {
+      throw new Error(`room ${opts.id}: test arenas are only allowed as arena instances on a testnet (chain ${opts.test.chainId})`);
+    }
+    // bots are for free practice and the testnet's test arenas only: never in any other room with stakes, never in a public room
+    const freeCustom = opts.mode === 'private' && !opts.stake && !!opts.custom;
+    if (botCount > 0 && !freeCustom && !opts.test) throw new Error(`room ${opts.id}: bots are only allowed in free custom rooms and testnet test arenas`);
     // a resizable room opens at the size its bots alone call for (the first joins grow it)
     const first = this.map ? this.shapeFor(this.wantedSide(0, botCount)) : preset;
     this.world = new World({ ...first, powerUps: opts.powerUps ?? true, coinRain: opts.mode !== 'arena', seed, ...(this.map ? { space: MAP_SPACE } : {}) });
@@ -303,7 +318,19 @@ export class Room implements RoomHandle {
       code: this.opts.code,
       round: this.round(),
       ...(this.opts.custom ? { custom: this.opts.custom } : {}),
+      ...(this.opts.test ? { test: true as const } : {}),
     };
+  }
+
+  /** Games here stay off the global boards: custom rooms (their own rules and board) and test arenas (bots). */
+  private get offBoard(): boolean {
+    return !!this.opts.custom || !!this.opts.test;
+  }
+
+  /** A test arena's new bot settings (the admin's, applied live). Ignored in any other room. */
+  setBots(count: number, difficulty: PracticeBotsOptions['difficulty']): void {
+    if (!this.opts.test || !this.bots) return;
+    for (const pid of this.bots.reconfigure(count, difficulty)) for (const c of this.conns) c.view.forgetPlayer(pid);
   }
 
   /** Σ value of the loot lying on this room's floor. */
@@ -692,6 +719,10 @@ export class Room implements RoomHandle {
     }
     const t = ledger.spill(ce.victim.id, ce.mass, ce.victimTotalBefore, ce.last);
     if (t <= 0) return;
+    if (ce.eater.isBot) {
+      this.botSpills.n++;
+      this.botSpills.value += t;
+    }
     this.noteLoss(ce.victim.id, t, t);
     const pieces = clamp(Math.ceil(t / (this.entryFee * RULES.lootPieceEntryFraction)), RULES.lootPiecesMin, RULES.lootPiecesMax);
     this.world.spawnLoot(ce.x, ce.y, t, pieces);
@@ -736,8 +767,9 @@ export class Room implements RoomHandle {
     const now = Date.now();
     const score = stats.maxMass;
 
-    // custom rooms play by their own rules: they keep their own board (see `RoomManager`), not the global one
-    if (!this.opts.custom) this.deps.leaderboards.submit({ name: p.name, score, skin: p.skin, wallet, kills: stats.playersEaten, at: now, ...(p.country ? { country: p.country } : {}) });
+    // custom rooms play by their own rules: they keep their own board (see `RoomManager`), not the global one;
+    // test arenas play with bots: their games count on no board
+    if (!this.offBoard) this.deps.leaderboards.submit({ name: p.name, score, skin: p.skin, wallet, kills: stats.playersEaten, at: now, ...(p.country ? { country: p.country } : {}) });
 
     const enqueue: JournalItem[] = [];
     const loss = this.losses.get(p.id);
@@ -764,7 +796,7 @@ export class Room implements RoomHandle {
       enqueue.unshift(item);
     }
     // the countries board: this game's mass (and an alive arena game's payout) for the player's flag
-    if (!this.opts.custom && p.country) {
+    if (!this.offBoard && p.country) {
       this.deps.leaderboards.countryGame({ country: p.country, mass: score, paid: cause === 'death' ? 0 : (stats.payout ?? 0), at: now });
     }
 
@@ -830,7 +862,7 @@ export class Room implements RoomHandle {
     // the final board (the same rows as a custom room's end), read before the coins go home
     const board: BoardEntry[] = ranked.map(({ e, p }) => ({ pid: e.pid, name: p?.name ?? '???', mass: Math.floor(p?.totalMass() ?? 0), kills: p?.stats.playersEaten ?? 0, value: e.value }));
     // the bell's standings go on the public "Last rounds" board (private paid rooms keep theirs to themselves)
-    if (!this.opts.custom && this.opts.stake && top.length > 0) {
+    if (!this.offBoard && this.opts.stake && top.length > 0) {
       this.deps.leaderboards.roundOver?.({
         n: round,
         endedAt: Date.now(),

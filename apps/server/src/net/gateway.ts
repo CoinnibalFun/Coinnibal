@@ -540,7 +540,7 @@ export class Gateway {
         return;
       }
       try {
-        await this.joinArena(conn, target.arenaId, { name, skin, flags, avatar, country }, target.code ?? null);
+        await this.joinArena(conn, target.arenaId, { name, skin, flags, avatar, country }, target.code ?? null, target.test === true);
       } catch (err) {
         if (!(err instanceof ChainBusyError)) throw err;
         // the RPC refused us even after the retries: the ticket is untouched on chain, the player tries again
@@ -576,13 +576,15 @@ export class Gateway {
   /**
    * The arena part of a join (the caller checked the wallet, the gate and the ban). `code`: seat the
    * ticket in that paid custom room (an invite-only instance of this arena) instead of a public
-   * instance; a live ticket comes back to wherever its coin is, either way. Throws `ChainBusyError`.
+   * instance; `test`: in the arena's test arena (testnet only, with practice bots). A live ticket comes back
+   * to wherever its coin is, either way. Throws `ChainBusyError`.
    */
   private async joinArena(
     conn: Conn,
     arenaId: number,
     look: { name: string; skin: number; flags: number; avatar: string | null; country: string | null },
     code: string | null = null,
+    test = false,
   ): Promise<void> {
     if (!conn.wallet) return;
     const wallet = conn.wallet;
@@ -605,13 +607,13 @@ export class Gateway {
         this.error(conn, 'session_busy', 'You are already playing in this arena.');
         return;
       }
-      const pick = code ? await this.rooms.paidRoom(target.arenaId, code) : await this.rooms.arenaRoom(target.arenaId);
+      const pick = test ? await this.rooms.testRoom(target.arenaId) : code ? await this.rooms.paidRoom(target.arenaId, code) : await this.rooms.arenaRoom(target.arenaId);
       if (pick === 'closed') {
         this.error(conn, 'room_closed', 'This room has closed.');
         return;
       }
       if (pick === 'missing') {
-        this.error(conn, 'room_not_found', 'No paid room with that code for this arena.');
+        this.error(conn, 'room_not_found', test ? 'No test arena here: test arenas run on a testnet only, when the admin turns them on.' : 'No paid room with that code for this arena.');
         return;
       }
       if (!pick || pick === 'arena') {
@@ -668,10 +670,10 @@ export class Gateway {
       // join), so an NFT sold since the sign-in no longer seats its former holder
       if (await this.gameClosed(conn, true)) return;
       // the instance may have filled up or been closed during the awaits above: pick again (arena data is cached)
-      if (code) {
-        // a paid room is never swapped for another room: it is this one or none
+      if (code || test) {
+        // a paid room (or a test arena) is never swapped for another room: it is this one or none
         const picked: RoomHandle = room;
-        room = this.rooms.confirmPaidRoom(picked);
+        room = test ? this.rooms.confirmTestRoom(picked) : this.rooms.confirmPaidRoom(picked);
         if (!room) {
           if (this.rooms.get(picked.id) === picked && picked.isFull) this.error(conn, 'room_full', 'That room is full.');
           else this.error(conn, 'room_closed', 'This room has closed.');

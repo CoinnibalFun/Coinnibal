@@ -814,4 +814,89 @@ describe('server over websocket', () => {
     svc.updateSettings({ priceGas: '0.05', treasury: null });
     for (const x of [c, o, l]) x.close();
   }, 20_000);
+  it('test arena (testnet): the official ticket in a room with labelled bots, settled at the bell, off every board; quick play never goes there', async () => {
+    // test arenas are on by default on a testnet: one per tier, listed with the arenas, marked test
+    let listed: { id: string; test?: true; bots: number }[] = [];
+    for (let i = 0; i < 60; i++) {
+      listed = ((await (await fetch(`http://127.0.0.1:${port}/api/rooms`)).json()) as { rooms: typeof listed }).rooms.filter((r) => r.test);
+      if (listed.length === 2 && listed.every((r) => r.bots > 0)) break;
+      await sleep(50);
+    }
+    expect(listed.map((r) => r.id).sort()).toEqual(['test-1', 'test-2']);
+    expect(listed.every((r) => r.bots > 0)).toBe(true);
+
+    const player = newWallet();
+    const ticket = session(player);
+    chain.sessions.set(`1:${player}`, ticket);
+    const c = await signedIn(player);
+    c.send({ t: 'join', room: 'arena:1:test', name: 'TestArenaPlayer', skin: 0, country: 'DE' });
+    const joined = await c.wait('joined');
+    expect(joined.room).toMatchObject({ id: 'test-1', mode: 'arena', arenaId: 1, test: true });
+    // the ticket's whole value, exactly as in an official instance
+    expect(joined.value).toBe(10_000_000);
+    for (let i = 0; i < 40 && !app.journal.live().some((l) => l.session === ticket.key); i++) await sleep(25);
+    expect(app.journal.live().find((l) => l.session === ticket.key)?.roomId).toBe('test-1');
+    // the bots are in the snapshots, tagged BOT
+    const lbMsg = await c.wait('lb', 4000, (m) => m.top.some((e) => e.isBot));
+    expect(lbMsg.top.find((e) => e.isBot)?.name).toMatch(/^Bot \d+$/);
+    // the same ticket cannot take a second seat (official instance or test arena)
+    const c2 = await signedIn(player);
+    c2.send({ t: 'join', room: 'arena:1', name: 'TestArenaPlayer', skin: 0 });
+    expect((await c2.wait('error', 2000, (m) => m.code === 'session_busy')).code).toBe('session_busy');
+    c2.close();
+
+    // quick play (`arena:1`) seats another ticket in an official instance, never in the test arena
+    const other = newWallet();
+    const otherTicket = session(other);
+    chain.sessions.set(`1:${other}`, otherTicket);
+    const o = await signedIn(other);
+    o.send({ t: 'join', room: 'arena:1', name: 'Official', skin: 0 });
+    expect((await o.wait('joined')).room.id).toMatch(/^arena-1-\d+$/);
+
+    // the bell: settled at value like any instance; value + the floor loot queued to burn = the entry fee
+    const r = roundAt(serverNow());
+    jumpTo(r.endsAt);
+    const over = await c.wait('roundOver', 4000);
+    await o.wait('roundOver', 4000);
+    await sleep(100);
+    const item = app.journal.settlements().find((p) => p.key === ticket.key);
+    expect(item).toMatchObject({ kind: 'settle', reason: 'round', player });
+    expect(over.payout).toBe(item?.payout);
+    const burned = app.journal.pending.filter((p) => p.kind === 'sweep' && p.roomId === 'test-1').reduce((n, p) => n + (p.kind === 'sweep' ? p.amount : 0), 0);
+    expect((item?.payout ?? 0) + burned).toBe(10_000_000);
+    // off every official board: no record, no "last rounds" entry, no share card
+    const lb = app.leaderboards.snapshot();
+    expect([...lb.daily, ...lb.allTime].some((x) => x.name === 'TestArenaPlayer')).toBe(false);
+    expect(lb.rounds.some((x) => x.top.some((t) => t.name === 'TestArenaPlayer'))).toBe(false);
+    expect(lb.rounds.some((x) => x.top.some((t) => t.name === 'Official'))).toBe(true);
+    expect(c.msgs.some((m) => m.t === 'share')).toBe(false);
+    expect(o.msgs.some((m) => m.t === 'share')).toBe(true);
+
+    for (const [w, t] of [
+      [player, ticket],
+      [other, otherTicket],
+    ] as const) {
+      app.journal.remove(t.key);
+      chain.sessions.delete(`1:${w}`);
+    }
+    for (const p of [...app.journal.pending]) if (p.kind === 'sweep') app.journal.remove(p.key);
+    c.close();
+    o.close();
+  }, 20_000);
+
+  it('test arenas turned off: closed (nothing of value in them), joins refused; on again: back', async () => {
+    app.rooms.testArenas.update({ enabled: false });
+    for (let i = 0; i < 100 && app.rooms.testRooms().length > 0; i++) await sleep(50);
+    expect(app.rooms.testRooms().map((r) => ({ id: r.id, h: r.humanCount, s: r.liveSessions(), l: r.lootCount(), c: r.connCount }))).toEqual([]);
+    const player = newWallet();
+    chain.sessions.set(`1:${player}`, session(player));
+    const c = await signedIn(player);
+    c.send({ t: 'join', room: 'arena:1:test', name: 'Late', skin: 0 });
+    expect((await c.wait('error', 2000, (m) => m.code === 'room_not_found')).code).toBe('room_not_found');
+    app.rooms.testArenas.update({ enabled: true });
+    for (let i = 0; i < 60 && app.rooms.testRooms().length < 2; i++) await sleep(50);
+    expect(app.rooms.testRooms().map((r) => r.id).sort()).toEqual(['test-1', 'test-2']);
+    chain.sessions.delete(`1:${player}`);
+    c.close();
+  }, 15_000);
 });

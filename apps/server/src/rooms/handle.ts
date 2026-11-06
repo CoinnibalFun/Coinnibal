@@ -1,4 +1,4 @@
-import type { ClientInput, MapScaleSettings, RoomInfo, ServerMessage } from '@elymum/shared';
+import type { ClientInput, CustomDifficulty, MapScaleSettings, RoomInfo, ServerMessage } from '@elymum/shared';
 import type { Player } from '../game/entities';
 import type { Conn } from '../net/conn';
 import type { JoinOptions, RoomOptions } from './room';
@@ -84,6 +84,8 @@ export interface RoomHandle extends RoomConnRoom {
   /** People and practice bots in the room. */
   botCounts(): { humans: number; bots: number };
   setMapScale(scale: MapScaleSettings): void;
+  /** A test arena's bot settings, applied live (ignored by any other room). */
+  setBots(count: number, difficulty: CustomDifficulty): void;
   clearAvatar(wallet: string): number;
   announce(text: string): void;
   /** A custom room closes at `endsAt` (server clock): the countdown for everyone in it (`closing`). */

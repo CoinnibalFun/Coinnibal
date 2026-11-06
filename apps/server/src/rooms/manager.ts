@@ -1,5 +1,21 @@
 import { availableParallelism } from 'node:os';
-import { TICK_MS, arenaMeta, type BlockedArena, type DeathStats, type League, type MapScaleSettings, type RoomInfo, type RoundWindow } from '@elymum/shared';
+import {
+  TEST_ARENA_ARRIVE_MS,
+  TEST_ARENA_BOTS,
+  TEST_ARENA_DEFAULT,
+  TICK_MS,
+  arenaMeta,
+  testArenaName,
+  testArenaRoomId,
+  testArenasAllowedOn,
+  type BlockedArena,
+  type DeathStats,
+  type League,
+  type MapScaleSettings,
+  type RoomInfo,
+  type RoundWindow,
+  type TestArenaView,
+} from '@elymum/shared';
 import type { ChainGateway } from '../chain/types';
 import type { ServerConfig } from '../config';
 import type { IntegrityService } from '../integrity/service';
@@ -15,6 +31,7 @@ import { Room, type BellSettled, type RoomDeps, type RoomOptions } from './room'
 import { RoundClock } from './round-clock';
 import { ThreadMeter, TickStats, roomTickStats, startTickLoop, wsOut, type RoomLoad, type ServerLoad, type ThreadLoad } from './load';
 import { RemoteRoom, WorkerPool } from './remote/pool';
+import { TestArenaStore } from './test-arenas';
 
 /** What the room manager asks of the custom-room service (`CustomRoomService`). */
 export interface CustomRoomHooks {
@@ -148,6 +165,10 @@ export class RoomManager {
   private readonly closedCodes = new Map<string, number>();
   /** How many public instances of each arena take seats, and which one a seat goes to (`arena-scaler.ts`). */
   readonly scaler: ArenaScaler;
+  /** The admin switch "Test arenas with bots" and their bot settings (testnet only, `test-arenas.ts`). */
+  readonly testArenas: TestArenaStore;
+  /** Test arenas on this thread that take no new seat and close once settled (the switch was turned off). */
+  private readonly closingTests = new Set<string>();
 
   constructor(
     private readonly cfg: ServerConfig,
@@ -155,8 +176,12 @@ export class RoomManager {
     private readonly chain: ChainGateway,
     mapSettings?: MapSettingsStore,
     scaling?: ArenaScalingStore,
+    /** Absent: test arenas stay off (bare unit tests); the app passes the admin's store. */
+    testArenas?: TestArenaStore,
   ) {
     this.mapSettings = mapSettings ?? new MapSettingsStore(null);
+    this.testArenas = testArenas ?? new TestArenaStore(cfg.chain.chainId, null, undefined, { enabled: false });
+    this.testArenas.onChange(() => this.applyTestArenaSettings());
     this.scaler = new ArenaScaler(
       {
         instances: (arenaId) => this.arenaInstances(arenaId),
@@ -599,9 +624,9 @@ export class RoomManager {
       .sort((a, b) => (a.opts.instance ?? 1) - (b.opts.instance ?? 1));
   }
 
-  /** Every public arena instance (of every arena). */
+  /** Every public arena instance (of every arena): never a paid custom room, never a test arena. */
   private publicInstances(): RoomHandle[] {
-    return [...this.handles()].filter((r) => r.opts.mode === 'arena' && !!r.opts.stake && !isPaidCustom(r.opts));
+    return [...this.handles()].filter((r) => r.opts.mode === 'arena' && !!r.opts.stake && !isPaidCustom(r.opts) && !r.opts.test);
   }
 
   /**
@@ -631,7 +656,7 @@ export class RoomManager {
     return 'closed';
   }
 
-  /** Every room that seats tickets of an arena: its public instances and its paid custom rooms. */
+  /** Every room that seats tickets of an arena: its public instances, its paid custom rooms and its test arena. */
   private ticketRooms(arenaId: number): RoomHandle[] {
     return [...this.handles()].filter((r) => r.opts.mode === 'arena' && r.opts.stake?.arenaId === arenaId);
   }
@@ -795,10 +820,152 @@ export class RoomManager {
         if (this.underfunded.has(id)) continue;
         if (this.arenaInstances(id).length === 0 && !this.vaultCovers(id, a)) continue;
         if (!this.has(`arena-${id}-1`)) this.createArenaInstance(id, a);
+        if (this.testActive() && !this.has(testArenaRoomId(id))) this.createTestArena(id, a);
       }
     } catch (err) {
       this.deps.log(`arena discovery failed: ${(err as Error).message}`);
     }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Test arenas (testnet only)                                       */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Test arenas are open now: the admin switch is on and the chain is a testnet, both the configured `CHAIN_ID`
+   * (the store) and the chain the RPC serves once it was read. Never on the mainnet.
+   */
+  testActive(): boolean {
+    if (!this.testArenas.active) return false;
+    const served = this.chain.status().chainId;
+    return testArenasAllowedOn(this.cfg.chain.chainId) && (served === null || served === undefined || testArenasAllowedOn(served));
+  }
+
+  /** Every test arena in the directory (closing ones too). */
+  testRooms(): RoomHandle[] {
+    return [...this.handles()].filter((r) => !!r.opts.test);
+  }
+
+  /**
+   * Opens the test arena of an arena: `test-<id>`, an arena instance (number 0) on the official arena's tickets and
+   * vault, with the admin's practice bots (arriving one by one). Never on a chain that is not a testnet.
+   */
+  private createTestArena(arenaId: number, arena: ArenaData): RoomHandle | null {
+    if (!this.testActive()) return null;
+    const s = this.testArenas.settings;
+    this.closingTests.delete(testArenaRoomId(arenaId));
+    this.deps.log(`test arenas: opening ${testArenaRoomId(arenaId)} (${s.bots} ${s.difficulty} bots, chain ${this.cfg.chain.chainId})`);
+    return this.open({
+      id: testArenaRoomId(arenaId),
+      mode: 'arena',
+      name: testArenaName(arenaMeta(arenaId).name),
+      instance: 0,
+      maxPlayers: this.cfg.arenaInstanceCap,
+      map: { scale: this.mapSettings.mapScale('arena') },
+      stake: { arenaId, buyIn: arena.buyIn },
+      test: { chainId: this.cfg.chain.chainId },
+      bots: { count: s.bots, difficulty: s.difficulty, max: TEST_ARENA_BOTS.max, arriveMs: TEST_ARENA_ARRIVE_MS },
+    });
+  }
+
+  /** The test arena takes new seats: still here, not closing, test arenas on. */
+  private testSeatable(room: RoomHandle): boolean {
+    if (!room.opts.test || this.get(room.id) !== room || this.closingTests.has(room.id)) return false;
+    if (room instanceof RemoteRoom && room.closed) return false;
+    return this.testActive();
+  }
+
+  /**
+   * The test arena of `arenaId` for a new seat (opened on demand): the arena must be allowed, enabled on chain and
+   * not kept closed by the vault guard, exactly as for its public instances. `missing`: test arenas are off (or this
+   * is not a testnet); `closed`: it is closing; `arena`: the arena itself is not available.
+   */
+  async testRoom(arenaId: number): Promise<RoomHandle | 'missing' | 'closed' | 'arena'> {
+    if (!this.testActive()) return 'missing';
+    if (!this.arenaAllowed(arenaId) || this.underfunded.has(arenaId)) return 'arena';
+    let arena: ArenaData | undefined;
+    try {
+      arena = (await this.arenas()).get(arenaId);
+    } catch (err) {
+      arena = this.arenaFromRooms(arenaId) ?? undefined;
+      if (!arena) throw err;
+    }
+    if (!arena || !arena.enabled || this.underfunded.has(arenaId)) return 'arena';
+    if (!this.testActive()) return 'missing';
+    let room = this.get(testArenaRoomId(arenaId)) ?? null;
+    if (!room) {
+      if (this.arenaInstances(arenaId).length === 0 && !this.vaultCovers(arenaId, arena)) return 'arena';
+      room = this.createTestArena(arenaId, arena);
+      if (!room) return 'missing';
+    }
+    if (!this.testSeatable(room)) return 'closed';
+    room.lastActivity = Date.now();
+    return room;
+  }
+
+  /** Re-validates a test arena after a join's awaits: still open here, not full, still taking seats. */
+  confirmTestRoom(room: RoomHandle): RoomHandle | null {
+    if (room.isFull || !this.testSeatable(room)) return null;
+    if (room.opts.stake && this.underfunded.has(room.opts.stake.arenaId)) return null;
+    room.lastActivity = Date.now();
+    return room;
+  }
+
+  /**
+   * The admin changed the settings: with test arenas on, every test arena takes the new bots and missing ones open;
+   * turned off, every test arena stops taking seats and closes once its bell settled every ticket in it (nobody is
+   * evicted, no ticket is touched).
+   */
+  private applyTestArenaSettings(): void {
+    if (!this.testActive()) {
+      this.closeTestArenas();
+      return;
+    }
+    const s = this.testArenas.settings;
+    // turned on again before a closing test arena was gone: it takes seats again
+    this.closingTests.clear();
+    for (const room of this.testRooms()) room.setBots(s.bots, s.difficulty);
+    void this.ensureArenaRooms();
+  }
+
+  /** Closes every test arena once nothing of value is left in it (see `applyTestArenaSettings`). */
+  private closeTestArenas(): void {
+    const message = 'Test arenas are off now: this test arena closed.';
+    for (const room of this.testRooms()) {
+      this.closingTests.add(room.id);
+      // a room worker answers through `onClosed` (not yet: asked again at the next cleanup)
+      if (room instanceof RemoteRoom) {
+        if (!room.closing && !room.closed) this.pool!.closeSettled(room, message);
+      } else if ((room as Room).closeSettled(message)) this.drop(room);
+    }
+    for (const id of [...this.closingTests]) if (!this.has(id)) this.closingTests.delete(id);
+  }
+
+  /** `GET /api/admin/test-arenas`: the switch, the bot settings, every test arena now. */
+  testArenaView(): TestArenaView {
+    return {
+      available: this.testArenas.available && testArenasAllowedOn(this.chain.status().chainId ?? this.cfg.chain.chainId),
+      chainId: this.cfg.chain.chainId,
+      active: this.testActive(),
+      settings: this.testArenas.settings,
+      defaults: { ...TEST_ARENA_DEFAULT },
+      limits: { botsMin: TEST_ARENA_BOTS.min, botsMax: TEST_ARENA_BOTS.max },
+      rooms: this.testRooms()
+        .sort((a, b) => (a.opts.stake?.arenaId ?? 0) - (b.opts.stake?.arenaId ?? 0))
+        .map((r) => {
+          const thread = r instanceof RemoteRoom ? `w${r.slot.index}` : undefined;
+          return {
+            arenaId: r.opts.stake?.arenaId ?? 0,
+            id: r.id,
+            name: r.opts.name,
+            people: r.humanCount,
+            bots: r.botCounts().bots,
+            capacity: r.opts.maxPlayers,
+            closing: this.closingTests.has(r.id),
+            ...(thread ? { thread } : {}),
+          };
+        }),
+    };
   }
 
   /* ---------------------------------------------------------------- */
@@ -922,6 +1089,8 @@ export class RoomManager {
 
   private cleanup(now: number): void {
     for (const [key, m] of this.bellMemo) if (now - m.at > BELL_MEMO_MS) this.bellMemo.delete(key);
+    // closing test arenas (the switch went off): gone once their bell settled them
+    if (this.closingTests.size > 0 && !this.testActive()) this.closeTestArenas();
     for (const room of [...this.handles()]) {
       const idle = room.connCount === 0 && room.humanCount === 0;
       if (!idle) continue;

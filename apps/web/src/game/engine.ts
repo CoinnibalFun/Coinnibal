@@ -571,6 +571,11 @@ export class GameEngine {
         this.ticketRetry = null;
         this.reclaiming = false;
         this.wasArena = m.room.mode === 'arena' ? (m.room.arenaId ?? null) : null;
+        // a ticket that played a test arena keeps its next one there; an official instance lets it go
+        if (m.room.mode === 'arena') {
+          const testSeat = m.room.test ? (m.room.arenaId ?? null) : null;
+          if (useUi.getState().testSeat !== testSeat) useUi.setState({ testSeat });
+        }
         this.world.value = m.value ?? null;
         useUi.setState((s) => ({
           // lobby notes (a purchase, a copied link) would hang over the HUD: only warnings and errors come along

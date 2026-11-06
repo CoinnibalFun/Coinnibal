@@ -128,7 +128,10 @@ most 10 %; the price keeper may call `setPrice` only inside the owner's `[minPri
 Off chain (the server; tests in `apps/server/test`):
 
 11. **Value conservation per arena:** Σ live values + Σ floor loot + Σ pending payouts and sweeps + Σ forfeited =
-    Σ entry fees − Σ paid. Only people hold value in an arena (there are no house bots). The journal
+    Σ entry fees − Σ paid. Only people hold value in an arena (there are no house bots). The practice bots of the
+    testnet's test arenas hold none either: they are never in the arena ledger, eating one moves no value, one
+    that eats a staker makes the eaten share spill as floor loot (burned at the bell unless a player takes it), and
+    bots pick up no loot. The journal
     (`DATA_DIR/chains/<id>/journal.json`) is written with write-to-temp + rename.
 12. **Crash recovery:** live tickets found in the journal at start are settled at their last journaled value; loot
     is restored. An arena whose vault does not cover what the journal owes it stays disabled (`!!! arena #N KEPT
@@ -147,7 +150,9 @@ The money simulation (`test/money-sim.ts`, `pnpm -F @elymum/server money-sim`) c
 rooms, journal and settlement worker against the contract model or a hardhat node with the real contract, with
 random joins, eats, disconnects, unplayed tickets, holds, failed transfers, RPC errors, ambiguous sends, lost
 receipts, outages, worker crashes, restarts and days passing; after every chain pass the vault must equal the rooms +
-the journal + forfeits + unseated tickets exactly, and at the end every ticket is closed exactly once.
+the journal + forfeits + unseated tickets exactly, and at the end every ticket is closed exactly once. The test-arena
+scenario (`testArenas`, `money-sim --test-arenas`) adds a test arena with practice bots next to every arena's
+instances (players eat bots, bots eat stake cells) and must hold the same books to the unit.
 
 ## Trust model
 
@@ -165,8 +170,9 @@ the journal + forfeits + unseated tickets exactly, and at the end every ticket i
   do"). The server itself refuses to pay what its own books do not support: a payout above `PAYOUT_GUARD_MULTIPLE`
   (100) entry fees is held for an admin, and nothing leaves a vault that does not cover what the journal owes it
   (the books guard).
-- **Fair play in arenas:** only people play there. Practice bots exist only in free custom rooms (no value), see only
-  what a player's view shows (invisible players excluded) and are tagged BOT.
+- **Fair play in arenas:** only people play in the official arenas. Practice bots exist only in free custom rooms
+  and in the testnet's test arenas (both: no value), see only what a player's view shows (invisible players
+  excluded) and are tagged BOT.
 - Collusion, multi-accounting and scripted input are detected off chain and shown to the owner (OPERATIONS.md,
   "Integrity"); an optional auto-hold keeps a high-risk payout in the journal until the owner decides (or, for an
   auto-hold, until `autoReleaseHours` pass: a false positive delays a payout, never loses it).
@@ -200,12 +206,28 @@ the journal + forfeits + unseated tickets exactly, and at the end every ticket i
   instances `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) people on the same vault, opened ahead of demand and
   drained when quiet by the instance scaler (`rooms/arena-scaler.ts`, OPERATIONS.md "Arena instances"; a draining
   instance takes no new seat and closes after its bell, nobody is evicted); rounds of 300 s aligned to Unix
-  time, joins closed in the final 60 s. **No bots in practice ponds or arenas.** Maps grow with every person and
+  time, joins closed in the final 60 s. **No bots in practice ponds or official arenas.** Maps grow with every person and
   shrink back only when safe (base + per person, at most max; `rooms/map-settings.ts`, `DATA_DIR/site/maps.json`, `/api/admin/maps`).
 - **Practice bots** (`bots/brain.ts`, `bots/practice.ts`): only in **free custom rooms**, when the creator turns them
-  on (count up to 12, difficulty easy / mixed / hard). Each bot sees the server's view rectangle of a player of its
-  size (no map-wide knowledge, invisible players excluded), carries no value, never uses power-ups and is tagged
-  BOT. `Room` refuses bots in any other room.
+  on (count up to 12, difficulty easy / mixed / hard), and in the testnet's **test arenas** (below). Each bot sees
+  the server's view rectangle of a player of its size (no map-wide knowledge, invisible players excluded), carries
+  no value, never uses power-ups and is tagged BOT. `Room` refuses bots in any other room (a room with stakes takes
+  them only when it is marked `test` and its chain is a testnet).
+- **Test arenas** (testnet only; `packages/shared/src/test-arenas.ts`, `rooms/test-arenas.ts`, `RoomManager`
+  "Test arenas"): for every official arena one fixed extra instance `test-<arenaId>` ("Test · <arena>", instance
+  number 0, `RoomInfo.test`), opened with the arena's first instance and reopened after a worker crash. It is the
+  official arena path exactly: the same ElymumArena contract and vault, a normal ticket of that arena (bought with
+  `join(arenaId)`, joined with `arena:<id>:test`), the same seating checks (game access, holders gate, bans, round
+  windows, one session per wallet per arena across every room of the arena), rounds and bell, settlement with the
+  contract's fee on profit, loot burns, the journal, crash recovery and the integrity telemetry. The one difference:
+  practice bots (default 10, mixed, 3..20; the first at once, then one about every 4 s). They carry no value (see
+  invariant 11). The scaler never sees them (`publicInstances` excludes them) and quick play never seats there.
+  Their games count on no board: no leaderboard record, country game or "Last rounds" entry, no profile stats, no
+  Share on X card. **Guards:** they exist only when the server's `CHAIN_ID` is a testnet (46630, or 31337 locally)
+  and the RPC serves a testnet, AND the admin switch "Test arenas with bots" is on (default on on a testnet). On the
+  mainnet the setting is refused (`PUT /api/admin/test-arenas` answers 409), a stored file is ignored, the room
+  directory opens none and `Room` refuses to build one. Turned off, each test arena takes no new seat and closes
+  once its bell settled every ticket in it (nobody is evicted).
 - **Custom rooms** (`rooms/custom.ts`, `site/custom-rooms.ts`): a signed-in wallet pays a small ETH fee to the
   treasury (checked on chain by tx hash, each hash used once) and gets a room `priv-<CODE>` with its own rules
   (duration, map, traps, food, power-ups, capacity, practice bots in free rooms). A **ticket room** is an
@@ -236,7 +258,7 @@ the journal + forfeits + unseated tickets exactly, and at the end every ticket i
   `@napi-rs/canvas` with the site's own fonts (cached; 30 renders per IP a minute). Cards are kept in
   `DATA_DIR/site/shares.json` (the newest 5,000). The web opens X's web intent (`x.com/intent/post`) with a
   localized line and the card's link: no X API.
-- **Other REST:** `/api/health`, `/api/rooms`, `/api/leaderboard`, `/api/config`, `/api/pending?wallet=`,
+- **Other REST:** `/api/health`, `/api/rooms` (test arenas carry `test: true`), `/api/leaderboard`, `/api/config`, `/api/pending?wallet=`,
   `/api/profile`, the site API `/api/site/*` and the admin API `/api/admin/*`. With `WEB_DIST` the server also serves
   the web build.
 - **Dev fake chain** (`chain/dev-fake.ts`, `DEV_FAKE_CHAIN=1` with `NODE_ENV=development` only): an in-memory chain

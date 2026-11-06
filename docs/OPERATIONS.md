@@ -211,7 +211,7 @@ the flags honest players raise (none at the defaults) and those two scripted bot
 - `GET /api/config`: the chain (`chainId`, `chainName`, `testnet`, `faucetUrl`, `explorerUrl`), the arena and NFT
   addresses, `tokenReady`, the token, `fees` (the fee pair on profit, the holder pair, the payment burn share, the
   burn mode), `serverKey`.
-- `GET /api/rooms`: rooms, instances, people (and the practice bots of free custom rooms), floor loot.
+- `GET /api/rooms`: rooms, instances, people (and the practice bots of free custom rooms and test arenas), floor loot.
 - `GET /api/pending?wallet=0x...`: payouts the server is still sending for a wallet. A finalized session (the payout
   transfer failed) is collected by the player with `refund`, any time.
 - `GET /api/site/mint`: the mint state, ETH/USD, the price in USD, holders, game access.
@@ -326,6 +326,30 @@ once" (`practiceMaxLive`, default 12, 0..50): the free one-click rooms the quiet
 per player, 4 per IP per 30 minutes, closed after 2 minutes empty). They take none of the paid rooms' slots or seats;
 each costs about 8 bots of CPU, so 12 at once is about 100 practice bots.
 
+## Test arenas with bots (testnet)
+
+On the testnet every official arena (ticket tier) gets one extra instance, **Test · <arena>** (`test-<arenaId>`):
+the same arena, the same ElymumArena contract and vault, real tickets, rounds, bell, settlement with the fee on
+profit, loot burns, journal and crash recovery as the official instances, plus practice bots so the whole system can
+be tested with few people. Bots never buy a ticket and carry no value: eating one gives mass, never tokens; a bot
+that eats a player makes the eaten value spill as loot (burned at the bell if nobody picks it up). A ticket is the
+arena's normal ticket: the same on-chain session can be played in an official instance or in the test arena (one
+seat at a time).
+
+- **Lobby:** listed after the official arenas under "Test arenas · testnet", each with a TEST badge and the line
+  "testnet test room with bots; same tickets and payouts". Quick play never goes there. Who may play follows the
+  normal game access rule (`gameAccess` / `GAME_ACCESS`): admins during maintenance, everyone when the game is open.
+- **Boards:** test-arena games count nowhere official: no leaderboard record, country game or "Last rounds" entry,
+  no profile stats (XP, games, best), no Share on X card.
+- **Admin:** `/admin` → Game → **Test arenas (testnet)** (`GET` / `PUT /api/admin/test-arenas`, stored in
+  `DATA_DIR/site/test-arenas.json`): "Test arenas with bots" on / off (default on), bots per test arena (3..20,
+  default 10), difficulty (easy / mixed / hard, default mixed), and every test arena live (people, bots, open or
+  closing, its worker). New settings apply at once: more bots arrive one by one, extra bots leave, the difficulty
+  applies to bots that arrive from then on. Turned off, no test arena takes a new seat and each closes once its bell
+  settled every ticket in it.
+- **Mainnet:** impossible. With `CHAIN_ID=4663` (or an RPC that serves the mainnet) no test arena opens, `PUT` answers
+  409 and the card says test arenas exist on a testnet only; a `test-arenas.json` left from the testnet is ignored.
+
 ## Share on X
 
 Players get a "Share on X" button on a bell's receipt, a custom room's final board and, for a few seconds, after
@@ -339,7 +363,8 @@ server like `/api/*`; in Docker the server serves it on the same origin; `pnpm d
 ## Arena instances (auto-scaling)
 
 Each official arena (ticket tier) runs as public instances `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) seats
-on the same vault. The scaler (`apps/server/src/rooms/arena-scaler.ts`, rules in
+on the same vault. The testnet's test arenas (`test-<id>`) are not scaled: one fixed instance per arena while they
+are on. The scaler (`apps/server/src/rooms/arena-scaler.ts`, rules in
 `packages/shared/src/arena-scaling.ts`) samples every 5 s and decides per arena:
 
 - **Seating:** a ticket goes to the fullest instance taking seats that is not full (rooms stay lively). When every

@@ -117,7 +117,7 @@ export function Lobby() {
   // a ticket held for the next round: show it selected (its button says it is held)
   const heldArena = useUi((s) => s.held?.arenaId ?? null);
   useEffect(() => {
-    if (heldArena !== null) setPicked(`arena:${heldArena}`);
+    if (heldArena !== null) setPicked(useUi.getState().testSeat === heldArena ? `test:${heldArena}` : `arena:${heldArena}`);
   }, [heldArena]);
 
   // "New ticket" from the death / receipt sheets: select that ticket, open its confirm sheet
@@ -139,6 +139,8 @@ export function Lobby() {
   const act = () => {
     if (!ticket || !gate) return;
     const id = ticket.arenaId;
+    // the test arena's ticket is the arena's own ticket: only where it is seated differs (`arenaTarget`)
+    if (id !== null) useUi.setState({ testSeat: ticket.test ? id : null });
     switch (gate.kind) {
       case 'practice':
         sound.punch();
