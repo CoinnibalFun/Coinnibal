@@ -42,8 +42,11 @@ describe('production bundle (tsup)', () => {
       const deadline = Date.now() + 15_000;
       while (!/Elymum server on/.test(log) && !exited && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
       await new Promise((r) => setTimeout(r, 1_500));
-      child.kill();
       expect(exited, log).toBe(false);
+      // SIGTERM: the server flushes its files on the way out; wait for it before the folder is removed
+      const gone = new Promise<void>((r) => (exited ? r() : child.once('exit', () => r())));
+      child.kill();
+      await Promise.race([gone, new Promise((r) => setTimeout(r, 10_000))]);
       expect(log).toMatch(/Elymum server on/);
       expect(log).not.toMatch(/failed to initialise|Dynamic require|ReferenceError/);
       expect(log).toMatch(/chain: server key 0x[0-9a-fA-F]{40}/);
@@ -52,7 +55,7 @@ describe('production bundle (tsup)', () => {
       // the gateway itself loaded; the RPC URL is logged redacted (it may carry an API key in its path or query)
       expect(log).toMatch(/chain: RPC http:\/\/127\.0\.0\.1:1\/<redacted> unreachable/);
     } finally {
-      rmSync(outDir, { recursive: true, force: true });
+      rmSync(outDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     }
   }, 60_000);
 });
