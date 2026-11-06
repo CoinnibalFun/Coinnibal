@@ -130,11 +130,12 @@ export function Feed({ narrow, fold = narrow }: { narrow: boolean; fold?: boolea
         <div className="g-chat">
           <div ref={listRef} className="g-chat__lines">
             {lines.map((c) => (
-              <p key={c.id} className={`g-chat__line${c.system ? ' is-system' : ''}`}>
+              <p key={c.id} className={`g-chat__line${c.system ? ' is-system' : c.guest ? ' is-guest' : ''}`}>
                 {!c.system && (
                   <b>
                     <InkDot skin={c.skin} />
                     {c.from}
+                    {c.guest && <span className="g-chat__guest mono">{t('g.chatGuest')}</span>}
                   </b>
                 )}
                 <span>{c.system ? stripEmoji(c.text) : c.text}</span>

@@ -8,7 +8,8 @@ import { engine } from '../../game/instance';
 import { roundStartLabel } from '../../game/round';
 import { useChainData } from '../../wallet/chain';
 import { isFakeHash } from '../../wallet/devFake';
-import { arenaRates } from '../../wallet/ticket';
+import { arenaRates, ledgerToBase } from '../../wallet/ticket';
+import { PRICE_STALE_HOURS, usdQuote } from '../../wallet/usdPrice';
 import { announce, sound } from '../../audio';
 import { useT } from '../../i18n';
 import { explorerTx } from '../../wallet/links';
@@ -64,6 +65,7 @@ export function RoundOverSheet() {
   const chain = useUi((s) => s.chain);
   const settledRaw = useUi((s) => s.lastSettlement);
   const config = useChainData((s) => s.config);
+  const prices = useChainData((s) => s.prices);
   const serverFees = useUi((s) => s.chain?.fees ?? null);
   // the rates fixed into this ticket at join (its session), else the live rates
   const session = useChainData((s) => (ticket?.arenaId != null ? (s.sessions[ticket.arenaId] ?? null) : null));
@@ -166,6 +168,9 @@ export function RoundOverSheet() {
     </span>
   );
 
+  // what was paid, in US dollars with the age of the price (nothing when the server has none)
+  const decimals = chain?.token?.decimals ?? config?.decimals ?? 18;
+  const usd = usdQuote(prices, ledgerToBase(n.net, decimals), decimals, since);
   const standings = res?.standings ?? [];
   const share = useShare('round');
 
@@ -211,6 +216,13 @@ export function RoundOverSheet() {
             )}
           </AnimatePresence>
         </div>
+        {usd && (
+          <p className="g-roundover__usd mono" data-testid="gr-usd">
+            {usd.text}
+            {usd.setAt ? ` · ${t('usd.setAt', { time: usd.setAt })}` : ''}
+            {usd.stale && <span className="g-roundover__stale">{usd.setAt ? t('usd.stale', { h: PRICE_STALE_HOURS }) : t('usd.staleUnknown')}</span>}
+          </p>
+        )}
         {settled?.collect && (
           <p className="g-roundover__note" role="status">
             {t('gr.collect')}

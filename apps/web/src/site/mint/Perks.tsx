@@ -2,7 +2,7 @@ import { Icon, Laurel, type IconName } from '../../design';
 import { useT } from '../../i18n';
 import type { EmblemPerk } from './logic';
 
-const GLYPH: Partial<Record<EmblemPerk['id'], IconName>> = { access: 'key', fee: 'check', wl: 'check', faucet: 'check' };
+const GLYPH: Partial<Record<EmblemPerk['id'], IconName>> = { access: 'key', fee: 'check', shop: 'check', room: 'check', wl: 'check', faucet: 'check' };
 
 /** "What the emblem does": a compact list of the holder perks (mint page, under the lede). */
 export function EmblemPerks({ perks }: { perks: EmblemPerk[] }) {
