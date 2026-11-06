@@ -1653,6 +1653,78 @@
 .g-share__x {
   flex: none;
 }
+/* the coins I ate this game, on a result sheet: name chips that wrap (long names cut with an ellipsis) */
+.g-eaten {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.g-eaten__label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.g-eaten__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.g-eaten__name,
+.g-eaten__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 10px;
+  border: 2px solid var(--outline);
+  border-radius: 999px;
+  background: var(--cream);
+  color: var(--ink-fixed);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.g-eaten__name bdi {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.g-eaten__more {
+  background: transparent;
+  color: var(--ink-2);
+  border-style: dashed;
+  font-weight: 500;
+}
+.g-eaten__tag,
+.g-test-tag {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--ink-fixed);
+  color: var(--cream);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.g-eaten__n {
+  flex: none;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.g-test-tag {
+  margin-left: 8px;
+  background: var(--red-ink);
+  color: #FFFFFF;
+  vertical-align: 2px;
+}
 /* a notable kill: "You ate Nakamoto!" with Share on X, for a few seconds */
 .g-killshare {
   display: flex;

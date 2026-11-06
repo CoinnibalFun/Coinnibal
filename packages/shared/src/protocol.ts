@@ -1,4 +1,4 @@
-import type { ShareKind } from './share';
+import type { EatenName, ShareKind } from './share';
 import type { BoostKind, BoostRefusal, BoostState } from './boosts';
 import type { League, RoomMode } from './constants';
 import type { CustomRoomSummary } from './custom-rooms';
@@ -436,6 +436,12 @@ export interface DeathStats {
   /** A room's end (an arena's bell, a custom room's end): my place on its final board, and how many stood on it. */
   finalRank?: number;
   finalOf?: number;
+  /**
+   * The coins I ate this game (people; practice bots too in a testnet test arena, tagged), the first `EATEN_SHOWN` by
+   * times eaten, and how many more. Public names only (`shareName`). Absent when I ate nobody.
+   */
+  eaten?: EatenName[];
+  eatenMore?: number;
 }
 
 export type ServerMessage =
@@ -513,7 +519,7 @@ export type ServerMessage =
   | { t: 'roomOver'; message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null }
   // "Share on X": a public card of my result (`round`, `room`) or of a notable kill (`kill`, eating a big coin) is ready
   // at `/share/<id>` on the site (with its Open Graph image). `victim`: the coin eaten (kills).
-  | { t: 'share'; kind: ShareKind; id: string; victim?: string }
+  | { t: 'share'; kind: ShareKind; id: string; victim?: string; victimIsBot?: boolean; test?: boolean }
   // Arena rooms: the player's in-game value changed.
   | {
       t: 'value';
