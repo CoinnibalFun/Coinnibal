@@ -172,3 +172,33 @@ describe('lobby while the game token is not set', () => {
     expect(cta().disabled).toBe(false);
   });
 });
+
+describe('lobby: the chain cannot be read, or its contract is not trusted', () => {
+  it('an RPC that does not answer: no "Arenas open" over closed tickets, "Can\'t reach … retrying" instead', () => {
+    recv({ t: 'chain', chain: SET });
+    act(() => useChainData.setState({ deployed: false, rpcDown: true }));
+    lobby();
+    expect(screen.queryByText('Arenas open')).toBeNull();
+    expect(screen.getByTestId('lobby-arenas').textContent).toBe("Can't reach Robinhood Chain Testnet, retrying");
+    // back: the pill says so again
+    act(() => useChainData.setState({ deployed: true, rpcDown: false }));
+    expect(screen.getByTestId('lobby-arenas').textContent).toBe('Arenas open');
+  });
+
+  it('an arena that is not the pinned one: the plate says the check failed', () => {
+    recv({ t: 'chain', chain: SET });
+    act(() => useChainData.setState({ deployed: false, pin: { ok: false, reason: 'arena_mismatch' } }));
+    lobby();
+    expect(screen.getByTestId('lobby-arenas').textContent).toBe('Contract check failed · no tickets');
+  });
+
+  it('says the real round length (the server may run shorter rounds)', () => {
+    const now = Date.now();
+    const roundMs = 120_000;
+    const n = Math.floor(now / roundMs);
+    recv({ t: 'chain', chain: SET });
+    recv({ t: 'rooms', rooms: [PRACTICE, { ...ARENAS[0], round: { n, endsAt: (n + 1) * roundMs, joinsCloseAt: (n + 1) * roundMs - 30_000 } }], online: 2 });
+    lobby();
+    expect(screen.getByText('2-minute rounds · alive at the bell, paid your till')).toBeTruthy();
+  });
+});

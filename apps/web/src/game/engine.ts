@@ -1,5 +1,6 @@
 import { CARD_PAPER, ELYSIUM, INK, RISO } from '@elymum/art';
 import {
+  PlayerFlag,
   PowerUpType,
   BOOST_KINDS,
   clamp,
@@ -515,6 +516,18 @@ export class GameEngine {
 
   private lastBackgroundStep = 0;
 
+  /**
+   * The chat line's author is known to be signed in (a wallet's profile name: `PlayerFlag.Verified` in view, or the
+   * leaderboard's `verified`). Anyone else's line is a guest's and is shown muted: a guest can type anything, a
+   * "send your tokens here" included.
+   */
+  private signedIn(pid: number): boolean {
+    if (pid === this.world.myPid && useUi.getState().auth) return true;
+    const p = this.world.players.get(pid);
+    if (p) return (p.flags & PlayerFlag.Verified) !== 0;
+    return useUi.getState().lb.some((e) => e.pid === pid && e.verified === true);
+  }
+
   private onMessage(m: ServerMessage): void {
     const now = performance.now();
     switch (m.t) {
@@ -664,11 +677,13 @@ export class GameEngine {
         useUi.setState((s) => ({ killfeed: [...s.killfeed.slice(-4), item] }));
         return;
       }
-      case 'chat':
-        useUi.setState((s) => ({ chat: [...s.chat.slice(-59), { id: chatId++, pid: m.pid, from: m.from, skin: m.skin, text: m.text, system: m.system, at: Date.now() }] }));
+      case 'chat': {
+        const guest = !m.system && !this.signedIn(m.pid);
+        useUi.setState((s) => ({ chat: [...s.chat.slice(-59), { id: chatId++, pid: m.pid, from: m.from, skin: m.skin, text: m.text, system: m.system, ...(guest ? { guest } : {}), at: Date.now() }] }));
         return;
+      }
       case 'history':
-        useUi.setState({ chat: m.chat.map((c) => ({ id: chatId++, ...c, at: Date.now() })) });
+        useUi.setState({ chat: m.chat.map((c) => ({ id: chatId++, ...c, ...(!c.system && !this.signedIn(c.pid) ? { guest: true } : {}), at: Date.now() })) });
         return;
       case 'emote': {
         const p = this.world.players.get(m.pid);

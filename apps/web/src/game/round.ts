@@ -67,6 +67,16 @@ export function roundStartLabel(n: number, info: RoundInfo | null | undefined): 
   return new Date(n * roundMs).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
+/**
+ * The round length in minutes for copy ("5-minute rounds"): from the round the server announced (it may run shorter
+ * rounds), else the rules' default. One decimal at most (`1.5`).
+ */
+export function roundMinutes(rooms: readonly RoomInfo[], room: RoomInfo | null): number {
+  const info = roundInfoFor(rooms, room, null);
+  const ms = info ? roundLengths(info).roundMs : RULES.roundMs;
+  return Math.round(ms / 6000) / 10;
+}
+
 /** `m:ss` of a countdown, rounded up (0:01 until the very end). */
 export function formatCountdown(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));
