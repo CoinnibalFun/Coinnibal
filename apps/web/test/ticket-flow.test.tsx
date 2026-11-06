@@ -115,7 +115,7 @@ describe('ticket confirm sheet', () => {
     expect(within(dialog).getByText('12,450 → 11,450 $ELYMUM')).toBeTruthy();
     const steps = within(within(dialog).getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
     // no allowance yet: one approval for every ticket first, then the ticket
-    expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take $ELYMUM for your tickets (once: later tickets skip this step)', '2Buy the ticket · Asphodel Meadow']);
+    expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take $ELYMUM for your tickets (once, with no limit: later tickets skip this step)', '2Buy the ticket · Asphodel Meadow']);
     expect((within(dialog).getByRole('button', { name: /Pay 1,000 \$ELYMUM/ }) as HTMLButtonElement).disabled).toBe(false);
     // the exact-approval choice, off by default
     expect((within(dialog).getByRole('checkbox', { name: /Approve only this ticket/ }) as HTMLInputElement).checked).toBe(false);
@@ -206,7 +206,7 @@ describe('ticket flow: two prompts, progress and races', () => {
     open(PENNY);
     act(() => screen.getByRole('button', { name: /^Pay / }).click());
     await settle();
-    expect(screen.getByTestId('tf-step').textContent).toBe('Step 1 of 2 · Allow the arena to take $ELYMUM for your tickets (once: later tickets skip this step)');
+    expect(screen.getByTestId('tf-step').textContent).toBe('Step 1 of 2 · Allow the arena to take $ELYMUM for your tickets (once, with no limit: later tickets skip this step)');
     expect(screen.getByText('Approve the game token in your wallet')).toBeTruthy();
     // one approval for every later ticket (the default)
     expect(spies.planJoin.mock.calls[0][1]).toMatchObject({ approve: 'unlimited' });
