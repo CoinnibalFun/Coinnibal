@@ -252,6 +252,10 @@ export class Gateway {
         socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
         socket.destroy();
       };
+      if (!this.accepting) {
+        refuse('503 Service Unavailable');
+        return;
+      }
       const priority = this.priorityOf(req);
       if (!this.admit(ip, net, priority)) {
         refuse('429 Too Many Requests');
@@ -286,7 +290,15 @@ export class Gateway {
     );
   }
 
+  /** The server is shutting down: every new WebSocket is refused (503) from now on. */
+  stopAccepting(): void {
+    this.accepting = false;
+  }
+
+  private accepting = true;
+
   close(): void {
+    this.accepting = false;
     for (const t of this.timers) clearInterval(t);
     for (const ws of this.wss.clients) ws.close(1001, 'server shutting down');
   }
