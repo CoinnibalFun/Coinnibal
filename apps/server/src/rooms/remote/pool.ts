@@ -372,7 +372,7 @@ export class WorkerPool {
       case 'nk': {
         const room = this.rooms.get(c.hid);
         const conn = this.conns.get(c.conn);
-        if (room && conn) d.onNotableKill({ room, conn, player: c.player, mass: c.mass, kills: c.kills, victim: c.victim, victimMass: c.victimMass });
+        if (room && conn) d.onNotableKill({ room, conn, player: c.player, mass: c.mass, kills: c.kills, victim: c.victim, victimMass: c.victimMass, ...(c.victimIsBot ? { victimIsBot: true } : {}) });
         return;
       }
       case 'bell':

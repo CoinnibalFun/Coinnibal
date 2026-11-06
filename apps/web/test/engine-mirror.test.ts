@@ -199,3 +199,33 @@ describe('engine: the jitter buffer', () => {
     expect(engine.world.entities.size).toBe(0);
   });
 });
+
+describe("engine: others' stickers (the setting)", () => {
+  const two = (): ArrayBuffer =>
+    encodeSnapshot({
+      tick: 1,
+      view: { x: 1000, y: 1000, h: 1200 },
+      players: [
+        { id: 7, skin: 0, flags: 0, name: 'Daphne' },
+        { id: 9, skin: 1, flags: 0, name: 'Penny' },
+      ],
+      upserts: [
+        { id: 100, kind: EntityKind.Cell, x: 1000, y: 1000, r: 60, playerId: 7, flags: 0 },
+        { id: 101, kind: EntityKind.Cell, x: 1200, y: 1000, r: 60, playerId: 9, flags: 0 },
+      ],
+      removals: [],
+    });
+
+  it("off: another player's sticker is dropped, mine still shows; on: both show", () => {
+    joined(A);
+    snap(two());
+    useUi.setState({ settings: { ...useUi.getState().settings, showEmotes: false } });
+    recv({ t: 'emote', pid: 9, id: 2 });
+    recv({ t: 'emote', pid: 7, id: 3 });
+    expect(engine.world.players.get(9)?.emote ?? null).toBeNull();
+    expect(engine.world.players.get(7)?.emote?.id).toBe(3);
+    useUi.setState({ settings: { ...useUi.getState().settings, showEmotes: true } });
+    recv({ t: 'emote', pid: 9, id: 2 });
+    expect(engine.world.players.get(9)?.emote?.id).toBe(2);
+  });
+});

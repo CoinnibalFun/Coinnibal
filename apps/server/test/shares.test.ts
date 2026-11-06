@@ -9,10 +9,12 @@ import { loadConfig } from '../src/config';
 import { Limiter } from '../src/net/limiter';
 import { Room } from '../src/rooms/room';
 import { KILL_SHARE_EVERY_MS, SHARES_KEPT, ShareService, sharePage } from '../src/site/shares';
+import { renderShareCard, shareEaten, shareFacts, shareHeadline } from '../src/site/share-card';
 import { ArenaChain, arena, fakeConn, freeCustom, roomDeps, testWallet } from './helpers';
 
 const look = { name: 'Nakamoto', skin: 2, country: 'JP', flags: 8 };
 const arenaRoom = { opts: { id: 'arena-1-1', mode: 'arena', name: 'Asphodel Meadow', maxPlayers: 50, stake: { arenaId: 1, buyIn: 1 } } } as never;
+const testRoom = { opts: { id: 'test-1', mode: 'arena', name: 'Test · Arena', maxPlayers: 50, stake: { arenaId: 1, buyIn: 1 }, test: { chainId: 46630 } } } as never;
 const customRoom = { opts: { id: 'priv-PONDS', mode: 'private', name: 'Friday Pond', maxPlayers: 10, custom: freeCustom() } } as never;
 
 function service(dir: string | null = null, clock = { t: 1_800_000_000_000 }) {
@@ -89,6 +91,58 @@ describe('share cards (made from the server records only)', () => {
     s.handle(req(`/share/${c.id}`), res, `/share/${c.id}`, '1.2.3.4');
     expect(out.status).toBe(200);
     expect(String(out.headers!['Content-Security-Policy'])).toMatch(/default-src 'none'/);
+  });
+
+  it('a result names the coins I ate (cleaned again, five and "+N"); a test arena card says TEST and shows no payout', () => {
+    const s = service();
+    const eaten = [{ name: '@Penny' }, { name: 'Rocky', n: 2 }, { name: 'a.b.c' }, { name: 'Zed', bot: true }, { name: 'Ed' }, { name: 'Flo' }];
+    const c = s.result({ room: arenaRoom, player: look, wallet: null }, { rank: 1, of: 9, mass: 2000, kills: 7, payout: 5_000_000_000, eaten, eatenMore: 2 });
+    expect(c.eaten).toEqual([{ name: 'Penny' }, { name: 'Rocky', n: 2 }, { name: 'a\u00B7b\u00B7c' }, { name: 'Zed', bot: true }, { name: 'Ed' }]);
+    expect(c.eatenMore).toBe(3);
+    expect(c.test).toBeUndefined();
+    expect(shareEaten(c)).toBe('Ate: Penny, Rocky \u00D72, a\u00B7b\u00B7c, Zed (BOT), Ed +3');
+    expect(shareFacts(c)).toContain('took home 5,000 $ELYMUM');
+    const t = s.result({ room: testRoom, player: look, wallet: testWallet(1) }, { rank: 2, of: 4, mass: 900, kills: 1, payout: 5_000_000_000, eaten: [{ name: 'Botty', bot: true }] });
+    expect(t).toMatchObject({ kind: 'round', test: true, eaten: [{ name: 'Botty', bot: true }] });
+    expect(t.paid).toBeUndefined();
+    expect(shareFacts(t).join(' ')).not.toMatch(/took home/);
+    const html = sharePage(t, 'https://elymum.io');
+    expect(html).toContain('<title>TEST · Nakamoto · 2nd of 4 · Elymum</title>');
+    expect(html).toContain('A testnet test arena: practice tokens, no real money.');
+    // nobody eaten: no line
+    expect(shareEaten(s.result({ room: customRoom, player: look, wallet: null }, { rank: 1, of: 2, mass: 10, kills: 0 }))).toBeNull();
+  });
+
+  it('a bot kill card only in a test arena (tagged BOT and TEST); never in another room', () => {
+    const s = service();
+    const k = { mass: 2500, kills: 3, victim: 'Botty', victimMass: 1800, victimIsBot: true };
+    expect(s.kill({ room: customRoom, player: look, wallet: null }, 'c1', k)).toBeNull();
+    expect(s.kill({ room: arenaRoom, player: look, wallet: null }, 'c2', k)).toBeNull();
+    const card = s.kill({ room: testRoom, player: look, wallet: null }, 'c3', k)!;
+    expect(card).toMatchObject({ kind: 'kill', victim: 'Botty', victimBot: true, test: true });
+    expect(shareHeadline(card)).toBe('Ate Botty (BOT)!');
+  });
+
+  it('renders the names and the TEST stamp on the 1200 x 630 card', async () => {
+    const { createCanvas, loadImage } = await import('@napi-rs/canvas');
+    const s = service();
+    const eaten = [{ name: 'Penny' }, { name: 'Rocky', n: 2 }, { name: 'Zed', bot: true }];
+    const real = renderShareCard(s.result({ room: arenaRoom, player: look, wallet: null }, { rank: 1, of: 9, mass: 2000, kills: 4, eaten, eatenMore: 1 }));
+    const test = renderShareCard(s.result({ room: testRoom, player: look, wallet: null }, { rank: 1, of: 9, mass: 2000, kills: 4, eaten, eatenMore: 1 }));
+    const pixel = async (png: Buffer, x: number, y: number) => {
+      const img = await loadImage(png);
+      const cv = createCanvas(img.width, img.height);
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      expect([img.width, img.height]).toEqual([1200, 630]);
+      return [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)];
+    };
+    // the coral TEST stamp sits at the sticker's top right; the real card is plain cream there
+    expect(await pixel(test, 1000, 100)).toEqual([0xe4, 0x57, 0x2e]);
+    expect(await pixel(real, 1000, 100)).toEqual([0xf6, 0xee, 0xda]);
+    // a very long list still fits (names drop into "+N"; never drawn past the sticker)
+    const many = Array.from({ length: 5 }, (_, i) => ({ name: `LongCoinName${i}xx` }));
+    expect(renderShareCard(s.result({ room: arenaRoom, player: look, wallet: null }, { rank: 3, of: 50, mass: 10, kills: 9, eaten: many, eatenMore: 40 })).length).toBeGreaterThan(1000);
   });
 
   it('the startup self-check draws with the real addon here', async () => {

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { ledgerDecimals } from '@elymum/sdk';
-import { PlayerFlag, SHARE_ID_RE, SHARE_IMAGE, arenaMeta, formatToken, shortAddress, type ShareCard, type ShareKind } from '@elymum/shared';
+import { EATEN_SHOWN, PlayerFlag, SHARE_ID_RE, SHARE_IMAGE, arenaMeta, formatToken, shareName, shortAddress, type EatenName, type ShareCard, type ShareKind } from '@elymum/shared';
 import { Limiter } from '../net/limiter';
 import type { PlayerLook, RoomHandle } from '../rooms/handle';
 import { renderShareCard, shareFacts, shareHeadline } from './share-card';
@@ -108,31 +108,55 @@ export class ShareService {
     return full;
   }
 
-  private base(o: ShareOrigin): Pick<ShareCard, 'name' | 'wallet' | 'skin' | 'country' | 'holder' | 'room'> {
+  private base(o: ShareOrigin): Pick<ShareCard, 'name' | 'wallet' | 'skin' | 'country' | 'holder' | 'room' | 'test'> {
     const r = o.room.opts;
     const room = r.stake && !r.custom ? arenaMeta(r.stake.arenaId).name : r.name;
-    return { name: o.player.name, wallet: o.wallet ? shortAddress(o.wallet) : null, skin: o.player.skin, country: o.player.country, holder: (o.player.flags & PlayerFlag.Holder) !== 0, room };
+    return {
+      name: shareName(o.player.name),
+      wallet: o.wallet ? shortAddress(o.wallet) : null,
+      skin: o.player.skin,
+      country: o.player.country,
+      holder: (o.player.flags & PlayerFlag.Holder) !== 0,
+      room,
+      // a testnet test arena: TEST on the card and the page, never a payout
+      ...(r.test ? { test: true } : {}),
+    };
   }
 
   /**
    * A room's end (an arena's bell, a custom room's end): the card of my place on its final board. `payout`: what
-   * reached the wallet (ledger units), arenas only.
+   * reached the wallet (ledger units), arenas only (never on a test arena's card). `eaten`: the coins I ate
+   * (`DeathStats.eaten`), names cleaned again here.
    */
-  result(o: ShareOrigin, r: { rank: number; of: number; mass: number; kills: number; payout?: number }): ShareCard {
+  result(o: ShareOrigin, r: { rank: number; of: number; mass: number; kills: number; payout?: number; eaten?: readonly EatenName[]; eatenMore?: number }): ShareCard {
     const kind: ShareKind = o.room.opts.stake ? 'round' : 'room';
     const t = this.d.token();
-    const paid = r.payout && r.payout > 0 && t ? `${formatToken(r.payout, ledgerDecimals(t.decimals), { maxFrac: 2 })} ${t.symbol}` : undefined;
-    return this.add({ kind, ...this.base(o), rank: r.rank, players: r.of, mass: Math.floor(r.mass), kills: r.kills, ...(paid ? { paid } : {}) });
+    const paid = !o.room.opts.test && r.payout && r.payout > 0 && t ? `${formatToken(r.payout, ledgerDecimals(t.decimals), { maxFrac: 2 })} ${t.symbol}` : undefined;
+    const list = (r.eaten ?? []).slice(0, EATEN_SHOWN).map((e): EatenName => ({ name: shareName(e.name), ...(e.bot ? { bot: true } : {}), ...(e.n && e.n > 1 ? { n: Math.floor(e.n) } : {}) }));
+    const more = Math.max(0, Math.floor(r.eatenMore ?? 0)) + Math.max(0, (r.eaten?.length ?? 0) - list.length);
+    return this.add({
+      kind,
+      ...this.base(o),
+      rank: r.rank,
+      players: r.of,
+      mass: Math.floor(r.mass),
+      kills: r.kills,
+      ...(paid ? { paid } : {}),
+      ...(list.length > 0 ? { eaten: list } : {}),
+      ...(more > 0 ? { eatenMore: more } : {}),
+    });
   }
 
   /** A notable kill; null when this player (`key`: its connection or wallet) got one in the last `KILL_SHARE_EVERY_MS`. */
-  kill(o: ShareOrigin, key: string, k: { mass: number; kills: number; victim: string; victimMass: number }): ShareCard | null {
+  kill(o: ShareOrigin, key: string, k: { mass: number; kills: number; victim: string; victimMass: number; victimIsBot?: boolean }): ShareCard | null {
+    // a practice bot counts in a testnet test arena only
+    if (k.victimIsBot && !o.room.opts.test) return null;
     const now = this.now();
     const last = this.lastKill.get(key);
     if (last !== undefined && now - last < KILL_SHARE_EVERY_MS) return null;
     this.lastKill.set(key, now);
     if (this.lastKill.size > 10_000) for (const [k2, at] of this.lastKill) if (now - at >= KILL_SHARE_EVERY_MS) this.lastKill.delete(k2);
-    return this.add({ kind: 'kill', ...this.base(o), mass: Math.floor(k.mass), kills: k.kills, victim: k.victim, victimMass: k.victimMass });
+    return this.add({ kind: 'kill', ...this.base(o), mass: Math.floor(k.mass), kills: k.kills, victim: shareName(k.victim), victimMass: k.victimMass, ...(k.victimIsBot ? { victimBot: true } : {}) });
   }
 
   /** Startup self-check result (`shareCardSelfCheck`): when drawing cannot work here, images fall back at once. */
@@ -204,8 +228,10 @@ export class ShareService {
 
 /** The share page: the Open Graph and Twitter card tags (X shows the image), the card, and the way into the game. */
 export function sharePage(card: ShareCard, origin: string): string {
-  const title = `${card.name} · ${shareHeadline(card)} · Elymum`;
-  const desc = `${shareFacts(card).join(' · ')}. Coin eats coin on Robinhood Chain.`;
+  const title = `${card.test ? 'TEST · ' : ''}${card.name} · ${shareHeadline(card)} · Elymum`;
+  const desc = card.test
+    ? `${shareFacts(card).join(' · ')}. A testnet test arena: practice tokens, no real money.`
+    : `${shareFacts(card).join(' · ')}. Coin eats coin on Robinhood Chain.`;
   const page = `${origin}/share/${card.id}`;
   const img = `${page}.png`;
   return `<!doctype html>

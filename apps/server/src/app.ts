@@ -256,14 +256,19 @@ export async function createApp(
       shop,
       // the server's own records: every finished game of a signed-in wallet counts in its profile
       onGameOver: (e) => {
-        // a test arena (testnet, with bots): its games count nowhere official (no card, no profile stats)
-        if (e.room.opts.test) return;
         const s = e.stats;
-        // a room's end (a bell, a custom room's end): the card of my place on its final board, for "Share on X"
+        const test = !!e.room.opts.test;
+        // a room's end (a bell, a custom room's end): the card of my place on its final board and who I ate, for
+        // "Share on X" (a test arena's card says TEST and shows no payout)
         if (e.conn && s.finalRank && s.finalOf) {
-          const card = shares.result({ room: e.room, player: e.player, wallet: e.conn.wallet }, { rank: s.finalRank, of: s.finalOf, mass: s.finalMass, kills: s.playersEaten, payout: s.payout });
-          e.conn.send({ t: 'share', kind: card.kind, id: card.id });
+          const card = shares.result(
+            { room: e.room, player: e.player, wallet: e.conn.wallet },
+            { rank: s.finalRank, of: s.finalOf, mass: s.finalMass, kills: s.playersEaten, payout: s.payout, eaten: s.eaten, eatenMore: s.eatenMore },
+          );
+          e.conn.send({ t: 'share', kind: card.kind, id: card.id, ...(test ? { test: true } : {}) });
         }
+        // a test arena (testnet, with bots): its games count nowhere official (no profile stats)
+        if (test) return;
         const wallet = e.conn?.wallet;
         if (!wallet) return;
         const xp = profiles.recordGame(wallet, { score: s.maxMass, kills: s.playersEaten, xp: s.xp ?? 0 });
@@ -271,11 +276,12 @@ export async function createApp(
         if (e.conn!.profile) e.conn!.profile = { ...e.conn!.profile, xp, level };
         e.conn!.send({ t: 'xp', xp, level });
       },
-      // a person ate a big person: the killer's card (one every few seconds at most)
+      // a person ate a big person (in a test arena a big practice bot too, on a TEST card): the killer's card (one every few seconds at most)
       onNotableKill: (e) => {
-        if (e.room.opts.test) return;
         const card = shares.kill({ room: e.room, player: e.player, wallet: e.conn.wallet }, e.conn.wallet ?? `conn:${e.conn.id}`, e);
-        if (card) e.conn.send({ t: 'share', kind: 'kill', id: card.id, victim: e.victim });
+        if (card) {
+          e.conn.send({ t: 'share', kind: 'kill', id: card.id, victim: card.victim ?? e.victim, ...(card.victimBot ? { victimIsBot: true } : {}), ...(card.test ? { test: true } : {}) });
+        }
       },
     },
     chain,

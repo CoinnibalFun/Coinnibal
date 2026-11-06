@@ -7,7 +7,7 @@ import { serverText, useT } from '../../i18n';
 import { useUi } from '../../store';
 import { FinalBoard } from './FinalBoard';
 import { roomName } from './format';
-import { ShareOnX, useShare } from './ShareOnX';
+import { EatenNames, ShareOnX, resultShareText, useShare } from './ShareOnX';
 
 /** The final board goes back to the lobby by itself after this long (ms), unless a button did first. */
 export const ROOM_OVER_AUTO_MS = 30_000;
@@ -101,7 +101,10 @@ export function RoomOverSheet() {
             {t('gr.lobby')}
           </Button>
           {share && res?.stats?.finalRank && (
-            <ShareOnX id={share.id} text={t('share.result', { rank: res.stats.finalRank, n: res.stats.finalOf ?? res.stats.finalRank, room: roomName(res.room) })} />
+            <ShareOnX
+              id={share.id}
+              text={resultShareText(t, { rank: res.stats.finalRank, n: res.stats.finalOf ?? res.stats.finalRank, room: roomName(res.room), eaten: res.stats.eaten, eatenMore: res.stats.eatenMore })}
+            />
           )}
           <span className="g-roomover__auto mono" aria-live="off">
             {t('ro.auto', { s: Math.max(0, Math.ceil(left / 1000)) })}
@@ -112,6 +115,7 @@ export function RoomOverSheet() {
       {res && (
         <div className="g-roundover__body">
           <p className="g-roundover__note">{serverText(res.message, t('ro.why'))}</p>
+          <EatenNames eaten={res.stats?.eaten} more={res.stats?.eatenMore} />
           <FinalBoard rows={res.standings} title={t('ro.top', { n: res.players })} skin={skin} />
         </div>
       )}

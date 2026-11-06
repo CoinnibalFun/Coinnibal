@@ -841,6 +841,8 @@ export class Renderer {
       const c = cells[i];
       const p = f.world.players.get(c.playerId);
       if (!p?.emote) continue;
+      // "Others' stickers" off: only mine (a sticker already up hides at once too)
+      if (!f.settings.showEmotes && c.playerId !== f.world.myPid) continue;
       const cur = best.get(c.playerId);
       if (!cur || c.r > cur.r) best.set(c.playerId, c);
     }

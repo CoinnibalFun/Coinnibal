@@ -58,6 +58,8 @@ export interface Settings {
   showFps: boolean;
   showMinimap: boolean;
   showChat: boolean;
+  /** Other players' stickers (the 1–8 emotes) over their coins; my own sticker buttons stay either way. */
+  showEmotes: boolean;
   /** Last arena the player bought a ticket for (Quick Play goes back there). */
   lastArena: number | null;
   /**
@@ -180,7 +182,7 @@ export interface UiState {
   /** A custom room closes at `endsAt` (server clock; `closing`): the countdown everyone in it sees, and why. */
   closing: { endsAt: number; message: string } | null;
   /** The last "Share on X" card the server made for me (`share`): a result's or a notable kill's; `at`: local ms. */
-  share: { kind: 'round' | 'room' | 'kill'; id: string; victim?: string; at: number } | null;
+  share: { kind: 'round' | 'room' | 'kill'; id: string; victim?: string; victimIsBot?: boolean; test?: boolean; at: number } | null;
   /** A free custom room ended (`roomOver`): its final board (everyone by mass), the room it was, my game in it. */
   roomResult: { message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null; room: RoomInfo | null } | null;
   /**
@@ -277,6 +279,7 @@ function loadSettings(): Settings {
     showFps: false,
     showMinimap: true,
     showChat: true,
+    showEmotes: true,
     lastArena: null,
     approveBatch: false,
   };
