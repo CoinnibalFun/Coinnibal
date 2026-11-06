@@ -1062,9 +1062,11 @@ export class EvmChain implements ChainGateway {
   }
 
   /**
-   * Payout guard: a ticket paid more than `PAYOUT_GUARD_MULTIPLE` entry fees (default 100: twice a full 50-seat
-   * instance) is held for an admin (`/admin` → Integrity → Held settlements: release pays it as it was) instead of
-   * being sent. A real game can hardly get there; a bug or a tampered journal can. Returns the items to send.
+   * Payout guard: a ticket paid more than every ticket seated in its round's instance put in (`roundPool`: no game
+   * can win more than that) is held for an admin (`/admin` → Integrity → Held settlements: release pays it as it was)
+   * instead of being sent. An item without a pool (crash recovery, an older journal) is held above
+   * `PAYOUT_GUARD_MULTIPLE` entry fees (default 100). A real game never gets there; a bug or a tampered journal can.
+   * `PAYOUT_GUARD_MULTIPLE=0` turns the guard off. Returns the items to send.
    */
   private payoutGuard(checked: Checked[]): Checked[] {
     const multiple = this.cfg.chain.payoutGuardMultiple;
@@ -1073,8 +1075,13 @@ export class EvmChain implements ChainGateway {
     return checked.filter((c) => {
       const entry = toLedger(c.entryFee, t.decimals, 'floor');
       const payout = c.item.payout ?? 0;
-      if (c.item.guardCleared || payout <= entry * multiple) return true;
-      const why = `payout guard: ${this.units(payout)} is more than ${multiple} times the ticket's entry fee (${this.units(entry)})`;
+      const pool = c.item.roundPool;
+      const limit = pool !== undefined && pool > 0 ? pool : entry * multiple;
+      if (c.item.guardCleared || payout <= limit) return true;
+      const why =
+        pool !== undefined && pool > 0
+          ? `payout guard: ${this.units(payout)} is more than every ticket of its round put in (${this.units(pool)})`
+          : `payout guard: ${this.units(payout)} is more than ${multiple} times the ticket's entry fee (${this.units(entry)})`;
       if (this.journal.hold(c.item.key, { at: this.now(), score: 100, why, flags: [PAYOUT_GUARD_FLAG] })) {
         this.log(`!!! chain: settlement ${c.item.key} HELD for review — ${why}. Release it in /admin → Integrity if it is right`);
       }

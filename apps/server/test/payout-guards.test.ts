@@ -65,6 +65,20 @@ describe('server-key blast radius', () => {
     expect(h.journal.pending).toHaveLength(0);
   });
 
+  it("a room's settlement is held above what every ticket of its round put in (roundPool), far below 100 entry fees", async () => {
+    const h = await harness();
+    const big = wallet();
+    const s = h.evm.join(1, big);
+    const fair = h.evm.join(1, wallet());
+    for (let i = 0; i < 20; i++) h.evm.join(1, wallet());
+    // 5 tickets of 1,000 were seated in its instance this round: 5,000 is the most any of them can be worth
+    h.journal.commit({ enqueue: [item(s, 5 * K + 1, { roundPool: 5 * K }), item(fair, 5 * K, { roundPool: 5 * K, createdAt: T0 + 1 })] });
+    await h.chain.processPending();
+    expect(h.settled.map((e) => e.payout)).toEqual([5 * K]);
+    expect(h.journal.held().map((i) => i.key)).toEqual([sessionKey(1, big, s.id)]);
+    expect(h.logs.join()).toMatch(/more than every ticket of its round put in/);
+  });
+
   it('defaults to 100 entry fees; PAYOUT_GUARD_MULTIPLE=0 turns it off (the contract still caps a payout at the vault)', async () => {
     expect(loadConfig({} as NodeJS.ProcessEnv).chain.payoutGuardMultiple).toBe(100);
     const h = await harness({ PAYOUT_GUARD_MULTIPLE: '0' });

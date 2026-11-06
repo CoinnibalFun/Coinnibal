@@ -25,6 +25,12 @@ export interface SettlementItem {
   payout?: number;
   /** The ticket's entry fee (ledger units), when known: what a refund after 24 h would take out of the vault. */
   entryFee?: number;
+  /**
+   * Σ entry fees of every ticket seated in this ticket's arena instance during its round, plus loot restored into it
+   * (ledger units): all the value a ticket can have taken from others. The payout guard holds a payout above it.
+   * Absent on items not made by a room (crash recovery, older journals): the guard uses `PAYOUT_GUARD_MULTIPLE` then.
+   */
+  roundPool?: number;
   score: number;
   kills: number;
   xp: number;

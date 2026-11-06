@@ -108,7 +108,7 @@ for (const p of paths) {
     console.log(`${x.policy.padEnd(46)} ${x.syncsPerDay.toFixed(1).padStart(9)}  ${pct(x.meanAbsDev).padStart(10)}  ${pct(x.p95AbsDev).padStart(9)}  ${pct(x.shareOver10).padStart(6)}  ${pct(x.shareOver25).padStart(6)}   ${x.pauseNowP50.toFixed(1).padStart(5)} / ${x.pauseNowP95.toFixed(1)} min   ${x.pauseFixedP50.toFixed(1).padStart(5)} min   ${x.pauseMinPerDayNow.toFixed(1).padStart(12)} / ${x.pauseMinPerDayFixed.toFixed(1)}   ${pct(x.powerUpVsTicketMin, 0)}..${pct(x.powerUpVsTicketMax, 0)}`);
   }
 }
-console.log(`(the shop sells a magnet charge for ${Number(SHOP_DEFAULTS.prices.magnet) / SHOP_DEFAULTS.packSize} tokens whatever the price; ECONOMY.md designed it as 20 % of the $1 ticket at $0.001)`);
+console.log(`(the shop prices a magnet pack at $${(SHOP_DEFAULTS.usdCents.magnet / 100).toFixed(2)}, converted like the tickets: a charge stays 20 % of the $1 ticket at any token price; the token column is the price before the USD packs)`);
 
 // ---- abuse
 const abuse = abuseStudy({ honest: quick ? 16 : 22, rounds: quick ? 3 : 5, seeds: quick ? [3] : [3, 4, 5], cases: ABUSE_CASES, log });

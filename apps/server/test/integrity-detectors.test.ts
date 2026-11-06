@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   detectBellAbuse,
   detectBotInput,
+  detectFreshFeeders,
+  detectNonAggression,
   detectEjectFeeding,
   detectInputTwins,
   detectPairTransfers,
@@ -363,5 +365,58 @@ describe('scoring', () => {
     const a = arena([1, 2, 3], ['x', 'y']);
     const s = snap(a.sessions, a.transfers);
     expect(runDetectors(s, TH)).toEqual(runDetectors(s, TH));
+  });
+});
+
+describe('fresh feeders (sybil feeding)', () => {
+  it('flags a wallet that took most of what many one-ticket wallets lost; a strong honest player who eats newcomers too is not flagged', () => {
+    const a = arena([1, 2, 3, 4, 5], ['farmer', 'shark']);
+    const transfers = [...a.transfers];
+    const sessions = [...a.sessions];
+    // every round two fresh wallets (one ticket each) join and lose their whole ticket to the farmer
+    for (const r of [1, 2, 3, 4, 5]) {
+      for (const k of [0, 1]) {
+        const f = sess(`sybil${r}-${k}`, r);
+        sessions.push(f);
+        transfers.push(tr(f, a.ticket('farmer', r), FEE, f.joinedAt + 20_000 + k, 12));
+      }
+      // the shark (a strong player) eats crowd tickets and one newcomer a round: its share of newcomer losses is fair
+      const n = sess(`newbie${r}`, r);
+      sessions.push(n);
+      transfers.push(tr(n, a.ticket('shark', r), FEE, n.joinedAt + 30_000, 12));
+      for (let i = 0; i < 3; i++) transfers.push(tr(a.ticket(`crowd${i}`, r), a.ticket('shark', r), FEE, T0 + r * ROUND + 60_000 + i, 12));
+      const m = sess(`newbie${r}b`, r);
+      sessions.push(m);
+      transfers.push(tr(m, a.ticket(`crowd${r % 10}`, r), FEE, m.joinedAt + 40_000, 12));
+    }
+    const out = detectFreshFeeders(snap(sessions, transfers), TH);
+    expect(out.map((c) => [c.beneficiary, c.subtype])).toEqual([['farmer', 'fresh_feeders']]);
+    expect(out[0].evidence).toMatchObject({ feeders: 10, rounds: 5 });
+    expect(out[0].score).toBeGreaterThanOrEqual(90);
+    // in the scoped snapshot (the auto-hold's) the farmer is flagged the same way
+    expect(detectFreshFeeders(scopeSnapshot(snap(sessions, transfers), 'farmer'), TH).map((c) => c.beneficiary)).toEqual(['farmer']);
+  });
+});
+
+describe('non-aggression (teaming)', () => {
+  it('flags two wallets often within eating range that never eat each other while they eat others; a pair that does eat is not', () => {
+    const sessions: SessionSummary[] = [];
+    const transfers: IntegrityTransfer[] = [];
+    for (const r of [1, 2, 3, 4]) {
+      const big = sess('big', r, { near: {} });
+      const pal = sess('pal', r, { near: { big: 400 } });
+      const rival = sess('rival', r, { near: { big: 400 } });
+      sessions.push(big, pal, rival);
+      // big eats the rival every round it gets close; never the pal, though as close as often
+      transfers.push(tr(rival, big, FEE, rival.joinedAt + 50_000, 5));
+      for (let i = 0; i < 4; i++) {
+        const v = sess(`v${r}-${i}`, r, { near: { big: 100 } });
+        sessions.push(v);
+        transfers.push(tr(v, big, FEE, v.joinedAt + 60_000 + i, 5));
+      }
+    }
+    const out = detectNonAggression(snap(sessions, transfers), TH);
+    expect(out.map((c) => [c.wallets, c.subtype])).toEqual([[['big', 'pal'], 'non_aggression']]);
+    expect(out[0].score).toBeLessThan(90);
   });
 });
