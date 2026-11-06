@@ -271,6 +271,37 @@ describe('room workers', () => {
     b.ws.close();
   });
 
+  it('a test arena in a worker: the official ticket journaled by the main thread; a crash settles it once and the test arena reopens', async () => {
+    await until(() => !!app.rooms.get('test-1'), 8000);
+    const w = testWallet(0xa0f1);
+    const t = ticket(w);
+    chain.sessions.set(`1:${w}`, t);
+    const c = await Client.open(port, app.auth.issueToken(w));
+    c.send({ t: 'join', room: 'arena:1:test', name: 'TestCrash', skin: 0 });
+    const j = await c.wait('joined');
+    expect(j.room).toMatchObject({ id: 'test-1', test: true, arenaId: 1 });
+    expect(j.value).toBe(10_000_000);
+    await until(() => app.journal.live().some((l) => l.session === t.key && l.roomId === 'test-1'));
+    expect(app.rooms.findArenaStake(1, w)?.room.id).toBe('test-1');
+    const room = app.rooms.get('test-1') as RemoteRoom;
+    await until(() => room.botCounts().bots > 0, 8000);
+
+    app.rooms.pool!.crash(room.slot.index);
+    await until(() => app.journal.settlements().some((p) => p.key === t.key));
+    const items = app.journal.settlements().filter((p) => p.key === t.key);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ reason: 'crash', player: w });
+    // whatever bots ate of it lies in the journaled loot, queued to burn: nothing created, nothing lost
+    const burned = app.journal.pending.filter((p) => p.kind === 'sweep' && p.roomId === 'test-1').reduce((n, p) => n + (p.kind === 'sweep' ? p.amount : 0), 0);
+    expect((items[0].payout ?? 0) + burned).toBe(10_000_000);
+    await until(() => c.closeCode !== null);
+    // the standing rooms come back, the test arena with them
+    await until(() => !!app.rooms.get('arena-1-1') && !!app.rooms.get('test-1') && app.rooms.get('test-1') !== room, 10_000);
+    app.journal.remove(t.key);
+    for (const p of [...app.journal.pending]) if (p.kind === 'sweep' && p.roomId === 'test-1') app.journal.remove(p.key);
+    chain.sessions.delete(`1:${w}`);
+  }, 30_000);
+
   it('a crashed worker: its live tickets are settled once at their journaled value, its sockets closed, the worker respawned', async () => {
     const w = testWallet(0xa003);
     const t = ticket(w);
@@ -461,7 +492,7 @@ describe('room workers: the money helpers', () => {
 });
 
 describe('room workers: practice bots', () => {
-  it('a free custom room in a worker fields its practice bots; arenas in a worker have none', async () => {
+  it('a free custom room in a worker fields its practice bots; official arenas in a worker have none, test arenas do', async () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-bots-'));
     const ch = new FakeChain();
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
@@ -477,7 +508,16 @@ describe('room workers: practice bots', () => {
       await until(() => room.botCounts().bots === 3, 20_000);
       await a.rooms.ensureArenaRooms();
       await until(() => a.rooms.roomCounts().some((r) => r.kind === 'arena'), 20_000);
-      for (const r of a.rooms.roomCounts()) if (r.kind !== 'private') expect(r.bots).toBe(0);
+      // official arenas and ponds field none; only the testnet's test arenas (on by default here) do
+      for (const r of a.rooms.roomCounts()) if (r.kind !== 'private' && !r.id.startsWith('test-')) expect(r.bots).toBe(0);
+      await until(() => a.rooms.roomCounts().some((r) => r.id === 'test-1' && r.bots > 0), 20_000);
+      // the admin's bot settings reach the test arenas in their workers (more bots arrive one by one, about 4 s apart)
+      a.rooms.testArenas.update({ bots: 3 });
+      await until(() => a.rooms.roomCounts().filter((r) => r.id.startsWith('test-')).every((r) => r.bots === 3), 30_000);
+      expect(a.rooms.testArenaView().rooms.map((r) => [r.id, r.bots, r.thread?.startsWith('w')])).toEqual([
+        ['test-1', 3, true],
+        ['test-2', 3, true],
+      ]);
     } finally {
       await a.close();
     }

@@ -195,13 +195,18 @@ export interface UiState {
   /** Lobby page (mirrored in the URL hash: `#ranks`, `#profile`, `#docs`; the guide also at `/docs`). */
   page: LobbyPage;
   /** Death / receipt "New ticket": the lobby selects this ticket and opens its confirm sheet. */
-  lobbyIntent: { ticket: 'practice' | `arena:${number}`; open: boolean; at: number } | null;
+  lobbyIntent: { ticket: 'practice' | `arena:${number}` | `test:${number}`; open: boolean; at: number } | null;
   /**
    * A paid custom room's invite was opened: the next ticket of `arenaId` (bought or resumed) is seated
    * in that private arena instance (`arena:<id>:<code>`) instead of a public one, until `endsAt` or
    * until the player lets it go (`rooms/invite.ts`).
    */
   paidSeat: { code: string; arenaId: number; name: string; endsAt: number } | null;
+  /**
+   * The player picked the test arena of `arenaId` (testnet only): its tickets (bought or resumed) are seated in
+   * `arena:<id>:test` instead of an official instance, until an official ticket is picked (`rooms/invite.ts`).
+   */
+  testSeat: number | null;
   auth: AuthState | null;
   /** The server refused a room entry with `game_closed`: the game is admin-only and this session is no admin. */
   gameClosed: boolean;
@@ -314,6 +319,7 @@ export const useUi = create<UiState>(() => ({
   page: pageFromLocation(),
   lobbyIntent: null,
   paidSeat: null,
+  testSeat: null,
   auth: null,
   gameClosed: false,
   settings: loadSettings(),
@@ -402,6 +408,8 @@ if (typeof window !== 'undefined') {
 
 /** "New ticket": back to the lobby with this ticket selected (and its confirm sheet open for arenas). */
 export function requestTicket(arenaId: number | null): void {
-  useUi.setState({ lobbyIntent: { ticket: arenaId === null ? 'practice' : `arena:${arenaId}`, open: arenaId !== null, at: Date.now() } });
+  // after a test arena's game, "New ticket" stays with the test arena
+  const test = arenaId !== null && useUi.getState().testSeat === arenaId;
+  useUi.setState({ lobbyIntent: { ticket: arenaId === null ? 'practice' : test ? `test:${arenaId}` : `arena:${arenaId}`, open: arenaId !== null, at: Date.now() } });
 }
 export const closeModal = () => useUi.setState({ modal: null });

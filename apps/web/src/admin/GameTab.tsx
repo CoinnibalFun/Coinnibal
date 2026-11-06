@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { SiteApiError, type MapAdminView, type MapSettingsPatch } from "../site/api";
 import { ArenaScalingCard } from "./ArenaScalingCard";
+import { TestArenasCard } from "./TestArenasCard";
 import { ArenaTab } from "./ArenaTab";
 import { CustomRoomsCard } from "./CustomRoomsCard";
 import { LeaderboardCard } from "./LeaderboardCard";
@@ -488,6 +489,7 @@ export function GameTab({ ctx }: { ctx: ChainCtx }) {
       <StartStopCard ctx={ctx} />
       <MapsCard ctx={ctx} />
       <ArenaScalingCard ctx={ctx} />
+      <TestArenasCard ctx={ctx} />
       <CustomRoomsCard ctx={ctx} />
       <ShopCard ctx={ctx} />
       <LeaderboardCard ctx={ctx} />

@@ -199,6 +199,11 @@ export interface RoomInfo {
   custom?: CustomRoomSummary;
   /** Arena rooms: the round in play (shared by every arena and instance). */
   round?: RoundInfo;
+  /**
+   * A test arena (testnet only, `test-arenas.ts`): the official arena's tickets, rounds and payouts, plus practice
+   * bots. Entered with `arena:<id>:test`; never picked by quick play.
+   */
+  test?: true;
 }
 
 /** An arena round as clients see it (Unix ms on the server clock; see `serverNow`). */
@@ -316,7 +321,7 @@ export interface ProfileSummary {
   premiumSkins: number;
 }
 
-export type JoinTarget = 'practice' | `private:${string}` | `arena:${number}`;
+export type JoinTarget = 'practice' | `private:${string}` | `arena:${number}` | `arena:${number}:test`;
 
 export type ClientMessage =
   | { t: 'hello'; v: number }
@@ -605,11 +610,12 @@ export type ErrorCode =
 
 /**
  * Parse a join target into its parts. Returns null for malformed input. `arena:<id>:<CODE>` seats
- * an arena ticket in the paid custom room `CODE` (an invite-only instance of that arena).
+ * an arena ticket in the paid custom room `CODE` (an invite-only instance of that arena);
+ * `arena:<id>:test` in that arena's test arena (testnet only, `test-arenas.ts`).
  */
 export function parseJoinTarget(
   target: string,
-): { mode: 'practice' } | { mode: 'private'; code: string | null } | { mode: 'arena'; arenaId: number; code?: string } | null {
+): { mode: 'practice' } | { mode: 'private'; code: string | null } | { mode: 'arena'; arenaId: number; code?: string; test?: true } | null {
   if (target === 'practice') return { mode: 'practice' };
   if (target.startsWith('private:')) {
     const code = target.slice(8).toUpperCase();
@@ -617,10 +623,11 @@ export function parseJoinTarget(
     return /^[A-Z0-9]{5}$/.test(code) ? { mode: 'private', code } : null;
   }
   if (target.startsWith('arena:')) {
-    const m = /^(\d{1,5})(?::([A-Za-z0-9]{5}))?$/.exec(target.slice(6));
+    const m = /^(\d{1,5})(?::([A-Za-z0-9]{5}|test))?$/.exec(target.slice(6));
     if (!m) return null;
     const id = Number(m[1]);
     if (id > 65535) return null;
+    if (m[2] === 'test') return { mode: 'arena', arenaId: id, test: true };
     return m[2] ? { mode: 'arena', arenaId: id, code: m[2].toUpperCase() } : { mode: 'arena', arenaId: id };
   }
   return null;

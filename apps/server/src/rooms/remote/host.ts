@@ -507,6 +507,9 @@ export class RoomHost {
       case 'map':
         this.rooms.get(cmd.hid)?.setMapScale(cmd.scale);
         return;
+      case 'bots':
+        this.rooms.get(cmd.hid)?.setBots(cmd.count, cmd.difficulty);
+        return;
       case 'avatar':
         for (const r of this.rooms.values()) r.clearAvatar(cmd.wallet);
         return;

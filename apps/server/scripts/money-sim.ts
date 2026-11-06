@@ -6,6 +6,7 @@
  *   pnpm -F @elymum/server money-sim                          # 4 seeds x 500 rounds on the model
  *   pnpm -F @elymum/server money-sim --rounds 2000 --seeds 2
  *   pnpm -F @elymum/server money-sim --hardhat --rounds 150   # the real contract on a fresh hardhat node
+ *   pnpm -F @elymum/server money-sim --test-arenas            # plus a test arena with practice bots per arena
  */
 import { DEFAULT_FAULTS, fakeSimChain, runMoneySim, type SimChain, type SimReport } from '../test/money-sim';
 
@@ -17,6 +18,7 @@ const hardhat = process.argv.includes('--hardhat');
 const rounds = arg('rounds', hardhat ? 150 : 500);
 const seeds = arg('seeds', hardhat ? 1 : 4);
 const players = arg('players', 14);
+const testArenas = process.argv.includes('--test-arenas') ? { bots: arg('bots', 10), difficulty: 'mixed' as const } : undefined;
 
 async function main(): Promise<void> {
   const reports: SimReport[] = [];
@@ -28,7 +30,7 @@ async function main(): Promise<void> {
       sim = await hardhatSimChain({ players, seed });
     } else sim = fakeSimChain({ players, seed });
     try {
-      const r = await runMoneySim(sim, { seed, rounds, faults: DEFAULT_FAULTS, passEvery: arg('pass', 6), instances: arg('instances', 2) });
+      const r = await runMoneySim(sim, { seed, rounds, faults: DEFAULT_FAULTS, passEvery: arg('pass', 6), instances: arg('instances', 2), testArenas });
       reports.push(r);
       console.log(JSON.stringify(r, null, 1));
     } finally {

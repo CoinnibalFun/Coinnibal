@@ -87,6 +87,7 @@ export function TicketList({
     const maintenance = gate?.kind === 'maintenance';
     const soon = gate?.kind === 'soon';
     const closed = gate?.kind === 'offline' || maintenance || soon;
+    const test = tk.test === true;
     const status =
       !practice && held?.arenaId === tk.arenaId
         ? t('lo.held')
@@ -107,7 +108,8 @@ export function TicketList({
     return (
       <motion.div
         key={tk.key}
-        className={`kl-ticket${practice ? ' is-practice' : ''}${closed ? ' is-closed' : ''}`}
+        className={`kl-ticket${practice ? ' is-practice' : ''}${test ? ' is-test' : ''}${closed ? ' is-closed' : ''}`}
+        data-test-arena={test ? tk.arenaId : undefined}
         style={style}
         initial={reduced ? false : { opacity: 0, y: -14, rotate: i % 2 ? 0.8 : -0.8 }}
         animate={{ opacity: 1, y: 0, rotate: 0 }}
@@ -138,6 +140,11 @@ export function TicketList({
           <span className="kl-ticket__main">
             <span className="kl-ticket__head">
               <span className="kb-ticket__title">{name}</span>
+              {test && (
+                <span className="kl-ticket__test mono" data-testid="test-badge">
+                  {t('lo.testBadge')}
+                </span>
+              )}
             </span>
             <span className="kb-ticket__meta mono" title={typeof meta === 'string' ? meta : undefined}>
               {tk.humans > 0 && <span className="kl-live-dot" aria-hidden="true" />}
@@ -157,6 +164,7 @@ export function TicketList({
             )}
             {!practice && !closed && <RoundLine arenaId={tk.arenaId!} />}
             {!practice && !soon && <span className={`kl-ticket__fee mono${mine.discount ? ' is-holder' : ''}`}>{feeLine}</span>}
+            {test && <span className="kl-ticket__fee kl-ticket__testnote mono">{t('lo.testNote')}</span>}
             {practice && <span className="kl-ticket__fee mono">{t('lo.practiceNote')}</span>}
           </span>
         </Ticket>
@@ -164,17 +172,25 @@ export function TicketList({
     );
   };
 
-  const arenas = tickets.filter((tk) => tk.arenaId !== null);
+  const arenas = tickets.filter((tk) => tk.arenaId !== null && !tk.test);
+  // the testnet's test arenas (practice bots, the same tickets): after every official arena
+  const tests = tickets.filter((tk) => tk.test);
   const warmups = tickets.filter((tk) => tk.arenaId === null);
   return (
     <TicketGroup label={t('lo.tickets')} value={value} onChange={(v) => onChange(v as TicketKey)} className="kl-tickets">
       {arenas.map((tk, i) => row(tk, i))}
+      {tests.length > 0 && (
+        <p className="kl-tickets__divider kl-tickets__divider--test mono" aria-hidden="true">
+          <span>{t('lo.testDivider')}</span>
+        </p>
+      )}
+      {tests.map((tk, i) => row(tk, arenas.length + i))}
       {warmups.length > 0 && (
         <p className="kl-tickets__divider mono" aria-hidden="true">
           <span>{t('lo.practiceDivider')}</span>
         </p>
       )}
-      {warmups.map((tk, i) => row(tk, arenas.length + i))}
+      {warmups.map((tk, i) => row(tk, arenas.length + tests.length + i))}
     </TicketGroup>
   );
 }

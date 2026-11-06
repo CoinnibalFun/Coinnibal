@@ -17,6 +17,7 @@ import type { Limiter } from './net/limiter';
 import { Gateway } from './net/gateway';
 import { LoadShedder } from './net/shedder';
 import { ArenaScalingStore } from './rooms/arena-scaler';
+import { TestArenaStore } from './rooms/test-arenas';
 import { MapSettingsStore } from './rooms/map-settings';
 import { ShareService } from './site/shares';
 import { shareCardSelfCheck } from './site/share-card';
@@ -252,6 +253,8 @@ export async function createApp(
       shop,
       // the server's own records: every finished game of a signed-in wallet counts in its profile
       onGameOver: (e) => {
+        // a test arena (testnet, with bots): its games count nowhere official (no card, no profile stats)
+        if (e.room.opts.test) return;
         const s = e.stats;
         // a room's end (a bell, a custom room's end): the card of my place on its final board, for "Share on X"
         if (e.conn && s.finalRank && s.finalOf) {
@@ -267,6 +270,7 @@ export async function createApp(
       },
       // a person ate a big person: the killer's card (one every few seconds at most)
       onNotableKill: (e) => {
+        if (e.room.opts.test) return;
         const card = shares.kill({ room: e.room, player: e.player, wallet: e.conn.wallet }, e.conn.wallet ?? `conn:${e.conn.id}`, e);
         if (card) e.conn.send({ t: 'share', kind: 'kill', id: card.id, victim: e.victim });
       },
@@ -275,6 +279,8 @@ export async function createApp(
     mapSettings,
     // the arena instance scaler's settings (DATA_DIR/site/arena-scaling.json)
     new ArenaScalingStore(persist ? cfg.dataDir : null, log),
+    // "Test arenas with bots" (testnet only; DATA_DIR/site/test-arenas.json; refused and ignored on the mainnet)
+    new TestArenaStore(cfg.chain.chainId, persist ? cfg.dataDir : null, log),
   );
   // custom rooms: paid with a gas-token transfer to the treasury (checked on chain), restored after a restart
   let paymentReader: PaymentReader | null | undefined = opts.paymentReader;
@@ -312,6 +318,7 @@ export async function createApp(
   site.setLoad(() => gameLoad(rooms.loadStats()));
   site.setMaps({ store: rooms.mapSettings, live: () => rooms.roomCounts(), log });
   site.setScaler(rooms.scaler);
+  site.setTestArenas(rooms);
   chain.setLiveSessionProvider(() => rooms.liveSessions());
   // the game token was set on chain (picked up by the 30 s config watcher, no restart): attach the
   // arenas now (a fresh read of the arena list) instead of waiting for the next arena timer

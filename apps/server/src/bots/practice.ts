@@ -6,16 +6,21 @@ import { BotBrain, levelFor, type BotLevel } from './brain';
 
 /**
  * Practice bots: the only bots Elymum has. A creator of a FREE custom room may ask for some (count and
- * difficulty) to practise alone or with friends. They never enter a room with stakes (the room refuses
- * to build them there), never hold value, see only what a person of their size would see (`BotBrain`),
- * and are labelled: every bot carries `PlayerFlag.Bot` (the client shows the BOT tag) and a "Bot N"
- * name. The room keeps exactly `count` of them: an eaten bot comes back a few seconds later.
+ * difficulty) to practise alone or with friends, and the testnet's test arenas (`test-arenas.ts` in shared) are
+ * populated with them. They never enter any other room with stakes (the room refuses to build them there), never
+ * hold value (no ticket, never in the arena ledger, never pick up loot), see only what a person of their size would
+ * see (`BotBrain`), and are labelled: every bot carries `PlayerFlag.Bot` (the client shows the BOT tag) and a
+ * "Bot N" name. The room keeps exactly `count` of them: an eaten bot comes back a few seconds later.
  */
 
 export interface PracticeBotsOptions {
-  /** Bots in the room, 0..`CUSTOM_LIMITS.botsMax`. */
+  /** Bots in the room, 0..`max` (default `CUSTOM_LIMITS.botsMax`). */
   count: number;
   difficulty: CustomDifficulty;
+  /** Most bots allowed (a test arena allows `TEST_ARENA_BOTS.max`); default `CUSTOM_LIMITS.botsMax`. */
+  max?: number;
+  /** Bots arrive one by one, about this many ms apart (± 40 %); absent / 0: all at once. */
+  arriveMs?: number;
 }
 
 /** An eaten bot walks back in after this long (ms). */
@@ -32,15 +37,54 @@ export class PracticeBots {
   readonly bots = new Map<number, PracticeBot>();
   /** Slot → when its bot comes back (eaten bots). */
   private readonly comeback = new Map<number, number>();
-  readonly count: number;
+  count: number;
+  /** Bots eaten so far (the admin's live status, the money simulation). */
+  eaten = 0;
+  opts: PracticeBotsOptions;
 
   constructor(
     private readonly world: World,
-    readonly opts: PracticeBotsOptions,
+    opts: PracticeBotsOptions,
     private readonly rng: Rng,
   ) {
-    this.count = Math.max(0, Math.min(CUSTOM_LIMITS.botsMax, Math.floor(opts.count)));
-    for (let slot = 1; slot <= this.count; slot++) this.comeback.set(slot, world.now);
+    this.opts = { ...opts };
+    this.count = this.clamp(opts.count);
+    this.schedule(1, this.count, world.now);
+  }
+
+  private clamp(n: number): number {
+    return Math.max(0, Math.min(this.opts.max ?? CUSTOM_LIMITS.botsMax, Math.floor(n)));
+  }
+
+  /** Slots `from..to` arrive from `at`: at once, or one by one (`arriveMs`). */
+  private schedule(from: number, to: number, at: number): void {
+    const gap = this.opts.arriveMs ?? 0;
+    let t = at;
+    for (let slot = from; slot <= to; slot++) {
+      this.comeback.set(slot, t);
+      if (gap > 0) t += gap * (0.6 + this.rng() * 0.8);
+    }
+  }
+
+  /**
+   * New count and difficulty (a test arena's admin settings, applied live). New slots arrive one by one; a slot
+   * above the new count leaves at once (a bot holds no value, nothing is settled). The difficulty applies to bots
+   * that arrive from now on (a playing bot keeps its level until it is eaten).
+   */
+  reconfigure(count: number, difficulty: CustomDifficulty): number[] {
+    this.opts = { ...this.opts, difficulty };
+    const next = this.clamp(count);
+    const gone: number[] = [];
+    if (next > this.count) this.schedule(this.count + 1, next, this.world.now);
+    for (const [pid, bot] of [...this.bots]) {
+      if (bot.slot <= next) continue;
+      this.bots.delete(pid);
+      this.world.removePlayer(pid);
+      gone.push(pid);
+    }
+    for (const slot of [...this.comeback.keys()]) if (slot > next) this.comeback.delete(slot);
+    this.count = next;
+    return gone;
   }
 
   isBot(pid: number): boolean {
@@ -75,6 +119,7 @@ export class PracticeBots {
     const bot = this.bots.get(pid);
     if (!bot) return;
     this.bots.delete(pid);
+    this.eaten++;
     const { min, max } = BOT_RESPAWN_MS;
     this.comeback.set(bot.slot, now + min + this.rng() * (max - min));
   }
