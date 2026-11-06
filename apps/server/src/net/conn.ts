@@ -61,8 +61,10 @@ export class Conn implements RoomConn {
 
   /** The last message from the client (Unix ms): an idle lobby guest is the first to go when the server is full. */
   lastMsgAt = Date.now();
-  /** Counted in its IP's and subnet's guest limit (until it signs in: signed-in sockets are not limited per IP). */
+  /** Counted in its IP's and subnet's guest limit (until it signs in: signed-in sockets have a far higher bound). */
   countedAsGuest = true;
+  /** Counted in its IP's signed-in bound (`SIGNED_PER_IP_FACTOR`). */
+  countedAsSigned = false;
   /** Admitted with a session token that holds a live arena stake (the reserve is theirs). */
   priority: 'stake' | 'signed' | null = null;
 

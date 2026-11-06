@@ -95,6 +95,31 @@ describe('connection slots', () => {
     await closeAll();
   });
 
+  it('one address signing in with many throwaway wallets is still bounded (8 x the guest limit per IP)', async () => {
+    const { SIGNED_PER_IP_FACTOR } = await import('../src/net/gateway');
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-slots2-')), GAME_ACCESS: 'public', NODE_ENV: 'development', MAX_CONNECTIONS: '100', MAX_CONNECTIONS_PER_IP: '1' } as unknown as NodeJS.ProcessEnv);
+    const other = await createApp(cfg, { chain: new NullChain(), log: () => {}, persist: false });
+    const p2 = await other.listen();
+    const socks: WebSocket[] = [];
+    const tryOpen = (token: string) =>
+      new Promise<number | 'open'>((resolve) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${p2}/ws`, ['elymum', `elymum.auth.${token}`], { headers: { 'X-Forwarded-For': '203.0.113.77' } });
+        socks.push(ws);
+        ws.on('error', () => {});
+        ws.once('open', () => resolve('open'));
+        ws.once('unexpected-response', (_q, r) => resolve(r.statusCode ?? 0));
+      });
+    try {
+      const got: (number | 'open')[] = [];
+      for (let i = 0; i < SIGNED_PER_IP_FACTOR + 1; i++) got.push(await tryOpen(other.auth.issueToken(testSigner().address)));
+      expect(got.filter((g) => g === 'open')).toHaveLength(SIGNED_PER_IP_FACTOR);
+      expect(got.at(-1)).toBe(429);
+    } finally {
+      for (const ws of socks) ws.terminate();
+      await other.close();
+    }
+  });
+
   it('a ticket holder reconnecting always gets in, even when every slot is taken by signed-in players', async () => {
     for (let i = 0; i < 10; i++) await open(`192.0.2.${i}`, app.auth.issueToken(testSigner().address));
     await expect(open('192.0.2.200', app.auth.issueToken(testSigner().address))).rejects.toThrow(/HTTP 429/);
