@@ -1,0 +1,61 @@
+/* "How to get $ELYMUM" (GetTokensSheet.tsx). */
+.gt-body {
+  display: grid;
+  gap: 14px;
+}
+.gt-lede {
+  margin: 0;
+  line-height: 1.5;
+}
+.gt-steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gt-step {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.gt-step__n {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 2.5px solid var(--outline);
+  border-radius: 50%;
+  background: var(--sun);
+  color: var(--ink-fixed);
+  font-weight: 700;
+}
+.gt-step__t {
+  display: grid;
+  gap: 4px;
+  padding-top: 4px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.gt-step__go {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  min-height: 32px;
+}
+.gt-token {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.gt-token code {
+  font-size: 12px;
+  /* an address keeps its checksum letters (the mono style capitalises the line) */
+  text-transform: none;
+  letter-spacing: 0;
+  word-break: break-all;
+}
