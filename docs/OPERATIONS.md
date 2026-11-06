@@ -120,7 +120,19 @@ public info API (`GAS_PRICE_URL`). The UI always shows the ETH amount with its U
   itself: a non-holder who buys one is refused at the seat and gets the entry fee back by the stale-session refund.
 - **Money:** mint proceeds stay in the NFT contract until **Withdraw** sends the whole balance to the treasury.
 - **Metadata:** `tokenURI = baseURI + id`, served by the server at `/api/nft/<id>` (JSON) and `/api/nft/<id>.svg`.
-  Change the base URI if the domain changes; **Freeze metadata** is forever.
+  Change the base URI if the domain changes; **Freeze metadata** is forever (never before the reveal: the reveal
+  needs one `setBaseURI` to tell marketplaces to refresh).
+- **Emblem reveal** (docs/NFT-DESIGN.md, "Fair mint"): every token shows the sealed emblem until the reveal.
+  1. Before the mint opens: read `GET /api/nft/provenance` and put the commitment on chain:
+     `setContractURI("<PUBLIC_URL>/api/nft/contract?provenance=<provenance>")` (a timestamped transaction), and
+     post the seed hash and the provenance hash publicly.
+  2. After the mint (phase **Closed**, or sold out): `POST /api/admin/nft/reveal/schedule {}` fixes a reveal block
+     50 blocks ahead (`{"block": n}` for another one, at least 10 ahead).
+  3. Once that block is mined: `POST /api/admin/nft/reveal {}`. The seed is published, the offset comes from the
+     block's hash, and every token shows its emblem. Then `setBaseURI` with the same URI (it emits ERC-4906
+     `BatchMetadataUpdate`, so marketplaces refresh).
+  Never reopen the mint after the reveal (the next ids' art would be known). `GET /api/admin/nft` shows the state,
+  the rarity counts and the mint; `pnpm -F @elymum/server nft:report --seed <seed>` re-checks a collection.
 - Supply can only go down (`setMaxSupply`, never below what is minted). Owner mints are for giveaways and the team.
 
 ## Integrity (cheat and collusion detection)

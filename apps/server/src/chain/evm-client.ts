@@ -102,6 +102,8 @@ export interface EvmClient {
   deployBlock(address: Address): Promise<bigint | null>;
   /** Block of a mined transaction; null when unknown. */
   txBlock(hash: Hash): Promise<bigint | null>;
+  /** Hash of block `n`; null when it is not mined yet (the NFT reveal's entropy). */
+  blockHash(n: bigint): Promise<Hash | null>;
   /** Simulates (throws the decoded revert) then sends `call` signed by the server key. */
   send(call: ContractCall): Promise<Hash>;
   /**
@@ -302,6 +304,14 @@ export function viemEvmClient(
   return {
     ...viemReads(publicClient),
     address: account.address,
+    blockHash: async (n) => {
+      try {
+        return (await publicClient.getBlock({ blockNumber: n })).hash;
+      } catch (err) {
+        if ((err as Error)?.name === 'BlockNotFoundError') return null;
+        throw err;
+      }
+    },
     codeCheck: (address, kind) => checkDeployedCode(publicClient, address, kind),
     hasCode: async (address) => {
       const code = await publicClient.getCode({ address });

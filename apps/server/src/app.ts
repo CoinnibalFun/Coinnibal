@@ -41,6 +41,7 @@ import { Journal } from './stake/journal';
 import { BoostInventory } from './shop/inventory';
 import { ShopService } from './shop/service';
 import { ShopSettingsStore } from './shop/settings';
+import { NFT_COLLECTION_FILE, NftCollection } from './site/nft/collection';
 
 export interface App {
   server: Server;
@@ -59,8 +60,10 @@ export interface App {
   stateChainId: number | null;
   /** Imported testnet emblem holders (`DATA_DIR/site/holder-wl.json`). */
   holderWl: HolderWlStore;
-  /** The NFT mint: state, the gas token's USD price, holders, allowlist, metadata. */
+  /** The NFT mint: state, the gas token's USD price, holders, allowlist. */
   mint: MintService;
+  /** The emblem collection: committed seed, provenance, reveal, metadata and art (`DATA_DIR/chains/<id>/nft-collection.json`). */
+  nft: NftCollection;
   /** Keeps the mint price at $1 in the gas token when the server key is the NFT's price keeper; null without a chain. */
   priceKeeper: PriceKeeper | null;
   /** Cheat and collusion detection: telemetry, flags, bans, auto-hold (`/api/admin/integrity/*`). */
@@ -171,10 +174,12 @@ export async function createApp(
       if (id === ROBINHOOD_TESTNET_CHAIN_ID) return viemHolderReader(cfg.chain.testnetRpcUrl || NETWORKS.testnet.rpcUrl);
       return null;
     });
+  const nft = new NftCollection({ file: chainState ? join(chainState, NFT_COLLECTION_FILE) : null, size: cfg.nft.size, seed: cfg.nft.seed, style: cfg.nft.style, log });
   const site = new SiteApi(cfg, auth, siteStore, opts.siteLimits, {
     chain,
     contracts,
     mint,
+    nft,
     profiles,
     journal,
     baseUrl: (req) => publicBaseUrl(cfg, req),
@@ -361,6 +366,7 @@ export async function createApp(
     stateChainId,
     holderWl,
     mint,
+    nft,
     priceKeeper,
     integrity,
     customRooms,

@@ -202,6 +202,39 @@ export interface SiteCounts {
   collab: Record<CollabStatus, number> & { total: number; closed: number; wallets: number };
 }
 
+/** `GET /api/nft/provenance`: what verifies the emblem collection (the seed only after the reveal). */
+export interface NftProvenance {
+  size: number;
+  seedHash: string;
+  provenance: string;
+  committedAt: number;
+  /** The scheduled reveal block (decimal), null until scheduled. */
+  revealBlock: string | null;
+  revealed: boolean;
+  seed: string | null;
+  blockHash: string | null;
+  offset: number | null;
+  algorithm: string;
+}
+
+/** `GET /api/nft/rarity`: counts over the whole collection (nothing about which token gets what). */
+export interface NftRarityStats {
+  size: number;
+  quotas: Record<string, number>;
+  tiers: Record<string, number>;
+  layers: Record<string, Record<string, number>>;
+  duplicates: number;
+}
+
+/** `GET /api/admin/nft`. */
+export interface NftCollectionAdminView {
+  provenance: NftProvenance;
+  stats: NftRarityStats;
+  style: 'vector' | 'pixel';
+  currentBlock: string | null;
+  mint: { phase: string; totalSupply: number; maxSupply: number; soldOut: boolean } | null;
+}
+
 /** Error codes of `/api/site/*`, `/api/admin/*` and `/api/auth/login` (`{ error, message?, field? }`). */
 export type SiteErrorCode =
   | 'bad_request'

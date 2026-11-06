@@ -79,6 +79,7 @@ One Docker container serves the game server and the web client on the same origi
 | `MAX_CONNECTIONS`, `MAX_CONNECTIONS_PER_IP`, `MAX_CONNECTIONS_PER_SUBNET` | `600`, `8`, `48` (defaults): WebSocket caps (total, per IP, per IPv4 /24 or IPv6 /64) |
 | `LOAD_SHED` | on by default in production: new free games, then new sockets and arena seats wait while the server is overloaded |
 | `MINT_USD_CENTS` | `100` (the $1 target; default) |
+| `NFT_COLLECTION_SIZE`, `NFT_ART_STYLE` | `5000` (= the NFT's max supply), `vector` (or `pixel`): the emblem collection (docs/NFT-DESIGN.md). Leave `NFT_COLLECTION_SEED` empty: the seed is generated and committed on first boot (`DATA_DIR/chains/<id>/nft-collection.json`, keep it in the backups) |
 | `TOKEN_SYMBOL` | `$ELYMUM` (default; display only) |
 | `GAME_ACCESS` | leave empty: the `/admin` setting decides (`public` on the testnet, `admins` on mainnet until you open the mint) |
 

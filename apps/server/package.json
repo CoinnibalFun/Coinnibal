@@ -17,7 +17,9 @@
     "typecheck": "tsc --noEmit",
     "integrity-sim": "tsx scripts/integrity-sim.ts",
     "arena-sim": "tsx scripts/arena-scaling-sim.ts",
-    "e2e": "tsx scripts/e2e.ts"
+    "e2e": "tsx scripts/e2e.ts",
+    "nft:report": "tsx scripts/nft/report.ts",
+    "nft:sheets": "tsx scripts/nft/sheets.ts"
   },
   "dependencies": {
     "@elymum/art": "workspace:*",

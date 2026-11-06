@@ -63,6 +63,9 @@ describe('chain env (EVM)', () => {
     const cfg = loadConfig({} as NodeJS.ProcessEnv);
     expect(cfg.chain).toMatchObject({ rpcUrl: null, publicRpcUrl: null, serverKey: null, arenaAddress: null, nftAddress: null, tokenSymbol: '$ELYMUM' });
     expect(cfg.mint).toEqual({ usdCents: 100, gasPriceUrl: 'https://api.hyperliquid.xyz/info' });
+    expect(cfg.nft).toEqual({ size: 5000, seed: null, style: 'vector' });
+    expect(loadConfig({ NFT_ART_STYLE: 'pixel', NFT_COLLECTION_SIZE: '3333', NFT_COLLECTION_SEED: ' 0xabc ' } as NodeJS.ProcessEnv).nft).toEqual({ size: 3333, seed: '0xabc', style: 'pixel' });
+    expect(loadConfig({ NFT_ART_STYLE: 'oil' } as NodeJS.ProcessEnv).nft.style).toBe('vector');
     expect(cfg.gameAccess).toBeNull();
     expect(loadConfig({ GAME_ACCESS: 'everyone' } as NodeJS.ProcessEnv).gameAccess).toBeNull();
     expect(loadConfig({ GAME_ACCESS: ' PUBLIC ' } as NodeJS.ProcessEnv).gameAccess).toBe('public');

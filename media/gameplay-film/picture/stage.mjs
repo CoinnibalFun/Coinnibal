@@ -2,7 +2,7 @@
 // its replay) stand one up around the real mint page: the site API answers a live public mint
 // (`/api/site/mint`), a tiny JSON-RPC (Node) plays the contract for the Dev Wallet (mintState,
 // mintedBy, the mint transaction and its receipt with the ERC-721 Transfer log), and the minted
-// emblem's image is the server's own `emblemSvg`. Everything is deterministic, so the replay
+// emblem's image is the server's own sealed emblem (`unrevealedSvg`: the mint shows it until the reveal). Everything is deterministic, so the replay
 // (which runs the same wallet calls again) sees the same answers.
 import http from 'node:http';
 import { join } from 'node:path';
@@ -23,9 +23,9 @@ async function emblemSvg(id) {
     const req = (await import('node:module')).createRequire(join(ROOT, 'apps/server/package.json'));
     const api = req.resolve('tsx/esm/api').replace(/index\.cjs$/, 'index.mjs');
     const { tsImport } = await import(pathToFileURL(api).href);
-    svgFn = (await tsImport(join(ROOT, 'apps/server/src/site/emblem.ts'), import.meta.url)).emblemSvg;
+    svgFn = (await tsImport(join(ROOT, 'apps/server/src/site/nft/unrevealed.ts'), import.meta.url)).unrevealedSvg;
   }
-  return svgFn(id);
+  return svgFn(id, 'vector');
 }
 
 export function mintStateBody(totalSupply = MINTED_BEFORE) {

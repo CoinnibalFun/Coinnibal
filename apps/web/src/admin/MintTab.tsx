@@ -25,6 +25,7 @@ import { formatEther, type Address, type Hex } from 'viem';
 import { ArcGauge, GasAmount, Icon, type CoinMood } from '../design';
 import { Addr, Advanced, Btn, Card, FormError, Input, NeedsSession, Row, useFormError, type ChainCtx } from './ui';
 import { readOwner, type Plan } from './plan';
+import { EmblemsCard } from './EmblemsCard';
 
 /** Is the allowlist snapshot the root published on the contract, and is it up to date with the approvals? */
 export function allowlistWarnings(a: AllowlistStatus | null, onchainRoot: string | null | undefined): string[] {
@@ -144,6 +145,7 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
       </section>
       <PhaseCard ctx={ctx} current={s.phaseName} open={open} />
       <ImportHoldersCard ctx={ctx} />
+      <EmblemsCard ctx={ctx} />
       <div className="ad-mint__pair">
         <AllowlistCard ctx={ctx} root={s.root} open={open} />
         <PriceCard ctx={ctx} price={s.price} open={open} keeper={s.keeper} minPrice={s.minPrice} maxPrice={s.maxPrice} onGasUsd={setGasUsd} />

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { AdminAudit } from './audit';
-import { AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, GAS_SYMBOL } from '@elymum/shared';
+import { AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import type { ChainGateway } from '../chain/types';
@@ -24,8 +24,9 @@ import type { CustomRoomService } from '../rooms/custom';
 import { importHolders, type HolderWlStore } from './holder-wl';
 import { FaucetInfo, networkInfo } from './network';
 import { clearContract, registerContract, type ContractsStore } from './contracts';
-import { emblemSvg } from './emblem';
 import { parseNftPath, type MintService } from './mint';
+import { CollectionFail, type NftCollection } from './nft/collection';
+import { parseArtStyle } from './nft/render';
 import type { SiteStore } from './store';
 import { SiteFail, obj } from './validate';
 
@@ -34,6 +35,8 @@ export interface SiteExtras {
   chain?: ChainGateway;
   contracts?: ContractsStore;
   mint?: MintService;
+  /** The emblem collection (art, metadata, provenance, reveal). */
+  nft?: NftCollection;
   profiles?: ProfileStore;
   journal?: Journal;
   /** Public base URL (`PUBLIC_URL`; the request host only in development): NFT metadata links. */
@@ -445,23 +448,82 @@ export class SiteApi {
     res.end(req.method === 'HEAD' ? undefined : file.bytes);
   }
 
-  /** `GET /api/nft/contract`, `/api/nft/<id>` (JSON) and `/api/nft/<id>.svg`: minted ids only. */
+  /**
+   * `GET /api/nft/contract`, `/api/nft/provenance`, `/api/nft/rarity`, `/api/nft/<id>` (JSON) and
+   * `/api/nft/<id>.svg` (`?style=vector|pixel` previews the other style): minted ids only. Before the reveal
+   * every token is the sealed emblem, cached briefly so marketplaces pick up the reveal.
+   */
   private async nftRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     this.method(req, 'GET');
     const mint = this.ext.mint;
+    const nft = this.ext.nft;
     const rest = url.pathname.slice('/api/nft/'.length);
-    if (!mint) throw new SiteFail(404, 'not_found', 'Not found');
+    if (!mint || !nft) throw new SiteFail(404, 'not_found', 'Not found');
     const base = this.baseUrl(req);
-    if (rest === 'contract') return send(res, 200, await mint.contractMetadata(base));
+    if (rest === 'contract') return send(res, 200, await mint.contractMetadata(base, nft.provenance()));
+    if (rest === 'provenance') return send(res, 200, nft.provenance());
+    if (rest === 'rarity') return send(res, 200, nft.stats());
     const parsed = parseNftPath(rest);
     if (!parsed || !(await mint.minted(parsed.id))) throw new SiteFail(404, 'not_found', 'No such token');
+    const cache = nft.revealed ? 'public, max-age=86400' : 'public, max-age=60';
     if (parsed.svg) {
-      res.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
-      res.end(emblemSvg(parsed.id));
+      const style = parseArtStyle(url.searchParams.get('style')) ?? nft.style;
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': cache });
+      res.end(nft.svg(parsed.id, style));
       return;
     }
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
-    res.end(JSON.stringify(mint.metadata(parsed.id, base)));
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': nft.revealed ? 'public, max-age=300' : 'public, max-age=60' });
+    res.end(JSON.stringify(nft.metadata(parsed.id, base)));
+  }
+
+  /** `/api/admin/nft`: the collection (provenance, stats, reveal state) and the two reveal steps. */
+  private async nftAdmin(req: IncomingMessage, res: ServerResponse, seg: string[]): Promise<void> {
+    const nft = this.ext.nft;
+    const mint = this.ext.mint;
+    if (!nft || !mint) throw new SiteFail(503, 'chain_off', 'The NFT is not available on this server.');
+    const client = this.ext.chain?.evm?.() ?? null;
+    const asSite = (err: unknown): never => {
+      if (err instanceof CollectionFail) throw new SiteFail(err.status, err.status === 400 ? 'bad_request' : 'wrong_state', err.message);
+      throw err;
+    };
+    if (seg.length === 1) {
+      this.method(req, 'GET');
+      const state = await mint.chainState().catch(() => null);
+      const current = client ? await client.blockNumber().catch(() => null) : null;
+      return send(res, 200, {
+        provenance: nft.provenance(),
+        stats: nft.stats(),
+        style: nft.style,
+        currentBlock: current?.toString() ?? null,
+        mint: state ? { phase: state.phaseName, totalSupply: state.totalSupply, maxSupply: state.maxSupply, soldOut: state.soldOut } : null,
+      } satisfies NftCollectionAdminView);
+    }
+    if (seg.length === 3 && seg[1] === 'reveal' && seg[2] === 'schedule') {
+      this.method(req, 'POST');
+      const body = obj(await readJson(req));
+      if (!client) throw new SiteFail(503, 'chain_off', 'The chain is not available on this server.');
+      const state = await mint.chainState(true);
+      if (!state) throw new SiteFail(503, 'chain_off', 'The NFT is not registered or its state cannot be read.');
+      const raw = body.block;
+      if (raw !== undefined && raw !== null && !(typeof raw === 'number' && Number.isSafeInteger(raw) && raw > 0) && !(typeof raw === 'string' && /^[1-9]\d{0,18}$/.test(raw))) {
+        throw new SiteFail(400, 'bad_request', 'block must be a positive block number', 'block');
+      }
+      try {
+        return send(res, 200, nft.schedule({ block: raw === undefined || raw === null ? null : BigInt(raw as number | string), current: await client.blockNumber(), mintOpen: state.phaseName !== 'closed', soldOut: state.soldOut, maxSupply: state.maxSupply }));
+      } catch (err) {
+        return asSite(err);
+      }
+    }
+    if (seg.length === 2 && seg[1] === 'reveal') {
+      this.method(req, 'POST');
+      if (!client) throw new SiteFail(503, 'chain_off', 'The chain is not available on this server.');
+      try {
+        return send(res, 200, await nft.reveal((n) => client.blockHash(n)));
+      } catch (err) {
+        return asSite(err);
+      }
+    }
+    throw new SiteFail(404, 'not_found', 'Not found');
   }
 
   /** Rate limits a write: per IP before the session is known, then per wallet. */
@@ -677,6 +739,8 @@ export class SiteApi {
         }
         break;
       }
+      case 'nft':
+        return this.nftAdmin(req, res, seg);
       case 'backup': {
         // a gzip tar of DATA_DIR (server key and secrets included): moving the server, offsite copies
         if (seg.length !== 1) break;

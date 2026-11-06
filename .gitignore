@@ -45,3 +45,6 @@ media/**/__pycache__/
 
 # VPS backups (deploy/vps/backup.sh; they hold the server key)
 backups/
+
+# generated previews (apps/server nft:sheets)
+out/

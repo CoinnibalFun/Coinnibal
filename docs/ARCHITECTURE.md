@@ -220,8 +220,13 @@ the journal + forfeits + unseated tickets exactly, and at the end every ticket i
   receipt's `Paid` event (the arena, the payer, the pack's `ref` = `elymum.shop.<kind>`, the price) and the token
   transfer, then credits the charges (each hash once, payments older than 24 h refused).
 - **Mint and NFT API:** `GET /api/site/mint` (state, ETH/USD, the price in USD, holders, game access), proofs, the
-  allowlist snapshot, `GET /api/admin/mint/price`; metadata at `/api/nft/<id>`, `/api/nft/<id>.svg`,
-  `/api/nft/contract`.
+  allowlist snapshot, `GET /api/admin/mint/price`; metadata at `/api/nft/<id>`, `/api/nft/<id>.svg`
+  (`?style=vector|pixel`), `/api/nft/contract`.
+- **Emblem collection** (`site/nft/`, docs/NFT-DESIGN.md): `traits.ts` (tiers, layers, odds, exclusion rules, the
+  1/1s), `generate.ts` (seeded art order, provenance hash, reveal offset), `vector.ts` and `pixel.ts` (the two
+  styles), `unrevealed.ts` (the sealed emblem), `collection.ts` (the committed seed in
+  `DATA_DIR/chains/<id>/nft-collection.json`, metadata, `GET /api/nft/provenance`, `GET /api/nft/rarity`,
+  `/api/admin/nft` and its `reveal/schedule` and `reveal` steps).
 - **Share on X** (`site/shares.ts`, `site/share-card.ts`, `shared/share.ts`): when a room ends (a bell, a custom
   room's end) the main thread makes a card of each connected player's place from the game-over it already gets
   (`DeathStats.finalRank` / `finalOf`, the player's look, the wallet's short form, the net paid), and when a person
