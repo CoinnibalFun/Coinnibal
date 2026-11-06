@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Elymum: load a backup (.tar.gz of DATA_DIR) into the elymum-data volume.
 #   restore.sh <file.tar.gz>                       a file on this server
-#   restore.sh --url <server> --token <token>      download it from the running server first
-#                                                  (<server> e.g. https://slana-wo00.onrender.com, or the
-#                                                  full .../api/admin/backup URL; token: /admin → Network →
-#                                                  Backup & move → Copy migration command)
+#   restore.sh --url <server> --token <token> --proof <proof>
+#                                                  download it from the running server first (<server> e.g.
+#                                                  https://game.elymum.io, or the full .../api/admin/backup URL;
+#                                                  the admin session token, and a fresh signature of the admin
+#                                                  wallet of purpose backup or migration: README "Moving")
 # Options: --yes (no questions), --no-start (leave the app stopped afterwards).
 # The archive is checked first (complete gzip, readable tar, no absolute or '..' paths). If the volume
 # already holds data, a safety backup of it is written to /opt/elymum/backups before it is replaced.
@@ -16,12 +17,14 @@ need_root
 file=""
 url=""
 token=""
+proof=""
 yes=0
 start=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --url) url="${2:?--url needs a value}"; shift 2 ;;
     --token) token="${2:?--token needs a value}"; shift 2 ;;
+    --proof) proof="${2:?--proof needs a value}"; shift 2 ;;
     --yes | -y) yes=1; shift ;;
     --no-start) start=0; shift ;;
     -h | --help) sed -n '2,11p' "$0"; exit 0 ;;
@@ -33,6 +36,8 @@ done
 if [[ -n "$url" ]]; then
   [[ -n "$token" ]] || { read -rsp "Admin session token: " token; echo; }
   [[ -n "$token" ]] || die "a token is needed to download the backup"
+  [[ -n "$proof" ]] || { read -rsp "Signed proof (X-Elymum-Proof): " proof; echo; }
+  [[ -n "$proof" ]] || die "a proof (a fresh signature of the admin wallet) is needed to download the backup"
   url="${url%/}"
   [[ "$url" == */api/admin/backup ]] || url="$url/api/admin/backup"
   mkdir -p "$ELYMUM_BACKUPS"
@@ -43,8 +48,9 @@ if [[ -n "$url" ]]; then
   # the token goes through a header file, not the command line (other users could read it in ps)
   hdr="$(mktemp)"
   trap 'rm -f "$hdr"' EXIT
-  printf 'Authorization: Bearer %s\n' "$token" >"$hdr"
-  curl -fsS --retry 3 --retry-delay 5 -H @"$hdr" "$url" -o "$file" || die "download failed (expired token? wrong URL?)"
+  printf 'Authorization: Bearer %s\nX-Elymum-Proof: %s\n' "$token" "$proof" >"$hdr"
+  # no --retry: a proof opens the backup once
+  curl -fsS -H @"$hdr" "$url" -o "$file" || die "download failed (expired token or proof? wrong URL? on the mainnet ADMIN_SECRET_EXPORT=1 must be set)"
   log "downloaded $(du -h "$file" | cut -f1)"
 fi
 [[ -n "$file" ]] || die "give a backup file, or --url and --token (see --help)"
