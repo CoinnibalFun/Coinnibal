@@ -27,7 +27,7 @@ export interface MainnetStep {
   /** null: cannot be checked from here (or not on mainnet yet). */
   ok: boolean | null;
   /** The drawer that does it. */
-  where: 'Render' | 'Setup' | 'Mint' | 'Game' | 'Community';
+  where: 'Server' | 'Setup' | 'Mint' | 'Game' | 'Community';
 }
 
 /**
@@ -41,9 +41,9 @@ export function mainnetChecklist(net: AdminNetwork, status: StatusSnapshot | nul
   const nft = status?.nft?.state ?? null;
   const when = (v: boolean | null | undefined): boolean | null => (on ? (v ?? null) : false);
   return [
-    { id: 'rpc', label: 'Set EVM_RPC_URL (and CHAIN_ID) in Render to the mainnet RPC', detail: 'Render → the game service → Environment → EVM_RPC_URL and CHAIN_ID, then redeploy. The server follows that chain; testnet records stay on file.', ok: on, where: 'Render' },
+    { id: 'rpc', label: 'Set EVM_RPC_URL (and CHAIN_ID) on the server to the mainnet RPC', detail: 'deploy/vps/docker-compose.yml → CHAIN_ID 4663 and the mainnet RPC, then push (the server updates itself). The server follows that chain; testnet records stay on file.', ok: on, where: 'Server' },
     { id: 'access', label: 'Set Game access explicitly', detail: 'The site settings carry over from testnet (where the game is public): pick Admins or Holders in Game before anything else opens.', ok: null, where: 'Game' },
-    { id: 'fund', label: `Fund the server key with ${GAS_SYMBOL}`, detail: 'It sends every settlement; a little gas lasts a long time.', ok: when(a?.serverBalance != null ? a.serverBalance >= LOW_SERVER_GAS : null), where: 'Render' },
+    { id: 'fund', label: `Fund the server key with ${GAS_SYMBOL}`, detail: 'It sends every settlement; a little gas lasts a long time.', ok: when(a?.serverBalance != null ? a.serverBalance >= LOW_SERVER_GAS : null), where: 'Server' },
     { id: 'arena', label: 'Deploy ElymumArena from the owner wallet', detail: 'Setup → the deploy wizard. No address to type; it registers with the server by itself (code hash, owner and settler checked).', ok: when(!!net.arenaAddress && a?.code === 'ok'), where: 'Setup' },
     { id: 'nft', label: 'Deploy ElymumNFT from the owner wallet', detail: 'Setup → the deploy wizard, right after the arena. Treasury = you, base URI = this site.', ok: when(!!net.nftAddress && status?.nft?.code === 'ok'), where: 'Setup' },
     { id: 'token', label: 'Confirm the game token ($ELYMUM) on the arena', detail: 'Once, and only the real token (TOKEN_ADDRESS on the server): Setup shows it, you confirm once.', ok: when(cfg ? !!cfg.token : null), where: 'Setup' },
