@@ -587,14 +587,36 @@ export interface NetworkInfo {
   block: string | null;
   serverKey: string | null;
   serverBalanceWei: string | null;
-  /** The server key's gas balance is below 0.01 of the gas token (fund it: it pays every settlement). */
+  /** The server key's gas runs low: under the floor, or under `GasRunway.criticalDays` days at the trailing spend. */
   low: boolean;
+  /** The server key's gas runway (absent on an older server). */
+  gas?: GasRunway;
   /** The registered contracts of the current chain, with a code check. */
   contracts: NetworkContractCheck[];
   /** Other chain ids with stored state under `DATA_DIR/chains/`. */
   otherChains: number[];
   /** The game server's threads (absent on an older server). */
   load?: GameServerLoad;
+}
+
+/**
+ * The server key's gas runway: its balance against the trailing spend (the balance drops between reads over the last
+ * day; top-ups are not spend). `critical`: under the floor or under `criticalDays` (2) of runway; `warn`: under
+ * `warnDays` (7); `unknown`: less than an hour of samples (only the floor applies then).
+ */
+export interface GasRunway {
+  level: 'ok' | 'warn' | 'critical' | 'unknown';
+  /** Wei (decimal string); null before the first read. */
+  balanceWei: string | null;
+  /** Wei spent per day at the trailing rate; null while unknown. */
+  spendWeiPerDay: string | null;
+  /** Days the balance lasts at that rate; null while unknown or when nothing is spent. */
+  days: number | null;
+  floorWei: string;
+  warnDays: number;
+  criticalDays: number;
+  /** Hours of balance samples the rate is measured over (up to 24). */
+  sampledHours: number;
 }
 
 /** One game thread: the main thread (HTTP, sockets, chain, journal; with `GAME_WORKERS=0` also every room) or a room worker. */

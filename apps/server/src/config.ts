@@ -166,6 +166,19 @@ export interface ServerConfig {
      * fees is held for an admin decision instead of being sent (limits what a bug or a tampered journal can pay).
      */
     payoutGuardMultiple: number;
+    /**
+     * `DEATH_SETTLE_BATCH_S` (default 6, 0 to 30; 0 sends each at once): an eaten ticket's settlement (payout 0) waits up
+     * to this long so the deaths of a few seconds go out in one `settle` batch instead of one transaction each. A bell,
+     * a cash-out or any item with a payout in the same arena takes the waiting deaths along at once.
+     */
+    deathBatchMs: number;
+    /**
+     * `GAS_FLOOR_ETH` (default 0.002): the server key's balance below which it is low whatever its spend; above it the
+     * runway decides (trailing spend: under `GAS_RUNWAY_WARN_DAYS` 7 a warning, under `GAS_RUNWAY_CRITICAL_DAYS` 2 an alert).
+     */
+    gasFloorWei: bigint;
+    gasRunwayWarnDays: number;
+    gasRunwayCriticalDays: number;
   };
   /**
    * NFT mint: the USD target (`MINT_USD_CENTS`, default 100) and the ETH/USD feed (`GAS_PRICE_URL`).
@@ -177,6 +190,8 @@ export interface ServerConfig {
    * `NFT_ART_STYLE` (`vector`, the default, or `pixel`).
    */
   nft: { size: number; seed: string | null; style: ArtStyle };
+  /** `/api/health` thresholds: `HEALTH_MAX_PENDING` (400) due settlements, `HEALTH_MAX_PENDING_AGE_S` (900) for the oldest. */
+  health?: { maxPending: number; maxPendingAgeS: number };
 }
 
 /**
@@ -289,6 +304,13 @@ export function parseRoundConfig(env: NodeJS.ProcessEnv): { roundMs: number; clo
   const breakS = Math.floor(num(env.ROUND_BREAK_SECONDS, RULES.roundBreakMs / 1000));
   const breakMs = Math.min(Math.max(0, breakS) * 1000, Math.floor(roundMs / 10_000) * 1000);
   return { roundMs, closeMs, breakMs };
+}
+
+/** A decimal ETH amount ("0.002") in wei; `d` when unset or malformed. */
+function ethToWei(v: string | undefined, d: bigint): bigint {
+  const m = /^\s*(\d{1,6})(?:\.(\d{1,18}))?\s*$/.exec(v ?? '');
+  if (!m) return d;
+  return BigInt(m[1]) * 10n ** 18n + BigInt((m[2] ?? '').padEnd(18, '0'));
 }
 
 const bool = (v: string | undefined, d: boolean): boolean => (v === undefined ? d : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase()));
@@ -416,10 +438,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       rpcBurst: Math.max(1, int(env.RPC_BURST, 8)),
       testnetRpcUrl: blank(env.TESTNET_RPC_URL)?.replace(/\/+$/, '') ?? NETWORKS.testnet.rpcUrl,
       payoutGuardMultiple: Math.max(0, int(env.PAYOUT_GUARD_MULTIPLE, PAYOUT_GUARD_MULTIPLE_DEFAULT)),
+      deathBatchMs: Math.min(30, Math.max(0, num(env.DEATH_SETTLE_BATCH_S, 6))) * 1000,
+      gasFloorWei: ethToWei(env.GAS_FLOOR_ETH, 2n * 10n ** 15n),
+      gasRunwayWarnDays: Math.max(0.1, num(env.GAS_RUNWAY_WARN_DAYS, 7)),
+      gasRunwayCriticalDays: Math.max(0.05, num(env.GAS_RUNWAY_CRITICAL_DAYS, 2)),
     },
     mint: {
       usdCents: Math.max(1, int(env.MINT_USD_CENTS, MINT_USD_CENTS_DEFAULT)),
       gasPriceUrl: blank(env.GAS_PRICE_URL) ?? GAS_PRICE_URL_DEFAULT,
+    },
+    health: {
+      maxPending: Math.max(1, int(env.HEALTH_MAX_PENDING, 400)),
+      maxPendingAgeS: Math.max(30, int(env.HEALTH_MAX_PENDING_AGE_S, 900)),
     },
     nft: {
       size: Math.max(1, int(env.NFT_COLLECTION_SIZE, 5000)),

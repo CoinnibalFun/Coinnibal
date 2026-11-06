@@ -606,7 +606,21 @@ export type ErrorCode =
    * The room is a paid custom room (an invite-only arena instance): it is entered with a ticket of
    * its arena (`arena:<id>:<CODE>`), not with `private:<CODE>`.
    */
-  | 'paid_room';
+  | 'paid_room'
+  /**
+   * The server cannot save its money records right now (the disk is full): no new arena seat until it can. A live
+   * coin plays on; the ticket stays safe on chain (seated later, or refunded in full if never played).
+   */
+  | 'storage_failing'
+  /** The arena is closing for a re-price at its bell (`/admin` "Re-price at next bell"): no new seat this round. */
+  | 'arena_repricing';
+
+/**
+ * WebSocket close code: this socket was replaced by a newer one of the same signed-in wallet that took over its live
+ * arena coin (a reconnect after a network switch). The client must not reconnect this socket by itself: the newer
+ * one is already playing.
+ */
+export const CLOSE_REPLACED = 4000;
 
 /**
  * Parse a join target into its parts. Returns null for malformed input. `arena:<id>:<CODE>` seats
