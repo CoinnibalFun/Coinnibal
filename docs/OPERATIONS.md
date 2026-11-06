@@ -19,7 +19,7 @@ price at $1.
 | **Launch** | The live checklist: chain, server key gas, contracts deployed and registered, token, arenas, allowlist root, $1 price, mint phase, game access. Each line links to the tab that fixes it |
 | **Setup** | The deploy wizard (ElymumArena v3, ElymumNFT and, on the testnet, the TestToken), Finish setup, holder perks, the TestToken faucet, register an already deployed contract |
 | **Mint** | Phase (closed / allowlist / public), publish the allowlist root, Sync to $1, price bounds and keeper, per-wallet limits, max supply (down only), base URI and freeze, contract URI, royalty, treasury, withdraw, owner mint |
-| **Game** | Who may play, pause and per-arena open / close, map sizes, arena instances (auto-scaling), custom rooms, power-ups, leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance |
+| **Game** | Who may play, pause and per-arena open / close, map sizes, **arena prices in US dollars** (the token price, the tiers, "Sync arena prices to USD"), arena instances (auto-scaling), custom rooms, power-ups, leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance |
 | **Play** | Play the arenas yourself before launch |
 | **WL**, **Tasks**, **Collabs** | The whitelist applications, the WL steps, the community collabs |
 | **Integrity** | Cheat and collusion flags, bans, held payouts, detector settings |
@@ -232,7 +232,7 @@ fee wallet at once. Example: entry 1,000, payout 2,000 → 150 burned, 50 to the
 | Setting | In `/admin` → Game → the arena contract → Advanced | Contract call | Limits |
 |---|---|---|---|
 | Fee pair on profit | Fees → Burned / To the fee wallet | `setFeeRates(burnBps, vaultBps)` | together at most 2,500 bps (25 %); new tickets only |
-| Holder pair | Setup → Holder perks | `setHolderPerks(nft, holderBurnBps, holderVaultBps)` | used when it totals less than the normal pair; suggested 1,500 + 0 |
+| Holder pair | Setup → Holder perks | `setHolderPerks(nft, holderBurnBps, holderVaultBps)` | used when it totals less than the normal pair; the owner's pair 800 + 200 (holders pay 10 % instead of 20 %) |
 | Power-up burn share | Fees → Power-up payments burned | `setPaymentBurnBps(bps)` | 0 to 10,000 |
 | Burn mode | Fees → Preview mode 0 / mode 1 | `setBurnMode(0 or 1)` | mode 1 only when the token's `burn()` works |
 | Fee wallet | Fees → Fee wallet | `setFeeWallet(address)` | any address that can receive the token |
@@ -269,12 +269,13 @@ Everything is done from `/admin` with the owner wallet; nothing needs a terminal
      The server checks the code hash and the server authority before it registers it.
    - **ElymumNFT** at the $1 price in ETH (the wizard reads ETH/USD).
 5. **Finish setup** (one button, the remaining steps in order): set the TestToken as the arena's game token, create
-   the four arenas (1,000 / 10,000 / 50,000 / 250,000), the holder perks (15 % + 0 %), the Isles of the Blessed
-   holders-only, the emblem as the faucet's 2x, and on the testnet open the mint to the public. The server picks the
+   the four arenas (1,000 / 3,000 / 5,000 / 10,000: the $1 / $3 / $5 / $10 tiers at the reference price of $0.001 a
+   token), the holder perks (8 % + 2 %), the Isles of the Blessed ($10) holders-only, the emblem as the faucet's 2x, and on the testnet open the mint to the public. The server picks the
    token up within 30 s and the lobby opens the arenas without a reload.
 6. **Burn mode** (optional on the testnet): Game → the arena contract → Advanced → Fees: the probe shows the
    TestToken's working `burn()`; preview mode 1 if you want `totalSupply` to fall.
-7. **Check**: Launch shows every line green; buy a ticket in the Play tab, play a round, see the receipt (fee on
+7. **Arena prices** (Game → Arena prices): set the token's USD price, save, then sync and sign (below).
+8. **Check**: Launch shows every line green; buy a ticket in the Play tab, play a round, see the receipt (fee on
    profit), buy a power-up pack.
 
 The same can be scripted with the CLI (`pnpm admin help`: `deploy-test-token`, `deploy-arena`, `deploy-nft`, `set-token`, `create-arena`, `fee`,
@@ -289,11 +290,47 @@ The testnet and the mainnet are two networks of the same chain; the server follo
    and restart. The server opens a clean state in `DATA_DIR/chains/4663/`; the testnet's records stay in
    `chains/46630/` (the Network tab lists them).
 2. Deploy ElymumArena v3 and ElymumNFT from `/admin` (no TestToken on mainnet), set the token, create the arenas,
-   set the holder perks, publish the allowlist root, Sync to $1. Keep burn mode 0 until the probe shows the token's
+   set the holder perks, publish the allowlist root, Sync to $1, then price the arenas in US dollars (set the token
+   price → sync → sign, "Arena prices in US dollars"). Keep burn mode 0 until the probe shows the token's
    `burn()` works.
 3. "Import testnet emblem holders" (Mint tab) reads the testnet NFT through `TESTNET_RPC_URL` (default the public
    testnet RPC) and adds its holders to the mainnet allowlist.
 4. On mainnet a red MAINNET banner stays at the top of `/admin` and `JOURNAL_ABANDON_CONTRACT` is refused.
+
+## Arena prices in US dollars
+
+The tiers are priced in dollars ($1 / $3 / $5 / $10, the $10 arena holders-only; ECONOMY.md section 1); the chain
+keeps entry fees in token units. `/admin` → Game → **Arena prices (USD)** (`GET` / `PUT /api/admin/arena-prices`,
+stored per chain in `DATA_DIR/chains/<id>/arena-prices.json`; the lobby reads `GET /api/site/arena-prices`):
+
+| Setting | Default | Notes |
+|---|---|---|
+| Price source | manual | the admin's price per token; "Pons TWAP" is shown but not wired (refused) |
+| Token price (USD per whole token) | not set | a plain decimal, at most 18 decimals ("0.00081"); stamped with the time it was set |
+| Tiers | #1 $1, #2 $3, #3 $5, #4 $10 holders-only | whole cents; holders-only per tier |
+| Rounding | 2 significant figures | 1 to 6 |
+
+**Owner steps** (with the owner wallet connected and signed in):
+
+1. **Set the price.** Type the token's USD price, **Save arena prices**. Nothing on chain changes yet; the lobby now
+   shows each ticket's dollar value ("≈ $0.81" while an arena is not at its tier price).
+2. **Sync.** The **Sync arena prices to USD** table shows, per tier, the entry now and the new entry in tokens and
+   USD, and what changes (`updateArena`, holders-only on / off). An arena with open tickets is marked: the contract
+   changes an entry fee only while none of that arena's tickets is open (`ArenaBusy`). To re-price a busy arena,
+   **Pause** (Game → Start / stop) or close just that arena, wait for its bell (5 minutes; an unplayed ticket is
+   cancelled after 15 minutes), then sync. Max open tickets and the enabled state are kept as they are.
+3. **Sign.** **Sign N changes with the owner wallet**: one wallet prompt per call, in order (`updateArena(id,
+   newEntry, maxSessions, enabled)` per re-priced arena, `setArenaHoldersOnly(id, on)` where a tier's holders-only flag
+   differs). The table re-reads the chain afterwards and shows "in sync". Then unpause (or reopen the arena).
+
+Tickets already bought keep the entry fee they were bought with, whatever the sync does (ECONOMY.md section 1). The
+running rooms of a re-priced arena take the new price for their own figures at the next arena read (within a
+minute; the log says `arena #N: ticket price … on chain`). Re-sync whenever the token's price moves enough to matter;
+`dex_twap` (a Pons / DEX TWAP) will replace the manual price once it is wired.
+
+**The holder pair** (holders pay 10 % of their profit): Setup → Holder perks → `setHolderPerks(<ElymumNFT>, 800, 200)`
+(Finish setup does it on a fresh deploy). An arena deployed earlier with the old suggestion (1,500 + 0) needs this
+call once; tickets bought before it keep the pair they joined with.
 
 ## Resetting the leaderboards
 
@@ -320,7 +357,8 @@ journaled as a sweep and sent with `sweepLoot(arenaId, sweepId, amount)`, which 
 
 `/admin` → Game → **Custom rooms** (`/api/admin/custom-rooms`, `DATA_DIR/site/custom-rooms-settings.json`): creating
 on / off, ticket rooms on / off, the base price and its step per 10 players, the biggest room (up to 100 players),
-the seats of all live rooms together, the holder perk, the live rooms (close one: a free room ends after a 10 s
+the seats of all live rooms together, the holder perk (default: one free room of up to 10 players a day per holder,
+UTC day, kept in `site/custom-rooms.json` across restarts; or a discount, or none), the live rooms (close one: a free room ends after a 10 s
 countdown and its final board, a ticket room at its bell). **Practice with bots** on / off and "practice rooms at
 once" (`practiceMaxLive`, default 12, 0..50): the free one-click rooms the quiet ponds offer (8 bots, 15 minutes, one
 per player, 4 per IP per 30 minutes, closed after 2 minutes empty). They take none of the paid rooms' slots or seats;

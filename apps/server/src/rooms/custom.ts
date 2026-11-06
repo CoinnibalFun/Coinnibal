@@ -292,6 +292,9 @@ export class CustomRoomService implements CustomRoomHooks {
   private saveRooms(): void {
     this.bestDirty = false;
     this.lastBestFlush = this.now();
+    // only today's free rooms matter (a UTC day): older days are dropped so the file does not grow forever
+    const today = utcDay(this.now());
+    for (const [w, day] of Object.entries(this.freeUsed)) if (day !== today) delete this.freeUsed[w];
     this.write(this.file('custom-rooms'), { v: 1, rooms: [...this.records.values()], freeUsed: this.freeUsed } satisfies RoomsFile);
   }
 
@@ -488,6 +491,11 @@ export class CustomRoomService implements CustomRoomHooks {
     return this.view(rec);
   }
 
+  /**
+   * The holder's free room of the day (`free_daily`): one room of the base size per UTC day per wallet, recorded in
+   * `custom-rooms.json` (`freeUsed`) in the same write that stores the room, so a restart never hands out a second
+   * one. A new UTC day (00:00 UTC) makes it available again.
+   */
   private freeAvailable(wallet: string): boolean {
     return this.cur.holderPerk === 'free_daily' && this.freeUsed[wallet.toLowerCase()] !== utcDay(this.now());
   }

@@ -1,4 +1,4 @@
-import { DEFAULT_ARENAS, arenaMeta, type GameAccess } from '@elymum/shared';
+import { DEFAULT_ARENAS, arenaMeta, formatUsdCents, type GameAccess } from '@elymum/shared';
 import { motion, useInView } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
@@ -37,7 +37,6 @@ import './landing.css';
 /** The game token's display symbol (server `TOKEN_SYMBOL`; the landing has no chain status). */
 const SYMBOL = '$ELYMUM';
 const view = { once: true, amount: 0.3 } as const;
-const nf = new Intl.NumberFormat('en-US');
 const pct = (bps: number) => `${bps / 100}%`;
 
 /* ── Plate I · the plain at dawn ──────────────────────────────────────── */
@@ -503,8 +502,9 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
                       <p className="ld-ticket__line">{p ? t(p.line) : null}</p>
                     </div>
                     <div className="ld-ticket__stub">
-                      <b className="num ld-ticket__fee">{nf.format(a.entryTokens)}</b>
-                      <span className="mono ld-ticket__unit">{SYMBOL}</span>
+                      {/* the tiers are priced in US dollars, paid in the game token at the day's price */}
+                      <b className="num ld-ticket__fee">{formatUsdCents(a.usdCents)}</b>
+                      <span className="mono ld-ticket__unit">{t('ld.ar.paidIn', { sym: SYMBOL })}</span>
                       <span className="mono ld-ticket__unit">{t('ld.ar.entry')}</span>
                     </div>
                   </div>

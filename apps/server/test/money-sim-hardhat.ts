@@ -14,6 +14,7 @@ import {
   createElymumPublicClient,
   createElymumWalletClient,
   deployArena,
+  deployNft,
   deployTestToken,
   deployedAddress,
   elymumArenaAbi,
@@ -21,19 +22,21 @@ import {
   getSession,
   getTokenBalance,
   joinCall,
+  ownerMintCall,
   refundCall,
   sendCall,
+  setHolderPerksCall,
   setTokenCall,
   testTokenMintCall,
   viemChain,
   type ContractCall,
 } from '@elymum/sdk';
-import { computeProfitFee } from '@elymum/shared';
+import { DEFAULT_HOLDER_FEE_RATES, computeProfitFee } from '@elymum/shared';
 import { toHex, type Address, type PublicClient, type WalletClient } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { viemEvmClient } from '../src/chain/evm-client';
 import { configureRpcBudgets } from '../src/chain/rpc-budget';
-import type { Closure, SimChain } from './money-sim';
+import { expectedRates, type Closure, type SimChain } from './money-sim';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const MNEMONIC = 'test test test test test test test test test test test junk';
@@ -59,7 +62,10 @@ async function rpcUp(u: string): Promise<boolean> {
   }
 }
 
-/** Starts a hardhat node, deploys and sets up the arena (arenas 1 and 2 used), funds `players` wallets. */
+/**
+ * Starts a hardhat node, deploys and sets up the arena (arenas 1 and 2 used), funds `players` wallets. Every third
+ * wallet holds an ElymumNFT (owner-minted), the arena's holder NFT at the owner's holder pair (8 % + 2 %).
+ */
 export async function hardhatSimChain(opts: { players: number; seed: number }): Promise<SimChain> {
   const port = await freePort();
   const url = `http://127.0.0.1:${port}`;
@@ -116,6 +122,14 @@ export async function hardhatSimChain(opts: { players: number; seed: number }): 
   const arena = await deployedAddress(pub, await deployArena(W, { admin: admin.address, serverAuthority: server.address, feeWallet: feeWallet.address }));
   if (!(await send(admin.address, setTokenCall(arena, token)))) throw new Error('setToken failed');
   for (const call of createDefaultArenaCalls(arena, 18)) if (!(await send(admin.address, call))) throw new Error('createArena failed');
+  const nft = await deployedAddress(pub, await deployNft(W, { owner: admin.address, maxSupply: 100, mintPrice: 0n, wlLimit: 1, publicLimit: 1, baseURI: '', treasury: admin.address }));
+  if (!(await send(admin.address, setHolderPerksCall(arena, nft, DEFAULT_HOLDER_FEE_RATES)))) throw new Error('setHolderPerks failed');
+  const holders = new Set<string>();
+  for (const [i, p] of playerAccounts.entries()) {
+    if (i % 3 !== 0) continue;
+    if (!(await send(admin.address, ownerMintCall(nft, p.address, 1)))) throw new Error('ownerMint failed');
+    holders.add(p.address.toLowerCase());
+  }
   const grant = 100_000_000n * 10n ** 18n;
   for (const p of playerAccounts) {
     if (!(await send(admin.address, testTokenMintCall(token, p.address, grant)))) throw new Error('mint failed');
@@ -135,6 +149,7 @@ export async function hardhatSimChain(opts: { players: number; seed: number }): 
     client,
     decimals: 18,
     wallets: playerAccounts.map((a) => a.address),
+    holders,
     arenaIds: () => ids,
     entryFee: (id) => fees.get(id)!,
     buy: (w, id) => send(w, joinCall(arena, id)),
@@ -172,8 +187,13 @@ export async function hardhatSimChain(opts: { players: number; seed: number }): 
     },
     async feeViolations() {
       const joined = new Map<bigint, { entryFee: bigint; burnBps: number; vaultBps: number }>();
-      for (const l of await logs('Joined')) joined.set(l.args.sessionId as bigint, { entryFee: l.args.entryFee as bigint, burnBps: Number(l.args.burnBps), vaultBps: Number(l.args.vaultBps) });
       const bad: string[] = [];
+      for (const l of await logs('Joined')) {
+        const r = { entryFee: l.args.entryFee as bigint, burnBps: Number(l.args.burnBps), vaultBps: Number(l.args.vaultBps) };
+        joined.set(l.args.sessionId as bigint, r);
+        const want = expectedRates(holders, String(l.args.player));
+        if (r.burnBps !== want.burnBps || r.vaultBps !== want.vaultBps) bad.push(`Joined #${l.args.sessionId} of ${l.args.player}: rates ${r.burnBps}/${r.vaultBps}, want ${want.burnBps}/${want.vaultBps}`);
+      }
       for (const l of await logs('Settled')) {
         const a = l.args;
         const j = joined.get(a.sessionId as bigint);

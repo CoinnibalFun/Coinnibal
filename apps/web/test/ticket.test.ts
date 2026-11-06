@@ -165,7 +165,7 @@ describe('buildTickets', () => {
     expect(list.map((t) => t.key)).toEqual(['practice', 'arena:1', 'arena:2', 'arena:3', 'arena:4']);
     expect(list[0]).toMatchObject({ humans: 4, bots: 39, open: true });
     expect(list.slice(1).every((t) => t.soon === true && t.open === false)).toBe(true);
-    expect(list.slice(1).map((t) => t.entryFee)).toEqual([1000n * ONE, 10_000n * ONE, 50_000n * ONE, 250_000n * ONE]);
+    expect(list.slice(1).map((t) => t.entryFee)).toEqual([1000n * ONE, 3_000n * ONE, 5_000n * ONE, 10_000n * ONE]);
     expect(buildTickets(ROOMS, [], [], { enabled: false, tokenReady: false, decimals: 18 }).some((t) => t.soon)).toBe(false);
   });
 

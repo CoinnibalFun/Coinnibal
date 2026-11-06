@@ -1,4 +1,5 @@
 import type {
+  ArenaPricingSettings,
   NftCollectionAdminView,
   NftProvenance,
   ArenaScalingSettings,
@@ -334,6 +335,10 @@ export function adminApi(token: string) {
     /** `POST /api/admin/leaderboards/reset`: clears both boards (the server backs the file up). Profiles stay. */
     resetLeaderboards: () =>
       request<{ cleared: { daily: number; allTime: number }; backedUp: boolean; info: LeaderboardAdminInfo }>('/api/admin/leaderboards/reset', { method: 'POST', token, body: { confirm: 'RESET' } }),
+    /** `GET /api/admin/arena-prices`: the USD tiers, the price source and the manual token price, the rounding. */
+    arenaPrices: () => request<ArenaPricesAdminView>('/api/admin/arena-prices', { token }),
+    /** `PUT /api/admin/arena-prices`: a partial update; answers like the GET. Nothing on chain changes. */
+    saveArenaPrices: (patch: Partial<ArenaPricingSettings>) => request<ArenaPricesAdminView>('/api/admin/arena-prices', { method: 'PUT', token, body: patch }),
     /** `GET /api/admin/shop`: power-up prices, sink, limits and the recent purchases. */
     shop: () => request<ShopAdminView>('/api/admin/shop', { token }),
     /** `PUT /api/admin/shop`: a partial settings update; answers like the GET. */
@@ -432,6 +437,16 @@ export interface LeaderboardAdminInfo {
   resetAt: number | null;
   /** The admin wallet that reset them, or `epoch` for the automatic reset of a deploy. */
   resetBy: string | null;
+}
+
+/* ── arena prices in USD (`/api/admin/arena-prices`) ───────────────── */
+
+/** `GET /api/admin/arena-prices`. */
+export interface ArenaPricesAdminView {
+  settings: ArenaPricingSettings;
+  defaults: ArenaPricingSettings;
+  /** The token's USD price from the selected source now. */
+  price: { ok: true; source: string; usdPerToken: string; at: number | null } | { ok: false; source: string; reason: string; message: string };
 }
 
 /* ── power-up shop (`/api/admin/shop`) ─────────────────────────────── */

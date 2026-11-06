@@ -16,6 +16,7 @@ import { ArenaTab } from "./ArenaTab";
 import { CustomRoomsCard } from "./CustomRoomsCard";
 import { LeaderboardCard } from "./LeaderboardCard";
 import { ShopCard } from "./ShopCard";
+import { ArenaPricesCard } from "./ArenaPricesCard";
 import { GAME_ACCESS_LABEL } from "./site/SettingsTab";
 import {
   Btn,
@@ -488,6 +489,7 @@ export function GameTab({ ctx }: { ctx: ChainCtx }) {
     <div className="ad-game">
       <StartStopCard ctx={ctx} />
       <MapsCard ctx={ctx} />
+      <ArenaPricesCard ctx={ctx} />
       <ArenaScalingCard ctx={ctx} />
       <TestArenasCard ctx={ctx} />
       <CustomRoomsCard ctx={ctx} />

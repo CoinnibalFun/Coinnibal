@@ -1,4 +1,4 @@
-import { BOOST_RULES, BPS, activeChain, GAS_SYMBOL, totalFeeBps, type FeeRates } from '@elymum/shared';
+import { BOOST_RULES, BPS, DEFAULT_ARENAS, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, activeChain, bpsToPercent, formatUsdCents, GAS_SYMBOL, totalFeeBps, type FeeRates } from '@elymum/shared';
 import { FACTS as F, payoutExample, type DocsContent } from './facts';
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
@@ -220,12 +220,18 @@ export const docsEn = (
             kind: 'list',
             items: [
               { term: 'Access:', text: 'while the game opens up in phases, holders play first (the WL → Mint → Play order).' },
-              { term: 'Emblem skin:', text: 'holders can wear the emblem coin, and their name carries the holder mark in the standings.' },
+              { term: 'Emblem skin:', text: 'holders can wear the emblem coin; their name carries the holder mark in the standings and their card in the lobby the holder badge (cosmetic only).' },
               { term: 'Cheaper power-ups:', text: `holders pay ${SH.holderDiscountPct}% less for every power-up pack in the shop.` },
               { term: 'More power-ups per round:', text: `${SH.holderExtraUses} extra power-up use per round in paid arenas (${SH.arenaUses + SH.holderExtraUses} instead of ${SH.arenaUses}).` },
-              { term: 'A lower fee:', text: "when the arena's holder perks are on, holders' tickets get the holder rates on profit (the ticket sheet shows them)." },
-              { term: 'Private rooms:', text: 'holders create their own rooms for less (or free, when the room settings say so).' },
-              { term: 'Holders-only arenas:', text: 'arenas can be opened to holders only, on-chain.' },
+              {
+                term: 'A lower fee:',
+                text: `when the arena's holder perks are on, holders' tickets get the holder rates on profit (by default ${bpsToPercent(totalFeeBps(DEFAULT_HOLDER_FEE_RATES))} % instead of ${bpsToPercent(totalFeeBps(DEFAULT_FEE_RATES))} %; the ticket sheet shows the live rates).`,
+              },
+              { term: 'Private rooms:', text: 'holders open one room a day for free (a UTC day, rooms of up to 10 players); the room settings may give a discount instead.' },
+              {
+                term: 'Holders-only arena:',
+                text: `the ${DEFAULT_ARENAS.filter((a) => a.holdersOnly).map((a) => formatUsdCents(a.usdCents)).join(', ')} arena is for holders only, on-chain.`,
+              },
             ],
           },
         ],

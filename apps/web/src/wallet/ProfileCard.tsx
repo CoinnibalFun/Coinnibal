@@ -1,5 +1,5 @@
 import { shortAddress } from '@elymum/shared';
-import { Button } from '../design';
+import { Button, Laurel } from '../design';
 import { levelProgress } from '../game/engine';
 import { useT } from '../i18n';
 import { useUi } from '../store';
@@ -18,6 +18,7 @@ export function ProfileCard({ onEdit }: { onEdit?: () => void }) {
   const settings = useUi((s) => s.settings);
   const auth = useUi((s) => s.auth);
   const profile = useChainData((s) => s.profile);
+  const holder = useChainData((s) => s.holder);
   const nf = new Intl.NumberFormat('en-US');
   const connected = address !== null;
   const name = profile?.name ?? auth?.profile?.name ?? (settings.name || t('pf.guest'));
@@ -46,6 +47,13 @@ export function ProfileCard({ onEdit }: { onEdit?: () => void }) {
           <h3 id="kl-profile-h" className="kl-profile__name" title={name}>
             {name}
           </h3>
+          {/* the emblem holder badge (cosmetic): the same laurel the coin wears in game */}
+          {connected && holder === true && (
+            <span className="kl-profile__holder mono" data-testid="holder-badge">
+              <Laurel size={13} />
+              {t('pf.holder')}
+            </span>
+          )}
           {connected ? (
             <>
               <span className="mono kl-profile__lvl">

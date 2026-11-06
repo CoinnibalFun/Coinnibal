@@ -1,4 +1,4 @@
-import { arenaMeta, bpsToPercent, totalFeeBps } from '@elymum/shared';
+import { arenaMeta, arenaUsdLabel, bpsToPercent, totalFeeBps } from '@elymum/shared';
 import { motion } from 'motion/react';
 import type { CSSProperties } from 'react';
 import { Laurel, STAGGER, Ticket, TicketGroup, TicketStub, springs, useReducedMotion } from '../../design';
@@ -71,6 +71,7 @@ export function TicketList({
   const held = useUi((s) => s.held);
   const holder = useChainData((s) => s.holder);
   const config = useChainData((s) => s.config);
+  const prices = useChainData((s) => s.prices);
   const normal = arenaRates(serverFees, config);
   const mine = ticketRates(normal, config, holder);
   // emblem holders see the rates their ticket gets (fixed at join)
@@ -105,6 +106,8 @@ export function TicketList({
         : [count(tk.humans, 'lo.humans1', 'lo.humans'), tk.bots > 0 ? count(tk.bots, 'lo.bots1', 'lo.bots') : null].filter(Boolean).join(' · ');
     const loot = !practice && !soon ? t('lo.onFloor', { n: tok.wireCompact(tk.loot), sym: tok.symbol }) : null;
     const style = { '--kl-ink': practice ? 'var(--foam)' : arenaMeta(tk.arenaId!).ink } as CSSProperties;
+    // tiers are priced in US dollars: "$1" with the token amount the chain asks next to it ("≈ $0.97" until re-priced)
+    const usd = practice ? null : arenaUsdLabel(prices, tk.arenaId!, tk.entryFee, tok.decimals);
     return (
       <motion.div
         key={tk.key}
@@ -132,7 +135,13 @@ export function TicketList({
               <span className="kl-stub-av">
                 <ArenaVignette arenaId={tk.arenaId} />
               </span>
-              {practice ? <TicketStub value={t('lo.free')} unit={t('lo.noTokens')} /> : <TicketStub value={tok.fee(tk.entryFee)} unit={tok.symbol} />}
+              {practice ? (
+                <TicketStub value={t('lo.free')} unit={t('lo.noTokens')} />
+              ) : usd ? (
+                <TicketStub value={<span data-testid="ticket-usd" data-exact={usd.exact ? 'yes' : 'no'}>{usd.text}</span>} unit={`${tok.fee(tk.entryFee)} ${tok.symbol}`} />
+              ) : (
+                <TicketStub value={tok.fee(tk.entryFee)} unit={tok.symbol} />
+              )}
             </>
           }
         >

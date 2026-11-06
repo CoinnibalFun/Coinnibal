@@ -130,8 +130,10 @@ send twice. Open **Setup**; the wizard walks the steps and remembers where you a
 6. **Set the game token** (later, when `$ELYMUM` exists). Type the token address twice. It can be set **once**: a
    wrong address means deploying a new arena. Until it is set the arenas show "Opening soon" and only practice
    runs.
-7. **Create the four arenas** (needs the token): Asphodel Meadow 1,000, Lethe Shore 10,000, Golden Bough 50,000,
-   Isles of the Blessed 250,000 tokens, 300 open tickets each. The lobby opens them within about a minute.
+7. **Create the four arenas** (needs the token): the $1 / $3 / $5 / $10 tiers, created at 1,000 / 3,000 / 5,000 /
+   10,000 tokens (the reference price $0.001 a token), 300 open tickets each; the Isles ($10) are for emblem holders.
+   Then price them at the token's real USD price: Game → Arena prices → set the price, sync, sign (OPERATIONS.md,
+   "Arena prices in US dollars"). The lobby opens them within about a minute.
 
 **The testnet token.** On Robinhood Chain Testnet the wizard offers **Deploy TestToken** (an ERC20Burnable faucet
 token: `faucet()` gives 1,000,000 per hour, 2x for emblem holders; only its owner mints). **Finish setup** sets it as

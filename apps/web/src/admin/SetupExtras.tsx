@@ -18,8 +18,8 @@ import { Addr, Advanced, Btn, Card, FormError, Input, Row, useFormError, type Ch
  * Setup → the emblem's perks on the arena: `setHolderPerks(nft, holderBurnBps, holderVaultBps)` (holders' tickets
  * get this pair on their profit when it totals less than the normal one, and holders may enter holders-only arenas)
  * and `setArenaHoldersOnly(id, on)` per arena. The NFT is the registered ElymumNFT (shown, not typed); another
- * address is an override under Advanced. The suggested pair keeps the burn and waives the fee wallet's share
- * (15 % + 0 %).
+ * address is an override under Advanced. The owner's pair (2026-11): holders pay 10 % of their profit instead of
+ * 20 %, 8 % burned + 2 % to the fee wallet (`DEFAULT_HOLDER_FEE_RATES`).
  */
 export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
   const arena = ctx.net.arenaAddress;
@@ -85,8 +85,8 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
         </Row>
       </dl>
       <div className="ad-form2">
-        <Input label="Holder burn" value={burn} onChange={setBurn} suffix="bps" hint="1500 = 15 % of the profit, burned." />
-        <Input label="Holder fee wallet" value={vault} onChange={setVault} suffix="bps" hint="0 = the fee wallet's share is waived." />
+        <Input label="Holder burn" value={burn} onChange={setBurn} suffix="bps" hint="800 = 8 % of the profit, burned." />
+        <Input label="Holder fee wallet" value={vault} onChange={setVault} suffix="bps" hint="200 = 2 % of the profit to the fee wallet." />
       </div>
       <Advanced title="Advanced: a different holder NFT" testId="holder-perks-advanced">
         <Input label="Holder NFT (override)" value={override} onChange={setOverride} placeholder={registered ?? '0x…'} hint="Leave empty to use the registered ElymumNFT." />

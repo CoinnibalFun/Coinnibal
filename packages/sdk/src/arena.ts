@@ -1,5 +1,5 @@
 import { elymumArenaAbi, elymumArenaArtifact, testTokenAbi, testTokenArtifact } from '@elymum/contracts';
-import { DEFAULT_ARENAS } from '@elymum/shared';
+import { DEFAULT_ARENAS, formatUsdCents, type ArenaPriceRow } from '@elymum/shared';
 import { BaseError, erc20Abi, getAddress, isAddress, type Account, type Address, type Chain, type Hash, type PublicClient, type WalletClient } from 'viem';
 import type { ContractCall } from './call';
 import {
@@ -556,6 +556,26 @@ export function setHolderPerksCall(arena: Address, nft: Address | null, rates: F
 export function setArenaHoldersOnlyCall(arena: Address, id: number, holdersOnly: boolean): ArenaCall {
   checkArenaId(id);
   return { address: arena, abi: elymumArenaAbi, functionName: 'setArenaHoldersOnly', args: [id, holdersOnly] };
+}
+
+/**
+ * "Sync arena prices to USD": the owner calls for the rows of `arenaPriceDiff` that can be signed now. Per arena an
+ * `updateArena` with the new entry fee (its max open tickets and enabled state unchanged) and, when the tier says so,
+ * `setArenaHoldersOnly`. Rows that are blocked (open tickets, missing arena or holder NFT) or cannot be priced are
+ * left out; nothing else is touched. Open tickets keep the entry fee they were bought with (`Session.entryFee`).
+ */
+export function arenaPriceSyncCalls(arena: Address, rows: readonly ArenaPriceRow[]): { arenaId: number; label: string; call: ArenaCall }[] {
+  const out: { arenaId: number; label: string; call: ArenaCall }[] = [];
+  for (const r of rows) {
+    if (r.blocked || r.error || !r.chain) continue;
+    if (r.entryChange && r.newEntry !== null) {
+      out.push({ arenaId: r.arenaId, label: `Arena #${r.arenaId}: ${formatUsdCents(r.usdCents)} ticket`, call: updateArenaFrom(arena, r.chain, { entryFee: r.newEntry }) });
+    }
+    if (r.holdersOnlyChange !== null) {
+      out.push({ arenaId: r.arenaId, label: `Arena #${r.arenaId}: ${r.holdersOnlyChange ? 'emblem holders only' : 'open to everyone'}`, call: setArenaHoldersOnlyCall(arena, r.arenaId, r.holdersOnlyChange) });
+    }
+  }
+  return out;
 }
 
 export function sweepArenaCall(arena: Address, id: number): ArenaCall {

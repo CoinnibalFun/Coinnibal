@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import type { Address, Hash, PublicClient, WalletClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import * as C from '../src/constants';
 import {
   BURN_ADDRESS,
   DEFAULT_BURN_BPS,
@@ -376,11 +377,13 @@ describe('e2e on a hardhat node', () => {
   it('emblem holders get the holder rates and alone enter a holders-only arena', async (ctx) => {
     if (!up) return ctx.skip();
     // p1 holds 2 emblems, p2 holds 1, the outsider none (minted above)
-    const holder = { burnBps: 1500, vaultBps: 0 };
+    // the owner decision: holders pay 10 % of their profit (8 % burned + 2 % fee wallet), everyone else 20 %
+    const holder = { burnBps: C.SUGGESTED_HOLDER_BURN_BPS, vaultBps: C.SUGGESTED_HOLDER_VAULT_BPS };
+    expect(holder).toEqual({ burnBps: 800, vaultBps: 200 });
     await send(admin.address, setHolderPerksCall(arena, nft, holder));
     await send(admin.address, setArenaHoldersOnlyCall(arena, 4, true));
     const c = await getArenaConfig(client, arena);
-    expect(c).toMatchObject({ holderNft: nft, holderBurnBps: 1500, holderVaultBps: 0, burnBps: 1500, vaultBps: 500 });
+    expect(c).toMatchObject({ holderNft: nft, holderBurnBps: 800, holderVaultBps: 200, burnBps: 1500, vaultBps: 500 });
     expect((await getArena(client, arena, 4)).holdersOnly).toBe(true);
     expect((await getArena(client, arena, 2)).holdersOnly).toBe(false);
     expect(await isArenaHolder(client, arena, p1.address)).toBe(true);
@@ -388,7 +391,7 @@ describe('e2e on a hardhat node', () => {
     expect(await getFeeRatesFor(client, arena, p1.address)).toEqual(holder);
     expect(await getFeeRatesFor(client, arena, outsider.address)).toEqual({ burnBps: 1500, vaultBps: 500 });
 
-    await send(admin.address, testTokenMintCall(token, outsider.address, 10_000n * T)); // the owner mints
+    await send(admin.address, testTokenMintCall(token, outsider.address, 20_000n * T)); // the owner mints
     const plan = await planJoin(client, { arena, arenaId: 2, player: p1.address });
     expect(plan).toMatchObject({ rates: holder, standardRates: { burnBps: 1500, vaultBps: 500 }, holder: true, holderDiscount: true, holdersOnly: false });
     for (const call of plan.calls) await send(p1.address, call);
@@ -397,19 +400,21 @@ describe('e2e on a hardhat node', () => {
     for (const call of outsiderPlan.calls) await send(outsider.address, call);
     const s1 = await getSession(client, arena, 2, p1.address);
     const so = await getSession(client, arena, 2, outsider.address);
-    expect([s1.vaultBps, so.vaultBps]).toEqual([0, 500]);
+    expect([s1.burnBps, s1.vaultBps, so.burnBps, so.vaultBps]).toEqual([800, 200, 1500, 500]);
+    const entry = (await getArena(client, arena, 2)).entryFee;
+    expect(entry).toBe(3_000n * T);
     const fees0 = await getTokenBalance(client, token, feeWallet.address);
-    expect((await getArena(client, arena, 2)).vault).toBe(20_000n * T);
+    expect((await getArena(client, arena, 2)).vault).toBe(2n * entry);
     await send(
       server.address,
       settleCalls(arena, [
-        { arenaId: 2, player: p1.address, sessionId: s1.id, payout: 15_000n * T },
-        { arenaId: 2, player: outsider.address, sessionId: so.id, payout: 5_000n * T },
+        { arenaId: 2, player: p1.address, sessionId: s1.id, payout: 4_500n * T },
+        { arenaId: 2, player: outsider.address, sessionId: so.id, payout: 1_500n * T },
       ])[0],
     );
-    // the holder's profit of 5,000 pays 750 burned and nothing to the fee wallet; the outsider lost and pays nothing
-    expect(settlementSplit(s1.entryFee, 15_000n * T, s1)).toEqual({ profit: 5_000n * T, burned: 750n * T, toVault: 0n, net: 14_250n * T });
-    expect((await getTokenBalance(client, token, feeWallet.address)) - fees0).toBe(0n);
+    // the holder's profit of 1,500 pays 120 burned and 30 to the fee wallet (10 %); the outsider lost and pays nothing
+    expect(settlementSplit(s1.entryFee, 4_500n * T, s1)).toEqual({ profit: 1_500n * T, burned: 120n * T, toVault: 30n * T, net: 4_350n * T });
+    expect((await getTokenBalance(client, token, feeWallet.address)) - fees0).toBe(30n * T);
 
     // holders-only: refused early by planJoin, and by the contract
     await expect(planJoin(client, { arena, arenaId: 4, player: outsider.address, token })).rejects.toThrow(/holders only/);
@@ -449,7 +454,7 @@ describe('e2e on a hardhat node', () => {
 
     // the status read shows the perks and the TestToken (auto-detected as the game token)
     const status = await fetchStatus(client, { arena, nft, account: admin.address });
-    expect(status.arena?.config).toMatchObject({ holderNft: nft, holderBurnBps: 1500, holderVaultBps: 0 });
+    expect(status.arena?.config).toMatchObject({ holderNft: nft, holderBurnBps: 800, holderVaultBps: 200 });
     expect(status.arena?.arenas.find((a) => a.id === 4)?.holdersOnly).toBe(true);
     expect(status.testToken).toMatchObject({ address: token, code: 'ok' });
     expect(status.testToken?.faucet).toMatchObject({ amount: 10n * T, holderAmount: 30n * T, holderNft: nft });

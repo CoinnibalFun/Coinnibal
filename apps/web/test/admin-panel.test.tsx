@@ -252,7 +252,7 @@ describe('Deploy wizard', () => {
     const withToken = ctxOf({ net, status: { arena: { code: 'ok', config: { admin: ALICE, token: BOB, decimals: 18 }, arenas: [{ id: 1, exists: true }] }, nft: { code: 'ok' } } as unknown as StatusSnapshot });
     ui(<DeployTab ctx={withToken} />);
     act(() => screen.getByTestId('create-arena').click());
-    expect(withToken.plans[0].call).toMatchObject({ functionName: 'createArena', args: [2, 10_000n * 10n ** 18n, 300] });
+    expect(withToken.plans[0].call).toMatchObject({ functionName: 'createArena', args: [2, 3_000n * 10n ** 18n, 300] });
   });
 
   it('asks for no address: the NFT treasury and base URI are shown, their overrides sit under Advanced', () => {
