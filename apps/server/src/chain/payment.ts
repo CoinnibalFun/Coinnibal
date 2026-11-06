@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname } from 'node:path';
 import { CUSTOM_PAYMENT_MAX_AGE_MS } from '@elymum/shared';
 import { createPublicClient, getAddress, type Hash, type PublicClient } from 'viem';
-import { budgetTransport } from './evm-client';
+import { budgetTransport, type RpcUrls } from './evm-client';
 import { isTransientRpcError, withRpcPriority } from './rpc-budget';
 
 /**
@@ -47,8 +47,8 @@ export class PaymentChainBusy extends Error {
  * (transaction, receipt, block) at `normal` priority: room creation is rare and user-initiated,
  * and must never queue in front of paid joins and settlements (`high`).
  */
-export function viemPaymentReader(rpcUrl: string): PaymentReader {
-  const client = createPublicClient({ transport: budgetTransport(rpcUrl, { batch: true }) }) as PublicClient;
+export function viemPaymentReader(rpc: RpcUrls): PaymentReader {
+  const client = createPublicClient({ transport: budgetTransport(rpc, { batch: true }) }) as PublicClient;
   return {
     transfer: (hash) =>
       withRpcPriority('normal', async () => {
