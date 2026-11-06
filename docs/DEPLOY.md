@@ -4,9 +4,10 @@ This is the whole path from an empty host to a running game with an open mint. T
 then the owner deploys both contracts **from their own wallet in `/admin`** and the server registers them.
 Nothing here needs a terminal on the chain side: the CLI (`pnpm admin`, at the end) is an alternative.
 
-Moving the game server to your own VPS (Docker + Caddy, auto-deploy, daily backups, one-command install):
-[deploy/vps/README.md](../deploy/vps/README.md). `/admin` → Network → **Backup & move** downloads the server's
-whole data folder (`GET /api/admin/backup`, admin only).
+The game server runs on a VPS (Docker + Caddy, CI-green auto-deploy with rollback, alerts, daily and offsite
+backups, one-command install): [deploy/vps/README.md](../deploy/vps/README.md). The backup of the whole data folder
+(`GET /api/admin/backup`) needs a fresh signature of the admin wallet each time, and is off on the mainnet unless
+`ADMIN_SECRET_EXPORT=1` (OPERATIONS.md, "Journal and data backup").
 
 Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testnet deploy). How the money moves:
 [ARCHITECTURE.md](ARCHITECTURE.md). The economy: [ECONOMY.md](ECONOMY.md). Chain facts: [RESEARCH.md](RESEARCH.md).
@@ -14,8 +15,8 @@ Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testne
 
 ## The order
 
-1. **Server** on a host with a persistent disk (Render below), `SERVER_PRIVATE_KEY=auto`, `ADMIN_WALLETS` = your
-   owner wallet, `CHAIN_ID=46630` and `EVM_RPC_URL` = Robinhood Chain Testnet (later `4663` and a mainnet RPC).
+1. **Server** on the VPS (deploy/vps/README.md), `SERVER_PRIVATE_KEY=auto`, `ADMIN_WALLETS` = your owner wallet,
+   `CHAIN_ID=46630` and `EVM_RPC_URLS` = Robinhood Chain Testnet (later `4663` and Alchemy plus the public RPC).
 2. **Fund the server key** with a little ETH (it pays gas for settlements, cancels and loot burns).
 3. In `/admin` on the site, with the owner wallet on Robinhood Chain: **Deploy Arena → Deploy NFT → register both**
    (on the testnet also the TestToken).
@@ -48,54 +49,46 @@ from testnet to mainnet is a server setting, not a rebuild.
 ...). The owner wallet is the one you will keep: it owns the contracts. A hardware wallet behind MetaMask or
 Rabby works. Get testnet ETH for it (and later for the server key) from the faucet.
 
-## 1. The server on Render
+## 1. The server
 
-One Docker container serves the game server and the web client on the same origin
-(`Dockerfile` at the repository root; image name `elymum`).
-
-1. **New → Web Service** from the repository, runtime **Docker** (the root `Dockerfile`), a region near your
-   players, a paid plan (the free plan has no disk).
-2. **Disk**: mount a persistent disk at **`/data`** (1 to 2 GB is plenty). It holds the money journal, the server
-   key, the contracts registry, profiles, standings and the site data. The entrypoint makes it writable for the
-   `node` user.
-3. **Environment** (Render passes these to the Docker build as well, which `VITE_PUBLIC_URL` needs):
+One Docker container runs the game server (`Dockerfile` at the repository root, image `elymum-app`) behind Caddy on
+the VPS: deploy/vps/README.md installs it, keeps it up to date and backs it up. The website is Vercel's
+(`elymum.io`); the game domain sends a browser to it (`WEB_DIST` unset). The settings (`/opt/elymum/.env`):
 
 | Variable | Value |
 |---|---|
 | `NODE_ENV` | `production` |
-| `DATA_DIR` | `/data` |
-| `PUBLIC_URL` | **required**: the site's address, e.g. `https://<your current domain>` (the SIWE domain and the base of the NFT metadata URLs). The server refuses to start without it unless `NODE_ENV=development`; it never derives the sign-in domain from `Host` / `X-Forwarded-Host` |
-| `VITE_PUBLIC_URL` | the same value (build time: absolute canonical and Open Graph URLs in `index.html`) |
+| `PUBLIC_URL` | **required**: the site's address, `https://elymum.io` (the SIWE domain and the base of the NFT metadata URLs). The server refuses to start without it unless `NODE_ENV=development`; it never derives the sign-in domain from `Host` / `X-Forwarded-Host` |
 | `CHAIN_ID` | `46630` (Robinhood Chain Testnet, the default), later `4663` (Robinhood Chain) |
-| `EVM_RPC_URL` | `https://rpc.testnet.chain.robinhood.com` (testnet), later a mainnet provider RPC (may hold an API key; never sent to browsers) |
-| `PUBLIC_RPC_URL` | optional: an RPC for browsers, no secrets (default: `EVM_RPC_URL` when it is a public Robinhood Chain RPC, else the wallet's own RPC) |
+| `EVM_RPC_URLS` | the server's RPCs in order: on the mainnet the Alchemy URL, then `https://rpc.mainnet.chain.robinhood.com` (a fallback; may hold an API key; never sent to browsers). `EVM_RPC_URL` (one URL) still works |
+| `RPC_MAX_RPS` | calls per second per URL (`25,4`) |
+| `PUBLIC_RPC_URL` | optional: an RPC for browsers, no secrets (default: the public Robinhood Chain RPC of the list, else the wallet's own RPC) |
 | `EXPLORER_URL`, `GAS_FAUCET_URL` | optional overrides of the built-in explorer and testnet faucet link |
 | `SERVER_PRIVATE_KEY` | `auto`: generated once into `/data/server-key.json` (mode 0600) and reused; its address is logged and published as `serverKey` |
 | `ADMIN_WALLETS` | your owner wallet's 0x address (comma-separated for more). **No default**: unset, nobody is admin |
-| `AUTH_SECRET` | `openssl rand -hex 32` (otherwise players sign in again after each restart) |
-| `TRUST_PROXY` | `1` (set by the image already): the client IP is the right-most `X-Forwarded-For` hop; with more than one proxy in front, set `TRUST_PROXY_HOPS` to their number (default 1) |
-| `CORS_ORIGIN` | the site's origin(s), comma-separated, when the web is hosted elsewhere (e.g. `https://elymum.io`); `*` when the server serves the web itself |
-| `PAYOUT_GUARD_MULTIPLE` | `100` (default): a payout above this many entry fees is held for an admin; see OPERATIONS.md, "The server key" |
-| `MAX_CONNECTIONS`, `MAX_CONNECTIONS_PER_IP`, `MAX_CONNECTIONS_PER_SUBNET` | `600`, `8`, `48` (defaults): WebSocket caps (total, per IP, per IPv4 /24 or IPv6 /64) |
+| `AUTH_SECRET` | `openssl rand -hex 32` (at least 32 bytes: the mainnet refuses to start with less), or empty for a generated one in the data volume |
+| `CORS_ORIGIN` | `https://elymum.io` |
+| `PAYOUT_GUARD_MULTIPLE` | `100` (default): the payout guard of settlements without a round pool; see OPERATIONS.md, "The server key" |
+| `MAX_CONNECTIONS`, `MAX_CONNECTIONS_PER_IP`, `MAX_CONNECTIONS_PER_SUBNET` | `1500`, `8`, `48` (defaults): WebSocket caps (total, guests per IP, guests per IPv4 /24 or IPv6 /64) |
+| `GAME_WORKERS` | `5` on 8 vCPU |
 | `LOAD_SHED` | on by default in production: new free games, then new sockets and arena seats wait while the server is overloaded |
 | `MINT_USD_CENTS` | `100` (the $1 target; default) |
 | `NFT_COLLECTION_SIZE`, `NFT_ART_STYLE` | `5000` (= the NFT's max supply), `vector` (or `pixel`): the emblem collection (docs/NFT-DESIGN.md). Leave `NFT_COLLECTION_SEED` empty: the seed is generated and committed on first boot (`DATA_DIR/chains/<id>/nft-collection.json`, keep it in the backups) |
 | `TOKEN_SYMBOL` | `$ELYMUM` (default; display only) |
-| `GAME_ACCESS` | leave empty: the `/admin` setting decides (`public` on the testnet, `admins` on mainnet until you open the mint) |
+| `GAME_ACCESS` | `maintenance` until you open (the compose default), `site` lets the `/admin` setting decide |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `BACKUP_RCLONE_REMOTE` | the alerts and the encrypted offsite backup (deploy/vps/README.md) |
 
 Leave `ARENA_ADDRESS` and `NFT_ADDRESS` empty: the addresses come from the registry `/admin` writes. Never set
 `DEV_FAKE_CHAIN` on a deployed server. The full list with comments: `apps/server/.env.example`.
 
-4. Deploy. The health check is `GET /api/health`. The log shows `chain: ...` with the chain id and the server key
-   address; `GET /api/config` shows the same (`chain.serverKey`). A disk-backed service restarts briefly on every
-   deploy; the journal keeps every value, but players reconnect, so deploy at quiet hours.
+The log shows `chain: ...` with the chain id, the RPCs and the server key address; `GET /api/config` shows the
+same (`chain.serverKey`). `GET /api/health` answers 503 with its reasons when something needs a person
+(OPERATIONS.md, "Monitoring"); `/api/health?live=1` is the container's liveness check. Deploys swap the container in
+the break after an arena bell (no live stake then).
 
-**Domain.** The site is served at whatever `PUBLIC_URL` says, today your current domain. In Render → Settings →
-Custom Domains add the domain (and `www`), then point the DNS at Render (`A @` to Render's address, `CNAME www` to
-the service's `onrender.com` host); Render issues the certificates. To move to **elymum.io** later: add it in
-Render, point its DNS, change `PUBLIC_URL` and `VITE_PUBLIC_URL` to `https://elymum.io` and redeploy. Nothing in
-the code or the art names a domain. Players sign in again on the new domain (SIWE binds the domain). NFT metadata
-URLs follow the NFT's base URI: update it with `setBaseURI` (Mint tab) unless you froze it.
+**Domain.** The site is wherever `PUBLIC_URL` says (`https://elymum.io`). Nothing in the code or the art names a
+domain. Players sign in again on a new domain (SIWE binds the domain). NFT metadata URLs follow the NFT's base URI:
+update it with `setBaseURI` (Mint tab) unless you froze it.
 
 **Without Docker.** `pnpm install && pnpm -F @elymum/web build && pnpm -F @elymum/server build`, then run
 `node apps/server/dist/index.js` with the variables above and `WEB_DIST=apps/web/dist`. The server does not read a
@@ -105,7 +98,9 @@ URLs follow the NFT's base URI: update it with `setBaseURI` (Mint tab) unless yo
 
 Send a little ETH to the `serverKey` address (on testnet from the faucet). It pays gas for the settlement
 batches at each bell, the cancels of unplayed tickets and the loot burns; on an L2 that is cheap (an L2 execution
-fee plus an L1 data fee), but keep a buffer. Below 0.01 ETH the server logs a warning and `/admin` shows it in red.
+fee plus an L1 data fee), but keep a buffer. The server measures its spend over the last day: under 7 days of runway
+it warns, under 2 days (or under 0.002 ETH) it alerts with `!!!`, `/api/health` answers 503 and `/admin` shows it in
+red (OPERATIONS.md, "The server key and gas").
 
 ## 3. Deploy the contracts from `/admin`
 
