@@ -4,6 +4,7 @@ import type { Address } from 'viem';
 import { SERVER } from '../config';
 import { isDevFake, loadDevFake } from './devFakeLoader';
 import { publicClientFor } from './network';
+import { verifyArena } from './pinned';
 import { connected } from './store';
 import { sendWalletCall, txErrorText, type TxPhase } from './tx';
 import { serverText, t } from '../i18n';
@@ -83,11 +84,15 @@ export async function buyPack(
     hash = await dev.fakeShopPay(ctx.owner, amount, ref, (p) => ctx.onPhase?.(p));
   } else {
     const token = view.token.address as Address;
-    const arena = view.payTo as Address;
     const owner = ctx.owner as Address;
     const reader = publicClientFor(ctx.chain, connected()?.provider ?? null);
+    if (!reader) throw new ShopError('network', t('api.reach'));
+    // the shop pays the pinned arena only (with the compiled code, and its pinned token): never the server's word alone
+    const pin = await verifyArena(reader, ctx.chain.chainId, { arena: view.payTo, token });
+    if (!pin.ok) throw new ShopError(pin.reason === 'unreadable' ? 'network' : 'tx', pin.reason === 'unreadable' ? t('api.reach') : t('tf.err.ContractMismatch'));
+    const arena = pin.arena;
     // an unknown allowance asks for the approval, to be safe
-    const allowance = reader ? await getAllowance(reader, token, owner, arena).catch(() => 0n) : 0n;
+    const allowance = await getAllowance(reader, token, owner, arena).catch(() => 0n);
     if (allowance < amount) {
       const ok = await sendWalletCall(approveCall(token, arena, amount), { chain: ctx.chain, onPhase: (p) => ctx.onPhase?.(p) });
       if (!ok.ok) throw new ShopError(ok.error.kind === 'rejected' ? 'rejected' : 'tx', txErrorText(ok.error), null);

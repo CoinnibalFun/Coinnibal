@@ -58,13 +58,15 @@ export interface Settings {
   showFps: boolean;
   showMinimap: boolean;
   showChat: boolean;
+  /** Other players' stickers (the 1–8 emotes) over their coins; my own sticker buttons stay either way. */
+  showEmotes: boolean;
   /** Last arena the player bought a ticket for (Quick Play goes back there). */
   lastArena: number | null;
   /**
-   * "Approve only this ticket": each ticket approves exactly its entry fee (two wallet prompts
-   * every time). Off (default): the first ticket approves once for all later ones.
+   * "Approve N tickets at once" (`APPROVE_BATCH_TICKETS`, explicit and capped): the approval covers that many tickets
+   * of the room. Off (default): every ticket approves exactly its own entry fee. Never an unlimited approval.
    */
-  exactApprove: boolean;
+  approveBatch: boolean;
 }
 
 export interface KillItem {
@@ -81,6 +83,16 @@ export interface KillItem {
   at: number;
 }
 
+/** Why the game server's socket is down, for the connection banner (`game/net.ts`). */
+export interface NetDown {
+  /** `replaced`: another tab took the coin over (no reconnect until the player asks); `lost`: a reconnect is scheduled. */
+  kind: 'lost' | 'replaced';
+  /** Reconnect attempts since the last open socket (1 for the first). */
+  attempt: number;
+  /** When the next attempt starts (`performance.now()` clock); null when none is scheduled. */
+  retryAt: number | null;
+}
+
 export interface ChatItem {
   id: number;
   pid: number;
@@ -88,6 +100,8 @@ export interface ChatItem {
   skin: number;
   text: string;
   system?: boolean;
+  /** Not known to be signed in (a guest's line is muted: anyone can type anything there). */
+  guest?: boolean;
   at: number;
 }
 
@@ -110,7 +124,7 @@ export interface Toast {
   at: number;
 }
 
-export type Modal = 'settings' | 'howto' | 'wallet' | 'shop' | 'standings' | null;
+export type Modal = 'settings' | 'howto' | 'wallet' | 'shop' | 'standings' | 'tokens' | null;
 
 /** Lobby pages: the ticket front page, the newspaper leaderboard, the profile, the player guide. */
 export type LobbyPage = 'play' | 'ranks' | 'profile' | 'docs';
@@ -129,6 +143,8 @@ export interface UiState {
   screen: Screen;
   connected: boolean;
   connecting: boolean;
+  /** Why the game server's socket is down (the connection banner), null while it is up. */
+  netDown: NetDown | null;
   ping: number;
   fps: number;
   online: number;
@@ -166,7 +182,7 @@ export interface UiState {
   /** A custom room closes at `endsAt` (server clock; `closing`): the countdown everyone in it sees, and why. */
   closing: { endsAt: number; message: string } | null;
   /** The last "Share on X" card the server made for me (`share`): a result's or a notable kill's; `at`: local ms. */
-  share: { kind: 'round' | 'room' | 'kill'; id: string; victim?: string; at: number } | null;
+  share: { kind: 'round' | 'room' | 'kill'; id: string; victim?: string; victimIsBot?: boolean; test?: boolean; at: number } | null;
   /** A free custom room ended (`roomOver`): its final board (everyone by mass), the room it was, my game in it. */
   roomResult: { message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null; room: RoomInfo | null } | null;
   /**
@@ -263,14 +279,21 @@ function loadSettings(): Settings {
     showFps: false,
     showMinimap: true,
     showChat: true,
+    showEmotes: true,
     lastArena: null,
-    exactApprove: false,
+    approveBatch: false,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) {
-      // retired fields: `lang` (the interface is English only) and `passSkin` (the old pass is gone)
-      const { lang: _lang, passSkin: _passSkin, ...saved } = JSON.parse(raw) as Partial<Settings> & { lang?: unknown; passSkin?: unknown };
+      // retired fields: `lang` (the interface is English only), `passSkin` (the old pass is gone) and `exactApprove`
+      // (approvals are exact by default now; the old "off" meant an unlimited approval, which is never asked again)
+      const {
+        lang: _lang,
+        passSkin: _passSkin,
+        exactApprove: _exactApprove,
+        ...saved
+      } = JSON.parse(raw) as Partial<Settings> & { lang?: unknown; passSkin?: unknown; exactApprove?: unknown };
       const out = mergeSettings(defaults, saved);
       out.musicTrack = musicChoice(out.musicTrack);
       return out;
@@ -285,6 +308,7 @@ export const useUi = create<UiState>(() => ({
   screen: 'lobby',
   connected: false,
   connecting: true,
+  netDown: null,
   ping: 0,
   fps: 0,
   online: 0,

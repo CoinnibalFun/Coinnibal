@@ -2,6 +2,7 @@ import { getAddress, isAddress, type Address } from 'viem';
 import { create } from 'zustand';
 import { describeError } from '@elymum/sdk';
 import { discoverProviders, type Eip1193Provider, type ProviderDetail } from './eip6963';
+import { WC_RDNS, endWalletConnect } from './walletconnect';
 import { t } from '../i18n';
 
 /**
@@ -215,7 +216,10 @@ export function disconnectWallet(): void {
   detach?.();
   remember(null);
   useWallet.setState({ current: null, address: null, chainId: null, status: 'disconnected', error: null });
-  if (cur) void cur.provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] }).catch(() => {});
+  // a WalletConnect session is ended for real (the wallet app forgets this site too); a browser wallet is asked to
+  // drop the permission
+  if (cur?.info.rdns === WC_RDNS) void endWalletConnect();
+  else if (cur) void cur.provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] }).catch(() => {});
 }
 
 /** The connected provider and account, or null. */

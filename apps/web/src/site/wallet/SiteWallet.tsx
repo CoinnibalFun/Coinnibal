@@ -1,9 +1,12 @@
+import type { ChainStatus } from '@elymum/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AddressChip, Button, Icon, StatusPill } from '../../design';
 import { providerSigner } from '../../wallet/siwe';
 import { connectWallet, connected, disconnectWallet, initWallets, useWallet } from '../../wallet/store';
 import { useT } from '../../i18n';
 import { T } from '../../i18n/rich';
+import { MoreWallets } from '../../wallet/MoreWallets';
+import { fetchServerChain } from '../serverChain';
 import { signIn, signOut, useSession, type SiteSession } from '../session';
 
 const strong = (c: ReactNode) => <strong>{c}</strong>;
@@ -26,6 +29,19 @@ export function useSiteSession(): SiteSession | null {
 
 const same = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
+/** The game server's chain for WalletConnect (asked for exactly that chain); null until `/api/config` answers. */
+function useSiteChain(): ChainStatus | null {
+  const [chain, setChain] = useState<ChainStatus | null>(null);
+  useEffect(() => {
+    let live = true;
+    void fetchServerChain().then((c) => live && setChain(c));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return chain;
+}
+
 /**
  * Connect a wallet and sign in (one free SIWE message, no transaction). Shows the wallets found in
  * this browser; after the visitor picks one, it asks for the signature once by itself.
@@ -44,6 +60,7 @@ export function WalletSignIn({ label: given, onSession }: { label?: string; onSe
   const [picked, setPicked] = useState(false);
   const asked = useRef<string | null>(null);
   const connecting = status === 'connecting';
+  const chain = useSiteChain();
 
   useEffect(() => initWallets(), []);
 
@@ -163,6 +180,7 @@ export function WalletSignIn({ label: given, onSession }: { label?: string; onSe
           })}
         </div>
       )}
+      <MoreWallets chain={chain} hasInjected={providers.length > 0} onConnected={() => setPicked(true)} sym="$ELYMUM" />
       <p className="sw-note">{connecting ? t('sw.connecting') : t('sw.freeIn')}</p>
       {(error || walletError) && (
         <p className="sw-note is-error" role="alert">
@@ -185,19 +203,23 @@ export function WalletConnect({ note: given, onPick }: { note?: string; onPick?:
   const current = useWallet((s) => s.current);
   const walletError = useWallet((s) => s.error);
   const connecting = status === 'connecting';
+  const chain = useSiteChain();
 
   useEffect(() => initWallets(), []);
 
   if (providers.length === 0)
     return (
-      <p className="sw-none">
-        <span className="sw-none__icon" aria-hidden="true">
-          <Icon name="wallet" size={22} />
-        </span>
-        <span>
-          <T k="sw.none" tags={{ strong }} />
-        </span>
-      </p>
+      <div className="sw">
+        <p className="sw-none">
+          <span className="sw-none__icon" aria-hidden="true">
+            <Icon name="wallet" size={22} />
+          </span>
+          <span>
+            <T k="sw.none" tags={{ strong }} />
+          </span>
+        </p>
+        <MoreWallets chain={chain} hasInjected={false} onConnected={onPick} sym="$ELYMUM" />
+      </div>
     );
   return (
     <div className="sw" data-testid="sw-connect">
@@ -225,6 +247,7 @@ export function WalletConnect({ note: given, onPick }: { note?: string; onPick?:
           );
         })}
       </div>
+      <MoreWallets chain={chain} hasInjected onConnected={onPick} sym="$ELYMUM" />
       <p className="sw-note">{connecting ? t('sw.connecting') : note}</p>
       {walletError && (
         <p className="sw-note is-error" role="alert">

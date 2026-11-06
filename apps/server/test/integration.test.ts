@@ -864,13 +864,18 @@ describe('server over websocket', () => {
     expect(over.payout).toBe(item?.payout);
     const burned = app.journal.pending.filter((p) => p.kind === 'sweep' && p.roomId === 'test-1').reduce((n, p) => n + (p.kind === 'sweep' ? p.amount : 0), 0);
     expect((item?.payout ?? 0) + burned).toBe(10_000_000);
-    // off every official board: no record, no "last rounds" entry, no share card
+    // off every official board: no record, no "last rounds" entry; its share card is a TEST card (no payout)
     const lb = app.leaderboards.snapshot();
     expect([...lb.daily, ...lb.allTime].some((x) => x.name === 'TestArenaPlayer')).toBe(false);
     expect(lb.rounds.some((x) => x.top.some((t) => t.name === 'TestArenaPlayer'))).toBe(false);
     expect(lb.rounds.some((x) => x.top.some((t) => t.name === 'Official'))).toBe(true);
-    expect(c.msgs.some((m) => m.t === 'share')).toBe(false);
-    expect(o.msgs.some((m) => m.t === 'share')).toBe(true);
+    const testShare = c.msgs.find((m) => m.t === 'share') as Extract<ServerMessage, { t: 'share' }> | undefined;
+    expect(testShare).toMatchObject({ kind: 'round', test: true });
+    expect(app.shares.get(testShare!.id)).toMatchObject({ test: true });
+    expect(app.shares.get(testShare!.id)?.paid).toBeUndefined();
+    const officialShare = o.msgs.find((m) => m.t === 'share') as Extract<ServerMessage, { t: 'share' }> | undefined;
+    expect(officialShare).toBeTruthy();
+    expect(officialShare!.test).toBeUndefined();
 
     for (const [w, t] of [
       [player, ticket],

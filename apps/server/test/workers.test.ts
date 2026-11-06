@@ -550,7 +550,8 @@ describe('room workers: arena instance scaling', () => {
       expect((await c2.wait('joined')).room.id).toBe('arena-1-2');
       const second = a.rooms.get('arena-1-2') as RemoteRoom;
       expect(second).toBeInstanceOf(RemoteRoom);
-      expect(a.rooms.scaler.log()[0]).toMatchObject({ action: 'overflow', room: 'arena-1-2' });
+      // the scaler's own tick may log a scale-up (both instances are full) right after the overflow: look for the decision
+      expect(a.rooms.scaler.log().find((x) => x.action === 'overflow')).toMatchObject({ action: 'overflow', room: 'arena-1-2' });
       // the bell settles both tickets (once each, on the main thread)
       const r = roundAt(now());
       off += r.endsAt + 50 - now();
@@ -565,7 +566,7 @@ describe('room workers: arena instance scaling', () => {
       expect(closed.message).toMatch(/instance closed/);
       await until(() => a.rooms.get('arena-1-2') === undefined);
       a.rooms.scaler.step(t + 15 * 5000);
-      expect(a.rooms.scaler.log()[0]).toMatchObject({ action: 'close', room: 'arena-1-2' });
+      expect(a.rooms.scaler.log().find((x) => x.action === 'close')).toMatchObject({ action: 'close', room: 'arena-1-2' });
       expect(a.rooms.get('arena-1-1')).toBeDefined();
       expect(a.journal.settlements().filter((s) => s.key === t2.key)).toHaveLength(1);
       c1.ws.close();

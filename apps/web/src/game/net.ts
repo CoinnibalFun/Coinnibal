@@ -1,26 +1,55 @@
 import { PROTOCOL_VERSION, type ClientMessage, type ServerMessage } from '@elymum/shared';
+import type { NetDown } from '../store';
+
+/**
+ * The WebSocket close code of "your coin was taken over by your newer connection" (the same wallet opened the game
+ * in another tab or window, and the server moved the coin there).
+ * TODO(group-a): use `CLOSE_REPLACED` from `packages/shared/src/protocol.ts` once it lands there (same value, 4000).
+ */
+export const CLOSE_REPLACED = 4000;
+
+/** No frame and no pong for this long: the socket is dead even if the browser has not noticed; close and reconnect. */
+export const WATCHDOG_MS = 4_000;
+/** The ping (the server answers `pong`; the watchdog hears it even when no snapshots flow). */
+const PING_MS = 2_000;
+/** How often the watchdog looks. */
+const WATCH_EVERY_MS = 500;
+
+export type { NetDown } from '../store';
 
 export interface NetHandlers {
   onOpen(): void;
-  onClose(): void;
+  onClose(down: NetDown): void;
   onMessage(msg: ServerMessage): void;
   /** A binary snapshot as received (the engine applies it straight into the world: `ClientWorld.applyBinary`). */
   onSnapshot(buf: ArrayBuffer): void;
 }
 
-/** WebSocket with automatic reconnect, JSON + binary routing and ping. */
+/** The reconnect backoff: 0.5 s, 1 s, 2 s, 4 s, then every 8 s. */
+export const retryDelay = (attempt: number): number => Math.min(8000, 500 * 2 ** Math.max(0, attempt - 1));
+
+/**
+ * WebSocket with automatic reconnect, JSON + binary routing, ping, and a watchdog: a phone that changed networks (or
+ * a path that went silent) keeps a socket the browser still thinks is open for a long time; when nothing at all
+ * arrived for `WATCHDOG_MS` the socket is dropped and a new one opened. A close with `CLOSE_REPLACED` is not
+ * reconnected (two tabs would take the coin from each other forever): the player chooses with `resume`.
+ */
 export class Net {
   private ws: WebSocket | null = null;
   private retry = 0;
   private closedByUser = false;
   private pingTimer: number | null = null;
+  private watchTimer: number | null = null;
   /** The pending reconnect after a drop (cleared by `close`: a closed engine stays offline). */
   private retryTimer: number | null = null;
+  /** The last frame, message or pong from the server (`performance.now()`). */
+  private lastHeard = 0;
   rtt = 0;
 
   constructor(
     private readonly url: string,
     private readonly handlers: NetHandlers,
+    private readonly watchdogMs = WATCHDOG_MS,
   ) {}
 
   connect(): void {
@@ -30,12 +59,17 @@ export class Net {
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
     ws.onopen = () => {
+      if (this.ws !== ws) return;
       this.retry = 0;
+      this.lastHeard = performance.now();
       this.send({ t: 'hello', v: PROTOCOL_VERSION });
       this.handlers.onOpen();
-      this.pingTimer = window.setInterval(() => this.send({ t: 'ping', ts: performance.now() }), 2000);
+      this.pingTimer = window.setInterval(() => this.send({ t: 'ping', ts: performance.now() }), PING_MS);
+      this.watchTimer = window.setInterval(() => this.watch(), WATCH_EVERY_MS);
     };
     ws.onmessage = (ev) => {
+      if (this.ws !== ws) return;
+      this.lastHeard = performance.now();
       if (typeof ev.data === 'string') {
         let msg: ServerMessage;
         try {
@@ -53,17 +87,52 @@ export class Net {
         }
       }
     };
-    ws.onclose = () => {
-      if (this.pingTimer) clearInterval(this.pingTimer);
-      this.pingTimer = null;
-      this.ws = null;
-      this.handlers.onClose();
-      if (!this.closedByUser) {
-        const delay = Math.min(8000, 500 * 2 ** this.retry++);
-        this.retryTimer = window.setTimeout(() => this.connect(), delay);
-      }
+    ws.onclose = (ev?: CloseEvent) => {
+      if (this.ws !== ws) return;
+      this.down(ev?.code === CLOSE_REPLACED ? 'replaced' : 'lost');
     };
     ws.onerror = () => ws.close();
+  }
+
+  /** Nothing heard for too long: give up on this socket now (its own close may take minutes to come). */
+  private watch(): void {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (performance.now() - this.lastHeard < this.watchdogMs) return;
+    try {
+      ws.close();
+    } catch {
+      /* already closing */
+    }
+    if (this.ws === ws) this.down('lost');
+  }
+
+  /** The socket is gone: stop its timers, tell the engine, and schedule the next attempt (unless replaced or closed). */
+  private down(kind: NetDown['kind']): void {
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    if (this.watchTimer) clearInterval(this.watchTimer);
+    this.pingTimer = null;
+    this.watchTimer = null;
+    this.ws = null;
+    if (this.closedByUser) {
+      this.handlers.onClose({ kind, attempt: this.retry, retryAt: null });
+      return;
+    }
+    if (kind === 'replaced') {
+      this.retry = 0;
+      this.handlers.onClose({ kind, attempt: 0, retryAt: null });
+      return;
+    }
+    const delay = retryDelay(++this.retry);
+    this.retryTimer = window.setTimeout(() => this.connect(), delay);
+    this.handlers.onClose({ kind, attempt: this.retry, retryAt: performance.now() + delay });
+  }
+
+  /** Reconnects now (after `replaced`: "Play here"; or "Retry now" while waiting). */
+  resume(): void {
+    if (this.ws) return;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.connect();
   }
 
   get open(): boolean {
