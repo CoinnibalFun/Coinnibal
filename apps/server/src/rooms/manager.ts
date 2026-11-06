@@ -817,6 +817,12 @@ export class RoomManager {
   }
 
   /** The room of `arenaId` (a public instance or a paid custom room) in which `wallet` holds a live ticket, if any. */
+  /** Whether `wallet` holds a live arena coin in any room (its reconnect is admitted before anyone else). */
+  holdsLiveStake(wallet: string): boolean {
+    for (const room of this.handles()) if (room.opts.mode === 'arena' && room.findStakeByWallet(wallet)) return true;
+    return false;
+  }
+
   findArenaStake(arenaId: number, wallet: string): { room: RoomHandle; entry: StakeSeat } | null {
     for (const room of this.ticketRooms(arenaId)) {
       const entry = room.findStakeByWallet(wallet);

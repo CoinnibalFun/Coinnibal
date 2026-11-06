@@ -393,7 +393,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     maxConnectionsPerSubnet: Math.max(1, int(env.MAX_CONNECTIONS_PER_SUBNET, 48)),
     loadShed: bool(env.LOAD_SHED, env.NODE_ENV === 'production'),
     wsHelloTimeoutMs: Math.max(200, int(env.WS_HELLO_TIMEOUT_MS, 10_000)),
-    maxConnections: int(env.MAX_CONNECTIONS, 600),
+    maxConnections: int(env.MAX_CONNECTIONS, 1500),
     practiceCapacity: Math.max(1, int(env.PRACTICE_CAPACITY ?? env.FREE_ROOM_CAPACITY, CAPACITY.practice)),
     privateRoomCapacity: int(env.PRIVATE_ROOM_CAPACITY, CAPACITY.private),
     arenaInstanceCap: Math.max(1, int(env.ARENA_INSTANCE_CAP, CAPACITY.arena)),
