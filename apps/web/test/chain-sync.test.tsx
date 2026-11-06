@@ -1,10 +1,18 @@
 import { act, render } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useUi } from '../src/store';
 import { readChain, useChainData, useChainSync } from '../src/wallet/chain';
 import { DEV_FAKE_ARENA_ADDRESS } from '../src/wallet/devFakeLoader';
 import { resetWallets, useWallet } from '../src/wallet/store';
 import { ALICE, BOB, ONE, chainStatus, detail, fakeProvider } from './evm-helpers';
+
+// the pin and code-hash check (pinned.test.ts tests it): the arena of these tests passes unless a test says otherwise
+const pin = vi.hoisted(() => ({ verifyArena: vi.fn() }));
+vi.mock('../src/wallet/pinned', async (orig) => ({ ...(await orig<typeof import('../src/wallet/pinned')>()), verifyArena: pin.verifyArena }));
+beforeEach(() => {
+  pin.verifyArena.mockReset();
+  pin.verifyArena.mockImplementation(async (_c: unknown, _id: unknown, a: { arena: string }) => ({ ok: true, arena: a.arena }));
+});
 
 const ui0 = useUi.getState();
 const chain0 = useChainData.getState();
@@ -137,7 +145,22 @@ describe('readChain', () => {
   it('no token yet: no arenas or token reads; no contract: not deployed', async () => {
     const d = await readChain(client({ config: { ...cfg, token: '0x0000000000000000000000000000000000000000' } }), chainStatus({ arenaAddress: ARENA }), ALICE);
     expect(d).toMatchObject({ deployed: true, arenas: [], tokenBalance: null, allowance: null });
-    const broken = { readContract: async () => Promise.reject(new Error('no code')) } as never;
-    expect((await readChain(broken, chainStatus({ arenaAddress: ARENA }), ALICE)).deployed).toBe(false);
+    const broken = { readContract: async () => Promise.reject(new Error('no code')), getBlockNumber: async () => 7n } as never;
+    expect(await readChain(broken, chainStatus({ arenaAddress: ARENA }), ALICE)).toMatchObject({ deployed: false, rpcDown: false });
+  });
+
+  it('an RPC that does not answer at all is "can\'t reach", not "no contract"', async () => {
+    const down = { readContract: async () => Promise.reject(new Error('fetch failed')), getBlockNumber: async () => Promise.reject(new Error('fetch failed')) } as never;
+    expect(await readChain(down, chainStatus({ arenaAddress: ARENA }), ALICE)).toMatchObject({ deployed: false, rpcDown: true, arenas: [] });
+  });
+
+  it('an arena that is not the pinned one (or not the compiled code) is not used: nothing is read or sold', async () => {
+    pin.verifyArena.mockImplementation(async () => ({ ok: false, reason: 'code_mismatch' }));
+    // (another address than the tests above: an arena that passed once is not checked again this visit)
+    const OTHER = '0x0000000000000000000000000000000000000b0b';
+    const d = await readChain(client(), chainStatus({ arenaAddress: OTHER }), ALICE);
+    expect(d).toMatchObject({ deployed: false, pin: { ok: false, reason: 'code_mismatch' }, arenas: [], tokenBalance: null, allowance: null, rpcDown: false });
+    // the token the arena names is checked against the pin too
+    expect(pin.verifyArena).toHaveBeenCalledWith(expect.anything(), chainStatus().chainId, { arena: OTHER, token: TOKEN });
   });
 });

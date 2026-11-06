@@ -3,12 +3,13 @@ import { AnimatePresence, motion, type TargetAndTransition } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon, Receipt, Sheet, Stamp, useReducedMotion, type ReceiptLine } from '../../design';
 import { FinalBoard } from './FinalBoard';
-import { ShareOnX, useShare } from './ShareOnX';
+import { EatenNames, ShareOnX, resultShareText, useShare } from './ShareOnX';
 import { engine } from '../../game/instance';
 import { roundStartLabel } from '../../game/round';
 import { useChainData } from '../../wallet/chain';
 import { isFakeHash } from '../../wallet/devFake';
-import { arenaRates } from '../../wallet/ticket';
+import { arenaRates, ledgerToBase } from '../../wallet/ticket';
+import { PRICE_STALE_HOURS, usdQuote } from '../../wallet/usdPrice';
 import { announce, sound } from '../../audio';
 import { useT } from '../../i18n';
 import { explorerTx } from '../../wallet/links';
@@ -64,6 +65,7 @@ export function RoundOverSheet() {
   const chain = useUi((s) => s.chain);
   const settledRaw = useUi((s) => s.lastSettlement);
   const config = useChainData((s) => s.config);
+  const prices = useChainData((s) => s.prices);
   const serverFees = useUi((s) => s.chain?.fees ?? null);
   // the rates fixed into this ticket at join (its session), else the live rates
   const session = useChainData((s) => (ticket?.arenaId != null ? (s.sessions[ticket.arenaId] ?? null) : null));
@@ -166,6 +168,9 @@ export function RoundOverSheet() {
     </span>
   );
 
+  // what was paid, in US dollars with the age of the price (nothing when the server has none)
+  const decimals = chain?.token?.decimals ?? config?.decimals ?? 18;
+  const usd = usdQuote(prices, ledgerToBase(n.net, decimals), decimals, since);
   const standings = res?.standings ?? [];
   const share = useShare('round');
 
@@ -187,7 +192,17 @@ export function RoundOverSheet() {
             {t('gr.lobby')}
           </Button>
           {share && !exit && res?.stats?.finalRank && (
-            <ShareOnX id={share.id} text={t('share.result', { rank: res.stats.finalRank, n: res.stats.finalOf ?? res.stats.finalRank, room: roomName(room) })} />
+            <ShareOnX
+              id={share.id}
+              text={resultShareText(t, {
+                rank: res.stats.finalRank,
+                n: res.stats.finalOf ?? res.stats.finalRank,
+                room: roomName(room),
+                eaten: res.stats.eaten,
+                eatenMore: res.stats.eatenMore,
+                test: !!(share.test || room?.test),
+              })}
+            />
           )}
         </>
       }
@@ -211,6 +226,14 @@ export function RoundOverSheet() {
             )}
           </AnimatePresence>
         </div>
+        {usd && (
+          <p className="g-roundover__usd mono" data-testid="gr-usd">
+            {usd.text}
+            {usd.setAt ? ` · ${t('usd.setAt', { time: usd.setAt })}` : ''}
+            {usd.stale && <span className="g-roundover__stale">{usd.setAt ? t('usd.stale', { h: PRICE_STALE_HOURS }) : t('usd.staleUnknown')}</span>}
+          </p>
+        )}
+        <EatenNames eaten={res?.stats?.eaten} more={res?.stats?.eatenMore} />
         {settled?.collect && (
           <p className="g-roundover__note" role="status">
             {t('gr.collect')}

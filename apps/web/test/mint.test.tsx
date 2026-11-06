@@ -30,6 +30,12 @@ vi.mock('../src/wallet/network', async (orig) => ({
   fetchServerChain: spies.fetchServerChain,
   publicClientFor: () => spies.client,
 }));
+// this test's NFT is the one the build trusts (the pin check itself: pinned.test.ts); one test overrides it
+const nftPin = vi.hoisted(() => ({ ok: true }));
+vi.mock('../src/wallet/pinned', async (orig) => ({
+  ...(await orig<typeof import('../src/wallet/pinned')>()),
+  checkNft: (_id: number | null | undefined, nft: string | null | undefined) => (nftPin.ok ? { ok: true, nft } : { ok: false, reason: 'nft_mismatch' }),
+}));
 const { Mint } = await import('../src/site/mint/MintPage');
 
 const contract = (o: Partial<MintContractState> = {}): MintContractState => ({
@@ -414,6 +420,23 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     fireEvent.click(btn);
     expect((await screen.findByTestId('mt-error')).textContent).toMatch(/cancelled in your wallet\. Nothing was minted/);
     expect((screen.getByRole('button', { name: 'Mint 1 emblem' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('an NFT the build does not pin gets no payment: refused before the wallet opens', async () => {
+    connect();
+    nftPin.ok = false;
+    try {
+      ({ restore } = mockFetch({ 'GET /api/site/mint': testnetState(), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(false) }));
+      spies.getMintState.mockResolvedValue(freshPub());
+      render(<Mint pollMs={0} />);
+      const btn = await screen.findByRole('button', { name: 'Mint 1 emblem' });
+      await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(btn);
+      expect((await screen.findByTestId('mt-error')).textContent).toMatch(/does not recognise the emblem contract/);
+      expect(spies.sendWalletCall).not.toHaveBeenCalled();
+    } finally {
+      nftPin.ok = true;
+    }
   });
 
   it('the server chain did not answer at first: the button still works and asks again', async () => {

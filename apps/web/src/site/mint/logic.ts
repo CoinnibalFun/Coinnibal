@@ -2,8 +2,8 @@
  * The mint page's logic, pure (no React, no network) so every state is unit-tested.
  * See docs/specs/2026-10-29-elymum-on-elysium.md (sections 3.2, 4.4 and 5).
  */
-import { MintPhase, SUGGESTED_HOLDER_BURN_BPS, SUGGESTED_HOLDER_VAULT_BPS, elymumNFTAbi, mintRefusal, type DescribedError } from '@elymum/sdk';
-import { DEFAULT_FEE_RATES, bpsToPercent, isTestChainId, totalFeeBps, type ArenaFees, type GameAccess, type MintContractState, type MintProofResponse, type MintState } from '@elymum/shared';
+import { MintPhase, elymumNFTAbi, mintRefusal, type DescribedError } from '@elymum/sdk';
+import { bpsToPercent, isTestChainId, type ArenaFees, type CustomHolderPerk, type GameAccess, type MintContractState, type MintProofResponse, type MintState } from '@elymum/shared';
 import { parseEventLogs, type Address, type Log } from 'viem';
 import { t } from '../../i18n';
 
@@ -88,25 +88,41 @@ export function usdText(usd: number | null | undefined): string | null {
 
 /** One line of "What the emblem does". */
 export interface EmblemPerk {
-  id: 'access' | 'fee' | 'isles' | 'wl' | 'skin' | 'faucet';
+  id: 'access' | 'fee' | 'isles' | 'shop' | 'room' | 'wl' | 'skin' | 'faucet';
   title: string;
   note: string;
 }
 
 /**
- * What an Elymum emblem does, for the mint page (and in one line on the landing). On a testnet
- * the game is open and the mint public, so the copy says what holds there and only promises the
- * mainnet WL; on mainnet the testnet-only lines (the WL import, the faucet bonus) are left out.
- * `testnet` null (unknown): the mainnet copy without the testnet lines.
+ * The perks that depend on a setting, as they are live right now (unknown: not shown). The fee comes from the arena's
+ * `config()` (`ArenaFees.holderPerks`); the rest from the server's public reads.
+ */
+export interface LivePerks {
+  /** An arena admits emblem holders only, on chain (`GET /api/rooms/custom/quote` tiers). */
+  isles?: boolean | null;
+  /** The power-up shop's holder discount, percent, while the shop is open (`GET /api/shop`). */
+  shopPct?: number | null;
+  /** The private-room holder perk (`GET /api/rooms/custom/quote`), while private rooms are on. */
+  room?: { perk: CustomHolderPerk; pct: number } | null;
+}
+
+/**
+ * What an Elymum emblem does, for the mint page. Only perks that are live are listed (2026-11 audit: the page
+ * promised a fee discount and the holders-only arena whether or not they were on): the holder fee while the arena's
+ * holder perks are on and lower, the Isles while an arena is holders-only on chain, the shop discount and the
+ * private-room perk while the server offers them. On a testnet the game is open and the mint public, so the copy
+ * says what holds there and only promises the mainnet WL; on mainnet the testnet-only lines (the WL import, the
+ * faucet bonus) are left out. `testnet` null (unknown): the mainnet copy without the testnet lines.
  */
 export function emblemPerks(
   testnet: boolean | null,
   fee: { fees?: ArenaFees | null; gameAccess?: GameAccess | null } = {},
+  live: LivePerks = {},
 ): EmblemPerk[] {
   const pct = (bps: number) => `${bpsToPercent(bps)}%`;
-  // the live arena's pairs (the fee on profit); before it is known, the suggested holder setup (8 % + 2 % vs 15 % + 5 %)
-  const normal = pct(fee.fees ? fee.fees.burnBps + fee.fees.vaultBps : totalFeeBps(DEFAULT_FEE_RATES));
-  const holder = pct(fee.fees?.holderPerks ? fee.fees.holderBurnBps + fee.fees.holderVaultBps : SUGGESTED_HOLDER_BURN_BPS + SUGGESTED_HOLDER_VAULT_BPS);
+  const f = fee.fees;
+  // the holder fee only while the arena really gives it (perks on, and a lower pair than everyone else's)
+  const holderFee = f?.holderPerks && f.holderBurnBps + f.holderVaultBps < f.burnBps + f.vaultBps ? { holder: pct(f.holderBurnBps + f.holderVaultBps), normal: pct(f.burnBps + f.vaultBps) } : null;
   // "open to everyone" only while the server really lets everyone in (the admin may have closed it to holders)
   const openToAll = fee.gameAccess == null || fee.gameAccess === 'public';
   const out: EmblemPerk[] = [
@@ -115,13 +131,25 @@ export function emblemPerks(
       : testnet && fee.gameAccess === 'holders'
         ? { id: 'access', title: t('mn.perk.access'), note: t('mn.perk.accessHolders') }
       : { id: 'access', title: t('mn.perk.access'), note: t('mn.perk.accessMain') },
-    { id: 'fee', title: t('mn.perk.fee', { holder, normal }), note: t('mn.perk.feeProfit') },
-    { id: 'isles', title: t('mn.perk.isles'), note: t('mn.perk.islesNote') },
   ];
+  if (holderFee) out.push({ id: 'fee', title: t('mn.perk.fee', holderFee), note: t('mn.perk.feeProfit') });
+  if (live.isles === true) out.push({ id: 'isles', title: t('mn.perk.isles'), note: t('mn.perk.islesNote') });
+  if (live.shopPct != null && live.shopPct > 0) out.push({ id: 'shop', title: t('mn.perk.shop', { pct: live.shopPct }), note: t('mn.perk.shopNote') });
+  if (live.room?.perk === 'free_daily') out.push({ id: 'room', title: t('mn.perk.room'), note: t('mn.perk.roomNote') });
+  else if (live.room?.perk === 'discount' && live.room.pct > 0) out.push({ id: 'room', title: t('mn.perk.roomDiscount', { pct: live.room.pct }), note: t('mn.perk.roomDiscountNote') });
   if (testnet) out.push({ id: 'wl', title: t('mn.perk.wl'), note: t('mn.perk.wlNote') });
   out.push({ id: 'skin', title: t('mn.perk.skin'), note: t('mn.perk.skinNote') });
   if (testnet) out.push({ id: 'faucet', title: t('mn.perk.faucet'), note: t('mn.perk.faucetNote') });
   return out;
+}
+
+/** The live perks from the server's public reads (each one that fails is left unknown, so not shown). */
+export function livePerks(quote: { enabled: boolean; tiers: { holdersOnly: boolean }[]; holderPerk: CustomHolderPerk; holderDiscountPct: number } | null, shop: { open: boolean; holderDiscountPct: number } | null): LivePerks {
+  return {
+    isles: quote ? quote.tiers.some((x) => x.holdersOnly) : null,
+    shopPct: shop?.open ? shop.holderDiscountPct : null,
+    room: quote?.enabled ? { perk: quote.holderPerk, pct: quote.holderDiscountPct } : null,
+  };
 }
 
 /* ── price copy ─────────────────────────────────────────────────────── */

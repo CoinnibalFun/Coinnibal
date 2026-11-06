@@ -1734,36 +1734,39 @@
   display: block;
   height: 1px;
 }
-.tf-more {
-  position: sticky;
-  bottom: -18px;
-  z-index: 2;
+/* "More below": a row of its own at the top of the footer (it used to float over the sheet's last lines and hid the
+   approval hint on phones) */
+.tf-sheet .kb-sheet__foot > .tf-more {
+  flex: 1 0 100%;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  height: 56px;
-  margin: -56px -22px -18px;
-  padding-bottom: 10px;
-  background: linear-gradient(to bottom, transparent, var(--sticker) 70%);
-  pointer-events: none;
+  gap: 5px;
+  min-height: 24px;
+  margin: -6px 0 -4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
   opacity: 0;
+  visibility: hidden;
   transition: opacity 160ms linear;
 }
-.tf-more.is-on {
+.tf-sheet .kb-sheet__foot > .tf-more.is-on {
   opacity: 1;
+  visibility: visible;
 }
-.tf-more__pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border: 2px solid var(--outline);
-  border-radius: var(--r-pill);
-  background: var(--sticker);
-  font-size: 11px;
-}
-.tf-more__pill svg {
+.tf-more svg {
   transform: rotate(90deg);
+}
+.tf-warn__link {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
 }
 @media (prefers-reduced-motion: reduce) {
   .tf-steps li.is-active .tf-steps__n {
@@ -2116,4 +2119,19 @@
   .tf-hatch {
     width: 92px;
   }
+}
+
+/* "Get $ELYMUM" under a ticket the wallet cannot pay for (GetTokensLink) */
+.kl-gettokens {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.kl-dock__cta .kl-gettokens {
+  min-height: 32px;
+  margin-top: 4px;
 }

@@ -1,17 +1,30 @@
-import { formatGasAmount } from '@elymum/sdk';
+import { approveCall, formatGasAmount } from '@elymum/sdk';
 import { useState } from 'react';
 import { Button, Chip, CoinCharacter, Icon, Sheet, WalletPicker } from '../design';
 import { useT } from '../i18n';
 import { summaryAmount } from '../ui/amount';
-import { closeModal, toast, useUi } from '../store';
+import { closeModal, openModal, toast, useUi } from '../store';
 import { useTokenText } from '../ui/lobby/useLobby';
-import { useChainData } from './chain';
+import { refreshChain, useChainData, useReadClient } from './chain';
 import { explorerAddress } from './links';
+import { MoreWallets } from './MoreWallets';
 import { ensureChain, serverChainInfo } from './network';
+import { verifyArena } from './pinned';
 import { signInWithWallet } from './signIn';
 import { connectWallet, disconnectWallet, initWallets, useWallet } from './store';
-import { txErrorText } from './tx';
+import { APPROVE_BATCH_TICKETS } from './ticket';
+import { sendWalletCall, txErrorText } from './tx';
 import { describeError } from '@elymum/sdk';
+
+/**
+ * An allowance left from before approvals were exact (an "approve once" was unlimited): more than any ticket batch of
+ * the dearest arena could need. Such a wallet is offered to set it back to zero.
+ */
+export function allowanceTooHigh(allowance: bigint | null, entryFees: readonly bigint[]): boolean {
+  if (allowance === null || allowance === 0n) return false;
+  const top = entryFees.reduce((m, f) => (f > m ? f : m), 0n);
+  return top > 0n && allowance > top * BigInt(APPROVE_BATCH_TICKETS);
+}
 
 /**
  * Wallet sheet. Disconnected: the EVM wallets found in the browser (EIP-6963: MetaMask, Rabby or
@@ -28,6 +41,10 @@ export function WalletModal() {
   const walletError = useWallet((s) => s.error);
   const wei = useChainData((s) => s.balance);
   const tokens = useChainData((s) => s.tokenBalance);
+  const allowance = useChainData((s) => s.allowance);
+  const arenas = useChainData((s) => s.arenas);
+  const token = useChainData((s) => s.config?.token ?? null);
+  const client = useReadClient();
   const auth = useUi((s) => s.auth);
   const chain = useUi((s) => s.chain);
   const tok = useTokenText();
@@ -49,11 +66,33 @@ export function WalletModal() {
       await ensureChain(current.provider, chain);
     } catch (err) {
       const e = describeError(err, { chainName: info?.name });
-      toast(e.kind === 'rejected' ? 'warn' : 'error', txErrorText(e));
+      // a declined switch: say what is needed, not just "cancelled"
+      toast(e.kind === 'rejected' ? 'warn' : 'error', e.kind === 'rejected' ? t('tf.err.SwitchRejected') : txErrorText(e));
     } finally {
       setBusy(false);
     }
   };
+
+  const highAllowance = allowanceTooHigh(allowance, arenas.map((a) => a.entryFee));
+  /** Sets the arena's allowance back to zero (to the pinned arena only). */
+  const revoke = async () => {
+    if (!chain || !client || !token || !chain.arenaAddress) return;
+    setBusy(true);
+    try {
+      const pin = await verifyArena(client, chain.chainId, { arena: chain.arenaAddress, token });
+      if (!pin.ok) {
+        toast('error', t('tf.err.ContractMismatch'));
+        return;
+      }
+      const res = await sendWalletCall(approveCall(token, pin.arena, 0n), { chain });
+      if (res.ok) toast('success', t('wl.revoked'));
+      else toast(res.error.kind === 'rejected' ? 'warn' : 'error', txErrorText(res.error));
+      refreshChain();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const openTokens = () => openModal('tokens');
 
   if (!addr) {
     return (
@@ -70,6 +109,7 @@ export function WalletModal() {
           if (d) void connectWallet(d).then((a) => a && closeModal());
         }}
         error={walletError ?? undefined}
+        extra={<MoreWallets chain={chain} hasInjected={providers.length > 0} onConnected={closeModal} onGetTokens={openTokens} sym={tok.symbol} />}
         empty={
           <>
             {t('wl.none')}{' '}
@@ -165,6 +205,19 @@ export function WalletModal() {
               {t('wl.switch', { chain: info!.name })}
             </Button>
           </div>
+        )}
+        {highAllowance && (
+          <div className="wl-verify" data-testid="wl-allowance">
+            <p className="kl-note">{t('wl.allowance', { sym: tok.symbol })}</p>
+            <Button variant="secondary" size="md" disabled={busy} onClick={() => void revoke()}>
+              {t('wl.revoke')}
+            </Button>
+          </div>
+        )}
+        {!soon && (
+          <button type="button" className="kl-link mono wl-gettokens" onClick={openTokens}>
+            {t('wl.getTokens', { sym: tok.symbol })}
+          </button>
         )}
         {verified ? (
           <p className="wl-ok mono">

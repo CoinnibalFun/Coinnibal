@@ -62,6 +62,11 @@ const snapshot = (): ArrayBuffer => {
   return encodeSnapshot(s);
 };
 const joined = (room: RoomInfo, playerId = 7) => recv({ t: 'joined', room, playerId, name: 'Daphne', skin: 0 });
+/** A snapshot from the server, applied at once (the frame loop would apply it from the jitter buffer a moment later). */
+const snap = (buf: ArrayBuffer) => {
+  net.handlers!.onSnapshot(buf);
+  engine.applySnapshots(performance.now(), true);
+};
 
 beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', () => 0);
@@ -83,7 +88,7 @@ afterEach(() => {
 describe('engine: the world mirror starts afresh with the server view', () => {
   it('lobby (watching room A) → joined room B: nothing of room A stays as a ghost', () => {
     recv({ t: 'spectating', room: A, targetPid: 9 });
-    net.handlers!.onSnapshot(snapshot());
+    snap(snapshot());
     expect(engine.world.entities.size).toBe(5);
     joined(B);
     expect(engine.world.entities.size).toBe(0);
@@ -93,11 +98,11 @@ describe('engine: the world mirror starts afresh with the server view', () => {
 
   it('joined again in the same room (play again after the lobby) and a fresh spectating clear it too', () => {
     joined(A);
-    net.handlers!.onSnapshot(snapshot());
+    snap(snapshot());
     expect(engine.world.entities.size).toBe(5);
     recv({ t: 'spectating', room: A, targetPid: 9 });
     expect(engine.world.entities.size).toBe(0);
-    net.handlers!.onSnapshot(snapshot());
+    snap(snapshot());
     joined(A, 8);
     expect(engine.world.entities.size).toBe(0);
     expect(engine.world.myPid).toBe(8);
@@ -105,7 +110,7 @@ describe('engine: the world mirror starts afresh with the server view', () => {
 
   it('a new socket (welcome after a reconnect) clears it: the new connection starts with an empty view', () => {
     joined(A);
-    net.handlers!.onSnapshot(snapshot());
+    snap(snapshot());
     welcome();
     expect(engine.world.entities.size).toBe(0);
   });
@@ -165,3 +170,62 @@ describe('engine: snapshots with no frame in between', () => {
   });
 });
 
+describe('engine: the jitter buffer', () => {
+  it('a snapshot waits for its place on the timeline (RENDER_DELAY_MS), then the frame applies it', () => {
+    let clock = performance.now();
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    recv({ t: 'spectating', room: A, targetPid: 9 });
+    // a frame happened just now (not a hidden tab)
+    (engine as unknown as { last: number }).last = clock;
+    net.handlers!.onSnapshot(snapshot());
+    expect(engine.world.entities.size).toBe(0);
+    clock += 50;
+    engine.applySnapshots(clock);
+    expect(engine.world.entities.size).toBe(0);
+    clock += 60;
+    engine.applySnapshots(clock);
+    expect(engine.world.entities.size).toBe(5);
+  });
+
+  it('a new view drops what was queued for the old one', () => {
+    let clock = performance.now();
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    (engine as unknown as { last: number }).last = clock;
+    recv({ t: 'spectating', room: A, targetPid: 9 });
+    net.handlers!.onSnapshot(snapshot());
+    joined(B);
+    clock += 1000;
+    engine.applySnapshots(clock, true);
+    expect(engine.world.entities.size).toBe(0);
+  });
+});
+
+describe("engine: others' stickers (the setting)", () => {
+  const two = (): ArrayBuffer =>
+    encodeSnapshot({
+      tick: 1,
+      view: { x: 1000, y: 1000, h: 1200 },
+      players: [
+        { id: 7, skin: 0, flags: 0, name: 'Daphne' },
+        { id: 9, skin: 1, flags: 0, name: 'Penny' },
+      ],
+      upserts: [
+        { id: 100, kind: EntityKind.Cell, x: 1000, y: 1000, r: 60, playerId: 7, flags: 0 },
+        { id: 101, kind: EntityKind.Cell, x: 1200, y: 1000, r: 60, playerId: 9, flags: 0 },
+      ],
+      removals: [],
+    });
+
+  it("off: another player's sticker is dropped, mine still shows; on: both show", () => {
+    joined(A);
+    snap(two());
+    useUi.setState({ settings: { ...useUi.getState().settings, showEmotes: false } });
+    recv({ t: 'emote', pid: 9, id: 2 });
+    recv({ t: 'emote', pid: 7, id: 3 });
+    expect(engine.world.players.get(9)?.emote ?? null).toBeNull();
+    expect(engine.world.players.get(7)?.emote?.id).toBe(3);
+    useUi.setState({ settings: { ...useUi.getState().settings, showEmotes: true } });
+    recv({ t: 'emote', pid: 9, id: 2 });
+    expect(engine.world.players.get(9)?.emote?.id).toBe(2);
+  });
+});

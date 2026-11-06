@@ -65,8 +65,9 @@ flowchart LR
 
 ### Ticket lifecycle
 
-1. **Join.** The web checks the allowance and sends `approve` when it is short (by default once, unlimited;
-   "Approve only this ticket" approves exactly the entry fee), then `join(arenaId)`. The contract pulls the entry
+1. **Join.** The web checks the allowance and sends `approve` when it is short (exactly the entry fee; "Approve 5
+   tickets at once" is an explicit choice capped at five entry fees; never unlimited), then `join(arenaId)`. Before
+   either, the arena must be the one the web build pins, with the compiled runtime code (see Web internals). The contract pulls the entry
    fee with a balance-delta check (fee-on-transfer tokens are refused), opens a session with a global id and fixes
    the ticket's fee rates (`burnBps`, `vaultBps`; the holder pair for an emblem holder when it is lower). One open
    session per player per arena. The whole entry fee is the coin's starting value.
@@ -274,9 +275,24 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
 ## Web internals
 
 - **Wallets** (`src/wallet`): EIP-6963 discovery, SIWE sign-in, the ticket flow (`TicketFlow.tsx`: the exact
-  amount, the fee rates on profit, every call previewed; the config is re-read right before the wallet opens and a
-  changed price or rate is refused), the shop payment (`shop.ts`: approve when short, then `pay`), the chain data
-  hook (`chain.ts`).
+  amount and its US-dollar value with the price's age, the fee rates on profit, every call previewed; the config is
+  re-read right before the wallet opens and a changed price or rate is refused), the shop payment (`shop.ts`: approve
+  exactly the price when short, then `pay`), the chain data hook (`chain.ts`). On a phone without a browser wallet:
+  deep links that open the page in MetaMask or Coinbase Wallet (`deeplinks.ts`), and WalletConnect when the build has
+  `VITE_WALLETCONNECT_PROJECT_ID` (`walletconnect.ts`, loaded only when picked). "How to get $ELYMUM"
+  (`GetTokensSheet.tsx`; the Pons link is `VITE_TOKEN_BUY_URL`).
+- **Contract pins** (`src/wallet/pinned.ts`): the arena, NFT and token addresses are fixed per chain at build time
+  (`VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS`, `VITE_TOKEN_ADDRESS` for the build's `VITE_CHAIN_ID`; the testnet
+  deployment is the default for 46630; a mainnet build without them signs nothing; the local node may run unpinned).
+  Before every approval, ticket, refund and shop payment the web checks that the server's arena is the pinned one and
+  that its runtime code hash is the compiled `@elymum/contracts` build; the mint checks its NFT the same way. A
+  mismatch is refused with a clear error and the lobby says "Contract check failed".
+- **Game connection** (`src/game/net.ts`, `jitter.ts`): a watchdog drops a socket that delivered no frame and no pong
+  for 4 s and reconnects (backoff 0.5 s to 8 s); while it is down a blocking banner says the coin is still in the
+  arena. A close with `CLOSE_REPLACED` (4000: the same wallet's newer connection took the coin) is not reconnected:
+  the player chooses "Play here". Snapshots are drawn on a steady timeline 100 ms behind the newest (a jitter buffer,
+  by server tick), and a coin keeps its last velocity up to 250 ms when the next snapshot is late
+  (`apps/web/test/netsim.ts`: at 150 ms RTT and 2 % loss, about 36 freezes a minute before, none after).
 - **Copy** (`src/i18n`): English plus five translations; `{chain}` names the network; ETH is written out.
 - **Admin** (`src/admin`): the deploy wizard (arena v3, NFT, TestToken on testnets), Finish setup (token, the four
   arenas, holder perks 8 % + 2 %, the Isles holders-only, the faucet's 2x), arena prices in US dollars (the sync's

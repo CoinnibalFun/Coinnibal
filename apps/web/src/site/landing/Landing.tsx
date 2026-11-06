@@ -1,4 +1,4 @@
-import { DEFAULT_ARENAS, arenaMeta, formatUsdCents, type GameAccess } from '@elymum/shared';
+import { DEFAULT_ARENAS, activeChain, arenaMeta, formatUsdCents, type GameAccess } from '@elymum/shared';
 import { motion, useInView } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
@@ -58,6 +58,11 @@ function Hero({ collabOpen, gameAccess, wlOpen, sound }: { collabOpen: boolean; 
               </h1>
               <p className="ld-hero__tag">{t('ld.hero.tag')}</p>
               <p className="ld-hero__lede">{t('ld.hero.lede')}</p>
+              {/* plainly: this is real money (on testnet: what it will be on mainnet) */}
+              <p className="ld-hero__money" data-testid="ld-money">
+                <Icon name="info" size={16} className="ld-hero__money-icon" />
+                <span>{activeChain().testnet ? t('ld.hero.moneyTest', { sym: SYMBOL }) : t('ld.hero.money', { sym: SYMBOL })}</span>
+              </p>
               <p className="ld-hero__homer">
                 <i className="quote">{t('ld.hero.quote')}</i>
                 <br />

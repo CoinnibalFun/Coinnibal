@@ -1,5 +1,6 @@
 import { Icon, Sheet } from '../../design';
 import { openBrief } from '../../game/brief';
+import { roundMinutes } from '../../game/round';
 import { useT, type TKey } from '../../i18n';
 import { closeModal, useUi } from '../../store';
 import { CountryPicker } from '../profile/CountryPicker';
@@ -31,6 +32,10 @@ const HOWTO: { icon: Parameters<typeof Icon>[0]['name']; key: TKey }[] = [
 export function HowToSheet() {
   const t = useT();
   const open = useUi((st) => st.modal === 'howto');
+  const rooms = useUi((st) => st.rooms);
+  const room = useUi((st) => st.room);
+  // the real round length (the server may run shorter rounds)
+  const min = roundMinutes(rooms, room);
   return (
     <Sheet open={open} onClose={closeModal} closeLabel={t('lo.close')} kicker={t('st.kicker')} title={t('howto.title')} className="g-sheet g-howto">
       <ol className="g-howto__list">
@@ -40,7 +45,7 @@ export function HowToSheet() {
               {String(i + 1).padStart(2, '0')}
             </span>
             <Icon name={h.icon} size={22} className="g-howto__icon" />
-            <span>{t(h.key)}</span>
+            <span>{t(h.key, { min })}</span>
           </li>
         ))}
       </ol>

@@ -227,7 +227,7 @@ export class RoomHost {
       round: init.round,
       onGameOver: (e) => ctl({ k: 'go', hid: this.hidOf(e.room), conn: e.conn?.id ?? null, player: lookOf(e.player), stats: e.stats }),
       onNotableKill: (e) =>
-        ctl({ k: 'nk', hid: this.hidOf(e.room), conn: e.conn.id, player: lookOf(e.killer), mass: Math.floor(e.killer.totalMass()), kills: e.killer.stats.playersEaten, victim: e.victim, victimMass: e.victimMass }),
+        ctl({ k: 'nk', hid: this.hidOf(e.room), conn: e.conn.id, player: lookOf(e.killer), mass: Math.floor(e.killer.totalMass()), kills: e.killer.stats.playersEaten, victim: e.victim, victimMass: e.victimMass, ...(e.victimIsBot ? { victimIsBot: true } : {}) }),
       onBellSettled: (e) => ctl({ k: 'bell', e }),
       integrity,
       // power-ups: the main thread holds the charges and asks this worker to apply the effect (`boost`)
