@@ -30,6 +30,19 @@ services:
       HOST: 0.0.0.0
       TRUST_PROXY: "1"
       TRUST_PROXY_HOPS: "1"
+      # Robinhood Chain (the only network). Set here, not in .env, so the move from Elysium reaches the
+      # live server through git: these win over any older .env value. Mainnet later: CHAIN_ID 4663 and
+      # https://rpc.mainnet.chain.robinhood.com.
+      CHAIN_ID: "46630"
+      EVM_RPC_URL: https://rpc.testnet.chain.robinhood.com
+      # Elysium-era settings that must not carry over (empty = unset; the /admin registry decides)
+      PUBLIC_RPC_URL: ""
+      TESTNET_RPC_URL: ""
+      EXPLORER_URL: ""
+      ARENA_ADDRESS: ""
+      NFT_ADDRESS: ""
+      TOKEN_ADDRESS: ""
+      JOURNAL_ABANDON_CONTRACT: ""
       # forced maintenance (owner asked); comment this out again (and push) to hand control back to /admin
       GAME_ACCESS: maintenance
     volumes:
