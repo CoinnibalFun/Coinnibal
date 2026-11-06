@@ -1,4 +1,5 @@
 import {
+  ROBINHOOD_CHAIN_ID,
   INTEGRITY_SETTINGS_DEFAULT,
   INTEGRITY_THRESHOLD_RANGES,
   INTEGRITY_THRESHOLDS_DEFAULT,
@@ -6,8 +7,11 @@ import {
   type IntegrityThresholds,
 } from '@elymum/shared';
 
-/** Settings read from disk: unknown or out-of-range values fall back to the defaults (auto-hold stays off unless saved on). */
-export function sanitizeSettings(raw: unknown): IntegritySettings {
+/**
+ * Settings read from disk: unknown or out-of-range values fall back to `defaults` (auto-hold: as saved, else the
+ * default of the chain: on for the mainnet, off on a testnet; `integrityDefaults`).
+ */
+export function sanitizeSettings(raw: unknown, defaults: IntegritySettings = INTEGRITY_SETTINGS_DEFAULT): IntegritySettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<IntegritySettings>;
   const th = { ...INTEGRITY_THRESHOLDS_DEFAULT };
   const src = (r.thresholds && typeof r.thresholds === 'object' ? r.thresholds : {}) as Partial<IntegrityThresholds>;
@@ -18,7 +22,12 @@ export function sanitizeSettings(raw: unknown): IntegritySettings {
   }
   const hold = typeof r.holdScore === 'number' && Number.isFinite(r.holdScore) && r.holdScore >= 50 && r.holdScore <= 100 ? r.holdScore : INTEGRITY_SETTINGS_DEFAULT.holdScore;
   const rel = typeof r.autoReleaseHours === 'number' && Number.isInteger(r.autoReleaseHours) && r.autoReleaseHours >= 0 && r.autoReleaseHours <= 23 ? r.autoReleaseHours : INTEGRITY_SETTINGS_DEFAULT.autoReleaseHours;
-  return { autoHold: r.autoHold === true, holdScore: hold, autoReleaseHours: rel, thresholds: th };
+  return { autoHold: typeof r.autoHold === 'boolean' ? r.autoHold : defaults.autoHold, holdScore: hold, autoReleaseHours: rel, thresholds: th };
+}
+
+/** The integrity defaults of a chain: auto-hold on for Robinhood Chain (mainnet, 4663), off elsewhere. */
+export function integrityDefaults(chainId: number | null): IntegritySettings {
+  return { ...structuredClone(INTEGRITY_SETTINGS_DEFAULT), autoHold: chainId === ROBINHOOD_CHAIN_ID };
 }
 
 export class SettingsError extends Error {
@@ -34,8 +43,8 @@ export class SettingsError extends Error {
  * Applies an admin patch (`autoHold`, `holdScore`, `thresholds: {...}`, `reset: true`) strictly:
  * a wrong type or an out-of-range value is refused, never clamped silently.
  */
-export function applySettingsPatch(cur: IntegritySettings, body: Record<string, unknown>): IntegritySettings {
-  if (body.reset === true) return structuredClone(INTEGRITY_SETTINGS_DEFAULT);
+export function applySettingsPatch(cur: IntegritySettings, body: Record<string, unknown>, defaults: IntegritySettings = INTEGRITY_SETTINGS_DEFAULT): IntegritySettings {
+  if (body.reset === true) return structuredClone(defaults);
   const next: IntegritySettings = { ...cur, thresholds: { ...cur.thresholds } };
   for (const key of Object.keys(body)) {
     if (key !== 'autoHold' && key !== 'holdScore' && key !== 'autoReleaseHours' && key !== 'thresholds') throw new SettingsError(`Unknown setting ${key}`, key);

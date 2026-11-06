@@ -3,11 +3,12 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { PROTOCOL_VERSION } from '@elymum/shared';
-import { checksumAddress, type Auth, type SiweOrigin } from './auth';
+import { NonceLimitError, checksumAddress, type Auth, type SiweOrigin } from './auth';
 import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
 import type { ServerConfig } from './config';
 import type { Leaderboards } from './leaderboards';
+import { healthReport } from './health';
 import { clientIp, trustProxyHops } from './net/gateway';
 import { Limiter } from './net/limiter';
 import type { PriceKeeper } from './chain/price-keeper';
@@ -131,9 +132,10 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   res.writeHead(200, {
     'Content-Type': MIME[ext] ?? 'application/octet-stream',
     'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
-    // the web app is never framed (clickjacking of wallet actions); same rule as vercel.json
+    // the web app is never framed (clickjacking of wallet actions); scripts from this origin only (vercel.json's rule,
+    // plus the sources the app needs: its own API and sockets, wallet RPCs over https, inline styles of the shell)
     'X-Frame-Options': 'DENY',
-    'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+    'Content-Security-Policy': WEB_CSP,
     'Referrer-Policy': 'strict-origin-when-cross-origin',
   });
   if (req.method === 'HEAD') res.end();
@@ -154,6 +156,27 @@ export function corsAllow(corsOrigin: string, origin: string | undefined): strin
 
 /** Slow or idle HTTP clients (slowloris): headers within 15 s, the whole request within 30 s, idle keep-alive 5 s. */
 export const HTTP_TIMEOUTS = { headersMs: 15_000, requestMs: 30_000, keepAliveMs: 5_000, maxHeaders: 64 } as const;
+
+/** The strict CSP of the bundled web app (`WEB_DIST`). */
+export const WEB_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; " +
+  "connect-src 'self' https: wss:; worker-src 'self' blob:; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; " +
+  "frame-ancestors 'none'; form-action 'self'";
+
+/**
+ * Without `WEB_DIST` (production: the web app is the site's, e.g. elymum.io on Vercel) a browser that opens a page of
+ * the game server's own domain is sent to the same page on `PUBLIC_URL`, so there is one copy of the site. Null when
+ * there is nothing to redirect (development, no `PUBLIC_URL`, the request is already for that host).
+ */
+export function siteRedirect(cfg: Pick<ServerConfig, 'webDist' | 'publicUrl' | 'nodeEnv'>, req: IncomingMessage, url: URL): string | null {
+  if (cfg.webDist || !cfg.publicUrl || cfg.nodeEnv !== 'production') return null;
+  if (req.method !== 'GET' && req.method !== 'HEAD') return null;
+  const p = url.pathname;
+  if (p.startsWith('/api/') || p === '/ws' || p.startsWith('/share/')) return null;
+  const site = new URL(cfg.publicUrl);
+  if (req.headers.host && req.headers.host.toLowerCase() === site.host.toLowerCase()) return null;
+  return `${site.origin}${p}${url.search}`;
+}
 
 /** Public reads answered from a copy at most this old (a flood of them costs one build per period). */
 const MICRO_CACHE_MS = 1_000;
@@ -196,15 +219,13 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
         if (!apiLimiter.allow(ip)) return json(res, 429, { error: 'rate_limited' });
         if (ctx.site && (await ctx.site.handle(req, res, url, ip))) return;
         switch (url.pathname) {
-          case '/api/health':
-            return json(res, 200, {
-              ok: true,
-              uptimeS: Math.round((Date.now() - ctx.startedAt) / 1000),
-              online: ctx.rooms.online(),
-              rooms: ctx.rooms.roomCount,
-              // single-thread, or room workers (and how many answer)
-              game: ctx.rooms.pool ? { mode: 'workers', workers: ctx.rooms.pool.size, up: ctx.rooms.pool.threads().filter((t) => t.up).length } : { mode: 'single', workers: 0, up: 0 },
-            });
+          case '/api/health': {
+            // `?live=1`: the container's liveness check (Docker HEALTHCHECK): the process answers. A server that only
+            // waits on the RPC, or whose disk is full, is not restarted for it (a restart fixes neither)
+            if (url.searchParams.get('live') === '1') return json(res, 200, { ok: true, live: true, uptimeS: Math.round((Date.now() - ctx.startedAt) / 1000) });
+            const report = healthReport({ cfg, rooms: ctx.rooms, journal: ctx.journal, chain: ctx.chain, startedAt: ctx.startedAt });
+            return json(res, report.ok ? 200 : 503, report);
+          }
           case '/api/rooms':
             return publicJson(res, 'rooms', () => ({ rooms: ctx.rooms.list(), online: ctx.rooms.online(), blocked: ctx.rooms.blockedArenas() }));
           case '/api/leaderboard':
@@ -214,10 +235,11 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             // `chain.tokenReady` false: practice only, arenas "opening soon" (the server picks the token up by itself)
             const body: Record<string, unknown> = { protocol: PROTOCOL_VERSION, chain: ctx.chain.status() };
             // admins also see the server key's gas balance (and the price keeper)
-            const wallet = bearerWallet(ctx.auth, req);
+            const bearer = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization ?? '').trim())?.[1];
+            const wallet = bearer ? ctx.auth.verifyAdminToken(bearer) : null;
             if (wallet && ctx.site?.isAdmin(wallet)) {
               const info = ctx.chain.serverInfo();
-              body.server = { address: info.address, balanceWei: info.balanceWei, low: info.low, priceKeeper: ctx.priceKeeper?.last ?? null };
+              body.server = { address: info.address, balanceWei: info.balanceWei, low: info.low, ...(info.gas ? { gas: info.gas } : {}), priceKeeper: ctx.priceKeeper?.last ?? null };
             }
             return json(res, 200, body);
           }
@@ -225,13 +247,22 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             if (!nonceLimiter.allow(ip)) return json(res, 429, { error: 'rate_limited' });
             const address = checksumAddress(url.searchParams.get('address'));
             if (!address) return json(res, 400, { error: 'bad_request', message: 'address must be an EVM address (0x…)' });
-            return json(res, 200, ctx.auth.issueNonce(address, siweOrigin(cfg, req, trustProxy, ctx.chain.status().chainId)));
+            try {
+              return json(res, 200, ctx.auth.issueNonce(address, siweOrigin(cfg, req, trustProxy, ctx.chain.status().chainId), Date.now(), ip));
+            } catch (err) {
+              if (err instanceof NonceLimitError) return json(res, 429, { error: 'rate_limited', message: 'Too many sign-in attempts. Wait a few minutes.' });
+              throw err;
+            }
           }
           case '/api/pending': {
             // settlements the server still has to send for a wallet (payouts in ledger units). Finalized sessions
             // (settled, payout waiting to be collected) live on chain; the web reads them there (getSession)
             const wallet = checksumAddress(url.searchParams.get('wallet'));
             if (!wallet) return json(res, 400, { error: 'bad_request', message: 'wallet must be an EVM address (0x…)' });
+            // what a wallet is owed (and when it played) is that wallet's business: its own session, or an admin's
+            const caller = bearerWallet(ctx.auth, req);
+            if (!caller) return json(res, 401, { error: 'unauthorized', message: 'Sign in with your wallet first.' });
+            if (caller.toLowerCase() !== wallet.toLowerCase() && !ctx.site?.isAdmin(caller)) return json(res, 403, { error: 'forbidden', message: 'Only that wallet (or an admin) may read its pending payouts.' });
             const pending = (ctx.journal?.pending ?? [])
               // loot sweeps (`kind: 'sweep'`) belong to no wallet
               .flatMap((p) =>
@@ -264,6 +295,12 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
       }
       if (url.pathname.startsWith('/share/') && ctx.shares?.handle(req, res, url.pathname, ip)) return;
       if (cfg.webDist && (req.method === 'GET' || req.method === 'HEAD') && serveStatic(cfg.webDist, req, res, url.pathname)) return;
+      const to = siteRedirect(cfg, req, url);
+      if (to) {
+        res.writeHead(301, { Location: to, 'Cache-Control': 'public, max-age=3600' });
+        res.end();
+        return;
+      }
       if (url.pathname === '/') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Elymum game server: connect via /ws');

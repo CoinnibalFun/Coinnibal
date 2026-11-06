@@ -1,4 +1,4 @@
-import { BOOST_KEY_LABELS, BPS, DEFAULT_PAYMENT_BURN_BPS, SHOP_DEFAULTS, boostCooldownMs, bpsToPercent, type BoostKind, type ShopPack, type ShopView } from '@elymum/shared';
+import { BOOST_KEY_LABELS, BPS, DEFAULT_PAYMENT_BURN_BPS, SHOP_DEFAULTS, boostCooldownMs, bpsToPercent, formatUsdCents, type BoostKind, type ShopPack, type ShopView } from '@elymum/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Chip, Sheet, shortAddress } from '../../design';
 import { useT } from '../../i18n';
@@ -8,10 +8,14 @@ import { summaryAmount } from '../amount';
 import { BOOST_PATH } from '../game/BoostBar';
 import './shop.css';
 
-/** A pack price for display: `210 tELYMUM` (whole tokens, at most two decimals). */
-export function priceText(raw: string, view: Pick<ShopView, 'token'>): string {
+/**
+ * A pack price for display: `210 tELYMUM` (whole tokens, at most two decimals), with its dollar price first when the
+ * pack is priced in US dollars (`$0.60 · 740 $ELYMUM`): the token amount is what the wallet sends.
+ */
+export function priceText(raw: string, view: Pick<ShopView, 'token'>, usdCents?: number): string {
   const decimals = view.token?.decimals ?? 18;
-  return `${summaryAmount(BigInt(raw), decimals)} ${view.token?.symbol ?? '$ELYMUM'}`;
+  const tokens = `${summaryAmount(BigInt(raw), decimals)} ${view.token?.symbol ?? '$ELYMUM'}`;
+  return usdCents !== undefined ? `${formatUsdCents(usdCents)} · ${tokens}` : tokens;
 }
 
 function PackCard({
@@ -52,7 +56,7 @@ function PackCard({
         </p>
       </div>
       <div className="sh-pack__buy">
-        {discounted && <s className="sh-pack__was mono">{priceText(pack.fullPriceRaw, view)}</s>}
+        {discounted && <s className="sh-pack__was mono">{priceText(pack.fullPriceRaw, view, pack.fullUsdCents)}</s>}
         <Button
           variant={kind === 'leap' || kind === 'invis' ? 'teal' : 'secondary'}
           size="sm"
@@ -62,7 +66,7 @@ function PackCard({
           sub={phaseText ?? undefined}
           data-testid={`shop-buy-${kind}`}
         >
-          {t('shop.buy', { n: pack.charges, price: priceText(pack.priceRaw, view) })}
+          {t('shop.buy', { n: pack.charges, price: priceText(pack.priceRaw, view, pack.usdCents) })}
         </Button>
       </div>
     </li>

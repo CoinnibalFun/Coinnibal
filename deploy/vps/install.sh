@@ -2,10 +2,10 @@
 # Elymum game server: one-command install on a fresh Ubuntu 22.04 / 24.04 VPS. Run as root:
 #   bash install.sh                       asks for the domain, repository and branch (Enter = default)
 #   bash install.sh --restore elymum-backup.tar.gz
-#   bash install.sh --restore-url https://slana-wo00.onrender.com --token <admin session token>
-#   bash install.sh --from https://slana-wo00.onrender.com --token <admin session token> --yes
-#       the whole move in one command: copies the old server's settings (.env) AND its data
-#       (/admin → Network → Backup & move → "Copy new-server command" writes this line for you)
+#   bash install.sh --restore-url https://game.elymum.io --token <admin session token> --proof <signed proof>
+#   bash install.sh --from https://game.elymum.io --token <admin session token> --proof <signed proof> --yes
+#       the whole move in one command: copies the old server's settings (.env) AND its data. The proof is a
+#       fresh signature of the admin wallet of purpose "migration" (POST /api/admin/secret-proof, README "Moving")
 # Options: --domain D, --repo SSH_URL, --branch B, --set KEY=VALUE (a .env setting; repeatable),
 #          --yes (no questions; defaults or the given values).
 # Safe to run again: every step checks what is already done. Full guide: deploy/vps/README.md.
@@ -27,9 +27,23 @@ branch=""
 restore_file=""
 restore_url=""
 restore_token=""
+restore_proof=""
 from_url=""
 sets=()
 yes=0
+
+# a persistent journal (survives reboots, 2 GB at most): Docker's journald log driver keeps the server log there,
+# so it survives a redeploy (a new container) too. Idempotent.
+host_journald() {
+  mkdir -p /var/log/journal /etc/systemd/journald.conf.d
+  local conf=/etc/systemd/journald.conf.d/elymum.conf want
+  want=$'[Journal]\nStorage=persistent\nSystemMaxUse=2G\nMaxRetentionSec=1month'
+  if [[ "$(cat "$conf" 2>/dev/null)" != "$want" ]]; then
+    printf '%s\n' "$want" >"$conf"
+    systemd-tmpfiles --create --prefix /var/log/journal >/dev/null 2>&1 || true
+    systemctl restart systemd-journald || true
+  fi
+}
 
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
@@ -47,6 +61,7 @@ while [[ $# -gt 0 ]]; do
     --restore-url) restore_url="${2:?--restore-url needs a value}"; shift 2 ;;
     --from) from_url="${2:?--from needs the old server URL}"; restore_url="$from_url"; shift 2 ;;
     --token) restore_token="${2:?--token needs a value}"; shift 2 ;;
+    --proof) restore_proof="${2:?--proof needs a value}"; shift 2 ;;
     --set) [[ "${2:-}" =~ ^[A-Z][A-Z0-9_]*=[^[:space:]]*$ ]] || die "--set needs KEY=VALUE (no spaces)"; sets+=("$2"); shift 2 ;;
     --yes | -y) yes=1; shift ;;
     -h | --help) sed -n '2,8p' "$0"; exit 0 ;;
@@ -125,12 +140,14 @@ APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 CONF
-# a kernel update needs a reboot: done at 04:30 server time (players reconnect after about a minute)
+# a kernel update needs a reboot: never by unattended-upgrades itself (it would cut a round); elymum-reboot.timer
+# reboots at 04:30 in the break after an arena bell, only when the update asks for it
 cat >/etc/apt/apt.conf.d/52elymum-unattended <<'CONF'
-Unattended-Upgrade::Automatic-Reboot "true";
-Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+Unattended-Upgrade::Automatic-Reboot "false";
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
 CONF
+# the server log survives a redeploy (Docker's journald log driver) and a reboot (persistent journal)
+host_journald
 systemctl enable --now unattended-upgrades >/dev/null 2>&1 || true
 
 say "4/10 Firewall (SSH, HTTP, HTTPS)"
@@ -268,8 +285,14 @@ if [[ -n "$from_url" ]]; then
   note "copying the settings from $from_url"
   envjson="$(mktemp)"
   chmod 600 "$envjson"
-  curl -fsS --max-time 30 -H "Authorization: Bearer $restore_token" "${from_url%/}/api/admin/migration-env" -o "$envjson" \
-    || die "could not read the settings from $from_url (is the token still valid? it lasts 24 h)"
+  [[ -n "$restore_proof" ]] || die "--from needs --proof (a signature of the admin wallet, purpose migration: README \"Moving to another VPS\")"
+  hdr="$(mktemp)"
+  chmod 600 "$hdr"
+  # the token and the proof go through a header file, not the command line (other users could read it in ps)
+  printf 'Authorization: Bearer %s\nX-Elymum-Proof: %s\n' "$restore_token" "$restore_proof" >"$hdr"
+  curl -fsS --max-time 30 -H @"$hdr" "${from_url%/}/api/admin/migration-env" -o "$envjson" \
+    || { rm -f "$hdr"; die "could not read the settings from $from_url (expired token or proof? a proof opens it once, within 10 minutes)"; }
+  rm -f "$hdr"
   # one KEY<TAB>VALUE line per setting; values never hold a newline (the server drops those)
   while IFS=$'\t' read -r k v; do
     [[ "$k" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
@@ -287,8 +310,8 @@ if [[ -n "$from_url" ]]; then
 fi
 edit_env() {
   echo
-  echo " The settings file opens in the nano editor. Fill in the values marked [FROM RENDER]"
-  echo " (copy them from Render → the game service → Environment)."
+  echo " The settings file opens in the nano editor. Fill in the values (deploy/vps/README.md section 4:"
+  echo " ADMIN_WALLETS, AUTH_SECRET, CHAIN_ID, EVM_RPC_URLS, TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID, ...)."
   echo " Save: Ctrl+O then Enter. Quit: Ctrl+X."
   read -rp " Press Enter to open it... " _
   nano "$ELYMUM_ENV"
@@ -323,7 +346,7 @@ if [[ -n "$restore_file" ]]; then
 elif [[ -n "$restore_url" ]]; then
   note "downloading and restoring the backup from $restore_url before the first start"
   if [[ -n "$restore_token" ]]; then
-    "$DIR/deploy/vps/restore.sh" --yes --no-start --url "$restore_url" --token "$restore_token"
+    "$DIR/deploy/vps/restore.sh" --yes --no-start --url "$restore_url" --token "$restore_token" ${restore_proof:+--proof "$restore_proof"}
   else
     "$DIR/deploy/vps/restore.sh" --yes --no-start --url "$restore_url"
   fi
@@ -336,8 +359,8 @@ date -u +%FT%TZ >"$STATE/deployed-at"
 say "10/10 Auto-deploy, daily backups, shortcuts"
 install -m 644 deploy/vps/systemd/*.service deploy/vps/systemd/*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now elymum-update.timer elymum-backup.timer >/dev/null
-for s in status compose backup restore update; do
+systemctl enable --now elymum-update.timer elymum-backup.timer elymum-alert.timer elymum-reboot.timer >/dev/null
+for s in status compose backup restore update alert reboot; do
   ln -sf "$DIR/deploy/vps/$s.sh" "/usr/local/bin/elymum-$s"
 done
 note "commands: elymum-status, elymum-compose logs -f app, elymum-backup, elymum-restore, elymum-update"
@@ -347,7 +370,7 @@ echo
 note "waiting for https://$domain/api/health (Caddy gets the certificate on the first request; up to 5 minutes)"
 ok=0
 for _ in $(seq 1 60); do
-  if curl -fsS --max-time 5 "https://$domain/api/health" >/dev/null 2>&1; then
+  if curl -fsS --max-time 5 "https://$domain/api/health?live=1" >/dev/null 2>&1; then
     ok=1
     break
   fi
@@ -355,7 +378,7 @@ for _ in $(seq 1 60); do
 done
 if [[ "$ok" -eq 1 ]]; then
   printf '\n\033[1;32mElymum is running at https://%s\033[0m\n' "$domain"
-  curl -fsS "https://$domain/api/health" || true
+  curl -sS "https://$domain/api/health" || true
   echo
   note "Status any time: elymum-status. New commits on $branch deploy by themselves within 2 minutes."
 else
@@ -369,5 +392,5 @@ else
   exit 1
 fi
 if [[ -f /var/run/reboot-required ]]; then
-  note "The system update wants a reboot; it happens by itself at 04:30, or run: reboot"
+  note "The system update wants a reboot; elymum-reboot.timer does it at 04:30 in a round break (or now: elymum-reboot)"
 fi

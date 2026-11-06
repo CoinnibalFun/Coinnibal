@@ -22,7 +22,8 @@ fi
 
 section "Public health check"
 if [[ -n "$domain" ]]; then
-  if out="$(curl -fsS --max-time 8 "https://$domain/api/health" 2>&1)"; then
+  # 200: fine; 503: something needs a person (the reasons are in the answer: journal, settlements, RPC, gas, books)
+  if out="$(curl -sS --max-time 8 -w '\nHTTP %{http_code}' "https://$domain/api/health" 2>&1)"; then
     echo "https://$domain/api/health -> $out"
   else
     echo "https://$domain/api/health FAILED: $out"
@@ -44,6 +45,9 @@ if [[ -s "$ELYMUM_STATE/failed" ]]; then
   echo "LAST BUILD FAILED for $(cut -c1-12 "$ELYMUM_STATE/failed"): journalctl -u elymum-update -n 200"
 fi
 echo "auto-deploy: $(systemctl is-active elymum-update.timer 2>/dev/null || true) (next: $(systemctl show elymum-update.timer -p NextElapseUSecRealtime --value 2>/dev/null || echo '?'))"
+echo "rollback image: $(docker image inspect -f '{{.Created}}' elymum-app:previous 2>/dev/null || echo none) (commit $(cut -c1-12 "$ELYMUM_STATE/previous" 2>/dev/null || echo '?'))"
+echo "alerts: $(systemctl is-active elymum-alert.timer 2>/dev/null || true); Telegram $([[ -n "$(env_get TELEGRAM_BOT_TOKEN)" && -n "$(env_get TELEGRAM_CHAT_ID)" ]] && echo on || echo 'off (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set)')"
+echo "reboots: $(systemctl is-active elymum-reboot.timer 2>/dev/null || true) (in a round break at 04:30 when an update asks; $([[ -f /var/run/reboot-required ]] && echo 'one is due' || echo 'none due'))"
 
 section "Backups"
 last="$(find "$ELYMUM_BACKUPS" -maxdepth 1 -type f -name 'elymum-data-*.tar.gz' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n 1 | cut -d' ' -f2-)"

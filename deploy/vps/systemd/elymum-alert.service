@@ -1,0 +1,10 @@
+[Unit]
+Description=Elymum: alerts to Telegram (!!! log lines, /api/health, gas runway, disk) and autoheal
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/elymum/deploy/vps/alert.sh
+TimeoutStartSec=50s
+Nice=5

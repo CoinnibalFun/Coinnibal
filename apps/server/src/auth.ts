@@ -1,13 +1,22 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { DEFAULT_CHAIN_ID, parseSiweMessage, siweMessage } from '@elymum/shared';
 import { getAddress, type Address, type Hex } from 'viem';
 import { verifyEoa } from './chain/evm-client';
 
 /** A nonce is single use and valid this long. */
 export const NONCE_TTL_MS = 10 * 60_000;
-const TOKEN_TTL_MS = 24 * 60 * 60_000;
-/** Hard cap on outstanding nonces: the oldest are evicted beyond it. */
+/** A player's session token lives this long. */
+export const TOKEN_TTL_MS = 24 * 60 * 60_000;
+/** An admin wallet's session token lives this long by default (`ADMIN_TOKEN_TTL_MIN`); a refresh never extends it. */
+export const ADMIN_TOKEN_TTL_MS = 2 * 60 * 60_000;
+/** Hard cap on outstanding nonces. */
 export const MAX_NONCES = 10_000;
+/** Outstanding nonces per wallet address (a new one beyond it replaces that address's oldest). */
+export const MAX_NONCES_PER_ADDRESS = 4;
+/** Outstanding nonces per client (IP): beyond it `issueNonce` refuses (null), so one client cannot fill the pool. */
+export const MAX_NONCES_PER_CLIENT = 24;
 /** Wrong signatures a nonce survives; at this many it is gone (ask for a new one). */
 export const MAX_NONCE_FAILURES = 3;
 
@@ -61,16 +70,72 @@ export interface IssuedNonce {
 /** On-chain check for smart-wallet signatures (ERC-1271 / ERC-6492); EOAs never need it. */
 export type OnChainVerifier = (address: string, message: string, signature: string) => Promise<boolean>;
 
-/** Wallet login: one-time SIWE nonces signed by the wallet, then stateless HMAC tokens. */
+/** `issueNonce`: this client already holds `MAX_NONCES_PER_CLIENT` unused nonces. */
+export class NonceLimitError extends Error {
+  constructor() {
+    super('too many outstanding sign-in nonces for this client');
+  }
+}
+
+interface NonceEntry {
+  address: string;
+  message: string;
+  expires: number;
+  origin: SiweOrigin;
+  failures?: number;
+  /** The client that asked (its IP), for the per-client cap. */
+  client: string;
+}
+
+/** Revoked sessions: tokens issued before these times are refused (`Auth.revoke`). */
+interface Revocations {
+  /** Every admin session issued before this (Unix ms). */
+  adminsBefore: number;
+  /** Per wallet (lower-case): every session of that wallet issued before this. */
+  wallets: Record<string, number>;
+}
+
+export interface AuthOptions {
+  onChain?: OnChainVerifier | null;
+  /** Whether a wallet is an admin (`ADMIN_WALLETS`): its tokens are short-lived and never extended. */
+  isAdmin?: (wallet: string) => boolean;
+  /** Admin token lifetime (default `ADMIN_TOKEN_TTL_MS`). */
+  adminTtlMs?: number;
+  /** Where revocations are kept (`DATA_DIR/auth-revoked.json`); null: memory only. */
+  revocationsFile?: string | null;
+  log?: (m: string) => void;
+}
+
+/**
+ * Wallet login: one-time SIWE nonces signed by the wallet, then stateless HMAC tokens
+ * `<address>.<expires>.<issued>.<mac>` (tokens of the earlier `<address>.<expires>.<mac>` form are accepted for
+ * players until they expire, never for admin routes). Admin wallets get short tokens (`ADMIN_TOKEN_TTL_MIN`, 2 h by
+ * default) that a refresh never extends; `revoke` ends sessions before their expiry (one wallet's, or every
+ * admin's), kept on disk so a restart does not bring them back.
+ */
 export class Auth {
-  private readonly nonces = new Map<string, { address: string; message: string; expires: number; origin: SiweOrigin; failures?: number }>();
+  private readonly nonces = new Map<string, NonceEntry>();
+  /** Outstanding nonces per client (IP) and per address, oldest first. */
+  private readonly byClient = new Map<string, Set<string>>();
+  private readonly byAddress = new Map<string, Set<string>>();
   private onChain: OnChainVerifier | null;
+  private isAdminWallet: (wallet: string) => boolean;
+  readonly adminTtlMs: number;
+  private revoked: Revocations = { adminsBefore: 0, wallets: {} };
 
   constructor(
     private readonly secret: Buffer,
-    opts: { onChain?: OnChainVerifier | null } = {},
+    private readonly opts: AuthOptions = {},
   ) {
     this.onChain = opts.onChain ?? null;
+    this.isAdminWallet = opts.isAdmin ?? (() => false);
+    this.adminTtlMs = Math.max(60_000, opts.adminTtlMs ?? ADMIN_TOKEN_TTL_MS);
+    this.loadRevocations();
+  }
+
+  /** Sets who is an admin (the site's `ADMIN_WALLETS`): their tokens are short, never extended, revocable as a group. */
+  setAdminCheck(fn: (wallet: string) => boolean): void {
+    this.isAdminWallet = fn;
   }
 
   /** Sets the smart-wallet fallback (the chain gateway's `verifyMessage`). */
@@ -80,22 +145,58 @@ export class Auth {
 
   /**
    * A one-time nonce and the SIWE message for it. The fields are returned too, so the web client
-   * can rebuild the message itself and refuse to sign anything else.
+   * can rebuild the message itself and refuse to sign anything else. `client` (the caller's IP) is held to
+   * `MAX_NONCES_PER_CLIENT` outstanding nonces (`NonceLimitError` beyond it: answer 429); a wallet address keeps at most
+   * `MAX_NONCES_PER_ADDRESS` (its oldest is replaced). When the pool is full, the client holding the most nonces
+   * loses its oldest first, so a flood from many addresses evicts its own nonces before anyone else's.
    */
-  issueNonce(address: string, origin: SiweOrigin = DEFAULT_ORIGIN, now = Date.now()): IssuedNonce {
+  issueNonce(address: string, origin: SiweOrigin = DEFAULT_ORIGIN, now = Date.now(), client = 'local'): IssuedNonce {
     const checksummed = checksumAddress(address);
     if (!checksummed) throw new Error('invalid address');
     this.prune(now);
+    if ((this.byClient.get(client)?.size ?? 0) >= MAX_NONCES_PER_CLIENT) throw new NonceLimitError();
+    // one address keeps a few (two tabs, a retry), never thousands
+    const mine = this.byAddress.get(checksummed);
+    while (mine && mine.size >= MAX_NONCES_PER_ADDRESS) this.dropNonce(mine.values().next().value!);
+    if (this.nonces.size >= MAX_NONCES) this.evictOne();
     const nonce = randomBytes(12).toString('hex');
     const issuedAt = new Date(now).toISOString();
     const message = loginMessage(checksummed, nonce, issuedAt, origin);
-    this.nonces.set(nonce, { address: checksummed, message, expires: now + NONCE_TTL_MS, origin });
+    this.track({ address: checksummed, message, expires: now + NONCE_TTL_MS, origin, client }, nonce);
     return { nonce, message, address: checksummed, domain: origin.domain, uri: origin.uri, chainId: origin.chainId, issuedAt };
   }
 
   /** Outstanding nonces (tests). */
   get nonceCount(): number {
     return this.nonces.size;
+  }
+
+  private track(e: NonceEntry, nonce: string): void {
+    this.nonces.set(nonce, e);
+    for (const [map, key] of [[this.byClient, e.client], [this.byAddress, e.address]] as const) {
+      let set = map.get(key);
+      if (!set) map.set(key, (set = new Set()));
+      set.add(nonce);
+    }
+  }
+
+  private dropNonce(nonce: string): void {
+    const e = this.nonces.get(nonce);
+    if (!e) return;
+    this.nonces.delete(nonce);
+    for (const [map, key] of [[this.byClient, e.client], [this.byAddress, e.address]] as const) {
+      const set = map.get(key);
+      set?.delete(nonce);
+      if (set && set.size === 0) map.delete(key);
+    }
+  }
+
+  /** The pool is full: the oldest nonce of the client that holds the most goes (the globally oldest when nobody holds many). */
+  private evictOne(): void {
+    let top: Set<string> | null = null;
+    for (const set of this.byClient.values()) if (!top || set.size > top.size) top = set;
+    const victim = top && top.size > 2 ? top.values().next().value : this.nonces.keys().next().value;
+    if (victim !== undefined) this.dropNonce(victim);
   }
 
   /**
@@ -115,47 +216,127 @@ export class Auth {
     const o = entry.origin;
     if (fields.address !== checksummed || fields.domain !== o.domain || fields.uri !== o.uri || fields.chainId !== o.chainId) return null;
     // single use: taken out before the (async) check so two concurrent replays cannot both pass
-    this.nonces.delete(fields.nonce);
-    let ok = await verifyEoa(checksummed, message, signature as Hex);
-    if (!ok && this.onChain) ok = await this.onChain(checksummed, message, signature).catch(() => false);
+    this.dropNonce(fields.nonce);
+    const ok = await this.signedBy(checksummed, message, signature);
     // a wrong signature gives the nonce back a few times only: each failure may cost an on-chain check
     // (ERC-1271 / ERC-6492 call), so one nonce must not let a client hammer the RPC with garbage signatures
     if (!ok && entry.expires >= now) {
       const failures = (entry.failures ?? 0) + 1;
-      if (failures < MAX_NONCE_FAILURES) this.nonces.set(fields.nonce, { ...entry, failures });
+      if (failures < MAX_NONCE_FAILURES) this.track({ ...entry, failures }, fields.nonce);
     }
     return ok ? checksummed : null;
+  }
+
+  /** `message` was signed by `address` (an EOA locally, a smart wallet through the chain). */
+  async signedBy(address: string, message: string, signature: string): Promise<boolean> {
+    if (typeof signature !== 'string' || !/^0x[0-9a-fA-F]{2,4096}$/.test(signature)) return false;
+    const a = checksumAddress(address);
+    if (!a) return false;
+    let ok = await verifyEoa(a, message, signature as Hex);
+    if (!ok && this.onChain) ok = await this.onChain(a, message, signature).catch(() => false);
+    return ok;
   }
 
   private mac(payload: string): string {
     return createHmac('sha256', this.secret).update(payload).digest('base64url');
   }
 
+  /** A session token; an admin wallet's lives `adminTtlMs`, everyone else's `TOKEN_TTL_MS`. */
   issueToken(address: string, now = Date.now()): string {
     const checksummed = checksumAddress(address);
     if (!checksummed) throw new Error('invalid address');
-    const payload = `${checksummed}.${now + TOKEN_TTL_MS}`;
+    const ttl = this.isAdminWallet(checksummed) ? this.adminTtlMs : TOKEN_TTL_MS;
+    const payload = `${checksummed}.${now + ttl}.${now}`;
     return `${payload}.${this.mac(payload)}`;
   }
 
-  /** Returns the (checksummed) wallet of a valid, unexpired token. */
-  verifyToken(token: unknown, now = Date.now()): string | null {
-    if (typeof token !== 'string' || token.length > 200) return null;
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const [address, exp, mac] = parts;
-    if (!isValidAddress(address) || !(Number(exp) > now)) return null;
-    const expected = Buffer.from(this.mac(`${address}.${exp}`));
-    const given = Buffer.from(mac);
-    if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
-    return address;
+  /**
+   * The token a client gets back when it signs in with a token it already holds (the WebSocket `auth`): a
+   * player's session slides on (a new 24 h token); an admin's is never extended (the same token comes back).
+   */
+  refreshToken(token: string, now = Date.now()): string | null {
+    const t = this.parse(token, now);
+    if (!t) return null;
+    if (this.isAdminWallet(t.address)) return token;
+    return this.issueToken(t.address, now);
   }
 
-  /** Drops expired nonces once there are many, then evicts the oldest beyond `MAX_NONCES`. */
+  /** Returns the (checksummed) wallet of a valid, unexpired, unrevoked token. */
+  verifyToken(token: unknown, now = Date.now()): string | null {
+    return this.parse(token, now)?.address ?? null;
+  }
+
+  /**
+   * The admin wallet of a token fit for admin routes: issued in the current form (with its issue time), at most
+   * `adminTtlMs` long, unexpired and not revoked. Null otherwise (also for a player-length token of an admin wallet).
+   */
+  verifyAdminToken(token: unknown, now = Date.now()): string | null {
+    const t = this.parse(token, now);
+    if (!t || t.iat === null || !this.isAdminWallet(t.address)) return null;
+    if (t.exp - t.iat > this.adminTtlMs) return null;
+    return t.address;
+  }
+
+  private parse(token: unknown, now: number): { address: string; exp: number; iat: number | null } | null {
+    if (typeof token !== 'string' || token.length > 220) return null;
+    const parts = token.split('.');
+    if (parts.length !== 3 && parts.length !== 4) return null;
+    const [address, exp] = parts;
+    const iat = parts.length === 4 ? parts[2] : null;
+    const mac = parts[parts.length - 1];
+    if (!isValidAddress(address) || !(Number(exp) > now)) return null;
+    if (iat !== null && !/^\d{1,16}$/.test(iat)) return null;
+    const expected = Buffer.from(this.mac(parts.slice(0, -1).join('.')));
+    const given = Buffer.from(mac);
+    if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+    // a token of the earlier form: issued TOKEN_TTL_MS before it expires
+    const issued = iat !== null ? Number(iat) : Number(exp) - TOKEN_TTL_MS;
+    if (issued < (this.revoked.wallets[address.toLowerCase()] ?? 0)) return null;
+    if (this.isAdminWallet(address) && issued < this.revoked.adminsBefore) return null;
+    return { address, exp: Number(exp), iat: iat !== null ? Number(iat) : null };
+  }
+
+  /**
+   * Ends sessions now: `wallet`'s (every token of it issued until now), or with `wallet` null every admin
+   * session. Kept in `revocationsFile`. A token issued afterwards (a new sign-in) works.
+   */
+  revoke(wallet: string | null, now = Date.now()): void {
+    if (wallet === null) this.revoked.adminsBefore = Math.max(this.revoked.adminsBefore, now + 1);
+    else this.revoked.wallets[wallet.toLowerCase()] = Math.max(this.revoked.wallets[wallet.toLowerCase()] ?? 0, now + 1);
+    // entries older than any token's life can go
+    for (const [w, at] of Object.entries(this.revoked.wallets)) if (at < now - TOKEN_TTL_MS) delete this.revoked.wallets[w];
+    this.saveRevocations();
+  }
+
+  private loadRevocations(): void {
+    const file = this.opts.revocationsFile;
+    if (!file) return;
+    try {
+      const j = JSON.parse(readFileSync(file, 'utf8')) as Partial<Revocations>;
+      this.revoked = {
+        adminsBefore: Number.isFinite(j.adminsBefore) ? Number(j.adminsBefore) : 0,
+        wallets: j.wallets && typeof j.wallets === 'object' ? Object.fromEntries(Object.entries(j.wallets).filter(([, v]) => Number.isFinite(v))) : {},
+      };
+    } catch {
+      /* none yet */
+    }
+  }
+
+  private saveRevocations(): void {
+    const file = this.opts.revocationsFile;
+    if (!file) return;
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(`${file}.tmp`, JSON.stringify(this.revoked), { mode: 0o600 });
+      renameSync(`${file}.tmp`, file);
+    } catch (err) {
+      this.opts.log?.(`!!! auth: could not save the revoked sessions (${(err as Error).message}); they hold until a restart only`);
+    }
+  }
+
+  /** Drops expired nonces once there are many. */
   private prune(now: number): void {
     if (this.nonces.size < 1000) return;
-    for (const [k, v] of this.nonces) if (v.expires < now) this.nonces.delete(k);
-    // Map iteration is insertion order: the first keys are the oldest nonces
-    while (this.nonces.size >= MAX_NONCES) this.nonces.delete(this.nonces.keys().next().value!);
+    for (const [k, v] of this.nonces) if (v.expires < now) this.dropNonce(k);
   }
 }

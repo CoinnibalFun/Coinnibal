@@ -73,3 +73,30 @@ jobs:
           persist-credentials: false
       - name: Build
         run: docker build -t elymum:ci .
+
+  # The VPS deploys only what passed: after every green run on a branch this moves the tag ci-green-<branch> to the
+  # commit, and deploy/vps/update.sh deploys the newest commit it marks (a private repository's CI status is not
+  # readable from the VPS without a token; the tag comes with the same git fetch as the code).
+  mark-green:
+    name: Mark the commit deployable (ci-green-<branch>)
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
+    needs: [typescript, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Move ci-green-<branch> to this commit (never backwards)
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          tag="ci-green-${BRANCH}"
+          git fetch --quiet origin "+refs/tags/${tag}:refs/tags/${tag}" 2>/dev/null || true
+          if old="$(git rev-parse -q --verify "refs/tags/${tag}^{commit}")" && git merge-base --is-ancestor "$GITHUB_SHA" "$old" && [ "$old" != "$GITHUB_SHA" ]; then
+            echo "the marker is already ahead of this commit"
+            exit 0
+          fi
+          git tag -f "$tag" "$GITHUB_SHA"
+          git push -f origin "refs/tags/${tag}"

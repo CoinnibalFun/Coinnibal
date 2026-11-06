@@ -33,5 +33,8 @@ export default defineConfig({
   },
   networks: {
     localnet: { type: 'http', chainType: 'generic', url: 'http://127.0.0.1:8545' },
+    // `hardhat --network bench node` (the server's bell-burst and failure drills): blocks every 250 ms keep the real
+    // time as their timestamp, like Robinhood Chain, instead of adding a second per block
+    bench: { type: 'edr-simulated', chainType: 'generic', allowBlocksWithSameTimestamp: true },
   },
 });

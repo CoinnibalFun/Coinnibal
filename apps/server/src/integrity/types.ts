@@ -62,7 +62,15 @@ export interface SessionSummary {
   ejects: { eatenBy: Record<string, number>; eatenOther: number };
   /** How the ticket ended in a death: the staker that ate it (null for anything else, e.g. a virus) and the approach share before it. */
   death: { by: string | null; approach: number; samples: number } | null;
+  /**
+   * Stakers big enough to eat this ticket that came within eating range (by wallet, at most `NEAR_MAX` wallets): the
+   * samples (about 15 a second) they were there. The non-aggression detector compares it with who ate whom.
+   */
+  near?: Record<string, number>;
 }
+
+/** Wallets kept in a ticket's `near` map. */
+export const NEAR_MAX = 12;
 
 /** What the detectors read: ended and live tickets plus value transfers. */
 export interface IntegritySnapshot {
