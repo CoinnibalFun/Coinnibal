@@ -19,7 +19,9 @@
     "arena-sim": "tsx scripts/arena-scaling-sim.ts",
     "e2e": "tsx scripts/e2e.ts",
     "nft:report": "tsx scripts/nft/report.ts",
-    "nft:sheets": "tsx scripts/nft/sheets.ts"
+    "nft:sheets": "tsx scripts/nft/sheets.ts",
+    "econ-sim": "tsx scripts/mainnet-econ-sim.ts",
+    "test:econ-findings": "ELYMUM_ECON_FINDINGS=1 vitest run test/mainnet-econ.test.ts"
   },
   "dependencies": {
     "@elymum/art": "workspace:*",
