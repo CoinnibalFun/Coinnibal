@@ -87,8 +87,8 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
   const chain = net.info ? `${net.mainnet ? 'MAINNET' : 'Testnet'} · ${net.info.name} (${net.info.id})` : 'No chain';
   switch (group) {
     case 'network': {
-      if (!net.chain) return { now: 'The game server is not answering.', next: 'Check the server on Render, then reload.' };
-      if (!net.info) return { now: 'The server has no chain.', next: 'Set EVM_RPC_URL in Render and redeploy.' };
+      if (!net.chain) return { now: 'The game server is not answering.', next: 'It retries every 5 s. If it stays down: on the server, run elymum-status (deploy/vps/README.md).' };
+      if (!net.info) return { now: 'The server has no chain.', next: 'Set EVM_RPC_URL (and CHAIN_ID) on the server and restart it.' };
       const bal = a?.serverBalance ?? null;
       const now = `${chain}${status ? ` · block ${status.block.toString()}` : ''}${bal !== null ? ` · server key ${formatGasAmount(bal, 4)}` : ''}`;
       if (bal === 0n) return { now, next: `Fund the server key with ${GAS_SYMBOL}: it pays the gas of every settlement.` };
@@ -107,7 +107,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
         const known = i.registry?.token?.address ?? status?.testToken?.address ?? null;
         if (known) return { now, next: 'Confirm the game token (one click, then your wallet).' };
         if (net.info && !testTokenRefusal(net.info.id)) return { now, next: 'Deploy a TestToken (below), then Finish setup.' };
-        return { now, next: 'Set TOKEN_ADDRESS on the game server (Render) to $ELYMUM, then confirm it here.' };
+        return { now, next: 'Set TOKEN_ADDRESS on the game server to $ELYMUM, then confirm it here.' };
       }
       if (steps.length > 0) return { now, next: `Finish setup: ${steps.length} step${steps.length === 1 ? '' : 's'} left, one button.` };
       return { now, next: null };

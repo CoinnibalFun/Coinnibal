@@ -532,7 +532,7 @@ export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }
       lede={
         known
           ? 'The ERC-20 the arenas take. The server already knows it: check it, then confirm once in the preview. It can never be changed.'
-          : 'The ERC-20 the arenas take ($ELYMUM). The server has no game token registered yet: set TOKEN_ADDRESS on the game server (Render) and reload, and it shows up here.'
+          : 'The ERC-20 the arenas take ($ELYMUM). The server has no game token registered yet: set TOKEN_ADDRESS on the game server and reload, and it shows up here.'
       }
     >
       {known && (
