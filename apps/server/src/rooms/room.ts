@@ -49,6 +49,7 @@ import type { ShopService, UseContext } from '../shop/service';
 import type { Leaderboards } from '../leaderboards';
 import type { RoomConn as Conn, RoomHandle } from './handle';
 import { sweepKey, type Journal, type JournalItem, type LiveStake, type SettleReason, type SettlementItem } from '../stake/journal';
+import { EatenTracker } from './eaten';
 import { ArenaLedger, type ArenaEntry } from '../stake/ledger';
 import { RoundClock } from './round-clock';
 
@@ -91,8 +92,11 @@ export interface RoomDeps {
   integrity?: RoomIntegrity;
   /** Bought power-ups (charges, cooldowns, the arena cap); absent: the `boost` message is ignored. */
   shop?: Pick<ShopService, 'state' | 'use'>;
-  /** A person ate a person whose coin reached `NOTABLE_KILL_MASS` this game (the killer may share it). */
-  onNotableKill?: (e: { room: Room; conn: Conn; killer: Player; victim: string; victimMass: number }) => void;
+  /**
+   * A person ate a person whose coin reached `NOTABLE_KILL_MASS` this game (the killer may share it); in a testnet
+   * test arena a practice bot counts too (`victimIsBot`).
+   */
+  onNotableKill?: (e: { room: Room; conn: Conn; killer: Player; victim: string; victimMass: number; victimIsBot?: boolean }) => void;
 }
 
 /** An AFK staker's ticket settled at a round's bell (see `RoomDeps.onBellSettled`). */
@@ -227,6 +231,8 @@ export class Room implements RoomHandle {
   /** World clock (ms) of the next growth check and of the last resize. */
   private nextMapCheckAt = 0;
   private lastResizeAt = -Infinity;
+  /** The coins each person ate this game (`DeathStats.eaten`); bots count in test arenas only. */
+  private readonly eaten: EatenTracker;
   /** Test arenas: stake cells eaten by a bot (their value spilled as floor loot, never to the bot). */
   readonly botSpills = { n: 0, value: 0 };
   /** A custom room's coming end (`closingSoon`): told to everyone who joins or watches meanwhile. */
@@ -253,6 +259,7 @@ export class Room implements RoomHandle {
     this.world = new World({ ...first, powerUps: opts.powerUps ?? true, coinRain: opts.mode !== 'arena', seed, ...(this.map ? { space: MAP_SPACE } : {}) });
     this.bots = botCount > 0 && opts.bots ? new PracticeBots(this.world, opts.bots, mulberry32(seed ^ 0xb07)) : null;
     this.ledger = opts.mode === 'arena' ? new ArenaLedger() : null;
+    this.eaten = new EatenTracker(!!opts.test);
     this.clock = deps.clock ?? new RoundClock(deps.now, deps.round);
     this.integrity = this.ledger ? (deps.integrity ?? null) : null;
     // loot left on any of this arena's instances when the server last stopped: the first instance adopts it all
@@ -654,6 +661,7 @@ export class Room implements RoomHandle {
       playersEaten: p.stats.playersEaten,
       bestRank: Number.isFinite(p.stats.bestRank) ? p.stats.bestRank : 0,
       xp: xpForGame(p.stats.maxMass, p.stats.playersEaten, aliveMs),
+      ...(this.eaten.take(p.id) ?? {}),
     };
   }
 
@@ -843,6 +851,17 @@ export class Room implements RoomHandle {
       else if (cause === 'maxage' || cause === 'kicked') c.send({ t: 'cashout', state: 'done', value: stats.payout, stats });
     }
     return stats;
+  }
+
+  /** A test arena: a person ate a practice bot that reached `NOTABLE_KILL_MASS` (a TEST card; never in other rooms). */
+  private notableBotKill(killer: Player | null, bot: Player): void {
+    const conn = killer && !killer.isBot ? this.humans.get(killer.id) : null;
+    if (!conn || bot.stats.maxMass < NOTABLE_KILL_MASS) return;
+    try {
+      this.deps.onNotableKill?.({ room: this, conn, killer: killer!, victim: bot.name, victimMass: Math.floor(bot.stats.maxMass), victimIsBot: true });
+    } catch (err) {
+      this.deps.log(`room ${this.id}: notable-kill hook failed: ${(err as Error).message}`);
+    }
   }
 
   /* ---------------------------------------------------------------- */
@@ -1055,7 +1074,12 @@ export class Room implements RoomHandle {
         ...(k.killer?.isBot ? { killerIsBot: true } : {}),
         ...(k.victim.isBot ? { victimIsBot: true } : {}),
       });
+      // the eaten list of a person's result (a bot victim counts in a test arena only)
+      if (k.killer && this.humans.has(k.killer.id)) {
+        this.eaten.note(k.killer.id, { pid: k.victim.id, name: k.victim.name, bot: k.victim.isBot, wallet: this.walletOf.get(k.victim.id) ?? null });
+      }
       if (this.bots?.isBot(k.victim.id)) {
+        if (this.opts.test) this.notableBotKill(k.killer, k.victim);
         this.bots.onDeath(k.victim.id, world.now);
         world.removePlayer(k.victim.id);
         for (const c of this.conns) c.view.forgetPlayer(k.victim.id);

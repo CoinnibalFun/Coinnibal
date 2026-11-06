@@ -7,7 +7,7 @@ import { openModal, updateSettings, useUi, type Settings } from '../../store';
 import { LanguagePicker } from '../LanguagePicker';
 import { MusicPicker } from './MusicPicker';
 
-type Flag = 'showNames' | 'showMass' | 'showChat' | 'showFps';
+type Flag = 'showNames' | 'showMass' | 'showChat' | 'showEmotes' | 'showFps';
 
 /** A punched-ticket toggle: role=switch, 44 px tall hit area. */
 export function Punch({ on, onChange, label, disabled = false }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
@@ -81,10 +81,11 @@ export function SettingsPage({ headings = true }: { headings?: boolean }) {
   const t = useT();
   const s = useUi((st) => st.settings);
   const set = (patch: Partial<Settings>) => updateSettings(patch);
-  const flags: [TKey, Flag][] = [
+  const flags: [TKey, Flag, TKey?][] = [
     ['gs.names', 'showNames'],
     ['gs.mass', 'showMass'],
     ['gs.chat', 'showChat'],
+    ['gs.emotes', 'showEmotes', 'gs.emotesNote'],
     ['gs.fps', 'showFps'],
   ];
   return (
@@ -125,8 +126,8 @@ export function SettingsPage({ headings = true }: { headings?: boolean }) {
         <Row label={t('gs.minimap')}>
           <Punch on={s.showMinimap} onChange={(v) => set({ showMinimap: v })} label={t('gs.minimap')} />
         </Row>
-        {flags.map(([key, flag]) => (
-          <Row key={flag} label={t(key)}>
+        {flags.map(([key, flag, note]) => (
+          <Row key={flag} label={t(key)} note={note ? t(note) : undefined}>
             <Punch on={s[flag]} onChange={(v) => set({ [flag]: v } as Partial<Settings>)} label={t(key)} />
           </Row>
         ))}

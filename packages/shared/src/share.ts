@@ -3,8 +3,10 @@
  * kill, made from its own records only (nothing a client sends), and serves it at `/share/<id>` (a page with the
  * Open Graph and Twitter card tags) and `/share/<id>.png` (the 1200 x 630 card image). The web opens X's web intent
  * (`shareIntentUrl`) with a localized line and that link: no X API, no account linking. A card holds only what the
- * game shows anyway: the public name, the wallet's short form, the coin's paint, flag and emblem badge, the numbers.
+ * game shows anyway: the public name, the wallet's short form, the coin's paint, flag and emblem badge, the numbers,
+ * and the public names of the coins eaten that game (`shareName`: never a wallet address).
  */
+import { sanitizeName } from './text';
 
 export type ShareKind = 'round' | 'room' | 'kill';
 
@@ -37,6 +39,50 @@ export interface ShareCard {
   /** Kills: the coin eaten and its mass. */
   victim?: string;
   victimMass?: number;
+  /** Kills: the coin eaten was a practice bot (test arenas only). */
+  victimBot?: boolean;
+  /** Results: the coins eaten this game (the first `EATEN_SHOWN`) and how many more. */
+  eaten?: EatenName[];
+  eatenMore?: number;
+  /** A testnet test arena: the card says TEST everywhere and never shows a payout. */
+  test?: boolean;
+}
+
+/** A coin eaten this game, as a result shows it: its public name (`shareName`), BOT for a practice bot, and times eaten. */
+export interface EatenName {
+  name: string;
+  /** A practice bot (counted in testnet test arenas only). */
+  bot?: boolean;
+  /** Times eaten this game (absent: once). */
+  n?: number;
+}
+
+/** Names a result shows of the coins eaten; the rest are "+N". */
+export const EATEN_SHOWN = 5;
+
+// a run of hex long enough to be (part of) an address or a hash
+const HEXISH = /(?:0x)?[0-9a-f]{10,}/gi;
+
+/**
+ * A player name made safe for a share card and an X post: the usual name cleaning (invisible characters, 16 characters
+ * at most), no address-like hex, no @mention / #hashtag / $cashtag, and no link (dots become middle dots).
+ */
+export function shareName(raw: unknown): string {
+  const s = sanitizeName(raw, '')
+    .replace(HEXISH, '0x…')
+    .replace(/[@#$\uFF20\uFF03\uFF04]/g, '')
+    .replace(/[:/\\]+/g, ' ')
+    .replace(/[.\u3002\uFF0E]/g, '\u00B7')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return s.length > 0 ? s : '???';
+}
+
+/** "Penny, Rocky ×2, Zed (BOT) +3": the eaten coins on one line (`botTag`: the translated BOT tag). */
+export function eatenLine(list: readonly EatenName[], more = 0, botTag = 'BOT'): string {
+  const names = list.map((e) => `${shareName(e.name)}${e.bot ? ` (${botTag})` : ''}${e.n && e.n > 1 ? ` \u00D7${e.n}` : ''}`).join(', ');
+  const rest = more > 0 ? `+${more}` : '';
+  return names && rest ? `${names} ${rest}` : names || rest;
 }
 
 /** Share ids: 10 characters of [A-Za-z0-9]. */

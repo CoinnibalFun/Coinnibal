@@ -686,6 +686,8 @@ export class GameEngine {
         useUi.setState({ chat: m.chat.map((c) => ({ id: chatId++, ...c, ...(!c.system && !this.signedIn(c.pid) ? { guest: true } : {}), at: Date.now() })) });
         return;
       case 'emote': {
+        // other players' stickers are hidden with the setting off (mine always show)
+        if (m.pid !== this.world.myPid && !useUi.getState().settings.showEmotes) return;
         const p = this.world.players.get(m.pid);
         if (p) p.emote = { id: m.id, at: now };
         return;
@@ -726,7 +728,9 @@ export class GameEngine {
         return;
       case 'share':
         // the card the server made of my result or of a notable kill: the sheets and the HUD offer "Share on X"
-        useUi.setState({ share: { kind: m.kind, id: m.id, ...(m.victim ? { victim: m.victim } : {}), at: Date.now() } });
+        useUi.setState({
+          share: { kind: m.kind, id: m.id, ...(m.victim ? { victim: m.victim } : {}), ...(m.victimIsBot ? { victimIsBot: true } : {}), ...(m.test ? { test: true } : {}), at: Date.now() },
+        });
         return;
       case 'roomOver': {
         // a free custom room ended: its final board over the frozen world; the button (or the timer) goes to the lobby
