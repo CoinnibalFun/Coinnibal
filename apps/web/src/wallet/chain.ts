@@ -17,6 +17,7 @@ import { SERVER } from '../config';
 import { adoptProfileCountry, useUi } from '../store';
 import { isDevFake, loadDevFake } from './devFakeLoader';
 import { publicClientFor } from './network';
+import { verifyArena, type PinCheck } from './pinned';
 import { useAddress, useWallet } from './store';
 import { sessionKey, type OpenSession, type PendingPayout } from './ticket';
 
@@ -48,6 +49,13 @@ export interface ChainData {
   holdersOnly: number[];
   /** The arena tiers in US dollars and the token's USD price (`/api/site/arena-prices`); null while unknown. */
   prices: ArenaPricesView | null;
+  /**
+   * The announced arena against this build's pins and the compiled code hash (`pinned.ts`); null while unknown.
+   * Not ok: nothing is sold (the lobby says so), and the ticket sheet checks again before every transaction anyway.
+   */
+  pin: PinCheck | null;
+  /** The chain's RPC does not answer at all (not even a block number): "Can't reach Robinhood Chain, retrying". */
+  rpcDown: boolean;
   loading: boolean;
 }
 
@@ -66,6 +74,8 @@ export const useChainData = create<ChainData>(() => ({
   holder: null,
   holdersOnly: [],
   prices: null,
+  pin: null,
+  rpcDown: false,
   loading: false,
 }));
 
@@ -121,19 +131,33 @@ let refreshTimer: number | null = null;
 let generation = 0;
 let currentOwner: string | null = null;
 
+/** Arenas whose code already matched the compiled build this visit (code at an address does not change). */
+const verified = new Set<string>();
+
 /** Chain reads of one refresh (exported for tests). */
 export async function readChain(
   client: PublicClient,
   chain: ChainStatus,
   owner: Address | null,
-): Promise<Pick<ChainData, 'deployed' | 'config' | 'arenas' | 'sessions' | 'balance' | 'tokenBalance' | 'allowance' | 'holder' | 'holdersOnly'>> {
+): Promise<Pick<ChainData, 'deployed' | 'config' | 'arenas' | 'sessions' | 'balance' | 'tokenBalance' | 'allowance' | 'holder' | 'holdersOnly' | 'pin' | 'rpcDown'>> {
   const arena = chain.arenaAddress as Address;
+  const none = { deployed: false, config: null, arenas: [], sessions: {}, balance: null, tokenBalance: null, allowance: null, holder: null, holdersOnly: [] };
   let config: ArenaConfig;
   try {
     config = await getArenaConfig(client, arena);
   } catch {
-    return { deployed: false, config: null, arenas: [], sessions: {}, balance: null, tokenBalance: null, allowance: null, holder: null, holdersOnly: [] };
+    // no arena there, or no chain at all: only the second is "can't reach", and it is retried with every refresh
+    const up = await client.getBlockNumber().then(
+      () => true,
+      () => false,
+    );
+    return { ...none, pin: null, rpcDown: !up };
   }
+  // the arena the server names must be the one this build pins, with the compiled code (and the pinned token)
+  const key = `${chain.chainId}:${arena.toLowerCase()}:${(config.token ?? '').toLowerCase()}`;
+  const pin: PinCheck = verified.has(key) ? { ok: true, arena } : await verifyArena(client, chain.chainId, { arena, token: config.token });
+  if (!pin.ok) return { ...none, pin, rpcDown: pin.reason === 'unreadable' };
+  verified.add(key);
   // no token yet: no arena can exist (createArena needs it)
   const arenas = config.token ? await listArenas(client, arena).catch(() => [] as ArenaInfo[]) : [];
   const sessions: Record<number, SessionInfo | null> = {};
@@ -158,7 +182,7 @@ export async function readChain(
   }
   arenas.sort((a, b) => (a.entryFee < b.entryFee ? -1 : a.entryFee > b.entryFee ? 1 : a.id - b.id));
   const holdersOnly = arenas.filter((a) => a.holdersOnly).map((a) => a.id);
-  return { deployed: true, config, arenas, sessions, balance, tokenBalance, allowance, holder, holdersOnly };
+  return { deployed: true, config, arenas, sessions, balance, tokenBalance, allowance, holder, holdersOnly, pin, rpcDown: false };
 }
 
 /**
@@ -208,7 +232,7 @@ export function useChainSync(): void {
       return;
     }
     if (!client || !chain) {
-      set({ deployed: chain ? false : null, fake: false, config: null, arenas: [], sessions: {}, profile, profileLoaded: true, pending });
+      set({ deployed: chain ? false : null, fake: false, config: null, arenas: [], sessions: {}, profile, profileLoaded: true, pending, pin: null, rpcDown: false });
       return;
     }
     set({ loading: true, fake: false });
@@ -217,7 +241,7 @@ export function useChainSync(): void {
       set({ ...data, profile, profileLoaded: true, pending, loading: false });
     } catch (err) {
       console.warn('chain refresh failed', err);
-      set({ loading: false, profileLoaded: true, profile, pending });
+      set({ loading: false, profileLoaded: true, profile, pending, rpcDown: true });
     }
   }, [client, owner, fake, chain, token]);
 

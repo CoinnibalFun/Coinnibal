@@ -2,7 +2,9 @@ import { shopPaymentRef, type ShopView } from '@elymum/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chainStatus, ONE } from './evm-helpers';
 
-const spies = vi.hoisted(() => ({ sendWalletCall: vi.fn(), getAllowance: vi.fn() }));
+const spies = vi.hoisted(() => ({ sendWalletCall: vi.fn(), getAllowance: vi.fn(), verifyArena: vi.fn() }));
+// the pin and code-hash check (pinned.test.ts): this test's arena passes unless a test says otherwise
+vi.mock('../src/wallet/pinned', async (orig) => ({ ...(await orig<typeof import('../src/wallet/pinned')>()), verifyArena: spies.verifyArena }));
 vi.mock('../src/wallet/tx', async (orig) => ({ ...(await orig<typeof import('../src/wallet/tx')>()), sendWalletCall: spies.sendWalletCall }));
 vi.mock('@elymum/sdk', async (orig) => ({ ...(await orig<typeof import('@elymum/sdk')>()), getAllowance: spies.getAllowance }));
 
@@ -26,6 +28,8 @@ const VIEW: ShopView = {
 const credited = { ok: true, kind: 'leap', added: 3, charges: { magnet: 0, leap: 3, speed: 0, invis: 0 } };
 
 beforeEach(() => {
+  spies.verifyArena.mockReset();
+  spies.verifyArena.mockImplementation(async (_c: unknown, _id: unknown, a: { arena: string }) => ({ ok: true, arena: a.arena }));
   spies.sendWalletCall.mockReset();
   spies.sendWalletCall.mockImplementation(async () => ({ ok: true, hash: HASH, receipt: { status: 'success', logs: [] } }));
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(credited), { status: 200 })));
@@ -66,5 +70,13 @@ describe('buyPack: a power-up pack is paid with ElymumArena.pay', () => {
     expect(loadPendingClaim(OWNER)).toBeNull();
     await expect(buyPack({ ...VIEW, payTo: null }, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() })).rejects.toBeInstanceOf(ShopError);
     await expect(buyPack({ ...VIEW, open: false }, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() })).rejects.toMatchObject({ code: 'shop_closed' });
+  });
+
+  it('pays the pinned arena only: an arena the build does not trust gets no approval and no payment', async () => {
+    spies.getAllowance.mockResolvedValue(0n);
+    spies.verifyArena.mockImplementation(async () => ({ ok: false, reason: 'arena_mismatch' }));
+    await expect(buyPack(VIEW, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() })).rejects.toMatchObject({ code: 'tx', message: expect.stringMatching(/does not recognise the arena contract/) });
+    expect(spies.sendWalletCall).not.toHaveBeenCalled();
+    expect(spies.verifyArena).toHaveBeenCalledWith(expect.anything(), chainStatus().chainId, { arena: ARENA, token: TOKEN });
   });
 });
