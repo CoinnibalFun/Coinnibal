@@ -26,6 +26,7 @@ import { EmblemHand, Flap, FlipCard, SealBreak } from './MintRitual';
 import { EmblemPerks } from './Perks';
 import {
   emblemPerks,
+  livePerks,
   fundsBlocker,
   gasText,
   mintBlocker,
@@ -37,8 +38,12 @@ import {
   priceStory,
   remaining,
   usdText,
+  type LivePerks,
   type MintView,
 } from './logic';
+import { checkNft } from '../../wallet/pinned';
+import { fetchShop } from '../../wallet/shop';
+import { roomsApi } from '../../rooms/api';
 
 /** The NFT emblem image the server draws for a token id. */
 export const nftImageUrl = (id: bigint | number | string): string => `${SERVER.http}/api/nft/${id.toString()}.svg`;
@@ -153,6 +158,17 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
   const [fresh, setFresh] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [chain, setChain] = useState<ChainStatus | null>(null);
+  /** The holder perks that depend on the server's settings, as they are live (unknown: not listed). */
+  const [perks, setPerks] = useState<LivePerks>({});
+  useEffect(() => {
+    let live = true;
+    void Promise.all([roomsApi.quote(null).catch(() => null), fetchShop(null).catch(() => null)]).then(([quote, shop]) => {
+      if (live) setPerks(livePerks(quote, shop));
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   const address = useWallet((s) => (s.status === 'connected' ? s.address : null));
   const provider = useWallet((s) => s.current?.provider ?? null);
   const session = useSiteSession();
@@ -319,12 +335,15 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
     const target = chain ?? (await fetchServerChain({ fresh: true }));
     if (!target) return fail(t('mn.fail.server'));
     if (!chain) setChain(target);
+    // the emblem contract must be the one this build pins: the server's word alone never gets a payment
+    const pinned = checkNft(target.chainId, nft);
+    if (!pinned.ok) return fail(t('mn.fail.pin'));
     const client = publicClientFor(target, provider);
     if (!client) return fail(t('mn.fail.chain'));
     let price: bigint;
     try {
       // the latest price and limits, right before the wallet opens (a keeper may have re-priced)
-      const [fresh, mine] = await Promise.all([getMintState(client, nft), getMintedBy(client, nft, address)]);
+      const [fresh, mine] = await Promise.all([getMintState(client, pinned.nft), getMintedBy(client, pinned.nft, address)]);
       setMinted(mine);
       const why = mintBlocker(toContractState(fresh), mine, { kind, qty: q, proof });
       if (why) return fail(t('mn.fail.not', { why }));
@@ -333,7 +352,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
       return fail(t('mn.fail.contract'));
     }
     const call =
-      kind === 'allowlist' ? mintAllowlistCall(nft, { qty: q, proof: (proof?.proof ?? []) as Hex[], price }) : mintPublicCall(nft, { qty: q, price });
+      kind === 'allowlist' ? mintAllowlistCall(pinned.nft, { qty: q, proof: (proof?.proof ?? []) as Hex[], price }) : mintPublicCall(pinned.nft, { qty: q, price });
     // the wallet's gas balance and a dry run, so a mint that cannot work says why here instead of in a
     // wallet warning. Only a clear answer stops it (too little gas, a contract refusal); a read
     // that fails for any other reason leaves the decision to the wallet.
@@ -638,7 +657,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
           <div className="mt-card__right">{right}</div>
         </motion.div>
         {/* under the lede on wide screens, under the mint card on phones (the card comes first there) */}
-        <EmblemPerks perks={emblemPerks(isTestnetChain(chain), { fees: chain?.fees ?? null, gameAccess: state.gameAccess })} />
+        <EmblemPerks perks={emblemPerks(isTestnetChain(chain), { fees: chain?.fees ?? null, gameAccess: state.gameAccess }, perks)} />
       </div>
     </NightPlate>
   );
