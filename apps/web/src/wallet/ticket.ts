@@ -9,28 +9,43 @@
  */
 import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, ratesFor, totalFeeBps, type ArenaFees, type FeeRates, type RoomInfo } from '@elymum/shared';
 import type { Address, Hex } from 'viem';
-import { MAX_ALLOWANCE, REFUND_DELAY_SECS, fromLedger } from '@elymum/sdk';
+import { REFUND_DELAY_SECS, fromLedger, type Erc20Call } from '@elymum/sdk';
 
 /* ── the ticket calls ───────────────────────────────────────────────── */
 
 /**
- * `approve` (only when the allowance is short) then `join`: two wallet prompts at most. By default
- * the approval is the largest allowance (`MAX_ALLOWANCE`), given once: every later ticket is a
- * single `join` prompt (2026-11 playtest: "after approving once it shouldn't ask again"). Players
- * who prefer exact approvals tick "Approve only this ticket" (`Settings.exactApprove`).
+ * `approve` (only when the allowance is short) then `join`: two wallet prompts at most. The approval is exactly this
+ * ticket's entry fee: what the wallet shows is what the arena may take, and nothing is left approved for a contract
+ * that could later turn out not to be ours (2026-11 audit: an unlimited approval to whatever arena the server names
+ * is a wallet-drain risk). A player who wants fewer prompts may tick "Approve N tickets at once"
+ * (`Settings.approveBatch`): explicit, and capped at `APPROVE_BATCH_TICKETS` tickets of that room. Never unlimited.
  */
 export type TicketStep = 'approve' | 'join';
 
-/** What the approval grants: `unlimited` (default) or `exact` (this ticket's entry fee). */
-export type ApproveMode = 'exact' | 'unlimited';
+/** The most tickets one approval may cover ("Approve N tickets at once"). */
+export const APPROVE_BATCH_TICKETS = 5;
 
-export function approveMode(exactApprove: boolean | undefined): ApproveMode {
-  return exactApprove ? 'exact' : 'unlimited';
+/** What the approval grants: `exact` (default: this ticket's entry fee) or `batch` (`APPROVE_BATCH_TICKETS` of them). */
+export type ApproveMode = 'exact' | 'batch';
+
+export function approveMode(batch: boolean | undefined): ApproveMode {
+  return batch ? 'batch' : 'exact';
 }
 
 /** The amount an approval of `mode` grants for a ticket of `entryFee` (base units). */
 export function approveAmount(mode: ApproveMode, entryFee: bigint): bigint {
-  return mode === 'exact' ? entryFee : MAX_ALLOWANCE;
+  return mode === 'batch' ? entryFee * BigInt(APPROVE_BATCH_TICKETS) : entryFee;
+}
+
+/**
+ * The last look at an approval before the wallet opens: an ERC-20 `approve` on the arena's game token, for the
+ * pinned arena, of exactly the amount the sheet showed. Anything else (another spender, another amount, an unlimited
+ * allowance) is refused. Pure: unit-tested.
+ */
+export function approvalIsSafe(call: Pick<Erc20Call, 'address' | 'functionName' | 'args'>, o: { token: Address; arena: Address; amount: bigint }): boolean {
+  if (call.functionName !== 'approve' || call.address.toLowerCase() !== o.token.toLowerCase()) return false;
+  const [spender, amount] = call.args as readonly unknown[];
+  return typeof spender === 'string' && spender.toLowerCase() === o.arena.toLowerCase() && amount === o.amount && o.amount > 0n;
 }
 
 /** The calls a ticket needs, in order. `allowance` null (unknown) asks for the approval to be safe. */

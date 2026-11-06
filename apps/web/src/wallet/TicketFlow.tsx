@@ -1,4 +1,4 @@
-import { getAllowance, getArenaConfig, getSession, planJoin, refundCall, sessionRefundState, formatGasAmount } from '@elymum/sdk';
+import { approveCall, getAllowance, getArenaConfig, getSession, planJoin, refundCall, sessionRefundState, formatGasAmount } from '@elymum/sdk';
 import { activeChain, arenaMeta, bpsToPercent, totalFeeBps, type FeeRates } from '@elymum/shared';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
@@ -15,9 +15,25 @@ import { isFakeHash } from './devFake';
 import { loadDevFake } from './devFakeLoader';
 import { explorerTx } from './links';
 import { serverChainInfo } from './network';
+import { pinErrorName, verifyArena } from './pinned';
 import { useAddress } from './store';
-import { approveAmount, approveMode, arenaRates, joinGasAfterApprove, planErrorName, sameRates, ticketRates, ticketSteps, type ApproveMode, type TicketModel, type TicketStep } from './ticket';
+import {
+  APPROVE_BATCH_TICKETS,
+  approvalIsSafe,
+  approveAmount,
+  approveMode,
+  arenaRates,
+  joinGasAfterApprove,
+  planErrorName,
+  sameRates,
+  ticketRates,
+  ticketSteps,
+  type ApproveMode,
+  type TicketModel,
+  type TicketStep,
+} from './ticket';
 import { sendWalletCall, txErrorText, type TxPhase } from './tx';
+import { PRICE_STALE_HOURS, usdQuote } from './usdPrice';
 
 /** `collect`: a finalized session's payout; `refund`: an unsettled ticket after 24 h. */
 export type FlowMode = 'buy' | 'refund' | 'collect';
@@ -35,18 +51,19 @@ const DOORS_AT_MS = BOARD_AT_MS + WALK_MS;
 const PLAY_AT_MS = 2_000;
 
 /**
- * Cutting a ticket: a confirm sheet that shows exactly what is signed (entry fee, fee policy,
- * every call), then at most two wallet prompts, `approve` (only when the allowance is short:
- * once for every later ticket by default, or for exactly this entry fee when the player ticks
- * "Approve only this ticket", remembered in `Settings.exactApprove`) and `join`, each confirmed by
- * its receipt, then the stamp lands,
+ * Cutting a ticket: a confirm sheet that shows exactly what is signed (entry fee, its value in US dollars with the
+ * price's age, fee policy, every call), then at most two wallet prompts, `approve` (only when the allowance is short:
+ * exactly this entry fee, or `APPROVE_BATCH_TICKETS` of them when the player ticks "Approve N tickets at once",
+ * remembered in `Settings.approveBatch`; never unlimited) and `join`, each confirmed by its receipt, then the stamp lands,
  * the stub tears off and the player enters the room. The same sheet collects a finalized game's
  * payout (any time) and refunds an unsettled ticket after 24 h, each with one `refund` call.
  *
  * Money safety: one in-flight guard (a ref, so a double click or a held Enter cannot start a
  * second transaction before React re-renders), focus never starts on the pay button, the values
  * are frozen at confirm, the arena and config are re-read from the chain right before the
- * wallet opens, and the wallet is switched to the server's chain first.
+ * wallet opens, the arena must be the one this build pins with the compiled code (`verifyArena`, before every
+ * transaction), the approval is checked call by call (`approvalIsSafe`), and the wallet is switched to the server's
+ * chain first. No ETH for gas: Pay is off, with the way to get some.
  */
 export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mode: FlowMode; ticket: TicketModel | null; onClose: () => void }) {
   const t = useT();
@@ -59,7 +76,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   const reduced = useReducedMotion();
   const serverFees = useUi((s) => s.chain?.fees ?? null);
   const tokenReady = useUi((s) => s.chain?.tokenReady === true);
-  const exactApprove = useUi((s) => s.settings.exactApprove === true);
+  const approveBatch = useUi((s) => s.settings.approveBatch === true);
   const paidSeat = useUi((s) => s.paidSeat);
 
   const [phase, setPhase] = useState<Phase>('review');
@@ -70,6 +87,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   /** What was on the sheet when the player pressed confirm: shown until the flow ends, never re-read from the chain. */
   const [frozen, setFrozen] = useState<Review | null>(null);
   const [moreBelow, setMoreBelow] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const timers = useRef<number[]>([]);
   /** Synchronous double-submit guard: set before the first await, cleared only on failure or reopen. */
   const inFlight = useRef(false);
@@ -82,6 +100,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   useEffect(() => {
     if (!open) return;
     inFlight.current = false;
+    setNow(Date.now());
     setPhase('review');
     setStep(null);
     setError(null);
@@ -114,9 +133,14 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   const steps: TicketStep[] = ticketSteps(data.allowance, fee);
   const busy = phase === 'preparing' || phase === 'switching' || phase === 'signing' || phase === 'confirming' || phase === 'stamped';
   const owed = session?.finalized ? session.owed : 0n;
-  const live: Review = { steps, fee, rates, balance: data.tokenBalance, wei: data.balance, owed, sessionId: session?.id ?? null, approve: approveMode(exactApprove) };
+  const live: Review = { steps, fee, rates, balance: data.tokenBalance, wei: data.balance, owed, sessionId: session?.id ?? null, approve: approveMode(approveBatch) };
   const v = frozen ?? live;
-  const lowGas = data.balance !== null && data.balance === 0n;
+  // no ETH at all: every transaction would fail in the wallet (Pay is off; the way to get some is right there)
+  const lowGas = !data.fake && data.balance !== null && data.balance === 0n;
+  const gasInfo = serverChainInfo(chain);
+  const gasHref = gasInfo?.testnet ? (chain?.faucetUrl ?? gasInfo.faucetUrl) : (gasInfo?.bridgeUrl ?? null);
+  // the money in US dollars, with the age of the price (nothing when the server has none)
+  const usd = usdQuote(data.prices, mode === 'collect' ? v.owed : v.fee, tok.decimals, now);
   // the transaction landed after all (e.g. the receipt timed out): never offer to pay twice
   const landed = mode === 'buy' && session !== null && (phase === 'review' || phase === 'error');
   const txLink = hash && !isFakeHash(hash) ? explorerTx(hash) : null;
@@ -184,13 +208,19 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     // the server keeps this arena closed (vault short of its journal): never sell a ticket
     if (useUi.getState().blockedArenas.includes(arenaId)) return failName('Maintenance');
     let plan;
+    let arena: Address;
     try {
       // re-read the arena, the allowance and the config: the price and the fee rates (fixed into the
       // ticket at join) signed must be the ones shown
       const [p, fresh] = await Promise.all([
-        planJoin(client, { arena: arenaAddress, arenaId, player: owner, token: config.token!, approve: review.approve }),
+        planJoin(client, { arena: arenaAddress, arenaId, player: owner, token: config.token!, approve: 'exact' }),
         getArenaConfig(client, arenaAddress),
       ]);
+      // the arena must be the pinned one, with the compiled code, and its token the pinned token: else nothing is signed
+      const pin = await verifyArena(client, chain.chainId, { arena: arenaAddress, token: fresh.token });
+      if (!pin.ok) return failName(pinErrorName(pin.reason));
+      if (!fresh.token || fresh.token.toLowerCase() !== config.token!.toLowerCase()) return failName('PriceChanged');
+      arena = pin.arena;
       if (p.entryFee !== review.fee) return failName('PriceChanged');
       // the rates this ticket will be fixed at: the holder pair for holders (planJoin reads them on chain)
       const now = p.rates ?? ticketRates({ burnBps: fresh.burnBps, vaultBps: fresh.vaultBps }, fresh, p.holder).rates;
@@ -202,7 +232,11 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     }
     if (useUi.getState().blockedArenas.includes(arenaId)) return failName('Maintenance');
     if (plan.approve) {
-      const ok = await sendWalletCall(plan.approve, { chain, onPhase: onPhase('approve') });
+      // exactly this ticket (or the capped batch the player ticked), to the pinned arena: checked once more as built
+      const amount = approveAmount(review.approve, plan.entryFee);
+      const call = approveCall(config.token!, arena, amount);
+      if (!approvalIsSafe(call, { token: config.token!, arena, amount })) return failName('ContractMismatch');
+      const ok = await sendWalletCall(call, { chain, onPhase: onPhase('approve') });
       if (!ok.ok) return fail(txErrorText(ok.error));
     }
     // the join goes out with its own gas limit, estimated once the allowance is visible (a wallet whose
@@ -213,7 +247,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     } catch {
       joinData = null;
     }
-    const gas = joinData ? await joinGasAfterApprove(client, () => getAllowance(client, config.token!, owner, arenaAddress), { owner, arena: arenaAddress, data: joinData, fee: plan.entryFee }) : undefined;
+    const gas = joinData ? await joinGasAfterApprove(client, () => getAllowance(client, config.token!, owner, arena), { owner, arena, data: joinData, fee: plan.entryFee }) : undefined;
     const res = await sendWalletCall(plan.join, { chain, onPhase: onPhase('join'), ...(gas !== undefined ? { gas } : {}) });
     if (!res.ok) return fail(txErrorText(res.error));
     enterRoom(res.hash);
@@ -243,9 +277,12 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
       return done();
     }
     if (!client || !arenaAddress) return failName('NetworkError');
+    // the refund goes to the pinned arena only (one with the compiled code)
+    const pin = await verifyArena(client, chain.chainId, { arena: arenaAddress });
+    if (!pin.ok) return failName(pinErrorName(pin.reason));
     try {
       // fresh on-chain re-check: the same session, still in the state the sheet showed
-      const fresh = await getSession(client, arenaAddress, arenaId, owner);
+      const fresh = await getSession(client, pin.arena, arenaId, owner);
       const state = sessionRefundState(fresh);
       if (fresh.id !== review.sessionId || state.kind !== kind || (kind === 'collect' && fresh.owed !== review.owed)) {
         return failName(state.kind === 'wait' ? 'RefundTooEarly' : 'SessionChanged');
@@ -253,7 +290,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     } catch {
       return failName('NetworkError');
     }
-    const res = await sendWalletCall(refundCall(arenaAddress, arenaId), { chain, onPhase: onPhase(null) });
+    const res = await sendWalletCall(refundCall(pin.arena, arenaId), { chain, onPhase: onPhase(null) });
     if (!res.ok) return fail(txErrorText(res.error));
     done();
   };
@@ -264,7 +301,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   const priceOk = !ticket.soon && (data.fake || (chainArena !== undefined && chainArena.entryFee === ticket.entryFee));
   const maintenance = mode === 'buy' && blockedArenas.includes(arenaId);
   const canConfirm =
-    !!owner && !!config && tokenReady && !busy && !maintenance && (mode === 'buy' ? priceOk : session !== null && (mode !== 'collect' || !!session.finalized));
+    !!owner && !!config && tokenReady && !busy && !maintenance && !lowGas && (mode === 'buy' ? priceOk : session !== null && (mode !== 'collect' || !!session.finalized));
   const confirmLabel =
     mode === 'buy'
       ? t('tf.confirm', { fee: tok.exact(fee), sym: tok.symbol })
@@ -275,8 +312,11 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   const stepIndex = step ? v.steps.indexOf(step) + 1 : 0;
   /** Calls already confirmed on the way (the boarding sequence ticks them off). */
   const doneCount = phase === 'stamped' ? v.steps.length : stepIndex > 0 ? stepIndex - 1 : 0;
+  const batchAmount = tok.exact(approveAmount('batch', v.fee));
   const approveLabel =
-    v.approve === 'exact' ? t('tf.step.approve', { fee: tok.exact(v.fee), sym: tok.symbol }) : t('tf.step.approveOnce', { sym: tok.symbol });
+    v.approve === 'exact'
+      ? t('tf.step.approve', { fee: tok.exact(v.fee), sym: tok.symbol })
+      : t('tf.step.approveMany', { amount: batchAmount, sym: tok.symbol, n: APPROVE_BATCH_TICKETS });
   const stepLabel = step === 'approve' ? approveLabel : step === 'join' ? t('tf.step.join', { room }) : null;
   // the choice is offered while an approval is still ahead (after it, later tickets only join)
   const showApproveChoice = mode === 'buy' && !landed && (phase === 'review' || phase === 'error') && v.steps.includes('approve');
@@ -292,6 +332,17 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     </>
   ) : phase === 'review' || phase === 'error' ? (
     <>
+      {/* a cue that more of the sheet is below: its own row above the buttons, so it never covers the text */}
+      <button
+        type="button"
+        className={`tf-more mono${moreBelow ? ' is-on' : ''}`}
+        tabIndex={moreBelow ? 0 : -1}
+        aria-hidden={!moreBelow}
+        onClick={() => endRef.current?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'end' })}
+      >
+        <Icon name="chevron" size={14} />
+        {t('tf.more')}
+      </button>
       {/* no autofocus here: the Enter that opened the sheet must never land on the pay button */}
       <Button variant="primary" size="lg" icon={mode === 'buy' ? 'ticket' : 'arrow'} disabled={!canConfirm} onClick={() => void confirm()} className="tf-pay">
         {phase === 'error' ? t('tf.retry') : confirmLabel}
@@ -334,7 +385,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
                     ? step === 'approve'
                       ? v.approve === 'exact'
                         ? t('tf.approvingNote', { fee: tok.exact(v.fee), sym: tok.symbol })
-                        : t('tf.approvingNoteOnce', { sym: tok.symbol })
+                        : t('tf.approvingNoteMany', { amount: batchAmount, sym: tok.symbol, n: APPROVE_BATCH_TICKETS })
                       : t('tf.signingNote', { fee: tok.exact(v.fee), sym: tok.symbol })
                     : t('tf.signingSimple')
                   : t('tf.confirmingNote')}
@@ -368,6 +419,19 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
           <p className="tf-seat" data-testid="tf-paid-seat">
             <Icon name="key" size={16} />
             <span>{t('cr.seat.ticketNote', { name: paidSeat.name, code: paidSeat.code })}</span>
+          </p>
+        )}
+        {/* no ETH for gas: said first (Pay is off), with the way to get some */}
+        {lowGas && !busy && (
+          <p className="tf-warn" data-testid="tf-no-gas">
+            <span>
+              {t('tf.lowGas', { chain: chainName })}{' '}
+              {gasHref && (
+                <a className="tf-warn__link" href={gasHref} target="_blank" rel="noreferrer">
+                  {gasInfo?.testnet ? t('tf.gasFaucet') : t('tf.gasBridge', { chain: chainName })}
+                </a>
+              )}
+            </span>
           </p>
         )}
         {landed ? (
@@ -408,11 +472,13 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
             ))}
           </ol>
           {showApproveChoice && (
-            <label className="tf-approve-choice" data-testid="tf-exact-approve">
-              <input type="checkbox" checked={exactApprove} onChange={(e) => updateSettings({ exactApprove: e.currentTarget.checked })} />
+            <label className="tf-approve-choice" data-testid="tf-approve-batch">
+              <input type="checkbox" checked={approveBatch} onChange={(e) => updateSettings({ approveBatch: e.currentTarget.checked })} />
               <span>
-                {t('tf.exactApprove')}
-                <small>{exactApprove ? t('tf.exactApproveOn') : t('tf.exactApproveOff')}</small>
+                {t('tf.approveMany', { n: APPROVE_BATCH_TICKETS })}
+                <small>
+                  {approveBatch ? t('tf.approveManyOn', { amount: batchAmount, sym: tok.symbol, more: APPROVE_BATCH_TICKETS - 1 }) : t('tf.approveManyOff')}
+                </small>
               </span>
             </label>
           )}
@@ -430,6 +496,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
 
         <dl className="tf-lines">
           {mode !== 'collect' && <Line label={t('tf.entry')} value={`${tok.exact(v.fee)} ${tok.symbol}`} strong />}
+          {usd && <Line label={t('tf.usd')} value={`${usd.text}${usd.setAt ? ` · ${t('usd.setAt', { time: usd.setAt })}` : ''}`} testId="tf-usd" />}
           {mode === 'buy' && (
             <Line
               label={t('tf.fee')}
@@ -446,17 +513,15 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
           )}
         </dl>
 
+        {usd?.stale && (
+          <p className="tf-warn" data-testid="tf-usd-stale">
+            {usd.setAt ? t('usd.stale', { h: PRICE_STALE_HOURS }) : t('usd.staleUnknown')}
+          </p>
+        )}
         {mode === 'buy' && <p className="tf-note">{t('tf.feeNote')}</p>}
         {maintenance && <p className="tf-warn">{t('tf.err.Maintenance')}</p>}
-        {lowGas && !busy && <p className="tf-warn">{t('tf.lowGas', { chain: chainName })}</p>}
 
         <span ref={endRef} className="tf-end" aria-hidden="true" />
-        <span className={`tf-more${moreBelow ? ' is-on' : ''}`} aria-hidden="true">
-          <span className="tf-more__pill mono">
-            <Icon name="chevron" size={14} />
-            {t('tf.more')}
-          </span>
-        </span>
       </div>
     </Sheet>
   );
@@ -479,9 +544,9 @@ interface Review {
   approve: ApproveMode;
 }
 
-function Line({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+function Line({ label, value, strong = false, testId }: { label: string; value: string; strong?: boolean; testId?: string }) {
   return (
-    <div className={`tf-line${strong ? ' is-strong' : ''}`}>
+    <div className={`tf-line${strong ? ' is-strong' : ''}`} data-testid={testId}>
       <dt className="mono">{label}</dt>
       <dd>{value}</dd>
     </div>
