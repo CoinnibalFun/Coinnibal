@@ -42,6 +42,8 @@ export interface WalletPickerProps {
   empty?: ReactNode;
   /** Footnote (default: the seed-phrase line). */
   footnote?: ReactNode;
+  /** More ways in, under the list (phone deep links, WalletConnect, how to get the token). */
+  extra?: ReactNode;
 }
 
 /** The connect dialog: a list of wallet stickers (EIP-6963 icons), detected ones first. */
@@ -57,6 +59,7 @@ export function WalletPicker({
   closeLabel = 'Close',
   empty = 'No wallet found in this browser. Install an EVM wallet (MetaMask, Rabby or similar), then come back.',
   footnote = 'We only ask you to sign a message. We will never ask for your seed phrase. Nobody should.',
+  extra,
 }: WalletPickerProps) {
   const sorted = [...wallets].sort((a, b) => Number(!!b.detected) - Number(!!a.detected));
   return (
@@ -83,6 +86,7 @@ export function WalletPicker({
           })}
         </ul>
       )}
+      {extra}
       {error != null && (
         <p className="kb-wallets__error" role="alert">
           {error}

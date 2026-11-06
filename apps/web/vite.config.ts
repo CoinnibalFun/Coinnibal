@@ -1,4 +1,7 @@
 import react from '@vitejs/plugin-react';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 const gameServer = process.env.GAME_SERVER ?? 'http://127.0.0.1:8787';
@@ -31,6 +34,34 @@ export function gameServerProxy(target: string) {
   };
 }
 
+/**
+ * The package directories of viem and the crypto / ABI packages it depends on, the exact versions it uses (real
+ * paths: pnpm keeps each version in its own directory). Only these make the cacheable `viem` chunk: another copy of
+ * the same packages (WalletConnect brings its own `ox` and `@noble/*` versions) stays with whoever imports it, so
+ * the lazily loaded WalletConnect chunk never grows the chunk every page loads.
+ */
+function viemPackageDirs(): string[] {
+  const dirs = new Set<string>();
+  const walk = (dir: string) => {
+    if (dirs.has(dir)) return;
+    dirs.add(dir);
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> };
+    for (const dep of Object.keys(pkg.dependencies ?? {})) {
+      if (!/^(viem|ox|abitype|@noble\/|@scure\/|isows)/.test(dep)) continue;
+      // pnpm: a package's dependencies are its siblings in the same node_modules directory
+      const at = join(dir, dep.startsWith('@') ? '../..' : '..', dep);
+      if (existsSync(join(at, 'package.json'))) walk(realpathSync(at));
+    }
+  };
+  try {
+    walk(realpathSync(join(dirname(fileURLToPath(import.meta.url)), 'node_modules', 'viem')));
+  } catch {
+    /* no viem here (should not happen): the chunk rule below then matches nothing special */
+  }
+  return [...dirs].map((d) => `${d}/`);
+}
+const VIEM_DIRS = viemPackageDirs();
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -62,7 +93,9 @@ export default defineConfig({
           if (id.includes('vite/preload-helper') || id.includes('vite/modulepreload-polyfill')) return 'preload';
           if (!id.includes('node_modules')) return undefined;
           // package roots only (`node_modules/<pkg>/`): viem and its crypto / ABI dependencies in one cacheable chunk
-          if (/node_modules[\\/](viem|ox|abitype|@noble|@scure|isows)[\\/]/.test(id)) return 'viem';
+          // WalletConnect (only in a build with a project id): its own chunk, loaded when a player picks it
+          if (/[\\/]@walletconnect[\\/]/.test(id)) return 'walletconnect';
+          if (/node_modules[\\/](viem|ox|abitype|@noble|@scure|isows)[\\/]/.test(id)) return VIEM_DIRS.some((d) => id.startsWith(d)) ? 'viem' : undefined;
           if (/node_modules[\\/](react|react-dom|scheduler|zustand)[\\/]/.test(id)) return 'react';
           return undefined;
         },

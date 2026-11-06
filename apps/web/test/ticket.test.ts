@@ -1,4 +1,4 @@
-import { MAX_ALLOWANCE, elymumArenaAbi, planJoin, refundCall, sessionRefundState } from '@elymum/sdk';
+import { MAX_ALLOWANCE, approveCall, elymumArenaAbi, planJoin, refundCall, sessionRefundState } from '@elymum/sdk';
 import type { RoomInfo } from '@elymum/shared';
 import { erc20Abi, type Address } from 'viem';
 import { describe, expect, it } from 'vitest';
@@ -15,6 +15,8 @@ import {
   ticketRates,
   ticketSteps,
   sameRates,
+  APPROVE_BATCH_TICKETS,
+  approvalIsSafe,
   approveAmount,
   approveMode,
   type GateInput,
@@ -71,14 +73,29 @@ describe('the ticket calls (approve, then join)', () => {
     expect(enough.calls.map((c) => c.functionName)).toEqual(['join']);
   });
 
-  it('approves once for every ticket by default, or exactly one entry fee when asked', () => {
-    expect(approveMode(undefined)).toBe('unlimited');
-    expect(approveMode(false)).toBe('unlimited');
-    expect(approveMode(true)).toBe('exact');
+  it('approves exactly one entry fee by default; the batch is explicit and capped, never unlimited', () => {
+    expect(approveMode(undefined)).toBe('exact');
+    expect(approveMode(false)).toBe('exact');
+    expect(approveMode(true)).toBe('batch');
+    expect(APPROVE_BATCH_TICKETS).toBe(5);
     expect(approveAmount('exact', 1000n * ONE)).toBe(1000n * ONE);
-    expect(approveAmount('unlimited', 1000n * ONE)).toBe(MAX_ALLOWANCE);
-    // after one unlimited approval (and a ticket spent from it) the next ticket is join only
-    expect(ticketSteps(MAX_ALLOWANCE - 1000n * ONE, 50_000n * ONE)).toEqual(['join']);
+    expect(approveAmount('batch', 1000n * ONE)).toBe(5000n * ONE);
+    for (const mode of ['exact', 'batch'] as const) expect(approveAmount(mode, 50_000n * ONE)).toBeLessThan(MAX_ALLOWANCE);
+    // a batch covers its tickets, then the approval is asked again
+    expect(ticketSteps(5000n * ONE - 4n * 1000n * ONE, 1000n * ONE)).toEqual(['join']);
+    expect(ticketSteps(5000n * ONE - 5n * 1000n * ONE, 1000n * ONE)).toEqual(['approve', 'join']);
+  });
+
+  it('checks the approval as built: the token, the pinned arena, exactly the amount shown', () => {
+    const o = { token: TOKEN, arena: ARENA, amount: 1000n * ONE };
+    expect(approvalIsSafe(approveCall(TOKEN, ARENA, 1000n * ONE), o)).toBe(true);
+    // another spender, another amount, an unlimited allowance, another token: refused
+    expect(approvalIsSafe(approveCall(TOKEN, ALICE, 1000n * ONE), o)).toBe(false);
+    expect(approvalIsSafe(approveCall(TOKEN, ARENA, 1001n * ONE), o)).toBe(false);
+    expect(approvalIsSafe(approveCall(TOKEN, ARENA, MAX_ALLOWANCE), o)).toBe(false);
+    expect(approvalIsSafe(approveCall(ALICE, ARENA, 1000n * ONE), o)).toBe(false);
+    expect(approvalIsSafe(approveCall(TOKEN, ARENA, 0n), { ...o, amount: 0n })).toBe(false);
+    expect(approvalIsSafe({ ...approveCall(TOKEN, ARENA, 1000n * ONE), functionName: 'transfer' as 'approve' }, o)).toBe(false);
   });
 
   it('ticketSteps mirrors it (an unknown allowance asks for the approval)', () => {

@@ -1,0 +1,73 @@
+/* Ways in without a browser wallet (MoreWallets.tsx): phone deep links, WalletConnect, "How to get $ELYMUM". */
+.mw {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.mw-links {
+  display: grid;
+  gap: 8px;
+}
+.mw-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mw-note {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.mw-note.is-error {
+  color: var(--red-ink, #b3261e);
+}
+.mw-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 2.5px solid var(--outline);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--sh-2);
+  font-weight: 600;
+  text-decoration: none;
+}
+.mw-link:active {
+  box-shadow: var(--sh-press);
+  transform: translate(2px, 2px);
+}
+.mw-wc {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+.mw-wc.is-pairing {
+  justify-items: center;
+  text-align: center;
+}
+.mw-wc__qr {
+  display: block;
+  width: min(240px, 70vw);
+  aspect-ratio: 1;
+  padding: 8px;
+  border: 2.5px solid var(--outline);
+  border-radius: 12px;
+  background: #fff;
+}
+.mw-wc__qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.mw-tokens {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13px;
+  cursor: pointer;
+}

@@ -11,6 +11,8 @@ import { Kb, ScreenTransition, themeFromSettings, type Box } from './design';
 import { Lobby } from './ui/lobby/Lobby';
 import { Toasts } from './ui/Toasts';
 import { WalletModal } from './wallet/WalletModal';
+import { GetTokensSheet } from './wallet/GetTokensSheet';
+import { ConnectionBanner } from './ui/game/ConnectionBanner';
 import { BellMoment, DeathMoment, DeathSheet, FirstPlayBrief, GameHud, HowToSheet, RoomOverSheet, RoundOverSheet, SettingsSheet, StandingsSheet } from './ui/game';
 import { ShopSheet } from './ui/shop/ShopSheet';
 import { GameClosedSheet } from './ui/gate/GameClosedSheet';
@@ -67,7 +69,9 @@ function Screens() {
         <FirstPlayBrief />
         <ShopSheet />
         <WalletModal />
+        <GetTokensSheet />
         <GameClosedSheet />
+        <ConnectionBanner />
         <Toasts />
       </Kb>
     </>
