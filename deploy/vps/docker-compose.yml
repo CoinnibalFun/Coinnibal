@@ -43,8 +43,8 @@ services:
       NFT_ADDRESS: ""
       TOKEN_ADDRESS: ""
       JOURNAL_ABANDON_CONTRACT: ""
-      # forced maintenance (owner asked); comment this out again (and push) to hand control back to /admin
-      GAME_ACCESS: maintenance
+      # open to everyone on testnet (owner asked); set to `maintenance` to close it, or remove to hand control back to /admin
+      GAME_ACCESS: public
     volumes:
       - elymum-data:/data
     expose:
