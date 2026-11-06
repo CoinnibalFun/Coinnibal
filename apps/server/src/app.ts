@@ -467,6 +467,10 @@ export async function createApp(
       shedder.stop();
       stopRpcLog();
       mint.flush();
+      // no new socket or request from here on: a client that reconnects during the shutdown would keep the HTTP
+      // server open (and the process alive) until the hard exit
+      gateway.stopAccepting();
+      server.close();
       await rooms.shutdown();
       customRooms.flush();
       integrity.close();
@@ -476,7 +480,8 @@ export async function createApp(
       shares.flush();
       gateway.close();
       await chain.stop().catch(() => {});
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => (server.listening ? server.close(() => resolve()) : resolve()));
     },
   };
 }
