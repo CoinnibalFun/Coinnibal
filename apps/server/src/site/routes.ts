@@ -18,6 +18,8 @@ import { ShopSettingsError, type ShopSettingsStore } from '../shop/settings';
 import type { BoostInventory } from '../shop/inventory';
 import { migrationEnv, streamBackup } from './backup';
 import { ArenaScalingFail, type ArenaScaler } from '../rooms/arena-scaler';
+import type { RoomManager } from '../rooms/manager';
+import { TestArenaFail } from '../rooms/test-arenas';
 import { mapRoutes, type MapAdmin } from './maps';
 import { customRoomAdminRoutes, customRoomRoutes } from './custom-rooms';
 import type { CustomRoomService } from '../rooms/custom';
@@ -153,6 +155,8 @@ export class SiteApi {
   private maps: MapAdmin | null = null;
   /** The arena instance scaler (`/api/admin/arena-scaling`); absent in bare unit tests. */
   private scaler: ArenaScaler | null = null;
+  /** Test arenas (testnet only, `/api/admin/test-arenas`); absent in bare unit tests. */
+  private testArenas: Pick<RoomManager, 'testArenas' | 'testArenaView'> | null = null;
   /** Custom rooms (`/api/rooms/custom/*`, `/api/admin/custom-rooms`); absent in bare unit tests. */
   private customRooms: CustomRoomService | null = null;
   /** The power-up shop (`/api/shop`, `/api/shop/buy`, `/api/admin/shop`); absent in bare unit tests. */
@@ -205,6 +209,10 @@ export class SiteApi {
 
   setScaler(scaler: ArenaScaler | null): void {
     this.scaler = scaler;
+  }
+
+  setTestArenas(rooms: Pick<RoomManager, 'testArenas' | 'testArenaView'> | null): void {
+    this.testArenas = rooms;
   }
 
   /** The game server's load per thread (`GET /api/admin/load`, `NetworkInfo.load`). */
@@ -826,6 +834,22 @@ export class SiteApi {
           this.ext.log?.(`arena scaling: settings updated by ${wallet}`);
         }
         return send(res, 200, scaler.view());
+      }
+      case 'test-arenas': {
+        // "Test arenas with bots" (testnet only): the switch, the bots per arena, the difficulty, every test arena now
+        const tests = this.testArenas;
+        if (seg.length !== 1 || !tests) break;
+        if (this.method(req, 'GET', 'PUT') === 'PUT') {
+          try {
+            tests.testArenas.update(await readJson(req));
+          } catch (err) {
+            // the mainnet refuses the setting (409); a bad value is a 400
+            if (err instanceof TestArenaFail) throw new SiteFail(tests.testArenas.available ? 400 : 409, tests.testArenas.available ? 'bad_request' : 'wrong_state', err.message, err.field);
+            throw err;
+          }
+          this.ext.log?.(`test arenas: settings updated by ${wallet}: ${JSON.stringify(tests.testArenas.settings)}`);
+        }
+        return send(res, 200, tests.testArenaView());
       }
       case 'maps':
         if (seg.length !== 1 || !this.maps) break;

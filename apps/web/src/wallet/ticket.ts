@@ -56,7 +56,8 @@ export function sessionKey(arenaId: number, player: string, sessionId: bigint | 
 
 /* ── the ticket list ────────────────────────────────────────────────────── */
 
-export type TicketKey = 'practice' | `arena:${number}`;
+/** `test:<id>`: the arena's test arena (testnet only): the same ticket, played in a room with practice bots. */
+export type TicketKey = 'practice' | `arena:${number}` | `test:${number}`;
 
 /** On-chain arena fields the lobby needs (an SDK `ArenaInfo` fits). */
 export interface ArenaLike {
@@ -88,6 +89,11 @@ export interface TicketModel {
   soon?: boolean;
   /** The arena admits Elymum emblem holders only (on-chain `holdersOnly`): a small laurel lock for everyone else. */
   holdersOnly?: boolean;
+  /**
+   * The arena's test arena (testnet only): the official ticket, rounds and payouts in a room with practice bots.
+   * Listed after the official arenas, never picked by quick play.
+   */
+  test?: true;
 }
 
 /** What the lobby knows about the game token (`ChainStatus`). */
@@ -152,7 +158,8 @@ export function buildTickets(
   }
   const chainKnown = byId.size > 0;
   for (const r of rooms) {
-    if (r.mode !== 'arena' || r.arenaId === undefined) continue;
+    // a test arena is its own ticket (below), never counted in the official arena's numbers
+    if (r.mode !== 'arena' || r.arenaId === undefined || r.test) continue;
     let t = byId.get(r.arenaId);
     if (!t) {
       // only list arenas the chain does not know about when the chain is not readable
@@ -181,7 +188,15 @@ export function buildTickets(
     if (t) t.holdersOnly = true;
   }
   const list = [...byId.values()].sort((a, b) => (a.entryFee < b.entryFee ? -1 : a.entryFee > b.entryFee ? 1 : (a.arenaId ?? 0) - (b.arenaId ?? 0)));
-  return [practice, ...list];
+  // the testnet's test arenas: the same ticket as their arena (price, state), listed after every official arena
+  const tests: TicketModel[] = [];
+  for (const official of list) {
+    const id = official.arenaId;
+    const room = id === null ? undefined : rooms.find((r) => r.test && r.mode === 'arena' && r.arenaId === id);
+    if (!room || id === null) continue;
+    tests.push({ ...official, key: `test:${id}`, humans: room.players, bots: room.bots, loot: room.loot ?? 0, test: true });
+  }
+  return [practice, ...list, ...tests];
 }
 
 /* ── quick play ─────────────────────────────────────────────────────────── */
@@ -203,11 +218,13 @@ export interface QuickPlayInput {
  * the last arena if still affordable, else the cheapest affordable arena, else practice.
  */
 export function quickPlayTarget(input: QuickPlayInput): TicketKey {
+  // quick play never picks a test arena
+  const tickets = input.tickets.filter((t) => !t.test);
   if (!input.walletConnected || input.balance === null || input.balance <= 0n) {
-    const resumable = input.walletConnected ? input.tickets.find((t) => t.arenaId !== null && input.openSessions?.includes(t.arenaId)) : undefined;
+    const resumable = input.walletConnected ? tickets.find((t) => t.arenaId !== null && input.openSessions?.includes(t.arenaId)) : undefined;
     return resumable ? resumable.key : 'practice';
   }
-  const arenas = input.tickets.filter((t) => t.arenaId !== null && t.open && !t.blocked && !t.soon && !(t.holdersOnly && input.holder === false));
+  const arenas = tickets.filter((t) => t.arenaId !== null && t.open && !t.blocked && !t.soon && !(t.holdersOnly && input.holder === false));
   const open = arenas.find((t) => input.openSessions?.includes(t.arenaId!));
   if (open) return open.key;
   const balance = input.balance;

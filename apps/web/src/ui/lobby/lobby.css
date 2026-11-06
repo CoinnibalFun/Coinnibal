@@ -598,6 +598,24 @@
   color: var(--up-ink);
   font-weight: 700;
 }
+/* a testnet test arena (practice bots, the official tickets): a TEST badge and its one-line note */
+.kl-ticket__test {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 7px;
+  border: 2px solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--sun);
+  color: var(--ink-fixed);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+}
+.kl-ticket__testnote {
+  font-style: italic;
+}
 .kl-ticket.is-practice .kb-ticket__stub {
   background-color: var(--linen);
 }

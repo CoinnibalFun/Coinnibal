@@ -132,7 +132,9 @@ describe('token set after deploy', () => {
       arenas = ((await (await fetch(`${base()}/api/rooms`)).json()) as { rooms: RoomInfo[] }).rooms.filter((r) => r.mode === 'arena');
       if (arenas.length === 0) await sleep(20);
     }
-    expect(arenas.map((r) => r.arenaId).sort()).toEqual([1, 2, 3, 4]);
+    // the official instances, and (on this testnet, test arenas on by default) one test arena per tier after them
+    expect(arenas.filter((r) => !r.test).map((r) => r.arenaId).sort()).toEqual([1, 2, 3, 4]);
+    expect(arenas.filter((r) => r.test).map((r) => r.id).sort()).toEqual(['test-1', 'test-2', 'test-3', 'test-4']);
 
     // and the same connection can now play an arena
     c.send({ t: 'join', room: 'arena:1', name: 'Early', skin: 0 });

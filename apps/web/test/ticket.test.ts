@@ -188,6 +188,35 @@ describe('buildTickets', () => {
   });
 });
 
+describe('test arenas (testnet)', () => {
+  const withTests = [
+    ...ROOMS,
+    room({ id: 'test-1', arenaId: 1, entryFee: 1000 * L, players: 2, bots: 10, loot: 3 * L, instance: 0, test: true }),
+    room({ id: 'test-3', arenaId: 3, entryFee: 50_000 * L, players: 0, bots: 7, instance: 0, test: true }),
+  ];
+
+  it('one ticket per test arena after every official arena; the official numbers leave them out', () => {
+    const list = buildTickets(withTests, []);
+    expect(list.map((t) => t.key)).toEqual(['practice', 'arena:1', 'arena:2', 'arena:3', 'test:1', 'test:3']);
+    // the official arena's own instances only
+    expect(list[1]).toMatchObject({ humans: 23, bots: 16, loot: 6 * L });
+    // the same ticket (arena, price), its own room's numbers
+    expect(list[4]).toMatchObject({ arenaId: 1, entryFee: 1000n * ONE, humans: 2, bots: 10, loot: 3 * L, test: true });
+    // a test arena follows its arena's state (closed on chain: closed here too)
+    const closed = buildTickets(withTests, [
+      { id: 1, entryFee: 1000n * ONE, enabled: true },
+      { id: 3, entryFee: 50_000n * ONE, enabled: false },
+    ]);
+    expect(closed.find((t) => t.key === 'test:3')?.open).toBe(false);
+  });
+
+  it('quick play never picks a test arena (not even to resume a ticket)', () => {
+    const tickets = buildTickets(withTests, []).filter((t) => t.key !== 'arena:1');
+    expect(quickPlayTarget({ tickets, lastArena: 1, walletConnected: true, balance: 12_450n * ONE })).toBe('arena:2');
+    expect(quickPlayTarget({ tickets, lastArena: 1, walletConnected: true, balance: 0n, openSessions: [1] })).toBe('practice');
+  });
+});
+
 describe('quickPlay', () => {
   const tickets = buildTickets(ROOMS, []);
   const base = { tickets, lastArena: null };

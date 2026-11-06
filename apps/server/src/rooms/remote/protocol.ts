@@ -1,5 +1,5 @@
 import type { PlayerLook } from '../handle';
-import type { DeathStats, IntegrityTransfer, MapScaleSettings, RoomInfo, RoundBoard } from '@elymum/shared';
+import type { CustomDifficulty, DeathStats, IntegrityTransfer, MapScaleSettings, RoomInfo, RoundBoard } from '@elymum/shared';
 import type { SessionSummary } from '../../integrity/types';
 import type { CountryGame, LbRecord } from '../../leaderboards';
 import type { JournalItem, LiveStake, LootRecord, SettleReason, SettlementItem } from '../../stake/journal';
@@ -60,6 +60,8 @@ export type Cmd =
   | { k: 'boost'; hid: number; conn: number; pid: number; kind: string; req: number }
   | { k: 'drop'; conn: number }
   | { k: 'map'; hid: number; scale: MapScaleSettings }
+  /** A test arena's bot settings (`Room.setBots`). */
+  | { k: 'bots'; hid: number; count: number; difficulty: CustomDifficulty }
   | { k: 'avatar'; wallet: string }
   | { k: 'announce'; hid: number; text: string }
   | { k: 'closing'; hid: number; endsAt: number; message: string }

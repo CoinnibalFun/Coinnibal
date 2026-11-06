@@ -1,5 +1,5 @@
 import { ledgerDecimals } from '@elymum/sdk';
-import { TOKEN_SYMBOL_DEFAULT, arenaMeta, formatToken } from '@elymum/shared';
+import { TOKEN_SYMBOL_DEFAULT, arenaMeta, formatToken, testArenaName } from '@elymum/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { openSessionOf, useChainData } from '../../wallet/chain';
 import { useAddress } from '../../wallet/store';
@@ -49,8 +49,8 @@ export function useTokenText(): TokenText {
   return useMemo(() => tokenText(decimals, token?.symbol || TOKEN_SYMBOL_DEFAULT), [decimals, token?.symbol]);
 }
 
-export const ticketName = (t: Pick<TicketModel, 'arenaId'>, practice: string): string =>
-  t.arenaId === null ? practice : arenaMeta(t.arenaId).name;
+export const ticketName = (t: Pick<TicketModel, 'arenaId' | 'test'>, practice: string): string =>
+  t.arenaId === null ? practice : t.test ? testArenaName(arenaMeta(t.arenaId).name) : arenaMeta(t.arenaId).name;
 
 export interface LobbyModel {
   tickets: TicketModel[];
