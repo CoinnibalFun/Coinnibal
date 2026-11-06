@@ -149,7 +149,7 @@ the web, and builds the Docker image.
 
 ### Deploying
 
-Deploy the server (Docker, e.g. on Render), then deploy the contracts from your own wallet in
+Deploy the server (Docker on a VPS: deploy/vps/README.md), then deploy the contracts from your own wallet in
 `/admin`: Deploy Arena → Deploy NFT → register both → set the token (when it exists) → create the
 arenas → publish the allowlist → open the mint. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
 Day-to-day running (gas for the server key, the allowlist, the $1 price, pausing, ownership):
