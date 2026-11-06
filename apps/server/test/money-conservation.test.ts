@@ -11,7 +11,8 @@ import { DEFAULT_FAULTS, fakeSimChain, runMoneySim, type SimReport } from './mon
 const brief = (r: SimReport) =>
   `${r.chain}: ${r.rounds} rounds, ${r.tickets} tickets, ${r.closures.Settled} settled, ${r.closures.Cancelled} cancelled, ` +
   `${r.closures.Refunded} refunded, ${r.closures.Collected} collected, ${r.checks} checks, ${r.faults.workerCrashes} worker crashes, ` +
-  `${r.faults.restarts} restarts, ${r.faults.holds} holds`;
+  `${r.faults.restarts} restarts, ${r.faults.holds} holds; holders: ${r.holders.wallets} wallets, ${r.holders.tickets} tickets, ` +
+  `${r.holders.settled} settled (${r.holders.winners} with a profit, at 8 % + 2 %)`;
 
 describe('money conservation under faults (simulation)', () => {
   for (const seed of [1, 2, 3]) {
@@ -23,6 +24,10 @@ describe('money conservation under faults (simulation)', () => {
       expect(r.winners).toBeGreaterThan(10);
       expect(r.closures.Cancelled).toBeGreaterThan(0);
       expect(r.faults.rpcErrors + r.faults.ambiguousSends + r.faults.lostReceipts).toBeGreaterThan(0);
+      // a share of the tickets came from emblem holders, at the holder pair (checked per Joined / Settled event)
+      expect(r.holders.tickets).toBeGreaterThan(20);
+      expect(r.holders.tickets).toBeLessThan(r.tickets);
+      expect(r.holders.winners).toBeGreaterThan(0);
       console.log(brief(r));
     }, 120_000);
   }
@@ -53,6 +58,8 @@ describe('money conservation under faults (simulation)', () => {
       const r = await runMoneySim(sim, { seed: 7, rounds: 6, faults: DEFAULT_FAULTS, testArenas: { bots: 6, difficulty: 'mixed' } });
       expect(r.violations).toEqual([]);
       expect(r.closures.Settled).toBeGreaterThan(5);
+      expect(r.holders.wallets).toBeGreaterThan(0);
+      expect(r.holders.tickets).toBeGreaterThan(0);
       console.log(brief(r));
     } finally {
       await sim.stop();

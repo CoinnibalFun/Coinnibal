@@ -61,9 +61,9 @@ describe('DEV_FAKE_CHAIN', () => {
     // ledger units: 1,000 tokens of the first tier = 1e9 (6 ledger decimals), a safe JS number
     expect((await ready.listArenas()).map((a) => [a.id, a.entryFee])).toEqual([
       [1, 1_000 * 1e6],
-      [2, 10_000 * 1e6],
-      [3, 50_000 * 1e6],
-      [4, 250_000 * 1e6],
+      [2, 3_000 * 1e6],
+      [3, 5_000 * 1e6],
+      [4, 10_000 * 1e6],
     ]);
     await ready.stop();
   });

@@ -154,8 +154,8 @@ describe('what the emblem does', () => {
     const t = emblemPerks(true);
     expect(t.map((p) => p.id)).toEqual(['access', 'fee', 'isles', 'wl', 'skin', 'faucet']);
     expect(t[0].note).toMatch(/testnet the ring is open to everyone/);
-    // before the server's rates are known: the suggested holder pair (15 % + 0 %) against the defaults (15 % + 5 %)
-    expect(t[1].title).toBe('15% fee instead of 20%');
+    // before the server's rates are known: the owner's holder pair (8 % + 2 %) against the defaults (15 % + 5 %)
+    expect(t[1].title).toBe('10% fee instead of 20%');
     expect(t[1].note).toMatch(/profit only/);
   });
   it('on testnet: says "open to everyone" only while the server lets everyone in', () => {

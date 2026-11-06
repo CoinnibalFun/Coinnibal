@@ -8,7 +8,7 @@
  *   Defaults 15 % + 5 % = 20 %; the contract caps the pair at 25 % (`MAX_TOTAL_FEE_BPS`). Each share rounds down,
  *   so the player never pays more than the rate. A loss or a break-even pays nothing.
  * - **Rates are fixed at join** (a ticket keeps the rates it was bought with); emblem holders may get their own,
- *   lower pair.
+ *   lower pair (`DEFAULT_HOLDER_FEE_RATES`: 8 % + 2 %).
  * - **Payments** (power-up packs, through `ElymumArena.pay`): `paymentBurnBps` (default 50 %) is burned, the rest
  *   goes to the fee wallet.
  * - **Floor loot** still on the floor at the bell is burned.
@@ -30,6 +30,13 @@ export interface FeeRates {
 
 /** The contract's deploy defaults (`DEFAULT_BURN_BPS`, `DEFAULT_VAULT_BPS`): 15 % burned + 5 % to the fee wallet. */
 export const DEFAULT_FEE_RATES: Readonly<FeeRates> = Object.freeze({ burnBps: 1_500, vaultBps: 500 });
+
+/**
+ * The holder pair the owner sets with `setHolderPerks` (owner decision 2026-11): emblem holders pay 10 % of their profit
+ * instead of 20 %: 8 % burned + 2 % to the fee wallet. The contract starts with the holder pair equal to the normal one
+ * (no discount); Finish setup and `pnpm admin holder-perks` use these values, the owner can set any pair under the cap.
+ */
+export const DEFAULT_HOLDER_FEE_RATES: Readonly<FeeRates> = Object.freeze({ burnBps: 800, vaultBps: 200 });
 
 /** `ElymumArena.DEFAULT_PAYMENT_BURN_BPS`: half of every power-up payment is burned, half goes to the fee wallet. */
 export const DEFAULT_PAYMENT_BURN_BPS = 5_000;

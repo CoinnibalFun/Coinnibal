@@ -1,6 +1,6 @@
 import { elymumArenaAbi, elymumNFTAbi, testTokenAbi, type ArenaConfig, type ArenaInfo, type ContractCall, type MintState, type SessionInfo, type TestTokenFaucetConfig } from '@elymum/sdk';
 import { encodeErrorResult, getAddress, keccak256, toHex, type Address, type Hash, type Hex } from 'viem';
-import { computeProfitFee } from '@elymum/shared';
+import { computeProfitFee, ratesFor } from '@elymum/shared';
 import type { ArenaEvent, CodeCheck, ContractKindCode, EvmClient, JoinedLog, TransferLog, TxReceipt } from '../src/chain/evm-client';
 
 export const SERVER = getAddress('0x70997970c51812dc3a010c7d01b50e0d17dc79c8');
@@ -71,6 +71,10 @@ export class FakeEvm implements EvmClient {
   gas = new Map<string, bigint>();
   /** Arena holder checks (`isHolder`): wallets holding the holder NFT (lower case). */
   arenaHolders = new Set<string>();
+  /** Every ticket's entry fee and fee rates as fixed at join (the `Joined` event's fields), by session id. */
+  joinedRates = new Map<bigint, { entryFee: bigint; burnBps: number; vaultBps: number }>();
+  /** Every settlement's split (the `Settled` event's fields). */
+  settledSplits: { sessionId: bigint; payout: bigint; burned: bigint; toVault: bigint; net: bigint }[] = [];
   faucet: TestTokenFaucetConfig = { address: TOKEN, owner: ADMIN, amount: 1_000_000n * E18, holderAmount: 2_000_000n * E18, cooldownSecs: 3600, holderNft: null };
   /** Every call sent by a player (`sendFrom`), with its sender. */
   sentBy: { from: Address; call: ContractCall }[] = [];
@@ -155,7 +159,17 @@ export class FakeEvm implements EvmClient {
     return a;
   }
 
-  /** A player buys a ticket: the session opens, the vault grows, a `Joined` log is recorded. */
+  /**
+   * `ElymumArena._ratesFor`: the holder pair for a wallet holding the holder NFT (`arenaHolders`, perks on) when it
+   * totals less than the normal pair, else the normal pair.
+   */
+  ratesFor(player: string): { burnBps: number; vaultBps: number } {
+    const c = this.config;
+    const holder = c.holderNft !== null && this.arenaHolders.has(player.toLowerCase());
+    return ratesFor({ burnBps: c.burnBps, vaultBps: c.vaultBps }, c.holderNft ? { burnBps: c.holderBurnBps, vaultBps: c.holderVaultBps } : null, holder);
+  }
+
+  /** A player buys a ticket: the session opens (its fee rates fixed), the vault grows, a `Joined` log is recorded. */
   join(arenaId: number, player: string, opts: { openedAt?: number } = {}): SessionInfo {
     const a = this.arenaMap.get(arenaId)!;
     const id = this.nextSessionId++;
@@ -165,11 +179,11 @@ export class FakeEvm implements EvmClient {
       id,
       entryFee: a.entryFee,
       openedAt: opts.openedAt ?? this.nowS(),
-      burnBps: this.config.burnBps,
-      vaultBps: this.config.vaultBps,
+      ...this.ratesFor(player),
       finalized: false,
       owed: 0n,
     };
+    this.joinedRates.set(id, { entryFee: a.entryFee, burnBps: s.burnBps, vaultBps: s.vaultBps });
     this.sessions.set(`${arenaId}:${player.toLowerCase()}`, s);
     // no entry fee cut: the whole ticket price goes into the vault
     a.vault += a.entryFee;
@@ -445,6 +459,7 @@ export class FakeEvm implements EvmClient {
       this.addTokens(it.player, toPlayer);
     }
     this.closures.push({ name: 'Settled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, amount: it.payout });
+    this.settledSplits.push({ sessionId: it.sessionId, payout: it.payout, burned, toVault, net });
     return { name: 'Settled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, payout: it.payout, net, burned, toVault, collected };
   }
 

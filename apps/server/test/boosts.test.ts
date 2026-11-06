@@ -390,20 +390,39 @@ describe('boosts: buying', () => {
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(1) }))).toBe('shop_closed');
   });
 
-  it('holders pay 30 % less; a non-holder cannot pay the holder price', async () => {
-    const { chain, shop, holders } = shopFixture({ holder: true });
+  it('holders pay 20 % less (the server quotes it); a non-holder cannot pay the holder price; the admin sets the share', async () => {
+    const { chain, shop, holders, settings } = shopFixture({ holder: true });
     const view = await shop.view(WALLET);
     expect(view.holder).toBe(true);
-    expect(view.packs.find((p) => p.kind === 'magnet')).toMatchObject({ priceRaw: (420n * ONE).toString(), fullPriceRaw: (600n * ONE).toString(), charges: 3 });
+    expect(view.holderDiscountPct).toBe(20);
+    expect(view.packs.map((p) => [p.kind, p.priceRaw, p.fullPriceRaw])).toEqual([
+      ['magnet', (480n * ONE).toString(), (600n * ONE).toString()],
+      ['leap', (720n * ONE).toString(), (900n * ONE).toString()],
+      ['speed', (480n * ONE).toString(), (600n * ONE).toString()],
+      ['invis', (960n * ONE).toString(), (1200n * ONE).toString()],
+    ]);
     expect(view.arenaUsesPerRound).toBe(3);
-    pay(chain, hash(1), 420n * ONE);
+    // a guest (no wallet) sees the full price
+    expect((await shop.view(null)).packs.find((p) => p.kind === 'magnet')).toMatchObject({ priceRaw: (600n * ONE).toString() });
+    pay(chain, hash(1), 480n * ONE);
     expect((await shop.buy(WALLET, { kind: 'magnet', txHash: hash(1) })).charges.magnet).toBe(3);
     // a holder who pays the full price is still served
     pay(chain, hash(2), 600n * ONE);
     expect((await shop.buy(WALLET, { kind: 'magnet', txHash: hash(2) })).charges.magnet).toBe(6);
+    // any other amount is refused (the old 30 % price, or less)
+    pay(chain, hash(4), 420n * ONE);
+    expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(4) }))).toBe('wrong_amount');
+    // the admin changes the discount: the quote and the check follow at once
+    settings.update({ holderDiscountPct: 25 });
+    expect((await shop.view(WALLET)).packs.find((p) => p.kind === 'leap')).toMatchObject({ priceRaw: (675n * ONE).toString() });
+    pay(chain, hash(5), 675n * ONE, { kind: 'leap' });
+    expect((await shop.buy(WALLET, { kind: 'leap', txHash: hash(5) })).charges.leap).toBe(3);
+    settings.update({ holderDiscountPct: 20 });
     holders.clear();
-    pay(chain, hash(3), 420n * ONE);
+    pay(chain, hash(3), 480n * ONE);
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(3) }))).toBe('wrong_amount');
+    // a non-holder's quote is the full price
+    expect((await shop.view(WALLET)).packs.find((p) => p.kind === 'magnet')).toMatchObject({ priceRaw: (600n * ONE).toString() });
   });
 
   it('payments go to the arena contract (it burns half and pays the fee wallet half); saved sink settings are ignored', async () => {
@@ -472,14 +491,14 @@ describe('boosts: buying', () => {
     expect(existsSync(join(dir, 'site', 'shop.json'))).toBe(true);
   });
 
-  it('the default prices: Magnet 600, Leap 900, Speed 600, Invisibility 1,200 per pack of 3 (a charge is 20-40 % of the cheapest ticket); holders pay 30% less', () => {
+  it('the default prices: Magnet 600, Leap 900, Speed 600, Invisibility 1,200 per pack of 3 (a charge is 20-40 % of the cheapest ticket); holders pay 20% less', () => {
     expect(SHOP_DEFAULTS.packSize).toBe(3);
     expect(packPriceRaw(SHOP_DEFAULTS.prices.magnet, 18, 0)).toBe(600n * ONE);
     expect(packPriceRaw(SHOP_DEFAULTS.prices.leap, 18, 0)).toBe(900n * ONE);
     expect(packPriceRaw(SHOP_DEFAULTS.prices.speed, 18, 0)).toBe(600n * ONE);
     expect(packPriceRaw(SHOP_DEFAULTS.prices.invis, 18, 0)).toBe(1200n * ONE);
-    expect(packPriceRaw(SHOP_DEFAULTS.prices.leap, 18, SHOP_DEFAULTS.holderDiscountPct)).toBe(630n * ONE);
-    expect(packPriceRaw(SHOP_DEFAULTS.prices.magnet, 18, SHOP_DEFAULTS.holderDiscountPct)).toBe(420n * ONE);
+    expect(packPriceRaw(SHOP_DEFAULTS.prices.leap, 18, SHOP_DEFAULTS.holderDiscountPct)).toBe(720n * ONE);
+    expect(packPriceRaw(SHOP_DEFAULTS.prices.magnet, 18, SHOP_DEFAULTS.holderDiscountPct)).toBe(480n * ONE);
     expect('sink' in SHOP_DEFAULTS).toBe(false);
   });
 

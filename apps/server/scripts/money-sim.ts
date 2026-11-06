@@ -45,7 +45,7 @@ async function main(): Promise<void> {
       `${sum((r) => r.closures.Collected)} collected, ${sum((r) => r.checks)} conservation checks, ${sum((r) => r.faults.workerCrashes)} worker crashes, ` +
       `${sum((r) => r.faults.restarts)} restarts (${sum((r) => r.faults.hardKills)} hard), ${sum((r) => r.faults.rpcErrors)} RPC errors, ` +
       `${sum((r) => r.faults.ambiguousSends)} ambiguous sends, ${sum((r) => r.faults.lostReceipts)} lost receipts, ${sum((r) => r.faults.holds)} holds ` +
-      `(${sum((r) => r.faults.zeroed)} settled at 0) — ${bad.length} violation(s) in ${(sum((r) => r.ms) / 1000).toFixed(1)} s`,
+      `(${sum((r) => r.faults.zeroed)} settled at 0), ${sum((r) => r.holders.tickets)} holder tickets (${sum((r) => r.holders.winners)} won at the holder pair) — ${bad.length} violation(s) in ${(sum((r) => r.ms) / 1000).toFixed(1)} s`,
   );
   for (const v of bad.slice(0, 30)) console.log(`  ✗ ${v}`);
   process.exit(bad.length > 0 ? 1 : 0);

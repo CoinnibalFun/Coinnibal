@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { AdminAudit } from './audit';
-import { AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL } from '@elymum/shared';
+import { ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import type { ChainGateway } from '../chain/types';
@@ -20,6 +20,7 @@ import { migrationEnv, streamBackup } from './backup';
 import { ArenaScalingFail, type ArenaScaler } from '../rooms/arena-scaler';
 import type { RoomManager } from '../rooms/manager';
 import { TestArenaFail } from '../rooms/test-arenas';
+import { ArenaPricingFail, type ArenaPriceStore } from './arena-prices';
 import { mapRoutes, type MapAdmin } from './maps';
 import { customRoomAdminRoutes, customRoomRoutes } from './custom-rooms';
 import type { CustomRoomService } from '../rooms/custom';
@@ -159,6 +160,8 @@ export class SiteApi {
   private testArenas: Pick<RoomManager, 'testArenas' | 'testArenaView'> | null = null;
   /** Custom rooms (`/api/rooms/custom/*`, `/api/admin/custom-rooms`); absent in bare unit tests. */
   private customRooms: CustomRoomService | null = null;
+  /** Arena tiers in US dollars (`/api/site/arena-prices`, `/api/admin/arena-prices`); absent in bare unit tests. */
+  private arenaPrices: ArenaPriceStore | null = null;
   /** The power-up shop (`/api/shop`, `/api/shop/buy`, `/api/admin/shop`); absent in bare unit tests. */
   private shop: { service: ShopService; settings: ShopSettingsStore; inventory: BoostInventory } | null = null;
   private readonly shopBuys = new Limiter(30, 60_000);
@@ -224,6 +227,10 @@ export class SiteApi {
 
   setCustomRooms(svc: CustomRoomService | null): void {
     this.customRooms = svc;
+  }
+
+  setArenaPrices(store: ArenaPriceStore | null): void {
+    this.arenaPrices = store;
   }
 
   setShop(shop: { service: ShopService; settings: ShopSettingsStore; inventory: BoostInventory } | null): void {
@@ -583,6 +590,12 @@ export class SiteApi {
         if (seg.length !== 1) break;
         this.method(req, 'GET');
         return send(res, 200, this.ext.contracts?.effective(this.chainId()) ?? { arena: null, nft: null, token: null });
+      case 'arena-prices': {
+        // the tiers in US dollars and the token's USD price: the lobby shows "$1" next to the token amount
+        if (seg.length !== 1 || !this.arenaPrices) break;
+        this.method(req, 'GET');
+        return send(res, 200, await this.arenaPrices.view());
+      }
       case 'faucet': {
         if (seg.length !== 1) break;
         this.method(req, 'GET');
@@ -850,6 +863,24 @@ export class SiteApi {
           this.ext.log?.(`test arenas: settings updated by ${wallet}: ${JSON.stringify(tests.testArenas.settings)}`);
         }
         return send(res, 200, tests.testArenaView());
+      }
+      case 'arena-prices': {
+        // arena tiers in US dollars: the price source, the manual token price, the tiers, the rounding. The sync's
+        // `updateArena` calls are built and signed in the admin's browser with the owner wallet, never here
+        const store = this.arenaPrices;
+        if (seg.length !== 1 || !store) break;
+        if (this.method(req, 'GET', 'PUT') === 'PUT') {
+          try {
+            store.update(await readJson(req));
+          } catch (err) {
+            if (err instanceof ArenaPricingFail) throw new SiteFail(400, 'bad_request', err.message, err.field);
+            throw err;
+          }
+          const st = store.settings;
+          const tiers = st.tiers.map((t) => `#${t.arenaId} ${formatUsdCents(t.usdCents)}${t.holdersOnly ? ' holders' : ''}`).join(', ');
+          this.ext.log?.(`arena prices: settings updated by ${wallet} (source ${st.source}, ${st.manualUsdPerToken ?? 'no'} USD per token, tiers ${tiers}, ${st.sigFigs} figures)`);
+        }
+        return send(res, 200, { settings: store.settings, defaults: ARENA_PRICING_DEFAULT, price: await store.priceView() });
       }
       case 'maps':
         if (seg.length !== 1 || !this.maps) break;

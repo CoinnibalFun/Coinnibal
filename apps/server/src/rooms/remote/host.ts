@@ -510,6 +510,9 @@ export class RoomHost {
       case 'bots':
         this.rooms.get(cmd.hid)?.setBots(cmd.count, cmd.difficulty);
         return;
+      case 'buyIn':
+        this.rooms.get(cmd.hid)?.setBuyIn(cmd.buyIn);
+        return;
       case 'avatar':
         for (const r of this.rooms.values()) r.clearAvatar(cmd.wallet);
         return;

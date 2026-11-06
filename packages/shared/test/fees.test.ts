@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FEE_RATES,
+  DEFAULT_HOLDER_FEE_RATES,
   DEFAULT_PAYMENT_BURN_BPS,
   MAX_TOTAL_FEE_BPS,
   bpsToPercent,
@@ -79,6 +80,23 @@ describe('fee on profit (mirrors ElymumArena v3)', () => {
     expect(ratesFor(DEFAULT_FEE_RATES, holder, true)).toEqual(holder);
     expect(ratesFor(DEFAULT_FEE_RATES, holder, false)).toEqual(DEFAULT_FEE_RATES);
     expect(ratesFor(DEFAULT_FEE_RATES, { burnBps: 2000, vaultBps: 500 }, true)).toEqual(DEFAULT_FEE_RATES);
+  });
+
+  it('holder fee selection: holders pay 10 % of profit (8 % burned + 2 % fee wallet), everyone else 20 %', () => {
+    expect(DEFAULT_HOLDER_FEE_RATES).toEqual({ burnBps: 800, vaultBps: 200 });
+    expect(isValidFeeRates(DEFAULT_HOLDER_FEE_RATES)).toBe(true);
+    const holder = ratesFor(DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, true);
+    const other = ratesFor(DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, false);
+    expect(holder).toEqual({ burnBps: 800, vaultBps: 200 });
+    expect(other).toEqual({ burnBps: 1500, vaultBps: 500 });
+    // entry 1,000 → 2,000: holders keep 1,900, others 1,800
+    expect(profitFee(1000, 2000, holder)).toMatchObject({ burned: 80, toVault: 20, net: 1900 });
+    expect(profitFee(1000, 2000, other)).toMatchObject({ burned: 150, toVault: 50, net: 1800 });
+    // perks off (no holder pair): the normal pair for everyone
+    expect(ratesFor(DEFAULT_FEE_RATES, null, true)).toEqual(DEFAULT_FEE_RATES);
+    // an admin pair equal to the normal pair gives no discount, a lower one does (the contract's `_ratesFor`)
+    expect(ratesFor(DEFAULT_FEE_RATES, { burnBps: 1000, vaultBps: 1000 }, true)).toEqual(DEFAULT_FEE_RATES);
+    expect(ratesFor({ burnBps: 2000, vaultBps: 500 }, DEFAULT_HOLDER_FEE_RATES, true)).toEqual(DEFAULT_HOLDER_FEE_RATES);
   });
 
   it('splits payments half burned, half to the fee wallet', () => {

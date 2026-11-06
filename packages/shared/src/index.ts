@@ -7,6 +7,7 @@ export * from './skins';
 export * from './emotes';
 export * from './palette';
 export * from './arenas';
+export * from './arena-pricing';
 export * from './names';
 export * from './text';
 export * from './token';

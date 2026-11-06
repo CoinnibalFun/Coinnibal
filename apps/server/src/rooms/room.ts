@@ -333,6 +333,10 @@ export class Room implements RoomHandle {
     for (const pid of this.bots.reconfigure(count, difficulty)) for (const c of this.conns) c.view.forgetPlayer(pid);
   }
 
+  setBuyIn(buyIn: number): void {
+    if (this.opts.stake && Number.isSafeInteger(buyIn) && buyIn > 0) this.opts.stake.buyIn = buyIn;
+  }
+
   /** Σ value of the loot lying on this room's floor. */
   lootValue(): number {
     let sum = 0;
