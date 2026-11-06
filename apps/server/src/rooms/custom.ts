@@ -9,10 +9,13 @@ import {
   CUSTOM_SETTINGS_LIMITS,
   CUSTOM_TRAP_MUL,
   CUSTOM_WORLD_CAPS,
+  PRACTICE_ROOM,
+  ROOM_CLOSE_COUNTDOWN_MS,
   WORLD_PRESETS,
   customRoomFee,
   customRoomPrice,
   customUsesFreeRoom,
+  practiceRoomConfig,
   validateCustomConfig,
   type CustomArenaTier,
   type CustomBest,
@@ -25,8 +28,7 @@ import {
   type CustomRoomView,
 } from '@elymum/shared';
 import { getAddress, parseEther } from 'viem';
-import type { BotManagerOptions } from '../bots/manager';
-import type { BotMixWeights } from '../bots/personality';
+import type { PracticeBotsOptions } from '../bots/practice';
 import { PaymentChainBusy, TX_HASH_RE, checkPayment, type PaymentReader, type UsedPayments } from '../chain/payment';
 import { ChainBusyError } from '../chain/types';
 import type { CustomRoomHooks, PaidArena, RoomManager } from './manager';
@@ -68,7 +70,15 @@ export interface CustomRecord {
    * settled every ticket in it (`RoomManager.closePaidRoom`), then this record goes.
    */
   closing?: boolean;
+  /** Closed early by its creator or an admin: the reason everyone sees in the countdown and on the final board. */
+  closeMessage?: string;
+  /** A "Practice with bots" room: who opened it (`w:<wallet>` or `ip:<address>`; one live room each). */
+  practice?: { owner: string };
 }
+
+/** What everyone in a room reads when its time is up (the countdown, then the final board). */
+const TIME_UP = 'Time is up: this room has closed. Thanks for playing!';
+const TIME_UP_PAID = 'Time is up: this room closes at the bell, where every ticket is settled. Thanks for playing!';
 
 interface RoomsFile {
   v: 1;
@@ -76,13 +86,6 @@ interface RoomsFile {
   /** Holder wallet (lower case) → UTC day (YYYY-MM-DD) of its last free room. */
   freeUsed: Record<string, string>;
 }
-
-/** Bot difficulty weights per choice. */
-export const CUSTOM_BOT_MIX: Record<CustomRoomConfig['difficulty'], BotMixWeights> = {
-  easy: { easy: 100, medium: 0, hard: 0 },
-  mixed: { easy: 45, medium: 40, hard: 15 },
-  hard: { easy: 0, medium: 35, hard: 65 },
-};
 
 const FOOD_MUL: Record<CustomRoomConfig['food'], number> = { low: 0.6, normal: 1, high: 1.6 };
 const POWERUPS: Record<CustomMapSize, number> = { XS: 2, S: 2, M: 3, L: 4, XL: 5 };
@@ -111,11 +114,13 @@ export function customWorld(c: CustomRoomConfig, side?: number): WorldShape {
   };
 }
 
-/** Bots of a config: exactly `bots` of them, whatever the humans do. */
-export function customBots(c: CustomRoomConfig): BotManagerOptions | null {
-  if (c.bots <= 0) return null;
-  // never a pack on one person: one chaser at a time (two on hard)
-  return { enabled: true, target: c.bots, min: c.bots, max: c.bots, mix: { ...CUSTOM_BOT_MIX[c.difficulty] }, maxChasers: c.difficulty === 'hard' ? 2 : 1 };
+/**
+ * Practice bots of a config: exactly `bots` of them, at the chosen difficulty, in a FREE room only. A paid room
+ * (stakes) never has bots, whatever an old saved record says.
+ */
+export function customBots(c: CustomRoomConfig): PracticeBotsOptions | null {
+  if (c.kind === 'paid' || c.bots <= 0) return null;
+  return { count: c.bots, difficulty: c.difficulty };
 }
 
 const BEST_KEPT = 10;
@@ -124,13 +129,15 @@ const BEST_FLUSH_MS = 10_000;
 export const CUSTOM_WARN_MS = 60_000;
 
 const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
+/** The creator of a guest's "Practice with bots" room. */
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 /** Validates an admin update of the settings; returns the merged settings. */
 export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string, unknown>, strict = true): CustomRoomSettings {
   const next = { ...cur };
   const bad = (field: string, message: string) => new CustomRoomFail(400, 'bad_request', message, field);
-  const keys: (keyof CustomRoomSettings)[] = ['enabled', 'priceHype', 'treasury', 'holderPerk', 'holderDiscountPct', 'maxLive', 'maxPerWallet', 'capacityStepPct', 'maxPlayers', 'maxSeats', 'paidRooms'];
+  const keys: (keyof CustomRoomSettings)[] = ['enabled', 'priceGas', 'treasury', 'holderPerk', 'holderDiscountPct', 'maxLive', 'maxPerWallet', 'capacityStepPct', 'maxPlayers', 'maxSeats', 'paidRooms', 'practiceRooms', 'practiceMaxLive'];
   for (const k of Object.keys(body)) if (!keys.includes(k as keyof CustomRoomSettings) && strict) throw bad(k, `unknown field ${k}`);
   if (body.enabled !== undefined) {
     if (typeof body.enabled !== 'boolean') throw bad('enabled', 'enabled must be true or false');
@@ -140,11 +147,15 @@ export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string
     if (typeof body.paidRooms !== 'boolean') throw bad('paidRooms', 'paidRooms must be true or false');
     next.paidRooms = body.paidRooms;
   }
-  if (body.priceHype !== undefined) {
-    const p = body.priceHype;
-    if (typeof p !== 'string' || !/^\d{1,6}(\.\d{1,18})?$/.test(p)) throw bad('priceHype', 'priceHype must be a HYPE amount like "0.05"');
-    if (parseEther(p) > parseEther('1000')) throw bad('priceHype', 'priceHype must be at most 1000 HYPE');
-    next.priceHype = p;
+  if (body.practiceRooms !== undefined) {
+    if (typeof body.practiceRooms !== 'boolean') throw bad('practiceRooms', 'practiceRooms must be true or false');
+    next.practiceRooms = body.practiceRooms;
+  }
+  if (body.priceGas !== undefined) {
+    const p = body.priceGas;
+    if (typeof p !== 'string' || !/^\d{1,6}(\.\d{1,18})?$/.test(p)) throw bad('priceGas', 'priceGas must be an amount of the gas token like "0.05"');
+    if (parseEther(p) > parseEther('1000')) throw bad('priceGas', 'priceGas must be at most 1000 of the gas token');
+    next.priceGas = p;
   }
   if (body.treasury !== undefined) {
     if (body.treasury === null || body.treasury === '') next.treasury = null;
@@ -171,6 +182,7 @@ export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string
   if (body.capacityStepPct !== undefined) next.capacityStepPct = int(body.capacityStepPct, 'capacityStepPct', 0, CUSTOM_SETTINGS_LIMITS.capacityStepPct);
   if (body.maxPlayers !== undefined) next.maxPlayers = int(body.maxPlayers, 'maxPlayers', CUSTOM_LIMITS.playersMin, CUSTOM_SETTINGS_LIMITS.maxPlayers);
   if (body.maxSeats !== undefined) next.maxSeats = int(body.maxSeats, 'maxSeats', CUSTOM_SETTINGS_LIMITS.maxSeatsMin, CUSTOM_SETTINGS_LIMITS.maxSeats);
+  if (body.practiceMaxLive !== undefined) next.practiceMaxLive = int(body.practiceMaxLive, 'practiceMaxLive', 0, CUSTOM_SETTINGS_LIMITS.practiceMaxLive);
   if (next.maxSeats < next.maxPlayers) throw bad('maxSeats', `maxSeats (${next.maxSeats}) must be at least the biggest room (maxPlayers ${next.maxPlayers})`);
   return next;
 }
@@ -206,6 +218,10 @@ export class CustomRoomService implements CustomRoomHooks {
   private freeUsed: Record<string, string> = {};
   /** Wallets with a create under way (one at a time per wallet). */
   private readonly creating = new Set<string>();
+  /** Rooms whose end countdown was shown (`closing`). */
+  private readonly counting = new Set<string>();
+  /** "Practice with bots" rooms standing empty since (service clock). */
+  private readonly emptySince = new Map<string, number>();
   private bestDirty = false;
   private lastBestFlush = 0;
   private readonly now: () => number;
@@ -315,7 +331,6 @@ export class CustomRoomService implements CustomRoomHooks {
     const opts = {
       name: r.config.name,
       maxPlayers: r.config.maxPlayers,
-      bots: customBots(r.config),
       world: customWorld(r.config),
       // "Auto": the private rooms' curve, sized for the bots plus the people in the room
       ...(r.config.mapSize === 'auto' ? { map: { scale: this.d.rooms.customMapScale(), shape: (side: number) => customWorld(r.config, side), config: r.config } } : {}),
@@ -326,7 +341,7 @@ export class CustomRoomService implements CustomRoomHooks {
       // an invite-only instance of the arena: its tickets, its vault, its bell
       return this.d.rooms.createPaidRoom(r.code, { ...opts, stake: { arenaId: r.config.arenaId, buyIn: r.buyIn ?? 0 } });
     }
-    return this.d.rooms.createCustomRoom(r.code, opts);
+    return this.d.rooms.createCustomRoom(r.code, { ...opts, bots: customBots(r.config) });
   }
 
   /* ------------------------------ settings ------------------------------ */
@@ -348,7 +363,7 @@ export class CustomRoomService implements CustomRoomHooks {
 
   /** Base price (rooms of up to 10 players), wei. */
   priceWei(): bigint {
-    return parseEther(this.cur.priceHype);
+    return parseEther(this.cur.priceGas);
   }
 
   /** The fee of a room of `capacity` before any holder perk (`customRoomFee`), wei. */
@@ -356,10 +371,10 @@ export class CustomRoomService implements CustomRoomHooks {
     return customRoomFee(this.priceWei(), capacity, this.cur.capacityStepPct);
   }
 
-  /** Seats taken by the live custom rooms (Σ capacity). */
+  /** Seats taken by the live custom rooms (Σ capacity; "Practice with bots" rooms have their own cap). */
   seatsUsed(): number {
     let n = 0;
-    for (const r of this.records.values()) n += r.config.maxPlayers;
+    for (const r of this.records.values()) if (!r.practice) n += r.config.maxPlayers;
     return n;
   }
 
@@ -380,12 +395,13 @@ export class CustomRoomService implements CustomRoomHooks {
     return {
       durationMin: c.durationMin,
       mapSize: c.mapSize,
-      bots: c.bots,
+      bots: customBots(c)?.count ?? 0,
       difficulty: c.difficulty,
       food: c.food,
       traps: c.traps ?? 'normal',
       powerUps: c.powerUps,
       ...(c.kind === 'paid' && c.arenaId !== null ? { kind: 'paid' as const, arenaId: c.arenaId } : { kind: 'free' as const }),
+      ...(r.practice ? { practice: true } : {}),
       creator: r.creator,
       createdAt: r.createdAt,
       endsAt: r.endsAt,
@@ -417,13 +433,59 @@ export class CustomRoomService implements CustomRoomHooks {
     return [...this.records.values()].sort((a, b) => a.endsAt - b.endsAt).map((r) => this.view(r));
   }
 
+  /** A wallet's live rooms (its "Practice with bots" room is not among them: it has its own limit). */
   mine(wallet: string): CustomRoomView[] {
     const w = wallet.toLowerCase();
-    return this.list().filter((r) => r.creator.toLowerCase() === w);
+    return this.list().filter((r) => !r.practice && r.creator.toLowerCase() === w);
   }
 
+  /** Live custom rooms (the paid and free ones creators opened; "Practice with bots" rooms apart). */
   get live(): number {
-    return this.records.size;
+    let n = 0;
+    for (const r of this.records.values()) if (!r.practice) n++;
+    return n;
+  }
+
+  /** Live "Practice with bots" rooms. */
+  get practiceLive(): number {
+    return this.records.size - this.live;
+  }
+
+  /**
+   * "Practice with bots" (`POST /api/rooms/custom/practice`): a free room with practice bots for this player (a
+   * guest too), opened in one click. One live practice room per player (`wallet`, else `ip`): asking again returns
+   * it while it has a few minutes left. The route rate-limits creations per IP; the admin caps how many live at
+   * once (`practiceMaxLive`). Throws `CustomRoomFail`.
+   */
+  practice(owner: { wallet: string | null; ip: string }): CustomRoomView {
+    if (!this.cur.practiceRooms) throw new CustomRoomFail(503, 'rooms_closed', 'Practice rooms are closed right now. The ponds are open.');
+    const key = owner.wallet ? `w:${owner.wallet.toLowerCase()}` : `ip:${owner.ip}`;
+    const now = this.now();
+    for (const r of this.records.values()) {
+      if (r.practice?.owner === key && !r.closeMessage && r.endsAt - now > 3 * 60_000 && this.d.rooms.get(`priv-${r.code}`)) return this.view(r);
+    }
+    if (this.practiceLive >= this.cur.practiceMaxLive) {
+      throw new CustomRoomFail(503, 'slots_busy', 'All practice rooms are busy right now. Try again in a few minutes, or play in a pond.');
+    }
+    const config = practiceRoomConfig();
+    const rec: CustomRecord = {
+      code: this.d.rooms.newPrivateCode(),
+      config,
+      // a guest's room has no creator wallet
+      creator: owner.wallet ? getAddress(owner.wallet.toLowerCase()) : ZERO_ADDRESS,
+      createdAt: now,
+      endsAt: now + config.durationMin * 60_000,
+      paidWith: 'free',
+      txHash: null,
+      paidWei: '0',
+      best: [],
+      practice: { owner: key },
+    };
+    this.records.set(rec.code, rec);
+    this.open(rec);
+    this.saveRooms();
+    this.log(`custom rooms: ${rec.code} practice with bots opened for ${owner.wallet ?? 'a guest'} (${config.bots} bots, ${config.durationMin} min)`);
+    return this.view(rec);
   }
 
   private freeAvailable(wallet: string): boolean {
@@ -604,32 +666,44 @@ export class CustomRoomService implements CustomRoomHooks {
 
   /* ------------------------------ close / expire ------------------------------ */
 
-  /** Closes a room early: its creator (`by` = creator wallet) or an admin. */
+  /**
+   * Closes a room early: its creator (`by` = creator wallet) or an admin. Never abruptly: a free room ends
+   * `ROOM_CLOSE_COUNTDOWN_MS` from now (the countdown, then the final board); a paid room at its next bell.
+   */
   close(code: string, by: { wallet: string; admin: boolean }): CustomRoomView {
     const r = this.records.get(code);
     if (!r) throw new CustomRoomFail(404, 'not_found', 'No open room with that code.');
     const creator = r.creator.toLowerCase() === by.wallet.toLowerCase();
     if (!creator && !by.admin) throw new CustomRoomFail(403, 'forbidden', 'Only the room creator can close it.');
     const message = creator ? 'The room creator closed this room.' : 'An admin closed this room.';
+    const now = this.now();
     if (r.config.kind === 'paid') {
       // tickets are never evicted: no new seat now, the room closes once its bell settled them
       if (!r.closing) {
         r.closing = true;
+        r.closeMessage = `${message} It closes at the bell: every ticket is settled there.`;
+        r.endsAt = Math.min(r.endsAt, this.d.rooms.roundWindow(now).endsAt);
         this.saveRooms();
-        this.d.rooms.get(`priv-${r.code}`)?.announce(`${message} It closes at the bell: every ticket is settled there.`);
+        this.d.rooms.get(`priv-${r.code}`)?.announce(r.closeMessage);
       }
       this.finishPaid(r, message);
       this.log(`custom rooms: ${code} closing early (at its bell) by ${by.wallet}${creator ? ' (creator)' : ' (admin)'}`);
       return this.view(r);
     }
-    const view = this.view(r);
-    this.shut(r, message);
-    this.log(`custom rooms: ${code} closed early by ${by.wallet}${creator ? ' (creator)' : ' (admin)'}`);
-    return view;
+    if (!r.closeMessage) {
+      r.closeMessage = message;
+      r.endsAt = Math.min(r.endsAt, now + ROOM_CLOSE_COUNTDOWN_MS);
+      this.saveRooms();
+      this.sweep(now);
+    }
+    this.log(`custom rooms: ${code} closing early (in ${Math.round((r.endsAt - now) / 1000)} s) by ${by.wallet}${creator ? ' (creator)' : ' (admin)'}`);
+    return this.view(r);
   }
 
   private shut(r: CustomRecord, message: string): void {
     this.records.delete(r.code);
+    this.counting.delete(r.code);
+    this.emptySince.delete(r.code);
     this.d.rooms.closeCustomRoom(r.code, message);
     this.saveRooms();
   }
@@ -638,25 +712,45 @@ export class CustomRoomService implements CustomRoomHooks {
   private finishPaid(r: CustomRecord, message: string): void {
     if (this.d.rooms.closePaidRoom(r.code, message) !== 'closed') return;
     this.records.delete(r.code);
+    this.counting.delete(r.code);
     this.saveRooms();
     this.log(`custom rooms: ${r.code} closed (every ticket settled)`);
   }
 
-  /** Closes rooms whose time ran out; says "1 minute left" before. Called from the tick loop. */
+  /**
+   * Closes rooms whose time ran out; says "1 minute left" before, and shows everyone the countdown
+   * `ROOM_CLOSE_COUNTDOWN_MS` before the end (`closing`). Called from the tick loop.
+   */
   sweep(now = this.now()): void {
     for (const r of [...this.records.values()]) {
-      if (r.config.kind === 'paid' && (r.closing || r.endsAt <= now)) {
+      const paid = r.config.kind === 'paid';
+      // a practice room nobody is in closes (quietly: nobody to tell) once it stood empty a while
+      if (r.practice) {
+        const room = this.d.rooms.get(`priv-${r.code}`);
+        if (room && (room.humanCount > 0 || room.connCount > 0)) this.emptySince.delete(r.code);
+        else if (!this.emptySince.has(r.code)) this.emptySince.set(r.code, now);
+        else if (now - this.emptySince.get(r.code)! >= PRACTICE_ROOM.idleMs) {
+          this.shut(r, TIME_UP);
+          this.log(`custom rooms: ${r.code} practice room closed (empty)`);
+          continue;
+        }
+      }
+      if (r.endsAt > now && r.endsAt - now <= ROOM_CLOSE_COUNTDOWN_MS && !this.counting.has(r.code)) {
+        this.counting.add(r.code);
+        this.d.rooms.get(`priv-${r.code}`)?.closingSoon(r.endsAt, r.closeMessage ?? (paid ? TIME_UP_PAID : TIME_UP));
+      }
+      if (paid && (r.closing || r.endsAt <= now)) {
         if (!r.closing) {
           r.closing = true;
           this.saveRooms();
           this.log(`custom rooms: ${r.code} expired (closes once its bell settled every ticket)`);
         }
-        this.finishPaid(r, 'Time is up: this room has closed. Thanks for playing!');
+        this.finishPaid(r, r.closeMessage ?? TIME_UP);
         continue;
       }
       if (r.endsAt <= now) {
-        this.shut(r, 'Time is up: this room has closed. Thanks for playing!');
-        this.log(`custom rooms: ${r.code} expired`);
+        this.shut(r, r.closeMessage ?? TIME_UP);
+        this.log(`custom rooms: ${r.code} ${r.closeMessage ? 'closed early' : 'expired'}`);
         continue;
       }
       if (!r.warned && r.endsAt - now <= CUSTOM_WARN_MS) {

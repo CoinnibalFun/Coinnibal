@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import {
   MINT_PHASE_NAMES,
   buildMerkleTree,
-  fetchHypeUsd,
+  fetchGasUsd,
   normalizeAllowlist,
   usdCentsToWei,
   weiToUsdCents,
@@ -24,7 +24,6 @@ import { getAddress, type Address, type Hash } from 'viem';
 import { ChainCache } from '../chain/chain-cache';
 import type { EvmClient } from '../chain/evm-client';
 import { isRateLimited, withRpcPriority } from '../chain/rpc-budget';
-import { emblemTraits } from './emblem';
 import type { SiteStore } from './store';
 import { SiteFail, userWallet } from './validate';
 
@@ -32,7 +31,7 @@ import { SiteFail, userWallet } from './validate';
 export const ALLOWLIST_FILE = 'allowlist.json';
 const PRICE_TTL_MS = 60_000;
 const PRICE_RETRY_MS = 15_000;
-/** A HYPE/USD reading older than this is not shown (the feed is down). */
+/** A gas-token/USD reading older than this is not shown (the feed is down). */
 const PRICE_MAX_AGE_MS = 10 * 60_000;
 /** `mintState()` is re-read in the background when older than this (the page is answered from the cache). */
 const STATE_TTL_MS = 30_000;
@@ -76,21 +75,21 @@ export interface MintServiceDeps {
   /** Imported testnet emblem holders (`site/holder-wl.json`): part of the allowlist. */
   holderWl?: () => string[];
   usdCents: number;
-  /** HYPE/USD feed (default: Hyperliquid's info API at `HYPE_PRICE_URL`). */
+  /** gas-token/USD feed (default: Hyperliquid's info API at `GAS_PRICE_URL`). */
   fetchPrice: PriceFetcher;
   logChunkBlocks: number;
   log?: (m: string) => void;
   now?: () => number;
 }
 
-/** The default feed: Hyperliquid's `allMids` at `url`. */
+/** The default feed: ETH (Robinhood Chain's gas token) on Hyperliquid's `allMids` at `url`. */
 export const hyperliquidPrice =
   (url: string): PriceFetcher =>
   () =>
-    fetchHypeUsd({ url, timeoutMs: 10_000 });
+    fetchGasUsd({ url, timeoutMs: 10_000 });
 
 /**
- * The mint side of the site: the NFT's state, HYPE/USD and the $1 price, holders (for the game gate
+ * The mint side of the site: the NFT's state, gas-token/USD and the $1 price, holders (for the game gate
  * and the mint page), the allowlist snapshot and its Merkle proofs, and the token metadata.
  */
 export class MintService {
@@ -243,8 +242,8 @@ export class MintService {
   /* Price                                                            */
   /* ---------------------------------------------------------------- */
 
-  /** HYPE/USD, cached 60 s; null when the feed has not answered for 10 minutes. */
-  async hypeUsd(): Promise<{ price: string; value: number; at: number } | null> {
+  /** gas-token/USD, cached 60 s; null when the feed has not answered for 10 minutes. */
+  async gasUsd(): Promise<{ price: string; value: number; at: number } | null> {
     const now = this.now();
     // a failing feed is asked again at most every 15 s (requests never pile onto it)
     if ((!this.price || now - this.price.at >= PRICE_TTL_MS) && now - this.priceFailedAt >= PRICE_RETRY_MS) {
@@ -256,7 +255,7 @@ export class MintService {
         })
         .catch((err) => {
           this.priceFailedAt = this.now();
-          this.log(`mint: HYPE/USD feed failed (${(err as Error).message})`);
+          this.log(`mint: gas-token/USD feed failed (${(err as Error).message})`);
         })
         .finally(() => (this.priceFetch = null));
       // stale-while-revalidate: a known price is answered now (re-read in the background)
@@ -268,9 +267,9 @@ export class MintService {
 
   /** `GET /api/admin/mint/price`. */
   async priceQuote(): Promise<MintPriceQuote> {
-    const p = await this.hypeUsd();
+    const p = await this.gasUsd();
     return {
-      hypeUsd: p?.value ?? null,
+      gasUsd: p?.value ?? null,
       targetUsdCents: this.deps.usdCents,
       priceWei: p ? usdCentsToWei(this.deps.usdCents, p.price).toString() : null,
       fetchedAt: p?.at ?? null,
@@ -410,7 +409,7 @@ export class MintService {
   /** `GET /api/site/mint`. */
   async publicState(gameAccess: GameAccess): Promise<MintState> {
     const nft = this.deps.nft();
-    const [s, p, holders] = await Promise.all([this.chainState(), this.hypeUsd(), this.holdersCount()]);
+    const [s, p, holders] = await Promise.all([this.chainState(), this.gasUsd(), this.holdersCount()]);
     const contract: MintContractState | null = s
       ? {
           phase: MINT_PHASE_NAMES[s.phase] ?? 'closed',
@@ -431,7 +430,7 @@ export class MintService {
       nftAddress: nft?.address ?? null,
       chainId: this.deps.chainId(),
       contract,
-      hypeUsd: p?.value ?? null,
+      gasUsd: p?.value ?? null,
       priceUsd: s && p ? weiToUsdCents(s.price, p.price) / 100 : null,
       targetUsdCents: this.deps.usdCents,
       holders,
@@ -463,25 +462,6 @@ export class MintService {
     return !!s && id <= s.totalSupply;
   }
 
-  /** ERC-721 metadata JSON of a minted token. */
-  metadata(id: number, baseUrl: string): Record<string, unknown> {
-    const t = emblemTraits(id);
-    const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
-    return {
-      name: `Elymum No. ${id}`,
-      description: 'An Elymum emblem: a coin of the ring. Holders play Elymum, the arena where the coins eat, on Elysium.',
-      image: `${baseUrl}/api/nft/${id}.svg`,
-      external_url: baseUrl,
-      attributes: [
-        { trait_type: 'Coin', value: cap(t.coin) },
-        { trait_type: 'Ring', value: cap(t.ring) },
-        { trait_type: 'Mood', value: cap(t.mood) },
-        { trait_type: 'Feet', value: t.feet ? 'Yes' : 'No' },
-        { trait_type: 'Sweat', value: t.sweat ? 'Yes' : 'No' },
-      ],
-    };
-  }
-
   /** `royaltyInfo` of the NFT, cached 5 min (a failed read is retried after 30 s); one read in flight at a time. */
   private async royalty(nft: string, client: EvmClient): Promise<{ bps: number; receiver: string } | null> {
     const c = this.royaltyV;
@@ -501,17 +481,18 @@ export class MintService {
     return this.royaltyFetch;
   }
 
-  /** The collection's `contractURI` JSON. */
-  async contractMetadata(baseUrl: string): Promise<Record<string, unknown>> {
+  /** The collection's `contractURI` JSON (`provenance`: the emblem collection's commitment, when known). */
+  async contractMetadata(baseUrl: string, provenance?: { seedHash: string; provenance: string } | null): Promise<Record<string, unknown>> {
     const nft = this.deps.nft();
     const client = this.deps.client();
     const royalty = nft && client ? await this.royalty(nft.address, client) : null;
     return {
       name: 'Elymum',
-      description: 'Elymum emblems: the coins of the ring. Holders play Elymum on Elysium.',
+      description: `Elymum emblems: the coins of the ring. Holders play Elymum on Robinhood Chain.`,
       image: `${baseUrl}/api/nft/1.svg`,
       external_link: baseUrl,
       ...(royalty && royalty.bps > 0 ? { seller_fee_basis_points: royalty.bps, fee_recipient: royalty.receiver } : {}),
+      ...(provenance ? { provenance_hash: provenance.provenance, seed_hash: provenance.seedHash, provenance_url: `${baseUrl}/api/nft/provenance` } : {}),
     };
   }
 }

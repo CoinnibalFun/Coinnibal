@@ -13,7 +13,7 @@ import { Countdown } from './components/Countdown';
 import { Counter } from './components/Counter';
 import { Dateline } from './components/Dateline';
 import { Field } from './components/Field';
-import { HypeAmount } from './components/HypeAmount';
+import { GasAmount } from './components/GasAmount';
 import { InkButton } from './components/InkButton';
 import { Skeleton, StampSpinner } from './components/Loading';
 import { Modal, WalletPicker } from './components/Modal';
@@ -132,7 +132,7 @@ export function Gallery() {
   const pushToast = (tone: ToastItem['tone']) => {
     const id = ++toastId.current;
     const copy = {
-      info: { title: 'Price refreshed', message: 'HYPE/USD 46.94. One emblem is still a dollar.' },
+      info: { title: 'Price refreshed', message: 'ETH/USD 46.94. One emblem is still a dollar.' },
       success: { title: 'Minted. Two of them.', message: 'They are in your wallet. Try not to eat them.' },
       error: { title: 'The wallet said no', message: 'Nothing was sent. Nothing was spent.' },
     }[tone ?? 'info'];
@@ -166,7 +166,7 @@ export function Gallery() {
         <RingScene time={time} className="gal-hero">
           <div className="gal-hero__inner">
             <Sticker pad="lg" tilt={-1.6} tape className="gal-hero__card">
-              <div className="kicker">A five-minute feast · on Elysium</div>
+              <div className="kicker">A five-minute feast · on Robinhood Chain</div>
               <Wordmark height={104} className="gal-hero__mark" />
               <h2 className="gal-hero__h">You are small change with a big appetite.</h2>
               <p className="gal-hero__lede">
@@ -248,7 +248,7 @@ export function Gallery() {
             <h3 className="gal-type__h3">Three small chores, then the feast.</h3>
             <p className="lede">DM Sans for everything you read. The ring noticed, and so did our follower count. Copy is short, specific and a little wry.</p>
             <p className="gal-type__body">
-              Body 16/1.5. Numbers are always Geist Mono: <span className="num">0.0213 HYPE</span>, <span className="num">2,614 / 5,000</span>,{' '}
+              Body 16/1.5. Numbers are always Geist Mono: <span className="num">0.0213 ETH</span>, <span className="num">2,614 / 5,000</span>,{' '}
               <span className="num">0x7a3f…e91c</span>.
             </p>
             <p className="quote gal-type__quote">&ldquo;To the Elysian plain, where life is easiest for men.&rdquo;</p>
@@ -442,7 +442,7 @@ export function Gallery() {
       </Plate>
 
       {/* ── VI: the mint card ── */}
-      <Plate n={6} title="The mint, after dark" aside="ArcGauge · HypeAmount · QuantityStepper · Countdown · AddressChip" className="gal-plate--mint">
+      <Plate n={6} title="The mint, after dark" aside="ArcGauge · GasAmount · QuantityStepper · Countdown · AddressChip" className="gal-plate--mint">
         <div className="gal-mint">
           <div className="gal-mint__copy">
             <div className="kicker">Sealed emblems · supply 5,000</div>
@@ -453,7 +453,7 @@ export function Gallery() {
               <br />
               Many snacks.
             </h2>
-            <p>Your emblem is your ticket to the ring. The price is pinned to a dollar and paid in HYPE, so the number on the button wiggles with the market.</p>
+            <p>Your emblem is your ticket to the ring. The price is pinned to a dollar and paid in ETH, so the number on the button wiggles with the market.</p>
             <div className="gal-row">
               <Countdown seconds={2 * 86400 + 6 * 3600 + 14 * 60} label="WL window closes" />
               <Countdown to={deadline} label="until the bell" tone="sun" />
@@ -469,8 +469,8 @@ export function Gallery() {
             <div className="gal-mint__right">
               <ArcGauge value={minted} max={5000} caption={`${Math.round((minted / 5000) * 100)}% minted. The rest are still deciding.`} />
               <div className="gal-mint__price">
-                <HypeAmount value={0.0213} usd={1} size="lg" />
-                <div className="gal-mint__tick num">HYPE/USD 46.94 · updated 4s ago · gas on Elysium, also in HYPE</div>
+                <GasAmount value={0.0213} usd={1} size="lg" />
+                <div className="gal-mint__tick num">ETH/USD 46.94 · updated 4s ago · gas on Robinhood Chain, also in ETH</div>
               </div>
               <div className="gal-mint__qty">
                 <div>
@@ -479,7 +479,7 @@ export function Gallery() {
                 </div>
                 <div className="gal-mint__tot">
                   Total
-                  <HypeAmount value={0.0213 * qty} usd={qty} size="sm" stack />
+                  <GasAmount value={0.0213 * qty} usd={qty} size="sm" stack />
                 </div>
               </div>
               <Button variant="primary" size="lg" block onClick={() => setMinted((m) => Math.min(5000, m + qty))}>
@@ -528,7 +528,7 @@ export function Gallery() {
                 id: 'wallet',
                 state: 'locked',
                 meta: 'Chore 3 · wallet',
-                title: 'Connect a wallet on Elysium',
+                title: 'Connect a wallet on Robinhood Chain',
                 body: 'To sign a message, not a transaction. We will never ask for your seed phrase.',
                 art: <CoinCharacter paint="cream" mood="scared" size={76} look={[0, -3]} />,
                 action: <Button disabled>Connect</Button>,
@@ -545,7 +545,7 @@ export function Gallery() {
             fn="setToken"
             contract={{ name: 'ElymumArena', address: '0x5FbDB2315678afecb367f032d93F642f64180aa3' }}
             args={[{ name: 'token', type: 'address', value: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' }]}
-            network={{ name: 'Elysium Testnet', chainId: 4207 }}
+            network={{ name: 'Robinhood Chain Testnet', chainId: 46630 }}
             from="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
             onConfirm={() => new Promise((r) => setTimeout(r, 1200))}
             onCancel={() => {}}
@@ -558,8 +558,8 @@ export function Gallery() {
               { name: 'quantity', type: 'uint256', value: '3' },
             ]}
             value={{ wei: 63_900_000_000_000_000n, usd: 3 }}
-            network={{ name: 'Elysium', chainId: 4206, mainnet: true }}
-            note="This is mainnet. Real HYPE leaves the owner wallet."
+            network={{ name: 'Robinhood Chain', chainId: 4663, mainnet: true }}
+            note="This is mainnet. Real ETH leaves the owner wallet."
             confirmLabel="Sign on mainnet"
             onConfirm={() => {}}
             onCancel={() => {}}
@@ -636,7 +636,7 @@ export function Gallery() {
                 { label: 'Paid out', value: '17,042', strong: true },
               ]}
               code="0x9a4e1c"
-              footer="tx 0x9a4e…1c07 · Elysium"
+              footer="tx 0x9a4e…1c07 · Robinhood Chain"
             />
           </Spec>
           <Spec label="Counter · Field · Tabs · Dateline · Rule">
@@ -670,9 +670,9 @@ export function Gallery() {
         <div className="gal-grid gal-grid--3">
           <Spec label="Toast · info / success / error">
             <div className="gal-stack">
-              <Toast tone="info" title="Price refreshed" message="HYPE/USD 46.94. Still a dollar." />
+              <Toast tone="info" title="Price refreshed" message="ETH/USD 46.94. Still a dollar." />
               <Toast tone="success" title="You made the list" message="0x7a3…e91c is in. Mint opens soon." tilt={-0.6} />
-              <Toast tone="error" title="Wrong network" message="Switch to Elysium and try again." onClose={() => {}} closeLabel="Dismiss" />
+              <Toast tone="error" title="Wrong network" message="Switch to Robinhood Chain and try again." onClose={() => {}} closeLabel="Dismiss" />
             </div>
           </Spec>
           <Spec label="Loading · StampSpinner · Skeleton">

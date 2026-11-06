@@ -1,13 +1,25 @@
-import { DEFAULT_HOLDER_FEE_BPS, DEFAULT_HOLDERS_ONLY_ARENA_IDS, sameAddress, setArenaHoldersOnlyCall, setFaucetCall, setHolderNftCall, setHolderPerksCall, setMinterCall } from '@elymum/sdk';
+import {
+  DEFAULT_HOLDERS_ONLY_ARENA_IDS,
+  SUGGESTED_HOLDER_BURN_BPS,
+  SUGGESTED_HOLDER_VAULT_BPS,
+  sameAddress,
+  setArenaHoldersOnlyCall,
+  setFaucetCall,
+  setHolderNftCall,
+  setHolderPerksCall,
+} from '@elymum/sdk';
+import { MAX_TOTAL_FEE_BPS } from '@elymum/shared';
 import { arenaName, fmtTok, holderPerksRefusal, holderPerksWarnings, holdersOnlyRefusal, parseAddressInput, parseIntInput, setFaucetRefusal, testTokenRefusal } from '@elymum/sdk/ops';
 import { useState } from 'react';
 import type { Address } from 'viem';
 import { Addr, Advanced, Btn, Card, FormError, Input, Row, useFormError, type ChainCtx } from './ui';
 
 /**
- * Setup → the emblem's perks on the arena: `setHolderPerks(nft, holderFeeBps)` (holders pay the
- * lower fee and may enter holders-only arenas) and `setArenaHoldersOnly(id, on)` per arena. The NFT
- * is the registered ElymumNFT (shown, not typed); another address is an override under Advanced.
+ * Setup → the emblem's perks on the arena: `setHolderPerks(nft, holderBurnBps, holderVaultBps)` (holders' tickets
+ * get this pair on their profit when it totals less than the normal one, and holders may enter holders-only arenas)
+ * and `setArenaHoldersOnly(id, on)` per arena. The NFT is the registered ElymumNFT (shown, not typed); another
+ * address is an override under Advanced. The suggested pair keeps the burn and waives the fee wallet's share
+ * (15 % + 0 %).
  */
 export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
   const arena = ctx.net.arenaAddress;
@@ -15,7 +27,8 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
   const cfg = a?.config ?? null;
   const registered = ctx.net.nftAddress;
   const [override, setOverride] = useState('');
-  const [bps, setBps] = useState(String(cfg?.holderNft ? cfg.holderFeeBps : DEFAULT_HOLDER_FEE_BPS));
+  const [burn, setBurn] = useState(String(cfg?.holderNft ? cfg.holderBurnBps : SUGGESTED_HOLDER_BURN_BPS));
+  const [vault, setVault] = useState(String(cfg?.holderNft ? cfg.holderVaultBps : SUGGESTED_HOLDER_VAULT_BPS));
   const [err, guard, setErr] = useFormError();
   if (!arena || !cfg) return null;
   const holdersOnlyIds = a!.arenas.filter((x) => x.holdersOnly).map((x) => x.id);
@@ -23,25 +36,25 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
   const preview = async (off: boolean) => {
     setErr(null);
     let addr: Address | null = null;
-    let fee = 0;
+    let rates = { burnBps: cfg.holderBurnBps, vaultBps: cfg.holderVaultBps };
     try {
       if (!off && !override.trim() && !registered) throw new Error('No ElymumNFT is registered with the server yet: deploy it in Setup (or enter one under Advanced).');
       addr = off ? null : override.trim() ? parseAddressInput('Holder NFT', override) : registered;
-      fee = off ? cfg.holderFeeBps : parseIntInput('Holder fee', bps, 0, 1000);
+      if (!off) rates = { burnBps: parseIntInput('Holder burn', burn, 0, MAX_TOTAL_FEE_BPS), vaultBps: parseIntInput('Holder fee wallet', vault, 0, MAX_TOTAL_FEE_BPS) };
     } catch (e) {
       setErr((e as Error).message);
       return;
     }
     let hasCode = true;
     if (addr && ctx.client) hasCode = !!(await ctx.client.getCode({ address: addr }).catch(() => undefined));
-    const why = holderPerksRefusal(addr, hasCode, fee);
+    const why = holderPerksRefusal(addr, hasCode, rates);
     if (why) return setErr(`Not sent: ${why}.`);
-    const warn = holderPerksWarnings({ nft: addr, holderFeeBps: fee, feeBps: cfg.feeBps, holdersOnlyIds });
+    const warn = holderPerksWarnings({ nft: addr, holder: rates, normal: { burnBps: cfg.burnBps, vaultBps: cfg.vaultBps }, holdersOnlyIds });
     guard(() =>
       ctx.open({
-        title: off ? 'Turn the holder perks off' : `Holder perks: ${fee} bps for emblem holders`,
+        title: off ? 'Turn the holder perks off' : `Holder perks: ${rates.burnBps} + ${rates.vaultBps} bps of profit for emblem holders`,
         contract: 'ElymumArena',
-        call: setHolderPerksCall(arena, addr, fee),
+        call: setHolderPerksCall(arena, addr, rates),
         ownerOf: arena,
         owner: cfg.admin,
         note: warn.length ? `Heads up: ${warn.join('; ')}.` : undefined,
@@ -54,8 +67,8 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
     <Card
       title="Holder perks"
       id="holder-perks"
-      kicker={cfg.holderNft ? `On · ${cfg.holderFeeBps} bps` : 'Off'}
-      lede={`Emblem holders pay a lower fee (of each entry fee; fixed into each ticket at join) and may enter holders-only arenas. Normal fee: ${cfg.feeBps} bps.`}
+      kicker={cfg.holderNft ? `On · ${cfg.holderBurnBps} + ${cfg.holderVaultBps} bps` : 'Off'}
+      lede={`Emblem holders' tickets get their own fee pair on profit (burned + to the fee wallet; used when it totals less than the normal pair, fixed into each ticket at join) and holders may enter holders-only arenas. Normal pair: ${cfg.burnBps} + ${cfg.vaultBps} bps.`}
     >
       <dl className="ad-kv">
         <Row label="Holder NFT">{cfg.holderNft ? <Addr value={cfg.holderNft} net={ctx.net} /> : <span className="ad-none">none (perks off)</span>}</Row>
@@ -72,7 +85,8 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
         </Row>
       </dl>
       <div className="ad-form2">
-        <Input label="Holder fee" value={bps} onChange={setBps} suffix="bps" hint="300 = 3%." />
+        <Input label="Holder burn" value={burn} onChange={setBurn} suffix="bps" hint="1500 = 15 % of the profit, burned." />
+        <Input label="Holder fee wallet" value={vault} onChange={setVault} suffix="bps" hint="0 = the fee wallet's share is waived." />
       </div>
       <Advanced title="Advanced: a different holder NFT" testId="holder-perks-advanced">
         <Input label="Holder NFT (override)" value={override} onChange={setOverride} placeholder={registered ?? '0x…'} hint="Leave empty to use the registered ElymumNFT." />
@@ -154,10 +168,7 @@ export function HoldersOnlyCard({ ctx }: { ctx: ChainCtx }) {
   );
 }
 
-/**
- * Setup → the TestToken (testnet only): the server key as a minter (it funds the testnet staked
- * bots), the emblem as the holder NFT (2x faucet) and the faucet amounts and cooldown.
- */
+/** Setup → the TestToken (testnet only): the emblem as the holder NFT (2x faucet) and the faucet amounts and cooldown. */
 export function TestTokenAdminCard({ ctx }: { ctx: ChainCtx }) {
   const tt = ctx.status?.testToken ?? null;
   const f = tt?.faucet ?? null;
@@ -177,7 +188,7 @@ export function TestTokenAdminCard({ ctx }: { ctx: ChainCtx }) {
     ctx.open({ title, contract: 'TestToken', call, ownerOf: token, owner, onDone: () => ctx.refresh() });
 
   return (
-    <Card title="TestToken faucet and minters" id="test-token-admin" kicker="Testnet only" lede="The faucet players use on /faucet, and the server key as a minter so it can fund the testnet bots.">
+    <Card title="TestToken faucet" id="test-token-admin" kicker="Testnet only" lede="The faucet players use on /faucet. Only the TestToken owner mints; the game server never does.">
       <dl className="ad-kv">
         <Row label="Token">
           <Addr value={token} net={ctx.net} /> <span className={`ad-code mono${tt.code === 'ok' ? ' is-ok' : ' is-bad'}`}>{tt.code === 'ok' ? 'TestToken' : `code ${tt.code}`}</span>
@@ -198,17 +209,8 @@ export function TestTokenAdminCard({ ctx }: { ctx: ChainCtx }) {
         <Row label="Emblem">
           <Addr value={nft} net={ctx.net} /> <span className="ad-role">the registered ElymumNFT</span>
         </Row>
-        <Row label="Server key mints">{tt.serverIsMinter === null ? <span className="ad-none">no arena yet</span> : tt.serverIsMinter ? <span className="ad-code mono is-ok">yes</span> : <span className="ad-code mono is-bad">no</span>}</Row>
       </dl>
       <div className="ad-actions">
-        <Btn
-          sun={tt.serverIsMinter === false}
-          disabled={!server || tt.serverIsMinter === true}
-          testId="tt-minter"
-          onClick={() => server && open('Make the server key a TestToken minter (funds the testnet bots)', setMinterCall(token, server, true))}
-        >
-          Make the server key a minter
-        </Btn>
         <Btn
           disabled={!nft || (!!f?.holderNft && sameAddress(f.holderNft, nft))}
           testId="tt-holder-nft"

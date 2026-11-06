@@ -88,7 +88,7 @@ describe('integrity store', () => {
     const room = { id: 'r', now: () => T, round: () => ({ n: 1, endsAt: T + 1000, joinsCloseAt: T }), opts: { stake: { arenaId: 1, buyIn: 1 } } };
     for (let i = 0; i < 200; i++) {
       svc.join(room, i, { ip: 'x', fp: null }, { player: `w${i}`, session: `s${i}`, sessionId: i, arenaId: 1, entryFee: 1 });
-      svc.settle(room, i, null, { reason: 'death', payout: 0, killer: null, killerIsBot: true });
+      svc.settle(room, i, null, { reason: 'death', payout: 0, killer: null });
     }
     expect(svc.overview().counts.sessions).toBe(50);
     expect(svc.monitor.size).toBe(0);

@@ -90,11 +90,6 @@ export function flagSkinKind(code: string | null | undefined): FlagSkinKind {
   return COLOURS[code] ? 'colours' : null;
 }
 
-/** Colours of a colours-only country (body first), or null. */
-export function flagColours(code: string): readonly string[] | null {
-  return COLOURS[code] ?? null;
-}
-
 /* ------------------------------------------------------------------ */
 /* The main colour (the body paint under a flag: tiny coins, a wobble) */
 /* ------------------------------------------------------------------ */

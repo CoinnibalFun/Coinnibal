@@ -11,8 +11,6 @@ import {
   type RoomInfo,
   type RoundWindow,
 } from '@elymum/shared';
-import type { BotManagerOptions } from '../../bots/manager';
-import type { StakedBotSource } from '../../bots/staked';
 import type { ChainGateway } from '../../chain/types';
 import type { Player } from '../../game/entities';
 import type { IntegrityService } from '../../integrity/service';
@@ -21,7 +19,8 @@ import type { Leaderboards } from '../../leaderboards';
 import type { Conn } from '../../net/conn';
 import type { ShopService, UseContext } from '../../shop/service';
 import type { Journal, LootRecord } from '../../stake/journal';
-import type { RoomConn, RoomHandle, StakeSeat } from '../handle';
+import type { PlayerLook, RoomConn, RoomHandle, StakeSeat } from '../handle';
+import type { NotableKillEvent } from '../manager';
 import { TickStats, wsOut, type RoomLoad, type ThreadLoad } from '../load';
 import type { BellSettled, JoinOptions, RoomOptions } from '../room';
 import type { RoundClock } from '../round-clock';
@@ -47,10 +46,9 @@ export interface PoolDeps {
   clockOffset: () => number;
   integrity?: IntegrityService;
   shop?: ShopService;
-  stakedBots?: StakedBotSource;
-  stakedAskMs?: number;
   /** A human's game ended in a room worker (the profile, the league, the custom room's board). */
-  onGameOver: (e: { room: RemoteRoom; conn: Conn | null; player: { name: string }; stats: DeathStats }) => void;
+  onGameOver: (e: { room: RemoteRoom; conn: Conn | null; player: PlayerLook; stats: DeathStats }) => void;
+  onNotableKill: (e: NotableKillEvent) => void;
   onBellSettled: (e: BellSettled) => void;
   /** A worker died: its rooms are gone (already recovered from the journal); the directory opens the standing ones again. */
   onLost: (rooms: RemoteRoom[]) => void;
@@ -107,7 +105,6 @@ export class WorkerPool {
   private reqSeq = 0;
   private stopping = false;
   private timers: NodeJS.Timeout[] = [];
-  private lastWanted = '';
   /** Time this thread spends delivering the workers' batches (`main.tick` in the load view). */
   readonly relayStats = new TickStats(600);
 
@@ -137,8 +134,6 @@ export class WorkerPool {
       round: this.deps.round,
       clockOffset: this.deps.clockOffset(),
       integrity: !!this.deps.integrity,
-      stakedBots: !!this.deps.stakedBots,
-      ...(this.deps.stakedAskMs !== undefined ? { stakedAskMs: this.deps.stakedAskMs } : {}),
     };
     const worker = new Worker(file, { workerData: init });
     const slot = new Slot(index, worker, restarts);
@@ -362,8 +357,6 @@ export class WorkerPool {
           ...(c.roomId !== undefined ? { roomId: c.roomId } : {}),
           ...(c.live ? { live: c.live } : {}),
           ...(c.loot ? { loot: c.loot } : {}),
-          ...(c.purses ? { purses: c.purses } : {}),
-          ...(c.house ? { house: c.house } : {}),
         });
         const room = this.rooms.get(c.hid);
         if (room && c.live) room.setSeats(c.seats, enqueue.map((i) => i.key));
@@ -372,7 +365,13 @@ export class WorkerPool {
       }
       case 'go': {
         const room = this.rooms.get(c.hid);
-        if (room) d.onGameOver({ room, conn: c.conn !== null ? (this.conns.get(c.conn) ?? null) : null, player: { name: c.name }, stats: c.stats });
+        if (room) d.onGameOver({ room, conn: c.conn !== null ? (this.conns.get(c.conn) ?? null) : null, player: c.player, stats: c.stats });
+        return;
+      }
+      case 'nk': {
+        const room = this.rooms.get(c.hid);
+        const conn = this.conns.get(c.conn);
+        if (room && conn) d.onNotableKill({ room, conn, player: c.player, mass: c.mass, kills: c.kills, victim: c.victim, victimMass: c.victimMass });
         return;
       }
       case 'bell':
@@ -452,31 +451,6 @@ export class WorkerPool {
       case 'liveSessions':
         slot.liveSessions = c.list;
         return;
-      case 'draw': {
-        const ok = d.journal.drawHouse(c.arenaId, c.amount);
-        // the room's worker is gone: the bankroll goes straight back to the reserve
-        if (ok && slot.dead) d.journal.commit({ house: [{ arenaId: c.arenaId, amount: c.amount }] });
-        else this.send(slot, { k: 'drawn', req: c.req, ok });
-        return;
-      }
-      case 'acquire': {
-        const src = d.stakedBots;
-        if (!src) {
-          this.send(slot, { k: 'ticket', req: c.req, ticket: null });
-          return;
-        }
-        src.acquire(c.arenaId, c.roomId).then(
-          (ticket) => {
-            if (slot.dead && ticket) d.log(`room ${c.roomId}: could not seat staked bot ${ticket.stake.player} (session ${ticket.stake.session}): its room worker is gone`);
-            this.send(slot, { k: 'ticket', req: c.req, ticket });
-          },
-          (err) => this.send(slot, { k: 'ticket', req: c.req, ticket: null, error: (err as Error).message }),
-        );
-        return;
-      }
-      case 'released':
-        d.stakedBots?.released(c.ticket, c.reason, c.item);
-        return;
       case 'stats': {
         slot.load = { ...c.load, restarts: slot.restarts, up: true };
         slot.roomLoads = c.roomLoads;
@@ -545,17 +519,6 @@ export class WorkerPool {
     }
     const hang = this.deps.hangMs ?? HANG_MS_DEFAULT;
     for (const s of this.slots) if (!s.dead && now - s.lastMsgAt > hang) this.lost(s, `no message for ${Math.round((now - s.lastMsgAt) / 1000)} s (hung)`);
-    // staked-bot targets per arena, for the workers' rooms
-    const src = this.deps.stakedBots;
-    if (src) {
-      const wanted: Record<number, number> = {};
-      for (const r of this.rooms.values()) if (r.opts.stake) wanted[r.opts.stake.arenaId] = src.wanted(r.opts.stake.arenaId);
-      const key = JSON.stringify(wanted);
-      if (key !== this.lastWanted) {
-        this.lastWanted = key;
-        this.broadcast({ k: 'wanted', wanted });
-      }
-    }
   }
 
   /**
@@ -807,12 +770,8 @@ export class RemoteRoom implements RoomHandle {
     return this.summary ? this.summary.mapScale : this.opts.map ? { ...this.opts.map.scale } : null;
   }
 
-  botCounts(): { humans: number; bots: number; stakedBots: number } {
-    return { humans: this.humanCount, bots: this.summary?.bots ?? 0, stakedBots: this.summary?.stakedBots ?? 0 };
-  }
-
-  setBotOptions(opts: BotManagerOptions): void {
-    this.pool.send(this.slot, { k: 'bots', hid: this.hid, opts });
+  botCounts(): { humans: number; bots: number } {
+    return { humans: this.humanCount, bots: this.summary?.bots ?? 0 };
   }
 
   setMapScale(scale: MapScaleSettings): void {
@@ -822,6 +781,10 @@ export class RemoteRoom implements RoomHandle {
   /** Done for every room at once (`WorkerPool.clearAvatar`); the count is not known here. */
   clearAvatar(_wallet: string): number {
     return 0;
+  }
+
+  closingSoon(endsAt: number, message: string): void {
+    this.pool.send(this.slot, { k: 'closing', hid: this.hid, endsAt, message });
   }
 
   announce(text: string): void {

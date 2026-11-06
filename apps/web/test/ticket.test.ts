@@ -4,15 +4,17 @@ import { erc20Abi, type Address } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { openSessionOf } from '../src/wallet/chain';
 import {
+  arenaRates,
   buildTickets,
-  feeBps,
   ledgerToBase,
   planErrorName,
   quickPlayTarget,
   sessionKey,
   sessionsToCollect,
   ticketGate,
+  ticketRates,
   ticketSteps,
+  sameRates,
   approveAmount,
   approveMode,
   type GateInput,
@@ -108,15 +110,29 @@ describe('the ticket calls (approve, then join)', () => {
 
   it('keys a session the way the server journals it', () => {
     expect(sessionKey(3, ALICE, 12n)).toBe(`3:${ALICE.toLowerCase()}:12`);
-    const open = openSessionOf({ arenaId: 3, player: ALICE, id: 12n, entryFee: ONE, openedAt: 5, feeBps: 500, finalized: false, owed: 0n });
+    const open = openSessionOf({ arenaId: 3, player: ALICE, id: 12n, entryFee: ONE, openedAt: 5, burnBps: 1500, vaultBps: 500, finalized: false, owed: 0n });
     expect(open).toMatchObject({ key: `3:${ALICE.toLowerCase()}:12`, id: 12n, openedAt: 5 });
-    expect(openSessionOf({ arenaId: 3, player: ALICE, id: 0n, entryFee: 0n, openedAt: 0, feeBps: 0, finalized: false, owed: 0n })).toBeNull();
+    expect(openSessionOf({ arenaId: 3, player: ALICE, id: 0n, entryFee: 0n, openedAt: 0, burnBps: 0, vaultBps: 0, finalized: false, owed: 0n })).toBeNull();
   });
 
-  it("the fee shown is the server's feeBps, then the loaded config, then the 5 % default", () => {
-    expect(feeBps(450, { feeBps: 300 })).toBe(450);
-    expect(feeBps(null, { feeBps: 300 })).toBe(300);
-    expect(feeBps(undefined)).toBe(500);
+  it("the fee rates shown are the server's, then the loaded config, then the contract defaults (15 % + 5 % of profit)", () => {
+    expect(arenaRates({ burnBps: 1000, vaultBps: 300 }, { burnBps: 1, vaultBps: 2 })).toEqual({ burnBps: 1000, vaultBps: 300 });
+    expect(arenaRates(null, { burnBps: 1, vaultBps: 2 })).toEqual({ burnBps: 1, vaultBps: 2 });
+    expect(arenaRates(undefined)).toEqual({ burnBps: 1500, vaultBps: 500 });
+  });
+
+  it('a holder ticket gets the holder pair only while the perks are on and it totals less (ElymumArena._ratesFor)', () => {
+    const normal = { burnBps: 1500, vaultBps: 500 };
+    const cfg = { holderNft: '0xnft', holderBurnBps: 1500, holderVaultBps: 0 };
+    expect(ticketRates(normal, cfg, true)).toEqual({ rates: { burnBps: 1500, vaultBps: 0 }, discount: true });
+    expect(ticketRates(normal, cfg, false)).toEqual({ rates: normal, discount: false });
+    expect(ticketRates(normal, cfg, null)).toEqual({ rates: normal, discount: false });
+    expect(ticketRates(normal, { ...cfg, holderNft: null }, true)).toEqual({ rates: normal, discount: false });
+    // a holder pair that is not lower never applies
+    expect(ticketRates({ burnBps: 1000, vaultBps: 0 }, cfg, true)).toEqual({ rates: { burnBps: 1000, vaultBps: 0 }, discount: false });
+    expect(ticketRates(normal, { ...cfg, holderBurnBps: 2000 }, true)).toEqual({ rates: normal, discount: false });
+    expect(sameRates({ burnBps: 1, vaultBps: 2 }, { burnBps: 1, vaultBps: 2 })).toBe(true);
+    expect(sameRates({ burnBps: 1, vaultBps: 2 }, { burnBps: 2, vaultBps: 1 })).toBe(false);
   });
 });
 

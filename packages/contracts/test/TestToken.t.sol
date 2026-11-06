@@ -11,9 +11,6 @@ contract TestTokenTest is Test {
     address internal owner = makeAddr("owner");
     address internal alice = makeAddr("alice");
     address internal bob = makeAddr("bob");
-    address internal minter = makeAddr("minter");
-
-    event MinterSet(address indexed minter, bool allowed);
     event HolderNftSet(address indexed nft);
     event FaucetSet(uint256 amount, uint256 holderAmount, uint64 cooldown);
     event FaucetClaimed(address indexed to, uint256 amount, bool holder);
@@ -72,39 +69,19 @@ contract TestTokenTest is Test {
         assertEq(t.HOLDER_FAUCET_AMOUNT(), 2_000_000 ether);
         assertEq(t.faucetCooldown(), 1 hours);
         assertEq(t.holderNft(), address(0));
-        assertFalse(t.isMinter(minter));
         (uint256 amount, uint256 next) = t.faucetInfo(alice);
         assertEq(amount, 1_000_000 ether);
         assertEq(next, 0);
     }
 
-    function test_minters() public {
-        vm.prank(minter);
-        vm.expectRevert(_unauthorized(minter));
-        t.mint(alice, 1);
-
+    function test_burn() public {
+        vm.prank(owner);
+        t.mint(alice, 10 ether);
+        uint256 supply = t.totalSupply();
         vm.prank(alice);
-        vm.expectRevert(_unauthorized(alice));
-        t.setMinter(minter, true);
-
-        vm.expectEmit(address(t));
-        emit MinterSet(minter, true);
-        vm.prank(owner);
-        t.setMinter(minter, true);
-        assertTrue(t.isMinter(minter));
-        vm.prank(minter);
-        t.mint(alice, 7 ether);
-        assertEq(t.balanceOf(alice), 7 ether);
-
-        vm.prank(owner);
-        t.setMinter(minter, false);
-        vm.prank(minter);
-        vm.expectRevert(_unauthorized(minter));
-        t.mint(alice, 1);
-        // The owner can always mint.
-        vm.prank(owner);
-        t.mint(bob, 1);
-        assertEq(t.balanceOf(bob), 1);
+        t.burn(4 ether);
+        assertEq(t.balanceOf(alice), 6 ether);
+        assertEq(t.totalSupply(), supply - 4 ether);
     }
 
     function test_faucet_holderGetsDouble() public {

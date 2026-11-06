@@ -1,4 +1,4 @@
-import { isMainnet, type ChainInfo, type ChainStatus } from '@elymum/shared';
+import { isTestChainId, type ChainInfo, type ChainStatus } from '@elymum/shared';
 import { getAddress, isAddress, type Address } from 'viem';
 import { isDevFake } from '../wallet/devFakeLoader';
 import { fetchServerChain, serverChainInfo } from '../wallet/network';
@@ -14,7 +14,7 @@ export interface AdminNetwork {
   chain: ChainStatus | null;
   /** `chainInfo` of the server's chain (null while it is off or unknown). */
   info: ChainInfo | null;
-  /** Elysium mainnet (every chain id that is not the testnet or the localnet). */
+  /** A mainnet (every chain id the registry does not mark as a testnet or a localnet). */
   mainnet: boolean;
   /** The game server's signing key (`ChainStatus.serverKey`), null when unknown. */
   serverKey: Address | null;
@@ -32,7 +32,7 @@ export function resolveNetwork(chain: ChainStatus | null): AdminNetwork {
   return {
     chain,
     info,
-    mainnet: info ? isMainnet(info.id) : false,
+    mainnet: info ? !isTestChainId(info.id) : false,
     serverKey: addr(chain?.serverKey),
     arenaAddress: addr(chain?.arenaAddress),
     nftAddress: addr(chain?.nftAddress),

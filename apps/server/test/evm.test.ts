@@ -1,8 +1,9 @@
 /**
  * The EVM gateway against a real chain: spawns `hardhat node` (from @elymum/contracts) on a free port,
  * deploys the TestToken and the arena with the SDK, then runs `EvmChain` through the money paths:
- * waiting for contracts → token set → join (real tickets) → one settle batch (fees checked) → loot
- * burn with a sweep id → the stale-session sweeper settling unplayed tickets at their entry fee.
+ * waiting for contracts → token set → join (real tickets) → one settle batch (the fee on profit: burned + to the
+ * fee wallet) → the token's own burn() in burn mode 1 → loot burn with a sweep id → the stale-session sweeper
+ * cancelling unplayed tickets (the full entry fee back).
  *
  * Skips itself when the node does not start within 40 s (e.g. Hardhat is not installed). The child process
  * group is killed when the suite ends or the process exits.
@@ -21,19 +22,19 @@ import {
   deployArena,
   deployTestToken,
   deployedAddress,
-  elysiumChain,
+  viemChain,
   faucetCall,
   getArena,
   getSession,
   getTokenBalance,
   planJoin,
   sendCall,
-  setArenaHoldersOnlyCall,
+  setBurnModeCall,
+  testTokenAbi,
   setTokenCall,
-  testTokenSetMinterCall,
   type ContractCall,
 } from '@elymum/sdk';
-import { PlayerFlag, TICK_MS, roundAt } from '@elymum/shared';
+
 import type { Address, PublicClient, WalletClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -41,13 +42,6 @@ import { EvmChain, type ContractsView } from '../src/chain/evm';
 import { sessionKey, type SettledEvent } from '../src/chain/types';
 import { loadConfig } from '../src/config';
 import { Journal, sweepKey, type SettlementItem } from '../src/stake/journal';
-import { BotSettingsStore, defaultBotSettings } from '../src/bots/settings';
-import { TestnetBotSource } from '../src/bots/testnet-source';
-import type { Player } from '../src/game/entities';
-import type { EvmClient } from '../src/chain/evm-client';
-import { Room } from '../src/rooms/room';
-import { RoundClock } from '../src/rooms/round-clock';
-import { fakeConn, roomDeps } from './helpers';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const KEYS = [
@@ -132,7 +126,7 @@ beforeAll(async () => {
     console.warn('evm.test: hardhat node did not start within 40 s; skipping');
     return;
   }
-  const chain = elysiumChain(31337, { rpcUrl: url });
+  const chain = viemChain(31337, { rpcUrl: url });
   client = createElymumPublicClient(url, chain, { pollingInterval: 50 });
   for (const a of [admin, server, p1, p2, feeWallet]) wallets.set(a.address, createElymumWalletClient(url, { account: a, chain, pollingInterval: 50 }));
 }, 60_000);
@@ -179,7 +173,7 @@ describe('EvmChain on a hardhat node', () => {
     chain.onStatusChange(() => changes++);
     await chain.refresh();
     expect(changes).toBe(1);
-    expect(chain.status()).toMatchObject({ tokenReady: true, arenasEnabled: true, token: { address: token, decimals: 18 }, feeBps: 500, feeModel: 'entry' });
+    expect(chain.status()).toMatchObject({ tokenReady: true, arenasEnabled: true, token: { address: token, decimals: 18 }, fees: { burnBps: 1500, vaultBps: 500, paymentBurnBps: 5000, burnMode: 0 } });
     expect((await chain.listArenas(true)).map((a) => [a.id, a.entryFee])).toEqual([
       [1, K],
       [2, 10 * K],
@@ -190,7 +184,7 @@ describe('EvmChain on a hardhat node', () => {
     expect(chain.serverInfo()).toMatchObject({ address: server.address, low: false });
   }, 60_000);
 
-  it('real tickets: join, then one settle batch pays both players and the fee wallet', async (ctx) => {
+  it('real tickets: join, then one settle batch pays the winner less the fee on its profit (burned + fee wallet)', async (ctx) => {
     if (!up) return ctx.skip();
     for (const p of [p1, p2]) {
       await send(p.address, faucetCall(token));
@@ -198,8 +192,8 @@ describe('EvmChain on a hardhat node', () => {
     }
     const s1 = (await chain.getSession(1, p1.address))!;
     const s2 = (await chain.getSession(1, p2.address.toLowerCase()))!;
-    // the bundled (v2) arena reserves the 5 % fee at the entry: the ticket plays 950
-    expect(s1).toMatchObject({ key: sessionKey(1, p1.address, s1.id), player: p1.address, entryFee: K, value: 950 * 1e6, feeBps: 500, finalized: false });
+    // arena v3: no entry fee, the ticket plays its whole 1,000; its fee rates on profit are fixed at the join
+    expect(s1).toMatchObject({ key: sessionKey(1, p1.address, s1.id), player: p1.address, entryFee: K, value: K, rates: { burnBps: 1500, vaultBps: 500 }, finalized: false });
     expect(s2.id).toBe(s1.id + 1);
     const before1 = await getTokenBalance(client, token, p1.address);
     const item = (s: typeof s1, payout: number, createdAt: number): SettlementItem => ({
@@ -218,30 +212,54 @@ describe('EvmChain on a hardhat node', () => {
       nextAttemptAt: 0,
       createdAt,
     });
-    // p1 ate half of p2: 1,425 / 475 tokens (the two tickets played 950 each)
-    journal.commit({ enqueue: [item(s1, 1_425 * 1e6, 1), item(s2, 475 * 1e6, 2)] });
+    // p1 ate half of p2: 1,500 / 500 tokens
+    journal.commit({ enqueue: [item(s1, 1_500 * 1e6, 1), item(s2, 500 * 1e6, 2)] });
     await chain.processPending();
     expect(journal.pending).toHaveLength(0);
-    // both paid 5 % of their entry; nothing is deducted from a payout
-    expect(settled.map((e) => [e.player, e.payout, e.fee])).toEqual([
-      [p1.address, 1_425 * 1e6, 50 * 1e6],
-      [p2.address, 475 * 1e6, 50 * 1e6],
+    // p1's profit of 500: 75 burned, 25 to the fee wallet, 1,400 to p1; p2 lost and pays nothing
+    expect(settled.map((e) => [e.player, e.payout, e.fee, e.burned, e.toVault, e.net])).toEqual([
+      [p1.address, 1_500 * 1e6, 100 * 1e6, 75 * 1e6, 25 * 1e6, 1_400 * 1e6],
+      [p2.address, 500 * 1e6, 0, 0, 0, 500 * 1e6],
     ]);
     expect(settled[0].txHash).toBe(settled[1].txHash); // one batch
-    expect(await getTokenBalance(client, token, p1.address)).toBe(before1 + 1_425n * T);
-    expect(await getTokenBalance(client, token, feeWallet.address)).toBe(100n * T);
+    expect(await getTokenBalance(client, token, p1.address)).toBe(before1 + 1_400n * T);
+    expect(await getTokenBalance(client, token, feeWallet.address)).toBe(25n * T);
+    expect(await getTokenBalance(client, token, BURN_ADDRESS)).toBe(75n * T);
     expect((await getSession(client, arena, 1, p1.address)).id).toBe(0n);
     expect((await getArena(client, arena, 1)).vault).toBe(0n);
+  }, 60_000);
+
+  it('burn mode 1: the fee burn uses the token\'s own burn() (the supply falls, nothing goes to 0x…dEaD)', async (ctx) => {
+    if (!up) return ctx.skip();
+    await send(admin.address, setBurnModeCall(arena, 1));
+    await chain.refresh();
+    expect(chain.status().fees?.burnMode).toBe(1);
+    const supply = async () => (await client.readContract({ address: token, abi: testTokenAbi, functionName: 'totalSupply' })) as bigint;
+    for (const p of [p1, p2]) for (const call of (await planJoin(client, { arena, arenaId: 1, player: p.address, token })).calls) await send(p.address, call);
+    const a = (await chain.getSession(1, p1.address))!;
+    const b = (await chain.getSession(1, p2.address))!;
+    const mk = (s: typeof a, payout: number, createdAt: number): SettlementItem => ({ kind: 'settle', key: s.key, player: s.player, arenaId: 1, session: s.key, sessionId: s.id, payout, score: 1, kills: 0, xp: 1, reason: 'round', attempts: 0, nextAttemptAt: 0, createdAt });
+    const dead0 = await getTokenBalance(client, token, BURN_ADDRESS);
+    const s0 = await supply();
+    journal.commit({ enqueue: [mk(a, 2_000 * 1e6, 5), mk(b, 0, 6)] });
+    await chain.processPending();
+    expect(journal.pending).toHaveLength(0);
+    expect(s0 - (await supply())).toBe(150n * T);
+    expect(await getTokenBalance(client, token, BURN_ADDRESS)).toBe(dead0);
+    await send(admin.address, setBurnModeCall(arena, 0));
+    await chain.refresh();
   }, 60_000);
 
   it('burns floor loot with a sweep id the journal assigned', async (ctx) => {
     if (!up) return ctx.skip();
     for (const call of (await planJoin(client, { arena, arenaId: 1, player: p1.address, token })).calls) await send(p1.address, call);
     const s = (await chain.getSession(1, p1.address))!;
-    // p1 lost 100 of its 950 to a bot (spilled as loot nobody picked up): paid 850, the loot is burned
+    const dead0 = await getTokenBalance(client, token, BURN_ADDRESS);
+    const burned0 = (await getArena(client, arena, 1)).totalBurned;
+    // 100 of p1's 1,000 spilled as loot nobody picked up: paid 900, the loot is burned
     journal.commit({
       enqueue: [
-        { kind: 'settle', key: s.key, player: s.player, arenaId: 1, session: s.key, sessionId: s.id, payout: 850 * 1e6, score: 1, kills: 0, xp: 1, reason: 'round', attempts: 0, nextAttemptAt: 0, createdAt: 3 },
+        { kind: 'settle', key: s.key, player: s.player, arenaId: 1, session: s.key, sessionId: s.id, payout: 900 * 1e6, score: 1, kills: 0, xp: 1, reason: 'round', attempts: 0, nextAttemptAt: 0, createdAt: 3 },
         { kind: 'sweep', key: sweepKey('arena-1-1', 9), arenaId: 1, roomId: 'arena-1-1', round: 9, amount: 100 * 1e6, attempts: 0, nextAttemptAt: 0, createdAt: 4 },
       ],
     });
@@ -249,8 +267,8 @@ describe('EvmChain on a hardhat node', () => {
     expect(journal.pending).toHaveLength(0);
     expect(journal.lastSweepId(1)).toBe(1);
     const a = await getArena(client, arena, 1);
-    expect(a).toMatchObject({ lastSweepId: 1n, totalBurned: 100n * T, vault: 0n, openSessions: 0 });
-    expect(await getTokenBalance(client, token, BURN_ADDRESS)).toBe(100n * T);
+    expect(a).toMatchObject({ lastSweepId: 1n, totalBurned: burned0 + 100n * T, vault: 0n, openSessions: 0 });
+    expect((await getTokenBalance(client, token, BURN_ADDRESS)) - dead0).toBe(100n * T);
     expect(logs.join('\n')).toMatch(/burned 100 \$ELYMUM loot of arena-1-1 \(round 9\) · sweep #1/);
   }, 60_000);
 
@@ -261,8 +279,8 @@ describe('EvmChain on a hardhat node', () => {
     skewMs = 3_600_000;
     const before2 = await getTokenBalance(client, token, p2.address);
     expect(await chain.sweepStale()).toBe(1); // every arena-1 ticket was settled: only p2's in arena 2
-    // the journal counts what leaves the vault (the ticket's 9,500 value); `cancel` returns the reserved fee too
-    expect(journal.settlements().map((s) => [s.player, s.arenaId, s.payout, s.reason])).toEqual([[p2.address, 2, 9_500 * 1e6, 'stale']]);
+    // the journal counts what leaves the vault: the whole 10,000 entry fee
+    expect(journal.settlements().map((s) => [s.player, s.arenaId, s.payout, s.reason])).toEqual([[p2.address, 2, 10_000 * 1e6, 'stale']]);
     const fees2 = await getTokenBalance(client, token, feeWallet.address);
     await chain.processPending();
     expect(journal.pending).toHaveLength(0);
@@ -274,237 +292,4 @@ describe('EvmChain on a hardhat node', () => {
     expect(await chain.sweepStale()).toBe(0);
     await chain.stop();
   }, 60_000);
-});
-
-/** Puts `eater` on top of `victim` until the victim dies. */
-function eat(room: Room, eater: Player, victim: Player): void {
-  eater.shieldUntil = 0;
-  victim.shieldUntil = 0;
-  eater.cells[0].setMass(400);
-  for (const c of eater.cells.slice(1)) c.setMass(1);
-  victim.cells[0].setMass(20);
-  for (const c of victim.cells.slice(1)) c.setMass(1);
-  eater.cells[0].x = victim.cells[0].x;
-  eater.cells[0].y = victim.cells[0].y;
-  room.world.setTarget(eater.id, victim.cells[0].x, victim.cells[0].y);
-  room.world.setTarget(victim.id, victim.cells[0].x, victim.cells[0].y);
-  for (let i = 0; i < 40 && victim.alive; i++) room.tick(TICK_MS);
-  expect(victim.alive).toBe(false);
-}
-
-describe('testnet staked bots on a hardhat node', () => {
-  it('bots are funded (minter + gas from the server key), buy real tickets, their value moves when eaten, and they settle at the bell', async (ctx) => {
-    if (!up) return ctx.skip();
-    const token = await deployedAddress(client, await deployTestToken(wallets.get(admin.address)!, { owner: admin.address }));
-    const arena = await deployedAddress(
-      client,
-      await deployArena(wallets.get(admin.address)!, { admin: admin.address, serverAuthority: server.address, feeWallet: feeWallet.address }),
-    );
-    await send(admin.address, setTokenCall(arena, token));
-    for (const call of createDefaultArenaCalls(arena, 18)) await send(admin.address, call);
-    const journal = new Journal(null);
-    const logs: string[] = [];
-    const cfg = loadConfig({ EVM_RPC_URL: url, SERVER_PRIVATE_KEY: KEYS[1], DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-bots-evm-')) } as unknown as NodeJS.ProcessEnv);
-    const chain = new EvmChain(cfg, journal, (m) => logs.push(m), { contracts: () => ({ arena, nft: null }), loops: false, receiptTimeoutMs: 20_000, stateChainId: 31337 });
-    await chain.start();
-    expect(chain.stakeEnabled).toBe(true);
-
-    // the one admin step: the server key becomes a TestToken minter (it funds the bot wallets)
-    await send(admin.address, testTokenSetMinterCall(token, server.address, true));
-    const settings = new BotSettingsStore(null, defaultBotSettings(cfg.bots));
-    settings.update({ testnet: { stakedPerArena: 2, bankroll: '5000', gasHype: '0.05' } });
-    const source = new TestnetBotSource({
-      chain: () => {
-        const st = chain.status();
-        return { chainId: st.chainId, stakeEnabled: chain.stakeEnabled, arena: st.arenaAddress, token: st.token };
-      },
-      client: () => chain.evm(),
-      serverKey: KEYS[1],
-      settings,
-      journal,
-      stateDir: mkdtempSync(join(tmpdir(), 'elymum-bots-state-')),
-      log: (m) => logs.push(m),
-      receiptTimeoutMs: 20_000,
-    });
-    const clock = { now: roundAt(1_791_000_000_000).startsAt + 60_000 };
-    const room = new Room(
-      { id: 'arena-1-1', mode: 'arena', name: 'Arena', instance: 1, maxPlayers: 50, bots: { target: 4, min: 0, max: 4 }, stake: { arenaId: 1, buyIn: K }, seed: 11 },
-      { ...roomDeps(chain, journal, () => clock.now), stakedBots: source },
-    );
-
-    // the room buys two tickets through the source (it asks at most every 3 s)
-    const deadline = Date.now() + 40_000;
-    while (room.bots!.stakedCount < 2 && Date.now() < deadline) {
-      room.tick(TICK_MS);
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    expect(room.bots!.stakedCount).toBe(2);
-    const staked = [...room.bots!.bots.values()].filter((b) => b.staked);
-    const [bot1, bot2] = staked.map((b) => b.staked!.stake.player as Address);
-    for (const b of [bot1, bot2]) {
-      expect((await getSession(client, arena, 1, b)).id).toBeGreaterThan(0n);
-      // bankroll 5,000 minted, one 1,000 ticket paid
-      expect(await getTokenBalance(client, token, b)).toBe(4_000n * T);
-      expect(await client.getBalance({ address: b })).toBeGreaterThan(0n);
-    }
-    expect(staked[0].player.flags).toBe(PlayerFlag.Bot | PlayerFlag.Staker);
-
-    // a human with a real ticket eats bot 1: its value moves to the human
-    await send(p1.address, faucetCall(token)).catch(() => undefined);
-    for (const call of (await planJoin(client, { arena, arenaId: 1, player: p1.address, token })).calls) await send(p1.address, call);
-    const s = (await chain.getSession(1, p1.address))!;
-    const human = room.join(fakeConn(p1.address), {
-      name: 'human',
-      skin: 1,
-      flags: PlayerFlag.Staker,
-      stake: { player: p1.address, session: s.key, sessionId: s.id, arenaId: 1, entryFee: s.entryFee, value: s.value, openedAt: s.openedAt },
-    });
-    eat(room, human, staked[0].player);
-    // both tickets played 950 (bots pay the 5 % fee like players)
-    expect(room.ledger!.value(human.id)).toBe(1_900 * 1e6);
-    expect(journal.settlements().find((i) => i.player === bot1)).toMatchObject({ reason: 'death', payout: 0 });
-
-    // the bell settles the human and bot 2 with everyone; the chain worker pays out in one pass
-    const before1 = await getTokenBalance(client, token, p1.address);
-    clock.now += 5 * 60_000;
-    room.tick(TICK_MS);
-    expect(journal.settlements().filter((i) => i.reason === 'round').map((i) => [i.player, i.payout]).sort()).toEqual(
-      [
-        // the human won 950: 20 % of that is the cut (142.5 burned, 47.5 kept in the vault); bot 2 broke even
-        [p1.address, 1_710 * 1e6],
-        [bot2, 950 * 1e6],
-      ].sort(),
-    );
-    await chain.processPending();
-    expect(journal.pending).toHaveLength(0);
-    expect(await getTokenBalance(client, token, p1.address)).toBe(before1 + 1_710n * T);
-    expect(await getTokenBalance(client, token, bot1)).toBe(4_000n * T);
-    expect(await getTokenBalance(client, token, bot2)).toBe(4_950n * T);
-    for (const b of [bot1, bot2, p1.address]) expect((await getSession(client, arena, 1, b)).id).toBe(0n);
-    // the burn share went out with the round's sweep; the vault share stays as the team's reserve
-    expect((await getArena(client, arena, 1)).vault).toBe((475n * T) / 10n);
-    expect((await getArena(client, arena, 1)).totalBurned).toBe((1425n * T) / 10n);
-    expect(journal.houseByArena(1)).toBe(47.5 * 1e6);
-    await chain.stop();
-  }, 120_000);
-  it('three short rounds in a row: bots re-buy every round on the same wallets, survive an RPC failure, skip the holders-only arena', async (ctx) => {
-    if (!up) return ctx.skip();
-    const token = await deployedAddress(client, await deployTestToken(wallets.get(admin.address)!, { owner: admin.address }));
-    const arena = await deployedAddress(
-      client,
-      await deployArena(wallets.get(admin.address)!, { admin: admin.address, serverAuthority: server.address, feeWallet: feeWallet.address }),
-    );
-    await send(admin.address, setTokenCall(arena, token));
-    for (const call of createDefaultArenaCalls(arena, 18)) await send(admin.address, call);
-    await send(admin.address, setArenaHoldersOnlyCall(arena, 4, true));
-    await send(admin.address, testTokenSetMinterCall(token, server.address, true));
-    const journal = new Journal(null);
-    const logs: string[] = [];
-    const cfg = loadConfig({ EVM_RPC_URL: url, SERVER_PRIVATE_KEY: KEYS[1], DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-bots-rounds-')) } as unknown as NodeJS.ProcessEnv);
-    const chain = new EvmChain(cfg, journal, (m) => logs.push(m), { contracts: () => ({ arena, nft: null }), loops: false, receiptTimeoutMs: 20_000, stateChainId: 31337 });
-    await chain.start();
-    expect(chain.stakeEnabled).toBe(true);
-
-    const ROUND = { roundMs: 120_000, closeMs: 10_000 };
-    const clock = { now: roundAt(1_791_000_000_000, ROUND.roundMs, ROUND.closeMs).startsAt + 1_000 };
-    const roundClock = new RoundClock(() => clock.now, ROUND);
-    let rooms: Room[] = [];
-    // an RPC that fails on demand (the session read of the next purchase)
-    let failSessions = 0;
-    const flaky = (c: EvmClient | null): EvmClient | null =>
-      c &&
-      new Proxy(c, {
-        get(target, prop) {
-          const v = Reflect.get(target, prop, target);
-          if (prop === 'session')
-            return async (...a: Parameters<EvmClient['session']>) => {
-              if (failSessions > 0) {
-                failSessions--;
-                throw new Error('RPC Request failed.');
-              }
-              return target.session(...a);
-            };
-          return typeof v === 'function' ? v.bind(target) : v;
-        },
-      });
-    const settings = new BotSettingsStore(null, defaultBotSettings(cfg.bots));
-    settings.update({ testnet: { stakedPerArena: 2, bankroll: '5000', gasHype: '0.05' } });
-    const source = new TestnetBotSource({
-      chain: () => {
-        const st = chain.status();
-        return { chainId: st.chainId, stakeEnabled: chain.stakeEnabled, arena: st.arenaAddress, token: st.token };
-      },
-      client: () => flaky(chain.evm()),
-      serverKey: KEYS[1],
-      settings,
-      journal,
-      stateDir: mkdtempSync(join(tmpdir(), 'elymum-bots-rounds-state-')),
-      log: (m) => logs.push(m),
-      receiptTimeoutMs: 20_000,
-      now: () => clock.now,
-      joinsOpen: () => clock.now < roundClock.window().joinsCloseAt,
-      liveSessions: () => new Set(rooms.flatMap((r) => r.liveSessions())),
-    });
-    const deps = { ...roomDeps(chain, journal, () => clock.now), round: ROUND, clock: roundClock, stakedBots: source, stakedAskMs: 0 };
-    const make = (id: number, buyIn: number) =>
-      new Room({ id: `arena-${id}-1`, mode: 'arena', name: `Arena ${id}`, instance: 1, maxPlayers: 50, bots: { target: 4, min: 0, max: 4 }, stake: { arenaId: id, buyIn }, seed: 20 + id }, deps);
-    const r1 = make(1, K);
-    const r4 = make(4, 250 * K);
-    rooms = [r1, r4];
-    // nobody watching for longer than the sleep delay (the production case): arenas with bots keep playing
-    for (const r of rooms) r.lastActivity = 0;
-    expect(r1.sleeping || r4.sleeping).toBe(false);
-    const tick = () => {
-      for (const r of rooms) r.tick(TICK_MS);
-    };
-    const until = async (cond: () => boolean) => {
-      const deadline = Date.now() + 40_000;
-      while (!cond() && Date.now() < deadline) {
-        clock.now += 100;
-        tick();
-        await new Promise((r) => setTimeout(r, 25));
-      }
-      expect(cond()).toBe(true);
-    };
-    const bought = () => logs.filter((l) => /bought a ticket in arena #\d/.test(l));
-
-    const walletsSeen = new Set<string>();
-    for (let round = 1; round <= 3; round++) {
-      const w = roundClock.window();
-      const before = bought().length;
-      if (round === 2) failSessions = 1;
-      await until(() => r1.bots!.stakedCount === 2);
-      expect(bought().length - before).toBe(2);
-      const bots = [...r1.bots!.bots.values()].filter((b) => b.staked).map((b) => b.staked!.stake.player as Address);
-      for (const b of bots) {
-        walletsSeen.add(b);
-        expect((await getSession(client, arena, 1, b)).id).toBeGreaterThan(0n);
-      }
-      // the holders-only arena: zero-value bots only, never a ticket
-      expect(r4.bots!.stakedCount).toBe(0);
-      expect(r4.bots!.bots.size).toBeGreaterThan(0);
-      expect(r1.bots!.bots.size).toBeLessThanOrEqual(4);
-
-      // the bell: both bots settled at their value, the chain worker pays them in one pass
-      const settledBefore = journal.settlements().length;
-      clock.now = w.endsAt + 100;
-      tick();
-      expect(r1.round()!.n).toBe(w.n + 1);
-      expect(journal.settlements().length - settledBefore).toBe(2);
-      expect(journal.settlements().every((i) => i.reason === 'round')).toBe(true);
-      await chain.processPending();
-      expect(journal.pending.filter((p) => p.kind === 'settle')).toHaveLength(0);
-      for (const b of bots) expect((await getSession(client, arena, 1, b)).id).toBe(0n);
-      // the zero-value squad left with the bell and walks back in over the next seconds
-    }
-    // 3 rounds × 2 tickets on the same 2 wallets (settled, reused: no churn), the RPC failure retried
-    expect(bought()).toHaveLength(6);
-    expect(walletsSeen.size).toBe(2);
-    expect(source.addresses()).toHaveLength(2);
-    expect(logs.join('\n')).toMatch(/ticket for arena #1 failed \(RPC Request failed\.\); retrying/);
-    expect(logs.filter((l) => /arena #4/.test(l))).toEqual([expect.stringMatching(/holders-only and no bot wallet holds an emblem/)]);
-    expect((await getArena(client, arena, 4)).openSessions).toBe(0);
-    expect((await getArena(client, arena, 1)).openSessions).toBe(0);
-    await chain.stop();
-  }, 180_000);
 });

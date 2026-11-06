@@ -1,3 +1,4 @@
+import { bpsToPercent, totalFeeBps } from '@elymum/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -26,7 +27,7 @@ import { useT, type TKey } from '../../i18n';
 import { ProfileCard } from '../../wallet/ProfileCard';
 import { signInWithWallet } from '../../wallet/signIn';
 import { TicketFlow, type FlowMode } from '../../wallet/TicketFlow';
-import { bpsPercent, feeBps, feeModelOf, sessionsToCollect, type TicketKey } from '../../wallet/ticket';
+import { arenaRates, sessionsToCollect, type TicketKey } from '../../wallet/ticket';
 import { WalletButton } from '../../wallet/WalletButton';
 import { BOOST_PATH } from '../game/BoostBar';
 import { goPage, openModal, updateSettings, useUi, type LobbyPage } from '../../store';
@@ -40,6 +41,7 @@ import { PendingBanner } from './PendingBanner';
 import { QuickPlay } from './QuickPlay';
 import { SplitFlap } from './SplitFlap';
 import { TicketList } from './TicketList';
+import { PracticeQuiet, QUIET_BELOW } from '../../rooms/PracticeQuiet';
 import { useLobbyModel, useMedia } from './useLobby';
 import { RoomCard } from '../../rooms/RoomCard';
 import { PaidSeatBanner } from '../../rooms/PaidSeatBanner';
@@ -217,13 +219,15 @@ export function Lobby() {
           onActivate={act}
           punched={punched}
         />
+        {/* the ponds are people only: an honest word when they are quiet, and one click to practice with bots */}
+        {ticket?.arenaId === null && ticket.humans < QUIET_BELOW && <PracticeQuiet />}
         {mid && (
           <div className="kl-cta-slot">
             <QuickPlay ticket={ticket} gate={gate} onPress={act} busy={!connected} />
           </div>
         )}
       </div>
-      {/* a private room with your own rules, for a small HYPE fee; join one by code */}
+      {/* a private room with your own rules, for a small gas-token fee; join one by code */}
       <RoomCard />
     </section>
   );
@@ -315,7 +319,7 @@ function Plate({ page, inline }: { page: LobbyPage; inline: boolean }) {
   const chain = useUi((st) => st.chain);
   const items = [
     chain?.enabled ? (chain.tokenReady ? t('lo.arenasOpen') : t('lo.arenasSoon')) : null,
-    chain?.enabled ? t(feeModelOf(chain) === 'profit' ? 'lo.feeDate.profit' : 'lo.feeDate', { pct: bpsPercent(feeBps(chain.feeBps)) }) : null,
+    chain?.enabled ? t('lo.feeDate', { pct: bpsToPercent(totalFeeBps(arenaRates(chain.fees))) }) : null,
     connected ? t('lo.online', { n: online }) : t('lo.live.connecting'),
   ].filter((x): x is string => x !== null);
   const titles: Record<LobbyPage, TKey> = { play: 'lo.plate.play', ranks: 'lo.plate.ranks', profile: 'lo.plate.profile', docs: 'lo.plate.docs' };

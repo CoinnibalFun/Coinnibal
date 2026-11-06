@@ -24,13 +24,13 @@ function keeper(evm: FakeEvm | null, price: string | Error | (() => string | Err
 function keptEvm(): FakeEvm {
   const evm = new FakeEvm();
   evm.mint.keeper = SERVER;
-  evm.mint.minPrice = WEI / 1000n; // 0.001 HYPE
-  evm.mint.maxPrice = WEI / 10n; // 0.1 HYPE
+  evm.mint.minPrice = WEI / 1000n; // 0.001 ETH
+  evm.mint.maxPrice = WEI / 10n; // 0.1 ETH
   evm.mint.price = 25n * 10n ** 15n; // $1 at $40
   return evm;
 }
 
-describe('price keeper ($1 in HYPE)', () => {
+describe('price keeper ($1 in the gas token)', () => {
   it('does nothing without a chain or an NFT', async () => {
     expect(await keeper(null).k.tick()).toBe('off');
     expect(await keeper(new FakeEvm(), '40', { nft: null }).k.tick()).toBe('off');
@@ -54,20 +54,20 @@ describe('price keeper ($1 in HYPE)', () => {
 
   it('re-prices when off by more than 2 % on two consecutive readings, and logs it', async () => {
     const evm = keptEvm();
-    const { k, logs } = keeper(evm, '50'); // $1 = 0.02 HYPE now (20 % lower)
+    const { k, logs } = keeper(evm, '50'); // $1 = 0.02 ETH now (20 % lower)
     // a single reading never moves the price
     expect(await k.tick()).toBe('unconfirmed');
     expect(evm.sent).toHaveLength(0);
     expect(await k.tick()).toBe('repriced');
     expect(evm.sent.map((c) => [c.functionName, c.args[0]])).toEqual([['setPrice', 2n * 10n ** 16n]]);
     expect(evm.mint.price).toBe(2n * 10n ** 16n);
-    expect(logs.join()).toMatch(/price keeper: HYPE \$50 → price 0.025 HYPE → 0.02 HYPE/);
+    expect(logs.join()).toMatch(/price keeper: ETH \$50 → price 0.025 ETH → 0.02 ETH/);
     expect(k.last).toBe('repriced');
   });
 
   it('moves at most 20 % per update and clamps the new price into the owner bounds', async () => {
     const evm = keptEvm();
-    const { k, logs } = keeper(evm, '5'); // $1 = 0.2 HYPE, above the 0.1 max
+    const { k, logs } = keeper(evm, '5'); // $1 = 0.2 ETH, above the 0.1 max
     expect(await k.tick()).toBe('unconfirmed');
     expect(await k.tick()).toBe('repriced');
     expect(evm.mint.price).toBe(3n * 10n ** 16n); // 0.025 × 1.2
@@ -111,7 +111,7 @@ describe('price keeper ($1 in HYPE)', () => {
     const evm = keptEvm();
     const { k, logs } = keeper(evm, new Error('HTTP 502'));
     expect(await k.tick()).toBe('no-price');
-    expect(logs.join()).toMatch(/HYPE\/USD unavailable/);
+    expect(logs.join()).toMatch(/gas-token\/USD unavailable/);
     const bad = keptEvm();
     bad.failures.push(new TypeError('fetch failed'));
     const r = keeper(bad, '80');

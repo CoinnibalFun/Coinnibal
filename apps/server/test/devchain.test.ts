@@ -2,6 +2,7 @@ import type { AddressInfo } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
+import { profitFee } from '@elymum/shared';
 import { createChain, dataFileNames } from '../src/chain';
 import { DevFakeChain } from '../src/chain/dev-fake';
 import { NullChain, type SettledEvent } from '../src/chain/types';
@@ -47,7 +48,7 @@ describe('DEV_FAKE_CHAIN', () => {
     const cfg = loadConfig(env({ DEV_FAKE_CHAIN: '1', NODE_ENV: 'development' }));
     const chain = await createChain(cfg, new Journal(null), () => {});
     expect(chain).toBeInstanceOf(DevFakeChain);
-    expect(chain.status()).toMatchObject({ enabled: true, chainId: 31337, tokenReady: false, arenasEnabled: false, token: null, feeBps: 500 });
+    expect(chain.status()).toMatchObject({ enabled: true, chainId: 31337, tokenReady: false, arenasEnabled: false, token: null, fees: { burnBps: 1500, vaultBps: 500, paymentBurnBps: 5000 } });
     expect(chain.status().arenaAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
     expect(chain.tokenReady).toBe(false);
     expect(chain.stakeEnabled).toBe(false);
@@ -55,7 +56,7 @@ describe('DEV_FAKE_CHAIN', () => {
     await chain.stop();
 
     const ready = await createChain(loadConfig(env({ DEV_FAKE_CHAIN: '1', NODE_ENV: 'development', DEV_FAKE_TOKEN: '1' })), new Journal(null), () => {});
-    expect(ready.status()).toMatchObject({ tokenReady: true, arenasEnabled: true, token: { decimals: 18, symbol: '$ELYMUM' }, feeBps: 500 });
+    expect(ready.status()).toMatchObject({ tokenReady: true, arenasEnabled: true, token: { decimals: 18, symbol: '$ELYMUM' }, fees: { burnBps: 1500 } });
     expect(ready.status().token!.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
     // ledger units: 1,000 tokens of the first tier = 1e9 (6 ledger decimals), a safe JS number
     expect((await ready.listArenas()).map((a) => [a.id, a.entryFee])).toEqual([
@@ -177,10 +178,10 @@ describe('DEV_FAKE_CHAIN', () => {
     expect(events[0].payout).toBe(payout);
     expect(events[0].txHash).toMatch(/^0x[0-9a-f]{64}$/);
     expect(events[0].player).toBe(w);
-    // arena v2: the fee is 5 % of the entry fee (taken at the entry), the whole payout is the player's
-    expect(events[0].fee).toBe(Math.floor((s.entryFee * 500) / 10_000));
-    expect(events[0].feeOnEntry).toBe(true);
-    expect(s.value).toBe(s.entryFee - Math.floor((s.entryFee * 500) / 10_000));
+    // arena v3: no entry fee (the ticket plays its whole price); the fee is on the profit only
+    expect(s.value).toBe(s.entryFee);
+    const f = profitFee(s.entryFee, payout);
+    expect(events[0]).toMatchObject({ fee: f.fee, burned: f.burned, toVault: f.toVault, net: f.net });
     expect(journal.pending).toHaveLength(0);
     // the ticket closed: a new one is issued next time
     expect((await chain.getSession(1, w))!.id).not.toBe(s.id);
@@ -204,10 +205,20 @@ describe('settled message', () => {
     // late confirmations without fee / arena stay well-formed
     expect(settledMessage({ key: 'k2', player: 'P', txHash: tx, payout: 0 })).toEqual({ t: 'settled', kind: 'death', session: 'k2', txHash: tx, payout: 0 });
     expect(settledMessage({ key: 'k3', player: 'P', txHash: tx, payout: 50, fee: 0, collect: true })).toMatchObject({ collect: true, net: 50 });
-    // arena v2: the fee was the entry's, the whole payout reaches the wallet
-    expect(settledMessage({ key: 'k4', player: 'P', txHash: tx, payout: 300, fee: 10, feeOnEntry: true })).toMatchObject({ kind: 'payout', fee: 10, net: 300, feeOnEntry: true });
+    // the fee on profit, split into its burned and fee-wallet shares
+    expect(settledMessage({ key: 'k4', player: 'P', txHash: tx, payout: 2000, fee: 200, burned: 150, toVault: 50, net: 1800 })).toEqual({
+      t: 'settled',
+      kind: 'payout',
+      session: 'k4',
+      txHash: tx,
+      payout: 2000,
+      fee: 200,
+      burned: 150,
+      toVault: 50,
+      net: 1800,
+    });
     // a cancelled unplayed ticket: the full entry fee back
-    expect(settledMessage({ key: 'k5', player: 'P', txHash: tx, payout: 1000, fee: 0, feeOnEntry: true, refund: true })).toMatchObject({ kind: 'refund', net: 1000 });
+    expect(settledMessage({ key: 'k5', player: 'P', txHash: tx, payout: 1000, fee: 0, net: 1000, refund: true })).toMatchObject({ kind: 'refund', net: 1000 });
   });
 });
 

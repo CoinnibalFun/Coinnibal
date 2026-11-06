@@ -1,4 +1,4 @@
-import { BOOST_KEY_LABELS, SHOP_DEFAULTS, boostCooldownMs, type BoostKind, type ShopPack, type ShopView } from '@elymum/shared';
+import { BOOST_KEY_LABELS, BPS, DEFAULT_PAYMENT_BURN_BPS, SHOP_DEFAULTS, boostCooldownMs, bpsToPercent, type BoostKind, type ShopPack, type ShopView } from '@elymum/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Chip, Sheet, shortAddress } from '../../design';
 import { useT } from '../../i18n';
@@ -71,7 +71,7 @@ function PackCard({
 
 /**
  * The power-up shop (lobby and HUD): three packs priced for the signed-in wallet (holders see the
- * discount), each bought with one game-token transfer to the shop's sink; the server checks the
+ * discount), each paid to the arena contract (`pay`: half burned, half to the fee wallet); the server checks the
  * payment and the charges appear on the HUD at once. Guests are asked to sign in.
  */
 export function ShopSheet() {
@@ -206,9 +206,9 @@ export function ShopSheet() {
       )}
       {/* fine print at the end of the list: as a fixed footer it took three lines from the packs on
           short screens */}
-      {s?.sink && (
+      {s?.payTo && (
         <p className="sh-foot mono">
-          {t(s.sinkKind === 'burn' ? 'shop.sink.burn' : 'shop.sink.treasury', { addr: shortAddress(s.sink) })} {t('shop.keys')}
+          {t('shop.paySplit', { burn: bpsToPercent(s.burnBps ?? DEFAULT_PAYMENT_BURN_BPS), vault: bpsToPercent(BPS - (s.burnBps ?? DEFAULT_PAYMENT_BURN_BPS)), addr: shortAddress(s.payTo) })} {t('shop.keys')}
         </p>
       )}
     </Sheet>

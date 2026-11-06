@@ -25,6 +25,7 @@ const KIND_LABEL: Record<IntegrityFlagKind, string> = {
   shared_device: 'Shared IP or browser',
   bot_input: 'Bot-like input',
   bell_abuse: 'Round-bell pattern',
+  input_twin: 'Input twins (one script, two wallets)',
 };
 
 const STATUS_TONE: Record<IntegrityFlagStatus, 'sun' | 'up' | 'ink'> = { open: 'sun', reviewed: 'up', dismissed: 'ink' };
@@ -53,6 +54,9 @@ const THRESHOLD_LABEL: Record<keyof IntegrityThresholds, string> = {
   bellMinSessions: 'Bell: suspicious tickets',
   bellLateJoinMs: 'Bell: late join window (ms)',
   bellMinAfkShare: 'Bell: idle share',
+  twinMinInputs: 'Twins: inputs per wallet',
+  twinMaxJsd: 'Twins: max divergence (bits)',
+  twinMinRounds: 'Twins: rounds together',
 };
 
 const HOUR = 3_600_000;
@@ -270,6 +274,58 @@ function FlagSheet({
 /* Held settlements                                                    */
 /* ------------------------------------------------------------------ */
 
+/** The settlements waiting to be sent, each with a Hold button (shown while an arena's payouts are stopped). */
+function PendingList({ api, money, onChanged }: { api: IntegrityApi; money: (n: number) => string; onChanged: () => void }) {
+  const [items, setItems] = useState<IntegrityHeld[] | null>(null);
+  const [flashNode, flash] = useFlash();
+  useEffect(() => void api.pending().then(setItems, (e) => flash('err', errText(e))), [api, flash]);
+  const hold = async (h: IntegrityHeld) => {
+    const reason = window.prompt(`Hold ${money(h.payout)} for ${h.player}? Reason:`);
+    if (!reason) return;
+    try {
+      await api.hold(h.key, reason);
+      setItems(await api.pending());
+      onChanged();
+    } catch (e) {
+      flash('err', errText(e));
+    }
+  };
+  if (!items) return <StampSpinner label="Loading" />;
+  return (
+    <div className="ad-tablewrap">
+      {flashNode}
+      <table className="ad-table">
+        <thead>
+          <tr>
+            <th scope="col">Wallet</th>
+            <th scope="col">Arena</th>
+            <th scope="col">Payout</th>
+            <th scope="col">Last error</th>
+            <th scope="col">
+              <span className="kb-sr">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((h) => (
+            <tr key={h.key}>
+              <td className="mono">{shortW(h.player)}</td>
+              <td className="num">#{h.arenaId ?? '?'}</td>
+              <td className="num">{money(h.payout)}</td>
+              <td>{h.why}</td>
+              <td>
+                <InkButton variant="paper" size="sm" onClick={() => void hold(h)}>
+                  Hold
+                </InkButton>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function HeldCard({ api, held, money, onChanged }: { api: IntegrityApi; held: IntegrityHeld[]; money: (n: number) => string; onChanged: () => void }) {
   const [zero, setZero] = useState<IntegrityHeld | null>(null);
   const [reason, setReason] = useState('');
@@ -435,6 +491,17 @@ function SettingsCard({ api, overview, onSaved }: { api: IntegrityApi; overview:
         <span className="mono ad-cap">Hold score (50 to 100)</span>
         <input className="st-input" type="number" min={50} max={100} value={draft.holdScore} onChange={(e) => setDraft({ ...draft, holdScore: Number(e.target.value) })} />
       </label>
+      <label className="ad-int__field ad-int__narrow">
+        <span className="mono ad-cap">Pay undecided holds after (hours, 0 to 23; 0: never)</span>
+        <input
+          className="st-input"
+          type="number"
+          min={0}
+          max={23}
+          value={draft.autoReleaseHours}
+          onChange={(e) => setDraft({ ...draft, autoReleaseHours: Number(e.target.value) })}
+        />
+      </label>
       <details className="ad-more ad-int__details">
         <summary>Thresholds ({keys.length})</summary>
         <div className="ad-int__grid">
@@ -463,7 +530,7 @@ function SettingsCard({ api, overview, onSaved }: { api: IntegrityApi; overview:
           variant="pink"
           onClick={() => {
             if (draft.autoHold && !overview.settings.autoHold && !window.confirm('Turn auto-hold on? Risky payouts will wait for your decision in this tab.')) return;
-            void save({ autoHold: draft.autoHold, holdScore: draft.holdScore, thresholds: draft.thresholds }, 'Settings saved.');
+            void save({ autoHold: draft.autoHold, holdScore: draft.holdScore, autoReleaseHours: draft.autoReleaseHours, thresholds: draft.thresholds }, 'Settings saved.');
           }}
           disabled={busy || !dirty}
         >
@@ -607,6 +674,26 @@ export function IntegrityTab({ api: adminApi }: TabProps) {
         </p>
         {flashNode}
       </section>
+
+      {overview.books.length > 0 && (
+        <section className="ad-card" role="alert" aria-labelledby="ad-int-books-h">
+          <h2 className="ad-card__title" id="ad-int-books-h">
+            Payouts stopped
+          </h2>
+          <p className="ad-note">
+            The server stopped paying out of these arenas because the vault does not cover what the journal owes. Nothing leaves such a vault until the books add up again (the
+            stakes stay there; players can refund after 24 h). Look at the pending settlements of the arena, hold the wrong one and settle it at 0, or fix the vault.
+          </p>
+          <ul>
+            {overview.books.map((b) => (
+              <li key={b.arenaId} className="mono">
+                Arena #{b.arenaId}: {b.why}
+              </li>
+            ))}
+          </ul>
+          <PendingList api={api} money={money} onChanged={() => void loadOverview()} />
+        </section>
+      )}
 
       <HeldCard api={api} held={overview.held} money={money} onChanged={() => void loadOverview()} />
 

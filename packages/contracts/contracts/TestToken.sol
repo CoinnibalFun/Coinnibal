@@ -2,15 +2,16 @@
 pragma solidity 0.8.28;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {HolderCheck} from "./HolderCheck.sol";
 
 /// @title TestToken
-/// @notice Mintable ERC-20 for localnet and Elysium Testnet only ("Elymum Test Token", tELYMUM, 18 decimals).
-///         Anyone can take `faucetAmount` (default 1,000,000) from `faucet` once per `faucetCooldown` (default 1 h);
-///         holders of `holderNft` take `holderFaucetAmount` (default 2,000,000). The owner and the minters it
-///         appoints (`setMinter`, e.g. the game server key that funds testnet bots) can mint any amount.
-contract TestToken is ERC20, Ownable {
+/// @notice Faucet ERC-20 for localnets and testnets only ("Elymum Test Token", tELYMUM, 18 decimals). Burnable
+///         (ERC20Burnable), so a testnet arena can exercise `burn()`. Anyone can take `faucetAmount` (default
+///         1,000,000) from `faucet` once per `faucetCooldown` (default 1 h); holders of `holderNft` take
+///         `holderFaucetAmount` (default 2,000,000). The owner can mint any amount.
+contract TestToken is ERC20, ERC20Burnable, Ownable {
     /// @notice Default `faucetAmount`.
     uint256 public constant FAUCET_AMOUNT = 1_000_000 ether;
     /// @notice Default `holderFaucetAmount`.
@@ -29,10 +30,6 @@ contract TestToken is ERC20, Ownable {
 
     /// @notice Last faucet time per address (0 = never).
     mapping(address => uint256) public lastFaucetAt;
-    /// @notice Addresses allowed to `mint` besides the owner.
-    mapping(address => bool) public isMinter;
-
-    event MinterSet(address indexed minter, bool allowed);
     event HolderNftSet(address indexed nft);
     event FaucetSet(uint256 amount, uint256 holderAmount, uint64 cooldown);
     event FaucetClaimed(address indexed to, uint256 amount, bool holder);
@@ -87,15 +84,8 @@ contract TestToken is ERC20, Ownable {
         emit HolderNftSet(nft);
     }
 
-    /// @notice Grants or revokes the right to `mint`.
-    function setMinter(address minter, bool allowed) external onlyOwner {
-        isMinter[minter] = allowed;
-        emit MinterSet(minter, allowed);
-    }
-
-    /// @notice Mint by the owner or a minter. Anyone else gets `OwnableUnauthorizedAccount`.
-    function mint(address to, uint256 amount) external {
-        if (msg.sender != owner() && !isMinter[msg.sender]) revert OwnableUnauthorizedAccount(msg.sender);
+    /// @notice Mint by the owner.
+    function mint(address to, uint256 amount) external onlyOwner {
         _mint(to, amount);
     }
 }

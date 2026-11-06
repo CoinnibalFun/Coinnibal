@@ -49,10 +49,11 @@ const arena = (id: number, entryFee: bigint): ArenaInfo => ({
   totalDeposited: 0n,
   totalPaidOut: 0n,
   totalBurned: 0n,
+  totalFees: 0n,
   lastSweepId: 0n,
   holdersOnly: false,
 });
-const session = (o: Partial<SessionInfo> = {}): SessionInfo => ({ arenaId: 1, player: ALICE, id: 9n, entryFee: 1000n * ONE, openedAt: 1, feeBps: 500, finalized: false, owed: 0n, ...o });
+const session = (o: Partial<SessionInfo> = {}): SessionInfo => ({ arenaId: 1, player: ALICE, id: 9n, entryFee: 1000n * ONE, openedAt: 1, burnBps: 1500, vaultBps: 500, finalized: false, owed: 0n, ...o });
 const ui0 = useUi.getState();
 const chain0 = useChainData.getState();
 const config = () => ({ ...fakeConfig(CHAIN), address: ARENA as `0x${string}`, token: TOKEN as `0x${string}` });
@@ -72,7 +73,7 @@ beforeEach(() => {
     return { ok: true, hash: HASH, receipt: { status: 'success', logs: [] } };
   });
   resetWallets();
-  useWallet.setState({ status: 'connected', address: ALICE, chainId: 99801, current: detail(fakeProvider({ chainId: 99801, known: [99801] })) });
+  useWallet.setState({ status: 'connected', address: ALICE, chainId: 46630, current: detail(fakeProvider({ chainId: 46630, known: [46630] })) });
   useUi.setState({ settings: { ...ui0.settings, name: 'Daphne', skin: 4 }, chain: CHAIN });
   useChainData.setState({
     config: config(),
@@ -106,10 +107,11 @@ describe('ticket confirm sheet', () => {
     open(PENNY);
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getAllByText('1,000 $ELYMUM').length).toBeGreaterThan(0);
-    expect(within(dialog).getByText('5% of the entry fee · fixed for this ticket')).toBeTruthy();
-    // the coin starts at the entry minus the fee
-    expect(within(dialog).getByText('950 $ELYMUM')).toBeTruthy();
-    expect(within(dialog).getByText(/paid in HYPE on Elysium Testnet · you have 0.42 HYPE/)).toBeTruthy();
+    // arena v3: no entry fee; the fee is on profit only, split burned / fee wallet
+    expect(within(dialog).getByText('20% · on profit only · fixed for this ticket · 15% burned · 5% to the fee wallet')).toBeTruthy();
+    expect(within(dialog).queryByText('Your coin starts at')).toBeNull();
+    expect(within(dialog).getByText(/No profit, no fee/)).toBeTruthy();
+    expect(within(dialog).getByText(/paid in ETH on Robinhood Chain Testnet · you have 0.42 ETH/)).toBeTruthy();
     expect(within(dialog).getByText('12,450 → 11,450 $ELYMUM')).toBeTruthy();
     const steps = within(within(dialog).getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
     // no allowance yet: one approval for every ticket first, then the ticket
@@ -134,13 +136,15 @@ describe('ticket confirm sheet', () => {
     expect((screen.getByRole('checkbox', { name: /Approve only this ticket/ }) as HTMLInputElement).checked).toBe(true);
   });
 
-  it('the legacy fee-on-profit arena (v1, still on testnet until redeployed) keeps its own copy', () => {
-    act(() => useUi.setState({ chain: { ...useUi.getState().chain!, feeModel: 'profit' } }));
+  it("shows the server's live rates, and an emblem holder's lower pair against the normal one", () => {
+    act(() => useUi.setState({ chain: { ...useUi.getState().chain!, fees: { ...useUi.getState().chain!.fees!, burnBps: 1000, vaultBps: 200 } } }));
+    const view = open(PENNY);
+    expect(within(screen.getByRole('dialog')).getByText('12% · on profit only · fixed for this ticket · 10% burned · 2% to the fee wallet')).toBeTruthy();
+    view.unmount();
+    act(() => useUi.setState({ chain: chainStatus() }));
+    useChainData.setState({ holder: true, config: { ...config(), holderBurnBps: 1500, holderVaultBps: 0 } });
     open(PENNY);
-    const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('5% · on profit only · fixed for this ticket')).toBeTruthy();
-    expect(within(dialog).queryByText('Your coin starts at')).toBeNull();
-    expect(within(dialog).getByText(/No profit, no fee/)).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByText('15% · on profit only · fixed for this ticket · 15% burned · 0% to the fee wallet · holder rate, not 20%')).toBeTruthy();
   });
 
   it('one call only when the allowance already covers the entry fee', () => {
@@ -175,10 +179,10 @@ describe('ticket confirm sheet', () => {
     expect((screen.getByRole('button', { name: /^Pay / }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('warns when the wallet has no HYPE for gas', () => {
+  it('warns when the wallet has no ETH for gas', () => {
     useChainData.setState({ balance: 0n });
     open(PENNY);
-    expect(screen.getByText(/You have no HYPE on Elysium Testnet/)).toBeTruthy();
+    expect(screen.getByText(/You have no ETH on Robinhood Chain Testnet/)).toBeTruthy();
   });
 
   it('the collect sheet shows the payout and one refund call', () => {
@@ -244,8 +248,8 @@ describe('ticket flow: two prompts, progress and races', () => {
     expect(spies.planJoin).toHaveBeenCalledTimes(2);
   });
 
-  it('re-reads the config right before the wallet and refuses a changed fee rate', async () => {
-    spies.getArenaConfig.mockImplementation(async () => ({ ...config(), feeBps: 1_000 }));
+  it('re-reads the config right before the wallet and refuses changed fee rates', async () => {
+    spies.getArenaConfig.mockImplementation(async () => ({ ...config(), vaultBps: 1_000 }));
     open(PENNY);
     act(() => screen.getByRole('button', { name: /^Pay / }).click());
     await settle();

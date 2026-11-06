@@ -1,12 +1,12 @@
 import type { CustomRoomQuote, CustomRoomView } from '@elymum/shared';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CUSTOM_SETTINGS_DEFAULT } from '@elymum/shared';
 import { customRoomsPatch, feeLadder, feeText, roomKindText } from '../src/admin/CustomRoomsCard';
 import { arenaTarget, leavePaidSeat, openInvite, seatInPaidRoom } from '../src/rooms/invite';
 import { Kb } from '../src/design';
 import { RoomApiError, loadPendingPayment, roomLink, savePendingPayment } from '../src/rooms/api';
-import { RoomCreator, hypeText } from '../src/rooms/RoomCreator';
+import { RoomCreator, gasText } from '../src/rooms/RoomCreator';
 import { resetInviteLink, useInviteLink } from '../src/rooms/RoomCard';
 
 function Probe() {
@@ -42,7 +42,7 @@ const quote = (o: Partial<CustomRoomQuote> = {}): CustomRoomQuote => ({
   maxLive: 6,
   mine: 0,
   maxPerWallet: 2,
-  chainId: 99801,
+  chainId: 46630,
   capacityStepPct: 50,
   maxPlayers: 50,
   seatsLeft: 200,
@@ -77,7 +77,7 @@ const roomView = (o: Partial<CustomRoomView> = {}): CustomRoomView => ({
 const settle = () => act(async () => new Promise((r) => setTimeout(r, 30)));
 
 function signIn() {
-  useWallet.setState({ status: 'connected', address: ALICE, chainId: 99801, current: detail(fakeProvider({ chainId: 99801, known: [99801] })) });
+  useWallet.setState({ status: 'connected', address: ALICE, chainId: 46630, current: detail(fakeProvider({ chainId: 46630, known: [46630] })) });
   useUi.setState({ auth: { address: ALICE, token: 'tok', profile: null } });
 }
 
@@ -128,6 +128,10 @@ describe('the room creator', () => {
     expect(screen.getByTestId('cr-map-hint').textContent).toContain('9,000 x 9,000');
     fireEvent.click(screen.getByRole('button', { name: 'Large' }));
     fireEvent.click(screen.getByRole('button', { name: 'Many' }));
+    // practice bots are off by default; turned on, they come at the suggested count and the difficulty appears
+    expect(screen.queryByRole('group', { name: 'Bot difficulty' })).toBeNull();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Bots' })).getByRole('button', { name: 'On' }));
+    expect(screen.getByText(/tagged BOT, they carry no value/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Hard' }));
     fireEvent.click(screen.getByTestId('cr-continue'));
     await settle();
@@ -135,14 +139,14 @@ describe('the room creator', () => {
     expect(payment.textContent).toMatch(/60 min/);
     expect(payment.textContent).toMatch(/Large · many cacti/);
     expect(payment.textContent).toMatch(/none, pure fun/);
-    expect(payment.textContent).toMatch(/0\.05 HYPE/);
+    expect(payment.textContent).toMatch(/0\.05 ETH/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     fireEvent.click(screen.getByTestId('cr-pay')); // a double click never pays twice
     await settle();
     expect(spies.pay).toHaveBeenCalledTimes(1);
     expect(spies.pay.mock.calls[0][1]).toBe(TREASURY);
     expect(spies.pay.mock.calls[0][2]).toBe(PRICE);
-    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ name: 'Friday Pond', durationMin: 60, mapSize: 'L', difficulty: 'hard', traps: 'many' }), HASH);
+    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ name: 'Friday Pond', durationMin: 60, mapSize: 'L', bots: 6, difficulty: 'hard', traps: 'many' }), HASH);
     expect(screen.getByTestId('cr-code').textContent).toBe('AB2CD');
     expect((screen.getByLabelText('Invite link') as HTMLInputElement).value).toMatch(/\/play\?room=AB2CD$/);
     expect(loadPendingPayment(ALICE)).toBeNull();
@@ -241,7 +245,11 @@ describe('the room creator', () => {
     signIn();
     spies.create.mockResolvedValue({ room: roomView({ kind: 'paid', arenaId: 2, endsAt: Date.now() + 20 * 60_000 }), invite: 'http://localhost/play?room=AB2CD' });
     await open();
+    // bots on in a free room, then a ticket room: practice bots are for free rooms only (no control, none sent)
+    fireEvent.click(within(screen.getByRole('group', { name: 'Bots' })).getByRole('button', { name: 'On' }));
     fireEvent.click(screen.getByRole('button', { name: 'Ticket room' }));
+    expect(screen.queryByRole('group', { name: 'Bots' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Bot difficulty' })).toBeNull();
     const tiers = screen.getByRole('group', { name: 'Ticket price' });
     expect(tiers.querySelectorAll('button')).toHaveLength(2); // not the holders-only tier
     expect(tiers.querySelector('[aria-pressed="true"]')?.getAttribute('data-value')).toBe('1');
@@ -255,7 +263,7 @@ describe('the room creator', () => {
     expect(payment.textContent).toMatch(/never holds anyone's tokens/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
-    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ kind: 'paid', arenaId: 2 }), HASH);
+    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ kind: 'paid', arenaId: 2, bots: 0 }), HASH);
     expect(screen.getByTestId('cr-done').textContent).toMatch(/buys a Lethe Shore ticket/);
     fireEvent.click(screen.getByTestId('cr-enter'));
     expect(spies.play).not.toHaveBeenCalled();
@@ -292,23 +300,24 @@ describe('the room creator', () => {
 });
 
 describe('room helpers', () => {
-  it('formats HYPE with as few decimals as needed and builds share links', () => {
-    expect(hypeText(PRICE)).toBe('0.05');
-    expect(hypeText(PRICE / 2n)).toBe('0.025');
-    expect(hypeText(10n ** 18n)).toBe('1.00');
+  it('formats ETH with as few decimals as needed and builds share links', () => {
+    expect(gasText(PRICE)).toBe('0.05');
+    expect(gasText(PRICE / 2n)).toBe('0.025');
+    expect(gasText(10n ** 18n)).toBe('1.00');
     expect(roomLink('AB2CD', 'https://elymum.io/')).toBe('https://elymum.io/play?room=AB2CD');
   });
 
   it('the admin card sends only the changed settings', () => {
     const s = { ...CUSTOM_SETTINGS_DEFAULT };
     expect(customRoomsPatch(s, { ...s })).toEqual({});
-    expect(customRoomsPatch(s, { ...s, priceHype: '0.1', maxLive: 4, capacityStepPct: 25, paidRooms: false })).toEqual({ priceHype: '0.1', maxLive: 4, capacityStepPct: 25, paidRooms: false });
+    expect(customRoomsPatch(s, { ...s, priceGas: '0.1', maxLive: 4, capacityStepPct: 25, paidRooms: false })).toEqual({ priceGas: '0.1', maxLive: 4, capacityStepPct: 25, paidRooms: false });
   });
 
   it('the admin card lists the kind, tier and fee of each room, and the fee by size', () => {
     expect(roomKindText({ kind: 'paid', arenaId: 2 })).toBe('paid · Lethe Shore #2');
     expect(roomKindText({ kind: 'free' })).toBe('free');
     expect(roomKindText({})).toBe('free');
+    expect(roomKindText({ kind: 'free', practice: true })).toBe('practice with bots');
     expect(feeText({ feeWei: (PRICE * 3n).toString() })).toBe('0.15');
     expect(feeText({ feeWei: '0' })).toBe('0');
     expect(feeText({})).toBe('0');

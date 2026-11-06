@@ -1,5 +1,5 @@
-import { getAllowance, getArenaConfig, getSession, planJoin, refundCall, sessionRefundState, formatHypeAmount } from '@elymum/sdk';
-import { arenaMeta } from '@elymum/shared';
+import { getAllowance, getArenaConfig, getSession, planJoin, refundCall, sessionRefundState, formatGasAmount } from '@elymum/sdk';
+import { activeChain, arenaMeta, bpsToPercent, totalFeeBps, type FeeRates } from '@elymum/shared';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { encodeFunctionData, type Address, type Hash, type Hex } from 'viem';
@@ -16,7 +16,7 @@ import { loadDevFake } from './devFakeLoader';
 import { explorerTx } from './links';
 import { serverChainInfo } from './network';
 import { useAddress } from './store';
-import { approveAmount, approveMode, bpsPercent, joinGasAfterApprove, feeBps, feeModelOf, planErrorName, ticketFeeBps, ticketPlays, ticketSteps, type ApproveMode, type TicketModel, type TicketStep } from './ticket';
+import { approveAmount, approveMode, arenaRates, joinGasAfterApprove, planErrorName, sameRates, ticketRates, ticketSteps, type ApproveMode, type TicketModel, type TicketStep } from './ticket';
 import { sendWalletCall, txErrorText, type TxPhase } from './tx';
 
 /** `collect`: a finalized session's payout; `refund`: an unsettled ticket after 24 h. */
@@ -57,8 +57,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   const data = useChainData();
   const tok = useTokenText();
   const reduced = useReducedMotion();
-  const serverBps = useUi((s) => s.chain?.feeBps ?? null);
-  const model = useUi((s) => feeModelOf(s.chain));
+  const serverFees = useUi((s) => s.chain?.fees ?? null);
   const tokenReady = useUi((s) => s.chain?.tokenReady === true);
   const exactApprove = useUi((s) => s.settings.exactApprove === true);
   const paidSeat = useUi((s) => s.paidSeat);
@@ -103,25 +102,26 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   if (!ticket || arenaId === null) return null;
 
   const room = ticketName(ticket, t('lo.practice'));
-  const chainName = serverChainInfo(chain)?.name ?? 'Elysium';
+  const chainName = serverChainInfo(chain)?.name ?? activeChain().name;
   // the game token must be set for any ticket transaction (the lobby lists none before)
   const config = data.config?.token ? data.config : null;
   const arenaAddress = (chain?.arenaAddress ?? null) as Address | null;
-  const normalBps = feeBps(serverBps, config);
-  // emblem holders get the holder rate, fixed into the ticket at join (planJoin's feeBps)
-  const holderRate = ticketFeeBps(normalBps, config, data.holder);
-  const bps = holderRate.bps;
+  const normal = arenaRates(serverFees, config);
+  // emblem holders get the holder rates, fixed into the ticket at join (planJoin's rates)
+  const holderRate = ticketRates(normal, config, data.holder);
+  const rates = holderRate.rates;
   const fee = mode === 'refund' ? (session?.entryFee ?? ticket.entryFee) : ticket.entryFee;
   const steps: TicketStep[] = ticketSteps(data.allowance, fee);
   const busy = phase === 'preparing' || phase === 'switching' || phase === 'signing' || phase === 'confirming' || phase === 'stamped';
   const owed = session?.finalized ? session.owed : 0n;
-  const live: Review = { steps, fee, bps, balance: data.tokenBalance, wei: data.balance, owed, sessionId: session?.id ?? null, approve: approveMode(exactApprove) };
+  const live: Review = { steps, fee, rates, balance: data.tokenBalance, wei: data.balance, owed, sessionId: session?.id ?? null, approve: approveMode(exactApprove) };
   const v = frozen ?? live;
   const lowGas = data.balance !== null && data.balance === 0n;
   // the transaction landed after all (e.g. the receipt timed out): never offer to pay twice
   const landed = mode === 'buy' && session !== null && (phase === 'review' || phase === 'error');
   const txLink = hash && !isFakeHash(hash) ? explorerTx(hash) : null;
 
+  const feeText = (r: FeeRates) => `${t('tf.feeV', { n: bpsToPercent(totalFeeBps(r)) })} · ${t('tf.feeSplit', { burn: bpsToPercent(r.burnBps), vault: bpsToPercent(r.vaultBps) })}`;
   const later = (ms: number, fn: () => void) => timers.current.push(window.setTimeout(fn, ms));
 
   const fail = (text: string) => {
@@ -175,7 +175,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     if (data.fake) {
       const dev = await loadDevFake();
       if (!dev) return failName('NetworkError');
-      const res = await dev.fakeSendTicket(owner, arenaId, review.fee, review.steps, review.bps, (s, p, h) => onPhase(s)(p, h), approveAmount(review.approve, review.fee));
+      const res = await dev.fakeSendTicket(owner, arenaId, review.fee, review.steps, review.rates, (s, p, h) => onPhase(s)(p, h), approveAmount(review.approve, review.fee));
       if (!res.ok) return failName(res.name);
       setHash(res.hash);
       return enterRoom(res.hash);
@@ -185,16 +185,16 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     if (useUi.getState().blockedArenas.includes(arenaId)) return failName('Maintenance');
     let plan;
     try {
-      // re-read the arena, the allowance and the config: the price and the fee rate (fixed into the
+      // re-read the arena, the allowance and the config: the price and the fee rates (fixed into the
       // ticket at join) signed must be the ones shown
       const [p, fresh] = await Promise.all([
         planJoin(client, { arena: arenaAddress, arenaId, player: owner, token: config.token!, approve: review.approve }),
         getArenaConfig(client, arenaAddress),
       ]);
       if (p.entryFee !== review.fee) return failName('PriceChanged');
-      // the rate this ticket will be fixed at: the holder rate for holders (planJoin reads it on chain)
-      const rate = p.feeBps ?? ticketFeeBps(fresh.feeBps, fresh, p.holder).bps;
-      if (rate !== review.bps) return failName('FeeChanged');
+      // the rates this ticket will be fixed at: the holder pair for holders (planJoin reads them on chain)
+      const now = p.rates ?? ticketRates({ burnBps: fresh.burnBps, vaultBps: fresh.vaultBps }, fresh, p.holder).rates;
+      if (!sameRates(now, review.rates)) return failName('FeeChanged');
       if (fresh.paused) return failName('Paused');
       plan = p;
     } catch (err) {
@@ -435,19 +435,18 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
               label={t('tf.fee')}
               value={
                 holderRate.discount
-                  ? `${t(model === 'profit' ? 'tf.feeV.profit' : 'tf.feeV', { n: bpsPercent(v.bps) })} · ${t('tf.feeHolder', { std: bpsPercent(normalBps) })}`
-                  : t(model === 'profit' ? 'tf.feeV.profit' : 'tf.feeV', { n: bpsPercent(v.bps) })
+                  ? `${feeText(v.rates)} · ${t('tf.feeHolder', { std: bpsToPercent(totalFeeBps(normal)) })}`
+                  : feeText(v.rates)
               }
             />
           )}
-          {mode === 'buy' && model === 'entry' && <Line label={t('tf.plays')} value={`${tok.exact(ticketPlays(v.fee, v.bps, model))} ${tok.symbol}`} />}
-          <Line label={t('tf.gas')} value={t('tf.gasV', { chain: chainName, hype: v.wei === null ? '…' : formatHypeAmount(v.wei, 4) })} />
+          <Line label={t('tf.gas')} value={t('tf.gasV', { chain: chainName, amount: v.wei === null ? '…' : formatGasAmount(v.wei, 4) })} />
           {mode === 'buy' && v.balance !== null && (
             <Line label={t('tf.balance')} value={`${tok.fee(v.balance)} → ${tok.fee(v.balance - v.fee)} ${tok.symbol}`} />
           )}
         </dl>
 
-        {mode === 'buy' && <p className="tf-note">{t(model === 'profit' ? 'tf.feeNote.profit' : 'tf.feeNote')}</p>}
+        {mode === 'buy' && <p className="tf-note">{t('tf.feeNote')}</p>}
         {maintenance && <p className="tf-warn">{t('tf.err.Maintenance')}</p>}
         {lowGas && !busy && <p className="tf-warn">{t('tf.lowGas', { chain: chainName })}</p>}
 
@@ -467,9 +466,10 @@ interface Review {
   steps: TicketStep[];
   /** Base units. */
   fee: bigint;
-  bps: number;
+  /** The fee rates on profit the ticket will be fixed at. */
+  rates: FeeRates;
   balance: bigint | null;
-  /** HYPE, wei. */
+  /** The chain's gas token, wei. */
   wei: bigint | null;
   /** Finalized session payout to collect (base units). */
   owed: bigint;

@@ -10,9 +10,9 @@
 //           `vite preview` on :4173 (proxying the demo's game server) and runs practice only
 //           (the fake chain behind the arena scene exists in dev builds only).
 // --start   spawns `GAME_PUBLIC=1 pnpm demo` itself (fake chain) with a busy arena
-//           (ARENA_BOT_TARGET=ARENA_BOT_MAX=40, long rounds so joins never close mid-run),
+//           (long rounds so joins never close mid-run; arenas and practice have people only, no bots),
 //           and stops it at the end. Without it, a demo must already be running.
-// Scenes:   practice  joins the free practice room (20 bots);
+// Scenes:   practice  joins the free practice room (people only);
 //           arena     signs in with a Dev Wallet, buys a Penny Pond ticket (fake chain) and plays.
 // Devices:  desktop   1920x1080, dpr 1;
 //           phone     390x844, dpr 3, touch, with a 4x CPU throttle (CDP Emulation).
@@ -74,7 +74,7 @@ async function startDemo() {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', 'ignore', 'ignore'],
-    env: { ...process.env, GAME_PUBLIC: '1', ARENA_BOT_TARGET: '40', ARENA_BOT_MAX: '40', ROUND_SECONDS: '1800', ROUND_JOIN_CLOSE_SECONDS: '60' },
+    env: { ...process.env, GAME_PUBLIC: '1', ROUND_SECONDS: '1800', ROUND_JOIN_CLOSE_SECONDS: '60' },
   });
   for (let i = 0; i < 120; i++) {
     const ok = await fetch(URL_).then((r) => r.ok, () => false);

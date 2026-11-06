@@ -1,4 +1,4 @@
-import { PlayerFlag, TICK_MS, roundAt, type ServerMessage } from '@elymum/shared';
+import { DEFAULT_FEE_RATES, PlayerFlag, TICK_MS, profitFee, roundAt, type ServerMessage } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { NullChain } from '../src/chain/types';
 import { Leaderboards } from '../src/leaderboards';
@@ -26,11 +26,8 @@ function fakeConn(wallet: string): Conn & { msgs: ServerMessage[] } {
   return conn;
 }
 
-describe.each([
-  { purses: true, label: 'house bots keep what they eat (purses)' },
-  { purses: false, label: 'bot kills spill as floor loot' },
-])('arena money conservation: $label', ({ purses }) => {
-  it('ledger + loot + purses + pending + house == entry fees − settled, every tick, across round ends (seeded)', () => {
+describe('arena money conservation (people only, fee on profit on chain)', () => {
+  it('ledger + loot + pending == entry fees − settled, every tick, across round ends (seeded)', () => {
     const rng = mulberry32(20261014);
     const journal = new Journal(null);
     // the wall clock advances with the simulation; it starts 5 s into a round
@@ -41,8 +38,7 @@ describe.each([
         mode: 'arena',
         name: 'Arena',
         maxPlayers: 50,
-        bots: { target: 8, min: 8, max: 8 },
-        stake: { arenaId: 1, buyIn: FEE, botPurses: purses },
+        stake: { arenaId: 1, buyIn: FEE },
         seed: 4242,
       },
       {
@@ -88,8 +84,8 @@ describe.each([
     const pendingTotal = () => journal.pending.reduce((s, p) => s + itemAmount(p), 0);
     const lootTotal = () => world.loot().reduce((s, l) => s + l.value, 0);
     let spills = 0;
-    let eatenByBots = 0;
     let picks = 0;
+    let feesPredicted = 0;
     let transfers = 0;
     let roundEnds = 0;
     let roundSettles = 0;
@@ -111,7 +107,7 @@ describe.each([
             for (const l of loot) if (Math.hypot(l.x - c.x, l.y - c.y) < Math.hypot(best.x - c.x, best.y - c.y)) best = l;
             world.setTarget(p.id, best.x, best.y);
           } else if (roll < 0.8) {
-            // hunt the nearest other player (bots and stakers alike)
+            // hunt the nearest other player
             let best: { x: number; y: number } | null = null;
             let bd = Infinity;
             for (const o of world.players.values()) {
@@ -157,6 +153,12 @@ describe.each([
       if (journal.pending.length > 0 && rng() < 0.03) {
         const item = journal.pending[0];
         settled += itemAmount(item);
+        // what the contract takes from it (the room never takes anything: the gross value goes out)
+        if (item.kind === 'settle') {
+          const f = profitFee(FEE, item.payout ?? 0, DEFAULT_FEE_RATES);
+          expect(f.net + f.fee).toBe(item.payout ?? 0);
+          feesPredicted += f.fee;
+        }
         if (item.kind === 'settle' && item.reason === 'round') roundSettles++;
         journal.remove(item.key);
       }
@@ -165,34 +167,29 @@ describe.each([
         for (const m of conn.msgs.splice(0)) {
           if (m.t !== 'value') continue;
           if (m.reason === 'spill') spills++;
-          else if (m.reason === 'eaten') eatenByBots++;
           else if (m.reason === 'loot') picks++;
           else if (m.reason === 'eat') transfers++;
         }
       }
 
-      const house = journal.houseByArena(1);
-      const lhs = ledger.total() + lootTotal() + room.purseTotal() + pendingTotal() + house;
+      const lhs = ledger.total() + lootTotal() + pendingTotal();
       if (lhs !== fees - settled) {
-        throw new Error(`tick ${t}: ledger ${ledger.total()} + loot ${lootTotal()} + purses ${room.purseTotal()} + pending ${pendingTotal()} + house ${house} != ${fees} - ${settled}`);
+        throw new Error(`tick ${t}: ledger ${ledger.total()} + loot ${lootTotal()} + pending ${pendingTotal()} != ${fees} - ${settled}`);
       }
       for (const e of ledger.all()) expect(Number.isSafeInteger(e.value) && e.value >= 0).toBe(true);
       for (const l of world.loot()) expect(Number.isSafeInteger(l.value) && l.value > 0).toBe(true);
     }
 
-    // the scenario actually exercised every money path
-    if (purses) {
-      expect(spills).toBe(0);
-      expect(eatenByBots).toBeGreaterThan(0);
-      expect(journal.houseByArena(1)).toBeGreaterThan(0);
-    } else {
-      expect(spills).toBeGreaterThan(0);
-      expect(picks).toBeGreaterThan(0);
-    }
+    // the scenario actually exercised every money path; with people only nothing spills as loot
+    expect(spills).toBe(0);
+    expect(picks).toBe(0);
+    expect(swept).toBe(0);
+    expect(room.bots).toBeNull();
     expect(transfers).toBeGreaterThan(0);
     expect(roundEnds).toBeGreaterThanOrEqual(3);
     expect(roundSettles).toBeGreaterThan(0);
-    expect(swept).toBeGreaterThan(0);
+    // winners paid the fee on their profit (burned + to the fee wallet) on chain
+    expect(feesPredicted).toBeGreaterThan(0);
     expect(joins).toBeGreaterThan(6);
     expect(afkAtBell).toBeGreaterThan(0);
   }, 120_000);

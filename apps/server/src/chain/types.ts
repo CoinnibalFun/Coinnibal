@@ -1,4 +1,4 @@
-import type { ChainStatus } from '@elymum/shared';
+import { activeChain, type ChainInfo, type ChainStatus, type FeeRates } from '@elymum/shared';
 import type { EvmClient } from './evm-client';
 
 /**
@@ -42,12 +42,9 @@ export interface ChainSession {
   arenaId: number;
   /** Ticket price, ledger units. */
   entryFee: number;
-  /** Fee rate fixed at join (basis points). */
-  feeBps?: number;
-  /**
-   * What the ticket plays with, ledger units (rounded down): `entryFee − fee` on a fee-on-entry arena (v2),
-   * the whole `entryFee` on the legacy fee-on-profit arena (v1). The coin's starting value in the room.
-   */
+  /** The ticket's fee rates on profit, fixed at join (absent: unknown, the contract defaults are assumed). */
+  rates?: FeeRates;
+  /** What the ticket plays with, ledger units (rounded down): the whole entry fee (no entry fee cut). */
   value: number;
   /** Unix seconds. */
   openedAt: number;
@@ -87,13 +84,17 @@ export interface SettledEvent {
   arenaId?: number;
   /** The settlement transaction (0x hash). */
   txHash: string;
-  /** Ledger units paid out (v2: all of it reaches the player; v1: before the fee on profit). */
+  /** The ticket's gross value, ledger units (what left the vault). */
   payout: number;
-  /** The fee, ledger units (v2: the entry fee's cut; v1: on profit; absent when unknown, e.g. a late confirmation). */
+  /** The fee on its profit (burned + to the fee wallet), ledger units. */
   fee?: number;
-  /** The fee was taken from the entry fee (arena v2): the whole payout reaches the player. */
-  feeOnEntry?: boolean;
-  /** An unplayed ticket was cancelled (v2): `payout` is its full entry fee, no fee. */
+  /** The burned share of the fee, ledger units. */
+  burned?: number;
+  /** The fee wallet's share of the fee, ledger units. */
+  toVault?: number;
+  /** What reached the player (or waits to be collected): `payout - fee`, ledger units. */
+  net?: number;
+  /** An unplayed ticket was cancelled: `payout` is its full entry fee, no fee. */
   refund?: boolean;
   /** The transfer to the player failed; the session is finalized and the player collects the net payout. */
   collect?: boolean;
@@ -103,7 +104,7 @@ export interface SettledEvent {
 export interface ServerKeyInfo {
   /** EIP-55 address of the server key; null when there is none. */
   address: string | null;
-  /** HYPE balance in wei (decimal string); null when unknown. */
+  /** Gas-token balance in wei (decimal string); null when unknown. */
   balanceWei: string | null;
   /** The balance is below the warning threshold. */
   low: boolean;
@@ -119,13 +120,26 @@ export interface TokenTransfer {
   value: bigint;
 }
 
-/** What a power-up purchase is checked against: a mined transaction's status and its ERC-20 transfers. */
+/** A `Paid` event of the arena contract (a power-up payment, `ElymumArena.pay`). */
+export interface ArenaPayment {
+  /** The arena contract that emitted it (EIP-55). */
+  contract: string;
+  payer: string;
+  /** The payer's order reference (0x, 32 bytes). */
+  ref: string;
+  /** Raw base units. */
+  amount: bigint;
+}
+
+/** What a power-up purchase is checked against: a mined transaction's status, its ERC-20 transfers and `Paid` events. */
 export interface TokenReceipt {
   status: 'success' | 'reverted';
   blockNumber: bigint;
   /** Unix ms of the block (the real chain always reads it; the purchase age check needs it). */
   timestamp?: number;
   transfers: TokenTransfer[];
+  /** `Paid` events of the arena contract in this transaction. */
+  payments?: ArenaPayment[];
 }
 
 /** Everything the rooms need from the chain. `NullChain` is used when it is off. */
@@ -160,7 +174,7 @@ export interface ChainGateway {
    * `tokenReady` turned true and arenas can attach). Listeners re-read `status()`.
    */
   onStatusChange(fn: () => void): void;
-  /** The server key and its HYPE balance. */
+  /** The server key and its gas balance. */
   serverInfo(): ServerKeyInfo;
   /**
    * Verifies a signed message on chain (ERC-1271 / ERC-6492 smart wallets). Absent or false when the
@@ -172,9 +186,9 @@ export interface ChainGateway {
   /** Re-reads the registry and the arena config now (after a registry change). */
   refresh?(): Promise<void>;
   /**
-   * The ERC-20 transfers of a mined transaction (power-up purchases); null when it is not mined (or
-   * unknown). One receipt read at `normal` priority through the RPC budget. Throws `ChainBusyError`
-   * when the RPC refuses the read. Absent when the chain is off.
+   * The ERC-20 transfers and the arena's `Paid` events of a mined transaction (power-up purchases); null when it
+   * is not mined (or unknown). One receipt read at `normal` priority through the RPC budget. Throws
+   * `ChainBusyError` when the RPC refuses the read. Absent when the chain is off.
    */
   tokenReceipt?(hash: string): Promise<TokenReceipt | null>;
   start(): Promise<void>;
@@ -185,12 +199,14 @@ export class NullChain implements ChainGateway {
   readonly enabled = false;
   readonly tokenReady = false;
   readonly stakeEnabled = false;
-  constructor(private readonly chainName = 'Elysium') {}
+  constructor(private readonly chain: ChainInfo = activeChain()) {}
   status(): ChainStatus {
     return {
       enabled: false,
       chainId: null,
-      chainName: this.chainName,
+      chainName: this.chain.name,
+      testnet: this.chain.testnet,
+      faucetUrl: this.chain.faucetUrl,
       rpcUrl: null,
       explorerUrl: null,
       arenaAddress: null,
@@ -198,8 +214,7 @@ export class NullChain implements ChainGateway {
       arenasEnabled: false,
       tokenReady: false,
       token: null,
-      feeBps: null,
-      feeModel: null,
+      fees: null,
       serverKey: null,
     };
   }

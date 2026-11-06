@@ -1,11 +1,13 @@
-import { arenaVersionOfCodeHash, elymumArenaAbi, elymumArenaArtifact, testTokenAbi, testTokenArtifact, type ArenaVersion } from '@elymum/contracts';
+import { elymumArenaAbi, elymumArenaArtifact, testTokenAbi, testTokenArtifact } from '@elymum/contracts';
 import { DEFAULT_ARENAS } from '@elymum/shared';
-import { erc20Abi, getAddress, isAddress, type Account, type Address, type Chain, type Hash, type PublicClient, type WalletClient } from 'viem';
+import { BaseError, erc20Abi, getAddress, isAddress, type Account, type Address, type Chain, type Hash, type PublicClient, type WalletClient } from 'viem';
 import type { ContractCall } from './call';
 import {
   MAX_ARENA_ID,
   MAX_ARENA_SESSIONS,
-  MAX_FEE_BPS,
+  MAX_TOTAL_FEE_BPS,
+  BPS,
+  BURN_MODE_CALL,
   MAX_UINT128,
   MAX_UINT64,
   MIN_ARENA_ID,
@@ -14,13 +16,12 @@ import {
   SETTLE_CHUNK,
 } from './constants';
 import { isZeroAddress } from './format';
-import { getCodeHash } from './chain';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
 const MAX_UINT256 = (1n << 256n) - 1n;
 
 /**
- * `ElymumArena`: typed reads and call builders. Every builder validates its input like the
+ * `ElymumArena` (v3: fee on profit, burned on chain): typed reads and call builders. Every builder validates its input like the
  * contract does (throws `RangeError` / `TypeError` before anything is signed) and returns a
  * `ContractCall` for `sendCall`, a browser wallet's `writeContract`, or a preview.
  */
@@ -47,26 +48,37 @@ export interface ArenaConfig {
   token: Address | null;
   /** The token's decimals (18 until the token is set). */
   decimals: number;
-  feeBps: number;
+  /** Fee rates on the profit of new tickets (bps): `burnBps` burned, `vaultBps` to the fee wallet. */
+  burnBps: number;
+  vaultBps: number;
   paused: boolean;
-  /** ERC-721 whose holders get the holder perks (lower fee, holders-only arenas); null when the perks are off. */
+  /** ERC-721 whose holders get the holder perks (their own rates, holders-only arenas); null when the perks are off. */
   holderNft: Address | null;
-  /** Holder fee rate, in bps (a ticket gets `min(feeBps, holderFeeBps)`); only used while `holderNft` is set. */
-  holderFeeBps: number;
+  /** Holder rates (bps); a holder's ticket gets them when they total less than the normal pair. */
+  holderBurnBps: number;
+  holderVaultBps: number;
+  /** `BURN_MODE_DEAD` (0) or `BURN_MODE_CALL` (1). */
+  burnMode: number;
+  /** Share of a `pay` payment burned (bps); the rest goes to the fee wallet. */
+  paymentBurnBps: number;
   totals: {
     sessions: bigint;
     games: bigint;
     staked: bigint;
+    /** Net payouts, cancels and refunds. */
     paidOut: bigint;
-    fees: bigint;
-    burned: bigint;
+    feeBurned: bigint;
+    feeToVault: bigint;
+    lootBurned: bigint;
+    payments: bigint;
+    paymentBurned: bigint;
   };
 }
 
 export interface ArenaInfo {
   id: number;
   entryFee: bigint;
-  /** Spendable by settle / cancel / refund / sweepLoot / sweepArena (v2: the tickets' values; their fees are reserved apart, see `getArenaFees`). */
+  /** Spendable by settle / cancel / refund / sweepLoot / sweepArena (the open tickets' stakes as they stand). */
   vault: bigint;
   /** Reserved for finalized sessions (collected with `refund`). */
   owed: bigint;
@@ -76,7 +88,10 @@ export interface ArenaInfo {
   exists: boolean;
   totalDeposited: bigint;
   totalPaidOut: bigint;
+  /** Fee burns + loot burns of this arena. */
   totalBurned: bigint;
+  /** Fees this arena sent to the fee wallet. */
+  totalFees: bigint;
   lastSweepId: bigint;
   /** Only holders of the holder NFT may join (`HoldersOnly`). */
   holdersOnly: boolean;
@@ -90,7 +105,9 @@ export interface SessionInfo {
   entryFee: bigint;
   /** Unix seconds. */
   openedAt: number;
-  feeBps: number;
+  /** The ticket's fee rates on profit, fixed at join. */
+  burnBps: number;
+  vaultBps: number;
   /** Settled; the player's share waits as `owed` (collect with `refund`). */
   finalized: boolean;
   owed: bigint;
@@ -108,17 +125,24 @@ export async function getArenaConfig(client: ReadClient, arena: Address): Promis
     feeWallet: getAddress(c.feeWallet),
     token: nullIfZero(c.token),
     decimals: c.token && !isZeroAddress(c.token) ? Number(c.decimals) : 18,
-    feeBps: Number(c.feeBps),
+    burnBps: Number(c.burnBps),
+    vaultBps: Number(c.vaultBps),
     paused: c.paused,
     holderNft: nullIfZero(c.holderNft),
-    holderFeeBps: Number(c.holderFeeBps),
+    holderBurnBps: Number(c.holderBurnBps),
+    holderVaultBps: Number(c.holderVaultBps),
+    burnMode: Number(c.burnMode),
+    paymentBurnBps: Number(c.paymentBurnBps),
     totals: {
       sessions: c.totalSessions,
       games: c.totalGames,
       staked: c.totalStaked,
       paidOut: c.totalPaidOut,
-      fees: c.totalFees,
-      burned: c.totalBurned,
+      feeBurned: c.totalFeeBurned,
+      feeToVault: c.totalFeeToVault,
+      lootBurned: c.totalLootBurned,
+      payments: c.totalPayments,
+      paymentBurned: c.totalPaymentBurned,
     },
   };
 }
@@ -144,6 +168,7 @@ export async function getArena(client: ReadClient, arena: Address, id: number): 
     totalDeposited: a.totalDeposited,
     totalPaidOut: a.totalPaidOut,
     totalBurned: a.totalBurned,
+    totalFees: a.totalFees,
     lastSweepId: a.lastSweepId,
     holdersOnly: a.holdersOnly === true,
   };
@@ -159,7 +184,8 @@ export async function getSession(client: ReadClient, arena: Address, arenaId: nu
     id: s.id,
     entryFee: s.entryFee,
     openedAt: Number(s.openedAt),
-    feeBps: Number(s.feeBps),
+    burnBps: Number(s.burnBps),
+    vaultBps: Number(s.vaultBps),
     finalized: s.finalized,
     owed: s.owed,
   };
@@ -176,34 +202,61 @@ export function isArenaHolder(client: ReadClient, arena: Address, player: Addres
   return client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'isHolder', args: [player] });
 }
 
-/** The fee rate (bps) a ticket bought by `player` now would get: the holder rate for holders. */
-export async function getFeeBpsFor(client: ReadClient, arena: Address, player: Address): Promise<number> {
-  return Number(await client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'feeBpsFor', args: [player] }));
+/** The fee rates a ticket bought by `player` now would get (the holder pair for holders, when lower). */
+export async function getFeeRatesFor(client: ReadClient, arena: Address, player: Address): Promise<FeeRates> {
+  const [burnBps, vaultBps] = await client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'feeRatesFor', args: [player] });
+  return { burnBps: Number(burnBps), vaultBps: Number(vaultBps) };
 }
 
-/** The fee rate a ticket gets, off-chain: `min(feeBps, holderFeeBps)` for holders while the perks are on, else `feeBps`. */
-export function effectiveFeeBps(config: Pick<ArenaConfig, 'feeBps' | 'holderNft' | 'holderFeeBps'>, holder: boolean): number {
-  return holder && config.holderNft && config.holderFeeBps < config.feeBps ? config.holderFeeBps : config.feeBps;
+/** A pair of fee rates on profit (bps). */
+export interface FeeRates {
+  burnBps: number;
+  vaultBps: number;
 }
 
-/** `ElymumArena.computeFee(entryFee, feeBps)` on chain, v2 only (the off-chain twin is `computeEntryFee` in math.ts). */
-export async function computeFeeOnChain(client: ReadClient, arena: Address, entryFee: bigint, feeBps: number): Promise<bigint> {
-  return client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'computeFee', args: [entryFee, feeBps] });
+/** The rates a ticket gets, off-chain (`ElymumArena._ratesFor`): the holder pair when the perks are on and it totals less. */
+export function effectiveFeeRates(
+  config: Pick<ArenaConfig, 'burnBps' | 'vaultBps' | 'holderNft' | 'holderBurnBps' | 'holderVaultBps'>,
+  holder: boolean,
+): FeeRates {
+  if (holder && config.holderNft && config.holderBurnBps + config.holderVaultBps < config.burnBps + config.vaultBps) {
+    return { burnBps: config.holderBurnBps, vaultBps: config.holderVaultBps };
+  }
+  return { burnBps: config.burnBps, vaultBps: config.vaultBps };
 }
 
-/** Fees reserved for the open tickets of an arena (v2 only; a v1 arena has no such view). */
-export async function getArenaFees(client: ReadClient, arena: Address, id: number): Promise<bigint> {
-  checkArenaId(id);
-  return client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'arenaFees', args: [id] });
+/** `ElymumArena.computeFees(entryFee, payout, burnBps, vaultBps)` on chain (the off-chain twin is `settlementSplit`). */
+export async function computeFeesOnChain(client: ReadClient, arena: Address, entryFee: bigint, payout: bigint, rates: FeeRates): Promise<{ net: bigint; burned: bigint; toVault: bigint }> {
+  const [net, burned, toVault] = await client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'computeFees', args: [entryFee, payout, rates.burnBps, rates.vaultBps] });
+  return { net, burned, toVault };
+}
+
+/** True when `codeHash` is the bundled arena build (the only version this SDK and the server support). */
+export function isBundledArena(codeHash: string | null | undefined): boolean {
+  return !!codeHash && codeHash.toLowerCase() === elymumArenaArtifact.runtimeCodeHash.toLowerCase();
 }
 
 /**
- * The fee rule of a deployed arena, from its code hash: 2 (fee on the entry fee: the bundled build), 1 (fee on
- * profit: the legacy build), null (no code, or not an ElymumArena build this SDK knows).
+ * Whether `token` has a working `burn(uint256)` (ERC20Burnable), probed with an `eth_call` of `burn(0)` from the
+ * arena's address (burning nothing changes nothing). `true` means the call did not revert; a token with a catch-all
+ * fallback would also answer `true`, which is why the arena checks the balance after every real burn and falls
+ * back to 0x…dEaD. `null` when the probe could not be made (no RPC).
  */
-export async function getArenaVersion(client: Pick<PublicClient, 'getCode'>, arena: Address): Promise<ArenaVersion | null> {
-  return arenaVersionOfCodeHash(await getCodeHash(client, arena));
+export async function probeBurnSupport(client: Pick<PublicClient, 'call'>, token: Address, from: Address): Promise<boolean | null> {
+  try {
+    await client.call({ to: token, account: from, data: BURN_ZERO_CALLDATA });
+    return true;
+  } catch (err) {
+    // a transport failure means "unknown"; anything else (a revert, an empty answer) means "no burn()"
+    const names: string[] = [];
+    if (err instanceof BaseError) err.walk((e) => (names.push((e as Error).name), false));
+    else names.push((err as Error)?.name ?? '');
+    return names.some((n) => /HttpRequestError|TimeoutError|WebSocketRequestError|LimitExceededRpcError/.test(n)) ? null : false;
+  }
 }
+
+/** `burn(0)` calldata (selector 0x42966c68). */
+const BURN_ZERO_CALLDATA = '0x42966c680000000000000000000000000000000000000000000000000000000000000000' as const;
 
 /** What a session can do now: nothing, collect `owed` (finalized), or refund after the 24 h delay. */
 export function sessionRefundState(
@@ -272,15 +325,15 @@ export function refundCall(arena: Address, arenaId: number): ArenaCall {
 export interface JoinPlan {
   entryFee: bigint;
   /**
-   * Fee rate (bps) this ticket will be fixed at: the holder rate when the player holds the emblem (v2: of the entry fee).
-   * null only when the arena contract could not be read for it.
+   * The fee rates on profit this ticket will be fixed at: the holder pair when the player holds the emblem and it is
+   * lower. null only when the arena contract could not be read for it.
    */
-  feeBps: number | null;
-  /** The normal rate (`config.feeBps`); null when unknown. */
-  standardFeeBps: number | null;
+  rates: FeeRates | null;
+  /** The normal pair (`config.burnBps` / `config.vaultBps`); null when unknown. */
+  standardRates: FeeRates | null;
   /** The player holds the holder NFT; null when unknown. */
   holder: boolean | null;
-  /** The player pays the lower holder fee. */
+  /** The player gets the lower holder rates. */
   holderDiscount: boolean;
   /** The arena admits holders only. */
   holdersOnly: boolean;
@@ -319,9 +372,10 @@ export async function planJoin(
   if (info.holdersOnly && holder === false) {
     throw new RangeError(`arena #${p.arenaId} is for Elymum emblem holders only: ${getAddress(p.player)} holds no emblem`);
   }
-  const standardFeeBps = config ? config.feeBps : null;
-  const feeBps = config ? effectiveFeeBps(config, holder === true) : null;
-  const fee = { feeBps, standardFeeBps, holder, holderDiscount: feeBps !== null && standardFeeBps !== null && feeBps < standardFeeBps, holdersOnly: info.holdersOnly };
+  const standardRates = config ? { burnBps: config.burnBps, vaultBps: config.vaultBps } : null;
+  const rates = config ? effectiveFeeRates(config, holder === true) : null;
+  const total = (r: FeeRates) => r.burnBps + r.vaultBps;
+  const fee = { rates, standardRates, holder, holderDiscount: !!rates && !!standardRates && total(rates) < total(standardRates), holdersOnly: info.holdersOnly };
   const [allowance, balance] = await Promise.all([getAllowance(client, token, p.player, p.arena), getTokenBalance(client, token, p.player)]);
   if (balance < info.entryFee) throw new RangeError(`balance too low for the ticket (need ${info.entryFee}, have ${balance} base units)`);
   const approve = allowance < info.entryFee ? approveCall(token, p.arena, p.approve === 'unlimited' ? MAX_ALLOWANCE : info.entryFee) : null;
@@ -338,11 +392,11 @@ export interface Settlement {
   arenaId: number;
   player: Address;
   sessionId: bigint;
-  /** Base units; see `fromLedger`. v2: what the player gets (the fee was reserved at join). v1: fee included. */
+  /** The ticket's gross value, base units (see `fromLedger`); the contract takes the fee on the profit from it. */
   payout: bigint;
 }
 
-/** One ticket of a `cancel` batch (v2): a ticket that was never played gets its full entry fee back. */
+/** One ticket of a `cancel` batch: a ticket that was never played gets its full entry fee back. */
 export interface SessionRef {
   arenaId: number;
   player: Address;
@@ -355,7 +409,7 @@ function checkSessionRef(s: SessionRef): void {
   if (typeof s.sessionId !== 'bigint' || s.sessionId <= 0n || s.sessionId > MAX_UINT64) throw new RangeError(`sessionId must be a uint64 > 0, got ${s.sessionId}`);
 }
 
-/** One `cancel` call (v2 arenas only): full entry-fee refunds of unplayed tickets, signed by the server. */
+/** One `cancel` call: full entry-fee refunds of unplayed tickets, signed by the server. */
 export function cancelCall(arena: Address, items: readonly SessionRef[]): ArenaCall {
   if (items.length === 0) throw new RangeError('cancel needs at least one item');
   for (const s of items) checkSessionRef(s);
@@ -399,6 +453,16 @@ export function settleCalls(arena: Address, items: readonly Settlement[], chunk:
   return chunkSettlements(items, chunk).map((c) => settleCall(arena, c));
 }
 
+/**
+ * `pay(amount, ref)`: pays for something the game sells off chain (power-up packs). `paymentBurnBps` of it is burned,
+ * the rest goes to the fee wallet. Needs an allowance of `amount` for the arena (approve first).
+ */
+export function payCall(arena: Address, amount: bigint, ref: `0x${string}`): ArenaCall {
+  if (typeof amount !== 'bigint' || amount <= 0n || amount > MAX_UINT128) throw new RangeError(`payment must be a uint128 > 0, got ${amount}`);
+  if (!/^0x[0-9a-fA-F]{64}$/.test(ref)) throw new TypeError(`payment ref must be 32 bytes of hex, got ${ref}`);
+  return { address: arena, abi: elymumArenaAbi, functionName: 'pay', args: [amount, ref] };
+}
+
 /** Burns floor loot; `sweepId` must be larger than the arena's `lastSweepId`. */
 export function sweepLootCall(arena: Address, arenaId: number, sweepId: bigint, amount: bigint): ArenaCall {
   checkArenaId(arenaId);
@@ -416,9 +480,22 @@ export function setTokenCall(arena: Address, token: Address): ArenaCall {
   return { address: arena, abi: elymumArenaAbi, functionName: 'setToken', args: [getAddress(token)] };
 }
 
-export function setFeeBpsCall(arena: Address, bps: number): ArenaCall {
-  checkFeeBps(bps);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setFeeBps', args: [bps] };
+/** Fee rates on the profit of new tickets (`burnBps + vaultBps <= 2 500`). Open tickets keep theirs. */
+export function setFeeRatesCall(arena: Address, rates: FeeRates): ArenaCall {
+  checkFeeRates(rates);
+  return { address: arena, abi: elymumArenaAbi, functionName: 'setFeeRates', args: [rates.burnBps, rates.vaultBps] };
+}
+
+/** `BURN_MODE_DEAD` (0) or `BURN_MODE_CALL` (1, the token's own `burn`; see `probeBurnSupport`). */
+export function setBurnModeCall(arena: Address, mode: number): ArenaCall {
+  if (mode !== 0 && mode !== BURN_MODE_CALL) throw new RangeError(`burn mode must be 0 or 1, got ${mode}`);
+  return { address: arena, abi: elymumArenaAbi, functionName: 'setBurnMode', args: [mode] };
+}
+
+/** Share of every `pay` payment that is burned, in bps (0..10 000). */
+export function setPaymentBurnBpsCall(arena: Address, bps: number): ArenaCall {
+  if (!Number.isInteger(bps) || bps < 0 || bps > BPS) throw new RangeError(`payment burn share must be an integer in 0..${BPS} bps, got ${bps}`);
+  return { address: arena, abi: elymumArenaAbi, functionName: 'setPaymentBurnBps', args: [bps] };
 }
 
 export function setFeeWalletCall(arena: Address, wallet: Address): ArenaCall {
@@ -465,14 +542,14 @@ export function updateArenaFrom(arena: Address, current: Pick<ArenaInfo, 'id' | 
 }
 
 /**
- * Holder perks: holders of `nft` (an ERC-721) join with `min(feeBps, holderFeeBps)` and may enter
- * holders-only arenas. `nft` null (or zero) turns the perks off.
+ * Holder perks: holders of `nft` (an ERC-721) join with the holder rates (when they total less than the normal
+ * pair) and may enter holders-only arenas. `nft` null (or zero) turns the perks off.
  */
-export function setHolderPerksCall(arena: Address, nft: Address | null, holderFeeBps: number): ArenaCall {
+export function setHolderPerksCall(arena: Address, nft: Address | null, rates: FeeRates): ArenaCall {
   if (nft !== null) checkAddress('holder NFT', nft);
-  checkFeeBps(holderFeeBps);
+  checkFeeRates(rates);
   const a = nft === null ? ZERO_ADDRESS : getAddress(nft);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setHolderPerks', args: [a, holderFeeBps] };
+  return { address: arena, abi: elymumArenaAbi, functionName: 'setHolderPerks', args: [a, rates.burnBps, rates.vaultBps] };
 }
 
 /** Marks an arena holders-only (or opens it to everyone again). Open tickets are not affected. */
@@ -486,7 +563,7 @@ export function sweepArenaCall(arena: Address, id: number): ArenaCall {
   return { address: arena, abi: elymumArenaAbi, functionName: 'sweepArena', args: [id] };
 }
 
-/** Recovers HYPE (`token` null/zero) or a foreign ERC-20; never the game token. */
+/** Recovers the gas token (`token` null/zero) or a foreign ERC-20; never the game token. */
 export function rescueCall(arena: Address, p: { token: Address | null; to: Address; amount: bigint }): ArenaCall {
   checkAddress('to', p.to, { nonZero: true });
   const token = p.token ?? ZERO_ADDRESS;
@@ -572,7 +649,7 @@ export function faucetCall(token: Address): TestTokenCall {
   return { address: token, abi: testTokenAbi, functionName: 'faucet', args: [] };
 }
 
-/** `TestToken.mint(to, amount)` (the owner or a minter). */
+/** `TestToken.mint(to, amount)` (the owner). */
 export function testTokenMintCall(token: Address, to: Address, amount: bigint): TestTokenCall {
   checkAddress('to', to, { nonZero: true });
   if (typeof amount !== 'bigint' || amount < 0n || amount > MAX_UINT256) throw new RangeError(`mint amount must be a uint256, got ${amount}`);
@@ -581,12 +658,6 @@ export function testTokenMintCall(token: Address, to: Address, amount: bigint): 
 
 /** Alias of `testTokenMintCall`. */
 export const mintCall = testTokenMintCall;
-
-/** `TestToken.setMinter(minter, allowed)` (owner): who may `mint` besides the owner (e.g. the server key that funds bots). */
-export function testTokenSetMinterCall(token: Address, minter: Address, allowed: boolean): TestTokenCall {
-  checkAddress('minter', minter, { nonZero: true });
-  return { address: token, abi: testTokenAbi, functionName: 'setMinter', args: [getAddress(minter), allowed] };
-}
 
 /** `TestToken.setHolderNft(nft)` (owner): holders of `nft` get the holder faucet amount; null turns the bonus off. */
 export function testTokenSetHolderNftCall(token: Address, nft: Address | null): TestTokenCall {
@@ -605,7 +676,6 @@ export function testTokenSetFaucetCall(token: Address, p: { amount: bigint; hold
 }
 
 /** Short names of the TestToken owner calls. */
-export const setMinterCall = testTokenSetMinterCall;
 export const setHolderNftCall = testTokenSetHolderNftCall;
 export const setFaucetCall = testTokenSetFaucetCall;
 
@@ -657,11 +727,6 @@ export async function getFaucetInfo(client: ReadClient, token: Address, who: Add
 /** Short name of `getFaucetInfo`. */
 export const faucetInfo = getFaucetInfo;
 
-/** True when `who` may `mint` on the TestToken (a minter; the owner can always mint). */
-export function isTestTokenMinter(client: ReadClient, token: Address, who: Address): Promise<boolean> {
-  return client.readContract({ address: token, abi: testTokenAbi, functionName: 'isMinter', args: [who] });
-}
-
 /** Waits for a deploy transaction and returns the new contract's address. */
 export async function deployedAddress(client: Pick<PublicClient, 'waitForTransactionReceipt'>, hash: Hash): Promise<Address> {
   const r = await client.waitForTransactionReceipt({ hash });
@@ -677,8 +742,12 @@ export function checkArenaId(id: number): void {
   if (!Number.isInteger(id) || id < MIN_ARENA_ID || id > MAX_ARENA_ID) throw new RangeError(`arena id must be an integer in ${MIN_ARENA_ID}..${MAX_ARENA_ID}, got ${id}`);
 }
 
-export function checkFeeBps(bps: number): void {
-  if (!Number.isInteger(bps) || bps < 0 || bps > MAX_FEE_BPS) throw new RangeError(`fee must be an integer in 0..${MAX_FEE_BPS} bps, got ${bps}`);
+/** A fee pair the contract accepts: whole bps, each >= 0, together at most `MAX_TOTAL_FEE_BPS` (25 %). */
+export function checkFeeRates(r: FeeRates): void {
+  const ok = (n: number) => Number.isInteger(n) && n >= 0 && n <= MAX_TOTAL_FEE_BPS;
+  if (!ok(r.burnBps) || !ok(r.vaultBps) || r.burnBps + r.vaultBps > MAX_TOTAL_FEE_BPS) {
+    throw new RangeError(`fee rates must be whole bps with burn + vault at most ${MAX_TOTAL_FEE_BPS}, got ${r.burnBps} + ${r.vaultBps}`);
+  }
 }
 
 export function checkArenaParams(entryFee: bigint, maxSessions: number): void {

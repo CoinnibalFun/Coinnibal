@@ -5,7 +5,7 @@ import type { PriceStory } from './logic';
 /**
  * The headline and lede, honest about the price: on a testnet the fixed test price (and that
  * mainnet is much cheaper); the "one dollar" story only while the price really tracks a dollar;
- * otherwise the HYPE price as it stands.
+ * otherwise the gas-token price as it stands.
  */
 export function MintHeadline({ story, price }: { story: PriceStory; price: string | null }) {
   const t = useT();

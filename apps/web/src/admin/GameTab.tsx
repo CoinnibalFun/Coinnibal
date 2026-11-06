@@ -2,18 +2,15 @@ import { setPausedCall, updateArenaFrom } from "@elymum/sdk";
 import { arenaName } from "@elymum/sdk/ops";
 import {
   GAME_ACCESS_MODES,
+  MAP_SCALE_FIELDS,
   MAP_SCALE_LIMITS,
   mapSideFor,
   type GameAccess,
   type MapScaleSettings,
 } from "@elymum/shared";
 import { useCallback, useEffect, useState } from "react";
-import {
-  SiteApiError,
-  type BotAdminView,
-  type BotKindSettings,
-  type BotSettingsPatch,
-} from "../site/api";
+import { SiteApiError, type MapAdminView, type MapSettingsPatch } from "../site/api";
+import { ArenaScalingCard } from "./ArenaScalingCard";
 import { ArenaTab } from "./ArenaTab";
 import { CustomRoomsCard } from "./CustomRoomsCard";
 import { LeaderboardCard } from "./LeaderboardCard";
@@ -218,84 +215,44 @@ const KIND_LABEL: Record<string, string> = {
 };
 const kindLabel = (k: string) => KIND_LABEL[k] ?? k;
 
-/** The fields of a kind that changed (for a partial PUT). */
-export function botsPatch(
-  saved: BotAdminView["settings"],
-  draft: BotAdminView["settings"],
-): BotSettingsPatch {
-  const out: BotSettingsPatch = {};
-  for (const [kind, d] of Object.entries(draft.kinds)) {
-    const s = saved.kinds[kind];
-    if (!s) continue;
-    const p: Record<string, unknown> = {};
-    for (const f of [
-      "enabled",
-      "cap",
-      "min",
-      "target",
-      "massCap",
-      "strength",
-      "maxChasers",
-    ] as const)
-      if (d[f] !== s[f] && d[f] !== undefined) p[f] = d[f];
-    const mix: Record<string, number> = {};
-    for (const [lvl, w] of Object.entries(d.mix))
-      if (s.mix[lvl] !== w) mix[lvl] = w;
-    if (Object.keys(mix).length) p.mix = mix;
-    if (Object.keys(p).length) (out.kinds ??= {})[kind] = p as never;
-  }
-  const t: Record<string, unknown> = {};
-  for (const f of ["stakedPerArena", "bankroll", "gasHype"] as const)
-    if (draft.testnet[f] !== saved.testnet[f]) t[f] = draft.testnet[f];
-  const arenas: Record<string, { stakedBots?: number; bankroll?: string }> = {};
-  for (const [id, a] of Object.entries(draft.testnet.arenas)) {
-    const s = saved.testnet.arenas[id] ?? {};
-    const p: { stakedBots?: number; bankroll?: string } = {};
-    if (a.stakedBots !== s.stakedBots && a.stakedBots !== undefined)
-      p.stakedBots = a.stakedBots;
-    if (
-      a.bankroll !== s.bankroll &&
-      a.bankroll !== undefined &&
-      a.bankroll !== ""
-    )
-      p.bankroll = a.bankroll;
-    if (Object.keys(p).length) arenas[id] = p;
-  }
-  if (Object.keys(arenas).length) t.arenas = arenas;
-  if (Object.keys(t).length) out.testnet = t as never;
-  for (const [kind, d] of Object.entries(draft.maps ?? {})) {
-    const s = saved.maps?.[kind];
+/** The map fields of each room kind that changed (for a partial PUT). */
+export function mapsPatch(saved: MapAdminView["settings"], draft: MapAdminView["settings"]): MapSettingsPatch {
+  const out: MapSettingsPatch = {};
+  for (const [kind, d] of Object.entries(draft)) {
+    const s = saved[kind];
     if (!s) continue;
     const p: Partial<MapScaleSettings> = {};
-    for (const f of ["auto", "perPlayer", "min", "max"] as const)
+    for (const f of MAP_SCALE_FIELDS)
       if (d[f] !== s[f]) (p as Record<string, unknown>)[f] = d[f];
-    if (Object.keys(p).length) (out.maps ??= {})[kind] = p;
+    if (Object.keys(p).length) out[kind] = p;
   }
   return out;
 }
 
-/** The players the map table previews the curve for. */
-const MAP_PREVIEW = [5, 10, 25, 50, 100] as const;
+/** The people the map table previews the side for. */
+const MAP_PREVIEW = [1, 10, 25, 50, 100] as const;
 
-/** Game → bots → map size: per room kind, auto on/off and the curve (side = per player x sqrt(players), within min..max). */
+/** Game → map size: per room kind, auto on/off, the base side, the growth per person and the max side. */
 function MapScaleTable({
   draft,
   view,
   setMap,
 }: {
   draft: Record<string, MapScaleSettings>;
-  view: BotAdminView;
+  view: MapAdminView;
   setMap: (kind: string, p: Partial<MapScaleSettings>) => void;
 }) {
   const L = MAP_SCALE_LIMITS;
   return (
     <>
       <p className="ad-note">
-        Map size: with Auto on, each room&apos;s map is sized for the players it
-        expects (people plus the bots that fill it): side = per player x
-        &radic;players, kept within min..max. At a round start the map takes its
-        new size; during play it only grows, a step every few seconds. Custom
-        rooms set to Auto follow the private rooms&apos; curve.
+        Map size: with Auto on, each room&apos;s map grows a little with every person in
+        it (and every practice bot of a free custom room): side = base + per person x
+        people, at most max. It grows during play a step every few seconds. An arena
+        never shrinks during a round: it takes its new size at the round start, after
+        the bell. Other rooms shrink back only over empty floor, so nobody is trapped.
+        Food, cacti and power-ups follow the area. Custom rooms set to Auto follow the
+        private rooms&apos; settings.
       </p>
       <div className="ad-tablewrap">
         <table className="ad-table ad-bots" data-testid="maps-table">
@@ -306,12 +263,16 @@ function MapScaleTable({
               <th
                 scope="col"
                 className="is-num"
-                title={`Side of the square each player gets (${L.perPlayerMin}..${L.perPlayerMax})`}
+                title={`Side of an empty room, and the smallest side (${L.sideMin}..${L.sideMax})`}
               >
-                Per player
+                Base side
               </th>
-              <th scope="col" className="is-num">
-                Min side
+              <th
+                scope="col"
+                className="is-num"
+                title={`Side each person adds (${L.perPlayerMin}..${L.perPlayerMax})`}
+              >
+                Per person
               </th>
               <th scope="col" className="is-num">
                 Max side
@@ -319,9 +280,9 @@ function MapScaleTable({
               <th
                 scope="col"
                 className="is-num"
-                title={`Map side for ${MAP_PREVIEW.join(" / ")} players`}
+                title={`Map side for ${MAP_PREVIEW.join(" / ")} people`}
               >
-                {MAP_PREVIEW.join(" / ")} players
+                {MAP_PREVIEW.join(" / ")} people
               </th>
               <th scope="col" className="is-num">
                 Live
@@ -330,9 +291,7 @@ function MapScaleTable({
           </thead>
           <tbody>
             {Object.entries(draft).map(([kind, m]) => {
-              const live = view.live.rooms
-                .filter((r) => r.kind === kind && r.mapSide !== undefined)
-                .map((r) => r.mapSide!);
+              const live = view.rooms.filter((r) => r.kind === kind).map((r) => r.mapSide);
               return (
                 <tr key={kind} data-kind={kind}>
                   <td>
@@ -351,18 +310,18 @@ function MapScaleTable({
                   </td>
                   <td className="is-num">
                     <NumCell
-                      value={m.perPlayer}
-                      max={L.perPlayerMax}
-                      label={`${kind} map per player`}
-                      onChange={(n) => setMap(kind, { perPlayer: n })}
+                      value={m.base}
+                      max={L.sideMax}
+                      label={`${kind} map base`}
+                      onChange={(n) => setMap(kind, { base: n })}
                     />
                   </td>
                   <td className="is-num">
                     <NumCell
-                      value={m.min}
-                      max={L.sideMax}
-                      label={`${kind} map min`}
-                      onChange={(n) => setMap(kind, { min: n })}
+                      value={m.perPlayer}
+                      max={L.perPlayerMax}
+                      label={`${kind} map per person`}
+                      onChange={(n) => setMap(kind, { perPlayer: n })}
                     />
                   </td>
                   <td className="is-num">
@@ -419,47 +378,20 @@ function NumCell({
   );
 }
 
-/** The fix for a staked-bot problem the server reports (null: no known fix, the text says it). */
-export function stakedFix(
-  problem: string,
-): { text: string; hash: string } | null {
-  if (/minter|mint/i.test(problem))
-    return {
-      text: "Grant minter to the server key: Setup → Finish setup.",
-      hash: "#setup",
-    };
-  if (/hype|gas|fund|balance/i.test(problem))
-    return {
-      text: "Fund the server key with HYPE (Network shows its balance).",
-      hash: "",
-    };
-  if (/token|arena/i.test(problem))
-    return {
-      text: "Check the arenas and the game token in Setup.",
-      hash: "#setup",
-    };
-  return null;
-}
-
-/** Game → bots: per room kind on/off, cap, minimum, target, bot mass cap and difficulty mix, testnet staked bots, and the live count. */
-export function BotsCard({
-  ctx,
-  arenaIds,
-}: {
-  ctx: ChainCtx;
-  arenaIds: number[];
-}) {
-  const [view, setView] = useState<BotAdminView | null>(null);
-  const [draft, setDraft] = useState<BotAdminView["settings"] | null>(null);
-  const [state, setState] = useState<"loading" | "ok" | "missing" | "error">(
-    "loading",
-  );
+/**
+ * Game → maps: the dynamic map size per room kind and every room's live numbers. Arenas and practice ponds have
+ * people only; practice bots exist only in free custom rooms (their creator turns them on).
+ */
+export function MapsCard({ ctx }: { ctx: ChainCtx }) {
+  const [view, setView] = useState<MapAdminView | null>(null);
+  const [draft, setDraft] = useState<MapAdminView["settings"] | null>(null);
+  const [state, setState] = useState<"loading" | "ok" | "missing" | "error">("loading");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const load = useCallback(() => {
     if (!ctx.api) return;
-    ctx.api.bots().then(
+    ctx.api.maps().then(
       (v) => {
         setView(v);
         setDraft(structuredClone(v.settings));
@@ -475,483 +407,70 @@ export function BotsCard({
     );
   }, [ctx.api]);
   useEffect(load, [load]);
-  // live counts refresh while the drawer is open
+  // live counts refresh while the tab is open
   useEffect(() => {
     if (!ctx.api || state !== "ok") return;
     const id = window.setInterval(
-      () =>
-        ctx.api!.bots().then(
-          (v) =>
-            setView((cur) =>
-              cur ? { ...cur, live: v.live, stakedActive: v.stakedActive } : v,
-            ),
-          () => {},
-        ),
+      () => ctx.api!.maps().then((v) => setView((cur) => (cur ? { ...cur, rooms: v.rooms } : v)), () => {}),
       15_000,
     );
     return () => clearInterval(id);
   }, [ctx.api, state]);
 
-  if (!ctx.api)
-    return (
-      <Card
-        title="Bots"
-        id="bots"
-        tone="quiet"
-        lede="Sign in as the admin (top right) to see and change the bots."
-      />
-    );
+  if (!ctx.api) return <Card title="Maps" id="maps" tone="quiet" lede="Sign in as the admin (top right) to see and change the map sizes." />;
   if (state === "missing")
-    return (
-      <Card
-        title="Bots"
-        id="bots"
-        tone="quiet"
-        lede="This server has no bot settings route yet (/api/admin/bots). Update the game server."
-      />
-    );
+    return <Card title="Maps" id="maps" tone="quiet" lede="This server has no map settings route yet (/api/admin/maps). Update the game server." />;
   if (!view || !draft)
-    return (
-      <Card
-        title="Bots"
-        id="bots"
-        tone="quiet"
-        lede={
-          state === "error"
-            ? `Cannot load the bots: ${err}`
-            : "Loading the bots…"
-        }
-      />
-    );
+    return <Card title="Maps" id="maps" tone="quiet" lede={state === "error" ? `Cannot load the map settings: ${err}` : "Loading the map settings…"} />;
 
-  const patch = botsPatch(view.settings, draft);
+  const patch = mapsPatch(view.settings, draft);
   const dirty = Object.keys(patch).length > 0;
-  const setKind = (kind: string, p: Partial<BotKindSettings>) =>
-    setDraft({
-      ...draft,
-      kinds: { ...draft.kinds, [kind]: { ...draft.kinds[kind], ...p } },
-    });
-  const setMap = (kind: string, p: Partial<MapScaleSettings>) =>
-    setDraft({
-      ...draft,
-      maps: { ...draft.maps, [kind]: { ...draft.maps![kind], ...p } },
-    });
+  const setMap = (kind: string, p: Partial<MapScaleSettings>) => setDraft({ ...draft, [kind]: { ...draft[kind], ...p } });
   const save = async () => {
     setBusy(true);
     setErr(null);
     try {
-      const v = await ctx.api!.saveBots(patch);
+      const v = await ctx.api!.saveMaps(patch);
       setView(v);
       setDraft(structuredClone(v.settings));
-      setMsg("Bots saved: every room follows at once.");
+      setMsg("Map sizes saved: every room follows at once.");
     } catch (e) {
       setErr(saveErrorText(e));
     } finally {
       setBusy(false);
     }
   };
-  const tot = view.live.totals;
-  const ids = [
-    ...new Set([...arenaIds, ...Object.keys(draft.testnet.arenas).map(Number)]),
-  ].sort((a, b) => a - b);
-  const hasMassCap = Object.values(draft.kinds).some(
-    (k) => k.massCap !== undefined,
-  );
-  const hasStrength = Object.values(draft.kinds).some(
-    (k) => k.strength !== undefined,
-  );
-  const levels = Object.keys(
-    Object.values(draft.kinds)[0]?.mix ?? { easy: 1, medium: 1, hard: 1 },
-  );
+  const people = view.rooms.reduce((n, r) => n + r.humans, 0);
+  const bots = view.rooms.reduce((n, r) => n + r.bots, 0);
 
   return (
     <Card
-      title="Bots"
-      id="bots"
-      kicker={
-        tot
-          ? `${tot.bots} bots · ${tot.humans} people · ${tot.rooms} rooms`
-          : undefined
-      }
-      lede="The house squad: every room fields Min to Cap bots (6-9 by default), whoever else plays; people never send a bot home. Bots walk in one at a time within the first minute of a room or an arena round and play as a team (map-wide tracking, traps, lures, feeding, covering their small ones; not in the rookie league). In arenas a bot enters with a ticket's worth from the team reserve, keeps what it eats and stays to the bell, when what it holds goes back to the reserve. They always wear a BOT tag."
+      title="Maps"
+      id="maps"
+      kicker={`${people} people · ${view.rooms.length} rooms${bots ? ` · ${bots} practice bots` : ""}`}
+      lede="Arenas and practice ponds are played by people only. Practice bots exist only in free custom rooms, where the creator turns them on (count and difficulty); they are tagged BOT and carry no value."
     >
-      {view.settings.finalPush !== undefined && (
-        <SwitchRow
-          label="Final-minute push (arenas)"
-          options={[
-            { id: "on", label: "On", note: "the last minute is a hunt on people" },
-            { id: "off", label: "Off" },
-          ]}
-          value={view.settings.finalPush ? "on" : "off"}
-          busy={busy}
-          testId="bots-final-push"
-          onPick={async (v) => {
-            setBusy(true);
-            setErr(null);
-            try {
-              const next = await ctx.api!.saveBots({ finalPush: v === "on" });
-              setView(next);
-              setDraft(structuredClone(next.settings));
-              setMsg(v === "on" ? "Final-minute push on: in an arena's last minute the bots go after people." : "Final-minute push off.");
-            } catch (e) {
-              setErr(saveErrorText(e));
-            } finally {
-              setBusy(false);
-            }
-          }}
-        />
-      )}
-      {view.reserve && (
-        <div className="ad-note" data-testid="bots-bankroll">
-          <p>
-            <strong>Bot bankroll (team reserve):</strong>{" "}
-            {ids.length === 0
-              ? "no arena yet"
-              : ids
-                  .map((id) => `#${id} ${((view.reserve?.[String(id)] ?? 0) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })}`)
-                  .join(" · ")}
-            . A bot enters an arena with one ticket's worth from it; with too little, bots enter with nothing. To add to it, buy a ticket
-            in that arena from this wallet in the lobby, do not play it, and press the arena's button: the ticket is settled at 0 and its
-            value stays in the vault as reserve.
-          </p>
-          <div className="ad-row">
-            {ids.map((id) => (
-              <Btn
-                key={id}
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setErr(null);
-                  try {
-                    const r = await ctx.api!.bankrollBots(id);
-                    setView(r.view);
-                    setMsg(`Arena #${id}: ${(r.amount / 1e6).toLocaleString("en-US")} added to the bot bankroll.`);
-                  } catch (e) {
-                    setErr(saveErrorText(e));
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Ticket to bankroll #{id}
-              </Btn>
-            ))}
-          </div>
-        </div>
-      )}
-      <div className="ad-tablewrap">
-        <table className="ad-table ad-bots" data-testid="bots-table">
-          <thead>
-            <tr>
-              <th scope="col">Rooms</th>
-              <th scope="col">On</th>
-              <th scope="col" className="is-num">
-                Cap
-              </th>
-              <th scope="col" className="is-num">
-                Min
-              </th>
-              <th scope="col" className="is-num" title="Typical squad size per room (at least 3, at most the cap); the live plan drifts around it">
-                Target
-              </th>
-              {hasMassCap && (
-                <th
-                  scope="col"
-                  className="is-num"
-                  title="Most mass one bot keeps; 0 = no cap"
-                >
-                  Mass cap
-                </th>
-              )}
-              {hasStrength && (
-                <>
-                  <th
-                    scope="col"
-                    className="is-num"
-                    title="Bot strength in percent (25..200; 100 = as tuned). Lower: slower reactions, worse aim, shorter chases, fewer split attacks."
-                  >
-                    Strength %
-                  </th>
-                  <th
-                    scope="col"
-                    className="is-num"
-                    title="Most bots working one person at once (pusher, flanker, feeder); 0 = no limit"
-                  >
-                    Chasers
-                  </th>
-                </>
-              )}
-              {levels.map((l) => (
-                <th key={l} scope="col" className="is-num">
-                  {l}
-                </th>
-              ))}
-              <th scope="col" className="is-num">
-                Bots / all
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(draft.kinds).map(([kind, k]) => {
-              const live = view.live.byKind?.[kind];
-              return (
-                <tr key={kind} data-kind={kind}>
-                  <td>
-                    <strong>{kindLabel(kind)}</strong>
-                  </td>
-                  <td>
-                    <label className="ad-switch ad-switch--inline">
-                      <input
-                        type="checkbox"
-                        role="switch"
-                        checked={k.enabled}
-                        onChange={() => setKind(kind, { enabled: !k.enabled })}
-                        aria-label={`${kindLabel(kind)} bots on`}
-                      />
-                    </label>
-                  </td>
-                  <td className="is-num">
-                    <NumCell
-                      value={k.cap}
-                      max={64}
-                      label={`${kind} cap`}
-                      onChange={(n) =>
-                        setKind(kind, { cap: n, min: Math.min(k.min, n) })
-                      }
-                    />
-                  </td>
-                  <td className="is-num">
-                    <NumCell
-                      value={k.min}
-                      max={k.cap}
-                      label={`${kind} min`}
-                      onChange={(n) => setKind(kind, { min: n })}
-                    />
-                  </td>
-                  <td className="is-num">
-                    <NumCell
-                      value={k.target}
-                      max={200}
-                      label={`${kind} target`}
-                      onChange={(n) => setKind(kind, { target: n })}
-                    />
-                  </td>
-                  {hasMassCap && (
-                    <td className="is-num">
-                      <NumCell
-                        value={k.massCap ?? 0}
-                        max={200_000}
-                        label={`${kind} mass cap`}
-                        onChange={(n) => setKind(kind, { massCap: n })}
-                      />
-                    </td>
-                  )}
-                  {hasStrength && (
-                    <>
-                      <td className="is-num">
-                        <NumCell
-                          value={k.strength ?? 100}
-                          max={200}
-                          label={`${kind} strength`}
-                          onChange={(n) => setKind(kind, { strength: n })}
-                        />
-                      </td>
-                      <td className="is-num">
-                        <NumCell
-                          value={k.maxChasers ?? 0}
-                          max={12}
-                          label={`${kind} chasers per person`}
-                          onChange={(n) => setKind(kind, { maxChasers: n })}
-                        />
-                      </td>
-                    </>
-                  )}
-                  {levels.map((l) => (
-                    <td key={l} className="is-num">
-                      <NumCell
-                        value={k.mix[l] ?? 0}
-                        max={100}
-                        label={`${kind} ${l}`}
-                        onChange={(n) =>
-                          setKind(kind, { mix: { ...k.mix, [l]: n } })
-                        }
-                      />
-                    </td>
-                  ))}
-                  <td className="num is-num">
-                    {live ? `${live.bots} / ${live.humans + live.bots}` : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {draft.maps && (
-        <MapScaleTable draft={draft.maps} view={view} setMap={setMap} />
-      )}
-
-      {view.staked?.problem && (
-        <div
-          className="ad-blocked ad-bots__problem"
-          role="alert"
-          data-testid="bots-problem"
-        >
-          <strong>STAKED BOTS STUCK.</strong>
-          <p>{view.staked.problem}</p>
-          {(() => {
-            const fix = stakedFix(view.staked.problem);
-            return fix ? (
-              <p>
-                <b>Fix:</b> {fix.text}{" "}
-                <a
-                  href={`/admin${fix.hash}`}
-                  onClick={() => (location.hash = fix.hash)}
-                >
-                  Go there →
-                </a>
-              </p>
-            ) : null;
-          })()}
-        </div>
-      )}
-      {view.testnet && (
-        <div className="ad-bots__staked" data-testid="bots-staked">
-          <h3 className="ad-h3">
-            Testnet staked bots{" "}
-            {view.stakedActive ? (
-              <span className="ad-code mono is-ok">running</span>
-            ) : (
-              <span className="ad-code mono">not running</span>
-            )}
-            {view.staked && (
-              <span className="ad-dim num">
-                {" "}
-                · {view.staked.wallets} wallets · {view.staked.playing} tickets
-                in play
-              </span>
-            )}
-          </h3>
-          <p className="ad-card__lede">
-            They buy real testnet tickets with their own wallets: eat one and
-            its tokens are yours. Funded from the server key (a TestToken
-            minter).
-          </p>
-          <div className="ad-form2 ad-form3">
-            <label className="ad-field">
-              <span className="ad-field__label mono">Per arena</span>
-              <NumCell
-                value={draft.testnet.stakedPerArena}
-                max={32}
-                label="Staked bots per arena"
-                onChange={(n) =>
-                  setDraft({
-                    ...draft,
-                    testnet: { ...draft.testnet, stakedPerArena: n },
-                  })
-                }
-              />
-            </label>
-            <label className="ad-field">
-              <span className="ad-field__label mono">Bankroll (tELYMUM)</span>
-              <input
-                className="ad-input num"
-                value={draft.testnet.bankroll}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    testnet: {
-                      ...draft.testnet,
-                      bankroll: e.target.value.trim(),
-                    },
-                  })
-                }
-              />
-            </label>
-            <label className="ad-field">
-              <span className="ad-field__label mono">Gas per bot (HYPE)</span>
-              <input
-                className="ad-input num"
-                value={draft.testnet.gasHype}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    testnet: {
-                      ...draft.testnet,
-                      gasHype: e.target.value.trim(),
-                    },
-                  })
-                }
-              />
-            </label>
-          </div>
-          {ids.length > 0 && (
-            <div className="ad-arenachips">
-              <span className="ad-switchrow__label mono">Per arena</span>
-              {ids.map((id) => {
-                const a = draft.testnet.arenas[String(id)] ?? {};
-                return (
-                  <label key={id} className="ad-botarena">
-                    <span className="num">#{id}</span> {arenaName(id)}
-                    <NumCell
-                      value={a.stakedBots ?? draft.testnet.stakedPerArena}
-                      max={32}
-                      label={`Staked bots in arena ${id}`}
-                      onChange={(n) =>
-                        setDraft({
-                          ...draft,
-                          testnet: {
-                            ...draft.testnet,
-                            arenas: {
-                              ...draft.testnet.arenas,
-                              [String(id)]: { ...a, stakedBots: n },
-                            },
-                          },
-                        })
-                      }
-                    />
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {view.live.rooms.length > 0 && (
+      <MapScaleTable draft={draft} view={view} setMap={setMap} />
+      {view.rooms.length > 0 && (
         <details className="ad-rooms">
-          <summary className="mono">
-            Live rooms ({view.live.rooms.length})
-          </summary>
+          <summary className="mono">Live rooms ({view.rooms.length})</summary>
           <ul className="ad-rooms__list">
-            {view.live.rooms.map((r) => (
+            {view.rooms.map((r) => (
               <li key={r.id}>
                 <span>{r.name}</span>
                 <span className="num ad-dim">
-                  {r.humans} people · {r.bots} bots
-                  {r.stakedBots ? ` (${r.stakedBots} staked)` : ""}
+                  {r.humans} people{r.bots ? ` · ${r.bots} practice bots` : ""} · map {r.mapSide}
                 </span>
               </li>
             ))}
           </ul>
         </details>
       )}
-
       <div className="ad-actions">
-        <Btn
-          sun
-          disabled={!dirty || busy}
-          onClick={() => void save()}
-          testId="bots-save"
-        >
-          {busy ? "Saving…" : "Save bots"}
+        <Btn sun disabled={!dirty || busy} onClick={() => void save()} testId="maps-save">
+          {busy ? "Saving…" : "Save map sizes"}
         </Btn>
-        {dirty && (
-          <Btn onClick={() => setDraft(structuredClone(view.settings))}>
-            Undo
-          </Btn>
-        )}
+        {dirty && <Btn onClick={() => setDraft(structuredClone(view.settings))}>Undo</Btn>}
         {msg && !dirty && <span className="ad-note">{msg}</span>}
       </div>
       <FormError error={err} />
@@ -961,17 +480,14 @@ export function BotsCard({
 
 /**
  * `/admin → Game`: the owner's decisions first (who may play, the pause, each arena open or
- * closed, the bots), then the arena contract's status; its manual controls sit under Advanced.
+ * closed, the map sizes), then the arena contract's status; its manual controls sit under Advanced.
  */
 export function GameTab({ ctx }: { ctx: ChainCtx }) {
-  const arenaIds = (ctx.status?.arena?.arenas ?? []).map((a) => a.id);
   return (
     <div className="ad-game">
       <StartStopCard ctx={ctx} />
-      <BotsCard
-        ctx={ctx}
-        arenaIds={arenaIds.length ? arenaIds : [1, 2, 3, 4]}
-      />
+      <MapsCard ctx={ctx} />
+      <ArenaScalingCard ctx={ctx} />
       <CustomRoomsCard ctx={ctx} />
       <ShopCard ctx={ctx} />
       <LeaderboardCard ctx={ctx} />

@@ -1,4 +1,4 @@
-import { chainInfo, isMainnet, type ChainInfo, type ChainOverrides } from '@elymum/shared';
+import { chainInfo, isTestChainId, type ChainInfo, type ChainOverrides } from '@elymum/shared';
 import {
   createPublicClient,
   createWalletClient,
@@ -17,9 +17,8 @@ import {
 } from 'viem';
 
 /**
- * Chains and clients. The chain table lives in `@elymum/shared` (`chains.ts`); this module turns
- * an entry into a viem `Chain` and builds clients from an RPC URL or an EIP-1193 provider (a
- * browser wallet). Do not use viem's built-in `elysiumTestnet`: it is an unrelated chain.
+ * Chains and clients. The chain registry lives in `@elymum/shared` (`chains.ts`); this module turns an entry into
+ * a viem `Chain` and builds clients from an RPC URL or an EIP-1193 provider (a browser wallet).
  */
 
 /** Where a client talks to: an HTTP(S) RPC URL or an EIP-1193 provider (`window.ethereum`, EIP-6963). */
@@ -38,8 +37,8 @@ export function toViemChain(info: ChainInfo): Chain {
   });
 }
 
-/** viem `Chain` for a chain id (the testnet, the localnet, or Elysium mainnet with the server's overrides). */
-export function elysiumChain(chainId: number, overrides: ChainOverrides = {}): Chain {
+/** viem `Chain` for a chain id (a registry entry, or a generic chain named by the overrides). */
+export function viemChain(chainId: number, overrides: ChainOverrides = {}): Chain {
   return toViemChain(chainInfo(chainId, overrides));
 }
 
@@ -68,12 +67,12 @@ export function createElymumWalletClient(source: RpcSource, opts: { account: Acc
 
 /** Reads `eth_chainId` and returns the matching viem chain (the server's RPC is the source of truth). */
 export async function resolveChain(client: Pick<PublicClient, 'getChainId'>, overrides: ChainOverrides = {}): Promise<Chain> {
-  return elysiumChain(await client.getChainId(), overrides);
+  return viemChain(await client.getChainId(), overrides);
 }
 
-/** True when the chain id is Elysium mainnet (anything that is not the testnet or the localnet). */
+/** True for a mainnet: every chain id the registry does not list as a testnet (the careful default). */
 export function isMainnetChain(chainId: number): boolean {
-  return isMainnet(chainId);
+  return !isTestChainId(chainId);
 }
 
 /** keccak256 of the code at `address` (null when there is none). Compare with an artifact's `runtimeCodeHash`. */

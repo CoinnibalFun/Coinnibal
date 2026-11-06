@@ -1,4 +1,4 @@
-import { addEthereumChainParams, chainInfo, isMainnet, toHexChainId, type ChainInfo, type ChainStatus } from '@elymum/shared';
+import { addEthereumChainParams, chainInfo, isTestChainId, toHexChainId, type ChainInfo, type ChainStatus } from '@elymum/shared';
 import { createElymumPublicClient, createElymumWalletClient, describeError, toViemChain } from '@elymum/sdk';
 import type { Address, Chain, PublicClient, WalletClient } from 'viem';
 import { CHAIN_OVERRIDES } from '../config';
@@ -19,7 +19,7 @@ export type ServerChain = Pick<ChainStatus, 'chainId' | 'chainName' | 'rpcUrl' |
 export function serverChainInfo(chain: ServerChain | null | undefined): ChainInfo | null {
   if (!chain || chain.chainId === null || chain.chainId === undefined) return null;
   try {
-    return chainInfo(chain.chainId, { name: chain.chainName || null, rpcUrl: CHAIN_OVERRIDES.rpcUrl ?? chain.rpcUrl, explorerUrl: chain.explorerUrl });
+    return chainInfo(chain.chainId, { rpcUrl: CHAIN_OVERRIDES.rpcUrl ?? chain.rpcUrl, explorerUrl: chain.explorerUrl });
   } catch {
     return null;
   }
@@ -31,7 +31,7 @@ export function serverViemChain(chain: ServerChain | null | undefined): Chain | 
   return info ? toViemChain(info) : null;
 }
 
-export const isMainnetChain = (chain: ServerChain | null | undefined): boolean => chain?.chainId != null && isMainnet(chain.chainId);
+export const isMainnetChain = (chain: ServerChain | null | undefined): boolean => chain?.chainId != null && !isTestChainId(chain.chainId);
 
 /** The chain switch failed (or the wallet ended on another chain). */
 export class WrongChainError extends Error {

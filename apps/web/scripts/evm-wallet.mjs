@@ -76,7 +76,7 @@ export async function installEvmWallet(ctx, { privateKey = generatePrivateKey(),
           if (!allowTransactions) throw fail(4001, 'User rejected the request (dev wallet refuses transactions).');
           const url = rpc();
           if (!url) throw fail(4900, `no RPC for chain ${current}`);
-          const chain = defineChain({ id: current, name: `chain ${current}`, nativeCurrency: { name: 'HYPE', symbol: 'HYPE', decimals: 18 }, rpcUrls: { default: { http: [url] } } });
+          const chain = defineChain({ id: current, name: `chain ${current}`, nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [url] } } });
           const wallet = createWalletClient({ account, chain, transport: http(url) });
           const tx = params?.[0] ?? {};
           const hash = await wallet.sendTransaction({

@@ -1,3 +1,4 @@
+import { GAS_SYMBOL } from '@elymum/shared';
 import { elymumArenaAbi, elymumNFTAbi, testTokenAbi } from '@elymum/contracts';
 import { BaseError, ContractFunctionRevertedError, decodeErrorResult, type Abi, type Hex } from 'viem';
 
@@ -28,7 +29,9 @@ export const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   TokenNotSet: 'Arenas are opening soon: the game token is not set yet.',
   TokenAlreadySet: 'The game token is already set; it can be set only once.',
   NotAContract: 'That address is not a contract.',
-  InvalidFee: 'The fee must be at most 10 %.',
+  InvalidFee: 'The fee on profit can be at most 25 % (burn + fee wallet together); a payment burn share at most 100 %.',
+  InvalidBurnMode: 'The burn mode is 0 (send to the dead address) or 1 (the token\'s own burn).',
+  BurnMismatch: 'The token\'s burn() burned a different amount than asked: switch the arena to burn mode 0.',
   InvalidArenaId: 'Arena ids start at 1.',
   ArenaExists: 'That arena already exists.',
   UnknownArena: 'That arena does not exist.',
@@ -46,7 +49,7 @@ export const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   FeeOnTransferToken: 'Tokens that take a fee on transfer are not supported.',
   SweepIdNotIncreasing: 'That loot sweep was already done.',
   CannotRescueGameToken: 'The game token can never be rescued.',
-  NativeTransferFailed: 'The HYPE transfer failed.',
+  NativeTransferFailed: 'The gas-token transfer failed.',
   RenounceDisabled: 'Ownership cannot be renounced.',
   HoldersOnly: 'This arena is for Elymum emblem holders only. Mint or hold an emblem to enter.',
   SafeERC20FailedOperation: 'The token transfer failed.',
@@ -61,7 +64,7 @@ export const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   PublicLimitExceeded: 'You reached the public mint limit for this wallet.',
   SoldOut: 'Sold out.',
   InsufficientPayment: 'The price changed a moment ago and the payment is short. Nothing was charged; try again.',
-  RefundFailed: 'The refund of the overpayment failed (the wallet cannot receive HYPE).',
+  RefundFailed: 'The refund of the overpayment failed (the wallet cannot receive the gas token).',
   WithdrawFailed: 'The withdrawal to the treasury failed.',
   NotPriceSetter: 'Only the owner or the price keeper can set the price.',
   PriceOutOfBounds: 'That price is outside the keeper bounds.',
@@ -88,7 +91,7 @@ export type ErrorKind =
   | 'revert' // a revert without a known error
   | 'wrong-chain' // wallet on another chain
   | 'chain-not-added' // 4902
-  | 'insufficient-funds' // not enough HYPE for gas / value
+  | 'insufficient-funds' // not enough of the gas token for gas / value
   | 'pending' // -32002, a request already open in the wallet
   | 'network'
   | 'unknown';
@@ -106,8 +109,6 @@ export interface DescribedError {
 }
 
 export interface DescribeContext {
-  /** Gas token symbol for the funds message (default HYPE). */
-  gasSymbol?: string;
   /** Name of the chain the wallet should be on. */
   chainName?: string;
 }
@@ -163,7 +164,7 @@ function textOf(err: unknown): string {
 
 /** Classifies and explains an error from viem, a wallet or an RPC. */
 export function describeError(err: unknown, ctx: DescribeContext = {}): DescribedError {
-  const gas = ctx.gasSymbol ?? 'HYPE';
+  const gas = GAS_SYMBOL;
   const code = findCode(err);
   const names: string[] = [];
   if (err instanceof BaseError) err.walk((e) => (names.push((e as Error).name), false));

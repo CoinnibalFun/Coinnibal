@@ -3,7 +3,7 @@
 // invite / close buttons, and a guest opening the invite link straight into the room.
 // Needs a dev server whose game server runs NODE_ENV=development DEV_FAKE_CHAIN=1 DEV_FAKE_TOKEN=1
 // with ADMIN_WALLETS set (the treasury defaults to the owner wallet) and GAME_ACCESS=public: the web
-// dev build then "sends" the HYPE fee through its fake chain (src/wallet/devFake.ts) and the
+// dev build then "sends" the ETH fee through its fake chain (src/wallet/devFake.ts) and the
 // server's fake payment reader accepts that hash. An EIP-6963 dev wallet signs the free sign-in.
 // Usage: node scripts/rooms.mjs <playUrl> <outDir>   → <outDir>/rooms-*.png
 import { mkdirSync } from 'node:fs';

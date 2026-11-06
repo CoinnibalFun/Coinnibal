@@ -335,7 +335,7 @@ export class IntegrityMonitor {
    * The ticket ended (death, bell, kick, age limit): returns its finished summary (also handed to
    * `onSession`). `killer`: the staker's eater when it died (any player; bots count as no wallet).
    */
-  onEnd(room: MonitorRoom, pid: number, end: { reason: string; payout: number; killer: Player | null; killerIsBot: boolean }): SessionSummary | null {
+  onEnd(room: MonitorRoom, pid: number, end: { reason: string; payout: number; killer: Player | null }): SessionSummary | null {
     const m = this.rooms.get(room.id);
     const tr = m?.get(pid);
     if (!m || !tr) return null;
@@ -349,10 +349,10 @@ export class IntegrityMonitor {
     s.afkAtEnd = tr.afkSince !== null;
     if (tr.afkSince !== null) s.afkMs += Math.max(0, now - tr.afkSince);
     if (end.reason === 'death') {
-      const by = end.killer && !end.killerIsBot ? (m.get(end.killer.id)?.s.wallet ?? null) : null;
+      const by = end.killer ? (m.get(end.killer.id)?.s.wallet ?? null) : null;
       const recent = tr.approach.filter((a) => now - a.t <= APPROACH_WINDOW_MS);
       const toward = by ? recent.filter((a) => a.wallet === by && a.toward).length : 0;
-      s.death = { by, byBot: end.killerIsBot, approach: recent.length > 0 ? toward / recent.length : 0, samples: recent.length };
+      s.death = { by, approach: recent.length > 0 ? toward / recent.length : 0, samples: recent.length };
     }
     this.opts.onSession(s);
     return s;

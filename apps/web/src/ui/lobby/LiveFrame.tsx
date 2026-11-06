@@ -115,7 +115,8 @@ export function LiveFrame() {
       <figcaption className="kl-live__cap">
         <span className="kl-live__room">{name || '—'}</span>
         <span className="kl-live__meta mono">
-          {humans === 1 ? t('lo.humans1') : t('lo.humans', { n: humans })} · {bots === 1 ? t('lo.bots1') : t('lo.bots', { n: bots })}
+          {humans === 1 ? t('lo.humans1') : t('lo.humans', { n: humans })}
+          {bots > 0 && ` · ${bots === 1 ? t('lo.bots1') : t('lo.bots', { n: bots })}`}
           {inFrame && ` · ${t('lo.live.photo', { name: inFrame })}`}
         </span>
         <button type="button" className="kl-link mono" onClick={() => engine()?.watch()} disabled={!room}>

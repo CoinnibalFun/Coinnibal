@@ -3,7 +3,7 @@ import type { ChainStatus, MintContractState, MintProofResponse, MintState, WlEn
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Address, Hash, Hex } from 'viem';
-import { AddressChip, ArcGauge, Button, CoinCharacter, FoodBit, HypeAmount, Icon, QuantityStepper, useMoves, useReducedMotion } from '../../design';
+import { AddressChip, ArcGauge, Button, CoinCharacter, FoodBit, GasAmount, Icon, QuantityStepper, useMoves, useReducedMotion } from '../../design';
 import { SERVER } from '../../config';
 import { intlLocale, useT, type TKey } from '../../i18n';
 import { renderRich } from '../../i18n/rich';
@@ -13,7 +13,7 @@ import { useWallet } from '../../wallet/store';
 import { sendWalletCall, txErrorText, type TxPhase } from '../../wallet/tx';
 import { site } from '../api';
 import { dropExpired } from '../session';
-import { HYPE_FAUCET_URL } from '../faucet/logic';
+import { gasFaucetUrl } from '../faucet/logic';
 import { X_URL } from '../settings';
 import { isTestnetChain } from '../serverChain';
 import { SitePage } from '../Shell';
@@ -27,7 +27,7 @@ import { EmblemPerks } from './Perks';
 import {
   emblemPerks,
   fundsBlocker,
-  hypeText,
+  gasText,
   mintBlocker,
   mintErrorText,
   mintKind,
@@ -91,7 +91,7 @@ export function toContractState(s: ChainMintState): MintContractState {
 
 type ReadClient = NonNullable<ReturnType<typeof publicClientFor>>;
 
-/** The wallet's HYPE, or null when the read fails. */
+/** The wallet's gas-token balance, or null when the read fails. */
 async function readBalance(client: ReadClient, address: Address): Promise<bigint | null> {
   try {
     const b = await client.getBalance({ address });
@@ -103,7 +103,7 @@ async function readBalance(client: ReadClient, address: Address): Promise<bigint
 
 /**
  * Estimates the mint from the wallet (`eth_estimateGas`, nothing is sent). Returns the text to
- * show when the chain clearly refuses it (a contract error, too little HYPE), else null.
+ * show when the chain clearly refuses it (a contract error, too little gas token), else null.
  */
 async function dryRun(client: ReadClient, from: Address, call: ReturnType<typeof mintPublicCall>): Promise<string | null> {
   try {
@@ -158,7 +158,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
   const session = useSiteSession();
   const [proof, setProof] = useState<MintProofResponse | null>(null);
   const [minted, setMinted] = useState<{ wl: number; pub: number }>({ wl: 0, pub: 0 });
-  /** The wallet's HYPE (wei); null while unknown (the wallet then decides). */
+  /** The wallet's gas-token balance (wei); null while unknown (the wallet then decides). */
   const [balance, setBalance] = useState<bigint | null>(null);
   const [wl, setWl] = useState<WlEntryPublic | null | undefined>(undefined);
   const [qty, setQty] = useState(1);
@@ -334,8 +334,8 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
     }
     const call =
       kind === 'allowlist' ? mintAllowlistCall(nft, { qty: q, proof: (proof?.proof ?? []) as Hex[], price }) : mintPublicCall(nft, { qty: q, price });
-    // the wallet's HYPE and a dry run, so a mint that cannot work says why here instead of in a
-    // wallet warning. Only a clear answer stops it (too little HYPE, a contract refusal); a read
+    // the wallet's gas balance and a dry run, so a mint that cannot work says why here instead of in a
+    // wallet warning. Only a clear answer stops it (too little gas, a contract refusal); a read
     // that fails for any other reason leaves the decision to the wallet.
     const bal = await readBalance(client, address);
     if (bal !== null) setBalance(bal);
@@ -455,14 +455,14 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
     <div className="mt-price">
       <span data-testid="mt-price" className="mt-price__fig">
         <Flap value={c.priceWei}>
-          <HypeAmount wei={priceWei} decimals={4} usd={state.priceUsd} size="lg" />
+          <GasAmount wei={priceWei} decimals={4} usd={state.priceUsd} size="lg" />
         </Flap>
       </span>
       <p className="mt-price__tick num">
         {story === 'testnet' && t('mn.tick.test')}
-        {state.hypeUsd !== null ? (
+        {state.gasUsd !== null ? (
           <>
-            {t('mn.tick.rate', { rate: state.hypeUsd.toFixed(2) })} {loadedAt ? <Age since={loadedAt} /> : t('mn.tick.now')}
+            {t('mn.tick.rate', { rate: state.gasUsd.toFixed(2) })} {loadedAt ? <Age since={loadedAt} /> : t('mn.tick.now')}
           </>
         ) : (
           t('mn.tick.napping')
@@ -577,7 +577,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
               <EmblemHand count={q} />
               <div className="mt-total">
                 <span className="kicker mt-card__kick">{t('cr.total')}</span>
-                <HypeAmount wei={priceWei * BigInt(q)} decimals={4} size="md" className="mt-total__fig" />
+                <GasAmount wei={priceWei * BigInt(q)} decimals={4} size="md" className="mt-total__fig" />
                 <span className="mt-total__sub num">
                   {state.priceUsd !== null && `≈ ${usdText(state.priceUsd * q)} · `}
                   {t('mn.max', { n: left })}
@@ -591,11 +591,11 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
             {blocker && !busy && (
               <p className="mt-why" role="alert" data-testid="mt-blocker">
                 <span className="kicker">{poor ? t('mn.why.poor') : left === 0 ? t('mn.why.limit') : t('mn.why.notYet')}</span> {cap(blocker)}.
-                {poor && story === 'testnet' && (
+                {poor && story === 'testnet' && gasFaucetUrl(chain?.faucetUrl) && (
                   <>
                     {' '}
-                    <a href={HYPE_FAUCET_URL} target="_blank" rel="noreferrer">
-                      {t('mn.testHype')}
+                    <a href={gasFaucetUrl(chain?.faucetUrl)!} target="_blank" rel="noreferrer">
+                      {t('mn.testGas')}
                     </a>
                   </>
                 )}
@@ -627,7 +627,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
       <div className="mt-wrap mt-page" data-view={view} data-stale={fresh ? undefined : ''}>
         <div className="mt-copy">
           <span className="kicker mt-kicker">{kicker}</span>
-          <MintHeadline story={story} price={c ? hypeText(priceWei) : null} />
+          <MintHeadline story={story} price={c ? gasText(priceWei) : null} />
           <MintTrack at={stage} />
           {c && (
             <p className="mt-limits num">{t('mn.limits', { wl: c.wlLimit, pub: c.publicLimit })}</p>
@@ -638,7 +638,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
           <div className="mt-card__right">{right}</div>
         </motion.div>
         {/* under the lede on wide screens, under the mint card on phones (the card comes first there) */}
-        <EmblemPerks perks={emblemPerks(isTestnetChain(chain), { feeBps: chain?.feeBps ?? null, feeModel: chain?.feeModel ?? null, gameAccess: state.gameAccess })} />
+        <EmblemPerks perks={emblemPerks(isTestnetChain(chain), { fees: chain?.fees ?? null, gameAccess: state.gameAccess })} />
       </div>
     </NightPlate>
   );

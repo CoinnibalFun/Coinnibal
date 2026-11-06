@@ -1,4 +1,4 @@
-import { RULES, roundAt, type DeathStats, type RoomInfo, type RoundInfo } from '@elymum/shared';
+import { RULES, roundAt, type DeathStats, type RoomInfo, type RoundInfo, type RoundStanding } from '@elymum/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Kb } from '../src/design';
@@ -25,7 +25,7 @@ const START = N * RULES.roundMs;
 const R: RoundInfo = { n: N, endsAt: START + RULES.roundMs, joinsCloseAt: START + RULES.roundMs - RULES.roundJoinCloseMs };
 const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: 'Asphodel Meadow', width: 6400, height: 6400, players: 3, bots: 10, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M, round: R };
 const STATS: DeathStats = { aliveMs: 94_000, finalMass: 0, maxMass: 640, foodEaten: 88, cellsEaten: 1, playersEaten: 1, bestRank: 5 };
-const CHAIN = chainStatus({ feeBps: null });
+const CHAIN = chainStatus({ fees: null });
 // jsdom has no canvas: the same null it returns, without the "not implemented" warning
 HTMLCanvasElement.prototype.getContext = (() => null) as never;
 const initial = useUi.getState();
@@ -192,23 +192,23 @@ describe('no cash-out in arenas', () => {
 });
 
 describe('Round over sheet', () => {
-  const standings = [
-    { name: 'Nakamoto', value: 9100 * M },
-    { name: 'Penny', value: 5200 * M },
-    { name: 'Daphne', value: 3000 * M, you: true },
-    { name: 'Rocky', value: 2100 * M },
-    { name: 'Lulu', value: 1500 * M },
-    { name: 'Sixth', value: 900 * M },
+  const standings: RoundStanding[] = [
+    { rank: 1, name: 'Nakamoto', value: 9100 * M, mass: 4200, kills: 6 },
+    { rank: 2, name: 'Penny', value: 5200 * M, mass: 2600, kills: 3 },
+    { rank: 3, name: 'Daphne', value: 3000 * M, mass: 1800, kills: 2, you: true },
+    { rank: 4, name: 'Rocky', value: 2100 * M, mass: 900, kills: 1 },
+    { rank: 5, name: 'Lulu', value: 1500 * M, mass: 700, kills: 0 },
+    { rank: 6, name: 'Sixth', value: 900 * M, mass: 300, kills: 0 },
   ];
 
-  it('fee on entry (arena v2): the till, the cut on winnings and what is paid; the fee line says it was paid at the entry', () => {
+  it('arena v3: the till, the fee on its profit and what is paid; then the settlement\'s own numbers', () => {
     setReducedMotion(true);
     clockAt(R.endsAt + 500);
     useUi.setState({
       screen: 'roundover',
       room: ARENA,
-      ticket: { entryFee: 1000 * M, arenaId: 1, session: 'SessV2' },
-      // the server paid 3,000 after a 500 cut on a 3,500 till
+      ticket: { entryFee: 1000 * M, arenaId: 1, session: 'SessV3' },
+      // a 3,500 till on a 1,000 ticket: 2,500 profit, 20 % of it (500) is the fee, 3,000 is paid
       roundResult: { kind: 'round', round: N, payout: 3000 * M, stats: { ...STATS, gross: 3500 * M, cut: 500 * M }, standings },
       lastSettlement: null,
     });
@@ -217,26 +217,26 @@ describe('Round over sheet', () => {
         <RoundOverSheet />
       </Kb>,
     );
-    expect(screen.getByText('Fee 5% · paid at entry')).toBeTruthy();
-    expect(screen.getByText('≈ 50')).toBeTruthy();
-    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 3,000$ELYMUM');
     expect(screen.getByText('3,500')).toBeTruthy();
-    expect(screen.getByText('Cut 20% of winnings')).toBeTruthy();
+    expect(screen.getByText('Fee 20% of profit')).toBeTruthy();
+    expect(screen.getByText('≈ −500')).toBeTruthy();
+    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 3,000$ELYMUM');
+    expect(screen.getByText('20% of your profit is the fee (15% burned, 5% to the fee wallet); no profit, no fee')).toBeTruthy();
+    act(() =>
+      useUi.setState({ lastSettlement: { session: 'SessV3', arenaId: 1, txHash: `0x${'5b'.repeat(32)}`, payout: 3500 * M, fee: 500 * M, burned: 375 * M, toVault: 125 * M, net: 3000 * M, at: Date.now() } }),
+    );
     expect(screen.getByText('−500')).toBeTruthy();
-    expect(screen.getByText(/no winnings, no cut/)).toBeTruthy();
-    act(() => useUi.setState({ lastSettlement: { session: 'SessV2', arenaId: 1, txHash: `0x${'5b'.repeat(32)}`, payout: 3000 * M, fee: 50 * M, net: 3000 * M, feeOnEntry: true, at: Date.now() } }));
     expect(document.querySelector('.g-receipt__net')?.textContent).toBe('3,000$ELYMUM');
   });
 
-  it('legacy fee on profit (v1 arena): prints till, fee and paid; my place and the top 5; then the PAID transaction', () => {
+  it('prints till, fee and paid; my place and the top 5; then the PAID transaction', () => {
     setReducedMotion(true);
     clockAt(R.endsAt + 500);
-    useUi.setState({ chain: { ...CHAIN, feeModel: 'profit' } });
     useUi.setState({
       screen: 'roundover',
       room: ARENA,
       ticket: { entryFee: 1000 * M, arenaId: 1, session: 'SessMine' },
-      roundResult: { kind: 'round', round: N, payout: 3000 * M, stats: STATS, standings },
+      roundResult: { kind: 'round', round: N, payout: 2600 * M, stats: { ...STATS, gross: 3000 * M, cut: 400 * M }, standings },
       lastSettlement: null,
     });
     render(
@@ -250,23 +250,25 @@ describe('Round over sheet', () => {
     expect(roundStartLabel(N, R)).toMatch(/^\d\d:\d\d$/);
     expect(document.body.textContent).not.toContain(String(N));
     expect(screen.getByText('Your till')).toBeTruthy();
-    expect(screen.getByText('3,000')).toBeTruthy();
-    expect(screen.getByText('Fee 5%')).toBeTruthy();
-    expect(screen.getByText('≈ −100')).toBeTruthy();
+    expect(screen.getAllByText('3,000').length).toBeGreaterThan(0);
+    expect(screen.getByText('Fee 20% of profit')).toBeTruthy();
+    expect(screen.getByText('≈ −400')).toBeTruthy();
     expect(screen.getByText('Paid')).toBeTruthy();
-    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 2,900$ELYMUM');
-    expect(screen.getByRole('status').textContent).toContain('Settling on Elysium');
+    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 2,600$ELYMUM');
+    expect(screen.getByRole('status').textContent).toContain('Settling on Robinhood Chain Testnet');
     // my place and the room's top 5 at the bell
     expect(screen.getByText('Your place').nextElementSibling?.textContent).toBe('3rd');
     const top = screen.getByRole('region', { name: 'Top 5 at the bell' });
     const rows = [...top.querySelectorAll('li')].map((li) => li.textContent);
-    expect(rows).toEqual(['01Nakamoto9.1K', '02Penny5.2K', '03DaphneYou3K', '04Rocky2.1K', '05Lulu1.5K']);
+    expect(rows).toEqual(['01Nakamoto4,20069.1K', '02Penny2,60035.2K', '03DaphneYou1,80023K', '04Rocky90012.1K', '05Lulu70001.5K']);
+    // the same board as a custom room's end: mass and kills next to the value
+    expect(top.querySelector('.g-board__head')?.textContent).toBe('MassKillsValue');
     expect(top.querySelector('.is-me')?.textContent).toContain('Daphne');
     expect(screen.getByRole('button', { name: /Next round/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Lobby/ })).toBeTruthy();
 
-    act(() => useUi.setState({ lastSettlement: { session: 'SessMine', arenaId: 1, txHash: `0x${'5a'.repeat(32)}`, payout: 3000 * M, fee: 100 * M, net: 2900 * M, at: Date.now() } }));
-    expect(screen.getByText('−100')).toBeTruthy();
+    act(() => useUi.setState({ lastSettlement: { session: 'SessMine', arenaId: 1, txHash: `0x${'5a'.repeat(32)}`, payout: 3000 * M, fee: 400 * M, net: 2600 * M, at: Date.now() } }));
+    expect(screen.getByText('−400')).toBeTruthy();
     expect(screen.getByRole('link', { name: /View transaction/ })).toBeTruthy();
   });
 
@@ -276,7 +278,7 @@ describe('Round over sheet', () => {
       screen: 'roundover',
       room: ARENA,
       ticket: { entryFee: 1000 * M, arenaId: 1, session: 'S2' },
-      roundResult: { kind: 'round', round: N, payout: 400 * M, stats: STATS, standings: standings.map((s) => ({ name: s.name, value: s.value })) },
+      roundResult: { kind: 'round', round: N, payout: 400 * M, stats: STATS, standings: standings.map(({ you: _you, ...s }) => s) },
     });
     render(
       <Kb>
@@ -286,29 +288,37 @@ describe('Round over sheet', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     await screen.findByRole('dialog', { name: 'Round over' }, { timeout: 2000 });
     expect(screen.getByText('Your place').nextElementSibling?.textContent).toBe('Outside the top 6');
-    // a loss still paid its fee at the entry (the rate shown is the program default while the server's is unknown)
-    expect(screen.getByText('Fee 5% · paid at entry')).toBeTruthy();
+    // a loss pays no fee (the rate shown is the contract default while the server's is unknown)
+    expect(screen.getByText('Fee 20% of profit')).toBeTruthy();
+    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 400$ELYMUM');
   });
 
-  it("estimates the fee at the server's live rate (feeBps)", () => {
+  it("estimates the fee at the server's live rates, and at the ticket's own rates once its session is read", () => {
     setReducedMotion(true);
     clockAt(R.endsAt + 500);
-    useChainData.setState({ config: { feeBps: 700 } as never });
-    useUi.setState({ chain: { ...CHAIN, feeBps: 300 } });
+    useUi.setState({ chain: { ...CHAIN, fees: { ...chainStatus().fees!, burnBps: 1000, vaultBps: 200 } } });
     useUi.setState({
       screen: 'roundover',
       room: ARENA,
       ticket: { entryFee: 1000 * M, arenaId: 1, session: 'S3' },
-      roundResult: { kind: 'round', round: N, payout: 3000 * M, stats: STATS, standings: [] },
+      roundResult: { kind: 'round', round: N, payout: 2760 * M, stats: { ...STATS, gross: 3000 * M, cut: 240 * M }, standings: [] },
     });
     render(
       <Kb>
         <RoundOverSheet />
       </Kb>,
     );
-    expect(screen.getByText('Fee 3% · paid at entry')).toBeTruthy();
-    expect(screen.getByText('≈ 30')).toBeTruthy();
-    useChainData.setState({ config: null });
+    expect(screen.getByText('Fee 12% of profit')).toBeTruthy();
+    expect(screen.getByText('≈ −240')).toBeTruthy();
+    // the rates fixed into the ticket at join win over the live ones
+    act(() =>
+      useChainData.setState({
+        sessions: { 1: { arenaId: 1, player: '0x1111111111111111111111111111111111111111', id: 9n, entryFee: 10n ** 21n, openedAt: 1, burnBps: 500, vaultBps: 0, finalized: false, owed: 0n } },
+      }),
+    );
+    expect(screen.getByText('Fee 5% of profit')).toBeTruthy();
+    expect(screen.getByText('≈ −100')).toBeTruthy();
+    useChainData.setState({ sessions: {} });
   });
 });
 

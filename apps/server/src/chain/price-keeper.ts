@@ -1,4 +1,5 @@
-import { clampPrice, describeError, formatHypeAmount, needsReprice, priceDeviationBps, setPriceCall, usdCentsToWei } from '@elymum/sdk';
+import { clampPrice, describeError, formatGasAmount, needsReprice, priceDeviationBps, setPriceCall, usdCentsToWei } from '@elymum/sdk';
+import { GAS_SYMBOL } from '@elymum/shared';
 import type { Address } from 'viem';
 import type { EvmClient } from './evm-client';
 
@@ -20,7 +21,7 @@ export interface PriceKeeperDeps {
   nft: () => string | null;
   /** Mint target in US cents (`MINT_USD_CENTS`). */
   usdCents: number;
-  /** HYPE/USD as the API's decimal string. */
+  /** The gas token's USD price as the API's decimal string. */
   fetchPrice: () => Promise<{ price: string; value: number }>;
   log: (m: string) => void;
   intervalMs?: number;
@@ -28,8 +29,8 @@ export interface PriceKeeperDeps {
 }
 
 /**
- * Keeps the mint at $1 in HYPE when the owner made the server key the NFT's `priceKeeper` and set the
- * price bounds: every 5 minutes it reads HYPE/USD and calls `setPrice` when the current price is off the
+ * Keeps the mint at $1 in the gas token when the owner made the server key the NFT's `priceKeeper` and set the
+ * price bounds: every 5 minutes it reads the gas token's USD price and calls `setPrice` when the current price is off the
  * target by more than 2 %. The feed is a single source, so a move needs two consecutive readings whose
  * targets agree within 3 %, and one update moves the on-chain price by at most ±20 % (a large move takes
  * several checks); the result is always clamped into `[minPrice, maxPrice]`. Otherwise it does nothing
@@ -96,7 +97,7 @@ export class PriceKeeper {
     } catch (err) {
       // the next reading starts a new pair
       this.prevTarget = null;
-      this.deps.log(`price keeper: HYPE/USD unavailable (${(err as Error).message})`);
+      this.deps.log(`price keeper: gas-token/USD unavailable (${(err as Error).message})`);
       return 'no-price';
     }
     const target = usdCentsToWei(this.deps.usdCents, price.price);
@@ -104,7 +105,7 @@ export class PriceKeeper {
     this.prevTarget = { nft: nft.toLowerCase(), wei: target };
     if (clampPrice(target, state.minPrice, state.maxPrice) === state.price || !needsReprice(state.price, target, PRICE_KEEPER_THRESHOLD_BPS)) return 'in-range';
     if (prev === null || priceDeviationBps(prev, target) > PRICE_KEEPER_CONFIRM_BPS) {
-      this.deps.log(`price keeper: HYPE $${price.value} puts the price off target; waiting for a second reading within 3 % before moving it`);
+      this.deps.log(`price keeper: ${GAS_SYMBOL} $${price.value} puts the price off target; waiting for a second reading within 3 % before moving it`);
       return 'unconfirmed';
     }
     const next = clampPrice(stepLimited(state.price, target), state.minPrice, state.maxPrice);
@@ -117,8 +118,8 @@ export class PriceKeeper {
         return 'failed';
       }
       this.deps.log(
-        `price keeper: HYPE $${price.value} → price ${formatHypeAmount(state.price)} → ${formatHypeAmount(next)} ` +
-          `(target ${formatHypeAmount(target)}, off ${(priceDeviationBps(state.price, target) / 100).toFixed(2)} %${
+        `price keeper: ${GAS_SYMBOL} $${price.value} → price ${formatGasAmount(state.price)} → ${formatGasAmount(next)} ` +
+          `(target ${formatGasAmount(target)}, off ${(priceDeviationBps(state.price, target) / 100).toFixed(2)} %${
             next !== target ? (next !== stepLimited(state.price, target) ? ', clamped to the bounds' : ', limited to a 20 % step') : ''
           }) · ${hash}`,
       );

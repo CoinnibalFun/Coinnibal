@@ -1,6 +1,5 @@
 import { availableParallelism } from 'node:os';
 import { TICK_MS, arenaMeta, type BlockedArena, type DeathStats, type League, type MapScaleSettings, type RoomInfo, type RoundWindow } from '@elymum/shared';
-import { BotSettingsStore, botKindOf, defaultBotSettings, type BotRoomKind } from '../bots/settings';
 import type { ChainGateway } from '../chain/types';
 import type { ServerConfig } from '../config';
 import type { IntegrityService } from '../integrity/service';
@@ -8,8 +7,10 @@ import type { Leaderboards } from '../leaderboards';
 import type { Conn } from '../net/conn';
 import type { ShopService } from '../shop/service';
 import type { Journal } from '../stake/journal';
-import type { BotManagerOptions } from '../bots/manager';
-import type { RoomHandle, StakeSeat } from './handle';
+import type { PracticeBotsOptions } from '../bots/practice';
+import { ArenaScaler, ArenaScalingStore } from './arena-scaler';
+import { MapSettingsStore, mapKindOf, type MapRoomKind } from './map-settings';
+import { lookOf, type PlayerLook, type RoomHandle, type StakeSeat } from './handle';
 import { Room, type BellSettled, type RoomDeps, type RoomOptions } from './room';
 import { RoundClock } from './round-clock';
 import { ThreadMeter, TickStats, roomTickStats, startTickLoop, wsOut, type RoomLoad, type ServerLoad, type ThreadLoad } from './load';
@@ -18,7 +19,7 @@ import { RemoteRoom, WorkerPool } from './remote/pool';
 /** What the room manager asks of the custom-room service (`CustomRoomService`). */
 export interface CustomRoomHooks {
   /** Closes rooms whose time ran out (called about once a second from the tick loop). */
-  sweep(now: number): void;
+  sweep(): void;
   /** A human's game ended in a custom room (its own leaderboard). */
   onGame(room: RoomHandle, e: { name: string; score: number; kills: number }): void;
   /** Rooms were lost with a crashed room worker: reopen the custom rooms that still have time. */
@@ -39,18 +40,32 @@ export function isPaidCustom(opts: Pick<RoomOptions, 'mode' | 'code'>): boolean 
 export interface GameOverEvent {
   room: RoomHandle;
   conn: Conn | null;
-  player: { name: string };
+  player: PlayerLook;
   stats: DeathStats;
 }
 
+/** A person ate a person whose coin reached `NOTABLE_KILL_MASS` (in a room on this thread or in a room worker). */
+export interface NotableKillEvent {
+  room: RoomHandle;
+  /** The killer's connection. */
+  conn: Conn;
+  player: PlayerLook;
+  /** The killer's mass and kills now. */
+  mass: number;
+  kills: number;
+  victim: string;
+  victimMass: number;
+}
+
 /** The services the rooms use: the main thread's own (journal, chain, stores), whichever thread runs the rooms. */
-export interface ManagerDeps extends Omit<RoomDeps, 'chain' | 'journal' | 'leaderboards' | 'integrity' | 'shop' | 'onGameOver'> {
+export interface ManagerDeps extends Omit<RoomDeps, 'chain' | 'journal' | 'leaderboards' | 'integrity' | 'shop' | 'onGameOver' | 'onNotableKill'> {
   chain: ChainGateway;
   journal: Journal;
   leaderboards: Leaderboards;
   integrity?: IntegrityService;
   shop?: ShopService;
   onGameOver?: (e: GameOverEvent) => void;
+  onNotableKill?: (e: NotableKillEvent) => void;
 }
 
 /** A custom room that closed is remembered this long (a late joiner hears `room_closed`, not "no such room"). */
@@ -125,21 +140,37 @@ export class RoomManager {
   private readonly lastEnabled = new Map<number, boolean>();
   /** `arenaId:wallet` → the AFK ticket the last bell settled while its player was away. */
   private readonly bellMemo = new Map<string, BellSettled & { at: number }>();
-  /** The admin's bot settings (`/api/admin/bots`), applied live to every room. */
-  readonly botSettings: BotSettingsStore;
+  /** The admin's map settings (`/api/admin/maps`), applied live to every room. */
+  readonly mapSettings: MapSettingsStore;
   private custom: CustomRoomHooks | null = null;
   private lastCustomSweep = 0;
   /** Codes of custom rooms that closed lately → when. */
   private readonly closedCodes = new Map<string, number>();
+  /** How many public instances of each arena take seats, and which one a seat goes to (`arena-scaler.ts`). */
+  readonly scaler: ArenaScaler;
 
   constructor(
     private readonly cfg: ServerConfig,
     deps: ManagerDeps,
     private readonly chain: ChainGateway,
-    botSettings?: BotSettingsStore,
+    mapSettings?: MapSettingsStore,
+    scaling?: ArenaScalingStore,
   ) {
-    this.botSettings = botSettings ?? new BotSettingsStore(null, defaultBotSettings(cfg.bots));
-    this.botSettings.onChange(() => this.applyBotSettings());
+    this.mapSettings = mapSettings ?? new MapSettingsStore(null);
+    this.scaler = new ArenaScaler(
+      {
+        instances: (arenaId) => this.arenaInstances(arenaId),
+        arenaIds: () => [...new Set(this.publicInstances().map((r) => r.opts.stake!.arenaId))].sort((a, b) => a - b),
+        capacity: () => this.cfg.arenaInstanceCap,
+        openInstance: (arenaId) => this.openScaledInstance(arenaId),
+        closeDrained: (room) => this.closeDrained(room),
+        threadOf: (room) => (room instanceof RemoteRoom ? `w${room.slot.index}` : undefined),
+        now: () => this.now(),
+        log: (m) => this.deps.log(m),
+      },
+      scaling ?? new ArenaScalingStore(null),
+    );
+    this.mapSettings.onChange(() => this.applyMapSettings());
     const round = deps.round ?? cfg.round;
     // one clock for the gateway and every room
     const clock = deps.clock ?? new RoundClock(deps.now, round);
@@ -154,10 +185,13 @@ export class RoomManager {
     };
     this.deps = { ...deps, round, clock, onGameOver: gameOver, onBellSettled: bellSettled };
     // a room on this thread hands its own connection (a `Conn`) to the hooks
+    const notable = (e: NotableKillEvent) => deps.onNotableKill?.(e);
     this.roomDeps = {
       ...this.deps,
-      houseBank: { draw: async (arenaId, amount) => this.deps.journal.drawHouse(arenaId, amount) },
-      onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: e.player, stats: e.stats }) };
+      onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: lookOf(e.player), stats: e.stats }),
+      onNotableKill: (e) =>
+        notable({ room: e.room, conn: e.conn as Conn, player: lookOf(e.killer), mass: Math.floor(e.killer.totalMass()), kills: e.killer.stats.playersEaten, victim: e.victim, victimMass: e.victimMass }),
+    };
     const workers = cfg.gameWorkers ?? 0;
     this.pool =
       workers > 0
@@ -171,9 +205,8 @@ export class RoomManager {
             clockOffset: () => clock.now() - Date.now(),
             integrity: deps.integrity,
             shop: deps.shop,
-            stakedBots: deps.stakedBots,
-            stakedAskMs: deps.stakedAskMs,
             onGameOver: gameOver,
+            onNotableKill: notable,
             onBellSettled: bellSettled,
             onLost: (rooms) => this.onRoomsLost(rooms),
             onClosed: (room, ok) => {
@@ -296,8 +329,7 @@ export class RoomManager {
         league,
         name: `${league === 'rookie' ? 'Rookie' : 'Pro'} Pond #${n}`,
         maxPlayers: this.cfg.practiceCapacity,
-        bots: this.botSettings.options(league === 'rookie' ? 'practiceRookie' : 'practicePro'),
-        map: { scale: this.botSettings.mapScale(league === 'rookie' ? 'practiceRookie' : 'practicePro') },
+        map: { scale: this.mapSettings.mapScale(league === 'rookie' ? 'practiceRookie' : 'practicePro') },
     });
   }
 
@@ -357,8 +389,7 @@ export class RoomManager {
         name: `Private · ${c}`,
         code: c,
         maxPlayers: this.cfg.privateRoomCapacity,
-        bots: this.botSettings.options('private'),
-        map: { scale: this.botSettings.mapScale('private') },
+        map: { scale: this.mapSettings.mapScale('private') },
     });
   }
 
@@ -372,10 +403,10 @@ export class RoomManager {
   }
 
   /**
-   * Opens a custom room `priv-<code>` (its bots are its own: the admin's bot settings never touch it).
+   * Opens a free custom room `priv-<code>` (with the practice bots its creator asked for, if any).
    * Throws when the code is taken.
    */
-  createCustomRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots'> & { bots: BotManagerOptions | null }): RoomHandle {
+  createCustomRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots'> & { bots: PracticeBotsOptions | null }): RoomHandle {
     const id = `priv-${code}`;
     if (this.has(id)) throw new Error(`room ${id} exists`);
     this.closedCodes.delete(code);
@@ -450,7 +481,7 @@ export class RoomManager {
    * listed, never picked by `arenaRoom` (quick play), never closed by the idle cleanup. Throws when
    * the code is taken.
    */
-  createPaidRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots' | 'instance' | 'stake'> & { bots: BotManagerOptions | null; stake: { arenaId: number; buyIn: number } }): RoomHandle {
+  createPaidRoom(code: string, opts: Omit<RoomOptions, 'id' | 'mode' | 'code' | 'bots' | 'instance' | 'stake'> & { stake: { arenaId: number; buyIn: number } }): RoomHandle {
     const id = `priv-${code}`;
     if (this.has(id)) throw new Error(`room ${id} exists`);
     this.closedCodes.delete(code);
@@ -563,9 +594,41 @@ export class RoomManager {
    * spectating pick from. Paid custom rooms (private instances) are never among them.
    */
   arenaInstances(arenaId: number): RoomHandle[] {
-    return [...this.handles()]
-      .filter((r) => r.opts.mode === 'arena' && r.opts.stake?.arenaId === arenaId && !isPaidCustom(r.opts))
+    return this.publicInstances()
+      .filter((r) => r.opts.stake?.arenaId === arenaId)
       .sort((a, b) => (a.opts.instance ?? 1) - (b.opts.instance ?? 1));
+  }
+
+  /** Every public arena instance (of every arena). */
+  private publicInstances(): RoomHandle[] {
+    return [...this.handles()].filter((r) => r.opts.mode === 'arena' && !!r.opts.stake && !isPaidCustom(r.opts));
+  }
+
+  /**
+   * The scaler opens one more instance of an arena (ahead of demand, an overflow seat or the minimum): only while
+   * the arena is allowed, enabled at the last chain read and not kept closed by the vault guard.
+   */
+  private openScaledInstance(arenaId: number): RoomHandle | null {
+    if (!this.arenaAllowed(arenaId) || this.underfunded.has(arenaId)) return null;
+    const arena = this.arenaCache?.ids.get(arenaId) ?? this.arenaFromRooms(arenaId);
+    if (!arena || !arena.enabled) return null;
+    if (this.arenaInstances(arenaId).length === 0 && !this.vaultCovers(arenaId, arena)) return null;
+    return this.createArenaInstance(arenaId, arena);
+  }
+
+  /**
+   * A drained instance closes once nothing of value is left in it (no player, no ticket, no loot: its bell settled
+   * them); its spectators go back to the lobby. Never evicts a ticket.
+   */
+  private closeDrained(room: RoomHandle): 'closed' | 'pending' {
+    const message = 'Fewer players now: this arena instance closed. Pick the arena again to play.';
+    if (room instanceof RemoteRoom) {
+      if (!room.closing && !room.closed) this.pool!.closeSettled(room, message);
+      return 'pending';
+    }
+    if (!(room as Room).closeSettled(message)) return 'pending';
+    this.drop(room);
+    return 'closed';
   }
 
   /** Every room that seats tickets of an arena: its public instances and its paid custom rooms. */
@@ -584,17 +647,9 @@ export class RoomManager {
         name: n === 1 ? meta.name : `${meta.name} #${n}`,
         instance: n,
         maxPlayers: this.cfg.arenaInstanceCap,
-        bots: this.botSettings.options('arena'),
-        map: { scale: this.botSettings.mapScale('arena') },
-        stake: { arenaId, buyIn: arena.buyIn, botStake: this.ticketValue(arena.buyIn) },
+        map: { scale: this.mapSettings.mapScale('arena') },
+        stake: { arenaId, buyIn: arena.buyIn },
     });
-  }
-
-  /** What a ticket bought now plays with (the entry fee less the arena's fee on entry): a house bot's bankroll. */
-  private ticketValue(buyIn: number): number {
-    const st = this.deps.chain.status();
-    const bps = st.feeModel === 'profit' ? 0 : Math.max(0, Math.min(10_000, st.feeBps ?? 0));
-    return buyIn - Math.floor((buyIn * bps) / 10_000);
   }
 
   /**
@@ -638,9 +693,9 @@ export class RoomManager {
   }
 
   /**
-   * Room for a new arena player: the busiest instance `arena-<id>-<n>` with
-   * fewer humans than the instance cap, else a new instance. Null when the
-   * arena does not exist or is disabled.
+   * Room for a new arena player: the fullest instance `arena-<id>-<n>` that takes seats and is not full, else a
+   * draining one taken back, else a new instance (`ArenaScaler.seatFor`). Null when the arena does not exist or
+   * is disabled.
    */
   async arenaRoom(arenaId: number): Promise<RoomHandle | null> {
     if (!this.arenaAllowed(arenaId)) return null;
@@ -655,12 +710,8 @@ export class RoomManager {
     if (!arena || !arena.enabled) return null;
     if (this.underfunded.has(arenaId)) return null;
     if (this.arenaInstances(arenaId).length === 0 && !this.vaultCovers(arenaId, arena)) return null;
-    let best: RoomHandle | null = null;
-    for (const r of this.arenaInstances(arenaId)) {
-      if (r.humanCount >= this.cfg.arenaInstanceCap) continue;
-      if (!best || r.humanCount > best.humanCount) best = r;
-    }
-    const room = best ?? this.createArenaInstance(arenaId, arena);
+    const room = this.scaler.seatFor(arenaId);
+    if (!room) return null;
     // a join is under way: keep cleanup from closing this (possibly idle) instance meanwhile
     room.lastActivity = Date.now();
     return room;
@@ -672,7 +723,7 @@ export class RoomManager {
    * picks again, with the same checks. Null when no live room is available.
    */
   async confirmArenaRoom(arenaId: number, room: RoomHandle): Promise<RoomHandle | null> {
-    const live = (r: RoomHandle | null): r is RoomHandle => r !== null && this.get(r.id) === r && !r.isFull;
+    const live = (r: RoomHandle | null): r is RoomHandle => r !== null && this.get(r.id) === r && this.scaler.seatable(r);
     if (live(room)) {
       room.lastActivity = Date.now();
       return room;
@@ -751,30 +802,27 @@ export class RoomManager {
   }
 
   /* ---------------------------------------------------------------- */
-  /* Bots                                                             */
+  /* Map settings                                                     */
   /* ---------------------------------------------------------------- */
 
-  /** Re-applies the bot and map settings to every room (an admin change, no restart). */
-  applyBotSettings(): void {
+  /** Re-applies the map settings to every room (an admin change, no restart); custom rooms keep their creator's map. */
+  applyMapSettings(): void {
     for (const room of this.handles()) {
-      // custom rooms keep the bots and the map their creator chose
       if (room.opts.custom) continue;
-      const kind = botKindOf(room.opts.mode, room.opts.league);
-      room.setBotOptions(this.botSettings.options(kind));
-      room.setMapScale(this.botSettings.mapScale(kind));
+      room.setMapScale(this.mapSettings.mapScale(mapKindOf(room.opts.mode, room.opts.league)));
     }
   }
 
   /** The curve a custom room whose creator picked "Auto" sizes its map by (the private rooms' curve, always on). */
   customMapScale(): MapScaleSettings {
-    return { ...this.botSettings.mapScale('private'), auto: true };
+    return { ...this.mapSettings.mapScale('private'), auto: true };
   }
 
-  /** Live bot counts per room (for `GET /api/admin/bots`). */
-  botCounts(): { id: string; kind: BotRoomKind; name: string; arenaId?: number; humans: number; bots: number; stakedBots: number; mapSide: number; mapAuto: boolean }[] {
+  /** Every room's people, bots and map now (`GET /api/admin/maps`). */
+  roomCounts(): { id: string; kind: MapRoomKind; name: string; arenaId?: number; humans: number; bots: number; mapSide: number; mapAuto: boolean }[] {
     return [...this.handles()].map((r) => ({
       id: r.id,
-      kind: botKindOf(r.opts.mode, r.opts.league),
+      kind: mapKindOf(r.opts.mode, r.opts.league),
       name: r.opts.name,
       ...(r.opts.stake ? { arenaId: r.opts.stake.arenaId } : {}),
       ...r.botCounts(),
@@ -851,12 +899,17 @@ export class RoomManager {
     this.housekeeping(Date.now());
   }
 
-  /** Expired custom rooms (every second) and idle rooms (every 15 s). */
+  /** Expired custom rooms (every second), the arena scaler (every 5 s) and idle rooms (every 15 s). */
   private housekeeping(now: number): void {
+    try {
+      this.scaler.tick();
+    } catch (err) {
+      this.deps.log(`arena scaling failed: ${(err as Error).stack ?? err}`);
+    }
     if (this.custom && now - this.lastCustomSweep >= 1000) {
       this.lastCustomSweep = now;
       try {
-        this.custom.sweep(now);
+        this.custom.sweep();
       } catch (err) {
         this.deps.log(`custom rooms: sweep failed: ${(err as Error).stack ?? err}`);
       }
@@ -876,10 +929,8 @@ export class RoomManager {
         // custom rooms live until their time runs out (the custom-room service closes them)
         (room.opts.mode === 'private' && !room.opts.custom && now - room.lastActivity > 120_000) ||
         // every league keeps its first room
-        (room.opts.mode === 'practice' && !room.id.endsWith('-1') && now - room.lastActivity > 300_000) ||
-        // extra arena instances close once empty, with no ticket and no loot left on their floor
-        // (paid custom rooms are closed by the custom-room service, at their end)
-        (room.opts.mode === 'arena' && !isPaidCustom(room.opts) && (room.opts.instance ?? 1) > 1 && room.liveSessions().length === 0 && room.lootCount() === 0 && now - room.lastActivity > 300_000);
+        // (arena instances are consolidated by the scaler; paid custom rooms by the custom-room service, at their end)
+        (room.opts.mode === 'practice' && !room.id.endsWith('-1') && now - room.lastActivity > 300_000);
       if (!close) continue;
       // a room worker drops it only if it is still idle there (a join may be on its way)
       if (room instanceof RemoteRoom) {
@@ -888,6 +939,20 @@ export class RoomManager {
     }
     for (const [ip, at] of this.promotions) if (now - at >= PROMOTION_MS) this.promotions.delete(ip);
     for (const [code, at] of this.closedCodes) if (now - at >= CLOSED_MEMO_MS) this.closedCodes.delete(code);
+  }
+
+  /**
+   * The tick p95 (ms) of the game thread with the most headroom: the worker a new room would go to, or the main
+   * thread in single-thread mode. Null while nothing was measured. Read by the load shedder (`net/shedder.ts`).
+   */
+  bestTickP95Ms(): number | null {
+    if (!this.pool) {
+      const s = this.tickStats.summary();
+      return s.n > 0 ? s.p95Ms : null;
+    }
+    let best: number | null = null;
+    for (const t of this.pool.threads()) if (t.up !== false && t.tick.n > 0) best = best === null ? t.tick.p95Ms : Math.min(best, t.tick.p95Ms);
+    return best;
   }
 
   /** Per-thread load (`GET /api/admin/load`, the load test). `rooms`: with every room's own figures. */

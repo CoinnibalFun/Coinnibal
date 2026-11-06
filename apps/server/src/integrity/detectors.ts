@@ -496,7 +496,109 @@ export function detectBellAbuse(snap: IntegritySnapshot, th: IntegrityThresholds
   return out;
 }
 
-export const DETECTORS = [detectPairTransfers, detectEjectFeeding, detectSuicideFeeding, detectSharedDevice, detectBotInput, detectBellAbuse] as const;
+/* ------------------------------------------------------------------ */
+/* 7. Input twins                                                      */
+/* ------------------------------------------------------------------ */
+
+/** Jensen-Shannon divergence (bits, 0..1) of two histograms (normalized here). */
+export function jsdBits(a: readonly number[], b: readonly number[]): number {
+  const sa = a.reduce((x, y) => x + y, 0);
+  const sb = b.reduce((x, y) => x + y, 0);
+  if (!(sa > 0) || !(sb > 0)) return 1;
+  let d = 0;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const p = (a[i] ?? 0) / sa;
+    const q = (b[i] ?? 0) / sb;
+    const m = (p + q) / 2;
+    if (p > 0) d += 0.5 * p * Math.log2(p / m);
+    if (q > 0) d += 0.5 * q * Math.log2(q / m);
+  }
+  return Math.max(0, d);
+}
+
+/** The automated-input signals of a pooled input (`detectBotInput`'s timing and jitter tests). */
+function automated(p: ReturnType<typeof poolInput>, th: IntegrityThresholds): boolean {
+  const turns = p.hist.reduce((a, b) => a + b, 0);
+  const periodic = p.n >= th.botMinInputs && p.cv <= th.botMaxIntervalCv;
+  const noJitter = (turns >= th.botMinInputs && entropyBits(p.hist) <= th.botMaxTurnEntropy) || (p.aims >= th.botMinInputs && p.intAims / p.aims >= th.botMinIntegerShare);
+  return periodic || noJitter;
+}
+
+/**
+ * Two wallets with automated input (the bot-input tests) whose pooled input statistics are the same to within
+ * noise, that played in the same room at the same time in several rounds: one script driving several accounts (a
+ * farm, multi-accounting). Only automated wallets are compared: people sending through the same web client can
+ * look alike (the simulation's emulated people, all drawn from one model, would all be "twins"), scripts are
+ * what this links. The score stays below the hold score on its own: it names the operator's other wallets
+ * next to their bot-input flags, for a person to look at.
+ */
+export function detectInputTwins(snap: IntegritySnapshot, th: IntegrityThresholds): Candidate[] {
+  const byWallet = new Map<string, SessionSummary[]>();
+  for (const s of snap.sessions) {
+    let l = byWallet.get(s.wallet);
+    if (!l) byWallet.set(s.wallet, (l = []));
+    l.push(s);
+  }
+  const pools = new Map<string, ReturnType<typeof poolInput>>();
+  for (const [w, list] of byWallet) {
+    const p = poolInput(list);
+    if (p.hist.reduce((a, b) => a + b, 0) >= th.twinMinInputs && automated(p, th)) pools.set(w, p);
+  }
+  if (pools.size < 2) return [];
+  // co-presence: rounds in which both had a ticket in the same room at the same time
+  const together = new Map<string, Set<string>>();
+  const byRoom = new Map<string, SessionSummary[]>();
+  for (const s of snap.sessions) {
+    if (!pools.has(s.wallet)) continue;
+    let l = byRoom.get(s.roomId);
+    if (!l) byRoom.set(s.roomId, (l = []));
+    l.push(s);
+  }
+  for (const list of byRoom.values()) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i];
+        const b = list[j];
+        if (a.wallet === b.wallet || a.joinedAt > end(b, snap.now) || b.joinedAt > end(a, snap.now)) continue;
+        const k = a.wallet < b.wallet ? `${a.wallet}|${b.wallet}` : `${b.wallet}|${a.wallet}`;
+        let r = together.get(k);
+        if (!r) together.set(k, (r = new Set()));
+        r.add(`${a.roomId}#${Math.max(a.round, b.round)}`);
+      }
+    }
+  }
+  const out: Candidate[] = [];
+  for (const [k, rounds] of together) {
+    if (rounds.size < th.twinMinRounds) continue;
+    const [wa, wb] = k.split('|');
+    const a = pools.get(wa)!;
+    const b = pools.get(wb)!;
+    const jsd = jsdBits(a.hist, b.hist);
+    const meanGap = Math.abs(a.mean - b.mean) / Math.max(1, (a.mean + b.mean) / 2);
+    const cvGap = Math.abs(a.cv - b.cv);
+    if (jsd > th.twinMaxJsd || meanGap > 0.03 || cvGap > 0.03) continue;
+    out.push({
+      kind: 'input_twin',
+      id: flagId('input_twin', k),
+      // tighter matches score higher, but never into the hold range by themselves
+      score: clampScore(60 + 15 * (1 - jsd / Math.max(1e-9, th.twinMaxJsd))),
+      wallets: [wa, wb],
+      beneficiary: null,
+      arenaId: null,
+      summary: `${short(wa)} and ${short(wb)}: automated input with the same pattern, ${rounds.size} rounds together (one script, two wallets?).`,
+      evidence: {
+        jsdBits: Math.round(jsd * 1e6) / 1e6,
+        intervalMeanMs: [Math.round(a.mean * 10) / 10, Math.round(b.mean * 10) / 10],
+        intervalCv: [round3(a.cv), round3(b.cv)],
+        turnSamples: [a.hist.reduce((x, y) => x + y, 0), b.hist.reduce((x, y) => x + y, 0)],
+        roundsTogether: rounds.size,
+      },
+    });
+  }
+  return out;
+}
+
+export const DETECTORS = [detectPairTransfers, detectEjectFeeding, detectSuicideFeeding, detectSharedDevice, detectBotInput, detectBellAbuse, detectInputTwins] as const;
 
 /** Every detector, keeping candidates at or above `flagMinScore`. */
 export function runDetectors(snap: IntegritySnapshot, th: IntegrityThresholds): Candidate[] {

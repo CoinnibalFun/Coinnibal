@@ -60,8 +60,8 @@ export interface SessionSummary {
   input: InputSummary;
   /** Ejected blobs of this ticket eaten by other stakers (by wallet, at most 8) and by anyone else (bots, overflow). */
   ejects: { eatenBy: Record<string, number>; eatenOther: number };
-  /** How the ticket ended in a death: the staker that ate it (null for a bot or a virus) and the approach share before it. */
-  death: { by: string | null; byBot: boolean; approach: number; samples: number } | null;
+  /** How the ticket ended in a death: the staker that ate it (null for anything else, e.g. a virus) and the approach share before it. */
+  death: { by: string | null; approach: number; samples: number } | null;
 }
 
 /** What the detectors read: ended and live tickets plus value transfers. */

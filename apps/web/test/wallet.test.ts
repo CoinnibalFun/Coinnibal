@@ -62,11 +62,11 @@ describe('EIP-6963 discovery', () => {
 
 describe('the wallet store', () => {
   it('connects (eth_requestAccounts), checksums the account and reads the chain', async () => {
-    const p = fakeProvider({ accounts: [ALICE.toLowerCase() as `0x${string}`], chainId: 99801, known: [99801] });
+    const p = fakeProvider({ accounts: [ALICE.toLowerCase() as `0x${string}`], chainId: 46630, known: [46630] });
     const d = detail(p);
     expect(await connectWallet(d)).toBe(ALICE);
     const s = useWallet.getState();
-    expect(s).toMatchObject({ status: 'connected', address: ALICE, chainId: 99801 });
+    expect(s).toMatchObject({ status: 'connected', address: ALICE, chainId: 46630 });
     expect(p.calls[0].method).toBe('eth_requestAccounts');
     expect(localStorage.getItem(LAST_WALLET_KEY)).toBe('test.wallet');
     // a user-initiated connect may ask for the game sign-in once
@@ -79,8 +79,8 @@ describe('the wallet store', () => {
     await connectWallet(detail(p));
     p.emit('accountsChanged', [BOB.toLowerCase()]);
     expect(useWallet.getState().address).toBe(BOB);
-    p.emit('chainChanged', '0x185d9');
-    expect(useWallet.getState().chainId).toBe(99801);
+    p.emit('chainChanged', '0xb626');
+    expect(useWallet.getState().chainId).toBe(46630);
     p.emit('accountsChanged', []);
     expect(useWallet.getState()).toMatchObject({ status: 'disconnected', address: null });
     expect(localStorage.getItem(LAST_WALLET_KEY)).toBeNull();
@@ -97,7 +97,7 @@ describe('the wallet store', () => {
 
   it('reconnects silently (eth_accounts) to the wallet used last time', async () => {
     localStorage.setItem(LAST_WALLET_KEY, 'io.rabby');
-    const p = fakeProvider({ chainId: 99801 });
+    const p = fakeProvider({ chainId: 46630 });
     const stop = announceProvider(detail(p, 'Rabby', 'io.rabby'));
     initWallets();
     await flush();
@@ -112,7 +112,7 @@ describe('the wallet store', () => {
   it('a silent reconnect the wallet never answers (locked) gives up quietly instead of "Connecting…" for good', async () => {
     vi.useFakeTimers();
     try {
-      const p = fakeProvider({ chainId: 99801 });
+      const p = fakeProvider({ chainId: 46630 });
       p.handlers.eth_accounts = () => new Promise(() => {});
       const pending = connectWallet(detail(p, 'MetaMask', 'io.metamask'), { silent: true });
       expect(useWallet.getState().status).toBe('connecting');
@@ -138,7 +138,7 @@ describe('the wallet store', () => {
 
   it('parses chain ids and accounts defensively', () => {
     expect(parseChainId('0x7a69')).toBe(31337);
-    expect(parseChainId('99801')).toBe(99801);
+    expect(parseChainId('46630')).toBe(46630);
     expect(parseChainId(5)).toBe(5);
     expect(parseChainId('0x')).toBeNull();
     expect(parseChainId(-1)).toBeNull();
@@ -151,32 +151,32 @@ describe('ensureChain: exactly the chain the server says', () => {
   const chain = chainStatus();
 
   it('does nothing when the wallet is already there', async () => {
-    const p = fakeProvider({ chainId: 99801, known: [99801] });
+    const p = fakeProvider({ chainId: 46630, known: [46630] });
     await ensureChain(p, chain);
     expect(p.calls.map((c) => c.method)).toEqual(['eth_chainId']);
   });
 
   it('switches with wallet_switchEthereumChain', async () => {
-    const p = fakeProvider({ chainId: 1, known: [1, 99801] });
+    const p = fakeProvider({ chainId: 1, known: [1, 46630] });
     await ensureChain(p, chain);
-    expect(p.chainId).toBe(99801);
-    expect(p.calls.find((c) => c.method === 'wallet_switchEthereumChain')?.params).toEqual([{ chainId: '0x185d9' }]);
+    expect(p.chainId).toBe(46630);
+    expect(p.calls.find((c) => c.method === 'wallet_switchEthereumChain')?.params).toEqual([{ chainId: '0xb626' }]);
   });
 
   it('adds the chain on 4902 with the server RPC and explorer, then switches', async () => {
     const p = fakeProvider({ chainId: 1, known: [1] });
     await ensureChain(p, chain);
     const add = p.calls.find((c) => c.method === 'wallet_addEthereumChain');
-    expect(add?.params).toEqual([addEthereumChainParams(chainInfo(99801, { name: 'Elysium Testnet', rpcUrl: chain.rpcUrl, explorerUrl: chain.explorerUrl }))]);
-    expect((add?.params as { nativeCurrency: { symbol: string } }[])[0].nativeCurrency.symbol).toBe('HYPE');
+    expect(add?.params).toEqual([addEthereumChainParams(chainInfo(46630, { rpcUrl: chain.rpcUrl, explorerUrl: chain.explorerUrl }))]);
+    expect((add?.params as { nativeCurrency: { symbol: string } }[])[0].nativeCurrency.symbol).toBe('ETH');
     expect(p.calls.filter((c) => c.method === 'wallet_switchEthereumChain')).toHaveLength(2);
-    expect(p.chainId).toBe(99801);
+    expect(p.chainId).toBe(46630);
   });
 
   it('cannot add a chain without a public RPC, and passes a decline through', async () => {
     const p = fakeProvider({ chainId: 1, known: [1] });
-    await expect(ensureChain(p, chainStatus({ chainId: 777, rpcUrl: null, chainName: 'Elysium' }))).rejects.toBeInstanceOf(WrongChainError);
-    const q = fakeProvider({ chainId: 1, known: [1, 99801] });
+    await expect(ensureChain(p, chainStatus({ chainId: 777, rpcUrl: null, chainName: 'Some Chain' }))).rejects.toBeInstanceOf(WrongChainError);
+    const q = fakeProvider({ chainId: 1, known: [1, 46630] });
     q.handlers.wallet_switchEthereumChain = () => {
       throw Object.assign(new Error('User rejected'), { code: 4001 });
     };
@@ -185,16 +185,16 @@ describe('ensureChain: exactly the chain the server says', () => {
   });
 
   it('refuses when the wallet still ends on another chain, or the server has none', async () => {
-    const p = fakeProvider({ chainId: 1, known: [1, 99801] });
+    const p = fakeProvider({ chainId: 1, known: [1, 46630] });
     p.handlers.wallet_switchEthereumChain = () => null;
     await expect(ensureChain(p, chain)).rejects.toBeInstanceOf(WrongChainError);
     await expect(ensureChain(p, chainStatus({ chainId: null }))).rejects.toBeInstanceOf(WrongChainError);
   });
 
   it('reads through the server public RPC, else the wallet provider', () => {
-    expect(serverChainInfo(chain)?.name).toBe('Elysium Testnet');
-    expect(publicClientFor(chain)?.chain?.id).toBe(99801);
+    expect(serverChainInfo(chain)?.name).toBe('Robinhood Chain Testnet');
+    expect(publicClientFor(chain)?.chain?.id).toBe(46630);
     expect(publicClientFor(chainStatus({ rpcUrl: null }))).toBeNull();
-    expect(publicClientFor(chainStatus({ rpcUrl: null }), fakeProvider())?.chain?.id).toBe(99801);
+    expect(publicClientFor(chainStatus({ rpcUrl: null }), fakeProvider())?.chain?.id).toBe(46630);
   });
 });

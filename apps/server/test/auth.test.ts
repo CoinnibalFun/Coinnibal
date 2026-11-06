@@ -5,7 +5,7 @@ import { assertPublicUrl, loadConfig } from '../src/config';
 import { siweOrigin } from '../src/http';
 import { testSigner } from './signers';
 
-const origin: SiweOrigin = { domain: 'elymum.io', uri: 'https://elymum.io', chainId: 99801 };
+const origin: SiweOrigin = { domain: 'elymum.io', uri: 'https://elymum.io', chainId: 46630 };
 
 describe('SIWE login message (EIP-4361)', () => {
   it('names the domain, URI and chain, and the client can rebuild it from the fields', async () => {
@@ -21,7 +21,7 @@ describe('SIWE login message (EIP-4361)', () => {
       '',
       'URI: https://elymum.io',
       'Version: 1',
-      'Chain ID: 99801',
+      'Chain ID: 46630',
       `Nonce: ${n.nonce}`,
       `Issued At: ${n.issuedAt}`,
     ]);
@@ -118,14 +118,15 @@ describe('SIWE login message (EIP-4361)', () => {
 
   it('takes the domain from PUBLIC_URL (the request host only in development); the chain id is the server\'s', () => {
     const req = { headers: { host: 'game.local:8787' } } as never;
-    expect(siweOrigin(loadConfig({ PUBLIC_URL: 'https://elymum.io/' } as NodeJS.ProcessEnv), req, false, 99801)).toEqual({
+    expect(siweOrigin(loadConfig({ PUBLIC_URL: 'https://elymum.io/' } as NodeJS.ProcessEnv), req, false, 46630)).toEqual({
       domain: 'elymum.io',
       uri: 'https://elymum.io',
-      chainId: 99801,
+      chainId: 46630,
     });
     const dev = loadConfig({ NODE_ENV: 'development' } as NodeJS.ProcessEnv);
-    // chain off: the testnet id
-    expect(siweOrigin(dev, req, false, null)).toEqual({ domain: 'game.local:8787', uri: 'http://game.local:8787', chainId: 99801 });
+    // chain off: the configured CHAIN_ID (default Robinhood Chain Testnet)
+    expect(siweOrigin(dev, req, false, null)).toEqual({ domain: 'game.local:8787', uri: 'http://game.local:8787', chainId: 46630 });
+    expect(siweOrigin(loadConfig({ NODE_ENV: 'development', CHAIN_ID: '4663' } as NodeJS.ProcessEnv), req, false, null).chainId).toBe(4663);
     expect(siweOrigin(dev, req, false, 31337).chainId).toBe(31337);
   });
 
@@ -136,16 +137,16 @@ describe('SIWE login message (EIP-4361)', () => {
     for (const headers of spoofs) {
       const req = { headers } as never;
       // PUBLIC_URL set: always its host
-      expect(siweOrigin(loadConfig({ PUBLIC_URL: 'https://game.example' } as NodeJS.ProcessEnv), req, false, 99801).domain).toBe('game.example');
+      expect(siweOrigin(loadConfig({ PUBLIC_URL: 'https://game.example' } as NodeJS.ProcessEnv), req, false, 46630).domain).toBe('game.example');
       // unset outside development (startup refuses this; the fallback is localhost, never the request)
       for (const env of [{}, { NODE_ENV: 'production' }, { NODE_ENV: 'test' }]) {
-        const o = siweOrigin(loadConfig({ PORT: '8787', ...env } as NodeJS.ProcessEnv), req, false, 99801);
+        const o = siweOrigin(loadConfig({ PORT: '8787', ...env } as NodeJS.ProcessEnv), req, false, 46630);
         expect(o.domain).toBe('localhost:8787');
         const n = auth.issueNonce(victim.address, o);
         expect(n.message).not.toContain('evil.example');
       }
       // development: Host only, X-Forwarded-Host is ignored
-      expect(siweOrigin(loadConfig({ NODE_ENV: 'development' } as NodeJS.ProcessEnv), req, false, 99801).domain).toBe(headers.host);
+      expect(siweOrigin(loadConfig({ NODE_ENV: 'development' } as NodeJS.ProcessEnv), req, false, 46630).domain).toBe(headers.host);
     }
   });
 

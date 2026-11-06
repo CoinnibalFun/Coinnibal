@@ -2,29 +2,37 @@ import { WORLD_PRESETS } from './constants';
 import { clamp } from './formulas';
 
 /**
- * Adaptive map size: a room's square world is sized for the players it expects (humans plus the
- * bots that fill it), so the area per player, and with it how often coins meet, stays about the
- * same in a quiet pond and in a packed arena.
+ * Dynamic map size: every room's square world grows a little with every person in it (and every practice bot
+ * of a free custom room), and shrinks back as they leave, only when that is safe.
  *
- *   side(n) = clamp(perPlayer * sqrt(n), min, max), rounded up to `MAP_SIDE_STEP`
+ *   side(n) = min(max, base + perPlayer * n), rounded up to `MAP_SIDE_STEP`; never below `base`
  *
- * Every player gets about `perPlayer^2` units of floor (default 900 x 900). Food, rug cacti and
- * power-ups follow the area at a practice pond's density (`worldForSide`, food capped by
- * `MAP_WORLD_CAPS`).
+ * `base` is the side of an empty room (and the smallest side), `perPlayer` the side each person adds, `max` the
+ * largest side. Food, rug cacti and power-ups follow the area at a practice pond's density (`worldForSide`, food
+ * capped by `MAP_WORLD_CAPS`).
  *
- * Defaults (perPlayer 900, min 9000, max 12000; 2026-11 owner): up to 100 players 9000, 144 players
- * 10800, 178 and more 12000. The custom room sizes XS..XL (3000..9000) are chosen sizes and do not follow the curve.
+ * Defaults (2026-11 owner: maps stay roomy and grow with every person): base 8000, 40 per person, max 12000.
+ * 1 person 8040, 25 people 9000, 40 (a full pond) 9600, 50 (a full arena instance) 10000, 100 and more 12000.
+ * The custom room sizes XS..XL (3000..9000) are chosen sizes and do not follow the model.
+ *
+ * When the side changes (`Room`): it grows during play by at most `MAP_GROW.maxStep` every `MAP_GROW.stepMs`.
+ * An arena (a public instance or a ticket room) never shrinks during a round: it takes its new, possibly smaller,
+ * size at the round start, right after the bell settled every coin. A room without rounds shrinks step by step
+ * and only over empty floor (no person's coin near the band that goes), so nobody is ever trapped by the wall.
  */
 export interface MapScaleSettings {
-  /** The world follows the player count (off: the room keeps its mode's fixed preset). */
+  /** The world follows the people in the room (off: the room keeps its mode's fixed preset). */
   auto: boolean;
-  /** Side (world units) of the square of floor each expected player gets. */
+  /** Side (world units) of an empty room, and the smallest side. */
+  base: number;
+  /** Side (world units) each person adds. */
   perPlayer: number;
-  /** Smallest side (world units). */
-  min: number;
   /** Largest side (world units, at most `MAP_SPACE`). */
   max: number;
 }
+
+/** The admin-tunable fields of `MapScaleSettings`, in the order the admin page shows them. */
+export const MAP_SCALE_FIELDS = ['auto', 'base', 'perPlayer', 'max'] as const;
 
 /**
  * Coordinate space (square, world units) of a resizable world: the playable square sits centred
@@ -33,30 +41,13 @@ export interface MapScaleSettings {
  */
 export const MAP_SPACE = 12_000;
 
-/** Sides are rounded up to a multiple of this (fewer, larger steps). */
-export const MAP_SIDE_STEP = 100;
+/** Sides are rounded up to a multiple of this (a step every person or two at the default growth). */
+export const MAP_SIDE_STEP = 10;
 
 /** Bounds of the admin values. */
-export const MAP_SCALE_LIMITS = { perPlayerMin: 300, perPlayerMax: 2000, sideMin: 2000, sideMax: MAP_SPACE } as const;
+export const MAP_SCALE_LIMITS = { perPlayerMin: 0, perPlayerMax: 300, sideMin: 2000, sideMax: MAP_SPACE } as const;
 
-export const MAP_SCALE_DEFAULT: MapScaleSettings = { auto: true, perPlayer: 900, min: 9000, max: 12_000 };
-
-/** The first defaults (before 2026-11): saved settings still equal to them are upgraded on load. */
-export const OLD_MAP_SCALE_DEFAULT: Readonly<Omit<MapScaleSettings, 'auto'>> = { perPlayer: 900, min: 3000, max: 9000 };
-
-/** The defaults of early 2026-11 (perPlayer 1000, min 10000, max 12000): also upgraded on load. */
-export const PREV_MAP_SCALE_DEFAULT: Readonly<Omit<MapScaleSettings, 'auto'>> = { perPlayer: 1000, min: 10_000, max: 12_000 };
-
-/** The defaults of mid 2026-11 (perPlayer 800, min 9000, max 12000): also upgraded on load. */
-export const MID_MAP_SCALE_DEFAULT: Readonly<Omit<MapScaleSettings, 'auto'>> = { perPlayer: 800, min: 9000, max: 12_000 };
-
-/** Every former default: saved map settings still exactly equal to one of them take `MAP_SCALE_DEFAULT`. */
-export const FORMER_MAP_SCALE_DEFAULTS: readonly Readonly<Omit<MapScaleSettings, 'auto'>>[] = [OLD_MAP_SCALE_DEFAULT, PREV_MAP_SCALE_DEFAULT, MID_MAP_SCALE_DEFAULT];
-
-/** The saved values equal a former default (`FORMER_MAP_SCALE_DEFAULTS`), so they were never tuned by hand. */
-export function isFormerMapScaleDefault(m: { perPlayer?: unknown; min?: unknown; max?: unknown }): boolean {
-  return FORMER_MAP_SCALE_DEFAULTS.some((d) => m.perPlayer === d.perPlayer && m.min === d.min && m.max === d.max);
-}
+export const MAP_SCALE_DEFAULT: MapScaleSettings = { auto: true, base: 8000, perPlayer: 40, max: 12_000 };
 
 /**
  * Pacing of growth during play: the room re-checks its expected count every `checkMs`, and grows by
@@ -68,13 +59,12 @@ export const MAP_GROW = { checkMs: 1000, stepMs: 4000, maxStep: 600, animMs: 150
 /** Upper bounds of an auto-sized world's food and cacti, whatever the size (the server is small). */
 export const MAP_WORLD_CAPS = { food: 4000, viruses: 40, powerUps: 6 } as const;
 
-/** The world side for `players` expected players. */
-export function mapSideFor(players: number, s: Pick<MapScaleSettings, 'perPlayer' | 'min' | 'max'>): number {
-  const n = Math.max(1, Number.isFinite(players) ? players : 1);
-  const hi = Math.min(MAP_SPACE, Math.max(s.min, s.max));
-  const raw = s.perPlayer * Math.sqrt(n);
-  const stepped = Math.ceil(raw / MAP_SIDE_STEP) * MAP_SIDE_STEP;
-  return clamp(stepped, Math.min(s.min, hi), hi);
+/** The world side for `players` expected players (people plus a free custom room's practice bots). */
+export function mapSideFor(players: number, s: Pick<MapScaleSettings, 'base' | 'perPlayer' | 'max'>): number {
+  const n = Math.max(0, Number.isFinite(players) ? Math.floor(players) : 0);
+  const hi = Math.min(MAP_SPACE, Math.max(s.base, s.max));
+  const stepped = Math.ceil((s.base + s.perPlayer * n) / MAP_SIDE_STEP) * MAP_SIDE_STEP;
+  return clamp(stepped, Math.min(s.base, hi), hi);
 }
 
 /** A practice pond's food and cacti per square unit (the density every auto-sized world keeps). */

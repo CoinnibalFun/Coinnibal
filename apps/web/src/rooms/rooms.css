@@ -395,3 +395,58 @@
   border-radius: var(--r-tag);
   background: var(--linen);
 }
+
+/* the ponds' honest empty state: "Quiet right now" and one click to practice with bots (lobby card / HUD sticker) */
+.pq {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: var(--stroke-sm) dashed var(--outline);
+  border-radius: var(--r-card);
+  background: var(--linen);
+  color: var(--ink-fixed);
+}
+.pq__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.15;
+}
+.pq__body {
+  margin: 0;
+  font-size: var(--t-small);
+  line-height: 1.4;
+}
+.pq__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+.pq--hud {
+  max-width: min(320px, 88vw);
+  margin-top: 0;
+  border-style: solid;
+  border-width: var(--stroke);
+  background: var(--cream);
+  box-shadow: var(--sh-2);
+  pointer-events: auto;
+}
+.pq--hud .pq__title {
+  font-size: 16px;
+}
+.pq__hide {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  /* on the cream sticker in both themes: the fixed ink */
+  color: var(--ink-fixed);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}

@@ -1,3 +1,4 @@
+import { GAS_SYMBOL } from '@elymum/shared';
 import type { SiteCounts, SiteSettings } from '@elymum/shared';
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { CoinCharacter, CoinMark, StatusPill, Tabs, TabPanel, tabId, type TabItem } from '../../design';
@@ -15,7 +16,6 @@ import { TasksTab } from './TasksTab';
 import { WlTab } from './WlTab';
 import './admin-site.css';
 
-export type AdminTab = AdminGroup;
 const TABS: TabItem<AdminGroup>[] = ADMIN_GROUPS.map((id) => ({ id, label: GROUP_LABEL[id] }));
 const IDS = TABS.map((t) => t.id);
 const COMMUNITY_ITEMS: TabItem<CommunityTab>[] = [
@@ -138,7 +138,7 @@ export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: ()
     <div className={`ad-shell${net.mainnet ? ' is-mainnet' : ''}`}>
       {net.mainnet && (
         <div className="ad-mainstrip mono" role="note">
-          Mainnet · every signature here moves real HYPE
+          Mainnet · every signature here moves real {GAS_SYMBOL}
         </div>
       )}
       <header className="ad-top">

@@ -11,7 +11,7 @@ const FEE = 1_000_000;
 const ROUND = { roundMs: 60_000, closeMs: 10_000 };
 
 /** An arena room on a hand-driven wall clock, 1 s into a round. */
-function setup(opts: { bots?: number; journal?: Journal } = {}) {
+function setup(opts: { journal?: Journal } = {}) {
   const clock = { now: roundAt(1_791_000_000_000, ROUND.roundMs, ROUND.closeMs).startsAt + 1_000 };
   const journal = opts.journal ?? new Journal(null);
   const commits: Parameters<Journal['commit']>[0][] = [];
@@ -26,7 +26,6 @@ function setup(opts: { bots?: number; journal?: Journal } = {}) {
     kicks++;
   };
   const logs: string[] = [];
-  const bots = opts.bots ?? 0;
   const room = new Room(
     {
       id: 'arena-1-1',
@@ -34,7 +33,6 @@ function setup(opts: { bots?: number; journal?: Journal } = {}) {
       name: 'Arena',
       instance: 1,
       maxPlayers: 50,
-      bots: bots > 0 ? { target: bots, min: bots, max: bots } : null,
       stake: { arenaId: 1, buyIn: FEE },
       seed: 11,
     },
@@ -172,13 +170,13 @@ describe('arena rounds (room)', () => {
     const bell = commits.filter((c) => c.enqueue && c.enqueue.length > 0);
     expect(bell).toHaveLength(1);
     const enqueued = bell[0].enqueue as JournalItem[];
-    // Bob won 350,000: 20 % of it is the cut (52,500 burned with the round's sweep, 17,500 kept in the vault)
+    // the settlements carry the gross values (the contract takes Bob's fee on his 350,000 profit); the sweep is the floor loot
     expect(enqueued.map((i) => [i.kind, i.key, itemAmount(i)])).toEqual([
       ['settle', ja.stake.session, 400_000],
-      ['settle', jb.stake.session, 1_280_000],
-      ['sweep', `sweep:arena-1-1:${round.n}`, 250_000 + 52_500],
+      ['settle', jb.stake.session, 1_350_000],
+      ['sweep', `sweep:arena-1-1:${round.n}`, 250_000],
     ]);
-    expect(enqueued[2]).toMatchObject({ kind: 'sweep', arenaId: 1, roomId: 'arena-1-1', round: round.n, amount: 302_500 });
+    expect(enqueued[2]).toMatchObject({ kind: 'sweep', arenaId: 1, roomId: 'arena-1-1', round: round.n, amount: 250_000 });
     expect(enqueued.filter((i) => i.kind === 'settle').every((i) => i.kind === 'settle' && i.reason === 'round')).toBe(true);
     // the same write cleared the live tickets and the floor loot
     expect(bell[0].live).toEqual([]);
@@ -187,8 +185,7 @@ describe('arena rounds (room)', () => {
 
     // conserved on disk: what the vault owes is unchanged
     const disk = new Journal(path);
-    expect(disk.owedByArena(1) + disk.houseByArena(1)).toBe(2 * FEE);
-    expect(disk.houseByArena(1)).toBe(17_500);
+    expect(disk.owedByArena(1)).toBe(2 * FEE);
     expect(disk.live()).toEqual([]);
     expect(disk.recoverLoot(1)).toEqual([]);
     expect(room.world.loot()).toEqual([]);
@@ -199,9 +196,10 @@ describe('arena rounds (room)', () => {
     expect(over.stats.payout).toBe(400_000);
     expect(over.stats.finalMass).toBeGreaterThan(0);
     expect(over.standings).toEqual([
-      { name: 'Bob', value: 1_350_000 },
-      { name: 'Alice', value: 400_000, you: true },
+      { rank: 1, name: 'Bob', value: 1_350_000, mass: expect.any(Number), kills: 0 },
+      { rank: 2, name: 'Alice', value: 400_000, mass: expect.any(Number), kills: 0, you: true },
     ]);
+    expect(over.standings[1].mass).toBe(Math.floor(over.stats.finalMass));
     expect(of(a, 'cashout')).toEqual([]);
     expect(of(a, 'death')).toEqual([]);
     expect(of(b, 'roundOver')).toEqual([]);
@@ -213,23 +211,20 @@ describe('arena rounds (room)', () => {
     expect(commits.some((c) => c.enqueue && c.enqueue.length > 0)).toBe(false);
   });
 
-  it('no loot on the floor → no sweep item; bots keep playing into the next round', () => {
-    const { room, journal, clock, round } = setup({ bots: 6 });
+  it('no loot on the floor → no sweep item; an arena never has bots', () => {
+    const { room, journal, clock, round } = setup();
     const conn = fakeConn('w1');
     room.join(conn, stakeJoin(1, FEE));
     tick(room, 5);
-    room.bots!.fill();
-    expect(room.bots!.bots.size).toBeGreaterThanOrEqual(3);
+    expect(room.bots).toBeNull();
+    expect([...room.world.players.values()].every((p) => !p.isBot)).toBe(true);
     expect(room.world.loot()).toEqual([]);
 
     clock.now = round.endsAt;
     tick(room);
     expect(journal.pending.map((i) => i.kind)).toEqual(['settle']);
     expect(of(conn, 'roundOver')).toHaveLength(1);
-    // the squad left with the bell and walks back in, a few right away
-    tick(room, 30 * 15);
-    expect(room.bots!.bots.size).toBeGreaterThanOrEqual(3);
-    for (const b of room.bots!.bots.values()) expect(b.player.alive).toBe(true);
+    expect(room.info().bots).toBe(0);
   });
 
   it('a sleeping room still ends its round and sweeps its loot', () => {

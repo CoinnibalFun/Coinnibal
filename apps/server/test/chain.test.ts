@@ -16,8 +16,8 @@ const T0 = 1_760_000_000_000;
 const wallet = () => testSigner().address;
 /** 1,000 tokens of an 18-decimal token in ledger units (6 decimals). */
 const K = 1_000 * 1e6;
-/** What a 1,000-token ticket plays with on a fee-on-entry (v2) arena: 1,000 minus the 5 % fee. */
-const V = 950 * 1e6;
+/** What a 1,000-token ticket plays with on arena v3: its whole price (no entry fee). */
+const V = K;
 
 function config(env: Record<string, string> = {}): ServerConfig {
   return loadConfig({ EVM_RPC_URL: 'http://127.0.0.1:1', SERVER_PRIVATE_KEY: generatePrivateKey(), ...env } as unknown as NodeJS.ProcessEnv);
@@ -158,6 +158,8 @@ describe('status and reads', () => {
       enabled: true,
       chainId: 31337,
       chainName: 'Localnet',
+      testnet: true,
+      faucetUrl: null,
       rpcUrl: 'https://rpc.public.example',
       explorerUrl: null,
       arenaAddress: ARENA,
@@ -165,21 +167,29 @@ describe('status and reads', () => {
       arenasEnabled: true,
       tokenReady: true,
       token: { address: TOKEN, symbol: '$TEST', decimals: 18 },
-      feeBps: 500,
-      feeModel: 'entry',
+      fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 500, holderPerks: false, paymentBurnBps: 5000, burnMode: 0 },
       serverKey: SERVER,
     });
-    // the legacy v1 arena (fee on profit) is told apart by its code hash
-    const v1 = await harness({ setup: (e) => (e.version = 1) });
-    expect(v1.chain.status()).toMatchObject({ feeModel: 'profit', arenasEnabled: true });
-    expect(v1.logs.join()).toMatch(/legacy v1 build — fee on PROFIT/);
+    // an arena whose code is not the bundled v3 build (an old v1 / v2 deployment) keeps the arenas off
+    const old = await harness({ setup: (e) => e.code.set(ARENA.toLowerCase(), 'mismatch') });
+    expect(old.chain.status()).toMatchObject({ arenasEnabled: false });
+    expect(old.logs.join()).toMatch(/is not the bundled ElymumArena/);
   });
 
-  it('names an unknown chain id by CHAIN_NAME and EXPLORER_URL', async () => {
-    const h = await harness({ env: { CHAIN_NAME: 'Elysium', EXPLORER_URL: 'https://scan.example/' }, setup: (e) => (e.chainId = 4242) });
-    expect(h.chain.status()).toMatchObject({ chainId: 4242, chainName: 'Elysium', explorerUrl: 'https://scan.example', rpcUrl: null });
-    const t = await harness({ env: { CHAIN_NAME: 'Not used' }, setup: (e) => (e.chainId = 99801) });
-    expect(t.chain.status()).toMatchObject({ chainName: 'Elysium Testnet', explorerUrl: 'https://explorer-elysium-testnet.t.conduit.xyz' });
+  it('names the Robinhood Chain network the RPC serves (EXPLORER_URL overrides its explorer); any other chain stays off', async () => {
+    const h = await harness({ env: { EXPLORER_URL: 'https://scan.example/' }, setup: (e) => (e.chainId = 4663) });
+    expect(h.chain.status()).toMatchObject({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, explorerUrl: 'https://scan.example', rpcUrl: null });
+    const t = await harness({ setup: (e) => (e.chainId = 46630) });
+    expect(t.chain.status()).toMatchObject({
+      chainName: 'Robinhood Chain Testnet',
+      testnet: true,
+      explorerUrl: 'https://explorer.testnet.chain.robinhood.com',
+      faucetUrl: 'https://faucet.testnet.chain.robinhood.com',
+    });
+    // an RPC of another chain: no arenas, and the log says Elymum runs on Robinhood Chain only
+    const other = await harness({ setup: (x) => (x.chainId = 99801) });
+    expect(other.chain.status()).toMatchObject({ enabled: false, chainId: null, arenasEnabled: false, chainName: 'Robinhood Chain Testnet' });
+    expect(other.logs.join('\n')).toMatch(/serves chain 99801: chain 99801 is not Robinhood Chain/);
   });
 
   it('converts 18-decimal amounts to ledger units at the boundary (vaults rounded down)', async () => {
@@ -188,12 +198,12 @@ describe('status and reads', () => {
     const s = h.evm.join(1, w);
     h.evm.arenaMap.get(1)!.vault += 7n; // dust below a ledger unit
     const arenas = await h.chain.listArenas(true);
-    // the vault holds the ticket's value (its 5 % fee is reserved apart)
+    // the vault holds the whole ticket price (no entry fee cut)
     expect(arenas[0]).toEqual({ id: 1, entryFee: K, maxSessions: 300, openSessions: 1, enabled: true, pot: V });
     expect(arenas[1].entryFee).toBe(10 * K);
     expect(Number.isSafeInteger(arenas[1].entryFee)).toBe(true);
     const got = await h.chain.getSession(1, w.toLowerCase());
-    expect(got).toEqual({ key: `1:${w.toLowerCase()}:${s.id}`, id: Number(s.id), player: w, arenaId: 1, entryFee: K, feeBps: 500, value: V, openedAt: s.openedAt, finalized: false, owed: 0 });
+    expect(got).toEqual({ key: `1:${w.toLowerCase()}:${s.id}`, id: Number(s.id), player: w, arenaId: 1, entryFee: K, rates: { burnBps: 1500, vaultBps: 500 }, value: V, openedAt: s.openedAt, finalized: false, owed: 0 });
     expect(await h.chain.getSession(2, w)).toBeNull();
     expect(await h.chain.getSession(1, 'nope')).toBeNull();
     expect(await h.chain.getSession(0, w)).toBeNull();
@@ -271,7 +281,7 @@ describe('contracts and the token watcher', () => {
   });
 
   it('the 30 s watcher re-reads the config every time while the token is unset (not after the 3-minute cache)', async () => {
-    // a freshly registered arena (the v2 redeploy): Setup sets the token right after the switch
+    // a freshly registered arena (a redeploy): Setup sets the token right after the switch
     const h = await harness({ setup: (e) => (e.config.token = null) });
     expect(h.chain.status().tokenReady).toBe(false);
     h.evm.config.token = TOKEN;
@@ -342,53 +352,29 @@ describe('settlement worker (batched settle)', () => {
     const sa = h.evm.join(1, a);
     const sb = h.evm.join(1, b);
     const sc = h.evm.join(1, c);
-    // three 1,000 tickets put 3 × 950 into the vault: a doubled 1,900, an eaten 0 and the rest 950
+    // three 1,000 tickets put 3,000 into the vault: a doubled 2,000, an eaten 0 and the rest 1,000
     h.journal.commit({ enqueue: [settleItem(sa, 2 * V), settleItem(sb, 0, { reason: 'death', createdAt: T0 + 1 }), settleItem(sc, V, { createdAt: T0 + 2 })] });
     await h.chain.processPending();
     expect(settleCalls(h.evm)).toHaveLength(1);
     const args = settleArgs(h.evm);
     expect(args.map((x) => [x.player, x.sessionId, x.payout])).toEqual([
-      [a, sa.id, 1_900n * E18],
+      [a, sa.id, 2_000n * E18],
       [b, sb.id, 0n],
-      [c, sc.id, 950n * E18],
+      [c, sc.id, 1_000n * E18],
     ]);
     expect(h.journal.pending).toHaveLength(0);
     expect(h.settled).toHaveLength(3);
     const ea = h.settled.find((e) => e.player === a)!;
-    // fee 5 % of the 1,000 entry = 50 tokens, in ledger units; the whole payout reaches the player
-    expect(ea).toMatchObject({ key: sessionKey(1, a, sa.id), arenaId: 1, payout: 2 * V, fee: 50 * 1e6, feeOnEntry: true });
+    // a profit of 1,000 (in ledger units: 1e9): 15 % burned, 5 % to the fee wallet, the rest to the player
+    expect(ea).toMatchObject({ key: sessionKey(1, a, sa.id), arenaId: 1, payout: 2 * V, fee: 200 * 1e6, burned: 150 * 1e6, toVault: 50 * 1e6, net: 1_800 * 1e6 });
     expect(ea.txHash).toMatch(/^0x[0-9a-f]{64}$/);
     expect(ea.collect).toBeUndefined();
-    // eaten: the fee was still paid at the entry
-    expect(h.settled.find((e) => e.player === b)).toMatchObject({ payout: 0, fee: 50 * 1e6, feeOnEntry: true });
-    expect(h.evm.tokenOf(a)).toBe(1_900n * E18);
-    expect(h.evm.reserved.get(1)).toBe(0n);
+    // eaten: no profit, no fee
+    expect(h.settled.find((e) => e.player === b)).toMatchObject({ payout: 0, fee: 0, net: 0 });
+    expect(h.evm.tokenOf(a)).toBe(1_800n * E18);
+    expect(h.evm.burned).toBe(150n * E18);
+    expect(h.evm.toFeeWallet).toBe(50n * E18);
     expect(h.logs.join()).toMatch(/settle batch 0x[0-9a-f]+ · arena #1 · 3\/3 settled/);
-  });
-
-  it('legacy v1 arena: the fee is taken from the profit at settle, unplayed tickets settle at the entry fee', async () => {
-    const h = await harness({ setup: (e) => (e.version = 1) });
-    const [a, b] = [wallet(), wallet()];
-    const sa = h.evm.join(1, a);
-    const sb = h.evm.join(1, b, { openedAt: Math.floor(T0 / 1000) - 3600 });
-    expect((await h.chain.getSession(1, a))?.value).toBe(K); // v1 plays the whole entry fee
-    h.journal.enqueue(settleItem(sa, K));
-    await h.chain.processPending();
-    expect(h.settled[0]).toMatchObject({ payout: K, fee: 0 });
-    expect(h.settled[0].feeOnEntry).toBeUndefined();
-    expect(await h.chain.sweepStale()).toBe(1);
-    expect(h.journal.pending[0]).toMatchObject({ payout: K, reason: 'stale' });
-    await h.chain.processPending();
-    expect(h.evm.sent.map((c) => c.functionName)).toEqual(['settle', 'settle']); // never `cancel` on v1
-    expect(h.settled[1]).toMatchObject({ player: b, payout: K, fee: 0 });
-    // a profit pays 5 % of it
-    const c = wallet();
-    const sc = h.evm.join(1, c);
-    h.evm.join(1, wallet());
-    h.journal.enqueue(settleItem(sc, 2 * K));
-    await h.chain.processPending();
-    expect(h.settled[2]).toMatchObject({ payout: 2 * K, fee: 50 * 1e6 });
-    expect(h.evm.tokenOf(c)).toBe(1_950n * E18);
   });
 
   it('chunks a bell of 45 tickets into 40 + 5, one batch per arena', async () => {
@@ -412,10 +398,10 @@ describe('settlement worker (batched settle)', () => {
     h.evm.refusing.add(w.toLowerCase());
     h.journal.enqueue(settleItem(s, 3 * K));
     await h.chain.processPending();
-    // v2: the fee (50) was the entry's; the whole payout is owed
-    expect(h.settled[0]).toMatchObject({ collect: true, payout: 3 * K, fee: 50 * 1e6 });
-    expect(h.evm.sessions.get(`1:${w.toLowerCase()}`)).toMatchObject({ finalized: true, owed: 3_000n * E18 });
-    expect(await h.chain.getSession(1, w)).toMatchObject({ finalized: true, owed: 3_000 * 1e6 });
+    // the fee on the 2,000 profit (400) went out with the batch; the player's net 2,600 is owed
+    expect(h.settled[0]).toMatchObject({ collect: true, payout: 3 * K, fee: 400 * 1e6, net: 2_600 * 1e6 });
+    expect(h.evm.sessions.get(`1:${w.toLowerCase()}`)).toMatchObject({ finalized: true, owed: 2_600n * E18 });
+    expect(await h.chain.getSession(1, w)).toMatchObject({ finalized: true, owed: 2_600 * 1e6 });
     expect(h.logs.join()).toMatch(/finalized .* \(to collect\)/);
     // a zero payout is never "to collect"
     const z = wallet();
@@ -463,19 +449,44 @@ describe('settlement worker (batched settle)', () => {
     expect(h.logs.join()).toMatch(/settled elsewhere/);
   });
 
+  it('books guard: nothing leaves a vault that does not cover what the journal owes; payouts resume when it does', async () => {
+    const h = await harness();
+    const a = wallet();
+    const b = wallet();
+    const sa = h.evm.join(1, a);
+    const sb = h.evm.join(1, b);
+    // the journal owes 6 entry fees out of a vault of 2: paying a first would pay it with b's (or anyone's) stake
+    h.journal.commit({ enqueue: [settleItem(sa, K), settleItem(sb, 5 * K, { createdAt: T0 + 1 })] });
+    await h.chain.processPending();
+    expect(settleCalls(h.evm)).toHaveLength(0);
+    expect(h.journal.pending.map((p) => p.lastError)).toEqual([expect.stringMatching(/books guard/), expect.stringMatching(/books guard/)]);
+    expect(h.logs.join()).toMatch(/arena #1 PAYOUTS STOPPED/);
+    expect(h.chain.booksGuard().get(1)).toMatch(/the vault holds/);
+    // items whose ticket already closed on chain do not count: the exact recount is what decides
+    h.evm.close(1, b);
+    h.clock.now += 60_000;
+    await h.chain.processPending();
+    expect(h.settled.map((e) => e.player)).toEqual([a]);
+    expect(h.chain.booksGuard().size).toBe(0);
+    expect(h.logs.join()).toMatch(/books add up again/);
+  });
+
   it('a skipped item (vault short) is retried with backoff; the rest of the batch settles', async () => {
     const h = await harness();
     const a = wallet();
     const b = wallet();
     const sa = h.evm.join(1, a);
     const sb = h.evm.join(1, b);
+    for (let i = 0; i < 4; i++) h.evm.join(1, wallet());
     h.journal.commit({ enqueue: [settleItem(sa, K), settleItem(sb, 5 * K, { createdAt: T0 + 1 })] });
+    // the vault covers the journal at the books check, then falls (e.g. other tickets refunded) before the batch
+    h.evm.beforeSettle = () => (h.evm.arenaMap.get(1)!.vault -= 4_000n * E18);
     await h.chain.processPending();
     expect(h.settled.map((e) => e.player)).toEqual([a]);
     const left = h.journal.pending[0] as SettlementItem;
     expect(left.key).toBe(sessionKey(1, b, sb.id));
     expect(left.attempts).toBe(1);
-    expect(left.lastError).toMatch(/skipped: the payout is larger than the arena vault/);
+    expect(left.lastError).toMatch(/skipped: the payout \(or the cancelled entry fee\) is larger than the arena vault/);
     expect(left.nextAttemptAt).toBeGreaterThan(T0);
     expect(h.logs.join()).toMatch(/vault cannot cover/);
     // not due yet: nothing is sent
@@ -526,7 +537,7 @@ describe('settlement worker (batched settle)', () => {
     expect(settleCalls(h.evm)).toHaveLength(1);
     expect(h.journal.pending).toHaveLength(0);
     expect(h.settled).toHaveLength(1);
-    expect(h.settled[0]).toMatchObject({ player: w, payout: 2 * V, fee: 50 * 1e6 });
+    expect(h.settled[0]).toMatchObject({ player: w, payout: 2 * V, fee: 200 * 1e6, burned: 150 * 1e6, toVault: 50 * 1e6, net: 1_800 * 1e6 });
     expect(h.logs.join()).toMatch(/confirmation arrived late/);
   });
 
@@ -560,7 +571,7 @@ describe('settlement worker (batched settle)', () => {
     await h.chain.processPending();
     expect(h.journal.pending).toHaveLength(1);
     expect(h.journal.pending[0].lastError).toMatch(/SafeERC20FailedOperation/);
-    expect(h.logs.join()).toMatch(/fee wallet .* cannot receive the game token. ALL settlements are held/);
+    expect(h.logs.join()).toMatch(/fee wallet .* cannot take the game token. Settlements with a profit are held/);
     h.evm.feeWalletBroken = false;
     h.clock.now = h.journal.pending[0].nextAttemptAt;
     await h.chain.processPending();
@@ -611,7 +622,7 @@ describe('settlement worker (batched settle)', () => {
     h.journal.settleZero(ib.key, 'collusion', 'admin', h.clock.now);
     await h.chain.processPending();
     expect(settleArgs(h.evm).map((x) => [x.player, x.payout])).toEqual([
-      [a, 1_900n * E18],
+      [a, 2_000n * E18],
       [b, 0n],
     ]);
     expect(h.journal.pending).toHaveLength(0);
@@ -693,7 +704,7 @@ describe('loot sweeps (sweepLoot burns, monotonic sweep ids)', () => {
     await h.chain.processPending();
     // round 7 is older and too big for the vault: it waits, and round 8 is not started before it
     expect(h.evm.sent).toHaveLength(0);
-    expect(h.journal.pending.find((p) => p.key === sweepKey('arena-1-1', 7))!.lastError).toMatch(/vault cannot cover/);
+    expect(h.journal.pending.find((p) => p.key === sweepKey('arena-1-1', 7))!.lastError).toMatch(/books guard|vault cannot cover/);
     expect((h.journal.pending.find((p) => p.key === sweepKey('arena-1-1', 8)) as SweepItem).sweepId).toBeUndefined();
     for (let i = 0; i < 5; i++) h.evm.join(1, wallet());
     h.clock.now += 600_000;
@@ -715,7 +726,7 @@ describe('loot sweeps (sweepLoot burns, monotonic sweep ids)', () => {
   });
 });
 
-describe('stale sessions (the full entry fee back: v2 cancel)', () => {
+describe('stale sessions (the full entry fee back: cancel)', () => {
   it('queues unplayed sessions from the Joined logs; live, queued, fresh and finalized ones are skipped', async () => {
     const h = await harness({ env: { LOG_CHUNK_BLOCKS: '100' } });
     const old = Math.floor(T0 / 1000) - 3600;
@@ -763,8 +774,10 @@ describe('stale sessions (the full entry fee back: v2 cancel)', () => {
     h.evm.join(1, p, { openedAt: old });
     const q = wallet();
     const sq = h.evm.join(1, q);
+    h.evm.join(1, wallet()); // the vault covers q's win
     expect(await h.chain.sweepStale()).toBe(1);
-    h.journal.enqueue(settleItem(sq, V));
+    // a winner: the batch pays the fee wallet its share of the profit
+    h.journal.enqueue(settleItem(sq, 2 * V));
     h.evm.feeWalletBroken = true;
     await h.chain.processPending();
     // the settle batch reverts on the fee transfer (held), the cancel needs no fee transfer

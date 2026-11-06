@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AVATAR_LIMITS, AVATAR_TYPES, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings } from '@elymum/shared';
+import { join } from 'node:path';
+import { AdminAudit } from './audit';
+import { AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import type { ChainGateway } from '../chain/types';
@@ -15,14 +17,16 @@ import { ShopFail, type ShopService } from '../shop/service';
 import { ShopSettingsError, type ShopSettingsStore } from '../shop/settings';
 import type { BoostInventory } from '../shop/inventory';
 import { migrationEnv, streamBackup } from './backup';
-import { botRoutes, type BotAdmin } from './bots';
+import { ArenaScalingFail, type ArenaScaler } from '../rooms/arena-scaler';
+import { mapRoutes, type MapAdmin } from './maps';
 import { customRoomAdminRoutes, customRoomRoutes } from './custom-rooms';
 import type { CustomRoomService } from '../rooms/custom';
 import { importHolders, type HolderWlStore } from './holder-wl';
 import { FaucetInfo, networkInfo } from './network';
 import { clearContract, registerContract, type ContractsStore } from './contracts';
-import { emblemSvg } from './emblem';
 import { parseNftPath, type MintService } from './mint';
+import { CollectionFail, type NftCollection } from './nft/collection';
+import { parseArtStyle } from './nft/render';
 import type { SiteStore } from './store';
 import { SiteFail, obj } from './validate';
 
@@ -31,6 +35,8 @@ export interface SiteExtras {
   chain?: ChainGateway;
   contracts?: ContractsStore;
   mint?: MintService;
+  /** The emblem collection (art, metadata, provenance, reveal). */
+  nft?: NftCollection;
   profiles?: ProfileStore;
   journal?: Journal;
   /** Public base URL (`PUBLIC_URL`; the request host only in development): NFT metadata links. */
@@ -143,13 +149,17 @@ export class SiteApi {
   private readonly admins: Set<string>;
   /** Cheat and collusion detection (`/api/admin/integrity/*`); absent in bare unit tests. */
   private integrity: IntegrityService | null = null;
-  /** Bot settings and live counts (`/api/admin/bots`); absent in bare unit tests. */
-  private bots: BotAdmin | null = null;
+  /** Map settings and live room counts (`/api/admin/maps`); absent in bare unit tests. */
+  private maps: MapAdmin | null = null;
+  /** The arena instance scaler (`/api/admin/arena-scaling`); absent in bare unit tests. */
+  private scaler: ArenaScaler | null = null;
   /** Custom rooms (`/api/rooms/custom/*`, `/api/admin/custom-rooms`); absent in bare unit tests. */
   private customRooms: CustomRoomService | null = null;
   /** The power-up shop (`/api/shop`, `/api/shop/buy`, `/api/admin/shop`); absent in bare unit tests. */
   private shop: { service: ShopService; settings: ShopSettingsStore; inventory: BoostInventory } | null = null;
   private readonly shopBuys = new Limiter(30, 60_000);
+  /** "Practice with bots" rooms opened per IP (`PRACTICE_ROOM.perIp` per window). */
+  private readonly practiceIps = new Limiter(PRACTICE_ROOM.perIp, PRACTICE_ROOM.perIpWindowMs);
   /** `GET /api/admin/backup` per admin wallet (a full copy of DATA_DIR each time). */
   private readonly backups = new Limiter(6, 60 * 60_000);
   /** Writes every store's unsaved state to disk (before a backup); set by the app. */
@@ -169,7 +179,11 @@ export class SiteApi {
     this.admins = new Set(cfg.adminWallets.map((w) => w.toLowerCase()));
     this.avatarIp = limits.avatarIp ?? new Limiter(20, 60 * 60_000);
     this.avatarWallet = limits.avatarWallet ?? new Limiter(6, 60 * 60_000);
+    this.audit = new AdminAudit(ext.dataDir ? join(ext.dataDir, 'admin-audit.jsonl') : null, ext.log);
   }
+
+  /** Every admin write (`DATA_DIR/admin-audit.jsonl`, `GET /api/admin/audit`). */
+  readonly audit: AdminAudit;
 
   /** `fn(wallet)`: the wallet's picture was removed or replaced (the rooms take it off live coins). */
   onAvatarChange(fn: ((wallet: string) => void) | null): void {
@@ -185,8 +199,12 @@ export class SiteApi {
     this.integrity = svc;
   }
 
-  setBots(admin: BotAdmin | null): void {
-    this.bots = admin;
+  setMaps(admin: MapAdmin | null): void {
+    this.maps = admin;
+  }
+
+  setScaler(scaler: ArenaScaler | null): void {
+    this.scaler = scaler;
   }
 
   /** The game server's load per thread (`GET /api/admin/load`, `NetworkInfo.load`). */
@@ -269,7 +287,7 @@ export class SiteApi {
       else if (path.startsWith('/api/nft/')) await this.nftRoutes(req, res, url);
       else if (path.startsWith('/api/site/')) await this.siteRoutes(req, res, url, ip);
       else if (path.startsWith('/api/rooms/custom')) await this.customRoutes(req, res, path, ip);
-      else await this.adminRoutes(req, res, url);
+      else await this.audited(req, res, url, ip);
     } catch (err) {
       if (err instanceof SiteFail && err.status === 413) res.setHeader('Connection', 'close');
       if (err instanceof SiteFail) fail(res, err.status, { error: err.code, message: err.message, ...(err.field ? { field: err.field } : {}) });
@@ -430,23 +448,82 @@ export class SiteApi {
     res.end(req.method === 'HEAD' ? undefined : file.bytes);
   }
 
-  /** `GET /api/nft/contract`, `/api/nft/<id>` (JSON) and `/api/nft/<id>.svg`: minted ids only. */
+  /**
+   * `GET /api/nft/contract`, `/api/nft/provenance`, `/api/nft/rarity`, `/api/nft/<id>` (JSON) and
+   * `/api/nft/<id>.svg` (`?style=vector|pixel` previews the other style): minted ids only. Before the reveal
+   * every token is the sealed emblem, cached briefly so marketplaces pick up the reveal.
+   */
   private async nftRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     this.method(req, 'GET');
     const mint = this.ext.mint;
+    const nft = this.ext.nft;
     const rest = url.pathname.slice('/api/nft/'.length);
-    if (!mint) throw new SiteFail(404, 'not_found', 'Not found');
+    if (!mint || !nft) throw new SiteFail(404, 'not_found', 'Not found');
     const base = this.baseUrl(req);
-    if (rest === 'contract') return send(res, 200, await mint.contractMetadata(base));
+    if (rest === 'contract') return send(res, 200, await mint.contractMetadata(base, nft.provenance()));
+    if (rest === 'provenance') return send(res, 200, nft.provenance());
+    if (rest === 'rarity') return send(res, 200, nft.stats());
     const parsed = parseNftPath(rest);
     if (!parsed || !(await mint.minted(parsed.id))) throw new SiteFail(404, 'not_found', 'No such token');
+    const cache = nft.revealed ? 'public, max-age=86400' : 'public, max-age=60';
     if (parsed.svg) {
-      res.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
-      res.end(emblemSvg(parsed.id));
+      const style = parseArtStyle(url.searchParams.get('style')) ?? nft.style;
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': cache });
+      res.end(nft.svg(parsed.id, style));
       return;
     }
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
-    res.end(JSON.stringify(mint.metadata(parsed.id, base)));
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': nft.revealed ? 'public, max-age=300' : 'public, max-age=60' });
+    res.end(JSON.stringify(nft.metadata(parsed.id, base)));
+  }
+
+  /** `/api/admin/nft`: the collection (provenance, stats, reveal state) and the two reveal steps. */
+  private async nftAdmin(req: IncomingMessage, res: ServerResponse, seg: string[]): Promise<void> {
+    const nft = this.ext.nft;
+    const mint = this.ext.mint;
+    if (!nft || !mint) throw new SiteFail(503, 'chain_off', 'The NFT is not available on this server.');
+    const client = this.ext.chain?.evm?.() ?? null;
+    const asSite = (err: unknown): never => {
+      if (err instanceof CollectionFail) throw new SiteFail(err.status, err.status === 400 ? 'bad_request' : 'wrong_state', err.message);
+      throw err;
+    };
+    if (seg.length === 1) {
+      this.method(req, 'GET');
+      const state = await mint.chainState().catch(() => null);
+      const current = client ? await client.blockNumber().catch(() => null) : null;
+      return send(res, 200, {
+        provenance: nft.provenance(),
+        stats: nft.stats(),
+        style: nft.style,
+        currentBlock: current?.toString() ?? null,
+        mint: state ? { phase: state.phaseName, totalSupply: state.totalSupply, maxSupply: state.maxSupply, soldOut: state.soldOut } : null,
+      } satisfies NftCollectionAdminView);
+    }
+    if (seg.length === 3 && seg[1] === 'reveal' && seg[2] === 'schedule') {
+      this.method(req, 'POST');
+      const body = obj(await readJson(req));
+      if (!client) throw new SiteFail(503, 'chain_off', 'The chain is not available on this server.');
+      const state = await mint.chainState(true);
+      if (!state) throw new SiteFail(503, 'chain_off', 'The NFT is not registered or its state cannot be read.');
+      const raw = body.block;
+      if (raw !== undefined && raw !== null && !(typeof raw === 'number' && Number.isSafeInteger(raw) && raw > 0) && !(typeof raw === 'string' && /^[1-9]\d{0,18}$/.test(raw))) {
+        throw new SiteFail(400, 'bad_request', 'block must be a positive block number', 'block');
+      }
+      try {
+        return send(res, 200, nft.schedule({ block: raw === undefined || raw === null ? null : BigInt(raw as number | string), current: await client.blockNumber(), mintOpen: state.phaseName !== 'closed', soldOut: state.soldOut, maxSupply: state.maxSupply }));
+      } catch (err) {
+        return asSite(err);
+      }
+    }
+    if (seg.length === 2 && seg[1] === 'reveal') {
+      this.method(req, 'POST');
+      if (!client) throw new SiteFail(503, 'chain_off', 'The chain is not available on this server.');
+      try {
+        return send(res, 200, await nft.reveal((n) => client.blockHash(n)));
+      } catch (err) {
+        return asSite(err);
+      }
+    }
+    throw new SiteFail(404, 'not_found', 'Not found');
   }
 
   /** Rate limits a write: per IP before the session is known, then per wallet. */
@@ -471,6 +548,10 @@ export class SiteApi {
         writer: (r) => this.writer(r, ip),
         isAdmin: (w) => this.isAdmin(w),
         origin: (r) => this.baseUrl(r),
+        practiceIp: () => {
+          if (!this.practiceIps.allow(ip)) throw new SiteFail(429, 'rate_limited', 'You opened several practice rooms lately. Try again in a while, or play in a pond.');
+          return ip;
+        },
       },
       req,
       res,
@@ -497,7 +578,7 @@ export class SiteApi {
       case 'faucet': {
         if (seg.length !== 1) break;
         this.method(req, 'GET');
-        const faucet = this.ext.faucet ?? (this.ext.chain ? new FaucetInfo({ chain: this.ext.chain, contracts: this.ext.contracts ?? null, hypeFaucetUrl: this.cfg.chain.hypeFaucetUrl }) : null);
+        const faucet = this.ext.faucet ?? (this.ext.chain ? new FaucetInfo({ chain: this.ext.chain, contracts: this.ext.contracts ?? null }) : null);
         if (!faucet) throw new SiteFail(503, 'chain_off', 'The faucet is not available on this server.');
         return send(res, 200, await faucet.get());
       }
@@ -543,6 +624,23 @@ export class SiteApi {
     throw new SiteFail(404, 'not_found', 'Not found');
   }
 
+  /** `adminRoutes` with every write of a signed-in admin recorded in the audit log (status included, failures too). */
+  private async audited(req: IncomingMessage, res: ServerResponse, url: URL, ip: string): Promise<void> {
+    const write = req.method !== 'GET' && req.method !== 'HEAD';
+    const wallet = write ? bearerWallet(this.auth, req) : null;
+    if (!write || !wallet || !this.isAdmin(wallet)) return this.adminRoutes(req, res, url);
+    let status = 500;
+    try {
+      await this.adminRoutes(req, res, url);
+      status = res.statusCode;
+    } catch (err) {
+      status = err instanceof SiteFail ? err.status : 500;
+      throw err;
+    } finally {
+      this.audit.record({ at: Date.now(), wallet, method: req.method ?? '?', path: url.pathname, status, ip });
+    }
+  }
+
   private async adminRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const wallet = this.session(req);
     if (!this.isAdmin(wallet)) throw new SiteFail(403, 'forbidden', 'This wallet is not an admin.');
@@ -554,6 +652,12 @@ export class SiteApi {
       case 'me':
         this.method(req, 'GET');
         return send(res, 200, { address: wallet, admin: true });
+      case 'audit': {
+        if (seg.length !== 1) break;
+        this.method(req, 'GET');
+        const limit = Math.min(5000, Math.max(1, Math.floor(Number(q.get('limit') ?? 500)) || 500));
+        return send(res, 200, { entries: this.audit.recent(limit) });
+      }
       case 'network': {
         if (seg.length !== 1 || !this.ext.chain) break;
         this.method(req, 'GET');
@@ -630,11 +734,13 @@ export class SiteApi {
         if (seg.length === 2 && seg[1] === 'price') {
           this.method(req, 'GET');
           const quote = await mint.priceQuote();
-          if (quote.hypeUsd === null) throw new SiteFail(502, 'price_unavailable', 'The HYPE/USD price feed is unavailable right now.');
+          if (quote.gasUsd === null) throw new SiteFail(502, 'price_unavailable', `The ${GAS_SYMBOL}/USD price feed is unavailable right now.`);
           return send(res, 200, quote);
         }
         break;
       }
+      case 'nft':
+        return this.nftAdmin(req, res, seg);
       case 'backup': {
         // a gzip tar of DATA_DIR (server key and secrets included): moving the server, offsite copies
         if (seg.length !== 1) break;
@@ -706,9 +812,24 @@ export class SiteApi {
       case 'custom-rooms':
         if (seg.length > 2 || !this.customRooms) break;
         return customRoomAdminRoutes(this.customRooms, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, seg.slice(1), wallet);
-      case 'bots':
-        if (seg.length > 2 || (seg.length === 2 && seg[1] !== 'bankroll') || !this.bots) break;
-        return botRoutes(this.bots, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, wallet, seg[1]);
+      case 'arena-scaling': {
+        // the arena instance scaler: its settings (thresholds, min / max instances), every arena's instances, its decisions
+        const scaler = this.scaler;
+        if (seg.length !== 1 || !scaler) break;
+        if (this.method(req, 'GET', 'PUT') === 'PUT') {
+          try {
+            scaler.store.update(await readJson(req));
+          } catch (err) {
+            if (err instanceof ArenaScalingFail) throw new SiteFail(400, 'bad_request', err.message, err.field);
+            throw err;
+          }
+          this.ext.log?.(`arena scaling: settings updated by ${wallet}`);
+        }
+        return send(res, 200, scaler.view());
+      }
+      case 'maps':
+        if (seg.length !== 1 || !this.maps) break;
+        return mapRoutes(this.maps, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, wallet);
       case 'shop': {
         // power-up prices, the sink (burn or treasury), on/off per power-up and the arena limits; plus recent purchases
         const shop = this.shop;
@@ -725,8 +846,8 @@ export class SiteApi {
         return send(res, 200, {
           settings: shop.settings.settings,
           defaults: shop.settings.defaults,
-          sink: shop.service.sink(),
-          owner: this.cfg.adminWallets[0] ?? null,
+          payTo: shop.service.payTo(),
+          burnBps: this.ext.chain?.status().fees?.paymentBurnBps ?? null,
           purchases: shop.inventory.recent(Number(q.get('limit') ?? 30) || 30),
           purchaseCount: shop.inventory.purchaseCount,
         });

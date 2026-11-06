@@ -11,7 +11,6 @@
 import { pathToFileURL } from 'node:url';
 import { ClientOp, PlayerFlag, TICK_MS, roundAt, type ClientInput, type IntegrityFlag } from '@elymum/shared';
 import { BotBrain } from '../src/bots/brain';
-import { rollPersonality } from '../src/bots/personality';
 import { NullChain } from '../src/chain/types';
 import type { Player } from '../src/game/entities';
 import { mulberry32, type Rng } from '../src/game/rng';
@@ -78,7 +77,7 @@ interface Client {
   mouse: { x: number; y: number } | null;
   goal: { x: number; y: number } | null;
   /** Decisions waiting for the human to react. */
-  decisions: { at: number; target: { x: number; y: number }; split: boolean; eject: boolean }[];
+  decisions: { at: number; target: { x: number; y: number }; split: boolean }[];
   lastSent: number;
   lastSentAim: { x: number; y: number };
   outbox: Pending[];
@@ -96,7 +95,7 @@ export function runIntegritySim(o: SimOptions = {}): SimResult {
   const integrity =
     o.integrity === false ? null : new IntegrityService({ store: new IntegrityStore(null), journal, kick: () => {}, now: () => clock, mono: () => mono });
   const room = new Room(
-    { id: 'arena-1-1', mode: 'arena', name: 'Arena', maxPlayers: 50, instance: 1, bots: { target: 20, min: 6, max: 10 }, stake: { arenaId: 1, buyIn: FEE }, seed: (o.seed ?? 1) * 7919 },
+    { id: 'arena-1-1', mode: 'arena', name: 'Arena', maxPlayers: 50, instance: 1, stake: { arenaId: 1, buyIn: FEE }, seed: (o.seed ?? 1) * 7919 },
     { chain: new NullChain(), journal, leaderboards: new Leaderboards(null), log: () => {}, now: () => clock, round: ROUND, integrity: integrity ?? undefined },
   );
   const world = room.world;
@@ -108,7 +107,8 @@ export function runIntegritySim(o: SimOptions = {}): SimResult {
     wallet: `${scripted ? 'Script' : 'Honest'}Wallet${i}`,
     conn: fakeConn(`${scripted ? 'Script' : 'Honest'}Wallet${i}`, `10.${scripted ? 9 : 1}.${i >> 8}.${i & 255}`),
     scripted,
-    brain: new BotBrain(rollPersonality(rng, 'standard'), rng),
+    // the practice-bot brain stands in for an honest person's intent (it sees only what a person would)
+    brain: new BotBrain('normal', rng, 0),
     latency: 15 + rng() * 90,
     jitter: 2 + rng() * 10,
     reaction: 190 + rng() * 140,
@@ -187,7 +187,7 @@ export function runIntegritySim(o: SimOptions = {}): SimResult {
       const now = world.now;
       if (c.brain.shouldThink(now)) {
         const d = c.brain.think(world, p, now);
-        if (d) c.decisions.push({ at: tickStart + c.reaction + noise(rng) * 40, target: d.target, split: d.split, eject: d.eject });
+        if (d) c.decisions.push({ at: tickStart + c.reaction + noise(rng) * 40, target: d.target, split: d.split });
       }
       for (let f = 0; f < 2; f++) {
         const ft = tickStart + f * (TICK_MS / 2) + noise(rng) * 1.5;
@@ -195,7 +195,6 @@ export function runIntegritySim(o: SimOptions = {}): SimResult {
           const d = c.decisions.shift()!;
           c.goal = d.target;
           if (d.split) send(c, { op: ClientOp.Split }, ft);
-          if (d.eject) send(c, { op: ClientOp.Eject }, ft);
         }
         const goal = c.goal ?? center;
         // the mouse sits at an offset from the coin on screen: it eases toward the goal with hand jitter

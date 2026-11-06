@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HYPE_DECIMALS, TOKEN_SYMBOL_DEFAULT, formatHype, formatToken, parseToken, toSafeAmount } from '../src';
+import { GAS_DECIMALS, TOKEN_SYMBOL_DEFAULT, formatGas, formatToken, parseToken, toSafeAmount } from '../src';
 
 describe('TOKEN_SYMBOL_DEFAULT', () => {
   it('is $ELYMUM', () => {
@@ -184,12 +184,12 @@ describe('parseToken', () => {
   });
 });
 
-describe('formatHype', () => {
-  it('formats wei as HYPE with up to 4 decimals', () => {
-    expect(HYPE_DECIMALS).toBe(18);
-    expect(formatHype(31_250_000_000_000_000n)).toBe('0.0313 HYPE');
-    expect(formatHype(10n ** 18n)).toBe('1 HYPE');
-    expect(formatHype(0n)).toBe('0 HYPE');
-    expect(formatHype(1_234_567_890_000_000_000_000n, 2)).toBe('1,234.57 HYPE');
+describe('formatGas', () => {
+  it('formats wei in the chain gas token with up to 4 decimals', () => {
+    expect(GAS_DECIMALS).toBe(18);
+    expect(formatGas(31_250_000_000_000_000n)).toBe('0.0313 ETH');
+    expect(formatGas(10n ** 18n)).toBe('1 ETH');
+    expect(formatGas(0n)).toBe('0 ETH');
+    expect(formatGas(1_234_567_890_000_000_000_000n, 2)).toBe('1,234.57 ETH');
   });
 });

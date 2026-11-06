@@ -6,6 +6,7 @@ import { engine } from '../../game/instance';
 import { BotTag } from './BotTag';
 import { useT, type TKey } from '../../i18n';
 import { useUi, type KillItem } from '../../store';
+import { useIdleFade } from './fade';
 
 /** System lines are UI chrome: no emoji there; player text stays as typed. */
 const stripEmoji = (s: string) =>
@@ -52,7 +53,9 @@ function KillLine({ k, myName }: { k: KillItem; myName: string | null }) {
 /**
  * The feed under the timer: kills as small ink strips with a wry verb, and the chat slip.
  * Enter opens the chat line; Esc closes it. `narrow` keeps fewer lines; `fold` (phones) hides the
- * slip until the chat button opens it.
+ * slip until the chat button opens it. A few seconds after the last new line the area fades to
+ * semi-transparent (`useIdleFade`) so it does not cover the floor; the pointer over it, a tap on it,
+ * focus in it, the open chat line or a new line bring it back.
  */
 export function Feed({ narrow, fold = narrow }: { narrow: boolean; fold?: boolean }) {
   const t = useT();
@@ -66,6 +69,16 @@ export function Feed({ narrow, fold = narrow }: { narrow: boolean; fold?: boolea
   const inputRef = useRef<HTMLInputElement>(null);
   const reduced = useReducedMotion();
   const spring = usePreset('press', { fade: true });
+  const [hover, setHover] = useState(false);
+  const [poke, setPoke] = useState(0);
+  // only a NEW line wakes the area (kill lines also leave by themselves after a few seconds)
+  const seen = useRef({ kill: -1, chat: -1, n: 0 });
+  const newestKill = killfeed.at(-1)?.id ?? -1;
+  const newestChat = chat.at(-1)?.id ?? -1;
+  if (newestKill > seen.current.kill || newestChat > seen.current.chat) {
+    seen.current = { kill: Math.max(seen.current.kill, newestKill), chat: Math.max(seen.current.chat, newestChat), n: seen.current.n + 1 };
+  }
+  const faded = useIdleFade(`${seen.current.n}:${poke}`, hover || chatOpen);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -85,7 +98,18 @@ export function Feed({ narrow, fold = narrow }: { narrow: boolean; fold?: boolea
   // folded (phones): the chat is its button in the thumb cluster until it is opened
   const showSlip = showChat && (chatOpen || (!fold && lines.length > 0));
   return (
-    <div className="g-feed" aria-label={t('g.feed')} role="log" aria-live="polite">
+    <div
+      className={`g-feed${faded ? ' is-faded' : ''}`}
+      aria-label={t('g.feed')}
+      role="log"
+      aria-live="polite"
+      data-testid="feed"
+      onPointerEnter={(e) => e.pointerType === 'mouse' && setHover(true)}
+      onPointerLeave={() => setHover(false)}
+      onPointerDown={() => setPoke((n) => n + 1)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+    >
       <ul className="g-kills">
         <AnimatePresence initial={false}>
           {kills.map((k) => (

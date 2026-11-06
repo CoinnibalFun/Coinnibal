@@ -73,6 +73,32 @@ describe('journal holds', () => {
     expect(new Journal(join(dir, 'j2.json')).held().map((h) => h.key)).toEqual(['H']);
   });
 
+  it('an auto-held payout nobody decided on is paid after autoReleaseHours (before the 24 h refund); guard and hand holds wait', () => {
+    const journal = new Journal(null);
+    let now = 1_000_000;
+    let kicks = 0;
+    const svc = new IntegrityService({ store: new IntegrityStore(null), journal, kick: () => kicks++, now: () => now });
+    expect(svc.settings.autoReleaseHours).toBe(20);
+    journal.commit({ enqueue: [settle('auto', 5000, false), settle('guard', 9000, false), settle('hand', 7000, false)] });
+    journal.hold('auto', { at: now, score: 95, why: 'pair transfer', flags: ['pair_transfer:abc'] });
+    journal.hold('guard', { at: now, score: 100, why: 'payout guard', flags: ['payout_guard'] });
+    svc.hold('hand', 'looks odd, checking', 'admin');
+    now += 19 * 3_600_000;
+    expect(svc.autoRelease()).toEqual([]);
+    now += 2 * 3_600_000;
+    expect(svc.autoRelease()).toEqual(['auto']);
+    expect(kicks).toBe(1);
+    expect(journal.held().map((h) => h.key).sort()).toEqual(['guard', 'hand']);
+    expect(journal.pending.find((p) => p.key === 'auto')).toMatchObject({ payout: 5000 });
+    // 0 turns it off; the setting is validated
+    svc.updateSettings({ autoReleaseHours: 0 }, 'admin');
+    journal.hold('auto', { at: 0, score: 95, why: 'again', flags: [] });
+    expect(svc.autoRelease(now + 100 * 3_600_000)).toEqual([]);
+    expect(() => svc.updateSettings({ autoReleaseHours: 24 }, 'admin')).toThrow(/0 to 23/);
+    expect(() => svc.hold('nope', 'reason here', 'admin')).toThrow(/No pending settlement/);
+    expect(() => svc.hold('guard', 'x', 'admin')).toThrow(/reason/);
+  });
+
   it('the dev fake chain never settles a held item until it is released', async () => {
     const journal = new Journal(null);
     const chain = new DevFakeChain(journal, () => {}, 5, { tokenSet: true });
@@ -112,7 +138,7 @@ describe('auto-hold keeps arena money conservation', () => {
     const integrity = new FixedRisk(journal, (w) => Number(w.slice(6)) % 3 !== 0);
     let clock = roundAt(1_791_000_000_000, ROUND.roundMs, ROUND.closeMs).startsAt + 5_000;
     const room = new Room(
-      { id: 'arena-1-1', mode: 'arena', name: 'Arena', maxPlayers: 50, bots: { target: 8, min: 8, max: 8 }, stake: { arenaId: 1, buyIn: FEE }, seed: 99 },
+      { id: 'arena-1-1', mode: 'arena', name: 'Arena', maxPlayers: 50, stake: { arenaId: 1, buyIn: FEE }, seed: 99 },
       { chain: new NullChain(), journal, leaderboards: new Leaderboards(null), log: () => {}, now: () => clock, round: ROUND, integrity },
     );
     const world = room.world;
@@ -194,9 +220,8 @@ describe('auto-hold keeps arena money conservation', () => {
       }
       const pending = journal.pending.reduce((s, p) => s + itemAmount(p), 0);
       const loot = world.loot().reduce((s, l) => s + l.value, 0);
-      // the house bots' purses and the team's reserve (vault share of the cut on winnings, purses taken home) stay in the vault too
-      const lhs = ledger.total() + loot + pending + journal.forfeitedByArena(1) + room.purseTotal() + journal.houseByArena(1);
-      if (lhs !== fees - paid) throw new Error(`tick ${t}: ${ledger.total()} + ${loot} + ${pending} + ${journal.forfeitedByArena(1)} + purses ${room.purseTotal()} + house ${journal.houseByArena(1)} != ${fees} - ${paid}`);
+      const lhs = ledger.total() + loot + pending + journal.forfeitedByArena(1);
+      if (lhs !== fees - paid) throw new Error(`tick ${t}: ${ledger.total()} + ${loot} + ${pending} + ${journal.forfeitedByArena(1)} != ${fees} - ${paid}`);
     }
     expect(held).toBeGreaterThan(0);
     expect(released).toBeGreaterThan(0);
@@ -212,7 +237,7 @@ describe('auto-hold keeps arena money conservation', () => {
     const room = { id: 'arena-1-1', now: () => 1_791_000_000_000, round: () => ({ n: 1, endsAt: 1_791_000_000_000 + 1, joinsCloseAt: 0 }), opts: { stake: { arenaId: 1, buyIn: 10 } } };
     svc.join(room, 1, { ip: '1.2.3.4', fp: null }, { player: 'w', session: 's', sessionId: 1, arenaId: 1, entryFee: 10 });
     const item = settle('s', 1000, false);
-    svc.settle(room, 1, item, { reason: 'round', payout: 1000, killer: null, killerIsBot: false });
+    svc.settle(room, 1, item, { reason: 'round', payout: 1000, killer: null });
     expect(item.held).toBeUndefined();
   });
 });

@@ -31,7 +31,7 @@ export interface ChainData {
   arenas: ArenaInfo[];
   /** The wallet's session per arena (`id: 0n` sessions are stored as null). */
   sessions: Record<number, SessionInfo | null>;
-  /** HYPE balance, wei (gas). */
+  /** Gas-token balance, wei. */
   balance: bigint | null;
   /** Game-token balance, base units. */
   tokenBalance: bigint | null;
@@ -155,7 +155,7 @@ export async function readChain(
 /**
  * Keeps config / arenas / my sessions / balances / allowance / payouts / profile fresh. Mount
  * once (App). While the game token is not set on chain there are no token balances and no
- * arenas to read: the HYPE balance still loads. The hook re-keys on the chain status, so the
+ * arenas to read: the gas balance still loads. The hook re-keys on the chain status, so the
  * server's `chain` push (the token was set) re-reads at once.
  */
 export function useChainSync(): void {

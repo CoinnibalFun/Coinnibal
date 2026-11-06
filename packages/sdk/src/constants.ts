@@ -6,10 +6,17 @@
 
 /** Basis-point denominator (100 %). */
 export const BPS = 10_000;
-/** Upper bound of the arena's `feeBps` (10 %). */
-export const MAX_FEE_BPS = 1_000;
-/** Fee (of every ticket's entry fee) a freshly deployed arena starts with (5 %). */
-export const DEFAULT_FEE_BPS = 500;
+/** Upper bound of the arena's fee pair on profit, `burnBps + vaultBps` (25 %): `ElymumArena.MAX_TOTAL_FEE_BPS`. */
+export const MAX_TOTAL_FEE_BPS = 2_500;
+/** Share of the profit a freshly deployed arena burns (15 %) and sends to the fee wallet (5 %). */
+export const DEFAULT_BURN_BPS = 1_500;
+export const DEFAULT_VAULT_BPS = 500;
+/** Share of a `pay` payment (power-ups) a freshly deployed arena burns (50 %); the rest goes to the fee wallet. */
+export const DEFAULT_PAYMENT_BURN_BPS = 5_000;
+/** `ElymumArena.burnMode`: send burned tokens to `BURN_ADDRESS` (the default; works with every ERC-20). */
+export const BURN_MODE_DEAD = 0;
+/** `ElymumArena.burnMode`: call the token's `burn(uint256)` (ERC20Burnable), falling back to `BURN_ADDRESS`. */
+export const BURN_MODE_CALL = 1;
 /** Bounds of `maxSessions` (open tickets per arena). */
 export const MIN_ARENA_SESSIONS = 2;
 export const MAX_ARENA_SESSIONS = 2_000;
@@ -18,7 +25,7 @@ export const MIN_ARENA_ID = 1;
 export const MAX_ARENA_ID = 65_535;
 /** A ticket the server never settled can be refunded by its player this many seconds after joining (24 h). */
 export const REFUND_DELAY_SECS = 86_400;
-/** Floor loot is burned by sending it here (`sweepLoot`). */
+/** Burned tokens go here unless the burn mode is `BURN_MODE_CALL` (fee burns, loot burns, payment burns). */
 export const BURN_ADDRESS = '0x000000000000000000000000000000000000dEaD' as const;
 /** Largest uint128 (entry fees and payouts). */
 export const MAX_UINT128 = (1n << 128n) - 1n;
@@ -44,7 +51,7 @@ export function settleSkipReasonText(reason: number): string {
     case SettleSkipReason.Finalized:
       return 'already settled; waits for the player to collect';
     case SettleSkipReason.InsufficientVault:
-      return 'the payout is larger than the arena vault';
+      return 'the payout (or the cancelled entry fee) is larger than the arena vault';
     default:
       return `unknown reason ${reason}`;
   }
@@ -67,18 +74,14 @@ export type MintPhaseName = (typeof MINT_PHASE_NAMES)[number];
 export const MAX_ROYALTY_BPS = 1_000;
 /** Default overpayment on a mint (1 %): the contract refunds the excess, so a price change in between cannot fail the mint. */
 export const DEFAULT_MINT_BUFFER_BPS = 100;
-/** Mint target in US cents ($1). */
-export const DEFAULT_MINT_USD_CENTS = 100;
-/** Hyperliquid's public info API (POST `{"type":"allMids"}`). */
-export const HYPE_PRICE_URL_DEFAULT = 'https://api.hyperliquid.xyz/info';
+/** Hyperliquid's public info API (POST `{"type":"allMids"}`): ETH's USD price (the $1 NFT mint). */
+export const GAS_PRICE_URL_DEFAULT = 'https://api.hyperliquid.xyz/info';
 
-/** TestToken faucet defaults (owner-settable with `setFaucet`): 1,000,000 tokens (18 decimals) per call, once per hour. */
-export const TEST_TOKEN_FAUCET_AMOUNT = 1_000_000n * 10n ** 18n;
-/** TestToken faucet default for holders of the holder NFT: 2,000,000 tokens. */
-export const TEST_TOKEN_HOLDER_FAUCET_AMOUNT = 2_000_000n * 10n ** 18n;
-export const TEST_TOKEN_FAUCET_COOLDOWN_SECS = 3_600;
-
-/** Holder fee the admin panel suggests for `setHolderPerks` (3 %; the contract starts with the perks off). */
-export const DEFAULT_HOLDER_FEE_BPS = 300;
+/**
+ * Holder rates the admin panel suggests for `setHolderPerks` (the contract starts with the perks off): an emblem
+ * holder's profit fee is only burned (15 %), nothing goes to the fee wallet.
+ */
+export const SUGGESTED_HOLDER_BURN_BPS = 1_500;
+export const SUGGESTED_HOLDER_VAULT_BPS = 0;
 /** Arenas the admin panel suggests marking holders-only (#4, the Isles of the Blessed). */
 export const DEFAULT_HOLDERS_ONLY_ARENA_IDS: readonly number[] = [4];

@@ -21,9 +21,11 @@ export type IntegrityFlagKind =
   /** Input statistics outside the human range (periodic timing, no turn variety, instant reactions, 24/7 play). */
   | 'bot_input'
   /** Round-bell patterns: late join and idle until the bell, or value received while idle. */
-  | 'bell_abuse';
+  | 'bell_abuse'
+  /** Two wallets whose input statistics are the same to within noise, playing the same rooms: one script, two accounts. */
+  | 'input_twin';
 
-export const INTEGRITY_FLAG_KINDS: readonly IntegrityFlagKind[] = ['pair_transfer', 'eject_feed', 'suicide_feed', 'shared_device', 'bot_input', 'bell_abuse'];
+export const INTEGRITY_FLAG_KINDS: readonly IntegrityFlagKind[] = ['pair_transfer', 'eject_feed', 'suicide_feed', 'shared_device', 'bot_input', 'bell_abuse', 'input_twin'];
 
 export type IntegrityFlagStatus = 'open' | 'reviewed' | 'dismissed';
 
@@ -76,6 +78,12 @@ export interface IntegrityThresholds {
   bellLateJoinMs: number;
   /** Bell abuse: share of the ticket's time spent idle (AFK). */
   bellMinAfkShare: number;
+  /** Input twins: turn samples each (automated) wallet needs. */
+  twinMinInputs: number;
+  /** Input twins: the largest Jensen-Shannon divergence (bits) between the two direction-change distributions. */
+  twinMaxJsd: number;
+  /** Input twins: rounds the two wallets played in the same room at the same time. */
+  twinMinRounds: number;
 }
 
 export interface IntegritySettings {
@@ -86,6 +94,12 @@ export interface IntegritySettings {
   autoHold: boolean;
   /** Risk score (0-100) at or above which `autoHold` holds a payout. */
   holdScore: number;
+  /**
+   * An auto-held payout nobody decided on is paid as settled after this many hours (0: never). It is below the
+   * 24 h after which the player could refund the ticket at its entry fee, so a false positive costs the player a
+   * delay, never the winnings. Holds of the payout guard and holds by hand are never released by themselves.
+   */
+  autoReleaseHours: number;
   thresholds: IntegrityThresholds;
 }
 
@@ -113,11 +127,15 @@ export const INTEGRITY_THRESHOLDS_DEFAULT: IntegrityThresholds = {
   bellMinSessions: 3,
   bellLateJoinMs: 20_000,
   bellMinAfkShare: 0.8,
+  twinMinInputs: 400,
+  twinMaxJsd: 0.02,
+  twinMinRounds: 2,
 };
 
 export const INTEGRITY_SETTINGS_DEFAULT: IntegritySettings = {
   autoHold: false,
   holdScore: 90,
+  autoReleaseHours: 20,
   thresholds: INTEGRITY_THRESHOLDS_DEFAULT,
 };
 
@@ -146,6 +164,9 @@ export const INTEGRITY_THRESHOLD_RANGES: Record<keyof IntegrityThresholds, reado
   bellMinSessions: [1, 1000],
   bellLateJoinMs: [1000, 300_000],
   bellMinAfkShare: [0.3, 1],
+  twinMinInputs: [200, 1_000_000],
+  twinMaxJsd: [0, 0.05],
+  twinMinRounds: [1, 1000],
 };
 
 /** Evidence values are plain, printable data. */
@@ -228,6 +249,11 @@ export interface IntegrityOverview {
   bans: IntegrityBan[];
   /** When the detectors last ran (Unix ms). */
   scannedAt: number | null;
+  /**
+   * Arenas whose payouts the server's books guard stopped: the vault does not cover what the journal owes
+   * (nothing leaves such a vault until the books add up again). Empty when every arena is fine.
+   */
+  books: { arenaId: number; why: string }[];
 }
 
 export interface IntegrityWalletView {

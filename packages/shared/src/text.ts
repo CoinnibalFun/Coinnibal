@@ -43,3 +43,10 @@ export function truncateUtf8(s: string, maxBytes: number): string {
 /** Shortens an EVM address: 0x12Ab…9fE0 (`head` counts the `0x`). */
 export const shortAddress = (addr: string, head = 6, tail = 4): string =>
   addr.length <= head + tail + 1 ? addr : `${addr.slice(0, head)}…${addr.slice(-tail)}`;
+
+/** English ordinal: 1st, 2nd, 3rd, 4th … 11th, 12th, 13th, 21st (the place on a final board, a share card). */
+export function ordinal(n: number): string {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
+  return `${n}${suffix}`;
+}

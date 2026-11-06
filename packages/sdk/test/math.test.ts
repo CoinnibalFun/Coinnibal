@@ -1,58 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import { BPS, MAX_UINT128 } from '../src/constants';
-import { computeEntryFee, computeProfitFee, fromLedger, ledgerDecimals, ledgerUnitScale, mulBps, splitPayout, ticketValue, toBigInt, toLedger } from '../src/math';
+import { fromLedger, ledgerDecimals, ledgerUnitScale, mulBps, settlementSplit, toBigInt, toLedger } from '../src/math';
 
-describe('computeEntryFee / ticketValue / splitPayout (ElymumArena v2 computeFee)', () => {
-  it('takes the fee from the entry fee, rounded down', () => {
-    expect(computeEntryFee(1_000n, 500)).toBe(50n);
-    expect(computeEntryFee(1_000n, 300)).toBe(30n);
-    expect(computeEntryFee(19n, 500)).toBe(0n); // 0.95 → 0
-    expect(computeEntryFee(20n, 500)).toBe(1n);
-    expect(computeEntryFee(1_000n, 0)).toBe(0n);
-    expect(computeEntryFee(1_000n, 1_000)).toBe(100n);
-    expect(ticketValue(1_000n, 500)).toBe(950n);
-    expect(ticketValue(1_000n, 500, 1)).toBe(1_000n); // v1 played the whole entry
+describe('settlementSplit (ElymumArena v3 computeFees)', () => {
+  const R = { burnBps: 1_500, vaultBps: 500 };
+  it('takes the fee from the profit only, each share rounded down', () => {
+    expect(settlementSplit(1_000n, 2_000n, R)).toEqual({ profit: 1_000n, burned: 150n, toVault: 50n, net: 1_800n });
+    expect(settlementSplit(1_000n, 1_000n, R)).toEqual({ profit: 0n, burned: 0n, toVault: 0n, net: 1_000n });
+    expect(settlementSplit(1_000n, 400n, R)).toEqual({ profit: 0n, burned: 0n, toVault: 0n, net: 400n });
+    expect(settlementSplit(1_000n, 1_019n, R)).toMatchObject({ burned: 2n, toVault: 0n, net: 1_017n });
+    expect(settlementSplit(1_000n, 1_020n, R)).toMatchObject({ burned: 3n, toVault: 1n, net: 1_016n });
   });
 
-  it('v2 pays the payout in full whatever the result; the fee is the entry cut', () => {
-    for (const [p, e, bps] of [
-      [0n, 10n, 500],
-      [950n, 1_000n, 500],
-      [12_345_678n, 1_000n, 500],
-      [MAX_UINT128, 10n ** 21n, 1_000],
+  it('adds up for any payout and never cuts into the stake', () => {
+    for (const [e, p] of [
+      [10n, 0n],
+      [1_000n, 12_345_678n],
+      [10n ** 21n, 10n ** 24n],
+      [0n, MAX_UINT128],
     ] as const) {
-      const s = splitPayout(p, e, bps);
-      expect(s.player).toBe(p);
-      expect(s.fee).toBe((e * BigInt(bps)) / BigInt(BPS));
-    }
-  });
-
-  it('v1 (legacy) splits payout = fee + player, fee on profit only', () => {
-    expect(computeProfitFee(1_500n, 1_000n, 500)).toBe(25n);
-    expect(computeProfitFee(1_000n, 1_000n, 500)).toBe(0n);
-    expect(computeProfitFee(400n, 1_000n, 500)).toBe(0n);
-    expect(computeProfitFee(1_019n, 1_000n, 500)).toBe(0n);
-    expect(computeProfitFee(1_020n, 1_000n, 500)).toBe(1n);
-    for (const [p, e, bps] of [
-      [0n, 10n, 500],
-      [12_345_678n, 1_000n, 500],
-      [10n ** 24n, 10n ** 21n, 777],
-      [MAX_UINT128, 0n, 1_000],
-    ] as const) {
-      const s = splitPayout(p, e, bps, 1);
-      expect(s.fee + s.player).toBe(p);
-      expect(s.fee).toBe(((p > e ? p - e : 0n) * BigInt(bps)) / BigInt(BPS));
+      const s = settlementSplit(e, p, { burnBps: 2_000, vaultBps: 500 });
+      expect(s.net + s.burned + s.toVault).toBe(p);
+      expect(s.burned).toBe(((p > e ? p - e : 0n) * 2_000n) / BigInt(BPS));
+      if (p > e) expect(s.net >= e).toBe(true);
     }
   });
 
   it('accepts numbers and refuses what the contract could not take', () => {
-    expect(computeEntryFee(1000, 500)).toBe(50n);
-    expect(() => computeEntryFee(-1n, 500)).toThrow(RangeError);
-    expect(() => computeEntryFee(MAX_UINT128 + 1n, 500)).toThrow(RangeError);
-    expect(() => computeEntryFee(1n, 70_000)).toThrow(RangeError);
-    expect(() => computeEntryFee(1.5, 500)).toThrow(RangeError);
-    expect(() => splitPayout(MAX_UINT128 + 1n, 0n, 500)).toThrow(RangeError);
-    expect(() => computeProfitFee(-1n, 0n, 500)).toThrow(RangeError);
+    expect(settlementSplit(1000, 2000, R).net).toBe(1_800n);
+    expect(() => settlementSplit(-1n, 0n, R)).toThrow(RangeError);
+    expect(() => settlementSplit(0n, MAX_UINT128 + 1n, R)).toThrow(RangeError);
+    expect(() => settlementSplit(0n, 1n, { burnBps: 70_000, vaultBps: 0 })).toThrow(RangeError);
+    expect(() => settlementSplit(1.5, 2, R)).toThrow(RangeError);
   });
 
   it('mulBps and toBigInt', () => {

@@ -1,4 +1,5 @@
-import { planDefaultArenas, parseAddressInput, parseHypeInput, parseIntInput, AdminInputError, type StatusSnapshot } from '@elymum/sdk/ops';
+import { GAS_SYMBOL } from '@elymum/shared';
+import { planDefaultArenas, parseAddressInput, parseGasInput, parseIntInput, AdminInputError, type StatusSnapshot } from '@elymum/sdk/ops';
 import type { DeployArenaArgs, DeployNftArgs } from '@elymum/sdk';
 import { formatEther, getAddress, type Address, type Hash } from 'viem';
 import type { AdminNetwork } from './net';
@@ -84,7 +85,7 @@ export function deploySteps(w: WizardInput): DeployStep[] {
       detail: target === null ? 'The game server reports no chain yet.' : w.walletChainId === target ? `Wallet on ${w.net.info!.name} (${target}).` : `Switch the wallet to ${w.net.info!.name} (${target}).`,
     },
     { id: 'arena', label: 'Deploy ElymumArena', done: arenaOk, detail: w.net.arenaAddress ?? w.local.arena?.address ?? 'admin = you, server authority = the server key, fee wallet = you.' },
-    { id: 'nft', label: 'Deploy ElymumNFT', done: nftOk, detail: w.net.nftAddress ?? w.local.nft?.address ?? 'Max supply 5,000, $1 in HYPE, 1 allowlist / 2 public per wallet.' },
+    { id: 'nft', label: 'Deploy ElymumNFT', done: nftOk, detail: w.net.nftAddress ?? w.local.nft?.address ?? `Max supply 5,000, $1 in ${GAS_SYMBOL}, 1 allowlist / 2 public per wallet.` },
     { id: 'register', label: 'Register both with the server', done: registered, detail: registered ? 'The server checked the code hash, the owner and the server authority.' : 'POST /api/admin/contracts for each.' },
     { id: 'token', label: 'Set the game token', done: tokenSet, detail: cfg?.token ?? 'The registered token, confirmed once (it can be set only once). Nothing to type.' },
     { id: 'arenas', label: 'Create the four arenas', done: tokenSet && arenasLeft === 0, detail: tokenSet ? (arenasLeft === 0 ? 'All four default arenas exist.' : `${arenasLeft} to create.`) : 'Needs the token.' },
@@ -112,8 +113,8 @@ export function arenaDeployArgs(me: Address | null, serverKey: string | null | u
 
 export interface NftForm {
   maxSupply: string;
-  /** HYPE per token (decimal text). */
-  priceHype: string;
+  /** Gas token per NFT (decimal text). */
+  priceGas: string;
   wlLimit: string;
   publicLimit: string;
   baseURI: string;
@@ -124,7 +125,7 @@ export interface NftForm {
 export function defaultNftForm(origin: string, priceWei: string | null | undefined, me: Address | null): NftForm {
   return {
     maxSupply: '5000',
-    priceHype: priceWei ? formatEther(BigInt(priceWei)) : '',
+    priceGas: priceWei ? formatEther(BigInt(priceWei)) : '',
     wlLimit: '1',
     publicLimit: '2',
     baseURI: `${origin.replace(/\/+$/, '')}/api/nft/`,
@@ -135,13 +136,13 @@ export function defaultNftForm(origin: string, priceWei: string | null | undefin
 /** Parses the NFT deploy form (throws `AdminInputError` naming the field). */
 export function nftDeployArgs(form: NftForm, me: Address | null): DeployNftArgs {
   if (!me) throw new AdminInputError('Connect the owner wallet first.');
-  if (!form.priceHype.trim()) throw new AdminInputError('Mint price: enter a price in HYPE (the $1 price could not be read).');
+  if (!form.priceGas.trim()) throw new AdminInputError(`Mint price: enter a price in ${GAS_SYMBOL} (the $1 price could not be read).`);
   const baseURI = form.baseURI.trim();
   if (!/^https?:\/\/\S+\/$/.test(baseURI)) throw new AdminInputError('Base URI: an http(s) URL ending with "/" (tokenURI = baseURI + id).');
   return {
     owner: getAddress(me),
     maxSupply: parseIntInput('Max supply', form.maxSupply, 1, 4_294_967_295),
-    mintPrice: parseHypeInput('Mint price', form.priceHype),
+    mintPrice: parseGasInput('Mint price', form.priceGas),
     wlLimit: parseIntInput('Allowlist limit', form.wlLimit, 0, 65_535),
     publicLimit: parseIntInput('Public limit', form.publicLimit, 0, 65_535),
     baseURI,

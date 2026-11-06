@@ -6,7 +6,7 @@ import { budgetTransport } from './evm-client';
 import { isTransientRpcError, withRpcPriority } from './rpc-budget';
 
 /**
- * A native HYPE transfer as the chain reports it (`eth_getTransactionByHash` +
+ * A native gas-token transfer as the chain reports it (`eth_getTransactionByHash` +
  * `eth_getTransactionReceipt` + the block's timestamp).
  */
 export interface NativeTransfer {

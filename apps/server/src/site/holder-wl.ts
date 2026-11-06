@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { ELYSIUM_TESTNET_CHAIN_ID, isChainId, type HolderWlEntry, type HolderWlView } from '@elymum/shared';
+import { ROBINHOOD_TESTNET_CHAIN_ID, isChainId, type HolderWlEntry, type HolderWlView } from '@elymum/shared';
 import { getAddress, isAddress, type Address, type Hash } from 'viem';
 import type { HolderReader } from '../chain/evm-client';
 import { SiteFail, bad } from './validate';
@@ -153,9 +153,9 @@ export interface ImportHoldersDeps {
   log?: (m: string) => void;
 }
 
-/** `POST /api/admin/mint/import-holders { fromChainId? }` (default: Elysium Testnet). */
+/** `POST /api/admin/mint/import-holders { fromChainId? }` (default: Robinhood Chain Testnet). */
 export async function importHolders(deps: ImportHoldersDeps, body: Record<string, unknown>, admin: string): Promise<number> {
-  const from = body.fromChainId === undefined || body.fromChainId === null ? ELYSIUM_TESTNET_CHAIN_ID : body.fromChainId;
+  const from = body.fromChainId === undefined || body.fromChainId === null ? ROBINHOOD_TESTNET_CHAIN_ID : body.fromChainId;
   if (!isChainId(from)) throw bad('fromChainId', 'fromChainId must be a chain id');
   const nft = deps.nftOf(from);
   if (!nft) throw new SiteFail(409, 'wrong_state', `No NFT is registered for chain ${from} on this server (its registry is DATA_DIR/chains/${from}/contracts.json).`);
