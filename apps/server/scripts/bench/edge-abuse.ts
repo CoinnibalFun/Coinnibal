@@ -6,8 +6,10 @@
  * 1. oversized frames: a 5 KB and a 1 MB WebSocket frame;
  * 2. many wallets from one IP: 12 signed-in wallets from one address;
  * 3. slot exhaustion: sockets that DO say hello and then idle (the 10 s hello timeout does not apply; ws answers
- *    the server's pings by itself), from 13 /24 networks x 48, until MAX_CONNECTIONS is reached; then can a real
- *    player still connect, and can a ticket holder still resume?
+ *    the server's pings by itself), from 14 /24 networks x 48, until the server refuses them; then can a real
+ *    player still connect (a guest, and signed in with its session token as the `elymum.auth.<token>`
+ *    subprotocol), can a ticket holder with a live coin still resume (without and with the token), and does a guest
+ *    get in once the attackers idled past IDLE_GUEST_MS? MAX_CONNECTIONS stays 600 here, as when it was measured.
  *
  *   node --import tsx scripts/bench/edge-abuse.ts      (from apps/server)
  */
@@ -23,14 +25,14 @@ import { loadConfig } from '../../src/config';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 process.env.TRUST_PROXY = '1';
 const dir = mkdtempSync(join(tmpdir(), 'elymum-edge-'));
-const cfg = loadConfig({ NODE_ENV: 'development', DEV_FAKE_CHAIN: '1', DEV_FAKE_TOKEN: '1', PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, GAME_ACCESS: 'public', LOAD_SHED: '1', GAME_WORKERS: '1' } as unknown as NodeJS.ProcessEnv);
+const cfg = loadConfig({ NODE_ENV: 'development', DEV_FAKE_CHAIN: '1', DEV_FAKE_TOKEN: '1', PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, GAME_ACCESS: 'public', LOAD_SHED: '1', GAME_WORKERS: '1', MAX_CONNECTIONS: '600' } as unknown as NodeJS.ProcessEnv);
 const app = await createApp(cfg, { log: () => {} });
 const port = await app.listen();
 await app.rooms.ensureArenaRooms();
 
-function open(ip: string, onMsg?: (m: { t: string; code?: string }) => void): Promise<{ ws: WebSocket; status: 'open' | number | string; closed: Promise<number> }> {
+function open(ip: string, onMsg?: (m: { t: string; code?: string }) => void, token?: string): Promise<{ ws: WebSocket; status: 'open' | number | string; closed: Promise<number> }> {
   return new Promise((resolve) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { perMessageDeflate: false, headers: { 'x-forwarded-for': ip } });
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, token ? ['elymum', `elymum.auth.${token}`] : [], { perMessageDeflate: false, headers: { 'x-forwarded-for': ip } });
     const closed = new Promise<number>((r) => ws.on('close', (c) => r(c)));
     ws.on('open', () => {
       ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));
@@ -74,6 +76,19 @@ const out: Record<string, unknown> = {};
 
 // 3. slot exhaustion with hello'd idle sockets
 {
+  // a ticket holder whose coin plays on (AFK) while its phone is away
+  const holder = getAddress(`0x${'7e'.repeat(20)}`);
+  const holderToken = app.auth.issueToken(holder);
+  {
+    const msgs: { t: string; code?: string }[] = [];
+    const h = await open('192.0.2.20', (m) => msgs.push(m));
+    h.ws.send(JSON.stringify({ t: 'auth', token: holderToken }));
+    await sleep(300);
+    h.ws.send(JSON.stringify({ t: 'join', room: 'arena:1', name: 'holder', skin: 0 }));
+    for (let i = 0; i < 40 && !msgs.some((m) => m.t === 'joined'); i++) await sleep(100);
+    h.ws.terminate();
+    await sleep(300);
+  }
   const held: WebSocket[] = [];
   let refused = 0;
   const t0 = Date.now();
@@ -85,6 +100,11 @@ const out: Record<string, unknown> = {};
   const stillOpen = held.filter((w) => w.readyState === WebSocket.OPEN).length;
   const player = await open('192.0.2.10');
   const ticket = await open('192.0.2.11');
+  const signed = await open('192.0.2.12', undefined, app.auth.issueToken(getAddress(`0x${'5e'.repeat(20)}`)));
+  const ticketWithToken = await open('192.0.2.13', undefined, holderToken);
+  // the attackers' sockets idle past IDLE_GUEST_MS: a newcomer takes the slot of the longest-idle one
+  await sleep(20_000);
+  const playerLater = await open('192.0.2.14');
   out.slotExhaustion = {
     maxConnections: cfg.maxConnections,
     attackerSocketsOpen: stillOpen,
@@ -94,10 +114,13 @@ const out: Record<string, unknown> = {};
     secondsToFill: Math.round((Date.now() - t0) / 1000),
     newPlayerStatus: player.status,
     ticketHolderStatus: ticket.status,
+    signedInPlayerWithTokenStatus: signed.status,
+    ticketHolderWithTokenStatus: ticketWithToken.status,
+    newPlayerAfterAttackersIdled32sStatus: playerLater.status,
+    idleGuestsEvicted: app.gateway.dropped.idle,
   };
   for (const w of held) w.terminate();
-  player.ws.terminate();
-  ticket.ws.terminate();
+  for (const s of [player, ticket, signed, ticketWithToken, playerLater]) s.ws.terminate();
 }
 
 console.log(JSON.stringify(out, null, 2));

@@ -42,6 +42,11 @@ export const IDLE_GUEST_MS = 30_000;
 const IDLE_SWEEP_SHARE = 0.9;
 /** Live-stake holders reconnecting get this much room above `MAX_CONNECTIONS` (they always get in). */
 const STAKE_HEADROOM = 0.05;
+/**
+ * Signed-in sockets per IP: `MAX_CONNECTIONS_PER_IP` times this (64 by default). Far above a household, enough for a
+ * carrier NAT address, and still a bound on one address that signs in with many throwaway wallets.
+ */
+export const SIGNED_PER_IP_FACTOR = 8;
 /** A browser may offer its session token as a WebSocket subprotocol `elymum.auth.<token>` (no token in the URL). */
 export const AUTH_SUBPROTOCOL = 'elymum.auth.';
 
@@ -136,6 +141,8 @@ export class Gateway {
   });
   private readonly perIp = new Map<string, number>();
   private readonly perSubnet = new Map<string, number>();
+  /** Signed-in sockets per IP (limited at `SIGNED_PER_IP_FACTOR` × the guest limit). */
+  private readonly signedPerIp = new Map<string, number>();
   private readonly upgrades = new Limiter(UPGRADES_PER_IP_PER_MIN, 60_000);
   /** Graceful degradation (new joins shed before live rooms suffer); null: never sheds (bare unit tests). */
   private shedder: LoadShedder | null = null;
@@ -307,11 +314,34 @@ export class Gateway {
       return this.evictIdleGuest(IDLE_GUEST_MS) || this.rooms.conns.size < max * (1 + STAKE_HEADROOM);
     }
     if (!this.upgrades.allow(ip)) return false;
-    if (priority === 'signed') return this.rooms.conns.size < max || this.evictIdleGuest(IDLE_GUEST_MS);
+    if (priority === 'signed') {
+      if (!this.signedRoom(ip)) return false;
+      return this.rooms.conns.size < max || this.evictIdleGuest(IDLE_GUEST_MS);
+    }
     if ((this.perIp.get(ip) ?? 0) >= this.cfg.maxConnectionsPerIp || (this.perSubnet.get(net) ?? 0) >= this.cfg.maxConnectionsPerSubnet) return false;
     // guests use at most GUEST_SHARE of the slots; at the cap (or the guest share) an idle guest makes room
     if (this.rooms.conns.size < max && this.guestCount() < max * GUEST_SHARE) return true;
     return this.evictIdleGuest(IDLE_GUEST_MS);
+  }
+
+  /** This IP may hold one more signed-in socket. */
+  private signedRoom(ip: string): boolean {
+    return (this.signedPerIp.get(ip) ?? 0) < this.cfg.maxConnectionsPerIp * SIGNED_PER_IP_FACTOR;
+  }
+
+  /** The socket counts as signed in for its IP (a stake holder's reconnect is counted, never refused). */
+  private countSigned(conn: Conn): void {
+    if (conn.countedAsSigned) return;
+    conn.countedAsSigned = true;
+    this.signedPerIp.set(conn.ip, (this.signedPerIp.get(conn.ip) ?? 0) + 1);
+  }
+
+  private uncountSigned(conn: Conn): void {
+    if (!conn.countedAsSigned) return;
+    conn.countedAsSigned = false;
+    const n = (this.signedPerIp.get(conn.ip) ?? 1) - 1;
+    if (n <= 0) this.signedPerIp.delete(conn.ip);
+    else this.signedPerIp.set(conn.ip, n);
   }
 
   private guestCount(): number {
@@ -354,8 +384,10 @@ export class Gateway {
     const conn = new Conn(ws, ip);
     conn.priority = priority;
     // a session-token socket is not a guest: it never counts in its IP's guest limit (players behind a carrier NAT)
-    if (priority) conn.countedAsGuest = false;
-    else {
+    if (priority) {
+      conn.countedAsGuest = false;
+      this.countSigned(conn);
+    } else {
       this.perIp.set(ip, (this.perIp.get(ip) ?? 0) + 1);
       this.perSubnet.set(net, (this.perSubnet.get(net) ?? 0) + 1);
     }
@@ -391,6 +423,7 @@ export class Gateway {
 
   private onClose(conn: Conn, net = subnetOf(conn.ip)): void {
     this.uncountGuest(conn, net);
+    this.uncountSigned(conn);
     this.rooms.removeConn(conn);
     conn.room?.leave(conn, 'disconnect');
   }
@@ -543,8 +576,11 @@ export class Gateway {
       return;
     }
     conn.wallet = wallet;
-    // signed in: no longer a guest of its IP (many players share a carrier's NAT address)
-    this.uncountGuest(conn);
+    // signed in: no longer a guest of its IP (many players share a carrier's NAT address), up to the signed-in bound
+    if (conn.countedAsGuest && this.signedRoom(conn.ip)) {
+      this.uncountGuest(conn);
+      this.countSigned(conn);
+    }
     conn.profile = this.profiles?.summary(wallet) ?? null;
     conn.send({ t: 'authed', address: wallet, token: token ?? this.auth.issueToken(wallet), profile: conn.profile });
   }
