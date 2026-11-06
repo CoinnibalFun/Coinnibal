@@ -33,6 +33,16 @@ import type { LoadShedder } from './shedder';
 export const HELLO_TIMEOUT_MS = 10_000;
 /** WebSocket upgrades per IP a minute (reconnect storms of a real client stay far below it). */
 export const UPGRADES_PER_IP_PER_MIN = 60;
+/** Guests (sockets not signed in) may hold at most this share of `MAX_CONNECTIONS`: the rest is kept for signed-in players. */
+export const GUEST_SHARE = 0.8;
+/** A guest with no message for this long, not playing, is idle: it is closed when a newcomer needs its slot. */
+export const IDLE_GUEST_MS = 30_000;
+/** Above this share of `MAX_CONNECTIONS` the heartbeat closes guests idle for `2 × IDLE_GUEST_MS` (down to the share). */
+const IDLE_SWEEP_SHARE = 0.9;
+/** Live-stake holders reconnecting get this much room above `MAX_CONNECTIONS` (they always get in). */
+const STAKE_HEADROOM = 0.05;
+/** A browser may offer its session token as a WebSocket subprotocol `elymum.auth.<token>` (no token in the URL). */
+export const AUTH_SUBPROTOCOL = 'elymum.auth.';
 
 /**
  * The network an address belongs to for the per-subnet connection limit: IPv4 /24, IPv6 /64 (an IPv4-mapped
@@ -116,14 +126,20 @@ export function settledMessage(e: SettledEvent): Extract<ServerMessage, { t: 'se
 
 /** WebSocket front door: connection limits, message parsing and routing. */
 export class Gateway {
-  private readonly wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false });
+  private readonly wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: 4096,
+    perMessageDeflate: false,
+    // the session token offered as a subprotocol (`elymum.auth.<token>`) is never echoed back: answer `elymum`
+    handleProtocols: (protocols) => (protocols.has('elymum') ? 'elymum' : false),
+  });
   private readonly perIp = new Map<string, number>();
   private readonly perSubnet = new Map<string, number>();
   private readonly upgrades = new Limiter(UPGRADES_PER_IP_PER_MIN, 60_000);
   /** Graceful degradation (new joins shed before live rooms suffer); null: never sheds (bare unit tests). */
   private shedder: LoadShedder | null = null;
   /** Connections closed for abuse (flood, garbage, no hello), for the load test and the logs. */
-  readonly dropped = { noHello: 0, flood: 0, limit: 0 };
+  readonly dropped = { noHello: 0, flood: 0, limit: 0, idle: 0 };
   /** Sockets closed because a newer one of the same wallet took their arena coin over (`CLOSE_REPLACED`). */
   replaced = 0;
   private readonly alive = new WeakMap<WebSocket, boolean>();
@@ -214,21 +230,17 @@ export class Gateway {
         socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
         socket.destroy();
       };
-      if (
-        this.rooms.conns.size >= this.cfg.maxConnections ||
-        (this.perIp.get(ip) ?? 0) >= this.cfg.maxConnectionsPerIp ||
-        (this.perSubnet.get(net) ?? 0) >= this.cfg.maxConnectionsPerSubnet ||
-        !this.upgrades.allow(ip)
-      ) {
+      const priority = this.priorityOf(req);
+      if (!this.admit(ip, net, priority)) {
         refuse('429 Too Many Requests');
         return;
       }
-      // overloaded: live games keep their budget, new sockets wait
-      if (this.shedder && !this.shedder.admitCritical()) {
+      // overloaded: live games keep their budget, new sockets wait (a live stake's reconnect always gets in)
+      if (priority !== 'stake' && this.shedder && !this.shedder.admitCritical()) {
         refuse('503 Service Unavailable');
         return;
       }
-      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, ip, net));
+      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, ip, net, priority));
     });
     // heartbeat + lobby room list
     this.timers.push(
@@ -241,6 +253,9 @@ export class Gateway {
           this.alive.set(ws, false);
           ws.ping();
         }
+        // close to the cap: lobby guests idle for a minute make room before anyone is refused
+        const max = this.cfg.maxConnections;
+        while (this.rooms.conns.size > max * IDLE_SWEEP_SHARE && this.evictIdleGuest(2 * IDLE_GUEST_MS));
       }, 25_000),
       setInterval(() => {
         const msg = { t: 'rooms', rooms: this.rooms.list(), online: this.rooms.online(), blocked: this.rooms.blockedArenas() } as const;
@@ -254,10 +269,81 @@ export class Gateway {
     for (const ws of this.wss.clients) ws.close(1001, 'server shutting down');
   }
 
-  private onConnection(ws: WebSocket, ip: string, net = subnetOf(ip)): void {
-    this.perIp.set(ip, (this.perIp.get(ip) ?? 0) + 1);
-    this.perSubnet.set(net, (this.perSubnet.get(net) ?? 0) + 1);
+  /**
+   * The session token a browser offered as a subprotocol (`elymum.auth.<token>`): `stake` when its wallet holds a
+   * live arena coin here (a reconnect: it always gets in), `signed` for any other valid session, null without one.
+   */
+  private priorityOf(req: IncomingMessage): 'stake' | 'signed' | null {
+    const offered = String(req.headers['sec-websocket-protocol'] ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .find((s) => s.startsWith(AUTH_SUBPROTOCOL));
+    const wallet = offered ? this.auth.verifyToken(offered.slice(AUTH_SUBPROTOCOL.length)) : null;
+    if (!wallet) return null;
+    return this.rooms.holdsLiveStake(wallet) ? 'stake' : 'signed';
+  }
+
+  /** Sockets not signed in, per IP and per subnet, are limited; the whole server keeps a reserve for signed-in players. */
+  private admit(ip: string, net: string, priority: 'stake' | 'signed' | null): boolean {
+    const max = this.cfg.maxConnections;
+    if (priority === 'stake') {
+      // a ticket holder coming back: past every per-IP limit (a carrier NAT), into the headroom above the cap
+      if (this.rooms.conns.size < max) return true;
+      return this.evictIdleGuest(IDLE_GUEST_MS) || this.rooms.conns.size < max * (1 + STAKE_HEADROOM);
+    }
+    if (!this.upgrades.allow(ip)) return false;
+    if (priority === 'signed') return this.rooms.conns.size < max || this.evictIdleGuest(IDLE_GUEST_MS);
+    if ((this.perIp.get(ip) ?? 0) >= this.cfg.maxConnectionsPerIp || (this.perSubnet.get(net) ?? 0) >= this.cfg.maxConnectionsPerSubnet) return false;
+    // guests use at most GUEST_SHARE of the slots; at the cap (or the guest share) an idle guest makes room
+    if (this.rooms.conns.size < max && this.guestCount() < max * GUEST_SHARE) return true;
+    return this.evictIdleGuest(IDLE_GUEST_MS);
+  }
+
+  private guestCount(): number {
+    let n = 0;
+    for (const c of this.rooms.conns) if (!c.wallet) n++;
+    return n;
+  }
+
+  /** Closes the longest-idle guest (not signed in, not playing, silent for `idleMs`). False when there is none. */
+  private evictIdleGuest(idleMs: number): boolean {
+    const now = Date.now();
+    let worst: Conn | null = null;
+    for (const c of this.rooms.conns) {
+      if (c.wallet || c.player?.alive || c.joining || c.ws.readyState > 1 || now - c.lastMsgAt < idleMs) continue;
+      if (!worst || c.lastMsgAt < worst.lastMsgAt) worst = c;
+    }
+    if (!worst) return false;
+    this.dropped.idle++;
+    // gone from the counts now: the newcomer takes its slot at once
+    this.rooms.removeConn(worst);
+    this.uncountGuest(worst);
+    worst.ws.close(1013, 'idle: the server is full');
+    setTimeout(() => worst.ws.terminate(), 1_000).unref();
+    return true;
+  }
+
+  /** The socket stops counting in its IP's and subnet's guest limit (it signed in, or it is gone). */
+  private uncountGuest(conn: Conn, net = subnetOf(conn.ip)): void {
+    if (!conn.countedAsGuest) return;
+    conn.countedAsGuest = false;
+    const n = (this.perIp.get(conn.ip) ?? 1) - 1;
+    if (n <= 0) this.perIp.delete(conn.ip);
+    else this.perIp.set(conn.ip, n);
+    const s = (this.perSubnet.get(net) ?? 1) - 1;
+    if (s <= 0) this.perSubnet.delete(net);
+    else this.perSubnet.set(net, s);
+  }
+
+  private onConnection(ws: WebSocket, ip: string, net = subnetOf(ip), priority: 'stake' | 'signed' | null = null): void {
     const conn = new Conn(ws, ip);
+    conn.priority = priority;
+    // a session-token socket is not a guest: it never counts in its IP's guest limit (players behind a carrier NAT)
+    if (priority) conn.countedAsGuest = false;
+    else {
+      this.perIp.set(ip, (this.perIp.get(ip) ?? 0) + 1);
+      this.perSubnet.set(net, (this.perSubnet.get(net) ?? 0) + 1);
+    }
     this.rooms.addConn(conn);
     this.alive.set(ws, true);
     // a socket that never says hello is closed (it would hold a slot and memory for nothing)
@@ -289,12 +375,7 @@ export class Gateway {
   }
 
   private onClose(conn: Conn, net = subnetOf(conn.ip)): void {
-    const n = (this.perIp.get(conn.ip) ?? 1) - 1;
-    if (n <= 0) this.perIp.delete(conn.ip);
-    else this.perIp.set(conn.ip, n);
-    const s = (this.perSubnet.get(net) ?? 1) - 1;
-    if (s <= 0) this.perSubnet.delete(net);
-    else this.perSubnet.set(net, s);
+    this.uncountGuest(conn, net);
     this.rooms.removeConn(conn);
     conn.room?.leave(conn, 'disconnect');
   }
@@ -329,6 +410,7 @@ export class Gateway {
   }
 
   async onMessage(conn: Conn, data: RawData, isBinary: boolean): Promise<void> {
+    conn.lastMsgAt = Date.now();
     if (!conn.allow(isBinary ? 1 : 3)) return this.strike(conn);
     if (isBinary) {
       const input = decodeClientInput(toBytes(data));
@@ -446,6 +528,8 @@ export class Gateway {
       return;
     }
     conn.wallet = wallet;
+    // signed in: no longer a guest of its IP (many players share a carrier's NAT address)
+    this.uncountGuest(conn);
     conn.profile = this.profiles?.summary(wallet) ?? null;
     conn.send({ t: 'authed', address: wallet, token: token ?? this.auth.issueToken(wallet), profile: conn.profile });
   }

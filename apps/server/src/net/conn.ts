@@ -59,6 +59,13 @@ export class Conn implements RoomConn {
   private chainTokens = 6;
   private chainRefill = Date.now();
 
+  /** The last message from the client (Unix ms): an idle lobby guest is the first to go when the server is full. */
+  lastMsgAt = Date.now();
+  /** Counted in its IP's and subnet's guest limit (until it signs in: signed-in sockets are not limited per IP). */
+  countedAsGuest = true;
+  /** Admitted with a session token that holds a live arena stake (the reserve is theirs). */
+  priority: 'stake' | 'signed' | null = null;
+
   constructor(
     readonly ws: WebSocket,
     readonly ip: string,
