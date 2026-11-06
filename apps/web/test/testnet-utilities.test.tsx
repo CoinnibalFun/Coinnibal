@@ -270,9 +270,9 @@ describe('admin groups', () => {
     expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never }).next).toMatch(/Testnet: open the game to everyone/);
   });
 
-  it('lists the mainnet launch with the Render step first; nothing is ticked on testnet', () => {
+  it('lists the mainnet launch with the server step first; nothing is ticked on testnet', () => {
     const steps = mainnetChecklist(resolveNetwork(chainStatus()), null);
-    expect(steps[0].label).toMatch(/Set EVM_RPC_URL \(and CHAIN_ID\) in Render/);
+    expect(steps[0].label).toMatch(/Set EVM_RPC_URL \(and CHAIN_ID\) on the server/);
     expect(steps.filter((s) => s.ok === true)).toHaveLength(0);
     const main = mainnetChecklist(resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null })), null);
     expect(main[0].ok).toBe(true);

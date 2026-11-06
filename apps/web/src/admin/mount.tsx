@@ -12,9 +12,19 @@ function AdminApp() {
   useEffect(() => {
     initWallets();
     let live = true;
-    void fetchServerChain().then((chain) => live && setNet(resolveNetwork(chain)));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // the server can be briefly away (a restart after a deploy): keep asking every 5 s until it answers,
+    // so the panel recovers by itself instead of staying on "not answering" until a manual reload
+    const load = (fresh: boolean) =>
+      void fetchServerChain({ fresh }).then((chain) => {
+        if (!live) return;
+        setNet(resolveNetwork(chain));
+        if (chain === null) timer = setTimeout(() => load(true), 5_000);
+      });
+    load(false);
     return () => {
       live = false;
+      if (timer) clearTimeout(timer);
     };
   }, []);
   // the workshop is a day page (spec §6.9 Admin): calm paper whatever the OS theme
