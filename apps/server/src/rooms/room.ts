@@ -261,7 +261,12 @@ export class Room implements RoomHandle {
     this.clock = deps.clock ?? new RoundClock(deps.now, deps.round);
     this.integrity = this.ledger ? (deps.integrity ?? null) : null;
     // loot left on any of this arena's instances when the server last stopped: the first instance adopts it all
-    if (this.ledger && opts.stake && (opts.instance ?? 1) === 1) this.world.restoreLoot(deps.journal.adoptLoot(opts.stake.arenaId, this.id));
+    if (this.ledger && opts.stake && (opts.instance ?? 1) === 1) {
+      const loot = deps.journal.adoptLoot(opts.stake.arenaId, this.id);
+      this.world.restoreLoot(loot);
+      // restored loot is value a ticket of this round may pick up: it counts in the round's pool
+      this.roundPool = loot.reduce((s, l) => s + l.value, 0);
+    }
     if (this.ledger) {
       const r = this.clock.window();
       this.roundN = r.n;
@@ -298,7 +303,16 @@ export class Room implements RoomHandle {
     this.roundN = r.n;
     this.roundEndsAt = r.endsAt;
     this.endRound(ended);
+    // every ticket of that round was settled at its bell: the next round's pool starts from nothing
+    this.roundPool = this.ledger.all().reduce((s, e) => s + e.entryFee, 0);
   }
+
+  /**
+   * Σ entry fees of the tickets seated in this instance during the round in play, plus loot restored into it (ledger
+   * units): no ticket can be worth more than that (value only moves between this round's tickets here). Each
+   * settlement carries it; the chain worker's payout guard holds a payout above it.
+   */
+  private roundPool = 0;
 
   get id(): string {
     return this.opts.id;
@@ -432,6 +446,7 @@ export class Room implements RoomHandle {
     else this.avatarOf.delete(player.id);
     if (this.ledger && opts.stake) {
       this.ledger.join({ ...opts.stake, pid: player.id });
+      this.roundPool += opts.stake.entryFee;
       this.integrity?.join(this, player.id, conn, opts.stake);
       this.commitJournal();
     }
@@ -799,7 +814,7 @@ export class Room implements RoomHandle {
       }
       // arena humans never `leave` (they go AFK); an operator exit settles at value like a kick
       const reason: SettleReason = cause === 'left' ? 'kicked' : cause;
-      const item = settlementOf(entry, { score, kills: stats.playersEaten, xp: stats.xp ?? 0, reason, now });
+      const item = settlementOf(entry, { score, kills: stats.playersEaten, xp: stats.xp ?? 0, reason, now, roundPool: this.roundPool });
       // integrity: finish the ticket's telemetry; with auto-hold on, a high-risk payout is held (same journal write)
       this.integrity?.settle(this, p.id, item, { reason, payout: fee.net, killer });
       enqueue.unshift(item);
@@ -1347,7 +1362,7 @@ export function boardRows(ranked: readonly BoardEntry[], pid: number): RoundStan
 /** The journal item that settles an arena ticket at its gross value (the contract takes the fee on profit). */
 function settlementOf(
   entry: ArenaEntry,
-  o: { score: number; kills: number; xp: number; reason: SettleReason; now: number },
+  o: { score: number; kills: number; xp: number; reason: SettleReason; now: number; roundPool?: number },
 ): SettlementItem {
   return {
     kind: 'settle',
@@ -1358,6 +1373,7 @@ function settlementOf(
     sessionId: entry.sessionId,
     payout: entry.value,
     entryFee: entry.entryFee,
+    ...(o.roundPool !== undefined && o.roundPool > 0 ? { roundPool: o.roundPool } : {}),
     score: o.score,
     kills: o.kills,
     xp: o.xp,

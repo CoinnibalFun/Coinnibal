@@ -1,6 +1,6 @@
 import { ClientOp, type ClientInput, type IntegrityTransfer } from '@elymum/shared';
 import type { Player } from '../game/entities';
-import { MAX_REACTION_SAMPLES, emptyInput, turnBin, type SessionSummary } from './types';
+import { MAX_REACTION_SAMPLES, NEAR_MAX, emptyInput, turnBin, type SessionSummary } from './types';
 
 /** Gaps between target messages longer than this are pauses, not timing samples. */
 const MAX_GAP_MS = 2000;
@@ -302,6 +302,15 @@ export class IntegrityMonitor {
         if (gap < THREAT_GAP && gap < threatGap) {
           threat = j;
           threatGap = gap;
+        }
+        // a staker that could eat this ticket is within range: counted for the non-aggression detector
+        if (gap < THREAT_GAP) {
+          const other = m.get(list[j].id);
+          if (other && other.s.wallet !== tr.s.wallet) {
+            const near = (tr.s.near ??= {});
+            const w = other.s.wallet;
+            if (near[w] !== undefined || Object.keys(near).length < NEAR_MAX) near[w] = (near[w] ?? 0) + 1;
+          }
         }
         if (bm >= am * FEED_RATIO && gap < FEED_GAP && gap < feedGap && m.has(list[j].id)) {
           feed = j;

@@ -1,7 +1,7 @@
 import { SiteFail } from './site/validate';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
-import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain } from '@elymum/shared';
+import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain } from '@elymum/shared';
 import { chainOverridesFor } from './chain/evm';
 import type { Hex } from 'viem';
 import { Auth } from './auth';
@@ -12,6 +12,7 @@ import { checkAuthSecret, type ServerConfig } from './config';
 import { createHttpServer, publicBaseUrl, redactUrls } from './http';
 import { IntegrityService } from './integrity/service';
 import { IntegrityStore } from './integrity/store';
+import { integrityDefaults } from './integrity/settings';
 import { Leaderboards } from './leaderboards';
 import type { Limiter } from './net/limiter';
 import { Gateway } from './net/gateway';
@@ -217,7 +218,8 @@ export async function createApp(
   // integrity data lives next to the journal; the fake chain keeps its own directory
   const integrityDir = persist ? join(cfg.dataDir, cfg.devFakeChain ? 'integrity.dev-fake' : 'integrity') : null;
   const integrity = new IntegrityService({
-    store: new IntegrityStore(integrityDir, { log }),
+    // auto-hold of high-risk payouts: on by default on the mainnet (an admin may still turn it off), off on a testnet
+    store: new IntegrityStore(integrityDir, { log, defaults: integrityDefaults(cfg.chain.chainId === ROBINHOOD_CHAIN_ID || stateChainId === ROBINHOOD_CHAIN_ID ? ROBINHOOD_CHAIN_ID : stateChainId) }),
     journal,
     kick: () => chain.kick(),
     books: () => (chain as Partial<{ booksGuard(): ReadonlyMap<number, string> }>).booksGuard?.() ?? new Map(),
