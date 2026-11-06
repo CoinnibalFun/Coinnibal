@@ -24,6 +24,7 @@ import type { RoomManager } from '../rooms/manager';
 import { TestArenaFail } from '../rooms/test-arenas';
 import { ArenaPricingFail, type ArenaPriceStore } from './arena-prices';
 import { mapRoutes, type MapAdmin } from './maps';
+import { RepriceFail, type RepriceScheduler } from './reprice';
 import { customRoomAdminRoutes, customRoomRoutes } from './custom-rooms';
 import type { CustomRoomService } from '../rooms/custom';
 import { importHolders, type HolderWlStore } from './holder-wl';
@@ -241,6 +242,13 @@ export class SiteApi {
 
   setArenaPrices(store: ArenaPriceStore | null): void {
     this.arenaPrices = store;
+  }
+
+  /** "Re-price at next bell" (`/api/admin/reprice`); absent in bare unit tests. */
+  private reprice: RepriceScheduler | null = null;
+
+  setReprice(r: RepriceScheduler | null): void {
+    this.reprice = r;
   }
 
   setShop(shop: { service: ShopService; settings: ShopSettingsStore; inventory: BoostInventory } | null): void {
@@ -799,6 +807,25 @@ export class SiteApi {
       }
       case 'nft':
         return this.nftAdmin(req, res, seg);
+      case 'reprice': {
+        // "Re-price at next bell": GET the arenas on their way; POST {"arenaIds":[1,2]} closes them at the next bell
+        // (joins close at the round's last minute, the bell and the drain, then "ready to sign"); POST
+        // {"arenaIds":[1],"cancel":true} opens them again without a re-price. The owner signs updateArena in /admin
+        if (seg.length !== 1 || !this.reprice) break;
+        if (this.method(req, 'GET', 'POST') === 'GET') return send(res, 200, { entries: this.reprice.view() });
+        const body = await readJson(req);
+        const ids = Array.isArray(body.arenaIds) ? body.arenaIds : null;
+        if (!ids || ids.length === 0 || ids.length > 16 || !ids.every((x) => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 65_535)) {
+          throw new SiteFail(400, 'bad_request', 'arenaIds must be a list of arena ids', 'arenaIds');
+        }
+        if (body.cancel === true) return send(res, 200, { entries: this.reprice.cancel(ids as number[], wallet) });
+        try {
+          return send(res, 200, { entries: await this.reprice.schedule(ids as number[], wallet) });
+        } catch (err) {
+          if (err instanceof RepriceFail) throw new SiteFail(400, 'bad_request', err.message, 'arenaIds');
+          throw err;
+        }
+      }
       case 'secret-proof': {
         // the text an admin signs to open one secret export (backup, migration settings), single use, 10 minutes
         if (seg.length !== 1) break;

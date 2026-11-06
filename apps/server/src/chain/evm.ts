@@ -188,6 +188,10 @@ export class EvmChain implements ChainGateway {
   private rpcOkAt: number | null = null;
 
   private liveSessions: () => Set<string> = () => new Set();
+  /** Arenas the server closed for a re-price (`RepriceScheduler`): their unseated tickets are cancelled at once. */
+  private closedArenaIds: () => Set<number> = () => new Set();
+  /** The closed arenas the last refresh saw (a newly closed one triggers the stale sweep at once). */
+  private closedSeen = '';
   private readonly settledListeners: ((e: SettledEvent) => void)[] = [];
   private readonly statusListeners: (() => void)[] = [];
   /** The last transaction sent per journal key (a lost confirmation can still be reported). */
@@ -396,6 +400,16 @@ export class EvmChain implements ChainGateway {
     }
     await this.syncContracts(opts.configMaxAgeMs ?? 0);
     this.announceStatus();
+    // an arena that closed since the last look (disabled, paused, or closed for a re-price): its unseated tickets go
+    // back now, so the re-price does not wait out the 15-minute stale limit
+    if (this.tokenReady) {
+      const c = await this.closedArenas();
+      const sig = c.all ? 'all' : [...c.ids].sort((a, b) => a - b).join(',');
+      if (sig !== this.closedSeen) {
+        this.closedSeen = sig;
+        if (sig !== '') void this.sweepStale();
+      }
+    }
   }
 
   /**
@@ -804,6 +818,29 @@ export class EvmChain implements ChainGateway {
 
   setLiveSessionProvider(fn: () => Set<string>): void {
     this.liveSessions = fn;
+  }
+
+  /** Arenas closed for a re-price by the server (their unseated tickets are cancelled at once). */
+  setClosedArenaProvider(fn: () => Set<number>): void {
+    this.closedArenaIds = fn;
+  }
+
+  /**
+   * Arenas whose unseated tickets are cancelled at once rather than after `STALE_SESSION_AFTER_S`: disabled on chain,
+   * every arena while the contract is paused, and those the server closed for a re-price. A ticket nobody will seat
+   * there keeps the arena busy (`ArenaBusy`) and the re-price waiting for nothing.
+   */
+  private async closedArenas(): Promise<{ ids: Set<number>; all: boolean }> {
+    const ids = new Set(this.closedArenaIds());
+    let list: ChainArena[] = [];
+    try {
+      // fresh: a cached "disabled" must not cancel the tickets of an arena that has just been opened again
+      list = await this.listArenas(true);
+    } catch {
+      /* unknown: only the server's own closures count */
+    }
+    for (const a of list) if (!a.enabled) ids.add(a.id);
+    return { ids, all: this.config?.paused === true };
   }
 
   onSettled(fn: (e: SettledEvent) => void): void {
@@ -1494,6 +1531,7 @@ export class EvmChain implements ChainGateway {
     // fast must not cancel a ticket its player is about to seat
     await this.readChainClock();
     const chainNowS = this.chainNow() / 1000;
+    const closed = await this.closedArenas();
     const live = this.liveSessions();
     const pending = new Set(this.journal.pending.map((p) => p.key));
     const only = this.cfg.chain.arenaIds;
@@ -1541,7 +1579,8 @@ export class EvmChain implements ChainGateway {
             });
             return;
           }
-          if (chainNowS - s.openedAt < staleAfterS) return;
+          // a closed arena (re-price, disabled, paused): nobody will seat it, the full entry fee goes back now
+          if (!closed.all && !closed.ids.has(c.arenaId) && chainNowS - s.openedAt < staleAfterS) return;
           if (only.length > 0 && !only.includes(c.arenaId)) return;
           enqueue.push({
             kind: 'settle',

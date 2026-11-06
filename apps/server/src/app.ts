@@ -45,6 +45,7 @@ import { ShopSettingsStore } from './shop/settings';
 import { ArenaPriceStore } from './site/arena-prices';
 import { EmblemClaims } from './site/emblem-claims';
 import { EmblemGate } from './site/emblem-gate';
+import { RepriceScheduler } from './site/reprice';
 import { NFT_COLLECTION_FILE, NftCollection } from './site/nft/collection';
 
 export interface App {
@@ -347,6 +348,22 @@ export async function createApp(
   site.setScaler(rooms.scaler);
   site.setTestArenas(rooms);
   chain.setLiveSessionProvider(() => rooms.liveSessions());
+  // "Re-price at next bell": the arena closes at the round's last minute, drains after its bell, waits for the owner
+  const reprice = new RepriceScheduler({
+    listArenas: (fresh) => chain.listArenas(fresh),
+    journal,
+    roundWindow: (n) => rooms.roundWindow(n),
+    now: () => rooms.now(),
+    liveStakes: (id) => rooms.liveStakesOf(id),
+    sweepNow: () => void (chain as Partial<{ sweepStale(): Promise<number> }>).sweepStale?.(),
+    file: chainState ? join(chainState, 'reprice.json') : null,
+    log,
+  });
+  (chain as Partial<{ setClosedArenaProvider(fn: () => Set<number>): void }>).setClosedArenaProvider?.(() => reprice.closedArenas());
+  rooms.repricingArenas = () => reprice.view().filter((e) => reprice.closedForSeats(e.arenaId)).map((e) => e.arenaId);
+  site.setReprice(reprice);
+  const repriceTimer = setInterval(() => void reprice.tick().catch((err) => log(`reprice: ${(err as Error).message}`)), 2_000);
+  repriceTimer.unref();
   const emblems = new EmblemGate({
     chain,
     journal,
@@ -381,6 +398,7 @@ export async function createApp(
   gateway.setBanGate((wallet) => integrity.isBanned(wallet));
   // emblem holders wear a laurel and may play the emblem skin (cached holder check of the NFT)
   gateway.setHolderCheck((wallet) => mint.isHolder(wallet));
+  gateway.setRepricing((id) => reprice.closedForSeats(id));
   // holder tickets: the emblem is there at the seat (read fresh) and one token id serves one open holder ticket
   gateway.setEmblemGate((wallet, session) => emblems.seat(wallet, session));
   chain.onSettled((e) => emblems.settled(e.key));
@@ -437,6 +455,7 @@ export async function createApp(
       clearInterval(flushTimer);
       clearInterval(arenaTimer);
       clearInterval(emblemTimer);
+      clearInterval(repriceTimer);
       shedder.stop();
       stopRpcLog();
       mint.flush();

@@ -51,6 +51,35 @@ describe('mainnet money simulation (USD tiers at a mainnet price, holders-only $
   });
 });
 
+describe('re-pricing downtime (fixed)', () => {
+  it('closing an arena for a sync cancels its unseated tickets at once, not after 15 minutes', async () => {
+    // a ticket bought 2 minutes ago whose player never took the seat; the owner closed the arena for a USD sync
+    const evm = new FakeEvm();
+    evm.addArena(1, 10_000n);
+    const T0 = 1_791_000_000_000;
+    evm.nowS = () => Math.floor(T0 / 1000);
+    const journal = new Journal(null);
+    const cfg = loadConfig({ EVM_RPC_URL: 'http://127.0.0.1:1', SERVER_PRIVATE_KEY: generatePrivateKey() } as unknown as NodeJS.ProcessEnv);
+    const chain = new EvmChain(cfg, journal, () => {}, { client: evm, contracts: () => ({ arena: ARENA, nft: null }), loops: false, now: () => T0, receiptTimeoutMs: 10 });
+    chain.setLiveSessionProvider(() => new Set());
+    await chain.start();
+    evm.join(1, testSigner().address, { openedAt: Math.floor(T0 / 1000) - 120 });
+    // the control: a ticket of the same arena older than 15 minutes, which the sweeper of today does cancel
+    evm.join(1, testSigner().address, { openedAt: Math.floor(T0 / 1000) - 1_000 });
+    evm.arenaMap.get(1)!.enabled = false;
+    // both queued for a cancel (the full entry fee back): the fresh one no longer keeps the closed arena busy until it
+    // is 900 s old (STALE_SESSION_AFTER_S) and the next 5-minute sweep
+    expect(await chain.sweepStale()).toBe(2);
+    // the same while the contract is paused (every arena), or when the server closed the arena for a re-price
+    evm.arenaMap.get(1)!.enabled = true;
+    evm.join(1, testSigner().address, { openedAt: Math.floor(T0 / 1000) - 30 });
+    expect(await chain.sweepStale()).toBe(0);
+    chain.setClosedArenaProvider(() => new Set([1]));
+    expect(await chain.sweepStale()).toBe(1);
+  });
+
+});
+
 describe('economy layer', () => {
   let cal: Calibration | null = null;
   const getCal = () => (cal ??= calibrate({ sizes: [12], rounds: 2, seeds: [1] }));
@@ -99,26 +128,6 @@ describe('economy layer', () => {
 const findings = process.env.ELYMUM_ECON_FINDINGS === '1';
 
 describe.skipIf(!findings)('audit findings (fail until fixed)', () => {
-  it('[F-reprice] closing an arena for a sync cancels its unseated tickets at once, not after 15 minutes', async () => {
-    // a ticket bought 2 minutes ago whose player never took the seat; the owner closed the arena for a USD sync
-    const evm = new FakeEvm();
-    evm.addArena(1, 10_000n);
-    const T0 = 1_791_000_000_000;
-    evm.nowS = () => Math.floor(T0 / 1000);
-    const journal = new Journal(null);
-    const cfg = loadConfig({ EVM_RPC_URL: 'http://127.0.0.1:1', SERVER_PRIVATE_KEY: generatePrivateKey() } as unknown as NodeJS.ProcessEnv);
-    const chain = new EvmChain(cfg, journal, () => {}, { client: evm, contracts: () => ({ arena: ARENA, nft: null }), loops: false, now: () => T0, receiptTimeoutMs: 10 });
-    chain.setLiveSessionProvider(() => new Set());
-    await chain.start();
-    evm.join(1, testSigner().address, { openedAt: Math.floor(T0 / 1000) - 120 });
-    // the control: a ticket of the same arena older than 15 minutes, which the sweeper of today does cancel
-    evm.join(1, testSigner().address, { openedAt: Math.floor(T0 / 1000) - 1_000 });
-    evm.arenaMap.get(1)!.enabled = false;
-    // wanted: both queued for a cancel. Today only the control is (received 1): the fresh one keeps the closed arena
-    // busy until it is 900 s old (STALE_SESSION_AFTER_S) and the next 5-minute sweep, so the sync waits
-    expect(await chain.sweepStale()).toBe(2);
-  });
-
   it('[F-powerups] a power-up charge stays near the documented 20 % of the $1 ticket at the mainnet price', () => {
     const price = parseUsdPrice(PRICE);
     const ticket = Number(usdToTokenRaw(100, price, 18, 2) / 10n ** 18n);

@@ -254,8 +254,8 @@ export const ROOM_CLOSE_COUNTDOWN_MS = 10_000;
  */
 export interface BlockedArena {
   arenaId: number;
-  /** `vault_short`: the vault holds less than the journal owes. */
-  reason: 'vault_short';
+  /** `vault_short`: the vault holds less than the journal owes. `repricing`: closed for a re-price at its bell. */
+  reason: 'vault_short' | 'repricing';
 }
 
 /** The arena contract's fee settings (`config()` of ElymumArena v3), basis points. */

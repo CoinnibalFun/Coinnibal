@@ -733,7 +733,19 @@ export class RoomManager {
 
   /** The public form of `underfundedArenas` (rooms message, `/api/rooms`): the lobby must not sell these. */
   blockedArenas(): BlockedArena[] {
-    return [...this.underfunded.keys()].sort((a, b) => a - b).map((arenaId) => ({ arenaId, reason: 'vault_short' }));
+    const out: BlockedArena[] = [...this.underfunded.keys()].map((arenaId) => ({ arenaId, reason: 'vault_short' }));
+    for (const arenaId of this.repricingArenas?.() ?? []) if (!this.underfunded.has(arenaId)) out.push({ arenaId, reason: 'repricing' });
+    return out.sort((a, b) => a.arenaId - b.arenaId);
+  }
+
+  /** Arenas closed for a re-price (shown to the lobby as blocked); set by the app. */
+  repricingArenas: (() => Iterable<number>) | null = null;
+
+  /** Live coins (seated tickets) of an arena over every room. */
+  liveStakesOf(arenaId: number): number {
+    let n = 0;
+    for (const r of this.ticketRooms(arenaId)) n += r.liveSessions().length;
+    return n;
   }
 
   private arenaAllowed(arenaId: number): boolean {

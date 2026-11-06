@@ -609,6 +609,8 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
           closedArenas.add(a);
           rp.closed++;
           note(`closed arena #${a} for a sync`);
+          // the server's 30 s refresh sees the closed arena and runs the stale sweep at once
+          await chain.sweepStale().catch(() => 0);
         }
       }
     } finally {
