@@ -1,0 +1,9 @@
+[Unit]
+Description=Elymum: reboot at 04:30 when a system update asks for it (in the round break)
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target

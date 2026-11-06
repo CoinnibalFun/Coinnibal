@@ -72,4 +72,25 @@ describe('static web client', () => {
     expect(logs.join('\n')).not.toMatch(/SECRET/);
     expect(redactUrls('see wss://a.example:8443/k/abc?x=1 and http://b.example')).toBe('see wss://a.example:8443/<redacted> and http://b.example/<redacted>');
   });
+
+  it('without WEB_DIST in production a page of the game domain redirects to the site (one copy of the web app)', async () => {
+    const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-data-')), NODE_ENV: 'production', PUBLIC_URL: 'https://elymum.io' } as NodeJS.ProcessEnv);
+    server = createHttpServer(cfg, { chain: new NullChain(), rooms: { online: () => 0, list: () => [] } as never, leaderboards: {} as never, auth: {} as never, startedAt: Date.now() });
+    await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address();
+    const base = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
+    const page = await fetch(`${base}/play?room=AB2CD`, { redirect: 'manual' });
+    expect(page.status).toBe(301);
+    expect(page.headers.get('location')).toBe('https://elymum.io/play?room=AB2CD');
+    // the API is served here, not redirected
+    expect((await fetch(`${base}/api/nope`, { redirect: 'manual' })).status).toBe(404);
+  });
+
+  it('the bundled web app (WEB_DIST) is served with a strict CSP: scripts from this origin only', async () => {
+    const { WEB_CSP } = await import('../src/http');
+    expect(WEB_CSP).toMatch(/script-src 'self';/);
+    expect(WEB_CSP).toMatch(/frame-ancestors 'none'/);
+    expect(WEB_CSP).toMatch(/object-src 'none'/);
+    expect(WEB_CSP).not.toMatch(/unsafe-eval/);
+  });
 });

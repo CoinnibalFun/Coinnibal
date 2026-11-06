@@ -132,9 +132,10 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   res.writeHead(200, {
     'Content-Type': MIME[ext] ?? 'application/octet-stream',
     'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
-    // the web app is never framed (clickjacking of wallet actions); same rule as vercel.json
+    // the web app is never framed (clickjacking of wallet actions); scripts from this origin only (vercel.json's rule,
+    // plus the sources the app needs: its own API and sockets, wallet RPCs over https, inline styles of the shell)
     'X-Frame-Options': 'DENY',
-    'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+    'Content-Security-Policy': WEB_CSP,
     'Referrer-Policy': 'strict-origin-when-cross-origin',
   });
   if (req.method === 'HEAD') res.end();
@@ -155,6 +156,27 @@ export function corsAllow(corsOrigin: string, origin: string | undefined): strin
 
 /** Slow or idle HTTP clients (slowloris): headers within 15 s, the whole request within 30 s, idle keep-alive 5 s. */
 export const HTTP_TIMEOUTS = { headersMs: 15_000, requestMs: 30_000, keepAliveMs: 5_000, maxHeaders: 64 } as const;
+
+/** The strict CSP of the bundled web app (`WEB_DIST`). */
+export const WEB_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; " +
+  "connect-src 'self' https: wss:; worker-src 'self' blob:; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; " +
+  "frame-ancestors 'none'; form-action 'self'";
+
+/**
+ * Without `WEB_DIST` (production: the web app is the site's, e.g. elymum.io on Vercel) a browser that opens a page of
+ * the game server's own domain is sent to the same page on `PUBLIC_URL`, so there is one copy of the site. Null when
+ * there is nothing to redirect (development, no `PUBLIC_URL`, the request is already for that host).
+ */
+export function siteRedirect(cfg: Pick<ServerConfig, 'webDist' | 'publicUrl' | 'nodeEnv'>, req: IncomingMessage, url: URL): string | null {
+  if (cfg.webDist || !cfg.publicUrl || cfg.nodeEnv !== 'production') return null;
+  if (req.method !== 'GET' && req.method !== 'HEAD') return null;
+  const p = url.pathname;
+  if (p.startsWith('/api/') || p === '/ws' || p.startsWith('/share/')) return null;
+  const site = new URL(cfg.publicUrl);
+  if (req.headers.host && req.headers.host.toLowerCase() === site.host.toLowerCase()) return null;
+  return `${site.origin}${p}${url.search}`;
+}
 
 /** Public reads answered from a copy at most this old (a flood of them costs one build per period). */
 const MICRO_CACHE_MS = 1_000;
@@ -273,6 +295,12 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
       }
       if (url.pathname.startsWith('/share/') && ctx.shares?.handle(req, res, url.pathname, ip)) return;
       if (cfg.webDist && (req.method === 'GET' || req.method === 'HEAD') && serveStatic(cfg.webDist, req, res, url.pathname)) return;
+      const to = siteRedirect(cfg, req, url);
+      if (to) {
+        res.writeHead(301, { Location: to, 'Cache-Control': 'public, max-age=3600' });
+        res.end();
+        return;
+      }
       if (url.pathname === '/') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Elymum game server: connect via /ws');

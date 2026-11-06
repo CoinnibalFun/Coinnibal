@@ -1,0 +1,8 @@
+[Unit]
+Description=Elymum: the reboot a system update asks for, in a round break
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/elymum/deploy/vps/reboot.sh
+TimeoutStartSec=45min

@@ -3,11 +3,12 @@
 # name and /opt/elymum/.env (for ${GAME_DOMAIN}). Paths below are relative to this folder.
 name: elymum
 
+# journald: the logs outlive a container (a redeploy replaces it) and, with the persistent journal install.sh and
+# update.sh set up, a reboot. Read them with: elymum-compose logs app, or journalctl CONTAINER_NAME=elymum-app-1
 x-logging: &logging
-  driver: json-file
+  driver: journald
   options:
-    max-size: "20m"
-    max-file: "5"
+    tag: "elymum-{{.Name}}"
 
 services:
   app:
@@ -30,11 +31,11 @@ services:
       HOST: 0.0.0.0
       TRUST_PROXY: "1"
       TRUST_PROXY_HOPS: "1"
-      # Robinhood Chain (the only network). Set here, not in .env, so the move from Elysium reaches the
-      # live server through git: these win over any older .env value. Mainnet later: CHAIN_ID 4663 and
-      # https://rpc.mainnet.chain.robinhood.com.
-      CHAIN_ID: "46630"
-      EVM_RPC_URL: https://rpc.testnet.chain.robinhood.com
+      # Robinhood Chain (the only network): from /opt/elymum/.env, these values when it leaves them empty. Mainnet:
+      # CHAIN_ID=4663 and EVM_RPC_URLS=<your Alchemy URL>,https://rpc.mainnet.chain.robinhood.com (README "RPC").
+      # EVM_RPC_URLS (several RPCs, a fallback in order) comes from .env through env_file and wins over EVM_RPC_URL.
+      CHAIN_ID: "${CHAIN_ID:-46630}"
+      EVM_RPC_URL: "${EVM_RPC_URL:-https://rpc.testnet.chain.robinhood.com}"
       # Elysium-era settings that must not carry over (empty = unset; the /admin registry decides)
       PUBLIC_RPC_URL: ""
       TESTNET_RPC_URL: ""
@@ -43,8 +44,12 @@ services:
       NFT_ADDRESS: ""
       TOKEN_ADDRESS: ""
       JOURNAL_ABANDON_CONTRACT: ""
-      # forced maintenance (owner asked); comment this out again (and push) to hand control back to /admin
-      GAME_ACCESS: maintenance
+      # who may play: maintenance until .env says otherwise (GAME_ACCESS=admins | holders | public; GAME_ACCESS=site
+      # hands the choice to /admin → Settings)
+      GAME_ACCESS: "${GAME_ACCESS:-maintenance}"
+      # the web app is Vercel's (elymum.io): this server does not serve a second copy; a browser that opens the game
+      # domain is sent to PUBLIC_URL. WEB_DIST=/app/web in .env serves the bundled copy again (with a strict CSP)
+      WEB_DIST: "${WEB_DIST:-}"
     volumes:
       - elymum-data:/data
     expose:
@@ -63,7 +68,14 @@ services:
       net.ipv4.tcp_keepalive_time: 120
       net.ipv4.tcp_keepalive_intvl: 30
       net.ipv4.tcp_keepalive_probes: 4
-    # the healthcheck is the image's own (GET /api/health)
+    # liveness only (the process answers): a server that waits on the RPC or has a full disk is up, not unhealthy;
+    # /api/health with its reasons is what alert.sh reads. alert.sh restarts the app after 3 failed minutes (autoheal)
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/health?live=1').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     logging: *logging
 
   caddy:
