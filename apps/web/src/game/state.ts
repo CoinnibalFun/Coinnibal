@@ -19,7 +19,7 @@ import {
 import type { Expression } from '@elymum/art';
 import { JellyBody } from '../render/jelly';
 
-/** Movement between two snapshots is eased over this window (classic agar feel). */
+/** Movement between two snapshots is eased over this window (classic agar feel) when no snapshot step is given. */
 const LERP_MS = 120;
 const DIE_MS = 160;
 /** How often the players without a coin in view are dropped (ms). */
@@ -51,6 +51,13 @@ export interface CEntity {
   ny: number;
   nr: number;
   t0: number;
+  /** How long the ease from (ox, oy) to (nx, ny) takes (ms): the snapshot step on the jitter buffer's timeline. */
+  dur: number;
+  /** The velocity between its last two snapshots (units per ms), for extrapolation. */
+  evx: number;
+  evy: number;
+  /** The snapshot (`ClientWorld.seq`) that last moved it. */
+  seq: number;
   playerId: number;
   flags: number;
   variant: number;
@@ -132,6 +139,15 @@ export class ClientWorld implements SnapshotSink {
   /** Each player's name bytes as last decoded (a name is decoded again only when its bytes change). */
   private readonly nameBytes = new Map<number, Uint8Array>();
   private applyAt = 0;
+  /** The ease of the snapshot being applied (ms). */
+  private applyDur = LERP_MS;
+  /** Snapshots applied so far: an entity moved by the newest one may be extrapolated, a still one never. */
+  private seq = 0;
+  /**
+   * When the next snapshot is late, a moving coin keeps going on its last velocity this long (ms) instead of
+   * stopping dead (0: off, the classic ease). Set by the engine with the jitter buffer (`EXTRAPOLATE_MS`).
+   */
+  extrapolateMs = 0;
 
   reset(): void {
     this.entities.clear();
@@ -166,9 +182,16 @@ export class ClientWorld implements SnapshotSink {
     return q;
   }
 
-  /** Applies a decoded snapshot (tests, and snapshots held back during the bell's freeze). */
-  apply(s: SnapshotData, now: number): void {
+  /** The start of a snapshot: when it lands and how long its movement eases (`step`, default `LERP_MS`). */
+  private begin(now: number, step: number | undefined): void {
     this.applyAt = now;
+    this.applyDur = step !== undefined && step > 0 ? step : LERP_MS;
+    this.seq++;
+  }
+
+  /** Applies a decoded snapshot (tests and the network drill). */
+  apply(s: SnapshotData, now: number, step?: number): void {
+    this.begin(now, step);
     this.snapshotBegin(s.tick, s.view.x, s.view.y, s.view.h);
     if (s.bounds) this.snapshotBounds(s.bounds.x0, s.bounds.y0, s.bounds.x1, s.bounds.y1);
     for (const p of s.players) this.setPlayer(p.id, p.skin, p.flagSkin ? p.flags | PlayerFlag.FlagSkin : p.flags, p.name, p.isBot ? undefined : p.avatar, p.country ?? null);
@@ -179,9 +202,12 @@ export class ClientWorld implements SnapshotSink {
     for (const rm of s.removals) this.snapshotRemoval(rm.id, rm.eaterId);
   }
 
-  /** Applies a binary snapshot straight from the wire (no intermediate records). */
-  applyBinary(buf: ArrayBuffer, now: number): void {
-    this.applyAt = now;
+  /**
+   * Applies a binary snapshot straight from the wire (no intermediate records). `step`: the time since the snapshot
+   * before it on the jitter buffer's timeline, over which its movement eases.
+   */
+  applyBinary(buf: ArrayBuffer, now: number, step?: number): void {
+    this.begin(now, step);
     readSnapshot(buf, this);
   }
 
@@ -292,43 +318,20 @@ export class ClientWorld implements SnapshotSink {
   }
 
   private upsert(id: number, kind: EntityKind, x: number, y: number, r: number, has: number, playerId: number | undefined, flags: number | undefined, variant: number | undefined): void {
-    const now = this.applyAt;
     const e = this.entities.get(id);
     if (!e || e.dying) {
-      this.entities.set(id, {
-        id,
-        kind,
-        x,
-        y,
-        r,
-        ox: x,
-        oy: y,
-        or: r,
-        nx: x,
-        ny: y,
-        nr: r,
-        t0: now,
-        playerId: playerId ?? 0,
-        flags: flags ?? 0,
-        variant: variant ?? 0,
-        born: now,
-        dying: 0,
-        eater: 0,
-        dieX: 0,
-        dieY: 0,
-        dieR: 0,
-        jelly: kind === EntityKind.Cell ? new JellyBody() : null,
-        vx: 0,
-        vy: 0,
-        seed: ((id * 2654435761) % 1000) / 1000,
-        expression: 'happy',
-        // landed in view mid-leap: no take-off point known, the landing puff only
-        leapAt: (flags ?? 0) & CellFlag.Leap ? now : 0,
-        leapX: x,
-        leapY: y,
-      });
+      this.create(id, kind, x, y, r, playerId, flags, variant);
       return;
     }
+    // the hot path (every moving entity, 30 times a second) stays small enough to be inlined into the snapshot
+    // reader: a call that is not inlined boxes its number arguments (garbage per record, see render-perf.test.ts)
+    const now = this.applyAt;
+    const dur = this.applyDur;
+    // the velocity between this snapshot and the one before (a coin that was still in between gets none)
+    const moved = e.seq === this.seq - 1;
+    e.evx = moved ? (x - e.nx) / dur : 0;
+    e.evy = moved ? (y - e.ny) / dur : 0;
+    e.seq = this.seq;
     e.ox = e.x;
     e.oy = e.y;
     e.or = e.r;
@@ -336,6 +339,7 @@ export class ClientWorld implements SnapshotSink {
     e.ny = y;
     e.nr = r;
     e.t0 = now;
+    e.dur = dur;
     if (has & HAS_PLAYER) {
       // a leap just happened: the trail runs from where the coin was drawn (the flag is up for a few snapshots)
       if (flags !== undefined && flags & CellFlag.Leap && !(e.flags & CellFlag.Leap)) {
@@ -347,6 +351,48 @@ export class ClientWorld implements SnapshotSink {
       if (playerId !== undefined) e.playerId = playerId;
     }
     if (has & HAS_VARIANT && variant !== undefined) e.variant = variant;
+  }
+
+  /** A new entity in view (the rare path of `upsert`). */
+  private create(id: number, kind: EntityKind, x: number, y: number, r: number, playerId: number | undefined, flags: number | undefined, variant: number | undefined): void {
+    const now = this.applyAt;
+    this.entities.set(id, {
+      id,
+      kind,
+      x,
+      y,
+      r,
+      ox: x,
+      oy: y,
+      or: r,
+      nx: x,
+      ny: y,
+      nr: r,
+      t0: now,
+      dur: this.applyDur,
+      // -0, not 0: a double from the start, so later velocities are stored in place (no number boxed per snapshot)
+      evx: -0,
+      evy: -0,
+      seq: this.seq,
+      playerId: playerId ?? 0,
+      flags: flags ?? 0,
+      variant: variant ?? 0,
+      born: now,
+      dying: 0,
+      eater: 0,
+      dieX: 0,
+      dieY: 0,
+      dieR: 0,
+      jelly: kind === EntityKind.Cell ? new JellyBody() : null,
+      vx: 0,
+      vy: 0,
+      seed: ((id * 2654435761) % 1000) / 1000,
+      expression: 'happy',
+      // landed in view mid-leap: no take-off point known, the landing puff only
+      leapAt: (flags ?? 0) & CellFlag.Leap ? now : 0,
+      leapX: x,
+      leapY: y,
+    });
   }
 
   snapshotRemoval(id: number, eaterId: number): void {
@@ -464,12 +510,20 @@ export class ClientWorld implements SnapshotSink {
         if (p >= 1) this.entities.delete(e.id);
         return;
       }
-      const t = Math.min(1, (now - e.t0) / LERP_MS);
+      const k = (now - e.t0) / e.dur;
+      const t = Math.min(1, k);
       const px = e.x;
       const py = e.y;
       e.x = e.ox + (e.nx - e.ox) * t;
       e.y = e.oy + (e.ny - e.oy) * t;
       e.r = e.or + (e.nr - e.or) * t;
+      // the next snapshot is late: a coin that was moving keeps going on its last velocity for a while (the newest
+      // snapshot moved it), instead of freezing until the late one lands
+      if (k > 1 && this.extrapolateMs > 0 && e.seq === this.seq && (e.evx !== 0 || e.evy !== 0)) {
+        const over = Math.min(now - e.t0 - e.dur, this.extrapolateMs);
+        e.x += e.evx * over;
+        e.y += e.evy * over;
+      }
       if (e.kind === EntityKind.Cell && dt > 0) {
         const k = 1 - Math.exp(-dt * 8);
         e.vx += ((e.x - px) / dt - e.vx) * k;
