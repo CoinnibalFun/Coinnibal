@@ -32,6 +32,8 @@ export interface IntegrityOptions {
   journal: Journal;
   /** Wakes the settlement worker after a release or a settle at 0. */
   kick: () => void;
+  /** Arenas the chain worker's books guard stopped (`EvmChain.booksGuard`); absent: none. */
+  books?: () => ReadonlyMap<number, string>;
   log?: (m: string) => void;
   /** Wall clock (Unix ms). */
   now?: () => number;
@@ -185,6 +187,7 @@ export class IntegrityService {
       try {
         this.trim();
         this.scan();
+        this.autoRelease();
       } catch (err) {
         this.log(`integrity: scan failed (${(err as Error).stack ?? err})`);
       }
@@ -241,7 +244,7 @@ export class IntegrityService {
    * wallet's risk score is at or above `holdScore` (`item.held`, written by the caller in the same
    * journal write that queues the settlement). Never throws: integrity must not break a settlement.
    */
-  settle(room: MonitorRoom, pid: number, item: SettlementItem | null, end: { reason: string; payout: number; killer: Player | null; killerIsBot: boolean }): void {
+  settle(room: MonitorRoom, pid: number, item: SettlementItem | null, end: { reason: string; payout: number; killer: Player | null }): void {
     try {
       const s = this.monitor.onEnd(room, pid, end);
       if (!s || !item) return;
@@ -415,6 +418,26 @@ export class IntegrityService {
     }));
   }
 
+  /**
+   * Auto-held payouts nobody decided on within `autoReleaseHours` are paid as settled (the player would otherwise
+   * be able to refund the ticket at its entry fee after 24 h and lose the winnings to a false positive). Holds of the
+   * payout guard and holds by hand wait for a person. Returns the keys released.
+   */
+  autoRelease(now = this.now()): string[] {
+    const hours = this.state.settings.autoReleaseHours;
+    if (!(hours > 0)) return [];
+    const out: string[] = [];
+    for (const item of this.opts.journal.held()) {
+      const h = item.held!;
+      if (h.flags.includes('payout_guard') || h.flags.includes('admin_hold') || now - h.at < hours * 3_600_000) continue;
+      this.opts.journal.release(item.key, now);
+      out.push(item.key);
+      this.log(`integrity: held settlement ${item.key} AUTO-RELEASED after ${hours} h without a decision (risk ${h.score}: ${h.why})`);
+    }
+    if (out.length > 0) this.opts.kick();
+    return out;
+  }
+
   /** Pays a held settlement as it was. */
   release(key: string, by: string): void {
     try {
@@ -424,6 +447,27 @@ export class IntegrityService {
     }
     this.log(`integrity: held settlement ${key} RELEASED by ${by}`);
     this.opts.kick();
+  }
+
+  /**
+   * Holds a pending (not yet sent) settlement for review by hand, e.g. the item behind a books-guard stop. It is
+   * then released or settled at 0 like any held item.
+   */
+  hold(key: string, reason: unknown, by: string): void {
+    if (typeof reason !== 'string' || reason.trim().length < 3 || reason.length > 500) throw new IntegrityError(400, 'bad_request', 'Give a reason (3 to 500 characters).', 'reason');
+    const ok = this.opts.journal.hold(key, { at: this.now(), score: 0, why: `held by ${by}: ${reason.trim()}`, flags: ['admin_hold'] });
+    if (!ok) throw new IntegrityError(404, 'not_found', 'No pending settlement with that key (or it is held already).');
+    this.log(`integrity: settlement ${key} HELD by ${by}: ${reason.trim()}`);
+  }
+
+  /** Pending settlements (not held), newest first: what the admin may hold by hand. */
+  pendingList(): IntegrityHeld[] {
+    return this.opts.journal
+      .settlements()
+      .filter((i) => !i.held)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 500)
+      .map((i) => ({ key: i.key, player: i.player, arenaId: i.arenaId ?? null, payout: i.payout ?? 0, reason: i.reason ?? null, createdAt: i.createdAt, heldAt: 0, score: 0, why: i.lastError ?? '', flags: [] }));
   }
 
   /** Settles a held settlement at 0 (the value stays in the arena vault as a journaled forfeit). */
@@ -452,6 +496,7 @@ export class IntegrityService {
       held,
       bans: [...this.bans.values()].sort((a, b) => b.at - a.at),
       scannedAt: this.state.scannedAt,
+      books: [...(this.opts.books?.() ?? new Map<number, string>())].map(([arenaId, why]) => ({ arenaId, why })),
     };
   }
 
@@ -495,7 +540,4 @@ export class IntegrityService {
     }
     return csv(rows);
   }
-
-  /** Kinds, for validating a filter. */
-  static readonly kinds: readonly IntegrityFlagKind[] = ['pair_transfer', 'eject_feed', 'suicide_feed', 'shared_device', 'bot_input', 'bell_abuse'];
 }

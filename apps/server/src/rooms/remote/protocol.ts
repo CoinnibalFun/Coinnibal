@@ -1,6 +1,5 @@
+import type { PlayerLook } from '../handle';
 import type { DeathStats, IntegrityTransfer, MapScaleSettings, RoomInfo, RoundBoard } from '@elymum/shared';
-import type { BotManagerOptions } from '../../bots/manager';
-import type { StakedBotTicket } from '../../bots/staked';
 import type { SessionSummary } from '../../integrity/types';
 import type { CountryGame, LbRecord } from '../../leaderboards';
 import type { JournalItem, LiveStake, LootRecord, SettleReason, SettlementItem } from '../../stake/journal';
@@ -21,9 +20,6 @@ export interface WorkerInit {
   clockOffset: number;
   /** Arena rooms run the integrity telemetry (the main thread has an `IntegrityService`). */
   integrity: boolean;
-  /** A staked-bot source exists on the main thread. */
-  stakedBots: boolean;
-  stakedAskMs?: number;
 }
 
 /** What a room worker knows of a connection (the socket stays on the main thread). */
@@ -63,13 +59,10 @@ export type Cmd =
   | { k: 'slow'; conn: number; slow: boolean }
   | { k: 'boost'; hid: number; conn: number; pid: number; kind: string; req: number }
   | { k: 'drop'; conn: number }
-  | { k: 'bots'; hid: number; opts: BotManagerOptions }
   | { k: 'map'; hid: number; scale: MapScaleSettings }
   | { k: 'avatar'; wallet: string }
   | { k: 'announce'; hid: number; text: string }
-  | { k: 'wanted'; wanted: Record<number, number> }
-  | { k: 'ticket'; req: number; ticket: StakedBotTicket | null; error?: string }
-  | { k: 'drawn'; req: number; ok: boolean }
+  | { k: 'closing'; hid: number; endsAt: number; message: string }
   | { k: 'clock'; offset: number }
   /** Test hook: keeps the worker busy for `ms` (the hang watchdog's test). */
   | { k: 'block'; ms: number }
@@ -82,7 +75,6 @@ export interface RoomSummary {
   humans: number;
   conns: number;
   bots: number;
-  stakedBots: number;
   loot: number;
   side: number;
   mapScale: MapScaleSettings | null;
@@ -97,16 +89,13 @@ export type Ctl =
       roomId?: string;
       live?: LiveStake[];
       loot?: { roomId: string; arenaId: number; items: { x: number; y: number; value: number }[] };
-      /** What the room's house bots hold (`Journal.commit` `purses`). */
-      purses?: { roomId: string; arenaId: number; value: number };
-      /** Value that became the team's reserve in this write (`Journal.commit` `house`). */
-      house?: { arenaId: number; amount: number }[];
       /** Seated stakes after this write: session → player id (the directory's `findStakeByWallet`). */
       seats: [session: string, pid: number, player: string][];
       /** Settlements the integrity auto-hold must look at: key → the ticket's stake (`IntegrityService.holdDecision`). */
       holds: [key: string, entryFee: number][];
     }
-  | { k: 'go'; hid: number; conn: number | null; name: string; stats: DeathStats }
+  | { k: 'go'; hid: number; conn: number | null; player: PlayerLook; stats: DeathStats }
+  | { k: 'nk'; hid: number; conn: number; player: PlayerLook; mass: number; kills: number; victim: string; victimMass: number }
   | { k: 'bell'; e: BellSettled }
   | { k: 'lb'; rec: LbRecord }
   | { k: 'country'; g: CountryGame }
@@ -121,10 +110,6 @@ export type Ctl =
   | { k: 'session'; s: SessionSummary }
   | { k: 'transfer'; t: IntegrityTransfer }
   | { k: 'liveSessions'; list: SessionSummary[] }
-  | { k: 'acquire'; req: number; arenaId: number; roomId: string }
-  /** A house bot asks the team reserve for its bankroll (`Journal.drawHouse`, answered with `drawn`). */
-  | { k: 'draw'; req: number; arenaId: number; amount: number }
-  | { k: 'released'; ticket: StakedBotTicket; reason: SettleReason; item: SettlementItem }
   | { k: 'stats'; load: ThreadLoad; rooms: RoomSummary[]; roomLoads: RoomLoad[] }
   | { k: 'closed'; hid: number; ok: boolean }
   | { k: 'bye' };

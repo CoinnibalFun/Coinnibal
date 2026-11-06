@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Journal, type LiveStake } from '../src/stake/journal';
-import { ELYSIUM_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID } from '@elymum/shared';
+import { ROBINHOOD_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID } from '@elymum/shared';
 import { journalAbandonDecision } from '../src/chain/evm';
 
 const live = (session: string, value: number): LiveStake => ({
@@ -207,55 +207,67 @@ describe('sweep ids and the contract binding (EVM)', () => {
   it('JOURNAL_ABANDON_CONTRACT is honoured on the testnet and the localnet only (never on mainnet)', () => {
     const old = '0x00000000000000000000000000000000000000AA';
     const arena = '0x00000000000000000000000000000000000000BB';
-    expect(journalAbandonDecision(old, arena, ELYSIUM_TESTNET_CHAIN_ID)).toBe('abandon');
+    expect(journalAbandonDecision(old, arena, ROBINHOOD_TESTNET_CHAIN_ID)).toBe('abandon');
     expect(journalAbandonDecision(old, arena, LOCALNET_CHAIN_ID)).toBe('abandon');
     // any other chain id is mainnet: the journal holds real unpaid winnings there
+    expect(journalAbandonDecision(old, arena, 4663)).toBe('refused');
     expect(journalAbandonDecision(old, arena, 999_999)).toBe('refused');
     expect(journalAbandonDecision(old, arena, null)).toBe('refused');
-    expect(journalAbandonDecision(null, arena, ELYSIUM_TESTNET_CHAIN_ID)).toBeNull();
+    expect(journalAbandonDecision(null, arena, ROBINHOOD_TESTNET_CHAIN_ID)).toBeNull();
     expect(journalAbandonDecision(arena.toLowerCase(), arena, 999_999)).toBeNull();
   });
 });
 
-describe('journal: the cut on winnings and the house bots', () => {
-  const stake = (session: string, value: number, start: number, roomId = 'arena-1-1'): LiveStake => ({ roomId, session, sessionId: 1, player: '0xP', arenaId: 1, value, start, score: 0, kills: 0 });
+describe('journal: crash recovery settles at the gross value (the contract takes the fee on profit)', () => {
+  const stake = (session: string, value: number, roomId = 'arena-1-1'): LiveStake => ({ roomId, session, sessionId: 1, player: '0xP', arenaId: 1, value, score: 0, kills: 0 });
 
-  it('crash recovery pays live tickets less the cut (burn queued, vault share kept) and turns bot purses into the reserve, on disk', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'elymum-journal-cut-')), 'journal.json');
+  it('crash recovery pays live tickets their whole value: no off-chain cut, no extra sweep', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'elymum-journal-v3-')), 'journal.json');
     const j = new Journal(path);
-    j.commit({ roomId: 'arena-1-1', live: [stake('S1', 1900, 1000), stake('S2', 600, 1000)], purses: { roomId: 'arena-1-1', arenaId: 1, value: 500 } });
-    // purses count as owed: a person could still win them back
-    expect(j.owedByArena(1)).toBe(1900 + 600 + 500);
+    j.commit({ roomId: 'arena-1-1', live: [stake('S1', 1900), stake('S2', 600)] });
+    expect(j.owedByArena(1)).toBe(1900 + 600);
     const again = new Journal(path);
-    expect(again.purses()).toEqual([{ roomId: 'arena-1-1', arenaId: 1, value: 500 }]);
     expect(again.recoverLive(1)).toBe(2);
     expect(again.settlements().map((i) => [i.key, i.payout])).toEqual([
-      ['S1', 1720],
+      ['S1', 1900],
       ['S2', 600],
     ]);
-    expect(again.pending.find((p) => p.kind === 'sweep')).toMatchObject({ key: 'sweep:cut:S1', amount: 135, arenaId: 1 });
-    expect(again.houseByArena(1)).toBe(45 + 500);
-    expect(again.purses()).toEqual([]);
-    // conserved: everything that was in the vault is owed, burned or the reserve
-    expect(again.owedByArena(1) + again.houseByArena(1)).toBe(1900 + 600 + 500);
-    expect(new Journal(path).houseByArena(1)).toBe(545);
+    expect(again.pending.some((p) => p.kind === 'sweep')).toBe(false);
+    expect(again.owedByArena(1)).toBe(1900 + 600);
   });
 
-  it('a lost room worker: its tickets settle with the cut and its purse goes to the reserve', () => {
+  it('a lost room worker: its tickets settle at their journaled value', () => {
     const j = new Journal(null);
-    j.commit({ roomId: 'arena-1-2', live: [stake('S3', 3000, 1000, 'arena-1-2')], purses: { roomId: 'arena-1-2', arenaId: 1, value: 70 } });
-    j.commit({ roomId: 'arena-1-1', live: [stake('S4', 1000, 1000)] });
+    j.commit({ roomId: 'arena-1-2', live: [stake('S3', 3000, 'arena-1-2')] });
+    j.commit({ roomId: 'arena-1-1', live: [stake('S4', 1000)] });
     expect(j.recoverRooms(['arena-1-2'], 9, 1)).toMatchObject({ settled: 1 });
-    expect(j.settlements()).toEqual([expect.objectContaining({ key: 'S3', payout: 2600 })]);
-    expect(j.houseByArena(1)).toBe(100 + 70);
+    expect(j.settlements()).toEqual([expect.objectContaining({ key: 'S3', payout: 3000 })]);
     expect(j.live().map((l) => l.session)).toEqual(['S4']);
   });
 
-  it('an old file without start values settles at value (no cut it cannot compute)', () => {
-    const j = new Journal(null);
-    j.commit({ roomId: 'r', live: [{ ...live('S5', 1500), roomId: 'r' }] });
+  it('a journal written with house-bot purses, a team reserve and start values loads; those fields are ignored and dropped', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'elymum-journal-old-')), 'journal.json');
+    writeFileSync(
+      path,
+      JSON.stringify({
+        version: 2,
+        pending: [],
+        live: [{ ...stake('S5', 1500), start: 1000 }],
+        loot: [],
+        purses: [{ roomId: 'arena-1-1', arenaId: 1, value: 500 }],
+        house: { '1': 45 },
+        updatedAt: 1,
+      }),
+    );
+    const logs: string[] = [];
+    const j = new Journal(path, (m) => logs.push(m));
+    expect(logs.some((m) => /ignored 545 ledger unit/.test(m))).toBe(true);
+    expect(j.live()).toEqual([stake('S5', 1500)]);
+    expect(j.owedByArena(1)).toBe(1500);
     j.recoverLive(1);
     expect(j.settlements()[0].payout).toBe(1500);
-    expect(j.pending.some((p) => p.kind === 'sweep')).toBe(false);
+    const disk = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    expect(disk.purses).toBeUndefined();
+    expect(disk.house).toBeUndefined();
   });
 });

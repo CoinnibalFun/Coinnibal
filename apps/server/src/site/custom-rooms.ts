@@ -14,6 +14,8 @@ interface Helpers {
   isAdmin: (wallet: string | null) => boolean;
   /** Public origin for share links. */
   origin: (req: IncomingMessage) => string;
+  /** The caller's IP (one practice room each; throws 429 past `PRACTICE_ROOM.perIp` creations in the window). */
+  practiceIp: () => string;
 }
 
 /** `CustomRoomFail` as the site's JSON error (`{ error, message, field?, paid? }`). */
@@ -32,6 +34,7 @@ const codeOf = (seg: string | undefined): string => {
  *  - `GET  /api/rooms/custom/quote`  what creating a room costs (signed-in: with the holder perk);
  *  - `POST /api/rooms/custom`        `{ config, txHash? }` (signed-in) → 201 `{ room, invite }`;
  *  - `GET  /api/rooms/custom/mine`   the signed-in wallet's live rooms;
+ *  - `POST /api/rooms/custom/practice` "Practice with bots": a free room with bots for the caller (guests too) → `{ room, invite }`;
  *  - `GET  /api/rooms/custom/<CODE>` a live room (anyone with the code);
  *  - `DELETE /api/rooms/custom/<CODE>` the creator (or an admin) closes it.
  */
@@ -48,6 +51,11 @@ export async function customRoomRoutes(svc: CustomRoomService, h: Helpers, req: 
     if (seg[0] === 'quote') {
       h.method(req, 'GET');
       return h.send(res, 200, await svc.quote(h.wallet(req)));
+    }
+    if (seg[0] === 'practice') {
+      h.method(req, 'POST');
+      const room = svc.practice({ wallet: h.wallet(req), ip: h.practiceIp() });
+      return h.send(res, 200, { room, invite: `${h.origin(req)}/play?room=${room.code}` });
     }
     if (seg[0] === 'mine') {
       h.method(req, 'GET');

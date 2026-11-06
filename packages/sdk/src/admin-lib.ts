@@ -9,8 +9,8 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { arenaMeta } from '@elymum/shared';
 import type { Address, Hex } from 'viem';
-import { DEFAULT_FEE_BPS, DEFAULT_HOLDER_FEE_BPS, MAX_ARENA_SESSIONS, MAX_FEE_BPS, MIN_ARENA_SESSIONS, MINT_PHASE_NAMES } from './constants';
-import { formatBps, formatHypeAmount, formatTokenAmount } from './format';
+import { DEFAULT_BURN_BPS, DEFAULT_PAYMENT_BURN_BPS, DEFAULT_VAULT_BPS, MAX_ARENA_SESSIONS, MAX_TOTAL_FEE_BPS, MIN_ARENA_SESSIONS, MINT_PHASE_NAMES, SUGGESTED_HOLDER_BURN_BPS, SUGGESTED_HOLDER_VAULT_BPS } from './constants';
+import { formatBps, formatGasAmount, formatTokenAmount } from './format';
 import { AdminInputError, parseAddressInput, parseBigIntInput, parseBoolInput, parseIntInput, parseTokenInput, type StatusSnapshot } from './ops';
 
 export const USAGE = `Elymum admin CLI
@@ -39,32 +39,33 @@ Setup (in this order)
 
 Arena
   update-arena --id N [--fee <tokens>] [--max N] [--enabled true|false]
-  fee --bps N                            fee on the entry fee of new tickets (0..${MAX_FEE_BPS}, default ${DEFAULT_FEE_BPS})
+  fee --burn-bps N --vault-bps N         fee on the PROFIT of new tickets: burned + to the fee wallet
+                                         (together at most ${MAX_TOTAL_FEE_BPS}; default ${DEFAULT_BURN_BPS} + ${DEFAULT_VAULT_BPS})
+  burn-mode --mode 0|1                   0: burns go to 0x…dEaD (default); 1: the token's own burn() (probed first)
+  payment-burn --bps N                   share of power-up payments burned (0..10000, default ${DEFAULT_PAYMENT_BURN_BPS})
   pause | unpause                        block / allow arena joins (settlements and refunds keep working)
   server-key --address <addr>            set the server authority (settle / sweepLoot)
   sweep-arena --id N --force             move a disabled, idle arena's vault to the fee wallet
-  holder-perks --nft <addr|none> [--bps ${DEFAULT_HOLDER_FEE_BPS}]
-                                         emblem holders pay --bps of the entry fee and may enter holders-only arenas
+  holder-perks --nft <addr|none> [--burn-bps ${SUGGESTED_HOLDER_BURN_BPS} --vault-bps ${SUGGESTED_HOLDER_VAULT_BPS}]
+                                         emblem holders' rates on profit (when lower) and holders-only arenas
   holders-only --id N --on true|false    admit only emblem holders to an arena
 
 TestToken (localnet / testnet)
-  token:minter --address <addr> [--allowed true|false]
-                                         let an address mint (e.g. the server key that funds the bots)
   token:holder-nft --nft <addr|none>     holders of this NFT get the holder faucet amount
   token:faucet --amount <tokens> --holder-amount <tokens> --cooldown <secs>
 
 NFT
   nft:phase closed|allowlist|public
   nft:root --file <path>                 build the allowlist tree (JSON array or one address per line), publish its root
-  nft:price (--usd-cents 100 [--hype-usd X] | --wei N)
+  nft:price (--usd-cents 100 [--gas-usd X] | --wei N)
   nft:keeper --address <addr|none>       the price keeper (may set the price inside the bounds)
-  nft:bounds (--min-wei N --max-wei N | --min-usd-cents N --max-usd-cents N [--hype-usd X])
-  nft:withdraw                           send the whole HYPE balance to the treasury
+  nft:bounds (--min-wei N --max-wei N | --min-usd-cents N --max-usd-cents N [--gas-usd X])
+  nft:withdraw                           send the whole gas-token balance to the treasury
 
 Safety
   Every transaction is printed (function, arguments, value) before it is sent.
   --dry-run              print the preview and stop
-  --mainnet              required on Elysium mainnet; you are also asked to type "mainnet"
+  --mainnet              required on a mainnet; you are also asked to type "mainnet"
   --verbose              print raw errors
 
 Token amounts (--fee on arenas) are whole tokens with '.' decimals, scaled by the token's decimals.
@@ -216,10 +217,11 @@ const codeText = (c: 'ok' | 'missing' | 'mismatch'): string =>
 
 /** The `status` report, one string per line. */
 export function formatStatus(s: StatusSnapshot, rpcUrl: string): string[] {
+  const gas = (wei: bigint, maxFrac = 6) => formatGasAmount(wei, maxFrac);
   const out: string[] = [
     `Elymum on ${s.chain.name} (chain id ${s.chain.id}${s.mainnet ? ', MAINNET' : ''}) via ${rpcUrl} · block ${s.block}`,
   ];
-  if (s.account) out.push(`signer    ${s.account.address}  (${formatHypeAmount(s.account.balance, 4)})`);
+  if (s.account) out.push(`signer    ${s.account.address}  (${gas(s.account.balance, 4)})`);
   const a = s.arena;
   if (!a) {
     out.push('arena     not configured (set ARENA_ADDRESS or run `pnpm admin deploy-arena --server <addr>`)');
@@ -230,17 +232,19 @@ export function formatStatus(s: StatusSnapshot, rpcUrl: string): string[] {
       const d = c.decimals;
       const sym = a.token?.symbol ? ` ${a.token.symbol}` : '';
       out.push(row('owner', `${c.admin}${c.pendingAdmin ? `  (pending transfer to ${c.pendingAdmin})` : ''}`));
-      out.push(row('server authority', `${c.serverAuthority}${a.serverBalance !== null ? `  (${formatHypeAmount(a.serverBalance, 4)})` : ''}`));
+      out.push(row('server authority', `${c.serverAuthority}${a.serverBalance !== null ? `  (${gas(a.serverBalance, 4)})` : ''}`));
       out.push(row('fee wallet', `${c.feeWallet}${a.token ? `  (${formatTokenAmount(a.token.feeWalletBalance, d)}${sym})` : ''}`));
       out.push(row('token', c.token ? `${c.token}  (${a.token?.name ?? '?'}${sym ? `,${sym}` : ''}, ${d} decimals)` : 'not set (run `pnpm admin set-token --token <addr> --confirm <addr>`)'));
-      out.push(row('fee', a.version === 1 ? `${formatBps(c.feeBps)} of profit, 100 % to the fee wallet (legacy v1 arena: redeploy to take the fee from every entry)` : `${formatBps(c.feeBps)} of every entry fee, 100 % to the fee wallet`));
-      out.push(row('holder perks', c.holderNft ? `${c.holderNft}  (holders pay ${formatBps(Math.min(c.holderFeeBps, c.feeBps))})` : 'off'));
+      out.push(row('fee on profit', `${formatBps(c.burnBps)} burned + ${formatBps(c.vaultBps)} to the fee wallet (burn mode ${c.burnMode === 1 ? "the token's burn()" : '0x…dEaD'})`));
+      if (a.burnSupport !== null) out.push(row('token burn()', a.burnSupport ? 'works (burn mode 1 can be used)' : 'missing (keep burn mode 0)'));
+      out.push(row('payments', `${formatBps(c.paymentBurnBps)} burned, the rest to the fee wallet`));
+      out.push(row('holder perks', c.holderNft ? `${c.holderNft}  (holders: ${formatBps(c.holderBurnBps)} burned + ${formatBps(c.holderVaultBps)} to the fee wallet, when lower)` : 'off'));
       out.push(row('paused', c.paused ? 'YES (arena joins blocked)' : 'no'));
       const t = c.totals;
       out.push(
         row(
           'totals',
-          `${t.sessions} sessions · ${t.games} games · ${formatTokenAmount(t.staked, d)} staked · ${formatTokenAmount(t.paidOut, d)} paid out · ${formatTokenAmount(t.fees, d)} fees · ${formatTokenAmount(t.burned, d)} burned`,
+          `${t.sessions} sessions · ${t.games} games · ${formatTokenAmount(t.staked, d)} staked · ${formatTokenAmount(t.paidOut, d)} paid out · ${formatTokenAmount(t.feeBurned + t.lootBurned + t.paymentBurned, d)} burned · ${formatTokenAmount(t.feeToVault + t.payments - t.paymentBurned, d)} to the fee wallet`,
         ),
       );
       if (a.arenas.length === 0) {
@@ -264,12 +268,12 @@ export function formatStatus(s: StatusSnapshot, rpcUrl: string): string[] {
     const m = n.state;
     if (m) {
       out.push(row('phase', m.phaseName));
-      out.push(row('price', `${formatHypeAmount(m.price)} per token`));
-      out.push(row('keeper', m.keeper ? `${m.keeper}  (bounds ${formatHypeAmount(m.minPrice)} .. ${formatHypeAmount(m.maxPrice)})` : 'none'));
+      out.push(row('price', `${gas(m.price)} per token`));
+      out.push(row('keeper', m.keeper ? `${m.keeper}  (bounds ${gas(m.minPrice)} .. ${gas(m.maxPrice)})` : 'none'));
       out.push(row('supply', `${m.totalSupply} / ${m.maxSupply}${m.soldOut ? '  SOLD OUT' : ''}`));
       out.push(row('limits', `allowlist ${m.wlLimit} · public ${m.publicLimit} per wallet`));
       out.push(row('root', /^0x0{64}$/.test(m.root) ? 'not set' : m.root));
-      out.push(row('treasury', `${m.treasury}  (contract holds ${formatHypeAmount(n.balance)})`));
+      out.push(row('treasury', `${m.treasury}  (contract holds ${gas(n.balance)})`));
       out.push(row('metadata', m.frozen ? 'frozen' : 'not frozen'));
     }
   }
@@ -280,7 +284,6 @@ export function formatStatus(s: StatusSnapshot, rpcUrl: string): string[] {
     if (f) {
       out.push(row('faucet', `${formatTokenAmount(f.amount, 18)} (holders ${formatTokenAmount(f.holderAmount, 18)}) every ${f.cooldownSecs} s`));
       out.push(row('holder NFT', f.holderNft ?? 'none (no holder bonus)'));
-      if (t.serverIsMinter !== null) out.push(row('server minter', t.serverIsMinter ? 'yes' : 'NO (run `pnpm admin token:minter --address <server> --allowed true`)'));
     }
   }
   return out;

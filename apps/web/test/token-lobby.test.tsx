@@ -69,8 +69,10 @@ const ARENAS: RoomInfo[] = [1, 2, 3, 4].map((id) => ({
 /** The server before `set-token`: the chain is on, the game token is not set, practice only. */
 const UNSET: ChainStatus = {
   enabled: true,
-  chainId: 99801,
-  chainName: 'Elysium Testnet',
+  chainId: 46630,
+  chainName: 'Robinhood Chain Testnet',
+  testnet: true,
+  faucetUrl: null,
   rpcUrl: null,
   explorerUrl: null,
   arenaAddress: null,
@@ -78,7 +80,7 @@ const UNSET: ChainStatus = {
   arenasEnabled: false,
   tokenReady: false,
   token: null,
-  feeBps: 500,
+  fees: null,
   serverKey: null,
 };
 const SET: ChainStatus = { ...UNSET, arenasEnabled: true, tokenReady: true, token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$ELYMUM', decimals: 18 } };
@@ -161,7 +163,7 @@ describe('lobby while the game token is not set', () => {
       expect(el.textContent).not.toContain('Opening soon');
       expect(disabled(el)).toBe(false);
       // the fee line uses the server's rate
-      expect(el.textContent).toContain('Fee 5% of the entry');
+      expect(el.textContent).toContain('Fee 20% of profit only');
     }
     // an arena can now be picked; without a wallet its button asks to connect (the path to buying)
     act(() => arenas[0].click());

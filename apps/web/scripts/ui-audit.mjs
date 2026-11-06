@@ -93,7 +93,7 @@ const BAL = {
   zero: 0n,
   tiny: 1_000_000_000_000n, // 0.000001
 };
-const HYPE = { huge: 12_345_678_900_000_000_000_000n, zero: 0n, tiny: 1_000_000_000_000n };
+const GAS = { huge: 12_345_678_900_000_000_000_000n, zero: 0n, tiny: 1_000_000_000_000n };
 
 // ───────────────────────────── the stack (optional) ─────────────────────────────
 const kids = [];
@@ -220,7 +220,7 @@ async function stressPlay(page, { token = 'max', hype = 'huge' } = {}) {
         };
       }
     },
-    [String(BAL[token]), String(HYPE[hype]), LONG, LONG_M],
+    [String(BAL[token]), String(GAS[hype]), LONG, LONG_M],
   );
 }
 
@@ -258,7 +258,9 @@ async function playPractice(page) {
 }
 
 const DEATH_STATS = { aliveMs: 3_723_000, finalMass: 0, maxMass: 99_999, foodEaten: 99_999, cellsEaten: 9_999, playersEaten: 999, bestRank: 1, xp: 99_999, payout: 0, valueLost: 999_999_999_999_123_456 };
-const ROUND_STANDINGS = Array.from({ length: 10 }, (_, i) => ({ name: i % 2 ? LONG_M : LONG, value: 999_999_999_999_123_456 - i * 1e15, isBot: i % 3 === 0, you: i === 3 }));
+const ROUND_STANDINGS = Array.from({ length: 10 }, (_, i) => ({ rank: i + 1, name: i % 2 ? LONG_M : LONG, value: 999_999_999_999_123_456 - i * 1e15, mass: 999_999 - i * 1000, kills: 999 - i, isBot: i % 3 === 0, you: i === 3 }));
+/** A custom room's final board: 10 rows and my own row far below them (no value outside arenas). */
+const ROOM_STANDINGS = [...Array.from({ length: 10 }, (_, i) => ({ rank: i + 1, name: i % 2 ? LONG_M : LONG, mass: 999_999 - i * 1000, kills: 999 - i, isBot: i % 3 === 0 })), { rank: 87, name: LONG, mass: 12, kills: 0, you: true }];
 
 // ───────────────────────────── scenes ─────────────────────────────
 // Each scene: { id, app: site|play|admin, auth: guest|signed, run(page, h) } — `run` leaves the page in
@@ -688,13 +690,92 @@ const SCENES = [
       await page.evaluate(([stats, standings]) => {
         const s = window.__elymum.useUi.getState();
         window.__elymum.useUi.setState({ room: { ...(s.room ?? {}), mode: 'arena' }, ticket: { entryFee: 999_999_999_999_000_000, arenaId: 1, session: '1' } });
-        window.__elymum.engine.endGame('round', 12345, 999_999_999_999_123_456, { ...stats, payout: 999_999_999_999_123_456 }, standings);
+        window.__elymum.engine.endGame('round', 12345, 999_999_999_999_123_456, { ...stats, payout: 999_999_999_999_123_456, finalRank: 4, finalOf: 999 }, standings);
       }, [DEATH_STATS, ROUND_STANDINGS]);
+      await feed(page, { t: 'share', kind: 'round', id: 'AuDiT00001' });
       await settle(page, 1500);
       await h.check('result');
       await page.evaluate(() =>
         window.__elymum.useUi.setState({ lastSettlement: { session: '1', arenaId: 1, txHash: '0xde7fa4e0' + '0'.repeat(56), payout: 999_999_999_999_123_456, fee: 49_999_999_999_956_172, net: 949_999_999_999_167_284, at: Date.now() } }),
       );
+      await settle(page, 1200);
+    },
+  },
+  {
+    // the people-only pond to oneself: the honest empty state with one click to practice with bots
+    id: 'pond-alone',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      // alone on the floor (the audit's stress data says 50 players otherwise)
+      await page.evaluate(() => {
+        const E = window.__elymum.engine;
+        const o = E.onMessage;
+        E.onMessage = (m) => {
+          o(m);
+          if (m.t === 'lb') window.__elymum.useUi.setState((s) => ({ hud: { ...s.hud, players: 1 } }));
+        };
+        window.__elymum.useUi.setState((s) => ({ hud: { ...s.hud, players: 1 } }));
+      });
+      await page.waitForSelector('[data-testid="practice-quiet-hud"]', { timeout: 8000 }).catch(() => h.note('no quiet-pond sticker'));
+      await settle(page, 600);
+    },
+  },
+  {
+    id: 'feed-fade',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      // chat with emoji and a few kills, then idle: the feed fades to semi-transparent
+      for (const [i, text] of ['gg 😂😂', 'who ate me 😭', 'nice split 👑'].entries()) await feed(page, { t: 'chat', pid: 900 + i, from: i % 2 ? LONG_M : LONG, skin: i + 1, text });
+      for (let i = 0; i < 3; i++) await feed(page, { t: 'kf', killer: LONG, killerSkin: 2, victim: LONG_M, victimSkin: 3, cause: 'eat' });
+      await settle(page, 600);
+      await h.check('fresh');
+      await page.waitForTimeout(7500);
+      await settle(page, 300);
+    },
+  },
+  {
+    // eating a big coin: "You ate ..." with Share on X, for a few seconds
+    id: 'kill-share',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      await feed(page, { t: 'share', kind: 'kill', id: 'AuDiT00003', victim: LONG });
+      await settle(page, 900);
+    },
+  },
+  {
+    id: 'room-closing',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      // a custom room closed by its creator: the countdown sticker and the big numerals
+      await page.evaluate((LONG) => {
+        const s = window.__elymum.useUi.getState();
+        window.__elymum.useUi.setState({ room: { ...(s.room ?? {}), mode: 'private', name: LONG, code: 'PONDS', custom: { durationMin: 30, mapSize: 'auto', bots: 2, difficulty: 'easy', food: 'normal', traps: 'normal', powerUps: true, kind: 'free', creator: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', createdAt: Date.now() - 60_000, endsAt: Date.now() + 600_000 } } });
+      }, LONG);
+      await feed(page, { t: 'closing', endsAt: Date.now() + 8_500, message: 'The room creator closed this room.' });
+      await settle(page, 900);
+    },
+  },
+  {
+    id: 'room-over',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      await feed(page, { t: 'roomOver', message: 'Time is up: this room has closed. Thanks for playing!', players: 99, standings: ROOM_STANDINGS, stats: { ...DEATH_STATS, finalRank: 87, finalOf: 99 } });
+      await feed(page, { t: 'share', kind: 'room', id: 'AuDiT00002' });
       await settle(page, 1200);
     },
   },
@@ -1092,7 +1173,7 @@ body{margin:0;font:16px/1.4 sans-serif;background:#fff;color:#111}
 .pad{height:120px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style></head><body>
-<div class="row" id="t-overlap"><span class="bal">1,109,986.25799155 ELY</span><span>HYPE · network fees</span></div>
+<div class="row" id="t-overlap"><span class="bal">1,109,986.25799155 ELY</span><span>ETH · network fees</span></div>
 <div class="fixed-h" id="t-clip">a long line of text that wraps to a second and a third line here</div>
 <div class="dark" id="t-contrast"><input value="ABCDEF" aria-label="code"></div>
 <button class="tiny" id="t-touch">x</button>

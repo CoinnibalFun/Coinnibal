@@ -2,20 +2,25 @@ import type { ChainStatus } from '@elymum/shared';
 import { getAddress, type Address } from 'viem';
 import type { Eip1193Provider, ProviderDetail } from '../src/wallet/eip6963';
 
-/** A server chain status on the Elysium testnet (overrides merged in). */
+/** The arena v3 defaults as the server reports them (`ChainStatus.fees`): 15 % burned + 5 % to the fee wallet. */
+export const FEES: NonNullable<ChainStatus['fees']> = { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 0, holderPerks: false, paymentBurnBps: 5000, burnMode: 0 };
+
+/** A server chain status on Robinhood Chain Testnet, the default chain (overrides merged in). */
 export function chainStatus(over: Partial<ChainStatus> = {}): ChainStatus {
   return {
     enabled: true,
-    chainId: 99801,
-    chainName: 'Elysium Testnet',
-    rpcUrl: 'https://testnet-rpc.elysium.kinetiq.xyz',
-    explorerUrl: 'https://explorer-elysium-testnet.t.conduit.xyz',
+    chainId: 46630,
+    chainName: 'Robinhood Chain Testnet',
+    testnet: true,
+    faucetUrl: 'https://faucet.testnet.chain.robinhood.com',
+    rpcUrl: 'https://rpc.testnet.chain.robinhood.com',
+    explorerUrl: 'https://explorer.testnet.chain.robinhood.com',
     arenaAddress: '0x00000000000000000000000000000000000a4e4a',
     nftAddress: null,
     arenasEnabled: true,
     tokenReady: true,
     token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$ELYMUM', decimals: 18 },
-    feeBps: 500,
+    fees: FEES,
     serverKey: '0x000000000000000000000000000000000000beef',
     ...over,
   };

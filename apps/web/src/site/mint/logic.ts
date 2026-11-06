@@ -2,8 +2,8 @@
  * The mint page's logic, pure (no React, no network) so every state is unit-tested.
  * See docs/specs/2026-10-29-elymum-on-elysium.md (sections 3.2, 4.4 and 5).
  */
-import { MintPhase, elymumNFTAbi, mintRefusal, type DescribedError } from '@elymum/sdk';
-import { isMainnet, type GameAccess, type MintContractState, type MintProofResponse, type MintState } from '@elymum/shared';
+import { MintPhase, SUGGESTED_HOLDER_BURN_BPS, SUGGESTED_HOLDER_VAULT_BPS, elymumNFTAbi, mintRefusal, type DescribedError } from '@elymum/sdk';
+import { DEFAULT_FEE_RATES, bpsToPercent, isTestChainId, totalFeeBps, type ArenaFees, type GameAccess, type MintContractState, type MintProofResponse, type MintState } from '@elymum/shared';
 import { parseEventLogs, type Address, type Log } from 'viem';
 import { t } from '../../i18n';
 
@@ -80,7 +80,7 @@ export function mintedTokenIds(logs: readonly Log[], nft: Address, to: Address):
 /** The game is open to holders (or everyone): the success state offers Play. */
 export const playOpenForHolders = (access: GameAccess | null | undefined): boolean => access === 'holders' || access === 'public';
 
-/** `0.0312` HYPE ≈ `$1.00`: a USD amount for display (null when unknown). */
+/** `0.0312` of the gas token ≈ `$1.00`: a USD amount for display (null when unknown). */
 export function usdText(usd: number | null | undefined): string | null {
   if (usd === null || usd === undefined || !Number.isFinite(usd)) return null;
   return `$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -101,11 +101,12 @@ export interface EmblemPerk {
  */
 export function emblemPerks(
   testnet: boolean | null,
-  fee: { holderBps?: number | null; feeBps?: number | null; feeModel?: 'entry' | 'profit' | null; gameAccess?: GameAccess | null } = {},
+  fee: { fees?: ArenaFees | null; gameAccess?: GameAccess | null } = {},
 ): EmblemPerk[] {
-  const pct = (bps: number) => `${(bps / 100).toFixed(2).replace(/\.?0+$/, '')}%`;
-  const holder = pct(fee.holderBps ?? 300);
-  const normal = pct(fee.feeBps ?? 500);
+  const pct = (bps: number) => `${bpsToPercent(bps)}%`;
+  // the live arena's pairs (the fee on profit); before it is known, the suggested holder setup (15 % + 0 % vs 15 % + 5 %)
+  const normal = pct(fee.fees ? fee.fees.burnBps + fee.fees.vaultBps : totalFeeBps(DEFAULT_FEE_RATES));
+  const holder = pct(fee.fees?.holderPerks ? fee.fees.holderBurnBps + fee.fees.holderVaultBps : SUGGESTED_HOLDER_BURN_BPS + SUGGESTED_HOLDER_VAULT_BPS);
   // "open to everyone" only while the server really lets everyone in (the admin may have closed it to holders)
   const openToAll = fee.gameAccess == null || fee.gameAccess === 'public';
   const out: EmblemPerk[] = [
@@ -114,12 +115,7 @@ export function emblemPerks(
       : testnet && fee.gameAccess === 'holders'
         ? { id: 'access', title: t('mn.perk.access'), note: t('mn.perk.accessHolders') }
       : { id: 'access', title: t('mn.perk.access'), note: t('mn.perk.accessMain') },
-    {
-      id: 'fee',
-      title: t('mn.perk.fee', { holder, normal }),
-      // the base follows the live arena (`ChainStatus.feeModel`): the legacy v1 arena takes it from the profit only
-      note: fee.feeModel === 'profit' ? t('mn.perk.feeProfit') : t('mn.perk.feeEntry'),
-    },
+    { id: 'fee', title: t('mn.perk.fee', { holder, normal }), note: t('mn.perk.feeProfit') },
     { id: 'isles', title: t('mn.perk.isles'), note: t('mn.perk.islesNote') },
   ];
   if (testnet) out.push({ id: 'wl', title: t('mn.perk.wl'), note: t('mn.perk.wlNote') });
@@ -134,7 +130,7 @@ export function emblemPerks(
  * What the page may say about the price. `testnet`: a fixed test price (say it plainly, and that
  * mainnet is much cheaper). `dollar`: the price really tracks the USD target (within ±10 %), so
  * the "one dollar" story holds. `plain`: neither (the feed is off or the price drifted): state
- * the HYPE price and nothing more.
+ * the gas-token price and nothing more.
  */
 export type PriceStory = 'testnet' | 'dollar' | 'plain';
 
@@ -142,17 +138,17 @@ export type PriceStory = 'testnet' | 'dollar' | 'plain';
 export const DOLLAR_TOLERANCE = 0.1;
 
 export function priceStory(s: Pick<MintState, 'priceUsd' | 'targetUsdCents' | 'chainId'>, testnet: boolean | null): PriceStory {
-  const onTestnet = testnet ?? (s.chainId != null ? !isMainnet(s.chainId) : null);
+  const onTestnet = testnet ?? (s.chainId != null ? isTestChainId(s.chainId) : null);
   if (onTestnet) return 'testnet';
   const target = s.targetUsdCents / 100;
   if (s.priceUsd !== null && Number.isFinite(s.priceUsd) && target > 0 && Math.abs(s.priceUsd - target) <= target * DOLLAR_TOLERANCE) return 'dollar';
   return 'plain';
 }
 
-/** `1000000000000000000n` → `1`, `31250000000000000n` → `0.0313`: HYPE for prose (at most 4 decimals). */
-export function hypeText(wei: bigint): string {
-  if (wei < 0n) return `-${hypeText(-wei)}`;
-  // ten-thousandths of a HYPE, rounded half up
+/** `1000000000000000000n` → `1`, `31250000000000000n` → `0.0313`: gas-token amounts for prose (at most 4 decimals). */
+export function gasText(wei: bigint): string {
+  if (wei < 0n) return `-${gasText(-wei)}`;
+  // ten-thousandths of a token, rounded half up
   const units = (wei + 50_000_000_000_000n) / 100_000_000_000_000n;
   if (units === 0n && wei > 0n) return '<0.0001';
   const frac = (units % 10_000n).toString().padStart(4, '0').replace(/0+$/, '');
@@ -162,12 +158,12 @@ export function hypeText(wei: bigint): string {
 /* ── funds and errors ──────────────────────────────────────────────── */
 
 /**
- * Why this wallet's HYPE cannot pay `value` (the price times the quantity, plus the buffer the
+ * Why this wallet's gas token cannot pay `value` (the price times the quantity, plus the buffer the
  * contract refunds), or null when it can, or when the balance is unknown (the wallet decides).
  */
 export function fundsBlocker(balance: bigint | null, value: bigint): string | null {
   if (balance === null || balance >= value) return null;
-  return t('mn.why.funds', { value: hypeText(value), balance: hypeText(balance) });
+  return t('mn.why.funds', { value: gasText(value), balance: gasText(balance) });
 }
 
 /**

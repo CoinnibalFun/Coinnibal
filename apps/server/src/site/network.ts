@@ -1,4 +1,4 @@
-import { CONTRACT_KINDS, isMainnet, type FaucetConfig, type NetworkContractCheck, type NetworkInfo } from '@elymum/shared';
+import { CONTRACT_KINDS, isTestChainId, type FaucetConfig, type NetworkContractCheck, type NetworkInfo } from '@elymum/shared';
 import type { Address } from 'viem';
 import { withTimeout } from '../chain/evm-client';
 import { isTestChain, storedChains } from '../chain/state-dir';
@@ -40,7 +40,7 @@ export async function networkInfo(d: { chain: ChainGateway; contracts: Contracts
   return {
     chainId,
     chainName: status.chainName,
-    testnet: chainId !== null && !isMainnet(chainId),
+    testnet: isTestChainId(chainId),
     rpcOk,
     rpcLatencyMs,
     block,
@@ -60,12 +60,13 @@ export class FaucetInfo {
   private cache: { token: string; at: number; value: FaucetConfig } | null = null;
 
   constructor(
-    private readonly d: { chain: ChainGateway; contracts: ContractsStore | null; hypeFaucetUrl: string; now?: () => number },
+    private readonly d: { chain: ChainGateway; contracts: ContractsStore | null; now?: () => number },
   ) {}
 
   async get(): Promise<FaucetConfig> {
     const now = this.d.now?.() ?? Date.now();
-    const chainId = this.d.chain.status().chainId;
+    const status = this.d.chain.status();
+    const chainId = status.chainId;
     const token = this.d.contracts?.effective(chainId).token?.address ?? null;
     const base: FaucetConfig = {
       enabled: isTestChain(chainId) && token !== null,
@@ -76,7 +77,7 @@ export class FaucetInfo {
       holderAmount: null,
       cooldownSecs: null,
       holderNft: null,
-      hypeFaucetUrl: this.d.hypeFaucetUrl,
+      gasFaucetUrl: status.faucetUrl,
     };
     if (!base.enabled) return base;
     const c = this.cache;

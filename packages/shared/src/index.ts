@@ -19,4 +19,6 @@ export * from './custom-rooms';
 export * from './boosts';
 export * from './countries';
 export * from './map-scale';
-export * from './economy';
+export * from './fees';
+export * from './arena-scaling';
+export * from './share';

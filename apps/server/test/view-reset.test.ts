@@ -2,7 +2,7 @@ import { TICK_MS, decodeSnapshot, type ServerMessage } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { Conn } from '../src/net/conn';
 import { Room } from '../src/rooms/room';
-import { ArenaChain, roomDeps } from './helpers';
+import { ArenaChain, freeCustom, roomDeps } from './helpers';
 
 /**
  * A client's world mirror, fed by the connection's messages in wire order, cleared the way the web
@@ -28,7 +28,7 @@ function mirroredConn(): { conn: Conn; mirror: Map<number, number> } {
 }
 
 const pond = (id: string, seed: number) =>
-  new Room({ id, mode: 'practice', league: 'rookie', name: id, maxPlayers: 40, bots: { target: 8, min: 2, max: 8 }, seed }, roomDeps(new ArenaChain([])));
+  new Room({ id, mode: 'private', code: id.slice(-5).toUpperCase(), name: id, maxPlayers: 40, bots: { count: 8, difficulty: 'easy' }, custom: freeCustom(8), seed }, roomDeps(new ArenaChain([])));
 
 const tick = (rooms: Room[], n: number) => {
   for (let i = 0; i < n; i++) for (const r of rooms) r.tick(TICK_MS);

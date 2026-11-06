@@ -1,7 +1,8 @@
+import { GAS_SYMBOL } from '@elymum/shared';
 import { useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { AddressChip } from './AddressChip';
 import { Button } from './Button';
-import { HypeAmount } from './HypeAmount';
+import { GasAmount } from './GasAmount';
 import { StatusPill } from './StatusPill';
 
 export interface TxArg {
@@ -18,7 +19,7 @@ export interface TxPreviewProps extends Omit<HTMLAttributes<HTMLElement>, 'title
   /** The contract called. */
   contract?: { name: string; address: string };
   args: TxArg[];
-  /** HYPE sent with the call (payable), in wei. Omit / null for none. */
+  /** Gas token sent with the call (payable), in wei. Omit / null for none. */
   value?: { wei: bigint; usd?: number | null } | null;
   /** The chain the wallet will sign on. `mainnet` adds the red badge. */
   network: { name: string; chainId: number; mainnet?: boolean };
@@ -42,7 +43,7 @@ export interface TxPreviewProps extends Omit<HTMLAttributes<HTMLElement>, 'title
 /**
  * What the admin is about to sign, shown before every wallet prompt (spec §5):
  * the call as a signature line, an arguments table (name, type, value), the
- * HYPE value, the network and the signer, then Cancel / Confirm.
+ * gas-token value, the network and the signer, then Cancel / Confirm.
  */
 export function TxPreview({
   fn,
@@ -122,7 +123,7 @@ export function TxPreview({
       <dl className="kb-tx__meta">
         <div>
           <dt>Value</dt>
-          <dd>{value && value.wei > 0n ? <HypeAmount wei={value.wei} usd={value.usd} size="sm" decimals={6} /> : <span className="kb-tx__zero">0 HYPE</span>}</dd>
+          <dd>{value && value.wei > 0n ? <GasAmount wei={value.wei} usd={value.usd} size="sm" decimals={6} /> : <span className="kb-tx__zero">0 {GAS_SYMBOL}</span>}</dd>
         </div>
         {contract && (
           <div>

@@ -1,6 +1,6 @@
 /**
- * Custom rooms: a signed-in wallet pays a small native HYPE fee (to the treasury) and gets a
- * private room with its own rules (map size, bots, duration, capacity, ...). The fee grows with the
+ * Custom rooms: a signed-in wallet pays a small fee in the chain's gas token (to the treasury) and gets a
+ * private room with its own rules (map size, practice bots in free rooms, duration, capacity, ...). The fee grows with the
  * capacity (`customRoomFee`). Two kinds:
  *
  *  - `free`: no stakes, pure fun (like practice). A `private` room (`RoomInfo.mode`), joined with
@@ -115,8 +115,12 @@ export interface CustomRoomConfig {
   durationMin: CustomDuration;
   /** `auto` or a fixed size (rooms made before `auto` existed always carry a size). */
   mapSize: CustomMapChoice;
-  /** Bots in the room, 0..12 (they stay at this count whatever the humans do). */
+  /**
+   * Practice bots in the room, 0..12 (0: off). FREE rooms only: a paid room (stakes) always has 0. They are
+   * labelled BOT, hold no value and see only what a person would.
+   */
   bots: number;
+  /** How well the bots play (`mixed`: a third each of easy, normal and hard). */
   difficulty: CustomDifficulty;
   /** Most humans at once (the room's capacity), 2..100 (and at most the admin's `maxPlayers`). */
   maxPlayers: number;
@@ -130,11 +134,20 @@ export interface CustomRoomConfig {
   arenaId: number | null;
 }
 
+/**
+ * "Practice with bots" (the ponds are people only, so they may look empty at quiet hours): one click opens a FREE,
+ * short-lived custom room with practice bots for the player (guests too) and up to three friends with its code. No
+ * creation fee; abuse limits instead: one live practice room per player (asking again returns it), a few creations
+ * per IP per half hour, at most `CustomRoomSettings.practiceMaxLive` at once (outside the paid rooms' slots and
+ * seats), `durationMin` long, and closed as soon as it has stood empty for `idleMs`.
+ */
+export const PRACTICE_ROOM = { name: 'Practice with bots', durationMin: 15, bots: 8, maxPlayers: 4, idleMs: 120_000, perIp: 4, perIpWindowMs: 30 * 60_000 } as const;
+
 export const CUSTOM_DEFAULTS: CustomRoomConfig = {
   name: '',
   durationMin: 30,
   mapSize: 'auto',
-  bots: 6,
+  bots: 0,
   difficulty: 'mixed',
   maxPlayers: 10,
   food: 'normal',
@@ -143,6 +156,11 @@ export const CUSTOM_DEFAULTS: CustomRoomConfig = {
   kind: 'free',
   arenaId: null,
 };
+
+/** The rules of a "Practice with bots" room (`PRACTICE_ROOM`): auto map, the creator's mix of bots, power-ups on. */
+export function practiceRoomConfig(): CustomRoomConfig {
+  return { ...CUSTOM_DEFAULTS, name: PRACTICE_ROOM.name, durationMin: PRACTICE_ROOM.durationMin, bots: PRACTICE_ROOM.bots, maxPlayers: PRACTICE_ROOM.maxPlayers, kind: 'free', arenaId: null };
+}
 
 /** The rules of a live custom room as clients see them (`RoomInfo.custom`). */
 export interface CustomRoomSummary {
@@ -158,6 +176,8 @@ export interface CustomRoomSummary {
   kind?: CustomRoomKind;
   /** Paid rooms: the arena whose tickets seat players here. */
   arenaId?: number;
+  /** A "Practice with bots" room (`PRACTICE_ROOM`): free, short-lived, opened in one click (its creator may be a guest). */
+  practice?: boolean;
   /**
    * Paid rooms closing (time is up, or closed early): no new seats; the room closes at its next
    * bell, once every ticket in it is settled.
@@ -189,7 +209,7 @@ export interface CustomRoomView extends CustomRoomSummary {
   players: number;
   /** The room's own leaderboard, best first (up to 10). */
   best: CustomBest[];
-  /** How it was paid: `paid` (a HYPE transfer) or `free` (the holder perk: a free room of the day, or a 100 % discount). */
+  /** How it was paid: `paid` (a gas-token transfer) or `free` (the holder perk: a free room of the day, or a 100 % discount). */
   paidWith: 'paid' | 'free';
   /** The payment transaction (0x hash), when paid. */
   txHash: string | null;
@@ -201,8 +221,8 @@ export interface CustomRoomView extends CustomRoomSummary {
 export interface CustomRoomSettings {
   /** Creating rooms is open. */
   enabled: boolean;
-  /** Price in HYPE, decimal string (e.g. "0.05"). */
-  priceHype: string;
+  /** Price in ETH (Robinhood Chain's gas token), decimal string (e.g. "0.0005"). */
+  priceGas: string;
   /** Where the fee goes (EIP-55); null: the first `ADMIN_WALLETS` wallet (the owner). */
   treasury: string | null;
   holderPerk: CustomHolderPerk;
@@ -223,11 +243,16 @@ export interface CustomRoomSettings {
   maxSeats: number;
   /** Paid rooms (invite-only arena instances) may be created. */
   paidRooms: boolean;
+  /** "Practice with bots" rooms (free, one click, `PRACTICE_ROOM`) may be opened. */
+  practiceRooms: boolean;
+  /** Most "Practice with bots" rooms live at once (0..50; outside `maxLive` and `maxSeats`). */
+  practiceMaxLive: number;
 }
 
 export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
   enabled: true,
-  priceHype: '0.05',
+  // about $1.50 at ETH = $3,000 (docs/ECONOMY.md); the admin re-prices it in /admin as ETH moves
+  priceGas: '0.0005',
   treasury: null,
   holderPerk: 'discount',
   holderDiscountPct: 50,
@@ -237,10 +262,12 @@ export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
   maxPlayers: 100,
   maxSeats: 300,
   paidRooms: true,
+  practiceRooms: true,
+  practiceMaxLive: 12,
 };
 
 /** Bounds of the admin caps. */
-export const CUSTOM_SETTINGS_LIMITS = { maxLive: 24, maxPerWallet: 10, capacityStepPct: 500, maxPlayers: CUSTOM_LIMITS.playersMax, maxSeats: 500, maxSeatsMin: 10 } as const;
+export const CUSTOM_SETTINGS_LIMITS = { maxLive: 24, maxPerWallet: 10, capacityStepPct: 500, maxPlayers: CUSTOM_LIMITS.playersMax, maxSeats: 500, maxSeatsMin: 10, practiceMaxLive: 50 } as const;
 
 /** An arena tier a paid room can be made of (`CustomRoomQuote.tiers`). */
 export interface CustomArenaTier {
@@ -341,6 +368,8 @@ export function validateCustomConfig(x: unknown): { ok: true; config: CustomRoom
     arenaId = int(o.arenaId, 1, 65535);
     if (arenaId === null) return { ok: false, field: 'arenaId', message: 'Pick the arena tier of the paid room.' };
   } else if (o.arenaId !== undefined && o.arenaId !== null) return { ok: false, field: 'arenaId', message: 'A free room has no arena tier.' };
+  // bots are for free practice only: a room with stakes is people only
+  if (kind === 'paid' && bots > 0) return { ok: false, field: 'bots', message: 'Bots play in free rooms only: a paid room is for people.' };
   return {
     ok: true,
     config: {

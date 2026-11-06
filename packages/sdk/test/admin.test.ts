@@ -4,6 +4,7 @@ import {
   AdminInputError,
   confirmTypedAddress,
   createArenaRefusal,
+  feeRatesRefusal,
   holderPerksRefusal,
   holderPerksWarnings,
   holdersOnlyRefusal,
@@ -36,7 +37,7 @@ describe('admin CLI parsing', () => {
     expect(tokens(new Map([['fee', '1_000']]), 'fee', 18)).toBe(1000n * 10n ** 18n);
     expect(parsePhaseArg('wl')).toBe('allowlist');
     expect(() => parsePhaseArg('open')).toThrow(UsageError);
-    for (const cmd of ['status', 'deploy-arena', 'deploy-nft', 'deploy-test-token', 'set-token', 'create-arena', 'update-arena', 'fee', 'pause', 'unpause', 'server-key', 'sweep-arena', 'nft:phase', 'nft:root', 'nft:price', 'nft:keeper', 'nft:bounds', 'nft:withdraw', 'holder-perks', 'holders-only', 'token:minter', 'token:holder-nft', 'token:faucet']) {
+    for (const cmd of ['status', 'deploy-arena', 'deploy-nft', 'deploy-test-token', 'set-token', 'create-arena', 'update-arena', 'fee', 'pause', 'unpause', 'server-key', 'sweep-arena', 'nft:phase', 'nft:root', 'nft:price', 'nft:keeper', 'nft:bounds', 'nft:withdraw', 'holder-perks', 'holders-only', 'burn-mode', 'payment-burn', 'token:holder-nft', 'token:faucet']) {
       expect(USAGE).toContain(cmd);
     }
   });
@@ -89,7 +90,7 @@ describe('ops (shared with the admin panel)', () => {
     expect(ownerRefusal(A, A.toLowerCase() as `0x${string}`)).toBeNull();
     expect(ownerRefusal(A, null)).toMatch(/connect/);
     expect(testTokenRefusal(4242)).toMatch(/testnet/);
-    expect(testTokenRefusal(99801)).toBeNull();
+    expect(testTokenRefusal(46630)).toBeNull();
     expect(planDefaultArenas(18, [2])).toMatchObject({ skip: [2] });
     expect(planDefaultArenas(18, [2]).create.map((a) => a.id)).toEqual([1, 3, 4]);
   });
@@ -105,18 +106,22 @@ describe('ops (shared with the admin panel)', () => {
     };
     const lines = formatStatus(s, 'http://127.0.0.1:8545');
     expect(lines[0]).toContain('Localnet');
-    expect(lines.join('\n')).toContain('1 HYPE');
+    expect(lines.join('\n')).toContain('1 ETH');
     expect(lines.join('\n')).toContain('ARENA_ADDRESS');
   });
 
   it('holder perks and faucet refusals', () => {
-    expect(holderPerksRefusal(A, true, 300)).toBeNull();
-    expect(holderPerksRefusal(null, false, 0)).toBeNull();
-    expect(holderPerksRefusal(A, false, 300)).toMatch(/not a contract/);
-    expect(holderPerksRefusal(A, true, 1001)).toMatch(/holder fee/);
-    expect(holderPerksWarnings({ nft: A, holderFeeBps: 500, feeBps: 500, holdersOnlyIds: [] })[0]).toMatch(/no discount/);
-    expect(holderPerksWarnings({ nft: null, holderFeeBps: 0, feeBps: 500, holdersOnlyIds: [4] })[0]).toMatch(/#4/);
-    expect(holderPerksWarnings({ nft: A, holderFeeBps: 300, feeBps: 500, holdersOnlyIds: [4] })).toEqual([]);
+    const normal = { burnBps: 1500, vaultBps: 500 };
+    expect(holderPerksRefusal(A, true, { burnBps: 1500, vaultBps: 0 })).toBeNull();
+    expect(holderPerksRefusal(null, false, { burnBps: 0, vaultBps: 0 })).toBeNull();
+    expect(holderPerksRefusal(A, false, { burnBps: 1500, vaultBps: 0 })).toMatch(/not a contract/);
+    expect(holderPerksRefusal(A, true, { burnBps: 2000, vaultBps: 501 })).toMatch(/holder rates/);
+    expect(feeRatesRefusal({ burnBps: 2000, vaultBps: 500 })).toBeNull();
+    expect(feeRatesRefusal({ burnBps: 2500, vaultBps: 1 })).toMatch(/25 %/);
+    expect(feeRatesRefusal({ burnBps: 1.5, vaultBps: 0 })).toMatch(/whole bps/);
+    expect(holderPerksWarnings({ nft: A, holder: normal, normal, holdersOnlyIds: [] })[0]).toMatch(/no discount/);
+    expect(holderPerksWarnings({ nft: null, holder: { burnBps: 0, vaultBps: 0 }, normal, holdersOnlyIds: [4] })[0]).toMatch(/#4/);
+    expect(holderPerksWarnings({ nft: A, holder: { burnBps: 1500, vaultBps: 0 }, normal, holdersOnlyIds: [4] })).toEqual([]);
     expect(holdersOnlyRefusal({ id: 4, exists: true }, true, { holderNft: A })).toBeNull();
     expect(holdersOnlyRefusal({ id: 4, exists: true }, true, { holderNft: null })).toMatch(/holder NFT first/);
     expect(holdersOnlyRefusal({ id: 4, exists: true }, false, { holderNft: null })).toBeNull();
@@ -145,31 +150,35 @@ describe('ops (shared with the admin panel)', () => {
           feeWallet: A,
           token: A,
           decimals: 18,
-          feeBps: 500,
+          burnBps: 1500,
+          vaultBps: 500,
           paused: false,
           holderNft: A,
-          holderFeeBps: 300,
-          totals: { sessions: 0n, games: 0n, staked: 0n, paidOut: 0n, fees: 0n, burned: 0n },
+          holderBurnBps: 1500,
+          holderVaultBps: 0,
+          burnMode: 0,
+          paymentBurnBps: 5000,
+          totals: { sessions: 0n, games: 0n, staked: 0n, paidOut: 0n, feeBurned: 0n, feeToVault: 0n, lootBurned: 0n, payments: 0n, paymentBurned: 0n },
         },
         token: null,
         arenas: [
-          { id: 4, entryFee: T, vault: 0n, owed: 0n, maxSessions: 300, openSessions: 0, enabled: true, exists: true, totalDeposited: 0n, totalPaidOut: 0n, totalBurned: 0n, lastSweepId: 0n, holdersOnly: true },
+          { id: 4, entryFee: T, vault: 0n, owed: 0n, maxSessions: 300, openSessions: 0, enabled: true, exists: true, totalDeposited: 0n, totalPaidOut: 0n, totalBurned: 0n, totalFees: 0n, lastSweepId: 0n, holdersOnly: true },
         ],
         serverBalance: null,
+        burnSupport: null,
       },
       nft: null,
       testToken: {
         address: A,
         code: 'ok',
         faucet: { address: A, owner: A, amount: 1_000_000n * T, holderAmount: 2_000_000n * T, cooldownSecs: 3600, holderNft: null },
-        serverIsMinter: false,
-        accountIsMinter: null,
       },
     };
     const text = formatStatus(s, 'http://127.0.0.1:8545').join('\n');
-    expect(text).toMatch(/holder perks: +0x70997970C51812dc3A010C7d01b50e0d17dc79C8 {2}\(holders pay 3.00 %\)/);
+    expect(text).toMatch(/holder perks: +0x70997970C51812dc3A010C7d01b50e0d17dc79C8 {2}\(holders: 15.00 % burned \+ 0.00 % to the fee wallet, when lower\)/);
+    expect(text).toMatch(/fee on profit: +15.00 % burned \+ 5.00 % to the fee wallet/);
     expect(text).toContain('HOLDERS ONLY');
     expect(text).toMatch(/faucet: .*every 3600 s/);
-    expect(text).toContain('token:minter');
+    expect(text).not.toContain('token:minter');
   });
 });

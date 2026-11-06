@@ -1,28 +1,31 @@
 import { useMemo, useRef } from 'react';
 import { CoinCharacter, Dateline, Icon, Receipt, Rule, Stamp, useOffscreenPause, useReducedMotion, type ReceiptLine } from '../../design';
-import { feeBps, feeModelOf } from '../../wallet/ticket';
+import { arenaRates } from '../../wallet/ticket';
 import { getLocale, LOCALES, useLocale, useT } from '../../i18n';
 import { useUi } from '../../store';
 import { useTokenText } from '../lobby/useLobby';
 import { PageHead } from '../PageHead';
 import { docsEn } from './content.en';
-import { EXAMPLE, FACTS, payoutExample, type DocBlock, type DocsContent } from './facts';
+import { payoutExample, type DocBlock, type DocsContent } from './facts';
 import { ComicStrip } from './Comics';
 import { ValueFlow } from './ValueFlow';
 import './docs.css';
 
 /**
  * The player guide (`/docs`, `#docs`): how to play, rooms and tickets, value flow, rounds and
- * the cut on winnings, the Elymum NFT, the $ELYMUM token, what is on-chain, wallet safety and an FAQ. Typed content lives in
+ * the fee on profit, the Elymum NFT, the $ELYMUM token, what is on-chain, wallet safety and an FAQ. Typed content lives in
  * content.en.ts; every number comes from the code through facts.ts, and the fee
- * rate is the server's (`ChainStatus.feeBps`) when it is known.
+ * rates are the server's (`ChainStatus.fees`) when they are known.
  */
 export function DocsPage() {
   const tok = useTokenText();
-  const serverBps = useUi((s) => s.chain?.feeBps ?? null);
-  const bps = feeBps(serverBps);
-  const model = useUi((s) => feeModelOf(s.chain));
-  const c = useMemo(() => docsEn(tok.symbol, bps, model), [tok.symbol, bps, model]);
+  const burnBps = useUi((s) => s.chain?.fees?.burnBps ?? null);
+  const vaultBps = useUi((s) => s.chain?.fees?.vaultBps ?? null);
+  const chainName = useUi((s) => s.chain?.chainName ?? null);
+  const c = useMemo(
+    () => docsEn(tok.symbol, arenaRates(burnBps !== null && vaultBps !== null ? { burnBps, vaultBps } : null), chainName ?? undefined),
+    [tok.symbol, burnBps, vaultBps, chainName],
+  );
   const reduced = useReducedMotion();
   const top = useRef<HTMLDivElement>(null);
   const t = useT();
@@ -258,20 +261,17 @@ function KeysFig({ caption, rows }: { caption: string; rows: { key: string; acti
   );
 }
 
-/** The worked example: a 1,000-token ticket with 1,900 in the till at the bell, with the cut on winnings. */
+/** The worked example: a 1,000-token ticket with 1,900 in the till at the bell, with the fee on its profit. */
 function FeeExample({ c }: { c: DocsContent }) {
-  const { entry } = EXAMPLE;
-  const x = payoutExample(c.feeBps);
+  const x = payoutExample(c.rates);
   const r = c.receipt;
   const n = (v: bigint | number) => c.num(Number(v));
   const lines: ReceiptLine[] = [
-    { label: r.entry, value: n(entry) },
-    ...(x.fee > 0 ? [{ label: r.fee(c.pct(c.feeBps)), value: `−${n(x.fee)}`, muted: true }] : []),
-    { label: r.starts, value: n(x.start) },
-    { label: r.cashout, value: n(x.gross) },
+    { label: r.entry, value: n(x.entry) },
+    { label: r.cashout, value: n(x.payout) },
     { label: r.winnings, value: n(x.profit) },
-    { label: r.burn(c.pct(FACTS.cut.burnBps)), value: `−${n(x.burn)}`, muted: true },
-    { label: r.vault(c.pct(FACTS.cut.vaultBps)), value: `−${n(x.vault)}`, muted: true },
+    { label: r.burn(c.pct(c.rates.burnBps)), value: `−${n(x.burned)}`, muted: true },
+    { label: r.vault(c.pct(c.rates.vaultBps)), value: `−${n(x.toVault)}`, muted: true },
     { label: r.net, value: n(x.net), strong: true },
   ];
   return (

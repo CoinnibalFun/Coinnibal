@@ -1,7 +1,8 @@
 import { SiteFail } from './site/validate';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
-import { ELYSIUM_TESTNET_CHAIN_ID, chainByKey } from '@elymum/shared';
+import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain } from '@elymum/shared';
+import { chainOverridesFor } from './chain/evm';
 import type { Hex } from 'viem';
 import { Auth } from './auth';
 import { assertDevFakeChainAllowed, createChain, dataFileNames } from './chain';
@@ -14,9 +15,11 @@ import { IntegrityStore } from './integrity/store';
 import { Leaderboards } from './leaderboards';
 import type { Limiter } from './net/limiter';
 import { Gateway } from './net/gateway';
-import { BotSettingsStore, defaultBotSettings } from './bots/settings';
-import type { StakedBotSource } from './bots/staked';
-import { TestnetBotSource } from './bots/testnet-source';
+import { LoadShedder } from './net/shedder';
+import { ArenaScalingStore } from './rooms/arena-scaler';
+import { MapSettingsStore } from './rooms/map-settings';
+import { ShareService } from './site/shares';
+import { shareCardSelfCheck } from './site/share-card';
 import { viemHolderReader, type HolderReader } from './chain/evm-client';
 import { configureRpcBudgets, startRpcMinuteLog } from './chain/rpc-budget';
 import { loadServerKeySecret } from './chain/server-key';
@@ -38,6 +41,7 @@ import { Journal } from './stake/journal';
 import { BoostInventory } from './shop/inventory';
 import { ShopService } from './shop/service';
 import { ShopSettingsStore } from './shop/settings';
+import { NFT_COLLECTION_FILE, NftCollection } from './site/nft/collection';
 
 export interface App {
   server: Server;
@@ -54,13 +58,13 @@ export interface App {
   contracts: ContractsStore;
   /** The chain id the chain-keyed state was opened for (`DATA_DIR/chains/<id>/`); null: none (chain off, dev fake chain). */
   stateChainId: number | null;
-  /** Testnet staked bots (null on any other chain, or without a server key). */
-  stakedBots: TestnetBotSource | null;
   /** Imported testnet emblem holders (`DATA_DIR/site/holder-wl.json`). */
   holderWl: HolderWlStore;
-  /** The NFT mint: state, HYPE/USD, holders, allowlist, metadata. */
+  /** The NFT mint: state, the gas token's USD price, holders, allowlist. */
   mint: MintService;
-  /** Keeps the mint price at $1 in HYPE when the server key is the NFT's price keeper; null without a chain. */
+  /** The emblem collection: committed seed, provenance, reveal, metadata and art (`DATA_DIR/chains/<id>/nft-collection.json`). */
+  nft: NftCollection;
+  /** Keeps the mint price at $1 in the gas token when the server key is the NFT's price keeper; null without a chain. */
   priceKeeper: PriceKeeper | null;
   /** Cheat and collusion detection: telemetry, flags, bans, auto-hold (`/api/admin/integrity/*`). */
   integrity: IntegrityService;
@@ -68,6 +72,12 @@ export interface App {
   customRooms: CustomRoomService;
   /** Bought power-ups: prices, purchases (`DATA_DIR/chains/<id>/boosts.json`) and the in-room rules. */
   shop: ShopService;
+  /** "Share on X" cards. */
+  shares: ShareService;
+  /** The WebSocket front door (connection limits, abuse counters). */
+  gateway: Gateway;
+  /** Graceful degradation under load (active with `LOAD_SHED`, default on in production). */
+  shedder: LoadShedder;
   /** Resolves once the HTTP server is listening; returns the bound port. */
   listen(): Promise<number>;
   close(): Promise<void>;
@@ -87,14 +97,10 @@ export async function createApp(
     siteLimits?: SiteLimits;
     /** The per-IP limiter of every `/api/*` request; tests inject a larger one. */
     apiLimiter?: Limiter;
-    /** HYPE/USD feed (default: Hyperliquid at `HYPE_PRICE_URL`); tests inject one. */
+    /** ETH/USD feed (default: Hyperliquid at `GAS_PRICE_URL`); tests inject one. */
     fetchPrice?: PriceFetcher;
     /** The chain id to key the state on (default: the injected chain's, else `eth_chainId` of `EVM_RPC_URL`). */
     chainId?: number | null;
-    /** The key testnet bot wallets are derived from (default: `SERVER_PRIVATE_KEY`); tests inject one with an injected chain. */
-    stakedBotKey?: Hex;
-    /** A staked-bot source to use instead of the testnet one (tests). */
-    stakedBots?: StakedBotSource;
     /** Holder readers per chain (default: the server's client on its own chain, `TESTNET_RPC_URL` for the testnet). */
     holderReaderFor?: (chainId: number) => HolderReader | null;
     /** Reads custom-room payments (default: the server's RPC; the fake chain's own on `DEV_FAKE_CHAIN`); tests inject one. */
@@ -135,10 +141,10 @@ export async function createApp(
   const profiles = new ProfileStore(persist ? join(cfg.dataDir, files.profiles) : null, log);
   // profile pictures: content-addressed files next to the profiles (DATA_DIR/avatars/<id>.png|webp)
   const avatars = new AvatarStore(persist ? join(cfg.dataDir, cfg.devFakeChain ? 'avatars.dev-fake' : 'avatars') : null, log);
-  // on Elysium Testnet the game is open to everyone unless the admin already chose otherwise
-  const siteStore = new SiteStore(persist ? cfg.dataDir : null, { now: opts.siteNow, log, ...(stateChainId === ELYSIUM_TESTNET_CHAIN_ID ? { defaults: { gameAccess: 'public' } } : {}) });
+  // on a public testnet the game is open to everyone unless the admin already chose otherwise
+  const siteStore = new SiteStore(persist ? cfg.dataDir : null, { now: opts.siteNow, log, ...(isTestChainId(stateChainId) && stateChainId !== LOCALNET_CHAIN_ID ? { defaults: { gameAccess: 'public' } } : {}) });
   const holderWl = new HolderWlStore(persist ? cfg.dataDir : null, log);
-  const fetchPrice = opts.fetchPrice ?? hyperliquidPrice(cfg.mint.hypePriceUrl);
+  const fetchPrice = opts.fetchPrice ?? hyperliquidPrice(cfg.mint.gasPriceUrl);
   const nftRecord = () => {
     const r = contracts.effective(null).nft;
     return r ? { address: r.address, txHash: r.txHash } : null;
@@ -155,7 +161,7 @@ export async function createApp(
     logChunkBlocks: cfg.chain.logChunkBlocks,
     log,
   });
-  // the NFT of another chain comes from that chain's registry (the testnet emblem import after the move to mainnet)
+  // the testnet's NFT comes from the testnet's registry (the testnet emblem import after the move to mainnet)
   const nftOf = (id: number) => {
     const r = id === chain.status().chainId || id === stateChainId ? contracts.effective(id).nft : persist ? new ContractsStore(chainDir(cfg.dataDir, id)).stored().nft : null;
     return r ? { address: r.address, txHash: r.txHash } : null;
@@ -165,13 +171,15 @@ export async function createApp(
     ((id: number): HolderReader | null => {
       const own = chain.evm?.() ?? null;
       if (own && id === chain.status().chainId) return own;
-      if (id === ELYSIUM_TESTNET_CHAIN_ID) return viemHolderReader(cfg.chain.testnetRpcUrl || chainByKey('elysium-testnet').rpcUrl!);
+      if (id === ROBINHOOD_TESTNET_CHAIN_ID) return viemHolderReader(cfg.chain.testnetRpcUrl || NETWORKS.testnet.rpcUrl);
       return null;
     });
+  const nft = new NftCollection({ file: chainState ? join(chainState, NFT_COLLECTION_FILE) : null, size: cfg.nft.size, seed: cfg.nft.seed, style: cfg.nft.style, log });
   const site = new SiteApi(cfg, auth, siteStore, opts.siteLimits, {
     chain,
     contracts,
     mint,
+    nft,
     profiles,
     journal,
     baseUrl: (req) => publicBaseUrl(cfg, req),
@@ -179,7 +187,7 @@ export async function createApp(
     holderWl,
     nftOf,
     holderReaderFor,
-    faucet: new FaucetInfo({ chain, contracts, hypeFaucetUrl: cfg.chain.hypeFaucetUrl }),
+    faucet: new FaucetInfo({ chain, contracts }),
     avatars,
     leaderboards,
     log,
@@ -193,60 +201,15 @@ export async function createApp(
     store: new IntegrityStore(integrityDir, { log }),
     journal,
     kick: () => chain.kick(),
+    books: () => (chain as Partial<{ booksGuard(): ReadonlyMap<number, string> }>).booksGuard?.() ?? new Map(),
     log,
   });
   site.setIntegrity(integrity);
   const held = journal.held().length;
   if (held > 0) log(`integrity: ${held} settlement(s) held for admin review (/admin → Integrity)`);
 
-  // the admin's bot settings (DATA_DIR/site/bots.json; the BOT_* env vars are the defaults), applied live
-  const botSettings = new BotSettingsStore(persist ? cfg.dataDir : null, defaultBotSettings(cfg.bots), log);
-  // testnet staked bots: their own wallets (derived from the server key), real tickets; never on mainnet
-  let roomsRef: RoomManager | null = null;
-  let stakedBots: TestnetBotSource | null = null;
-  const botChainId = stateChainId ?? chain.status().chainId;
-  if (!opts.stakedBots && chain.evm && isTestChain(botChainId)) {
-    let key: Hex | null = opts.stakedBotKey ?? null;
-    if (!key && !opts.chain && cfg.chain.serverKey) {
-      try {
-        key = loadServerKeySecret(cfg.chain.serverKey, cfg.dataDir).privateKey;
-      } catch (err) {
-        log(`bots: staked bots off — the server key cannot be read (${(err as Error).message})`);
-      }
-    }
-    if (key) {
-      stakedBots = new TestnetBotSource({
-        chain: () => {
-          const st = chain.status();
-          return {
-            chainId: st.chainId,
-            stakeEnabled: chain.stakeEnabled,
-            arena: st.arenaAddress,
-            token: st.token ? { address: st.token.address, decimals: st.token.decimals } : null,
-            feeModel: st.feeModel ?? null,
-          };
-        },
-        client: () => chain.evm?.() ?? null,
-        serverKey: key,
-        settings: botSettings,
-        journal,
-        stateDir: chainState,
-        joinsOpen: () => {
-          if (!roomsRef) return false;
-          const now = roomsRef.now();
-          return now < roomsRef.roundWindow(now).joinsCloseAt;
-        },
-        // reconciles in-use flags with the rooms and adopts open sessions no room plays
-        liveSessions: () => roomsRef?.liveSessions() ?? new Set<string>(),
-        // each bot slot buys at most one ticket per round (no re-buy after a death), and a global cap
-        round: () => (roomsRef ? roomsRef.roundWindow().n : 0),
-        maxTicketsPerMinute: cfg.chain.botTicketsPerMinute,
-        log,
-      });
-      log(`bots: testnet staked bots on (chain ${botChainId}; ${stakedBots.addresses().length} bot wallet(s) known; the server key must be a TestToken minter and hold HYPE)`);
-    }
-  }
-  const stakedSource: StakedBotSource | undefined = opts.stakedBots ?? stakedBots ?? undefined;
+  // the admin's map settings per room kind (DATA_DIR/site/maps.json; taken over once from the old bots.json)
+  const mapSettings = new MapSettingsStore(persist ? cfg.dataDir : null, log);
 
   // bought power-ups: the admin's prices (DATA_DIR/site/shop.json), the charges and used payments per chain
   const shopSettings = new ShopSettingsStore(persist ? cfg.dataDir : null, undefined, log);
@@ -255,16 +218,31 @@ export async function createApp(
     settings: shopSettings,
     inventory: boostInventory,
     chain,
-    owner: () => cfg.adminWallets[0] ?? null,
     holder: (wallet, fresh) => mint.isHolder(wallet, fresh),
     log,
   });
   site.setShop({ service: shop, settings: shopSettings, inventory: boostInventory });
 
+  // "Share on X": cards of results and notable kills, made from the server's own records (DATA_DIR/site/shares.json)
+  const shares = new ShareService({
+    dataDir: persist ? cfg.dataDir : null,
+    baseUrl: (req) => publicBaseUrl(cfg, req),
+    token: () => {
+      const t = chain.status().token;
+      return t ? { decimals: t.decimals, symbol: t.symbol } : null;
+    },
+    log,
+  });
+  // the native canvas addon draws the share cards: checked once at startup (the server runs without it)
+  const cards = shareCardSelfCheck();
+  if (cards.ok) log('share cards: @napi-rs/canvas ready');
+  else {
+    shares.setRenderBroken(cards.error);
+    log(`!!! share cards: @napi-rs/canvas cannot draw here (${cards.error}) — share images fall back to the site's picture; everything else works`);
+  }
   const rooms = new RoomManager(
     cfg,
     {
-      stakedBots: stakedSource,
       chain,
       journal,
       leaderboards,
@@ -274,19 +252,31 @@ export async function createApp(
       shop,
       // the server's own records: every finished game of a signed-in wallet counts in its profile
       onGameOver: (e) => {
+        const s = e.stats;
+        // a room's end (a bell, a custom room's end): the card of my place on its final board, for "Share on X"
+        if (e.conn && s.finalRank && s.finalOf) {
+          const card = shares.result({ room: e.room, player: e.player, wallet: e.conn.wallet }, { rank: s.finalRank, of: s.finalOf, mass: s.finalMass, kills: s.playersEaten, payout: s.payout });
+          e.conn.send({ t: 'share', kind: card.kind, id: card.id });
+        }
         const wallet = e.conn?.wallet;
         if (!wallet) return;
-        const xp = profiles.recordGame(wallet, { score: e.stats.maxMass, kills: e.stats.playersEaten, xp: e.stats.xp ?? 0 });
+        const xp = profiles.recordGame(wallet, { score: s.maxMass, kills: s.playersEaten, xp: s.xp ?? 0 });
         const level = profiles.level(wallet);
         if (e.conn!.profile) e.conn!.profile = { ...e.conn!.profile, xp, level };
         e.conn!.send({ t: 'xp', xp, level });
       },
+      // a person ate a big person: the killer's card (one every few seconds at most)
+      onNotableKill: (e) => {
+        const card = shares.kill({ room: e.room, player: e.player, wallet: e.conn.wallet }, e.conn.wallet ?? `conn:${e.conn.id}`, e);
+        if (card) e.conn.send({ t: 'share', kind: 'kill', id: card.id, victim: e.victim });
+      },
     },
     chain,
-    botSettings,
+    mapSettings,
+    // the arena instance scaler's settings (DATA_DIR/site/arena-scaling.json)
+    new ArenaScalingStore(persist ? cfg.dataDir : null, log),
   );
-  roomsRef = rooms;
-  // custom rooms: paid with a HYPE transfer to the treasury (checked on chain), restored after a restart
+  // custom rooms: paid with a gas-token transfer to the treasury (checked on chain), restored after a restart
   let paymentReader: PaymentReader | null | undefined = opts.paymentReader;
   const customRooms = new CustomRoomService({
     rooms,
@@ -314,35 +304,14 @@ export async function createApp(
     integrity.flush();
     leaderboards.flush();
     profiles.flush();
+    shares.flush();
   });
   shop.onCharges((wallet) => rooms.pushBoosts(wallet));
   // a removed (or replaced) picture comes off the live coins at once
   site.onAvatarChange((wallet) => void rooms.clearAvatar(wallet));
   site.setLoad(() => gameLoad(rooms.loadStats()));
-  site.setBots({
-    store: rooms.botSettings,
-    live: () => rooms.botCounts(),
-    chainId: () => chain.status().chainId,
-    stakedSource: () => (stakedBots ? stakedBots.active() : !!opts.stakedBots),
-    ...(stakedBots ? { stakedStatus: () => stakedBots!.status() } : {}),
-    reserve: () => journal.house(),
-    bankroll: async (wallet, arenaId) => {
-      const s = await chain.getSession(arenaId, wallet);
-      if (!s || s.finalized) throw new SiteFail(404, 'no_ticket', `This wallet holds no open ticket in arena #${arenaId}: buy one in the lobby first and do not play it`);
-      if (rooms.liveSessions().has(s.key) || journal.pending.some((p) => p.key === s.key)) {
-        throw new SiteFail(409, 'ticket_in_use', 'That ticket is in a room or already being settled');
-      }
-      const now = Date.now();
-      // one write: the ticket settles at 0 and its value becomes reserve (it never leaves the vault)
-      journal.commit({
-        enqueue: [{ kind: 'settle', key: s.key, player: s.player, arenaId, session: s.key, sessionId: s.id, payout: 0, score: 0, kills: 0, xp: 0, reason: 'house', attempts: 0, nextAttemptAt: now, createdAt: now }],
-        house: [{ arenaId, amount: s.value }],
-      });
-      chain.kick();
-      return { arenaId, amount: s.value, reserve: journal.houseByArena(arenaId) };
-    },
-    log,
-  });
+  site.setMaps({ store: rooms.mapSettings, live: () => rooms.roomCounts(), log });
+  site.setScaler(rooms.scaler);
   chain.setLiveSessionProvider(() => rooms.liveSessions());
   // the game token was set on chain (picked up by the 30 s config watcher, no restart): attach the
   // arenas now (a fresh read of the arena list) instead of waiting for the next arena timer
@@ -350,9 +319,16 @@ export async function createApp(
     if (chain.tokenReady) void rooms.refreshArenas();
   });
   await chain.start();
+  // the network this process names (testnet or mainnet): the one it runs on, else the configured one
+  const showChain = () => {
+    const st = chain.status();
+    setActiveChain(chainInfo(st.chainId ?? cfg.chain.chainId, chainOverridesFor(cfg)));
+  };
+  showChain();
+  chain.onStatusChange(showChain);
   await rooms.ensureArenaRooms();
 
-  const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, priceKeeper, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
+  const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, shares, priceKeeper, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
   const gateway = new Gateway(cfg, rooms, auth, chain, journal, log);
   gateway.setProfiles(profiles);
   // who may play: `gameAccess` (setting) or `GAME_ACCESS`: admins, NFT holders + admins, or everyone
@@ -361,6 +337,12 @@ export async function createApp(
   gateway.setBanGate((wallet) => integrity.isBanned(wallet));
   // emblem holders wear a laurel and may play the emblem skin (cached holder check of the NFT)
   gateway.setHolderCheck((wallet) => mint.isHolder(wallet));
+  // graceful degradation: new joins are shed before the live rooms lose their tick budget
+  const shedder = new LoadShedder({ bestTickP95Ms: () => rooms.bestTickP95Ms() }, log);
+  if (cfg.loadShed) {
+    gateway.setShedder(shedder);
+    shedder.start();
+  }
   integrity.start();
   priceKeeper?.start();
   gateway.attach(server);
@@ -369,10 +351,6 @@ export async function createApp(
   // arenas created (or a chain / token that came online) after startup show up in the lobby without a restart
   const arenaTimer = setInterval(() => void rooms.ensureArenaRooms(), 30_000);
   arenaTimer.unref();
-  // staked bots: in-use flags are reconciled with the rooms at boot and every minute
-  stakedBots?.reconcile();
-  const botTimer = stakedBots ? setInterval(() => stakedBots!.reconcile(), 60_000) : null;
-  botTimer?.unref();
 
   let closed = false;
   return {
@@ -386,13 +364,16 @@ export async function createApp(
     profiles,
     contracts,
     stateChainId,
-    stakedBots,
     holderWl,
     mint,
+    nft,
     priceKeeper,
     integrity,
     customRooms,
     shop,
+    shares,
+    gateway,
+    shedder,
     listen: () =>
       new Promise((resolve) => {
         server.listen(cfg.port, cfg.host, () => {
@@ -406,7 +387,7 @@ export async function createApp(
       closed = true;
       clearInterval(flushTimer);
       clearInterval(arenaTimer);
-      if (botTimer) clearInterval(botTimer);
+      shedder.stop();
       stopRpcLog();
       mint.flush();
       await rooms.shutdown();
@@ -415,6 +396,7 @@ export async function createApp(
       priceKeeper?.stop();
       leaderboards.flush();
       profiles.flush();
+      shares.flush();
       gateway.close();
       await chain.stop().catch(() => {});
       await new Promise<void>((resolve) => server.close(() => resolve()));

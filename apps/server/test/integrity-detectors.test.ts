@@ -4,10 +4,12 @@ import {
   detectBellAbuse,
   detectBotInput,
   detectEjectFeeding,
+  detectInputTwins,
   detectPairTransfers,
   detectSharedDevice,
   detectSuicideFeeding,
   entropyBits,
+  jsdBits,
   poissonTail,
   runDetectors,
   scopeSnapshot,
@@ -178,7 +180,7 @@ describe('eject feeding detector', () => {
 
 describe('suicide feeding detector', () => {
   it('flags a small player walking into the same big player round after round', () => {
-    const victims = [1, 2, 3].map((r) => sess('feeder', r, { endReason: 'death', payout: 0, death: { by: 'whale', byBot: false, approach: 0.9, samples: 12 } }));
+    const victims = [1, 2, 3].map((r) => sess('feeder', r, { endReason: 'death', payout: 0, death: { by: 'whale', approach: 0.9, samples: 12 } }));
     const whales = [1, 2, 3].map((r) => sess('whale', r));
     const transfers = victims.map((v, i) => tr(v, whales[i], FEE, v.joinedAt + 5000));
     const out = detectSuicideFeeding(snap([...victims, ...whales], transfers), TH);
@@ -189,11 +191,11 @@ describe('suicide feeding detector', () => {
   });
 
   it('does not flag a player who was chased down (fleeing) or eaten by different players', () => {
-    const fled = [1, 2, 3].map((r) => sess('runner', r, { endReason: 'death', death: { by: 'whale', byBot: false, approach: 0.1, samples: 12 } }));
+    const fled = [1, 2, 3].map((r) => sess('runner', r, { endReason: 'death', death: { by: 'whale', approach: 0.1, samples: 12 } }));
     expect(detectSuicideFeeding(snap(fled), TH)).toEqual([]);
-    const various = [1, 2, 3].map((r) => sess('unlucky', r, { endReason: 'death', death: { by: `eater${r}`, byBot: false, approach: 0.9, samples: 12 } }));
+    const various = [1, 2, 3].map((r) => sess('unlucky', r, { endReason: 'death', death: { by: `eater${r}`, approach: 0.9, samples: 12 } }));
     expect(detectSuicideFeeding(snap(various), TH)).toEqual([]);
-    const thin = [1, 2, 3].map((r) => sess('glimpse', r, { endReason: 'death', death: { by: 'whale', byBot: false, approach: 1, samples: 2 } }));
+    const thin = [1, 2, 3].map((r) => sess('glimpse', r, { endReason: 'death', death: { by: 'whale', approach: 1, samples: 2 } }));
     expect(detectSuicideFeeding(snap(thin), TH)).toEqual([]);
   });
 });
@@ -284,6 +286,27 @@ describe('bot input detector', () => {
     regular.m2 = 0;
     const out = runDetectors(snap([sess('wired', 39, { input: regular })]), TH);
     expect(out).toEqual([]);
+  });
+
+  it('input twins: two automated wallets with the same pattern in the same rooms; never two people', () => {
+    const rounds = [36, 37, 38];
+    const twins = rounds.flatMap((r) => [sess('farmA', r, { input: script() }), sess('farmB', r, { input: script() })]);
+    const out = detectInputTwins(snap(twins), TH);
+    expect(out.map((c) => [c.kind, c.wallets.sort(), c.evidence.roundsTogether])).toEqual([['input_twin', ['farmA', 'farmB'], 3]]);
+    expect(out[0].score).toBeGreaterThanOrEqual(TH.flagMinScore);
+    // never into the hold range on its own
+    expect(out[0].score).toBeLessThan(90);
+    // two people with the same habits (identical statistics, same rooms) are not linked: only scripts are compared
+    const people = rounds.flatMap((r) => [sess('alice', r, { input: human() }), sess('bob', r, { input: human() })]);
+    expect(detectInputTwins(snap(people), TH)).toEqual([]);
+    // two scripts that never shared a room, or a different script, are not linked either
+    const apart = rounds.flatMap((r) => [sess('farmC', r, { input: script(), roomId: 'arena-1-1' }), sess('farmD', r, { input: script(), roomId: 'arena-1-2' })]);
+    expect(detectInputTwins(snap(apart), TH)).toEqual([]);
+    const other = () => ({ ...script(), turnHist: [200, 100, 1500, 1200, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
+    const different = rounds.flatMap((r) => [sess('farmE', r, { input: script() }), sess('farmF', r, { input: other() })]);
+    expect(detectInputTwins(snap(different), TH)).toEqual([]);
+    expect(jsdBits([1, 0], [1, 0])).toBe(0);
+    expect(jsdBits([1, 0], [0, 1])).toBeCloseTo(1, 9);
   });
 });
 

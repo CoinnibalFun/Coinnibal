@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { ELYSIUM_TESTNET_CHAIN_ID, parseSiweMessage, siweMessage } from '@elymum/shared';
+import { DEFAULT_CHAIN_ID, parseSiweMessage, siweMessage } from '@elymum/shared';
 import { getAddress, type Address, type Hex } from 'viem';
 import { verifyEoa } from './chain/evm-client';
 
@@ -19,7 +19,7 @@ export interface SiweOrigin {
   chainId: number;
 }
 
-const DEFAULT_ORIGIN: SiweOrigin = { domain: 'localhost', uri: 'http://localhost', chainId: ELYSIUM_TESTNET_CHAIN_ID };
+const DEFAULT_ORIGIN: SiweOrigin = { domain: 'localhost', uri: 'http://localhost', chainId: DEFAULT_CHAIN_ID };
 
 /** An EVM address: `0x` + 40 hex digits, any case. */
 export function isValidAddress(s: unknown): s is string {

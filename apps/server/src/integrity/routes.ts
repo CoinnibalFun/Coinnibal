@@ -42,6 +42,8 @@ function filterOf(q: URLSearchParams): FlagFilter {
  * | POST | `bans` | `{ wallet, reason }` |
  * | DELETE | `bans/:wallet` | unban |
  * | GET | `held` | settlements held for review |
+ * | GET | `pending` | settlements waiting to be sent (not held), newest first |
+ * | POST | `pending/:key/hold` | `{ reason }`: hold a pending settlement by hand (then release or settle at 0) |
  * | POST | `held/:key/release` | pay it as it was |
  * | POST | `held/:key/settle-zero` | `{ reason }`: settle at 0, the value stays in the vault (journaled) |
  */
@@ -101,6 +103,18 @@ export async function integrityRoutes(svc: IntegrityService, io: IntegrityRouteI
           method(req, 'DELETE');
           svc.unban(b, admin);
           return send(res, 200, { ok: true });
+        }
+        break;
+      case 'pending':
+        if (seg.length === 1) {
+          method(req, 'GET');
+          return send(res, 200, { pending: svc.pendingList() });
+        }
+        if (seg.length === 3 && c === 'hold') {
+          method(req, 'POST');
+          const body = await readJson(req);
+          svc.hold(b, body.reason, admin);
+          return send(res, 200, { ok: true, held: svc.heldList() });
         }
         break;
       case 'held':

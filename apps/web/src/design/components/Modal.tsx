@@ -1,3 +1,4 @@
+import { activeChain } from '@elymum/shared';
 import type { ReactNode } from 'react';
 import { Icon } from '../icons';
 import { Sheet, type SheetProps } from './Sheet';
@@ -52,9 +53,9 @@ export function WalletPicker({
   busyId = null,
   error,
   title = 'Pick a wallet',
-  kicker = 'Connect · Elysium',
+  kicker = `Connect · ${activeChain().name}`,
   closeLabel = 'Close',
-  empty = 'No wallet found in this browser. Install one that supports Elysium, then come back.',
+  empty = 'No wallet found in this browser. Install an EVM wallet (MetaMask, Rabby or similar), then come back.',
   footnote = 'We only ask you to sign a message. We will never ask for your seed phrase. Nobody should.',
 }: WalletPickerProps) {
   const sorted = [...wallets].sort((a, b) => Number(!!b.detected) - Number(!!a.detected));

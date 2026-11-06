@@ -14,8 +14,9 @@ import type {
 import { create } from 'zustand';
 import { AUDIO_DEFAULTS } from './audio/mixer';
 import { DEFAULT_TRACK, musicChoice, type MusicChoice } from './audio/tracks';
+import { showChain } from './chainText';
 
-export type Screen = 'lobby' | 'playing' | 'dead' | 'spectating' | 'roundover';
+export type Screen = 'lobby' | 'playing' | 'dead' | 'spectating' | 'roundover' | 'roomover';
 export type Quality = 'high' | 'low';
 export type Theme = 'light' | 'dark';
 
@@ -162,6 +163,12 @@ export interface UiState {
    * the current value).
    */
   roundResult: RoundResult | null;
+  /** A custom room closes at `endsAt` (server clock; `closing`): the countdown everyone in it sees, and why. */
+  closing: { endsAt: number; message: string } | null;
+  /** The last "Share on X" card the server made for me (`share`): a result's or a notable kill's; `at`: local ms. */
+  share: { kind: 'round' | 'room' | 'kill'; id: string; victim?: string; at: number } | null;
+  /** A free custom room ended (`roomOver`): its final board (everyone by mass), the room it was, my game in it. */
+  roomResult: { message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null; room: RoomInfo | null } | null;
   /**
    * A ticket bought (or resumed) while the round's joins were closed: it is held, and joins by
    * itself when the next round opens (`opensAt`, server clock).
@@ -176,8 +183,9 @@ export interface UiState {
     payout: number;
     fee?: number;
     net?: number;
-    /** The fee was taken from the entry fee (arena v2): the whole payout reached the wallet. */
-    feeOnEntry?: boolean;
+    /** The fee's burned share and the fee wallet's share (ledger units). */
+    burned?: number;
+    toVault?: number;
     collect?: boolean;
     at: number;
   } | null;
@@ -295,6 +303,9 @@ export const useUi = create<UiState>(() => ({
   banner: null,
   death: null,
   roundResult: null,
+  closing: null,
+  share: null,
+  roomResult: null,
   held: null,
   lastSettlement: null,
   spectateTarget: null,
@@ -308,6 +319,11 @@ export const useUi = create<UiState>(() => ({
   settings: loadSettings(),
 }));
 
+
+// every string names the server's chain and its gas token once the server says which chain it is on
+useUi.subscribe((s, prev) => {
+  if (s.chain !== prev.chain) showChain(s.chain);
+});
 
 export function updateSettings(patch: Partial<Settings>): void {
   const settings = { ...useUi.getState().settings, ...patch };

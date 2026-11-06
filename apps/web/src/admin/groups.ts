@@ -1,5 +1,6 @@
-import { formatHypeAmount } from '@elymum/sdk';
+import { formatGasAmount } from '@elymum/sdk';
 import { testTokenRefusal, type StatusSnapshot } from '@elymum/sdk/ops';
+import { GAS_SYMBOL } from '@elymum/shared';
 import type { ContractsRegistry, GameAccess, SiteCounts, SiteSettings } from '@elymum/shared';
 import type { AdminNetwork } from './net';
 import { setupSteps } from './setup';
@@ -89,19 +90,19 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
       if (!net.chain) return { now: 'The game server is not answering.', next: 'Check the server on Render, then reload.' };
       if (!net.info) return { now: 'The server has no chain.', next: 'Set EVM_RPC_URL in Render and redeploy.' };
       const bal = a?.serverBalance ?? null;
-      const now = `${chain}${status ? ` · block ${status.block.toString()}` : ''}${bal !== null ? ` · server key ${formatHypeAmount(bal, 4)}` : ''}`;
-      if (bal === 0n) return { now, next: 'Fund the server key with HYPE: it pays the gas of every settlement.' };
+      const now = `${chain}${status ? ` · block ${status.block.toString()}` : ''}${bal !== null ? ` · server key ${formatGasAmount(bal, 4)}` : ''}`;
+      if (bal === 0n) return { now, next: `Fund the server key with ${GAS_SYMBOL}: it pays the gas of every settlement.` };
       if (!net.mainnet) return { now, next: 'Mainnet launch: follow the checklist below, step by step.' };
       return { now, next: null };
     }
     case 'setup': {
       const parts = [`Arena ${net.arenaAddress ? (a?.code === 'ok' ? 'ok' : (a?.code ?? '…')) : 'missing'}`, `NFT ${net.nftAddress ? (status?.nft?.code === 'ok' ? 'ok' : (status?.nft?.code ?? '…')) : 'missing'}`];
-      if (cfg) parts.push(`token ${cfg.token ? 'set' : 'not set'}`, `holder perks ${cfg.holderNft ? `on (${cfg.holderFeeBps} bps)` : 'off'}`);
+      if (cfg) parts.push(`token ${cfg.token ? 'set' : 'not set'}`, `holder perks ${cfg.holderNft ? `on (${cfg.holderBurnBps} + ${cfg.holderVaultBps} bps)` : 'off'}`);
       const now = parts.join(' · ');
       if (!net.arenaAddress) return { now, next: 'Deploy ElymumArena from the owner wallet (below).' };
       if (!net.nftAddress) return { now, next: 'Deploy ElymumNFT from the owner wallet (below).' };
       if (!cfg) return { now, next: null };
-      const steps = setupSteps({ net, status }, { openMint: !net.mainnet });
+      const steps = setupSteps({ status }, { openMint: !net.mainnet });
       if (!cfg.token && !steps.some((s) => s.id === 'token')) {
         const known = i.registry?.token?.address ?? status?.testToken?.address ?? null;
         if (known) return { now, next: 'Confirm the game token (one click, then your wallet).' };

@@ -21,7 +21,7 @@ describe('GET /api/admin/backup', () => {
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'elymum-backup-'));
     writeFileSync(join(dir, 'marker.txt'), 'known contents 42\n');
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0', ADMIN_WALLETS: admin, TRUST_PROXY: '0', CORS_ORIGIN: 'https://elymum.io' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', CORS_ORIGIN: 'https://elymum.io' } as NodeJS.ProcessEnv);
     app = await createApp(cfg, {
       chain: new ArenaChain([arena(1, 1000)]),
       log: (m) => logs.push(m),
@@ -91,7 +91,7 @@ describe('GET /api/admin/backup', () => {
   });
 
   it('names the file after the chain and the UTC time', () => {
-    expect(backupFileName(99801, Date.UTC(2026, 10, 4, 3, 5, 9))).toBe('elymum-data-99801-20261104-030509.tar.gz');
+    expect(backupFileName(46630, Date.UTC(2026, 10, 4, 3, 5, 9))).toBe('elymum-data-46630-20261104-030509.tar.gz');
     expect(backupFileName(null, Date.UTC(2026, 0, 1))).toBe('elymum-data-nochain-20260101-000000.tar.gz');
   });
 });
@@ -104,7 +104,6 @@ describe('migrationEnv', () => {
       AUTH_SECRET: 's3cret',
       SERVER_PRIVATE_KEY: 'auto',
       EVM_RPC_URL: 'https://rpc.example',
-      ARENA_BOT_TARGET: '12',
       PORT: '10000',
       DATA_DIR: '/data',
       TRUST_PROXY_HOPS: '1',
@@ -112,7 +111,8 @@ describe('migrationEnv', () => {
       PATH: '/usr/bin',
       RENDER_SERVICE_ID: 'srv-x',
       PUBLIC_URL: 'https://elymum.io',
-      CHAIN_NAME: 'bad\nINJECT=1',
+      EXPLORER_URL: 'bad\nINJECT=1',
+      CHAIN_NAME: 'Retired',
       GAME_ACCESS: 'admins',
       STAKE_ENABLED: 'false',
     });
@@ -121,7 +121,6 @@ describe('migrationEnv', () => {
       AUTH_SECRET: 's3cret',
       SERVER_PRIVATE_KEY: 'auto',
       EVM_RPC_URL: 'https://rpc.example',
-      ARENA_BOT_TARGET: '12',
       PUBLIC_URL: 'https://elymum.io',
     });
   });

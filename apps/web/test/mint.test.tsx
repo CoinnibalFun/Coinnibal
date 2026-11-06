@@ -6,7 +6,7 @@ import { encodeErrorResult, encodeEventTopics, padHex, type Log } from 'viem';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isSitePath } from '../src/site/router';
 import { useSession } from '../src/site/session';
-import { fundsBlocker, hypeText, mintBlocker, mintErrorText, mintView, mintedTokenIds, playOpenForHolders, priceStory, remaining, usdText } from '../src/site/mint/logic';
+import { fundsBlocker, gasText, mintBlocker, mintErrorText, mintView, mintedTokenIds, playOpenForHolders, priceStory, remaining, usdText } from '../src/site/mint/logic';
 import { announceProvider } from '../src/wallet/eip6963';
 import { resetWallets, useWallet } from '../src/wallet/store';
 import { ALICE, BOB, chainStatus, detail, fakeProvider } from './evm-helpers';
@@ -49,9 +49,9 @@ const contract = (o: Partial<MintContractState> = {}): MintContractState => ({
 });
 const mintState = (c: MintContractState | null, o: Partial<MintState> = {}): MintState => ({
   nftAddress: c ? NFT : null,
-  chainId: 99801,
+  chainId: 46630,
   contract: c,
-  hypeUsd: 33.3,
+  gasUsd: 33.3,
   priceUsd: 0.999,
   targetUsdCents: 100,
   holders: 7,
@@ -139,7 +139,7 @@ afterEach(() => {
   restore();
   act(() => resetWallets());
 });
-const connect = () => useWallet.setState({ status: 'connected', address: ALICE, chainId: 99801, current: detail(fakeProvider({ chainId: 99801, known: [99801] })) });
+const connect = () => useWallet.setState({ status: 'connected', address: ALICE, chainId: 46630, current: detail(fakeProvider({ chainId: 46630, known: [46630] })) });
 
 describe('/mint page', { timeout: 30_000 }, () => {
   it('Closed: the teaser and a way to the WL', async () => {
@@ -148,7 +148,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
     await waitFor(() => expect(screen.getByTestId('mt-phase').textContent).toBe('Closed'));
     expect(screen.getByRole('heading', { name: 'Sealed. For now.' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Join the WL' }).getAttribute('href')).toBe('/wl');
-    expect(screen.getByTestId('mt-price').textContent).toMatch(/0\.0300\s*HYPE.*\$1\.00/);
+    expect(screen.getByTestId('mt-price').textContent).toMatch(/0\.0300\s*ETH.*\$1\.00/);
   });
 
   it('Allowlist: eligibility, quantity bounded by the limit, and the mint call with the proof', async () => {
@@ -218,12 +218,12 @@ describe('/mint page', { timeout: 30_000 }, () => {
   });
 });
 
-/* ── the live testnet regression: 1 HYPE, public, limit 3 ─────────────── */
+/* ── the live testnet regression: 1 ETH, public, limit 3 ─────────────── */
 
-const HYPE = 10n ** 18n;
-const pubContract = (o: Partial<MintContractState> = {}) => contract({ phase: 'public', priceWei: HYPE.toString(), merkleRoot: `0x${'00'.repeat(32)}`, maxSupply: 3333, totalSupply: 0, wlLimit: 3, publicLimit: 3, ...o });
-const freshPub = (o: Record<string, unknown> = {}) => ({ phase: 2, phaseName: 'public', price: HYPE, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'00'.repeat(32)}`, maxSupply: 3333, totalSupply: 0, wlLimit: 3, publicLimit: 3, treasury: ALICE, frozen: false, soldOut: false, ...o });
-const testnetState = (c = pubContract(), o: Partial<MintState> = {}) => mintState(c, { priceUsd: 87.52, hypeUsd: 87.52, gameAccess: 'public', ...o });
+const ETH = 10n ** 18n;
+const pubContract = (o: Partial<MintContractState> = {}) => contract({ phase: 'public', priceWei: ETH.toString(), merkleRoot: `0x${'00'.repeat(32)}`, maxSupply: 3333, totalSupply: 0, wlLimit: 3, publicLimit: 3, ...o });
+const freshPub = (o: Record<string, unknown> = {}) => ({ phase: 2, phaseName: 'public', price: ETH, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'00'.repeat(32)}`, maxSupply: 3333, totalSupply: 0, wlLimit: 3, publicLimit: 3, treasury: ALICE, frozen: false, soldOut: false, ...o });
+const testnetState = (c = pubContract(), o: Partial<MintState> = {}) => mintState(c, { priceUsd: 87.52, gasUsd: 87.52, gameAccess: 'public', ...o });
 const minted = (ids: bigint[]) => async (_call: unknown, opts: { onPhase?: (p: string) => void }) => {
   opts.onPhase?.('switching');
   opts.onPhase?.('signing');
@@ -235,9 +235,9 @@ const revert = (errorName: 'SoldOut' | 'PublicLimitExceeded') =>
 describe('mint logic: price copy, funds, errors', () => {
   it('tells the testnet price plainly, keeps the dollar story only within ±10 % of the target', () => {
     const s = (priceUsd: number | null, chainId: number | null = 999) => ({ priceUsd, targetUsdCents: 100, chainId });
-    expect(priceStory(s(87.52, 99801), true)).toBe('testnet');
+    expect(priceStory(s(87.52, 46630), true)).toBe('testnet');
     // the chain from the mint state when the server chain is not loaded yet
-    expect(priceStory(s(87.52, 99801), null)).toBe('testnet');
+    expect(priceStory(s(87.52, 46630), null)).toBe('testnet');
     expect(priceStory(s(1.04), false)).toBe('dollar');
     expect(priceStory(s(0.91), false)).toBe('dollar');
     expect(priceStory(s(1.12), false)).toBe('plain');
@@ -245,37 +245,37 @@ describe('mint logic: price copy, funds, errors', () => {
     expect(priceStory(s(null), false)).toBe('plain');
   });
 
-  it('formats HYPE for prose', () => {
-    expect(hypeText(HYPE)).toBe('1');
-    expect(hypeText(3_030_000_000_000_000_000n)).toBe('3.03');
-    expect(hypeText(31_250_000_000_000_000n)).toBe('0.0313');
-    expect(hypeText(0n)).toBe('0');
-    expect(hypeText(1n)).toBe('<0.0001');
+  it('formats ETH for prose', () => {
+    expect(gasText(ETH)).toBe('1');
+    expect(gasText(3_030_000_000_000_000_000n)).toBe('3.03');
+    expect(gasText(31_250_000_000_000_000n)).toBe('0.0313');
+    expect(gasText(0n)).toBe('0');
+    expect(gasText(1n)).toBe('<0.0001');
   });
 
   it('blocks only a balance that is known and too small', () => {
-    expect(fundsBlocker(null, HYPE)).toBeNull();
-    expect(fundsBlocker(2n * HYPE, HYPE)).toBeNull();
-    expect(fundsBlocker(HYPE / 2n, 1_010_000_000_000_000_000n)).toMatch(/^this mint sends 1\.01 HYPE plus gas, and this wallet holds 0\.5 HYPE/);
+    expect(fundsBlocker(null, ETH)).toBeNull();
+    expect(fundsBlocker(2n * ETH, ETH)).toBeNull();
+    expect(fundsBlocker(ETH / 2n, 1_010_000_000_000_000_000n)).toMatch(/^this mint sends 1\.01 ETH plus gas, and this wallet holds 0\.5 ETH/);
   });
 
   it('words the mint failures that matter', () => {
     const fb = 'fallback';
     expect(mintErrorText({ kind: 'rejected', name: 'UserRejectedRequestError', message: '' }, fb)).toMatch(/cancelled in your wallet/);
-    expect(mintErrorText({ kind: 'insufficient-funds', name: 'InsufficientFundsError', message: '' }, fb)).toMatch(/Not enough HYPE/);
+    expect(mintErrorText({ kind: 'insufficient-funds', name: 'InsufficientFundsError', message: '' }, fb)).toMatch(/Not enough ETH/);
     expect(mintErrorText({ kind: 'contract', name: 'SoldOut', message: '' }, fb)).toMatch(/Sold out/);
     expect(mintErrorText({ kind: 'contract', name: 'PublicLimitExceeded', message: '' }, fb)).toMatch(/public mint limit/);
     expect(mintErrorText({ kind: 'network', name: 'NetworkError', message: '' }, fb)).toBe(fb);
   });
 });
 
-describe('/mint on the testnet (1 HYPE, public, 3 per wallet)', { timeout: 30_000 }, () => {
+describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000 }, () => {
   it('says the testnet price, not "one dollar"', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/mint': testnetState() }));
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/1 HYPE on testnet/));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/1 ETH on testnet/));
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toMatch(/dollar/i);
-    expect(document.querySelector('.mt-lede')!.textContent).toMatch(/Testnet mint: 1 HYPE/);
+    expect(document.querySelector('.mt-lede')!.textContent).toMatch(/Testnet mint: 1 ETH/);
     expect(document.querySelector('.mt-lede')!.textContent).not.toMatch(/pinned to a dollar/);
     expect(screen.getByTestId('mt-mainnet-note').textContent).toMatch(/mainnet mint will be much cheaper/);
   });
@@ -289,14 +289,14 @@ describe('/mint on the testnet (1 HYPE, public, 3 per wallet)', { timeout: 30_00
     restore();
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(pubContract(), { chainId: 999, priceUsd: 87.5 }) }));
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/1 HYPE\./));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/1 ETH\./));
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toMatch(/dollar/i);
   });
 
   it('a session from another page without a connected wallet still offers Connect, then mints (no new signature)', async () => {
     // the owner's case: signed in by the arena flow, the wallet not reconnected on /mint
     useSession.setState({ session: { address: ALICE, token: 't', admin: true }, signing: false, error: null });
-    const wallet = fakeProvider({ chainId: 99801, known: [99801] });
+    const wallet = fakeProvider({ chainId: 46630, known: [46630] });
     const stopAnnounce = announceProvider(detail(wallet, 'MetaMask', 'io.metamask'));
     const prev = restore;
     restore = () => {
@@ -327,7 +327,7 @@ describe('/mint on the testnet (1 HYPE, public, 3 per wallet)', { timeout: 30_00
     connect();
     ({ restore } = mockFetch({ 'GET /api/site/mint': testnetState(), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(false) }));
     spies.getMintState.mockResolvedValue(freshPub());
-    spies.client.getBalance.mockResolvedValue(4n * HYPE);
+    spies.client.getBalance.mockResolvedValue(4n * ETH);
     spies.client.estimateGas.mockResolvedValue(120_000n);
     spies.sendWalletCall.mockImplementation(minted([1n, 2n, 3n]));
     render(<Mint pollMs={0} />);
@@ -357,13 +357,13 @@ describe('/mint on the testnet (1 HYPE, public, 3 per wallet)', { timeout: 30_00
     await screen.findByTestId('mt-done');
   });
 
-  it('too little HYPE: says so and never opens the wallet', async () => {
+  it('too little ETH: says so and never opens the wallet', async () => {
     connect();
     ({ restore } = mockFetch({ 'GET /api/site/mint': testnetState(), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(false) }));
-    spies.client.getBalance.mockResolvedValue(HYPE / 2n);
+    spies.client.getBalance.mockResolvedValue(ETH / 2n);
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(screen.getByTestId('mt-blocker').textContent).toMatch(/Not enough HYPE.*1\.01 HYPE.*0\.5 HYPE/));
-    expect(screen.getByRole('link', { name: 'Get test HYPE' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('mt-blocker').textContent).toMatch(/Not enough ETH.*1\.01 ETH.*0\.5 ETH/));
+    expect(screen.getByRole('link', { name: 'Get test ETH' })).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Mint 1 emblem' }) as HTMLButtonElement).disabled).toBe(true);
     expect(spies.sendWalletCall).not.toHaveBeenCalled();
   });
@@ -428,7 +428,7 @@ describe('/mint on the testnet (1 HYPE, public, 3 per wallet)', { timeout: 30_00
     expect((btn as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(btn);
     await screen.findByTestId('mt-done');
-    expect(spies.sendWalletCall.mock.calls[0][1].chain).toMatchObject({ chainId: 99801 });
+    expect(spies.sendWalletCall.mock.calls[0][1].chain).toMatchObject({ chainId: 46630 });
   });
 });
 
@@ -436,7 +436,7 @@ describe('WalletSignIn with a session but no connected wallet (header, WL)', () 
   it('offers to reconnect the wallet instead of only "Switch wallet", and needs no new signature', async () => {
     const { WalletSignIn } = await import('../src/site/wallet/SiteWallet');
     useSession.setState({ session: { address: ALICE, token: 't', admin: false }, signing: false, error: null });
-    const wallet = fakeProvider({ chainId: 99801, known: [99801] });
+    const wallet = fakeProvider({ chainId: 46630, known: [46630] });
     const stop = announceProvider(detail(wallet, 'Rabby', 'io.rabby'));
     try {
       render(<WalletSignIn label="Sign in" />);

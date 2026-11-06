@@ -1,7 +1,7 @@
 import { elymumArenaAbi, elymumNFTAbi, testTokenAbi, type ArenaConfig, type ArenaInfo, type ContractCall, type MintState, type SessionInfo, type TestTokenFaucetConfig } from '@elymum/sdk';
 import { encodeErrorResult, getAddress, keccak256, toHex, type Address, type Hash, type Hex } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import type { ArenaEvent, CodeCheck, ContractKindCode, EvmClient, EvmSigner, JoinedLog, TransferLog, TxReceipt } from '../src/chain/evm-client';
+import { computeProfitFee } from '@elymum/shared';
+import type { ArenaEvent, CodeCheck, ContractKindCode, EvmClient, JoinedLog, TransferLog, TxReceipt } from '../src/chain/evm-client';
 
 export const SERVER = getAddress('0x70997970c51812dc3a010c7d01b50e0d17dc79c8');
 export const ADMIN = getAddress('0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266');
@@ -48,17 +48,14 @@ export class FakeEvm implements EvmClient {
   refusing = new Set<string>();
   /** The fee wallet cannot receive the token: a settle with a fee reverts (SafeERC20FailedOperation). */
   feeWalletBroken = false;
-  /**
-   * The modelled arena build: 2 (default, fee on every played ticket's entry fee: reserved at join, the ticket
-   * plays `entry − fee`, `cancel` refunds unplayed tickets in full) or 1 (legacy: fee on profit at settle).
-   */
-  version: 1 | 2 = 2;
-  /** v2: fees reserved for open tickets, per arena id (base units). */
-  reserved = new Map<number, bigint>();
-  /** v2: the ticket's fee (base units). */
-  cutOf(s: Pick<SessionInfo, 'entryFee' | 'feeBps'>): bigint {
-    return this.version === 2 ? (s.entryFee * BigInt(s.feeBps)) / 10_000n : 0n;
-  }
+  /** Tokens burned (fee burns + loot burns), base units. */
+  burned = 0n;
+  /** Tokens the fee wallet received, base units. */
+  toFeeWallet = 0n;
+  /** The chain's clock (Unix seconds): ticket open times and the 24 h refund. */
+  nowS: () => number = () => Math.floor(Date.now() / 1000);
+  /** Every ticket closure, in order: `Settled`, `Cancelled`, `Refunded` (24 h) and `Collected` (owed). */
+  closures: { name: 'Settled' | 'Cancelled' | 'Refunded' | 'Collected'; arenaId: number; player: Address; sessionId: bigint; amount: bigint }[] = [];
   /** Runs right before a `settle` is executed (lets a test change state between the pre-check and the tx). */
   beforeSettle: (() => void) | null = null;
   deployAt = 10n;
@@ -70,17 +67,13 @@ export class FakeEvm implements EvmClient {
   tokens = new Map<string, bigint>();
   /** ERC-20 allowances: `owner:spender` (lower case). */
   allowances = new Map<string, bigint>();
-  /** HYPE of every address but the server key (that one is `balanceWei`). */
-  hype = new Map<string, bigint>();
-  /** TestToken minters (lower case); the token owner (`owners`, default ADMIN) may always mint. */
-  minters = new Set<string>();
+  /** Gas-token balances of every address but the server key (that one is `balanceWei`). */
+  gas = new Map<string, bigint>();
   /** Arena holder checks (`isHolder`): wallets holding the holder NFT (lower case). */
   arenaHolders = new Set<string>();
   faucet: TestTokenFaucetConfig = { address: TOKEN, owner: ADMIN, amount: 1_000_000n * E18, holderAmount: 2_000_000n * E18, cooldownSecs: 3600, holderNft: null };
-  /** Every call sent by another key (`signer`), with its sender. */
+  /** Every call sent by a player (`sendFrom`), with its sender. */
   sentBy: { from: Address; call: ContractCall }[] = [];
-  /** HYPE sends of the server key. */
-  valueSent: { to: Address; wei: bigint }[] = [];
   verified: { address: string; message: string; signature: string }[] = [];
 
   constructor(opts: { address?: Address; token?: Address | null; decimals?: number } = {}) {
@@ -93,11 +86,15 @@ export class FakeEvm implements EvmClient {
       feeWallet: FEE_WALLET,
       token: opts.token === undefined ? TOKEN : opts.token,
       decimals: opts.decimals ?? 18,
-      feeBps: 500,
+      burnBps: 1500,
+      vaultBps: 500,
       paused: false,
-      totals: { sessions: 0n, games: 0n, staked: 0n, paidOut: 0n, fees: 0n, burned: 0n },
+      totals: { sessions: 0n, games: 0n, staked: 0n, paidOut: 0n, feeBurned: 0n, feeToVault: 0n, lootBurned: 0n, payments: 0n, paymentBurned: 0n },
       holderNft: null,
-      holderFeeBps: 500,
+      holderBurnBps: 1500,
+      holderVaultBps: 500,
+      burnMode: 0,
+      paymentBurnBps: 5000,
     };
     this.owners.set(NFT.toLowerCase(), ADMIN);
     this.mint = {
@@ -150,6 +147,7 @@ export class FakeEvm implements EvmClient {
       totalDeposited: 0n,
       totalPaidOut: 0n,
       totalBurned: 0n,
+      totalFees: 0n,
       lastSweepId: 0n,
       ...opts,
     };
@@ -166,15 +164,16 @@ export class FakeEvm implements EvmClient {
       player: getAddress(player),
       id,
       entryFee: a.entryFee,
-      openedAt: opts.openedAt ?? Math.floor(Date.now() / 1000),
-      feeBps: this.config.feeBps,
+      openedAt: opts.openedAt ?? this.nowS(),
+      burnBps: this.config.burnBps,
+      vaultBps: this.config.vaultBps,
       finalized: false,
       owed: 0n,
     };
     this.sessions.set(`${arenaId}:${player.toLowerCase()}`, s);
-    const cut = this.cutOf(s);
-    a.vault += a.entryFee - cut;
-    this.reserved.set(arenaId, (this.reserved.get(arenaId) ?? 0n) + cut);
+    // no entry fee cut: the whole ticket price goes into the vault
+    a.vault += a.entryFee;
+    a.totalDeposited += a.entryFee;
     a.openSessions += 1;
     this.block += 1n;
     this.joined.push({ arena: ARENA, arenaId, player: getAddress(player), sessionId: id, entryFee: a.entryFee, blockNumber: this.block });
@@ -204,12 +203,6 @@ export class FakeEvm implements EvmClient {
     this.check('codeCheck');
     return this.code.get(address.toLowerCase()) ?? 'ok';
   }
-  versionReads = 0;
-  async arenaVersion(address: Address) {
-    this.check('arenaVersion');
-    this.versionReads++;
-    return (this.code.get(address.toLowerCase()) ?? 'ok') === 'ok' ? this.version : null;
-  }
   async hasCode(address: Address) {
     return (this.code.get(address.toLowerCase()) ?? 'ok') !== 'missing';
   }
@@ -229,18 +222,18 @@ export class FakeEvm implements EvmClient {
     return a ? { ...a } : { ...this.addArenaShape(id) };
   }
   private addArenaShape(id: number): ArenaInfo {
-    return { id, entryFee: 0n, vault: 0n, owed: 0n, maxSessions: 0, openSessions: 0, enabled: false, exists: false, totalDeposited: 0n, totalPaidOut: 0n, totalBurned: 0n, lastSweepId: 0n, holdersOnly: false };
+    return { id, entryFee: 0n, vault: 0n, owed: 0n, maxSessions: 0, openSessions: 0, enabled: false, exists: false, totalDeposited: 0n, totalPaidOut: 0n, totalBurned: 0n, totalFees: 0n, lastSweepId: 0n, holdersOnly: false };
   }
   sessionReads = 0;
   async session(_arena: Address, arenaId: number, player: Address) {
     this.check('session');
     this.sessionReads++;
     const s = this.sessions.get(`${arenaId}:${player.toLowerCase()}`);
-    return s ? { ...s } : { arenaId, player: getAddress(player), id: 0n, entryFee: 0n, openedAt: 0, feeBps: 0, finalized: false, owed: 0n };
+    return s ? { ...s } : { arenaId, player: getAddress(player), id: 0n, entryFee: 0n, openedAt: 0, burnBps: 0, vaultBps: 0, finalized: false, owed: 0n };
   }
   async balance(address: Address) {
     this.check();
-    return address.toLowerCase() === this.address.toLowerCase() ? this.balanceWei : (this.hype.get(address.toLowerCase()) ?? 0n);
+    return address.toLowerCase() === this.address.toLowerCase() ? this.balanceWei : (this.gas.get(address.toLowerCase()) ?? 0n);
   }
   tokenOf(owner: string): bigint {
     return this.tokens.get(owner.toLowerCase()) ?? 0n;
@@ -256,10 +249,6 @@ export class FakeEvm implements EvmClient {
     this.check();
     return this.allowances.get(`${owner.toLowerCase()}:${spender.toLowerCase()}`) ?? 0n;
   }
-  async isMinter(_token: Address, who: Address) {
-    this.check();
-    return this.minters.has(who.toLowerCase());
-  }
   async testTokenFaucet(_token: Address) {
     this.check();
     return { ...this.faucet };
@@ -268,20 +257,8 @@ export class FakeEvm implements EvmClient {
     this.check();
     return this.arenaHolders.has(who.toLowerCase());
   }
-  async sendValue(to: Address, wei: bigint): Promise<Hash> {
-    this.check();
-    if (this.balanceWei < wei) throw new Error('insufficient funds for gas * price + value');
-    this.balanceWei -= wei;
-    this.hype.set(to.toLowerCase(), (this.hype.get(to.toLowerCase()) ?? 0n) + wei);
-    this.valueSent.push({ to: getAddress(to), wei });
-    return this.mined([]);
-  }
-  /** Gas a bot transaction burns (the model charges every bot send this much HYPE). */
-  botGasWei = 10n ** 14n;
-  signer(privateKey: Hex): EvmSigner {
-    const address = privateKeyToAccount(privateKey).address;
-    return { address, send: (call) => this.sendFrom(address, call) };
-  }
+  /** Gas a player transaction burns (the model charges every player send this much). */
+  playerGasWei = 10n ** 14n;
   private mined(events: ArenaEvent[]): Hash {
     const hash = nextHash();
     this.block += 1n;
@@ -292,8 +269,8 @@ export class FakeEvm implements EvmClient {
   async sendFrom(from: Address, call: ContractCall): Promise<Hash> {
     this.check();
     const key = from.toLowerCase();
-    const gas = this.hype.get(key) ?? 0n;
-    if (gas < this.botGasWei) throw new Error('insufficient funds for gas * price + value');
+    const gas = this.gas.get(key) ?? 0n;
+    if (gas < this.playerGasWei) throw new Error('insufficient funds for gas * price + value');
     if (call.functionName === 'approve') {
       const [spender, amount] = call.args as [Address, bigint];
       this.allowances.set(`${key}:${spender.toLowerCase()}`, amount);
@@ -312,14 +289,27 @@ export class FakeEvm implements EvmClient {
     } else if (call.functionName === 'refund') {
       const [arenaId] = call.args as [number];
       const s = this.sessions.get(`${arenaId}:${key}`);
-      if (!s?.finalized) throw revert('NothingToRefund');
-      this.addTokens(from, s.owed);
-      this.arenaMap.get(arenaId)!.owed -= s.owed;
+      if (!s) throw revert('NoSession');
+      const a = this.arenaMap.get(arenaId)!;
+      if (s.finalized) {
+        this.addTokens(from, s.owed);
+        a.owed -= s.owed;
+        this.closures.push({ name: 'Collected', arenaId, player: getAddress(from), sessionId: s.id, amount: s.owed });
+      } else {
+        // ElymumArena.refund: an unsettled ticket 24 h after its join pays min(entryFee, vault)
+        if (this.nowS() < s.openedAt + 24 * 3600) throw revert('RefundTooEarly');
+        const amount = s.entryFee < a.vault ? s.entryFee : a.vault;
+        a.vault -= amount;
+        a.openSessions -= 1;
+        a.totalPaidOut += amount;
+        this.addTokens(from, amount);
+        this.closures.push({ name: 'Refunded', arenaId, player: getAddress(from), sessionId: s.id, amount });
+      }
       this.sessions.delete(`${arenaId}:${key}`);
     } else {
       throw new Error(`FakeEvm: ${call.functionName} from a player key is not modelled`);
     }
-    this.hype.set(key, gas - this.botGasWei);
+    this.gas.set(key, gas - this.playerGasWei);
     this.sentBy.push({ from: getAddress(from), call });
     return this.mined([]);
   }
@@ -339,6 +329,11 @@ export class FakeEvm implements EvmClient {
   async txBlock() {
     return null;
   }
+  async blockHash(n: bigint): Promise<Hash | null> {
+    this.check();
+    if (n > this.block) return null;
+    return keccak256(toHex(`fake-block-${n}`));
+  }
 
   async send(call: ContractCall): Promise<Hash> {
     this.check();
@@ -352,10 +347,9 @@ export class FakeEvm implements EvmClient {
       this.beforeSettle = null;
       const items = call.args[0] as { arenaId: number; player: Address; sessionId: bigint; payout: bigint }[];
       // simulation: a failing fee transfer reverts the whole batch before anything happens
-      if (this.feeWalletBroken && items.some((it) => this.feeOf(it) > 0n)) throw revert('SafeERC20FailedOperation', [TOKEN]);
+      if (this.feeWalletBroken && items.some((it) => this.feeOf(it).toVault > 0n)) throw revert('SafeERC20FailedOperation', [TOKEN]);
       for (const it of items) events.push(this.settleOne(it));
     } else if (call.functionName === 'cancel') {
-      if (this.version !== 2) throw new Error('execution reverted'); // v1 has no cancel
       if (this.config.serverAuthority.toLowerCase() !== this.address.toLowerCase()) throw revert('NotServer');
       this.beforeSettle?.();
       this.beforeSettle = null;
@@ -371,11 +365,12 @@ export class FakeEvm implements EvmClient {
       a.lastSweepId = sweepId;
       a.vault -= amount;
       a.totalBurned += amount;
+      this.burned += amount;
       events = [{ name: 'LootBurned', arenaId, sweepId, amount }];
     } else if (call.functionName === 'mint' && call.abi === testTokenAbi) {
       const [to, amount] = call.args as [Address, bigint];
       const owner = this.owners.get(TOKEN.toLowerCase()) ?? ADMIN;
-      if (owner.toLowerCase() !== this.address.toLowerCase() && !this.minters.has(this.address.toLowerCase())) throw revert('OwnableUnauthorizedAccount', [this.address], testTokenAbi);
+      if (owner.toLowerCase() !== this.address.toLowerCase()) throw revert('OwnableUnauthorizedAccount', [this.address], testTokenAbi);
       this.addTokens(to, amount);
     } else if (call.functionName === 'setPrice') {
       const [wei] = call.args as [bigint];
@@ -389,11 +384,12 @@ export class FakeEvm implements EvmClient {
     return hash;
   }
 
-  private feeOf(it: { arenaId: number; player: Address; payout: bigint }): bigint {
+  /** ElymumArena v3's fee on the profit of a settlement (the shared fee module mirrors the contract). */
+  feeOf(it: { arenaId: number; player: Address; payout: bigint }): { burned: bigint; toVault: bigint; net: bigint } {
     const s = this.sessions.get(`${it.arenaId}:${it.player.toLowerCase()}`);
-    if (!s) return 0n;
-    if (this.version === 2) return s.finalized ? 0n : this.cutOf(s);
-    return it.payout > s.entryFee ? ((it.payout - s.entryFee) * BigInt(s.feeBps)) / 10_000n : 0n;
+    if (!s || s.finalized) return { burned: 0n, toVault: 0n, net: it.payout };
+    const f = computeProfitFee(s.entryFee, it.payout, s);
+    return { burned: f.burned, toVault: f.toVault, net: f.net };
   }
 
   private cancelOne(it: { arenaId: number; player: Address; sessionId: bigint }): ArenaEvent {
@@ -404,11 +400,9 @@ export class FakeEvm implements EvmClient {
     const s = this.sessions.get(key);
     if (!s || s.id !== it.sessionId) return skip(2);
     if (s.finalized) return skip(3);
-    const cut = this.cutOf(s);
-    if (s.entryFee - cut > a.vault) return skip(4);
+    if (s.entryFee > a.vault) return skip(4);
     this.sessions.delete(key);
-    a.vault -= s.entryFee - cut;
-    this.reserved.set(it.arenaId, (this.reserved.get(it.arenaId) ?? 0n) - cut);
+    a.vault -= s.entryFee;
     a.openSessions -= 1;
     a.totalPaidOut += s.entryFee;
     let collected = true;
@@ -419,6 +413,7 @@ export class FakeEvm implements EvmClient {
     } else {
       this.addTokens(it.player, s.entryFee);
     }
+    this.closures.push({ name: 'Cancelled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, amount: s.entryFee });
     return { name: 'Cancelled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, amount: s.entryFee, collected };
   }
 
@@ -431,14 +426,16 @@ export class FakeEvm implements EvmClient {
     if (!s || s.id !== it.sessionId) return skip(2);
     if (s.finalized) return skip(3);
     if (it.payout > a.vault) return skip(4);
-    const fee = this.feeOf(it);
-    // v2: the fee was reserved at join, the whole payout is the player's; v1: the fee comes out of the payout
-    const toPlayer = this.version === 2 ? it.payout : it.payout - fee;
-    if (this.version === 2) this.reserved.set(it.arenaId, (this.reserved.get(it.arenaId) ?? 0n) - fee);
+    const { burned, toVault, net } = this.feeOf(it);
+    const toPlayer = net;
     this.sessions.delete(key);
     a.vault -= it.payout;
     a.openSessions -= 1;
-    a.totalPaidOut += it.payout;
+    a.totalPaidOut += net;
+    a.totalBurned += burned;
+    a.totalFees += toVault;
+    this.burned += burned;
+    this.toFeeWallet += toVault;
     let collected = true;
     if (toPlayer > 0n && this.refusing.has(it.player.toLowerCase())) {
       collected = false;
@@ -447,7 +444,8 @@ export class FakeEvm implements EvmClient {
     } else if (toPlayer > 0n) {
       this.addTokens(it.player, toPlayer);
     }
-    return { name: 'Settled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, payout: it.payout, fee, collected };
+    this.closures.push({ name: 'Settled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, amount: it.payout });
+    return { name: 'Settled', arenaId: it.arenaId, player: getAddress(it.player), sessionId: it.sessionId, payout: it.payout, net, burned, toVault, collected };
   }
 
   async receipt(hash: Hash): Promise<TxReceipt | null> {

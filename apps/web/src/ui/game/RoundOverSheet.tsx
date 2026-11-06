@@ -1,19 +1,19 @@
-import { WINNINGS_CUT_BPS } from '@elymum/shared';
+import { activeChain, bpsToPercent, profitFee, totalFeeBps, type FeeRates } from '@elymum/shared';
 import { AnimatePresence, motion, type TargetAndTransition } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon, Receipt, Sheet, Stamp, useReducedMotion, type ReceiptLine } from '../../design';
-import { CoinPortrait } from './CoinPortrait';
+import { FinalBoard } from './FinalBoard';
+import { ShareOnX, useShare } from './ShareOnX';
 import { engine } from '../../game/instance';
 import { roundStartLabel } from '../../game/round';
 import { useChainData } from '../../wallet/chain';
 import { isFakeHash } from '../../wallet/devFake';
-import { feeBps, feeModelOf } from '../../wallet/ticket';
+import { arenaRates } from '../../wallet/ticket';
 import { announce, sound } from '../../audio';
-import { BotTag } from './BotTag';
 import { useT } from '../../i18n';
 import { explorerTx } from '../../wallet/links';
 import { requestTicket, useUi } from '../../store';
-import { formatClock, ordinal, roomName, useTokenFormat } from './format';
+import { formatClock, roomName, useTokenFormat } from './format';
 
 /** The receipt waits for the bell to swing in and ring over the frozen world (ms). */
 export const ROUND_SHEET_DELAY_MS = 1500;
@@ -22,25 +22,21 @@ export const ROUND_SHEET_DELAY_MS = 1500;
 const TOP = 5;
 
 /**
- * Receipt numbers: the settlement's own `fee` / `net` once it arrives, an
- * estimate at `bps` (the live config's rate for this ticket: `feeBps`) before.
- * `entry` model (arena v2): the fee was `bps` of the entry fee, taken at the entry; the whole till is
- * paid (`onEntry`). `profit` (the legacy v1 arena): the fee comes out of the gain, and after settlement
- * its % label is derived from the real fee and the gain.
+ * Receipt numbers: the settlement's own `fee` / `net` once it arrives, an estimate before, at `rates` (the rates fixed
+ * into this ticket at join, else the live ones). `gross` is the till at the bell; arena v3 takes the fee from the
+ * profit only (`gross - entryFee`): nothing when the ticket did not win.
  */
-export function receiptNumbers(payout: number, entryFee: number, bps: number, settled: { fee?: number; net?: number; feeOnEntry?: boolean } | null, model: 'entry' | 'profit' = 'entry') {
-  const gain = payout - entryFee;
+export function receiptNumbers(gross: number, entryFee: number, rates: FeeRates, settled: { fee?: number; net?: number } | null) {
+  const est = profitFee(entryFee, gross, rates);
   const final = settled?.fee !== undefined;
-  const onEntry = settled ? settled.feeOnEntry === true || (settled.fee === undefined && model === 'entry') : model === 'entry';
-  if (onEntry) {
-    const fee = settled?.fee ?? Math.floor((entryFee * bps) / 10_000);
-    return { gain, fee, net: settled?.net ?? payout, pct: final && entryFee > 0 ? Math.round((fee / entryFee) * 1000) / 10 : bps / 100, final, onEntry };
-  }
-  const estFee = Math.floor((Math.max(0, gain) * bps) / 10_000);
-  const fee = settled?.fee ?? estFee;
-  const net = settled?.net ?? payout - fee;
-  const pct = final && gain > 0 ? Math.round((fee / gain) * 1000) / 10 : bps / 100;
-  return { gain, fee, net, pct, final, onEntry };
+  const fee = settled?.fee ?? est.fee;
+  return {
+    gain: gross - entryFee,
+    fee,
+    net: settled?.net ?? est.net,
+    pct: totalFeeBps(rates) / 100,
+    final,
+  };
 }
 
 /** The settlement for this ticket: matched by its session key only. */
@@ -51,8 +47,9 @@ export function settlementFor<T extends { session: string | null }>(settled: T |
 /**
  * "Round over", the landing report: the bell rang while my coin was alive, so the till is paid.
  * After a beat (the bell wave over the frozen world) the report flies out of the worth sticker: the
- * till, the fee (paid at the entry; on profit on the legacy arena) and what was paid (an estimate until `settled` arrives, then a PAID
- * stamp and the transaction link), my place and the room's top 5 at the bell. "Next round"
+ * till, the fee on its profit and what was paid (an estimate until `settled` arrives, then a PAID
+ * stamp and the transaction link), my place and the room's top 5 at the bell (`FinalBoard`, the same board a custom
+ * room shows at its end: value, mass and kills). "Next round"
  * goes back to the lobby with this arena's ticket ready to buy.
  *
  * The same receipt, without the standings, serves an operator exit (`exit`: an admin kick or
@@ -67,9 +64,9 @@ export function RoundOverSheet() {
   const chain = useUi((s) => s.chain);
   const settledRaw = useUi((s) => s.lastSettlement);
   const config = useChainData((s) => s.config);
-  const serverBps = useUi((s) => s.chain?.feeBps ?? null);
-  // the rate fixed into this ticket at join (its session), else the live rate
-  const sessionBps = useChainData((s) => (ticket?.arenaId != null ? (s.sessions[ticket.arenaId]?.feeBps ?? null) : null));
+  const serverFees = useUi((s) => s.chain?.fees ?? null);
+  // the rates fixed into this ticket at join (its session), else the live rates
+  const session = useChainData((s) => (ticket?.arenaId != null ? (s.sessions[ticket.arenaId] ?? null) : null));
   const over = useUi((s) => s.screen === 'roundover' && s.roundResult !== null);
   const reduced = useReducedMotion();
   const exit = res?.kind === 'exit';
@@ -118,21 +115,19 @@ export function RoundOverSheet() {
     engine()?.backToLobby();
   };
 
-  const payout = res?.payout ?? 0;
+  // the till at the bell: the server's `stats.gross` when a fee was due, else what it paid (no fee)
+  const gross = res?.stats?.gross ?? res?.payout ?? 0;
   const entry = ticket?.entryFee ?? room?.entryFee ?? 0;
-  const n = receiptNumbers(payout, entry, sessionBps ?? feeBps(serverBps, config), settled, feeModelOf(chain));
+  const rates = session && session.id > 0n ? { burnBps: session.burnBps, vaultBps: session.vaultBps } : arenaRates(serverFees, config);
+  const n = receiptNumbers(gross, entry, rates, settled);
   const roundTime = res?.round != null ? roundStartLabel(res.round, room?.round) : '';
   const approx = n.final ? '' : `${t('gr.estimate')} `;
-  // the cut on winnings (20 % of what the till holds above the coin's start; 0 without winnings)
-  const cut = res?.stats?.cut ?? 0;
-  const gross = res?.stats?.gross ?? payout;
   const lines: ReceiptLine[] = [
     { label: t('gr.till'), value: tf.fmt(gross) },
-    ...(cut > 0 ? [{ label: t('gr.cut', { pct: WINNINGS_CUT_BPS / 100 }), value: `−${tf.fmt(cut)}`, muted: true }] : []),
     {
-      label: <>{t(n.onEntry ? 'gr.feeEntry' : 'gr.fee', { pct: n.pct.toLocaleString('en-US', { maximumFractionDigits: 1 }) })}</>,
-      // fee on entry: already paid out of the entry fee, nothing comes off this till
-      value: n.onEntry ? `${approx}${tf.fmt(n.fee)}` : n.fee > 0 ? `${approx}−${tf.fmt(n.fee)}` : tf.fmt(0),
+      label: <>{t('gr.fee', { pct: n.pct.toLocaleString('en-US', { maximumFractionDigits: 2 }) })}</>,
+      // the fee on profit (burned + to the fee wallet); a ticket that did not win pays none
+      value: n.fee > 0 ? `${approx}−${tf.fmt(n.fee)}` : tf.fmt(0),
       muted: true,
     },
     {
@@ -172,8 +167,7 @@ export function RoundOverSheet() {
   );
 
   const standings = res?.standings ?? [];
-  const mine = standings.findIndex((s) => s.you);
-  const place = mine >= 0 ? ordinal(mine + 1) : standings.length > 0 ? t('gr.placeOut', { n: standings.length }) : '—';
+  const share = useShare('round');
 
   return (
     <Sheet
@@ -192,6 +186,9 @@ export function RoundOverSheet() {
           <Button variant="secondary" size="lg" icon="menu" onClick={toLobby}>
             {t('gr.lobby')}
           </Button>
+          {share && !exit && res?.stats?.finalRank && (
+            <ShareOnX id={share.id} text={t('share.result', { rank: res.stats.finalRank, n: res.stats.finalOf ?? res.stats.finalRank, room: roomName(room) })} />
+          )}
         </>
       }
     >
@@ -209,7 +206,7 @@ export function RoundOverSheet() {
           <AnimatePresence>
             {settled && printed && (
               <motion.div className="g-roundover__stamp" initial={false} exit={{ opacity: 0 }}>
-                <Stamp text={t('gr.paid')} sub="ELYSIUM" round size="md" tone="up" rotate={-12} animateIn={!reduced} />
+                <Stamp text={t('gr.paid')} sub={activeChain().name.toUpperCase()} round size="md" tone="up" rotate={-12} animateIn={!reduced} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -219,35 +216,9 @@ export function RoundOverSheet() {
             {t('gr.collect')}
           </p>
         )}
-        <p className="g-roundover__note mono">{exit ? t('gr.exitNote') : t(n.onEntry ? 'gr.feeNote' : 'gr.feeNote.profit')}</p>
+        <p className="g-roundover__note mono">{exit ? t('gr.exitNote') : t('gr.feeNote', { pct: bpsToPercent(totalFeeBps(rates)), burn: bpsToPercent(rates.burnBps), vault: bpsToPercent(rates.vaultBps) })}</p>
 
-        {!exit && (
-          <section className="g-board" aria-label={t('gr.top')}>
-            <div className="g-board__landing">
-              <CoinPortrait skin={mySkin} size={76} expression="happy" seed={5} className="g-board__coin" />
-              <dl className="g-board__place">
-                <dt className="mono">{t('gr.place')}</dt>
-                <dd>{place}</dd>
-              </dl>
-            </div>
-            <h3 className="g-board__title mono">{t('gr.top')}</h3>
-            <ol className="g-board__list">
-              {standings.slice(0, TOP).map((s, i) => (
-                <li key={`${i}-${s.name}`} className={`g-board__row${s.you ? ' is-me' : ''}`}>
-                  <span className="g-board__rank num">{String(i + 1).padStart(2, '0')}</span>
-                  <span className="g-board__name">
-                    <span className="g-board__nm" title={s.name}>
-                      {s.name}
-                    </span>
-                    {s.isBot && <BotTag />}
-                    {s.you && <span className="g-you mono">{t('gr.you')}</span>}
-                  </span>
-                  <span className="g-board__value num">{tf.fmt(s.value, { compact: true, maxFrac: 1 })}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
+        {!exit && <FinalBoard rows={standings} title={t('gr.top')} skin={mySkin} top={TOP} />}
       </div>
     </Sheet>
   );

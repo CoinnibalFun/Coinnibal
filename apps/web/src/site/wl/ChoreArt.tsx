@@ -146,31 +146,6 @@ export function ChoreArt({ kind, handle = '' }: { kind: ChoreKind | string; hand
   }
 }
 
-/** A magnifying glass (collab: in review). */
-export function Magnifier({ size = 64 }: { size?: number }) {
-  return (
-    <Svg size={size}>
-      <path d="M50 50 L72 72" stroke={INK} strokeWidth={13} strokeLinecap="round" />
-      <path d="M50 50 L72 72" stroke={ELYSIUM.coral} strokeWidth={7} strokeLinecap="round" />
-      <circle cx={33} cy={33} r={22} fill={INK} transform="translate(3 3)" />
-      <circle cx={33} cy={33} r={22} fill={ELYSIUM.mist} {...S} />
-      <path d="M21 27 a13 13 0 0 1 10 -9" stroke="#FFFFFF" strokeWidth={4} fill="none" strokeLinecap="round" />
-    </Svg>
-  );
-}
-
-/** A rain cloud (collab: not this time). */
-export function RainCloud({ size = 80 }: { size?: number }) {
-  return (
-    <Svg size={size}>
-      <path d="M18 46 a12 12 0 0 1 4 -23 a16 16 0 0 1 30 -4 a12 12 0 0 1 12 27Z" fill={INK} transform="translate(3 3)" />
-      <path d="M18 46 a12 12 0 0 1 4 -23 a16 16 0 0 1 30 -4 a12 12 0 0 1 12 27Z" fill="#FFFFFF" {...S} />
-      <path d="M20 43 H62" stroke={ELYSIUM.mist} strokeWidth={5} strokeLinecap="round" />
-      <path d="M26 56 l-3 8 M40 56 l-3 8 M54 56 l-3 8" stroke={ELYSIUM.teal} strokeWidth={3.5} strokeLinecap="round" />
-    </Svg>
-  );
-}
-
 /** A sealed envelope with a sun wax seal (collab: submitted). */
 export function Sealed({ size = 80 }: { size?: number }) {
   return (

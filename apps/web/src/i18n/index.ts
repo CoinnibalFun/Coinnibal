@@ -1,3 +1,4 @@
+import { activeChain } from '@elymum/shared';
 import { useSyncExternalStore } from 'react';
 import { en } from './en';
 import { LOCALES, type Locale } from './locales/meta';
@@ -64,9 +65,26 @@ export function formatMessage(s: string, vars: TVars | undefined, locale: Locale
   return s;
 }
 
+/**
+ * The placeholder every string may use without the caller passing it: `{chain}`, the name of the Robinhood Chain
+ * network the game runs on ("Robinhood Chain Testnet" now, "Robinhood Chain" at mainnet). It follows the active
+ * network (`setActiveChain` in `@elymum/shared`: `VITE_CHAIN_ID` at boot, then the server's); `refreshChainText`
+ * re-renders on a change.
+ */
+let chainVars: { chain: string } = { chain: activeChain().name };
+
+/** Re-reads `{chain}` from the active network; components using `useT` re-render when it changed. */
+export function refreshChainText(): void {
+  const next = { chain: activeChain().name };
+  if (next.chain === chainVars.chain) return;
+  chainVars = next;
+  fns.clear();
+  for (const fn of listeners) fn();
+}
+
 export function translate(key: TKey, vars?: TVars): string {
   const s: string = dict[key] ?? en[key] ?? key;
-  return formatMessage(s, vars);
+  return formatMessage(s, vars ? { ...chainVars, ...vars } : chainVars);
 }
 
 /** Non-React access (engine, toasts): always the current language. */
@@ -88,20 +106,21 @@ function subscribe(fn: () => void): () => void {
   return () => listeners.delete(fn);
 }
 
-/** One function per language: components that memoise on `t` re-run when the language changes. */
-const fns = new Map<Locale, (key: TKey, vars?: TVars) => string>();
-function fnFor(l: Locale) {
-  let f = fns.get(l);
+/** One function per language and chain: components that memoise on `t` re-run when either changes. */
+const fns = new Map<string, (key: TKey, vars?: TVars) => string>();
+function fnFor(k: string) {
+  let f = fns.get(k);
   if (!f) {
     f = (key: TKey, vars?: TVars) => translate(key, vars);
-    fns.set(l, f);
+    fns.set(k, f);
   }
   return f;
 }
+const textKey = (): string => `${current}|${chainVars.chain}`;
 
-/** React hook: `const t = useT(); t('lo.tab.play')`. Re-renders when the language changes. */
+/** React hook: `const t = useT(); t('lo.tab.play')`. Re-renders when the language or the chain changes. */
 export function useT(): (key: TKey, vars?: TVars) => string {
-  return fnFor(useLocale());
+  return fnFor(useSyncExternalStore(subscribe, textKey, () => 'en'));
 }
 
 export function useLocale(): Locale {

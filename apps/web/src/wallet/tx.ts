@@ -1,9 +1,7 @@
 import { describeError, sendCall, type ContractCall, type DescribedError } from '@elymum/sdk';
 import type { Address, Hash, PublicClient, TransactionReceipt, WalletClient } from 'viem';
 import { t } from '../i18n';
-import { toast } from '../store';
 import type { Eip1193Provider } from './eip6963';
-import { explorerTx } from './links';
 import { ensureChain, publicClientFor, serverChainInfo, walletClientFor, WrongChainError, type ServerChain } from './network';
 import { connected } from './store';
 
@@ -68,16 +66,4 @@ export function txErrorText(error: Pick<DescribedError, 'name' | 'message' | 'ki
   const key = error.kind === 'rejected' ? 'tf.err.UserRejected' : `tf.err.${error.name ?? ''}`;
   const text = t(key as 'tf.err.NoWallet');
   return text === key ? error.message : text;
-}
-
-/** `sendWalletCall` with toasts for every outcome. Resolves to the hash or null. */
-export async function sendCallWithToasts(call: ContractCall, opts: SendOpts & { success?: string }): Promise<Hash | null> {
-  const res = await sendWalletCall(call, opts);
-  if (res.ok) {
-    const href = explorerTx(res.hash);
-    toast('success', opts.success ?? t('tx.confirmed'), href ? { href, label: t('tf.viewTx') } : undefined);
-    return res.hash;
-  }
-  toast(res.error.kind === 'rejected' ? 'warn' : 'error', `${t('tx.failed')}: ${txErrorText(res.error)}`, undefined, 7000);
-  return null;
 }

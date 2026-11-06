@@ -1,7 +1,8 @@
+import type { ShareService } from './site/shares';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { ELYSIUM_TESTNET_CHAIN_ID, PROTOCOL_VERSION } from '@elymum/shared';
+import { PROTOCOL_VERSION } from '@elymum/shared';
 import { checksumAddress, type Auth, type SiweOrigin } from './auth';
 import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
@@ -43,6 +44,8 @@ interface Ctx {
   site?: SiteApi;
   /** The NFT price keeper (its last outcome is shown to admins in `/api/config`). */
   priceKeeper?: PriceKeeper | null;
+  /** "Share on X" cards (`/share/<id>`, `/share/<id>.png`). */
+  shares?: ShareService;
   /** The per-IP limiter of every `/api/*` request (default 240 a minute); tests inject a larger one. */
   apiLimiter?: Limiter;
   /** Server log (unexpected errors of a request go here, never to the client). Default: console.error. */
@@ -79,11 +82,11 @@ export function publicBaseUrl(cfg: ServerConfig, req: IncomingMessage, _trustPro
 /**
  * SIWE origin of a login: the domain is the `PUBLIC_URL` host (the request host only in
  * development, as in `publicBaseUrl`); the URI is that base URL; the chain id is the server's
- * (`eth_chainId` of its RPC), or the Elysium testnet's while the chain is off.
+ * (`eth_chainId` of its RPC), or the configured `CHAIN_ID` while the chain is off.
  */
 export function siweOrigin(cfg: ServerConfig, req: IncomingMessage, _trustProxy: boolean | number, chainId: number | null): SiweOrigin {
   const uri = publicBaseUrl(cfg, req);
-  return { domain: new URL(uri).host, uri, chainId: chainId ?? ELYSIUM_TESTNET_CHAIN_ID };
+  return { domain: new URL(uri).host, uri, chainId: chainId ?? cfg.chain.chainId };
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -138,16 +141,49 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   return true;
 }
 
+/**
+ * The `Access-Control-Allow-Origin` answer for a request: `*` when `CORS_ORIGIN` is `*` (sessions are bearer
+ * tokens, never cookies, so no browser sends credentials either way), else the request's `Origin` when it is one
+ * of the comma-separated allowed origins, else nothing (the browser blocks the read).
+ */
+export function corsAllow(corsOrigin: string, origin: string | undefined): string | null {
+  const allowed = corsOrigin.split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
+  if (allowed.includes('*')) return '*';
+  return origin && allowed.includes(origin) ? origin : null;
+}
+
+/** Slow or idle HTTP clients (slowloris): headers within 15 s, the whole request within 30 s, idle keep-alive 5 s. */
+export const HTTP_TIMEOUTS = { headersMs: 15_000, requestMs: 30_000, keepAliveMs: 5_000, maxHeaders: 64 } as const;
+
+/** Public reads answered from a copy at most this old (a flood of them costs one build per period). */
+const MICRO_CACHE_MS = 1_000;
+
 export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
   const apiLimiter = ctx.apiLimiter ?? new Limiter(240, 60_000);
   const nonceLimiter = new Limiter(20, 60_000);
   const trustProxy = trustProxyHops();
+  const cached = new Map<string, { at: number; body: string }>();
+  /** A public JSON read, built at most once a second. */
+  const publicJson = (res: ServerResponse, key: string, build: () => unknown): void => {
+    const now = Date.now();
+    let hit = cached.get(key);
+    if (!hit || now - hit.at >= MICRO_CACHE_MS) {
+      hit = { at: now, body: JSON.stringify(build()) };
+      cached.set(key, hit);
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=1' });
+    res.end(hit.body);
+  };
 
-  return createServer(async (req, res) => {
+  // the request and header timeouts are enforced by a sweep every `connectionsCheckingInterval` (Node default 30 s)
+  const server = createServer({ connectionsCheckingInterval: 2_000 }, async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
-    res.setHeader('Access-Control-Allow-Origin', cfg.corsOrigin);
+    const allow = corsAllow(cfg.corsOrigin, req.headers.origin);
+    if (allow) res.setHeader('Access-Control-Allow-Origin', allow);
+    if (allow && allow !== '*') res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Max-Age', '600');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
@@ -170,10 +206,10 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
               game: ctx.rooms.pool ? { mode: 'workers', workers: ctx.rooms.pool.size, up: ctx.rooms.pool.threads().filter((t) => t.up).length } : { mode: 'single', workers: 0, up: 0 },
             });
           case '/api/rooms':
-            return json(res, 200, { rooms: ctx.rooms.list(), online: ctx.rooms.online(), blocked: ctx.rooms.blockedArenas() });
+            return publicJson(res, 'rooms', () => ({ rooms: ctx.rooms.list(), online: ctx.rooms.online(), blocked: ctx.rooms.blockedArenas() }));
           case '/api/leaderboard':
             // the standings: off-chain daily / all-time best scores, no prizes
-            return json(res, 200, ctx.leaderboards.snapshot());
+            return publicJson(res, 'leaderboard', () => ctx.leaderboards.snapshot());
           case '/api/config': {
             // `chain.tokenReady` false: practice only, arenas "opening soon" (the server picks the token up by itself)
             const body: Record<string, unknown> = { protocol: PROTOCOL_VERSION, chain: ctx.chain.status() };
@@ -212,20 +248,21 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             const changed = dev.devSetToken();
             return json(res, 200, { changed, chain: ctx.chain.status() });
           }
-          case '/api/dev/transfer': {
-            // DEV ONLY: the web's fake wallet "sends" a game-token transfer (a power-up purchase); answers its fake hash
+          case '/api/dev/pay': {
+            // DEV ONLY: the web's fake wallet "pays" a power-up pack (`ElymumArena.pay`); answers its fake hash
             const dev = cfg.devFakeChain ? (ctx.chain as Partial<DevFakeChainActions>) : null;
-            if (!dev?.devTransfer) return json(res, 404, { error: 'not found' });
+            if (!dev?.devPay) return json(res, 404, { error: 'not found' });
             if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
             const body = await readSmallJson(req);
             const value = typeof body?.value === 'string' && /^\d{1,40}$/.test(body.value) ? BigInt(body.value) : 0n;
-            const hash = dev.devTransfer(String(body?.from ?? ''), String(body?.to ?? ''), value);
+            const hash = dev.devPay(String(body?.from ?? ''), value, String(body?.ref ?? ''));
             return hash ? json(res, 200, { hash }) : json(res, 400, { error: 'bad_request' });
           }
           default:
             return json(res, 404, { error: 'not found' });
         }
       }
+      if (url.pathname.startsWith('/share/') && ctx.shares?.handle(req, res, url.pathname, ip)) return;
       if (cfg.webDist && (req.method === 'GET' || req.method === 'HEAD') && serveStatic(cfg.webDist, req, res, url.pathname)) return;
       if (url.pathname === '/') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -240,4 +277,9 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
       else res.end();
     }
   });
+  server.headersTimeout = HTTP_TIMEOUTS.headersMs;
+  server.requestTimeout = HTTP_TIMEOUTS.requestMs;
+  server.keepAliveTimeout = HTTP_TIMEOUTS.keepAliveMs;
+  server.maxHeadersCount = HTTP_TIMEOUTS.maxHeaders;
+  return server;
 }

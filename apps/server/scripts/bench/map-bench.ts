@@ -1,18 +1,20 @@
 /**
- * Adaptive map benchmark: CPU per tick of a full 100-player room (people with connections and
+ * Dynamic map benchmark: CPU per tick of a full 100-player room (people with connections and
  * snapshots, plus bots) on the auto-sized map, against the same room on a fixed arena preset,
  * and the cost of the resizes themselves.
  *   pnpm -F @elymum/server exec tsx scripts/bench/map-bench.ts [players] [humans] [seconds]
  *
  * `rooms` mode: several quiet rooms side by side in one process (the usual production load: a
- * handful of rooms of ~12 players, mostly bots), all ticked every 33 ms, on the new default curve
- * (every such room at 10000) and on the old one (perPlayer 900, min 3000, max 9000).
+ * handful of rooms of ~12 players, mostly bots), all ticked every 33 ms, on the default model
+ * (base 8000 + 40 per person) and on a small one (base 3000 + 60 per person).
  *   pnpm -F @elymum/server exec tsx scripts/bench/map-bench.ts rooms [rooms=6] [players=13] [humans=1] [seconds=20]
  *
  * The production server runs on a 0.5 CPU instance: a tick has 33 ms; read the numbers below
  * as roughly twice as slow there.
  */
-import { MAP_SCALE_DEFAULT, MAP_SPACE, OLD_MAP_SCALE_DEFAULT, TICK_MS, WORLD_PRESETS, worldForSide } from '@elymum/shared';
+import { MAP_SCALE_DEFAULT, MAP_SPACE, TICK_MS, WORLD_PRESETS, worldForSide, type MapScaleSettings } from '@elymum/shared';
+
+const SMALL: MapScaleSettings = { auto: true, base: 3000, perPlayer: 60, max: 9000 };
 import { World } from '../../src/game/world';
 import { runMapRoom } from '../../test/map-room';
 
@@ -25,8 +27,9 @@ if (process.argv[2] === 'rooms') {
   const humans = Number(process.argv[5] ?? 1);
   const seconds = Number(process.argv[6] ?? 20);
   console.log(`${rooms} rooms x ${players} players (${humans} with a connection, ${players - humans} bots) in one process, ${seconds} s measured; times are all rooms per tick\n`);
-  console.log(`new default (${MAP_SCALE_DEFAULT.perPlayer}/${MAP_SCALE_DEFAULT.min}/${MAP_SCALE_DEFAULT.max}): ${fmt(runMapRoom({ players, humans, seconds, rooms, map: { ...MAP_SCALE_DEFAULT } }))}`);
-  console.log(`old default (${OLD_MAP_SCALE_DEFAULT.perPlayer}/${OLD_MAP_SCALE_DEFAULT.min}/${OLD_MAP_SCALE_DEFAULT.max}): ${fmt(runMapRoom({ players, humans, seconds, rooms, map: { auto: true, ...OLD_MAP_SCALE_DEFAULT } }))}`);
+  const label = (m: MapScaleSettings) => `${m.base} + ${m.perPlayer}/person, max ${m.max}`;
+  console.log(`default (${label(MAP_SCALE_DEFAULT)}): ${fmt(runMapRoom({ players, humans, seconds, rooms, map: { ...MAP_SCALE_DEFAULT } }))}`);
+  console.log(`small   (${label(SMALL)}): ${fmt(runMapRoom({ players, humans, seconds, rooms, map: { ...SMALL } }))}`);
 } else {
   const players = Number(process.argv[2] ?? 100);
   const humans = Number(process.argv[3] ?? 40);

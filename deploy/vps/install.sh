@@ -181,6 +181,10 @@ net.ipv4.tcp_fin_timeout = 15
 net.ipv4.tcp_keepalive_time = 120
 net.ipv4.tcp_keepalive_intvl = 30
 net.ipv4.tcp_keepalive_probes = 4
+# SYN floods: answer with cookies once the backlog fills; drop spoofed sources
+net.ipv4.tcp_syncookies = 1
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.icmp_echo_ignore_broadcasts = 1
 vm.swappiness = 10
 CONF
 sysctl --system >/dev/null

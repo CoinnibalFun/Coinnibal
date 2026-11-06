@@ -12,7 +12,8 @@ import { loadConfig } from '../src/config';
 import { Limiter } from '../src/net/limiter';
 import { ProfileStore } from '../src/profiles';
 import { CONTRACTS_FILE } from '../src/site/contracts';
-import { EMBLEM_MOODS, emblemSvg, emblemTraits } from '../src/site/emblem';
+import { generateCollection, revealOffset, sha256Hex } from '../src/site/nft/generate';
+import { unrevealedSvg } from '../src/site/nft/unrevealed';
 import { ALLOWLIST_FILE, parseNftPath } from '../src/site/mint';
 import { SITE_FILES, SiteStore } from '../src/site/store';
 import { ADMIN, ARENA, FakeEvm, NFT, SERVER, TOKEN } from './fake-evm';
@@ -60,9 +61,6 @@ async function harness(env: Record<string, string> = {}, setupDir?: (dir: string
     PORT: '0',
     HOST: '127.0.0.1',
     DATA_DIR: dir,
-    BOT_TARGET: '2',
-    BOT_MIN: '0',
-    BOT_MAX: '2',
     ADMIN_WALLETS: ADMIN,
     PUBLIC_URL: 'https://elymum.example',
     ROUND_JOIN_CLOSE_SECONDS: '0',
@@ -262,9 +260,9 @@ describe('mint: allowlist, proofs, state, price', () => {
     expect(diff.diff.removed).toEqual([]);
   });
 
-  it('GET /api/site/mint: contract state, HYPE/USD, price in USD, holders, game access', async () => {
+  it('GET /api/site/mint: contract state, gas-token/USD, price in USD, holders, game access', async () => {
     h.evm.mint.phase = 1;
-    h.evm.mint.price = 25n * 10n ** 15n; // 0.025 HYPE at $40 = $1.00
+    h.evm.mint.price = 25n * 10n ** 15n; // 0.025 of the gas token at $40 = $1.00
     h.evm.mintNft(wallet(), 2);
     h.evm.mintNft(wallet(), 1);
     await h.app.mint.chainState(true);
@@ -273,7 +271,7 @@ describe('mint: allowlist, proofs, state, price', () => {
       nftAddress: NFT,
       chainId: 31337,
       contract: { phase: 'allowlist', priceWei: '25000000000000000', maxSupply: 1000, totalSupply: 3, keeper: '0x0000000000000000000000000000000000000000' },
-      hypeUsd: 40,
+      gasUsd: 40,
       priceUsd: 1,
       targetUsdCents: 100,
       holders: 2,
@@ -281,7 +279,7 @@ describe('mint: allowlist, proofs, state, price', () => {
       gameAccess: 'admins',
     });
     const q = (await h.call('GET', '/api/admin/mint/price', { wallet: ADMIN })).body;
-    expect(q).toMatchObject({ hypeUsd: 40, targetUsdCents: 100, priceWei: '25000000000000000' });
+    expect(q).toMatchObject({ gasUsd: 40, targetUsdCents: 100, priceWei: '25000000000000000' });
     expect(q.fetchedAt).toBeGreaterThan(0);
   });
 
@@ -298,15 +296,17 @@ describe('mint: allowlist, proofs, state, price', () => {
     expect((await h.call('GET', '/api/site/mint')).body.contract.phase).toBe(before === 'public' ? 'allowlist' : 'public');
   });
 
-  it('NFT metadata and the emblem SVG exist for minted ids only', async () => {
+  it('NFT metadata and the emblem SVG exist for minted ids only (sealed before the reveal)', async () => {
     const meta = await h.call('GET', '/api/nft/2');
     expect(meta.status).toBe(200);
     expect(meta.body).toMatchObject({ name: 'Elymum No. 2', image: 'https://elymum.example/api/nft/2.svg', external_url: 'https://elymum.example' });
-    expect(meta.body.attributes.map((a: { trait_type: string }) => a.trait_type)).toEqual(['Coin', 'Ring', 'Mood', 'Feet', 'Sweat']);
+    expect(meta.body.attributes).toEqual([{ trait_type: 'Status', value: 'Sealed' }]);
+    expect(meta.headers.get('cache-control')).toBe('public, max-age=60');
     const svg = await h.call('GET', '/api/nft/2.svg');
     expect(svg.status).toBe(200);
     expect(svg.headers.get('content-type')).toContain('image/svg+xml');
-    expect(svg.text).toBe(emblemSvg(2));
+    expect(svg.text).toBe(unrevealedSvg(2, 'vector'));
+    expect((await h.call('GET', '/api/nft/2.svg?style=pixel')).text).toBe(unrevealedSvg(2, 'pixel'));
     for (const missing of ['/api/nft/4', '/api/nft/4.svg', '/api/nft/0', '/api/nft/abc', '/api/nft/01.svg']) expect((await h.call('GET', missing)).status, missing).toBe(404);
     // a fresh mint shows up without waiting for the cache: even right after a read that predates it
     // (the mint page asks for the emblem the moment the receipt lands), past the 500 ms miss throttle
@@ -319,6 +319,7 @@ describe('mint: allowlist, proofs, state, price', () => {
     expect((await h.call('GET', '/api/nft/5000000')).status).toBe(404);
     const contract = (await h.call('GET', '/api/nft/contract')).body;
     expect(contract).toMatchObject({ name: 'Elymum', external_link: 'https://elymum.example', seller_fee_basis_points: 500, fee_recipient: ADMIN });
+    expect(contract.provenance_hash).toBe(h.app.nft.provenance().provenance);
     // royaltyInfo is cached (5 min): an unauthenticated route never turns every hit into an RPC call
     const calls = h.evm.royaltyCalls;
     for (let i = 0; i < 5; i++) expect((await h.call('GET', '/api/nft/contract')).body).toMatchObject({ seller_fee_basis_points: 500 });
@@ -331,24 +332,71 @@ describe('mint: allowlist, proofs, state, price', () => {
   }, 10_000);
 });
 
-describe('emblem', () => {
-  it('is deterministic per id, uses the palette and ink outlines, and says "No. <id>"', () => {
-    expect(emblemSvg(7)).toBe(emblemSvg(7));
-    expect(emblemSvg(7)).not.toBe(emblemSvg(8));
-    const svg = emblemSvg(123);
-    expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
-    expect(svg).toContain('No. 123');
-    expect(svg).toContain('stroke="#04181C" stroke-width="3"');
-    expect(svg).toMatch(/#2D7388|#34B7DD|#93D9EE|#F2C14E|#3C9A87/);
-    // every mood shows up over a range of ids, and the ring is never the coin's paint
-    const moods = new Set<string>();
-    for (let id = 1; id <= 300; id++) {
-      const t = emblemTraits(id);
-      moods.add(t.mood);
-      expect(t.ring).not.toBe(t.coin);
-    }
-    expect([...moods].sort()).toEqual([...EMBLEM_MOODS].sort());
-    expect(() => emblemTraits(0)).toThrow(RangeError);
+describe('emblem reveal (provenance, schedule, reveal) through the API', () => {
+  let h: Harness;
+  const SEED = '0x' + '5e'.repeat(32);
+  beforeAll(async () => {
+    h = await harness({ NFT_COLLECTION_SEED: SEED, NFT_COLLECTION_SIZE: '1000' });
+    h.app.contracts.set('nft', { address: NFT, txHash: null, chainId: 31337, registeredAt: 1, registeredBy: ADMIN });
+    for (let i = 0; i < 3; i++) h.evm.mintNft(wallet());
+  });
+  afterAll(async () => {
+    await h.app.close();
+  });
+
+  it('publishes the commitment, refuses an early reveal, then reveals verifiably', async () => {
+    const prov = (await h.call('GET', '/api/nft/provenance')).body;
+    const genomes = generateCollection(SEED, 1000);
+    expect(prov).toMatchObject({ size: 1000, seedHash: sha256Hex(SEED), revealed: false, seed: null, offset: null });
+    expect(prov.provenance).toMatch(/^0x[0-9a-f]{64}$/);
+    // the rarity table is public (aggregates only)
+    const rarity = (await h.call('GET', '/api/nft/rarity')).body;
+    expect(rarity.duplicates).toBe(0);
+    expect(rarity.tiers).toEqual(rarity.quotas);
+    // admin only; the mint must be closed first, and the block ahead
+    expect((await h.call('GET', '/api/admin/nft', { wallet: wallet() })).status).toBe(403);
+    expect((await h.call('POST', '/api/admin/nft/reveal', { wallet: ADMIN, body: {} })).body.error).toBe('wrong_state');
+    h.evm.mint.phase = 2;
+    h.evm.mint.phaseName = 'public';
+    const open = await h.call('POST', '/api/admin/nft/reveal/schedule', { wallet: ADMIN, body: {} });
+    expect(open.status).toBe(409);
+    expect(open.body.message).toMatch(/Close the mint/);
+    h.evm.mint.phase = 0;
+    h.evm.mint.phaseName = 'closed';
+    const past = await h.call('POST', '/api/admin/nft/reveal/schedule', { wallet: ADMIN, body: { block: Number(h.evm.block) } });
+    expect(past.status).toBe(400);
+    expect((await h.call('POST', '/api/admin/nft/reveal/schedule', { wallet: ADMIN, body: { block: 'soon' } })).status).toBe(400);
+    const sched = await h.call('POST', '/api/admin/nft/reveal/schedule', { wallet: ADMIN, body: {} });
+    expect(sched.status).toBe(200);
+    const target = BigInt(sched.body.revealBlock);
+    expect(target).toBe(h.evm.block + 50n);
+    // not mined yet
+    expect((await h.call('POST', '/api/admin/nft/reveal', { wallet: ADMIN, body: {} })).body.message).toMatch(/not mined/);
+    h.evm.block = target + 1n;
+    const rev = await h.call('POST', '/api/admin/nft/reveal', { wallet: ADMIN, body: {} });
+    expect(rev.status).toBe(200);
+    const hash = await h.evm.blockHash(target);
+    expect(rev.body).toMatchObject({ revealed: true, seed: SEED, blockHash: hash, offset: revealOffset(hash!, prov.provenance, 1000) });
+    // a second reveal is refused; the admin view shows the state
+    expect((await h.call('POST', '/api/admin/nft/reveal', { wallet: ADMIN, body: {} })).status).toBe(409);
+    const view = (await h.call('GET', '/api/admin/nft', { wallet: ADMIN })).body;
+    expect(view).toMatchObject({ style: 'vector', provenance: { revealed: true }, mint: { phase: 'closed', totalSupply: 3 } });
+    // token 2 now shows art (offset + 1) of the published order, in the OpenSea format
+    const g = genomes[(1 + rev.body.offset) % 1000];
+    const meta = await h.call('GET', '/api/nft/2');
+    expect(meta.headers.get('cache-control')).toBe('public, max-age=300');
+    expect(meta.body.image).toBe(`https://elymum.example/api/nft/2.svg?v=${target}`);
+    expect(meta.body.attributes[0]).toEqual({ trait_type: 'Tier', value: g.tier });
+    expect(meta.body.attributes.find((a: { trait_type: string }) => a.trait_type === 'Material').value).toBe(g.material);
+    const svg = await h.call('GET', '/api/nft/2.svg');
+    expect(svg.text).toBe(h.app.nft.svg(2));
+    expect(svg.text).not.toBe(unrevealedSvg(2, 'vector'));
+    expect((await h.call('GET', '/api/nft/2.svg?style=pixel')).text).toContain('shape-rendering="crispEdges"');
+  });
+});
+
+describe('nft paths', () => {
+  it('parses <id> and <id>.svg', () => {
     expect(parseNftPath('12.svg')).toEqual({ id: 12, svg: true });
     expect(parseNftPath('12')).toEqual({ id: 12, svg: false });
     expect(parseNftPath('-1')).toBeNull();

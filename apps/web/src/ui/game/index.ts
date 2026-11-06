@@ -3,6 +3,7 @@ export { GameHud } from './GameHud';
 export { DeathSheet } from './DeathSheet';
 export { RoundOverSheet, receiptNumbers, settlementFor, ROUND_SHEET_DELAY_MS } from './RoundOverSheet';
 export { RoundChip, RoundCountdown } from './RoundChip';
+export { RoomClosingNotice, RoomOverSheet } from './RoomClosing';
 export { HowToSheet, SettingsSheet } from './SettingsSheet';
 export { StandingsSheet } from './StandingsSheet';
 export { FirstPlayBrief } from './FirstPlayBrief';

@@ -7,7 +7,7 @@ import { t } from '../i18n';
 export type PayResult = { ok: true; hash: Hash } | { ok: false; message: string; rejected: boolean; hash: Hash | null };
 
 /**
- * Sends the room fee: one native HYPE transfer of exactly `wei` from the connected wallet to the
+ * Sends the room fee: one native gas-token transfer of exactly `wei` from the connected wallet to the
  * treasury `to`, on the server's chain (the wallet is switched first), and waits for its receipt.
  * On a DEV_FAKE_CHAIN server the transfer is simulated (the server accepts the fake hash).
  */
@@ -15,7 +15,7 @@ export async function payRoomFee(chain: ChainStatus, to: Address, wei: bigint, o
   if (isDevFake(chain)) {
     const fake = await loadDevFake();
     if (fake) {
-      const r = await fake.fakeHypePayment(wei, onPhase);
+      const r = await fake.fakeGasPayment(wei, onPhase);
       if (r.ok) return r;
       return { ok: false, rejected: r.name === 'UserRejected', hash: null, message: r.name === 'InsufficientFunds' ? t('api.roomFunds') : t('api.payFailed') };
     }

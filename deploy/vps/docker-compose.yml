@@ -30,6 +30,19 @@ services:
       HOST: 0.0.0.0
       TRUST_PROXY: "1"
       TRUST_PROXY_HOPS: "1"
+      # Robinhood Chain (the only network). Set here, not in .env, so the move from Elysium reaches the
+      # live server through git: these win over any older .env value. Mainnet later: CHAIN_ID 4663 and
+      # https://rpc.mainnet.chain.robinhood.com.
+      CHAIN_ID: "46630"
+      EVM_RPC_URL: https://rpc.testnet.chain.robinhood.com
+      # Elysium-era settings that must not carry over (empty = unset; the /admin registry decides)
+      PUBLIC_RPC_URL: ""
+      TESTNET_RPC_URL: ""
+      EXPLORER_URL: ""
+      ARENA_ADDRESS: ""
+      NFT_ADDRESS: ""
+      TOKEN_ADDRESS: ""
+      JOURNAL_ABANDON_CONTRACT: ""
       # forced maintenance (owner asked); comment this out again (and push) to hand control back to /admin
       GAME_ACCESS: maintenance
     volumes:
@@ -64,6 +77,9 @@ services:
       - "443:443/udp"
     environment:
       GAME_DOMAIN: ${GAME_DOMAIN:?set GAME_DOMAIN in /opt/elymum/.env}
+    # Caddyfile (players connect straight to this server) or Caddyfile.cloudflare (behind Cloudflare, README
+    # "Cloudflare in front"): CADDY_CONFIG in /opt/elymum/.env
+    command: ["caddy", "run", "--config", "/etc/caddy/${CADDY_CONFIG:-Caddyfile}", "--adapter", "caddyfile"]
     volumes:
       # the folder, not the file: a git update replaces the file and a file mount would keep the old one
       - ./caddy:/etc/caddy:ro

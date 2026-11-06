@@ -6,9 +6,10 @@
  * Run `pnpm admin help` for the command list. Parsing, the key loader and the status report live
  * in `admin-lib.ts`; validation and refusals in `ops.ts` (shared with the web admin panel). This
  * file does the RPC and the I/O. Safety rails: every transaction is previewed and simulated
- * before it is sent, `--dry-run` stops after the preview, Elysium mainnet needs `--mainnet` and a
+ * before it is sent, `--dry-run` stops after the preview, a mainnet needs `--mainnet` and a
  * typed confirmation, and `set-token` takes the address twice.
  */
+import { chainInfo, setActiveChain } from '@elymum/shared';
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { explorerAddressUrl, explorerTxUrl } from '@elymum/shared';
@@ -45,7 +46,10 @@ import {
   getTestTokenFaucet,
   getTokenInfo,
   setArenaHoldersOnlyCall,
-  setFeeBpsCall,
+  probeBurnSupport,
+  setBurnModeCall,
+  setFeeRatesCall,
+  setPaymentBurnBpsCall,
   setHolderPerksCall,
   setPausedCall,
   setServerAuthorityCall,
@@ -53,15 +57,14 @@ import {
   sweepArenaCall,
   testTokenSetFaucetCall,
   testTokenSetHolderNftCall,
-  testTokenSetMinterCall,
   updateArenaFrom,
   type ArenaConfig,
 } from './arena';
 import { describeCall, sendCall, simulateCall, type ContractCall } from './call';
-import { createElymumPublicClient, createElymumWalletClient, elysiumChain, isMainnetChain } from './chain';
-import { DEFAULT_HOLDER_FEE_BPS, MAX_FEE_BPS } from './constants';
+import { createElymumPublicClient, createElymumWalletClient, isMainnetChain, viemChain } from './chain';
+import { BPS, MAX_TOTAL_FEE_BPS, SUGGESTED_HOLDER_BURN_BPS, SUGGESTED_HOLDER_VAULT_BPS } from './constants';
 import { describeError } from './errors';
-import { formatBps, formatHypeAmount, formatTokenAmount } from './format';
+import { formatBps, formatGasAmount, formatTokenAmount } from './format';
 import { buildMerkleTree } from './merkle';
 import { deployNftParams, getMintState, getNftOwner, setMerkleRootCall, setPhaseCall, setPriceBoundsCall, setPriceCall, setPriceKeeperCall, withdrawCall } from './nft';
 import {
@@ -70,6 +73,7 @@ import {
   confirmTypedAddress,
   createArenaRefusal,
   fetchStatus,
+  feeRatesRefusal,
   holderPerksRefusal,
   holderPerksWarnings,
   holdersOnlyRefusal,
@@ -82,7 +86,7 @@ import {
   testTokenRefusal,
   updateArenaRefusal,
 } from './ops';
-import { fetchHypeUsd, usdCentsToWei } from './price';
+import { fetchGasUsd, usdCentsToWei } from './price';
 
 interface Ctx {
   url: string;
@@ -105,7 +109,7 @@ interface Ctx {
 
 async function confirmMainnet(ctx: Ctx): Promise<void> {
   if (!ctx.mainnet || ctx.confirmed) return;
-  if (!flag(ctx.opts, 'mainnet')) throw new UsageError(`chain ${ctx.chainId} is Elysium MAINNET: re-run with --mainnet to send real transactions`);
+  if (!flag(ctx.opts, 'mainnet')) throw new UsageError(`chain ${ctx.chainId} is a MAINNET: re-run with --mainnet to send real transactions`);
   if (!process.stdin.isTTY) throw new UsageError('mainnet transactions need an interactive terminal to confirm');
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
@@ -189,11 +193,11 @@ function requireToken(config: ArenaConfig): { token: Address; decimals: number }
   return { token: config.token, decimals: config.decimals };
 }
 
-async function hypeUsd(ctx: Ctx): Promise<string> {
-  const given = str(ctx.opts, 'hype-usd');
+async function gasUsd(ctx: Ctx): Promise<string> {
+  const given = str(ctx.opts, 'gas-usd');
   if (given) return given;
-  const { price } = await fetchHypeUsd({ url: process.env.HYPE_PRICE_URL || undefined });
-  console.log(`  HYPE/USD ${price} (Hyperliquid)`);
+  const { price } = await fetchGasUsd({ url: process.env.GAS_PRICE_URL || undefined });
+  console.log(`  ETH/USD ${price} (Hyperliquid info API)`);
   return price;
 }
 
@@ -239,7 +243,7 @@ async function cmdDeployNft(ctx: Ctx): Promise<void> {
   if (maxSupply === undefined) throw new UsageError('deploy-nft needs --max-supply N');
   let price = big(o, 'price-wei');
   const cents = int(o, 'usd-cents', 1, 1_000_000);
-  if (price === undefined && cents !== undefined) price = usdCentsToWei(cents, await hypeUsd(ctx));
+  if (price === undefined && cents !== undefined) price = usdCentsToWei(cents, await gasUsd(ctx));
   if (price === undefined) throw new UsageError('deploy-nft needs --price-wei N or --usd-cents N');
   const baseURI = required(o, 'base-uri', 'deploy-nft');
   const args = {
@@ -251,7 +255,7 @@ async function cmdDeployNft(ctx: Ctx): Promise<void> {
     baseURI,
     treasury: addressOpt(o, 'treasury') ?? owner,
   };
-  console.log(`  price ${formatHypeAmount(price)} per token`);
+  console.log(`  price ${formatGasAmount(price)} per token`);
   const address = await deploy(ctx, 'ElymumNFT', deployNftParams(args), ['owner', 'maxSupply', 'mintPrice', 'wlLimit', 'publicLimit', 'baseURI', 'treasury']);
   if (address) console.log(`  next: export NFT_ADDRESS=${address}  (and register it in /admin)`);
 }
@@ -317,11 +321,35 @@ async function cmdUpdateArena(ctx: Ctx): Promise<void> {
 }
 
 async function cmdFee(ctx: Ctx): Promise<void> {
-  const bps = int(ctx.opts, 'bps', 0, MAX_FEE_BPS);
-  if (bps === undefined) throw new UsageError(`fee needs --bps N (0..${MAX_FEE_BPS})`);
+  const burnBps = int(ctx.opts, 'burn-bps', 0, MAX_TOTAL_FEE_BPS);
+  const vaultBps = int(ctx.opts, 'vault-bps', 0, MAX_TOTAL_FEE_BPS);
+  if (burnBps === undefined || vaultBps === undefined) throw new UsageError(`fee needs --burn-bps N --vault-bps N (together at most ${MAX_TOTAL_FEE_BPS})`);
+  const refusal = feeRatesRefusal({ burnBps, vaultBps });
+  if (refusal) throw new UsageError(refusal);
   const config = await requireArenaOwner(ctx);
-  console.log(`  fee ${formatBps(config.feeBps)} → ${formatBps(bps)} (open tickets keep the rate they joined with)`);
-  await send(ctx, `fee set to ${formatBps(bps)}`, setFeeBpsCall(ctx.arena(), bps));
+  console.log(`  fee on profit ${formatBps(config.burnBps)} + ${formatBps(config.vaultBps)} → ${formatBps(burnBps)} burned + ${formatBps(vaultBps)} to the fee wallet (open tickets keep their rates)`);
+  await send(ctx, `fee on profit set to ${formatBps(burnBps)} + ${formatBps(vaultBps)}`, setFeeRatesCall(ctx.arena(), { burnBps, vaultBps }));
+}
+
+async function cmdBurnMode(ctx: Ctx): Promise<void> {
+  const mode = int(ctx.opts, 'mode', 0, 1);
+  if (mode === undefined) throw new UsageError('burn-mode needs --mode 0 (send to 0x…dEaD) or --mode 1 (the token\'s burn())');
+  const config = await requireArenaOwner(ctx);
+  if (mode === 1) {
+    const { token } = requireToken(config);
+    const ok = await probeBurnSupport(ctx.client, token, ctx.arena());
+    if (ok === false) throw new UsageError(`the token ${token} refuses burn(0) from the arena: it has no ERC20Burnable burn(), keep mode 0`);
+    console.log(ok ? '  the token answers burn(0): its burn() will be used (the arena checks every burn and falls back to 0x…dEaD)' : '  could not probe the token (RPC): the arena still falls back to 0x…dEaD if burn() fails');
+  }
+  await send(ctx, `burn mode ${mode}`, setBurnModeCall(ctx.arena(), mode));
+}
+
+async function cmdPaymentBurn(ctx: Ctx): Promise<void> {
+  const bps = int(ctx.opts, 'bps', 0, BPS);
+  if (bps === undefined) throw new UsageError(`payment-burn needs --bps N (0..${BPS})`);
+  const config = await requireArenaOwner(ctx);
+  console.log(`  power-up payments: ${formatBps(config.paymentBurnBps)} → ${formatBps(bps)} burned, the rest to the fee wallet`);
+  await send(ctx, `payment burn share set to ${formatBps(bps)}`, setPaymentBurnBpsCall(ctx.arena(), bps));
 }
 
 async function cmdPause(ctx: Ctx, paused: boolean): Promise<void> {
@@ -362,14 +390,18 @@ function optionalAddress(ctx: Ctx, name: string, cmd: string): Address | null {
 
 async function cmdHolderPerks(ctx: Ctx): Promise<void> {
   const nft = optionalAddress(ctx, 'nft', 'holder-perks');
-  const bps = int(ctx.opts, 'bps', 0, MAX_FEE_BPS) ?? (nft ? DEFAULT_HOLDER_FEE_BPS : 0);
+  const rates = {
+    burnBps: int(ctx.opts, 'burn-bps', 0, MAX_TOTAL_FEE_BPS) ?? SUGGESTED_HOLDER_BURN_BPS,
+    vaultBps: int(ctx.opts, 'vault-bps', 0, MAX_TOTAL_FEE_BPS) ?? SUGGESTED_HOLDER_VAULT_BPS,
+  };
   const config = await requireArenaOwner(ctx);
   const code = nft ? await ctx.client.getCode({ address: nft }) : undefined;
-  const refusal = holderPerksRefusal(nft, !!code && code !== '0x', bps);
+  const refusal = holderPerksRefusal(nft, !!code && code !== '0x', rates);
   if (refusal) throw new UsageError(refusal);
   const arenas = await Promise.all((await getArenaIds(ctx.client, ctx.arena())).map((id) => getArena(ctx.client, ctx.arena(), id)));
-  for (const w of holderPerksWarnings({ nft, holderFeeBps: bps, feeBps: config.feeBps, holdersOnlyIds: arenas.filter((a) => a.holdersOnly).map((a) => a.id) })) console.log(`! ${w}`);
-  await send(ctx, nft ? `holder perks: holders of ${nft} pay ${formatBps(Math.min(bps, config.feeBps))}` : 'holder perks off', setHolderPerksCall(ctx.arena(), nft, bps));
+  const normal = { burnBps: config.burnBps, vaultBps: config.vaultBps };
+  for (const w of holderPerksWarnings({ nft, holder: rates, normal, holdersOnlyIds: arenas.filter((a) => a.holdersOnly).map((a) => a.id) })) console.log(`! ${w}`);
+  await send(ctx, nft ? `holder perks: holders of ${nft} pay ${formatBps(rates.burnBps)} + ${formatBps(rates.vaultBps)} of the profit (when lower)` : 'holder perks off', setHolderPerksCall(ctx.arena(), nft, rates));
 }
 
 async function cmdHoldersOnly(ctx: Ctx): Promise<void> {
@@ -398,14 +430,6 @@ async function requireTestTokenOwner(ctx: Ctx): Promise<Address> {
   const ownerErr = ownerRefusal(owner, ctx.account().address, 'TestToken');
   if (ownerErr) throw new UsageError(ownerErr);
   return token;
-}
-
-async function cmdTokenMinter(ctx: Ctx): Promise<void> {
-  const minter = addressOpt(ctx.opts, 'address');
-  if (!minter) throw new UsageError('token:minter needs --address <addr>');
-  const allowed = bool(ctx.opts, 'allowed') ?? true;
-  const token = await requireTestTokenOwner(ctx);
-  await send(ctx, `${minter} ${allowed ? 'may now mint' : 'may no longer mint'}`, testTokenSetMinterCall(token, minter, allowed));
 }
 
 async function cmdTokenHolderNft(ctx: Ctx): Promise<void> {
@@ -460,12 +484,12 @@ async function cmdNftRoot(ctx: Ctx): Promise<void> {
 async function cmdNftPrice(ctx: Ctx): Promise<void> {
   let wei = big(ctx.opts, 'wei');
   const cents = int(ctx.opts, 'usd-cents', 1, 1_000_000);
-  if (wei === undefined && cents !== undefined) wei = usdCentsToWei(cents, await hypeUsd(ctx));
+  if (wei === undefined && cents !== undefined) wei = usdCentsToWei(cents, await gasUsd(ctx));
   if (wei === undefined) throw new UsageError('nft:price needs --usd-cents N or --wei N');
   const nft = await requireNftOwner(ctx);
   const state = await getMintState(ctx.client, nft);
-  console.log(`  price ${formatHypeAmount(state.price)} → ${formatHypeAmount(wei)}`);
-  await send(ctx, `price set to ${formatHypeAmount(wei)}`, setPriceCall(nft, wei));
+  console.log(`  price ${formatGasAmount(state.price)} → ${formatGasAmount(wei)}`);
+  await send(ctx, `price set to ${formatGasAmount(wei)}`, setPriceCall(nft, wei));
 }
 
 async function cmdNftKeeper(ctx: Ctx): Promise<void> {
@@ -483,14 +507,14 @@ async function cmdNftBounds(ctx: Ctx): Promise<void> {
   const minC = int(ctx.opts, 'min-usd-cents', 1, 1_000_000);
   const maxC = int(ctx.opts, 'max-usd-cents', 1, 1_000_000);
   if ((min === undefined || max === undefined) && minC !== undefined && maxC !== undefined) {
-    const p = await hypeUsd(ctx);
+    const p = await gasUsd(ctx);
     min = usdCentsToWei(minC, p);
     max = usdCentsToWei(maxC, p);
   }
   if (min === undefined || max === undefined) throw new UsageError('nft:bounds needs --min-wei and --max-wei (or --min-usd-cents and --max-usd-cents)');
   if (min > max) throw new UsageError('the minimum is above the maximum');
   const nft = await requireNftOwner(ctx);
-  console.log(`  keeper bounds ${formatHypeAmount(min)} .. ${formatHypeAmount(max)}`);
+  console.log(`  keeper bounds ${formatGasAmount(min)} .. ${formatGasAmount(max)}`);
   await send(ctx, 'price bounds set', setPriceBoundsCall(nft, min, max));
 }
 
@@ -498,11 +522,11 @@ async function cmdNftWithdraw(ctx: Ctx): Promise<void> {
   const nft = await requireNftOwner(ctx);
   const [state, balance] = await Promise.all([getMintState(ctx.client, nft), ctx.client.getBalance({ address: nft })]);
   if (balance === 0n) {
-    console.log('the NFT contract holds no HYPE: nothing to withdraw');
+    console.log('the NFT contract holds no gas token: nothing to withdraw');
     return;
   }
-  console.log(`  ${formatHypeAmount(balance)} → treasury ${state.treasury}`);
-  await send(ctx, `withdrew ${formatHypeAmount(balance)} to the treasury`, withdrawCall(nft));
+  console.log(`  ${formatGasAmount(balance)} → treasury ${state.treasury}`);
+  await send(ctx, `withdrew ${formatGasAmount(balance)} to the treasury`, withdrawCall(nft));
 }
 
 /* -------------------------------------------------------------------- */
@@ -535,7 +559,10 @@ async function main(argv: string[]): Promise<number> {
     url = str(opts, 'rpc') ?? process.env.EVM_RPC_URL ?? 'http://127.0.0.1:8545';
     const probe = createElymumPublicClient(url);
     const chainId = await probe.getChainId();
-    const chain = elysiumChain(chainId, { name: process.env.CHAIN_NAME, explorerUrl: process.env.EXPLORER_URL, rpcUrl: url });
+    // Robinhood Chain only: an RPC of any other chain is refused here (chainInfo throws)
+    const overrides = { explorerUrl: process.env.EXPLORER_URL, rpcUrl: url };
+    setActiveChain(chainInfo(chainId, overrides));
+    const chain = viemChain(chainId, overrides);
     const client = createElymumPublicClient(url, chain);
     let account: PrivateKeyAccount | null = null;
     let wallet: WalletClient | null = null;
@@ -560,7 +587,7 @@ async function main(argv: string[]): Promise<number> {
       nft: envAddress(opts, 'nft', 'NFT_ADDRESS'),
       confirmed: false,
     };
-    if (ctx.mainnet) console.log(`! Elysium MAINNET (chain id ${chainId})`);
+    if (ctx.mainnet) console.log(`! MAINNET (chain id ${chainId})`);
 
     const commands: Record<string, () => Promise<void>> = {
       status: () => cmdStatus(ctx),
@@ -571,13 +598,14 @@ async function main(argv: string[]): Promise<number> {
       'create-arena': () => cmdCreateArena(ctx),
       'update-arena': () => cmdUpdateArena(ctx),
       fee: () => cmdFee(ctx),
+      'burn-mode': () => cmdBurnMode(ctx),
+      'payment-burn': () => cmdPaymentBurn(ctx),
       pause: () => cmdPause(ctx, true),
       unpause: () => cmdPause(ctx, false),
       'server-key': () => cmdServerKey(ctx),
       'sweep-arena': () => cmdSweepArena(ctx),
       'holder-perks': () => cmdHolderPerks(ctx),
       'holders-only': () => cmdHoldersOnly(ctx),
-      'token:minter': () => cmdTokenMinter(ctx),
       'token:holder-nft': () => cmdTokenHolderNft(ctx),
       'token:faucet': () => cmdTokenFaucet(ctx),
       'nft:phase': () => cmdNftPhase(ctx, positional),

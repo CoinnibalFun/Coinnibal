@@ -1,9 +1,19 @@
 import type { ClientInput, MapScaleSettings, RoomInfo, ServerMessage } from '@elymum/shared';
-import type { BotManagerOptions } from '../bots/manager';
 import type { Player } from '../game/entities';
 import type { Conn } from '../net/conn';
 import type { JoinOptions, RoomOptions } from './room';
 import type { ViewState } from './visibility';
+
+/** How a player looks on a share card (`share.ts`): what the room tells the main thread about a game's player. */
+export interface PlayerLook {
+  name: string;
+  skin: number;
+  country: string | null;
+  /** `PlayerFlag` bits (the emblem holder's badge). */
+  flags: number;
+}
+
+export const lookOf = (p: Pick<Player, 'name' | 'skin' | 'country' | 'flags'>): PlayerLook => ({ name: p.name, skin: p.skin, country: p.country, flags: p.flags });
 
 /**
  * What a `Room` needs of a connection. The main thread's `Conn` (a WebSocket) is one; inside a
@@ -71,11 +81,13 @@ export interface RoomHandle extends RoomConnRoom {
   /** Current world side. */
   mapSide(): number;
   mapScale(): MapScaleSettings | null;
-  botCounts(): { humans: number; bots: number; stakedBots: number };
-  setBotOptions(opts: BotManagerOptions): void;
+  /** People and practice bots in the room. */
+  botCounts(): { humans: number; bots: number };
   setMapScale(scale: MapScaleSettings): void;
   clearAvatar(wallet: string): number;
   announce(text: string): void;
+  /** A custom room closes at `endsAt` (server clock): the countdown for everyone in it (`closing`). */
+  closingSoon(endsAt: number, message: string): void;
   sendBoosts(conn: Conn): void;
   join(conn: Conn, opts: JoinOptions): unknown;
   /** A remote room answers asynchronously (the worker decides). */

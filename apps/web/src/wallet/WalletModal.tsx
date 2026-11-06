@@ -1,4 +1,4 @@
-import { formatHypeAmount } from '@elymum/sdk';
+import { formatGasAmount } from '@elymum/sdk';
 import { useState } from 'react';
 import { Button, Chip, CoinCharacter, Icon, Sheet, WalletPicker } from '../design';
 import { useT } from '../i18n';
@@ -15,7 +15,7 @@ import { describeError } from '@elymum/sdk';
 
 /**
  * Wallet sheet. Disconnected: the EVM wallets found in the browser (EIP-6963: MetaMask, Rabby or
- * any browser wallet). Connected: address, $ELYMUM and HYPE balances, the network (with a switch
+ * any browser wallet). Connected: address, $ELYMUM and gas-token balances, the network (with a switch
  * when the wallet is on another chain), the free sign-in signature, explorer and disconnect.
  */
 export function WalletModal() {
@@ -150,7 +150,7 @@ export function WalletModal() {
           <div>
             <dt className="mono wl-cap">{t('wl.hype')}</dt>
             <dd>
-              <span className="wl-bal__mid num">{wei === null ? '…' : formatHypeAmount(wei, 4)}</span>
+              <span className="wl-bal__mid num">{wei === null ? '…' : formatGasAmount(wei, 4)}</span>
             </dd>
           </div>
           <div>

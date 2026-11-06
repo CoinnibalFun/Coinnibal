@@ -24,9 +24,9 @@ function fakeConn(wallet: string): Conn & { msgs: ServerMessage[] } {
   return conn;
 }
 
-function arena(bots: number): Room {
+function arena(): Room {
   return new Room(
-    { id: 'stake-1', mode: 'arena', name: 'Arena', maxPlayers: 50, bots: { target: bots, min: bots, max: bots }, stake: { arenaId: 3, buyIn: FEE }, seed: 7 },
+    { id: 'stake-1', mode: 'arena', name: 'Arena', maxPlayers: 50, stake: { arenaId: 3, buyIn: FEE }, seed: 7 },
     // a fixed wall clock mid-round: no round end during the test
     { chain: new NullChain(), journal: new Journal(null), leaderboards: new Leaderboards(null), log: () => {}, now: () => 1_791_000_060_000 },
   );
@@ -61,30 +61,27 @@ function feed(room: Room, eater: Player, victim: Player): void {
 
 describe('arena death stats (the death sheet)', () => {
   it('a staker eaten by a staker reports the value lost (it went to the eater, nothing spilled)', () => {
-    const room = arena(0);
+    const room = arena();
     const a = staker(room, 1);
     const b = staker(room, 2);
     feed(room, a.p, b.p);
     const death = b.conn.msgs.find((m) => m.t === 'death');
     expect(death?.t).toBe('death');
     if (death?.t !== 'death') return;
-    expect(death.stats).toMatchObject({ payout: 0, valueLost: FEE, lootSpilled: 0, byBot: false });
+    expect(death.stats).toMatchObject({ payout: 0, valueLost: FEE, lootSpilled: 0 });
     expect(death.killer).toBe('staker1');
     expect(room.ledger!.value(a.p.id)).toBe(2 * FEE);
   });
 
-  it('a staker eaten by a house bot reports the value lost (the bot keeps it, nothing spills)', () => {
-    const room = arena(1);
+  it('a staker eaten by something without a ticket spills the share as floor loot (the safety path)', () => {
+    const room = arena();
     const b = staker(room, 2);
-    for (let i = 0; i < 600 && room.world.players.size < 2; i++) room.tick(TICK_MS); // the first bot walks in
-    const bot = [...room.world.players.values()].find((p) => room.bots!.isBot(p.id))!;
-    expect(bot).toBeDefined();
-    bot.shieldUntil = 0;
-    feed(room, bot, b.p);
+    // nothing without a ticket plays an arena; the rule still holds if it ever did
+    const stray = room.world.addPlayer({ name: 'stray', skin: 0, spawnShield: false });
+    feed(room, stray, b.p);
     const death = b.conn.msgs.find((m) => m.t === 'death');
     if (death?.t !== 'death') throw new Error('no death message');
-    expect(death.stats).toMatchObject({ payout: 0, valueLost: FEE, lootSpilled: 0, byBot: true });
-    expect(room.world.loot()).toEqual([]);
-    expect(room.purseOf(bot.id)).toBe(FEE);
+    expect(death.stats).toMatchObject({ payout: 0, valueLost: FEE, lootSpilled: FEE });
+    expect(room.lootValue()).toBe(FEE);
   });
 });

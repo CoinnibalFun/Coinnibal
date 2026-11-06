@@ -12,9 +12,9 @@ import {
   type ServerMessage,
 } from '../src';
 
-describe('protocol v11 constants', () => {
-  it('pins the wire values (v6: isBot on player-facing messages, feed left lines; v7: avatar ids; v8: map bounds; v9: countries; v10: the flag skin; v11: leap / invisibility, emoji emotes)', () => {
-    expect(PROTOCOL_VERSION).toBe(11);
+describe('protocol constants', () => {
+  it('pins the wire values (v6: isBot on player-facing messages, feed left lines; v7: avatar ids; v8: map bounds; v9: countries; v10: the flag skin; v11: leap / invisibility, emoji emotes; v13: final boards, the closing countdown, share cards)', () => {
+    expect(PROTOCOL_VERSION).toBe(13);
     expect(EntityKind.Loot).toBe(6);
     expect(PlayerFlag).toEqual({ Bot: 1, Verified: 2, Staker: 4, Holder: 8, Avatar: 16, Country: 32, FlagSkin: 64 });
   });
@@ -70,8 +70,8 @@ describe('v2 message shapes', () => {
   it('type-checks the lobby and chain payloads', () => {
     const chain: ChainStatus = {
       enabled: true,
-      chainId: 99801,
-      chainName: 'Elysium Testnet',
+      chainId: 46630,
+      chainName: 'Robinhood Chain Testnet',
       rpcUrl: 'https://testnet-rpc.elysium.kinetiq.xyz',
       explorerUrl: 'https://explorer-elysium-testnet.t.conduit.xyz',
       arenaAddress: '0x1111111111111111111111111111111111111111',
@@ -79,12 +79,16 @@ describe('v2 message shapes', () => {
       arenasEnabled: true,
       tokenReady: true,
       token: { address: '0x2222222222222222222222222222222222222222', symbol: '$ELYMUM', decimals: 18 },
-      feeBps: 500,
+      testnet: true,
+      faucetUrl: null,
+      fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 0, holderPerks: true, paymentBurnBps: 5000, burnMode: 0 },
       serverKey: '0x3333333333333333333333333333333333333333',
     };
     // deployed and initialized, token not set yet: practice only, arenas "opening soon"
     const opening: ChainStatus = { ...chain, arenasEnabled: false, tokenReady: false, token: null };
-    const offline: ChainStatus = { ...chain, enabled: false, arenasEnabled: false, tokenReady: false, token: null, feeBps: null };
+    const offline: ChainStatus = { ...chain, enabled: false, arenasEnabled: false, tokenReady: false, token: null, fees: null };
+    // @ts-expect-error the fee-on-entry model of arena v2 is gone
+    const v2: ChainStatus = { ...chain, feeBps: 500, feeModel: 'entry' };
     // @ts-expect-error the Pass status is gone
     const pass: ChainStatus = { ...chain, pass: null };
     // @ts-expect-error seasons are gone
@@ -143,7 +147,7 @@ describe('v2 message shapes', () => {
       { t: 'value', value: 750, delta: -750, reason: 'spill' },
       {
         t: 'death',
-        stats: { aliveMs: 1, finalMass: 1, maxMass: 1, foodEaten: 0, cellsEaten: 0, playersEaten: 0, bestRank: 1, valueLost: 1500, byBot: true, lootSpilled: 1500 },
+        stats: { aliveMs: 1, finalMass: 1, maxMass: 1, foodEaten: 0, cellsEaten: 0, playersEaten: 0, bestRank: 1, valueLost: 1500, lootSpilled: 1500 },
         killer: 'Bot',
         killerSkin: 1,
       },

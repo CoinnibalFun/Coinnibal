@@ -15,78 +15,42 @@ export function mulBps(amount: IntLike, bps: number): bigint {
   return (toBigInt(amount) * BigInt(bps)) / BigInt(BPS);
 }
 
-/**
- * The arena contract's fee rule. `2` (the bundled ElymumArena): the fee is `feeBps` of the ENTRY FEE of every
- * played ticket, whatever the result; the ticket plays `entryFee − fee` and a payout is paid in full. `1`
- * (legacy, still live on the testnet until it is redeployed): the fee is `feeBps` of the profit at `settle`.
- */
-export type ArenaFeeVersion = 1 | 2;
-
-/** How a settled ticket's money is split (base units of the game token). */
+/** How a settled ticket's payout is split (base units of the game token). */
 export interface PayoutSplit {
-  /** The fee, paid in full to the fee wallet (v2: the entry fee's cut; v1: the cut of the profit). */
-  fee: bigint;
-  /** What the player receives (v2: the whole payout; v1: `payout - fee`). */
-  player: bigint;
+  /** `max(0, payout - entryFee)`. */
+  profit: bigint;
+  /** Burned (`burnBps` of the profit). */
+  burned: bigint;
+  /** Sent to the fee wallet (`vaultBps` of the profit). */
+  toVault: bigint;
+  /** What the player receives: `payout - burned - toVault`. */
+  net: bigint;
 }
 
 function checkU128(name: string, v: bigint): void {
   if (v < 0n || v > MAX_UINT128) throw new RangeError(`${name} must be a uint128, got ${v}`);
 }
 
-function checkFeeBps(feeBps: number): void {
-  if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 0xffff) throw new RangeError(`feeBps must be a uint16, got ${feeBps}`);
+function checkRate(name: string, bps: number): void {
+  if (!Number.isInteger(bps) || bps < 0 || bps > 0xffff) throw new RangeError(`${name} must be a uint16, got ${bps}`);
 }
 
 /**
- * `ElymumArena.computeFee` (v2) exactly: the fee of a ticket, `floor(entryFee × feeBps / 10 000)`.
- * Throws `RangeError` where the contract could not run (a value outside uint128, `feeBps` not a uint16).
+ * `ElymumArena.computeFees` exactly: the fee is taken from the profit only, each share rounded down. Pass the
+ * session's own rates (fixed at join) for a settlement, the config's for a preview. Throws `RangeError` where the
+ * contract could not run (a value outside uint128, a rate outside uint16).
  */
-export function computeEntryFee(entryFee: IntLike, feeBps: number): bigint {
+export function settlementSplit(entryFee: IntLike, payout: IntLike, rates: { burnBps: number; vaultBps: number }): PayoutSplit {
   const e = toBigInt(entryFee);
-  checkU128('entryFee', e);
-  checkFeeBps(feeBps);
-  return (e * BigInt(feeBps)) / BigInt(BPS);
-}
-
-/**
- * What a ticket plays with (base units): `entryFee − computeEntryFee(entryFee, feeBps)` on a v2 arena, the
- * whole entry fee on a v1 arena (which took its fee from the profit instead).
- */
-export function ticketValue(entryFee: IntLike, feeBps: number, version: ArenaFeeVersion = 2): bigint {
-  const e = toBigInt(entryFee);
-  return version === 1 ? e : e - computeEntryFee(e, feeBps);
-}
-
-/**
- * Legacy v1 arena (`computeFee(payout, entryFee, feeBps)` there): `floor((payout − entryFee)⁺ × feeBps / 10 000)`.
- * Throws `RangeError` where the contract could not run.
- */
-export function computeProfitFee(payout: IntLike, entryFee: IntLike, feeBps: number): bigint {
   const p = toBigInt(payout);
-  const e = toBigInt(entryFee);
-  checkU128('payout', p);
   checkU128('entryFee', e);
-  checkFeeBps(feeBps);
-  if (p <= e) return 0n;
-  return ((p - e) * BigInt(feeBps)) / BigInt(BPS);
-}
-
-/**
- * Mirrors `settle` exactly. v2 (default): `fee = computeEntryFee(entryFee, feeBps)` (reserved at join),
- * `player = payout`. v1: `fee = computeProfitFee(payout, entryFee, feeBps)`, `player = payout − fee`.
- *
- * For a settlement pass the session's own `feeBps` (fixed at join), not the config's current
- * rate; for a preview of a ticket not bought yet pass the config's `feeBps`.
- */
-export function splitPayout(payout: IntLike, entryFee: IntLike, feeBps: number, version: ArenaFeeVersion = 2): PayoutSplit {
-  const p = toBigInt(payout);
   checkU128('payout', p);
-  if (version === 1) {
-    const fee = computeProfitFee(p, entryFee, feeBps);
-    return { fee, player: p - fee };
-  }
-  return { fee: computeEntryFee(entryFee, feeBps), player: p };
+  checkRate('burnBps', rates.burnBps);
+  checkRate('vaultBps', rates.vaultBps);
+  const profit = p > e ? p - e : 0n;
+  const burned = mulBps(profit, rates.burnBps);
+  const toVault = mulBps(profit, rates.vaultBps);
+  return { profit, burned, toVault, net: p - burned - toVault };
 }
 
 /* -------------------------------------------------------------------- */

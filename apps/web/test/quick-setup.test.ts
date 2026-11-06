@@ -8,26 +8,33 @@ const KEY = '0xabec7B8ed9b87989106f6d0510ec9Dd9DEE0a1FC';
 
 function ctx(over: Record<string, unknown> = {}) {
   const status = {
-    arena: { address: ARENA, config: { admin: '0x08b2b32E932D5f429073a441E6eFd8e3D42369b2', serverAuthority: KEY, token: null, feeBps: 500, holderNft: null }, token: null, arenas: [] },
+    arena: { address: ARENA, config: { admin: '0x08b2b32E932D5f429073a441E6eFd8e3D42369b2', serverAuthority: KEY, token: null, burnBps: 1500, vaultBps: 500, holderNft: null }, token: null, arenas: [] },
     nft: { address: NFT, state: { phaseName: 'closed' } },
-    testToken: { address: TOKEN, serverIsMinter: false, faucet: { holderNft: null } },
+    testToken: { address: TOKEN, faucet: { holderNft: null } },
     ...over,
   };
-  return { status, net: { serverKey: KEY, mainnet: false } } as never;
+  return { status } as never;
 }
 
 describe('finish setup', () => {
   it('lists every missing owner step in order on a fresh testnet deploy', () => {
     const ids = setupSteps(ctx(), { openMint: true }).map((s) => s.id);
-    expect(ids).toEqual(['token', 'arena-1', 'arena-2', 'arena-3', 'arena-4', 'minter', 'faucet-nft', 'perks', 'holders-4', 'mint']);
+    // nothing grants the server key a mint: it never mints
+    expect(ids).toEqual(['token', 'arena-1', 'arena-2', 'arena-3', 'arena-4', 'faucet-nft', 'perks', 'holders-4', 'mint']);
+  });
+
+  it('suggests the holder pair 15 % + 0 % of profit (the fee wallet share waived), against the arena\'s normal pair', () => {
+    const perks = setupSteps(ctx(), { openMint: true }).find((s) => s.id === 'perks')!;
+    expect(perks.label).toBe('Emblem holders pay 15 % of profit instead of 20 %');
+    expect(perks.call).toMatchObject({ functionName: 'setHolderPerks', args: [expect.stringMatching(/^0x/i), 1500, 0] });
   });
 
   it('leaves out what is already done on chain', () => {
     const arenas = [1, 2, 3, 4].map((id) => ({ id, exists: true, holdersOnly: id === 4 }));
     const c = ctx({
-      arena: { address: ARENA, config: { admin: '0x08b2b32E932D5f429073a441E6eFd8e3D42369b2', serverAuthority: KEY, token: TOKEN, feeBps: 500, holderNft: NFT }, token: { decimals: 18 }, arenas },
+      arena: { address: ARENA, config: { admin: '0x08b2b32E932D5f429073a441E6eFd8e3D42369b2', serverAuthority: KEY, token: TOKEN, burnBps: 1500, vaultBps: 500, holderNft: NFT }, token: { decimals: 18 }, arenas },
       nft: { address: NFT, state: { phaseName: 'public' } },
-      testToken: { address: TOKEN, serverIsMinter: true, faucet: { holderNft: NFT } },
+      testToken: { address: TOKEN, faucet: { holderNft: NFT } },
     });
     expect(setupSteps(c, { openMint: true })).toEqual([]);
   });

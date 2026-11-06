@@ -1,3 +1,4 @@
+import { GAS_SYMBOL } from '@elymum/shared';
 import { createArenaCall, deployArenaParams, deployNftParams, deployTestTokenParams, faucetCall, testTokenArtifact } from '@elymum/sdk';
 import { checkDeployedCode, confirmTypedAddress, planDefaultArenas, setTokenRefusal, testTokenRefusal, arenaName, fmtTok } from '@elymum/sdk/ops';
 import { setTokenCall } from '@elymum/sdk';
@@ -289,17 +290,17 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
   const [form, setForm] = useState<NftForm>(() => defaultNftForm(location.origin, null, ctx.me));
   const [quote, setQuote] = useState<string | null>(null);
   const [err, guard, setErr] = useFormError();
-  // the $1 price in wei from the server (HYPE/USD from Hyperliquid)
+  // the $1 price in wei from the server (the gas token's USD price feed)
   useEffect(() => {
     if (!ctx.api) return;
     let live = true;
     ctx.api.mintPrice().then(
       (q) => {
         if (!live || !q.priceWei) return;
-        setQuote(q.hypeUsd !== null ? `HYPE = $${q.hypeUsd}` : null);
-        setForm((f) => (f.priceHype ? f : defaultNftForm(location.origin, q.priceWei, ctx.me)));
+        setQuote(q.gasUsd !== null ? `${GAS_SYMBOL} = $${q.gasUsd}` : null);
+        setForm((f) => (f.priceGas ? f : defaultNftForm(location.origin, q.priceWei, ctx.me)));
       },
-      (e: Error) => live && setErr(`The $1 price could not be read (${e.message}); enter a HYPE price.`),
+      (e: Error) => live && setErr(`The $1 price could not be read (${e.message}); enter a price in ${GAS_SYMBOL}.`),
     );
     return () => {
       live = false;
@@ -313,7 +314,7 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
     <Card title="Deploy ElymumNFT" id="deploy-nft" kicker={kicker} lede="The emblem contract. Everything below goes into its constructor; most of it can be changed later from Mint.">
       <div className="ad-form ad-form--grid">
         <Input label="Max supply" value={form.maxSupply} onChange={set('maxSupply')} />
-        <Input label="Mint price (HYPE)" suffix="HYPE" value={form.priceHype} onChange={set('priceHype')} hint={quote ? `$1 at ${quote}` : 'From /api/admin/mint/price'} />
+        <Input label={`Mint price (${GAS_SYMBOL})`} suffix={GAS_SYMBOL} value={form.priceGas} onChange={set('priceGas')} hint={quote ? `$1 at ${quote}` : 'From /api/admin/mint/price'} />
         <Input label="Allowlist limit per wallet" value={form.wlLimit} onChange={set('wlLimit')} />
         <Input label="Public limit per wallet" value={form.publicLimit} onChange={set('publicLimit')} />
       </div>

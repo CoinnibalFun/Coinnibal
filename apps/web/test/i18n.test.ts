@@ -1,10 +1,13 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { EMOTES, PowerUpType } from '@elymum/shared';
+import { EMOTES, PowerUpType, activeChain, chainInfo, setActiveChain } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
-import { detectLocale, formatMessage, getLocale, initLocale, LOCALES, loadLocale, setLocale, translate, type Dict, type Locale, type TKey } from '../src/i18n';
+import { detectLocale, formatMessage, getLocale, initLocale, LOCALES, loadLocale, refreshChainText, setLocale, translate, type Dict, type Locale, type TKey } from '../src/i18n';
 import { renderRich } from '../src/i18n/rich';
 import { en } from '../src/i18n/en';
+import { BUILD_CHAIN_ID } from '../src/chainText';
+import { useUi } from '../src/store';
+import { chainStatus } from './evm-helpers';
 
 // vitest runs in apps/web (pnpm -r / -F run each package in its own directory)
 const SRC = resolve(process.cwd(), 'src');
@@ -63,6 +66,52 @@ describe('the English string table', () => {
   it('fills placeholders and leaves unknown keys readable', () => {
     expect(translate('lo.onFloor', { n: '84,200', sym: '$ELYMUM' })).toBe('84,200 $ELYMUM on the floor');
     expect(translate('nope.missing' as TKey)).toBe('nope.missing');
+  });
+
+  it('names the network only through {chain} (testnet or mainnet) and the gas token as ETH, in every language', async () => {
+    const all: [string, Dict][] = [['en', en as Dict]];
+    for (const l of LOCALES) if (l.code !== 'en') all.push([l.code, await loadLocale(l.code)]);
+    for (const [code, dict] of all)
+      for (const [key, value] of Object.entries(dict)) {
+        // Robinhood Chain only: no other chain, gas token or faucet is named anywhere
+        expect(value, `${code} ${key}`).not.toMatch(/HYPE|Elysium|Kinetiq|HyperEVM|\{gas\}/);
+        // the network's name is the placeholder, so the copy is right on the testnet and on mainnet
+        expect(value, `${code} ${key}`).not.toMatch(/Robinhood/);
+      }
+    expect(en['tf.lowGas']).toBe('You have no ETH on {chain} for the network fee. Add a little ETH to this wallet first.');
+  });
+
+  it('fills {chain} from the active network (the server\'s, once known); a caller\'s value wins', () => {
+    const before = activeChain();
+    try {
+      setActiveChain(chainInfo(46630));
+      refreshChainText();
+      expect(translate('tx.confirmed')).toBe('Confirmed on Robinhood Chain Testnet');
+      setActiveChain(chainInfo(4663));
+      refreshChainText();
+      expect(translate('tx.confirmed')).toBe('Confirmed on Robinhood Chain');
+      expect(translate('tf.lowGas', { chain: 'Somewhere' })).toContain('Somewhere');
+    } finally {
+      setActiveChain(before);
+      refreshChainText();
+    }
+  });
+
+  it("follows the server's chain as the store receives it (and the build's chain before)", () => {
+    const before = useUi.getState().chain;
+    try {
+      // VITE_CHAIN_ID is unset in tests: the default chain, Robinhood Chain Testnet
+      expect(BUILD_CHAIN_ID).toBe(46630);
+      useUi.setState({ chain: chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null }) });
+      expect(translate('tx.confirmed')).toBe('Confirmed on Robinhood Chain');
+      // a server on any other chain is not named: the build's network stays
+      useUi.setState({ chain: chainStatus({ chainId: 99801, chainName: 'Elsewhere' }) });
+      expect(translate('tx.confirmed')).toBe('Confirmed on Robinhood Chain Testnet');
+      useUi.setState({ chain: null });
+      expect(translate('tx.confirmed')).toBe('Confirmed on Robinhood Chain Testnet');
+    } finally {
+      useUi.setState({ chain: before });
+    }
   });
 });
 

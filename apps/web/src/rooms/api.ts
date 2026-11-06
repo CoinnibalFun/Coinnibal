@@ -46,6 +46,8 @@ export const roomsApi = {
   get: (code: string) => call<{ room: CustomRoomView }>(`/api/rooms/custom/${encodeURIComponent(code)}`).then((r) => r.room),
   mine: (token: string) => call<{ rooms: CustomRoomView[] }>('/api/rooms/custom/mine', { token }).then((r) => r.rooms),
   close: (token: string, code: string) => call<{ closed: CustomRoomView }>(`/api/rooms/custom/${encodeURIComponent(code)}`, { method: 'DELETE', token }),
+  /** "Practice with bots": this player's free practice room (guests too; the same room again while it lasts). */
+  practice: (token: string | null) => call<{ room: CustomRoomView; invite: string }>('/api/rooms/custom/practice', { method: 'POST', token }).then((r) => r.room),
 };
 
 const PAY_KEY = 'elymum.room-payment.v1';

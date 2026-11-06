@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   PRICE_GRANULARITY_WEI,
-  checkHypeUsd,
+  checkGasUsd,
   clampPrice,
-  fetchHypeUsd,
+  fetchGasUsd,
   needsReprice,
   parseDecimal,
   priceDeviationBps,
@@ -14,7 +14,7 @@ import {
 
 describe('usdCentsToWei', () => {
   it('computes $1 exactly at round prices', () => {
-    expect(usdCentsToWei(100, 40)).toBe(25_000_000_000_000_000n); // 0.025 HYPE
+    expect(usdCentsToWei(100, 40)).toBe(25_000_000_000_000_000n); // 0.025 ETH
     expect(usdCentsToWei(100, '50')).toBe(20_000_000_000_000_000n);
     expect(usdCentsToWei(250, 25)).toBe(100_000_000_000_000_000n);
   });
@@ -22,7 +22,7 @@ describe('usdCentsToWei', () => {
   it('rounds up to 1e12 wei and never below the target', () => {
     const wei = usdCentsToWei(100, '38.123');
     expect(wei % PRICE_GRANULARITY_WEI).toBe(0n);
-    // exact value 1/38.123 HYPE = 0.0262308842...
+    // exact value 1/38.123 ETH = 0.0262308842...
     expect(wei).toBe(26_231_000_000_000_000n);
     expect(wei * 38_123n).toBeGreaterThanOrEqual(10n ** 18n * 1_000n);
     expect((wei - PRICE_GRANULARITY_WEI) * 38_123n).toBeLessThan(10n ** 18n * 1_000n);
@@ -43,7 +43,7 @@ describe('usdCentsToWei', () => {
     expect(() => usdCentsToWei(100, 1e9)).toThrow(RangeError);
     expect(() => usdCentsToWei(0, 40)).toThrow(RangeError);
     expect(() => usdCentsToWei(1.5, 40)).toThrow(RangeError);
-    expect(checkHypeUsd('41.5')).toBe(41.5);
+    expect(checkGasUsd('41.5')).toBe(41.5);
   });
 
   it('converts back for display', () => {
@@ -62,12 +62,13 @@ describe('usdCentsToWei', () => {
   });
 });
 
-describe('fetchHypeUsd', () => {
+describe('fetchGasUsd', () => {
   const ok = (body: unknown): FetchLike => vi.fn(async () => ({ ok: true, status: 200, json: async () => body }));
 
-  it('posts allMids and reads HYPE', async () => {
-    const f = ok({ BTC: '65000.0', HYPE: '38.123' });
-    const r = await fetchHypeUsd({ fetch: f, url: 'https://example.test/info' });
+  it('posts allMids and reads the chain gas coin (ETH by default)', async () => {
+    expect(await fetchGasUsd({ fetch: ok({ ETH: '3012.5', BTC: '65000' }) })).toEqual({ price: '3012.5', value: 3012.5 });
+    const f = ok({ BTC: '65000.0', ETH: '38.123' });
+    const r = await fetchGasUsd({ fetch: f, url: 'https://example.test/info' });
     expect(r).toEqual({ price: '38.123', value: 38.123 });
     const [url, init] = (f as unknown as { mock: { calls: [string, { method: string; body: string }][] } }).mock.calls[0];
     expect(url).toBe('https://example.test/info');
@@ -76,9 +77,10 @@ describe('fetchHypeUsd', () => {
   });
 
   it('fails on HTTP errors, a missing key and insane values', async () => {
-    await expect(fetchHypeUsd({ fetch: async () => ({ ok: false, status: 502, json: async () => ({}) }) })).rejects.toThrow(/502/);
-    await expect(fetchHypeUsd({ fetch: ok({ BTC: '1' }) })).rejects.toThrow(/missing/);
-    await expect(fetchHypeUsd({ fetch: ok({ HYPE: '0' }) })).rejects.toThrow(RangeError);
-    await expect(fetchHypeUsd({ fetch: ok({ HYPE: 'lots' }) })).rejects.toThrow(RangeError);
+    await expect(fetchGasUsd({ fetch: async () => ({ ok: false, status: 502, json: async () => ({}) }) })).rejects.toThrow(/502/);
+    await expect(fetchGasUsd({ fetch: ok({ BTC: '1' }) })).rejects.toThrow(/missing/);
+    await expect(fetchGasUsd({ fetch: ok({ ETH: '0' }) })).rejects.toThrow(RangeError);
+    await expect(fetchGasUsd({ fetch: ok({ ETH: 'lots' }) })).rejects.toThrow(RangeError);
+    await expect(fetchGasUsd({ fetch: ok({ ETH: '0' }) })).rejects.toThrow(RangeError);
   });
 });

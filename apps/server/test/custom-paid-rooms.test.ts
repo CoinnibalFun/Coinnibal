@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CUSTOM_DEFAULTS, TICK_MS, roundAt, type CustomRoomConfig } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, TICK_MS, roundAt, type CustomRoomConfig, type ServerMessage } from '@elymum/shared';
 import { parseEther } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { UsedPayments, type NativeTransfer, type PaymentReader } from '../src/chain/payment';
@@ -14,7 +14,7 @@ import { ArenaChain, MID_ROUND, arena, fakeConn, roomDeps, stakeJoin } from './h
 import { testSigner } from './signers';
 
 const TREASURY = '0x1111111111111111111111111111111111111111';
-const BASE = parseEther('0.05');
+const BASE = parseEther('0.0005');
 const FEE = 1_000_000;
 const hash = (n: number) => `0x${n.toString(16).padStart(64, '0')}`;
 const cfgOf = (extra: Partial<CustomRoomConfig> = {}): CustomRoomConfig => ({ ...CUSTOM_DEFAULTS, name: 'Whale Club', bots: 0, ...extra });
@@ -38,7 +38,7 @@ function setup(o: { holder?: boolean; journal?: Journal } = {}) {
   const clock = { t: MID_ROUND };
   const chain = new ArenaChain([arena(1, FEE), arena(2, 10 * FEE), { ...arena(4, 250 * FEE), holdersOnly: true }]);
   const journal = o.journal ?? new Journal(null);
-  const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-paid-')), BOT_TARGET: '0', BOT_MIN: '0', BOT_MAX: '0' } as NodeJS.ProcessEnv);
+  const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-paid-')) } as NodeJS.ProcessEnv);
   const rooms = new RoomManager(cfg, roomDeps(chain, journal, () => clock.t), chain);
   const reader = new Transfers(clock);
   const dir = mkdtempSync(join(tmpdir(), 'elymum-paid-svc-'));
@@ -91,7 +91,7 @@ describe('custom rooms: capacity and its fee', () => {
   it('the admin sets the base, the step and the caps; the quote carries them', async () => {
     const { svc, reader } = setup();
     const a = testSigner().address;
-    svc.updateSettings({ priceHype: '0.1', capacityStepPct: 100, maxPlayers: 30, maxSeats: 40 });
+    svc.updateSettings({ priceGas: '0.1', capacityStepPct: 100, maxPlayers: 30, maxSeats: 40 });
     const q = await svc.quote(a);
     expect(q).toMatchObject({ priceWei: parseEther('0.1').toString(), capacityStepPct: 100, maxPlayers: 30, seatsLeft: 40 });
     expect(svc.feeWei(21)).toBe(parseEther('0.3'));
@@ -238,23 +238,32 @@ describe('custom rooms: paid rooms (invite-only arena instances)', () => {
     expect(p.alive).toBe(true);
     svc.sweep(clock.t);
     expect(rooms.get(room.id)).toBe(room);
-    clock.t = roundAt(clock.t).endsAt;
+    // it now ends at this round's bell: the countdown comes 10 s before it, with the reason
+    const bell = roundAt(clock.t).endsAt;
+    expect(svc.get(view.code)!.endsAt).toBe(bell);
+    clock.t = bell - 9_000;
+    svc.sweep(clock.t);
+    expect(conn.msgs.find((m) => m.t === 'closing')).toEqual({ t: 'closing', endsAt: bell, message: expect.stringMatching(/creator closed this room\. It closes at the bell/) });
+    clock.t = bell;
     tick(room);
+    // the bell's board: every ticket with its value, mass and kills (the same rows as a free room's end)
+    const over = conn.msgs.find((m) => m.t === 'roundOver') as Extract<ServerMessage, { t: 'roundOver' }>;
+    expect(over.standings).toEqual([{ rank: 1, name: j.name, mass: expect.any(Number), kills: 0, value: FEE, you: true }]);
     expect(journal.pending.find((i) => i.key === j.stake.session)).toMatchObject({ reason: 'round' });
     svc.sweep(clock.t);
     expect(rooms.get(room.id)).toBeUndefined();
     expect(svc.live).toBe(0);
   });
 
-  it('an empty paid room closes at once; a staked bot never sits in one', async () => {
+  it('an empty paid room closes at once; it never has bots (a creator cannot ask for them)', async () => {
     const { svc, rooms, reader } = setup();
     const a = testSigner().address;
-    const view = await svc.create(a, { config: paid(1, { bots: 3 }), txHash: reader.pay(1, a, BASE) });
+    await expect(svc.create(a, { config: paid(1, { bots: 3 }), txHash: reader.pay(1, a, BASE) })).rejects.toMatchObject({ code: 'bad_request', field: 'bots' });
+    const view = await svc.create(a, { config: paid(1, { bots: 0 }), txHash: reader.pay(1, a, BASE) });
     const room = rooms.get(`priv-${view.code}`) as Room;
-    expect(room.stakedTarget()).toBe(0);
-    // the creator's bots walk in over the first seconds (3 within 13.5 s at most)
     tick(room, 30 * 20);
-    expect(room.bots?.bots.size).toBe(3);
+    expect(room.bots).toBeNull();
+    expect([...room.world.players.values()].some((p) => p.isBot)).toBe(false);
     svc.close(view.code, { wallet: a, admin: true });
     expect(rooms.get(room.id)).toBeUndefined();
     expect(svc.live).toBe(0);

@@ -1,7 +1,7 @@
 import { TICK_MS, type MapScaleSettings, type WorldShape } from '@elymum/shared';
 import { mulberry32 } from '../src/game/rng';
 import { Room } from '../src/rooms/room';
-import { ArenaChain, fakeConn, roomDeps } from './helpers';
+import { ArenaChain, fakeConn, freeCustom, roomDeps } from './helpers';
 
 export interface MapRoomRun {
   /** Map side once warmed up. */
@@ -17,8 +17,8 @@ export interface MapRoomRun {
 }
 
 /**
- * A free room with `humans` connected people wandering about (a new aim every second) and bots
- * filling it to `players`, warmed up until the map has grown (coarse ticks), then `seconds` of
+ * A free custom room with `humans` (or more) connected people wandering about (a new aim every second) and up to
+ * 12 practice bots filling it to `players` (people fill what the bots cannot), warmed up until the map has grown (coarse ticks), then `seconds` of
  * real 30 Hz ticks timed one by one. `rooms` (default 1) runs that many such rooms side by side
  * (one server process) and times all of them per tick. Shared by the map benchmark script and its test.
  */
@@ -52,14 +52,19 @@ export function runMapRoom(o: { players: number; humans: number; seconds: number
 }
 
 function mapRoom(o: { players: number; humans: number; map: MapScaleSettings | null; world?: WorldShape; seed?: number }) {
-  const bots = Math.max(0, o.players - o.humans);
+  // a free custom room fields at most 12 practice bots: the rest of the room is people
+  const bots = Math.min(12, Math.max(0, o.players - o.humans));
+  const humans = o.players - bots;
   const room = new Room(
     {
       id: 'bench',
       mode: 'private',
       name: 'Bench',
-      maxPlayers: o.humans + 1,
-      bots: bots > 0 ? { target: bots, min: bots, max: bots, mix: 'standard' } : null,
+      maxPlayers: humans + 1,
+      // a free custom room: the only kind that may field practice bots
+      code: 'BENCH',
+      custom: freeCustom(bots),
+      bots: bots > 0 ? { count: bots, difficulty: 'mixed' } : null,
       seed: o.seed ?? 7,
       ...(o.world ? { world: o.world } : {}),
       ...(o.map ? { map: { scale: o.map } } : {}),
@@ -67,10 +72,10 @@ function mapRoom(o: { players: number; humans: number; map: MapScaleSettings | n
     roomDeps(new ArenaChain([])),
   );
   const rng = mulberry32(o.seed ?? 7);
-  const conns = Array.from({ length: o.humans }, (_, i) => fakeConn(`bench${i}`));
+  const conns = Array.from({ length: humans }, (_, i) => fakeConn(`bench${i}`));
   for (const c of conns) room.join(c, { name: 'p', skin: 1, flags: 0 });
-  // a bench measures a full room: seat the whole squad now (rooms let bots walk in one by one)
-  room.bots?.fill();
+  // a bench measures a full room: the bots walk in on the first tick
+  room.tick(0);
   const steer = () => {
     const w = room.world;
     for (const c of conns) {

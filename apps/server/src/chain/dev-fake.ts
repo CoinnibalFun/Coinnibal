@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { DEFAULT_ARENAS, LOCALNET_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, type ChainStatus } from '@elymum/shared';
+import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, LOCALNET_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, chainInfo, profitFee, type ChainStatus } from '@elymum/shared';
 import { getAddress } from 'viem';
 import type { Journal } from '../stake/journal';
 import { sessionKey, type ChainArena, type ChainGateway, type ChainSession, type ServerKeyInfo, type SettledEvent, type TokenReceipt } from './types';
@@ -8,8 +8,6 @@ import { sessionKey, type ChainArena, type ChainGateway, type ChainSession, type
 const DECIMALS = 18;
 /** Ledger decimals (`ledgerDecimals(18)`): what the rooms and the wire count in. */
 const LEDGER_DECIMALS = 6;
-/** Fee on every played ticket's entry fee, basis points (the contract default: 5 %; the dev fake models arena v2). */
-const FEE_BPS = 500;
 const FAKE_TOKEN = '0x00000000000000000000000000000000DE7f4CE1';
 const FAKE_ARENA = '0x000000000000000000000000000000000000fA4E';
 const FAKE_SERVER = '0x00000000000000000000000000000000De75e12f';
@@ -22,10 +20,11 @@ export interface DevFakeChainActions {
   /** Sets the fake game token (like `setToken` from /admin); false when it was already set. */
   devSetToken(): boolean;
   /**
-   * "Mines" a game-token transfer (the web's fake wallet buying power-ups): `tokenReceipt` of the
-   * returned hash shows it. Null while the token is not set or an address is malformed.
+   * "Mines" an `ElymumArena.pay` (the web's fake wallet buying power-ups): `tokenReceipt` of the returned hash
+   * shows the token transfer to the arena and the `Paid` event. Null while the token is not set or an input is
+   * malformed.
    */
-  devTransfer(from: string, to: string, value: bigint): string | null;
+  devPay(from: string, value: bigint, ref: string): string | null;
 }
 
 /**
@@ -55,7 +54,7 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
   private tokenSet: boolean;
   /** Ledger units of floor loot burned at round ends. */
   burned = 0;
-  /** Fake token transfers by hash (`devTransfer`). */
+  /** Fake power-up payments by hash (`devPay`). */
   private readonly transfers = new Map<string, TokenReceipt>();
   private block = 1n;
 
@@ -81,6 +80,8 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
       enabled: true,
       chainId: LOCALNET_CHAIN_ID,
       chainName: 'Localnet (dev fake)',
+      testnet: true,
+      faucetUrl: null,
       rpcUrl: null,
       explorerUrl: null,
       arenaAddress: FAKE_ARENA,
@@ -88,8 +89,7 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
       arenasEnabled: this.tokenSet,
       tokenReady: this.tokenSet,
       token: this.tokenSet ? { address: FAKE_TOKEN, symbol: TOKEN_SYMBOL_DEFAULT, decimals: DECIMALS } : null,
-      feeBps: FEE_BPS,
-      feeModel: 'entry',
+      fees: { ...DEFAULT_FEE_RATES, holderBurnBps: DEFAULT_FEE_RATES.burnBps, holderVaultBps: DEFAULT_FEE_RATES.vaultBps, holderPerks: false, paymentBurnBps: DEFAULT_PAYMENT_BURN_BPS, burnMode: 0 },
       serverKey: FAKE_SERVER,
     };
   }
@@ -113,19 +113,23 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
     return true;
   }
 
-  /** DEV ONLY: records a token transfer and returns its fake hash. */
-  devTransfer(from: string, to: string, value: bigint): string | null {
-    if (!this.tokenSet || value <= 0n) return null;
+  /** DEV ONLY: records a `pay` (the transfer to the arena and its `Paid` event) and returns its fake hash. */
+  devPay(from: string, value: bigint, ref: string): string | null {
+    if (!this.tokenSet || value <= 0n || !/^0x[0-9a-fA-F]{64}$/.test(ref)) return null;
     let f: string;
-    let t: string;
     try {
       f = getAddress(from);
-      t = getAddress(to);
     } catch {
       return null;
     }
     const hash = fakeTxHash();
-    this.transfers.set(hash, { status: 'success', blockNumber: this.block++, transfers: [{ token: getAddress(FAKE_TOKEN), from: f, to: t, value }] });
+    const arena = getAddress(FAKE_ARENA);
+    this.transfers.set(hash, {
+      status: 'success',
+      blockNumber: this.block++,
+      transfers: [{ token: getAddress(FAKE_TOKEN), from: f, to: arena, value }],
+      payments: [{ contract: arena, payer: f, ref: ref.toLowerCase(), amount: value }],
+    });
     return hash;
   }
 
@@ -152,9 +156,9 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
         player: wallet,
         arenaId,
         entryFee: arena.entryFee,
-        feeBps: FEE_BPS,
-        // the ticket plays its entry fee minus the fee (arena v2)
-        value: arena.entryFee - Math.floor((arena.entryFee * FEE_BPS) / 10_000),
+        rates: { ...DEFAULT_FEE_RATES },
+        // no entry fee cut: the ticket plays its whole price
+        value: arena.entryFee,
         openedAt: Math.floor(Date.now() / 1000),
         finalized: false,
         owed: 0,
@@ -211,14 +215,14 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
     const session = this.byKey.get(key);
     if (!session) return;
     const payout = item.payout ?? 0;
-    // arena v2: the fee is the entry fee's cut (reserved at join), the whole payout is the player's
-    const fee = Math.floor((session.entryFee * FEE_BPS) / 10_000);
+    // the contract's fee on profit (`fees.ts`), as ElymumArena v3 would take it
+    const f = profitFee(session.entryFee, payout, session.rates);
     this.journal.remove(key);
     this.sessions.delete(`${session.arenaId}:${session.player.toLowerCase()}`);
     this.byKey.delete(key);
     const txHash = fakeTxHash();
-    this.log(`chain(dev-fake): settled ${key} payout=${payout} fee=${fee}`);
-    for (const fn of this.listeners) fn({ key, player: session.player, arenaId: session.arenaId, txHash, payout, fee, feeOnEntry: true });
+    this.log(`chain(dev-fake): settled ${key} payout=${payout} fee=${f.fee} (burned ${f.burned}, to the fee wallet ${f.toVault})`);
+    for (const fn of this.listeners) fn({ key, player: session.player, arenaId: session.arenaId, txHash, payout, fee: f.fee, burned: f.burned, toVault: f.toVault, net: f.net });
   }
 
   setLiveSessionProvider(): void {}

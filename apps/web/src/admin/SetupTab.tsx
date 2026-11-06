@@ -14,7 +14,7 @@ export function setupLayout(ctx: Pick<ChainCtx, 'net' | 'status' | 'registry'>):
   const { net, status } = ctx;
   const registered = !!net.arenaAddress && !!net.nftAddress;
   const cfg = status?.arena?.config ?? null;
-  const quickSetsToken = setupSteps({ net, status }, { openMint: !net.mainnet }).some((s) => s.id === 'token');
+  const quickSetsToken = setupSteps({ status }, { openMint: !net.mainnet }).some((s) => s.id === 'token');
   const testnet = !!net.info && !testTokenRefusal(net.info.id);
   return {
     registered,

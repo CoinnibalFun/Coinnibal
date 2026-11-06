@@ -1,3 +1,4 @@
+import { GAS_SYMBOL } from '@elymum/shared';
 import { describeCall, elymumArenaAbi, sendCall, type ContractCall, type DescribedArg } from '@elymum/sdk';
 import { ownerRefusal } from '@elymum/sdk/ops';
 import { formatEther, getAddress, type Abi, type Address, type Hash, type Hex, type PublicClient, type TransactionReceipt, type WalletClient } from 'viem';
@@ -28,7 +29,7 @@ export interface Plan {
   contract: string;
   call?: ContractCall;
   deploy?: { name: DeployName; params: DeployParams };
-  /** A plain HYPE transfer from the connected wallet (funding the server key). */
+  /** A plain gas-token transfer from the connected wallet (funding the server key). */
   transfer?: { to: Address; value: bigint };
   /** Owner-only call: this contract's `owner()` is re-read right before signing and must be the connected wallet. */
   ownerOf?: Address;
@@ -76,13 +77,13 @@ export function previewOf(plan: Plan): PlanPreview {
   }
   if (plan.transfer) {
     const t = plan.transfer;
-    return { signature: 'transfer HYPE', functionName: 'send HYPE', to: t.to, args: [], value: t.value, valueText: hypeText(t.value) };
+    return { signature: `transfer ${GAS_SYMBOL}`, functionName: `send ${GAS_SYMBOL}`, to: t.to, args: [], value: t.value, valueText: gasText(t.value) };
   }
   throw new TypeError('a plan needs a call, a deploy or a transfer');
 }
 
-/** `0.0312 HYPE` for a wei value (the preview shows the same text). */
-export const hypeText = (wei: bigint): string => `${formatEther(wei)} HYPE`;
+/** `0.0312 ETH` for a wei value, in the chain's gas token (the preview shows the same text). */
+export const gasText = (wei: bigint): string => `${formatEther(wei)} ${GAS_SYMBOL}`;
 
 /** Why the preview cannot open the wallet (empty = it may): the chain blockers, then the owner check. */
 export function planRefusals(plan: Plan, ctx: { me: Address | null; blockers: readonly string[] }): string[] {

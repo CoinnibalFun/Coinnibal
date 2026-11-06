@@ -4,17 +4,17 @@ import { describe, expect, it } from 'vitest';
 import { expectedLoginMessage, personalSign } from '../src/wallet/siwe';
 import { ALICE, BOB, fakeProvider } from './evm-helpers';
 
-const fields = { domain: 'elymum.test', uri: 'https://elymum.test', chainId: 99801, nonce: 'a'.repeat(24), issuedAt: '2026-10-29T00:00:00.000Z' };
+const fields = { domain: 'elymum.test', uri: 'https://elymum.test', chainId: 46630, nonce: 'a'.repeat(24), issuedAt: '2026-10-29T00:00:00.000Z' };
 const body = { ...fields, message: siweMessage({ ...fields, address: ALICE }) };
 
 describe('SIWE on the web: sign only what the page rebuilt itself', () => {
   it('accepts the exact message for this page, this wallet and the server chain', () => {
     expect(expectedLoginMessage(body, ALICE, ['elymum.test'])).toBe(body.message);
-    expect(expectedLoginMessage(body, ALICE, ['elymum.test'], { chainId: 99801 })).toBe(body.message);
+    expect(expectedLoginMessage(body, ALICE, ['elymum.test'], { chainId: 46630 })).toBe(body.message);
     // the wallet address in any case: compared checksummed
     expect(expectedLoginMessage(body, ALICE.toLowerCase(), ['elymum.test'])).toBe(body.message);
     // a decimal-string chain id from the server is fine
-    expect(expectedLoginMessage({ ...body, chainId: '99801' }, ALICE, ['elymum.test'])).toBe(body.message);
+    expect(expectedLoginMessage({ ...body, chainId: '46630' }, ALICE, ['elymum.test'])).toBe(body.message);
   });
 
   it('refuses another domain, URI host, wallet or chain', () => {

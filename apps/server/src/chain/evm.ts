@@ -3,26 +3,25 @@ import {
   SettleSkipReason,
   cancelCall,
   chunkSettlements,
-  computeEntryFee,
-  computeProfitFee,
   describeError,
+  elymumArenaArtifact,
   fromLedger,
   ledgerDecimals,
   settleCall,
   settleSkipReasonText,
   sweepLootCall,
-  ticketValue,
   toLedger,
   type ArenaConfig,
-  type ArenaVersion,
   type SessionRef,
   type Settlement,
 } from '@elymum/sdk';
-import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatHype, formatToken, type ChainStatus } from '@elymum/shared';
+import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatGas, isSupportedChainId, unsupportedChainMessage, formatToken, type ArenaFees, type ChainStatus } from '@elymum/shared';
 import { getAddress, isAddress, type Address, type Hash, type Hex } from 'viem';
 import type { PrivateKeyAccount } from 'viem/accounts';
 import type { ServerConfig } from '../config';
-import type { Journal, JournalItem, SettlementItem, SweepItem } from '../stake/journal';
+import { join } from 'node:path';
+import { PAYOUT_GUARD_FLAG, type Journal, type JournalItem, type SettlementItem, type SweepItem } from '../stake/journal';
+import { SettledLog } from '../stake/settled-log';
 import { ChainCache } from './chain-cache';
 import { hasMulticall3, readChainId, viemEvmClient, withTimeout, type ArenaEvent, type EvmClient } from './evm-client';
 import { isRateLimited, isTransientRpcError, withRpcPriority } from './rpc-budget';
@@ -37,10 +36,7 @@ import { ChainBusyError, sessionKey, type ChainArena, type ChainGateway, type Ch
 const WORKER_INTERVAL_MS = 1_000;
 const REFRESH_INTERVAL_MS = 30_000;
 const SWEEP_INTERVAL_MS = 5 * 60_000;
-/**
- * Sessions nobody plays for this long get their entry fee back (v2: `cancel`, the full entry fee and no fee;
- * v1: settled at the entry fee); `STALE_SESSION_AFTER_S` overrides it.
- */
+/** Sessions nobody plays for this long get their full entry fee back (`cancel`, no fee); `STALE_SESSION_AFTER_S` overrides it. */
 export const STALE_SESSION_AFTER_S = 15 * 60;
 /** The arena list is re-read at most this often (settlements mark it stale; RPC errors serve the last good one). */
 export const ARENA_TTL_MS = 60_000;
@@ -61,13 +57,19 @@ export const RECEIPT_TIMEOUT_MS = 90_000;
 const LATE_RECEIPT_TIMEOUT_MS = 2_000;
 /** Re-check delay of an item whose transaction is not confirmed yet. */
 export const RECHECK_MS = 5_000;
-/** Below this, the server key cannot pay gas for long: logged and shown in `/admin` (0.01 HYPE). */
+/** Below this, the server key cannot pay gas for long: logged and shown in `/admin` (0.01 of the gas token). */
 export const LOW_BALANCE_WEI = 10n ** 16n;
 const STOP_GRACE_MS = 5_000;
 /** When the deploy block of the arena is unknown, the session index starts this many blocks back. */
 const INDEX_LOOKBACK_BLOCKS = 1_000_000n;
 /** Concurrent session reads of the stale sweeper. */
 const READ_CONCURRENCY = 8;
+/** The confirmed settlements, cancels and loot burns (`DATA_DIR/chains/<id>/settled.jsonl`). */
+export const SETTLED_LOG_FILE = 'settled.jsonl';
+/** A held settlement's session is re-read at most this often (a player may refund it after 24 h). */
+const HELD_RECHECK_MS = 10 * 60_000;
+/** An arena whose vault does not cover the journal is looked at again after this. */
+const BOOKS_RETRY_MS = 60_000;
 
 /** A stale arena list: everything but the vaults, which are unknown (`pot: null` skips the vault guard). */
 const unknownPots = (list: ChainArena[]): ChainArena[] => list.map((a) => ({ ...a, pot: null }));
@@ -78,12 +80,20 @@ const isEvm = (s: unknown): s is string => typeof s === 'string' && isAddress(s,
 
 /**
  * What `JOURNAL_ABANDON_CONTRACT` may do on this chain: `abandon` (set the old arena's journal records aside)
- * only on the Elysium testnet or the localnet; `refused` on any other chain (mainnet: the journal holds real
+ * only on a testnet or a localnet; `refused` on any other chain (mainnet: the journal holds real
  * players' unpaid winnings, which the escape hatch would wipe); null when it is unset or names the current arena.
  */
 export function journalAbandonDecision(abandon: string | null, arena: string, chainId: number | null): 'abandon' | 'refused' | null {
   if (!abandon || abandon.toLowerCase() === arena.toLowerCase()) return null;
   return isTestChain(chainId) ? 'abandon' : 'refused';
+}
+
+/** The server's overrides of the network's values: `EXPLORER_URL` and `GAS_FAUCET_URL`, whenever they are set. */
+export function chainOverridesFor(cfg: Pick<ServerConfig, 'chain'>) {
+  return {
+    ...(cfg.chain.explorerUrl ? { explorerUrl: cfg.chain.explorerUrl } : {}),
+    ...(cfg.chain.gasFaucetUrl ? { faucetUrl: cfg.chain.gasFaucetUrl } : {}),
+  };
 }
 
 /** The contracts the gateway works with: the registry (written by `/admin`) with the env overrides applied. */
@@ -102,6 +112,8 @@ export interface EvmChainDeps {
   /** The registered contracts; read on every refresh, so a newly registered arena is picked up without a restart. */
   contracts?: () => ContractsView;
   now?: () => number;
+  /** Confirmed settlements (reorg protection, audit). Default: `settled.jsonl` in `cacheDir`, else memory only. */
+  settledLog?: SettledLog;
   /** Start the background loops in `start()` (default true; tests drive them by hand). */
   loops?: boolean;
   /** Receipt wait per transaction (default 90 s). */
@@ -119,7 +131,7 @@ export interface EvmChainDeps {
   cacheDir?: string | null;
 }
 
-/** A receipt event that closes a ticket: `settle`'s `Settled` or v2 `cancel`'s `Cancelled`. */
+/** A receipt event that closes a ticket: `settle`'s `Settled` or `cancel`'s `Cancelled`. */
 type SettledLike = Extract<ArenaEvent, { name: 'Settled' | 'Cancelled' }>;
 
 /** One item of a settle batch, with the on-chain session it was checked against. */
@@ -127,7 +139,6 @@ interface Checked {
   item: SettlementItem;
   sessionId: bigint;
   entryFee: bigint;
-  feeBps: number;
 }
 
 /**
@@ -155,14 +166,8 @@ export class EvmChain implements ChainGateway {
   /** The arena contract in use (checksummed); null while none is registered. */
   private arena: Address | null = null;
   private arenaTx: string | null = null;
-  /** `ok` once the code at `arena` matched the bundled artifact (or the legacy v1 build). */
+  /** `ok` once the code at `arena` matched the bundled artifact (ElymumArena v3). */
   private arenaCode: 'ok' | 'missing' | 'mismatch' | null = null;
-  /**
-   * The arena's fee rule, from its code hash (known once `arenaCode` is `ok`): 2 takes the fee from every
-   * played ticket's entry fee (the ticket plays `entry − fee`, unplayed tickets are cancelled in full);
-   * 1 is the legacy fee-on-profit build still live on the testnet until it is redeployed.
-   */
-  private arenaVersion: ArenaVersion | null = null;
   private config: ArenaConfig | null = null;
   private configAt = 0;
   /** Server key == config.serverAuthority (null until the config was read once). */
@@ -202,6 +207,12 @@ export class EvmChain implements ChainGateway {
   private arenaFailedAt = -Infinity;
   /** Blocks per `Joined` log request (adaptive). */
   private logChunk: bigint;
+  /** Every settlement, cancel and loot burn confirmed on chain (reorg protection: see `sweepStaleNow`). */
+  readonly settledLog: SettledLog;
+  /** Arenas the books guard stopped (id → why): their vault does not cover what the journal owes. */
+  private readonly booksBlocked = new Map<number, string>();
+  /** When each held settlement's session was last re-read. */
+  private readonly heldCheckedAt = new Map<string, number>();
 
   constructor(
     private readonly cfg: ServerConfig,
@@ -212,6 +223,12 @@ export class EvmChain implements ChainGateway {
     this.now = deps.now ?? Date.now;
     this.cache = ChainCache.in(deps.cacheDir ?? null, CHAIN_CACHE_FILE, log);
     this.logChunk = BigInt(Math.max(Number(LOG_CHUNK_MIN), cfg.chain.logChunkBlocks));
+    this.settledLog = deps.settledLog ?? new SettledLog(deps.cacheDir ? join(deps.cacheDir, SETTLED_LOG_FILE) : null, log, this.now);
+  }
+
+  /** Arenas whose payouts the books guard stopped (id → reason); empty when every vault covers its journal. */
+  booksGuard(): ReadonlyMap<number, string> {
+    return this.booksBlocked;
   }
 
   /* ---------------------------------------------------------------- */
@@ -236,7 +253,7 @@ export class EvmChain implements ChainGateway {
       this.log(`chain: disabled — ${(err as Error).message}; running practice only`);
       return;
     }
-    this.log(`chain: server key ${this.serverAddress} (set it as the arena's server authority; it pays gas in HYPE)`);
+    this.log(`chain: server key ${this.serverAddress} (set it as the arena's server authority; it pays the gas)`);
     await this.probe();
     // the boot state is the baseline: the app attaches arenas itself after start, nobody is connected yet
     this.announced = { tokenReady: this.tokenReady, arenasEnabled: this.stakeEnabled, arena: this.arena };
@@ -280,13 +297,16 @@ export class EvmChain implements ChainGateway {
       if (!this.client) {
         const rpcUrl = this.cfg.chain.rpcUrl!;
         const chainId = await readChainId(rpcUrl);
+        if (!isSupportedChainId(chainId)) return this.refuseChain(chainId);
         // concurrent eth_calls are merged into one Multicall3 call where the chain has it
         const multicall = await hasMulticall3(rpcUrl);
-        this.client = viemEvmClient(rpcUrl, this.account!, { chainId, overrides: this.overrides(chainId), multicall });
+        this.client = viemEvmClient(rpcUrl, this.account!, { chainId, overrides: this.overrides(), multicall });
         if (multicall) this.log('chain: Multicall3 found — concurrent reads are batched into one eth_call');
       }
       if (this.chainId === null) {
-        this.chainId = await withTimeout(this.client.getChainId(), 20_000, 'eth_chainId');
+        const id = await withTimeout(this.client.getChainId(), 20_000, 'eth_chainId');
+        if (!isSupportedChainId(id)) return this.refuseChain(id);
+        this.chainId = id;
         const info = this.chainInfo();
         this.log(`chain: ${info.name} (chain id ${this.chainId}) via ${where}`);
         const want = this.deps.stateChainId;
@@ -308,17 +328,18 @@ export class EvmChain implements ChainGateway {
     }
   }
 
-  private overrides(chainId: number) {
-    // CHAIN_NAME names chain ids the table does not know; EXPLORER_URL applies whenever it is set
-    const unknown = chainInfo(chainId).key === 'elysium';
-    return {
-      ...(unknown && this.cfg.chain.chainName ? { name: this.cfg.chain.chainName } : {}),
-      ...(this.cfg.chain.explorerUrl ? { explorerUrl: this.cfg.chain.explorerUrl } : {}),
-    };
+  /** The RPC serves a chain that is not Robinhood Chain: the arenas stay off (logged every 5 minutes). */
+  private refuseChain(id: number): false {
+    this.warn('chain', `!!! chain: EVM_RPC_URL serves chain ${id}: ${unsupportedChainMessage(id)} — arenas stay OFF`, 300_000);
+    return false;
+  }
+
+  private overrides() {
+    return chainOverridesFor(this.cfg);
   }
 
   private chainInfo() {
-    return chainInfo(this.chainId!, this.overrides(this.chainId!));
+    return chainInfo(this.chainId!, this.overrides());
   }
 
   /**
@@ -352,7 +373,6 @@ export class EvmChain implements ChainGateway {
       this.arena = next;
       this.arenaTx = view.arenaTx ?? null;
       this.arenaCode = null;
-      this.arenaVersion = null;
       this.config = null;
       this.configAt = 0;
       this.authorized = null;
@@ -365,27 +385,15 @@ export class EvmChain implements ChainGateway {
       return;
     }
     if (this.arenaCode !== 'ok') {
-      const codeKey = `code:${this.arena.toLowerCase()}`;
-      const versionKey = `version:${this.arena.toLowerCase()}`;
+      // the bundled build's hash is part of the key: a check of an older build is never reused
+      const codeKey = `code:${this.arena.toLowerCase()}:${elymumArenaArtifact.runtimeCodeHash.toLowerCase()}`;
       try {
         // a positive check is kept on disk (the code at an address does not change): no read after a restart
-        let code = this.cache.get<string>(codeKey) === 'ok' ? 'ok' : await this.client!.codeCheck(this.arena, 'arena');
-        let version: ArenaVersion | null = null;
-        if (code === 'ok') {
-          const kept = this.cache.get<number>(versionKey);
-          version = kept === 1 || kept === 2 ? kept : await this.client!.arenaVersion(this.arena);
-          if (version === null) code = 'mismatch';
-        }
+        const code = this.cache.get<string>(codeKey) === 'ok' ? 'ok' : await this.client!.codeCheck(this.arena, 'arena');
         this.arenaCode = code;
-        this.arenaVersion = version;
         if (code === 'ok') {
           this.cache.set(codeKey, 'ok');
-          this.cache.set(versionKey, version);
-          this.log(
-            version === 1
-              ? `chain: arena ${this.arena} is the legacy v1 build — fee on PROFIT. Redeploy the arena (/admin → Deploy) to take the fee from every entry.`
-              : `chain: arena ${this.arena} is v2 — the fee is taken from every played ticket's entry fee`,
-          );
+          this.log(`chain: arena ${this.arena} is ElymumArena v3 — the fee is taken from the profit (burned + to the fee wallet) at settlement`);
         }
       } catch (err) {
         this.warn('code', `chain: code check of ${this.arena} failed (${firstLine(err)})`);
@@ -505,7 +513,7 @@ export class EvmChain implements ChainGateway {
     }
   }
 
-  /** Reads the server key's HYPE balance; warns (at most every 30 min) when it runs low. */
+  /** Reads the server key's gas balance; warns (at most every 30 min) when it runs low. */
   async checkBalance(): Promise<void> {
     if (!this.enabled || !this.client || !this.serverAddress) return;
     try {
@@ -513,7 +521,7 @@ export class EvmChain implements ChainGateway {
       const who = this.serverAddress;
       this.balance = await withRpcPriority('low', () => client.balance(who));
       if (this.balance < LOW_BALANCE_WEI) {
-        this.warn('balance', `chain: WARNING the server key ${this.serverAddress} holds only ${formatHype(this.balance, 6)} — fund it, it pays the gas of every settlement`, 30 * 60_000);
+        this.warn('balance', `chain: WARNING the server key ${this.serverAddress} holds only ${formatGas(this.balance, 6)} — fund it, it pays the gas of every settlement`, 30 * 60_000);
       }
     } catch {
       /* best effort */
@@ -544,10 +552,13 @@ export class EvmChain implements ChainGateway {
     const view = this.deps.contracts?.() ?? { arena: this.cfg.chain.arenaAddress, nft: this.cfg.chain.nftAddress };
     const nftAddress = view.nft && isEvm(view.nft) ? getAddress(view.nft) : null;
     if (!this.enabled || this.chainId === null) {
+      const want = chainInfo(this.cfg.chain.chainId, this.overrides());
       return {
         enabled: false,
         chainId: null,
-        chainName: this.cfg.chain.chainName ?? 'Elysium',
+        chainName: want.name,
+        testnet: want.testnet,
+        faucetUrl: want.faucetUrl,
         rpcUrl: null,
         explorerUrl: null,
         arenaAddress: null,
@@ -555,8 +566,7 @@ export class EvmChain implements ChainGateway {
         arenasEnabled: false,
         tokenReady: false,
         token: null,
-        feeBps: null,
-        feeModel: null,
+        fees: null,
         serverKey: this.serverAddress,
       };
     }
@@ -566,6 +576,8 @@ export class EvmChain implements ChainGateway {
       enabled: true,
       chainId: this.chainId,
       chainName: info.name,
+      testnet: info.testnet,
+      faucetUrl: info.faucetUrl,
       rpcUrl: this.cfg.chain.publicRpcUrl,
       explorerUrl: info.explorerUrl,
       arenaAddress: this.arena,
@@ -573,25 +585,24 @@ export class EvmChain implements ChainGateway {
       arenasEnabled: this.stakeEnabled,
       tokenReady: token !== null,
       token: token ? { address: token.address, symbol: this.cfg.chain.tokenSymbol || TOKEN_SYMBOL_DEFAULT, decimals: token.decimals } : null,
-      feeBps: this.config?.feeBps ?? null,
-      feeModel: this.feeModel(),
+      fees: this.fees(),
       serverKey: this.serverAddress,
     };
   }
 
-  /** What the fee of the registered arena is taken from; null while its version is unknown. */
-  feeModel(): 'entry' | 'profit' | null {
-    return this.arenaVersion === 2 ? 'entry' : this.arenaVersion === 1 ? 'profit' : null;
-  }
-
-  /** The registered arena's version (1 legacy fee on profit, 2 fee on entry); null while unknown. */
-  get version(): ArenaVersion | null {
-    return this.arenaVersion;
-  }
-
-  /** What a ticket plays with, ledger units (rounded down): v2 `entry − fee`, v1 the whole entry fee. */
-  private ledgerValue(entryFee: bigint, feeBps: number, decimals: number): number {
-    return toLedger(ticketValue(entryFee, feeBps, this.arenaVersion === 1 ? 1 : 2), decimals, 'floor');
+  /** The arena's fee settings (fee on profit, payment split, burn mode); null while its config is unknown. */
+  fees(): ArenaFees | null {
+    const c = this.config;
+    if (!c) return null;
+    return {
+      burnBps: c.burnBps,
+      vaultBps: c.vaultBps,
+      holderBurnBps: c.holderBurnBps,
+      holderVaultBps: c.holderVaultBps,
+      holderPerks: c.holderNft !== null,
+      paymentBurnBps: c.paymentBurnBps,
+      burnMode: c.burnMode,
+    };
   }
 
   /**
@@ -612,8 +623,9 @@ export class EvmChain implements ChainGateway {
         player: getAddress(player),
         arenaId,
         entryFee: toLedger(s.entryFee, t.decimals, 'floor'),
-        feeBps: s.feeBps,
-        value: this.ledgerValue(s.entryFee, s.feeBps, t.decimals),
+        rates: { burnBps: s.burnBps, vaultBps: s.vaultBps },
+        // no entry fee cut: the ticket plays its whole price
+        value: toLedger(s.entryFee, t.decimals, 'floor'),
         openedAt: s.openedAt,
         finalized: s.finalized,
         owed: toLedger(s.owed, t.decimals, 'floor'),
@@ -689,7 +701,8 @@ export class EvmChain implements ChainGateway {
     const client = this.client;
     if (!client?.tokenReceipt || !/^0x[0-9a-fA-F]{64}$/.test(hash)) return null;
     try {
-      return await withRpcPriority('normal', () => client.tokenReceipt!(hash as Hash));
+      const arena = this.arena;
+      return await withRpcPriority('normal', () => client.tokenReceipt!(hash as Hash, arena));
     } catch (err) {
       this.warn('shop-receipt', `chain: purchase receipt read failed (${firstLine(err)})`);
       throw new ChainBusyError('purchase receipt', err);
@@ -761,6 +774,7 @@ export class EvmChain implements ChainGateway {
   private async pass(): Promise<void> {
     if (this.stopped || !this.enabled || !this.client) return;
     const now = this.now();
+    await this.recheckHeld(now);
     const due = this.journal.pending
       // integrity holds wait for an admin decision (release or settle at 0)
       .filter((item) => item.nextAttemptAt <= now && !(item.kind === 'settle' && item.held))
@@ -779,13 +793,12 @@ export class EvmChain implements ChainGateway {
       for (const item of due) if (this.isPending(item.key)) this.journal.retryLater(item.key, blocked, this.now(), transient ? { maxDelayMs: TRANSIENT_RETRY_MAX_MS } : {});
       return;
     }
-    // per arena, and on a v2 arena the unplayed (stale) tickets apart: they go out as `cancel` (full entry fee back)
-    const cancels = this.arenaVersion === 2;
+    // per arena, and the unplayed (stale) tickets apart: they go out as `cancel` (full entry fee back, no fee)
     const byArena = new Map<string, { mode: 'settle' | 'cancel'; items: SettlementItem[] }>();
     for (const item of due) {
       if (item.kind !== 'settle') continue;
       if (!this.validSettlement(item)) continue;
-      const mode = cancels && item.reason === 'stale' ? 'cancel' : 'settle';
+      const mode = item.reason === 'stale' ? 'cancel' : 'settle';
       const group = `${item.arenaId}:${mode}`;
       const entry = byArena.get(group) ?? { mode, items: [] };
       entry.items.push(item);
@@ -813,6 +826,119 @@ export class EvmChain implements ChainGateway {
         if (this.isPending(item.key)) this.journal.retryLater(item.key, firstLine(err), this.now());
       }
     }
+  }
+
+  /**
+   * A held settlement waits for an admin, but its ticket is still open on chain: after 24 h the player may refund
+   * it at the entry fee. Such an item (session closed or re-opened) is dropped, so it never counts as owed. Each
+   * held item is re-read at most every `HELD_RECHECK_MS`.
+   */
+  private async recheckHeld(now: number): Promise<void> {
+    if (!this.client || !this.arena || this.blockedSync()) return;
+    for (const item of this.journal.held()) {
+      if (now - (this.heldCheckedAt.get(item.key) ?? -Infinity) < HELD_RECHECK_MS) continue;
+      if (!Number.isInteger(item.arenaId) || !isEvm(item.player) || !Number.isSafeInteger(item.sessionId)) continue;
+      this.heldCheckedAt.set(item.key, now);
+      let s;
+      try {
+        s = await this.client.session(this.arena, item.arenaId!, getAddress(item.player));
+      } catch {
+        continue;
+      }
+      if (s.id === BigInt(item.sessionId!) && !s.finalized) {
+        // what a refund after 24 h would take out of the vault (older journals did not record it)
+        item.entryFee ??= toLedger(s.entryFee, this.token()!.decimals, 'floor');
+        continue;
+      }
+      this.heldCheckedAt.delete(item.key);
+      const kept = this.journal.dropRefunded(item.key, 'chain');
+      this.log(
+        `!!! chain: held settlement ${short(item.key)} dropped — its ticket is no longer open on chain (the player refunded it after 24 h)` +
+          (kept ? `; ${this.units(Math.abs(kept))} ${kept > 0 ? 'stays in the vault (journaled as forfeited)' : 'more than its value left the vault (journaled)'}` : ''),
+      );
+    }
+    for (const k of this.heldCheckedAt.keys()) if (!this.isPending(k)) this.heldCheckedAt.delete(k);
+  }
+
+  /** The synchronous part of `blockedReason` (no config read). */
+  private blockedSync(): boolean {
+    return this.chainMismatch || !this.arena || this.arenaCode !== 'ok' || !this.journalBound || this.authorized !== true;
+  }
+
+  /**
+   * Books guard, before anything leaves an arena vault: what the journal owes the arena (pending payouts and loot
+   * burns whose session is still open on chain, live tickets, floor loot) must fit in its vault. When it does not,
+   * the journal claims more than the players put in (a bug, a corrupted journal, or a vault swept or drained
+   * behind the server's back): paying the first items would pay them with the other players' stakes. Nothing is
+   * sent for that arena until the books add up again; the money stays in the vault (players can still refund
+   * after 24 h). The quick sum is recounted exactly (items whose ticket already closed on chain do not count)
+   * before an arena is stopped. Returns true when the arena may pay.
+   */
+  private async booksOk(arenaId: number): Promise<boolean> {
+    const client = this.client!;
+    const arena = this.arena!;
+    const t = this.token()!;
+    let info;
+    try {
+      info = await client.arena(arena, arenaId);
+    } catch {
+      return true; // unknown: the contract's own vault check still applies per item
+    }
+    if (!info.exists) return true; // the contract skips every item (unknown arena)
+    const vault = toLedger(info.vault, t.decimals, 'floor');
+    if (this.journal.owedByArena(arenaId) <= vault) return this.booksClear(arenaId);
+    let owed = this.journal.liveAndLootByArena(arenaId);
+    for (const p of this.journal.pending) {
+      if (p.arenaId !== arenaId) continue;
+      if (p.kind === 'sweep') {
+        if (p.sweepId === undefined || BigInt(p.sweepId) > info.lastSweepId) owed += p.amount;
+        continue;
+      }
+      if (!isEvm(p.player) || !Number.isSafeInteger(p.sessionId)) continue;
+      let s;
+      try {
+        s = await client.session(arena, arenaId, getAddress(p.player));
+      } catch {
+        return true;
+      }
+      if (s.id === BigInt(p.sessionId!) && !s.finalized) owed += p.payout ?? 0;
+    }
+    if (owed <= vault) return this.booksClear(arenaId);
+    const why = `the vault holds ${this.units(vault)} but the journal owes ${this.units(owed)}`;
+    if (!this.booksBlocked.has(arenaId)) {
+      this.log(
+        `!!! chain: arena #${arenaId} PAYOUTS STOPPED — ${why}. Nothing is paid from this arena until the books add up ` +
+          '(check /admin → Arena and the journal; the stakes stay in the vault and players can refund after 24 h)',
+      );
+    }
+    this.booksBlocked.set(arenaId, why);
+    return false;
+  }
+
+  private booksClear(arenaId: number): true {
+    if (this.booksBlocked.delete(arenaId)) this.log(`chain: arena #${arenaId} books add up again — payouts resume`);
+    return true;
+  }
+
+  /**
+   * Payout guard: a ticket paid more than `PAYOUT_GUARD_MULTIPLE` entry fees (default 100: twice a full 50-seat
+   * instance) is held for an admin (`/admin` → Integrity → Held settlements: release pays it as it was) instead of
+   * being sent. A real game can hardly get there; a bug or a tampered journal can. Returns the items to send.
+   */
+  private payoutGuard(checked: Checked[]): Checked[] {
+    const multiple = this.cfg.chain.payoutGuardMultiple;
+    if (!(multiple > 0)) return checked;
+    const t = this.token()!;
+    return checked.filter((c) => {
+      const entry = toLedger(c.entryFee, t.decimals, 'floor');
+      const payout = c.item.payout ?? 0;
+      if (c.item.guardCleared || payout <= entry * multiple) return true;
+      const why = `payout guard: ${this.units(payout)} is more than ${multiple} times the ticket's entry fee (${this.units(entry)})`;
+      if (this.journal.hold(c.item.key, { at: this.now(), score: 100, why, flags: [PAYOUT_GUARD_FLAG] })) {
+        this.log(`!!! chain: settlement ${c.item.key} HELD for review — ${why}. Release it in /admin → Integrity if it is right`);
+      }
+      return false;
+    });
   }
 
   /** Why nothing can be sent now (null: the worker may send). */
@@ -861,7 +987,7 @@ export class EvmChain implements ChainGateway {
   }
 
   /**
-   * One `settle` (or, `mode: 'cancel'`, one v2 `cancel` of unplayed tickets) transaction for up to 40 items of
+   * One `settle` (or, `mode: 'cancel'`, one `cancel` of unplayed tickets) transaction for up to 40 items of
    * one arena. Each item is checked against its session first (gone or re-opened → settled elsewhere;
    * finalized → the player collects), then reconciled after the receipt: its `Settled` / `Cancelled` event
    * (or a read of the session) decides, a skipped or reverted item is retried with backoff.
@@ -882,7 +1008,7 @@ export class EvmChain implements ChainGateway {
         }
         const id = BigInt(item.sessionId!);
         if (s.id !== id) {
-          await this.dropFinished(item, s.id === 0n ? 'session already closed' : `on-chain session is #${s.id}, item is for #${id}`);
+          await this.dropFinished(item, s.id === 0n ? 'session already closed' : `on-chain session is #${s.id}, item is for #${id}`, true);
           return;
         }
         if (s.finalized) {
@@ -895,7 +1021,7 @@ export class EvmChain implements ChainGateway {
           if (this.journal.pending.includes(item)) this.journal.remove(item.key);
           return;
         }
-        checked.push({ item, sessionId: id, entryFee: s.entryFee, feeBps: s.feeBps });
+        checked.push({ item, sessionId: id, entryFee: s.entryFee });
       }),
     );
     // last check right before sending: a stale session may have been picked up meanwhile
@@ -912,6 +1038,15 @@ export class EvmChain implements ChainGateway {
     });
     if (send.length === 0) return;
     send.sort((a, b) => a.item.createdAt - b.item.createdAt);
+    if (mode === 'settle') {
+      const guarded = this.payoutGuard(send);
+      send.splice(0, send.length, ...guarded);
+      if (send.length === 0) return;
+    }
+    if (!(await this.booksOk(send[0].item.arenaId!))) {
+      for (const c of send) this.journal.retryLater(c.item.key, `books guard: ${this.booksBlocked.get(c.item.arenaId!) ?? 'vault short'}`, this.now(), { delayMs: BOOKS_RETRY_MS });
+      return;
+    }
     let call;
     if (mode === 'cancel') {
       const refs: SessionRef[] = send.map((c) => ({ arenaId: c.item.arenaId!, player: getAddress(c.item.player), sessionId: c.sessionId }));
@@ -927,6 +1062,8 @@ export class EvmChain implements ChainGateway {
     }
     let hash: Hash;
     try {
+      // from here on an item may be settled by this very transaction (even when the send seems to fail)
+      this.journal.markSettleSent(send.map((c) => c.item.key), this.now());
       hash = await client.send(call);
     } catch (err) {
       await this.onBatchError(send.map((c) => c.item), err);
@@ -994,27 +1131,36 @@ export class EvmChain implements ChainGateway {
     const t = this.token()!;
     this.journal.remove(item.key);
     this.sentTx.delete(item.key);
+    const base = { key: item.key, arenaId: item.arenaId!, player: getAddress(item.player), sessionId: item.sessionId, reason: item.reason, tx: hash, at: this.now() };
     if (ev.name === 'Cancelled') {
       // an unplayed ticket: its full entry fee went back, no fee
       const amount = toLedger(ev.amount, t.decimals, 'floor');
+      this.settledLog.record({ kind: 'cancel', ...base, amount, net: amount, fee: 0 });
       const collect = !ev.collected && ev.amount > 0n;
       this.log(`chain: ${collect ? 'finalized' : 'cancelled'} ${short(item.key)} (${item.reason ?? 'stale'}) · full entry fee ${this.units(amount)} → ${short(item.player)}${collect ? ' (to collect)' : ''} · ${hash}`);
-      this.emit({ key: item.key, player: getAddress(item.player), arenaId: item.arenaId, txHash: hash, payout: amount, fee: 0, feeOnEntry: true, refund: true, ...(collect ? { collect: true } : {}) });
+      this.emit({ key: item.key, player: getAddress(item.player), arenaId: item.arenaId, txHash: hash, payout: amount, fee: 0, net: amount, refund: true, ...(collect ? { collect: true } : {}) });
       return;
     }
-    const fee = toLedger(ev.fee, t.decimals, 'floor');
     const payout = item.payout ?? 0;
-    // v2: the fee was the ticket's cut of its entry fee (reserved at join); the whole payout is the player's
-    const onEntry = this.arenaVersion === 2;
-    const collect = !ev.collected && (onEntry ? ev.payout > 0n : ev.payout > ev.fee);
+    const burned = toLedger(ev.burned, t.decimals, 'floor');
+    const toVault = toLedger(ev.toVault, t.decimals, 'floor');
+    const net = toLedger(ev.net, t.decimals, 'floor');
+    const fee = burned + toVault;
+    const collect = !ev.collected && ev.net > 0n;
+    this.settledLog.record({ kind: 'settle', ...base, amount: payout, net, fee });
     this.log(
-      `chain: ${collect ? 'finalized' : 'settled'} ${short(item.key)} (${item.reason ?? 'settle'}) · ${this.units(payout)}${fee ? ` (fee ${this.units(fee)}${onEntry ? ' of the entry' : ''})` : ''} → ${short(item.player)}${collect ? ' (to collect)' : ''} · ${hash}`,
+      `chain: ${collect ? 'finalized' : 'settled'} ${short(item.key)} (${item.reason ?? 'settle'}) · ${this.units(payout)}${fee ? ` (fee on profit ${this.units(fee)}: ${this.units(burned)} burned, ${this.units(toVault)} to the fee wallet)` : ''} → ${this.units(net)} to ${short(item.player)}${collect ? ' (to collect)' : ''} · ${hash}`,
     );
-    this.emit({ key: item.key, player: getAddress(item.player), arenaId: item.arenaId, txHash: hash, payout, fee, ...(onEntry ? { feeOnEntry: true } : {}), ...(collect ? { collect: true } : {}) });
+    this.emit({ key: item.key, player: getAddress(item.player), arenaId: item.arenaId, txHash: hash, payout, fee, burned, toVault, net, ...(collect ? { collect: true } : {}) });
   }
 
   /** The session is gone (or re-opened, or finalized): drop the item, reporting our own earlier transaction if it settled it. */
-  private async dropFinished(item: SettlementItem, why: string): Promise<void> {
+  /**
+   * `closed`: the ticket is closed (or re-opened) on chain. When this server never sent the item, someone else
+   * closed it (the player's refund after 24 h, at the entry fee): `Journal.dropRefunded` keeps the books matching
+   * the vault.
+   */
+  private async dropFinished(item: SettlementItem, why: string, closed = false): Promise<void> {
     const hash = this.sentTx.get(item.key);
     if (hash) {
       const receipt = await this.client!.receipt(hash, this.arena, LATE_RECEIPT_TIMEOUT_MS).catch(() => null);
@@ -1032,6 +1178,14 @@ export class EvmChain implements ChainGateway {
       }
     }
     this.sentTx.delete(item.key);
+    if (closed && item.sentAt === undefined) {
+      const kept = this.journal.dropRefunded(item.key, 'chain');
+      this.log(
+        `!!! chain: dropping settlement ${short(item.key)} for ${short(item.player)} — ${why}, never sent by this server (refunded by the player after 24 h?)` +
+          (kept ? `; ${this.units(Math.abs(kept))} journaled as ${kept > 0 ? 'left in' : 'taken from'} the vault` : ''),
+      );
+      return;
+    }
     this.journal.remove(item.key);
     this.log(`chain: dropping settlement ${short(item.key)} for ${short(item.player)} — ${why} (already settled or refunded)`);
   }
@@ -1044,16 +1198,16 @@ export class EvmChain implements ChainGateway {
       // our key may have been rotated out: re-read the config to tell
       await this.freshConfig();
     } else if (d.name === 'SafeERC20FailedOperation') {
-      // a failing fee transfer reverts the whole batch: the fee wallet cannot receive the token (on a v2 arena
-      // every settle batch pays fees; a `cancel` pays none and still goes through)
+      // a failing burn or fee transfer reverts the whole batch (a batch with a profit burns and pays the fee wallet;
+      // a `cancel` or a batch of losses pays none and still goes through)
       this.feeHeld = true;
       this.warn(
         'fee-wallet',
-        `!!! chain: settle batches revert on the fee transfer — the fee wallet ${this.config?.feeWallet ?? '?'} cannot receive the game token. ` +
-          'ALL settlements are held (never counted against the players); set a working fee wallet in /admin → Arena. They resume by themselves.',
+        `!!! chain: settle batches revert on the fee transfer or the burn — the fee wallet ${this.config?.feeWallet ?? '?'} (or the burn) cannot take the game token. ` +
+          'Settlements with a profit are held (never counted against the players); set a working fee wallet (or burn mode 0) in /admin → Arena. They resume by themselves.',
       );
     } else if (d.kind === 'insufficient-funds') {
-      this.warn('gas', `!!! chain: the server key ${this.serverAddress} cannot pay gas — fund it with HYPE (${label})`);
+      this.warn('gas', `!!! chain: the server key ${this.serverAddress} cannot pay gas — fund it with ${this.chainInfo().nativeCurrency.symbol} (${label})`);
       void this.checkBalance();
     }
     for (const item of items) {
@@ -1089,15 +1243,26 @@ export class EvmChain implements ChainGateway {
       this.journal.retryLater(key, `arena #${item.arenaId} does not exist on ${arenaAddr}`, this.now());
       return;
     }
+    if (info.lastSweepId > BigInt(Number.MAX_SAFE_INTEGER)) {
+      // only a server key can raise it: an id this large means the key was misused (or a bug); never guess past it
+      this.warn(`sweep-id-${item.arenaId}`, `!!! chain: arena #${item.arenaId} lastSweepId is ${info.lastSweepId} — loot burns of this arena are stopped (was the server key misused?)`);
+      this.journal.retryLater(key, 'lastSweepId out of range', this.now(), { delayMs: BOOKS_RETRY_MS });
+      return;
+    }
     const last = Number(info.lastSweepId);
     if (item.sweepId !== undefined && last >= item.sweepId) {
       this.journal.remove(key);
+      this.settledLog.record({ kind: 'sweep', key, arenaId: item.arenaId, amount: item.amount, sweepId: item.sweepId, tx: item.sentTx ?? 'confirmed', at: this.now() });
       this.arenasStale();
       this.log(`chain: burned ${this.units(item.amount)} loot of ${item.roomId} (round ${item.round}) · sweep #${item.sweepId} (confirmed)${item.sentTx ? ` · ${item.sentTx}` : ''}`);
       return;
     }
     const sweepId = this.journal.assignSweepId(key, last);
     const amount = fromLedger(item.amount, t.decimals);
+    if (!(await this.booksOk(item.arenaId))) {
+      this.journal.retryLater(key, `books guard: ${this.booksBlocked.get(item.arenaId) ?? 'vault short'}`, this.now(), { delayMs: BOOKS_RETRY_MS });
+      return;
+    }
     if (amount > info.vault) {
       this.warn(`sweep-pot-${item.arenaId}`, `!!! chain: arena #${item.arenaId} vault cannot cover the loot sweep ${key} (${this.units(item.amount)}) — retrying with backoff`);
       this.journal.retryLater(key, 'vault cannot cover the sweep', this.now());
@@ -1124,6 +1289,7 @@ export class EvmChain implements ChainGateway {
     const receipt = await client.receipt(hash, arenaAddr, this.deps.receiptTimeoutMs ?? RECEIPT_TIMEOUT_MS);
     if (receipt?.status === 'success') {
       this.journal.remove(key);
+      this.settledLog.record({ kind: 'sweep', key, arenaId: item.arenaId, amount: item.amount, sweepId, tx: hash, at: this.now() });
       this.arenasStale();
       this.log(`chain: burned ${this.units(item.amount)} loot of ${item.roomId} (round ${item.round}) · sweep #${sweepId} · ${hash}`);
       return;
@@ -1203,11 +1369,9 @@ export class EvmChain implements ChainGateway {
 
   /**
    * Queues a refund for every open session that is not in a room, not already queued and older than
-   * `STALE_SESSION_AFTER_S` (15 minutes by default): the player paid but never played, so no fee is taken.
-   * v2 arena: a `cancel` (the full entry fee back; the journal item's payout is the ticket's value, what
-   * leaves the vault; the reserved fee comes back with it). v1: a settlement at the entry fee (no profit, no
-   * fee). Open sessions come from the arena's `Joined` logs, checked with `getSession`. Returns the number of
-   * sessions queued.
+   * `STALE_SESSION_AFTER_S` (15 minutes by default): the player paid but never played, so it is a `cancel` (the
+   * full entry fee back, no fee; the journal item's payout is that entry fee, what leaves the vault). Open sessions
+   * come from the arena's `Joined` logs, checked with `getSession`. Returns the number of sessions queued.
    */
   sweepStale(): Promise<number> {
     // background work: after joins, settlements and the arena list
@@ -1246,9 +1410,33 @@ export class EvmChain implements ChainGateway {
             this.index.candidates.delete(key);
             return;
           }
+          if (s.id > BigInt(Number.MAX_SAFE_INTEGER)) return;
+          const done = this.settledLog.get(key);
+          if (done?.kind === 'settle') {
+            // we settled exactly this session and saw the receipt, yet it is open again: the transaction was
+            // reorged out. Send the same result again; never refund it at the entry fee (see SettledLog)
+            this.log(`!!! chain: ${short(key)} was settled in ${done.tx} but is open again (reorg?) — re-sending the same payout`);
+            enqueue.push({
+              kind: 'settle',
+              key,
+              player: getAddress(c.player),
+              arenaId: c.arenaId,
+              session: key,
+              sessionId: Number(s.id),
+              payout: done.amount,
+              entryFee: toLedger(s.entryFee, t.decimals, 'floor'),
+              score: 0,
+              kills: 0,
+              xp: 0,
+              reason: done.reason === 'stale' || !done.reason ? 'crash' : (done.reason as SettlementItem['reason']),
+              attempts: 0,
+              nextAttemptAt: now,
+              createdAt: now,
+            });
+            return;
+          }
           if (now / 1000 - s.openedAt < staleAfterS) return;
           if (only.length > 0 && !only.includes(c.arenaId)) return;
-          if (s.id > BigInt(Number.MAX_SAFE_INTEGER)) return;
           enqueue.push({
             kind: 'settle',
             key,
@@ -1256,7 +1444,8 @@ export class EvmChain implements ChainGateway {
             arenaId: c.arenaId,
             session: key,
             sessionId: Number(s.id),
-            payout: this.ledgerValue(s.entryFee, s.feeBps, t.decimals),
+            payout: toLedger(s.entryFee, t.decimals, 'floor'),
+            entryFee: toLedger(s.entryFee, t.decimals, 'floor'),
             score: 0,
             kills: 0,
             xp: 0,
@@ -1279,7 +1468,7 @@ export class EvmChain implements ChainGateway {
     if (enqueue.length === 0) return 0;
     this.journal.commit({ enqueue });
     this.log(
-      `chain: ${enqueue.length} unplayed session(s) older than ${staleAfterS >= 120 ? `${Math.round(staleAfterS / 60)} min` : `${staleAfterS} s`} → ${this.arenaVersion === 2 ? 'full entry-fee refund (cancel)' : 'settlement at the entry fee'} queued`,
+      `chain: ${enqueue.length} unplayed session(s) older than ${staleAfterS >= 120 ? `${Math.round(staleAfterS / 60)} min` : `${staleAfterS} s`} → full entry-fee refund (cancel) queued`,
     );
     this.kick();
     return enqueue.length;
@@ -1288,13 +1477,5 @@ export class EvmChain implements ChainGateway {
   /** Items the worker still has to send (tests). */
   pendingItems(): readonly JournalItem[] {
     return this.journal.pending;
-  }
-
-  /** Expected fee of a settled session (ledger units), as `settle` computes it: v2 the entry fee's cut, v1 on profit. */
-  feeFor(payoutLedger: number, entryFee: bigint, feeBps: number): number {
-    const t = this.token();
-    if (!t) return 0;
-    const fee = this.arenaVersion === 1 ? computeProfitFee(fromLedger(payoutLedger, t.decimals), entryFee, feeBps) : computeEntryFee(entryFee, feeBps);
-    return toLedger(fee, t.decimals, 'floor');
   }
 }

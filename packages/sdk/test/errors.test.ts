@@ -50,8 +50,8 @@ describe('errors', () => {
   it('classifies wallet errors', () => {
     expect(describeError({ code: 4001, message: 'User rejected the request.' }).kind).toBe('rejected');
     expect(describeError(new UserRejectedRequestError(new Error('x'))).kind).toBe('rejected');
-    expect(describeError({ code: 4902, message: 'Unrecognized chain ID' }, { chainName: 'Elysium Testnet' }).message).toMatch(/Elysium Testnet/);
-    expect(describeError(new ChainMismatchError({ chain: { id: 99801, name: 'Elysium Testnet' } as never, currentChainId: 1 })).kind).toBe('wrong-chain');
+    expect(describeError({ code: 4902, message: 'Unrecognized chain ID' }, { chainName: 'Robinhood Chain Testnet' }).message).toMatch(/Robinhood Chain Testnet/);
+    expect(describeError(new ChainMismatchError({ chain: { id: 46630, name: 'Robinhood Chain Testnet' } as never, currentChainId: 1 })).kind).toBe('wrong-chain');
     expect(describeError(new InsufficientFundsError({ cause: new BaseError('insufficient funds for gas * price + value') })).kind).toBe('insufficient-funds');
     // a dev node's and viem's own wording, through a wallet that passes only the message on
     expect(describeError(new Error("Sender doesn't have enough funds to send tx. The max upfront cost is: 1 and the sender's account only has: 0")).kind).toBe('insufficient-funds');
