@@ -95,8 +95,15 @@ export interface ServerConfig {
     chainId: number;
     /** `CHAIN_ID` was set explicitly (the RPC is held to it); false: the RPC's own id is used. */
     chainIdExplicit: boolean;
-    /** Server RPC (`EVM_RPC_URL`, may hold an API key). Null: chain off, practice only. */
+    /** Server RPC (`EVM_RPC_URL`, may hold an API key): the first of `rpcUrls`. Null: chain off, practice only. */
     rpcUrl: string | null;
+    /**
+     * Every server RPC in order of preference (`EVM_RPC_URLS`, a comma list, e.g. an Alchemy URL then the public RPC;
+     * else `EVM_RPC_URL` alone). Reads and sends go through a viem fallback over them, each URL with its own budget.
+     */
+    rpcUrls: string[];
+    /** `RPC_MAX_RPS` per entry of `rpcUrls` (a comma list; one number applies to every URL). */
+    rpcMaxRpsPerUrl: number[];
     /**
      * RPC handed to browsers (`PUBLIC_RPC_URL`, no secrets). Default: `EVM_RPC_URL` when it is Robinhood Chain's
      * public RPC, else null (the wallet's own RPC is used).
@@ -325,8 +332,33 @@ export function gameWorkers(env: NodeJS.ProcessEnv): number {
   return env.NODE_ENV === 'production' ? Math.max(1, availableParallelism() - 1) : 0;
 }
 
+/**
+ * `EVM_RPC_URLS` (comma-separated, in order of preference), else `EVM_RPC_URL`: trailing slashes dropped, duplicates
+ * and blanks removed.
+ */
+export function parseRpcUrls(list: string | undefined, single: string | undefined): string[] {
+  const raw = blank(list) !== null ? list!.split(',') : [single ?? ''];
+  const out: string[] = [];
+  for (const r of raw) {
+    const u = r.trim().replace(/\/+$/, '');
+    if (u && !out.includes(u)) out.push(u);
+  }
+  return out;
+}
+
+/** `RPC_MAX_RPS`: one rate for every URL, or a comma list (one per URL, the last one repeated); default 4 a second. */
+export function parseRpcRates(v: string | undefined, n: number): number[] {
+  const parts = (v ?? '').split(',').map((s) => Number(s.trim()));
+  const ok = parts.map((x) => (Number.isFinite(x) && x > 0 ? Math.max(0.2, x) : null));
+  const out: number[] = [];
+  for (let i = 0; i < Math.max(1, n); i++) out.push(ok[Math.min(i, ok.length - 1)] ?? ok.find((x) => x !== null) ?? 4);
+  return out;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
-  const rpcUrl = blank(env.EVM_RPC_URL)?.replace(/\/+$/, '') ?? null;
+  const rpcUrls = parseRpcUrls(env.EVM_RPC_URLS, env.EVM_RPC_URL);
+  const rpcUrl = rpcUrls[0] ?? null;
+  const rates = parseRpcRates(env.RPC_MAX_RPS, rpcUrls.length);
   const secret = env.AUTH_SECRET ? Buffer.from(env.AUTH_SECRET, 'utf8') : persistedAuthSecret(resolve(env.DATA_DIR ?? 'data'));
   return {
     port: int(env.PORT, 8787),
@@ -357,7 +389,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     devFakeToken: bool(env.DEV_FAKE_TOKEN, false),
     chain: {
       rpcUrl,
-      publicRpcUrl: defaultPublicRpc(rpcUrl, env.PUBLIC_RPC_URL),
+      rpcUrls,
+      rpcMaxRpsPerUrl: rates,
+      publicRpcUrl: defaultPublicRpc(rpcUrls.find((u) => defaultPublicRpc(u, undefined) !== null) ?? rpcUrl, env.PUBLIC_RPC_URL),
       chainId: chainIdOf(env.CHAIN_ID),
       chainIdExplicit: blank(env.CHAIN_ID) !== null,
       explorerUrl: blank(env.EXPLORER_URL)?.replace(/\/+$/, '') ?? null,
@@ -378,7 +412,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       staleSessionAfterS: Math.max(1, int(env.STALE_SESSION_AFTER_S, 15 * 60)),
       staleSweepAck: bool(env.STALE_SWEEP_ACK, false),
       logChunkBlocks: Math.max(100, int(env.LOG_CHUNK_BLOCKS, 50_000)),
-      rpcMaxRps: Math.max(0.2, Number(env.RPC_MAX_RPS) > 0 ? Number(env.RPC_MAX_RPS) : 4),
+      rpcMaxRps: rates[0],
       rpcBurst: Math.max(1, int(env.RPC_BURST, 8)),
       testnetRpcUrl: blank(env.TESTNET_RPC_URL)?.replace(/\/+$/, '') ?? NETWORKS.testnet.rpcUrl,
       payoutGuardMultiple: Math.max(0, int(env.PAYOUT_GUARD_MULTIPLE, PAYOUT_GUARD_MULTIPLE_DEFAULT)),

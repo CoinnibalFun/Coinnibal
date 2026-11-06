@@ -22,7 +22,7 @@ import { MapSettingsStore } from './rooms/map-settings';
 import { ShareService } from './site/shares';
 import { shareCardSelfCheck } from './site/share-card';
 import { viemHolderReader, type HolderReader } from './chain/evm-client';
-import { configureRpcBudgets, startRpcMinuteLog } from './chain/rpc-budget';
+import { configureRpcBudgetFor, configureRpcBudgets, startRpcMinuteLog } from './chain/rpc-budget';
 import { loadServerKeySecret } from './chain/server-key';
 import { chainDir, isTestChain, migrateLegacyState, resolveStateChainId, stateDir } from './chain/state-dir';
 import { HolderWlStore } from './site/holder-wl';
@@ -121,6 +121,8 @@ export async function createApp(
   if (weakSecret) log(`auth: ${weakSecret}`);
   // one request budget per RPC URL for the whole process (the public RPC answers 429 above its limit)
   configureRpcBudgets({ ratePerSec: cfg.chain.rpcMaxRps, burst: cfg.chain.rpcBurst });
+  // EVM_RPC_URLS: each URL its own budget (RPC_MAX_RPS may give one rate per URL: a provider allows far more than a public RPC)
+  cfg.chain.rpcUrls.forEach((u, i) => configureRpcBudgetFor(u, { ratePerSec: cfg.chain.rpcMaxRpsPerUrl[i] ?? cfg.chain.rpcMaxRps, burst: cfg.chain.rpcBurst }));
   const stopRpcLog = startRpcMinuteLog(log);
   const files = dataFileNames(cfg);
   // chain-keyed state: DATA_DIR/chains/<chainId>/ (registry, journal, bot wallets, allowlist snapshots)
@@ -308,7 +310,7 @@ export async function createApp(
       if (paymentReader !== undefined) return paymentReader;
       if (cfg.devFakeChain) return (paymentReader = devFakePaymentReader());
       if (!chain.enabled || !cfg.chain.rpcUrl) return null;
-      return (paymentReader = viemPaymentReader(cfg.chain.rpcUrl));
+      return (paymentReader = viemPaymentReader(cfg.chain.rpcUrls));
     },
     chainId: () => chain.status().chainId,
     isHolder: (wallet) => mint.isHolder(wallet),

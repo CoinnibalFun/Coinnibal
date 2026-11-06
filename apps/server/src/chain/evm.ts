@@ -23,7 +23,7 @@ import { join } from 'node:path';
 import { PAYOUT_GUARD_FLAG, type Journal, type JournalItem, type SettlementItem, type SweepItem } from '../stake/journal';
 import { SettledLog } from '../stake/settled-log';
 import { ChainCache } from './chain-cache';
-import { hasMulticall3, readChainId, viemEvmClient, withTimeout, type ArenaEvent, type EvmClient } from './evm-client';
+import { multicallMode, readChainId, viemEvmClient, withTimeout, type ArenaEvent, type EvmClient, type MulticallMode } from './evm-client';
 import { isRateLimited, isTransientRpcError, withRpcPriority } from './rpc-budget';
 import { loadServerKey } from './server-key';
 import { isTestChain } from './state-dir';
@@ -62,8 +62,8 @@ export const LOW_BALANCE_WEI = 10n ** 16n;
 const STOP_GRACE_MS = 5_000;
 /** When the deploy block of the arena is unknown, the session index starts this many blocks back. */
 const INDEX_LOOKBACK_BLOCKS = 1_000_000n;
-/** Concurrent session reads of the stale sweeper. */
-const READ_CONCURRENCY = 8;
+/** Concurrent session reads of the stale sweeper (merged into one multicall where the RPC allows it). */
+const READ_CONCURRENCY = 40;
 /** The confirmed settlements, cancels and loot burns (`DATA_DIR/chains/<id>/settled.jsonl`). */
 export const SETTLED_LOG_FILE = 'settled.jsonl';
 /** A held settlement's session is re-read at most this often (a player may refund it after 24 h). */
@@ -177,6 +177,8 @@ export class EvmChain implements ChainGateway {
   private balance: bigint | null = null;
   /** The RPC's chain is not the one the state was opened for (`EvmChainDeps.stateChainId`). */
   private chainMismatch = false;
+  /** How concurrent reads are merged (null: an injected client). */
+  multicall: MulticallMode | null = null;
 
   private liveSessions: () => Set<string> = () => new Set();
   private readonly settledListeners: ((e: SettledEvent) => void)[] = [];
@@ -295,13 +297,28 @@ export class EvmChain implements ChainGateway {
     const where = this.cfg.chain.rpcUrl ?? 'injected client';
     try {
       if (!this.client) {
-        const rpcUrl = this.cfg.chain.rpcUrl!;
-        const chainId = await readChainId(rpcUrl);
+        const urls = this.cfg.chain.rpcUrls.length > 0 ? this.cfg.chain.rpcUrls : [this.cfg.chain.rpcUrl!];
+        const chainId = await readChainId(urls[0]);
         if (!isSupportedChainId(chainId)) return this.refuseChain(chainId);
-        // concurrent eth_calls are merged into one Multicall3 call where the chain has it
-        const multicall = await hasMulticall3(rpcUrl);
-        this.client = viemEvmClient(rpcUrl, this.account!, { chainId, overrides: this.overrides(), multicall });
-        if (multicall) this.log('chain: Multicall3 found — concurrent reads are batched into one eth_call');
+        // EVM_RPC_URLS: every fallback must serve the same chain; one that serves another (or none) is left out
+        const usable = [urls[0]];
+        for (const u of urls.slice(1)) {
+          const id = await readChainId(u).catch(() => null);
+          if (id === chainId) usable.push(u);
+          else this.log(`!!! chain: fallback RPC #${urls.indexOf(u) + 1} ${id === null ? 'does not answer' : `serves chain ${id}`} — not used (EVM_RPC_URLS)`);
+        }
+        // concurrent eth_calls are merged into one Multicall3 call (or a deployless one where the chain has none)
+        const multicall = await multicallMode(usable, chainId);
+        this.client = viemEvmClient(usable, this.account!, { chainId, overrides: this.overrides(), multicall });
+        this.multicall = multicall;
+        this.log(
+          `chain: ${usable.length} RPC${usable.length > 1 ? 's (fallback in this order)' : ''} · ` +
+            (multicall === 'multicall3'
+              ? 'Multicall3 found — concurrent reads are batched into one eth_call'
+              : multicall === 'deployless'
+                ? 'no Multicall3 on this chain — concurrent reads are batched into one deployless multicall eth_call'
+                : 'no multicall — concurrent reads go as JSON-RPC batches'),
+        );
       }
       if (this.chainId === null) {
         const id = await withTimeout(this.client.getChainId(), 20_000, 'eth_chainId');
@@ -888,6 +905,7 @@ export class EvmChain implements ChainGateway {
     const vault = toLedger(info.vault, t.decimals, 'floor');
     if (this.journal.owedByArena(arenaId) <= vault) return this.booksClear(arenaId);
     let owed = this.journal.liveAndLootByArena(arenaId);
+    const reads: Promise<number>[] = [];
     for (const p of this.journal.pending) {
       if (p.arenaId !== arenaId) continue;
       if (p.kind === 'sweep') {
@@ -895,13 +913,13 @@ export class EvmChain implements ChainGateway {
         continue;
       }
       if (!isEvm(p.player) || !Number.isSafeInteger(p.sessionId)) continue;
-      let s;
-      try {
-        s = await client.session(arena, arenaId, getAddress(p.player));
-      } catch {
-        return true;
-      }
-      if (s.id === BigInt(p.sessionId!) && !s.finalized) owed += p.payout ?? 0;
+      // read together: concurrent reads go out as one multicall
+      reads.push(client.session(arena, arenaId, getAddress(p.player)).then((s) => (s.id === BigInt(p.sessionId!) && !s.finalized ? (p.payout ?? 0) : 0)));
+    }
+    try {
+      for (const v of await Promise.all(reads)) owed += v;
+    } catch {
+      return true;
     }
     if (owed <= vault) return this.booksClear(arenaId);
     const why = `the vault holds ${this.units(vault)} but the journal owes ${this.units(owed)}`;
@@ -1085,10 +1103,8 @@ export class EvmChain implements ChainGateway {
       this.log(`!!! chain: settle batch ${hash} (${send.length} item(s)) reverted — retrying with backoff`);
       return;
     }
-    let settledCount = 0;
-    for (const c of send) {
-      if (await this.reconcile(c, hash, receipt.events)) settledCount++;
-    }
+    // the items the receipt settled are booked at once; the others are re-read together (one multicall)
+    const settledCount = (await Promise.all(send.map((c) => this.reconcile(c, hash, receipt.events)))).filter(Boolean).length;
     this.log(`chain: ${mode} batch ${hash} · arena #${send[0].item.arenaId} · ${settledCount}/${send.length} ${mode === 'cancel' ? 'refunded' : 'settled'}`);
   }
 
