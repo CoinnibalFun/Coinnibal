@@ -1,4 +1,4 @@
-import type { ErrorCode } from '@elymum/shared';
+import { REFUSAL_CODES, type ErrorCode } from '@elymum/shared';
 import type { ChainGateway, ChainSession } from '../chain/types';
 import type { Candidate } from '../integrity/detectors';
 import type { Journal, SettlementItem } from '../stake/journal';
@@ -53,7 +53,7 @@ export class EmblemGate {
     if (!(await this.isHolderTicket(s))) return null;
     if (!(await this.d.isHolder(wallet, true).catch(() => false))) {
       this.cancel(wallet, s, 'the wallet no longer holds an emblem');
-      return { code: 'emblem_required', message: 'This ticket needs an Elymum emblem in your wallet, and it is not there now. The ticket is refunded in full.' };
+      return { code: REFUSAL_CODES.emblem, message: 'This ticket needs an Elymum emblem in your wallet, and it is not there now. The ticket is refunded in full.' };
     }
     const tokens = await this.d.emblemTokens(wallet, true).catch(() => null);
     // the index cannot tell (never read, the RPC refuses logs): balanceOf said yes, so the seat goes on
@@ -78,7 +78,7 @@ export class EmblemGate {
         evidence: { tokenIds: tokens, session: s.key, heldBy: r.heldBy.map((c) => c.session) },
       });
     }
-    return { code: 'emblem_in_use', message: 'Your emblem already serves another open holder ticket (one ticket per emblem at a time). This ticket is refunded in full.' };
+    return { code: REFUSAL_CODES.emblem, message: 'Your emblem already serves another open holder ticket (one ticket per emblem at a time). This ticket is refunded in full.' };
   }
 
   /** The seated ticket was settled: its token id is free. */

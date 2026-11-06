@@ -606,18 +606,16 @@ export type ErrorCode =
    * The room is a paid custom room (an invite-only arena instance): it is entered with a ticket of
    * its arena (`arena:<id>:<CODE>`), not with `private:<CODE>`.
    */
-  | 'paid_room'
-  /**
-   * The server cannot save its money records right now (the disk is full): no new arena seat until it can. A live
-   * coin plays on; the ticket stays safe on chain (seated later, or refunded in full if never played).
-   */
-  | 'storage_failing'
-  /** The arena is closing for a re-price at its bell (`/admin` "Re-price at next bell"): no new seat this round. */
-  | 'arena_repricing'
-  /** A holder ticket (holders-only arena, or the holder fee rates) whose wallet holds no emblem now: refunded in full. */
-  | 'emblem_required'
-  /** A holder ticket whose wallet's emblem already serves another open holder ticket: refunded in full. */
-  | 'emblem_in_use';
+  | 'paid_room';
+
+/**
+ * Refusals that reuse a code above (the client shows the code's text; the server's `message` says more):
+ * - the journal cannot be written (disk full): `server_full`, no new arena seat until it can;
+ * - an arena closing for a re-price at its bell (`/admin` "Re-price at next bell"): `arenas_disabled`;
+ * - a holder ticket whose wallet holds no emblem now, or whose emblem already serves another open holder ticket:
+ *   `game_closed` (the ticket is refunded in full).
+ */
+export const REFUSAL_CODES = { storage: 'server_full', repricing: 'arenas_disabled', emblem: 'game_closed' } as const satisfies Record<string, ErrorCode>;
 
 /**
  * WebSocket close code: this socket was replaced by a newer one of the same signed-in wallet that took over its live

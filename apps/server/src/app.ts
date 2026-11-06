@@ -237,6 +237,8 @@ export async function createApp(
   // bought power-ups: the admin's prices (DATA_DIR/site/shop.json), the charges and used payments per chain
   const shopSettings = new ShopSettingsStore(persist ? cfg.dataDir : null, undefined, log);
   const boostInventory = new BoostInventory(chainState ? join(chainState, files.boosts) : null, log);
+  // arena tiers in US dollars and the token's USD price (DATA_DIR/chains/<id>/arena-prices.json): the owner re-prices on chain
+  const arenaPrices = new ArenaPriceStore(chainState, log);
   const shop = new ShopService({
     settings: shopSettings,
     inventory: boostInventory,
@@ -244,11 +246,15 @@ export async function createApp(
     holder: (wallet, fresh) => mint.isHolder(wallet, fresh),
     emblemTokens,
     claims: emblemClaims,
+    // power-up packs priced in dollars convert at the arenas' price and rounding (the manual price today)
+    usdPrice: async () => {
+      const r = await arenaPrices.price();
+      return r.ok ? { price: r.price, usdPerToken: r.usdPerToken, sigFigs: arenaPrices.settings.sigFigs } : null;
+    },
     log,
   });
   site.setShop({ service: shop, settings: shopSettings, inventory: boostInventory });
-  // arena tiers in US dollars and the token's USD price (DATA_DIR/chains/<id>/arena-prices.json): the owner re-prices on chain
-  site.setArenaPrices(new ArenaPriceStore(chainState, log));
+  site.setArenaPrices(arenaPrices);
 
   // "Share on X": cards of results and notable kills, made from the server's own records (DATA_DIR/site/shares.json)
   const shares = new ShareService({
