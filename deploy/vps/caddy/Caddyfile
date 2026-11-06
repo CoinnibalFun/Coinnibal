@@ -41,5 +41,8 @@
 	reverse_proxy app:8787 {
 		# stream responses (the admin backup download) instead of buffering them
 		flush_interval -1
+		# keep WebSockets open across a Caddy config reload (update.sh reloads Caddy when this file changes);
+		# without it Caddy closes every game socket at once on a reload (the default delay is 0)
+		stream_close_delay 10m
 	}
 }
