@@ -101,13 +101,28 @@ describe('boosts: rules', () => {
     expect(migrateBoostCounts(null)).toEqual({ magnet: 0, leap: 0, speed: 0, invis: 0 });
   });
 
+  it('holders pay 20 % less by default: the quote for every default pack', () => {
+    const d = SHOP_DEFAULTS.holderDiscountPct;
+    const quote = (k: keyof typeof SHOP_DEFAULTS.prices) => [packPriceRaw(SHOP_DEFAULTS.prices[k], 18, 0), packPriceRaw(SHOP_DEFAULTS.prices[k], 18, d)];
+    expect(quote('magnet')).toEqual([600n * 10n ** 18n, 480n * 10n ** 18n]);
+    expect(quote('speed')).toEqual([600n * 10n ** 18n, 480n * 10n ** 18n]);
+    expect(quote('leap')).toEqual([900n * 10n ** 18n, 720n * 10n ** 18n]);
+    expect(quote('invis')).toEqual([1200n * 10n ** 18n, 960n * 10n ** 18n]);
+    // an odd base-unit price rounds down (the holder never pays more than 80 %); the admin's other percentages too
+    expect(packPriceRaw('0.000007', 6, 20)).toBe(5n);
+    expect(packPriceRaw('600', 18, 35)).toBe(390n * 10n ** 18n);
+    // out of range clamps to 0..100 %
+    expect(packPriceRaw('600', 18, -5)).toBe(600n * 10n ** 18n);
+    expect(packPriceRaw('600', 18, 150)).toBe(0n);
+  });
+
   it('pack prices in base units, with the holder discount rounded down', () => {
     expect(packPriceRaw('300', 18, 0)).toBe(300n * 10n ** 18n);
     expect(packPriceRaw('300', 18, 30)).toBe(210n * 10n ** 18n);
     expect(packPriceRaw('0.000001', 6, 30)).toBe(0n);
     expect(packPriceRaw('12.5', 6, 0)).toBe(12_500_000n);
     expect(() => packPriceRaw('abc', 18, 0)).toThrow();
-    expect(SHOP_DEFAULTS).toMatchObject({ packSize: 3, holderDiscountPct: 30, arenaUsesPerRound: 2, holderExtraArenaUses: 1 });
+    expect(SHOP_DEFAULTS).toMatchObject({ packSize: 3, holderDiscountPct: 20, arenaUsesPerRound: 2, holderExtraArenaUses: 1 });
     // payments go to the arena contract (`pay`): there is no sink setting any more
     expect('sink' in SHOP_DEFAULTS).toBe(false);
     expect(SHOP_DEFAULTS.prices).toEqual({ magnet: '600', leap: '900', speed: '600', invis: '1200' });

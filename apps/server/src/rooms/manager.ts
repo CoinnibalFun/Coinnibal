@@ -577,8 +577,24 @@ export class RoomManager {
       list.map((a) => [a.id, { buyIn: a.entryFee, maxPlayers: a.maxSessions, enabled: a.enabled, pot: a.pot, holdersOnly: a.holdersOnly === true }]),
     );
     this.arenaCache = { at: Date.now(), ids };
+    this.followPrices(ids);
     await this.recheckVaults(ids);
     return ids;
+  }
+
+  /**
+   * The owner re-priced an arena on chain (`updateArena`, only possible while none of its tickets is open): the rooms
+   * of that arena take the new price for their own figures (`RoomHandle.setBuyIn`). Tickets are not touched: each
+   * one keeps the entry fee its session recorded.
+   */
+  private followPrices(ids: Map<number, ArenaData>): void {
+    for (const [id, a] of ids) {
+      for (const room of this.ticketRooms(id)) {
+        if (!room.opts.stake || room.opts.stake.buyIn === a.buyIn) continue;
+        this.deps.log(`arena #${id}: ticket price ${room.opts.stake.buyIn} -> ${a.buyIn} (ledger units) on chain; ${room.id} follows`);
+        room.setBuyIn(a.buyIn);
+      }
+    }
   }
 
   /**

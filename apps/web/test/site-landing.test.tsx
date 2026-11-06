@@ -24,10 +24,10 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     await waitFor(() => expect(screen.getByRole('link', { name: 'Collab, soon' }).getAttribute('href')).toBe('/collab'));
     for (const h of [/everything is a feast/, 'One lap, four stops, then lunch.', 'Usual suspects of the plain.', /Your seat at the feast/, 'Pick a table. Same rules, bigger plates.', 'Small print, large font.'])
       expect(screen.getByRole('heading', { name: h })).toBeTruthy();
-    // the four arenas as places on the ring, with their fees in the game token
-    for (const [name, fee] of [['Asphodel Meadow', '1,000'], ['Lethe Shore', '10,000'], ['Golden Bough', '50,000'], ['Isles of the Blessed', '250,000']]) {
+    // the four arenas as places on the ring, priced in US dollars (paid in the game token)
+    for (const [name, fee] of [['Asphodel Meadow', '$1'], ['Lethe Shore', '$3'], ['Golden Bough', '$5'], ['Isles of the Blessed', '$10']]) {
       expect(screen.getByRole('heading', { level: 3, name })).toBeTruthy();
-      expect(screen.getByText(fee)).toBeTruthy();
+      expect(within(screen.getByRole('heading', { level: 3, name }).closest('.ld-ticket') as HTMLElement).getByText(fee)).toBeTruthy();
     }
     expect(screen.getByText('Opens after the mint')).toBeTruthy();
     // the NFT plate links to the mint; the header has the nav and Connect

@@ -1,3 +1,5 @@
+import { DEFAULT_ARENAS, DEFAULT_HOLDER_FEE_RATES } from '@elymum/shared';
+
 /**
  * Constants mirrored from `packages/contracts/contracts/*.sol` (a unit test checks the ones the
  * contracts expose as `public constant` against the bundled ABIs, and the e2e test reads them from
@@ -78,10 +80,11 @@ export const DEFAULT_MINT_BUFFER_BPS = 100;
 export const GAS_PRICE_URL_DEFAULT = 'https://api.hyperliquid.xyz/info';
 
 /**
- * Holder rates the admin panel suggests for `setHolderPerks` (the contract starts with the perks off): an emblem
- * holder's profit fee is only burned (15 %), nothing goes to the fee wallet.
+ * Holder rates Finish setup and `pnpm admin holder-perks` use for `setHolderPerks` (the contract starts without a holder
+ * discount): `DEFAULT_HOLDER_FEE_RATES`, 8 % burned + 2 % to the fee wallet, i.e. holders pay 10 % of their profit
+ * instead of 20 %.
  */
-export const SUGGESTED_HOLDER_BURN_BPS = 1_500;
-export const SUGGESTED_HOLDER_VAULT_BPS = 0;
-/** Arenas the admin panel suggests marking holders-only (#4, the Isles of the Blessed). */
-export const DEFAULT_HOLDERS_ONLY_ARENA_IDS: readonly number[] = [4];
+export const SUGGESTED_HOLDER_BURN_BPS = DEFAULT_HOLDER_FEE_RATES.burnBps;
+export const SUGGESTED_HOLDER_VAULT_BPS = DEFAULT_HOLDER_FEE_RATES.vaultBps;
+/** Arenas Finish setup marks holders-only (the $10 tier, #4 the Isles of the Blessed: `DEFAULT_ARENAS`). */
+export const DEFAULT_HOLDERS_ONLY_ARENA_IDS: readonly number[] = DEFAULT_ARENAS.filter((a) => a.holdersOnly).map((a) => a.id);

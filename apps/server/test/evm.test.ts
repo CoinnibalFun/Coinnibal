@@ -176,9 +176,9 @@ describe('EvmChain on a hardhat node', () => {
     expect(chain.status()).toMatchObject({ tokenReady: true, arenasEnabled: true, token: { address: token, decimals: 18 }, fees: { burnBps: 1500, vaultBps: 500, paymentBurnBps: 5000, burnMode: 0 } });
     expect((await chain.listArenas(true)).map((a) => [a.id, a.entryFee])).toEqual([
       [1, K],
-      [2, 10 * K],
-      [3, 50 * K],
-      [4, 250 * K],
+      [2, 3 * K],
+      [3, 5 * K],
+      [4, 10 * K],
     ]);
     await chain.checkBalance();
     expect(chain.serverInfo()).toMatchObject({ address: server.address, low: false });
@@ -279,14 +279,14 @@ describe('EvmChain on a hardhat node', () => {
     skewMs = 3_600_000;
     const before2 = await getTokenBalance(client, token, p2.address);
     expect(await chain.sweepStale()).toBe(1); // every arena-1 ticket was settled: only p2's in arena 2
-    // the journal counts what leaves the vault: the whole 10,000 entry fee
-    expect(journal.settlements().map((s) => [s.player, s.arenaId, s.payout, s.reason])).toEqual([[p2.address, 2, 10_000 * 1e6, 'stale']]);
+    // the journal counts what leaves the vault: the whole 3,000 entry fee
+    expect(journal.settlements().map((s) => [s.player, s.arenaId, s.payout, s.reason])).toEqual([[p2.address, 2, 3_000 * 1e6, 'stale']]);
     const fees2 = await getTokenBalance(client, token, feeWallet.address);
     await chain.processPending();
     expect(journal.pending).toHaveLength(0);
-    expect(await getTokenBalance(client, token, p2.address)).toBe(before2 + 10_000n * T);
+    expect(await getTokenBalance(client, token, p2.address)).toBe(before2 + 3_000n * T);
     expect((await getSession(client, arena, 2, p2.address)).id).toBe(0n);
-    expect(settled.at(-1)).toMatchObject({ player: p2.address, arenaId: 2, payout: 10 * K, fee: 0, refund: true });
+    expect(settled.at(-1)).toMatchObject({ player: p2.address, arenaId: 2, payout: 3 * K, fee: 0, refund: true });
     expect((await getArena(client, arena, 2)).vault).toBe(0n);
     expect(await getTokenBalance(client, token, feeWallet.address)).toBe(fees2); // no fee for an unplayed ticket
     expect(await chain.sweepStale()).toBe(0);

@@ -909,6 +909,26 @@
   font-size: 11px;
   color: var(--ink-3);
 }
+/* the emblem holder badge (cosmetic): a sun-yellow pill with the laurel the coin wears in game */
+.kl-profile__holder {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin: 2px 0;
+  padding: 1px 8px 1px 6px;
+  border: 2px solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--sun);
+  color: var(--ink-fixed);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.kl-profile__holder .kb-laurel {
+  color: var(--up-s);
+}
 .kl-xp {
   display: block;
   height: 14px;

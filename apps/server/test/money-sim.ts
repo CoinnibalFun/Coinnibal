@@ -14,14 +14,16 @@
  *         + Σ entry fees of open tickets that are in no room and no pending item (bought, not seated yet)
  *
  * plus the contract's own books (deposited = vault + paid out + burned + fees) and the token supply (every token is
- * in a wallet, the arena, the fee wallet or burned). At the end everything is drained and the run asserts: no ticket
+ * in a wallet, the arena, the fee wallet or burned). A share of the wallets hold the emblem (the arena's holder NFT):
+ * their tickets must carry the holder pair (`DEFAULT_HOLDER_FEE_RATES`, 8 % + 2 % of the profit), everyone else's the
+ * normal pair (15 % + 5 %), and every settlement's split must be the shared fee module's at the ticket's own rates. At the end everything is drained and the run asserts: no ticket
  * left open, no journal item left, every ticket closed exactly once (no double settlement, no lost ticket), every
  * vault holds exactly its forfeits.
  */
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { computeProfitFee, PlayerFlag, ROBINHOOD_TESTNET_CHAIN_ID, roundAt, TEST_ARENA_ARRIVE_MS, TEST_ARENA_BOTS, testArenaRoomId, TICK_MS, type CustomDifficulty, type ServerMessage } from '@elymum/shared';
+import { computeProfitFee, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, PlayerFlag, ROBINHOOD_TESTNET_CHAIN_ID, roundAt, TEST_ARENA_ARRIVE_MS, TEST_ARENA_BOTS, testArenaRoomId, TICK_MS, type CustomDifficulty, type ServerMessage } from '@elymum/shared';
 import type { ArenaInfo, SessionInfo } from '@elymum/sdk';
 import { getAddress, type Address } from 'viem';
 import { generatePrivateKey } from 'viem/accounts';
@@ -34,7 +36,7 @@ import { Leaderboards } from '../src/leaderboards';
 import { Conn } from '../src/net/conn';
 import { MAX_STAKE_SESSION_AGE_S, Room } from '../src/rooms/room';
 import { Journal } from '../src/stake/journal';
-import { ARENA, E18, FakeEvm } from './fake-evm';
+import { ARENA, E18, FakeEvm, NFT } from './fake-evm';
 
 /** One ticket closure on chain (the double-settlement and lost-ticket checks read these). */
 export interface Closure {
@@ -54,6 +56,8 @@ export interface SimChain {
   readonly client: EvmClient;
   readonly decimals: number;
   readonly wallets: Address[];
+  /** The wallets holding the arena's holder NFT (lower case): their tickets get the holder pair. */
+  readonly holders: ReadonlySet<string>;
   arenaIds(): number[];
   /** Entry fee (base units). */
   entryFee(arenaId: number): bigint;
@@ -71,7 +75,10 @@ export interface SimChain {
   /** Token supply split: every player wallet, the arena contract, the fee wallet, burned; and what was ever minted. */
   tokens(): Promise<{ wallets: bigint; arena: bigint; feeWallet: bigint; burned: bigint; minted: bigint }>;
   closures(): Promise<Closure[]>;
-  /** `Settled` events whose fee split is not the shared fee module's (`computeProfitFee`) for the ticket's rates. */
+  /**
+   * `Joined` events whose rates are not the wallet's (the holder pair for a holder, else the normal pair) and `Settled`
+   * events whose fee split is not the shared fee module's (`computeProfitFee`) for the ticket's own rates.
+   */
   feeViolations(): Promise<string[]>;
   stop(): Promise<void>;
 }
@@ -151,6 +158,8 @@ export interface SimReport {
   faults: { rpcErrors: number; ambiguousSends: number; lostReceipts: number; outages: number; workerCrashes: number; restarts: number; hardKills: number; holds: number; released: number; zeroed: number; refusingPlayers: number; spills: number; daysPassed: number; dayRefunds: number };
   /** The test-arena scenario: bots eaten by players (mass, no value) and stake cells eaten by bots (value spilled as loot). */
   testArenas: { rooms: number; botsEaten: number; botSpills: number; botSpillValue: number } | null;
+  /** Emblem holders: wallets, tickets bought, tickets settled and settled with a profit (paying the holder pair). */
+  holders: { wallets: number; tickets: number; settled: number; winners: number };
   /** Settled tickets paid more than their entry fee / less than it (eaten or shrunk). */
   winners: number;
   losers: number;
@@ -326,7 +335,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   }
 
   const players: Player[] = sim.wallets.map((w) => ({ wallet: w, conn: null, seat: null, bought: null, skip: false, refusingUntil: 0 }));
-  const stats = { tickets: 0, seated: 0, unplayed: 0, holds: 0, released: 0, zeroed: 0, workerCrashes: 0, restarts: 0, hardKills: 0, outages: 0, refusingPlayers: 0, spills: 0, checks: 0, daysPassed: 0, dayRefunds: 0 };
+  const stats = { holderTickets: 0, tickets: 0, seated: 0, unplayed: 0, holds: 0, released: 0, zeroed: 0, workerCrashes: 0, restarts: 0, hardKills: 0, outages: 0, refusingPlayers: 0, spills: 0, checks: 0, daysPassed: 0, dayRefunds: 0 };
   let ticks = 0;
 
   /** Drops what the simulation knows about seats of rooms that are gone (worker crash, restart). */
@@ -572,6 +581,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
         const s2 = await sim.session(a, p.wallet);
         tickets.add(`${a}:${s2.id}`);
         stats.tickets++;
+        if (sim.holders.has(p.wallet.toLowerCase())) stats.holderTickets++;
         p.bought = a;
         p.skip = rng() < f.unplayed;
         if (p.skip) stats.unplayed++;
@@ -750,6 +760,12 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
       dayRefunds: stats.dayRefunds,
     },
     testArenas: opts.testArenas ? { rooms: arenaIds.length, ...testBots } : null,
+    holders: {
+      wallets: sim.holders.size,
+      tickets: stats.holderTickets,
+      settled: closures.filter((c) => c.name === 'Settled' && sim.holders.has(c.player.toLowerCase())).length,
+      winners: closures.filter((c) => c.name === 'Settled' && sim.holders.has(c.player.toLowerCase()) && c.amount > sim.entryFee(c.arenaId)).length,
+    },
     winners: closures.filter((c) => c.name === 'Settled' && c.amount > sim.entryFee(c.arenaId)).length,
     losers: closures.filter((c) => c.name === 'Settled' && c.amount < sim.entryFee(c.arenaId)).length,
     violations,
@@ -764,8 +780,18 @@ export const feeOf = computeProfitFee;
  * The simulation on `FakeEvm` (the TypeScript model of ElymumArena v3: sessions, vaults, the skip rules, two-phase
  * payouts, sweep ids, the 24 h refund). Fast enough for thousands of rounds.
  */
-export function fakeSimChain(opts: { players: number; seed: number; arenas?: { id: number; tokens: bigint }[] }): SimChain {
+/** The fee pair a ticket of `wallet` must carry (`holders`: lower-case holder wallets). */
+export function expectedRates(holders: ReadonlySet<string>, wallet: string) {
+  return holders.has(wallet.toLowerCase()) ? DEFAULT_HOLDER_FEE_RATES : DEFAULT_FEE_RATES;
+}
+
+export function fakeSimChain(opts: { players: number; seed: number; arenas?: { id: number; tokens: bigint }[]; holderShare?: number }): SimChain {
   const evm = new FakeEvm();
+  // the arena's holder perks at the owner's pair: emblem holders pay 8 % + 2 % of their profit
+  evm.config.holderNft = NFT;
+  evm.config.holderBurnBps = DEFAULT_HOLDER_FEE_RATES.burnBps;
+  evm.config.holderVaultBps = DEFAULT_HOLDER_FEE_RATES.vaultBps;
+  const holders = new Set<string>();
   let skewS = 0;
   const startS = Math.floor(Date.now() / 1000);
   evm.nowS = () => startS + skewS;
@@ -783,6 +809,11 @@ export function fakeSimChain(opts: { players: number; seed: number; arenas?: { i
     evm.gas.set(w.toLowerCase(), 10n ** 30n);
     evm.tokens.set(w.toLowerCase(), grant);
     evm.allowances.set(`${w.toLowerCase()}:${ARENA.toLowerCase()}`, (1n << 256n) - 1n);
+    // a share of the players hold the emblem (at least one)
+    if (i === 0 || rng() < (opts.holderShare ?? 0.35)) {
+      holders.add(w.toLowerCase());
+      evm.arenaHolders.add(w.toLowerCase());
+    }
   }
   const minted = grant * BigInt(opts.players);
   const join = (w: Address, arenaId: number) => ({ address: ARENA, abi: [], functionName: 'join', args: [arenaId] }) as never;
@@ -793,6 +824,7 @@ export function fakeSimChain(opts: { players: number; seed: number; arenas?: { i
     client: evm,
     decimals: 18,
     wallets,
+    holders,
     arenaIds: () => arenas.map((a) => a.id),
     entryFee: (id) => evm.arenaMap.get(id)!.entryFee,
     async buy(w, arenaId) {
@@ -844,7 +876,22 @@ export function fakeSimChain(opts: { players: number; seed: number; arenas?: { i
       return evm.closures.map((c) => ({ ...c }));
     },
     async feeViolations() {
-      return [];
+      const bad: string[] = [];
+      for (const j of evm.joined) {
+        const r = evm.joinedRates.get(j.sessionId)!;
+        const want = expectedRates(holders, j.player);
+        if (r.burnBps !== want.burnBps || r.vaultBps !== want.vaultBps) bad.push(`Joined #${j.sessionId} of ${j.player}: rates ${r.burnBps}/${r.vaultBps}, want ${want.burnBps}/${want.vaultBps}`);
+      }
+      for (const s of evm.settledSplits) {
+        const j = evm.joinedRates.get(s.sessionId);
+        if (!j) {
+          bad.push(`Settled #${s.sessionId} has no Joined event`);
+          continue;
+        }
+        const f = computeProfitFee(j.entryFee, s.payout, j);
+        if (f.burned !== s.burned || f.toVault !== s.toVault || f.net !== s.net) bad.push(`Settled #${s.sessionId}: fee split ${s.burned}/${s.toVault}/${s.net} != shared fee module ${f.burned}/${f.toVault}/${f.net}`);
+      }
+      return bad;
     },
     async stop() {},
   };

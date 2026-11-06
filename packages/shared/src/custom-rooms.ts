@@ -254,7 +254,8 @@ export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
   // about $1.50 at ETH = $3,000 (docs/ECONOMY.md); the admin re-prices it in /admin as ETH moves
   priceGas: '0.0005',
   treasury: null,
-  holderPerk: 'discount',
+  // owner decision 2026-11: an emblem holder opens one room of the base size a day (UTC) for free
+  holderPerk: 'free_daily',
   holderDiscountPct: 50,
   maxLive: 6,
   maxPerWallet: 2,

@@ -86,6 +86,12 @@ export interface RoomHandle extends RoomConnRoom {
   setMapScale(scale: MapScaleSettings): void;
   /** A test arena's bot settings, applied live (ignored by any other room). */
   setBots(count: number, difficulty: CustomDifficulty): void;
+  /**
+   * The arena's ticket price changed on chain (the owner re-priced it while no ticket was open): the room's own
+   * figure follows (the lobby fallback, the loot pieces, the integrity evidence). Money never reads it: every ticket
+   * plays, settles and refunds at the entry fee recorded in its own session.
+   */
+  setBuyIn(buyIn: number): void;
   clearAvatar(wallet: string): number;
   announce(text: string): void;
   /** A custom room closes at `endsAt` (server clock): the countdown for everyone in it (`closing`). */

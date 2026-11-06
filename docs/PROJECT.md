@@ -139,12 +139,15 @@ On screen:
 
 ### 2.5 Arenas
 
-| Arena | Entry fee |
-|---|---|
-| Asphodel Meadow | 1,000 `$ELYMUM` |
-| Lethe Shore | 10,000 `$ELYMUM` |
-| Golden Bough | 50,000 `$ELYMUM` |
-| Isles of the Blessed | 250,000 `$ELYMUM` |
+| Arena | Ticket | Created at (reference price $0.001 a token) |
+|---|---|---|
+| Asphodel Meadow | $1 | 1,000 `$ELYMUM` |
+| Lethe Shore | $3 | 3,000 `$ELYMUM` |
+| Golden Bough | $5 | 5,000 `$ELYMUM` |
+| Isles of the Blessed (emblem holders only) | $10 | 10,000 `$ELYMUM` |
+
+Tickets are priced in US dollars; the chain keeps the entry fee in tokens, and the owner re-prices the arenas at the
+token's USD price from `/admin` (ECONOMY.md section 1).
 
 Ids 1 to 4, created from `/admin` → Setup → Finish setup (or `pnpm admin create-arena --defaults`) once the token is
 set, 300 open tickets each; the Isles are for emblem holders. Each arena runs as 50-player instances on the same vault:
@@ -183,8 +186,8 @@ and seats, and it closes as soon as it has stood empty for 2 minutes. `POST /api
 There is no entry fee: the whole ticket price goes into the arena vault and the coin starts at it. When a ticket is
 settled for more than its entry fee, the arena contract takes a fee from the **profit**: 15 % is burned (the token's
 `burn()` in burn mode 1, else `0x…dEaD`) and 5 % goes to the fee wallet. A loss or a break-even pays nothing. The rates
-are fixed into the ticket at join, owner-settable for new tickets, together at most 25 %; emblem holders may get a
-lower pair. The numbers live in one module, `packages/shared/src/fees.ts` (the contract's `computeFees`).
+are fixed into the ticket at join, owner-settable for new tickets, together at most 25 %; emblem holders pay a
+lower pair (8 % + 2 %: 10 % of their profit). The numbers live in one module, `packages/shared/src/fees.ts` (the contract's `computeFees`).
 
 ```
 profit  = max(0, payout - entryFee)

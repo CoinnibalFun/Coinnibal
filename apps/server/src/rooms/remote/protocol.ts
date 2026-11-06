@@ -62,6 +62,8 @@ export type Cmd =
   | { k: 'map'; hid: number; scale: MapScaleSettings }
   /** A test arena's bot settings (`Room.setBots`). */
   | { k: 'bots'; hid: number; count: number; difficulty: CustomDifficulty }
+  /** The arena's ticket price changed on chain (`Room.setBuyIn`). */
+  | { k: 'buyIn'; hid: number; buyIn: number }
   | { k: 'avatar'; wallet: string }
   | { k: 'announce'; hid: number; text: string }
   | { k: 'closing'; hid: number; endsAt: number; message: string }
