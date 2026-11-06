@@ -663,7 +663,7 @@ describe('server over websocket', () => {
     Object.defineProperty(app.journal, 'writeFailing', { get: () => true, configurable: true });
     try {
       c.send({ t: 'join', room: 'arena:1', name: 'Disk', skin: 0 });
-      expect((await c.wait('error', 2000)).code).toBe('storage_failing');
+      expect(await c.wait('error', 2000)).toMatchObject({ code: 'server_full', message: expect.stringMatching(/cannot save/) });
     } finally {
       delete (app.journal as unknown as { writeFailing?: boolean }).writeFailing;
     }

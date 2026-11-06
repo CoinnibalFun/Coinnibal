@@ -58,7 +58,7 @@ describe('one emblem token id serves one open holder ticket', () => {
     h.owners.set('7', b.toLowerCase());
     const tb = ticket(b);
     const refused = await h.gate.seat(b, tb);
-    expect(refused?.code).toBe('emblem_in_use');
+    expect(refused).toMatchObject({ code: 'game_closed', message: expect.stringMatching(/already serves another open holder ticket/) });
     // B's ticket goes back in full at once (a `cancel`: reason stale, payout = the entry fee)
     expect(h.journal.pending).toEqual([expect.objectContaining({ key: tb.key, reason: 'stale', payout: tb.entryFee })]);
     expect(h.flags).toEqual([expect.objectContaining({ subtype: 'emblem_shared', id: 'emblem_shared:7', wallets: [b.toLowerCase(), a.toLowerCase()] })]);
@@ -81,7 +81,7 @@ describe('one emblem token id serves one open holder ticket', () => {
     const a = testSigner().address;
     const t = ticket(a, NORMAL, 4);
     const refused = await h.gate.seat(a, t);
-    expect(refused?.code).toBe('emblem_required');
+    expect(refused).toMatchObject({ code: 'game_closed', message: expect.stringMatching(/needs an Elymum emblem/) });
     expect(h.journal.pending).toEqual([expect.objectContaining({ key: t.key, reason: 'stale' })]);
   });
 

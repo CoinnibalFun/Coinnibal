@@ -5,7 +5,9 @@ import {
   emptyBoostCounts,
   normalizeBoostKind,
   packPriceRaw,
+  roundSigFigs,
   shopPaymentRef,
+  usdToTokenRaw,
   type BoostCounts,
   type BoostKind,
   type BoostRefusal,
@@ -20,6 +22,9 @@ import { ChainBusyError, type ChainGateway } from '../chain/types';
 import { InventoryError, type BoostInventory } from './inventory';
 import type { ShopSettingsStore } from './settings';
 import { verifyPurchase } from './verify';
+
+/** A shown pack price is accepted for a purchase this long (the wallet prompt, a slow block, a token price change). */
+export const QUOTE_VALID_MS = 15 * 60_000;
 
 /** A refused purchase: HTTP status, the `ShopBuyError` code and a player-facing message. */
 export class ShopFail extends Error {
@@ -71,6 +76,11 @@ export interface ShopDeps {
   /** The emblem token ids a wallet owns (null: unknown); with `claims`, the discount is one wallet per token id a day. */
   emblemTokens?: (wallet: string, fresh?: boolean) => Promise<string[] | null>;
   claims?: EmblemClaims;
+  /**
+   * The token's USD price and the significant figures of the arenas' sync (`ArenaPriceStore`: Game → Arena prices):
+   * packs priced in dollars (`priceIn: 'usd'`) are converted with them. Null / absent: the token prices apply.
+   */
+  usdPrice?: () => Promise<{ price: bigint; usdPerToken: string; sigFigs: number } | null>;
   /** Wall clock (cooldowns). */
   now?: () => number;
   /** Waits before re-reading a receipt that is not visible yet (default 0, 1.5 s, 3 s, 5 s). */
@@ -95,8 +105,44 @@ export class ShopService {
   private readonly inflight = new Set<string>();
   private readonly chargeListeners: ((wallet: string) => void)[] = [];
 
+  /** Prices quoted lately (pack kind → raw amounts and until when they are accepted): a price that moved between the
+   * quote and the payment (a new token price) is still credited for a while, never refused after the player paid. */
+  private readonly quoted = new Map<BoostKind, { raw: bigint; holder: boolean; until: number }[]>();
+
   constructor(private readonly deps: ShopDeps) {
     this.now = deps.now ?? Date.now;
+  }
+
+  /**
+   * One pack's price now, raw base units: full and with the holder discount, and in US cents when priced in dollars.
+   * Dollars are converted at the arenas' token price and rounded to their significant figures (the discounted price
+   * too, so a holder's pack is as round as a ticket).
+   */
+  private async priceOf(s: ShopSettings, kind: BoostKind, decimals: number): Promise<{ full: bigint; discounted: bigint; usdCents: number | null; usdPerToken: string | null }> {
+    const usd = s.priceIn === 'usd' ? await this.deps.usdPrice?.().catch(() => null) : null;
+    if (usd) {
+      const cents = s.usdCents[kind];
+      const full = usdToTokenRaw(cents, usd.price, decimals, usd.sigFigs);
+      const pct = BigInt(Math.max(0, Math.min(100, Math.floor(s.holderDiscountPct))));
+      const discounted = pct > 0n ? roundSigFigs((full * (100n - pct)) / 100n, usd.sigFigs) : full;
+      return { full, discounted, usdCents: cents, usdPerToken: usd.usdPerToken };
+    }
+    return { full: packPriceRaw(s.prices[kind], decimals, 0), discounted: packPriceRaw(s.prices[kind], decimals, s.holderDiscountPct), usdCents: null, usdPerToken: null };
+  }
+
+  /** Remembers the prices that were shown (accepted for a purchase for `QUOTE_VALID_MS`). */
+  private remember(kind: BoostKind, full: bigint, discounted: bigint): void {
+    const now = this.now();
+    const list = (this.quoted.get(kind) ?? []).filter((q) => q.until > now);
+    for (const [raw, holder] of [
+      [full, false],
+      [discounted, true],
+    ] as const) {
+      const q = list.find((x) => x.raw === raw && x.holder === holder);
+      if (q) q.until = now + QUOTE_VALID_MS;
+      else list.push({ raw, holder, until: now + QUOTE_VALID_MS });
+    }
+    this.quoted.set(kind, list.slice(-12));
   }
 
   get settings(): ShopSettings {
@@ -147,11 +193,19 @@ export class ShopService {
     const holder = wallet ? await this.discountFor(wallet, false) : false;
     const closed = this.closedReason(s);
     const decimals = token?.decimals ?? 18;
-    const packs: ShopPack[] = BOOST_KINDS.map((kind) => {
-      const full = packPriceRaw(s.prices[kind], decimals, 0);
-      const mine = holder ? packPriceRaw(s.prices[kind], decimals, s.holderDiscountPct) : full;
-      return { kind, charges: s.packSize, priceRaw: mine.toString(), fullPriceRaw: full.toString(), enabled: s.enabled && s.kinds[kind] };
-    });
+    let usdPerToken: string | null = null;
+    const packs: ShopPack[] = [];
+    for (const kind of BOOST_KINDS) {
+      const p = await this.priceOf(s, kind, decimals);
+      const mine = holder ? p.discounted : p.full;
+      if (token) this.remember(kind, p.full, p.discounted);
+      usdPerToken ??= p.usdPerToken;
+      const usd =
+        p.usdCents !== null
+          ? { fullUsdCents: p.usdCents, usdCents: holder ? Math.round((p.usdCents * (100 - Math.max(0, Math.min(100, s.holderDiscountPct)))) / 100) : p.usdCents }
+          : {};
+      packs.push({ kind, charges: s.packSize, priceRaw: mine.toString(), fullPriceRaw: p.full.toString(), ...usd, enabled: s.enabled && s.kinds[kind] });
+    }
     return {
       open: closed === null,
       ...(closed ? { closedReason: closed } : {}),
@@ -161,6 +215,7 @@ export class ShopService {
       packs,
       holder,
       holderDiscountPct: s.holderDiscountPct,
+      ...(usdPerToken ? { usdPerToken } : {}),
       arenaUsesPerRound: s.arenaUsesPerRound + (holder ? s.holderExtraArenaUses : 0),
       holderExtraArenaUses: s.holderExtraArenaUses,
       ...(wallet ? { charges: this.deps.inventory.get(wallet) } : {}),
@@ -187,8 +242,13 @@ export class ShopService {
     if (this.deps.inventory.isUsed(txHash) || this.inflight.has(txHash)) return fail(409, 'tx_used');
     this.inflight.add(txHash);
     try {
-      const full = packPriceRaw(s.prices[kind], token.decimals, 0);
-      const discounted = packPriceRaw(s.prices[kind], token.decimals, s.holderDiscountPct);
+      // the price now, and the prices shown in the last minutes (a token price that moved meanwhile)
+      const now = await this.priceOf(s, kind, token.decimals);
+      this.remember(kind, now.full, now.discounted);
+      const fulls = new Set<bigint>([now.full]);
+      const discounts = new Set<bigint>([now.discounted]);
+      for (const q of this.quoted.get(kind) ?? []) if (q.until > this.now()) (q.holder ? discounts : fulls).add(q.raw);
+      const full = now.full;
       let receipt = null;
       for (const wait of this.deps.receiptRetryMs ?? [0, 1_500, 3_000, 5_000]) {
         if (wait > 0) await sleep(wait);
@@ -205,13 +265,13 @@ export class ShopService {
         from: wallet,
         arena,
         ref: shopPaymentRef(kind),
-        amounts: discounted === full ? [full] : [full, discounted],
+        amounts: [...new Set([...fulls, ...discounts])],
         now: this.now(),
       });
       if (!check.ok) return fail(check.code === 'tx_pending' ? 409 : 400, check.code);
       // the discounted price is only for emblem holders (re-read on chain when the cache says no), and one emblem
       // token id gives it to one wallet a day (passing the emblem around does not discount every wallet)
-      if (check.paid !== full && !(await this.discountFor(wallet, true, true))) return fail(400, 'wrong_amount');
+      if (!fulls.has(check.paid) && !(await this.discountFor(wallet, true, true))) return fail(400, 'wrong_amount');
       let charges: BoostCounts;
       try {
         charges = this.deps.inventory.credit(wallet, kind, s.packSize, txHash, check.paid);

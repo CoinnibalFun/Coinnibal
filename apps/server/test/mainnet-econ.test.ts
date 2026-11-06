@@ -7,9 +7,8 @@
  *  - the economy layer's exact books on a short physics calibration, the gas model against the Hardhat figures and
  *    the re-pricing pause model.
  *
- * `describe('audit findings')` holds tests that FAIL on purpose: each states the behaviour the audit asks for and
- * shows that the code does not do it yet. They run only with `ELYMUM_ECON_FINDINGS=1`
- * (`pnpm -F @elymum/server test:econ-findings`), so the normal suite stays green until each fix lands.
+ * The audit's two server findings (a closed arena kept busy by unseated tickets; power-up prices in tokens drifting
+ * away from the dollar ticket) are fixed and tested here as regular tests.
  */
 import { generatePrivateKey } from 'viem/accounts';
 import { DEFAULT_ARENAS, SHOP_DEFAULTS, parseUsdPrice, roundSigFigs, usdToTokenRaw } from '@elymum/shared';
@@ -125,14 +124,14 @@ describe('economy layer', () => {
   });
 });
 
-const findings = process.env.ELYMUM_ECON_FINDINGS === '1';
-
-describe.skipIf(!findings)('audit findings (fail until fixed)', () => {
-  it('[F-powerups] a power-up charge stays near the documented 20 % of the $1 ticket at the mainnet price', () => {
+describe('power-ups priced in dollars (fixed)', () => {
+  it('a power-up charge stays at the documented 20 % of the $1 ticket at the mainnet price (both priced in USD)', () => {
     const price = parseUsdPrice(PRICE);
     const ticket = Number(usdToTokenRaw(100, price, 18, 2) / 10n ** 18n);
-    const charge = Number(SHOP_DEFAULTS.prices.magnet) / SHOP_DEFAULTS.packSize;
-    // ECONOMY.md section 3: "one charge is a fifth of a ticket or more" (designed at $0.001 a token)
+    // the pack converts at the same price and rounding as the ticket
+    const charge = Number(usdToTokenRaw(SHOP_DEFAULTS.usdCents.magnet, price, 18, 2) / 10n ** 18n) / SHOP_DEFAULTS.packSize;
+    // ECONOMY.md section 3: "one charge is a fifth of a ticket or more"
     expect(charge / ticket).toBeGreaterThanOrEqual(0.15);
+    expect(charge / ticket).toBeLessThanOrEqual(0.25);
   });
 });

@@ -2,6 +2,7 @@ import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import {
   CLOSE_REPLACED,
+  REFUSAL_CODES,
   PROTOCOL_VERSION,
   PlayerFlag,
   SKIN_COUNT,
@@ -773,12 +774,12 @@ export class Gateway {
       if (this.roundClosed(conn)) return;
       // closing for a re-price at its bell: the round plays out, nobody new sits down until the owner signed
       if (this.repricing?.(target.arenaId)) {
-        this.error(conn, 'arena_repricing', 'This arena is closing for a moment to update its ticket price. Your ticket is safe on chain: an unseated one is refunded in full.');
+        this.error(conn, REFUSAL_CODES.repricing, 'This arena is closing for a moment to update its ticket price. Your ticket is safe on chain: an unseated one is refunded in full.');
         return;
       }
       // the journal cannot be written (disk full): a new seat would hold money the server could not record
       if (this.journal.writeFailing) {
-        this.error(conn, 'storage_failing', 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
+        this.error(conn, REFUSAL_CODES.storage, 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
         return;
       }
       // badly overloaded: a new seat waits; the ticket stays on chain (seated later, or refunded in full if never played)
@@ -850,7 +851,7 @@ export class Gateway {
       // the awaits above may have crossed into the closed window (or the disk filled meanwhile)
       if (this.roundClosed(conn)) return;
       if (this.journal.writeFailing) {
-        this.error(conn, 'storage_failing', 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
+        this.error(conn, REFUSAL_CODES.storage, 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
         return;
       }
       // a new arena game (not a resumed ticket): refused for a banned wallet (the ban may be new since the check above)
