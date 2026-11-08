@@ -13,7 +13,7 @@
 .kl-root {
   /* wide screens (2560): the page keeps a 1760 px measure in the middle, its rules still run edge to
      edge (the gutter grows instead of the board stretching into a thin, sparse strip) */
-  --gutter: max(clamp(16px, 4.4vw, 64px), calc((100vw - 1760px) / 2));
+  --gutter: max(clamp(16px, 4.4vw, 64px), calc((100vw / var(--page-zoom, 1) - 1760px) / 2));
   position: fixed;
   inset: 0;
   z-index: 5;
@@ -152,10 +152,14 @@
 }
 .kl-mast__kicker {
   align-self: flex-end;
+  min-width: 0;
   margin: 0 0 4px 4px;
   font-size: var(--t-label);
   color: var(--ink-3);
   white-space: nowrap;
+  /* the mast squeezes the brand when the guest's wallet button is wide: the kicker gives way, not the nav */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .kl-mast__right {
   display: flex;
@@ -2170,4 +2174,43 @@
 .kl-dock__cta .kl-gettokens {
   min-height: 32px;
   margin-top: 4px;
+}
+/* under the departures board (the dark teal panel): the light link ink, not the paper's teal (2.3:1 there) */
+.kl-cta-slot .kl-gettokens {
+  color: var(--foam);
+}
+.kl-cta-slot .kl-gettokens:hover {
+  color: var(--cream);
+}
+/* touch screens: compact links and tabs keep their look, their hit area reaches 44 px */
+@media (pointer: coarse) {
+  .kl-dock__cta .kl-gettokens {
+    min-height: 44px;
+    margin-top: 0;
+  }
+  .kl-sections__item {
+    min-height: 44px;
+  }
+  .tf-sheet .kb-sheet__foot > .tf-more {
+    position: relative;
+    min-height: 32px;
+  }
+  .tf-sheet .kb-sheet__foot > .tf-more::after {
+    content: '';
+    position: absolute;
+    inset: -6px 0;
+  }
+}
+
+/* very large screens (1440p and up): the page is zoomed as a whole, so its 12-16 px type and its
+   sticker outlines read at the distance a 27-32" monitor sits; the 1760 px measure holds in the
+   zoomed pixels (the gutter divides the window by the zoom). LiveFrame reads the zoom back when it
+   cuts the window onto the live floor. */
+@media (min-width: 2200px) and (min-height: 1200px) {
+  .kl-root {
+    --page-zoom: 1.25;
+  }
+  .kl-root > .kl-sheet-page {
+    zoom: var(--page-zoom);
+  }
 }
