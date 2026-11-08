@@ -25,7 +25,7 @@ interface Harness {
 async function harness(): Promise<Harness> {
   const dir = mkdtempSync(join(tmpdir(), 'elymum-integrity-'));
   const admin = wallet();
-  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public', ROUND_JOIN_CLOSE_SECONDS: '0' } as NodeJS.ProcessEnv);
+  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public', ROUND_JOIN_CLOSE_SECONDS: '0', ROUND_BREAK_SECONDS: '0' } as NodeJS.ProcessEnv);
   const app = await createApp(cfg, {
     chain: new ArenaChain([arena(1, 1000)]),
     log: () => {},
@@ -188,11 +188,9 @@ describe('integrity admin API', () => {
     expect(reset.body.settings.thresholds.pairMinEvents).toBe(4);
   });
 
-  /** A join the ban gate let through: refused next by the round window or the ticket check. */
+  /** A join the ban gate let through: refused next by the ticket check (joins never close in this suite: no break, no last minute). */
   const expectPastBanGate = async (reply: Promise<unknown>) => {
-    const m = (await reply) as { t: string; code: string };
-    expect(m.t).toBe('error');
-    expect(['no_session', 'round_closed']).toContain(m.code);
+    expect(await reply).toMatchObject({ t: 'error', code: 'no_session' });
   };
 
   it('a ban refuses arena joins with `banned` (practice still works); an unban lifts it', async () => {
@@ -201,9 +199,7 @@ describe('integrity admin API', () => {
     c.send({ t: 'auth', token: h.token(player) });
     await c.next('authed');
     const arenaJoin = { t: 'join', room: 'arena:1', name: 'p', skin: 0, fp: 'ab'.repeat(16) };
-    // not banned: past the ban gate, to the round window or the ticket check (the test chain has no ticket).
-    // Arena rounds follow the wall clock, so on a run that lands in the break or the last minute the round
-    // window answers first (`round_closed`); either way the ban gate let the join through.
+    // not banned: past the ban gate, to the ticket check (the test chain has no ticket)
     await expectPastBanGate(c.attempt(arenaJoin));
 
     expect((await h.call('POST', '/api/admin/integrity/bans', { wallet: h.admin, body: { wallet: 'not-a-wallet', reason: 'x' } })).status).toBe(400);

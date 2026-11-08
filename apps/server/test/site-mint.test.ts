@@ -64,6 +64,7 @@ async function harness(env: Record<string, string> = {}, setupDir?: (dir: string
     ADMIN_WALLETS: ADMIN,
     PUBLIC_URL: 'https://elymum.example',
     ROUND_JOIN_CLOSE_SECONDS: '0',
+    ROUND_BREAK_SECONDS: '0',
     ...env,
   } as NodeJS.ProcessEnv);
   const app = await createApp(cfg, {

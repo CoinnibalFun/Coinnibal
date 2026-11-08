@@ -372,8 +372,8 @@ export class SiteApi {
 
   /**
    * `GET /api/shop` (the packs priced for the signed-in wallet, public prices without a session) and
-   * `POST /api/shop/buy {kind, txHash}` (signed-in): verifies the game-token payment on chain and
-   * credits the pack. Refusals answer `{ error: ShopBuyError, message }`.
+   * `POST /api/shop/buy {cart, txHash}` (signed-in; `{kind, txHash}` for one pack from older clients): verifies the
+   * game-token payment on chain and credits the packs. Refusals answer `{ error: ShopBuyError, message }`.
    */
   private async shopRoutes(req: IncomingMessage, res: ServerResponse, path: string, ip: string): Promise<void> {
     const shop = this.shop;
