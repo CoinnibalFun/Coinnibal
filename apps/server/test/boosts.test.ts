@@ -1,4 +1,4 @@
-import { BOOST_RULES, CellFlag, PlayerFlag, RULES, OLD_SHOP_PRICES, SHOP_DEFAULTS, TICK_MS, leapDistance, packPriceRaw, shopPaymentRef, type ServerMessage } from '@elymum/shared';
+import { BOOST_RULES, CellFlag, PlayerFlag, RULES, OLD_SHOP_PRICES, SHOP_DEFAULTS, TICK_MS, leapDistance, packPriceRaw, parseUsdPrice, shopPaymentRef, type ServerMessage } from '@elymum/shared';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { BotBrain } from '../src/bots/brain';
 import { mulberry32 } from '../src/game/rng';
@@ -281,22 +281,24 @@ class ShopChain extends ArenaChain {
   }
 }
 
-function shopFixture(opts: { holder?: boolean; dir?: string | null; settings?: Record<string, unknown> } = {}) {
+function shopFixture(opts: { holder?: boolean; dir?: string | null; settings?: Record<string, unknown>; usd?: { usdPerToken: string; sigFigs?: number } } = {}) {
   const chain = new ShopChain();
   const settings = new ShopSettingsStore(opts.dir ?? null);
   if (opts.settings) settings.update(opts.settings);
   const inventory = new BoostInventory(opts.dir ? join(opts.dir, 'boosts.json') : null);
   let now = 1_000_000;
   const holders = new Set<string>(opts.holder ? [WALLET.toLowerCase()] : []);
+  const usd: { v: { usdPerToken: string; sigFigs?: number } | null } = { v: opts.usd ?? null };
   const shop = new ShopService({
     settings,
     inventory,
     chain,
     holder: async (w) => holders.has(w.toLowerCase()),
+    usdPrice: async () => (usd.v ? { price: parseUsdPrice(usd.v.usdPerToken), usdPerToken: usd.v.usdPerToken, sigFigs: usd.v.sigFigs ?? 2 } : null),
     now: () => now,
     receiptRetryMs: [0, 1],
   });
-  return { chain, settings, inventory, shop, holders, tick: (ms: number) => (now += ms) };
+  return { chain, settings, inventory, shop, holders, usd, tick: (ms: number) => (now += ms) };
 }
 
 /** Records a `pay` of `value` for the pack `kind` (default: the one the test buys, read from the claim). */
@@ -423,6 +425,37 @@ describe('boosts: buying', () => {
     expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(3) }))).toBe('wrong_amount');
     // a non-holder's quote is the full price
     expect((await shop.view(WALLET)).packs.find((p) => p.kind === 'magnet')).toMatchObject({ priceRaw: (600n * ONE).toString() });
+  });
+
+  it('priced in dollars: converted at the arenas\' token price with their rounding; both amounts shown; holders 20 % less', async () => {
+    const { chain, shop, holders, usd, tick } = shopFixture({ holder: true, usd: { usdPerToken: '0.00081' } });
+    const view = await shop.view(WALLET);
+    expect(view.usdPerToken).toBe('0.00081');
+    // $0.60 at $0.00081 = 740.7 tokens → 740 (2 figures, like a ticket: $1 → 1,200); holders 592 → 590
+    expect(view.packs.map((p) => [p.kind, p.fullUsdCents, p.usdCents, p.fullPriceRaw, p.priceRaw])).toEqual([
+      ['magnet', 60, 48, (740n * ONE).toString(), (590n * ONE).toString()],
+      ['leap', 90, 72, (1100n * ONE).toString(), (880n * ONE).toString()],
+      ['speed', 60, 48, (740n * ONE).toString(), (590n * ONE).toString()],
+      ['invis', 120, 96, (1500n * ONE).toString(), (1200n * ONE).toString()],
+    ]);
+    pay(chain, hash(1), 590n * ONE);
+    expect((await shop.buy(WALLET, { kind: 'magnet', txHash: hash(1) })).charges.magnet).toBe(3);
+    // the token price moves (the owner re-syncs): the new price applies, the one just shown is still credited for a while
+    usd.v = { usdPerToken: '0.0012' };
+    expect((await shop.view(null)).packs[0]).toMatchObject({ fullPriceRaw: (500n * ONE).toString(), fullUsdCents: 60 });
+    holders.clear();
+    pay(chain, hash(2), 740n * ONE);
+    expect((await shop.buy(WALLET, { kind: 'magnet', txHash: hash(2) })).charges.magnet).toBe(6);
+    // a non-holder cannot pay a holder price, old or new
+    pay(chain, hash(3), 590n * ONE);
+    expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(3) }))).toBe('wrong_amount');
+    tick(16 * 60_000);
+    pay(chain, hash(4), 740n * ONE);
+    expect(await buyFails(shop.buy(WALLET, { kind: 'magnet', txHash: hash(4) }))).toBe('wrong_amount');
+    // no token price set yet: the token prices apply
+    usd.v = null;
+    expect((await shop.view(null)).packs[0]).toMatchObject({ fullPriceRaw: (600n * ONE).toString() });
+    expect((await shop.view(null)).packs[0].fullUsdCents).toBeUndefined();
   });
 
   it('payments go to the arena contract (it burns half and pays the fee wallet half); saved sink settings are ignored', async () => {

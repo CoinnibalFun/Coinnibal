@@ -14,27 +14,33 @@ import { REFUND_DELAY_SECS, fromLedger, type Erc20Call } from '@elymum/sdk';
 /* ── the ticket calls ───────────────────────────────────────────────── */
 
 /**
- * `approve` (only when the allowance is short) then `join`: two wallet prompts at most. The approval is exactly this
- * ticket's entry fee: what the wallet shows is what the arena may take, and nothing is left approved for a contract
- * that could later turn out not to be ours (2026-11 audit: an unlimited approval to whatever arena the server names
- * is a wallet-drain risk). A player who wants fewer prompts may tick "Approve N tickets at once"
- * (`Settings.approveBatch`): explicit, and capped at `APPROVE_BATCH_TICKETS` tickets of that room. Never unlimited.
+ * `approve` (only when the allowance is short) then `join`: two wallet prompts at most. The approval names an exact
+ * amount, never unlimited (2026-11 audit: an unlimited approval to whatever arena the server names is a wallet-drain
+ * risk): the entry fee of 1, 5, 10 or 20 tickets of that room (`Settings.approveTickets`, 5 preselected and
+ * remembered). Until that allowance runs out, the next tickets need one transaction (the join) only.
  */
 export type TicketStep = 'approve' | 'join';
 
-/** The most tickets one approval may cover ("Approve N tickets at once"). */
-export const APPROVE_BATCH_TICKETS = 5;
+/** How many tickets one approval may cover: the player's choices, and the cap (20 entry fees). */
+export const APPROVE_TICKET_CHOICES = [1, 5, 10, 20] as const;
+export const APPROVE_MAX_TICKETS = 20;
+/** Preselected (and kept until the player picks another). */
+export const APPROVE_DEFAULT_TICKETS = 5;
 
-/** What the approval grants: `exact` (default: this ticket's entry fee) or `batch` (`APPROVE_BATCH_TICKETS` of them). */
-export type ApproveMode = 'exact' | 'batch';
-
-export function approveMode(batch: boolean | undefined): ApproveMode {
-  return batch ? 'batch' : 'exact';
+/** A stored choice as one of `APPROVE_TICKET_CHOICES` (the default for anything else; never above the cap). */
+export function approveTickets(n: unknown): number {
+  return (APPROVE_TICKET_CHOICES as readonly number[]).includes(n as number) ? (n as number) : APPROVE_DEFAULT_TICKETS;
 }
 
-/** The amount an approval of `mode` grants for a ticket of `entryFee` (base units). */
-export function approveAmount(mode: ApproveMode, entryFee: bigint): bigint {
-  return mode === 'batch' ? entryFee * BigInt(APPROVE_BATCH_TICKETS) : entryFee;
+/** The amount an approval for `tickets` tickets of `entryFee` grants (base units), capped at 20 entry fees. */
+export function approveAmount(tickets: number, entryFee: bigint): bigint {
+  return entryFee * BigInt(Math.max(1, Math.min(APPROVE_MAX_TICKETS, Math.floor(tickets))));
+}
+
+/** Tickets of `entryFee` the arena's allowance still covers (each needs only the join); null while unknown. */
+export function ticketsLeft(allowance: bigint | null, entryFee: bigint): number | null {
+  if (allowance === null || entryFee <= 0n) return null;
+  return Number(allowance / entryFee);
 }
 
 /**

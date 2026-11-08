@@ -261,11 +261,12 @@ export class RpcBudget {
    * holding `eth_sendRawTransaction` is retried only when the whole request was refused (the
    * transaction was not accepted), so a signed transaction is never sent twice.
    */
-  fetchFn(inner: typeof fetch = fetch): typeof fetch {
+  fetchFn(inner: typeof fetch = fetch, opts: { maxAttempts?: number } = {}): typeof fetch {
     return (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const methods = methodsOf(init?.body);
       const p = currentRpcPriority();
-      const attempts = Math.max(1, this.attempts[p]);
+      // behind a fallback (several RPCs) a rate-limited URL hands the call on quickly instead of waiting out its backoff
+      const attempts = Math.max(1, Math.min(this.attempts[p], opts.maxAttempts ?? Infinity));
       const signal = init?.signal ?? null;
       for (let attempt = 1; ; attempt++) {
         await this.acquire(methods.length || 1, p, signal);
@@ -366,12 +367,20 @@ export function configureRpcBudgets(opts: RpcBudgetOptions): void {
   defaults = { ...defaults, ...opts };
 }
 
+/** Per-URL overrides of the defaults (`RPC_MAX_RPS` given as a list, one rate per `EVM_RPC_URLS` entry). */
+const perUrl = new Map<string, RpcBudgetOptions>();
+
+/** Sets the budget of one URL (before its first use; a budget already made keeps its rate). */
+export function configureRpcBudgetFor(url: string, opts: RpcBudgetOptions): void {
+  perUrl.set(url.trim().toLowerCase(), opts);
+}
+
 /** The shared budget of an RPC URL (one per URL for the whole process). */
 export function rpcBudgetFor(url: string): RpcBudget {
   const key = url.trim().toLowerCase();
   let b = budgets.get(key);
   if (!b) {
-    b = new RpcBudget(defaults);
+    b = new RpcBudget({ ...defaults, ...(perUrl.get(key) ?? {}) });
     budgets.set(key, b);
   }
   return b;

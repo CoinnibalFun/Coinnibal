@@ -10,7 +10,7 @@ import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProo
 
 /// @title ElymumNFT
 /// @notice The Elymum NFT: an allowlist phase (OpenZeppelin Merkle tree, double-hashed `abi.encode(address)` leaves)
-///         and a public phase, priced in HYPE wei (kept near $1 by the owner or a bounded price keeper).
+///         and a public phase, priced in ETH wei, the gas token of Robinhood Chain (kept near $1 by the owner or a bounded price keeper).
 /// @dev    Token ids start at 1. No `immutable` variables, so the runtime bytecode is identical for every deployment.
 contract ElymumNFT is ERC721, ERC2981, Ownable2Step, ReentrancyGuard {
     enum Phase {
@@ -242,7 +242,7 @@ contract ElymumNFT is ERC721, ERC2981, Ownable2Step, ReentrancyGuard {
         emit RoyaltySet(receiver, bps);
     }
 
-    /// @notice Sends the whole HYPE balance to the treasury.
+    /// @notice Sends the whole ETH balance to the treasury.
     function withdraw() external onlyOwner nonReentrant {
         address to = _treasury;
         uint256 amount = address(this).balance;

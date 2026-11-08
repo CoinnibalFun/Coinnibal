@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { availableParallelism } from 'node:os';
 import {
   TEST_ARENA_ARRIVE_MS,
@@ -210,7 +211,7 @@ export class RoomManager {
       this.bellMemo.set(`${e.arenaId}:${e.wallet}`, { ...e, at: Date.now() });
       deps.onBellSettled?.(e);
     };
-    this.deps = { ...deps, round, clock, onGameOver: gameOver, onBellSettled: bellSettled };
+    this.deps = { ...deps, round, clock, onGameOver: gameOver, onBellSettled: bellSettled, chainNow: deps.chainNow ?? (() => chain.chainNow?.() ?? Date.now()) };
     // a room on this thread hands its own connection (a `Conn`) to the hooks
     const notable = (e: NotableKillEvent) => deps.onNotableKill?.(e);
     this.roomDeps = {
@@ -230,6 +231,7 @@ export class RoomManager {
             clock,
             round,
             clockOffset: () => clock.now() - Date.now(),
+            chainOffset: () => (chain.chainNow?.() ?? Date.now()) - Date.now(),
             integrity: deps.integrity,
             shop: deps.shop,
             onGameOver: gameOver,
@@ -398,11 +400,14 @@ export class RoomManager {
     return best ?? this.createPractice('rookie');
   }
 
-  /** A fresh private-room code (5 characters of `CODE_ALPHABET`), not used by a live or lately closed room. */
+  /**
+   * A fresh private-room code (8 characters of `CODE_ALPHABET`, drawn with `crypto.randomInt`: 32^8, about 10^12
+   * codes, so an invite cannot be guessed; codes of 5 from before stay valid), not used by a live or lately closed room.
+   */
   newPrivateCode(): string {
     let c = '';
     do {
-      c = Array.from({ length: 5 }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join('');
+      c = Array.from({ length: 8 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
     } while (this.has(`priv-${c}`) || this.closedCodes.has(c));
     return c;
   }
@@ -728,7 +733,19 @@ export class RoomManager {
 
   /** The public form of `underfundedArenas` (rooms message, `/api/rooms`): the lobby must not sell these. */
   blockedArenas(): BlockedArena[] {
-    return [...this.underfunded.keys()].sort((a, b) => a - b).map((arenaId) => ({ arenaId, reason: 'vault_short' }));
+    const out: BlockedArena[] = [...this.underfunded.keys()].map((arenaId) => ({ arenaId, reason: 'vault_short' }));
+    for (const arenaId of this.repricingArenas?.() ?? []) if (!this.underfunded.has(arenaId)) out.push({ arenaId, reason: 'repricing' });
+    return out.sort((a, b) => a.arenaId - b.arenaId);
+  }
+
+  /** Arenas closed for a re-price (shown to the lobby as blocked); set by the app. */
+  repricingArenas: (() => Iterable<number>) | null = null;
+
+  /** Live coins (seated tickets) of an arena over every room. */
+  liveStakesOf(arenaId: number): number {
+    let n = 0;
+    for (const r of this.ticketRooms(arenaId)) n += r.liveSessions().length;
+    return n;
   }
 
   private arenaAllowed(arenaId: number): boolean {
@@ -812,6 +829,12 @@ export class RoomManager {
   }
 
   /** The room of `arenaId` (a public instance or a paid custom room) in which `wallet` holds a live ticket, if any. */
+  /** Whether `wallet` holds a live arena coin in any room (its reconnect is admitted before anyone else). */
+  holdsLiveStake(wallet: string): boolean {
+    for (const room of this.handles()) if (room.opts.mode === 'arena' && room.findStakeByWallet(wallet)) return true;
+    return false;
+  }
+
   findArenaStake(arenaId: number, wallet: string): { room: RoomHandle; entry: StakeSeat } | null {
     for (const room of this.ticketRooms(arenaId)) {
       const entry = room.findStakeByWallet(wallet);

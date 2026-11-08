@@ -213,6 +213,11 @@ export class FakeEvm implements EvmClient {
     this.check();
     return this.block;
   }
+  /** The chain's clock: `nowS` (the contract model's own time). */
+  async latestBlock() {
+    this.check();
+    return { number: this.block, timestamp: this.nowS() };
+  }
   async codeCheck(address: Address, _kind: ContractKindCode) {
     this.check('codeCheck');
     return this.code.get(address.toLowerCase()) ?? 'ok';

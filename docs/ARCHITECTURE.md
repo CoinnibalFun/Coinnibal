@@ -38,8 +38,10 @@ examples) and the tests use it; the contract is the authority and the server rea
 | `mainnet` | 4663 | `https://rpc.mainnet.chain.robinhood.com` | `https://robinhoodchain.blockscout.com` |
 | `localnet` (development and tests only) | 31337 | `http://127.0.0.1:8545` (`hardhat node`) | none |
 
-- **Server:** `CHAIN_ID` (46630 by default; anything else refuses to start) and `EVM_RPC_URL`. The RPC's
-  `eth_chainId` is checked: an RPC of another chain keeps the arenas off (`!!! chain: EVM_RPC_URL serves chain …`).
+- **Server:** `CHAIN_ID` (46630 by default; anything else refuses to start) and `EVM_RPC_URLS` (a comma list in
+  order: a provider, then the public RPC; `EVM_RPC_URL` alone still works). The RPC's `eth_chainId` is checked: an
+  RPC of another chain keeps the arenas off (`!!! chain: EVM_RPC_URL serves chain …`), a fallback of another chain is
+  left out.
   `/api/config` publishes `{ chainId, chainName, testnet, faucetUrl, rpcUrl, explorerUrl, fees, … }`.
 - **Web:** `VITE_CHAIN_ID` names the network before the server answers; the server's network wins. Wallets are
   asked to switch to (or add) exactly the server's chain. Copy says "ETH" and uses `{chain}` for the network's name,
@@ -65,8 +67,9 @@ flowchart LR
 
 ### Ticket lifecycle
 
-1. **Join.** The web checks the allowance and sends `approve` when it is short (exactly the entry fee; "Approve 5
-   tickets at once" is an explicit choice capped at five entry fees; never unlimited), then `join(arenaId)`. Before
+1. **Join.** The web checks the allowance and sends `approve` when it is short (the entry fee of 1, 5, 10 or 20
+   tickets of that room, the player's choice with 5 preselected; capped at 20 entry fees, never unlimited; the wallet
+   sheet shows what is left in tickets and revokes it), then `join(arenaId)`. Before
    either, the arena must be the one the web build pins, with the compiled runtime code (see Web internals). The contract pulls the entry
    fee with a balance-delta check (fee-on-transfer tokens are refused), opens a session with a global id and fixes
    the ticket's fee rates (`burnBps`, `vaultBps`; the holder pair for an emblem holder when it is lower). One open
@@ -139,11 +142,15 @@ Off chain (the server; tests in `apps/server/test`):
     DISABLED`).
 13. **One arena contract per journal:** while the journal owes money on an arena contract the server refuses to
     switch to another one (`POST /api/admin/contracts` answers 409 `wrong_state`).
-14. **Stale tickets:** a ticket nobody played for `STALE_SESSION_AFTER_S` (15 min) is cancelled (full entry fee
-    back). While a quarantined journal (`journal.json.corrupt-*`) exists the stale sweeper stays off.
-15. **Guards before money leaves:** a payout above `PAYOUT_GUARD_MULTIPLE` entry fees is held, an arena whose vault
-    does not cover its journal pays nothing (the books guard), and a ticket the server settled that is open again (a
-    reorg) is re-sent with the same payout (`settled.jsonl`), never refunded at the entry fee.
+14. **Stale tickets:** a ticket nobody played for `STALE_SESSION_AFTER_S` (15 min, on the chain's clock: the latest
+    block's timestamp) is cancelled (full entry fee back); in an arena that is disabled, paused or closing for a
+    re-price, at once. While a quarantined journal (`journal.json.corrupt-*`) exists the stale sweeper stays off.
+15. **Guards before money leaves:** nothing is sent while the journal cannot be written (a settlement sent from
+    memory alone would not survive a crash together with the change that matched it); a payout above its round's pool
+    (`roundPool`: the entry fees seated in its instance that round) is held (without a pool: above
+    `PAYOUT_GUARD_MULTIPLE` entry fees); an arena whose vault does not cover its journal pays nothing (the books
+    guard); a ticket the server settled that is open again (a reorg) is re-sent with the same payout
+    (`settled.jsonl`), never refunded at the entry fee.
 16. **Refunds the server did not send:** a held (or never-sent) settlement whose ticket the player refunded after
     24 h is dropped and the difference (payout − entry fee) journaled as a forfeit, so (11) keeps holding.
 
@@ -168,24 +175,31 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
 - **The game outcome is trusted.** A buggy or malicious server could split a vault wrongly between that arena's
   players or burn the wrong amount of it (never more than the vault). The owner can replace the server key, so
   trusting the server means trusting the owner. **Protect the server key** (OPERATIONS.md, "What the server key can
-  do"). The server itself refuses to pay what its own books do not support: a payout above `PAYOUT_GUARD_MULTIPLE`
-  (100) entry fees is held for an admin, and nothing leaves a vault that does not cover what the journal owes it
-  (the books guard).
+  do"). The server itself refuses to pay what its own books do not support: a payout above what every ticket of its
+  round put in is held for an admin, and nothing leaves a vault that does not cover what the journal owes it (the
+  books guard).
 - **Fair play in arenas:** only people play in the official arenas. Practice bots exist only in free custom rooms
   and in the testnet's test arenas (both: no value), see only what a player's view shows (invisible players
   excluded) and are tagged BOT.
-- Collusion, multi-accounting and scripted input are detected off chain and shown to the owner (OPERATIONS.md,
-  "Integrity"); an optional auto-hold keeps a high-risk payout in the journal until the owner decides (or, for an
-  auto-hold, until `autoReleaseHours` pass: a false positive delays a payout, never loses it).
+- Collusion, multi-accounting, sybil feeding, pacts and scripted input are detected off chain and shown to the owner
+  (OPERATIONS.md, "Integrity"); the auto-hold (on by default on the mainnet) keeps a high-risk payout in the journal
+  until the owner decides (or until `autoReleaseHours` pass: a false positive delays a payout, never loses it).
+- **Holder perks are bound to emblem token ids** (`site/emblem-claims.ts`, `site/emblem-gate.ts`): the contract
+  checks the emblem at `join` only, so the server binds each holder ticket to a token id of its wallet (from the
+  NFT's `Transfer` logs) until it is settled; one token id serves one open holder ticket, one discounted power-up
+  buyer and one free room a day. A ticket the emblem cannot serve is refused at the seat and cancelled in full.
 - The contracts are not upgradeable and not audited.
 
 ## Server internals
 
-- **Config** (`config.ts`; every variable in `apps/server/.env.example`): `CHAIN_ID`, `EVM_RPC_URL`,
-  `PUBLIC_RPC_URL`, `EXPLORER_URL`, `GAS_FAUCET_URL`, `ARENA_ADDRESS`, `NFT_ADDRESS`, `TOKEN_ADDRESS`,
-  `SERVER_PRIVATE_KEY` (`auto` | 0x hex | a file path), `ADMIN_WALLETS`, `GAME_ACCESS`, `MINT_USD_CENTS`,
-  `GAS_PRICE_URL`, `TOKEN_SYMBOL`, `STAKE_ENABLED`, `STAKE_ARENA_IDS`, `STALE_SESSION_AFTER_S`, `LOG_CHUNK_BLOCKS`,
-  `RPC_MAX_RPS`, `RPC_BURST`, `TESTNET_RPC_URL`, `GAME_WORKERS`, `DEV_FAKE_CHAIN`, `DEV_FAKE_TOKEN`.
+- **Config** (`config.ts`; every variable in `apps/server/.env.example`): `CHAIN_ID`, `EVM_RPC_URLS` /
+  `EVM_RPC_URL`, `PUBLIC_RPC_URL`, `EXPLORER_URL`, `GAS_FAUCET_URL`, `ARENA_ADDRESS`, `NFT_ADDRESS`, `TOKEN_ADDRESS`,
+  `SERVER_PRIVATE_KEY` (`auto` | 0x hex | a file path), `ADMIN_WALLETS`, `AUTH_SECRET` (32+ bytes on the mainnet),
+  `ADMIN_TOKEN_TTL_MIN`, `ADMIN_SECRET_EXPORT`, `GAME_ACCESS`, `MINT_USD_CENTS`, `GAS_PRICE_URL`, `TOKEN_SYMBOL`,
+  `STAKE_ENABLED`, `STAKE_ARENA_IDS`, `STALE_SESSION_AFTER_S`, `DEATH_SETTLE_BATCH_S`, `PAYOUT_GUARD_MULTIPLE`,
+  `GAS_FLOOR_ETH`, `GAS_RUNWAY_WARN_DAYS`, `GAS_RUNWAY_CRITICAL_DAYS`, `HEALTH_MAX_PENDING`, `HEALTH_MAX_PENDING_AGE_S`,
+  `LOG_CHUNK_BLOCKS`, `RPC_MAX_RPS` (one rate or one per URL), `RPC_BURST`, `TESTNET_RPC_URL`, `GAME_WORKERS`,
+  `MAX_CONNECTIONS`, `DEV_FAKE_CHAIN`, `DEV_FAKE_TOKEN`.
 - **Contracts registry** (`site/contracts.ts`): `DATA_DIR/chains/<id>/contracts.json`, written by `POST
   /api/admin/contracts` after a deploy from `/admin`. The server checks the code hash (the bundled v3 build only),
   that the owner is the signed-in admin and, for the arena, that the server authority is the server key. A newly
@@ -193,13 +207,20 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
 - **Chain gateway** (`chain/evm.ts`, `chain/evm-client.ts`): reads `config()` every 30 s (token, fee rates, burn
   mode, holder perks) and pushes `chain` to every client when it changes; lists arenas; runs the settlement worker
   (batches, read-back reconciliation, backoff), the loot burn with a monotonic `sweepId` kept in the journal, and
-  the stale sweeper (`cancel`). Reads go through a request budget (`rpc-budget.ts`) and Multicall3 where the chain
-  has it. Gas is ETH, paid by the server key; a low balance is logged and shown in `/admin`.
+  the stale sweeper (`cancel`). Reads go through one request budget per RPC URL (`rpc-budget.ts`) and a viem fallback
+  over `EVM_RPC_URLS`; concurrent `eth_call`s merge into one Multicall3 call, or a deployless multicall where the chain
+  has none (probed at start). Eaten tickets (payout 0) wait `DEATH_SETTLE_BATCH_S` (6 s) to go out in one batch. The
+  chain's clock (the latest block's timestamp) measures ticket ages; a server clock more than 30 s off is logged. Gas
+  is ETH, paid by the server key; its runway at the last day's spend (`chain/gas-runway.ts`) is in `/admin` and
+  `/api/health` (warning under 7 days, alert under 2).
 - **Price keeper** (`chain/price-keeper.ts`): when the server key is the NFT's `priceKeeper` with bounds set, every
   5 minutes it reads ETH/USD (Hyperliquid's `allMids`) and re-prices to `MINT_USD_CENTS` when off by more than 2 %,
   only after two readings agree within 3 %, at most ±20 % per update, always inside the bounds.
 - **Sign-in (SIWE, EIP-4361):** `/api/auth/nonce` issues the message (domain = the `PUBLIC_URL` host, the server's
-  chain id); nonces are single use, 10 minutes. ERC-1271 / 6492 smart wallets are verified through the RPC.
+  chain id); nonces are single use, 10 minutes, at most 24 unused per IP and 4 per address. ERC-1271 / 6492 smart
+  wallets are verified through the RPC. Session tokens carry their issue time; an admin wallet's last
+  `ADMIN_TOKEN_TTL_MIN` (2 h), are never extended, and can be revoked (`POST /api/admin/auth/revoke`). The secret
+  exports (backup, migration settings) need a fresh purpose-bound signature (`site/secret-proof.ts`).
 - **Who may play** (`gameAccess`: `admins` | `holders` | `public` | `maintenance`; `GAME_ACCESS` overrides):
   holders are wallets with `balanceOf > 0` on the NFT (cached 15 s, re-read uncached at every arena seat) plus the
   admins. On the testnet the default is `public`.
@@ -245,9 +266,11 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   The admin panel computes the sync's diff and the owner wallet signs `updateArena`; the server only stores settings.
   When an arena's entry fee changes on chain its rooms follow (`RoomHandle.setBuyIn`, display and evidence only:
   money always uses the ticket's own `Session.entryFee`).
-- **Power-up shop** (`shop/`): `GET /api/shop`, `POST /api/shop/buy {kind, txHash}`; the server checks the
-  receipt's `Paid` event (the arena, the payer, the pack's `ref` = `elymum.shop.<kind>`, the price) and the token
-  transfer, then credits the charges (each hash once, payments older than 24 h refused).
+- **Power-up shop** (`shop/`): `GET /api/shop`, `POST /api/shop/buy {kind, txHash}`; packs are priced in US cents
+  and converted at the arenas' token price and rounding (`priceIn: 'usd'`; token prices until a price is set); the
+  server checks the receipt's `Paid` event (the arena, the payer, the pack's `ref` = `elymum.shop.<kind>`, the price
+  now or one shown in the last 15 minutes) and the token transfer, then credits the charges (each hash once, payments
+  older than 24 h refused).
 - **Mint and NFT API:** `GET /api/site/mint` (state, ETH/USD, the price in USD, holders, game access), proofs, the
   allowlist snapshot, `GET /api/admin/mint/price`; metadata at `/api/nft/<id>`, `/api/nft/<id>.svg`
   (`?style=vector|pixel`), `/api/nft/contract`.
@@ -265,9 +288,16 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   `@napi-rs/canvas` with the site's own fonts (cached; 30 renders per IP a minute). Cards are kept in
   `DATA_DIR/site/shares.json` (the newest 5,000). The web opens X's web intent (`x.com/intent/post`) with a
   localized line and the card's link: no X API.
-- **Other REST:** `/api/health`, `/api/rooms` (test arenas carry `test: true`), `/api/leaderboard`, `/api/config`, `/api/pending?wallet=`,
-  `/api/profile`, the site API `/api/site/*` and the admin API `/api/admin/*`. With `WEB_DIST` the server also serves
-  the web build.
+- **Other REST:** `/api/health` (503 with reasons, `?live=1` the liveness check; `health.ts`), `/api/rooms` (test
+  arenas carry `test: true`), `/api/leaderboard`, `/api/config`, `/api/pending?wallet=` (that wallet's session or an
+  admin's), `/api/profile`, the site API `/api/site/*` and the admin API `/api/admin/*` (`/api/admin/reprice`:
+  "Re-price at next bell", `site/reprice.ts`). With `WEB_DIST` the server also serves the web build (strict CSP);
+  without it, in production, a page of its own domain redirects to `PUBLIC_URL`.
+- **Front door** (`net/gateway.ts`): guests hold at most 80 % of `MAX_CONNECTIONS` and are limited per IP and per
+  subnet; a signed-in socket leaves its IP's guest count (carrier NAT, up to 64 per IP); a socket offering its
+  session token as the `elymum.auth.<token>` subprotocol takes the reserve, and one whose wallet holds a live coin
+  always gets in; an idle lobby guest makes room near the cap. A join of the wallet that holds a live coin takes it
+  over on the new socket at once and closes the old one with `CLOSE_REPLACED` (4000).
 - **Dev fake chain** (`chain/dev-fake.ts`, `DEV_FAKE_CHAIN=1` with `NODE_ENV=development` only): an in-memory chain
   with free tickets, simulated settlements and `pay`, for `pnpm demo` and the screenshot tours. It refuses to start
   next to `EVM_RPC_URL` or `SERVER_PRIVATE_KEY`.
@@ -386,6 +416,7 @@ sandbox with the clients on the same machine (about 0.45 cores for 500 clients):
 One thread tops out near 150 clients. The cost is mostly per connection (building and sending each
 client's snapshot 30 times a second), then (at the time) bots, then the simulation. With workers the main thread costs
 about 0.09 % of a core per client (sockets, inputs, frame delivery: 0.42 at 500) and each worker about
-0.065 ms of tick per player. On a 6-vCore VPS (main + 5 workers), 500 players are about 95 per worker:
+0.065 ms of tick per player. On the 8 vCPU VPS (`GAME_WORKERS=5`: main + 5 workers, two cores left for Caddy,
+Docker and the host), 500 players are about 95 per worker:
 a tick of ~6 ms mean (of 33 ms), the main thread under half busy, about 1.7 cores used in all. Each client
 receives about 6.8 KB/s (500 clients: 27 Mbit/s of the 2 Gbit/s link).

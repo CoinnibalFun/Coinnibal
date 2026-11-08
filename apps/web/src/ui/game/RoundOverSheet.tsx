@@ -3,6 +3,7 @@ import { AnimatePresence, motion, type TargetAndTransition } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon, Receipt, Sheet, Stamp, useReducedMotion, type ReceiptLine } from '../../design';
 import { FinalBoard } from './FinalBoard';
+import { NextRoundOpens } from './NextRoundOpens';
 import { EatenNames, ShareOnX, resultShareText, useShare } from './ShareOnX';
 import { engine } from '../../game/instance';
 import { roundStartLabel } from '../../game/round';
@@ -19,8 +20,6 @@ import { formatClock, roomName, useTokenFormat } from './format';
 /** The receipt waits for the bell to swing in and ring over the frozen world (ms). */
 export const ROUND_SHEET_DELAY_MS = 1500;
 
-/** Rows of the room's standings shown on the receipt sheet. */
-const TOP = 5;
 
 /**
  * Receipt numbers: the settlement's own `fee` / `net` once it arrives, an estimate before, at `rates` (the rates fixed
@@ -49,7 +48,7 @@ export function settlementFor<T extends { session: string | null }>(settled: T |
  * "Round over", the landing report: the bell rang while my coin was alive, so the till is paid.
  * After a beat (the bell wave over the frozen world) the report flies out of the worth sticker: the
  * till, the fee on its profit and what was paid (an estimate until `settled` arrives, then a PAID
- * stamp and the transaction link), my place and the room's top 5 at the bell (`FinalBoard`, the same board a custom
+ * stamp and the transaction link), my place and the room's whole board at the bell (`FinalBoard`, the same board a custom
  * room shows at its end: value, mass and kills). "Next round"
  * goes back to the lobby with this arena's ticket ready to buy.
  *
@@ -233,6 +232,7 @@ export function RoundOverSheet() {
             {usd.stale && <span className="g-roundover__stale">{usd.setAt ? t('usd.stale', { h: PRICE_STALE_HOURS }) : t('usd.staleUnknown')}</span>}
           </p>
         )}
+        {!exit && <NextRoundOpens arenaId={room?.arenaId ?? null} className="g-roundover__break" />}
         <EatenNames eaten={res?.stats?.eaten} more={res?.stats?.eatenMore} />
         {settled?.collect && (
           <p className="g-roundover__note" role="status">
@@ -241,7 +241,7 @@ export function RoundOverSheet() {
         )}
         <p className="g-roundover__note mono">{exit ? t('gr.exitNote') : t('gr.feeNote', { pct: bpsToPercent(totalFeeBps(rates)), burn: bpsToPercent(rates.burnBps), vault: bpsToPercent(rates.vaultBps) })}</p>
 
-        {!exit && <FinalBoard rows={standings} title={t('gr.top')} skin={mySkin} top={TOP} />}
+        {!exit && <FinalBoard rows={standings} title={t('gr.board', { n: standings.length })} skin={mySkin} />}
       </div>
     </Sheet>
   );

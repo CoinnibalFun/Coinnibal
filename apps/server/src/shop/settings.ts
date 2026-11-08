@@ -32,7 +32,7 @@ function price(x: unknown, field: string): string {
   return x;
 }
 
-const KEYS = ['enabled', 'packSize', 'prices', 'kinds', 'holderDiscountPct', 'arenaUsesPerRound', 'holderExtraArenaUses'] as const;
+const KEYS = ['enabled', 'packSize', 'priceIn', 'usdCents', 'prices', 'kinds', 'holderDiscountPct', 'arenaUsesPerRound', 'holderExtraArenaUses'] as const;
 /** Fields of older files that are read and ignored (the payment split is on chain now: `ElymumArena.pay`). */
 const RETIRED_KEYS = ['sink', 'treasury'] as const;
 
@@ -50,7 +50,11 @@ export function applyShopSettings(cur: ShopSettings, body: Record<string, unknow
   if (body.holderDiscountPct !== undefined) next.holderDiscountPct = int(body.holderDiscountPct, 'holderDiscountPct', 0, SHOP_LIMITS.holderDiscountPct);
   if (body.arenaUsesPerRound !== undefined) next.arenaUsesPerRound = int(body.arenaUsesPerRound, 'arenaUsesPerRound', 0, SHOP_LIMITS.arenaUsesPerRound);
   if (body.holderExtraArenaUses !== undefined) next.holderExtraArenaUses = int(body.holderExtraArenaUses, 'holderExtraArenaUses', 0, SHOP_LIMITS.holderExtraArenaUses);
-  for (const group of ['prices', 'kinds'] as const) {
+  if (body.priceIn !== undefined) {
+    if (body.priceIn !== 'usd' && body.priceIn !== 'token') throw new ShopSettingsError('priceIn must be "usd" or "token"', 'priceIn');
+    next.priceIn = body.priceIn;
+  }
+  for (const group of ['prices', 'kinds', 'usdCents'] as const) {
     const patch = body[group];
     if (patch === undefined) continue;
     if (!isObj(patch)) throw new ShopSettingsError(`${group} must be an object`, group);
@@ -58,6 +62,7 @@ export function applyShopSettings(cur: ShopSettings, body: Record<string, unknow
     for (const kind of BOOST_KINDS) {
       if (patch[kind] === undefined) continue;
       if (group === 'prices') next.prices[kind] = price(patch[kind], `prices.${kind}`);
+      else if (group === 'usdCents') next.usdCents[kind] = int(patch[kind], `usdCents.${kind}`, 1, SHOP_LIMITS.usdCents);
       else next.kinds[kind] = bool(patch[kind], `kinds.${kind}`);
     }
   }

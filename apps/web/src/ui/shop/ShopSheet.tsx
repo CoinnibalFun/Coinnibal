@@ -1,40 +1,47 @@
-import { BOOST_KEY_LABELS, BPS, DEFAULT_PAYMENT_BURN_BPS, SHOP_DEFAULTS, boostCooldownMs, bpsToPercent, type BoostKind, type ShopPack, type ShopView } from '@elymum/shared';
+import { BOOST_KEY_LABELS, BPS, DEFAULT_PAYMENT_BURN_BPS, SHOP_DEFAULTS, boostCooldownMs, bpsToPercent, formatUsdCents, type BoostKind, type ShopPack, type ShopView } from '@elymum/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Chip, Sheet, shortAddress } from '../../design';
 import { useT } from '../../i18n';
 import { closeModal, openModal, toast, useUi } from '../../store';
-import { ShopError, buyPack, fetchShop, loadPendingClaim, settleClaim, type BuyPhase, type PendingClaim } from '../../wallet/shop';
+import { SHOP_CART_LIMITS } from '@elymum/shared';
+import { ShopError, buyCart, cartTotals, emptyCart, fetchShop, loadPendingClaim, settleCartClaim, settleClaim, type BuyPhase, type Cart, type PendingClaim } from '../../wallet/shop';
 import { summaryAmount } from '../amount';
 import { BOOST_PATH } from '../game/BoostBar';
 import './shop.css';
 
-/** A pack price for display: `210 tELYMUM` (whole tokens, at most two decimals). */
-export function priceText(raw: string, view: Pick<ShopView, 'token'>): string {
+/**
+ * A pack price for display: `210 tELYMUM` (whole tokens, at most two decimals), with its dollar price first when the
+ * pack is priced in US dollars (`$0.60 · 740 $ELYMUM`): the token amount is what the wallet sends.
+ */
+export function priceText(raw: string, view: Pick<ShopView, 'token'>, usdCents?: number): string {
   const decimals = view.token?.decimals ?? 18;
-  return `${summaryAmount(BigInt(raw), decimals)} ${view.token?.symbol ?? '$ELYMUM'}`;
+  const tokens = `${summaryAmount(BigInt(raw), decimals)} ${view.token?.symbol ?? '$ELYMUM'}`;
+  return usdCents !== undefined ? `${formatUsdCents(usdCents)} · ${tokens}` : tokens;
 }
 
 function PackCard({
   pack,
   view,
   owned,
-  busy,
-  phase,
+  qty,
   canBuy,
-  onBuy,
+  canAdd,
+  onQty,
 }: {
   pack: ShopPack;
   view: ShopView;
   owned: number | null;
-  busy: boolean;
-  phase: BuyPhase | null;
+  /** Packs of it in the cart. */
+  qty: number;
   canBuy: boolean;
-  onBuy: () => void;
+  /** The cart has room for one more pack. */
+  canAdd: boolean;
+  onQty: (n: number) => void;
 }) {
   const t = useT();
   const kind: BoostKind = pack.kind;
   const discounted = pack.priceRaw !== pack.fullPriceRaw;
-  const phaseText = phase === 'verifying' ? t('shop.verifying') : phase === 'confirming' ? t('shop.confirming') : phase ? t('shop.paying') : null;
+  const name = t(`boost.${kind}` as 'boost.magnet');
   return (
     <li className={`sh-pack sh-pack--${kind}${pack.enabled ? '' : ' is-off'}`} data-kind={kind}>
       <span className="sh-pack__glyph" aria-hidden="true">
@@ -52,27 +59,42 @@ function PackCard({
         </p>
       </div>
       <div className="sh-pack__buy">
-        {discounted && <s className="sh-pack__was mono">{priceText(pack.fullPriceRaw, view)}</s>}
-        <Button
-          variant={kind === 'leap' || kind === 'invis' ? 'teal' : 'secondary'}
-          size="sm"
-          loading={busy}
-          disabled={!canBuy || !pack.enabled || busy}
-          onClick={onBuy}
-          sub={phaseText ?? undefined}
-          data-testid={`shop-buy-${kind}`}
-        >
-          {t('shop.buy', { n: pack.charges, price: priceText(pack.priceRaw, view) })}
-        </Button>
+        {discounted && <s className="sh-pack__was mono">{priceText(pack.fullPriceRaw, view, pack.fullUsdCents)}</s>}
+        {qty === 0 ? (
+          <Button
+            variant={kind === 'leap' || kind === 'invis' ? 'teal' : 'secondary'}
+            size="sm"
+            lead="coin"
+            disabled={!canBuy || !pack.enabled || !canAdd}
+            onClick={() => onQty(1)}
+            data-testid={`shop-buy-${kind}`}
+          >
+            {t('shop.add', { n: pack.charges, price: priceText(pack.priceRaw, view, pack.usdCents) })}
+          </Button>
+        ) : (
+          <span className="sh-qty" role="group" aria-label={t('shop.qtyLabel', { name })}>
+            <button type="button" className="kb-iconbtn kb-iconbtn--sm sh-qty__btn" onClick={() => onQty(qty - 1)} disabled={!canBuy} aria-label={t('shop.less', { name })} data-testid={`shop-less-${kind}`}>
+              −
+            </button>
+            <span className="sh-qty__n num" aria-live="polite" data-testid={`shop-qty-${kind}`}>
+              {t('shop.packs', { n: qty })}
+            </span>
+            <button type="button" className="kb-iconbtn kb-iconbtn--sm sh-qty__btn" onClick={() => onQty(qty + 1)} disabled={!canBuy || !canAdd || qty >= SHOP_CART_LIMITS.perKind} aria-label={t('shop.more', { name })} data-testid={`shop-more-${kind}`}>
+              +
+            </button>
+            <span className="sh-qty__price mono">{t('shop.each', { price: priceText(pack.priceRaw, view, pack.usdCents) })}</span>
+          </span>
+        )}
       </div>
     </li>
   );
 }
 
 /**
- * The power-up shop (lobby and HUD): three packs priced for the signed-in wallet (holders see the
- * discount), each paid to the arena contract (`pay`: half burned, half to the fee wallet); the server checks the
- * payment and the charges appear on the HUD at once. Guests are asked to sign in.
+ * The power-up shop (lobby and HUD): the packs priced for the signed-in wallet (holders see the discount). The player
+ * puts several power-ups in a cart with quantities, sees the total in US dollars and the game token, and pays ONCE
+ * (`buyCart`: one `pay` to the arena contract, half burned, half to the fee wallet); the server applies the whole cart
+ * and the charges appear on the HUD at once. Guests are asked to sign in.
  */
 export function ShopSheet() {
   const t = useT();
@@ -82,7 +104,8 @@ export function ShopSheet() {
   const live = useUi((s) => s.boosts?.charges ?? null);
   const [view, setView] = useState<ShopView | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [buying, setBuying] = useState<{ kind: BoostKind; phase: BuyPhase | null } | null>(null);
+  const [buying, setBuying] = useState<{ phase: BuyPhase | null } | null>(null);
+  const [cart, setCart] = useState<Cart>(emptyCart);
 
   const load = useCallback(
     (signal?: AbortSignal) =>
@@ -114,10 +137,17 @@ export function ShopSheet() {
     if (!auth || claiming) return;
     setClaiming(true);
     try {
-      const r = await settleClaim(auth.token, auth.address, p.kind, p.txHash);
-      setView((v) => (v ? { ...v, charges: r.charges } : v));
-      useUi.setState((s) => (s.boosts ? { boosts: { ...s.boosts, charges: r.charges } } : {}));
-      toast('success', t('shop.done', { n: r.added, name: t(`boost.${r.kind}` as 'boost.magnet') }));
+      if (p.cart) {
+        const r = await settleCartClaim(auth.token, auth.address, p.cart, p.txHash);
+        setView((v) => (v ? { ...v, charges: r.charges } : v));
+        useUi.setState((s) => (s.boosts ? { boosts: { ...s.boosts, charges: r.charges } } : {}));
+        cartToast(r);
+      } else {
+        const r = await settleClaim(auth.token, auth.address, p.kind, p.txHash);
+        setView((v) => (v ? { ...v, charges: r.charges } : v));
+        useUi.setState((s) => (s.boosts ? { boosts: { ...s.boosts, charges: r.charges } } : {}));
+        toast('success', t('shop.done', { n: r.added, name: t(`boost.${r.kind}` as 'boost.magnet') }));
+      }
     } catch (e) {
       toast('error', t('shop.failed', { msg: (e as Error).message }), undefined, 8000);
       // a claim credited meanwhile: the counts on the packs catch up
@@ -129,15 +159,25 @@ export function ShopSheet() {
   };
 
   const charges = live ?? view?.charges ?? null;
-  const buy = async (pack: ShopPack) => {
-    if (!view || !auth || !chain) return;
-    setBuying({ kind: pack.kind, phase: 'switching' });
+  /** What the server applied: the charges added, and a part owed back when a power-up was switched off meanwhile. */
+  const cartToast = (r: { added: Record<BoostKind, number>; refund?: { kinds: BoostKind[] } }) => {
+    const got = (Object.keys(r.added) as BoostKind[]).filter((k) => r.added[k] > 0).map((k) => `+${r.added[k]} ${t(`boost.${k}` as 'boost.magnet')}`);
+    if (got.length) toast('success', t('shop.cartDone', { list: got.join(', ') }));
+    if (r.refund) toast('info', t('shop.cartRefund', { list: r.refund.kinds.map((k) => t(`boost.${k}` as 'boost.magnet')).join(', ') }), undefined, 10_000);
+  };
+  const totals = view ? cartTotals(view, cart) : null;
+  const setQty = (kind: BoostKind, n: number) => setCart((c) => ({ ...c, [kind]: Math.max(0, Math.min(SHOP_CART_LIMITS.perKind, n)) }));
+  const room = totals ? totals.packs < SHOP_CART_LIMITS.total : true;
+  const buy = async () => {
+    if (!view || !auth || !chain || !totals || totals.packs === 0) return;
+    setBuying({ phase: 'switching' });
     try {
-      const r = await buyPack(view, pack, { token: auth.token, owner: auth.address, chain, onPhase: (phase) => setBuying({ kind: pack.kind, phase }) });
+      const r = await buyCart(view, cart, { token: auth.token, owner: auth.address, chain, onPhase: (phase) => setBuying({ phase }) });
       setView((v) => (v ? { ...v, charges: r.charges } : v));
       // the HUD follows at once (the server also pushes `boosts` to a live game)
       useUi.setState((s) => (s.boosts ? { boosts: { ...s.boosts, charges: r.charges } } : {}));
-      toast('success', t('shop.done', { n: r.added, name: t(`boost.${r.kind}` as 'boost.magnet') }));
+      setCart(emptyCart());
+      cartToast(r);
     } catch (e) {
       const msg = e instanceof ShopError ? e.message : (e as Error).message;
       if (!(e instanceof ShopError && e.code === 'rejected')) toast('error', t('shop.failed', { msg }), undefined, 8000);
@@ -186,15 +226,50 @@ export function ShopSheet() {
               pack={p}
               view={s}
               owned={charges ? charges[p.kind] : null}
-              busy={buying?.kind === p.kind}
-              phase={buying?.kind === p.kind ? buying.phase : null}
+              qty={cart[p.kind]}
               canBuy={!!auth && s.open && !buying && !claiming}
-              onBuy={() => void buy(p)}
+              canAdd={room}
+              onQty={(n) => setQty(p.kind, n)}
             />
           ))}
         </ul>
       ) : (
         !err && <p className="sh-hint mono">…</p>
+      )}
+      {s && totals && totals.packs > 0 && (
+        <div className="sh-cart" role="region" aria-label={t('shop.cart')} data-testid="shop-cart">
+          <div className="sh-cart__sum">
+            <span className="sh-cart__label mono">{t('shop.cartTotal', { n: totals.packs })}</span>
+            <span className="sh-cart__price">
+              {totals.fullRaw !== totals.raw && (
+                <s className="sh-pack__was mono" data-testid="shop-cart-full">
+                  {priceText(totals.fullRaw.toString(), s, totals.fullUsdCents ?? undefined)}
+                </s>
+              )}
+              <b className="num" data-testid="shop-cart-total">
+                {priceText(totals.raw.toString(), s, totals.usdCents ?? undefined)}
+              </b>
+            </span>
+            {s.holder && totals.fullRaw !== totals.raw && <span className="sh-cart__note mono">{t('shop.cartHolder', { pct: s.holderDiscountPct })}</span>}
+          </div>
+          <div className="sh-cart__actions">
+            <Button variant="ghost" size="sm" disabled={!!buying} onClick={() => setCart(emptyCart())} data-testid="shop-cart-clear">
+              {t('shop.cartClear')}
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              lead="wallet"
+              loading={!!buying}
+              disabled={!auth || !s.open || !!buying || claiming}
+              onClick={() => void buy()}
+              sub={buying?.phase === 'verifying' ? t('shop.verifying') : buying?.phase === 'confirming' ? t('shop.confirming') : buying ? t('shop.paying') : t('shop.oneTx')}
+              data-testid="shop-pay"
+            >
+              {t('shop.payOnce', { price: priceText(totals.raw.toString(), s) })}
+            </Button>
+          </div>
+        </div>
       )}
       {!auth && (
         <div className="sh-signin">

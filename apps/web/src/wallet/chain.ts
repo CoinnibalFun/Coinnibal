@@ -111,8 +111,15 @@ export async function loadArenaPrices(): Promise<ArenaPricesView | null> {
   return v && Array.isArray(v.tiers) && (v.usdPerToken === null || typeof v.usdPerToken === 'string') ? v : null;
 }
 
-export async function loadPending(owner: string): Promise<PendingPayout[]> {
-  return (await getJson<{ pending: PendingPayout[] }>(`/api/pending?wallet=${encodeURIComponent(owner)}`))?.pending ?? [];
+/**
+ * `GET /api/pending` with that wallet's session token: what a wallet is owed is its own business, so the server answers
+ * only its own session (or an admin's). Signed out, or a refused token: nothing (no error, the chain reads still show
+ * the open and finalized tickets).
+ */
+export async function loadPending(owner: string, token: string | null | undefined): Promise<PendingPayout[]> {
+  if (!token) return [];
+  const body = await getJson<{ pending?: unknown }>(`/api/pending?wallet=${encodeURIComponent(owner)}`, token);
+  return Array.isArray(body?.pending) ? (body.pending as PendingPayout[]) : [];
 }
 
 /** `GET /api/profile` with the session token (null when signed out or unreachable). */
@@ -204,7 +211,7 @@ export function useChainSync(): void {
     const set = (patch: Partial<ChainData>) => {
       if (!stale()) useChainData.setState(patch);
     };
-    const [pending, profile, prices] = await Promise.all([owner ? loadPending(owner) : Promise.resolve([] as PendingPayout[]), owner ? loadProfile(token) : Promise.resolve(null), loadArenaPrices()]);
+    const [pending, profile, prices] = await Promise.all([owner ? loadPending(owner, token) : Promise.resolve([] as PendingPayout[]), owner ? loadProfile(token) : Promise.resolve(null), loadArenaPrices()]);
     if (!stale()) adoptProfileCountry(profile);
     // the dollar labels of the tickets: kept when the server cannot be reached this time
     if (prices && !stale()) useChainData.setState({ prices });

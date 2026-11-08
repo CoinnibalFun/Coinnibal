@@ -25,6 +25,12 @@ export interface SettlementItem {
   payout?: number;
   /** The ticket's entry fee (ledger units), when known: what a refund after 24 h would take out of the vault. */
   entryFee?: number;
+  /**
+   * Σ entry fees of every ticket seated in this ticket's arena instance during its round, plus loot restored into it
+   * (ledger units): all the value a ticket can have taken from others. The payout guard holds a payout above it.
+   * Absent on items not made by a room (crash recovery, older journals): the guard uses `PAYOUT_GUARD_MULTIPLE` then.
+   */
+  roundPool?: number;
   score: number;
   kills: number;
   xp: number;
@@ -644,10 +650,15 @@ export class Journal {
     if (!this.path) return;
     try {
       this.write();
-      if (this.persistFailing) this.log('journal: writes succeed again');
-      this.persistFailing = false;
+      if (this.persistFailing) {
+        this.log('journal: writes succeed again');
+        this.persistFailing = false;
+        this.notifyWriteState();
+      }
     } catch (err) {
+      const was = this.persistFailing;
       this.persistFailing = true;
+      if (!was) this.notifyWriteState();
       const now = Date.now();
       if (now - this.lastPersistWarn > 30_000) {
         this.lastPersistWarn = now;
@@ -664,6 +675,23 @@ export class Journal {
   /** The journal could not be written lately (the records are only in memory). */
   get writeFailing(): boolean {
     return this.persistFailing;
+  }
+
+  private readonly writeStateListeners: (() => void)[] = [];
+
+  /** `fn()` runs when writes start failing and when they succeed again (`writeFailing` flips). */
+  onWriteStateChange(fn: () => void): void {
+    this.writeStateListeners.push(fn);
+  }
+
+  private notifyWriteState(): void {
+    for (const fn of this.writeStateListeners) {
+      try {
+        fn();
+      } catch {
+        /* a listener never breaks the journal */
+      }
+    }
   }
 
   private write(): void {

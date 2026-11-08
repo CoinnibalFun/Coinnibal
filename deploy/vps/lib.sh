@@ -42,6 +42,58 @@ env_set() {
   mv "$tmp" "$ELYMUM_ENV"
 }
 
+# a persistent journal (survives reboots, 2 GB at most): Docker's journald log driver keeps the server log there,
+# so it survives a redeploy (a new container) too. Idempotent.
+host_journald() {
+  mkdir -p /var/log/journal /etc/systemd/journald.conf.d
+  local conf=/etc/systemd/journald.conf.d/elymum.conf want
+  want=$'[Journal]\nStorage=persistent\nSystemMaxUse=2G\nMaxRetentionSec=1month'
+  if [[ "$(cat "$conf" 2>/dev/null)" != "$want" ]]; then
+    printf '%s\n' "$want" >"$conf"
+    systemd-tmpfiles --create --prefix /var/log/journal >/dev/null 2>&1 || true
+    systemctl restart systemd-journald || true
+  fi
+}
+
+# Waits for the break after an arena bell: rounds are aligned to Unix time (ROUND_SECONDS, default 300) and the floor
+# reopens ROUND_BREAK_SECONDS (default 30, at most a tenth of the round) after the bell. Stopping the server there
+# finds no live stake (every ticket was just settled at the bell); anywhere else SIGTERM cashes every arena player out
+# mid-round. ELYMUM_DEPLOY_NOW=1 skips the wait (an urgent fix).
+wait_for_round_break() {
+  [[ "${ELYMUM_DEPLOY_NOW:-0}" == "1" ]] && return 0
+  local round brk s last
+  round="$(env_get ROUND_SECONDS)"
+  [[ "$round" =~ ^[0-9]+$ ]] || round=300
+  brk="$(env_get ROUND_BREAK_SECONDS)"
+  [[ "$brk" =~ ^[0-9]+$ ]] || brk=30
+  ((brk > round / 10)) && brk=$((round / 10))
+  # the swap must fit in the break with a margin; otherwise go right after the bell
+  last=$((brk - 8))
+  ((last < 2)) && last=2
+  for _ in $(seq 1 $((round * 2 + 10))); do
+    s=$(($(date +%s) % round))
+    if ((s >= 2 && s <= last)); then
+      log "in the break after the bell (${s} s into the round)"
+      return 0
+    fi
+    sleep 0.5
+  done
+  log "no round break found in time; going on anyway"
+}
+
+# Sends a message to the owner's Telegram (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env; both optional: without
+# them the message only goes to the journal). The token never appears on a command line (curl reads it from stdin).
+notify() {
+  local text="$1" token chat
+  log "ALERT: $text"
+  token="$(env_get TELEGRAM_BOT_TOKEN)"
+  chat="$(env_get TELEGRAM_CHAT_ID)"
+  [[ -n "$token" && -n "$chat" ]] || return 0
+  printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token" |
+    curl -sS --max-time 15 -K - --data-urlencode "chat_id=$chat" --data-urlencode "text=[$(hostname -s)] $text" \
+      --data-urlencode "disable_web_page_preview=true" -o /dev/null || log "telegram: sending failed"
+}
+
 need_root() {
   [[ "$(id -u)" -eq 0 ]] || die "run this as root (sudo -i first)"
 }

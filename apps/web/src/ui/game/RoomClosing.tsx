@@ -4,7 +4,7 @@ import { Button, Sheet } from '../../design';
 import { engine } from '../../game/instance';
 import { serverClock } from '../../game/clock';
 import { serverText, useT } from '../../i18n';
-import { useUi } from '../../store';
+import { openModal, useUi } from '../../store';
 import { FinalBoard } from './FinalBoard';
 import { roomName } from './format';
 import { EatenNames, ShareOnX, resultShareText, useShare } from './ShareOnX';
@@ -56,6 +56,10 @@ export function RoomClosingNotice() {
     <div className="g-closing" role="status" data-testid="room-closing">
       <strong className="g-closing__title">{paid ? t('ro.closingBell', { s }) : t('ro.closing', { s })}</strong>
       {message && <span className="g-closing__why mono">{serverText(message, paid ? t('ro.whyBell') : t('ro.why'))}</span>}
+      {/* the whole board, live, before the room closes (its final board follows at the end) */}
+      <button type="button" className="g-closing__board mono" onClick={() => openModal('standings')} data-testid="room-closing-board">
+        {t('ro.seeBoard')}
+      </button>
     </div>
   );
 }

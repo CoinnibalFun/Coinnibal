@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { IntegrityService } from '../src/integrity/service';
 import { IntegrityStore } from '../src/integrity/store';
+import { integrityDefaults } from '../src/integrity/settings';
 import { emptyInput, type SessionSummary } from '../src/integrity/types';
 import { Journal } from '../src/stake/journal';
 
@@ -92,5 +93,22 @@ describe('integrity store', () => {
     }
     expect(svc.overview().counts.sessions).toBe(50);
     expect(svc.monitor.size).toBe(0);
+  });
+});
+
+describe('auto-hold default per chain', () => {
+  it('is on for the mainnet (4663) and off on the testnet, unless the admin saved a choice', () => {
+    expect(integrityDefaults(4663).autoHold).toBe(true);
+    expect(integrityDefaults(46630).autoHold).toBe(false);
+    expect(integrityDefaults(null).autoHold).toBe(false);
+    const dir = mkdtempSync(join(tmpdir(), 'elymum-int-def-'));
+    const main = new IntegrityStore(dir, { defaults: integrityDefaults(4663) });
+    expect(main.loadState().settings.autoHold).toBe(true);
+    // a saved state without the field (an older file) takes the chain's default; a saved "off" stays off
+    writeFileSync(join(dir, 'state.json'), JSON.stringify({ version: 1, settings: { holdScore: 90 }, bans: [], flags: [], scannedAt: null }));
+    expect(new IntegrityStore(dir, { defaults: integrityDefaults(4663) }).loadState().settings.autoHold).toBe(true);
+    writeFileSync(join(dir, 'state.json'), JSON.stringify({ version: 1, settings: { autoHold: false }, bans: [], flags: [], scannedAt: null }));
+    expect(new IntegrityStore(dir, { defaults: integrityDefaults(4663) }).loadState().settings.autoHold).toBe(false);
+    expect(new IntegrityStore(mkdtempSync(join(tmpdir(), 'elymum-int-def-')), { defaults: integrityDefaults(46630) }).loadState().settings.autoHold).toBe(false);
   });
 });

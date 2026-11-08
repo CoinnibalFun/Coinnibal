@@ -36,7 +36,7 @@ export const SERVER = {
   /** `STALE_SESSION_AFTER_S` (chain/evm.ts): a ticket nobody plays gets its full entry fee back after 15 min. */
   staleTicketMinutes: 15,
   /** `PRIVATE_ROOM_CAPACITY` default (shared CAPACITY.private) and the 5-character room code (rooms/manager.ts). */
-  privateCodeLength: 5,
+  privateCodeLength: 8,
 } as const;
 
 /** The worked example of the guide: a 1,000-token ticket with 1,900 tokens in the till at the bell. */

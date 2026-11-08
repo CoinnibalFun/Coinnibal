@@ -9,7 +9,7 @@ default; the module that holds it is named so this page and the game cannot drif
 | Arena tiers in US dollars, entry fees at the reference price | `DEFAULT_ARENAS`, `packages/shared/src/arenas.ts` |
 | USD → token conversion, rounding, the admin sync's diff | `packages/shared/src/arena-pricing.ts` (`usdToTokenRaw`, `arenaPriceDiff`) |
 | Token price source (manual; a Pons / DEX TWAP stub, not wired) | `apps/server/src/chain/token-price.ts` |
-| Power-up packs | `SHOP_DEFAULTS`, `packages/shared/src/boosts.ts` |
+| Power-up packs (in US cents, converted like the tickets) | `SHOP_DEFAULTS`, `packages/shared/src/boosts.ts`; `apps/server/src/shop/service.ts` |
 | Custom rooms | `CUSTOM_SETTINGS_DEFAULT`, `packages/shared/src/custom-rooms.ts` |
 | Loot | `RULES.loot*`, `packages/shared/src/constants.ts` |
 
@@ -85,23 +85,29 @@ Packs of **3 charges**, paid in the game token through `ElymumArena.pay(amount, 
 **50 %** (`paymentBurnBps`, owner-settable 0 to 100 %) and sends the rest to the fee wallet in the same call. The
 server credits the charges after checking the `Paid` event (contract, payer, pack, amount).
 
-| Pack | Price (tokens) | Holders | Per charge | vs the $1 ticket (1,000 at the reference price) | vs the $10 ticket (10,000) |
-|---|---|---|---|---|---|
-| Magnet | 600 | 480 | 200 | 20 % per use | 2 % |
-| Speed burst | 600 | 480 | 200 | 20 % | 2 % |
-| Leap | 900 | 720 | 300 | 30 % | 3 % |
-| Invisibility | 1,200 | 960 | 400 | 40 % | 4 % |
+**Priced in US dollars** like the tickets (`priceIn: 'usd'`, the default): the server converts each pack at the same
+token price source and the same significant figures as the arena tiers (Game → Arena prices: the manual price; the
+DEX source stays a stub), so a charge stays the same share of the $1 ticket whatever the token's price. The shop shows
+both: "$0.60 · 740 $ELYMUM" (at $0.00081 a token).
 
-**Emblem holders pay 20 % less** (`holderDiscountPct`, an admin setting: Magnet and Speed 480, Leap 720,
-Invisibility 960). The server quotes each wallet its price (`GET /api/shop`) and credits a `pay(amount, ref)` only
-for the full price or, for a wallet that holds the emblem (re-read on chain), the holder price. **Paid arenas allow 2
-uses per round** (3 for holders), so a big-arena player cannot buy an edge by volume; practice and private rooms use
-charges freely, with cooldowns.
+| Pack | Price | Holders | Per charge | vs the $1 ticket | vs the $10 ticket | In tokens at $0.001 / at $0.00081 |
+|---|---|---|---|---|---|---|
+| Magnet | $0.60 | $0.48 | $0.20 | 20 % per use | 2 % | 600 / 740 |
+| Speed burst | $0.60 | $0.48 | $0.20 | 20 % | 2 % | 600 / 740 |
+| Leap | $0.90 | $0.72 | $0.30 | 30 % | 3 % | 900 / 1,100 |
+| Invisibility | $1.20 | $0.96 | $0.40 | 40 % | 4 % | 1,200 / 1,500 |
+
+Until a token price is set (or with `priceIn: 'token'`) the packs cost their token prices (`prices`: 600 / 900 / 600 /
+1,200). **Emblem holders pay 20 % less** (`holderDiscountPct`, an admin setting), rounded like the full price. The
+server quotes each wallet its price (`GET /api/shop`) and credits a `pay(amount, ref)` for the full price or, for a
+wallet that holds the emblem (re-read on chain), the holder price, now or as shown in the last 15 minutes (a token
+price that moved between the quote and the payment). One emblem token id gives the discount to one wallet a UTC day.
+**Paid arenas allow 2 uses per round** (3 for holders), so a big-arena player cannot buy an edge by volume; practice
+and private rooms use charges freely, with cooldowns.
 
 Pricing logic: a pack costs between 60 % and 120 % of the cheapest ticket, so in the entry arena a power-up is a
 real decision (one charge is a fifth of a ticket or more), while the per-round cap keeps the higher arenas from
-becoming pay-to-win. The prices are whole tokens and the admin can change them in `/admin` (Game → Power-ups); revisit
-them once the token has a market price (they stay in tokens; the arena sync does not change them).
+becoming pay-to-win. The admin changes the dollar prices in `/admin` (Game → Power-ups, `usdCents`).
 
 ## 4. Floor loot: burned at the bell
 
@@ -138,6 +144,11 @@ value, never pick up loot and never use power-ups.
 Minted for **$1 in ETH** (the price keeper follows ETH/USD within owner-set bounds), allowlist first, then public;
 proceeds go to the NFT treasury. What it does in the economy:
 
+- **One emblem, one perk at a time.** Every holder perk is bound to a token id of the emblem (read from its
+  `Transfer` logs): a token id serves one open holder ticket (a holders-only seat or the holder fee rates) until it is
+  settled, and gives the power-up discount and the free room to one wallet a UTC day. An emblem passed around (or
+  borrowed for a moment) cannot serve several wallets at once: the extra ticket is refused at its seat and refunded in
+  full, and the admin sees a flag.
 - **Access** while the game opens in phases (holders play first).
 - **Half the fee on profit:** 10 % (8 % burned + 2 % to the fee wallet) instead of 20 % (the arena's holder pair).
 - **The $10 arena is holders-only** (the Isles of the Blessed, on chain).
@@ -172,8 +183,6 @@ invariant tests.
 
 - Whether the Pons token exposes a working `burn()` (burn mode 1) is not documented: the arena burns to `0x…dEaD`
   until `/admin` shows it works (docs/RESEARCH.md).
-- Power-up prices are in whole tokens; revisit them against the token's market price after launch (or price them in
-  USD like the arenas).
 - The Pons / DEX TWAP price source is a stub: which pool, which interface and which averaging window are not known
   until the token launches. Until it is wired the manual price is the only source, and the owner re-syncs by hand.
 - The custom room fee follows ETH; re-price it in `/admin` if ETH moves a lot.

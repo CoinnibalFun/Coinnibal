@@ -98,8 +98,8 @@ describe('sweeper tunables', () => {
 
 describe('round clock config', () => {
   it('defaults to 5-minute rounds with joins closed in the last minute', () => {
-    expect(loadConfig({}).round).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 15_000 });
-    expect(parseRoundConfig({ ROUND_SECONDS: '', ROUND_JOIN_CLOSE_SECONDS: ' ' })).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 15_000 });
+    expect(loadConfig({}).round).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 30_000 });
+    expect(parseRoundConfig({ ROUND_SECONDS: '', ROUND_JOIN_CLOSE_SECONDS: ' ' })).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 30_000 });
   });
 
   it('reads ROUND_SECONDS / ROUND_JOIN_CLOSE_SECONDS (tests, localnet e2e)', () => {
@@ -112,7 +112,7 @@ describe('round clock config', () => {
     // a 30 s round with the default 60 s closed window would never open: capped at half the round
     expect(parseRoundConfig({ ROUND_SECONDS: '30' })).toEqual({ roundMs: 30_000, closeMs: 15_000, breakMs: 3_000 });
     expect(parseRoundConfig({ ROUND_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '-4' })).toEqual({ roundMs: 2_000, closeMs: 0, breakMs: 0 });
-    expect(parseRoundConfig({ ROUND_SECONDS: 'soon' })).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 15_000 });
+    expect(parseRoundConfig({ ROUND_SECONDS: 'soon' })).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 30_000 });
   });
 });
 

@@ -1,12 +1,20 @@
-import { PROTOCOL_VERSION, type ClientMessage, type ServerMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, PROTOCOL_VERSION, type ClientMessage, type ServerMessage } from '@elymum/shared';
 import type { NetDown } from '../store';
 
+/** The game's WebSocket subprotocol (the server answers with it; it never echoes the token one). */
+const SUBPROTOCOL = 'elymum';
+/** The session token rides in a second subprotocol, never in the URL (no proxy or access log sees it). */
+const AUTH_SUBPROTOCOL = 'elymum.auth.';
+/** A subprotocol must be an HTTP token: a session token (`0x….exp.iat.mac`, base64url) always is. */
+const TOKEN_CHARS = /^[A-Za-z0-9._~-]{1,512}$/;
+
 /**
- * The WebSocket close code of "your coin was taken over by your newer connection" (the same wallet opened the game
- * in another tab or window, and the server moved the coin there).
- * TODO(group-a): use `CLOSE_REPLACED` from `packages/shared/src/protocol.ts` once it lands there (same value, 4000).
+ * The subprotocols a socket offers: `elymum` alone for a guest, plus `elymum.auth.<token>` when signed in, so a
+ * signed-in player gets the server's reserved slots (and its live arena coin back) before any message is sent.
  */
-export const CLOSE_REPLACED = 4000;
+export function gameProtocols(token: string | null | undefined): string[] {
+  return token && TOKEN_CHARS.test(token) ? [SUBPROTOCOL, AUTH_SUBPROTOCOL + token] : [SUBPROTOCOL];
+}
 
 /** No frame and no pong for this long: the socket is dead even if the browser has not noticed; close and reconnect. */
 export const WATCHDOG_MS = 4_000;
@@ -50,12 +58,14 @@ export class Net {
     private readonly url: string,
     private readonly handlers: NetHandlers,
     private readonly watchdogMs = WATCHDOG_MS,
+    /** The session token to offer when a socket opens (read at each connect: a sign-in counts from the next one). */
+    private readonly token: () => string | null | undefined = () => null,
   ) {}
 
   connect(): void {
     this.retryTimer = null;
     this.closedByUser = false;
-    const ws = new WebSocket(this.url);
+    const ws = new WebSocket(this.url, gameProtocols(this.token()));
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
     ws.onopen = () => {
