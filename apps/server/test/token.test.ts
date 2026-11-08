@@ -76,8 +76,9 @@ beforeAll(async () => {
     HOST: '127.0.0.1',
     NODE_ENV: 'development',
     DEV_FAKE_CHAIN: '1',
-    // joins stay open the whole round (the suite runs on the real clock)
+    // joins stay open the whole round, with no break after the bell (the suite runs on the real clock)
     ROUND_JOIN_CLOSE_SECONDS: '0',
+    ROUND_BREAK_SECONDS: '0',
     // the game gate (site setting `gameAccess`) is covered in site.test.ts
     GAME_ACCESS: 'public',
   });
