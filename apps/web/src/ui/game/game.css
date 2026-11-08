@@ -1637,6 +1637,24 @@
 .g-board__row:last-child {
   border-bottom: 0;
 }
+/* the whole board scrolls inside the sheet; my row sticks to whichever edge it left by */
+.g-board__list {
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+.g-board__list:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.g-board__row.is-me {
+  position: sticky;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  box-shadow: 0 0 0 2px var(--outline);
+}
 .g-board__num {
   font-size: 14px;
   text-align: right;
@@ -1763,6 +1781,19 @@
 }
 .g-closing__title {
   font-size: 16px;
+}
+.g-closing__board {
+  pointer-events: auto;
+  margin-top: 6px;
+  min-height: 36px;
+  padding: 4px 12px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--sticker);
+  color: var(--ink-fixed);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .g-closing__why {
   font-size: 11px;

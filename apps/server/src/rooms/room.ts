@@ -2,6 +2,7 @@ import {
   BinaryWriter,
   ClientOp,
   EMOTES,
+  FINAL_BOARD_ROWS,
   FINAL_STANDINGS_ROWS,
   NOTABLE_KILL_MASS,
   MAP_GROW,
@@ -1365,7 +1366,7 @@ interface BoardEntry {
 
 /**
  * The final standings one player gets (`RoundStanding`, the same at an arena's bell and at a custom room's end): the
- * top `FINAL_STANDINGS_ROWS` of `ranked`, plus their own row when it is below them.
+ * whole board (the top `FINAL_BOARD_ROWS` of `ranked`), plus their own row when it is below them.
  */
 export function boardRows(ranked: readonly BoardEntry[], pid: number): RoundStanding[] {
   const row = (b: BoardEntry, i: number): RoundStanding => ({
@@ -1377,9 +1378,9 @@ export function boardRows(ranked: readonly BoardEntry[], pid: number): RoundStan
     ...(b.isBot ? { isBot: true } : {}),
     ...(b.pid === pid ? { you: true } : {}),
   });
-  const rows = ranked.slice(0, FINAL_STANDINGS_ROWS).map(row);
+  const rows = ranked.slice(0, FINAL_BOARD_ROWS).map(row);
   const mine = ranked.findIndex((b) => b.pid === pid);
-  if (mine >= FINAL_STANDINGS_ROWS) rows.push(row(ranked[mine], mine));
+  if (mine >= FINAL_BOARD_ROWS) rows.push(row(ranked[mine], mine));
   return rows;
 }
 

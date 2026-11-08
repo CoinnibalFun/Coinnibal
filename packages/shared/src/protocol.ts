@@ -242,8 +242,15 @@ export interface RoundStanding {
   you?: boolean;
 }
 
-/** Rows of the final standings sent to each player (`RoundStanding`): the top ones, plus the receiver's own. */
+/** Rows of a round on the public "Last rounds" board (the top of the bell's standings). */
 export const FINAL_STANDINGS_ROWS = 10;
+
+/**
+ * Rows of the final board each player gets at an arena's bell or a custom room's end (`RoundStanding`): the whole room
+ * (an arena instance holds 50 people, a custom room 20 and its bots), capped for safety; the receiver's own row is
+ * always on it.
+ */
+export const FINAL_BOARD_ROWS = 120;
 
 /** A custom room shows its end this long before it closes (`closing`, then `roomOver`). */
 export const ROOM_CLOSE_COUNTDOWN_MS = 10_000;
