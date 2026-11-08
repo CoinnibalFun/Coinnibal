@@ -13,7 +13,8 @@
 .kl-root {
   /* wide screens (2560): the page keeps a 1760 px measure in the middle, its rules still run edge to
      edge (the gutter grows instead of the board stretching into a thin, sparse strip) */
-  --gutter: max(clamp(16px, 4.4vw, 64px), calc((100vw / var(--page-zoom, 1) - 1760px) / 2));
+  /* and never under a landscape phone's notch or rounded corners (env(safe-area-inset-left / right)) */
+  --gutter: max(clamp(16px, 4.4vw, 64px), calc((100vw / var(--page-zoom, 1) - 1760px) / 2), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
   position: fixed;
   inset: 0;
   z-index: 5;
@@ -55,6 +56,12 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  /* the mast starts below the status bar / notch (the page's paper runs up behind it) */
+  padding-top: env(safe-area-inset-top, 0px);
+}
+/* the colophon's links end above the home bar (phones end in the dock, which clears it itself) */
+.kl-root:not(.is-phone) > .kl-sheet-page {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ── shared bits ──────────────────────────────────────────────────────── */

@@ -1305,8 +1305,9 @@ h2,
 .kb-toasts {
   position: fixed;
   z-index: 60;
-  top: 18px;
-  right: 18px;
+  /* below the status bar / notch, clear of a landscape phone's rounded corner */
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  right: calc(18px + env(safe-area-inset-right, 0px));
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1332,7 +1333,7 @@ h2,
 }
 /* in a game the top-right corner belongs to the leaderboard: slips hang under the weight sticker */
 .kb-toasts.kb-toasts--game {
-  top: 168px;
+  top: calc(168px + env(safe-area-inset-top, 0px));
   right: auto;
   left: 50%;
   transform: translateX(-50%);
@@ -1340,8 +1341,8 @@ h2,
 }
 @media (max-width: 639px) {
   .kb-toasts {
-    left: 16px;
-    right: 16px;
+    left: calc(16px + env(safe-area-inset-left, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
     width: auto;
   }
 }

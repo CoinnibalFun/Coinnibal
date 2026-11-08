@@ -46,7 +46,7 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 20px;
-  padding: 12px var(--gutter);
+  padding: calc(12px + env(safe-area-inset-top, 0px)) var(--gutter) 12px;
   border-bottom: var(--stroke) solid var(--outline);
   background: var(--paper);
 }
@@ -1846,7 +1846,8 @@ body {
     top: 0;
     z-index: 20;
     margin: 0 calc(-1 * var(--gutter));
-    padding: 8px var(--gutter);
+    /* pinned at the top of a phone: its tabs start below the status bar / notch */
+    padding: calc(8px + env(safe-area-inset-top, 0px)) var(--gutter) 8px;
     border-bottom: 2px dashed var(--rule);
     background: var(--paper);
   }
@@ -1886,7 +1887,7 @@ body {
 @media (max-width: 760px) {
   .ad-top {
     position: static;
-    padding: 10px 16px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
     gap: 10px 14px;
   }
   .ad-top__net {
@@ -2526,4 +2527,34 @@ body {
 }
 .ad-reprice__row .ad-code {
   white-space: normal;
+}
+
+/* small phones: the header held the brand, the network chip, the session and its two buttons on four
+   rows (about 400 of 640 px before the first drawer). The brand slims to its mark and name so the
+   chip shares its row, and the session row packs tighter. */
+@media (max-width: 420px) {
+  .ad-brand .kb-coinmark {
+    width: 32px;
+    height: 32px;
+  }
+  .ad-brand__name {
+    font-size: 22px;
+  }
+  .ad-brand__sub {
+    display: none;
+  }
+  .ad-top__net {
+    min-width: 0;
+  }
+  .ad-session__row {
+    gap: 6px;
+  }
+}
+
+/* landscape phones and low windows: the session header scrolls away (pinned, it took a third of a
+   390 px screen and covered the tables; the drawer tabs stay pinned instead) */
+@media (max-height: 500px) {
+  .ad-top {
+    position: static;
+  }
 }
