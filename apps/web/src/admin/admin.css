@@ -1657,7 +1657,9 @@ body {
   position: relative;
   width: min(720px, 100%);
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   outline: none;
 }
 .ad-txp__box:focus-visible {
@@ -1995,7 +1997,8 @@ body {
   }
   .ad-txp__box {
     max-height: calc(100vh - 20px);
-    padding: 18px 16px;
+    max-height: calc(100dvh - 20px - env(safe-area-inset-top, 0px));
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
   }
   .ad-txp__box.is-mainnet {
     padding-top: 26px;

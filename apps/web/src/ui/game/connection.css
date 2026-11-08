@@ -6,7 +6,7 @@
   z-index: 90;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
   background: rgba(4, 24, 28, 0.55);
   pointer-events: auto;
   touch-action: none;
@@ -16,6 +16,11 @@
   justify-items: center;
   gap: 10px;
   max-width: min(420px, 100%);
+  /* a landscape phone is only ~390 px high: the card scrolls instead of losing its button */
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 22px 24px 20px;
   border: 3px solid var(--outline);
   border-radius: 20px;
