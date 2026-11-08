@@ -235,3 +235,42 @@
   gap: 8px;
   margin-left: auto;
 }
+
+/* "pick several, pay once": the line over the packs */
+.sh-pick {
+  margin: 0 0 10px;
+  font-weight: 700;
+  font-size: 15px;
+}
+/* a pack in the cart: its count reads as picked */
+.sh-qty.is-on .sh-qty__n {
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--sun);
+  color: var(--ink-fixed);
+}
+.sh-qty__btn.is-more:not(:disabled) {
+  background: var(--sun);
+}
+.sh-cart.is-empty {
+  box-shadow: none;
+  border-style: dashed;
+}
+.sh-cart__empty {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+@media (max-width: 520px) {
+  .sh-qty {
+    justify-content: flex-end;
+  }
+  .sh-qty__price {
+    text-align: right;
+  }
+  .sh-cart__actions {
+    width: 100%;
+  }
+  .sh-cart__actions > .kb-btn:last-child {
+    flex: 1;
+  }
+}

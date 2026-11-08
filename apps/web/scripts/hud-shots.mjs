@@ -62,9 +62,9 @@ async function newPage(size) {
 async function buyAll(page) {
   await page.evaluate(() => window.__elymum.useUi.setState({ modal: 'shop' }));
   for (const k of ['magnet', 'leap', 'speed', 'invis']) {
-    await page.waitForSelector(`[data-testid="shop-buy-${k}"]`);
-    await page.getByTestId(`shop-buy-${k}`).click();
-    await page.waitForFunction((x) => (document.querySelector(`[data-testid="shop-buy-${x}"]`)?.getAttribute('aria-busy') ?? 'false') !== 'true', k, { timeout: 20000 });
+    await page.waitForSelector(`[data-testid="shop-more-${k}"]`);
+    await page.getByTestId(`shop-more-${k}`).click();
+    await page.waitForFunction((x) => (document.querySelector(`[data-testid="shop-more-${x}"]`)?.getAttribute('aria-busy') ?? 'false') !== 'true', k, { timeout: 20000 });
     await page.waitForTimeout(300);
   }
   await page.evaluate(() => window.__elymum.useUi.setState({ modal: null }));

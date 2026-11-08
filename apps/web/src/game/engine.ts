@@ -353,7 +353,7 @@ export class GameEngine {
       return;
     }
     if (s.boosts.charges[kind] <= 0) {
-      // nothing is sold during a game: a small hint, never the shop over the floor
+      // out of charges: a small hint pointing at the HUD's shop button (the shop never opens by itself over the floor)
       this.buyHint();
       return;
     }
@@ -373,12 +373,12 @@ export class GameEngine {
 
   private lastBuyHintAt = 0;
 
-  /** "Buy power-ups in the lobby" (at most every few seconds, so a held key does not stack slips). */
+  /** "Out of charges: the shop button" (at most every few seconds, so a held key does not stack slips). */
   private buyHint(): void {
     const now = Date.now();
     if (now - this.lastBuyHintAt < 4000) return;
     this.lastBuyHintAt = now;
-    toast('info', t('boost.buyInLobby'));
+    toast('info', t('boost.buyInShop'));
   }
 
   /* ---------------------------------------------------------------- */
@@ -629,6 +629,7 @@ export class GameEngine {
           closing: useUi.getState().room?.id === m.room.id ? useUi.getState().closing : null,
           powerups: [],
           boosts: null,
+          myEaten: 0,
           hud: { ...useUi.getState().hud, value: m.value ?? null },
           valueDelta: null,
           // a new ticket: any earlier settlement belongs to an earlier ticket (the server only lets us
@@ -673,7 +674,11 @@ export class GameEngine {
         if (useUi.getState().modal === 'standings') useUi.setState({ standings: { rows: m.rows, players: m.players, watching: m.watching, at: Date.now() } });
         return;
       case 'kf':
-        useUi.setState((s) => ({ killfeed: [...s.killfeed.slice(-4), { id: killId++, ...m, at: Date.now() }] }));
+        useUi.setState((s) => ({
+          killfeed: [...s.killfeed.slice(-4), { id: killId++, ...m, at: Date.now() }],
+          // my bites, for the HUD's "Share on X" line (the feed prints "you" the same way: by my name)
+          myEaten: s.screen === 'playing' && !m.killerIsBot && s.me?.name === m.killer && m.victim !== m.killer ? s.myEaten + 1 : s.myEaten,
+        }));
         return;
       case 'feed': {
         // a player left without dying (a bot making room for a person, or going home): one feed line
@@ -731,7 +736,7 @@ export class GameEngine {
         useUi.setState({ closing: { endsAt: m.endsAt, message: m.message } });
         return;
       case 'share':
-        // the card the server made of my result or of a notable kill: the sheets and the HUD offer "Share on X"
+        // the card the server made of my result or of a kill: the sheets and the HUD offer "Share on X"
         useUi.setState({
           share: { kind: m.kind, id: m.id, ...(m.victim ? { victim: m.victim } : {}), ...(m.victimIsBot ? { victimIsBot: true } : {}), ...(m.test ? { test: true } : {}), at: Date.now() },
         });

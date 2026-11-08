@@ -230,6 +230,36 @@
 .g-topbar__btn {
   pointer-events: auto;
 }
+/* share on X and the shop: round keys like the others; on a desktop they print their word (pills) */
+.g-hudshare,
+.g-hudshop {
+  color: var(--ink-fixed);
+  text-decoration: none;
+}
+.g-hudshop {
+  background: var(--sun);
+}
+.g-topbar__btn.has-label {
+  display: inline-flex;
+  gap: 7px;
+  width: auto;
+  padding: 0 14px 0 12px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* phones: four keys in the 172 px right column (portrait) or beside the count (landscape) */
+.g-hud.is-short .g-topbar,
+.g-hud.is-narrow .g-topbar {
+  gap: 4px;
+}
+.g-hud.is-short .g-topbar__btn,
+.g-hud.is-narrow .g-topbar__btn {
+  width: 40px;
+  height: 40px;
+}
 /* touch screens: the compact HUD keys keep their size on the floor, their hit area reaches 44 px */
 @media (pointer: coarse) {
   .g-pond__code,
@@ -1258,9 +1288,6 @@
   top: calc(var(--hud-gap) + 54px + env(safe-area-inset-top, 0px));
   transform: none;
   align-items: flex-end;
-}
-.g-hud.is-narrow .g-corner--tr .g-topbar {
-  gap: 6px;
 }
 .g-hud.is-narrow .g-till {
   min-width: 0;
@@ -2421,12 +2448,17 @@
   /* ends 10 px before the worth sticker in the middle (a custom room's tag ran under it) */
   max-width: min(300px, 36vw, calc(50vw - 100px - env(safe-area-inset-left, 0px)));
 }
+/* the kill feed lines stop before the centre column's widest notice ("You are alone in this pond", 300 px) */
+.g-hud.is-short .g-corner--tl .g-feed {
+  max-width: calc(50vw - 160px - env(safe-area-inset-left, 0px) - var(--hud-gap));
+}
 /* landscape phones: the last-10-seconds count stands right of the worth sticker, level with it, in the band
    above the minimap and the power-up keys (in the column, at 112 px, it covered my coin in the middle of a
    390 px screen and pushed the notices under it onto the coin) */
 .g-hud.is-short .g-count.is-on {
   position: absolute;
-  left: calc(100% + 24px);
+  /* 12 px: the top bar (share, shop, menu, settings) starts close by on an 844 px screen */
+  left: calc(100% + 12px);
   top: -6px;
   height: 80px;
 }
@@ -2757,23 +2789,47 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── the chat: a stream overlay on the right edge (no panel; ChatStream measures its free band) ── */
+/* ── the chat: transparent lines at the bottom left (no panel) ──────────────
+ * Desktop: docked in the bottom-left column (`.g-bl`) between the kill feed and the key hints.
+ * Touch and small windows: on its own, above the thumb stick (beside it on a landscape phone); ChatStream
+ * caps its height to the room the HUD pieces above it leave. */
 .g-stream {
   position: absolute;
-  right: calc(var(--hud-gap) + env(safe-area-inset-right, 0px));
-  top: 30%;
-  height: 40%;
-  width: min(320px, 34vw);
+  left: calc(var(--hud-gap) + env(safe-area-inset-left, 0px));
+  bottom: calc(var(--hud-gap) + env(safe-area-inset-bottom, 0px));
+  width: clamp(160px, calc(50vw - 240px), 300px);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   gap: 6px;
+  overflow: hidden;
   pointer-events: none;
   z-index: 3;
 }
-.g-hud.is-narrow .g-stream,
-.g-hud.is-short .g-stream {
-  width: min(230px, 58vw);
+.g-bl > .g-stream.is-docked {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  width: min(380px, 100%);
+  max-height: min(34vh, 250px);
+  pointer-events: none;
+}
+/* nothing to show: no empty gap between the kill feed and the key hints */
+.g-bl > .g-stream.is-docked:not(:has(li, form)) {
+  display: none;
+}
+/* touch: above the thumb stick (136 px, 22 px off the bottom), left of the Split / Tip cluster */
+.g-hud.is-touch .g-stream {
+  left: calc(14px + env(safe-area-inset-left, 0px));
+  bottom: calc(22px + 136px + 12px + env(safe-area-inset-bottom, 0px));
+  width: min(300px, calc(100vw - 196px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+}
+/* landscape phones: beside the 112 px stick, along the bottom edge, ending before the centre column (the worth
+   sticker, the power-up timers and the notices run down the middle of a 390 px screen) */
+.g-hud.is-touch.is-short .g-stream {
+  left: calc(12px + 112px + 14px + env(safe-area-inset-left, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  width: clamp(120px, calc(50vw - 248px - env(safe-area-inset-left, 0px)), 280px);
 }
 .g-stream__lines {
   display: flex;
@@ -2795,13 +2851,10 @@
   flex: none;
   color: #fff;
   overflow-wrap: anywhere;
-  /* readable on any floor without a panel: a dark outline around every glyph */
+  /* readable on any floor without a panel: a soft dark shadow under every glyph */
   text-shadow:
-    -1px -1px 0 #04181c,
-    1px -1px 0 #04181c,
-    -1px 1px 0 #04181c,
-    1px 1px 0 #04181c,
-    0 1px 3px rgba(4, 24, 28, 0.9);
+    0 1px 2px rgba(4, 24, 28, 0.95),
+    0 0 6px rgba(4, 24, 28, 0.7);
 }
 .g-stream__line.is-fading {
   animation-name: g-stream-fade;
@@ -2866,8 +2919,7 @@
 /* ── large screens: the instruments grow with the window ─────────────────
  * The stickers are drawn for a 1440 x 900 laptop. On a 1080p monitor and up (mouse only: a touch
  * HUD keeps its thumb sizes) each cluster is zoomed as a whole, so its proportions, outlines and
- * shadows stay those of the design. The chat stream is not zoomed (ChatStream sets its top and
- * height in window pixels): its width and type scale instead. */
+ * shadows stay those of the design (the chat is docked in the bottom-left column and zooms with it). */
 .g-hud {
   --hud-scale: 1;
 }
@@ -2893,10 +2945,4 @@
 }
 .g-hud.is-desktop > :is(.g-corner, .g-center, .g-bl, .g-dock, .g-boosts-dock, .g-map, .g-spectate) {
   zoom: var(--hud-scale);
-}
-.g-hud.is-desktop .g-stream {
-  width: min(calc(320px * var(--hud-scale)), 34vw);
-}
-.g-hud.is-desktop .g-stream__lines {
-  font-size: calc(14px * var(--hud-scale));
 }

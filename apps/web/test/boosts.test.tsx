@@ -145,7 +145,7 @@ describe('BoostBar', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('a power-up key with no charge left shows the lobby hint instead of the shop', async () => {
+  it('a power-up key with no charge left points at the shop button (the shop never opens by itself)', async () => {
     const { GameEngine } = await import('../src/game/engine');
     const send = vi.fn();
     const fake = Object.create(GameEngine.prototype) as GameEngine;
@@ -154,7 +154,7 @@ describe('BoostBar', () => {
     act(() => fake.boost('magnet'));
     expect(useUi.getState().modal).toBeNull();
     expect(send).not.toHaveBeenCalled();
-    expect(useUi.getState().toasts.map((x) => x.text)).toContain('Buy power-ups in the lobby');
+    expect(useUi.getState().toasts.map((x) => x.text)).toContain('Out of charges: get more in the shop (bag button, top right)');
     // a held key does not stack slips
     act(() => fake.boost('invis'));
     expect(useUi.getState().toasts).toHaveLength(1);
@@ -204,16 +204,21 @@ describe('ShopSheet', () => {
         <ShopSheet />
       </Kb>,
     );
-    await waitFor(() => expect(screen.getByTestId('shop-buy-magnet')).toBeTruthy());
-    expect(screen.getByTestId('shop-buy-magnet').textContent).toContain('Add 3 · 1,050 tELYMUM');
+    await waitFor(() => expect(screen.getByTestId('shop-more-magnet')).toBeTruthy());
+    // every pack has its stepper from the start (0 in the cart) with its price a pack
+    expect(screen.getByTestId('shop-qty-magnet').textContent).toBe('0 × pack');
+    expect(screen.getByTestId('shop-more-magnet').getAttribute('title')).toBe('Add 3 · 1,050 tELYMUM');
+    expect((screen.getByTestId('shop-less-magnet') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByText('1,050 tELYMUM a pack').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Pick as many as you like with \+ and −, then pay once/)).toBeTruthy();
     expect(screen.getAllByText('1,500 tELYMUM')).toHaveLength(2);
     expect(screen.getByText(/You have 4/)).toBeTruthy();
     expect(screen.getByText(/30% off and \+1 arena use per round/)).toBeTruthy();
     expect(screen.getByText(/Each pack is paid to the arena contract \(0x0000…4e4a\): 50% is burned, 50% goes to the fee wallet\./)).toBeTruthy();
-    expect((screen.getByTestId('shop-buy-speed') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('shop-more-speed') as HTMLButtonElement).disabled).toBe(true);
     // the two new power-ups are on sale, the Shockwave is gone
-    expect(screen.getByTestId('shop-buy-leap').textContent).toContain('Add 3 · 1,750 tELYMUM');
-    expect(screen.getByTestId('shop-buy-invis').textContent).toContain('Add 3 · 2,100 tELYMUM');
+    expect(screen.getByTestId('shop-more-leap').getAttribute('title')).toBe('Add 3 · 1,750 tELYMUM');
+    expect(screen.getByTestId('shop-more-invis').getAttribute('title')).toBe('Add 3 · 2,100 tELYMUM');
     expect(screen.getByText('Leap')).toBeTruthy();
     expect(screen.getByText('Invisibility')).toBeTruthy();
     expect(screen.queryByText(/Shockwave/)).toBeNull();
@@ -227,22 +232,25 @@ describe('ShopSheet', () => {
         <ShopSheet />
       </Kb>,
     );
-    await waitFor(() => expect(screen.getByTestId('shop-buy-magnet')).toBeTruthy());
-    expect(screen.queryByTestId('shop-cart')).toBeNull();
-    fireEvent.click(screen.getByTestId('shop-buy-magnet'));
+    await waitFor(() => expect(screen.getByTestId('shop-more-magnet')).toBeTruthy());
+    // the cart is on screen from the start: empty, "Buy all" off
+    expect(screen.getByTestId('shop-cart-empty')).toBeTruthy();
+    expect((screen.getByTestId('shop-pay') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByTestId('shop-more-magnet'));
-    fireEvent.click(screen.getByTestId('shop-buy-invis'));
+    fireEvent.click(screen.getByTestId('shop-more-magnet'));
+    fireEvent.click(screen.getByTestId('shop-more-invis'));
     expect(screen.getByTestId('shop-qty-magnet').textContent).toBe('2 × pack');
     // 2 x 1,050 + 2,100 at the holder price; 2 x 1,500 + 3,000 before the discount
     expect(screen.getByTestId('shop-cart-total').textContent).toBe('4,200 tELYMUM');
     expect(screen.getByTestId('shop-cart-full').textContent).toBe('6,000 tELYMUM');
     expect(screen.getByTestId('shop-cart').textContent).toMatch(/Total · 3 packs/);
-    expect(screen.getByTestId('shop-pay').textContent).toMatch(/Pay 4,200 tELYMUM once/);
+    expect(screen.getByTestId('shop-pay').textContent).toMatch(/Buy all · 4,200 tELYMUM/);
+    expect((screen.getByTestId('shop-pay') as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByTestId('shop-less-magnet'));
     fireEvent.click(screen.getByTestId('shop-less-magnet'));
-    expect(screen.getByTestId('shop-buy-magnet')).toBeTruthy();
+    expect(screen.getByTestId('shop-qty-magnet').textContent).toBe('0 × pack');
     fireEvent.click(screen.getByTestId('shop-cart-clear'));
-    expect(screen.queryByTestId('shop-cart')).toBeNull();
+    expect(screen.getByTestId('shop-cart-empty')).toBeTruthy();
   });
 
   it('asks guests to sign in and disables buying', async () => {
@@ -253,8 +261,8 @@ describe('ShopSheet', () => {
         <ShopSheet />
       </Kb>,
     );
-    await waitFor(() => expect(screen.getByTestId('shop-buy-magnet')).toBeTruthy());
-    expect((screen.getByTestId('shop-buy-magnet') as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(screen.getByTestId('shop-more-magnet')).toBeTruthy());
+    expect((screen.getByTestId('shop-more-magnet') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: /Sign in with wallet/ }));
     expect(useUi.getState().modal).toBe('wallet');
   });

@@ -19,7 +19,7 @@ import { MobileControls, useIsTouch } from './MobileControls';
 import { RoundIntro, SunsetSky, ValueFlyers } from './Moments';
 import { RoundChip, RoundCountdown } from './RoundChip';
 import { RoomClosingNotice } from './RoomClosing';
-import { KillShare } from './ShareOnX';
+import { HudShare, KillShare } from './ShareOnX';
 import { PracticeQuiet, QUIET_BELOW } from '../../rooms/PracticeQuiet';
 import { SpectateBar } from './SpectateBar';
 import { CustomRoomBar } from '../../rooms/CustomRoomBar';
@@ -387,11 +387,30 @@ function Banner() {
   );
 }
 
-function TopButtons() {
+/**
+ * The top bar: "Share on X" (the game as it stands) and the power-up shop (a cart of several packs, one payment) while
+ * playing, then the menu and the settings. `labels`: the share and shop keys print their word (desktop); on smaller
+ * screens they are round icon keys like the others.
+ */
+function TopButtons({ labels }: { labels: boolean }) {
   const t = useT();
   const screen = useUi((s) => s.screen);
   return (
-    <div className="g-topbar">
+    <div className={`g-topbar${labels ? ' has-labels' : ''}`}>
+      {screen === 'playing' && <HudShare label={labels} />}
+      {screen === 'playing' && (
+        <button
+          type="button"
+          className={`kb-iconbtn g-topbar__btn g-hudshop${labels ? ' has-label' : ''}`}
+          onClick={() => openModal('shop')}
+          aria-label={t('boost.openShop')}
+          title={t('boost.openShop')}
+          data-testid="hud-shop"
+        >
+          <Icon name="bag" size={20} />
+          {labels && <span className="g-hudshop__text">{t('boost.shop')}</span>}
+        </button>
+      )}
       {screen === 'playing' && (
         <button type="button" className="kb-iconbtn g-topbar__btn" onClick={() => engine()?.backToLobby()} aria-label={t('g.menu')} title={t('g.menu')}>
           <Icon name="menu" size={20} />
@@ -477,15 +496,17 @@ export const MAP_SIZE: Record<HudClass, number> = { phone: 84, 'phone-land': 76,
  * The in-game HUD: cream instrument stickers pressed onto the night floor of the ring.
  *
  * Layout per size class (nothing sits under the thumb stick or the Split / Tip cluster):
- * - desktop (mouse): timer top left with the kill feed and chat under it; worth top centre; menu,
- *   settings and the standings top right; minimap bottom right with the power-up rail above it; key
- *   hints bottom left; emote stickers bottom centre.
+ * - desktop (mouse): timer top left; worth top centre; share, shop, menu, settings and the standings top
+ *   right; minimap bottom right with the power-up rail above it; the kill feed, the chat and the key hints
+ *   stacked bottom left; emote stickers bottom centre.
  * - tablet (touch): as desktop, but the minimap moves under the standings (the bottom right is the
  *   Split / Tip cluster, which also holds the power-ups) and there are no key hints.
  * - phone portrait: timer, compact standings and the feed top left; menu and settings top right with
- *   the worth sticker and a small minimap under them; chat folds into its button.
+ *   the worth sticker and a small minimap under them; chat folds into its button and opens at the bottom
+ *   left, above the thumb stick.
  * - phone landscape: timer, compact standings and the feed top left; worth top centre; menu,
- *   settings and a small minimap top right; chat folds into its button.
+ *   settings and a small minimap top right; chat folds into its button and opens at the bottom left,
+ *   beside the thumb stick.
  */
 export function GameHud() {
   const t = useT();
@@ -546,17 +567,18 @@ export function GameHud() {
       </div>
 
       <motion.div className="g-corner g-corner--tr" {...drop(0.8, 0.1)}>
-        <TopButtons />
+        <TopButtons labels={cls === 'desktop'} />
         {!compact && <Standings compact={false} />}
         {/* touch: the bottom right is the thumb cluster, so the minimap lives up here */}
         {!narrow && (touch || short) && <MapSheet inline size={mapSize} />}
       </motion.div>
 
       {!narrow && !touch && !short && <MapSheet size={mapSize} />}
-      {/* desktop: the feed and chat sit bottom left, over the key hints */}
+      {/* desktop: the kill feed, then the chat, then the key hints, stacked at the bottom left (one column: no overlaps) */}
       {!touch && !compact && (
         <div className="g-bl">
           <Feed narrow={false} />
+          {(playing || screen === 'spectating') && <ChatStream docked />}
           {playing && (
             <Peek className="g-keys-peek" tab={<kbd className="kb-key">{t('g.keysLabel')}</kbd>} label={t('g.keysLabel')}>
               <KeyHints />
@@ -574,8 +596,8 @@ export function GameHud() {
           </div>
         </>
       )}
-      {/* the chat: a stream on the right edge, in the band the other pieces leave free */}
-      {(playing || screen === 'spectating') && <ChatStream />}
+      {/* touch and small windows: the chat stands at the bottom left, above the thumb stick (beside it on a landscape phone) */}
+      {(touch || compact) && (playing || screen === 'spectating') && <ChatStream />}
       {playing && touch && <MobileControls />}
       {screen === 'spectating' && <SpectateBar />}
       <RoundIntro />
