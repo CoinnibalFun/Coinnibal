@@ -79,6 +79,8 @@ body {
   position: sticky;
   top: 0;
   z-index: 30;
+  /* the header's paper runs up behind the status bar; its links start below the notch */
+  padding-top: env(safe-area-inset-top, 0px);
   background: var(--paper);
   border-bottom: var(--stroke) solid var(--outline);
 }
@@ -322,6 +324,7 @@ body {
 }
 .st-foot {
   position: relative;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--paper);
   color: var(--ink);
   border-top: var(--stroke) solid var(--outline);

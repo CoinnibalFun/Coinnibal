@@ -2,7 +2,7 @@
 .fc-platelabel {
   max-width: 1120px;
   margin: 18px auto 0;
-  padding: 0 20px;
+  padding: 0 max(20px, env(safe-area-inset-right, 0px)) 0 max(20px, env(safe-area-inset-left, 0px));
 }
 .fc-plate {
   background: transparent;
@@ -10,7 +10,7 @@
 .fc-wrap {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 28px 20px 72px;
+  padding: 28px max(20px, env(safe-area-inset-right, 0px)) 72px max(20px, env(safe-area-inset-left, 0px));
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
   gap: 40px;
