@@ -1550,6 +1550,11 @@ h2,
   .kb-sheet__foot {
     padding: 10px 20px 14px;
   }
+  /* the large action keeps its weight but not a fifth of a 390 px screen */
+  .kb-sheet__foot .kb-btn--lg {
+    min-height: 50px;
+    font-size: 18px;
+  }
 }
 /* short phones (an iPhone SE is 667 px, less its bars): a tighter head and foot, so the scrolling body keeps
    more than a third of the sheet (the round-over receipt showed two lines between them) */
