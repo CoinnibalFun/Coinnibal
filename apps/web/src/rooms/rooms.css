@@ -442,6 +442,19 @@
 .pq--hud .pq__title {
   font-size: 16px;
 }
+/* tablets: the top-centre column ends before the standings in the top-right corner */
+.g-hud:not(.is-narrow) .pq--hud {
+  max-width: min(320px, 88vw, calc(100vw - 540px));
+}
+/* portrait phones: in the 172 px column the full card reached the thumb keys; the title and its two
+   actions say it (the explanation stays in the lobby's card), and it comes after an event stamp */
+.g-hud.is-narrow .pq--hud .pq__body {
+  display: none;
+}
+.g-hud.is-narrow .g-center > .pq--hud {
+  order: 1;
+  padding: 8px 10px;
+}
 .pq__hide {
   min-width: 44px;
   min-height: 44px;
