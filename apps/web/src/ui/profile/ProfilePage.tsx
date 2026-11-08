@@ -13,6 +13,7 @@ import { openModal, toast, updateSettings, useUi } from '../../store';
 import { CoinPortrait } from '../game/CoinPortrait';
 import { PageHead } from '../PageHead';
 import { CountryPicker } from './CountryPicker';
+import { LinkXCard } from './LinkX';
 import { PicturePanel, PictureTile, usePicture } from './PicturePicker';
 import { wearsPicture, wornFlag } from './picture';
 import { SettingsPage } from './SettingsPage';
@@ -35,6 +36,7 @@ export function ProfilePage() {
         <div className="pf-col">
           <MemberCard />
           <NameAndCoin />
+          <LinkXCard />
         </div>
         <div className="pf-col">
           <Record />

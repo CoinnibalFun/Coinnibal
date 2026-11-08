@@ -25,6 +25,7 @@ import { engine } from '../../game/instance';
 import { sound } from '../../audio';
 import { useT, type TKey } from '../../i18n';
 import { ProfileCard } from '../../wallet/ProfileCard';
+import { LINK_X_ID } from '../profile/LinkX';
 import { signInWithWallet } from '../../wallet/signIn';
 import { TicketFlow, type FlowMode } from '../../wallet/TicketFlow';
 import { arenaRates, sessionsToCollect, type TicketKey } from '../../wallet/ticket';
@@ -70,6 +71,11 @@ export function Lobby() {
   const [picked, setPicked] = useState<TicketKey | null>(null);
   const tab = useUi((s) => s.page);
   const setTab = goPage;
+  // "Link X" from the profile card: the profile page, scrolled to its Link X card once it is on screen
+  const linkX = () => {
+    setTab('profile');
+    window.setTimeout(() => document.getElementById(LINK_X_ID)?.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' }), 420);
+  };
   const [flow, setFlow] = useState<{ mode: FlowMode; key: TicketKey; open: boolean } | null>(null);
   const reduced = useReducedMotion();
   const root = useRef<HTMLDivElement>(null);
@@ -250,7 +256,7 @@ export function Lobby() {
           <LiveFrame />
         </section>
       )}
-      <ProfileCard onEdit={() => setTab('profile')} />
+      <ProfileCard onEdit={() => setTab('profile')} onLinkX={linkX} />
       {wide && <Deck minutes={minutes} />}
     </aside>
   );
@@ -281,7 +287,7 @@ export function Lobby() {
                 <>
                   <PendingBanner onCollect={collect} />
                   {tickets}
-                  <ProfileCard onEdit={() => setTab('profile')} />
+                  <ProfileCard onEdit={() => setTab('profile')} onLinkX={linkX} />
                 </>
               ) : (
                 <SectionPage page={tab} />

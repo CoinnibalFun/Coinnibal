@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { ledgerDecimals } from '@elymum/sdk';
-import { EATEN_SHOWN, PlayerFlag, SHARE_ID_RE, SHARE_IMAGE, arenaMeta, formatToken, shareName, shortAddress, type EatenName, type ShareCard, type ShareKind } from '@elymum/shared';
+import { EATEN_SHOWN, PlayerFlag, SHARE_ID_RE, isXHandle, SHARE_IMAGE, arenaMeta, formatToken, shareName, shortAddress, type EatenName, type ShareCard, type ShareKind } from '@elymum/shared';
 import { Limiter } from '../net/limiter';
 import type { PlayerLook, RoomHandle } from '../rooms/handle';
 import { renderShareCard, shareFacts, shareHeadline } from './share-card';
@@ -43,6 +43,8 @@ export interface ShareDeps {
   baseUrl: (req: IncomingMessage) => string;
   /** The game token's decimals and symbol (for "took home 1,234.5 $ELYMUM"). */
   token: () => { decimals: number; symbol: string } | null;
+  /** "Link X": the handle is linked to a wallet right now (a card tags only such a handle; absent: never tag). */
+  xLinked?: (handle: string) => boolean;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -161,7 +163,10 @@ export class ShareService {
     const kind: ShareKind = o.room.opts.stake ? 'round' : 'room';
     const t = this.d.token();
     const paid = !o.room.opts.test && r.payout && r.payout > 0 && t ? `${formatToken(r.payout, ledgerDecimals(t.decimals), { maxFrac: 2 })} ${t.symbol}` : undefined;
-    const list = (r.eaten ?? []).slice(0, EATEN_SHOWN).map((e): EatenName => ({ name: shareName(e.name), ...(e.bot ? { bot: true } : {}), ...(e.n && e.n > 1 ? { n: Math.floor(e.n) } : {}) }));
+    const list = (r.eaten ?? []).slice(0, EATEN_SHOWN).map((e): EatenName => {
+      const x = this.tag(e.bot ? null : e.xHandle);
+      return { name: shareName(e.name), ...(e.bot ? { bot: true } : {}), ...(e.n && e.n > 1 ? { n: Math.floor(e.n) } : {}), ...(x ? { xHandle: x } : {}) };
+    });
     const more = Math.max(0, Math.floor(r.eatenMore ?? 0)) + Math.max(0, (r.eaten?.length ?? 0) - list.length);
     return this.add({
       kind,
@@ -176,11 +181,16 @@ export class ShareService {
     });
   }
 
+  /** A handle a card may tag: valid and still linked to a wallet (an unlinked account is never tagged). */
+  private tag(handle: string | null | undefined): string | null {
+    return isXHandle(handle) && this.d.xLinked?.(handle) === true ? handle : null;
+  }
+
   /**
    * A kill (every person eaten; a practice bot in a test arena only): an offer (`offer`), or null when this player
    * (`key`: its connection or wallet) got one in the last `KILL_SHARE_EVERY_MS`.
    */
-  kill(o: ShareOrigin, key: string, k: { mass: number; kills: number; victim: string; victimMass: number; victimIsBot?: boolean }): ShareCard | null {
+  kill(o: ShareOrigin, key: string, k: { mass: number; kills: number; victim: string; victimMass: number; victimIsBot?: boolean; victimX?: string | null }): ShareCard | null {
     // a practice bot counts in a testnet test arena only
     if (k.victimIsBot && !o.room.opts.test) return null;
     const now = this.now();
@@ -188,7 +198,9 @@ export class ShareService {
     if (last !== undefined && now - last < KILL_SHARE_EVERY_MS) return null;
     this.lastKill.set(key, now);
     if (this.lastKill.size > 10_000) for (const [k2, at] of this.lastKill) if (now - at >= KILL_SHARE_EVERY_MS) this.lastKill.delete(k2);
-    return this.offer({ kind: 'kill', ...this.base(o), mass: Math.floor(k.mass), kills: k.kills, victim: shareName(k.victim), victimMass: k.victimMass, ...(k.victimIsBot ? { victimBot: true } : {}) });
+    // a linked victim is tagged (bots never are)
+    const victimX = k.victimIsBot ? null : this.tag(k.victimX);
+    return this.offer({ kind: 'kill', ...this.base(o), mass: Math.floor(k.mass), kills: k.kills, victim: shareName(k.victim), victimMass: k.victimMass, ...(k.victimIsBot ? { victimBot: true } : {}), ...(victimX ? { victimX } : {}) });
   }
 
   /** Startup self-check result (`shareCardSelfCheck`): when drawing cannot work here, images fall back at once. */
