@@ -337,7 +337,9 @@ function PowerUpChip({ type, until }: { type: PowerUpType; until: number }) {
         <path d={PU_PATH[type]} />
       </svg>
       <span className="mono">
-        {t(`pu.${type}` as 'pu.1')} · {t('g.secondsLeft', { s: secs })}
+        {/* phones show the icon and the seconds; the name stays for screen readers */}
+        <span className="g-pu__name">{t(`pu.${type}` as 'pu.1')} · </span>
+        {t('g.secondsLeft', { s: secs })}
       </span>
     </li>
   );
