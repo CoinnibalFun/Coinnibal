@@ -483,8 +483,9 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
                     className={`tf-approve-seg mono${approveN === n ? ' is-on' : ''}`}
                     onClick={() => updateSettings({ approveTickets: n })}
                     data-testid={`tf-approve-${n}`}
+                    aria-label={n === 1 ? t('tf.approveOneTicket') : t('tf.approveN', { n })}
                   >
-                    {t('tf.approveN', { n })}
+                    <b className="num">{n}</b>
                   </button>
                 ))}
               </span>

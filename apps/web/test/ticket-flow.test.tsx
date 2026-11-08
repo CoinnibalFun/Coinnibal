@@ -123,7 +123,7 @@ describe('ticket confirm sheet', () => {
     expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take up to 5,000 $ELYMUM (5 tickets of this room)', '2Buy the ticket · Asphodel Meadow']);
     expect((within(dialog).getByRole('button', { name: /Pay 1,000 \$ELYMUM/ }) as HTMLButtonElement).disabled).toBe(false);
     // the approval covers 1, 5, 10 or 20 tickets, 5 preselected
-    expect(within(dialog).getAllByRole('radio').map((r) => r.textContent)).toEqual(['1 tickets', '5 tickets', '10 tickets', '20 tickets']);
+    expect(within(dialog).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['1 ticket', '5 tickets', '10 tickets', '20 tickets']);
     expect(within(dialog).getByRole('radio', { name: '5 tickets' }).getAttribute('aria-checked')).toBe('true');
   });
 
@@ -136,7 +136,7 @@ describe('ticket confirm sheet', () => {
     view.unmount();
     spies.sendWalletCall.mockClear();
     open(PENNY);
-    act(() => screen.getByRole('radio', { name: '1 tickets' }).click());
+    act(() => screen.getByRole('radio', { name: '1 ticket' }).click());
     expect(screen.getByText(/your wallet asks for an approval every time/)).toBeTruthy();
     act(() => screen.getByRole('button', { name: /^Pay / }).click());
     await settle();

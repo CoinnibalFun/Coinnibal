@@ -1448,14 +1448,15 @@
   gap: 6px;
 }
 .tf-approve-seg {
-  flex: 1 1 64px;
+  flex: 1 1 0;
+  min-width: 44px;
   min-height: 44px;
   padding: 6px 8px;
   border: var(--stroke-sm) solid var(--outline);
   border-radius: var(--r-pill);
   background: var(--paper-fixed, #fffaf0);
   color: var(--ink-fixed);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 700;
   cursor: pointer;
 }
