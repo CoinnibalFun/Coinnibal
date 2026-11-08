@@ -2,7 +2,9 @@
 // Layout guard: a fast Playwright check that the web app holds up at the core viewports.
 //   - no horizontal page scroll on the site pages, the lobby and the in-game HUD;
 //   - no two key HUD pieces (timer, pond tag, standings, worth, minimap, power-ups, menu buttons,
-//     Split / Tip / sticker buttons, the thumb stick, the dock and the key hints) drawn over each other;
+//     Split / Tip / sticker buttons, the thumb stick, the dock, the key hints, an event banner, the
+//     last-10-seconds count) drawn over each other, in a busy arena state (coin rain, power-ups running,
+//     the round 10 s from its bell);
 //   - every HUD piece inside the visible screen, clear of an emulated notch / home bar on phones.
 // It needs a Chromium (the CI job skips the browser download), so it is a script, not a vitest test:
 //
@@ -54,6 +56,11 @@ const PIECES = [
   '.g-dock',
   '.g-keys-peek',
   '.g-boosts-dock .g-peek__tab',
+  '.g-boosts__arena',
+  '.g-banner',
+  '.g-count__n',
+  '.g-net',
+  '.pq',
 ];
 
 const kids = [];
@@ -101,7 +108,7 @@ const overflowX = () => {
 };
 
 /** In the page: pairs of HUD pieces that overlap, and pieces outside the safe screen. */
-function hudProblems([pieces, safe]) {
+function hudProblems([pieces, safe, dbg]) {
   const W = innerWidth;
   const H = innerHeight;
   const seen = [];
@@ -115,6 +122,7 @@ function hudProblems([pieces, safe]) {
     }
   // the guard must see the HUD it guards: a renamed class would make it pass on nothing
   const out = seen.length < 6 ? [`only ${seen.length} HUD pieces found (${[...new Set(seen.map((p) => p.sel))].join(', ')}): the guard's selectors are stale`] : [];
+  if (dbg) out.push(...seen.map((p) => `debug ${p.sel} ${Math.round(p.r.left)},${Math.round(p.r.top)} ${Math.round(p.r.width)}x${Math.round(p.r.height)}`));
   const name = (p) => `${p.sel}${p.el.getAttribute('aria-label') ? `[${p.el.getAttribute('aria-label')}]` : ''}`;
   for (let i = 0; i < seen.length; i++) {
     const a = seen[i];
@@ -158,26 +166,55 @@ async function checkViewport(browser, vp) {
     await page.goto(`${BASE}/play`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__elymum?.useUi.getState().connected, null, { timeout: 30000 });
     await sleep(600);
-    let o = await page.evaluate(overflowX);
-    if (o > 1) problems.push(`${vp.name} lobby: the page scrolls sideways by ${o}px`);
+    const lobbyO = await page.evaluate(overflowX);
+    if (lobbyO > 1) problems.push(`${vp.name} lobby: the page scrolls sideways by ${lobbyO}px`);
     await page.evaluate(() => window.__elymum.engine.play('practice'));
     await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 15000 });
+    // the round intro card passes over the HUD for a few seconds: let it come and go
+    await page.waitForSelector('.gm-intro__card', { timeout: 3000 }).catch(() => {});
     await page.waitForFunction(() => !document.querySelector('.gm-intro__card'), null, { timeout: 12000 }).catch(() => {});
-    // the fullest HUD: power-ups owned and running, chat and kill feed lines
+    const check = async (state) => {
+      const o = await page.evaluate(overflowX);
+      if (o > 1) problems.push(`${vp.name} hud (${state}): the page scrolls sideways by ${o}px`);
+      for (const p of await page.evaluate(hudProblems, [PIECES, vp.safe ?? null, !!process.env.LAYOUT_GUARD_DEBUG])) problems.push(`${vp.name} hud (${state}): ${p}`);
+      if (process.env.LAYOUT_GUARD_SHOTS) await page.screenshot({ path: join(process.env.LAYOUT_GUARD_SHOTS, `hud-${state}-${vp.name}.png`) });
+    };
+    // (1) a quiet practice pond: the tallest notice ("You are alone in this pond") with power-ups owned and
+    // running, coin rain, chat and kill feed lines
     await page.evaluate(() => {
       const E = window.__elymum.engine;
-      const s = window.__elymum.useUi.getState();
-      window.__elymum.useUi.setState({ boosts: { ...(s.boosts ?? {}), usable: true, signedIn: true, disabled: [], cooldownMs: { magnet: 0, leap: 0, speed: 0, invis: 0 }, charges: { magnet: 3, leap: 2, speed: 3, invis: 3 } } });
+      const ui = window.__elymum.useUi;
+      const s = ui.getState();
+      const orig = E.onMessage.bind(E);
+      E.onMessage = (m) => {
+        orig(m);
+        if (m.t === 'lb') ui.setState((st) => ({ hud: { ...st.hud, players: 1 } }));
+      };
+      ui.setState({
+        hud: { ...s.hud, players: 1 },
+        boosts: { ...(s.boosts ?? {}), usable: true, signedIn: true, disabled: [], cooldownMs: { magnet: 0, leap: 0, speed: 0, invis: 0 }, charges: { magnet: 3, leap: 2, speed: 3, invis: 3 }, arena: { left: 3, max: 3 } },
+      });
       for (let i = 0; i < 3; i++) E.onMessage({ t: 'kf', killer: 'WWWWWWWWWWWWWWWW', killerSkin: 1, victim: 'MMMMMMMMMMMMMMMM', victimSkin: 2, cause: 'eat' });
       for (let i = 0; i < 3; i++) E.onMessage({ t: 'chat', pid: 7, from: 'WWWWWWWWWWWWWWWW', skin: 3, text: 'gg wp '.repeat(12) });
-      E.onMessage({ t: 'powerup', type: 1, ms: 30000 });
-      E.onMessage({ t: 'powerup', type: 2, ms: 30000 });
+      E.onMessage({ t: 'powerup', type: 1, ms: 60000 });
+      E.onMessage({ t: 'powerup', type: 2, ms: 60000 });
+      E.onMessage({ t: 'event', kind: 'coinrain', state: 'start', ms: 90000 });
     });
     await sleep(900);
-    o = await page.evaluate(overflowX);
-    if (o > 1) problems.push(`${vp.name} hud: the page scrolls sideways by ${o}px`);
-    for (const p of await page.evaluate(hudProblems, [PIECES, vp.safe ?? null])) problems.push(`${vp.name} hud: ${p}`);
-    if (process.env.LAYOUT_GUARD_SHOTS) await page.screenshot({ path: join(process.env.LAYOUT_GUARD_SHOTS, `hud-${vp.name}.png`) });
+    await check('pond');
+    // (2) an arena round 20 s from its bell: once the intro card (replayed by the room change) has passed,
+    // the last-10-seconds count comes in over the same busy HUD
+    await page.evaluate(() => {
+      const ui = window.__elymum.useUi;
+      const s = ui.getState();
+      const endsAt = Date.now() + 20_000;
+      ui.setState({ room: { ...(s.room ?? {}), mode: 'arena', arenaId: 1, round: { n: 0, endsAt, joinsCloseAt: endsAt - 5000, opensAt: 0 } } });
+    });
+    await page.waitForSelector('.gm-intro__card', { timeout: 3000 }).catch(() => {});
+    await page.waitForFunction(() => !document.querySelector('.gm-intro__card'), null, { timeout: 15000 }).catch(() => {});
+    await page.waitForSelector('[data-testid="round-count"]', { timeout: 15000 }).catch(() => problems.push(`${vp.name} hud: the last-10-seconds count never showed`));
+    await sleep(400);
+    await check('arena');
   } catch (e) {
     problems.push(`${vp.name}: ${e.message.split('\n')[0]}`);
   } finally {
