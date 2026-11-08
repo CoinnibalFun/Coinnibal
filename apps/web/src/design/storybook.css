@@ -2596,7 +2596,11 @@ h2,
     border-radius: 50%;
   }
   .kb-chip.is-button {
-    min-height: 40px;
+    min-height: 44px;
+  }
+  /* the small button keeps its type and corner; only its height reaches the 44 px touch floor */
+  .kb-btn--sm {
+    min-height: 44px;
   }
   /* the address chip lets its copy key's hit area out (the key keeps the chip's rounded corner) */
   .kb-addr {

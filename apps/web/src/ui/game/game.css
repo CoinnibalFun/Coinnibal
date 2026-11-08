@@ -230,6 +230,23 @@
 .g-topbar__btn {
   pointer-events: auto;
 }
+/* touch screens: the compact HUD keys keep their size on the floor, their hit area reaches 44 px */
+@media (pointer: coarse) {
+  .g-pond__code,
+  .g-hud .kb-iconbtn {
+    position: relative;
+  }
+  .g-pond__code::after,
+  .g-hud .kb-iconbtn::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+  }
+  .g-closing__board {
+    min-height: 44px;
+  }
+}
 
 /* ── kill feed and chat (under the timer) ─────────────────────────────── */
 .g-feed {

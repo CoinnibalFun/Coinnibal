@@ -179,8 +179,8 @@
   color: var(--ink-2);
 }
 .sh-qty__btn {
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
   font-size: 20px;
   font-weight: 800;
   line-height: 1;
