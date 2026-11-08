@@ -32,7 +32,14 @@ describe('player guide facts', () => {
   it('quotes the contract defaults', () => {
     expect(FACTS.fee).toEqual({ burnBps: 1500, vaultBps: 500, maxBps: 2500, paymentBurnBps: 5000 });
     expect(FACTS.refundHours).toBe(24);
-    expect(FACTS.rules).toMatchObject({ roundMin: 5, joinCloseS: 60, afkS: 45, lootMin: 3, lootMax: 24, lootEntryDiv: 4 });
+    expect(FACTS.rules).toMatchObject({ roundMin: 5, joinCloseS: 60, breakS: 30, afkS: 45, lootMin: 3, lootMax: 24, lootEntryDiv: 4 });
+    expect(FACTS.approve).toEqual({ choices: [1, 5, 10, 20], preselected: 5 });
+    expect(FACTS.arenas.map((a) => [a.usdCents, a.holdersOnly])).toEqual([
+      [100, false],
+      [300, false],
+      [500, false],
+      [1000, true],
+    ]);
     expect(FACTS.rules.roundMin).toBe(RULES.roundMs / 60_000);
     expect(FACTS.capacity).toEqual({ practice: CAPACITY.practice, private: CAPACITY.private, arena: 50 });
     // the USD tiers ($1 / $3 / $5 / $10) at the reference token price
@@ -89,7 +96,8 @@ describe('player guide content', () => {
     expect(nft).toContain('the $10 arena is for holders only');
     expect(nft).toContain('holders play first');
     const token = JSON.stringify(en.sections.find((s) => s.id === 'token'));
-    expect(token).toContain('Magnet 600, Leap 900, Speed burst 600 and Invisibility 1,200 $ELYMUM');
+    expect(token).toContain('Magnet $0.60, Leap $0.90, Speed burst $0.60 and Invisibility $1.20 by default');
+    expect(token).not.toContain('Nothing is sold during a game');
     expect(token).toContain('15% of every profit is burned');
     expect(token).toContain('which burns 50% of it and sends 50% to the fee wallet');
     expect(token).toContain('Nothing mints new $ELYMUM');

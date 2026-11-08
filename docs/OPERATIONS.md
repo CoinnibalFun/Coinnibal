@@ -23,7 +23,7 @@ price at $1.
 | **Play** | Play the arenas yourself before launch |
 | **WL**, **Tasks**, **Collabs** | The whitelist applications, the WL steps, the community collabs |
 | **Integrity** | Cheat and collusion flags, bans, held payouts, detector settings |
-| **Settings** | `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public), the X handle (default `elymum`) |
+| **Settings** | `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public / maintenance), the X handle (default `elymumio`) |
 
 Admin endpoints need a SIWE session whose wallet is in `ADMIN_WALLETS`. Contract actions also need the
 connected wallet to be the contract's owner and on the chain the server reports; otherwise signing is blocked
@@ -243,7 +243,8 @@ the flags honest players raise (none at the defaults) and those two scripted bot
   rooms, the journal (pending, held, oldest), the chain (reachable, last answer, clock skew), `gas` (the runway) and
   the books guard. `GET /api/health?live=1` only says the process answers: the container's health check (a server
   that waits on the RPC, or whose disk is full, must not be restarted for it).
-- **Alerts:** on the VPS `elymum-alert.timer` posts to Telegram every minute on a `!!!` log line, a 503 and its
+- **Alerts:** on the VPS `elymum-alert.timer` checks every minute and posts to Telegram (optional:
+  `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`; without them the alerts go to the journal only) on a `!!!` log line, a 503 and its
   reasons, a gas runway under 7 days, a disk over 80 %, the container down; it restarts an app whose liveness check
   failed 3 minutes in a row (deploy/vps/README.md, "Alerts and autoheal").
 - **Clock:** ticket ages (the 15-minute stale limit, the 6-hour cap) are measured on the chain's clock (the latest
@@ -259,7 +260,8 @@ the flags honest players raise (none at the defaults) and those two scripted bot
   nothing is sent and no new arena seat is taken until it can), an arena whose vault falls short, the wrong server
   authority, low gas, a fee wallet that cannot receive the token, an arena contract whose code hash differs, an RPC
   that serves another chain than `CHAIN_ID` (`!!! chain: EVM_RPC_URL serves chain …`, or a fallback of
-  `EVM_RPC_URLS` left out), the server clock off the chain's, an emblem seat refused.
+  `EVM_RPC_URLS` left out), the server clock off the chain's, an emblem seat refused. `integrity: HELD ...` means a
+  payout waits in `/admin` → Integrity.
 
 ## RPC
 
@@ -271,7 +273,6 @@ own budget (`RPC_MAX_RPS`, on the VPS `ELYMUM_RPC_MAX_RPS`, e.g. `25,4`). Concur
 on a chain without Multicall3 (the log says which), so the bell of 200 tickets reads its sessions in about 24 calls
 instead of 216. Set-up and checks: deploy/vps/README.md, "RPC". `rpc: N calls/min …` in the log, once a minute per
 URL, shows the traffic and the 429s.
-  `integrity: HELD ...` means a payout waits in `/admin` → Integrity.
 
 ## Fees, burns and the fee wallet
 
@@ -317,7 +318,8 @@ Everything is done from `/admin` with the owner wallet; nothing needs a terminal
 3. **Wallet.** Open `/admin`, connect the owner wallet and Sign in. The panel asks the wallet to add or switch to
    Robinhood Chain Testnet (chain id 46630, RPC, explorer) when it does not know it.
 4. **Deploy** (Setup → the deploy wizard; each step is previewed and registered with the server on success):
-   - **TestToken** (testnet only): an ERC20Burnable game token with a faucet; the owner mints, nobody else.
+   - **TestToken** (testnet only): an ERC20Burnable game token with a public faucet (1,000,000 an hour per wallet,
+     2,000,000 for emblem holders); apart from the faucet only the owner mints.
    - **ElymumArena v3** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
      The server checks the code hash and the server authority before it registers it.
    - **ElymumNFT** at the $1 price in ETH (the wizard reads ETH/USD).
@@ -469,7 +471,8 @@ seat at a time).
   "testnet test room with bots; same tickets and payouts". Quick play never goes there. Who may play follows the
   normal game access rule (`gameAccess` / `GAME_ACCESS`): admins during maintenance, everyone when the game is open.
 - **Boards:** test-arena games count nowhere official: no leaderboard record, country game or "Last rounds" entry,
-  no profile stats (XP, games, best), no Share on X card.
+  no profile stats (XP, games, best). Their Share on X cards are stamped TEST and never show a payout; eating a
+  practice bot offers a kill card there only.
 - **Admin:** `/admin` → Game → **Test arenas (testnet)** (`GET` / `PUT /api/admin/test-arenas`, stored in
   `DATA_DIR/site/test-arenas.json`): "Test arenas with bots" on / off (default on), bots per test arena (3..20,
   default 10), difficulty (easy / mixed / hard, default mixed), and every test arena live (people, bots, open or
@@ -481,11 +484,15 @@ seat at a time).
 
 ## Share on X
 
-Players get a "Share on X" button on a bell's receipt, a custom room's final board and, for a few seconds, after
-eating a big coin (1,000+ mass). It opens X's composer (`x.com/intent/post`, no X API or keys) with a localized line
-and a link to `/share/<id>`, whose Open Graph image X shows as the card. The server makes each card from its own
-records (name, the wallet's short form, the coin's paint, flag code, emblem badge, place, mass, kills, net paid):
-nothing else, and nothing a client sends. Cards live in `DATA_DIR/site/shares.json` (the newest 5,000). The image is
+Players get a "Share on X" button on a bell's receipt, a custom room's final board, the in-game top bar and, for 8
+seconds, after eating any person (a kill card; at most one per player every 5 s, `KILL_SHARE_EVERY_MS`; a practice
+bot counts only in a testnet test arena). It opens X's composer (`x.com/intent/post`, no X API or keys) with a
+localized line and a link to `/share/<id>`, whose Open Graph image X shows as the card. The server makes each card
+from its own records (name, the wallet's short form, the coin's paint, flag code, emblem badge, place, mass, kills,
+net paid, and on a result "Ate: …" with the coins eaten that game): nothing else, and nothing a client sends. A coin
+whose owner linked X ("Link X", `/api/x/*`) is named by its `@handle`, so the post tags them. A test arena's card is
+stamped TEST and never shows a payout. Kill cards are offers held in memory (the newest 20,000, for 6 h) and saved
+only when their link is first opened; saved cards live in `DATA_DIR/site/shares.json` (the newest 5,000). The image is
 rendered on demand and cached (30 renders per IP a minute). On Vercel, `vercel.json` rewrites `/share/*` to the game
 server like `/api/*`; in Docker the server serves it on the same origin; `pnpm dev` proxies it.
 

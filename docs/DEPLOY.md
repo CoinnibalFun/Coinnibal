@@ -16,7 +16,8 @@ Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testne
 ## The order
 
 1. **Server** on the VPS (deploy/vps/README.md), `SERVER_PRIVATE_KEY=auto`, `ADMIN_WALLETS` = your owner wallet,
-   `CHAIN_ID=46630` and `EVM_RPC_URLS` = Robinhood Chain Testnet (later `4663` and Alchemy plus the public RPC).
+   `CHAIN_ID=46630` and `EVM_RPC_URLS` = Robinhood Chain Testnet (later `4663` and Alchemy plus the public RPC; on the
+   VPS these are `ELYMUM_CHAIN_ID` and `ELYMUM_RPC_URLS`, and unset they already mean the testnet).
 2. **Fund the server key** with a little ETH (it pays gas for settlements, cancels and loot burns).
 3. In `/admin` on the site, with the owner wallet on Robinhood Chain: **Deploy Arena → Deploy NFT → register both**
    (on the testnet also the TestToken).

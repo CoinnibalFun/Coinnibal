@@ -12,7 +12,8 @@ import { CUSTOM_DIFFICULTIES, type CustomDifficulty } from './custom-rooms';
  * They exist only while the server's chain is a testnet (Robinhood Chain Testnet, or the local node) AND the admin
  * switch is on (default on). On the mainnet the setting is refused and ignored and the server never opens one.
  * Quick play never seats anyone there; the lobby lists them after the official arenas, marked TEST; their results
- * stay off every official board (leaderboards, countries, last rounds, profile stats, Share on X cards).
+ * stay off every official board (leaderboards, countries, last rounds, profile stats); their Share on X cards are
+ * stamped TEST and never show a payout.
  */
 export interface TestArenaSettings {
   /** The admin switch "Test arenas with bots" (testnet only). */

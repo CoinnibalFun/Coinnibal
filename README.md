@@ -31,15 +31,17 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
 
 - Real-time arena game: a 30 Hz authoritative server (physics, rounds) and a canvas client with
   split, eject, viruses, power-ups and floor loot.
-- Rounds, not cash-outs: paid arenas play 5-minute wall-clock rounds. Join late or buy back in;
-  everyone alive at the bell is paid their value. There is no entry fee; the arena contract takes 20 % of a
-  ticket's **profit** only (15 % burned, 5 % to the fee wallet); a loss pays nothing.
-- Four arenas on the ring: Asphodel Meadow (1,000), Lethe Shore (10,000), Golden Bough (50,000) and
-  Isles of the Blessed (250,000 `$ELYMUM`, for emblem holders). Only people play them: no house bots.
+- Rounds, not cash-outs: paid arenas play 5-minute wall-clock rounds (a 30 s break after each bell, joins closed in
+  the final minute). Join late or buy back in; everyone alive at the bell is paid their value. There is no entry
+  fee; the arena contract takes 20 % of a ticket's **profit** only (15 % burned, 5 % to the fee wallet; emblem
+  holders 10 %: 8 % + 2 %); a loss pays nothing.
+- Four arenas on the ring, tickets priced in US dollars and paid in `$ELYMUM`: Asphodel Meadow ($1), Lethe Shore ($3),
+  Golden Bough ($5) and Isles of the Blessed ($10, for emblem holders). Only people play the official arenas: no
+  house bots (on the testnet each arena also has a labelled TEST room with practice bots that carry no value).
 - On-chain money in one contract: `ElymumArena` holds the entry fees in per-arena vaults; a payout
   can never exceed the vault, a settlement cannot replay, players refund unsettled tickets themselves
-  after 24 h, floor loot is only ever burned. Power-ups are paid to the same contract (`pay`: half burned, half to
-  the fee wallet).
+  after 24 h, floor loot is only ever burned. Power-ups (packs priced in US dollars, several in one cart, one
+  payment) are paid to the same contract (`pay`: half burned, half to the fee wallet).
 - Elymum NFT: an ERC-721 with an allowlist (Merkle root) and a public phase, priced at $1 in
   ETH (synced from `/admin` or kept there by the server's price keeper within the owner's bounds).
 - Sign-In with Ethereum (EIP-4361) for every wallet that speaks EIP-6963 (MetaMask, Rabby, Coinbase
@@ -48,8 +50,10 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
   create arenas, publish the allowlist, open the mint, review the WL and collabs, integrity flags,
   bans and held payouts. Every transaction is previewed before the wallet prompt.
 - Practice: two leagues of free practice rooms; nothing touches the chain.
-- Custom rooms: your own rules for a small ETH fee; free rooms may add fair practice bots (count and difficulty,
-  tagged BOT, no value, they see only what a player sees).
+- Custom rooms: your own rules for a small ETH fee (emblem holders: one free room a day); free rooms may add fair
+  practice bots (count and difficulty, tagged BOT, no value, they see only what a player sees).
+- Share on X and Link X: result and kill cards drawn by the server, opened in X's composer; a player can tie an X
+  account to the coin by posting a code (no X API), so the `@handle` shows on the coin and eaters can tag it.
 
 ## How it works
 
@@ -96,7 +100,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | `packages/sdk` | viem client: reads, call builders, deploy helpers, Merkle tree, ETH/USD price, the admin CLI (`pnpm admin`) |
 | `packages/shared` | Game rules, protocol, chains table, arenas, SIWE message, palette |
 | `packages/art` | Coin drawing shared by the web renderer and the films |
-| `apps/server` | The game server (rooms, rounds, ledger, journal, chain gateway, site and admin API, integrity, practice bots for free custom rooms) |
+| `apps/server` | The game server (rooms, rounds, ledger, journal, chain gateway, site and admin API, integrity, practice bots for free custom rooms and the testnet's test arenas, the shop, Share on X and Link X) |
 | `apps/web` | The client: landing, `/wl`, `/collab`, `/mint`, `/play`, `/docs`, `/admin` |
 | `scripts/` | `demo.mjs`, `localnet.mjs`, `localnet-fund.mjs`, `dev-browser.mjs`, `record-walkthrough.mjs` and the Dev Wallet |
 | `brand/` | The brand kit generator and its PNGs (X avatar and banner, OG card, favicons, posts, stickers, arena posters) |
