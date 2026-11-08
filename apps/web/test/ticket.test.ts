@@ -15,10 +15,13 @@ import {
   ticketRates,
   ticketSteps,
   sameRates,
-  APPROVE_BATCH_TICKETS,
+  APPROVE_DEFAULT_TICKETS,
+  APPROVE_MAX_TICKETS,
+  APPROVE_TICKET_CHOICES,
   approvalIsSafe,
   approveAmount,
-  approveMode,
+  approveTickets,
+  ticketsLeft,
   type GateInput,
   type TicketModel,
 } from '../src/wallet/ticket';
@@ -73,14 +76,22 @@ describe('the ticket calls (approve, then join)', () => {
     expect(enough.calls.map((c) => c.functionName)).toEqual(['join']);
   });
 
-  it('approves exactly one entry fee by default; the batch is explicit and capped, never unlimited', () => {
-    expect(approveMode(undefined)).toBe('exact');
-    expect(approveMode(false)).toBe('exact');
-    expect(approveMode(true)).toBe('batch');
-    expect(APPROVE_BATCH_TICKETS).toBe(5);
-    expect(approveAmount('exact', 1000n * ONE)).toBe(1000n * ONE);
-    expect(approveAmount('batch', 1000n * ONE)).toBe(5000n * ONE);
-    for (const mode of ['exact', 'batch'] as const) expect(approveAmount(mode, 50_000n * ONE)).toBeLessThan(MAX_ALLOWANCE);
+  it('approves 1, 5, 10 or 20 tickets (5 preselected), capped at 20 entry fees, never unlimited', () => {
+    expect(APPROVE_TICKET_CHOICES).toEqual([1, 5, 10, 20]);
+    expect(APPROVE_DEFAULT_TICKETS).toBe(5);
+    expect(approveTickets(undefined)).toBe(5);
+    expect(approveTickets(10)).toBe(10);
+    expect(approveTickets(7)).toBe(5);
+    expect(approveTickets(1000)).toBe(5);
+    expect(approveAmount(1, 1000n * ONE)).toBe(1000n * ONE);
+    expect(approveAmount(5, 1000n * ONE)).toBe(5000n * ONE);
+    expect(approveAmount(20, 1000n * ONE)).toBe(20_000n * ONE);
+    expect(approveAmount(500, 1000n * ONE)).toBe(BigInt(APPROVE_MAX_TICKETS) * 1000n * ONE);
+    for (const n of APPROVE_TICKET_CHOICES) expect(approveAmount(n, 100_000n * ONE)).toBeLessThan(MAX_ALLOWANCE);
+    // what is left, in tickets
+    expect(ticketsLeft(3500n * ONE, 1000n * ONE)).toBe(3);
+    expect(ticketsLeft(null, 1000n * ONE)).toBeNull();
+    expect(ticketsLeft(0n, 1000n * ONE)).toBe(0);
     // a batch covers its tickets, then the approval is asked again
     expect(ticketSteps(5000n * ONE - 4n * 1000n * ONE, 1000n * ONE)).toEqual(['join']);
     expect(ticketSteps(5000n * ONE - 5n * 1000n * ONE, 1000n * ONE)).toEqual(['approve', 'join']);

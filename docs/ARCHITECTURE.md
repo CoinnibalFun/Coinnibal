@@ -67,8 +67,9 @@ flowchart LR
 
 ### Ticket lifecycle
 
-1. **Join.** The web checks the allowance and sends `approve` when it is short (exactly the entry fee; "Approve 5
-   tickets at once" is an explicit choice capped at five entry fees; never unlimited), then `join(arenaId)`. Before
+1. **Join.** The web checks the allowance and sends `approve` when it is short (the entry fee of 1, 5, 10 or 20
+   tickets of that room, the player's choice with 5 preselected; capped at 20 entry fees, never unlimited; the wallet
+   sheet shows what is left in tickets and revokes it), then `join(arenaId)`. Before
    either, the arena must be the one the web build pins, with the compiled runtime code (see Web internals). The contract pulls the entry
    fee with a balance-delta check (fee-on-transfer tokens are refused), opens a session with a global id and fixes
    the ticket's fee rates (`burnBps`, `vaultBps`; the holder pair for an emblem holder when it is lower). One open
