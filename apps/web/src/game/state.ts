@@ -9,6 +9,7 @@ import {
   avatarIdEquals,
   avatarIdFromBytes,
   decodeUtf8,
+  isXHandle,
   readSnapshot,
   unpackCountry,
   type PlayerInfo,
@@ -194,7 +195,7 @@ export class ClientWorld implements SnapshotSink {
     this.begin(now, step);
     this.snapshotBegin(s.tick, s.view.x, s.view.y, s.view.h);
     if (s.bounds) this.snapshotBounds(s.bounds.x0, s.bounds.y0, s.bounds.x1, s.bounds.y1);
-    for (const p of s.players) this.setPlayer(p.id, p.skin, p.flagSkin ? p.flags | PlayerFlag.FlagSkin : p.flags, p.name, p.isBot ? undefined : p.avatar, p.country ?? null);
+    for (const p of s.players) this.setPlayer(p.id, p.skin, p.flagSkin ? p.flags | PlayerFlag.FlagSkin : p.flags, p.name, p.isBot ? undefined : p.avatar, p.country ?? null, p.isBot ? undefined : p.xHandle);
     for (const u of s.upserts) {
       const has = (u.playerId !== undefined || u.flags !== undefined ? HAS_PLAYER : 0) | (u.variant !== undefined ? HAS_VARIANT : 0);
       this.upsert(u.id, u.kind, u.x, u.y, u.r, has, u.playerId, u.flags, u.variant);
@@ -274,7 +275,7 @@ export class ClientWorld implements SnapshotSink {
     v.at = now;
   }
 
-  snapshotPlayer(id: number, skin: number, flags: number, bytes: Uint8Array, at: number, len: number, avatarAt = -1, country = 0): void {
+  snapshotPlayer(id: number, skin: number, flags: number, bytes: Uint8Array, at: number, len: number, avatarAt = -1, country = 0, xAt = -1, xLen = 0): void {
     // the name is decoded only when its bytes change (a snapshot carries every visible player 30 times a second)
     let known = this.nameBytes.get(id);
     const p = this.players.get(id);
@@ -287,11 +288,17 @@ export class ClientWorld implements SnapshotSink {
     // the avatar id (bots never wear one) is turned into a string only when it changes
     let avatar: string | undefined;
     if (avatarAt >= 0 && (flags & PlayerFlag.Bot) === 0) avatar = p && avatarIdEquals(p.avatar, bytes, avatarAt) ? p.avatar : avatarIdFromBytes(bytes, avatarAt);
+    // the linked X handle (people only): a string is built only when its bytes change
+    let xHandle: string | undefined;
+    if (xAt >= 0 && (flags & PlayerFlag.Bot) === 0) {
+      xHandle = p?.xHandle && asciiEquals(p.xHandle, bytes, xAt, xLen) ? p.xHandle : decodeUtf8(bytes, xAt, xLen);
+      if (!isXHandle(xHandle)) xHandle = undefined;
+    }
     // the country: an interned allowlisted code (no string built), null when off the allowlist
-    this.setPlayer(id, skin, flags, same ? p!.name : decodeUtf8(bytes, at, len), avatar, country ? unpackCountry(country) : null);
+    this.setPlayer(id, skin, flags, same ? p!.name : decodeUtf8(bytes, at, len), avatar, country ? unpackCountry(country) : null, xHandle);
   }
 
-  private setPlayer(id: number, skin: number, flags: number, name: string, avatar: string | undefined, country: string | null): void {
+  private setPlayer(id: number, skin: number, flags: number, name: string, avatar: string | undefined, country: string | null, xHandle?: string): void {
     const existing = this.players.get(id);
     if (existing) {
       existing.skin = skin;
@@ -304,11 +311,14 @@ export class ClientWorld implements SnapshotSink {
       else if (existing.avatar) delete existing.avatar;
       if (country) existing.country = country;
       else if (existing.country) delete existing.country;
+      if (xHandle && !existing.isBot) existing.xHandle = xHandle;
+      else if (existing.xHandle) delete existing.xHandle;
     } else {
       const p: CPlayer = { id, skin, flags, name, isBot: (flags & PlayerFlag.Bot) !== 0, emote: null };
       if ((flags & PlayerFlag.Holder) !== 0) p.holder = true;
       if (avatar && !p.isBot) p.avatar = avatar;
       if (country) p.country = country;
+      if (xHandle && !p.isBot) p.xHandle = xHandle;
       this.players.set(id, p);
     }
   }
@@ -612,4 +622,11 @@ export class ClientWorld implements SnapshotSink {
       a.expression = expr;
     }
   }
+}
+
+/** Whether the ASCII string `s` spells the bytes at `[at, at + len)` (no string built). */
+function asciiEquals(s: string, bytes: Uint8Array, at: number, len: number): boolean {
+  if (s.length !== len) return false;
+  for (let i = 0; i < len; i++) if (s.charCodeAt(i) !== bytes[at + i]) return false;
+  return true;
 }

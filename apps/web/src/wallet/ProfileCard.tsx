@@ -7,12 +7,13 @@ import { CoinPortrait } from '../ui/game/CoinPortrait';
 import { wearsPicture, wornFlag } from '../ui/profile/picture';
 import { useChainData } from './chain';
 import { useAddress } from './store';
+import { useXLinkSync } from './xlink';
 
 /**
  * The player as a membership sticker: a mist band with the member number, the coin they
  * wear, name, level and XP, and the server's record of them in three mono figures.
  */
-export function ProfileCard({ onEdit }: { onEdit?: () => void }) {
+export function ProfileCard({ onEdit, onLinkX }: { onEdit?: () => void; onLinkX?: () => void }) {
   const t = useT();
   const address = useAddress();
   const settings = useUi((s) => s.settings);
@@ -24,6 +25,8 @@ export function ProfileCard({ onEdit }: { onEdit?: () => void }) {
   const name = profile?.name ?? auth?.profile?.name ?? (settings.name || t('pf.guest'));
   const xp = auth?.profile?.xp ?? 0;
   const prog = levelProgress(xp);
+  const token = auth && address && auth.address.toLowerCase() === address.toLowerCase() ? auth.token : null;
+  const x = useXLinkSync(address, token);
 
   return (
     <section className="kl-card kl-profile" aria-labelledby="kl-profile-h">
@@ -52,6 +55,12 @@ export function ProfileCard({ onEdit }: { onEdit?: () => void }) {
             <span className="kl-profile__holder mono" data-testid="holder-badge">
               <Laurel size={13} />
               {t('pf.holder')}
+            </span>
+          )}
+          {/* the linked X account: its @handle rides on the coin in game */}
+          {connected && x.link && (
+            <span className="kl-profile__x mono" data-testid="profile-x">
+              @{x.link.handle}
             </span>
           )}
           {connected ? (
@@ -85,10 +94,20 @@ export function ProfileCard({ onEdit }: { onEdit?: () => void }) {
           </div>
         </dl>
       )}
-      {onEdit && (
-        <Button variant="secondary" size="sm" lead="user" onClick={onEdit} className="kl-profile__edit">
-          {t('pf.edit')}
-        </Button>
+      {(onEdit || (onLinkX && !x.link)) && (
+        <span className="kl-profile__actions">
+          {onEdit && (
+            <Button variant="secondary" size="sm" lead="user" onClick={onEdit} className="kl-profile__edit">
+              {t('pf.edit')}
+            </Button>
+          )}
+          {/* "Link X" from the lobby: the profile's Link X card (guests learn there that a wallet comes first) */}
+          {onLinkX && !x.link && (
+            <Button variant="ghost" size="sm" onClick={onLinkX} className="kl-profile__linkx" data-testid="profile-link-x">
+              {t('pf.linkX')}
+            </Button>
+          )}
+        </span>
       )}
     </section>
   );

@@ -1,4 +1,4 @@
-import { EATEN_SHOWN, shareName, type EatenName } from '@elymum/shared';
+import { EATEN_SHOWN, isXHandle, shareName, type EatenName } from '@elymum/shared';
 
 /** Distinct coins remembered per eater (a game with more only counts them in `eatenMore`). */
 const KEYS_KEPT = 64;
@@ -7,6 +7,8 @@ interface Eaten {
   name: string;
   bot: boolean;
   n: number;
+  /** The X handle its owner linked (people only). */
+  xHandle: string | null;
   /** Order of the first bite (ties of `n` keep it). */
   first: number;
 }
@@ -30,7 +32,7 @@ export class EatenTracker {
   constructor(private readonly withBots: boolean) {}
 
   /** `eater` (a person's pid) ate `victim`. Ignored for a bot victim outside a test arena, and for eating oneself. */
-  note(eater: number, victim: { pid: number; name: string; bot: boolean; wallet: string | null }): void {
+  note(eater: number, victim: { pid: number; name: string; bot: boolean; wallet: string | null; xHandle?: string | null }): void {
     if (victim.pid === eater || (victim.bot && !this.withBots)) return;
     let book = this.books.get(eater);
     if (!book) this.books.set(eater, (book = { coins: new Map(), overflow: 0 }));
@@ -38,13 +40,14 @@ export class EatenTracker {
     const had = book.coins.get(key);
     if (had) {
       had.n++;
+      if (!victim.bot && isXHandle(victim.xHandle)) had.xHandle = victim.xHandle;
       return;
     }
     if (book.coins.size >= KEYS_KEPT) {
       book.overflow++;
       return;
     }
-    book.coins.set(key, { name: shareName(victim.name), bot: victim.bot, n: 1, first: this.seq++ });
+    book.coins.set(key, { name: shareName(victim.name), bot: victim.bot, n: 1, first: this.seq++, xHandle: !victim.bot && isXHandle(victim.xHandle) ? victim.xHandle : null });
   }
 
   /** The eater's list (most eaten first, then first eaten) and the count past it; forgets the eater. Null: ate nobody. */
@@ -53,7 +56,7 @@ export class EatenTracker {
     this.books.delete(eater);
     if (!book || book.coins.size === 0) return null;
     const all = [...book.coins.values()].sort((a, b) => b.n - a.n || a.first - b.first);
-    const eaten = all.slice(0, EATEN_SHOWN).map((e): EatenName => ({ name: e.name, ...(e.bot ? { bot: true } : {}), ...(e.n > 1 ? { n: e.n } : {}) }));
+    const eaten = all.slice(0, EATEN_SHOWN).map((e): EatenName => ({ name: e.name, ...(e.bot ? { bot: true } : {}), ...(e.n > 1 ? { n: e.n } : {}), ...(e.xHandle ? { xHandle: e.xHandle } : {}) }));
     return { eaten, eatenMore: all.length - eaten.length + book.overflow };
   }
 }

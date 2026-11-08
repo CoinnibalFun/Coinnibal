@@ -1,5 +1,6 @@
 import { AVATAR_ID_BYTES, avatarIdFromBytes, avatarIdToBytes, isAvatarId } from './avatar';
 import { COUNTRY_BYTES, isCountryCode, unpackCountry } from './countries';
+import { isXHandle } from './xlink';
 import { ClientOp, EntityKind, PlayerFlag, ServerOp, type EntityRecord, type PlayerInfo, type SnapshotData, type WorldBounds } from './protocol';
 
 const encoder = new TextEncoder();
@@ -160,10 +161,10 @@ export class BinaryReader {
  * Layout (little endian):
  *   u8 op=1 | u32 tick | f32 viewX | f32 viewY | f32 viewH
  *   u8 extras (v8; bit 0 `SNAP_BOUNDS`) [f32 x0 | f32 y0 | f32 x1 | f32 y1 with SNAP_BOUNDS]
- *   u8 nPlayers   { u16 id | u8 skin | u8 flags | str8 name | [8 bytes avatar id] | [2 bytes country] }
+ *   u8 nPlayers   { u16 id | u8 skin | u8 flags | str8 name | [8 bytes avatar id] | [2 bytes country] | [str8 X handle] }
  *        (flags: PlayerFlag; Bot ⇒ `isBot`; the avatar id follows only with `PlayerFlag.Avatar`, v7;
  *        the country code, two ASCII capitals, only with `PlayerFlag.Country`, v9; `PlayerFlag.FlagSkin`
- *        only with a country, v10)
+ *        only with a country, v10; the linked X handle, `isXHandle`, only with `PlayerFlag.XHandle`, v14)
  *   u16 nUpserts  { u32 id | u8 kind | f32 x | f32 y | f32 r | kind data }
  *        Cell: u16 playerId | u8 flags ; Food/Eject/PowerUp/Loot: u8 variant ; Virus: –
  *   u16 nRemovals { u32 id | u32 eaterId }
@@ -197,6 +198,9 @@ export function writeSnapshot(w: BinaryWriter, s: SnapshotData): void {
     flags = country ? flags | PlayerFlag.Country : flags & ~PlayerFlag.Country;
     // the flag skin paints the coin with the country's flag: never without a country
     flags = country && (p.flagSkin || (flags & PlayerFlag.FlagSkin) !== 0) ? flags | PlayerFlag.FlagSkin : flags & ~PlayerFlag.FlagSkin;
+    // a linked X handle: people only, and only a valid one
+    const xHandle = !p.isBot && (flags & PlayerFlag.Bot) === 0 && isXHandle(p.xHandle) ? p.xHandle : null;
+    flags = xHandle ? flags | PlayerFlag.XHandle : flags & ~PlayerFlag.XHandle;
     w.u8(flags);
     w.str8(p.name);
     if (avatar) w.avatarId(avatar);
@@ -204,6 +208,7 @@ export function writeSnapshot(w: BinaryWriter, s: SnapshotData): void {
       w.u8(country.charCodeAt(0));
       w.u8(country.charCodeAt(1));
     }
+    if (xHandle) w.str8(xHandle);
   }
 
   w.u16(s.upserts.length);
@@ -275,6 +280,11 @@ export function decodeSnapshot(buf: ArrayBuffer | ArrayBufferView): SnapshotData
       if (country) p.country = country;
     }
     if ((flags & PlayerFlag.FlagSkin) !== 0 && p.country) p.flagSkin = true;
+    if ((flags & PlayerFlag.XHandle) !== 0) {
+      // off the handle rules (or on a bot): no handle (the bytes are still consumed)
+      const xHandle = r.str8();
+      if (isXHandle(xHandle) && !p.isBot) p.xHandle = xHandle;
+    }
     players[i] = p;
   }
 
@@ -326,8 +336,10 @@ export interface SnapshotSink {
    * `name` is the snapshot's bytes: the name is UTF-8 at `[nameAt, nameAt + nameLen)` (`decodeUtf8`).
    * `avatarAt`: offset of the 8 avatar id bytes in the same array (`avatarIdFromBytes`), -1 without one.
    * `country`: the country code packed into 16 bits (`unpackCountry`), 0 without one.
+   * `xAt` / `xLen`: the linked X handle's ASCII bytes in the same array (v14), -1 / 0 without one (`isXHandle` is
+   * the sink's to check).
    */
-  snapshotPlayer(id: number, skin: number, flags: number, name: Uint8Array, nameAt: number, nameLen: number, avatarAt: number, country: number): void;
+  snapshotPlayer(id: number, skin: number, flags: number, name: Uint8Array, nameAt: number, nameLen: number, avatarAt: number, country: number, xAt: number, xLen: number): void;
   snapshotUpsert(id: number, kind: EntityKind, x: number, y: number, r: number, has: number, playerId: number, flags: number, variant: number): void;
   snapshotRemoval(id: number, eaterId: number): void;
 }
@@ -381,7 +393,16 @@ export function readSnapshot(buf: ArrayBuffer, sink: SnapshotSink): void {
       country = (bytes[o] << 8) | bytes[o + 1];
       o += COUNTRY_BYTES;
     }
-    sink.snapshotPlayer(id, skin, flags, bytes, nameAt, len, avatarAt, country);
+    let xAt = -1;
+    let xLen = 0;
+    if ((flags & PlayerFlag.XHandle) !== 0) {
+      if (o + 1 > bytes.length) throw new RangeError('snapshot truncated');
+      xLen = bytes[o++];
+      if (o + xLen > bytes.length) throw new RangeError('snapshot truncated');
+      xAt = o;
+      o += xLen;
+    }
+    sink.snapshotPlayer(id, skin, flags, bytes, nameAt, len, avatarAt, country, xAt, xLen);
   }
   const nUpserts = v.getUint16(o, true);
   o += 2;
