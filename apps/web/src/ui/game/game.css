@@ -860,7 +860,7 @@
   transform: rotate(-6deg);
 }
 
-/* ── bottom left (desktop): the kill feed and chat over the key stickers ── */
+/* ── bottom left (desktop): the kill feed over the chat ── */
 .g-bl {
   position: absolute;
   left: calc(var(--hud-gap) + env(safe-area-inset-left, 0px));
@@ -2230,11 +2230,27 @@
   pointer-events: auto;
 }
 .g-boosts-dock {
+  display: flex;
+  justify-content: flex-end;
+}
+/* desktop: one column above the minimap: the power-up keys, then the KEYS hint right under them */
+.g-rdock {
   position: absolute;
-  /* a small row of 40 px buttons above the minimap, so it never reaches the standings */
   right: calc(var(--hud-gap) + env(safe-area-inset-right, 0px));
+  /* above the minimap, so it never reaches the standings */
   bottom: calc(var(--hud-gap) + 182px + env(safe-area-inset-bottom, 0px));
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: min(520px, calc(50vw - 200px));
+  pointer-events: none;
+}
+.g-rdock > * {
+  pointer-events: auto;
+  max-width: 100%;
+}
+.g-rdock .g-keys {
   justify-content: flex-end;
 }
 .g-boosts.is-rail {
@@ -2285,8 +2301,7 @@
     flex-direction: column;
   }
 }
-.g-hud.is-desktop-small .g-boosts-dock {
-  right: calc(var(--hud-gap) + env(safe-area-inset-right, 0px));
+.g-hud.is-desktop-small .g-rdock {
   bottom: calc(var(--hud-gap) + env(safe-area-inset-bottom, 0px));
 }
 .g-boosts.is-touch {
@@ -2943,6 +2958,6 @@
     --hud-scale: 2;
   }
 }
-.g-hud.is-desktop > :is(.g-corner, .g-center, .g-bl, .g-dock, .g-boosts-dock, .g-map, .g-spectate) {
+.g-hud.is-desktop > :is(.g-corner, .g-center, .g-bl, .g-dock, .g-rdock, .g-map, .g-spectate) {
   zoom: var(--hud-scale);
 }
