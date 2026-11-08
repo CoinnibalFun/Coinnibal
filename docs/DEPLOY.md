@@ -53,15 +53,17 @@ Rabby works. Get testnet ETH for it (and later for the server key) from the fauc
 
 One Docker container runs the game server (`Dockerfile` at the repository root, image `elymum-app`) behind Caddy on
 the VPS: deploy/vps/README.md installs it, keeps it up to date and backs it up. The website is Vercel's
-(`elymum.io`); the game domain sends a browser to it (`WEB_DIST` unset). The settings (`/opt/elymum/.env`):
+(`elymum.io`); the game domain sends a browser to it (`WEB_DIST` unset). The settings (`/opt/elymum/.env`; on the VPS
+the chain, RPC and access keys are the namespaced `ELYMUM_*` ones, which `docker-compose.yml` maps to the server's
+names and which a stale older `.env` cannot hold: deploy/vps/README.md section 4):
 
 | Variable | Value |
 |---|---|
 | `NODE_ENV` | `production` |
 | `PUBLIC_URL` | **required**: the site's address, `https://elymum.io` (the SIWE domain and the base of the NFT metadata URLs). The server refuses to start without it unless `NODE_ENV=development`; it never derives the sign-in domain from `Host` / `X-Forwarded-Host` |
-| `CHAIN_ID` | `46630` (Robinhood Chain Testnet, the default), later `4663` (Robinhood Chain) |
-| `EVM_RPC_URLS` | the server's RPCs in order: on the mainnet the Alchemy URL, then `https://rpc.mainnet.chain.robinhood.com` (a fallback; may hold an API key; never sent to browsers). `EVM_RPC_URL` (one URL) still works |
-| `RPC_MAX_RPS` | calls per second per URL (`25,4`) |
+| `CHAIN_ID` (VPS: `ELYMUM_CHAIN_ID`) | `46630` (Robinhood Chain Testnet, the default), later `4663` (Robinhood Chain) |
+| `EVM_RPC_URLS` (VPS: `ELYMUM_RPC_URLS`) | the server's RPCs in order: on the mainnet the Alchemy URL, then `https://rpc.mainnet.chain.robinhood.com` (a fallback; may hold an API key; never sent to browsers). Off the VPS, `EVM_RPC_URL` (one URL) still works; an empty one is unset |
+| `RPC_MAX_RPS` (VPS: `ELYMUM_RPC_MAX_RPS`) | calls per second per URL (`25,4`; default 4) |
 | `PUBLIC_RPC_URL` | optional: an RPC for browsers, no secrets (default: the public Robinhood Chain RPC of the list, else the wallet's own RPC) |
 | `EXPLORER_URL`, `GAS_FAUCET_URL` | optional overrides of the built-in explorer and testnet faucet link |
 | `SERVER_PRIVATE_KEY` | `auto`: generated once into `/data/server-key.json` (mode 0600) and reused; its address is logged and published as `serverKey` |
@@ -75,7 +77,7 @@ the VPS: deploy/vps/README.md installs it, keeps it up to date and backs it up. 
 | `MINT_USD_CENTS` | `100` (the $1 target; default) |
 | `NFT_COLLECTION_SIZE`, `NFT_ART_STYLE` | `5000` (= the NFT's max supply), `vector` (or `pixel`): the emblem collection (docs/NFT-DESIGN.md). Leave `NFT_COLLECTION_SEED` empty: the seed is generated and committed on first boot (`DATA_DIR/chains/<id>/nft-collection.json`, keep it in the backups) |
 | `TOKEN_SYMBOL` | `$ELYMUM` (default; display only) |
-| `GAME_ACCESS` | `maintenance` until you open (the compose default), `site` lets the `/admin` setting decide |
+| `GAME_ACCESS` (VPS: `ELYMUM_GAME_ACCESS`) | `public` on the VPS when unset (the testnet is open), `maintenance` to close, `site` lets the `/admin` setting decide |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `BACKUP_RCLONE_REMOTE` | the alerts and the encrypted offsite backup (deploy/vps/README.md) |
 
 Leave `ARENA_ADDRESS` and `NFT_ADDRESS` empty: the addresses come from the registry `/admin` writes. Never set
@@ -153,7 +155,7 @@ which exists on mainnet only (RESEARCH.md). Remember the token is final for an a
 
 1. Do the whole flow on Robinhood Chain Testnet first, including tickets, rounds, power-ups and the burn mode probe.
 2. Launch the game token on Pons (mainnet only).
-3. Set `CHAIN_ID=4663` and `EVM_RPC_URL` (a provider RPC; it may contain a key) on the host, optionally
+3. Set `ELYMUM_CHAIN_ID=4663` and `ELYMUM_RPC_URLS` (a provider RPC first; it may contain a key) in `/opt/elymum/.env`, optionally
    `PUBLIC_RPC_URL` (secret-free). Redeploy. The server opens a clean state for chain 4663; the testnet's records stay
    in `/data/chains/46630/`.
 4. **New contracts.** Testnet addresses are not mainnet addresses. Fund the server key with ETH, redo section 3 on

@@ -263,11 +263,11 @@ the flags honest players raise (none at the defaults) and those two scripted bot
 
 ## RPC
 
-`EVM_RPC_URLS` lists the server's RPCs in order: the provider (Alchemy, `https://robinhood-mainnet.g.alchemy.com/v2/<key>`)
+`EVM_RPC_URLS` (on the VPS: `ELYMUM_RPC_URLS` in `/opt/elymum/.env`) lists the server's RPCs in order: the provider (Alchemy, `https://robinhood-mainnet.g.alchemy.com/v2/<key>`)
 first, the public RPC (`https://rpc.mainnet.chain.robinhood.com`) as fallback. Reads and sends go through a viem
 fallback: a URL that keeps answering 429 or is down hands the call on after two tries, and the first URL is tried
 first again for every new call; a resent transaction is the same signed one (same hash and nonce). Each URL has its
-own budget (`RPC_MAX_RPS`, e.g. `25,4`). Concurrent reads merge into one Multicall3 call, or a deployless multicall
+own budget (`RPC_MAX_RPS`, on the VPS `ELYMUM_RPC_MAX_RPS`, e.g. `25,4`). Concurrent reads merge into one Multicall3 call, or a deployless multicall
 on a chain without Multicall3 (the log says which), so the bell of 200 tickets reads its sessions in about 24 calls
 instead of 216. Set-up and checks: deploy/vps/README.md, "RPC". `rpc: N calls/min …` in the log, once a minute per
 URL, shows the traffic and the 429s.
@@ -307,7 +307,7 @@ by themselves.
 
 Everything is done from `/admin` with the owner wallet; nothing needs a terminal once the server runs.
 
-1. **Server.** Set `CHAIN_ID=46630` (the default), `EVM_RPC_URL` (the public `https://rpc.testnet.chain.robinhood.com`
+1. **Server.** On the VPS nothing is needed for the chain (`ELYMUM_CHAIN_ID` defaults to 46630 and `ELYMUM_RPC_URLS` to the public `https://rpc.testnet.chain.robinhood.com`;
    works; a provider such as Alchemy is better for production), `SERVER_PRIVATE_KEY=auto`, `ADMIN_WALLETS` and
    `PUBLIC_URL`, then start it. The log shows `chain: Robinhood Chain Testnet (chain id 46630)` and the server key;
    `/api/config` publishes it as `serverKey`.
@@ -334,12 +334,41 @@ Everything is done from `/admin` with the owner wallet; nothing needs a terminal
 The same can be scripted with the CLI (`pnpm admin help`: `deploy-test-token`, `deploy-arena`, `deploy-nft`, `set-token`, `create-arena`, `fee`,
 `burn-mode`, `payment-burn`, `holder-perks`, `status`) and a key file.
 
+## First deploy checklist (the ELYMUM_* keys)
+
+The VPS deploys `main` by itself (deploy/vps/update.sh). The first deploy of the server/ops release needs no change in
+`/opt/elymum/.env`: every new key is optional, and `docker-compose.yml` fills in the live values. Check, in order:
+
+1. **Nothing to add.** Unset `ELYMUM_CHAIN_ID`, `ELYMUM_RPC_URLS`, `ELYMUM_RPC_MAX_RPS` and `ELYMUM_GAME_ACCESS` mean
+   46630, `https://rpc.testnet.chain.robinhood.com`, 4 calls a second and `public`: the chain, contracts and open game
+   of today.
+2. **Stale keys are harmless.** `CHAIN_ID`, `EVM_RPC_URL`, `EVM_RPC_URLS`, `RPC_MAX_RPS`, `GAME_ACCESS`, `WEB_DIST`
+   and the Elysium-era `PUBLIC_RPC_URL`, `EXPLORER_URL`, `ARENA_ADDRESS`, `NFT_ADDRESS`, `TOKEN_ADDRESS`,
+   `TESTNET_RPC_URL`, `JOURNAL_ABANDON_CONTRACT` in `.env` are always overridden. Delete them when convenient, so the
+   file says what runs. If you tuned `RPC_MAX_RPS` there, copy it to `ELYMUM_RPC_MAX_RPS`.
+3. **`AUTH_SECRET`.** Under 32 bytes the testnet server only warns (`!!! AUTH_SECRET is …`); the mainnet refuses to
+   start. Replace it with `openssl rand -hex 32` before the mainnet, or leave it empty for the generated one (every
+   session then has to sign in again once).
+4. **Sign in to `/admin` again.** Admin sessions are now 2 hours and the earlier long tokens are refused on admin
+   routes (`admin_session_expired`); players keep theirs.
+5. **After the deploy:** `elymum-compose config | grep -E 'CHAIN_ID|EVM_RPC|GAME_ACCESS'` shows `46630`, the testnet
+   RPC and `public`; `elymum-status` shows `/api/health`; `/admin` → Network shows the chain, the server key's gas
+   runway and the same contracts.
+6. **Logs move to journald.** `elymum-compose logs app` keeps working; `journalctl CONTAINER_NAME=elymum-app-1` too.
+
+Optional keys (all have defaults): `ELYMUM_CHAIN_ID`, `ELYMUM_RPC_URLS`, `ELYMUM_RPC_MAX_RPS`, `ELYMUM_GAME_ACCESS`,
+`ELYMUM_WEB_DIST` (leave unset), `ELYMUM_REQUIRE_CI` (off: without the CI marker the branch head deploys as before),
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `BACKUP_RCLONE_REMOTE`, `BACKUP_RCLONE_KEEP_DAYS`, `ADMIN_TOKEN_TTL_MIN`
+(120), `ADMIN_SECRET_EXPORT` (on on testnet, off on mainnet), `DEATH_SETTLE_BATCH_S` (6), `GAS_FLOOR_ETH` (0.002),
+`GAS_RUNWAY_WARN_DAYS` (7), `GAS_RUNWAY_CRITICAL_DAYS` (2), `HEALTH_MAX_PENDING` (400), `HEALTH_MAX_PENDING_AGE_S`
+(900). Required as before: `GAME_DOMAIN`, `NODE_ENV=production`, `PUBLIC_URL`, `CORS_ORIGIN`, `ADMIN_WALLETS`.
+
 ## Moving to Robinhood Chain (mainnet)
 
 The testnet and the mainnet are two networks of the same chain; the server follows `CHAIN_ID`.
 
-1. Deploy the game token on Pons (mainnet only; RESEARCH.md), then on the server set `CHAIN_ID=4663` and
-   `EVM_RPC_URLS` to the Alchemy mainnet URL and the public RPC (section "RPC"), an `AUTH_SECRET` of at least 32 bytes
+1. Deploy the game token on Pons (mainnet only; RESEARCH.md), then in `/opt/elymum/.env` set `ELYMUM_CHAIN_ID=4663`
+   and `ELYMUM_RPC_URLS` to the Alchemy mainnet URL and the public RPC (section "RPC"), an `AUTH_SECRET` of at least 32 bytes
    (the mainnet refuses less), keep `SERVER_PRIVATE_KEY` or rotate it, fund the server key with ETH, and restart.
    Integrity auto-hold is on by default there, and the secret exports are off (`ADMIN_SECRET_EXPORT`). The server opens a clean state in `DATA_DIR/chains/4663/`; the testnet's records stay in
    `chains/46630/` (the Network tab lists them).
