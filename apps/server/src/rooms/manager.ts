@@ -62,7 +62,7 @@ export interface GameOverEvent {
   stats: DeathStats;
 }
 
-/** A person ate a person whose coin reached `NOTABLE_KILL_MASS` (in a room on this thread or in a room worker). */
+/** A person ate a person (in a testnet test arena a practice bot too), in a room on this thread or in a room worker. */
 export interface NotableKillEvent {
   room: RoomHandle;
   /** The killer's connection. */

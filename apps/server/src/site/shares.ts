@@ -14,10 +14,17 @@ import { renderShareCard, shareFacts, shareHeadline } from './share-card';
  * (the newest `SHARES_KEPT`) and served at `/share/<id>` (a page with the Open Graph / Twitter tags) and
  * `/share/<id>.png` (the image, rendered once and cached). Limits: a connection gets at most one kill card every
  * `KILL_SHARE_EVERY_MS`; an IP renders at most `RENDERS_PER_MIN` images a minute (crawlers fetch each card once).
+ *
+ * Every person eaten offers a kill card, so kill cards start as OFFERS: kept in memory only (the newest `OFFERS_KEPT`,
+ * for `OFFER_TTL_MS`) and moved into the kept cards the first time their link is opened (X fetches the card as the
+ * player writes the post). A kill nobody shares never reaches the disk and never pushes an older card out.
  */
 
 export const SHARES_KEPT = 5000;
-export const KILL_SHARE_EVERY_MS = 20_000;
+export const KILL_SHARE_EVERY_MS = 5_000;
+/** Kill offers held in memory (not yet opened) and how long one stays valid. */
+export const OFFERS_KEPT = 20_000;
+export const OFFER_TTL_MS = 6 * 60 * 60_000;
 const RENDERS_PER_MIN = 30;
 /**
  * Renders a minute for the whole server (each one is ~20-50 ms of the main thread's CPU): a crowd of IPs (or the
@@ -49,6 +56,8 @@ export interface ShareOrigin {
 
 export class ShareService {
   private readonly cards = new Map<string, ShareCard>();
+  /** Kill cards not opened yet (memory only; see the class note). */
+  private readonly offers = new Map<string, ShareCard>();
   private readonly png = new Map<string, Buffer>();
   private readonly renders = new Limiter(RENDERS_PER_MIN, 60_000);
   private readonly rendersAll = new Limiter(RENDERS_PER_MIN_ALL, 60_000);
@@ -94,17 +103,37 @@ export class ShareService {
     renameSync(`${p}.tmp`, p);
   }
 
-  private add(card: Omit<ShareCard, 'id' | 'at'>): ShareCard {
+  private newId(): string {
     let id = '';
     do {
       id = [...randomBytes(10)].map((b) => ID_CHARS[b % ID_CHARS.length]).join('');
-    } while (this.cards.has(id));
-    const full: ShareCard = { id, at: this.now(), ...card };
-    this.cards.set(id, full);
+    } while (this.cards.has(id) || this.offers.has(id));
+    return id;
+  }
+
+  private keep(full: ShareCard): void {
+    this.cards.set(full.id, full);
     while (this.cards.size > SHARES_KEPT) this.cards.delete(this.cards.keys().next().value!);
     this.dirty = true;
     this.saveTimer ??= setTimeout(() => this.flush(), SAVE_EVERY_MS);
     this.saveTimer.unref?.();
+  }
+
+  private add(card: Omit<ShareCard, 'id' | 'at'>): ShareCard {
+    const full: ShareCard = { id: this.newId(), at: this.now(), ...card };
+    this.keep(full);
+    return full;
+  }
+
+  /** A card held in memory until its link is first opened (`get` keeps it then). */
+  private offer(card: Omit<ShareCard, 'id' | 'at'>): ShareCard {
+    const now = this.now();
+    const full: ShareCard = { id: this.newId(), at: now, ...card };
+    this.offers.set(full.id, full);
+    for (const [id, c] of this.offers) {
+      if (this.offers.size <= OFFERS_KEPT && now - c.at < OFFER_TTL_MS) break;
+      this.offers.delete(id);
+    }
     return full;
   }
 
@@ -147,7 +176,10 @@ export class ShareService {
     });
   }
 
-  /** A notable kill; null when this player (`key`: its connection or wallet) got one in the last `KILL_SHARE_EVERY_MS`. */
+  /**
+   * A kill (every person eaten; a practice bot in a test arena only): an offer (`offer`), or null when this player
+   * (`key`: its connection or wallet) got one in the last `KILL_SHARE_EVERY_MS`.
+   */
   kill(o: ShareOrigin, key: string, k: { mass: number; kills: number; victim: string; victimMass: number; victimIsBot?: boolean }): ShareCard | null {
     // a practice bot counts in a testnet test arena only
     if (k.victimIsBot && !o.room.opts.test) return null;
@@ -156,7 +188,7 @@ export class ShareService {
     if (last !== undefined && now - last < KILL_SHARE_EVERY_MS) return null;
     this.lastKill.set(key, now);
     if (this.lastKill.size > 10_000) for (const [k2, at] of this.lastKill) if (now - at >= KILL_SHARE_EVERY_MS) this.lastKill.delete(k2);
-    return this.add({ kind: 'kill', ...this.base(o), mass: Math.floor(k.mass), kills: k.kills, victim: shareName(k.victim), victimMass: k.victimMass, ...(k.victimIsBot ? { victimBot: true } : {}) });
+    return this.offer({ kind: 'kill', ...this.base(o), mass: Math.floor(k.mass), kills: k.kills, victim: shareName(k.victim), victimMass: k.victimMass, ...(k.victimIsBot ? { victimBot: true } : {}) });
   }
 
   /** Startup self-check result (`shareCardSelfCheck`): when drawing cannot work here, images fall back at once. */
@@ -164,8 +196,17 @@ export class ShareService {
     this.renderBroken = why;
   }
 
+  /** A kept card, or an offer opened for the first time (kept from then on); null when unknown or expired. */
   get(id: string): ShareCard | null {
-    return SHARE_ID_RE.test(id) ? (this.cards.get(id) ?? null) : null;
+    if (!SHARE_ID_RE.test(id)) return null;
+    const kept = this.cards.get(id);
+    if (kept) return kept;
+    const o = this.offers.get(id);
+    if (!o) return null;
+    this.offers.delete(id);
+    if (this.now() - o.at >= OFFER_TTL_MS) return null;
+    this.keep(o);
+    return o;
   }
 
   /** `GET /share/<id>` (the page) and `GET /share/<id>.png` (the image). False when the path is not a share's. */
