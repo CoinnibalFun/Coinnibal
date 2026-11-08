@@ -1,4 +1,4 @@
-import { eatenLine, shareIntentUrl, shareName, type EatenName } from '@elymum/shared';
+import { eatenLabel, eatenLine, shareIntentUrl, xMention, type EatenName } from '@elymum/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { SERVER } from '../../config';
@@ -47,8 +47,12 @@ export function liveShareText(t: Translate, g: { mass: number; rank: number; n: 
   return g.test ? `${line} ${t('share.test')}` : line;
 }
 
-/** A kill's coin as the sticker and the post name it: cleaned, with its BOT tag (test arenas only). */
-const victimLabel = (t: Translate, s: { victim?: string; victimIsBot?: boolean }) => `${shareName(s.victim ?? '')}${s.victimIsBot ? ` (${t('g.botTag')})` : ''}`;
+/**
+ * A kill's coin as the sticker and the post name it: its linked X `@handle` (the server's record; linking is consent to
+ * be tagged), else its cleaned name, with its BOT tag (test arenas only; bots never have a handle).
+ */
+export const victimLabel = (t: Translate, s: { victim?: string; victimIsBot?: boolean; victimX?: string }) =>
+  (!s.victimIsBot && xMention(s.victimX)) || `${eatenLabel({ name: s.victim ?? '' })}${s.victimIsBot ? ` (${t('g.botTag')})` : ''}`;
 
 /** The coins I ate this game, on a result sheet: name chips (BOT tagged, ×2 when eaten twice) and "+N more". */
 export function EatenNames({ eaten, more = 0 }: { eaten?: readonly EatenName[]; more?: number }) {
@@ -61,7 +65,7 @@ export function EatenNames({ eaten, more = 0 }: { eaten?: readonly EatenName[]; 
       <ul className="g-eaten__list">
         {list.map((e, i) => (
           <li key={i} className="g-eaten__name">
-            <bdi>{shareName(e.name)}</bdi>
+            <bdi>{eatenLabel(e)}</bdi>
             {e.bot && <span className="g-eaten__tag mono">{t('g.botTag')}</span>}
             {(e.n ?? 1) > 1 && <span className="g-eaten__n mono">×{e.n}</span>}
           </li>
@@ -73,7 +77,7 @@ export function EatenNames({ eaten, more = 0 }: { eaten?: readonly EatenName[]; 
 }
 
 /** X's mark (the letter), drawn: no icon font needed. */
-function XMark({ size }: { size: number }) {
+export function XMark({ size }: { size: number }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" className="g-share__x">
       <path fill="currentColor" d="M17.8 3h3.1l-6.8 7.8L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.3-8.3L1.9 3h6.4l4.4 5.8L17.8 3zm-1.1 16.2h1.7L7.4 4.7H5.6l11.1 14.5z" />
@@ -105,7 +109,7 @@ export function ShareOnX({ id, text, size = 'lg' }: { id: string | null; text: s
 }
 
 /** The share card of this kind that arrived for the result on screen (null until the server sent it). */
-export function useShare(kind: 'round' | 'room' | 'kill'): { id: string; victim?: string; victimIsBot?: boolean; test?: boolean; at: number } | null {
+export function useShare(kind: 'round' | 'room' | 'kill'): { id: string; victim?: string; victimIsBot?: boolean; victimX?: string; test?: boolean; at: number } | null {
   return useUi((s) => (s.share && s.share.kind === kind ? s.share : null));
 }
 

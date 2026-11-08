@@ -43,7 +43,7 @@ describe('boosts: wire', () => {
   });
 
   it('the messages keep their shape (v11: the kinds changed)', () => {
-    expect(PROTOCOL_VERSION).toBe(13);
+    expect(PROTOCOL_VERSION).toBe(14);
     const c: ClientMessage = { t: 'boost', kind: 'leap' };
     const s: ServerMessage[] = [
       { t: 'boost', kind: 'magnet', ok: true, ms: 8000 },

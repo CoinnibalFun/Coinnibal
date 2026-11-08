@@ -986,6 +986,22 @@
 .kl-profile__edit {
   align-self: flex-start;
 }
+.kl-profile__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.kl-profile__x {
+  align-self: flex-start;
+  text-transform: none;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--teal-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ── colophon ─────────────────────────────────────────────────────────── */
 .kl-colophon {
