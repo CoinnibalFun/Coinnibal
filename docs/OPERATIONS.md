@@ -308,7 +308,7 @@ by themselves.
 Everything is done from `/admin` with the owner wallet; nothing needs a terminal once the server runs.
 
 1. **Server.** On the VPS nothing is needed for the chain (`ELYMUM_CHAIN_ID` defaults to 46630 and `ELYMUM_RPC_URLS` to the public `https://rpc.testnet.chain.robinhood.com`;
-   works; a provider such as Alchemy is better for production), `SERVER_PRIVATE_KEY=auto`, `ADMIN_WALLETS` and
+   a provider such as Alchemy is better for production), then set `SERVER_PRIVATE_KEY=auto`, `ADMIN_WALLETS` and
    `PUBLIC_URL`, then start it. The log shows `chain: Robinhood Chain Testnet (chain id 46630)` and the server key;
    `/api/config` publishes it as `serverKey`.
 2. **Gas.** Get testnet ETH for the owner wallet and the server key (faucet: `faucet.testnet.chain.robinhood.com`,
