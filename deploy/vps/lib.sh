@@ -56,7 +56,7 @@ host_journald() {
 }
 
 # Waits for the break after an arena bell: rounds are aligned to Unix time (ROUND_SECONDS, default 300) and the floor
-# reopens ROUND_BREAK_SECONDS (default 15, at most a tenth of the round) after the bell. Stopping the server there
+# reopens ROUND_BREAK_SECONDS (default 30, at most a tenth of the round) after the bell. Stopping the server there
 # finds no live stake (every ticket was just settled at the bell); anywhere else SIGTERM cashes every arena player out
 # mid-round. ELYMUM_DEPLOY_NOW=1 skips the wait (an urgent fix).
 wait_for_round_break() {
@@ -65,7 +65,7 @@ wait_for_round_break() {
   round="$(env_get ROUND_SECONDS)"
   [[ "$round" =~ ^[0-9]+$ ]] || round=300
   brk="$(env_get ROUND_BREAK_SECONDS)"
-  [[ "$brk" =~ ^[0-9]+$ ]] || brk=15
+  [[ "$brk" =~ ^[0-9]+$ ]] || brk=30
   ((brk > round / 10)) && brk=$((round / 10))
   # the swap must fit in the break with a margin; otherwise go right after the bell
   last=$((brk - 8))

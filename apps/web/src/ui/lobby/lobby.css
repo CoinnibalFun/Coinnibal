@@ -456,6 +456,13 @@
 .kl-bell.is-closed {
   background: var(--sticker);
 }
+/* the break after a bell: "next round opens in" above its countdown */
+.kl-bell.is-break {
+  background: #fffaf0;
+}
+.kl-bell__label--top {
+  margin: 0 0 2px;
+}
 
 /* tickets: cream boarding passes pinned to the board */
 .kl-tickets {

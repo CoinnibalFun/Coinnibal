@@ -2580,3 +2580,17 @@
 .g-hud.is-narrow.is-touch .g-center:has(.g-pu) > .g-net {
   display: none;
 }
+
+/* the break after a bell: "Next round opens in 0:27" on the receipt */
+.g-break {
+  margin: 0;
+  padding: 8px 12px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--sun);
+  color: var(--ink-fixed);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

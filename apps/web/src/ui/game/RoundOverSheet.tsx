@@ -3,6 +3,7 @@ import { AnimatePresence, motion, type TargetAndTransition } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon, Receipt, Sheet, Stamp, useReducedMotion, type ReceiptLine } from '../../design';
 import { FinalBoard } from './FinalBoard';
+import { NextRoundOpens } from './NextRoundOpens';
 import { EatenNames, ShareOnX, resultShareText, useShare } from './ShareOnX';
 import { engine } from '../../game/instance';
 import { roundStartLabel } from '../../game/round';
@@ -233,6 +234,7 @@ export function RoundOverSheet() {
             {usd.stale && <span className="g-roundover__stale">{usd.setAt ? t('usd.stale', { h: PRICE_STALE_HOURS }) : t('usd.staleUnknown')}</span>}
           </p>
         )}
+        {!exit && <NextRoundOpens arenaId={room?.arenaId ?? null} className="g-roundover__break" />}
         <EatenNames eaten={res?.stats?.eaten} more={res?.stats?.eatenMore} />
         {settled?.collect && (
           <p className="g-roundover__note" role="status">
