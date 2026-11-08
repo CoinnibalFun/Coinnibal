@@ -1843,11 +1843,11 @@ body {
   }
   .ad-rail {
     position: sticky;
-    top: 0;
+    /* pinned below the status bar / notch of a phone */
+    top: env(safe-area-inset-top, 0px);
     z-index: 20;
     margin: 0 calc(-1 * var(--gutter));
-    /* pinned at the top of a phone: its tabs start below the status bar / notch */
-    padding: calc(8px + env(safe-area-inset-top, 0px)) var(--gutter) 8px;
+    padding: 8px var(--gutter);
     border-bottom: 2px dashed var(--rule);
     background: var(--paper);
   }
