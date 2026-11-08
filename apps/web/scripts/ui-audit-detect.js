@@ -6,7 +6,9 @@
 //   overlap    visible text / controls drawn over each other (not ancestors, not decorative)
 //   offscreen  controls partly outside the viewport (no scroller can bring them in) or clipped by a container
 //   contrast   WCAG contrast of visible text (and input text / placeholders) against what is behind it
-//   touch      touch targets smaller than 40x40 css px (the real hit area, probed with elementFromPoint)
+//   touch      touch targets smaller than 44x44 css px (the real hit area, probed with elementFromPoint)
+//   font       visible text set below 12 css px (opts.minFont)
+//   safe       controls and text under the emulated notch / home bar (opts.safe: the env(safe-area-inset-*) insets)
 // `opts.pixels` (optional): { w, h, data } RGBA of a css-scale viewport screenshot, used to read
 // the background behind text where the DOM cannot tell (gradients, images, canvas, positioned art).
 (() => {
@@ -696,7 +698,7 @@
     if (touch) {
       for (const { el, r } of controls) {
         if (r.bottom < 0 || r.top > H || r.right < 0 || r.left > W) continue;
-        if (r.width >= 40 && r.height >= 40) continue;
+        if (r.width >= 44 && r.height >= 44) continue;
         if (disabled(el)) continue;
         // half scrolled under a sheet's header: judge it where it rests, not mid-scroll
         const vis = visiblePart(el, r);
@@ -708,7 +710,7 @@
         const label = el.closest('label');
         const tgt = label && el.matches('input') ? label : el;
         const tr = tgt.getBoundingClientRect();
-        if (tr.width >= 40 && tr.height >= 40) continue;
+        if (tr.width >= 44 && tr.height >= 44) continue;
         if (!onTop(tgt, tr)) continue;
         const cx = tr.left + tr.width / 2;
         const cy = tr.top + tr.height / 2;
@@ -722,16 +724,82 @@
         };
         const ew = reach(-1, 0) + reach(1, 0) + 1;
         const eh = reach(0, -1) + reach(0, 1) + 1;
-        // the probe walks whole pixels from a fractional centre: 38 measured is a 40 px target
-        if (ew >= 38 && eh >= 38) continue;
+        // the probe walks whole pixels from a fractional centre: 42 measured is a 44 px target
+        if (ew >= 42 && eh >= 42) continue;
         add({
           detector: 'touch',
           severity: ew < 24 || eh < 24 ? 'issue' : 'issue',
           selector: sel(el),
           text: snippet(el.textContent || el.getAttribute('aria-label') || el.getAttribute('title')),
-          detail: `touch target ${Math.round(tr.width)}x${Math.round(tr.height)} (hit area ${ew}x${eh}) < 40x40`,
+          detail: `touch target ${Math.round(tr.width)}x${Math.round(tr.height)} (hit area ${ew}x${eh}) < 44x44`,
           rect: R(tr),
         });
+      }
+    }
+    // (7) font size: text below the readable floor
+    const minFont = opts.minFont || 0;
+    if (minFont) {
+      const seenEl = new Set();
+      for (const t of texts) {
+        if (!t.onscreen || decorative(t.el) || seenEl.has(t.el)) continue;
+        seenEl.add(t.el);
+        if (t.el.closest('[aria-hidden="true"]')) continue;
+        const fs = parseFloat(getComputedStyle(t.el).fontSize) || 16;
+        if (fs + 0.05 >= minFont) continue;
+        add({ detector: 'font', severity: 'issue', selector: sel(t.el), text: snippet(t.node.nodeValue), detail: `font-size ${fs.toFixed(1)}px < ${minFont}px`, rect: R(t.box) });
+      }
+    }
+
+    // (8) safe area: controls and text under the notch / home bar / rounded corners
+    const sa = opts.safe;
+    if (sa && (sa.top || sa.bottom || sa.left || sa.right)) {
+      // content that scrolls may pass under the status bar and the home bar (it is read once scrolled
+      // into the clear); what must stay clear is pinned (fixed / sticky) or at the end its scroller rests at
+      const pinned = (el) => {
+        for (let e = el; e && e !== document.documentElement; e = e.parentElement) {
+          const cs = getComputedStyle(e);
+          if (cs.position === 'fixed' || cs.position === 'sticky') return true;
+          // inside a scroller (a fixed full-screen page that scrolls itself): the content moves
+          if (e !== el && (cs.overflowY === 'auto' || cs.overflowY === 'scroll') && e.scrollHeight > e.clientHeight + 1) return false;
+        }
+        return false;
+      };
+      const scrollEnds = (el) => {
+        let atTop = true;
+        let atEnd = true;
+        for (let e = el.parentElement; e; e = e.parentElement) {
+          const cs = getComputedStyle(e);
+          const sc = e === document.scrollingElement || ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && e.scrollHeight > e.clientHeight + 1);
+          if (!sc) continue;
+          if (e.scrollTop > 1) atTop = false;
+          if (e.scrollTop + e.clientHeight < e.scrollHeight - 1) atEnd = false;
+        }
+        const d = document.scrollingElement;
+        if (d.scrollTop > 1) atTop = false;
+        if (d.scrollTop + innerHeight < d.scrollHeight - 1) atEnd = false;
+        return { atTop, atEnd };
+      };
+      const underEl = (el, r) => {
+        if ((sa.left && r.left < sa.left - 1 && r.right > 0) || (sa.right && r.right > W - sa.right + 1 && r.left < W)) return true;
+        const top = sa.top && r.top < sa.top - 1 && r.bottom > 0;
+        const bottom = sa.bottom && r.bottom > H - sa.bottom + 1 && r.top < H;
+        if (!top && !bottom) return false;
+        if (pinned(el)) return true;
+        const ends = scrollEnds(el);
+        return (top && ends.atTop) || (bottom && ends.atEnd);
+      };
+      const flagged = new Set();
+      for (const { el, r } of controls) {
+        const vr = visiblePart(el, r);
+        if (!vr || !underEl(el, vr) || !onTop(el, vr)) continue;
+        flagged.add(el);
+        add({ detector: 'safe', severity: 'issue', kind: 'control', selector: sel(el), text: snippet(el.textContent || el.getAttribute('aria-label')), detail: `control under the safe-area inset (${R(r).x},${R(r).y} ${R(r).w}x${R(r).h})`, rect: R(r) });
+      }
+      for (const t of texts) {
+        if (!t.onscreen || decorative(t.el) || [...flagged].some((c) => c.contains(t.el))) continue;
+        const b = visiblePart(t.el, t.box);
+        if (!b || !underEl(t.el, b) || !onTop(t.el, b)) continue;
+        add({ detector: 'safe', severity: 'issue', kind: 'text', selector: sel(t.el), text: snippet(t.node.nodeValue), detail: 'text under the safe-area inset', rect: R(b) });
       }
     }
     return { findings, needPixels };
