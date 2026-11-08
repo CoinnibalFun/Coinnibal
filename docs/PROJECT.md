@@ -6,11 +6,11 @@ money rules live in Solidity contracts, the game runs on an authoritative server
 how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY.md), [RESEARCH.md](RESEARCH.md)
 (the specs under `docs/specs/` are historical: they describe the earlier Elysium build).
 
-> **Status (2026-11-05).** Elymum runs on **Robinhood Chain only**: Robinhood Chain Testnet (46630) now, Robinhood
+> **Status (2026-11-08).** Elymum runs on **Robinhood Chain only**: Robinhood Chain Testnet (46630) now, Robinhood
 > Chain (4663) later, switched with `CHAIN_ID`. The arena contract is v3 (no entry fee; 20 % of a ticket's profit:
 > 15 % burned, 5 % to the fee wallet). Arenas and practice ponds are played by people only; fair practice bots exist
-> only in free custom rooms. The flow is **WL → Mint → Play**; the owner deploys every contract from their own wallet
-> in `/admin`. The contracts have **not been audited**, and a game played with a token of real value may need a
+> only in free custom rooms and, on the testnet, in each arena's labelled TEST room (bots carry no value). The flow
+> is **WL → Mint → Play**; the owner deploys every contract from their own wallet in `/admin`. The contracts have **not been audited**, and a game played with a token of real value may need a
 > licence where you operate.
 
 ---
@@ -21,9 +21,10 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 - Practice rooms are free, two leagues (Rookie and Pro), people only, and touch nothing on chain.
 - Arenas are paid rooms with a fixed entry fee in `$ELYMUM` (the game token the owner sets after deploy).
   - Your value starts at the whole entry fee; eat a player and their value moves to you.
-- Rounds: 5 minutes on the wall clock, the same for every arena. No cash-out: at the bell everyone still alive is
-  paid their value on chain, less 20 % of their profit (15 % burned, 5 % to the fee wallet); a loss pays no fee.
-- Re-entry: eaten? Buy back in at the same fee while joins are open (they close in the final minute).
+- Rounds: 5 minutes on the wall clock, the same for every arena, with a 30 s break after each bell. No cash-out: at
+  the bell everyone still alive is paid their value on chain, less 20 % of their profit (15 % burned, 5 % to the fee wallet); a loss pays no fee.
+- Re-entry: eaten? Buy back in at the same fee while joins are open (they close in the final minute and in the
+  break; a ticket bought then is held and seated when the next round opens).
 - The NFT: the Elymum NFT (an emblem) mints for $1 in ETH, allowlist first, then public. The owner decides who
   may play: admins only, NFT holders, or everyone.
 - The token is set after deploy: until the owner sets it on the arena (once), the arenas read "Opening soon".
@@ -39,36 +40,42 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 | Eating | needs at least 1.25 × the victim's mass and enough overlap (the victim must be mostly covered) |
 | Speed | `2185 · r^-0.44` up to radius 100 (mass 100), then a gentler `r^-0.3` falloff, so bigger coins are slower (about 410 u/s at start size) |
 | Split (`Space`) | needs at least 35 mass; up to 16 cells; launch speed 1440 (about 450 units of flight); halves merge back after 12 s + 15 ms per unit of mass |
-| Eject mass (`W`) | needs at least 35 mass; costs 18 and throws a 14-mass blob at 1150 u/s |
+| Eject mass (`E`) | needs at least 35 mass; costs 18 and throws a 14-mass blob at 1150 u/s |
 | Viruses (spiky cacti) | mass 100. A coin at least 1.33 × that size pops into as many as 15 pieces. Feeding a virus 198 mass makes it shoot a new one. |
 | Decay | above 150 mass you lose 0.15 %/s, plus an extra term that grows with total mass, so giants melt faster |
 | Maximum cell mass | 12,000 |
 | Food | pastel coins (1 mass), gems (2), golden coins (8); refills at 60 per second |
 | Power-ups | Magnet (10 s), Pump (6 s, × 1.4 speed), Shield (8 s), Bag (+15 % mass, at least 40) |
-| Bought power-ups (lobby shop, `packages/shared/src/boosts.ts`) | Magnet `R` (8 s), Leap `F` (instant hop toward the aim, 420 + 0.9·r units, at most 900, never through the wall), Speed `G` (3 s), Invisibility `V` (10 s: the server sends the coins to nobody else, practice bots and minimap leader dots skip them; eating works as usual). The Shockwave was retired in 2026-11: saved charges, prices and switches load as Leap 1:1 |
-| Spawn shield | 3 s |
-| Room sizes | Adaptive (default): side = 800 · √(expected players), 9,000..12,000 (up to 126 players 9,000, 144 players 9,600, 200 players 11,400, 225+ 12,000); auto off: Practice 6800², Private 4600², Arena 7800². Humans per instance: Practice 40, Arena 50 |
+| Bought power-ups (the shop, in the lobby and on the in-game top bar; `packages/shared/src/boosts.ts`) | Magnet `R` (8 s), Leap `F` (instant hop toward the aim, 420 + 0.9·r units, at most 900, never through the wall), Speed `G` (3 s), Invisibility `V` (10 s: the server sends the coins to nobody else, practice bots and minimap leader dots skip them; eating works as usual). The Shockwave was retired in 2026-11: saved charges, prices and switches load as Leap 1:1 |
+| Spawn shield | 5.5 s |
+| Room sizes | Dynamic (default, section 2.2.2): side = 8,000 + 40 per person, at most 12,000; auto off: Practice 6800², Private 4600², Arena 7800². Humans per instance: Practice 40, Arena 50 |
 
 ### 2.2 Controls
 
 | Action | Desktop | Phone |
 |---|---|---|
-| Move | mouse | joystick |
+| Move | mouse, or `WASD` / arrow keys | joystick |
 | Split | `Space` or left click | split button |
-| Drop mass | `W` (can be held) | tip button |
-| Chat / sticker | `Enter` / `1`–`8` (`9` flips the sticker page: Hype or Trash talk) | chat / sticker buttons (with a page switch) |
+| Drop mass | `E` (can be held) | tip button |
+| Bought power-ups | `R` Magnet, `F` Leap, `G` Speed, `V` Invisibility (the keys on the right, above the minimap, with the KEYS hint under them) | power-up buttons |
+| Chat / sticker | `Enter` (the chat sits at the bottom left, see-through; a line fades after 5 s) / `1`–`8` (the switch on the sticker bar flips the page: Hype or Trash talk) | chat / sticker buttons (with a page switch) |
+| Share, shop | "Share on X" and "Shop" on the top bar while playing | the same, as icon keys |
 | Next player while spectating | `Q` | |
+| Close the chat or a panel | `Esc` | |
 
-### 2.2.1 Practice bots (free custom rooms only)
+### 2.2.1 Practice bots (free custom rooms and testnet test arenas only)
 
-- **No bots in arenas or practice ponds.** The house squad, staked testnet bots, bot purses, team reserve, traps and
-  the final-minute push were removed in 2026-11 (with their settings, files and admin switches; saved settings load
+- **No bots in official arenas or practice ponds.** The house squad, staked testnet bots, bot purses, team reserve,
+  traps and the final-minute push were removed in 2026-11 (with their settings, files and admin switches; saved settings load
   with the retired keys ignored).
 - A **free** custom room may field practice bots: its creator turns them on and picks the count (1 to 12) and the
-  difficulty (easy, mixed, hard). Ticket rooms and every other room refuse them (`Room` throws).
+  difficulty (easy, mixed, hard). On the testnet each arena also has a **test arena** (`test-<id>`, marked TEST in
+  the lobby) with practice bots (default 10, mixed; OPERATIONS.md, "Test arenas with bots"). Ticket rooms and every
+  other room refuse them (`Room` throws).
 - Fair by construction (`apps/server/src/bots/brain.ts`): a bot sees only what the server would show a player of its
-  size (its view rectangle; invisible players excluded), re-thinks every ~420 / 260 / 160 ms (easy / normal /
-  hard; "mixed" rolls a third of each), aims with an error, flees bigger coins, hunts smaller ones (not on easy),
+  size (its view rectangle; invisible players excluded), re-thinks every ~650 / 450 / 300 ms (easy / normal /
+  hard; "mixed" rolls a third of each), misses a threat or a prey 35 / 25 / 12 % of the time (`BOT_TUNING`
+  `missChance`), aims with an error, flees bigger coins, hunts smaller ones (not on easy),
   splits for a kill only on hard, eats food, keeps off walls and cacti. No map-wide knowledge, no teamwork.
 - Bots carry no value, never pick up loot, never use power-ups, are named "Bot N" and always wear a BOT tag. An eaten
   bot comes back 3 to 7 s later.
@@ -118,11 +125,12 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 | Rule | Value |
 |---|---|
 | Round length | 5 minutes, aligned to Unix time: round *n* runs `[n·300 s, (n+1)·300 s)` for every arena and instance |
-| Joins | open in the first 4 minutes, closed in the final 60 s |
+| Break | the first 30 s after the bell (`ROUND_BREAK_SECONDS`): the payouts go out, the receipt counts down "Next round opens in 0:27"; no joins |
+| Joins | open from 0:30 to 4:00 of the round; closed in the break and the final 60 s (`round_closed`) |
 | A ticket bought while joins are closed | held; the client joins it automatically when the next round opens (0–1.5 s jitter, up to 5 attempts) |
 | Eaten | you get 0 for that ticket; buy back in at the same fee while joins are open |
 | Disconnect (AFK) | your cells stay in the arena until they are eaten or the bell rings, so leaving is not an early exit |
-| The bell | every live ticket, connected or AFK, is settled at its current value; the world resets and a new round starts at once |
+| The bell | every live ticket, connected or AFK, is settled at its current value; the world resets and the next round's floor opens after the 30 s break |
 | Floor loot at the bell | collected and **burned** with `sweepLoot` |
 | Exits that still settle at the current value | admin kick and server shutdown (operator actions, not player choices) |
 
@@ -130,7 +138,8 @@ On screen:
 
 - Round chip: shows `m:ss`, switches to "Final minute" for the last 60 s and shows a large countdown in the last 10 s.
 - Bell: the world freezes and the Round over receipt appears, with your till, the fee on your profit, the amount paid, your
-  place, the top 5 (value at the bell, mass and kills; your own row when you are below them) and a PAID stamp. It is the
+  place, the final standings (everyone at the bell: value, mass and kills, your own row marked), a PAID stamp and the
+  "Next round opens in" countdown of the break. It is the
   same final board a custom room shows at its end (`FinalBoard`, `RoundStanding` rows).
 - Lobby rows: each arena shows either "Round ends in 3:12" or "Joins closed · next round in 0:42".
 - Death sheet: offers "Buy back in", or "Next round in" while joins are closed.
@@ -166,10 +175,17 @@ everyone in it, players and spectators, sees a countdown with the reason; then a
 30 s. A ticket room ends on its bell: the countdown runs into the bell, whose receipt carries the same board with the
 values. A free room closed early ends 10 s later; a ticket room closed early ends at the round's bell.
 
-**Share on X.** A bell's receipt and a custom room's final board carry "Share on X"; eating a person whose coin reached
-1,000 mass shows "You ate …!" with the same button for a few seconds. It opens X's composer with a localized line ("I
-just ate Nakamoto on Elymum!") and a link to `/share/<id>`, whose card image (the coin, the place or the kill, mass,
-kills, what was paid, the flag code and emblem badge, the wallet's short form) the server draws from its own records.
+**Share on X.** A bell's receipt, a custom room's final board and the in-game top bar carry "Share on X"; eating any
+person shows "You ate …!" with the same button for 8 seconds (at most one kill card every 5 s; a practice bot counts
+only in a testnet test arena). It opens X's composer with a localized line ("I just ate Nakamoto on Elymum!") and a
+link to `/share/<id>`, whose card image (the coin, the place or the kill, mass, kills, what was paid, "Ate: …" with
+the coins eaten, the flag code and emblem badge, the wallet's short form) the server draws from its own records. A
+test arena's card is stamped TEST and shows no payout.
+
+**Link X.** Profile → Link X ties an X account to the coin without the X API: the server issues a code, the player
+posts it from X and pastes the post's link, and the server reads that post from X's public embed. The `@handle` then
+shows on the coin, "Use my X picture" wears the X picture, and a player who eats a linked coin tags its `@handle` when
+sharing (`/api/x/*`, ARCHITECTURE.md).
 
 **Practice with bots.** The ponds are people only, so at quiet hours they say so honestly: with fewer than two
 people in the ponds the lobby shows "Quiet right now" (invite friends, or practice with bots), and a player alone in
@@ -234,10 +250,10 @@ flowchart LR
 
 **Hybrid model.** The server runs the physics; the contracts enforce the money rules; the browser signs its own
 transactions (approve, join, refund, pay, mint); the server key signs only `settle`, `cancel`, `sweepLoot` and (as
-keeper) `setPrice`. A ticket approves the game token once for every later ticket by default (the largest allowance), so
-later tickets are a single `join` prompt; "Approve only this ticket" in the confirm sheet (remembered per browser)
-approves exactly each entry fee instead. Shop packs are paid with the arena's `pay` (covered by that approval, or an
-exact one); custom rooms with a plain ETH transfer. Details: [ARCHITECTURE.md](ARCHITECTURE.md).
+keeper) `setPrice`. A ticket's approval covers the entry fee of 1, 5, 10 or 20 tickets of that room (the player's
+choice in the confirm sheet, 5 preselected and remembered; capped at 20 entry fees, never unlimited), so the next
+tickets are a single `join` prompt; the wallet sheet shows what is left and revokes it. Shop carts are paid with one
+`pay` of the arena (covered by that approval, or an exact one); custom rooms with a plain ETH transfer. Details: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 | Path | What it is |
 |---|---|
@@ -245,7 +261,7 @@ exact one); custom rooms with a plain ETH transfer. Details: [ARCHITECTURE.md](A
 | `packages/sdk` | viem reads, call builders, deploy helpers, call previews, Merkle tree, ETH/USD price, the admin CLI (`pnpm admin`) |
 | `packages/shared` | Rules (`RULES`), the binary protocol, the fee module (`fees.ts`), the Robinhood Chain networks (`chains.ts`), arenas, the SIWE message, the palette |
 | `packages/art` | The coin drawing used by the web renderer and the films |
-| `apps/server` | The game server: rooms, rounds, practice bots (free custom rooms), ledger, journal, `chain/evm.ts`, the price keeper, the site, mint, NFT metadata and admin API, integrity |
+| `apps/server` | The game server: rooms, rounds, practice bots (free custom rooms, testnet test arenas), ledger, journal, `chain/evm.ts`, the price keeper, the site, mint, NFT metadata and admin API, integrity |
 | `apps/web` | The client: landing, `/wl`, `/collab`, `/mint`, `/play`, `/docs`, `/admin`; wallets via EIP-6963 + viem (`src/wallet`) |
 | `scripts/` | `demo.mjs`, `localnet.mjs`, `localnet-fund.mjs`, `dev-browser.mjs`, `record-walkthrough.mjs`, the Dev Wallet (`lib/dev-wallet.mjs`) |
 | `brand/` | The brand kit generator and its PNGs (section 9) |
@@ -370,4 +386,6 @@ lands** ([media/README.md](../media/README.md)).
 | 2026-10-29 | The project becomes **Elymum on Elysium**: two Solidity contracts, EIP-6963 + viem wallets, SIWE, the Elymum NFT at $1 in HYPE, WL → Mint → Play, everything deployed from `/admin`, the Ring Storybook design |
 | 2026-11-03 | Playtest fixes: bots fair to people (one or two chasers per person, short chases, rare split attacks, reaction delay and aim error, admin `strength`), rooms of ~12 players at 10,000 (map default 1,000 / 10,000 / 12,000), one token approval for every ticket by default |
 | 2026-11-05 | Rebuild: **Robinhood Chain only** (testnet now, mainnet later; the Elysium build retired). **ElymumArena v3**: no entry fee, 20 % of a ticket's profit (15 % burned, 5 % to the fee wallet, owner-settable, at most 25 %), burn mode (token `burn()` or `0x…dEaD`), power-ups paid with `pay` (50 % burned). **People only** in arenas and practice: the house squad, staked bots, purses and reserve removed; fair practice bots only in free custom rooms. One fee module (`shared/fees.ts`); `pnpm check` |
+| 2026-11-06 | Power-ups priced in US dollars like the tickets; holder perks bound to one emblem token id at a time; Share on X cards (TEST in test arenas); secret exports behind a purpose-bound signature, 2 h admin sessions, the gas runway; CI-green VPS deploys with rollback |
+| 2026-11-08 | A 30 s break after every bell; a shop cart paid with one `pay`; approvals for 1 / 5 / 10 / 20 tickets; a kill card for every person eaten; Link X (`PROTOCOL_VERSION` 14); practice bots slower and sometimes distracted; the HUD's chat at the bottom left, Share on X and Shop on the top bar; `ELYMUM_*` keys on the VPS |
 | 2026-11-02 | (superseded by v3) The fee moves from profit to the entry: every played ticket pays 5 % of its entry fee (holders 3 %), win or lose; unplayed tickets are refunded in full. ElymumArena v2 (`version()` 2); the server handles the legacy v1 testnet arena until it is redeployed. The leaderboards are reset once (epoch 2) |

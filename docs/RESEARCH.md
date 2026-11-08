@@ -68,7 +68,7 @@ From Robinhood's "differences from Ethereum" page (Arbitrum Nitro behaviour):
 The game token is meant to be launched on **Pons** ([docs.ponsfamily.com](https://docs.ponsfamily.com),
 [V2 docs](https://docs.ponsfamily.com/docs/v2); [Bitquery's Pons API docs](https://docs.bitquery.io/docs/blockchain/robinhood/pons-api/);
 an explainer: [BingX, "What is Pons"](https://bingx.com/en/learn/article/what-is-pons-crypto-and-how-does-pons-robinhood-launchpad-work), third party). V2 went live on 2026-08-04, on **Robinhood Chain mainnet only** (no testnet deployment): on the testnet
-the game uses the bundled `TestToken` (ERC20Burnable, owner-minted faucet).
+the game uses the bundled `TestToken` (ERC20Burnable; its public `faucet()` gives 1,000,000 an hour, 2,000,000 to emblem holders, and only its owner mints otherwise).
 
 | Fact | Value | Status |
 |---|---|---|
