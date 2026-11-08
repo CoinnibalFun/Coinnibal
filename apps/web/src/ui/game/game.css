@@ -238,12 +238,13 @@
   }
   .g-pond__code::after,
   .g-hud .kb-iconbtn::after {
+    /* measured from the padding box: past the 3 px border, 3 px more each side */
     content: '';
     position: absolute;
-    inset: -3px;
+    inset: -6px;
     border-radius: inherit;
   }
-  .g-closing__board {
+  .g-hud .g-closing__board {
     min-height: 44px;
   }
 }
