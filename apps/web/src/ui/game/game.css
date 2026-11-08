@@ -2612,6 +2612,25 @@
 .g-hud.is-narrow .g-pu__chip {
   max-width: 100%;
 }
+/* portrait phones: the running power-ups come right under the worth and the minimap (before a tall
+   notice such as "You are alone in this pond"), as icon + seconds, so the column ends well above
+   the thumb cluster */
+.g-hud.is-narrow .g-center > :is(.g-center__worth, .g-map) {
+  order: -2;
+}
+.g-hud.is-narrow .g-center > .g-pu {
+  order: -1;
+}
+/* landscape phones: the column runs down to my coin at the middle of a 390 px screen; compact chips too */
+.g-hud.is-short .g-pu__name,
+.g-hud.is-narrow .g-pu__name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
 /* the flag picker heads the settings sheet */
 .g-settings__country {
@@ -2625,7 +2644,10 @@
 
 /* portrait phones: with power-up timers stacked in the centre column, the fps / ping readout would
    reach the thumb buttons; it steps aside until the timers run out */
-.g-hud.is-narrow.is-touch .g-center:has(.g-pu) > .g-net {
+/* the frame-rate readout is the first to go when the column is busy (it ran into the chat key and
+   the power-up rail on small phones and at 200 % zoom) */
+.g-hud.is-narrow .g-center:has(.g-pu, .g-banner, .g-closing, .g-killshare, .pq) > .g-net,
+.g-hud.is-short .g-center:has(.g-pu, .g-banner, .g-closing, .g-killshare, .pq) > .g-net {
   display: none;
 }
 
@@ -2745,4 +2767,42 @@
 }
 .g-stream__form .g-chat__send {
   background: var(--sticker);
+}
+
+/* ── large screens: the instruments grow with the window ─────────────────
+ * The stickers are drawn for a 1440 x 900 laptop. On a 1080p monitor and up (mouse only: a touch
+ * HUD keeps its thumb sizes) each cluster is zoomed as a whole, so its proportions, outlines and
+ * shadows stay those of the design. The chat stream is not zoomed (ChatStream sets its top and
+ * height in window pixels): its width and type scale instead. */
+.g-hud {
+  --hud-scale: 1;
+}
+@media (min-width: 1680px) and (min-height: 1000px) {
+  .g-hud.is-desktop {
+    --hud-scale: 1.15;
+  }
+}
+@media (min-width: 1900px) and (min-height: 1060px) {
+  .g-hud.is-desktop {
+    --hud-scale: 1.25;
+  }
+}
+@media (min-width: 2400px) and (min-height: 1300px) {
+  .g-hud.is-desktop {
+    --hud-scale: 1.5;
+  }
+}
+@media (min-width: 3200px) and (min-height: 1800px) {
+  .g-hud.is-desktop {
+    --hud-scale: 2;
+  }
+}
+.g-hud.is-desktop > :is(.g-corner, .g-center, .g-bl, .g-dock, .g-boosts-dock, .g-map, .g-spectate) {
+  zoom: var(--hud-scale);
+}
+.g-hud.is-desktop .g-stream {
+  width: min(calc(320px * var(--hud-scale)), 34vw);
+}
+.g-hud.is-desktop .g-stream__lines {
+  font-size: calc(14px * var(--hud-scale));
 }
