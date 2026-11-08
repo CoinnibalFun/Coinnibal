@@ -34,11 +34,11 @@ describe('arena round clock', () => {
     expect(roundAt(0, 30_000, 0)).toEqual({ n: 0, startsAt: 0, opensAt: 0, endsAt: 30_000, joinsCloseAt: 30_000 });
   });
 
-  it('a break after each bell: joins open 15 s into the slot; numbering and bells are unchanged', () => {
-    expect(RULES.roundBreakMs).toBe(15_000);
+  it('a break after each bell: joins open 30 s into the slot; numbering and bells are unchanged', () => {
+    expect(RULES.roundBreakMs).toBe(30_000);
     const start = 600_000 * 3000;
     const r = roundAt(start + 1000, RULES.roundMs, RULES.roundJoinCloseMs, RULES.roundBreakMs);
-    expect(r).toEqual({ n: start / 300_000, startsAt: start, opensAt: start + 15_000, endsAt: start + 300_000, joinsCloseAt: start + 240_000 });
+    expect(r).toEqual({ n: start / 300_000, startsAt: start, opensAt: start + 30_000, endsAt: start + 300_000, joinsCloseAt: start + 240_000 });
     // never past the join close
     expect(roundAt(0, 10_000, 5_000, 9_000).opensAt).toBe(5_000);
   });

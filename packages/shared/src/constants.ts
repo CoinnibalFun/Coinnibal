@@ -111,9 +111,9 @@ export const RULES = {
   /**
    * The break at the start of every round slot: after the bell the payouts go out and people see
    * the results; the floor opens to new joins `roundBreakMs` after the bell (a ticket bought in the
-   * break is held and seated when it opens).
+   * break is held and seated when it opens). 30 s (owner, 2026-11): time to buy the next ticket.
    */
-  roundBreakMs: 15_000,
+  roundBreakMs: 30_000,
 
   /**
    * Loot: when something without a ticket eats a staker (never in a room of people only), the victim's tokens spill as

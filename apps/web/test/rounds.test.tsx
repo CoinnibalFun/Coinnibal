@@ -14,6 +14,7 @@ import { useUi } from '../src/store';
 import { setReducedMotion } from '../src/test/media';
 import { DeathSheet, GameHud, RoundChip, RoundCountdown, RoundOverSheet } from '../src/ui/game';
 import { MobileControls } from '../src/ui/game/MobileControls';
+import { NextRoundOpens } from '../src/ui/game/NextRoundOpens';
 import { HeldBanner } from '../src/ui/lobby/HeldBanner';
 import { QuickPlay } from '../src/ui/lobby/QuickPlay';
 import { TicketList } from '../src/ui/lobby/TicketList';
@@ -57,11 +58,17 @@ describe('round math on the client', () => {
     expect(roundStateAt(R, R.joinsCloseAt)).toMatchObject({ n: N, msLeft: 60_000, phase: 'closing' });
     // at the bell the next round is open (no intermission)
     const next = roundAt(R.endsAt);
-    expect(roundStateAt(R, R.endsAt)).toEqual({ n: N + 1, endsAt: next.endsAt, joinsCloseAt: next.joinsCloseAt, opensAt: next.endsAt - RULES.roundMs, msLeft: RULES.roundMs, phase: 'open' });
+    expect(roundStateAt(R, R.endsAt)).toEqual({ n: N + 1, endsAt: next.endsAt, joinsCloseAt: next.joinsCloseAt, opensAt: next.endsAt - RULES.roundMs, msLeft: RULES.roundMs, phase: 'open', breakMsLeft: 0 });
     // a server with a 15 s break after each bell: the next round opens to joins 15 s in
     const withBreak = { ...R, opensAt: R.endsAt - RULES.roundMs + 15_000 };
     expect(roundLengths(withBreak).breakMs).toBe(15_000);
     expect(roundStateAt(withBreak, R.endsAt + 1)).toMatchObject({ n: N + 1, opensAt: R.endsAt + 15_000 });
+    // the 30 s break (RULES.roundBreakMs): the countdown to the open floor, then 0
+    const thirty = { ...R, opensAt: R.endsAt - RULES.roundMs + RULES.roundBreakMs };
+    expect(RULES.roundBreakMs).toBe(30_000);
+    expect(roundStateAt(thirty, R.endsAt + 3_000)).toMatchObject({ n: N + 1, breakMsLeft: 27_000 });
+    expect(formatCountdown(roundStateAt(thirty, R.endsAt + 3_000).breakMsLeft)).toBe('0:27');
+    expect(roundStateAt(thirty, R.endsAt + 30_000).breakMsLeft).toBe(0);
     expect(formatCountdown(192_000)).toBe('3:12');
     expect(formatCountdown(41_200)).toBe('0:42');
     expect(formatCountdown(0)).toBe('0:00');
@@ -445,5 +452,29 @@ describe('lobby tickets and the held ticket', () => {
     expect(waits[1]).toBe(10_750);
     expect(waits[2]).toBeGreaterThan(11_490);
     expect(waits[2]).toBeLessThan(11_500);
+  });
+});
+
+describe('the break after the bell', () => {
+  afterEach(() => vi.useRealTimers());
+  it('shows "Next round opens in 0:27" during the break, nothing once the floor is open', () => {
+    const roundMs = RULES.roundMs;
+    const n = 5_900_000;
+    const bell = n * roundMs;
+    const info: RoundInfo = { n, endsAt: bell + roundMs, joinsCloseAt: bell + roundMs - RULES.roundJoinCloseMs, opensAt: bell + RULES.roundBreakMs };
+    const room: RoomInfo = { id: 'arena-1-1', mode: 'arena', arenaId: 1, name: 'A', players: 1, maxPlayers: 50, round: info } as RoomInfo;
+    vi.useFakeTimers();
+    vi.setSystemTime(bell + 3_000);
+    serverClock.reset?.();
+    act(() => useUi.setState({ rooms: [room], room: null }));
+    const v = render(
+      <Kb>
+        <NextRoundOpens arenaId={1} />
+      </Kb>,
+    );
+    expect(screen.getByTestId('next-round-opens').textContent).toBe('Next round opens in 0:27');
+    act(() => vi.advanceTimersByTime(27_100));
+    expect(screen.queryByTestId('next-round-opens')).toBeNull();
+    v.unmount();
   });
 });

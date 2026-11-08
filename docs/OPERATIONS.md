@@ -432,7 +432,9 @@ kills, best score) are never touched.
 ## Arena rounds and the loot burn
 
 Paid arenas play wall-clock rounds: `ROUND_SECONDS` (default 300) and `ROUND_JOIN_CLOSE_SECONDS` (default 60,
-capped at half a round). Round *n* covers `[n x ROUND_SECONDS, (n + 1) x ROUND_SECONDS)` of Unix time, so keep the
+capped at half a round). After each bell the floor stays closed for `ROUND_BREAK_SECONDS` (default 30, at most a
+tenth of the round): the payouts go out, the receipt shows "Next round opens in 0:27", and players buy their next
+ticket (a ticket bought in the break is seated when it opens; deploys and reboots swap the container in it). Round *n* covers `[n x ROUND_SECONDS, (n + 1) x ROUND_SECONDS)` of Unix time, so keep the
 server clock synced. At the bell every live ticket is settled at its value in one batch, and the floor loot is
 journaled as a sweep and sent with `sweepLoot(arenaId, sweepId, amount)`, which **burns** it (to `0x...dEaD`). The
 `sweepId` is monotonic and kept in the journal, so a sweep is never applied twice.

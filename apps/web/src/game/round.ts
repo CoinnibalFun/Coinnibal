@@ -23,6 +23,8 @@ export interface RoundState {
   msLeft: number;
   /** `open`: joins open; `closing`: the final minute, joins closed until the next round. */
   phase: RoundPhase;
+  /** The break after the bell (joins closed, payouts going out): ms until the floor opens; 0 once it is open. */
+  breakMsLeft: number;
 }
 
 /** The big countdown takes over the chip for the last 10 s. */
@@ -44,7 +46,15 @@ export function roundLengths(info: RoundInfo): { roundMs: number; closeMs: numbe
 export function roundStateAt(info: RoundInfo, now: number): RoundState {
   const { roundMs, closeMs, breakMs } = roundLengths(info);
   const w: Pick<RoundState, 'n' | 'endsAt' | 'joinsCloseAt' | 'opensAt'> = now >= info.endsAt ? roundAt(now, roundMs, closeMs, breakMs) : { ...info, opensAt: info.opensAt ?? info.endsAt - roundMs };
-  return { n: w.n, endsAt: w.endsAt, joinsCloseAt: w.joinsCloseAt, opensAt: w.opensAt, msLeft: Math.max(0, w.endsAt - now), phase: now >= w.joinsCloseAt ? 'closing' : 'open' };
+  return {
+    n: w.n,
+    endsAt: w.endsAt,
+    joinsCloseAt: w.joinsCloseAt,
+    opensAt: w.opensAt,
+    msLeft: Math.max(0, w.endsAt - now),
+    phase: now >= w.joinsCloseAt ? 'closing' : 'open',
+    breakMsLeft: Math.max(0, w.opensAt - now),
+  };
 }
 
 /**
@@ -106,7 +116,9 @@ export function useRound(arenaId: number | null, active = true): RoundState | nu
     const step = () => {
       const t = serverClock.now();
       setNow(t);
-      const left = roundStateAt(info, t).msLeft;
+      const st = roundStateAt(info, t);
+      // the break's countdown and the bell's flip on the same second boundaries
+      const left = st.breakMsLeft > 0 ? st.breakMsLeft : st.msLeft;
       id = setTimeout(step, (left % 1000) + 15);
     };
     step();

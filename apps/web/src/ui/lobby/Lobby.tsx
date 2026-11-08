@@ -314,6 +314,14 @@ function NextBell() {
   const t = useT();
   const round = useRound(null);
   if (!round) return null;
+  // the break after a bell: joins open again in a few seconds; the next ticket can be bought already
+  if (round.breakMsLeft > 0)
+    return (
+      <span className="kl-bell is-break" role="timer" aria-label={t('gr.nextOpens', { t: formatCountdown(round.breakMsLeft) })} data-testid="lobby-break">
+        <span className="kl-bell__label kl-bell__label--top mono">{t('lo.bell.break')}</span>
+        <SplitFlap text={formatCountdown(round.breakMsLeft)} className="kl-bell__time num" />
+      </span>
+    );
   const closed = round.phase === 'closing';
   return (
     <span className={`kl-bell${closed ? ' is-closed' : ''}`} aria-hidden="true">
