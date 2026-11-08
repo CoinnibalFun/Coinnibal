@@ -119,36 +119,44 @@ describe('ticket confirm sheet', () => {
     expect(within(dialog).getByText(/paid in ETH on Robinhood Chain Testnet · you have 0.42 ETH/)).toBeTruthy();
     expect(within(dialog).getByText('12,450 → 11,450 $ELYMUM')).toBeTruthy();
     const steps = within(within(dialog).getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
-    // no allowance yet: an approval of exactly this ticket first (what the wallet will show), then the ticket
-    expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take exactly 1,000 $ELYMUM', '2Buy the ticket · Asphodel Meadow']);
+    // no allowance yet: an approval for 5 tickets of this room first (preselected; what the wallet will show), then the ticket
+    expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take up to 5,000 $ELYMUM (5 tickets of this room)', '2Buy the ticket · Asphodel Meadow']);
     expect((within(dialog).getByRole('button', { name: /Pay 1,000 \$ELYMUM/ }) as HTMLButtonElement).disabled).toBe(false);
-    // the batch approval is a choice the player makes, off by default
-    expect((within(dialog).getByRole('checkbox', { name: /Approve 5 tickets at once/ }) as HTMLInputElement).checked).toBe(false);
+    // the approval covers 1, 5, 10 or 20 tickets, 5 preselected
+    expect(within(dialog).getAllByRole('radio').map((r) => r.textContent)).toEqual(['1 tickets', '5 tickets', '10 tickets', '20 tickets']);
+    expect(within(dialog).getByRole('radio', { name: '5 tickets' }).getAttribute('aria-checked')).toBe('true');
   });
 
-  it('approves exactly the entry fee by default: the wallet is asked for that amount, to the pinned arena', async () => {
-    open(PENNY);
+  it('approves 5 tickets by default (an exact amount, to the pinned arena); 1 ticket approves exactly the entry fee', async () => {
+    const view = open(PENNY);
     act(() => screen.getByRole('button', { name: /^Pay / }).click());
     await settle();
     expect(spies.verifyArena).toHaveBeenCalledWith(expect.anything(), CHAIN.chainId, { arena: ARENA, token: TOKEN });
-    const approve = spies.sendWalletCall.mock.calls[0][0];
-    expect(approve).toMatchObject({ address: TOKEN, functionName: 'approve', args: [ARENA, 1000n * ONE] });
-  });
-
-  it('"Approve 5 tickets at once": explicit, capped at five entry fees, remembered for next time', async () => {
-    const view = open(PENNY);
-    act(() => screen.getByRole('checkbox', { name: /Approve 5 tickets at once/ }).click());
-    expect(useUi.getState().settings.approveBatch).toBe(true);
-    const steps = within(screen.getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
-    expect(steps[0].textContent).toBe('1Allow the arena to take up to 5,000 $ELYMUM (5 tickets of this room)');
-    expect(screen.getByText(/your next 4 tickets here skip the approval/)).toBeTruthy();
+    expect(spies.sendWalletCall.mock.calls[0][0]).toMatchObject({ address: TOKEN, functionName: 'approve', args: [ARENA, 5000n * ONE] });
+    view.unmount();
+    spies.sendWalletCall.mockClear();
+    open(PENNY);
+    act(() => screen.getByRole('radio', { name: '1 tickets' }).click());
+    expect(screen.getByText(/your wallet asks for an approval every time/)).toBeTruthy();
     act(() => screen.getByRole('button', { name: /^Pay / }).click());
     await settle();
-    expect(spies.sendWalletCall.mock.calls[0][0]).toMatchObject({ functionName: 'approve', args: [ARENA, 5000n * ONE] });
+    expect(spies.sendWalletCall.mock.calls[0][0]).toMatchObject({ functionName: 'approve', args: [ARENA, 1000n * ONE] });
+  });
+
+  it('"Approve for 1 / 5 / 10 / 20 tickets": the amount follows the choice (capped at 20), remembered for next time', async () => {
+    const view = open(PENNY);
+    act(() => screen.getByRole('radio', { name: '10 tickets' }).click());
+    expect(useUi.getState().settings.approveTickets).toBe(10);
+    const steps = within(screen.getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
+    expect(steps[0].textContent).toBe('1Allow the arena to take up to 10,000 $ELYMUM (10 tickets of this room)');
+    expect(screen.getByText(/your next 9 tickets here need a single transaction each/)).toBeTruthy();
+    act(() => screen.getByRole('button', { name: /^Pay / }).click());
+    await settle();
+    expect(spies.sendWalletCall.mock.calls[0][0]).toMatchObject({ functionName: 'approve', args: [ARENA, 10_000n * ONE] });
     view.unmount();
-    // the next sheet starts with the choice still ticked
+    // the next sheet starts with the same choice
     open(PENNY);
-    expect((screen.getByRole('checkbox', { name: /Approve 5 tickets at once/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole('radio', { name: '10 tickets' }).getAttribute('aria-checked')).toBe('true');
   });
 
   it('refuses an arena that is not the pinned one (or not the compiled code) before anything is signed', async () => {
@@ -257,15 +265,15 @@ describe('ticket flow: two prompts, progress and races', () => {
     open(PENNY);
     act(() => screen.getByRole('button', { name: /^Pay / }).click());
     await settle();
-    expect(screen.getByTestId('tf-step').textContent).toBe('Step 1 of 2 · Allow the arena to take exactly 1,000 $ELYMUM');
+    expect(screen.getByTestId('tf-step').textContent).toBe('Step 1 of 2 · Allow the arena to take up to 5,000 $ELYMUM (5 tickets of this room)');
     expect(screen.getByText('Approve the game token in your wallet')).toBeTruthy();
-    expect(screen.getByText('This only allows the arena to take 1,000 $ELYMUM, once. Nothing moves yet.')).toBeTruthy();
+    expect(screen.getByText(/Your wallet shows 5,000 \$ELYMUM: enough for 5 tickets of this room/)).toBeTruthy();
     // the plan is always exact (the batch, when ticked, is built here and checked call by call)
     expect(spies.planJoin.mock.calls[0][1]).toMatchObject({ approve: 'exact' });
     await act(async () => release());
     await settle();
     expect(spies.sendWalletCall).toHaveBeenCalledTimes(2);
-    expect(spies.sendWalletCall.mock.calls[0][0]).toMatchObject({ address: TOKEN, functionName: 'approve', args: [ARENA, 1000n * ONE] });
+    expect(spies.sendWalletCall.mock.calls[0][0]).toMatchObject({ address: TOKEN, functionName: 'approve', args: [ARENA, 5000n * ONE] });
     expect(spies.sendWalletCall.mock.calls[1][0]).toBe(joinCall);
     // the server's chain rides along: the wallet is switched to it before each prompt
     expect(spies.sendWalletCall.mock.calls[0][1]).toMatchObject({ chain: CHAIN });

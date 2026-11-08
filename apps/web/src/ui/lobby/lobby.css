@@ -1429,15 +1429,43 @@
 /* "Approve only this ticket" (off by default: one approval covers every later ticket) */
 .tf-approve-choice {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  /* the whole label is the tap target: a thumb-sized row */
-  min-height: 44px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   padding: 4px 0;
   margin-top: 6px;
   font-size: var(--t-small);
   color: var(--ink-2);
+}
+.tf-approve-choice__title {
+  font-weight: 700;
+  color: var(--ink);
+}
+/* 1 / 5 / 10 / 20 tickets: four thumb-sized segments in one row (they wrap on a very narrow phone) */
+.tf-approve-choice__segs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tf-approve-seg {
+  flex: 1 1 64px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--paper-fixed, #fffaf0);
+  color: var(--ink-fixed);
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
+}
+.tf-approve-seg.is-on {
+  background: var(--sun);
+  box-shadow: 2px 2px 0 var(--outline);
+}
+.tf-approve-seg:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 .tf-approve-choice input {
   flex: none;
