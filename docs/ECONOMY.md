@@ -16,7 +16,8 @@ default; the module that holds it is named so this page and the game cannot drif
 The token is the game token on Robinhood Chain (launched on Pons: a fixed supply of 1,000,000,000 with no mint after
 launch; on the testnet the bundled `TestToken`). **Nothing in Elymum mints the game token**: the arena only holds,
 pays out and burns tokens players brought, so every sink below shrinks circulation for good. The server key cannot
-mint either (the testnet `TestToken` is minted by its owner only).
+mint either (the testnet `TestToken` is minted only by its owner and its public faucet: 1,000,000 an hour per
+wallet, 2,000,000 for emblem holders).
 
 ## 1. Arena tickets: priced in US dollars, paid in the token
 
@@ -83,7 +84,9 @@ settles can be refunded by its player after 24 h (the entry fee, capped by the v
 
 Packs of **3 charges**, paid in the game token through `ElymumArena.pay(amount, ref)`: the contract burns
 **50 %** (`paymentBurnBps`, owner-settable 0 to 100 %) and sends the rest to the fee wallet in the same call. The
-server credits the charges after checking the `Paid` event (contract, payer, pack, amount).
+shop is a cart: the player picks several packs (+/−), and one `pay(total, ref)` pays them all (the `ref` names the
+cart, `elymum.cart.…`; a single pack is `elymum.shop.<kind>`). The server credits the charges after checking the
+`Paid` event (contract, payer, cart, amount).
 
 **Priced in US dollars** like the tickets (`priceIn: 'usd'`, the default): the server converts each pack at the same
 token price source and the same significant figures as the arena tiers (Game → Arena prices: the manual price; the
@@ -118,8 +121,9 @@ safety path that rarely triggers.
 ## 5. Custom rooms: a small fee in ETH
 
 A signed-in wallet opens a room with its own rules for **0.0005 ETH** (about $1.50 at ETH = $3,000) up to 10
-players, +50 % per further 10 players (100 players: x5.5), paid as a plain ETH transfer to the treasury and checked on
-chain before the room opens. **Emblem holders open one room a day for free** (`holderPerk: free_daily`, the
+players, +50 % per further 10 players (100 players: x5.5), paid as a plain ETH transfer to the treasury (an admin setting; unset, the
+owner, the first `ADMIN_WALLETS` wallet) and checked on chain before the room opens. Free rooms and ticket rooms pay
+the same fee. **Emblem holders open one room a day for free** (`holderPerk: free_daily`, the
 default): one room of the base size (up to 10 players) per wallet per UTC day (it renews at 00:00 UTC), enforced by
 the server and recorded in `DATA_DIR/site/custom-rooms.json` in the same write that stores the room, so a restart
 never hands out a second one. The admin can switch the perk to a discount (`holderDiscountPct`, 50 % by default) or
@@ -173,7 +177,7 @@ None of these create tokens; they lower what a holder pays into the sinks.
 | Power-ups | 50 % burned, 50 % fee wallet |
 | Floor loot | burned |
 | Custom rooms, NFT mint | ETH, not the token |
-| Mint of the game token | none (fixed supply; the testnet token is owner-minted only) |
+| Mint of the game token | none (fixed supply; the testnet token: its owner and its faucet only) |
 
 The arena's books are checked on chain (`balance = Σ vaults + Σ owed`; per arena: deposited = vault + paid out +
 burned + fees) and off chain (Σ live + Σ loot + Σ pending + Σ forfeited = Σ entry fees − Σ paid), by unit, fuzz and

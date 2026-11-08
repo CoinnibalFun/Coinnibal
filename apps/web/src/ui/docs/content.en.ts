@@ -1,4 +1,4 @@
-import { BOOST_RULES, BPS, DEFAULT_ARENAS, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, activeChain, bpsToPercent, formatUsdCents, GAS_SYMBOL, totalFeeBps, type FeeRates } from '@elymum/shared';
+import { BOOST_RULES, BPS, CUSTOM_CAPACITY_TIER, DEFAULT_ARENAS, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, activeChain, bpsToPercent, formatUsdCents, GAS_SYMBOL, totalFeeBps, type FeeRates } from '@elymum/shared';
 import { FACTS as F, payoutExample, type DocsContent } from './facts';
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
@@ -10,6 +10,8 @@ const S = F.server;
 const R = F.rules;
 const SH = F.shop;
 const sym = '$ELYMUM';
+/** How many tickets one approval may cover: "1, 5, 10 or 20". */
+const APPROVE = { choices: `${F.approve.choices.slice(0, -1).join(', ')} or ${F.approve.choices[F.approve.choices.length - 1]}`, preselected: F.approve.preselected } as const;
 
 /**
  * The player guide in English: how to play, what the Elymum NFT and the token are for, and how the money
@@ -117,7 +119,7 @@ export const docsEn = (
               { term: 'One ticket:', text: 'you can hold one open ticket per arena at a time.' },
               {
                 term: 'Private rooms',
-                text: 'are your own rooms with your own rules and an invite code, free or with tickets; Elymum NFT holders create them for less.',
+                text: `are your own rooms with your own rules and an invite code, free or with tickets, opened for a small fee in ${GAS_SYMBOL}; Elymum NFT holders open one a day for free (up to ${CUSTOM_CAPACITY_TIER} players).`,
               },
               {
                 term: 'Opening soon:',
@@ -127,14 +129,14 @@ export const docsEn = (
           },
           {
             kind: 'table',
-            caption: 'Default arenas (they differ only by entry fee)',
-            head: ['No', 'Room', 'Entry fee'],
+            caption: `Default arenas: tickets priced in US dollars, paid in ${symbol}`,
+            head: ['No', 'Room', 'Ticket', 'Who'],
             numeric: [0, 2],
-            rows: F.arenas.map((a) => [String(a.id), a.name, `${num(a.entry)} ${symbol}`]),
+            rows: F.arenas.map((a) => [String(a.id), a.name, formatUsdCents(a.usdCents), a.holdersOnly ? 'Elymum NFT holders' : 'Everyone']),
           },
           {
             kind: 'p',
-            text: `A ticket needs an EVM wallet (MetaMask, Rabby or any browser wallet), the entry fee in ${symbol} and a little of the network's gas token (${GAS_SYMBOL} on ${chain}) for network fees. Buying takes at most two signatures: one approval for the arena contract (given once; tick "Approve only this ticket" to approve just the entry fee each time), then the ticket itself. There is no entry fee rate: the whole entry fee goes into the vault and your coin starts at it.`,
+            text: `A ticket needs an EVM wallet (MetaMask, Rabby or any browser wallet), the entry fee in ${symbol} and a little of the network's gas token (${GAS_SYMBOL} on ${chain}) for network fees. The lobby shows each ticket's dollar price with its ${symbol} amount next to it, set from the token's price. Buying takes at most two signatures: an approval for the arena contract, then the ticket itself. You choose how many tickets of that room the approval covers (${APPROVE.choices}; ${APPROVE.preselected} preselected, never unlimited), so the next tickets need only one signature. There is no entry fee rate: the whole entry fee goes into the vault and your coin starts at it.`,
           },
         ],
       },
@@ -158,7 +160,7 @@ export const docsEn = (
             kind: 'list',
             items: [
               { term: 'Mass is not value.', text: 'Tipping mass (E), cactus pops and mass decay never change your value; value only changes hands by eating.' },
-              { term: 'Only people play the arenas.', text: 'Every coin in an arena is a player who bought a ticket; the game fields no coins of its own there.' },
+              { term: 'Only people play the official arenas.', text: 'Every coin in an arena is a player who bought a ticket; the game fields no coins of its own there. Only on the testnet, the extra rooms marked TEST also field practice coins that carry no value.' },
               { term: 'Loot', text: 'that spills on the floor can be picked up by any player until the bell; what is left then is burned.' },
               { term: 'If you disconnect,', text: 'your coin stays in the arena (it can still be eaten) and you carry on if you come back. Alive at the bell, you are paid as usual.' },
               { term: 'If you die,', text: 'your value goes to whoever ate you and the ticket closes. You may buy a new ticket and re-enter the same round.' },
@@ -184,7 +186,7 @@ export const docsEn = (
         blocks: [
           {
             kind: 'p',
-            text: `Rounds follow the clock: a new one starts every ${R.roundMin} minutes in every arena at once. There is no cash-out in an arena and no way to leave early with money. When the bell rings, everyone still alive is paid, the server sends the payout on-chain and the "Round over" receipt shows the transaction link. Joins close ${R.joinCloseS} s before the bell; a ticket bought in that window joins the next round automatically.`,
+            text: `Rounds follow the clock: a new one starts every ${R.roundMin} minutes in every arena at once. There is no cash-out in an arena and no way to leave early with money. When the bell rings, everyone still alive is paid, the server sends the payout on-chain and the "Round over" receipt shows the transaction link. After the bell the floor rests for ${R.breakS} s while the payouts go out ("Next round opens in"), then the next round opens. Joins close ${R.joinCloseS} s before the bell; a ticket bought while joins are closed, in the break or the final minute, joins the next round automatically.`,
           },
           {
             kind: 'p',
@@ -247,7 +249,7 @@ export const docsEn = (
               { term: 'Arena tickets:', text: `every arena entry fee is paid in ${symbol}, and every payout is paid in ${symbol}.` },
               {
                 term: 'Power-ups:',
-                text: `packs of ${SH.packSize} charges in the lobby shop: Magnet ${num(SH.prices.magnet)}, Leap ${num(SH.prices.leap)}, Speed burst ${num(SH.prices.speed)} and Invisibility ${num(SH.prices.invis)} ${symbol} by default. Each payment goes to the arena contract, which burns ${payBurn} of it and sends ${payVault} to the fee wallet.`,
+                text: `packs of ${SH.packSize} charges in the shop, priced in US dollars and paid in ${symbol} at the token's price: Magnet ${formatUsdCents(SH.usdCents.magnet)}, Leap ${formatUsdCents(SH.usdCents.leap)}, Speed burst ${formatUsdCents(SH.usdCents.speed)} and Invisibility ${formatUsdCents(SH.usdCents.invis)} by default. Put several packs in the cart and pay once. Each payment goes to the arena contract, which burns ${payBurn} of it and sends ${payVault} to the fee wallet.`,
               },
               { term: 'Burn on every win:', text: `${burn} of every profit is burned, and so is floor loot left at the bell: the more the game is played, the smaller the supply. Nothing mints new ${symbol}.` },
               { term: 'Fee wallet:', text: `${vault} of every profit and ${payVault} of every power-up payment go to the game's fee wallet, on-chain and visible to anyone.` },
@@ -265,7 +267,7 @@ export const docsEn = (
           },
           {
             kind: 'p',
-            text: `Each power-up has a cooldown. Use them freely in practice and private rooms; in paid arenas at most ${SH.arenaUses} per round (${SH.arenaUses + SH.holderExtraUses} for NFT holders). Nothing is sold during a game.`,
+            text: `Each power-up has a cooldown. Use them freely in practice and private rooms; in paid arenas at most ${SH.arenaUses} per round (${SH.arenaUses + SH.holderExtraUses} for NFT holders). The shop is in the lobby and, during a game, behind the Shop key on the top bar.`,
           },
         ],
       },
@@ -320,7 +322,7 @@ export const docsEn = (
             kind: 'list',
             items: [
               { term: 'Sign-in', text: 'is only a message signature ("Sign in to Elymum. This is free and sends no transaction."): no transaction, no cost.' },
-              { term: 'A ticket', text: `takes at most two transactions: an approval of the arena contract for ${symbol} (once, or for exactly the entry fee if you tick "Approve only this ticket"), then the ticket itself. If your wallet asks you to approve any other address, do not sign.` },
+              { term: 'A ticket', text: `takes at most two transactions: an approval of the arena contract for ${symbol} (for the entry fee of ${APPROVE.choices} tickets of that room, your choice, never unlimited), then the ticket itself. If your wallet asks you to approve any other address, do not sign.` },
               { term: 'Anyone asking', text: 'for your recovery phrase or private key, site, person or "support", is a scammer.' },
               { term: 'Use a separate wallet', text: 'for games and keep only what you want to play with in it.' },
               { term: 'Links:', text: 'check the address bar. The only mint is the Mint page of this site.' },
@@ -338,13 +340,15 @@ export const docsEn = (
             items: [
               { q: 'Do I need a wallet for practice?', a: 'No. Practice is free; no wallet, token or NFT needed.' },
               { q: 'What is the fee exactly?', a: `${total} of your profit only: ${burn} burned, ${vault} to the fee wallet. If your till at the bell is at or below your entry fee, there is no fee. Joining is free of fees.` },
-              { q: 'What does the NFT give me?', a: `Early access while the game opens in phases, the emblem skin and holder mark, ${SH.holderDiscountPct}% off power-ups, an extra power-up use per arena round a lower fee when the holder perks are on, and cheaper private rooms.` },
+              { q: 'What does the NFT give me?', a: `Early access while the game opens in phases, the emblem skin and holder mark, ${SH.holderDiscountPct}% off power-ups, an extra power-up use per arena round, a lower fee when the holder perks are on, a free private room every day and the holders-only ${DEFAULT_ARENAS.filter((a) => a.holdersOnly).map((a) => formatUsdCents(a.usdCents)).join(', ')} arena.` },
               { q: `What is ${symbol} used for?`, a: 'Arena tickets and payouts, and power-ups in the shop. A share of every profit and half of every shop payment are burned.' },
               { q: 'Why do the arenas say "Opening soon"?', a: `The ${symbol} token is not set on-chain yet. Practice is open; the arenas open by themselves as soon as it is set.` },
               { q: 'I lost my connection or closed the tab.', a: 'Your coin stays in the arena and can still be eaten. Come back and you carry on; alive at the bell, you are paid as usual.' },
               { q: 'Can I cash out early?', a: `No. Arenas have no cash-out: you are paid when the ${R.roundMin}-minute round ends.` },
               { q: 'I bought a ticket but never played.', a: `The server refunds the full entry fee after about ${S.staleTicketMinutes} minutes. If it does not, refund it yourself after ${F.refundHours} hours.` },
               { q: 'My payout has not arrived.', a: 'Check the payout banner in the lobby. "Collect payout" means your game is settled and the payout waits in the vault: collect it with one transaction. Otherwise the server is still sending it and retries by itself.' },
+              { q: 'How do I share a game on X?', a: 'Press "Share on X" on the top bar during a game, on the "Round over" receipt or right after you eat someone. X opens with a short line and a card of your game; nothing is posted until you post it.' },
+              { q: 'Can I show my X account on my coin?', a: 'Yes: Profile → Link X. Post the code shown there from your X account and paste the post\'s link (no X login). Your @handle then shows on your coin, you can wear your X picture, and players who eat you can tag you when they share.' },
               { q: 'Are there prizes for the Standings?', a: 'No. The Today and All-time standings are for fun; they pay nothing.' },
               { q: 'Is this gambling?', a: 'It is a skill game played with a token of real value, and many countries may regulate it. Make sure playing is legal where you are. Burns are not a promise of returns.' },
             ],
