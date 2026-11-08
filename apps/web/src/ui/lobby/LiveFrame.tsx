@@ -46,14 +46,16 @@ export function LiveFrame() {
     const measure = () => {
       const p = page.getBoundingClientRect();
       const w = win.getBoundingClientRect();
-      const x = w.left - p.left;
-      const y = w.top - p.top;
+      // a zoomed page (very large screens) lays the hole out in its own, zoomed pixels
+      const z = Number.parseFloat(getComputedStyle(page).zoom) || 1;
+      const x = (w.left - p.left) / z;
+      const y = (w.top - p.top) / z;
       const key = `${x}|${y}|${w.width}|${w.height}`;
       if (key === last) return false;
       last = key;
       hole.style.transform = `translate(${x}px, ${y}px)`;
-      hole.style.width = `${w.width}px`;
-      hole.style.height = `${w.height}px`;
+      hole.style.width = `${w.width / z}px`;
+      hole.style.height = `${w.height / z}px`;
       // the scrollbar's gutter is not page: it gets the paper too (a plain property, not an
       // inherited variable, so nothing under the root restyles)
       root.style.backgroundSize = `${root.offsetWidth - root.clientWidth}px 100%`;

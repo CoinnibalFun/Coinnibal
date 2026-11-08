@@ -63,6 +63,11 @@
   color: var(--ink-fixed);
 }
 
+/* <small> (the browser's "smaller", 0.83em) never drops under the 12 px readable floor */
+.kb small {
+  font-size: max(12px, 0.83em);
+}
+
 /* focus: a thick ring in the theme's focus ink, offset so it never sits on the outline */
 .kb :focus-visible {
   outline: 3px solid var(--focus);
@@ -370,7 +375,7 @@ h2,
 .kb-tape--paper { --tape-c: rgba(246, 238, 218, 0.9); }
 .kb-tape.is-inline { position: relative; }
 .kb-tape__text {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-fixed);
 }
 
@@ -417,7 +422,7 @@ h2,
   padding: 3px 7px;
   border-width: 2.5px;
   border-radius: 7px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .kb-stamp--lg {
   padding: 10px 18px;
@@ -432,7 +437,7 @@ h2,
 .kb-stamp__sub {
   font-family: var(--font-mono);
   font-weight: 600;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.14em;
 }
 .kb-stamp--round {
@@ -442,7 +447,7 @@ h2,
   border-radius: 50%;
   white-space: normal;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.12em;
   line-height: 1.15;
   outline: 2px solid currentColor;
@@ -1305,8 +1310,9 @@ h2,
 .kb-toasts {
   position: fixed;
   z-index: 60;
-  top: 18px;
-  right: 18px;
+  /* below the status bar / notch, clear of a landscape phone's rounded corner */
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  right: calc(18px + env(safe-area-inset-right, 0px));
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1332,7 +1338,7 @@ h2,
 }
 /* in a game the top-right corner belongs to the leaderboard: slips hang under the weight sticker */
 .kb-toasts.kb-toasts--game {
-  top: 168px;
+  top: calc(168px + env(safe-area-inset-top, 0px));
   right: auto;
   left: 50%;
   transform: translateX(-50%);
@@ -1340,8 +1346,8 @@ h2,
 }
 @media (max-width: 639px) {
   .kb-toasts {
-    left: 16px;
-    right: 16px;
+    left: calc(16px + env(safe-area-inset-left, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
     width: auto;
   }
 }
@@ -1413,7 +1419,11 @@ h2,
   z-index: 80;
   display: grid;
   place-items: center;
-  padding: 24px;
+  /* clear of the notch, the rounded corners and the home bar (landscape phones put them at the sides) */
+  --sheet-pad: 24px;
+  --sheet-pad-top: max(var(--sheet-pad), env(safe-area-inset-top, 0px));
+  --sheet-pad-bottom: max(var(--sheet-pad), env(safe-area-inset-bottom, 0px));
+  padding: var(--sheet-pad-top) max(var(--sheet-pad), env(safe-area-inset-right, 0px)) var(--sheet-pad-bottom) max(var(--sheet-pad), env(safe-area-inset-left, 0px));
 }
 .kb-sheet-scrim {
   position: absolute;
@@ -1426,6 +1436,9 @@ h2,
   flex-direction: column;
   width: min(540px, 100%);
   max-height: min(740px, calc(100vh - 48px));
+  /* the visible viewport (a phone's browser bars come and go), less the layer's padding */
+  max-height: min(740px, calc(100dvh - var(--sheet-pad-top) - var(--sheet-pad-bottom)));
+  min-height: 0;
   border: var(--stroke) solid var(--outline);
   border-radius: var(--r-panel);
   background: var(--sticker);
@@ -1440,10 +1453,14 @@ h2,
   bottom: 0;
   width: 100%;
   max-height: 90vh;
+  /* the visible viewport, below the notch: the head never slides under the status bar */
+  max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 12px));
   border-width: var(--stroke) 0 0;
   border-radius: var(--r-panel) var(--r-panel) 0 0;
   box-shadow: 0 calc(var(--lift, 1) * -5px) 0 var(--sun);
   padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
 }
 .kb-sheet__grip {
   align-self: center;
@@ -1468,15 +1485,51 @@ h2,
   color: var(--teal-ink);
   margin-bottom: 6px;
 }
+/* a bottom sheet has a grip, not tape: its kicker lines up with the title */
+.kb-sheet.is-bottom .kb-sheet__kicker {
+  padding-left: 0;
+}
+.kb-sheet__title {
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: clamp(26px, 4vw, 34px);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.kb-sheet__body {
+  padding: 18px 24px;
+  overflow-y: auto;
+  /* the body scrolls between the head and the foot; a fling at its end never scrolls the page or the game */
+  min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.kb-sheet__foot {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding: 14px 24px 24px;
+}
+.kb-sheet.is-bottom .kb-sheet__foot > * {
+  /* side by side while the labels fit; a long label (other languages) takes its own row */
+  flex: 1 0 auto;
+  max-width: 100%;
+}
+.kb-sheet__foot > .kb-btn {
+  max-width: 100%;
+}
+/* the close key is pressed on top of the corner tape (in a slim head the tape ran across it) */
+.kb-sheet__head > .kb-iconbtn {
+  position: relative;
+  z-index: 4;
+}
 /* landscape phones and low windows: a slimmer head and foot, so the body (the part that scrolls)
    keeps most of the height instead of a sliver between them */
 @media (max-height: 500px) {
   .kb-sheet-layer {
-    padding: 12px;
-  }
-  .kb-sheet {
-    max-height: calc(100vh - 24px);
-    max-height: calc(100dvh - 24px);
+    --sheet-pad: 12px;
   }
   .kb-sheet__head {
     padding: 12px 20px 10px;
@@ -1497,37 +1550,36 @@ h2,
   .kb-sheet__foot {
     padding: 10px 20px 14px;
   }
+  /* the large action keeps its weight but not a fifth of a 390 px screen */
+  .kb-sheet__foot .kb-btn--lg {
+    min-height: 50px;
+    font-size: 18px;
+  }
 }
-/* a bottom sheet has a grip, not tape: its kicker lines up with the title */
-.kb-sheet.is-bottom .kb-sheet__kicker {
-  padding-left: 0;
-}
-.kb-sheet__title {
-  font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
-  font-weight: 800;
-  font-size: clamp(26px, 4vw, 34px);
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-.kb-sheet__body {
-  padding: 18px 24px;
-  overflow-y: auto;
-}
-.kb-sheet__foot {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  padding: 14px 24px 24px;
-}
-.kb-sheet.is-bottom .kb-sheet__foot > * {
-  /* side by side while the labels fit; a long label (other languages) takes its own row */
-  flex: 1 0 auto;
-  max-width: 100%;
-}
-.kb-sheet__foot > .kb-btn {
-  max-width: 100%;
+/* short phones (an iPhone SE is 667 px, less its bars): a tighter head and foot, so the scrolling body keeps
+   more than a third of the sheet (the round-over receipt showed two lines between them) */
+@media (max-height: 700px) and (min-height: 501px) {
+  .kb-sheet__head {
+    padding: 16px 20px 12px;
+  }
+  .kb-sheet__title {
+    font-size: 28px;
+  }
+  .kb-sheet__body {
+    padding: 14px 20px;
+  }
+  .kb-sheet__foot {
+    gap: 10px;
+    padding: 10px 20px 14px;
+  }
+  .kb-sheet__foot .kb-btn--lg {
+    min-height: 52px;
+    font-size: 18px;
+  }
+  /* slimmer sides: two secondary buttons ("Lobby", "Share on X") share a row instead of one each */
+  .kb-sheet__foot > .kb-btn {
+    padding-inline: 16px;
+  }
 }
 
 /* WalletPicker */
@@ -2098,7 +2150,7 @@ h2,
 .kb-step__meta {
   margin-bottom: 4px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -2579,13 +2631,20 @@ h2,
     position: relative;
   }
   .kb-iconbtn--sm::after {
+    /* from the padding box (inside the 2.5 px border): 29 + 2 x 8 = 45 px */
     content: '';
     position: absolute;
-    inset: -5px;
+    inset: -8px;
     border-radius: 50%;
   }
   .kb-chip.is-button {
-    min-height: 40px;
+    min-height: 44px;
+    min-width: 44px;
+    justify-content: center;
+  }
+  /* the small button keeps its type and corner; only its height reaches the 44 px touch floor */
+  .kb-btn--sm {
+    min-height: 44px;
   }
   /* the address chip lets its copy key's hit area out (the key keeps the chip's rounded corner) */
   .kb-addr {
@@ -2600,6 +2659,6 @@ h2,
   .kb-addr__copy::after {
     content: '';
     position: absolute;
-    inset: -12px -6px;
+    inset: -14px -8px;
   }
 }

@@ -177,7 +177,7 @@
   --t-body: 16px;
   --t-small: 14px;
   --t-label: 12px; /* mono kickers and labels, uppercase +0.08em */
-  --t-micro: 11px; /* never smaller */
+  --t-micro: 12px; /* never smaller: the readable floor on phones */
   --t-num: 28px; /* Geist Mono figures in cards */
 
   /* ── space ── */
@@ -190,7 +190,8 @@
   --s-7: 48px;
   --s-8: 64px;
   --s-9: 96px;
-  --gutter: clamp(16px, 4.4vw, 64px);
+  /* never less than a landscape phone's notch / rounded-corner inset (viewport-fit=cover) */
+  --gutter: max(clamp(16px, 4.4vw, 64px), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
   --measure: 62ch;
 
   /* ── radii: soft die-cut sticker corners ── */

@@ -79,6 +79,8 @@ body {
   position: sticky;
   top: 0;
   z-index: 30;
+  /* the header's paper runs up behind the status bar; its links start below the notch */
+  padding-top: env(safe-area-inset-top, 0px);
   background: var(--paper);
   border-bottom: var(--stroke) solid var(--outline);
 }
@@ -322,6 +324,7 @@ body {
 }
 .st-foot {
   position: relative;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--paper);
   color: var(--ink);
   border-top: var(--stroke) solid var(--outline);
@@ -940,6 +943,15 @@ html[data-turn='back']::view-transition-old(root) {
    the far edges of a 2560 px window (their rules still span the page) */
 @media (min-width: 1440px) {
   .st-root .kb-plate {
-    padding-inline: calc((100vw - 1312px) / 2 + var(--gutter));
+    padding-inline: calc((100vw / var(--page-zoom, 1) - 1312px) / 2 + var(--gutter));
+  }
+}
+
+/* very large screens (1440p and up): the whole site page is zoomed, so its type and stickers keep
+   their reading size on a 27-32" monitor instead of a small column in a sea of paper */
+@media (min-width: 2200px) and (min-height: 1200px) {
+  .st-root {
+    --page-zoom: 1.25;
+    zoom: var(--page-zoom);
   }
 }
