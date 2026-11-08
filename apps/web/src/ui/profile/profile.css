@@ -219,6 +219,9 @@
 .pf-stats dt {
   font-size: 12px;
   color: var(--ink-3);
+  /* a long label ("Mejor puntuación") wraps inside its third of a phone instead of running into the next */
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 .pf-stats dd {
   font-size: 34px;
