@@ -1824,7 +1824,7 @@
 }
 /* portrait phones: the notice is the one thing that matters in the room's last seconds; the minimap
    steps aside for it so it ends above the sticker and chat keys, and it packs tighter */
-.g-hud.is-narrow .g-center:has(.g-closing) > .g-map {
+.g-hud.is-narrow .g-center:has(.g-closing, .pq--hud) > .g-map {
   display: none;
 }
 .g-hud.is-narrow .g-closing {
@@ -2421,15 +2421,17 @@
   /* ends 10 px before the worth sticker in the middle (a custom room's tag ran under it) */
   max-width: min(300px, 36vw, calc(50vw - 100px - env(safe-area-inset-left, 0px)));
 }
-/* landscape phones: the last-10-seconds count stands beside the worth column, right of my coin, not on it */
+/* landscape phones: the last-10-seconds count stands right of the worth sticker, level with it, in the band
+   above the minimap and the power-up keys (in the column, at 112 px, it covered my coin in the middle of a
+   390 px screen and pushed the notices under it onto the coin) */
 .g-hud.is-short .g-count.is-on {
   position: absolute;
-  left: calc(100% + 28px);
-  top: calc(50vh - 70px - env(safe-area-inset-top, 0px));
-  height: 88px;
+  left: calc(100% + 24px);
+  top: -6px;
+  height: 80px;
 }
 .g-hud.is-short .g-count__n {
-  font-size: 88px;
+  font-size: 80px;
 }
 /* a closing room's notice: a compact card just below my coin (in the column's flow it ran off the bottom, or
    onto the coin once the count left the flow) */
@@ -2833,6 +2835,8 @@
   font-weight: 600;
 }
 .g-stream__guest {
+  /* the tag stays whole ("GUES / T" broke across lines) */
+  white-space: nowrap;
   margin-left: 4px;
   padding: 0 4px;
   border: 1px solid rgba(255, 255, 255, 0.5);
