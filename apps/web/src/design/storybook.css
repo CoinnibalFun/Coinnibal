@@ -63,6 +63,11 @@
   color: var(--ink-fixed);
 }
 
+/* <small> (the browser's "smaller", 0.83em) never drops under the 12 px readable floor */
+.kb small {
+  font-size: max(12px, 0.83em);
+}
+
 /* focus: a thick ring in the theme's focus ink, offset so it never sits on the outline */
 .kb :focus-visible {
   outline: 3px solid var(--focus);
@@ -1480,32 +1485,6 @@ h2,
   color: var(--teal-ink);
   margin-bottom: 6px;
 }
-/* landscape phones and low windows: a slimmer head and foot, so the body (the part that scrolls)
-   keeps most of the height instead of a sliver between them */
-@media (max-height: 500px) {
-  .kb-sheet-layer {
-    --sheet-pad: 12px;
-  }
-  .kb-sheet__head {
-    padding: 12px 20px 10px;
-  }
-  .kb-sheet__kicker {
-    margin-bottom: 2px;
-  }
-  /* the slimmer head brings the kicker up into the corner tape: it starts further right */
-  .kb-sheet:not(.is-bottom) .kb-sheet__head .kb-sheet__kicker {
-    padding-left: 52px;
-  }
-  .kb-sheet__title {
-    font-size: 24px;
-  }
-  .kb-sheet__body {
-    padding: 12px 20px;
-  }
-  .kb-sheet__foot {
-    padding: 10px 20px 14px;
-  }
-}
 /* a bottom sheet has a grip, not tape: its kicker lines up with the title */
 .kb-sheet.is-bottom .kb-sheet__kicker {
   padding-left: 0;
@@ -1540,6 +1519,58 @@ h2,
 }
 .kb-sheet__foot > .kb-btn {
   max-width: 100%;
+}
+/* the close key is pressed on top of the corner tape (in a slim head the tape ran across it) */
+.kb-sheet__head > .kb-iconbtn {
+  position: relative;
+  z-index: 4;
+}
+/* landscape phones and low windows: a slimmer head and foot, so the body (the part that scrolls)
+   keeps most of the height instead of a sliver between them */
+@media (max-height: 500px) {
+  .kb-sheet-layer {
+    --sheet-pad: 12px;
+  }
+  .kb-sheet__head {
+    padding: 12px 20px 10px;
+  }
+  .kb-sheet__kicker {
+    margin-bottom: 2px;
+  }
+  /* the slimmer head brings the kicker up into the corner tape: it starts further right */
+  .kb-sheet:not(.is-bottom) .kb-sheet__head .kb-sheet__kicker {
+    padding-left: 52px;
+  }
+  .kb-sheet__title {
+    font-size: 24px;
+  }
+  .kb-sheet__body {
+    padding: 12px 20px;
+  }
+  .kb-sheet__foot {
+    padding: 10px 20px 14px;
+  }
+}
+/* short phones (an iPhone SE is 667 px, less its bars): a tighter head and foot, so the scrolling body keeps
+   more than a third of the sheet (the round-over receipt showed two lines between them) */
+@media (max-height: 700px) and (min-height: 501px) {
+  .kb-sheet__head {
+    padding: 16px 20px 12px;
+  }
+  .kb-sheet__title {
+    font-size: 28px;
+  }
+  .kb-sheet__body {
+    padding: 14px 20px;
+  }
+  .kb-sheet__foot {
+    gap: 10px;
+    padding: 10px 20px 14px;
+  }
+  .kb-sheet__foot .kb-btn--lg {
+    min-height: 52px;
+    font-size: 18px;
+  }
 }
 
 /* WalletPicker */
