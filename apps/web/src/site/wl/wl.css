@@ -215,7 +215,7 @@
 }
 .wl-ascent__no {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   fill: var(--ink-3);
@@ -266,7 +266,7 @@
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 4px 12px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .wl-card.is-compact .wl-card__frame {
@@ -373,7 +373,7 @@
   min-width: 0;
 }
 .wl-step__meta {
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   color: #6B655A;
 }
@@ -405,7 +405,7 @@
   font-size: 13px;
 }
 .wl-step__edit {
-  font-size: 11px;
+  font-size: 12px;
   color: #2D7388;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -453,7 +453,7 @@
     padding: 0 14px 16px;
   }
   .wl-step__act .kb-stamp {
-    font-size: 11px;
+    font-size: 12px;
   }
 }
 
@@ -592,7 +592,7 @@
   background: #E6F3EE;
 }
 .wl-wallet__k {
-  font-size: 11px;
+  font-size: 12px;
   color: #2B7465;
 }
 .wl-wallet code {
@@ -656,7 +656,7 @@
 }
 .wl-manifest dt {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -788,7 +788,7 @@
   gap: 2px;
 }
 .wl-closed__sign .mono {
-  font-size: 11px;
+  font-size: 12px;
   color: #4A453B;
 }
 .wl-closed__sign strong {
@@ -929,7 +929,7 @@
 .wl-album__head {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);

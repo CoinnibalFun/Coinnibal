@@ -46,7 +46,7 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 20px;
-  padding: 12px var(--gutter);
+  padding: calc(12px + env(safe-area-inset-top, 0px)) var(--gutter) 12px;
   border-bottom: var(--stroke) solid var(--outline);
   background: var(--paper);
 }
@@ -82,7 +82,7 @@ body {
 }
 .ad-brand__sub {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--teal-ink);
 }
 .ad-top__net {
@@ -166,7 +166,7 @@ body {
 }
 .ad-rail__group {
   padding-left: 14px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-rail .kb-tabs {
@@ -190,7 +190,7 @@ body {
   content: counter(adtab, decimal-leading-zero) / '';
   width: 20px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--ink-3);
 }
@@ -210,7 +210,7 @@ body {
   top: -27px;
   left: 14px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -413,7 +413,7 @@ body {
   margin: 0;
 }
 .ad-chainbar__list dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-chainbar__list dd {
@@ -496,7 +496,7 @@ body {
   border-radius: var(--r-pill);
   background: var(--down);
   color: var(--ink-fixed);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   transform: rotate(2deg);
 }
@@ -584,7 +584,7 @@ body {
   min-width: 0;
 }
 .ad-field__label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 .ad-field__box {
@@ -633,7 +633,7 @@ body {
   align-items: center;
   padding: 0 12px;
   border-left: 2px dashed var(--sand-2);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   background: var(--linen);
   border-radius: 0 8px 8px 0;
@@ -685,7 +685,7 @@ body {
   border-bottom: 0;
 }
 .ad-kv dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-kv dd {
@@ -779,7 +779,7 @@ body {
   padding: 2px 9px;
   border: var(--stroke-xs) solid var(--outline);
   border-radius: var(--r-pill);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
@@ -829,7 +829,7 @@ body {
   background: var(--mist);
   color: var(--cyan-ink);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -927,7 +927,7 @@ body {
 .ad-table caption {
   padding-bottom: 8px;
   text-align: left;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-table th,
@@ -950,7 +950,7 @@ body {
   background: var(--sticker);
   font-family: var(--font-mono);
   font-weight: 500;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -1025,7 +1025,7 @@ body {
 }
 .ad-launch__cap {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-terraces {
@@ -1093,7 +1093,7 @@ body {
   padding-right: 90px;
 }
 .ad-terrace__no {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-terrace__title {
@@ -1106,7 +1106,7 @@ body {
   border-radius: var(--r-pill);
   background: var(--sun);
   color: var(--ink-fixed);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   transform: rotate(-2deg);
 }
@@ -1366,7 +1366,7 @@ body {
   margin: 0;
 }
 .ad-glance__figs dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
   margin-bottom: 6px;
 }
@@ -1462,7 +1462,7 @@ body {
   border-radius: var(--r-pill);
   background: var(--up);
   color: var(--ink-fixed);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   transform: rotate(3deg);
 }
@@ -1485,7 +1485,7 @@ body {
   margin-left: -2px;
 }
 .ad-stats span.mono {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-stats strong {
@@ -1527,7 +1527,7 @@ body {
   background: var(--linen);
 }
 .ad-pricebox span.mono {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-pricebox__fig {
@@ -1657,7 +1657,9 @@ body {
   position: relative;
   width: min(720px, 100%);
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   outline: none;
 }
 .ad-txp__box:focus-visible {
@@ -1738,7 +1740,7 @@ body {
   gap: 8px;
 }
 .ad-txp__result dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-txp__result dd {
@@ -1783,7 +1785,7 @@ body {
   animation: ad-pulse 1s ease-in-out infinite alternate;
 }
 .ad-stations .mono {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-stations li.is-now .mono {
@@ -1841,7 +1843,8 @@ body {
   }
   .ad-rail {
     position: sticky;
-    top: 0;
+    /* pinned below the status bar / notch of a phone */
+    top: env(safe-area-inset-top, 0px);
     z-index: 20;
     margin: 0 calc(-1 * var(--gutter));
     padding: 8px var(--gutter);
@@ -1884,7 +1887,7 @@ body {
 @media (max-width: 760px) {
   .ad-top {
     position: static;
-    padding: 10px 16px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
     gap: 10px 14px;
   }
   .ad-top__net {
@@ -1995,13 +1998,14 @@ body {
   }
   .ad-txp__box {
     max-height: calc(100vh - 20px);
-    padding: 18px 16px;
+    max-height: calc(100dvh - 20px - env(safe-area-inset-top, 0px));
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
   }
   .ad-txp__box.is-mainnet {
     padding-top: 26px;
   }
   .ad-stations .mono {
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 0.02em;
   }
 }
@@ -2031,7 +2035,7 @@ body {
     align-self: flex-start;
   }
   .ad-addr__v {
-    font-size: 11.5px;
+    font-size: 12px;
   }
   .ad-addr {
     gap: 4px;
@@ -2194,7 +2198,7 @@ body {
   font-size: 15px;
 }
 .ad-summary__k {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -2219,7 +2223,7 @@ body {
 }
 .ad-switchrow__label {
   min-width: 110px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -2281,7 +2285,7 @@ body {
   border: 2px solid var(--outline);
 }
 .ad-seg__live {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -2468,31 +2472,35 @@ body {
   overflow-wrap: anywhere;
 }
 
-/* touch screens: every control of the workshop is at least 40 px tall */
+/* touch screens: every control of the workshop is at least 44 px tall */
 @media (pointer: coarse) {
   .ad-golink,
   .ad-input--num,
   .ad-botarena .ad-input--num,
   .ad-rail__site {
-    min-height: 40px;
+    min-height: 44px;
   }
+  /* a flex row only where the rail shows it (under 900 px the tab bar hides the link): see below */
   .ad-rail__site {
-    display: flex;
     align-items: center;
   }
+  .ad-field__box {
+    /* the field's input fills the box: a 49 px box gives it a 44 px tap height inside the border */
+    min-height: 49px;
+  }
   .ad-switch--inline {
-    min-width: 40px;
-    min-height: 40px;
+    min-width: 44px;
+    min-height: 44px;
     justify-content: center;
   }
   .ad-rooms summary {
     display: flex;
     align-items: center;
-    min-height: 40px;
+    min-height: 44px;
   }
   .ad-copy {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
   }
 }
 
@@ -2523,4 +2531,39 @@ body {
 }
 .ad-reprice__row .ad-code {
   white-space: normal;
+}
+
+/* small phones: the header held the brand, the network chip, the session and its two buttons on four
+   rows (about 400 of 640 px before the first drawer). The brand slims to its mark and name so the
+   chip shares its row, and the session row packs tighter. */
+@media (max-width: 420px) {
+  .ad-brand .kb-coinmark {
+    width: 32px;
+    height: 32px;
+  }
+  .ad-brand__name {
+    font-size: 22px;
+  }
+  .ad-brand__sub {
+    display: none;
+  }
+  .ad-top__net {
+    min-width: 0;
+  }
+  .ad-session__row {
+    gap: 6px;
+  }
+}
+
+/* landscape phones and low windows: the session header scrolls away (pinned, it took a third of a
+   390 px screen and covered the tables; the drawer tabs stay pinned instead) */
+@media (max-height: 500px) {
+  .ad-top {
+    position: static;
+  }
+}
+@media (pointer: coarse) and (min-width: 901px) {
+  .ad-rail__site {
+    display: flex;
+  }
 }

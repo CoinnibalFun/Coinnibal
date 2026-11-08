@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "shot": "node scripts/shot.mjs"
+    "shot": "node scripts/shot.mjs",
+    "layout:guard": "node scripts/layout-guard.mjs"
   },
   "dependencies": {
     "@elymum/art": "workspace:*",

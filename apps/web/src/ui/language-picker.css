@@ -79,7 +79,9 @@
   /* placed in the full-window layer, so its coordinates are the window's */
   position: absolute;
   max-height: min(420px, calc(100vh - 16px));
+  max-height: min(420px, calc(100dvh - 16px));
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6px;
   border: var(--stroke) solid var(--outline);
   border-radius: 16px;
@@ -143,7 +145,7 @@
   overflow-wrap: anywhere;
 }
 .lang-pop__code {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   color: var(--ink-3, #6b655a);
 }
@@ -157,7 +159,8 @@
   right: 0;
   bottom: 0;
   max-height: 80vh;
-  padding: 0 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  max-height: 80dvh;
+  padding: 0 calc(14px + env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) calc(14px + env(safe-area-inset-left, 0px));
   border-width: var(--stroke) 0 0;
   border-radius: var(--r-panel, 22px) var(--r-panel, 22px) 0 0;
   box-shadow: 0 -5px 0 var(--sun);
