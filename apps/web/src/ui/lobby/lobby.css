@@ -1491,6 +1491,7 @@
 }
 .tf-approve-choice small {
   display: block;
+  font-size: 13px;
   color: var(--ink-3, var(--ink-2));
 }
 
