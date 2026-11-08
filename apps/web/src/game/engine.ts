@@ -7,6 +7,7 @@ import {
   emptyBoostCounts,
   emoteForSlot,
   formatToken,
+  isXHandle,
   encodeEject,
   encodeSplit,
   encodeTarget,
@@ -738,7 +739,8 @@ export class GameEngine {
       case 'share':
         // the card the server made of my result or of a kill: the sheets and the HUD offer "Share on X"
         useUi.setState({
-          share: { kind: m.kind, id: m.id, ...(m.victim ? { victim: m.victim } : {}), ...(m.victimIsBot ? { victimIsBot: true } : {}), ...(m.test ? { test: true } : {}), at: Date.now() },
+          // a linked victim's X handle comes from the server only, checked again here (bots never have one)
+          share: { kind: m.kind, id: m.id, ...(m.victim ? { victim: m.victim } : {}), ...(m.victimIsBot ? { victimIsBot: true } : {}), ...(!m.victimIsBot && isXHandle(m.victimX) ? { victimX: m.victimX } : {}), ...(m.test ? { test: true } : {}), at: Date.now() },
         });
         return;
       case 'roomOver': {

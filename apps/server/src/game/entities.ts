@@ -184,6 +184,8 @@ export class Player {
   afk = false;
   /** The country the player plays for (`isCountryCode`), shown as a flag by the name; null: none. */
   country: string | null = null;
+  /** The X handle the player's wallet linked ("Link X", set at the join from the server's store); null: none, bots. */
+  xHandle: string | null = null;
   /**
    * Snapshot cache (`ViewState.build`): the player-info signature, built at most once per tick and
    * avatar instead of once per viewer and visible cell.

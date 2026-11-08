@@ -72,7 +72,7 @@ export class ViewState {
         const avatar = p.isBot ? undefined : avatars?.get(p.id);
         // one signature per player and tick (every viewer of every one of its cells compares it)
         if (p.infoSigTick !== world.tickCount || p.infoSigAvatar !== avatar) {
-          p.infoSig = `${p.skin}|${p.flags}|${p.name}|${avatar ?? ''}|${p.country ?? ''}`;
+          p.infoSig = `${p.skin}|${p.flags}|${p.name}|${avatar ?? ''}|${p.country ?? ''}|${p.xHandle ?? ''}`;
           p.infoSigTick = world.tickCount;
           p.infoSigAvatar = avatar;
         }
@@ -82,6 +82,7 @@ export class ViewState {
           const info: PlayerInfo = { id: p.id, skin: p.skin, flags: p.flags, name: p.name, isBot: p.isBot };
           if (avatar) info.avatar = avatar;
           if (p.country) info.country = p.country;
+          if (p.xHandle && !p.isBot) info.xHandle = p.xHandle;
           players.push(info);
         }
       }

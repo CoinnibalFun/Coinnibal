@@ -23,4 +23,5 @@ export * from './map-scale';
 export * from './fees';
 export * from './arena-scaling';
 export * from './share';
+export * from './xlink';
 export * from './test-arenas';

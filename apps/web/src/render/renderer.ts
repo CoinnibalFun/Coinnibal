@@ -814,7 +814,8 @@ export class Renderer {
     const top = view.y0 + 60 + h / 2 + 8 / z;
     if (y < top) y = Math.min(top, e.y - e.r * 0.5);
     const l = this.label;
-    l.name = showName ? player.name : null;
+    // a linked X account: the handle rides after the name (`labelName` keeps one string per player and handle)
+    l.name = showName ? labelName(player) : null;
     l.value = showMass ? massText(Math.floor((e.nr * e.nr) / 100)) : null;
     l.verified = (player.flags & PlayerFlag.Verified) !== 0;
     l.bot = (player.flags & PlayerFlag.Bot) !== 0;
@@ -1049,4 +1050,17 @@ export class Renderer {
       ctx.stroke();
     }
   }
+}
+
+/** Name tag text cache: "Penny · @penny_x" for a linked X account, built once per name and handle. */
+const LABEL_NAMES = new WeakMap<object, { name: string; xHandle: string; text: string }>();
+
+/** The name tag's text: the public name, and the linked X handle after it. */
+export function labelName(p: { name: string; xHandle?: string; isBot?: boolean }): string {
+  if (!p.xHandle || p.isBot) return p.name;
+  const c = LABEL_NAMES.get(p);
+  if (c && c.name === p.name && c.xHandle === p.xHandle) return c.text;
+  const text = `${p.name} \u00B7 @${p.xHandle}`;
+  LABEL_NAMES.set(p, { name: p.name, xHandle: p.xHandle, text });
+  return text;
 }
