@@ -519,6 +519,16 @@
 .g-banner .kb-stamp {
   background: var(--sticker);
 }
+/* the phone column is 172 px: a long event name ("¡Lluvia de monedas!") wraps inside it */
+.g-hud.is-narrow .g-banner {
+  max-width: 100%;
+}
+.g-hud.is-narrow .g-banner .kb-stamp {
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.2;
+  text-align: center;
+}
 
 /* power-ups: small cream pills with a draining ring */
 .g-pu {
@@ -1273,13 +1283,13 @@
   font-size: 13px;
 }
 .g-hud.is-narrow .g-count.is-on {
-  /* just under my coin (the camera keeps it at the middle of the screen): at 30 % it landed on the
-     standings and the worth sticker, which leave only a sliver between them on a phone */
+  /* just left of my coin (the camera keeps it at the middle of the screen), in the band between the
+     standings and the thumb stick: at 30 % it landed on the standings and the worth sticker, and under
+     the coin it met the right column's notices (coin rain, power-ups) */
   position: fixed;
-  left: 50%;
-  top: calc(50% + 34px);
+  right: calc(50% + 30px);
+  top: calc(50% - 44px);
   height: 88px;
-  transform: translateX(-50%);
 }
 .g-hud.is-narrow .g-count__n {
   font-size: 88px;
@@ -2408,7 +2418,52 @@
   gap: 7px;
 }
 .g-hud.is-short .g-corner--tl {
-  max-width: min(300px, 36vw);
+  /* ends 10 px before the worth sticker in the middle (a custom room's tag ran under it) */
+  max-width: min(300px, 36vw, calc(50vw - 100px - env(safe-area-inset-left, 0px)));
+}
+/* landscape phones: the last-10-seconds count stands beside the worth column, right of my coin, not on it */
+.g-hud.is-short .g-count.is-on {
+  position: absolute;
+  left: calc(100% + 28px);
+  top: calc(50vh - 70px - env(safe-area-inset-top, 0px));
+  height: 88px;
+}
+.g-hud.is-short .g-count__n {
+  font-size: 88px;
+}
+/* a closing room's notice: a compact card just below my coin (in the column's flow it ran off the bottom, or
+   onto the coin once the count left the flow) */
+.g-hud.is-short .g-closing {
+  position: absolute;
+  left: 50%;
+  top: calc(50vh + 30px - var(--hud-gap) - env(safe-area-inset-top, 0px));
+  width: max-content;
+  max-width: min(340px, 44vw);
+  padding: 6px 12px 8px;
+  transform: translateX(-50%) rotate(-1deg);
+}
+.g-hud.is-short .g-closing__title {
+  font-size: 15px;
+}
+/* the thumb keys' words become a small tag on the key's lower edge ("Propina" ran out of the 56-64 px key) */
+.g-hud.is-short .g-touch__btn,
+.g-hud.is-narrow .g-touch__btn {
+  position: relative;
+}
+.g-hud.is-short .g-touch__btn > .mono,
+.g-hud.is-narrow .g-touch__btn > .mono {
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border: var(--stroke-xs) solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--sticker);
+  color: #04181c;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
 }
 .g-hud.is-short .g-round,
 .g-hud.is-short .g-pond {
