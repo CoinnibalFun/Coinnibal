@@ -263,14 +263,15 @@ describe('Round over sheet', () => {
     expect(screen.getByText('Paid')).toBeTruthy();
     expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 2,600$ELYMUM');
     expect(screen.getByRole('status').textContent).toContain('Settling on Robinhood Chain Testnet');
-    // my place and the room's top 5 at the bell
+    // my place and the room's whole board at the bell (scrolling, my row highlighted and pinned)
     expect(screen.getByText('Your place').nextElementSibling?.textContent).toBe('3rd');
-    const top = screen.getByRole('region', { name: 'Top 5 at the bell' });
+    const top = screen.getByRole('region', { name: 'Final standings · 6 at the bell' });
     const rows = [...top.querySelectorAll('li')].map((li) => li.textContent);
-    expect(rows).toEqual(['01Nakamoto4,20069.1K', '02Penny2,60035.2K', '03DaphneYou1,80023K', '04Rocky90012.1K', '05Lulu70001.5K']);
-    // the same board as a custom room's end: mass and kills next to the value
-    expect(top.querySelector('.g-board__head')?.textContent).toBe('MassKillsValue');
+    expect(rows).toEqual(['01Nakamoto4,20069.1K', '02Penny2,60035.2K', '03DaphneYou1,80023K', '04Rocky90012.1K', '05Lulu70001.5K', '06Sixth3000900']);
+    // the same board as a custom room's end: rank, name, mass and kills next to the payout
+    expect(top.querySelector('.g-board__head')?.textContent).toBe('#PlayerMassKillsPayout');
     expect(top.querySelector('.is-me')?.textContent).toContain('Daphne');
+    expect(top.querySelector('.is-me')?.getAttribute('aria-current')).toBe('true');
     expect(screen.getByRole('button', { name: /Next round/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Lobby/ })).toBeTruthy();
 

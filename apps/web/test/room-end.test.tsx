@@ -90,7 +90,7 @@ describe('a custom room ends: countdown, then the final board', () => {
     const rows = [...sheet.querySelectorAll('.g-board__list li')].map((li) => li.textContent);
     expect(rows).toEqual(['01Nakamoto4,2007', '02Bot 1BOT2,6002', '03DaphneYou1,8001']);
     // no value column outside arenas
-    expect(sheet.querySelector('.g-board__head')?.textContent).toBe('MassKills');
+    expect(sheet.querySelector('.g-board__head')?.textContent).toBe('#PlayerMassKills');
     expect(sheet.textContent).toContain('2 players at the end');
     expect(sheet.textContent).toMatch(/Back to the lobby in \d+ s/);
     expect(screen.getByRole('button', { name: /Lobby/ })).toBeTruthy();

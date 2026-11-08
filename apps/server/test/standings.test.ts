@@ -1,3 +1,4 @@
+import { FINAL_BOARD_ROWS } from '@elymum/shared';
 import { PlayerFlag, TICK_MS, type ServerMessage } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { Gateway } from '../src/net/gateway';
@@ -87,14 +88,19 @@ describe('full standings (standings sheet)', () => {
 describe('final standings rows (the same at a bell and at a custom room end)', () => {
   const ranked = Array.from({ length: 14 }, (_, i) => ({ pid: i + 1, name: `p${i + 1}`, mass: 1000 - i * 10, kills: i % 3, ...(i === 2 ? { isBot: true } : {}) }));
 
-  it('sends the top 10 with their rank, mass and kills, plus the receiver\'s own row below them', () => {
+  it('sends the whole board with rank, mass and kills; the receiver\'s row is marked', () => {
     const top = boardRows(ranked, 3);
-    expect(top).toHaveLength(10);
+    expect(top).toHaveLength(14);
     expect(top[2]).toEqual({ rank: 3, name: 'p3', mass: 980, kills: 2, isBot: true, you: true });
     const low = boardRows(ranked, 13);
-    expect(low).toHaveLength(11);
-    expect(low.at(-1)).toEqual({ rank: 13, name: 'p13', mass: 880, kills: 0, you: true });
+    expect(low).toHaveLength(14);
+    expect(low[12]).toEqual({ rank: 13, name: 'p13', mass: 880, kills: 0, you: true });
     expect(low.filter((r) => r.you)).toHaveLength(1);
+    // a huge room is capped, and the receiver below the cap still gets their own row
+    const many = Array.from({ length: FINAL_BOARD_ROWS + 30 }, (_, i) => ({ pid: i + 1, name: `p${i + 1}`, mass: 10_000 - i, kills: 0 }));
+    const capped = boardRows(many, FINAL_BOARD_ROWS + 20);
+    expect(capped).toHaveLength(FINAL_BOARD_ROWS + 1);
+    expect(capped.at(-1)).toMatchObject({ rank: FINAL_BOARD_ROWS + 20, you: true });
     // a spectator: no own row
     expect(boardRows(ranked, -1).some((r) => r.you)).toBe(false);
     // arenas carry the value
