@@ -2480,9 +2480,13 @@ body {
   .ad-rail__site {
     min-height: 44px;
   }
+  /* a flex row only where the rail shows it (under 900 px the tab bar hides the link): see below */
   .ad-rail__site {
-    display: flex;
     align-items: center;
+  }
+  .ad-field__box {
+    /* the field's input fills the box: a 49 px box gives it a 44 px tap height inside the border */
+    min-height: 49px;
   }
   .ad-switch--inline {
     min-width: 44px;
@@ -2556,5 +2560,10 @@ body {
 @media (max-height: 500px) {
   .ad-top {
     position: static;
+  }
+}
+@media (pointer: coarse) and (min-width: 901px) {
+  .ad-rail__site {
+    display: flex;
   }
 }
