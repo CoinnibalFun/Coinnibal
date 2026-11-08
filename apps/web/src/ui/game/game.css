@@ -1210,7 +1210,8 @@
 
 /* ── narrow screens ───────────────────────────────────────────────────── */
 .g-hud.is-narrow .g-corner--tl {
-  max-width: calc(100vw - 200px);
+  /* ends 10 px before the 172 px right column */
+  max-width: calc(100vw - 192px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
 }
 .g-hud.is-narrow .g-round,
 .g-hud.is-narrow .g-pond {
@@ -1231,6 +1232,10 @@
 .g-hud.is-narrow .g-round__label,
 .g-hud.is-narrow .g-pond__label {
   font-size: 12px;
+}
+/* "Until the bell" keeps one line at the 12 px floor (tighter tracking; a longer translation still wraps) */
+.g-hud.is-narrow .g-round__label {
+  letter-spacing: 0.02em;
 }
 .g-hud.is-narrow .g-pond__name {
   font-size: 14px;

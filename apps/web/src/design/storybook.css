@@ -1571,6 +1571,10 @@ h2,
     min-height: 52px;
     font-size: 18px;
   }
+  /* slimmer sides: two secondary buttons ("Lobby", "Share on X") share a row instead of one each */
+  .kb-sheet__foot > .kb-btn {
+    padding-inline: 16px;
+  }
 }
 
 /* WalletPicker */
