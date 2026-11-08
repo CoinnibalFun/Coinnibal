@@ -10,7 +10,7 @@
  */
 import { pathToFileURL } from 'node:url';
 import { ClientOp, PlayerFlag, TICK_MS, roundAt, type ClientInput, type IntegrityFlag } from '@elymum/shared';
-import { BotBrain } from '../src/bots/brain';
+import { BotBrain, HUMAN_PROXY_TUNING } from '../src/bots/brain';
 import { NullChain } from '../src/chain/types';
 import type { Player } from '../src/game/entities';
 import { mulberry32, type Rng } from '../src/game/rng';
@@ -108,7 +108,7 @@ export function runIntegritySim(o: SimOptions = {}): SimResult {
     conn: fakeConn(`${scripted ? 'Script' : 'Honest'}Wallet${i}`, `10.${scripted ? 9 : 1}.${i >> 8}.${i & 255}`),
     scripted,
     // the practice-bot brain stands in for an honest person's intent (it sees only what a person would)
-    brain: new BotBrain('normal', rng, 0),
+    brain: new BotBrain('normal', rng, 0, HUMAN_PROXY_TUNING),
     latency: 15 + rng() * 90,
     jitter: 2 + rng() * 10,
     reaction: 190 + rng() * 140,

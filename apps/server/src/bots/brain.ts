@@ -25,13 +25,18 @@ export interface BotTuning {
   hunts: boolean;
   /** Splits on a reachable prey. */
   splits: boolean;
+  /** Chance a decision overlooks threats and prey (a distracted moment: it just grazes). */
+  missChance: number;
 }
 
 export const BOT_TUNING: Readonly<Record<BotLevel, BotTuning>> = Object.freeze({
-  easy: { thinkMs: 420, aimNoise: 0.45, caution: 0.6, hunts: false, splits: false },
-  normal: { thinkMs: 260, aimNoise: 0.22, caution: 1, hunts: true, splits: false },
-  hard: { thinkMs: 160, aimNoise: 0.1, caution: 1.3, hunts: true, splits: true },
+  easy: { thinkMs: 650, aimNoise: 0.75, caution: 0.35, hunts: false, splits: false, missChance: 0.35 },
+  normal: { thinkMs: 450, aimNoise: 0.45, caution: 0.6, hunts: true, splits: false, missChance: 0.25 },
+  hard: { thinkMs: 300, aimNoise: 0.25, caution: 0.9, hunts: true, splits: true, missChance: 0.12 },
 });
+
+/** An attentive person's intent (the integrity simulation's honest players), independent of the practice bots' tuning. */
+export const HUMAN_PROXY_TUNING: Readonly<BotTuning> = Object.freeze({ thinkMs: 260, aimNoise: 0.22, caution: 1, hunts: true, splits: false, missChance: 0 });
 
 /** The level of each new bot for a room's difficulty choice (`mixed`: a third of each). */
 export function levelFor(difficulty: CustomDifficulty, rng: Rng): BotLevel {
@@ -66,9 +71,10 @@ export class BotBrain {
     readonly level: BotLevel,
     private readonly rng: Rng,
     now: number,
+    private readonly tuning: Readonly<BotTuning> = BOT_TUNING[level],
   ) {
     // first decisions spread out (bots do not all think on the same tick)
-    this.nextThinkAt = now + rng() * BOT_TUNING[level].thinkMs;
+    this.nextThinkAt = now + rng() * tuning.thinkMs;
   }
 
   shouldThink(now: number): boolean {
@@ -77,12 +83,14 @@ export class BotBrain {
 
   /** One decision from what `me` can see now; null when it has no cells. */
   think(world: World, me: Player, now: number): BotDecision | null {
-    const T = BOT_TUNING[this.level];
+    const T = this.tuning;
     this.nextThinkAt = now + T.thinkMs * (0.8 + this.rng() * 0.4);
     const big = me.biggestCell();
     if (!big) return null;
     const c = me.center();
     const view = botView(me);
+    // a distracted moment: it does not notice threats or prey this time, it only grazes
+    const distracted = this.rng() < T.missChance;
 
     // what a person of this size sees: cells of others (visible ones only), food, cacti
     let fleeX = 0;
@@ -100,6 +108,7 @@ export class BotBrain {
         const dx = cell.x - c.x;
         const dy = cell.y - c.y;
         const d = Math.max(1, Math.hypot(dx, dy) - big.r - cell.r);
+        if (distracted) return;
         if (canEat(cell.mass, big.mass * 0.9)) {
           // a threat: run away, harder the closer it is
           const w = (T.caution * 1000) / d;
