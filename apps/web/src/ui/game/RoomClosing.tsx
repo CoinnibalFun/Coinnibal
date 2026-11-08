@@ -7,7 +7,7 @@ import { serverText, useT } from '../../i18n';
 import { openModal, useUi } from '../../store';
 import { FinalBoard } from './FinalBoard';
 import { roomName } from './format';
-import { EatenNames, ShareOnX, resultShareText, useShare } from './ShareOnX';
+import { EatenNames, ShareOnX, gameShareText, resultShareText, useShare } from './ShareOnX';
 
 /** The final board goes back to the lobby by itself after this long (ms), unless a button did first. */
 export const ROOM_OVER_AUTO_MS = 30_000;
@@ -104,11 +104,14 @@ export function RoomOverSheet() {
           <Button variant="primary" size="lg" icon="menu" onClick={toLobby} data-autofocus>
             {t('gr.lobby')}
           </Button>
-          {share && res?.stats?.finalRank && (
+          {/* the room's card once the server sent it (the site's link until then, or with no place on the board) */}
+          {res?.stats?.finalRank ? (
             <ShareOnX
-              id={share.id}
+              id={share?.id ?? null}
               text={resultShareText(t, { rank: res.stats.finalRank, n: res.stats.finalOf ?? res.stats.finalRank, room: roomName(res.room), eaten: res.stats.eaten, eatenMore: res.stats.eatenMore })}
             />
+          ) : (
+            res && <ShareOnX id={null} text={gameShareText(t, { mass: res.stats?.maxMass ?? 0, eaten: res.stats?.playersEaten ?? 0, room: roomName(res.room) })} />
           )}
           <span className="g-roomover__auto mono" aria-live="off">
             {t('ro.auto', { s: Math.max(0, Math.ceil(left / 1000)) })}

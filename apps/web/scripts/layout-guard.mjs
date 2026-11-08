@@ -2,8 +2,8 @@
 // Layout guard: a fast Playwright check that the web app holds up at the core viewports.
 //   - no horizontal page scroll on the site pages, the lobby and the in-game HUD;
 //   - no two key HUD pieces (timer, pond tag, standings, worth, minimap, power-ups, menu buttons,
-//     Split / Tip / sticker buttons, the thumb stick, the dock, the key hints, an event banner, the
-//     last-10-seconds count) drawn over each other, in a busy arena state (coin rain, power-ups running,
+//     Split / Tip / sticker buttons, the thumb stick, the dock, the key hints, the kill feed, the chat lines
+//     and the chat input at the bottom left, an event banner, the last-10-seconds count) drawn over each other, in a busy arena state (coin rain, power-ups running,
 //     the round 10 s from its bell);
 //   - every HUD piece inside the visible screen, clear of an emulated notch / home bar on phones.
 // It needs a Chromium (the CI job skips the browser download), so it is a script, not a vitest test:
@@ -61,6 +61,10 @@ const PIECES = [
   '.g-count__n',
   '.g-net',
   '.pq',
+  // the bottom-left column: kill feed lines, then the chat (lines and the open chat line), then the key hints
+  '.g-kills',
+  '.g-stream__lines',
+  '.g-stream__form',
 ];
 
 const kids = [];

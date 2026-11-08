@@ -258,7 +258,7 @@ export async function createApp(
   site.setShop({ service: shop, settings: shopSettings, inventory: boostInventory });
   site.setArenaPrices(arenaPrices);
 
-  // "Share on X": cards of results and notable kills, made from the server's own records (DATA_DIR/site/shares.json)
+  // "Share on X": cards of results and kills, made from the server's own records (DATA_DIR/site/shares.json)
   const shares = new ShareService({
     dataDir: persist ? cfg.dataDir : null,
     baseUrl: (req) => publicBaseUrl(cfg, req),
@@ -307,7 +307,8 @@ export async function createApp(
         if (e.conn!.profile) e.conn!.profile = { ...e.conn!.profile, xp, level };
         e.conn!.send({ t: 'xp', xp, level });
       },
-      // a person ate a big person (in a test arena a big practice bot too, on a TEST card): the killer's card (one every few seconds at most)
+      // a person ate a person (in a test arena a practice bot too, on a TEST card): the killer's card (one every few seconds at most;
+      // an offer that is kept for good only once its link is opened, so a kill nobody shares costs no storage)
       onNotableKill: (e) => {
         const card = shares.kill({ room: e.room, player: e.player, wallet: e.conn.wallet }, e.conn.wallet ?? `conn:${e.conn.id}`, e);
         if (card) {

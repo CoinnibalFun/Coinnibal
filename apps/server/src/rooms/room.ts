@@ -4,7 +4,6 @@ import {
   EMOTES,
   FINAL_BOARD_ROWS,
   FINAL_STANDINGS_ROWS,
-  NOTABLE_KILL_MASS,
   MAP_GROW,
   MAP_SPACE,
   PlayerFlag,
@@ -99,8 +98,8 @@ export interface RoomDeps {
   /** Bought power-ups (charges, cooldowns, the arena cap); absent: the `boost` message is ignored. */
   shop?: Pick<ShopService, 'state' | 'use'>;
   /**
-   * A person ate a person whose coin reached `NOTABLE_KILL_MASS` this game (the killer may share it); in a testnet
-   * test arena a practice bot counts too (`victimIsBot`).
+   * A person ate a person (the killer may share it: every person eaten offers "Share on X"); in a testnet test arena
+   * a practice bot counts too (`victimIsBot`).
    */
   onNotableKill?: (e: { room: Room; conn: Conn; killer: Player; victim: string; victimMass: number; victimIsBot?: boolean }) => void;
 }
@@ -846,9 +845,9 @@ export class Room implements RoomHandle {
     } catch (err) {
       this.deps.log(`room ${this.id}: game-over hook failed: ${(err as Error).message}`);
     }
-    // a person ate a big person: the killer may share it
+    // a person ate a person: the killer may share it ("Share on X"; the share service rate-limits the cards)
     const killerConn = killer && !killer.isBot && !p.isBot ? this.humans.get(killer.id) : null;
-    if (cause === 'death' && killerConn && stats.maxMass >= NOTABLE_KILL_MASS) {
+    if (cause === 'death' && killerConn) {
       try {
         this.deps.onNotableKill?.({ room: this, conn: killerConn, killer: killer!, victim: p.name, victimMass: Math.floor(stats.maxMass) });
       } catch (err) {
@@ -874,10 +873,10 @@ export class Room implements RoomHandle {
     return stats;
   }
 
-  /** A test arena: a person ate a practice bot that reached `NOTABLE_KILL_MASS` (a TEST card; never in other rooms). */
+  /** A test arena: a person ate a practice bot (a TEST card; never in other rooms). */
   private notableBotKill(killer: Player | null, bot: Player): void {
     const conn = killer && !killer.isBot ? this.humans.get(killer.id) : null;
-    if (!conn || bot.stats.maxMass < NOTABLE_KILL_MASS) return;
+    if (!conn) return;
     try {
       this.deps.onNotableKill?.({ room: this, conn, killer: killer!, victim: bot.name, victimMass: Math.floor(bot.stats.maxMass), victimIsBot: true });
     } catch (err) {

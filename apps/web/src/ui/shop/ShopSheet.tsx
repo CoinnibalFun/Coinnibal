@@ -60,39 +60,36 @@ function PackCard({
       </div>
       <div className="sh-pack__buy">
         {discounted && <s className="sh-pack__was mono">{priceText(pack.fullPriceRaw, view, pack.fullUsdCents)}</s>}
-        {qty === 0 ? (
-          <Button
-            variant={kind === 'leap' || kind === 'invis' ? 'teal' : 'secondary'}
-            size="sm"
-            lead="coin"
-            disabled={!canBuy || !pack.enabled || !canAdd}
-            onClick={() => onQty(1)}
-            data-testid={`shop-buy-${kind}`}
-          >
-            {t('shop.add', { n: pack.charges, price: priceText(pack.priceRaw, view, pack.usdCents) })}
-          </Button>
-        ) : (
-          <span className="sh-qty" role="group" aria-label={t('shop.qtyLabel', { name })}>
-            <button type="button" className="kb-iconbtn kb-iconbtn--sm sh-qty__btn" onClick={() => onQty(qty - 1)} disabled={!canBuy} aria-label={t('shop.less', { name })} data-testid={`shop-less-${kind}`}>
-              −
-            </button>
-            <span className="sh-qty__n num" aria-live="polite" data-testid={`shop-qty-${kind}`}>
-              {t('shop.packs', { n: qty })}
-            </span>
-            <button type="button" className="kb-iconbtn kb-iconbtn--sm sh-qty__btn" onClick={() => onQty(qty + 1)} disabled={!canBuy || !canAdd || qty >= SHOP_CART_LIMITS.perKind} aria-label={t('shop.more', { name })} data-testid={`shop-more-${kind}`}>
-              +
-            </button>
-            <span className="sh-qty__price mono">{t('shop.each', { price: priceText(pack.priceRaw, view, pack.usdCents) })}</span>
+        {/* every pack has its own quantity stepper: pick several, pay once (the cart below) */}
+        <span className={`sh-qty${qty > 0 ? ' is-on' : ''}`} role="group" aria-label={t('shop.qtyLabel', { name })}>
+          <button type="button" className="kb-iconbtn kb-iconbtn--sm sh-qty__btn" onClick={() => onQty(qty - 1)} disabled={!canBuy || qty === 0} aria-label={t('shop.less', { name })} data-testid={`shop-less-${kind}`}>
+            −
+          </button>
+          <span className="sh-qty__n num" aria-live="polite" data-testid={`shop-qty-${kind}`}>
+            {t('shop.packs', { n: qty })}
           </span>
-        )}
+          <button
+            type="button"
+            className="kb-iconbtn kb-iconbtn--sm sh-qty__btn is-more"
+            onClick={() => onQty(qty + 1)}
+            disabled={!canBuy || !pack.enabled || !canAdd || qty >= SHOP_CART_LIMITS.perKind}
+            aria-label={t('shop.more', { name })}
+            title={t('shop.add', { n: pack.charges, price: priceText(pack.priceRaw, view, pack.usdCents) })}
+            data-testid={`shop-more-${kind}`}
+          >
+            +
+          </button>
+          <span className="sh-qty__price mono">{t('shop.each', { price: priceText(pack.priceRaw, view, pack.usdCents) })}</span>
+        </span>
       </div>
     </li>
   );
 }
 
 /**
- * The power-up shop (lobby and HUD): the packs priced for the signed-in wallet (holders see the discount). The player
- * puts several power-ups in a cart with quantities, sees the total in US dollars and the game token, and pays ONCE
+ * The power-up shop (the lobby's masthead and the HUD's top bar, over the game): the packs priced for the signed-in
+ * wallet (holders see the discount). Every pack has a +/− quantity stepper; the cart under them (always on screen,
+ * stuck to the sheet's bottom edge) keeps the running total in US dollars and the game token, and "Buy all" pays ONCE
  * (`buyCart`: one `pay` to the arena contract, half burned, half to the fee wallet); the server applies the whole cart
  * and the charges appear on the HUD at once. Guests are asked to sign in.
  */
@@ -201,6 +198,7 @@ export function ShopSheet() {
       className="g-sheet sh-sheet"
     >
       <p className="sh-lede">{t('shop.lede', { n: s?.packs[0]?.charges ?? SHOP_DEFAULTS.packSize, sym: s?.token?.symbol ?? '$ELYMUM', max })}</p>
+      <p className="sh-pick">{t('shop.pick')}</p>
       {s?.holder ? (
         <Chip tone="up" className="sh-holder">
           {t('shop.holder', { pct, extra })}
@@ -236,37 +234,45 @@ export function ShopSheet() {
       ) : (
         !err && <p className="sh-hint mono">…</p>
       )}
-      {s && totals && totals.packs > 0 && (
-        <div className="sh-cart" role="region" aria-label={t('shop.cart')} data-testid="shop-cart">
+      {s && totals && (
+        <div className={`sh-cart${totals.packs > 0 ? ' is-full' : ' is-empty'}`} role="region" aria-label={t('shop.cart')} data-testid="shop-cart">
           <div className="sh-cart__sum">
             <span className="sh-cart__label mono">{t('shop.cartTotal', { n: totals.packs })}</span>
-            <span className="sh-cart__price">
-              {totals.fullRaw !== totals.raw && (
-                <s className="sh-pack__was mono" data-testid="shop-cart-full">
-                  {priceText(totals.fullRaw.toString(), s, totals.fullUsdCents ?? undefined)}
-                </s>
-              )}
-              <b className="num" data-testid="shop-cart-total">
-                {priceText(totals.raw.toString(), s, totals.usdCents ?? undefined)}
-              </b>
-            </span>
+            {totals.packs === 0 ? (
+              <span className="sh-cart__empty" data-testid="shop-cart-empty">
+                {t('shop.cartEmpty')}
+              </span>
+            ) : (
+              <span className="sh-cart__price">
+                {totals.fullRaw !== totals.raw && (
+                  <s className="sh-pack__was mono" data-testid="shop-cart-full">
+                    {priceText(totals.fullRaw.toString(), s, totals.fullUsdCents ?? undefined)}
+                  </s>
+                )}
+                <b className="num" data-testid="shop-cart-total">
+                  {priceText(totals.raw.toString(), s, totals.usdCents ?? undefined)}
+                </b>
+              </span>
+            )}
             {s.holder && totals.fullRaw !== totals.raw && <span className="sh-cart__note mono">{t('shop.cartHolder', { pct: s.holderDiscountPct })}</span>}
           </div>
           <div className="sh-cart__actions">
-            <Button variant="ghost" size="sm" disabled={!!buying} onClick={() => setCart(emptyCart())} data-testid="shop-cart-clear">
-              {t('shop.cartClear')}
-            </Button>
+            {totals.packs > 0 && (
+              <Button variant="ghost" size="sm" disabled={!!buying} onClick={() => setCart(emptyCart())} data-testid="shop-cart-clear">
+                {t('shop.cartClear')}
+              </Button>
+            )}
             <Button
               variant="primary"
               size="md"
               lead="wallet"
               loading={!!buying}
-              disabled={!auth || !s.open || !!buying || claiming}
+              disabled={!auth || !s.open || !!buying || claiming || totals.packs === 0}
               onClick={() => void buy()}
               sub={buying?.phase === 'verifying' ? t('shop.verifying') : buying?.phase === 'confirming' ? t('shop.confirming') : buying ? t('shop.paying') : t('shop.oneTx')}
               data-testid="shop-pay"
             >
-              {t('shop.payOnce', { price: priceText(totals.raw.toString(), s) })}
+              {totals.packs > 0 ? t('shop.buyAll', { price: priceText(totals.raw.toString(), s) }) : t('shop.buyAll', { price: '—' })}
             </Button>
           </div>
         </div>

@@ -46,4 +46,16 @@ describe('layout css', () => {
     const game = sheets.find((s) => s.file.endsWith('ui/game/game.css'))!.css;
     expect(game).toMatch(/\.g-hud\.is-desktop > :is\([^)]*\.g-corner[^)]*\) \{\s*zoom: var\(--hud-scale\);/);
   });
+
+  it('keeps the chat at the bottom left (transparent: no panel), docked between the kill feed and the key hints on a desktop', () => {
+    const game = sheets.find((s) => s.file.endsWith('ui/game/game.css'))!.css;
+    const stream = /\n\.g-stream \{[^}]*\}/.exec(game)![0];
+    expect(stream).toMatch(/\bleft:/);
+    expect(stream).toMatch(/\bbottom:/);
+    expect(stream).not.toMatch(/\bright:/);
+    expect(stream).not.toMatch(/background/);
+    expect(game).toMatch(/\.g-bl > \.g-stream\.is-docked \{[^}]*position: relative;/);
+    // touch: above the thumb stick, never under it
+    expect(/\.g-hud\.is-touch \.g-stream \{[^}]*\}/.exec(game)![0]).toMatch(/bottom: calc\(22px \+ 136px/);
+  });
 });
