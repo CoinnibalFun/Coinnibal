@@ -293,11 +293,22 @@ if [[ -n "$from_url" ]]; then
   curl -fsS --max-time 30 -H @"$hdr" "${from_url%/}/api/admin/migration-env" -o "$envjson" \
     || { rm -f "$hdr"; die "could not read the settings from $from_url (expired token or proof? a proof opens it once, within 10 minutes)"; }
   rm -f "$hdr"
-  # one KEY<TAB>VALUE line per setting; values never hold a newline (the server drops those)
+  # one KEY<TAB>VALUE line per setting; values never hold a newline (the server drops those). The chain settings go
+  # to the ELYMUM_* keys docker-compose.yml reads (it ignores CHAIN_ID, EVM_RPC_URL(S) and RPC_MAX_RPS in .env)
+  old_single_rpc=""
+  have_rpc_list=0
   while IFS=$'\t' read -r k v; do
     [[ "$k" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
-    env_set "$k" "$v"
+    case "$k" in
+      CHAIN_ID) env_set ELYMUM_CHAIN_ID "$v" ;;
+      EVM_RPC_URLS) env_set ELYMUM_RPC_URLS "$v"; have_rpc_list=1 ;;
+      EVM_RPC_URL) old_single_rpc="$v" ;;
+      RPC_MAX_RPS) env_set ELYMUM_RPC_MAX_RPS "$v" ;;
+      *) env_set "$k" "$v" ;;
+    esac
   done < <(python3 -I -c 'import json,sys; [print(k + "\t" + str(v)) for k, v in json.load(open(sys.argv[1]))["env"].items()]' "$envjson")
+  # an older server with one RPC only
+  if [[ "$have_rpc_list" -eq 0 && -n "$old_single_rpc" ]]; then env_set ELYMUM_RPC_URLS "$old_single_rpc"; fi
   direct="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("directUrl") or "")' "$envjson")"
   if [[ "$direct" =~ ^https://[A-Za-z0-9.-]+$ ]]; then
     restore_url="$direct"
@@ -311,7 +322,7 @@ fi
 edit_env() {
   echo
   echo " The settings file opens in the nano editor. Fill in the values (deploy/vps/README.md section 4:"
-  echo " ADMIN_WALLETS, AUTH_SECRET, CHAIN_ID, EVM_RPC_URLS, TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID, ...)."
+  echo " ADMIN_WALLETS, AUTH_SECRET, ELYMUM_CHAIN_ID, ELYMUM_RPC_URLS, TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID, ...)."
   echo " Save: Ctrl+O then Enter. Quit: Ctrl+X."
   read -rp " Press Enter to open it... " _
   nano "$ELYMUM_ENV"
@@ -325,7 +336,8 @@ if [[ "$yes" -eq 0 ]]; then
   fi
   while :; do
     missing=()
-    for k in ADMIN_WALLETS EVM_RPC_URL PUBLIC_URL CORS_ORIGIN; do
+    # the chain (ELYMUM_CHAIN_ID, ELYMUM_RPC_URLS) has testnet defaults in docker-compose.yml: not asked for here
+    for k in ADMIN_WALLETS PUBLIC_URL CORS_ORIGIN; do
       [[ -n "$(env_get "$k")" ]] || missing+=("$k")
     done
     if [[ "${#missing[@]}" -eq 0 ]]; then break; fi

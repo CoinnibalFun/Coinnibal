@@ -63,23 +63,27 @@ server, installs the timers and waits for `https://game.elymum.io/api/health?liv
 | `ADMIN_WALLETS` | the owner's 0x address(es) |
 | `AUTH_SECRET` | `openssl rand -hex 32` (at least 32 bytes; the mainnet refuses to start with less), or empty for the generated `DATA_DIR/auth-secret` |
 | `SERVER_PRIVATE_KEY` | `auto` (kept in the data volume and the backups) |
-| `CHAIN_ID` | `46630` (testnet) or `4663` (mainnet) |
-| `EVM_RPC_URLS` | the RPCs in order, comma-separated: the Alchemy URL first, the public RPC as fallback (section 5) |
-| `RPC_MAX_RPS` | calls per second per URL, one per `EVM_RPC_URLS` entry (`25,4`) |
-| `GAME_ACCESS` | `maintenance` (the compose default), `admins`, `holders`, `public`, or `site` (the `/admin` setting decides) |
+| `ELYMUM_CHAIN_ID` | optional: `46630` (testnet, the default when unset) or `4663` (mainnet) |
+| `ELYMUM_RPC_URLS` | optional: the RPCs in order, comma-separated: the Alchemy URL first, the public RPC as fallback (section 5). Unset: `https://rpc.testnet.chain.robinhood.com` |
+| `ELYMUM_RPC_MAX_RPS` | optional: calls per second per URL, one per `ELYMUM_RPC_URLS` entry (`25,4`); default 4 |
+| `ELYMUM_GAME_ACCESS` | optional: `public` (the default when unset), `holders`, `admins`, `maintenance`, or `site` (the `/admin` setting decides) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | alerts to Telegram (optional; section 7) |
 | `BACKUP_RCLONE_REMOTE` | the encrypted offsite remote, e.g. `elymum-offsite:` (optional; section 8) |
 | `GAME_WORKERS` | `5` on 8 vCPU |
 | `MAX_CONNECTIONS` | `1500` |
 
-`docker-compose.yml` reads `CHAIN_ID`, `EVM_RPC_URL` and `GAME_ACCESS` from this file (empty: the testnet values and
-maintenance); nothing about the chain is fixed in git any more. After a change: `elymum-compose up -d app`.
+`docker-compose.yml` maps the `ELYMUM_*` keys to the server's `CHAIN_ID`, `EVM_RPC_URLS`, `RPC_MAX_RPS` and
+`GAME_ACCESS`, and always overrides those names (and `EVM_RPC_URL`, forced empty) whatever `.env` says: this `.env`
+was first filled from an older Elysium / Render setup, and a stale `CHAIN_ID`, `EVM_RPC_URL` or `GAME_ACCESS` in it
+must never move the live server to another chain or close the game. Unset `ELYMUM_*` keys mean the live testnet
+values (46630, the testnet's public RPC, `public`). After a change: `elymum-compose up -d app`. Check what the app
+gets with `elymum-compose config | grep -E 'CHAIN_ID|EVM_RPC|RPC_MAX_RPS|GAME_ACCESS'`.
 
 ## 5. RPC: Alchemy first, the public RPC as fallback
 
 The server reads the chain and sends settlements through `EVM_RPC_URLS`, a viem fallback in order: a URL that keeps
 answering 429 or is down hands the call to the next one after two tries, and every new call starts with the first
-URL again. Each URL has its own request budget (`RPC_MAX_RPS`, one rate per URL). Every URL must serve `CHAIN_ID`
+URL again. Each URL has its own request budget (`ELYMUM_RPC_MAX_RPS`, one rate per URL). Every URL must serve the chain
 (one that does not is left out, logged with `!!!`). The browser never sees these URLs (`PUBLIC_RPC_URL`, or the
 public one in the list).
 
@@ -87,9 +91,9 @@ public one in the list).
    (`https://robinhood-mainnet.g.alchemy.com/v2/<key>`; the testnet's is `robinhood-testnet.g.alchemy.com`).
 2. In `.env` (mainnet):
    ```bash
-   CHAIN_ID=4663
-   EVM_RPC_URLS=https://robinhood-mainnet.g.alchemy.com/v2/<key>,https://rpc.mainnet.chain.robinhood.com
-   RPC_MAX_RPS=25,4
+   ELYMUM_CHAIN_ID=4663
+   ELYMUM_RPC_URLS=https://robinhood-mainnet.g.alchemy.com/v2/<key>,https://rpc.mainnet.chain.robinhood.com
+   ELYMUM_RPC_MAX_RPS=25,4
    ```
    25 calls a second is well inside Alchemy's free plan (its compute units; raise it on a paid plan); the public RPC
    allows about 4. `elymum-compose up -d app`.
@@ -169,7 +173,7 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
 1. Pause the arena if the key may be exposed (`/admin` → Game → Pause); otherwise tickets stay safe on chain: unplayed
    ones are refunded in full by the next server, settled ones are paid, and a player can refund any ticket after 24 h.
 2. A new VPS (sections 1 to 3); stop at the settings step and put the old `.env` values back (from your password
-   manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `CHAIN_ID`, `EVM_RPC_URLS`, ...).
+   manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `ELYMUM_CHAIN_ID`, `ELYMUM_RPC_URLS`, ...).
 3. The newest backup: from the offsite copy (`rclone copy elymum-offsite:elymum-data-<newest>.tar.gz /root/`), then
    `elymum-restore /root/elymum-data-<newest>.tar.gz`. It carries the server key, the journal (pending settlements go
    out), the contracts registry and the site data. What happened after that backup is lost: tickets settled since are

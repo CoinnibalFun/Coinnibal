@@ -137,6 +137,28 @@ describe('several RPCs (EVM_RPC_URLS)', () => {
     expect(cfg.chain.publicRpcUrl).toBe('https://rpc.testnet.chain.robinhood.com');
   });
 
+  it('the VPS compose environment: an empty EVM_RPC_URL is unset, EVM_RPC_URLS and CHAIN_ID win over stale values', () => {
+    // deploy/vps/docker-compose.yml sets EVM_RPC_URL: "" and EVM_RPC_URLS / CHAIN_ID / GAME_ACCESS from ELYMUM_* keys
+    // (a stale CHAIN_ID or EVM_RPC_URL of /opt/elymum/.env never reaches the app)
+    const cfg = loadConfig({
+      EVM_RPC_URL: '',
+      EVM_RPC_URLS: 'https://rpc.testnet.chain.robinhood.com',
+      CHAIN_ID: '46630',
+      RPC_MAX_RPS: '4',
+      GAME_ACCESS: 'public',
+      PUBLIC_RPC_URL: '',
+    } as NodeJS.ProcessEnv);
+    expect(cfg.chain.rpcUrls).toEqual(['https://rpc.testnet.chain.robinhood.com']);
+    expect(cfg.chain.rpcUrl).toBe('https://rpc.testnet.chain.robinhood.com');
+    expect(cfg.chain.chainId).toBe(46630);
+    expect(cfg.chain.rpcMaxRpsPerUrl).toEqual([4]);
+    expect(cfg.gameAccess).toBe('public');
+    expect(cfg.chain.publicRpcUrl).toBe('https://rpc.testnet.chain.robinhood.com');
+    // whitespace only is unset as well; an empty list falls back to EVM_RPC_URL, both empty: practice only
+    expect(parseRpcUrls('  ', 'https://rpc.testnet.chain.robinhood.com')).toEqual(['https://rpc.testnet.chain.robinhood.com']);
+    expect(loadConfig({ EVM_RPC_URL: ' ', EVM_RPC_URLS: '' } as NodeJS.ProcessEnv).chain.rpcUrl).toBeNull();
+  });
+
   it('a provider that answers 429 or is down hands the call to the next URL; it is tried first again afterwards', async () => {
     const a = { v: 'ok' as 'ok' | '429' | 'down' };
     const primary = await rpcServer(a);
