@@ -164,6 +164,8 @@ export interface UiState {
   standings: { rows: StandingRow[]; players: number; watching: number; at: number } | null;
   leaders: { x: number; y: number }[];
   killfeed: KillItem[];
+  /** Coins I ate this game, counted from the kill feed (the HUD's "Share on X" line); reset on every join. */
+  myEaten: number;
   chat: ChatItem[];
   chatOpen: boolean;
   powerups: { type: PowerUpType; until: number }[];
@@ -181,7 +183,7 @@ export interface UiState {
   roundResult: RoundResult | null;
   /** A custom room closes at `endsAt` (server clock; `closing`): the countdown everyone in it sees, and why. */
   closing: { endsAt: number; message: string } | null;
-  /** The last "Share on X" card the server made for me (`share`): a result's or a notable kill's; `at`: local ms. */
+  /** The last "Share on X" card the server made for me (`share`): a result's or a kill's; `at`: local ms. */
   share: { kind: 'round' | 'room' | 'kill'; id: string; victim?: string; victimIsBot?: boolean; test?: boolean; at: number } | null;
   /** A free custom room ended (`roomOver`): its final board (everyone by mass), the room it was, my game in it. */
   roomResult: { message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null; room: RoomInfo | null } | null;
@@ -328,6 +330,7 @@ export const useUi = create<UiState>(() => ({
   standings: null,
   leaders: [],
   killfeed: [],
+  myEaten: 0,
   chat: [],
   chatOpen: false,
   powerups: [],

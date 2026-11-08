@@ -282,12 +282,14 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
 - **Share on X** (`site/shares.ts`, `site/share-card.ts`, `shared/share.ts`): when a room ends (a bell, a custom
   room's end) the main thread makes a card of each connected player's place from the game-over it already gets
   (`DeathStats.finalRank` / `finalOf`, the player's look, the wallet's short form, the net paid), and when a person
-  eats a person whose coin reached `NOTABLE_KILL_MASS` (1,000) the killer's card (at most one per 20 s); the client
-  gets `share { kind, id }`. Nothing of a card comes from a client. `GET /share/<id>` is a page with the Open
+  eats a person (in a testnet test arena a practice bot too) the killer's kill card (at most one per 5 s); the client
+  gets `share { kind, id }`. Kill cards are offers held in memory (the newest 20,000, for 6 h) and kept for good only
+  when their link is first opened, so the many kills nobody shares never push a result card out. Nothing of a card comes from a client. `GET /share/<id>` is a page with the Open
   Graph / Twitter `summary_large_image` tags; `GET /share/<id>.png` the 1200 x 630 card drawn with `@elymum/art` on
   `@napi-rs/canvas` with the site's own fonts (cached; 30 renders per IP a minute). Cards are kept in
   `DATA_DIR/site/shares.json` (the newest 5,000). The web opens X's web intent (`x.com/intent/post`) with a
-  localized line and the card's link: no X API.
+  localized line and the card's link: no X API. Death sheets, operator exits and the in-game HUD's share button (live
+  mass, place and coins eaten) open the intent with a localized line and the site's link when no card fits.
 - **Other REST:** `/api/health` (503 with reasons, `?live=1` the liveness check; `health.ts`), `/api/rooms` (test
   arenas carry `test: true`), `/api/leaderboard`, `/api/config`, `/api/pending?wallet=` (that wallet's session or an
   admin's), `/api/profile`, the site API `/api/site/*` and the admin API `/api/admin/*` (`/api/admin/reprice`:
