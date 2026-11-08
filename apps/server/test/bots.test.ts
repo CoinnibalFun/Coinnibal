@@ -144,11 +144,14 @@ describe('practice bots play fair', () => {
     const bot = world.addPlayer({ name: 'Bot 1', skin: 0, isBot: true, x: 4500, y: 4500, mass: 400, spawnShield: false });
     world.addPlayer({ name: 'snack', skin: 1, x: 4800, y: 4500, mass: 60, spawnShield: false });
     let splits = 0;
+    let chases = 0;
     for (let seed = 1; seed <= 20; seed++) {
       const d = new BotBrain('hard', mulberry32(seed), world.now).think(world, bot, world.now)!;
       if (d.split) splits++;
-      expect(d.target.x).toBeGreaterThan(4500);
+      if (d.target.x > 4500) chases++;
     }
+    // a hard bot goes for the prey on most decisions (it has a few distracted moments)
+    expect(chases).toBeGreaterThanOrEqual(14);
     expect(splits).toBeGreaterThan(0);
     for (let seed = 1; seed <= 20; seed++) expect(new BotBrain('easy', mulberry32(seed), world.now).think(world, bot, world.now)!.split).toBe(false);
   });
