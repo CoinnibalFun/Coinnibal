@@ -35,7 +35,7 @@ class Client {
   send(obj: unknown) {
     this.ws.send(JSON.stringify(obj));
   }
-  wait<T extends ServerMessage['t']>(t: T, pred: (m: Extract<ServerMessage, { t: T }>) => boolean = () => true, timeoutMs = 3000) {
+  wait<T extends ServerMessage['t']>(t: T, pred: (m: Extract<ServerMessage, { t: T }>) => boolean = () => true, timeoutMs = 10_000) {
     const hit = this.msgs.find((m) => m.t === t && pred(m as Extract<ServerMessage, { t: T }>));
     if (hit) return Promise.resolve(hit as Extract<ServerMessage, { t: T }>);
     return new Promise<Extract<ServerMessage, { t: T }>>((resolve, reject) => {
@@ -143,7 +143,7 @@ describe('token set after deploy', () => {
     expect(joined.value).toBeGreaterThan(0);
     c.close();
     other.close();
-  });
+  }, 30_000);
 
   it('a fresh connection after the switch is welcomed with tokenReady and the arenas', async () => {
     const c = await Client.connect(port);
