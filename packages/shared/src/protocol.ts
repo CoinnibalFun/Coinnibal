@@ -70,6 +70,11 @@ export const PlayerFlag = {
    * encoder clears it otherwise). No extra bytes. A worn profile picture wins over it on screen.
    */
   FlagSkin: 64,
+  /**
+   * The player linked an X account ("Link X"): the wire record carries its handle (`str8`, `isXHandle`) after the
+   * country (protocol v14). Never set for bots; set by the server only.
+   */
+  XHandle: 128,
 } as const;
 
 /** Binary client → server opcodes (first byte). */
@@ -119,6 +124,11 @@ export interface PlayerInfo {
    * `PlayerFlag.FlagSkin` in `flags` (never without a country); `decodeSnapshot` sets it only when true.
    */
   flagSkin?: boolean;
+  /**
+   * The X handle the player linked (`isXHandle`, without the `@`), shown by the name. On the wire this is
+   * `PlayerFlag.XHandle` in `flags` plus a `str8` after the country; absent for bots, guests and unlinked players.
+   */
+  xHandle?: string;
 }
 
 export interface EntityRecord {
@@ -526,7 +536,8 @@ export type ServerMessage =
   | { t: 'roomOver'; message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null }
   // "Share on X": a public card of my result (`round`, `room`) or of a kill (`kill`, every person I eat; at most one every few seconds) is ready
   // at `/share/<id>` on the site (with its Open Graph image). `victim`: the coin eaten (kills).
-  | { t: 'share'; kind: ShareKind; id: string; victim?: string; victimIsBot?: boolean; test?: boolean }
+  // `victimX`: the X handle the eaten coin's owner linked (the post tags it; the server's record, never the client's).
+  | { t: 'share'; kind: ShareKind; id: string; victim?: string; victimIsBot?: boolean; victimX?: string; test?: boolean }
   // Arena rooms: the player's in-game value changed.
   | {
       t: 'value';

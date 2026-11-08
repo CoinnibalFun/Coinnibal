@@ -6,6 +6,8 @@ import { SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, t
 import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
+import { XLinkFail, type XLinkService } from '../xlink';
+import { squarePng } from './share-card';
 import type { ChainGateway } from '../chain/types';
 import { integrityRoutes } from '../integrity/routes';
 import type { IntegrityService } from '../integrity/service';
@@ -181,6 +183,8 @@ export class SiteApi {
   private flushAll: (() => void) | null = null;
   /** Told when a wallet's picture is removed or replaced (live rooms drop it from the coin). */
   private avatarChanged: ((wallet: string) => void) | null = null;
+  /** "Link X" (`/api/x/*`); absent in bare unit tests. */
+  private xLinks: XLinkService | null = null;
   private readonly avatarIp: Limiter;
   private readonly avatarWallet: Limiter;
 
@@ -206,6 +210,11 @@ export class SiteApi {
   /** `fn(wallet)`: the wallet's picture was removed or replaced (the rooms take it off live coins). */
   onAvatarChange(fn: ((wallet: string) => void) | null): void {
     this.avatarChanged = fn;
+  }
+
+  /** "Link X": the links, the proof check and the account pictures (`/api/x/*`). */
+  setXLinks(x: XLinkService | null): void {
+    this.xLinks = x;
   }
 
   /** `fn()`: flush every store to disk (the backup's consistent snapshot). */
@@ -309,7 +318,9 @@ export class SiteApi {
       path === '/api/rooms/custom' ||
       path.startsWith('/api/rooms/custom/') ||
       path === '/api/shop' ||
-      path === '/api/shop/buy';
+      path === '/api/shop/buy' ||
+      path === '/api/x' ||
+      path.startsWith('/api/x/');
     if (!mine) return false;
     try {
       if (path === '/api/auth/login' || path === '/api/auth/me') await this.authRoutes(req, res, path, ip);
@@ -317,6 +328,7 @@ export class SiteApi {
       else if (path === '/api/profile/avatar') await this.uploadRoutes(req, res, ip);
       else if (path === '/api/shop' || path === '/api/shop/buy') await this.shopRoutes(req, res, path, ip);
       else if (path.startsWith('/api/avatar/')) this.serveAvatar(req, res, path.slice('/api/avatar/'.length));
+      else if (path === '/api/x' || path.startsWith('/api/x/')) await this.xRoutes(req, res, path, ip);
       else if (path.startsWith('/api/nft/')) await this.nftRoutes(req, res, url);
       else if (path.startsWith('/api/site/')) await this.siteRoutes(req, res, url, ip);
       else if (path.startsWith('/api/rooms/custom')) await this.customRoutes(req, res, path, ip);
@@ -464,6 +476,95 @@ export class SiteApi {
     } else if (profiles.avatarUsers(before) === 0) store.delete(before);
     this.avatarChanged?.(wallet);
     return before;
+  }
+
+  /**
+   * "Link X" (signed-in unless said otherwise): `GET /api/x` (the link and the pending code), `POST /api/x/code` (a
+   * new code), `POST /api/x/verify {url}` (the proof post's link), `DELETE /api/x` (unlink), `POST /api/x/picture`
+   * (wear the X picture on the coin: it becomes the profile picture) and `GET /api/x/avatar/<userId>` (public: the
+   * cached picture of a linked account). Refusals answer `{ error, message }` (`XLinkError`).
+   */
+  private async xRoutes(req: IncomingMessage, res: ServerResponse, path: string, ip: string): Promise<void> {
+    const x = this.xLinks;
+    if (!x) throw new SiteFail(404, 'not_found', 'Not found');
+    // the site named in the proof post: the public site's host, else the game's own name for it
+    let site = 'elymum.io';
+    try {
+      if (this.cfg.publicUrl) site = new URL(this.cfg.publicUrl).host;
+    } catch {
+      /* keep the default */
+    }
+    try {
+      if (path.startsWith('/api/x/avatar/')) {
+        this.method(req, 'GET', 'HEAD');
+        const file = await x.avatar(path.slice('/api/x/avatar/'.length));
+        if (!file) throw new SiteFail(404, 'not_found', 'No such picture');
+        res.writeHead(200, {
+          'Content-Type': file.type,
+          'Content-Length': file.bytes.length,
+          'Cache-Control': 'public, max-age=3600',
+          'X-Content-Type-Options': 'nosniff',
+          'Content-Security-Policy': "default-src 'none'; sandbox",
+          'Cross-Origin-Resource-Policy': 'cross-origin',
+        });
+        res.end(req.method === 'HEAD' ? undefined : file.bytes);
+        return;
+      }
+      if (path === '/api/x') {
+        if (this.method(req, 'GET', 'DELETE') === 'GET') return send(res, 200, x.status(this.session(req), site));
+        const wallet = this.writer(req, ip);
+        x.unlink(wallet);
+        return send(res, 200, x.status(wallet, site));
+      }
+      if (path === '/api/x/code') {
+        this.method(req, 'POST');
+        const wallet = this.writer(req, ip);
+        return send(res, 201, { code: x.issueCode(wallet, ip, site) });
+      }
+      if (path === '/api/x/verify') {
+        this.method(req, 'POST');
+        const wallet = this.writer(req, ip);
+        const body = await readJson(req);
+        const { link } = await x.verify(wallet, ip, body.url);
+        return send(res, 200, { link, code: null });
+      }
+      if (path === '/api/x/picture') {
+        this.method(req, 'POST');
+        return send(res, 201, { profile: await this.wearXPicture(this.writer(req, ip), ip) });
+      }
+    } catch (err) {
+      if (err instanceof XLinkFail) throw new SiteFail(err.status, err.code, err.message);
+      throw err;
+    }
+    throw new SiteFail(404, 'not_found', 'Not found');
+  }
+
+  /** The linked account's picture, squared to `AVATAR_LIMITS.px` and cleaned, becomes the wallet's profile picture. */
+  private async wearXPicture(wallet: string, ip: string): Promise<unknown> {
+    const profiles = this.ext.profiles;
+    const store = this.ext.avatars;
+    const userId = this.xLinks?.links.get(wallet)?.userId;
+    if (!profiles || !store) throw new SiteFail(404, 'not_found', 'Not found');
+    if (!userId) throw new SiteFail(409, 'x_picture_unavailable', 'Your linked X account has no picture we can use. Upload one instead.');
+    if (!this.avatarIp.allow(ip) || !this.avatarWallet.allow(wallet)) throw new SiteFail(429, 'rate_limited', 'Too many pictures. Try again in an hour.');
+    const file = await this.xLinks!.avatar(userId);
+    if (!file) throw new SiteFail(409, 'x_picture_unavailable', 'We could not get your X picture right now. Try again later or upload one.');
+    let id: string;
+    try {
+      const clean = sanitizeAvatar(await squarePng(file.bytes, AVATAR_LIMITS.px));
+      if (store.isBlocked(avatarIdOf(clean.bytes))) throw new SiteFail(403, 'image_blocked', 'This picture was removed by a moderator and cannot be used.');
+      id = store.put(clean);
+    } catch (err) {
+      if (err instanceof SiteFail) throw err;
+      this.ext.log?.(`x-links: the X picture of ${wallet} could not be used (${(err as Error).message})`);
+      throw new SiteFail(503, 'x_picture_unavailable', 'Your X picture cannot be used here right now. Upload one instead.');
+    }
+    const before = profiles.setAvatar(wallet, id);
+    if (before && before !== id) {
+      if (profiles.avatarUsers(before) === 0) store.delete(before);
+      this.avatarChanged?.(wallet);
+    }
+    return profiles.view(wallet);
   }
 
   /** `GET /api/avatar/<id>`: the picture file (immutable: an id is the hash of its bytes). */

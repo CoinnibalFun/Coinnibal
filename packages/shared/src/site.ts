@@ -1,3 +1,5 @@
+import type { XLinkError } from './xlink';
+
 /**
  * Elymum site: WL (allowlist) and collab applications, the NFT mint, the contracts registry and
  * player profiles. Types shared by the server (`/api/site/*`, `/api/admin/*`, `/api/profile`) and
@@ -278,7 +280,11 @@ export type SiteErrorCode =
   /** The admin session is too old for admin routes (short-lived, revocable), or of the earlier long form: sign in again. */
   | 'admin_session_expired'
   /** Turned off on this server (secret exports on the mainnet without `ADMIN_SECRET_EXPORT=1`). */
-  | 'disabled';
+  | 'disabled'
+  /** "Link X": why a link attempt failed (`xlink.ts`). */
+  | XLinkError
+  /** "Link X": the X picture cannot be put on the coin here (no picture cached, or no image decoder on the server). */
+  | 'x_picture_unavailable';
 
 export interface SiteError {
   error: SiteErrorCode;

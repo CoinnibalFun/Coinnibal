@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { drawRisoCoin, lookForBasicSkin } from '@elymum/art';
-import { SHARE_IMAGE, eatenLine, ordinal, shareName, type ShareCard } from '@elymum/shared';
+import { SHARE_IMAGE, eatenLine, ordinal, shareName, xMention, type ShareCard } from '@elymum/shared';
 import type { SKRSContext2D } from '@napi-rs/canvas';
 
 type Canvas = typeof import('@napi-rs/canvas');
@@ -72,8 +72,8 @@ function fonts(): void {
   GlobalFonts.registerFromPath(require.resolve('@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2'), 'DM Sans');
 }
 
-/** The eaten coin of a kill card, cleaned, with its BOT tag (test arenas). */
-const victimOf = (c: ShareCard) => (c.victim ? `${shareName(c.victim)}${c.victimBot ? ' (BOT)' : ''}` : null);
+/** The eaten coin of a kill card: its linked `@handle`, else its cleaned name, with its BOT tag (test arenas). */
+const victimOf = (c: ShareCard) => (!c.victimBot && xMention(c.victimX)) || (c.victim ? `${shareName(c.victim)}${c.victimBot ? ' (BOT)' : ''}` : null);
 
 /** The card's headline: "1st of 42", "Ate Nakamoto!". */
 export function shareHeadline(c: ShareCard): string {
@@ -150,6 +150,22 @@ function testStamp(ctx: SKRSContext2D, right: number, top: number): void {
   ctx.textAlign = 'center';
   ctx.fillText('TEST', 0, 14);
   ctx.restore();
+}
+
+/**
+ * A picture (JPEG, PNG or WebP bytes) cut to its centre square and drawn at `px` x `px`: a plain RGBA PNG (the X picture
+ * worn on the coin goes through `sanitizeAvatar` after this). Throws when the canvas cannot load or decode it.
+ */
+export async function squarePng(bytes: Buffer, px: number): Promise<Buffer> {
+  const lib = canvasModule();
+  if (!lib) throw new Error(`@napi-rs/canvas is not available: ${canvasError}`);
+  const img = await lib.loadImage(bytes);
+  const side = Math.min(img.width, img.height);
+  if (!(side > 0)) throw new Error('empty picture');
+  const canvas = lib.createCanvas(px, px);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, px, px);
+  return canvas.toBuffer('image/png');
 }
 
 /** Draws the card; returns PNG bytes. Throws when the canvas cannot load (see `shareCardSelfCheck`). */

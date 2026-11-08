@@ -13,10 +13,10 @@ import {
 } from '../src';
 
 describe('protocol constants', () => {
-  it('pins the wire values (v6: isBot on player-facing messages, feed left lines; v7: avatar ids; v8: map bounds; v9: countries; v10: the flag skin; v11: leap / invisibility, emoji emotes; v13: final boards, the closing countdown, share cards)', () => {
-    expect(PROTOCOL_VERSION).toBe(13);
+  it('pins the wire values (v6: isBot on player-facing messages, feed left lines; v7: avatar ids; v8: map bounds; v9: countries; v10: the flag skin; v11: leap / invisibility, emoji emotes; v13: final boards, the closing countdown, share cards; v14: linked X handles)', () => {
+    expect(PROTOCOL_VERSION).toBe(14);
     expect(EntityKind.Loot).toBe(6);
-    expect(PlayerFlag).toEqual({ Bot: 1, Verified: 2, Staker: 4, Holder: 8, Avatar: 16, Country: 32, FlagSkin: 64 });
+    expect(PlayerFlag).toEqual({ Bot: 1, Verified: 2, Staker: 4, Holder: 8, Avatar: 16, Country: 32, FlagSkin: 64, XHandle: 128 });
   });
 
   it('keeps entity kinds and player flags distinct', () => {

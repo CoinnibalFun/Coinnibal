@@ -195,6 +195,13 @@ export class Gateway {
     this.profiles = profiles;
   }
 
+  /** The X handle a signed-in wallet linked ("Link X"): shown by its name and tagged in kill posts. */
+  private xHandleOf: ((wallet: string) => string | null) | null = null;
+
+  setXHandles(fn: ((wallet: string) => string | null) | null): void {
+    this.xHandleOf = fn;
+  }
+
   /** Sets the emblem holder check (cached by the mint service): holders wear a laurel and may pick the emblem skin. */
   setHolderCheck(check: ((wallet: string) => Promise<boolean>) | null): void {
     this.holderCheck = check;
@@ -639,6 +646,8 @@ export class Gateway {
       // not sent with one). A join that leaves `flag` out takes the signed-in wallet's saved choice.
       const wantsFlag = msg.flag === true || (msg.flag === undefined && !!conn.wallet && (this.profiles?.flagSkin(conn.wallet) ?? false));
       if (wantsFlag && country && !avatar) flags |= PlayerFlag.FlagSkin;
+      // the linked X handle comes from the server's own store (a client never names one)
+      const xHandle = conn.wallet ? (this.xHandleOf?.(conn.wallet) ?? null) : null;
 
       // overloaded: a new free game waits (live games, reconnects and paid seats go on)
       if (target.mode !== 'arena' && !(conn.player?.alive) && this.shedder && !this.shedder.admitFree()) {
@@ -649,7 +658,7 @@ export class Gateway {
         if (conn.player?.alive && conn.room?.opts.mode === 'practice') return; // already playing
         const room = this.rooms.practiceRoom(this.rooms.leagueFor(conn), conn.room);
         if (conn.player?.alive) conn.room?.leave(conn, 'switch');
-        room.join(conn, { name, skin, flags, avatar, country });
+        room.join(conn, { name, skin, flags, avatar, country, xHandle });
         return;
       }
 
@@ -671,7 +680,7 @@ export class Gateway {
           return;
         }
         if (conn.player?.alive) conn.room?.leave(conn, 'switch');
-        room.join(conn, { name, skin, flags, avatar, country });
+        room.join(conn, { name, skin, flags, avatar, country, xHandle });
         return;
       }
 
@@ -696,7 +705,7 @@ export class Gateway {
         return;
       }
       try {
-        await this.joinArena(conn, target.arenaId, { name, skin, flags, avatar, country }, target.code ?? null, target.test === true);
+        await this.joinArena(conn, target.arenaId, { name, skin, flags, avatar, country, xHandle }, target.code ?? null, target.test === true);
       } catch (err) {
         if (!(err instanceof ChainBusyError)) throw err;
         // the RPC refused us even after the retries: the ticket is untouched on chain, the player tries again
@@ -760,14 +769,14 @@ export class Gateway {
   private async joinArena(
     conn: Conn,
     arenaId: number,
-    look: { name: string; skin: number; flags: number; avatar: string | null; country: string | null },
+    look: { name: string; skin: number; flags: number; avatar: string | null; country: string | null; xHandle?: string | null },
     code: string | null = null,
     test = false,
   ): Promise<void> {
     if (!conn.wallet) return;
     const wallet = conn.wallet;
     const target = { arenaId };
-    const { name, skin, flags, avatar, country } = look;
+    const { name, skin, flags, avatar, country, xHandle = null } = look;
     {
       // a live ticket comes back first, with no chain read at all: its coin is in this process already
       const existing = this.rooms.findArenaStake(target.arenaId, conn.wallet);
@@ -913,6 +922,7 @@ export class Gateway {
         skin,
         avatar,
         country,
+        xHandle,
         flags: flags | PlayerFlag.Staker,
         stake: {
           player: conn.wallet,

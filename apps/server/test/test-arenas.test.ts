@@ -270,15 +270,20 @@ describe('test arenas: the room directory', () => {
   it('bots in a test arena are labelled BOT and hold no ticket', async () => {
     const { m } = await setup();
     const room = m.get('test-1') as Room;
-    // they arrive one by one, about 4 s apart
-    for (let i = 0; i < 70_000 / TICK_MS; i++) room.tick(TICK_MS);
-    const bots = [...room.world.players.values()].filter((p) => p.isBot);
-    expect(bots.length).toBe(TEST_ARENA_DEFAULT.bots);
-    for (const b of bots) {
-      expect(b.flags & PlayerFlag.Bot).toBe(PlayerFlag.Bot);
-      expect(b.flags & PlayerFlag.Staker).toBe(0);
-      expect(room.ledger!.has(b.id)).toBe(false);
+    // they arrive one by one, about 4 s apart; a bot another bot ate is away for a few seconds before its slot comes
+    // back, so count every bot slot seen over the run rather than the ones alive at one instant
+    const seen = new Set<string>();
+    for (let i = 0; i < 70_000 / TICK_MS; i++) {
+      room.tick(TICK_MS);
+      for (const b of room.world.players.values()) {
+        if (!b.isBot) continue;
+        seen.add(b.name);
+        expect(b.flags & PlayerFlag.Bot).toBe(PlayerFlag.Bot);
+        expect(b.flags & PlayerFlag.Staker).toBe(0);
+        expect(room.ledger!.has(b.id)).toBe(false);
+      }
     }
+    expect(seen.size).toBe(TEST_ARENA_DEFAULT.bots);
   });
 });
 
