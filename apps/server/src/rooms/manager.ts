@@ -75,6 +75,8 @@ export interface NotableKillEvent {
   victimMass: number;
   /** A practice bot (testnet test arenas only). */
   victimIsBot?: boolean;
+  /** The X handle the eaten coin's wallet linked when it joined (the main thread checks it is still linked). */
+  victimX?: string | null;
 }
 
 /** The services the rooms use: the main thread's own (journal, chain, stores), whichever thread runs the rooms. */
@@ -218,7 +220,7 @@ export class RoomManager {
       ...this.deps,
       onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: lookOf(e.player), stats: e.stats }),
       onNotableKill: (e) =>
-        notable({ room: e.room, conn: e.conn as Conn, player: lookOf(e.killer), mass: Math.floor(e.killer.totalMass()), kills: e.killer.stats.playersEaten, victim: e.victim, victimMass: e.victimMass, ...(e.victimIsBot ? { victimIsBot: true } : {}) }),
+        notable({ room: e.room, conn: e.conn as Conn, player: lookOf(e.killer), mass: Math.floor(e.killer.totalMass()), kills: e.killer.stats.playersEaten, victim: e.victim, victimMass: e.victimMass, ...(e.victimIsBot ? { victimIsBot: true } : {}), ...(e.victimX ? { victimX: e.victimX } : {}) }),
     };
     const workers = cfg.gameWorkers ?? 0;
     this.pool =

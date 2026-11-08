@@ -101,7 +101,7 @@ export type Ctl =
       holds: [key: string, entryFee: number][];
     }
   | { k: 'go'; hid: number; conn: number | null; player: PlayerLook; stats: DeathStats }
-  | { k: 'nk'; hid: number; conn: number; player: PlayerLook; mass: number; kills: number; victim: string; victimMass: number; victimIsBot?: boolean }
+  | { k: 'nk'; hid: number; conn: number; player: PlayerLook; mass: number; kills: number; victim: string; victimMass: number; victimIsBot?: boolean; victimX?: string | null }
   | { k: 'bell'; e: BellSettled }
   | { k: 'lb'; rec: LbRecord }
   | { k: 'country'; g: CountryGame }

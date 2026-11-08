@@ -35,6 +35,7 @@ import { UsedPayments, devFakePaymentReader, viemPaymentReader, type PaymentRead
 import { checksumAddress } from './auth';
 import { ProfileStore } from './profiles';
 import { AvatarStore } from './avatars';
+import { XLinkService, devFakeXPicture, fakeXFetch, type XFetch } from './xlink';
 import { ContractsStore } from './site/contracts';
 import { MintService, hyperliquidPrice, type PriceFetcher } from './site/mint';
 import { SiteApi, type SiteLimits } from './site/routes';
@@ -80,6 +81,8 @@ export interface App {
   shop: ShopService;
   /** "Share on X" cards. */
   shares: ShareService;
+  /** "Link X": linked X accounts and their pictures (`DATA_DIR/x-links.json`, `DATA_DIR/x-avatars/`). */
+  xLinks: XLinkService;
   /** The WebSocket front door (connection limits, abuse counters). */
   gateway: Gateway;
   /** Graceful degradation under load (active with `LOAD_SHED`, default on in production). */
@@ -113,6 +116,8 @@ export async function createApp(
     paymentReader?: PaymentReader | null;
     /** Wall clock of the custom rooms (Unix ms); tests inject one. */
     customNow?: () => number;
+    /** "Link X": the fetch that reads X's public endpoints (tests inject a fake X). */
+    xFetch?: XFetch;
   } = {},
 ): Promise<App> {
   const log = opts.log ?? ((m: string) => console.log(`[${new Date().toISOString()}] ${redactUrls(m)}`));
@@ -258,6 +263,17 @@ export async function createApp(
   site.setShop({ service: shop, settings: shopSettings, inventory: boostInventory });
   site.setArenaPrices(arenaPrices);
 
+  // "Link X": X accounts linked by a post with a code (no X API; DATA_DIR/x-links.json, DATA_DIR/x-avatars/)
+  const xLinks: XLinkService = new XLinkService({
+    dataDir: persist ? cfg.dataDir : null,
+    suffix: cfg.devFakeChain ? '.dev-fake' : '',
+    // the dev stack (fake chain only) may ask for a fake X: posts carry the newest code, by @elymum_fan
+    ...(opts.xFetch ? { fetch: opts.xFetch } : {}),
+    ...(!opts.xFetch && cfg.devFakeChain && process.env.DEV_FAKE_X === '1' ? { fetch: fakeXFetch({ text: () => `Linking my X to Elymum: ${xLinks.lastCode() ?? ''} elymum.io`, avatar: devFakeXPicture }) } : {}),
+    log,
+  });
+  if (cfg.devFakeChain && process.env.DEV_FAKE_X === '1') log('x-links: DEV_FAKE_X=1, X is faked (dev stack only)');
+  site.setXLinks(xLinks);
   // "Share on X": cards of results and kills, made from the server's own records (DATA_DIR/site/shares.json)
   const shares = new ShareService({
     dataDir: persist ? cfg.dataDir : null,
@@ -266,6 +282,7 @@ export async function createApp(
       const t = chain.status().token;
       return t ? { decimals: t.decimals, symbol: t.symbol } : null;
     },
+    xLinked: (handle) => xLinks.links.linkedHandle(handle),
     log,
   });
   // the native canvas addon draws the share cards: checked once at startup (the server runs without it)
@@ -312,7 +329,7 @@ export async function createApp(
       onNotableKill: (e) => {
         const card = shares.kill({ room: e.room, player: e.player, wallet: e.conn.wallet }, e.conn.wallet ?? `conn:${e.conn.id}`, e);
         if (card) {
-          e.conn.send({ t: 'share', kind: 'kill', id: card.id, victim: card.victim ?? e.victim, ...(card.victimBot ? { victimIsBot: true } : {}), ...(card.test ? { test: true } : {}) });
+          e.conn.send({ t: 'share', kind: 'kill', id: card.id, victim: card.victim ?? e.victim, ...(card.victimBot ? { victimIsBot: true } : {}), ...(card.victimX ? { victimX: card.victimX } : {}), ...(card.test ? { test: true } : {}) });
         }
       },
     },
@@ -407,6 +424,8 @@ export async function createApp(
   const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, shares, priceKeeper, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
   const gateway = new Gateway(cfg, rooms, auth, chain, journal, log);
   gateway.setProfiles(profiles);
+  // a linked X handle rides on the coin (read from memory at the join: X is never asked then)
+  gateway.setXHandles((wallet) => xLinks.links.handle(wallet));
   // who may play: `gameAccess` (setting) or `GAME_ACCESS`: admins, NFT holders + admins, or everyone
   gateway.setGameGate((wallet, fresh) => site.gameOpenFor(wallet, fresh));
   // wallets the admin banned after an integrity review cannot start arena games (practice still works)
@@ -454,6 +473,7 @@ export async function createApp(
     customRooms,
     shop,
     shares,
+    xLinks,
     gateway,
     shedder,
     listen: () =>

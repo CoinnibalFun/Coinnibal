@@ -2,11 +2,13 @@
  * "Share on X": the server keeps a small public card of a result (an arena bell, a custom room's end) or of a kill
  * (every person eaten; a practice bot only in a testnet test arena), made from its own records only (nothing a client sends), and serves it at `/share/<id>` (a page with the
  * Open Graph and Twitter card tags) and `/share/<id>.png` (the 1200 x 630 card image). The web opens X's web intent
- * (`shareIntentUrl`) with a localized line and that link: no X API, no account linking. A card holds only what the
- * game shows anyway: the public name, the wallet's short form, the coin's paint, flag and emblem badge, the numbers,
- * and the public names of the coins eaten that game (`shareName`: never a wallet address).
+ * (`shareIntentUrl`) with a localized line and that link: no X API. A card holds only what the game shows anyway: the
+ * public name, the wallet's short form, the coin's paint, flag and emblem badge, the numbers, and the public names of
+ * the coins eaten that game (`shareName`: never a wallet address). A coin eaten whose owner linked an X account
+ * ("Link X", `xlink.ts`: linking is consent to be tagged) is named by its `@handle`, which only the server sets.
  */
 import { sanitizeName } from './text';
+import { xMention } from './xlink';
 
 export type ShareKind = 'round' | 'room' | 'kill';
 
@@ -41,6 +43,8 @@ export interface ShareCard {
   victimMass?: number;
   /** Kills: the coin eaten was a practice bot (test arenas only). */
   victimBot?: boolean;
+  /** Kills: the X handle the eaten coin's owner linked (`isXHandle`, set by the server only): the post tags it. */
+  victimX?: string;
   /** Results: the coins eaten this game (the first `EATEN_SHOWN`) and how many more. */
   eaten?: EatenName[];
   eatenMore?: number;
@@ -55,6 +59,8 @@ export interface EatenName {
   bot?: boolean;
   /** Times eaten this game (absent: once). */
   n?: number;
+  /** The X handle its owner linked (`isXHandle`, set by the server only): named `@handle`. Never for a bot. */
+  xHandle?: string;
 }
 
 /** Names a result shows of the coins eaten; the rest are "+N". */
@@ -78,9 +84,14 @@ export function shareName(raw: unknown): string {
   return s.length > 0 ? s : '???';
 }
 
-/** "Penny, Rocky ×2, Zed (BOT) +3": the eaten coins on one line (`botTag`: the translated BOT tag). */
+/** How a coin eaten is named in a post: its linked `@handle` (people only), else its cleaned public name. */
+export function eatenLabel(e: { name: string; bot?: boolean; xHandle?: string }): string {
+  return (!e.bot && xMention(e.xHandle)) || shareName(e.name);
+}
+
+/** "Penny, @rocky ×2, Zed (BOT) +3": the eaten coins on one line (`botTag`: the translated BOT tag). */
 export function eatenLine(list: readonly EatenName[], more = 0, botTag = 'BOT'): string {
-  const names = list.map((e) => `${shareName(e.name)}${e.bot ? ` (${botTag})` : ''}${e.n && e.n > 1 ? ` \u00D7${e.n}` : ''}`).join(', ');
+  const names = list.map((e) => `${eatenLabel(e)}${e.bot ? ` (${botTag})` : ''}${e.n && e.n > 1 ? ` \u00D7${e.n}` : ''}`).join(', ');
   const rest = more > 0 ? `+${more}` : '';
   return names && rest ? `${names} ${rest}` : names || rest;
 }

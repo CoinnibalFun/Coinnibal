@@ -101,7 +101,7 @@ export interface RoomDeps {
    * A person ate a person (the killer may share it: every person eaten offers "Share on X"); in a testnet test arena
    * a practice bot counts too (`victimIsBot`).
    */
-  onNotableKill?: (e: { room: Room; conn: Conn; killer: Player; victim: string; victimMass: number; victimIsBot?: boolean }) => void;
+  onNotableKill?: (e: { room: Room; conn: Conn; killer: Player; victim: string; victimMass: number; victimIsBot?: boolean; victimX?: string | null }) => void;
 }
 
 /** An AFK staker's ticket settled at a round's bell (see `RoomDeps.onBellSettled`). */
@@ -124,6 +124,8 @@ export interface JoinOptions {
   avatar?: string | null;
   /** The country the player plays for (`isCountryCode`, the gateway checked it); null / absent: no flag. */
   country?: string | null;
+  /** The X handle the wallet linked (`isXHandle`, the gateway read it from the server's store); null / absent: none. */
+  xHandle?: string | null;
   /** Arena ticket. */
   stake?: Omit<ArenaEntry, 'pid'>;
 }
@@ -441,7 +443,7 @@ export class Room implements RoomHandle {
     this.attach(conn);
     // `joined` starts the client's world mirror afresh: the view starts afresh with it (see `freshView`)
     this.freshView(conn);
-    const player = this.world.addPlayer({ name: opts.name, skin: opts.skin, flags: opts.flags, country: opts.country ?? null, mass: RULES.startMass });
+    const player = this.world.addPlayer({ name: opts.name, skin: opts.skin, flags: opts.flags, country: opts.country ?? null, xHandle: opts.xHandle ?? null, mass: RULES.startMass });
     this.humans.set(player.id, conn);
     conn.player = player;
     conn.spectating = false;
@@ -849,7 +851,7 @@ export class Room implements RoomHandle {
     const killerConn = killer && !killer.isBot && !p.isBot ? this.humans.get(killer.id) : null;
     if (cause === 'death' && killerConn) {
       try {
-        this.deps.onNotableKill?.({ room: this, conn: killerConn, killer: killer!, victim: p.name, victimMass: Math.floor(stats.maxMass) });
+        this.deps.onNotableKill?.({ room: this, conn: killerConn, killer: killer!, victim: p.name, victimMass: Math.floor(stats.maxMass), victimX: p.xHandle });
       } catch (err) {
         this.deps.log(`room ${this.id}: notable-kill hook failed: ${(err as Error).message}`);
       }
@@ -1096,7 +1098,7 @@ export class Room implements RoomHandle {
       });
       // the eaten list of a person's result (a bot victim counts in a test arena only)
       if (k.killer && this.humans.has(k.killer.id)) {
-        this.eaten.note(k.killer.id, { pid: k.victim.id, name: k.victim.name, bot: k.victim.isBot, wallet: this.walletOf.get(k.victim.id) ?? null });
+        this.eaten.note(k.killer.id, { pid: k.victim.id, name: k.victim.name, bot: k.victim.isBot, wallet: this.walletOf.get(k.victim.id) ?? null, xHandle: k.victim.xHandle });
       }
       if (this.bots?.isBot(k.victim.id)) {
         if (this.opts.test) this.notableBotKill(k.killer, k.victim);
