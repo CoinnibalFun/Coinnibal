@@ -758,9 +758,9 @@
       const pinned = (el) => {
         for (let e = el; e && e !== document.documentElement; e = e.parentElement) {
           const cs = getComputedStyle(e);
-          if (cs.position === 'fixed' || cs.position === 'sticky') return true;
           // inside a scroller (a fixed full-screen page that scrolls itself): the content moves
           if (e !== el && (cs.overflowY === 'auto' || cs.overflowY === 'scroll') && e.scrollHeight > e.clientHeight + 1) return false;
+          if (cs.position === 'fixed' || cs.position === 'sticky') return true;
         }
         return false;
       };
