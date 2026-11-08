@@ -395,7 +395,7 @@ describe('room workers: shutdown', () => {
   it('a server stop settles the live tickets of every worker (an operator exit) before it returns', async () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-stop-'));
     const ch = new FakeChain();
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
     const p = await a.listen();
     const w = testWallet(0xb001);
@@ -420,7 +420,7 @@ describe('room workers: a hung worker', () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-hang-'));
     const ch = new FakeChain();
     const logs: string[] = [];
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: (m) => logs.push(m), persist: true });
     const p = await a.listen();
     try {
@@ -497,7 +497,7 @@ describe('room workers: practice bots', () => {
   it('a free custom room in a worker fields its practice bots; official arenas in a worker have none, test arenas do', async () => {
     const d = mkdtempSync(join(tmpdir(), 'elymum-workers-bots-'));
     const ch = new FakeChain();
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
     await a.listen();
     try {
@@ -533,7 +533,7 @@ describe('room workers: arena instance scaling', () => {
     const base = Date.now();
     let off = roundAt(base).startsAt + 2_000 - base;
     const now = () => Date.now() + off;
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '2', ARENA_INSTANCE_CAP: '1' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '2', ARENA_INSTANCE_CAP: '1' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true, now });
     const p = await a.listen();
     try {
