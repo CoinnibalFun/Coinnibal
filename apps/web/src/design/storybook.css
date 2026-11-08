@@ -2591,13 +2591,16 @@ h2,
     position: relative;
   }
   .kb-iconbtn--sm::after {
+    /* from the padding box (inside the 2.5 px border): 29 + 2 x 8 = 45 px */
     content: '';
     position: absolute;
-    inset: -5px;
+    inset: -8px;
     border-radius: 50%;
   }
   .kb-chip.is-button {
     min-height: 44px;
+    min-width: 44px;
+    justify-content: center;
   }
   /* the small button keeps its type and corner; only its height reaches the 44 px touch floor */
   .kb-btn--sm {
@@ -2616,6 +2619,6 @@ h2,
   .kb-addr__copy::after {
     content: '';
     position: absolute;
-    inset: -12px -6px;
+    inset: -14px -8px;
   }
 }

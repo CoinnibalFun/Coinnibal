@@ -1087,6 +1087,9 @@
 }
 @media (max-width: 959px) {
   .kl-root.is-mid .kl-sections__item {
+    /* icon-only tabs: still a 44 px square to tap */
+    min-width: 44px;
+    justify-content: center;
     padding: 0 11px;
   }
   .kl-root.is-mid .kl-sections__label,
