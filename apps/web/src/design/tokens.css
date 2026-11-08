@@ -177,7 +177,7 @@
   --t-body: 16px;
   --t-small: 14px;
   --t-label: 12px; /* mono kickers and labels, uppercase +0.08em */
-  --t-micro: 11px; /* never smaller */
+  --t-micro: 12px; /* never smaller: the readable floor on phones */
   --t-num: 28px; /* Geist Mono figures in cards */
 
   /* ── space ── */

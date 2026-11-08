@@ -49,7 +49,7 @@
   background: #e6f3ee;
 }
 .ad-counts dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-counts dd {
@@ -292,7 +292,7 @@
 }
 .ad-access legend {
   margin-bottom: 10px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 .ad-opts {
@@ -376,7 +376,7 @@ label.ad-cap,
 .ad-cap {
   display: block;
   margin-bottom: 6px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -597,7 +597,7 @@ label.ad-cap,
   border-radius: var(--r-pill);
   background: #fbe7b0;
   color: var(--ink-fixed);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   /* wraps on a phone instead of widening the kind column */
   white-space: normal;

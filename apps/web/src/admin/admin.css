@@ -82,7 +82,7 @@ body {
 }
 .ad-brand__sub {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--teal-ink);
 }
 .ad-top__net {
@@ -166,7 +166,7 @@ body {
 }
 .ad-rail__group {
   padding-left: 14px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-rail .kb-tabs {
@@ -190,7 +190,7 @@ body {
   content: counter(adtab, decimal-leading-zero) / '';
   width: 20px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--ink-3);
 }
@@ -210,7 +210,7 @@ body {
   top: -27px;
   left: 14px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -413,7 +413,7 @@ body {
   margin: 0;
 }
 .ad-chainbar__list dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-chainbar__list dd {
@@ -496,7 +496,7 @@ body {
   border-radius: var(--r-pill);
   background: var(--down);
   color: var(--ink-fixed);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   transform: rotate(2deg);
 }
@@ -584,7 +584,7 @@ body {
   min-width: 0;
 }
 .ad-field__label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 .ad-field__box {
@@ -633,7 +633,7 @@ body {
   align-items: center;
   padding: 0 12px;
   border-left: 2px dashed var(--sand-2);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   background: var(--linen);
   border-radius: 0 8px 8px 0;
@@ -685,7 +685,7 @@ body {
   border-bottom: 0;
 }
 .ad-kv dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-kv dd {
@@ -779,7 +779,7 @@ body {
   padding: 2px 9px;
   border: var(--stroke-xs) solid var(--outline);
   border-radius: var(--r-pill);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
@@ -829,7 +829,7 @@ body {
   background: var(--mist);
   color: var(--cyan-ink);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -927,7 +927,7 @@ body {
 .ad-table caption {
   padding-bottom: 8px;
   text-align: left;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-table th,
@@ -950,7 +950,7 @@ body {
   background: var(--sticker);
   font-family: var(--font-mono);
   font-weight: 500;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -1025,7 +1025,7 @@ body {
 }
 .ad-launch__cap {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-terraces {
@@ -1093,7 +1093,7 @@ body {
   padding-right: 90px;
 }
 .ad-terrace__no {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-terrace__title {
@@ -1106,7 +1106,7 @@ body {
   border-radius: var(--r-pill);
   background: var(--sun);
   color: var(--ink-fixed);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   transform: rotate(-2deg);
 }
@@ -1366,7 +1366,7 @@ body {
   margin: 0;
 }
 .ad-glance__figs dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
   margin-bottom: 6px;
 }
@@ -1462,7 +1462,7 @@ body {
   border-radius: var(--r-pill);
   background: var(--up);
   color: var(--ink-fixed);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   transform: rotate(3deg);
 }
@@ -1485,7 +1485,7 @@ body {
   margin-left: -2px;
 }
 .ad-stats span.mono {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-stats strong {
@@ -1527,7 +1527,7 @@ body {
   background: var(--linen);
 }
 .ad-pricebox span.mono {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-pricebox__fig {
@@ -1738,7 +1738,7 @@ body {
   gap: 8px;
 }
 .ad-txp__result dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-txp__result dd {
@@ -1783,7 +1783,7 @@ body {
   animation: ad-pulse 1s ease-in-out infinite alternate;
 }
 .ad-stations .mono {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ad-stations li.is-now .mono {
@@ -2001,7 +2001,7 @@ body {
     padding-top: 26px;
   }
   .ad-stations .mono {
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 0.02em;
   }
 }
@@ -2031,7 +2031,7 @@ body {
     align-self: flex-start;
   }
   .ad-addr__v {
-    font-size: 11.5px;
+    font-size: 12px;
   }
   .ad-addr {
     gap: 4px;
@@ -2194,7 +2194,7 @@ body {
   font-size: 15px;
 }
 .ad-summary__k {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -2219,7 +2219,7 @@ body {
 }
 .ad-switchrow__label {
   min-width: 110px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -2281,7 +2281,7 @@ body {
   border: 2px solid var(--outline);
 }
 .ad-seg__live {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;

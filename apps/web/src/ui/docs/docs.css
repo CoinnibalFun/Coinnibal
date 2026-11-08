@@ -153,7 +153,7 @@
   border-radius: 50%;
   background: var(--white, #fff);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--ink);
@@ -770,7 +770,7 @@
   border-radius: 50%;
   background: var(--sun);
   color: var(--ink-fixed);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 .cs__cap {
@@ -789,7 +789,7 @@
 .cs-say__t { font-size: 12px; }
 .cs-tag { font-size: 12px; fill: #fff !important; letter-spacing: 0.08em; }
 .cs-tag--ink { fill: var(--ink-fixed) !important; font-size: 15px; }
-.cs-note { font-size: 11px; }
+.cs-note { font-size: 12px; }
 .cs-no { font-size: 22px; fill: var(--down-ink) !important; letter-spacing: 0.06em; }
 
 /* play */
