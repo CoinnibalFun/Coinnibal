@@ -75,7 +75,12 @@ async function startStack() {
     }),
   );
   for (let i = 0; i < 90; i++) {
-    if (await fetch(`${BASE}/api/health`).then((r) => r.ok, () => false)) return () => rmSync(data, { recursive: true, force: true });
+    if (await fetch(`${BASE}/api/health`).then((r) => r.ok, () => false)) return () => {
+      // the server may still be writing its data as it stops: a leftover temp directory is harmless
+      try {
+        rmSync(data, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch {}
+    };
     await sleep(1000);
   }
   throw new Error('the stack did not come up');

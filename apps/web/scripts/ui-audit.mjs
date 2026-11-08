@@ -60,7 +60,12 @@ const MAX_SHOTS = Number(opt('--max-shots', '500'));
 const MIN_FONT = Number(opt('--min-font', '12'));
 // --safe-area: emulate an iPhone notch / home bar on touch viewports (env(safe-area-inset-*), through CDP)
 const SAFE_AREA = flag('--safe-area');
-const safeInsets = (vp) => (!SAFE_AREA || !vp.touch ? null : vp.w > vp.h ? { top: 0, bottom: 21, left: 47, right: 47 } : { top: 47, bottom: 34, left: 0, right: 0 });
+// (phones: an iPhone's notch and home bar; tablets: an iPad's status bar and home indicator, no notch)
+const safeInsets = (vp) => {
+  if (!SAFE_AREA || !vp.touch) return null;
+  if (Math.min(vp.w, vp.h) >= 600) return { top: 24, bottom: 20, left: 0, right: 0 };
+  return vp.w > vp.h ? { top: 0, bottom: 21, left: 47, right: 47 } : { top: 47, bottom: 34, left: 0, right: 0 };
+};
 const SHOTS = !flag('--no-shots');
 const log = (...a) => console.error('[ui-audit]', ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -129,7 +134,12 @@ async function startStack() {
   kids.push(server, web);
   for (let i = 0; i < 90; i++) {
     const ok = await fetch(`${BASE}/api/health`).then((r) => r.ok, () => false);
-    if (ok) return () => rmSync(data, { recursive: true, force: true });
+    if (ok) return () => {
+      // the server may still be writing its data as it stops: a leftover temp directory is harmless
+      try {
+        rmSync(data, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch {}
+    };
     await sleep(1000);
   }
   throw new Error('the stack did not come up');
