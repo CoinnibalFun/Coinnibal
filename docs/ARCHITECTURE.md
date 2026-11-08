@@ -170,7 +170,7 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
 | Server key (`serverAuthority`, optionally the NFT `priceKeeper`) | settle any open session with any payout up to the vault (so, with a ticket bought from a wallet of its own, take an arena's open stakes less the fee on profit); cancel unplayed tickets; burn floor loot up to the vault; re-price the NFT inside the owner's bounds | touch owed payouts, the fee wallet or the config, mint any token, price the NFT outside the bounds |
 | Owner (Ownable2Step) | arena: set the token once, the fee pair (≤ 25 % of profit), the holder pair and NFT (8 % + 2 % by decision), the burn mode, the payment burn share, the fee wallet, the server authority, pause, create / update / sweep arenas, rescue non-game tokens; NFT: phase, root, price, bounds, keeper, limits, supply (down only), metadata, royalty, treasury, owner mint, withdraw | change the token once set, change an open ticket's rates, take an arena vault directly |
 | Fee wallet | receives the fee wallet's share of profits and payments, and a swept arena's vault | nothing else on chain |
-| Server operator | rooms, round length (`ROUND_SECONDS`, `ROUND_JOIN_CLOSE_SECONDS`), who may play (`GAME_ACCESS`), map sizes | anything on chain except through the server key |
+| Server operator | rooms, round length (`ROUND_SECONDS`, `ROUND_JOIN_CLOSE_SECONDS`, `ROUND_BREAK_SECONDS`), who may play (`GAME_ACCESS`), map sizes | anything on chain except through the server key |
 
 - **The game outcome is trusted.** A buggy or malicious server could split a vault wrongly between that arena's
   players or burn the wrong amount of it (never more than the vault). The owner can replace the server key, so
@@ -228,10 +228,13 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   instances `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) people on the same vault, opened ahead of demand and
   drained when quiet by the instance scaler (`rooms/arena-scaler.ts`, OPERATIONS.md "Arena instances"; a draining
   instance takes no new seat and closes after its bell, nobody is evicted); rounds of 300 s aligned to Unix
-  time, joins closed in the final 60 s. **No bots in practice ponds or official arenas.** Maps grow with every person and
+  time, joins closed in the final 60 s and in the 30 s break after each bell (`ROUND_BREAK_SECONDS`; a join then is
+  refused with `round_closed` and its `opensAt`, and the client holds the ticket until the floor opens). **No bots in practice ponds or official arenas.** Maps grow with every person and
   shrink back only when safe (base + per person, at most max; `rooms/map-settings.ts`, `DATA_DIR/site/maps.json`, `/api/admin/maps`).
 - **Practice bots** (`bots/brain.ts`, `bots/practice.ts`): only in **free custom rooms**, when the creator turns them
-  on (count up to 12, difficulty easy / mixed / hard), and in the testnet's **test arenas** (below). Each bot sees
+  on (count up to 12, difficulty easy / mixed / hard), and in the testnet's **test arenas** (below). Their tuning (`BOT_TUNING`) is
+  deliberately beatable: a bot re-thinks every 650 / 450 / 300 ms (easy / normal / hard) and misses a threat or a
+  prey 35 / 25 / 12 % of the time. Each bot sees
   the server's view rectangle of a player of its size (no map-wide knowledge, invisible players excluded), carries
   no value, never uses power-ups and is tagged BOT. `Room` refuses bots in any other room (a room with stakes takes
   them only when it is marked `test` and its chain is a testnet).
@@ -244,8 +247,8 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   contract's fee on profit, loot burns, the journal, crash recovery and the integrity telemetry. The one difference:
   practice bots (default 10, mixed, 3..20; the first at once, then one about every 4 s). They carry no value (see
   invariant 11). The scaler never sees them (`publicInstances` excludes them) and quick play never seats there.
-  Their games count on no board: no leaderboard record, country game or "Last rounds" entry, no profile stats, no
-  Share on X card. **Guards:** they exist only when the server's `CHAIN_ID` is a testnet (46630, or 31337 locally)
+  Their games count on no board: no leaderboard record, country game or "Last rounds" entry, no profile stats; their Share on X
+  cards are stamped TEST and never show a payout. **Guards:** they exist only when the server's `CHAIN_ID` is a testnet (46630, or 31337 locally)
   and the RPC serves a testnet, AND the admin switch "Test arenas with bots" is on (default on on a testnet). On the
   mainnet the setting is refused (`PUT /api/admin/test-arenas` answers 409), a stored file is ignored, the room
   directory opens none and `Room` refuses to build one. Turned off, each test arena takes no new seat and closes
@@ -266,11 +269,14 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   The admin panel computes the sync's diff and the owner wallet signs `updateArena`; the server only stores settings.
   When an arena's entry fee changes on chain its rooms follow (`RoomHandle.setBuyIn`, display and evidence only:
   money always uses the ticket's own `Session.entryFee`).
-- **Power-up shop** (`shop/`): `GET /api/shop`, `POST /api/shop/buy {kind, txHash}`; packs are priced in US cents
-  and converted at the arenas' token price and rounding (`priceIn: 'usd'`; token prices until a price is set); the
-  server checks the receipt's `Paid` event (the arena, the payer, the pack's `ref` = `elymum.shop.<kind>`, the price
-  now or one shown in the last 15 minutes) and the token transfer, then credits the charges (each hash once, payments
-  older than 24 h refused).
+- **Power-up shop** (`shop/`): `GET /api/shop`, `POST /api/shop/buy {cart, txHash}` (a cart of several packs paid
+  with one `pay(total, ref)`, `ref` = `elymum.cart.` and each power-up's letter and pack count; older clients send
+  `{kind, txHash}` for one pack, `ref` = `elymum.shop.<kind>`); packs are priced in US cents and converted at the
+  arenas' token price and rounding (`priceIn: 'usd'`; token prices until a price is set); the server checks the
+  receipt's `Paid` event (the arena, the payer, the cart's `ref`, the total at one price table quoted now or in the
+  last 15 minutes, full or the holder's) and the token transfer, then credits the whole cart in one write (each hash
+  once, payments older than 24 h refused; a power-up switched off between the quote and the payment is recorded as
+  owed back to the wallet).
 - **Mint and NFT API:** `GET /api/site/mint` (state, ETH/USD, the price in USD, holders, game access), proofs, the
   allowlist snapshot, `GET /api/admin/mint/price`; metadata at `/api/nft/<id>`, `/api/nft/<id>.svg`
   (`?style=vector|pixel`), `/api/nft/contract`.
@@ -290,6 +296,13 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   `DATA_DIR/site/shares.json` (the newest 5,000). The web opens X's web intent (`x.com/intent/post`) with a
   localized line and the card's link: no X API. Death sheets, operator exits and the in-game HUD's share button (live
   mass, place and coins eaten) open the intent with a localized line and the site's link when no card fits.
+- **Link X** (`xlink.ts`, `shared/xlink.ts`): a signed-in wallet ties an X account to its coin without the X API.
+  `POST /api/x/code` issues a code (`ELYMUM-` and six characters, 30 minutes), the player posts it from X (the web
+  intent) and sends the post's link to `POST /api/x/verify {url}`; the server reads the post from X's public embed
+  endpoints and takes the handle, id, name and picture from X's answer. `GET /api/x` (the link and the pending code),
+  `DELETE /api/x` (unlink), `POST /api/x/picture` (wear the X picture on the coin), `GET /api/x/avatar/<userId>`
+  (public). The handle travels in snapshots (`PlayerFlag.XHandle`, `PROTOCOL_VERSION` 14) and kill cards tag a linked
+  victim (`share.victimX`); bots never have one.
 - **Other REST:** `/api/health` (503 with reasons, `?live=1` the liveness check; `health.ts`), `/api/rooms` (test
   arenas carry `test: true`), `/api/leaderboard`, `/api/config`, `/api/pending?wallet=` (that wallet's session or an
   admin's), `/api/profile`, the site API `/api/site/*` and the admin API `/api/admin/*` (`/api/admin/reprice`:

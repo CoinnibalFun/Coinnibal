@@ -12,6 +12,7 @@ import {
   type ProfitFee,
 } from '@elymum/shared';
 import { REFUND_DELAY_SECS } from '@elymum/sdk';
+import { APPROVE_DEFAULT_TICKETS, APPROVE_TICKET_CHOICES } from '../../wallet/ticket';
 
 /**
  * Every number the player guide quotes, taken from the code that enforces it, so the
@@ -35,7 +36,7 @@ export const SERVER = {
   maxTicketHours: 6,
   /** `STALE_SESSION_AFTER_S` (chain/evm.ts): a ticket nobody plays gets its full entry fee back after 15 min. */
   staleTicketMinutes: 15,
-  /** `PRIVATE_ROOM_CAPACITY` default (shared CAPACITY.private) and the 5-character room code (rooms/manager.ts). */
+  /** The length of a private room's invite code (rooms/manager.ts). */
   privateCodeLength: 8,
 } as const;
 
@@ -54,13 +55,23 @@ export function payoutExample(rates: FeeRates = DEFAULT_FEE_RATES): ProfitFee<nu
 export interface DocsFacts {
   /** The contract's default fee rates on profit (bps), their on-chain cap, and the burned share of a shop payment. */
   fee: { burnBps: number; vaultBps: number; maxBps: number; paymentBurnBps: number };
-  shop: { packSize: number; prices: Record<'magnet' | 'leap' | 'speed' | 'invis', number>; holderDiscountPct: number; arenaUses: number; holderExtraUses: number };
+  /** `prices`: whole tokens (used until a token price is set); `usdCents`: the default price of a pack in US cents. */
+  shop: {
+    packSize: number;
+    prices: Record<'magnet' | 'leap' | 'speed' | 'invis', number>;
+    usdCents: Record<'magnet' | 'leap' | 'speed' | 'invis', number>;
+    holderDiscountPct: number;
+    arenaUses: number;
+    holderExtraUses: number;
+  };
   example: { entry: number; cashout: number };
-  arenas: { id: number; name: string; entry: number; maxSessions: number }[];
+  /** `entry`: whole tokens at the reference price; `usdCents`: the ticket's price in US cents. */
+  arenas: { id: number; name: string; entry: number; usdCents: number; holdersOnly: boolean; maxSessions: number }[];
   capacity: { practice: number; private: number; arena: number };
   rules: {
     roundMin: number;
     joinCloseS: number;
+    breakS: number;
     afkS: number;
     spawnShieldS: number;
     eatRatio: number;
@@ -69,6 +80,8 @@ export interface DocsFacts {
     lootEntryDiv: number;
   };
   refundHours: number;
+  /** How many tickets of a room one token approval may cover, and the preselected choice (wallet/ticket.ts). */
+  approve: { choices: readonly number[]; preselected: number };
   server: typeof SERVER;
 }
 
@@ -82,16 +95,18 @@ export const FACTS: DocsFacts = {
       speed: Number(SHOP_DEFAULTS.prices.speed),
       invis: Number(SHOP_DEFAULTS.prices.invis),
     },
+    usdCents: { ...SHOP_DEFAULTS.usdCents },
     holderDiscountPct: SHOP_DEFAULTS.holderDiscountPct,
     arenaUses: SHOP_DEFAULTS.arenaUsesPerRound,
     holderExtraUses: SHOP_DEFAULTS.holderExtraArenaUses,
   },
   example: EXAMPLE,
-  arenas: DEFAULT_ARENAS.map((a) => ({ id: a.id, name: arenaMeta(a.id).name, entry: a.entryTokens, maxSessions: a.maxSessions })),
+  arenas: DEFAULT_ARENAS.map((a) => ({ id: a.id, name: arenaMeta(a.id).name, entry: a.entryTokens, usdCents: a.usdCents, holdersOnly: a.holdersOnly, maxSessions: a.maxSessions })),
   capacity: { practice: CAPACITY.practice, private: CAPACITY.private, arena: CAPACITY.arena },
   rules: {
     roundMin: RULES.roundMs / 60_000,
     joinCloseS: RULES.roundJoinCloseMs / 1000,
+    breakS: RULES.roundBreakMs / 1000,
     afkS: RULES.afkGraceMs / 1000,
     spawnShieldS: RULES.spawnShieldMs / 1000,
     eatRatio: RULES.eatRatio,
@@ -100,6 +115,7 @@ export const FACTS: DocsFacts = {
     lootEntryDiv: Math.round(1 / RULES.lootPieceEntryFraction),
   },
   refundHours: REFUND_DELAY_SECS / 3600,
+  approve: { choices: APPROVE_TICKET_CHOICES, preselected: APPROVE_DEFAULT_TICKETS },
   server: SERVER,
 };
 
