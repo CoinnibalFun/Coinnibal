@@ -1249,7 +1249,11 @@
 }
 .g-hud.is-narrow .g-till {
   min-width: 0;
-  padding: 4px 11px 6px;
+  padding: 4px 8px 6px;
+}
+/* "50 of 50 on the floor" stays on one line in the 172 px column at the 12 px floor */
+.g-hud.is-narrow .g-till__bite {
+  letter-spacing: -0.03em;
 }
 .g-hud.is-narrow .g-till__value {
   font-size: 21px;
@@ -1264,9 +1268,12 @@
   font-size: 13px;
 }
 .g-hud.is-narrow .g-count.is-on {
+  /* just under my coin (the camera keeps it at the middle of the screen): at 30 % it landed on the
+     standings and the worth sticker, which leave only a sliver between them on a phone */
   position: fixed;
   left: 50%;
-  top: 30%;
+  top: calc(50% + 34px);
+  height: 88px;
   transform: translateX(-50%);
 }
 .g-hud.is-narrow .g-count__n {
@@ -1799,6 +1806,18 @@
 }
 .g-closing__title {
   font-size: 16px;
+}
+/* portrait phones: the notice is the one thing that matters in the room's last seconds; the minimap
+   steps aside for it so it ends above the sticker and chat keys, and it packs tighter */
+.g-hud.is-narrow .g-center:has(.g-closing) > .g-map {
+  display: none;
+}
+.g-hud.is-narrow .g-closing {
+  padding: 6px 10px 8px;
+}
+.g-hud.is-narrow .g-closing__title {
+  font-size: 15px;
+  line-height: 1.2;
 }
 .g-closing__board {
   pointer-events: auto;
@@ -2621,6 +2640,16 @@
 }
 .g-hud.is-narrow .g-center > .g-pu {
   order: -1;
+}
+/* short portrait phones (an SE is 667 px, less its bars) and 200 % zoom: the right column packs tighter and its
+   minimap shrinks, so a notice (coin rain, the room closing) still ends above the thumb cluster */
+@media (max-height: 700px) {
+  .g-hud.is-narrow .g-center {
+    gap: 8px;
+  }
+  .g-hud.is-narrow .g-center > .g-map {
+    zoom: 0.78;
+  }
 }
 /* landscape phones: the column runs down to my coin at the middle of a 390 px screen; compact chips too */
 .g-hud.is-short .g-pu__name,
