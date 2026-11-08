@@ -11,6 +11,7 @@ import { useT } from '../../i18n';
 import { openModal, useUi } from '../../store';
 import { useTicker } from '../ticker';
 import { EmoteBar } from './EmoteBar';
+import { ChatStream } from './ChatStream';
 import { Feed } from './Feed';
 import { Peek } from './Peek';
 import { compactCount, counterFrac, roomName, sectorOf, useTokenFormat } from './format';
@@ -571,6 +572,8 @@ export function GameHud() {
           </div>
         </>
       )}
+      {/* the chat: a stream on the right edge, in the band the other pieces leave free */}
+      {(playing || screen === 'spectating') && <ChatStream />}
       {playing && touch && <MobileControls />}
       {screen === 'spectating' && <SpectateBar />}
       <RoundIntro />

@@ -2594,3 +2594,107 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── the chat: a stream overlay on the right edge (no panel; ChatStream measures its free band) ── */
+.g-stream {
+  position: absolute;
+  right: calc(var(--hud-gap) + env(safe-area-inset-right, 0px));
+  top: 30%;
+  height: 40%;
+  width: min(320px, 34vw);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 3;
+}
+.g-hud.is-narrow .g-stream,
+.g-hud.is-short .g-stream {
+  width: min(230px, 58vw);
+}
+.g-stream__lines {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.35;
+}
+.g-hud.is-narrow .g-stream__lines {
+  font-size: 12.5px;
+}
+.g-stream__line {
+  flex: none;
+  color: #fff;
+  overflow-wrap: anywhere;
+  /* readable on any floor without a panel: a dark outline around every glyph */
+  text-shadow:
+    -1px -1px 0 #04181c,
+    1px -1px 0 #04181c,
+    -1px 1px 0 #04181c,
+    1px 1px 0 #04181c,
+    0 1px 3px rgba(4, 24, 28, 0.9);
+}
+.g-stream__line.is-fading {
+  animation-name: g-stream-fade;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+}
+@keyframes g-stream-fade {
+  to {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .g-stream__line.is-fading {
+    animation-timing-function: steps(1, end);
+  }
+}
+.g-stream__name {
+  margin-right: 6px;
+  font-weight: 800;
+}
+.g-stream__name::after {
+  content: ':';
+  color: #fff;
+}
+.g-stream__line.is-guest {
+  color: #c9d3d4;
+  font-size: 0.92em;
+}
+.g-stream__line.is-guest .g-stream__name {
+  color: #aab6b8;
+  font-weight: 600;
+}
+.g-stream__guest {
+  margin-left: 4px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 5px;
+  font-size: 9.5px;
+  font-weight: 400;
+  text-transform: uppercase;
+  text-shadow: none;
+  background: rgba(4, 24, 28, 0.55);
+}
+.g-stream__line.is-system {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--sun);
+}
+.g-stream__form {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+.g-stream__form .g-chat__send {
+  background: var(--sticker);
+}
