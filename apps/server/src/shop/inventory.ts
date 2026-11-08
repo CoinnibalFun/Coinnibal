@@ -9,13 +9,20 @@ export interface PurchaseRecord {
   tx: string;
   /** EIP-55 wallet. */
   wallet: string;
-  /** What was bought; records from before 2026-11 may name the retired `shock` (now counted as Leap). */
-  kind: BoostKind | 'shock';
+  /** What was bought (`cart`: several power-ups, see `cart`); records from before 2026-11 may name the retired `shock`. */
+  kind: BoostKind | 'shock' | 'cart';
+  /** Charges added in all. */
   charges: number;
   /** Raw base units paid (decimal string). */
   paid: string;
   /** Unix ms. */
   at: number;
+  /** A cart: charges added per power-up. */
+  cart?: Partial<Record<BoostKind, number>>;
+  /** Raw base units of this payment owed back to the wallet (a part of the cart that could not be applied). */
+  refund?: string;
+  /** The owner marked the refund as sent (Unix ms). */
+  refundedAt?: number;
 }
 
 interface InventoryFile {
@@ -123,6 +130,64 @@ export class BoostInventory {
     }
     this.log(`boosts: ${getAddress(wallet)} bought ${charges} ${kind} (tx ${hash})`);
     return { ...c };
+  }
+
+  /**
+   * Credits a verified cart payment in one write: every power-up's charges, the "used" mark of `tx`, and the part of the
+   * payment that could not be applied (`refundRaw`, owed back to the wallet). All or nothing: a failed write changes
+   * nothing. Throws `tx_used` on a replay.
+   */
+  creditCart(wallet: string, add: Partial<Record<BoostKind, number>>, tx: string, paid: bigint, refundRaw = 0n): BoostCounts {
+    const hash = tx.toLowerCase();
+    const entries = Object.entries(add).filter(([, n]) => (n ?? 0) > 0) as [BoostKind, number][];
+    const total = entries.reduce((s, [, n]) => s + n, 0);
+    if (!/^0x[0-9a-f]{64}$/.test(hash) || entries.some(([, n]) => !Number.isInteger(n)) || (total === 0 && refundRaw <= 0n) || refundRaw < 0n || refundRaw > paid) {
+      throw new InventoryError('bad_request', 'bad purchase');
+    }
+    if (this.used.has(hash)) throw new InventoryError('tx_used', 'This transaction was already used for a purchase.');
+    const key = wallet.toLowerCase();
+    const had = this.charges.get(key);
+    const before = had ? { ...had } : null;
+    const c = had ?? emptyBoostCounts();
+    for (const [k, n] of entries) c[k] += n;
+    this.charges.set(key, c);
+    this.used.add(hash);
+    this.purchases.push({
+      tx: hash,
+      wallet: getAddress(wallet),
+      kind: 'cart',
+      charges: total,
+      paid: paid.toString(),
+      at: this.now(),
+      cart: Object.fromEntries(entries),
+      ...(refundRaw > 0n ? { refund: refundRaw.toString() } : {}),
+    });
+    try {
+      this.save();
+    } catch (err) {
+      // not on disk: everything goes back, so a retry after the disk is fixed credits it once
+      if (before) this.charges.set(key, before);
+      else this.charges.delete(key);
+      this.used.delete(hash);
+      this.purchases.pop();
+      throw err;
+    }
+    this.log(`boosts: ${getAddress(wallet)} bought a cart ${entries.map(([k, n]) => `${n} ${k}`).join(', ') || '(nothing applied)'} (tx ${hash})${refundRaw > 0n ? `; !!! ${refundRaw} raw owed back to the wallet` : ''}`);
+    return { ...c };
+  }
+
+  /** Payments with a part owed back to the wallet that the owner has not marked as sent (admin view). */
+  refundsOwed(): PurchaseRecord[] {
+    return this.purchases.filter((p) => p.refund && !p.refundedAt).reverse();
+  }
+
+  /** The owner sent a refund back (by hand, from the fee wallet): it leaves the owed list. False when unknown. */
+  markRefunded(tx: string): boolean {
+    const p = this.purchases.find((x) => x.tx === tx.toLowerCase() && x.refund && !x.refundedAt);
+    if (!p) return false;
+    p.refundedAt = this.now();
+    this.save();
+    return true;
   }
 
   /** Takes one charge; false when there is none. */

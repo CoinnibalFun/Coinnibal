@@ -2,7 +2,7 @@ import { availableParallelism } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { CAPACITY, NETWORKS, RULES, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, type GameAccess } from '@elymum/shared';
+import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, type GameAccess } from '@elymum/shared';
 import { GAS_PRICE_URL_DEFAULT } from '@elymum/sdk';
 import { getAddress, isAddress } from 'viem';
 import { DEFAULT_ART_STYLE, parseArtStyle, type ArtStyle } from './site/nft/render';
@@ -53,6 +53,15 @@ export interface ServerConfig {
    */
   round: { roundMs: number; closeMs: number; breakMs: number };
   authSecret: Buffer;
+  /** `AUTH_SECRET` came from the environment (false: the generated `DATA_DIR/auth-secret`). */
+  authSecretFromEnv: boolean;
+  /** Lifetime of an admin wallet's session token (`ADMIN_TOKEN_TTL_MIN`, default 120, 5 to 1440). */
+  adminTokenTtlMs: number;
+  /**
+   * `ADMIN_SECRET_EXPORT=1`: `GET /api/admin/backup` and `/api/admin/migration-env` (they hand out the server key)
+   * work on the mainnet. Off by default there; on a testnet they work unless `ADMIN_SECRET_EXPORT=0`.
+   */
+  adminSecretExport: boolean | null;
   /**
    * Admin wallets (`ADMIN_WALLETS`, comma-separated 0x addresses, EIP-55 checksummed here): a SIWE session of
    * one of them may use `/api/admin/*` and always play. No default: unset means nobody is admin (logged loudly).
@@ -86,8 +95,15 @@ export interface ServerConfig {
     chainId: number;
     /** `CHAIN_ID` was set explicitly (the RPC is held to it); false: the RPC's own id is used. */
     chainIdExplicit: boolean;
-    /** Server RPC (`EVM_RPC_URL`, may hold an API key). Null: chain off, practice only. */
+    /** Server RPC (`EVM_RPC_URL`, may hold an API key): the first of `rpcUrls`. Null: chain off, practice only. */
     rpcUrl: string | null;
+    /**
+     * Every server RPC in order of preference (`EVM_RPC_URLS`, a comma list, e.g. an Alchemy URL then the public RPC;
+     * else `EVM_RPC_URL` alone). Reads and sends go through a viem fallback over them, each URL with its own budget.
+     */
+    rpcUrls: string[];
+    /** `RPC_MAX_RPS` per entry of `rpcUrls` (a comma list; one number applies to every URL). */
+    rpcMaxRpsPerUrl: number[];
     /**
      * RPC handed to browsers (`PUBLIC_RPC_URL`, no secrets). Default: `EVM_RPC_URL` when it is Robinhood Chain's
      * public RPC, else null (the wallet's own RPC is used).
@@ -150,6 +166,19 @@ export interface ServerConfig {
      * fees is held for an admin decision instead of being sent (limits what a bug or a tampered journal can pay).
      */
     payoutGuardMultiple: number;
+    /**
+     * `DEATH_SETTLE_BATCH_S` (default 6, 0 to 30; 0 sends each at once): an eaten ticket's settlement (payout 0) waits up
+     * to this long so the deaths of a few seconds go out in one `settle` batch instead of one transaction each. A bell,
+     * a cash-out or any item with a payout in the same arena takes the waiting deaths along at once.
+     */
+    deathBatchMs: number;
+    /**
+     * `GAS_FLOOR_ETH` (default 0.002): the server key's balance below which it is low whatever its spend; above it the
+     * runway decides (trailing spend: under `GAS_RUNWAY_WARN_DAYS` 7 a warning, under `GAS_RUNWAY_CRITICAL_DAYS` 2 an alert).
+     */
+    gasFloorWei: bigint;
+    gasRunwayWarnDays: number;
+    gasRunwayCriticalDays: number;
   };
   /**
    * NFT mint: the USD target (`MINT_USD_CENTS`, default 100) and the ETH/USD feed (`GAS_PRICE_URL`).
@@ -161,6 +190,8 @@ export interface ServerConfig {
    * `NFT_ART_STYLE` (`vector`, the default, or `pixel`).
    */
   nft: { size: number; seed: string | null; style: ArtStyle };
+  /** `/api/health` thresholds: `HEALTH_MAX_PENDING` (400) due settlements, `HEALTH_MAX_PENDING_AGE_S` (900) for the oldest. */
+  health?: { maxPending: number; maxPendingAgeS: number };
 }
 
 /**
@@ -199,6 +230,21 @@ export function assertPublicUrl(cfg: Pick<ServerConfig, 'publicUrl' | 'nodeEnv'>
     `PUBLIC_URL is required (NODE_ENV is ${cfg.nodeEnv ?? 'unset'}): set it to the site's public origin, e.g. https://elymum.io. ` +
       'It is the domain wallet sign-ins (SIWE) are bound to and the base of the NFT metadata links; only NODE_ENV=development may derive it from the request. Refusing to start',
   );
+}
+
+/** The least `AUTH_SECRET` may hold (bytes): it signs every session token, so it must not be guessable. */
+export const AUTH_SECRET_MIN_BYTES = 32;
+
+/**
+ * A weak `AUTH_SECRET` (under `AUTH_SECRET_MIN_BYTES` bytes) lets anyone who guesses it forge an admin session
+ * offline. On the mainnet (`CHAIN_ID=4663`) the server refuses to start with one; elsewhere it returns the
+ * warning to log (null: fine). The generated `DATA_DIR/auth-secret` (64 hex characters) always passes.
+ */
+export function checkAuthSecret(cfg: Pick<ServerConfig, 'authSecret' | 'authSecretFromEnv' | 'chain'>): string | null {
+  if (!cfg.authSecretFromEnv || cfg.authSecret.length >= AUTH_SECRET_MIN_BYTES) return null;
+  const msg = `AUTH_SECRET is ${cfg.authSecret.length} byte(s): it must be at least ${AUTH_SECRET_MIN_BYTES} (e.g. openssl rand -hex 32), or unset to use a generated one`;
+  if (cfg.chain.chainId === ROBINHOOD_CHAIN_ID) throw new Error(`${msg}; refusing to start on the mainnet`);
+  return `!!! ${msg} (a mainnet server refuses to start with it)`;
 }
 
 export function invalidAdminWallets(v: string | undefined): string[] {
@@ -260,6 +306,13 @@ export function parseRoundConfig(env: NodeJS.ProcessEnv): { roundMs: number; clo
   return { roundMs, closeMs, breakMs };
 }
 
+/** A decimal ETH amount ("0.002") in wei; `d` when unset or malformed. */
+function ethToWei(v: string | undefined, d: bigint): bigint {
+  const m = /^\s*(\d{1,6})(?:\.(\d{1,18}))?\s*$/.exec(v ?? '');
+  if (!m) return d;
+  return BigInt(m[1]) * 10n ** 18n + BigInt((m[2] ?? '').padEnd(18, '0'));
+}
+
 const bool = (v: string | undefined, d: boolean): boolean => (v === undefined ? d : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase()));
 
 /**
@@ -301,8 +354,33 @@ export function gameWorkers(env: NodeJS.ProcessEnv): number {
   return env.NODE_ENV === 'production' ? Math.max(1, availableParallelism() - 1) : 0;
 }
 
+/**
+ * `EVM_RPC_URLS` (comma-separated, in order of preference), else `EVM_RPC_URL`: trailing slashes dropped, duplicates
+ * and blanks removed.
+ */
+export function parseRpcUrls(list: string | undefined, single: string | undefined): string[] {
+  const raw = blank(list) !== null ? list!.split(',') : [single ?? ''];
+  const out: string[] = [];
+  for (const r of raw) {
+    const u = r.trim().replace(/\/+$/, '');
+    if (u && !out.includes(u)) out.push(u);
+  }
+  return out;
+}
+
+/** `RPC_MAX_RPS`: one rate for every URL, or a comma list (one per URL, the last one repeated); default 4 a second. */
+export function parseRpcRates(v: string | undefined, n: number): number[] {
+  const parts = (v ?? '').split(',').map((s) => Number(s.trim()));
+  const ok = parts.map((x) => (Number.isFinite(x) && x > 0 ? Math.max(0.2, x) : null));
+  const out: number[] = [];
+  for (let i = 0; i < Math.max(1, n); i++) out.push(ok[Math.min(i, ok.length - 1)] ?? ok.find((x) => x !== null) ?? 4);
+  return out;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
-  const rpcUrl = blank(env.EVM_RPC_URL)?.replace(/\/+$/, '') ?? null;
+  const rpcUrls = parseRpcUrls(env.EVM_RPC_URLS, env.EVM_RPC_URL);
+  const rpcUrl = rpcUrls[0] ?? null;
+  const rates = parseRpcRates(env.RPC_MAX_RPS, rpcUrls.length);
   const secret = env.AUTH_SECRET ? Buffer.from(env.AUTH_SECRET, 'utf8') : persistedAuthSecret(resolve(env.DATA_DIR ?? 'data'));
   return {
     port: int(env.PORT, 8787),
@@ -315,7 +393,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     maxConnectionsPerSubnet: Math.max(1, int(env.MAX_CONNECTIONS_PER_SUBNET, 48)),
     loadShed: bool(env.LOAD_SHED, env.NODE_ENV === 'production'),
     wsHelloTimeoutMs: Math.max(200, int(env.WS_HELLO_TIMEOUT_MS, 10_000)),
-    maxConnections: int(env.MAX_CONNECTIONS, 600),
+    maxConnections: int(env.MAX_CONNECTIONS, 1500),
     practiceCapacity: Math.max(1, int(env.PRACTICE_CAPACITY ?? env.FREE_ROOM_CAPACITY, CAPACITY.practice)),
     privateRoomCapacity: int(env.PRIVATE_ROOM_CAPACITY, CAPACITY.private),
     arenaInstanceCap: Math.max(1, int(env.ARENA_INSTANCE_CAP, CAPACITY.arena)),
@@ -323,6 +401,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     gameWorkerHangMs: Math.max(2, int(env.GAME_WORKER_HANG_S, 10)) * 1000,
     round: parseRoundConfig(env),
     authSecret: secret,
+    authSecretFromEnv: !!env.AUTH_SECRET,
+    adminTokenTtlMs: Math.min(1440, Math.max(5, int(env.ADMIN_TOKEN_TTL_MIN, 120))) * 60_000,
+    adminSecretExport: env.ADMIN_SECRET_EXPORT === undefined || env.ADMIN_SECRET_EXPORT.trim() === '' ? null : bool(env.ADMIN_SECRET_EXPORT, false),
     adminWallets: parseAdminWallets(env.ADMIN_WALLETS),
     gameAccess: parseGameAccess(env.GAME_ACCESS),
     nodeEnv: env.NODE_ENV?.trim() || null,
@@ -330,7 +411,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     devFakeToken: bool(env.DEV_FAKE_TOKEN, false),
     chain: {
       rpcUrl,
-      publicRpcUrl: defaultPublicRpc(rpcUrl, env.PUBLIC_RPC_URL),
+      rpcUrls,
+      rpcMaxRpsPerUrl: rates,
+      publicRpcUrl: defaultPublicRpc(rpcUrls.find((u) => defaultPublicRpc(u, undefined) !== null) ?? rpcUrl, env.PUBLIC_RPC_URL),
       chainId: chainIdOf(env.CHAIN_ID),
       chainIdExplicit: blank(env.CHAIN_ID) !== null,
       explorerUrl: blank(env.EXPLORER_URL)?.replace(/\/+$/, '') ?? null,
@@ -351,14 +434,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       staleSessionAfterS: Math.max(1, int(env.STALE_SESSION_AFTER_S, 15 * 60)),
       staleSweepAck: bool(env.STALE_SWEEP_ACK, false),
       logChunkBlocks: Math.max(100, int(env.LOG_CHUNK_BLOCKS, 50_000)),
-      rpcMaxRps: Math.max(0.2, Number(env.RPC_MAX_RPS) > 0 ? Number(env.RPC_MAX_RPS) : 4),
+      rpcMaxRps: rates[0],
       rpcBurst: Math.max(1, int(env.RPC_BURST, 8)),
       testnetRpcUrl: blank(env.TESTNET_RPC_URL)?.replace(/\/+$/, '') ?? NETWORKS.testnet.rpcUrl,
       payoutGuardMultiple: Math.max(0, int(env.PAYOUT_GUARD_MULTIPLE, PAYOUT_GUARD_MULTIPLE_DEFAULT)),
+      deathBatchMs: Math.min(30, Math.max(0, num(env.DEATH_SETTLE_BATCH_S, 6))) * 1000,
+      gasFloorWei: ethToWei(env.GAS_FLOOR_ETH, 2n * 10n ** 15n),
+      gasRunwayWarnDays: Math.max(0.1, num(env.GAS_RUNWAY_WARN_DAYS, 7)),
+      gasRunwayCriticalDays: Math.max(0.05, num(env.GAS_RUNWAY_CRITICAL_DAYS, 2)),
     },
     mint: {
       usdCents: Math.max(1, int(env.MINT_USD_CENTS, MINT_USD_CENTS_DEFAULT)),
       gasPriceUrl: blank(env.GAS_PRICE_URL) ?? GAS_PRICE_URL_DEFAULT,
+    },
+    health: {
+      maxPending: Math.max(1, int(env.HEALTH_MAX_PENDING, 400)),
+      maxPendingAgeS: Math.max(30, int(env.HEALTH_MAX_PENDING_AGE_S, 900)),
     },
     nft: {
       size: Math.max(1, int(env.NFT_COLLECTION_SIZE, 5000)),

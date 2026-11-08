@@ -292,7 +292,7 @@ describe('admin groups', () => {
 
   it('lists the mainnet launch with the server step first; nothing is ticked on testnet', () => {
     const steps = mainnetChecklist(resolveNetwork(chainStatus()), null);
-    expect(steps[0].label).toMatch(/Set EVM_RPC_URL \(and CHAIN_ID\) on the server/);
+    expect(steps[0].label).toMatch(/Point the server at the mainnet \(ELYMUM_CHAIN_ID and ELYMUM_RPC_URLS\)/);
     expect(steps.filter((s) => s.ok === true)).toHaveLength(0);
     const main = mainnetChecklist(resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null })), null);
     expect(main[0].ok).toBe(true);

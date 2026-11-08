@@ -172,10 +172,20 @@ export const INTEGRITY_THRESHOLD_RANGES: Record<keyof IntegrityThresholds, reado
 /** Evidence values are plain, printable data. */
 export type IntegrityEvidence = Record<string, number | string | boolean | null | string[] | number[]>;
 
+/**
+ * A finer kind within `IntegrityFlagKind` (the admin list may label it): `emblem_shared` (one emblem token id served
+ * holder tickets of several wallets at once), `fresh_feeders` (value flowed to one wallet from young or fresh
+ * wallets), `shared_funding` (feeder wallets got their first gas from one source), `non_aggression` (two wallets
+ * often within eating range that never ate each other).
+ */
+export type IntegrityFlagSubtype = 'emblem_shared' | 'fresh_feeders' | 'shared_funding' | 'non_aggression';
+
 export interface IntegrityFlag {
   /** Stable id: the same kind and subject keep the same id as new evidence arrives. */
   id: string;
   kind: IntegrityFlagKind;
+  /** The finer kind, when there is one (absent on the original detectors' flags). */
+  subtype?: IntegrityFlagSubtype;
   status: IntegrityFlagStatus;
   /** 0-100. */
   score: number;

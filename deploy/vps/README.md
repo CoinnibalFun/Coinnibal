@@ -1,212 +1,204 @@
 # Elymum game server on a VPS
 
-The game server moves from Render to a VPS you rent (OVH, Ubuntu 24.04). The website stays on Vercel at
-**https://elymum.io**; the game server lives at **https://game.elymum.io** and the website talks to it
-directly. Every player then reaches the server with their own IP address (through the Vercel `/api` rewrite,
-every player shared Vercel's addresses, so per-IP limits hit everyone at once).
-
-Everything is one command, and it looks after itself afterwards:
+The website is on Vercel at **https://elymum.io**; the game server runs on a VPS at **https://game.elymum.io**,
+and the website talks to it directly (every player reaches the server with their own IP address, so the per-IP
+limits work). Everything is one command, and it looks after itself afterwards:
 
 | What | How |
 |---|---|
 | HTTPS certificate | Caddy gets and renews it by itself |
-| New code | a new commit on the branch is built and deployed within 2 minutes (`elymum-update.timer`) |
-| A broken commit | the old version keeps running; the broken commit is not retried until a newer one arrives |
-| Crashes, reboots | containers restart by themselves (`restart: unless-stopped`) |
-| Backups | every day at 04:00, the newest 14 kept in `/opt/elymum/backups` |
-| Security updates | installed automatically; a reboot (if needed) happens at 04:30 |
+| New code | a commit CI passed is built and deployed within 2 minutes (`elymum-update.timer`), swapped in the break after an arena bell |
+| A broken commit | a failed build keeps the old version; a new container not healthy within 60 s is rolled back to the previous image at once |
+| Crashes | containers restart by themselves (`restart: unless-stopped`); a hung app is restarted by the alert job after 3 minutes (autoheal) |
+| Alerts | every minute: `!!!` log lines, `/api/health` 503, gas runway, disk over 80 %, the container down, to Telegram (`elymum-alert.timer`) |
+| Backups | every day at 04:00, the newest 14 kept in `/opt/elymum/backups`; optional encrypted offsite copy (rclone crypt) |
+| Security updates | installed automatically; a reboot they need happens at 04:30 **in a round break** (`elymum-reboot.timer`) |
+| Logs | Docker's journald driver and a persistent journal: they survive redeploys and reboots |
 | Firewall, SSH brute force | ufw (only 22, 80, 443 open) and fail2ban |
 
-Files here: `install.sh` (the installer), `docker-compose.yml` (the app and Caddy), `caddy/Caddyfile`,
-`env.example` (every setting, with comments), `update.sh`, `backup.sh`, `restore.sh`, `status.sh`,
-`compose.sh`, `systemd/` (the two timers).
+Files here: `install.sh` (the installer), `docker-compose.yml` (the app and Caddy), `caddy/`, `env.example` (every
+setting, with comments), `update.sh`, `alert.sh`, `reboot.sh`, `backup.sh`, `restore.sh`, `status.sh`, `compose.sh`,
+`lib.sh`, `systemd/` (the timers).
 
 ---
 
-## 1. Buy the VPS
+## 1. The VPS
 
-1. OVHcloud → **VPS**. 4 to 6 vCores, 8 GB RAM or more, location **Gravelines** or **Frankfurt** (close to
-   most players), image **Ubuntu 24.04**. The rooms run on every core but one (`GAME_WORKERS`, see
-   `env.example`): 6 vCores carry 500 players with room to spare (docs/ARCHITECTURE.md, "Threads").
-2. During the order, add your **SSH public key** (the content of `~/.ssh/id_ed25519.pub` on your laptop; create
-   one with `ssh-keygen -t ed25519` if you have none). OVH emails you the server's **IPv4 address**; the user
-   is `ubuntu`.
-3. Test the login from your laptop: `ssh ubuntu@<IP>`.
+**8 vCPU, 16 GB RAM**, Ubuntu 24.04, close to most players (Frankfurt, Amsterdam, Gravelines). The rooms run on
+`GAME_WORKERS` cores (5 on 8 vCPU: the main thread keeps the sockets, HTTP, the chain and the journal, and two cores
+stay free for Caddy, Docker and the alert job); 500 players use about 1.7 cores (docs/ARCHITECTURE.md, "Capacity").
+`MAX_CONNECTIONS=1500` fits the 16 GB (about 1 MB per connection) with a wide margin.
+
+Add your SSH public key when you order (`ssh-keygen -t ed25519` if you have none) and test `ssh <user>@<IP>`.
 
 ## 2. DNS
 
-Where the DNS of `elymum.io` is managed (Vercel → Domains → elymum.io → DNS Records, or your registrar), add:
+Where the DNS of `elymum.io` is managed, add an `A` record `game` → the VPS IPv4 address, **DNS only** (no CDN proxy
+until "Cloudflare in front" below). `nslookup game.elymum.io` must answer the VPS address before step 3: Caddy needs
+it for the certificate.
 
-| Type | Name | Value | Proxy |
-|---|---|---|---|
-| `A` | `game` | the VPS IPv4 address | **DNS only** (no CDN proxy) |
+## 3. Install
 
-Keep it "DNS only": behind a CDN proxy (for example Cloudflare's orange cloud) every player would again share
-the CDN's addresses. Check from your laptop (it can take a few minutes): `nslookup game.elymum.io` must answer the
-VPS address. Do this **before** step 3: Caddy needs it to get the certificate.
-
-## 3. Run the installer
-
-The repository is private, so copy the installer to the server first. From a clone on your laptop:
+Copy the installer to the server (`scp deploy/vps/install.sh <user>@<IP>:`), then as root:
 
 ```bash
-scp deploy/vps/install.sh ubuntu@<IP>:
-```
-
-(Or open `deploy/vps/install.sh` on GitHub, press "Raw", copy everything, then on the server
-`nano install.sh`, paste, Ctrl+O Enter, Ctrl+X.)
-
-On the server:
-
-```bash
-ssh ubuntu@<IP>
 sudo -i
-bash /home/ubuntu/install.sh
+bash /home/<user>/install.sh
 ```
 
-It asks three questions (press Enter for the defaults): the domain (`game.elymum.io`), the repository
-(`https://github.com/furkan3152/Solagel.git`; the repository is public, so no deploy key is asked for; pass an SSH URL with `--repo` for a private one, and the script then asks for a read-only deploy key) and the branch. Then it:
+It asks for the domain (`game.elymum.io`), the repository (an SSH URL for the private repository: it makes a
+read-only **deploy key** and shows the steps to add it on GitHub) and the branch. Then it updates Ubuntu, installs
+Docker, automatic security updates (no automatic reboot), the firewall, fail2ban, a persistent journal, network
+tuning, downloads the code to `/opt/elymum`, opens `/opt/elymum/.env` in nano (section 4), builds and starts the
+server, installs the timers and waits for `https://game.elymum.io/api/health?live=1`. Running it again is safe.
 
-1. updates Ubuntu, installs Docker from Docker's own repository, automatic security updates, the firewall and
-   fail2ban, a swapfile on small machines, and network settings for many connections;
-2. makes a **deploy key** and shows it with the exact steps to add it on GitHub (repository → Settings →
-   Deploy keys → Add deploy key, "Allow write access" **unchecked**), and waits for you to press Enter;
-3. downloads the code to `/opt/elymum` and opens the settings file `/opt/elymum/.env` in the nano editor.
-   **Copy the values marked `[FROM RENDER]` from Render** → the game service → Environment
-   (`ADMIN_WALLETS`, `AUTH_SECRET`, `SERVER_PRIVATE_KEY`, `EVM_RPC_URL`, `TESTNET_RPC_URL`, and any other you
-   set there). Keep `PUBLIC_URL=https://elymum.io` and `CORS_ORIGIN=https://elymum.io`. Save with Ctrl+O, Enter,
-   quit with Ctrl+X;
-4. builds and starts the server, installs the timers, and waits until `https://game.elymum.io/api/health`
-   answers.
+## 4. Settings (`/opt/elymum/.env`)
 
-Running the installer again is safe; it only does what is missing.
+`env.example` lists every setting with its default. What the owner sets (never commit this file):
 
-> **Never run two servers with the same server key.** Both would send settlements as the arena's server
-> authority. Until the cutover, the VPS runs with its own fresh key (`SERVER_PRIVATE_KEY=auto`, no restore),
-> which can do nothing on chain: that is the rehearsal. If Render's `SERVER_PRIVATE_KEY` is a `0x…` key rather
-> than `auto`, leave `auto` in the VPS `.env` until step 5 and paste the real key only then.
+| Key | What |
+|---|---|
+| `GAME_DOMAIN` | `game.elymum.io` |
+| `PUBLIC_URL`, `CORS_ORIGIN` | `https://elymum.io` (the site's origin: SIWE sign-ins are bound to it) |
+| `ADMIN_WALLETS` | the owner's 0x address(es) |
+| `AUTH_SECRET` | `openssl rand -hex 32` (at least 32 bytes; the mainnet refuses to start with less), or empty for the generated `DATA_DIR/auth-secret` |
+| `SERVER_PRIVATE_KEY` | `auto` (kept in the data volume and the backups) |
+| `ELYMUM_CHAIN_ID` | optional: `46630` (testnet, the default when unset) or `4663` (mainnet) |
+| `ELYMUM_RPC_URLS` | optional: the RPCs in order, comma-separated: the Alchemy URL first, the public RPC as fallback (section 5). Unset: `https://rpc.testnet.chain.robinhood.com` |
+| `ELYMUM_RPC_MAX_RPS` | optional: calls per second per URL, one per `ELYMUM_RPC_URLS` entry (`25,4`); default 4 |
+| `ELYMUM_GAME_ACCESS` | optional: `public` (the default when unset), `holders`, `admins`, `maintenance`, or `site` (the `/admin` setting decides) |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | alerts to Telegram (optional; section 7) |
+| `BACKUP_RCLONE_REMOTE` | the encrypted offsite remote, e.g. `elymum-offsite:` (optional; section 8) |
+| `GAME_WORKERS` | `5` on 8 vCPU |
+| `MAX_CONNECTIONS` | `1500` |
 
-## 4. Bring the data over (backup and restore)
+`docker-compose.yml` maps the `ELYMUM_*` keys to the server's `CHAIN_ID`, `EVM_RPC_URLS`, `RPC_MAX_RPS` and
+`GAME_ACCESS`, and always overrides those names (and `EVM_RPC_URL`, forced empty) whatever `.env` says: this `.env`
+was first filled from an older Elysium / Render setup, and a stale `CHAIN_ID`, `EVM_RPC_URL` or `GAME_ACCESS` in it
+must never move the live server to another chain or close the game. Unset `ELYMUM_*` keys mean the live testnet
+values (46630, the testnet's public RPC, `public`). After a change: `elymum-compose up -d app`. Check what the app
+gets with `elymum-compose config | grep -E 'CHAIN_ID|EVM_RPC|RPC_MAX_RPS|GAME_ACCESS'`.
 
-The backup is a `.tar.gz` of the server's whole data folder: the money journal, the contracts registry, the
-**server key**, `auth-secret`, profiles, pictures, standings and site data. **Treat the file like a private key.**
+## 5. RPC: Alchemy first, the public RPC as fallback
 
-Get an admin session token: open `https://elymum.io/admin`, sign in with the owner wallet, then
-**Network → Backup & move → Copy migration command**. The command contains your session token (valid 24 h).
+The server reads the chain and sends settlements through `EVM_RPC_URLS`, a viem fallback in order: a URL that keeps
+answering 429 or is down hands the call to the next one after two tries, and every new call starts with the first
+URL again. Each URL has its own request budget (`ELYMUM_RPC_MAX_RPS`, one rate per URL). Every URL must serve the chain
+(one that does not is left out, logged with `!!!`). The browser never sees these URLs (`PUBLIC_RPC_URL`, or the
+public one in the list).
 
-The real restore happens during the cutover (step 5), while Render is closed. To try the restore before
-that without starting a second server with Render's key, add `--no-start` and start nothing afterwards (or
-restore a backup you made on the VPS itself).
-
-Either let the VPS download it straight from Render (nothing passes through your laptop):
-
-```bash
-# on the VPS, as root. The token is the long text after "Bearer " in the copied command.
-elymum-restore --no-start --url https://slana-wo00.onrender.com --token '<token>'
-```
-
-or download it on your laptop (**Download backup**) and copy it over:
-
-```bash
-scp elymum-data-*.tar.gz ubuntu@<IP>:
-# on the VPS, as root
-elymum-restore /home/ubuntu/elymum-data-*.tar.gz
-```
-
-On a fresh install the installer can also do it in one go before the very first start (only when Render is
-already closed, as in step 5: the server starts with Render's key):
-
-```bash
-bash install.sh --restore-url https://slana-wo00.onrender.com --token '<token>'
-# or
-bash install.sh --restore /home/ubuntu/elymum-data-....tar.gz
-```
-
-The restore checks the archive first (a complete gzip, a readable tar, no absolute or `..` paths). If the
-server already holds data, it saves a safety backup of it, stops the server, replaces the data and starts
-again. After a restore, check that `https://game.elymum.io/api/config` shows the **same `serverKey`** as
-`https://elymum.io/api/config` (Render).
-
-Use the Render URL (`https://slana-wo00.onrender.com`) rather than `https://elymum.io` for the download: the
-backup should not go through the Vercel proxy.
-
-## 5. Cutover (switching players to the VPS)
-
-Do it at a quiet hour; the whole switch takes about 15 minutes.
-
-1. **Rehearse.** Steps 1 to 3 done (no restore yet), `elymum-status` green, `https://game.elymum.io/api/health`
-   answers. Get a fresh admin token (Copy migration command) right before you start.
-2. **Close the game on Render.** `https://elymum.io/admin` → Game → who may play: **Admins**. Wait for the
-   current arena round to end (at most 5 minutes) so nobody is mid-game with a stake.
-3. **Pause auto-deploy** on the VPS (it would restart a stopped app): `systemctl stop elymum-update.timer`.
-4. **Final backup into the VPS, without starting it**, then **suspend Render** right away (Render → the game
-   service → Settings → Suspend Service), then start the VPS:
+1. Alchemy → Create app → network **Robinhood Chain** (Mainnet; Testnet for the testnet). Copy the HTTPS URL
+   (`https://robinhood-mainnet.g.alchemy.com/v2/<key>`; the testnet's is `robinhood-testnet.g.alchemy.com`).
+2. In `.env` (mainnet):
    ```bash
-   elymum-restore --yes --no-start --url https://slana-wo00.onrender.com --token '<token>'
-   # now suspend Render, then:
-   nano /opt/elymum/.env        # only if Render's SERVER_PRIVATE_KEY is a 0x key: paste it now
-   elymum-compose up -d
-   systemctl start elymum-update.timer
+   ELYMUM_CHAIN_ID=4663
+   ELYMUM_RPC_URLS=https://robinhood-mainnet.g.alchemy.com/v2/<key>,https://rpc.mainnet.chain.robinhood.com
+   ELYMUM_RPC_MAX_RPS=25,4
    ```
-   `https://game.elymum.io/api/config` must now show the **same `serverKey`** as Render had. (Money stays safe
-   even if a settlement slipped in between: the arena contract skips a session that is already settled.)
-5. **Point the website at the VPS** (Vercel). These are the exact changes; they are not in the repository yet:
-   - Vercel → the project → Settings → Environment Variables → Production:
-     `VITE_SERVER_URL=https://game.elymum.io`. Remove `VITE_WS_URL` if it is set (unused once
-     `VITE_SERVER_URL` is set).
-   - `vercel.json` (in the repository) proxies only what must live on the site's domain: `/api/nft/*` (the NFT
-     metadata, the base URI on chain) and `/share/*` (the share cards). Every other API call goes from the browser
-     straight to `game.elymum.io`: through a proxy, every player would arrive from Vercel's few addresses and the
-     server's per-IP limits (sign-in nonces, the API's 240 a minute) would be shared by everyone. A Vercel build
-     without `VITE_SERVER_URL` (or `VITE_WS_URL`) fails on purpose.
-   - Commit, push, and let Vercel redeploy (or Deployments → Redeploy). `VITE_*` values are baked in at build
-     time, so a redeploy is required.
-6. **Check.** Open `https://elymum.io` in a private window: the browser's network tab shows requests to
-   `game.elymum.io` and a `wss://game.elymum.io/ws` socket; sign in; play a practice round; open `/admin` →
-   Network (same server key, RPC ok).
-7. **Reopen the game** on the VPS: `/admin` → Game → who may play: back to what it was.
-8. Keep the Render service **suspended, not deleted**, for a week (rollback).
+   25 calls a second is well inside Alchemy's free plan (its compute units; raise it on a paid plan); the public RPC
+   allows about 4. `elymum-compose up -d app`.
+3. Check: the log says `chain: 2 RPCs (fallback in this order)` and how reads are merged (`Multicall3 found`, or a
+   deployless multicall on a chain without it). `elymum-compose logs app | grep 'rpc:'` shows the calls per minute.
 
-Settings that stay as they are: `PUBLIC_URL=https://elymum.io` (wallet sign-ins are bound to the site's
-domain, and players sign in on elymum.io), the NFT base URI, the contracts.
+A bell of 200 tickets reads its sessions in about 24 `eth_call`s (multicall) instead of 216, and at 4 calls a second
+pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts`).
 
-## 6. Rollback to Render
+## 6. Deploys
 
-1. Vercel → Deployments → the last deployment before the cutover → **Promote to Production** (instant; it has
-   the old `VITE_SERVER_URL` and `vercel.json`). Later, revert the env var and the `vercel.json` change in git.
-2. On the VPS, stop the game first so two servers never settle at once: `systemctl stop elymum-update.timer`
-   (it would start the app again), then `elymum-compose stop app`.
-3. Render → the game service → **Resume Service**.
+- **Only commits CI passed.** After every green run on a branch, CI moves the tag `ci-green-<branch>` to the commit
+  (`.github/workflows/ci.yml`, job `mark-green`). `update.sh` fetches it with the code (the deploy key is enough; the
+  CI status of a private repository is not readable from the VPS without a GitHub token, so the marker travels
+  through git) and deploys the newest commit it marks. A commit pushed while CI runs waits (`journalctl -u
+  elymum-update` says so). Without the tag (CI never ran the job yet) the branch head is deployed as before;
+  `ELYMUM_REQUIRE_CI=1` in `.env` refuses that.
+- **In the round break.** The new image is built while the old container serves; the swap waits for the break after
+  an arena bell (no live stake then: SIGTERM mid-round would cash every arena player out). `ELYMUM_DEPLOY_NOW=1
+  elymum-update` skips the wait for an urgent fix.
+- **Rollback.** The running image is tagged `elymum-app:previous` before every build. When the new container is not
+  healthy (the liveness check) within 60 s, `update.sh` puts the previous image and commit back at once and alerts;
+  that commit is not retried until a newer one arrives. By hand: `docker tag elymum-app:previous elymum-app:latest
+  && elymum-compose up -d app`.
+- **Caddy** reloads when its file changed (`stream_close_delay 10m` keeps the game sockets open across a reload).
 
-Data written on the VPS after the cutover (new profiles, standings, journal entries) is not on Render. Money is
-on chain, so nothing is lost there, but wait until the VPS shows no pending settlements (`/admin`) before step 2.
+## 7. Alerts and autoheal
 
-## 7. Day to day
+`elymum-alert.timer` runs `alert.sh` every minute. It posts to Telegram when the server logs a `!!!` line, when
+`/api/health` answers 503 (with the reasons: the journal cannot be written, settlements backed up or stuck, the RPC
+unreachable, the server key's gas runway under 2 days, the books guard, the server clock more than 30 s off the
+chain, a room worker down), when the gas runway is under 7 days, when a disk is over 80 % full, and when the app
+container is down. Each alert repeats at most every 30 minutes while it lasts and says "ok again" when it clears.
+
+Telegram: talk to **@BotFather** → `/newbot` → copy the token; send your bot a message, then open
+`https://api.telegram.org/bot<token>/getUpdates` and copy `chat.id`. In `.env`: `TELEGRAM_BOT_TOKEN=<token>`,
+`TELEGRAM_CHAT_ID=<id>`. Test: `elymum-alert` (it reads them on every run). Without them alerts go to the journal
+only (`journalctl -u elymum-alert`).
+
+**Autoheal.** The container's health check is liveness only (`/api/health?live=1`: the process answers). When it fails
+on 3 runs in a row the alert job restarts the app. A server that waits on the RPC, or whose disk is full, answers its
+liveness check and is not restarted: a restart fixes neither (and would cash out live coins).
+
+## 8. Backups
+
+`elymum-backup.timer` writes `/opt/elymum/backups/elymum-data-YYYYmmdd-HHMM.tar.gz` at 04:00 (the newest 14). The
+file holds the **server key**: treat it like a private key.
+
+**Offsite (optional, encrypted).** `apt-get install -y rclone`, then `rclone config`: first a remote for the storage
+(Backblaze B2, S3, Cloudflare R2: e.g. `b2raw`, bucket `elymum-backups`), then a remote of type **crypt** over it
+(e.g. `elymum-offsite`, remote `b2raw:elymum-backups`, a generated password and salt). **Keep the crypt passwords
+outside the VPS** (a password manager): without them the copies cannot be read. In `.env`:
+`BACKUP_RCLONE_REMOTE=elymum-offsite:` (and `BACKUP_RCLONE_KEEP_DAYS=30`). Every backup is then copied there; a
+remote that is not `crypt` is refused; a failed copy is alerted. Test: `elymum-backup`, then `rclone ls elymum-offsite:`.
+
+## 9. Moving to another VPS, or the VPS died
+
+**The old server still runs (a planned move).** The new server copies the settings and the data from the old one in
+one command. The exports hand out the server key, so they need a fresh signature of the admin wallet, single use,
+for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for the time of the move):
+
+1. Close the game (`/admin` → Settings → who may play: Admins) and wait for the bell.
+2. The proof: `/admin` → Network → Backup & move asks the wallet to sign (purpose `migration`) where the panel offers it; by hand: with an
+   admin session token, `POST /api/admin/secret-proof {"purpose":"migration"}`, sign the returned `message` with the
+   admin wallet (`personal_sign`), and base64url-encode `{"message":"...","signature":"0x..."}`: that is the proof.
+3. On the new VPS (sections 1 to 3; the installer takes the old server's settings itself):
+   ```bash
+   bash install.sh --from https://game.elymum.io --token '<admin session token>' --proof '<proof>' --yes
+   ```
+   It reads the settings once (`/api/admin/migration-env`) and the backup once (`/api/admin/backup`), restores the
+   data before the first start, and starts.
+4. **Stop the old server before the new one starts settling** (`elymum-compose down` there): two servers must never
+   run with the same server key. Then point DNS at the new VPS; remove `ADMIN_SECRET_EXPORT`.
+
+**The VPS died (no way to reach it).**
+
+1. Pause the arena if the key may be exposed (`/admin` → Game → Pause); otherwise tickets stay safe on chain: unplayed
+   ones are refunded in full by the next server, settled ones are paid, and a player can refund any ticket after 24 h.
+2. A new VPS (sections 1 to 3); stop at the settings step and put the old `.env` values back (from your password
+   manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `ELYMUM_CHAIN_ID`, `ELYMUM_RPC_URLS`, ...).
+3. The newest backup: from the offsite copy (`rclone copy elymum-offsite:elymum-data-<newest>.tar.gz /root/`), then
+   `elymum-restore /root/elymum-data-<newest>.tar.gz`. It carries the server key, the journal (pending settlements go
+   out), the contracts registry and the site data. What happened after that backup is lost: tickets settled since are
+   simply closed on chain already; live ones of that day are settled at their last saved value or refunded.
+4. DNS → the new IP. `/api/health` and `elymum-status`. If the key may have leaked: rotate it (docs/OPERATIONS.md
+   "Rotating the server key") and unpause.
+
+## 10. Day to day
 
 All commands as root on the VPS (`sudo -i`).
 
 | Task | Command |
 |---|---|
-| Everything at a glance (health, CPU / memory, deployed commit, last backup, disk) | `elymum-status` |
-| Live server log | `elymum-compose logs -f --tail 200 app` |
+| Everything at a glance (health and its reasons, deployed commit, rollback image, alerts, backups, disk) | `elymum-status` |
+| Live server log | `elymum-compose logs -f --tail 200 app` (or `journalctl -f CONTAINER_NAME=elymum-app-1`) |
 | Caddy (HTTPS) log | `elymum-compose logs --tail 100 caddy` |
 | Auto-deploy log | `journalctl -u elymum-update -n 100` |
+| Alerts log | `journalctl -u elymum-alert -n 50` |
 | Deploy now instead of waiting 2 minutes | `elymum-update` |
-| Restart the game server | `elymum-compose restart app` |
+| Restart the game server (in a round break) | `elymum-compose restart app` (any time it cashes the arenas out: prefer a break) |
 | Change a setting | `nano /opt/elymum/.env`, then `elymum-compose up -d app` |
-| Backup now | `elymum-backup` (into `/opt/elymum/backups`) |
-| Backup log | `journalctl -u elymum-backup -n 50` |
+| Backup now / log | `elymum-backup` / `journalctl -u elymum-backup -n 50` |
 | Restore a backup | `elymum-restore /opt/elymum/backups/elymum-data-YYYYmmdd-HHMM.tar.gz` |
 | Pause auto-deploy | `systemctl stop elymum-update.timer` (`start` to resume) |
-| Turn off automatic reboots | set `Automatic-Reboot "false"` in `/etc/apt/apt.conf.d/52elymum-unattended` |
-
-**Copy a backup to your laptop:** `scp ubuntu@<IP>:/opt/elymum/backups/elymum-data-*.tar.gz .` (as `ubuntu` you
-need `sudo cp` it to your home first, or use `/admin` → Network → Download backup).
-
-**Offsite backups (optional):** the daily backups live on the VPS's own disk. For a copy elsewhere, install
-[rclone](https://rclone.org) (`apt install rclone`), run `rclone config` to add a remote (Backblaze B2, S3, ...)
-with **encryption** (the "crypt" remote type: the files hold secrets), then add
-`rclone copy /opt/elymum/backups <remote>:elymum-backups --max-age 25h` at the end of `backup.sh`.
+| Reboot for an update now, in the next round break | `elymum-reboot --force` |
 
 ## Cloudflare in front (recommended for DDoS protection)
 

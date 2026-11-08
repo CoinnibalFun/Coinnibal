@@ -136,10 +136,18 @@ export interface RequestOpts {
   body?: unknown;
   token?: string | null;
   signal?: AbortSignal;
+  /** Extra request headers (the secret exports' `X-Elymum-Proof`). */
+  headers?: Record<string, string>;
 }
 
-async function send(path: string, { method = 'GET', body, token, signal }: RequestOpts): Promise<Response> {
-  const headers: Record<string, string> = {};
+/** Told when an admin route answers `admin_session_expired` (session.ts signs out and asks for a new sign-in). */
+let adminExpiredListener: ((message: string) => void) | null = null;
+export function onAdminSessionExpired(fn: ((message: string) => void) | null): void {
+  adminExpiredListener = fn;
+}
+
+async function send(path: string, { method = 'GET', body, token, signal, headers: extra }: RequestOpts): Promise<Response> {
+  const headers: Record<string, string> = { ...extra };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (token) headers.Authorization = `Bearer ${token}`;
   let res: Response;
@@ -160,7 +168,9 @@ async function send(path: string, { method = 'GET', body, token, signal }: Reque
     // waking up): not "Something in the form is not right"
     if (!data.error && res.status >= 500) throw new SiteApiError(res.status, 'network', getLocale() === 'en' ? SERVER_DOWN : t('api.down'));
     const code = data.error ?? (res.status === 429 ? 'rate_limited' : res.status === 401 ? 'unauthorized' : 'bad_request');
-    throw new SiteApiError(res.status, code, message(code, data.message, data.field), data.field);
+    const err = new SiteApiError(res.status, code, message(code, data.message, data.field), data.field);
+    if (code === 'admin_session_expired') adminExpiredListener?.(err.message);
+    throw err;
   }
   return res;
 }
@@ -171,29 +181,50 @@ export async function request<T>(path: string, opts: RequestOpts = {}): Promise<
 }
 
 /** Fetches a CSV with the session header and saves it (a plain link cannot carry the header). */
-export async function downloadCsv(path: string, token: string, fallbackName: string): Promise<void> {
-  const res = await send(path, { token });
+export async function downloadCsv(path: string, token: string, fallbackName: string, headers?: Record<string, string>): Promise<void> {
+  const res = await send(path, { token, headers });
   const blob = await res.blob();
   const disp = res.headers.get('Content-Disposition') ?? '';
   const name = /filename="?([^";]+)"?/.exec(disp)?.[1] ?? fallbackName;
   saveBlob(blob, name);
 }
 
-/**
- * The one-line shell command that downloads a server backup with an admin session token (pure, tested):
- * run on the new server to move the data without a laptop in between. The token is single-quoted
- * (it is base64url and a dot, but quoted anyway).
- */
-export function backupCurlCommand(serverHttp: string, token: string): string {
-  const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-  return `curl -fsS -H ${quote(`Authorization: Bearer ${token}`)} ${quote(`${serverHttp.replace(/\/+$/, '')}/api/admin/backup`)} -o elymum-backup.tar.gz`;
+/** The header that carries a secret export's proof (`/api/admin/backup`, `/api/admin/migration-env`). */
+export const PROOF_HEADER = 'X-Elymum-Proof';
+
+/** What the admin wallet signs to open one secret export (`POST /api/admin/secret-proof`). */
+export interface SecretProofChallenge {
+  message: string;
+  nonce: string;
+  expiresAt: number;
 }
 
-/** The whole move to a new server as one line (deploy/vps/install.sh --from): settings and data. */
-export function installCommand(serverHttp: string, token: string): string {
-  const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+/** A purpose: `backup` opens one backup download; `migration` the settings and one backup (the move to a new server). */
+export type SecretPurpose = 'backup' | 'migration';
+
+/** The `X-Elymum-Proof` value: base64url of `{"message","signature"}` (pure, tested). */
+export function encodeProof(message: string, signature: string): string {
+  const bytes = new TextEncoder().encode(JSON.stringify({ message, signature }));
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * The one-line shell command that downloads a server backup with an admin session token and a fresh proof (pure,
+ * tested): run on the new server to move the data without a laptop in between. Both are single-quoted. The proof
+ * opens one download within 10 minutes; the session lasts 2 hours at most.
+ */
+export function backupCurlCommand(serverHttp: string, token: string, proof: string): string {
+  return `curl -fsS -H ${shellQuote(`Authorization: Bearer ${token}`)} -H ${shellQuote(`${PROOF_HEADER}: ${proof}`)} ${shellQuote(`${serverHttp.replace(/\/+$/, '')}/api/admin/backup`)} -o elymum-backup.tar.gz`;
+}
+
+/** The whole move to a new server as one line (deploy/vps/install.sh --from): settings and data, with a `migration` proof. */
+export function installCommand(serverHttp: string, token: string, proof: string): string {
   const raw = 'https://raw.githubusercontent.com/furkan3152/Solagel/main/deploy/vps/install.sh';
-  return `curl -fsSL ${raw} -o install.sh && sudo bash install.sh --yes --from ${quote(serverHttp.replace(/\/+$/, ''))} --token ${quote(token)}`;
+  return `curl -fsSL ${raw} -o install.sh && sudo bash install.sh --yes --from ${shellQuote(serverHttp.replace(/\/+$/, ''))} --token ${shellQuote(token)} --proof ${shellQuote(proof)}`;
 }
 
 export function saveBlob(blob: Blob, name: string): void {
@@ -343,6 +374,8 @@ export function adminApi(token: string) {
     shop: () => request<ShopAdminView>('/api/admin/shop', { token }),
     /** `PUT /api/admin/shop`: a partial settings update; answers like the GET. */
     saveShop: (patch: Partial<ShopSettings>) => request<ShopAdminView>('/api/admin/shop', { method: 'PUT', token, body: patch }),
+    /** `POST /api/admin/shop/refunds/<tx>`: the owner sent the owed part of a cart payment back. */
+    markRefunded: (tx: string) => request<{ refundsOwed: ShopPurchase[] }>(`/api/admin/shop/refunds/${id(tx)}`, { method: 'POST', token, body: {} }).then((r) => r.refundsOwed),
     /**
      * `POST /api/admin/mint/import-holders` (`{ fromChainId? }`, default the testnet): adds every
      * testnet emblem holder to the mainnet allowlist, recorded per wallet with the source.
@@ -367,11 +400,22 @@ export function adminApi(token: string) {
     nftReveal: () => request<NftProvenance>('/api/admin/nft/reveal', { method: 'POST', token, body: {} }),
     /** `GET /api/admin/network`: the server's chain, RPC health, server key and the contracts' code checks. */
     network: () => request<NetworkInfo>('/api/admin/network', { token }),
-    /** `GET /api/admin/backup`: a gzip tar of the server's DATA_DIR (server key and secrets included), saved as a file. */
-    backup: () => downloadCsv('/api/admin/backup', token, 'elymum-backup.tar.gz'),
-    /** The `curl` command that downloads the same backup with this session (valid until the session expires, 24 h). */
-    backupCommand: () => backupCurlCommand(SERVER.http, token),
-    installCommand: () => installCommand(SERVER.http, token),
+    /** `POST /api/admin/secret-proof`: the text the admin wallet signs to open one secret export (10 minutes, single use). */
+    secretProof: (purpose: SecretPurpose) => request<SecretProofChallenge>('/api/admin/secret-proof', { method: 'POST', token, body: { purpose } }),
+    /** `GET /api/admin/backup` with a `backup` proof: a gzip tar of the server's DATA_DIR (server key and secrets included), saved as a file. */
+    backup: (proof: string) => downloadCsv('/api/admin/backup', token, 'elymum-backup.tar.gz', { [PROOF_HEADER]: proof }),
+    /** The `curl` command that downloads the same backup with this session and a `backup` proof (one download, 10 minutes). */
+    backupCommand: (proof: string) => backupCurlCommand(SERVER.http, token, proof),
+    /** The new-server command with a `migration` proof (the settings and one backup, 10 minutes). */
+    installCommand: (proof: string) => installCommand(SERVER.http, token, proof),
+    /** `POST /api/admin/auth/revoke`: ends every session of `wallet` (this one included), or of every admin (`admins`). */
+    revokeSessions: (wallet: string | 'admins') => request<{ revoked: string }>('/api/admin/auth/revoke', { method: 'POST', token, body: { wallet } }),
+    /** `GET /api/admin/reprice`: the arenas on their way to a re-price at the next bell. */
+    reprice: () => request<{ entries: RepriceEntry[] }>('/api/admin/reprice', { token }).then((r) => r.entries),
+    /** `POST /api/admin/reprice`: closes these arenas at the next bell for a re-price (the owner signs once they are empty). */
+    scheduleReprice: (arenaIds: number[]) => request<{ entries: RepriceEntry[] }>('/api/admin/reprice', { method: 'POST', token, body: { arenaIds } }).then((r) => r.entries),
+    /** `POST /api/admin/reprice {cancel: true}`: opens them again without a re-price. */
+    cancelReprice: (arenaIds: number[]) => request<{ entries: RepriceEntry[] }>('/api/admin/reprice', { method: 'POST', token, body: { arenaIds, cancel: true } }).then((r) => r.entries),
   };
 }
 
@@ -449,6 +493,24 @@ export interface ArenaPricesAdminView {
   price: { ok: true; source: string; usdPerToken: string; at: number | null } | { ok: false; source: string; reason: string; message: string };
 }
 
+/* ── re-price at next bell (`/api/admin/reprice`) ──────────────────── */
+
+/**
+ * An arena on its way to a re-price at the next bell: `waiting` (joins open until the round's last minute), `closing`
+ * (the last minute), `draining` (after the bell: unseated tickets are refunded at once), `ready` (nothing open: sign
+ * the new entry fee now). It opens again once the chain shows a new entry fee, or on cancel.
+ */
+export interface RepriceEntry {
+  arenaId: number;
+  phase: 'waiting' | 'closing' | 'draining' | 'ready';
+  by: string;
+  at: number;
+  entryFeeAtStart: number;
+  bellAt: number | null;
+  readyAt: number | null;
+  open?: { onChain: number; journal: number; live: number };
+}
+
 /* ── power-up shop (`/api/admin/shop`) ─────────────────────────────── */
 
 /** One credited power-up purchase. */
@@ -456,7 +518,12 @@ export interface ShopPurchase {
   tx: string;
   wallet: string;
   /** Records from before 2026-11 may name the retired Shockwave (`shock`, now counted as Leap). */
-  kind: BoostKind | 'shock';
+  kind: BoostKind | 'shock' | 'cart';
+  /** A cart: charges added per power-up. */
+  cart?: Partial<Record<BoostKind, number>>;
+  /** Raw base units owed back to the wallet (a part of the cart that could not be applied). */
+  refund?: string;
+  refundedAt?: number;
   charges: number;
   /** Raw base units (decimal string). */
   paid: string;
@@ -473,6 +540,8 @@ export interface ShopAdminView {
   burnBps: number | null;
   purchases: ShopPurchase[];
   purchaseCount: number;
+  /** Cart payments with a part owed back that the owner has not sent yet (absent on an older server). */
+  refundsOwed?: ShopPurchase[];
 }
 
 /* ── maps (`/api/admin/maps`) ─────────────────────────────────────── */

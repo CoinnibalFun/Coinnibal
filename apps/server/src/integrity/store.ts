@@ -38,6 +38,8 @@ export interface IntegrityStoreOptions {
   retentionDays?: number;
   /** At most this many log chunks are kept, newest first (default 3000). */
   maxFiles?: number;
+  /** The settings when none are saved (the chain's: `integrityDefaults`). */
+  defaults?: IntegritySettings;
 }
 
 function writeAtomic(path: string, data: string): void {
@@ -61,6 +63,8 @@ export class IntegrityStore {
   private readonly now: () => number;
   private readonly retentionMs: number;
   private readonly maxFiles: number;
+  /** The settings when none are saved (auto-hold on for the mainnet). */
+  readonly defaults: IntegritySettings;
 
   constructor(
     private readonly dir: string | null,
@@ -70,6 +74,7 @@ export class IntegrityStore {
     this.now = opts.now ?? Date.now;
     this.retentionMs = (opts.retentionDays ?? 30) * DAY;
     this.maxFiles = opts.maxFiles ?? 3000;
+    this.defaults = opts.defaults ?? INTEGRITY_SETTINGS_DEFAULT;
     if (dir) mkdirSync(join(dir, INTEGRITY_FILES.log), { recursive: true });
     this.secret = this.loadSecret();
   }
@@ -95,7 +100,7 @@ export class IntegrityStore {
   }
 
   loadState(): IntegrityState {
-    const empty: IntegrityState = { settings: structuredClone(INTEGRITY_SETTINGS_DEFAULT), bans: [], flags: [], scannedAt: null };
+    const empty: IntegrityState = { settings: structuredClone(this.defaults), bans: [], flags: [], scannedAt: null };
     if (!this.dir) return empty;
     const p = join(this.dir, INTEGRITY_FILES.state);
     if (!existsSync(p)) return empty;
@@ -103,14 +108,14 @@ export class IntegrityStore {
       const raw = JSON.parse(readFileSync(p, 'utf8')) as Partial<StateFile>;
       if (raw.version !== 1) throw new Error('unknown version');
       return {
-        settings: sanitizeSettings(raw.settings),
+        settings: sanitizeSettings(raw.settings, this.defaults),
         bans: Array.isArray(raw.bans) ? raw.bans.filter((b) => typeof b?.wallet === 'string' && typeof b.at === 'number') : [],
         flags: Array.isArray(raw.flags) ? raw.flags.filter((f) => typeof f?.id === 'string' && INTEGRITY_FLAG_KINDS.includes(f.kind)) : [],
         scannedAt: typeof raw.scannedAt === 'number' ? raw.scannedAt : null,
       };
     } catch (err) {
       const backup = `${p}.corrupt-${this.now()}`;
-      this.log(`!!! integrity: ${p} is unreadable (${(err as Error).message}); moved to ${backup}. Bans and flags start empty; auto-hold is off.`);
+      this.log(`!!! integrity: ${p} is unreadable (${(err as Error).message}); moved to ${backup}. Bans and flags start empty; auto-hold is ${this.defaults.autoHold ? 'on (the mainnet default)' : 'off'}.`);
       try {
         renameSync(p, backup);
       } catch {

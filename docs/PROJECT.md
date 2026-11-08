@@ -278,7 +278,7 @@ pnpm -F @elymum/server e2e       # real hardhat node + real server, the deploy o
 
 | Topic | Where |
 |---|---|
-| Robinhood Chain, Render, env vars, the domain, the `/admin` deploy flow, mainnet | [DEPLOY.md](DEPLOY.md) |
+| Robinhood Chain, the VPS, env vars, the domain, the `/admin` deploy flow, mainnet | [DEPLOY.md](DEPLOY.md), [deploy/vps/README.md](../deploy/vps/README.md) |
 | Robinhood Chain and Pons facts with sources | [RESEARCH.md](RESEARCH.md) |
 | Sinks, fees, prices, the NFT's utility | [ECONOMY.md](ECONOMY.md) |
 | Testnet deploy step by step, fees and burn mode, server key gas, allowlist, $1 price, pausing, mainnet, ownership, key rotation, backups, integrity | [OPERATIONS.md](OPERATIONS.md) |
@@ -303,7 +303,7 @@ the owner. Protect the server key.
 | Contracts | deployed by the owner from `/admin` → Setup and registered with the server (`DATA_DIR/chains/<id>/contracts.json`) |
 | Server key | `SERVER_PRIVATE_KEY=auto`, on the persistent disk; pays gas in ETH |
 | Admins | `ADMIN_WALLETS` = the owner's 0x address (no default) |
-| Hosting | one Docker container (game server + web) on Render with a persistent disk at `/data` |
+| Hosting | the game server in Docker behind Caddy on a VPS (the data volume at `/data`, daily and offsite backups); the website on Vercel |
 | Domain | the site is served at `PUBLIC_URL` (your current domain); elymum.io can be set later by changing `PUBLIC_URL` / `VITE_PUBLIC_URL` and the DNS |
 
 ## 8. Website, allowlist, collabs and the admin panel
@@ -348,7 +348,7 @@ lands** ([media/README.md](../media/README.md)).
 
 | Step | Who |
 |---|---|
-| Server on Render with a persistent disk, `ADMIN_WALLETS`, `SERVER_PRIVATE_KEY=auto`, testnet RPC | owner |
+| Server on the VPS (deploy/vps/README.md), `ADMIN_WALLETS`, `SERVER_PRIVATE_KEY=auto`, `EVM_RPC_URLS`, Telegram alerts | owner |
 | Fund the server key with ETH | owner |
 | `/admin` → Setup: TestToken, Arena, NFT, Finish setup (testnet first; OPERATIONS.md) | owner |
 | WL open; review WL and collabs | owner |

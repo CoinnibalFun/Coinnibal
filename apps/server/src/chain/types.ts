@@ -1,3 +1,4 @@
+import type { GasRunway } from '@elymum/shared';
 import { activeChain, type ChainInfo, type ChainStatus, type FeeRates } from '@elymum/shared';
 import type { EvmClient } from './evm-client';
 
@@ -106,8 +107,10 @@ export interface ServerKeyInfo {
   address: string | null;
   /** Gas-token balance in wei (decimal string); null when unknown. */
   balanceWei: string | null;
-  /** The balance is below the warning threshold. */
+  /** The gas runs low: under the floor (`GAS_FLOOR_ETH`) or under the critical runway (`GasRunway`). */
   low: boolean;
+  /** The runway at the trailing spend (absent: not tracked, e.g. the chain is off). */
+  gas?: GasRunway;
 }
 
 /** An ERC-20 `Transfer` log of a receipt. */
@@ -191,6 +194,14 @@ export interface ChainGateway {
    * `ChainBusyError` when the RPC refuses the read. Absent when the chain is off.
    */
   tokenReceipt?(hash: string): Promise<TokenReceipt | null>;
+  /**
+   * The chain's clock (Unix ms): the local clock corrected by the last latest-block timestamp read. Ticket ages
+   * (the stale sweeper, the 6 h cap) are measured with it: a server clock that drifts never cancels a fresh ticket.
+   * Absent (the chain off, tests): the local clock.
+   */
+  chainNow?(): number;
+  /** How far the server clock is from the chain's (ms, local − chain); null until a block time was read. */
+  clockSkewMs?(): number | null;
   start(): Promise<void>;
   stop(): Promise<void>;
 }

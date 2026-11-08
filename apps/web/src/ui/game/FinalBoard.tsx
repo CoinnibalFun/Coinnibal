@@ -13,13 +13,14 @@ export function boardPlace(rows: readonly RoundStanding[], outside: (n: number) 
 
 /**
  * The final standings of a room that ended, the same for an arena's bell and a custom room's end: my place on a sun
- * sticker, then the rows (rank, name with its BOT / You tags, mass, kills and, in arenas, the value at the bell).
- * `top` limits the rows shown; my own row is kept below them when the server sent it.
+ * sticker, then the whole board (rank, name with its BOT / You tags, mass, kills and, in arenas, the payout at the
+ * bell) in a scrolling list. My row is highlighted and pinned to the list's top or bottom edge while it is scrolled
+ * out of view, so I always see where I finished.
  */
-export function FinalBoard({ rows, title, skin, top = rows.length }: { rows: readonly RoundStanding[]; title: string; skin: number; top?: number }) {
+export function FinalBoard({ rows, title, skin }: { rows: readonly RoundStanding[]; title: string; skin: number }) {
   const t = useT();
   const tf = useTokenFormat();
-  const shown = rows.filter((s, i) => i < top || s.you);
+  const shown = rows;
   const value = rows.some((s) => s.value !== undefined);
   return (
     <section className="g-board" aria-label={title}>
@@ -32,15 +33,15 @@ export function FinalBoard({ rows, title, skin, top = rows.length }: { rows: rea
       </div>
       <h3 className="g-board__title mono">{title}</h3>
       <div className={`g-board__head mono${value ? ' has-value' : ''}`} aria-hidden="true">
-        <span />
-        <span />
+        <span>#</span>
+        <span>{t('gr.nameCol')}</span>
         <span>{t('gr.mass')}</span>
         <span>{t('gr.kills')}</span>
-        {value && <span>{t('gr.value')}</span>}
+        {value && <span>{t('gr.payoutCol')}</span>}
       </div>
-      <ol className="g-board__list">
+      <ol className="g-board__list" data-testid="final-board" tabIndex={0} aria-label={title}>
         {shown.map((s) => (
-          <li key={`${s.rank}-${s.name}`} className={`g-board__row${value ? ' has-value' : ''}${s.you ? ' is-me' : ''}`}>
+          <li key={`${s.rank}-${s.name}`} className={`g-board__row${value ? ' has-value' : ''}${s.you ? ' is-me' : ''}`} aria-current={s.you ? 'true' : undefined}>
             <span className="g-board__rank num">{String(s.rank).padStart(2, '0')}</span>
             <span className="g-board__name">
               <span className="g-board__nm" title={s.name}>

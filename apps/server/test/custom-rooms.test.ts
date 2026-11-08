@@ -133,7 +133,7 @@ describe('custom rooms: create, caps, perks', () => {
     const alice = testSigner().address;
     const h = reader.pay(1, alice);
     const view = await svc.create(alice, { config: cfgOf({ mapSize: 'S', bots: 4, difficulty: 'hard', maxPlayers: 6, powerUps: false }), txHash: h });
-    expect(view.code).toMatch(/^[A-HJ-NP-Z2-9]{5}$/);
+    expect(view.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
     expect(view).toMatchObject({ name: 'Friday Pond', paidWith: 'paid', txHash: h, maxPlayers: 6, creator: alice, durationMin: 30 });
     expect(view.endsAt - view.createdAt).toBe(30 * 60_000);
     const room = rooms.privateRoom(view.code) as Room;

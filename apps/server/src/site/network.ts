@@ -47,6 +47,7 @@ export async function networkInfo(d: { chain: ChainGateway; contracts: Contracts
     serverKey: key.address,
     serverBalanceWei: key.balanceWei,
     low: key.low,
+    ...(key.gas ? { gas: key.gas } : {}),
     contracts,
     otherChains: d.dataDir ? storedChains(d.dataDir).filter((id) => id !== chainId) : [],
   };

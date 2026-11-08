@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CUSTOM_DEFAULTS, EntityKind, PROTOCOL_VERSION, RULES, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, CUSTOM_DEFAULTS, EntityKind, PROTOCOL_VERSION, RULES, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@elymum/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
@@ -319,7 +319,7 @@ describe('server over websocket', () => {
     const got = await b.wait('chat', 2000, (m) => m.from === 'Alice');
     expect(got.text).toBe('gm frens');
     await sleep(1300);
-    a.send({ t: 'chat', text: 'free hype at https://scam.xyz' });
+    a.send({ t: 'chat', text: 'free tokens at https://scam.xyz' });
     const err = await a.wait('error', 2000, (m) => m.code === 'bad_request');
     expect(err.message).toMatch(/Links/);
     a.close();
@@ -601,6 +601,78 @@ describe('server over websocket', () => {
     b.close();
   });
 
+  it('a reconnect of the same wallet takes the live coin over at once (no session_busy); the old socket gets CLOSE_REPLACED', async () => {
+    const player = newWallet();
+    chain.sessions.set(`1:${player}`, session(player, { id: 3, entryFee: 20_000_000 }));
+    const token = app.auth.issueToken(player);
+    const enter = async () => {
+      const c = await Client.connect(port);
+      c.send({ t: 'hello', v: PROTOCOL_VERSION });
+      await c.wait('welcome');
+      c.send({ t: 'auth', token });
+      await c.wait('authed');
+      return c;
+    };
+    const a = await enter();
+    a.send({ t: 'join', room: 'arena:1', name: 'Switcher', skin: 0 });
+    const j1 = await a.wait('joined');
+    // the phone switched from Wi-Fi to mobile data: the old socket is still open as far as the server knows
+    const closed = new Promise<{ code: number; at: number }>((r) => a.ws.once('close', (code) => r({ code, at: Date.now() })));
+    const b = await enter();
+    const t0 = Date.now();
+    b.send({ t: 'join', room: 'arena:1', name: 'Switcher', skin: 0 });
+    const j2 = await b.wait('joined', 2000);
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(j2.playerId).toBe(j1.playerId);
+    expect(j2.value).toBe(20_000_000);
+    expect(b.msgs.some((m) => m.t === 'error' && m.code === 'session_busy')).toBe(false);
+    expect((await closed).code).toBe(CLOSE_REPLACED);
+    // the coin is the new socket's: it steers it (and the old one cannot come back by itself)
+    const room = WORKERS ? null : app.rooms.rooms.get('arena-1-1')!;
+    if (room) expect(room.world.players.get(j1.playerId)?.afk).toBe(false);
+    expect(app.gateway.replaced).toBeGreaterThanOrEqual(1);
+
+    // another wallet (signed in) can never take it: it has no ticket here
+    const thief = newWallet();
+    const t = await Client.connect(port);
+    t.send({ t: 'hello', v: PROTOCOL_VERSION });
+    await t.wait('welcome');
+    t.send({ t: 'auth', token: app.auth.issueToken(thief) });
+    await t.wait('authed');
+    t.send({ t: 'join', room: 'arena:1', name: 'Switcher', skin: 0 });
+    expect((await t.wait('error', 2000)).code).toBe('no_session');
+    expect(b.ws.readyState).toBe(WebSocket.OPEN);
+    // a guest (not signed in) cannot either
+    const g = await Client.connect(port);
+    g.send({ t: 'hello', v: PROTOCOL_VERSION });
+    await g.wait('welcome');
+    g.send({ t: 'join', room: 'arena:1', name: 'Switcher', skin: 0 });
+    expect((await g.wait('error', 2000)).code).toBe('auth_required');
+    expect(b.ws.readyState).toBe(WebSocket.OPEN);
+    t.close();
+    g.close();
+    b.close();
+    app.journal.remove(`1:${player.toLowerCase()}:3`);
+    chain.sessions.delete(`1:${player}`);
+  });
+
+  it('while the journal cannot be written a new arena seat is refused (storage_failing); a live coin plays on', async () => {
+    const player = newWallet();
+    chain.sessions.set(`1:${player}`, session(player));
+    const c = await signedIn(player);
+    Object.defineProperty(app.journal, 'writeFailing', { get: () => true, configurable: true });
+    try {
+      c.send({ t: 'join', room: 'arena:1', name: 'Disk', skin: 0 });
+      expect(await c.wait('error', 2000)).toMatchObject({ code: 'server_full', message: expect.stringMatching(/cannot save/) });
+    } finally {
+      delete (app.journal as unknown as { writeFailing?: boolean }).writeFailing;
+    }
+    c.send({ t: 'join', room: 'arena:1', name: 'Disk', skin: 0 });
+    await c.wait('joined');
+    c.close();
+    chain.sessions.delete(`1:${player}`);
+  });
+
   it("spectators watch a room (an empty pond shows its food)", async () => {
     const c = await Client.connect(port);
     c.send({ t: 'hello', v: PROTOCOL_VERSION });
@@ -740,7 +812,11 @@ describe('server over websocket', () => {
     const player = newWallet();
     const now = Date.now();
     app.journal.enqueue({ kind: 'settle', key: `Owed-${player}`, player: player, arenaId: 1, session: `Owed-${player}`, sessionId: 9, payout: 12_000_000, score: 1, kills: 0, xp: 0, attempts: 0, nextAttemptAt: now + 60_000, createdAt: now });
-    const res = (await (await fetch(`http://127.0.0.1:${port}/api/pending?wallet=${player}`)).json()) as unknown;
+    const url = `http://127.0.0.1:${port}/api/pending?wallet=${player}`;
+    // only that wallet's own session (or an admin's) reads it
+    expect((await fetch(url)).status).toBe(401);
+    expect((await fetch(url, { headers: { Authorization: `Bearer ${app.auth.issueToken(newWallet())}` } })).status).toBe(403);
+    const res = (await (await fetch(url, { headers: { Authorization: `Bearer ${app.auth.issueToken(player)}` } })).json()) as unknown;
     expect(res).toEqual({ pending: [{ key: `Owed-${player}`, arenaId: 1, payout: 12_000_000 }] });
     expect((await fetch(`http://127.0.0.1:${port}/api/pending?wallet=nope`)).status).toBe(400);
     app.journal.remove(`Owed-${player}`);
@@ -839,24 +915,26 @@ describe('server over websocket', () => {
     // the bots are in the snapshots, tagged BOT
     const lbMsg = await c.wait('lb', 4000, (m) => m.top.some((e) => e.isBot));
     expect(lbMsg.top.find((e) => e.isBot)?.name).toMatch(/^Bot \d+$/);
-    // the same ticket cannot take a second seat (official instance or test arena)
+    // the same ticket never takes a second seat: a new socket of the wallet takes this coin over (in the test arena)
     const c2 = await signedIn(player);
+    const replaced = new Promise<number>((r) => c.ws.once('close', (code) => r(code)));
     c2.send({ t: 'join', room: 'arena:1', name: 'TestArenaPlayer', skin: 0 });
-    expect((await c2.wait('error', 2000, (m) => m.code === 'session_busy')).code).toBe('session_busy');
-    c2.close();
+    const back = await c2.wait('joined');
+    expect(back).toMatchObject({ playerId: joined.playerId, room: { id: 'test-1' } });
+    expect(await replaced).toBe(CLOSE_REPLACED);
 
     // quick play (`arena:1`) seats another ticket in an official instance, never in the test arena
     const other = newWallet();
     const otherTicket = session(other);
     chain.sessions.set(`1:${other}`, otherTicket);
     const o = await signedIn(other);
-    o.send({ t: 'join', room: 'arena:1', name: 'Official', skin: 0 });
+    o.send({ t: 'join', room: 'arena:1', name: 'Regular', skin: 0 });
     expect((await o.wait('joined')).room.id).toMatch(/^arena-1-\d+$/);
 
     // the bell: settled at value like any instance; value + the floor loot queued to burn = the entry fee
     const r = roundAt(serverNow());
     jumpTo(r.endsAt);
-    const over = await c.wait('roundOver', 4000);
+    const over = await c2.wait('roundOver', 4000);
     await o.wait('roundOver', 4000);
     await sleep(100);
     const item = app.journal.settlements().find((p) => p.key === ticket.key);
@@ -868,8 +946,10 @@ describe('server over websocket', () => {
     const lb = app.leaderboards.snapshot();
     expect([...lb.daily, ...lb.allTime].some((x) => x.name === 'TestArenaPlayer')).toBe(false);
     expect(lb.rounds.some((x) => x.top.some((t) => t.name === 'TestArenaPlayer'))).toBe(false);
-    expect(lb.rounds.some((x) => x.top.some((t) => t.name === 'Official'))).toBe(true);
-    const testShare = c.msgs.find((m) => m.t === 'share') as Extract<ServerMessage, { t: 'share' }> | undefined;
+    expect(lb.rounds.some((x) => x.top.some((t) => t.name === 'Regular'))).toBe(true);
+    // the takeover socket (c2) holds the coin at the bell, so its share card is the TEST card; the replaced one gets none
+    expect(c.msgs.some((m) => m.t === 'share')).toBe(false);
+    const testShare = c2.msgs.find((m) => m.t === 'share') as Extract<ServerMessage, { t: 'share' }> | undefined;
     expect(testShare).toMatchObject({ kind: 'round', test: true });
     expect(app.shares.get(testShare!.id)).toMatchObject({ test: true });
     expect(app.shares.get(testShare!.id)?.paid).toBeUndefined();
@@ -885,7 +965,7 @@ describe('server over websocket', () => {
       chain.sessions.delete(`1:${w}`);
     }
     for (const p of [...app.journal.pending]) if (p.kind === 'sweep') app.journal.remove(p.key);
-    c.close();
+    c2.close();
     o.close();
   }, 20_000);
 

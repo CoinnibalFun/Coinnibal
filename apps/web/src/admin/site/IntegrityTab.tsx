@@ -7,6 +7,7 @@ import {
   type IntegrityFlag,
   type IntegrityFlagKind,
   type IntegrityFlagStatus,
+  type IntegrityFlagSubtype,
   type IntegrityHeld,
   type IntegrityOverview,
   type IntegritySettings,
@@ -27,6 +28,30 @@ const KIND_LABEL: Record<IntegrityFlagKind, string> = {
   bell_abuse: 'Round-bell pattern',
   input_twin: 'Input twins (one script, two wallets)',
 };
+
+/** The finer kinds of the newer detectors (a flag of the original detectors has none). */
+export const SUBTYPE_LABEL: Record<IntegrityFlagSubtype, { label: string; hint: string }> = {
+  emblem_shared: { label: 'Emblem shared', hint: 'one emblem served holder tickets of several wallets at once' },
+  fresh_feeders: { label: 'Fresh feeders', hint: 'value flowed to one wallet from young or fresh wallets' },
+  shared_funding: { label: 'Shared funding', hint: 'the feeder wallets got their first gas from one source' },
+  non_aggression: { label: 'Non-aggression pact', hint: 'two wallets often within eating range that never ate each other' },
+};
+
+/** A flag's kind with its finer kind, when it has one: "Pair transfer · Fresh feeders" (pure, tested). */
+export function flagKindText(f: Pick<IntegrityFlag, 'kind' | 'subtype'>): string {
+  const sub = f.subtype ? SUBTYPE_LABEL[f.subtype]?.label : undefined;
+  return sub ? `${KIND_LABEL[f.kind]} · ${sub}` : KIND_LABEL[f.kind];
+}
+
+function SubtypeChip({ subtype }: { subtype?: IntegrityFlagSubtype }) {
+  const s = subtype ? SUBTYPE_LABEL[subtype] : undefined;
+  if (!s) return null;
+  return (
+    <span className="ad-int__subtype mono" title={s.hint} data-subtype={subtype}>
+      {s.label}
+    </span>
+  );
+}
 
 const STATUS_TONE: Record<IntegrityFlagStatus, 'sun' | 'up' | 'ink'> = { open: 'sun', reviewed: 'up', dismissed: 'ink' };
 
@@ -191,8 +216,13 @@ function FlagSheet({
   };
   const pair = flag.wallets.length === 2 && flag.kind !== 'bot_input' && flag.kind !== 'bell_abuse';
   return (
-    <Sheet open onClose={onClose} title={KIND_LABEL[flag.kind]} kicker={`Flag · score ${flag.score}`} closeLabel="Close" className="ad-sheet">
+    <Sheet open onClose={onClose} title={flagKindText(flag)} kicker={`Flag · score ${flag.score}`} closeLabel="Close" className="ad-sheet">
       <div className="ad-form">
+        {flag.subtype && SUBTYPE_LABEL[flag.subtype] && (
+          <p className="ad-note" data-testid="flag-subtype">
+            <SubtypeChip subtype={flag.subtype} /> {SUBTYPE_LABEL[flag.subtype].hint}.
+          </p>
+        )}
         <p>{flag.summary}</p>
         <dl className="ad-kv">
           <div>
@@ -760,7 +790,10 @@ export function IntegrityTab({ api: adminApi }: TabProps) {
                     <td>
                       <span className={`ad-score is-${scoreTone(f.score)} num`}>{f.score}</span>
                     </td>
-                    <td>{KIND_LABEL[f.kind]}</td>
+                    <td>
+                      {KIND_LABEL[f.kind]}
+                      <SubtypeChip subtype={f.subtype} />
+                    </td>
                     <td>{f.summary}</td>
                     <td>
                       {f.wallets.map((w) => (

@@ -63,10 +63,10 @@ export interface Settings {
   /** Last arena the player bought a ticket for (Quick Play goes back there). */
   lastArena: number | null;
   /**
-   * "Approve N tickets at once" (`APPROVE_BATCH_TICKETS`, explicit and capped): the approval covers that many tickets
-   * of the room. Off (default): every ticket approves exactly its own entry fee. Never an unlimited approval.
+   * Tickets one approval covers (1, 5, 10 or 20 entry fees of the room; 5 by default): the next tickets need only the
+   * join until the allowance runs out. Never an unlimited approval.
    */
-  approveBatch: boolean;
+  approveTickets: number;
 }
 
 export interface KillItem {
@@ -281,20 +281,24 @@ function loadSettings(): Settings {
     showChat: true,
     showEmotes: true,
     lastArena: null,
-    approveBatch: false,
+    approveTickets: 5,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) {
       // retired fields: `lang` (the interface is English only), `passSkin` (the old pass is gone) and `exactApprove`
       // (approvals are exact by default now; the old "off" meant an unlimited approval, which is never asked again)
+      // `approveBatch` (an on/off "approve 5 tickets") became `approveTickets`: on was 5, off was 1
       const {
         lang: _lang,
         passSkin: _passSkin,
         exactApprove: _exactApprove,
+        approveBatch,
         ...saved
-      } = JSON.parse(raw) as Partial<Settings> & { lang?: unknown; passSkin?: unknown; exactApprove?: unknown };
+      } = JSON.parse(raw) as Partial<Settings> & { lang?: unknown; passSkin?: unknown; exactApprove?: unknown; approveBatch?: unknown };
       const out = mergeSettings(defaults, saved);
+      if (saved.approveTickets === undefined && approveBatch !== undefined) out.approveTickets = approveBatch === true ? 5 : 1;
+      if (![1, 5, 10, 20].includes(out.approveTickets)) out.approveTickets = 5;
       out.musicTrack = musicChoice(out.musicTrack);
       return out;
     }

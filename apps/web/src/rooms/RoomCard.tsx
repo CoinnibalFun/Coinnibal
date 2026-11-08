@@ -92,8 +92,11 @@ export function RoomCard() {
             <input
               className="cr-card__code mono"
               value={code}
-              maxLength={5}
-              placeholder="AB2CD"
+              maxLength={10}
+              placeholder="AB2CD3EF"
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
               aria-label={t('cr.card.code')}
               onChange={(e) => {
                 setCode(e.target.value.toUpperCase());

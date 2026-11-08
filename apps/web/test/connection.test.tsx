@@ -45,7 +45,7 @@ const { setEngine } = await import('../src/game/instance');
 const { Kb } = await import('../src/design');
 const { useUi } = await import('../src/store');
 const { ConnectionBanner, BANNER_DELAY_MS } = await import('../src/ui/game/ConnectionBanner');
-const { Feed } = await import('../src/ui/game/Feed');
+const { ChatStream } = await import('../src/ui/game/ChatStream');
 
 HTMLCanvasElement.prototype.getContext = (() => null) as never;
 // jsdom has no scrolling
@@ -146,12 +146,12 @@ describe('guest chat', () => {
     ]);
     render(
       <Kb>
-        <Feed narrow={false} />
+        <ChatStream />
       </Kb>,
     );
-    const guest = screen.getByText('send me tokens').closest('p')!;
+    const guest = screen.getByText('send me tokens').closest('li')!;
     expect(guest.className).toContain('is-guest');
     expect(guest.textContent).toContain('guest');
-    expect(screen.getByText('gl hf').closest('p')!.className).not.toContain('is-guest');
+    expect(screen.getByText('gl hf').closest('li')!.className).not.toContain('is-guest');
   });
 });

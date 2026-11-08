@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { describeError } from '@elymum/sdk';
 import { allowedDomains, expectedLoginMessage, fetchNonce, type MessageSigner, type NonceResponse } from '../wallet/siwe';
 import { t } from '../i18n';
-import { SiteApiError, auth } from './api';
+import { SiteApiError, auth, onAdminSessionExpired } from './api';
 
 /**
  * The site's wallet session: a SIWE (EIP-4361) sign-in over HTTP (`POST /api/auth/login`), free
@@ -110,3 +110,12 @@ export function dropExpired(err: unknown): boolean {
   }
   return false;
 }
+
+/**
+ * An admin route answered `admin_session_expired` (admin sessions last 2 hours and can be revoked): the stored token is
+ * dropped, so the Sign in button asks the wallet for a fresh signature instead of reusing it, and the reason shows.
+ */
+onAdminSessionExpired((message) => {
+  store(null);
+  useSession.setState({ session: null, signing: false, error: message || 'Your admin session ended. Sign in again.' });
+});

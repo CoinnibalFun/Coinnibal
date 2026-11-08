@@ -48,7 +48,8 @@ describe('parseJoinTarget', () => {
     expect(parseJoinTarget('private:abcde')).toEqual({ mode: 'private', code: 'ABCDE' });
     expect(parseJoinTarget('private:ab12c')).toEqual({ mode: 'private', code: 'AB12C' });
     expect(parseJoinTarget('private:new')).toEqual({ mode: 'private', code: null });
-    expect(parseJoinTarget('private:toolong')).toBeNull();
+    expect(parseJoinTarget('private:abcd2345')).toEqual({ mode: 'private', code: 'ABCD2345' });
+    expect(parseJoinTarget('private:muchtoolong')).toBeNull();
     expect(parseJoinTarget('private:abcd')).toBeNull();
     expect(parseJoinTarget('private:')).toBeNull();
   });

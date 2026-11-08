@@ -12,18 +12,19 @@ import { ensureChain, serverChainInfo } from './network';
 import { verifyArena } from './pinned';
 import { signInWithWallet } from './signIn';
 import { connectWallet, disconnectWallet, initWallets, useWallet } from './store';
-import { APPROVE_BATCH_TICKETS } from './ticket';
+import { APPROVE_MAX_TICKETS, ticketsLeft } from './ticket';
 import { sendWalletCall, txErrorText } from './tx';
 import { describeError } from '@elymum/sdk';
+import { arenaName as arenaRoomName } from '@elymum/sdk/ops';
 
 /**
- * An allowance left from before approvals were exact (an "approve once" was unlimited): more than any ticket batch of
- * the dearest arena could need. Such a wallet is offered to set it back to zero.
+ * An allowance left from before approvals were exact (an "approve once" was unlimited): more than the largest ticket
+ * approval of the dearest arena could need (20 entry fees). Such a wallet is offered to set it back to zero.
  */
 export function allowanceTooHigh(allowance: bigint | null, entryFees: readonly bigint[]): boolean {
   if (allowance === null || allowance === 0n) return false;
   const top = entryFees.reduce((m, f) => (f > m ? f : m), 0n);
-  return top > 0n && allowance > top * BigInt(APPROVE_BATCH_TICKETS);
+  return top > 0n && allowance > top * BigInt(APPROVE_MAX_TICKETS);
 }
 
 /**
@@ -74,6 +75,10 @@ export function WalletModal() {
   };
 
   const highAllowance = allowanceTooHigh(allowance, arenas.map((a) => a.entryFee));
+  // what the arena may still take, in tickets of the room the player buys (the last one, else the cheapest)
+  const lastArena = useUi((s) => s.settings.lastArena);
+  const shown = arenas.find((a) => a.id === lastArena && a.entryFee > 0n) ?? [...arenas].filter((a) => a.entryFee > 0n).sort((a, b) => (a.entryFee < b.entryFee ? -1 : 1))[0] ?? null;
+  const left = shown ? ticketsLeft(allowance, shown.entryFee) : null;
   /** Sets the arena's allowance back to zero (to the pinned arena only). */
   const revoke = async () => {
     if (!chain || !client || !token || !chain.arenaAddress) return;
@@ -203,6 +208,16 @@ export function WalletModal() {
             <p className="kl-note">{t('wl.wrongChain', { chain: info!.name })}</p>
             <Button variant="teal" size="md" lead="arrow" disabled={busy} onClick={() => void switchChain()}>
               {t('wl.switch', { chain: info!.name })}
+            </Button>
+          </div>
+        )}
+        {!highAllowance && !soon && allowance !== null && allowance > 0n && shown && (
+          <div className="wl-verify wl-approved" data-testid="wl-approved">
+            <p className="kl-note">
+              {t('wl.approved', { amount: tok.exact(allowance), sym: tok.symbol, n: left ?? 0, room: arenaRoomName(shown.id) })}
+            </p>
+            <Button variant="secondary" size="md" disabled={busy} onClick={() => void revoke()} data-testid="wl-revoke">
+              {t('wl.revokeApproval')}
             </Button>
           </div>
         )}

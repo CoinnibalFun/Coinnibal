@@ -76,6 +76,11 @@ export interface SimChain {
   tokens(): Promise<{ wallets: bigint; arena: bigint; feeWallet: bigint; burned: bigint; minted: bigint }>;
   closures(): Promise<Closure[]>;
   /**
+   * The owner's `updateArena(id, entryFee, maxSessions, enabled)`: false when the contract refuses it (`ArenaBusy`: a
+   * new entry fee while a ticket of the arena is open). Undefined: the chain does not model it.
+   */
+  updateArena?(arenaId: number, entryFee: bigint, enabled: boolean): Promise<boolean>;
+  /**
    * `Joined` events whose rates are not the wallet's (the holder pair for a holder, else the normal pair) and `Settled`
    * events whose fee split is not the shared fee module's (`computeProfitFee`) for the ticket's own rates.
    */
@@ -141,6 +146,24 @@ export interface SimOptions {
    */
   testArenas?: { bots: number; difficulty: CustomDifficulty };
   log?: (m: string) => void;
+  /**
+   * Mainnet re-pricing (the USD sync): every `everyRounds` rounds one arena is closed on chain (`updateArena(...,
+   * enabled=false)`, as OPERATIONS.md tells the owner), and at each later bell the owner tries the new entry fee
+   * (`newEntry` of the old one) with the arena re-opened; the contract refuses it while a ticket is open (`ArenaBusy`).
+   * Tickets bought before keep their own entry fee; the books must balance across the change.
+   */
+  reprice?: { everyRounds: number; newEntry: (old: bigint, rng: () => number) => bigint };
+}
+
+/** What the re-pricing scenario did (`SimOptions.reprice`). */
+export interface RepriceStats {
+  /** Arenas closed for a sync, syncs done, and attempts the contract refused with `ArenaBusy`. */
+  closed: number;
+  synced: number;
+  busy: number;
+  /** Rounds an arena stayed closed until its sync went through (each sync), and the entry fees it went through. */
+  pauseRounds: number[];
+  entries: Record<number, string[]>;
 }
 
 export interface SimReport {
@@ -164,6 +187,8 @@ export interface SimReport {
   winners: number;
   losers: number;
   violations: string[];
+  /** The re-pricing scenario (null without `SimOptions.reprice`). */
+  reprice: RepriceStats | null;
   ms: number;
 }
 
@@ -557,6 +582,42 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
     openAll();
   }
 
+  // the re-pricing scenario: one arena at a time is closed, then re-priced at the first bell the contract allows it
+  const rp: RepriceStats | null = opts.reprice ? { closed: 0, synced: 0, busy: 0, pauseRounds: [], entries: {} } : null;
+  if (rp) for (const a of arenaIds) rp.entries[a] = [sim.entryFee(a).toString()];
+  let closing: { arenaId: number; since: number } | null = null;
+  const closedArenas = new Set<number>();
+  async function repriceAtBell(): Promise<void> {
+    if (!rp || !opts.reprice || !sim.updateArena) return;
+    const was = faulty.on;
+    faulty.on = false;
+    try {
+      if (closing) {
+        const want = opts.reprice.newEntry(sim.entryFee(closing.arenaId), rng);
+        if (await sim.updateArena(closing.arenaId, want, true)) {
+          rp.synced++;
+          rp.pauseRounds.push(roundsDone - closing.since);
+          rp.entries[closing.arenaId].push(want.toString());
+          closedArenas.delete(closing.arenaId);
+          note(`re-priced arena #${closing.arenaId} to ${want}`);
+          closing = null;
+        } else rp.busy++;
+      } else if (roundsDone > 0 && roundsDone % opts.reprice.everyRounds === 0) {
+        const a = arenaIds[Math.floor(rng() * arenaIds.length)];
+        if (await sim.updateArena(a, sim.entryFee(a), false)) {
+          closing = { arenaId: a, since: roundsDone };
+          closedArenas.add(a);
+          rp.closed++;
+          note(`closed arena #${a} for a sync`);
+          // the server's 30 s refresh sees the closed arena and runs the stale sweep at once
+          await chain.sweepStale().catch(() => 0);
+        }
+      }
+    } finally {
+      faulty.on = was;
+    }
+  }
+
   const roundOf = (t: number) => roundAt(t, roundCfg.roundMs, roundCfg.closeMs).n;
   let lastRound = roundOf(clock);
   let roundsDone = 0;
@@ -575,6 +636,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
       }
       if (rng() > 0.02) continue;
       const a = arenaIds[Math.floor(rng() * arenaIds.length)];
+      if (closedArenas.has(a)) continue; // closed for a sync: the lobby offers no ticket (a join would revert)
       const s = await sim.session(a, p.wallet);
       if (s.id !== 0n) continue; // still settling (or owed: collected below)
       if (await sim.buy(p.wallet, a)) {
@@ -607,6 +669,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
       holds();
       await pass();
       await checkBooks(`bell ${n}`);
+      await repriceAtBell();
       // the chain's clock follows the game's (unplayed tickets go stale, 24 h refunds become possible)
       const want = Math.floor(clock / 1000);
       const nowS = await sim.nowS();
@@ -690,12 +753,15 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   for (const item of journal.held()) journal.release(item.key, clock);
   clock += staleAfterS * 1000 + 60_000;
   {
+    // ticket ages are measured on the chain's clock: it moves on at least as far as the game's (a chain that ran
+    // ahead, one second per block on an automining node, still has to see every unplayed ticket age past the limit)
     const want = Math.floor(clock / 1000);
     const nowS = await sim.nowS();
-    if (want > nowS) await sim.advance(want - nowS);
+    await sim.advance(Math.max(want - nowS, staleAfterS + 60));
   }
   for (let i = 0; i < 40 && (journal.pending.length > 0 || i < 3); i++) {
     clock += 400_000; // past every backoff
+    await sim.advance(400);
     await chain.sweepStale();
     await pass();
   }
@@ -769,6 +835,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
     winners: closures.filter((c) => c.name === 'Settled' && c.amount > sim.entryFee(c.arenaId)).length,
     losers: closures.filter((c) => c.name === 'Settled' && c.amount < sim.entryFee(c.arenaId)).length,
     violations,
+    reprice: rp,
     ms: Date.now() - t0,
   };
 }
@@ -785,7 +852,7 @@ export function expectedRates(holders: ReadonlySet<string>, wallet: string) {
   return holders.has(wallet.toLowerCase()) ? DEFAULT_HOLDER_FEE_RATES : DEFAULT_FEE_RATES;
 }
 
-export function fakeSimChain(opts: { players: number; seed: number; arenas?: { id: number; tokens: bigint }[]; holderShare?: number }): SimChain {
+export function fakeSimChain(opts: { players: number; seed: number; arenas?: { id: number; tokens: bigint; holdersOnly?: boolean }[]; holderShare?: number; decimals?: number }): SimChain {
   const evm = new FakeEvm();
   // the arena's holder perks at the owner's pair: emblem holders pay 8 % + 2 % of their profit
   evm.config.holderNft = NFT;
@@ -799,7 +866,7 @@ export function fakeSimChain(opts: { players: number; seed: number; arenas?: { i
     { id: 1, tokens: 1_000n },
     { id: 2, tokens: 10_000n },
   ];
-  for (const a of arenas) evm.addArena(a.id, a.tokens);
+  for (const a of arenas) evm.addArena(a.id, a.tokens, { holdersOnly: a.holdersOnly === true });
   const rng = mulberry32(opts.seed ^ 0xfa4e);
   const wallets: Address[] = [];
   const grant = 100_000_000n * E18;
@@ -842,6 +909,15 @@ export function fakeSimChain(opts: { players: number; seed: number; arenas?: { i
       } catch {
         return false;
       }
+    },
+    async updateArena(arenaId, entryFee, enabled) {
+      // ElymumArena.updateArena: a new entry fee only while no ticket of the arena is open (ArenaBusy)
+      const a = evm.arenaMap.get(arenaId);
+      if (!a || !a.exists || entryFee <= 0n) return false;
+      if (entryFee !== a.entryFee && a.openSessions !== 0) return false;
+      a.entryFee = entryFee;
+      a.enabled = enabled;
+      return true;
     },
     setRefusing(w, on) {
       if (on) evm.refusing.add(w.toLowerCase());

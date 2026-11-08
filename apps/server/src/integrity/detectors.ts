@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { IntegrityEvidence, IntegrityFlagKind, IntegrityThresholds, IntegrityTransfer } from '@elymum/shared';
+import type { IntegrityEvidence, IntegrityFlagKind, IntegrityFlagSubtype, IntegrityThresholds, IntegrityTransfer } from '@elymum/shared';
 import { TURN_BINS, type IntegritySnapshot, type SessionSummary } from './types';
 
 /**
@@ -10,6 +10,7 @@ import { TURN_BINS, type IntegritySnapshot, type SessionSummary } from './types'
 
 export interface Candidate {
   kind: IntegrityFlagKind;
+  subtype?: IntegrityFlagSubtype;
   /** Stable id from the kind and the subject. */
   id: string;
   score: number;
@@ -598,7 +599,190 @@ export function detectInputTwins(snap: IntegritySnapshot, th: IntegrityThreshold
   return out;
 }
 
-export const DETECTORS = [detectPairTransfers, detectEjectFeeding, detectSuicideFeeding, detectSharedDevice, detectBotInput, detectBellAbuse, detectInputTwins] as const;
+/* ------------------------------------------------------------------ */
+/* 8. Value flowing to one wallet from fresh wallets (sybil feeders)   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Settings of the two newer detectors (not admin thresholds yet). Fresh feeders: a fresh wallet has at most
+ * `freshMaxTickets` tickets in the window; a beneficiary is flagged when at least `freshMinFeeders` distinct fresh
+ * wallets lost value to it over `freshMinRounds` rounds, at least `freshMinNetFees` entry fees in all, and it took
+ * at least `freshMinShare` of everything those wallets lost (and `freshShareOverBase` times its share of the other
+ * losses in its rooms: a strong player eats newcomers too, but not nearly all of them). Non-aggression: two wallets
+ * whose expected eats (the bigger one's eat rate per sample within range, times the samples it spent within range of
+ * the smaller one) reach `naMinExpected`, that never ate each other, over `naMinRounds` rounds.
+ */
+export const COLLUSION_DEFAULTS = {
+  freshMaxTickets: 2,
+  freshMinFeeders: 4,
+  freshMinRounds: 3,
+  freshMinNetFees: 2,
+  freshMinShare: 0.5,
+  freshShareOverBase: 2.5,
+  naMinExpected: 6,
+  naMinRounds: 3,
+  naMinSamples: 600,
+} as const;
+
+/**
+ * Value flowed to wallet B from many fresh wallets (one or two tickets each): the sybil version of feeding, which the
+ * pair detector cannot see (each feeder pays once, never four times). Fresh wallets lose to strong players anyway, so
+ * the flag needs B to have taken most of what every fresh wallet lost in the rooms and rounds where they fed B, far
+ * above B's share of the other losses there. The score climbs with the number of feeders and the share: a ring of eight or more fresh feeders reaches the
+ * hold score on its own.
+ */
+export function detectFreshFeeders(snap: IntegritySnapshot, _th: IntegrityThresholds, cfg = COLLUSION_DEFAULTS): Candidate[] {
+  const tickets = new Map<string, number>();
+  for (const s of snap.sessions) tickets.set(s.wallet, (tickets.get(s.wallet) ?? 0) + 1);
+  // a wallet with no ticket in the snapshot (outside a scoped one) is not taken for fresh
+  const fresh = (w: string) => {
+    const n = tickets.get(w);
+    return n !== undefined && n <= cfg.freshMaxTickets;
+  };
+  // what fresh wallets lost, by eater; and every loss of a non-fresh wallet per room-round (the base rate)
+  const freshLossTo = new Map<string, { amount: number; fees: number; feeders: Set<string>; rounds: Set<string>; arenas: Set<number>; rooms: Set<string> }>();
+  let freshLossAll = 0;
+  const lossByRoomRound = new Map<string, { total: number; to: Map<string, number> }>();
+  const freshByRoomRound = new Map<string, number>();
+  for (const t of snap.transfers) {
+    if (t.from === t.to) continue;
+    const rr = `${t.roomId}#${t.round}`;
+    if (fresh(t.from)) freshByRoomRound.set(rr, (freshByRoomRound.get(rr) ?? 0) + t.amount);
+    if (fresh(t.from) && !fresh(t.to)) {
+      freshLossAll += t.amount;
+      let e = freshLossTo.get(t.to);
+      if (!e) freshLossTo.set(t.to, (e = { amount: 0, fees: 0, feeders: new Set(), rounds: new Set(), arenas: new Set(), rooms: new Set() }));
+      e.amount += t.amount;
+      e.fees += t.fee > 0 ? t.amount / t.fee : 0;
+      e.feeders.add(t.from);
+      e.rounds.add(`${t.arenaId}:${t.round}`);
+      e.arenas.add(t.arenaId);
+      e.rooms.add(rr);
+    } else if (!fresh(t.from)) {
+      let r = lossByRoomRound.get(rr);
+      if (!r) lossByRoomRound.set(rr, (r = { total: 0, to: new Map() }));
+      r.total += t.amount;
+      r.to.set(t.to, (r.to.get(t.to) ?? 0) + t.amount);
+    }
+  }
+  const out: Candidate[] = [];
+  for (const [b, e] of freshLossTo) {
+    if (e.feeders.size < cfg.freshMinFeeders || e.rounds.size < cfg.freshMinRounds || e.fees < cfg.freshMinNetFees) continue;
+    // what every fresh wallet lost in the rooms and rounds where fresh wallets fed B: B's part of it
+    let lostThere = 0;
+    for (const rr of e.rooms) lostThere += freshByRoomRound.get(rr) ?? 0;
+    const share = lostThere > 0 ? e.amount / lostThere : 0;
+    // B's share of the other losses in the same room-rounds (Laplace-smoothed: an unknown base is taken as even)
+    let baseTotal = 0;
+    let baseB = 0;
+    for (const rr of e.rooms) {
+      const r = lossByRoomRound.get(rr);
+      if (!r) continue;
+      baseTotal += r.total;
+      baseB += r.to.get(b) ?? 0;
+    }
+    const players = Math.max(2, snap.sessions.filter((s) => e.rooms.has(`${s.roomId}#${s.round}`)).length / Math.max(1, e.rooms.size));
+    // no other loss to compare with: an even share of the room
+    const base = baseTotal > 0 ? baseB / baseTotal : 1 / players;
+    if (share < cfg.freshMinShare || share < cfg.freshShareOverBase * base) continue;
+    const score = clampScore(40 + 6 * e.feeders.size + 30 * (share - cfg.freshMinShare));
+    const arenas = [...e.arenas].sort((x, y) => x - y);
+    out.push({
+      kind: 'pair_transfer',
+      subtype: 'fresh_feeders',
+      id: flagId('pair_transfer', `fresh>${b}`),
+      score,
+      wallets: [b, ...[...e.feeders].sort()].slice(0, 20),
+      beneficiary: b,
+      arenaId: arenas.length === 1 ? arenas[0] : null,
+      summary: `${short(b)} took ${Math.round(share * 100)} % of what fresh wallets (at most ${cfg.freshMaxTickets} tickets each) lost in its rounds, from ${e.feeders.size} of them: ${round3(e.fees)} entry fees over ${e.rounds.size} rounds.`,
+      evidence: {
+        feeders: e.feeders.size,
+        rounds: e.rounds.size,
+        netFees: round3(e.fees),
+        share: round3(share),
+        baseShare: round3(base),
+        freshLossAll,
+        arenas,
+      },
+    });
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* 9. Non-aggression (teaming)                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Two wallets often within eating range of each other that never eat each other, while the bigger one eats others
+ * at its usual rate when they come that close: a pact (teaming). Expected eats: the eater's rate per sample within
+ * range of everyone else (eats / samples, Laplace-smoothed) times its samples within range of the other wallet; with
+ * none observed, the chance is e^-expected. Below the hold score on its own (teaming moves no value between the two).
+ */
+export function detectNonAggression(snap: IntegritySnapshot, _th: IntegrityThresholds, cfg = COLLUSION_DEFAULTS): Candidate[] {
+  // samples B spent within eating range of A (from A's tickets: A's `near` counts B), per pair, and per round
+  const nearPair = new Map<string, { samples: number; rounds: Set<string>; arenas: Set<number> }>();
+  const nearOf = new Map<string, number>();
+  for (const s of snap.sessions) {
+    for (const [b, n] of Object.entries(s.near ?? {})) {
+      if (b === s.wallet) continue;
+      nearOf.set(b, (nearOf.get(b) ?? 0) + n);
+      const k = `${b}>${s.wallet}`;
+      let e = nearPair.get(k);
+      if (!e) nearPair.set(k, (e = { samples: 0, rounds: new Set(), arenas: new Set() }));
+      e.samples += n;
+      e.rounds.add(`${s.arenaId}:${s.round}`);
+      e.arenas.add(s.arenaId);
+    }
+  }
+  if (nearPair.size === 0) return [];
+  // eats (victim tickets) by eater, and whether a pair ever moved value between them
+  const eats = new Map<string, number>();
+  const touched = new Set<string>();
+  const seen = new Set<string>();
+  for (const t of snap.transfers) {
+    touched.add(`${t.from}|${t.to}`);
+    touched.add(`${t.to}|${t.from}`);
+    const k = `${t.fromKey}>${t.toKey}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    eats.set(t.to, (eats.get(t.to) ?? 0) + 1);
+  }
+  const out: Candidate[] = [];
+  const done = new Set<string>();
+  for (const [k, e] of nearPair) {
+    const [b, a] = k.split('>');
+    const pk = [a, b].sort().join('|');
+    if (done.has(pk) || touched.has(`${a}|${b}`)) continue;
+    // both directions: the pair's samples within range, either one the bigger
+    const back = nearPair.get(`${a}>${b}`);
+    const samples = e.samples + (back?.samples ?? 0);
+    const rounds = new Set([...e.rounds, ...(back?.rounds ?? [])]);
+    if (samples < cfg.naMinSamples || rounds.size < cfg.naMinRounds) continue;
+    // each wallet's eat rate per sample within range of anyone else
+    const rate = (w: string, pairSamples: number) => ((eats.get(w) ?? 0) + 1) / (Math.max(0, (nearOf.get(w) ?? 0) - pairSamples) + 600);
+    const expected = rate(b, e.samples) * e.samples + (back ? rate(a, back.samples) * back.samples : 0);
+    if (expected < cfg.naMinExpected) continue;
+    done.add(pk);
+    const p = Math.exp(-expected);
+    const arenas = [...new Set([...e.arenas, ...(back?.arenas ?? [])])].sort((x, y) => x - y);
+    out.push({
+      kind: 'pair_transfer',
+      subtype: 'non_aggression',
+      id: flagId('pair_transfer', `pact>${pk}`),
+      score: clampScore(45 + 4 * (expected - cfg.naMinExpected) + rounds.size),
+      wallets: [a, b].sort(),
+      beneficiary: null,
+      arenaId: arenas.length === 1 ? arenas[0] : null,
+      summary: `${short(a)} and ${short(b)} were within eating range ${samples} times over ${rounds.size} rounds and never ate each other (expected ${round3(expected)} eats, chance ${p.toExponential(1)}).`,
+      evidence: { samples, rounds: rounds.size, expected: round3(expected), pValue: Number(p.toExponential(3)), arenas },
+    });
+  }
+  return out;
+}
+
+export const DETECTORS = [detectPairTransfers, detectEjectFeeding, detectSuicideFeeding, detectSharedDevice, detectBotInput, detectBellAbuse, detectInputTwins, detectFreshFeeders, detectNonAggression] as const;
 
 /** Every detector, keeping candidates at or above `flagMinScore`. */
 export function runDetectors(snap: IntegritySnapshot, th: IntegrityThresholds): Candidate[] {
@@ -628,6 +812,8 @@ export function scopeSnapshot(snap: IntegritySnapshot, wallet: string): Integrit
   const related = new Set<string>([wallet]);
   for (const t of transfers) related.add(t.from === wallet ? t.to : t.from);
   for (const s of mine) for (const w of Object.keys(s.ejects.eatenBy)) related.add(w);
+  for (const s of mine) for (const w of Object.keys(s.near ?? {})) related.add(w);
+  for (const s of snap.sessions) if (s.near && s.near[wallet] !== undefined) related.add(s.wallet);
   for (const s of snap.sessions) if (keys.has(s.ipHash) || (s.fpHash && keys.has(s.fpHash))) related.add(s.wallet);
   const sessions = snap.sessions.filter((s) => related.has(s.wallet));
   // the pair model's expectation needs the victims' other losses and every occasion where this wallet was present

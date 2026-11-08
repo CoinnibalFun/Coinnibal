@@ -18,17 +18,16 @@ import { serverChainInfo } from './network';
 import { pinErrorName, verifyArena } from './pinned';
 import { useAddress } from './store';
 import {
-  APPROVE_BATCH_TICKETS,
+  APPROVE_TICKET_CHOICES,
   approvalIsSafe,
   approveAmount,
-  approveMode,
+  approveTickets,
   arenaRates,
   joinGasAfterApprove,
   planErrorName,
   sameRates,
   ticketRates,
   ticketSteps,
-  type ApproveMode,
   type TicketModel,
   type TicketStep,
 } from './ticket';
@@ -53,8 +52,8 @@ const PLAY_AT_MS = 2_000;
 /**
  * Cutting a ticket: a confirm sheet that shows exactly what is signed (entry fee, its value in US dollars with the
  * price's age, fee policy, every call), then at most two wallet prompts, `approve` (only when the allowance is short:
- * exactly this entry fee, or `APPROVE_BATCH_TICKETS` of them when the player ticks "Approve N tickets at once",
- * remembered in `Settings.approveBatch`; never unlimited) and `join`, each confirmed by its receipt, then the stamp lands,
+ * the entry fee of 1, 5, 10 or 20 tickets of this room, the player's choice with 5 preselected and remembered in
+ * `Settings.approveTickets`; never unlimited) and `join`, each confirmed by its receipt, then the stamp lands,
  * the stub tears off and the player enters the room. The same sheet collects a finalized game's
  * payout (any time) and refunds an unsettled ticket after 24 h, each with one `refund` call.
  *
@@ -76,7 +75,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   const reduced = useReducedMotion();
   const serverFees = useUi((s) => s.chain?.fees ?? null);
   const tokenReady = useUi((s) => s.chain?.tokenReady === true);
-  const approveBatch = useUi((s) => s.settings.approveBatch === true);
+  const approveN = useUi((s) => approveTickets(s.settings.approveTickets));
   const paidSeat = useUi((s) => s.paidSeat);
 
   const [phase, setPhase] = useState<Phase>('review');
@@ -133,7 +132,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   const steps: TicketStep[] = ticketSteps(data.allowance, fee);
   const busy = phase === 'preparing' || phase === 'switching' || phase === 'signing' || phase === 'confirming' || phase === 'stamped';
   const owed = session?.finalized ? session.owed : 0n;
-  const live: Review = { steps, fee, rates, balance: data.tokenBalance, wei: data.balance, owed, sessionId: session?.id ?? null, approve: approveMode(approveBatch) };
+  const live: Review = { steps, fee, rates, balance: data.tokenBalance, wei: data.balance, owed, sessionId: session?.id ?? null, approve: approveN };
   const v = frozen ?? live;
   // no ETH at all: every transaction would fail in the wallet (Pay is off; the way to get some is right there)
   const lowGas = !data.fake && data.balance !== null && data.balance === 0n;
@@ -312,11 +311,11 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
   const stepIndex = step ? v.steps.indexOf(step) + 1 : 0;
   /** Calls already confirmed on the way (the boarding sequence ticks them off). */
   const doneCount = phase === 'stamped' ? v.steps.length : stepIndex > 0 ? stepIndex - 1 : 0;
-  const batchAmount = tok.exact(approveAmount('batch', v.fee));
+  const batchAmount = tok.exact(approveAmount(v.approve, v.fee));
   const approveLabel =
-    v.approve === 'exact'
+    v.approve === 1
       ? t('tf.step.approve', { fee: tok.exact(v.fee), sym: tok.symbol })
-      : t('tf.step.approveMany', { amount: batchAmount, sym: tok.symbol, n: APPROVE_BATCH_TICKETS });
+      : t('tf.step.approveMany', { amount: batchAmount, sym: tok.symbol, n: v.approve });
   const stepLabel = step === 'approve' ? approveLabel : step === 'join' ? t('tf.step.join', { room }) : null;
   // the choice is offered while an approval is still ahead (after it, later tickets only join)
   const showApproveChoice = mode === 'buy' && !landed && (phase === 'review' || phase === 'error') && v.steps.includes('approve');
@@ -383,9 +382,9 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
                 : phase === 'signing'
                   ? mode === 'buy'
                     ? step === 'approve'
-                      ? v.approve === 'exact'
+                      ? v.approve === 1
                         ? t('tf.approvingNote', { fee: tok.exact(v.fee), sym: tok.symbol })
-                        : t('tf.approvingNoteMany', { amount: batchAmount, sym: tok.symbol, n: APPROVE_BATCH_TICKETS })
+                        : t('tf.approvingNoteMany', { amount: batchAmount, sym: tok.symbol, n: v.approve })
                       : t('tf.signingNote', { fee: tok.exact(v.fee), sym: tok.symbol })
                     : t('tf.signingSimple')
                   : t('tf.confirmingNote')}
@@ -472,15 +471,28 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
             ))}
           </ol>
           {showApproveChoice && (
-            <label className="tf-approve-choice" data-testid="tf-approve-batch">
-              <input type="checkbox" checked={approveBatch} onChange={(e) => updateSettings({ approveBatch: e.currentTarget.checked })} />
-              <span>
-                {t('tf.approveMany', { n: APPROVE_BATCH_TICKETS })}
-                <small>
-                  {approveBatch ? t('tf.approveManyOn', { amount: batchAmount, sym: tok.symbol, more: APPROVE_BATCH_TICKETS - 1 }) : t('tf.approveManyOff')}
-                </small>
+            <div className="tf-approve-choice" role="radiogroup" aria-label={t('tf.approveFor')} data-testid="tf-approve-batch">
+              <span className="tf-approve-choice__title">{t('tf.approveFor')}</span>
+              <span className="tf-approve-choice__segs">
+                {APPROVE_TICKET_CHOICES.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    role="radio"
+                    aria-checked={approveN === n}
+                    className={`tf-approve-seg mono${approveN === n ? ' is-on' : ''}`}
+                    onClick={() => updateSettings({ approveTickets: n })}
+                    data-testid={`tf-approve-${n}`}
+                    aria-label={n === 1 ? t('tf.approveOneTicket') : t('tf.approveN', { n })}
+                  >
+                    <b className="num">{n}</b>
+                  </button>
+                ))}
               </span>
-            </label>
+              <small>
+                {approveN === 1 ? t('tf.approveOne') : t('tf.approveSome', { amount: batchAmount, sym: tok.symbol, more: approveN - 1 })}
+              </small>
+            </div>
           )}
         </section>
 
@@ -541,7 +553,8 @@ interface Review {
   /** On-chain id of the session the sheet showed (re-checked before signing). */
   sessionId: bigint | null;
   /** What an approval grants (frozen at confirm with the rest). */
-  approve: ApproveMode;
+  /** Tickets the approval covers (1, 5, 10 or 20 entry fees). */
+  approve: number;
 }
 
 function Line({ label, value, strong = false, testId }: { label: string; value: string; strong?: boolean; testId?: string }) {

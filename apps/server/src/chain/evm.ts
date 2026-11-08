@@ -22,8 +22,9 @@ import type { ServerConfig } from '../config';
 import { join } from 'node:path';
 import { PAYOUT_GUARD_FLAG, type Journal, type JournalItem, type SettlementItem, type SweepItem } from '../stake/journal';
 import { SettledLog } from '../stake/settled-log';
+import { GasRunwayTracker } from './gas-runway';
 import { ChainCache } from './chain-cache';
-import { hasMulticall3, readChainId, viemEvmClient, withTimeout, type ArenaEvent, type EvmClient } from './evm-client';
+import { multicallMode, readChainId, viemEvmClient, withTimeout, type ArenaEvent, type EvmClient, type MulticallMode } from './evm-client';
 import { isRateLimited, isTransientRpcError, withRpcPriority } from './rpc-budget';
 import { loadServerKey } from './server-key';
 import { isTestChain } from './state-dir';
@@ -57,13 +58,13 @@ export const RECEIPT_TIMEOUT_MS = 90_000;
 const LATE_RECEIPT_TIMEOUT_MS = 2_000;
 /** Re-check delay of an item whose transaction is not confirmed yet. */
 export const RECHECK_MS = 5_000;
-/** Below this, the server key cannot pay gas for long: logged and shown in `/admin` (0.01 of the gas token). */
-export const LOW_BALANCE_WEI = 10n ** 16n;
+/** The server clock is this far off the chain's (ms): logged with `!!!` and reported by `/api/health`. */
+export const CLOCK_SKEW_ALERT_MS = 30_000;
 const STOP_GRACE_MS = 5_000;
 /** When the deploy block of the arena is unknown, the session index starts this many blocks back. */
 const INDEX_LOOKBACK_BLOCKS = 1_000_000n;
-/** Concurrent session reads of the stale sweeper. */
-const READ_CONCURRENCY = 8;
+/** Concurrent session reads of the stale sweeper (merged into one multicall where the RPC allows it). */
+const READ_CONCURRENCY = 40;
 /** The confirmed settlements, cancels and loot burns (`DATA_DIR/chains/<id>/settled.jsonl`). */
 export const SETTLED_LOG_FILE = 'settled.jsonl';
 /** A held settlement's session is re-read at most this often (a player may refund it after 24 h). */
@@ -177,8 +178,20 @@ export class EvmChain implements ChainGateway {
   private balance: bigint | null = null;
   /** The RPC's chain is not the one the state was opened for (`EvmChainDeps.stateChainId`). */
   private chainMismatch = false;
+  /** How concurrent reads are merged (null: an injected client). */
+  multicall: MulticallMode | null = null;
+  /** Chain time − local time (ms), from the last latest-block read; null until one was read. */
+  private chainOffsetMs: number | null = null;
+  /** The server key's balance samples and runway. */
+  private readonly runway: GasRunwayTracker;
+  /** When the RPC last answered (Unix ms, local clock); null: never. */
+  private rpcOkAt: number | null = null;
 
   private liveSessions: () => Set<string> = () => new Set();
+  /** Arenas the server closed for a re-price (`RepriceScheduler`): their unseated tickets are cancelled at once. */
+  private closedArenaIds: () => Set<number> = () => new Set();
+  /** The closed arenas the last refresh saw (a newly closed one triggers the stale sweep at once). */
+  private closedSeen = '';
   private readonly settledListeners: ((e: SettledEvent) => void)[] = [];
   private readonly statusListeners: (() => void)[] = [];
   /** The last transaction sent per journal key (a lost confirmation can still be reported). */
@@ -224,6 +237,18 @@ export class EvmChain implements ChainGateway {
     this.cache = ChainCache.in(deps.cacheDir ?? null, CHAIN_CACHE_FILE, log);
     this.logChunk = BigInt(Math.max(Number(LOG_CHUNK_MIN), cfg.chain.logChunkBlocks));
     this.settledLog = deps.settledLog ?? new SettledLog(deps.cacheDir ? join(deps.cacheDir, SETTLED_LOG_FILE) : null, log, this.now);
+    this.runway = new GasRunwayTracker({ floorWei: cfg.chain.gasFloorWei, warnDays: cfg.chain.gasRunwayWarnDays, criticalDays: cfg.chain.gasRunwayCriticalDays });
+    this.runway.load(this.cache.get('gas-samples'));
+  }
+
+  /** The RPC answered within `withinMs` (the health check's "chain reachable"). */
+  rpcReachable(withinMs = 3 * 60_000): boolean {
+    return this.rpcOkAt !== null && this.now() - this.rpcOkAt <= withinMs;
+  }
+
+  /** When the RPC last answered (Unix ms); null: never. */
+  lastRpcOkAt(): number | null {
+    return this.rpcOkAt;
   }
 
   /** Arenas whose payouts the books guard stopped (id → reason); empty when every vault covers its journal. */
@@ -264,6 +289,7 @@ export class EvmChain implements ChainGateway {
       setInterval(() => this.kick(), WORKER_INTERVAL_MS),
       setInterval(() => void withRpcPriority('normal', () => this.refresh({ configMaxAgeMs: CONFIG_TTL_MS })), REFRESH_INTERVAL_MS),
       setInterval(() => void this.checkBalance(), SWEEP_INTERVAL_MS),
+      setInterval(() => void this.readChainClock(), 60_000),
       setInterval(() => void this.sweepStale(), Math.min(SWEEP_INTERVAL_MS, Math.max(1_000, staleAfterS * 1000))),
     );
     for (const t of this.timers) t.unref();
@@ -295,16 +321,32 @@ export class EvmChain implements ChainGateway {
     const where = this.cfg.chain.rpcUrl ?? 'injected client';
     try {
       if (!this.client) {
-        const rpcUrl = this.cfg.chain.rpcUrl!;
-        const chainId = await readChainId(rpcUrl);
+        const urls = this.cfg.chain.rpcUrls.length > 0 ? this.cfg.chain.rpcUrls : [this.cfg.chain.rpcUrl!];
+        const chainId = await readChainId(urls[0]);
         if (!isSupportedChainId(chainId)) return this.refuseChain(chainId);
-        // concurrent eth_calls are merged into one Multicall3 call where the chain has it
-        const multicall = await hasMulticall3(rpcUrl);
-        this.client = viemEvmClient(rpcUrl, this.account!, { chainId, overrides: this.overrides(), multicall });
-        if (multicall) this.log('chain: Multicall3 found — concurrent reads are batched into one eth_call');
+        // EVM_RPC_URLS: every fallback must serve the same chain; one that serves another (or none) is left out
+        const usable = [urls[0]];
+        for (const u of urls.slice(1)) {
+          const id = await readChainId(u).catch(() => null);
+          if (id === chainId) usable.push(u);
+          else this.log(`!!! chain: fallback RPC #${urls.indexOf(u) + 1} ${id === null ? 'does not answer' : `serves chain ${id}`} — not used (EVM_RPC_URLS)`);
+        }
+        // concurrent eth_calls are merged into one Multicall3 call (or a deployless one where the chain has none)
+        const multicall = await multicallMode(usable, chainId);
+        this.client = viemEvmClient(usable, this.account!, { chainId, overrides: this.overrides(), multicall });
+        this.multicall = multicall;
+        this.log(
+          `chain: ${usable.length} RPC${usable.length > 1 ? 's (fallback in this order)' : ''} · ` +
+            (multicall === 'multicall3'
+              ? 'Multicall3 found — concurrent reads are batched into one eth_call'
+              : multicall === 'deployless'
+                ? 'no Multicall3 on this chain — concurrent reads are batched into one deployless multicall eth_call'
+                : 'no multicall — concurrent reads go as JSON-RPC batches'),
+        );
       }
       if (this.chainId === null) {
         const id = await withTimeout(this.client.getChainId(), 20_000, 'eth_chainId');
+        this.rpcOkAt = this.now();
         if (!isSupportedChainId(id)) return this.refuseChain(id);
         this.chainId = id;
         const info = this.chainInfo();
@@ -321,6 +363,7 @@ export class EvmChain implements ChainGateway {
       this.enabled = true;
       await this.syncContracts();
       void this.checkBalance();
+      void this.readChainClock();
       return true;
     } catch (err) {
       this.warn('probe', `chain: RPC ${where} unreachable (${firstLine(err)}) — practice only (re-checking every 30 s)`);
@@ -357,6 +400,16 @@ export class EvmChain implements ChainGateway {
     }
     await this.syncContracts(opts.configMaxAgeMs ?? 0);
     this.announceStatus();
+    // an arena that closed since the last look (disabled, paused, or closed for a re-price): its unseated tickets go
+    // back now, so the re-price does not wait out the 15-minute stale limit
+    if (this.tokenReady) {
+      const c = await this.closedArenas();
+      const sig = c.all ? 'all' : [...c.ids].sort((a, b) => a - b).join(',');
+      if (sig !== this.closedSeen) {
+        this.closedSeen = sig;
+        if (sig !== '') void this.sweepStale();
+      }
+    }
   }
 
   /**
@@ -504,6 +557,7 @@ export class EvmChain implements ChainGateway {
     if (!this.client || !this.arena || this.arenaCode !== 'ok') return null;
     try {
       const config = await this.client.arenaConfig(this.arena);
+      this.rpcOkAt = this.now();
       this.applyConfig(config);
       this.cache.set(`config:${this.arena.toLowerCase()}`, config);
       return config;
@@ -513,26 +567,74 @@ export class EvmChain implements ChainGateway {
     }
   }
 
-  /** Reads the server key's gas balance; warns (at most every 30 min) when it runs low. */
+  /**
+   * The chain's clock (Unix ms): local time corrected by the last block timestamp read. Block timestamps have whole
+   * seconds and trail by up to a block: good to about a second, far inside the minutes ticket ages are measured in.
+   */
+  chainNow(): number {
+    return this.now() + (this.chainOffsetMs ?? 0);
+  }
+
+  /** Local − chain clock (ms); null until a block time was read. */
+  clockSkewMs(): number | null {
+    return this.chainOffsetMs === null ? null : -this.chainOffsetMs;
+  }
+
+  /** Reads the latest block's timestamp (the chain's clock); warns when the server clock is more than 30 s off. */
+  async readChainClock(): Promise<void> {
+    const client = this.client;
+    if (!client?.latestBlock) return;
+    try {
+      const t0 = this.now();
+      const b = await withRpcPriority('low', () => client.latestBlock!());
+      this.rpcOkAt = this.now();
+      const local = Math.round((t0 + this.now()) / 2);
+      // the block was made up to a second before it was read: its timestamp is the chain's time then
+      this.chainOffsetMs = b.timestamp * 1000 - local;
+      const skew = -this.chainOffsetMs;
+      if (Math.abs(skew) > CLOCK_SKEW_ALERT_MS) {
+        this.warn('clock', `!!! clock: the server clock is ${Math.round(skew / 1000)} s ${skew > 0 ? 'ahead of' : 'behind'} the chain (block ${b.number}) — ticket ages use the chain's time; fix NTP on the host (timedatectl)`, 10 * 60_000);
+      }
+    } catch {
+      /* best effort: the last offset stays */
+    }
+  }
+
+  /**
+   * Reads the server key's gas balance (every 5 minutes) into the runway: its trailing spend decides the alert, not a
+   * fixed amount. Under `gasRunwayCriticalDays` (2) of runway or the floor: `!!!` every 30 minutes; under
+   * `gasRunwayWarnDays` (7): a warning every 6 hours.
+   */
   async checkBalance(): Promise<void> {
     if (!this.enabled || !this.client || !this.serverAddress) return;
     try {
       const client = this.client;
       const who = this.serverAddress;
       this.balance = await withRpcPriority('low', () => client.balance(who));
-      if (this.balance < LOW_BALANCE_WEI) {
-        this.warn('balance', `chain: WARNING the server key ${this.serverAddress} holds only ${formatGas(this.balance, 6)} — fund it, it pays the gas of every settlement`, 30 * 60_000);
-      }
+      this.rpcOkAt = this.now();
+      this.runway.record(this.now(), this.balance);
+      this.cache.set('gas-samples', this.runway.save());
+      const r = this.runway.view(this.now());
+      const what = `the server key ${this.serverAddress} holds ${formatGas(this.balance, 6)}${r.days !== null ? ` — about ${r.days} day(s) at the last day's spend (${formatGas(BigInt(r.spendWeiPerDay ?? '0'), 6)}/day)` : ''}`;
+      if (r.level === 'critical') this.warn('balance', `!!! chain: gas LOW — ${what}. Fund it now: it pays the gas of every settlement`, 30 * 60_000);
+      else if (r.level === 'warn') this.warn('balance', `chain: WARNING gas runway under ${this.cfg.chain.gasRunwayWarnDays} days — ${what}`, 6 * 3600_000);
     } catch {
       /* best effort */
     }
   }
 
+  /** The server key's gas runway (trailing spend, levels). */
+  gasRunway() {
+    return this.runway.view(this.now());
+  }
+
   serverInfo(): ServerKeyInfo {
+    const gas = this.runway.view(this.now());
     return {
       address: this.serverAddress,
       balanceWei: this.balance === null ? null : this.balance.toString(),
-      low: this.balance !== null && this.balance < LOW_BALANCE_WEI,
+      low: this.balance !== null && gas.level === 'critical',
+      gas,
     };
   }
 
@@ -582,7 +684,8 @@ export class EvmChain implements ChainGateway {
       explorerUrl: info.explorerUrl,
       arenaAddress: this.arena,
       nftAddress,
-      arenasEnabled: this.stakeEnabled,
+      // while the journal cannot be written no new seat is taken: the lobby must not sell tickets meanwhile
+      arenasEnabled: this.stakeEnabled && !this.journal.writeFailing,
       tokenReady: token !== null,
       token: token ? { address: token.address, symbol: this.cfg.chain.tokenSymbol || TOKEN_SYMBOL_DEFAULT, decimals: token.decimals } : null,
       fees: this.fees(),
@@ -717,6 +820,29 @@ export class EvmChain implements ChainGateway {
     this.liveSessions = fn;
   }
 
+  /** Arenas closed for a re-price by the server (their unseated tickets are cancelled at once). */
+  setClosedArenaProvider(fn: () => Set<number>): void {
+    this.closedArenaIds = fn;
+  }
+
+  /**
+   * Arenas whose unseated tickets are cancelled at once rather than after `STALE_SESSION_AFTER_S`: disabled on chain,
+   * every arena while the contract is paused, and those the server closed for a re-price. A ticket nobody will seat
+   * there keeps the arena busy (`ArenaBusy`) and the re-price waiting for nothing.
+   */
+  private async closedArenas(): Promise<{ ids: Set<number>; all: boolean }> {
+    const ids = new Set(this.closedArenaIds());
+    let list: ChainArena[] = [];
+    try {
+      // fresh: a cached "disabled" must not cancel the tickets of an arena that has just been opened again
+      list = await this.listArenas(true);
+    } catch {
+      /* unknown: only the server's own closures count */
+    }
+    for (const a of list) if (!a.enabled) ids.add(a.id);
+    return { ids, all: this.config?.paused === true };
+  }
+
   onSettled(fn: (e: SettledEvent) => void): void {
     this.settledListeners.push(fn);
   }
@@ -773,6 +899,13 @@ export class EvmChain implements ChainGateway {
   /** Due items: settle batches per arena (chunks of 40, oldest first), then the oldest loot sweep of each arena. */
   private async pass(): Promise<void> {
     if (this.stopped || !this.enabled || !this.client) return;
+    // nothing leaves a vault while the journal cannot be written: a settlement sent from memory alone (an eaten
+    // ticket at 0) whose matching change (the eater's gain) never reached the disk would be lost to a crash, the
+    // eater paid its old value and the difference left in the vault, owed to nobody
+    if (this.journal.writeFailing) {
+      this.warn('journal-write', '!!! chain: the journal cannot be written — settlements wait until it can (nothing is sent from memory alone)', 60_000);
+      return;
+    }
     const now = this.now();
     await this.recheckHeld(now);
     const due = this.journal.pending
@@ -803,6 +936,13 @@ export class EvmChain implements ChainGateway {
       const entry = byArena.get(group) ?? { mode, items: [] };
       entry.items.push(item);
       byArena.set(group, entry);
+    }
+    // eaten tickets (payout 0) of an arena wait up to `deathBatchMs` for company, so the deaths of a few seconds go
+    // out in one batch; anything else due in that arena (a bell, a payout) takes them along at once
+    const waitMs = this.cfg.chain.deathBatchMs;
+    for (const [group, g] of [...byArena]) {
+      if (g.mode !== 'settle' || waitMs <= 0) continue;
+      if (g.items.every((i) => i.reason === 'death' && (i.payout ?? 0) === 0 && i.attempts === 0 && now - i.createdAt < waitMs)) byArena.delete(group);
     }
     for (const { mode, items } of byArena.values()) {
       for (const chunk of chunkSettlements(items, SETTLE_CHUNK)) {
@@ -888,6 +1028,7 @@ export class EvmChain implements ChainGateway {
     const vault = toLedger(info.vault, t.decimals, 'floor');
     if (this.journal.owedByArena(arenaId) <= vault) return this.booksClear(arenaId);
     let owed = this.journal.liveAndLootByArena(arenaId);
+    const reads: Promise<number>[] = [];
     for (const p of this.journal.pending) {
       if (p.arenaId !== arenaId) continue;
       if (p.kind === 'sweep') {
@@ -895,13 +1036,13 @@ export class EvmChain implements ChainGateway {
         continue;
       }
       if (!isEvm(p.player) || !Number.isSafeInteger(p.sessionId)) continue;
-      let s;
-      try {
-        s = await client.session(arena, arenaId, getAddress(p.player));
-      } catch {
-        return true;
-      }
-      if (s.id === BigInt(p.sessionId!) && !s.finalized) owed += p.payout ?? 0;
+      // read together: concurrent reads go out as one multicall
+      reads.push(client.session(arena, arenaId, getAddress(p.player)).then((s) => (s.id === BigInt(p.sessionId!) && !s.finalized ? (p.payout ?? 0) : 0)));
+    }
+    try {
+      for (const v of await Promise.all(reads)) owed += v;
+    } catch {
+      return true;
     }
     if (owed <= vault) return this.booksClear(arenaId);
     const why = `the vault holds ${this.units(vault)} but the journal owes ${this.units(owed)}`;
@@ -921,9 +1062,11 @@ export class EvmChain implements ChainGateway {
   }
 
   /**
-   * Payout guard: a ticket paid more than `PAYOUT_GUARD_MULTIPLE` entry fees (default 100: twice a full 50-seat
-   * instance) is held for an admin (`/admin` → Integrity → Held settlements: release pays it as it was) instead of
-   * being sent. A real game can hardly get there; a bug or a tampered journal can. Returns the items to send.
+   * Payout guard: a ticket paid more than every ticket seated in its round's instance put in (`roundPool`: no game
+   * can win more than that) is held for an admin (`/admin` → Integrity → Held settlements: release pays it as it was)
+   * instead of being sent. An item without a pool (crash recovery, an older journal) is held above
+   * `PAYOUT_GUARD_MULTIPLE` entry fees (default 100). A real game never gets there; a bug or a tampered journal can.
+   * `PAYOUT_GUARD_MULTIPLE=0` turns the guard off. Returns the items to send.
    */
   private payoutGuard(checked: Checked[]): Checked[] {
     const multiple = this.cfg.chain.payoutGuardMultiple;
@@ -932,8 +1075,13 @@ export class EvmChain implements ChainGateway {
     return checked.filter((c) => {
       const entry = toLedger(c.entryFee, t.decimals, 'floor');
       const payout = c.item.payout ?? 0;
-      if (c.item.guardCleared || payout <= entry * multiple) return true;
-      const why = `payout guard: ${this.units(payout)} is more than ${multiple} times the ticket's entry fee (${this.units(entry)})`;
+      const pool = c.item.roundPool;
+      const limit = pool !== undefined && pool > 0 ? pool : entry * multiple;
+      if (c.item.guardCleared || payout <= limit) return true;
+      const why =
+        pool !== undefined && pool > 0
+          ? `payout guard: ${this.units(payout)} is more than every ticket of its round put in (${this.units(pool)})`
+          : `payout guard: ${this.units(payout)} is more than ${multiple} times the ticket's entry fee (${this.units(entry)})`;
       if (this.journal.hold(c.item.key, { at: this.now(), score: 100, why, flags: [PAYOUT_GUARD_FLAG] })) {
         this.log(`!!! chain: settlement ${c.item.key} HELD for review — ${why}. Release it in /admin → Integrity if it is right`);
       }
@@ -1085,10 +1233,8 @@ export class EvmChain implements ChainGateway {
       this.log(`!!! chain: settle batch ${hash} (${send.length} item(s)) reverted — retrying with backoff`);
       return;
     }
-    let settledCount = 0;
-    for (const c of send) {
-      if (await this.reconcile(c, hash, receipt.events)) settledCount++;
-    }
+    // the items the receipt settled are booked at once; the others are re-read together (one multicall)
+    const settledCount = (await Promise.all(send.map((c) => this.reconcile(c, hash, receipt.events)))).filter(Boolean).length;
     this.log(`chain: ${mode} batch ${hash} · arena #${send[0].item.arenaId} · ${settledCount}/${send.length} ${mode === 'cancel' ? 'refunded' : 'settled'}`);
   }
 
@@ -1388,6 +1534,11 @@ export class EvmChain implements ChainGateway {
       this.warn('sweep', `chain: stale-session scan failed (${firstLine(err)})`);
       return 0;
     }
+    // ticket ages are measured on the chain's clock (the latest block), never the server's: a server clock that runs
+    // fast must not cancel a ticket its player is about to seat
+    await this.readChainClock();
+    const chainNowS = this.chainNow() / 1000;
+    const closed = await this.closedArenas();
     const live = this.liveSessions();
     const pending = new Set(this.journal.pending.map((p) => p.key));
     const only = this.cfg.chain.arenaIds;
@@ -1435,7 +1586,8 @@ export class EvmChain implements ChainGateway {
             });
             return;
           }
-          if (now / 1000 - s.openedAt < staleAfterS) return;
+          // a closed arena (re-price, disabled, paused): nobody will seat it, the full entry fee goes back now
+          if (!closed.all && !closed.ids.has(c.arenaId) && chainNowS - s.openedAt < staleAfterS) return;
           if (only.length > 0 && !only.includes(c.arenaId)) return;
           enqueue.push({
             kind: 'settle',

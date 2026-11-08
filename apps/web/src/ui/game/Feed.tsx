@@ -1,19 +1,11 @@
 import { lookForSkin as lookForBasicSkin } from '../../render/looks';
 import { AnimatePresence, motion } from 'motion/react';
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Icon, usePreset, useReducedMotion } from '../../design';
-import { engine } from '../../game/instance';
+import { Fragment, useRef, useState, type ReactNode } from 'react';
+import { usePreset, useReducedMotion } from '../../design';
 import { BotTag } from './BotTag';
 import { useT, type TKey } from '../../i18n';
 import { useUi, type KillItem } from '../../store';
 import { useIdleFade } from './fade';
-
-/** System lines are UI chrome: no emoji there; player text stays as typed. */
-const stripEmoji = (s: string) =>
-  s
-    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
 
 /** A skin's paint as a tiny inked coin. */
 function InkDot({ skin }: { skin: number }) {
@@ -51,52 +43,25 @@ function KillLine({ k, myName }: { k: KillItem; myName: string | null }) {
 }
 
 /**
- * The feed under the timer: kills as small ink strips with a wry verb, and the chat slip.
- * Enter opens the chat line; Esc closes it. `narrow` keeps fewer lines; `fold` (phones) hides the
- * slip until the chat button opens it. A few seconds after the last new line the area fades to
- * semi-transparent (`useIdleFade`) so it does not cover the floor; the pointer over it, a tap on it,
- * focus in it, the open chat line or a new line bring it back.
+ * The kill feed under the timer: kills as small ink strips with a wry verb (the chat is its own stream on the right
+ * edge, `ChatStream`). `narrow` keeps fewer lines. A few seconds after the last new line the area fades to
+ * semi-transparent (`useIdleFade`) so it does not cover the floor; the pointer over it, a tap on it or a new line
+ * bring it back.
  */
-export function Feed({ narrow, fold = narrow }: { narrow: boolean; fold?: boolean }) {
+export function Feed({ narrow }: { narrow: boolean; fold?: boolean }) {
   const t = useT();
   const killfeed = useUi((s) => s.killfeed);
-  const chat = useUi((s) => s.chat);
-  const chatOpen = useUi((s) => s.chatOpen);
-  const showChat = useUi((s) => s.settings.showChat);
   const myName = useUi((s) => s.me?.name ?? null);
-  const [text, setText] = useState('');
-  const listRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const reduced = useReducedMotion();
   const spring = usePreset('press', { fade: true });
   const [hover, setHover] = useState(false);
   const [poke, setPoke] = useState(0);
   // only a NEW line wakes the area (kill lines also leave by themselves after a few seconds)
-  const seen = useRef({ kill: -1, chat: -1, n: 0 });
+  const seen = useRef({ kill: -1, n: 0 });
   const newestKill = killfeed.at(-1)?.id ?? -1;
-  const newestChat = chat.at(-1)?.id ?? -1;
-  if (newestKill > seen.current.kill || newestChat > seen.current.chat) {
-    seen.current = { kill: Math.max(seen.current.kill, newestKill), chat: Math.max(seen.current.chat, newestChat), n: seen.current.n + 1 };
-  }
-  const faded = useIdleFade(`${seen.current.n}:${poke}`, hover || chatOpen);
-
-  useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [chat, chatOpen]);
-  useEffect(() => {
-    if (chatOpen) inputRef.current?.focus();
-  }, [chatOpen]);
-
-  const send = () => {
-    engine()?.chat(text);
-    setText('');
-    useUi.setState({ chatOpen: false });
-  };
-
+  if (newestKill > seen.current.kill) seen.current = { kill: newestKill, n: seen.current.n + 1 };
+  const faded = useIdleFade(`${seen.current.n}:${poke}`, hover);
   const kills = narrow ? killfeed.slice(-2) : killfeed.slice(-5);
-  const lines = chat.slice(narrow ? -3 : -30);
-  // folded (phones): the chat is its button in the thumb cluster until it is opened
-  const showSlip = showChat && (chatOpen || (!fold && lines.length > 0));
   return (
     <div
       className={`g-feed${faded ? ' is-faded' : ''}`}
@@ -126,51 +91,6 @@ export function Feed({ narrow, fold = narrow }: { narrow: boolean; fold?: boolea
           ))}
         </AnimatePresence>
       </ul>
-      {showSlip && (
-        <div className="g-chat">
-          <div ref={listRef} className="g-chat__lines">
-            {lines.map((c) => (
-              <p key={c.id} className={`g-chat__line${c.system ? ' is-system' : c.guest ? ' is-guest' : ''}`}>
-                {!c.system && (
-                  <b>
-                    <InkDot skin={c.skin} />
-                    {c.from}
-                    {c.guest && <span className="g-chat__guest mono">{t('g.chatGuest')}</span>}
-                  </b>
-                )}
-                <span>{c.system ? stripEmoji(c.text) : c.text}</span>
-              </p>
-            ))}
-          </div>
-          {chatOpen && (
-            <form
-              className="g-chat__form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                send();
-              }}
-            >
-              <input
-                ref={inputRef}
-                className="g-chat__input"
-                value={text}
-                maxLength={100}
-                placeholder={t('hud.chat')}
-                aria-label={t('g.chat')}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') useUi.setState({ chatOpen: false });
-                  e.stopPropagation();
-                }}
-                onBlur={() => useUi.setState({ chatOpen: false })}
-              />
-              <button type="submit" className="kb-iconbtn kb-iconbtn--sm g-chat__send" aria-label={t('g.chatSend')} onMouseDown={(e) => e.preventDefault()}>
-                <Icon name="arrow" size={18} />
-              </button>
-            </form>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -287,6 +287,11 @@ export class IntegrityService {
     return structuredClone(this.state.settings);
   }
 
+  /** A flag raised outside the detectors (an emblem caught serving two holder tickets): merged like theirs. */
+  raise(c: Candidate): IntegrityFlag[] {
+    return this.merge([c]);
+  }
+
   /** Runs every detector over the whole window and merges the results into the flags. */
   scan(): IntegrityFlag[] {
     const cands = runDetectors(this.snapshot(), this.state.settings.thresholds);
@@ -351,7 +356,7 @@ export class IntegrityService {
 
   updateSettings(body: Record<string, unknown>, by: string): IntegritySettings {
     const before = this.state.settings;
-    this.state.settings = applySettingsPatch(before, body);
+    this.state.settings = applySettingsPatch(before, body, this.opts.store.defaults);
     if (before.autoHold !== this.state.settings.autoHold) this.log(`integrity: auto-hold turned ${this.state.settings.autoHold ? 'ON' : 'off'} by ${by}`);
     this.saveState();
     return this.settings;
@@ -491,7 +496,7 @@ export class IntegrityService {
     counts.held = held.length;
     return {
       settings: this.settings,
-      defaults: structuredClone(INTEGRITY_SETTINGS_DEFAULT),
+      defaults: structuredClone(this.opts.store.defaults),
       counts,
       held,
       bans: [...this.bans.values()].sort((a, b) => b.at - a.at),
