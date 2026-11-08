@@ -31,8 +31,8 @@ async function newPage({ viewport, mobile = false }) {
 const ev = (page, fn, arg) => page.evaluate(fn, arg);
 
 async function buy(page, kind) {
-  await page.getByTestId(`shop-buy-${kind}`).click();
-  await page.waitForFunction((k) => (document.querySelector(`[data-testid="shop-buy-${k}"]`)?.getAttribute('aria-busy') ?? 'false') !== 'true', kind, { timeout: 20000 });
+  await page.getByTestId(`shop-more-${kind}`).click();
+  await page.waitForFunction((k) => (document.querySelector(`[data-testid="shop-more-${k}"]`)?.getAttribute('aria-busy') ?? 'false') !== 'true', kind, { timeout: 20000 });
   await page.waitForTimeout(400);
 }
 
@@ -40,7 +40,7 @@ async function buy(page, kind) {
 {
   const { ctx, page } = await newPage({ viewport: { width: 1440, height: 900 } });
   await page.getByTestId('lobby-shop').click();
-  await page.waitForSelector('[data-testid="shop-buy-magnet"]');
+  await page.waitForSelector('[data-testid="shop-more-magnet"]');
   await page.waitForTimeout(600);
   await page.screenshot({ path: join(out, 'shop-lobby-desktop.png') });
   for (const k of ['magnet', 'leap', 'speed', 'invis']) await buy(page, k);
@@ -70,7 +70,7 @@ async function buy(page, kind) {
 {
   const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, mobile: true });
   await ev(page, () => window.__elymum.useUi.setState({ modal: 'shop' }));
-  await page.waitForSelector('[data-testid="shop-buy-leap"]');
+  await page.waitForSelector('[data-testid="shop-more-leap"]');
   await buy(page, 'leap');
   await buy(page, 'magnet');
   await page.waitForTimeout(400);

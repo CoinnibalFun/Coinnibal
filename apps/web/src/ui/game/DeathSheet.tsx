@@ -4,6 +4,7 @@ import { formatCountdown, useRound } from '../../game/round';
 import { useT } from '../../i18n';
 import { requestTicket, useUi } from '../../store';
 import { CoinPortrait } from './CoinPortrait';
+import { ShareOnX, gameShareText } from './ShareOnX';
 import { formatClock, roomName, useTokenFormat } from './format';
 import { useEffect, useState } from 'react';
 
@@ -75,9 +76,13 @@ export function DeathSheet() {
       quiet
       title={<span className="g-death__title">{t('gd.stamp')}</span>}
       footer={
-        <Button variant="primary" size="lg" icon={arena ? 'ticket' : 'play'} sub={sub} onClick={startOver} data-autofocus>
-          {t('gd.startOver')}
-        </Button>
+        <>
+          <Button variant="primary" size="lg" icon={arena ? 'ticket' : 'play'} sub={sub} onClick={startOver} data-autofocus>
+            {t('gd.startOver')}
+          </Button>
+          {/* every room: the game I just had (no server card for a death: the post links the site) */}
+          {s && <ShareOnX id={null} text={gameShareText(t, { mass: s.maxMass, eaten: s.playersEaten, room: roomName(room), test: !!room?.test })} />}
+        </>
       }
     >
       {s && (

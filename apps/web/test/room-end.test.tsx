@@ -6,7 +6,8 @@ import { serverClock } from '../src/game/clock';
 import { useUi } from '../src/store';
 import { setReducedMotion } from '../src/test/media';
 import { RoomClosingNotice, RoomOverSheet, RoundCountdown } from '../src/ui/game';
-import { KillShare, KILL_SHARE_MS, SHARE_COIN, shareUrl } from '../src/ui/game/ShareOnX';
+import { HudShare, KillShare, KILL_SHARE_MS, SHARE_COIN, shareUrl, siteLink } from '../src/ui/game/ShareOnX';
+import { DeathSheet } from '../src/ui/game/DeathSheet';
 import { boardPlace } from '../src/ui/game/FinalBoard';
 
 HTMLCanvasElement.prototype.getContext = (() => null) as never;
@@ -111,7 +112,8 @@ describe('a custom room ends: countdown, then the final board', () => {
         <RoomOverSheet />
       </Kb>,
     );
-    expect(screen.queryByTestId('share-x')).toBeNull();
+    // before the card comes the button is already there, linking the site
+    expect(new URL((screen.getByTestId('share-x') as HTMLAnchorElement).href).searchParams.get('url')).toBe(siteLink());
     act(() => useUi.setState({ share: { kind: 'room', id: 'AbCdE12345', at: Date.now() } }));
     rerender(
       <Kb>
@@ -129,7 +131,7 @@ describe('a custom room ends: countdown, then the final board', () => {
     expect(shareUrl('AbCdE12345')).toMatch(/\/share\/AbCdE12345$/);
   });
 
-  it('a notable kill shows "You ate ..." with Share on X for a few seconds', () => {
+  it('a kill shows "You ate ..." with Share on X for a few seconds', () => {
     useUi.setState({ screen: 'playing', share: { kind: 'kill', id: 'KiLL123456', victim: 'Nakamoto', at: Date.now() } });
     render(
       <Kb>
@@ -140,5 +142,39 @@ describe('a custom room ends: countdown, then the final board', () => {
     expect(sticker.textContent).toContain('You ate Nakamoto!');
     expect(new URL((screen.getByTestId('share-x') as HTMLAnchorElement).href).searchParams.get('text')).toBe(`I just ate Nakamoto on Elymum! ${SHARE_COIN}`);
     expect(KILL_SHARE_MS).toBeGreaterThanOrEqual(5000);
+  });
+
+  it('death in a practice pond: the game-over sheet offers Share on X (the mass reached, the coins eaten, the site link)', () => {
+    const pond: RoomInfo = { id: 'practice-1', mode: 'practice', name: 'Pro Pond #1', width: 6000, height: 6000, players: 1, bots: 0, maxPlayers: 50 };
+    const stats = { aliveMs: 61_000, finalMass: 0, maxMass: 2345.6, foodEaten: 40, cellsEaten: 0, playersEaten: 2, bestRank: 1 };
+    useUi.setState({ screen: 'dead', room: pond, death: { stats, killer: 'Nakamoto', killerSkin: 2 } });
+    render(
+      <Kb>
+        <DeathSheet />
+      </Kb>,
+    );
+    const url = new URL((screen.getByTestId('share-x') as HTMLAnchorElement).href);
+    expect(url.searchParams.get('text')).toBe(`I reached mass 2,345 and ate 2 coins in Pro Pond #1 on Elymum! ${SHARE_COIN}`);
+    expect(url.searchParams.get('url')).toBe(siteLink());
+  });
+
+  it("the HUD's own Share on X: my place, mass and coins eaten so far, read when it is used", () => {
+    const pond: RoomInfo = { id: 'practice-1', mode: 'practice', name: 'Pro Pond #1', width: 6000, height: 6000, players: 1, bots: 0, maxPlayers: 50 };
+    useUi.setState({ screen: 'playing', room: pond, hud: { mass: 120, cells: 1, value: null, rank: 1, players: 1 }, myEaten: 0 });
+    render(
+      <Kb>
+        <HudShare label />
+      </Kb>,
+    );
+    const link = screen.getByTestId('hud-share') as HTMLAnchorElement;
+    expect(link.textContent).toContain('Share on X');
+    expect(link.target).toBe('_blank');
+    act(() => useUi.setState({ hud: { mass: 987.4, cells: 2, value: null, rank: 2, players: 7 }, myEaten: 3 }));
+    act(() => link.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })));
+    link.focus();
+    const url = new URL(link.href);
+    expect(url.origin + url.pathname).toBe('https://x.com/intent/post');
+    expect(url.searchParams.get('text')).toBe(`I'm #2 of 7 in Pro Pond #1 on Elymum: mass 987, 3 coins eaten so far! ${SHARE_COIN}`);
+    expect(url.searchParams.get('url')).toBe(siteLink());
   });
 });
