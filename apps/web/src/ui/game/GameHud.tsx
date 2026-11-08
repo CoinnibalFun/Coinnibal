@@ -574,21 +574,24 @@ export function GameHud() {
       </motion.div>
 
       {!narrow && !touch && !short && <MapSheet size={mapSize} />}
-      {/* desktop: the kill feed, then the chat, then the key hints, stacked at the bottom left (one column: no overlaps) */}
+      {/* desktop: the kill feed, then the chat, stacked at the bottom left (one column: no overlaps) */}
       {!touch && !compact && (
         <div className="g-bl">
           <Feed narrow={false} />
           {(playing || screen === 'spectating') && <ChatStream docked />}
-          {playing && (
-            <Peek className="g-keys-peek" tab={<kbd className="kb-key">{t('g.keysLabel')}</kbd>} label={t('g.keysLabel')}>
-              <KeyHints />
-            </Peek>
-          )}
         </div>
       )}
       {playing && !touch && (
         <>
-          <BoostBar />
+          {/* right column above the minimap: the power-up keys (R F G V), the key hints right under them (one column: no overlaps) */}
+          <div className="g-rdock">
+            <BoostBar />
+            {!compact && (
+              <Peek className="g-keys-peek" tab={<kbd className="kb-key">{t('g.keysLabel')}</kbd>} label={t('g.keysLabel')}>
+                <KeyHints />
+              </Peek>
+            )}
+          </div>
           <div className="g-dock">
             <Peek className="g-emotes-peek" tab={<span className="g-peek__emoji">{emoteEmoji(EMOTE_BAR[0])}</span>} label={t('g.emotes')}>
               <EmoteBar />

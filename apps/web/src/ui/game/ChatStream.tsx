@@ -31,7 +31,7 @@ export function visibleLines(chat: readonly ChatItem[], now: number, open: boole
 }
 
 /** The HUD pieces the chat must never cover (touch and small windows, where it stands on its own). */
-const OBSTACLES = '.g-corner--tl, .g-corner--tr, .g-center > *, .g-map, .g-boosts-dock, .g-touch, .g-touch .g-boost, .g-touch__emotes, .g-stick, .g-dock, .g-spectate';
+const OBSTACLES = '.g-corner--tl, .g-corner--tr, .g-center > *, .g-map, .g-rdock > *, .g-touch, .g-touch .g-boost, .g-touch__emotes, .g-stick, .g-dock, .g-spectate';
 
 /**
  * The chat's free band in its column (pure on rects, tested): from `anchor` (its bottom edge as the CSS places it)
