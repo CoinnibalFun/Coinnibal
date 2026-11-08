@@ -3,7 +3,7 @@
  * People count everywhere; practice bots only in a testnet test arena (tagged BOT). A split coin is one coin; the same
  * person eaten again (a rejoin, same wallet) is one entry ×2. Names are cleaned for a share card and an X post.
  */
-import { EATEN_SHOWN, NOTABLE_KILL_MASS, ROBINHOOD_TESTNET_CHAIN_ID, TICK_MS, eatenLine, shareName, type DeathStats, type ServerMessage } from '@elymum/shared';
+import { EATEN_SHOWN, ROBINHOOD_TESTNET_CHAIN_ID, TICK_MS, eatenLine, shareName, type DeathStats, type ServerMessage } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import type { Player } from '../src/game/entities';
 import { EatenTracker } from '../src/rooms/eaten';
@@ -141,7 +141,7 @@ describe('a room feeds the eaten list into my game-over stats', () => {
     expect(over[0].playersEaten).toBe(2);
   });
 
-  it('a testnet test arena: eating a practice bot lists it tagged BOT, and a big bot is a notable kill', () => {
+  it('a testnet test arena: eating a practice bot lists it tagged BOT, and every bot eaten is a kill to share', () => {
     const over: DeathStats[] = [];
     const kills: { victim: string; victimIsBot?: boolean }[] = [];
     const deps = {
@@ -166,7 +166,7 @@ describe('a room feeds the eaten list into my game-over stats', () => {
     const p = room.join(fakeConn(j.stake.player), j);
     const [small, big] = [...room.bots!.bots.values()].map((b) => b.player);
     eat(room, p, small);
-    big.stats.maxMass = NOTABLE_KILL_MASS + 50;
+    big.stats.maxMass = 1050;
     eat(room, p, big);
     room.shutdown();
     expect(over).toHaveLength(1);
@@ -174,7 +174,10 @@ describe('a room feeds the eaten list into my game-over stats', () => {
       { name: shareName(small.name), bot: true },
       { name: shareName(big.name), bot: true },
     ]);
-    expect(kills).toEqual([{ victim: big.name, victimIsBot: true }]);
+    expect(kills).toEqual([
+      { victim: small.name, victimIsBot: true },
+      { victim: big.name, victimIsBot: true },
+    ]);
     // bots carry no value: the ticket is worth its entry fee
     expect(room.ledger!.total()).toBe(0);
   });
@@ -195,7 +198,10 @@ describe('the app: a test arena result card', () => {
       const bot = [...room.bots!.bots.values()][0].player;
       eat(room, p, bot);
       room.syncRound(room.round()!.endsAt + 1);
-      const share = conn.msgs.find((m) => m.t === 'share') as Extract<ServerMessage, { t: 'share' }> | undefined;
+      // eating the bot offered a TEST kill card first; the bell's result card follows
+      const shares = conn.msgs.filter((m) => m.t === 'share') as Extract<ServerMessage, { t: 'share' }>[];
+      expect(shares[0]).toMatchObject({ kind: 'kill', test: true, victimIsBot: true });
+      const share = shares.find((m) => m.kind === 'round');
       expect(share).toMatchObject({ kind: 'round', test: true });
       const card = app.shares.get(share!.id)!;
       expect(card).toMatchObject({ test: true, eaten: [{ name: shareName(bot.name), bot: true }] });

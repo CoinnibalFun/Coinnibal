@@ -1,14 +1,14 @@
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { NOTABLE_KILL_MASS, PROTOCOL_VERSION, SHARE_ID_RE, TICK_MS, shareIntentUrl, type ServerMessage } from '@elymum/shared';
+import { PROTOCOL_VERSION, SHARE_ID_RE, TICK_MS, shareIntentUrl, type ServerMessage } from '@elymum/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
 import { loadConfig } from '../src/config';
 import { Limiter } from '../src/net/limiter';
 import { Room } from '../src/rooms/room';
-import { KILL_SHARE_EVERY_MS, SHARES_KEPT, ShareService, sharePage } from '../src/site/shares';
+import { KILL_SHARE_EVERY_MS, OFFER_TTL_MS, SHARES_KEPT, ShareService, sharePage } from '../src/site/shares';
 import { renderShareCard, shareEaten, shareFacts, shareHeadline } from '../src/site/share-card';
 import { ArenaChain, arena, fakeConn, freeCustom, roomDeps, testWallet } from './helpers';
 
@@ -45,6 +45,27 @@ describe('share cards (made from the server records only)', () => {
     expect(s.kill({ room: customRoom, player: look, wallet: null }, 'conn:7', { mass: 2600, kills: 4, victim: 'Rocky', victimMass: 1500 })).toBeNull();
     clock.t += KILL_SHARE_EVERY_MS;
     expect(s.kill({ room: customRoom, player: look, wallet: null }, 'conn:7', { mass: 2600, kills: 4, victim: 'Rocky', victimMass: 1500 })).not.toBeNull();
+  });
+
+  it('a kill card is an offer: kept on disk only once its link is opened; an unopened one expires', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'elymum-offers-'));
+    const clock = { t: 1_800_000_000_000 };
+    const s = service(dir, clock);
+    const small = { mass: 30, kills: 1, victim: 'Tiny', victimMass: 12 };
+    const a = s.kill({ room: customRoom, player: look, wallet: null }, 'conn:1', small)!;
+    const b = s.kill({ room: customRoom, player: look, wallet: null }, 'conn:2', small)!;
+    expect(a).toMatchObject({ kind: 'kill', victim: 'Tiny', victimMass: 12 });
+    s.flush();
+    // nothing kept yet
+    expect(existsSync(join(dir, 'site', 'shares.json'))).toBe(false);
+    // the first open (X's crawler) keeps it for good
+    expect(s.get(a.id)).toEqual(a);
+    s.flush();
+    expect(JSON.parse(readFileSync(join(dir, 'site', 'shares.json'), 'utf8')).cards.map((c: { id: string }) => c.id)).toEqual([a.id]);
+    expect(service(dir).get(a.id)).toEqual(a);
+    // an offer nobody opened in time is gone
+    clock.t += OFFER_TTL_MS;
+    expect(s.get(b.id)).toBeNull();
   });
 
   it('keeps the newest cards on disk across a restart', () => {
@@ -151,8 +172,8 @@ describe('share cards (made from the server records only)', () => {
   });
 });
 
-describe('the notable-kill hook of a room', () => {
-  it('fires for the killer when a person eats a person who reached NOTABLE_KILL_MASS; never for bots or small coins', () => {
+describe('the kill hook of a room', () => {
+  it('fires for the killer on every person eaten, big or small', () => {
     const seen: { victim: string; victimMass: number; killer: string }[] = [];
     const deps = { ...roomDeps(new ArenaChain([])), onNotableKill: (e: { victim: string; victimMass: number; killer: { name: string } }) => seen.push({ victim: e.victim, victimMass: e.victimMass, killer: e.killer.name }) };
     const room = new Room({ id: 'priv-KILLS', mode: 'private', code: 'KILLS', name: 'Kills', maxPlayers: 10, bots: null, custom: freeCustom(), seed: 4 }, deps);
@@ -173,9 +194,12 @@ describe('the notable-kill hook of a room', () => {
       expect(small.alive).toBe(false);
       room.leave(a, 'left');
     };
-    eat(NOTABLE_KILL_MASS + 200, 'Penny');
-    eat(NOTABLE_KILL_MASS - 1, 'Tiny');
-    expect(seen).toEqual([{ victim: 'Penny', victimMass: NOTABLE_KILL_MASS + 200, killer: 'Whale' }]);
+    eat(1200, 'Penny');
+    eat(40, 'Tiny');
+    expect(seen).toEqual([
+      { victim: 'Penny', victimMass: 1200, killer: 'Whale' },
+      { victim: 'Tiny', victimMass: 40, killer: 'Whale' },
+    ]);
   });
 });
 
