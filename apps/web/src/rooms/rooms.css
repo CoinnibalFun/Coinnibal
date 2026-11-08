@@ -309,7 +309,7 @@
 /* the map size in world units, under its chips */
 .cr-hint {
   margin: -6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 
@@ -379,7 +379,7 @@
   justify-content: space-between;
   /* under the slider: past the count (2.2em of 30 px) and the gap */
   margin: -8px 0 0 calc(66px + 14px);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .cr-cap .cr-hint {

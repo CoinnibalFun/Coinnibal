@@ -62,7 +62,7 @@
   border-radius: 50%;
   background: var(--white);
   color: var(--ink-fixed);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 .cb-progress li.is-on {
@@ -159,7 +159,7 @@
   height: 100%;
 }
 .cb-guidecard__k {
-  font-size: 11px;
+  font-size: 12px;
   color: #3A2E0A;
 }
 .cb-guidecard strong {
@@ -190,7 +190,7 @@
 }
 .cb-mine__h {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: #6B655A;
 }
 .cb-mine__list {
@@ -532,7 +532,7 @@
   left: 18px;
   display: flex;
   gap: 10px;
-  font-size: 11px;
+  font-size: 12px;
   color: #4A453B;
 }
 .cb-vig__cap span:first-child {
@@ -699,7 +699,7 @@
 }
 .cb-summary dt {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #6B655A;
@@ -723,7 +723,7 @@
   gap: 8px;
 }
 .cb-timer__l {
-  font-size: 11px;
+  font-size: 12px;
   color: #6B655A;
 }
 .cb-clock {
@@ -770,7 +770,7 @@
 }
 .cb-raffle__k {
   margin-right: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: #6B655A;
 }
 /* the wallet table */
@@ -833,7 +833,7 @@
   border-bottom: var(--stroke-sm) solid var(--outline);
   background: var(--cream);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1432,7 +1432,7 @@
   animation: none;
 }
 .cb-seats__key {
-  font-size: 11px;
+  font-size: 12px;
   color: #6b655a;
 }
 
