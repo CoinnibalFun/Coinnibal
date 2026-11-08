@@ -374,6 +374,8 @@ export function adminApi(token: string) {
     shop: () => request<ShopAdminView>('/api/admin/shop', { token }),
     /** `PUT /api/admin/shop`: a partial settings update; answers like the GET. */
     saveShop: (patch: Partial<ShopSettings>) => request<ShopAdminView>('/api/admin/shop', { method: 'PUT', token, body: patch }),
+    /** `POST /api/admin/shop/refunds/<tx>`: the owner sent the owed part of a cart payment back. */
+    markRefunded: (tx: string) => request<{ refundsOwed: ShopPurchase[] }>(`/api/admin/shop/refunds/${id(tx)}`, { method: 'POST', token, body: {} }).then((r) => r.refundsOwed),
     /**
      * `POST /api/admin/mint/import-holders` (`{ fromChainId? }`, default the testnet): adds every
      * testnet emblem holder to the mainnet allowlist, recorded per wallet with the source.
@@ -516,7 +518,12 @@ export interface ShopPurchase {
   tx: string;
   wallet: string;
   /** Records from before 2026-11 may name the retired Shockwave (`shock`, now counted as Leap). */
-  kind: BoostKind | 'shock';
+  kind: BoostKind | 'shock' | 'cart';
+  /** A cart: charges added per power-up. */
+  cart?: Partial<Record<BoostKind, number>>;
+  /** Raw base units owed back to the wallet (a part of the cart that could not be applied). */
+  refund?: string;
+  refundedAt?: number;
   charges: number;
   /** Raw base units (decimal string). */
   paid: string;
@@ -533,6 +540,8 @@ export interface ShopAdminView {
   burnBps: number | null;
   purchases: ShopPurchase[];
   purchaseCount: number;
+  /** Cart payments with a part owed back that the owner has not sent yet (absent on an older server). */
+  refundsOwed?: ShopPurchase[];
 }
 
 /* ── maps (`/api/admin/maps`) ─────────────────────────────────────── */

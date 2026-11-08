@@ -3,9 +3,12 @@ import {
   BOOST_KINDS,
   boostCooldownMs,
   emptyBoostCounts,
+  cartTotal,
   normalizeBoostKind,
+  normalizeCart,
   packPriceRaw,
   roundSigFigs,
+  shopCartRef,
   shopPaymentRef,
   usdToTokenRaw,
   type BoostCounts,
@@ -14,6 +17,7 @@ import {
   type BoostState,
   type ShopBuyError,
   type ShopBuyResult,
+  type ShopCartResult,
   type ShopPack,
   type ShopSettings,
   type ShopView,
@@ -108,6 +112,32 @@ export class ShopService {
   /** Prices quoted lately (pack kind → raw amounts and until when they are accepted): a price that moved between the
    * quote and the payment (a new token price) is still credited for a while, never refused after the player paid. */
   private readonly quoted = new Map<BoostKind, { raw: bigint; holder: boolean; until: number }[]>();
+  /** Whole price tables quoted lately (a cart is priced from one table: every pack at the same token price). */
+  private readonly tables: { full: Record<BoostKind, bigint>; discounted: Record<BoostKind, bigint>; until: number }[] = [];
+
+  /** Remembers a whole price table (accepted for a cart for `QUOTE_VALID_MS`). */
+  private rememberTable(full: Record<BoostKind, bigint>, discounted: Record<BoostKind, bigint>): void {
+    const now = this.now();
+    const same = (a: Record<BoostKind, bigint>, b: Record<BoostKind, bigint>) => BOOST_KINDS.every((k) => a[k] === b[k]);
+    for (let i = this.tables.length - 1; i >= 0; i--) if (this.tables[i].until <= now) this.tables.splice(i, 1);
+    const t = this.tables.find((x) => same(x.full, full) && same(x.discounted, discounted));
+    if (t) t.until = now + QUOTE_VALID_MS;
+    else this.tables.push({ full, discounted, until: now + QUOTE_VALID_MS });
+    if (this.tables.length > 12) this.tables.splice(0, this.tables.length - 12);
+  }
+
+  /** Every pack's price now (full and discounted), raw base units; remembered as a quoted table. */
+  private async priceTable(s: ShopSettings, decimals: number): Promise<{ full: Record<BoostKind, bigint>; discounted: Record<BoostKind, bigint> }> {
+    const full = {} as Record<BoostKind, bigint>;
+    const discounted = {} as Record<BoostKind, bigint>;
+    for (const k of BOOST_KINDS) {
+      const p = await this.priceOf(s, k, decimals);
+      full[k] = p.full;
+      discounted[k] = p.discounted;
+    }
+    this.rememberTable(full, discounted);
+    return { full, discounted };
+  }
 
   constructor(private readonly deps: ShopDeps) {
     this.now = deps.now ?? Date.now;
@@ -206,6 +236,7 @@ export class ShopService {
           : {};
       packs.push({ kind, charges: s.packSize, priceRaw: mine.toString(), fullPriceRaw: p.full.toString(), ...usd, enabled: s.enabled && s.kinds[kind] });
     }
+    if (token) await this.priceTable(s, decimals);
     return {
       open: closed === null,
       ...(closed ? { closedReason: closed } : {}),
@@ -287,6 +318,95 @@ export class ShopService {
         }
       }
       return { ok: true, kind, added: s.packSize, charges };
+    } finally {
+      this.inflight.delete(txHash);
+    }
+  }
+
+  /**
+   * `POST /api/shop/buy {cart, txHash}`: several power-ups paid with ONE `ElymumArena.pay(total, shopCartRef(cart))`.
+   * The payment must name exactly this cart (its ref) and pay exactly its total at one quoted price table (full, or
+   * discounted for an emblem holder). The whole cart is then applied in one write (`creditCart`): every power-up that
+   * is still sold gets its charges; a power-up switched off between the quote and the payment cannot be applied, and
+   * its exact share of the payment is recorded as owed back to the wallet (the admin sees it and sends it back),
+   * never kept. A hash is credited once.
+   */
+  async buyCart(wallet: string, body: Record<string, unknown>): Promise<ShopCartResult> {
+    const s = this.settings;
+    const fail = (status: number, code: ShopBuyError): never => {
+      throw new ShopFail(status, code, BUY_MESSAGES[code]);
+    };
+    const cart = normalizeCart(body.cart);
+    const txHash = typeof body.txHash === 'string' ? body.txHash.toLowerCase() : '';
+    if (!cart || !/^0x[0-9a-f]{64}$/.test(txHash)) return fail(400, 'bad_request');
+    // without a chain, a token or an arena the payment cannot be checked (the claim is retried later); a shop the admin
+    // switched off is checked anyway, so a payment made just before is owed back, not lost
+    const closed = this.closedReason(s);
+    if (closed && closed !== 'disabled') return fail(403, 'shop_closed');
+    const token = this.token()!;
+    const arena = this.payTo()!;
+    if (this.deps.inventory.isUsed(txHash) || this.inflight.has(txHash)) return fail(409, 'tx_used');
+    this.inflight.add(txHash);
+    try {
+      await this.priceTable(s, token.decimals);
+      const now = this.now();
+      const tables = this.tables.filter((t) => t.until > now);
+      const fulls = tables.map((t) => ({ table: t.full, total: cartTotal(cart, (k) => t.full[k]) }));
+      const discounts = tables.map((t) => ({ table: t.discounted, total: cartTotal(cart, (k) => t.discounted[k]) }));
+      let receipt = null;
+      for (const wait of this.deps.receiptRetryMs ?? [0, 1_500, 3_000, 5_000]) {
+        if (wait > 0) await sleep(wait);
+        try {
+          receipt = await this.deps.chain.tokenReceipt!(txHash);
+        } catch (err) {
+          if (err instanceof ChainBusyError) return fail(503, 'chain_busy');
+          throw err;
+        }
+        if (receipt) break;
+      }
+      const check = verifyPurchase(receipt, {
+        token: token.address,
+        from: wallet,
+        arena,
+        ref: shopCartRef(cart),
+        amounts: [...new Set([...fulls, ...discounts].map((x) => x.total))],
+        now: this.now(),
+      });
+      if (!check.ok) return fail(check.code === 'tx_pending' ? 409 : 400, check.code);
+      let priced = fulls.find((x) => x.total === check.paid);
+      if (!priced) {
+        // the discounted total is for emblem holders only (one token id discounts one wallet a day)
+        if (!(await this.discountFor(wallet, true, true))) return fail(400, 'wrong_amount');
+        priced = discounts.find((x) => x.total === check.paid)!;
+      }
+      const add: Partial<Record<BoostKind, number>> = {};
+      const refunded: BoostKind[] = [];
+      let refundRaw = 0n;
+      for (const k of BOOST_KINDS) {
+        if (cart[k] === 0) continue;
+        if (s.enabled && s.kinds[k]) add[k] = cart[k] * s.packSize;
+        else {
+          refunded.push(k);
+          refundRaw += priced.table[k] * BigInt(cart[k]);
+        }
+      }
+      let charges: BoostCounts;
+      try {
+        charges = this.deps.inventory.creditCart(wallet, add, txHash, check.paid, refundRaw);
+      } catch (err) {
+        if (err instanceof InventoryError) return fail(err.code === 'tx_used' ? 409 : 400, err.code);
+        throw err;
+      }
+      for (const fn of this.chargeListeners) {
+        try {
+          fn(wallet);
+        } catch (err) {
+          this.deps.log?.(`shop: charge listener failed: ${(err as Error).message}`);
+        }
+      }
+      const added = emptyBoostCounts();
+      for (const k of BOOST_KINDS) added[k] = add[k] ?? 0;
+      return { ok: true, cart, added, charges, ...(refundRaw > 0n ? { refund: { kinds: refunded, raw: refundRaw.toString() } } : {}) };
     } finally {
       this.inflight.delete(txHash);
     }

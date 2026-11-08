@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_FAULTS, fakeSimChain, runMoneySim, type SimReport } from './money-sim';
+import { runCartConservation } from './shop-cart';
 
 const brief = (r: SimReport) =>
   `${r.chain}: ${r.rounds} rounds, ${r.tickets} tickets, ${r.closures.Settled} settled, ${r.closures.Cancelled} cancelled, ` +
@@ -65,4 +66,15 @@ describe('money conservation under faults (simulation)', () => {
       await sim.stop();
     }
   }, 240_000);
+});
+
+describe('money conservation: power-up carts (one payment, applied at once)', () => {
+  for (const seed of [21, 22, 23]) {
+    it(`seed ${seed}: what a cart paid is credited at its price or owed back, to the unit; nothing twice, nothing for a refused payment`, async () => {
+      const r = await runCartConservation(seed, 500);
+      expect(r.violations).toEqual([]);
+      expect(r.refunds).toBeGreaterThan(0);
+      console.log(`carts seed ${seed}: ${r.purchases} payments, ${r.refused} refused, ${r.refunds} with a part owed back`);
+    }, 60_000);
+  }
 });
