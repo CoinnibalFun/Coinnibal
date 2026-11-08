@@ -3,7 +3,7 @@
 // of the web app at phone / tablet / desktop sizes in the day and night themes, with extreme data
 // (huge and tiny balances, 16-character names, 50-row standings, long room names and errors,
 // many toasts), and runs in-page detectors (scripts/ui-audit-detect.js):
-//   overflow · text (spill / clipped / truncated) · overlap · offscreen · contrast · touch · console
+//   overflow · text (spill / clipped / truncated) · overlap · offscreen · contrast · touch (44 px) · font · safe · console
 // Output: <out>/<label>/findings.json, report.md, report.html, shots/*.png (cropped, highlighted).
 //
 //   node apps/web/scripts/ui-audit.mjs --start [--label before] [--viewports 390x844,1280x800]
@@ -23,6 +23,9 @@
 //           --full-page the shot holds the whole scrolling page.
 // --selftest checks the detectors against a fixture page with one known bug each.
 // --scenes takes id prefixes (`lobby` runs lobby-*); --list prints the scene ids.
+// --safe-area emulates an iPhone's notch and home bar on the touch viewports (env(safe-area-inset-*) through
+//           CDP: 47 / 34 px portrait, 47 px sides and a 21 px bar landscape) and reports what sits under them.
+// --min-font 12 (default) reports text set below that size; 0 turns the check off.
 // --locale ru runs every scene in that interface language (en, tr, es, pt, ru, zh; default en): the
 //           browser locale and the stored language pick are set before the app boots.
 import { spawn } from 'node:child_process';
@@ -53,6 +56,11 @@ const LOCALE = opt('--locale', 'en');
 const LOCALE_TAG = { en: 'en-US', tr: 'tr-TR', es: 'es-ES', pt: 'pt-BR', ru: 'ru-RU', zh: 'zh-CN' }[LOCALE];
 if (!LOCALE_TAG) throw new Error(`--locale must be one of en, tr, es, pt, ru, zh (got ${LOCALE})`);
 const MAX_SHOTS = Number(opt('--max-shots', '500'));
+// readable floor for text (css px); 0 turns the font detector off
+const MIN_FONT = Number(opt('--min-font', '12'));
+// --safe-area: emulate an iPhone notch / home bar on touch viewports (env(safe-area-inset-*), through CDP)
+const SAFE_AREA = flag('--safe-area');
+const safeInsets = (vp) => (!SAFE_AREA || !vp.touch ? null : vp.w > vp.h ? { top: 0, bottom: 21, left: 47, right: 47 } : { top: 47, bottom: 34, left: 0, right: 0 });
 const SHOTS = !flag('--no-shots');
 const log = (...a) => console.error('[ui-audit]', ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -66,6 +74,7 @@ const VIEWPORTS = [
   { name: '320x568', w: 320, h: 568, touch: true, dpr: 2 },
   { name: '360x640', w: 360, h: 640, touch: true, dpr: 2 },
   { name: '360x800', w: 360, h: 800, touch: true, dpr: 2 },
+  { name: '375x667', w: 375, h: 667, touch: true, dpr: 2 },
   { name: '390x844', w: 390, h: 844, touch: true, dpr: 2 },
   { name: '414x896', w: 414, h: 896, touch: true, dpr: 2 },
   { name: '430x932', w: 430, h: 932, touch: true, dpr: 2 },
@@ -74,10 +83,13 @@ const VIEWPORTS = [
   { name: '768x1024', w: 768, h: 1024, touch: true, dpr: 1 },
   { name: '1024x768', w: 1024, h: 768, touch: true, dpr: 1 },
   { name: '820x1180', w: 820, h: 1180, touch: true, dpr: 1 },
+  { name: '1280x720', w: 1280, h: 720, touch: false, dpr: 1 },
   { name: '1280x800', w: 1280, h: 800, touch: false, dpr: 1 },
   { name: '1440x900', w: 1440, h: 900, touch: false, dpr: 1 },
   { name: '1920x1080', w: 1920, h: 1080, touch: false, dpr: 1 },
   { name: '2560x1440', w: 2560, h: 1440, touch: false, dpr: 1 },
+  // desktop browser zoom 200%: a 1440x900 window at 2x zoom lays out as 720x450 CSS px
+  { name: '1440x900z200', w: 720, h: 450, touch: false, dpr: 2 },
 ];
 const THEMES = ['day', 'night'];
 
@@ -702,6 +714,58 @@ const SCENES = [
     },
   },
   {
+    // an arena round in its last 10 s: the big countdown over the HUD (a round info whose bell is 8 s away)
+    id: 'hud-final10',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      await hudExtras(page);
+      await page.evaluate(() => {
+        const s = window.__elymum.useUi.getState();
+        const endsAt = Date.now() + 20_000;
+        window.__elymum.useUi.setState({ room: { ...(s.room ?? {}), mode: 'arena', arenaId: 1, round: { n: 0, endsAt, joinsCloseAt: endsAt - 5000, opensAt: 0 } } });
+      });
+      // the room change replays the round intro card: the countdown comes once it has passed
+      await page.waitForFunction(() => !document.querySelector('.gm-intro__card'), null, { timeout: 15000 }).catch(() => {});
+      await page.waitForSelector('[data-testid="round-count"]', { timeout: 15000 }).catch(() => h.note('no countdown'));
+      await settle(page, 300);
+    },
+  },
+  {
+    // the socket drops in play: the blocking "Connection lost" card over the HUD
+    id: 'hud-offline',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      await page.evaluate(() => window.__elymum.useUi.setState({ netDown: { kind: 'lost', attempt: 3, retryAt: performance.now() + 9000 } }));
+      await settle(page, 2500);
+    },
+  },
+  {
+    // the arena receipt during the 30 s break after a bell: "Next round opens in 0:27" with the share buttons
+    id: 'round-break',
+    app: 'play',
+    auth: 'signed',
+    run: async (page, h) => {
+      await openPlay(page, h);
+      await playPractice(page);
+      await page.evaluate(([stats, standings]) => {
+        const s = window.__elymum.useUi.getState();
+        const T = Date.now();
+        const R = 3_600_000;
+        const n = Math.floor(T / R);
+        window.__elymum.useUi.setState({ room: { ...(s.room ?? {}), mode: 'arena', arenaId: 1, round: { n, endsAt: (n + 1) * R, joinsCloseAt: (n + 1) * R - 60_000, opensAt: T + 27_000 } }, ticket: { entryFee: 999_999_999_999_000_000, arenaId: 1, session: '1' } });
+        window.__elymum.engine.endGame('round', 12345, 999_999_999_999_123_456, { ...stats, payout: 999_999_999_999_123_456, finalRank: 4, finalOf: 999 }, standings);
+      }, [DEATH_STATS, ROUND_STANDINGS]);
+      await feed(page, { t: 'share', kind: 'round', id: 'AuDiT00004' });
+      await settle(page, 1500);
+    },
+  },
+  {
     // the people-only pond to oneself: the honest empty state with one click to practice with bots
     id: 'pond-alone',
     app: 'play',
@@ -944,7 +1008,7 @@ async function auditState(page, ctxInfo, sceneId, state, dedupe) {
     // the DOM pass first; a screenshot only when some text sits on art the DOM cannot read (gradients, canvas)
     const run = (b64) =>
       page.evaluate(
-        async ([src, b64, touch]) => {
+        async ([src, b64, touch, minFont, safe]) => {
           if (!window.__uiAudit?.detect) (0, eval)(src);
           let px = null;
           if (b64) {
@@ -955,9 +1019,9 @@ async function auditState(page, ctxInfo, sceneId, state, dedupe) {
             g.drawImage(bmp, 0, 0);
             px = { w: bmp.width, h: bmp.height, data: g.getImageData(0, 0, bmp.width, bmp.height).data };
           }
-          return window.__uiAudit.detect({ touch, pixels: px });
+          return window.__uiAudit.detect({ touch, pixels: px, minFont, safe });
         },
-        [DETECT_SRC, b64, vp.touch],
+        [DETECT_SRC, b64, vp.touch, MIN_FONT, ctxInfo.safe],
       );
     let out = await run(null);
     if (out.needPixels) {
@@ -1056,10 +1120,11 @@ async function newContext(browser, vp, theme, auth, app, brief = false, key = AU
 
 async function runScene(browser, vp, theme, scene, sessionCtxCache) {
   const t0 = Date.now();
-  const ctxInfo = { vp, theme, scroll: scene.scroll };
+  const ctxInfo = { vp, theme, scroll: scene.scroll, safe: safeInsets(vp) };
   // `fresh`: a wallet of its own (the server rate-limits room creation per wallet)
   const ctx = await newContext(browser, vp, theme, scene.auth, scene.app, scene.brief, scene.fresh ? newDevKey() : AUDIT_KEY);
   const page = await ctx.newPage();
+  if (ctxInfo.safe) await (await ctx.newCDPSession(page)).send('Emulation.setSafeAreaInsetsOverride', { insets: ctxInfo.safe }).catch(() => {});
   const consoleErrs = [];
   page.on('pageerror', (e) => consoleErrs.push(`[pageerror] ${e.message}`));
   page.on('console', (m) => {
@@ -1108,7 +1173,7 @@ async function runScene(browser, vp, theme, scene, sessionCtxCache) {
 }
 
 // ───────────────────────────── report ─────────────────────────────
-const DETECTORS = ['overflow', 'text', 'overlap', 'offscreen', 'contrast', 'touch', 'console'];
+const DETECTORS = ['overflow', 'text', 'overlap', 'offscreen', 'contrast', 'touch', 'font', 'safe', 'console'];
 function writeReport(meta) {
   const issues = findings.filter((f) => f.severity === 'issue');
   const infos = findings.filter((f) => f.severity === 'info');
@@ -1181,7 +1246,7 @@ body{margin:0;font:16px/1.4 sans-serif;background:#fff;color:#111}
 <span class="sr">screen reader only text that is long</span>
 <div class="wide" id="t-wide"></div>
 <div class="pad"></div>
-<div class="dock"><button style="margin:10px;height:40px;width:120px">Dock</button></div>
+<div class="dock"><button style="margin:8px;height:44px;width:120px">Dock</button></div>
 </body></html>`;
 
 async function selfTest() {
@@ -1211,7 +1276,7 @@ async function selfTest() {
     ['contrast: dark input text on a dark field', has((f) => f.detector === 'contrast' && f.kind === 'input' && f.severity === 'issue')],
     ['touch: 20x20 button', has((f) => f.detector === 'touch' && /20x20/.test(f.detail))],
     ['no finding for sr-only text', !has((f) => /screen reader only/.test(f.text))],
-    ['no finding for the 120x40 dock button', !has((f) => f.detector === 'touch' && /Dock/.test(f.text))],
+    ['no finding for the 120x44 dock button', !has((f) => f.detector === 'touch' && /Dock/.test(f.text))],
   ];
   for (const [name, ok] of checks) console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`);
   if (checks.some(([, ok]) => !ok)) {
