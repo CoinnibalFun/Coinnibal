@@ -375,7 +375,8 @@ export class SiteApi {
     if (!this.shopBuys.allow(wallet) || !this.shopBuys.allow(`ip:${ip}`)) throw new SiteFail(429, 'rate_limited', 'Too many purchases at once. Wait a moment.');
     const body = await readJson(req);
     try {
-      return send(res, 200, await shop.service.buy(wallet, body));
+      // `cart`: several power-ups in one payment; `kind`: one pack (older clients)
+      return send(res, 200, body.cart !== undefined ? await shop.service.buyCart(wallet, body) : await shop.service.buy(wallet, body));
     } catch (err) {
       if (err instanceof ShopFail) return send(res, err.status, { error: err.code, message: err.message });
       throw err;
@@ -976,7 +977,15 @@ export class SiteApi {
       case 'shop': {
         // power-up prices, the sink (burn or treasury), on/off per power-up and the arena limits; plus recent purchases
         const shop = this.shop;
-        if (seg.length !== 1 || !shop) break;
+        if (!shop) break;
+        // POST /api/admin/shop/refunds/<tx>: the owner sent back the part of a cart payment that could not be applied
+        if (seg.length === 3 && seg[1] === 'refunds') {
+          this.method(req, 'POST');
+          if (!shop.inventory.markRefunded(decodeURIComponent(seg[2]))) throw new SiteFail(404, 'not_found', 'No refund owed for that transaction.');
+          this.ext.log?.(`shop: refund of ${seg[2]} marked as sent by ${wallet}`);
+          return send(res, 200, { refundsOwed: shop.inventory.refundsOwed() });
+        }
+        if (seg.length !== 1) break;
         if (this.method(req, 'GET', 'PUT') === 'PUT') {
           try {
             shop.settings.update(await readJson(req));
@@ -993,6 +1002,7 @@ export class SiteApi {
           burnBps: this.ext.chain?.status().fees?.paymentBurnBps ?? null,
           purchases: shop.inventory.recent(Number(q.get('limit') ?? 30) || 30),
           purchaseCount: shop.inventory.purchaseCount,
+          refundsOwed: shop.inventory.refundsOwed(),
         });
       }
       case 'settings':

@@ -1,4 +1,4 @@
-import { shopPaymentRef, type ShopView } from '@elymum/shared';
+import { parseShopCartRef, shopCartRef, shopPaymentRef, type ShopView } from '@elymum/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chainStatus, ONE } from './evm-helpers';
 
@@ -8,7 +8,7 @@ vi.mock('../src/wallet/pinned', async (orig) => ({ ...(await orig<typeof import(
 vi.mock('../src/wallet/tx', async (orig) => ({ ...(await orig<typeof import('../src/wallet/tx')>()), sendWalletCall: spies.sendWalletCall }));
 vi.mock('@elymum/sdk', async (orig) => ({ ...(await orig<typeof import('@elymum/sdk')>()), getAllowance: spies.getAllowance }));
 
-import { ShopError, buyPack, loadPendingClaim, savePendingClaim } from '../src/wallet/shop';
+import { ShopError, buyCart, buyPack, cartTotals, loadPendingClaim, savePendingClaim } from '../src/wallet/shop';
 
 const OWNER = '0x1111111111111111111111111111111111111111';
 const ARENA = '0x00000000000000000000000000000000000a4e4a';
@@ -78,5 +78,48 @@ describe('buyPack: a power-up pack is paid with ElymumArena.pay', () => {
     await expect(buyPack(VIEW, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() })).rejects.toMatchObject({ code: 'tx', message: expect.stringMatching(/does not recognise the arena contract/) });
     expect(spies.sendWalletCall).not.toHaveBeenCalled();
     expect(spies.verifyArena).toHaveBeenCalledWith(expect.anything(), chainStatus().chainId, { arena: ARENA, token: TOKEN });
+  });
+});
+
+describe('buyCart: several power-ups, one ElymumArena.pay', () => {
+  const CART_VIEW: ShopView = {
+    ...VIEW,
+    holder: true,
+    packs: [
+      { kind: 'magnet', charges: 3, priceRaw: (420n * ONE).toString(), fullPriceRaw: (600n * ONE).toString(), usdCents: 42, fullUsdCents: 60, enabled: true },
+      { kind: 'leap', charges: 3, priceRaw: (630n * ONE).toString(), fullPriceRaw: (900n * ONE).toString(), usdCents: 63, fullUsdCents: 90, enabled: true },
+      { kind: 'speed', charges: 3, priceRaw: (420n * ONE).toString(), fullPriceRaw: (600n * ONE).toString(), usdCents: 42, fullUsdCents: 60, enabled: true },
+      { kind: 'invis', charges: 3, priceRaw: (840n * ONE).toString(), fullPriceRaw: (1200n * ONE).toString(), usdCents: 84, fullUsdCents: 120, enabled: true },
+    ],
+  };
+  const cart = { magnet: 2, leap: 0, speed: 1, invis: 1 };
+
+  it('totals the cart at the wallet\'s prices (holder discount), in tokens and US cents', () => {
+    expect(cartTotals(CART_VIEW, cart)).toEqual({ raw: 2100n * ONE, fullRaw: 3000n * ONE, packs: 4, usdCents: 210, fullUsdCents: 300 });
+    expect(cartTotals(CART_VIEW, { magnet: 0, leap: 0, speed: 0, invis: 0 })).toMatchObject({ raw: 0n, packs: 0, usdCents: null });
+  });
+
+  it('approves exactly the total when short, pays it once with the cart ref, and claims the whole cart', async () => {
+    spies.getAllowance.mockResolvedValue(0n);
+    const applied = { ok: true, cart, added: { magnet: 6, leap: 0, speed: 3, invis: 3 }, charges: { magnet: 6, leap: 0, speed: 3, invis: 3 } };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(applied), { status: 200 })));
+    const r = await buyCart(CART_VIEW, cart, { token: 'tok', owner: OWNER, chain: chainStatus() });
+    expect(r.added).toEqual({ magnet: 6, leap: 0, speed: 3, invis: 3 });
+    const calls = spies.sendWalletCall.mock.calls.map(([c]) => c as { functionName: string; args: readonly unknown[] });
+    expect(calls.map((c) => c.functionName)).toEqual(['approve', 'pay']);
+    expect(calls[0].args[1]).toBe(2100n * ONE);
+    expect(calls[1].args).toEqual([2100n * ONE, shopCartRef(cart)]);
+    expect(parseShopCartRef(calls[1].args[1] as string)).toEqual(cart);
+    const body = JSON.parse(((fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0][1].body as string) ?? '{}');
+    expect(body).toEqual({ cart, txHash: HASH });
+    expect(loadPendingClaim(OWNER)).toBeNull();
+  });
+
+  it('keeps a paid cart whose claim did not get through, to claim it again without paying twice', async () => {
+    spies.getAllowance.mockResolvedValue(10n ** 30n);
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))));
+    await expect(buyCart(CART_VIEW, cart, { token: 'tok', owner: OWNER, chain: chainStatus(), retryMs: [0] })).rejects.toBeInstanceOf(ShopError);
+    expect(loadPendingClaim(OWNER)).toMatchObject({ txHash: HASH, cart });
+    expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
   });
 });

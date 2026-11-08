@@ -6,7 +6,16 @@ import { Btn, Card, FormError, saveErrorText, type ChainCtx } from './ui';
 
 const KIND_LABEL: Record<BoostKind, string> = { magnet: 'Magnet', leap: 'Leap', speed: 'Speed burst', invis: 'Invisibility' };
 /** Purchase records may name the retired Shockwave (its charges now count as Leap). */
-const PURCHASE_LABEL: Record<BoostKind | 'shock', string> = { ...KIND_LABEL, shock: 'Shockwave (now Leap)' };
+const PURCHASE_LABEL: Record<BoostKind | 'shock' | 'cart', string> = { ...KIND_LABEL, shock: 'Shockwave (now Leap)', cart: 'cart' };
+
+/** What a purchase added: "3 Magnet" or, for a cart, "6 Magnet + 3 Leap" (pure). */
+export function purchaseText(p: { kind: BoostKind | 'shock' | 'cart'; charges: number; cart?: Partial<Record<BoostKind, number>> }): string {
+  if (p.kind === 'cart' && p.cart) {
+    const parts = (Object.entries(p.cart) as [BoostKind, number][]).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${KIND_LABEL[k]}`);
+    return parts.length ? `cart: ${parts.join(' + ')}` : 'cart: nothing applied';
+  }
+  return `${p.charges} ${PURCHASE_LABEL[p.kind] ?? p.kind}`;
+}
 
 /** The fields that changed (a partial PUT). */
 export function shopPatch(saved: ShopSettings, draft: ShopSettings): Partial<ShopSettings> {
@@ -239,7 +248,7 @@ export function ShopCard({ ctx }: { ctx: ChainCtx }) {
             {view.purchases.map((p) => (
               <li key={p.tx}>
                 <span className="mono">
-                  {p.wallet.slice(0, 8)}… · {p.charges} {PURCHASE_LABEL[p.kind] ?? p.kind}
+                  {p.wallet.slice(0, 8)}… · {purchaseText(p)}
                 </span>
                 <span className="num ad-dim">
                   {formatToken(BigInt(p.paid), decimals, { maxFrac: 2 })} · {new Date(p.at).toISOString().slice(0, 16).replace('T', ' ')}
@@ -248,6 +257,31 @@ export function ShopCard({ ctx }: { ctx: ChainCtx }) {
             ))}
           </ul>
         </details>
+      )}
+      {(view.refundsOwed?.length ?? 0) > 0 && (
+        <div className="ad-warn" data-testid="shop-refunds">
+          <strong>Owed back to players.</strong> A power-up was switched off after these players saw its price: that part of their payment could not be applied. Send it back from the fee wallet, then mark it sent.
+          <ul className="ad-rooms__list">
+            {view.refundsOwed!.map((p) => (
+              <li key={p.tx}>
+                <span className="mono">
+                  {p.wallet} · {formatToken(BigInt(p.refund ?? '0'), decimals, { maxFrac: 2 })} · tx {p.tx.slice(0, 10)}…
+                </span>
+                <Btn
+                  testId={`shop-refund-${p.tx}`}
+                  onClick={() =>
+                    void ctx.api!.markRefunded(p.tx).then(
+                      (refundsOwed) => setView({ ...view, refundsOwed }),
+                      (e) => setErr(saveErrorText(e)),
+                    )
+                  }
+                >
+                  Mark as sent
+                </Btn>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       <div className="ad-actions">
         <Btn sun disabled={!dirty || busy || badUsd} onClick={() => void save()} testId="shop-save">

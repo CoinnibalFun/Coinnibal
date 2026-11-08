@@ -205,18 +205,44 @@ describe('ShopSheet', () => {
       </Kb>,
     );
     await waitFor(() => expect(screen.getByTestId('shop-buy-magnet')).toBeTruthy());
-    expect(screen.getByTestId('shop-buy-magnet').textContent).toContain('Buy 3 for 1,050 tELYMUM');
+    expect(screen.getByTestId('shop-buy-magnet').textContent).toContain('Add 3 · 1,050 tELYMUM');
     expect(screen.getAllByText('1,500 tELYMUM')).toHaveLength(2);
     expect(screen.getByText(/You have 4/)).toBeTruthy();
     expect(screen.getByText(/30% off and \+1 arena use per round/)).toBeTruthy();
     expect(screen.getByText(/Each pack is paid to the arena contract \(0x0000…4e4a\): 50% is burned, 50% goes to the fee wallet\./)).toBeTruthy();
     expect((screen.getByTestId('shop-buy-speed') as HTMLButtonElement).disabled).toBe(true);
     // the two new power-ups are on sale, the Shockwave is gone
-    expect(screen.getByTestId('shop-buy-leap').textContent).toContain('Buy 3 for 1,750 tELYMUM');
-    expect(screen.getByTestId('shop-buy-invis').textContent).toContain('Buy 3 for 2,100 tELYMUM');
+    expect(screen.getByTestId('shop-buy-leap').textContent).toContain('Add 3 · 1,750 tELYMUM');
+    expect(screen.getByTestId('shop-buy-invis').textContent).toContain('Add 3 · 2,100 tELYMUM');
     expect(screen.getByText('Leap')).toBeTruthy();
     expect(screen.getByText('Invisibility')).toBeTruthy();
     expect(screen.queryByText(/Shockwave/)).toBeNull();
+  });
+
+  it('a cart: several power-ups with quantities, the total with the holder discount, one payment', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(VIEW), { status: 200 })));
+    act(() => useUi.setState({ chain: chainStatus(), modal: 'shop', auth: { address: '0x1111111111111111111111111111111111111111', token: 'tok', profile: null } }));
+    render(
+      <Kb>
+        <ShopSheet />
+      </Kb>,
+    );
+    await waitFor(() => expect(screen.getByTestId('shop-buy-magnet')).toBeTruthy());
+    expect(screen.queryByTestId('shop-cart')).toBeNull();
+    fireEvent.click(screen.getByTestId('shop-buy-magnet'));
+    fireEvent.click(screen.getByTestId('shop-more-magnet'));
+    fireEvent.click(screen.getByTestId('shop-buy-invis'));
+    expect(screen.getByTestId('shop-qty-magnet').textContent).toBe('2 × pack');
+    // 2 x 1,050 + 2,100 at the holder price; 2 x 1,500 + 3,000 before the discount
+    expect(screen.getByTestId('shop-cart-total').textContent).toBe('4,200 tELYMUM');
+    expect(screen.getByTestId('shop-cart-full').textContent).toBe('6,000 tELYMUM');
+    expect(screen.getByTestId('shop-cart').textContent).toMatch(/Total · 3 packs/);
+    expect(screen.getByTestId('shop-pay').textContent).toMatch(/Pay 4,200 tELYMUM once/);
+    fireEvent.click(screen.getByTestId('shop-less-magnet'));
+    fireEvent.click(screen.getByTestId('shop-less-magnet'));
+    expect(screen.getByTestId('shop-buy-magnet')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('shop-cart-clear'));
+    expect(screen.queryByTestId('shop-cart')).toBeNull();
   });
 
   it('asks guests to sign in and disables buying', async () => {

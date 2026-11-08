@@ -1,5 +1,5 @@
 import { approveCall, getAllowance, payCall } from '@elymum/sdk';
-import { BOOST_KINDS, shopPaymentRef, type BoostCounts, type BoostKind, type ChainStatus, type ShopBuyError, type ShopBuyResult, type ShopPack, type ShopView } from '@elymum/shared';
+import { BOOST_KINDS, shopCartRef, shopPaymentRef, type BoostCounts, type BoostKind, type ChainStatus, type ShopBuyError, type ShopBuyResult, type ShopCartResult, type ShopPack, type ShopView } from '@elymum/shared';
 import type { Address } from 'viem';
 import { SERVER } from '../config';
 import { isDevFake, loadDevFake } from './devFakeLoader';
@@ -35,8 +35,44 @@ export class ShopError extends Error {
   }
 }
 
-/** `POST /api/shop/buy {kind, txHash}`: retries a few times while the server cannot see the receipt yet. */
+/** Packs per power-up in the shop sheet's cart. */
+export type Cart = Record<BoostKind, number>;
+
+export const emptyCart = (): Cart => ({ magnet: 0, leap: 0, speed: 0, invis: 0 });
+
+/**
+ * A cart's total for this wallet (pure, tested): raw base units at the wallet's prices (holder discount included), the
+ * full price before the discount, the packs, and US cents when every pack in it is priced in dollars.
+ */
+export function cartTotals(view: Pick<ShopView, 'packs'>, cart: Cart): { raw: bigint; fullRaw: bigint; packs: number; usdCents: number | null; fullUsdCents: number | null } {
+  let raw = 0n;
+  let fullRaw = 0n;
+  let packs = 0;
+  let usd: number | null = 0;
+  let fullUsd: number | null = 0;
+  for (const p of view.packs) {
+    const n = cart[p.kind] ?? 0;
+    if (n <= 0) continue;
+    packs += n;
+    raw += BigInt(p.priceRaw) * BigInt(n);
+    fullRaw += BigInt(p.fullPriceRaw) * BigInt(n);
+    usd = usd !== null && p.usdCents !== undefined ? usd + p.usdCents * n : null;
+    fullUsd = fullUsd !== null && p.fullUsdCents !== undefined ? fullUsd + p.fullUsdCents * n : null;
+  }
+  return { raw, fullRaw, packs, usdCents: packs > 0 ? usd : null, fullUsdCents: packs > 0 ? fullUsd : null };
+}
+
+/** `POST /api/shop/buy {kind, txHash}` (one pack) or `{cart, txHash}`: retries a few times while the server cannot see the receipt yet. */
 export async function claimPack(token: string, kind: BoostKind, txHash: string, opts: { retryMs?: readonly number[] } = {}): Promise<ShopBuyResult> {
+  return claimBody<ShopBuyResult>(token, { kind, txHash }, txHash, opts);
+}
+
+/** `POST /api/shop/buy {cart, txHash}`: the whole cart, applied at once by the server. */
+export async function claimCart(token: string, cart: Cart, txHash: string, opts: { retryMs?: readonly number[] } = {}): Promise<ShopCartResult> {
+  return claimBody<ShopCartResult>(token, { cart, txHash }, txHash, opts);
+}
+
+async function claimBody<T extends { ok: true }>(token: string, payload: Record<string, unknown>, txHash: string, opts: { retryMs?: readonly number[] }): Promise<T> {
   const waits = opts.retryMs ?? [0, 2_000, 4_000, 6_000];
   let last: ShopError | null = null;
   for (const wait of waits) {
@@ -46,13 +82,13 @@ export async function claimPack(token: string, kind: BoostKind, txHash: string, 
       res = await fetch(`${SERVER.http}/api/shop/buy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ kind, txHash }),
+        body: JSON.stringify(payload),
       });
     } catch {
       last = new ShopError('network', t('api.reach'), txHash);
       continue;
     }
-    const body = (await res.json().catch(() => null)) as (ShopBuyResult & { error?: undefined }) | { error?: ShopBuyError; message?: string } | null;
+    const body = (await res.json().catch(() => null)) as (T & { error?: undefined }) | { error?: ShopBuyError; message?: string } | null;
     if (res.ok && body && 'ok' in body) return body;
     const code = (body && 'error' in body && body.error) || 'bad_request';
     last = new ShopError(code, serverText(body && 'message' in body ? body.message : undefined, res.status === 401 ? t('api.expiredVerify') : t('api.shopRefused')), txHash);
@@ -74,9 +110,35 @@ export async function buyPack(
   pack: ShopPack,
   ctx: { token: string; owner: string; chain: ChainStatus; onPhase?: (p: BuyPhase) => void },
 ): Promise<ShopBuyResult> {
+  const hash = await payShop(view, BigInt(pack.priceRaw), shopPaymentRef(pack.kind), ctx);
+  ctx.onPhase?.('verifying');
+  // the tokens are spent from here on: keep the hash until the server has credited it, so a claim
+  // that cannot get through now (network, a slow chain, an expired session) is tried again later
+  // instead of the player paying a second time
+  savePendingClaim({ owner: ctx.owner, kind: pack.kind, txHash: hash, at: Date.now() });
+  return settleClaim(ctx.token, ctx.owner, pack.kind, hash);
+}
+
+/**
+ * Pays a whole cart with ONE `ElymumArena.pay(total, shopCartRef(cart))` (an `approve` of exactly the total first when
+ * the allowance is short), then claims it: the server applies every power-up at once. Throws `ShopError`.
+ */
+export async function buyCart(
+  view: ShopView,
+  cart: Cart,
+  ctx: { token: string; owner: string; chain: ChainStatus; onPhase?: (p: BuyPhase) => void; retryMs?: readonly number[] },
+): Promise<ShopCartResult> {
+  const total = cartTotals(view, cart);
+  if (total.packs === 0) throw new ShopError('bad_request', t('api.shopRefused'));
+  const hash = await payShop(view, total.raw, shopCartRef(cart), ctx);
+  ctx.onPhase?.('verifying');
+  savePendingClaim({ owner: ctx.owner, kind: BOOST_KINDS.find((k) => cart[k] > 0)!, cart, txHash: hash, at: Date.now() });
+  return settleCartClaim(ctx.token, ctx.owner, cart, hash, ctx.retryMs ? { retryMs: ctx.retryMs } : {});
+}
+
+/** Pays `amount` to the pinned arena with `ref` (approve first when short); the transaction hash. */
+async function payShop(view: ShopView, amount: bigint, ref: `0x${string}`, ctx: { owner: string; chain: ChainStatus; onPhase?: (p: BuyPhase) => void }): Promise<string> {
   if (!view.open || !view.token || !view.payTo) throw new ShopError('shop_closed', t('shop.closed'));
-  const amount = BigInt(pack.priceRaw);
-  const ref = shopPaymentRef(pack.kind);
   let hash: string;
   if (isDevFake(ctx.chain)) {
     const dev = await loadDevFake();
@@ -101,18 +163,15 @@ export async function buyPack(
     if (!res.ok) throw new ShopError(res.error.kind === 'rejected' ? 'rejected' : 'tx', txErrorText(res.error), res.hash);
     hash = res.hash;
   }
-  ctx.onPhase?.('verifying');
-  // the tokens are spent from here on: keep the hash until the server has credited it, so a claim
-  // that cannot get through now (network, a slow chain, an expired session) is tried again later
-  // instead of the player paying a second time
-  savePendingClaim({ owner: ctx.owner, kind: pack.kind, txHash: hash, at: Date.now() });
-  return settleClaim(ctx.token, ctx.owner, pack.kind, hash);
+  return hash;
 }
 
 /** A paid pack the server has not credited yet (kept in this browser, per wallet). */
 export interface PendingClaim {
   owner: string;
   kind: BoostKind;
+  /** A cart payment (claimed whole); absent for a single pack. */
+  cart?: Cart;
   txHash: string;
   at: number;
 }
@@ -145,6 +204,18 @@ export function loadPendingClaim(owner: string | null | undefined): PendingClaim
 export async function settleClaim(token: string, owner: string, kind: BoostKind, txHash: string, opts: { retryMs?: readonly number[] } = {}): Promise<ShopBuyResult> {
   try {
     const r = await claimPack(token, kind, txHash, opts);
+    if (loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
+    return r;
+  } catch (e) {
+    if (e instanceof ShopError && (FINAL as readonly string[]).includes(e.code) && loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
+    throw e;
+  }
+}
+
+/** Claims a paid cart; the kept hash is dropped once credited or finally refused. */
+export async function settleCartClaim(token: string, owner: string, cart: Cart, txHash: string, opts: { retryMs?: readonly number[] } = {}): Promise<ShopCartResult> {
+  try {
+    const r = await claimCart(token, cart, txHash, opts);
     if (loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
     return r;
   } catch (e) {

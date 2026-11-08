@@ -165,3 +165,73 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+/* the cart: a quantity stepper per pack, the total and one payment (sticks to the sheet's bottom edge) */
+.sh-qty {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.sh-qty__price {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.sh-qty__btn {
+  min-width: 40px;
+  min-height: 40px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+.sh-qty__n {
+  min-width: 4.5em;
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+.sh-cart {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  background: var(--sticker);
+  box-shadow: var(--sh-2);
+}
+.sh-cart__sum {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sh-cart__label {
+  font-size: 11px;
+  color: var(--ink-2);
+  text-transform: uppercase;
+}
+.sh-cart__price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 17px;
+}
+.sh-cart__note {
+  font-size: 11px;
+  color: var(--up-ink);
+}
+.sh-cart__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
