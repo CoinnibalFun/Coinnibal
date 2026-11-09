@@ -131,17 +131,21 @@ describe('a custom room ends: countdown, then the final board', () => {
     expect(shareUrl('AbCdE12345')).toMatch(/\/share\/AbCdE12345$/);
   });
 
-  it('a kill shows "You ate ..." with Share on X for a few seconds', () => {
+  it('a kill shows a small "You ate ..." chip for a few seconds, with nothing to press while playing', () => {
     useUi.setState({ screen: 'playing', share: { kind: 'kill', id: 'KiLL123456', victim: 'Nakamoto', at: Date.now() } });
     render(
       <Kb>
         <KillShare />
       </Kb>,
     );
-    const sticker = screen.getByTestId('kill-share');
-    expect(sticker.textContent).toContain('You ate Nakamoto!');
-    expect(new URL((screen.getByTestId('share-x') as HTMLAnchorElement).href).searchParams.get('text')).toBe(`I just ate Nakamoto on Elymum! ${SHARE_COIN}`);
-    expect(KILL_SHARE_MS).toBeGreaterThanOrEqual(5000);
+    const chip = screen.getByTestId('kill-share');
+    expect(chip.textContent).toBe('You ate Nakamoto!');
+    expect(chip.className).toBe('g-killshare');
+    // no button or link in play: the card waits for the end sheet
+    expect(chip.querySelector('a, button')).toBeNull();
+    expect(screen.queryByTestId('share-x')).toBeNull();
+    expect(KILL_SHARE_MS).toBeLessThanOrEqual(4000);
+    expect(KILL_SHARE_MS).toBeGreaterThanOrEqual(2000);
   });
 
   it('death in a practice pond: the game-over sheet offers Share on X (the mass reached, the coins eaten, the site link)', () => {

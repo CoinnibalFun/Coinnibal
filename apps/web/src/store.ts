@@ -20,6 +20,25 @@ export type Screen = 'lobby' | 'playing' | 'dead' | 'spectating' | 'roundover' |
 export type Quality = 'high' | 'low';
 export type Theme = 'light' | 'dark';
 
+/** A share card the server made for me (`share`). */
+export interface ShareItem {
+  kind: 'round' | 'room' | 'kill';
+  id: string;
+  victim?: string;
+  victimIsBot?: boolean;
+  victimX?: string;
+  test?: boolean;
+  /** A result card that also has the final standings picture (`shareStandingsPath`). */
+  standings?: boolean;
+  /** A death's card (the game I had, no place). */
+  dead?: boolean;
+  /** Local ms it arrived. */
+  at: number;
+}
+
+/** Kill cards kept for the end-of-game panel (the newest). */
+export const MOMENTS_KEPT = 30;
+
 export interface Settings {
   name: string;
   skin: number;
@@ -183,8 +202,13 @@ export interface UiState {
   roundResult: RoundResult | null;
   /** A custom room closes at `endsAt` (server clock; `closing`): the countdown everyone in it sees, and why. */
   closing: { endsAt: number; message: string } | null;
-  /** The last "Share on X" card the server made for me (`share`): a result's or a kill's; `at`: local ms. */
-  share: { kind: 'round' | 'room' | 'kill'; id: string; victim?: string; victimIsBot?: boolean; victimX?: string; test?: boolean; at: number } | null;
+  /**
+   * The last "Share on X" card the server made for me (`share`): a result's, a death's (`dead`) or a kill's; `at`:
+   * local ms. `standings`: a result card that also has the final standings picture.
+   */
+  share: ShareItem | null;
+  /** The kill cards of this game (every `share` of a kill), for the end-of-game share panel; reset on every join. */
+  moments: ShareItem[];
   /** A free custom room ended (`roomOver`): its final board (everyone by mass), the room it was, my game in it. */
   roomResult: { message: string; players: number; standings: RoundStanding[]; stats: DeathStats | null; room: RoomInfo | null } | null;
   /**
@@ -341,6 +365,7 @@ export const useUi = create<UiState>(() => ({
   roundResult: null,
   closing: null,
   share: null,
+  moments: [],
   roomResult: null,
   held: null,
   lastSettlement: null,
