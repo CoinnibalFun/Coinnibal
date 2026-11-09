@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import { SERVER } from '../../config';
 import { useReducedMotion } from '../../design';
 import { useT, type TKey, type TVars } from '../../i18n';
-import { useUi } from '../../store';
+import { useUi, type ShareItem } from '../../store';
 import { roomName } from './format';
 
-/** The kill card's sticker stays on the HUD this long (ms). */
-export const KILL_SHARE_MS = 8000;
+/** The kill notice (a small chip under the worth sticker) stays on the HUD this long (ms). */
+export const KILL_SHARE_MS = 3000;
 
 /** The post ends on the game's coin (the copy itself carries no emoji). */
 export const SHARE_COIN = '\u{1FA99}';
@@ -53,6 +53,10 @@ export function liveShareText(t: Translate, g: { mass: number; rank: number; n: 
  */
 export const victimLabel = (t: Translate, s: { victim?: string; victimIsBot?: boolean; victimX?: string }) =>
   (!s.victimIsBot && xMention(s.victimX)) || `${eatenLabel({ name: s.victim ?? '' })}${s.victimIsBot ? ` (${t('g.botTag')})` : ''}`;
+
+/** The X post of a kill: "I just ate Nakamoto on Elymum!" (its linked @handle), TEST in a test arena. */
+export const killShareText = (t: Translate, s: { victim?: string; victimIsBot?: boolean; victimX?: string; test?: boolean }): string =>
+  `${t('share.kill', { name: victimLabel(t, s) })}${s.test ? ` ${t('share.test')}` : ''}`;
 
 /** The coins I ate this game, on a result sheet: name chips (BOT tagged, ×2 when eaten twice) and "+N more". */
 export function EatenNames({ eaten, more = 0 }: { eaten?: readonly EatenName[]; more?: number }) {
@@ -108,9 +112,9 @@ export function ShareOnX({ id, text, size = 'lg' }: { id: string | null; text: s
   );
 }
 
-/** The share card of this kind that arrived for the result on screen (null until the server sent it). */
-export function useShare(kind: 'round' | 'room' | 'kill'): { id: string; victim?: string; victimIsBot?: boolean; victimX?: string; test?: boolean; at: number } | null {
-  return useUi((s) => (s.share && s.share.kind === kind ? s.share : null));
+/** The share card of this kind that arrived for the result on screen (null until the server sent it; never a death's). */
+export function useShare(kind: 'round' | 'room' | 'kill'): ShareItem | null {
+  return useUi((s) => (s.share && s.share.kind === kind && !s.share.dead ? s.share : null));
 }
 
 /**
@@ -150,8 +154,9 @@ export function HudShare({ label }: { label: boolean }) {
 }
 
 /**
- * A kill (every person eaten; a practice bot in a test arena only): a sticker on the HUD for a few seconds,
- * "You ate Nakamoto!" with "Share on X".
+ * A kill (every person eaten; a practice bot in a test arena only): a small chip under the worth sticker for a few
+ * seconds, "You ate Nakamoto!" (TEST in a test arena). Nothing to press while playing and no pointer events (it never
+ * takes a click meant for the game): the kill's card is kept for the end of the game ("Your moments" on the end sheet).
  */
 export function KillShare() {
   const t = useT();
@@ -174,15 +179,12 @@ export function KillShare() {
           className="g-killshare"
           role="status"
           data-testid="kill-share"
-          initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12, rotate: -2 }}
-          animate={{ opacity: 1, y: 0, rotate: -1 }}
+          initial={reduced ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0 }}
         >
-          <strong className="g-killshare__title">
-            {t('share.ate', { name: victimLabel(t, share) })}
-            {share.test && <span className="g-test-tag mono">TEST</span>}
-          </strong>
-          <ShareOnX id={share.id} text={`${t('share.kill', { name: victimLabel(t, share) })}${share.test ? ` ${t('share.test')}` : ''}`} size="md" />
+          <bdi className="g-killshare__title">{t('share.ate', { name: victimLabel(t, share) })}</bdi>
+          {share.test && <span className="g-test-tag mono">TEST</span>}
         </motion.div>
       )}
     </AnimatePresence>

@@ -58,6 +58,8 @@ const PIECES = [
   '.g-boosts-dock .g-peek__tab',
   '.g-boosts__arena',
   '.g-banner',
+  // the kill notice: a small chip in the centre column (it must never cover another piece)
+  '.g-killshare',
   '.g-count__n',
   '.g-net',
   '.pq',
@@ -203,6 +205,8 @@ async function checkViewport(browser, vp) {
       E.onMessage({ t: 'powerup', type: 1, ms: 60000 });
       E.onMessage({ t: 'powerup', type: 2, ms: 60000 });
       E.onMessage({ t: 'event', kind: 'coinrain', state: 'start', ms: 90000 });
+      // a kill: its notice chip stands in the centre column for a few seconds
+      E.onMessage({ t: 'share', kind: 'kill', id: 'KiLLguard0', victim: 'MMMMMMMMMMMMMMMM' });
     });
     await sleep(900);
     await check('pond');

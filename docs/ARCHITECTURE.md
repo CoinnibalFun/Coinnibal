@@ -287,15 +287,20 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   `/api/admin/nft` and its `reveal/schedule` and `reveal` steps).
 - **Share on X** (`site/shares.ts`, `site/share-card.ts`, `shared/share.ts`): when a room ends (a bell, a custom
   room's end) the main thread makes a card of each connected player's place from the game-over it already gets
-  (`DeathStats.finalRank` / `finalOf`, the player's look, the wallet's short form, the net paid), and when a person
-  eats a person (in a testnet test arena a practice bot too) the killer's kill card (at most one per 5 s); the client
-  gets `share { kind, id }`. Kill cards are offers held in memory (the newest 20,000, for 6 h) and kept for good only
-  when their link is first opened, so the many kills nobody shares never push a result card out. Nothing of a card comes from a client. `GET /share/<id>` is a page with the Open
-  Graph / Twitter `summary_large_image` tags; `GET /share/<id>.png` the 1200 x 630 card drawn with `@elymum/art` on
-  `@napi-rs/canvas` with the site's own fonts (cached; 30 renders per IP a minute). Cards are kept in
-  `DATA_DIR/site/shares.json` (the newest 5,000). The web opens X's web intent (`x.com/intent/post`) with a
-  localized line and the card's link: no X API. Death sheets, operator exits and the in-game HUD's share button (live
-  mass, place and coins eaten) open the intent with a localized line and the site's link when no card fits.
+  (`DeathStats.finalRank` / `finalOf`, the player's look, the wallet's short form, the net paid, and the top 10 of the
+  final board with the player's own row: the game-over hook's `standings`), a death's card (the game had: mass and
+  coins eaten), and when a person eats a person (in a testnet test arena a practice bot too) the killer's kill card
+  (at most one per 5 s); the client gets `share { kind, id, standings?, dead? }`. Kill and death cards are offers held
+  in memory (the newest 20,000, for 6 h) and kept for good only when their page is first opened, so the many cards
+  nobody shares never push a result card out. Nothing of a card comes from a client. `GET /share/<id>` is a page with
+  the Open Graph / Twitter `summary_large_image` tags; `GET /share/<id>.png` the 1200 x 630 card drawn with
+  `@elymum/art` on `@napi-rs/canvas` with the site's own fonts, and `GET /share/<id>/standings.png` a result's final
+  standings in the same style (cached; 30 renders per IP a minute; a picture fetch never keeps an offer). Cards are
+  kept in `DATA_DIR/site/shares.json` (the newest 5,000). The web's end sheets (`SharePanel`) preview the pictures,
+  save them as files and hand them to the Web Share API (`navigator.canShare({ files })`), and open X's web intent
+  (`x.com/intent/post`) with a localized line and the card's link: no X API (an intent cannot attach a picture).
+  Operator exits and the in-game HUD's share button (live mass, place and coins eaten) open the intent with the site's
+  link.
 - **Link X** (`xlink.ts`, `shared/xlink.ts`): a signed-in wallet ties an X account to its coin without the X API.
   `POST /api/x/code` issues a code (`ELYMUM-` and six characters, 30 minutes), the player posts it from X (the web
   intent) and sends the post's link to `POST /api/x/verify {url}`; the server reads the post from X's public embed

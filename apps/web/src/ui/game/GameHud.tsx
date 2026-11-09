@@ -546,6 +546,8 @@ export function GameHud() {
         </div>
         {compact && <Standings compact />}
         {(touch || compact) && <Feed narrow={compact} fold={compact && touch} />}
+        {/* a kill of mine: a small chip under the kill feed for a few seconds */}
+        {(touch || compact) && <KillShare />}
       </motion.div>
 
       <div className="g-center">
@@ -559,7 +561,6 @@ export function GameHud() {
         {/* in the column's flow, so it never covers a banner or my coin */}
         {!roundOver && <RoundCountdown />}
         <RoomClosingNotice />
-        <KillShare />
         <PondQuiet />
         <Banner />
         <PowerUps />
@@ -578,6 +579,7 @@ export function GameHud() {
       {!touch && !compact && (
         <div className="g-bl">
           <Feed narrow={false} />
+          <KillShare />
           {(playing || screen === 'spectating') && <ChatStream docked />}
         </div>
       )}

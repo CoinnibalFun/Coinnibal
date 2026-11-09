@@ -175,12 +175,17 @@ everyone in it, players and spectators, sees a countdown with the reason; then a
 30 s. A ticket room ends on its bell: the countdown runs into the bell, whose receipt carries the same board with the
 values. A free room closed early ends 10 s later; a ticket room closed early ends at the round's bell.
 
-**Share on X.** A bell's receipt, a custom room's final board and the in-game top bar carry "Share on X"; eating any
-person shows "You ate …!" with the same button for 8 seconds (at most one kill card every 5 s; a practice bot counts
-only in a testnet test arena). It opens X's composer with a localized line ("I just ate Nakamoto on Elymum!") and a
-link to `/share/<id>`, whose card image (the coin, the place or the kill, mass, kills, what was paid, "Ate: …" with
-the coins eaten, the flag code and emblem badge, the wallet's short form) the server draws from its own records. A
-test arena's card is stamped TEST and shows no payout.
+**Share on X.** The in-game top bar carries "Share on X"; eating any person shows a small "You ate …!" chip under the
+kill feed for 3 seconds, with nothing to press (at most one kill card every 5 s; a practice bot counts only in a
+testnet test arena), and the kill's card is kept for the end of the game. A bell's receipt, a custom room's final
+board and the death sheet carry a share panel: the card's picture (and for a room's end, a second picture of the
+final standings, my row marked), "Download image", "Share" through the system share sheet with the picture as a file
+where the browser can (phones send it straight to the X app), "Share on X", and "Your moments" (the game's kill
+cards, each to download or post). "Share on X" opens X's composer with a localized line ("I just ate Nakamoto on
+Elymum!") and a link to `/share/<id>`, whose card image (the coin, the place, the death or the kill, mass, kills, what
+was paid, "Ate: …" with the coins eaten, the flag code and emblem badge, the wallet's short form) the server draws from
+its own records; X's web intent cannot attach a picture, hence the download. A test arena's card is stamped TEST and
+shows no payout.
 
 **Link X.** Profile → Link X ties an X account to the coin without the X API: the server issues a code, the player
 posts it from X and pastes the post's link, and the server reads that post from X's public embed. The `@handle` then

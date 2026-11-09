@@ -4,7 +4,8 @@ import { formatCountdown, useRound } from '../../game/round';
 import { useT } from '../../i18n';
 import { requestTicket, useUi } from '../../store';
 import { CoinPortrait } from './CoinPortrait';
-import { ShareOnX, gameShareText } from './ShareOnX';
+import { SharePanel } from './SharePanel';
+import { gameShareText } from './ShareOnX';
 import { formatClock, roomName, useTokenFormat } from './format';
 import { useEffect, useState } from 'react';
 
@@ -64,6 +65,9 @@ export function DeathSheet() {
     : closed
       ? t('gd.nextRoundIn', { time: formatCountdown(round.msLeft) })
       : t('gd.newTicketFee', { fee: tf.fmt(fee, { compact: true, maxFrac: 1 }), sym: tf.symbol });
+  // the death's own card (the game I had), and the kills of the game
+  const share = useUi((st) => (st.share?.dead ? st.share : null));
+  const moments = useUi((s) => s.moments);
   const killerLine = death?.killer ? t('gd.byPlayer', { name: death.killer }) : t('gd.byNobody');
 
   return (
@@ -80,8 +84,6 @@ export function DeathSheet() {
           <Button variant="primary" size="lg" icon={arena ? 'ticket' : 'play'} sub={sub} onClick={startOver} data-autofocus>
             {t('gd.startOver')}
           </Button>
-          {/* every room: the game I just had (no server card for a death: the post links the site) */}
-          {s && <ShareOnX id={null} text={gameShareText(t, { mass: s.maxMass, eaten: s.playersEaten, room: roomName(room), test: !!room?.test })} />}
         </>
       }
     >
@@ -139,6 +141,9 @@ export function DeathSheet() {
               </div>
             )}
           </dl>
+
+          {/* every room: the game I just had (its card once the server sent it; the site's link until then) */}
+          <SharePanel card={share} text={gameShareText(t, { mass: s.maxMass, eaten: s.playersEaten, room: roomName(room), test: !!(share?.test || room?.test) })} room={roomName(room)} moments={moments} />
 
           <button type="button" className="g-link mono" onClick={() => engine()?.watch()}>
             {t('gd.watch')}
