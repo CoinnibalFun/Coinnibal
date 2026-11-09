@@ -3,6 +3,7 @@ import {
   ClientOp,
   EMOTES,
   FINAL_BOARD_ROWS,
+  SHARE_BOARD_ROWS,
   FINAL_STANDINGS_ROWS,
   MAP_GROW,
   MAP_SPACE,
@@ -86,8 +87,11 @@ export interface RoomDeps {
    * agree on the round). Without it the room builds one from `now` and `round`.
    */
   clock?: RoundClock;
-  /** A human's game ended (death, leave, round end or operator exit). */
-  onGameOver?: (e: { room: Room; conn: Conn | null; player: Player; stats: DeathStats }) => void;
+  /**
+   * A human's game ended (death, leave, round end or operator exit). `dead`: it ended in a death. `standings`: a room's
+   * end, the top of its final board (`SHARE_BOARD_ROWS`) with the player's own row (the result card's standings picture).
+   */
+  onGameOver?: (e: { room: Room; conn: Conn | null; player: Player; stats: DeathStats; dead?: boolean; standings?: RoundStanding[] }) => void;
   /**
    * The bell settled the ticket of a staker who was away (AFK, not connected). When they come
    * back the gateway tells them the round ended (`round_ended`) instead of "already playing".
@@ -789,8 +793,11 @@ export class Room implements RoomHandle {
    * Ends a human's game. With `batch`, the settlement is appended to it and nothing is written
    * (the caller commits the whole batch in one journal write) and no message is sent.
    */
-  /** `end`: a room's end (bell, custom room end): the player's place on the final board, in the stats the hooks get. */
-  private finishHuman(p: Player, conn: Conn | null, cause: FinishCause, killer: Player | null = null, batch?: JournalItem[], end?: { rank: number; of: number }): DeathStats {
+  /**
+   * `end`: a room's end (bell, custom room end): the player's place on the final board, in the stats the hooks get,
+   * and the top of that board (`standings`, for the result card's standings picture).
+   */
+  private finishHuman(p: Player, conn: Conn | null, cause: FinishCause, killer: Player | null = null, batch?: JournalItem[], end?: { rank: number; of: number; standings?: RoundStanding[] }): DeathStats {
     const stillAlive = cause !== 'death';
     const stats = this.statsFor(p, stillAlive);
     if (end) {
@@ -843,7 +850,7 @@ export class Room implements RoomHandle {
 
     const c = conn ?? this.humans.get(p.id) ?? null;
     try {
-      this.deps.onGameOver?.({ room: this, conn: c, player: p, stats });
+      this.deps.onGameOver?.({ room: this, conn: c, player: p, stats, ...(cause === 'death' ? { dead: true } : {}), ...(end?.standings ? { standings: end.standings } : {}) });
     } catch (err) {
       this.deps.log(`room ${this.id}: game-over hook failed: ${(err as Error).message}`);
     }
@@ -933,7 +940,7 @@ export class Room implements RoomHandle {
       if (!p?.alive) continue;
       const c = conn ?? null;
       const entry = ledger.get(pid);
-      const stats = this.finishHuman(p, c, 'round', null, batch, { rank: board.findIndex((b) => b.pid === pid) + 1, of: board.length });
+      const stats = this.finishHuman(p, c, 'round', null, batch, { rank: board.findIndex((b) => b.pid === pid) + 1, of: board.length, standings: boardRows(board, pid, SHARE_BOARD_ROWS) });
       const payout = stats.payout ?? 0;
       if (c) results.push({ conn: c, pid, payout, stats });
       else if (entry) away.push({ arenaId: entry.arenaId, wallet: entry.player, session: entry.session, sessionId: entry.sessionId, round });
@@ -1306,7 +1313,7 @@ export class Room implements RoomHandle {
       const p = this.world.players.get(pid);
       if (p?.alive) {
         const rank = board.findIndex((b) => b.pid === pid) + 1;
-        const stats = this.finishHuman(p, c, 'left', null, undefined, final && rank > 0 ? { rank, of: board.length } : undefined);
+        const stats = this.finishHuman(p, c, 'left', null, undefined, final && rank > 0 ? { rank, of: board.length, standings: boardRows(board, pid, SHARE_BOARD_ROWS) } : undefined);
         if (c) played.set(c, { pid, stats });
         n++;
       }
@@ -1367,9 +1374,9 @@ interface BoardEntry {
 
 /**
  * The final standings one player gets (`RoundStanding`, the same at an arena's bell and at a custom room's end): the
- * whole board (the top `FINAL_BOARD_ROWS` of `ranked`), plus their own row when it is below them.
+ * whole board (the top `rows` of `ranked`, `FINAL_BOARD_ROWS` by default), plus their own row when it is below them.
  */
-export function boardRows(ranked: readonly BoardEntry[], pid: number): RoundStanding[] {
+export function boardRows(ranked: readonly BoardEntry[], pid: number, rows = FINAL_BOARD_ROWS): RoundStanding[] {
   const row = (b: BoardEntry, i: number): RoundStanding => ({
     rank: i + 1,
     name: b.name,
@@ -1379,10 +1386,10 @@ export function boardRows(ranked: readonly BoardEntry[], pid: number): RoundStan
     ...(b.isBot ? { isBot: true } : {}),
     ...(b.pid === pid ? { you: true } : {}),
   });
-  const rows = ranked.slice(0, FINAL_BOARD_ROWS).map(row);
+  const out = ranked.slice(0, rows).map(row);
   const mine = ranked.findIndex((b) => b.pid === pid);
-  if (mine >= FINAL_BOARD_ROWS) rows.push(row(ranked[mine], mine));
-  return rows;
+  if (mine >= rows) out.push(row(ranked[mine], mine));
+  return out;
 }
 
 /** The journal item that settles an arena ticket at its gross value (the contract takes the fee on profit). */
