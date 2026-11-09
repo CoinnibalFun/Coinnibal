@@ -459,10 +459,11 @@ describe('lobby tickets and the held ticket', () => {
 describe('the break after the bell', () => {
   afterEach(() => vi.useRealTimers());
   it('shows "Next round opens in 0:27" during the break, nothing once the floor is open', () => {
-    const roundMs = RULES.roundMs;
+    // the default schedule: slots of 5:30 (the 30 s break, then 5:00 of play)
+    const cycle = RULES.roundMs + RULES.roundBreakMs;
     const n = 5_900_000;
-    const bell = n * roundMs;
-    const info: RoundInfo = { n, endsAt: bell + roundMs, joinsCloseAt: bell + roundMs - RULES.roundJoinCloseMs, opensAt: bell + RULES.roundBreakMs };
+    const bell = n * cycle; // the previous round's bell: this slot starts with the break
+    const info: RoundInfo = { n, endsAt: bell + cycle, joinsCloseAt: bell + cycle - RULES.roundJoinCloseMs, opensAt: bell + RULES.roundBreakMs };
     const room: RoomInfo = { id: 'arena-1-1', mode: 'arena', arenaId: 1, name: 'A', players: 1, maxPlayers: 50, round: info } as RoomInfo;
     vi.useFakeTimers();
     vi.setSystemTime(bell + 3_000);
@@ -477,5 +478,75 @@ describe('the break after the bell', () => {
     act(() => vi.advanceTimersByTime(27_100));
     expect(screen.queryByTestId('next-round-opens')).toBeNull();
     v.unmount();
+  });
+});
+
+describe('the default schedule: 5:00 of play, then the 30 s break (a 5:30 cycle)', () => {
+  const CYCLE = 330_000;
+  const N5 = 5_437_047; // the slot holding 2026-11-09T12:00:00Z
+  const SLOT = N5 * CYCLE; // 11:58:30 UTC: the previous bell, the break starts
+  const OPENS = SLOT + 30_000; // 11:59:00: play starts, joins open
+  const CLOSES = SLOT + 270_000; // 12:03:00: joins close (the last minute)
+  const BELL = SLOT + CYCLE; // 12:04:00: the bell, the next break starts
+  const INFO: RoundInfo = { n: N5, endsAt: BELL, joinsCloseAt: CLOSES, opensAt: OPENS };
+
+  it('derives 5:00 of play, a 1:00 close and a 30 s break from what the server sends', () => {
+    expect(RULES.roundMs + RULES.roundBreakMs).toBe(CYCLE);
+    expect(roundLengths(INFO)).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 30_000 });
+    expect(roundStartLabel(N5, INFO)).toBe(new Date(OPENS).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+  });
+
+  it('every phase of the slot, boundaries included', () => {
+    // the break: "Next round opens in", the bell is the full play plus the rest of the break away
+    expect(roundStateAt(INFO, SLOT)).toMatchObject({ n: N5, breakMsLeft: 30_000, msLeft: 330_000, phase: 'open' });
+    expect(roundStateAt(INFO, OPENS - 1)).toMatchObject({ n: N5, breakMsLeft: 1, phase: 'open' });
+    // play: "Until the bell" starts at the full 5:00
+    expect(roundStateAt(INFO, OPENS)).toMatchObject({ n: N5, breakMsLeft: 0, msLeft: 300_000, phase: 'open' });
+    expect(formatCountdown(roundStateAt(INFO, OPENS).msLeft)).toBe('5:00');
+    expect(roundStateAt(INFO, CLOSES - 1)).toMatchObject({ phase: 'open', msLeft: 60_001 });
+    expect(roundStateAt(INFO, CLOSES)).toMatchObject({ phase: 'closing', msLeft: 60_000 });
+    expect(roundStateAt(INFO, BELL - 10_000)).toMatchObject({ phase: 'closing', msLeft: 10_000 });
+    expect(roundStateAt(INFO, BELL - 1)).toMatchObject({ n: N5, msLeft: 1 });
+    // the bell: the next slot, which starts with its break
+    expect(roundStateAt(INFO, BELL)).toEqual({ n: N5 + 1, endsAt: BELL + CYCLE, joinsCloseAt: CLOSES + CYCLE, opensAt: OPENS + CYCLE, msLeft: CYCLE, phase: 'open', breakMsLeft: 30_000 });
+    // rolled forward several rounds without a new listing
+    expect(roundStateAt(INFO, BELL + 2 * CYCLE + 45_000)).toMatchObject({ n: N5 + 3, breakMsLeft: 0, msLeft: CYCLE - 45_000 });
+    // the same windows as the server's clock
+    for (const t of [SLOT, OPENS, CLOSES, BELL - 1, BELL, BELL + 31_000]) {
+      const w = roundAt(t, RULES.roundMs, RULES.roundJoinCloseMs, RULES.roundBreakMs);
+      expect(roundStateAt(INFO, t)).toMatchObject({ n: w.n, endsAt: w.endsAt, joinsCloseAt: w.joinsCloseAt, opensAt: w.opensAt });
+    }
+  });
+
+  it('the HUD chip: 5:00 until the bell when play starts, the final minute, the last ten seconds', () => {
+    const room: RoomInfo = { ...ARENA, round: INFO };
+    useUi.setState({ screen: 'playing', room, rooms: [room] });
+    const renderChip = () =>
+      render(
+        <Kb>
+          <RoundChip />
+          <RoundCountdown />
+        </Kb>,
+      );
+    clockAt(OPENS);
+    let v = renderChip();
+    expect(screen.getByRole('timer', { name: 'Round ends in 5:00' }).dataset.phase).toBe('open');
+    v.unmount();
+    clockAt(CLOSES);
+    v = renderChip();
+    expect(screen.getByRole('timer', { name: 'Final minute: 1:00 left' })).toBeTruthy();
+    v.unmount();
+    clockAt(BELL - 9_500);
+    v = renderChip();
+    expect(screen.getByTestId('round-count').textContent).toBe('10');
+    v.unmount();
+  });
+
+  it('an older server whose break sat inside the slot still counts down right', () => {
+    // 5-minute slots with the floor opening 30 s in (the schedule before the break moved out of the play)
+    const n = 5_970_000;
+    const old: RoundInfo = { n, endsAt: (n + 1) * 300_000, joinsCloseAt: (n + 1) * 300_000 - 60_000, opensAt: n * 300_000 + 30_000 };
+    expect(roundLengths(old)).toEqual({ roundMs: 270_000, closeMs: 60_000, breakMs: 30_000 });
+    expect(roundStateAt(old, old.endsAt + 1_000)).toMatchObject({ n: n + 1, opensAt: old.endsAt + 30_000, endsAt: old.endsAt + 300_000, breakMsLeft: 29_000 });
   });
 });

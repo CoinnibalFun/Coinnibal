@@ -21,7 +21,8 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 - Practice rooms are free, two leagues (Rookie and Pro), people only, and touch nothing on chain.
 - Arenas are paid rooms with a fixed entry fee in `$ELYMUM` (the game token the owner sets after deploy).
   - Your value starts at the whole entry fee; eat a player and their value moves to you.
-- Rounds: 5 minutes on the wall clock, the same for every arena, with a 30 s break after each bell. No cash-out: at
+- Rounds: 5 full minutes of play on the wall clock, the same for every arena, then a 30 s break after each bell (a
+  round every 5:30; the break never comes out of the play). No cash-out: at
   the bell everyone still alive is paid their value on chain, less 20 % of their profit (15 % burned, 5 % to the fee wallet); a loss pays no fee.
 - Re-entry: eaten? Buy back in at the same fee while joins are open (they close in the final minute and in the
   break; a ticket bought then is held and seated when the next round opens).
@@ -124,9 +125,9 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 
 | Rule | Value |
 |---|---|
-| Round length | 5 minutes, aligned to Unix time: round *n* runs `[n·300 s, (n+1)·300 s)` for every arena and instance |
-| Break | the first 30 s after the bell (`ROUND_BREAK_SECONDS`): the payouts go out, the receipt counts down "Next round opens in 0:27"; no joins |
-| Joins | open from 0:30 to 4:00 of the round; closed in the break and the final 60 s (`round_closed`) |
+| Round length | 5:00 of play (`ROUND_SECONDS`) plus the 30 s break after its bell: a 5:30 cycle aligned to Unix time; round *n*'s slot is `[n·330 s, (n+1)·330 s)` for every arena and instance (the break first, then the play; the bell at `(n+1)·330 s`) |
+| Break | the first 30 s after the bell (`ROUND_BREAK_SECONDS`, on top of the play): the payouts go out, the receipt counts down "Next round opens in 0:27"; no joins |
+| Joins | open for the first 4:00 of play (0:30 to 4:30 of the slot); closed in the break and the final 60 s of play (`round_closed`) |
 | A ticket bought while joins are closed | held; the client joins it automatically when the next round opens (0–1.5 s jitter, up to 5 attempts) |
 | Eaten | you get 0 for that ticket; buy back in at the same fee while joins are open |
 | Disconnect (AFK) | your cells stay in the arena until they are eaten or the bell rings, so leaving is not an early exit |
@@ -388,4 +389,5 @@ lands** ([media/README.md](../media/README.md)).
 | 2026-11-05 | Rebuild: **Robinhood Chain only** (testnet now, mainnet later; the Elysium build retired). **ElymumArena v3**: no entry fee, 20 % of a ticket's profit (15 % burned, 5 % to the fee wallet, owner-settable, at most 25 %), burn mode (token `burn()` or `0x…dEaD`), power-ups paid with `pay` (50 % burned). **People only** in arenas and practice: the house squad, staked bots, purses and reserve removed; fair practice bots only in free custom rooms. One fee module (`shared/fees.ts`); `pnpm check` |
 | 2026-11-06 | Power-ups priced in US dollars like the tickets; holder perks bound to one emblem token id at a time; Share on X cards (TEST in test arenas); secret exports behind a purpose-bound signature, 2 h admin sessions, the gas runway; CI-green VPS deploys with rollback |
 | 2026-11-08 | A 30 s break after every bell; a shop cart paid with one `pay`; approvals for 1 / 5 / 10 / 20 tickets; a kill card for every person eaten; Link X (`PROTOCOL_VERSION` 14); practice bots slower and sometimes distracted; the HUD's chat at the bottom left, Share on X and Shop on the top bar; `ELYMUM_*` keys on the VPS |
+| 2026-11-09 | The full 5:00 of play per round: the 30 s break after the bell comes on top of the play instead of out of it (a 5:30 cycle on Unix time; `ROUND_SECONDS` is the play). The server still sends every round time, so `PROTOCOL_VERSION` stays 14 |
 | 2026-11-02 | (superseded by v3) The fee moves from profit to the entry: every played ticket pays 5 % of its entry fee (holders 3 %), win or lose; unplayed tickets are refunded in full. ElymumArena v2 (`version()` 2); the server handles the legacy v1 testnet arena until it is redeployed. The leaderboards are reset once (epoch 2) |

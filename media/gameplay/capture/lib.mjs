@@ -225,7 +225,7 @@ export function pageHelpers() {
     if (!r) r = (st.rooms || []).find((q) => q.mode === 'arena' && q.arenaId === (arenaId ?? 1))?.round;
     if (!r) return null;
     const now = Date.now();
-    const len = Math.round(r.endsAt / (r.n + 1)); // round n ends at (n + 1) * roundMs
+    const len = Math.round(r.endsAt / (r.n + 1)); // round n rings at (n + 1) * cycle (cycle = break + play)
     let ends = r.endsAt;
     while (ends <= now) ends += len;
     const close = ends - (r.endsAt - r.joinsCloseAt);

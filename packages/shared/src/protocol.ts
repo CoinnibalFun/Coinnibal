@@ -218,15 +218,18 @@ export interface RoomInfo {
 
 /** An arena round as clients see it (Unix ms on the server clock; see `serverNow`). */
 export interface RoundInfo {
-  /** Round number: floor(serverNow / roundMs). */
+  /**
+   * Round number: floor(serverNow / cycle), where one cycle is the break plus the full play, so round n's slot is
+   * [n·cycle, (n+1)·cycle) and the cycle is `endsAt / (n + 1)`.
+   */
   n: number;
-  /** The round ends (and the next one opens) at this time. */
+  /** The bell: the round's play ends here (and the next slot starts, with its break). */
   endsAt: number;
   /** New joins are refused (`round_closed`) from this time until `endsAt`. */
   joinsCloseAt: number;
   /**
-   * The break after the previous bell ends here: joins are refused (`round_closed`) before it.
-   * Old servers leave it out (no break).
+   * The break after the previous bell ends here and the play starts (it runs the full play length until `endsAt`):
+   * joins are refused (`round_closed`) before it. Old servers leave it out (no break).
    */
   opensAt?: number;
 }

@@ -97,7 +97,7 @@ describe('sweeper tunables', () => {
 });
 
 describe('round clock config', () => {
-  it('defaults to 5-minute rounds with joins closed in the last minute', () => {
+  it('defaults to 5 minutes of play with joins closed in the last minute, and a 30 s break on top', () => {
     expect(loadConfig({}).round).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 30_000 });
     expect(parseRoundConfig({ ROUND_SECONDS: '', ROUND_JOIN_CLOSE_SECONDS: ' ' })).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 30_000 });
   });
@@ -113,6 +113,16 @@ describe('round clock config', () => {
     expect(parseRoundConfig({ ROUND_SECONDS: '30' })).toEqual({ roundMs: 30_000, closeMs: 15_000, breakMs: 3_000 });
     expect(parseRoundConfig({ ROUND_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '-4' })).toEqual({ roundMs: 2_000, closeMs: 0, breakMs: 0 });
     expect(parseRoundConfig({ ROUND_SECONDS: 'soon' })).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 30_000 });
+  });
+
+  it('the break comes on top of the play: an explicit one is kept up to the play length, the default is at most a tenth', () => {
+    expect(parseRoundConfig({ ROUND_BREAK_SECONDS: '60' })).toEqual({ roundMs: 300_000, closeMs: 60_000, breakMs: 60_000 });
+    expect(parseRoundConfig({ ROUND_SECONDS: '30', ROUND_BREAK_SECONDS: '10' })).toMatchObject({ breakMs: 10_000 });
+    expect(parseRoundConfig({ ROUND_SECONDS: '30', ROUND_BREAK_SECONDS: '90' })).toMatchObject({ breakMs: 30_000 });
+    expect(parseRoundConfig({ ROUND_SECONDS: '90' })).toMatchObject({ breakMs: 9_000 });
+    expect(parseRoundConfig({ ROUND_BREAK_SECONDS: '-3' })).toMatchObject({ breakMs: 0 });
+    expect(parseRoundConfig({ ROUND_BREAK_SECONDS: 'x' })).toMatchObject({ breakMs: 30_000 });
+    expect(parseRoundConfig({ ROUND_BREAK_SECONDS: '12.7' })).toMatchObject({ breakMs: 12_000 });
   });
 });
 
