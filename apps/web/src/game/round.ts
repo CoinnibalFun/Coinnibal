@@ -17,11 +17,11 @@ export interface RoundState {
   n: number;
   endsAt: number;
   joinsCloseAt: number;
-  /** Joins open here (the break after the previous bell ends); `n·roundMs` on servers without a break. */
+  /** Play starts and joins open here (the break after the previous bell ends); the slot start on servers without a break. */
   opensAt: number;
   /** Until the bell (ms, never negative). */
   msLeft: number;
-  /** `open`: joins open; `closing`: the final minute, joins closed until the next round. */
+  /** `open`: joins open (or the break before them, see `breakMsLeft`); `closing`: the final minute, joins closed until the next round. */
   phase: RoundPhase;
   /** The break after the bell (joins closed, payouts going out): ms until the floor opens; 0 once it is open. */
   breakMsLeft: number;
@@ -30,22 +30,29 @@ export interface RoundState {
 /** The big countdown takes over the chip for the last 10 s. */
 export const COUNTDOWN_MS = 10_000;
 
+/** The rules' default round: 5:00 of play, joins closed in the last 1:00, a 30 s break after the bell. */
+const DEFAULT_LENGTHS = { roundMs: RULES.roundMs, closeMs: RULES.roundJoinCloseMs, breakMs: RULES.roundBreakMs };
+
 /**
- * Round and join-close lengths implied by a `RoundInfo` (the server may run shorter rounds for
- * tests and demos: `ROUND_SECONDS`). Round n ends at (n + 1) · roundMs.
+ * The play, join-close and break lengths implied by a `RoundInfo` (the server may run shorter rounds for tests and
+ * demos: `ROUND_SECONDS`). Round n's slot is [n·cycle, (n+1)·cycle) with cycle = break + play, so the bell of round n
+ * is at (n + 1) · cycle and its play starts `breakMs` into the slot (`opensAt`). `roundMs` is the play alone.
  */
 export function roundLengths(info: RoundInfo): { roundMs: number; closeMs: number; breakMs: number } {
-  const roundMs = info.endsAt / (info.n + 1);
+  const cycle = info.endsAt / (info.n + 1);
+  if (!Number.isInteger(cycle) || cycle <= 0) return DEFAULT_LENGTHS;
+  const breakMs = info.opensAt !== undefined ? info.opensAt - info.n * cycle : 0;
+  const roundMs = cycle - breakMs;
   const closeMs = info.endsAt - info.joinsCloseAt;
-  if (!Number.isInteger(roundMs) || roundMs <= 0 || closeMs < 0 || closeMs > roundMs) return { roundMs: RULES.roundMs, closeMs: RULES.roundJoinCloseMs, breakMs: 0 };
-  const breakMs = info.opensAt !== undefined ? Math.max(0, info.opensAt - info.n * roundMs) : 0;
+  if (breakMs < 0 || roundMs <= 0 || closeMs < 0 || closeMs > roundMs) return DEFAULT_LENGTHS;
   return { roundMs, closeMs, breakMs };
 }
 
 /** The round in play at server time `now`, from the last known `RoundInfo` (rolled forward with `roundAt`). */
 export function roundStateAt(info: RoundInfo, now: number): RoundState {
   const { roundMs, closeMs, breakMs } = roundLengths(info);
-  const w: Pick<RoundState, 'n' | 'endsAt' | 'joinsCloseAt' | 'opensAt'> = now >= info.endsAt ? roundAt(now, roundMs, closeMs, breakMs) : { ...info, opensAt: info.opensAt ?? info.endsAt - roundMs };
+  const w: Pick<RoundState, 'n' | 'endsAt' | 'joinsCloseAt' | 'opensAt'> =
+    now >= info.endsAt ? roundAt(now, roundMs, closeMs, breakMs) : { ...info, opensAt: info.opensAt ?? info.endsAt - roundMs };
   return {
     n: w.n,
     endsAt: w.endsAt,
@@ -69,17 +76,17 @@ export function roundInfoFor(rooms: readonly RoomInfo[], room: RoomInfo | null, 
 }
 
 /**
- * A round as players name it: the wall-clock time it started ("15:45"), not its index since
- * 1970. `info` (any arena's) gives the round length.
+ * A round as players name it: the wall-clock time its play started ("15:45:30" shows as "15:45"; the break after the
+ * previous bell comes before it), not its index since 1970. `info` (any arena's) gives the lengths.
  */
 export function roundStartLabel(n: number, info: RoundInfo | null | undefined): string {
-  const roundMs = info ? roundLengths(info).roundMs : RULES.roundMs;
-  return new Date(n * roundMs).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const { roundMs, breakMs } = info ? roundLengths(info) : DEFAULT_LENGTHS;
+  return new Date(n * (roundMs + breakMs) + breakMs).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
 /**
- * The round length in minutes for copy ("5-minute rounds"): from the round the server announced (it may run shorter
- * rounds), else the rules' default. One decimal at most (`1.5`).
+ * The round's play in minutes for copy ("5-minute rounds"; the break after the bell is not counted): from the round
+ * the server announced (it may run shorter rounds), else the rules' default. One decimal at most (`1.5`).
  */
 export function roundMinutes(rooms: readonly RoomInfo[], room: RoomInfo | null): number {
   const info = roundInfoFor(rooms, room, null);

@@ -227,8 +227,9 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
 - **Rooms** (`rooms/manager.ts`, `rooms/room.ts`): practice ponds (Rookie and Pro leagues, 40 people), arena
   instances `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) people on the same vault, opened ahead of demand and
   drained when quiet by the instance scaler (`rooms/arena-scaler.ts`, OPERATIONS.md "Arena instances"; a draining
-  instance takes no new seat and closes after its bell, nobody is evicted); rounds of 300 s aligned to Unix
-  time, joins closed in the final 60 s and in the 30 s break after each bell (`ROUND_BREAK_SECONDS`; a join then is
+  instance takes no new seat and closes after its bell, nobody is evicted); rounds of 300 s of play plus the 30 s
+  break after each bell (a 330 s cycle) aligned to Unix time, joins closed in the final 60 s and in the break
+  (`ROUND_BREAK_SECONDS`, on top of the play; a join then is
   refused with `round_closed` and its `opensAt`, and the client holds the ticket until the floor opens). **No bots in practice ponds or official arenas.** Maps grow with every person and
   shrink back only when safe (base + per person, at most max; `rooms/map-settings.ts`, `DATA_DIR/site/maps.json`, `/api/admin/maps`).
 - **Practice bots** (`bots/brain.ts`, `bots/practice.ts`): only in **free custom rooms**, when the creator turns them

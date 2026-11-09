@@ -7,7 +7,7 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PlayerFlag, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, TEST_ARENA_DEFAULT, TICK_MS, roundAt } from '@elymum/shared';
+import { PlayerFlag, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, TEST_ARENA_DEFAULT, TICK_MS } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config';
 import { Leaderboards } from '../src/leaderboards';
@@ -146,7 +146,7 @@ describe('test arenas: bots carry no value', () => {
     const j = stakeJoin(1, FEE);
     room.join(fakeConn(j.stake.player), { ...j, country: 'DE' });
     for (let i = 0; i < 100; i++) room.tick(TICK_MS);
-    clock.t = roundAt(MID_ROUND).endsAt;
+    clock.t = room.round(MID_ROUND)!.endsAt;
     room.syncRound(clock.t);
     const settle = journal.settlements().find((x) => x.key === j.stake.session);
     expect(settle).toMatchObject({ reason: 'round', arenaId: 1 });
@@ -239,7 +239,7 @@ describe('test arenas: the room directory', () => {
     expect(m.confirmTestRoom(room)).toBeNull();
     expect(room.ledger!.has(conn.player!.id)).toBe(true);
     expect(m.testArenaView().rooms).toEqual([expect.objectContaining({ id: 'test-1', closing: true })]);
-    room.syncRound(roundAt(MID_ROUND).endsAt);
+    room.syncRound(room.round(MID_ROUND)!.endsAt);
     expect(journal.pending.some((x) => x.key === j.stake.session)).toBe(true);
     // the cleanup closes it once settled (nothing of value left)
     (m as unknown as { closeTestArenas(): void }).closeTestArenas();

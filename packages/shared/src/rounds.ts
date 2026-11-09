@@ -2,31 +2,39 @@ import { RULES } from './constants';
 
 /** One arena round on the shared wall clock (all times are Unix milliseconds). */
 export interface RoundWindow {
-  /** Round number: floor(nowMs / roundMs). */
+  /** Round number: floor(nowMs / (playMs + breakMs)). */
   n: number;
-  /** The round's slot starts (the previous bell). */
+  /** The round's slot starts (the previous bell): the break after it runs from here to `opensAt`. */
   startsAt: number;
-  /** The break after the previous bell is over: joins open (`startsAt` + the break). */
+  /** The break after the previous bell is over: play starts and joins open (`startsAt` + the break). */
   opensAt: number;
+  /** The bell: `opensAt` + the full play length (= the next round's `startsAt`). */
   endsAt: number;
-  /** New joins are refused from here until `endsAt` (= the next round's `startsAt`). */
+  /** New joins are refused from here until the next round's `opensAt` (the final `closeMs` and the break after the bell). */
   joinsCloseAt: number;
 }
 
 /**
- * The round running at `nowMs`. Rounds are aligned to Unix time, so every arena and every
- * server instance agrees on them: round n's slot is [n·roundMs, (n+1)·roundMs); its first
- * `breakMs` is the break after the previous bell (no joins: payouts go out, people read the
- * results), then joins are open until `closeMs` before the bell.
+ * The round running at `nowMs`. Rounds are aligned to Unix time, so every arena and every server
+ * instance agrees on them. One cycle is the break plus the full play: round n's slot is
+ * [n·C, (n+1)·C) with C = breakMs + playMs. It starts with the break after the previous bell (no
+ * joins: payouts go out, people read the results), then `playMs` of play from `opensAt` to the bell
+ * at `endsAt`; joins are open from `opensAt` until `closeMs` before the bell. With the defaults
+ * (5:00 of play, a 30 s break, joins closed in the last 1:00): a 5:30 cycle, joins open for 4:00.
  */
-export function roundAt(nowMs: number, roundMs: number = RULES.roundMs, closeMs: number = RULES.roundJoinCloseMs, breakMs = 0): RoundWindow {
-  const n = Math.floor(nowMs / roundMs);
-  const startsAt = n * roundMs;
-  const endsAt = startsAt + roundMs;
-  const joinsCloseAt = endsAt - closeMs;
-  const opensAt = Math.min(joinsCloseAt, startsAt + Math.max(0, breakMs));
+export function roundAt(nowMs: number, playMs: number = RULES.roundMs, closeMs: number = RULES.roundJoinCloseMs, breakMs = 0): RoundWindow {
+  const brk = Math.max(0, breakMs);
+  const cycle = playMs + brk;
+  const n = Math.floor(nowMs / cycle);
+  const startsAt = n * cycle;
+  const endsAt = startsAt + cycle;
+  const joinsCloseAt = endsAt - Math.min(Math.max(0, closeMs), playMs);
+  const opensAt = startsAt + brk;
   return { n, startsAt, opensAt, endsAt, joinsCloseAt };
 }
+
+/** The length of one round cycle on the wall clock: the full play plus the break after its bell. */
+export const roundCycleMs = (playMs: number = RULES.roundMs, breakMs: number = RULES.roundBreakMs): number => playMs + Math.max(0, breakMs);
 
 /** One coin at a bell on the public "Last rounds" board. */
 export interface RoundBoardRow {

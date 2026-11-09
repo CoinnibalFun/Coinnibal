@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CUSTOM_DEFAULTS, TICK_MS, roundAt, type CustomRoomConfig, type ServerMessage } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, TICK_MS, type CustomRoomConfig, type ServerMessage } from '@elymum/shared';
 import { parseEther } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { UsedPayments, type NativeTransfer, type PaymentReader } from '../src/chain/payment';
@@ -139,7 +139,7 @@ describe('custom rooms: paid rooms (invite-only arena instances)', () => {
     const view = await svc.create(a, { config: paid(2, { maxPlayers: 8, durationMin: 15 }), txHash: reader.pay(1, a, BASE) });
     expect(view).toMatchObject({ kind: 'paid', arenaId: 2, maxPlayers: 8, feeWei: BASE.toString() });
     // it ends on a bell, at or after its duration (its tickets are settled there)
-    const bell = roundAt(clock.t + 15 * 60_000 - 1);
+    const bell = rooms.roundWindow(clock.t + 15 * 60_000 - 1);
     expect(view.endsAt).toBe(bell.endsAt);
     expect(view.endsAt).toBeGreaterThanOrEqual(clock.t + 15 * 60_000);
     const room = rooms.get(`priv-${view.code}`) as Room;
@@ -178,7 +178,7 @@ describe('custom rooms: paid rooms (invite-only arena instances)', () => {
     expect(rooms.liveSessions().has(j.stake.session)).toBe(true);
     expect(journal.live().map((l) => l.session)).toContain(j.stake.session);
     room.world.restoreLoot([{ x: 100, y: 100, value: 777 }]);
-    const r = roundAt(clock.t);
+    const r = rooms.roundWindow(clock.t);
     clock.t = r.endsAt;
     tick(room);
     expect(conn.msgs.some((m) => m.t === 'roundOver')).toBe(true);
@@ -239,7 +239,7 @@ describe('custom rooms: paid rooms (invite-only arena instances)', () => {
     svc.sweep(clock.t);
     expect(rooms.get(room.id)).toBe(room);
     // it now ends at this round's bell: the countdown comes 10 s before it, with the reason
-    const bell = roundAt(clock.t).endsAt;
+    const bell = rooms.roundWindow(clock.t).endsAt;
     expect(svc.get(view.code)!.endsAt).toBe(bell);
     clock.t = bell - 9_000;
     svc.sweep(clock.t);

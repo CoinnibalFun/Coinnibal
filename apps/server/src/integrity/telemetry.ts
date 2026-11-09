@@ -108,7 +108,7 @@ export class IntegrityMonitor {
         roomId: room.id,
         entryFee: j.entryFee,
         round: r?.n ?? 0,
-        // round n runs [n·len, (n+1)·len), so its length is endsAt / (n + 1)
+        // round n's slot (the break after the previous bell, then the play) is [n·cycle, (n+1)·cycle): cycle = endsAt / (n + 1)
         roundStartsAt: r && r.n >= 0 ? r.endsAt - r.endsAt / (r.n + 1) : now,
         joinsCloseAt: r?.joinsCloseAt ?? roundMs,
         roundEndsAt: roundMs,

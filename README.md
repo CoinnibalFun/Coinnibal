@@ -31,8 +31,8 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
 
 - Real-time arena game: a 30 Hz authoritative server (physics, rounds) and a canvas client with
   split, eject, viruses, power-ups and floor loot.
-- Rounds, not cash-outs: paid arenas play 5-minute wall-clock rounds (a 30 s break after each bell, joins closed in
-  the final minute). Join late or buy back in; everyone alive at the bell is paid their value. There is no entry
+- Rounds, not cash-outs: paid arenas play 5-minute wall-clock rounds (the full 5:00 of play, then a 30 s break after
+  each bell; joins closed in the final minute). Join late or buy back in; everyone alive at the bell is paid their value. There is no entry
   fee; the arena contract takes 20 % of a ticket's **profit** only (15 % burned, 5 % to the fee wallet; emblem
   holders 10 %: 8 % + 2 %); a loss pays nothing.
 - Four arenas on the ring, tickets priced in US dollars and paid in `$ELYMUM`: Asphodel Meadow ($1), Lethe Shore ($3),
