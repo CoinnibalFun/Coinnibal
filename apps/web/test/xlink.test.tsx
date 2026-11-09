@@ -4,7 +4,7 @@ import { Kb } from '../src/design';
 import { translate } from '../src/i18n';
 import { labelName } from '../src/render/renderer';
 import { useUi } from '../src/store';
-import { KillShare, SHARE_COIN, resultShareText, victimLabel } from '../src/ui/game/ShareOnX';
+import { KillShare, SHARE_COIN, killShareText, resultShareText, victimLabel } from '../src/ui/game/ShareOnX';
 import { LinkXCard } from '../src/ui/profile/LinkX';
 import { resetWallets, useWallet } from '../src/wallet/store';
 import { useXLink } from '../src/wallet/xlink';
@@ -35,7 +35,7 @@ describe('Link X in the share posts', () => {
       </Kb>,
     );
     expect(screen.getByTestId('kill-share').textContent).toContain('You ate @penny_x!');
-    expect(textOf(screen.getByTestId('share-x'))).toBe(`I just ate @penny_x on Elymum! ${SHARE_COIN}`);
+    expect(killShareText(t, useUi.getState().share!)).toBe('I just ate @penny_x on Elymum!');
   });
 
   it('a result names linked coins by @handle in its eaten list', () => {

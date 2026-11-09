@@ -488,16 +488,20 @@ seat at a time).
 
 ## Share on X
 
-Players get a "Share on X" button on a bell's receipt, a custom room's final board, the in-game top bar and, for 8
-seconds, after eating any person (a kill card; at most one per player every 5 s, `KILL_SHARE_EVERY_MS`; a practice
-bot counts only in a testnet test arena). It opens X's composer (`x.com/intent/post`, no X API or keys) with a
+Players get "Share on X" on the in-game top bar and a share panel on a bell's receipt, a custom room's final board
+and the death sheet (the card's picture to preview, download or hand to the system share sheet, the room's final
+standings picture, and the game's kill cards). Eating any person makes a kill card (at most one per player every 5 s,
+`KILL_SHARE_EVERY_MS`; a practice bot counts only in a testnet test arena): a small chip says so for 3 s in play and the
+card waits for the end panel. A death makes a card of the game had. "Share on X" opens X's composer (`x.com/intent/post`, no X API or keys) with a
 localized line and a link to `/share/<id>`, whose Open Graph image X shows as the card. The server makes each card
 from its own records (name, the wallet's short form, the coin's paint, flag code, emblem badge, place, mass, kills,
 net paid, and on a result "Ate: …" with the coins eaten that game): nothing else, and nothing a client sends. A coin
 whose owner linked X ("Link X", `/api/x/*`) is named by its `@handle`, so the post tags them. A test arena's card is
-stamped TEST and never shows a payout. Kill cards are offers held in memory (the newest 20,000, for 6 h) and saved
-only when their link is first opened; saved cards live in `DATA_DIR/site/shares.json` (the newest 5,000). The image is
-rendered on demand and cached (30 renders per IP a minute). On Vercel, `vercel.json` rewrites `/share/*` to the game
+stamped TEST and never shows a payout. Kill and death cards are offers held in memory (the newest 20,000, for 6 h) and
+saved only when their page is first opened (a picture fetch does not save one); saved cards live in
+`DATA_DIR/site/shares.json` (the newest 5,000). The images (`/share/<id>.png`, and `/share/<id>/standings.png` for a
+result: the top 10 of its final board and the player's own row) are rendered on demand and cached (30 renders per IP
+a minute). On Vercel, `vercel.json` rewrites `/share/*` to the game
 server like `/api/*`; in Docker the server serves it on the same origin; `pnpm dev` proxies it.
 
 ## Arena instances (auto-scaling)

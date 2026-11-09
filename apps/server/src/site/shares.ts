@@ -3,21 +3,24 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { ledgerDecimals } from '@elymum/sdk';
-import { EATEN_SHOWN, PlayerFlag, SHARE_ID_RE, isXHandle, SHARE_IMAGE, arenaMeta, formatToken, shareName, shortAddress, type EatenName, type ShareCard, type ShareKind } from '@elymum/shared';
+import { EATEN_SHOWN, PlayerFlag, SHARE_BOARD_ROWS, SHARE_ID_RE, isXHandle, SHARE_IMAGE, arenaMeta, formatToken, shareName, shortAddress, type EatenName, type RoundStanding, type ShareBoardRow, type ShareCard, type ShareKind } from '@elymum/shared';
 import { Limiter } from '../net/limiter';
 import type { PlayerLook, RoomHandle } from '../rooms/handle';
-import { renderShareCard, shareFacts, shareHeadline } from './share-card';
+import { renderShareCard, renderStandingsCard, shareFacts, shareHeadline } from './share-card';
 
 /**
  * "Share on X" (`packages/shared/src/share.ts`): the cards of results and notable kills, made by the server from its
  * own game records when they happen (a client never sends a card's content), kept in `DATA_DIR/site/shares.json`
  * (the newest `SHARES_KEPT`) and served at `/share/<id>` (a page with the Open Graph / Twitter tags) and
- * `/share/<id>.png` (the image, rendered once and cached). Limits: a connection gets at most one kill card every
+ * `/share/<id>.png` (the image, rendered once and cached), and for a result also `/share/<id>/standings.png` (the room's
+ * final standings, my row marked). Limits: a connection gets at most one kill card every
  * `KILL_SHARE_EVERY_MS`; an IP renders at most `RENDERS_PER_MIN` images a minute (crawlers fetch each card once).
  *
  * Every person eaten offers a kill card, so kill cards start as OFFERS: kept in memory only (the newest `OFFERS_KEPT`,
  * for `OFFER_TTL_MS`) and moved into the kept cards the first time their link is opened (X fetches the card as the
- * player writes the post). A kill nobody shares never reaches the disk and never pushes an older card out.
+ * player writes the post). A kill nobody shares never reaches the disk and never pushes an older card out. A death's
+ * card (the game I had: mass, coins eaten) is an offer too. Only the page keeps an offer: its picture is served from
+ * the offer as it is (the end-of-game share panel previews and downloads it without storing anything).
  */
 
 export const SHARES_KEPT = 5000;
@@ -159,15 +162,13 @@ export class ShareService {
    * reached the wallet (ledger units), arenas only (never on a test arena's card). `eaten`: the coins I ate
    * (`DeathStats.eaten`), names cleaned again here.
    */
-  result(o: ShareOrigin, r: { rank: number; of: number; mass: number; kills: number; payout?: number; eaten?: readonly EatenName[]; eatenMore?: number }): ShareCard {
+  result(
+    o: ShareOrigin,
+    r: { rank: number; of: number; mass: number; kills: number; payout?: number; eaten?: readonly EatenName[]; eatenMore?: number; standings?: readonly RoundStanding[] },
+  ): ShareCard {
     const kind: ShareKind = o.room.opts.stake ? 'round' : 'room';
-    const t = this.d.token();
-    const paid = !o.room.opts.test && r.payout && r.payout > 0 && t ? `${formatToken(r.payout, ledgerDecimals(t.decimals), { maxFrac: 2 })} ${t.symbol}` : undefined;
-    const list = (r.eaten ?? []).slice(0, EATEN_SHOWN).map((e): EatenName => {
-      const x = this.tag(e.bot ? null : e.xHandle);
-      return { name: shareName(e.name), ...(e.bot ? { bot: true } : {}), ...(e.n && e.n > 1 ? { n: Math.floor(e.n) } : {}), ...(x ? { xHandle: x } : {}) };
-    });
-    const more = Math.max(0, Math.floor(r.eatenMore ?? 0)) + Math.max(0, (r.eaten?.length ?? 0) - list.length);
+    const paid = !o.room.opts.test && r.payout && r.payout > 0 ? this.money(r.payout) : undefined;
+    const board = this.board(o, r.standings);
     return this.add({
       kind,
       ...this.base(o),
@@ -176,8 +177,55 @@ export class ShareService {
       mass: Math.floor(r.mass),
       kills: r.kills,
       ...(paid ? { paid } : {}),
-      ...(list.length > 0 ? { eaten: list } : {}),
-      ...(more > 0 ? { eatenMore: more } : {}),
+      ...this.eaten(r),
+      ...(board.length > 0 ? { board } : {}),
+    });
+  }
+
+  /**
+   * A death (every room): the card of the game I had (no place: the mass reached and the coins I ate), an offer like a
+   * kill's (kept only once its link is opened).
+   */
+  game(o: ShareOrigin, g: { mass: number; kills: number; eaten?: readonly EatenName[]; eatenMore?: number }): ShareCard {
+    return this.offer({ kind: o.room.opts.stake ? 'round' : 'room', ...this.base(o), mass: Math.floor(g.mass), kills: g.kills, ...this.eaten(g) });
+  }
+
+  /** "1,234.5 $ELYMUM" (ledger units), or undefined without the token. */
+  private money(v: number): string | undefined {
+    const t = this.d.token();
+    return t ? `${formatToken(v, ledgerDecimals(t.decimals), { maxFrac: 2 })} ${t.symbol}` : undefined;
+  }
+
+  /** The coins eaten, as a card keeps them: the first `EATEN_SHOWN` (names cleaned, linked handles only) and "+N". */
+  private eaten(r: { eaten?: readonly EatenName[]; eatenMore?: number }): Pick<ShareCard, 'eaten' | 'eatenMore'> {
+    const list = (r.eaten ?? []).slice(0, EATEN_SHOWN).map((e): EatenName => {
+      const x = this.tag(e.bot ? null : e.xHandle);
+      return { name: shareName(e.name), ...(e.bot ? { bot: true } : {}), ...(e.n && e.n > 1 ? { n: Math.floor(e.n) } : {}), ...(x ? { xHandle: x } : {}) };
+    });
+    const more = Math.max(0, Math.floor(r.eatenMore ?? 0)) + Math.max(0, (r.eaten?.length ?? 0) - list.length);
+    return { ...(list.length > 0 ? { eaten: list } : {}), ...(more > 0 ? { eatenMore: more } : {}) };
+  }
+
+  /**
+   * The final standings a result card draws: the top `SHARE_BOARD_ROWS` and my own row (names cleaned, bots tagged);
+   * an arena's value at the bell formatted (never on a test arena's card: practice tokens).
+   */
+  private board(o: ShareOrigin, rows: readonly RoundStanding[] | undefined): ShareBoardRow[] {
+    if (!rows) return [];
+    const top = rows.filter((r) => r.rank <= SHARE_BOARD_ROWS);
+    const mine = rows.find((r) => r.you && r.rank > SHARE_BOARD_ROWS);
+    const test = !!o.room.opts.test;
+    return [...top.slice(0, SHARE_BOARD_ROWS), ...(mine ? [mine] : [])].map((r): ShareBoardRow => {
+      const value = !test && r.value !== undefined ? this.money(r.value) : undefined;
+      return {
+        rank: Math.floor(r.rank),
+        name: shareName(r.name),
+        mass: Math.max(0, Math.floor(r.mass)),
+        kills: Math.max(0, Math.floor(r.kills)),
+        ...(value ? { value } : {}),
+        ...(r.isBot ? { bot: true } : {}),
+        ...(r.you ? { you: true } : {}),
+      };
     });
   }
 
@@ -208,6 +256,13 @@ export class ShareService {
     this.renderBroken = why;
   }
 
+  /** A kept card or a live offer, as it is (an offer stays an offer: the pictures are served this way). */
+  peek(id: string): ShareCard | null {
+    if (!SHARE_ID_RE.test(id)) return null;
+    const c = this.cards.get(id) ?? this.offers.get(id) ?? null;
+    return c && (this.cards.has(id) || this.now() - c.at < OFFER_TTL_MS) ? c : null;
+  }
+
   /** A kept card, or an offer opened for the first time (kept from then on); null when unknown or expired. */
   get(id: string): ShareCard | null {
     if (!SHARE_ID_RE.test(id)) return null;
@@ -221,23 +276,29 @@ export class ShareService {
     return o;
   }
 
-  /** `GET /share/<id>` (the page) and `GET /share/<id>.png` (the image). False when the path is not a share's. */
+  /**
+   * `GET /share/<id>` (the page), `GET /share/<id>.png` (the image) and `GET /share/<id>/standings.png` (a result's
+   * final standings). False when the path is not a share's.
+   */
   handle(req: IncomingMessage, res: ServerResponse, path: string, ip: string): boolean {
-    const m = /^\/share\/([^/]+?)(\.png)?$/.exec(path);
+    const m = /^\/share\/([^/.]+)(\.png|\/standings\.png)?$/.exec(path);
     if (!m) return false;
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { Allow: 'GET, HEAD' });
       res.end();
       return true;
     }
-    const card = this.get(m[1]);
-    if (!card) {
+    const standings = m[2] === '/standings.png';
+    // the page keeps an offer (X opens it as the post is written); a picture does not
+    const card = m[2] ? this.peek(m[1]) : this.get(m[1]);
+    if (!card || (standings && !card.board?.length)) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('No such card.');
       return true;
     }
     if (m[2]) {
-      let png = this.png.get(card.id);
+      const key = standings ? `${card.id}/standings` : card.id;
+      let png = this.png.get(key);
       if (!png) {
         if (this.renderBroken) {
           // no canvas here: the site's own Open Graph picture, so a shared link still shows an image
@@ -251,7 +312,7 @@ export class ShareService {
           return true;
         }
         try {
-          png = renderShareCard(card);
+          png = standings ? renderStandingsCard(card) : renderShareCard(card);
         } catch (err) {
           this.renderBroken = String((err as Error)?.message ?? err).split('\n')[0];
           this.d.log?.(`!!! share cards: drawing failed (${this.renderBroken}) — share images fall back to the site's picture until a restart`);
@@ -259,7 +320,7 @@ export class ShareService {
           res.end();
           return true;
         }
-        this.png.set(card.id, png);
+        this.png.set(key, png);
         if (this.png.size > PNG_CACHE) this.png.delete(this.png.keys().next().value!);
       }
       // a card never changes: CDNs (the Vercel rewrite, Cloudflare) may keep it as long as they like

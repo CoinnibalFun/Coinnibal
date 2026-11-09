@@ -311,9 +311,13 @@ export async function createApp(
         if (e.conn && s.finalRank && s.finalOf) {
           const card = shares.result(
             { room: e.room, player: e.player, wallet: e.conn.wallet },
-            { rank: s.finalRank, of: s.finalOf, mass: s.finalMass, kills: s.playersEaten, payout: s.payout, eaten: s.eaten, eatenMore: s.eatenMore },
+            { rank: s.finalRank, of: s.finalOf, mass: s.finalMass, kills: s.playersEaten, payout: s.payout, eaten: s.eaten, eatenMore: s.eatenMore, standings: e.standings },
           );
-          e.conn.send({ t: 'share', kind: card.kind, id: card.id, ...(test ? { test: true } : {}) });
+          e.conn.send({ t: 'share', kind: card.kind, id: card.id, ...(card.board?.length ? { standings: true } : {}), ...(test ? { test: true } : {}) });
+        } else if (e.conn && e.dead) {
+          // a death: the card of the game I had (an offer, kept only if its link is opened), for the death sheet's share panel
+          const card = shares.game({ room: e.room, player: e.player, wallet: e.conn.wallet }, { mass: s.maxMass, kills: s.playersEaten, eaten: s.eaten, eatenMore: s.eatenMore });
+          e.conn.send({ t: 'share', kind: card.kind, id: card.id, dead: true, ...(test ? { test: true } : {}) });
         }
         // a test arena (testnet, with bots): its games count nowhere official (no profile stats)
         if (test) return;

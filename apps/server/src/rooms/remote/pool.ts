@@ -8,6 +8,7 @@ import {
   type ClientInput,
   type CustomDifficulty,
   type DeathStats,
+  type RoundStanding,
   type MapScaleSettings,
   type RoomInfo,
   type RoundWindow,
@@ -50,7 +51,7 @@ export interface PoolDeps {
   integrity?: IntegrityService;
   shop?: ShopService;
   /** A human's game ended in a room worker (the profile, the league, the custom room's board). */
-  onGameOver: (e: { room: RemoteRoom; conn: Conn | null; player: PlayerLook; stats: DeathStats }) => void;
+  onGameOver: (e: { room: RemoteRoom; conn: Conn | null; player: PlayerLook; stats: DeathStats; dead?: boolean; standings?: RoundStanding[] }) => void;
   onNotableKill: (e: NotableKillEvent) => void;
   onBellSettled: (e: BellSettled) => void;
   /** A worker died: its rooms are gone (already recovered from the journal); the directory opens the standing ones again. */
@@ -375,7 +376,7 @@ export class WorkerPool {
       }
       case 'go': {
         const room = this.rooms.get(c.hid);
-        if (room) d.onGameOver({ room, conn: c.conn !== null ? (this.conns.get(c.conn) ?? null) : null, player: c.player, stats: c.stats });
+        if (room) d.onGameOver({ room, conn: c.conn !== null ? (this.conns.get(c.conn) ?? null) : null, player: c.player, stats: c.stats, ...(c.dead ? { dead: true } : {}), ...(c.standings ? { standings: c.standings } : {}) });
         return;
       }
       case 'nk': {

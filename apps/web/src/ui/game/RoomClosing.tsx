@@ -7,7 +7,8 @@ import { serverText, useT } from '../../i18n';
 import { openModal, useUi } from '../../store';
 import { FinalBoard } from './FinalBoard';
 import { roomName } from './format';
-import { EatenNames, ShareOnX, gameShareText, resultShareText, useShare } from './ShareOnX';
+import { SharePanel } from './SharePanel';
+import { EatenNames, gameShareText, resultShareText, useShare } from './ShareOnX';
 
 /** The final board goes back to the lobby by itself after this long (ms), unless a button did first. */
 export const ROOM_OVER_AUTO_MS = 30_000;
@@ -74,10 +75,16 @@ export function RoomOverSheet() {
   const res = useUi((s) => (s.screen === 'roomover' ? s.roomResult : null));
   const skin = useUi((s) => s.me?.skin ?? s.settings.skin);
   const share = useShare('room');
+  const moments = useUi((s) => s.moments);
   const [left, setLeft] = useState(ROOM_OVER_AUTO_MS);
+  // the player is sharing (a download, the share sheet, X): the sheet stays until a button takes it away
+  const [held, setHeld] = useState(false);
   const open = res !== null;
   useEffect(() => {
-    if (!open) return;
+    if (!open) setHeld(false);
+  }, [open]);
+  useEffect(() => {
+    if (!open || held) return;
     const until = Date.now() + ROOM_OVER_AUTO_MS;
     setLeft(ROOM_OVER_AUTO_MS);
     const id = setInterval(() => {
@@ -89,7 +96,7 @@ export function RoomOverSheet() {
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [open]);
+  }, [open, held]);
   const toLobby = () => engine()?.backToLobby();
   return (
     <Sheet
@@ -104,18 +111,11 @@ export function RoomOverSheet() {
           <Button variant="primary" size="lg" icon="menu" onClick={toLobby} data-autofocus>
             {t('gr.lobby')}
           </Button>
-          {/* the room's card once the server sent it (the site's link until then, or with no place on the board) */}
-          {res?.stats?.finalRank ? (
-            <ShareOnX
-              id={share?.id ?? null}
-              text={resultShareText(t, { rank: res.stats.finalRank, n: res.stats.finalOf ?? res.stats.finalRank, room: roomName(res.room), eaten: res.stats.eaten, eatenMore: res.stats.eatenMore })}
-            />
-          ) : (
-            res && <ShareOnX id={null} text={gameShareText(t, { mass: res.stats?.maxMass ?? 0, eaten: res.stats?.playersEaten ?? 0, room: roomName(res.room) })} />
+          {!held && (
+            <span className="g-roomover__auto mono" aria-live="off">
+              {t('ro.auto', { s: Math.max(0, Math.ceil(left / 1000)) })}
+            </span>
           )}
-          <span className="g-roomover__auto mono" aria-live="off">
-            {t('ro.auto', { s: Math.max(0, Math.ceil(left / 1000)) })}
-          </span>
         </>
       }
     >
@@ -123,6 +123,18 @@ export function RoomOverSheet() {
         <div className="g-roundover__body">
           <p className="g-roundover__note">{serverText(res.message, t('ro.why'))}</p>
           <EatenNames eaten={res.stats?.eaten} more={res.stats?.eatenMore} />
+          {/* the room's card and standings pictures once the server sent them (the site's link with no place on the board) */}
+          <SharePanel
+            card={res.stats?.finalRank ? share : null}
+            text={
+              res.stats?.finalRank
+                ? resultShareText(t, { rank: res.stats.finalRank, n: res.stats.finalOf ?? res.stats.finalRank, room: roomName(res.room), eaten: res.stats.eaten, eatenMore: res.stats.eatenMore })
+                : gameShareText(t, { mass: res.stats?.maxMass ?? 0, eaten: res.stats?.playersEaten ?? 0, room: roomName(res.room) })
+            }
+            room={roomName(res.room)}
+            moments={moments}
+            onUse={() => setHeld(true)}
+          />
           <FinalBoard rows={res.standings} title={t('ro.top', { n: res.players })} skin={skin} />
         </div>
       )}

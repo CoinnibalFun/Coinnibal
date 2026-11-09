@@ -540,7 +540,9 @@ export type ServerMessage =
   // "Share on X": a public card of my result (`round`, `room`) or of a kill (`kill`, every person I eat; at most one every few seconds) is ready
   // at `/share/<id>` on the site (with its Open Graph image). `victim`: the coin eaten (kills).
   // `victimX`: the X handle the eaten coin's owner linked (the post tags it; the server's record, never the client's).
-  | { t: 'share'; kind: ShareKind; id: string; victim?: string; victimIsBot?: boolean; victimX?: string; test?: boolean }
+  // `standings`: a result card also has the final standings picture (`shareStandingsPath`). A death's card (`round` or
+  // `room` with no place: `dead`) shows the game I had.
+  | { t: 'share'; kind: ShareKind; id: string; victim?: string; victimIsBot?: boolean; victimX?: string; test?: boolean; standings?: boolean; dead?: boolean }
   // Arena rooms: the player's in-game value changed.
   | {
       t: 'value';
