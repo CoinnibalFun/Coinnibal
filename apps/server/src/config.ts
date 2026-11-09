@@ -47,9 +47,10 @@ export interface ServerConfig {
   /** A room worker silent this long is stopped and its rooms recovered (`GAME_WORKER_HANG_S`, default 10). */
   gameWorkerHangMs: number;
   /**
-   * Arena round clock (`ROUND_SECONDS`, `ROUND_JOIN_CLOSE_SECONDS`; defaults `RULES.roundMs` /
-   * `RULES.roundJoinCloseMs`). Tests, the localnet e2e and demo recordings shorten it;
-   * production uses the defaults. The closed window is at most half a round.
+   * Arena round clock (`ROUND_SECONDS` = the play, `ROUND_JOIN_CLOSE_SECONDS`, `ROUND_BREAK_SECONDS` = the break
+   * added after each bell; defaults `RULES.roundMs` / `RULES.roundJoinCloseMs` / `RULES.roundBreakMs`). Tests, the
+   * localnet e2e and demo recordings shorten it; production uses the defaults. The closed window is at most half the
+   * play.
    */
   round: { roundMs: number; closeMs: number; breakMs: number };
   authSecret: Buffer;
@@ -293,16 +294,20 @@ const num = (v: string | undefined, d: number): number => {
 };
 
 /**
- * `ROUND_SECONDS` / `ROUND_JOIN_CLOSE_SECONDS` / `ROUND_BREAK_SECONDS`: whole seconds, a round of at
- * least 2 s, joins closed for at most half of it, the break after a bell at most a tenth of it.
+ * `ROUND_SECONDS` / `ROUND_JOIN_CLOSE_SECONDS` / `ROUND_BREAK_SECONDS`: whole seconds. `ROUND_SECONDS` is the full
+ * play of a round (at least 2 s); joins close at most half of it before the bell; the break after each bell comes on
+ * top of the play (one cycle on the wall clock is play + break). An explicit break is kept up to the play length;
+ * left unset it is the default 30 s, at most a tenth of the play (so short test rounds get a short break).
  */
 export function parseRoundConfig(env: NodeJS.ProcessEnv): { roundMs: number; closeMs: number; breakMs: number } {
   const roundS = Math.floor(num(env.ROUND_SECONDS, RULES.roundMs / 1000));
   const roundMs = Math.max(2, roundS) * 1000;
   const closeS = Math.floor(num(env.ROUND_JOIN_CLOSE_SECONDS, RULES.roundJoinCloseMs / 1000));
   const closeMs = Math.min(Math.max(0, closeS) * 1000, Math.floor(roundMs / 2000) * 1000);
-  const breakS = Math.floor(num(env.ROUND_BREAK_SECONDS, RULES.roundBreakMs / 1000));
-  const breakMs = Math.min(Math.max(0, breakS) * 1000, Math.floor(roundMs / 10_000) * 1000);
+  const breakSet = num(env.ROUND_BREAK_SECONDS, NaN);
+  const breakMs = Number.isNaN(breakSet)
+    ? Math.min(RULES.roundBreakMs, Math.floor(roundMs / 10_000) * 1000)
+    : Math.min(Math.max(0, Math.floor(breakSet)) * 1000, roundMs);
   return { roundMs, closeMs, breakMs };
 }
 

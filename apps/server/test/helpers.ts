@@ -1,5 +1,5 @@
 import { getAddress } from 'viem';
-import { roundAt, type ChainStatus, type ServerMessage } from '@elymum/shared';
+import { RULES, roundAt, type ChainStatus, type ServerMessage } from '@elymum/shared';
 import type { ChainArena, ChainGateway, ChainSession, ServerKeyInfo } from '../src/chain/types';
 import { Leaderboards } from '../src/leaderboards';
 import { Conn } from '../src/net/conn';
@@ -77,8 +77,11 @@ export const arena = (id: number, entryFee: number): ChainArena => ({
   pot: null,
 });
 
-/** A fixed wall-clock instant one minute into a 5-minute round: room tests never hit a round end by accident. */
-export const MID_ROUND = roundAt(1_791_000_000_000).startsAt + 60_000;
+/**
+ * A fixed wall-clock instant one minute into the play of a default round (5:00 of play after a 30 s break), and 2:30
+ * into a round of a server without a break: room tests never hit a bell or a closed floor by accident.
+ */
+export const MID_ROUND = roundAt(1_791_000_000_000, RULES.roundMs, RULES.roundJoinCloseMs, RULES.roundBreakMs).opensAt + 60_000;
 
 export function roomDeps(chain: ChainGateway, journal = new Journal(null), now: () => number = () => MID_ROUND): RoomDeps & ManagerDeps {
   return {

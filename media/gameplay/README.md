@@ -89,8 +89,8 @@ the final minute, the last gulp, the bell and the receipt) and `spill` (eaten by
 - A replay renders about 1.5-2 frames per second at 2x on 4 cores; the fast-forward between
   ranges skips the canvas draw. Disk: a journal is a few MB per minute; a replayed take holds only
   the frames the edits use (CRF 14 H.264).
-- Rounds are wall-clock aligned (`ROUND_SECONDS`, default 300). The takes use the default so the
-  round chip shows real five-minute times.
+- Rounds are wall-clock aligned (`ROUND_SECONDS` of play, default 300, plus the `ROUND_BREAK_SECONDS` break,
+  default 30). The takes use the default so the round chip shows real five-minute times.
 - The rivals (`mochi_moon`, `bonk_bae`, `lil_wei`, `rug_ruth`, `pixel_penny`) are real wallets
   with real (fake-chain) tickets, played by the capture script. Bots are the game's own.
 - The end card reads the site's host (`SITE_HOST`, the `PUBLIC_URL` host; default elymum.io) and @elymumio (X).

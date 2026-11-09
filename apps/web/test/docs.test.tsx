@@ -41,6 +41,10 @@ describe('player guide facts', () => {
       [1000, true],
     ]);
     expect(FACTS.rules.roundMin).toBe(RULES.roundMs / 60_000);
+    // the full 5 minutes of play, the 30 s break on top of it (a round every 5:30)
+    const play = JSON.stringify(en0);
+    expect(play).toContain('5 full minutes of play, then a 30 s break, so a new round starts every 5 minutes 30 seconds');
+    expect(play).toContain('Rounds 5 min + 30 s break');
     expect(FACTS.capacity).toEqual({ practice: CAPACITY.practice, private: CAPACITY.private, arena: 50 });
     // the USD tiers ($1 / $3 / $5 / $10) at the reference token price
     expect(FACTS.arenas.map((a) => [a.id, a.entry])).toEqual([
