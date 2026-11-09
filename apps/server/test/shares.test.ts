@@ -9,7 +9,8 @@ import { loadConfig } from '../src/config';
 import { Limiter } from '../src/net/limiter';
 import { Room } from '../src/rooms/room';
 import { KILL_SHARE_EVERY_MS, OFFER_TTL_MS, SHARES_KEPT, ShareService, sharePage } from '../src/site/shares';
-import { renderShareCard, shareEaten, shareFacts, shareHeadline } from '../src/site/share-card';
+import { renderShareCard, renderStandingsCard, shareEaten, shareFacts, shareHeadline } from '../src/site/share-card';
+import { boardRows } from '../src/rooms/room';
 import { ArenaChain, arena, fakeConn, freeCustom, roomDeps, testWallet } from './helpers';
 
 const look = { name: 'Nakamoto', skin: 2, country: 'JP', flags: 8 };
@@ -166,6 +167,69 @@ describe('share cards (made from the server records only)', () => {
     expect(renderShareCard(s.result({ room: arenaRoom, player: look, wallet: null }, { rank: 3, of: 50, mass: 10, kills: 9, eaten: many, eatenMore: 40 })).length).toBeGreaterThan(1000);
   });
 
+  it('a result keeps the final standings: the top ten and my own row (names cleaned, bots tagged, values only off test arenas)', () => {
+    const s = service();
+    const ranked = Array.from({ length: 14 }, (_, i) => ({ pid: i + 1, name: i === 2 ? '@Rocky.com' : `Coin${i + 1}`, mass: 5000 - i * 100, kills: 14 - i, value: (14 - i) * 1_000_000_000, ...(i === 4 ? { isBot: true } : {}) }));
+    // I stood 13th: the picture shows the top ten and my row under them
+    const standings = boardRows(ranked, 13, 10);
+    const c = s.result({ room: arenaRoom, player: look, wallet: null }, { rank: 13, of: 14, mass: 3800, kills: 2, standings });
+    expect(c.board).toHaveLength(11);
+    expect(c.board![2]).toMatchObject({ rank: 3, name: 'Rocky·com', value: '12,000 $ELYMUM' });
+    expect(c.board![4]).toMatchObject({ rank: 5, bot: true });
+    expect(c.board![10]).toMatchObject({ rank: 13, name: 'Coin13', you: true, mass: 3800 });
+    expect(c.board!.filter((r) => r.you)).toHaveLength(1);
+    // a test arena: practice tokens, no value on the picture
+    const t = s.result({ room: testRoom, player: look, wallet: null }, { rank: 1, of: 14, mass: 5000, kills: 14, standings: boardRows(ranked, 1, 10) });
+    expect(t.board).toHaveLength(10);
+    expect(t.board!.every((r) => r.value === undefined)).toBe(true);
+    expect(t.board![0]).toMatchObject({ rank: 1, you: true });
+    // no standings handed in: no board
+    expect(s.result({ room: customRoom, player: look, wallet: null }, { rank: 1, of: 2, mass: 10, kills: 0 }).board).toBeUndefined();
+  });
+
+  it('a death card is an offer with no place: the mass reached and the coins eaten', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'elymum-death-'));
+    const s = service(dir);
+    const d = s.game({ room: testRoom, player: look, wallet: null }, { mass: 1234.9, kills: 2, eaten: [{ name: 'Botty', bot: true }, { name: 'Penny' }] });
+    expect(d).toMatchObject({ kind: 'round', mass: 1234, kills: 2, test: true, eaten: [{ name: 'Botty', bot: true }, { name: 'Penny' }] });
+    expect(d.rank).toBeUndefined();
+    expect(shareHeadline(d)).toBe('1,234 mass');
+    expect(shareFacts(d)).toEqual(['2 eaten this game']);
+    s.flush();
+    expect(existsSync(join(dir, 'site', 'shares.json'))).toBe(false);
+    // the picture is served from the offer without keeping it; the page keeps it
+    expect(s.peek(d.id)).toEqual(d);
+    s.flush();
+    expect(existsSync(join(dir, 'site', 'shares.json'))).toBe(false);
+    expect(s.get(d.id)).toEqual(d);
+    s.flush();
+    expect(existsSync(join(dir, 'site', 'shares.json'))).toBe(true);
+  });
+
+  it('draws the standings picture (1200 x 630): my row in sun, the TEST stamp in a test arena', async () => {
+    const { createCanvas, loadImage } = await import('@napi-rs/canvas');
+    const s = service();
+    const ranked = Array.from({ length: 12 }, (_, i) => ({ pid: i + 1, name: `Coin${i + 1}`, mass: 5000 - i * 100, kills: 3, value: 1_000_000_000 }));
+    const mine = s.result({ room: arenaRoom, player: look, wallet: null }, { rank: 1, of: 12, mass: 5000, kills: 3, standings: boardRows(ranked, 1, 10) });
+    const test = s.result({ room: testRoom, player: look, wallet: null }, { rank: 12, of: 12, mass: 3900, kills: 3, standings: boardRows(ranked, 12, 10) });
+    const pixel = async (png: Buffer, x: number, y: number) => {
+      const img = await loadImage(png);
+      const cv = createCanvas(img.width, img.height);
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      expect([img.width, img.height]).toEqual([1200, 630]);
+      return [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)];
+    };
+    const a = renderStandingsCard(mine);
+    const b = renderStandingsCard(test);
+    // row 1 (left column, top) is mine: sun; on the test card row 1 is someone else's (white) and the stamp is coral
+    expect(await pixel(a, 400, 194)).toEqual([0xf2, 0xc1, 0x4e]);
+    expect(await pixel(b, 400, 194)).toEqual([0xff, 0xff, 0xff]);
+    expect(await pixel(b, 1040, 90)).toEqual([0xe4, 0x57, 0x2e]);
+    // my 12th place sits on its own strip under the board, in sun
+    expect(await pixel(b, 600, 476)).toEqual([0xf2, 0xc1, 0x4e]);
+  });
+
   it('the startup self-check draws with the real addon here', async () => {
     const { shareCardSelfCheck } = await import('../src/site/share-card');
     expect(shareCardSelfCheck()).toEqual({ ok: true });
@@ -200,6 +264,30 @@ describe('the kill hook of a room', () => {
       { victim: 'Penny', victimMass: 1200, killer: 'Whale' },
       { victim: 'Tiny', victimMass: 40, killer: 'Whale' },
     ]);
+  });
+});
+
+describe('the game-over hook of a room', () => {
+  it('marks a death, and hands the top of the final board with my row at a custom room end', () => {
+    const seen: { name: string; dead?: boolean; standings?: { rank: number; you?: boolean }[] }[] = [];
+    const deps = { ...roomDeps(new ArenaChain([])), onGameOver: (e: { player: { name: string }; dead?: boolean; standings?: { rank: number; you?: boolean }[] }) => seen.push({ name: e.player.name, dead: e.dead, standings: e.standings }) };
+    const room = new Room({ id: 'priv-ENDS', mode: 'private', code: 'ENDS', name: 'Ends', maxPlayers: 10, bots: null, custom: freeCustom(), seed: 5 }, deps);
+    const a = fakeConn(null);
+    const b = fakeConn(null);
+    const big = room.join(a, { name: 'Whale', skin: 1, flags: 0 });
+    const small = room.join(b, { name: 'Penny', skin: 2, flags: 0 });
+    for (const p of [big, small]) p.shieldUntil = 0;
+    const c = small.center();
+    for (const cell of big.cells) {
+      cell.x = c.x;
+      cell.y = c.y;
+      cell.mass = 800;
+    }
+    for (let i = 0; i < 60 && small.alive; i++) room.tick(TICK_MS);
+    expect(seen).toEqual([{ name: 'Penny', dead: true, standings: undefined }]);
+    room.evict('Time is up.');
+    expect(seen[1]).toMatchObject({ name: 'Whale', standings: [{ rank: 1, you: true }] });
+    expect(seen[1].dead).toBeUndefined();
   });
 });
 
@@ -249,6 +337,15 @@ describe('share cards over HTTP and WebSocket', () => {
     const bytes = Buffer.from(await png.arrayBuffer());
     expect(bytes.subarray(1, 4).toString()).toBe('PNG');
     expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([1200, 630]);
+    // the standings picture of the room's final board, my row on it
+    expect(share.standings).toBe(true);
+    expect(app.shares.get(share.id)?.board).toEqual([{ rank: 1, name: 'Pip', mass: expect.any(Number), kills: 0, you: true }]);
+    const board = await fetch(`http://127.0.0.1:${port}/share/${share.id}/standings.png`);
+    expect(board.status).toBe(200);
+    expect(board.headers.get('content-type')).toBe('image/png');
+    const bb = Buffer.from(await board.arrayBuffer());
+    expect([bb.readUInt32BE(16), bb.readUInt32BE(20)]).toEqual([1200, 630]);
+    expect((await fetch(`http://127.0.0.1:${port}/share/AAAAAAAAAA/standings.png`)).status).toBe(404);
     expect((await fetch(`http://127.0.0.1:${port}/share/AAAAAAAAAA`)).status).toBe(404);
     expect((await fetch(`http://127.0.0.1:${port}/share/${share.id}`, { method: 'POST' })).status).toBe(405);
   });

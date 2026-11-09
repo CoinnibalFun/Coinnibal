@@ -25,7 +25,7 @@ import { serverText, t } from '../i18n';
 import { FrameGovernor } from '../render/governor';
 import { Renderer, type FrameInput } from '../render/renderer';
 import { FOOD_COLORS } from '../render/sprites';
-import { toast, useUi } from '../store';
+import { MOMENTS_KEPT, toast, useUi, type ShareItem } from '../store';
 import { Camera } from './camera';
 import { worldCovered } from './backdrop';
 import { serverClock } from './clock';
@@ -410,8 +410,8 @@ export class GameEngine {
     useUi.setState({
       screen: 'roundover',
       roundResult: { kind, round, payout, stats, standings },
-      // this result's card follows (`share`); an older one must not stand in for it
-      share: null,
+      // this result's card (`share`) comes just before this message; an older one must not stand in for it
+      share: freshResult(useUi.getState().share),
       powerups: [],
       boosts: null,
       chatOpen: false,
@@ -631,6 +631,9 @@ export class GameEngine {
           powerups: [],
           boosts: null,
           myEaten: 0,
+          // a new game: its own cards and moments
+          share: null,
+          moments: [],
           hud: { ...useUi.getState().hud, value: m.value ?? null },
           valueDelta: null,
           // a new ticket: any earlier settlement belongs to an earlier ticket (the server only lets us
@@ -736,13 +739,24 @@ export class GameEngine {
       case 'closing':
         useUi.setState({ closing: { endsAt: m.endsAt, message: m.message } });
         return;
-      case 'share':
-        // the card the server made of my result or of a kill: the sheets and the HUD offer "Share on X"
-        useUi.setState({
+      case 'share': {
+        // the card the server made of my result, my death or a kill: the HUD notes a kill, the end sheets share them
+        const share: ShareItem = {
+          kind: m.kind,
+          id: m.id,
+          ...(m.victim ? { victim: m.victim } : {}),
+          ...(m.victimIsBot ? { victimIsBot: true } : {}),
           // a linked victim's X handle comes from the server only, checked again here (bots never have one)
-          share: { kind: m.kind, id: m.id, ...(m.victim ? { victim: m.victim } : {}), ...(m.victimIsBot ? { victimIsBot: true } : {}), ...(!m.victimIsBot && isXHandle(m.victimX) ? { victimX: m.victimX } : {}), ...(m.test ? { test: true } : {}), at: Date.now() },
-        });
+          ...(!m.victimIsBot && isXHandle(m.victimX) ? { victimX: m.victimX } : {}),
+          ...(m.test ? { test: true } : {}),
+          ...(m.standings && m.kind !== 'kill' ? { standings: true } : {}),
+          ...(m.dead && m.kind !== 'kill' ? { dead: true } : {}),
+          at: Date.now(),
+        };
+        // the kills of this game are kept for the end-of-game panel ("Your moments")
+        useUi.setState((s) => ({ share, ...(share.kind === 'kill' ? { moments: [...s.moments, share].slice(-MOMENTS_KEPT) } : {}) }));
         return;
+      }
       case 'roomOver': {
         // a free custom room ended: its final board over the frozen world; the button (or the timer) goes to the lobby
         caller.end();
@@ -752,7 +766,8 @@ export class GameEngine {
           screen: 'roomover',
           roomResult: { message: m.message, players: m.players, standings: m.standings, stats: m.stats, room: s.room },
           closing: null,
-          share: null,
+          // the room's card came just before this message
+          share: freshResult(s.share),
           death: null,
           powerups: [],
           boosts: null,
@@ -1194,4 +1209,10 @@ export function levelProgress(xp: number): { level: number; cur: number; next: n
   const cur = 50 * (level - 1) ** 2;
   const next = 50 * level ** 2;
   return { level, cur, next, pct: Math.max(0, Math.min(1, (xp - cur) / (next - cur))) };
+}
+
+/** A result card is sent just before the result itself: it stays when it is this game's (fresh, not a kill or a death). */
+export const RESULT_SHARE_FRESH_MS = 10_000;
+export function freshResult(share: ShareItem | null, now = Date.now()): ShareItem | null {
+  return share && share.kind !== 'kill' && !share.dead && now - share.at < RESULT_SHARE_FRESH_MS ? share : null;
 }

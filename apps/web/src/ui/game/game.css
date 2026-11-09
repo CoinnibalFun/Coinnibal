@@ -420,16 +420,33 @@
   padding: 6px 10px;
   border: var(--stroke-sm) solid var(--outline);
   border-radius: var(--r-tag);
+  /* a white field with fixed day ink in every state: the chat line stands on the night HUD, where --ink is
+     cream (typed text was cream on white), and the stream's white line colour must not reach it either */
   background: #fff;
-  color: var(--ink);
+  color: var(--ink-fixed, #04181c);
+  -webkit-text-fill-color: var(--ink-fixed, #04181c);
+  caret-color: var(--ink-fixed, #04181c);
+  text-shadow: none;
   font-size: 15px;
 }
 .g-chat__input::placeholder {
-  color: var(--ink-3);
+  /* 5.6:1 on white (WCAG AA for body text) */
+  color: #6b655a;
+  -webkit-text-fill-color: #6b655a;
+  opacity: 1;
+}
+.g-chat__input:focus,
+.g-chat__input:focus-visible {
+  background: #fff;
+  color: var(--ink-fixed, #04181c);
 }
 .g-chat__input:focus-visible {
-  outline: 3px solid var(--focus);
+  outline: 3px solid #2d7388;
   outline-offset: 2px;
+}
+.g-chat__input:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink-fixed, #04181c);
+  box-shadow: 0 0 0 40px #fff inset;
 }
 .g-chat__send {
   color: var(--ink);
@@ -1566,7 +1583,7 @@
 }
 .g-roundover.has-board:not(.is-bottom) .g-board {
   grid-column: 2;
-  grid-row: 1 / span 5;
+  grid-row: 1 / span 8;
 }
 .g-roundover__slip {
   position: relative;
@@ -1738,6 +1755,185 @@
 .g-share__x {
   flex: none;
 }
+/* the end-of-game share panel: the card's picture, Download / Share / Share on X, then "Your moments" (folded) */
+.g-sharepanel {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: var(--r-card);
+  background: var(--paper);
+}
+.g-sharepanel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.g-sharepanel__title {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.g-sharepanel__pick {
+  display: inline-flex;
+  padding: 2px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--sticker);
+}
+.g-sharepanel__tab {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-fixed);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.g-sharepanel__tab.is-on {
+  background: var(--ink-fixed);
+  color: var(--cream);
+}
+.g-sharepanel__tab:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.g-sharepanel__preview {
+  position: relative;
+  margin: 0;
+  width: 100%;
+  max-width: 440px;
+  aspect-ratio: 1200 / 630;
+  overflow: hidden;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 12px;
+  background: #0f2a30;
+}
+.g-sharepanel__preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.g-sharepanel__wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  color: #f6eeda;
+  font-size: 12px;
+  text-align: center;
+}
+.g-sharepanel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.g-sharepanel__actions .kb-btn {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 0 16px;
+}
+.g-sharepanel__x {
+  display: contents;
+}
+.g-sharepanel__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.g-sharepanel__note.is-error {
+  color: var(--red-ink);
+  font-weight: 700;
+}
+.g-moments {
+  border-top: 2px dashed var(--rule);
+  padding-top: 8px;
+}
+.g-moments__sum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.g-moments__sum::-webkit-details-marker {
+  display: none;
+}
+.g-moments__chev {
+  transform: rotate(90deg);
+  transition: transform var(--dur-micro, 120ms) ease-out;
+}
+.g-moments[open] .g-moments__chev {
+  transform: rotate(-90deg);
+}
+.g-moments__sum:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.g-moments__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 232px;
+  overflow-y: auto;
+}
+.g-moments__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.g-moments__name {
+  flex: 1;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: 14px;
+}
+.g-moments__name bdi {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.g-moments__name .g-test-tag {
+  margin-left: 0;
+}
+.g-moments__err {
+  font-size: 12px;
+  color: var(--red-ink);
+}
+.g-moments__btn.kb-iconbtn--sm {
+  width: 44px;
+  height: 44px;
+  color: var(--ink-fixed);
+  background: var(--sticker);
+  text-decoration: none;
+}
 /* the coins I ate this game, on a result sheet: name chips that wrap (long names cut with an ellipsis) */
 .g-eaten {
   grid-column: 1;
@@ -1810,24 +2006,44 @@
   color: #FFFFFF;
   vertical-align: 2px;
 }
-/* a notable kill: "You ate Nakamoto!" with Share on X, for a few seconds */
+/* a kill: "You ate Nakamoto!", a small chip under the kill feed for a few seconds (nothing to press, no
+   pointer events: it never covers the play or takes a click; the card waits on the end sheet) */
 .g-killshare {
-  display: flex;
-  flex-wrap: wrap;
+  align-self: flex-start;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px 12px;
-  max-width: min(92vw, 420px);
-  padding: 8px 12px;
-  border: var(--stroke) solid var(--outline);
-  border-radius: var(--r-card);
+  gap: 6px;
+  max-width: min(70vw, 300px);
+  min-width: 0;
+  padding: 3px 12px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: var(--r-pill);
   background: var(--cream);
-  box-shadow: var(--sh-2);
+  box-shadow: var(--sh-1);
   color: var(--ink-fixed);
-  pointer-events: auto;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  pointer-events: none;
+}
+.g-corner--tl .g-killshare {
+  /* never wider than the corner's column (it ends before the centre column) */
+  max-width: 100%;
+}
+/* landscape phones: the left column runs from the timer down to the thumb stick with no room to spare; the kill
+   feed's own line ("you ate ...") is the notice there (the card still waits on the end sheet) */
+.g-hud.is-short .g-killshare {
+  display: none;
 }
 .g-killshare__title {
-  font-size: 16px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.g-killshare .g-test-tag {
+  margin-left: 0;
+  vertical-align: 0;
 }
 /* a custom room's end, ten seconds ahead: a sticker under the top of the world */
 .g-closing {
@@ -2785,8 +3001,8 @@
    reach the thumb buttons; it steps aside until the timers run out */
 /* the frame-rate readout is the first to go when the column is busy (it ran into the chat key and
    the power-up rail on small phones and at 200 % zoom) */
-.g-hud.is-narrow .g-center:has(.g-pu, .g-banner, .g-closing, .g-killshare, .pq) > .g-net,
-.g-hud.is-short .g-center:has(.g-pu, .g-banner, .g-closing, .g-killshare, .pq) > .g-net {
+.g-hud.is-narrow .g-center:has(.g-pu, .g-banner, .g-closing, .pq) > .g-net,
+.g-hud.is-short .g-center:has(.g-pu, .g-banner, .g-closing, .pq) > .g-net {
   display: none;
 }
 
@@ -2929,6 +3145,8 @@
 }
 .g-stream__form .g-chat__send {
   background: var(--sticker);
+  /* the arrow keeps day ink on the cream button (the night HUD's --ink is cream) */
+  color: var(--ink-fixed);
 }
 
 /* ── large screens: the instruments grow with the window ─────────────────

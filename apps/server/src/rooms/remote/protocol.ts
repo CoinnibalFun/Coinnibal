@@ -1,5 +1,5 @@
 import type { PlayerLook } from '../handle';
-import type { CustomDifficulty, DeathStats, IntegrityTransfer, MapScaleSettings, RoomInfo, RoundBoard } from '@elymum/shared';
+import type { CustomDifficulty, DeathStats, IntegrityTransfer, MapScaleSettings, RoomInfo, RoundBoard, RoundStanding } from '@elymum/shared';
 import type { SessionSummary } from '../../integrity/types';
 import type { CountryGame, LbRecord } from '../../leaderboards';
 import type { JournalItem, LiveStake, LootRecord, SettleReason, SettlementItem } from '../../stake/journal';
@@ -100,7 +100,7 @@ export type Ctl =
       /** Settlements the integrity auto-hold must look at: key → the ticket's stake (`IntegrityService.holdDecision`). */
       holds: [key: string, entryFee: number][];
     }
-  | { k: 'go'; hid: number; conn: number | null; player: PlayerLook; stats: DeathStats }
+  | { k: 'go'; hid: number; conn: number | null; player: PlayerLook; stats: DeathStats; dead?: boolean; standings?: RoundStanding[] }
   | { k: 'nk'; hid: number; conn: number; player: PlayerLook; mass: number; kills: number; victim: string; victimMass: number; victimIsBot?: boolean; victimX?: string | null }
   | { k: 'bell'; e: BellSettled }
   | { k: 'lb'; rec: LbRecord }

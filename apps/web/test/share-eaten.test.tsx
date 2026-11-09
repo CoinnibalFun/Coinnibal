@@ -7,7 +7,7 @@ import { translate } from '../src/i18n';
 import { updateSettings, useUi } from '../src/store';
 import { setReducedMotion } from '../src/test/media';
 import { RoundOverSheet } from '../src/ui/game';
-import { KillShare, SHARE_COIN, resultShareText } from '../src/ui/game/ShareOnX';
+import { KillShare, SHARE_COIN, killShareText, resultShareText } from '../src/ui/game/ShareOnX';
 import { SettingsPage } from '../src/ui/profile/SettingsPage';
 import { chainStatus } from './evm-helpers';
 
@@ -110,7 +110,8 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     const sticker = screen.getByTestId('kill-share');
     expect(sticker.textContent).toContain('You ate Botty (BOT)!');
     expect(sticker.querySelector('.g-test-tag')?.textContent).toBe('TEST');
-    expect(textOf(screen.getByTestId('share-x'))).toBe(`I just ate Botty (BOT) on Elymum! (TEST: testnet test arena, no real money) ${SHARE_COIN}`);
+    // its post (from the end sheet's moments) says BOT and TEST
+    expect(killShareText(t, useUi.getState().share!)).toBe('I just ate Botty (BOT) on Elymum! (TEST: testnet test arena, no real money)');
   });
 });
 

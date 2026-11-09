@@ -50,7 +50,29 @@ export interface ShareCard {
   eatenMore?: number;
   /** A testnet test arena: the card says TEST everywhere and never shows a payout. */
   test?: boolean;
+  /**
+   * Results: the room's final standings (the top `SHARE_BOARD_ROWS`, plus my own row when it is below them), drawn as
+   * the second picture (`/share/<id>/standings.png`). Names cleaned (`shareName`).
+   */
+  board?: ShareBoardRow[];
 }
+
+/** One row of a result card's final standings (`ShareCard.board`). */
+export interface ShareBoardRow {
+  rank: number;
+  name: string;
+  mass: number;
+  kills: number;
+  /** Arena rooms (never a test arena): the value at the bell, formatted ("1,234.5 $ELYMUM"). */
+  value?: string;
+  /** A practice bot (test arenas, free custom rooms). */
+  bot?: boolean;
+  /** The card's own player. */
+  you?: boolean;
+}
+
+/** Rows a result card's standings picture shows (my own row is added when it is below them). */
+export const SHARE_BOARD_ROWS = 10;
 
 /** A coin eaten this game, as a result shows it: its public name (`shareName`), BOT for a practice bot, and times eaten. */
 export interface EatenName {
@@ -99,9 +121,12 @@ export function eatenLine(list: readonly EatenName[], more = 0, botTag = 'BOT'):
 /** Share ids: 10 characters of [A-Za-z0-9]. */
 export const SHARE_ID_RE = /^[A-Za-z0-9]{10}$/;
 
-
 /** The card image's size (X's summary_large_image, 1.91:1). */
 export const SHARE_IMAGE = { width: 1200, height: 630 } as const;
+
+/** The card's picture (`/share/<id>.png`) and a result's standings picture (`/share/<id>/standings.png`). */
+export const shareImagePath = (id: string): string => `/share/${id}.png`;
+export const shareStandingsPath = (id: string): string => `/share/${id}/standings.png`;
 
 /** X's web intent with the text and the share link (opens the composer; nothing is posted without the player). */
 export function shareIntentUrl(text: string, url: string): string {

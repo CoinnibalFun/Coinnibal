@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon, Receipt, Sheet, Stamp, useReducedMotion, type ReceiptLine } from '../../design';
 import { FinalBoard } from './FinalBoard';
 import { NextRoundOpens } from './NextRoundOpens';
-import { EatenNames, ShareOnX, gameShareText, resultShareText, useShare } from './ShareOnX';
+import { SharePanel } from './SharePanel';
+import { EatenNames, gameShareText, resultShareText, useShare } from './ShareOnX';
 import { engine } from '../../game/instance';
 import { roundStartLabel } from '../../game/round';
 import { useChainData } from '../../wallet/chain';
@@ -172,6 +173,19 @@ export function RoundOverSheet() {
   const usd = usdQuote(prices, ledgerToBase(n.net, decimals), decimals, since);
   const standings = res?.standings ?? [];
   const share = useShare('round');
+  const moments = useUi((s) => s.moments);
+  // the post's line: my place and who I ate (the bell's card), or the game I had (an operator exit)
+  const shareText =
+    !exit && res?.stats?.finalRank
+      ? resultShareText(t, {
+          rank: res.stats.finalRank,
+          n: res.stats.finalOf ?? res.stats.finalRank,
+          room: roomName(room),
+          eaten: res.stats.eaten,
+          eatenMore: res.stats.eatenMore,
+          test: !!(share?.test || room?.test),
+        })
+      : gameShareText(t, { mass: res?.stats?.maxMass ?? 0, eaten: res?.stats?.playersEaten ?? 0, room: roomName(room), test: !!room?.test });
 
   return (
     <Sheet
@@ -190,22 +204,6 @@ export function RoundOverSheet() {
           <Button variant="secondary" size="lg" icon="menu" onClick={toLobby}>
             {t('gr.lobby')}
           </Button>
-          {/* the bell's card once the server sent it; an operator exit (or a card still on its way) links the site */}
-          {!exit && res?.stats?.finalRank ? (
-            <ShareOnX
-              id={share?.id ?? null}
-              text={resultShareText(t, {
-                rank: res.stats.finalRank,
-                n: res.stats.finalOf ?? res.stats.finalRank,
-                room: roomName(room),
-                eaten: res.stats.eaten,
-                eatenMore: res.stats.eatenMore,
-                test: !!(share?.test || room?.test),
-              })}
-            />
-          ) : (
-            <ShareOnX id={null} text={gameShareText(t, { mass: res?.stats?.maxMass ?? 0, eaten: res?.stats?.playersEaten ?? 0, room: roomName(room), test: !!room?.test })} />
-          )}
         </>
       }
     >
@@ -237,6 +235,8 @@ export function RoundOverSheet() {
         )}
         {!exit && <NextRoundOpens arenaId={room?.arenaId ?? null} className="g-roundover__break" />}
         <EatenNames eaten={res?.stats?.eaten} more={res?.stats?.eatenMore} />
+        {/* the bell's card and standings pictures once the server sent them; an operator exit links the site */}
+        <SharePanel card={exit ? null : share} text={shareText} room={roomName(room)} moments={moments} />
         {settled?.collect && (
           <p className="g-roundover__note" role="status">
             {t('gr.collect')}
