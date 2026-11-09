@@ -420,16 +420,33 @@
   padding: 6px 10px;
   border: var(--stroke-sm) solid var(--outline);
   border-radius: var(--r-tag);
+  /* a white field with fixed day ink in every state: the chat line stands on the night HUD, where --ink is
+     cream (typed text was cream on white), and the stream's white line colour must not reach it either */
   background: #fff;
-  color: var(--ink);
+  color: var(--ink-fixed, #04181c);
+  -webkit-text-fill-color: var(--ink-fixed, #04181c);
+  caret-color: var(--ink-fixed, #04181c);
+  text-shadow: none;
   font-size: 15px;
 }
 .g-chat__input::placeholder {
-  color: var(--ink-3);
+  /* 5.6:1 on white (WCAG AA for body text) */
+  color: #6b655a;
+  -webkit-text-fill-color: #6b655a;
+  opacity: 1;
+}
+.g-chat__input:focus,
+.g-chat__input:focus-visible {
+  background: #fff;
+  color: var(--ink-fixed, #04181c);
 }
 .g-chat__input:focus-visible {
-  outline: 3px solid var(--focus);
+  outline: 3px solid #2d7388;
   outline-offset: 2px;
+}
+.g-chat__input:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink-fixed, #04181c);
+  box-shadow: 0 0 0 40px #fff inset;
 }
 .g-chat__send {
   color: var(--ink);
@@ -2929,6 +2946,8 @@
 }
 .g-stream__form .g-chat__send {
   background: var(--sticker);
+  /* the arrow keeps day ink on the cream button (the night HUD's --ink is cream) */
+  color: var(--ink-fixed);
 }
 
 /* ── large screens: the instruments grow with the window ─────────────────
