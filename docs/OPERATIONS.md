@@ -64,7 +64,8 @@ The arena contract lets its server authority settle any open ticket with any pay
 whoever holds the key could buy a ticket from a wallet of their own and settle it with the whole vault (less the fee
 on profit): **the open stakes of the arenas are what a stolen key can take** (never owed payouts, never the fee
 wallet, never another contract; the contract test `test_security_compromisedServerKey_blastRadiusIsTheOpenVault`).
-Rounds settle every 5 minutes, so a vault normally holds only the tickets in play (plus forfeits).
+Rounds settle every 5.5 minutes (5:00 of play and the 30 s break), so a vault normally holds only the tickets in
+play (plus forfeits).
 
 The server limits what a bug, a tampered journal or a confused process can pay through it:
 
@@ -433,11 +434,14 @@ kills, best score) are never touched.
 
 ## Arena rounds and the loot burn
 
-Paid arenas play wall-clock rounds: `ROUND_SECONDS` (default 300) and `ROUND_JOIN_CLOSE_SECONDS` (default 60,
-capped at half a round). After each bell the floor stays closed for `ROUND_BREAK_SECONDS` (default 30, at most a
-tenth of the round): the payouts go out, the receipt shows "Next round opens in 0:27", and players buy their next
-ticket (a ticket bought in the break is seated when it opens; deploys and reboots swap the container in it). Round *n* covers `[n x ROUND_SECONDS, (n + 1) x ROUND_SECONDS)` of Unix time, so keep the
-server clock synced. At the bell every live ticket is settled at its value in one batch, and the floor loot is
+Paid arenas play wall-clock rounds: `ROUND_SECONDS` of play (default 300) and `ROUND_JOIN_CLOSE_SECONDS` (default 60,
+capped at half the play) before the bell. After each bell the floor stays closed for `ROUND_BREAK_SECONDS` (default
+30; unset, at most a tenth of the play; set, at most the play), **added on top of the play**: the payouts go out, the
+receipt shows "Next round opens in 0:27", and players buy their next ticket (a ticket bought in the break is seated
+when it opens; deploys and reboots swap the container in it). One cycle is `ROUND_SECONDS + ROUND_BREAK_SECONDS`
+(5:30 by default): round *n*'s slot covers `[n x cycle, (n + 1) x cycle)` of Unix time, the break first, then the
+full play, the bell at `(n + 1) x cycle`; keep the server clock synced. Example (UTC, defaults): the slot of
+11:58:30 has its break until 11:59:00, joins open until 12:03:00, the bell at 12:04:00, then the next break. At the bell every live ticket is settled at its value in one batch, and the floor loot is
 journaled as a sweep and sent with `sweepLoot(arenaId, sweepId, amount)`, which **burns** it (to `0x...dEaD`). The
 `sweepId` is monotonic and kept in the journal, so a sweep is never applied twice.
 

@@ -103,16 +103,19 @@ export const RULES = {
   afkGraceMs: 45_000,
 
   /**
-   * Arena rounds: wall-clock aligned, round n runs [n·roundMs, (n+1)·roundMs) of Unix time,
-   * identical for every arena and instance. Everyone alive at the end is paid their value.
+   * Arena rounds: the full play of a round (5:00, owner 2026-11). The break after its bell
+   * (`roundBreakMs`) comes on top, so one cycle on the wall clock is play + break (5:30): round n's
+   * slot is [n·C, (n+1)·C) of Unix time with C = roundMs + roundBreakMs (`roundAt`), identical for
+   * every arena and instance. Everyone alive at the bell is paid their value.
    */
   roundMs: 300_000,
-  /** New arena joins close this long before a round ends (`round_closed` until the next round opens). */
+  /** New arena joins close this long before the bell (`round_closed` until the next round opens): joins open for the first 4:00 of play. */
   roundJoinCloseMs: 60_000,
   /**
-   * The break at the start of every round slot: after the bell the payouts go out and people see
+   * The break after every bell, before the next round's play: the payouts go out and people see
    * the results; the floor opens to new joins `roundBreakMs` after the bell (a ticket bought in the
    * break is held and seated when it opens). 30 s (owner, 2026-11): time to buy the next ticket.
+   * Added to the play, never taken out of it.
    */
   roundBreakMs: 30_000,
 

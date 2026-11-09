@@ -5,12 +5,13 @@
  * Four layers, each built on the real code and nothing invented where the code has the answer:
  *
  *  1. **Physics calibration** (`runArenaRounds`, `calibrate`): real arena `Room`s (the real world, ledger, round clock,
- *     dynamic map and integrity telemetry) on 5-minute rounds (`RULES.roundMs`, joins closed in the last minute).
+ *     dynamic map and integrity telemetry) on 5-minute rounds (`RULES.roundMs` of play, joins closed in the last
+ *     minute, the 30 s break after each bell on top).
  *     Every seat is a person emulated as in `scripts/integrity-sim.ts`: the practice-bot brain stands in for the
  *     person's intent, behind a human reaction delay, mouse smoothing and network latency. Skill is the brain's level:
  *     weak = `easy`, median = `normal`, skilled = `hard`. Eaten players buy another ticket while joins are open. The
  *     output is every ticket's gross value at its settlement, as a multiple of its entry fee, per room-round.
- *  2. **Economy** (`runEconomy`): 100 or 200 concurrent players over hours of 5-minute rounds. Each instance's round
+ *  2. **Economy** (`runEconomy`): 100 or 200 concurrent players over hours of 5:30 round cycles. Each instance's round
  *     replays a calibrated room-round of its size, at the tier's entry fee in token base units (`usdToTokenRaw` at a
  *     mainnet price), with the contract's own split (`computeProfitFee` at `ratesFor` holder / normal rates),
  *     power-up purchases (`SHOP_DEFAULTS`, `paymentSplit`) and the settlement worker's batching (deaths at their
@@ -45,6 +46,7 @@ import {
   paymentSplit,
   ratesFor,
   roundAt,
+  roundCycleMs,
   tokenRawToUsd,
   usdToTokenRaw,
   type ClientInput,
@@ -159,7 +161,7 @@ export function runArenaRounds(o: { seats: Seat[]; rounds: number; seed: number;
   const ROUND = { roundMs: RULES.roundMs, closeMs: RULES.roundJoinCloseMs, breakMs: RULES.roundBreakMs };
   // the sim clock starts at the wall clock (rounded to a round): the room's 6-hour ticket age check reads
   // `Date.now()`, and a sim clock in the past would cash tickets out mid-round as "maxage"
-  let clock = roundAt(Date.now(), ROUND.roundMs, ROUND.closeMs).startsAt + ROUND.roundMs + ROUND.breakMs;
+  let clock = roundAt(Date.now(), ROUND.roundMs, ROUND.closeMs, ROUND.breakMs).endsAt + ROUND.breakMs;
   let mono = 1_000_000;
   const journal = new Journal(null);
   const integrity = o.integrity === false ? null : new IntegrityService({ store: new IntegrityStore(null), journal, kick: () => {}, now: () => clock, mono: () => mono });
@@ -196,7 +198,7 @@ export function runArenaRounds(o: { seats: Seat[]; rounds: number; seed: number;
 
   const out: RoomRound[] = [];
   let cur: RoomRound | null = null;
-  let roundStart = roundAt(clock, ROUND.roundMs, ROUND.closeMs).startsAt;
+  let roundStart = roundAt(clock, ROUND.roundMs, ROUND.closeMs, ROUND.breakMs).opensAt;
   let roundNo = 0;
   const seatOfWallet = new Map<string, number>();
 
@@ -269,10 +271,10 @@ export function runArenaRounds(o: { seats: Seat[]; rounds: number; seed: number;
     return null;
   };
 
-  const ticks = Math.round(((o.rounds + 1) * ROUND.roundMs) / TICK_MS) + 2;
+  const ticks = Math.round(((o.rounds + 1) * roundCycleMs(ROUND.roundMs, ROUND.breakMs)) / TICK_MS) + 2;
   for (let t = 0; t < ticks; t++) {
     const tickStart = mono;
-    const r = roundAt(clock, ROUND.roundMs, ROUND.closeMs);
+    const r = roundAt(clock, ROUND.roundMs, ROUND.closeMs, ROUND.breakMs);
     for (const c of clients) {
       const p: Player | null = c.conn.player && c.conn.player.alive ? c.conn.player : null;
       if (!p) continue;
@@ -322,14 +324,14 @@ export function runArenaRounds(o: { seats: Seat[]; rounds: number; seed: number;
     clock += TICK_MS;
     room.tick(TICK_MS);
 
-    const r2 = roundAt(clock, ROUND.roundMs, ROUND.closeMs);
+    const r2 = roundAt(clock, ROUND.roundMs, ROUND.closeMs, ROUND.breakMs);
     if (r2.n !== r.n) {
       roundNo++;
-      roundStart = r2.startsAt;
+      roundStart = r2.opensAt;
       if (cur) out.push(cur);
       cur = roundNo >= 1 ? { players: clients.length, round: roundNo, tickets: [] } : null;
       // everyone plays on: a new ticket when the floor opens after the break
-      for (const c of clients) c.nextBuyAt = r2.startsAt + ROUND.breakMs + rng() * 6_000;
+      for (const c of clients) c.nextBuyAt = r2.opensAt + rng() * 6_000;
     }
     // settlements written this tick: the ticket's value at its end
     for (const item of journal.pending) {
@@ -352,7 +354,7 @@ export function runArenaRounds(o: { seats: Seat[]; rounds: number; seed: number;
     }
     for (const item of [...journal.pending]) journal.remove(item.key);
     for (const c of clients) {
-      if (c.nextBuyAt !== null && clock >= c.nextBuyAt && clock < r2.joinsCloseAt && clock >= r2.startsAt + ROUND.breakMs && !(c.conn.player?.alive) && !room.findStakeByWallet(c.wallet)) {
+      if (c.nextBuyAt !== null && clock >= c.nextBuyAt && clock < r2.joinsCloseAt && clock >= r2.opensAt && !(c.conn.player?.alive) && !room.findStakeByWallet(c.wallet)) {
         c.nextBuyAt = null;
         buy(c);
       }
@@ -615,7 +617,7 @@ export function runEconomy(cal: Calibration, sc: MainnetScenario, gasFig: GasFig
   const rng = mulberry32(sc.seed);
   const price = parseUsdPrice(sc.usdPerToken);
   const violations: string[] = [];
-  const rounds = Math.round((sc.hours * 3_600_000) / RULES.roundMs);
+  const rounds = Math.round((sc.hours * 3_600_000) / roundCycleMs());
   const usd = (raw: bigint) => tokenRawToUsd(raw, price, TOKEN_DECIMALS);
   const tokens = (raw: bigint) => Number(raw / 10n ** 12n) / 1e6;
   // the arenas: tier prices converted at the mainnet price, 2 significant figures (the admin's default)
@@ -641,7 +643,7 @@ export function runEconomy(cal: Calibration, sc: MainnetScenario, gasFig: GasFig
   const feeByTier = new Map<number, { fee: bigint; pu: bigint; entries: bigint; playerRounds: number }>();
 
   for (let r = 0; r < rounds; r++) {
-    const t0 = r * (RULES.roundMs / 1000);
+    const t0 = r * (roundCycleMs() / 1000);
     for (const tier of tiers) {
       for (const size of instancesFor(tier.players)) {
         const lib = cal.bySize.get(nearestSize(cal, size))!;

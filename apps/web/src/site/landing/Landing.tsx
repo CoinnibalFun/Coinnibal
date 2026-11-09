@@ -199,7 +199,7 @@ const STATIONS: { no: string; title: TKey; body: TKey }[] = [
   { no: '03', title: 'ld.stop.bell', body: 'ld.stop.bellBody' },
   { no: '04', title: 'ld.stop.paid', body: 'ld.stop.paidBody' },
 ];
-const stationVars = () => ({ sym: SYMBOL, s: FACTS.rules.joinCloseS, fee: pct(FACTS.fee.burnBps + FACTS.fee.vaultBps) });
+const stationVars = () => ({ sym: SYMBOL, s: FACTS.rules.joinCloseS, b: FACTS.rules.breakS, fee: pct(FACTS.fee.burnBps + FACTS.fee.vaultBps) });
 
 function Round() {
   const m = useMoves();

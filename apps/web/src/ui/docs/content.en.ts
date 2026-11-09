@@ -39,7 +39,7 @@ export const docsEn = (
     rates,
     dateline: [
       `Fee ${total} of profit only`,
-      `Rounds ${R.roundMin} min · joins close ${R.joinCloseS} s before the bell`,
+      `Rounds ${R.roundMin} min + ${R.breakS} s break · joins close ${R.joinCloseS} s before the bell`,
       `${F.capacity.arena} players per room`,
       `${burn} of profit burned`,
     ],
@@ -186,7 +186,7 @@ export const docsEn = (
         blocks: [
           {
             kind: 'p',
-            text: `Rounds follow the clock: a new one starts every ${R.roundMin} minutes in every arena at once. There is no cash-out in an arena and no way to leave early with money. When the bell rings, everyone still alive is paid, the server sends the payout on-chain and the "Round over" receipt shows the transaction link. After the bell the floor rests for ${R.breakS} s while the payouts go out ("Next round opens in"), then the next round opens. Joins close ${R.joinCloseS} s before the bell; a ticket bought while joins are closed, in the break or the final minute, joins the next round automatically.`,
+            text: `Rounds follow the clock in every arena at once: ${R.roundMin} full minutes of play, then a ${R.breakS} s break, so a new round starts every ${R.roundMin} minutes ${R.breakS} seconds. There is no cash-out in an arena and no way to leave early with money. When the bell rings, everyone still alive is paid, the server sends the payout on-chain and the "Round over" receipt shows the transaction link. After the bell the floor rests for ${R.breakS} s while the payouts go out ("Next round opens in"), then the next round opens; the break never comes out of the play. Joins close ${R.joinCloseS} s before the bell; a ticket bought while joins are closed, in the break or the final minute, joins the next round automatically.`,
           },
           {
             kind: 'p',

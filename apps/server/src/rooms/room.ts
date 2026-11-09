@@ -79,7 +79,10 @@ export interface RoomDeps {
    * measured with it, since a ticket's `openedAt` is a block timestamp. Defaults to `Date.now`.
    */
   chainNow?: () => number;
-  /** Arena round clock (defaults to `RULES.roundMs` / `RULES.roundJoinCloseMs`). */
+  /**
+   * Arena round clock: the play, the join close before the bell and the break added after it (defaults
+   * `RULES.roundMs` / `RULES.roundJoinCloseMs` / `RULES.roundBreakMs`).
+   */
   round?: { roundMs: number; closeMs: number; breakMs?: number };
   /**
    * The shared round clock (the room manager passes its own, so the gateway and every room

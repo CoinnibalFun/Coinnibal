@@ -10,9 +10,9 @@
 // Flags: --browser  also open a Chromium with the Dev Wallet (an EIP-6963 wallet whose key stays in Node;
 //                   on localnet it is Hardhat account #0, the contract owner and admin; needs a display)
 //        --no-build (localnet) do not build the server first and fail if it is missing
-// Rounds: paid arenas play wall-clock rounds (5 minutes by default, no cash-out). To see the bell sooner, set
-//        ROUND_SECONDS (e.g. `ROUND_SECONDS=90 pnpm demo`); joins close ROUND_JOIN_CLOSE_SECONDS before it (default
-//        60, capped at half a round). The server reads both.
+// Rounds: paid arenas play wall-clock rounds (5 minutes of play by default, then the ROUND_BREAK_SECONDS break, no
+//        cash-out). To see the bell sooner, set ROUND_SECONDS (e.g. `ROUND_SECONDS=90 pnpm demo`); joins close
+//        ROUND_JOIN_CLOSE_SECONDS before it (default 60, capped at half a round). The server reads them.
 // Ctrl+C (SIGINT), SIGTERM and SIGHUP stop every child process group, including the hardhat node.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';

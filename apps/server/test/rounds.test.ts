@@ -281,3 +281,41 @@ describe('arena rounds (room)', () => {
     expect(byKey.get(j1.stake.session)).toMatchObject({ reason: 'death', payout: 0 });
   });
 });
+
+describe('arena rounds with the default break (5:00 of play, then 30 s)', () => {
+  const DEF = { roundMs: RULES.roundMs, closeMs: RULES.roundJoinCloseMs, breakMs: RULES.roundBreakMs };
+
+  function room(clock: { now: number }, journal: Journal) {
+    return new Room(
+      { id: 'arena-1-1', mode: 'arena', name: 'Arena', instance: 1, maxPlayers: 50, stake: { arenaId: 1, buyIn: FEE }, seed: 12 },
+      { ...roomDeps(new ArenaChain([arena(1, FEE)]), journal, () => clock.now), round: DEF },
+    );
+  }
+
+  it('a ticket seated as play starts plays the full 5:00 to the bell; the break follows; the next play opens 30 s later', () => {
+    const w = roundAt(1_791_000_000_000, DEF.roundMs, DEF.closeMs, DEF.breakMs);
+    expect(w.endsAt - w.startsAt).toBe(330_000);
+    const clock = { now: w.opensAt };
+    const journal = new Journal(null);
+    const r = room(clock, journal);
+    // what the room announces: play from opensAt to the bell, joins closed for its last minute
+    expect(r.round()).toEqual({ n: w.n, endsAt: w.opensAt + 300_000, joinsCloseAt: w.opensAt + 240_000, opensAt: w.opensAt });
+    expect(r.inBreak(w.opensAt - 1)).toBe(true);
+    expect(r.inBreak(w.opensAt)).toBe(false);
+    const j = stakeJoin(1, FEE);
+    r.join(fakeConn('w1'), j);
+    // a millisecond before the bell: still playing, nothing settled
+    clock.now = w.endsAt - 1;
+    tick(r);
+    expect(journal.settlements()).toEqual([]);
+    expect(r.ledger!.all()).toHaveLength(1);
+    // the bell: settled at its value, then the break of the next slot
+    clock.now = w.endsAt;
+    tick(r);
+    expect(journal.settlements()).toEqual([expect.objectContaining({ key: j.stake.session, reason: 'round', payout: FEE })]);
+    expect(r.round()).toEqual({ n: w.n + 1, endsAt: w.endsAt + 330_000, joinsCloseAt: w.endsAt + 270_000, opensAt: w.endsAt + 30_000 });
+    expect(r.inBreak()).toBe(true);
+    expect(r.inBreak(w.endsAt + 29_999)).toBe(true);
+    expect(r.inBreak(w.endsAt + 30_000)).toBe(false);
+  });
+});
