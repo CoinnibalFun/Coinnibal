@@ -39,6 +39,8 @@ export const ICON_NAMES = [
   'info',
   'docs',
   'bag',
+  'download',
+  'share',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -211,6 +213,20 @@ const P: Record<IconName, ReactElement> = {
     <>
       <path d="M5.6 8h12.8l-1 11.4a1.2 1.2 0 0 1-1.2 1.1H7.8a1.2 1.2 0 0 1-1.2-1.1z" />
       <path d="M9 10.5V7a3 3 0 0 1 6 0v3.5" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M12 3.5V14M7.8 9.8L12 14l4.2-4.2" />
+      <path d="M4 15.5v2.5A2.5 2.5 0 0 0 6.5 20.5h11A2.5 2.5 0 0 0 20 18v-2.5" />
+    </>
+  ),
+  share: (
+    <>
+      <circle cx="17.5" cy="5.8" r="2.6" />
+      <circle cx="6.5" cy="12" r="2.6" />
+      <circle cx="17.5" cy="18.2" r="2.6" />
+      <path d="M8.8 10.7l6.4-3.6M8.8 13.3l6.4 3.6" />
     </>
   ),
 };
