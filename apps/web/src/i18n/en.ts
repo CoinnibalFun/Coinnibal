@@ -880,6 +880,7 @@ export const en = {
   'shop.qtyLabel': "Packs of {name} in the cart",
   'shop.add': "Add {n} · {price}",
   'shop.owned': 'You have {n}',
+  'shop.info': 'What {name} does',
   'shop.signIn': 'Sign in with your wallet to buy power-ups.',
   'shop.signInBtn': 'Sign in with wallet',
   'shop.closed': 'The shop is closed right now.',

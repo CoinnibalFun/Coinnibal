@@ -50,9 +50,12 @@ function PackCard({
         </svg>
         <kbd className="sh-pack__key mono">{BOOST_KEY_LABELS[kind]}</kbd>
       </span>
+      {/* what it does: a small "i" on the icon's corner (the key cap sits on the other corner) */}
+      <PackInfo id={`sh-note-${kind}`} label={t('shop.info', { name })}>
+        {t(`boost.${kind}.note` as 'boost.magnet.note')}
+      </PackInfo>
       <div className="sh-pack__body">
-        <h3 className="sh-pack__name">{t(`boost.${kind}` as 'boost.magnet')}</h3>
-        <p className="sh-pack__note">{t(`boost.${kind}.note` as 'boost.magnet.note')}</p>
+        <h3 className="sh-pack__name">{name}</h3>
         <p className="sh-pack__meta mono">
           {t('shop.cooldown', { s: Math.round(boostCooldownMs(kind) / 1000) })}
           {owned !== null && <> · {t('shop.owned', { n: owned })}</>}
@@ -83,6 +86,24 @@ function PackCard({
         </span>
       </div>
     </li>
+  );
+}
+
+/**
+ * What a power-up does, behind a small "i": it opens on hover or keyboard focus (desktop) and on a tap (touch), and
+ * closes on a second tap, Escape or when focus leaves. The description stays in the page for screen readers.
+ */
+function PackInfo({ id, label, children }: { id: string; label: string; children: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className={`sh-info${open ? ' is-open' : ''}`} onBlur={() => setOpen(false)} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+      <button type="button" className="sh-info__btn" aria-label={label} aria-expanded={open} aria-describedby={id} onClick={() => setOpen((o) => !o)} data-testid="shop-info">
+        i
+      </button>
+      <span id={id} role="tooltip" className="sh-info__tip">
+        {children}
+      </span>
+    </span>
   );
 }
 

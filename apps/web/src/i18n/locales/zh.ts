@@ -862,6 +862,7 @@ const zh: Dict = {
   'shop.qtyLabel': "购物车中的{name}礼包",
   'shop.add': "加入 {n} · {price}",
   'shop.owned': "你有 {n}",
+  'shop.info': "{name} 有什么用",
   'shop.signIn': "用钱包登录后才能购买道具。",
   'shop.signInBtn': "用钱包登录",
   'shop.closed': "商店暂时关闭。",
