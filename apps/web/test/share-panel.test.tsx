@@ -43,7 +43,8 @@ const { SERVER } = await import('../src/config');
 const { setReducedMotion } = await import('../src/test/media');
 const { RoundOverSheet, RoomOverSheet } = await import('../src/ui/game');
 const { DeathSheet } = await import('../src/ui/game/DeathSheet');
-const { SHARE_COIN, shareUrl } = await import('../src/ui/game/ShareOnX');
+const { SHARE_COIN, gameShareText, killShareText, resultShareText, shareUrl } = await import('../src/ui/game/ShareOnX');
+const { translate } = await import('../src/i18n');
 const { fileSlug, resetCardBlobs } = await import('../src/ui/game/SharePanel');
 const { chainStatus } = await import('./evm-helpers');
 
@@ -133,7 +134,8 @@ describe('the end-of-game share panel', () => {
     const x = screen.getByTestId('share-x') as HTMLAnchorElement;
     const url = new URL(x.href);
     expect(url.origin + url.pathname).toBe('https://x.com/intent/post');
-    expect(url.searchParams.get('text')).toBe(`I finished #1 of 2 in Asphodel Meadow on Elymum! ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toBe(`${resultShareText(translate, { rank: 1, n: 2, room: 'Asphodel Meadow' })} ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toMatch(/#1 of 2 in Asphodel Meadow on Elymum/);
     expect(url.searchParams.get('url')).toBe(shareUrl('AbCdE12345'));
     expect(x.closest('[data-testid="share-panel"]')).toBeTruthy();
     expect(screen.queryByTestId('share-pick-standings')).toBeNull();
@@ -149,7 +151,7 @@ describe('the end-of-game share panel', () => {
     expect(arg.files).toHaveLength(1);
     expect(arg.files[0].name).toBe('elymum-asphodel-meadow-result.png');
     expect(arg.files[0].type).toBe('image/png');
-    expect(arg.text).toContain('I finished #1 of 2 in Asphodel Meadow on Elymum!');
+    expect(arg.text).toContain(resultShareText(translate, { rank: 1, n: 2, room: 'Asphodel Meadow' }));
     expect(arg.text).toContain(shareUrl('AbCdE12345'));
     // a closed share sheet is no error
     share.mockRejectedValueOnce(Object.assign(new Error('closed'), { name: 'AbortError' }));
@@ -180,7 +182,11 @@ describe('the end-of-game share panel', () => {
     expect(rows.map((r) => r.querySelector('bdi')!.textContent)).toEqual(['You ate @rocky_x!', 'You ate Botty (BOT)!', 'You ate Penny!']);
     expect(rows[1].querySelector('.g-test-tag')?.textContent).toBe('TEST');
     const x = rows[1].querySelector('[data-testid="moment-x"]') as HTMLAnchorElement;
-    expect(new URL(x.href).searchParams.get('text')).toBe(`I just ate Botty (BOT) on Elymum! (TEST: testnet test arena, no real money) ${SHARE_COIN}`);
+    const posted = new URL(x.href).searchParams.get('text')!;
+    expect(posted).toBe(`${killShareText(translate, { id: 'KiLLbbbbbb', victim: 'Botty', victimIsBot: true, test: true })} ${SHARE_COIN}`);
+    expect(posted).toContain('Botty (BOT)');
+    expect(posted).toContain('Elymum');
+    expect(posted).toContain('(TEST: testnet test arena, no real money)');
     expect(new URL(x.href).searchParams.get('url')).toBe(shareUrl('KiLLbbbbbb'));
     fireEvent.click(rows[0].querySelector('[data-testid="moment-download"]')!);
     await waitFor(() => expect(clicks.some((c) => c.download === 'elymum-asphodel-meadow-ate-rocky-x.png')).toBe(true));
@@ -198,7 +204,10 @@ describe('the end-of-game share panel', () => {
     await screen.findByTestId('share-preview');
     expect(fetched()).toEqual([`${SERVER.http}/share/DeAdD12345.png`]);
     const url = new URL((screen.getByTestId('share-x') as HTMLAnchorElement).href);
-    expect(url.searchParams.get('text')).toBe(`I reached mass 2,345 and ate 2 coins in Pro Pond #1 on Elymum! ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toBe(`${gameShareText(translate, { mass: 2345.6, eaten: 2, room: 'Pro Pond #1' })} ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toMatch(/2,345/);
+    expect(url.searchParams.get('text')).toMatch(/\b2 coins\b/);
+    expect(url.searchParams.get('text')).toContain('Pro Pond #1 on Elymum');
     expect(url.searchParams.get('url')).toBe(shareUrl('DeAdD12345'));
     expect(screen.getByTestId('share-moments').textContent).toContain('Your moments: 1 kill');
     fireEvent.click(screen.getByTestId('share-download'));

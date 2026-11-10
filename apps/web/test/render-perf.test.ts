@@ -103,6 +103,22 @@ const NOT_OURS = new Set(['(root)', '(program)', '(idle)', '(garbage collector)'
 
 /** Bytes the game's sources (`/src/` of the app and the packages) allocate per call of `fn`. */
 async function bytesPerCall(fn: (i: number) => void, n = 300, warm = 1500): Promise<number> {
+  // V8 optimises on background threads: on a busy machine (the full suite, a CI runner) the first window can still run
+  // in the interpreter, which boxes every double it computes. That is not the steady state a game runs in, so take the
+  // best of up to three windows (each continues the same call sequence), stopping as soon as one is clean.
+  let best = Infinity;
+  let at = 0;
+  for (let k = 0; k < 3 && best >= 32; k++) {
+    const w = k === 0 ? warm : 0;
+    const start = at;
+    best = Math.min(best, await sampleBytesPerCall((i) => fn(start + i), n, w));
+    at += w + n;
+  }
+  return best;
+}
+
+/** One sampled window of `bytesPerCall` (after `warm` unsampled calls). */
+async function sampleBytesPerCall(fn: (i: number) => void, n: number, warm: number): Promise<number> {
   // warm up until the code is optimised (the browser's steady state, a few seconds into a game)
   for (let i = 0; i < warm; i++) fn(i);
   const session = new Session();

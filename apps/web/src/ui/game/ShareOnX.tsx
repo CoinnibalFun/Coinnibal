@@ -21,14 +21,68 @@ export const siteLink = (): string => `${window.location.origin}/play`;
 
 type Translate = (key: TKey, vars?: TVars) => string;
 
+/** The four lines of each post (playful banter: the joke is the coin game, never the player). */
+export const SHARE_VARIANTS = {
+  kill: ['share.kill', 'share.kill2', 'share.kill3', 'share.kill4'],
+  result: ['share.result', 'share.result2', 'share.result3', 'share.result4'],
+  resultAte: ['share.resultAte', 'share.resultAte2', 'share.resultAte3', 'share.resultAte4'],
+  game: ['share.game', 'share.game2', 'share.game3', 'share.game4'],
+  live: ['share.live', 'share.live2', 'share.live3', 'share.live4'],
+  liveMass: ['share.liveMass', 'share.liveMass2', 'share.liveMass3', 'share.liveMass4'],
+} as const satisfies Record<string, readonly TKey[]>;
+
+/**
+ * One of a post's lines, picked from the post's own inputs (FNV-1a of `seed`): the same moment always reads the same
+ * (re-renders, the preview and the posted text agree), different kills and results vary.
+ */
+export function pickShareKey(kind: keyof typeof SHARE_VARIANTS, seed: readonly (string | number | boolean | undefined)[]): TKey {
+  const list = SHARE_VARIANTS[kind];
+  let h = 0x811c9dc5;
+  for (const ch of `${kind}|${seed.join('|')}`) {
+    h ^= ch.codePointAt(0)!;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return list[h % list.length];
+}
+
+/** X's limit on a post, in its weighted characters. */
+export const X_MAX = 280;
+/** What a post spends besides its text: " " + the coin (an emoji weighs 2) and " " + the link (any URL weighs 23). */
+const X_EXTRA = 1 + 2 + 1 + 23;
+
+/**
+ * A text's length as X counts it: Latin, Cyrillic, Greek and the like weigh 1, CJK and emoji (and everything else) 2
+ * (twitter-text's weighting).
+ */
+export function xLength(s: string): number {
+  let n = 0;
+  for (const ch of s) {
+    const c = ch.codePointAt(0)!;
+    n += c <= 0x10ff || (c >= 0x2000 && c <= 0x200d) || (c >= 0x2010 && c <= 0x201f) || (c >= 0x2032 && c <= 0x2037) ? 1 : 2;
+  }
+  return n;
+}
+
 /**
  * The X post of a result: my place, the coins I ate (the first few, then "+N"; names cleaned by `shareName`: no
- * address, mention, hashtag or link), and TEST for a testnet test arena.
+ * address, mention, hashtag or link), and TEST for a testnet test arena. Names that would take the post past X's
+ * limit (with the coin and the link) fold into the "+N".
  */
 export function resultShareText(t: Translate, r: { rank: number; n: number; room: string; eaten?: readonly EatenName[]; eatenMore?: number; test?: boolean }): string {
-  const names = eatenLine(r.eaten ?? [], r.eatenMore ?? 0, t('g.botTag'));
-  const line = names ? t('share.resultAte', { rank: r.rank, n: r.n, room: r.room, names }) : t('share.result', { rank: r.rank, n: r.n, room: r.room });
-  return r.test ? `${line} ${t('share.test')}` : line;
+  const list = r.eaten ?? [];
+  const more = r.eatenMore ?? 0;
+  const vars = { rank: r.rank, n: r.n, room: r.room };
+  const tail = r.test ? ` ${t('share.test')}` : '';
+  const all = eatenLine(list, more, t('g.botTag'));
+  if (!all) return `${t(pickShareKey('result', [r.rank, r.n, r.room]), vars)}${tail}`;
+  const key = pickShareKey('resultAte', [r.rank, r.n, r.room, all]);
+  let line = '';
+  for (let shown = list.length; shown >= 0; shown--) {
+    const names = eatenLine(list.slice(0, shown), more + list.length - shown, t('g.botTag'));
+    line = `${t(key, { ...vars, names })}${tail}`;
+    if (xLength(line) + X_EXTRA <= X_MAX) break;
+  }
+  return line;
 }
 
 /**
@@ -36,14 +90,18 @@ export function resultShareText(t: Translate, r: { rank: number; n: number; room
  * mass reached, the coins eaten and the room; TEST in a testnet test arena.
  */
 export function gameShareText(t: Translate, g: { mass: number; eaten: number; room: string; test?: boolean }): string {
-  const line = t('share.game', { mass: Math.floor(g.mass).toLocaleString('en-US'), eaten: g.eaten, room: g.room });
+  const mass = Math.floor(g.mass).toLocaleString('en-US');
+  const line = t(pickShareKey('game', [mass, g.eaten, g.room]), { mass, eaten: g.eaten, room: g.room });
   return g.test ? `${line} ${t('share.test')}` : line;
 }
 
 /** The X post of the game in play (the HUD's button): my place when ranked, my mass, the coins eaten so far. */
 export function liveShareText(t: Translate, g: { mass: number; rank: number; n: number; eaten: number; room: string; test?: boolean }): string {
   const mass = Math.floor(g.mass).toLocaleString('en-US');
-  const line = g.rank > 0 && g.n > 0 ? t('share.live', { rank: g.rank, n: g.n, mass, eaten: g.eaten, room: g.room }) : t('share.liveMass', { mass, eaten: g.eaten, room: g.room });
+  const line =
+    g.rank > 0 && g.n > 0
+      ? t(pickShareKey('live', [g.rank, g.n, mass, g.eaten, g.room]), { rank: g.rank, n: g.n, mass, eaten: g.eaten, room: g.room })
+      : t(pickShareKey('liveMass', [mass, g.eaten, g.room]), { mass, eaten: g.eaten, room: g.room });
   return g.test ? `${line} ${t('share.test')}` : line;
 }
 
@@ -54,9 +112,11 @@ export function liveShareText(t: Translate, g: { mass: number; rank: number; n: 
 export const victimLabel = (t: Translate, s: { victim?: string; victimIsBot?: boolean; victimX?: string }) =>
   (!s.victimIsBot && xMention(s.victimX)) || `${eatenLabel({ name: s.victim ?? '' })}${s.victimIsBot ? ` (${t('g.botTag')})` : ''}`;
 
-/** The X post of a kill: "I just ate Nakamoto on Elymum!" (its linked @handle), TEST in a test arena. */
-export const killShareText = (t: Translate, s: { victim?: string; victimIsBot?: boolean; victimX?: string; test?: boolean }): string =>
-  `${t('share.kill', { name: victimLabel(t, s) })}${s.test ? ` ${t('share.test')}` : ''}`;
+/** The X post of a kill: "Just ate Nakamoto on Elymum..." (one of four lines, picked by the victim and the card; its linked @handle), TEST in a test arena. */
+export const killShareText = (t: Translate, s: { id?: string; victim?: string; victimIsBot?: boolean; victimX?: string; test?: boolean }): string => {
+  const name = victimLabel(t, s);
+  return `${t(pickShareKey('kill', [name, s.id]), { name })}${s.test ? ` ${t('share.test')}` : ''}`;
+};
 
 /** The coins I ate this game, on a result sheet: name chips (BOT tagged, ×2 when eaten twice) and "+N more". */
 export function EatenNames({ eaten, more = 0 }: { eaten?: readonly EatenName[]; more?: number }) {
