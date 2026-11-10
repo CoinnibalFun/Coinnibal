@@ -7,7 +7,7 @@ import { translate } from '../src/i18n';
 import { updateSettings, useUi } from '../src/store';
 import { setReducedMotion } from '../src/test/media';
 import { RoundOverSheet } from '../src/ui/game';
-import { KillShare, SHARE_COIN, killShareText, resultShareText } from '../src/ui/game/ShareOnX';
+import { KillShare, SHARE_COIN, SHARE_VARIANTS, killShareText, resultShareText } from '../src/ui/game/ShareOnX';
 import { SettingsPage } from '../src/ui/profile/SettingsPage';
 import { chainStatus } from './evm-helpers';
 
@@ -79,7 +79,9 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     // the list sits in the sheet body with the receipt, the button in its footer
     expect(eaten.closest('.g-roundover__body')).toBeTruthy();
     const link = screen.getByTestId('share-x');
-    expect(textOf(link)).toBe(`I finished #1 of 2 in Asphodel Meadow on Elymum and snacked on Penny ×2, Rocky·com, Lulu, Zed, Ed +2! ${SHARE_COIN}`);
+    const names = 'Penny ×2, Rocky·com, Lulu, Zed, Ed +2';
+    expect(textOf(link)).toBe(`${resultShareText(t, { rank: 1, n: 2, room: 'Asphodel Meadow', eaten: STATS.eaten, eatenMore: STATS.eatenMore })} ${SHARE_COIN}`);
+    expect(SHARE_VARIANTS.resultAte.map((k) => `${t(k, { rank: 1, n: 2, room: 'Asphodel Meadow', names })} ${SHARE_COIN}`)).toContain(textOf(link));
     expect(textOf(link)).not.toMatch(/@|\.com|TEST/);
   });
 
@@ -89,15 +91,17 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     expect(chip.textContent).toBe('BottyBOT');
     expect(chip.querySelector('.g-eaten__tag')?.textContent).toBe('BOT');
     const text = textOf(screen.getByTestId('share-x'))!;
-    expect(text).toContain('snacked on Botty (BOT)!');
+    expect(text).toContain('Botty (BOT)');
+    expect(SHARE_VARIANTS.resultAte.some((k) => text.startsWith(t(k, { rank: 1, n: 2, room: 'Asphodel Meadow', names: 'Botty (BOT)' })))).toBe(true);
     expect(text).toContain('(TEST: testnet test arena, no real money)');
   });
 
   it('ate nobody: no list, the plain post', () => {
     sheet(ARENA, { ...STATS, eaten: undefined, eatenMore: undefined }, {});
     expect(screen.queryByTestId('eaten')).toBeNull();
-    expect(textOf(screen.getByTestId('share-x'))).toBe(`I finished #1 of 2 in Asphodel Meadow on Elymum! ${SHARE_COIN}`);
-    expect(resultShareText(t, { rank: 3, n: 9, room: 'Pond', test: true })).toBe('I finished #3 of 9 in Pond on Elymum! (TEST: testnet test arena, no real money)');
+    expect(textOf(screen.getByTestId('share-x'))).toBe(`${resultShareText(t, { rank: 1, n: 2, room: 'Asphodel Meadow' })} ${SHARE_COIN}`);
+    const plain = resultShareText(t, { rank: 3, n: 9, room: 'Pond', test: true });
+    expect(SHARE_VARIANTS.result.map((k) => `${t(k, { rank: 3, n: 9, room: 'Pond' })} (TEST: testnet test arena, no real money)`)).toContain(plain);
   });
 
   it('a test arena kill of a big bot: the sticker says BOT and TEST', () => {
@@ -111,7 +115,8 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     expect(sticker.textContent).toContain('You ate Botty (BOT)!');
     expect(sticker.querySelector('.g-test-tag')?.textContent).toBe('TEST');
     // its post (from the end sheet's moments) says BOT and TEST
-    expect(killShareText(t, useUi.getState().share!)).toBe('I just ate Botty (BOT) on Elymum! (TEST: testnet test arena, no real money)');
+    const post = killShareText(t, useUi.getState().share!);
+    expect(SHARE_VARIANTS.kill.map((k) => `${t(k, { name: 'Botty (BOT)' })} (TEST: testnet test arena, no real money)`)).toContain(post);
   });
 });
 

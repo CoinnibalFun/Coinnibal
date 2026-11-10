@@ -6,7 +6,8 @@ import { serverClock } from '../src/game/clock';
 import { useUi } from '../src/store';
 import { setReducedMotion } from '../src/test/media';
 import { RoomClosingNotice, RoomOverSheet, RoundCountdown } from '../src/ui/game';
-import { HudShare, KillShare, KILL_SHARE_MS, SHARE_COIN, shareUrl, siteLink } from '../src/ui/game/ShareOnX';
+import { translate } from '../src/i18n';
+import { HudShare, KillShare, KILL_SHARE_MS, SHARE_COIN, gameShareText, liveShareText, resultShareText, shareUrl, siteLink } from '../src/ui/game/ShareOnX';
 import { DeathSheet } from '../src/ui/game/DeathSheet';
 import { boardPlace } from '../src/ui/game/FinalBoard';
 
@@ -126,7 +127,8 @@ describe('a custom room ends: countdown, then the final board', () => {
     expect(link.rel).toContain('noopener');
     const url = new URL(link.href);
     expect(url.origin + url.pathname).toBe('https://x.com/intent/post');
-    expect(url.searchParams.get('text')).toBe(`I finished #3 of 3 in Friday Pond on Elymum! ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toBe(`${resultShareText(translate, { rank: 3, n: 3, room: 'Friday Pond' })} ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toMatch(/#3 of 3 in Friday Pond on Elymum/);
     expect(url.searchParams.get('url')).toBe(shareUrl('AbCdE12345'));
     expect(shareUrl('AbCdE12345')).toMatch(/\/share\/AbCdE12345$/);
   });
@@ -158,7 +160,10 @@ describe('a custom room ends: countdown, then the final board', () => {
       </Kb>,
     );
     const url = new URL((screen.getByTestId('share-x') as HTMLAnchorElement).href);
-    expect(url.searchParams.get('text')).toBe(`I reached mass 2,345 and ate 2 coins in Pro Pond #1 on Elymum! ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toBe(`${gameShareText(translate, { mass: 2345.6, eaten: 2, room: 'Pro Pond #1' })} ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toMatch(/2,345/);
+    expect(url.searchParams.get('text')).toMatch(/\b2 coins\b/);
+    expect(url.searchParams.get('text')).toContain('Pro Pond #1 on Elymum');
     expect(url.searchParams.get('url')).toBe(siteLink());
   });
 
@@ -178,7 +183,10 @@ describe('a custom room ends: countdown, then the final board', () => {
     link.focus();
     const url = new URL(link.href);
     expect(url.origin + url.pathname).toBe('https://x.com/intent/post');
-    expect(url.searchParams.get('text')).toBe(`I'm #2 of 7 in Pro Pond #1 on Elymum: mass 987, 3 coins eaten so far! ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toBe(`${liveShareText(translate, { mass: 987.4, rank: 2, n: 7, eaten: 3, room: 'Pro Pond #1' })} ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toMatch(/#2 of 7/);
+    expect(url.searchParams.get('text')).toMatch(/mass 987\b/);
+    expect(url.searchParams.get('text')).toMatch(/\b3 coins\b/);
     expect(url.searchParams.get('url')).toBe(siteLink());
   });
 });
