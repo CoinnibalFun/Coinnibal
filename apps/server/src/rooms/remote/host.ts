@@ -229,7 +229,7 @@ export class RoomHost {
       clock: this.clock,
       round: init.round,
       chainNow: () => Date.now() + this.chainOffset,
-      onGameOver: (e) => ctl({ k: 'go', hid: this.hidOf(e.room), conn: e.conn?.id ?? null, player: lookOf(e.player), stats: e.stats }),
+      onGameOver: (e) => ctl({ k: 'go', hid: this.hidOf(e.room), conn: e.conn?.id ?? null, player: lookOf(e.player), stats: e.stats, ...(e.dead ? { dead: true } : {}), ...(e.standings ? { standings: e.standings } : {}) }),
       onNotableKill: (e) =>
         ctl({ k: 'nk', hid: this.hidOf(e.room), conn: e.conn.id, player: lookOf(e.killer), mass: Math.floor(e.killer.totalMass()), kills: e.killer.stats.playersEaten, victim: e.victim, victimMass: e.victimMass, ...(e.victimIsBot ? { victimIsBot: true } : {}), ...(e.victimX ? { victimX: e.victimX } : {}) }),
       onBellSettled: (e) => ctl({ k: 'bell', e }),

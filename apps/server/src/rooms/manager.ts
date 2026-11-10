@@ -11,6 +11,7 @@ import {
   testArenasAllowedOn,
   type BlockedArena,
   type DeathStats,
+  type RoundStanding,
   type League,
   type MapScaleSettings,
   type RoomInfo,
@@ -60,6 +61,10 @@ export interface GameOverEvent {
   conn: Conn | null;
   player: PlayerLook;
   stats: DeathStats;
+  /** The game ended in a death. */
+  dead?: boolean;
+  /** A room's end: the top of its final board with the player's own row (the result card's standings picture). */
+  standings?: RoundStanding[];
 }
 
 /** A person ate a person (in a testnet test arena a practice bot too), in a room on this thread or in a room worker. */
@@ -218,7 +223,7 @@ export class RoomManager {
     const notable = (e: NotableKillEvent) => deps.onNotableKill?.(e);
     this.roomDeps = {
       ...this.deps,
-      onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: lookOf(e.player), stats: e.stats }),
+      onGameOver: (e) => gameOver({ room: e.room, conn: e.conn as Conn | null, player: lookOf(e.player), stats: e.stats, ...(e.dead ? { dead: true } : {}), ...(e.standings ? { standings: e.standings } : {}) }),
       onNotableKill: (e) =>
         notable({ room: e.room, conn: e.conn as Conn, player: lookOf(e.killer), mass: Math.floor(e.killer.totalMass()), kills: e.killer.stats.playersEaten, victim: e.victim, victimMass: e.victimMass, ...(e.victimIsBot ? { victimIsBot: true } : {}), ...(e.victimX ? { victimX: e.victimX } : {}) }),
     };

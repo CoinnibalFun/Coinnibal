@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { drawRisoCoin, lookForBasicSkin } from '@elymum/art';
-import { SHARE_IMAGE, eatenLine, ordinal, shareName, xMention, type ShareCard } from '@elymum/shared';
+import { SHARE_IMAGE, eatenLine, ordinal, shareName, xMention, type ShareBoardRow, type ShareCard } from '@elymum/shared';
 import type { SKRSContext2D } from '@napi-rs/canvas';
 
 type Canvas = typeof import('@napi-rs/canvas');
@@ -78,13 +78,15 @@ const victimOf = (c: ShareCard) => (!c.victimBot && xMention(c.victimX)) || (c.v
 /** The card's headline: "1st of 42", "Ate Nakamoto!". */
 export function shareHeadline(c: ShareCard): string {
   if (c.kind === 'kill') return `Ate ${victimOf(c) ?? 'a coin'}!`;
-  return c.rank ? `${ordinal(c.rank)}${c.players ? ` of ${c.players}` : ''}` : 'Played';
+  // a death's card has no place: the mass the coin reached
+  return c.rank ? `${ordinal(c.rank)}${c.players ? ` of ${c.players}` : ''}` : `${c.mass.toLocaleString('en-US')} mass`;
 }
 
 /** The card's line of numbers. */
 export function shareFacts(c: ShareCard): string[] {
   const n = (v: number) => v.toLocaleString('en-US');
   if (c.kind === 'kill') return [`${victimOf(c) ?? 'They'} weighed ${n(c.victimMass ?? 0)}`, `now ${n(c.mass)} mass · ${n(c.kills)} eaten`];
+  if (!c.rank) return [`${n(c.kills)} eaten this game`];
   // a test arena's card never shows a payout
   return [`${n(c.mass)} mass · ${n(c.kills)} eaten`, ...(c.paid && !c.test ? [`took home ${c.paid}`] : [])];
 }
@@ -168,15 +170,8 @@ export async function squarePng(bytes: Buffer, px: number): Promise<Buffer> {
   return canvas.toBuffer('image/png');
 }
 
-/** Draws the card; returns PNG bytes. Throws when the canvas cannot load (see `shareCardSelfCheck`). */
-export function renderShareCard(c: ShareCard): Buffer {
-  const lib = canvasModule();
-  if (!lib) throw new Error(`@napi-rs/canvas is not available: ${canvasError}`);
-  fonts();
-  const { width: W, height: H } = SHARE_IMAGE;
-  const canvas = lib.createCanvas(W, H);
-  const ctx = canvas.getContext('2d');
-  // the night floor with a few food dots, and a cream sticker for the words
+/** The night floor of every card, with a few food dots. */
+function floor(ctx: SKRSContext2D, W: number, H: number): void {
   ctx.fillStyle = NIGHT;
   ctx.fillRect(0, 0, W, H);
   const dots = [FOAM, SUN, '#F39B86', '#3C9A87'];
@@ -188,17 +183,10 @@ export function renderShareCard(c: ShareCard): Buffer {
     ctx.arc(x, y, 5 + (i % 3) * 2, 0, Math.PI * 2);
     ctx.fill();
   }
-  // the coin, big, on the left (drawn at its origin)
-  ctx.save();
-  ctx.translate(250, 330);
-  ctx.rotate(-0.08);
-  drawRisoCoin(ctx as unknown as CanvasRenderingContext2D, lookForBasicSkin(c.skin), 165, { time: 0, lookX: 0.35, lookY: -0.1, expression: c.kind === 'kill' ? 'chomp' : 'happy', seed: 3 });
-  ctx.restore();
-  // the sticker
-  const X = 470;
-  const Y = 70;
-  const PW = W - X - 60;
-  const PH = H - Y - 70;
+}
+
+/** The cream sticker the words sit on: ink edge and a hard ink shadow. */
+function sticker(ctx: SKRSContext2D, X: number, Y: number, PW: number, PH: number): void {
   ctx.fillStyle = INK;
   ctx.beginPath();
   ctx.roundRect(X + 10, Y + 10, PW, PH, 28);
@@ -210,6 +198,30 @@ export function renderShareCard(c: ShareCard): Buffer {
   ctx.roundRect(X, Y, PW, PH, 28);
   ctx.fill();
   ctx.stroke();
+}
+
+/** Draws the card; returns PNG bytes. Throws when the canvas cannot load (see `shareCardSelfCheck`). */
+export function renderShareCard(c: ShareCard): Buffer {
+  const lib = canvasModule();
+  if (!lib) throw new Error(`@napi-rs/canvas is not available: ${canvasError}`);
+  fonts();
+  const { width: W, height: H } = SHARE_IMAGE;
+  const canvas = lib.createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  // the night floor with a few food dots, and a cream sticker for the words
+  floor(ctx, W, H);
+  // the coin, big, on the left (drawn at its origin)
+  ctx.save();
+  ctx.translate(250, 330);
+  ctx.rotate(-0.08);
+  drawRisoCoin(ctx as unknown as CanvasRenderingContext2D, lookForBasicSkin(c.skin), 165, { time: 0, lookX: 0.35, lookY: -0.1, expression: c.kind === 'kill' ? 'chomp' : 'happy', seed: 3 });
+  ctx.restore();
+  // the sticker
+  const X = 470;
+  const Y = 70;
+  const PW = W - X - 60;
+  const PH = H - Y - 70;
+  sticker(ctx, X, Y, PW, PH);
   const L = X + 40;
   const max = PW - 80;
   ctx.fillStyle = c.test ? CORAL : TEAL;
@@ -240,4 +252,118 @@ export function renderShareCard(c: ShareCard): Buffer {
   ctx.fillText(c.test ? 'TESTNET TEST ARENA · practice tokens, no real money' : 'elymum.io · coin eats coin on Robinhood Chain', L, Y + PH - 30);
   if (c.test) testStamp(ctx, X + PW - 40, Y + 18);
   return canvas.toBuffer('image/png');
+}
+
+/** Rows per column of the standings picture (two columns: the top `SHARE_BOARD_ROWS`). */
+const BOARD_COL_ROWS = 5;
+
+/**
+ * A result's second picture (1200 x 630 PNG, the same floor and sticker): the room's final standings, the top
+ * `SHARE_BOARD_ROWS` in two columns (place, name with its BOT tag, value at the bell or mass), my own row marked in
+ * sun; when I stood below them, my row on its own strip under the board. TEST stamp and line in a test arena.
+ * Throws when the canvas cannot load.
+ */
+export function renderStandingsCard(c: ShareCard): Buffer {
+  const lib = canvasModule();
+  if (!lib) throw new Error(`@napi-rs/canvas is not available: ${canvasError}`);
+  fonts();
+  const { width: W, height: H } = SHARE_IMAGE;
+  const canvas = lib.createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  floor(ctx, W, H);
+  const X = 56;
+  const Y = 36;
+  const PW = W - X * 2 - 10;
+  const PH = H - Y * 2 - 10;
+  sticker(ctx, X, Y, PW, PH);
+  const L = X + 36;
+  const max = PW - 72;
+  ctx.fillStyle = c.test ? CORAL : TEAL;
+  ctx.font = '700 22px "DM Sans"';
+  ctx.fillText(fit(ctx, `ELYMUM · ${c.test ? 'TESTNET TEST ARENA · ' : ''}${c.room.toUpperCase()}`, (px) => `700 ${px}px "DM Sans"`, 22, c.test ? max - 170 : max), L, Y + 48);
+  ctx.fillStyle = INK;
+  const head = `Final standings${c.players ? ` · ${c.players} players` : ''}`;
+  ctx.fillText(fit(ctx, head, (px) => `800 ${px}px Fraunces`, 52, c.test ? max - 170 : max), L, Y + 108);
+
+  const rows = c.board ?? [];
+  const top = rows.filter((r) => r.rank <= BOARD_COL_ROWS * 2).slice(0, BOARD_COL_ROWS * 2);
+  const below = rows.find((r) => r.you && r.rank > BOARD_COL_ROWS * 2) ?? null;
+  const gap = 24;
+  const colW = (max - gap) / 2;
+  const rowH = 56;
+  const top0 = Y + 134;
+  top.forEach((r, i) => {
+    const col = i < BOARD_COL_ROWS ? 0 : 1;
+    boardRow(ctx, r, L + col * (colW + gap), top0 + (i % BOARD_COL_ROWS) * rowH, colW, rowH - 8);
+  });
+  if (below) {
+    const y = top0 + BOARD_COL_ROWS * rowH + 6;
+    ctx.save();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 8]);
+    ctx.beginPath();
+    ctx.moveTo(L, y - 6);
+    ctx.lineTo(L + max, y - 6);
+    ctx.stroke();
+    ctx.restore();
+    boardRow(ctx, below, L, y + 4, max, rowH - 8);
+  }
+  ctx.fillStyle = c.test ? CORAL : TEAL;
+  ctx.font = '700 22px "DM Sans"';
+  ctx.fillText(c.test ? 'TESTNET TEST ARENA · practice tokens, no real money' : 'elymum.io · coin eats coin on Robinhood Chain', L, Y + PH - 26);
+  if (c.test) testStamp(ctx, X + PW - 36, Y + 16);
+  return canvas.toBuffer('image/png');
+}
+
+/** One standings row: a place disc, the name (and its BOT tag), the value or mass on the right; mine in sun. */
+function boardRow(ctx: SKRSContext2D, r: ShareBoardRow, x: number, y: number, w: number, h: number): void {
+  ctx.fillStyle = r.you ? SUN : '#FFFFFF';
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = r.you ? 4 : 2.5;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, h / 2);
+  ctx.fill();
+  ctx.stroke();
+  const mid = y + h / 2;
+  // the place: a disc, gold / foam for the podium
+  const disc = r.rank === 1 ? SUN : r.rank <= 3 ? FOAM : CREAM;
+  ctx.fillStyle = r.you && r.rank === 1 ? CREAM : disc;
+  ctx.beginPath();
+  ctx.arc(x + h / 2, mid, h / 2 - 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.fillStyle = INK;
+  ctx.textAlign = 'center';
+  ctx.font = `800 ${r.rank >= 100 ? 16 : 20}px "DM Sans"`;
+  ctx.fillText(String(r.rank), x + h / 2, mid + 7);
+  ctx.textAlign = 'right';
+  const right = r.value ?? `${r.mass.toLocaleString('en-US')} mass`;
+  const rightText = fit(ctx, right, (px) => `700 ${px}px "DM Sans"`, 22, w * 0.42);
+  ctx.fillText(rightText, x + w - 20, mid + 8);
+  const rightW = ctx.measureText(rightText).width;
+  ctx.textAlign = 'left';
+  const nameX = x + h + 6;
+  let tagW = 0;
+  ctx.font = '800 16px "DM Sans"';
+  if (r.bot) tagW = ctx.measureText('BOT').width + 16;
+  if (r.you) tagW += ctx.measureText('YOU').width + 16 + (r.bot ? 6 : 0);
+  const nameMax = w - (nameX - x) - rightW - 36 - (tagW ? tagW + 8 : 0);
+  const name = fit(ctx, r.name, (px) => `${r.you ? 800 : 700} ${px}px "DM Sans"`, 24, Math.max(40, nameMax));
+  ctx.fillText(name, nameX, mid + 8);
+  let tx = nameX + ctx.measureText(name).width + 8;
+  const tag = (text: string, fill: string, ink: string) => {
+    ctx.font = '800 16px "DM Sans"';
+    const tw = ctx.measureText(text).width + 16;
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.roundRect(tx, mid - 13, tw, 26, 6);
+    ctx.fill();
+    ctx.fillStyle = ink;
+    ctx.fillText(text, tx + 8, mid + 6);
+    tx += tw + 6;
+  };
+  if (r.bot) tag('BOT', INK, CREAM);
+  if (r.you) tag('YOU', TEAL, '#FFFFFF');
 }
