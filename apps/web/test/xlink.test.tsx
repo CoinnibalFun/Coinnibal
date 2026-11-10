@@ -4,7 +4,7 @@ import { Kb } from '../src/design';
 import { translate } from '../src/i18n';
 import { labelName } from '../src/render/renderer';
 import { useUi } from '../src/store';
-import { KillShare, SHARE_COIN, killShareText, resultShareText, victimLabel } from '../src/ui/game/ShareOnX';
+import { KillShare, SHARE_COIN, SHARE_VARIANTS, killShareText, resultShareText, victimLabel } from '../src/ui/game/ShareOnX';
 import { LinkXCard } from '../src/ui/profile/LinkX';
 import { resetWallets, useWallet } from '../src/wallet/store';
 import { useXLink } from '../src/wallet/xlink';
@@ -35,13 +35,15 @@ describe('Link X in the share posts', () => {
       </Kb>,
     );
     expect(screen.getByTestId('kill-share').textContent).toContain('You ate @penny_x!');
-    expect(killShareText(t, useUi.getState().share!)).toBe('I just ate @penny_x on Elymum!');
+    const post = killShareText(t, useUi.getState().share!);
+    expect(SHARE_VARIANTS.kill.map((k) => t(k, { name: '@penny_x' }))).toContain(post);
+    expect(post).toContain('@penny_x');
   });
 
   it('a result names linked coins by @handle in its eaten list', () => {
-    expect(resultShareText(t, { rank: 1, n: 5, room: 'Pond', eaten: [{ name: 'Penny', xHandle: 'penny_x' }, { name: 'Rocky', n: 2 }, { name: 'Zed', bot: true, xHandle: 'zed' }] })).toBe(
-      'I finished #1 of 5 in Pond on Elymum and snacked on @penny_x, Rocky ×2, Zed (BOT)!',
-    );
+    const post = resultShareText(t, { rank: 1, n: 5, room: 'Pond', eaten: [{ name: 'Penny', xHandle: 'penny_x' }, { name: 'Rocky', n: 2 }, { name: 'Zed', bot: true, xHandle: 'zed' }] });
+    expect(SHARE_VARIANTS.resultAte.map((k) => t(k, { rank: 1, n: 5, room: 'Pond', names: '@penny_x, Rocky ×2, Zed (BOT)' }))).toContain(post);
+    expect(post).not.toContain('@zed');
   });
 
   it('the coin name tag carries the handle after the name (people only)', () => {
