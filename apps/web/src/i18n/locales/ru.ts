@@ -862,6 +862,7 @@ const ru: Dict = {
   'shop.qtyLabel': "Наборы «{name}» в корзине",
   'shop.add': "Добавить {n} · {price}",
   'shop.owned': "У тебя {n}",
+  'shop.info': "Что делает {name}",
   'shop.signIn': "Войди через кошелёк, чтобы покупать бонусы.",
   'shop.signInBtn': "Войти через кошелёк",
   'shop.closed': "Магазин сейчас закрыт.",

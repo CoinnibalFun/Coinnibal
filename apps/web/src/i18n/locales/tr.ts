@@ -862,6 +862,7 @@ const tr: Dict = {
   'shop.qtyLabel': "Sepetteki {name} paketleri",
   'shop.add': "{n} ekle · {price}",
   'shop.owned': "Sende {n} var",
+  'shop.info': "{name} ne işe yarar",
   'shop.signIn': "Güçlendirme almak için cüzdanınla giriş yap.",
   'shop.signInBtn': "Cüzdanla giriş yap",
   'shop.closed': "Dükkân şu an kapalı.",

@@ -862,6 +862,7 @@ const pt: Dict = {
   'shop.qtyLabel': "Pacotes de {name} no carrinho",
   'shop.add': "Adicionar {n} · {price}",
   'shop.owned': "Você tem {n}",
+  'shop.info': "O que {name} faz",
   'shop.signIn': "Entre com sua carteira para comprar power-ups.",
   'shop.signInBtn': "Entrar com a carteira",
   'shop.closed': "A loja está fechada agora.",
