@@ -139,6 +139,8 @@ export const en = {
   'g.key.mouse': 'mouse',
   'g.key.wasd': 'wasd',
   'g.key.click': 'click',
+  'g.key.tab': 'tab',
+  'g.key.board': 'hold: standings',
   'g.keysLabel': 'Keys',
   'g.youName': 'you',
   'g.practiceTag': 'practice · no bell',

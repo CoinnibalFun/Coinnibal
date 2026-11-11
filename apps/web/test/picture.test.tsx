@@ -2,7 +2,7 @@ import { EMBLEM_SKIN_ID, EntityKind, PlayerFlag, encodeSnapshot, type ProfileVie
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClientWorld } from '../src/game/state';
-import { AVATAR_BUCKETS, AvatarCache, bucketFor } from '../src/render/avatars';
+import { AVATAR_BUCKETS, AvatarCache, PICTURE_BACKDROP, bucketFor } from '../src/render/avatars';
 import { useUi, updateSettings } from '../src/store';
 import { PicturePanel, PictureTile, usePicture } from '../src/ui/profile/PicturePicker';
 import { centerCrop, clampCrop, coverScale, pictureStatus, sourceRect, wearsPicture, zoomCrop } from '../src/ui/profile/picture';
@@ -56,7 +56,52 @@ describe('avatar cache', () => {
     expect(bucketFor(1)).toBe(0);
     expect(AVATAR_BUCKETS[bucketFor(30)]).toBe(32);
     expect(AVATAR_BUCKETS[bucketFor(33)]).toBe(48);
-    expect(AVATAR_BUCKETS[bucketFor(5000)]).toBe(128);
+    // past the pictures' own 128 px, enlarged discs (cut once, with high-quality smoothing) up to 384
+    expect(AVATAR_BUCKETS[bucketFor(129)]).toBe(192);
+    expect(AVATAR_BUCKETS[bucketFor(300)]).toBe(384);
+    expect(AVATAR_BUCKETS[bucketFor(5000)]).toBe(384);
+  });
+
+  it('cuts a picture onto a black disc (a transparent or soft-edged picture never shows the floor) and keeps a byte budget', () => {
+    const calls: string[] = [];
+    const ctx = {
+      fillStyle: '',
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: 'low',
+      beginPath: () => {},
+      arc: () => {},
+      clip: () => calls.push('clip'),
+      fill: () => calls.push(`fill ${ctx.fillStyle}`),
+      drawImage: () => calls.push('picture'),
+    };
+    const spy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ctx as unknown as CanvasRenderingContext2D);
+    try {
+      const cache = new AvatarCache((id) => `data:,${id}`);
+      const ready = (id: string) => {
+        cache.request(id);
+        const e = (cache as unknown as { entries: Map<string, { state: string; img: unknown }> }).entries.get(id)!;
+        e.state = 'ready';
+        e.img = { naturalWidth: 128 };
+      };
+      ready(PIC);
+      const disc = cache.disc(PIC, 300)!;
+      expect(disc.width).toBe(384);
+      expect(calls).toEqual([`fill ${PICTURE_BACKDROP}`, 'clip', 'picture']);
+      expect(ctx.imageSmoothingQuality).toBe('high');
+      // the same size is cut once
+      expect(cache.disc(PIC, 290)).toBe(disc);
+      expect(cache.bytes).toBe(384 * 384 * 4);
+      // many big pictures: the least recently drawn give their discs back (they are cut again when next drawn)
+      const ids = Array.from({ length: 60 }, (_, i) => (0x1000000000000000 + i).toString(16));
+      for (const id of ids) {
+        ready(id);
+        cache.disc(id, 384);
+      }
+      expect(cache.bytes).toBeLessThanOrEqual(24 * 1024 * 1024);
+      expect(cache.disc(ids[59], 384)).not.toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('answers null while a picture loads and for bad ids, and loads each id once', () => {

@@ -132,6 +132,8 @@ const pt: Dict = {
   'g.key.mouse': "mouse",
   'g.key.wasd': "wasd",
   'g.key.click': "clique",
+  'g.key.tab': "tab",
+  'g.key.board': "segure: classificação",
   'g.keysLabel': "Teclas",
   'g.youName': "você",
   'g.practiceTag': "treino · sem sino",

@@ -5,9 +5,9 @@ import { Kb } from '../src/design';
 import type { GameEngine } from '../src/game/engine';
 import { setEngine } from '../src/game/instance';
 import { useUi } from '../src/store';
-import { GameHud, StandingsSheet } from '../src/ui/game';
+import { GameHud, StandingsPeek, StandingsSheet } from '../src/ui/game';
 import { MAP_SIZE, hudClass } from '../src/ui/game/GameHud';
-import { rowsFromLb } from '../src/ui/game/StandingsSheet';
+import { peekRows, rowsFromLb } from '../src/ui/game/StandingsSheet';
 
 const initial = useUi.getState();
 afterEach(() => {
@@ -108,5 +108,69 @@ describe('everyone in the room', () => {
     );
     act(() => useUi.setState({ screen: 'lobby' }));
     expect(useUi.getState().modal).toBeNull();
+  });
+});
+
+describe('Tab peek: the full standings while Tab is held', () => {
+  it('shows over the game only while held (and only in the game view), asking the server meanwhile', () => {
+    const watchStandings = vi.fn();
+    setEngine({ watchStandings } as unknown as GameEngine);
+    act(() => useUi.setState({ screen: 'playing', room: ROOM, me: { pid: 7, name: 'Daphne', skin: 4 }, standings: { rows: ROWS, players: 4, watching: 0, at: Date.now() } }));
+    render(
+      <Kb>
+        <StandingsPeek />
+      </Kb>,
+    );
+    expect(screen.queryByTestId('standings-peek')).toBeNull();
+    expect(watchStandings).not.toHaveBeenCalled();
+    act(() => useUi.setState({ standingsPeek: true }));
+    const peek = screen.getByTestId('standings-peek');
+    // it never takes the pointer or the focus: the mouse keeps steering
+    expect(peek.getAttribute('aria-hidden')).toBe('true');
+    expect(peek.querySelector('button, a, input')).toBeNull();
+    expect(watchStandings).toHaveBeenLastCalledWith(true);
+    const rows = within(peek).getAllByTestId('standings-row');
+    expect(rows).toHaveLength(4);
+    expect(rows[2].textContent).toContain('Daphne (you)');
+    // a panel opened over it (the card clicked while Tab is held) hides it
+    act(() => useUi.setState({ modal: 'settings' }));
+    expect(screen.queryByTestId('standings-peek')).toBeNull();
+    act(() => useUi.setState({ modal: null }));
+    expect(screen.getByTestId('standings-peek')).toBeTruthy();
+    // let go
+    act(() => useUi.setState({ standingsPeek: false }));
+    expect(screen.queryByTestId('standings-peek')).toBeNull();
+    expect(watchStandings).toHaveBeenLastCalledWith(false);
+    // outside the game view (the lobby) Tab shows nothing
+    act(() => useUi.setState({ screen: 'lobby', standingsPeek: true }));
+    expect(screen.queryByTestId('standings-peek')).toBeNull();
+  });
+
+  it('fits the window and pins my row under the visible ones when it would fall below the fold', () => {
+    // 800 px: 16 rows fit
+    expect(peekRows(10, 3, 800)).toEqual({ shown: 10, pinned: false });
+    expect(peekRows(120, 3, 800)).toEqual({ shown: 16, pinned: false });
+    expect(peekRows(120, 15, 800)).toEqual({ shown: 16, pinned: false });
+    expect(peekRows(120, 16, 800)).toEqual({ shown: 15, pinned: true });
+    expect(peekRows(120, 80, 800)).toEqual({ shown: 15, pinned: true });
+    expect(peekRows(120, -1, 800)).toEqual({ shown: 16, pinned: false });
+    // a very low window still shows a few rows
+    expect(peekRows(120, 50, 200).shown).toBe(4);
+  });
+
+  it('pins my row with its real rank', () => {
+    const many: StandingRow[] = Array.from({ length: 60 }, (_, i) => ({ pid: 100 + i, name: `c${i}`, skin: 1, score: 1000 - i }));
+    setEngine({ watchStandings: vi.fn() } as unknown as GameEngine);
+    act(() => useUi.setState({ screen: 'playing', room: ROOM, me: { pid: 150, name: 'c50', skin: 1 }, standingsPeek: true, standings: { rows: many, players: 60, watching: 0, at: Date.now() } }));
+    render(
+      <Kb>
+        <StandingsPeek />
+      </Kb>,
+    );
+    const rows = within(screen.getByTestId('standings-peek')).getAllByTestId('standings-row');
+    const last = rows[rows.length - 1];
+    expect(last.getAttribute('aria-current')).toBe('true');
+    expect(last.textContent).toContain('51');
+    expect(last.textContent).toContain('c50 (you)');
   });
 });

@@ -230,3 +230,91 @@ describe('Input keys', () => {
     expect(input.keys.active).toBe(false);
   });
 });
+
+describe('Tab: hold for the full standings', () => {
+  let input: Input | null = null;
+  afterEach(() => {
+    input?.destroy();
+    input = null;
+  });
+  const make = (peeking = true) => {
+    const state = { peeking, peek: [] as boolean[] };
+    const actions: InputActions = {
+      split: vi.fn(),
+      eject: vi.fn(),
+      emote: vi.fn(),
+      openChat: vi.fn(),
+      escape: vi.fn(),
+      spectateNext: vi.fn(),
+      steering: () => true,
+      peeking: () => state.peeking,
+      peek: (on) => state.peek.push(on),
+    };
+    input = new Input(document.createElement('div'), actions, () => {}, () => {});
+    return state;
+  };
+  const tab = (type: 'keydown' | 'keyup', init: KeyboardEventInit = {}, target: EventTarget = window) => {
+    const e = new KeyboardEvent(type, { code: 'Tab', key: 'Tab', bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(e);
+    return e;
+  };
+
+  it('opens while held and closes when let go; the key repeat changes nothing (no flicker)', () => {
+    const s = make();
+    expect(tab('keydown').defaultPrevented).toBe(true);
+    expect(s.peek).toEqual([true]);
+    for (let i = 0; i < 5; i++) expect(tab('keydown', { repeat: true }).defaultPrevented).toBe(true);
+    expect(s.peek).toEqual([true]);
+    tab('keyup');
+    expect(s.peek).toEqual([true, false]);
+    // a stray keyup with nothing held sends nothing
+    tab('keyup');
+    expect(s.peek).toEqual([true, false]);
+  });
+
+  it('closes when the window loses focus or the tab is hidden while Tab is held (its keyup never comes)', () => {
+    const s = make();
+    tab('keydown');
+    window.dispatchEvent(new Event('blur'));
+    expect(s.peek).toEqual([true, false]);
+    tab('keydown');
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    try {
+      document.dispatchEvent(new Event('visibilitychange'));
+    } finally {
+      delete (document as unknown as { visibilityState?: string }).visibilityState;
+    }
+    expect(s.peek).toEqual([true, false, true, false]);
+  });
+
+  it('leaves Tab to the browser outside the game view, in the chat line, in a field and in a dialog', () => {
+    const s = make(false);
+    expect(tab('keydown').defaultPrevented).toBe(false);
+    tab('keyup');
+    s.peeking = true;
+    const field = document.createElement('input');
+    document.body.append(field);
+    expect(tab('keydown', {}, field).defaultPrevented).toBe(false);
+    tab('keyup', {}, field);
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    const btn = document.createElement('button');
+    dialog.append(btn);
+    document.body.append(dialog);
+    expect(tab('keydown', {}, btn).defaultPrevented).toBe(false);
+    tab('keyup', {}, btn);
+    // Ctrl/Alt+Tab belong to the browser and the system
+    expect(tab('keydown', { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(s.peek).toEqual([]);
+    field.remove();
+    dialog.remove();
+  });
+
+  it('lets go when the input is destroyed with Tab held', () => {
+    const s = make();
+    tab('keydown');
+    input!.destroy();
+    input = null;
+    expect(s.peek).toEqual([true, false]);
+  });
+});

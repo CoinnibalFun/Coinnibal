@@ -2,6 +2,7 @@ import { CARD_PAPER, ELYSIUM, INK, RISO } from '@elymum/art';
 import {
   PlayerFlag,
   PowerUpType,
+  TICK_MS,
   BOOST_KINDS,
   clamp,
   emptyBoostCounts,
@@ -178,6 +179,13 @@ export class GameEngine {
         steering: () => {
           const s = useUi.getState();
           return s.screen === 'playing' && !s.chatOpen;
+        },
+        peeking: () => {
+          const s = useUi.getState();
+          return (s.screen === 'playing' || s.screen === 'spectating') && !s.chatOpen && !s.modal;
+        },
+        peek: (on) => {
+          if (useUi.getState().standingsPeek !== on) useUi.setState({ standingsPeek: on });
         },
       },
       (dy) => this.camera.wheel(dy),
@@ -368,9 +376,16 @@ export class GameEngine {
    * second while it is open (`standings`), and nothing when it is closed.
    */
   watchStandings(on: boolean): void {
+    // the sheet and the Tab peek may overlap (the sheet opened while Tab is held): the list flows while either is open
+    const was = this.standingsWatchers;
+    this.standingsWatchers = Math.max(0, was + (on ? 1 : -1));
+    if ((was > 0) === (this.standingsWatchers > 0)) return;
     this.net.send({ t: 'standings', on });
     if (!on) useUi.setState({ standings: null });
   }
+
+  /** Open standings views (`watchStandings`). */
+  private standingsWatchers = 0;
 
   private lastBuyHintAt = 0;
 
@@ -487,8 +502,12 @@ export class GameEngine {
   /** Applies the snapshots whose time on the timeline has come (`all`: every one queued). */
   applySnapshots(now: number, all = false): void {
     for (const d of this.timeline.due(now, all)) {
+      // its ease starts at its own time on the timeline, not at the frame that happens to pick it up (on a 144 Hz
+      // screen that is up to a frame late, a different amount each time: uneven steps); never later than now, and
+      // a backlog (a hitch, the bell's freeze) starts at most a tick back
+      const at = Math.min(now, Math.max(now - TICK_MS, d.at + this.timeline.delayMs));
       try {
-        this.world.applyBinary(d.item, now, d.step);
+        this.world.applyBinary(d.item, at, d.step);
       } catch (err) {
         console.warn('bad snapshot', err);
       }
@@ -547,8 +566,8 @@ export class GameEngine {
         useUi.setState({ connected: true, connecting: false, netDown: null, rooms: m.rooms, chain: m.chain, online: m.online, blockedArenas: (m.blocked ?? []).map((b) => b.arenaId) });
         const auth = useUi.getState().auth;
         if (auth) this.authToken(auth.token);
-        // the standings sheet stays live across a reconnect
-        if (useUi.getState().modal === 'standings') this.net.send({ t: 'standings', on: true });
+        // the standings sheet (or the Tab peek) stays live across a reconnect
+        if (this.standingsWatchers > 0) this.net.send({ t: 'standings', on: true });
         this.resize();
         const screen = useUi.getState().screen;
         if (this.wasArena !== null && (screen === 'playing' || screen === 'lobby')) {
@@ -674,8 +693,8 @@ export class GameEngine {
         return;
       }
       case 'standings':
-        // a late answer after the sheet closed is dropped
-        if (useUi.getState().modal === 'standings') useUi.setState({ standings: { rows: m.rows, players: m.players, watching: m.watching, at: Date.now() } });
+        // a late answer after the sheet (and the peek) closed is dropped
+        if (this.standingsWatchers > 0) useUi.setState({ standings: { rows: m.rows, players: m.players, watching: m.watching, at: Date.now() } });
         return;
       case 'kf':
         useUi.setState((s) => ({
