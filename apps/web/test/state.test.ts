@@ -126,3 +126,47 @@ describe('ClientWorld · value messages', () => {
     expect(w.value).toBeNull();
   });
 });
+
+describe('ClientWorld · interpolation', () => {
+  it('a coin moving at a steady speed moves the same distance every frame (30 snapshots a second, 60 frames)', () => {
+    // the engine's order each frame: the snapshots due are applied, then the world steps
+    const w = new ClientWorld();
+    const TICK = 1000 / 30;
+    const FRAME = 1000 / 60;
+    const speed = 0.3; // world units per ms
+    let tick = 0;
+    const steps: number[] = [];
+    let last: number | null = null;
+    for (let f = 0; f < 60; f++) {
+      const now = f * FRAME;
+      while (tick * TICK <= now + 1e-6) {
+        const at = tick * TICK;
+        w.apply(snap({ tick, upserts: [{ id: 1, kind: EntityKind.Cell, x: 1000 + speed * at, y: 500, r: 40, playerId: ME }] }), at, TICK);
+        tick++;
+      }
+      w.update(now, FRAME / 1000);
+      const x = w.entities.get(1)!.x;
+      if (last !== null && f > 4) steps.push(x - last);
+      last = x;
+    }
+    const want = speed * FRAME;
+    for (const s of steps) expect(s).toBeCloseTo(want, 6);
+  });
+
+  it('a snapshot picked up a little late eases on from where the coin is drawn, without a jump back', () => {
+    const w = new ClientWorld();
+    w.apply(snap({ upserts: [{ id: 1, kind: EntityKind.Cell, x: 0, y: 0, r: 40, playerId: ME }] }), 0, 100);
+    w.apply(snap({ upserts: [{ id: 1, kind: EntityKind.Cell, x: 100, y: 0, r: 50, playerId: ME }] }), 0, 100);
+    w.update(60, 0.016);
+    const e = w.entities.get(1)!;
+    expect(e.x).toBeCloseTo(60);
+    // the next lands at 80 (before this frame's step): the new ease starts at the place on the old one at 80
+    w.apply(snap({ upserts: [{ id: 1, kind: EntityKind.Cell, x: 200, y: 0, r: 60, playerId: ME }] }), 80, 100);
+    expect(e.ox).toBeCloseTo(80);
+    expect(e.or).toBeCloseTo(48);
+    w.update(80, 0.016);
+    expect(e.x).toBeCloseTo(80);
+    w.update(130, 0.016);
+    expect(e.x).toBeCloseTo(80 + (200 - 80) * 0.5);
+  });
+});

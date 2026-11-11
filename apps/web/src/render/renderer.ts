@@ -110,6 +110,21 @@ export function canvasDpr(quality: Quality = 'high'): number {
   return Math.min(window.devicePixelRatio || 1, cap);
 }
 
+/** On-screen size of an emote sticker (CSS px): about the coin's face, never unreadably small nor huge. */
+export const EMOTE_MIN_PX = 36;
+export const EMOTE_MAX_PX = 150;
+/** Share of the coin's diameter the sticker spans (inside the rim: the name tag above stays clear). */
+export const EMOTE_COIN_SHARE = 0.62;
+
+/**
+ * Size (world units) of the emote sticker drawn centred on a coin of world radius `r` at camera `zoom`: about
+ * `EMOTE_COIN_SHARE` of the coin's diameter on screen, within `EMOTE_MIN_PX`..`EMOTE_MAX_PX`.
+ */
+export function emoteSize(r: number, zoom: number): number {
+  const px = r * zoom * 2 * EMOTE_COIN_SHARE;
+  return (px < EMOTE_MIN_PX ? EMOTE_MIN_PX : px > EMOTE_MAX_PX ? EMOTE_MAX_PX : px) / zoom;
+}
+
 /**
  * Sorts by radius in place (insertion sort: the order barely changes between frames, so this is
  * about linear, and unlike Array#sort it never allocates merge buffers).
@@ -832,7 +847,7 @@ export class Renderer {
     this.labels.drawSticker(this.ctx, l, e);
   }
 
-  /** Emote stickers: pop in with an overshoot, tilt, bob, then peel away. */
+  /** Emote stickers, centred on the sender's biggest coin: pop in with an overshoot, tilt, bob, then peel away. */
   private drawEmotes(f: FrameInput, cells: CEntity[]): void {
     const { ctx } = this;
     const z = f.camera.zoom;
@@ -857,12 +872,13 @@ export class Renderer {
       // spring-ish overshoot: 0.4 → 1.12 → 1
       const pop = f.reduced ? 1 : t < 1 ? 0.4 + 0.72 * Math.sin((t * Math.PI) / 2) ** 2 + 0.12 * Math.sin(t * Math.PI) - 0.12 * t : 1;
       const fade = age > 2200 ? Math.max(0, 1 - (age - 2200) / 400) : f.reduced ? Math.min(1, age / 120) : 1;
-      const size = Math.max(46, Math.min(80, c.r * z * 0.85)) / z;
+      const size = emoteSize(c.r, z);
       const bob = f.reduced ? 0 : Math.sin(age / 260) * size * 0.03;
       const tilt = ((emote.id % 3) - 1) * 0.1 + (f.reduced ? 0 : Math.sin(age / 400) * 0.03);
       ctx.save();
       ctx.globalAlpha = fade;
-      ctx.translate(c.x + c.r * 0.45, c.y - c.r - size * 0.42 + bob);
+      // on the middle of the coin (over its face for the moment it is up), clear of the name tag above it
+      ctx.translate(c.x, c.y + bob);
       ctx.rotate(tilt);
       ctx.scale(pop, pop);
       ctx.drawImage(img, -size / 2, -size / 2, size, size);

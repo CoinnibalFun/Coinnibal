@@ -132,6 +132,8 @@ const ru: Dict = {
   'g.key.mouse': "мышь",
   'g.key.wasd': "wasd",
   'g.key.click': "клик",
+  'g.key.tab': "Tab",
+  'g.key.board': "удерживать: таблица",
   'g.keysLabel': "Клавиши",
   'g.youName': "ты",
   'g.practiceTag': "тренировка · без звонка",

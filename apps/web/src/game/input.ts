@@ -12,6 +12,13 @@ export interface InputActions {
   spectateNext(): void;
   /** True while a game is being played: move keys steer (and arrows stop scrolling the page). */
   steering(): boolean;
+  /**
+   * True when Tab may peek at the full standings: playing or spectating in the game view, with no chat line or
+   * panel open (there Tab keeps moving the keyboard focus). Optional: tests may leave it out.
+   */
+  peeking?(): boolean;
+  /** Tab held (`true`) or let go (`false`): the full standings over the game while it is held. */
+  peek?(on: boolean): void;
 }
 
 export type MoveDir = 'up' | 'down' | 'left' | 'right';
@@ -135,6 +142,8 @@ export class Input {
   /** WASD / arrow keys: a unit direction, fed to the aim like the stick at full reach. */
   readonly keys = new KeySteer();
   private ejectTimer: number | null = null;
+  /** Tab is held for the standings peek. */
+  private peekHeld = false;
   private readonly cleanup: (() => void)[] = [];
 
   constructor(
@@ -177,7 +186,43 @@ export class Input {
     on(window, 'blur', () => {
       this.stopEject();
       this.keys.clear();
+      // the keyup of a Tab held while the window lost focus never comes: the peek must not stay open
+      this.endPeek();
     });
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') this.endPeek();
+    };
+    document.addEventListener('visibilitychange', onHidden);
+    this.cleanup.push(() => document.removeEventListener('visibilitychange', onHidden));
+  }
+
+  /** Lets go of the standings peek (Tab up, the window lost focus, the tab hidden). */
+  private endPeek(): void {
+    if (!this.peekHeld) return;
+    this.peekHeld = false;
+    this.actions.peek?.(false);
+  }
+
+  /**
+   * Tab: held, it shows the full standings over the game; let go, they close. Only in the game view (playing or
+   * spectating, no chat line, no panel) and never while typing: everywhere else Tab moves the keyboard focus as
+   * usual. Key repeats while it is held change nothing (no flicker). Returns true when the key was taken.
+   */
+  private peekKey(e: KeyboardEvent): boolean {
+    if (e.code !== 'Tab' && e.key !== 'Tab') return false;
+    if (e.altKey || e.ctrlKey || e.metaKey) return false;
+    if (!this.peekHeld && (this.typing(e) || this.inDialog(e) || !this.actions.peek || !this.actions.peeking?.())) return false;
+    e.preventDefault();
+    if (!this.peekHeld) {
+      this.peekHeld = true;
+      this.actions.peek!(true);
+    }
+    return true;
+  }
+
+  private inDialog(e: KeyboardEvent): boolean {
+    const el = e.target as HTMLElement | null;
+    return !!el && typeof el.closest === 'function' && !!el.closest('[role="dialog"]');
   }
 
   private typing(e: KeyboardEvent): boolean {
@@ -199,6 +244,7 @@ export class Input {
   }
 
   private keyDown(e: KeyboardEvent): void {
+    if (this.peekKey(e)) return;
     if (e.key === 'Escape') {
       this.actions.escape();
       return;
@@ -242,6 +288,10 @@ export class Input {
   }
 
   private keyUp(e: KeyboardEvent): void {
+    if (e.code === 'Tab' || e.key === 'Tab') {
+      this.endPeek();
+      return;
+    }
     // released even while typing: a key held into the chat line must not stick
     if (this.keys.up(e.code)) return;
     if (e.code === 'KeyE') this.stopEject();
@@ -281,6 +331,7 @@ export class Input {
 
   destroy(): void {
     this.stopEject();
+    this.endPeek();
     for (const fn of this.cleanup) fn();
   }
 }
