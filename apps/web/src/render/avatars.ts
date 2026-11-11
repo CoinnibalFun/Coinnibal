@@ -1,8 +1,16 @@
 import { avatarPath, isAvatarId } from '@elymum/shared';
 import { SERVER } from '../config';
 
-/** Disc sizes (device px) a picture is pre-rendered at; a coin uses the smallest one at least its size. */
-const BUCKETS = [16, 24, 32, 48, 64, 96, 128] as const;
+/**
+ * Disc sizes (device px) a picture is pre-rendered at; a coin uses the smallest one at least its size. Past the
+ * pictures' own 128 px the discs are enlarged once with high-quality smoothing (a big coin then draws one sharp
+ * disc at about its size, instead of stretching a 128 px one with the frame's plain bilinear filter every frame).
+ */
+const BUCKETS = [16, 24, 32, 48, 64, 96, 128, 192, 256, 384] as const;
+/** Decoded discs kept at once, bytes (the least recently drawn pictures give theirs back first). */
+const MAX_DISC_BYTES = 24 * 1024 * 1024;
+/** The backdrop under a picture: a transparent or soft-edged one never shows the floor through the coin. */
+export const PICTURE_BACKDROP = '#000';
 /** Pictures kept decoded at once (least recently drawn ones go first). */
 const MAX_ENTRIES = 80;
 /** Downloads at once (the rest wait their turn). */
@@ -45,6 +53,8 @@ export class AvatarCache {
   private readonly listeners = new Set<(id: string) => void>();
   private loading = 0;
   private clock = 0;
+  /** Bytes of every disc cut (see `MAX_DISC_BYTES`). */
+  private discBytes = 0;
 
   constructor(
     private readonly urlOf: (id: string) => string = (id) => `${SERVER.http}${avatarPath(id)}`,
@@ -147,22 +157,50 @@ export class AvatarCache {
     ctx.imageSmoothingQuality = 'high';
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    ctx.fillStyle = PICTURE_BACKDROP;
+    ctx.fill();
     ctx.clip();
     // a larger disc already cut is a better source than the full picture for a big step down
     const from = e.discs.findIndex((d, i) => !!d && i > b && BUCKETS[i] <= size * 2);
     ctx.drawImage(from >= 0 ? e.discs[from]! : e.img, 0, 0, size, size);
     e.discs[b] = c;
+    this.discBytes += size * size * 4;
+    if (this.discBytes > MAX_DISC_BYTES) this.trimDiscs(e);
     return c;
+  }
+
+  /** Gives back the discs of the least recently drawn pictures (they are cut again on their next use) until under budget. */
+  private trimDiscs(keep: Entry): void {
+    const order = [...this.entries.values()].filter((x) => x !== keep && x.discs.length > 0).sort((a, b) => a.used - b.used);
+    for (const x of order) {
+      if (this.discBytes <= MAX_DISC_BYTES) break;
+      this.dropDiscs(x);
+    }
+  }
+
+  private dropDiscs(e: Entry): void {
+    for (const d of e.discs) if (d) this.discBytes -= d.width * d.height * 4;
+    e.discs = [];
+  }
+
+  /** Bytes of the discs cut and kept (tests). */
+  get bytes(): number {
+    return this.discBytes;
   }
 
   private evict(): void {
     let oldest: Entry | null = null;
     for (const e of this.entries.values()) if (e.state !== 'loading' && (!oldest || e.used < oldest.used)) oldest = e;
-    if (oldest) this.entries.delete(oldest.id);
+    if (oldest) {
+      this.dropDiscs(oldest);
+      this.entries.delete(oldest.id);
+    }
   }
 
   /** Forgets a picture (it was removed: the next request loads it again). */
   forget(id: string): void {
+    const e = this.entries.get(id);
+    if (e) this.dropDiscs(e);
     this.entries.delete(id);
   }
 }

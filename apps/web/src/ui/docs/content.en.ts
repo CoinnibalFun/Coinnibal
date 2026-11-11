@@ -80,6 +80,7 @@ export const docsEn = (
               { key: 'Enter', action: 'Chat' },
               { key: '1–8', action: 'Stickers (emotes): Hype or Trash talk (the switch on the sticker bar)' },
               { key: 'R / F / G / V', action: 'Bought power-ups: Magnet, Leap, Speed burst, Invisibility (buttons by Split on phones)' },
+              { key: 'Tab (hold)', action: 'Everyone in the room: the full standings while held (tap the standings card on phones)' },
               { key: 'Q', action: 'Next player while spectating' },
               { key: 'Esc', action: 'Close the chat or an open panel' },
             ],

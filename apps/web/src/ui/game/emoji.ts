@@ -3,7 +3,11 @@ import { emoteEmoji } from '@elymum/shared';
 /** The platform's colour emoji fonts, in the order the systems ship them. */
 export const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
 
-const SIZE = 128;
+/**
+ * Tile size, px: the sticker is drawn up to `EMOTE_MAX_PX` (150 CSS px) on a big coin, 300 device px on a 2x screen,
+ * so the tile covers that without being stretched (a 128 px tile went soft on big coins).
+ */
+const SIZE = 320;
 const tiles = new Map<number, HTMLCanvasElement | null>();
 
 /**

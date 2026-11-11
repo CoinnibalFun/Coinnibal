@@ -179,8 +179,10 @@ export interface UiState {
   /** The arena ticket being played: its own price, arena and session. */
   ticket: { entryFee: number; arenaId: number | null; session: string | null } | null;
   lb: LbEntry[];
-  /** The full room standings (`standings`), while the standings sheet is open; null otherwise. */
+  /** The full room standings (`standings`), while the standings sheet or the Tab peek is open; null otherwise. */
   standings: { rows: StandingRow[]; players: number; watching: number; at: number } | null;
+  /** Tab held in a game (desktop): the full standings shown over the game until it is let go (`StandingsPeek`). */
+  standingsPeek: boolean;
   leaders: { x: number; y: number }[];
   killfeed: KillItem[];
   /** Coins I ate this game, counted from the kill feed (the HUD's "Share on X" line); reset on every join. */
@@ -352,6 +354,7 @@ export const useUi = create<UiState>(() => ({
   ticket: null,
   lb: [],
   standings: null,
+  standingsPeek: false,
   leaders: [],
   killfeed: [],
   myEaten: 0,

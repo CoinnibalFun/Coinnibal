@@ -132,6 +132,8 @@ const tr: Dict = {
   'g.key.mouse': "fare",
   'g.key.wasd': "wasd",
   'g.key.click': "tık",
+  'g.key.tab': "tab",
+  'g.key.board': "basılı tut: sıralama",
   'g.keysLabel': "Tuşlar",
   'g.youName': "sen",
   'g.practiceTag': "antrenman · zil yok",

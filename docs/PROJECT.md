@@ -61,6 +61,7 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 | Bought power-ups | `R` Magnet, `F` Leap, `G` Speed, `V` Invisibility (the keys on the right, above the minimap, with the KEYS hint under them) | power-up buttons |
 | Chat / sticker | `Enter` (the chat sits at the bottom left, see-through; a line fades after 5 s) / `1`–`8` (the switch on the sticker bar flips the page: Hype or Trash talk) | chat / sticker buttons (with a page switch) |
 | Share, shop | "Share on X" and "Shop" on the top bar while playing | the same, as icon keys |
+| Full standings (everyone in the room) | hold `Tab` (closes when let go; Tab only peeks in the game view, it still moves the focus in the chat line and in panels) | tap the standings card |
 | Next player while spectating | `Q` | |
 | Close the chat or a panel | `Esc` | |
 

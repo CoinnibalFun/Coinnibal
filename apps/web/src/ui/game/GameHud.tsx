@@ -443,6 +443,9 @@ function KeyHints() {
       <span className="g-keys__item">
         <kbd className="kb-key">1–8</kbd> {t('g.emotes').toLowerCase()}
       </span>
+      <span className="g-keys__item">
+        <kbd className="kb-key">{t('g.key.tab')}</kbd> {t('g.key.board')}
+      </span>
       {hasBoosts && (
         <span className="g-keys__item">
           {BOOST_KINDS.map((k) => (
