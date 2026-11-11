@@ -5,7 +5,7 @@ export { RoundOverSheet, receiptNumbers, settlementFor, ROUND_SHEET_DELAY_MS } f
 export { RoundChip, RoundCountdown } from './RoundChip';
 export { RoomClosingNotice, RoomOverSheet } from './RoomClosing';
 export { HowToSheet, SettingsSheet } from './SettingsSheet';
-export { StandingsSheet } from './StandingsSheet';
+export { StandingsPeek, StandingsSheet } from './StandingsSheet';
 export { FirstPlayBrief } from './FirstPlayBrief';
 export { emojiImage, EMOJI_FONT } from './emoji';
 export { BellMoment, DeathMoment, RoundIntro, SunsetSky, ValueFlyers, VALUE_FLY_EVENT, type ValueFlyDetail } from './Moments';

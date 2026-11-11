@@ -132,6 +132,8 @@ const zh: Dict = {
   'g.key.mouse': "鼠标",
   'g.key.wasd': "wasd",
   'g.key.click': "点击",
+  'g.key.tab': "Tab",
+  'g.key.board': "按住：排行榜",
   'g.keysLabel': "按键",
   'g.youName': "你",
   'g.practiceTag': "练习 · 无铃声",

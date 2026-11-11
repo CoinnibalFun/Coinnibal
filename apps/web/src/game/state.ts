@@ -183,8 +183,22 @@ export class ClientWorld implements SnapshotSink {
     return q;
   }
 
+  /**
+   * Moves every entity to its place at `now` on its current ease, before a snapshot starts the next ease from there
+   * (`upsert` takes `x` as the start). A snapshot lands before the frame's step: started from the last frame's
+   * place instead, each ease lost its rest and, at 60 Hz with 30 snapshots a second, a coin stood still every other
+   * frame while the camera glided on, a 30 Hz judder that read as a blurry coin whenever it moved. No velocity
+   * smoothing here (`dt` 0); the frame's own step follows.
+   */
+  private settle(now: number): void {
+    this.stepNow = now;
+    this.stepDt = 0;
+    this.entities.forEach(this.step);
+  }
+
   /** The start of a snapshot: when it lands and how long its movement eases (`step`, default `LERP_MS`). */
   private begin(now: number, step: number | undefined): void {
+    this.settle(now);
     this.applyAt = now;
     this.applyDur = step !== undefined && step > 0 ? step : LERP_MS;
     this.seq++;
@@ -342,6 +356,7 @@ export class ClientWorld implements SnapshotSink {
     e.evx = moved ? (x - e.nx) / dur : 0;
     e.evy = moved ? (y - e.ny) / dur : 0;
     e.seq = this.seq;
+    // `x` is its place at `now` on the ease it was on (`settle`)
     e.ox = e.x;
     e.oy = e.y;
     e.or = e.r;
