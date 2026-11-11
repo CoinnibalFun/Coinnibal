@@ -58,4 +58,20 @@ describe('layout css', () => {
     // touch: above the thumb stick, never under it
     expect(/\.g-hud\.is-touch \.g-stream \{[^}]*\}/.exec(game)![0]).toMatch(/bottom: calc\(22px \+ 136px/);
   });
+
+  it('keeps the room intro a slim one-line banner and the quiet-pond note a chip (no big card over the play area)', () => {
+    const moments = sheets.find((s) => s.file.endsWith('ui/game/moments.css'))!.css;
+    const card = /\n\.gm-intro__card \{[^}]*\}/.exec(moments)![0];
+    expect(card).toMatch(/white-space: nowrap;/);
+    expect(card).toMatch(/border-radius: var\(--r-pill\);/);
+    expect(/\n\.gm-intro__card \.av \{[^}]*\}/.exec(moments)![0]).toMatch(/width: 24px;/);
+    const rooms = sheets.find((s) => s.file.endsWith('rooms/rooms.css'))!.css;
+    expect(/\n\.pq--hud \{[^}]*\}/.exec(rooms)![0]).toMatch(/flex-direction: row;/);
+  });
+
+  it('has no shop key on the in-game top bar (the shop is in the lobby only)', () => {
+    const hud = readFileSync(join(SRC, 'ui/game/GameHud.tsx'), 'utf8');
+    expect(hud).not.toMatch(/openModal\('shop'\)/);
+    expect(hud).not.toMatch(/hud-shop/);
+  });
 });

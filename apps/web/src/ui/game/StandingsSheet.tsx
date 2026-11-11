@@ -139,7 +139,8 @@ export function peekRows(total: number, mine: number, h: number): { shown: numbe
 /**
  * The full standings while Tab is held (desktop, like a shooter's scoreboard): the sheet's rows on a sticker over
  * the game, gone the moment Tab is let go. Nothing in it takes the pointer or the focus, so the mouse keeps steering
- * underneath; the list flows from the server while it is up, like the sheet's.
+ * underneath; the list flows from the server while it is up, like the sheet's. The panel is a day island (`kb-island`):
+ * dark ink on the cream card in every theme (the HUD's own `--ink` is cream at night).
  */
 export function StandingsPeek() {
   const t = useT();
@@ -175,7 +176,7 @@ export function StandingsPeek() {
   const { shown, pinned } = peekRows(rows.length, mine, h);
   return (
     <div className="g-tabboard" data-testid="standings-peek" aria-hidden="true">
-      <div className="g-tabboard__panel">
+      <div className="g-tabboard__panel kb-island">
         <header className="g-tabboard__head">
           <span className="g-tabboard__kicker mono">{t('g.full.kicker', { n })}</span>
           <h2 className="g-tabboard__title">{t('g.full.title')}</h2>

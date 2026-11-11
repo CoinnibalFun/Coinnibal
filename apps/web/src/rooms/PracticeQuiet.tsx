@@ -1,6 +1,6 @@
 import { PRACTICE_ROOM } from '@elymum/shared';
 import { useState } from 'react';
-import { Button } from '../design';
+import { Button, Icon } from '../design';
 import { engine } from '../game/instance';
 import { useT } from '../i18n';
 import { toast, useUi } from '../store';
@@ -21,7 +21,8 @@ export async function practiceWithBots(): Promise<void> {
 
 /**
  * The honest empty state of the people-only ponds: "Quiet right now", why, and one click to a free room with practice
- * bots. `hud`: the small sticker in a pond the player has to themselves (it can be hidden); else the lobby card.
+ * bots. `hud`: a slim one-line chip in a pond the player has to themselves ("You are alone in this pond · Practice
+ * with bots · Hide"; the explanation stays in the lobby's card); else the lobby card.
  */
 export function PracticeQuiet({ hud = false }: { hud?: boolean }) {
   const t = useT();
@@ -38,19 +39,28 @@ export function PracticeQuiet({ hud = false }: { hud?: boolean }) {
       setBusy(false);
     }
   };
+  if (hud)
+    return (
+      <div className="pq pq--hud" role="note" data-testid="practice-quiet-hud">
+        <p className="pq__title">{t('pr.alone')}</p>
+        <button type="button" className="pq__go" onClick={() => void go()} disabled={busy} data-testid="practice-bots">
+          <Icon name="users" size={14} />
+          {busy ? t('pr.opening') : t('pr.bots')}
+        </button>
+        <button type="button" className="pq__hide mono" onClick={() => setHidden(true)} title={t('pr.dismiss')}>
+          <span className="pq__hide-word">{t('pr.dismiss')}</span>
+          <Icon name="close" size={14} className="pq__hide-x" />
+        </button>
+      </div>
+    );
   return (
-    <div className={`pq${hud ? ' pq--hud' : ''}`} role="note" data-testid={hud ? 'practice-quiet-hud' : 'practice-quiet'}>
-      <p className="pq__title">{hud ? t('pr.alone') : t('pr.quietTitle')}</p>
+    <div className="pq" role="note" data-testid="practice-quiet">
+      <p className="pq__title">{t('pr.quietTitle')}</p>
       <p className="pq__body">{t('pr.quietBody')}</p>
       <div className="pq__actions">
-        <Button variant="secondary" size={hud ? 'sm' : 'md'} icon="users" onClick={() => void go()} disabled={busy} sub={hud ? undefined : t('pr.botsSub', { min: PRACTICE_ROOM.durationMin, n: PRACTICE_ROOM.maxPlayers - 1 })} data-testid="practice-bots">
+        <Button variant="secondary" size="md" icon="users" onClick={() => void go()} disabled={busy} sub={t('pr.botsSub', { min: PRACTICE_ROOM.durationMin, n: PRACTICE_ROOM.maxPlayers - 1 })} data-testid="practice-bots">
           {busy ? t('pr.opening') : t('pr.bots')}
         </Button>
-        {hud && (
-          <button type="button" className="pq__hide mono" onClick={() => setHidden(true)}>
-            {t('pr.dismiss')}
-          </button>
-        )}
       </div>
     </div>
   );

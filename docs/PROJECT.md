@@ -47,7 +47,7 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 | Maximum cell mass | 12,000 |
 | Food | pastel coins (1 mass), gems (2), golden coins (8); refills at 60 per second |
 | Power-ups | Magnet (10 s), Pump (6 s, × 1.4 speed), Shield (8 s), Bag (+15 % mass, at least 40) |
-| Bought power-ups (the shop, in the lobby and on the in-game top bar; `packages/shared/src/boosts.ts`) | Magnet `R` (8 s), Leap `F` (instant hop toward the aim, 420 + 0.9·r units, at most 900, never through the wall), Speed `G` (3 s), Invisibility `V` (10 s: the server sends the coins to nobody else, practice bots and minimap leader dots skip them; eating works as usual). The Shockwave was retired in 2026-11: saved charges, prices and switches load as Leap 1:1 |
+| Bought power-ups (the shop, in the lobby only; `packages/shared/src/boosts.ts`) | Magnet `R` (8 s), Leap `F` (instant hop toward the aim, 420 + 0.9·r units, at most 900, never through the wall), Speed `G` (3 s), Invisibility `V` (10 s: the server sends the coins to nobody else, practice bots and minimap leader dots skip them; eating works as usual). The Shockwave was retired in 2026-11: saved charges, prices and switches load as Leap 1:1 |
 | Spawn shield | 5.5 s |
 | Room sizes | Dynamic (default, section 2.2.2): side = 8,000 + 40 per person, at most 12,000; auto off: Practice 6800², Private 4600², Arena 7800². Humans per instance: Practice 40, Arena 50 |
 
@@ -60,7 +60,7 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 | Drop mass | `E` (can be held) | tip button |
 | Bought power-ups | `R` Magnet, `F` Leap, `G` Speed, `V` Invisibility (the keys on the right, above the minimap, with the KEYS hint under them) | power-up buttons |
 | Chat / sticker | `Enter` (the chat sits at the bottom left, see-through; a line fades after 5 s) / `1`–`8` (the switch on the sticker bar flips the page: Hype or Trash talk) | chat / sticker buttons (with a page switch) |
-| Share, shop | "Share on X" and "Shop" on the top bar while playing | the same, as icon keys |
+| Share | "Share on X" on the top bar while playing (the shop is in the lobby only; a power-up key out of charges says so) | the same, as an icon key |
 | Full standings (everyone in the room) | hold `Tab` (closes when let go; Tab only peeks in the game view, it still moves the focus in the chat line and in panels) | tap the standings card |
 | Next player while spectating | `Q` | |
 | Close the chat or a panel | `Esc` | |
@@ -196,7 +196,7 @@ sharing (`/api/x/*`, ARCHITECTURE.md).
 
 **Practice with bots.** The ponds are people only, so at quiet hours they say so honestly: with fewer than two
 people in the ponds the lobby shows "Quiet right now" (invite friends, or practice with bots), and a player alone in
-a pond sees the same as a small sticker. "Practice with bots" opens, in one click and free (guests too), a short-lived
+a pond sees a slim one-line chip ("You are alone in this pond", a small "Practice with bots", Hide). "Practice with bots" opens, in one click and free (guests too), a short-lived
 free custom room of their own (`PRACTICE_ROOM`: 8 practice bots of mixed difficulty, auto map, 15 minutes, room for
 3 friends with its code). Abuse limits instead of the creation fee: one live practice room per player (asking again
 returns it), 4 creations per IP per 30 minutes, at most `practiceMaxLive` (12) at once outside the paid rooms' slots
@@ -394,6 +394,6 @@ lands** ([media/README.md](../media/README.md)).
 | 2026-11-03 | Playtest fixes: bots fair to people (one or two chasers per person, short chases, rare split attacks, reaction delay and aim error, admin `strength`), rooms of ~12 players at 10,000 (map default 1,000 / 10,000 / 12,000), one token approval for every ticket by default |
 | 2026-11-05 | Rebuild: **Robinhood Chain only** (testnet now, mainnet later; the Elysium build retired). **ElymumArena v3**: no entry fee, 20 % of a ticket's profit (15 % burned, 5 % to the fee wallet, owner-settable, at most 25 %), burn mode (token `burn()` or `0x…dEaD`), power-ups paid with `pay` (50 % burned). **People only** in arenas and practice: the house squad, staked bots, purses and reserve removed; fair practice bots only in free custom rooms. One fee module (`shared/fees.ts`); `pnpm check` |
 | 2026-11-06 | Power-ups priced in US dollars like the tickets; holder perks bound to one emblem token id at a time; Share on X cards (TEST in test arenas); secret exports behind a purpose-bound signature, 2 h admin sessions, the gas runway; CI-green VPS deploys with rollback |
-| 2026-11-08 | A 30 s break after every bell; a shop cart paid with one `pay`; approvals for 1 / 5 / 10 / 20 tickets; a kill card for every person eaten; Link X (`PROTOCOL_VERSION` 14); practice bots slower and sometimes distracted; the HUD's chat at the bottom left, Share on X and Shop on the top bar; `ELYMUM_*` keys on the VPS |
+| 2026-11-08 | A 30 s break after every bell; a shop cart paid with one `pay`; approvals for 1 / 5 / 10 / 20 tickets; a kill card for every person eaten; Link X (`PROTOCOL_VERSION` 14); practice bots slower and sometimes distracted; the HUD's chat at the bottom left, Share on X and Shop on the top bar (the in-game Shop key was removed again on 2026-11-11: the shop is in the lobby only); `ELYMUM_*` keys on the VPS |
 | 2026-11-09 | The full 5:00 of play per round: the 30 s break after the bell comes on top of the play instead of out of it (a 5:30 cycle on Unix time; `ROUND_SECONDS` is the play). The server still sends every round time, so `PROTOCOL_VERSION` stays 14 |
 | 2026-11-02 | (superseded by v3) The fee moves from profit to the entry: every played ticket pays 5 % of its entry fee (holders 3 %), win or lose; unplayed tickets are refunded in full. ElymumArena v2 (`version()` 2); the server handles the legacy v1 testnet arena until it is redeployed. The leaderboards are reset once (epoch 2) |

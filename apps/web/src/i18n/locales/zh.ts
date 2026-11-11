@@ -848,7 +848,7 @@ const zh: Dict = {
   'boost.label': "道具",
   'boost.shop': "商店",
   'boost.openShop': "打开道具商店",
-  'boost.buyInShop': "次数用完了：去商店再买（右上角的袋子按钮）",
+  'boost.buyInLobby': "次数用完了：去大厅的商店再买",
   'boost.use': "{name}（{key}）· 剩 {n}",
   'boost.left': "剩 {n}",
   'boost.arenaLeft': "本局 {left}/{max}",
