@@ -866,7 +866,7 @@ export const en = {
   'boost.label': 'Power-ups',
   'boost.shop': 'Shop',
   'boost.openShop': 'Open the power-up shop',
-  'boost.buyInShop': 'Out of charges: get more in the shop (bag button, top right)',
+  'boost.buyInLobby': 'Out of charges: get more in the shop in the lobby',
   'boost.use': '{name} ({key}) · {n} left',
   'boost.left': '{n} left',
   'boost.arenaLeft': '{left}/{max} this round',

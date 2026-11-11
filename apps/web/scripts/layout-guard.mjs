@@ -185,7 +185,7 @@ async function checkViewport(browser, vp) {
       for (const p of await page.evaluate(hudProblems, [PIECES, vp.safe ?? null, !!process.env.LAYOUT_GUARD_DEBUG])) problems.push(`${vp.name} hud (${state}): ${p}`);
       if (process.env.LAYOUT_GUARD_SHOTS) await page.screenshot({ path: join(process.env.LAYOUT_GUARD_SHOTS, `hud-${state}-${vp.name}.png`) });
     };
-    // (1) a quiet practice pond: the tallest notice ("You are alone in this pond") with power-ups owned and
+    // (1) a quiet practice pond: the "You are alone in this pond" chip with power-ups owned and
     // running, coin rain, chat and kill feed lines
     await page.evaluate(() => {
       const E = window.__elymum.engine;

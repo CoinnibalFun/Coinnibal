@@ -362,7 +362,7 @@ export class GameEngine {
       return;
     }
     if (s.boosts.charges[kind] <= 0) {
-      // out of charges: a small hint pointing at the HUD's shop button (the shop never opens by itself over the floor)
+      // out of charges: a small hint pointing at the lobby's shop (nothing is sold over the floor)
       this.buyHint();
       return;
     }
@@ -389,12 +389,12 @@ export class GameEngine {
 
   private lastBuyHintAt = 0;
 
-  /** "Out of charges: the shop button" (at most every few seconds, so a held key does not stack slips). */
+  /** "Out of charges: the shop in the lobby" (at most every few seconds, so a held key does not stack slips). */
   private buyHint(): void {
     const now = Date.now();
     if (now - this.lastBuyHintAt < 4000) return;
     this.lastBuyHintAt = now;
-    toast('info', t('boost.buyInShop'));
+    toast('info', t('boost.buyInLobby'));
   }
 
   /* ---------------------------------------------------------------- */

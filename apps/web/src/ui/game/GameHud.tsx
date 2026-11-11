@@ -388,9 +388,9 @@ function Banner() {
 }
 
 /**
- * The top bar: "Share on X" (the game as it stands) and the power-up shop (a cart of several packs, one payment) while
- * playing, then the menu and the settings. `labels`: the share and shop keys print their word (desktop); on smaller
- * screens they are round icon keys like the others.
+ * The top bar: "Share on X" (the game as it stands) while playing, then the menu and the settings. `labels`: the share
+ * key prints its word (desktop); on smaller screens it is a round icon key like the others. The power-up shop is in
+ * the lobby only: nothing is sold over the floor.
  */
 function TopButtons({ labels }: { labels: boolean }) {
   const t = useT();
@@ -398,19 +398,6 @@ function TopButtons({ labels }: { labels: boolean }) {
   return (
     <div className={`g-topbar${labels ? ' has-labels' : ''}`}>
       {screen === 'playing' && <HudShare label={labels} />}
-      {screen === 'playing' && (
-        <button
-          type="button"
-          className={`kb-iconbtn g-topbar__btn g-hudshop${labels ? ' has-label' : ''}`}
-          onClick={() => openModal('shop')}
-          aria-label={t('boost.openShop')}
-          title={t('boost.openShop')}
-          data-testid="hud-shop"
-        >
-          <Icon name="bag" size={20} />
-          {labels && <span className="g-hudshop__text">{t('boost.shop')}</span>}
-        </button>
-      )}
       {screen === 'playing' && (
         <button type="button" className="kb-iconbtn g-topbar__btn" onClick={() => engine()?.backToLobby()} aria-label={t('g.menu')} title={t('g.menu')}>
           <Icon name="menu" size={20} />

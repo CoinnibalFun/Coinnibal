@@ -430,35 +430,91 @@
   align-items: center;
   margin-top: 4px;
 }
+/* in a pond of my own: a slim chip, not a card over the play area (title, a small "Practice with bots", Hide) */
 .pq--hud {
-  max-width: min(320px, 88vw);
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  max-width: min(440px, 88vw);
   margin-top: 0;
+  padding: 3px 4px 3px 12px;
   border-style: solid;
-  border-width: var(--stroke);
+  border-width: var(--stroke-sm);
+  border-radius: 14px;
   background: var(--cream);
-  box-shadow: var(--sh-2);
+  box-shadow: var(--sh-1);
   pointer-events: auto;
 }
 .pq--hud .pq__title {
-  font-size: 16px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.pq__go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--white);
+  color: var(--ink-fixed);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pq__go:hover:not(:disabled) {
+  background: var(--sun);
+}
+.pq__go:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 /* tablets: the top-centre column ends before the standings in the top-right corner */
 .g-hud:not(.is-narrow) .pq--hud {
-  max-width: min(320px, 88vw, calc(100vw - 540px));
+  max-width: min(440px, 88vw, calc(100vw - 540px));
 }
-/* portrait phones: in the 172 px column the full card reached the thumb keys; the title and its two
-   actions say it (the explanation stays in the lobby's card), and it comes after an event stamp */
-.g-hud.is-narrow .pq--hud .pq__body {
-  display: none;
-}
+/* portrait phones: in the 172 px column the chip wraps under its title and comes after an event stamp */
 .g-hud.is-narrow .g-center > .pq--hud {
   order: 1;
-  padding: 8px 10px;
+  gap: 2px 4px;
+  padding: 4px 2px 4px 8px;
+}
+.g-hud.is-narrow .pq--hud .pq__title {
+  flex: 1 1 100px;
+  min-width: 0;
+  font-size: 12px;
+}
+.g-hud.is-narrow .pq--hud .pq__go {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+/* the phone's chip: Hide is a small × beside the title, "Practice with bots" under them */
+.g-hud.is-narrow .pq--hud .pq__hide {
+  order: 1;
+  min-width: 28px;
+  padding: 0;
+}
+.g-hud.is-narrow .pq--hud .pq__go {
+  order: 2;
+}
+.pq__hide .pq__hide-x,
+.g-hud.is-narrow .pq--hud .pq__hide-word {
+  display: none;
+}
+.g-hud.is-narrow .pq--hud .pq__hide .pq__hide-x {
+  display: inline-block;
 }
 .pq__hide {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 10px;
+  min-width: 40px;
+  min-height: 30px;
+  padding: 0 8px;
   border: 0;
   background: transparent;
   /* on the cream sticker in both themes: the fixed ink */

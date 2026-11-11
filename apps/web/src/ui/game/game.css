@@ -230,14 +230,10 @@
 .g-topbar__btn {
   pointer-events: auto;
 }
-/* share on X and the shop: round keys like the others; on a desktop they print their word (pills) */
-.g-hudshare,
-.g-hudshop {
+/* share on X: a round key like the others; on a desktop it prints its word (a pill). The shop is in the lobby only. */
+.g-hudshare {
   color: var(--ink-fixed);
   text-decoration: none;
-}
-.g-hudshop {
-  background: var(--sun);
 }
 .g-topbar__btn.has-label {
   display: inline-flex;
@@ -250,7 +246,7 @@
   font-weight: 700;
   white-space: nowrap;
 }
-/* phones: four keys in the 172 px right column (portrait) or beside the count (landscape) */
+/* phones: three keys in the 172 px right column (portrait) or beside the count (landscape) */
 .g-hud.is-short .g-topbar,
 .g-hud.is-narrow .g-topbar {
   gap: 4px;
@@ -3195,6 +3191,7 @@
   -webkit-user-select: none;
 }
 .g-tabboard__panel {
+  /* a day island (.kb-island in the markup): dark ink on the cream card in both themes, like the standings sheet */
   width: min(560px, 100%);
   max-height: 100%;
   overflow: hidden;

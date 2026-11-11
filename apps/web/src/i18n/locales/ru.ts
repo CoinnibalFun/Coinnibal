@@ -848,7 +848,7 @@ const ru: Dict = {
   'boost.label': "Бонусы",
   'boost.shop': "Магазин",
   'boost.openShop': "Открыть магазин бонусов",
-  'boost.buyInShop': "Заряды кончились: купи ещё в магазине (кнопка с сумкой справа вверху)",
+  'boost.buyInLobby': "Заряды кончились: купи ещё в магазине в лобби",
   'boost.use': "{name} ({key}) · осталось {n}",
   'boost.left': "осталось {n}",
   'boost.arenaLeft': "{left}/{max} за раунд",

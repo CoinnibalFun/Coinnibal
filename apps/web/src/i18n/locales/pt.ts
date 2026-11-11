@@ -848,7 +848,7 @@ const pt: Dict = {
   'boost.label': "Power-ups",
   'boost.shop': "Loja",
   'boost.openShop': "Abrir a loja de power-ups",
-  'boost.buyInShop': "Sem cargas: compre mais na loja (botão da sacola, no canto superior direito)",
+  'boost.buyInLobby': "Sem cargas: compre mais na loja do lobby",
   'boost.use': "{name} ({key}) · restam {n}",
   'boost.left': "restam {n}",
   'boost.arenaLeft': "{left}/{max} nesta rodada",
