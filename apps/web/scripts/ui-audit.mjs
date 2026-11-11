@@ -882,7 +882,6 @@ const SCENES = [
     },
   },
   { id: 'game-settings', app: 'play', auth: 'signed', run: async (page, h) => (await openPlay(page, h), await playPractice(page), await setUi(page, { modal: 'settings' }), await settle(page, 900)) },
-  { id: 'game-shop', app: 'play', auth: 'signed', run: async (page, h) => (await openPlay(page, h), await playPractice(page), await setUi(page, { modal: 'shop' }), await settle(page, 1200)) },
   { id: 'game-closed', app: 'play', auth: 'signed', run: async (page, h) => (await openPlay(page, h), await setUi(page, { gameClosed: true }), await settle(page, 900)) },
   {
     id: 'lobby-held',
