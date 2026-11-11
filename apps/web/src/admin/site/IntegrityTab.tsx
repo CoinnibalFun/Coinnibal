@@ -489,8 +489,12 @@ function SettingsCard({ api, overview, onSaved }: { api: IntegrityApi; overview:
   const [draft, setDraft] = useState<IntegritySettings>(overview.settings);
   const [busy, setBusy] = useState(false);
   const [flashNode, flash] = useFlash();
-  useEffect(() => setDraft(overview.settings), [overview.settings]);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(overview.settings);
+  // a refreshed overview (another fetch, a scan) brings a new settings object: only a real change of the saved settings
+  // resets the form, so an edit in progress is not wiped by a reload that returns the same settings
+  const savedKey = JSON.stringify(overview.settings);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setDraft(overview.settings), [savedKey]);
+  const dirty = JSON.stringify(draft) !== savedKey;
   const save = async (patch: Parameters<IntegrityApi['saveSettings']>[0], label: string) => {
     setBusy(true);
     try {
