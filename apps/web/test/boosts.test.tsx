@@ -145,7 +145,7 @@ describe('BoostBar', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('a power-up key with no charge left points at the shop button (the shop never opens by itself)', async () => {
+  it('a power-up key with no charge left points at the lobby shop (the shop never opens in a game)', async () => {
     const { GameEngine } = await import('../src/game/engine');
     const send = vi.fn();
     const fake = Object.create(GameEngine.prototype) as GameEngine;
@@ -154,7 +154,7 @@ describe('BoostBar', () => {
     act(() => fake.boost('magnet'));
     expect(useUi.getState().modal).toBeNull();
     expect(send).not.toHaveBeenCalled();
-    expect(useUi.getState().toasts.map((x) => x.text)).toContain('Out of charges: get more in the shop (bag button, top right)');
+    expect(useUi.getState().toasts.map((x) => x.text)).toContain('Out of charges: get more in the shop in the lobby');
     // a held key does not stack slips
     act(() => fake.boost('invis'));
     expect(useUi.getState().toasts).toHaveLength(1);

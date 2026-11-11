@@ -848,7 +848,7 @@ const tr: Dict = {
   'boost.label': "Güçlendirmeler",
   'boost.shop': "Dükkân",
   'boost.openShop': "Güçlendirme dükkânını aç",
-  'boost.buyInShop': "Hakkın bitti: dükkândan daha fazla al (sağ üstteki çanta düğmesi)",
+  'boost.buyInLobby': "Hakkın bitti: lobideki dükkândan daha fazla al",
   'boost.use': "{name} ({key}) · {n} kaldı",
   'boost.left': "{n} kaldı",
   'boost.arenaLeft': "bu tur {left}/{max}",

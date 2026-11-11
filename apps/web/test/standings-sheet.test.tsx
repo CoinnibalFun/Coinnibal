@@ -128,6 +128,8 @@ describe('Tab peek: the full standings while Tab is held', () => {
     // it never takes the pointer or the focus: the mouse keeps steering
     expect(peek.getAttribute('aria-hidden')).toBe('true');
     expect(peek.querySelector('button, a, input')).toBeNull();
+    // a day island: dark ink on the cream card in every theme (the night HUD's own --ink is cream)
+    expect(peek.querySelector('.g-tabboard__panel')!.classList.contains('kb-island')).toBe(true);
     expect(watchStandings).toHaveBeenLastCalledWith(true);
     const rows = within(peek).getAllByTestId('standings-row');
     expect(rows).toHaveLength(4);

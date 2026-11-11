@@ -14,8 +14,8 @@ import './moments.css';
  * The game's authored beats, drawn over the canvas (all decoration: aria-hidden, no pointer
  * events, transform / opacity only, and each has a still or no version under reduced motion):
  *
- * - `RoundIntro`: entering a room, its title card tilts in and out ("The 14:05 round · Asphodel
- *   Meadow", with the arena's stamp from the departures board).
+ * - `RoundIntro`: entering a room, a slim banner slides in and out ("The 14:05 round · Asphodel
+ *   Meadow", with the arena's small stamp from the departures board).
  * - `SunsetSky`: the final minute; the sky band at the edges of the screen turns to sunset and a
  *   sun sinks behind the bottom edge as the bell comes.
  * - `BellMoment`: the bell itself swings in over the frozen world and rings out its shock rings
@@ -26,11 +26,16 @@ import './moments.css';
 
 /* ───────────────────────── the round's title card ───────────────────────── */
 
-/** Card on screen (ms) once it has landed. */
-const INTRO_HOLD_MS = 2300;
+/** Banner on screen (ms) once it has landed. */
+const INTRO_HOLD_MS = 1800;
 /** It waits for the coin to land first (ms). */
 const INTRO_DELAY_MS = 750;
 
+/**
+ * A slim one-line banner over the floor: the room's small stamp, its tag ("Warm-up · no bell", "The 14:05 round"),
+ * its name and (wide screens) the one-line motto. It slides in, holds for a moment and slides out; no pointer
+ * events, nothing in the play area for long.
+ */
 export function RoundIntro() {
   const t = useT();
   const room = useUi((s) => s.room);
@@ -71,17 +76,14 @@ export function RoundIntro() {
           <motion.div
             key={shown}
             className="gm-intro__card kb-island"
-            initial={reduced ? { opacity: 0 } : { opacity: 0, y: -70, rotate: -14, scale: 0.82 }}
-            animate={reduced ? { opacity: 1, transition: { duration: 0.12 } } : { opacity: 1, y: 0, rotate: -2.5, scale: 1, transition: springs.drop }}
-            exit={reduced ? { opacity: 0, transition: { duration: 0.12 } } : { opacity: 0, y: -46, rotate: 9, scale: 0.9, transition: { duration: 0.32, ease: [0.5, 0, 0.75, 0] } }}
+            initial={reduced ? { opacity: 0 } : { opacity: 0, y: -18, rotate: -3, scale: 0.94 }}
+            animate={reduced ? { opacity: 1, transition: { duration: 0.12 } } : { opacity: 1, y: 0, rotate: -1, scale: 1, transition: springs.drop }}
+            exit={reduced ? { opacity: 0, transition: { duration: 0.12 } } : { opacity: 0, y: -14, transition: { duration: 0.24, ease: [0.5, 0, 0.75, 0] } }}
           >
-            <span className="gm-intro__tape" />
             <ArenaVignette arenaId={arena ? (room.arenaId ?? 1) : null} />
-            <span className="gm-intro__text">
-              <span className="gm-intro__kicker mono">{kicker}</span>
-              <span className="gm-intro__title">{roomName(room)}</span>
-              <span className="gm-intro__sub">{sub}</span>
-            </span>
+            <span className="gm-intro__kicker mono">{kicker}</span>
+            <span className="gm-intro__title">{roomName(room)}</span>
+            <span className="gm-intro__sub">{sub}</span>
           </motion.div>
         )}
       </AnimatePresence>

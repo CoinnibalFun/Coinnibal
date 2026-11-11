@@ -268,7 +268,7 @@ export const docsEn = (
           },
           {
             kind: 'p',
-            text: `Each power-up has a cooldown. Use them freely in practice and private rooms; in paid arenas at most ${SH.arenaUses} per round (${SH.arenaUses + SH.holderExtraUses} for NFT holders). The shop is in the lobby and, during a game, behind the Shop key on the top bar.`,
+            text: `Each power-up has a cooldown. Use them freely in practice and private rooms; in paid arenas at most ${SH.arenaUses} per round (${SH.arenaUses + SH.holderExtraUses} for NFT holders). The shop is in the lobby (the lightning key at the top); nothing is sold during a game.`,
           },
         ],
       },
