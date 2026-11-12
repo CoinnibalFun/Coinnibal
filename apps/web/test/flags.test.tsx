@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ClientWorld } from '../src/game/state';
 import { DRAWN_FLAGS, FLAG_H, FLAG_W, FlagCache, flagArt, paintFlag } from '../src/render/flags';
 import { adoptProfileCountry, mergeSettings, useUi, type Settings } from '../src/store';
-import { CountryField, Flag, countryName } from '../src/ui/Flag';
+import { CountrySelect, filterCountries, foldName } from '../src/ui/CountrySelect';
+import { Flag, countryName } from '../src/ui/Flag';
 
 const initial = useUi.getState();
 afterEach(() => {
@@ -128,17 +129,84 @@ describe('<Flag>', () => {
     expect(container.querySelector('.kb-flag')?.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('the picker lists every country and "none", and reports the pick', () => {
+  it('the picker opens a listbox like the language picker: "none" and every country, flag rows, the current one checked', () => {
     let picked = 'unset';
-    render(<CountryField label="You play for" value="FR" noneLabel="No flag" onChange={(c) => (picked = c)} />);
-    const select = screen.getByLabelText('You play for') as HTMLSelectElement;
-    expect(select.value).toBe('FR');
-    expect(select.options.length).toBe(250);
-    expect(select.options[0].textContent).toBe('No flag');
-    fireEvent.change(select, { target: { value: 'JP' } });
+    render(<CountrySelect label="You play for" value="FR" noneLabel="No flag" onChange={(c) => (picked = c)} />);
+    const tag = screen.getByTestId('country-pick');
+    expect(tag.getAttribute('aria-label')).toBe(`You play for: ${countryName('FR')}`);
+    expect(tag.getAttribute('aria-haspopup')).toBe('listbox');
+    expect(tag.querySelector('.kb-flag')).not.toBeNull();
+    fireEvent.click(tag);
+    expect(tag.getAttribute('aria-expanded')).toBe('true');
+    const opts = screen.getAllByRole('option');
+    expect(opts.length).toBe(250);
+    expect(opts[0].textContent).toBe('No flag');
+    expect(opts.filter((o) => o.querySelector('.kb-flag')).length).toBe(250);
+    const on = opts.filter((o) => o.getAttribute('aria-selected') === 'true');
+    expect(on.map((o) => o.dataset.code)).toEqual(['FR']);
+    // opening starts on the current country
+    expect(opts.find((o) => o.className.includes('is-active'))?.dataset.code).toBe('FR');
+    // the search box has the keyboard on wide screens (type to filter)
+    expect(document.activeElement).toBe(screen.getByTestId('country-search'));
+    fireEvent.click(opts.find((o) => o.dataset.code === 'JP')!);
     expect(picked).toBe('JP');
-    fireEvent.change(select, { target: { value: '' } });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(tag);
+    fireEvent.click(tag);
+    fireEvent.click(screen.getAllByRole('option')[0]);
     expect(picked).toBe('');
+  });
+
+  it('typing filters the list (accents and case do not matter); arrows and Enter pick; Escape closes', () => {
+    let picked = 'unset';
+    render(<CountrySelect label="You play for" value="" noneLabel="No flag" onChange={(c) => (picked = c)} />);
+    const tag = screen.getByTestId('country-pick');
+    tag.focus();
+    fireEvent.keyDown(tag, { key: 'ArrowDown' });
+    const search = screen.getByTestId('country-search') as HTMLInputElement;
+    // nothing picked: "none" is checked
+    expect(screen.getAllByRole('option')[0].getAttribute('aria-selected')).toBe('true');
+    fireEvent.change(search, { target: { value: 'turk' } });
+    const opts = screen.getAllByRole('option');
+    expect(opts[0].dataset.code).toBe('TR');
+    expect(opts.length).toBeLessThan(5);
+    expect(opts.some((o) => o.textContent === 'No flag')).toBe(false);
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(picked).toBe('TR');
+    expect(document.activeElement).toBe(tag);
+    // arrows walk the filtered rows
+    fireEvent.click(tag);
+    fireEvent.change(screen.getByTestId('country-search'), { target: { value: 'united' } });
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    const active = screen.getAllByRole('option')[1];
+    expect(active.className).toContain('is-active');
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(picked).toBe(active.dataset.code);
+    // no match: an empty list and a plain line; Escape closes without a pick
+    picked = 'unset';
+    fireEvent.click(tag);
+    fireEvent.change(screen.getByTestId('country-search'), { target: { value: 'zzzz' } });
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.getByRole('status').textContent).toBe('No country found');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(picked).toBe('unset');
+  });
+
+  it('search matches names from the start first, then inside, plus the two-letter code', () => {
+    const rows = [
+      { code: 'GB', name: 'United Kingdom' },
+      { code: 'US', name: 'United States' },
+      { code: 'TZ', name: 'Tanzania' },
+      { code: 'TR', name: 'T\u00fcrkiye' },
+    ];
+    expect(foldName('  T\u00fcrkiye ')).toBe('turkiye');
+    expect(filterCountries(rows, '').map((r) => r.code)).toEqual(['GB', 'US', 'TZ', 'TR']);
+    expect(filterCountries(rows, 'T\u00dcR').map((r) => r.code)).toEqual(['TR']);
+    expect(filterCountries(rows, 'states').map((r) => r.code)).toEqual(['US']);
+    expect(filterCountries(rows, 'us').map((r) => r.code)).toEqual(['US']);
+    expect(filterCountries(rows, 'ted').map((r) => r.code)).toEqual(['GB', 'US']);
+    expect(filterCountries(rows, 't').map((r) => r.code)).toEqual(['TZ', 'TR', 'GB', 'US']);
   });
 });
 

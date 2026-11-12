@@ -14,7 +14,7 @@ import {
   type IntegrityThresholds,
   type IntegrityWalletView,
 } from '@elymum/shared';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chip, InkButton, Sheet, StampSpinner } from '../../design';
 import { request, type IntegrityApi, type IntegrityFilter } from '../../site/api';
 import { Empty, errText, fmtDate, useFlash, type TabProps } from './common';
@@ -492,8 +492,15 @@ function SettingsCard({ api, overview, onSaved }: { api: IntegrityApi; overview:
   // a refreshed overview (another fetch, a scan) brings a new settings object: only a real change of the saved settings
   // resets the form, so an edit in progress is not wiped by a reload that returns the same settings
   const savedKey = JSON.stringify(overview.settings);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => setDraft(overview.settings), [savedKey]);
+  // the mount needs no reset (the draft starts from these settings): a mount-time reset can land after a first edit
+  // and silently undo it, so only a later change of the saved settings replaces the draft
+  const lastKey = useRef(savedKey);
+  useEffect(() => {
+    if (lastKey.current === savedKey) return;
+    lastKey.current = savedKey;
+    setDraft(overview.settings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedKey]);
   const dirty = JSON.stringify(draft) !== savedKey;
   const save = async (patch: Parameters<IntegrityApi['saveSettings']>[0], label: string) => {
     setBusy(true);

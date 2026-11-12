@@ -23,8 +23,11 @@ export const speedForRadius = (r: number): number => {
 /** Milliseconds a freshly split cell must wait before it can merge back. */
 export const mergeDelayMs = (mass: number): number => RULES.mergeBaseMs + RULES.mergeMsPerMass * mass;
 
-/** Per-tick multiplier for boost velocity given the tick length in ms. */
-export const boostDecayFactor = (dtMs: number): number => Math.pow(RULES.splitDecayPerSec, dtMs / 1000);
+/** Per-tick multiplier for boost velocity given the tick length in ms (split cells by default; ejects pass theirs). */
+export const boostDecayFactor = (dtMs: number, perSec: number = RULES.splitDecayPerSec): number => Math.pow(perSec, dtMs / 1000);
+
+/** How far a freshly split half flies on its boost alone (units): splitSpeed / -ln(splitDecayPerSec). */
+export const SPLIT_REACH = RULES.splitSpeed / -Math.log(RULES.splitDecayPerSec);
 
 export const canEat = (eaterMass: number, victimMass: number): boolean =>
   eaterMass >= victimMass * RULES.eatRatio;

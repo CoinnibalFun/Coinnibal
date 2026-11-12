@@ -24,7 +24,7 @@ const M = 1_000_000; // one whole token in ledger units (6 decimals of the 18-de
 const N = 5_800_000;
 const START = N * RULES.roundMs;
 const R: RoundInfo = { n: N, endsAt: START + RULES.roundMs, joinsCloseAt: START + RULES.roundMs - RULES.roundJoinCloseMs };
-const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: 'Asphodel Meadow', width: 6400, height: 6400, players: 3, bots: 10, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M, round: R };
+const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: '$1 Room', width: 6400, height: 6400, players: 3, bots: 10, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M, round: R };
 const STATS: DeathStats = { aliveMs: 94_000, finalMass: 0, maxMass: 640, foodEaten: 88, cellsEaten: 1, playersEaten: 1, bestRank: 5 };
 const CHAIN = chainStatus({ fees: null });
 // jsdom has no canvas: the same null it returns, without the "not implemented" warning
@@ -101,6 +101,38 @@ describe('round math on the client', () => {
     expect(c2.offset).toBe(10_000);
     c2.sync(20_000, -5);
     expect(c2.offset).toBe(20_000);
+  });
+});
+
+describe('a custom ticket room plays its own one game (no 5-minute bell)', () => {
+  // a 45-minute room that opened 7 s into an arena round
+  const OPEN = START + 7_000;
+  const OWN: RoundInfo = { n: Math.floor(OPEN / 1000), startsAt: OPEN, endsAt: OPEN + 45 * 60_000, joinsCloseAt: OPEN + 44 * 60_000 };
+  const PAID: RoomInfo = { ...ARENA, id: 'priv-AB2CD234', name: 'Whale Club', code: 'AB2CD234', round: OWN };
+
+  it('its lengths are the room\'s: the whole game, joins closed in its last minute, no break; it never rolls into a next round', () => {
+    expect(roundLengths(OWN)).toEqual({ roundMs: 45 * 60_000, closeMs: 60_000, breakMs: 0 });
+    // past the arenas' bell: still the same game, open
+    const mid = roundStateAt(OWN, R.endsAt + 1000);
+    expect(mid).toMatchObject({ n: OWN.n, endsAt: OWN.endsAt, phase: 'open', breakMsLeft: 0 });
+    expect(mid.msLeft).toBe(OWN.endsAt - R.endsAt - 1000);
+    expect(roundStateAt(OWN, OWN.endsAt - 30_000)).toMatchObject({ phase: 'closing', msLeft: 30_000 });
+    // over: it stays over (no next round to roll into)
+    expect(roundStateAt(OWN, OWN.endsAt + 120_000)).toMatchObject({ n: OWN.n, endsAt: OWN.endsAt, msLeft: 0, phase: 'closing' });
+    expect(roundStartLabel(OWN.n, OWN)).toBe(new Date(OPEN).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+  });
+
+  it('the HUD timer counts down to the room end (its own duration), not to the arenas\' bell', () => {
+    useUi.setState({ screen: 'playing', room: PAID });
+    clockAt(START + 108_000);
+    render(
+      <Kb>
+        <RoundChip />
+      </Kb>,
+    );
+    const chip = screen.getByRole('timer');
+    expect(chip.textContent).toBe('43:19until the room ends');
+    expect(chip.dataset.phase).toBe('open');
   });
 });
 

@@ -33,9 +33,9 @@ export const docsEn = (
   return {
     pct,
     num,
-    kicker: 'Guide · Player handbook',
-    title: 'Ticket, coin, receipt.',
-    deck: `How Elymum plays, what the Elymum NFT and ${symbol} are for, and where the money goes: short and plain. Numbers are the game's defaults; the amounts on your ticket are the ones that count.`,
+    kicker: 'Player guide',
+    title: 'How Elymum works',
+    deck: `How to play, how rounds and fees work, what the Elymum NFT and ${symbol} are for. Short and simple. The numbers here are the game's defaults; the numbers on your ticket are the ones that count.`,
     rates,
     dateline: [
       `Fee ${total} of profit only`,
@@ -62,12 +62,12 @@ export const docsEn = (
       {
         id: 'play',
         title: 'How to play',
-        lede: 'Eat food, grow, swallow smaller coins, run from bigger ones.',
-        strip: { label: 'The one rule', panels: ['Eat the food. Grow.', `${num(R.eatRatio)} times bigger? Lunch.`, 'Smaller? Run.'] },
+        lede: 'Eat food, grow, eat smaller coins, run from bigger ones.',
+        strip: { label: 'The one rule', panels: ['Eat food. Grow.', `${num(R.eatRatio)} times bigger? You can eat it.`, 'Smaller? Run.'] },
         blocks: [
           {
             kind: 'p',
-            text: `Pick the Practice ticket in the lobby and press Quick Play: no wallet needed. Your coin follows the mouse; WASD or the arrow keys steer it too (the joystick at the bottom left on phones). Eat food to grow. To eat a coin you need at least ${num(R.eatRatio)} times its mass and must mostly cover it. The bigger you are, the slower you move, so split to strike and stay away from anything bigger than you.`,
+            text: `Pick Practice in the lobby and press Quick Play. You don't need a wallet. Your coin follows the mouse. You can also use WASD or the arrow keys (on phones, the joystick at the bottom left). Eat food to grow. To eat a coin, you must be ${num(R.eatRatio)} times its size and cover most of it. Big coins are slow. Split to catch others, and stay away from anything bigger than you.`,
           },
           {
             kind: 'keys',
@@ -93,7 +93,7 @@ export const docsEn = (
               { term: 'Spawn shield:', text: `a fresh coin cannot be eaten for ${R.spawnShieldS} s.` },
               {
                 term: 'Tips:',
-                text: 'split only when the half lands safely, keep away from walls and corners when something big is near, and remember that a coin split into pieces is at its weakest.',
+                text: 'split only when it is safe, stay away from walls and corners when a big coin is near, and remember: a split coin is weak.',
               },
             ],
           },
@@ -102,8 +102,8 @@ export const docsEn = (
       {
         id: 'rooms',
         title: 'Rooms and tickets',
-        lede: 'Practice is free; arenas take a ticket with a fixed entry fee.',
-        strip: { label: 'Two doors', panels: ['Practice: free.', 'Arenas: show a ticket.', 'The entry fee goes into the vault.'] },
+        lede: 'Practice is free. Paid rooms need a ticket.',
+        strip: { label: 'Two kinds of room', panels: ['Practice: free.', 'Paid rooms: buy a ticket.', 'The ticket money goes into the vault.'] },
         blocks: [
           {
             kind: 'list',
@@ -130,10 +130,10 @@ export const docsEn = (
           },
           {
             kind: 'table',
-            caption: `Default arenas: tickets priced in US dollars, paid in ${symbol}`,
+            caption: `The rooms: ticket prices in US dollars, paid in ${symbol}`,
             head: ['No', 'Room', 'Ticket', 'Who'],
             numeric: [0, 2],
-            rows: F.arenas.map((a) => [String(a.id), a.name, formatUsdCents(a.usdCents), a.holdersOnly ? 'Elymum NFT holders' : 'Everyone']),
+            rows: F.arenas.map((a) => [String(a.id), a.name, formatUsdCents(a.usdCents), a.holdersOnly ? 'NFT holders' : 'Everyone']),
           },
           {
             kind: 'p',
@@ -181,7 +181,7 @@ export const docsEn = (
         title: 'Rounds, payout and the fee',
         lede: `Arenas play ${R.roundMin}-minute rounds. Stay alive until the bell and you are paid your value.`,
         strip: {
-          label: 'Five minutes, then lunch',
+          label: 'Five minutes, then the bell',
           panels: [`${R.roundMin} minutes on the clock.`, 'The bell rings. Everyone alive is paid.', `${total} of the profit is the fee. Nothing if you did not win.`],
         },
         blocks: [
@@ -213,28 +213,29 @@ export const docsEn = (
       {
         id: 'nft',
         title: 'The Elymum NFT',
-        lede: 'Your emblem: the key to the game at launch, and perks every time you play.',
+        lede: 'Your key to the game, with perks every time you play.',
         blocks: [
           {
             kind: 'p',
-            text: 'The Elymum NFT is the game\'s emblem, an ERC-721 minted for $1 in the network\'s gas token on the Mint page (allowlist first, then public). It is not a ticket and carries no value inside a round; it is your membership card.',
+            text: `The Elymum NFT is a collection of coin characters (ERC-721) on ${chain}. You mint it on the Mint page with ${GAS_SYMBOL}: the WL first, then everyone. The Mint page shows the price from the contract before you sign. The NFT is not a ticket and has no value inside a round. It is your membership card.`,
           },
           {
             kind: 'list',
             items: [
-              { term: 'Access:', text: 'while the game opens up in phases, holders play first (the WL → Mint → Play order).' },
-              { term: 'Emblem skin:', text: 'holders can wear the emblem coin; their name carries the holder mark in the standings and their card in the lobby the holder badge (cosmetic only).' },
+              { term: 'Access:', text: 'while the game opens step by step, holders play first (WL → Mint → Play).' },
+              { term: 'NFT skin and badge:', text: 'holders can wear their NFT coin, and get a holder badge on their name (looks only).' },
               { term: 'Cheaper power-ups:', text: `holders pay ${SH.holderDiscountPct}% less for every power-up pack in the shop.` },
               { term: 'More power-ups per round:', text: `${SH.holderExtraUses} extra power-up use per round in paid arenas (${SH.arenaUses + SH.holderExtraUses} instead of ${SH.arenaUses}).` },
               {
                 term: 'A lower fee:',
-                text: `when the arena's holder perks are on, holders' tickets get the holder rates on profit (by default ${bpsToPercent(totalFeeBps(DEFAULT_HOLDER_FEE_RATES))} % instead of ${bpsToPercent(totalFeeBps(DEFAULT_FEE_RATES))} %; the ticket sheet shows the live rates).`,
+                text: `holders pay a smaller fee on profit: ${bpsToPercent(totalFeeBps(DEFAULT_HOLDER_FEE_RATES))} % instead of ${bpsToPercent(totalFeeBps(DEFAULT_FEE_RATES))} % (${bpsToPercent(DEFAULT_HOLDER_FEE_RATES.burnBps)} % burned, ${bpsToPercent(DEFAULT_HOLDER_FEE_RATES.vaultBps)} % to the team). These are the configured holder perks; your ticket always shows the live rate before you pay.`,
               },
               { term: 'Private rooms:', text: 'holders open one room a day for free (a UTC day, rooms of up to 10 players); the room settings may give a discount instead.' },
               {
-                term: 'Holders-only arena:',
-                text: `the ${DEFAULT_ARENAS.filter((a) => a.holdersOnly).map((a) => formatUsdCents(a.usdCents)).join(', ')} arena is for holders only, on-chain.`,
+                term: 'Holders-only room:',
+                text: `the ${DEFAULT_ARENAS.filter((a) => a.holdersOnly).map((a) => formatUsdCents(a.usdCents)).join(', ')} room is for holders only, on-chain.`,
               },
+              { term: 'Testnet faucet:', text: 'on testnet, holders get twice the free test tokens from the faucet.' },
             ],
           },
         ],
@@ -341,7 +342,7 @@ export const docsEn = (
             items: [
               { q: 'Do I need a wallet for practice?', a: 'No. Practice is free; no wallet, token or NFT needed.' },
               { q: 'What is the fee exactly?', a: `${total} of your profit only: ${burn} burned, ${vault} to the fee wallet. If your till at the bell is at or below your entry fee, there is no fee. Joining is free of fees.` },
-              { q: 'What does the NFT give me?', a: `Early access while the game opens in phases, the emblem skin and holder mark, ${SH.holderDiscountPct}% off power-ups, an extra power-up use per arena round, a lower fee when the holder perks are on, a free private room every day and the holders-only ${DEFAULT_ARENAS.filter((a) => a.holdersOnly).map((a) => formatUsdCents(a.usdCents)).join(', ')} arena.` },
+              { q: 'What does the NFT give me?', a: `Early access, a lower fee on profit (${bpsToPercent(totalFeeBps(DEFAULT_HOLDER_FEE_RATES))}% instead of ${bpsToPercent(totalFeeBps(DEFAULT_FEE_RATES))}%), the holders-only ${DEFAULT_ARENAS.filter((a) => a.holdersOnly).map((a) => formatUsdCents(a.usdCents)).join(', ')} room, ${SH.holderDiscountPct}% off power-ups and one extra power-up per paid round, a free private room every day, the NFT skin and holder badge, and twice the testnet faucet.` },
               { q: `What is ${symbol} used for?`, a: 'Arena tickets and payouts, and power-ups in the shop. A share of every profit and half of every shop payment are burned.' },
               { q: 'Why do the arenas say "Opening soon"?', a: `The ${symbol} token is not set on-chain yet. Practice is open; the arenas open by themselves as soon as it is set.` },
               { q: 'I lost my connection or closed the tab.', a: 'Your coin stays in the arena and can still be eaten. Come back and you carry on; alive at the bell, you are paid as usual.' },

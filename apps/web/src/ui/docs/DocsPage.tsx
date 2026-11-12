@@ -50,7 +50,7 @@ export function DocsPage() {
         aside={
           <span className="dc-head__art">
             <CoinCharacter paint="cream" mood="smug" size={124} look={[-3, 1]} feet ground bob />
-            <Stamp text="Guide" sub="Player copy" tone="teal" round size="md" rotate={-8} className="dc-head__stamp" />
+            <Stamp text="Guide" tone="teal" round size="md" rotate={-8} className="dc-head__stamp" />
           </span>
         }
       />

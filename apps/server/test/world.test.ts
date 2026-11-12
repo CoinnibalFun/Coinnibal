@@ -1,4 +1,4 @@
-import { EntityKind, PowerUpType, RULES, TICK_MS, massToRadius, mergeDelayMs } from '@elymum/shared';
+import { EntityKind, PowerUpType, RULES, SPLIT_REACH, TICK_MS, massToRadius, mergeDelayMs } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { World, type WorldConfig } from '../src/game/world';
 
@@ -105,6 +105,64 @@ describe('world: split & merge', () => {
     w.tick(TICK_MS);
     expect(q.cells).toHaveLength(16);
     expect(q.totalMass()).toBeGreaterThan(9900);
+  });
+
+  /** The widest edge-to-edge gap between the main (biggest) piece and any other piece of `p`. */
+  const gapToMain = (p: { cells: { x: number; y: number; r: number; mass: number }[] }) => {
+    const big = [...p.cells].sort((a, b) => b.mass - a.mass)[0];
+    return Math.max(0, ...p.cells.map((c) => Math.hypot(c.x - big.x, c.y - big.y) - big.r - c.r));
+  };
+  /** Splits `mass` `splits` times and chases a far target (the mouse kept well ahead) for `ms`: the gap then. */
+  const chase = (mass: number, splits: number, ms: number) => {
+    const w = new World(cfg({ width: 12_000, height: 12_000 }));
+    const p = w.addPlayer({ spawnShield: false, name: 'a', skin: 0, x: 1500, y: 6000, mass });
+    w.setTarget(p.id, 4000, 5900);
+    for (let i = 0; i < splits; i++) {
+      w.queueSplit(p.id);
+      w.tick(TICK_MS);
+    }
+    for (let t = 0; t < ms; t += TICK_MS) {
+      const c = p.center();
+      w.setTarget(p.id, c.x + 1500, c.y - 100);
+      w.tick(TICK_MS);
+    }
+    return { w, p, gap: gapToMain(p) };
+  };
+
+  it('a split flies a short way (owner playtest: pieces flew too far from the main coin); the launch is as fast as ever', () => {
+    // the flight on the boost alone: about 325 units (was about 450 with a 0.04 decay)
+    expect(SPLIT_REACH).toBeGreaterThan(300);
+    expect(SPLIT_REACH).toBeLessThan(340);
+    expect(RULES.splitSpeed).toBe(1440);
+    // ejects keep their own (unchanged) flight
+    expect(RULES.ejectDecayPerSec).toBe(0.04);
+    const w = new World(cfg());
+    const p = w.addPlayer({ spawnShield: false, name: 'a', skin: 0, x: 1000, y: 1500, mass: 400 });
+    w.setTarget(p.id, 1000.4, 1500); // the mouse on the coin: the flight alone moves the half
+    w.queueSplit(p.id);
+    w.tick(TICK_MS);
+    const half = p.cells[1];
+    const x0 = half.x;
+    run(w, 400);
+    expect(half.x - x0).toBeGreaterThan(SPLIT_REACH * 0.5);
+    expect(half.x - x0).toBeLessThan(SPLIT_REACH * 1.05);
+  });
+
+  it('pieces stay close to the main coin while it moves (cohesion before the merge), merge timing unchanged', () => {
+    // one split of a small coin chasing: the halves end up touching-close (was a gap of about 360)
+    expect(chase(60, 1, 3000).gap).toBeLessThan(90);
+    // two splits: about 120 (was about 490), and it keeps closing
+    const two = chase(150, 2, 3000);
+    expect(two.p.cells).toHaveLength(4);
+    expect(two.gap).toBeLessThan(200);
+    // a big coin's four pieces draw together over the seconds (was about 835 and staying there)
+    const a = chase(1500, 2, 2000).gap;
+    const b = chase(1500, 2, 7000).gap;
+    expect(b).toBeLessThan(a * 0.7);
+    expect(b).toBeLessThan(500);
+    // movement only: the pieces still wait their full merge time
+    for (const c of two.p.cells) expect(c.mergeAt).toBeGreaterThan(two.w.now);
+    expect(two.p.totalMass()).toBeCloseTo(150, 0);
   });
 
   it('cells below the split threshold do not split', () => {

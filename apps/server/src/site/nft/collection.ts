@@ -190,7 +190,7 @@ export class NftCollection {
     if (!g) {
       return {
         name: `Elymum No. ${id}`,
-        description: 'A sealed Elymum emblem. Every emblem is revealed at once after the mint, from a seed committed before it (see /api/nft/provenance). Holders play Elymum, the arena where the coins eat, on Robinhood Chain.',
+        description: 'An Elymum NFT, not revealed yet. Every NFT is revealed at once after the mint, from a seed committed before it (see /api/nft/provenance). Holders get perks in Elymum, the game where coins eat coins, on Robinhood Chain.',
         image: `${baseUrl}/api/nft/${id}.svg`,
         external_url: baseUrl,
         attributes: [{ trait_type: 'Status', value: 'Sealed' }],
@@ -261,14 +261,14 @@ export class NftCollection {
 function tierLine(t: Tier): string {
   switch (t) {
     case 'Common':
-      return 'An Elymum emblem: a coin of the ring.';
+      return 'An Elymum NFT: a coin character.';
     case 'Rare':
-      return 'A Rare Elymum emblem: a struck metal coin of the ring.';
+      return 'A Rare Elymum NFT: a metal coin.';
     case 'Epic':
-      return 'An Epic Elymum emblem: a coin of precious stuff.';
+      return 'An Epic Elymum NFT: a coin made of something precious.';
     case 'Legendary':
-      return 'A Legendary Elymum emblem: one of the few coins of glass, crystal and foil.';
+      return 'A Legendary Elymum NFT: one of the few coins of glass, crystal and foil.';
     case 'Mythic':
-      return 'A Mythic Elymum emblem: one of ten one-of-one coins.';
+      return 'A Mythic Elymum NFT: one of ten one-of-a-kind coins.';
   }
 }

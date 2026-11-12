@@ -213,7 +213,7 @@ describe('ShopSheet', () => {
     expect(screen.getByText(/Pick as many as you like with \+ and −, then pay once/)).toBeTruthy();
     expect(screen.getAllByText('1,500 tELYMUM')).toHaveLength(2);
     expect(screen.getByText(/You have 4/)).toBeTruthy();
-    expect(screen.getByText(/30% off and \+1 arena use per round/)).toBeTruthy();
+    expect(screen.getByText(/30% off and \+1 power-up per paid round/)).toBeTruthy();
     expect(screen.getByText(/Each pack is paid to the arena contract \(0x0000…4e4a\): 50% is burned, 50% goes to the fee wallet\./)).toBeTruthy();
     expect((screen.getByTestId('shop-more-speed') as HTMLButtonElement).disabled).toBe(true);
     // the two new power-ups are on sale, the Shockwave is gone

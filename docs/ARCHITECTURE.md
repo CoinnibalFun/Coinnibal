@@ -257,10 +257,14 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
 - **Custom rooms** (`rooms/custom.ts`, `site/custom-rooms.ts`): a signed-in wallet pays a small ETH fee to the
   treasury (checked on chain by tx hash, each hash used once) and gets a room `priv-<CODE>` with its own rules
   (duration, map, traps, food, power-ups, capacity, practice bots in free rooms). A **ticket room** is an
-  invite-only instance of an arena: players buy that arena's normal ticket and it settles at the arena's bell like
-  any other instance; it fields no bots. Capacity 2 to 100. The end is announced `ROOM_CLOSE_COUNTDOWN_MS` (10 s)
+  invite-only instance of an arena on its **own clock** (`RoomOptions.ownRound`, `ownRoundAt`): one game from its
+  opening to its end, no tie to the arenas' 5-minute rounds; players buy that arena's normal ticket (the creator's own
+  is bought in the same creator sheet, right after the fee), joins close in its last minute, and every ticket is
+  settled at the room's end (its only bell, the normal fee on profit); it fields no bots. A ticket bought for a room
+  that ended (or is in its last minute) and never seated is cancelled at once (full entry fee back,
+  `Gateway.refundUnseated`); the 15-minute stale sweep only ever sees unseated tickets. Capacity 2 to 100. The end is announced `ROOM_CLOSE_COUNTDOWN_MS` (10 s)
   ahead (`closing`, repeated to late joiners); a free room then sends its final board (`roomOver`, the same
-  `RoundStanding` rows as a bell's `roundOver`) before `room_closed`; a ticket room closes after its bell.
+  `RoundStanding` rows as a bell's `roundOver`) before `room_closed`; a ticket room closes after its own bell at its end.
   **Practice with bots** (`POST /api/rooms/custom/practice`, `CustomRoomService.practice`): a free custom room with
   practice bots in one click, for guests too, no fee; limited to one live room per player, 4 per IP per 30 min,
   `practiceMaxLive` at once, 15 minutes, closed after 2 minutes empty.
