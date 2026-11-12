@@ -130,7 +130,6 @@ describe("the others' stickers setting", () => {
     );
     const sw = screen.getByRole('switch', { name: "Others' stickers" });
     expect(sw.getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByText('Your own sticker buttons stay.')).toBeTruthy();
     // a separate switch from the chat one
     expect(screen.getByRole('switch', { name: 'Chat' }).getAttribute('aria-checked')).toBe('true');
     fireEvent.click(sw);

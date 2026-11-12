@@ -11,7 +11,7 @@ import { EatenTracker } from '../src/rooms/eaten';
 import { ShareService } from '../src/site/shares';
 import { shareEaten, shareHeadline } from '../src/site/share-card';
 import { XLinkService, XLinkStore, carriesCode, cleanXName, oembedText, sniffImage, xAvatarUrl, type XFetch } from '../src/xlink';
-import { TICK_MS, decodeSnapshot, encodeSnapshot } from '@elymum/shared';
+import { TICK_MS, decodeSnapshot, encodeSnapshot, xLinkPostText } from '@elymum/shared';
 import { Room } from '../src/rooms/room';
 import { ArenaChain, arena, fakeConn, freeCustom, roomDeps, testWallet } from './helpers';
 
@@ -87,7 +87,7 @@ describe('Link X: codes', () => {
     const a = s.issueCode(W1, IP);
     expect(a.code).toMatch(X_CODE_RE);
     expect(a.expiresAt).toBe(T0 + X_CODE_TTL_MS);
-    expect(a.text).toBe(`Linking my X to Elymum: ${a.code} elymum.io`);
+    expect(a.text).toBe(`Joining the coin party \u{1FA99} my code: ${a.code} elymum.io`);
     expect(a.intentUrl).toBe(`https://x.com/intent/post?text=${encodeURIComponent(a.text)}`);
     expect(s.status(W1).code?.code).toBe(a.code);
     // a new code replaces the old one
@@ -259,6 +259,7 @@ describe('Link X: the proof post', () => {
     expect([...cleanXName('a'.repeat(80))].length).toBe(50);
     expect(oembedText('<p lang="en">Hi &amp; ELYMUM-ABCDEF<br>next <a href="x">elymum.io</a></p>&mdash; x')).toBe('Hi & ELYMUM-ABCDEF next elymum.io');
     expect(carriesCode('Linking: elymum-abcdef!', 'ELYMUM-ABCDEF')).toBe(true);
+    expect(carriesCode(xLinkPostText('ELYMUM-ABCDEF'), 'ELYMUM-ABCDEF')).toBe(true);
     expect(carriesCode('ELYMUM-ABCDEFG', 'ELYMUM-ABCDEF')).toBe(false);
     expect(xPostTime(postId(T0))).toBe(T0);
   });

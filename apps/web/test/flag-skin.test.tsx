@@ -146,14 +146,16 @@ describe('the flag skin setting', () => {
       render(<CountryPicker />);
       const sw = screen.getByRole('switch', { name: 'Wear the flag on my coin' });
       expect(sw).toHaveProperty('disabled', true);
-      expect(screen.getByText('Pick a country first')).toBeTruthy();
-      fireEvent.change(screen.getByLabelText('You play for'), { target: { value: 'TR' } });
+      // plain rows: no helper text under them
+      expect(document.querySelector('.gs-note')).toBeNull();
+      fireEvent.click(screen.getByTestId('country-pick'));
+      fireEvent.change(screen.getByTestId('country-search'), { target: { value: 'turk' } });
+      fireEvent.keyDown(window, { key: 'Enter' });
       expect(sw).toHaveProperty('disabled', false);
       expect(sw.getAttribute('aria-checked')).toBe('false');
       fireEvent.click(sw);
       expect(useUi.getState().settings).toMatchObject({ country: 'TR', flagSkin: true });
       expect(sw.getAttribute('aria-checked')).toBe('true');
-      expect(screen.getByText('Your coin is painted with your flag, face and all')).toBeTruthy();
     }
   });
 });

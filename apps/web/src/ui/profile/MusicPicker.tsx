@@ -5,13 +5,13 @@ import { updateSettings, useUi } from '../../store';
 
 type Option = MusicChoice | 'off';
 
-const OPTIONS: { id: Option; name: TKey; note: TKey }[] = [
-  { id: 'classic', name: 'gs.track.classic', note: 'gs.track.classicNote' },
-  { id: 'chill', name: 'gs.track.chill', note: 'gs.track.chillNote' },
-  { id: 'arcade', name: 'gs.track.arcade', note: 'gs.track.arcadeNote' },
-  { id: 'chiptune', name: 'gs.track.chiptune', note: 'gs.track.chiptuneNote' },
-  { id: 'lofi', name: 'gs.track.lofi', note: 'gs.track.lofiNote' },
-  { id: 'off', name: 'gs.track.off', note: 'gs.track.offNote' },
+const OPTIONS: { id: Option; name: TKey }[] = [
+  { id: 'classic', name: 'gs.track.classic' },
+  { id: 'chill', name: 'gs.track.chill' },
+  { id: 'arcade', name: 'gs.track.arcade' },
+  { id: 'chiptune', name: 'gs.track.chiptune' },
+  { id: 'lofi', name: 'gs.track.lofi' },
+  { id: 'off', name: 'gs.track.off' },
 ];
 
 /** The option the settings stand for: "No music" is the switch. */
@@ -27,7 +27,6 @@ export function MusicPicker({ disabled = false }: { disabled?: boolean }) {
   const t = useT();
   const s = useUi((st) => st.settings);
   const labelId = useId();
-  const noteId = useId();
   const current = selectedOption(s.musicOn, s.musicTrack);
 
   const choose = (id: Option) => {
@@ -55,14 +54,10 @@ export function MusicPicker({ disabled = false }: { disabled?: boolean }) {
         <span className="g-set__label" id={labelId}>
           {t('gs.music')}
         </span>
-        <span className="gs-note" id={noteId}>
-          {t('gs.musicNote')}
-        </span>
       </span>
-      <div className="gs-tracks" role="radiogroup" aria-labelledby={labelId} aria-describedby={noteId} onKeyDown={onKeyDown}>
+      <div className="gs-tracks" role="radiogroup" aria-labelledby={labelId} onKeyDown={onKeyDown}>
         {OPTIONS.map((o) => {
           const on = current === o.id;
-          const note = t(o.note);
           return (
             <button
               key={o.id}
@@ -76,9 +71,6 @@ export function MusicPicker({ disabled = false }: { disabled?: boolean }) {
               onClick={() => choose(o.id)}
             >
               <span className="gs-track__name">{t(o.name)}</span>
-              <span className="gs-track__note mono" title={note}>
-                {note}
-              </span>
             </button>
           );
         })}

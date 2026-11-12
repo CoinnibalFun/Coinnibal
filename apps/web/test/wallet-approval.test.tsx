@@ -65,4 +65,17 @@ describe('the wallet sheet: what the arena may still take, and revoking it', () 
     );
     expect(screen.queryByTestId('wl-approved')).toBeNull();
   });
+
+  it('a signed-in wallet shows no "Verified" badge; address, balance, network and Disconnect stay', () => {
+    useUi.setState({ auth: { address: ALICE, token: 't' } as never });
+    render(
+      <Kb>
+        <WalletModal />
+      </Kb>,
+    );
+    expect(screen.queryByText(/verified/i)).toBeNull();
+    expect(document.querySelector('.wl-ok')).toBeNull();
+    expect(screen.getByText('Disconnect')).toBeTruthy();
+    expect(screen.getByText('12,000')).toBeTruthy();
+  });
 });
