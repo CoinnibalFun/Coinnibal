@@ -132,7 +132,7 @@ export function isTestChainId(id: number | null | undefined): boolean {
 
 /** The error every wrong chain id gets: Elymum runs on Robinhood Chain only. */
 export function unsupportedChainMessage(id: unknown): string {
-  return `chain ${String(id)} is not Robinhood Chain: Elymum runs on Robinhood Chain Testnet (${ROBINHOOD_TESTNET_CHAIN_ID}) or Robinhood Chain (${ROBINHOOD_CHAIN_ID}) only (${LOCALNET_CHAIN_ID}: local development node)`;
+  return `chain ${String(id)} is not Robinhood Chain: Coinnibal runs on Robinhood Chain Testnet (${ROBINHOOD_TESTNET_CHAIN_ID}) or Robinhood Chain (${ROBINHOOD_CHAIN_ID}) only (${LOCALNET_CHAIN_ID}: local development node)`;
 }
 
 const trimSlash = (url: string): string => url.replace(/\/+$/, '');

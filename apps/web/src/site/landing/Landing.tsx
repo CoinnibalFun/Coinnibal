@@ -1,4 +1,4 @@
-import { DEFAULT_ARENAS, activeChain, arenaMeta, formatUsdCents, type GameAccess } from '@elymum/shared';
+import { DEFAULT_ARENAS, TOKEN_SYMBOL_DEFAULT, activeChain, arenaMeta, formatUsdCents, type GameAccess } from '@elymum/shared';
 import { motion, useInView } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
@@ -36,7 +36,7 @@ import { useLandingSound } from './sound';
 import './landing.css';
 
 /** The game token's display symbol (server `TOKEN_SYMBOL`; the landing has no chain status). */
-const SYMBOL = '$ELYMUM';
+const SYMBOL = TOKEN_SYMBOL_DEFAULT;
 const view = { once: true, amount: 0.3 } as const;
 const pct = (bps: number) => `${bps / 100}%`;
 
@@ -57,7 +57,9 @@ function Hero({ collabOpen, gameAccess, wlOpen, sound }: { collabOpen: boolean; 
               <h1 id="ld-hero-title" ref={peel.ref} className={`ld-hero__title ${peel.className}`}>
                 <Wordmark height={104} playful={!reduced} className="ld-hero__mark" />
               </h1>
-              <p className="ld-hero__tag">{t('ld.hero.tag')}</p>
+              <p className="ld-hero__tag">
+                {t('ld.hero.tag')} <span className="ld-hero__motto">{t('brand.tagline')}</span>
+              </p>
               <p className="ld-hero__lede">{t('ld.hero.lede')}</p>
               {/* plainly: this is real money (on testnet: what it will be on mainnet) */}
               <p className="ld-hero__money" data-testid="ld-money">
@@ -122,7 +124,7 @@ function Hero({ collabOpen, gameAccess, wlOpen, sound }: { collabOpen: boolean; 
   );
 }
 
-/* ── what Elymum is ───────────────────────────────────────────────────── */
+/* ── what Coinnibal is ───────────────────────────────────────────────────── */
 
 function MenuLine({ art, dish, note, price }: { art: ReactNode; dish: string; note: string; price: string }) {
   return (
@@ -254,7 +256,7 @@ function Round() {
   );
 }
 
-/* ── the Elymum NFT and why to get it ─────────────────────────────────── */
+/* ── the Coinnibal NFT and why to get it ──────────────────────────────── */
 
 /** The three NFT cards of the fan: which paint each wears and the slot it starts in. */
 const EMBLEMS: { paint: CoinPaint; tilt: number }[] = [

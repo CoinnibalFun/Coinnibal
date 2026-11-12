@@ -1,17 +1,21 @@
-# Elymum
+# Coinnibal
 
-**You are small change with a big appetite.** Elymum is a cute coin-eats-coin arena game on
-Robinhood Chain (an Arbitrum Orbit L2, gas token ETH).
+**You are small change with a big appetite.** Coinnibal is a cute coin-eats-coin arena game on
+Robinhood Chain (an Arbitrum Orbit L2, gas token ETH). Its token is `$NIBAL`. Eat or be eaten.
 You are a coin: eat food and smaller coins, run from bigger ones, and when the five-minute bell rings
 whatever you swallowed is paid out on chain.
 
-The product flow is WL → Mint → Play: people apply for the whitelist, mint an Elymum NFT for
+The game used to be called Elymum. The code keeps that as its internal name (`@elymum/*` packages,
+`ElymumArena` / `ElymumNFT`, env vars, storage keys); everything a player sees says Coinnibal. The domain and the X
+handle are configuration: see docs/OPERATIONS.md, "The name: Coinnibal, and moving to coinnibal.io".
+
+The product flow is WL → Mint → Play: people apply for the whitelist, mint a Coinnibal NFT for
 $1 in ETH, and the game opens for holders. The money rules live in two Solidity contracts; the
 game itself runs on an authoritative server; the owner deploys and runs everything from their own
 wallet in `/admin`.
 
 Status: the contracts and the whole mint system are ready and run from `/admin`; the public site
-collects WL applications for now. Elymum runs on Robinhood Chain only: Robinhood Chain Testnet (chain id
+collects WL applications for now. Coinnibal runs on Robinhood Chain only: Robinhood Chain Testnet (chain id
 46630) now, Robinhood Chain (4663) later, switched with `CHAIN_ID`. The contracts have not been audited, and a game
 played with a token of real value may need a licence where you operate.
 
@@ -35,14 +39,14 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
   each bell; joins closed in the final minute). Join late or buy back in; everyone alive at the bell is paid their value. There is no entry
   fee; the arena contract takes 20 % of a ticket's **profit** only (15 % burned, 5 % to the fee wallet; emblem
   holders 10 %: 8 % + 2 %); a loss pays nothing.
-- Four arenas on the ring, tickets priced in US dollars and paid in `$ELYMUM`: Asphodel Meadow ($1), Lethe Shore ($3),
+- Four arenas on the ring, tickets priced in US dollars and paid in `$NIBAL`: Asphodel Meadow ($1), Lethe Shore ($3),
   Golden Bough ($5) and Isles of the Blessed ($10, for emblem holders). Only people play the official arenas: no
   house bots (on the testnet each arena also has a labelled TEST room with practice bots that carry no value).
 - On-chain money in one contract: `ElymumArena` holds the entry fees in per-arena vaults; a payout
   can never exceed the vault, a settlement cannot replay, players refund unsettled tickets themselves
   after 24 h, floor loot is only ever burned. Power-ups (packs priced in US dollars, several in one cart, one
   payment) are paid to the same contract (`pay`: half burned, half to the fee wallet).
-- Elymum NFT: an ERC-721 with an allowlist (Merkle root) and a public phase, priced at $1 in
+- Coinnibal NFT: an ERC-721 with an allowlist (Merkle root) and a public phase, priced at $1 in
   ETH (synced from `/admin` or kept there by the server's price keeper within the owner's bounds).
 - Sign-In with Ethereum (EIP-4361) for every wallet that speaks EIP-6963 (MetaMask, Rabby, Coinbase
   Wallet, OKX and the rest), smart wallets included (ERC-1271 / 6492).

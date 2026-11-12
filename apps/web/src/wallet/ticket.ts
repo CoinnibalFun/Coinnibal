@@ -108,7 +108,7 @@ export interface TicketModel {
    * price from `DEFAULT_ARENAS`), not for sale. Practice still plays.
    */
   soon?: boolean;
-  /** The arena admits Elymum emblem holders only (on-chain `holdersOnly`): a small laurel lock for everyone else. */
+  /** The arena admits Coinnibal emblem holders only (on-chain `holdersOnly`): a small laurel lock for everyone else. */
   holdersOnly?: boolean;
   /**
    * The arena's test arena (testnet only): the official ticket, rounds and payouts in a room with practice bots.

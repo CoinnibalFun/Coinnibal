@@ -14,11 +14,11 @@ import { b, em, T } from '../../i18n/rich';
 import { site } from '../api';
 import { isTestnetChain, useServerChain } from '../serverChain';
 import { SiteLinkButton, SitePage } from '../Shell';
-import { claimErrorText, faucetTokenAddress, servedConfig, faucetView, formatWait, gasFaucetUrl, holderMultiple, TEST_SYMBOL_DEFAULT, watchAssetParams, wholeTokens } from './logic';
+import { claimErrorText, faucetTokenAddress, servedConfig, faucetView, formatWait, gasFaucetUrl, holderMultiple, TEST_SYMBOL_DEFAULT, displaySymbol, watchAssetParams, wholeTokens } from './logic';
 import '../wallet/wallet.css';
 import './faucet.css';
 
-/** `/faucet` (testnet only): free tELYMUM to play the arenas with, once an hour. */
+/** `/faucet` (testnet only): free test tokens to play the arenas with, once an hour. */
 export function FaucetPage() {
   return (
     <SitePage className="fc-root">
@@ -201,6 +201,9 @@ function Faucet() {
     );
   if (view === 'mainnet' || view === 'offline' || view === 'no-token') return <Quiet view={view} />;
   const m = meta as TokenMeta;
+  // what the page calls the token: the game's display symbol (server `TOKEN_SYMBOL`, e.g. $NIBAL) when the faucet token
+  // is the game token, else its on-chain symbol; the wallet's "add token" always gets the on-chain symbol
+  const sym = displaySymbol(m, chain?.token);
   const chainInfo = serverChainInfo(chain);
   const chainName = chainInfo?.name ?? activeChain().name;
   const onChain = walletChainId !== null && chainInfo?.id === walletChainId;
@@ -270,14 +273,14 @@ function Faucet() {
             <T k="fc.h2" tags={{ em }} />
           </h1>
           <p className="fc-lede">
-            <T k="fc.lede" vars={{ sym: m.symbol }} tags={{ b }} />
+            <T k="fc.lede" vars={{ sym }} tags={{ b }} />
           </p>
           <FaucetTap pouring={busy} mood={mood} />
         </div>
         <Sticker tone="cream" lift="lg" pad="lg" round="lg" tape className="fc-card" as="section" aria-labelledby="fc-card-h">
           <div className="fc-card__top">
             <h2 className="fc-card__h display" id="fc-card-h">
-              <span className="num">{wholeTokens(amount, m.decimals)}</span> <span className="fc-card__sym">{m.symbol}</span>
+              <span className="num">{wholeTokens(amount, m.decimals)}</span> <span className="fc-card__sym">{sym}</span>
             </h2>
             {mult !== null && (
               <span className={`fc-bonus mono${isHolder ? ' is-mine' : ''}`} data-testid="fc-bonus">
@@ -313,12 +316,12 @@ function Faucet() {
                 </div>
               ) : (
                 <Button variant="primary" size="lg" block loading={busy} disabled={busy || !info} onClick={() => void claim()} className="fc-claim" data-testid="fc-claim">
-                  {busy ? t(BUSY[phase as keyof typeof BUSY]) : t('fc.claim', { n: wholeTokens(amount, m.decimals), sym: m.symbol })}
+                  {busy ? t(BUSY[phase as keyof typeof BUSY]) : t('fc.claim', { n: wholeTokens(amount, m.decimals), sym })}
                 </Button>
               )}
               {phase === 'done' && (
                 <p className="fc-ok" role="status" data-testid="fc-done">
-                  <Icon name="check" size={16} /> {t('fc.done', { n: wholeTokens(amount, m.decimals), sym: m.symbol })}{' '}
+                  <Icon name="check" size={16} /> {t('fc.done', { n: wholeTokens(amount, m.decimals), sym })}{' '}
                   {tx && (
                     <a href={tx} target="_blank" rel="noreferrer">
                       {t('tf.viewTx')}
@@ -338,7 +341,7 @@ function Faucet() {
               )}
               <div className="fc-row">
                 <button type="button" className="fc-add" onClick={() => void addToken()} disabled={!provider || fake}>
-                  <Icon name="wallet" size={16} /> {added === 'ok' ? t('fc.added', { sym: m.symbol }) : t('fc.add', { sym: m.symbol })}
+                  <Icon name="wallet" size={16} /> {added === 'ok' ? t('fc.added', { sym }) : t('fc.add', { sym })}
                 </button>
                 {phase === 'done' && (
                   <SiteLinkButton href="/play" variant="teal" size="sm" icon="arrow">

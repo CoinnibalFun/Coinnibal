@@ -27,7 +27,7 @@ async function universal(): Promise<Universal> {
     UniversalProvider.init({
       projectId: WC_PROJECT_ID!,
       metadata: {
-        name: 'Elymum',
+        name: 'Coinnibal',
         description: 'A coin-eats-coin arena on Robinhood Chain',
         url: window.location.origin,
         icons: [`${window.location.origin}/favicon.svg`],

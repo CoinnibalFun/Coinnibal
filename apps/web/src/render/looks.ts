@@ -2,7 +2,7 @@ import { ELYSIUM, lookForBasicSkin, shadeOf, type CoinLook } from '@elymum/art';
 import { EMBLEM_SKIN_ID } from '@elymum/shared';
 
 /**
- * The emblem skin (`EMBLEM_SKIN_ID`, unlocked for Elymum NFT holders): the emblem's gold coin with
+ * The emblem skin (`EMBLEM_SKIN_ID`, unlocked for Coinnibal NFT holders): the emblem's gold coin with
  * its crown face and a laurel, drawn with the shared Storybook coin art.
  */
 export const EMBLEM_LOOK: CoinLook = {

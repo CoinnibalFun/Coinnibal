@@ -48,11 +48,11 @@ const fail = (s, hint) => {
 // ───────────────────────────── preflight ─────────────────────────────
 async function preflight() {
   const major = Number(process.versions.node.split('.')[0]);
-  if (major < 22) fail(`Node ${process.versions.node} is too old; Elymum needs Node 22 or newer.`, 'Install it from https://nodejs.org or with nvm: nvm install 22');
+  if (major < 22) fail(`Node ${process.versions.node} is too old; Coinnibal needs Node 22 or newer.`, 'Install it from https://nodejs.org or with nvm: nvm install 22');
   const pv = spawnSync('pnpm', ['--version'], { encoding: 'utf8' });
   if (pv.error || pv.status !== 0) fail('pnpm was not found.', 'Install it with: corepack enable   (or npm i -g pnpm@10)');
   const pnpmMajor = Number(pv.stdout.trim().split('.')[0]);
-  if (pnpmMajor < 10) fail(`pnpm ${pv.stdout.trim()} is too old; Elymum needs pnpm 10.`, 'Run: corepack enable   (the repo pins pnpm@10 in package.json)');
+  if (pnpmMajor < 10) fail(`pnpm ${pv.stdout.trim()} is too old; Coinnibal needs pnpm 10.`, 'Run: corepack enable   (the repo pins pnpm@10 in package.json)');
   const installed = ['apps/server/node_modules/tsx', 'apps/web/node_modules/vite', 'apps/web/node_modules/playwright'].every((p) => existsSync(join(ROOT, p)));
   if (!installed) fail('Dependencies are not installed.', 'Run: pnpm install');
   const ports = [[SERVER_PORT, 'game server'], [WEB_PORT, 'web app'], ...(LOCALNET ? [[RPC_PORT, 'hardhat node RPC']] : [])];
@@ -231,7 +231,7 @@ async function main() {
   }
 
   console.log('');
-  console.log(color('1;32', `  Elymum is running: ${WEB_URL}`));
+  console.log(color('1;32', `  Coinnibal is running: ${WEB_URL}`));
   console.log(`  game server:       http://127.0.0.1:${SERVER_PORT}/api/health`);
   if (localnet) {
     console.log(`  hardhat node:      http://127.0.0.1:${RPC_PORT}   (chain id ${localnet.chainId}; addresses in .localnet/contracts.json)`);

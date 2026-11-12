@@ -1,4 +1,6 @@
 import { ELYSIUM, SHADE, TEXT_INKS, activeChain } from '@elymum/shared';
+import { BITTEN_COIN, WORD_COIN_SCALE, WORD_LETTERS, type BrandLetter } from '../../design/motifs/brandShapes';
+import { ourXHandle } from '../../i18n';
 import { drawCoinLook } from '../../render/coin';
 import { hash32, lookForHandle, seeded, ticketNo } from '../coinLook';
 import { siteHost } from '../settings';
@@ -27,17 +29,7 @@ export async function cardFonts(): Promise<void> {
   }
 }
 
-/** The ELYMUM letters (the same brush skeletons as the `Wordmark` motif), for drawing on canvas. */
-const LETTERS: { d: string; x: number; rot: number; dy: number; shine?: string }[] = [
-  { d: 'M58 18 H16 V94 H58 M16 56 H50', x: 0, rot: -4, dy: 1, shine: 'M8 34 v12' },
-  { d: 'M16 18 V94 H56', x: 76, rot: 2.5, dy: 4, shine: 'M8 32 v14' },
-  { d: 'M12 18 L38 56 L64 18 M38 56 V94', x: 140, rot: -2, dy: -2, shine: 'M7 24 l5 7' },
-  { d: 'M16 94 V18 L44 58 L72 18 V94', x: 216, rot: 3, dy: 2, shine: 'M8 36 v12' },
-  { d: 'M16 18 V62 C16 100 70 100 70 62 V18', x: 304, rot: -2.5, dy: -1, shine: 'M8 30 v12' },
-  { d: 'M16 94 V18 L44 58 L72 18 V94', x: 386, rot: 2, dy: 3, shine: 'M8 36 v12' },
-];
-
-/** The wordmark at (x, y) (top-left), `scale` × its 486 × 128 drawing. */
+/** The wordmark at (x, y) (top-left), `scale` × its WORD_W × WORD_H drawing (the `Wordmark` motif on canvas). */
 function drawWordmark(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
   if (typeof Path2D === 'undefined') return;
   ctx.save();
@@ -45,32 +37,74 @@ function drawWordmark(ctx: CanvasRenderingContext2D, x: number, y: number, scale
   ctx.scale(scale, scale);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const layer = (fn: (p: Path2D, l: (typeof LETTERS)[number]) => void) => {
-    for (const l of LETTERS) {
+  const coin = new Path2D(BITTEN_COIN);
+  const layer = (fn: (p: Path2D | null, l: BrandLetter) => void) => {
+    for (const l of WORD_LETTERS) {
       ctx.save();
       ctx.translate(l.x, l.dy);
       ctx.translate(40, 56);
       ctx.rotate((l.rot * Math.PI) / 180);
       ctx.translate(-40, -56);
-      fn(new Path2D(l.d), l);
+      fn(l.d ? new Path2D(l.d) : null, l);
       ctx.restore();
     }
+  };
+  /** The coin "O": the bitten coin scaled into the letter's cell. */
+  const inCoin = (fn: () => void) => {
+    ctx.save();
+    ctx.translate(40, 56);
+    ctx.scale(WORD_COIN_SCALE, WORD_COIN_SCALE);
+    fn();
+    ctx.restore();
   };
   // hard offset shadow, then the ink edge of every letter, then the paint (so letters overlap cleanly)
   layer((p) => {
     ctx.save();
     ctx.translate(5, 5);
     ctx.strokeStyle = INK;
-    ctx.lineWidth = 30;
-    ctx.stroke(p);
+    ctx.fillStyle = INK;
+    if (p) {
+      ctx.lineWidth = 30;
+      ctx.stroke(p);
+    } else
+      inCoin(() => {
+        ctx.lineWidth = 6 / WORD_COIN_SCALE;
+        ctx.fill(coin);
+        ctx.stroke(coin);
+      });
     ctx.restore();
   });
   layer((p) => {
     ctx.strokeStyle = INK;
     ctx.lineWidth = 30;
-    ctx.stroke(p);
+    if (p) ctx.stroke(p);
   });
   layer((p, l) => {
+    if (!p) {
+      inCoin(() => {
+        ctx.fillStyle = SHADE.sun;
+        ctx.fill(coin);
+        ctx.save();
+        ctx.clip(coin);
+        ctx.fillStyle = ELYSIUM.sun;
+        ctx.beginPath();
+        ctx.arc(-5, -7, 44, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        ctx.strokeStyle = SHADE.sun;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, 30, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 6;
+        ctx.stroke(new Path2D('M-36 -10 A37 37 0 0 1 -18 -32'));
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = (6 / WORD_COIN_SCALE) * 1.2;
+        ctx.stroke(coin);
+      });
+      return;
+    }
     ctx.strokeStyle = SHADE.cyan;
     ctx.lineWidth = 24;
     ctx.stroke(p);
@@ -299,9 +333,9 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
     ctx.restore();
     return;
   }
-  label(ctx, 'Elymum WL pass', BX, Y + 62, TEAL_INK, 19);
+  label(ctx, 'Coinnibal WL pass', BX, Y + 62, TEAL_INK, 19);
   label(ctx, 'Coins eat coins', PERF - 40, Y + 62, STONE, 17, 'right');
-  drawWordmark(ctx, BX - 4, Y + 84, 0.6);
+  drawWordmark(ctx, BX - 4, Y + 88, 0.48);
 
   label(ctx, 'Passenger', BX, Y + 222);
   if (upto < 3) {
@@ -329,7 +363,7 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
   ctx.stroke();
   ctx.setLineDash([]);
   const cols: [string, string][] = [
-    ['Game', 'Elymum'],
+    ['Game', 'Coinnibal'],
     ['Rounds', '5 min'],
     ['Gate', 'WL'],
     ['Boards', 'Round 001'],
@@ -406,7 +440,7 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
   ctx.globalAlpha = 0.92;
   ctx.fillText('"No snow is there, nor heavy storm, nor ever rain."', X + 6, 590);
   ctx.globalAlpha = 1;
-  label(ctx, '@elymumio', CARD_W - X - 4, 590, ELYSIUM.foam, 17, 'right');
+  label(ctx, ourXHandle(), CARD_W - X - 4, 590, ELYSIUM.foam, 17, 'right');
 }
 
 /** The card as a PNG. */

@@ -15,7 +15,7 @@
  *     is published, and token `t` shows art `(t - 1 + offset) mod size`. Anyone can re-run the generator and
  *     check both hashes and the offset.
  */
-import type { NftProvenance, NftRarityStats } from '@elymum/shared';
+import { BRAND_NAME, NFT_NAME, type NftProvenance, type NftRarityStats } from '@elymum/shared';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -189,8 +189,8 @@ export class NftCollection {
     const g = this.genomeOf(id);
     if (!g) {
       return {
-        name: `Elymum No. ${id}`,
-        description: 'An Elymum NFT, not revealed yet. Every NFT is revealed at once after the mint, from a seed committed before it (see /api/nft/provenance). Holders get perks in Elymum, the game where coins eat coins, on Robinhood Chain.',
+        name: `${NFT_NAME} No. ${id}`,
+        description: `A ${NFT_NAME} NFT, not revealed yet. Every NFT is revealed at once after the mint, from a seed committed before it (see /api/nft/provenance). Holders get perks in ${BRAND_NAME}, the game where coins eat coins, on Robinhood Chain.`,
         image: `${baseUrl}/api/nft/${id}.svg`,
         external_url: baseUrl,
         attributes: [{ trait_type: 'Status', value: 'Sealed' }],
@@ -203,8 +203,8 @@ export class NftCollection {
     if (g.name) attributes.push({ trait_type: 'One of One', value: g.name });
     attributes.push({ display_type: 'number', trait_type: 'Rarity Rank', value: rank, max_value: this.state.size });
     return {
-      name: g.name ? `Elymum No. ${id}: ${g.name}` : `Elymum No. ${id}`,
-      description: `${tierLine(g.tier)} Holders play Elymum, the arena where the coins eat, on Robinhood Chain.`,
+      name: g.name ? `${NFT_NAME} No. ${id}: ${g.name}` : `${NFT_NAME} No. ${id}`,
+      description: `${tierLine(g.tier)} Holders play ${BRAND_NAME}, the arena where the coins eat, on Robinhood Chain.`,
       // the reveal block in the URL: marketplaces that cached the sealed picture fetch the new one
       image: `${baseUrl}/api/nft/${id}.svg?v=${r.block}`,
       external_url: baseUrl,
@@ -261,14 +261,14 @@ export class NftCollection {
 function tierLine(t: Tier): string {
   switch (t) {
     case 'Common':
-      return 'An Elymum NFT: a coin character.';
+      return `A ${NFT_NAME} NFT: a coin character.`;
     case 'Rare':
-      return 'A Rare Elymum NFT: a metal coin.';
+      return `A Rare ${NFT_NAME} NFT: a metal coin.`;
     case 'Epic':
-      return 'An Epic Elymum NFT: a coin made of something precious.';
+      return `An Epic ${NFT_NAME} NFT: a coin made of something precious.`;
     case 'Legendary':
-      return 'A Legendary Elymum NFT: one of the few coins of glass, crystal and foil.';
+      return `A Legendary ${NFT_NAME} NFT: one of the few coins of glass, crystal and foil.`;
     case 'Mythic':
-      return 'A Mythic Elymum NFT: one of ten one-of-a-kind coins.';
+      return `A Mythic ${NFT_NAME} NFT: one of ten one-of-a-kind coins.`;
   }
 }

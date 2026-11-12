@@ -1,4 +1,4 @@
-// Drawing kit for the Elymum brand renders, in the "Ring Storybook" language of
+// Drawing kit for the Coinnibal brand renders, in the "Ring Storybook" language of
 // docs/design/storybook-reference.html and docs/specs/2026-10-29-elymum-on-elysium.md (section 6):
 // ink outlines (#04181C), flat cel fills with one shade tone, hard offset shadows (no blur), cream
 // die-cut stickers, Fraunces (display, SOFT 100), DM Sans (reading), Geist Mono (numbers, kickers).
@@ -207,50 +207,93 @@ export function coin(paint = 'sun', o = {}) {
 /* ------------------------------------------------------------------ marks */
 
 /**
- * The ELYMUM wordmark: chunky cyan Fraunces 900 letters, a fat ink edge, a hard offset shadow and a mist
- * shine, each letter a hair off the baseline. `diecut` adds a cream sticker border (for night pages).
+ * The bitten coin (radius 46 around 0,0, three bites out of the upper right rim). Same path as
+ * apps/web/src/design/motifs/brandShapes.ts (BITTEN_COIN) and apps/web/public/favicon.svg.
+ */
+export const BITTEN_COIN = 'M46 -0.63 A46 46 0 1 1 -7.36 -45.41 A15.64 15.64 0 0 0 13.63 -31.98 A16.27 16.27 0 0 0 29.13 -18.98 A15.64 15.64 0 0 0 46 -0.63Z';
+const MARK_C = 'M13 -14 C8 -22 -13 -24 -13 0 C-13 24 8 22 13 14';
+/** The COINNIBAL brush letters (brandShapes.ts WORD_LETTERS): skeleton, x, rotation, baseline nudge, shine. No `d`: the coin "O". */
+const WORD_LETTERS = [
+  { d: 'M62 30 C52 12 16 12 16 56 C16 100 52 100 62 82', x: 0, rot: -4, dy: 1, shine: 'M8 40 v12' },
+  { x: 78, rot: 3, dy: 2 },
+  { d: 'M28 18 V94', x: 158, rot: -2, dy: -2, shine: 'M20 32 v12' },
+  { d: 'M16 94 V18 L60 94 V18', x: 208, rot: 2.5, dy: 3, shine: 'M8 34 v12' },
+  { d: 'M16 94 V18 L60 94 V18', x: 288, rot: -2, dy: -1, shine: 'M8 34 v12' },
+  { d: 'M28 18 V94', x: 368, rot: 3, dy: 2, shine: 'M20 32 v12' },
+  { d: 'M16 94 V18 H36 C62 18 62 54 36 54 H16 M36 54 C68 54 68 94 36 94 H16', x: 418, rot: -3, dy: 0, shine: 'M8 34 v12' },
+  { d: 'M12 94 L38 18 L64 94 M24 68 H52', x: 498, rot: 2, dy: 2, shine: 'M18 50 l5 -14' },
+  { d: 'M16 18 V94 H56', x: 578, rot: -2.5, dy: -1, shine: 'M8 32 v14' },
+];
+
+/**
+ * The COINNIBAL wordmark (the web app's `Wordmark` motif): chunky brush letters with an ink edge and a hard
+ * shadow, and a gold coin with a bite out of it for the "O". `width` = rendered width; `diecut` adds the cream sticker halo.
  */
 export function wordmark({ width = 470, diecut = false, fill = C.cyan } = {}) {
-  const letters = 'ELYMUM'.split('');
-  // hand-set advance (Fraunces 900 at 96px, tracking -3), with a little bounce on the baseline
-  const xs = [10, 74, 134, 198, 290, 360];
-  const dy = [0, -2, 1, -1, 2, -1];
-  const rot = [-2, 1.5, -1, 0.8, -1.5, 2];
-  const t = (stroke, extra) =>
-    letters
-      .map(
-        (l, i) =>
-          `<text x="${xs[i]}" y="${92 + dy[i]}" transform="rotate(${rot[i]} ${xs[i] + 30} 60)" ${extra} stroke-width="${stroke}" stroke-linejoin="round" paint-order="stroke">${l}</text>`,
-      )
-      .join('');
-  const font = `font-family="Fraunces" font-weight="900" font-size="96" style="font-variation-settings:'SOFT' 100,'WONK' 1,'opsz' 144"`;
-  return `<svg viewBox="-8 -4 486 124" width="${width}" style="display:block;overflow:visible" role="img" aria-label="Elymum">
-    <g ${font}>
-      ${diecut ? `<g transform="translate(6,6)" fill="${C.ink}" stroke="${C.ink}">${t(28, '')}</g><g fill="${C.ink}" stroke="${C.ink}">${t(28, '')}</g><g fill="${C.cream}" stroke="${C.cream}">${t(22, '')}</g>` : ''}
-      <g transform="translate(5,5)" fill="${C.ink}" stroke="${C.ink}">${t(6, '')}</g>
-      <g fill="${fill}" stroke="${C.ink}">${t(6, '')}</g>
+  const id = `wm${uid++}`;
+  const shade = fill === C.sun ? C.sunS : fill === C.cream ? C.creamS : fill === C.foam ? C.foamS : C.cyanS;
+  const [coinLit, coinShade] = fill === C.sun ? [C.cyan, C.cyanS] : [C.sun, C.sunS];
+  const BRUSH = 24;
+  const EDGE = 6;
+  const K = 0.9;
+  const pad = diecut ? 13 : 0;
+  const place = (l, inner) => `<g transform="translate(${l.x} ${l.dy}) rotate(${l.rot} 40 56)">${inner}</g>`;
+  const halo = (extra) => WORD_LETTERS.map((l) => place(l, `<path d="${l.d ?? 'M40 56 h0.1'}" stroke-width="${l.d ? BRUSH + EDGE + 26 + extra : 46 * K * 2 + 26 + extra}"/>`)).join('');
+  const letters = WORD_LETTERS.map((l, i) => {
+    if (!l.d) {
+      return place(
+        l,
+        `<g transform="translate(40 56) scale(${K})">
+          <clipPath id="${id}-c${i}"><path d="${BITTEN_COIN}"/></clipPath>
+          <path d="${BITTEN_COIN}" fill="${C.ink}" stroke="${C.ink}" stroke-width="${EDGE / K}" transform="translate(${5 / K} ${5 / K})"/>
+          <path d="${BITTEN_COIN}" fill="${coinShade}" stroke="none"/>
+          <circle cx="-5" cy="-7" r="44" fill="${coinLit}" stroke="none" clip-path="url(#${id}-c${i})"/>
+          <circle r="30" stroke="${coinShade}" stroke-width="4"/>
+          <path d="M-36 -10 A37 37 0 0 1 -18 -32" stroke="#fff" stroke-width="6" opacity=".85"/>
+          <path d="${BITTEN_COIN}" stroke="${C.ink}" stroke-width="${(EDGE / K) * 1.2}"/>
+        </g>`,
+      );
+    }
+    return place(
+      l,
+      `<path d="${l.d}" stroke="${C.ink}" stroke-width="${BRUSH + EDGE}" transform="translate(5 5)"/>
+       <path d="${l.d}" stroke="${C.ink}" stroke-width="${BRUSH + EDGE}"/>
+       <path d="${l.d}" stroke="${shade}" stroke-width="${BRUSH}"/>
+       <path d="${l.d}" stroke="${fill}" stroke-width="${BRUSH - 5}" transform="translate(-1.6 -1.8)"/>
+       ${l.shine ? `<path d="${l.shine}" stroke="${C.mist}" stroke-width="4.5" transform="translate(5 0)"/>` : ''}`,
+    );
+  }).join('');
+  const vbW = 664 + pad * 2;
+  const vbH = 128 + pad * 2;
+  return `<svg viewBox="${-6 - pad} ${-4 - pad} ${vbW} ${vbH}" width="${width}" height="${(width * vbH) / vbW}" style="display:block;overflow:visible" role="img" aria-label="Coinnibal">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      ${diecut ? `<g stroke="${C.ink}" transform="translate(6 6)">${halo(6)}</g><g stroke="${C.ink}">${halo(6)}</g><g stroke="${C.cream}">${halo(0)}</g>` : ''}
+      ${letters}
     </g>
-    <path d="M24 36 q8 -12 26 -11" stroke="${C.mist}" stroke-width="6" fill="none" stroke-linecap="round"/>
-    <path d="M300 32 q6 -8 16 -8" stroke="${C.mist}" stroke-width="5" fill="none" stroke-linecap="round"/>
   </svg>`;
 }
 
-/** CoinMark: a cyan coin with a fat cream E (the compact mark and the favicon). `px` = rendered size. */
-export function coinMark(px = 256, { shadow = true } = {}) {
+/** CoinMark: a cyan coin with a bite out of it and a fat cream C (the compact mark and the favicon). `px` = rendered size. */
+export function coinMark(px = 256, { shadow = true, paint = 'cyan' } = {}) {
   const ink = C.ink;
-  // stroke stays ~3 px at large sizes and thick enough to read at 32 px
-  const W = px >= 128 ? 4 : Math.min(9, (3 * 112) / px + 3.2);
-  const E = 'M-16 -27 H16 Q20 -27 20 -23 V-17 Q20 -13 16 -13 H-2 V-7 H13 Q17 -7 17 -3 V3 Q17 7 13 7 H-2 V13 H16 Q20 13 20 17 V23 Q20 27 16 27 H-16 Q-20 27 -20 23 V-23 Q-20 -27 -16 -27Z';
-  const vb = shadow ? '-54 -54 112 112' : '-52 -52 104 104';
+  const [lit, shade] = PAINTS[paint] ?? PAINTS.cyan;
+  const id = `cm${uid++}`;
+  // the outline stays ~3 px at large sizes and thick enough to read at 32 px
+  const W = px >= 128 ? 5 : Math.min(9, (3 * 116) / px + 2.5);
+  const vb = shadow ? '-56 -56 116 116' : '-54 -54 108 108';
   return `<svg viewBox="${vb}" width="${px}" height="${px}" style="display:block">
-    <defs><clipPath id="cm-clip"><circle r="48"/></clipPath></defs>
-    ${shadow ? `<circle cx="4" cy="4" r="48" fill="${ink}"/>` : ''}
-    <circle r="48" fill="${C.cyanS}"/>
-    <g clip-path="url(#cm-clip)"><circle cx="-6" cy="-8" r="48" fill="${C.cyan}"/></g>
-    <path d="M-38 -12 A39 39 0 0 1 -20 -34" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" opacity=".85"/>
-    <circle r="48" fill="none" stroke="${ink}" stroke-width="${W}"/>
-    <path d="${E}" transform="translate(3,3)" fill="${ink}" stroke="${ink}" stroke-width="${W}" stroke-linejoin="round"/>
-    <path d="${E}" fill="${C.cream}" stroke="${ink}" stroke-width="${W}" stroke-linejoin="round"/>
+    <defs><clipPath id="${id}"><path d="${BITTEN_COIN}"/></clipPath></defs>
+    ${shadow ? `<path d="${BITTEN_COIN}" fill="${ink}" transform="translate(4 4)"/>` : ''}
+    <path d="${BITTEN_COIN}" fill="${shade}"/>
+    <circle cx="-5" cy="-7" r="45" fill="${lit}" clip-path="url(#${id})"/>
+    <circle r="36" fill="none" stroke="${shade}" stroke-width="3" clip-path="url(#${id})"/>
+    <path d="M-36 -10 A37 37 0 0 1 -18 -32" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" opacity=".85"/>
+    <path d="${BITTEN_COIN}" fill="none" stroke="${ink}" stroke-width="${W}" stroke-linejoin="round"/>
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(-4 4)">
+      <path d="${MARK_C}" stroke="${ink}" stroke-width="22" transform="translate(3 3)"/>
+      <path d="${MARK_C}" stroke="${ink}" stroke-width="22"/>
+      <path d="${MARK_C}" stroke="${C.cream}" stroke-width="14"/>
+    </g>
   </svg>`;
 }
 

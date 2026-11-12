@@ -42,7 +42,7 @@ export function startFlagGallery(root: HTMLElement, list: string): void {
     ctx.fillStyle = INK;
     ctx.font = DISPLAY;
     ctx.textAlign = 'left';
-    ctx.fillText('Elymum · flag skins', 24, 46);
+    ctx.fillText('Coinnibal · flag skins', 24, 46);
     const x0 = (w - cols * cell) / 2;
     codes.forEach((code, i) => {
       const cx = x0 + (i % cols) * cell + cell / 2;

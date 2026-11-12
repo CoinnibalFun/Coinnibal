@@ -25,7 +25,7 @@ export const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   // ElymumArena
   ZeroAddress: 'An address must not be the zero address.',
   NotServer: 'Only the game server key can do that.',
-  Paused: 'Elymum is paused for maintenance: arena joins are closed for now.',
+  Paused: 'Coinnibal is paused for maintenance: arena joins are closed for now.',
   TokenNotSet: 'Arenas are opening soon: the game token is not set yet.',
   TokenAlreadySet: 'The game token is already set; it can be set only once.',
   NotAContract: 'That address is not a contract.',
@@ -51,7 +51,7 @@ export const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   CannotRescueGameToken: 'The game token can never be rescued.',
   NativeTransferFailed: 'The gas-token transfer failed.',
   RenounceDisabled: 'Ownership cannot be renounced.',
-  HoldersOnly: 'This arena is for Elymum emblem holders only. Mint or hold an emblem to enter.',
+  HoldersOnly: 'This arena is for Coinnibal NFT holders only. Mint or hold the NFT to enter.',
   SafeERC20FailedOperation: 'The token transfer failed.',
   ReentrancyGuardReentrantCall: 'Re-entrant call refused.',
   OwnableUnauthorizedAccount: 'Only the contract owner can do that. Connect the owner wallet.',

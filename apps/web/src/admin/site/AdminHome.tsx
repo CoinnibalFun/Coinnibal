@@ -28,7 +28,7 @@ const COMMUNITY_ITEMS: TabItem<CommunityTab>[] = [
 const BENCH: Record<AdminGroup, { title: string; lede: string }> = {
   network: { title: 'Network', lede: 'The chain the server follows, its RPC, the server key, the contracts, and the way to mainnet.' },
   setup: { title: 'Setup', lede: 'Every contract leaves from your wallet, and your wallet becomes its owner. Then the emblem perks and the TestToken.' },
-  mint: { title: 'Mint', lede: 'Start and stop the mint, the allowlist, the $1 price and the small print of the Elymum NFT.' },
+  mint: { title: 'Mint', lede: 'Start and stop the mint, the allowlist, the $1 price and the small print of the Coinnibal NFT.' },
   game: { title: 'Game', lede: 'Who may play, the arena switches, the bots and the rooms right now.' },
   community: { title: 'Community', lede: 'The WL, the chores applicants do, and the communities asking for spots.' },
   safety: { title: 'Safety', lede: 'Farming, feeding and collusion (evidence for a person to weigh, never a verdict), and the pictures players wear.' },
@@ -142,10 +142,10 @@ export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: ()
         </div>
       )}
       <header className="ad-top">
-        <a className="ad-brand" href="/" aria-label="Elymum: back to the site">
+        <a className="ad-brand" href="/" aria-label="Coinnibal: back to the site">
           <CoinMark size={40} />
           <span className="ad-brand__text">
-            <span className="ad-brand__name">Elymum</span>
+            <span className="ad-brand__name">Coinnibal</span>
             <span className="ad-brand__sub mono">Workshop</span>
           </span>
         </a>

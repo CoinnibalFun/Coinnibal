@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Renders the Elymum brand kit (Ring Storybook style) to PNGs with Playwright's Chromium.
+// Renders the Coinnibal brand kit (Ring Storybook style) to PNGs with Playwright's Chromium.
 //
 //   node brand/generate.mjs            render everything into brand/out/ and refresh the web app's
-//                                      og-elymum.png, favicon-32.png and apple-touch-icon.png
+//                                      og-elymum.png, favicon-32.png, apple-touch-icon.png and the manifest icons
 //   node brand/generate.mjs og x-banner   render only the named jobs
 //   node brand/generate.mjs --list     list the jobs
 //
@@ -29,7 +29,9 @@ const JOBS = [
   { name: 'og', make: T.ogCard, scale: 1, file: 'web/og-elymum.png', copies: [join(PUBLIC, 'og-elymum.png')] },
   { name: 'favicon-32', make: () => T.favicon(32), scale: 1, file: 'web/favicon-32.png', copies: [join(PUBLIC, 'favicon-32.png')] },
   { name: 'apple-touch-icon', make: T.appleTouchIcon, scale: 1, file: 'web/apple-touch-icon.png', copies: [join(PUBLIC, 'apple-touch-icon.png')] },
-  { name: 'coin-mark-512', make: () => T.favicon(512), scale: 1, file: 'web/coin-mark-512.png' },
+  { name: 'coin-mark-512', make: () => T.favicon(512), scale: 1, file: 'web/coin-mark-512.png', copies: [join(PUBLIC, 'icon-512.png')] },
+  { name: 'icon-192', make: () => T.favicon(192), scale: 1, file: 'web/icon-192.png', copies: [join(PUBLIC, 'icon-192.png')] },
+  { name: 'icon-512-maskable', make: T.maskableIcon, scale: 1, file: 'web/icon-512-maskable.png', copies: [join(PUBLIC, 'icon-512-maskable.png')] },
   { name: 'post-wl-open', make: T.postWlOpen, scale: 1, file: 'posts/post-wl-open.png' },
   { name: 'post-mint', make: T.postMint, scale: 1, file: 'posts/post-mint.png' },
   { name: 'post-game-live', make: T.postGameLive, scale: 1, file: 'posts/post-game-live.png' },

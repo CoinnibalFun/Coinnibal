@@ -14,7 +14,7 @@ import './site.css';
 const HeaderConnect = lazy(() => import('./HeaderConnect').then((m) => ({ default: m.HeaderConnect })));
 
 /**
- * The ELYMUM wordmark for site pages: the hand-built ink letters from the design system
+ * The COINNIBAL wordmark for site pages: the hand-built ink letters from the design system
  * (`size` sm = header, xl = hero). `live` lets the letters hop once on load and on hover.
  */
 export function Wordmark({ size = 'sm', as: Tag = 'span', live = false }: { size?: 'sm' | 'xl'; as?: 'span' | 'h1'; live?: boolean }) {
@@ -232,7 +232,7 @@ export function SiteFooter() {
           <Link href="/docs">{t('site.nav.docs')}</Link>
         </nav>
         <p className="st-foot__small mono">
-          <span>Elymum · 2026</span>
+          <span>Coinnibal · {t('brand.tagline')} · 2026</span>
           <span>{siteHost()}</span>
           <span>{t('site.foot.safety')}</span>
         </p>

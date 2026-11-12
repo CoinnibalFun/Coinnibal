@@ -35,7 +35,7 @@ export interface CoinCharacterProps {
 const INK = ELYSIUM.abyss;
 
 /**
- * An Elymum coin with a face (spec §6.5): flat paint, one hard shade on the
+ * A Coinnibal coin with a face (spec §6.5): flat paint, one hard shade on the
  * lower right, a rim, a shine, ink outline at a steady ~3 px whatever the size,
  * big eyes, blush cheeks. Moods: smile, happy, smug, scared, chomp, sleepy,
  * open. Pure SVG + CSS (storybook.css `.kb-coin`), safe on any page.

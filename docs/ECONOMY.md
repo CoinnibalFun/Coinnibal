@@ -1,4 +1,4 @@
-# Elymum economy
+# Coinnibal economy
 
 How value moves, what leaves circulation, and what each price is set against. Every number here is a code
 default; the module that holds it is named so this page and the game cannot drift apart:
@@ -14,7 +14,7 @@ default; the module that holds it is named so this page and the game cannot drif
 | Loot | `RULES.loot*`, `packages/shared/src/constants.ts` |
 
 The token is the game token on Robinhood Chain (launched on Pons: a fixed supply of 1,000,000,000 with no mint after
-launch; on the testnet the bundled `TestToken`). **Nothing in Elymum mints the game token**: the arena only holds,
+launch; on the testnet the bundled `TestToken`). **Nothing in Coinnibal mints the game token**: the arena only holds,
 pays out and burns tokens players brought, so every sink below shrinks circulation for good. The server key cannot
 mint either (the testnet `TestToken` is minted only by its owner and its public faucet: 1,000,000 an hour per
 wallet, 2,000,000 for emblem holders).
@@ -40,7 +40,7 @@ Game → Arena prices):
 - **Rounding.** `entry = $ / price`, rounded half up to `sigFigs` significant figures (default 2: "1,200", not
   "1,234.57"), in exact integer arithmetic. At $0.00081 a token: $1 → 1,200 ($0.97), $3 → 3,700, $5 → 6,200,
   $10 → 12,000 ($9.72). Two figures keep a ticket within about 5 % of its dollar price; 3 figures within 0.5 %.
-- **The lobby** shows the dollar price with the token amount next to it ("$1 · 1,200 $ELYMUM"). An arena whose
+- **The lobby** shows the dollar price with the token amount next to it ("$1 · 1,200 $NIBAL"). An arena whose
   entry is not the tier price at the current token price (not re-synced yet) shows its value instead ("≈ $0.81").
 - **A price change never touches a ticket already bought.** Each ticket records its entry fee at `join`
   (`Session.entryFee`); settlement, the fee on profit, cancel, the 24 h refund, the server's payout guard and its
@@ -91,7 +91,7 @@ cart, `elymum.cart.…`; a single pack is `elymum.shop.<kind>`). The server cred
 **Priced in US dollars** like the tickets (`priceIn: 'usd'`, the default): the server converts each pack at the same
 token price source and the same significant figures as the arena tiers (Game → Arena prices: the manual price; the
 DEX source stays a stub), so a charge stays the same share of the $1 ticket whatever the token's price. The shop shows
-both: "$0.60 · 740 $ELYMUM" (at $0.00081 a token).
+both: "$0.60 · 740 $NIBAL" (at $0.00081 a token).
 
 | Pack | Price | Holders | Per charge | vs the $1 ticket | vs the $10 ticket | In tokens at $0.001 / at $0.00081 |
 |---|---|---|---|---|---|---|
@@ -143,7 +143,7 @@ off.
 Practice bots exist only in **free** custom rooms (the creator turns them on: count and difficulty). They carry no
 value, never pick up loot and never use power-ups.
 
-## 6. The Elymum NFT (emblem)
+## 6. The Coinnibal NFT (emblem)
 
 Minted for **$1 in ETH** (the price keeper follows ETH/USD within owner-set bounds), allowlist first, then public;
 proceeds go to the NFT treasury. What it does in the economy:

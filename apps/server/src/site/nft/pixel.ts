@@ -4,6 +4,7 @@
  * pass, so it is always one pixel and always ink), hand-authored sprites for faces, hats and accessories,
  * and a 3 × 5 pixel font for the tags. Output: a 512 × 512 SVG of crisp 8 px cells (row runs merged).
  */
+import { NFT_NAME } from '@elymum/shared';
 import { BLUSH, CREAM, HOLO, INK, MATERIAL_SPECS, P, SHADES, TIER_FRAME, WHITE, type MaterialSpec } from './palette';
 import type { Genome } from './traits';
 
@@ -743,7 +744,7 @@ export function pixelGrid(g: Genome, id: number | null): Px[] {
 export function pixelSvg(g: Genome, id: number | null): string {
   const px = pixelGrid(g, id);
   const out: string[] = [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${N} ${N}" width="${N * CELL}" height="${N * CELL}" shape-rendering="crispEdges" role="img" aria-label="Elymum${id === null ? '' : ` No. ${id}`}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${N} ${N}" width="${N * CELL}" height="${N * CELL}" shape-rendering="crispEdges" role="img" aria-label="${NFT_NAME}${id === null ? '' : ` No. ${id}`}">`,
   ];
   for (let y = 0; y < N; y++) {
     let x = 0;

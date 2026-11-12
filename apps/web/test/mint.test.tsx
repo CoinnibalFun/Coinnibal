@@ -152,7 +152,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract({ phase: 'closed' })) }));
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(screen.getByTestId('mt-phase').textContent).toBe('Closed'));
-    expect(screen.getByRole('heading', { name: 'Elymum NFT' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Coinnibal NFT' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Join the WL' }).getAttribute('href')).toBe('/wl');
     expect(screen.getByTestId('mt-price').textContent).toMatch(/0\.0300\s*ETH.*\$1\.00/);
   });
@@ -280,7 +280,7 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     ({ restore } = mockFetch({ 'GET /api/site/mint': testnetState() }));
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(document.querySelector('.mt-lede')!.textContent).toMatch(/testnet mint: 1 ETH, paid with free test ETH/));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Get the Elymum NFT.');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Get the Coinnibal NFT.');
     expect(document.querySelector('.mt-page')!.textContent).not.toMatch(/\$1\b|dollar/i);
     expect(screen.getByTestId('mt-mainnet-note').textContent).toMatch(/mainnet mint will cost much less/);
   });
@@ -290,7 +290,7 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(pubContract(), { chainId: 999, priceUsd: 1.02 }) }));
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(screen.getByTestId('mt-price').textContent).toMatch(/ETH/));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Get the Elymum NFT.');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Get the Coinnibal NFT.');
     expect(document.querySelector('.mt-lede')!.textContent).toMatch(/read live from the contract/);
     expect(document.querySelector('.mt-copy')!.textContent).not.toMatch(/dollar|pinned/i);
     // the collection and every holder perk, linked from under the lede

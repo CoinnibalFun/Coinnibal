@@ -285,7 +285,7 @@ describe('Round over sheet', () => {
     );
     expect(screen.getByRole('dialog', { name: 'Round over' })).toBeTruthy();
     // the round is named by its start time, not by its index since 1970
-    expect(screen.getByText(`ELYMUM · ${roundStartLabel(N, R)} ROUND`)).toBeTruthy();
+    expect(screen.getByText(`COINNIBAL · ${roundStartLabel(N, R)} ROUND`)).toBeTruthy();
     expect(roundStartLabel(N, R)).toMatch(/^\d\d:\d\d$/);
     expect(document.body.textContent).not.toContain(String(N));
     expect(screen.getByText('Your till')).toBeTruthy();

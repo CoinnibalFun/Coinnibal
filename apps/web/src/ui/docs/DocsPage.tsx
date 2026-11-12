@@ -13,7 +13,7 @@ import './docs.css';
 
 /**
  * The player guide (`/docs`, `#docs`): how to play, rooms and tickets, value flow, rounds and
- * the fee on profit, the Elymum NFT, the $ELYMUM token, what is on-chain, wallet safety and an FAQ. Typed content lives in
+ * the fee on profit, the Coinnibal NFT, the $NIBAL token, what is on-chain, wallet safety and an FAQ. Typed content lives in
  * content.en.ts; every number comes from the code through facts.ts, and the fee
  * rates are the server's (`ChainStatus.fees`) when they are known.
  */

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { AdminAudit } from './audit';
 import { SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
-import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL } from '@elymum/shared';
+import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import { XLinkFail, type XLinkService } from '../xlink';
@@ -488,12 +488,7 @@ export class SiteApi {
     const x = this.xLinks;
     if (!x) throw new SiteFail(404, 'not_found', 'Not found');
     // the site named in the proof post: the public site's host, else the game's own name for it
-    let site = 'elymum.io';
-    try {
-      if (this.cfg.publicUrl) site = new URL(this.cfg.publicUrl).host;
-    } catch {
-      /* keep the default */
-    }
+    const site = siteHostOf(this.cfg.publicUrl);
     try {
       if (path.startsWith('/api/x/avatar/')) {
         this.method(req, 'GET', 'HEAD');

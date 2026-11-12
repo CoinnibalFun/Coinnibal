@@ -13,7 +13,7 @@ import { GAS_DECIMALS, GAS_SYMBOL } from './chains';
  */
 
 /** Display symbol used when the server config does not set one. */
-export const TOKEN_SYMBOL_DEFAULT = '$ELYMUM';
+export const TOKEN_SYMBOL_DEFAULT = '$NIBAL';
 
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 

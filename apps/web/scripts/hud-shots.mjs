@@ -77,7 +77,7 @@ async function fillFeed(page) {
     const chat = [
       { id: 9001, pid: 2, from: 'Mossy', skin: 2, text: 'gg, nice split' },
       { id: 9002, pid: 3, from: 'Pip', skin: 6, text: 'who has the magnet' },
-      { id: 9003, pid: 0, from: 'Elymum', skin: 1, text: 'COIN RAIN!', system: true },
+      { id: 9003, pid: 0, from: 'Coinnibal', skin: 1, text: 'COIN RAIN!', system: true },
       { id: 9004, pid: 4, from: 'Quill', skin: 9, text: 'stay off the cacti' },
     ];
     const kills = [

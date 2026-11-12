@@ -1051,7 +1051,7 @@ export class GameEngine {
     }
   }
 
-  /** Floating "+X $ELYMUM" ink numbers from `value` messages (ledger units). */
+  /** Floating "+X $NIBAL" ink numbers from `value` messages (ledger units). */
   private handleFloats(): void {
     const floats = this.world.drainFloats();
     if (floats.length === 0) return;

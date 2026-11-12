@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EMOTES, PowerUpType, activeChain, chainInfo, setActiveChain } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
-import { detectLocale, formatMessage, getLocale, initLocale, LOCALES, loadLocale, refreshChainText, setLocale, translate, type Dict, type Locale, type TKey } from '../src/i18n';
+import { detectLocale, formatMessage, getLocale, initLocale, LOCALES, loadLocale, ourXHandle, refreshChainText, setLocale, setOurXHandle, translate, X_HANDLE_BUILD, type Dict, type Locale, type TKey } from '../src/i18n';
 import { renderRich } from '../src/i18n/rich';
 import { en } from '../src/i18n/en';
 import { BUILD_CHAIN_ID } from '../src/chainText';
@@ -129,5 +129,25 @@ describe('?lang=', () => {
       history.replaceState(null, '', '/');
       localStorage.removeItem('elymum.locale.v1');
     }
+  });
+});
+
+describe('{ourX}: the project X handle every string may name', () => {
+  it('starts at the build default and follows the site setting', () => {
+    expect(X_HANDLE_BUILD).toBe('elymumio');
+    expect(translate('pg.follow')).toBe('Follow @elymumio');
+    setOurXHandle('coinnibal');
+    expect(ourXHandle()).toBe('@coinnibal');
+    expect(translate('pg.follow')).toBe('Follow @coinnibal');
+    expect(translate('wp.post')).toContain('@coinnibal WL');
+    // an invalid handle is ignored
+    setOurXHandle('not a handle');
+    expect(ourXHandle()).toBe('@coinnibal');
+    setOurXHandle('@elymumio');
+    expect(translate('pg.follow')).toBe('Follow @elymumio');
+  });
+
+  it('no string writes the handle out: every language uses {ourX}', () => {
+    for (const [key, text] of Object.entries(en)) expect(`${key}: ${text}`).not.toMatch(/@elymumio/i);
   });
 });

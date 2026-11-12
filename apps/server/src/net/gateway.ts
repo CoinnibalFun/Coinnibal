@@ -235,7 +235,7 @@ export class Gateway {
     if (!this.gameGate) return false;
     const open = await Promise.resolve(this.gameGate(conn.wallet, fresh)).catch(() => false);
     if (open) return false;
-    this.error(conn, 'game_closed', conn.wallet ? 'The game is not open to this wallet yet.' : 'The game is not open yet. Sign in with your wallet if you hold an Elymum NFT.');
+    this.error(conn, 'game_closed', conn.wallet ? 'The game is not open to this wallet yet.' : 'The game is not open yet. Sign in with your wallet if you hold a Coinnibal NFT.');
     return true;
   }
 
@@ -552,7 +552,7 @@ export class Gateway {
     switch (msg.t) {
       case 'hello': {
         if (msg.v !== PROTOCOL_VERSION) {
-          this.error(conn, 'version_mismatch', 'A new version of Elymum is available. Please refresh.');
+          this.error(conn, 'version_mismatch', 'A new version of Coinnibal is available. Please refresh.');
           return;
         }
         conn.helloed = true;
@@ -683,7 +683,7 @@ export class Gateway {
       const holder = conn.wallet && this.holderCheck ? await this.holderCheck(conn.wallet).catch(() => false) : false;
       // only the basic skins can be picked, and the emblem skin by emblem holders
       if (wantsEmblem ? !holder : !isBasicSkin(skin)) {
-        this.error(conn, 'skin_locked', wantsEmblem ? 'The emblem skin is for Elymum emblem holders.' : 'That skin is locked.');
+        this.error(conn, 'skin_locked', wantsEmblem ? 'The emblem skin is for Coinnibal NFT holders.' : 'That skin is locked.');
         return;
       }
       let name = sanitizeName(msg.name);

@@ -300,7 +300,7 @@ describe('mint: allowlist, proofs, state, price', () => {
   it('NFT metadata and the emblem SVG exist for minted ids only (sealed before the reveal)', async () => {
     const meta = await h.call('GET', '/api/nft/2');
     expect(meta.status).toBe(200);
-    expect(meta.body).toMatchObject({ name: 'Elymum No. 2', image: 'https://elymum.example/api/nft/2.svg', external_url: 'https://elymum.example' });
+    expect(meta.body).toMatchObject({ name: 'Coinnibal No. 2', image: 'https://elymum.example/api/nft/2.svg', external_url: 'https://elymum.example' });
     expect(meta.body.attributes).toEqual([{ trait_type: 'Status', value: 'Sealed' }]);
     expect(meta.headers.get('cache-control')).toBe('public, max-age=60');
     const svg = await h.call('GET', '/api/nft/2.svg');
@@ -319,7 +319,7 @@ describe('mint: allowlist, proofs, state, price', () => {
     // ids beyond the max supply never trigger a chain read
     expect((await h.call('GET', '/api/nft/5000000')).status).toBe(404);
     const contract = (await h.call('GET', '/api/nft/contract')).body;
-    expect(contract).toMatchObject({ name: 'Elymum', external_link: 'https://elymum.example', seller_fee_basis_points: 500, fee_recipient: ADMIN });
+    expect(contract).toMatchObject({ name: 'Coinnibal', external_link: 'https://elymum.example', seller_fee_basis_points: 500, fee_recipient: ADMIN });
     expect(contract.provenance_hash).toBe(h.app.nft.provenance().provenance);
     // royaltyInfo is cached (5 min): an unauthenticated route never turns every hit into an RPC call
     const calls = h.evm.royaltyCalls;
@@ -581,7 +581,7 @@ describe('X handle migration (previous default @elymum → @elymumio)', () => {
     const s = new SiteStore(null);
     expect(s.settings.xHandle).toBe('elymumio');
     expect(s.tasks[0]).toMatchObject({ id: 'follow_x', title: 'Follow @elymumio', body: 'Follow @elymumio on X.', target: 'https://x.com/elymumio' });
-    expect(s.tasks[1].body).toBe('Post about Elymum on X, tag @elymumio, then paste the link to your post.');
+    expect(s.tasks[1]).toMatchObject({ title: 'Post about Coinnibal on X', body: 'Post about Coinnibal on X, tag @elymumio, then paste the link to your post.' });
   });
 
   it('switches a stored previous default handle and rewrites only the seeded tasks', () => {
@@ -594,7 +594,7 @@ describe('X handle migration (previous default @elymum → @elymumio)', () => {
     const [follow, postX, engage, custom] = s.tasks;
     // the seeded tasks keep their admin edits (enabled: false) and get the new handle
     expect(follow).toMatchObject({ id: 'follow_x', title: 'Follow @elymumio', body: 'Follow @elymumio on X.', target: 'https://x.com/elymumio', enabled: false });
-    expect(postX.body).toBe('Post about Elymum on X, tag @elymumio, then paste the link to your post.');
+    expect(postX).toMatchObject({ title: 'Post about Coinnibal on X', body: 'Post about Coinnibal on X, tag @elymumio, then paste the link to your post.' });
     expect(engage).toEqual(seededOld[2]);
     // an admin-written task is never touched
     expect(custom).toEqual(seededOld[3]);
@@ -602,7 +602,7 @@ describe('X handle migration (previous default @elymum → @elymumio)', () => {
     // answers stored in WL entries (and the admin's note) stay as they were
     expect(s.getWl('wl_1')).toMatchObject({ note: 'follows @elymum', tasks: [oldAnswer] });
     expect(logs.join('\n')).toMatch(/previous default/);
-    expect(logs.join('\n')).toMatch(/2 seeded WL task\(s\) now name @elymumio/);
+    expect(logs.join('\n')).toMatch(/2 seeded WL task\(s\) now name Coinnibal and @elymumio/);
     // idempotent: a second load changes nothing
     const again: string[] = [];
     const s2 = new SiteStore(dir, { log: (m) => again.push(m) });
@@ -628,13 +628,26 @@ describe('X handle migration (previous default @elymum → @elymumio)', () => {
     expect(s.tasks[0]).toMatchObject({ title: 'Follow @elymumio and @Elymum_fans', body: 'See https://x.com/elymumio and x.com/elymumio.', target: 'https://x.com/elymumio' });
   });
 
+  it('moves to a new default handle (X_HANDLE): the stored old default and the seeded tasks follow it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'elymum-handle-'));
+    seed(dir, { wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymumio', launchPostUrl: null });
+    const s = new SiteStore(dir, { defaults: { xHandle: 'coinnibal' } });
+    expect(s.settings.xHandle).toBe('coinnibal');
+    expect(s.tasks[0]).toMatchObject({ title: 'Follow @coinnibal', body: 'Follow @coinnibal on X.', target: 'https://x.com/coinnibal' });
+    expect(s.tasks[1].body).toBe('Post about Coinnibal on X, tag @coinnibal, then paste the link to your post.');
+    // an admin-written task is never touched
+    expect(s.tasks[3]).toEqual(seededOld[3]);
+    // fresh data seeds the new handle
+    expect(new SiteStore(null, { defaults: { xHandle: 'coinnibal' } }).tasks[0]).toMatchObject({ title: 'Follow @coinnibal' });
+  });
+
   it('serves the migrated tasks over the API', async () => {
     const h = await harness({}, (dir) => seed(dir, { wlOpen: true, collabOpen: false, gameAccess: 'admins', xHandle: 'elymum', launchPostUrl: null }));
     try {
       const r = await h.call('GET', '/api/site/tasks');
       expect(r.status).toBe(200);
       // follow_x is disabled in this data, so post_x leads
-      expect(r.body.tasks[0]).toMatchObject({ id: 'post_x', body: 'Post about Elymum on X, tag @elymumio, then paste the link to your post.' });
+      expect(r.body.tasks[0]).toMatchObject({ id: 'post_x', body: 'Post about Coinnibal on X, tag @elymumio, then paste the link to your post.' });
       expect((await h.call('GET', '/api/site/settings')).body.settings.xHandle).toBe('elymumio');
     } finally {
       await h.app.close();

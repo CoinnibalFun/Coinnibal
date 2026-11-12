@@ -1,4 +1,4 @@
-import { siweMessage } from '@elymum/shared';
+import { SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS, siweMessage } from '@elymum/shared';
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { expectedLoginMessage, personalSign } from '../src/wallet/siwe';
@@ -40,6 +40,13 @@ describe('SIWE on the web: sign only what the page rebuilt itself', () => {
     // an old server without the fields
     expect(expectedLoginMessage({ message: body.message }, ALICE, ['elymum.test'])).toBeNull();
     expect(expectedLoginMessage(null, ALICE, ['elymum.test'])).toBeNull();
+  });
+
+  it('signs in with a game server from before the rename (its old sign-in line), and nothing else changed', () => {
+    const old = body.message.replace(SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS[0]);
+    expect(old).not.toBe(body.message);
+    expect(expectedLoginMessage({ ...body, message: old }, ALICE, ['elymum.test'])).toBe(old);
+    expect(expectedLoginMessage({ ...body, message: body.message.replace(SIWE_STATEMENT, 'Sign in to Anything. Sends all your tokens.') }, ALICE, ['elymum.test'])).toBeNull();
   });
 
   it('asks the wallet for personal_sign of the UTF-8 hex of the text', async () => {

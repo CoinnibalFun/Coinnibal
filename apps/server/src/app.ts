@@ -1,7 +1,7 @@
 import { SiteFail } from './site/validate';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
-import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain } from '@elymum/shared';
+import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain, siteHostOf } from '@elymum/shared';
 import { chainOverridesFor } from './chain/evm';
 import type { Hex } from 'viem';
 import { Auth } from './auth';
@@ -167,7 +167,14 @@ export async function createApp(
   // profile pictures: content-addressed files next to the profiles (DATA_DIR/avatars/<id>.png|webp)
   const avatars = new AvatarStore(persist ? join(cfg.dataDir, cfg.devFakeChain ? 'avatars.dev-fake' : 'avatars') : null, log);
   // on a public testnet the game is open to everyone unless the admin already chose otherwise
-  const siteStore = new SiteStore(persist ? cfg.dataDir : null, { now: opts.siteNow, log, ...(isTestChainId(stateChainId) && stateChainId !== LOCALNET_CHAIN_ID ? { defaults: { gameAccess: 'public' } } : {}) });
+  const siteStore = new SiteStore(persist ? cfg.dataDir : null, {
+    now: opts.siteNow,
+    log,
+    defaults: {
+      ...(isTestChainId(stateChainId) && stateChainId !== LOCALNET_CHAIN_ID ? { gameAccess: 'public' as const } : {}),
+      ...(cfg.xHandle ? { xHandle: cfg.xHandle } : {}),
+    },
+  });
   const holderWl = new HolderWlStore(persist ? cfg.dataDir : null, log);
   const fetchPrice = opts.fetchPrice ?? hyperliquidPrice(cfg.mint.gasPriceUrl);
   const nftRecord = () => {
@@ -269,7 +276,7 @@ export async function createApp(
     suffix: cfg.devFakeChain ? '.dev-fake' : '',
     // the dev stack (fake chain only) may ask for a fake X: posts carry the newest code, by @elymum_fan
     ...(opts.xFetch ? { fetch: opts.xFetch } : {}),
-    ...(!opts.xFetch && cfg.devFakeChain && process.env.DEV_FAKE_X === '1' ? { fetch: fakeXFetch({ text: () => `Linking my X to Elymum: ${xLinks.lastCode() ?? ''} elymum.io`, avatar: devFakeXPicture }) } : {}),
+    ...(!opts.xFetch && cfg.devFakeChain && process.env.DEV_FAKE_X === '1' ? { fetch: fakeXFetch({ text: () => `Linking my X to Coinnibal: ${xLinks.lastCode() ?? ''} ${siteHostOf(cfg.publicUrl)}`, avatar: devFakeXPicture }) } : {}),
     log,
   });
   if (cfg.devFakeChain && process.env.DEV_FAKE_X === '1') log('x-links: DEV_FAKE_X=1, X is faked (dev stack only)');

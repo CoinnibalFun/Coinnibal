@@ -1,6 +1,6 @@
-# Elymum architecture
+# Coinnibal architecture
 
-Elymum is a hybrid: an authoritative game server runs the real-time world, and Solidity contracts on
+Coinnibal is a hybrid: an authoritative game server runs the real-time world, and Solidity contracts on
 **Robinhood Chain** (an Arbitrum Orbit L2, gas in ETH) hold the money rules. The browser signs its own
 transactions (ticket, refund, power-up payment, mint); the server key signs only settlements, cancels and loot
 burns. Robinhood Chain is the only chain: the testnet now, the mainnet later, chosen with `CHAIN_ID`
@@ -307,7 +307,7 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   Operator exits and the in-game HUD's share button (live mass, place and coins eaten) open the intent with the site's
   link.
 - **Link X** (`xlink.ts`, `shared/xlink.ts`): a signed-in wallet ties an X account to its coin without the X API.
-  `POST /api/x/code` issues a code (`ELYMUM-` and six characters, 30 minutes), the player posts it from X (the web
+  `POST /api/x/code` issues a code (`NIBAL-` and six characters; the pre-rename `ELYMUM-` is still accepted, 30 minutes), the player posts it from X (the web
   intent) and sends the post's link to `POST /api/x/verify {url}`; the server reads the post from X's public embed
   endpoints and takes the handle, id, name and picture from X's answer. `GET /api/x` (the link and the pending code),
   `DELETE /api/x` (unlink), `POST /api/x/picture` (wear the X picture on the coin), `GET /api/x/avatar/<userId>`
@@ -334,7 +334,7 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   re-read right before the wallet opens and a changed price or rate is refused), the shop payment (`shop.ts`: approve
   exactly the price when short, then `pay`), the chain data hook (`chain.ts`). On a phone without a browser wallet:
   deep links that open the page in MetaMask or Coinbase Wallet (`deeplinks.ts`), and WalletConnect when the build has
-  `VITE_WALLETCONNECT_PROJECT_ID` (`walletconnect.ts`, loaded only when picked). "How to get $ELYMUM"
+  `VITE_WALLETCONNECT_PROJECT_ID` (`walletconnect.ts`, loaded only when picked). "How to get $NIBAL"
   (`GetTokensSheet.tsx`; the Pons link is `VITE_TOKEN_BUY_URL`).
 - **Contract pins** (`src/wallet/pinned.ts`): the arena, NFT and token addresses are fixed per chain at build time
   (`VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS`, `VITE_TOKEN_ADDRESS` for the build's `VITE_CHAIN_ID`; the testnet

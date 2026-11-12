@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { drawRisoCoin, lookForBasicSkin } from '@elymum/art';
-import { SHARE_IMAGE, eatenLine, ordinal, shareName, xMention, type ShareBoardRow, type ShareCard } from '@elymum/shared';
+import { BRAND_NAME, SHARE_IMAGE, SITE_HOST_DEFAULT, eatenLine, ordinal, shareName, xMention, type ShareBoardRow, type ShareCard } from '@elymum/shared';
 import type { SKRSContext2D } from '@napi-rs/canvas';
 
 type Canvas = typeof import('@napi-rs/canvas');
@@ -134,6 +134,50 @@ function chip(ctx: SKRSContext2D, x: number, y: number, text: string, fill: stri
   return w;
 }
 
+/** The bitten coin of the brand mark (apps/web/src/design/motifs/brandShapes.ts BITTEN_COIN: radius 46 around 0,0). */
+const BITTEN_COIN = 'M46 -0.63 A46 46 0 1 1 -7.36 -45.41 A15.64 15.64 0 0 0 13.63 -31.98 A16.27 16.27 0 0 0 29.13 -18.98 A15.64 15.64 0 0 0 46 -0.63Z';
+const MARK_C = 'M13 -14 C8 -22 -13 -24 -13 0 C-13 24 8 22 13 14';
+
+/** The Coinnibal coin mark (a cyan coin with a bite out of it and a cream C), centred at (x, y), `size` px across. */
+function brandMark(ctx: SKRSContext2D, x: number, y: number, size: number): void {
+  const { Path2D } = canvasModule()!;
+  const coin = new Path2D(BITTEN_COIN);
+  const c = new Path2D(MARK_C);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-0.12);
+  ctx.scale(size / 104, size / 104);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.save();
+  ctx.translate(4, 4);
+  ctx.fillStyle = INK;
+  ctx.fill(coin);
+  ctx.restore();
+  ctx.fillStyle = '#2490B0';
+  ctx.fill(coin);
+  ctx.save();
+  ctx.clip(coin);
+  ctx.fillStyle = '#34B7DD';
+  ctx.beginPath();
+  ctx.arc(-5, -7, 45, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 5;
+  ctx.stroke(coin);
+  ctx.translate(-4, 4);
+  for (const [w, color, dx] of [[22, INK, 3], [22, INK, 0], [14, CREAM, 0]] as const) {
+    ctx.save();
+    ctx.translate(dx, dx);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.stroke(c);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 /** The TEST stamp, top right of the sticker (`right`: its right edge): coral, tilted, impossible to miss. */
 function testStamp(ctx: SKRSContext2D, right: number, top: number): void {
   ctx.save();
@@ -201,7 +245,7 @@ function sticker(ctx: SKRSContext2D, X: number, Y: number, PW: number, PH: numbe
 }
 
 /** Draws the card; returns PNG bytes. Throws when the canvas cannot load (see `shareCardSelfCheck`). */
-export function renderShareCard(c: ShareCard): Buffer {
+export function renderShareCard(c: ShareCard, site: string = SITE_HOST_DEFAULT): Buffer {
   const lib = canvasModule();
   if (!lib) throw new Error(`@napi-rs/canvas is not available: ${canvasError}`);
   fonts();
@@ -226,7 +270,8 @@ export function renderShareCard(c: ShareCard): Buffer {
   const max = PW - 80;
   ctx.fillStyle = c.test ? CORAL : TEAL;
   ctx.font = '700 22px "DM Sans"';
-  ctx.fillText(fit(ctx, `ELYMUM · ${c.test ? 'TESTNET TEST ARENA · ' : ''}${c.room.toUpperCase()}`, (px) => `700 ${px}px "DM Sans"`, 22, c.test ? max - 150 : max), L, Y + 56);
+  ctx.fillText(fit(ctx, `${BRAND_NAME.toUpperCase()} · ${c.test ? 'TESTNET TEST ARENA · ' : ''}${c.room.toUpperCase()}`, (px) => `700 ${px}px "DM Sans"`, 22, max - 150), L, Y + 56);
+  if (!c.test) brandMark(ctx, X + PW - 62, Y + 50, 62);
   ctx.fillStyle = INK;
   const head = fit(ctx, shareHeadline(c), (px) => `800 ${px}px Fraunces`, 78, max);
   ctx.fillText(head, L, Y + 140);
@@ -249,7 +294,7 @@ export function renderShareCard(c: ShareCard): Buffer {
   }
   ctx.fillStyle = c.test ? CORAL : TEAL;
   ctx.font = '700 22px "DM Sans"';
-  ctx.fillText(c.test ? 'TESTNET TEST ARENA · practice tokens, no real money' : 'elymum.io · coin eats coin on Robinhood Chain', L, Y + PH - 30);
+  ctx.fillText(c.test ? 'TESTNET TEST ARENA · practice tokens, no real money' : `${site} · coins that eat coins, on Robinhood Chain`, L, Y + PH - 30);
   if (c.test) testStamp(ctx, X + PW - 40, Y + 18);
   return canvas.toBuffer('image/png');
 }
@@ -263,7 +308,7 @@ const BOARD_COL_ROWS = 5;
  * sun; when I stood below them, my row on its own strip under the board. TEST stamp and line in a test arena.
  * Throws when the canvas cannot load.
  */
-export function renderStandingsCard(c: ShareCard): Buffer {
+export function renderStandingsCard(c: ShareCard, site: string = SITE_HOST_DEFAULT): Buffer {
   const lib = canvasModule();
   if (!lib) throw new Error(`@napi-rs/canvas is not available: ${canvasError}`);
   fonts();
@@ -280,7 +325,8 @@ export function renderStandingsCard(c: ShareCard): Buffer {
   const max = PW - 72;
   ctx.fillStyle = c.test ? CORAL : TEAL;
   ctx.font = '700 22px "DM Sans"';
-  ctx.fillText(fit(ctx, `ELYMUM · ${c.test ? 'TESTNET TEST ARENA · ' : ''}${c.room.toUpperCase()}`, (px) => `700 ${px}px "DM Sans"`, 22, c.test ? max - 170 : max), L, Y + 48);
+  ctx.fillText(fit(ctx, `${BRAND_NAME.toUpperCase()} · ${c.test ? 'TESTNET TEST ARENA · ' : ''}${c.room.toUpperCase()}`, (px) => `700 ${px}px "DM Sans"`, 22, max - 170), L, Y + 48);
+  if (!c.test) brandMark(ctx, X + PW - 64, Y + 50, 60);
   ctx.fillStyle = INK;
   const head = `Final standings${c.players ? ` · ${c.players} players` : ''}`;
   ctx.fillText(fit(ctx, head, (px) => `800 ${px}px Fraunces`, 52, c.test ? max - 170 : max), L, Y + 108);
@@ -311,7 +357,7 @@ export function renderStandingsCard(c: ShareCard): Buffer {
   }
   ctx.fillStyle = c.test ? CORAL : TEAL;
   ctx.font = '700 22px "DM Sans"';
-  ctx.fillText(c.test ? 'TESTNET TEST ARENA · practice tokens, no real money' : 'elymum.io · coin eats coin on Robinhood Chain', L, Y + PH - 26);
+  ctx.fillText(c.test ? 'TESTNET TEST ARENA · practice tokens, no real money' : `${site} · coins that eat coins, on Robinhood Chain`, L, Y + PH - 26);
   if (c.test) testStamp(ctx, X + PW - 36, Y + 16);
   return canvas.toBuffer('image/png');
 }

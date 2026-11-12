@@ -303,7 +303,7 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
       }
       if (url.pathname === '/') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Elymum game server: connect via /ws');
+        res.end('Coinnibal game server: connect via /ws');
         return;
       }
       json(res, 404, { error: 'not found' });

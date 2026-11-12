@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   const port = await app.listen();
   const status = app.chain.status();
   log(
-    `Elymum server on http://${cfg.host}:${port} (ws: /ws) — chain: ${
+    `Coinnibal server on http://${cfg.host}:${port} (ws: /ws) — chain: ${
       status.enabled ? `${status.chainName} (${status.chainId}) · arena ${status.arenaAddress ?? 'not registered yet'}` : 'off (practice only)'
     }`,
   );

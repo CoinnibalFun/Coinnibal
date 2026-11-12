@@ -132,7 +132,7 @@ describe('lobby while the game token is not set', () => {
     }
     // prices still read from the default arenas, in the default symbol
     expect(within(arenas[0]).getByText('1,000')).toBeTruthy();
-    expect(within(arenas[0]).getByText('$ELYMUM')).toBeTruthy();
+    expect(within(arenas[0]).getByText('$NIBAL')).toBeTruthy();
     expect(screen.getByText('Arenas opening soon')).toBeTruthy();
     // practice is selected and plays
     const practice = within(ticketsGroup()).getAllByRole('radio').find((el) => el.getAttribute('data-kb-value') === 'practice')!;
