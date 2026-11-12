@@ -81,7 +81,7 @@ describe('everyone in the room', () => {
     expect(within(rows[0]).getByText('BOT')).toBeTruthy();
     expect(rows[0].textContent).toContain('812');
     // holder: laurel and picture
-    expect(within(rows[1]).getByText('Emblem holder')).toBeTruthy();
+    expect(within(rows[1]).getByText('NFT holder')).toBeTruthy();
     expect(rows[1].querySelector('img')?.getAttribute('src')).toBe('/api/avatar/0123456789abcdef');
     // me
     expect(rows[2].getAttribute('aria-current')).toBe('true');

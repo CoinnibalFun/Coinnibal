@@ -285,14 +285,14 @@ describe('the room creator', () => {
     expect(tiers.querySelectorAll('button')).toHaveLength(2); // not the holders-only tier
     expect(tiers.querySelector('[aria-pressed="true"]')?.getAttribute('data-value')).toBe('1');
     fireEvent.click(tiers.querySelector('[data-value="2"]')!);
-    expect(screen.getByTestId('cr-kind-hint').textContent).toMatch(/Lethe Shore ticket/);
+    expect(screen.getByTestId('cr-kind-hint').textContent).toMatch(/\$3 Room ticket/);
     expect(screen.getByTestId('cr-kind-hint').textContent).toMatch(/starts at once/);
     fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Whale Club' } });
     fireEvent.click(screen.getByTestId('cr-continue'));
     await settle();
     // the receipt names both: the room fee, then the creator's own ticket
     const payment = screen.getByTestId('cr-payment');
-    expect(payment.textContent).toMatch(/ArenaLethe Shore/);
+    expect(payment.textContent).toMatch(/Arena\$3 Room/);
     expect(payment.textContent).toMatch(/never holds anyone's tokens/);
     expect(payment.textContent).toMatch(/Your ticket10,000 \$ELYMUM/);
     expect(screen.getByTestId('cr-pay').textContent).toMatch(/then my ticket/);
@@ -394,7 +394,7 @@ describe('room helpers', () => {
   });
 
   it('the admin card lists the kind, tier and fee of each room, and the fee by size', () => {
-    expect(roomKindText({ kind: 'paid', arenaId: 2 })).toBe('paid · Lethe Shore #2');
+    expect(roomKindText({ kind: 'paid', arenaId: 2 })).toBe('paid · $3 Room #2');
     expect(roomKindText({ kind: 'free' })).toBe('free');
     expect(roomKindText({})).toBe('free');
     expect(roomKindText({ kind: 'free', practice: true })).toBe('practice with bots');

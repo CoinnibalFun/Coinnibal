@@ -58,8 +58,8 @@ describe('the X share posts: four lines each, picked from the moment', () => {
   it('the helpers fill in the right name, @handle, place and numbers', () => {
     const kill = killShareText(t, { id: 'KiLLaaaaaa', victim: 'Penny', victimX: 'penny_x' });
     expect(SHARE_VARIANTS.kill.map((k) => t(k, { name: '@penny_x' }))).toContain(kill);
-    const res = resultShareText(t, { rank: 7, n: 9, room: 'Golden Bough' });
-    expect(res).toMatch(/#7 of 9 in Golden Bough on Elymum/);
+    const res = resultShareText(t, { rank: 7, n: 9, room: '$5 Room' });
+    expect(res).toMatch(/#7 of 9 in \$5 Room on Elymum/);
     const ate = resultShareText(t, { rank: 2, n: 5, room: 'Pond', eaten: [{ name: 'Penny', xHandle: 'penny_x' }, { name: 'Rocky', n: 2 }] });
     expect(ate).toContain('@penny_x, Rocky ×2');
     expect(gameShareText(t, { mass: 1, eaten: 1, room: 'Pond' })).toMatch(/1 coin\b/);

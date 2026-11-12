@@ -18,20 +18,32 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, collabOpen: false } } }));
     render(<Landing />);
     expect(screen.getByRole('heading', { level: 1, name: 'Elymum' })).toBeTruthy();
-    expect(screen.getByText('You are small change with a big appetite.')).toBeTruthy();
+    expect(screen.getByText('Coins that eat coins.')).toBeTruthy();
+    expect(screen.getByText('Eat coins smaller than you. Run from the ones that are bigger. Five minutes later the bell rings and whatever you’ve swallowed is yours.')).toBeTruthy();
+    expect(screen.queryByText(/small change with a big appetite|Eat the food/)).toBeNull();
+    // the hero links to the holder perks on the same page
+    expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
     const wl = screen.getAllByRole('link', { name: /Join the WL/ });
     expect(wl.every((a) => a.getAttribute('href') === '/wl')).toBe(true);
     await waitFor(() => expect(screen.getByRole('link', { name: 'Collab, soon' }).getAttribute('href')).toBe('/collab'));
-    for (const h of [/everything is a feast/, 'One lap, four stops, then lunch.', 'Usual suspects of the plain.', /Your seat at the feast/, 'Pick a table. Same rules, bigger plates.', 'Small print, large font.'])
+    for (const h of [/coins eat coins/, 'Four steps, five minutes.', 'Get the Elymum NFT.', 'Why get the NFT?', 'Pick a room.', 'Questions and answers.'])
       expect(screen.getByRole('heading', { name: h })).toBeTruthy();
-    // the four arenas as places on the ring, priced in US dollars (paid in the game token)
-    for (const [name, fee] of [['Asphodel Meadow', '$1'], ['Lethe Shore', '$3'], ['Golden Bough', '$5'], ['Isles of the Blessed', '$10']]) {
+    // no character cards with prices and jokes, no story lines under the rooms
+    expect(document.querySelector('.ld-cast, .ld-suspect')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Asphodel|Lethe|Golden Bough|Isles|Elysi|obol|feast|Homer/i);
+    // every holder perk as a card
+    const why = screen.getByTestId('why-nft');
+    expect([...why.querySelectorAll('.nf-card')].map((c) => c.getAttribute('data-perk'))).toEqual(['fee', 'room', 'shop', 'private', 'skin', 'faucet']);
+    expect(why.textContent).toContain('Lower fee: 10% instead of 20%');
+    // the four rooms, named by price, priced in US dollars (paid in the game token); the $10 one for NFT holders
+    for (const [name, fee] of [['$1 Room', '$1'], ['$3 Room', '$3'], ['$5 Room', '$5'], ['$10 Room', '$10']]) {
       expect(screen.getByRole('heading', { level: 3, name })).toBeTruthy();
       expect(within(screen.getByRole('heading', { level: 3, name }).closest('.ld-ticket') as HTMLElement).getByText(fee)).toBeTruthy();
     }
+    expect(within(screen.getByRole('heading', { level: 3, name: '$10 Room' }).closest('.ld-ticket') as HTMLElement).getByText('NFT holders only')).toBeTruthy();
     expect(screen.getByText('Opens after the mint')).toBeTruthy();
     // the NFT plate links to the mint; the header has the nav and Connect
-    expect(screen.getAllByRole('link', { name: 'See the mint' })[0].getAttribute('href')).toBe('/mint');
+    expect(screen.getAllByRole('link', { name: 'Go to the mint' })[0].getAttribute('href')).toBe('/mint');
     const nav = screen.getByRole('navigation', { name: 'Site' });
     // the header nav is short: Play · Mint · (Faucet on testnet) · WL · Docs
     for (const n of ['Play', 'Mint', 'WL', 'Docs']) expect(nav.textContent).toContain(n);
@@ -83,7 +95,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(screen.getByText(/WL is open/)).toBeTruthy();
   });
 
-  it('feeds a pond coin on click and shuffles the sealed emblems on demand', async () => {
+  it('feeds a pond coin on click and shuffles the NFT cards on demand', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
     setReducedMotion(false);
     render(<Landing />);
@@ -94,21 +106,21 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(hungry.textContent).toContain('+a bite');
     const front = () => (document.querySelector('.ld-fan__card[data-slot="front"] .ld-emblem__coin') as HTMLElement).closest('.ld-fan__card')?.getAttribute('data-slot');
     const before = [...document.querySelectorAll('.ld-fan__card')].map((c) => c.getAttribute('data-slot')).join();
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Shuffle the deck' })));
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Shuffle' })));
     const after = [...document.querySelectorAll('.ld-fan__card')].map((c) => c.getAttribute('data-slot')).join();
     expect(after).not.toBe(before);
     expect(front()).toBe('front');
   });
 
-  it('shows the unbuilt terrace for a path the site does not know', async () => {
+  it('shows a plain not-found page for a path the site does not know', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
     history.pushState(null, '', '/Terrace-Nine');
     try {
       render(<SiteApp />);
-      expect(screen.getByRole('heading', { level: 1, name: /This terrace hasn.t been built yet/ })).toBeTruthy();
+      expect(screen.getByRole('heading', { level: 1, name: 'This page does not exist.' })).toBeTruthy();
       expect(screen.getByText('/Terrace-Nine', { selector: 'code' })).toBeTruthy();
-      expect(screen.getByRole('link', { name: /Walk back to the plain/ }).getAttribute('href')).toBe('/');
-      await waitFor(() => expect(document.title).toBe('Off the map · Elymum'));
+      expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
+      await waitFor(() => expect(document.title).toBe('Page not found · Elymum'));
     } finally {
       history.pushState(null, '', '/');
     }

@@ -52,7 +52,7 @@ HTMLCanvasElement.prototype.getContext = (() => null) as never;
 Element.prototype.scrollTo = (() => {}) as never;
 const ui0 = useUi.getState();
 const recv = (m: Partial<ServerMessage> & { t: string }) => act(() => net.handlers!.onMessage(m));
-const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: 'Asphodel Meadow', width: 6400, height: 6400, players: 3, bots: 0, maxPlayers: 50, arenaId: 1, entryFee: 1000 };
+const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: '$1 Room', width: 6400, height: 6400, players: 3, bots: 0, maxPlayers: 50, arenaId: 1, entryFee: 1000 };
 const POND: RoomInfo = { id: 'practice-rookie-1', mode: 'practice', name: 'Practice', width: 4000, height: 4000, players: 3, bots: 0, maxPlayers: 40 };
 
 let engine: InstanceType<typeof GameEngine>;

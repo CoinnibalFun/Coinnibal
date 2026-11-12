@@ -17,7 +17,7 @@ const M = 1_000_000;
 const N = 5_800_000;
 const START = N * RULES.roundMs;
 const R: RoundInfo = { n: N, endsAt: START + RULES.roundMs, joinsCloseAt: START + RULES.roundMs - RULES.roundJoinCloseMs };
-const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: 'Asphodel Meadow', width: 6400, height: 6400, players: 3, bots: 0, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M, round: R };
+const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: '$1 Room', width: 6400, height: 6400, players: 3, bots: 0, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M, round: R };
 const TEST_ARENA: RoomInfo = { ...ARENA, id: 'test-1', test: true, bots: 6 };
 const STANDINGS: RoundStanding[] = [
   { rank: 1, name: 'Daphne', value: 3000 * M, mass: 1800, kills: 6, you: true },
@@ -80,8 +80,8 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     expect(eaten.closest('.g-roundover__body')).toBeTruthy();
     const link = screen.getByTestId('share-x');
     const names = 'Penny ×2, Rocky·com, Lulu, Zed, Ed +2';
-    expect(textOf(link)).toBe(`${resultShareText(t, { rank: 1, n: 2, room: 'Asphodel Meadow', eaten: STATS.eaten, eatenMore: STATS.eatenMore })} ${SHARE_COIN}`);
-    expect(SHARE_VARIANTS.resultAte.map((k) => `${t(k, { rank: 1, n: 2, room: 'Asphodel Meadow', names })} ${SHARE_COIN}`)).toContain(textOf(link));
+    expect(textOf(link)).toBe(`${resultShareText(t, { rank: 1, n: 2, room: '$1 Room', eaten: STATS.eaten, eatenMore: STATS.eatenMore })} ${SHARE_COIN}`);
+    expect(SHARE_VARIANTS.resultAte.map((k) => `${t(k, { rank: 1, n: 2, room: '$1 Room', names })} ${SHARE_COIN}`)).toContain(textOf(link));
     expect(textOf(link)).not.toMatch(/@|\.com|TEST/);
   });
 
@@ -92,14 +92,14 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     expect(chip.querySelector('.g-eaten__tag')?.textContent).toBe('BOT');
     const text = textOf(screen.getByTestId('share-x'))!;
     expect(text).toContain('Botty (BOT)');
-    expect(SHARE_VARIANTS.resultAte.some((k) => text.startsWith(t(k, { rank: 1, n: 2, room: 'Asphodel Meadow', names: 'Botty (BOT)' })))).toBe(true);
+    expect(SHARE_VARIANTS.resultAte.some((k) => text.startsWith(t(k, { rank: 1, n: 2, room: '$1 Room', names: 'Botty (BOT)' })))).toBe(true);
     expect(text).toContain('(TEST: testnet test arena, no real money)');
   });
 
   it('ate nobody: no list, the plain post', () => {
     sheet(ARENA, { ...STATS, eaten: undefined, eatenMore: undefined }, {});
     expect(screen.queryByTestId('eaten')).toBeNull();
-    expect(textOf(screen.getByTestId('share-x'))).toBe(`${resultShareText(t, { rank: 1, n: 2, room: 'Asphodel Meadow' })} ${SHARE_COIN}`);
+    expect(textOf(screen.getByTestId('share-x'))).toBe(`${resultShareText(t, { rank: 1, n: 2, room: '$1 Room' })} ${SHARE_COIN}`);
     const plain = resultShareText(t, { rank: 3, n: 9, room: 'Pond', test: true });
     expect(SHARE_VARIANTS.result.map((k) => `${t(k, { rank: 3, n: 9, room: 'Pond' })} (TEST: testnet test arena, no real money)`)).toContain(plain);
   });

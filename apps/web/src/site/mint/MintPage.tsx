@@ -23,9 +23,8 @@ import { MintHeadline } from './MintHeadline';
 import { MintSkeleton, NightPlate } from './MintShell';
 import { fetchMintState, readCachedMint, takeEarlyMint } from './mintState';
 import { EmblemHand, Flap, FlipCard, SealBreak } from './MintRitual';
-import { EmblemPerks } from './Perks';
+import { WhyNft, configuredPerks } from '../nft/WhyNft';
 import {
-  emblemPerks,
   livePerks,
   fundsBlocker,
   gasText,
@@ -121,7 +120,7 @@ async function dryRun(client: ReadClient, from: Address, call: ReturnType<typeof
   }
 }
 
-/** `/mint`: Plate II, "The mint, after dark" (Closed / Allowlist / Public / Sold out, and the minted moment). */
+/** `/mint`: the Elymum NFT mint (Closed / Allowlist / Public / Sold out, and the minted moment), the collection and its perks. */
 export function MintPage() {
   return (
     <SitePage className="mt-root" cta={false}>
@@ -656,8 +655,18 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
           {emblem}
           <div className="mt-card__right">{right}</div>
         </motion.div>
-        {/* under the lede on wide screens, under the mint card on phones (the card comes first there) */}
-        <EmblemPerks perks={emblemPerks(isTestnetChain(chain), { fees: chain?.fees ?? null, gameAccess: state.gameAccess }, perks)} />
+        {/* the collection in plain words, then every holder perk as a card */}
+        <section className="mt-about" aria-labelledby="mt-about-h" data-testid="mt-about">
+          <h2 className="mt-about__h" id="mt-about-h">
+            {t('mn.about.h')}
+          </h2>
+          <ul className="mt-about__list">
+            <li>{c ? t('mn.about.supply', { n: fmt(c.maxSupply) }) : t('mn.about.supplyUnknown')}</li>
+            <li>{t('mn.about.art')}</li>
+            <li>{c ? t('mn.about.order', { wl: c.wlLimit, pub: c.publicLimit }) : t('mn.about.orderUnknown')}</li>
+          </ul>
+          <WhyNft testnet={isTestnetChain(chain)} values={configuredPerks(perks)} />
+        </section>
       </div>
     </NightPlate>
   );
