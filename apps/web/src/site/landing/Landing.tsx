@@ -16,7 +16,6 @@ import {
   Wordmark,
   useMoves,
   useReducedMotion,
-  type CoinMood,
   type CoinPaint,
 } from '../../design';
 import { useT, type TKey } from '../../i18n';
@@ -31,6 +30,8 @@ import { CoinPond } from './CoinPond';
 import { DuskSeam } from './DuskSeam';
 import { GazeCoin } from './GazeCoin';
 import { SeedRail } from './SeedRail';
+import { WhyNft } from '../nft/WhyNft';
+import { isTestnetChain, useServerChain } from '../serverChain';
 import { useLandingSound } from './sound';
 import './landing.css';
 
@@ -39,7 +40,7 @@ const SYMBOL = '$ELYMUM';
 const view = { once: true, amount: 0.3 } as const;
 const pct = (bps: number) => `${bps / 100}%`;
 
-/* ── Plate I · the plain at dawn ──────────────────────────────────────── */
+/* ── the hero ─────────────────────────────────────────────────────────── */
 
 function Hero({ collabOpen, gameAccess, wlOpen, sound }: { collabOpen: boolean; gameAccess: GameAccess; wlOpen: boolean; sound: ReturnType<typeof useLandingSound> }) {
   const reduced = useReducedMotion();
@@ -63,15 +64,15 @@ function Hero({ collabOpen, gameAccess, wlOpen, sound }: { collabOpen: boolean; 
                 <Icon name="info" size={16} className="ld-hero__money-icon" />
                 <span>{activeChain().testnet ? t('ld.hero.moneyTest', { sym: SYMBOL }) : t('ld.hero.money', { sym: SYMBOL })}</span>
               </p>
-              <p className="ld-hero__homer">
-                <i className="quote">{t('ld.hero.quote')}</i>
-                <br />
-                {t('ld.hero.homer')}
-              </p>
               <div className="ld-hero__ctas">
                 <SiteLinkButton href="/wl" variant="primary" icon="arrow" onClick={sound.click}>
                   {t('ld.cta.wl')}
                 </SiteLinkButton>
+                <a href="#why-nft" className="kb-btn kb-btn--secondary kb-btn--md st-btn" onClick={sound.click} data-testid="ld-why-link">
+                  <span className="kb-btn__label">
+                    <span className="kb-btn__text">{t('ld.cta.why')}</span>
+                  </span>
+                </a>
                 {collabOpen ? (
                   <SiteLinkButton href="/collab" onClick={sound.click}>
                     {t('site.nav.collab')}
@@ -121,7 +122,7 @@ function Hero({ collabOpen, gameAccess, wlOpen, sound }: { collabOpen: boolean; 
   );
 }
 
-/* ── Plate II · the feast ─────────────────────────────────────────────── */
+/* ── what Elymum is ───────────────────────────────────────────────────── */
 
 function MenuLine({ art, dish, note, price }: { art: ReactNode; dish: string; note: string; price: string }) {
   return (
@@ -174,15 +175,12 @@ function Feast() {
               <h3 className="ld-menu__title">{t('ld.menu.title')}</h3>
             </header>
             <ul className="ld-menu__list">
-              <MenuLine art={<FoodBit kind="pear" size={44} />} dish={t('ld.menu.pears')} note={t('ld.menu.pearsNote')} price={t('ld.menu.pearsPrice')} />
-              <MenuLine art={<FoodBit kind="grapes" size={44} />} dish={t('ld.menu.grapes')} note={t('ld.menu.grapesNote')} price={t('ld.menu.grapesPrice')} />
-              <MenuLine art={<FoodBit kind="seed" size={34} paint="up" />} dish={t('ld.menu.seeds')} note={t('ld.menu.seedsNote')} price={t('ld.menu.seedsPrice')} />
+              <MenuLine art={<FoodBit kind="pear" size={44} />} dish={t('ld.menu.food')} note={t('ld.menu.foodNote')} price={t('ld.menu.foodPrice')} />
               <MenuLine art={<CoinCharacter paint="foam" mood="scared" size={46} />} dish={t('ld.menu.small')} note={t('ld.menu.smallNote')} price={t('ld.menu.smallPrice')} />
               <MenuLine art={<CoinCharacter paint="sun" mood="smug" size={46} />} dish={t('ld.menu.big')} note={t('ld.menu.bigNote')} price={t('ld.menu.bigPrice')} />
             </ul>
             <footer className="ld-menu__foot">
               <span className="mono">{t('ld.menu.foot')}</span>
-              <Stamp text={t('ld.menu.stamp')} tone="teal" size="sm" rotate={-9} className="ld-menu__stamp" />
             </footer>
           </Sticker>
         </motion.div>
@@ -191,7 +189,7 @@ function Feast() {
   );
 }
 
-/* ── Plate III · a round, in orbit ────────────────────────────────────── */
+/* ── how a round works ────────────────────────────────────────────────── */
 
 const STATIONS: { no: string; title: TKey; body: TKey }[] = [
   { no: '01', title: 'ld.stop.ticket', body: 'ld.stop.ticketBody' },
@@ -256,66 +254,9 @@ function Round() {
   );
 }
 
-/* ── Plate IV · the cast ──────────────────────────────────────────────── */
+/* ── the Elymum NFT and why to get it ─────────────────────────────────── */
 
-const CAST: { handle: string; paint: CoinPaint; mood: CoinMood; size: number; worth: string; bio: TKey; look: [number, number]; sweat?: boolean }[] = [
-  { handle: 'nibbler', paint: 'foam', mood: 'scared', size: 64, worth: '$0.71', bio: 'ld.cast.0', look: [3, -1], sweat: true },
-  { handle: 'gm_crumbs', paint: 'cream', mood: 'happy', size: 92, worth: '$2.41', bio: 'ld.cast.1', look: [0, 0] },
-  { handle: 'big_aurelius', paint: 'sun', mood: 'smug', size: 176, worth: '$9.80', bio: 'ld.cast.2', look: [2, 0] },
-  { handle: 'obol', paint: 'spray', mood: 'sleepy', size: 82, worth: '$1.30', bio: 'ld.cast.3', look: [0, 0] },
-  { handle: 'lethe.hl', paint: 'teal', mood: 'open', size: 132, worth: '$6.12', bio: 'ld.cast.4', look: [-2, 1] },
-  { handle: 'chompers', paint: 'coral', mood: 'chomp', size: 112, worth: '$4.37', bio: 'ld.cast.5', look: [-3, 1] },
-  { handle: 'penny_pincher', paint: 'up', mood: 'smile', size: 100, worth: '$3.05', bio: 'ld.cast.6', look: [-3, 0] },
-];
-
-function Cast() {
-  const m = useMoves();
-  const t = useT();
-  return (
-    <section className="ld-plate ld-cast" id="cast" aria-labelledby="ld-cast-h">
-      <PlateLabel numeral={4} title={t('ld.cast.plate')} aside={t('ld.cast.aside')} />
-      <div className="ld-wrap">
-        <div className="ld-cast__head">
-          <div>
-            <p className="kicker">{t('ld.cast.kicker')}</p>
-            <h2 className="ld-h2" id="ld-cast-h">
-              {t('ld.cast.h')}
-            </h2>
-          </div>
-          <p className="ld-cast__aside">{t('ld.cast.body')}</p>
-        </div>
-        <div className="ld-lineup">
-          <div className="ld-lineup__chart" aria-hidden="true">
-            {['$10', '$5', '$1'].map((v) => (
-              <span key={v} className="ld-lineup__mark mono">
-                {v}
-              </span>
-            ))}
-          </div>
-          <motion.ul className="ld-lineup__list" variants={m.stagger} initial="hidden" whileInView="shown" viewport={view}>
-            {CAST.map((c, i) => (
-              <motion.li key={c.handle} className="ld-suspect" variants={m.popIn} style={{ ['--i' as string]: i } as CSSProperties}>
-                <span className="ld-suspect__stand">
-                  <span className="ld-suspect__tag kb-tag">
-                    {c.handle} <b className="num">{c.worth}</b>
-                  </span>
-                  <span className="ld-suspect__coin">
-                    <GazeCoin paint={c.paint} mood={c.mood} size={c.size} look={c.look} sweat={c.sweat} wary={c.mood === 'scared'} feet ground bob phase={i * 0.37} title={`${c.handle}, ${c.mood}`} />
-                  </span>
-                </span>
-                <span className="ld-suspect__bio">{t(c.bio)}</span>
-              </motion.li>
-            ))}
-          </motion.ul>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ── Plate V · the mint, after dark ───────────────────────────────────── */
-
-/** The three sealed emblems of the fan: which paint each wears and the slot it starts in. */
+/** The three NFT cards of the fan: which paint each wears and the slot it starts in. */
 const EMBLEMS: { paint: CoinPaint; tilt: number }[] = [
   { paint: 'cyan', tilt: -8 },
   { paint: 'sun', tilt: -1.5 },
@@ -341,7 +282,7 @@ function Emblem({ paint, front, waking }: { paint: CoinPaint; front: boolean; wa
 }
 
 /**
- * The fan of sealed emblems shuffles itself like a hand of cards while it is on screen (every
+ * The fan of NFT cards shuffles itself like a hand of cards while it is on screen (every
  * 4.6 s, not while the visitor hovers it): the front card slides off to a side and tucks behind,
  * a side card comes forward and its sleepy coin wakes up and peeks out. The sticker button deals
  * the next card at once. Reduced motion: no automatic shuffle; the button still deals (no tween).
@@ -390,10 +331,6 @@ function EmblemFan() {
           </div>
         );
       })}
-      <motion.div className="ld-price" variants={m.popIn}>
-        <span className="num ld-price__n">$1.00</span>
-        <span className="mono ld-price__l">{t('ld.nft.priceNote')}</span>
-      </motion.div>
       <motion.button type="button" className="ld-fan__deal mono" onClick={deal} variants={m.popIn}>
         {t('ld.nft.shuffle')}
       </motion.button>
@@ -404,6 +341,7 @@ function EmblemFan() {
 function Nft() {
   const m = useMoves();
   const t = useT();
+  const testnet = isTestnetChain(useServerChain());
   return (
     <section className="ld-plate ld-nft" id="nft" aria-labelledby="ld-nft-h">
       <PlateLabel numeral={5} title={t('ld.nft.plate')} aside="/mint" />
@@ -415,9 +353,6 @@ function Nft() {
               <T k="ld.nft.h" tags={{ em }} />
             </h2>
             <p className="ld-nft__text">{t('ld.nft.body')}</p>
-            <p className="ld-nft__perks" data-testid="ld-perks">
-              {t('ld.nft.perks')}
-            </p>
             <ol className="ld-flow" aria-label={t('ld.nft.order')}>
               <li className="is-on">
                 <span>{t('site.nav.wl')}</span>
@@ -440,19 +375,22 @@ function Nft() {
           </motion.div>
           <EmblemFan />
         </div>
+        <div className="ld-wrap ld-nft__why">
+          <WhyNft testnet={testnet} />
+        </div>
         <Seigaiha tone="night" rows={3} r={36} className="ld-nft__waves" />
       </div>
     </section>
   );
 }
 
-/* ── Plate VI · the four arenas ───────────────────────────────────────── */
+/* ── the four rooms ───────────────────────────────────────────────────── */
 
-const PLACES: Record<number, { line: TKey; x: number; y: number }> = {
-  1: { line: 'ld.place.1', x: 12, y: 152 },
-  2: { line: 'ld.place.2', x: 37, y: 57 },
-  3: { line: 'ld.place.3', x: 63, y: 57 },
-  4: { line: 'ld.place.4', x: 88, y: 152 },
+const PLACES: Record<number, { x: number; y: number }> = {
+  1: { x: 12, y: 152 },
+  2: { x: 37, y: 57 },
+  3: { x: 63, y: 57 },
+  4: { x: 88, y: 152 },
 };
 
 // where the tram pulls in, beside each place's pin and clear of the tickets
@@ -502,9 +440,8 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
                   <span className="ld-place__pin" aria-hidden="true" />
                   <div className="ld-ticket">
                     <div className="ld-ticket__body">
-                      <span className="ld-ticket__no mono">{t('ld.ar.no', { n: a.id })}</span>
                       <h3 className="ld-ticket__name">{meta.name}</h3>
-                      <p className="ld-ticket__line">{p ? t(p.line) : null}</p>
+                      {a.holdersOnly && <p className="ld-ticket__line">{t('ld.ar.holdersTag')}</p>}
                     </div>
                     <div className="ld-ticket__stub">
                       {/* the tiers are priced in US dollars, paid in the game token at the day's price */}
@@ -527,7 +464,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
   );
 }
 
-/* ── Plate VII · small print ──────────────────────────────────────────── */
+/* ── questions ────────────────────────────────────────────────────────── */
 
 function Faq({ handle }: { handle: string }) {
   const m = useMoves();
@@ -579,7 +516,7 @@ function Faq({ handle }: { handle: string }) {
   );
 }
 
-/** `/`: the landing, a picture book from dawn into night. No way into the game unless the game is public. */
+/** `/`: the landing, from day into night. No way into the game unless the game is public. */
 export function Landing() {
   const { settings } = useSiteSettings();
   const sound = useLandingSound();
@@ -597,7 +534,6 @@ export function Landing() {
         <Hero collabOpen={settings.collabOpen} gameAccess={settings.gameAccess} wlOpen={settings.wlOpen} sound={sound} />
         <Feast />
         <Round />
-        <Cast />
         <DuskSeam />
         <Kb theme="night" className="ld-night">
           <Nft />

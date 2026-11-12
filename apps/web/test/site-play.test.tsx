@@ -16,11 +16,11 @@ beforeEach(() => {
 afterEach(() => restore());
 
 describe('the /play gate', { timeout: 30_000 }, () => {
-  it('blocks a visitor with no session: "The ring is closed", links to the WL, the mint and home', async () => {
+  it('blocks a visitor with no session: "The game is closed", links to the WL, the mint and home', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
     const onAllowed = vi.fn();
     render(<PlayGate onAllowed={onAllowed} />);
-    expect(await screen.findByRole('heading', { name: /The ring is closed/ })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /The game is closed/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Back home' }).getAttribute('href')).toBe('/');
     expect(screen.getByRole('link', { name: 'Join the WL' }).getAttribute('href')).toBe('/wl');
     expect(screen.getByRole('link', { name: 'Go to the mint' }).getAttribute('href')).toBe('/mint');
@@ -58,7 +58,7 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     const onAllowed = vi.fn();
     render(<PlayGate onAllowed={onAllowed} />);
     await waitFor(() => expect(onAllowed).toHaveBeenCalledWith({ address: ADMIN, token: 'admin-token', admin: true }));
-    expect(screen.queryByRole('heading', { name: /ring is closed/ })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /game is closed/ })).toBeNull();
   });
 
   it('opens to everyone when the game is public', async () => {
@@ -74,7 +74,7 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': holders }));
     expect(await playAccess()).toEqual({ allowed: false, reason: 'holders', session: null });
     render(<PlayGate onAllowed={vi.fn()} />);
-    expect(await screen.findByRole('heading', { name: /Holders only/ })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /NFT holders only/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Go to the mint' }).getAttribute('href')).toBe('/mint');
     restore();
     store(USER, 'holder-token');

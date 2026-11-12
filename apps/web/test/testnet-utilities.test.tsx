@@ -17,7 +17,9 @@ import { Kb } from '../src/design';
 import { adminApi, type MapAdminView } from '../src/site/api';
 import { FaucetPage } from '../src/site/faucet/FaucetPage';
 import { claimErrorText, faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
-import { emblemPerks, livePerks } from '../src/site/mint/logic';
+import { translate, type TKey } from '../src/i18n';
+import { livePerks } from '../src/site/mint/logic';
+import { configuredPerks, perkCards } from '../src/site/nft/WhyNft';
 import { isLazyPage, loadedPage, resetPages, warmPage } from '../src/site/pages';
 import { navigate } from '../src/site/router';
 import { resetServerChain } from '../src/site/serverChain';
@@ -149,44 +151,35 @@ describe('the faucet', () => {
 
 /* ── NFT utilities ────────────────────────────────────────────────── */
 
-describe('what the emblem does', () => {
-  it('on testnet: open game, the WL carry-over and the faucet bonus; never mainnet access as live', () => {
-    const t = emblemPerks(true);
-    // nothing that depends on a setting while the settings are unknown
-    expect(t.map((p) => p.id)).toEqual(['access', 'wl', 'skin', 'faucet']);
-    expect(t[0].note).toMatch(/testnet the ring is open to everyone/);
+describe('why get the NFT: the holder perks', () => {
+  const t = (k: TKey, vars?: Record<string, string | number>) => translate(k, vars);
+  it('lists every configured perk: the fee, the $10 room, power-ups, the free room, the skin and the faucet', () => {
+    const v = configuredPerks();
+    expect(v.fee).toEqual({ normal: '20%', holder: '10%', burn: '8%', team: '2%' });
+    const cards = perkCards(v, t, true);
+    expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin', 'faucet']);
+    expect(cards[0].title).toBe('Lower fee: 10% instead of 20%');
+    expect(cards[0].note).toBe('We take less of your profit: 8% is burned and 2% goes to the team.');
+    expect(cards[1].title).toBe('$10 room for holders');
+    expect(cards[2].title).toBe('20% off power-ups');
+    expect(cards[2].note).toMatch(/1 extra power-up in every paid round/);
+    expect(cards[3].title).toBe('1 free private room a day');
+    expect(cards[5].title).toBe('2x testnet faucet');
   });
-  it('lists only the perks that are live: the holder fee, the Isles, the shop discount, the private-room perk', () => {
-    const fees = { ...chainStatus().fees!, holderPerks: true, holderBurnBps: 800, holderVaultBps: 200 };
-    const all = emblemPerks(false, { fees }, { isles: true, shopPct: 20, room: { perk: 'free_daily', pct: 50 } });
-    expect(all.map((p) => p.id)).toEqual(['access', 'fee', 'isles', 'shop', 'room', 'skin']);
-    expect(all[1].title).toBe('10% fee instead of 20%');
-    expect(all[1].note).toMatch(/profit only/);
-    expect(all[3].title).toBe('20% off power-ups');
-    expect(all[4].title).toBe('A free private room every day');
-    expect(emblemPerks(false, { fees }, { room: { perk: 'discount', pct: 50 } }).find((p) => p.id === 'room')?.title).toBe('50% off private rooms');
-    // perks off on chain (no holder NFT set), or a holder pair that is not lower: no fee line
-    expect(emblemPerks(false, { fees: { ...fees, holderPerks: false } }).map((p) => p.id)).not.toContain('fee');
-    expect(emblemPerks(false, { fees: { ...fees, holderBurnBps: 1500, holderVaultBps: 500 } }).map((p) => p.id)).not.toContain('fee');
-    // no holders-only arena, a closed shop, no room perk: none of those lines
-    expect(emblemPerks(false, { fees }, { isles: false, shopPct: null, room: { perk: 'none', pct: 0 } }).map((p) => p.id)).toEqual(['access', 'fee', 'skin']);
+  it('takes the live shop discount and private-room perk when the server reports them; no faucet card on mainnet', () => {
+    const v = configuredPerks({ shopPct: 30, room: { perk: 'discount', pct: 50 } });
+    const cards = perkCards(v, t, false);
+    expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
+    expect(cards[2].title).toBe('30% off power-ups');
+    expect(cards[3].title).toBe('50% off private rooms');
+    // a closed shop or no room perk falls back to the configured defaults
+    expect(configuredPerks({ shopPct: null, room: { perk: 'none', pct: 0 } }).shopPct).toBe(20);
   });
   it('reads the live perks from the server: tiers, the shop, private rooms', () => {
     const quote = { enabled: true, tiers: [{ holdersOnly: false }, { holdersOnly: true }], holderPerk: 'free_daily' as const, holderDiscountPct: 50 };
     expect(livePerks(quote, { open: true, holderDiscountPct: 20 })).toEqual({ isles: true, shopPct: 20, room: { perk: 'free_daily', pct: 50 } });
     expect(livePerks({ ...quote, enabled: false, tiers: [] }, { open: false, holderDiscountPct: 20 })).toEqual({ isles: false, shopPct: null, room: null });
     expect(livePerks(null, null)).toEqual({ isles: null, shopPct: null, room: null });
-  });
-  it('on testnet: says "open to everyone" only while the server lets everyone in', () => {
-    expect(emblemPerks(true, { gameAccess: 'public' })[0].note).toMatch(/open to everyone/);
-    expect(emblemPerks(true, { gameAccess: 'holders' })[0].note).toMatch(/open to holders only/);
-    expect(emblemPerks(true, { gameAccess: 'admins' })[0].note).not.toMatch(/open to everyone/);
-  });
-  it('on mainnet: no testnet lines', () => {
-    expect(emblemPerks(false).map((p) => p.id)).toEqual(['access', 'skin']);
-    const fees = { ...chainStatus().fees!, holderPerks: true, holderBurnBps: 1000, holderVaultBps: 250 };
-    expect(emblemPerks(false, { fees })[1].title).toBe('12.5% fee instead of 20%');
-    expect(emblemPerks(true, { fees })[1].note).not.toMatch(/entry fee/);
   });
 });
 
@@ -344,7 +337,7 @@ describe('admin groups', () => {
       arena: { auto: true, base: 3000, perPlayer: 60, max: 9000 },
     },
     rooms: [
-      { id: 'r1', kind: 'arena', name: 'Asphodel Meadow', arenaId: 1, humans: 2, bots: 0, mapSide: 3600, mapAuto: true },
+      { id: 'r1', kind: 'arena', name: '$1 Room', arenaId: 1, humans: 2, bots: 0, mapSide: 3600, mapAuto: true },
       { id: 'c1', kind: 'private', name: 'Bots', humans: 1, bots: 3, mapSide: 3000, mapAuto: true },
     ],
   };
@@ -395,7 +388,7 @@ describe('admin groups', () => {
     arenas: [
       {
         arenaId: 1,
-        name: 'Asphodel Meadow',
+        name: '$1 Room',
         fillPct: 90,
         fullHits: 2,
         lastActionAt: null,

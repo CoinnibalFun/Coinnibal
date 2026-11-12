@@ -29,9 +29,9 @@ to Google Fonts). Chromium comes from `CHROME_PATH` or Playwright's own browser
 | `web/favicon-32.png` | 32 | The CoinMark (cyan coin, fat cream E). **Also `apps/web/public/favicon-32.png`** |
 | `web/apple-touch-icon.png` | 180 | CoinMark on the night trench with seigaiha. **Also `apps/web/public/apple-touch-icon.png`** |
 | `web/coin-mark-512.png` | 512 | The mark alone, transparent, for anything else |
-| `posts/post-wl-open.png` | 1600x900 | "The WL is open." with the three chores as terrace stickers |
-| `posts/post-mint.png` | 1600x900 | Night plate: "One emblem. One dollar. Many snacks." and the mint card ($1.00, paid in HYPE) |
-| `posts/post-game-live.png` | 1600x900 | The floor of the ring at feeding time: HUD stickers, leaderboard, coins with name tags |
+| `posts/post-wl-open.png` | 1600x900 | "The WL is open." with the three steps as stickers |
+| `posts/post-mint.png` | 1600x900 | Night plate: "Get the Elymum NFT." and the mint card (paid in ETH, no price in the art) |
+| `posts/post-game-live.png` | 1600x900 | "The game is open.": HUD stickers, leaderboard, coins with name tags |
 | `stickers/sticker-sheet.png` | 1800x1200 | The cast of coins, the mark and the die-cut wordmark |
 | `stickers/sticker-<name>.png` | 500 square, transparent | One die-cut sticker per character: hunter, snack, smug, happy, smile, open, sleepy |
 
@@ -39,10 +39,11 @@ The PNGs are committed (about 3 MB in all) so people can grab them without runni
 
 ## Rules the templates follow
 
-- Copy is short and a little wry; the product is "Elymum", the chain "Elysium", the gas token HYPE, the
-  mint "$1 in HYPE", the handle `@elymumio`. No domain is written into the art: the site lives at whatever
-  `PUBLIC_URL` says, and moving it (for example to elymum.io) needs no new images.
-- The mint art never shows a HYPE amount: the price is held at $1 and its HYPE value moves.
+- Copy is plain, short English a beginner reads at a glance ("simple is the best"); the product is
+  "Elymum", the chain "Robinhood Chain", the gas token ETH, the handle `@elymumio`. No domain is written
+  into the art: the site lives at whatever `PUBLIC_URL` says, and moving it (for example to elymum.io)
+  needs no new images.
+- The art never shows a mint price: the mint page reads it from the contract.
 - No gradients except the sky, no soft shadows, no purple, no emoji; one sun (primary) button per image.
 - Shadows always go down and right.
 

@@ -73,7 +73,7 @@ describe('/wl', { timeout: 30_000 }, () => {
       },
     }));
     render(<WlPage />);
-    await screen.findByRole('heading', { name: 'Seven small chores, then the feast.' });
+    await screen.findByRole('heading', { name: 'Join the WL in 7 steps.' });
     // every kind renders its step
     for (const t of ['Your X handle', 'Follow @elymumio', 'Post about Elymum on X', 'Like, repost and reply', 'Join the Discord', 'Why Elymum?', 'Your EVM wallet']) expect(screen.getAllByText(t).length).toBeGreaterThan(0);
 
