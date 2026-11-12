@@ -63,7 +63,9 @@ export function DeathSheet() {
   const sub = !arena
     ? undefined
     : closed
-      ? t('gd.nextRoundIn', { time: formatCountdown(round.msLeft) })
+      ? room?.round?.startsAt !== undefined
+        ? t('gd.roomEndsIn', { time: formatCountdown(round.msLeft) })
+        : t('gd.nextRoundIn', { time: formatCountdown(round.msLeft) })
       : t('gd.newTicketFee', { fee: tf.fmt(fee, { compact: true, maxFrac: 1 }), sym: tf.symbol });
   // the death's own card (the game I had), and the kills of the game
   const share = useUi((st) => (st.share?.dead ? st.share : null));

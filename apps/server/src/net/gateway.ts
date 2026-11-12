@@ -25,7 +25,7 @@ import type { ProfileStore } from '../profiles';
 import type { RoomHandle } from '../rooms/handle';
 import type { RoomManager } from '../rooms/manager';
 import { MAX_STAKE_SESSION_AGE_S } from '../rooms/room';
-import type { Journal } from '../stake/journal';
+import type { Journal, SettlementItem } from '../stake/journal';
 import { Conn } from './conn';
 import { Limiter } from './limiter';
 import type { LoadShedder } from './shedder';
@@ -464,8 +464,17 @@ export class Gateway {
    * (`round_closed` with `opensAt` = when joins open again; the client holds the ticket until then).
    * Returns true when refused. Reconnects of a live staker never come here.
    */
-  private roundClosed(conn: Conn): boolean {
+  private roundClosed(conn: Conn, room: RoomHandle | null = null): boolean {
     const now = this.rooms.now();
+    if (room?.opts.ownRound) {
+      // a paid custom room on its own clock: one game, joins open from its start until its last minute; it never
+      // opens again, so the ticket is not held for a next round (there is none): it goes back in full
+      const own = this.rooms.roomWindow(room, now);
+      if (now >= own.opensAt && now < own.joinsCloseAt) return false;
+      this.error(conn, 'room_closed', now >= own.endsAt ? 'This room has ended.' : 'This room is in its last minute: joins are closed. Your unplayed ticket is refunded in full.');
+      void this.refundUnseated(conn, room.opts.stake?.arenaId ?? -1);
+      return true;
+    }
     const r = this.rooms.roundWindow(now);
     if (now >= r.opensAt && now < r.joinsCloseAt) return false;
     // in the break: this round opens soon; in the last minute: the next one opens after its break
@@ -473,6 +482,52 @@ export class Gateway {
     const secs = Math.max(1, Math.ceil((opensAt - now) / 1000));
     const what = now < r.opensAt ? 'The round opens after a short break' : 'Joins are closed for the rest of this round';
     this.error(conn, 'round_closed', `${what}. The next round opens in ${secs} s.`, { opensAt });
+    return true;
+  }
+
+  /**
+   * The paid custom room a ticket was bought for has ended, closes, or is in its last minute (it never seats again):
+   * the wallet's open ticket of that arena goes back in full now (`cancel`: the whole entry fee, no fee) instead of
+   * waiting for the stale sweeper (15 minutes). Only a ticket that is open on chain, not finalized, not seated in
+   * any room and not queued: checked again synchronously right before the one journal write, so a seat that won
+   * meanwhile keeps the ticket (and the chain worker drops a `cancel` of a seated ticket too). Returns whether one was
+   * queued.
+   */
+  async refundUnseated(conn: Conn, arenaId: number): Promise<boolean> {
+    const wallet = conn.wallet;
+    if (!wallet || arenaId < 0 || !this.chain.stakeEnabled || !conn.allowChainOp()) return false;
+    let s: ChainSession | null;
+    try {
+      s = await this.chain.getSession(arenaId, wallet);
+    } catch {
+      return false; // the sweeper refunds it later
+    }
+    if (!s || s.finalized || s.arenaId !== arenaId || s.player.toLowerCase() !== wallet.toLowerCase()) return false;
+    const key = s.key;
+    if (this.rooms.findArenaStake(arenaId, wallet) || this.rooms.liveSessions().has(key) || this.journal.pending.some((p) => p.key === key)) return false;
+    if (this.journal.writeFailing) return false;
+    const now = Date.now();
+    const item: SettlementItem = {
+      kind: 'settle',
+      key,
+      player: s.player,
+      arenaId,
+      session: key,
+      sessionId: s.id,
+      payout: s.entryFee,
+      entryFee: s.entryFee,
+      score: 0,
+      kills: 0,
+      xp: 0,
+      // an unplayed ticket: the chain worker sends it as `cancel` (the full entry fee back, no fee)
+      reason: 'stale',
+      attempts: 0,
+      nextAttemptAt: now,
+      createdAt: now,
+    };
+    this.journal.commit({ enqueue: [item] });
+    this.chain.kick();
+    this.log(`join: the paid room ${wallet} was headed for has ended; its unplayed ticket ${key} is refunded in full (cancel)`);
     return true;
   }
 
@@ -801,6 +856,8 @@ export class Gateway {
       const pick = test ? await this.rooms.testRoom(target.arenaId) : code ? await this.rooms.paidRoom(target.arenaId, code) : await this.rooms.arenaRoom(target.arenaId);
       if (pick === 'closed') {
         this.error(conn, 'room_closed', 'This room has closed.');
+        // the paid room this ticket was bought for ended (or is closing): its unseated ticket goes back in full now
+        if (code) void this.refundUnseated(conn, target.arenaId);
         return;
       }
       if (pick === 'missing') {
@@ -827,8 +884,8 @@ export class Gateway {
         // could not be read (`live` undefined) the memo stays, so a later retry still hears round_ended.
         if (live !== undefined) this.rooms.forgetBellSettled(target.arenaId, conn.wallet);
       }
-      // a new join (not the AFK return above): only while the round's joins are open
-      if (this.roundClosed(conn)) return;
+      // a new join (not the AFK return above): only while the round's joins are open (a paid room: its own game's)
+      if (this.roundClosed(conn, room)) return;
       // closing for a re-price at its bell: the round plays out, nobody new sits down until the owner signed
       if (this.repricing?.(target.arenaId)) {
         this.error(conn, REFUSAL_CODES.repricing, 'This arena is closing for a moment to update its ticket price. Your ticket is safe on chain: an unseated one is refunded in full.');
@@ -906,7 +963,7 @@ export class Gateway {
         return;
       }
       // the awaits above may have crossed into the closed window (or the disk filled meanwhile)
-      if (this.roundClosed(conn)) return;
+      if (this.roundClosed(conn, room)) return;
       if (this.journal.writeFailing) {
         this.error(conn, REFUSAL_CODES.storage, 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
         return;

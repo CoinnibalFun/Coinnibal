@@ -1,8 +1,8 @@
-import { approveCall, getAllowance, getArenaConfig, getSession, planJoin, refundCall, sessionRefundState, formatGasAmount } from '@elymum/sdk';
+import { getSession, refundCall, sessionRefundState, formatGasAmount } from '@elymum/sdk';
 import { activeChain, arenaMeta, bpsToPercent, totalFeeBps, type FeeRates } from '@elymum/shared';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { encodeFunctionData, type Address, type Hash, type Hex } from 'viem';
+import type { Address, Hash } from 'viem';
 import { Button, CoinCharacter, Icon, Sheet, Stamp, StampSpinner, markTransitionOrigin, useReducedMotion } from '../design';
 import { engine } from '../game/instance';
 import { sound } from '../audio';
@@ -17,20 +17,8 @@ import { explorerTx } from './links';
 import { serverChainInfo } from './network';
 import { pinErrorName, verifyArena } from './pinned';
 import { useAddress } from './store';
-import {
-  APPROVE_TICKET_CHOICES,
-  approvalIsSafe,
-  approveAmount,
-  approveTickets,
-  arenaRates,
-  joinGasAfterApprove,
-  planErrorName,
-  sameRates,
-  ticketRates,
-  ticketSteps,
-  type TicketModel,
-  type TicketStep,
-} from './ticket';
+import { buyTicket } from './buyTicket';
+import { APPROVE_TICKET_CHOICES, approveAmount, approveTickets, arenaRates, ticketRates, ticketSteps, type TicketModel, type TicketStep } from './ticket';
 import { sendWalletCall, txErrorText, type TxPhase } from './tx';
 import { PRICE_STALE_HOURS, usdQuote } from './usdPrice';
 
@@ -195,60 +183,10 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     sound.click();
     const review = live;
     setFrozen(review);
-    if (data.fake) {
-      const dev = await loadDevFake();
-      if (!dev) return failName('NetworkError');
-      const res = await dev.fakeSendTicket(owner, arenaId, review.fee, review.steps, review.rates, (s, p, h) => onPhase(s)(p, h), approveAmount(review.approve, review.fee));
-      if (!res.ok) return failName(res.name);
-      setHash(res.hash);
-      return enterRoom(res.hash);
-    }
-    if (!client || !arenaAddress) return failName('NetworkError');
-    // the server keeps this arena closed (vault short of its journal): never sell a ticket
-    if (useUi.getState().blockedArenas.includes(arenaId)) return failName('Maintenance');
-    let plan;
-    let arena: Address;
-    try {
-      // re-read the arena, the allowance and the config: the price and the fee rates (fixed into the
-      // ticket at join) signed must be the ones shown
-      const [p, fresh] = await Promise.all([
-        planJoin(client, { arena: arenaAddress, arenaId, player: owner, token: config.token!, approve: 'exact' }),
-        getArenaConfig(client, arenaAddress),
-      ]);
-      // the arena must be the pinned one, with the compiled code, and its token the pinned token: else nothing is signed
-      const pin = await verifyArena(client, chain.chainId, { arena: arenaAddress, token: fresh.token });
-      if (!pin.ok) return failName(pinErrorName(pin.reason));
-      if (!fresh.token || fresh.token.toLowerCase() !== config.token!.toLowerCase()) return failName('PriceChanged');
-      arena = pin.arena;
-      if (p.entryFee !== review.fee) return failName('PriceChanged');
-      // the rates this ticket will be fixed at: the holder pair for holders (planJoin reads them on chain)
-      const now = p.rates ?? ticketRates({ burnBps: fresh.burnBps, vaultBps: fresh.vaultBps }, fresh, p.holder).rates;
-      if (!sameRates(now, review.rates)) return failName('FeeChanged');
-      if (fresh.paused) return failName('Paused');
-      plan = p;
-    } catch (err) {
-      return err instanceof RangeError ? failName(planErrorName(err.message), err.message) : failName('NetworkError');
-    }
-    if (useUi.getState().blockedArenas.includes(arenaId)) return failName('Maintenance');
-    if (plan.approve) {
-      // exactly this ticket (or the capped batch the player ticked), to the pinned arena: checked once more as built
-      const amount = approveAmount(review.approve, plan.entryFee);
-      const call = approveCall(config.token!, arena, amount);
-      if (!approvalIsSafe(call, { token: config.token!, arena, amount })) return failName('ContractMismatch');
-      const ok = await sendWalletCall(call, { chain, onPhase: onPhase('approve') });
-      if (!ok.ok) return fail(txErrorText(ok.error));
-    }
-    // the join goes out with its own gas limit, estimated once the allowance is visible (a wallet whose
-    // node has not seen the approval yet would otherwise guess, and the ticket would be refused)
-    let joinData: Hex | null = null;
-    try {
-      joinData = encodeFunctionData({ abi: plan.join.abi, functionName: plan.join.functionName, args: plan.join.args } as never);
-    } catch {
-      joinData = null;
-    }
-    const gas = joinData ? await joinGasAfterApprove(client, () => getAllowance(client, config.token!, owner, arena), { owner, arena, data: joinData, fee: plan.entryFee }) : undefined;
-    const res = await sendWalletCall(plan.join, { chain, onPhase: onPhase('join'), ...(gas !== undefined ? { gas } : {}) });
-    if (!res.ok) return fail(txErrorText(res.error));
+    // the one checked money path (also the paid room creator's own ticket): re-reads, pins, exact approval, join
+    const res = await buyTicket({ owner, chain, client, config, arenaId, review, fake: data.fake }, (s, p, h) => onPhase(s)(p, h));
+    if (!res.ok) return fail(res.text);
+    setHash(res.hash);
     enterRoom(res.hash);
   };
 

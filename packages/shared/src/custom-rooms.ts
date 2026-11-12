@@ -7,9 +7,11 @@
  *    `private:<CODE>`; anyone with the invite code joins (guests too).
  *  - `paid`: a private, invite-only instance of an existing on-chain arena (`arenaId`, its entry
  *    tier). Players buy the normal ticket of that arena and are seated in the private instance with
- *    `arena:<id>:<CODE>`; the ticket is settled by the server at the arena's bell like any other.
- *    No custody: the room never holds tokens, the arena vault does. Its `RoomInfo.mode` is `arena`
- *    and it is never listed, quick-played or picked by matchmaking.
+ *    `arena:<id>:<CODE>`. The room runs on its OWN clock: one game from its opening to its end (its
+ *    chosen duration), with no tie to the official arenas' 5-minute rounds; every ticket in it is
+ *    settled by the server at the room's end (normal fee on profit). No custody: the room never holds
+ *    tokens, the arena vault does. Its `RoomInfo.mode` is `arena` and it is never listed, quick-played
+ *    or picked by matchmaking.
  *
  * `RoomInfo.custom` carries the rules and the end time either way.
  */
@@ -179,8 +181,8 @@ export interface CustomRoomSummary {
   /** A "Practice with bots" room (`PRACTICE_ROOM`): free, short-lived, opened in one click (its creator may be a guest). */
   practice?: boolean;
   /**
-   * Paid rooms closing (time is up, or closed early): no new seats; the room closes at its next
-   * bell, once every ticket in it is settled.
+   * Paid rooms closing (time is up, or closed early): no new seats; the room closes at its end,
+   * once its own bell settled every ticket in it.
    */
   closing?: boolean;
   /** Creator wallet (EIP-55). */

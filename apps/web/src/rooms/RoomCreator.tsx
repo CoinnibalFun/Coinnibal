@@ -5,23 +5,33 @@ import { AddressChip, Button, Chip, CoinCharacter, Field, GasAmount, QuantitySte
 import { engine } from '../game/instance';
 import { sound } from '../audio';
 import { useT, type TKey } from '../i18n';
-import { openModal, toast, useUi } from '../store';
+import { openModal, toast, updateSettings, useUi } from '../store';
 import { useTokenText, type TokenText } from '../ui/lobby/useLobby';
+import { buyTicket, type TicketReview } from '../wallet/buyTicket';
+import { refreshChain, useChainData, useReadClient } from '../wallet/chain';
 import { isFakeHash } from '../wallet/devFake';
 import { explorerTx } from '../wallet/links';
 import { serverChainInfo } from '../wallet/network';
 import { signInWithWallet } from '../wallet/signIn';
 import { useAddress } from '../wallet/store';
+import { approveTickets, arenaRates, ledgerToBase, sessionKey, ticketRates, ticketSteps, type TicketStep } from '../wallet/ticket';
 import type { TxPhase } from '../wallet/tx';
 import { RoomApiError, loadPendingPayment, roomLink, roomsApi, savePendingPayment } from './api';
-import { seatInPaidRoom } from './invite';
+import { arenaTarget, seatInPaidRoom } from './invite';
 import { gasDecimals, gasText } from './gas';
 import { payRoomFee } from './pay';
 import './rooms.css';
 
 export { gasText };
 
-type Step = 'setup' | 'pay' | 'working' | 'done';
+/** `ticket`: a paid room just opened and the creator's own arena ticket is being bought (or failed and can be retried). */
+type Step = 'setup' | 'pay' | 'working' | 'ticket' | 'done';
+
+/** What the creator's own ticket of a paid room needs: buy one (as reviewed), resume the open one, or nothing possible yet. */
+type SeatPlan = { kind: 'buy'; review: TicketReview } | { kind: 'resume' } | { kind: 'blocked'; text: string };
+
+/** After the ticket is stamped, this long before the room opens (the stamp is seen). */
+const SEATED_MS = 900;
 
 /** One row of choices (a toggle chip each). */
 function Choice<T extends string | number>({ label, options, value, onPick, text }: { label: string; options: readonly T[]; value: T; onPick: (v: T) => void; text: (v: T) => string }) {
@@ -102,9 +112,17 @@ function Capacity({ value, steps, onPick, label, note }: { value: number; steps:
  * (one native transfer; NFT holders get the perk the admin chose), the server checks the payment
  * on chain and opens the room; the sheet ends on the invite code and share link.
  *
- * Money safety: one in-flight guard (a ref), the price and treasury are frozen at "Continue", and a
- * payment that went through but did not open a room yet is kept (this browser) and offered again,
- * so the creator never pays twice.
+ * A paid (ticket) room goes on in the same sheet straight into the creator's own arena ticket (approve if needed,
+ * then join, the same checked path as the ticket sheet: `buyTicket`) and ends with the creator seated in the room.
+ * Two wallet signatures at least (the gas-token fee, then the ticket) in one guided flow. The ticket is checked
+ * BEFORE the fee is paid (enough tokens, no payout waiting in that arena), so the fee is never paid for a room its
+ * creator cannot sit in; a ticket that fails or is rejected leaves the room open and the creator retries here (or
+ * later from the lobby, where the room's seat stays remembered).
+ *
+ * Money safety: one in-flight guard (a ref) per payment, the price and treasury (and the ticket's fee, rates and
+ * calls) are frozen at "Continue", and a payment that went through but did not open a room yet is kept (this
+ * browser) and offered again, so the creator never pays twice. A ticket that landed after all (the receipt timed out)
+ * is resumed, never bought again.
  */
 export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
@@ -122,6 +140,17 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   const [nameError, setNameError] = useState<string | null>(null);
   const [made, setMade] = useState<CustomRoomView | null>(null);
   const inFlight = useRef(false);
+  /** The creator's ticket (paid rooms): frozen at "Continue" with the fee. */
+  const [seat, setSeat] = useState<SeatPlan | null>(null);
+  const [ticketPhase, setTicketPhase] = useState<TxPhase | 'preparing' | 'seated' | null>(null);
+  const [ticketStep, setTicketStep] = useState<TicketStep | null>(null);
+  const [ticketError, setTicketError] = useState<string | null>(null);
+  const ticketInFlight = useRef(false);
+  const data = useChainData();
+  const client = useReadClient();
+  const serverFees = useUi((s) => s.chain?.fees ?? null);
+  const blockedArenas = useUi((s) => s.blockedArenas);
+  const approveN = useUi((s) => approveTickets(s.settings.approveTickets));
 
   const signedIn = !!auth && !!address && auth.address.toLowerCase() === address.toLowerCase();
   const token = signedIn ? auth!.token : null;
@@ -136,6 +165,11 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
     setHash(null);
     setMade(null);
     setFrozen(null);
+    setSeat(null);
+    setTicketPhase(null);
+    setTicketStep(null);
+    setTicketError(null);
+    ticketInFlight.current = false;
     let live = true;
     roomsApi.quote(token).then(
       (q) => live && setQuote(q),
@@ -182,6 +216,28 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   // a kept payment opens only a room it covers (a bigger room costs more)
   const kept = pending && (!frozen || BigInt(pending.wei) >= frozen.wei) ? pending : null;
 
+  /**
+   * The creator's own ticket of a paid room on `arenaId`, from the live chain data: an open ticket is resumed (no new
+   * payment); a payout waiting there, too few tokens or an arena the server keeps closed block it (said before any fee
+   * is paid); else one ticket at the arena's price on chain, with the rates and calls the ticket sheet would show.
+   */
+  const seatPlan = (arenaId: number, entryFee: number): SeatPlan => {
+    const session = data.sessions[arenaId] ?? null;
+    if (session?.finalized) return { kind: 'blocked', text: t('cr.tk.collect') };
+    const key = session && address ? sessionKey(arenaId, address, session.id) : null;
+    if (data.pending.some((p) => p.arenaId === arenaId || p.key === key)) return { kind: 'blocked', text: t('cr.tk.settling') };
+    if (session) return { kind: 'resume' };
+    if (blockedArenas.includes(arenaId)) return { kind: 'blocked', text: t('tf.err.Maintenance') };
+    const config = data.config?.token ? data.config : null;
+    // the price signed is the arena's on chain (the dev fake chain: the server's listing)
+    const onChain = data.arenas.find((a) => a.id === arenaId)?.entryFee ?? null;
+    const fee = onChain ?? (data.fake ? ledgerToBase(entryFee, tok.decimals) : null);
+    if (!config || fee === null || fee <= 0n) return { kind: 'blocked', text: t('cr.tk.unknown') };
+    if (data.tokenBalance !== null && data.tokenBalance < fee) return { kind: 'blocked', text: t('cr.tk.short', { fee: tok.exact(fee), sym: tok.symbol }) };
+    const rates = ticketRates(arenaRates(serverFees, config), config, data.holder).rates;
+    return { kind: 'buy', review: { fee, rates, steps: ticketSteps(data.allowance, fee), approve: approveN } };
+  };
+
   const toPay = () => {
     const v = validateCustomConfig(cfg);
     if (!v.ok) {
@@ -193,19 +249,93 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
     setError(null);
     if (!quote?.treasury || youPay === null) return;
     if (noSeats || (v.config.kind === 'paid' && !tier)) return;
+    // a ticket room: the creator's own ticket must be possible before the fee is paid
+    const plan = v.config.kind === 'paid' && tier ? seatPlan(tier.arenaId, tier.entryFee) : null;
+    if (plan?.kind === 'blocked') {
+      setError(plan.text);
+      return;
+    }
     setCfg(v.config);
+    setSeat(plan);
     setFrozen({ wei: youPay, to: quote.treasury as Address });
     setStep('pay');
+  };
+
+  /** The creator sits down in the paid room that just opened: their open ticket is resumed, else seated by the join. */
+  const seatMe = (room: CustomRoomView, awaitTicket: boolean) => {
+    if (!room.arenaId) return;
+    updateSettings({ lastArena: room.arenaId });
+    onClose();
+    engine()?.play(arenaTarget(room.arenaId), awaitTicket ? { awaitTicket: true } : {});
+  };
+
+  /**
+   * The creator's own ticket of the paid room `room` (just opened): bought with the checked ticket path, then the
+   * creator is seated. `plan` is the one frozen at "Continue" (a retry reads the chain again: an approval that went
+   * through is not asked again, a ticket that landed after all is resumed).
+   */
+  const ticket = async (room: CustomRoomView, plan: SeatPlan | null) => {
+    if (ticketInFlight.current || !room.arenaId || !address || !chain) return;
+    const p = plan ?? seatPlan(room.arenaId, tier?.entryFee ?? 0);
+    if (p.kind === 'resume') return seatMe(room, false);
+    if (p.kind === 'blocked') {
+      setTicketError(p.text);
+      return;
+    }
+    const config = data.config?.token ? data.config : null;
+    if (!config) {
+      setTicketError(t('cr.tk.unknown'));
+      return;
+    }
+    ticketInFlight.current = true;
+    setTicketError(null);
+    setTicketPhase('preparing');
+    const res = await buyTicket({ owner: address, chain, client, config, arenaId: room.arenaId, review: p.review, fake: data.fake }, (s, ph, h) => {
+      setTicketStep(s);
+      setTicketPhase(ph);
+      if (h) setHash(h);
+    });
+    if (!res.ok) {
+      ticketInFlight.current = false;
+      setTicketPhase(null);
+      setTicketStep(null);
+      setTicketError(res.text);
+      refreshChain();
+      return;
+    }
+    setHash(res.hash);
+    setTicketPhase('seated');
+    setTicketStep(null);
+    sound.punch();
+    const href = isFakeHash(res.hash) ? null : explorerTx(res.hash);
+    toast('success', t('tf.ticketOk'), href ? { href, label: t('tf.viewTx') } : undefined, 6000);
+    refreshChain();
+    window.setTimeout(() => {
+      ticketInFlight.current = false;
+      seatMe(room, true);
+    }, SEATED_MS);
+  };
+
+  /** A room opened: a free room ends on its invite; a ticket room goes on to the creator's own ticket at once. */
+  const opened = (room: CustomRoomView) => {
+    savePendingPayment(null);
+    setMade(room);
+    if (room.kind === 'paid' && room.arenaId) {
+      // the lobby remembers the seat too: "Later" (or a closed sheet) still sends this arena's next ticket here
+      useUi.setState({ paidSeat: { code: room.code, arenaId: room.arenaId, name: room.name, endsAt: room.endsAt } });
+      setStep('ticket');
+      void ticket(room, seat);
+      return;
+    }
+    setStep('done');
+    sound.punch();
   };
 
   const create = async (txHash: string | null) => {
     setPhase('creating');
     try {
       const r = await roomsApi.create(token!, cfg, txHash);
-      savePendingPayment(null);
-      setMade(r.room);
-      setStep('done');
-      sound.punch();
+      opened(r.room);
     } catch (e) {
       const err = e as RoomApiError;
       // the payment is fine but no room opened: keep it for "Open the room" later (never pay twice)
@@ -247,12 +377,9 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
       try {
         setPhase('creating');
         const r = await roomsApi.create(token, cfg, res.hash);
-        savePendingPayment(null);
-        setMade(r.room);
-        setStep('done');
         setPhase(null);
         inFlight.current = false;
-        sound.punch();
+        opened(r.room);
         return;
       } catch (e) {
         if (e instanceof RoomApiError && (e.code === 'payment_pending' || e.code === 'chain_busy') && i < 3) {
@@ -291,6 +418,19 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   const phaseText =
     phase === 'switching' ? t('cr.phase.switching', { chain: chainName }) : phase === 'signing' ? t('cr.phase.signing') : phase === 'confirming' ? t('cr.phase.confirming') : phase === 'creating' ? t('cr.phase.creating') : '';
   const txLink = hash && !isFakeHash(hash) ? explorerTx(hash) : null;
+  // where the creator's own ticket is (paid rooms)
+  const ticketText =
+    ticketPhase === 'seated'
+      ? t('cr.tk.seated')
+      : ticketPhase === 'preparing'
+        ? t('tf.preparing')
+        : ticketPhase === 'switching'
+          ? t('tf.switching', { chain: chainName })
+          : ticketPhase === 'signing'
+            ? ticketStep === 'approve'
+              ? t('tf.approving')
+              : t('tf.signing')
+            : t('tf.confirming');
 
   const gate = !address ? (
     <Button variant="primary" size="lg" block lead="wallet" onClick={() => openModal('wallet')}>
@@ -325,7 +465,23 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
           {t('cr.back')}
         </Button>
         <Button variant="primary" size="lg" loading={step === 'working'} onClick={() => void pay()} data-testid="cr-pay" lead={kept || free ? 'key' : 'wallet'}>
-          {free ? t('cr.createFree') : kept ? t('cr.useKept') : t('cr.pay', { amount: gasText(frozen?.wei ?? 0n) })}
+          {free ? t('cr.createFree') : kept ? t('cr.useKept') : seat ? t('cr.payTicket', { amount: gasText(frozen?.wei ?? 0n) }) : t('cr.pay', { amount: gasText(frozen?.wei ?? 0n) })}
+        </Button>
+      </div>
+    );
+  } else if (step === 'ticket') {
+    const busy = ticketPhase !== null;
+    footer = busy ? (
+      <Button variant="primary" size="lg" block loading disabled data-testid="cr-ticket-busy">
+        {ticketText}
+      </Button>
+    ) : (
+      <div className="cr-foot">
+        <Button variant="ghost" onClick={onClose} data-testid="cr-ticket-later">
+          {t('cr.tk.later')}
+        </Button>
+        <Button variant="primary" size="lg" lead="ticket" onClick={() => made && void ticket(made, null)} data-testid="cr-ticket-retry">
+          {t('cr.tk.retry')}
         </Button>
       </div>
     );
@@ -340,10 +496,10 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   return (
     <Sheet
       open={open}
-      onClose={onClose}
+      onClose={() => (step === 'working' || (step === 'ticket' && ticketPhase !== null) ? undefined : onClose())}
       closeLabel={t('cr.close')}
-      kicker={step === 'done' ? t('cr.kicker.done') : t('cr.kicker')}
-      title={step === 'done' ? t('cr.title.done') : step === 'setup' ? t('cr.title') : t('cr.title.pay')}
+      kicker={step === 'done' || step === 'ticket' ? t('cr.kicker.done') : t('cr.kicker')}
+      title={step === 'done' ? t('cr.title.done') : step === 'ticket' ? t('cr.tk.title') : step === 'setup' ? t('cr.title') : t('cr.title.pay')}
       footer={footer}
       className="cr-sheet"
     >
@@ -478,6 +634,9 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
                   ]
                 : [{ label: t('cr.stakes'), value: t('cr.noStakes'), muted: true }]),
               { label: t('cr.total'), value: frozen.wei === 0n ? t('cr.free') : `${gasText(frozen.wei)} ${GAS_SYMBOL}`, strong: true },
+              // then the creator's own ticket of the room's arena (its own signatures, right after the fee)
+              ...(seat?.kind === 'buy' ? [{ label: t('cr.yourTicket'), value: `${tok.exact(seat.review.fee)} ${tok.symbol}`, strong: true }] : []),
+              ...(seat?.kind === 'resume' ? [{ label: t('cr.yourTicket'), value: t('cr.ticketResume'), muted: true }] : []),
             ]}
           />
           {frozen.wei > 0n && (
@@ -499,6 +658,68 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
             </p>
           )}
           {error && <p className="cr-error" role="alert">{error}</p>}
+        </div>
+      )}
+
+      {step === 'ticket' && made && made.arenaId && (
+        <div className="cr-done cr-ticket" data-testid="cr-ticket">
+          <p className="cr-lede">{t('cr.tk.lede', { name: made.name, arena: arenaMeta(made.arenaId).name })}</p>
+          {seat?.kind === 'buy' && (
+            <section className="tf-steps cr-tsteps" aria-label={t('tf.signs')}>
+              <ol>
+                <li className="is-done">
+                  <span className="tf-steps__n num" aria-hidden="true">
+                    1
+                  </span>
+                  <span>
+                    {t('cr.receipt')} · {frozen && frozen.wei > 0n ? `${gasText(frozen.wei)} ${GAS_SYMBOL}` : t('cr.free')}
+                  </span>
+                </li>
+                {seat.review.steps.map((s, i) => (
+                  <li key={s} className={ticketPhase === 'seated' || (ticketStep !== null && seat.review.steps.indexOf(ticketStep) > i) ? 'is-done' : ticketStep === s ? 'is-active' : undefined}>
+                    <span className="tf-steps__n num" aria-hidden="true">
+                      {i + 2}
+                    </span>
+                    <span>
+                      {s === 'approve'
+                        ? t('tf.step.approve', { fee: tok.exact(seat.review.fee), sym: tok.symbol })
+                        : t('tf.step.join', { room: arenaMeta(made.arenaId ?? 0).name })}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+          {ticketPhase !== null && (
+            <p className="cr-phase" role="status" data-testid="cr-ticket-phase">
+              {ticketPhase !== 'seated' && <StampSpinner size="sm" />} {ticketText}
+              {txLink && (
+                <a className="cr-phase__link mono" href={txLink} target="_blank" rel="noreferrer">
+                  {t('tf.viewTx')}
+                </a>
+              )}
+            </p>
+          )}
+          {ticketError && (
+            <>
+              <p className="cr-error" role="alert" data-testid="cr-ticket-error">
+                {t('cr.tk.failed', { error: ticketError })}
+              </p>
+              <p className="cr-note">{t('cr.tk.laterNote')}</p>
+            </>
+          )}
+          <div className="cr-code" aria-label={t('cr.codeLabel')}>
+            <span className="cr-row__label mono">{t('cr.codeLabel')}</span>
+            <button type="button" className="cr-code__value mono" onClick={() => copy(made.code)} data-testid="cr-code">
+              {made.code}
+            </button>
+          </div>
+          <div className="cr-link">
+            <input className="cr-link__input mono" readOnly value={link} aria-label={t('cr.link')} onFocus={(e) => e.currentTarget.select()} />
+            <Button size="sm" onClick={() => copy(link)} lead="docs">
+              {t('cr.copyLink')}
+            </Button>
+          </div>
         </div>
       )}
 

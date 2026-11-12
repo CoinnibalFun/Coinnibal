@@ -47,7 +47,7 @@ class Tracker {
 export interface MonitorRoom {
   readonly id: string;
   now(): number;
-  round(now?: number): { n: number; endsAt: number; joinsCloseAt: number } | undefined;
+  round(now?: number): { n: number; endsAt: number; joinsCloseAt: number; startsAt?: number } | undefined;
   readonly opts: { stake?: { arenaId: number; buyIn: number } };
 }
 
@@ -109,7 +109,8 @@ export class IntegrityMonitor {
         entryFee: j.entryFee,
         round: r?.n ?? 0,
         // round n's slot (the break after the previous bell, then the play) is [n·cycle, (n+1)·cycle): cycle = endsAt / (n + 1)
-        roundStartsAt: r && r.n >= 0 ? r.endsAt - r.endsAt / (r.n + 1) : now,
+        // a paid custom room's own game says where it started (`startsAt`)
+        roundStartsAt: r?.startsAt !== undefined ? r.startsAt : r && r.n >= 0 ? r.endsAt - r.endsAt / (r.n + 1) : now,
         joinsCloseAt: r?.joinsCloseAt ?? roundMs,
         roundEndsAt: roundMs,
         joinedAt: now,

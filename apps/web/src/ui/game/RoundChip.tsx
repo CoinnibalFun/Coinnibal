@@ -65,7 +65,7 @@ export function RoundChip() {
           <span className="g-round__time num" aria-hidden="true">
             {time}
           </span>
-          <span className="g-round__label mono">{closing ? t('g.finalMinute') : t('g.round')}</span>
+          <span className="g-round__label mono">{closing ? t('g.finalMinute') : info?.startsAt !== undefined ? t('g.roomUntilEnd') : t('g.round')}</span>
         </span>
       </div>
       {/* phase changes only: "Final minute", then "10 seconds left" */}

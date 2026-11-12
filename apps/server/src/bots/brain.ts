@@ -1,4 +1,4 @@
-import { EntityKind, RULES, VIEW, canEat, viewSize, type CustomDifficulty } from '@elymum/shared';
+import { EntityKind, RULES, SPLIT_REACH, VIEW, canEat, viewSize, type CustomDifficulty } from '@elymum/shared';
 import type { Cell, Player } from '../game/entities';
 import type { Rng } from '../game/rng';
 import type { World } from '../game/world';
@@ -52,8 +52,6 @@ export interface BotDecision {
   split: boolean;
 }
 
-/** Distance a freshly split half flies (boost only), as in the simulation. */
-export const SPLIT_REACH = RULES.splitSpeed / -Math.log(RULES.splitDecayPerSec);
 
 /** The rectangle a player of `p`'s size sees (the server's snapshot rectangle on a 16:9 screen). */
 export function botView(p: Player): { x0: number; y0: number; x1: number; y1: number } {
