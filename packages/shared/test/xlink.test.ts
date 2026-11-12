@@ -9,6 +9,7 @@ import {
   parseXPostId,
   readSnapshot,
   xLinkIntentUrl,
+  xLinkPostText,
   xMention,
   xPostTime,
   xSyndicationToken,
@@ -41,7 +42,16 @@ describe('Link X helpers', () => {
   it('the proof post and its code', () => {
     expect(X_CODE_RE.test('ELYMUM-7F3K9Q')).toBe(true);
     expect(X_CODE_RE.test('ELYMUM-7F3K9O')).toBe(false);
-    expect(xLinkIntentUrl('ELYMUM-7F3K9Q')).toBe('https://x.com/intent/post?text=Linking%20my%20X%20to%20Elymum%3A%20ELYMUM-7F3K9Q%20elymum.io');
+    expect(xLinkIntentUrl('ELYMUM-7F3K9Q')).toBe(`https://x.com/intent/post?text=${encodeURIComponent('Joining the coin party \u{1FA99} my code: ELYMUM-7F3K9Q elymum.io')}`);
+  });
+
+  it('the proof post is short and friendly, and carries the code and the site', () => {
+    const text = xLinkPostText('ELYMUM-7F3K9Q');
+    expect(text).toBe('Joining the coin party \u{1FA99} my code: ELYMUM-7F3K9Q elymum.io');
+    expect(text).toContain('ELYMUM-7F3K9Q');
+    expect(text).toContain('elymum.io');
+    expect(xLinkPostText('ELYMUM-7F3K9Q', 'localhost:5173').endsWith('localhost:5173')).toBe(true);
+    expect(text.length).toBeLessThan(80);
   });
 
   it('eaten lines name linked people by @handle, never bots, never an invalid handle', () => {

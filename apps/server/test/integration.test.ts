@@ -822,14 +822,16 @@ describe('server over websocket', () => {
     app.journal.remove(`Owed-${player}`);
   });
 
-  it('paid custom room: an invite-only arena instance seated by code with a normal ticket, never by quick play; settled at the bell; closes once settled', async () => {
+  it('paid custom room: an invite-only arena instance seated by code with a normal ticket, never by quick play; on its own clock (no 5-minute bell), settled at the room end; closes once settled', async () => {
     const svc = app.customRooms;
     // a free fee (no gas-token transfer to check) and a treasury: the room itself is what is tested here
     svc.updateSettings({ priceGas: '0', treasury: '0x1111111111111111111111111111111111111111' });
     const creator = newWallet();
     const view = await svc.create(creator, { config: { ...CUSTOM_DEFAULTS, name: 'Whale Club', kind: 'paid', arenaId: 1, bots: 0, maxPlayers: 4, durationMin: 15 } });
     expect(view).toMatchObject({ kind: 'paid', arenaId: 1, maxPlayers: 4 });
-    expect(view.endsAt % RULES.roundMs).toBe(0); // it ends on a bell
+    // it starts now (the server's clock) and ends exactly 15 minutes later: no arena bell involved
+    expect(Math.abs(view.createdAt - serverNow())).toBeLessThan(1000);
+    expect(view.endsAt - view.createdAt).toBe(15 * 60_000);
     const code = view.code;
     const host = newWallet();
     const hostTicket = session(host, { id: 501 });
@@ -841,10 +843,12 @@ describe('server over websocket', () => {
     // a wrong arena for the code
     c.send({ t: 'join', room: `arena:2:${code}`, name: 'Host', skin: 0 });
     expect((await c.wait('error', 2000, (m) => m.code === 'room_not_found')).code).toBe('room_not_found');
-    // the ticket of arena 1 seats here by code
+    // the ticket of arena 1 seats here by code, at once
     c.send({ t: 'join', room: `arena:1:${code}`, name: 'Host', skin: 0 });
     const joined = await c.wait('joined');
     expect(joined.room).toMatchObject({ id: `priv-${code}`, mode: 'arena', arenaId: 1, code, custom: { kind: 'paid', arenaId: 1 } });
+    // its round is the room's own game: from its start to its end, joins closed only in its last minute
+    expect(joined.round).toEqual({ n: expect.any(Number), startsAt: view.createdAt, endsAt: view.endsAt, joinsCloseAt: view.endsAt - 60_000 });
     expect(joined.value).toBe(10_000_000);
     expect(app.journal.live().map((l) => l.session)).toContain(hostTicket.key);
 
@@ -859,22 +863,43 @@ describe('server over websocket', () => {
     const listed = (await (await fetch(`http://127.0.0.1:${port}/api/rooms`)).json()) as { rooms: { id: string }[] };
     expect(listed.rooms.some((r) => r.id === `priv-${code}`)).toBe(false);
 
-    // closed early: no new seat, the ticket in play keeps playing to the bell
-    expect(svc.close(code, { wallet: creator, admin: false })).toMatchObject({ closing: true });
+    // the arenas' last minute (their joins are closed): the paid room still seats
+    const r = roundAt(serverNow());
+    jumpTo(r.joinsCloseAt + 1000);
+    const mid = newWallet();
+    const midTicket = session(mid, { id: 504 });
+    chain.sessions.set(`1:${mid}`, midTicket);
+    const m = await signedIn(mid);
+    m.send({ t: 'join', room: `arena:1:${code}`, name: 'Mid', skin: 0 });
+    expect((await m.wait('joined')).room.id).toBe(`priv-${code}`);
+
+    // the arenas' bell: the public ticket is settled, the paid room plays on (no re-pay every 5 minutes)
+    jumpTo(r.endsAt);
+    await o.wait('roundOver', 4000);
+    await sleep(300);
+    expect(c.msgs.some((x) => x.t === 'roundOver')).toBe(false);
+    expect(app.journal.live().map((x) => x.session)).toEqual(expect.arrayContaining([hostTicket.key, midTicket.key]));
+
+    // the room's own last minute: a new seat is refused, and that unplayed ticket goes back in full at once
+    jumpTo(view.endsAt - 30_000);
     const late = newWallet();
-    chain.sessions.set(`1:${late}`, session(late, { id: 503 }));
+    const lateTicket = session(late, { id: 503 });
+    chain.sessions.set(`1:${late}`, lateTicket);
     const l = await signedIn(late);
     l.send({ t: 'join', room: `arena:1:${code}`, name: 'Late', skin: 0 });
-    expect((await l.wait('error', 2000, (m) => m.code === 'room_closed')).code).toBe('room_closed');
-    expect(app.journal.live().map((x) => x.session)).toContain(hostTicket.key);
+    expect((await l.wait('error', 2000, (x) => x.code === 'room_closed')).message).toMatch(/last minute/);
+    for (let i = 0; i < 40 && !app.journal.pending.some((p) => p.key === lateTicket.key); i++) await sleep(25);
+    expect(app.journal.pending.find((p) => p.key === lateTicket.key)).toMatchObject({ kind: 'settle', reason: 'stale', payout: 10_000_000, entryFee: 10_000_000, player: late });
+    expect(l.msgs.some((x) => x.t === 'joined')).toBe(false);
 
-    // the bell settles both tickets by the normal server path; then the paid room closes
-    jumpTo(roundAt(serverNow()).endsAt);
+    // the room's end settles every ticket in it by the normal server path; then the paid room closes
+    jumpTo(view.endsAt);
     const over = await c.wait('roundOver', 4000);
     expect(over.payout).toBe(10_000_000);
+    expect(over.standings).toHaveLength(2);
     expect(app.journal.pending.find((p) => p.key === hostTicket.key)).toMatchObject({ kind: 'settle', reason: 'round', payout: 10_000_000, player: host });
-    await o.wait('roundOver', 4000);
-    expect((await c.wait('error', 4000, (m) => m.code === 'room_closed')).code).toBe('room_closed');
+    await m.wait('roundOver', 4000);
+    expect((await c.wait('error', 4000, (x) => x.code === 'room_closed')).code).toBe('room_closed');
     for (let i = 0; i < 50 && svc.get(code); i++) await sleep(50);
     expect(svc.get(code)).toBeNull();
     expect(app.rooms.get(`priv-${code}`)).toBeUndefined();
@@ -882,13 +907,14 @@ describe('server over websocket', () => {
     for (const [w, t] of [
       [host, hostTicket],
       [other, otherTicket],
+      [mid, midTicket],
+      [late, lateTicket],
     ] as const) {
       app.journal.remove(t.key);
       chain.sessions.delete(`1:${w}`);
     }
-    chain.sessions.delete(`1:${late}`);
     svc.updateSettings({ priceGas: '0.05', treasury: null });
-    for (const x of [c, o, l]) x.close();
+    for (const x of [c, o, l, m]) x.close();
   }, 20_000);
   it('test arena (testnet): the official ticket in a room with labelled bots, settled at the bell, off every board; quick play never goes there', async () => {
     // test arenas are on by default on a testnet: one per tier, listed with the arenas, marked test

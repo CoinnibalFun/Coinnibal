@@ -120,7 +120,7 @@ describe('ticket confirm sheet', () => {
     expect(within(dialog).getByText('12,450 → 11,450 $ELYMUM')).toBeTruthy();
     const steps = within(within(dialog).getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
     // no allowance yet: an approval for 5 tickets of this room first (preselected; what the wallet will show), then the ticket
-    expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take up to 5,000 $ELYMUM (5 tickets of this room)', '2Buy the ticket · Asphodel Meadow']);
+    expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take up to 5,000 $ELYMUM (5 tickets of this room)', '2Buy the ticket · $1 Room']);
     expect((within(dialog).getByRole('button', { name: /Pay 1,000 \$ELYMUM/ }) as HTMLButtonElement).disabled).toBe(false);
     // the approval covers 1, 5, 10 or 20 tickets, 5 preselected
     expect(within(dialog).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['1 ticket', '5 tickets', '10 tickets', '20 tickets']);
@@ -208,7 +208,7 @@ describe('ticket confirm sheet', () => {
     useChainData.setState({ allowance: 5000n * ONE });
     open(PENNY);
     const steps = within(screen.getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
-    expect(steps.map((s) => s.textContent)).toEqual(['1Buy the ticket · Asphodel Meadow']);
+    expect(steps.map((s) => s.textContent)).toEqual(['1Buy the ticket · $1 Room']);
     // nothing to approve: no approval choice either
     expect(screen.queryByRole('checkbox', { name: /Approve 5 tickets at once/ })).toBeNull();
   });

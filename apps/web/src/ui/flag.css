@@ -34,47 +34,13 @@
   background: transparent;
 }
 
-/* ── Country picker (a Field box around a native select) ───────────────── */
-.kb-country .kb-field__box {
-  position: relative;
-}
-.kb-country__flag {
-  display: inline-flex;
-  flex: none;
-}
-.kb-country__select {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 22px;
-  cursor: pointer;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.kb-country__select option {
-  color: #04181c;
-  background: #ffffff;
-}
-.kb-country__chev {
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  width: 12px;
-  height: 8px;
-  margin-top: -4px;
-  color: var(--ink-fixed);
-  pointer-events: none;
-}
-
-/* "Wear the flag on my coin": a switch row under the country picker, with a little preview coin */
-.cp-flagskin {
-  margin-top: 4px;
-}
-.cp-flagskin .g-set__row {
-  border-bottom: 0;
-}
-.cp-flagskin .g-set__ctl {
+/* "You play for" and "Wear the flag on my coin": two plain settings rows (CountryPicker.tsx) */
+.cp-country .g-set__ctl {
   align-items: center;
   gap: 10px;
+}
+.cty-pick {
+  max-width: min(260px, 100%);
 }
 .cp-flagskin__coin {
   display: block;

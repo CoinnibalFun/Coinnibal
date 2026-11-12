@@ -4,6 +4,7 @@ import {
   WORLD_PRESETS,
   boostDurationMs,
   isBoostKind,
+  ownRoundAt,
   type BoostKind,
   type ClientInput,
   type CustomDifficulty,
@@ -665,6 +666,11 @@ export class WorkerPool {
   round(): RoundWindow {
     return this.deps.clock.window();
   }
+
+  /** The arenas' join close before a bell (ms): rooms on their own clock mirror it before their end. */
+  closeMs(): number {
+    return this.deps.clock.cfg.closeMs;
+  }
 }
 
 const hidOf = (r: RoomHandle | null | undefined): number => (r instanceof RemoteRoom ? r.hid : 0);
@@ -735,8 +741,11 @@ export class RemoteRoom implements RoomHandle {
 
   info(): RoomInfo {
     // the round comes from this thread's clock (the summary may be a second old)
-    const r = this.opts.mode === 'arena' ? this.pool.round() : undefined;
-    const round = r ? { round: { n: r.n, endsAt: r.endsAt, joinsCloseAt: r.joinsCloseAt, ...(r.opensAt > r.startsAt ? { opensAt: r.opensAt } : {}) } } : {};
+    const own = this.opts.ownRound;
+    const r = this.opts.mode === 'arena' ? (own ? ownRoundAt(own, this.pool.closeMs()) : this.pool.round()) : undefined;
+    const round = r
+      ? { round: own ? { n: r.n, endsAt: r.endsAt, joinsCloseAt: r.joinsCloseAt, startsAt: r.startsAt } : { n: r.n, endsAt: r.endsAt, joinsCloseAt: r.joinsCloseAt, ...(r.opensAt > r.startsAt ? { opensAt: r.opensAt } : {}) } }
+      : {};
     if (this.summary) return { ...this.summary.info, players: this.humanCount, ...round };
     const w = this.opts.world ?? WORLD_PRESETS[this.opts.mode];
     return {
@@ -806,6 +815,9 @@ export class RemoteRoom implements RoomHandle {
   }
 
   closingSoon(endsAt: number, message: string): void {
+    // a room on its own clock closed early: this thread's copy of its end follows the worker's (`Room.closingSoon`)
+    const own = this.opts.ownRound;
+    if (own && endsAt < own.endsAt) own.endsAt = Math.max(own.startsAt, endsAt);
     this.pool.send(this.slot, { k: 'closing', hid: this.hid, endsAt, message });
   }
 

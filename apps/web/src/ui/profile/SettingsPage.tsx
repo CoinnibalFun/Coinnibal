@@ -1,9 +1,9 @@
 import { useId, type ReactNode } from 'react';
-import { Chip, Icon } from '../../design';
+import { Chip } from '../../design';
 import { sound } from '../../audio';
 import { APP_VERSION } from '../../config';
 import { useT, type TKey } from '../../i18n';
-import { openModal, updateSettings, useUi, type Settings } from '../../store';
+import { updateSettings, useUi, type Settings } from '../../store';
 import { LanguagePicker } from '../LanguagePicker';
 import { MusicPicker } from './MusicPicker';
 
@@ -60,12 +60,12 @@ function Level({ label, value, disabled, onChange, onCommit }: { label: string; 
   );
 }
 
-export function Row({ label, note, children }: { label: string; note?: string; children: ReactNode }) {
+/** A settings row: a plain label on the left, its control on the right (no helper text: simple is the best). */
+export function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="g-set__row">
       <span className="gs-label">
         <span className="g-set__label">{label}</span>
-        {note && <span className="gs-note">{note}</span>}
       </span>
       <div className="g-set__ctl">{children}</div>
     </div>
@@ -73,24 +73,23 @@ export function Row({ label, note, children }: { label: string; note?: string; c
 }
 
 /**
- * Settings as a print order: language, stock (paper / night), sound (master,
- * the soundtrack picker, music volume, effects, announcer), the map sheet and performance mode first, then
- * the in-room overlays. Used on the profile page and inside the settings sheet.
+ * Settings as one plain list: language, sky (paper / night), sound (master, the soundtrack picker,
+ * music volume, effects, announcer), performance mode, then the in-room overlays. Labels and
+ * controls only. Lives in the settings sheet.
  */
-export function SettingsPage({ headings = true }: { headings?: boolean }) {
+export function SettingsPage() {
   const t = useT();
   const s = useUi((st) => st.settings);
   const set = (patch: Partial<Settings>) => updateSettings(patch);
-  const flags: [TKey, Flag, TKey?][] = [
+  const flags: [TKey, Flag][] = [
     ['gs.names', 'showNames'],
     ['gs.mass', 'showMass'],
     ['gs.chat', 'showChat'],
-    ['gs.emotes', 'showEmotes', 'gs.emotesNote'],
+    ['gs.emotes', 'showEmotes'],
     ['gs.fps', 'showFps'],
   ];
   return (
     <div className="gs-page">
-      {headings && <h3 className="gs-h mono">{t('st.look')}</h3>}
       <div className="g-set">
         <Row label={t('site.lang')}>
           <LanguagePicker className="gs-lang" />
@@ -113,30 +112,24 @@ export function SettingsPage({ headings = true }: { headings?: boolean }) {
           <Punch on={s.sfxOn} onChange={(v) => set({ sfxOn: v })} label={t('gs.sfx')} disabled={!s.sound} />
         </Row>
         <Level label={t('gs.sfxVol')} value={s.sfx} disabled={!s.sound || !s.sfxOn} onChange={(v) => set({ sfx: v })} onCommit={() => sound.click()} />
-        <Row label={t('gs.announcer')} note={t('gs.announcerNote')}>
+        <Row label={t('gs.announcer')}>
           <Punch on={s.announcer} onChange={(v) => set({ announcer: v })} label={t('gs.announcer')} disabled={!s.sound} />
         </Row>
         <Level label={t('gs.voiceVol')} value={s.voice} disabled={!s.sound || !s.announcer} onChange={(v) => set({ voice: v })} />
-        <Row label={t('st.perf')} note={t('st.perfNote')}>
+        <Row label={t('st.perf')}>
           <Punch on={s.quality === 'low'} onChange={(v) => set({ quality: v ? 'low' : 'high' })} label={t('st.perf')} />
         </Row>
-      </div>
-      {headings && <h3 className="gs-h mono">{t('st.game')}</h3>}
-      <div className="g-set">
+
         <Row label={t('gs.minimap')}>
           <Punch on={s.showMinimap} onChange={(v) => set({ showMinimap: v })} label={t('gs.minimap')} />
         </Row>
-        {flags.map(([key, flag, note]) => (
-          <Row key={flag} label={t(key)} note={note ? t(note) : undefined}>
+        {flags.map(([key, flag]) => (
+          <Row key={flag} label={t(key)}>
             <Punch on={s[flag]} onChange={(v) => set({ [flag]: v } as Partial<Settings>)} label={t(key)} />
           </Row>
         ))}
       </div>
       <div className="gs-foot">
-        <button type="button" className="kl-link mono" onClick={() => openModal('howto')}>
-          <Icon name="docs" size={16} />
-          {t('st.howto')}
-        </button>
         <span className="gs-version mono">{t('st.version', { v: APP_VERSION })}</span>
       </div>
     </div>

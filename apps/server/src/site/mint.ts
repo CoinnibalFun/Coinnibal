@@ -517,7 +517,7 @@ export class MintService {
     const royalty = nft && client ? await this.royalty(nft.address, client) : null;
     return {
       name: 'Elymum',
-      description: `Elymum emblems: the coins of the ring. Holders play Elymum on Robinhood Chain.`,
+      description: `The Elymum NFT: a collection of coin characters. Holders get perks in Elymum, the game where coins eat coins, on Robinhood Chain.`,
       image: `${baseUrl}/api/nft/1.svg`,
       external_link: baseUrl,
       ...(royalty && royalty.bps > 0 ? { seller_fee_basis_points: royalty.bps, fee_recipient: royalty.receiver } : {}),

@@ -6,6 +6,7 @@ import {
   TEST_ARENA_DEFAULT,
   TICK_MS,
   arenaMeta,
+  ownRoundAt,
   testArenaName,
   testArenaRoomId,
   testArenasAllowedOn,
@@ -336,6 +337,15 @@ export class RoomManager {
     return this.deps.clock!.window(now);
   }
 
+  /**
+   * The round window `room` plays at `now`: a paid custom room's own game (one round from its opening to its end,
+   * joins closed in its last `closeMs`), else the arenas' shared round.
+   */
+  roomWindow(room: Pick<RoomHandle, 'opts'> | null, now = this.now()): RoundWindow {
+    const own = room?.opts.ownRound;
+    return own ? ownRoundAt(own, this.deps.clock!.cfg.closeMs) : this.roundWindow(now);
+  }
+
   /** The ticket a bell settled while this wallet was away from the arena (kept `BELL_MEMO_MS`). */
   bellSettled(arenaId: number, wallet: string): BellSettled | null {
     const key = `${arenaId}:${wallet}`;
@@ -516,7 +526,7 @@ export class RoomManager {
 
   /**
    * Opens a paid custom room `priv-<code>`: a private instance (number 0) of arena `stake.arenaId`
-   * with the creator's rules. Joined only with `arena:<id>:<code>` and a ticket of that arena; never
+   * with the creator's rules, on its own clock (`ownRound`: one game to the room's end, never the arenas' bell). Joined only with `arena:<id>:<code>` and a ticket of that arena; never
    * listed, never picked by `arenaRoom` (quick play), never closed by the idle cleanup. Throws when
    * the code is taken.
    */

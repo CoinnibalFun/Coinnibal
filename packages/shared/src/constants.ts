@@ -34,10 +34,26 @@ export const RULES = {
    * movement speed (+15 %, was 1250) so a split still outruns a fleeing coin by the same margin.
    */
   splitSpeed: 1440,
-  /** Fraction of boost velocity kept after one second (exponential decay → ~450u flight). */
-  splitDecayPerSec: 0.04,
+  /**
+   * Fraction of a split cell's boost velocity kept after one second (exponential decay): the flight is
+   * splitSpeed / -ln(splitDecayPerSec), about 325 units (was 0.04, about 450: owner playtest 2026-11, the
+   * pieces flew too far from the main coin). The launch speed is unchanged, so a split still lunges as fast.
+   */
+  splitDecayPerSec: 0.012,
+  /** The same for ejected blobs and shot thorn bushes (their flight is unchanged, about 360 / 390 units). */
+  ejectDecayPerSec: 0.04,
   /** Own-cell collisions are ignored this long after a split so halves can fly out. */
   splitNoCollideMs: 380,
+  /**
+   * Cohesion of a split coin before its pieces may merge: once a piece's split flight is over, a piece farther
+   * from the coin's centre of mass than the whole coin's radius is pulled back toward it at this fraction of its
+   * own speed (like agar.io's pieces drawing together), so a small fast piece never runs far ahead of the main
+   * coin. Movement only: merge times (`mergeBaseMs`, `mergeMsPerMass`) are unchanged. Mergeable pieces keep
+   * their own pull (`mergePull`).
+   */
+  splitCohesion: 0.6,
+  /** Pull toward the centre of a piece that may merge now, as a fraction of its speed. */
+  mergePull: 0.35,
   mergeBaseMs: 12_000,
   mergeMsPerMass: 15,
 

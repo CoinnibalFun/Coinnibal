@@ -106,7 +106,7 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
   );
 }
 
-/** Setup → which arenas admit emblem holders only (default: #4, the Isles of the Blessed). */
+/** Setup → which arenas admit emblem holders only (default: #4, the $10 Room). */
 export function HoldersOnlyCard({ ctx }: { ctx: ChainCtx }) {
   const arena = ctx.net.arenaAddress;
   const a = ctx.status?.arena ?? null;
@@ -115,7 +115,7 @@ export function HoldersOnlyCard({ ctx }: { ctx: ChainCtx }) {
   if (!arena || !cfg || !a || a.arenas.length === 0) return null;
   const d = cfg.decimals;
   return (
-    <Card title="Holders-only arenas" id="holders-only" lede="A holders-only arena admits emblem holders only. Open tickets are not affected. The Isles of the Blessed (#4) are the holders' table.">
+    <Card title="Holders-only arenas" id="holders-only" lede="A holders-only arena admits emblem holders only. Open tickets are not affected. The $10 Room (#4) is the holders' room.">
       <div className="ad-tablewrap">
         <table className="ad-table">
           <thead>

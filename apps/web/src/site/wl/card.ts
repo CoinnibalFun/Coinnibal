@@ -3,7 +3,7 @@ import { drawCoinLook } from '../../render/coin';
 import { hash32, lookForHandle, seeded, ticketNo } from '../coinLook';
 import { siteHost } from '../settings';
 
-/** The shareable WL card, an Elysian boarding pass: 1200 × 675 (X shows 16:9 images whole). */
+/** The shareable WL card, a boarding-pass card: 1200 × 675 (X shows 16:9 images whole). */
 export const CARD_W = 1200;
 export const CARD_H = 675;
 
@@ -170,7 +170,7 @@ function label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number
   }
 }
 
-/** Draws the Elysian boarding pass for `handle` (normalised, no `@`; empty shows a blank pass). */
+/** Draws the WL pass card for `handle` (normalised, no `@`; empty shows a blank pass). */
 /**
  * How much of the pass to draw (the on-page "assembly": the pass prints itself piece by piece).
  * `upto`: 0 the night only, 1 + the blank pass, 2 + the wordmark and labels, 3 + the passenger
@@ -299,8 +299,8 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
     ctx.restore();
     return;
   }
-  label(ctx, 'Elysian boarding pass', BX, Y + 62, TEAL_INK, 19);
-  label(ctx, 'Class: small change', PERF - 40, Y + 62, STONE, 17, 'right');
+  label(ctx, 'Elymum WL pass', BX, Y + 62, TEAL_INK, 19);
+  label(ctx, 'Coins eat coins', PERF - 40, Y + 62, STONE, 17, 'right');
   drawWordmark(ctx, BX - 4, Y + 84, 0.6);
 
   label(ctx, 'Passenger', BX, Y + 222);
@@ -329,8 +329,8 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
   ctx.stroke();
   ctx.setLineDash([]);
   const cols: [string, string][] = [
-    ['From', 'The plain'],
-    ['To', 'The feast'],
+    ['Game', 'Elymum'],
+    ['Rounds', '5 min'],
     ['Gate', 'WL'],
     ['Boards', 'Round 001'],
   ];

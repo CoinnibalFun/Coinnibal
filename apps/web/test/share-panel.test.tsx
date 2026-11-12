@@ -53,7 +53,7 @@ const initial = useUi.getState();
 const M = 1_000_000;
 const N = 5_800_000;
 const R: RoundInfo = { n: N, endsAt: (N + 1) * RULES.roundMs, joinsCloseAt: (N + 1) * RULES.roundMs - RULES.roundJoinCloseMs };
-const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: 'Asphodel Meadow', width: 6400, height: 6400, players: 3, bots: 0, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M, round: R };
+const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: '$1 Room', width: 6400, height: 6400, players: 3, bots: 0, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M, round: R };
 const POND: RoomInfo = { id: 'practice-1', mode: 'practice', name: 'Pro Pond #1', width: 6000, height: 6000, players: 1, bots: 0, maxPlayers: 50 };
 const STANDINGS: RoundStanding[] = [
   { rank: 1, name: 'Daphne', value: 3000 * M, mass: 1800, kills: 6, you: true },
@@ -116,7 +116,7 @@ describe('the end-of-game share panel', () => {
     expect(fetched()).toEqual([`${SERVER.http}/share/AbCdE12345.png`]);
     fireEvent.click(screen.getByTestId('share-download'));
     await waitFor(() => expect(clicks).toHaveLength(1));
-    expect(clicks[0].download).toBe('elymum-asphodel-meadow-result.png');
+    expect(clicks[0].download).toBe('elymum-1-room-result.png');
     expect(clicks[0].href).toMatch(/^blob:/);
     // the picture was fetched once: the download reuses the preview's bytes
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -126,7 +126,7 @@ describe('the end-of-game share panel', () => {
     await waitFor(() => expect(fetched()).toContain(`${SERVER.http}/share/AbCdE12345/standings.png`));
     fireEvent.click(screen.getByTestId('share-download'));
     await waitFor(() => expect(clicks).toHaveLength(2));
-    expect(clicks[1].download).toBe('elymum-asphodel-meadow-standings.png');
+    expect(clicks[1].download).toBe('elymum-1-room-standings.png');
   });
 
   it('"Share on X" opens the intent with the result line and the card link; no standings tab without the picture', () => {
@@ -134,8 +134,8 @@ describe('the end-of-game share panel', () => {
     const x = screen.getByTestId('share-x') as HTMLAnchorElement;
     const url = new URL(x.href);
     expect(url.origin + url.pathname).toBe('https://x.com/intent/post');
-    expect(url.searchParams.get('text')).toBe(`${resultShareText(translate, { rank: 1, n: 2, room: 'Asphodel Meadow' })} ${SHARE_COIN}`);
-    expect(url.searchParams.get('text')).toMatch(/#1 of 2 in Asphodel Meadow on Elymum/);
+    expect(url.searchParams.get('text')).toBe(`${resultShareText(translate, { rank: 1, n: 2, room: '$1 Room' })} ${SHARE_COIN}`);
+    expect(url.searchParams.get('text')).toMatch(/in \$1 Room on Elymum/);
     expect(url.searchParams.get('url')).toBe(shareUrl('AbCdE12345'));
     expect(x.closest('[data-testid="share-panel"]')).toBeTruthy();
     expect(screen.queryByTestId('share-pick-standings')).toBeNull();
@@ -149,9 +149,9 @@ describe('the end-of-game share panel', () => {
     await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
     const arg = (share.mock.calls[0] as unknown as [{ files: File[]; text: string }])[0];
     expect(arg.files).toHaveLength(1);
-    expect(arg.files[0].name).toBe('elymum-asphodel-meadow-result.png');
+    expect(arg.files[0].name).toBe('elymum-1-room-result.png');
     expect(arg.files[0].type).toBe('image/png');
-    expect(arg.text).toContain(resultShareText(translate, { rank: 1, n: 2, room: 'Asphodel Meadow' }));
+    expect(arg.text).toContain(resultShareText(translate, { rank: 1, n: 2, room: '$1 Room' }));
     expect(arg.text).toContain(shareUrl('AbCdE12345'));
     // a closed share sheet is no error
     share.mockRejectedValueOnce(Object.assign(new Error('closed'), { name: 'AbortError' }));
@@ -189,7 +189,7 @@ describe('the end-of-game share panel', () => {
     expect(posted).toContain('(TEST: testnet test arena, no real money)');
     expect(new URL(x.href).searchParams.get('url')).toBe(shareUrl('KiLLbbbbbb'));
     fireEvent.click(rows[0].querySelector('[data-testid="moment-download"]')!);
-    await waitFor(() => expect(clicks.some((c) => c.download === 'elymum-asphodel-meadow-ate-rocky-x.png')).toBe(true));
+    await waitFor(() => expect(clicks.some((c) => c.download === 'elymum-1-room-ate-rocky-x.png')).toBe(true));
     expect(fetched()).toContain(`${SERVER.http}/share/KiLLcccccc.png`);
   });
 
@@ -233,7 +233,7 @@ describe('the end-of-game share panel', () => {
   });
 
   it('file names: lower-case ASCII words joined by dashes', () => {
-    expect(fileSlug('Asphodel Meadow')).toBe('asphodel-meadow');
+    expect(fileSlug('$1 Room')).toBe('1-room');
     expect(fileSlug('Crème Brûlée #3')).toBe('creme-brulee-3');
     expect(fileSlug('海')).toBe('game');
   });

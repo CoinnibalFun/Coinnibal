@@ -11,6 +11,7 @@ import {
   PowerUpType,
   RULES,
   boostDecayFactor,
+  SPLIT_REACH,
   canEat,
   clamp,
   coversVictim,
@@ -88,8 +89,6 @@ const VIRUS_REGROW_MS = 4_000;
 const VIRUS_CELL_CLEARANCE = 160;
 /** A spawn spot keeps this much room around thorn bushes. */
 const SPAWN_VIRUS_CLEARANCE = 220;
-/** Approximate flight distance of a freshly split half (boost only). */
-const SPLIT_REACH = RULES.splitSpeed / -Math.log(RULES.splitDecayPerSec);
 
 const emptyEvents = (): TickEvents => ({ kills: [], cellsEaten: [], pops: [], pickups: [], airdrops: [], coinRain: null, lootPicked: [], ejectsEaten: [] });
 
@@ -763,7 +762,7 @@ export class World {
   }
 
   private moveEjectsAndViruses(dt: number, dtMs: number): void {
-    const decay = boostDecayFactor(dtMs);
+    const decay = boostDecayFactor(dtMs, RULES.ejectDecayPerSec);
     for (const e of this.ejects) {
       if (e.removed || (e.vx === 0 && e.vy === 0)) continue;
       e.x += e.vx * dt;
@@ -818,19 +817,29 @@ export class World {
       const cells = p.cells;
       if (cells.length < 2) continue;
       const center = p.center();
+      // the radius of the whole coin (all its pieces as one): a piece within it of the centre is "close"
+      let area = 0;
+      for (const c of cells) if (!c.removed) area += c.r * c.r;
+      const whole = Math.sqrt(area);
       for (let i = 0; i < cells.length; i++) {
         const a = cells[i];
         if (a.removed) continue;
-        // cohesion: once mergeable, drift toward the group's centre
+        const dx = center.x - a.x;
+        const dy = center.y - a.y;
+        const d = Math.hypot(dx, dy);
         if (this.now >= a.mergeAt) {
-          const dx = center.x - a.x;
-          const dy = center.y - a.y;
-          const d = Math.hypot(dx, dy);
+          // once mergeable, drift toward the group's centre
           if (d > 1) {
-            const pull = Math.min(d, speedForRadius(a.r) * 0.35 * dt);
+            const pull = Math.min(d, speedForRadius(a.r) * RULES.mergePull * dt);
             a.x += (dx / d) * pull;
             a.y += (dy / d) * pull;
           }
+        } else if (this.now >= a.noCollideUntil && a.vx === 0 && a.vy === 0 && d > whole) {
+          // cohesion before the merge: a piece done flying that strays beyond the whole coin's radius is drawn back,
+          // so the pieces stay close to the main coin (a split's lunge itself is untouched)
+          const pull = Math.min(d - whole, speedForRadius(a.r) * RULES.splitCohesion * dt);
+          a.x += (dx / d) * pull;
+          a.y += (dy / d) * pull;
         }
         for (let j = i + 1; j < cells.length; j++) {
           const b = cells[j];

@@ -16,16 +16,15 @@ import { CountryPicker } from './CountryPicker';
 import { LinkXCard } from './LinkX';
 import { PicturePanel, PictureTile, usePicture } from './PicturePicker';
 import { wearsPicture, wornFlag } from './picture';
-import { SettingsPage } from './SettingsPage';
 import './profile.css';
 
 /** Names are at most 16 UTF-8 bytes (the server refuses longer ones). */
 const MAX_NAME_BYTES = 16;
 
 /**
- * Profile: the member card (coin, name, level and XP), the name and the coin you wear (saved on
- * the server with `PUT /api/profile` once the wallet is signed in; locally otherwise) and the
- * record; settings sit next to it.
+ * Profile: the member card (coin, name, level and XP) with "Link X" right under it, the name and
+ * the coin you wear (saved on the server with `PUT /api/profile` once the wallet is signed in;
+ * locally otherwise) and the record. Settings live in the settings sheet (the gear).
  */
 export function ProfilePage() {
   const t = useT();
@@ -35,18 +34,11 @@ export function ProfilePage() {
       <div className="pf-cols">
         <div className="pf-col">
           <MemberCard />
-          <NameAndCoin />
           <LinkXCard />
         </div>
         <div className="pf-col">
+          <NameAndCoin />
           <Record />
-          <section className="pf-box" aria-labelledby="pf-settings-h">
-            <h3 id="pf-settings-h" className="kl-h3">
-              <Icon name="settings" size={20} />
-              {t('st.title')}
-            </h3>
-            <SettingsPage />
-          </section>
         </div>
       </div>
     </div>

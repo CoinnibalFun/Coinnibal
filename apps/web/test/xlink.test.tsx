@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { xLinkIntentUrl, xLinkPostText } from '@elymum/shared';
 import { Kb } from '../src/design';
 import { translate } from '../src/i18n';
 import { labelName } from '../src/render/renderer';
@@ -72,7 +73,7 @@ describe('the Link X card', () => {
   it('get a code, post it, paste the link, verify; then the linked account and Unlink; the consent line throughout', async () => {
     useWallet.setState({ status: 'connected', address: ALICE, chainId: 46630, current: detail(fakeProvider({ accounts: [ALICE] })) });
     useUi.setState({ auth: { address: ALICE, token: 'tok', profile: null } });
-    const code = { code: 'ELYMUM-7F3K9Q', text: 'Linking my X to Elymum: ELYMUM-7F3K9Q elymum.io', intentUrl: 'https://x.com/intent/post?text=Linking%20my%20X%20to%20Elymum%3A%20ELYMUM-7F3K9Q%20elymum.io', expiresAt: Date.now() + 30 * 60_000 };
+    const code = { code: 'ELYMUM-7F3K9Q', text: xLinkPostText('ELYMUM-7F3K9Q'), intentUrl: xLinkIntentUrl('ELYMUM-7F3K9Q'), expiresAt: Date.now() + 30 * 60_000 };
     const link = { handle: 'penny_x', name: 'Penny', userId: '44', avatar: true, linkedAt: Date.now() };
     const calls: string[] = [];
     vi.stubGlobal(

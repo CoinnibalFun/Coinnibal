@@ -15,13 +15,15 @@ function Probe() {
 }
 import { useUi } from '../src/store';
 import { resetWallets, useWallet } from '../src/wallet/store';
-import { ALICE, chainStatus, detail, fakeProvider } from './evm-helpers';
+import { useChainData } from '../src/wallet/chain';
+import { ALICE, ONE, chainStatus, detail, fakeProvider } from './evm-helpers';
 
 const HASH = `0x${'ab'.repeat(32)}`;
 const TREASURY = '0x3333333333333333333333333333333333333333';
 const PRICE = 5n * 10n ** 16n;
 
-const spies = vi.hoisted(() => ({ quote: vi.fn(), create: vi.fn(), pay: vi.fn(), play: vi.fn(), get: vi.fn() }));
+const spies = vi.hoisted(() => ({ quote: vi.fn(), create: vi.fn(), pay: vi.fn(), play: vi.fn(), get: vi.fn(), buy: vi.fn() }));
+vi.mock('../src/wallet/buyTicket', () => ({ buyTicket: spies.buy }));
 vi.mock('../src/rooms/api', async (orig) => {
   const real = await orig<typeof import('../src/rooms/api')>();
   return { ...real, roomsApi: { ...real.roomsApi, quote: spies.quote, create: spies.create, get: spies.get, mine: async () => [] } };
@@ -91,8 +93,25 @@ beforeEach(() => {
     return { ok: true, hash: HASH };
   });
   spies.get.mockRejectedValue(new RoomApiError(404, 'not_found', 'No open room with that code.'));
+  spies.buy.mockImplementation(async (_p: unknown, onPhase: (s: string | null, p: string, h?: string) => void) => {
+    onPhase('approve', 'signing');
+    onPhase('join', 'signing');
+    onPhase('join', 'confirming', HASH);
+    return { ok: true, hash: HASH };
+  });
   resetWallets();
-  useUi.setState({ chain: chainStatus(), auth: null, paidSeat: null, lobbyIntent: null });
+  useUi.setState({ chain: chainStatus(), auth: null, paidSeat: null, lobbyIntent: null, blockedArenas: [] });
+  // the creator's wallet on chain: the token set, arena 2 at 10,000 tokens, 50,000 in the wallet, no allowance yet
+  useChainData.setState({
+    fake: false,
+    config: { token: '0x0000000000000000000000000000000000007e57', burnBps: 1500, vaultBps: 500, holderNft: null, holderBurnBps: 1500, holderVaultBps: 500, paused: false } as never,
+    arenas: [{ id: 2, entryFee: 10_000n * ONE, enabled: true } as never],
+    sessions: {},
+    pending: [],
+    tokenBalance: 50_000n * ONE,
+    allowance: 0n,
+    holder: false,
+  });
   savePendingPayment(null);
 });
 afterEach(() => savePendingPayment(null));
@@ -241,7 +260,19 @@ describe('the room creator', () => {
     expect((screen.getByTestId('cr-continue') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('a ticket room: picks an arena tier (holders-only tiers for holders only), opens, and its entry is the arena ticket', async () => {
+  /** Sets up a ticket room on arena 2 in the sheet and presses Continue. */
+  const ticketRoom = async () => {
+    spies.create.mockResolvedValue({ room: roomView({ kind: 'paid', arenaId: 2, endsAt: Date.now() + 20 * 60_000 }), invite: 'http://localhost/play?room=AB2CD' });
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Ticket room' }));
+    fireEvent.click(screen.getByRole('group', { name: 'Ticket price' }).querySelector('[data-value="2"]')!);
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Whale Club' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+  };
+  const seated = () => act(async () => new Promise((r) => setTimeout(r, 1000)));
+
+  it('a ticket room: picks an arena tier (holders-only tiers for holders only); one flow takes the fee, then the creator\'s own ticket, and seats the creator', async () => {
     signIn();
     spies.create.mockResolvedValue({ room: roomView({ kind: 'paid', arenaId: 2, endsAt: Date.now() + 20 * 60_000 }), invite: 'http://localhost/play?room=AB2CD' });
     await open();
@@ -254,21 +285,70 @@ describe('the room creator', () => {
     expect(tiers.querySelectorAll('button')).toHaveLength(2); // not the holders-only tier
     expect(tiers.querySelector('[aria-pressed="true"]')?.getAttribute('data-value')).toBe('1');
     fireEvent.click(tiers.querySelector('[data-value="2"]')!);
-    expect(screen.getByTestId('cr-kind-hint').textContent).toMatch(/Lethe Shore ticket/);
+    expect(screen.getByTestId('cr-kind-hint').textContent).toMatch(/\$3 Room ticket/);
+    expect(screen.getByTestId('cr-kind-hint').textContent).toMatch(/starts at once/);
     fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Whale Club' } });
     fireEvent.click(screen.getByTestId('cr-continue'));
     await settle();
+    // the receipt names both: the room fee, then the creator's own ticket
     const payment = screen.getByTestId('cr-payment');
-    expect(payment.textContent).toMatch(/ArenaLethe Shore/);
+    expect(payment.textContent).toMatch(/Arena\$3 Room/);
     expect(payment.textContent).toMatch(/never holds anyone's tokens/);
+    expect(payment.textContent).toMatch(/Your ticket10,000 \$ELYMUM/);
+    expect(screen.getByTestId('cr-pay').textContent).toMatch(/then my ticket/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
+    expect(spies.pay).toHaveBeenCalledTimes(1);
     expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ kind: 'paid', arenaId: 2, bots: 0 }), HASH);
-    expect(screen.getByTestId('cr-done').textContent).toMatch(/buys a Lethe Shore ticket/);
-    fireEvent.click(screen.getByTestId('cr-enter'));
-    expect(spies.play).not.toHaveBeenCalled();
+    // straight on: the creator's ticket of arena 2, the price on chain, approve then join (no second trip)
+    expect(spies.buy).toHaveBeenCalledTimes(1);
+    expect(spies.buy.mock.calls[0][0]).toMatchObject({ owner: ALICE, arenaId: 2, fake: false, review: { fee: 10_000n * ONE, steps: ['approve', 'join'], rates: { burnBps: 1500, vaultBps: 500 } } });
     expect(useUi.getState().paidSeat).toMatchObject({ code: 'AB2CD', arenaId: 2, name: 'Friday Pond' });
-    expect(useUi.getState().lobbyIntent).toMatchObject({ ticket: 'arena:2', open: true });
+    expect(screen.getByTestId('cr-ticket').textContent).toMatch(/AB2CD/);
+    await seated();
+    // seated in the room by its code (the join waits for the ticket to be seen by the server)
+    expect(spies.play).toHaveBeenCalledWith('arena:2:AB2CD', { awaitTicket: true });
+    expect(useUi.getState().lobbyIntent).toBeNull();
+  });
+
+  it('a ticket room: a rejected ticket keeps the room open; the creator retries in the same sheet (the fee is never paid again)', async () => {
+    signIn();
+    spies.buy.mockResolvedValueOnce({ ok: false, text: 'You rejected the request in your wallet.' });
+    await ticketRoom();
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(spies.create).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('cr-ticket-error').textContent).toMatch(/The room is open, but your ticket did not go through: You rejected/);
+    expect(spies.play).not.toHaveBeenCalled();
+    // the room's seat is remembered for the lobby too ("Later")
+    expect(useUi.getState().paidSeat).toMatchObject({ code: 'AB2CD', arenaId: 2 });
+    fireEvent.click(screen.getByTestId('cr-ticket-retry'));
+    await settle();
+    expect(spies.buy).toHaveBeenCalledTimes(2);
+    await seated();
+    expect(spies.pay).toHaveBeenCalledTimes(1);
+    expect(spies.create).toHaveBeenCalledTimes(1);
+    expect(spies.play).toHaveBeenCalledWith('arena:2:AB2CD', { awaitTicket: true });
+  });
+
+  it('a ticket room: too few tokens for the creator\'s own ticket is said before any fee is paid', async () => {
+    signIn();
+    useChainData.setState({ tokenBalance: 9_000n * ONE });
+    await ticketRoom();
+    expect(screen.queryByTestId('cr-payment')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toMatch(/You need 10,000 \$ELYMUM for your own ticket/);
+    expect(spies.pay).not.toHaveBeenCalled();
+  });
+
+  it('a ticket room: an open ticket of that arena is resumed in the room (no new ticket bought)', async () => {
+    signIn();
+    useChainData.setState({ sessions: { 2: { id: 7n, entryFee: 10_000n * ONE, openedAt: Math.floor(Date.now() / 1000), finalized: false, owed: 0n } as never } });
+    await ticketRoom();
+    expect(screen.getByTestId('cr-payment').textContent).toMatch(/Your open ticket/);
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(spies.buy).not.toHaveBeenCalled();
+    expect(spies.play).toHaveBeenCalledWith('arena:2:AB2CD', {});
   });
 
   it('a holder sees the holders-only tier; ticket rooms closed are said', async () => {
@@ -314,7 +394,7 @@ describe('room helpers', () => {
   });
 
   it('the admin card lists the kind, tier and fee of each room, and the fee by size', () => {
-    expect(roomKindText({ kind: 'paid', arenaId: 2 })).toBe('paid · Lethe Shore #2');
+    expect(roomKindText({ kind: 'paid', arenaId: 2 })).toBe('paid · $3 Room #2');
     expect(roomKindText({ kind: 'free' })).toBe('free');
     expect(roomKindText({})).toBe('free');
     expect(roomKindText({ kind: 'free', practice: true })).toBe('practice with bots');
