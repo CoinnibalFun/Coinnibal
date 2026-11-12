@@ -126,7 +126,7 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   } catch {
     return false;
   }
-  // browsers ask for /favicon.ico on their own: the site ships favicon-32.png (vercel.json's rewrite, served here)
+  // browsers ask for /favicon.ico on their own: the site ships favicon-32.png (Vercel's old rewrite, now here)
   if (rel === '/favicon.ico' && !existsSync(join(resolve(root), 'favicon.ico'))) rel = '/favicon-32.png';
   const base = resolve(root);
   let file = normalize(join(base, rel));
@@ -141,7 +141,7 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   res.writeHead(200, {
     'Content-Type': MIME[ext] ?? 'application/octet-stream',
     'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
-    // the web app is never framed (clickjacking of wallet actions); scripts from this origin only (vercel.json's rule,
+    // the web app is never framed (clickjacking of wallet actions); scripts from this origin only (Vercel's old rule,
     // plus the sources the app needs: its own API and sockets, wallet RPCs over https, inline styles of the shell)
     'X-Frame-Options': 'DENY',
     'Content-Security-Policy': WEB_CSP,
