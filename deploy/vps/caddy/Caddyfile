@@ -24,7 +24,9 @@
 	}
 }
 
-{$GAME_DOMAIN} {
+# The game server's own domain and the site's (SITE_DOMAIN, default coinnibal.fun): the app serves the web client
+# itself (WEB_DIST), so the site and the game share one origin. SITE_DOMAIN must differ from GAME_DOMAIN.
+{$GAME_DOMAIN}, {$SITE_DOMAIN} {
 	encode zstd gzip
 
 	# the largest real body is a 64 KiB profile picture
@@ -45,4 +47,9 @@
 		# without it Caddy closes every game socket at once on a reload (the default delay is 0)
 		stream_close_delay 10m
 	}
+}
+
+# www.<site> -> <site>
+www.{$SITE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
 }

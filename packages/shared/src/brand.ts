@@ -22,10 +22,11 @@ export const SITE_HOST_DEFAULT = 'elymum.io';
 export const SITE_URL_DEFAULT = `https://${SITE_HOST_DEFAULT}`;
 
 /**
- * The brand's own site origins (coinnibal.fun, bought for the new name). A server whose `CORS_ORIGIN` is a list
- * always accepts these too, so the site works there before the server's `.env` is edited.
+ * The brand's own site origins: coinnibal.fun (the site) and elymum.io (the old name, still serving players while
+ * the move lasts). A server whose `CORS_ORIGIN` is a list always accepts these too, and a sign-in from one of them
+ * names that site, so both work whatever the server's `.env` says.
  */
-export const BRAND_SITE_ORIGINS: readonly string[] = ['https://coinnibal.fun', 'https://www.coinnibal.fun'];
+export const BRAND_SITE_ORIGINS: readonly string[] = ['https://coinnibal.fun', 'https://www.coinnibal.fun', 'https://elymum.io'];
 
 /** A `CORS_ORIGIN` value with the brand's site origins added (`*` and an unset value stay as they are). */
 export function withBrandOrigins(corsOrigin: string | undefined): string {
