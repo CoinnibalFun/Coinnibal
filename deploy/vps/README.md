@@ -1,8 +1,10 @@
 # Coinnibal game server on a VPS
 
-The website is on Vercel at **https://elymum.io**; the game server runs on a VPS at **https://game.elymum.io**,
-and the website talks to it directly (every player reaches the server with their own IP address, so the per-IP
-limits work). Everything is one command, and it looks after itself afterwards:
+The website and the game server are one: the VPS serves the site at **https://coinnibal.fun** (`SITE_DOMAIN`,
+www redirects to it) and the game on the same origin, plus the game server's own domain (`GAME_DOMAIN`). There is
+no Vercel: the app serves the web client it was built with (`WEB_DIST=/app/web`, with a strict CSP), and
+`PUBLIC_URL` defaults to `https://<SITE_DOMAIN>` (`ELYMUM_PUBLIC_URL` in `.env` overrides it). Every player
+reaches the server with their own IP address, so the per-IP limits work. Everything is one command, and it looks after itself afterwards:
 
 | What | How |
 |---|---|
@@ -36,6 +38,9 @@ Add your SSH public key when you order (`ssh-keygen -t ed25519` if you have none
 Where the DNS of `elymum.io` is managed, add an `A` record `game` → the VPS IPv4 address, **DNS only** (no CDN proxy
 until "Cloudflare in front" below). `nslookup game.elymum.io` must answer the VPS address before step 3: Caddy needs
 it for the certificate.
+
+The site (`SITE_DOMAIN`, default `coinnibal.fun`, DNS on Cloudflare): `A` records for `@` and `www` → the same VPS
+address, **DNS only**, so Caddy can get their certificates too.
 
 ## 3. Install
 
