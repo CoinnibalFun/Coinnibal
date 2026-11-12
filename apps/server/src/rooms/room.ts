@@ -17,6 +17,7 @@ import {
   boostDurationMs,
   isBoostKind,
   mapSideFor,
+  ownRoundAt,
   sanitizeChat,
   testArenasAllowedOn,
   viewSize,
@@ -25,6 +26,8 @@ import {
   xpForGame,
   type ClientInput,
   type MapScaleSettings,
+  type OwnRound,
+  type RoundWindow,
   type WorldShape,
   type CustomRoomConfig,
   type CustomRoomSummary,
@@ -161,6 +164,12 @@ export interface RoomOptions {
   test?: { chainId: number };
   /** Paid rooms: the arena whose tickets play here and its entry fee (ledger units). */
   stake?: { arenaId: number; buyIn: number };
+  /**
+   * A paid custom room's own clock (`OwnRound`): ONE game from the room's opening to its end, its only bell, where
+   * every ticket in it is settled. No tie to the official arenas' 5-minute rounds (no bell every 5 minutes, no
+   * break, no re-pay). Absent: the arenas' shared round clock. An early close moves `endsAt` forward (`closingSoon`).
+   */
+  ownRound?: OwnRound;
   seed?: number;
   /** The world size and population (default `WORLD_PRESETS[mode]`; custom rooms bring their own). */
   world?: WorldShape;
@@ -251,6 +260,8 @@ export class Room implements RoomHandle {
   readonly botSpills = { n: 0, value: 0 };
   /** A custom room's coming end (`closingSoon`): told to everyone who joins or watches meanwhile. */
   private closing: { endsAt: number; message: string } | null = null;
+  /** A room on its own clock (`RoomOptions.ownRound`) rang its one bell. */
+  private ownBellRung = false;
 
   constructor(
     readonly opts: RoomOptions,
@@ -283,11 +294,21 @@ export class Room implements RoomHandle {
       // restored loot is value a ticket of this round may pick up: it counts in the round's pool
       this.roundPool = loot.reduce((s, l) => s + l.value, 0);
     }
+    if (opts.ownRound && (!this.ledger || !opts.code || !opts.custom)) throw new Error(`room ${opts.id}: an own round clock is for paid custom rooms only`);
     if (this.ledger) {
-      const r = this.clock.window();
+      const r = this.window();
       this.roundN = r.n;
       this.roundEndsAt = r.endsAt;
     }
+  }
+
+  /**
+   * The round window this room plays: its own game (a paid custom room, `ownRound`) or the arenas' shared round at
+   * `now`.
+   */
+  private window(now = this.now()): RoundWindow {
+    const own = this.opts.ownRound;
+    return own ? ownRoundAt(own, this.clock.cfg.closeMs) : this.clock.window(now);
   }
 
   /** The wall clock rounds run on (Unix ms). */
@@ -298,13 +319,14 @@ export class Room implements RoomHandle {
   /** Arena rooms: the round in play now (undefined elsewhere). */
   round(now = this.now()): RoundInfo | undefined {
     if (!this.ledger) return undefined;
-    const r = this.clock.window(now);
+    const r = this.window(now);
+    if (this.opts.ownRound) return { n: r.n, endsAt: r.endsAt, joinsCloseAt: r.joinsCloseAt, startsAt: r.startsAt };
     return { n: r.n, endsAt: r.endsAt, joinsCloseAt: r.joinsCloseAt, ...(r.opensAt > r.startsAt ? { opensAt: r.opensAt } : {}) };
   }
 
-  /** Arena rooms: the break after a bell (joins not open yet). */
+  /** Arena rooms: the break after a bell (joins not open yet). A room on its own clock has none. */
   inBreak(now = this.now()): boolean {
-    return !!this.ledger && now < this.clock.window(now).opensAt;
+    return !!this.ledger && now < this.window(now).opensAt;
   }
 
   /**
@@ -313,7 +335,20 @@ export class Room implements RoomHandle {
    * joining right as a round opens never lands in the round that is ending.
    */
   syncRound(now = this.now()): void {
-    if (!this.ledger || now < this.roundEndsAt) return;
+    if (!this.ledger) return;
+    const own = this.opts.ownRound;
+    if (own) {
+      // its own game: one bell at the room's end. Anything of value still here after it (a join that raced the bell)
+      // is settled at the next tick the same way: nothing waits for a next round, there is none
+      if (now < own.endsAt) return;
+      if (this.ownBellRung && this.ledger.size === 0 && this.world.loot().length === 0) return;
+      this.ownBellRung = true;
+      this.roundEndsAt = own.endsAt;
+      this.endRound(this.roundN);
+      this.roundPool = 0;
+      return;
+    }
+    if (now < this.roundEndsAt) return;
     const ended = this.roundN;
     const r = this.clock.window(now);
     this.roundN = r.n;
@@ -548,6 +583,9 @@ export class Room implements RoomHandle {
 
   /** A custom room closes at `endsAt` (server clock): everyone in it (and who comes meanwhile) gets the countdown. */
   closingSoon(endsAt: number, message: string): void {
+    // a room on its own clock closed early: its one bell (every ticket settled) moves to the new end
+    const own = this.opts.ownRound;
+    if (own && !this.ownBellRung && endsAt < own.endsAt) own.endsAt = Math.max(own.startsAt, endsAt);
     this.closing = { endsAt, message };
     this.broadcast({ t: 'closing', endsAt, message });
   }

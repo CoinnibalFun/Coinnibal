@@ -1,7 +1,9 @@
 import { TICK_MS, decodeSnapshot, type ServerMessage } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
 import { Conn } from '../src/net/conn';
+import { World } from '../src/game/world';
 import { Room } from '../src/rooms/room';
+import { ViewState } from '../src/rooms/visibility';
 import { ArenaChain, freeCustom, roomDeps } from './helpers';
 
 /**
@@ -73,5 +75,27 @@ describe('client mirror vs server view', () => {
     // the camera moved on and things were eaten meanwhile: still exact
     tick(rooms, 300);
     check(b);
+  });
+});
+
+describe('player infos follow the view', () => {
+  it('a coin that left the view and comes back brings its info again (the client let go of it: no bare coin without a name tag)', () => {
+    const world = new World({ width: 6000, height: 6000, foodTarget: 0, virusTarget: 0, maxPowerUps: 0, powerUps: false, coinRain: false, seed: 3 });
+    const big = world.addPlayer({ spawnShield: false, name: 'Bluey', skin: 3, x: 1000, y: 1000, mass: 4000, country: 'TR' });
+    const view = new ViewState();
+    const at = (x: number, y: number) => ({ x0: x - 800, y0: y - 500, x1: x + 800, y1: y + 500 });
+    const v = { x: 0, y: 0, h: 1000 };
+    const first = view.build(world, at(1000, 1000), v)!;
+    expect(first.players.map((p) => p.name)).toEqual(['Bluey']);
+    // still in view: sent once only
+    world.tick(TICK_MS);
+    expect(view.build(world, at(1000, 1000), v)?.players ?? []).toEqual([]);
+    // the view moves away: the coin is removed from the mirror (and the client prunes its player)
+    const away = view.build(world, at(5000, 5000), v)!;
+    expect(away.removals.map((r) => r.id)).toContain(big.cells[0].id);
+    // back in view: the coin AND its player info (name, flag) come again
+    const back = view.build(world, at(1000, 1000), v)!;
+    expect(back.upserts.some((u) => u.id === big.cells[0].id)).toBe(true);
+    expect(back.players).toEqual([expect.objectContaining({ id: big.id, name: 'Bluey', skin: 3, country: 'TR' })]);
   });
 });

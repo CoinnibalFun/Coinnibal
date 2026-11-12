@@ -232,6 +232,12 @@ export interface RoundInfo {
    * joins are refused (`round_closed`) before it. Old servers leave it out (no break).
    */
   opensAt?: number;
+  /**
+   * A custom ticket room's own game (`ownRoundAt`): it started here and runs, as ONE game, until the room's end at
+   * `endsAt` (no 5-minute bell, no break, no next round; joins close `endsAt - joinsCloseAt` before the end). Absent
+   * on the official arenas' shared rounds.
+   */
+  startsAt?: number;
 }
 
 /**

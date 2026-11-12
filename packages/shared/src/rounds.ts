@@ -33,6 +33,25 @@ export function roundAt(nowMs: number, playMs: number = RULES.roundMs, closeMs: 
   return { n, startsAt, opensAt, endsAt, joinsCloseAt };
 }
 
+/**
+ * A custom ticket room's own clock: ONE game from `startsAt` (the room opened) to `endsAt` (the room's end, its
+ * only bell). It has no tie to the official arenas' rounds: no 5-minute bell, no break, no next round.
+ */
+export interface OwnRound {
+  startsAt: number;
+  endsAt: number;
+}
+
+/**
+ * The window of a room's own game (`OwnRound`) in the arenas' terms: open from `startsAt`, joins closed in the last
+ * `closeMs` before the end (the arenas' last-minute close, mirrored on the room's end; at most the whole game), the
+ * bell at `endsAt`. `n` is the second the room opened (a stable id of that game; rooms have their own ids anyway).
+ */
+export function ownRoundAt(o: OwnRound, closeMs: number = RULES.roundJoinCloseMs): RoundWindow {
+  const len = Math.max(0, o.endsAt - o.startsAt);
+  return { n: Math.floor(o.startsAt / 1000), startsAt: o.startsAt, opensAt: o.startsAt, endsAt: o.endsAt, joinsCloseAt: o.endsAt - Math.min(Math.max(0, closeMs), len) };
+}
+
 /** The length of one round cycle on the wall clock: the full play plus the break after its bell. */
 export const roundCycleMs = (playMs: number = RULES.roundMs, breakMs: number = RULES.roundBreakMs): number => playMs + Math.max(0, breakMs);
 

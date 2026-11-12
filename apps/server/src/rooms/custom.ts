@@ -67,8 +67,8 @@ export interface CustomRecord {
   /** Paid rooms: the arena's ticket price when the room was made (ledger units; the instance's `stake.buyIn`). */
   buyIn?: number;
   /**
-   * Paid rooms: time is up or it was closed early. No new seat; the room closes once its bell
-   * settled every ticket in it (`RoomManager.closePaidRoom`), then this record goes.
+   * Paid rooms: time is up or it was closed early. No new seat; the room closes once its own bell (at `endsAt`, the
+   * room's end) settled every ticket in it (`RoomManager.closePaidRoom`), then this record goes.
    */
   closing?: boolean;
   /** Closed early by its creator or an admin: the reason everyone sees in the countdown and on the final board. */
@@ -79,7 +79,7 @@ export interface CustomRecord {
 
 /** What everyone in a room reads when its time is up (the countdown, then the final board). */
 const TIME_UP = 'Time is up: this room has closed. Thanks for playing!';
-const TIME_UP_PAID = 'Time is up: this room closes at the bell, where every ticket is settled. Thanks for playing!';
+const TIME_UP_PAID = 'Time is up: every ticket in this room is settled now, at its end. Thanks for playing!';
 
 interface RoomsFile {
   v: 1;
@@ -232,7 +232,8 @@ export class CustomRoomService implements CustomRoomHooks {
   private readonly log: (m: string) => void;
 
   constructor(private readonly d: CustomRoomDeps) {
-    this.now = d.now ?? Date.now;
+    // the rooms' own clock by default: a paid room's own game (`ownRound`) is timed on the clock its room plays by
+    this.now = d.now ?? (() => d.rooms.now());
     this.log = d.log ?? (() => {});
     this.cur = { ...CUSTOM_SETTINGS_DEFAULT };
     this.loadSettings();
@@ -345,8 +346,9 @@ export class CustomRoomService implements CustomRoomHooks {
       custom: this.summary(r),
     };
     if (r.config.kind === 'paid' && r.config.arenaId !== null) {
-      // an invite-only instance of the arena: its tickets, its vault, its bell
-      return this.d.rooms.createPaidRoom(r.code, { ...opts, stake: { arenaId: r.config.arenaId, buyIn: r.buyIn ?? 0 } });
+      // an invite-only instance of the arena (its tickets, its vault) on its OWN clock: one game from the room's
+      // opening to its end, where every ticket is settled; never the arenas' 5-minute bell
+      return this.d.rooms.createPaidRoom(r.code, { ...opts, stake: { arenaId: r.config.arenaId, buyIn: r.buyIn ?? 0 }, ownRound: { startsAt: r.createdAt, endsAt: r.endsAt } });
     }
     return this.d.rooms.createCustomRoom(r.code, { ...opts, bots: customBots(r.config) });
   }
@@ -581,12 +583,12 @@ export class CustomRoomService implements CustomRoomHooks {
   }
 
   /**
-   * When a room made at `now` closes. A paid room ends on an arena bell (at or after its duration):
-   * its tickets are settled there, so it never closes in the middle of a round.
+   * When a room made at `now` closes: exactly its duration later, free or paid. A paid room runs on its own clock (one
+   * game, `RoomOptions.ownRound`): its one bell is this end, where every ticket in it is settled. Nothing ties it to
+   * the arenas' rounds.
    */
   private endsAt(c: CustomRoomConfig, now: number): number {
-    const end = now + c.durationMin * 60_000;
-    return c.kind === 'paid' ? this.d.rooms.roundWindow(end - 1).endsAt : end;
+    return now + c.durationMin * 60_000;
   }
 
   /** A paid room `code` takes new seats now (it exists, has time left and is not closing). */
@@ -690,8 +692,9 @@ export class CustomRoomService implements CustomRoomHooks {
   /* ------------------------------ close / expire ------------------------------ */
 
   /**
-   * Closes a room early: its creator (`by` = creator wallet) or an admin. Never abruptly: a free room ends
-   * `ROOM_CLOSE_COUNTDOWN_MS` from now (the countdown, then the final board); a paid room at its next bell.
+   * Closes a room early: its creator (`by` = creator wallet) or an admin. Never abruptly: the room ends
+   * `ROOM_CLOSE_COUNTDOWN_MS` from now (the countdown, then the final board). A paid room takes no new seat from now
+   * and its own bell moves to that end: every ticket in it is settled there (`Room.closingSoon`).
    */
   close(code: string, by: { wallet: string; admin: boolean }): CustomRoomView {
     const r = this.records.get(code);
@@ -701,17 +704,17 @@ export class CustomRoomService implements CustomRoomHooks {
     const message = creator ? 'The room creator closed this room.' : 'An admin closed this room.';
     const now = this.now();
     if (r.config.kind === 'paid') {
-      // tickets are never evicted: no new seat now, the room closes once its bell settled them
+      // tickets are never evicted: no new seat now, its own bell moves to the countdown's end and settles them all
       if (!r.closing) {
         r.closing = true;
-        r.closeMessage = `${message} It closes at the bell: every ticket is settled there.`;
-        r.endsAt = Math.min(r.endsAt, this.d.rooms.roundWindow(now).endsAt);
+        r.closeMessage = `${message} Every ticket is settled at its end.`;
+        r.endsAt = Math.max(now, Math.min(r.endsAt, now + ROOM_CLOSE_COUNTDOWN_MS));
         this.saveRooms();
         this.d.rooms.get(`priv-${r.code}`)?.announce(r.closeMessage);
-      }
-      this.finishPaid(r, message);
-      this.log(`custom rooms: ${code} closing early (at its bell) by ${by.wallet}${creator ? ' (creator)' : ' (admin)'}`);
-      return this.view(r);
+        this.sweep(now);
+      } else this.finishPaid(r, message);
+      this.log(`custom rooms: ${code} closing early (in ${Math.round((r.endsAt - now) / 1000)} s) by ${by.wallet}${creator ? ' (creator)' : ' (admin)'}`);
+      return this.records.has(code) ? this.view(r) : { ...this.view(r), closing: true };
     }
     if (!r.closeMessage) {
       r.closeMessage = message;
@@ -766,7 +769,7 @@ export class CustomRoomService implements CustomRoomHooks {
         if (!r.closing) {
           r.closing = true;
           this.saveRooms();
-          this.log(`custom rooms: ${r.code} expired (closes once its bell settled every ticket)`);
+          this.log(`custom rooms: ${r.code} expired (its own bell settles every ticket, then it closes)`);
         }
         this.finishPaid(r, r.closeMessage ?? TIME_UP);
         continue;
@@ -778,7 +781,7 @@ export class CustomRoomService implements CustomRoomHooks {
       }
       if (!r.warned && r.endsAt - now <= CUSTOM_WARN_MS) {
         r.warned = true;
-        this.d.rooms.get(`priv-${r.code}`)?.announce(r.config.kind === 'paid' ? '1 minute left: this room closes at the bell.' : '1 minute left in this room!');
+        this.d.rooms.get(`priv-${r.code}`)?.announce(r.config.kind === 'paid' ? '1 minute left: joins are closed, every ticket is settled when the room ends.' : '1 minute left in this room!');
         this.bestDirty = true;
       }
     }
