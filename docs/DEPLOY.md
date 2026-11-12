@@ -91,8 +91,8 @@ same (`chain.serverKey`). `GET /api/health` answers 503 with its reasons when so
 the break after an arena bell (no live stake then).
 
 **Domain.** The site is wherever `PUBLIC_URL` says (`https://elymum.io`; the web build's `VITE_PUBLIC_URL`). Nothing in
-the code or the art names a domain; moving to coinnibal.io is configuration only (OPERATIONS.md, "The name: Coinnibal,
-and moving to coinnibal.io"). Players sign in again on a new domain (SIWE binds the domain). NFT metadata URLs follow the NFT's base URI:
+the code or the art names a domain; moving to coinnibal.fun is configuration only (OPERATIONS.md, "The name: Coinnibal,
+and moving to coinnibal.fun"). Players sign in again on a new domain (SIWE binds the domain). NFT metadata URLs follow the NFT's base URI:
 update it with `setBaseURI` (Mint tab) unless you froze it.
 
 **Without Docker.** `pnpm install && pnpm -F @elymum/web build && pnpm -F @elymum/server build`, then run

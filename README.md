@@ -7,7 +7,7 @@ whatever you swallowed is paid out on chain.
 
 The game used to be called Elymum. The code keeps that as its internal name (`@elymum/*` packages,
 `ElymumArena` / `ElymumNFT`, env vars, storage keys); everything a player sees says Coinnibal. The domain and the X
-handle are configuration: see docs/OPERATIONS.md, "The name: Coinnibal, and moving to coinnibal.io".
+handle are configuration: see docs/OPERATIONS.md, "The name: Coinnibal, and moving to coinnibal.fun".
 
 The product flow is WL → Mint → Play: people apply for the whitelist, mint a Coinnibal NFT for
 $1 in ETH, and the game opens for holders. The money rules live in two Solidity contracts; the

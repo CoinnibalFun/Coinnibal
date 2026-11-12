@@ -306,7 +306,7 @@ transfer to it fails (a token that refuses that address), the whole batch revert
 `!!! chain: settle batches revert on the fee transfer`: change the fee wallet and the pending settlements go out
 by themselves.
 
-## The name: Coinnibal, and moving to coinnibal.io
+## The name: Coinnibal, and moving to coinnibal.fun
 
 The product is **Coinnibal** (a coin + a cannibal: coins that eat coins), its token **$NIBAL**. "Elymum" is the old
 name and stays as the **internal** name on purpose: the packages (`@elymum/*`), the contract names (`ElymumArena`,
@@ -334,22 +334,22 @@ Transitions handled in code: Link X codes are now `NIBAL-XXXXXX` and a post with
 same code still verifies (codes live 30 minutes); the sign-in message says "Sign in to Coinnibal." and a page or server
 from before the rename that uses the old line still signs in (the web and the server deploy apart).
 
-**Moving to coinnibal.io** (when the domain is bought). Keep elymum.io working throughout: the NFT's on-chain base URI
+**Moving to coinnibal.fun** (when the domain is bought). Keep elymum.io working throughout: the NFT's on-chain base URI
 and links already posted on X point at it.
 
-1. DNS: point `coinnibal.io` at Vercel (Project → Settings → Domains → add `coinnibal.io` and `www.coinnibal.io`).
-   Optionally add `game.coinnibal.io` → the VPS (an `A` record, as for `game.elymum.io` in deploy/vps/README.md).
-2. Vercel → Environment Variables: `VITE_PUBLIC_URL=https://coinnibal.io` (and `VITE_SERVER_URL=https://game.coinnibal.io`
+1. DNS: point `coinnibal.fun` at Vercel (Project → Settings → Domains → add `coinnibal.fun` and `www.coinnibal.fun`).
+   Optionally add `game.coinnibal.fun` → the VPS (an `A` record, as for `game.elymum.io` in deploy/vps/README.md).
+2. Vercel → Environment Variables: `VITE_PUBLIC_URL=https://coinnibal.fun` (and `VITE_SERVER_URL=https://game.coinnibal.fun`
    if you moved the game domain), then redeploy. index.html, robots.txt and sitemap.xml follow.
-3. VPS (`/opt/elymum/.env`): `PUBLIC_URL=https://coinnibal.io` and `CORS_ORIGIN=https://coinnibal.io,https://elymum.io`
+3. VPS (`/opt/elymum/.env`): `PUBLIC_URL=https://coinnibal.fun` and `CORS_ORIGIN=https://coinnibal.fun,https://elymum.io`
    (both while elymum.io still serves pages), then `elymum-compose up -d app`. With a new game domain also set
-   `GAME_DOMAIN=game.coinnibal.io` (Caddy gets its certificate) and update the two `game.elymum.io` rewrites in
+   `GAME_DOMAIN=game.coinnibal.fun` (Caddy gets its certificate) and update the two `game.elymum.io` rewrites in
    `vercel.json`.
-4. Make elymum.io redirect to coinnibal.io in Vercel (Domains → elymum.io → Redirect to coinnibal.io, 308) once step 3
+4. Make elymum.io redirect to coinnibal.fun in Vercel (Domains → elymum.io → Redirect to coinnibal.fun, 308) once step 3
    is live. Players sign in again once (SIWE binds the domain).
 5. NFT links: the metadata base URI is on chain. Either keep `elymum.io/api/nft/*` answering (the redirect keeps it
    working), or set the new one in Admin → Mint (`setBaseURI`) unless you froze it.
-6. Art: `BRAND_SITE=coinnibal.io node brand/generate.mjs x2-banner` for the X banner's "Testnet open" sticker.
+6. Art: `BRAND_SITE=coinnibal.fun node brand/generate.mjs x2-banner` for the X banner's "Testnet open" sticker.
    (No other image names a domain; share cards name `PUBLIC_URL`'s host by themselves.)
 
 **Moving the X handle to @coinnibal** (once the account is live).

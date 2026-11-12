@@ -55,7 +55,7 @@ describe('Link X helpers', () => {
     expect(text).toBe('Joining the coin party \u{1FA99} my code: NIBAL-7F3K9Q elymum.io');
     expect(text).toContain('NIBAL-7F3K9Q');
     expect(text).toContain('elymum.io');
-    expect(xLinkPostText('NIBAL-7F3K9Q', 'coinnibal.io').endsWith('coinnibal.io')).toBe(true);
+    expect(xLinkPostText('NIBAL-7F3K9Q', 'coinnibal.fun').endsWith('coinnibal.fun')).toBe(true);
     expect(xLinkPostText('NIBAL-7F3K9Q', 'localhost:5173').endsWith('localhost:5173')).toBe(true);
     expect(text.length).toBeLessThan(80);
   });
