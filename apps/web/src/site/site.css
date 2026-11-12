@@ -96,7 +96,8 @@ body {
 .st-head__home {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  /* the coin's bite faces the word: a tight gap keeps the pair reading as one logo */
+  gap: 4px;
   min-height: 44px;
   margin-right: auto;
   text-decoration: none;
@@ -104,6 +105,10 @@ body {
 }
 .st-head__coin {
   flex: none;
+  width: 44px;
+  height: 44px;
+  /* the letters sit a little above their box's middle: lift the coin to share their centre line */
+  margin-top: -6px;
   transition: transform var(--dur-state) var(--ease-spring);
 }
 .st-head__home:hover .st-head__coin {
@@ -116,9 +121,10 @@ body {
   75% { transform: translateY(0) rotateY(360deg) scale(1.06, 0.92); }
   100% { transform: translateY(0) rotateY(360deg) scale(1); }
 }
+/* the word's letters fill about 3/4 of its box: at the coin's height they stand as tall as the coin's face */
 .st-head .st-mark__art {
   width: auto;
-  height: 30px;
+  height: 40px;
 }
 .st-nav {
   display: flex;
@@ -287,11 +293,12 @@ body {
     gap: 8px;
   }
   .st-head .st-mark__art {
-    height: 22px;
+    height: 32px;
   }
   .st-head__coin {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
+    margin-top: -5px;
   }
   .st-connect {
     padding: 0 12px;
