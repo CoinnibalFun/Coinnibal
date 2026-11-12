@@ -40,7 +40,7 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 | Start mass | 20 |
 | Eating | needs at least 1.25 × the victim's mass and enough overlap (the victim must be mostly covered) |
 | Speed | `2185 · r^-0.44` up to radius 100 (mass 100), then a gentler `r^-0.3` falloff, so bigger coins are slower (about 410 u/s at start size) |
-| Split (`Space`) | needs at least 35 mass; up to 16 cells; launch speed 1440 (about 450 units of flight); halves merge back after 12 s + 15 ms per unit of mass |
+| Split (`Space`) | needs at least 35 mass; up to 16 cells; launch speed 1440 (about 325 units of flight); once landed, pieces are drawn back toward the coin's centre (cohesion), so they stay close; halves merge back after 12 s + 15 ms per unit of mass |
 | Eject mass (`E`) | needs at least 35 mass; costs 18 and throws a 14-mass blob at 1150 u/s |
 | Viruses (spiky cacti) | mass 100. A coin at least 1.33 × that size pops into as many as 15 pieces. Feeding a virus 198 mass makes it shoot a new one. |
 | Decay | above 150 mass you lose 0.15 %/s, plus an extra term that grows with total mass, so giants melt faster |
@@ -168,14 +168,15 @@ another opens when they keep filling up, a quiet one drains (no new seats) and c
 Custom rooms: a player pays a small ETH fee (default 0.0005 ETH, ECONOMY.md) for a room with their own rules and capacity (2 to 100; the fee
 grows 50 % of the base for every started 10 players above 10). A **free** room has no stakes and may add practice bots. A **ticket
 room** is an invite-only instance of one of the arenas above: its players buy that arena's normal ticket and
-are seated there by the invite code; it plays on the arena's round clock (it ends on a bell) and is settled at
-the bell like any arena. Quick play never lands in one. Details: [ARCHITECTURE.md](ARCHITECTURE.md), "Custom rooms".
+are seated there by the invite code; it starts at once and plays as ONE game for its whole duration (no 5-minute
+bell, no re-pay), and every ticket in it is settled at the room's end with the normal fee on profit. Its creator
+buys their own ticket in the same sheet, right after the fee, and is seated. Quick play never lands in one. Details: [ARCHITECTURE.md](ARCHITECTURE.md), "Custom rooms".
 
 A custom room never closes abruptly. Ten seconds before its end (time up, or closed early by its creator or an admin)
 everyone in it, players and spectators, sees a countdown with the reason; then a free room shows its **final standings**
 (everyone by mass, practice bots included, with kills; your own row) and goes back to the lobby on "Lobby" or after
-30 s. A ticket room ends on its bell: the countdown runs into the bell, whose receipt carries the same board with the
-values. A free room closed early ends 10 s later; a ticket room closed early ends at the round's bell.
+30 s. A ticket room ends on its own bell at its end: the countdown runs into it, and its receipt carries the same board with
+the values. A room closed early (free or ticket) ends 10 s later; a ticket room settles every ticket there.
 
 **Share on X.** The in-game top bar carries "Share on X"; eating any person shows a small "You ate …!" chip under the
 kill feed for 3 seconds, with nothing to press (at most one kill card every 5 s; a practice bot counts only in a

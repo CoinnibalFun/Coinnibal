@@ -104,6 +104,38 @@ describe('round math on the client', () => {
   });
 });
 
+describe('a custom ticket room plays its own one game (no 5-minute bell)', () => {
+  // a 45-minute room that opened 7 s into an arena round
+  const OPEN = START + 7_000;
+  const OWN: RoundInfo = { n: Math.floor(OPEN / 1000), startsAt: OPEN, endsAt: OPEN + 45 * 60_000, joinsCloseAt: OPEN + 44 * 60_000 };
+  const PAID: RoomInfo = { ...ARENA, id: 'priv-AB2CD234', name: 'Whale Club', code: 'AB2CD234', round: OWN };
+
+  it('its lengths are the room\'s: the whole game, joins closed in its last minute, no break; it never rolls into a next round', () => {
+    expect(roundLengths(OWN)).toEqual({ roundMs: 45 * 60_000, closeMs: 60_000, breakMs: 0 });
+    // past the arenas' bell: still the same game, open
+    const mid = roundStateAt(OWN, R.endsAt + 1000);
+    expect(mid).toMatchObject({ n: OWN.n, endsAt: OWN.endsAt, phase: 'open', breakMsLeft: 0 });
+    expect(mid.msLeft).toBe(OWN.endsAt - R.endsAt - 1000);
+    expect(roundStateAt(OWN, OWN.endsAt - 30_000)).toMatchObject({ phase: 'closing', msLeft: 30_000 });
+    // over: it stays over (no next round to roll into)
+    expect(roundStateAt(OWN, OWN.endsAt + 120_000)).toMatchObject({ n: OWN.n, endsAt: OWN.endsAt, msLeft: 0, phase: 'closing' });
+    expect(roundStartLabel(OWN.n, OWN)).toBe(new Date(OPEN).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+  });
+
+  it('the HUD timer counts down to the room end (its own duration), not to the arenas\' bell', () => {
+    useUi.setState({ screen: 'playing', room: PAID });
+    clockAt(START + 108_000);
+    render(
+      <Kb>
+        <RoundChip />
+      </Kb>,
+    );
+    const chip = screen.getByRole('timer');
+    expect(chip.textContent).toBe('43:19until the room ends');
+    expect(chip.dataset.phase).toBe('open');
+  });
+});
+
 describe('round sound cues', () => {
   function cues() {
     const calls: string[] = [];

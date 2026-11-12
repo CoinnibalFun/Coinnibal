@@ -15,7 +15,13 @@ interface Known {
  */
 export class ViewState {
   readonly known = new Map<number, Known>();
-  readonly knownPlayers = new Map<number, string>();
+  /**
+   * Player infos the client holds: the info signature sent, and the generation a cell of that player was last in
+   * view. A player with no cell in view is forgotten at once: the client lets go of players without a coin in its
+   * mirror (`prunePlayers`), so a coin coming back into view must bring its info (name tag, flag, skin) again.
+   * Without this a big coin seen before came back as a bare default coin with no name tag (owner playtest 2026-11).
+   */
+  readonly knownPlayers = new Map<number, { sig: string; g: number }>();
   private gen = 0;
   /** `World.boundsVersion` this client last heard (-1: never, the next snapshot carries the bounds). */
   private boundsSent = -1;
@@ -77,8 +83,10 @@ export class ViewState {
           p.infoSigAvatar = avatar;
         }
         const sig = p.infoSig;
-        if (this.knownPlayers.get(p.id) !== sig) {
-          this.knownPlayers.set(p.id, sig);
+        const kp = this.knownPlayers.get(p.id);
+        if (kp && kp.sig === sig) kp.g = gen;
+        else {
+          this.knownPlayers.set(p.id, { sig, g: gen });
           const info: PlayerInfo = { id: p.id, skin: p.skin, flags: p.flags, name: p.name, isBot: p.isBot };
           if (avatar) info.avatar = avatar;
           if (p.country) info.country = p.country;
@@ -87,6 +95,9 @@ export class ViewState {
         }
       }
     });
+
+    // players with no cell in view any more: forgotten, so their info rides again with their next visible cell
+    for (const [pid, kp] of this.knownPlayers) if (kp.g !== gen) this.knownPlayers.delete(pid);
 
     const removals: Removal[] = [];
     for (const [id, k] of this.known) {

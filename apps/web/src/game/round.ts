@@ -39,6 +39,11 @@ const DEFAULT_LENGTHS = { roundMs: RULES.roundMs, closeMs: RULES.roundJoinCloseM
  * is at (n + 1) · cycle and its play starts `breakMs` into the slot (`opensAt`). `roundMs` is the play alone.
  */
 export function roundLengths(info: RoundInfo): { roundMs: number; closeMs: number; breakMs: number } {
+  // a custom ticket room's own game: one round from its start to its end, no break
+  if (info.startsAt !== undefined) {
+    const roundMs = Math.max(1, info.endsAt - info.startsAt);
+    return { roundMs, closeMs: Math.min(roundMs, Math.max(0, info.endsAt - info.joinsCloseAt)), breakMs: 0 };
+  }
   const cycle = info.endsAt / (info.n + 1);
   if (!Number.isInteger(cycle) || cycle <= 0) return DEFAULT_LENGTHS;
   const breakMs = info.opensAt !== undefined ? info.opensAt - info.n * cycle : 0;
@@ -51,8 +56,13 @@ export function roundLengths(info: RoundInfo): { roundMs: number; closeMs: numbe
 /** The round in play at server time `now`, from the last known `RoundInfo` (rolled forward with `roundAt`). */
 export function roundStateAt(info: RoundInfo, now: number): RoundState {
   const { roundMs, closeMs, breakMs } = roundLengths(info);
+  // a room's own game never rolls into a next round (there is none): it ends at `endsAt` and stays ended
   const w: Pick<RoundState, 'n' | 'endsAt' | 'joinsCloseAt' | 'opensAt'> =
-    now >= info.endsAt ? roundAt(now, roundMs, closeMs, breakMs) : { ...info, opensAt: info.opensAt ?? info.endsAt - roundMs };
+    info.startsAt !== undefined
+      ? { n: info.n, endsAt: info.endsAt, joinsCloseAt: info.joinsCloseAt, opensAt: info.startsAt }
+      : now >= info.endsAt
+        ? roundAt(now, roundMs, closeMs, breakMs)
+        : { ...info, opensAt: info.opensAt ?? info.endsAt - roundMs };
   return {
     n: w.n,
     endsAt: w.endsAt,
@@ -81,7 +91,9 @@ export function roundInfoFor(rooms: readonly RoomInfo[], room: RoomInfo | null, 
  */
 export function roundStartLabel(n: number, info: RoundInfo | null | undefined): string {
   const { roundMs, breakMs } = info ? roundLengths(info) : DEFAULT_LENGTHS;
-  return new Date(n * (roundMs + breakMs) + breakMs).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  // a room's own game says when it started
+  const at = info?.startsAt !== undefined && info.n === n ? info.startsAt : n * (roundMs + breakMs) + breakMs;
+  return new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
 /**
@@ -89,7 +101,9 @@ export function roundStartLabel(n: number, info: RoundInfo | null | undefined): 
  * the server announced (it may run shorter rounds), else the rules' default. One decimal at most (`1.5`).
  */
 export function roundMinutes(rooms: readonly RoomInfo[], room: RoomInfo | null): number {
-  const info = roundInfoFor(rooms, room, null);
+  // the arenas' rounds (a custom ticket room plays its own one game: not "the round")
+  const own = room?.round?.startsAt !== undefined;
+  const info = roundInfoFor(rooms, own ? null : room, null);
   const ms = info ? roundLengths(info).roundMs : RULES.roundMs;
   return Math.round(ms / 6000) / 10;
 }

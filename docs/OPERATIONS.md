@@ -456,7 +456,7 @@ journaled as a sweep and sent with `sweepLoot(arenaId, sweepId, amount)`, which 
 on / off, ticket rooms on / off, the base price and its step per 10 players, the biggest room (up to 100 players),
 the seats of all live rooms together, the holder perk (default: one free room of up to 10 players a day per holder,
 UTC day, kept in `site/custom-rooms.json` across restarts; or a discount, or none), the live rooms (close one: a free room ends after a 10 s
-countdown and its final board, a ticket room at its bell). **Practice with bots** on / off and "practice rooms at
+countdown and its final board, a ticket room too: its tickets are settled at that end). **Practice with bots** on / off and "practice rooms at
 once" (`practiceMaxLive`, default 12, 0..50): the free one-click rooms the quiet ponds offer (8 bots, 15 minutes, one
 per player, 4 per IP per 30 minutes, closed after 2 minutes empty). They take none of the paid rooms' slots or seats;
 each costs about 8 bots of CPU, so 12 at once is about 100 practice bots.
