@@ -2,7 +2,7 @@ import { availableParallelism } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, normalizeXHandle, SITE_URL_DEFAULT, type GameAccess } from '@elymum/shared';
+import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, normalizeXHandle, SITE_URL_DEFAULT, withBrandOrigins, type GameAccess } from '@elymum/shared';
 import { GAS_PRICE_URL_DEFAULT } from '@elymum/sdk';
 import { getAddress, isAddress } from 'viem';
 import { DEFAULT_ART_STYLE, parseArtStyle, type ArtStyle } from './site/nft/render';
@@ -396,7 +396,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   return {
     port: int(env.PORT, 8787),
     host: env.HOST ?? '0.0.0.0',
-    corsOrigin: env.CORS_ORIGIN ?? '*',
+    corsOrigin: withBrandOrigins(env.CORS_ORIGIN),
     dataDir: resolve(env.DATA_DIR ?? 'data'),
     publicUrl: env.PUBLIC_URL?.trim() ? env.PUBLIC_URL.trim().replace(/\/+$/, '') : null,
     webDist: env.WEB_DIST ? resolve(env.WEB_DIST) : null,

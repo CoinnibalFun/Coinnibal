@@ -2,7 +2,7 @@ import type { ShareService } from './site/shares';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { PROTOCOL_VERSION } from '@elymum/shared';
+import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION } from '@elymum/shared';
 import { NonceLimitError, checksumAddress, type Auth, type SiweOrigin } from './auth';
 import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
@@ -86,7 +86,10 @@ export function publicBaseUrl(cfg: ServerConfig, req: IncomingMessage, _trustPro
  * (`eth_chainId` of its RPC), or the configured `CHAIN_ID` while the chain is off.
  */
 export function siweOrigin(cfg: ServerConfig, req: IncomingMessage, _trustProxy: boolean | number, chainId: number | null): SiweOrigin {
-  const uri = publicBaseUrl(cfg, req);
+  // a sign-in from one of the brand's own sites (coinnibal.fun) names that site, so the wallet shows the page's own
+  // domain; every other request names PUBLIC_URL as before. The browser sets Origin, a page cannot choose it.
+  const origin = typeof req.headers.origin === 'string' ? req.headers.origin.replace(/\/+$/, '') : '';
+  const uri = BRAND_SITE_ORIGINS.includes(origin) ? origin : publicBaseUrl(cfg, req);
   return { domain: new URL(uri).host, uri, chainId: chainId ?? cfg.chain.chainId };
 }
 

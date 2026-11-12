@@ -3,7 +3,7 @@
 import { C, coin, page, seigaiha, star, starfield, wordmark } from './art.mjs';
 import { HANDLE } from './templates.mjs';
 
-/** The site named on the banner's "Testnet open" sticker: `BRAND_SITE` (a host, e.g. coinnibal.io), else the current one. */
+/** The site named on the banner's "Testnet open" sticker: `BRAND_SITE` (a host, e.g. coinnibal.fun), else the current one. */
 const SITE = (process.env.BRAND_SITE || 'elymum.io').replace(/^https?:\/\//, '').replace(/\/+$/, '');
 
 const at = (x, y, html, extra = '') => `<div class="abs" style="left:${x}px;top:${y}px;${extra}">${html}</div>`;

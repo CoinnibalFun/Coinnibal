@@ -9,7 +9,7 @@ const gameServer = process.env.GAME_SERVER ?? 'http://127.0.0.1:8787';
 // index.html uses %VITE_PUBLIC_URL% for its absolute canonical / Open Graph URLs (they must be
 // absolute: crawlers need them, and Vite would try to bundle a relative og:image). Default: the
 // server's PUBLIC_URL, else the live public domain. Set VITE_PUBLIC_URL (or PUBLIC_URL) at build time:
-// moving the site to another domain (coinnibal.io) is only this variable (docs/OPERATIONS.md).
+// moving the site to another domain (coinnibal.fun) is only this variable (docs/OPERATIONS.md).
 const LIVE_URL = 'https://elymum.io';
 process.env.VITE_PUBLIC_URL = (process.env.VITE_PUBLIC_URL || process.env.PUBLIC_URL || LIVE_URL).replace(/\/+$/, '');
 // the project's X handle (no `@`) for index.html's twitter:site and the pages before the server's settings load
