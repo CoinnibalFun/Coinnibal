@@ -87,60 +87,17 @@ export function usdText(usd: number | null | undefined): string | null {
 }
 
 /** One line of "What the emblem does". */
-export interface EmblemPerk {
-  id: 'access' | 'fee' | 'isles' | 'shop' | 'room' | 'wl' | 'skin' | 'faucet';
-  title: string;
-  note: string;
-}
-
 /**
- * The perks that depend on a setting, as they are live right now (unknown: not shown). The fee comes from the arena's
- * `config()` (`ArenaFees.holderPerks`); the rest from the server's public reads.
+ * The perks that depend on a setting, as they are live right now (unknown: left to the configured default). The
+ * "Why get the NFT?" cards (`site/nft/WhyNft.tsx`) take the shop discount and the private-room perk from here.
  */
 export interface LivePerks {
-  /** An arena admits emblem holders only, on chain (`GET /api/rooms/custom/quote` tiers). */
+  /** An arena admits NFT holders only, on chain (`GET /api/rooms/custom/quote` tiers). */
   isles?: boolean | null;
   /** The power-up shop's holder discount, percent, while the shop is open (`GET /api/shop`). */
   shopPct?: number | null;
   /** The private-room holder perk (`GET /api/rooms/custom/quote`), while private rooms are on. */
   room?: { perk: CustomHolderPerk; pct: number } | null;
-}
-
-/**
- * What an Elymum emblem does, for the mint page. Only perks that are live are listed (2026-11 audit: the page
- * promised a fee discount and the holders-only arena whether or not they were on): the holder fee while the arena's
- * holder perks are on and lower, the Isles while an arena is holders-only on chain, the shop discount and the
- * private-room perk while the server offers them. On a testnet the game is open and the mint public, so the copy
- * says what holds there and only promises the mainnet WL; on mainnet the testnet-only lines (the WL import, the
- * faucet bonus) are left out. `testnet` null (unknown): the mainnet copy without the testnet lines.
- */
-export function emblemPerks(
-  testnet: boolean | null,
-  fee: { fees?: ArenaFees | null; gameAccess?: GameAccess | null } = {},
-  live: LivePerks = {},
-): EmblemPerk[] {
-  const pct = (bps: number) => `${bpsToPercent(bps)}%`;
-  const f = fee.fees;
-  // the holder fee only while the arena really gives it (perks on, and a lower pair than everyone else's)
-  const holderFee = f?.holderPerks && f.holderBurnBps + f.holderVaultBps < f.burnBps + f.vaultBps ? { holder: pct(f.holderBurnBps + f.holderVaultBps), normal: pct(f.burnBps + f.vaultBps) } : null;
-  // "open to everyone" only while the server really lets everyone in (the admin may have closed it to holders)
-  const openToAll = fee.gameAccess == null || fee.gameAccess === 'public';
-  const out: EmblemPerk[] = [
-    testnet && openToAll
-      ? { id: 'access', title: t('mn.perk.access'), note: t('mn.perk.accessTest') }
-      : testnet && fee.gameAccess === 'holders'
-        ? { id: 'access', title: t('mn.perk.access'), note: t('mn.perk.accessHolders') }
-      : { id: 'access', title: t('mn.perk.access'), note: t('mn.perk.accessMain') },
-  ];
-  if (holderFee) out.push({ id: 'fee', title: t('mn.perk.fee', holderFee), note: t('mn.perk.feeProfit') });
-  if (live.isles === true) out.push({ id: 'isles', title: t('mn.perk.isles'), note: t('mn.perk.islesNote') });
-  if (live.shopPct != null && live.shopPct > 0) out.push({ id: 'shop', title: t('mn.perk.shop', { pct: live.shopPct }), note: t('mn.perk.shopNote') });
-  if (live.room?.perk === 'free_daily') out.push({ id: 'room', title: t('mn.perk.room'), note: t('mn.perk.roomNote') });
-  else if (live.room?.perk === 'discount' && live.room.pct > 0) out.push({ id: 'room', title: t('mn.perk.roomDiscount', { pct: live.room.pct }), note: t('mn.perk.roomDiscountNote') });
-  if (testnet) out.push({ id: 'wl', title: t('mn.perk.wl'), note: t('mn.perk.wlNote') });
-  out.push({ id: 'skin', title: t('mn.perk.skin'), note: t('mn.perk.skinNote') });
-  if (testnet) out.push({ id: 'faucet', title: t('mn.perk.faucet'), note: t('mn.perk.faucetNote') });
-  return out;
 }
 
 /** The live perks from the server's public reads (each one that fails is left unknown, so not shown). */

@@ -20,8 +20,8 @@ describe('arena catalog', () => {
     }
   });
 
-  it('names the tiers after Elysian places (spec section 1)', () => {
-    expect(DEFAULT_ARENAS.map((a) => arenaMeta(a.id).name)).toEqual(['Asphodel Meadow', 'Lethe Shore', 'Golden Bough', 'Isles of the Blessed']);
+  it('names the tiers by their ticket price, plainly', () => {
+    expect(DEFAULT_ARENAS.map((a) => arenaMeta(a.id).name)).toEqual(['$1 Room', '$3 Room', '$5 Room', '$10 Room']);
   });
 
   it('uses the arena inks of the design spec', () => {

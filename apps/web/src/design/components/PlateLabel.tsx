@@ -1,10 +1,9 @@
 import type { HTMLAttributes, ReactNode } from 'react';
-import { useT } from '../../i18n';
 
 export interface PlateLabelProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
-  /** The plate number, as a roman numeral or a number ("II" or 2). */
+  /** The section's place in the page ("II" or 2): kept on the element as `data-plate`, not printed (plain copy, 2026-11). */
   numeral: string | number;
-  /** The caption in Fraunces, e.g. "The mint, after dark". */
+  /** The caption in Fraunces, e.g. "The Elymum NFT". */
   title: ReactNode;
   /** Right-hand mono note, e.g. "/mint". */
   aside?: ReactNode;
@@ -20,16 +19,14 @@ function roman(n: number): string {
 }
 
 /**
- * The book-plate caption between sections: "PLATE II  The mint, after dark
- * - - - - - /MINT". Ink rule on top, dashed rule running to the aside.
+ * The caption between sections: "The Elymum NFT - - - - - /MINT". Ink rule on top, dashed
+ * rule running to the aside.
  */
 export function PlateLabel({ numeral, title, aside, level, className, ...rest }: PlateLabelProps) {
   const n = typeof numeral === 'number' ? roman(numeral) : numeral;
   const T = level ? (`h${level}` as const) : 'b';
-  const t = useT();
   return (
-    <div {...rest} className={`kb-plate${className ? ` ${className}` : ''}`}>
-      <span className="kb-plate__no">{t('ui.plate', { n })}</span>
+    <div {...rest} data-plate={n} className={`kb-plate${className ? ` ${className}` : ''}`}>
       <T className="kb-plate__title">{title}</T>
       <span className="kb-plate__rule" aria-hidden="true" />
       {aside != null && <span className="kb-plate__aside">{aside}</span>}

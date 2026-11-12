@@ -86,5 +86,5 @@ export const GAS_PRICE_URL_DEFAULT = 'https://api.hyperliquid.xyz/info';
  */
 export const SUGGESTED_HOLDER_BURN_BPS = DEFAULT_HOLDER_FEE_RATES.burnBps;
 export const SUGGESTED_HOLDER_VAULT_BPS = DEFAULT_HOLDER_FEE_RATES.vaultBps;
-/** Arenas Finish setup marks holders-only (the $10 tier, #4 the Isles of the Blessed: `DEFAULT_ARENAS`). */
+/** Arenas Finish setup marks holders-only (the $10 tier, #4 the $10 Room: `DEFAULT_ARENAS`). */
 export const DEFAULT_HOLDERS_ONLY_ARENA_IDS: readonly number[] = DEFAULT_ARENAS.filter((a) => a.holdersOnly).map((a) => a.id);

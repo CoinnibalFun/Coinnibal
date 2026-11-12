@@ -26,7 +26,7 @@ describe('share cards (made from the server records only)', () => {
   it('a bell result: place, players, mass, kills, the net paid formatted, the wallet short, flag and emblem', () => {
     const s = service();
     const c = s.result({ room: arenaRoom, player: look, wallet: testWallet(0xabc) }, { rank: 2, of: 41, mass: 1234.7, kills: 5, payout: 2_600_000_000 });
-    expect(c).toMatchObject({ kind: 'round', name: 'Nakamoto', room: 'Asphodel Meadow', rank: 2, players: 41, mass: 1234, kills: 5, paid: '2,600 $ELYMUM', country: 'JP', holder: true, skin: 2 });
+    expect(c).toMatchObject({ kind: 'round', name: 'Nakamoto', room: '$1 Room', rank: 2, players: 41, mass: 1234, kills: 5, paid: '2,600 $ELYMUM', country: 'JP', holder: true, skin: 2 });
     expect(c.wallet).toBe('0x0000…0aBc');
     expect(SHARE_ID_RE.test(c.id)).toBe(true);
     expect(s.get(c.id)).toEqual(c);

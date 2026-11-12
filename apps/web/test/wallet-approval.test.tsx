@@ -50,7 +50,7 @@ describe('the wallet sheet: what the arena may still take, and revoking it', () 
       </Kb>,
     );
     // 9,000 approved, the last arena (#2) costs 3,000: three more tickets, one transaction each
-    expect(screen.getByTestId('wl-approved').textContent).toMatch(/9,000 \$ELYMUM, enough for 3 more tickets of Lethe Shore/);
+    expect(screen.getByTestId('wl-approved').textContent).toMatch(/9,000 \$ELYMUM, enough for 3 more tickets of \$3 Room/);
     await act(async () => screen.getByTestId('wl-revoke').click());
     expect(spies.verifyArena).toHaveBeenCalled();
     expect(spies.sendWalletCall.mock.calls[0][0]).toMatchObject({ address: TOKEN, functionName: 'approve', args: [ARENA, 0n] });

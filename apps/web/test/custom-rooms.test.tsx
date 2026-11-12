@@ -254,17 +254,17 @@ describe('the room creator', () => {
     expect(tiers.querySelectorAll('button')).toHaveLength(2); // not the holders-only tier
     expect(tiers.querySelector('[aria-pressed="true"]')?.getAttribute('data-value')).toBe('1');
     fireEvent.click(tiers.querySelector('[data-value="2"]')!);
-    expect(screen.getByTestId('cr-kind-hint').textContent).toMatch(/Lethe Shore ticket/);
+    expect(screen.getByTestId('cr-kind-hint').textContent).toMatch(/\$3 Room ticket/);
     fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Whale Club' } });
     fireEvent.click(screen.getByTestId('cr-continue'));
     await settle();
     const payment = screen.getByTestId('cr-payment');
-    expect(payment.textContent).toMatch(/ArenaLethe Shore/);
+    expect(payment.textContent).toMatch(/Arena\$3 Room/);
     expect(payment.textContent).toMatch(/never holds anyone's tokens/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
     expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ kind: 'paid', arenaId: 2, bots: 0 }), HASH);
-    expect(screen.getByTestId('cr-done').textContent).toMatch(/buys a Lethe Shore ticket/);
+    expect(screen.getByTestId('cr-done').textContent).toMatch(/buys a \$3 Room ticket/);
     fireEvent.click(screen.getByTestId('cr-enter'));
     expect(spies.play).not.toHaveBeenCalled();
     expect(useUi.getState().paidSeat).toMatchObject({ code: 'AB2CD', arenaId: 2, name: 'Friday Pond' });
@@ -314,7 +314,7 @@ describe('room helpers', () => {
   });
 
   it('the admin card lists the kind, tier and fee of each room, and the fee by size', () => {
-    expect(roomKindText({ kind: 'paid', arenaId: 2 })).toBe('paid · Lethe Shore #2');
+    expect(roomKindText({ kind: 'paid', arenaId: 2 })).toBe('paid · $3 Room #2');
     expect(roomKindText({ kind: 'free' })).toBe('free');
     expect(roomKindText({})).toBe('free');
     expect(roomKindText({ kind: 'free', practice: true })).toBe('practice with bots');

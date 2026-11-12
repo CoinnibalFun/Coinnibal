@@ -1,8 +1,7 @@
 /* ─────────────────────────── site · the landing ───────────────────────────
- * A picture book of the ring, from dawn into night (spec §6.9):
- * I the plain at dawn (RingScene + hero sticker + pond), II the feast (menu),
- * III a round in orbit (OrbitDots), IV the cast (line-up), then night:
- * V the mint, VI four places on the ring (tickets), VII small print.
+ * From day into night: the hero (RingScene + hero sticker + pond), what Elymum is
+ * (the rules card), how a round works (OrbitDots), then night: the Elymum NFT and
+ * why to get it, the four rooms (tickets), questions.
  * ------------------------------------------------------------------------- */
 
 .ld-main {
@@ -107,17 +106,6 @@
 .ld-hero__money-icon {
   flex: none;
   margin-top: 2px;
-}
-.ld-hero__homer {
-  margin: 18px 0 22px;
-  padding-left: 14px;
-  border-left: 3px solid var(--sun);
-  font-size: 14px;
-  color: var(--ink-3);
-}
-.ld-hero__homer .quote {
-  font-size: 17px;
-  color: var(--ink);
 }
 .ld-hero__ctas {
   display: flex;
@@ -545,9 +533,6 @@
   font-size: var(--t-micro);
   color: var(--ink-3);
 }
-.ld-menu__stamp {
-  flex: none;
-}
 @media (max-width: 899px) {
   .ld-feast__grid {
     grid-template-columns: 1fr;
@@ -700,146 +685,6 @@
   }
 }
 
-/* ── IV · the cast ───────────────────────────────────────────────────── */
-.ld-cast__head {
-  display: grid;
-  grid-template-columns: 7fr 5fr;
-  gap: 24px 48px;
-  align-items: end;
-}
-.ld-cast__aside {
-  margin: 0;
-  color: var(--ink-2);
-  max-width: 46ch;
-}
-.ld-lineup {
-  position: relative;
-  margin-top: 40px;
-  padding: 0 0 0 56px;
-}
-.ld-lineup__chart {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 282px;
-  display: grid;
-  grid-template-rows: repeat(3, 1fr);
-  pointer-events: none;
-}
-.ld-lineup__mark {
-  border-top: 2px dashed var(--rule);
-  font-size: var(--t-micro);
-  color: var(--ink-3);
-  padding-top: 4px;
-}
-.ld-lineup__list {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-/* the floor they stand on */
-.ld-lineup__list::before {
-  content: '';
-  position: absolute;
-  left: -56px;
-  right: 0;
-  top: 276px;
-  height: 16px;
-  background: var(--sand);
-  border-top: var(--stroke) solid var(--outline);
-  border-bottom: var(--stroke) solid var(--outline);
-}
-.ld-suspect {
-  position: relative;
-  display: grid;
-  grid-template-rows: 290px auto;
-  justify-items: center;
-  text-align: center;
-}
-.ld-suspect__stand {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: 0;
-}
-.ld-suspect__tag {
-  transform: rotate(calc((var(--i) - 3) * 1.2deg));
-  transition: transform var(--dur-state) var(--ease-spring);
-}
-.ld-suspect__tag b {
-  font-weight: 600;
-  color: var(--teal-ink);
-}
-.ld-suspect__coin {
-  display: block;
-  line-height: 0;
-  transition: transform var(--dur-state) var(--ease-spring);
-}
-.ld-suspect__bio {
-  margin-top: 26px;
-  font-size: var(--t-small);
-  color: var(--ink-2);
-  max-width: 18ch;
-}
-.ld-suspect:hover .ld-suspect__coin {
-  transform: translateY(-6px) rotate(-3deg);
-}
-.ld-suspect:hover .ld-suspect__tag {
-  transform: translateY(-6px) rotate(2deg);
-}
-@media (max-width: 1099px) {
-  .ld-suspect__tag {
-    font-size: 12px;
-    white-space: normal;
-  }
-}
-@media (max-width: 899px) {
-  .ld-cast__head {
-    grid-template-columns: 1fr;
-  }
-  .ld-lineup {
-    padding: 0;
-  }
-  .ld-lineup__chart,
-  .ld-lineup__list::before {
-    display: none;
-  }
-  .ld-lineup__list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 28px 14px;
-  }
-  .ld-suspect {
-    grid-template-rows: auto auto;
-  }
-  .ld-suspect__stand {
-    align-self: end;
-    width: 100%;
-    padding-bottom: 6px;
-    border-bottom: var(--stroke) solid var(--outline);
-  }
-  .ld-suspect__coin .kb-coin {
-    width: min(100%, 104px) !important;
-  }
-  .ld-suspect:nth-child(3) {
-    grid-column: 1 / -1;
-  }
-  .ld-suspect:nth-child(3) .ld-suspect__coin .kb-coin {
-    width: 150px !important;
-  }
-  .ld-suspect__bio {
-    margin-top: 10px;
-  }
-}
-
 /* ── night plates ────────────────────────────────────────────────────── */
 .ld-night {
   position: relative;
@@ -885,6 +730,9 @@
   gap: clamp(32px, 5vw, 72px);
   align-items: center;
   padding-top: clamp(48px, 7vw, 104px);
+  padding-bottom: clamp(32px, 5vw, 64px);
+}
+.ld-nft__why {
   padding-bottom: 150px;
 }
 .ld-nft__title em {
@@ -1092,28 +940,6 @@
   right: 16px;
   bottom: 40px;
 }
-.ld-price {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  z-index: 3;
-  display: grid;
-  gap: 2px;
-  padding: 12px 16px;
-  background: var(--sun);
-  color: var(--ink-fixed);
-  border: var(--stroke) solid var(--outline);
-  border-radius: 14px;
-  box-shadow: var(--sh-3);
-  transform: rotate(-4deg);
-}
-.ld-price__n {
-  font-size: 32px;
-  line-height: 1;
-}
-.ld-price__l {
-  font-size: var(--t-micro);
-}
 .ld-nft__waves {
   position: absolute;
   left: 0;
@@ -1157,10 +983,6 @@
   }
   .ld-emblem .ld-emblem__panel {
     height: 280px;
-  }
-  .ld-price {
-    right: -4px;
-    bottom: -6px;
   }
 }
 
@@ -1275,10 +1097,6 @@
   border-radius: 0 16px 16px 0;
   background: var(--ink-b);
   text-align: center;
-}
-.ld-ticket__no {
-  font-size: var(--t-micro);
-  color: #4a453b;
 }
 .ld-ticket__name {
   margin: 0;
@@ -1485,9 +1303,6 @@
   .ld-chase__snack,
   .ld-chase__pop {
     animation: none !important;
-  }
-  .ld-suspect:hover .ld-suspect__coin {
-    transform: none;
   }
 }
 

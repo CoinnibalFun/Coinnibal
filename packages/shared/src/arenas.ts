@@ -1,21 +1,24 @@
 export interface ArenaMeta {
-  /** An Elysian place on the ring. */
+  /** The display name: the room's ticket price in plain words ("$1 Room"). */
   name: string;
   /** The arena's ink (ticket stripe, stamp, place marker). Upper-case hex. */
   ink: string;
-  /** Second stop when the ink is a gradient (Lethe), else absent. */
+  /** Second stop when the ink is a gradient (the $3 Room), else absent. */
   inkTo?: string;
 }
 
 /** Ink of an arena id the catalog does not know (`--teal`). */
 export const ARENA_INK_FALLBACK = '#2D7388';
 
-/** Display metadata for the arena contract's ids (the chain stores only numbers). */
+/**
+ * Display metadata for the arena contract's ids (the chain stores only numbers). The names are the plain ticket tiers
+ * of `DEFAULT_ARENAS` (owner decision 2026-11: no story names, just the price).
+ */
 export const ARENA_META: Record<number, ArenaMeta> = {
-  1: { name: 'Asphodel Meadow', ink: '#6FCDE8' },
-  2: { name: 'Lethe Shore', ink: '#93D9EE', inkTo: '#2D7388' },
-  3: { name: 'Golden Bough', ink: '#F2C14E' },
-  4: { name: 'Isles of the Blessed', ink: '#3C9A87' },
+  1: { name: '$1 Room', ink: '#6FCDE8' },
+  2: { name: '$3 Room', ink: '#93D9EE', inkTo: '#2D7388' },
+  3: { name: '$5 Room', ink: '#F2C14E' },
+  4: { name: '$10 Room', ink: '#3C9A87' },
 };
 
 /**
