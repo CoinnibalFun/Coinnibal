@@ -16,12 +16,12 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-      # empty: the browser bundle in this image is served same-origin (game.elymum.io); the real site
-      # (elymum.io on Vercel) is built by Vercel with its own VITE_* variables
+      # the site is this image's bundle, served by the app itself on SITE_DOMAIN (same origin as the game, so
+      # VITE_SERVER_URL stays empty); VITE_PUBLIC_URL is the site's canonical origin
       args:
         VITE_SERVER_URL: ""
         VITE_RPC_URL: ""
-        VITE_PUBLIC_URL: ""
+        VITE_PUBLIC_URL: "https://${SITE_DOMAIN:-coinnibal.fun}"
     env_file:
       - ../../.env
     environment:
@@ -53,9 +53,11 @@ services:
       # who may play: ELYMUM_GAME_ACCESS in .env (admins | holders | public | maintenance; site hands the choice to
       # /admin -> Settings). Default public: the game is open on the testnet (the owner's choice)
       GAME_ACCESS: "${ELYMUM_GAME_ACCESS:-public}"
-      # the web app is Vercel's (elymum.io): this server does not serve a second copy; a browser that opens the game
-      # domain is sent to PUBLIC_URL. ELYMUM_WEB_DIST=/app/web in .env serves the bundled copy again (with a strict CSP)
-      WEB_DIST: "${ELYMUM_WEB_DIST:-}"
+      # the site lives here (no Vercel): the app serves the bundled web client (with a strict CSP) on every domain
+      # Caddy hands it, SITE_DOMAIN first. PUBLIC_URL is that site (sign-ins, share cards, X posts name it);
+      # ELYMUM_PUBLIC_URL in .env overrides it, a stale PUBLIC_URL there does not
+      WEB_DIST: "${ELYMUM_WEB_DIST:-/app/web}"
+      PUBLIC_URL: "${ELYMUM_PUBLIC_URL:-https://${SITE_DOMAIN:-coinnibal.fun}}"
     volumes:
       - elymum-data:/data
     expose:
@@ -95,6 +97,8 @@ services:
       - "443:443/udp"
     environment:
       GAME_DOMAIN: ${GAME_DOMAIN:?set GAME_DOMAIN in /opt/elymum/.env}
+      # the site's domain (the web client on the same origin as the game); www.<it> redirects to it
+      SITE_DOMAIN: ${SITE_DOMAIN:-coinnibal.fun}
     # Caddyfile (players connect straight to this server) or Caddyfile.cloudflare (behind Cloudflare, README
     # "Cloudflare in front"): CADDY_CONFIG in /opt/elymum/.env
     command: ["caddy", "run", "--config", "/etc/caddy/${CADDY_CONFIG:-Caddyfile}", "--adapter", "caddyfile"]
