@@ -18,7 +18,7 @@ async function launchGame(root: HTMLElement, session: SiteSession | null): Promi
 
 /** `/play`: the arena, behind the game gate. */
 export function startPlay(root: HTMLElement): void {
-  document.title = 'Elymum · Arena';
+  document.title = 'Coinnibal · Arena';
   setPageHead('/play');
   // the arena handles its own pinch and drag: no page zoom there (the site pages keep zoom)
   document.querySelector('meta[name="viewport"]')?.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');

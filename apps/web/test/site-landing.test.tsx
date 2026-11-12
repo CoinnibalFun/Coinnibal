@@ -17,7 +17,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
   it('renders the hero, the sections, the CTAs and the footer, with no way into the game', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, collabOpen: false } } }));
     render(<Landing />);
-    expect(screen.getByRole('heading', { level: 1, name: 'Elymum' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Coinnibal' })).toBeTruthy();
     expect(screen.getByText('Coins that eat coins.')).toBeTruthy();
     expect(screen.getByText('Eat coins smaller than you. Run from the ones that are bigger. Five minutes later the bell rings and whatever you’ve swallowed is yours.')).toBeTruthy();
     expect(screen.queryByText(/small change with a big appetite|Eat the food/)).toBeNull();
@@ -26,7 +26,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     const wl = screen.getAllByRole('link', { name: /Join the WL/ });
     expect(wl.every((a) => a.getAttribute('href') === '/wl')).toBe(true);
     await waitFor(() => expect(screen.getByRole('link', { name: 'Collab, soon' }).getAttribute('href')).toBe('/collab'));
-    for (const h of [/coins eat coins/, 'Four steps, five minutes.', 'Get the Elymum NFT.', 'Why get the NFT?', 'Pick a room.', 'Questions and answers.'])
+    for (const h of [/coins eat coins/, 'Four steps, five minutes.', 'Get the Coinnibal NFT.', 'Why get the NFT?', 'Pick a room.', 'Questions and answers.'])
       expect(screen.getByRole('heading', { name: h })).toBeTruthy();
     // no character cards with prices and jokes, no story lines under the rooms
     expect(document.querySelector('.ld-cast, .ld-suspect')).toBeNull();
@@ -120,7 +120,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       expect(screen.getByRole('heading', { level: 1, name: 'This page does not exist.' })).toBeTruthy();
       expect(screen.getByText('/Terrace-Nine', { selector: 'code' })).toBeTruthy();
       expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
-      await waitFor(() => expect(document.title).toBe('Page not found · Elymum'));
+      await waitFor(() => expect(document.title).toBe('Page not found · Coinnibal'));
     } finally {
       history.pushState(null, '', '/');
     }

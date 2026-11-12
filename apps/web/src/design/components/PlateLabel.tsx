@@ -3,7 +3,7 @@ import type { HTMLAttributes, ReactNode } from 'react';
 export interface PlateLabelProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
   /** The section's place in the page ("II" or 2): kept on the element as `data-plate`, not printed (plain copy, 2026-11). */
   numeral: string | number;
-  /** The caption in Fraunces, e.g. "The Elymum NFT". */
+  /** The caption in Fraunces, e.g. "The Coinnibal NFT". */
   title: ReactNode;
   /** Right-hand mono note, e.g. "/mint". */
   aside?: ReactNode;
@@ -19,7 +19,7 @@ function roman(n: number): string {
 }
 
 /**
- * The caption between sections: "The Elymum NFT - - - - - /MINT". Ink rule on top, dashed
+ * The caption between sections: "The Coinnibal NFT - - - - - /MINT". Ink rule on top, dashed
  * rule running to the aside.
  */
 export function PlateLabel({ numeral, title, aside, level, className, ...rest }: PlateLabelProps) {

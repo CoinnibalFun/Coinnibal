@@ -1,6 +1,6 @@
 # Research: Robinhood Chain and Pons
 
-Elymum runs on **Robinhood Chain only**: Robinhood Chain Testnet now, Robinhood Chain (mainnet) later, switched by
+Coinnibal runs on **Robinhood Chain only**: Robinhood Chain Testnet now, Robinhood Chain (mainnet) later, switched by
 `CHAIN_ID` and nothing else. This page records what the code relies on, where each value comes from, and what is
 still unconfirmed. Researched 2026-11-05. The values used in code are in `packages/shared/src/chains.ts`.
 
@@ -39,14 +39,14 @@ Sources:
 - Explorers: [testnet](https://explorer.testnet.chain.robinhood.com), [mainnet](https://robinhoodchain.blockscout.com).
 - Block time: GetBlock and Chainstack Robinhood Chain node pages (third party).
 
-### Differences from Ethereum that matter to Elymum
+### Differences from Ethereum that matter to Coinnibal
 
 From Robinhood's "differences from Ethereum" page (Arbitrum Nitro behaviour):
 
 - **`block.number` is an L1 block estimate**, not the L2 block. The contracts never use block numbers (time comes
   from `block.timestamp`: the 24 h self-refund); the server indexes events by L2 block through the RPC, which is
   correct. Use `ArbSys(100).arbBlockNumber()` if a contract ever needs the L2 block.
-- **`block.prevrandao` is a constant**: never a randomness source. Elymum's randomness is server-side.
+- **`block.prevrandao` is a constant**: never a randomness source. Coinnibal's randomness is server-side.
 - `block.coinbase` is a fee account; gas is the L2 execution fee plus an **L1 calldata fee** (batches of 40
   settlements keep it per ticket small: about 182k gas for one settlement transaction, ~1.07M for 40, measured on
   Hardhat; the L1 part depends on calldata, not measured on the real chain yet).
@@ -96,11 +96,11 @@ V1 (legacy docs): no curve, a Uniswap V3 pool from launch. Not relevant for a ne
   (the SDK probes it with an `eth_call` of `burn(0)` from the arena). Either way the burned tokens leave
   circulation; only mode 1 lowers `totalSupply`.
 - **No fee-on-transfer**: the arena refuses such tokens at join (`FeeOnTransferToken`); a Pons token has none.
-- **Supply is fixed**, so every Elymum sink is deflationary for good (docs/ECONOMY.md).
+- **Supply is fixed**, so every Coinnibal sink is deflationary for good (docs/ECONOMY.md).
 - **Open questions** (to check at launch): the exact token bytecode (burnability), whether the launch needs the
   allowlist, and the graduation venue's liquidity (the arena does not depend on it).
 
-## Elymum on Robinhood Chain: decisions
+## Coinnibal on Robinhood Chain: decisions
 
 1. **One chain.** `packages/shared/src/chains.ts` holds Robinhood Chain Testnet, Robinhood Chain and the local
    Hardhat node used in development; any other chain id is refused (server `CHAIN_ID`, the RPC's `eth_chainId`, the

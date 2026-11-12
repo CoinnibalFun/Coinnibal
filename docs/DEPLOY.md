@@ -1,4 +1,4 @@
-# Elymum: setup and deployment (Robinhood Chain Testnet → Robinhood Chain)
+# Coinnibal: setup and deployment (Robinhood Chain Testnet → Robinhood Chain)
 
 This is the whole path from an empty host to a running game with an open mint. The server goes up first;
 then the owner deploys both contracts **from their own wallet in `/admin`** and the server registers them.
@@ -21,7 +21,7 @@ Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testne
 2. **Fund the server key** with a little ETH (it pays gas for settlements, cancels and loot burns).
 3. In `/admin` on the site, with the owner wallet on Robinhood Chain: **Deploy Arena → Deploy NFT → register both**
    (on the testnet also the TestToken).
-4. **Set the `$ELYMUM` token** on the arena when the token exists (once and for good), then **create the four
+4. **Set the `$NIBAL` token** on the arena when the token exists (once and for good), then **create the four
    arenas**. On testnet you can deploy the `TestToken` first and use it.
 5. **WL**: review applications in `/admin` → WL and Collabs → **publish the allowlist root**.
 6. **Open the mint**: phase Allowlist (with "activate the game for holders" checked), later Public.
@@ -31,7 +31,7 @@ Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testne
 
 ## 0. Robinhood Chain
 
-Elymum runs on Robinhood Chain only (an Arbitrum Orbit L2, gas in ETH). Sources and the status of each value:
+Coinnibal runs on Robinhood Chain only (an Arbitrum Orbit L2, gas in ETH). Sources and the status of each value:
 [RESEARCH.md](RESEARCH.md).
 
 | | Robinhood Chain Testnet | Robinhood Chain |
@@ -77,7 +77,8 @@ names and which a stale older `.env` cannot hold: deploy/vps/README.md section 4
 | `LOAD_SHED` | on by default in production: new free games, then new sockets and arena seats wait while the server is overloaded |
 | `MINT_USD_CENTS` | `100` (the $1 target; default) |
 | `NFT_COLLECTION_SIZE`, `NFT_ART_STYLE` | `5000` (= the NFT's max supply), `vector` (or `pixel`): the emblem collection (docs/NFT-DESIGN.md). Leave `NFT_COLLECTION_SEED` empty: the seed is generated and committed on first boot (`DATA_DIR/chains/<id>/nft-collection.json`, keep it in the backups) |
-| `TOKEN_SYMBOL` | `$ELYMUM` (default; display only) |
+| `TOKEN_SYMBOL` | `$NIBAL` (default; display only) |
+| `X_HANDLE` | the project's X handle by default (unset: `elymumio`; `coinnibal` once that account is live) |
 | `GAME_ACCESS` (VPS: `ELYMUM_GAME_ACCESS`) | `public` on the VPS when unset (the testnet is open), `maintenance` to close, `site` lets the `/admin` setting decide |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `BACKUP_RCLONE_REMOTE` | the alerts and the encrypted offsite backup (deploy/vps/README.md) |
 
@@ -89,8 +90,9 @@ same (`chain.serverKey`). `GET /api/health` answers 503 with its reasons when so
 (OPERATIONS.md, "Monitoring"); `/api/health?live=1` is the container's liveness check. Deploys swap the container in
 the break after an arena bell (no live stake then).
 
-**Domain.** The site is wherever `PUBLIC_URL` says (`https://elymum.io`). Nothing in the code or the art names a
-domain. Players sign in again on a new domain (SIWE binds the domain). NFT metadata URLs follow the NFT's base URI:
+**Domain.** The site is wherever `PUBLIC_URL` says (`https://elymum.io`; the web build's `VITE_PUBLIC_URL`). Nothing in
+the code or the art names a domain; moving to coinnibal.io is configuration only (OPERATIONS.md, "The name: Coinnibal,
+and moving to coinnibal.io"). Players sign in again on a new domain (SIWE binds the domain). NFT metadata URLs follow the NFT's base URI:
 update it with `setBaseURI` (Mint tab) unless you froze it.
 
 **Without Docker.** `pnpm install && pnpm -F @elymum/web build && pnpm -F @elymum/server build`, then run
@@ -125,7 +127,7 @@ send twice. Open **Setup**; the wizard walks the steps and remembers where you a
 5. **Register both with the server.** `POST /api/admin/contracts` for each: the server checks that the code hash is
    the bundled one, that the owner is you and that the arena's server authority is its key, then stores the
    addresses in `/data/chains/<chainId>/contracts.json`. The server picks the arena up without a restart.
-6. **Set the game token** (later, when `$ELYMUM` exists). Type the token address twice. It can be set **once**: a
+6. **Set the game token** (later, when `$NIBAL` exists). Type the token address twice. It can be set **once**: a
    wrong address means deploying a new arena. Until it is set the arenas show "Opening soon" and only practice
    runs.
 7. **Create the four arenas** (needs the token): the $1 / $3 / $5 / $10 tiers, created at 1,000 / 3,000 / 5,000 /

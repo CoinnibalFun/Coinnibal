@@ -53,7 +53,7 @@ export class EmblemGate {
     if (!(await this.isHolderTicket(s))) return null;
     if (!(await this.d.isHolder(wallet, true).catch(() => false))) {
       this.cancel(wallet, s, 'the wallet no longer holds an emblem');
-      return { code: REFUSAL_CODES.emblem, message: 'This ticket needs an Elymum NFT in your wallet, and it is not there now. The ticket is refunded in full.' };
+      return { code: REFUSAL_CODES.emblem, message: 'This ticket needs a Coinnibal NFT in your wallet, and it is not there now. The ticket is refunded in full.' };
     }
     const tokens = await this.d.emblemTokens(wallet, true).catch(() => null);
     // the index cannot tell (never read, the RPC refuses logs): balanceOf said yes, so the seat goes on

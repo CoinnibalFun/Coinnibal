@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE, type ElysiumPaint } from '@elymum/shared';
+import { ELYSIUM, SHADE, SITE_X_HANDLE_DEFAULT as X_HANDLE, type ElysiumPaint } from '@elymum/shared';
 import { motion } from 'motion/react';
 import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -122,7 +122,7 @@ export function Gallery() {
   const toastId = useRef(0);
 
   useEffect(() => {
-    document.title = 'Elymum · Storybook proof';
+    document.title = 'Coinnibal · Storybook proof';
   }, []);
   const rootRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -145,7 +145,7 @@ export function Gallery() {
       {/* ── masthead ── */}
       <header className="gal-head">
         <div className="gal-head__brand">
-          <CoinMark size={52} title="Elymum" />
+          <CoinMark size={52} title="Coinnibal" />
           <div>
             <div className="kicker">Design system · Ring Storybook</div>
             <h1 className="gal-head__title display">The proof sheet</h1>
@@ -511,7 +511,7 @@ export function Gallery() {
                 id: 'follow',
                 state: 'done',
                 meta: 'Chore 1 · X',
-                title: 'Follow @elymumio',
+                title: `Follow @${X_HANDLE}`,
                 body: 'Done. The ring noticed, and so did our follower count.',
                 art: <CoinCharacter paint="up" mood="happy" size={76} />,
               },
@@ -594,7 +594,7 @@ export function Gallery() {
             </>
           }
         >
-          <p>1,000 $ELYMUM for a seat at the next round. If the round never starts, you get it back.</p>
+          <p>1,000 $NIBAL for a seat at the next round. If the round never starts, you get it back.</p>
         </Modal>
         <WalletPicker
           open={wallets}
@@ -618,10 +618,10 @@ export function Gallery() {
         <div className="gal-grid gal-grid--3">
           <Spec label="Ticket (boarding pass) in a TicketGroup">
             <TicketGroup label="Arenas" value={room} onChange={setRoom} className="gal-tickets">
-              <Ticket value="asphodel" title="Asphodel Meadow" meta="23 players · open" stub={<TicketStub value="1,000" unit="$ELYMUM" />} />
-              <Ticket value="lethe" title="Lethe Shore" meta="9 players · open" stub={<TicketStub value="10K" unit="$ELYMUM" />} />
-              <Ticket value="bough" title="Golden Bough" meta="closed till 18:00" stamp="HELD" stub={<TicketStub value="50K" unit="$ELYMUM" />} />
-              <Ticket value="isles" title="Isles of the Blessed" meta="for holders" disabled stub={<TicketStub value="250K" unit="$ELYMUM" />} />
+              <Ticket value="asphodel" title="Asphodel Meadow" meta="23 players · open" stub={<TicketStub value="1,000" unit="$NIBAL" />} />
+              <Ticket value="lethe" title="Lethe Shore" meta="9 players · open" stub={<TicketStub value="10K" unit="$NIBAL" />} />
+              <Ticket value="bough" title="Golden Bough" meta="closed till 18:00" stamp="HELD" stub={<TicketStub value="50K" unit="$NIBAL" />} />
+              <Ticket value="isles" title="Isles of the Blessed" meta="for holders" disabled stub={<TicketStub value="250K" unit="$NIBAL" />} />
             </TicketGroup>
           </Spec>
           <Spec label="Receipt (sticker report card)">
@@ -644,7 +644,7 @@ export function Gallery() {
               <div className="gal-counter">
                 <Counter value={minted} unit="minted" />
               </div>
-              <Field label="X handle" placeholder="elymumio" prefix="@" hint="We check it once. No DMs." />
+              <Field label="X handle" placeholder={X_HANDLE} prefix="@" hint="We check it once. No DMs." />
               <Field label="Token address" defaultValue="0xnope" error="That is not an address. It is a mood." />
               <Tabs
                 label="Board"
@@ -709,7 +709,7 @@ export function Gallery() {
 
       <footer className="gal-foot">
         <RingScene time={time} variant="horizon" clouds={false} />
-        <p className="mono gal-foot__note">Elymum · Ring Storybook · every component in {night ? 'night' : 'day'}</p>
+        <p className="mono gal-foot__note">Coinnibal · Ring Storybook · every component in {night ? 'night' : 'day'}</p>
       </footer>
     </Kb>
   );

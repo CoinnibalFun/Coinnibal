@@ -129,7 +129,7 @@ describe('share cards (made from the server records only)', () => {
     expect(t.paid).toBeUndefined();
     expect(shareFacts(t).join(' ')).not.toMatch(/took home/);
     const html = sharePage(t, 'https://elymum.io');
-    expect(html).toContain('<title>TEST · Nakamoto · 2nd of 4 · Elymum</title>');
+    expect(html).toContain('<title>TEST · Nakamoto · 2nd of 4 · Coinnibal</title>');
     expect(html).toContain('A testnet test arena: practice tokens, no real money.');
     // nobody eaten: no line
     expect(shareEaten(s.result({ room: customRoom, player: look, wallet: null }, { rank: 1, of: 2, mass: 10, kills: 0 }))).toBeNull();

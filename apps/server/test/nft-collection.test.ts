@@ -160,7 +160,7 @@ describe('NftCollection', () => {
     expect(c.genomeOf(1)).toBeNull();
     expect(c.svg(5)).toBe(unrevealedSvg(5, 'pixel'));
     expect(c.metadata(5, 'https://x.example')).toEqual({
-      name: 'Elymum No. 5',
+      name: 'Coinnibal No. 5',
       description: expect.stringContaining('not revealed yet'),
       image: 'https://x.example/api/nft/5.svg',
       external_url: 'https://x.example',

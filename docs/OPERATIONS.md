@@ -1,8 +1,8 @@
-# Elymum: operations guide
+# Coinnibal: operations guide
 
 What comes after the setup: deploying on Robinhood Chain Testnet, the server key and its gas, the fees and the
 burn mode, the allowlist, the $1 price, opening the game, pausing, retiring an arena, moving to mainnet, ownership,
-key rotation and backups. Elymum runs on **Robinhood Chain only** (testnet now, mainnet later; `CHAIN_ID`). Hosting:
+key rotation and backups. Coinnibal runs on **Robinhood Chain only** (testnet now, mainnet later; `CHAIN_ID`). Hosting:
 [DEPLOY.md](DEPLOY.md). Money flow and trust model: [ARCHITECTURE.md](ARCHITECTURE.md). The economy:
 [ECONOMY.md](ECONOMY.md). Chain facts and sources: [RESEARCH.md](RESEARCH.md).
 
@@ -23,7 +23,7 @@ price at $1.
 | **Play** | Play the arenas yourself before launch |
 | **WL**, **Tasks**, **Collabs** | The whitelist applications, the WL steps, the community collabs |
 | **Integrity** | Cheat and collusion flags, bans, held payouts, detector settings |
-| **Settings** | `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public / maintenance), the X handle (default `elymumio`) |
+| **Settings** | `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public / maintenance), the X handle (default `X_HANDLE`, else `elymumio`) |
 
 Admin endpoints need a SIWE session whose wallet is in `ADMIN_WALLETS`. Contract actions also need the
 connected wallet to be the contract's owner and on the chain the server reports; otherwise signing is blocked
@@ -102,9 +102,10 @@ until you publish a root.
 | Communities | **Collabs**: approve with spots and a deadline, extend, unlock a submitted list, export wallets (`collab_id,community,name,wallet,dup_wl,dup_collabs`) |
 
 - Wallets are EVM addresses (checksummed); anything else is refused. One entry per wallet and per X handle.
-- The X handle (Settings) defaults to `elymumio`. A data dir that still holds the earlier default `elymum` is
-  switched to `elymumio` on start, and the seeded WL tasks (follow, post, launch post, handle, wallet) are pointed at
-  the current handle; tasks you wrote and the answers stored in WL entries are never rewritten.
+- The X handle (Settings) defaults to `X_HANDLE`, else `elymumio`. A data dir that still holds an earlier default
+  (`elymum`, or `elymumio` once `X_HANDLE` names another) is switched to the default on start, and the seeded WL tasks
+  (follow, post, launch post, handle, wallet) are pointed at the current handle and say "Coinnibal"; tasks you wrote and
+  the answers stored in WL entries are never rewritten.
 - Duplicates are flagged, never dropped: a collab wallet that is also on the WL (`dup_wl`) or in another list
   (`dup_collabs`) is marked; decide by hand.
 - **Publishing the allowlist** (Mint tab): the server snapshots every approved WL wallet plus every wallet of a
@@ -304,6 +305,60 @@ working `burn()` is not documented (RESEARCH.md): keep mode 0 until the probe sa
 transfer to it fails (a token that refuses that address), the whole batch reverts and the server logs
 `!!! chain: settle batches revert on the fee transfer`: change the fee wallet and the pending settlements go out
 by themselves.
+
+## The name: Coinnibal, and moving to coinnibal.io
+
+The product is **Coinnibal** (a coin + a cannibal: coins that eat coins), its token **$NIBAL**. "Elymum" is the old
+name and stays as the **internal** name on purpose: the packages (`@elymum/*`), the contract names (`ElymumArena`,
+`ElymumNFT`), the env vars (`ELYMUM_*` on the VPS), `/opt/elymum`, the `elymum-*` systemd units and compose project,
+the DATA_DIR files, the browser storage keys (`elymum.*`), the WebSocket protocol (`elymum.auth.`), the
+`X-Elymum-Proof` header and the file `og-elymum.png`. Renaming those would break deploys and saved data; players
+never see them.
+
+What players see follows configuration, not code:
+
+| What | Where it comes from | Today |
+|---|---|---|
+| The site's domain (canonical / Open Graph URLs, robots.txt, sitemap.xml, share cards, the Link X post, SIWE) | web build `VITE_PUBLIC_URL` (else `PUBLIC_URL`); server `PUBLIC_URL` | `https://elymum.io` |
+| The project's X handle (every "Follow @...", WL tasks, collab posts, the WL card, `twitter:site`) | the admin's **Settings → X handle** (live at once); its default: server `X_HANDLE`, web build `VITE_X_HANDLE` | `elymumio` |
+| The token's display symbol (lobby, HUD, receipts, shop, faucet page) | server `TOKEN_SYMBOL` | `$NIBAL` (the default) |
+| The brand kit art (`node brand/generate.mjs`) | `BRAND_X_HANDLE`, `BRAND_SITE` | `@elymumio`, `elymum.io` |
+
+On-chain names cannot change after a deploy. The testnet TestToken's symbol is `tELYMUM` (wallets show it; the site
+says `$NIBAL`), and the deployed testnet NFT keeps `name()` / `symbol()` "Elymum" / "ELYMUM". A **new** `ElymumNFT`
+deployment (mainnet) is "Coinnibal" / "NIBAL": only the constructor changed, the runtime code and its pinned hash are
+the same, so the deployed contracts still pass every code check. Marketplaces show the collection name from the
+server's contract metadata (`contractURI`), which says "Coinnibal".
+
+Transitions handled in code: Link X codes are now `NIBAL-XXXXXX` and a post with the old `ELYMUM-XXXXXX` form of the
+same code still verifies (codes live 30 minutes); the sign-in message says "Sign in to Coinnibal." and a page or server
+from before the rename that uses the old line still signs in (the web and the server deploy apart).
+
+**Moving to coinnibal.io** (when the domain is bought). Keep elymum.io working throughout: the NFT's on-chain base URI
+and links already posted on X point at it.
+
+1. DNS: point `coinnibal.io` at Vercel (Project → Settings → Domains → add `coinnibal.io` and `www.coinnibal.io`).
+   Optionally add `game.coinnibal.io` → the VPS (an `A` record, as for `game.elymum.io` in deploy/vps/README.md).
+2. Vercel → Environment Variables: `VITE_PUBLIC_URL=https://coinnibal.io` (and `VITE_SERVER_URL=https://game.coinnibal.io`
+   if you moved the game domain), then redeploy. index.html, robots.txt and sitemap.xml follow.
+3. VPS (`/opt/elymum/.env`): `PUBLIC_URL=https://coinnibal.io` and `CORS_ORIGIN=https://coinnibal.io,https://elymum.io`
+   (both while elymum.io still serves pages), then `elymum-compose up -d app`. With a new game domain also set
+   `GAME_DOMAIN=game.coinnibal.io` (Caddy gets its certificate) and update the two `game.elymum.io` rewrites in
+   `vercel.json`.
+4. Make elymum.io redirect to coinnibal.io in Vercel (Domains → elymum.io → Redirect to coinnibal.io, 308) once step 3
+   is live. Players sign in again once (SIWE binds the domain).
+5. NFT links: the metadata base URI is on chain. Either keep `elymum.io/api/nft/*` answering (the redirect keeps it
+   working), or set the new one in Admin → Mint (`setBaseURI`) unless you froze it.
+6. Art: `BRAND_SITE=coinnibal.io node brand/generate.mjs x2-banner` for the X banner's "Testnet open" sticker.
+   (No other image names a domain; share cards name `PUBLIC_URL`'s host by themselves.)
+
+**Moving the X handle to @coinnibal** (once the account is live).
+
+1. Admin → Settings → X handle: `coinnibal`. Every page, toast and post that names the handle follows at once.
+2. VPS: `X_HANDLE=coinnibal` (the default, so a fresh data dir and the seeded WL tasks say @coinnibal; a stored
+   `elymumio` is moved over on start), then `elymum-compose up -d app`.
+3. Vercel: `VITE_X_HANDLE=coinnibal` (index.html's `twitter:site` and the text before the settings load), redeploy.
+4. Art: `BRAND_X_HANDLE=coinnibal node brand/generate.mjs` and upload the new X banner and posts.
 
 ## Deploying on Robinhood Chain Testnet
 

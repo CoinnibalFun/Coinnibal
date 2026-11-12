@@ -20,6 +20,7 @@ import type {
   MintProofResponse,
   MintState,
 } from '@elymum/shared';
+import { BRAND_NAME, NFT_NAME } from '@elymum/shared';
 import { getAddress, type Address, type Hash } from 'viem';
 import { ChainCache } from '../chain/chain-cache';
 import type { EvmClient } from '../chain/evm-client';
@@ -516,8 +517,8 @@ export class MintService {
     const client = this.deps.client();
     const royalty = nft && client ? await this.royalty(nft.address, client) : null;
     return {
-      name: 'Elymum',
-      description: `The Elymum NFT: a collection of coin characters. Holders get perks in Elymum, the game where coins eat coins, on Robinhood Chain.`,
+      name: NFT_NAME,
+      description: `The ${NFT_NAME} NFT: a collection of coin characters. Holders get perks in ${BRAND_NAME}, the game where coins eat coins, on Robinhood Chain.`,
       image: `${baseUrl}/api/nft/1.svg`,
       external_link: baseUrl,
       ...(royalty && royalty.bps > 0 ? { seller_fee_basis_points: royalty.bps, fee_recipient: royalty.receiver } : {}),

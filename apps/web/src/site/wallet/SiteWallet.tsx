@@ -1,4 +1,4 @@
-import type { ChainStatus } from '@elymum/shared';
+import { TOKEN_SYMBOL_DEFAULT, type ChainStatus } from '@elymum/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AddressChip, Button, Icon, StatusPill } from '../../design';
 import { providerSigner } from '../../wallet/siwe';
@@ -180,7 +180,7 @@ export function WalletSignIn({ label: given, onSession }: { label?: string; onSe
           })}
         </div>
       )}
-      <MoreWallets chain={chain} hasInjected={providers.length > 0} onConnected={() => setPicked(true)} sym="$ELYMUM" />
+      <MoreWallets chain={chain} hasInjected={providers.length > 0} onConnected={() => setPicked(true)} sym={TOKEN_SYMBOL_DEFAULT} />
       <p className="sw-note">{connecting ? t('sw.connecting') : t('sw.freeIn')}</p>
       {(error || walletError) && (
         <p className="sw-note is-error" role="alert">
@@ -218,7 +218,7 @@ export function WalletConnect({ note: given, onPick }: { note?: string; onPick?:
             <T k="sw.none" tags={{ strong }} />
           </span>
         </p>
-        <MoreWallets chain={chain} hasInjected={false} onConnected={onPick} sym="$ELYMUM" />
+        <MoreWallets chain={chain} hasInjected={false} onConnected={onPick} sym={TOKEN_SYMBOL_DEFAULT} />
       </div>
     );
   return (
@@ -247,7 +247,7 @@ export function WalletConnect({ note: given, onPick }: { note?: string; onPick?:
           );
         })}
       </div>
-      <MoreWallets chain={chain} hasInjected onConnected={onPick} sym="$ELYMUM" />
+      <MoreWallets chain={chain} hasInjected onConnected={onPick} sym={TOKEN_SYMBOL_DEFAULT} />
       <p className="sw-note">{connecting ? t('sw.connecting') : note}</p>
       {walletError && (
         <p className="sw-note is-error" role="alert">

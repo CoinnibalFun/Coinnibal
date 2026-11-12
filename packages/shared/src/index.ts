@@ -25,3 +25,4 @@ export * from './arena-scaling';
 export * from './share';
 export * from './xlink';
 export * from './test-arenas';
+export * from './brand';

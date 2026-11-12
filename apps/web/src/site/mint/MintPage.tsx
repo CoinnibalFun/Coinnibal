@@ -57,7 +57,7 @@ function EmblemImage({ id }: { id: bigint }) {
   return (
     <img
       src={src}
-      alt={`Elymum #${id.toString()}`}
+      alt={`Coinnibal #${id.toString()}`}
       width={240}
       height={240}
       onError={() => {
@@ -120,7 +120,7 @@ async function dryRun(client: ReadClient, from: Address, call: ReturnType<typeof
   }
 }
 
-/** `/mint`: the Elymum NFT mint (Closed / Allowlist / Public / Sold out, and the minted moment), the collection and its perks. */
+/** `/mint`: the Coinnibal NFT mint (Closed / Allowlist / Public / Sold out, and the minted moment), the collection and its perks. */
 export function MintPage() {
   return (
     <SitePage className="mt-root" cta={false}>

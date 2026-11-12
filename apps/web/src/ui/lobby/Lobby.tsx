@@ -491,7 +491,7 @@ function Masthead({ full, wide, page, onPage }: { full: boolean; wide: boolean; 
     <header className="kl-mast">
       <a className="kl-mast__brand" href="/" aria-label={t('lo.home')}>
         <CoinMark size={wide ? 44 : 36} />
-        <Wordmark height={wide ? 40 : full ? 32 : 24} className="kl-mast__word" title="Elymum" />
+        <Wordmark height={wide ? 34 : full ? 28 : 21} className="kl-mast__word" title="Coinnibal" />
         {wide && <span className="kl-mast__kicker mono">{t('lo.kicker')}</span>}
       </a>
       {full && <SectionNav page={page} onChange={onPage} />}

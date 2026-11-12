@@ -195,7 +195,7 @@ export class ProfileStore {
     if (name.length === 0) throw new ProfileError('name', 'name is required');
     if ([...name].length > MAX_NAME_LENGTH || utf8Length(name) > PROFILE_NAME_MAX_BYTES) throw new ProfileError('name', `name is longer than ${MAX_NAME_LENGTH} characters`);
     if (body.skin === EMBLEM_SKIN_ID) {
-      if (!opts.emblem) throw new ProfileError('skin', 'the emblem skin is for Elymum emblem holders');
+      if (!opts.emblem) throw new ProfileError('skin', 'the emblem skin is for Coinnibal NFT holders');
     } else if (typeof body.skin !== 'number' || !isBasicSkin(body.skin)) throw new ProfileError('skin', 'that skin cannot be picked');
     // the country: an allowlisted ISO 3166-1 alpha-2 code exactly, or null for no flag; absent keeps the saved one
     if (body.country !== undefined && body.country !== null && !isCountryCode(body.country)) throw new ProfileError('country', 'that country cannot be picked');

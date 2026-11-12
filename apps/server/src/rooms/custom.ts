@@ -578,7 +578,7 @@ export class CustomRoomService implements CustomRoomHooks {
     }
     const a = list.find((x) => x.arenaId === arenaId);
     if (!a) throw new CustomRoomFail(400, 'bad_request', 'That arena tier is not open right now. Pick another one.', 'arenaId');
-    if (a.holdersOnly && !holder) throw new CustomRoomFail(403, 'holders_only', 'That arena tier is for Elymum emblem holders.', 'arenaId');
+    if (a.holdersOnly && !holder) throw new CustomRoomFail(403, 'holders_only', 'That arena tier is for Coinnibal NFT holders.', 'arenaId');
     return a;
   }
 

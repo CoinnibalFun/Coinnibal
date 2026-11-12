@@ -16,7 +16,7 @@ import type { ChainCtx } from '../src/admin/ui';
 import { Kb } from '../src/design';
 import { adminApi, type MapAdminView } from '../src/site/api';
 import { FaucetPage } from '../src/site/faucet/FaucetPage';
-import { claimErrorText, faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
+import { claimErrorText, displaySymbol, faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
 import { translate, type TKey } from '../src/i18n';
 import { livePerks } from '../src/site/mint/logic';
 import { configuredPerks, perkCards } from '../src/site/nft/WhyNft';
@@ -81,6 +81,13 @@ describe('fast navigation', () => {
 /* ── faucet ───────────────────────────────────────────────────────── */
 
 describe('the faucet', () => {
+  it("names the game token by the game's display symbol, another token by its own", () => {
+    const tt = { address: '0xAbC0000000000000000000000000000000000001', symbol: 'tELYMUM' };
+    expect(displaySymbol(tt, { address: tt.address.toLowerCase(), symbol: '$NIBAL' })).toBe('$NIBAL');
+    expect(displaySymbol(tt, { address: '0x0000000000000000000000000000000000000002', symbol: '$NIBAL' })).toBe('tELYMUM');
+    expect(displaySymbol(tt, null)).toBe('tELYMUM');
+  });
+
   it('picks what to show from the chain and the token', () => {
     expect(faucetView({ chain: 'loading', token: null })).toBe('loading');
     expect(faucetView({ chain: 'off', token: '0x1' })).toBe('offline');

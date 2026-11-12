@@ -123,8 +123,8 @@ contract ElymumNFTTest is Test, MerkleHelper {
     // ---------------------------------------------------------------- constructor & views
 
     function test_constructor() public view {
-        assertEq(nft.name(), "Elymum");
-        assertEq(nft.symbol(), "ELYMUM");
+        assertEq(nft.name(), "Coinnibal");
+        assertEq(nft.symbol(), "NIBAL");
         assertEq(nft.owner(), owner);
         ElymumNFT.MintStateView memory s = nft.mintState();
         assertEq(uint8(s.phase), uint8(ElymumNFT.Phase.Closed));

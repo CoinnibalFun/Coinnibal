@@ -1,7 +1,7 @@
 // UX audit (2026-11): the error states of the ticket flow on the local hardhat chain, as screenshots.
 //   pnpm demo:localnet
 //   node apps/web/scripts/ux-audit/errors.mjs [phone|desktop] [case...]
-// Cases: reject (the wallet refuses the transaction), notokens (ETH, no $ELYMUM), nogas (tokens, no ETH),
+// Cases: reject (the wallet refuses the transaction), notokens (ETH, no $NIBAL), nogas (tokens, no ETH),
 // wrongnet (the wallet is on another chain and refuses to switch), rpcdown (the chain RPC is unreachable from
 // the page), serverdown (the game server goes away mid-game), replaced (the socket is closed with CLOSE_REPLACED,
 // 4000: the same wallet opened the game in another tab). Screenshots and a JSON log go to out/ux-audit/.

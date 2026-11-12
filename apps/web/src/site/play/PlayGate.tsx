@@ -17,7 +17,7 @@ export type PlayAccess =
 
 /**
  * Who may open `/play` (`gameAccess`, the server's `GAME_ACCESS` overrides it): everyone when
- * `public`; when `holders`, a signed-in wallet holding an Elymum NFT (`/api/auth/me` says
+ * `public`; when `holders`, a signed-in wallet holding a Coinnibal NFT (`/api/auth/me` says
  * `canPlay`) or an admin; when `admins`, only a signed-in admin wallet. The server enforces the
  * same rule on the WebSocket; this only spares visitors the game download and a refused join.
  */

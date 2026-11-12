@@ -1,12 +1,16 @@
-// The Elymum brand kit templates. Each export returns { w, h, html } (CSS pixels; the generator
+// The Coinnibal brand kit templates. Each export returns { w, h, html } (CSS pixels; the generator
 // picks the device scale). Copy is plain, short English a beginner reads at a glance ("simple is
-// the best"): the product is "Elymum", the chain "Robinhood Chain", the gas token ETH, the handle
-// @elymumio. No mint price is written into the art (the mint page reads it from the contract).
+// the best", "just having fun"): the product is "Coinnibal", its token $NIBAL, the chain "Robinhood
+// Chain", the gas token ETH, the X handle `BRAND_X_HANDLE` (default @elymumio until the new handle is
+// live). No mint price is written into the art (the mint page reads it from the contract).
 // No domain is written into the art (the site's domain is whatever PUBLIC_URL says).
 import { C, coin, coinMark, cloud, food, page, props, seigaiha, star, starfield, terraces, wordmark } from './art.mjs';
 import { ringScene } from './scene.mjs';
 
-const HANDLE = '@elymumio';
+/** The project's X handle in the art: `BRAND_X_HANDLE` (with or without `@`), else the current one. */
+export const HANDLE = `@${(process.env.BRAND_X_HANDLE || 'elymumio').replace(/^@/, '')}`;
+/** The brand line under the wordmark. */
+export const TAGLINE = 'Eat or be eaten.';
 
 /** A positioned coin (left/top are the box's top-left in px). */
 const at = (x, y, html, extra = '') => `<div class="abs" style="left:${x}px;top:${y}px;${extra}">${html}</div>`;
@@ -68,7 +72,7 @@ export function xBanner() {
     <div class="card sticker">
       <div class="tape"></div>
       <div class="kick" style="color:${C.teal}">5-minute rounds &middot; on Robinhood Chain</div>
-      <div style="margin:10px 0 6px">${wordmark({ width: 400 })}</div>
+      <div style="margin:10px 0 6px">${wordmark({ width: 470 })}</div>
       <h2>Coins that eat coins.</h2>
       <div style="display:flex;align-items:center;justify-content:space-between">${flowPills()}<span class="mono" style="font-size:15px;font-weight:600">${HANDLE}</span></div>
     </div>`;
@@ -103,9 +107,9 @@ export function ogCard() {
     <div class="card sticker">
       <div class="tape"></div>
       <div class="kick" style="color:${C.teal}">5-minute rounds &middot; on Robinhood Chain</div>
-      <div style="margin:10px 0 10px">${wordmark({ width: 430 })}</div>
-      <h2>Coins that eat coins.</h2>
-      <p>Eat coins smaller than you. Run from the bigger ones. When the bell rings, what you swallowed is yours.</p>
+      <div style="margin:10px 0 10px">${wordmark({ width: 500 })}</div>
+      <h2>Coins that eat coins. <span style="color:${C.teal}">${TAGLINE}</span></h2>
+      <p>Eat coins smaller than you. Run from the ones that are bigger. Five minutes later the bell rings and whatever you&rsquo;ve swallowed is yours.</p>
       <div style="display:flex;align-items:center;gap:18px">
         <span class="btn sun">Join the WL ${arrow}</span>${flowPills()}
       </div>
@@ -118,6 +122,15 @@ export function ogCard() {
 export function favicon(px) {
   const body = `<div style="width:${px}px;height:${px}px;display:flex;align-items:center;justify-content:center">${coinMark(px, { shadow: false })}</div>`;
   return { w: px, h: px, html: page({ w: px, h: px, body }) };
+}
+
+/** The installed-app icon (web manifest, `purpose: maskable`): the mark inside the safe circle on the night trench. */
+export function maskableIcon() {
+  const px = 512;
+  const body = `<svg class="abs" style="inset:0" viewBox="0 0 ${px} ${px}" width="${px}" height="${px}"><rect width="${px}" height="${px}" fill="${C.trench}"/></svg>
+    <div class="abs" style="left:-40px;top:300px;opacity:.9">${seigaiha({ w: 600, h: 230, r: 52, stroke: C.reef, width: 5 })}</div>
+    <div class="abs" style="left:106px;top:106px">${coinMark(300)}</div>`;
+  return { w: px, h: px, html: page({ w: px, h: px, body, bg: C.trench }) };
 }
 
 export function appleTouchIcon() {
@@ -167,7 +180,7 @@ export function postWlOpen() {
         <span class="mono" style="font-size:18px;font-weight:600">${HANDLE}</span>
       </div>
     </div>
-    ${chore(1, 'X', 'Follow @elymumio', 'Done. Thanks for the follow.', 'up', 'happy', 'Open X', true, 860, 128, -1.2)}
+    ${chore(1, 'X', `Follow ${HANDLE}`, 'Done. Thanks for the follow.', 'up', 'happy', 'Open X', true, 860, 128, -1.2)}
     ${chore(2, 'X &middot; about 20 seconds', 'Repost our pinned post', 'Like it, repost it, and reply with your card.', 'cyan', 'smile', 'Open X', false, 820, 318, 0.8)}
     ${chore(3, 'Wallet', 'Connect a wallet on Robinhood Chain', 'You sign a message, not a transaction. We never ask for your seed phrase.', 'cream', 'smile', 'Connect', false, 780, 508, -0.6)}
     ${at(1360, 724, coin('sun', { mood: 'smile', look: [-3, 0], size: 104, ground: true }))}
@@ -198,17 +211,17 @@ export function postMint() {
     <div class="abs" style="left:0;top:70px">${starfield(1600, 90, 14, 11)}</div>
     <div class="abs" style="left:680px;top:150px">${starfield(110, 600, 6, 5)}</div>
     <div class="abs" style="left:0;top:770px">${seigaiha({ w: 1600, h: 130, r: 36, stroke: C.reef, width: 3, fill: C.trench })}</div>
-    ${plate('II', 'The Elymum NFT', '/mint', true)}
+    ${plate('II', 'The Coinnibal NFT', '/mint', true)}
     <div class="abs" style="left:76px;top:150px;width:640px;color:${C.cream}">
-      <div class="kick" style="color:${C.foam}">Elymum NFT &middot; on Robinhood Chain</div>
-      <div class="disp" style="font-size:96px;margin:18px 0 26px;color:${C.cream}">Get the <span class="wonk" style="color:${C.sun}">Elymum NFT.</span></div>
+      <div class="kick" style="color:${C.foam}">Coinnibal NFT &middot; on Robinhood Chain</div>
+      <div class="disp" style="font-size:96px;margin:18px 0 26px;color:${C.cream}">Get the <span class="wonk" style="color:${C.sun}">Coinnibal NFT.</span></div>
       <div style="font-size:22px;line-height:1.5;color:#BFD8DD;max-width:540px">Your key to the game. Holders pay a lower fee, get a holders-only room, cheaper power-ups and a free private room every day. You pay in ETH.</div>
       <div style="margin-top:30px">${flowPills(true)}</div>
     </div>
     <div class="mintcard">
       <div class="emblem">${rays}<span class="no">NO. ####</span>
         <div style="position:relative;margin-top:-40px">${coin('sun', { mood: 'smug', feet: false, look: [2, 0], size: 190 })}</div>
-        <div class="rib">Elymum NFT</div></div>
+        <div class="rib">Coinnibal NFT</div></div>
       <div class="right">
         <div class="kick" style="color:${C.stone}">Mint</div>
         <div style="display:flex;align-items:flex-end;gap:14px"><div class="price">NFT</div><span class="tag sun" style="margin-bottom:8px">paid in ETH</span></div>
@@ -317,7 +330,7 @@ export function stickerSheet() {
       <g stroke="${C.foam}" stroke-width="2" stroke-dasharray="2 10" stroke-linecap="round">${Array.from({ length: 11 }, (_, i) => `<path d="M0 ${110 + i * 100} H${w}"/>`).join('')}</g></svg>
     <div class="abs" style="left:90px;top:48px;display:flex;align-items:baseline;gap:22px">
       <div class="disp" style="font-size:56px">The cast of coins</div>
-      <div class="kick" style="color:${C.teal}">Elymum sticker sheet</div></div>
+      <div class="kick" style="color:${C.teal}">Coinnibal sticker sheet</div></div>
     ${cells}${mark}
     <div class="abs" style="left:96px;top:1086px" ><span class="mono" style="font-size:18px;font-weight:600">${HANDLE}</span></div>
     <div class="abs" style="right:90px;top:1050px;transform:rotate(-1.5deg)">${wordmark({ width: 420, diecut: true })}</div>`;
@@ -389,7 +402,7 @@ export function arenaPoster(a) {
         <div style="font-size:12.5px;line-height:1.35;color:#3E3A31;margin-top:6px">${a.line}</div></div>
       <div class="abs" style="left:15px;right:15px;bottom:14px;display:flex;justify-content:space-between;align-items:center;border-top:2px dashed ${C.sand2};padding-top:9px">
         <span class="kick" style="font-size:10.5px;color:${C.stone}">Ticket</span>
-        <span class="num" style="font-size:15px;font-weight:600">${a.entry} <span style="color:${C.teal}">in $ELYMUM</span></span></div>
+        <span class="num" style="font-size:15px;font-weight:600">${a.entry} <span style="color:${C.teal}">in $NIBAL</span></span></div>
     </div>
     <div class="abs" style="right:6px;top:178px;transform:rotate(6deg)">${coin(a.coin[0], { mood: a.coin[1], look: [-3, 1], size: 76, feet: false, diecut: 7 })}</div>`;
   return { w, h, html: page({ w, h, body }) };

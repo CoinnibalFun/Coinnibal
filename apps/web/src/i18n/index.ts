@@ -1,4 +1,4 @@
-import { activeChain } from '@elymum/shared';
+import { SITE_X_HANDLE_DEFAULT, activeChain, isXHandle } from '@elymum/shared';
 import { useSyncExternalStore } from 'react';
 import { en } from './en';
 import { LOCALES, type Locale } from './locales/meta';
@@ -65,21 +65,41 @@ export function formatMessage(s: string, vars: TVars | undefined, locale: Locale
   return s;
 }
 
-/**
- * The placeholder every string may use without the caller passing it: `{chain}`, the name of the Robinhood Chain
- * network the game runs on ("Robinhood Chain Testnet" now, "Robinhood Chain" at mainnet). It follows the active
- * network (`setActiveChain` in `@elymum/shared`: `VITE_CHAIN_ID` at boot, then the server's); `refreshChainText`
- * re-renders on a change.
- */
-let chainVars: { chain: string } = { chain: activeChain().name };
+/** The project's X handle at boot (no `@`): the build's `VITE_X_HANDLE`, else the shared default. */
+export const X_HANDLE_BUILD: string = (() => {
+  const v = String((import.meta.env?.VITE_X_HANDLE as string | undefined) ?? '').replace(/^@/, '').trim();
+  return isXHandle(v) ? v : SITE_X_HANDLE_DEFAULT;
+})();
 
-/** Re-reads `{chain}` from the active network; components using `useT` re-render when it changed. */
-export function refreshChainText(): void {
-  const next = { chain: activeChain().name };
-  if (next.chain === chainVars.chain) return;
+/**
+ * The placeholders every string may use without the caller passing them:
+ * - `{chain}`, the name of the Robinhood Chain network the game runs on ("Robinhood Chain Testnet" now, "Robinhood
+ *   Chain" at mainnet). It follows the active network (`setActiveChain` in `@elymum/shared`: `VITE_CHAIN_ID` at boot,
+ *   then the server's); `refreshChainText` re-renders on a change.
+ * - `{ourX}`, the project's X handle with its `@` (`X_HANDLE_BUILD`, then the server's site setting once it is
+ *   loaded: `setOurXHandle`).
+ */
+let chainVars: { chain: string; ourX: string } = { chain: activeChain().name, ourX: `@${X_HANDLE_BUILD}` };
+
+function setGlobals(next: { chain: string; ourX: string }): void {
+  if (next.chain === chainVars.chain && next.ourX === chainVars.ourX) return;
   chainVars = next;
   fns.clear();
   for (const fn of listeners) fn();
+}
+
+/** Re-reads `{chain}` from the active network; components using `useT` re-render when it changed. */
+export function refreshChainText(): void {
+  setGlobals({ ...chainVars, chain: activeChain().name });
+}
+
+/** The project's X handle with its `@` (what `{ourX}` reads). */
+export const ourXHandle = (): string => chainVars.ourX;
+
+/** Sets `{ourX}` from the site settings (a handle with or without `@`; an invalid one is ignored). */
+export function setOurXHandle(handle: string | null | undefined): void {
+  const h = String(handle ?? '').replace(/^@/, '');
+  if (isXHandle(h)) setGlobals({ ...chainVars, ourX: `@${h}` });
 }
 
 export function translate(key: TKey, vars?: TVars): string {
@@ -116,7 +136,7 @@ function fnFor(k: string) {
   }
   return f;
 }
-const textKey = (): string => `${current}|${chainVars.chain}`;
+const textKey = (): string => `${current}|${chainVars.chain}|${chainVars.ourX}`;
 
 /** React hook: `const t = useT(); t('lo.tab.play')`. Re-renders when the language or the chain changes. */
 export function useT(): (key: TKey, vars?: TVars) => string {

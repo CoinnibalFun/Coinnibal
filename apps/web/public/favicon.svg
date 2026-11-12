@@ -1,17 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-56 -56 116 116">
-  <!-- Elymum coin E-mark (design/motifs/Wordmark.tsx CoinMark): cyan coin, one hard shade, ink outline, fat cream E. -->
+  <!-- Coinnibal coin mark (design/motifs/Wordmark.tsx CoinMark): a cyan coin with a bite out of it, one hard shade, ink outline, fat cream C. -->
   <defs>
-    <clipPath id="c"><circle r="46"/></clipPath>
+    <clipPath id="c"><path d="M46 -0.63 A46 46 0 1 1 -7.36 -45.41 A15.64 15.64 0 0 0 13.63 -31.98 A16.27 16.27 0 0 0 29.13 -18.98 A15.64 15.64 0 0 0 46 -0.63Z"/></clipPath>
+    <path id="b" d="M46 -0.63 A46 46 0 1 1 -7.36 -45.41 A15.64 15.64 0 0 0 13.63 -31.98 A16.27 16.27 0 0 0 29.13 -18.98 A15.64 15.64 0 0 0 46 -0.63Z"/>
   </defs>
-  <circle cx="4" cy="4" r="47" fill="#04181C"/>
-  <circle r="46" fill="#2490B0"/>
+  <use href="#b" fill="#04181C" transform="translate(4 4)"/>
+  <use href="#b" fill="#2490B0"/>
   <circle cx="-5" cy="-7" r="45" fill="#34B7DD" clip-path="url(#c)"/>
-  <circle r="36" fill="none" stroke="#2490B0" stroke-width="3"/>
+  <circle r="36" fill="none" stroke="#2490B0" stroke-width="3" clip-path="url(#c)"/>
   <path d="M-36 -10 A37 37 0 0 1 -18 -32" stroke="#FFFFFF" stroke-width="5" fill="none" stroke-linecap="round" opacity=".85"/>
-  <circle r="46" fill="none" stroke="#04181C" stroke-width="5"/>
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M15 -22 H-12 V22 H15 M-12 0 H10" stroke="#04181C" stroke-width="22" transform="translate(3 3)"/>
-    <path d="M15 -22 H-12 V22 H15 M-12 0 H10" stroke="#04181C" stroke-width="22"/>
-    <path d="M15 -22 H-12 V22 H15 M-12 0 H10" stroke="#F6EEDA" stroke-width="14"/>
+  <use href="#b" fill="none" stroke="#04181C" stroke-width="5" stroke-linejoin="round"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(-4 4)">
+    <path d="M13 -14 C8 -22 -13 -24 -13 0 C-13 24 8 22 13 14" stroke="#04181C" stroke-width="22" transform="translate(3 3)"/>
+    <path d="M13 -14 C8 -22 -13 -24 -13 0 C-13 24 8 22 13 14" stroke="#04181C" stroke-width="22"/>
+    <path d="M13 -14 C8 -22 -13 -24 -13 0 C-13 24 8 22 13 14" stroke="#F6EEDA" stroke-width="14"/>
   </g>
 </svg>

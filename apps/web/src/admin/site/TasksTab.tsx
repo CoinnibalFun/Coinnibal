@@ -2,6 +2,7 @@ import { SITE_LIMITS, WL_TASK_KINDS, isXStatusUrl, type WlTask, type WlTaskKind 
 import { useCallback, useEffect, useState } from 'react';
 import { Chip, Field, InkButton, StampSpinner } from '../../design';
 import type { TaskInput } from '../../site/api';
+import { X_HANDLE } from '../../site/settings';
 import { Ext, errText, useFlash, type TabProps } from './common';
 
 export const KIND_LABEL: Record<WlTaskKind, string> = {
@@ -177,7 +178,7 @@ export function TasksTab({ api }: TabProps) {
             setLaunchErr(null);
           }}
           error={launchErr ?? undefined}
-          placeholder="https://x.com/elymumio/status/…"
+          placeholder={`https://x.com/${X_HANDLE}/status/…`}
         />
         <div className="ad-actions">
           <InkButton variant="pink" size="sm" onClick={() => void saveLaunch()} disabled={(launch.trim() || null) === launchSaved}>

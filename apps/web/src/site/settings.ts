@@ -1,9 +1,15 @@
-import { SITE_SETTINGS_DEFAULT, SITE_X_HANDLE_DEFAULT, type SiteSettings } from '@elymum/shared';
+import { SITE_SETTINGS_DEFAULT, type SiteSettings } from '@elymum/shared';
 import { useEffect, useState } from 'react';
+import { X_HANDLE_BUILD, setOurXHandle } from '../i18n';
 import { site } from './api';
 
-/** The project's X account (the default handle; pages that know the settings use `xProfile(settings.xHandle)`). */
-export const X_HANDLE = SITE_X_HANDLE_DEFAULT;
+/**
+ * The project's X account before the settings load (the build's `VITE_X_HANDLE`, else the shared default); pages that
+ * know the settings use `xProfile(settings.xHandle)`.
+ */
+export const X_HANDLE = X_HANDLE_BUILD;
+/** The settings while loading or when the server is down: the defaults, with the build's X handle. */
+const FALLBACK: SiteSettings = { ...SITE_SETTINGS_DEFAULT, xHandle: X_HANDLE_BUILD };
 export const X_URL = `https://x.com/${X_HANDLE}`;
 
 let cache: SiteSettings | null = null;
@@ -14,10 +20,14 @@ export function loadSiteSettings(): Promise<SiteSettings> {
   if (cache) return Promise.resolve(cache);
   pending ??= site
     .settings()
-    .then((s) => (cache = s))
+    .then((s) => {
+      cache = s;
+      setOurXHandle(s.xHandle);
+      return s;
+    })
     .catch(() => {
       pending = null;
-      return SITE_SETTINGS_DEFAULT;
+      return FALLBACK;
     });
   return pending;
 }
@@ -29,7 +39,7 @@ export function resetSiteSettings(): void {
 }
 
 export function useSiteSettings(): { settings: SiteSettings; loaded: boolean } {
-  const [state, setState] = useState<{ settings: SiteSettings; loaded: boolean }>(() => ({ settings: cache ?? SITE_SETTINGS_DEFAULT, loaded: !!cache }));
+  const [state, setState] = useState<{ settings: SiteSettings; loaded: boolean }>(() => ({ settings: cache ?? FALLBACK, loaded: !!cache }));
   useEffect(() => {
     let live = true;
     void loadSiteSettings().then((s) => live && setState({ settings: s, loaded: true }));

@@ -1,4 +1,4 @@
-import { BOOST_RULES, BPS, CUSTOM_CAPACITY_TIER, DEFAULT_ARENAS, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, activeChain, bpsToPercent, formatUsdCents, GAS_SYMBOL, totalFeeBps, type FeeRates } from '@elymum/shared';
+import { BOOST_RULES, BPS, CUSTOM_CAPACITY_TIER, DEFAULT_ARENAS, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, activeChain, bpsToPercent, formatUsdCents, GAS_SYMBOL, TOKEN_SYMBOL_DEFAULT, totalFeeBps, type FeeRates } from '@elymum/shared';
 import { FACTS as F, payoutExample, type DocsContent } from './facts';
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
@@ -9,12 +9,12 @@ const pct = (bps: number): string => `${nf.format(bps / 100)}%`;
 const S = F.server;
 const R = F.rules;
 const SH = F.shop;
-const sym = '$ELYMUM';
+const sym = TOKEN_SYMBOL_DEFAULT;
 /** How many tickets one approval may cover: "1, 5, 10 or 20". */
 const APPROVE = { choices: `${F.approve.choices.slice(0, -1).join(', ')} or ${F.approve.choices[F.approve.choices.length - 1]}`, preselected: F.approve.preselected } as const;
 
 /**
- * The player guide in English: how to play, what the Elymum NFT and the token are for, and how the money
+ * The player guide in English: how to play, what the Coinnibal NFT and the token are for, and how the money
  * moves, kept short. Every number comes from `FACTS` (see facts.ts); the fee rates on profit are the server's
  * (`ChainStatus.fees`, the arena contract's `config()`) when known, else the contract defaults. `chain` names the
  * Robinhood Chain network (testnet or mainnet; the active one by default). Gas is ETH.
@@ -34,8 +34,8 @@ export const docsEn = (
     pct,
     num,
     kicker: 'Player guide',
-    title: 'How Elymum works',
-    deck: `How to play, how rounds and fees work, what the Elymum NFT and ${symbol} are for. Short and simple. The numbers here are the game's defaults; the numbers on your ticket are the ones that count.`,
+    title: 'How Coinnibal works',
+    deck: `How to play, how rounds and fees work, what the Coinnibal NFT and ${symbol} are for. Short and simple. The numbers here are the game's defaults; the numbers on your ticket are the ones that count.`,
     rates,
     dateline: [
       `Fee ${total} of profit only`,
@@ -120,7 +120,7 @@ export const docsEn = (
               { term: 'One ticket:', text: 'you can hold one open ticket per arena at a time.' },
               {
                 term: 'Private rooms',
-                text: `are your own rooms with your own rules and an invite code, free or with tickets, opened for a small fee in ${GAS_SYMBOL}; Elymum NFT holders open one a day for free (up to ${CUSTOM_CAPACITY_TIER} players).`,
+                text: `are your own rooms with your own rules and an invite code, free or with tickets, opened for a small fee in ${GAS_SYMBOL}; Coinnibal NFT holders open one a day for free (up to ${CUSTOM_CAPACITY_TIER} players).`,
               },
               {
                 term: 'Opening soon:',
@@ -212,12 +212,12 @@ export const docsEn = (
       },
       {
         id: 'nft',
-        title: 'The Elymum NFT',
+        title: 'The Coinnibal NFT',
         lede: 'Your key to the game, with perks every time you play.',
         blocks: [
           {
             kind: 'p',
-            text: `The Elymum NFT is a collection of coin characters (ERC-721) on ${chain}. You mint it on the Mint page with ${GAS_SYMBOL}: the WL first, then everyone. The Mint page shows the price from the contract before you sign. The NFT is not a ticket and has no value inside a round. It is your membership card.`,
+            text: `The Coinnibal NFT is a collection of coin characters (ERC-721) on ${chain}. You mint it on the Mint page with ${GAS_SYMBOL}: the WL first, then everyone. The Mint page shows the price from the contract before you sign. The NFT is not a ticket and has no value inside a round. It is your membership card.`,
           },
           {
             kind: 'list',
@@ -303,7 +303,7 @@ export const docsEn = (
           },
           {
             kind: 'p',
-            text: `The server key can only settle open tickets and burn from an arena's vault (never more than it holds); it cannot move tokens to a wallet of its choice. The admin cannot take an open arena's vault. Elymum currently runs on ${chain}; the network may change in the future, and any move will be announced in the official channels.`,
+            text: `The server key can only settle open tickets and burn from an arena's vault (never more than it holds); it cannot move tokens to a wallet of its choice. The admin cannot take an open arena's vault. Coinnibal currently runs on ${chain}; the network may change in the future, and any move will be announced in the official channels.`,
           },
           {
             kind: 'note',
@@ -317,13 +317,13 @@ export const docsEn = (
       {
         id: 'wallet',
         title: 'Wallet safety',
-        lede: 'Read before you sign. Elymum never asks for your secret recovery phrase.',
+        lede: 'Read before you sign. Coinnibal never asks for your secret recovery phrase.',
         strip: { label: 'Read before you sign', panels: ['Someone asks for your phrase.', 'Never. Not to anyone.', 'Sign only what you have read.'] },
         blocks: [
           {
             kind: 'list',
             items: [
-              { term: 'Sign-in', text: 'is only a message signature ("Sign in to Elymum. This is free and sends no transaction."): no transaction, no cost.' },
+              { term: 'Sign-in', text: 'is only a message signature ("Sign in to Coinnibal. This is free and sends no transaction."): no transaction, no cost.' },
               { term: 'A ticket', text: `takes at most two transactions: an approval of the arena contract for ${symbol} (for the entry fee of ${APPROVE.choices} tickets of that room, your choice, never unlimited), then the ticket itself. If your wallet asks you to approve any other address, do not sign.` },
               { term: 'Anyone asking', text: 'for your recovery phrase or private key, site, person or "support", is a scammer.' },
               { term: 'Use a separate wallet', text: 'for games and keep only what you want to play with in it.' },

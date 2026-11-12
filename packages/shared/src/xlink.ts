@@ -1,3 +1,5 @@
+import { SITE_HOST_DEFAULT } from './brand';
+
 /**
  * "Link X": a signed-in wallet ties its X (Twitter) account to its coin without any X API key. The server issues a
  * short-lived code (`X_CODE_RE`), the player posts it from their X account (X's web intent, `xLinkIntentUrl`) and
@@ -26,15 +28,22 @@ export function xMention(handle: unknown): string | null {
   return isXHandle(handle) ? `@${handle}` : null;
 }
 
-/** Link codes: `ELYMUM-` and six characters of `X_CODE_CHARS` (no 0/O, 1/I/L look-alikes). */
-export const X_CODE_RE = /^ELYMUM-[2-9A-HJKMNP-Z]{6}$/;
+/** The prefix of a new link code. */
+export const X_CODE_PREFIX = 'NIBAL';
+/**
+ * Prefixes a post may carry a code with: the current one, and the one from before the rename (`ELYMUM-`, for a
+ * code shown by a page that was open across the deploy; a code lives `X_CODE_TTL_MS`).
+ */
+export const X_CODE_PREFIXES: readonly string[] = [X_CODE_PREFIX, 'ELYMUM'];
+/** Link codes: `NIBAL-` (or the old `ELYMUM-`) and six characters of `X_CODE_CHARS` (no 0/O, 1/I/L look-alikes). */
+export const X_CODE_RE = /^(?:NIBAL|ELYMUM)-[2-9A-HJKMNP-Z]{6}$/;
 export const X_CODE_CHARS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 
 /** A code is valid this long after it was issued (ms). */
 export const X_CODE_TTL_MS = 30 * 60_000;
 
 /** The X post that proves the account: short and friendly, with the code (the proof) and the site. */
-export function xLinkPostText(code: string, site = 'elymum.io'): string {
+export function xLinkPostText(code: string, site = SITE_HOST_DEFAULT): string {
   return `Joining the coin party \u{1FA99} my code: ${code} ${site}`;
 }
 

@@ -3,6 +3,7 @@
  * nothing that could tell a rare apart). The coin is turned face-down: a blank, reeded coin with a question
  * mark, on the ring at night, in the style the collection will be revealed in.
  */
+import { NFT_NAME } from '@elymum/shared';
 import { CREAM, INK, P } from './palette';
 import type { ArtStyle } from './render';
 
@@ -21,7 +22,7 @@ function vector(id: number): string {
     );
   };
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Elymum No. ${id} (sealed)">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="${NFT_NAME} No. ${id} (sealed)">`,
     `<rect x="1.5" y="1.5" width="509" height="509" rx="30" fill="${P.reef}" stroke="${INK}" stroke-width="${w}"/>`,
     `<rect x="20" y="20" width="472" height="472" rx="18" fill="${P.trench}" stroke="${INK}" stroke-width="${w}"/>`,
     `<g fill="none" stroke="${P.current}" stroke-width="3">${[150, 182, 214].map((r) => `<circle cx="256" cy="270" r="${r}"/>`).join('')}</g>`,
@@ -102,7 +103,7 @@ function pixel(id: number): string {
   };
   tag('SEALED', 1, P.sun);
   tag(`No.${id}`, N - 8, CREAM);
-  const out = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${N} ${N}" width="512" height="512" shape-rendering="crispEdges" role="img" aria-label="Elymum No. ${id} (sealed)">`];
+  const out = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${N} ${N}" width="512" height="512" shape-rendering="crispEdges" role="img" aria-label="${NFT_NAME} No. ${id} (sealed)">`];
   for (let y = 0; y < N; y++) {
     let x = 0;
     while (x < N) {

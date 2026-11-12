@@ -28,6 +28,7 @@ import {
   type WlStatus,
   type WlTask,
   type WlTaskAnswer,
+  BRAND_NAME,
 } from '@elymum/shared';
 import * as v from './validate';
 import { SiteFail, bad } from './validate';
@@ -36,11 +37,11 @@ import { SiteFail, bad } from './validate';
 const wkey = (w: string): string => w.toLowerCase();
 
 /**
- * Earlier defaults of the project's X handle. A stored `xHandle` equal to one of them is switched to
- * `SITE_X_HANDLE_DEFAULT` on load, and the seeded tasks' text and links that name one are rewritten to
+ * Earlier defaults of the project's X handle. A stored `xHandle` equal to one of them (and not the current default:
+ * `X_HANDLE`, else `SITE_X_HANDLE_DEFAULT`) is switched to the default on load, and the seeded tasks' text and links that name one are rewritten to
  * the current handle (an admin-chosen handle, custom tasks and WL answers are never touched).
  */
-export const PREVIOUS_X_HANDLES: readonly string[] = ['elymum'];
+export const PREVIOUS_X_HANDLES: readonly string[] = ['elymum', 'elymumio'];
 
 /** The ids of the seeded tasks (`defaultTasks`), the only ones the handle migration rewrites. */
 const SEEDED_TASK_IDS = new Set(['follow_x', 'post_x', 'engage_launch', WL_TASK_X_HANDLE, WL_TASK_WALLET]);
@@ -59,6 +60,14 @@ export function rewriteHandle(text: string, handle: string): string {
     out = out.replace(at, `@${handle}`).replace(link, `$1${handle}`);
   }
   return out;
+}
+
+/** The product's name before the rename, as a whole word: the seeded tasks' text says the current `BRAND_NAME`. */
+const PREVIOUS_BRAND = /\bElymum\b/g;
+
+/** Rewrites the old product name in a seeded task's text to the current one. */
+export function rewriteBrand(text: string): string {
+  return text.replace(PREVIOUS_BRAND, BRAND_NAME);
 }
 
 /** A WL entry as stored. */
@@ -98,14 +107,14 @@ interface CollabRecord {
 }
 
 /** The seeded WL tasks (spec "Default tasks"). */
-export function defaultTasks(): WlTask[] {
+export function defaultTasks(handle: string = SITE_X_HANDLE_DEFAULT): WlTask[] {
   return [
     {
       id: 'follow_x',
       kind: 'follow_x',
-      title: `Follow @${SITE_X_HANDLE_DEFAULT}`,
-      body: `Follow @${SITE_X_HANDLE_DEFAULT} on X.`,
-      target: `https://x.com/${SITE_X_HANDLE_DEFAULT}`,
+      title: `Follow @${handle}`,
+      body: `Follow @${handle} on X.`,
+      target: `https://x.com/${handle}`,
       required: true,
       enabled: true,
       order: 0,
@@ -113,8 +122,8 @@ export function defaultTasks(): WlTask[] {
     {
       id: 'post_x',
       kind: 'post_x',
-      title: 'Post about Elymum on X',
-      body: `Post about Elymum on X, tag @${SITE_X_HANDLE_DEFAULT}, then paste the link to your post.`,
+      title: `Post about ${BRAND_NAME} on X`,
+      body: `Post about ${BRAND_NAME} on X, tag @${handle}, then paste the link to your post.`,
       target: null,
       required: true,
       enabled: true,
@@ -188,7 +197,7 @@ export interface SiteStoreOptions {
 export class SiteStore {
   private settingsV: SiteSettings;
   private readonly defaults: SiteSettings;
-  private tasksV: WlTask[] = defaultTasks();
+  private tasksV: WlTask[];
   private wl: WlRecord[] = [];
   private collabs: CollabRecord[] = [];
   private readonly wlByWallet = new Map<string, WlRecord>();
@@ -204,6 +213,7 @@ export class SiteStore {
     this.log = opts.log ?? (() => {});
     this.defaults = { ...SITE_SETTINGS_DEFAULT, ...opts.defaults };
     this.settingsV = { ...this.defaults };
+    this.tasksV = defaultTasks(this.defaults.xHandle);
     this.load();
   }
 
@@ -236,7 +246,7 @@ export class SiteStore {
     if (settings) {
       const d = this.defaults;
       const handle = normalizeXHandle(settings.xHandle);
-      const previous = handle !== null && handle !== SITE_X_HANDLE_DEFAULT && PREVIOUS_X_HANDLES.includes(handle);
+      const previous = handle !== null && handle !== d.xHandle && PREVIOUS_X_HANDLES.includes(handle);
       this.settingsV = {
         wlOpen: typeof settings.wlOpen === 'boolean' ? settings.wlOpen : d.wlOpen,
         collabOpen: typeof settings.collabOpen === 'boolean' ? settings.collabOpen : d.collabOpen,
@@ -255,13 +265,13 @@ export class SiteStore {
       let migrated = 0;
       this.tasksV = tasks.map((t) => {
         if (!SEEDED_TASK_IDS.has(t.id)) return t;
-        const next = { ...t, title: rewriteHandle(t.title, handle), body: rewriteHandle(t.body, handle), target: t.target === null ? null : rewriteHandle(t.target, handle) };
+        const next = { ...t, title: rewriteBrand(rewriteHandle(t.title, handle)), body: rewriteBrand(rewriteHandle(t.body, handle)), target: t.target === null ? null : rewriteHandle(t.target, handle) };
         if (next.title === t.title && next.body === t.body && next.target === t.target) return t;
         migrated++;
         return next;
       });
       if (migrated > 0) {
-        this.log(`site: ${migrated} seeded WL task(s) now name @${handle}`);
+        this.log(`site: ${migrated} seeded WL task(s) now name ${BRAND_NAME} and @${handle}`);
         this.save('tasks');
       }
     }

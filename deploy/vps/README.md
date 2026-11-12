@@ -1,4 +1,4 @@
-# Elymum game server on a VPS
+# Coinnibal game server on a VPS
 
 The website is on Vercel at **https://elymum.io**; the game server runs on a VPS at **https://game.elymum.io**,
 and the website talks to it directly (every player reaches the server with their own IP address, so the per-IP
