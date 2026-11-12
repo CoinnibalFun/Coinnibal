@@ -245,3 +245,70 @@
     display: none;
   }
 }
+
+/* ── the country picker (CountrySelect.tsx): the same tag and sticker list, a search on top, flag rows ── */
+.cty-pick {
+  gap: 8px;
+}
+.cty-pick > .kb-flag {
+  flex: none;
+}
+.cty-pop__search {
+  position: sticky;
+  top: -6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px -6px 6px;
+  padding: 8px 10px;
+  border-bottom: 2px dashed var(--rule);
+  background: var(--sticker);
+}
+.lang-pop.is-sheet .cty-pop__search {
+  top: 0;
+  margin: 0 0 6px;
+  padding: 8px 0;
+}
+.cty-pop__glass {
+  flex: none;
+  color: var(--ink-3, #6b655a);
+}
+.cty-pop__input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 12px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--ink-fixed);
+  font-family: var(--font-body);
+  /* 16 px: phones do not zoom into the box */
+  font-size: 16px;
+  font-weight: 600;
+  outline: none;
+}
+.cty-pop__input::placeholder {
+  color: var(--ink-3, #6b655a);
+  font-weight: 500;
+}
+.cty-pop__input:focus-visible {
+  outline: 3px solid var(--focus, var(--teal));
+  outline-offset: 1px;
+}
+.cty-pop__opt {
+  grid-template-columns: 20px auto minmax(0, 1fr);
+  /* a row scrolled into view clears the search box stuck on top */
+  scroll-margin-top: 64px;
+}
+.cty-pop__flag {
+  display: inline-flex;
+}
+.cty-pop__empty {
+  margin: 0;
+  padding: 12px 10px;
+  color: var(--ink-3, #6b655a);
+  font-size: 15px;
+}

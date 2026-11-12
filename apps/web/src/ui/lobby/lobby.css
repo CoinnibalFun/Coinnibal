@@ -1426,18 +1426,6 @@
   border: var(--stroke-sm) dashed var(--outline);
   border-radius: var(--r-card);
 }
-.wl-ok {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  padding: 3px 11px;
-  border: var(--stroke-sm) solid var(--outline);
-  border-radius: var(--r-pill);
-  background: #e3f1ec;
-  color: var(--up-ink);
-  font-size: 12px;
-}
 .wl-install {
   display: inline-flex;
   flex-wrap: wrap;

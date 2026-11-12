@@ -33,9 +33,9 @@ export const X_CODE_CHARS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 /** A code is valid this long after it was issued (ms). */
 export const X_CODE_TTL_MS = 30 * 60_000;
 
-/** The X post that proves the account: the code and the site. */
+/** The X post that proves the account: short and friendly, with the code (the proof) and the site. */
 export function xLinkPostText(code: string, site = 'elymum.io'): string {
-  return `Linking my X to Elymum: ${code} ${site}`;
+  return `Joining the coin party \u{1FA99} my code: ${code} ${site}`;
 }
 
 /** X's web intent with the proof post written out (nothing is posted unless the player posts it). */

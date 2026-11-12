@@ -234,11 +234,7 @@ export function WalletModal() {
             {t('wl.getTokens', { sym: tok.symbol })}
           </button>
         )}
-        {verified ? (
-          <p className="wl-ok mono">
-            <Icon name="check" size={16} /> {t('wl.verified')}
-          </p>
-        ) : (
+        {!verified && (
           <div className="wl-verify">
             <p className="kl-note">{t('wl.verifyNote')}</p>
             <Button

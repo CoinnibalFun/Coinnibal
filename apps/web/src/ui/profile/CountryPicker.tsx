@@ -7,7 +7,7 @@ import { saveProfile } from '../../wallet/profile';
 import { useAddress } from '../../wallet/store';
 import { flagSkinKind } from '../../render/flagskin';
 import { toast, updateSettings, useUi } from '../../store';
-import { CountryField } from '../Flag';
+import { CountrySelect } from '../CountrySelect';
 import { CoinPortrait } from '../game/CoinPortrait';
 import { wearsPicture } from './picture';
 import { Punch, Row } from './SettingsPage';
@@ -16,7 +16,7 @@ import { Punch, Row } from './SettingsPage';
  * "You play for": the flag by the player's name (`join.country`), and "Wear the flag on my coin"
  * (the flag skin, `join.flag`: the coin painted with that flag). Kept in the local settings at
  * once; a signed-in wallet with a saved profile also saves them there (they follow the player to
- * other devices). The first visit shows a guess from the browser's languages, marked as one.
+ * other devices). The first visit starts from a guess from the browser's languages. Two plain rows: label and control.
  */
 export function CountryPicker({ className }: { className?: string }) {
   const t = useT();
@@ -55,33 +55,18 @@ export function CountryPicker({ className }: { className?: string }) {
   const kind = flagSkinKind(country);
   // an uploaded picture worn on the coin wins over the flag
   const picture = !!owner && wearsPicture(settings.picture, profile?.avatar);
-  const note = !country
-    ? t('pf.flagSkinNone')
-    : settings.flagSkin && picture
-      ? t('pf.flagSkinPicture')
-      : kind === 'colours'
-        ? t('pf.flagSkinColours')
-        : kind === null
-          ? t('pf.flagSkinPlain')
-          : t('pf.flagSkinNote');
 
   return (
-    <div className={`cp-country${className ? ` ${className}` : ''}`}>
-      <CountryField
-        label={t('pf.country')}
-        value={settings.country}
-        onChange={pick}
-        noneLabel={t('pf.countryNone')}
-        hint={settings.countryAuto && settings.country ? t('pf.countryGuess') : t('pf.countryHint')}
-      />
-      <div className="g-set cp-flagskin">
-        <Row label={t('pf.flagSkin')} note={note}>
-          {country && kind && (
-            <CoinPortrait skin={settings.skin} size={44} still seed={21} flag={country} className={`cp-flagskin__coin${settings.flagSkin && !picture ? '' : ' is-off'}`} />
-          )}
-          <Punch on={settings.flagSkin && !!country} onChange={wear} label={t('pf.flagSkin')} disabled={!country} />
-        </Row>
-      </div>
+    <div className={`g-set cp-country${className ? ` ${className}` : ''}`}>
+      <Row label={t('pf.country')}>
+        <CountrySelect label={t('pf.country')} value={settings.country} onChange={pick} noneLabel={t('pf.countryNone')} />
+      </Row>
+      <Row label={t('pf.flagSkin')}>
+        {country && kind && (
+          <CoinPortrait skin={settings.skin} size={44} still seed={21} flag={country} className={`cp-flagskin__coin${settings.flagSkin && !picture ? '' : ' is-off'}`} />
+        )}
+        <Punch on={settings.flagSkin && !!country} onChange={wear} label={t('pf.flagSkin')} disabled={!country} />
+      </Row>
     </div>
   );
 }

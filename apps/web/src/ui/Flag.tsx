@@ -1,5 +1,5 @@
 import { COUNTRY_CODES, isCountryCode } from '@elymum/shared';
-import { memo, useId, useMemo, type SelectHTMLAttributes } from 'react';
+import { memo, useId, useMemo } from 'react';
 import { intlLocale, useLocale } from '../i18n';
 import { FLAG_H, FLAG_W, flagArt, type FlagOp } from '../render/flags';
 import './flag.css';
@@ -128,64 +128,11 @@ export const Flag = memo(function Flag({ code, size = 14, className, label = tru
 });
 
 /** Every country, by name in the reader's language. */
-function useCountryOptions(): { code: string; name: string }[] {
+export function useCountryOptions(): { code: string; name: string }[] {
   const locale = useLocale();
   return useMemo(() => {
     const tag = intlLocale();
     return COUNTRY_CODES.map((code) => ({ code, name: countryName(code, tag) })).sort((a, b) => a.name.localeCompare(b.name, tag));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locale]);
-}
-
-export interface CountryFieldProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'value' | 'onChange'> {
-  label: string;
-  /** '' for none. */
-  value: string;
-  onChange: (code: string) => void;
-  /** The "none" option's text. */
-  noneLabel: string;
-  hint?: string;
-}
-
-/** The country picker: a form box like `Field` (mono caption, bold value) with the flag in front. */
-export function CountryField({ label, value, onChange, noneLabel, hint, id, className, ...select }: CountryFieldProps) {
-  const auto = useId();
-  const selectId = id ?? `c${auto}`;
-  const noteId = `${selectId}-note`;
-  const options = useCountryOptions();
-  return (
-    <div className={`kb-field kb-country${className ? ` ${className}` : ''}`}>
-      <label className="kb-field__label mono" htmlFor={selectId}>
-        {label}
-      </label>
-      <div className="kb-field__box">
-        <span className="kb-country__flag" aria-hidden="true">
-          {isCountryCode(value) ? <Flag code={value} size={18} label={false} /> : <span className="kb-flag is-none" style={{ ['--flag-h' as string]: '18px' }} />}
-        </span>
-        <select
-          id={selectId}
-          className="kb-field__input kb-country__select"
-          value={isCountryCode(value) ? value : ''}
-          onChange={(e) => onChange(e.target.value)}
-          aria-describedby={hint ? noteId : undefined}
-          {...select}
-        >
-          <option value="">{noneLabel}</option>
-          {options.map((o) => (
-            <option key={o.code} value={o.code}>
-              {o.name}
-            </option>
-          ))}
-        </select>
-        <svg className="kb-country__chev" viewBox="0 0 12 8" aria-hidden="true" focusable="false">
-          <path d="M1 1.5 L6 6.5 L11 1.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-      {hint && (
-        <div id={noteId} className="kb-field__note">
-          {hint}
-        </div>
-      )}
-    </div>
-  );
 }
