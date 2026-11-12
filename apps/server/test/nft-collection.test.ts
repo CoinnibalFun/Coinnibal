@@ -161,7 +161,7 @@ describe('NftCollection', () => {
     expect(c.svg(5)).toBe(unrevealedSvg(5, 'pixel'));
     expect(c.metadata(5, 'https://x.example')).toEqual({
       name: 'Elymum No. 5',
-      description: expect.stringContaining('sealed'),
+      description: expect.stringContaining('not revealed yet'),
       image: 'https://x.example/api/nft/5.svg',
       external_url: 'https://x.example',
       attributes: [{ trait_type: 'Status', value: 'Sealed' }],

@@ -59,7 +59,7 @@ describe('PageBoundary', () => {
       );
     }
     render(<Host />);
-    expect(screen.getByTestId('site-crash').textContent).toMatch(/This page did not open\..*Something tripped|Something tripped.*This page did not open/);
+    expect(screen.getByTestId('site-crash').textContent).toMatch(/This page did not open\..*Something went wrong|Something went wrong.*This page did not open/);
     broken = false;
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(screen.getByText('the page')).toBeTruthy();

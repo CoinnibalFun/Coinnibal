@@ -168,7 +168,7 @@ describe('lobby while the game token is not set', () => {
     // an arena can now be picked; without a wallet its button asks to connect (the path to buying)
     act(() => arenas[0].click());
     expect(cta().textContent).toContain('Connect wallet');
-    expect(cta().textContent).toContain('Asphodel Meadow · 1,000 $ELYMUM');
+    expect(cta().textContent).toContain('$1 Room · 1,000 $ELYMUM');
     expect(cta().disabled).toBe(false);
   });
 });
@@ -199,6 +199,6 @@ describe('lobby: the chain cannot be read, or its contract is not trusted', () =
     recv({ t: 'chain', chain: SET });
     recv({ t: 'rooms', rooms: [PRACTICE, { ...ARENAS[0], round: { n, endsAt: (n + 1) * roundMs, joinsCloseAt: (n + 1) * roundMs - 30_000 } }], online: 2 });
     lobby();
-    expect(screen.getByText('2-minute rounds · alive at the bell, paid your till')).toBeTruthy();
+    expect(screen.getByText('2-minute rounds · alive at the bell? You get paid')).toBeTruthy();
   });
 });

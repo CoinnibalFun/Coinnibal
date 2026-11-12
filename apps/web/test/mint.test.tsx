@@ -152,7 +152,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract({ phase: 'closed' })) }));
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(screen.getByTestId('mt-phase').textContent).toBe('Closed'));
-    expect(screen.getByRole('heading', { name: 'Sealed. For now.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Elymum NFT' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Join the WL' }).getAttribute('href')).toBe('/wl');
     expect(screen.getByTestId('mt-price').textContent).toMatch(/0\.0300\s*ETH.*\$1\.00/);
   });
@@ -169,9 +169,9 @@ describe('/mint page', { timeout: 30_000 }, () => {
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(screen.getByTestId('mt-eligibility').textContent).toMatch(/is on the allowlist\./));
     fireEvent.click(screen.getByRole('button', { name: 'One more' }));
-    expect(screen.getByRole('spinbutton', { name: 'How many emblems' }).textContent).toBe('2');
+    expect(screen.getByRole('spinbutton', { name: 'How many NFTs' }).textContent).toBe('2');
     expect((screen.getByRole('button', { name: 'One more' }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Mint 2 emblems' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mint 2 NFTs' }));
     await screen.findByTestId('mt-done');
     const call = spies.sendWalletCall.mock.calls[0][0];
     expect(call).toMatchObject({ address: NFT, functionName: 'mintAllowlist', args: [2n, [`0x${'11'.repeat(32)}`]] });
@@ -203,8 +203,8 @@ describe('/mint page', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract({ phase: 'public' })), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(false) }));
     spies.getMintState.mockResolvedValue({ phase: 2, phaseName: 'public', price: 1n, minPrice: 0n, maxPrice: 0n, keeper: null, root: ROOT, maxSupply: 10, totalSupply: 10, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: true });
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect((screen.getByRole('button', { name: 'Mint 1 emblem' }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(screen.getByRole('button', { name: 'Mint 1 emblem' }));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Mint 1 NFT' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Mint 1 NFT' }));
     expect((await screen.findByTestId('mt-error')).textContent).toMatch(/sold out/);
     expect(spies.sendWalletCall).not.toHaveBeenCalled();
   });
@@ -262,7 +262,7 @@ describe('mint logic: price copy, funds, errors', () => {
   it('blocks only a balance that is known and too small', () => {
     expect(fundsBlocker(null, ETH)).toBeNull();
     expect(fundsBlocker(2n * ETH, ETH)).toBeNull();
-    expect(fundsBlocker(ETH / 2n, 1_010_000_000_000_000_000n)).toMatch(/^this mint sends 1\.01 ETH plus gas, and this wallet holds 0\.5 ETH/);
+    expect(fundsBlocker(ETH / 2n, 1_010_000_000_000_000_000n)).toMatch(/^this mint sends 1\.01 ETH plus gas, and this wallet has 0\.5 ETH/);
   });
 
   it('words the mint failures that matter', () => {
@@ -276,27 +276,28 @@ describe('mint logic: price copy, funds, errors', () => {
 });
 
 describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000 }, () => {
-  it('says the testnet price, not "one dollar"', async () => {
+  it('says the testnet price plainly, and makes no dollar claim', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/mint': testnetState() }));
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/1 ETH on testnet/));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).not.toMatch(/dollar/i);
-    expect(document.querySelector('.mt-lede')!.textContent).toMatch(/Testnet mint: 1 ETH/);
-    expect(document.querySelector('.mt-lede')!.textContent).not.toMatch(/pinned to a dollar/);
-    expect(screen.getByTestId('mt-mainnet-note').textContent).toMatch(/mainnet mint will be much cheaper/);
+    await waitFor(() => expect(document.querySelector('.mt-lede')!.textContent).toMatch(/testnet mint: 1 ETH, paid with free test ETH/));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Get the Elymum NFT.');
+    expect(document.querySelector('.mt-page')!.textContent).not.toMatch(/\$1\b|dollar/i);
+    expect(screen.getByTestId('mt-mainnet-note').textContent).toMatch(/mainnet mint will cost much less/);
   });
 
-  it('mainnet: the dollar story only while the price tracks a dollar', async () => {
+  it('mainnet: no dollar story, whatever the price; the card shows the price read from the contract', async () => {
     spies.fetchServerChain.mockResolvedValue(chainStatus({ chainId: 999, nftAddress: NFT }));
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(pubContract(), { chainId: 999, priceUsd: 1.02 }) }));
-    const { unmount } = render(<Mint pollMs={0} />);
-    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/One dollar/));
-    unmount();
-    restore();
-    ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(pubContract(), { chainId: 999, priceUsd: 87.5 }) }));
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/1 ETH\./));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).not.toMatch(/dollar/i);
+    await waitFor(() => expect(screen.getByTestId('mt-price').textContent).toMatch(/ETH/));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Get the Elymum NFT.');
+    expect(document.querySelector('.mt-lede')!.textContent).toMatch(/read live from the contract/);
+    expect(document.querySelector('.mt-copy')!.textContent).not.toMatch(/dollar|pinned/i);
+    // the collection and every holder perk, linked from under the lede
+    expect(screen.getByTestId('mt-why-link').getAttribute('href')).toBe('#why-nft');
+    expect(screen.getByRole('heading', { level: 2, name: 'Why get the NFT?' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'About the collection' })).toBeTruthy();
+    expect(screen.getByTestId('mt-about').textContent).toMatch(/Lower fee: 10% instead of 20%/);
   });
 
   it('a session from another page without a connected wallet still offers Connect, then mints (no new signature)', async () => {
@@ -321,7 +322,7 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     const connectBtn = await screen.findByRole('button', { name: /Connect MetaMask/ });
     expect(screen.getByTestId('mt-connect').textContent).toMatch(/Signed in as/);
     fireEvent.click(connectBtn);
-    const mintBtn = await screen.findByRole('button', { name: 'Mint 1 emblem' });
+    const mintBtn = await screen.findByRole('button', { name: 'Mint 1 NFT' });
     await waitFor(() => expect((mintBtn as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(mintBtn);
     await screen.findByTestId('mt-done');
@@ -340,7 +341,7 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     const more = await screen.findByRole('button', { name: 'One more' });
     fireEvent.click(more);
     fireEvent.click(more);
-    const btn = screen.getByRole('button', { name: 'Mint 3 emblems' });
+    const btn = screen.getByRole('button', { name: 'Mint 3 NFTs' });
     await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(btn);
     await screen.findByTestId('mt-done');
@@ -357,7 +358,7 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     spies.getMintState.mockResolvedValue(freshPub());
     spies.sendWalletCall.mockImplementation(minted([7n]));
     render(<Mint pollMs={0} />);
-    const btn = await screen.findByRole('button', { name: 'Mint 1 emblem' });
+    const btn = await screen.findByRole('button', { name: 'Mint 1 NFT' });
     await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(btn);
     await screen.findByTestId('mt-done');
@@ -370,7 +371,7 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(screen.getByTestId('mt-blocker').textContent).toMatch(/Not enough ETH.*1\.01 ETH.*0\.5 ETH/));
     expect(screen.getByRole('link', { name: 'Get test ETH' })).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Mint 1 emblem' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Mint 1 NFT' }) as HTMLButtonElement).disabled).toBe(true);
     expect(spies.sendWalletCall).not.toHaveBeenCalled();
   });
 
@@ -380,7 +381,7 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     ({ restore } = mockFetch({ 'GET /api/site/mint': testnetState(), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(false) }));
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(screen.getByTestId('mt-blocker').textContent).toMatch(/Limit reached.*Public limit is 3 per wallet \(minted 3\)/));
-    expect((screen.getByRole('button', { name: 'Mint 1 emblem' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Mint 1 NFT' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('the dry run catches a contract refusal (sold out a moment ago) before the wallet', async () => {
@@ -389,10 +390,10 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     spies.getMintState.mockResolvedValue(freshPub());
     spies.client.estimateGas.mockRejectedValue(revert('SoldOut'));
     render(<Mint pollMs={0} />);
-    const btn = await screen.findByRole('button', { name: 'Mint 1 emblem' });
+    const btn = await screen.findByRole('button', { name: 'Mint 1 NFT' });
     await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(btn);
-    expect((await screen.findByTestId('mt-error')).textContent).toMatch(/Sold out: the last emblems went/);
+    expect((await screen.findByTestId('mt-error')).textContent).toMatch(/Sold out: the last NFTs were just minted/);
     expect(spies.sendWalletCall).not.toHaveBeenCalled();
   });
 
@@ -403,7 +404,7 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     spies.client.estimateGas.mockRejectedValue(new Error('fetch failed'));
     spies.sendWalletCall.mockImplementation(minted([1n]));
     render(<Mint pollMs={0} />);
-    const btn = await screen.findByRole('button', { name: 'Mint 1 emblem' });
+    const btn = await screen.findByRole('button', { name: 'Mint 1 NFT' });
     await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(btn);
     await screen.findByTestId('mt-done');
@@ -415,11 +416,11 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     spies.getMintState.mockResolvedValue(freshPub());
     spies.sendWalletCall.mockResolvedValue({ ok: false, hash: null, error: { kind: 'rejected', name: 'UserRejectedRequestError', args: [], code: 4001, message: 'declined' } });
     render(<Mint pollMs={0} />);
-    const btn = await screen.findByRole('button', { name: 'Mint 1 emblem' });
+    const btn = await screen.findByRole('button', { name: 'Mint 1 NFT' });
     await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(btn);
     expect((await screen.findByTestId('mt-error')).textContent).toMatch(/cancelled in your wallet\. Nothing was minted/);
-    expect((screen.getByRole('button', { name: 'Mint 1 emblem' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Mint 1 NFT' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('an NFT the build does not pin gets no payment: refused before the wallet opens', async () => {
@@ -429,10 +430,10 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
       ({ restore } = mockFetch({ 'GET /api/site/mint': testnetState(), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(false) }));
       spies.getMintState.mockResolvedValue(freshPub());
       render(<Mint pollMs={0} />);
-      const btn = await screen.findByRole('button', { name: 'Mint 1 emblem' });
+      const btn = await screen.findByRole('button', { name: 'Mint 1 NFT' });
       await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
       fireEvent.click(btn);
-      expect((await screen.findByTestId('mt-error')).textContent).toMatch(/does not recognise the emblem contract/);
+      expect((await screen.findByTestId('mt-error')).textContent).toMatch(/does not recognise the NFT contract/);
       expect(spies.sendWalletCall).not.toHaveBeenCalled();
     } finally {
       nftPin.ok = true;
@@ -447,7 +448,7 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     spies.getMintState.mockResolvedValue(freshPub());
     spies.sendWalletCall.mockImplementation(minted([1n]));
     render(<Mint pollMs={0} />);
-    const btn = await screen.findByRole('button', { name: 'Mint 1 emblem' });
+    const btn = await screen.findByRole('button', { name: 'Mint 1 NFT' });
     expect((btn as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(btn);
     await screen.findByTestId('mt-done');

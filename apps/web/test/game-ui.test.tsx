@@ -12,7 +12,7 @@ import { EmoteBar } from '../src/ui/game/EmoteBar';
 import { roomName, tokenFormat } from '../src/ui/game/format';
 
 const M = 1_000_000; // one whole token in ledger units (6 decimals)
-const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: 'Asphodel Meadow', width: 6400, height: 6400, players: 3, bots: 10, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M };
+const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: '$1 Room', width: 6400, height: 6400, players: 3, bots: 10, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M };
 const STATS: DeathStats = { aliveMs: 94_000, finalMass: 0, maxMass: 640, foodEaten: 88, cellsEaten: 1, playersEaten: 1, bestRank: 5 };
 const initial = useUi.getState();
 
@@ -56,8 +56,8 @@ describe('format helpers', () => {
   });
 
   it('names arenas and practice rooms', () => {
-    expect(roomName(ARENA)).toBe('Asphodel Meadow');
-    expect(roomName({ ...ARENA, arenaId: 4, instance: 2 })).toBe('Isles of the Blessed · 2');
+    expect(roomName(ARENA)).toBe('$1 Room');
+    expect(roomName({ ...ARENA, arenaId: 4, instance: 2 })).toBe('$10 Room · 2');
     expect(roomName({ ...ARENA, id: 'practice-rookie-2', mode: 'practice', league: 'rookie', arenaId: undefined })).toBe('Rookie Pond #2');
     expect(roomName({ ...ARENA, id: 'practice-pro-1', mode: 'practice', league: 'pro', arenaId: undefined })).toBe('Pro Pond #1');
   });

@@ -1,0 +1,109 @@
+/* ── "Why get the NFT?": the holder perks as die-cut sticker cards (landing, mint page) ── */
+.nf-why {
+  position: relative;
+  scroll-margin-top: 80px;
+}
+.nf-why__head {
+  margin-bottom: 22px;
+}
+.nf-why__kicker {
+  margin: 0;
+}
+.nf-why__h {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: clamp(30px, 4vw, 44px);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.nf-why__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nf-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'art big'
+    'title title'
+    'note note';
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 8px;
+  min-width: 0;
+  padding: 18px 18px 20px;
+  background: var(--sticker);
+  color: var(--on-sticker);
+  border: var(--stroke) solid var(--outline);
+  border-radius: 18px;
+  box-shadow: var(--sh-3, 4px 4px 0 var(--outline));
+}
+.nf-card:nth-child(odd) {
+  transform: rotate(-0.6deg);
+}
+.nf-card:nth-child(even) {
+  transform: rotate(0.5deg);
+}
+.nf-card__art {
+  grid-area: art;
+  position: relative;
+  display: inline-flex;
+  width: 64px;
+  height: 64px;
+}
+.nf-card__icon {
+  position: absolute;
+  right: -8px;
+  bottom: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--sun);
+  color: var(--ink-fixed);
+  border: 2.5px solid var(--outline);
+}
+.nf-card__big {
+  grid-area: big;
+  justify-self: end;
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--on-sticker);
+}
+.nf-card__t {
+  grid-area: title;
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 700;
+}
+.nf-card__n {
+  grid-area: note;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--on-sticker-2);
+}
+.nf-why__note {
+  margin: 20px 0 0;
+  max-width: 70ch;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nf-card:nth-child(n) {
+    transform: none;
+  }
+}

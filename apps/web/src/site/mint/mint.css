@@ -141,75 +141,56 @@
   color: var(--foam);
 }
 
-/* "What the emblem does" (Perks.tsx): small, under the lede (left column), under the card on phones */
-.mt-perks {
-  max-width: 460px;
+/* "Why get the NFT?" link under the lede */
+.mt-whylink {
+  display: inline-block;
+  margin-top: 14px;
+  color: var(--sun);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+/* the collection in plain words and the holder perks (WhyNft.tsx), full width under the card */
+.mt-about {
+  grid-column: 1 / -1;
+  padding-top: clamp(8px, 2vw, 24px);
+}
+.mt-about__h {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: clamp(28px, 3.4vw, 40px);
+  line-height: 1.05;
+  color: var(--cream);
+}
+.mt-about__list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 36px;
+  padding-left: 20px;
+  max-width: 70ch;
+  color: #bfd8dd;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.mt-about .nf-why__h {
+  color: var(--cream);
+}
+.mt-about .nf-why__kicker {
+  color: var(--foam);
+}
+.mt-about .nf-why__note {
+  color: #bfd8dd;
 }
 @media (min-width: 961px) {
-  .mt-page {
-    align-items: start;
-  }
   .mt-page > .mt-card {
     grid-column: 2;
-    grid-row: 1 / span 2;
-    align-self: center;
+    grid-row: 1;
   }
   .mt-page > .mt-copy {
     grid-column: 1;
     grid-row: 1;
-    align-self: end;
-  }
-  .mt-page > .mt-perks {
-    grid-column: 1;
-    grid-row: 2;
-    margin-top: calc(-1 * clamp(32px, 4vw, 56px) + 22px);
-  }
-}
-.mt-perks__h {
-  margin: 0 0 8px;
-  color: var(--sun);
-}
-.mt-perks__list {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.mt-perk {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: 14px;
-  line-height: 1.4;
-  color: #bfd8dd;
-}
-.mt-perk b {
-  color: var(--cream);
-  font-weight: 700;
-}
-.mt-perk__dot {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin-top: 0;
-  border-radius: 50%;
-  border: 2px solid var(--outline);
-  background: var(--sun);
-  color: var(--ink-fixed);
-}
-.mt-perk[data-perk='skin'] .mt-perk__dot,
-.mt-perk[data-perk='isles'] .mt-perk__dot {
-  background: var(--meadow);
-}
-@media (max-width: 479px) {
-  .mt-perk {
-    font-size: 13px;
-  }
-  .mt-perk__t span {
-    display: block;
   }
 }
 

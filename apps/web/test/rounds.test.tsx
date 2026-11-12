@@ -24,7 +24,7 @@ const M = 1_000_000; // one whole token in ledger units (6 decimals of the 18-de
 const N = 5_800_000;
 const START = N * RULES.roundMs;
 const R: RoundInfo = { n: N, endsAt: START + RULES.roundMs, joinsCloseAt: START + RULES.roundMs - RULES.roundJoinCloseMs };
-const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: 'Asphodel Meadow', width: 6400, height: 6400, players: 3, bots: 10, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M, round: R };
+const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: '$1 Room', width: 6400, height: 6400, players: 3, bots: 10, maxPlayers: 50, arenaId: 1, entryFee: 1000 * M, round: R };
 const STATS: DeathStats = { aliveMs: 94_000, finalMass: 0, maxMass: 640, foodEaten: 88, cellsEaten: 1, playersEaten: 1, bestRank: 5 };
 const CHAIN = chainStatus({ fees: null });
 // jsdom has no canvas: the same null it returns, without the "not implemented" warning

@@ -97,7 +97,7 @@ describe('player guide content', () => {
     expect(nft).toContain('20% less');
     expect(nft).toContain('10 % instead of 20 %');
     expect(nft).toContain('one room a day for free');
-    expect(nft).toContain('the $10 arena is for holders only');
+    expect(nft).toContain('the $10 room is for holders only');
     expect(nft).toContain('holders play first');
     const token = JSON.stringify(en.sections.find((s) => s.id === 'token'));
     expect(token).toContain('Magnet $0.60, Leap $0.90, Speed burst $0.60 and Invisibility $1.20 by default');

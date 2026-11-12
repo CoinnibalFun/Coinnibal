@@ -235,7 +235,7 @@ export function renderShareCard(c: ShareCard): Buffer {
   let cx = L;
   if (c.wallet) cx += chip(ctx, cx, Y + 216, c.wallet, '#FFFFFF', INK) + 10;
   if (c.country) cx += chip(ctx, cx, Y + 216, c.country, FOAM, INK) + 10;
-  if (c.holder) chip(ctx, cx, Y + 216, 'EMBLEM HOLDER', SUN, INK);
+  if (c.holder) chip(ctx, cx, Y + 216, 'NFT HOLDER', SUN, INK);
   ctx.fillStyle = INK;
   const facts = shareFacts(c);
   facts.forEach((line, i) => {
