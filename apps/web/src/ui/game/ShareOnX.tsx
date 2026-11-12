@@ -112,7 +112,7 @@ export function liveShareText(t: Translate, g: { mass: number; rank: number; n: 
 export const victimLabel = (t: Translate, s: { victim?: string; victimIsBot?: boolean; victimX?: string }) =>
   (!s.victimIsBot && xMention(s.victimX)) || `${eatenLabel({ name: s.victim ?? '' })}${s.victimIsBot ? ` (${t('g.botTag')})` : ''}`;
 
-/** The X post of a kill: "Just ate Nakamoto on Elymum..." (one of four lines, picked by the victim and the card; its linked @handle), TEST in a test arena. */
+/** The X post of a kill: "Just ate Nakamoto on Coinnibal..." (one of four lines, picked by the victim and the card; its linked @handle), TEST in a test arena. */
 export const killShareText = (t: Translate, s: { id?: string; victim?: string; victimIsBot?: boolean; victimX?: string; test?: boolean }): string => {
   const name = victimLabel(t, s);
   return `${t(pickShareKey('kill', [name, s.id]), { name })}${s.test ? ` ${t('share.test')}` : ''}`;

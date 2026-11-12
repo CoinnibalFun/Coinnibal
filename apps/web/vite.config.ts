@@ -1,15 +1,42 @@
 import react from '@vitejs/plugin-react';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 
 const gameServer = process.env.GAME_SERVER ?? 'http://127.0.0.1:8787';
 
 // index.html uses %VITE_PUBLIC_URL% for its absolute canonical / Open Graph URLs (they must be
 // absolute: crawlers need them, and Vite would try to bundle a relative og:image). Default: the
-// server's PUBLIC_URL, else the planned public domain. Set VITE_PUBLIC_URL (or PUBLIC_URL) at build time.
-process.env.VITE_PUBLIC_URL = (process.env.VITE_PUBLIC_URL || process.env.PUBLIC_URL || 'https://elymum.io').replace(/\/+$/, '');
+// server's PUBLIC_URL, else the live public domain. Set VITE_PUBLIC_URL (or PUBLIC_URL) at build time:
+// moving the site to another domain (coinnibal.fun) is only this variable (docs/OPERATIONS.md).
+const LIVE_URL = 'https://elymum.io';
+process.env.VITE_PUBLIC_URL = (process.env.VITE_PUBLIC_URL || process.env.PUBLIC_URL || LIVE_URL).replace(/\/+$/, '');
+// the project's X handle (no `@`) for index.html's twitter:site and the pages before the server's settings load
+process.env.VITE_X_HANDLE = (process.env.VITE_X_HANDLE || 'elymumio').replace(/^@/, '').trim();
+
+/**
+ * robots.txt and sitemap.xml are static files (public/) written for the live domain; the build rewrites their absolute
+ * URLs to `VITE_PUBLIC_URL`, so they follow the domain like index.html does.
+ */
+function publicUrlFiles(): Plugin {
+  let outDir = '';
+  return {
+    name: 'public-url-files',
+    apply: 'build',
+    configResolved(c) {
+      outDir = c.build.outDir.startsWith('/') ? c.build.outDir : join(c.root, c.build.outDir);
+    },
+    closeBundle() {
+      const url = process.env.VITE_PUBLIC_URL!;
+      if (url === LIVE_URL) return;
+      for (const f of ['robots.txt', 'sitemap.xml']) {
+        const p = join(outDir, f);
+        if (existsSync(p)) writeFileSync(p, readFileSync(p, 'utf8').replaceAll(LIVE_URL, url));
+      }
+    },
+  };
+}
 
 // On Vercel (a static host) the browser must reach the game server directly: vercel.json proxies only the NFT
 // metadata and the share cards, and proxied API calls would all come from Vercel's addresses (the server's per-IP
@@ -63,7 +90,7 @@ function viemPackageDirs(): string[] {
 const VIEM_DIRS = viemPackageDirs();
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), publicUrlFiles()],
   server: {
     port: 5173,
     host: true,

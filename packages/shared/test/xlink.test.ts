@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PlayerFlag,
+  X_CODE_PREFIX,
   X_CODE_RE,
   decodeSnapshot,
   eatenLine,
@@ -40,17 +41,22 @@ describe('Link X helpers', () => {
   });
 
   it('the proof post and its code', () => {
+    expect(X_CODE_PREFIX).toBe('NIBAL');
+    expect(X_CODE_RE.test('NIBAL-7F3K9Q')).toBe(true);
+    expect(X_CODE_RE.test('NIBAL-7F3K9O')).toBe(false);
+    // codes issued before the rename stay valid for their 30 minutes
     expect(X_CODE_RE.test('ELYMUM-7F3K9Q')).toBe(true);
-    expect(X_CODE_RE.test('ELYMUM-7F3K9O')).toBe(false);
-    expect(xLinkIntentUrl('ELYMUM-7F3K9Q')).toBe(`https://x.com/intent/post?text=${encodeURIComponent('Joining the coin party \u{1FA99} my code: ELYMUM-7F3K9Q elymum.io')}`);
+    expect(X_CODE_RE.test('OTHER-7F3K9Q')).toBe(false);
+    expect(xLinkIntentUrl('NIBAL-7F3K9Q')).toBe(`https://x.com/intent/post?text=${encodeURIComponent('Joining the coin party \u{1FA99} my code: NIBAL-7F3K9Q elymum.io')}`);
   });
 
   it('the proof post is short and friendly, and carries the code and the site', () => {
-    const text = xLinkPostText('ELYMUM-7F3K9Q');
-    expect(text).toBe('Joining the coin party \u{1FA99} my code: ELYMUM-7F3K9Q elymum.io');
-    expect(text).toContain('ELYMUM-7F3K9Q');
+    const text = xLinkPostText('NIBAL-7F3K9Q');
+    expect(text).toBe('Joining the coin party \u{1FA99} my code: NIBAL-7F3K9Q elymum.io');
+    expect(text).toContain('NIBAL-7F3K9Q');
     expect(text).toContain('elymum.io');
-    expect(xLinkPostText('ELYMUM-7F3K9Q', 'localhost:5173').endsWith('localhost:5173')).toBe(true);
+    expect(xLinkPostText('NIBAL-7F3K9Q', 'coinnibal.fun').endsWith('coinnibal.fun')).toBe(true);
+    expect(xLinkPostText('NIBAL-7F3K9Q', 'localhost:5173').endsWith('localhost:5173')).toBe(true);
     expect(text.length).toBeLessThan(80);
   });
 

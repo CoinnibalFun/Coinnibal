@@ -52,7 +52,7 @@ export function startGallery(root: HTMLElement): void {
     const w = window.innerWidth;
     ctx.fillStyle = ELYSIUM.trench;
     ctx.fillRect(0, 0, w, HEIGHT);
-    heading('Elymum · the cast', 24, 44);
+    heading('Coinnibal · the cast', 24, 44);
 
     const cols = 8;
     const cell = Math.min(160, (w - 40) / cols);

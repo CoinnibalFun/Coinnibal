@@ -74,7 +74,7 @@ function MemberCard() {
   return (
     <section className="pf-card" aria-labelledby="pf-card-h">
       <span className="pf-card__band mono" aria-hidden="true">
-        <span>{t('pf.card')} · ELYMUM</span>
+        <span>{t('pf.card')} · COINNIBAL</span>
         <span>{owner ? `NO. ${owner.slice(2, 6).toUpperCase()}` : t('pf.guestNo')}</span>
       </span>
       <Seigaiha rows={3} r={22} span={600} tone="ink" className="pf-card__waves" />

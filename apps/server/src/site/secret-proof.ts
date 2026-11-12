@@ -51,7 +51,7 @@ export class SecretProofs {
     const expires = now + SECRET_PROOF_TTL_MS;
     const what = purpose === 'backup' ? 'download one full backup of the server data' : 'read the server settings and download one full backup, to move the server';
     const message = [
-      'Elymum admin: export the server secrets',
+      'Coinnibal admin: export the server secrets',
       '',
       `I allow this server to ${what}. It contains the server key: keep it encrypted.`,
       '',

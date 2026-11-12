@@ -3,7 +3,7 @@ import { useT } from '../i18n';
 import { openModal } from '../store';
 import { useTokenText } from '../ui/lobby/useLobby';
 
-/** "Get $ELYMUM": under a ticket the wallet cannot pay for; opens "How to get $ELYMUM" (`GetTokensSheet`). */
+/** "Get $NIBAL": under a ticket the wallet cannot pay for; opens "How to get $NIBAL" (`GetTokensSheet`). */
 export function GetTokensLink({ className }: { className?: string }) {
   const t = useT();
   const tok = useTokenText();

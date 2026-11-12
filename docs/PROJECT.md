@@ -1,12 +1,12 @@
-# Elymum: the whole project on one page
+# Coinnibal: the whole project on one page
 
-Elymum is a cute coin-eats-coin arena game on **Robinhood Chain** (an Arbitrum Orbit L2, gas token **ETH**). The
-money rules live in Solidity contracts, the game runs on an authoritative server, and an **Elymum NFT** minted for
+Coinnibal is a cute coin-eats-coin arena game on **Robinhood Chain** (an Arbitrum Orbit L2, gas token **ETH**). The
+money rules live in Solidity contracts, the game runs on an authoritative server, and an **Coinnibal NFT** minted for
 **$1 in ETH** opens the game. This page explains how the game plays, how money moves, how the code is laid out and
 how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY.md), [RESEARCH.md](RESEARCH.md)
 (the specs under `docs/specs/` are historical: they describe the earlier Elysium build).
 
-> **Status (2026-11-08).** Elymum runs on **Robinhood Chain only**: Robinhood Chain Testnet (46630) now, Robinhood
+> **Status (2026-11-08).** Coinnibal runs on **Robinhood Chain only**: Robinhood Chain Testnet (46630) now, Robinhood
 > Chain (4663) later, switched with `CHAIN_ID`. The arena contract is v3 (no entry fee; 20 % of a ticket's profit:
 > 15 % burned, 5 % to the fee wallet). Arenas and practice ponds are played by people only; fair practice bots exist
 > only in free custom rooms and, on the testnet, in each arena's labelled TEST room (bots carry no value). The flow
@@ -19,14 +19,14 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 
 - You are a coin. Eat food and smaller coins to grow, and run from bigger ones.
 - Practice rooms are free, two leagues (Rookie and Pro), people only, and touch nothing on chain.
-- Arenas are paid rooms with a fixed entry fee in `$ELYMUM` (the game token the owner sets after deploy).
+- Arenas are paid rooms with a fixed entry fee in `$NIBAL` (the game token the owner sets after deploy).
   - Your value starts at the whole entry fee; eat a player and their value moves to you.
 - Rounds: 5 full minutes of play on the wall clock, the same for every arena, then a 30 s break after each bell (a
   round every 5:30; the break never comes out of the play). No cash-out: at
   the bell everyone still alive is paid their value on chain, less 20 % of their profit (15 % burned, 5 % to the fee wallet); a loss pays no fee.
 - Re-entry: eaten? Buy back in at the same fee while joins are open (they close in the final minute and in the
   break; a ticket bought then is held and seated when the next round opens).
-- The NFT: the Elymum NFT (an emblem) mints for $1 in ETH, allowlist first, then public. The owner decides who
+- The NFT: the Coinnibal NFT (an emblem) mints for $1 in ETH, allowlist first, then public. The owner decides who
   may play: admins only, NFT holders, or everyone.
 - The token is set after deploy: until the owner sets it on the arena (once), the arenas read "Opening soon".
 
@@ -152,10 +152,10 @@ On screen:
 
 | Arena | Ticket | Created at (reference price $0.001 a token) |
 |---|---|---|
-| Asphodel Meadow | $1 | 1,000 `$ELYMUM` |
-| Lethe Shore | $3 | 3,000 `$ELYMUM` |
-| Golden Bough | $5 | 5,000 `$ELYMUM` |
-| Isles of the Blessed (emblem holders only) | $10 | 10,000 `$ELYMUM` |
+| Asphodel Meadow | $1 | 1,000 `$NIBAL` |
+| Lethe Shore | $3 | 3,000 `$NIBAL` |
+| Golden Bough | $5 | 5,000 `$NIBAL` |
+| Isles of the Blessed (emblem holders only) | $10 | 10,000 `$NIBAL` |
 
 Tickets are priced in US dollars; the chain keeps the entry fee in tokens, and the owner re-prices the arenas at the
 token's USD price from `/admin` (ECONOMY.md section 1).
@@ -185,7 +185,7 @@ board and the death sheet carry a share panel: the card's picture (and for a roo
 final standings, my row marked), "Download image", "Share" through the system share sheet with the picture as a file
 where the browser can (phones send it straight to the X app), "Share on X", and "Your moments" (the game's kill
 cards, each to download or post). "Share on X" opens X's composer with a localized line ("I just ate Nakamoto on
-Elymum!") and a link to `/share/<id>`, whose card image (the coin, the place, the death or the kill, mass, kills, what
+Coinnibal!") and a link to `/share/<id>`, whose card image (the coin, the place, the death or the kill, mass, kills, what
 was paid, "Ate: …" with the coins eaten, the flag code and emblem badge, the wallet's short form) the server draws from
 its own records; X's web intent cannot attach a picture, hence the download. A test arena's card is stamped TEST and
 shows no payout.
@@ -246,7 +246,7 @@ flowchart LR
 
 ### 3.3 The token and the mint
 
-- The arena is deployed without a token; the owner sets `$ELYMUM` once (`setToken`, typed twice in `/admin`). It can
+- The arena is deployed without a token; the owner sets `$NIBAL` once (`setToken`, typed twice in `/admin`). It can
   never change. Until then the server plays practice only and the arenas show "Opening soon"; when it is set the lobby
   opens the arenas without a reload.
 - The NFT price is held in wei and kept at `MINT_USD_CENTS` (default $1) of ETH: by the owner's Sync button, or by
@@ -282,7 +282,7 @@ settlement cannot replay (the session id must match); the fee is on profit only,
 excess payment refunded, the keeper prices only inside the owner's bounds, supply only goes down, metadata can be
 frozen forever.
 
-**Sign-in** is SIWE (EIP-4361): the statement is "Sign in to Elymum. This is free and sends no transaction."; smart
+**Sign-in** is SIWE (EIP-4361): the statement is "Sign in to Coinnibal. This is free and sends no transaction."; smart
 wallets are verified with ERC-1271 / 6492.
 
 ## 5. Run, test, deploy, operate
@@ -377,7 +377,7 @@ lands** ([media/README.md](../media/README.md)).
 | `/admin` → Setup: TestToken, Arena, NFT, Finish setup (testnet first; OPERATIONS.md) | owner |
 | WL open; review WL and collabs | owner |
 | Publish the allowlist root; Sync to $1; open the mint (Allowlist) with "activate the game for holders" | owner |
-| `$ELYMUM` exists → Set token (once) → create the four arenas | owner |
+| `$NIBAL` exists → Set token (once) → create the four arenas | owner |
 | Public mint; optional price keeper with bounds | owner |
 | Mainnet: launch the token on Pons, `CHAIN_ID=4663` and a provider RPC, redeploy the contracts on mainnet | owner |
 | Re-render the films, regenerate the screenshots, upload the X art | owner |

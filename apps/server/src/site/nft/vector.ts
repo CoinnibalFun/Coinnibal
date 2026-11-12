@@ -4,6 +4,7 @@
  * gradients, no blur. The picture depends on the genome only (equal DNA, equal SVG); the token number is a
  * small tag on the frame.
  */
+import { NFT_NAME } from '@elymum/shared';
 import { BLUSH, CREAM, HOLO, INK, MATERIAL_SPECS, P, SHADES, TIER_FRAME, WHITE, type MaterialSpec } from './palette';
 import type { Genome } from './traits';
 
@@ -796,7 +797,7 @@ function character(g: Genome): string {
 /** The vector emblem of a genome (512 × 512). `id` labels the frame (null: no number tag, e.g. showcases). */
 export function vectorSvg(g: Genome, id: number | null): string {
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Elymum${id === null ? '' : ` No. ${id}`}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="${NFT_NAME}${id === null ? '' : ` No. ${id}`}">`,
     `<defs><clipPath id="card"><rect x="0" y="0" width="512" height="512" rx="31"/></clipPath><clipPath id="window"><rect x="20" y="20" width="472" height="472" rx="18"/></clipPath></defs>`,
     frameBack(g),
     `<g clip-path="url(#window)">${BACKGROUND[g.background]()}<g transform="translate(${CX} ${CY}) scale(${K})">${character(g)}</g></g>`,

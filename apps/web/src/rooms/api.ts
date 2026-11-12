@@ -1,4 +1,4 @@
-import type { CustomRoomConfig, CustomRoomError, CustomRoomQuote, CustomRoomView } from '@elymum/shared';
+import { SITE_URL_DEFAULT, type CustomRoomConfig, type CustomRoomError, type CustomRoomQuote, type CustomRoomView } from '@elymum/shared';
 import { SERVER } from '../config';
 import { serverText, t } from '../i18n';
 
@@ -82,6 +82,6 @@ export function savePendingPayment(p: PendingRoomPayment | null): void {
 }
 
 /** The share link of a room on this site. */
-export function roomLink(code: string, origin = typeof location === 'undefined' ? 'https://elymum.io' : location.origin): string {
+export function roomLink(code: string, origin = typeof location === 'undefined' ? SITE_URL_DEFAULT : location.origin): string {
   return `${origin.replace(/\/+$/, '')}/play?room=${code}`;
 }

@@ -98,7 +98,7 @@ describe('collab logic', () => {
     expect(post).toMatch(/@elymumio\b/);
     expect(post).not.toMatch(/@elymum(?![a-z0-9_])/i);
     expect(post).toMatch(/elymum\.test/);
-    expect(post).toMatch(/20 Elymum WL spots/);
+    expect(post).toMatch(/20 Coinnibal WL spots/);
     expect(post).toMatch(/EVM wallet/);
   });
 });
@@ -119,14 +119,14 @@ describe('/collab', { timeout: 30_000 }, () => {
     const apply = await screen.findByRole('button', { name: 'Apply' });
     fireEvent.click(apply);
     expect(await screen.findByText('Pick a type.')).toBeTruthy();
-    expect(screen.getByText(/Post about Elymum on your community's X first/)).toBeTruthy();
+    expect(screen.getByText(/Post about Coinnibal on your community's X first/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Community name'), { target: { value: 'Riso Guild' } });
     fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'guild' } });
     fireEvent.change(screen.getByLabelText('Members'), { target: { value: '2,500' } });
     fireEvent.change(screen.getByLabelText('Community X'), { target: { value: '@RisoGuild' } });
     fireEvent.change(screen.getByLabelText('Your X'), { target: { value: 'riso_rita' } });
     fireEvent.change(screen.getByLabelText('Your role'), { target: { value: 'founder' } });
-    fireEvent.change(screen.getByLabelText('Your post about Elymum on X'), { target: { value: 'https://x.com/risoguild/status/1849000000000000002' } });
+    fireEvent.change(screen.getByLabelText('Your post about Coinnibal on X'), { target: { value: 'https://x.com/risoguild/status/1849000000000000002' } });
     fireEvent.change(screen.getByLabelText('About your community'), { target: { value: 'Printers.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(await screen.findByText('Thanks for applying.')).toBeTruthy();

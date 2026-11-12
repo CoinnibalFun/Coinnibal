@@ -13,7 +13,7 @@ import { DEFAULT_BURN_BPS, DEFAULT_PAYMENT_BURN_BPS, DEFAULT_VAULT_BPS, MAX_AREN
 import { formatBps, formatGasAmount, formatTokenAmount } from './format';
 import { AdminInputError, parseAddressInput, parseBigIntInput, parseBoolInput, parseIntInput, parseTokenInput, type StatusSnapshot } from './ops';
 
-export const USAGE = `Elymum admin CLI
+export const USAGE = `Coinnibal admin CLI
 
 Usage: pnpm admin <command> [options]
 
@@ -219,7 +219,7 @@ const codeText = (c: 'ok' | 'missing' | 'mismatch'): string =>
 export function formatStatus(s: StatusSnapshot, rpcUrl: string): string[] {
   const gas = (wei: bigint, maxFrac = 6) => formatGasAmount(wei, maxFrac);
   const out: string[] = [
-    `Elymum on ${s.chain.name} (chain id ${s.chain.id}${s.mainnet ? ', MAINNET' : ''}) via ${rpcUrl} · block ${s.block}`,
+    `Coinnibal on ${s.chain.name} (chain id ${s.chain.id}${s.mainnet ? ', MAINNET' : ''}) via ${rpcUrl} · block ${s.block}`,
   ];
   if (s.account) out.push(`signer    ${s.account.address}  (${gas(s.account.balance, 4)})`);
   const a = s.arena;

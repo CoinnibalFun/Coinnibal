@@ -5,7 +5,7 @@ import { errText, useFlash, type TabProps } from './common';
 
 export const GAME_ACCESS_LABEL: Record<GameAccess, { label: string; note: string }> = {
   admins: { label: 'Admins only', note: 'Only wallets in ADMIN_WALLETS can enter rooms; /play shows “The arena opens soon”.' },
-  holders: { label: 'NFT holders', note: 'Wallets holding an Elymum NFT (and admins) can play; everyone else is sent to the mint.' },
+  holders: { label: 'NFT holders', note: 'Wallets holding a Coinnibal NFT (and admins) can play; everyone else is sent to the mint.' },
   public: { label: 'Everyone', note: 'The game is open to every visitor; practice needs no wallet.' },
   maintenance: { label: 'Maintenance', note: 'Only admins can play; /play tells everyone else the game is down for maintenance and back soon.' },
 };

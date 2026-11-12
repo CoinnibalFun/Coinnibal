@@ -370,7 +370,7 @@ export async function planJoin(
   if (!info.enabled) throw new RangeError(`arena #${p.arenaId} is closed`);
   if (info.openSessions >= info.maxSessions) throw new RangeError(`arena #${p.arenaId} is full`);
   if (info.holdersOnly && holder === false) {
-    throw new RangeError(`arena #${p.arenaId} is for Elymum emblem holders only: ${getAddress(p.player)} holds no emblem`);
+    throw new RangeError(`arena #${p.arenaId} is for Coinnibal NFT holders only: ${getAddress(p.player)} holds no emblem`);
   }
   const standardRates = config ? { burnBps: config.burnBps, vaultBps: config.vaultBps } : null;
   const rates = config ? effectiveFeeRates(config, holder === true) : null;

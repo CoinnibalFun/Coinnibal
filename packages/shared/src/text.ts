@@ -17,8 +17,8 @@ const LOOKALIKE: Record<string, string> = { '0': 'o', '1': 'l', '3': 'e', '4': '
 const RESERVED_WORDS = new Set(['admin', 'admins', 'administrator', 'moderator', 'mod', 'mods', 'support', 'official', 'system', 'staff', 'helpdesk']);
 
 /**
- * Names that impersonate the game or its staff: anything spelling "Elymum" (also "E1ymum", "ELYMUM Support",
- * "e.l.y.m.u.m"), and names made of a staff word ("Admin", "Support", "Official Mod"). Case, accents, full-width
+ * Names that impersonate the game or its staff: anything spelling "Coinnibal" or its old name "Elymum" (also
+ * "C0innibal", "COINNIBAL Support", "c.o.i.n.n.i.b.a.l", "E1ymum"), and names made of a staff word ("Admin", "Support", "Official Mod"). Case, accents, full-width
  * letters, separators and digit look-alikes are folded first.
  */
 export function isReservedName(name: string): boolean {
@@ -28,7 +28,8 @@ export function isReservedName(name: string): boolean {
     .normalize('NFKC')
     .toLowerCase()
     .replace(/[0-9@$|!]/g, (c) => LOOKALIKE[c] ?? c);
-  if (folded.replace(/[^\p{L}]/gu, '').includes('elymum')) return true;
+  const letters = folded.replace(/[^\p{L}]/gu, '');
+  if (letters.includes('elymum') || letters.includes('coinnibal')) return true;
   const words = folded.split(/[^\p{L}]+/u).filter(Boolean);
   return words.length > 0 && words.length <= 3 && words.some((w) => RESERVED_WORDS.has(w));
 }

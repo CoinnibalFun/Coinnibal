@@ -1,4 +1,4 @@
-import { parseSiweMessage, siweMessage } from '@elymum/shared';
+import { SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS, parseSiweMessage, siweMessage } from '@elymum/shared';
 import { getAddress, isAddress, stringToHex, type Address, type Hex } from 'viem';
 import { SERVER } from '../config';
 import type { Eip1193Provider } from './eip6963';
@@ -72,7 +72,10 @@ export function expectedLoginMessage(
   } catch {
     return null;
   }
-  return rebuilt === message ? rebuilt : null;
+  if (rebuilt === message) return rebuilt;
+  // a game server from before the rename still issues its old sign-in line: the same message otherwise
+  for (const old of SIWE_STATEMENTS_PREVIOUS) if (rebuilt.replace(`\n${SIWE_STATEMENT}\n`, `\n${old}\n`) === message) return message;
+  return null;
 }
 
 /** Fetches a sign-in nonce for `address`. Throws on HTTP errors (`status` set) or a network failure. */

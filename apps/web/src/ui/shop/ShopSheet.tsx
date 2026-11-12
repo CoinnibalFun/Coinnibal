@@ -3,19 +3,19 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button, Chip, Sheet, shortAddress } from '../../design';
 import { useT } from '../../i18n';
 import { closeModal, openModal, toast, useUi } from '../../store';
-import { SHOP_CART_LIMITS } from '@elymum/shared';
+import { SHOP_CART_LIMITS, TOKEN_SYMBOL_DEFAULT } from '@elymum/shared';
 import { ShopError, buyCart, cartTotals, emptyCart, fetchShop, loadPendingClaim, settleCartClaim, settleClaim, type BuyPhase, type Cart, type PendingClaim } from '../../wallet/shop';
 import { summaryAmount } from '../amount';
 import { BOOST_PATH } from '../game/BoostBar';
 import './shop.css';
 
 /**
- * A pack price for display: `210 tELYMUM` (whole tokens, at most two decimals), with its dollar price first when the
- * pack is priced in US dollars (`$0.60 · 740 $ELYMUM`): the token amount is what the wallet sends.
+ * A pack price for display: `210 $NIBAL` (whole tokens, at most two decimals), with its dollar price first when the
+ * pack is priced in US dollars (`$0.60 · 740 $NIBAL`): the token amount is what the wallet sends.
  */
 export function priceText(raw: string, view: Pick<ShopView, 'token'>, usdCents?: number): string {
   const decimals = view.token?.decimals ?? 18;
-  const tokens = `${summaryAmount(BigInt(raw), decimals)} ${view.token?.symbol ?? '$ELYMUM'}`;
+  const tokens = `${summaryAmount(BigInt(raw), decimals)} ${view.token?.symbol ?? TOKEN_SYMBOL_DEFAULT}`;
   return usdCents !== undefined ? `${formatUsdCents(usdCents)} · ${tokens}` : tokens;
 }
 
@@ -218,7 +218,7 @@ export function ShopSheet() {
       title={t('shop.title')}
       className="g-sheet sh-sheet"
     >
-      <p className="sh-lede">{t('shop.lede', { n: s?.packs[0]?.charges ?? SHOP_DEFAULTS.packSize, sym: s?.token?.symbol ?? '$ELYMUM', max })}</p>
+      <p className="sh-lede">{t('shop.lede', { n: s?.packs[0]?.charges ?? SHOP_DEFAULTS.packSize, sym: s?.token?.symbol ?? TOKEN_SYMBOL_DEFAULT, max })}</p>
       <p className="sh-pick">{t('shop.pick')}</p>
       {s?.holder ? (
         <Chip tone="up" className="sh-holder">

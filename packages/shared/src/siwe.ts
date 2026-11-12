@@ -22,7 +22,13 @@ export interface SiweFields {
   issuedAt: string;
 }
 
-export const SIWE_STATEMENT = 'Sign in to Elymum. This is free and sends no transaction.';
+export const SIWE_STATEMENT = 'Sign in to Coinnibal. This is free and sends no transaction.';
+/**
+ * Statements of earlier builds, still accepted when a message is read back: the web (Vercel) and the game server (VPS)
+ * deploy apart, so a page from before the rename may sign the old line for a while. New messages always use
+ * `SIWE_STATEMENT`.
+ */
+export const SIWE_STATEMENTS_PREVIOUS: readonly string[] = ['Sign in to Elymum. This is free and sends no transaction.'];
 export const SIWE_VERSION = '1';
 
 const HEADER_SUFFIX = ' wants you to sign in with your Ethereum account:';
@@ -66,7 +72,7 @@ export function siweMessage(f: SiweFields): string {
 export function parseSiweMessage(message: unknown): SiweFields | null {
   if (typeof message !== 'string' || message.length > 2000) return null;
   const lines = message.split('\n');
-  if (lines.length !== 10 || lines[2] !== '' || lines[3] !== SIWE_STATEMENT || lines[4] !== '') return null;
+  if (lines.length !== 10 || lines[2] !== '' || (lines[3] !== SIWE_STATEMENT && !SIWE_STATEMENTS_PREVIOUS.includes(lines[3])) || lines[4] !== '') return null;
   if (!lines[0].endsWith(HEADER_SUFFIX)) return null;
   const uri = /^URI: (.+)$/.exec(lines[5]);
   const version = lines[6] === `Version: ${SIWE_VERSION}`;
@@ -83,6 +89,8 @@ export function parseSiweMessage(message: unknown): SiweFields | null {
     issuedAt: issued[1],
   };
   if (siweFieldsError(fields)) return null;
-  // the canonical rebuild must match byte for byte (no stray spaces, no alternative spellings)
-  return siweMessage(fields) === message ? fields : null;
+  // the canonical rebuild must match byte for byte (no stray spaces, no alternative spellings), with the line it was
+  // signed with (the current one or an earlier build's)
+  const rebuilt = siweMessage(fields);
+  return (lines[3] === SIWE_STATEMENT ? rebuilt : rebuilt.replace(`\n${SIWE_STATEMENT}\n`, `\n${lines[3]}\n`)) === message ? fields : null;
 }

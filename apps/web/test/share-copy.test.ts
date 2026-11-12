@@ -59,14 +59,14 @@ describe('the X share posts: four lines each, picked from the moment', () => {
     const kill = killShareText(t, { id: 'KiLLaaaaaa', victim: 'Penny', victimX: 'penny_x' });
     expect(SHARE_VARIANTS.kill.map((k) => t(k, { name: '@penny_x' }))).toContain(kill);
     const res = resultShareText(t, { rank: 7, n: 9, room: '$5 Room' });
-    expect(res).toMatch(/#7 of 9 in \$5 Room on Elymum/);
+    expect(res).toMatch(/#7 of 9 in \$5 Room on Coinnibal/);
     const ate = resultShareText(t, { rank: 2, n: 5, room: 'Pond', eaten: [{ name: 'Penny', xHandle: 'penny_x' }, { name: 'Rocky', n: 2 }] });
     expect(ate).toContain('@penny_x, Rocky ×2');
     expect(gameShareText(t, { mass: 1, eaten: 1, room: 'Pond' })).toMatch(/1 coin\b/);
     expect(liveShareText(t, { mass: 1234.5, rank: 0, n: 0, eaten: 2, room: 'Pond' })).toMatch(/1,234.*2 coins/);
   });
 
-  it('every line in every language keeps the placeholders its call supplies, names Elymum, and fills in cleanly', async () => {
+  it('every line in every language keeps the placeholders its call supplies, names Coinnibal, and fills in cleanly', async () => {
     const bad: string[] = [];
     const sample = { name: '@penny_x', names: 'Penny, Rocky ×2', rank: 3, n: 9, room: 'Pond', mass: '1,234', eaten: 5 };
     for (const [code, dict] of await dicts())
@@ -74,7 +74,7 @@ describe('the X share posts: four lines each, picked from the moment', () => {
         for (const key of SHARE_VARIANTS[kind]) {
           const s = dict[key];
           if (varsOf(s).join() !== NEEDS[kind].join()) bad.push(`${code} ${key}: [${varsOf(s)}] != [${NEEDS[kind]}]`);
-          if (!s.includes('Elymum')) bad.push(`${code} ${key}: no Elymum`);
+          if (!s.includes('Coinnibal')) bad.push(`${code} ${key}: no Coinnibal`);
           for (const eaten of [0, 1, 2, 5, 21]) {
             const out = formatMessage(s, { ...sample, eaten }, code);
             if (/[{}]/.test(out)) bad.push(`${code} ${key}: unfilled "${out}"`);

@@ -2,7 +2,7 @@
   "name": "elymum",
   "private": true,
   "version": "0.1.0",
-  "description": "Elymum: a cute coin-eats-coin arena game on Robinhood Chain (Arbitrum Orbit L2, gas ETH), with the Elymum NFT",
+  "description": "Coinnibal (internal name elymum): a cute coin-eats-coin arena game on Robinhood Chain (Arbitrum Orbit L2, gas ETH), with the Coinnibal NFT",
   "license": "MIT",
   "packageManager": "pnpm@10.28.0",
   "engines": {

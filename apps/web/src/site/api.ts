@@ -49,7 +49,7 @@ import type {
   WlTask,
 } from '@elymum/shared';
 import { SERVER } from '../config';
-import { getLocale, t, type TKey } from '../i18n';
+import { X_HANDLE_BUILD, getLocale, t, type TKey } from '../i18n';
 
 /**
  * The site API (`/api/site/*`, `/api/admin/*`, `/api/auth/*`). Every error is a
@@ -81,8 +81,8 @@ const FALLBACK: Partial<Record<SiteApiError['code'], string>> = {
   unauthorized: 'Your sign-in expired. Sign in with your wallet again.',
   forbidden: 'This wallet is not an admin.',
   rate_limited: 'Too many tries. Wait a minute and try again.',
-  wl_closed: 'Applications are closed. Follow @elymumio for the next round.',
-  collab_closed: 'Collab applications are closed. Follow @elymumio for the next round.',
+  wl_closed: `Applications are closed. Follow @${X_HANDLE_BUILD} for the next round.`,
+  collab_closed: `Collab applications are closed. Follow @${X_HANDLE_BUILD} for the next round.`,
   already_applied: 'This wallet has already applied.',
   handle_taken: 'This X handle has already applied.',
   collab_limit: 'This X account has already applied twice.',
@@ -92,7 +92,7 @@ const FALLBACK: Partial<Record<SiteApiError['code'], string>> = {
   auth_failed: 'The wallet signature did not check out. Try again.',
   bad_request: 'Something in the form is not right.',
   game_closed: 'The game is not open to this wallet yet.',
-  code_mismatch: 'That address holds no code, or code other than the Elymum contract this server ships with.',
+  code_mismatch: 'That address holds no code, or code other than the Coinnibal contract this server ships with.',
   not_owner: 'The contract owner is not the signed-in admin wallet.',
   wrong_authority: "The arena's server authority is not this server's key.",
   chain_off: 'The server has no chain configured, or the contract is not registered.',
@@ -252,7 +252,7 @@ export interface AuthMe {
   admin: boolean;
   /** The wallet may play under the current `gameAccess` (admins, NFT holders or everyone). */
   canPlay?: boolean;
-  /** The wallet holds an Elymum NFT (`balanceOf > 0`). */
+  /** The wallet holds a Coinnibal NFT (`balanceOf > 0`). */
   holder?: boolean;
 }
 

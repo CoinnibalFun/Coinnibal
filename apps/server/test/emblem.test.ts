@@ -81,7 +81,7 @@ describe('one emblem token id serves one open holder ticket', () => {
     const a = testSigner().address;
     const t = ticket(a, NORMAL, 4);
     const refused = await h.gate.seat(a, t);
-    expect(refused).toMatchObject({ code: 'game_closed', message: expect.stringMatching(/needs an Elymum NFT/) });
+    expect(refused).toMatchObject({ code: 'game_closed', message: expect.stringMatching(/needs a Coinnibal NFT/) });
     expect(h.journal.pending).toEqual([expect.objectContaining({ key: t.key, reason: 'stale' })]);
   });
 

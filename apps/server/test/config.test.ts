@@ -59,14 +59,18 @@ describe('chain env (EVM)', () => {
     expect(loadConfig({} as NodeJS.ProcessEnv).chain.testnetRpcUrl).toBe('https://rpc.testnet.chain.robinhood.com');
   });
 
-  it('defaults: chain off, $ELYMUM, $1 mint on Hyperliquid, the setting decides who plays', () => {
+  it('defaults: chain off, $NIBAL, $1 mint on Hyperliquid, the setting decides who plays', () => {
     const cfg = loadConfig({} as NodeJS.ProcessEnv);
-    expect(cfg.chain).toMatchObject({ rpcUrl: null, publicRpcUrl: null, serverKey: null, arenaAddress: null, nftAddress: null, tokenSymbol: '$ELYMUM' });
+    expect(cfg.chain).toMatchObject({ rpcUrl: null, publicRpcUrl: null, serverKey: null, arenaAddress: null, nftAddress: null, tokenSymbol: '$NIBAL' });
     expect(cfg.mint).toEqual({ usdCents: 100, gasPriceUrl: 'https://api.hyperliquid.xyz/info' });
     expect(cfg.nft).toEqual({ size: 5000, seed: null, style: 'vector' });
     expect(loadConfig({ NFT_ART_STYLE: 'pixel', NFT_COLLECTION_SIZE: '3333', NFT_COLLECTION_SEED: ' 0xabc ' } as NodeJS.ProcessEnv).nft).toEqual({ size: 3333, seed: '0xabc', style: 'pixel' });
     expect(loadConfig({ NFT_ART_STYLE: 'oil' } as NodeJS.ProcessEnv).nft.style).toBe('vector');
     expect(cfg.gameAccess).toBeNull();
+    // the project's X handle: unset is the shared default; X_HANDLE moves it (e.g. to @coinnibal once it is live)
+    expect(cfg.xHandle).toBeNull();
+    expect(loadConfig({ X_HANDLE: '@Coinnibal' } as NodeJS.ProcessEnv).xHandle).toBe('coinnibal');
+    expect(loadConfig({ X_HANDLE: 'not a handle!' } as NodeJS.ProcessEnv).xHandle).toBeNull();
     expect(loadConfig({ GAME_ACCESS: 'everyone' } as NodeJS.ProcessEnv).gameAccess).toBeNull();
     expect(loadConfig({ GAME_ACCESS: ' PUBLIC ' } as NodeJS.ProcessEnv).gameAccess).toBe('public');
   });
