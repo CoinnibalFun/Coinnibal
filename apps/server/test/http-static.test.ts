@@ -20,6 +20,9 @@ describe('static web client', () => {
     writeFileSync(join(web, 'index.html'), '<!doctype html><title>Elymum</title>');
     mkdirSync(join(web, 'assets'));
     writeFileSync(join(web, 'assets', 'app-1234.js'), 'console.log(1)');
+    writeFileSync(join(web, 'favicon-32.png'), 'png');
+    writeFileSync(join(web, 'sitemap.xml'), '<urlset/>');
+    writeFileSync(join(web, 'assets', 'bell-1234.ogg'), 'ogg');
     const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-data-')), WEB_DIST: web } as NodeJS.ProcessEnv);
     server = createHttpServer(cfg, { chain: new NullChain(), rooms: {} as never, leaderboards: {} as never, auth: {} as never, startedAt: Date.now() });
     await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
@@ -47,6 +50,13 @@ describe('static web client', () => {
     expect(asset.headers.get('cache-control')).toMatch(/immutable/);
     // a missing file with an extension is not the SPA
     expect((await fetch(`${url}/assets/missing.js`)).status).toBe(404);
+    // what vercel.json did for the site, now that the server serves it: /favicon.ico is the 32 px PNG, and the
+    // sitemap and the sounds carry their real types
+    const ico = await fetch(`${url}/favicon.ico`);
+    expect(ico.status).toBe(200);
+    expect(ico.headers.get('content-type')).toBe('image/png');
+    expect((await fetch(`${url}/sitemap.xml`)).headers.get('content-type')).toMatch(/^application\/xml/);
+    expect((await fetch(`${url}/assets/bell-1234.ogg`)).headers.get('content-type')).toBe('audio/ogg');
     // API paths and missing files with an extension (e.g. the removed /pass/<n>.json) never fall back to index.html
     const api = await fetch(`${url}/api/docs`);
     expect(api.status).toBe(404);

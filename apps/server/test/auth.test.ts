@@ -136,6 +136,10 @@ describe('SIWE login message (EIP-4361)', () => {
     expect(from('https://coinnibal.fun')).toEqual({ domain: 'coinnibal.fun', uri: 'https://coinnibal.fun', chainId: 46630 });
     expect(from('https://www.coinnibal.fun/').domain).toBe('www.coinnibal.fun');
     for (const other of ['https://evil.example', 'http://coinnibal.fun', 'https://coinnibal.fun.evil.example']) expect(from(other).domain).toBe('elymum.io');
+    // the site moved (PUBLIC_URL coinnibal.fun): a sign-in from the old elymum.io page still names elymum.io
+    const moved = loadConfig({ PUBLIC_URL: 'https://coinnibal.fun' } as NodeJS.ProcessEnv);
+    expect(siweOrigin(moved, { headers: { host: 'coinnibal.fun', origin: 'https://elymum.io' } } as never, false, 46630).domain).toBe('elymum.io');
+    expect(siweOrigin(moved, { headers: { host: 'coinnibal.fun', origin: 'https://evil.example' } } as never, false, 46630).domain).toBe('coinnibal.fun');
   });
 
   it('never lets a request choose the SIWE domain outside development (Host / X-Forwarded-Host spoofing)', async () => {

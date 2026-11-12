@@ -30,6 +30,10 @@ const MIME: Record<string, string> = {
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
   '.webmanifest': 'application/manifest+json',
 };
 
@@ -122,6 +126,8 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   } catch {
     return false;
   }
+  // browsers ask for /favicon.ico on their own: the site ships favicon-32.png (vercel.json's rewrite, served here)
+  if (rel === '/favicon.ico' && !existsSync(join(resolve(root), 'favicon.ico'))) rel = '/favicon-32.png';
   const base = resolve(root);
   let file = normalize(join(base, rel));
   if (file !== base && !file.startsWith(base + sep)) return false;
