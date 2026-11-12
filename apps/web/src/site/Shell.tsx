@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
-import { CoinMark, Icon, Kb, RingScene, Wordmark as InkWordmark, type IconName } from '../design';
+import { ChompMark, CoinMark, Icon, Kb, RingScene, Wordmark as InkWordmark, type IconName } from '../design';
 import { FooterLife } from './FooterLife';
 import { usePeelLetters } from './peel';
 import { Link, usePath } from './router';
@@ -159,6 +159,7 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
       <div className="st-head__inner">
         <Link href="/" className="st-head__home" aria-label={t('lo.home')}>
           <CoinMark size={38} className="st-head__coin" />
+          <ChompMark size={50} className="st-head__chomp" />
           <span ref={peel.ref} className={peel.className}>
             <Wordmark />
           </span>

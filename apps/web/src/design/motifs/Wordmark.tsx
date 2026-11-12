@@ -169,3 +169,83 @@ export function CoinMark({ size = 48, paint = 'cyan', title, className, style }:
     </svg>
   );
 }
+
+export interface ChompMarkProps {
+  /** Rendered size in px (default 48). */
+  size?: number;
+  /** Accessible name; omit when the link around it already names the brand. */
+  title?: string;
+  className?: string;
+}
+
+/** The C of the chomp mark: a thick ring open to the right, its two ends the jaws (drawn with a round pen). */
+const CHOMP_C = 'M19.3 -23 A30 30 0 1 0 19.3 23';
+/** Two fangs on each jaw, pointing at the coin between them. */
+const CHOMP_TEETH = 'M12 -9 L15.5 0 L19.5 -9.5Z M21.5 -10 L24.5 -2 L28 -10.5Z M12 9 L15.5 0 L19.5 9.5Z M21.5 10 L24.5 2 L28 10.5Z';
+
+/**
+ * The phone logo, standing alone where the word does not fit: the C of Coinnibal is a mouth. Its two ends are fanged
+ * jaws closing on a small gold coin that stares back, terrified; a hungry eye under a hungry brow watches its dinner
+ * and crumbs fly off the bite. It reads as a C at a glance and tells the whole game (coins that eat coins) on a
+ * closer look. The eye blinks now and then and the crumbs bob (none of it with reduced motion); hovering or pressing
+ * it makes the coin squirm.
+ */
+export function ChompMark({ size = 48, title, className }: ChompMarkProps): ReactElement {
+  const ink = ELYSIUM.abyss;
+  const uid = useId().replace(/[^A-Za-z0-9_-]/g, '');
+  const lit = `kb-chomp-lit-${uid}`;
+  const inside = `kb-chomp-in-${uid}`;
+  return (
+    <svg
+      className={`kb-chomp${className ? ` ${className}` : ''}`}
+      viewBox="-52 -54 114 112"
+      width={size}
+      height={size}
+      role={title ? 'img' : undefined}
+      aria-label={title}
+      aria-hidden={title ? undefined : true}
+      focusable="false"
+    >
+      <clipPath id={lit}>
+        <circle cx={-8} cy={-10} r={42} />
+      </clipPath>
+      <clipPath id={inside}>
+        <circle r={22} />
+      </clipPath>
+      {/* inside the mouth: dark, with a pink tongue */}
+      <circle r={22} fill={ink} />
+      <ellipse cx={2} cy={14} rx={14} ry={7} fill={ELYSIUM.blush} clipPath={`url(#${inside})`} />
+      {/* dinner: a small gold coin caught between the jaws, wide-eyed */}
+      <g className="kb-chomp__prey">
+        <circle cx={35} cy={0} r={12.5} fill={ELYSIUM.sun} stroke={ink} strokeWidth={4} />
+        <circle cx={35} cy={0} r={7.5} fill="none" stroke={SHADE.sun} strokeWidth={2.5} />
+        <circle cx={37.5} cy={-2.5} r={2.8} fill="#FFFFFF" stroke={ink} strokeWidth={1.6} />
+        <circle cx={43.5} cy={-2.5} r={2.8} fill="#FFFFFF" stroke={ink} strokeWidth={1.6} />
+        <ellipse cx={40.5} cy={5} rx={1.8} ry={2.4} fill={ink} />
+      </g>
+      {/* the crumbs of the bite */}
+      <g className="kb-chomp__crumbs" fill={ELYSIUM.sun} stroke={ink} strokeWidth={2.5}>
+        <circle className="kb-chomp__crumb" cx={53} cy={-15} r={4} />
+        <circle className="kb-chomp__crumb" cx={46} cy={-26} r={2.8} />
+        <circle className="kb-chomp__crumb" cx={54} cy={13} r={3} />
+      </g>
+      {/* the C: ink shadow, outline, shade, lit face, shine */}
+      <g className="kb-chomp__body" fill="none" strokeLinecap="round">
+        <path d={CHOMP_C} stroke={ink} strokeWidth={33} transform="translate(4 4)" />
+        <path d={CHOMP_C} stroke={ink} strokeWidth={33} />
+        <path d={CHOMP_C} stroke={SHADE.cyan} strokeWidth={24} />
+        <path d={CHOMP_C} stroke={ELYSIUM.cyan} strokeWidth={24} clipPath={`url(#${lit})`} />
+        <path d="M-35 12 A36 36 0 0 1 -30 -18" stroke="#FFFFFF" strokeWidth={4.5} opacity={0.85} />
+      </g>
+      {/* the jaws' fangs, sunk into the coin */}
+      <path className="kb-chomp__teeth" d={CHOMP_TEETH} fill="#FFFFFF" stroke={ink} strokeWidth={2.2} strokeLinejoin="round" />
+      {/* the hungry eye on top of the C, looking down at dinner, under a hungry brow */}
+      <g className="kb-chomp__eyes">
+        <circle cx={-10} cy={-28} r={10.5} fill="#FFFFFF" stroke={ink} strokeWidth={4} />
+        <circle cx={-6} cy={-25.5} r={5} fill={ink} />
+        <circle cx={-4.5} cy={-27.2} r={1.5} fill="#FFFFFF" />
+      </g>
+      <path d="M-24 -44 L1 -37" fill="none" stroke={ink} strokeWidth={5} strokeLinecap="round" />
+    </svg>
+  );
+}

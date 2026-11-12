@@ -1136,9 +1136,6 @@
 .kl-root.is-phone .kl-mast__brand {
   gap: 4px;
 }
-.kl-root.is-phone .kl-mast__coin {
-  margin-top: -3px;
-}
 /* the narrowest phones (360 px): coin + wordmark + shop + "Connect wallet" do not fit in one row
    and the wordmark slid under the shop button. The coin mark alone stays the home link. */
 @media (max-width: 379px) {
