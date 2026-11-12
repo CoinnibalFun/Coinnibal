@@ -142,7 +142,8 @@
 .kl-mast__brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  /* the coin's bite faces the word: a tight gap keeps the pair reading as one logo */
+  gap: 4px;
   min-width: 0;
   /* a 44 px tap target around the 24-40 px wordmark */
   min-height: 44px;
@@ -156,6 +157,11 @@
 .kl-mast__word {
   display: block;
   width: auto;
+}
+/* the word's letters sit a little above their box's middle: the coin shares their centre line */
+.kl-mast__coin {
+  flex: none;
+  margin-top: -5px;
 }
 .kl-mast__kicker {
   align-self: flex-end;
@@ -1128,7 +1134,10 @@
   padding: 12px 16px 10px;
 }
 .kl-root.is-phone .kl-mast__brand {
-  gap: 7px;
+  gap: 4px;
+}
+.kl-root.is-phone .kl-mast__coin {
+  margin-top: -3px;
 }
 /* the narrowest phones (360 px): coin + wordmark + shop + "Connect wallet" do not fit in one row
    and the wordmark slid under the shop button. The coin mark alone stays the home link. */
