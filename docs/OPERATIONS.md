@@ -556,8 +556,8 @@ stamped TEST and never shows a payout. Kill and death cards are offers held in m
 saved only when their page is first opened (a picture fetch does not save one); saved cards live in
 `DATA_DIR/site/shares.json` (the newest 5,000). The images (`/share/<id>.png`, and `/share/<id>/standings.png` for a
 result: the top 10 of its final board and the player's own row) are rendered on demand and cached (30 renders per IP
-a minute). On Vercel, `vercel.json` rewrites `/share/*` to the game
-server like `/api/*`; in Docker the server serves it on the same origin; `pnpm dev` proxies it.
+a minute). The VPS serves the site and the game on one origin, so `/share/*` is the server's own; `pnpm dev` proxies
+it. (`vercel.json` now only redirects the old elymum.io to coinnibal.fun, path and all.)
 
 ## Arena instances (auto-scaling)
 
@@ -606,8 +606,8 @@ settled exactly once.
 | HTTP | 240 API requests per IP a minute, 20 sign-in nonces per IP a minute (at most 24 unused per IP and 4 per address; a full pool evicts the biggest holder's first), headers in 15 s, the whole request in 30 s, 64 KiB bodies, `/api/rooms` and `/api/leaderboard` built at most once a second, 30 share-card renders per IP and 120 in all a minute |
 | Load shedding (`LOAD_SHED`, on in production) | when the game thread with the most headroom runs a tick p95 over 28 ms or the main thread lags over 150 ms (p99): new free games wait (`server_full`); over 45 ms / 400 ms: new sockets (503) and new arena seats wait too (the ticket stays on chain). Live games and reconnects always go on. Logged as `!!! load: BUSY` / `CRITICAL` |
 
-The per-IP limits need the real client address: Caddy hands it on (one hop), and the website must call the game
-server directly (`VITE_SERVER_URL`): `vercel.json` proxies only `/api/nft/*` and `/share/*`.
+The per-IP limits need the real client address: Caddy hands it on (one hop); the site is served by the game server
+itself on the same origin, so every request reaches it straight from the player.
 
 `node --import tsx scripts/bench/flood.ts` (in `apps/server`) plays 60 people and runs four attacks from thousands of
 spoofed addresses (idle sockets, a message flood, an HTTP flood, slowloris) and prints what the players saw.
