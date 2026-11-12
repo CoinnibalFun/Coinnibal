@@ -28,7 +28,7 @@ export interface StickerLabel {
   verified: boolean;
   /** A server bot: a small ink "BOT" chip after the name. */
   bot?: boolean;
-  /** An Elymum emblem holder: a small laurel before the name. */
+  /** A Coinnibal emblem holder: a small laurel before the name. */
   holder?: boolean;
   /** The country the player plays for (ISO 3166-1 alpha-2): a small flag before the name. */
   country?: string | null;

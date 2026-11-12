@@ -118,7 +118,7 @@ export async function checkPayment(
   if (!t) return { ok: false, code: 'payment_pending', message: 'The payment is not confirmed yet. Try again in a few seconds.' };
   if (t.status !== 'success') return { ok: false, code: 'payment_invalid', message: 'The payment transaction failed on chain.' };
   if (t.from.toLowerCase() !== p.from.toLowerCase()) return { ok: false, code: 'payment_invalid', message: 'The payment was sent from another wallet. Pay from the wallet you signed in with.' };
-  if (!t.to || t.to.toLowerCase() !== p.to.toLowerCase()) return { ok: false, code: 'payment_invalid', message: 'The payment did not go to the Elymum treasury.' };
+  if (!t.to || t.to.toLowerCase() !== p.to.toLowerCase()) return { ok: false, code: 'payment_invalid', message: 'The payment did not go to the Coinnibal treasury.' };
   if (t.value < p.minWei) return { ok: false, code: 'payment_low', message: 'The payment is less than the room price.' };
   if (p.now - t.timestamp > CUSTOM_PAYMENT_MAX_AGE_MS) return { ok: false, code: 'payment_stale', message: 'This payment is too old to open a room.' };
   return { ok: true, transfer: t };

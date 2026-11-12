@@ -86,6 +86,7 @@ describe('Link X: codes', () => {
     const s = service(fakeX(), null, clock);
     const a = s.issueCode(W1, IP);
     expect(a.code).toMatch(X_CODE_RE);
+    expect(a.code.startsWith('NIBAL-')).toBe(true);
     expect(a.expiresAt).toBe(T0 + X_CODE_TTL_MS);
     expect(a.text).toBe(`Joining the coin party \u{1FA99} my code: ${a.code} elymum.io`);
     expect(a.intentUrl).toBe(`https://x.com/intent/post?text=${encodeURIComponent(a.text)}`);
@@ -261,6 +262,13 @@ describe('Link X: the proof post', () => {
     expect(carriesCode('Linking: elymum-abcdef!', 'ELYMUM-ABCDEF')).toBe(true);
     expect(carriesCode(xLinkPostText('ELYMUM-ABCDEF'), 'ELYMUM-ABCDEF')).toBe(true);
     expect(carriesCode('ELYMUM-ABCDEFG', 'ELYMUM-ABCDEF')).toBe(false);
+    // the rename: new codes are NIBAL-, and a code counts under either prefix (a page open across the deploy)
+    expect(carriesCode(xLinkPostText('NIBAL-ABCDEF'), 'NIBAL-ABCDEF')).toBe(true);
+    expect(carriesCode('my code: ELYMUM-ABCDEF', 'NIBAL-ABCDEF')).toBe(true);
+    expect(carriesCode('my code: nibal-abcdef', 'ELYMUM-ABCDEF')).toBe(true);
+    expect(carriesCode('my code: NIBAL-ABCDEG', 'NIBAL-ABCDEF')).toBe(false);
+    expect(carriesCode('my code: OTHER-ABCDEF', 'NIBAL-ABCDEF')).toBe(false);
+    expect(carriesCode('my code: XNIBAL-ABCDEF', 'NIBAL-ABCDEF')).toBe(false);
     expect(xPostTime(postId(T0))).toBe(T0);
   });
 });

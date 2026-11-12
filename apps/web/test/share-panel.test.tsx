@@ -135,7 +135,7 @@ describe('the end-of-game share panel', () => {
     const url = new URL(x.href);
     expect(url.origin + url.pathname).toBe('https://x.com/intent/post');
     expect(url.searchParams.get('text')).toBe(`${resultShareText(translate, { rank: 1, n: 2, room: '$1 Room' })} ${SHARE_COIN}`);
-    expect(url.searchParams.get('text')).toMatch(/in \$1 Room on Elymum/);
+    expect(url.searchParams.get('text')).toMatch(/in \$1 Room on Coinnibal/);
     expect(url.searchParams.get('url')).toBe(shareUrl('AbCdE12345'));
     expect(x.closest('[data-testid="share-panel"]')).toBeTruthy();
     expect(screen.queryByTestId('share-pick-standings')).toBeNull();
@@ -185,7 +185,7 @@ describe('the end-of-game share panel', () => {
     const posted = new URL(x.href).searchParams.get('text')!;
     expect(posted).toBe(`${killShareText(translate, { id: 'KiLLbbbbbb', victim: 'Botty', victimIsBot: true, test: true })} ${SHARE_COIN}`);
     expect(posted).toContain('Botty (BOT)');
-    expect(posted).toContain('Elymum');
+    expect(posted).toContain('Coinnibal');
     expect(posted).toContain('(TEST: testnet test arena, no real money)');
     expect(new URL(x.href).searchParams.get('url')).toBe(shareUrl('KiLLbbbbbb'));
     fireEvent.click(rows[0].querySelector('[data-testid="moment-download"]')!);
@@ -207,7 +207,7 @@ describe('the end-of-game share panel', () => {
     expect(url.searchParams.get('text')).toBe(`${gameShareText(translate, { mass: 2345.6, eaten: 2, room: 'Pro Pond #1' })} ${SHARE_COIN}`);
     expect(url.searchParams.get('text')).toMatch(/2,345/);
     expect(url.searchParams.get('text')).toMatch(/\b2 coins\b/);
-    expect(url.searchParams.get('text')).toContain('Pro Pond #1 on Elymum');
+    expect(url.searchParams.get('text')).toContain('Pro Pond #1 on Coinnibal');
     expect(url.searchParams.get('url')).toBe(shareUrl('DeAdD12345'));
     expect(screen.getByTestId('share-moments').textContent).toContain('Your moments: 1 kill');
     fireEvent.click(screen.getByTestId('share-download'));

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { ledgerDecimals } from '@elymum/sdk';
-import { EATEN_SHOWN, PlayerFlag, SHARE_BOARD_ROWS, SHARE_ID_RE, isXHandle, SHARE_IMAGE, arenaMeta, formatToken, shareName, shortAddress, type EatenName, type RoundStanding, type ShareBoardRow, type ShareCard, type ShareKind } from '@elymum/shared';
+import { BRAND_NAME, EATEN_SHOWN, siteHostOf, PlayerFlag, SHARE_BOARD_ROWS, SHARE_ID_RE, isXHandle, SHARE_IMAGE, arenaMeta, formatToken, shareName, shortAddress, type EatenName, type RoundStanding, type ShareBoardRow, type ShareCard, type ShareKind } from '@elymum/shared';
 import { Limiter } from '../net/limiter';
 import type { PlayerLook, RoomHandle } from '../rooms/handle';
 import { renderShareCard, renderStandingsCard, shareFacts, shareHeadline } from './share-card';
@@ -44,7 +44,7 @@ export interface ShareDeps {
   dataDir: string | null;
   /** The site's public origin for the absolute card URLs (`publicBaseUrl`: `PUBLIC_URL`; never a forwarded header). */
   baseUrl: (req: IncomingMessage) => string;
-  /** The game token's decimals and symbol (for "took home 1,234.5 $ELYMUM"). */
+  /** The game token's decimals and symbol (for "took home 1,234.5 $NIBAL"). */
   token: () => { decimals: number; symbol: string } | null;
   /** "Link X": the handle is linked to a wallet right now (a card tags only such a handle; absent: never tag). */
   xLinked?: (handle: string) => boolean;
@@ -190,7 +190,7 @@ export class ShareService {
     return this.offer({ kind: o.room.opts.stake ? 'round' : 'room', ...this.base(o), mass: Math.floor(g.mass), kills: g.kills, ...this.eaten(g) });
   }
 
-  /** "1,234.5 $ELYMUM" (ledger units), or undefined without the token. */
+  /** "1,234.5 $NIBAL" (ledger units), or undefined without the token. */
   private money(v: number): string | undefined {
     const t = this.d.token();
     return t ? `${formatToken(v, ledgerDecimals(t.decimals), { maxFrac: 2 })} ${t.symbol}` : undefined;
@@ -312,7 +312,8 @@ export class ShareService {
           return true;
         }
         try {
-          png = standings ? renderStandingsCard(card) : renderShareCard(card);
+          const site = siteHostOf(this.d.baseUrl(req));
+          png = standings ? renderStandingsCard(card, site) : renderShareCard(card, site);
         } catch (err) {
           this.renderBroken = String((err as Error)?.message ?? err).split('\n')[0];
           this.d.log?.(`!!! share cards: drawing failed (${this.renderBroken}) — share images fall back to the site's picture until a restart`);
@@ -342,7 +343,7 @@ export class ShareService {
 
 /** The share page: the Open Graph and Twitter card tags (X shows the image), the card, and the way into the game. */
 export function sharePage(card: ShareCard, origin: string): string {
-  const title = `${card.test ? 'TEST · ' : ''}${card.name} · ${shareHeadline(card)} · Elymum`;
+  const title = `${card.test ? 'TEST · ' : ''}${card.name} · ${shareHeadline(card)} · ${BRAND_NAME}`;
   const desc = card.test
     ? `${shareFacts(card).join(' · ')}. A testnet test arena: practice tokens, no real money.`
     : `${shareFacts(card).join(' · ')}. Coin eats coin on Robinhood Chain.`;
@@ -357,7 +358,7 @@ export function sharePage(card: ShareCard, origin: string): string {
 <meta name="description" content="${esc(desc)}">
 <link rel="canonical" href="${esc(page)}">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Elymum">
+<meta property="og:site_name" content="${BRAND_NAME}">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="${esc(page)}">
@@ -373,7 +374,7 @@ export function sharePage(card: ShareCard, origin: string): string {
 </head>
 <body>
 <img src="/share/${esc(card.id)}.png" width="${SHARE_IMAGE.width}" height="${SHARE_IMAGE.height}" alt="${esc(title)}">
-<a href="/play">Play Elymum</a>
+<a href="/play">Play ${BRAND_NAME}</a>
 </body>
 </html>
 `;

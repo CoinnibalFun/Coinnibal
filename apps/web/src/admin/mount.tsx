@@ -43,7 +43,7 @@ function AdminApp() {
 
 /** `/admin`: the operator's panel (contracts + site tabs), a separate lazily loaded entry (main.tsx). */
 export function mount(root: HTMLElement): void {
-  document.title = 'Elymum admin';
+  document.title = 'Coinnibal admin';
   setPageHead('/admin', false);
   createRoot(root).render(
     <StrictMode>

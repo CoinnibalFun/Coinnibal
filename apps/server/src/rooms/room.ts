@@ -657,7 +657,7 @@ export class Room implements RoomHandle {
 
   /** A system line in the room's chat (e.g. "1 minute left"). */
   announce(text: string): void {
-    this.pushChat({ pid: 0, from: 'Elymum', skin: 1, text, system: true });
+    this.pushChat({ pid: 0, from: 'Coinnibal', skin: 1, text, system: true });
   }
 
   private pushChat(line: ChatLine): void {
@@ -1168,7 +1168,7 @@ export class Room implements RoomHandle {
     for (const a of ev.airdrops) this.broadcast({ t: 'event', kind: 'airdrop', state: 'start', x: a.x, y: a.y, powerUp: a.type });
     if (ev.coinRain) {
       this.broadcast({ t: 'event', kind: 'coinrain', state: ev.coinRain, ms: ev.coinRain === 'start' ? world.coinRainUntil - world.now : 0 });
-      if (ev.coinRain === 'start') this.pushChat({ pid: 0, from: 'Elymum', skin: 1, text: 'COIN RAIN!', system: true });
+      if (ev.coinRain === 'start') this.pushChat({ pid: 0, from: 'Coinnibal', skin: 1, text: 'COIN RAIN!', system: true });
     }
 
     this.bots?.update(world.now);

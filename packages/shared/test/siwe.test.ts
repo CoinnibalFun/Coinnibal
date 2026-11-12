@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SIWE_STATEMENT, parseSiweMessage, siweFieldsError, siweMessage, type SiweFields } from '../src';
+import { SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS, parseSiweMessage, siweFieldsError, siweMessage, type SiweFields } from '../src';
 
 const FIELDS: SiweFields = {
   domain: 'elymum.io',
@@ -14,7 +14,7 @@ const EXPECTED = [
   'elymum.io wants you to sign in with your Ethereum account:',
   '0x52908400098527886E0F7030069857D2E4169EE7',
   '',
-  'Sign in to Elymum. This is free and sends no transaction.',
+  'Sign in to Coinnibal. This is free and sends no transaction.',
   '',
   'URI: https://elymum.io',
   'Version: 1',
@@ -25,8 +25,15 @@ const EXPECTED = [
 
 describe('siweMessage', () => {
   it('builds the exact EIP-4361 text', () => {
-    expect(SIWE_STATEMENT).toBe('Sign in to Elymum. This is free and sends no transaction.');
+    expect(SIWE_STATEMENT).toBe('Sign in to Coinnibal. This is free and sends no transaction.');
     expect(siweMessage(FIELDS)).toBe(EXPECTED);
+  });
+
+  it('still reads a message with the sign-in line from before the rename', () => {
+    expect(SIWE_STATEMENTS_PREVIOUS).toEqual(['Sign in to Elymum. This is free and sends no transaction.']);
+    const old = siweMessage(FIELDS).replace(SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS[0]);
+    expect(parseSiweMessage(old)).toEqual(FIELDS);
+    expect(parseSiweMessage(siweMessage(FIELDS).replace(SIWE_STATEMENT, 'Sign in to Something Else.'))).toBeNull();
   });
 
   it('round-trips through the parser', () => {

@@ -10,8 +10,16 @@ export function gasFaucetUrl(served?: string | null): string | null {
   return served || activeChain().faucetUrl || null;
 }
 
-/** The display symbol of the faucet token. */
+/** The on-chain symbol of the testnet TestToken (what a wallet shows), when it cannot be read. */
 export const TEST_SYMBOL_DEFAULT = 'tELYMUM';
+
+/**
+ * What the page calls the faucet token: the game's display symbol (`gameToken.symbol`, the server's `TOKEN_SYMBOL`)
+ * when the faucet token is the game token, else its on-chain symbol (pure, tested).
+ */
+export function displaySymbol(token: { address: string; symbol: string }, gameToken: { address: string; symbol: string } | null | undefined): string {
+  return gameToken?.symbol && gameToken.address.toLowerCase() === token.address.toLowerCase() ? gameToken.symbol : token.symbol;
+}
 
 /** What the faucet page shows, in order of precedence (pure, tested). */
 export type FaucetView =

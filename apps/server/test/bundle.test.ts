@@ -40,14 +40,14 @@ describe('production bundle (tsup)', () => {
       let exited = false;
       child.on('exit', () => (exited = true));
       const deadline = Date.now() + 15_000;
-      while (!/Elymum server on/.test(log) && !exited && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+      while (!/Coinnibal server on/.test(log) && !exited && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
       await new Promise((r) => setTimeout(r, 1_500));
       expect(exited, log).toBe(false);
       // SIGTERM: the server flushes its files on the way out; wait for it before the folder is removed
       const gone = new Promise<void>((r) => (exited ? r() : child.once('exit', () => r())));
       child.kill();
       await Promise.race([gone, new Promise((r) => setTimeout(r, 10_000))]);
-      expect(log).toMatch(/Elymum server on/);
+      expect(log).toMatch(/Coinnibal server on/);
       expect(log).not.toMatch(/failed to initialise|Dynamic require|ReferenceError/);
       expect(log).toMatch(/chain: server key 0x[0-9a-fA-F]{40}/);
       // the native canvas addon loads from the bundle (share cards), checked at startup

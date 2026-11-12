@@ -128,7 +128,7 @@ describe('a custom room ends: countdown, then the final board', () => {
     const url = new URL(link.href);
     expect(url.origin + url.pathname).toBe('https://x.com/intent/post');
     expect(url.searchParams.get('text')).toBe(`${resultShareText(translate, { rank: 3, n: 3, room: 'Friday Pond' })} ${SHARE_COIN}`);
-    expect(url.searchParams.get('text')).toMatch(/#3 of 3 in Friday Pond on Elymum/);
+    expect(url.searchParams.get('text')).toMatch(/#3 of 3 in Friday Pond on Coinnibal/);
     expect(url.searchParams.get('url')).toBe(shareUrl('AbCdE12345'));
     expect(shareUrl('AbCdE12345')).toMatch(/\/share\/AbCdE12345$/);
   });
@@ -163,7 +163,7 @@ describe('a custom room ends: countdown, then the final board', () => {
     expect(url.searchParams.get('text')).toBe(`${gameShareText(translate, { mass: 2345.6, eaten: 2, room: 'Pro Pond #1' })} ${SHARE_COIN}`);
     expect(url.searchParams.get('text')).toMatch(/2,345/);
     expect(url.searchParams.get('text')).toMatch(/\b2 coins\b/);
-    expect(url.searchParams.get('text')).toContain('Pro Pond #1 on Elymum');
+    expect(url.searchParams.get('text')).toContain('Pro Pond #1 on Coinnibal');
     expect(url.searchParams.get('url')).toBe(siteLink());
   });
 

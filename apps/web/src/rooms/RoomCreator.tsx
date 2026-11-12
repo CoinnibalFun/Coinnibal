@@ -58,7 +58,7 @@ const DIFF_KEY: Record<CustomRoomConfig['difficulty'], TKey> = { easy: 'cr.diff.
 const FOOD_KEY: Record<CustomRoomConfig['food'], TKey> = { low: 'cr.food.low', normal: 'cr.food.normal', high: 'cr.food.high' };
 const KIND_KEY: Record<CustomRoomConfig['kind'], TKey> = { free: 'cr.kind.free', paid: 'cr.kind.paid' };
 
-/** "Arena · 10,000 $ELYMUM": a paid room's tier. */
+/** "Arena · 10,000 $NIBAL": a paid room's tier. */
 const tierText = (x: CustomArenaTier, tok: TokenText) => `${arenaMeta(x.arenaId).name} · ${tok.wire(x.entryFee)} ${tok.symbol}`;
 
 /** The fee multiplier of a capacity as text: "1.5" for x1.5 (`stepPct` per started 10 players above 10). */

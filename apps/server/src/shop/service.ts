@@ -51,7 +51,7 @@ const BUY_MESSAGES: Record<ShopBuyError, string> = {
   no_payment: 'That transaction is not a power-up payment.',
   wrong_token: 'That transaction did not move the game token.',
   wrong_sender: 'That payment was not sent from your signed-in wallet.',
-  wrong_recipient: 'That payment did not go to the Elymum arena contract.',
+  wrong_recipient: 'That payment did not go to the Coinnibal arena contract.',
   wrong_pack: 'That payment was made for another power-up.',
   wrong_amount: 'That payment does not match the pack price.',
   tx_stale: 'That payment is too old to be credited as a new purchase.',

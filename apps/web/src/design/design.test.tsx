@@ -280,6 +280,6 @@ describe('Storybook building blocks', () => {
     expect(screen.getByRole('meter', { name: 'Minted' }).getAttribute('aria-valuetext')).toBe('2,614 of 5,000');
     expect(screen.getByRole('progressbar', { name: 'Chores' }).getAttribute('aria-valuenow')).toBe('1');
     expect(screen.getByText('DONE')).toBeTruthy();
-    expect(screen.getByRole('img', { name: 'Elymum' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Coinnibal' })).toBeTruthy();
   });
 });

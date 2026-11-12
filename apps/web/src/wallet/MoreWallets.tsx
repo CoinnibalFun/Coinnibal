@@ -11,7 +11,7 @@ import './more-wallets.css';
  * Under the list of browser wallets: the ways in for a player without one. On a phone, links that open this page in
  * a wallet app's own browser (MetaMask, Coinbase Wallet; Rabby through WalletConnect or as a download); WalletConnect
  * when the build has a project id (a QR code on a desktop, the wallet app on a phone); and, once a wallet is there,
- * "How to get $ELYMUM".
+ * "How to get $NIBAL".
  */
 export function MoreWallets({
   chain,
@@ -25,7 +25,7 @@ export function MoreWallets({
   /** The browser already has a wallet (no deep links then). */
   hasInjected: boolean;
   onConnected?: () => void;
-  /** Opens "How to get $ELYMUM" (omitted: not offered). */
+  /** Opens "How to get $NIBAL" (omitted: not offered). */
   onGetTokens?: () => void;
   sym: string;
 }) {

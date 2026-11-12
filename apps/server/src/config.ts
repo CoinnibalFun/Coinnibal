@@ -2,7 +2,7 @@ import { availableParallelism } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, type GameAccess } from '@elymum/shared';
+import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, normalizeXHandle, SITE_URL_DEFAULT, withBrandOrigins, type GameAccess } from '@elymum/shared';
 import { GAS_PRICE_URL_DEFAULT } from '@elymum/sdk';
 import { getAddress, isAddress } from 'viem';
 import { DEFAULT_ART_STYLE, parseArtStyle, type ArtStyle } from './site/nft/render';
@@ -73,6 +73,12 @@ export interface ServerConfig {
    * Null: the site setting decides (default `admins`).
    */
   gameAccess: GameAccess | null;
+  /**
+   * `X_HANDLE`: the project's X handle by default (no `@`; e.g. `coinnibal` once that account is live). Null: the
+   * shared default (`SITE_X_HANDLE_DEFAULT`). The admin's Settings, X handle, overrides it once saved; a saved handle
+   * that is an earlier default (`PREVIOUS_X_HANDLES`) moves to this one on start.
+   */
+  xHandle: string | null;
   /** `NODE_ENV` as given (null when unset). */
   nodeEnv: string | null;
   /**
@@ -130,7 +136,7 @@ export interface ServerConfig {
     journalAbandonContract: string | null;
     /** Arena ids to open as stake rooms (empty = discover on-chain). */
     arenaIds: number[];
-    /** Display symbol of the game token (`TOKEN_SYMBOL`, default `$ELYMUM`). */
+    /** Display symbol of the game token (`TOKEN_SYMBOL`, default `$NIBAL`; the on-chain symbol is not used for display). */
     tokenSymbol: string;
     /**
      * Seconds after which an open session nobody plays is settled at its entry fee by the sweeper
@@ -223,12 +229,12 @@ export function assertPublicUrl(cfg: Pick<ServerConfig, 'publicUrl' | 'nodeEnv'>
     } catch {
       ok = false;
     }
-    if (!ok) throw new Error(`PUBLIC_URL must be the site's origin, e.g. https://elymum.io (got ${JSON.stringify(cfg.publicUrl)}); refusing to start`);
+    if (!ok) throw new Error(`PUBLIC_URL must be the site's origin, e.g. ${SITE_URL_DEFAULT} (got ${JSON.stringify(cfg.publicUrl)}); refusing to start`);
     return;
   }
   if (cfg.nodeEnv === 'development') return;
   throw new Error(
-    `PUBLIC_URL is required (NODE_ENV is ${cfg.nodeEnv ?? 'unset'}): set it to the site's public origin, e.g. https://elymum.io. ` +
+    `PUBLIC_URL is required (NODE_ENV is ${cfg.nodeEnv ?? 'unset'}): set it to the site's public origin, e.g. ${SITE_URL_DEFAULT}. ` +
       'It is the domain wallet sign-ins (SIWE) are bound to and the base of the NFT metadata links; only NODE_ENV=development may derive it from the request. Refusing to start',
   );
 }
@@ -390,7 +396,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   return {
     port: int(env.PORT, 8787),
     host: env.HOST ?? '0.0.0.0',
-    corsOrigin: env.CORS_ORIGIN ?? '*',
+    corsOrigin: withBrandOrigins(env.CORS_ORIGIN),
     dataDir: resolve(env.DATA_DIR ?? 'data'),
     publicUrl: env.PUBLIC_URL?.trim() ? env.PUBLIC_URL.trim().replace(/\/+$/, '') : null,
     webDist: env.WEB_DIST ? resolve(env.WEB_DIST) : null,
@@ -411,6 +417,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     adminSecretExport: env.ADMIN_SECRET_EXPORT === undefined || env.ADMIN_SECRET_EXPORT.trim() === '' ? null : bool(env.ADMIN_SECRET_EXPORT, false),
     adminWallets: parseAdminWallets(env.ADMIN_WALLETS),
     gameAccess: parseGameAccess(env.GAME_ACCESS),
+    xHandle: normalizeXHandle(env.X_HANDLE),
     nodeEnv: env.NODE_ENV?.trim() || null,
     devFakeChain: bool(env.DEV_FAKE_CHAIN, false),
     devFakeToken: bool(env.DEV_FAKE_TOKEN, false),

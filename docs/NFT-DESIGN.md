@@ -1,6 +1,6 @@
-# The Elymum emblem collection: design, rarity and fair reveal
+# The Coinnibal emblem collection: design, rarity and fair reveal
 
-The Elymum NFT ("emblems") is a 5,000-token PFP collection. Each emblem is a portrait of an Elymum coin creature
+The Coinnibal NFT ("emblems") is a 5,000-token PFP collection. Each emblem is a portrait of a Coinnibal coin creature
 drawn in the game's Ring Storybook style. Traits are layered, rarity comes in five tiers, and the reveal is
 provably fair. This page covers the research behind the design, the design system, the odds, the comparison
 between the two art styles, and the commit-and-reveal flow. Researched and built 2026-11-05.
@@ -271,7 +271,7 @@ default, or `pixel`) picks the collection's style, and `/api/nft/<id>.svg?style=
   flames are pixel shapes, faces are hand-placed sprites, and an outline pass adds exactly 1 px of ink around
   every part. A 3 × 5 pixel font draws the tags. The output is an SVG of crisp 8 px cells.
 
-`out/nft2/compare.png` shows the same 12 tokens side by side. Verdict: **vector is better for Elymum, and it is
+`out/nft2/compare.png` shows the same 12 tokens side by side. Verdict: **vector is better for Coinnibal, and it is
 the default.** The reasons:
 
 1. **It is our character.** The game, the site, the stickers and the share cards are all vector storybook art.
@@ -344,8 +344,8 @@ A revealed token:
 
 ```json
 {
-  "name": "Elymum No. 42",
-  "description": "A Rare Elymum emblem: a struck metal coin of the ring. Holders play Elymum, ...",
+  "name": "Coinnibal No. 42",
+  "description": "A Rare Coinnibal emblem: a struck metal coin of the ring. Holders play Coinnibal, ...",
   "image": "https://<site>/api/nft/42.svg?v=<revealBlock>",
   "external_url": "https://<site>",
   "background_color": "34B7DD",

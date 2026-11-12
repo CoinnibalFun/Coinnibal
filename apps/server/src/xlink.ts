@@ -2,7 +2,10 @@ import { randomInt } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
+  SITE_URL_DEFAULT,
   X_CODE_CHARS,
+  X_CODE_PREFIX,
+  X_CODE_PREFIXES,
   X_CODE_TTL_MS,
   isXHandle,
   isXId,
@@ -97,7 +100,7 @@ const TYPE_OF_EXT: Record<string, XAvatarType> = { jpg: 'image/jpeg', png: 'imag
 const CLOCK_SKEW_MS = 2 * 60_000;
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_JSON_BYTES = 256 * 1024;
-const UA = 'Mozilla/5.0 (compatible; ElymumLinkCheck/1.0; +https://elymum.io)';
+const UA = `Mozilla/5.0 (compatible; CoinnibalLinkCheck/1.0; +${SITE_URL_DEFAULT})`;
 
 /** The picture URL to fetch: X's own host, https, the 400 x 400 variant of `_normal` / `_bigger` / `_mini`. */
 export function xAvatarUrl(raw: unknown): string | null {
@@ -152,9 +155,17 @@ export function oembedText(html: string): string {
     });
 }
 
-/** Whether the post's words carry `code` as a word of its own (any case). */
+/**
+ * Whether the post's words carry `code` as a word of its own (any case). The code's six characters count under any of
+ * `X_CODE_PREFIXES` (`NIBAL-7F3K9Q` and the pre-rename `ELYMUM-7F3K9Q` are the same code).
+ */
 export function carriesCode(text: string, code: string): boolean {
-  return new RegExp(`(?:^|[^A-Za-z0-9])${code.replace('-', '\\-')}(?![A-Za-z0-9])`, 'i').test(text);
+  const dash = code.indexOf('-');
+  if (dash <= 0 || !/^[A-Za-z0-9-]+$/.test(code)) return false;
+  const prefix = code.slice(0, dash);
+  const tail = code.slice(dash + 1);
+  const prefixes = X_CODE_PREFIXES.includes(prefix.toUpperCase()) ? X_CODE_PREFIXES : [prefix];
+  return new RegExp(`(?:^|[^A-Za-z0-9])(?:${prefixes.join('|')})\\-${tail}(?![A-Za-z0-9])`, 'i').test(text);
 }
 
 /* ------------------------------------------------------------------ */
@@ -426,7 +437,7 @@ export class XLinkService {
     const now = this.now();
     let code = '';
     for (let i = 0; i < 6; i++) code += X_CODE_CHARS[randomInt(X_CODE_CHARS.length)];
-    const c: PendingCode = { code: `ELYMUM-${code}`, issuedAt: now, expiresAt: now + X_CODE_TTL_MS };
+    const c: PendingCode = { code: `${X_CODE_PREFIX}-${code}`, issuedAt: now, expiresAt: now + X_CODE_TTL_MS };
     this.codes.set(wallet.toLowerCase(), c);
     // forget expired codes of other wallets
     if (this.codes.size > 5000) for (const [k, v] of this.codes) if (now >= v.expiresAt) this.codes.delete(k);
@@ -621,7 +632,7 @@ export function fakeXFetch(opts: { text: () => string; handle?: string; avatar?:
       id_str: id,
       text: opts.text(),
       created_at: new Date().toISOString(),
-      user: { id_str: '1700000000000000001', screen_name: handle, name: 'Elymum Fan', profile_image_url_https: 'https://pbs.twimg.com/profile_images/1/fan_normal.png' },
+      user: { id_str: '1700000000000000001', screen_name: handle, name: 'Coinnibal Fan', profile_image_url_https: 'https://pbs.twimg.com/profile_images/1/fan_normal.png' },
     };
     return answer(Buffer.from(JSON.stringify(body)), 'application/json');
   };

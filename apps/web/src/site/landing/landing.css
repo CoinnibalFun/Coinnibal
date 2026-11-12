@@ -1,6 +1,6 @@
 /* ─────────────────────────── site · the landing ───────────────────────────
- * From day into night: the hero (RingScene + hero sticker + pond), what Elymum is
- * (the rules card), how a round works (OrbitDots), then night: the Elymum NFT and
+ * From day into night: the hero (RingScene + hero sticker + pond), what Coinnibal is
+ * (the rules card), how a round works (OrbitDots), then night: the Coinnibal NFT and
  * why to get it, the four rooms (tickets), questions.
  * ------------------------------------------------------------------------- */
 
@@ -82,6 +82,10 @@
   line-height: 1.25;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+.ld-hero__motto {
+  color: var(--teal-ink);
+  white-space: nowrap;
 }
 .ld-hero__lede {
   margin: 0;

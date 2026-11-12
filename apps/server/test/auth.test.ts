@@ -130,6 +130,14 @@ describe('SIWE login message (EIP-4361)', () => {
     expect(siweOrigin(dev, req, false, 31337).chainId).toBe(31337);
   });
 
+  it('names the brand site (coinnibal.fun) for a sign-in from it, and only from that fixed list', () => {
+    const cfg = loadConfig({ PUBLIC_URL: 'https://elymum.io' } as NodeJS.ProcessEnv);
+    const from = (origin: string) => siweOrigin(cfg, { headers: { host: 'game.elymum.io', origin } } as never, false, 46630);
+    expect(from('https://coinnibal.fun')).toEqual({ domain: 'coinnibal.fun', uri: 'https://coinnibal.fun', chainId: 46630 });
+    expect(from('https://www.coinnibal.fun/').domain).toBe('www.coinnibal.fun');
+    for (const other of ['https://evil.example', 'http://coinnibal.fun', 'https://coinnibal.fun.evil.example']) expect(from(other).domain).toBe('elymum.io');
+  });
+
   it('never lets a request choose the SIWE domain outside development (Host / X-Forwarded-Host spoofing)', async () => {
     const auth = new Auth(Buffer.alloc(32, 1));
     const victim = testSigner();

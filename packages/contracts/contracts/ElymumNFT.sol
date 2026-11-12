@@ -114,7 +114,7 @@ contract ElymumNFT is ERC721, ERC2981, Ownable2Step, ReentrancyGuard {
         uint16 publicLimit,
         string memory baseURI,
         address treasury
-    ) ERC721("Elymum", "ELYMUM") Ownable(owner_) {
+    ) ERC721("Coinnibal", "NIBAL") Ownable(owner_) {
         if (treasury == address(0)) revert ZeroAddress();
         _maxSupply = maxSupply_;
         _price = mintPrice;

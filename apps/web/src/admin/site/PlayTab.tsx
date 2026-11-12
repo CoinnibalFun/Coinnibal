@@ -27,7 +27,7 @@ export function PlayTab({ api }: TabProps) {
         {access === 'public'
           ? 'The game is open to everyone. You play as this admin wallet.'
           : access === 'holders'
-            ? 'The game is open to Elymum NFT holders. Your admin session lets you in either way.'
+            ? 'The game is open to Coinnibal NFT holders. Your admin session lets you in either way.'
             : 'The game is closed to the public. Your admin session lets you in to test: the server checks the same wallet on every room entry.'}
       </p>
       <div className="ad-actions">

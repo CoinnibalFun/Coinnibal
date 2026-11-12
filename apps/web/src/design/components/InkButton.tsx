@@ -13,7 +13,7 @@ export interface InkButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElem
   icon?: IconName;
   /** Leading icon. */
   lead?: IconName;
-  /** Mono second line, e.g. "Asphodel Meadow · 1,000 $ELYMUM". */
+  /** Mono second line, e.g. "Asphodel Meadow · 1,000 $NIBAL". */
   sub?: ReactNode;
   block?: boolean;
   loading?: boolean;
