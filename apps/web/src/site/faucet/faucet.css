@@ -1,16 +1,12 @@
 /* ── /faucet: the tap at the edge of the ring (FaucetPage.tsx) ───────── */
-.fc-platelabel {
-  max-width: 1120px;
-  margin: 18px auto 0;
-  padding: 0 max(20px, env(safe-area-inset-right, 0px)) 0 max(20px, env(safe-area-inset-left, 0px));
-}
 .fc-plate {
   background: transparent;
 }
+/* the same column as the other site pages (.st-page) */
 .fc-wrap {
-  max-width: 1120px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 28px max(20px, env(safe-area-inset-right, 0px)) 72px max(20px, env(safe-area-inset-left, 0px));
+  padding: clamp(28px, 6vw, 64px) var(--gutter) 72px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
   gap: 40px;
@@ -52,7 +48,7 @@
 .fc-tap {
   position: relative;
   width: 240px;
-  height: 250px;
+  height: 226px;
 }
 .fc-tap__art {
   position: absolute;
@@ -99,13 +95,13 @@
 @keyframes fc-drip {
   0% { opacity: 0; transform: translateY(-4px) scale(0.6); }
   15% { opacity: 1; transform: translateY(0) scale(1); }
-  85% { opacity: 1; transform: translateY(64px) scale(1) rotateY(180deg); }
-  100% { opacity: 0; transform: translateY(72px) scale(0.7, 0.4); }
+  85% { opacity: 1; transform: translateY(42px) scale(1) rotateY(180deg); }
+  100% { opacity: 0; transform: translateY(48px) scale(0.7, 0.4); }
 }
 .fc-tap__coin {
   position: absolute;
   left: 79px;
-  top: 158px;
+  top: 134px;
   transition: transform 0.2s var(--ease-spring);
 }
 .fc-tap.is-pouring .fc-tap__coin {
@@ -315,10 +311,10 @@
     grid-column: 2;
     grid-row: 1 / span 2;
     width: 240px;
-    height: 250px;
+    height: 226px;
     transform: scale(0.5);
     transform-origin: top left;
-    margin-bottom: -125px;
+    margin-bottom: -113px;
   }
   .fc-wrap--quiet {
     grid-template-columns: 1fr;
@@ -334,7 +330,7 @@
   .fc-tap {
     grid-row: 1;
     transform: scale(0.42);
-    margin-bottom: -145px;
+    margin-bottom: -131px;
   }
   .fc-copy > .fc-h {
     grid-column: 1 / -1;
@@ -356,6 +352,6 @@
   }
   .fc-tap.is-pouring .fc-drop:first-child {
     opacity: 1;
-    transform: translateY(40px);
+    transform: translateY(14px);
   }
 }

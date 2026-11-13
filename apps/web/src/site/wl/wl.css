@@ -273,9 +273,8 @@
   box-shadow: var(--sh-3);
 }
 
-/* the terraces */
+/* the steps: one aligned column, the closed ones tilted a hair either way like stickers on a page */
 .wl-steps {
-  --t: calc(120px / max(1, var(--steps, 3) - 1));
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -285,8 +284,6 @@
 }
 .wl-step {
   position: relative;
-  margin-left: calc(var(--terrace, 0) * var(--t));
-  margin-right: calc((var(--steps, 3) - 1 - var(--terrace, 0)) * var(--t));
   border: var(--stroke) solid var(--outline);
   border-radius: 20px;
   background: var(--white);
@@ -304,20 +301,26 @@
   background: var(--linen);
   box-shadow: var(--sh-1);
 }
+.wl-step:not(.is-active):nth-child(odd) {
+  rotate: -0.35deg;
+}
+.wl-step:not(.is-active):nth-child(even) {
+  rotate: 0.4deg;
+}
 .wl-step.is-active {
   box-shadow: var(--sh-4);
 }
-/* the "you are here" flag on the open terrace */
+/* the "you are here" flag on the open step: an index tab sticking out of the card's left edge */
 .wl-step.is-active::before {
   content: '';
   position: absolute;
-  left: -3px;
+  left: calc(-1 * var(--stroke) - 9px);
   top: 22px;
   width: 9px;
   height: 36px;
   border: var(--stroke-sm) solid var(--outline);
-  border-left: 0;
-  border-radius: 0 6px 6px 0;
+  border-right: 0;
+  border-radius: 6px 0 0 6px;
   background: var(--sun);
 }
 .wl-step__toggle {
@@ -359,6 +362,11 @@
 .wl-step__art > * {
   max-width: 100%;
   max-height: 100%;
+}
+/* the handle chore's 72 px coin: sized into the 64 px cell, its sleepy "z z" kept clear of the text */
+.wl-step__art > .kb-coin {
+  scale: 0.86;
+  translate: -3px 2px;
 }
 .wl-step__art .wl-art {
   width: 100%;
@@ -429,10 +437,6 @@
   margin-top: 2px;
 }
 @media (max-width: 759px) {
-  .wl-step {
-    margin-left: calc(var(--terrace, 0) * 4px);
-    margin-right: calc((var(--steps, 3) - 1 - var(--terrace, 0)) * 4px);
-  }
   .wl-step__head {
     grid-template-columns: 50px minmax(0, 1fr) auto;
     gap: 12px;
@@ -444,7 +448,8 @@
   }
   /* the handle chore's coin draws at a fixed 72 px: scale it into the 50 px cell, not over the title */
   .wl-step__art > .kb-coin {
-    scale: 0.62;
+    scale: 0.56;
+    translate: -3px 2px;
   }
   .wl-step__title {
     font-size: 20px;
@@ -935,8 +940,10 @@
   color: var(--ink-3);
 }
 .wl-album__page {
-  display: flex;
-  flex-wrap: wrap;
+  /* the slots share the page's width evenly (no empty third at the end of a wide album) */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+  justify-items: center;
   gap: 10px;
   margin: 0;
   padding: 12px;

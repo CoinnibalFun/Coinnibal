@@ -12,7 +12,7 @@ import { useOffscreenPause } from './useOffscreenPause';
  *
  * `time`: `dawn` (the plain, day) or `night` (moonlit fields, lit windows).
  * `variant`: `full` (1440 × 880 hero), `compact` (terraces + planet top,
- * 1440 × 520), `horizon` (the front terraces only, 1440 × 240, for footers
+ * 1440 × 520), `horizon` (the front terraces only, 1440 × 288, for footers
  * and section seams). The SVG slices to cover its box; put HTML (cards,
  * coins) on top as `children`.
  */
@@ -39,7 +39,8 @@ export interface RingSceneProps {
 const VIEW: Record<RingVariant, string> = {
   full: '0 0 1440 880',
   compact: '0 360 1440 520',
-  horizon: '0 640 1440 240',
+  // starts above the tallest prop on the front terraces (a tree crown at y 595), under the props of the row behind (bases at y 560 and less)
+  horizon: '0 592 1440 288',
 };
 
 interface Paints {

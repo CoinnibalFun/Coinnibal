@@ -103,12 +103,24 @@ export function CardPreview({ handle, compact = false, assemble = false }: { han
   useEffect(() => {
     const c = ref.current;
     if (!c || show !== 'running') return;
-    return assemblePass(
+    const cancel = assemblePass(
       c,
       normAtStart.current,
       () => setThump((n) => n + 1),
       () => setShow('done'),
     );
+    // scrolled away before the stamp landed: the pass is finished, not left half printed (stub empty)
+    const io =
+      typeof IntersectionObserver === 'undefined'
+        ? null
+        : new IntersectionObserver((es) => {
+            if (es.some((e) => !e.isIntersecting)) setShow('done');
+          });
+    io?.observe(c);
+    return () => {
+      cancel();
+      io?.disconnect();
+    };
   }, [show]);
   // typing during the assembly: skip to the live pass
   useEffect(() => {
