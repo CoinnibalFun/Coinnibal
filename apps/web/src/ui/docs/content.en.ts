@@ -39,7 +39,7 @@ export const docsEn = (
     rates,
     dateline: [
       `Fee ${total} of profit only`,
-      `Rounds ${R.roundMin} min + ${R.breakS} s break · joins close ${R.joinCloseS} s before the bell`,
+      `Rounds ${R.roundMin}\u00a0min + ${R.breakS}\u00a0s break · joins close ${R.joinCloseS}\u00a0s before the bell`,
       `${F.capacity.arena} players per room`,
       `${burn} of profit burned`,
     ],

@@ -35,6 +35,14 @@
   stroke-dasharray: 2 16;
   stroke-linecap: round;
 }
+/* on a phone the plate is tall and narrow: the slice blows the sky up around its middle, so a star
+   would land on the copy as a big grey disc. The ring stays, the stars and sparkles go. */
+@media (max-width: 759px) {
+  .mt-sky__stars,
+  .mt-sky__spark {
+    display: none;
+  }
+}
 .mt-sky__stars circle {
   fill: var(--cream);
   opacity: 0.8;

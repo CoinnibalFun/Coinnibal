@@ -25,6 +25,7 @@ import { DROP_LAND, DUR, SLOWMO_TOTAL, slowmoScale } from '../design/curves';
 import { serverText, t } from '../i18n';
 import { FrameGovernor } from '../render/governor';
 import { Renderer, type FrameInput } from '../render/renderer';
+import { nameTagRise } from '../render/labels';
 import { FOOD_COLORS } from '../render/sprites';
 import { MOMENTS_KEPT, toast, useUi, type ShareItem } from '../store';
 import { Camera } from './camera';
@@ -865,7 +866,7 @@ export class GameEngine {
           });
         }
         const me = this.world.myStats();
-        if (me) this.particles.text(me.x, me.y - me.maxR, `${t(`boost.${m.kind}` as 'boost.magnet')}!`, undefined, 24, RISO.mustard);
+        if (me) this.particles.text(me.x, this.overMyTag(24), `${t(`boost.${m.kind}` as 'boost.magnet')}!`, undefined, 24, RISO.mustard);
         return;
       }
       case 'powerup': {
@@ -873,7 +874,7 @@ export class GameEngine {
         caller.powerUp(powerUpKind((Object.keys(PowerUpType) as (keyof typeof PowerUpType)[]).find((k) => PowerUpType[k] === m.type) ?? ''));
         useUi.setState((s) => ({ powerups: [...s.powerups.filter((p) => p.type !== m.type), { type: m.type, until: Date.now() + m.ms }] }));
         const me = this.world.myStats();
-        if (me) this.particles.text(me.x, me.y - me.maxR, `${t(`pu.${m.type}` as 'pu.1')}!`, undefined, 24, RISO.mustard);
+        if (me) this.particles.text(me.x, this.overMyTag(24), `${t(`pu.${m.type}` as 'pu.1')}!`, undefined, 24, RISO.mustard);
         if (m.type === PowerUpType.Bag && me) this.particles.coinBurst(me.x, me.y, me.maxR, 18);
         return;
       }
@@ -1049,6 +1050,36 @@ export class GameEngine {
           break;
       }
     }
+  }
+
+  /**
+   * My coins on screen (CSS px): from the top of the topmost one's name tag down to the lowest coin's bottom edge,
+   * across the coins and the middle of the tag; null without a coin on the floor. The HUD keeps clear of it (the
+   * last-10-seconds count and the chat on a phone).
+   */
+  myCoinBox(): { left: number; right: number; top: number; bottom: number; x: number } | null {
+    const me = this.world.myStats();
+    if (!me) return null;
+    const cam = this.camera;
+    const a = cam.toScreen(me.bbox.x0, me.bbox.y0);
+    const b = cam.toScreen(me.bbox.x1, me.bbox.y1);
+    const x = (a.x + b.x) / 2;
+    // a name tag is wider than a small coin: at least 80 px either side of the middle
+    const half = Math.max((b.x - a.x) / 2, 80);
+    return { left: x - half, right: x + half, top: a.y - nameTagRise(me.maxR * cam.zoom, true), bottom: b.y, x };
+  }
+
+  /**
+   * World y for a floating sticker `size` px tall (a power-up's "Pump!") over my coin: its bottom edge 6 px over the
+   * top of my name tag, so the two never print over each other (it rises from there).
+   */
+  private overMyTag(size: number): number {
+    const me = this.world.myStats();
+    if (!me) return 0;
+    const z = this.camera.zoom;
+    // the sticker is `size * 0.78 * 1.6` px tall and pops in at up to 1.15x (Particles.drawSticker)
+    const half = (size * 0.78 * 1.6 * 1.15) / 2;
+    return me.bbox.y0 - (nameTagRise(me.maxR * z, true) + 6 + half) / z;
   }
 
   /** Floating "+X $NIBAL" ink numbers from `value` messages (ledger units). */

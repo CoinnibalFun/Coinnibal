@@ -11,7 +11,7 @@ import { avatars, type AvatarCache } from './avatars';
 import { drawCoinLook, type CoinOpts } from './coin';
 import { flagSkins, type FlagSkinCache } from './flagskin';
 import type { Neighbour } from './jelly';
-import { LabelCache, type StickerLabel } from './labels';
+import { LabelCache, nameTagBox, type StickerLabel } from './labels';
 import { LookCache } from './looks';
 import { SpriteCache, drawGlint, drawSprite } from './sprites';
 
@@ -822,10 +822,10 @@ export class Renderer {
     const mine = e.playerId === f.world.myPid;
     const showMass = f.settings.showMass && (mine || screenR > 24);
     if (!showName && !showMass) return;
-    const fs = Math.min(15, Math.max(11, screenR * 0.11)) / z;
-    const h = fs * 1.78;
-    const ring = mine ? Math.min(16, Math.max(8, screenR * 0.2)) / z : 0;
-    let y = e.y - e.r - ring - h / 2 - 7 / z;
+    const box = nameTagBox(screenR, mine);
+    const fs = box.fs / z;
+    const h = box.h / z;
+    let y = e.y - e.r - box.gap / z - h / 2;
     const top = view.y0 + 60 + h / 2 + 8 / z;
     if (y < top) y = Math.min(top, e.y - e.r * 0.5);
     const l = this.label;
