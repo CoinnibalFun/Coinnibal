@@ -23,7 +23,7 @@ const FLIES: [number, number, number][] = [
 
 /**
  * Small night life on the footer's front terraces, drawn in the RingScene's own coordinates and
- * framing (viewBox 0 640 1440 240, xMidYMax slice) so it sits on the painted ground: a windmill
+ * framing (viewBox 0 592 1440 288, xMidYMax slice) so it sits on the painted ground: a windmill
  * turning, a coin walking home along the terrace with a lantern (and turning round at the ends),
  * windows glowing warmer, fireflies over the sand. SMIL and CSS loops, paused off screen; reduced
  * motion: the same picture standing still. Decoration (aria-hidden).
@@ -36,7 +36,7 @@ export function FooterLife() {
     <svg
       ref={ref}
       className="st-life"
-      viewBox="0 640 1440 240"
+      viewBox="0 592 1440 288"
       preserveAspectRatio="xMidYMax slice"
       aria-hidden="true"
       focusable="false"

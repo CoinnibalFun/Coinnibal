@@ -371,6 +371,12 @@
   font-size: var(--t-micro);
   cursor: pointer;
 }
+/* wide screens: the shy coin hides a step further left, so the sound button has room beside it */
+@media (min-width: 900px) {
+  .ld-pond__c--shy {
+    left: 80.5% !important;
+  }
+}
 .ld-sound[aria-pressed='true'] {
   background: var(--sun);
 }
@@ -687,6 +693,15 @@
   .ld-orbit .kb-orbit__label {
     font-size: 24px;
   }
+  /* at this size the side labels would run past the card's edge: they turn to face inwards */
+  .ld-orbit .kb-orbit__station.is-left .kb-orbit__label {
+    text-anchor: start;
+    transform: translateX(36px);
+  }
+  .ld-orbit .kb-orbit__station.is-right .kb-orbit__label {
+    text-anchor: end;
+    transform: translateX(-36px);
+  }
 }
 
 /* ── night plates ────────────────────────────────────────────────────── */
@@ -702,12 +717,15 @@
 .ld-nft__body {
   position: relative;
   overflow: hidden;
+  /* the star dots sit behind the copy and the buttons (z-index -1 inside this context) */
+  isolation: isolate;
   background: var(--paper);
 }
 .ld-nft__body::before,
 .ld-nft__body::after {
   content: '';
   position: absolute;
+  z-index: -1;
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -723,10 +741,16 @@
   left: 4%;
   top: 40px;
 }
+/* the second row of dots drifts behind the card fan, clear of the copy and its buttons */
 .ld-nft__body::after {
-  left: 10%;
+  left: 52%;
   top: 420px;
   opacity: 0.7;
+}
+@media (max-width: 899px) {
+  .ld-nft__body::after {
+    display: none;
+  }
 }
 .ld-nft__grid {
   display: grid;
