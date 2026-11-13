@@ -94,6 +94,10 @@ body {
   gap: 16px;
 }
 .st-head__home {
+  /* the letters' box carries their shadow below them: nudged down, the logo sits midway between the top of the
+     header and its bottom rule */
+  position: relative;
+  top: 4px;
   display: inline-flex;
   align-items: center;
   /* the coin's bite faces the word: a tight gap keeps the pair reading as one logo */
@@ -125,6 +129,10 @@ body {
 .st-head .st-mark__art {
   width: auto;
   height: 40px;
+}
+/* the phone logo (the coin alive, crumbs and all) stands in for coin + word below 480 px */
+.st-head__chomp {
+  display: none;
 }
 .st-nav {
   display: flex;
@@ -288,6 +296,16 @@ body {
   }
 }
 @media (max-width: 479px) {
+  .st-head__coin,
+  .st-head .st-mark {
+    display: none;
+  }
+  .st-head__chomp {
+    display: block;
+  }
+  .st-head__home {
+    top: 2px;
+  }
   .st-head__inner {
     height: 64px;
     gap: 8px;

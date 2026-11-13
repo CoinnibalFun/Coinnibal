@@ -18,16 +18,12 @@ describe('where the browser reaches the game server', () => {
     expect(resolveServer({}, { protocol: 'http:', host: 'localhost:5173' })).toEqual({ http: 'http://localhost:5173', ws: 'ws://localhost:5173/ws' });
   });
 
-  it('vercel.json proxies only what must live on the site domain, and the site runs only its own scripts', () => {
+  it('vercel.json only sends elymum.io (the old Vercel site) to coinnibal.fun, path and all: the site lives on the VPS', () => {
     const v = JSON.parse(readFileSync(join(__dirname, '../../../vercel.json'), 'utf8')) as {
-      rewrites: { source: string; destination: string }[];
-      headers: { headers: { key: string; value: string }[] }[];
+      redirects: { source: string; destination: string; permanent: boolean }[];
+      rewrites?: unknown;
     };
-    const proxied = v.rewrites.filter((r) => r.destination.startsWith('https://')).map((r) => r.source);
-    expect(proxied.sort()).toEqual(['/api/nft/:path*', '/share/:path*']);
-    const csp = v.headers.flatMap((h) => h.headers).find((h) => h.key === 'Content-Security-Policy')!.value;
-    expect(csp).toMatch(/script-src 'self'/);
-    expect(csp).toMatch(/frame-ancestors 'none'/);
-    expect(csp).toMatch(/object-src 'none'/);
+    expect(v.redirects).toEqual([{ source: '/:path*', destination: 'https://coinnibal.fun/:path*', permanent: true }]);
+    expect(v.rewrites).toBeUndefined();
   });
 });
