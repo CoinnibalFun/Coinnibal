@@ -485,14 +485,14 @@ function WlStepper({ tasks, settings, onEntry }: { tasks: PublicWlTask[]; settin
           </div>
         </aside>
 
-        <ol className="wl-steps" ref={list} style={{ ['--steps' as string]: total }}>
+        <ol className="wl-steps" ref={list}>
           {steps.map((s, i) => {
             const state = i === active ? 'active' : done.has(s.key) ? 'done' : 'todo';
             const err = errors[s.key] ?? null;
             const errId = `wl-err-${s.key}`;
             const body = bodyFor(s);
             return (
-              <li key={s.key} className={`wl-step is-${state}`} data-kind={s.kind} style={{ ['--terrace' as string]: i }} aria-current={state === 'active' ? 'step' : undefined}>
+              <li key={s.key} className={`wl-step is-${state}`} data-kind={s.kind} aria-current={state === 'active' ? 'step' : undefined}>
                 {state === 'active' ? (
                   <StepHead i={i} step={s} state={state} handle={handle} />
                 ) : (
