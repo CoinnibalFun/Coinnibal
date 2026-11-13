@@ -301,23 +301,6 @@ const SCENES = [
   site('site-faucet-guest', '/faucet', { auth: 'guest' }),
   site('site-docs', '/docs'),
   // the language list open from the header tag (phones: from the menu sheet)
-  {
-    id: 'site-lang-open',
-    app: 'site',
-    auth: 'signed',
-    scroll: false,
-    run: async (page) => {
-      await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-      await page.waitForLoadState('networkidle').catch(() => {});
-      await settle(page, 1500);
-      if (!(await page.locator('[data-testid="lang-pick"]:visible').count())) {
-        await page.locator('.st-menu-btn').click();
-        await settle(page, 700);
-      }
-      await page.locator('[data-testid="lang-pick"]:visible').first().click();
-      await settle(page, 600);
-    },
-  },
   // every free text field filled with long values (X handles, post links, names, wallets)
   ...['wl', 'collab'].map((pg) => ({
     id: `site-${pg}-filled`,
@@ -443,19 +426,6 @@ const SCENES = [
     },
   },
   { id: 'settings-sheet', app: 'play', auth: 'signed', run: async (page, h) => (await openPlay(page, h), await setUi(page, { modal: 'settings' }), await settle(page, 900)) },
-  {
-    id: 'settings-lang-open',
-    app: 'play',
-    auth: 'signed',
-    scroll: false,
-    run: async (page, h) => {
-      await openPlay(page, h);
-      await setUi(page, { modal: 'settings' });
-      await settle(page, 900);
-      await page.locator('[data-testid="lang-pick"]:visible').first().click();
-      await settle(page, 600);
-    },
-  },
   { id: 'howto-sheet', app: 'play', auth: 'signed', run: async (page, h) => (await openPlay(page, h), await setUi(page, { modal: 'howto' }), await settle(page, 900)) },
   { id: 'shop-sheet', app: 'play', auth: 'signed', run: async (page, h) => (await openPlay(page, h), await setUi(page, { modal: 'shop' }), await settle(page, 1200)) },
   { id: 'shop-sheet-guest', app: 'play', auth: 'guest', run: async (page, h) => (await openPlay(page, h, { signed: false }), await setUi(page, { modal: 'shop' }), await settle(page, 1200)) },

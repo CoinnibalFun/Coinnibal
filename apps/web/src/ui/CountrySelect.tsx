@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Icon, useKbTheme } from '../design';
 import { useT } from '../i18n';
 import { Flag, countryName, useCountryOptions } from './Flag';
-import { useSheetMode, usePopoverPlace } from './LanguagePicker';
+import { useSheetMode, usePopoverPlace } from './popover';
 import './language-picker.css';
 
 /** Folds a name for matching: lower case, no accents (an accented name is found by its plain letters). */
