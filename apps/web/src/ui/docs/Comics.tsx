@@ -97,7 +97,7 @@ const PANELS: Record<string, [Panel, Panel, Panel]> = {
       <g>
         <Ground />
         <g className="cs-chase">
-          <SceneCoin x={14} y={58} r={46} paint="coral" mood="chomp" look={[4, 0]} />
+          <SceneCoin x={52} y={64} r={38} paint="coral" mood="chomp" look={[4, 0]} feet />
         </g>
         <g className="cs-run">
           <path d="M120 84 h-16 M124 94 h-22 M118 104 h-14" {...ln} strokeWidth={2} className="cs-lines" />

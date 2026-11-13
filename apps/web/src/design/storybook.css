@@ -2581,7 +2581,7 @@ a:active > .kb-chomp {
 }
 .kb-ring--full { aspect-ratio: 1440 / 880; min-height: 520px; }
 .kb-ring--compact { aspect-ratio: 1440 / 520; min-height: 280px; }
-.kb-ring--horizon { aspect-ratio: 1440 / 240; min-height: 110px; background: transparent; }
+.kb-ring--horizon { aspect-ratio: 1440 / 288; min-height: 110px; background: transparent; }
 .kb-ring__art {
   grid-area: 1 / 1;
   position: absolute;

@@ -211,8 +211,6 @@ export function SiteFooter() {
   return (
     <Kb theme="night" paper={false} className="st-foot-kb">
     <footer className="st-foot">
-      <RingScene time="night" variant="horizon" clouds={false} animate={false} className="st-foot__ring" />
-      <FooterLife />
       <div className="st-foot__inner">
         <div className="st-foot__brand">
           <InkWordmark height={64} diecut playful={false} className="st-foot__mark" />
@@ -237,6 +235,11 @@ export function SiteFooter() {
           <span>{siteHost()}</span>
           <span>{t('site.foot.safety')}</span>
         </p>
+      </div>
+      {/* the front terraces under the footer's text (in the flow, so the text never runs onto the ground) */}
+      <div className="st-foot__land">
+        <RingScene time="night" variant="horizon" clouds={false} animate={false} className="st-foot__ring" />
+        <FooterLife />
       </div>
     </footer>
     </Kb>

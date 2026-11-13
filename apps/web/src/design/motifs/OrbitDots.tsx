@@ -72,7 +72,7 @@ export function OrbitDots({ width = 600, height = 240, coins = 3, duration = 18,
         const ly = side ? 4 : below ? 30 : -18;
         const anchor = side ? (dx > 0 ? 'start' : 'end') : 'middle';
         return (
-          <g key={i} className={`kb-orbit__station${s.done ? ' is-done' : ''}`} transform={`translate(${p.x} ${p.y})`}>
+          <g key={i} className={`kb-orbit__station${s.done ? ' is-done' : ''}${side ? (dx > 0 ? ' is-right' : ' is-left') : ''}`} transform={`translate(${p.x} ${p.y})`}>
             <circle r={9} strokeWidth={3} stroke={ELYSIUM.abyss} />
             <text x={lx} y={ly} textAnchor={anchor} className="kb-orbit__label">
               {s.label}
