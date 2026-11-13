@@ -27,7 +27,8 @@ describe('the settings sheet: simple is the best', () => {
     // the controls are all still there, the country picker first
     expect(screen.getByTestId('country-pick')).toBeTruthy();
     expect(screen.getByRole('switch', { name: 'Wear the flag on my coin' })).toBeTruthy();
-    expect(screen.getByTestId('lang-pick')).toBeTruthy();
+    // English only: no language picker
+    expect(screen.queryByTestId('lang-pick')).toBeNull();
     expect(screen.getByRole('switch', { name: 'Chat' })).toBeTruthy();
     expect(screen.getByRole('radiogroup')).toBeTruthy();
   });
