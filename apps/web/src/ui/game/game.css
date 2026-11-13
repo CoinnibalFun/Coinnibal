@@ -300,11 +300,10 @@
   align-items: flex-start;
   gap: 6px;
 }
+/* a sentence in inline flow: the copy's own spaces part the words (a flex gap put one before "." too), the names
+   (dot + name, ellipsised) stay whole, and punctuation after a name is glued to it (.g-kill__who) */
 .g-kill {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 5px;
+  display: block;
   max-width: 100%;
   padding: 4px 10px;
   border-radius: var(--r-tag);
@@ -315,12 +314,22 @@
   text-transform: none;
   line-height: 1.5;
 }
+.g-kill__who {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+.g-kill__punct {
+  flex: none;
+}
 .g-kill b {
   display: inline-flex;
   align-items: center;
   gap: 0 5px;
   min-width: 0;
   max-width: 100%;
+  vertical-align: bottom;
   font-weight: 600;
   color: var(--floor-text);
 }
@@ -555,12 +564,62 @@
 .g-count__n.is-last {
   color: var(--sun);
 }
+/* low desktop windows (a 720 px laptop): in the column the count pushed the notices and the power-up timers under it
+   down onto my coin in the middle of the screen; it stands right of the worth sticker, level with it, instead */
+@media (max-height: 820px) {
+  .g-hud.is-desktop .g-count.is-on {
+    position: absolute;
+    left: calc(50% + 100px);
+    top: -6px;
+    height: 104px;
+  }
+  .g-hud.is-desktop .g-count__n {
+    font-size: 104px;
+  }
+}
 
 .g-banner {
   min-height: 0;
 }
 .g-banner .kb-stamp {
   background: var(--sticker);
+}
+/* phones and small windows: the event stamp and the "alone in this pond" notice under my coin (GameHud's UnderMyCoin
+   sets the top from my coin each frame; this is the place before the first frame) */
+.g-under {
+  position: absolute;
+  top: calc(50% + 50px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 2;
+}
+.g-under > * {
+  pointer-events: auto;
+}
+.g-under > .g-banner:not(:has(.kb-stamp)) {
+  display: none;
+}
+/* portrait phones: right of the chat (which stands under my coin on the left), to the right edge */
+.g-hud.is-narrow .g-under {
+  left: auto;
+  right: calc(var(--hud-gap) + env(safe-area-inset-right, 0px));
+  transform: none;
+  max-width: 172px;
+  align-items: flex-end;
+}
+/* short portrait phones (an SE): no room for both under my coin; the stamp steps aside for the notice (the chat
+   says "Coin rain!" too, and the coins fall on screen) */
+@media (max-height: 700px) {
+  .g-hud.is-narrow .g-under:has(.pq) > .g-banner {
+    display: none;
+  }
 }
 /* the phone column is 172 px: a long event name ("¡Lluvia de monedas!") wraps inside it */
 .g-hud.is-narrow .g-banner {
@@ -579,7 +638,8 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
-  max-width: 260px;
+  /* two timers side by side (stacked, a third row ran the column down onto my coin on a 720 px laptop) */
+  max-width: 360px;
 }
 .g-pu__chip {
   position: relative;
@@ -1323,23 +1383,30 @@
   font-size: 13px;
 }
 .g-hud.is-narrow .g-count.is-on {
-  /* just left of my coin (the camera keeps it at the middle of the screen), in the band between the
-     standings and the thumb stick: at 30 % it landed on the standings and the worth sticker, and under
-     the coin it met the right column's notices (coin rain, power-ups) */
+  /* over my coin's name tag, centred on my coin (RoundCountdown follows it there frame by frame; this is the place
+     before the first frame): in the middle of a phone, beside my coin, it covered the coin and its tag, and the
+     column on the right has no room for it */
   position: fixed;
-  right: calc(50% + 30px);
-  top: calc(50% - 44px);
-  height: 88px;
+  left: calc(50% - 36px);
+  top: calc(50% - 150px);
+  height: 64px;
 }
 .g-hud.is-narrow .g-count__n {
-  font-size: 88px;
+  font-size: 64px;
+  -webkit-text-stroke: 4px #04181c;
+  text-shadow: 4px 4px 0 #000507;
 }
 .g-hud.is-narrow .g-kill {
   font-size: 12px;
 }
-/* short phones (iPhone SE): one feed line, so the corner column ends well above the thumb stick */
-@media (max-height: 660px) {
-  .g-hud.is-narrow .g-kills > :not(:last-child) {
+/* portrait phones: one feed line, so the corner column ends above my coin's name tag in the middle of the screen
+   (two lines with long names and the kill chip under them ran over it) */
+.g-hud.is-narrow .g-kills > :not(:last-child) {
+  display: none;
+}
+/* short portrait phones (an SE): my kill's chip says what its feed line says; the line steps aside while it is up */
+@media (max-height: 700px) {
+  .g-hud.is-narrow .g-corner--tl:has(.g-killshare) .g-feed {
     display: none;
   }
 }
@@ -2063,7 +2130,8 @@
 }
 /* portrait phones: the notice is the one thing that matters in the room's last seconds; the minimap
    steps aside for it so it ends above the sticker and chat keys, and it packs tighter */
-.g-hud.is-narrow .g-center:has(.g-closing, .pq--hud) > .g-map {
+.g-hud.is-narrow .g-center:has(.g-closing) > .g-map,
+.g-hud.is-narrow:has(.g-under .pq--hud) .g-center > .g-map {
   display: none;
 }
 .g-hud.is-narrow .g-closing {
@@ -2975,6 +3043,12 @@
 .g-hud.is-short .g-center:has(.g-pu, .g-banner, .g-closing, .pq) > .g-net {
   display: none;
 }
+/* low desktop windows: the same (the readout under the timers met my coin's name tag at 1280 x 720) */
+@media (max-height: 820px) {
+  .g-hud.is-desktop .g-center:has(.g-pu, .g-banner .kb-stamp, .g-closing, .pq) > .g-net {
+    display: none;
+  }
+}
 
 /* the break after a bell: "Next round opens in 0:27" on the receipt */
 .g-break {
@@ -3036,7 +3110,8 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  gap: 2px;
+  align-items: flex-start;
+  gap: 3px;
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -3050,12 +3125,34 @@
 }
 .g-stream__line {
   flex: none;
+  max-width: 100%;
+  /* readable on any floor: an ink strip behind each line, like the kill feed's (bare text with a shadow got lost
+     over coins and the coin rain); a long line keeps three rows, then ends in an ellipsis */
+  /* the strip's top and bottom are a transparent border, not padding: a clamped line clips at the padding edge, so
+     no sliver of its next row shows through */
+  padding: 0 8px;
+  border-block: 2px solid transparent;
+  border-radius: var(--r-tag);
+  background: var(--floor-strip);
   color: #fff;
   overflow-wrap: anywhere;
-  /* readable on any floor without a panel: a soft dark shadow under every glyph */
-  text-shadow:
-    0 1px 2px rgba(4, 24, 28, 0.95),
-    0 0 6px rgba(4, 24, 28, 0.7);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+/* whole lines only: the oldest that do not fit step out (ChatStream's fitLines) */
+.g-stream__line.is-cut {
+  display: none;
+}
+/* touch: a compact block, at most three lines of two rows each (on a phone it stands under my coin) */
+.g-hud.is-touch .g-stream__line {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.g-hud.is-touch .g-stream__line:nth-last-child(n + 4) {
+  display: none;
 }
 .g-stream__line.is-fading {
   animation-name: g-stream-fade;
@@ -3098,8 +3195,6 @@
   font-size: 12px;
   font-weight: 400;
   text-transform: uppercase;
-  text-shadow: none;
-  background: rgba(4, 24, 28, 0.55);
 }
 .g-stream__line.is-system {
   font-family: var(--font-mono);
