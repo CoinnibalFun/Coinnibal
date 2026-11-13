@@ -31,7 +31,7 @@ export function visibleLines(chat: readonly ChatItem[], now: number, open: boole
 }
 
 /** The HUD pieces the chat must never cover (touch and small windows, where it stands on its own). */
-const OBSTACLES = '.g-corner--tl, .g-corner--tr, .g-center > *, .g-map, .g-rdock > *, .g-touch, .g-touch .g-boost, .g-touch__emotes, .g-stick, .g-dock, .g-spectate';
+const OBSTACLES = '.g-corner--tl, .g-corner--tr, .g-center > *, .g-under > *, .g-map, .g-rdock > *, .g-touch, .g-touch .g-boost, .g-touch__emotes, .g-stick, .g-dock, .g-spectate';
 
 /**
  * The chat's free band in its column (pure on rects, tested): from `anchor` (its bottom edge as the CSS places it)
@@ -55,6 +55,23 @@ export function freeBand(
     else if (r.top < bottom + gap) bottom = Math.min(bottom, r.top - gap);
   }
   return { top, bottom: Math.max(top, bottom) };
+}
+
+/**
+ * Whole lines only: the oldest lines that would not fit in `max` px (with the chat line, if open) step out, so the
+ * top of the block never shows half a line cut through.
+ */
+function fitLines(el: HTMLElement, max: number) {
+  const list = el.querySelector('.g-stream__lines');
+  if (!list) return;
+  const form = el.querySelector<HTMLElement>('.g-stream__form');
+  let room = max - (form ? form.offsetHeight + 6 : 0);
+  const lines = [...list.children] as HTMLElement[];
+  for (const li of lines) li.classList.remove('is-cut');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    room -= lines[i].offsetHeight + (i < lines.length - 1 ? 3 : 0);
+    if (room < 0) lines[i].classList.add('is-cut');
+  }
 }
 
 /**
@@ -89,21 +106,30 @@ export function ChatStream({ docked = false }: { docked?: boolean }) {
     if (chatOpen) inputRef.current?.focus();
   }, [chatOpen]);
 
-  // standing on its own: the room above it, re-measured as the HUD moves (the feed grows, a notice, a resize)
+  // standing on its own: the room above it (docked: its height cap), re-measured as the HUD moves (the feed grows, a notice, a resize)
   useLayoutEffect(() => {
     const el = ref.current;
     const hud = el?.closest('.g-hud');
-    if (docked || !el || !hud) return;
+    if (!el || !hud) return;
     const measure = () => {
+      // docked in the desktop column: its CSS height cap, whole lines only
+      if (docked) return fitLines(el, parseFloat(getComputedStyle(el).maxHeight) || Infinity);
       // the place the CSS gives it, from the offsets (the lift below is a transform: it does not move them)
       const at = hud.getBoundingClientRect();
       const left = at.left + el.offsetLeft;
       const anchor = at.top + el.offsetTop + el.offsetHeight;
-      const rects = [...hud.querySelectorAll(OBSTACLES)].filter((x) => !el.contains(x) && !x.contains(el)).map((x) => x.getBoundingClientRect());
+      const rects: { top: number; bottom: number; left: number; right: number }[] = [...hud.querySelectorAll(OBSTACLES)]
+        .filter((x) => !el.contains(x) && !x.contains(el))
+        .map((x) => x.getBoundingClientRect());
+      // my coin and its name tag in the middle of the screen: the chat stays under them, never over them
+      const coin = engine()?.myCoinBox();
+      if (coin) rects.push({ top: coin.top, bottom: coin.bottom + 6, left: coin.left, right: coin.right });
       const band = freeBand({ w: window.innerWidth, h: window.innerHeight }, { left, right: left + el.offsetWidth }, anchor, rects);
       const lift = Math.round(anchor - band.bottom);
       el.style.transform = lift > 0 ? `translateY(${-lift}px)` : '';
-      el.style.maxHeight = `${Math.floor(band.bottom - band.top)}px`;
+      const max = Math.floor(band.bottom - band.top);
+      el.style.maxHeight = `${max}px`;
+      fitLines(el, max);
     };
     measure();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;

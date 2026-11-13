@@ -1,6 +1,8 @@
 import { RULES } from '@elymum/shared';
 import { AnimatePresence, motion } from 'motion/react';
+import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { springs, useReducedMotion } from '../../design';
+import { engine } from '../../game/instance';
 import { COUNTDOWN_MS, formatCountdown, roundLengths, useRound, type RoundState } from '../../game/round';
 import { useT } from '../../i18n';
 import { useUi } from '../../store';
@@ -76,17 +78,60 @@ export function RoundChip() {
   );
 }
 
+/** Room left between the count's bottom edge and the top of my name tag (px): a power-up's "Pump!" pops in there. */
+const COUNT_OVER_TAG = 40;
+/** The count never rises higher than this under the top bar (px), however big my coin grows. */
+const COUNT_UNDER_BAR = 8;
+
+/**
+ * Portrait phones: the count stands over my coin, its bottom edge `COUNT_OVER_TAG` px over the top of my name tag,
+ * centred on the coin, followed frame by frame while it is up (only then). The column beside it is too narrow for it,
+ * and anywhere in the middle of a 390 px screen a fixed spot meets my coin or its tag once the coin grows.
+ */
+function useOverMyCoin(ref: RefObject<HTMLDivElement | null>, on: boolean) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!on || !el || !el.closest('.g-hud.is-narrow')) return;
+    let raf = 0;
+    const place = () => {
+      raf = requestAnimationFrame(place);
+      const tag = engine()?.myCoinBox();
+      if (!tag) return;
+      // the box the CSS's top / left are measured from (a transformed column holds a fixed child)
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      const cbTop = r.top - (parseFloat(cs.top) || 0);
+      const cbLeft = r.left - (parseFloat(cs.left) || 0);
+      const bar = el.closest('.g-hud')?.querySelector('.g-topbar')?.getBoundingClientRect().bottom ?? 0;
+      const top = Math.max(bar + COUNT_UNDER_BAR, tag.top - COUNT_OVER_TAG - r.height);
+      const left = Math.min(window.innerWidth - r.width - 8, Math.max(8, tag.x - r.width / 2));
+      if (Math.abs(top - r.top) > 0.5) el.style.top = `${Math.round(top - cbTop)}px`;
+      if (Math.abs(left - r.left) > 0.5) el.style.left = `${Math.round(left - cbLeft)}px`;
+    };
+    place();
+    return () => {
+      cancelAnimationFrame(raf);
+      el.style.top = '';
+      el.style.left = '';
+    };
+  }, [ref, on]);
+}
+
 /**
  * The last ten seconds: a big sticker numeral dropped in once a second over the top of the world. The arena's bell,
- * or a custom room's end (`useRoomClosing`): a ticket room closes on its bell, so the two count together.
+ * or a custom room's end (`useRoomClosing`): a ticket room closes on its bell, so the two count together. Never over
+ * my coin or its name tag: in the centre column under the worth sticker (beside it on low windows and landscape
+ * phones), over my coin's name tag on a portrait phone (`useOverMyCoin`).
  */
 export function RoundCountdown() {
   const round = useArenaRound();
   const closing = useRoomClosing();
   const reduced = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
   const count = (round ? countOf(round) : null) ?? (closing !== null ? Math.max(1, Math.ceil(closing / 1000)) : null);
+  useOverMyCoin(ref, count !== null);
   return (
-    <div className={`g-count${count !== null ? ' is-on' : ''}`} aria-hidden="true">
+    <div ref={ref} className={`g-count${count !== null ? ' is-on' : ''}`} aria-hidden="true">
       <AnimatePresence initial={false}>
         {count !== null && (
           <motion.span

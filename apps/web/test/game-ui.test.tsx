@@ -9,6 +9,7 @@ import { useUi } from '../src/store';
 import { setReducedMotion } from '../src/test/media';
 import { DeathSheet, receiptNumbers, settlementFor } from '../src/ui/game';
 import { EmoteBar } from '../src/ui/game/EmoteBar';
+import { Feed } from '../src/ui/game/Feed';
 import { roomName, tokenFormat } from '../src/ui/game/format';
 
 const M = 1_000_000; // one whole token in ledger units (6 decimals)
@@ -60,6 +61,18 @@ describe('format helpers', () => {
     expect(roomName({ ...ARENA, arenaId: 4, instance: 2 })).toBe('$10 Room · 2');
     expect(roomName({ ...ARENA, id: 'practice-rookie-2', mode: 'practice', league: 'rookie', arenaId: undefined })).toBe('Rookie Pond #2');
     expect(roomName({ ...ARENA, id: 'practice-pro-1', mode: 'practice', league: 'pro', arenaId: undefined })).toBe('Pro Pond #1');
+  });
+});
+
+describe('kill feed', () => {
+  it('reads as one sentence: no space before the period, and the period stays glued to the name it follows', () => {
+    // id 3 picks "{k} ate {v}. No crumbs."
+    act(() => useUi.setState({ killfeed: [{ id: 3, killer: 'Penny', killerSkin: 1, victim: 'Dime', victimSkin: 2, cause: 'eat', at: Date.now() }] }));
+    const { container } = render(<Feed narrow={false} />);
+    const line = container.querySelector('.g-kill')!;
+    expect(line.textContent).toBe('Penny ate Dime. No crumbs.');
+    const glued = line.querySelector('.g-kill__who')!;
+    expect(glued.textContent).toBe('Dime.');
   });
 });
 

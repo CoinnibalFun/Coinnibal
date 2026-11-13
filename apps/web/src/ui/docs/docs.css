@@ -445,10 +445,16 @@
 }
 .dc-fee__slips {
   display: grid;
-  grid-template-columns: minmax(0, 340px);
+  grid-template-columns: minmax(0, 380px);
 }
 .dc-fee__slip {
   transform: rotate(-1deg);
+}
+/* a long label wraps inside its own column: the amount stays on the label's line, right aligned */
+.dc-fee__slip .kb-receipt__line dt {
+  flex: 1 1 0;
+  min-width: 9ch;
+  text-wrap: balance;
 }
 
 /* on-chain vs server */
@@ -456,6 +462,8 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+  /* each card as tall as its own list (the short one is not stretched into an empty box) */
+  align-items: start;
 }
 .dc-compare__col {
   padding: 20px 20px 22px;
@@ -798,36 +806,36 @@
   0%, 6% { transform: translateX(0); opacity: 1; }
   25% { transform: translateX(32px); }
   45% { transform: translateX(56px); }
-  65%, 84% { transform: translateX(80px); opacity: 1; }
+  65%, 87% { transform: translateX(80px); opacity: 1; }
   90% { transform: translateX(84px); opacity: 0; }
-  94% { transform: translateX(0); opacity: 0; }
-  100% { transform: translateX(0); opacity: 1; }
+  91% { transform: translateX(0); opacity: 0; }
+  95%, 100% { transform: translateX(0); opacity: 1; }
 }
 .cs-grow { animation: cs-grow 4.8s ease-in-out infinite; }
 @keyframes cs-grow {
   0%, 22% { transform: scale(0.88); }
   28%, 42% { transform: scale(0.96); }
   48%, 62% { transform: scale(1.04); }
-  68%, 90% { transform: scale(1.12); }
-  100% { transform: scale(0.88); }
+  68%, 88% { transform: scale(1.12); }
+  91%, 100% { transform: scale(0.88); }
 }
 .cs-pop--1 { animation: cs-pop1 4.8s ease-in infinite; }
 .cs-pop--2 { animation: cs-pop2 4.8s ease-in infinite; }
 .cs-pop--3 { animation: cs-pop3 4.8s ease-in infinite; }
 @keyframes cs-pop1 {
   0%, 21% { transform: scale(1); opacity: 1; }
-  25%, 94% { transform: scale(0); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+  25%, 89% { transform: scale(0); opacity: 0; }
+  94%, 100% { transform: scale(1); opacity: 1; }
 }
 @keyframes cs-pop2 {
   0%, 41% { transform: scale(1); opacity: 1; }
-  45%, 94% { transform: scale(0); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+  45%, 89% { transform: scale(0); opacity: 0; }
+  94%, 100% { transform: scale(1); opacity: 1; }
 }
 @keyframes cs-pop3 {
   0%, 61% { transform: scale(1); opacity: 1; }
-  65%, 94% { transform: scale(0); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+  65%, 89% { transform: scale(0); opacity: 0; }
+  94%, 100% { transform: scale(1); opacity: 1; }
 }
 .cs-slurp { animation: cs-slurp 4.8s ease-in infinite; }
 @keyframes cs-slurp {
@@ -1053,9 +1061,35 @@
 @keyframes vf-fee {
   0%, 66% { transform: translate(0, 0) scale(0.7); opacity: 0; }
   68% { opacity: 1; }
-  78% { transform: translate(40px, 50px) scale(0.7); }
-  88% { transform: translate(104px, 83px) scale(0.7); opacity: 1; }
-  92%, 100% { transform: translate(104px, 83px) scale(0.3); opacity: 0; }
+  78% { transform: translate(40px, 45px) scale(0.7); }
+  88% { transform: translate(104px, 75px) scale(0.7); opacity: 1; }
+  92%, 100% { transform: translate(104px, 75px) scale(0.3); opacity: 0; }
+}
+/* the phone layout: the same loop, top to bottom */
+.vf__svg--tall {
+  display: none;
+}
+.vf-in--v { animation-name: vf-in-v; }
+@keyframes vf-in-v {
+  0% { transform: translateY(-14px); opacity: 0; }
+  4% { opacity: 1; }
+  22% { transform: translateY(52px); opacity: 1; }
+  26%, 100% { transform: translateY(58px); opacity: 0; }
+}
+.vf-out--v { animation-name: vf-out-v; }
+@keyframes vf-out-v {
+  0%, 64% { transform: translateY(0); opacity: 0; }
+  66% { opacity: 1; }
+  86% { transform: translateY(62px); opacity: 1; }
+  90%, 100% { transform: translateY(68px); opacity: 0; }
+}
+.vf-fee--v { animation-name: vf-fee-v; }
+@keyframes vf-fee-v {
+  0%, 66% { transform: translate(0, 0) scale(0.7); opacity: 0; }
+  68% { opacity: 1; }
+  78% { transform: translate(52px, 22px) scale(0.7); }
+  88% { transform: translate(148px, 87px) scale(0.7); opacity: 1; }
+  92%, 100% { transform: translate(148px, 87px) scale(0.3); opacity: 0; }
 }
 
 /* ── controls: key stickers that press themselves, one after another ──── */
@@ -1090,29 +1124,46 @@
   .cs__panel {
     scroll-snap-align: start;
   }
-  .vf {
-    overflow-x: auto;
-    padding: 0 6px 10px 0;
+}
+@media (max-width: 560px) {
+  .vf__svg--wide {
+    display: none;
   }
-  .vf__svg {
-    min-width: 540px;
+  .vf__svg--tall {
+    display: block;
+    max-width: 380px;
+    margin: 0 auto;
   }
 }
 
+/* Still pictures: reduced motion, and a strip or diagram scrolled off screen. Off screen the loops
+   do not freeze mid-frame (a coin half faded, the food gone): they drop back to the drawn
+   composition, so the page reads right in any still (a screenshot, a print, coming back to it). */
 @media (prefers-reduced-motion: reduce) {
   .cs *,
   .vf__svg *,
   .dc-kbd {
     animation: none !important;
   }
+}
+.cs.is-still *,
+.cs[data-paused] *,
+.vf.is-still *,
+.vf[data-paused] * {
+  animation: none !important;
+}
+:is(.cs.is-still, .cs[data-paused]) :is(.cs-pop, .cs-slurp, .cs-slot, .cs-shine, .cs-stamp),
+:is(.vf.is-still, .vf[data-paused]) :is(.vf-prey, .vf-in, .vf-out, .vf-fee, .vf-hop) {
+  opacity: 1;
+}
+:is(.cs.is-still, .cs[data-paused]) .cs-check {
+  stroke-dashoffset: 0;
+}
+@media (prefers-reduced-motion: reduce) {
   .cs-pop, .cs-slurp, .cs-slot, .vf-prey { opacity: 1; }
   .cs-shine, .vf-in, .vf-out, .vf-fee, .vf-hop { opacity: 1; }
   .cs-check { stroke-dashoffset: 0; }
   .cs-stamp { opacity: 1; }
-}
-.cs.is-still *,
-.vf__svg.is-still * {
-  animation: none !important;
 }
 .cs__row:focus-visible {
   outline: 3px solid var(--focus);

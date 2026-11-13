@@ -37,7 +37,7 @@ export function MintSky() {
         ))}
       </g>
       <path className="mt-sky__spark mt-sky__spark--sun" d={sparkle(9)} transform="translate(1380 60)" />
-      <path className="mt-sky__spark mt-sky__spark--foam" d={sparkle(7)} transform="translate(560 120)" />
+      <path className="mt-sky__spark mt-sky__spark--foam" d={sparkle(7)} transform="translate(700 26)" />
       <path className="mt-sky__spark mt-sky__spark--foam" d={sparkle(5)} transform="translate(1180 330)" />
     </svg>
   );

@@ -479,36 +479,37 @@
 .g-hud:not(.is-narrow) .pq--hud {
   max-width: min(440px, 88vw, calc(100vw - 540px));
 }
-/* portrait phones: in the 172 px column the chip wraps under its title and comes after an event stamp */
-.g-hud.is-narrow .g-center > .pq--hud {
+/* phones: under my coin (a 172 px column on a portrait phone, 200 px on a landscape one) the chip wraps under its
+   title and comes after an event stamp */
+.g-hud:is(.is-narrow, .is-short) .pq--hud {
   order: 1;
   gap: 2px 4px;
   padding: 4px 2px 4px 8px;
 }
-.g-hud.is-narrow .pq--hud .pq__title {
+.g-hud:is(.is-narrow, .is-short) .pq--hud .pq__title {
   flex: 1 1 100px;
   min-width: 0;
   font-size: 12px;
 }
-.g-hud.is-narrow .pq--hud .pq__go {
+.g-hud:is(.is-narrow, .is-short) .pq--hud .pq__go {
   min-height: 28px;
   padding: 0 8px;
   font-size: 12px;
 }
 /* the phone's chip: Hide is a small × beside the title, "Practice with bots" under them */
-.g-hud.is-narrow .pq--hud .pq__hide {
+.g-hud:is(.is-narrow, .is-short) .pq--hud .pq__hide {
   order: 1;
   min-width: 28px;
   padding: 0;
 }
-.g-hud.is-narrow .pq--hud .pq__go {
+.g-hud:is(.is-narrow, .is-short) .pq--hud .pq__go {
   order: 2;
 }
 .pq__hide .pq__hide-x,
-.g-hud.is-narrow .pq--hud .pq__hide-word {
+.g-hud:is(.is-narrow, .is-short) .pq--hud .pq__hide-word {
   display: none;
 }
-.g-hud.is-narrow .pq--hud .pq__hide .pq__hide-x {
+.g-hud:is(.is-narrow, .is-short) .pq--hud .pq__hide .pq__hide-x {
   display: inline-block;
 }
 .pq__hide {

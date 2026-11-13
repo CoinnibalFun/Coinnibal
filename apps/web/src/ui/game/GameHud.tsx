@@ -1,7 +1,7 @@
 import { lookForSkin as lookForBasicSkin } from '../../render/looks';
 import { BOOST_KEY_LABELS, BOOST_KINDS, EMOTE_BAR, PowerUpType, RULES, emoteEmoji } from '@elymum/shared';
 import { AnimatePresence, motion } from 'motion/react';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Counter, DUR, Icon, Stamp, springs, useReducedMotion } from '../../design';
 import { engine } from '../../game/instance';
 import { Flag } from '../Flag';
@@ -551,8 +551,8 @@ export function GameHud() {
         {/* in the column's flow, so it never covers a banner or my coin */}
         {!roundOver && <RoundCountdown />}
         <RoomClosingNotice />
-        <PondQuiet />
-        <Banner />
+        {!compact && <PondQuiet />}
+        {!compact && <Banner />}
         <PowerUps />
         <NetStats />
       </div>
@@ -563,6 +563,14 @@ export function GameHud() {
         {/* touch: the bottom right is the thumb cluster, so the minimap lives up here */}
         {!narrow && (touch || short) && <MapSheet inline size={mapSize} />}
       </motion.div>
+
+      {/* phones and small windows: the notices stand under my coin (above it, in the columns, they ran onto it) */}
+      {compact && (
+        <UnderMyCoin>
+          <Banner />
+          <PondQuiet />
+        </UnderMyCoin>
+      )}
 
       {!narrow && !touch && !short && <MapSheet size={mapSize} />}
       {/* desktop: the kill feed, then the chat, stacked at the bottom left (one column: no overlaps) */}
@@ -598,6 +606,42 @@ export function GameHud() {
       <RoundIntro />
       <ValueFlyers />
     </motion.div>
+  );
+}
+
+/** Gap between my coin's bottom edge and the notices under it (px). */
+const UNDER_COIN_GAP = 10;
+
+/**
+ * Phones and small windows: the event stamp and the "alone in this pond" notice stand just under my coin, followed
+ * frame by frame (the coin grows, the camera eases). On a phone the columns above it end at my coin's name tag
+ * already, and there is free floor between the coin and the thumb cluster (right of the chat on a portrait phone,
+ * between the chat and the thumb cluster on a landscape one).
+ */
+function UnderMyCoin({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const hud = el?.parentElement;
+    if (!el || !hud) return;
+    let raf = 0;
+    let last = NaN;
+    const place = () => {
+      raf = requestAnimationFrame(place);
+      const coin = engine()?.myCoinBox();
+      if (!coin) return;
+      const top = Math.round(coin.bottom + UNDER_COIN_GAP - hud.getBoundingClientRect().top);
+      if (top === last) return;
+      last = top;
+      el.style.top = `${top}px`;
+    };
+    place();
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return (
+    <div ref={ref} className="g-under">
+      {children}
+    </div>
   );
 }
 
