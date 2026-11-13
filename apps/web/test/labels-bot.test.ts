@@ -1,6 +1,4 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { setLocale } from '../src/i18n';
-import ru from '../src/i18n/locales/ru';
 import { LabelCache, type StickerLabel } from '../src/render/labels';
 
 // jsdom has no canvas: a context that records the words it is asked to print
@@ -20,23 +18,16 @@ beforeAll(() => {
   restore = () => (proto.getContext = orig);
 });
 afterAll(() => restore());
-afterEach(async () => {
-  await setLocale('en', false);
+afterEach(() => {
   printed.length = 0;
 });
 
 const bot: StickerLabel = { name: 'jakeyboy', value: null, verified: false, bot: true, mine: false, x: 0, y: 0, fs: 14, devicePx: 2, zoom: 1 };
 
 describe('name tags: the bot chip', () => {
-  it('speaks the interface language like the HUD chip, and follows a switch mid-game', async () => {
+  it('says BOT, like the HUD chip', () => {
     const cache = new LabelCache();
-    const owner = {};
-    cache.drawSticker(ctx, bot, owner);
+    cache.drawSticker(ctx, bot, {});
     expect(printed).toContain('BOT');
-    await setLocale('ru', false);
-    printed.length = 0;
-    cache.drawSticker(ctx, bot, owner);
-    expect(ru['g.botTag']).not.toBe('BOT');
-    expect(printed).toContain(ru['g.botTag']);
   });
 });

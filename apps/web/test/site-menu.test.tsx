@@ -9,9 +9,9 @@ describe('the phone menu', () => {
     act(() => btn.click());
     btn.focus();
     const sheet = screen.getByRole('navigation', { name: 'Site menu' });
-    // its links, then the language tag (a button since the picker opens its own list)
+    // its links, the Play button last (English only: no language tag)
     const stops = [btn, ...sheet.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')];
-    expect(stops.at(-1)?.getAttribute('data-testid')).toBe('lang-pick');
+    expect(sheet.querySelector('[data-testid="lang-pick"]')).toBeNull();
     for (let i = 1; i <= stops.length; i++) {
       fireEvent.keyDown(window, { key: 'Tab' });
       expect(document.activeElement).toBe(stops[i % stops.length]);
@@ -23,16 +23,4 @@ describe('the phone menu', () => {
     expect(document.activeElement).toBe(btn);
   });
 
-  it('Escape in the language list closes the list, not the menu', () => {
-    render(<SiteHeader />);
-    act(() => screen.getByRole('button', { name: 'Open the menu' }).click());
-    const sheet = screen.getByRole('navigation', { name: 'Site menu' });
-    const tag = sheet.querySelector<HTMLElement>('[data-testid="lang-pick"]')!;
-    fireEvent.click(tag);
-    expect(screen.getByRole('listbox')).toBeTruthy();
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.queryByRole('listbox')).toBeNull();
-    expect(screen.getByRole('navigation', { name: 'Site menu' })).toBeTruthy();
-    expect(document.activeElement).toBe(tag);
-  });
 });

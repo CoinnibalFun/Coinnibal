@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatMessage, LOCALES, loadLocale, translate, type Dict, type Locale, type TKey } from '../src/i18n';
+import { formatMessage, translate, type Dict, type Locale, type TKey } from '../src/i18n';
 import { en } from '../src/i18n/en';
 import { gameShareText, killShareText, liveShareText, pickShareKey, resultShareText, SHARE_VARIANTS, X_MAX, xLength } from '../src/ui/game/ShareOnX';
 
@@ -18,9 +18,7 @@ const NEEDS: Record<keyof typeof SHARE_VARIANTS, string[]> = {
 const KINDS = Object.keys(SHARE_VARIANTS) as (keyof typeof SHARE_VARIANTS)[];
 
 async function dicts(): Promise<[Locale, Dict][]> {
-  const all: [Locale, Dict][] = [['en', en as Dict]];
-  for (const l of LOCALES) if (l.code !== 'en') all.push([l.code, await loadLocale(l.code)]);
-  return all;
+  return [['en', en as Dict]];
 }
 
 describe('the X share posts: four lines each, picked from the moment', () => {

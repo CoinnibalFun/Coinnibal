@@ -6,7 +6,6 @@ import { Link, usePath } from './router';
 import { isTestnetChain, useServerChain } from './serverChain';
 import { useT, type TKey } from '../i18n';
 import { strong, T } from '../i18n/rich';
-import { LanguagePicker } from '../ui/LanguagePicker';
 import { siteHost, useSiteSettings, xProfile } from './settings';
 import './site.css';
 
@@ -168,7 +167,6 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
           {links}
         </nav>
         <div className="st-head__tools">
-          <LanguagePicker compact className="st-lang st-lang--head" />
           <Suspense fallback={<ConnectFallback />}>
             <HeaderConnect />
           </Suspense>
@@ -194,7 +192,6 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
             <SiteLinkButton href="/play" variant="primary" size="lg" icon="arrow" className="st-menu__play" onClick={() => setMenu(false)}>
               {t('site.menu.play')}
             </SiteLinkButton>
-            <LanguagePicker className="st-lang st-lang--menu" />
           </nav>
         </>
       )}

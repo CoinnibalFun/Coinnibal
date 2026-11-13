@@ -931,7 +931,6 @@ export const en = {
   'site.foot.nav': "Footer",
   'site.foot.safety': "Never DMs first. Never asks for a seed phrase.",
   'site.skip': "Skip to content",
-  'site.lang': "Language",
   'site.hc.signedIn': "Wallet {addr}, signed in",
   'site.hc.connected': "Wallet {addr}, connected",
   'site.hc.connect': "Connect a wallet",
@@ -1573,7 +1572,6 @@ export const en = {
   'api.signFailed': "Sign-in failed.",
   'api.mintSlow': "The mint is taking too long to answer. Try again in a moment.",
   // docs
-  'dc.englishOnly': "The player guide is in English for now. Every rule and number below is the same in every language.",
   // game API errors
   'api.reach': "Cannot reach the server right now.",
   'api.expiredVerify': "Your sign-in expired. Verify your wallet again.",

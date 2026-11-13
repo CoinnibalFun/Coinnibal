@@ -4,7 +4,6 @@ import { sound } from '../../audio';
 import { APP_VERSION } from '../../config';
 import { useT, type TKey } from '../../i18n';
 import { updateSettings, useUi, type Settings } from '../../store';
-import { LanguagePicker } from '../LanguagePicker';
 import { MusicPicker } from './MusicPicker';
 
 type Flag = 'showNames' | 'showMass' | 'showChat' | 'showEmotes' | 'showFps';
@@ -91,9 +90,6 @@ export function SettingsPage() {
   return (
     <div className="gs-page">
       <div className="g-set">
-        <Row label={t('site.lang')}>
-          <LanguagePicker className="gs-lang" />
-        </Row>
         <Row label={t('gs.theme')}>
           <Chip icon="sun" selected={s.theme === 'light'} onClick={() => set({ theme: 'light' })}>
             {t('gs.paper')}
