@@ -5,7 +5,8 @@
 //     Split / Tip / sticker buttons, the thumb stick, the dock, the key hints, the kill feed, the chat lines
 //     and the chat input at the bottom left, an event banner, the last-10-seconds count) drawn over each other, in a busy arena state (coin rain, power-ups running,
 //     the round 10 s from its bell);
-//   - every HUD piece inside the visible screen, clear of an emulated notch / home bar on phones.
+//   - every HUD piece inside the visible screen, clear of an emulated notch / home bar on phones;
+//   - no HUD piece over my coin and its name tag in the middle of the screen (the engine's `myCoinBox`).
 // It needs a Chromium (the CI job skips the browser download), so it is a script, not a vitest test:
 //
 //   pnpm -F @elymum/web layout:guard             starts its own stack (fake chain) on ports 8897 / 5197
@@ -117,6 +118,8 @@ const overflowX = () => {
 function hudProblems([pieces, safe, dbg]) {
   const W = innerWidth;
   const H = innerHeight;
+  // my coin and its name tag (canvas): no HUD piece may cover them
+  const coin = window.__elymum?.engine?.myCoinBox?.() ?? null;
   const seen = [];
   for (const sel of pieces)
     for (const el of document.querySelectorAll(`.g-hud ${sel}`)) {
@@ -128,6 +131,7 @@ function hudProblems([pieces, safe, dbg]) {
     }
   // the guard must see the HUD it guards: a renamed class would make it pass on nothing
   const out = seen.length < 6 ? [`only ${seen.length} HUD pieces found (${[...new Set(seen.map((p) => p.sel))].join(', ')}): the guard's selectors are stale`] : [];
+  if (dbg) out.push(`debug my coin ${coin ? `${Math.round(coin.left)},${Math.round(coin.top)} to ${Math.round(coin.right)},${Math.round(coin.bottom)}` : 'not found'}`);
   if (dbg) out.push(...seen.map((p) => `debug ${p.sel} ${Math.round(p.r.left)},${Math.round(p.r.top)} ${Math.round(p.r.width)}x${Math.round(p.r.height)}`));
   const name = (p) => `${p.sel}${p.el.getAttribute('aria-label') ? `[${p.el.getAttribute('aria-label')}]` : ''}`;
   for (let i = 0; i < seen.length; i++) {
@@ -135,6 +139,11 @@ function hudProblems([pieces, safe, dbg]) {
     const s = safe ?? { top: 0, bottom: 0, left: 0, right: 0 };
     if (a.r.left < s.left - 1 || a.r.top < s.top - 1 || a.r.right > W - s.right + 1 || a.r.bottom > H - s.bottom + 1)
       out.push(`${name(a)} leaves the safe screen (${Math.round(a.r.left)},${Math.round(a.r.top)} ${Math.round(a.r.width)}x${Math.round(a.r.height)})`);
+    if (coin) {
+      const x = Math.min(a.r.right, coin.right) - Math.max(a.r.left, coin.left);
+      const y = Math.min(a.r.bottom, coin.bottom) - Math.max(a.r.top, coin.top);
+      if (x > 3 && y > 3) out.push(`${name(a)} covers my coin or its name tag by ${Math.round(x)}x${Math.round(y)}px`);
+    }
     for (let j = i + 1; j < seen.length; j++) {
       const b = seen[j];
       if (a.el.contains(b.el) || b.el.contains(a.el)) continue;

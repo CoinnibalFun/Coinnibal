@@ -21,6 +21,23 @@ interface TextSprite {
   bytes: number;
 }
 
+/**
+ * The name tag over a coin `screenR` CSS px across (radius): its font size and height, and how far its bottom edge
+ * stands over the coin's top (my coin's dotted ring adds to that), all in CSS px. The renderer draws the tag from
+ * these; the HUD and the floating stickers ("Pump!") use them to stay clear of it.
+ */
+export function nameTagBox(screenR: number, mine: boolean): { fs: number; h: number; gap: number } {
+  const fs = Math.min(15, Math.max(11, screenR * 0.11));
+  const ring = mine ? Math.min(16, Math.max(8, screenR * 0.2)) : 0;
+  return { fs, h: fs * 1.78, gap: ring + 7 };
+}
+
+/** From the top of a coin `screenR` CSS px across up to the top of its name tag (CSS px). */
+export const nameTagRise = (screenR: number, mine: boolean): number => {
+  const b = nameTagBox(screenR, mine);
+  return b.gap + b.h;
+};
+
 export interface StickerLabel {
   name: string | null;
   /** Value (mass) printed after the name in teal, or null. */

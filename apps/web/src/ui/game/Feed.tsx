@@ -32,13 +32,31 @@ function KillLine({ k, myName }: { k: KillItem; myName: string | null }) {
       </b>
     );
   };
-  // the sentence comes from the copy with two markers for the names
+  // the sentence comes from the copy with two markers for the names; it runs as plain inline text around them
   const text = t(key as 'g.kill.0', { k: '\u0001', v: '\u0002' });
-  const parts: ReactNode[] = text.split(/(\u0001|\u0002)/).map((p, i) => {
-    if (p === '\u0001') return who(k.killer, k.killerSkin, k.killerIsBot, `k${i}`);
-    if (p === '\u0002') return who(k.victim, k.victimSkin, k.victimIsBot, `v${i}`);
-    return <Fragment key={i}>{p}</Fragment>;
-  });
+  const bits = text.split(/(\u0001|\u0002)/);
+  const parts: ReactNode[] = [];
+  for (let i = 0; i < bits.length; i++) {
+    const p = bits[i];
+    if (p !== '\u0001' && p !== '\u0002') {
+      if (p) parts.push(<Fragment key={i}>{p}</Fragment>);
+      continue;
+    }
+    const name = p === '\u0001' ? who(k.killer, k.killerSkin, k.killerIsBot, `k${i}`) : who(k.victim, k.victimSkin, k.victimIsBot, `v${i}`);
+    // punctuation right after a name ("{v}.") stays glued to it: a line never starts with ". No crumbs."
+    const glue = /^\p{P}+/u.exec(bits[i + 1] ?? '')?.[0] ?? '';
+    if (!glue) {
+      parts.push(name);
+      continue;
+    }
+    bits[i + 1] = bits[i + 1].slice(glue.length);
+    parts.push(
+      <span className="g-kill__who" key={`g${i}`}>
+        {name}
+        <span className="g-kill__punct">{glue}</span>
+      </span>,
+    );
+  }
   return <>{parts}</>;
 }
 
