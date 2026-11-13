@@ -2,7 +2,7 @@ export { RingScene, SceneProp, type RingSceneProps, type RingTime, type RingVari
 export { Cloud, Clouds, type CloudProps, type CloudsProps } from './Clouds';
 export { Seigaiha, type SeigaihaProps } from './Seigaiha';
 export { OrbitDots, type OrbitDotsProps, type OrbitStation } from './OrbitDots';
-export { Wordmark, CoinMark, type WordmarkProps, type WordmarkPaint, type CoinMarkProps } from './Wordmark';
+export { Wordmark, CoinMark, ChompMark, type WordmarkProps, type WordmarkPaint, type CoinMarkProps, type ChompMarkProps } from './Wordmark';
 export { CoinCharacter, type CoinCharacterProps, type CoinMood, type CoinPaint } from './CoinCharacter';
 export { FoodBit, FoodScatter, type FoodBitProps, type FoodKind, type SeedPaint } from './FoodBits';
 export { ensureInkDefs, WOBBLE, WOBBLE_SOFT } from './InkDefs';

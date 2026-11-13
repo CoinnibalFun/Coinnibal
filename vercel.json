@@ -1,26 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "git config --global url.\"https://github.com/\".insteadOf \"git@github.com:\" && pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm -F @elymum/web build",
-  "outputDirectory": "apps/web/dist",
+  "installCommand": "true",
+  "buildCommand": "mkdir -p .vercel-moved && printf 'Coinnibal moved to https://coinnibal.fun\\n' > .vercel-moved/index.html",
+  "outputDirectory": ".vercel-moved",
   "framework": null,
-  "headers": [
-    {
-      "source": "/((?!api/).*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Content-Security-Policy", "value": "script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'" },
-        { "key": "Strict-Transport-Security", "value": "max-age=31536000" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" }
-      ]
-    }
-  ],
-  "rewrites": [
-    { "source": "/api/nft/:path*", "destination": "https://game.elymum.io/api/nft/:path*" },
-    { "source": "/share/:path*", "destination": "https://game.elymum.io/share/:path*" },
-    { "source": "/favicon.ico", "destination": "/favicon-32.png" },
-    { "source": "/((?!api/|share/|ws|assets/).*)", "destination": "/index.html" }
-  ]
+  "redirects": [{ "source": "/:path*", "destination": "https://coinnibal.fun/:path*", "permanent": true }]
 }

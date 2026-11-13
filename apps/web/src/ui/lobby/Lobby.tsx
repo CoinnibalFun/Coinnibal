@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import {
   CoinCharacter,
+  ChompMark,
   CoinMark,
   DUR,
   Icon,
@@ -490,8 +491,15 @@ function Masthead({ full, wide, page, onPage }: { full: boolean; wide: boolean; 
   return (
     <header className="kl-mast">
       <a className="kl-mast__brand" href="/" aria-label={t('lo.home')}>
-        <CoinMark size={wide ? 38 : 26} className="kl-mast__coin" />
-        <Wordmark height={wide ? 36 : full ? 28 : 21} className="kl-mast__word" title="Coinnibal" />
+        {wide || full ? (
+          <>
+            <CoinMark size={wide ? 38 : 26} className="kl-mast__coin" />
+            <Wordmark height={wide ? 36 : 28} className="kl-mast__word" title="Coinnibal" />
+          </>
+        ) : (
+          // phones: the word does not fit beside the buttons, the coin alive is the logo
+          <ChompMark size={48} />
+        )}
         {wide && <span className="kl-mast__kicker mono">{t('lo.kicker')}</span>}
       </a>
       {full && <SectionNav page={page} onChange={onPage} />}
