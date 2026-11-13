@@ -11,31 +11,16 @@ export type Dict = Record<TKey, string>;
 export type TVars = Record<string, string | number>;
 
 const STORAGE_KEY = 'elymum.locale.v1';
-const CODES = LOCALES.map((l) => l.code);
-export const isLocale = (v: unknown): v is Locale => typeof v === 'string' && (CODES as string[]).includes(v);
-
-/**
- * The non-English dictionaries, each its own lazy chunk: English is the only table in the
- * entry bundle, a visitor downloads one other language at most.
- */
-const LOADERS: Record<Exclude<Locale, 'en'>, () => Promise<{ default: Dict }>> = {
-  tr: () => import('./locales/tr'),
-  es: () => import('./locales/es'),
-  pt: () => import('./locales/pt'),
-  ru: () => import('./locales/ru'),
-  zh: () => import('./locales/zh'),
-};
 
 let current: Locale = 'en';
 let dict: Dict = en;
-const loaded = new Map<Locale, Dict>([['en', en]]);
 const listeners = new Set<() => void>();
 const plurals = new Map<Locale, Intl.PluralRules>();
 
 function pluralRules(l: Locale): Intl.PluralRules {
   let r = plurals.get(l);
   if (!r) {
-    r = new Intl.PluralRules(l === 'pt' ? 'pt-BR' : l === 'zh' ? 'zh-CN' : l);
+    r = new Intl.PluralRules(l);
     plurals.set(l, r);
   }
   return r;
@@ -147,89 +132,25 @@ export function useLocale(): Locale {
   return useSyncExternalStore(subscribe, getLocale, () => 'en' as Locale);
 }
 
-function readStored(): Locale | null {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    return isLocale(v) ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-/** The best language for this browser: the stored pick, else the first of `navigator.languages` we have. */
-export function detectLocale(langs: readonly string[] = typeof navigator === 'undefined' ? [] : navigator.languages?.length ? navigator.languages : [navigator.language]): Locale {
-  const stored = readStored();
-  if (stored) return stored;
-  for (const tag of langs) {
-    const base = String(tag || '').toLowerCase().split(/[-_]/)[0];
-    if (isLocale(base)) return base;
-  }
+/** The language for this browser: always English (the only one the interface ships in). */
+export function detectLocale(): Locale {
   return 'en';
 }
 
 function apply(l: Locale, d: Dict): void {
   current = l;
   dict = d;
-  if (typeof document !== 'undefined') {
-    document.documentElement.lang = LOCALES.find((x) => x.code === l)?.tag ?? l;
-  }
+  if (typeof document !== 'undefined') document.documentElement.lang = 'en';
   for (const fn of listeners) fn();
 }
 
-/** Downloads a language (cached). */
-export async function loadLocale(l: Locale): Promise<Dict> {
-  const have = loaded.get(l);
-  if (have) return have;
-  const d = (await LOADERS[l as Exclude<Locale, 'en'>]()).default;
-  loaded.set(l, d);
-  return d;
-}
-
-let pending = 0;
-/** Switches the language (and remembers it): English at once, others after their chunk loads. */
-export async function setLocale(l: Locale, persist = true): Promise<void> {
-  if (persist) {
-    try {
-      localStorage.setItem(STORAGE_KEY, l);
-    } catch {
-      /* private mode: this visit only */
-    }
-  }
-  const mine = ++pending;
+/** Boot: English, and any language a visitor picked before (other languages are gone) is forgotten. */
+export function initLocale(): Promise<void> {
   try {
-    const d = await loadLocale(l);
-    if (mine === pending) apply(l, d);
-  } catch (err) {
-    console.warn('language failed to load', l, err);
-  }
-}
-
-/**
- * Boot: picks the language and waits (at most `maxWaitMs`) for its dictionary, so the first paint
- * is already in that language. A slow download paints English and switches when it lands.
- */
-export function initLocale(maxWaitMs = 1500): Promise<void> {
-  // `?lang=ru` (the UI audit, shared links) wins once and is remembered like a pick
-  let forced: Locale | null = null;
-  try {
-    const q = new URLSearchParams(location.search).get('lang');
-    if (isLocale(q)) forced = q;
+    localStorage.removeItem(STORAGE_KEY);
   } catch {
-    /* no location (tests) */
+    /* private mode */
   }
-  const l = forced ?? detectLocale();
-  if (l === 'en') {
-    // `?lang=en` over a stored other language is remembered too (like any forced pick)
-    if (forced) {
-      try {
-        localStorage.setItem(STORAGE_KEY, 'en');
-      } catch {
-        /* private mode: this visit only */
-      }
-    }
-    apply('en', en);
-    return Promise.resolve();
-  }
-  const go = setLocale(l, forced !== null);
-  return Promise.race([go, new Promise<void>((r) => setTimeout(r, maxWaitMs))]);
+  apply('en', en);
+  return Promise.resolve();
 }

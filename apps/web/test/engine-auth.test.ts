@@ -35,8 +35,6 @@ vi.mock('../src/game/net', () => ({
 }));
 
 const { GameEngine } = await import('../src/game/engine');
-const { setLocale } = await import('../src/i18n');
-const { default: tr } = await import('../src/i18n/locales/tr');
 const { useUi } = await import('../src/store');
 
 HTMLCanvasElement.prototype.getContext = (() => null) as never;
@@ -89,18 +87,10 @@ describe('a session token the server refuses', () => {
 });
 
 describe('a custom room that closes', () => {
-  it("says so in the interface language (the server's reason is English)", async () => {
+  it("shows the server's reason", () => {
     engine = new GameEngine(document.createElement('canvas'));
     welcome();
-    await setLocale('tr', false);
-    try {
-      recv({ t: 'error', code: 'room_closed', message: 'The room creator closed this room.' });
-      expect(useUi.getState().toasts.at(-1)?.text).toBe(tr['err.room_closed']);
-      await setLocale('en', false);
-      recv({ t: 'error', code: 'room_closed', message: 'The room creator closed this room.' });
-      expect(useUi.getState().toasts.at(-1)?.text).toBe('The room creator closed this room.');
-    } finally {
-      await setLocale('en', false);
-    }
+    recv({ t: 'error', code: 'room_closed', message: 'The room creator closed this room.' });
+    expect(useUi.getState().toasts.at(-1)?.text).toBe('The room creator closed this room.');
   });
 });

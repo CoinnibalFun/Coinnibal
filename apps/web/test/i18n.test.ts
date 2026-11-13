@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EMOTES, PowerUpType, activeChain, chainInfo, setActiveChain } from '@elymum/shared';
 import { describe, expect, it } from 'vitest';
-import { detectLocale, formatMessage, getLocale, initLocale, LOCALES, loadLocale, ourXHandle, refreshChainText, setLocale, setOurXHandle, translate, X_HANDLE_BUILD, type Dict, type Locale, type TKey } from '../src/i18n';
+import { detectLocale, formatMessage, getLocale, initLocale, ourXHandle, refreshChainText, setOurXHandle, translate, X_HANDLE_BUILD, type Dict, type Locale, type TKey } from '../src/i18n';
 import { renderRich } from '../src/i18n/rich';
 import { en } from '../src/i18n/en';
 import { BUILD_CHAIN_ID } from '../src/chainText';
@@ -70,7 +70,6 @@ describe('the English string table', () => {
 
   it('names the network only through {chain} (testnet or mainnet) and the gas token as ETH, in every language', async () => {
     const all: [string, Dict][] = [['en', en as Dict]];
-    for (const l of LOCALES) if (l.code !== 'en') all.push([l.code, await loadLocale(l.code)]);
     for (const [code, dict] of all)
       for (const [key, value] of Object.entries(dict)) {
         // Robinhood Chain only: no other chain, gas token or faucet is named anywhere
@@ -115,18 +114,16 @@ describe('the English string table', () => {
   });
 });
 
-describe('?lang=', () => {
-  it('is remembered like a pick, English included (a stored other language does not come back)', async () => {
+describe('English only', () => {
+  it('boots in English and forgets a language picked before the others were removed', async () => {
     localStorage.setItem('elymum.locale.v1', 'ru');
-    history.replaceState(null, '', '/?lang=en');
     try {
       await initLocale();
       expect(getLocale()).toBe('en');
-      expect(localStorage.getItem('elymum.locale.v1')).toBe('en');
-      history.replaceState(null, '', '/');
-      expect(detectLocale(['ru-RU'])).toBe('en');
+      expect(document.documentElement.lang).toBe('en');
+      expect(localStorage.getItem('elymum.locale.v1')).toBeNull();
+      expect(detectLocale()).toBe('en');
     } finally {
-      history.replaceState(null, '', '/');
       localStorage.removeItem('elymum.locale.v1');
     }
   });
