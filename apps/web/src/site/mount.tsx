@@ -1,5 +1,7 @@
 import { lazy, StrictMode, Suspense, useEffect, useState, type ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
+import { AdminPreviewTag, ClosedPage } from './Closed';
+import { pageDoor, useAdminPreview, useDoors } from './doors';
 import { Landing } from './landing/Landing';
 import { NotFound } from './NotFound';
 import { prefetchMintState } from './mint/mintState';
@@ -7,6 +9,7 @@ import { isLazyPage, loadPage, loadedPage, warmPage } from './pages';
 import { installChunkRecovery, PageBoundary } from './recover';
 import { isSitePath, usePath } from './router';
 import { setPageHead } from './seo';
+import { loadSiteSettings } from './settings';
 import { SiteLoader } from './SiteLoader';
 import { useLocale, useT, type TKey } from '../i18n';
 
@@ -33,7 +36,7 @@ const loadMintShell = () => import('./mint/MintShell').then((m) => ({ default: m
 const MintShell = lazy(loadMintShell);
 const SHELLS: Record<string, ComponentType> = { '/mint': MintShell };
 
-/** After the landing has settled (idle), fetch the mint page's code so the click finds it ready. */
+/** After the landing has settled (idle), fetch the mint page's code so the click finds it ready (only while the mint page is open). */
 function warmFromLanding(): () => void {
   const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
   let idle: number | undefined;
@@ -64,12 +67,19 @@ export function SiteApp() {
   const path = usePath();
   const t = useT();
   const locale = useLocale();
-  useEffect(() => {
-    document.title = t(TITLES[path] ?? (isSitePath(path) ? TITLES['/'] : 'site.nf.docTitle'));
-    setPageHead(path, path === '/' || isLazyPage(path));
-  }, [path, locale, t]);
   const [attempt, setAttempt] = useState(0);
-  useEffect(() => (path === '/' ? warmFromLanding() : undefined), [path]);
+  const doors = useDoors();
+  // a page the admin has not opened (`/mint`, `/faucet`, `/collab`): visitors get "not open yet"; a signed-in
+  // admin gets the real page, to look it over before opening it
+  const door = pageDoor(path);
+  const shut = door !== null && doors.loaded && !doors[door];
+  const admin = useAdminPreview(shut);
+  const closed = shut && admin === false;
+  useEffect(() => {
+    document.title = t(closed ? 'site.title.closed' : (TITLES[path] ?? (isSitePath(path) ? TITLES['/'] : 'site.nf.docTitle')));
+    setPageHead(path, !closed && !shut && (path === '/' || isLazyPage(path)));
+  }, [path, locale, t, closed, shut]);
+  useEffect(() => (path === '/' && doors.mint ? warmFromLanding() : undefined), [path, doors.mint]);
   if (path === '/')
     return (
       <PageBoundary resetKey={path}>
@@ -77,6 +87,9 @@ export function SiteApp() {
       </PageBoundary>
     );
   if (!isLazyPage(path)) return <NotFound path={path} />;
+  // the settings (or the admin check) are still on their way: the loader, never a flash of the wrong page
+  if (door !== null && (!doors.loaded || (shut && admin === null))) return <SiteLoader />;
+  if (closed) return <ClosedPage path={path} />;
   const Page = lazyPage(path);
   const Shell = SHELLS[path];
   return (
@@ -89,6 +102,7 @@ export function SiteApp() {
       }}
     >
       <Suspense fallback={<SiteLoader />}>
+        {shut && <AdminPreviewTag />}
         {Shell ? (
           <Suspense fallback={<Shell />}>
             <Page />
@@ -106,10 +120,13 @@ export function mount(root: HTMLElement): void {
   document.documentElement.dataset.theme = 'light';
   installChunkRecovery();
   if ((location.pathname.replace(/\/+$/, '') || '/') === '/mint') {
-    // the mint state, the page's code and its skeleton all start now, side by side
-    prefetchMintState();
-    void loadMintShell();
-    void warmPage('/mint');
+    // an open mint page: its state, its code and its skeleton all start as soon as the settings say so
+    void loadSiteSettings().then((s) => {
+      if (!s.mintOpen) return;
+      prefetchMintState();
+      void loadMintShell();
+      void warmPage('/mint');
+    });
   }
   createRoot(root).render(
     <StrictMode>

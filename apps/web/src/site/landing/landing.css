@@ -116,17 +116,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-}
-.ld-soon {
-  gap: 10px;
-}
-.ld-soon__tag {
-  padding: 2px 7px;
-  border: 2px solid var(--outline);
-  border-radius: var(--r-pill);
-  background: var(--mist);
-  font-size: var(--t-micro);
-  letter-spacing: 0.08em;
+  margin-top: 16px;
 }
 .ld-hero__note {
   display: flex;
@@ -138,6 +128,19 @@
 }
 .ld-flowline {
   color: var(--teal-ink);
+}
+/* everything is closed: the project's X account under the buttons */
+.ld-hero__note--x {
+  margin-top: 12px;
+}
+.ld-hero__x {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink) !important;
 }
 .ld-hero__badge-wrap {
   position: absolute;
@@ -451,27 +454,6 @@
 }
 .ld-feast__copy .lede {
   margin: 20px 0 0;
-}
-.ld-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 22px 32px;
-  margin: 30px 0 0;
-  padding: 18px 0 0;
-  list-style: none;
-  border-top: 2px dashed var(--rule);
-}
-.ld-facts li {
-  display: grid;
-  gap: 2px;
-}
-.ld-facts b {
-  font-size: var(--t-num);
-  line-height: 1;
-}
-.ld-facts span {
-  font-size: var(--t-micro);
-  color: var(--ink-3);
 }
 .ld-menu {
   transform: rotate(1.2deg);
@@ -985,7 +967,7 @@
 @media (max-width: 899px) {
   .ld-nft__grid {
     grid-template-columns: 1fr;
-    padding-bottom: 120px;
+    padding-bottom: 64px;
   }
   .ld-nft__fan {
     height: 470px;
@@ -1154,9 +1136,20 @@
   color: var(--cream);
 }
 @media (max-width: 1099px) {
+  /* the two middle tickets stand 26% of the map apart: a ticket stays narrower than that, so they never touch */
   .ld-place {
-    width: 250px;
-    margin-left: -125px;
+    --w: clamp(204px, 23.5%, 250px);
+    width: var(--w);
+    margin-left: calc(var(--w) / -2);
+  }
+}
+@media (min-width: 900px) and (max-width: 1099px) {
+  .ld-place .ld-ticket__body {
+    padding: 14px 8px 16px 16px;
+  }
+  .ld-place .ld-ticket__name {
+    font-size: 17px;
+    white-space: nowrap;
   }
 }
 @media (max-width: 899px) {

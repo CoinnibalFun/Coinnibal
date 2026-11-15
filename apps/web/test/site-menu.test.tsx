@@ -1,11 +1,18 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SiteHeader } from '../src/site/Shell';
+import { resetSiteSettings } from '../src/site/settings';
+import { SETTINGS, mockFetch } from './site-helpers';
+
+let restore = () => {};
+beforeEach(() => resetSiteSettings());
+afterEach(() => restore());
 
 describe('the phone menu', () => {
   it('keeps Tab inside the open menu and gives focus back to its button on Escape', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, gameAccess: 'public' } } }));
     render(<SiteHeader />);
-    const btn = screen.getByRole('button', { name: 'Open the menu' });
+    const btn = await screen.findByRole('button', { name: 'Open the menu' });
     act(() => btn.click());
     btn.focus();
     const sheet = screen.getByRole('navigation', { name: 'Site menu' });
@@ -21,6 +28,20 @@ describe('the phone menu', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('navigation', { name: 'Site menu' })).toBeNull();
     expect(document.activeElement).toBe(btn);
+  });
+
+  it('with everything closed: Docs alone beside the logo, no menu button, no Play, no wallet button', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' } } }));
+    localStorage.clear();
+    const { container } = render(<SiteHeader />);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect([...screen.getByRole('navigation', { name: 'Site' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['/docs']);
+    expect(screen.queryByRole('button', { name: 'Open the menu' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Connect/ })).toBeNull();
+    expect(container.querySelector('.st-head--few')).toBeTruthy();
+    expect(container.querySelector('a[href="/play"], a[href="/mint"], a[href="/faucet"], a[href="/wl"], a[href="/collab"]')).toBeNull();
   });
 
 });

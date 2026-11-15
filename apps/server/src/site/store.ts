@@ -178,12 +178,19 @@ export const csv = (rows: unknown[][]): string => rows.map((r) => r.map(csvCell)
 
 const iso = (ms: number | null) => (ms === null ? '' : new Date(ms).toISOString());
 
+/**
+ * The marker `settings.json` carries (`launch`) once the public-launch switch below has run. It is
+ * stored next to the settings and is not part of `SiteSettings`.
+ */
+export const SETTINGS_LAUNCH = 1;
+/** What the public launch closes, once, in a settings file saved before it. */
+const LAUNCH_CLOSED = { wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' } as const satisfies Partial<SiteSettings>;
+
 export interface SiteStoreOptions {
   /** Wall clock (Unix ms); tests inject one. */
   now?: () => number;
   /**
-   * Defaults of settings the file does not hold yet (a fresh settings file). On a public testnet the
-   * app passes `gameAccess: 'public'`; a stored value always wins.
+   * Defaults of settings the file does not hold yet (a fresh settings file); a stored value always wins.
    */
   defaults?: Partial<SiteSettings>;
   log?: (m: string) => void;
@@ -242,7 +249,7 @@ export class SiteStore {
   }
 
   private load(): void {
-    const settings = this.read('settings', (x) => (x && typeof x === 'object' ? (x as Partial<SiteSettings>) : null));
+    const settings = this.read('settings', (x) => (x && typeof x === 'object' ? (x as Partial<SiteSettings> & { launch?: unknown }) : null));
     if (settings) {
       const d = this.defaults;
       const handle = normalizeXHandle(settings.xHandle);
@@ -250,12 +257,20 @@ export class SiteStore {
       this.settingsV = {
         wlOpen: typeof settings.wlOpen === 'boolean' ? settings.wlOpen : d.wlOpen,
         collabOpen: typeof settings.collabOpen === 'boolean' ? settings.collabOpen : d.collabOpen,
+        mintOpen: typeof settings.mintOpen === 'boolean' ? settings.mintOpen : d.mintOpen,
         gameAccess: isGameAccess(settings.gameAccess) ? settings.gameAccess : d.gameAccess,
         xHandle: handle && !previous ? handle : d.xHandle,
         launchPostUrl: isXStatusUrl(settings.launchPostUrl) ? settings.launchPostUrl : null,
       };
       if (previous) {
         this.log(`site: xHandle @${handle} is a previous default; now @${this.settingsV.xHandle}`);
+        this.save('settings');
+      }
+      // the public launch, once: a file saved before it has no marker; the site closes to visitors
+      // (information only) and the marker is saved, so the admin's later changes are kept
+      if (settings.launch !== SETTINGS_LAUNCH) {
+        this.settingsV = { ...this.settingsV, ...LAUNCH_CLOSED };
+        this.log('site: public launch: WL, collab, mint and the game are now closed to visitors; reopen each in /admin, Settings');
         this.save('settings');
       }
     }
@@ -289,7 +304,7 @@ export class SiteStore {
   private save(file: keyof typeof SITE_FILES): void {
     const p = this.path(file);
     if (!p) return;
-    const data = file === 'settings' ? this.settingsV : file === 'tasks' ? this.tasksV : file === 'wl' ? this.wl : this.collabs;
+    const data = file === 'settings' ? { ...this.settingsV, launch: SETTINGS_LAUNCH } : file === 'tasks' ? this.tasksV : file === 'wl' ? this.wl : this.collabs;
     mkdirSync(join(this.dataDir!, 'site'), { recursive: true });
     const tmp = `${p}.tmp`;
     writeFileSync(tmp, JSON.stringify(data));
@@ -308,6 +323,7 @@ export class SiteStore {
       switch (key) {
         case 'wlOpen':
         case 'collabOpen':
+        case 'mintOpen':
           next[key] = v.bool(body[key], key);
           break;
         case 'gameAccess':

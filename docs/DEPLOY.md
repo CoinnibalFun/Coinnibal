@@ -79,7 +79,7 @@ names and which a stale older `.env` cannot hold: deploy/vps/README.md section 4
 | `NFT_COLLECTION_SIZE`, `NFT_ART_STYLE` | `5000` (= the NFT's max supply), `vector` (or `pixel`): the emblem collection (docs/NFT-DESIGN.md). Leave `NFT_COLLECTION_SEED` empty: the seed is generated and committed on first boot (`DATA_DIR/chains/<id>/nft-collection.json`, keep it in the backups) |
 | `TOKEN_SYMBOL` | `$NIBAL` (default; display only) |
 | `X_HANDLE` | the project's X handle by default (unset: `elymumio`; `coinnibal` once that account is live) |
-| `GAME_ACCESS` (VPS: `ELYMUM_GAME_ACCESS`) | `public` on the VPS when unset (the testnet is open), `maintenance` to close, `site` lets the `/admin` setting decide |
+| `GAME_ACCESS` (VPS: `ELYMUM_GAME_ACCESS`) | unset (VPS: `site`): the `/admin` → Settings switch decides (a fresh server starts closed, `admins`); `public`, `holders`, `admins` or `maintenance` overrides that switch |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `BACKUP_RCLONE_REMOTE` | the alerts and the encrypted offsite backup (deploy/vps/README.md) |
 
 Leave `ARENA_ADDRESS` and `NFT_ADDRESS` empty: the addresses come from the registry `/admin` writes. Never set
