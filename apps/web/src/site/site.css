@@ -253,6 +253,17 @@ body {
     display: flex;
   }
 }
+/* a link that stands alone beside the logo is drawn as a small sticker, so it reads as the way into the guide */
+.st-head--few .st-nav__link:not(.is-on) {
+  padding: 0 16px;
+  border-color: var(--outline);
+  background: var(--sticker);
+  color: var(--ink-fixed) !important;
+  box-shadow: var(--sh-1);
+}
+.st-head--few .st-nav__link.is-on {
+  padding: 0 16px;
+}
 .st-head__tools:empty {
   display: none;
 }
@@ -388,7 +399,8 @@ body {
 }
 @media (min-width: 900px) {
   .st-foot__inner {
-    grid-template-columns: 7fr 5fr;
+    /* the links keep one row beside the wordmark (seven of them when every part of the site is open) */
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
     padding-top: 72px;
     padding-bottom: 32px;
@@ -399,17 +411,8 @@ body {
   width: min(100%, 300px);
   height: auto;
 }
-.st-foot__line {
-  margin: 18px 0 0;
-  font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
-  font-weight: 800;
-  font-size: 25px;
-  line-height: 1.1;
-  letter-spacing: -0.015em;
-}
 .st-foot__eco {
-  margin: 10px 0 0;
+  margin: 18px 0 0;
   max-width: 46ch;
   font-size: 15px;
   color: var(--ink-2);

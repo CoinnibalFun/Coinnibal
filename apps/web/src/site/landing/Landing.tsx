@@ -118,7 +118,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
           </motion.div>
           <motion.div className="ld-hero__badge-wrap" variants={m.popIn} initial="hidden" animate="shown" transition={{ delay: 0.5 }}>
             <Sticker tone="sun" pad="sm" tilt={4} className="ld-hero__badge">
-              <span className="num ld-hero__badge-n">05:00</span>
+              <span className="num ld-hero__badge-n">{String(FACTS.rules.roundMin).padStart(2, '0')}:00</span>
               <span className="mono ld-hero__badge-l">{t('ld.badge')}</span>
             </Sticker>
           </motion.div>
@@ -168,21 +168,7 @@ function Feast() {
           <h2 className="ld-h2" id="ld-feast-h">
             <T k="ld.feast.h" tags={{ u: (c) => <span className="wonk ld-ul">{c}</span> }} />
           </h2>
-          <p className="lede">{t('ld.feast.lede', { sym: SYMBOL })}</p>
-          <ul className="ld-facts" aria-label={t('ld.facts')}>
-            <li>
-              <b className="num">{FACTS.rules.roundMin}:00</b>
-              <span className="mono">{t('ld.fact.round')}</span>
-            </li>
-            <li>
-              <b className="num">{FACTS.capacity.arena}</b>
-              <span className="mono">{t('ld.fact.room')}</span>
-            </li>
-            <li>
-              <b className="num">{pct(FACTS.fee.burnBps + FACTS.fee.vaultBps)}</b>
-              <span className="mono">{t('ld.fact.fee')}</span>
-            </li>
-          </ul>
+          <p className="lede">{t('ld.feast.lede', { sym: SYMBOL, n: FACTS.capacity.arena })}</p>
         </motion.div>
         <motion.div className="ld-feast__menu-wrap" variants={m.stickerDrop} custom={1.2} initial="hidden" whileInView="shown" viewport={view}>
           <Sticker tone="white" pad="lg" lift="lg" className="ld-menu">
@@ -196,7 +182,7 @@ function Feast() {
               <MenuLine art={<CoinCharacter paint="sun" mood="smug" size={46} />} dish={t('ld.menu.big')} note={t('ld.menu.bigNote')} price={t('ld.menu.bigPrice')} />
             </ul>
             <footer className="ld-menu__foot">
-              <span className="mono">{t('ld.menu.foot')}</span>
+              <span className="mono">{t('ld.menu.foot', { r: FACTS.rules.eatRatio })}</span>
             </footer>
           </Sticker>
         </motion.div>
@@ -213,7 +199,7 @@ const STATIONS: { no: string; title: TKey; body: TKey }[] = [
   { no: '03', title: 'ld.stop.bell', body: 'ld.stop.bellBody' },
   { no: '04', title: 'ld.stop.paid', body: 'ld.stop.paidBody' },
 ];
-const stationVars = () => ({ sym: SYMBOL, s: FACTS.rules.joinCloseS, b: FACTS.rules.breakS, fee: pct(FACTS.fee.burnBps + FACTS.fee.vaultBps) });
+const stationVars = () => ({ sym: SYMBOL, min: FACTS.rules.roundMin, s: FACTS.rules.joinCloseS, b: FACTS.rules.breakS });
 
 function Round({ live }: { live: boolean }) {
   const m = useMoves();
@@ -430,7 +416,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
   const open = gameAccess === 'public' ? { tone: 'live' as const, text: t('ld.ar.open') } : gameAccess === 'holders' ? { tone: 'ok' as const, text: t('ld.ar.holders') } : { tone: 'idle' as const, text: t('ld.ar.after') };
   return (
     <section className="ld-plate ld-arenas" id="arenas" aria-labelledby="ld-arenas-h">
-      <PlateLabel numeral={6} title={t('ld.ar.plate')} aside={t('ld.ar.aside')} />
+      <PlateLabel numeral={4} title={t('ld.ar.plate')} aside={t('ld.ar.aside')} />
       <div className="ld-wrap">
         <div className="ld-arenas__head">
           <div>
@@ -441,7 +427,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
           </div>
           <div className="ld-arenas__aside">
             <StatusPill tone={open.tone}>{open.text}</StatusPill>
-            <p>{t('ld.ar.body', { sym: SYMBOL })}</p>
+            <p>{t('ld.ar.body', { sym: SYMBOL, fee: pct(FACTS.fee.burnBps + FACTS.fee.vaultBps), burn: pct(FACTS.fee.burnBps), team: pct(FACTS.fee.vaultBps) })}</p>
           </div>
         </div>
         <div className="ld-map" ref={mapRef}>
@@ -492,7 +478,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
 
 /* ── questions ────────────────────────────────────────────────────────── */
 
-function Faq({ handle, doors, gameAccess }: { handle: string; doors: Doors; gameAccess: GameAccess }) {
+function Faq({ handle, doors }: { handle: string; doors: Doors }) {
   const m = useMoves();
   const t = useT();
   const tags = {
@@ -504,15 +490,16 @@ function Faq({ handle, doors, gameAccess }: { handle: string; doors: Doors; game
     docs: (c: ReactNode) => <Link href="/docs">{c}</Link>,
     collab: (c: ReactNode) => <Link href="/collab">{c}</Link>,
   };
-  // "when does the game open?" only while it is not open to everyone; the collab question only with its page
-  const asked = [1, 2, 3, 4, 5, 6, 7].filter((n) => (n !== 5 || gameAccess !== 'public') && (n !== 7 || doors.collab));
+  // the NFT's price only with the mint page, "is the game open?" only while it is closed, the collab question only
+  // with its page; the last answer sends the visitor to the guide for every rule
+  const asked = [1, 2, 4, 5, 6, 7, 8].filter((n) => (n !== 4 || doors.mint) && (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
   const items: { q: string; a: ReactNode }[] = asked.map((n) => ({
     q: t(`ld.faq.q${n}` as TKey),
-    a: renderRich(t(n === 4 && !doors.mint ? 'ld.faq.a4closed' : (`ld.faq.a${n}` as TKey), { handle: `@${handle}` }), tags),
+    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}` }), tags),
   }));
   return (
     <section className="ld-plate ld-faq" id="faq" aria-labelledby="ld-faq-h">
-      <PlateLabel numeral={7} title={t('ld.faq.plate')} aside={t('ld.faq.aside')} />
+      <PlateLabel numeral={6} title={t('ld.faq.plate')} aside={t('ld.faq.aside')} />
       <div className="ld-wrap ld-faq__grid">
         <div className="ld-faq__side">
           <div>
@@ -565,9 +552,9 @@ export function Landing() {
         <Round live={doors.game && settings.gameAccess !== 'maintenance'} />
         <DuskSeam />
         <Kb theme="night" className="ld-night">
-          <Nft doors={doors} />
           <Arenas gameAccess={doors.loaded ? settings.gameAccess : 'admins'} />
-          <Faq handle={settings.xHandle.replace(/^@/, '')} doors={doors} gameAccess={doors.loaded ? settings.gameAccess : 'admins'} />
+          <Nft doors={doors} />
+          <Faq handle={settings.xHandle.replace(/^@/, '')} doors={doors} />
         </Kb>
       </main>
       <SiteFooter />

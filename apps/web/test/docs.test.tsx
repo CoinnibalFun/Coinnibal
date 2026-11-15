@@ -129,7 +129,6 @@ describe('player guide content', () => {
     once(/No cash-out/);
     once(/50% is burned/);
     once(/1, 5, 10 or 20 tickets/);
-    once(/Opening soon/);
     // no questions-and-answers block restating the sections
     expect(en.sections.flatMap((s) => s.blocks).some((b) => b.kind === 'faq')).toBe(false);
   });
@@ -141,6 +140,17 @@ describe('player guide content', () => {
     expect(t).toContain('NIBAL-7K2M9Q');
     expect(t).toContain('$1 Room');
     expect(t).toContain('$10 Room');
+  });
+
+  it('names no mint price and no date: what the NFT does, never what it costs or when anything opens', () => {
+    const t = JSON.stringify(en);
+    // the mint: no price, no "the Mint page shows the price", no order of a sale
+    expect(t).not.toMatch(/mint(ing)? (price|cost|fee)|price of the (nft|mint)|Mint page|minted on|allowlist|\bWL\b/i);
+    const nft = JSON.stringify(en.sections.find((s) => s.id === 'nft'));
+    expect(nft).not.toMatch(/\bprice from\b|\bcosts?\b|\d(\.\d+)? ?ETH\b/i);
+    // no dates, launch timing or schedule words (the rules' own durations stay: 5:00, 30 s, 15 minutes, 24 hours)
+    expect(t).not.toMatch(/\bsoon\b|at launch|launch(es|ing)?\b|\bopens (on|in|at|after|when)\b|\b(up)?coming\b|\bnot open yet\b|\bschedule|timeline|\b20\d\d\b|\bQ[1-4]\b/i);
+    expect(t).not.toMatch(/january|february|march|april|\bmay \d|june|july|august|september|october|november|december|next (week|month|year)|start date/i);
   });
 
   it('covers the NFT and the token: what each is for, with the shop prices and holder perks from the code', () => {
@@ -164,7 +174,7 @@ describe('player guide content', () => {
     expect(pu).toContain('Nothing is sold during a game');
     const token = JSON.stringify(en.sections.find((s) => s.id === 'token'));
     expect(token).toContain('The game never creates new $ELYMUM');
-    expect(token).toContain('Opening soon');
+    expect(token).toContain('Until it is set, the paid rooms stay closed.');
     // floor loot exists only where something without a ticket eats a coin (the testnet's test rooms): not in the guide
     expect(JSON.stringify(en)).not.toMatch(/loot/i);
   });

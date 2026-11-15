@@ -179,7 +179,7 @@ describe('why get the NFT: the holder perks', () => {
     const cards = perkCards(v, t, true);
     expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin', 'faucet']);
     expect(cards[0].title).toBe('Lower fee: 10% instead of 20%');
-    expect(cards[0].note).toBe('We take less of your profit: 8% is burned and 2% goes to the team.');
+    expect(cards[0].note).toBe('We take less of your profit: 8% is burned and 2% goes to the team wallet.');
     expect(cards[1].title).toBe('$10 room for holders');
     expect(cards[2].title).toBe('20% off power-ups');
     expect(cards[2].note).toMatch(/1 extra power-up in every paid round/);

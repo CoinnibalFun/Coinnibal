@@ -44,6 +44,13 @@
 .nf__scene {
   position: relative;
 }
+/* phones: the two buttons share one width (as on the closed pages) */
+@media (max-width: 479px) {
+  .nf__ctas .st-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
 .nf-art {
   display: block;
   width: 100%;

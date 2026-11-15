@@ -85,7 +85,7 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     expect(textOf(link)).not.toMatch(/@|\.com|TEST/);
   });
 
-  it('a test arena: bots tagged BOT on the sheet and in the post, which says TEST (testnet test arena)', () => {
+  it('a test arena: bots tagged BOT on the sheet and in the post, which says TEST (testnet test room)', () => {
     sheet(TEST_ARENA, { ...STATS, eaten: [{ name: 'Botty', bot: true }], eatenMore: 0 }, { test: true });
     const chip = screen.getByTestId('eaten').querySelector('li')!;
     expect(chip.textContent).toBe('BottyBOT');
@@ -93,7 +93,7 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     const text = textOf(screen.getByTestId('share-x'))!;
     expect(text).toContain('Botty (BOT)');
     expect(SHARE_VARIANTS.resultAte.some((k) => text.startsWith(t(k, { rank: 1, n: 2, room: '$1 Room', names: 'Botty (BOT)' })))).toBe(true);
-    expect(text).toContain('(TEST: testnet test arena, no real money)');
+    expect(text).toContain('(TEST: testnet test room, no real money)');
   });
 
   it('ate nobody: no list, the plain post', () => {
@@ -101,7 +101,7 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     expect(screen.queryByTestId('eaten')).toBeNull();
     expect(textOf(screen.getByTestId('share-x'))).toBe(`${resultShareText(t, { rank: 1, n: 2, room: '$1 Room' })} ${SHARE_COIN}`);
     const plain = resultShareText(t, { rank: 3, n: 9, room: 'Pond', test: true });
-    expect(SHARE_VARIANTS.result.map((k) => `${t(k, { rank: 3, n: 9, room: 'Pond' })} (TEST: testnet test arena, no real money)`)).toContain(plain);
+    expect(SHARE_VARIANTS.result.map((k) => `${t(k, { rank: 3, n: 9, room: 'Pond' })} (TEST: testnet test room, no real money)`)).toContain(plain);
   });
 
   it('a test arena kill of a big bot: the sticker says BOT and TEST', () => {
@@ -116,7 +116,7 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     expect(sticker.querySelector('.g-test-tag')?.textContent).toBe('TEST');
     // its post (from the end sheet's moments) says BOT and TEST
     const post = killShareText(t, useUi.getState().share!);
-    expect(SHARE_VARIANTS.kill.map((k) => `${t(k, { name: 'Botty (BOT)' })} (TEST: testnet test arena, no real money)`)).toContain(post);
+    expect(SHARE_VARIANTS.kill.map((k) => `${t(k, { name: 'Botty (BOT)' })} (TEST: testnet test room, no real money)`)).toContain(post);
   });
 });
 
