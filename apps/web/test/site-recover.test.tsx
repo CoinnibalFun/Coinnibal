@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RELOAD_KEY, RELOAD_WINDOW_MS, PageBoundary, isChunkError, reloadOnce } from '../src/site/recover';
-import { installDomStubs } from './site-helpers';
+import { SETTINGS, installDomStubs, mockFetch } from './site-helpers';
 
 // a tab from before a deploy: the MintPage chunk it names is gone on the host (404)
 vi.mock('../src/site/mint/MintPage', () => {
@@ -10,6 +10,7 @@ vi.mock('../src/site/mint/MintPage', () => {
 });
 const { SiteApp } = await import('../src/site/mount');
 const { resetPages, pageFailed } = await import('../src/site/pages');
+const { resetSiteSettings } = await import('../src/site/settings');
 
 const fakeWin = () => {
   const store = new Map<string, string>();
@@ -67,6 +68,7 @@ describe('PageBoundary', () => {
 });
 
 describe('/mint whose chunk is gone (a tab from before a deploy)', () => {
+  let restoreFetch = () => {};
   beforeEach(() => {
     installDomStubs();
     resetPages();
@@ -74,8 +76,11 @@ describe('/mint whose chunk is gone (a tab from before a deploy)', () => {
     // a reload already happened a moment ago: this time the page must say so, not loop
     sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
     history.replaceState(null, '', '/mint');
+    resetSiteSettings();
+    ({ restore: restoreFetch } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
   });
   afterEach(() => {
+    restoreFetch();
     vi.restoreAllMocks();
     sessionStorage.clear();
     history.replaceState(null, '', '/');

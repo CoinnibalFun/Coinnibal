@@ -130,13 +130,13 @@ describe('chain-keyed state: migration', () => {
 });
 
 describe('chain-keyed state: the app', () => {
-  it('testnet: migrates on first start, opens chains/46630, the game is public by default; mainnet then starts clean and keeps the testnet records', async () => {
+  it('testnet: migrates on first start, opens chains/46630, a fresh server is closed (admins only); mainnet then starts clean and keeps the testnet records', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'elymum-app-'));
     legacy(dir);
     const t = await start(dir, 46630);
     expect(t.app.stateChainId).toBe(46630);
     expect(t.app.contracts.stored().arena?.address).toBe(ARENA);
-    expect((await t.call('GET', '/api/site/settings')).body.settings.gameAccess).toBe('public');
+    expect((await t.call('GET', '/api/site/settings')).body.settings).toMatchObject({ gameAccess: 'admins', wlOpen: false, collabOpen: false, mintOpen: false });
     t.app.journal.enqueue({ kind: 'sweep', key: 'sweep:x:1', arenaId: 1, roomId: 'x', round: 1, amount: 5, attempts: 0, nextAttemptAt: Date.now() + 60_000, createdAt: Date.now() });
     expect(existsSync(join(dir, 'chains', '46630', 'journal.json'))).toBe(true);
     const net = (await t.call('GET', '/api/admin/network', { wallet: ADMIN })).body;
@@ -160,10 +160,10 @@ describe('chain-keyed state: the app', () => {
     expect(JSON.parse(readFileSync(join(dir, 'chains', '46630', 'journal.json'), 'utf8')).pending).toHaveLength(1);
   });
 
-  it('testnet default never overrides a stored gameAccess', async () => {
+  it('a stored gameAccess is kept on the testnet', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'elymum-app-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
-    writeFileSync(join(dir, 'site', 'settings.json'), JSON.stringify({ wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymumio', launchPostUrl: null }));
+    writeFileSync(join(dir, 'site', 'settings.json'), JSON.stringify({ wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymumio', launchPostUrl: null, launch: 1 }));
     const t = await start(dir, 46630);
     expect((await t.call('GET', '/api/site/settings')).body.settings.gameAccess).toBe('holders');
   });
@@ -219,6 +219,7 @@ describe('testnet emblem holders → mainnet WL', () => {
     testnet.balances.set(c.toLowerCase(), 1n);
     const t = await start(dir, 4663, { holderReaderFor: (id) => (id === 46630 ? testnet : null) });
     // a is also on the approved WL
+    t.app.site.store.updateSettings({ wlOpen: true });
     t.app.site.store.submitWl(a, { xHandle: 'alice', answers: { follow_x: true, post_x: 'https://x.com/alice/status/1790000000000000001' } });
     const id = t.app.site.store.listWl({ status: null, q: null, page: 1, pageSize: 10 }).items[0].id;
     t.app.site.store.setWlStatus([id], 'approved');

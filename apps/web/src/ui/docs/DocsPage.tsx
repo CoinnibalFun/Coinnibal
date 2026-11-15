@@ -1,8 +1,8 @@
 import { useMemo, useRef } from 'react';
 import { CoinCharacter, Dateline, Icon, Receipt, Rule, Stamp, useOffscreenPause, useReducedMotion, type ReceiptLine } from '../../design';
 import { arenaRates } from '../../wallet/ticket';
-import { useT } from '../../i18n';
 import { useUi } from '../../store';
+import { siteHost } from '../../site/settings';
 import { useTokenText } from '../lobby/useLobby';
 import { PageHead } from '../PageHead';
 import { docsEn } from './content.en';
@@ -12,24 +12,23 @@ import { ValueFlow } from './ValueFlow';
 import './docs.css';
 
 /**
- * The player guide (`/docs`, `#docs`): how to play, rooms and tickets, value flow, rounds and
- * the fee on profit, the Coinnibal NFT, the $NIBAL token, what is on-chain, wallet safety and an FAQ. Typed content lives in
- * content.en.ts; every number comes from the code through facts.ts, and the fee
- * rates are the server's (`ChainStatus.fees`) when they are known.
+ * The player guide (`/docs`, `#docs`): how to play, rooms and tickets, how value moves, rounds and the fee on
+ * profit, power-ups, the Coinnibal NFT, the $NIBAL token, what is on-chain, wallet safety, the profile and X, and
+ * what happens when something goes wrong. Typed content lives in content.en.ts; every number comes from the code
+ * through facts.ts, and the fee rates are the server's (`ChainStatus.fees`) when they are known.
  */
 export function DocsPage() {
   const tok = useTokenText();
   const burnBps = useUi((s) => s.chain?.fees?.burnBps ?? null);
   const vaultBps = useUi((s) => s.chain?.fees?.vaultBps ?? null);
   const chainName = useUi((s) => s.chain?.chainName ?? null);
+  const testnet = useUi((s) => s.chain?.testnet ?? null);
   const c = useMemo(
-    () => docsEn(tok.symbol, arenaRates(burnBps !== null && vaultBps !== null ? { burnBps, vaultBps } : null), chainName ?? undefined),
-    [tok.symbol, burnBps, vaultBps, chainName],
+    () => docsEn(tok.symbol, arenaRates(burnBps !== null && vaultBps !== null ? { burnBps, vaultBps } : null), chainName ?? undefined, { testnet: testnet ?? undefined, site: siteHost() }),
+    [tok.symbol, burnBps, vaultBps, chainName, testnet],
   );
   const reduced = useReducedMotion();
   const top = useRef<HTMLDivElement>(null);
-  const t = useT();
-  // the guide itself is English for now: say so in the reader's language, and mark the text as English
 
   const jump = (id: string) => {
     const el = document.getElementById(`docs-${id}`);
@@ -254,7 +253,7 @@ function KeysFig({ caption, rows }: { caption: string; rows: { key: string; acti
   );
 }
 
-/** The worked example: a 1,000-token ticket with 1,900 in the till at the bell, with the fee on its profit. */
+/** The worked example: a 1,000-token ticket worth 1,900 at the bell, with the fee on its profit. */
 function FeeExample({ c }: { c: DocsContent }) {
   const x = payoutExample(c.rates);
   const r = c.receipt;

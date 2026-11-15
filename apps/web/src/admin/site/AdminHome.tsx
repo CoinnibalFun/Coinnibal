@@ -32,7 +32,7 @@ const BENCH: Record<AdminGroup, { title: string; lede: string }> = {
   game: { title: 'Game', lede: 'Who may play, the arena switches, the bots and the rooms right now.' },
   community: { title: 'Community', lede: 'The WL, the chores applicants do, and the communities asking for spots.' },
   safety: { title: 'Safety', lede: 'Farming, feeding and collusion (evidence for a person to weigh, never a verdict), and the pictures players wear.' },
-  settings: { title: 'Settings', lede: 'Who may play (the same switch as in Game), which doors are open, and the X handle.' },
+  settings: { title: 'Settings', lede: 'What visitors can see: the game (the same switch as in Game), the mint page, WL and collab applications. And the X handle.' },
 };
 
 import { NetPill } from '../NetPill';

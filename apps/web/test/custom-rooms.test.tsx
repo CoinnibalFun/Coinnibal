@@ -292,7 +292,7 @@ describe('the room creator', () => {
     await settle();
     // the receipt names both: the room fee, then the creator's own ticket
     const payment = screen.getByTestId('cr-payment');
-    expect(payment.textContent).toMatch(/Arena\$3 Room/);
+    expect(payment.textContent).toMatch(/Paid room\$3 Room/);
     expect(payment.textContent).toMatch(/never holds anyone's tokens/);
     expect(payment.textContent).toMatch(/Your ticket10,000 \$ELYMUM/);
     expect(screen.getByTestId('cr-pay').textContent).toMatch(/then my ticket/);

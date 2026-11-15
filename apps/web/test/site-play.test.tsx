@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlayGate, playAccess } from '../src/site/play/PlayGate';
 import { TOKEN_KEY } from '../src/site/session';
+import { resetSiteSettings } from '../src/site/settings';
 import { SETTINGS, installDomStubs, json, mockFetch } from './site-helpers';
 
 const ADMIN = '0xAdA0000000000000000000000000000000000001';
@@ -12,18 +13,23 @@ let restore = () => {};
 beforeEach(() => {
   installDomStubs();
   localStorage.clear();
+  resetSiteSettings();
 });
 afterEach(() => restore());
 
 describe('the /play gate', { timeout: 30_000 }, () => {
-  it('blocks a visitor with no session: "The game is closed", links to the WL, the mint and home', async () => {
-    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+  it('blocks a visitor with no session: "The game is not open yet", the guide, home and X; no WL or mint promise', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false } } }));
     const onAllowed = vi.fn();
     render(<PlayGate onAllowed={onAllowed} />);
-    expect(await screen.findByRole('heading', { name: /The game is closed/ })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Back home' }).getAttribute('href')).toBe('/');
-    expect(screen.getByRole('link', { name: 'Join the WL' }).getAttribute('href')).toBe('/wl');
-    expect(screen.getByRole('link', { name: 'Go to the mint' }).getAttribute('href')).toBe('/mint');
+    expect(await screen.findByRole('heading', { name: /The game is not open yet/ })).toBeTruthy();
+    expect(screen.getByText('The guide explains every rule.')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/start date|soon|until then/i);
+    expect(screen.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/');
+    expect(screen.getByRole('link', { name: 'Read the guide' }).getAttribute('href')).toBe('/docs');
+    expect(screen.getByRole('link', { name: /Follow @elymumio/ }).getAttribute('href')).toBe('https://x.com/elymumio');
+    expect(document.querySelector('a[href="/wl"], a[href="/mint"], a[href="/collab"], a[href="/faucet"], a[href="/play"]')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Join the WL|Go to the mint/);
     expect(onAllowed).not.toHaveBeenCalled();
   });
 
@@ -58,7 +64,7 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     const onAllowed = vi.fn();
     render(<PlayGate onAllowed={onAllowed} />);
     await waitFor(() => expect(onAllowed).toHaveBeenCalledWith({ address: ADMIN, token: 'admin-token', admin: true }));
-    expect(screen.queryByRole('heading', { name: /game is closed/ })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /game is not open/ })).toBeNull();
   });
 
   it('opens to everyone when the game is public', async () => {
@@ -75,7 +81,7 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     expect(await playAccess()).toEqual({ allowed: false, reason: 'holders', session: null });
     render(<PlayGate onAllowed={vi.fn()} />);
     expect(await screen.findByRole('heading', { name: /NFT holders only/ })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Go to the mint' }).getAttribute('href')).toBe('/mint');
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Go to the mint' }).getAttribute('href')).toBe('/mint'));
     restore();
     store(USER, 'holder-token');
     ({ restore } = mockFetch({ 'GET /api/site/settings': holders, 'GET /api/auth/me': { address: USER, admin: false, canPlay: true } }));

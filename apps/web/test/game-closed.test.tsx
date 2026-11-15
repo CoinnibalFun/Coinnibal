@@ -17,7 +17,7 @@ describe('game_closed from the WebSocket', () => {
     act(() => useUi.setState({ gameClosed: true }));
     expect(screen.getByText('Not open to this wallet yet.')).toBeTruthy();
     expect(screen.getByText(t('err.game_closed'))).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Back home' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Mint' })).toBeTruthy();
   });
 });

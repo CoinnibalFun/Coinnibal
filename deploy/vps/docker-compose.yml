@@ -50,9 +50,9 @@ services:
       NFT_ADDRESS: ""
       TOKEN_ADDRESS: ""
       JOURNAL_ABANDON_CONTRACT: ""
-      # who may play: ELYMUM_GAME_ACCESS in .env (admins | holders | public | maintenance; site hands the choice to
-      # /admin -> Settings). Default public: the game is open on the testnet (the owner's choice)
-      GAME_ACCESS: "${ELYMUM_GAME_ACCESS:-public}"
+      # who may play: the /admin -> Settings switch decides (site, the default; a fresh server starts closed: admins
+      # only). ELYMUM_GAME_ACCESS in .env (admins | holders | public | maintenance) overrides that switch
+      GAME_ACCESS: "${ELYMUM_GAME_ACCESS:-site}"
       # the site lives here (no Vercel): the app serves the bundled web client (with a strict CSP) on every domain
       # Caddy hands it, SITE_DOMAIN first. PUBLIC_URL is that site (sign-ins, share cards, X posts name it);
       # ELYMUM_PUBLIC_URL in .env overrides it, a stale PUBLIC_URL there does not

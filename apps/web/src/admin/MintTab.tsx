@@ -215,7 +215,7 @@ function PhaseCard({ ctx, current, open }: { ctx: ChainCtx; current: MintPhaseNa
   const offer = phase !== 'closed' && offerHolderAccess(access);
   const withAccess = offer && activate;
   return (
-    <Card title="Start / stop the mint" id="mint-phase" kicker={`Now: ${current}`} lede="Closed → Allowlist → Public. Pick one, then preview the switch. Opening the mint can open the game to holders in the same go.">
+    <Card title="Start / stop the mint" id="mint-phase" kicker={`Now: ${current}`} lede="Closed → Allowlist → Public. Pick one, then preview the switch. Opening the mint can open the game to holders in the same go. Visitors see the mint page only while “Mint page open” is on in Settings.">
       <div className="ad-switchrow" role="radiogroup" aria-label="Mint phase">
         <span className="ad-switchrow__label mono">Mint phase</span>
         <div className="ad-switchrow__segs">

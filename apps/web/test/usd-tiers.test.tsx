@@ -76,7 +76,7 @@ describe('the holder badge in the lobby (cosmetic)', () => {
       useChainData.setState({ holder: true });
     });
     const view = ui(<ProfileCard />);
-    expect(screen.getByTestId('holder-badge').textContent).toContain('Emblem holder');
+    expect(screen.getByTestId('holder-badge').textContent).toContain('NFT holder');
     view.unmount();
     act(() => useChainData.setState({ holder: false }));
     ui(<ProfileCard />);
