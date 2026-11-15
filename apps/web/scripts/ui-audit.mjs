@@ -118,6 +118,9 @@ async function startStack() {
   // another stack on these ports would be audited instead of this checkout's: refuse
   if (await fetch(`${BASE}/api/health`).then((r) => r.ok, () => false)) throw new Error(`${BASE} already serves a stack: pick other --web-port / --server-port`);
   const data = mkdtempSync(join(tmpdir(), 'elymum-ui-audit-'));
+  // a fresh server starts closed (information site): this stack opens every part, as the admin would in /admin
+  mkdirSync(join(data, 'site'), { recursive: true });
+  writeFileSync(join(data, 'site/settings.json'), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', launch: 1 }));
   const server = spawn('npx', ['tsx', 'src/index.ts'], {
     cwd: join(ROOT, 'apps/server'),
     detached: true,

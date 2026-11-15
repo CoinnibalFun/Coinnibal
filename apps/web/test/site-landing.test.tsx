@@ -23,9 +23,11 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(screen.queryByText(/small change with a big appetite|Eat the food/)).toBeNull();
     // the hero links to the holder perks on the same page
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
+    // the nav (and every button) follows the settings once they are in: Mint and WL are open here, collab and the game are not
+    await waitFor(() => expect(screen.getAllByRole('link', { name: /Join the WL/ }).length).toBeGreaterThan(0));
+    expect(document.querySelector('a[href="/collab"]')).toBeNull();
     const wl = screen.getAllByRole('link', { name: /Join the WL/ });
     expect(wl.every((a) => a.getAttribute('href') === '/wl')).toBe(true);
-    await waitFor(() => expect(screen.getByRole('link', { name: 'Collab, soon' }).getAttribute('href')).toBe('/collab'));
     for (const h of [/coins eat coins/, 'Four steps, five minutes.', 'Get the Coinnibal NFT.', 'Why get the NFT?', 'Pick a room.', 'Questions and answers.'])
       expect(screen.getByRole('heading', { name: h })).toBeTruthy();
     // no character cards with prices and jokes, no story lines under the rooms
@@ -41,28 +43,27 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       expect(within(screen.getByRole('heading', { level: 3, name }).closest('.ld-ticket') as HTMLElement).getByText(fee)).toBeTruthy();
     }
     expect(within(screen.getByRole('heading', { level: 3, name: '$10 Room' }).closest('.ld-ticket') as HTMLElement).getByText('NFT holders only')).toBeTruthy();
-    expect(screen.getByText('Opens after the mint')).toBeTruthy();
+    expect(screen.getByText('Not open yet')).toBeTruthy();
     // the NFT plate links to the mint; the header has the nav and Connect
     expect(screen.getAllByRole('link', { name: 'Go to the mint' })[0].getAttribute('href')).toBe('/mint');
     const nav = screen.getByRole('navigation', { name: 'Site' });
-    // the header nav is short: Play · Mint · (Faucet on testnet) · WL · Docs
-    for (const n of ['Play', 'Mint', 'WL', 'Docs']) expect(nav.textContent).toContain(n);
-    expect(nav.textContent).not.toContain('Faucet');
+    // the header nav is short and names only what is open: Mint · WL · Docs (the game is admins-only here)
+    expect([...nav.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Mint', 'WL', 'Docs']);
     expect(screen.getByRole('button', { name: /Connect/ })).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /@elymumio/ }).some((a) => a.getAttribute('href') === 'https://x.com/elymumio')).toBe(true);
-    // the page itself offers no way into the closed game (the header's Play leads to the gate)
-    const main = document.querySelector('main')!;
-    expect(within(main).queryByRole('link', { name: /^Play$/ })).toBeNull();
-    expect(main.querySelector('a[href="/play"]')).toBeNull();
+    // no way into the closed game anywhere on the page, and no "live" round
+    expect(document.querySelector('a[href="/play"], a[href="/faucet"]')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Round 418/);
     // sound is off until the visitor turns it on
     expect(screen.getByRole('button', { name: /Sound off/ }).getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('shows Collab without "Soon" when collabs are open, and Play when the game is public', async () => {
+  it('shows Collab when collabs are open, and Play when the game is public', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, collabOpen: true, gameAccess: 'public' } } }));
     render(<Landing />);
     await waitFor(() => expect(within(document.querySelector('main')!).getByRole('link', { name: /^Play$/ }).getAttribute('href')).toBe('/play'));
-    expect(screen.queryByRole('link', { name: 'Collab, soon' })).toBeNull();
+    expect(screen.getByText('Round 418 · live')).toBeTruthy();
+    expect(screen.getByText('WL → Mint → Play')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /Collab/ })[0].getAttribute('href')).toBe('/collab');
   });
 
@@ -88,11 +89,126 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(screen.getByText(/Gas is ETH/)).toBeTruthy();
   });
 
-  it('keeps working when the server cannot be reached (defaults: WL open, collab soon)', async () => {
+  const CLOSED = { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' as const };
+  const closedLinks = 'a[href="/play"], a[href="/mint"], a[href="/faucet"], a[href="/wl"], a[href="/collab"]';
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+
+  it('everything closed: an information page. "How it works" leads, X follows, nothing closed is linked or named as live', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
+    render(<Landing />);
+    await settle();
+    const how = screen.getByTestId('ld-how-link');
+    expect(how.getAttribute('href')).toBe('/docs');
+    expect(how.className).toContain('kb-btn--primary');
+    expect(screen.getByTestId('ld-x-link').getAttribute('href')).toBe('https://x.com/elymumio');
+    expect(document.querySelector(closedLinks)).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Join the WL|Go to the mint|WL → Mint → Play|Round 418|WL is open|Play now/);
+    expect(document.querySelector('.ld-flow, .ld-flowline, .ld-nft__ctas')).toBeNull();
+    // the NFT's perks stay: they are information
+    expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
+    expect(screen.getByTestId('why-nft').querySelectorAll('.nf-card').length).toBeGreaterThan(3);
+    expect(screen.getByRole('heading', { name: 'The Coinnibal NFT.' })).toBeTruthy();
+    // the header: Docs only, no wallet button; the footer: X and Docs
+    expect([...screen.getByRole('navigation', { name: 'Site' }).querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Docs']);
+    expect(screen.queryByRole('button', { name: /Connect/ })).toBeNull();
+    expect([...screen.getByRole('navigation', { name: 'Footer' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://x.com/elymumio', '/docs']);
+    // the FAQ does not send anyone to the collab page
+    expect(screen.queryByText('Can my community get WL spots?')).toBeNull();
+  });
+
+  it('shows nothing closed while the settings are still loading, and stays closed when the server cannot be reached', async () => {
     ({ restore } = mockFetch({}));
     render(<Landing />);
-    await waitFor(() => expect(screen.getByRole('link', { name: 'Collab, soon' })).toBeTruthy());
-    expect(screen.getByText(/WL is open/)).toBeTruthy();
+    expect(document.querySelector(closedLinks)).toBeNull();
+    await settle();
+    expect(document.querySelector(closedLinks)).toBeNull();
+    expect(screen.getByTestId('ld-how-link').getAttribute('href')).toBe('/docs');
+  });
+
+  it('each part comes back when the admin reopens it', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...CLOSED, mintOpen: true } } }));
+    const first = render(<Landing />);
+    await waitFor(() => expect(screen.getAllByRole('link', { name: 'Go to the mint' })[0].getAttribute('href')).toBe('/mint'));
+    expect(document.querySelector('a[href="/play"], a[href="/faucet"], a[href="/wl"], a[href="/collab"]')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Get the Coinnibal NFT.' })).toBeTruthy();
+    first.unmount();
+    restore();
+    resetSiteSettings();
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...CLOSED, wlOpen: true, collabOpen: true, gameAccess: 'holders' } } }));
+    render(<Landing />);
+    await waitFor(() => expect(screen.getAllByRole('link', { name: /Join the WL/ })[0].getAttribute('href')).toBe('/wl'));
+    expect(document.querySelector('main a[href="/collab"]')).toBeTruthy();
+    expect(within(document.querySelector('main')!).getByRole('link', { name: 'Play (NFT holders)' }).getAttribute('href')).toBe('/play');
+    expect(document.querySelector('a[href="/mint"]')).toBeNull();
+    expect(screen.getByText('Can my community get WL spots?')).toBeTruthy();
+  });
+
+  it('a closed page says "not open yet" (never the real page or a 404); the same path opens when the admin opens it', async () => {
+    for (const [path, line] of [
+      ['/mint', 'The mint page is not open yet. Follow @elymumio for news.'],
+      ['/faucet', 'The faucet opens together with the game. Follow @elymumio for news.'],
+      ['/collab', 'Collab applications are closed for now. Follow @elymumio for news.'],
+    ]) {
+      resetSiteSettings();
+      ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
+      history.pushState(null, '', path);
+      try {
+        const view = render(<SiteApp />);
+        expect(await screen.findByRole('heading', { level: 1, name: 'Not open yet.' })).toBeTruthy();
+        expect(screen.getByText(line)).toBeTruthy();
+        expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
+        expect(screen.getByRole('link', { name: /Read the guide/ }).getAttribute('href')).toBe('/docs');
+        expect(screen.getByRole('link', { name: /Follow @elymumio/ }).getAttribute('href')).toBe('https://x.com/elymumio');
+        expect(document.querySelector(closedLinks)).toBeNull();
+        expect(screen.queryByText('This page does not exist.')).toBeNull();
+        await waitFor(() => expect(document.title).toBe('Not open yet · Coinnibal'));
+        expect(document.head.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex');
+        view.unmount();
+      } finally {
+        restore();
+        history.pushState(null, '', '/');
+      }
+    }
+    // reopened: the collab page itself
+    resetSiteSettings();
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...CLOSED, collabOpen: true } } }));
+    history.pushState(null, '', '/collab');
+    try {
+      render(<SiteApp />);
+      await waitFor(() => expect(document.querySelector('.cb-root, [class*="cb-"]')).toBeTruthy(), { timeout: 8000 });
+      expect(screen.queryByTestId('closed-page')).toBeNull();
+      expect(screen.queryByTestId('admin-preview')).toBeNull();
+    } finally {
+      history.pushState(null, '', '/');
+    }
+  });
+
+  it('a signed-in admin still gets a closed page (to check it before opening), with a tag that says so', async () => {
+    const ADMIN = '0xAdA0000000000000000000000000000000000001';
+    localStorage.setItem('elymum.auth.v1', JSON.stringify({ address: ADMIN, token: 'admin-token', exp: Date.now() + 3600_000 }));
+    localStorage.setItem('elymum.site.admin.v1', ADMIN);
+    resetSiteSettings();
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED }, 'GET /api/auth/me': { address: ADMIN, admin: true } }));
+    history.pushState(null, '', '/collab');
+    try {
+      const view = render(<SiteApp />);
+      expect(await screen.findByTestId('admin-preview', {}, { timeout: 8000 })).toBeTruthy();
+      expect(screen.queryByTestId('closed-page')).toBeNull();
+      view.unmount();
+      // the flag in the browser alone is not enough: the server says who is an admin
+      restore();
+      resetSiteSettings();
+      ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED }, 'GET /api/auth/me': { address: ADMIN, admin: false } }));
+      render(<SiteApp />);
+      expect(await screen.findByTestId('closed-page')).toBeTruthy();
+      expect(screen.queryByTestId('admin-preview')).toBeNull();
+    } finally {
+      localStorage.clear();
+      history.pushState(null, '', '/');
+    }
   });
 
   it('feeds a pond coin on click and shuffles the NFT cards on demand', async () => {

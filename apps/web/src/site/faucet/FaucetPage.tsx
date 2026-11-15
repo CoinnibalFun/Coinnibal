@@ -12,6 +12,7 @@ import { sendWalletCall, txErrorText, type TxPhase } from '../../wallet/tx';
 import { useT, type TKey } from '../../i18n';
 import { b, em, T } from '../../i18n/rich';
 import { site } from '../api';
+import { useDoors } from '../doors';
 import { isTestnetChain, useServerChain } from '../serverChain';
 import { SiteLinkButton, SitePage } from '../Shell';
 import { claimErrorText, faucetTokenAddress, servedConfig, faucetView, formatWait, gasFaucetUrl, holderMultiple, TEST_SYMBOL_DEFAULT, displaySymbol, watchAssetParams, wholeTokens } from './logic';
@@ -432,6 +433,7 @@ function ConnectOnly() {
 /** Mainnet, no chain, or no TestToken yet. */
 function Quiet({ view }: { view: 'mainnet' | 'offline' | 'no-token' }) {
   const t = useT();
+  const doors = useDoors();
   const copy = {
     mainnet: { h: t('fc.q.mainnet'), p: t('fc.q.mainnetP'), mood: 'smug' as const },
     offline: { h: t('fc.q.offline'), p: t('fc.q.offlineP'), mood: 'sleepy' as const },
@@ -445,12 +447,21 @@ function Quiet({ view }: { view: 'mainnet' | 'offline' | 'no-token' }) {
           <h1 className="fc-quiet__h display">{copy.h}</h1>
           <p className="fc-lede">{copy.p}</p>
           <div className="fc-row">
-            <SiteLinkButton href="/mint" variant="primary" icon="arrow">
-              {t('site.nav.mint')}
-            </SiteLinkButton>
-            <SiteLinkButton href="/wl" variant="secondary">
-              {t('ld.cta.wl')}
-            </SiteLinkButton>
+            {doors.mint && (
+              <SiteLinkButton href="/mint" variant="primary" icon="arrow">
+                {t('site.nav.mint')}
+              </SiteLinkButton>
+            )}
+            {doors.wl && (
+              <SiteLinkButton href="/wl" variant="secondary">
+                {t('ld.cta.wl')}
+              </SiteLinkButton>
+            )}
+            {!doors.mint && !doors.wl && (
+              <SiteLinkButton href="/docs" variant="primary" icon="arrow">
+                {t('site.nf.guide')}
+              </SiteLinkButton>
+            )}
           </div>
         </div>
       </div>

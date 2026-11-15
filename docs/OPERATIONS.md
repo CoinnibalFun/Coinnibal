@@ -131,7 +131,13 @@ public info API (`GAS_PRICE_URL`). The UI always shows the ETH amount with its U
 - **Phases:** Closed → **Allowlist** (proof required, `wlLimit` per wallet) → **Public** (`publicLimit` per wallet;
   allowlisted wallets may still use their allowlist allowance). Opening the mint offers "activate the game for
   holders" (sets `gameAccess` to `holders`).
-- **Who may play:** `admins` (default on mainnet; `public` on the testnet), `holders` (NFT `balanceOf > 0`, cached 15 s, plus admins) or `public`;
+- **What visitors can see** (`/admin` → Settings; a fresh server starts with all four closed, and the public launch
+  closed them once on the live server: the `launch` marker in `site/settings.json`): Game access, **Mint page open**
+  (`mintOpen`), WL applications open, Collab applications open. A closed part has no link, button or widget on the
+  site and its page (`/mint`, `/faucet`, `/collab`) says "not open yet"; `/wl` shows "applications are closed" and still
+  lets an earlier applicant sign in for their status; the landing and `/docs` are always open. A signed-in admin still
+  gets the closed pages (with an "Admin preview" tag). The static `sitemap.xml` lists only `/` and `/docs`.
+- **Who may play:** `admins` (the default), `holders` (NFT `balanceOf > 0`, cached 15 s, plus admins) or `public`;
   `GAME_ACCESS` on the server overrides the setting (`site`: the setting decides). In `holders` mode every room entry
   checks the gate, and every arena seat (each new ticket, i.e. each round) re-reads `balanceOf` uncached right before
   seating.
@@ -398,8 +404,8 @@ The VPS deploys `main` by itself (deploy/vps/update.sh). The first deploy of the
 `/opt/elymum/.env`: every new key is optional, and `docker-compose.yml` fills in the live values. Check, in order:
 
 1. **Nothing to add.** Unset `ELYMUM_CHAIN_ID`, `ELYMUM_RPC_URLS`, `ELYMUM_RPC_MAX_RPS` and `ELYMUM_GAME_ACCESS` mean
-   46630, `https://rpc.testnet.chain.robinhood.com`, 4 calls a second and `public`: the chain, contracts and open game
-   of today.
+   46630, `https://rpc.testnet.chain.robinhood.com`, 4 calls a second and `site`: the chain and contracts of today,
+   and who may play is the `/admin` → Settings switch.
 2. **Stale keys are harmless.** `CHAIN_ID`, `EVM_RPC_URL`, `EVM_RPC_URLS`, `RPC_MAX_RPS`, `GAME_ACCESS`, `WEB_DIST`
    and the Elysium-era `PUBLIC_RPC_URL`, `EXPLORER_URL`, `ARENA_ADDRESS`, `NFT_ADDRESS`, `TOKEN_ADDRESS`,
    `TESTNET_RPC_URL`, `JOURNAL_ABANDON_CONTRACT` in `.env` are always overridden. Delete them when convenient, so the
@@ -410,7 +416,7 @@ The VPS deploys `main` by itself (deploy/vps/update.sh). The first deploy of the
 4. **Sign in to `/admin` again.** Admin sessions are now 2 hours and the earlier long tokens are refused on admin
    routes (`admin_session_expired`); players keep theirs.
 5. **After the deploy:** `elymum-compose config | grep -E 'CHAIN_ID|EVM_RPC|GAME_ACCESS'` shows `46630`, the testnet
-   RPC and `public`; `elymum-status` shows `/api/health`; `/admin` → Network shows the chain, the server key's gas
+   RPC and `site`; `elymum-status` shows `/api/health`; `/admin` → Network shows the chain, the server key's gas
    runway and the same contracts.
 6. **Logs move to journald.** `elymum-compose logs app` keeps working; `journalctl CONTAINER_NAME=elymum-app-1` too.
 

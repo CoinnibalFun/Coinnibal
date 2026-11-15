@@ -19,6 +19,11 @@ export type GameAccess = 'admins' | 'holders' | 'public' | 'maintenance';
 export const GAME_ACCESS_MODES: readonly GameAccess[] = ['admins', 'holders', 'public', 'maintenance'];
 export const GAME_ACCESS_DEFAULT: GameAccess = 'admins';
 
+/** The game shows on the site (nav links, the faucet, landing pieces): every mode but `admins`. */
+export function gameVisible(mode: GameAccess): boolean {
+  return mode !== 'admins';
+}
+
 export function isGameAccess(s: unknown): s is GameAccess {
   return typeof s === 'string' && (GAME_ACCESS_MODES as readonly string[]).includes(s);
 }
@@ -29,6 +34,8 @@ export interface SiteSettings {
   wlOpen: boolean;
   /** Collab applications accepted (the landing's Collab button reads it). */
   collabOpen: boolean;
+  /** Visitors see the mint page (and every link to it). */
+  mintOpen: boolean;
   /** Who may play (server `GAME_ACCESS` overrides it). */
   gameAccess: GameAccess;
   /** The project's X handle, without `@`. */
@@ -38,8 +45,9 @@ export interface SiteSettings {
 }
 
 export const SITE_SETTINGS_DEFAULT: SiteSettings = {
-  wlOpen: true,
+  wlOpen: false,
   collabOpen: false,
+  mintOpen: false,
   gameAccess: GAME_ACCESS_DEFAULT,
   xHandle: SITE_X_HANDLE_DEFAULT,
   launchPostUrl: null,

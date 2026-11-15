@@ -24,12 +24,13 @@ import { isLazyPage, loadedPage, resetPages, warmPage } from '../src/site/pages'
 import { navigate } from '../src/site/router';
 import { resetServerChain } from '../src/site/serverChain';
 import { navFor } from '../src/site/Shell';
+import { resetSiteSettings } from '../src/site/settings';
 import { Feed } from '../src/ui/game/Feed';
 import { useUi } from '../src/store';
 import { buildTickets, quickPlayTarget, ticketGate, type TicketModel } from '../src/wallet/ticket';
 import { resetWallets } from '../src/wallet/store';
 import { ALICE, ONE, chainStatus } from './evm-helpers';
-import { installDomStubs, mockFetch } from './site-helpers';
+import { SETTINGS, installDomStubs, mockFetch } from './site-helpers';
 
 const ARENA = '0x00000000000000000000000000000000000a4e4a';
 const ui = (node: ReactElement) => render(<Kb>{node}</Kb>);
@@ -38,6 +39,7 @@ let restore: (() => void) | null = null;
 beforeEach(() => {
   installDomStubs();
   resetServerChain();
+  resetSiteSettings();
 });
 afterEach(() => {
   restore?.();
@@ -49,9 +51,19 @@ afterEach(() => {
 
 describe('fast navigation', () => {
   it('keeps the header short: Play, Mint, Faucet only on testnet, WL, Docs', () => {
-    expect(navFor(true).map((n) => n.label)).toEqual(['Play', 'Mint', 'Faucet', 'WL', 'Docs']);
-    expect(navFor(false).map((n) => n.label)).toEqual(['Play', 'Mint', 'WL', 'Docs']);
-    expect(navFor(null).map((n) => n.label)).toEqual(['Play', 'Mint', 'WL', 'Docs']);
+    const open = { game: true, mint: true, wl: true, collab: true };
+    expect(navFor(true, open).map((n) => n.label)).toEqual(['Play', 'Mint', 'Faucet', 'WL', 'Docs']);
+    expect(navFor(false, open).map((n) => n.label)).toEqual(['Play', 'Mint', 'WL', 'Docs']);
+    expect(navFor(null, open).map((n) => n.label)).toEqual(['Play', 'Mint', 'WL', 'Docs']);
+  });
+
+  it('links only to what the admin has opened: Docs alone when everything is closed', () => {
+    expect(navFor(true).map((n) => n.label)).toEqual(['Docs']);
+    expect(navFor(true, { game: false, mint: false, wl: false, collab: false }).map((n) => n.label)).toEqual(['Docs']);
+    // each part comes back on its own
+    expect(navFor(true, { game: true, mint: false, wl: false, collab: false }).map((n) => n.label)).toEqual(['Play', 'Faucet', 'Docs']);
+    expect(navFor(true, { game: false, mint: true, wl: false, collab: false }).map((n) => n.label)).toEqual(['Mint', 'Docs']);
+    expect(navFor(true, { game: false, mint: false, wl: true, collab: true }).map((n) => n.label)).toEqual(['WL', 'Docs']);
   });
 
   it('warms a page once and hands the loaded component back synchronously after that', async () => {
@@ -149,6 +161,7 @@ describe('the faucet', () => {
     ({ restore } = mockFetch({
       'GET /api/config': { chain: chainStatus({ token: null }) },
       'GET /api/site/contracts': { arena: null, nft: null, token: null },
+      'GET /api/site/settings': { settings: { ...SETTINGS, gameAccess: 'public' } },
     }));
     ui(<FaucetPage />);
     expect(await screen.findByTestId('fc-no-token')).toBeTruthy();

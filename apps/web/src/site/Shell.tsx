@@ -6,7 +6,9 @@ import { Link, usePath } from './router';
 import { isTestnetChain, useServerChain } from './serverChain';
 import { useT, type TKey } from '../i18n';
 import { strong, T } from '../i18n/rich';
+import { DOORS_CLOSED, linkOpen, useDoors, type Doors } from './doors';
 import { siteHost, useSiteSettings, xProfile } from './settings';
+import { readStoredSession } from './storedSession';
 import './site.css';
 
 // the wallet (viem, EIP-6963) loads in its own chunk, after the page has painted
@@ -95,8 +97,11 @@ export const NAV: { href: string; label: string; key: TKey; testnet?: true }[] =
   { href: '/docs', label: 'Docs', key: 'site.nav.docs' },
 ];
 
-/** The nav for a network: the Faucet link only where test tokens exist (hidden while unknown). */
-export const navFor = (testnet: boolean | null) => NAV.filter((n) => !n.testnet || testnet === true);
+/**
+ * The nav for a network and the admin's settings: the Faucet link only where test tokens exist (hidden while
+ * unknown), and a link only to what is open (`doors`: Play and Faucet with the game, Mint, WL; Docs always).
+ */
+export const navFor = (testnet: boolean | null, doors: Doors = DOORS_CLOSED) => NAV.filter((n) => (!n.testnet || testnet === true) && linkOpen(n.href, doors));
 
 function ConnectFallback() {
   const t = useT();
@@ -115,6 +120,13 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
   const path = usePath();
   const peel = usePeelLetters<HTMLSpanElement>();
   const testnet = isTestnetChain(useServerChain());
+  const doors = useDoors();
+  const nav = navFor(testnet, doors);
+  // one or two links fit beside the logo on a phone too: no menu button for them
+  const few = nav.length <= 2 && !doors.game;
+  // the wallet button belongs to what needs a wallet (the game, the mint, the applications); a signed-in wallet keeps it
+  const [wallet] = useState(() => readStoredSession() !== null);
+  const connect = doors.game || doors.mint || doors.wl || doors.collab || wallet;
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [path]);
   const menuBtn = useRef<HTMLButtonElement>(null);
@@ -139,7 +151,7 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [menu]);
-  const links = navFor(testnet).map((n) => {
+  const links = nav.map((n) => {
     const on = path === n.href;
     return (
       <Link
@@ -154,7 +166,7 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
     );
   });
   return (
-    <header className="st-head">
+    <header className={`st-head${few ? ' st-head--few' : ''}`}>
       <div className="st-head__inner">
         <Link href="/" className="st-head__home" aria-label={t('lo.home')}>
           <CoinMark size={38} className="st-head__coin" />
@@ -167,9 +179,12 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
           {links}
         </nav>
         <div className="st-head__tools">
-          <Suspense fallback={<ConnectFallback />}>
-            <HeaderConnect />
-          </Suspense>
+          {connect && (
+            <Suspense fallback={<ConnectFallback />}>
+              <HeaderConnect />
+            </Suspense>
+          )}
+          {!few && (
           <button
             ref={menuBtn}
             type="button"
@@ -181,17 +196,20 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
           >
             <Icon name={menu ? 'close' : 'menu'} size={22} />
           </button>
+          )}
         </div>
       </div>
-      {menu && (
+      {menu && !few && (
         <>
           <button type="button" className="st-menu__scrim" aria-label={t('site.menu.close')} tabIndex={-1} onClick={() => setMenu(false)} />
           {/* phones: a sheet from the bottom edge, so every link and the Play button sit under the thumb */}
           <nav ref={sheet} id="st-menu" className="st-menu kb-sticker kb-sticker--cream" aria-label={t('site.menu.label')}>
             {links.filter((l) => l.key !== '/play')}
-            <SiteLinkButton href="/play" variant="primary" size="lg" icon="arrow" className="st-menu__play" onClick={() => setMenu(false)}>
-              {t('site.menu.play')}
-            </SiteLinkButton>
+            {doors.game && (
+              <SiteLinkButton href="/play" variant="primary" size="lg" icon="arrow" className="st-menu__play" onClick={() => setMenu(false)}>
+                {t('site.menu.play')}
+              </SiteLinkButton>
+            )}
           </nav>
         </>
       )}
@@ -205,6 +223,7 @@ export function SiteFooter() {
   const { settings } = useSiteSettings();
   const handle = settings.xHandle.replace(/^@/, '');
   const testnetFoot = isTestnetChain(useServerChain()) === true;
+  const doors = useDoors();
   return (
     <Kb theme="night" paper={false} className="st-foot-kb">
     <footer className="st-foot">
@@ -220,11 +239,11 @@ export function SiteFooter() {
           <a href={xProfile(handle)} target="_blank" rel="noreferrer" className="st-foot__x">
             <XIcon size={18} /> <span>@{handle}</span>
           </a>
-          <Link href="/play">{t('site.nav.play')}</Link>
-          <Link href="/mint">{t('site.nav.mint')}</Link>
-          {testnetFoot && <Link href="/faucet">{t('site.nav.faucet')}</Link>}
-          <Link href="/wl">{t('site.nav.wl')}</Link>
-          <Link href="/collab">{t('site.nav.collab')}</Link>
+          {doors.game && <Link href="/play">{t('site.nav.play')}</Link>}
+          {doors.mint && <Link href="/mint">{t('site.nav.mint')}</Link>}
+          {doors.game && testnetFoot && <Link href="/faucet">{t('site.nav.faucet')}</Link>}
+          {doors.wl && <Link href="/wl">{t('site.nav.wl')}</Link>}
+          {doors.collab && <Link href="/collab">{t('site.nav.collab')}</Link>}
           <Link href="/docs">{t('site.nav.docs')}</Link>
         </nav>
         <p className="st-foot__small mono">

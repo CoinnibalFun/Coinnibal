@@ -247,6 +247,15 @@ body {
     display: inline-grid;
   }
 }
+/* one or two links (most of the site is closed): they stay in the header on a phone, with no menu button */
+@media (max-width: 899px) {
+  .st-head--few .st-nav {
+    display: flex;
+  }
+}
+.st-head__tools:empty {
+  display: none;
+}
 /* phones: the menu is a sheet on the bottom edge (every link and Play under the thumb) */
 .st-menu__scrim {
   position: fixed;

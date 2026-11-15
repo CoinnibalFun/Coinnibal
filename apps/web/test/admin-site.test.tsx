@@ -153,6 +153,25 @@ describe('admin: site tabs (Bearer session, mocked fetch)', { timeout: 30_000 },
     expect(sent('PUT', '/api/admin/settings')?.body).toEqual({ collabOpen: true });
   });
 
+  it('Settings: one "What visitors can see" group with the game, the mint page, WL and collab; the mint page switch saves mintOpen', async () => {
+    const closed = { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false };
+    ({ calls, restore } = mockFetch({
+      'GET /api/admin/settings': { settings: closed, gameAccessEnv: null },
+      'PUT /api/admin/settings': (c: Call) => ({ settings: { ...closed, ...(c.body as object) }, gameAccessEnv: null }),
+    }));
+    ui(<SettingsTab api={api} />);
+    expect(await screen.findByRole('heading', { name: 'What visitors can see' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Game access' })).toBeTruthy();
+    const mint = screen.getByRole('switch', { name: /Mint page open/ }) as HTMLInputElement;
+    expect(mint.checked).toBe(false);
+    for (const n of [/WL applications open/, /Collab applications open/]) expect((screen.getByRole('switch', { name: n }) as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(mint);
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await screen.findByText('Settings saved.');
+    expect(sent('PUT', '/api/admin/settings')?.body).toEqual({ mintOpen: true });
+    expect((screen.getByRole('switch', { name: /Mint page open/ }) as HTMLInputElement).checked).toBe(true);
+  });
+
   it('Settings: who may play is a four-way choice (admins, NFT holders, everyone, maintenance); the env override is shown', async () => {
     ({ calls, restore } = mockFetch({
       'GET /api/admin/settings': { settings: SETTINGS, gameAccessEnv: null },

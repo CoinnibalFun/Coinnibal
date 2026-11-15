@@ -14,7 +14,7 @@
 //
 // About a minute on a laptop. Exits 1 with a list of problems when the layout regresses.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,6 +74,9 @@ const kids = [];
 async function startStack() {
   if (await fetch(`${BASE}/api/health`).then((r) => r.ok, () => false)) throw new Error(`${BASE} already serves a stack: pass --base to use it, or pick other ports`);
   const data = mkdtempSync(join(tmpdir(), 'elymum-layout-guard-'));
+  // a fresh server starts closed (information site): this stack opens every part, as the admin would in /admin
+  mkdirSync(join(data, 'site'), { recursive: true });
+  writeFileSync(join(data, 'site/settings.json'), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', launch: 1 }));
   kids.push(
     spawn('npx', ['tsx', 'src/index.ts'], {
       cwd: join(ROOT, 'apps/server'),
@@ -171,12 +174,32 @@ const problems = [];
 async function checkViewport(browser, vp) {
   const { ctx, page } = await newPage(browser, vp);
   try {
-    for (const path of ['/', '/mint', '/faucet']) {
+    for (const path of ['/', '/mint', '/faucet', '/collab', '/wl']) {
       await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
       await page.waitForLoadState('networkidle').catch(() => {});
       await sleep(400);
       const o = await page.evaluate(overflowX);
       if (o > 1) problems.push(`${vp.name} ${path}: the page scrolls sideways by ${o}px`);
+    }
+    // the same site with everything closed (the public launch): the landing, the "not open yet" pages, the closed WL
+    const closed = await newPage(browser, vp);
+    try {
+      await closed.page.route('**/api/site/settings', (r) =>
+        r.fulfill({ contentType: 'application/json', body: JSON.stringify({ settings: { wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'elymumio', launchPostUrl: null } }) }),
+      );
+      for (const path of ['/', '/mint', '/faucet', '/collab', '/wl']) {
+        await closed.page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+        await closed.page.waitForLoadState('networkidle').catch(() => {});
+        await sleep(400);
+        const o = await closed.page.evaluate(overflowX);
+        if (o > 1) problems.push(`${vp.name} ${path} (closed): the page scrolls sideways by ${o}px`);
+        const shut = await closed.page.locator('[data-testid="closed-page"]').count();
+        if (['/mint', '/faucet', '/collab'].includes(path) && shut !== 1) problems.push(`${vp.name} ${path} (closed): the "not open yet" page did not show`);
+        const links = await closed.page.locator('a[href="/play"], a[href="/mint"], a[href="/faucet"], a[href="/wl"], a[href="/collab"]').count();
+        if (links > 0) problems.push(`${vp.name} ${path} (closed): ${links} link(s) to a closed page`);
+      }
+    } finally {
+      await closed.ctx.close();
     }
     await page.goto(`${BASE}/play`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__elymum?.useUi.getState().connected, null, { timeout: 30000 });

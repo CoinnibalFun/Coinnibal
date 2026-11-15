@@ -71,7 +71,7 @@ server, installs the timers and waits for `https://game.elymum.io/api/health?liv
 | `ELYMUM_CHAIN_ID` | optional: `46630` (testnet, the default when unset) or `4663` (mainnet) |
 | `ELYMUM_RPC_URLS` | optional: the RPCs in order, comma-separated: the Alchemy URL first, the public RPC as fallback (section 5). Unset: `https://rpc.testnet.chain.robinhood.com` |
 | `ELYMUM_RPC_MAX_RPS` | optional: calls per second per URL, one per `ELYMUM_RPC_URLS` entry (`25,4`); default 4 |
-| `ELYMUM_GAME_ACCESS` | optional: `public` (the default when unset), `holders`, `admins`, `maintenance`, or `site` (the `/admin` setting decides) |
+| `ELYMUM_GAME_ACCESS` | optional: `site` (the default when unset: the `/admin` → Settings switch decides), or `public`, `holders`, `admins`, `maintenance` to override that switch |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | alerts to Telegram (optional; section 7) |
 | `BACKUP_RCLONE_REMOTE` | the encrypted offsite remote, e.g. `elymum-offsite:` (optional; section 8) |
 | `GAME_WORKERS` | `5` on 8 vCPU |
@@ -80,8 +80,9 @@ server, installs the timers and waits for `https://game.elymum.io/api/health?liv
 `docker-compose.yml` maps the `ELYMUM_*` keys to the server's `CHAIN_ID`, `EVM_RPC_URLS`, `RPC_MAX_RPS` and
 `GAME_ACCESS`, and always overrides those names (and `EVM_RPC_URL`, forced empty) whatever `.env` says: this `.env`
 was first filled from an older Elysium / Render setup, and a stale `CHAIN_ID`, `EVM_RPC_URL` or `GAME_ACCESS` in it
-must never move the live server to another chain or close the game. Unset `ELYMUM_*` keys mean the live testnet
-values (46630, the testnet's public RPC, `public`). After a change: `elymum-compose up -d app`. Check what the app
+must never move the live server to another chain or override who may play. Unset `ELYMUM_*` keys mean the live testnet
+values (46630, the testnet's public RPC) and `site`: the owner opens and closes the game, the mint page, WL and collab
+applications in `/admin` → Settings (a fresh server starts with all four closed). After a change: `elymum-compose up -d app`. Check what the app
 gets with `elymum-compose config | grep -E 'CHAIN_ID|EVM_RPC|RPC_MAX_RPS|GAME_ACCESS'`.
 
 ## 5. RPC: Alchemy first, the public RPC as fallback

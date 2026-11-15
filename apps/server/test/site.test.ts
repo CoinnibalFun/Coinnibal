@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { PROTOCOL_VERSION, type CollabAdmin, type CollabPublic, type ServerMessage, type WlEntryAdmin, type WlEntryPublic } from '@elymum/shared';
@@ -8,7 +8,7 @@ import { createApp, type App } from '../src/app';
 import { loadConfig, parseAdminWallets } from '../src/config';
 import { Limiter } from '../src/net/limiter';
 import { SiteApi } from '../src/site/routes';
-import { SITE_FILES, SiteStore, csvCell } from '../src/site/store';
+import { SETTINGS_LAUNCH, SITE_FILES, SiteStore, csvCell } from '../src/site/store';
 import { isUserWallet } from '../src/site/validate';
 import { ArenaChain, arena } from './helpers';
 import { testSigner } from './signers';
@@ -38,6 +38,8 @@ async function harness(env: Record<string, string> = {}, limits?: ConstructorPar
     siteLimits: limits ?? { writeIp: new Limiter(10_000, 60_000), writeWallet: new Limiter(10_000, 60_000), login: new Limiter(10_000, 60_000) },
     apiLimiter: new Limiter(10_000, 60_000),
   });
+  // a fresh server starts closed (information site); these tests apply to the WL, so the admin has opened it
+  app.site.store.updateSettings({ wlOpen: true });
   const port = await app.listen();
   const token = (w: string) => app.auth.issueToken(w);
   const call: Harness['call'] = async (method, path, opts = {}) => {
@@ -202,7 +204,14 @@ describe('site API', () => {
   describe('public settings and tasks', () => {
     it('serves the defaults; the launch-post task opens when the link is set', async () => {
       const s = await h.call('GET', '/api/site/settings');
-      expect(s.body.settings).toEqual({ wlOpen: true, collabOpen: false, gameAccess: 'admins', xHandle: 'elymumio', launchPostUrl: null });
+      // the harness opened the WL; a fresh server has everything closed
+      expect(s.body.settings).toEqual({ wlOpen: true, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'elymumio', launchPostUrl: null });
+      expect(new SiteStore(null).settings).toEqual({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'elymumio', launchPostUrl: null });
+      // the mint page switch: a boolean like the other two
+      expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { mintOpen: 'yes' } })).body.field).toBe('mintOpen');
+      expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { mintOpen: true } })).body.settings.mintOpen).toBe(true);
+      expect((await h.call('GET', '/api/site/settings')).body.settings.mintOpen).toBe(true);
+      expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { mintOpen: false } })).body.settings.mintOpen).toBe(false);
       const t = await h.call('GET', '/api/site/tasks');
       expect(t.body.tasks.map((x: { id: string }) => x.id)).toEqual(['follow_x', 'post_x', 'engage_launch', 'x_handle', 'wallet']);
       const engage = t.body.tasks[2];
@@ -577,6 +586,39 @@ describe('site API', () => {
       expect(existsSync(join(empty, 'site'))).toBe(false);
     });
 
+    it('the public launch closes an older settings file once; after that the admin decides', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));
+      mkdirSync(join(dir, 'site'), { recursive: true });
+      // the live server before the launch: WL open, the game public, no marker
+      writeFileSync(join(dir, SITE_FILES.settings), JSON.stringify({ wlOpen: true, collabOpen: true, gameAccess: 'public', xHandle: 'coinnibal', launchPostUrl: 'https://x.com/coinnibal/status/42' }));
+      const logs: string[] = [];
+      const a = new SiteStore(dir, { log: (m) => logs.push(m) });
+      expect(a.settings).toEqual({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibal', launchPostUrl: 'https://x.com/coinnibal/status/42' });
+      expect(logs.filter((m) => /public launch/.test(m))).toHaveLength(1);
+      const onDisk = () => JSON.parse(readFileSync(join(dir, SITE_FILES.settings), 'utf8'));
+      expect(onDisk()).toMatchObject({ launch: SETTINGS_LAUNCH, wlOpen: false, gameAccess: 'admins' });
+      // the marker is not a setting anyone reads
+      expect('launch' in a.settings).toBe(false);
+      // the admin reopens things: a restart keeps every choice and logs nothing
+      a.updateSettings({ wlOpen: true, mintOpen: true, gameAccess: 'holders' });
+      expect(onDisk().launch).toBe(SETTINGS_LAUNCH);
+      const again: string[] = [];
+      const b = new SiteStore(dir, { log: (m) => again.push(m) });
+      expect(b.settings).toMatchObject({ wlOpen: true, collabOpen: false, mintOpen: true, gameAccess: 'holders' });
+      expect(again).toEqual([]);
+      // a file that already carries the marker is never touched, whatever it holds
+      const kept = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));
+      mkdirSync(join(kept, 'site'), { recursive: true });
+      writeFileSync(join(kept, SITE_FILES.settings), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', xHandle: 'elymumio', launchPostUrl: null, launch: SETTINGS_LAUNCH }));
+      expect(new SiteStore(kept).settings).toMatchObject({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public' });
+      // a fresh server (no file) starts closed and writes the marker with its first save
+      const fresh = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));
+      const f = new SiteStore(fresh);
+      expect(f.settings).toMatchObject({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' });
+      f.updateSettings({ gameAccess: 'public' });
+      expect(new SiteStore(fresh).settings.gameAccess).toBe('public');
+    });
+
     it('survives an app restart on the same data dir', async () => {
       const x = await harness();
       const w = wallet();
@@ -722,6 +764,16 @@ describe('game gate', () => {
     c.send({ t: 'logout' });
     expect(await c.attempt(entries[0])).toMatchObject({ t: 'error', code: 'game_closed' });
     c.close();
+  });
+
+  it('a closed game opens no room over HTTP either (practice, paid); the room list stays readable', async () => {
+    const closed = await h.call('POST', '/api/rooms/custom/practice');
+    expect([closed.status, closed.body.error]).toEqual([403, 'game_closed']);
+    const paid = await h.call('POST', '/api/rooms/custom', { wallet: wallet(), body: { config: {} } });
+    expect([paid.status, paid.body.error]).toEqual([403, 'game_closed']);
+    // an admin is past the gate (the request itself is then judged as usual)
+    expect((await h.call('POST', '/api/rooms/custom/practice', { wallet: h.admin })).body?.error).not.toBe('game_closed');
+    expect((await h.call('GET', '/api/rooms')).status).toBe(200);
   });
 
   it('lets everyone in once gameAccess is public, and closes again when it is admins', async () => {

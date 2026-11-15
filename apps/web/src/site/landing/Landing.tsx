@@ -23,7 +23,8 @@ import { em, renderRich, T } from '../../i18n/rich';
 import { FACTS } from '../../ui/docs/facts';
 import { usePeelLetters } from '../peel';
 import { Link } from '../router';
-import { SiteFooter, SiteHeader, SiteLinkButton } from '../Shell';
+import { useDoors, type Doors } from '../doors';
+import { SiteFooter, SiteHeader, SiteLinkButton, XIcon } from '../Shell';
 import { useSiteSettings, xProfile } from '../settings';
 import { ArenaTram } from './ArenaTram';
 import { CoinPond } from './CoinPond';
@@ -42,7 +43,12 @@ const pct = (bps: number) => `${bps / 100}%`;
 
 /* ── the hero ─────────────────────────────────────────────────────────── */
 
-function Hero({ collabOpen, gameAccess, wlOpen, sound }: { collabOpen: boolean; gameAccess: GameAccess; wlOpen: boolean; sound: ReturnType<typeof useLandingSound> }) {
+/**
+ * The hero. Its buttons follow what is open (`doors`): with everything closed the main action is "How it works"
+ * (the guide), then the NFT's perks and the project's X account; "Join the WL", Collab and Play come back as the
+ * admin opens them. Nothing here points at a closed page.
+ */
+function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: GameAccess; handle: string; sound: ReturnType<typeof useLandingSound> }) {
   const reduced = useReducedMotion();
   const m = useMoves();
   const peel = usePeelLetters<HTMLHeadingElement>();
@@ -67,27 +73,27 @@ function Hero({ collabOpen, gameAccess, wlOpen, sound }: { collabOpen: boolean; 
                 <span>{activeChain().testnet ? t('ld.hero.moneyTest', { sym: SYMBOL }) : t('ld.hero.money', { sym: SYMBOL })}</span>
               </p>
               <div className="ld-hero__ctas">
-                <SiteLinkButton href="/wl" variant="primary" icon="arrow" onClick={sound.click}>
-                  {t('ld.cta.wl')}
-                </SiteLinkButton>
+                {doors.wl && (
+                  <SiteLinkButton href="/wl" variant="primary" icon="arrow" onClick={sound.click}>
+                    {t('ld.cta.wl')}
+                  </SiteLinkButton>
+                )}
+                {!doors.wl && (
+                  <SiteLinkButton href="/docs" variant="primary" icon="arrow" onClick={sound.click} data-testid="ld-how-link">
+                    {t('ld.cta.how')}
+                  </SiteLinkButton>
+                )}
                 <a href="#why-nft" className="kb-btn kb-btn--secondary kb-btn--md st-btn" onClick={sound.click} data-testid="ld-why-link">
                   <span className="kb-btn__label">
                     <span className="kb-btn__text">{t('ld.cta.why')}</span>
                   </span>
                 </a>
-                {collabOpen ? (
+                {doors.collab && (
                   <SiteLinkButton href="/collab" onClick={sound.click}>
                     {t('site.nav.collab')}
                   </SiteLinkButton>
-                ) : (
-                  <Link href="/collab" className="kb-btn kb-btn--secondary kb-btn--md st-btn ld-soon" onClick={sound.click} aria-label={t('ld.cta.collabSoon')}>
-                    <span className="kb-btn__label">
-                      <span className="kb-btn__text">{t('site.nav.collab')}</span>
-                    </span>
-                    <span className="ld-soon__tag mono">{t('ld.soon')}</span>
-                  </Link>
                 )}
-                {gameAccess !== 'admins' && gameAccess !== 'maintenance' && (
+                {doors.game && gameAccess !== 'maintenance' && (
                   <a href="/play" className="kb-btn kb-btn--teal kb-btn--md st-btn" onClick={sound.click}>
                     <Icon name="play" size={20} className="kb-btn__lead" />
                     <span className="kb-btn__label">
@@ -96,10 +102,18 @@ function Hero({ collabOpen, gameAccess, wlOpen, sound }: { collabOpen: boolean; 
                   </a>
                 )}
               </div>
-              <p className="ld-hero__note mono">
-                <span className="ld-flowline">{t('ld.flowline')}</span>
-                <span>{wlOpen ? t('ld.wlOpen') : t('ld.wlClosed')}</span>
-              </p>
+              {doors.wl ? (
+                <p className="ld-hero__note mono">
+                  {doors.mint && doors.game && <span className="ld-flowline">{t('ld.flowline')}</span>}
+                  <span>{t('ld.wlOpen')}</span>
+                </p>
+              ) : (
+                <p className="ld-hero__note ld-hero__note--x">
+                  <a href={xProfile(handle)} target="_blank" rel="noreferrer" className="ld-hero__x" onClick={sound.click} data-testid="ld-x-link">
+                    <XIcon size={16} /> <span>{t('pg.follow')}</span>
+                  </a>
+                </p>
+              )}
             </Sticker>
           </motion.div>
           <motion.div className="ld-hero__badge-wrap" variants={m.popIn} initial="hidden" animate="shown" transition={{ delay: 0.5 }}>
@@ -201,7 +215,7 @@ const STATIONS: { no: string; title: TKey; body: TKey }[] = [
 ];
 const stationVars = () => ({ sym: SYMBOL, s: FACTS.rules.joinCloseS, b: FACTS.rules.breakS, fee: pct(FACTS.fee.burnBps + FACTS.fee.vaultBps) });
 
-function Round() {
+function Round({ live }: { live: boolean }) {
   const m = useMoves();
   const t = useT();
   return (
@@ -210,7 +224,8 @@ function Round() {
       <div className="ld-wrap ld-round__grid">
         <motion.div className="ld-round__orbit-wrap" variants={m.stickerDrop} custom={-0.8} initial="hidden" whileInView="shown" viewport={view}>
           <Sticker tone="night" pad="none" lift="lg" round="lg" className="ld-orbit">
-            <span className="ld-orbit__tag kb-tag">{t('ld.round.tag')}</span>
+            {/* "live" only while the game is open to someone */}
+            <span className="ld-orbit__tag kb-tag">{live ? t('ld.round.tag') : t('ld.round.tagInfo')}</span>
             <OrbitDots
               width={640}
               height={330}
@@ -340,40 +355,49 @@ function EmblemFan() {
   );
 }
 
-function Nft() {
+/** The NFT: what it is and what holding one gives. The steps and the buttons show only for what is open. */
+function Nft({ doors }: { doors: Doors }) {
   const m = useMoves();
   const t = useT();
   const testnet = isTestnetChain(useServerChain());
   return (
     <section className="ld-plate ld-nft" id="nft" aria-labelledby="ld-nft-h">
-      <PlateLabel numeral={5} title={t('ld.nft.plate')} aside="/mint" />
+      <PlateLabel numeral={5} title={t('ld.nft.plate')} aside={doors.mint ? '/mint' : t('ld.nft.aside')} />
       <div className="ld-nft__body">
         <div className="ld-wrap ld-nft__grid">
           <motion.div className="ld-nft__copy" variants={m.popIn} initial="hidden" whileInView="shown" viewport={view}>
             <p className="kicker">{t('ld.nft.kicker')}</p>
             <h2 className="ld-h2 ld-nft__title" id="ld-nft-h">
-              <T k="ld.nft.h" tags={{ em }} />
+              <T k={doors.mint ? 'ld.nft.h' : 'ld.nft.hInfo'} tags={{ em }} />
             </h2>
             <p className="ld-nft__text">{t('ld.nft.body')}</p>
-            <ol className="ld-flow" aria-label={t('ld.nft.order')}>
-              <li className="is-on">
-                <span>{t('site.nav.wl')}</span>
-              </li>
-              <li>
-                <span>{t('site.nav.mint')}</span>
-              </li>
-              <li>
-                <span>{t('site.nav.play')}</span>
-              </li>
-            </ol>
-            <div className="ld-nft__ctas">
-              <SiteLinkButton href="/wl" variant="primary" icon="arrow">
-                {t('ld.cta.wl')}
-              </SiteLinkButton>
-              <SiteLinkButton href="/mint" variant="teal">
-                {t('ld.nft.see')}
-              </SiteLinkButton>
-            </div>
+            {doors.wl && doors.mint && doors.game && (
+              <ol className="ld-flow" aria-label={t('ld.nft.order')}>
+                <li className="is-on">
+                  <span>{t('site.nav.wl')}</span>
+                </li>
+                <li>
+                  <span>{t('site.nav.mint')}</span>
+                </li>
+                <li>
+                  <span>{t('site.nav.play')}</span>
+                </li>
+              </ol>
+            )}
+            {(doors.wl || doors.mint) && (
+              <div className="ld-nft__ctas">
+                {doors.wl && (
+                  <SiteLinkButton href="/wl" variant="primary" icon="arrow">
+                    {t('ld.cta.wl')}
+                  </SiteLinkButton>
+                )}
+                {doors.mint && (
+                  <SiteLinkButton href="/mint" variant={doors.wl ? 'teal' : 'primary'} icon={doors.wl ? undefined : 'arrow'}>
+                    {t('ld.nft.see')}
+                  </SiteLinkButton>
+                )}
+              </div>
+            )}
           </motion.div>
           <EmblemFan />
         </div>
@@ -468,7 +492,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
 
 /* ── questions ────────────────────────────────────────────────────────── */
 
-function Faq({ handle }: { handle: string }) {
+function Faq({ handle, doors, gameAccess }: { handle: string; doors: Doors; gameAccess: GameAccess }) {
   const m = useMoves();
   const t = useT();
   const tags = {
@@ -480,9 +504,11 @@ function Faq({ handle }: { handle: string }) {
     docs: (c: ReactNode) => <Link href="/docs">{c}</Link>,
     collab: (c: ReactNode) => <Link href="/collab">{c}</Link>,
   };
-  const items: { q: string; a: ReactNode }[] = [1, 2, 3, 4, 5, 6, 7].map((n) => ({
+  // "when does the game open?" only while it is not open to everyone; the collab question only with its page
+  const asked = [1, 2, 3, 4, 5, 6, 7].filter((n) => (n !== 5 || gameAccess !== 'public') && (n !== 7 || doors.collab));
+  const items: { q: string; a: ReactNode }[] = asked.map((n) => ({
     q: t(`ld.faq.q${n}` as TKey),
-    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}` }), tags),
+    a: renderRich(t(n === 4 && !doors.mint ? 'ld.faq.a4closed' : (`ld.faq.a${n}` as TKey), { handle: `@${handle}` }), tags),
   }));
   return (
     <section className="ld-plate ld-faq" id="faq" aria-labelledby="ld-faq-h">
@@ -518,9 +544,10 @@ function Faq({ handle }: { handle: string }) {
   );
 }
 
-/** `/`: the landing, from day into night. No way into the game unless the game is public. */
+/** `/`: the landing, from day into night. It links only to what the admin has opened (`useDoors`). */
 export function Landing() {
   const { settings } = useSiteSettings();
+  const doors = useDoors();
   const sound = useLandingSound();
   const t = useT();
   return (
@@ -533,14 +560,14 @@ export function Landing() {
       </SiteHeader>
       <main id="main" className="ld-main" tabIndex={-1}>
         <PlateLabel numeral={1} title={t('ld.plate1')} aside={t('ld.plate1.aside')} className="ld-plate1" />
-        <Hero collabOpen={settings.collabOpen} gameAccess={settings.gameAccess} wlOpen={settings.wlOpen} sound={sound} />
+        <Hero doors={doors} gameAccess={settings.gameAccess} handle={settings.xHandle} sound={sound} />
         <Feast />
-        <Round />
+        <Round live={doors.game && settings.gameAccess !== 'maintenance'} />
         <DuskSeam />
         <Kb theme="night" className="ld-night">
-          <Nft />
-          <Arenas gameAccess={settings.gameAccess} />
-          <Faq handle={settings.xHandle.replace(/^@/, '')} />
+          <Nft doors={doors} />
+          <Arenas gameAccess={doors.loaded ? settings.gameAccess : 'admins'} />
+          <Faq handle={settings.xHandle.replace(/^@/, '')} doors={doors} gameAccess={doors.loaded ? settings.gameAccess : 'admins'} />
         </Kb>
       </main>
       <SiteFooter />

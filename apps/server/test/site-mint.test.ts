@@ -75,6 +75,8 @@ async function harness(env: Record<string, string> = {}, setupDir?: (dir: string
     apiLimiter: new Limiter(10_000, 60_000),
     fetchPrice: async () => ({ price: '40', value: 40 }),
   });
+  // a fresh server starts closed; these tests apply to the WL (a seeded settings file keeps its own value)
+  if (!setupDir) app.site.store.updateSettings({ wlOpen: true });
   const port = await app.listen();
   const call: Harness['call'] = async (method, path, opts = {}) => {
     const headers: Record<string, string> = { ...opts.headers };
@@ -586,10 +588,10 @@ describe('X handle migration (previous default @elymum → @elymumio)', () => {
 
   it('switches a stored previous default handle and rewrites only the seeded tasks', () => {
     const dir = mkdtempSync(join(tmpdir(), 'elymum-handle-'));
-    seed(dir, { wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymum', launchPostUrl: null });
+    seed(dir, { wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymum', launchPostUrl: null, launch: 1 });
     const logs: string[] = [];
     const s = new SiteStore(dir, { log: (m) => logs.push(m) });
-    expect(s.settings).toEqual({ wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymumio', launchPostUrl: null });
+    expect(s.settings).toEqual({ wlOpen: true, collabOpen: false, mintOpen: false, gameAccess: 'holders', xHandle: 'elymumio', launchPostUrl: null });
     expect(JSON.parse(readFileSync(join(dir, SITE_FILES.settings), 'utf8')).xHandle).toBe('elymumio');
     const [follow, postX, engage, custom] = s.tasks;
     // the seeded tasks keep their admin edits (enabled: false) and get the new handle
