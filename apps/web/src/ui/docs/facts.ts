@@ -40,13 +40,13 @@ export const SERVER = {
   privateCodeLength: 8,
 } as const;
 
-/** The worked example of the guide: a 1,000-token ticket with 1,900 tokens in the till at the bell. */
+/** The worked example of the guide: a 1,000-token ticket worth 1,900 tokens at the bell. */
 export const EXAMPLE = { entry: 1000, cashout: 1900 } as const;
 
 /**
  * The worked payout at `rates` (the arena's live fee rates on profit, else the contract defaults), exactly as the
- * arena contract splits it (`fees.ts`): the coin starts at the whole entry fee, the till at the bell is 1,900, the
- * profit is 900 and the fee is taken from it (15 % burned = 135, 5 % to the fee wallet = 45); the player gets 1,720.
+ * arena contract splits it (`fees.ts`): the coin starts at the whole ticket price, its value at the bell is 1,900, the
+ * profit is 900 and the fee is taken from it (15 % burned = 135, 5 % to the team wallet = 45); the player gets 1,720.
  */
 export function payoutExample(rates: FeeRates = DEFAULT_FEE_RATES): ProfitFee<number> & { entry: number } {
   return feeExample(EXAMPLE.entry, EXAMPLE.cashout, rates);
