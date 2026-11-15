@@ -1,4 +1,4 @@
-"""The Elymum voice: Kokoro TTS (local ONNX) with fixed pronunciations, spoken rhythm and auditions.
+"""The Coinnibal voice: Kokoro TTS (local ONNX) with fixed pronunciations, spoken rhythm and auditions.
 
 Shared by the promo (media/promo/audio/tts.py) and the how-to-play video
 (media/how-to-play/audio/tts.py); the gameplay mixer's VO chain (render/audio.py) and the promo's
@@ -28,13 +28,13 @@ import soundfile as sf
 
 # words the G2P must not guess (espeak IPA, as Kokoro expects)
 FIXED = {
-    "@elymumio": "æt ˈɛlɪməm ˈaɪ ˈoʊ",
-    "$ELYMUM": "ˈɛlɪməm",
-    "Elymum's": "ˈɛlɪməmz",
-    "Elymum": "ˈɛlɪməm",
-    "Elysium": "ɪlˈɪziəm",
-    "HYPE": "hˈaɪp",
+    "Coinnibal's": "kˈɔɪnɪbəlz",
+    "Coinnibal": "kˈɔɪnɪbəl",
+    "$NIBAL": "nˈɪbəl",  # said like "nibble"
+    "NIBAL": "nˈɪbəl",
+    "Robinhood": "ɹˈɑbɪnhʊd",
     "NFTs": "ˌɛnˌɛftˈiːz",  # the G2P drops the plural
+    "NFT": "ˌɛnˌɛftˈiː",
 }
 PAUSE = {"|": 0.16, "||": 0.38}
 SR = 24000

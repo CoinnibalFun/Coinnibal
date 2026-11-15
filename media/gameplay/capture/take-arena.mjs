@@ -64,9 +64,9 @@ async function enter(r) {
 }
 /** Death sheet -> "Buy back in" (opens the ticket sheet for the same arena) -> sign. */
 async function buyBack(p, o = {}) {
-  await p.page.waitForSelector('.g-death .kb-btn--pink', { timeout: 8000 });
+  await p.page.waitForSelector('.g-death .kb-btn--primary', { timeout: 8000 });
   await p.wait(o.pause ?? 400);
-  await p.click('.g-death .kb-btn--pink', { before: o.before ?? 200 });
+  await p.click('.g-death .kb-btn--primary', { before: o.before ?? 200 });
   await p.page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'lobby', null, { timeout: 10000 }).catch(() => {});
   await p.page.waitForFunction(() => !!document.querySelector('.tf-sheet') || !document.querySelector('.kl-cta')?.disabled, null, { timeout: 25000 }).catch(() => {});
 }

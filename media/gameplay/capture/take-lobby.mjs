@@ -71,7 +71,7 @@ try {
     await hero.wait(2200);
     await hero.wheel(300, 40, 80);
     await hero.wait(2200);
-    await hero.hover('.tf-sheet .kb-btn--pink', { pause: 1500 });
+    await hero.hover('.tf-sheet .tf-pay', { pause: 1500 });
     rec.mark('ticket-close');
     await hero.page.keyboard.press('Escape');
     await hero.wait(1200);

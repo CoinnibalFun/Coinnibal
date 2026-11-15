@@ -1,12 +1,12 @@
-# Elymum films
+# Coinnibal films
 
-Video pipelines for Elymum. Every film is code: scenes are drawn per frame (canvas or DOM) or
+Video pipelines for Coinnibal (internal name elymum). Every film is code: scenes are drawn per frame (canvas or DOM) or
 captured from the real web app with Playwright, then mixed and encoded with ffmpeg. Nothing here is
 rendered in the repository; the outputs go to `out/videos/` (gitignored).
 
 | Folder | Film |
 |---|---|
-| `promo/` | The 45 s launch film and its 32 s vertical cut (scenes in `promo/scenes`, the shared canvas kit in `promo/scenes/lib.js`) |
+| `promo/` | The 40 s Coinnibal launch film (re-made for the new brand: scenes in `promo/scenes`, the shared canvas kit with the Coinnibal marks in `promo/scenes/lib.js`; see `promo/README.md`) |
 | `gameplay/` | Video A: a real paid round, captured from the app (`gameplay/capture`), cut by `gameplay/edit.mjs` |
 | `how-to-play/` | Video B: the narrated guide, built on the gameplay kit |
 | `gameplay-film/` | The narrated gameplay film (about 120 s, home page into a live round): script, voice-actor page, cue timeline, Kokoro or human voice with a humanising post chain, synthesised storybook score and sfx, mixer |
