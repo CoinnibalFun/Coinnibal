@@ -166,12 +166,11 @@ export async function createApp(
   const profiles = new ProfileStore(persist ? join(cfg.dataDir, files.profiles) : null, log);
   // profile pictures: content-addressed files next to the profiles (DATA_DIR/avatars/<id>.png|webp)
   const avatars = new AvatarStore(persist ? join(cfg.dataDir, cfg.devFakeChain ? 'avatars.dev-fake' : 'avatars') : null, log);
-  // on a public testnet the game is open to everyone unless the admin already chose otherwise
+  // a fresh server starts closed (information site): the admin opens the game, mint, WL and collab in /admin
   const siteStore = new SiteStore(persist ? cfg.dataDir : null, {
     now: opts.siteNow,
     log,
     defaults: {
-      ...(isTestChainId(stateChainId) && stateChainId !== LOCALNET_CHAIN_ID ? { gameAccess: 'public' as const } : {}),
       ...(cfg.xHandle ? { xHandle: cfg.xHandle } : {}),
     },
   });

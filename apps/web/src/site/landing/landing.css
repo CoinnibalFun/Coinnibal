@@ -116,17 +116,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-}
-.ld-soon {
-  gap: 10px;
-}
-.ld-soon__tag {
-  padding: 2px 7px;
-  border: 2px solid var(--outline);
-  border-radius: var(--r-pill);
-  background: var(--mist);
-  font-size: var(--t-micro);
-  letter-spacing: 0.08em;
+  margin-top: 16px;
 }
 .ld-hero__note {
   display: flex;
@@ -138,6 +128,19 @@
 }
 .ld-flowline {
   color: var(--teal-ink);
+}
+/* everything is closed: the project's X account under the buttons */
+.ld-hero__note--x {
+  margin-top: 12px;
+}
+.ld-hero__x {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink) !important;
 }
 .ld-hero__badge-wrap {
   position: absolute;

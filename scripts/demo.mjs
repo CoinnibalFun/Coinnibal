@@ -15,7 +15,7 @@
 //        ROUND_JOIN_CLOSE_SECONDS before it (default 60, capped at half a round). The server reads them.
 // Ctrl+C (SIGINT), SIGTERM and SIGHUP stop every child process group, including the hardhat node.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LOCALNET_RPC_PORT, ROOT, portFree, waitForHttp } from './lib/common.mjs';
 import { ACCOUNT, STATE_DIR, deployLocalnet, startHardhatNode } from './lib/localnet.mjs';
@@ -150,6 +150,12 @@ async function shutdown(code = 0) {
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => void shutdown(sig === 'SIGINT' ? 130 : 143));
 
 // ───────────────────────────── modes ─────────────────────────────
+/** A fresh server starts closed (information site): the demo opens every part, as the admin would in /admin. */
+function openSite(data) {
+  mkdirSync(join(data, 'site'), { recursive: true });
+  writeFileSync(join(data, 'site/settings.json'), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', launch: 1 }));
+}
+
 async function buildServer() {
   if (NO_BUILD) {
     if (!existsSync(join(ROOT, 'apps/server/dist/index.js'))) fail('apps/server/dist/index.js is missing and --no-build was given.', 'Run: pnpm -F @elymum/server build');
@@ -177,6 +183,7 @@ async function main() {
     for (const k of ['EVM_RPC_URL', 'SERVER_PRIVATE_KEY', 'ARENA_ADDRESS', 'NFT_ADDRESS']) delete serverEnv[k];
     // anyone who signs in may play the demo
     serverEnv.GAME_ACCESS ??= 'public';
+    openSite(data);
     serverCmd = ['pnpm', ['-F', '@elymum/server', 'dev']];
   } else {
     await buildServer();
@@ -210,6 +217,7 @@ async function main() {
     mkdirSync(data, { recursive: true });
     serverEnv = { ...ENV, ...deployed.env, NODE_ENV: 'production', DATA_DIR: data, STALE_SESSION_AFTER_S: '60' };
     serverEnv.GAME_ACCESS ??= 'public';
+    openSite(data);
     delete serverEnv.DEV_FAKE_CHAIN;
     delete serverEnv.DEV_FAKE_TOKEN;
     serverCmd = ['node', ['dist/index.js']];

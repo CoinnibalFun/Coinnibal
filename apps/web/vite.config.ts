@@ -18,6 +18,8 @@ process.env.VITE_X_HANDLE = (process.env.VITE_X_HANDLE || 'elymumio').replace(/^
 /**
  * robots.txt and sitemap.xml are static files (public/) written for the live domain; the build rewrites their absolute
  * URLs to `VITE_PUBLIC_URL`, so they follow the domain like index.html does.
+ * The sitemap lists only the pages that are always open (`/`, `/docs`): a static file cannot follow the admin's
+ * settings, which open and close the mint, the game, the WL and the collab pages.
  */
 function publicUrlFiles(): Plugin {
   let outDir = '';

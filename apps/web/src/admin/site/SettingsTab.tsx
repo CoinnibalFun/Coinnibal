@@ -3,14 +3,17 @@ import { useEffect, useState } from 'react';
 import { Field, InkButton, StampSpinner } from '../../design';
 import { errText, useFlash, type TabProps } from './common';
 
+const DOORS = ['mintOpen', 'wlOpen', 'collabOpen'] as const;
+type Door = (typeof DOORS)[number];
+
 export const GAME_ACCESS_LABEL: Record<GameAccess, { label: string; note: string }> = {
-  admins: { label: 'Admins only', note: 'Only wallets in ADMIN_WALLETS can enter rooms; /play shows “The arena opens soon”.' },
-  holders: { label: 'NFT holders', note: 'Wallets holding a Coinnibal NFT (and admins) can play; everyone else is sent to the mint.' },
-  public: { label: 'Everyone', note: 'The game is open to every visitor; practice needs no wallet.' },
-  maintenance: { label: 'Maintenance', note: 'Only admins can play; /play tells everyone else the game is down for maintenance and back soon.' },
+  admins: { label: 'Admins only', note: 'Only admin wallets can play. Visitors see no Play or Faucet link; /play says the game is not open yet.' },
+  holders: { label: 'NFT holders', note: 'Wallets holding a Coinnibal NFT (and admins) can play. Everyone sees the Play and Faucet links.' },
+  public: { label: 'Everyone', note: 'The game is open to every visitor. Practice needs no wallet.' },
+  maintenance: { label: 'Maintenance', note: 'Only admins can play. The Play link stays; /play says the game is paused and back soon.' },
 };
 
-/** Site switches: who may play (gameAccess), WL open, collab open, the X handle. */
+/** Site switches: what visitors can see (the game, the mint page, WL and collab applications) and the X handle. */
 export function SettingsTab({ api, onSiteChange }: TabProps) {
   const [saved, setSaved] = useState<SiteSettings | null>(null);
   const [draft, setDraft] = useState<SiteSettings | null>(null);
@@ -32,7 +35,7 @@ export function SettingsTab({ api, onSiteChange }: TabProps) {
 
   if (!draft || !saved) return <StampSpinner label="Loading" />;
 
-  const toggle = (k: 'wlOpen' | 'collabOpen') => setDraft({ ...draft, [k]: !draft[k] });
+  const toggle = (k: Door) => setDraft({ ...draft, [k]: !draft[k] });
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
   const save = async () => {
@@ -44,7 +47,7 @@ export function SettingsTab({ api, onSiteChange }: TabProps) {
     setBusy(true);
     try {
       const patch: Partial<SiteSettings> = {};
-      for (const k of ['wlOpen', 'collabOpen'] as const) if (draft[k] !== saved[k]) patch[k] = draft[k];
+      for (const k of DOORS) if (draft[k] !== saved[k]) patch[k] = draft[k];
       if (draft.gameAccess !== saved.gameAccess) patch.gameAccess = draft.gameAccess;
       if (h !== saved.xHandle) patch.xHandle = h;
       const r = await api.saveSettings(patch);
@@ -60,7 +63,7 @@ export function SettingsTab({ api, onSiteChange }: TabProps) {
     }
   };
 
-  const switchRow = (k: 'wlOpen' | 'collabOpen', label: string, note: string) => (
+  const switchRow = (k: Door, label: string, note: string) => (
     <label className="ad-check ad-switch" key={k}>
       <input type="checkbox" role="switch" checked={draft[k]} onChange={() => toggle(k)} />
       <span>
@@ -76,8 +79,13 @@ export function SettingsTab({ api, onSiteChange }: TabProps) {
         Site settings
       </h2>
       <p className="ad-card__lede">Nothing here touches the chain. Changes apply when you save.</p>
+      <h3 className="ad-h3">What visitors can see</h3>
+      <p className="ad-note">
+        A closed part has no link or button anywhere on the site, and its page says “not open yet”. The landing and the guide (/docs) are always open. Signed in as admin, you still
+        see every closed page, so you can check it before you open it.
+      </p>
       <fieldset className="ad-access" aria-describedby="ad-access-note">
-        <legend className="mono ad-cap">Who may play</legend>
+        <legend className="mono ad-cap">Game access</legend>
         <div className="ad-opts">
           {GAME_ACCESS_MODES.map((m) => (
             <label className={`ad-opt${draft.gameAccess === m ? ' is-picked' : ''}${saved.gameAccess === m ? ' is-live' : ''}`} key={m}>
@@ -94,9 +102,10 @@ export function SettingsTab({ api, onSiteChange }: TabProps) {
           {env ? `GAME_ACCESS=${env} is set on the server: it wins over this setting.` : 'The server reads this on every room entry.'}
         </p>
       </fieldset>
-      <h3 className="ad-h3">Doors</h3>
-      {switchRow('wlOpen', 'WL applications open', `When off, /wl shows “Applications are closed, follow @${saved.xHandle}”.`)}
-      {switchRow('collabOpen', 'Collab applications open', "When off, the landing's Collab button reads “Soon” and /collab takes no new communities.")}
+      {switchRow('mintOpen', 'Mint page open', 'On: visitors see /mint and the Mint links. Off: /mint says “not open yet”. This does not change the mint phase on the chain (Mint tab).')}
+      {switchRow('wlOpen', 'WL applications open', 'On: visitors can apply on /wl. Off: no new entries; someone who applied before can still sign in on /wl to see their status. The WL tab keeps working.')}
+      {switchRow('collabOpen', 'Collab applications open', 'On: communities can apply on /collab. Off: /collab says “not open yet”. The Collabs tab keeps working.')}
+      <h3 className="ad-h3">X account</h3>
       <Field
         label="X handle"
         prefix="@"

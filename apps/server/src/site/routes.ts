@@ -668,6 +668,11 @@ export class SiteApi {
     const svc = this.customRooms;
     if (!svc) throw new SiteFail(404, 'not_found', 'Not found');
     const rest = path.slice('/api/rooms/custom'.length).replace(/^\//, '');
+    // opening a room (paid, or free practice) follows the game gate: the join over the WebSocket would be refused
+    // anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter
+    if (req.method === 'POST' && !(await this.gameOpenFor(bearerWallet(this.auth, req)))) {
+      throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
+    }
     return customRoomRoutes(
       svc,
       {

@@ -46,7 +46,7 @@ describe('site helpers', () => {
 
   it('defaults: WL open, collab closed, game for admins only, X handle elymumio', () => {
     expect(SITE_X_HANDLE_DEFAULT).toBe('elymumio');
-    expect(SITE_SETTINGS_DEFAULT).toEqual({ wlOpen: true, collabOpen: false, gameAccess: 'admins', xHandle: 'elymumio', launchPostUrl: null });
+    expect(SITE_SETTINGS_DEFAULT).toEqual({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'elymumio', launchPostUrl: null });
   });
 
   it('knows the game access modes', () => {
