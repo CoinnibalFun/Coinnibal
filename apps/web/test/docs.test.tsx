@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 /** The section order the guide promises. */
-const SECTION_IDS = ['play', 'rooms', 'value', 'payout', 'nft', 'token', 'fair', 'wallet', 'faq'];
+const SECTION_IDS = ['play', 'rooms', 'value', 'payout', 'powerups', 'nft', 'token', 'fair', 'wallet', 'profile', 'help'];
 
 describe('player guide facts', () => {
   it('works the payout example through the shared fee module: entry 1,000, till 1,900, profit 900 → 135 burned, 45 to the fee wallet, 1,720 paid', () => {
@@ -43,9 +43,10 @@ describe('player guide facts', () => {
     expect(FACTS.rules.roundMin).toBe(RULES.roundMs / 60_000);
     // the full 5 minutes of play, the 30 s break on top of it (a round every 5:30)
     const play = JSON.stringify(en0);
-    expect(play).toContain('5 full minutes of play, then a 30 s break, so a new round starts every 5 minutes 30 seconds');
+    expect(play).toContain('A round is 5:00 of play, then a 0:30 break, so a new round starts every 5:30.');
+    expect(play).toContain('Round 5:00 + 0:30 break');
     // number and unit stay together on a line (no-break spaces)
-    expect(play).toContain('Rounds 5\u00a0min + 30\u00a0s break');
+    expect(play).toContain('Joins close 60\u00a0s before the bell');
     expect(FACTS.capacity).toEqual({ practice: CAPACITY.practice, private: CAPACITY.private, arena: 50 });
     // the USD tiers ($1 / $3 / $5 / $10) at the reference token price
     expect(FACTS.arenas.map((a) => [a.id, a.entry])).toEqual([
@@ -78,49 +79,105 @@ describe('player guide content', () => {
   it('explains the fee on profit with the worked example, at the live rates', () => {
     const text = (c: typeof en) => JSON.stringify([c.dateline, c.sections]);
     expect(en.rates).toEqual({ burnBps: 1500, vaultBps: 500 });
-    expect(text(en)).toContain('Fee 20% of profit only');
-    expect(text(en)).toContain('so your profit is 900: 135 is burned, 45 goes to the fee wallet and you get 1,720');
-    expect(text(en)).toContain('there is no fee to enter');
-    expect(text(en)).not.toMatch(/entry fee rate of|the cut|arena vault for the team|played by the team/);
+    expect(text(en)).toContain('Fee 20% of profit');
+    expect(text(en)).toContain('The only fee is 20% of your profit. Profit is your value at the bell minus the ticket price. 15% of the profit is burned and 5% goes to the team wallet.');
+    expect(text(en)).toContain('buying a ticket has no fee');
+    expect(text(en)).not.toMatch(/entry fee|the cut|arena vault for the team|played by the team|fee wallet|\btill\b/);
     const live = docsEn('$ELYMUM', { burnBps: 1000, vaultBps: 200 });
     expect(live.rates).toEqual({ burnBps: 1000, vaultBps: 200 });
-    expect(text(live)).toContain('Fee 12% of profit only');
-    expect(text(live)).toContain('90 is burned, 18 goes to the fee wallet and you get 1,792');
+    expect(text(live)).toContain('Fee 12% of profit');
+    expect(text(live)).toContain('10% of the profit is burned and 2% goes to the team wallet');
+    // the worked numbers stand once, on the receipt (the page test reads them there)
+    expect(payoutExample(live.rates)).toMatchObject({ burned: 90, toVault: 18, net: 1792 });
   });
 
-  it('says the arenas are played by people only', () => {
-    const value = JSON.stringify(en.sections.find((s) => s.id === 'value'));
-    expect(value).toContain('Every coin in an arena is a player who bought a ticket; the game fields no coins of its own there.');
+  it('says bots never play in the paid rooms, in one line, and leaves the testnet test rooms out', () => {
+    const all = JSON.stringify(en);
+    expect(all).toContain('Bots are labelled BOT and never play in paid rooms.');
+    // one list item speaks of bots, nothing else does
+    const items = en.sections.flatMap((s) => s.blocks).flatMap((b) => (b.kind === 'list' ? b.items : []));
+    const about = items.filter((it) => /\bbots?\b/i.test(JSON.stringify(it)));
+    expect(about).toHaveLength(1);
+    expect(all.replace(JSON.stringify(about[0]), '')).not.toMatch(/\bbots?\b/i);
+    expect(all).not.toMatch(/test arena|test room|\bTEST\b|Test ·/);
+  });
+
+  it('keeps what is true on the testnet only in one note, shown on a testnet only', () => {
+    const notes = (c: typeof en) => c.sections.flatMap((s) => s.blocks).filter((b) => b.kind === 'note');
+    const test = docsEn('$NIBAL', undefined, 'Robinhood Chain Testnet', { testnet: true });
+    expect(notes(test).map((n) => n.kind === 'note' && n.stamp)).toEqual(['Testnet', 'Risk']);
+    const text = JSON.stringify(test);
+    expect(text.match(/[Ff]aucet/g)).toHaveLength(1);
+    expect(text.match(/not been audited/g)).toHaveLength(1);
+    expect(text.match(/worth nothing/g)).toHaveLength(1);
+    const main = docsEn('$NIBAL', undefined, 'Robinhood Chain', { testnet: false });
+    expect(notes(main).map((n) => n.kind === 'note' && n.stamp)).toEqual(['Risk']);
+    expect(JSON.stringify(main)).not.toMatch(/[Ff]aucet|test tokens|testnet/i);
+    expect(JSON.stringify(main).match(/not been audited/g)).toHaveLength(1);
+  });
+
+  it('says each rule once: the fee split, the round clock, the holder fee, the refunds', () => {
+    const t = JSON.stringify(en.sections);
+    const once = (re: RegExp) => expect(t.match(re) ?? [], String(re)).toHaveLength(1);
+    once(/15% of the profit is burned/);
+    once(/5:00 of play/);
+    once(/8% burned/);
+    once(/20% off/);
+    once(/Collect payout/);
+    once(/after about 15 minutes/);
+    once(/24 hours after buying/);
+    once(/No cash-out/);
+    once(/50% is burned/);
+    once(/1, 5, 10 or 20 tickets/);
+    once(/Opening soon/);
+    // no questions-and-answers block restating the sections
+    expect(en.sections.flatMap((s) => s.blocks).some((b) => b.kind === 'faq')).toBe(false);
+  });
+
+  it('uses one word per thing and does not tell the reader to play or mint now', () => {
+    const t = JSON.stringify(en);
+    expect(t).not.toMatch(/\barenas?\b|emblem|\btill\b|entry fee|fee wallet|stake/i);
+    expect(t).not.toMatch(/play now|mint now|press Quick Play|coming soon|will be announced|roadmap/i);
+    expect(t).toContain('NIBAL-7K2M9Q');
+    expect(t).toContain('$1 Room');
+    expect(t).toContain('$10 Room');
   });
 
   it('covers the NFT and the token: what each is for, with the shop prices and holder perks from the code', () => {
     const nft = JSON.stringify(en.sections.find((s) => s.id === 'nft'));
-    expect(nft).toContain('20% less');
-    expect(nft).toContain('10 % instead of 20 %');
-    expect(nft).toContain('one room a day for free');
-    expect(nft).toContain('the $10 room is for holders only');
-    expect(nft).toContain('holders play first');
+    const table = en.sections.find((s) => s.id === 'nft')!.blocks.find((b) => b.kind === 'table');
+    expect(table?.kind === 'table' && table.rows).toEqual([
+      ['Fee on profit', '20%', '10% (8% burned, 2% team wallet)'],
+      ['$10 Room', 'Closed', 'Open'],
+      ['Power-up packs', 'Full price', '20% off'],
+      ['Power-ups per round in a paid room', '2', '3'],
+      ['Private room', 'Paid in ETH', '1 free a day, up to 10 players'],
+      ['Coin look', 'Standard skins', 'Also the NFT skin and a holder badge'],
+    ]);
+    expect(nft).toContain('NFT holders only');
+    const pu = JSON.stringify(en.sections.find((s) => s.id === 'powerups'));
+    for (const line of ['Magnet (R), $0.60:', 'Leap (F), $0.90:', 'Speed burst (G), $0.60:', 'Invisibility (V), $1.20:']) expect(pu).toContain(line);
+    expect(pu).toContain('one pack of 3 uses');
+    expect(pu).toContain('50% is burned and 50% goes to the team wallet');
+    expect(pu).toContain('you can use 2 power-ups per round');
+    // the shop is in the lobby only (GameHud's top bar sells nothing)
+    expect(pu).toContain('Nothing is sold during a game');
     const token = JSON.stringify(en.sections.find((s) => s.id === 'token'));
-    expect(token).toContain('Magnet $0.60, Leap $0.90, Speed burst $0.60 and Invisibility $1.20 by default');
-    expect(token).not.toContain('Nothing is sold during a game');
-    expect(token).toContain('15% of every profit is burned');
-    expect(token).toContain('which burns 50% of it and sends 50% to the fee wallet');
-    expect(token).toContain('Nothing mints new $ELYMUM');
-    const t = JSON.stringify([en.receipt, en.sections]);
-    expect(t).toMatch(/what is left then is burned/);
-    expect(t).toContain('Opening soon');
+    expect(token).toContain('The game never creates new $ELYMUM');
+    expect(token).toContain('Opening soon');
+    // floor loot exists only where something without a ticket eats a coin (the testnet's test rooms): not in the guide
+    expect(JSON.stringify(en)).not.toMatch(/loot/i);
   });
 
   it('keeps to playing, the NFT, the token and the money: no internal mechanics', () => {
     const t = JSON.stringify(en);
-    expect(t).not.toMatch(/\bbots?\b/i);
     expect(t).not.toMatch(/\bPass\b|season|prize pool|reveal/i);
   });
 
   it('describes timed rounds and promises no cash-out in arenas', () => {
     const all = JSON.stringify([en.dateline, en.sections]);
-    expect(all).toContain('5-minute rounds');
-    expect(all).toContain('There is no cash-out in an arena');
+    expect(all).toContain('A round is 5 minutes of play.');
+    expect(all).toContain('you cannot leave a round early with your value');
     expect(all).not.toMatch(/cash out in|Press C|cash-out button|cashes out in|anytime/i);
     expect(JSON.stringify(en.sections)).not.toContain('"key":"C"');
   });
@@ -143,7 +200,7 @@ describe('player guide content', () => {
     const text = JSON.stringify(en);
     expect(text).not.toMatch(/\brent\b|token account/);
     expect(text).toContain('ETH on Robinhood Chain Testnet');
-    expect(JSON.stringify(docsEn('$ELYMUM', undefined, 'Robinhood Chain'))).toContain('ETH on Robinhood Chain)');
+    expect(JSON.stringify(docsEn('$ELYMUM', undefined, 'Robinhood Chain'))).toContain('ETH on Robinhood Chain for network fees');
     expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
     expect(text).not.toMatch(/record_game/);
     // the CI guard's Turkish letters, written as escapes so this file passes the guard itself
@@ -168,7 +225,7 @@ describe('player guide page', () => {
     const toc = screen.getByRole('navigation', { name: en0.tocLabel });
     expect(within(toc).getAllByRole('button')).toHaveLength(SECTION_IDS.length);
     for (const s of en0.sections) expect(screen.getByRole('heading', { level: 3, name: s.title })).toBeTruthy();
-    expect(screen.getByRole('heading', { level: 3, name: 'Rounds, payout and the fee' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 3, name: 'Rounds, payout and fee' })).toBeTruthy();
     // the receipt at the contract default rates (15 % + 5 % of profit): 1,900 at the bell, 900 profit
     expect(screen.getByText('−135')).toBeTruthy();
     expect(screen.getByText('−45')).toBeTruthy();

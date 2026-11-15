@@ -74,9 +74,9 @@ const rail = { stroke: ELYSIUM.teal, strokeWidth: 3, strokeDasharray: '2 8', str
 const feeRail = { ...rail, stroke: ELYSIUM.coral };
 
 /**
- * The value flow as a moving diagram: tokens leave the ticket for the arena's vault, change
+ * The value flow as a moving diagram: tokens leave the ticket for the room's vault, change
  * hands inside it when a coin is eaten, and at the bell travel on to the player's wallet while
- * the thin slice each entry fee left as the fee drops to the fee wallet. One 7 s loop while on screen; a still
+ * the fee on the profit drops to the burn and the team wallet. One 7 s loop while on screen; a still
  * picture under reduced motion and off screen. Wide screens get it left to right; phones get the
  * same picture top to bottom (CSS shows one of the two). The numbered steps under it carry the words.
  */
