@@ -28,7 +28,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(document.querySelector('a[href="/collab"]')).toBeNull();
     const wl = screen.getAllByRole('link', { name: /Join the WL/ });
     expect(wl.every((a) => a.getAttribute('href') === '/wl')).toBe(true);
-    for (const h of [/coins eat coins/, 'Four steps, five minutes.', 'Get the Coinnibal NFT.', 'Why get the NFT?', 'Pick a room.', 'Questions and answers.'])
+    for (const h of ['You are a coin.', 'Four steps, one round.', 'Get the Coinnibal NFT.', 'Why get the NFT?', 'Four rooms, one fee.', 'Good to know.'])
       expect(screen.getByRole('heading', { name: h })).toBeTruthy();
     // no character cards with prices and jokes, no story lines under the rooms
     expect(document.querySelector('.ld-cast, .ld-suspect')).toBeNull();
@@ -48,7 +48,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(screen.getAllByRole('link', { name: 'Go to the mint' })[0].getAttribute('href')).toBe('/mint');
     const nav = screen.getByRole('navigation', { name: 'Site' });
     // the header nav is short and names only what is open: Mint · WL · Docs (the game is admins-only here)
-    expect([...nav.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Mint', 'WL', 'Docs']);
+    expect([...nav.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Mint', 'WL', 'Guide']);
     expect(screen.getByRole('button', { name: /Connect/ })).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /@elymumio/ }).some((a) => a.getAttribute('href') === 'https://x.com/elymumio')).toBe(true);
     // no way into the closed game anywhere on the page, and no "live" round
@@ -112,11 +112,24 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(screen.getByTestId('why-nft').querySelectorAll('.nf-card').length).toBeGreaterThan(3);
     expect(screen.getByRole('heading', { name: 'The Coinnibal NFT.' })).toBeTruthy();
     // the header: Docs only, no wallet button; the footer: X and Docs
-    expect([...screen.getByRole('navigation', { name: 'Site' }).querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Docs']);
+    expect([...screen.getByRole('navigation', { name: 'Site' }).querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Guide']);
     expect(screen.queryByRole('button', { name: /Connect/ })).toBeNull();
     expect([...screen.getByRole('navigation', { name: 'Footer' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://x.com/elymumio', '/docs']);
     // the FAQ does not send anyone to the collab page
     expect(screen.queryByText('Can my community get WL spots?')).toBeNull();
+    // each idea once: "five minutes" stays in the hero sentence and on its sticker, nowhere else in the hero or its title strip
+    const hero = `${document.querySelector('.ld-plate1')?.textContent} ${document.querySelector('.ld-hero')?.textContent}`;
+    expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toEqual(['Five minutes', '05:00']);
+    const page = document.querySelector('main')!.textContent ?? '';
+    expect(page.match(/Coins that eat coins/g)).toHaveLength(1);
+    expect(page.match(/Eat or be eaten/g)).toHaveLength(1);
+    expect(document.querySelector('.st-foot')!.textContent).not.toMatch(/Coins that eat coins|Eat or be eaten|Five minutes/);
+    // the fee's numbers: once for everyone (the rooms), once for holders (the NFT's first perk)
+    expect(page.match(/15% is burned and 5% goes to the team wallet/g)).toHaveLength(1);
+    expect(page.match(/8% is burned and 2% goes to the team wallet/g)).toHaveLength(1);
+    // information only: no price of the mint, no date, no promise
+    expect(screen.queryByText('How much is the NFT?')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/\bsoon\b|start date|post the date|at launch|mint it with|mint page shows/i);
   });
 
   it('shows nothing closed while the settings are still loading, and stays closed when the server cannot be reached', async () => {
@@ -148,9 +161,9 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
 
   it('a closed page says "not open yet" (never the real page or a 404); the same path opens when the admin opens it', async () => {
     for (const [path, line] of [
-      ['/mint', 'The mint page is not open yet. Follow @elymumio for news.'],
-      ['/faucet', 'The faucet opens together with the game. Follow @elymumio for news.'],
-      ['/collab', 'Collab applications are closed for now. Follow @elymumio for news.'],
+      ['/mint', 'The Coinnibal NFT is minted on this page. The guide explains what the NFT does.'],
+      ['/faucet', 'The faucet gives free test tokens for the game. The guide explains how the game works.'],
+      ['/collab', 'Communities ask for WL spots on this page. The guide explains how the game works.'],
     ]) {
       resetSiteSettings();
       ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));

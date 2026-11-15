@@ -186,7 +186,7 @@ describe('the end-of-game share panel', () => {
     expect(posted).toBe(`${killShareText(translate, { id: 'KiLLbbbbbb', victim: 'Botty', victimIsBot: true, test: true })} ${SHARE_COIN}`);
     expect(posted).toContain('Botty (BOT)');
     expect(posted).toContain('Coinnibal');
-    expect(posted).toContain('(TEST: testnet test arena, no real money)');
+    expect(posted).toContain('(TEST: testnet test room, no real money)');
     expect(new URL(x.href).searchParams.get('url')).toBe(shareUrl('KiLLbbbbbb'));
     fireEvent.click(rows[0].querySelector('[data-testid="moment-download"]')!);
     await waitFor(() => expect(clicks.some((c) => c.download === 'elymum-1-room-ate-rocky-x.png')).toBe(true));

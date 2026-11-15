@@ -230,7 +230,6 @@ export function SiteFooter() {
       <div className="st-foot__inner">
         <div className="st-foot__brand">
           <InkWordmark height={64} diecut playful={false} className="st-foot__mark" />
-          <p className="st-foot__line">{t('site.foot.line')}</p>
           <p className="st-foot__eco">
             <T k="site.foot.eco" tags={{ strong }} />
           </p>
@@ -247,7 +246,7 @@ export function SiteFooter() {
           <Link href="/docs">{t('site.nav.docs')}</Link>
         </nav>
         <p className="st-foot__small mono">
-          <span>Coinnibal · {t('brand.tagline')} · 2026</span>
+          <span>Coinnibal · 2026</span>
           <span>{siteHost()}</span>
           <span>{t('site.foot.safety')}</span>
         </p>

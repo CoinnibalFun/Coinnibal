@@ -87,7 +87,7 @@ export function ArenaSoon({ holders = false, maintenance = false, onSignedIn }: 
                   <p className="pg-lede">{t('pg.lede')}</p>
                   <div className="pg-actions">
                     <LinkButton href="/docs" variant="primary" size="lg" icon="arrow">
-                      {t('ld.cta.how')}
+                      {t('site.nf.guide')}
                     </LinkButton>
                   </div>
                 </>

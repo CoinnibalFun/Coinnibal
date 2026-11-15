@@ -333,7 +333,7 @@ export const docsEn = (
         blocks: [
           {
             kind: 'p',
-            text: `The Coinnibal NFT is an ERC-721 collection. It is minted on the Mint page and paid in ${GAS_SYMBOL}: first the allowlist (WL), then everyone. The Mint page shows the price from the contract before the wallet signs. The NFT is not a ticket and has no value in a round.`,
+            text: `The Coinnibal NFT is an ERC-721 collection. The NFT is not a ticket and has no value in a round.`,
           },
           {
             kind: 'table',
@@ -376,7 +376,7 @@ export const docsEn = (
               },
               {
                 term: 'Set once:',
-                text: 'the token address is set in the game contract one time and cannot be changed. Until it is set, the paid rooms show "Opening soon".',
+                text: 'the token address is set in the game contract one time and cannot be changed. Until it is set, the paid rooms stay closed.',
               },
             ],
           },

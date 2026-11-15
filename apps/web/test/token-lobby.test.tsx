@@ -133,7 +133,7 @@ describe('lobby while the game token is not set', () => {
     // prices still read from the default arenas, in the default symbol
     expect(within(arenas[0]).getByText('1,000')).toBeTruthy();
     expect(within(arenas[0]).getByText('$NIBAL')).toBeTruthy();
-    expect(screen.getByText('Arenas opening soon')).toBeTruthy();
+    expect(screen.getByText('Paid rooms not open yet')).toBeTruthy();
     // practice is selected and plays
     const practice = within(ticketsGroup()).getAllByRole('radio').find((el) => el.getAttribute('data-kb-value') === 'practice')!;
     expect(practice.getAttribute('aria-checked')).toBe('true');
@@ -154,7 +154,7 @@ describe('lobby while the game token is not set', () => {
     recv({ t: 'chain', chain: SET });
     expect(useUi.getState().chain).toEqual(SET);
     expect(screen.queryByText('Opening soon')).toBeNull();
-    expect(screen.getByText('Arenas open')).toBeTruthy();
+    expect(screen.getByText('Paid rooms open')).toBeTruthy();
     recv({ t: 'rooms', rooms: [PRACTICE, ...ARENAS], online: 2 });
 
     const arenas = arenaTickets();
@@ -174,15 +174,15 @@ describe('lobby while the game token is not set', () => {
 });
 
 describe('lobby: the chain cannot be read, or its contract is not trusted', () => {
-  it('an RPC that does not answer: no "Arenas open" over closed tickets, "Can\'t reach … retrying" instead', () => {
+  it('an RPC that does not answer: no "Paid rooms open" over closed tickets, "Can\'t reach … retrying" instead', () => {
     recv({ t: 'chain', chain: SET });
     act(() => useChainData.setState({ deployed: false, rpcDown: true }));
     lobby();
-    expect(screen.queryByText('Arenas open')).toBeNull();
+    expect(screen.queryByText('Paid rooms open')).toBeNull();
     expect(screen.getByTestId('lobby-arenas').textContent).toBe("Can't reach Robinhood Chain Testnet, retrying");
     // back: the pill says so again
     act(() => useChainData.setState({ deployed: true, rpcDown: false }));
-    expect(screen.getByTestId('lobby-arenas').textContent).toBe('Arenas open');
+    expect(screen.getByTestId('lobby-arenas').textContent).toBe('Paid rooms open');
   });
 
   it('an arena that is not the pinned one: the plate says the check failed', () => {

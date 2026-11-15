@@ -23,9 +23,10 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     const onAllowed = vi.fn();
     render(<PlayGate onAllowed={onAllowed} />);
     expect(await screen.findByRole('heading', { name: /The game is not open yet/ })).toBeTruthy();
-    expect(screen.getByText('Follow @elymumio for news and the start date. Until then, the guide explains every rule.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Back home' }).getAttribute('href')).toBe('/');
-    expect(screen.getByRole('link', { name: 'How it works' }).getAttribute('href')).toBe('/docs');
+    expect(screen.getByText('The guide explains every rule.')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/start date|soon|until then/i);
+    expect(screen.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/');
+    expect(screen.getByRole('link', { name: 'Read the guide' }).getAttribute('href')).toBe('/docs');
     expect(screen.getByRole('link', { name: /Follow @elymumio/ }).getAttribute('href')).toBe('https://x.com/elymumio');
     expect(document.querySelector('a[href="/wl"], a[href="/mint"], a[href="/collab"], a[href="/faucet"], a[href="/play"]')).toBeNull();
     expect(document.body.textContent).not.toMatch(/Join the WL|Go to the mint/);

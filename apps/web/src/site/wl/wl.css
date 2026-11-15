@@ -1111,3 +1111,9 @@
     transform: translate(var(--dx), -4px) scale(0.6) rotate(90deg);
   }
 }
+/* the closed notice: below 1200 px the plate's cloud would drift over the moon, so the moon keeps the corner */
+@media (max-width: 1199px) {
+  .wl-plate--closed .wl-plate__cloud {
+    display: none;
+  }
+}

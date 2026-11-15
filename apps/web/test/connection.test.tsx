@@ -84,7 +84,7 @@ const banner = () =>
 const drop = (d: NetDown) => act(() => net.handlers!.onClose(d));
 
 describe('the connection banner', () => {
-  it('during an arena game: blocks the game with "your coin is still in the arena", the attempt and its countdown', () => {
+  it('during an arena game: blocks the game with "your coin is still in the room", the attempt and its countdown', () => {
     recv({ t: 'joined', room: ARENA, playerId: 7, name: 'Daphne', skin: 0 });
     banner();
     drop({ kind: 'lost', attempt: 2, retryAt: performance.now() + 1000 });
@@ -93,7 +93,7 @@ describe('the connection banner', () => {
     act(() => vi.advanceTimersByTime(BANNER_DELAY_MS));
     const el = screen.getByTestId('net-lost');
     expect(el.getAttribute('role')).toBe('alertdialog');
-    expect(el.textContent).toContain('Connection lost, reconnecting… your coin is still in the arena');
+    expect(el.textContent).toContain('Connection lost, reconnecting… your coin is still in the room');
     expect(el.textContent).toMatch(/Attempt 2 · next try in \d s/);
     // "Retry now" reconnects at once
     act(() => screen.getByRole('button', { name: 'Retry now' }).click());
@@ -109,7 +109,7 @@ describe('the connection banner', () => {
     drop({ kind: 'lost', attempt: 1, retryAt: performance.now() + 500 });
     act(() => vi.advanceTimersByTime(BANNER_DELAY_MS));
     expect(screen.getByTestId('net-lost').textContent).toContain('Connection lost, reconnecting…');
-    expect(screen.getByTestId('net-lost').textContent).not.toContain('still in the arena');
+    expect(screen.getByTestId('net-lost').textContent).not.toContain('still in the room');
     act(() => useUi.setState({ screen: 'lobby' }));
     expect(screen.queryByTestId('net-lost')).toBeNull();
   });

@@ -11,6 +11,9 @@ const WHAT: Record<string, TKey> = {
   '/collab': 'site.closed.collab',
 };
 
+/** The name each closed page carries on its title strip (the same word as its nav link). */
+const NAME: Record<string, TKey> = { '/mint': 'site.nav.mint', '/faucet': 'site.nav.faucet', '/collab': 'site.nav.collab' };
+
 /**
  * A page the admin has not opened yet (`/mint`, `/faucet`, `/collab`): one sentence, the way home, the guide and
  * the project's X account. Nothing here links to another closed part of the site.
@@ -21,7 +24,7 @@ export function ClosedPage({ path }: { path: string }) {
   const { settings } = useSiteSettings();
   return (
     <SitePage className="cl-root">
-      <PlateLabel numeral="·" title={t('site.closed.plate')} aside={path} />
+      <PlateLabel numeral="·" title={t(NAME[path] ?? 'site.closed.plate')} aside={path} />
       <section className="cl" aria-labelledby="cl-title" data-testid="closed-page">
         <div className="cl__art" aria-hidden="true">
           <Sticker tone="sun" pad="sm" tilt={-4} lift="md" className="cl__sign">
@@ -30,7 +33,6 @@ export function ClosedPage({ path }: { path: string }) {
           <CoinCharacter paint="cream" mood="sleepy" size={120} feet ground bob={!reduced} />
         </div>
         <Sticker tone="cream" pad="lg" lift="lg" round="lg" className="cl__card">
-          <p className="kicker">{t('site.closed.kicker')}</p>
           <h1 className="cl__title" id="cl-title">
             {t('site.closed.title')}
           </h1>

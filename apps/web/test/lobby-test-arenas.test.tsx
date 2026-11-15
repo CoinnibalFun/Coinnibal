@@ -32,7 +32,7 @@ describe('lobby: the testnet test arenas', () => {
     expect(screen.getAllByTestId('test-badge')).toHaveLength(1);
     expect(screen.getByText('TEST')).toBeTruthy();
     expect(screen.getByText('testnet test room with bots; same tickets and payouts')).toBeTruthy();
-    expect(screen.getByText('Test arenas · testnet')).toBeTruthy();
+    expect(screen.getByText('Test rooms · testnet')).toBeTruthy();
     expect(document.querySelector('[data-test-arena="1"]')?.textContent).toMatch(/Test · /);
     expect(document.querySelector('[data-test-arena="1"]')?.textContent).toMatch(/10 bots/);
   });
