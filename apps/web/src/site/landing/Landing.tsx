@@ -156,6 +156,70 @@ function MenuLine({ art, dish, note, price }: { art: ReactNode; dish: string; no
   );
 }
 
+/** A counter that runs from `from` to `to` once it is in view (the end value at once with reduced motion). */
+function useCountUp(from: number, to: number, on: boolean, ms = 900): number {
+  const reduce = useReducedMotion();
+  const [v, setV] = useState(reduce ? to : from);
+  useEffect(() => {
+    if (!on || reduce) {
+      if (reduce) setV(to);
+      return;
+    }
+    let raf = 0;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / ms);
+      setV(Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    // a short beat first: the gulp, then the tokens pour in
+    const wait = setTimeout(() => (raf = requestAnimationFrame(step)), 450);
+    return () => {
+      clearTimeout(wait);
+      cancelAnimationFrame(raf);
+    };
+  }, [on, reduce, from, to, ms]);
+  return v;
+}
+
+/**
+ * The core rule in one picture: a smaller coin worth 1,000 is eaten, and the eater's value runs from 1,000 to 2,000.
+ * "Eat a coin, take its tokens."
+ */
+function TakeStrip() {
+  const t = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  const seen = useInView(ref, { once: true, amount: 0.6 });
+  const value = useCountUp(1000, 2000, seen);
+  const fmt = (n: number) => n.toLocaleString('en-US');
+  return (
+    <div ref={ref} className={`ld-take${seen ? ' is-on' : ''}`} role="img" aria-label={t('ld.take.aria', { sym: SYMBOL })}>
+      <p className="ld-take__h">{t('ld.take.h')}</p>
+      <div className="ld-take__row" aria-hidden="true">
+        <span className="ld-take__coin ld-take__coin--prey">
+          <CoinCharacter paint="foam" mood="scared" size={58} />
+          <span className="ld-take__tag mono">
+            {fmt(1000)} <small>{SYMBOL}</small>
+          </span>
+        </span>
+        <span className="ld-take__flow">
+          <span className="ld-take__gain mono">+{fmt(1000)}</span>
+          <svg viewBox="0 0 120 24" className="ld-take__arrow">
+            <path d="M4 14 C 34 2, 74 2, 108 12" fill="none" />
+            <path d="M100 5 L110 12 L100 19" fill="none" />
+          </svg>
+        </span>
+        <span className="ld-take__coin ld-take__coin--eater">
+          <CoinCharacter paint="sun" mood="chomp" size={82} />
+          <span className="ld-take__tag ld-take__tag--you mono">
+            {fmt(value)} <small>{SYMBOL}</small>
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function Feast() {
   const m = useMoves();
   const t = useT();
@@ -169,6 +233,7 @@ function Feast() {
             <T k="ld.feast.h" tags={{ u: (c) => <span className="wonk ld-ul">{c}</span> }} />
           </h2>
           <p className="lede">{t('ld.feast.lede', { sym: SYMBOL, n: FACTS.capacity.arena })}</p>
+          <TakeStrip />
         </motion.div>
         <motion.div className="ld-feast__menu-wrap" variants={m.stickerDrop} custom={1.2} initial="hidden" whileInView="shown" viewport={view}>
           <Sticker tone="white" pad="lg" lift="lg" className="ld-menu">
