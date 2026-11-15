@@ -31,7 +31,7 @@ async function revive() {
   if ((await hero.screen()) === 'playing') return;
   rec.mark('died');
   await hero.wait(3500);
-  await hero.click('.g-death .kb-btn--pink').catch(() => {}); // Practice again
+  await hero.click('.g-death .kb-btn--primary').catch(() => {}); // Practice again
   await hero.page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 15000 }).catch(() => {});
   await hero.wheel(-Number(opt('--zoom', '460')), 60, 60);
   rec.mark('respawn');

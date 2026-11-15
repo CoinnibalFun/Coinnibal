@@ -1,164 +1,675 @@
 {
  "fps": 60,
  "bpm": 100,
- "duration": 66.6,
  "width": 1920,
  "height": 1080,
- "scenes": [
-  ["hook", 0.0, 4.8],
-  ["logo", 4.8, 8.4],
-  ["ticket", 8.4, 14.4],
-  ["play", 14.4, 20.4],
-  ["rounds", 20.4, 26.4],
-  ["bots", 26.4, 31.2],
-  ["arenas", 31.2, 37.2],
-  ["join", 37.2, 42.0],
-  ["fee", 42.0, 46.8],
-  ["end", 46.8, 52.8]
- ],
+ "duration": 40.2,
+ "beats": {
+  "hook": [
+   0.0,
+   4.8
+  ],
+  "logo": [
+   4.8,
+   8.4
+  ],
+  "ticket": [
+   8.4,
+   13.2
+  ],
+  "play": [
+   13.2,
+   18.0
+  ],
+  "round": [
+   18.0,
+   22.8
+  ],
+  "burn": [
+   22.8,
+   28.8
+  ],
+  "nft": [
+   28.8,
+   34.8
+  ],
+  "end": [
+   34.8,
+   40.2
+  ]
+ },
  "vo": [
-  {"id": "hook_a", "at": 0.5},
-  {"id": "hook_b", "at": 2.55},
-  {"id": "logo", "at": 5.35},
-  {"id": "ticket", "at": 8.85},
-  {"id": "play", "at": 14.75},
-  {"id": "rounds_a", "at": 20.75},
-  {"id": "rounds_b", "at": 22.5},
-  {"id": "bots", "at": 26.75},
-  {"id": "arenas", "at": 31.55},
-  {"id": "join", "at": 37.55},
-  {"id": "fee", "at": 42.3},
-  {"id": "end", "at": 47.05}
+  {
+   "id": "hook_a",
+   "at": 0.15
+  },
+  {
+   "id": "hook_b",
+   "at": 1.55
+  },
+  {
+   "id": "logo",
+   "at": 4.95
+  },
+  {
+   "id": "ticket",
+   "at": 8.8
+  },
+  {
+   "id": "play",
+   "at": 13.4
+  },
+  {
+   "id": "rounds_a",
+   "at": 18.15
+  },
+  {
+   "id": "rounds_b",
+   "at": 19.75
+  },
+  {
+   "id": "burn",
+   "at": 22.95
+  },
+  {
+   "id": "nft",
+   "at": 28.85
+  },
+  {
+   "id": "end",
+   "at": 35.05
+  }
  ],
- "sfx": [
-  {"type": "tick", "at": 0.25, "gain": 0.35},
-  {"type": "whoosh_s", "at": 2.12, "gain": 0.6},
-  {"type": "gulp", "at": 2.4, "gain": 0.9},
-  {"type": "coins_s", "at": 2.45, "gain": 0.55},
-  {"type": "roll", "at": 2.6, "dur": 0.7, "gain": 0.35},
-  {"type": "whoosh_s", "at": 3.62, "gain": 0.4},
-  {"type": "impact", "at": 4.8, "gain": 1.0},
-  {"type": "stamp", "at": 4.8, "gain": 0.8},
-  {"type": "type", "at": 5.5, "dur": 0.55, "gain": 0.3},
-  {"type": "whoosh_l", "at": 7.75, "gain": 0.55},
-  {"type": "tape", "at": 8.62, "gain": 0.5},
-  {"type": "tape", "at": 8.8, "gain": 0.45},
-  {"type": "stamp", "at": 10.8, "gain": 0.95},
-  {"type": "punch", "at": 11.4, "gain": 0.9},
-  {"type": "dive", "at": 12.4, "gain": 0.75},
-  {"type": "hit", "at": 14.4, "gain": 0.6},
-  {"type": "shutter", "at": 15.6, "gain": 0.45},
-  {"type": "stamp", "at": 16.2, "gain": 0.75},
-  {"type": "shutter", "at": 16.8, "gain": 0.45},
-  {"type": "shutter", "at": 18.0, "gain": 0.45},
-  {"type": "shutter", "at": 19.2, "gain": 0.45},
-  {"type": "whoosh_s", "at": 20.15, "gain": 0.6},
-  {"type": "roll", "at": 20.55, "dur": 1.05, "gain": 0.3},
-  {"type": "tick", "at": 21.6, "gain": 0.45},
-  {"type": "tick", "at": 21.8, "gain": 0.45},
-  {"type": "tick", "at": 22.0, "gain": 0.5},
-  {"type": "bell", "at": 22.2, "gain": 0.75},
-  {"type": "whoosh_s", "at": 22.75, "gain": 0.4},
-  {"type": "printer", "at": 22.45, "dur": 1.5, "gain": 0.55},
-  {"type": "stamp", "at": 24.0, "gain": 1.0},
-  {"type": "tape", "at": 24.65, "gain": 0.5},
-  {"type": "ink", "at": 25.75, "gain": 0.8},
-  {"type": "sub", "at": 26.4, "gain": 0.9},
-  {"type": "gulp_low", "at": 28.8, "gain": 0.9},
-  {"type": "coins_l", "at": 28.82, "gain": 0.8},
-  {"type": "pickup", "at": 30.15, "gain": 0.4},
-  {"type": "pickup", "at": 30.4, "gain": 0.4},
-  {"type": "pickup", "at": 30.65, "gain": 0.4},
-  {"type": "page", "at": 30.5, "gain": 0.75},
-  {"type": "whoosh_s", "at": 30.95, "gain": 0.45},
-  {"type": "whip", "at": 36.85, "gain": 0.7},
-  {"type": "pop", "at": 37.4, "gain": 0.5},
-  {"type": "stamp", "at": 38.15, "gain": 0.8},
-  {"type": "pop", "at": 38.98, "gain": 0.5},
-  {"type": "tick", "at": 39.95, "gain": 0.6},
-  {"type": "stamp", "at": 40.2, "gain": 0.8},
-  {"type": "coins_s", "at": 40.25, "gain": 0.45},
-  {"type": "whoosh_s", "at": 41.35, "gain": 0.5},
-  {"type": "pop", "at": 42.0, "gain": 0.6},
-  {"type": "pop", "at": 42.6, "gain": 0.6},
-  {"type": "pop", "at": 42.78, "gain": 0.5},
-  {"type": "tape", "at": 43.6, "gain": 0.45},
-  {"type": "fire", "at": 44.4, "dur": 2.4, "gain": 0.7},
-  {"type": "whoosh_l", "at": 45.95, "gain": 0.6},
-  {"type": "impact", "at": 46.8, "gain": 1.0},
-  {"type": "stamp", "at": 46.8, "gain": 0.7},
-  {"type": "pop", "at": 47.95, "gain": 0.45},
-  {"type": "pop", "at": 48.4, "gain": 0.45},
-  {"type": "pop", "at": 48.83, "gain": 0.5},
-  {"type": "slide", "at": 49.6, "gain": 0.4},
-  {"type": "boing", "at": 50.3, "gain": 0.35}
+ "montage": [
+  [
+   "GULP",
+   0.0,
+   "GULP"
+  ],
+  [
+   "RUN",
+   1.6,
+   "RUN"
+  ],
+  [
+   "SPLIT",
+   3.2,
+   "SPLIT"
+  ]
  ],
  "footage": [
-  {"id": "H", "take": "arena", "dur": 2.45, "align": {"src": 122.35, "at": 1.2}, "zoom": 1.9, "lag": 0.45, "lead": [-230, -30], "speed": [[0, 1], [0.85, 1], [1.05, 0.4], [1.55, 0.4], [1.85, 1], [2.45, 1]], "punch": [[0.95, 1.3, 0.22, 0.75, 0.45]]},
-  {"id": "A", "take": "arena", "from": 179.2, "dur": 4.2, "zoom": 1.3, "lag": 0.8},
-  {"id": "B", "take": "arena2", "from": 249.12, "dur": 1.2, "zoom": 1.5, "lag": 0.4},
-  {"id": "C", "take": "arena2", "from": 147.9, "dur": 1.2, "zoom": 1.6, "lag": 0.4},
-  {"id": "D", "take": "arena", "from": 123.4, "dur": 1.2, "zoom": 1.45, "lag": 0.6},
-  {"id": "E", "take": "arena2", "from": 255.6, "dur": 1.4, "cam": [[0, 960, 545, 1.3], [1.4, 960, 545, 1.36]]}
+  {
+   "id": "G1",
+   "take": "promo",
+   "from": 53.46,
+   "dur": 2.4,
+   "gulp": 54.46,
+   "zoom": 1.4,
+   "lead": [
+    -260,
+    10
+   ],
+   "speed": [
+    [
+     0,
+     1
+    ],
+    [
+     0.8,
+     1
+    ],
+    [
+     0.95,
+     0.4
+    ],
+    [
+     1.5,
+     0.4
+    ],
+    [
+     1.7,
+     1
+    ],
+    [
+     2.4,
+     1
+    ]
+   ]
+  },
+  {
+   "id": "G2",
+   "take": "promo",
+   "from": 82.9,
+   "dur": 2.4,
+   "gulp": 83.83,
+   "zoom": 1.4,
+   "lead": [
+    -260,
+    10
+   ],
+   "speed": [
+    [
+     0,
+     1
+    ],
+    [
+     0.7,
+     1
+    ],
+    [
+     0.85,
+     0.5
+    ],
+    [
+     1.25,
+     0.5
+    ],
+    [
+     1.45,
+     1
+    ],
+    [
+     2.4,
+     1
+    ]
+   ]
+  },
+  {
+   "id": "GULP",
+   "take": "promo",
+   "from": 113.95,
+   "dur": 1.6,
+   "gulp": 114.76,
+   "zoom": 1.2
+  },
+  {
+   "id": "RUN",
+   "take": "promo",
+   "from": 63.45,
+   "dur": 1.6,
+   "zoom": 1.1
+  },
+  {
+   "id": "SPLIT",
+   "take": "promo",
+   "from": 61.9,
+   "dur": 1.6,
+   "zoom": 1.15
+  }
  ],
- "cut": [
-  {"at": 0.0, "dur": 2.4, "kind": "hook"},
-  {"at": 2.4, "dur": 22.2, "old": 3.6},
-  {"at": 24.6, "dur": 0.6, "kind": "turn", "a": 25.8, "b": 31.0, "sa": "rounds", "sb": "arenas"},
-  {"at": 25.2, "dur": 5.4, "old": 31.6, "scene": "arenas"},
-  {"at": 30.6, "dur": 0.6, "kind": "whip", "a": 37.0, "b": 41.4, "sa": "arenas", "sb": "fee"},
-  {"at": 31.2, "dur": 3.9, "old": 42.0},
-  {"at": 35.1, "dur": 0.9, "kind": "burn", "a": 45.9, "b": -0.9},
-  {"at": 36.0, "dur": 3.0, "kind": "nft"},
-  {"at": 39.0, "dur": 6.0, "old": 46.8}
+ "sfx": [
+  {
+   "type": "tick",
+   "at": 0.08,
+   "gain": 0.35
+  },
+  {
+   "type": "whoosh_s",
+   "at": 0.85,
+   "gain": 0.4
+  },
+  {
+   "type": "gulp",
+   "at": 1.18,
+   "gain": 0.9
+  },
+  {
+   "type": "coins_s",
+   "at": 1.6,
+   "gain": 0.6
+  },
+  {
+   "type": "pop",
+   "at": 1.6,
+   "gain": 0.4
+  },
+  {
+   "type": "gulp",
+   "at": 3.48,
+   "gain": 0.85
+  },
+  {
+   "type": "coins_s",
+   "at": 3.9,
+   "gain": 0.55
+  },
+  {
+   "type": "whoosh_s",
+   "at": 4.3,
+   "gain": 0.5
+  },
+  {
+   "type": "stamp",
+   "at": 4.8,
+   "gain": 0.7
+  },
+  {
+   "type": "type",
+   "at": 5.0,
+   "gain": 0.3,
+   "dur": 0.5
+  },
+  {
+   "type": "whoosh_s",
+   "at": 6.7,
+   "gain": 0.45
+  },
+  {
+   "type": "gulp",
+   "at": 7.35,
+   "gain": 0.7
+  },
+  {
+   "type": "coins_s",
+   "at": 7.4,
+   "gain": 0.4
+  },
+  {
+   "type": "whoosh_l",
+   "at": 7.95,
+   "gain": 0.5
+  },
+  {
+   "type": "thud",
+   "at": 8.6,
+   "gain": 0.6
+  },
+  {
+   "type": "thud",
+   "at": 8.9,
+   "gain": 0.55
+  },
+  {
+   "type": "thud",
+   "at": 9.2,
+   "gain": 0.55
+  },
+  {
+   "type": "thud",
+   "at": 9.5,
+   "gain": 0.6
+  },
+  {
+   "type": "whoosh_s",
+   "at": 10.45,
+   "gain": 0.5
+  },
+  {
+   "type": "tape",
+   "at": 10.95,
+   "gain": 0.5
+  },
+  {
+   "type": "tape",
+   "at": 11.05,
+   "gain": 0.45
+  },
+  {
+   "type": "stamp",
+   "at": 11.4,
+   "gain": 0.95
+  },
+  {
+   "type": "pop",
+   "at": 11.55,
+   "gain": 0.5
+  },
+  {
+   "type": "coins_s",
+   "at": 11.8,
+   "gain": 0.45
+  },
+  {
+   "type": "punch",
+   "at": 12.25,
+   "gain": 0.9
+  },
+  {
+   "type": "dive",
+   "at": 12.45,
+   "gain": 0.75
+  },
+  {
+   "type": "hit",
+   "at": 13.2,
+   "gain": 0.6
+  },
+  {
+   "type": "gulp",
+   "at": 14.0,
+   "gain": 0.7
+  },
+  {
+   "type": "coins_s",
+   "at": 14.05,
+   "gain": 0.45
+  },
+  {
+   "type": "shutter",
+   "at": 14.8,
+   "gain": 0.45
+  },
+  {
+   "type": "stamp",
+   "at": 15.05,
+   "gain": 0.6
+  },
+  {
+   "type": "shutter",
+   "at": 16.4,
+   "gain": 0.45
+  },
+  {
+   "type": "stamp",
+   "at": 16.7,
+   "gain": 0.6
+  },
+  {
+   "type": "whip",
+   "at": 17.72,
+   "gain": 0.6
+  },
+  {
+   "type": "roll",
+   "at": 18.3,
+   "gain": 0.3,
+   "dur": 1.0
+  },
+  {
+   "type": "tick",
+   "at": 19.3,
+   "gain": 0.45
+  },
+  {
+   "type": "tick",
+   "at": 19.5,
+   "gain": 0.45
+  },
+  {
+   "type": "tick",
+   "at": 19.7,
+   "gain": 0.5
+  },
+  {
+   "type": "bell",
+   "at": 19.9,
+   "gain": 0.75
+  },
+  {
+   "type": "printer",
+   "at": 20.15,
+   "gain": 0.55,
+   "dur": 1.35
+  },
+  {
+   "type": "stamp",
+   "at": 21.7,
+   "gain": 1.0
+  },
+  {
+   "type": "whoosh_s",
+   "at": 22.45,
+   "gain": 0.45
+  },
+  {
+   "type": "pop",
+   "at": 22.85,
+   "gain": 0.45
+  },
+  {
+   "type": "pop",
+   "at": 22.97,
+   "gain": 0.45
+  },
+  {
+   "type": "pop",
+   "at": 23.09,
+   "gain": 0.45
+  },
+  {
+   "type": "pop",
+   "at": 23.21,
+   "gain": 0.5
+  },
+  {
+   "type": "pickup",
+   "at": 23.55,
+   "gain": 0.35
+  },
+  {
+   "type": "thud",
+   "at": 23.8,
+   "gain": 0.55
+  },
+  {
+   "type": "pickup",
+   "at": 23.95,
+   "gain": 0.35
+  },
+  {
+   "type": "thud",
+   "at": 24.25,
+   "gain": 0.5
+  },
+  {
+   "type": "pickup",
+   "at": 24.35,
+   "gain": 0.35
+  },
+  {
+   "type": "thud",
+   "at": 24.55,
+   "gain": 0.5
+  },
+  {
+   "type": "pickup",
+   "at": 24.75,
+   "gain": 0.4
+  },
+  {
+   "type": "fire",
+   "at": 24.9,
+   "gain": 0.7,
+   "dur": 3.6
+  },
+  {
+   "type": "coins_l",
+   "at": 25.1,
+   "gain": 0.6
+  },
+  {
+   "type": "thud",
+   "at": 26.0,
+   "gain": 0.5
+  },
+  {
+   "type": "thud",
+   "at": 26.15,
+   "gain": 0.5
+  },
+  {
+   "type": "thud",
+   "at": 26.3,
+   "gain": 0.5
+  },
+  {
+   "type": "thud",
+   "at": 26.45,
+   "gain": 0.5
+  },
+  {
+   "type": "stamp_l",
+   "at": 26.55,
+   "gain": 0.5
+  },
+  {
+   "type": "stamp_l",
+   "at": 26.67,
+   "gain": 0.45
+  },
+  {
+   "type": "coins_l",
+   "at": 26.75,
+   "gain": 0.55
+  },
+  {
+   "type": "stamp_l",
+   "at": 26.79,
+   "gain": 0.45
+  },
+  {
+   "type": "stamp_l",
+   "at": 26.91,
+   "gain": 0.45
+  },
+  {
+   "type": "whip",
+   "at": 28.5,
+   "gain": 0.6
+  },
+  {
+   "type": "thud",
+   "at": 28.85,
+   "gain": 0.45
+  },
+  {
+   "type": "thud",
+   "at": 29.05,
+   "gain": 0.4
+  },
+  {
+   "type": "thud",
+   "at": 29.25,
+   "gain": 0.4
+  },
+  {
+   "type": "page",
+   "at": 29.35,
+   "gain": 0.6
+  },
+  {
+   "type": "whoosh_s",
+   "at": 30.35,
+   "gain": 0.45
+  },
+  {
+   "type": "stamp",
+   "at": 30.85,
+   "gain": 0.8
+  },
+  {
+   "type": "pop",
+   "at": 31.15,
+   "gain": 0.5
+  },
+  {
+   "type": "tape",
+   "at": 31.25,
+   "gain": 0.35
+  },
+  {
+   "type": "pop",
+   "at": 32.15,
+   "gain": 0.5
+  },
+  {
+   "type": "tape",
+   "at": 32.25,
+   "gain": 0.35
+  },
+  {
+   "type": "pop",
+   "at": 32.85,
+   "gain": 0.5
+  },
+  {
+   "type": "tape",
+   "at": 32.95,
+   "gain": 0.35
+  },
+  {
+   "type": "pop",
+   "at": 33.35,
+   "gain": 0.5
+  },
+  {
+   "type": "tape",
+   "at": 33.45,
+   "gain": 0.35
+  },
+  {
+   "type": "pop",
+   "at": 33.75,
+   "gain": 0.5
+  },
+  {
+   "type": "tape",
+   "at": 33.85,
+   "gain": 0.35
+  },
+  {
+   "type": "ink",
+   "at": 34.35,
+   "gain": 0.7
+  },
+  {
+   "type": "stamp",
+   "at": 34.8,
+   "gain": 0.7
+  },
+  {
+   "type": "pop",
+   "at": 35.75,
+   "gain": 0.45
+  },
+  {
+   "type": "pop",
+   "at": 36.0,
+   "gain": 0.45
+  },
+  {
+   "type": "pop",
+   "at": 36.3,
+   "gain": 0.5
+  },
+  {
+   "type": "slide",
+   "at": 36.9,
+   "gain": 0.4
+  },
+  {
+   "type": "pop",
+   "at": 37.4,
+   "gain": 0.35
+  },
+  {
+   "type": "pop",
+   "at": 37.52,
+   "gain": 0.35
+  },
+  {
+   "type": "pop",
+   "at": 37.64,
+   "gain": 0.35
+  },
+  {
+   "type": "pop",
+   "at": 37.76,
+   "gain": 0.35
+  },
+  {
+   "type": "boing",
+   "at": 37.85,
+   "gain": 0.35
+  },
+  {
+   "type": "gulp",
+   "at": 38.4,
+   "gain": 0.6
+  }
  ],
- "cutDuration": 45.0,
- "audioCut": [
-  [0.0, 1.2, 25.8],
-  [24.6, 30.6, 36.6],
-  [30.6, 41.4, 46.8],
-  [36.0, 62.4, 65.4],
-  [39.0, 46.8, 52.8]
- ],
- "hook2": {
-  "shot": "H",
-  "gulp": 1.2,
-  "end": 2.4,
-  "purse": [1000, 2000]
- },
- "vo2": [
-  {"id": "hook_a", "at": 0.12},
-  {"id": "hook_b", "at": 1.32},
-  {"id": "logo", "at": 4.15},
-  {"id": "ticket", "at": 7.65},
-  {"id": "play", "at": 13.55},
-  {"id": "rounds_a", "at": 19.55},
-  {"id": "rounds_b", "at": 21.3},
-  {"id": "arenas", "at": 25.35},
-  {"id": "fee", "at": 31.35},
-  {"id": "nft", "at": 36.12},
-  {"id": "end", "at": 39.55}
- ],
- "sfx2": [
-  {"type": "impact", "at": 0.0, "gain": 0.9},
-  {"type": "stamp", "at": 0.04, "gain": 0.55},
-  {"type": "stamp", "at": 1.28, "gain": 0.5},
-  {"type": "impact", "at": 1.2, "gain": 0.7},
-  {"type": "whoosh_l", "at": 1.92, "gain": 0.5},
-  {"type": "thud", "at": 25.05, "gain": 0.6},
-  {"type": "thud", "at": 25.65, "gain": 0.55},
-  {"type": "thud", "at": 26.25, "gain": 0.55},
-  {"type": "thud", "at": 26.85, "gain": 0.6},
-  {"type": "stamp_l", "at": 27.8, "gain": 0.6},
-  {"type": "thud", "at": 28.4, "gain": 0.55},
-  {"type": "thud", "at": 28.7, "gain": 0.55},
-  {"type": "thud", "at": 29.0, "gain": 0.55},
-  {"type": "thud", "at": 29.3, "gain": 0.55},
-  {"type": "whoosh_s", "at": 35.72, "gain": 0.45},
-  {"type": "thud", "at": 36.02, "gain": 0.6},
-  {"type": "thud", "at": 36.14, "gain": 0.5},
-  {"type": "thud", "at": 36.26, "gain": 0.55},
-  {"type": "whoosh_s", "at": 38.25, "gain": 0.45},
-  {"type": "ink", "at": 38.4, "gain": 0.75}
+ "gulps": [
+  1.18,
+  3.48
  ]
 }
