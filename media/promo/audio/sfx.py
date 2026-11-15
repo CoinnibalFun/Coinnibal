@@ -1,4 +1,4 @@
-"""Procedural sound effects for the Elymum promo (paper, ink, coins, stamps).
+"""Procedural sound effects for the Coinnibal promo (paper, ink, coins, stamps).
 
 Every cue in ../timeline.json "sfx" is synthesised here and laid onto one
 stereo track.   python sfx.py OUT.wav
@@ -367,7 +367,6 @@ def make(cue):
 
 def main():
     out = sys.argv[1]
-    # --cues sfx2: the cut's own cues (film time) instead of the scene timeline's
     key = sys.argv[sys.argv.index("--cues") + 1] if "--cues" in sys.argv else "sfx"
     n = int((TL["duration"] + 1.2) * SR)
     buf = np.zeros((2, n))
