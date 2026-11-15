@@ -1,4 +1,4 @@
-/* Elymum promo: stage bootstrap. Exposes window.renderAt(t) (async) for the
+/* Coinnibal promo: stage bootstrap. Exposes window.renderAt(t) (async) for the
  * frame renderer and a ?t= preview mode for quick looks in a browser. */
 'use strict';
 
