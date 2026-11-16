@@ -90,12 +90,12 @@ describe('collab logic', () => {
     expect(filledRows([{ name: ' x ', wallet: a.toLowerCase() }])).toEqual([{ name: 'x', wallet: a }]);
   });
 
-  it('counts down and writes a raffle post that names @elymumio and this site', () => {
+  it('counts down and writes a raffle post that names @coinnibalfun and this site', () => {
     expect(countdown(1000 + 3_723_000, 1000)).toBe('01:02:03');
     expect(countdown(2 * 86_400_000 + 5000, 0)).toBe('2d 00:00:05');
     expect(countdown(0, 5000)).toBe('00:00:00');
     const post = rafflePost('Riso Guild', 20, Date.UTC(2026, 9, 20), 'elymum.test');
-    expect(post).toMatch(/@elymumio\b/);
+    expect(post).toMatch(/@coinnibalfun\b/);
     expect(post).not.toMatch(/@elymum(?![a-z0-9_])/i);
     expect(post).toMatch(/elymum\.test/);
     expect(post).toMatch(/20 Coinnibal WL spots/);
@@ -192,7 +192,7 @@ describe('/collab', { timeout: 30_000 }, () => {
     await waitFor(() => expect(screen.getAllByText('Not this time.').length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: /Collab guide/ }));
     const post = (await screen.findByLabelText('Raffle post')) as HTMLTextAreaElement;
-    expect(post.value).toMatch(/@elymumio/);
+    expect(post.value).toMatch(/@coinnibalfun/);
     expect(screen.getByRole('button', { name: 'Copy the post' })).toBeTruthy();
   });
 });

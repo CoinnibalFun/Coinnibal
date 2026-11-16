@@ -1,14 +1,14 @@
 // The Coinnibal brand kit templates. Each export returns { w, h, html } (CSS pixels; the generator
 // picks the device scale). Copy is plain, short English a beginner reads at a glance ("simple is
 // the best", "just having fun"): the product is "Coinnibal", its token $NIBAL, the chain "Robinhood
-// Chain", the gas token ETH, the X handle `BRAND_X_HANDLE` (default @elymumio until the new handle is
+// Chain", the gas token ETH, the X handle `BRAND_X_HANDLE` (default @coinnibalfun; earlier @elymumio
 // live). No mint price is written into the art (the mint page reads it from the contract).
 // No domain is written into the art (the site's domain is whatever PUBLIC_URL says).
 import { C, coin, coinMark, cloud, food, page, props, seigaiha, star, starfield, terraces, wordmark } from './art.mjs';
 import { ringScene } from './scene.mjs';
 
 /** The project's X handle in the art: `BRAND_X_HANDLE` (with or without `@`), else the current one. */
-export const HANDLE = `@${(process.env.BRAND_X_HANDLE || 'elymumio').replace(/^@/, '')}`;
+export const HANDLE = `@${(process.env.BRAND_X_HANDLE || 'coinnibalfun').replace(/^@/, '')}`;
 /** The brand line under the wordmark. */
 export const TAGLINE = 'Eat or be eaten.';
 

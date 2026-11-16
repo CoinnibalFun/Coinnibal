@@ -559,7 +559,7 @@ describe('profiles', () => {
   });
 });
 
-describe('X handle migration (previous default @elymum → @elymumio)', () => {
+describe('X handle migration (previous default @elymum → @elymumio → @coinnibalfun)', () => {
   const now = 1_700_000_000_000;
   const seededOld = [
     { id: 'follow_x', kind: 'follow_x', title: 'Follow @elymum', body: 'Follow @elymum on X.', target: 'https://x.com/elymum', required: true, enabled: false, order: 0 },
@@ -579,11 +579,11 @@ describe('X handle migration (previous default @elymum → @elymumio)', () => {
     );
   }
 
-  it('seeds new data with @elymumio', () => {
+  it('seeds new data with @coinnibalfun', () => {
     const s = new SiteStore(null);
-    expect(s.settings.xHandle).toBe('elymumio');
-    expect(s.tasks[0]).toMatchObject({ id: 'follow_x', title: 'Follow @elymumio', body: 'Follow @elymumio on X.', target: 'https://x.com/elymumio' });
-    expect(s.tasks[1]).toMatchObject({ title: 'Post about Coinnibal on X', body: 'Post about Coinnibal on X, tag @elymumio, then paste the link to your post.' });
+    expect(s.settings.xHandle).toBe('coinnibalfun');
+    expect(s.tasks[0]).toMatchObject({ id: 'follow_x', title: 'Follow @coinnibalfun', body: 'Follow @coinnibalfun on X.', target: 'https://x.com/coinnibalfun' });
+    expect(s.tasks[1]).toMatchObject({ title: 'Post about Coinnibal on X', body: 'Post about Coinnibal on X, tag @coinnibalfun, then paste the link to your post.' });
   });
 
   it('switches a stored previous default handle and rewrites only the seeded tasks', () => {
@@ -591,20 +591,20 @@ describe('X handle migration (previous default @elymum → @elymumio)', () => {
     seed(dir, { wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymum', launchPostUrl: null, launch: 1 });
     const logs: string[] = [];
     const s = new SiteStore(dir, { log: (m) => logs.push(m) });
-    expect(s.settings).toEqual({ wlOpen: true, collabOpen: false, mintOpen: false, gameAccess: 'holders', xHandle: 'elymumio', launchPostUrl: null });
-    expect(JSON.parse(readFileSync(join(dir, SITE_FILES.settings), 'utf8')).xHandle).toBe('elymumio');
+    expect(s.settings).toEqual({ wlOpen: true, collabOpen: false, mintOpen: false, gameAccess: 'holders', xHandle: 'coinnibalfun', launchPostUrl: null });
+    expect(JSON.parse(readFileSync(join(dir, SITE_FILES.settings), 'utf8')).xHandle).toBe('coinnibalfun');
     const [follow, postX, engage, custom] = s.tasks;
     // the seeded tasks keep their admin edits (enabled: false) and get the new handle
-    expect(follow).toMatchObject({ id: 'follow_x', title: 'Follow @elymumio', body: 'Follow @elymumio on X.', target: 'https://x.com/elymumio', enabled: false });
-    expect(postX).toMatchObject({ title: 'Post about Coinnibal on X', body: 'Post about Coinnibal on X, tag @elymumio, then paste the link to your post.' });
+    expect(follow).toMatchObject({ id: 'follow_x', title: 'Follow @coinnibalfun', body: 'Follow @coinnibalfun on X.', target: 'https://x.com/coinnibalfun', enabled: false });
+    expect(postX).toMatchObject({ title: 'Post about Coinnibal on X', body: 'Post about Coinnibal on X, tag @coinnibalfun, then paste the link to your post.' });
     expect(engage).toEqual(seededOld[2]);
     // an admin-written task is never touched
     expect(custom).toEqual(seededOld[3]);
-    expect(JSON.parse(readFileSync(join(dir, SITE_FILES.tasks), 'utf8'))[0].title).toBe('Follow @elymumio');
+    expect(JSON.parse(readFileSync(join(dir, SITE_FILES.tasks), 'utf8'))[0].title).toBe('Follow @coinnibalfun');
     // answers stored in WL entries (and the admin's note) stay as they were
     expect(s.getWl('wl_1')).toMatchObject({ note: 'follows @elymum', tasks: [oldAnswer] });
     expect(logs.join('\n')).toMatch(/previous default/);
-    expect(logs.join('\n')).toMatch(/2 seeded WL task\(s\) now name Coinnibal and @elymumio/);
+    expect(logs.join('\n')).toMatch(/2 seeded WL task\(s\) now name Coinnibal and @coinnibalfun/);
     // idempotent: a second load changes nothing
     const again: string[] = [];
     const s2 = new SiteStore(dir, { log: (m) => again.push(m) });
@@ -627,7 +627,7 @@ describe('X handle migration (previous default @elymum → @elymumio)', () => {
     const tasks = [{ ...seededOld[0], title: 'Follow @elymumio and @Elymum_fans', body: 'See https://x.com/elymumio and x.com/ELYMUM.', target: 'https://x.com/elymumio' }];
     writeFileSync(join(dir, SITE_FILES.tasks), JSON.stringify(tasks));
     const s = new SiteStore(dir);
-    expect(s.tasks[0]).toMatchObject({ title: 'Follow @elymumio and @Elymum_fans', body: 'See https://x.com/elymumio and x.com/elymumio.', target: 'https://x.com/elymumio' });
+    expect(s.tasks[0]).toMatchObject({ title: 'Follow @coinnibalfun and @Elymum_fans', body: 'See https://x.com/coinnibalfun and x.com/coinnibalfun.', target: 'https://x.com/coinnibalfun' });
   });
 
   it('moves to a new default handle (X_HANDLE): the stored old default and the seeded tasks follow it', () => {
@@ -649,8 +649,8 @@ describe('X handle migration (previous default @elymum → @elymumio)', () => {
       const r = await h.call('GET', '/api/site/tasks');
       expect(r.status).toBe(200);
       // follow_x is disabled in this data, so post_x leads
-      expect(r.body.tasks[0]).toMatchObject({ id: 'post_x', body: 'Post about Coinnibal on X, tag @elymumio, then paste the link to your post.' });
-      expect((await h.call('GET', '/api/site/settings')).body.settings.xHandle).toBe('elymumio');
+      expect(r.body.tasks[0]).toMatchObject({ id: 'post_x', body: 'Post about Coinnibal on X, tag @coinnibalfun, then paste the link to your post.' });
+      expect((await h.call('GET', '/api/site/settings')).body.settings.xHandle).toBe('coinnibalfun');
     } finally {
       await h.app.close();
     }

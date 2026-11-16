@@ -25,7 +25,7 @@ const wl = (id: string, xHandle: string): WlEntryAdmin => ({
   note: '',
   dupCollabs: [],
 });
-const task = (id: string, order: number): WlTask => ({ id, kind: 'follow_x', title: `Task ${id}`, body: '', target: 'https://x.com/elymumio', required: true, enabled: true, order });
+const task = (id: string, order: number): WlTask => ({ id, kind: 'follow_x', title: `Task ${id}`, body: '', target: 'https://x.com/coinnibalfun', required: true, enabled: true, order });
 const cb = (over: Partial<CollabAdmin> = {}): CollabAdmin => ({
   id: 'c1',
   wallet: W,

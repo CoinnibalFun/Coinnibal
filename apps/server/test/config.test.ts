@@ -67,7 +67,7 @@ describe('chain env (EVM)', () => {
     expect(loadConfig({ NFT_ART_STYLE: 'pixel', NFT_COLLECTION_SIZE: '3333', NFT_COLLECTION_SEED: ' 0xabc ' } as NodeJS.ProcessEnv).nft).toEqual({ size: 3333, seed: '0xabc', style: 'pixel' });
     expect(loadConfig({ NFT_ART_STYLE: 'oil' } as NodeJS.ProcessEnv).nft.style).toBe('vector');
     expect(cfg.gameAccess).toBeNull();
-    // the project's X handle: unset is the shared default; X_HANDLE moves it (e.g. to @coinnibal once it is live)
+    // the project's X handle: unset is the shared default; X_HANDLE moves it (e.g. to another account)
     expect(cfg.xHandle).toBeNull();
     expect(loadConfig({ X_HANDLE: '@Coinnibal' } as NodeJS.ProcessEnv).xHandle).toBe('coinnibal');
     expect(loadConfig({ X_HANDLE: 'not a handle!' } as NodeJS.ProcessEnv).xHandle).toBeNull();
