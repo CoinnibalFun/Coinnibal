@@ -18,7 +18,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, collabOpen: false } } }));
     render(<Landing />);
     expect(screen.getByRole('heading', { level: 1, name: 'Coinnibal' })).toBeTruthy();
-    expect(screen.getByText('Coins that eat coins.')).toBeTruthy();
+    expect(screen.getByText('Coins eating coins.')).toBeTruthy();
     expect(screen.getByText('Eat coins smaller than you. Run from the ones that are bigger. Five minutes later the bell rings and whatever you’ve swallowed is yours.')).toBeTruthy();
     expect(screen.queryByText(/small change with a big appetite|Eat the food/)).toBeNull();
     // the hero links to the holder perks on the same page
@@ -35,8 +35,11 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(document.body.textContent).not.toMatch(/Asphodel|Lethe|Golden Bough|Isles|Elysi|obol|feast|Homer/i);
     // every holder perk as a card
     const why = screen.getByTestId('why-nft');
-    expect([...why.querySelectorAll('.nf-card')].map((c) => c.getAttribute('data-perk'))).toEqual(['fee', 'room', 'shop', 'private', 'skin', 'faucet']);
+    expect([...why.querySelectorAll('.nf-card')].map((c) => c.getAttribute('data-perk'))).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
     expect(why.textContent).toContain('Lower fee: 10% instead of 20%');
+    { const m = document.body.textContent?.match(/.{0,60}(testnet|faucet|Short answers).{0,40}/i); expect(m?.[0] ?? null).toBeNull(); }
+    expect(screen.getByText('What does the Coinnibal NFT give me?')).toBeTruthy();
+    expect(screen.getByText('How many NFTs are there?')).toBeTruthy();
     // the four rooms, named by price, priced in US dollars (paid in the game token); the $10 one for NFT holders
     for (const [name, fee] of [['$1 Room', '$1'], ['$3 Room', '$3'], ['$5 Room', '$5'], ['$10 Room', '$10']]) {
       expect(screen.getByRole('heading', { level: 3, name })).toBeTruthy();
@@ -86,7 +89,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     render(<Landing />);
     await waitFor(() => expect(screen.getAllByRole('link', { name: /@feastbot/ }).length).toBeGreaterThan(0));
     expect(screen.getAllByRole('link', { name: /@feastbot/ }).every((a) => a.getAttribute('href') === 'https://x.com/feastbot')).toBe(true);
-    expect(screen.getByText(/Gas is ETH/)).toBeTruthy();
+    expect(screen.getByText(/using ETH for gas/)).toBeTruthy();
   });
 
   const CLOSED = { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' as const };
@@ -121,9 +124,9 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     const hero = `${document.querySelector('.ld-plate1')?.textContent} ${document.querySelector('.ld-hero')?.textContent}`;
     expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toEqual(['Five minutes', '05:00']);
     const page = document.querySelector('main')!.textContent ?? '';
-    expect(page.match(/Coins that eat coins/g)).toHaveLength(1);
+    expect(page.match(/Coins eating coins/g)).toHaveLength(1);
     expect(page.match(/Eat or be eaten/g)).toHaveLength(1);
-    expect(document.querySelector('.st-foot')!.textContent).not.toMatch(/Coins that eat coins|Eat or be eaten|Five minutes/);
+    expect(document.querySelector('.st-foot')!.textContent).not.toMatch(/Coins eating coins|Eat or be eaten|Five minutes/);
     // the fee's numbers: once for everyone (the rooms), once for holders (the NFT's first perk)
     expect(page.match(/15% is burned and 5% goes to the team wallet/g)).toHaveLength(1);
     expect(page.match(/8% is burned and 2% goes to the team wallet/g)).toHaveLength(1);

@@ -62,8 +62,8 @@ interface Card {
   note: string;
 }
 
-/** The six holder perks as cards (the faucet one only where test tokens exist, or while the network is unknown). */
-export function perkCards(v: NftPerkValues, t: (k: TKey, vars?: Record<string, string | number>) => string, testnet: boolean | null): Card[] {
+/** The holder perks as cards (the test faucet is not one of them: visitor pages do not talk about the test network). */
+export function perkCards(v: NftPerkValues, t: (k: TKey, vars?: Record<string, string | number>) => string, _testnet: boolean | null): Card[] {
   const cards: Card[] = [
     { id: 'fee', icon: 'flame', paint: 'sun', big: v.fee.holder, title: t('nf.fee.t', { holder: v.fee.holder, normal: v.fee.normal }), note: t('nf.fee.n', { burn: v.fee.burn, team: v.fee.team }) },
   ];
@@ -72,7 +72,6 @@ export function perkCards(v: NftPerkValues, t: (k: TKey, vars?: Record<string, s
   if (v.privateRoom.perk === 'free_daily') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: '1/day', title: t('nf.free.t'), note: t('nf.free.n') });
   else if (v.privateRoom.perk === 'discount') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: `-${v.privateRoom.pct}%`, title: t('nf.freeDiscount.t', { pct: v.privateRoom.pct }), note: t('nf.free.n') });
   cards.push({ id: 'skin', icon: 'user', paint: 'teal', big: 'NFT', title: t('nf.skin.t'), note: t('nf.skin.n') });
-  if (testnet !== false) cards.push({ id: 'faucet', icon: 'download', paint: 'foam', big: `${v.faucetX}x`, title: t('nf.faucet.t', { n: v.faucetX }), note: t('nf.faucet.n', { n: v.faucetX }) });
   return cards;
 }
 

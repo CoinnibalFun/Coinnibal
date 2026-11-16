@@ -108,10 +108,10 @@ export function ogCard() {
       <div class="tape"></div>
       <div class="kick" style="color:${C.teal}">5-minute rounds &middot; on Robinhood Chain</div>
       <div style="margin:10px 0 10px">${wordmark({ width: 500 })}</div>
-      <h2>Coins that eat coins. <span style="color:${C.teal}">${TAGLINE}</span></h2>
+      <h2>Coins eating coins. <span style="color:${C.teal}">${TAGLINE}</span></h2>
       <p>Eat coins smaller than you. Run from the ones that are bigger. Five minutes later the bell rings and whatever you&rsquo;ve swallowed is yours.</p>
       <div style="display:flex;align-items:center;gap:18px">
-        <span class="btn sun">Join the WL ${arrow}</span>${flowPills()}
+        <span class="btn sun">See how it works ${arrow}</span>
       </div>
     </div>`;
   return { w, h, html: page({ w, h, body, css, bg: C.teal }) };

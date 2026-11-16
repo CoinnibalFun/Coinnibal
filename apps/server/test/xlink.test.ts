@@ -88,7 +88,7 @@ describe('Link X: codes', () => {
     expect(a.code).toMatch(X_CODE_RE);
     expect(a.code.startsWith('COIN-')).toBe(true);
     expect(a.expiresAt).toBe(T0 + X_CODE_TTL_MS);
-    expect(a.text).toBe(`Joining the coin party \u{1FA99} my code: ${a.code} elymum.io`);
+    expect(a.text).toBe(`Joining the coin party \u{1FA99} my code: ${a.code} coinnibal.fun`);
     expect(a.intentUrl).toBe(`https://x.com/intent/post?text=${encodeURIComponent(a.text)}`);
     expect(s.status(W1).code?.code).toBe(a.code);
     // a new code replaces the old one

@@ -1,7 +1,7 @@
 {
   "name": "Coinnibal",
   "short_name": "Coinnibal",
-  "description": "Coins that eat coins. Eat or be eaten.",
+  "description": "Coins eating coins. Eat or be eaten.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F8F7F4",

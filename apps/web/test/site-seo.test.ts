@@ -30,10 +30,10 @@ describe('per-page head tags', () => {
 
   it('ships robots.txt and a sitemap (the SPA rewrite would answer them with the landing HTML)', () => {
     const pub = resolve(__dirname, '../public');
-    expect(readFileSync(resolve(pub, 'robots.txt'), 'utf8')).toMatch(/Sitemap: https:\/\/elymum\.io\/sitemap\.xml/);
+    expect(readFileSync(resolve(pub, 'robots.txt'), 'utf8')).toMatch(/Sitemap: https:\/\/coinnibal\.fun\/sitemap\.xml/);
     const sitemap = readFileSync(resolve(pub, 'sitemap.xml'), 'utf8');
     // a static file cannot follow the admin's settings: only the pages that are always open are listed
-    for (const p of ['/', '/docs']) expect(sitemap).toContain(`https://elymum.io${p}<`);
-    for (const p of ['/play', '/mint', '/wl', '/collab', '/faucet']) expect(sitemap).not.toContain(`https://elymum.io${p}<`);
+    for (const p of ['/', '/docs']) expect(sitemap).toContain(`https://coinnibal.fun${p}<`);
+    for (const p of ['/play', '/mint', '/wl', '/collab', '/faucet']) expect(sitemap).not.toContain(`https://coinnibal.fun${p}<`);
   });
 });

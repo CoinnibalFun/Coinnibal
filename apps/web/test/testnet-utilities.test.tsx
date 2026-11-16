@@ -173,18 +173,17 @@ describe('the faucet', () => {
 
 describe('why get the NFT: the holder perks', () => {
   const t = (k: TKey, vars?: Record<string, string | number>) => translate(k, vars);
-  it('lists every configured perk: the fee, the $10 room, power-ups, the free room, the skin and the faucet', () => {
+  it('lists every configured perk: the fee, the $10 room, power-ups, the free room and the skin (no test faucet)', () => {
     const v = configuredPerks();
     expect(v.fee).toEqual({ normal: '20%', holder: '10%', burn: '8%', team: '2%' });
     const cards = perkCards(v, t, true);
-    expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin', 'faucet']);
+    expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
     expect(cards[0].title).toBe('Lower fee: 10% instead of 20%');
     expect(cards[0].note).toBe('We take less of your profit: 8% is burned and 2% goes to the team wallet.');
     expect(cards[1].title).toBe('$10 room for holders');
     expect(cards[2].title).toBe('20% off power-ups');
     expect(cards[2].note).toMatch(/1 extra power-up in every paid round/);
     expect(cards[3].title).toBe('1 free private room a day');
-    expect(cards[5].title).toBe('2x testnet faucet');
   });
   it('takes the live shop discount and private-room perk when the server reports them; no faucet card on mainnet', () => {
     const v = configuredPerks({ shopPct: 30, room: { perk: 'discount', pct: 50 } });

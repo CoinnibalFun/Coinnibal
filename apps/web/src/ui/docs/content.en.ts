@@ -13,6 +13,7 @@ import {
   SIWE_STATEMENT,
   SITE_HOST_DEFAULT,
   TOKEN_SYMBOL_DEFAULT,
+  NFT_SUPPLY,
   X_CODE_PREFIX,
   X_CODE_TTL_MS,
   activeChain,
@@ -27,7 +28,8 @@ const num = (n: number): string => nf.format(n);
 /** `500` → `5%`, `450` → `4.5%`. */
 const pct = (bps: number): string => `${nf.format(bps / 100)}%`;
 /** `300000` → `5:00`, `30000` → `0:30`. */
-const clock = (ms: number): string => `${Math.floor(ms / 60_000)}:${String(Math.round((ms % 60_000) / 1000)).padStart(2, '0')}`;
+/** `300000` → `5 minutes`, `30000` → `30 seconds`, `330000` → `5.5 minutes`. */
+const clock = (ms: number): string => (ms < 60_000 ? `${num(ms / 1000)} seconds` : `${num(ms / 60_000)} minutes`);
 /** `8000` → `8 s`. */
 const secs = (ms: number): string => `${num(ms / 1000)} s`;
 
@@ -40,7 +42,7 @@ const APPROVE = { choices: `${F.approve.choices.slice(0, -1).join(', ')} or ${F.
 
 /** What the page knows about where it runs (the server's answer when known, else the build's defaults). */
 export interface DocsEnv {
-  /** The chain is a testnet: the one "Testnet" note is shown. */
+  /** The chain is a testnet (kept for callers; the guide reads the same on every network). */
   testnet?: boolean;
   /** The host the site is served at (`coinnibal.fun`). */
   site?: string;
@@ -54,8 +56,7 @@ export interface DocsEnv {
  * or mainnet; the active one by default). Gas is ETH.
  *
  * One word per thing: room (practice, paid, private), ticket, round, bell, value, fee (only the fee on profit), burn,
- * team wallet, NFT, power-up. Temporary things (the testnet's test rooms) are not described; what is true on the
- * testnet only stands in the one "Testnet" note.
+ * team wallet, NFT, power-up. Temporary things (test rooms, the test network) are not described.
  */
 export const docsEn = (
   symbol: string = sym,
@@ -63,7 +64,8 @@ export const docsEn = (
   chain: string = activeChain().name,
   env: DocsEnv = {},
 ): DocsContent => {
-  const testnet = env.testnet ?? activeChain().testnet;
+  // visitors read the network's plain name ("Robinhood Chain"); the wallet shows the exact network itself
+  chain = chain.replace(/\s+Testnet$/i, '');
   const site = env.site || SITE_HOST_DEFAULT;
   const total = pct(totalFeeBps(rates));
   const burn = pct(rates.burnBps);
@@ -75,29 +77,17 @@ export const docsEn = (
     .filter((a) => a.holdersOnly)
     .map((a) => a.name)
     .join(', ');
-  const usd = (k: keyof typeof SH.usdCents): string => formatUsdCents(SH.usdCents[k]);
   const room = CUSTOM_SETTINGS_DEFAULT;
   const notAudited = 'The smart contracts have not been audited yet.';
-  const testnetNote: DocBlock[] = testnet
-    ? [
-        {
-          kind: 'note',
-          tone: 'info',
-          stamp: 'Testnet',
-          title: `Testnet only: ${chain}`,
-          text: `On the testnet, ${GAS_SYMBOL} and the game's ${symbol} are test tokens: free and worth nothing. The Faucet page gives test ${symbol} once an hour, and twice as much to NFT holders. ${notAudited}`,
-        },
-      ]
-    : [];
   return {
     pct,
     num,
     kicker: 'Player guide',
     title: 'How Coinnibal works',
-    deck: `The game, the rooms, the fee, the Coinnibal NFT and the game token. The numbers are the game's default settings; a ticket shows the ones that apply to it.`,
+    deck: 'Everything about Coinnibal in one place: how a round works, the rooms and tickets, the fee, power-ups and what the NFT gives you.',
     rates,
     dateline: [
-      `Round ${clock(RULES.roundMs)} + ${clock(RULES.roundBreakMs)} break`,
+      `${clock(RULES.roundMs)} rounds, ${clock(RULES.roundBreakMs)} break`,
       `Joins close ${R.joinCloseS} s before the bell`,
       `${F.capacity.arena} players per paid room`,
       `Fee ${total} of profit`,
@@ -115,7 +105,7 @@ export const docsEn = (
       footer: `Amounts in ${symbol}`,
       caption: `Example: a ${num(F.example.entry)} ${symbol} ticket, worth ${num(F.example.cashout)} ${symbol} at the bell`,
     },
-    colophon: "The numbers on this page are read from the game's code.",
+    colophon: '',
     backToTop: 'Back to top',
     sections: [
       {
@@ -292,19 +282,19 @@ export const docsEn = (
             kind: 'list',
             items: [
               {
-                term: `Magnet (${BOOST_KEY_LABELS.magnet}), ${usd('magnet')}:`,
+                term: `Magnet (${BOOST_KEY_LABELS.magnet}):`,
                 text: `pulls nearby food to your coin for ${secs(BOOST_RULES.magnet.durationMs)}. Cooldown ${secs(BOOST_RULES.magnet.cooldownMs)}.`,
               },
               {
-                term: `Leap (${BOOST_KEY_LABELS.leap}), ${usd('leap')}:`,
+                term: `Leap (${BOOST_KEY_LABELS.leap}):`,
                 text: `jumps your coin toward the pointer at once. It cannot cross the wall. Cooldown ${secs(BOOST_RULES.leap.cooldownMs)}.`,
               },
               {
-                term: `Speed burst (${BOOST_KEY_LABELS.speed}), ${usd('speed')}:`,
+                term: `Speed burst (${BOOST_KEY_LABELS.speed}):`,
                 text: `extra speed for ${secs(BOOST_RULES.speed.durationMs)}. Cooldown ${secs(BOOST_RULES.speed.cooldownMs)}.`,
               },
               {
-                term: `Invisibility (${BOOST_KEY_LABELS.invis}), ${usd('invis')}:`,
+                term: `Invisibility (${BOOST_KEY_LABELS.invis}):`,
                 text: `other players cannot see your coin, its name or its minimap dot for ${secs(BOOST_RULES.invis.durationMs)}. It can still eat and be eaten. Cooldown ${secs(BOOST_RULES.invis.cooldownMs)}.`,
               },
             ],
@@ -314,7 +304,7 @@ export const docsEn = (
             items: [
               {
                 term: 'Packs:',
-                text: `each price above is for one pack of ${SH.packSize} uses. Prices are set in US dollars and paid in ${symbol}. Several packs can be paid in one transaction.`,
+                text: `a pack holds ${SH.packSize} uses of one power-up. The shop shows each price, paid in ${symbol}. Several packs can be paid in one transaction.`,
               },
               { term: 'Where the payment goes:', text: `${payBurn} is burned and ${payTeam} goes to the team wallet.` },
               {
@@ -333,7 +323,7 @@ export const docsEn = (
         blocks: [
           {
             kind: 'p',
-            text: `The Coinnibal NFT is an ERC-721 collection. The NFT is not a ticket and has no value in a round.`,
+            text: `The Coinnibal NFT is an ERC-721 collection of ${num(NFT_SUPPLY)} NFTs. The NFT is not a ticket and has no value in a round.`,
           },
           {
             kind: 'table',
@@ -411,13 +401,12 @@ export const docsEn = (
               ],
             },
           },
-          ...testnetNote,
           {
             kind: 'note',
             tone: 'warn',
             stamp: 'Risk',
             title: 'Know the risk',
-            text: `On the mainnet a ticket costs real money, and an eaten coin loses it. Check that playing is legal where you live. Burns are not a promise of profit.${testnet ? '' : ` ${notAudited}`}`,
+            text: `In a paid room a ticket costs real money, and an eaten coin loses it. Check that playing is legal where you live. Burns are not a promise of profit. ${notAudited}`,
           },
         ],
       },

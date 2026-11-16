@@ -41,10 +41,11 @@ describe('player guide facts', () => {
       [1000, true],
     ]);
     expect(FACTS.rules.roundMin).toBe(RULES.roundMs / 60_000);
-    // the full 5 minutes of play, the 30 s break on top of it (a round every 5:30)
+    // the full 5 minutes of play, the 30 s break on top of it (a round every 5.5 minutes), in words, not a clock
     const play = JSON.stringify(en0);
-    expect(play).toContain('A round is 5:00 of play, then a 0:30 break, so a new round starts every 5:30.');
-    expect(play).toContain('Round 5:00 + 0:30 break');
+    expect(play).toContain('A round is 5 minutes of play, then a 30 seconds break, so a new round starts every 5.5 minutes.');
+    expect(play).toContain('5 minutes rounds, 30 seconds break');
+    expect(play).not.toMatch(/\b5:00\b/);
     // number and unit stay together on a line (no-break spaces)
     expect(play).toContain('Joins close 60\u00a0s before the bell');
     expect(FACTS.capacity).toEqual({ practice: CAPACITY.practice, private: CAPACITY.private, arena: 50 });
@@ -102,14 +103,13 @@ describe('player guide content', () => {
     expect(all).not.toMatch(/test arena|test room|\bTEST\b|Test ·/);
   });
 
-  it('keeps what is true on the testnet only in one note, shown on a testnet only', () => {
+  it('never talks about the test network, and reads the same on every network', () => {
     const notes = (c: typeof en) => c.sections.flatMap((s) => s.blocks).filter((b) => b.kind === 'note');
     const test = docsEn('$NIBAL', undefined, 'Robinhood Chain Testnet', { testnet: true });
-    expect(notes(test).map((n) => n.kind === 'note' && n.stamp)).toEqual(['Testnet', 'Risk']);
+    expect(notes(test).map((n) => n.kind === 'note' && n.stamp)).toEqual(['Risk']);
     const text = JSON.stringify(test);
-    expect(text.match(/[Ff]aucet/g)).toHaveLength(1);
+    expect(text).not.toMatch(/[Ff]aucet|test tokens|testnet|mainnet/i);
     expect(text.match(/not been audited/g)).toHaveLength(1);
-    expect(text.match(/worth nothing/g)).toHaveLength(1);
     const main = docsEn('$NIBAL', undefined, 'Robinhood Chain', { testnet: false });
     expect(notes(main).map((n) => n.kind === 'note' && n.stamp)).toEqual(['Risk']);
     expect(JSON.stringify(main)).not.toMatch(/[Ff]aucet|test tokens|testnet/i);
@@ -120,7 +120,7 @@ describe('player guide content', () => {
     const t = JSON.stringify(en.sections);
     const once = (re: RegExp) => expect(t.match(re) ?? [], String(re)).toHaveLength(1);
     once(/15% of the profit is burned/);
-    once(/5:00 of play/);
+    once(/5 minutes of play/);
     once(/8% burned/);
     once(/20% off/);
     once(/Collect payout/);
@@ -166,9 +166,12 @@ describe('player guide content', () => {
       ['Coin look', 'Standard skins', 'Also the NFT skin and a holder badge'],
     ]);
     expect(nft).toContain('NFT holders only');
+    expect(nft).toContain('collection of 3,333 NFTs');
     const pu = JSON.stringify(en.sections.find((s) => s.id === 'powerups'));
-    for (const line of ['Magnet (R), $0.60:', 'Leap (F), $0.90:', 'Speed burst (G), $0.60:', 'Invisibility (V), $1.20:']) expect(pu).toContain(line);
-    expect(pu).toContain('one pack of 3 uses');
+    // no power-up prices in the guide (the shop shows them)
+    for (const line of ['Magnet (R):', 'Leap (F):', 'Speed burst (G):', 'Invisibility (V):']) expect(pu).toContain(line);
+    expect(pu).not.toMatch(/\$\d/);
+    expect(pu).toContain('a pack holds 3 uses');
     expect(pu).toContain('50% is burned and 50% goes to the team wallet');
     expect(pu).toContain('you can use 2 power-ups per round');
     // the shop is in the lobby only (GameHud's top bar sells nothing)
@@ -210,7 +213,8 @@ describe('player guide content', () => {
   it('uses no emoji and no Turkish, and names the network (the active chain and its gas token)', () => {
     const text = JSON.stringify(en);
     expect(text).not.toMatch(/\brent\b|token account/);
-    expect(text).toContain('ETH on Robinhood Chain Testnet');
+    expect(text).toContain('ETH on Robinhood Chain for network fees');
+    expect(text).not.toMatch(/Testnet/);
     expect(JSON.stringify(docsEn('$ELYMUM', undefined, 'Robinhood Chain'))).toContain('ETH on Robinhood Chain for network fees');
     expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
     expect(text).not.toMatch(/record_game/);
