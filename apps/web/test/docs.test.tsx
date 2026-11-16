@@ -166,6 +166,7 @@ describe('player guide content', () => {
       ['Coin look', 'Standard skins', 'Also the NFT skin and a holder badge'],
     ]);
     expect(nft).toContain('NFT holders only');
+    expect(nft).toContain('collection of 3,333 NFTs');
     const pu = JSON.stringify(en.sections.find((s) => s.id === 'powerups'));
     // no power-up prices in the guide (the shop shows them)
     for (const line of ['Magnet (R):', 'Leap (F):', 'Speed burst (G):', 'Invisibility (V):']) expect(pu).toContain(line);

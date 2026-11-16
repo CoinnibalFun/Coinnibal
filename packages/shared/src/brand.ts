@@ -9,6 +9,9 @@
  * docs/OPERATIONS.md, "Moving to coinnibal.fun").
  */
 
+/** The Coinnibal NFT collection's size (the team's decision; the contract's `maxSupply` is set to it at deploy). */
+export const NFT_SUPPLY = 3333;
+
 /** The product name. */
 export const BRAND_NAME = 'Coinnibal';
 
