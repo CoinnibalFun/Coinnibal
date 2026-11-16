@@ -180,7 +180,7 @@ export const docsEn = (
           },
           {
             kind: 'table',
-            caption: `Paid rooms: ticket price in US dollars, paid in ${symbol}`,
+            caption: 'Paid rooms: ticket prices, paid in our game token',
             head: ['Room', 'Ticket', 'Who can join'],
             rows: F.arenas.map((a) => [a.name, formatUsdCents(a.usdCents), a.holdersOnly ? 'NFT holders' : 'Everyone']),
           },
@@ -189,7 +189,7 @@ export const docsEn = (
             items: [
               {
                 term: 'Ticket:',
-                text: `one ticket is one coin in one round. The price is set in US dollars and paid in ${symbol}; the lobby shows both amounts. The whole price goes into the room's vault. You can have one open ticket per room.`,
+                text: `one ticket is one coin in one round. You pay for it in our game token; the lobby shows the amount. The whole price goes into the room's vault. You can have one open ticket per room.`,
               },
               {
                 term: 'Buying a ticket',
