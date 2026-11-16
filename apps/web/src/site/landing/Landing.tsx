@@ -16,6 +16,7 @@ import {
   Wordmark,
   useMoves,
   useReducedMotion,
+  type CoinMood,
   type CoinPaint,
 } from '../../design';
 import { plainChainName, useT, type TKey } from '../../i18n';
@@ -26,7 +27,6 @@ import { Link } from '../router';
 import { useDoors, type Doors } from '../doors';
 import { SiteFooter, SiteHeader, SiteLinkButton, XIcon } from '../Shell';
 import { useSiteSettings, xProfile } from '../settings';
-import { ArenaTram } from './ArenaTram';
 import { CoinPond } from './CoinPond';
 import { DuskSeam } from './DuskSeam';
 import { GazeCoin } from './GazeCoin';
@@ -463,22 +463,24 @@ function Nft({ doors }: { doors: Doors }) {
 
 /* ── the four rooms ───────────────────────────────────────────────────── */
 
-const PLACES: Record<number, { x: number; y: number }> = {
-  1: { x: 12, y: 152 },
-  2: { x: 37, y: 57 },
-  3: { x: 63, y: 57 },
-  4: { x: 88, y: 152 },
-};
-
-// where the tram pulls in, beside each place's pin and clear of the tickets
-const STOPS_X = [17, 31, 57, 82];
+/** Each room as a step up: a bigger ticket, a bigger coin on top. The $10 coin is the holders' (crowned). */
+const STAIR: { paint: CoinPaint; mood: CoinMood; size: number }[] = [
+  { paint: 'cyan', mood: 'smile', size: 58 },
+  { paint: 'teal', mood: 'happy', size: 70 },
+  { paint: 'coral', mood: 'smug', size: 84 },
+  { paint: 'sun', mood: 'chomp', size: 100 },
+];
 
 function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
   const m = useMoves();
-  const reduced = useReducedMotion();
-  const mapRef = useRef<HTMLDivElement>(null);
   const t = useT();
   const open = gameAccess === 'public' ? { tone: 'live' as const, text: t('ld.ar.open') } : gameAccess === 'holders' ? { tone: 'ok' as const, text: t('ld.ar.holders') } : { tone: 'idle' as const, text: t('ld.ar.after') };
+  const feeBps = FACTS.fee.burnBps + FACTS.fee.vaultBps;
+  const split = [
+    { key: 'keep', bps: 10_000 - feeBps, label: t('ld.ar.keep', { pct: pct(10_000 - feeBps) }) },
+    { key: 'burn', bps: FACTS.fee.burnBps, label: t('ld.ar.burn', { pct: pct(FACTS.fee.burnBps) }) },
+    { key: 'team', bps: FACTS.fee.vaultBps, label: t('ld.ar.team', { pct: pct(FACTS.fee.vaultBps) }) },
+  ];
   return (
     <section className="ld-plate ld-arenas" id="arenas" aria-labelledby="ld-arenas-h">
       <PlateLabel numeral={4} title={t('ld.ar.plate')} aside={t('ld.ar.aside')} />
@@ -492,50 +494,73 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
           </div>
           <div className="ld-arenas__aside">
             <StatusPill tone={open.tone}>{open.text}</StatusPill>
-            <p>{t('ld.ar.body', { sym: SYMBOL, fee: pct(FACTS.fee.burnBps + FACTS.fee.vaultBps), burn: pct(FACTS.fee.burnBps), team: pct(FACTS.fee.vaultBps) })}</p>
+            <p>{t('ld.ar.body')}</p>
           </div>
         </div>
-        <div className="ld-map" ref={mapRef}>
-          <svg className="ld-map__ring" viewBox="0 0 1000 300" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-            <path d="M-20 290 C 180 -40, 820 -40, 1020 290" fill="none" className="ld-map__band" strokeWidth="34" />
-            <path d="M-20 290 C 180 -40, 820 -40, 1020 290" fill="none" className="ld-map__edge" strokeWidth="3" />
-            <path d="M-20 290 C 180 -40, 820 -40, 1020 290" fill="none" className="ld-map__lights" strokeWidth="5" strokeDasharray="2 20" strokeLinecap="round" />
-          </svg>
-          <ArenaTram stopsX={STOPS_X} places={mapRef} still={reduced} />
-          <motion.ol className="ld-map__list" variants={m.stagger} initial="hidden" whileInView="shown" viewport={view}>
-            {DEFAULT_ARENAS.map((a, i) => {
-              const meta = arenaMeta(a.id);
-              const p = PLACES[a.id];
-              return (
-                <motion.li
-                  key={a.id}
-                  className="ld-place"
-                  variants={m.stickerDrop}
-                  custom={i % 2 ? 1.2 : -1.2}
-                  style={{ ['--x' as string]: `${p?.x ?? 50}%`, ['--y' as string]: `${p?.y ?? 50}px`, ['--ink-a' as string]: meta.ink, ['--ink-b' as string]: meta.inkTo ?? meta.ink } as CSSProperties}
-                >
-                  <span className="ld-place__pin" aria-hidden="true" />
-                  <div className="ld-ticket">
-                    <div className="ld-ticket__body">
-                      <h3 className="ld-ticket__name">{meta.name}</h3>
-                      {a.holdersOnly && <p className="ld-ticket__line">{t('ld.ar.holdersTag')}</p>}
-                    </div>
-                    <div className="ld-ticket__stub">
-                      {/* the tiers are priced in US dollars, paid in the game token at the day's price */}
-                      <b className="num ld-ticket__fee">{formatUsdCents(a.usdCents)}</b>
-                      <span className="mono ld-ticket__unit">{t('ld.ar.paidIn', { sym: SYMBOL })}</span>
-                      <span className="mono ld-ticket__unit">{t('ld.ar.entry')}</span>
-                    </div>
-                  </div>
-                </motion.li>
-              );
-            })}
-          </motion.ol>
-          <div className="ld-map__here" aria-hidden="true">
-            <span className="kb-tag">{t('ld.ar.you')}</span>
-            <CoinCharacter paint="cyan" mood="happy" size={84} feet ground bob />
+        <motion.ol className="ld-stairs" variants={m.stagger} initial="hidden" whileInView="shown" viewport={view}>
+          {DEFAULT_ARENAS.map((a, i) => {
+            const meta = arenaMeta(a.id);
+            const look = STAIR[i % STAIR.length];
+            const price = formatUsdCents(a.usdCents).replace(/\.00$/, '');
+            return (
+              <motion.li
+                key={a.id}
+                className={`ld-stair${a.holdersOnly ? ' is-holders' : ''}`}
+                variants={m.stickerDrop}
+                custom={i % 2 ? 1.4 : -1.4}
+                style={{ ['--step' as string]: i, ['--ink-a' as string]: meta.ink, ['--ink-b' as string]: meta.inkTo ?? meta.ink } as CSSProperties}
+              >
+                <div className="ld-stair__coin" aria-hidden="true">
+                  {i === 0 && <span className="kb-tag ld-stair__you">{t('ld.ar.you')}</span>}
+                  {a.holdersOnly && (
+                    <span className="ld-stair__crown">
+                      <Icon name="crown" size={22} />
+                    </span>
+                  )}
+                  <CoinCharacter paint={look.paint} mood={look.mood} size={look.size} feet ground bob />
+                </div>
+                <div className="ld-ticket">
+                  <h3 className="ld-ticket__name">
+                    <span className="num ld-ticket__fee">{price}</span> <span className="ld-ticket__room">Room</span>
+                  </h3>
+                  {a.holdersOnly && (
+                    <p className="ld-ticket__line">
+                      <Icon name="crown" size={14} /> {t('ld.ar.holdersTag')}
+                    </p>
+                  )}
+                  <span className="mono ld-ticket__stub">{t('ld.ar.stub')}</span>
+                </div>
+                <div className="ld-stair__step" aria-hidden="true">
+                  <span className="num">{String(i + 1).padStart(2, '0')}</span>
+                </div>
+              </motion.li>
+            );
+          })}
+        </motion.ol>
+        <motion.div className="ld-feecard" variants={m.stickerDrop} custom={-0.8} initial="hidden" whileInView="shown" viewport={view}>
+          <div className="ld-feecard__copy">
+            <h3 className="ld-feecard__t">{t('ld.ar.feeT', { fee: pct(feeBps) })}</h3>
+            <p className="ld-feecard__n">{t('ld.ar.feeN')}</p>
           </div>
-        </div>
+          <div className="ld-feecard__split">
+            <p className="mono ld-feecard__cap">{t('ld.ar.feeCap')}</p>
+            <div className="ld-feebar" role="img" aria-label={split.map((p) => p.label).join(', ')}>
+              {split.map((p) => (
+                <span key={p.key} className={`ld-feebar__seg is-${p.key}`} style={{ flexGrow: p.bps }}>
+                  {p.key === 'burn' && <Icon name="flame" size={14} />}
+                </span>
+              ))}
+            </div>
+            <ul className="ld-feebar__keys" aria-hidden="true">
+              {split.map((p) => (
+                <li key={p.key} className={`is-${p.key}`}>
+                  <i />
+                  {p.label}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </motion.div>
       </div>
     </section>
   );
