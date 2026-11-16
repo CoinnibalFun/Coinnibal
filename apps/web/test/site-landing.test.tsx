@@ -39,6 +39,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(why.textContent).toContain('Lower fee: 10% instead of 20%');
     { const m = document.body.textContent?.match(/.{0,60}(testnet|faucet|Short answers).{0,40}/i); expect(m?.[0] ?? null).toBeNull(); }
     expect(screen.getByText('What does the Coinnibal NFT give me?')).toBeTruthy();
+    expect(screen.getByText('How many NFTs are there?')).toBeTruthy();
     // the four rooms, named by price, priced in US dollars (paid in the game token); the $10 one for NFT holders
     for (const [name, fee] of [['$1 Room', '$1'], ['$3 Room', '$3'], ['$5 Room', '$5'], ['$10 Room', '$10']]) {
       expect(screen.getByRole('heading', { level: 3, name })).toBeTruthy();

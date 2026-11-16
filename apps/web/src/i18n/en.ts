@@ -1061,6 +1061,8 @@ export const en = {
   'ld.faq.a6': "Not at first: when the game opens, playing is free. Later, paid rooms take a ticket in {sym}. Your coin's value at the bell goes to your wallet, and an eaten coin loses its ticket. Practice stays free.",
   'ld.faq.q9': "What does the Coinnibal NFT give me?",
   'ld.faq.a9': "Perks in the game: a lower fee on profit ({holder} instead of {normal}), the {room} room for holders only, {shop}% off power-ups plus {extra} extra use in every paid round, one free private room a day, and your NFT as your coin's skin with a holder badge.",
+  'ld.faq.q12': "How many NFTs are there?",
+  'ld.faq.a12': "The collection has {supply} NFTs.",
   'ld.faq.q10': "Is every NFT different?",
   'ld.faq.a10': "Yes. Every NFT is a different coin character, and some are rare.",
   'ld.faq.q11': "Do I need the NFT to play?",

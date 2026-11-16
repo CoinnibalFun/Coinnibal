@@ -1,4 +1,4 @@
-import { DEFAULT_ARENAS, TOKEN_SYMBOL_DEFAULT, activeChain, arenaMeta, formatUsdCents, type GameAccess } from '@elymum/shared';
+import { DEFAULT_ARENAS, NFT_SUPPLY, TOKEN_SYMBOL_DEFAULT, activeChain, arenaMeta, formatUsdCents, type GameAccess } from '@elymum/shared';
 import { motion, useInView } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
@@ -558,9 +558,9 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
   // the NFT's price only with the mint page, "is the game open?" only while it is closed, the collab question only
   // with its page; the last answer sends the visitor to the guide for every rule
   const perks = configuredPerks();
-  const perkVars = { holder: perks.fee.holder, normal: perks.fee.normal, room: perks.room ?? '', shop: perks.shopPct, extra: perks.shopExtra };
+  const perkVars = { supply: NFT_SUPPLY.toLocaleString('en-US'), holder: perks.fee.holder, normal: perks.fee.normal, room: perks.room ?? '', shop: perks.shopPct, extra: perks.shopExtra };
   // the NFT questions need the holders' room (the default arenas have one)
-  const asked = [1, 2, 9, 10, 11, 4, 5, 6, 7, 8].filter((n) => (n !== 9 && n !== 11) || perks.room !== null).filter((n) => (n !== 4 || doors.mint) && (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
+  const asked = [1, 2, 9, 12, 10, 11, 4, 5, 6, 7, 8].filter((n) => (n !== 9 && n !== 11) || perks.room !== null).filter((n) => (n !== 4 || doors.mint) && (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
   const items: { q: string; a: ReactNode }[] = asked.map((n) => ({
     q: t(`ld.faq.q${n}` as TKey, { chain: plainChainName(activeChain().name) }),
     a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}`, sym: SYMBOL, chain: plainChainName(activeChain().name), ...perkVars }), tags),

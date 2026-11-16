@@ -13,6 +13,7 @@ import {
   SIWE_STATEMENT,
   SITE_HOST_DEFAULT,
   TOKEN_SYMBOL_DEFAULT,
+  NFT_SUPPLY,
   X_CODE_PREFIX,
   X_CODE_TTL_MS,
   activeChain,
@@ -322,7 +323,7 @@ export const docsEn = (
         blocks: [
           {
             kind: 'p',
-            text: `The Coinnibal NFT is an ERC-721 collection. The NFT is not a ticket and has no value in a round.`,
+            text: `The Coinnibal NFT is an ERC-721 collection of ${num(NFT_SUPPLY)} NFTs. The NFT is not a ticket and has no value in a round.`,
           },
           {
             kind: 'table',
