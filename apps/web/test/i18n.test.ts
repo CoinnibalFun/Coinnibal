@@ -131,8 +131,8 @@ describe('English only', () => {
 
 describe('{ourX}: the project X handle every string may name', () => {
   it('starts at the build default and follows the site setting', () => {
-    expect(X_HANDLE_BUILD).toBe('elymumio');
-    expect(translate('pg.follow')).toBe('Follow @elymumio');
+    expect(X_HANDLE_BUILD).toBe('coinnibalfun');
+    expect(translate('pg.follow')).toBe('Follow @coinnibalfun');
     setOurXHandle('coinnibal');
     expect(ourXHandle()).toBe('@coinnibal');
     expect(translate('pg.follow')).toBe('Follow @coinnibal');

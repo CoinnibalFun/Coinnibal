@@ -44,9 +44,9 @@ describe('site helpers', () => {
     expect(isXStatusUrl('https://x.com/a/status/1 javascript:')).toBe(false);
   });
 
-  it('defaults: WL open, collab closed, game for admins only, X handle elymumio', () => {
-    expect(SITE_X_HANDLE_DEFAULT).toBe('elymumio');
-    expect(SITE_SETTINGS_DEFAULT).toEqual({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'elymumio', launchPostUrl: null });
+  it('defaults: WL open, collab closed, game for admins only, X handle coinnibalfun', () => {
+    expect(SITE_X_HANDLE_DEFAULT).toBe('coinnibalfun');
+    expect(SITE_SETTINGS_DEFAULT).toEqual({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null });
   });
 
   it('knows the game access modes', () => {

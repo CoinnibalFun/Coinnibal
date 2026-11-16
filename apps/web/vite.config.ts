@@ -13,7 +13,7 @@ const gameServer = process.env.GAME_SERVER ?? 'http://127.0.0.1:8787';
 const LIVE_URL = 'https://elymum.io';
 process.env.VITE_PUBLIC_URL = (process.env.VITE_PUBLIC_URL || process.env.PUBLIC_URL || LIVE_URL).replace(/\/+$/, '');
 // the project's X handle (no `@`) for index.html's twitter:site and the pages before the server's settings load
-process.env.VITE_X_HANDLE = (process.env.VITE_X_HANDLE || 'elymumio').replace(/^@/, '').trim();
+process.env.VITE_X_HANDLE = (process.env.VITE_X_HANDLE || 'coinnibalfun').replace(/^@/, '').trim();
 
 /**
  * robots.txt and sitemap.xml are static files (public/) written for the live domain; the build rewrites their absolute
