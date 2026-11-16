@@ -26,7 +26,7 @@ const { installDevWallet, loadOrCreateKey } = await import(resolve(ROOT, 'script
 const { resolveChromium } = await import(resolve(ROOT, 'scripts/lib/common.mjs'));
 import { attachJournal } from './journal.mjs';
 
-export const BASE = process.env.ELYMUM_URL || 'http://localhost:5173/play';
+export const BASE = process.env.COINNIBAL_URL || process.env.ELYMUM_URL || 'http://localhost:5173/play';
 export const CHROME = resolveChromium(chromium).executablePath;
 export const FFMPEG = process.env.FFMPEG || '/usr/bin/ffmpeg';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -269,6 +269,8 @@ export async function setupContext(ctx, o) {
     ...(o.settings || {}),
   };
   await ctx.addInitScript((s) => {
+    // the first-play brief is for new players, not for a take
+    localStorage.setItem('elymum.brief', '1');
     if (!sessionStorage.getItem('__set')) { localStorage.setItem('elymum.settings.v1', JSON.stringify(s)); sessionStorage.setItem('__set', '1'); }
     // captures keep one look: no automatic quality drop
     localStorage.setItem('elymum.autoQuality', 'off');
@@ -350,6 +352,13 @@ export class Player {
     await this.wait(pause);
   }
   async click(sel, opts = {}) {
+    // a staged rival (o.fast) clicks straight away: nobody sees its mouse
+    if (this.o.fast) {
+      const loc = typeof sel === 'string' ? this.page.locator(sel).nth(opts.nth ?? 0) : sel;
+      await loc.click({ timeout: 15000 });
+      await this.wait(150);
+      return;
+    }
     await this.hover(sel, { pause: 0, ...opts });
     await this.wait(opts.before ?? 300);
     await this.page.mouse.down();
@@ -366,11 +375,16 @@ export class Player {
   async key(code, holdMs = 60) { await this.page.keyboard.down(code); await this.wait(holdMs); await this.page.keyboard.up(code); }
 
   async login() {
-    await this.click('.kl-wallet');
-    await this.page.waitForSelector('.wl-sheet', { timeout: 5000 });
-    await this.wait(600);
-    await this.click('.wl-item');
-    await this.page.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 15000 });
+    for (let i = 0; i < 4; i++) {
+      if (await this.ui(() => !!window.__elymum.useUi.getState().auth)) break;
+      await this.click('.kl-wallet');
+      const ok = await this.page.waitForSelector('.kb-wallet', { timeout: 8000 }).then(() => true, () => false);
+      if (!ok) { await this.page.keyboard.press('Escape').catch(() => {}); await this.wait(1000); continue; }
+      await this.wait(600);
+      await this.click('.kb-wallet');
+      if (await this.page.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 15000 }).then(() => true, () => false)) break;
+    }
+    await this.page.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 5000 });
     await this.page.waitForFunction(() => window.__elymumChain?.useChainData.getState().tokenBalance != null, null, { timeout: 15000 });
     await this.wait(800);
   }
@@ -395,7 +409,7 @@ export class Player {
     await this.wait(slow ? 1400 : 500);
     if (slow && this.onSheet) await this.onSheet(this);
     await this.ui((ms) => { if (window.__elymumChain?.fakeWallet) window.__elymumChain.fakeWallet.delayMs = ms; }, signDelay);
-    await this.click('.tf-sheet .kb-btn--pink', { before: slow ? 600 : 200 });
+    await this.click('.tf-sheet .tf-pay', { before: slow ? 600 : 200 });
     if (held) {
       // joins are closed: the lobby holds the ticket and joins by itself at the bell
       await this.page.waitForFunction(() => { const s = window.__elymum.useUi.getState(); return s.screen === 'playing' || !!s.held; }, null, { timeout: 15000 });

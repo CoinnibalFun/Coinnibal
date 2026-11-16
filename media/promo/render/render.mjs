@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Frame renderer for the Elymum promo. SITE_HOST=<host> sets the address on end cards (default elymum.io).
+// Frame renderer for the Coinnibal promo. SITE_HOST=<host> sets the address on the end card (default coinnibal.fun).
 //
 // Serves media/promo over a local HTTP port, opens scenes/promo.html in
 // headless Chromium (one browser per worker), steps the timeline frame by
@@ -31,7 +31,7 @@ const TL = JSON.parse(readFileSync(join(PROMO, 'timeline.json'), 'utf8'));
 const FPS = TL.fps;
 const VW = Number(opt('--w', TL.width)), VH = Number(opt('--h', TL.height));
 // SITE_HOST: the host shown on end cards and WL tickets (the site's PUBLIC_URL host)
-const SITE_HOST = process.env.SITE_HOST || 'elymum.io';
+const SITE_HOST = process.env.SITE_HOST || 'coinnibal.fun';
 const PAGE = `/${TL.page || 'scenes/promo.html'}?w=${VW}&h=${VH}&site=${encodeURIComponent(SITE_HOST)}`;
 
 // ── static server ──
@@ -41,7 +41,7 @@ const ROUTES = {
   '/fonts/dm-sans.woff2': join(FONT_DIR, '@fontsource-variable/dm-sans/files/dm-sans-latin-opsz-normal.woff2'),
   '/fonts/geist-mono.woff2': join(FONT_DIR, '@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2'),
 };
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 const server = createServer((req, res) => {
   const url = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   // the brand art (arena posters) is served from brand/, shared scene code from media/
@@ -94,7 +94,7 @@ try {
     await browser.close();
   } else {
     const from = parseFloat(opt('--from', '0'));
-    const to = parseFloat(opt('--to', String(TL.cutDuration ?? TL.duration)));
+    const to = parseFloat(opt('--to', String(TL.duration)));
     const workers = parseInt(opt('--workers', '3'), 10);
     const out = resolve(opt('--out', join(PROMO, 'cache/video.mp4')));
     const f0 = Math.round(from * FPS), f1 = Math.round(to * FPS);

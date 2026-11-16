@@ -1,5 +1,6 @@
-"""Mixes the promo soundtrack: processed VO + ducked music + SFX, then a
-two-pass ffmpeg loudnorm to -14 LUFS / -1.5 dBTP.
+"""Mixes the Coinnibal promo soundtrack: processed VO + ducked music + SFX, then a
+two-pass ffmpeg loudnorm to -16 LUFS (render/mux.sh then runs the gameplay kit's finalize.py:
+-16 LUFS, true peak at or below -1.2 dBTP measured after AAC encoding).
 
   python mix.py CACHE_DIR      (expects CACHE_DIR/vo-raw/*.wav, audio/music.wav, audio/sfx.wav)
   → CACHE_DIR/audio/final.wav
@@ -55,23 +56,6 @@ def process_vo(src, dst, ir):
     run(["-i", src, "-i", ir, "-filter_complex", fc, "-map", "[o]", "-c:a", "pcm_f32le", dst])
 
 
-def splice(x, pieces, n):
-    """pieces: [[film_at, scene_from, scene_to], ...] -> the film's track (n samples)."""
-    out = np.zeros((x.shape[0], n))
-    xf = int(0.008 * SR)
-    for k, (at, a, b) in enumerate(pieces):
-        nxt = pieces[k + 1][0] if k + 1 < len(pieces) else n / SR
-        i0, j0 = int(round(at * SR)), int(round(a * SR))
-        m = min(int(round(nxt * SR)) - i0 + xf, x.shape[1] - j0, n - i0)
-        seg = x[:, j0:j0 + m].copy()
-        if k > 0:
-            seg[:, :xf] *= np.linspace(0, 1, xf)
-        if k + 1 < len(pieces) and m > xf:
-            seg[:, -xf:] *= np.linspace(1, 0, xf)
-        out[:, i0:i0 + m] += seg
-    return out
-
-
 def main():
     cache = sys.argv[1]
     adir = os.path.join(cache, "audio")
@@ -81,21 +65,13 @@ def main():
     music, _ = sf.read(os.path.join(adir, "music.wav"), always_2d=True)
     sfx, _ = sf.read(os.path.join(adir, "sfx.wav"), always_2d=True)
     music, sfx = music.T, sfx.T
-    if TL.get("audioCut"):
-        # the film is a cut of the scene timeline: splice the music and the scene SFX on the
-        # beat-aligned pieces (8 ms crossfades), then add the cut's own cues (sfx2.wav)
-        n = int((TL["cutDuration"] + 0.2) * SR)
-        music, sfx = splice(music, TL["audioCut"], n), splice(sfx, TL["audioCut"], n)
-        p2 = os.path.join(adir, "sfx2.wav")
-        if os.path.exists(p2):
-            s2, _ = sf.read(p2, always_2d=True)
-            s2 = s2.T[:, :n]
-            sfx[:, : s2.shape[1]] += s2
-        vo_cues = TL["vo2"]
-    else:
-        n = int((TL["duration"] + 0.2) * SR)
-        music, sfx = music[:, :n], sfx[:, :n]
-        vo_cues = TL["vo"]
+    n = int((TL["duration"] + 0.2) * SR)
+    music, sfx = music[:, :n], sfx[:, :n]
+    if music.shape[1] < n:
+        music = np.pad(music, ((0, 0), (0, n - music.shape[1])))
+    if sfx.shape[1] < n:
+        sfx = np.pad(sfx, ((0, 0), (0, n - sfx.shape[1])))
+    vo_cues = TL["vo"]
     meter = pyln.Meter(SR)
 
     vo = np.zeros((2, n))
@@ -136,11 +112,11 @@ def main():
     sf.write(pre, mix.T.astype(np.float32), SR, subtype="FLOAT")
     sf.write(os.path.join(adir, "duck.wav"), g.astype(np.float32), SR, subtype="FLOAT")
 
-    # gain to target, brick-wall limit the peaks, then a two-pass linear loudnorm trims to exactly -14
-    I, TP, LRA = -14.0, -2.0, 11
+    # gain to target, brick-wall limit the peaks, then a two-pass linear loudnorm trims to exactly -16
+    I, TP, LRA = -16.0, -2.0, 11
     gain_db = I - meter.integrated_loudness(mix.T)
     lim = os.path.join(adir, "limited.wav")
-    run(["-i", pre, "-af", f"volume={gain_db:.2f}dB,alimiter=limit={10 ** (-4.4 / 20):.4f}:attack=2:release=80:level=false", "-c:a", "pcm_f32le", lim])
+    run(["-i", pre, "-af", f"volume={gain_db:.2f}dB,alimiter=limit={10 ** (-5.4 / 20):.4f}:attack=2:release=80:level=false", "-c:a", "pcm_f32le", lim])
     pre = lim
     p1 = run(["-i", pre, "-af", f"loudnorm=I={I}:TP={TP}:LRA={LRA}:print_format=json", "-f", "null", "-"])
     js = json.loads(re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", p1.stderr, re.S).group(0))

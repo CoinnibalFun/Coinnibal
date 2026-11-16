@@ -455,6 +455,108 @@
 .ld-feast__copy .lede {
   margin: 20px 0 0;
 }
+/* the core rule as a picture: eat a coin, take its tokens */
+.ld-take {
+  margin-top: 28px;
+  padding: 18px 20px 16px;
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card, 18px);
+  background: var(--cream, #f6eeda);
+  box-shadow: 4px 4px 0 var(--outline);
+  transform: rotate(-0.6deg);
+}
+.ld-take__h {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-size: clamp(20px, 2.1vw, 26px);
+  line-height: 1.15;
+  color: var(--ink);
+}
+.ld-take__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: end;
+  gap: 10px;
+}
+.ld-take__coin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+.ld-take__tag {
+  padding: 3px 8px;
+  border: 2px solid var(--outline);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ld-take__tag small {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.ld-take__tag--you {
+  background: var(--sun, #f2c14e);
+  font-weight: 700;
+}
+.ld-take__flow {
+  display: grid;
+  justify-items: center;
+  align-self: center;
+  gap: 2px;
+  min-width: 0;
+}
+.ld-take__gain {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--teal, #2d7388);
+}
+.ld-take__arrow {
+  width: 100%;
+  max-width: 140px;
+  height: 24px;
+  stroke: var(--outline);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* in view: the prey shrinks into the gulp, the tokens fly along the arrow */
+@media (prefers-reduced-motion: no-preference) {
+  .ld-take.is-on .ld-take__coin--prey > svg {
+    animation: ld-take-gulp 0.5s ease-in 0.15s both;
+  }
+  .ld-take.is-on .ld-take__gain {
+    animation: ld-take-fly 0.9s cubic-bezier(0.3, 0.6, 0.35, 1) 0.35s both;
+  }
+}
+@keyframes ld-take-gulp {
+  to {
+    transform: translateX(14px) scale(0.55);
+    opacity: 0.35;
+  }
+}
+@keyframes ld-take-fly {
+  from {
+    transform: translateX(-30%);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@media (max-width: 479px) {
+  .ld-take {
+    padding: 14px 14px 12px;
+  }
+  .ld-take__row {
+    gap: 6px;
+  }
+}
 .ld-menu {
   transform: rotate(1.2deg);
 }
