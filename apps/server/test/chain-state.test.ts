@@ -163,7 +163,7 @@ describe('chain-keyed state: the app', () => {
   it('a stored gameAccess is kept on the testnet', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'elymum-app-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
-    writeFileSync(join(dir, 'site', 'settings.json'), JSON.stringify({ wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymumio', launchPostUrl: null, launch: 1 }));
+    writeFileSync(join(dir, 'site', 'settings.json'), JSON.stringify({ wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'coinnibalfun', launchPostUrl: null, launch: 1 }));
     const t = await start(dir, 46630);
     expect((await t.call('GET', '/api/site/settings')).body.settings.gameAccess).toBe('holders');
   });

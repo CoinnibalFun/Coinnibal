@@ -205,8 +205,8 @@ describe('site API', () => {
     it('serves the defaults; the launch-post task opens when the link is set', async () => {
       const s = await h.call('GET', '/api/site/settings');
       // the harness opened the WL; a fresh server has everything closed
-      expect(s.body.settings).toEqual({ wlOpen: true, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'elymumio', launchPostUrl: null });
-      expect(new SiteStore(null).settings).toEqual({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'elymumio', launchPostUrl: null });
+      expect(s.body.settings).toEqual({ wlOpen: true, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null });
+      expect(new SiteStore(null).settings).toEqual({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null });
       // the mint page switch: a boolean like the other two
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { mintOpen: 'yes' } })).body.field).toBe('mintOpen');
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { mintOpen: true } })).body.settings.mintOpen).toBe(true);
@@ -273,21 +273,21 @@ describe('site API', () => {
       // the task list changes later: the entry keeps what was answered
       expect((await h.call('PUT', '/api/admin/tasks/follow_x', { wallet: h.admin, body: { title: 'Follow us' } })).status).toBe(200);
       const after = (await h.call('GET', '/api/site/wl', { wallet: w })).body.entry as WlEntryPublic;
-      expect(after.tasks.find((t) => t.id === 'follow_x')?.title).toBe('Follow @elymumio');
-      expect((await h.call('PUT', '/api/admin/tasks/follow_x', { wallet: h.admin, body: { title: 'Follow @elymumio' } })).status).toBe(200);
+      expect(after.tasks.find((t) => t.id === 'follow_x')?.title).toBe('Follow @coinnibalfun');
+      expect((await h.call('PUT', '/api/admin/tasks/follow_x', { wallet: h.admin, body: { title: 'Follow @coinnibalfun' } })).status).toBe(200);
     });
 
     it('requires the launch-post task once its link is live; closes with wlOpen', async () => {
-      const set = await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { launchPostUrl: 'https://x.com/elymumio/status/42' } });
-      expect(set.body.settings.launchPostUrl).toBe('https://x.com/elymumio/status/42');
+      const set = await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { launchPostUrl: 'https://x.com/coinnibalfun/status/42' } });
+      expect(set.body.settings.launchPostUrl).toBe('https://x.com/coinnibalfun/status/42');
       const tasks = (await h.call('GET', '/api/site/tasks')).body.tasks;
-      expect(tasks[2]).toMatchObject({ target: 'https://x.com/elymumio/status/42', available: true, required: true });
+      expect(tasks[2]).toMatchObject({ target: 'https://x.com/coinnibalfun/status/42', available: true, required: true });
       const w = wallet();
       const miss = await h.call('POST', '/api/site/wl', { wallet: w, body: wlBody('bob') });
       expect([miss.status, miss.body.field]).toEqual([400, 'answers.engage_launch']);
       const ok = await h.call('POST', '/api/site/wl', { wallet: w, body: { ...wlBody('bob'), answers: { ...wlBody('bob').answers, engage_launch: post('bob', '77') } } });
       expect(ok.status).toBe(201);
-      expect((ok.body.entry as WlEntryPublic).tasks[2]).toMatchObject({ target: 'https://x.com/elymumio/status/42', answer: post('bob', '77') });
+      expect((ok.body.entry as WlEntryPublic).tasks[2]).toMatchObject({ target: 'https://x.com/coinnibalfun/status/42', answer: post('bob', '77') });
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { launchPostUrl: 'https://example.com/x' } })).status).toBe(400);
       await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { launchPostUrl: null, wlOpen: false } });
       const closed = await h.call('POST', '/api/site/wl', { wallet: wallet(), body: wlBody('carol') });
@@ -295,9 +295,9 @@ describe('site API', () => {
       await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { wlOpen: true } });
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { wlOpen: 'yes' } })).body.field).toBe('wlOpen');
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { bogus: 1 } })).body.field).toBe('bogus');
-      expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { xHandle: '@ElymumIO' } })).body.settings.xHandle).toBe('elymumio');
+      expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { xHandle: '@CoinnibalFun' } })).body.settings.xHandle).toBe('coinnibalfun');
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'everyone' } })).body.field).toBe('gameAccess');
-      await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { xHandle: 'elymumio' } });
+      await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { xHandle: 'coinnibalfun' } });
     });
   });
 
@@ -609,7 +609,7 @@ describe('site API', () => {
       // a file that already carries the marker is never touched, whatever it holds
       const kept = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));
       mkdirSync(join(kept, 'site'), { recursive: true });
-      writeFileSync(join(kept, SITE_FILES.settings), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', xHandle: 'elymumio', launchPostUrl: null, launch: SETTINGS_LAUNCH }));
+      writeFileSync(join(kept, SITE_FILES.settings), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', xHandle: 'coinnibalfun', launchPostUrl: null, launch: SETTINGS_LAUNCH }));
       expect(new SiteStore(kept).settings).toMatchObject({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public' });
       // a fresh server (no file) starts closed and writes the marker with its first save
       const fresh = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));

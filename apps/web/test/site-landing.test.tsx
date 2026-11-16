@@ -50,7 +50,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     // the header nav is short and names only what is open: Mint · WL · Docs (the game is admins-only here)
     expect([...nav.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Mint', 'WL', 'Guide']);
     expect(screen.getByRole('button', { name: /Connect/ })).toBeTruthy();
-    expect(screen.getAllByRole('link', { name: /@elymumio/ }).some((a) => a.getAttribute('href') === 'https://x.com/elymumio')).toBe(true);
+    expect(screen.getAllByRole('link', { name: /@coinnibalfun/ }).some((a) => a.getAttribute('href') === 'https://x.com/coinnibalfun')).toBe(true);
     // no way into the closed game anywhere on the page, and no "live" round
     expect(document.querySelector('a[href="/play"], a[href="/faucet"]')).toBeNull();
     expect(document.body.textContent).not.toMatch(/Round 418/);
@@ -103,7 +103,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     const how = screen.getByTestId('ld-how-link');
     expect(how.getAttribute('href')).toBe('/docs');
     expect(how.className).toContain('kb-btn--primary');
-    expect(screen.getByTestId('ld-x-link').getAttribute('href')).toBe('https://x.com/elymumio');
+    expect(screen.getByTestId('ld-x-link').getAttribute('href')).toBe('https://x.com/coinnibalfun');
     expect(document.querySelector(closedLinks)).toBeNull();
     expect(document.body.textContent).not.toMatch(/Join the WL|Go to the mint|WL → Mint → Play|Round 418|WL is open|Play now/);
     expect(document.querySelector('.ld-flow, .ld-flowline, .ld-nft__ctas')).toBeNull();
@@ -114,7 +114,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     // the header: Docs only, no wallet button; the footer: X and Docs
     expect([...screen.getByRole('navigation', { name: 'Site' }).querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Guide']);
     expect(screen.queryByRole('button', { name: /Connect/ })).toBeNull();
-    expect([...screen.getByRole('navigation', { name: 'Footer' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://x.com/elymumio', '/docs']);
+    expect([...screen.getByRole('navigation', { name: 'Footer' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://x.com/coinnibalfun', '/docs']);
     // the FAQ does not send anyone to the collab page
     expect(screen.queryByText('Can my community get WL spots?')).toBeNull();
     // each idea once: "five minutes" stays in the hero sentence and on its sticker, nowhere else in the hero or its title strip
@@ -174,7 +174,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
         expect(screen.getByText(line)).toBeTruthy();
         expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
         expect(screen.getByRole('link', { name: /Read the guide/ }).getAttribute('href')).toBe('/docs');
-        expect(screen.getByRole('link', { name: /Follow @elymumio/ }).getAttribute('href')).toBe('https://x.com/elymumio');
+        expect(screen.getByRole('link', { name: /Follow @coinnibalfun/ }).getAttribute('href')).toBe('https://x.com/coinnibalfun');
         expect(document.querySelector(closedLinks)).toBeNull();
         expect(screen.queryByText('This page does not exist.')).toBeNull();
         await waitFor(() => expect(document.title).toBe('Not open yet · Coinnibal'));

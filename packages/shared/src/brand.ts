@@ -5,8 +5,8 @@
  *
  * The domain and the X handle are configuration, not code: the site's origin is `PUBLIC_URL` (server) and
  * `VITE_PUBLIC_URL` (web build), the X handle is the admin setting (Admin, Settings) with `X_HANDLE` /
- * `VITE_X_HANDLE` as the default. The defaults below are the live ones until coinnibal.fun and @coinnibal are
- * live (docs/OPERATIONS.md, "Moving to coinnibal.fun").
+ * `VITE_X_HANDLE` as the default. The defaults below are the live ones (coinnibal.fun, @coinnibalfun; see
+ * docs/OPERATIONS.md, "Moving to coinnibal.fun").
  */
 
 /** The product name. */

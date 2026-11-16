@@ -23,7 +23,7 @@ price at $1.
 | **Play** | Play the arenas yourself before launch |
 | **WL**, **Tasks**, **Collabs** | The whitelist applications, the WL steps, the community collabs |
 | **Integrity** | Cheat and collusion flags, bans, held payouts, detector settings |
-| **Settings** | `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public / maintenance), the X handle (default `X_HANDLE`, else `elymumio`) |
+| **Settings** | `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public / maintenance), the X handle (default `X_HANDLE`, else `coinnibalfun`) |
 
 Admin endpoints need a SIWE session whose wallet is in `ADMIN_WALLETS`. Contract actions also need the
 connected wallet to be the contract's owner and on the chain the server reports; otherwise signing is blocked
@@ -102,7 +102,7 @@ until you publish a root.
 | Communities | **Collabs**: approve with spots and a deadline, extend, unlock a submitted list, export wallets (`collab_id,community,name,wallet,dup_wl,dup_collabs`) |
 
 - Wallets are EVM addresses (checksummed); anything else is refused. One entry per wallet and per X handle.
-- The X handle (Settings) defaults to `X_HANDLE`, else `elymumio`. A data dir that still holds an earlier default
+- The X handle (Settings) defaults to `X_HANDLE`, else `coinnibalfun`. A data dir that still holds an earlier default
   (`elymum`, or `elymumio` once `X_HANDLE` names another) is switched to the default on start, and the seeded WL tasks
   (follow, post, launch post, handle, wallet) are pointed at the current handle and say "Coinnibal"; tasks you wrote and
   the answers stored in WL entries are never rewritten.
@@ -328,7 +328,7 @@ What players see follows configuration, not code:
 | The site's domain (canonical / Open Graph URLs, robots.txt, sitemap.xml, share cards, the Link X post, SIWE) | web build `VITE_PUBLIC_URL` (else `PUBLIC_URL`); server `PUBLIC_URL` | `https://elymum.io` |
 | The project's X handle (every "Follow @...", WL tasks, collab posts, the WL card, `twitter:site`) | the admin's **Settings → X handle** (live at once); its default: server `X_HANDLE`, web build `VITE_X_HANDLE` | `elymumio` |
 | The token's display symbol (lobby, HUD, receipts, shop, faucet page) | server `TOKEN_SYMBOL` | `$NIBAL` (the default) |
-| The brand kit art (`node brand/generate.mjs`) | `BRAND_X_HANDLE`, `BRAND_SITE` | `@elymumio`, `elymum.io` |
+| The brand kit art (`node brand/generate.mjs`) | `BRAND_X_HANDLE`, `BRAND_SITE` | `@coinnibalfun`, `coinnibal.fun` |
 
 On-chain names cannot change after a deploy. The testnet TestToken's symbol is `tELYMUM` (wallets show it; the site
 says `$NIBAL`), and the deployed testnet NFT keeps `name()` / `symbol()` "Elymum" / "ELYMUM". A **new** `ElymumNFT`
@@ -358,13 +358,10 @@ and links already posted on X point at it.
 6. Art: `BRAND_SITE=coinnibal.fun node brand/generate.mjs x2-banner` for the X banner's "Testnet open" sticker.
    (No other image names a domain; share cards name `PUBLIC_URL`'s host by themselves.)
 
-**Moving the X handle to @coinnibal** (once the account is live).
+**The X handle is @coinnibalfun** (the shared default since the account went live).
 
-1. Admin → Settings → X handle: `coinnibal`. Every page, toast and post that names the handle follows at once.
-2. VPS: `X_HANDLE=coinnibal` (the default, so a fresh data dir and the seeded WL tasks say @coinnibal; a stored
-   `elymumio` is moved over on start), then `elymum-compose up -d app`.
-3. Vercel: `VITE_X_HANDLE=coinnibal` (index.html's `twitter:site` and the text before the settings load), redeploy.
-4. Art: `BRAND_X_HANDLE=coinnibal node brand/generate.mjs` and upload the new X banner and posts.
+A data dir that still stores `elymumio` (or `elymum`) is moved to `coinnibalfun` on start, and the seeded WL tasks
+follow. To use another account: Admin → Settings → X handle (live at once), or `X_HANDLE` on the VPS as the default.
 
 ## Deploying on Robinhood Chain Testnet
 
