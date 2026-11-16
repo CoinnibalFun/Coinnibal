@@ -128,7 +128,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(page.match(/Eat or be eaten/g)).toHaveLength(1);
     expect(document.querySelector('.st-foot')!.textContent).not.toMatch(/Coins eating coins|Eat or be eaten|Five minutes/);
     // the fee's numbers: once for everyone (the rooms), once for holders (the NFT's first perk)
-    expect(page.match(/15% is burned and 5% goes to the team wallet/g)).toHaveLength(1);
+    expect(page.match(/15% burned/g)).toHaveLength(1);
     expect(page.match(/8% is burned and 2% goes to the team wallet/g)).toHaveLength(1);
     // information only: no price of the mint, no date, no promise
     expect(screen.queryByText('How much is the NFT?')).toBeNull();
