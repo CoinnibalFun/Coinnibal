@@ -1117,181 +1117,299 @@
   margin: 0;
   color: var(--ink-2);
 }
-.ld-map {
-  position: relative;
-  margin-top: 40px;
-  height: 440px;
-}
-.ld-map__ring {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 40px;
-  width: 100%;
-  height: 300px;
-  overflow: visible;
-}
-.ld-map__band {
-  stroke: var(--reef);
-}
-.ld-map__edge {
-  stroke: var(--outline);
-}
-.ld-map__lights {
-  stroke: var(--sun);
-}
-.ld-map__here {
-  position: absolute;
-  left: 50%;
-  top: 300px;
+/* the rooms as a staircase: each step up is a bigger ticket, with a bigger coin standing on it */
+.ld-stairs {
+  --rise: 46px;
   display: grid;
-  justify-items: center;
-  gap: 10px;
-  transform: translateX(-50%);
-}
-.ld-map__here .kb-tag {
-  transform: rotate(-3deg);
-}
-.ld-map__list {
-  margin: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 0 18px;
+  margin: 56px 0 0;
   padding: 0;
   list-style: none;
 }
-.ld-place {
-  position: absolute;
-  left: var(--x);
-  top: var(--y);
-  width: 290px;
-  margin-left: -145px;
+.ld-stair {
   display: grid;
   justify-items: center;
+  align-content: end;
+  gap: 0;
 }
-.ld-place__pin {
-  width: 30px;
-  height: 30px;
-  margin-bottom: 12px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  background: var(--ink-a);
-  border: var(--stroke) solid var(--outline);
-  box-shadow: 3px -3px 0 var(--shadow-ink);
-}
-.ld-ticket {
-  --notch: 11px;
-  display: grid;
-  grid-template-columns: 1fr 92px;
-  width: 100%;
-  filter: drop-shadow(4px 4px 0 var(--shadow-ink));
-}
-.ld-ticket__body,
-.ld-ticket__stub {
-  border: var(--stroke) solid var(--outline);
-  background: var(--cream);
-  color: var(--ink-fixed);
-}
-.ld-ticket__body {
+.ld-stair__coin {
   position: relative;
   display: grid;
-  /* the name sits in the middle of the ticket's height, not at its top edge */
-  align-content: center;
-  gap: 4px;
-  padding: 14px 14px 16px 18px;
-  border-right: 0;
-  border-radius: 16px 0 0 16px;
-  box-shadow: inset 8px 0 0 var(--ink-a);
-}
-.ld-ticket__stub {
-  display: grid;
-  align-content: center;
   justify-items: center;
-  gap: 2px;
-  padding: 10px 6px;
-  border-left: 3px dashed var(--outline);
-  border-radius: 0 16px 16px 0;
-  background: var(--ink-b);
+  margin-bottom: -6px;
+  z-index: 2;
+}
+.ld-stair__you {
+  position: absolute;
+  top: -34px;
+  transform: rotate(-4deg);
+}
+.ld-stair__crown {
+  position: absolute;
+  top: -20px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 30px;
+  color: var(--ink-fixed);
+  background: var(--sun);
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 10px 10px 6px 6px;
+  box-shadow: 2px 2px 0 var(--shadow-ink);
+  transform: rotate(-8deg);
+}
+.ld-ticket {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 100%;
+  max-width: 230px;
+  padding: 14px 12px 0;
+  background: var(--cream);
+  color: var(--ink-fixed);
+  border: var(--stroke) solid var(--outline);
+  border-radius: 16px;
+  box-shadow: 4px 4px 0 var(--shadow-ink);
   text-align: center;
+  transform: rotate(calc((var(--step) - 1.5) * 1.4deg));
+  transition: transform 0.25s var(--ease-out, ease-out);
+}
+.ld-stair:hover .ld-ticket {
+  transform: rotate(0deg) translateY(-6px);
+}
+/* a punched notch on each side, where the stub tears off */
+.ld-ticket::before,
+.ld-ticket::after {
+  content: '';
+  position: absolute;
+  bottom: 30px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: var(--stroke) solid var(--outline);
+}
+.ld-ticket::before {
+  left: -10px;
+  clip-path: inset(0 0 0 50%);
+}
+.ld-ticket::after {
+  right: -10px;
+  clip-path: inset(0 50% 0 0);
 }
 .ld-ticket__name {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
   margin: 0;
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  font-size: 22px;
-  line-height: 1.05;
-  letter-spacing: -0.015em;
-}
-.ld-ticket__line {
-  margin: 2px 0 0;
-  font-size: 14px;
-  line-height: 1.35;
-  color: #4a453b;
+  line-height: 1;
+  letter-spacing: -0.02em;
 }
 .ld-ticket__fee {
-  font-size: 19px;
-  line-height: 1.1;
+  font-size: 44px;
+  color: var(--ink-fixed);
 }
-.ld-ticket__unit {
-  font-size: var(--t-micro);
-  letter-spacing: 0.04em;
+.ld-ticket__room {
+  font-size: 20px;
 }
-/* Lethe's stub is the deep end of its ink: cream text there */
-.ld-place:nth-child(2) .ld-ticket__stub {
+.ld-ticket__line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 0;
+  padding: 2px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--sun);
+  border: 1.5px solid var(--outline);
+  border-radius: 999px;
+}
+.ld-ticket__stub {
+  align-self: stretch;
+  justify-self: stretch;
+  margin: 10px -12px 0;
+  padding: 8px 6px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-fixed);
+  background: var(--ink-a);
+  background: linear-gradient(90deg, var(--ink-a), var(--ink-b));
+  border-top: 3px dashed var(--outline);
+  border-radius: 0 0 13px 13px;
+}
+.ld-stair:nth-child(2) .ld-ticket__stub {
   color: var(--cream);
 }
-@media (max-width: 1099px) {
-  /* the two middle tickets stand 26% of the map apart: a ticket stays narrower than that, so they never touch */
-  .ld-place {
-    --w: clamp(204px, 23.5%, 250px);
-    width: var(--w);
-    margin-left: calc(var(--w) / -2);
-  }
+/* the step the ticket stands on: one rise taller per room */
+.ld-stair__step {
+  position: relative;
+  width: calc(100% + 18px);
+  height: calc(28px + var(--step) * var(--rise));
+  margin-top: 14px;
+  background:
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.06) 0 2px, transparent 2px 24px),
+    linear-gradient(180deg, color-mix(in srgb, var(--ink-a) 38%, var(--reef)), var(--reef) 70%);
+  border-top: var(--stroke) solid var(--outline);
+  box-shadow: inset 0 7px 0 var(--ink-a);
 }
-@media (min-width: 900px) and (max-width: 1099px) {
-  .ld-place .ld-ticket__body {
-    padding: 14px 8px 16px 16px;
-  }
-  .ld-place .ld-ticket__name {
-    font-size: 17px;
-    white-space: nowrap;
-  }
+.ld-stair:first-child .ld-stair__step {
+  border-left: var(--stroke) solid var(--outline);
+  border-top-left-radius: 14px;
+}
+.ld-stair:last-child .ld-stair__step {
+  border-right: var(--stroke) solid var(--outline);
+  border-top-right-radius: 14px;
+  width: 100%;
+}
+.ld-stair__step .num {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  top: 16px;
+  color: var(--cream);
+  opacity: 0.85;
+}
+.ld-stair.is-holders .ld-ticket {
+  box-shadow:
+    4px 4px 0 var(--shadow-ink),
+    0 0 0 6px rgb(244 193 75 / 0.25);
+}
+
+/* the fee: one card, the profit as a bar */
+.ld-feecard {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: 18px 40px;
+  align-items: center;
+  margin-top: 40px;
+  padding: 26px 30px;
+  background: var(--cream);
+  color: var(--ink-fixed);
+  border: var(--stroke) solid var(--outline);
+  border-radius: 20px;
+  box-shadow: 6px 6px 0 var(--shadow-ink);
+  transform: rotate(-0.6deg);
+}
+.ld-feecard__t {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+.ld-feecard__n {
+  margin: 0;
+  color: #4a453b;
+}
+.ld-feecard__cap {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4a453b;
+}
+.ld-feebar {
+  display: flex;
+  height: 30px;
+  overflow: hidden;
+  border: var(--stroke) solid var(--outline);
+  border-radius: 999px;
+  background: var(--white);
+}
+.ld-feebar__seg {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  flex-basis: 0;
+}
+.ld-feebar__seg + .ld-feebar__seg {
+  border-left: var(--stroke-sm) solid var(--outline);
+}
+.ld-feebar__seg.is-keep,
+.ld-feebar__keys .is-keep i {
+  background: var(--up, #5aa66b);
+}
+.ld-feebar__seg.is-burn,
+.ld-feebar__keys .is-burn i {
+  background: var(--coral, #e8735a);
+  color: var(--ink-fixed);
+}
+.ld-feebar__seg.is-team,
+.ld-feebar__keys .is-team i {
+  background: var(--cyan, #41b8d9);
+}
+.ld-feebar__keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  font-weight: 700;
+}
+.ld-feebar__keys li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ld-feebar__keys i {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--outline);
+  border-radius: 50%;
 }
 @media (max-width: 899px) {
   .ld-arenas__head {
     grid-template-columns: 1fr;
   }
-  .ld-map {
-    height: auto;
-    margin-top: 32px;
+  .ld-stairs {
+    --rise: 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 34px 14px;
+    margin-top: 48px;
   }
-  .ld-map__ring,
-  .ld-map__here {
+  /* two by two on a phone: the tickets alone, no steps under them */
+  .ld-stair__step {
     display: none;
   }
-  .ld-map__list {
-    display: grid;
-    gap: 22px;
-    border-left: 4px dotted var(--foam);
-    margin-left: 12px;
-    padding-left: 22px;
+  .ld-ticket__line {
+    padding: 2px 6px;
+    font-size: 12px;
+    white-space: nowrap;
   }
-  .ld-place {
-    position: relative;
-    left: auto;
-    top: auto;
-    width: auto;
-    margin: 0;
-    justify-items: stretch;
+  .ld-ticket__fee {
+    font-size: 36px;
   }
-  .ld-place__pin {
-    position: absolute;
-    left: -40px;
-    top: 50%;
-    width: 24px;
-    height: 24px;
-    margin: -12px 0 0;
+  .ld-feecard {
+    grid-template-columns: 1fr;
+    padding: 22px 20px;
+    transform: none;
   }
-  .ld-ticket {
-    max-width: 480px;
+  .ld-feecard__t {
+    font-size: 25px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-ticket,
+  .ld-stair:hover .ld-ticket {
+    transition: none;
+    transform: none;
   }
 }
 
@@ -1488,60 +1606,6 @@
   .ld-pond__c,
   .ld-pond__body {
     transition: none;
-  }
-}
-
-/* the ring tram (ArenaTram.tsx): rides the band of the map between the four places */
-.ld-tram {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 40px;
-  height: 300px;
-  pointer-events: none;
-  z-index: 0;
-}
-.ld-tram__car {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 84px;
-  height: 64px;
-  offset-anchor: 50% calc(100% + 10px);
-  offset-rotate: auto;
-}
-.ld-tram__car svg {
-  display: block;
-  animation: ld-tram-rock 0.9s ease-in-out infinite;
-  transform-origin: 50% 100%;
-}
-.ld-tram__car[data-dir='back'] svg {
-  scale: -1 1;
-}
-@keyframes ld-tram-rock {
-  0%, 100% { rotate: -1.2deg; }
-  50% { rotate: 1.2deg; }
-}
-.ld-place {
-  z-index: 1;
-}
-.ld-place.is-stop .ld-place__pin {
-  animation: ld-pin-hop 0.6s cubic-bezier(0.3, 1.6, 0.5, 1);
-}
-@keyframes ld-pin-hop {
-  0% { transform: rotate(-45deg) translate(0, 0); }
-  40% { transform: rotate(-45deg) translate(5px, -5px); }
-  100% { transform: rotate(-45deg) translate(0, 0); }
-}
-@media (max-width: 899px) {
-  .ld-tram {
-    display: none;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ld-tram__car svg,
-  .ld-place.is-stop .ld-place__pin {
-    animation: none;
   }
 }
 
