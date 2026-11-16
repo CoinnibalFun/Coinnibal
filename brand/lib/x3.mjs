@@ -61,23 +61,30 @@ function chompMark({ crumbs = true } = {}) {
 /* ------------------------------------------------------------------ avatar */
 
 /**
- * The profile picture: the chomp mark (the C eating a coin) under the lit ring, on the banner's night sky.
- * Everything that matters sits inside the circle X crops to, with room to spare at 48 px.
+ * The profile picture: a window onto the banner. The same night sky (deep at the top, teal at the horizon), the lit
+ * ring overhead, the seigaiha waves and the green hill; the chomp mark (the C eating a coin) stands on the hill like
+ * the coins of the banner. Everything that matters sits inside the circle X crops to, and reads at 32-48 px.
  */
 export function xAvatar3() {
   const S = 400;
+  const floor = 'M-20 318 C 100 300, 300 290, 420 282 V 420 H -20 Z';
+  const floor2 = 'M-20 352 C 120 340, 300 332, 420 326 V 420 H -20 Z';
   const body = `
     <svg class="abs" style="inset:0" viewBox="0 0 ${S} ${S}" width="${S}" height="${S}">
-      <defs>
-        <radialGradient id="a3-sky" cx=".5" cy=".46" r=".72">
-          <stop offset="0" stop-color="${C.teal}"/><stop offset=".55" stop-color="${C.current}"/><stop offset="1" stop-color="${C.trench}"/>
-        </radialGradient>
-      </defs>
+      <defs><linearGradient id="a3-sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${C.deep}"/><stop offset=".5" stop-color="${C.trench}"/><stop offset=".82" stop-color="${C.teal}"/></linearGradient></defs>
       <rect width="${S}" height="${S}" fill="url(#a3-sky)"/>
-      ${band('M-40 300 C 40 40, 360 40, 440 300', 34)}
-      ${star(84, 112, 1.3)}${star(318, 96, 1.1)}${star(330, 318, 1.2, C.sun)}${star(66, 300, 0.9)}
-      <circle cx="132" cy="60" r="2.2" fill="${C.cream}"/><circle cx="270" cy="52" r="1.8" fill="${C.cream}"/>
-      <g transform="translate(194 204) scale(2.75)">${chompMark()}</g>
+    </svg>
+    <div class="abs" style="left:0;top:0;opacity:.9">${starfield(S, 200, 14, 21)}</div>
+    <div class="abs" style="left:0;top:170px;opacity:.35;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 60%);mask-image:linear-gradient(to bottom,transparent,#000 60%)">${seigaiha({ w: S, h: 150, r: 26, stroke: C.spray, width: 2.5 })}</div>
+    <svg class="abs" style="inset:0" viewBox="0 0 ${S} ${S}" width="${S}" height="${S}">
+      ${band('M-60 250 C 20 -10, 380 -10, 460 250', 30)}
+      ${star(330, 150, 1.0, C.sun)}${star(64, 168, 0.9)}
+      <path d="${floor}" fill="${C.verdant}" stroke="${C.ink}" stroke-width="4"/>
+      <path d="M-20 328 C 100 310, 300 300, 420 292" fill="none" stroke="#7DBB72" stroke-width="6"/>
+      <path d="${floor2}" fill="${C.forest}" stroke="${C.ink}" stroke-width="4"/>
+      <ellipse cx="196" cy="300" rx="92" ry="9" fill="${C.ink}" opacity=".25"/>
+      <g transform="translate(192 190) scale(2.45)">${chompMark()}</g>
     </svg>`;
   return { w: S, h: S, html: page({ w: S, h: S, body, bg: C.trench }) };
 }
