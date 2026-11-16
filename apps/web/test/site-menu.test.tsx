@@ -30,7 +30,7 @@ describe('the phone menu', () => {
     expect(document.activeElement).toBe(btn);
   });
 
-  it('with everything closed: Docs alone beside the logo, no menu button, no Play, no wallet button', async () => {
+  it('with everything closed: Docs is the one link; Play, WL and Collab are named with a Soon tag and link nowhere; no wallet button', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' } } }));
     localStorage.clear();
     const { container } = render(<SiteHeader />);
@@ -38,9 +38,15 @@ describe('the phone menu', () => {
       await new Promise((r) => setTimeout(r, 20));
     });
     expect([...screen.getByRole('navigation', { name: 'Site' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['/docs']);
-    expect(screen.queryByRole('button', { name: 'Open the menu' })).toBeNull();
+    const soon = [...container.querySelectorAll('.st-nav .st-nav__link--soon')];
+    expect(soon.map((s) => s.textContent)).toEqual(['PlaySoon', 'WLSoon', 'CollabSoon']);
+    expect(soon.every((s) => s.tagName === 'SPAN' && s.getAttribute('aria-disabled') === 'true')).toBe(true);
     expect(screen.queryByRole('button', { name: /Connect/ })).toBeNull();
-    expect(container.querySelector('.st-head--few')).toBeTruthy();
+    // on a phone they sit in the menu sheet, still not links
+    fireEvent.click(screen.getByRole('button', { name: 'Open the menu' }));
+    const sheet = screen.getByRole('navigation', { name: 'Site menu' });
+    expect([...sheet.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['/docs']);
+    expect(sheet.querySelectorAll('.st-nav__link--soon')).toHaveLength(3);
     expect(container.querySelector('a[href="/play"], a[href="/mint"], a[href="/faucet"], a[href="/wl"], a[href="/collab"]')).toBeNull();
   });
 

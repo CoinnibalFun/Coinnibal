@@ -167,6 +167,28 @@ body {
   box-shadow: var(--sh-1);
   transform: rotate(-2deg);
 }
+.st-nav__link--soon,
+.st-nav__link--soon:hover {
+  gap: 6px;
+  cursor: default;
+  color: var(--ink-2) !important;
+  background: none;
+  border-color: transparent;
+  user-select: none;
+}
+.st-soon {
+  padding: 1px 6px 2px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-fixed);
+  background: var(--sun);
+  border: 1.5px solid var(--outline);
+  border-radius: 6px;
+  transform: rotate(-3deg);
+}
 .st-head__tools {
   display: flex;
   align-items: center;

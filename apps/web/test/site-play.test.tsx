@@ -24,7 +24,7 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     render(<PlayGate onAllowed={onAllowed} />);
     expect(await screen.findByRole('heading', { name: /The game is not open yet/ })).toBeTruthy();
     expect(screen.getByText('The guide explains every rule.')).toBeTruthy();
-    expect(document.body.textContent).not.toMatch(/start date|soon|until then/i);
+    expect(document.querySelector('main')?.textContent ?? document.body.textContent).not.toMatch(/start date|soon|until then/i);
     expect(screen.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/');
     expect(screen.getByRole('link', { name: 'Read the guide' }).getAttribute('href')).toBe('/docs');
     expect(screen.getByRole('link', { name: /Follow @coinnibalfun/ }).getAttribute('href')).toBe('https://x.com/coinnibalfun');
