@@ -1,52 +1,11 @@
 [
- {
-  "id": "hook_a",
-  "text": "Eat a coin.",
-  "speed": 1.0
- },
- {
-  "id": "hook_b",
-  "text": "Keep what it carried.",
-  "speed": 1.04
- },
- {
-  "id": "logo",
-  "text": "This is Coinnibal. | Coins that eat coins, | on Robinhood Chain.",
-  "speed": 1.1
- },
- {
-  "id": "ticket",
-  "text": "Buy a ticket in $NIBAL, | from one to ten dollars. | That's your coin's value.",
-  "speed": 1.1
- },
- {
-  "id": "play",
-  "text": "Eat smaller coins. | Run from *bigger* ones.",
-  "speed": 1.08
- },
- {
-  "id": "rounds_a",
-  "text": "Five-minute rounds.",
-  "speed": 1.05
- },
- {
-  "id": "rounds_b",
-  "text": "Alive at the bell? | You get *paid.*",
-  "speed": 1.06
- },
- {
-  "id": "burn",
-  "text": "The fee only touches profit, | and most of it *burns.* | So does half of every power-up.",
-  "speed": 1.12
- },
- {
-  "id": "nft",
-  "text": "The Coinnibal NFT collection. | Hold one: | half the fee, | the ten-dollar room, | cheaper power-ups.",
-  "speed": 1.14
- },
- {
-  "id": "end",
-  "text": "Coinnibal. || Eat, or be eaten!",
-  "speed": 1.0
- }
+ {"id": "hook_a", "text": "Eat a coin.", "speed": 1.0},
+ {"id": "hook_b", "text": "Keep what it carried.", "speed": 1.04},
+ {"id": "logo", "text": "This is Coinnibal. | Coins eating coins.", "speed": 1.08},
+ {"id": "ticket", "text": "Buy a ticket. | One token runs it all.", "speed": 1.08},
+ {"id": "play", "text": "Eat smaller coins. | Run from *bigger* ones.", "speed": 1.08},
+ {"id": "rounds_a", "text": "Five-minute rounds.", "speed": 1.05},
+ {"id": "rounds_b", "text": "Alive at the bell? | You get *paid.*", "speed": 1.06},
+ {"id": "nft", "text": "The Coinnibal NFT collection. | Half the fee, | the ten-dollar room, | cheaper power-ups.", "speed": 1.14},
+ {"id": "end", "text": "Coinnibal. || Eat, or be eaten!", "speed": 1.0}
 ]

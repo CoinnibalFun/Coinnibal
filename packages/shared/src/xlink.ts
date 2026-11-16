@@ -29,14 +29,14 @@ export function xMention(handle: unknown): string | null {
 }
 
 /** The prefix of a new link code. */
-export const X_CODE_PREFIX = 'NIBAL';
+export const X_CODE_PREFIX = 'COIN';
 /**
- * Prefixes a post may carry a code with: the current one, and the one from before the rename (`ELYMUM-`, for a
- * code shown by a page that was open across the deploy; a code lives `X_CODE_TTL_MS`).
+ * Prefixes a post may carry a code with: the current one, and the earlier ones (`NIBAL-`, `ELYMUM-`, for a code
+ * shown by a page that was open across a deploy; a code lives `X_CODE_TTL_MS`).
  */
-export const X_CODE_PREFIXES: readonly string[] = [X_CODE_PREFIX, 'ELYMUM'];
-/** Link codes: `NIBAL-` (or the old `ELYMUM-`) and six characters of `X_CODE_CHARS` (no 0/O, 1/I/L look-alikes). */
-export const X_CODE_RE = /^(?:NIBAL|ELYMUM)-[2-9A-HJKMNP-Z]{6}$/;
+export const X_CODE_PREFIXES: readonly string[] = [X_CODE_PREFIX, 'NIBAL', 'ELYMUM'];
+/** Link codes: `COIN-` (or the older `NIBAL-` / `ELYMUM-`) and six characters of `X_CODE_CHARS` (no 0/O, 1/I/L look-alikes). */
+export const X_CODE_RE = /^(?:COIN|NIBAL|ELYMUM)-[2-9A-HJKMNP-Z]{6}$/;
 export const X_CODE_CHARS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 
 /** A code is valid this long after it was issued (ms). */

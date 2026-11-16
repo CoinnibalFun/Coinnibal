@@ -41,7 +41,8 @@ describe('Link X helpers', () => {
   });
 
   it('the proof post and its code', () => {
-    expect(X_CODE_PREFIX).toBe('NIBAL');
+    expect(X_CODE_PREFIX).toBe('COIN');
+    expect(X_CODE_RE.test('COIN-7F3K9Q')).toBe(true);
     expect(X_CODE_RE.test('NIBAL-7F3K9Q')).toBe(true);
     expect(X_CODE_RE.test('NIBAL-7F3K9O')).toBe(false);
     // codes issued before the rename stay valid for their 30 minutes

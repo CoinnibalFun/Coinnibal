@@ -684,7 +684,7 @@ describe('loot sweeps (sweepLoot burns, monotonic sweep ids)', () => {
     expect(h.journal.pending).toHaveLength(0);
     expect(h.journal.lastSweepId(1)).toBe(5);
     expect(h.evm.arenaMap.get(1)!.totalBurned).toBe(3_141_592n * 10n ** 12n);
-    expect(h.logs.join()).toMatch(/burned 3.141592 \$NIBAL loot of arena-1-1 \(round 7\) · sweep #5/);
+    expect(h.logs.join()).toMatch(/burned 3.141592 tokens loot of arena-1-1 \(round 7\) · sweep #5/);
   });
 
   it('a sweep item survives a journal reload with its id; a landed sweep is never sent again', async () => {

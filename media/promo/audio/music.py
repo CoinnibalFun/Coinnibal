@@ -2,8 +2,8 @@
 
 Playful lo-fi electronic at 100 BPM (one beat = 0.6 s = 36 video frames), scored
 to the beats in ../timeline.json: a pluck motif over the cold open (low notes on the
-gulps), a held breath and a drop into the logo, a riser into the dive, a tighter
-groove to the bell, a sub drop when the fee catches fire, a sparkly NFT section, a
+gulps), a held breath and a drop into the logo, a sub hit under the token coin, a riser into the dive,
+a tighter groove to the bell, a sparkly NFT section, a
 second breath before the end card and a final sting.
 
   python music.py OUT.wav
@@ -270,7 +270,7 @@ def chord_at(t, dark=False):
 
 
 B = TL["beats"]
-BELL = B["round"][0] + 1.9   # the round clock's bell (scenes.js)
+BELL = B["round"][0] + 1.6   # the round clock's bell (scenes.js)
 BREATHS = ((B["logo"][0] - 0.18, B["logo"][0]), (B["end"][0] - 0.18, B["end"][0]))
 
 
@@ -380,12 +380,9 @@ def build():
     groove(R0, BELL - 0.6, open_hats=False, cutoff=2000)
     groove(BELL - 0.6, BELL, kick_pat="four", hats=False, open_hats=False, cutoff=1400)
     place(drums, impact(0.7), BELL)
-    groove(BELL, B["burn"][0], open_hats=False, cutoff=2200, half=True, kick_pat="half")
-    # the token and the burn: full groove, a sub drop as the fee catches fire
-    U0 = B["burn"][0]
-    place(drums, crash(0.7), U0, 1.0, -0.2)
-    groove(U0, B["nft"][0] - 0.3, bells=True, cutoff=3000)
-    place(bass, sub_drone(1.6, 33, 0.8), U0 + 2.1)
+    groove(BELL, B["nft"][0] - 0.3, open_hats=False, cutoff=2400, half=True, kick_pat="half")
+    # the token drops in on the ticket beat: a low hit under the coin
+    place(bass, sub_drone(1.2, 33, 0.7), B["ticket"][0] + 1.5)
     place(fx, reverse_crash(0.3, 0.8), B["nft"][0] - 0.3)
     # the NFTs: bright, sparkly, then one beat of tension, a riser and the breath
     N0 = B["nft"][0]

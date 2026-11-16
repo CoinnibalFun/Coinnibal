@@ -30,8 +30,6 @@ import soundfile as sf
 FIXED = {
     "Coinnibal's": "kˈɔɪnɪbəlz",
     "Coinnibal": "kˈɔɪnɪbəl",
-    "$NIBAL": "nˈɪbəl",  # said like "nibble"
-    "NIBAL": "nˈɪbəl",
     "Robinhood": "ɹˈɑbɪnhʊd",
     "NFTs": "ˌɛnˌɛftˈiːz",  # the G2P drops the plural
     "NFT": "ˌɛnˌɛftˈiː",

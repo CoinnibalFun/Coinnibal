@@ -107,7 +107,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
         const known = i.registry?.token?.address ?? status?.testToken?.address ?? null;
         if (known) return { now, next: 'Confirm the game token (one click, then your wallet).' };
         if (net.info && !testTokenRefusal(net.info.id)) return { now, next: 'Deploy a TestToken (below), then Finish setup.' };
-        return { now, next: 'Set TOKEN_ADDRESS on the game server to $NIBAL, then confirm it here.' };
+        return { now, next: 'Set TOKEN_ADDRESS on the game server to the game token, then confirm it here.' };
       }
       if (steps.length > 0) return { now, next: `Finish setup: ${steps.length} step${steps.length === 1 ? '' : 's'} left, one button.` };
       return { now, next: null };
