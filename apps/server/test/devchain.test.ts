@@ -56,7 +56,7 @@ describe('DEV_FAKE_CHAIN', () => {
     await chain.stop();
 
     const ready = await createChain(loadConfig(env({ DEV_FAKE_CHAIN: '1', NODE_ENV: 'development', DEV_FAKE_TOKEN: '1' })), new Journal(null), () => {});
-    expect(ready.status()).toMatchObject({ tokenReady: true, arenasEnabled: true, token: { decimals: 18, symbol: '$NIBAL' }, fees: { burnBps: 1500 } });
+    expect(ready.status()).toMatchObject({ tokenReady: true, arenasEnabled: true, token: { decimals: 18, symbol: 'tokens' }, fees: { burnBps: 1500 } });
     expect(ready.status().token!.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
     // ledger units: 1,000 tokens of the first tier = 1e9 (6 ledger decimals), a safe JS number
     expect((await ready.listArenas()).map((a) => [a.id, a.entryFee])).toEqual([

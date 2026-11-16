@@ -59,9 +59,9 @@ describe('chain env (EVM)', () => {
     expect(loadConfig({} as NodeJS.ProcessEnv).chain.testnetRpcUrl).toBe('https://rpc.testnet.chain.robinhood.com');
   });
 
-  it('defaults: chain off, $NIBAL, $1 mint on Hyperliquid, the setting decides who plays', () => {
+  it('defaults: chain off, plain token word, $1 mint on Hyperliquid, the setting decides who plays', () => {
     const cfg = loadConfig({} as NodeJS.ProcessEnv);
-    expect(cfg.chain).toMatchObject({ rpcUrl: null, publicRpcUrl: null, serverKey: null, arenaAddress: null, nftAddress: null, tokenSymbol: '$NIBAL' });
+    expect(cfg.chain).toMatchObject({ rpcUrl: null, publicRpcUrl: null, serverKey: null, arenaAddress: null, nftAddress: null, tokenSymbol: 'tokens' });
     expect(cfg.mint).toEqual({ usdCents: 100, gasPriceUrl: 'https://api.hyperliquid.xyz/info' });
     expect(cfg.nft).toEqual({ size: 5000, seed: null, style: 'vector' });
     expect(loadConfig({ NFT_ART_STYLE: 'pixel', NFT_COLLECTION_SIZE: '3333', NFT_COLLECTION_SEED: ' 0xabc ' } as NodeJS.ProcessEnv).nft).toEqual({ size: 3333, seed: '0xabc', style: 'pixel' });

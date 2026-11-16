@@ -2182,7 +2182,7 @@
   }
 }
 
-/* "Get $NIBAL" under a ticket the wallet cannot pay for (GetTokensLink) */
+/* "Get tokens" under a ticket the wallet cannot pay for (GetTokensLink) */
 .kl-gettokens {
   display: flex;
   justify-content: center;

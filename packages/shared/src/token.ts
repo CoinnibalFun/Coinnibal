@@ -12,8 +12,11 @@ import { GAS_DECIMALS, GAS_SYMBOL } from './chains';
  * floating point drift and no dependence on the runtime's ICU data.
  */
 
-/** Display symbol used when the server config does not set one. */
-export const TOKEN_SYMBOL_DEFAULT = '$NIBAL';
+/**
+ * How amounts name the game token when the server config does not set `TOKEN_SYMBOL`: a plain word, not a ticker
+ * (the ticker is not announced yet), so amounts read `1,000 tokens`.
+ */
+export const TOKEN_SYMBOL_DEFAULT = 'tokens';
 
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 

@@ -157,7 +157,7 @@ export function oembedText(html: string): string {
 
 /**
  * Whether the post's words carry `code` as a word of its own (any case). The code's six characters count under any of
- * `X_CODE_PREFIXES` (`NIBAL-7F3K9Q` and the pre-rename `ELYMUM-7F3K9Q` are the same code).
+ * `X_CODE_PREFIXES` (`COIN-7F3K9Q`, `NIBAL-7F3K9Q` and `ELYMUM-7F3K9Q` are the same code).
  */
 export function carriesCode(text: string, code: string): boolean {
   const dash = code.indexOf('-');

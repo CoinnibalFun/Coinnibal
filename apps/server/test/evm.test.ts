@@ -269,7 +269,7 @@ describe('EvmChain on a hardhat node', () => {
     const a = await getArena(client, arena, 1);
     expect(a).toMatchObject({ lastSweepId: 1n, totalBurned: burned0 + 100n * T, vault: 0n, openSessions: 0 });
     expect((await getTokenBalance(client, token, BURN_ADDRESS)) - dead0).toBe(100n * T);
-    expect(logs.join('\n')).toMatch(/burned 100 \$NIBAL loot of arena-1-1 \(round 9\) · sweep #1/);
+    expect(logs.join('\n')).toMatch(/burned 100 tokens loot of arena-1-1 \(round 9\) · sweep #1/);
   }, 60_000);
 
   it('the stale sweeper finds unplayed tickets in the Joined logs and cancels them: the full entry fee back', async (ctx) => {

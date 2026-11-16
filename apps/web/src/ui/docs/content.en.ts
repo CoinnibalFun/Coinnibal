@@ -85,7 +85,7 @@ export const docsEn = (
           tone: 'info',
           stamp: 'Testnet',
           title: `Testnet only: ${chain}`,
-          text: `On the testnet, ${GAS_SYMBOL} and ${symbol} are test tokens: free and worth nothing. The Faucet page gives test ${symbol} once an hour, and twice as much to NFT holders. ${notAudited}`,
+          text: `On the testnet, ${GAS_SYMBOL} and the game's ${symbol} are test tokens: free and worth nothing. The Faucet page gives test ${symbol} once an hour, and twice as much to NFT holders. ${notAudited}`,
         },
       ]
     : [];
@@ -94,7 +94,7 @@ export const docsEn = (
     num,
     kicker: 'Player guide',
     title: 'How Coinnibal works',
-    deck: `The game, the rooms, the fee, the Coinnibal NFT and ${symbol}. The numbers are the game's default settings; a ticket shows the ones that apply to it.`,
+    deck: `The game, the rooms, the fee, the Coinnibal NFT and the game token. The numbers are the game's default settings; a ticket shows the ones that apply to it.`,
     rates,
     dateline: [
       `Round ${clock(RULES.roundMs)} + ${clock(RULES.roundBreakMs)} break`,
@@ -362,7 +362,7 @@ export const docsEn = (
       },
       {
         id: 'token',
-        title: `The ${symbol} token`,
+        title: 'The game token',
         lede: 'The token of the paid rooms.',
         blocks: [
           {
@@ -404,7 +404,7 @@ export const docsEn = (
               title: 'On the server: players trust it',
               items: [
                 'The game itself: movement, who ate whom, and the value of each coin at the bell.',
-                `The dollar price of ${symbol}, set by the team. It decides how many ${symbol} a ticket or a pack costs.`,
+                `The dollar price of the game token, set by the team. It decides how many ${symbol} a ticket or a pack costs.`,
                 'Power-up uses: the payment is on-chain, the uses are kept on the server.',
                 'Levels, XP, leagues and ranks.',
                 'The chat filter.',
