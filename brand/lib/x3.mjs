@@ -124,7 +124,7 @@ export function xBanner3() {
         <stop offset="0" stop-color="${C.deep}"/><stop offset=".55" stop-color="${C.trench}"/><stop offset="1" stop-color="${C.teal}"/></linearGradient></defs>
       <rect width="${w}" height="${h}" fill="url(#b3-sky)"/>
     </svg>
-    <div class="abs" style="left:0;top:0;opacity:.9">${starfield(w, 300, 46, 13)}</div>
+    <div class="abs" style="left:0;top:0;opacity:.9">${starfield(w, 300, 46, 29)}</div>
     <div class="abs" style="left:0;top:250px;opacity:.35;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 60%);mask-image:linear-gradient(to bottom,transparent,#000 60%)">${seigaiha({ w, h: 200, r: 34, stroke: C.spray, width: 2.5 })}</div>
     <svg class="abs" style="inset:0" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
       ${band(arc, 40)}
@@ -137,7 +137,7 @@ export function xBanner3() {
       ${food(392, 418, C.sun)}${food(470, 414, C.cyan)}${food(1360, 318, C.blush)}${food(1440, 306, C.sun)}
     </svg>
     <div class="title">${wordmark({ width: 470, diecut: true })}</div>
-    <div class="line">Coins that eat coins. <b>Eat or be eaten.</b></div>
+    <div class="line">Coins eating coins. <b>Eat or be eaten.</b></div>
 
     ${at(468, 352, coin('foam', { mood: 'scared', look: [-5, -1], sweat: true, size: 50 }), 'transform:rotate(-8deg)')}
     ${at(548, 322, coin('cyan', { mood: 'chomp', look: [-6, 1], size: 76 }), 'transform:rotate(-6deg)')}
@@ -147,7 +147,6 @@ export function xBanner3() {
       ${chomp(543, 360)}${chomp(655, 336)}${chomp(815, 300)}
       ${crumb(1022, 250, 5)}${crumb(1040, 230, 3.5)}${crumb(1012, 228, 3)}
     </svg>
-    <div class="gain" style="left:1040px;top:214px;transform:rotate(6deg)">+1,000 <small>$NIBAL</small></div>
     ${at(1150, 282, coin('teal', { mood: 'smug', look: [-4, 0], size: 70 }), 'transform:rotate(4deg)')}
     ${at(1262, 270, coin('cream', { mood: 'sleepy', size: 54 }))}
 
