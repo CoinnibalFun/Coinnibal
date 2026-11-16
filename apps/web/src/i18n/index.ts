@@ -64,6 +64,9 @@ export const X_HANDLE_BUILD: string = (() => {
  * - `{ourX}`, the project's X handle with its `@` (`X_HANDLE_BUILD`, then the server's site setting once it is
  *   loaded: `setOurXHandle`).
  */
+/** A network's name as visitor pages say it: without a trailing "Testnet" (the wallet shows the exact network). */
+export const plainChainName = (name: string): string => name.replace(/\s+Testnet$/i, '');
+
 let chainVars: { chain: string; ourX: string } = { chain: activeChain().name, ourX: `@${X_HANDLE_BUILD}` };
 
 function setGlobals(next: { chain: string; ourX: string }): void {

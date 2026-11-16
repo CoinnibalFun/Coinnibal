@@ -30,6 +30,9 @@ const JOBS = [
   { name: 'x3-avatar', make: X3.xAvatar3, scale: 2.5, file: 'x/coinnibal-avatar-1000.png' },
   { name: 'x3-banner', make: X3.xBanner3, scale: 1, file: 'x/coinnibal-banner-1500x500.png' },
   { name: 'x3-banner-2x', make: X3.xBanner3, scale: 2, file: 'x/coinnibal-banner-3000x1000.png' },
+  // HD masters (vector art rendered large; X scales them down without blur)
+  { name: 'x3-avatar-hd', make: X3.xAvatar3, scale: 5, file: 'x/coinnibal-avatar-2000.png' },
+  { name: 'x3-banner-hd', make: X3.xBanner3, scale: 3, file: 'x/coinnibal-banner-4500x1500.png' },
   { name: 'og', make: T.ogCard, scale: 1, file: 'web/og-elymum.png', copies: [join(PUBLIC, 'og-elymum.png')] },
   { name: 'favicon-32', make: () => T.favicon(32), scale: 1, file: 'web/favicon-32.png', copies: [join(PUBLIC, 'favicon-32.png')] },
   { name: 'apple-touch-icon', make: T.appleTouchIcon, scale: 1, file: 'web/apple-touch-icon.png', copies: [join(PUBLIC, 'apple-touch-icon.png')] },

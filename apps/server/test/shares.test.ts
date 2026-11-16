@@ -109,7 +109,7 @@ describe('share cards (made from the server records only)', () => {
     const req = (path: string) => ({ method: 'GET', url: path, headers: {} }) as never;
     s.setRenderBroken('Cannot find module @napi-rs/canvas-linux-x64-gnu');
     expect(s.handle(req(`/share/${c.id}.png`), res, `/share/${c.id}.png`, '1.2.3.4')).toBe(true);
-    expect(out).toMatchObject({ status: 302, headers: { Location: 'https://elymum.io/og-elymum.png' } });
+    expect(out).toMatchObject({ status: 302, headers: { Location: 'https://elymum.io/og-coinnibal.png' } });
     s.handle(req(`/share/${c.id}`), res, `/share/${c.id}`, '1.2.3.4');
     expect(out.status).toBe(200);
     expect(String(out.headers!['Content-Security-Policy'])).toMatch(/default-src 'none'/);

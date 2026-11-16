@@ -18,7 +18,7 @@ import {
   useReducedMotion,
   type CoinPaint,
 } from '../../design';
-import { useT, type TKey } from '../../i18n';
+import { plainChainName, useT, type TKey } from '../../i18n';
 import { em, renderRich, T } from '../../i18n/rich';
 import { FACTS } from '../../ui/docs/facts';
 import { usePeelLetters } from '../peel';
@@ -31,7 +31,7 @@ import { CoinPond } from './CoinPond';
 import { DuskSeam } from './DuskSeam';
 import { GazeCoin } from './GazeCoin';
 import { SeedRail } from './SeedRail';
-import { WhyNft } from '../nft/WhyNft';
+import { WhyNft, configuredPerks } from '../nft/WhyNft';
 import { isTestnetChain, useServerChain } from '../serverChain';
 import { useLandingSound } from './sound';
 import './landing.css';
@@ -59,7 +59,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
         <div className="ld-hero__inner">
           <motion.div className="ld-hero__drop" variants={m.stickerDrop} custom={-1.6} initial="hidden" animate="shown">
             <Sticker pad="lg" lift="lg" tape className="ld-hero__card">
-              <p className="kicker ld-hero__kicker">{t('ld.hero.kicker')}</p>
+              <p className="kicker ld-hero__kicker">{t('ld.hero.kicker', { chain: plainChainName(activeChain().name) })}</p>
               <h1 id="ld-hero-title" ref={peel.ref} className={`ld-hero__title ${peel.className}`}>
                 <Wordmark height={104} playful={!reduced} className="ld-hero__mark" />
               </h1>
@@ -417,7 +417,7 @@ function Nft({ doors }: { doors: Doors }) {
       <div className="ld-nft__body">
         <div className="ld-wrap ld-nft__grid">
           <motion.div className="ld-nft__copy" variants={m.popIn} initial="hidden" whileInView="shown" viewport={view}>
-            <p className="kicker">{t('ld.nft.kicker')}</p>
+            <p className="kicker">{t('ld.nft.kicker', { chain: plainChainName(activeChain().name) })}</p>
             <h2 className="ld-h2 ld-nft__title" id="ld-nft-h">
               <T k={doors.mint ? 'ld.nft.h' : 'ld.nft.hInfo'} tags={{ em }} />
             </h2>
@@ -557,10 +557,13 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
   };
   // the NFT's price only with the mint page, "is the game open?" only while it is closed, the collab question only
   // with its page; the last answer sends the visitor to the guide for every rule
-  const asked = [1, 2, 4, 5, 6, 7, 8].filter((n) => (n !== 4 || doors.mint) && (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
+  const perks = configuredPerks();
+  const perkVars = { holder: perks.fee.holder, normal: perks.fee.normal, room: perks.room ?? '', shop: perks.shopPct, extra: perks.shopExtra };
+  // the NFT questions need the holders' room (the default arenas have one)
+  const asked = [1, 2, 9, 10, 11, 4, 5, 6, 7, 8].filter((n) => (n !== 9 && n !== 11) || perks.room !== null).filter((n) => (n !== 4 || doors.mint) && (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
   const items: { q: string; a: ReactNode }[] = asked.map((n) => ({
-    q: t(`ld.faq.q${n}` as TKey),
-    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}` }), tags),
+    q: t(`ld.faq.q${n}` as TKey, { chain: plainChainName(activeChain().name) }),
+    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}`, sym: SYMBOL, chain: plainChainName(activeChain().name), ...perkVars }), tags),
   }));
   return (
     <section className="ld-plate ld-faq" id="faq" aria-labelledby="ld-faq-h">
@@ -568,7 +571,6 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
       <div className="ld-wrap ld-faq__grid">
         <div className="ld-faq__side">
           <div>
-            <p className="kicker">{t('ld.faq.kicker')}</p>
             <h2 className="ld-h2" id="ld-faq-h">
               {t('ld.faq.h')}
             </h2>

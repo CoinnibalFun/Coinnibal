@@ -6,8 +6,8 @@ describe('brand', () => {
     expect(BRAND_NAME).toBe('Coinnibal');
     expect(NFT_NAME).toBe('Coinnibal');
     expect(BRAND_TAGLINE).toBe('Eat or be eaten.');
-    expect(SITE_HOST_DEFAULT).toBe('elymum.io');
-    expect(SITE_URL_DEFAULT).toBe('https://elymum.io');
+    expect(SITE_HOST_DEFAULT).toBe('coinnibal.fun');
+    expect(SITE_URL_DEFAULT).toBe('https://coinnibal.fun');
     expect(SITE_X_HANDLE_DEFAULT).toBe('coinnibalfun');
   });
 
@@ -15,9 +15,9 @@ describe('brand', () => {
     expect(siteHostOf('https://coinnibal.fun')).toBe('coinnibal.fun');
     expect(siteHostOf('https://coinnibal.fun/')).toBe('coinnibal.fun');
     expect(siteHostOf('http://localhost:5173')).toBe('localhost:5173');
-    expect(siteHostOf(null)).toBe('elymum.io');
-    expect(siteHostOf('')).toBe('elymum.io');
-    expect(siteHostOf('not a url')).toBe('elymum.io');
+    expect(siteHostOf(null)).toBe('coinnibal.fun');
+    expect(siteHostOf('')).toBe('coinnibal.fun');
+    expect(siteHostOf('not a url')).toBe('coinnibal.fun');
     expect(siteHostOf(undefined, 'x.example')).toBe('x.example');
   });
 

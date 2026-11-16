@@ -1,10 +1,11 @@
+import { activeChain } from '@elymum/shared';
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChompMark, CoinMark, Icon, Kb, RingScene, Wordmark as InkWordmark, type IconName } from '../design';
 import { FooterLife } from './FooterLife';
 import { usePeelLetters } from './peel';
 import { Link, usePath } from './router';
 import { isTestnetChain, useServerChain } from './serverChain';
-import { useT, type TKey } from '../i18n';
+import { plainChainName, useT, type TKey } from '../i18n';
 import { strong, T } from '../i18n/rich';
 import { DOORS_CLOSED, linkOpen, useDoors, type Doors } from './doors';
 import { siteHost, useSiteSettings, xProfile } from './settings';
@@ -231,7 +232,7 @@ export function SiteFooter() {
         <div className="st-foot__brand">
           <InkWordmark height={64} diecut playful={false} className="st-foot__mark" />
           <p className="st-foot__eco">
-            <T k="site.foot.eco" tags={{ strong }} />
+            <T k="site.foot.eco" tags={{ strong }} vars={{ chain: plainChainName(activeChain().name) }} />
           </p>
         </div>
         <nav className="st-foot__links" aria-label={t('site.foot.nav')}>

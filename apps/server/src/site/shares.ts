@@ -302,7 +302,7 @@ export class ShareService {
       if (!png) {
         if (this.renderBroken) {
           // no canvas here: the site's own Open Graph picture, so a shared link still shows an image
-          res.writeHead(302, { Location: `${this.d.baseUrl(req).replace(/\/$/, '')}/og-elymum.png`, 'Cache-Control': 'public, max-age=300' });
+          res.writeHead(302, { Location: `${this.d.baseUrl(req).replace(/\/$/, '')}/og-coinnibal.png`, 'Cache-Control': 'public, max-age=300' });
           res.end();
           return true;
         }
@@ -317,7 +317,7 @@ export class ShareService {
         } catch (err) {
           this.renderBroken = String((err as Error)?.message ?? err).split('\n')[0];
           this.d.log?.(`!!! share cards: drawing failed (${this.renderBroken}) — share images fall back to the site's picture until a restart`);
-          res.writeHead(302, { Location: `${this.d.baseUrl(req).replace(/\/$/, '')}/og-elymum.png` });
+          res.writeHead(302, { Location: `${this.d.baseUrl(req).replace(/\/$/, '')}/og-coinnibal.png` });
           res.end();
           return true;
         }
