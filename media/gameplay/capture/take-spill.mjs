@@ -31,12 +31,12 @@ try {
   await hero.page.mouse.wheel(0, -240);
   await hero.drive(20_000, { mode: 'kamikaze' });
   rec.mark('eaten');
-  await hero.page.waitForSelector('.g-death .kb-btn--pink', { timeout: 10000 });
+  await hero.page.waitForSelector('.g-death .kb-btn--primary', { timeout: 10000 });
   await hero.wait(2600);
   rec.mark('sheet');
-  await hero.hover('.g-death .kb-btn--pink', { pause: 1300, speed: 0.7 });
+  await hero.hover('.g-death .kb-btn--primary', { pause: 1300, speed: 0.7 });
   rec.mark('buyback');
-  await hero.click('.g-death .kb-btn--pink', { before: 200 });
+  await hero.click('.g-death .kb-btn--primary', { before: 200 });
   await hero.page.waitForSelector('.tf-sheet', { timeout: 20000 });
   rec.mark('ticket-sheet');
   await hero.wait(1500);

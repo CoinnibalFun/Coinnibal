@@ -1,9 +1,10 @@
-"""Original score for the Elymum promo, synthesised from scratch with numpy.
+"""Original score for the Coinnibal promo, synthesised from scratch with numpy.
 
 Playful lo-fi electronic at 100 BPM (one beat = 0.6 s = 36 video frames), scored
-to the cut list in ../timeline.json: a held breath before the logo drop, a
-drop-out when the bots arrive, a whip crash into the join desk, a second breath
-before the end card and a final sting.
+to the beats in ../timeline.json: a pluck motif over the cold open (low notes on the
+gulps), a held breath and a drop into the logo, a riser into the dive, a tighter
+groove to the bell, a sub drop when the fee catches fire, a sparkly NFT section, a
+second breath before the end card and a final sting.
 
   python music.py OUT.wav
 """
@@ -19,7 +20,7 @@ BEAT = 0.6
 BAR = BEAT * 4
 HERE = os.path.dirname(os.path.abspath(__file__))
 TL = json.load(open(os.path.join(HERE, "..", "timeline.json")))
-DUR = TL["duration"] + 1.2
+DUR = TL["duration"] + 0.6
 N = int(DUR * SR)
 rs = np.random.default_rng(1234)
 
@@ -268,36 +269,9 @@ def chord_at(t, dark=False):
     return p[bar % 4]
 
 
-SECTIONS = [
-    # start, end, name
-    (0.0, 4.62, "intro"),
-    (4.8, 8.4, "logo"),
-    (8.4, 14.4, "A"),
-    (14.4, 20.4, "B"),
-    (20.4, 25.8, "A2"),
-    (25.8, 26.4, "sweep"),
-    (26.4, 28.8, "darkin"),
-    (28.8, 30.55, "dark"),
-    (30.55, 31.2, "turn"),
-    (31.2, 36.9, "bright"),
-    (36.9, 37.2, "whip"),
-    (37.2, 41.4, "B2"),
-    (41.4, 42.0, "fill"),
-    (42.0, 44.4, "A3"),
-    (44.4, 46.62, "tension"),
-    (46.8, 51.6, "outro"),
-    (51.6, 54.0, "sting"),
-    # cut only: the NFT beat (film 36.0 - 39.0) is scored here, after the scene timeline
-    (62.4, 64.8, "nft"),
-    (64.8, 65.4, "nft-breath"),
-]
-
-
-def section(t):
-    for a, b, n in SECTIONS:
-        if a <= t < b:
-            return n
-    return None
+B = TL["beats"]
+BELL = B["round"][0] + 1.9   # the round clock's bell (scenes.js)
+BREATHS = ((B["logo"][0] - 0.18, B["logo"][0]), (B["end"][0] - 0.18, B["end"][0]))
 
 
 def build():
@@ -308,23 +282,24 @@ def build():
     fx = np.zeros((2, N))
     swing = 0.035
 
-    # vinyl bed across everything (tiny), stronger in the intro
     place(fx, vinyl(DUR, 0.6), 0, 1.0, 0.0)
 
-    # ── intro: filtered pad + pluck motif, riser, breath ──
+    # ── cold open: filtered pad + pluck motif over the footage, the gulps land on low notes, riser, breath ──
+    L0 = B["logo"][0]
     place(keys, pad(PROG[0][0], 2.4, 1.0, 700), 0.0, 0.9)
     place(keys, pad(PROG[1][0], 2.4, 1.0, 800), 2.4, 0.9)
     motif = [72, 76, 79, 76, 74, 77, 81, 77]
     for i in range(16):
         tt = i * 0.3
-        if tt >= 4.4:
+        if tt >= L0 - 0.4:
             break
         m = motif[i % 8] - (0 if i < 8 else 2)
         place(lead, pluck(m, 0.9 if i % 2 == 0 else 0.55), tt + (swing if i % 2 else 0), 1.0, -0.3 + 0.6 * (i % 2))
-    place(bass, bass_note(41, 0.5, 0.8), 2.4)  # the gulp lands on a low F
-    for k in range(4):
-        place(drums, shaker(0.7), 2.4 + k * 0.3 + (swing if k % 2 else 0), 1.0, 0.4)
-    place(fx, noise_riser(1.02, 1.0), 3.6, 0.9)
+    for g in TL.get("gulps", []):
+        place(bass, bass_note(41, 0.5, 0.8), g)
+    for k in range(6):
+        place(drums, shaker(0.6), 2.4 + k * 0.3 + (swing if k % 2 else 0), 1.0, 0.4)
+    place(fx, noise_riser(1.02, 1.0), L0 - 1.2, 0.9)
 
     # ── grooves ──
     def groove(a, b, kick_pat="full", hats=True, open_hats=True, stabs=True, bass_on=True, dark=False,
@@ -385,71 +360,53 @@ def build():
                     place(lead, bell(m, 0.7, 0.75 if s == 0 else 0.5), tb + s * BEAT / 2 + (swing if s else 0), 1.0, -0.25 if s else 0.25)
 
     # logo drop
-    place(drums, impact(1.0), 4.8)
-    place(drums, crash(0.9), 4.8, 1.0, 0.2)
-    place(keys, pad(PROG[0][0], 3.6, 0.8, 1600), 4.8, 0.7)
-    groove(4.8, 8.4, open_hats=False, bells=False)
-    groove(8.4, 14.4)
-    place(fx, reverse_crash(0.6, 0.8), 13.8)
-    place(drums, crash(0.7), 14.4, 1.0, -0.2)
-    groove(14.4, 20.4, shakers=True, bells=True, cutoff=3200)
-    place(drums, crash(0.5), 20.4, 1.0, 0.2)
-    groove(20.4, 25.8, open_hats=False, cutoff=2000)
-    # sweep down: stab filter closes, reverse crash into the ink
-    for k in range(4):
-        tb = 25.8 + k * 0.15
-        place(keys, chord_stab(PROG[3][0], 0.1, 0.8 - k * 0.15, 1800 - k * 400), tb)
-    place(fx, reverse_crash(0.6, 1.0), 25.8)
-    place(drums, impact(0.9), 26.4)
-    # dark: drone + heartbeat, then half-time beat
-    place(bass, sub_drone(4.4, 33, 1.0), 26.4)
-    place(keys, pad([57, 60, 64], 4.2, 0.8, 600), 26.4, 0.7)
-    for k in range(3):
-        place(drums, kick(0.55), 27.0 + k * 0.6)
-        place(drums, kick(0.3), 27.0 + k * 0.6 + 0.18)
-    place(fx, reverse_crash(0.5, 0.7), 28.3)
-    place(drums, impact(0.7), 28.8)
-    groove(28.8, 30.6, kick_pat="half", half=True, open_hats=False, stabs=False, dark=True, hats=True)
-    place(fx, noise_riser(0.62, 0.8, 600, 7000), 30.55)
-    # bright arenas section
-    place(drums, crash(0.7), 31.2, 1.0, 0.2)
-    groove(31.2, 36.9, bells=True, shakers=True, cutoff=3400)
-    place(fx, noise_riser(0.35, 0.9, 1500, 12000), 36.85)
-    place(drums, crash(1.0), 37.2, 1.0, -0.2)
-    place(drums, kick(1.0), 37.2)
-    groove(37.2, 41.4, bells=True, cutoff=3000)
-    # fill
-    for k in range(8):
-        place(drums, clap(0.25 + k * 0.08), 41.4 + k * 0.075, 1.0, (k % 2) * 0.3 - 0.15)
-    place(drums, crash(0.6), 42.0)
-    groove(42.0, 44.4, cutoff=2600)
-    # tension: kick on every beat, hats thinning, filter closing, riser, breath
-    groove(44.4, 46.2, kick_pat="four", open_hats=False, stabs=True, cutoff=1400, hats=False)
-    place(fx, noise_riser(1.0, 1.1, 300, 11000), 45.62)
-    # final hit + outro
-    place(drums, impact(1.1), 46.8)
-    place(drums, crash(1.0), 46.8, 1.0, 0.15)
-    place(keys, pad(PROG[0][0] + [72], 4.8, 0.9, 1800), 46.8, 0.8)
-    groove(46.8, 51.6, open_hats=False, bells=True, cutoff=2600)
-    # sting
-    place(drums, kick(1.0), 51.6)
-    place(drums, crash(0.8, 2.6), 51.6)
-    for i, m in enumerate([65, 69, 72, 76, 79]):
-        place(lead, bell(m, 2.2, 0.8), 51.6 + i * 0.03, 1.0, -0.4 + i * 0.2)
-    place(keys, chord_stab(PROG[0][0], 1.2, 1.0, 2400), 51.6)
-    place(bass, bass_note(41, 1.0, 1.0), 51.6)
-    # ── the NFT beat (the cut plays it between the fee and the end card) ──
-    # the drop out of the burn, one bright bar under the cards, then one beat of tension and a
-    # breath so the end card's hit lands clean (3.0 s)
-    N0 = 62.4
-    place(drums, impact(1.0), N0)
-    place(drums, crash(0.9), N0, 1.0, -0.15)
+    place(drums, impact(1.0), L0)
+    place(drums, crash(0.9), L0, 1.0, 0.2)
+    place(keys, pad(PROG[0][0], 3.6, 0.8, 1600), L0, 0.7)
+    groove(L0, B["ticket"][0], open_hats=False)
+    # tickets
+    T0 = B["ticket"][0]
+    groove(T0, B["play"][0] - 0.6)
+    place(fx, noise_riser(0.6, 0.9, 400, 9000), B["play"][0] - 0.6, 0.9)
+    groove(B["play"][0] - 0.6, B["play"][0], kick_pat="four", open_hats=False, hats=False, cutoff=1600)
+    # the dive lands in the arena: the montage
+    P0 = B["play"][0]
+    place(drums, crash(0.7), P0, 1.0, -0.2)
+    place(drums, kick(1.0), P0)
+    groove(P0, B["round"][0], shakers=True, bells=True, cutoff=3200)
+    # rounds: tighter, the bell, the receipt
+    R0 = B["round"][0]
+    place(drums, crash(0.5), R0, 1.0, 0.2)
+    groove(R0, BELL - 0.6, open_hats=False, cutoff=2000)
+    groove(BELL - 0.6, BELL, kick_pat="four", hats=False, open_hats=False, cutoff=1400)
+    place(drums, impact(0.7), BELL)
+    groove(BELL, B["burn"][0], open_hats=False, cutoff=2200, half=True, kick_pat="half")
+    # the token and the burn: full groove, a sub drop as the fee catches fire
+    U0 = B["burn"][0]
+    place(drums, crash(0.7), U0, 1.0, -0.2)
+    groove(U0, B["nft"][0] - 0.3, bells=True, cutoff=3000)
+    place(bass, sub_drone(1.6, 33, 0.8), U0 + 2.1)
+    place(fx, reverse_crash(0.3, 0.8), B["nft"][0] - 0.3)
+    # the NFTs: bright, sparkly, then one beat of tension, a riser and the breath
+    N0 = B["nft"][0]
+    place(drums, crash(0.9), N0, 1.0, 0.15)
     place(keys, pad(PROG[0][0], 2.4, 0.8, 1800), N0, 0.7)
-    groove(N0, N0 + BAR, bells=True, shakers=True, cutoff=3600)
-    T0 = N0 + BAR
-    groove(T0, T0 + 0.6, kick_pat="four", open_hats=False, stabs=True, cutoff=1400, hats=False)
-    place(drums, kick(0.9), T0 + 0.3)
-    place(fx, noise_riser(0.42, 1.1, 300, 11000), T0 + 0.0)
+    E0 = B["end"][0]
+    groove(N0, E0 - 1.2, bells=True, shakers=True, cutoff=3600)
+    groove(E0 - 1.2, E0 - 0.18, kick_pat="four", open_hats=False, stabs=True, cutoff=1400, hats=False)
+    place(fx, noise_riser(1.0, 1.1, 300, 11000), E0 - 1.18)
+    # the end card hit + outro + sting
+    place(drums, impact(1.1), E0)
+    place(drums, crash(1.0), E0, 1.0, 0.15)
+    place(keys, pad(PROG[0][0] + [72], 4.8, 0.9, 1800), E0, 0.8)
+    S0 = E0 + 3.6
+    groove(E0, S0, open_hats=False, bells=True, cutoff=2600)
+    place(drums, kick(1.0), S0)
+    place(drums, crash(0.8, 2.6), S0)
+    for i, m in enumerate([65, 69, 72, 76, 79]):
+        place(lead, bell(m, 2.2, 0.8), S0 + i * 0.03, 1.0, -0.4 + i * 0.2)
+    place(keys, chord_stab(PROG[0][0], 1.2, 1.0, 2400), S0)
+    place(bass, bass_note(41, 1.0, 1.0), S0)
     return drums, bass, keys, lead, fx
 
 
@@ -471,18 +428,14 @@ def main():
     mix = biquad(mix, "peak", 300, -3.5, 0.7)
     mix = biquad(mix, "peak", 140, -1.5, 1.0)
     mix = biquad(mix, "highshelf", 4200, 3.0, 0.7)
-    # breaths: hard silence before the logo drop and the end hit (reverb tails cut)
-    for a, b in ((4.62, 4.8), (46.62, 46.8), (65.22, 65.4)):
+    # breaths: near silence before the logo drop and the end hit (reverb tails cut)
+    for a, b in BREATHS:
         i0, i1 = int(a * SR), int(b * SR)
         fade = int(0.02 * SR)
-        floor = 10 ** (-34 / 20)  # not digital silence: a breath with the room still there
+        floor = 10 ** (-34 / 20)
         mix[:, i0 - fade:i0] *= np.linspace(1, floor, fade)
         mix[:, i0:i1] *= floor
-    # tail fades: the film's end (the sting, old 52.3 - 54.0), then the NFT beat's bed after it
-    f0, f1 = int(52.3 * SR), int(54.0 * SR)
-    mix[:, f0:f1] *= np.linspace(1, 0, f1 - f0) ** 1.5
-    mix[:, f1:int(62.3 * SR)] = 0
-    f0 = int((TL["duration"] - 0.5) * SR)
+    f0 = int((TL["duration"] - 0.9) * SR)
     mix[:, f0:] *= np.linspace(1, 0, N - f0) ** 1.5
     # gentle glue: soft clip, normalise to -3 dBFS peak
     mix = np.tanh(mix * 0.9) / 0.9

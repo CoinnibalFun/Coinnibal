@@ -1,4 +1,4 @@
-/* Elymum promo: shared drawing library (Paper Ticket / riso print).
+/* Coinnibal promo: shared drawing library (Storybook paints, riso print).
  * Everything here is deterministic: no Date, no Math.random. All motion is a
  * pure function of the timeline time t (seconds). */
 'use strict';
@@ -13,8 +13,13 @@ const C = {
   blue: '#93D9EE', green: '#3C9A87', red: '#FF5252', orange: '#D9714F', purple: '#1E4D5A',
   night: '#0F2A30', nightCard: '#163B44', nightInk: '#F6EEDA', nightInk2: '#BFD8DD', nightPink: '#6FCDE8',
   cover: '#1F5566', line: 'rgba(4,24,28,0.35)', tape: 'rgba(219,242,249,0.85)',
+  // the Storybook paints by their own names (packages/shared/src/palette.ts)
+  abyss: '#04181C', deep: '#071317', trench: '#0F2A30', reef: '#163B44', current: '#1E4D5A',
+  cyan: '#34B7DD', cyanShade: '#2490B0', spray: '#6FCDE8', foam: '#93D9EE', mist: '#DBF2F9',
+  cream: '#F6EEDA', creamShade: '#DCCDA8', sun: '#F2C14E', sunShade: '#D49A2B', sunText: '#8A5F0E',
+  up: '#3C9A87', down: '#FF5252', downShade: '#C93A3A', blush: '#F39B86', coral: '#D9714F', white: '#FFFFFF',
 };
-// Ring Storybook type (docs/specs/2026-10-29-elymum-on-elysium.md, 6.4): Fraunces for display, Geist Mono for
+// Storybook type (the web app's fonts): Fraunces for display, Geist Mono for
 // numbers and kickers. The palette above is the Storybook paint table under the old Paper Ticket names
 // (pink -> cyan, mustard -> sun, night -> trench, ...), so every scene picks it up unchanged.
 const FONT = { display: '"Fraunces", Georgia, serif', mono: '"Geist Mono", ui-monospace, monospace' };
@@ -499,7 +504,7 @@ function halftoneShadow(ctx, cx, cy, rx, ry, alpha = 0.18, sp = 7) {
 
 /** Coin character via the art package. o: {look, r, expr, lookX, lookY, time, sx, sy, rot, alpha} */
 function coin(ctx, x, y, o) {
-  const A = window.ElymumArt;
+  const A = window.CoinnibalArt;
   ctx.save();
   ctx.translate(x, y);
   if (o.rot) ctx.rotate(o.rot);
@@ -515,65 +520,193 @@ function coin(ctx, x, y, o) {
   ctx.restore();
 }
 
-/** The brand mark: pink disc overprinted on teal, with an ink ring. */
-function brandMark(ctx, x, y, r, misreg = 1, alpha = 1) {
+/* ───────────── the Coinnibal marks (apps/web/src/design/motifs/brandShapes.ts + Wordmark.tsx) ─────────────
+ * The same paths, drawn with Path2D: the COINNIBAL letters are brush skeletons stroked with a fat round pen,
+ * the "O" is the gold bitten coin; the coin mark is the bitten cyan coin with a cream C; the chomp mark is
+ * the C as a fanged mouth closing on a scared gold coin. */
+const BITTEN_COIN = 'M46 -0.63 A46 46 0 1 1 -7.36 -45.41 A15.64 15.64 0 0 0 13.63 -31.98 A16.27 16.27 0 0 0 29.13 -18.98 A15.64 15.64 0 0 0 46 -0.63Z';
+const MARK_C = 'M13 -14 C8 -22 -13 -24 -13 0 C-13 24 8 22 13 14';
+const WORD_LETTERS = [
+  { d: 'M62 30 C52 12 16 12 16 56 C16 100 52 100 62 82', x: 0, rot: -4, dy: 1, shine: 'M8 40 v12' },
+  { x: 78, rot: 3, dy: 2 },
+  { d: 'M28 18 V94', x: 158, rot: -2, dy: -2, shine: 'M20 32 v12' },
+  { d: 'M16 94 V18 L60 94 V18', x: 208, rot: 2.5, dy: 3, shine: 'M8 34 v12' },
+  { d: 'M16 94 V18 L60 94 V18', x: 288, rot: -2, dy: -1, shine: 'M8 34 v12' },
+  { d: 'M28 18 V94', x: 358, rot: 3, dy: 2, shine: 'M20 32 v12' },
+  { d: 'M16 94 V18 H36 C62 18 62 54 36 54 H16 M36 54 C68 54 68 94 36 94 H16', x: 408, rot: -3, dy: 0, shine: 'M8 34 v12' },
+  { d: 'M12 94 L38 18 L64 94 M24 68 H52', x: 488, rot: 2, dy: 2, shine: 'M18 50 l5 -14' },
+  { d: 'M16 18 V94 H56', x: 568, rot: -2.5, dy: -1, shine: 'M8 32 v14' },
+];
+const WORD_W = 654, WORD_H = 128, WORD_COIN_SCALE = 0.9;
+const P2D = new Map();
+const path2d = (d) => { let p = P2D.get(d); if (!p) { p = new Path2D(d); P2D.set(d, p); } return p; };
+const PAINT = { cyan: [C.cyan, C.cyanShade], sun: [C.sun, C.sunShade], cream: [C.cream, C.creamShade], foam: [C.foam, '#69B4CC'] };
+function strokeP(ctx, d, color, w) { ctx.strokeStyle = color; ctx.lineWidth = w; ctx.stroke(path2d(d)); }
+/** The bitten coin in its own units (radius 46), paint 'sun' or 'cyan'; with the cream C for the coin mark. */
+function bittenCoin(ctx, paint = 'sun', o = {}) {
+  const [lit, shade] = PAINT[paint];
+  const bc = path2d(BITTEN_COIN);
   ctx.save();
-  ctx.globalAlpha = alpha;
-  const tx = x + r * 0.2 * misreg, ty = y + r * 0.2 * misreg;
-  ctx.fillStyle = C.teal;
-  ctx.beginPath(); ctx.arc(tx, ty, r, 0, TAU); ctx.fill();
-  ctx.fillStyle = C.pink;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-  // overprint: pink x teal where the two inks overlap
-  ctx.save();
-  ctx.beginPath(); ctx.arc(tx, ty, r, 0, TAU); ctx.clip();
-  ctx.fillStyle = '#071317';
-  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = 'rgba(4,24,28,0.5)';
-  ctx.lineWidth = r * 0.107;
-  ctx.beginPath(); ctx.arc(x, y, r * 0.667, 0, TAU); ctx.stroke();
-  ctx.restore();
-}
-
-/**
- * The elymum wordmark (artboard: 800 weight, 85% stretch, -2px @46px) with
- * the mark at its top right. reg: 0 = in register, 1 = full misregistration.
- * Returns the mark centre in local coords for match cuts.
- */
-function wordmarkMetrics(ctx, size) {
-  font(ctx, size, 800, 'display', 'semi-condensed');
-  ctx.letterSpacing = (-size * 0.045) + 'px';
-  const w = ctx.measureText('elymum').width;
-  const mr = size * 0.29;
-  return { w, mr, total: w + mr * 2.1, markX: w + mr * 0.95, markY: -size * 0.74 };
-}
-function wordmark(ctx, x, y, size, opts = {}) {
-  const m = wordmarkMetrics(ctx, size);
-  const reg = opts.reg ?? 0;
-  const ox = x - (opts.center ? m.total / 2 : 0);
-  ctx.save();
-  ctx.textBaseline = 'alphabetic';
-  ctx.globalAlpha = opts.alpha ?? 1;
-  const layers = opts.layers ?? 1;
-  if (opts.ghost !== false) {
-    // permanent riso ghost (teal, 5px @ display size) + entry misregistration
-    const gx = size * 0.016 + reg * size * 0.12, gy = size * 0.014 + reg * size * 0.06;
-    ctx.globalCompositeOperation = opts.dark ? 'source-over' : 'multiply';
-    ctx.fillStyle = C.teal;
-    ctx.globalAlpha = (opts.alpha ?? 1) * 0.9 * clamp(layers * 3);
-    ctx.fillText('elymum', ox + gx, y + gy);
-    ctx.fillStyle = C.pink;
-    ctx.globalAlpha = (opts.alpha ?? 1) * clamp(layers * 3 - 1) * (0.25 + reg * 0.75);
-    ctx.fillText('elymum', ox - reg * size * 0.09, y - reg * size * 0.05);
-    ctx.globalCompositeOperation = 'source-over';
+  ctx.save(); ctx.translate(o.shadow ?? 5, o.shadow ?? 5); ctx.fillStyle = C.ink; ctx.fill(bc); ctx.lineWidth = o.edge ?? 6; ctx.strokeStyle = C.ink; ctx.stroke(bc); ctx.restore();
+  ctx.fillStyle = shade; ctx.fill(bc);
+  ctx.save(); ctx.clip(bc); ctx.fillStyle = lit; ctx.beginPath(); ctx.arc(-5, -7, 44, 0, TAU); ctx.fill(); ctx.restore();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.arc(0, 0, o.c ? 36 : 30, 0, TAU); ctx.strokeStyle = shade; ctx.lineWidth = o.c ? 3 : 4;
+  ctx.save(); ctx.clip(bc); ctx.stroke(); ctx.restore();
+  ctx.globalAlpha *= 0.85; strokeP(ctx, 'M-36 -10 A37 37 0 0 1 -18 -32', '#FFFFFF', 6); ctx.globalAlpha /= 0.85;
+  ctx.strokeStyle = C.ink; ctx.lineWidth = o.edge ?? 7.2; ctx.stroke(bc);
+  if (o.c) {
+    ctx.translate(-4, 4);
+    ctx.save(); ctx.translate(3, 3); strokeP(ctx, MARK_C, C.ink, 22); ctx.restore();
+    strokeP(ctx, MARK_C, C.ink, 22);
+    strokeP(ctx, MARK_C, C.cream, 14);
   }
-  ctx.globalAlpha = (opts.alpha ?? 1) * clamp(layers * 3 - 2);
-  ctx.fillStyle = opts.color || C.ink;
-  ctx.fillText('elymum', ox, y);
   ctx.restore();
-  if (opts.mark !== false) brandMark(ctx, ox + m.markX, y + m.markY, m.mr, 1, opts.markAlpha ?? opts.alpha ?? 1);
-  return { x: ox + m.markX, y: y + m.markY, r: m.mr, w: m.total };
+}
+/** The coin mark centred at (x, y), radius r (px). */
+function brandMark(ctx, x, y, r, paint = 'cyan', alpha = 1) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y); ctx.scale(r / 46, r / 46);
+  bittenCoin(ctx, paint, { c: true, shadow: 4, edge: 5 });
+  ctx.restore();
+}
+/** One wordmark letter (or the coin O) in its 80 x 112 cell. */
+function wordLetter(ctx, l, paint) {
+  const [lit, shade] = PAINT[paint];
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (!l.d) {
+    ctx.save(); ctx.translate(40, 56); ctx.scale(WORD_COIN_SCALE, WORD_COIN_SCALE);
+    bittenCoin(ctx, paint === 'sun' ? 'cyan' : 'sun', { shadow: 5 / WORD_COIN_SCALE, edge: (6 / WORD_COIN_SCALE) * 1.2 });
+    ctx.restore();
+    return;
+  }
+  ctx.save(); ctx.translate(5, 5); strokeP(ctx, l.d, C.ink, 30); ctx.restore();
+  strokeP(ctx, l.d, C.ink, 30);
+  strokeP(ctx, l.d, shade, 24);
+  ctx.save(); ctx.translate(-1.6, -1.8); strokeP(ctx, l.d, lit, 19); ctx.restore();
+  if (l.shine) { ctx.save(); ctx.translate(5, 0); strokeP(ctx, l.shine, C.mist, 4.5); ctx.restore(); }
+}
+/**
+ * The COINNIBAL wordmark, `height` px tall, its left edge at x (or centred), top at y.
+ * o.letter(i) -> {p (0..1 arrival), dy, rot, s} animates each letter; o.diecut adds the cream sticker halo.
+ * Returns the box and the centre of the coin O (for match cuts).
+ */
+function wordmark(ctx, x, y, height, o = {}) {
+  const k = height / WORD_H;
+  const w = WORD_W * k;
+  const x0 = o.center ? x - w / 2 : x;
+  const paint = o.paint || 'cyan';
+  ctx.save();
+  ctx.translate(x0 + 6 * k, y + 4 * k);
+  ctx.scale(k, k);
+  if (o.alpha != null) ctx.globalAlpha = o.alpha;
+  const anim = (i) => (o.letter ? o.letter(i) : { p: 1 });
+  if (o.diecut) {
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const halo = (l, extra) => (l.d ? 24 + 6 + 26 + extra : 46 * WORD_COIN_SCALE * 2 + 26 + extra);
+    for (const pass of [['s', C.ink, 6], ['o', C.ink, 6], ['c', C.cream, 0]]) {
+      WORD_LETTERS.forEach((l, i) => {
+        const a = anim(i); if (a.p <= 0) return;
+        ctx.save(); ctx.translate(l.x, l.dy + (a.dy || 0)); if (pass[0] === 's') ctx.translate(6, 6);
+        ctx.translate(40, 56); ctx.rotate(((l.rot + (a.rot || 0)) * Math.PI) / 180); ctx.scale(a.s ?? 1, a.s ?? 1); ctx.translate(-40, -56);
+        strokeP(ctx, l.d || 'M40 56 h0.1', pass[1], halo(l, pass[2]));
+        ctx.restore();
+      });
+    }
+  }
+  WORD_LETTERS.forEach((l, i) => {
+    const a = anim(i); if (a.p <= 0) return;
+    ctx.save();
+    ctx.translate(l.x, l.dy + (a.dy || 0));
+    ctx.translate(40, 56); ctx.rotate(((l.rot + (a.rot || 0)) * Math.PI) / 180); ctx.scale(a.s ?? 1, a.s ?? 1); ctx.translate(-40, -56);
+    if (a.alpha != null) ctx.globalAlpha *= a.alpha;
+    wordLetter(ctx, l, paint);
+    ctx.restore();
+  });
+  ctx.restore();
+  return { x: x0, y, w, h: height, ox: x0 + (6 + 78 + 40) * k, oy: y + (4 + 2 + 56) * k, or: 46 * WORD_COIN_SCALE * k };
+}
+/**
+ * The chomp mark centred at (x, y), `size` px across. bite: 0 = jaws open, 1 = closed on the coin;
+ * eye: blink 0..1; prey: 0..1 how far the scared coin has been pulled into the mouth (1 = gone).
+ */
+function chompMark(ctx, x, y, size, o = {}) {
+  const k = size / 114;
+  const bite = o.bite ?? 0.4, prey = o.prey ?? 0;
+  ctx.save();
+  ctx.translate(x, y); ctx.scale(k, k); ctx.translate(-5, -2);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // jaw opening: the C's ends swing apart (bite 0) or close to the stock mark (bite 1)
+  const open = (1 - bite) * 0.5;
+  const a0 = Math.atan2(23, 19.3) + open, R = 30;
+  const C_D = `M${(R * Math.cos(-a0)).toFixed(2)} ${(R * Math.sin(-a0)).toFixed(2)} A30 30 0 1 0 ${(R * Math.cos(a0)).toFixed(2)} ${(R * Math.sin(a0)).toFixed(2)}`;
+  // inside the mouth
+  ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(0, 0, 22, 0, TAU); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(0, 0, 22, 0, TAU); ctx.clip();
+  ctx.fillStyle = C.blush; ctx.beginPath(); ctx.ellipse(2, 14, 14, 7, 0, 0, TAU); ctx.fill(); ctx.restore();
+  // the prey coin (pulled in and shrinking)
+  if (prey < 1) {
+    const px = lerp(35, 6, E.inCubic(prey)), ps = 1 - prey * 0.85;
+    ctx.save(); ctx.translate(px, 0); ctx.scale(ps, ps); ctx.rotate(Math.sin((o.time ?? 0) * 30) * 0.08 * (1 - prey));
+    ctx.fillStyle = C.sun; ctx.strokeStyle = C.ink; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(0, 0, 12.5, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = C.sunShade; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, TAU); ctx.stroke();
+    ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = C.ink; ctx.lineWidth = 1.6;
+    for (const ex of [2.5, 8.5]) { ctx.beginPath(); ctx.arc(ex, -2.5, 2.8, 0, TAU); ctx.fill(); ctx.stroke(); }
+    ctx.fillStyle = C.ink; ctx.beginPath(); ctx.ellipse(5.5, 5, 1.8, 2.4, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  // crumbs
+  const cr = o.crumbs ?? 1;
+  if (cr > 0) {
+    ctx.fillStyle = C.sun; ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5;
+    [[53, -15, 4], [46, -26, 2.8], [54, 13, 3]].forEach(([cx, cy, r], i) => {
+      const b = Math.sin((o.time ?? 0) * 6 + i * 2) * 1.5;
+      ctx.beginPath(); ctx.arc(cx + (1 - cr) * -10, cy + b, r * cr, 0, TAU); ctx.fill(); ctx.stroke();
+    });
+  }
+  // the C
+  ctx.save(); ctx.translate(4, 4); strokeP(ctx, C_D, C.ink, 33); ctx.restore();
+  strokeP(ctx, C_D, C.ink, 33);
+  strokeP(ctx, C_D, C.cyanShade, 24);
+  ctx.save(); ctx.beginPath(); ctx.arc(-8, -10, 42, 0, TAU); ctx.clip(); strokeP(ctx, C_D, C.cyan, 24); ctx.restore();
+  ctx.globalAlpha *= 0.85; strokeP(ctx, 'M-35 12 A36 36 0 0 1 -30 -18', '#FFFFFF', 4.5); ctx.globalAlpha /= 0.85;
+  // fangs: upper pair turns with the upper jaw, lower pair with the lower jaw
+  const fang = (sgn) => {
+    ctx.save(); ctx.rotate(-sgn * open);
+    const d = sgn < 0 ? 'M12 -9 L15.5 0 L19.5 -9.5Z M21.5 -10 L24.5 -2 L28 -10.5Z' : 'M12 9 L15.5 0 L19.5 9.5Z M21.5 10 L24.5 2 L28 10.5Z';
+    ctx.fillStyle = '#FFFFFF'; ctx.fill(path2d(d)); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.2; ctx.stroke(path2d(d));
+    ctx.restore();
+  };
+  fang(-1); fang(1);
+  // the hungry eye and brow
+  const blink = o.eye ?? 0;
+  ctx.save(); ctx.translate(-10, -28); ctx.scale(1, 1 - blink * 0.9);
+  ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = C.ink; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(0, 0, 10.5, 0, TAU); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(4, 2.5, 5, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(5.5, 0.8, 1.5, 0, TAU); ctx.fill();
+  ctx.restore();
+  strokeP(ctx, 'M-24 -44 L1 -37', C.ink, 5);
+  ctx.restore();
+}
+/** The $NIBAL token: a small gold coin with a riso ghost and an N, r px. spin turns it edge-on. */
+function nibal(ctx, x, y, r, o = {}) {
+  if (r <= 0.3) return;
+  ctx.save();
+  ctx.translate(x, y);
+  if (o.rot) ctx.rotate(o.rot);
+  ctx.scale(Math.max(0.12, Math.abs(Math.cos(o.spin || 0))), 1);
+  if (o.alpha != null) ctx.globalAlpha = o.alpha;
+  ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(r * 0.12, r * 0.14, r, 0, TAU); ctx.fill();
+  ctx.fillStyle = C.sunShade; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.clip(); ctx.fillStyle = C.sun; ctx.beginPath(); ctx.arc(-r * 0.1, -r * 0.14, r * 0.95, 0, TAU); ctx.fill(); ctx.restore();
+  ctx.strokeStyle = C.ink; ctx.lineWidth = Math.max(1.5, r * 0.12); ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = C.sunShade; ctx.lineWidth = Math.max(1, r * 0.08); ctx.beginPath(); ctx.arc(0, 0, r * 0.68, 0, TAU); ctx.stroke();
+  if (r > 9) {
+    font(ctx, r * 1.0, 900, 'display'); ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('N', 0, r * 0.06);
+  }
+  ctx.restore();
 }
 
 /** Number with thousands separators. */
@@ -684,5 +817,5 @@ Object.assign(window, {
   W, H, TAU, C, FONT, clamp, lerp, prog, E, spring, tw, hash, rng, noise1, shake,
   mkCanvas, font, rrect, ticketPath, sideTicketPath, dashed, paperShadow, TEX, buildTextures,
   drawPaper, drawGrainAndVignette, kicker, headline, tape, stamp, stampImage, halftoneShadow,
-  coin, brandMark, wordmark, wordmarkMetrics, fmt, odometer, burst, shockDots, barcode, blobPath,
+  coin, brandMark, wordmark, chompMark, bittenCoin, nibal, fmt, odometer, burst, shockDots, barcode, blobPath,
 });
