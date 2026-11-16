@@ -532,7 +532,7 @@ export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }
       lede={
         known
           ? 'The ERC-20 the arenas take. The server already knows it: check it, then confirm once in the preview. It can never be changed.'
-          : 'The ERC-20 the arenas take ($NIBAL). The server has no game token registered yet: set TOKEN_ADDRESS on the game server and reload, and it shows up here.'
+          : 'The ERC-20 the arenas take (the game token). The server has no game token registered yet: set TOKEN_ADDRESS on the game server and reload, and it shows up here.'
       }
     >
       {known && (
@@ -623,7 +623,7 @@ export function DefaultArenas({ ctx, kicker }: { ctx: ChainCtx; kicker?: string 
   );
 }
 
-/** Off mainnet: a TestToken to try the arena flow before $NIBAL exists, and its faucet. */
+/** Off mainnet: a TestToken to try the arena flow before the game token exists, and its faucet. */
 export function TestTokenCard({ ctx, local: given, onLocal: onGiven }: { ctx: ChainCtx; local?: LocalDeploys; onLocal?: (l: LocalDeploys) => void }) {
   const [err, guard] = useFormError();
   const [own, setOwn] = useState<LocalDeploys>(() => loadLocalDeploys(ctx.net.info?.id));
@@ -633,7 +633,7 @@ export function TestTokenCard({ ctx, local: given, onLocal: onGiven }: { ctx: Ch
   if (refusal) return null;
   const token = (ctx.status?.arena?.config?.token ?? registeredToken(ctx) ?? local.token?.address ?? null) as Address | null;
   return (
-    <Card title="TestToken" id="test-token" kicker="Off mainnet only" tone="quiet" lede={`A mintable ERC-20 with a faucet (1,000,000 per hour), to try the arena before $NIBAL exists. ${testTokenArtifact.contractName} is never offered on mainnet.`}>
+    <Card title="TestToken" id="test-token" kicker="Off mainnet only" tone="quiet" lede={`A mintable ERC-20 with a faucet (1,000,000 per hour), to try the arena before the game token exists. ${testTokenArtifact.contractName} is never offered on mainnet.`}>
       {token && (
         <p className="ad-inline">
           <span className="ad-registered__name">Token</span> <Addr value={token} net={ctx.net} />

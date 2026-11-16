@@ -137,7 +137,8 @@ describe('player guide content', () => {
     const t = JSON.stringify(en);
     expect(t).not.toMatch(/\barenas?\b|emblem|\btill\b|entry fee|fee wallet|stake/i);
     expect(t).not.toMatch(/play now|mint now|press Quick Play|coming soon|will be announced|roadmap/i);
-    expect(t).toContain('NIBAL-7K2M9Q');
+    expect(t).toContain('COIN-7K2M9Q');
+    expect(t).not.toContain('NIBAL');
     expect(t).toContain('$1 Room');
     expect(t).toContain('$10 Room');
   });
