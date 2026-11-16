@@ -689,8 +689,8 @@ function chompMark(ctx, x, y, size, o = {}) {
   strokeP(ctx, 'M-24 -44 L1 -37', C.ink, 5);
   ctx.restore();
 }
-/** The $NIBAL token: a small gold coin with a riso ghost and an N, r px. spin turns it edge-on. */
-function nibal(ctx, x, y, r, o = {}) {
+/** The game's token: a plain gold coin with a riso ghost and a star (no ticker, no letter), r px. spin turns it edge-on. */
+function tokenCoin(ctx, x, y, r, o = {}) {
   if (r <= 0.3) return;
   ctx.save();
   ctx.translate(x, y);
@@ -703,8 +703,11 @@ function nibal(ctx, x, y, r, o = {}) {
   ctx.strokeStyle = C.ink; ctx.lineWidth = Math.max(1.5, r * 0.12); ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
   ctx.strokeStyle = C.sunShade; ctx.lineWidth = Math.max(1, r * 0.08); ctx.beginPath(); ctx.arc(0, 0, r * 0.68, 0, TAU); ctx.stroke();
   if (r > 9) {
-    font(ctx, r * 1.0, 900, 'display'); ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('N', 0, r * 0.06);
+    ctx.fillStyle = C.sunShade;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.16 : r * 0.38; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+    ctx.closePath(); ctx.fill();
+    if (r > 40) { ctx.globalAlpha *= 0.85; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = r * 0.09; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, 0, r * 0.82, Math.PI * 1.05, Math.PI * 1.4); ctx.stroke(); }
   }
   ctx.restore();
 }
@@ -817,5 +820,5 @@ Object.assign(window, {
   W, H, TAU, C, FONT, clamp, lerp, prog, E, spring, tw, hash, rng, noise1, shake,
   mkCanvas, font, rrect, ticketPath, sideTicketPath, dashed, paperShadow, TEX, buildTextures,
   drawPaper, drawGrainAndVignette, kicker, headline, tape, stamp, stampImage, halftoneShadow,
-  coin, brandMark, wordmark, chompMark, bittenCoin, nibal, fmt, odometer, burst, shockDots, barcode, blobPath,
+  coin, brandMark, wordmark, chompMark, bittenCoin, tokenCoin, fmt, odometer, burst, shockDots, barcode, blobPath,
 });

@@ -3,7 +3,7 @@
  "bpm": 100,
  "width": 1920,
  "height": 1080,
- "duration": 40.2,
+ "duration": 29.4,
  "beats": {
   "hook": [
    0.0,
@@ -11,31 +11,27 @@
   ],
   "logo": [
    4.8,
-   8.4
+   7.8
   ],
   "ticket": [
-   8.4,
-   13.2
+   7.8,
+   11.4
   ],
   "play": [
-   13.2,
-   18.0
+   11.4,
+   15.0
   ],
   "round": [
-   18.0,
-   22.8
-  ],
-  "burn": [
-   22.8,
-   28.8
+   15.0,
+   19.2
   ],
   "nft": [
-   28.8,
-   34.8
+   19.2,
+   24.6
   ],
   "end": [
-   34.8,
-   40.2
+   24.6,
+   29.4
   ]
  },
  "vo": [
@@ -53,31 +49,27 @@
   },
   {
    "id": "ticket",
-   "at": 8.8
+   "at": 7.95
   },
   {
    "id": "play",
-   "at": 13.4
+   "at": 11.55
   },
   {
    "id": "rounds_a",
-   "at": 18.15
+   "at": 15.1
   },
   {
    "id": "rounds_b",
-   "at": 19.75
-  },
-  {
-   "id": "burn",
-   "at": 22.95
+   "at": 16.35
   },
   {
    "id": "nft",
-   "at": 28.85
+   "at": 19.3
   },
   {
    "id": "end",
-   "at": 35.05
+   "at": 24.85
   }
  ],
  "montage": [
@@ -88,12 +80,12 @@
   ],
   [
    "RUN",
-   1.6,
+   1.2,
    "RUN"
   ],
   [
    "SPLIT",
-   3.2,
+   2.4,
    "SPLIT"
   ]
  ],
@@ -247,424 +239,288 @@
    "type": "type",
    "at": 5.0,
    "gain": 0.3,
-   "dur": 0.5
+   "dur": 0.45
   },
   {
    "type": "whoosh_s",
-   "at": 6.7,
+   "at": 6.2,
    "gain": 0.45
   },
   {
    "type": "gulp",
-   "at": 7.35,
+   "at": 6.9,
    "gain": 0.7
   },
   {
    "type": "coins_s",
-   "at": 7.4,
+   "at": 6.95,
    "gain": 0.4
   },
   {
    "type": "whoosh_l",
-   "at": 7.95,
+   "at": 7.35,
    "gain": 0.5
   },
   {
    "type": "thud",
-   "at": 8.6,
+   "at": 7.9,
    "gain": 0.6
   },
   {
    "type": "thud",
-   "at": 8.9,
+   "at": 8.06,
    "gain": 0.55
   },
   {
    "type": "thud",
-   "at": 9.2,
+   "at": 8.22,
    "gain": 0.55
   },
   {
    "type": "thud",
-   "at": 9.5,
+   "at": 8.38,
    "gain": 0.6
   },
   {
    "type": "whoosh_s",
-   "at": 10.45,
+   "at": 8.9,
+   "gain": 0.5
+  },
+  {
+   "type": "impact",
+   "at": 9.3,
+   "gain": 0.45
+  },
+  {
+   "type": "coins_l",
+   "at": 9.3,
    "gain": 0.5
   },
   {
    "type": "tape",
-   "at": 10.95,
+   "at": 9.65,
    "gain": 0.5
   },
   {
    "type": "tape",
-   "at": 11.05,
+   "at": 9.75,
    "gain": 0.45
   },
   {
    "type": "stamp",
-   "at": 11.4,
+   "at": 10.0,
    "gain": 0.95
   },
   {
-   "type": "pop",
-   "at": 11.55,
-   "gain": 0.5
-  },
-  {
-   "type": "coins_s",
-   "at": 11.8,
-   "gain": 0.45
-  },
-  {
    "type": "punch",
-   "at": 12.25,
+   "at": 10.4,
    "gain": 0.9
   },
   {
    "type": "dive",
-   "at": 12.45,
+   "at": 10.55,
    "gain": 0.75
   },
   {
    "type": "hit",
-   "at": 13.2,
+   "at": 11.4,
    "gain": 0.6
   },
   {
    "type": "gulp",
-   "at": 14.0,
+   "at": 12.2,
    "gain": 0.7
   },
   {
    "type": "coins_s",
-   "at": 14.05,
+   "at": 12.25,
    "gain": 0.45
   },
   {
    "type": "shutter",
-   "at": 14.8,
+   "at": 12.6,
    "gain": 0.45
   },
   {
    "type": "stamp",
-   "at": 15.05,
+   "at": 12.85,
    "gain": 0.6
   },
   {
    "type": "shutter",
-   "at": 16.4,
+   "at": 13.8,
    "gain": 0.45
   },
   {
    "type": "stamp",
-   "at": 16.7,
+   "at": 14.1,
    "gain": 0.6
   },
   {
    "type": "whip",
-   "at": 17.72,
+   "at": 14.72,
    "gain": 0.6
   },
   {
    "type": "roll",
-   "at": 18.3,
+   "at": 15.25,
    "gain": 0.3,
-   "dur": 1.0
+   "dur": 0.75
   },
   {
    "type": "tick",
-   "at": 19.3,
+   "at": 16.0,
    "gain": 0.45
   },
   {
    "type": "tick",
-   "at": 19.5,
+   "at": 16.2,
    "gain": 0.45
   },
   {
    "type": "tick",
-   "at": 19.7,
+   "at": 16.4,
    "gain": 0.5
   },
   {
    "type": "bell",
-   "at": 19.9,
+   "at": 16.6,
    "gain": 0.75
   },
   {
    "type": "printer",
-   "at": 20.15,
+   "at": 16.8,
    "gain": 0.55,
-   "dur": 1.35
+   "dur": 1.1
   },
   {
    "type": "stamp",
-   "at": 21.7,
+   "at": 18.0,
    "gain": 1.0
   },
   {
    "type": "whoosh_s",
-   "at": 22.45,
-   "gain": 0.45
-  },
-  {
-   "type": "pop",
-   "at": 22.85,
-   "gain": 0.45
-  },
-  {
-   "type": "pop",
-   "at": 22.97,
-   "gain": 0.45
-  },
-  {
-   "type": "pop",
-   "at": 23.09,
-   "gain": 0.45
-  },
-  {
-   "type": "pop",
-   "at": 23.21,
-   "gain": 0.5
-  },
-  {
-   "type": "pickup",
-   "at": 23.55,
-   "gain": 0.35
-  },
-  {
-   "type": "thud",
-   "at": 23.8,
-   "gain": 0.55
-  },
-  {
-   "type": "pickup",
-   "at": 23.95,
-   "gain": 0.35
-  },
-  {
-   "type": "thud",
-   "at": 24.25,
-   "gain": 0.5
-  },
-  {
-   "type": "pickup",
-   "at": 24.35,
-   "gain": 0.35
-  },
-  {
-   "type": "thud",
-   "at": 24.55,
-   "gain": 0.5
-  },
-  {
-   "type": "pickup",
-   "at": 24.75,
-   "gain": 0.4
-  },
-  {
-   "type": "fire",
-   "at": 24.9,
-   "gain": 0.7,
-   "dur": 3.6
-  },
-  {
-   "type": "coins_l",
-   "at": 25.1,
-   "gain": 0.6
-  },
-  {
-   "type": "thud",
-   "at": 26.0,
-   "gain": 0.5
-  },
-  {
-   "type": "thud",
-   "at": 26.15,
-   "gain": 0.5
-  },
-  {
-   "type": "thud",
-   "at": 26.3,
-   "gain": 0.5
-  },
-  {
-   "type": "thud",
-   "at": 26.45,
-   "gain": 0.5
-  },
-  {
-   "type": "stamp_l",
-   "at": 26.55,
-   "gain": 0.5
-  },
-  {
-   "type": "stamp_l",
-   "at": 26.67,
-   "gain": 0.45
-  },
-  {
-   "type": "coins_l",
-   "at": 26.75,
-   "gain": 0.55
-  },
-  {
-   "type": "stamp_l",
-   "at": 26.79,
-   "gain": 0.45
-  },
-  {
-   "type": "stamp_l",
-   "at": 26.91,
-   "gain": 0.45
-  },
-  {
-   "type": "whip",
-   "at": 28.5,
-   "gain": 0.6
-  },
-  {
-   "type": "thud",
-   "at": 28.85,
+   "at": 18.9,
    "gain": 0.45
   },
   {
    "type": "thud",
-   "at": 29.05,
+   "at": 19.28,
+   "gain": 0.45
+  },
+  {
+   "type": "thud",
+   "at": 19.45,
    "gain": 0.4
   },
   {
    "type": "thud",
-   "at": 29.25,
+   "at": 19.62,
    "gain": 0.4
   },
   {
    "type": "page",
-   "at": 29.35,
+   "at": 19.8,
    "gain": 0.6
   },
   {
    "type": "whoosh_s",
-   "at": 30.35,
+   "at": 20.75,
    "gain": 0.45
   },
   {
    "type": "stamp",
-   "at": 30.85,
+   "at": 21.25,
    "gain": 0.8
   },
   {
    "type": "pop",
-   "at": 31.15,
+   "at": 21.5,
    "gain": 0.5
   },
   {
    "type": "tape",
-   "at": 31.25,
+   "at": 21.6,
    "gain": 0.35
   },
   {
    "type": "pop",
-   "at": 32.15,
+   "at": 22.25,
    "gain": 0.5
   },
   {
    "type": "tape",
-   "at": 32.25,
+   "at": 22.35,
    "gain": 0.35
   },
   {
    "type": "pop",
-   "at": 32.85,
+   "at": 23.0,
    "gain": 0.5
   },
   {
    "type": "tape",
-   "at": 32.95,
-   "gain": 0.35
-  },
-  {
-   "type": "pop",
-   "at": 33.35,
-   "gain": 0.5
-  },
-  {
-   "type": "tape",
-   "at": 33.45,
-   "gain": 0.35
-  },
-  {
-   "type": "pop",
-   "at": 33.75,
-   "gain": 0.5
-  },
-  {
-   "type": "tape",
-   "at": 33.85,
+   "at": 23.1,
    "gain": 0.35
   },
   {
    "type": "ink",
-   "at": 34.35,
+   "at": 24.2,
    "gain": 0.7
   },
   {
    "type": "stamp",
-   "at": 34.8,
+   "at": 24.6,
    "gain": 0.7
   },
   {
    "type": "pop",
-   "at": 35.75,
+   "at": 25.55,
    "gain": 0.45
   },
   {
    "type": "pop",
-   "at": 36.0,
+   "at": 25.8,
    "gain": 0.45
   },
   {
    "type": "pop",
-   "at": 36.3,
+   "at": 26.1,
    "gain": 0.5
   },
   {
    "type": "slide",
-   "at": 36.9,
+   "at": 26.7,
    "gain": 0.4
   },
   {
    "type": "pop",
-   "at": 37.4,
+   "at": 27.2,
    "gain": 0.35
   },
   {
    "type": "pop",
-   "at": 37.52,
+   "at": 27.32,
    "gain": 0.35
   },
   {
    "type": "pop",
-   "at": 37.64,
+   "at": 27.44,
    "gain": 0.35
   },
   {
    "type": "pop",
-   "at": 37.76,
+   "at": 27.56,
    "gain": 0.35
   },
   {
    "type": "boing",
-   "at": 37.85,
+   "at": 27.65,
    "gain": 0.35
   },
   {
    "type": "gulp",
-   "at": 38.4,
+   "at": 28.2,
    "gain": 0.6
   }
  ],
