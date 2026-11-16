@@ -95,7 +95,7 @@ export function DocsPage() {
 
           <Rule variant="double" />
           <footer className="dc-foot">
-            <p className="dc-foot__text">{c.colophon}</p>
+            {c.colophon && <p className="dc-foot__text">{c.colophon}</p>}
             <button
               type="button"
               className="dc-top"

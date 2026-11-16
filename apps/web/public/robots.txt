@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 Disallow: /api/
 
-Sitemap: https://elymum.io/sitemap.xml
+Sitemap: https://coinnibal.fun/sitemap.xml

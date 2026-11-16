@@ -9,14 +9,17 @@
  * docs/OPERATIONS.md, "Moving to coinnibal.fun").
  */
 
+/** The Coinnibal NFT collection's size (the team's decision; the contract's `maxSupply` is set to it at deploy). */
+export const NFT_SUPPLY = 3333;
+
 /** The product name. */
 export const BRAND_NAME = 'Coinnibal';
 
 /** The one short brand line (simple English, a little playful). */
 export const BRAND_TAGLINE = 'Eat or be eaten.';
 
-/** The site's host when nothing is configured (the live domain until coinnibal.fun is). */
-export const SITE_HOST_DEFAULT = 'elymum.io';
+/** The site's host when nothing is configured (the live domain). */
+export const SITE_HOST_DEFAULT = 'coinnibal.fun';
 
 /** `https://<SITE_HOST_DEFAULT>`. */
 export const SITE_URL_DEFAULT = `https://${SITE_HOST_DEFAULT}`;
