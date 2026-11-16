@@ -402,7 +402,7 @@ export function arenaPoster(a) {
         <div style="font-size:12.5px;line-height:1.35;color:#3E3A31;margin-top:6px">${a.line}</div></div>
       <div class="abs" style="left:15px;right:15px;bottom:14px;display:flex;justify-content:space-between;align-items:center;border-top:2px dashed ${C.sand2};padding-top:9px">
         <span class="kick" style="font-size:10.5px;color:${C.stone}">Ticket</span>
-        <span class="num" style="font-size:15px;font-weight:600">${a.entry} <span style="color:${C.teal}">in $NIBAL</span></span></div>
+        <span class="num" style="font-size:15px;font-weight:600">${a.entry} <span style="color:${C.teal}">in tokens</span></span></div>
     </div>
     <div class="abs" style="right:6px;top:178px;transform:rotate(6deg)">${coin(a.coin[0], { mood: a.coin[1], look: [-3, 1], size: 76, feet: false, diecut: 7 })}</div>`;
   return { w, h, html: page({ w, h, body }) };

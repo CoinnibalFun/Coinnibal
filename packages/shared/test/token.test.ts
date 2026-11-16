@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { GAS_DECIMALS, TOKEN_SYMBOL_DEFAULT, formatGas, formatToken, parseToken, toSafeAmount } from '../src';
 
 describe('TOKEN_SYMBOL_DEFAULT', () => {
-  it('is $NIBAL', () => {
-    expect(TOKEN_SYMBOL_DEFAULT).toBe('$NIBAL');
+  it('is a plain word, not a ticker', () => {
+    expect(TOKEN_SYMBOL_DEFAULT).toBe('tokens');
   });
 });
 

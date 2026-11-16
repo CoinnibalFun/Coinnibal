@@ -594,7 +594,7 @@ export function Gallery() {
             </>
           }
         >
-          <p>1,000 $NIBAL for a seat at the next round. If the round never starts, you get it back.</p>
+          <p>1,000 tokens for a seat at the next round. If the round never starts, you get it back.</p>
         </Modal>
         <WalletPicker
           open={wallets}
@@ -618,10 +618,10 @@ export function Gallery() {
         <div className="gal-grid gal-grid--3">
           <Spec label="Ticket (boarding pass) in a TicketGroup">
             <TicketGroup label="Arenas" value={room} onChange={setRoom} className="gal-tickets">
-              <Ticket value="asphodel" title="Asphodel Meadow" meta="23 players · open" stub={<TicketStub value="1,000" unit="$NIBAL" />} />
-              <Ticket value="lethe" title="Lethe Shore" meta="9 players · open" stub={<TicketStub value="10K" unit="$NIBAL" />} />
-              <Ticket value="bough" title="Golden Bough" meta="closed till 18:00" stamp="HELD" stub={<TicketStub value="50K" unit="$NIBAL" />} />
-              <Ticket value="isles" title="Isles of the Blessed" meta="for holders" disabled stub={<TicketStub value="250K" unit="$NIBAL" />} />
+              <Ticket value="asphodel" title="Asphodel Meadow" meta="23 players · open" stub={<TicketStub value="1,000" unit="tokens" />} />
+              <Ticket value="lethe" title="Lethe Shore" meta="9 players · open" stub={<TicketStub value="10K" unit="tokens" />} />
+              <Ticket value="bough" title="Golden Bough" meta="closed till 18:00" stamp="HELD" stub={<TicketStub value="50K" unit="tokens" />} />
+              <Ticket value="isles" title="Isles of the Blessed" meta="for holders" disabled stub={<TicketStub value="250K" unit="tokens" />} />
             </TicketGroup>
           </Spec>
           <Spec label="Receipt (sticker report card)">
