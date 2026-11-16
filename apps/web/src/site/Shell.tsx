@@ -104,6 +104,19 @@ export const NAV: { href: string; label: string; key: TKey; testnet?: true }[] =
  */
 export const navFor = (testnet: boolean | null, doors: Doors = DOORS_CLOSED) => NAV.filter((n) => (!n.testnet || testnet === true) && linkOpen(n.href, doors));
 
+/**
+ * Pages that are closed but named in the header with a "Soon" tag, not clickable: the game (beta), the WL and the
+ * collab applications. The mint is not among them (it runs on OpenSea).
+ */
+export const SOON: { href: string; key: TKey }[] = [
+  { href: '/play', key: 'site.nav.play' },
+  { href: '/wl', key: 'site.nav.wl' },
+  { href: '/collab', key: 'site.nav.collab' },
+];
+
+/** The "Soon" entries for the doors that are still closed. */
+export const soonFor = (doors: Doors = DOORS_CLOSED) => SOON.filter((n) => !linkOpen(n.href, doors));
+
 function ConnectFallback() {
   const t = useT();
   return (
@@ -123,8 +136,9 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
   const testnet = isTestnetChain(useServerChain());
   const doors = useDoors();
   const nav = navFor(testnet, doors);
-  // one or two links fit beside the logo on a phone too: no menu button for them
-  const few = nav.length <= 2 && !doors.game;
+  const soon = soonFor(doors);
+  // one or two entries fit beside the logo on a phone too: no menu button for them
+  const few = nav.length + soon.length <= 2 && !doors.game;
   // the wallet button belongs to what needs a wallet (the game, the mint, the applications); a signed-in wallet keeps it
   const [wallet] = useState(() => readStoredSession() !== null);
   const connect = doors.game || doors.mint || doors.wl || doors.collab || wallet;
@@ -166,6 +180,12 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
       </Link>
     );
   });
+  const soonItems = soon.map((n) => (
+    <span key={`soon:${n.href}`} className="st-nav__link st-nav__link--soon" aria-disabled="true">
+      {t(n.key)}
+      <span className="st-soon">{t('site.nav.soon')}</span>
+    </span>
+  ));
   return (
     <header className={`st-head${few ? ' st-head--few' : ''}`}>
       <div className="st-head__inner">
@@ -178,6 +198,7 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
         </Link>
         <nav className="st-nav" aria-label={t('site.nav.label')}>
           {links}
+          {soonItems}
         </nav>
         <div className="st-head__tools">
           {connect && (
@@ -206,6 +227,7 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
           {/* phones: a sheet from the bottom edge, so every link and the Play button sit under the thumb */}
           <nav ref={sheet} id="st-menu" className="st-menu kb-sticker kb-sticker--cream" aria-label={t('site.menu.label')}>
             {links.filter((l) => l.key !== '/play')}
+            {soonItems}
             {doors.game && (
               <SiteLinkButton href="/play" variant="primary" size="lg" icon="arrow" className="st-menu__play" onClick={() => setMenu(false)}>
                 {t('site.menu.play')}

@@ -1192,7 +1192,8 @@
 .ld-ticket__body {
   position: relative;
   display: grid;
-  align-content: start;
+  /* the name sits in the middle of the ticket's height, not at its top edge */
+  align-content: center;
   gap: 4px;
   padding: 14px 14px 16px 18px;
   border-right: 0;
