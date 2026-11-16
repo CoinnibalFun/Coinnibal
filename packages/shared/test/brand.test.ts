@@ -8,7 +8,7 @@ describe('brand', () => {
     expect(BRAND_TAGLINE).toBe('Eat or be eaten.');
     expect(SITE_HOST_DEFAULT).toBe('elymum.io');
     expect(SITE_URL_DEFAULT).toBe('https://elymum.io');
-    expect(SITE_X_HANDLE_DEFAULT).toBe('elymumio');
+    expect(SITE_X_HANDLE_DEFAULT).toBe('coinnibalfun');
   });
 
   it('siteHostOf: the host of a configured origin, else the default', () => {

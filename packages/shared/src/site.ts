@@ -8,7 +8,7 @@ import type { XLinkError } from './xlink';
  */
 
 /** The X account of the project (no `@`). */
-export const SITE_X_HANDLE_DEFAULT = 'elymumio';
+export const SITE_X_HANDLE_DEFAULT = 'coinnibalfun';
 
 /**
  * Who may play (practice, arenas, private rooms, spectating): `admins` only, NFT `holders`
