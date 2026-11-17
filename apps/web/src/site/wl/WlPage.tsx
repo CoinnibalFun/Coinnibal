@@ -1,7 +1,7 @@
 import { normalizeXHandle, type PublicWlTask, type SiteSettings, type WlEntryPublic } from '@elymum/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, CoinCharacter, Field, Icon, Stamp, StampSpinner, StatusPill, Sticker, Tape, useReducedMotion } from '../../design';
+import { Button, CoinCharacter, Field, Icon, PlateLabel, Stamp, StampSpinner, StatusPill, Sticker, Tape, useReducedMotion } from '../../design';
 import { SiteApiError, site } from '../api';
 import { ticketNo } from '../coinLook';
 import { Link } from '../router';
@@ -9,11 +9,12 @@ import { dropExpired, signOut } from '../session';
 import { X_HANDLE, X_URL, shortWallet, siteHost, useSiteSettings, xIntent } from '../settings';
 import { intlLocale, t, useT, type TKey } from '../../i18n';
 import { T } from '../../i18n/rich';
+import { ClosedNotice } from '../Closed';
 import { SitePage, XIcon } from '../Shell';
 import { SiteWalletProvider, WalletSignIn, useSiteSession } from '../wallet/SiteWallet';
 import { Ascent } from './Ascent';
 import { CardPreview, SaveCardButton } from './CardPreview';
-import { ChoreArt, Moon, handlePaint } from './ChoreArt';
+import { ChoreArt, handlePaint } from './ChoreArt';
 import { InkSplat, StickerAlbum } from './Juice';
 import { StoryPlate } from './Plate';
 import { buildSteps, stepError, stepForField, submitBody, tweetId, type Answers, type Step } from './steps';
@@ -126,35 +127,25 @@ function Wl() {
   );
 }
 
+/** The WL while applications are not open: the site's shared closed notice, with the way back to an earlier entry. */
 function WlClosed() {
   const [signin, setSignin] = useState(false);
   const t = useT();
+  // the tab reads like the site's other closed pages (the WL page itself, open or with a status, keeps its own title)
+  useEffect(() => {
+    document.title = t('site.title.closed');
+    return () => {
+      document.title = t('site.title.wl');
+    };
+  }, [t]);
   return (
-    <WlPlate title={t('wp.closed.plate')} className="wl-plate--closed">
-      <div className="wl-closed">
-        <div className="wl-closed__text">
-          <span className="kicker wl-kicker">{t('wp.closed.kicker')}</span>
-          <h1 className="wl-title">{t('wp.closed.h')}</h1>
-          <p className="wl-deck">
-            <T
-              k="wp.closed.body"
-              tags={{
-                x: (c) => (
-                  <a href={X_URL} target="_blank" rel="noreferrer">
-                    {c}
-                  </a>
-                ),
-              }}
-            />
-          </p>
-          <div className="wl-row">
-            <a className="kb-btn kb-btn--teal kb-btn--md" href={X_URL} target="_blank" rel="noreferrer">
-              <XIcon /> {t('pg.follow')}
-            </a>
-            <button type="button" className="wl-textlink" onClick={() => setSignin((v) => !v)} aria-expanded={signin}>
-              {t('wp.closed.signin')}
-            </button>
-          </div>
+    <>
+      <PlateLabel numeral="IV" title={t('wp.closed.plate')} />
+      <ClosedNotice lede={t('wp.closed.body')}>
+        <div className="wl-closed__again">
+          <button type="button" className="wl-textlink" onClick={() => setSignin((v) => !v)} aria-expanded={signin}>
+            {t('wp.closed.signin')}
+          </button>
           {signin && (
             <Sticker className="wl-signin-card" tone="white" pad="sm">
               <p className="wl-signin-card__lede">{t('wp.closed.signinLede')}</p>
@@ -162,21 +153,8 @@ function WlClosed() {
             </Sticker>
           )}
         </div>
-        <div className="wl-closed__art" aria-hidden="true">
-          <span className="wl-closed__moon">
-            <Moon size={92} />
-          </span>
-          <Sticker className="wl-closed__sign" tone="sun" tilt={-4} pad="sm" lift="md">
-            <span className="mono">{t('wp.closed.gate')}</span>
-            <strong>{t('wp.closed.soon')}</strong>
-          </Sticker>
-          <span className="wl-closed__coin">
-            <CoinCharacter paint="cream" mood="sleepy" size={150} feet ground />
-          </span>
-          <span className="wl-closed__ledge" />
-        </div>
-      </div>
-    </WlPlate>
+      </ClosedNotice>
+    </>
   );
 }
 

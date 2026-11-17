@@ -1,8 +1,5 @@
 /* /play gate: the ring at night, closed (or members only), drawn as Plate III of the book. */
 
-.pg-platelabel {
-  padding: 18px var(--gutter);
-}
 
 .pg-night {
   background: var(--trench);
@@ -20,7 +17,8 @@
 .pg-wrap {
   position: relative;
   height: 100%;
-  max-width: 1240px;
+  /* the header's column */
+  max-width: 1312px;
   margin: 0 auto;
   padding: clamp(40px, 6vw, 88px) var(--gutter) clamp(160px, 16vw, 240px);
   display: grid;
@@ -63,6 +61,30 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+}
+.pg-x {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 14px;
+  font-weight: 700;
+  color: var(--ink) !important;
+}
+/* phones: the closed page's two buttons share one width, as on the site's other closed pages; the holders page's
+   two links stack instead of leaving the dot at the end of a line */
+@media (max-width: 479px) {
+  .pg-actions--stack .st-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .pg-links {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .pg-links > span[aria-hidden] {
+    display: none;
+  }
 }
 .pg-links {
   display: flex;
@@ -450,5 +472,22 @@
   }
   .pg-gate__zzz i:nth-child(3) {
     transform: translate(28px, -52px);
+  }
+}
+
+/* landscape phones: a tighter card, so the first screen reaches its buttons */
+@media (max-height: 500px) and (orientation: landscape) {
+  .pg-wrap {
+    padding-top: 20px;
+  }
+  .pg-card {
+    padding-block: 18px !important;
+  }
+  .pg-h {
+    margin: 6px 0 10px;
+    font-size: 32px;
+  }
+  .pg-lede {
+    margin-bottom: 14px;
   }
 }

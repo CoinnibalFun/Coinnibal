@@ -187,7 +187,7 @@ describe('/collab', { timeout: 30_000 }, () => {
       'GET /api/site/collab': { collabs: [collab({ status: 'rejected', phase: 'rejected' })] },
     }));
     render(<CollabPage />);
-    expect(await screen.findByRole('heading', { name: 'Applications are closed.' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Applications are not open yet.' })).toBeTruthy();
     act(() => useSession.setState({ session: { address: ME, token: 'tok', admin: false } }));
     await waitFor(() => expect(screen.getAllByText('Not this time.').length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: /Collab guide/ }));
