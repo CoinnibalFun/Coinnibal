@@ -5,7 +5,8 @@ import { CoinCharacter, useReducedMotion, type CoinMood } from '../../design';
 /**
  * The landing's reading progress, drawn as a snack: a row of seeds runs along the bottom of the
  * header and a little coin eats its way through them as the visitor scrolls (the seeds behind it
- * are gone). It chews while the page moves; when the page rests it wears the mood of the plate
+ * are gone). The rail is a band of the sticky header itself (opaque, above the header's rule), so
+ * nothing on the page ever scrolls under the seeds or the coin; its track keeps to the page gutter. It chews while the page moves; when the page rests it wears the mood of the plate
  * under it (sleepy once night falls, wary at the cast of big coins, hungry at the menu).
  * Transform and clip only; the coin's place is a CSS variable fed by the scroll.
  * When a plate seam bites (`ld:gulp`, reveal.ts), the coin gulps with it, so the rail and the seams read as one
@@ -84,10 +85,12 @@ export function SeedRail() {
 
   return (
     <div ref={rail} className="ld-rail" aria-hidden="true" style={{ ['--p' as string]: 0 } as CSSProperties}>
-      <span className="ld-rail__seeds" />
-      <span className="ld-rail__coin">
-        <span className={`ld-rail__gulp${gulping ? ' is-gulp' : ''}`}>
-          <CoinCharacter paint="sun" mood={gulping || moving ? 'chomp' : mood} size={30} look={[3, 0]} chewing={!reduced} blink={!reduced} />
+      <span className="ld-rail__track">
+        <span className="ld-rail__seeds" />
+        <span className="ld-rail__coin">
+          <span className={`ld-rail__gulp${gulping ? ' is-gulp' : ''}`}>
+            <CoinCharacter paint="sun" mood={gulping || moving ? 'chomp' : mood} size={20} look={[3, 0]} chewing={!reduced} blink={!reduced} />
+          </span>
         </span>
       </span>
     </div>

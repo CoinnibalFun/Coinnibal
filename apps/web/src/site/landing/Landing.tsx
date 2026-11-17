@@ -24,6 +24,7 @@ import { em, renderRich, T } from '../../i18n/rich';
 import { FACTS } from '../../ui/docs/facts';
 import { usePeelLetters } from '../peel';
 import { Link } from '../router';
+import { useMedia } from '../../design/useMedia';
 import { useDoors, type Doors } from '../doors';
 import { SiteFooter, SiteHeader, SiteLinkButton, XIcon } from '../Shell';
 import { useSiteSettings, xProfile } from '../settings';
@@ -35,7 +36,7 @@ import { NapSeam } from './NapSeam';
 import { BITE_GULP_MS, SEAL_GULP_MS, gulp, useReveal, useRevealEach } from './reveal';
 import { SealSeam } from './SealSeam';
 import { SeedRail } from './SeedRail';
-import { WhyNft, configuredPerks } from '../nft/WhyNft';
+import { WhyNft } from '../nft/WhyNft';
 import { isTestnetChain, useServerChain } from '../serverChain';
 import { useLandingSound } from './sound';
 import './landing.css';
@@ -50,9 +51,9 @@ const v = (o: Record<string, string | number>) => o as CSSProperties;
 /*
  * Scrolling down, every plate is printed in one rhythm (reveal.ts arms it, reveal.css plays it): the section's ink
  * rule draws, its caption slides in, its dashed rule runs out, while a bite, the seal or the tablecloth plays on the
- * seam; then each content stage lays down kicker (rv-k), heading (rv-h, fed out top-down), visual (rv-v, settling up
- * with the scroll), body (rv-b) and items (rv-i). Text is never hidden longer than about 0.6 s; reduced motion is
- * never armed and sees the finished page.
+ * seam; then each content stage lays down heading (rv-h, fed out top-down), visual (rv-v, settling up with the
+ * scroll), body (rv-b) and items (rv-i). The plate's caption names the section, so no kicker repeats it above the
+ * heading. Text is never hidden longer than about 0.6 s; reduced motion is never armed and sees the finished page.
  */
 
 const NO_REF: RefObject<Element | null> = { current: null };
@@ -78,13 +79,15 @@ const usePlate = (gulpAt: number) => useReveal<HTMLElement>(undefined, { attr: '
 function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: GameAccess; handle: string; sound: ReturnType<typeof useLandingSound> }) {
   const reduced = useReducedMotion();
   const m = useMoves();
+  // on a phone the card fills the width: a smaller tilt keeps its corners off the screen's edges
+  const phone = useMedia('(max-width: 479px)');
   const peel = usePeelLetters<HTMLHeadingElement>();
   const t = useT();
   return (
     <section className="ld-hero" aria-labelledby="ld-hero-title">
       <RingScene time="dawn" variant="full" animate={!reduced} className="ld-hero__ring">
         <div className="ld-hero__inner">
-          <motion.div className="ld-hero__drop" variants={m.stickerDrop} custom={-1.6} initial="hidden" animate="shown">
+          <motion.div className="ld-hero__drop" variants={m.stickerDrop} custom={phone ? -0.8 : -1.6} initial="hidden" animate="shown">
             <Sticker pad="lg" lift="lg" tape className="ld-hero__card">
               <p className="kicker ld-hero__kicker">{t('ld.hero.kicker', { chain: plainChainName(activeChain().name) })}</p>
               <h1 id="ld-hero-title" ref={peel.ref} className={`ld-hero__title ${peel.className}`}>
@@ -94,10 +97,10 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
                 {t('ld.hero.tag')} <span className="ld-hero__motto">{t('brand.tagline')}</span>
               </p>
               <p className="ld-hero__lede">{t('ld.hero.lede')}</p>
-              {/* plainly: this is real money (on testnet: what it will be on mainnet) */}
+              {/* plainly: free at first, then a ticket is real money (D12), whatever chain the build is on */}
               <p className="ld-hero__money" data-testid="ld-money">
                 <Icon name="info" size={16} className="ld-hero__money-icon" />
-                <span>{activeChain().testnet ? t('ld.hero.moneyTest', { sym: SYMBOL }) : t('ld.hero.money', { sym: SYMBOL })}</span>
+                <span>{t('ld.hero.money', { sym: SYMBOL })}</span>
               </p>
               <div className="ld-hero__ctas">
                 {doors.wl && (
@@ -258,7 +261,6 @@ function Feast() {
       <PlateLabel numeral={2} title={t('ld.feast.plate')} aside={t('ld.feast.aside')} />
       <div className="ld-wrap ld-feast__grid">
         <div ref={copy} className="ld-feast__copy">
-          <p className="kicker rv-k">{t('ld.feast.kicker')}</p>
           <h2 className="ld-h2 rv-h" id="ld-feast-h">
             <T k="ld.feast.h" tags={{ u: (c) => <span className="wonk ld-ul">{c}</span> }} />
           </h2>
@@ -298,11 +300,46 @@ const STATIONS: { no: string; title: TKey; body: TKey }[] = [
 ];
 const stationVars = () => ({ sym: SYMBOL, min: FACTS.rules.roundMin, s: FACTS.rules.joinCloseS, b: FACTS.rules.breakS });
 
+/**
+ * How far the visitor has read down the steps: the index of the last step whose top has passed 60 % of the viewport
+ * (-1 before the first). Steps above the viewport stay read, so a jump past the section lights them all. Without an
+ * IntersectionObserver every step counts as read (the finished page).
+ */
+function useStepsRead(list: RefObject<HTMLOListElement | null>): number {
+  const [at, setAt] = useState(-1);
+  useEffect(() => {
+    const ol = list.current;
+    if (!ol) return;
+    const items = [...ol.children];
+    if (typeof IntersectionObserver === 'undefined') {
+      setAt(items.length - 1);
+      return;
+    }
+    const read = items.map(() => false);
+    const io = new IntersectionObserver(
+      (es) => {
+        for (const e of es) {
+          const i = items.indexOf(e.target);
+          if (i >= 0) read[i] = e.isIntersecting || (e.boundingClientRect?.top ?? 1) < 0;
+        }
+        setAt(read.lastIndexOf(true));
+      },
+      { rootMargin: '0px 0px -40% 0px' },
+    );
+    for (const el of items) io.observe(el);
+    return () => io.disconnect();
+  }, [list]);
+  return at;
+}
+
 function Round({ live }: { live: boolean }) {
   const t = useT();
   const plate = usePlate(0);
   const orbit = useReveal<HTMLDivElement>();
   const copy = useReveal<HTMLDivElement>();
+  // the orbit's stations and the step numbers light up as the visitor reads down the steps (the card stays beside them)
+  const stops = useRef<HTMLOListElement>(null);
+  const read = useStepsRead(stops);
   return (
     <section ref={plate} className="ld-plate ld-round" id="round" aria-labelledby="ld-round-h">
       <PlateLabel numeral={3} title={t('ld.round.plate')} aside={t('ld.round.aside')} />
@@ -319,12 +356,7 @@ function Round({ live }: { live: boolean }) {
               tone="night"
               className="ld-orbit__svg"
               title={t('ld.round.svg')}
-              stations={[
-                { at: 0, label: t('ld.stop.ticket'), done: true },
-                { at: 0.25, label: t('ld.stop.eat'), done: true },
-                { at: 0.5, label: t('ld.stop.bell') },
-                { at: 0.75, label: t('ld.stop.paid') },
-              ]}
+              stations={STATIONS.map((s, i) => ({ at: i / STATIONS.length, label: t(s.title), done: i <= read }))}
             />
             <span className="ld-orbit__core" aria-hidden="true">
               <GazeCoin paint="sun" mood="chomp" size={112} look={[2, 1]} reach={0.7} />
@@ -333,13 +365,12 @@ function Round({ live }: { live: boolean }) {
           </Sticker>
         </div>
         <div ref={copy} className="ld-round__copy">
-          <p className="kicker rv-k">{t('ld.round.kicker')}</p>
           <h2 className="ld-h2 rv-h" id="ld-round-h">
             {t('ld.round.h')}
           </h2>
-          <ol className="ld-stops">
+          <ol ref={stops} className="ld-stops">
             {STATIONS.map((s, i) => (
-              <li key={s.no} className="ld-stop rv-i" style={v({ '--rv-n': i })}>
+              <li key={s.no} className={`ld-stop rv-i${i <= read ? ' is-read' : ''}`} style={v({ '--rv-n': i })}>
                 <span className="ld-stop__no num" aria-hidden="true">
                   {s.no}
                 </span>
@@ -451,13 +482,12 @@ function Nft({ doors }: { doors: Doors }) {
   return (
     <section ref={plate} className="ld-plate ld-nft" id="nft" aria-labelledby="ld-nft-h">
       <SealSeam />
-      <PlateLabel numeral={5} title={t('ld.nft.plate')} aside={doors.mint ? '/mint' : t('ld.nft.aside')} />
+      <PlateLabel numeral={5} title={t('ld.nft.plate')} aside={t('ld.nft.aside')} />
       <div className="ld-nft__body">
         <div className="ld-wrap ld-nft__grid">
           <div ref={copy} className="ld-nft__copy">
-            <p className="kicker rv-k">{t('ld.nft.kicker', { chain: plainChainName(activeChain().name) })}</p>
             <h2 className="ld-h2 ld-nft__title rv-h" id="ld-nft-h">
-              <T k={doors.mint ? 'ld.nft.h' : 'ld.nft.hInfo'} tags={{ em }} />
+              <T k={doors.mint ? 'ld.nft.h' : 'ld.nft.hInfo'} tags={{ em }} vars={{ supply: NFT_SUPPLY.toLocaleString('en-US') }} />
             </h2>
             <p className="ld-nft__text rv-b">{t('ld.nft.body')}</p>
             {doors.wl && doors.mint && doors.game && (
@@ -491,7 +521,7 @@ function Nft({ doors }: { doors: Doors }) {
           <EmblemFan />
         </div>
         <div ref={why} className="ld-wrap ld-nft__why">
-          <WhyNft testnet={testnet} />
+          <WhyNft testnet={testnet} level={3} />
         </div>
         <Seigaiha tone="night" rows={3} r={36} className="ld-nft__waves" />
       </div>
@@ -529,7 +559,6 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
       <div className="ld-wrap">
         <div ref={head} className="ld-arenas__head">
           <div>
-            <p className="kicker rv-k">{t('ld.ar.kicker')}</p>
             <h2 className="ld-h2 rv-h" id="ld-arenas-h">
               {t('ld.ar.h')}
             </h2>
@@ -545,7 +574,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
             const look = STAIR[i % STAIR.length];
             const price = formatUsdCents(a.usdCents).replace(/\.00$/, '');
             return (
-              <li key={a.id} className={`ld-stair${a.holdersOnly ? ' is-holders' : ''}`} style={v({ '--step': i, '--tilt': i % 2 ? '1.4deg' : '-1.4deg', '--ink-a': meta.ink, '--ink-b': meta.inkTo ?? meta.ink })}>
+              <li key={a.id} className={`ld-stair${a.holdersOnly ? ' is-holders' : ''}`} style={v({ '--step': i, '--ink-a': meta.ink, '--ink-b': meta.inkTo ?? meta.ink })}>
                 <div className="ld-stair__coin" aria-hidden="true">
                   {i === 0 && <span className="kb-tag ld-stair__you">{t('ld.ar.you')}</span>}
                   {a.holdersOnly && (
@@ -618,15 +647,13 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
     docs: (c: ReactNode) => <Link href="/docs">{c}</Link>,
     collab: (c: ReactNode) => <Link href="/collab">{c}</Link>,
   };
-  // the NFT's price only with the mint page, "is the game open?" only while it is closed, the collab question only
-  // with its page; the last answer sends the visitor to the guide for every rule
-  const perks = configuredPerks();
-  const perkVars = { supply: NFT_SUPPLY.toLocaleString('en-US'), holder: perks.fee.holder, normal: perks.fee.normal, room: perks.room ?? '', shop: perks.shopPct, extra: perks.shopExtra };
-  // the NFT questions need the holders' room (the default arenas have one)
-  const asked = [1, 2, 9, 12, 10, 11, 4, 5, 6, 7, 8].filter((n) => (n !== 9 && n !== 11) || perks.room !== null).filter((n) => (n !== 4 || doors.mint) && (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
+  // each fact once: the NFT's perks and its count are in the NFT section above, the rules in the guide. "Is the game
+  // open?" only while it is closed, the collab question only with its page; the last answer sends the visitor to the
+  // guide for every rule
+  const asked = [1, 2, 11, 5, 6, 7, 8].filter((n) => (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
   const items: { q: string; a: ReactNode }[] = asked.map((n) => ({
     q: t(`ld.faq.q${n}` as TKey, { chain: plainChainName(activeChain().name) }),
-    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}`, sym: SYMBOL, chain: plainChainName(activeChain().name), ...perkVars }), tags),
+    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}`, sym: SYMBOL, chain: plainChainName(activeChain().name) }), tags),
   }));
   // re-arm when a card is remounted (its key is the question, which carries the chain's name)
   useRevealEach(list, '.ld-qa', items.map((f) => f.q).join('\n'));
@@ -671,6 +698,14 @@ export function Landing() {
   const doors = useDoors();
   const sound = useLandingSound();
   const t = useT();
+  // a shared link to a part of the page (/#nft, /#why-nft, /#faq): the browser's own jump came before the sections
+  // rendered, so it lands at the top; jump once they are there (the plates' scroll margin clears the header)
+  useEffect(() => {
+    const id = decodeURIComponent(location.hash.slice(1));
+    if (!id) return;
+    const raf = requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'instant' as ScrollBehavior }));
+    return () => cancelAnimationFrame(raf);
+  }, []);
   return (
     <Kb theme="paper" className="st-root ld-root">
       <a className="st-skip" href="#main">

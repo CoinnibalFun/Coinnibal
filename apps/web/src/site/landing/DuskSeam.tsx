@@ -1,6 +1,7 @@
 import { ELYSIUM } from '@elymum/shared';
 import { motion, useScroll, useTransform, type MotionValue } from 'motion/react';
 import { useOffscreenPause, useReducedMotion } from '../../design';
+import { useMedia } from '../../design/useMedia';
 import { useT } from '../../i18n';
 
 /**
@@ -15,6 +16,15 @@ const INK = ELYSIUM.abyss;
 const W = 1440;
 const H = 340;
 
+/**
+ * Where the sun sets and the planet rises (scene x). The scene is cropped around its middle, and the clock and its
+ * note sit at the left gutter: on a wide screen the sun sets left of the middle, clear of them; on anything narrower
+ * (where the crop brings the left side under the clock) it sets just right of the middle, the planet beside it, so
+ * both stay whole on a phone and the sun never passes behind the labels.
+ */
+const WIDE = { sun: 520, planet: 930 };
+const NARROW = { sun: 760, planet: 950 };
+
 /** Stars: x, y, radius, the scroll point (0..1) where each switches on. */
 const STARS: [number, number, number, number][] = [
   [90, 60, 3, 0.36], [210, 120, 2, 0.5], [330, 40, 2.6, 0.42], [470, 96, 2, 0.6], [560, 30, 3.2, 0.33],
@@ -24,7 +34,7 @@ const STARS: [number, number, number, number][] = [
 
 /** Houses on the terraces: x, y (ground), scale, the scroll point where the window lights. */
 const HOUSES: [number, number, number, number][] = [
-  [150, 0, 1, 0.42], [236, 0, 0.8, 0.56], [430, 0, 0.9, 0.5], [640, 0, 0.85, 0.66], [1010, 0, 1, 0.62], [1120, 0, 0.8, 0.46], [1300, 0, 1, 0.7],
+  [150, 0, 1, 0.42], [236, 0, 0.8, 0.56], [430, 0, 0.9, 0.5], [560, 0, 0.75, 0.6], [640, 0, 0.85, 0.66], [830, 0, 0.8, 0.52], [1010, 0, 1, 0.62], [1120, 0, 0.8, 0.46], [1300, 0, 1, 0.7],
 ];
 
 /** The terraces dip in the middle and climb at both ends: the inside of the ring. */
@@ -63,6 +73,7 @@ export function DuskSeam() {
   const t = useT();
   const reduced = useReducedMotion();
   const [ref, visible] = useOffscreenPause<HTMLDivElement>();
+  const at = useMedia('(max-width: 1279px)') ? NARROW : WIDE;
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
   const still = useTransform(scrollYProgress, () => 0.72);
   const p = reduced ? still : scrollYProgress;
@@ -116,14 +127,16 @@ export function DuskSeam() {
         </motion.g>
         {/* the planet rising over the far rim */}
         <motion.g style={{ y: planetY }}>
-          <circle cx={930} cy={290} r={130} fill={ELYSIUM.teal} stroke={INK} strokeWidth={3} />
-          <path d="M840 236 q34 -34 80 -16 q34 16 12 40 q-46 22 -92 -24z" fill={ELYSIUM.up} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
-          <path d="M968 196 q46 -12 62 22 q-22 18 -62 -22z" fill={ELYSIUM.up} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
-          <path d="M830 214 a120 120 0 0 1 64 -50" fill="none" stroke={ELYSIUM.mist} strokeWidth={6} strokeLinecap="round" opacity={0.75} />
+          <g transform={`translate(${at.planet - 930} 0)`}>
+            <circle cx={930} cy={290} r={130} fill={ELYSIUM.teal} stroke={INK} strokeWidth={3} />
+            <path d="M840 236 q34 -34 80 -16 q34 16 12 40 q-46 22 -92 -24z" fill={ELYSIUM.up} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+            <path d="M968 196 q46 -12 62 22 q-22 18 -62 -22z" fill={ELYSIUM.up} stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+            <path d="M830 214 a120 120 0 0 1 64 -50" fill="none" stroke={ELYSIUM.mist} strokeWidth={6} strokeLinecap="round" opacity={0.75} />
+          </g>
         </motion.g>
         {/* the sun going down behind the plain */}
-        <motion.circle cx={520} cy={0} r={160} fill="url(#ld-dusk-glow)" style={{ y: sunY, opacity: glow }} />
-        <motion.g style={{ y: sunY, scale: sunScale, x: 520 }}>
+        <motion.circle cx={at.sun} cy={0} r={160} fill="url(#ld-dusk-glow)" style={{ y: sunY, opacity: glow }} />
+        <motion.g style={{ y: sunY, scale: sunScale, x: at.sun }}>
           <circle r={46} fill={ELYSIUM.sun} stroke={INK} strokeWidth={3} />
           <path d="M-30 -14 a34 34 0 0 1 20 -22" fill="none" stroke="#FFF6D8" strokeWidth={5} strokeLinecap="round" />
         </motion.g>
