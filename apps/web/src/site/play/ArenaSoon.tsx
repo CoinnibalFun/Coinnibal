@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CoinCharacter, Kb, PlateLabel, RingScene, Sticker } from '../../design';
 import { useDoors } from '../doors';
 import { useSiteSettings, xProfile } from '../settings';
-import { SitePage, XIcon } from '../Shell';
+import { SiteLinkButton, SitePage, XIcon } from '../Shell';
 import { LinkButton } from '../mint/MintArt';
 import { SiteWalletProvider, WalletSignIn } from '../wallet/SiteWallet';
 import { useT } from '../../i18n';
@@ -10,8 +10,9 @@ import { em, T } from '../../i18n/rich';
 import { GateScene } from './GateScene';
 
 /*
- * The closed / holders-only page of `/play`: the site shell, the wallet sign-in and (holders mode, while they are
- * open) the mint and WL links. Closed: one plain sentence, the guide and the project's X account.
+ * The closed / holders-only page of `/play`: the site shell, the wallet sign-in and (holders mode, while it is
+ * open) the WL link. Never the site's mint page: the NFT is not minted here. Closed: one plain sentence, then the
+ * same buttons as the site's other closed pages (the guide, home) and the project's X account.
  * Loaded only when the gate stays shut (PlayGate lazy-loads it), so an open arena never downloads it.
  */
 
@@ -22,6 +23,15 @@ export function ArenaSoon({ holders = false, maintenance = false, onSignedIn }: 
   const t = useT();
   const doors = useDoors();
   const { settings } = useSiteSettings();
+  const closed = !holders && !maintenance;
+  // closed, the tab reads like the site's other closed pages
+  useEffect(() => {
+    if (!closed) return;
+    document.title = t('site.title.closed');
+    return () => {
+      document.title = t('site.title.play');
+    };
+  }, [closed, t]);
   return (
     <SitePage className="pg-root">
       <PlateLabel numeral="III" title={holders ? t('pg.plateHolders') : maintenance ? t('pg.plateMaint') : t('pg.plate')} aside="/play" className="pg-platelabel" />
@@ -63,18 +73,11 @@ export function ArenaSoon({ holders = false, maintenance = false, onSignedIn }: 
                       <WalletSignIn label={t('pg.signIn')} onSession={() => onSignedIn?.()} />
                     </SiteWalletProvider>
                   </div>
-                  {(doors.mint || doors.wl) && (
+                  {doors.wl && (
                     <div className="pg-actions">
-                      {doors.mint && (
-                        <LinkButton href="/mint" variant="primary" size="lg" icon="arrow">
-                          {t('pg.mint')}
-                        </LinkButton>
-                      )}
-                      {doors.wl && (
-                        <LinkButton href="/wl" variant="secondary" size="md">
-                          {t('ld.cta.wl')}
-                        </LinkButton>
-                      )}
+                      <LinkButton href="/wl" variant="secondary" size="md">
+                        {t('ld.cta.wl')}
+                      </LinkButton>
                     </div>
                   )}
                 </>
@@ -85,20 +88,27 @@ export function ArenaSoon({ holders = false, maintenance = false, onSignedIn }: 
               ) : (
                 <>
                   <p className="pg-lede">{t('pg.lede')}</p>
-                  <div className="pg-actions">
-                    <LinkButton href="/docs" variant="primary" size="lg" icon="arrow">
+                  <div className="pg-actions pg-actions--stack">
+                    <SiteLinkButton href="/docs" variant="primary" icon="arrow">
                       {t('site.nf.guide')}
-                    </LinkButton>
+                    </SiteLinkButton>
+                    <SiteLinkButton href="/">{t('pg.home')}</SiteLinkButton>
                   </div>
                 </>
               )}
-              <p className="pg-links">
-                <a href="/">{t('pg.home')}</a>
-                <span aria-hidden="true">·</span>
-                <a href={xProfile(settings.xHandle)} target="_blank" rel="noreferrer">
-                  <XIcon size={14} /> {t('pg.follow')}
+              {closed ? (
+                <a className="pg-x" href={xProfile(settings.xHandle)} target="_blank" rel="noreferrer">
+                  <XIcon size={16} /> <span>{t('pg.follow')}</span>
                 </a>
-              </p>
+              ) : (
+                <p className="pg-links">
+                  <a href="/">{t('pg.home')}</a>
+                  <span aria-hidden="true">·</span>
+                  <a href={xProfile(settings.xHandle)} target="_blank" rel="noreferrer">
+                    <XIcon size={14} /> {t('pg.follow')}
+                  </a>
+                </p>
+              )}
             </Sticker>
             <div className={`pg-cast${holders ? ' pg-cast--holders' : ''}`} aria-hidden="true">
               <GateScene mode={holders ? 'holders' : 'closed'} attention={attention} />
