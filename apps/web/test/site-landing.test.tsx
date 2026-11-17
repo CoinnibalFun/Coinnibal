@@ -1,3 +1,4 @@
+import { activeChain, chainInfo, setActiveChain } from '@elymum/shared';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Landing } from '../src/site/landing/Landing';
@@ -19,7 +20,9 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     render(<Landing />);
     expect(screen.getByRole('heading', { level: 1, name: 'Coinnibal' })).toBeTruthy();
     expect(screen.getByText('Coins eating coins.')).toBeTruthy();
-    expect(screen.getByText('Eat coins smaller than you. Run from the ones that are bigger. Five minutes later the bell rings and whatever you’ve swallowed is yours.')).toBeTruthy();
+    // the pitch never promises the whole amount (the fee is told in step 04 and on the fee card)
+    expect(screen.getByText('Eat coins smaller than you. Run from the ones that are bigger. When the bell rings, every coin still standing gets paid.')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/swallowed is yours|is yours\./);
     expect(screen.queryByText(/small change with a big appetite|Eat the food/)).toBeNull();
     // the hero links to the holder perks on the same page
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
@@ -38,8 +41,13 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect([...why.querySelectorAll('.nf-card')].map((c) => c.getAttribute('data-perk'))).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
     expect(why.textContent).toContain('Lower fee: 10% instead of 20%');
     { const m = document.body.textContent?.match(/.{0,60}(testnet|faucet|Short answers).{0,40}/i); expect(m?.[0] ?? null).toBeNull(); }
-    expect(screen.getByText('What does the Coinnibal NFT give me?')).toBeTruthy();
-    expect(screen.getByText('How many NFTs are there?')).toBeTruthy();
+    // each fact once: the perks and the count live in the NFT section, not again in the FAQ
+    expect(screen.queryByText('What does the Coinnibal NFT give me?')).toBeNull();
+    expect(screen.queryByText('How many NFTs are there?')).toBeNull();
+    expect(screen.queryByText('Is every NFT different?')).toBeNull();
+    // the shared skin is one gold look, not the holder's own NFT art
+    expect(why.textContent).toContain('Your coin can wear the gold NFT skin, with a holder badge next to your name.');
+    expect(why.textContent).not.toMatch(/wears your NFT/);
     // the four rooms, named by price, priced in US dollars (paid in the game token); the $10 one for NFT holders
     for (const [name, fee] of [['$1 Room', '$1'], ['$3 Room', '$3'], ['$5 Room', '$5'], ['$10 Room', '$10']]) {
       expect(screen.getByRole('heading', { level: 3, name })).toBeTruthy();
@@ -113,16 +121,18 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     // the NFT's perks stay: they are information
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
     expect(screen.getByTestId('why-nft').querySelectorAll('.nf-card').length).toBeGreaterThan(3);
-    expect(screen.getByRole('heading', { name: 'The Coinnibal NFT.' })).toBeTruthy();
+    // the NFT's heading gives the count instead of repeating its plate
+    expect(screen.getByRole('heading', { level: 2, name: '3,333 coin characters.' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'The Coinnibal NFT.' })).toBeNull();
     // the header: Docs only, no wallet button; the footer: X and Docs
     expect([...screen.getByRole('navigation', { name: 'Site' }).querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Guide']);
     expect(screen.queryByRole('button', { name: /Connect/ })).toBeNull();
     expect([...screen.getByRole('navigation', { name: 'Footer' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://x.com/coinnibalfun', '/docs']);
     // the FAQ does not send anyone to the collab page
     expect(screen.queryByText('Can my community get WL spots?')).toBeNull();
-    // each idea once: "five minutes" stays in the hero sentence and on its sticker, nowhere else in the hero or its title strip
+    // each idea once: the round's length is the hero's sticker, nowhere else in the hero or its title strip
     const hero = `${document.querySelector('.ld-plate1')?.textContent} ${document.querySelector('.ld-hero')?.textContent}`;
-    expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toEqual(['Five minutes', '05:00']);
+    expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toEqual(['05:00']);
     const page = document.querySelector('main')!.textContent ?? '';
     expect(page.match(/Coins eating coins/g)).toHaveLength(1);
     expect(page.match(/Eat or be eaten/g)).toHaveLength(1);
@@ -133,6 +143,95 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     // information only: no price of the mint, no date, no promise
     expect(screen.queryByText('How much is the NFT?')).toBeNull();
     expect(document.body.textContent).not.toMatch(/\bsoon\b|start date|post the date|at launch|mint it with|mint page shows/i);
+  });
+
+  it('everything closed: each fact once, the FAQ agrees with the guide, the hero money line is the same on every chain', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
+    const before = activeChain();
+    try {
+      // a mainnet build too: "free at first" (D12), never "real money" alone
+      setActiveChain(chainInfo(4663));
+      render(<Landing />);
+      await settle();
+      expect(screen.getByTestId('ld-money').textContent).toBe('Playing is free at first. Later a ticket costs real tokens, and you lose it if you get eaten.');
+    } finally {
+      setActiveChain(before);
+    }
+    const faq = [...document.querySelectorAll('.ld-qa')];
+    expect(faq.map((q) => q.querySelector('.ld-qa__text')?.textContent)).toEqual([
+      'Which wallet do I need?',
+      'What is Robinhood Chain?',
+      'Do I need the NFT to play?',
+      'Is the game open?',
+      'Does it cost money to play?',
+      'Where are all the rules?',
+    ]);
+    const answer = (q: string) => faq.find((f) => f.querySelector('.ld-qa__text')?.textContent === q)!.querySelector('.ld-qa__a')!.textContent;
+    // the same answer as the guide (which describes no holders-only mode); the $10 Room is told by its ticket and perk card
+    expect(answer('Do I need the NFT to play?')).toBe('No. The NFT is not a ticket. It gives perks.');
+    // the chain holds the money, the game runs on a server (as the guide says)
+    expect(answer('What is Robinhood Chain?')).toMatch(/the game itself runs on a server/);
+    // D12's core, once
+    expect(answer('Does it cost money to play?')).toBe('Not at first: when the game opens, playing is free. Later, paid rooms take a ticket in tokens. Practice stays free.');
+    const page = document.querySelector('main')!.textContent ?? '';
+    expect(page.match(/Practice (stays|is) free/g)).toHaveLength(1);
+    expect(page.match(/explains every rule/g)).toBeNull();
+    // practice and private rooms run no 5-minute bell
+    expect(page).toContain('A round lasts 5 minutes in every paid room.');
+    // the pond's snack pays tokens, never dollars
+    expect(document.querySelector('.ld-chase__pop')?.textContent).toBe('+1,000');
+    // the perks are a part of the NFT section: their heading ranks under it
+    expect(screen.getByRole('heading', { level: 3, name: 'Why get the NFT?' })).toBeTruthy();
+    // no kicker repeats a plate or a heading
+    expect(document.querySelectorAll('.ld-feast__copy > .kicker, .ld-round__copy > .kicker, .ld-arenas__head .kicker, .ld-nft__copy > .kicker')).toHaveLength(0);
+    // the stairs stand level (only their tickets tilt, in CSS)
+    expect([...document.querySelectorAll<HTMLElement>('.ld-stair')].map((s) => s.style.getPropertyValue('--tilt'))).toEqual(['', '', '', '']);
+  });
+
+  it('lights each step of the round, and its station on the orbit, as the visitor reads down to it', async () => {
+    const made: { cb: IntersectionObserverCallback; opts?: IntersectionObserverInit; io: IntersectionObserver }[] = [];
+    const Base = globalThis.IntersectionObserver as unknown as new (cb: IntersectionObserverCallback, opts?: IntersectionObserverInit) => IntersectionObserver;
+    globalThis.IntersectionObserver = class extends Base {
+      constructor(cb: IntersectionObserverCallback, opts?: IntersectionObserverInit) {
+        super(cb, opts);
+        made.push({ cb, opts, io: this });
+      }
+    } as unknown as typeof IntersectionObserver;
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    const stops = [...document.querySelectorAll('.ld-stop')];
+    const read = () => stops.map((s) => s.classList.contains('is-read'));
+    const done = () => document.querySelectorAll('.ld-orbit .kb-orbit__station.is-done').length;
+    expect(read()).toEqual([false, false, false, false]);
+    expect(done()).toBe(0);
+    const steps = made.find((o) => o.opts?.rootMargin === '0px 0px -40% 0px')!;
+    const entry = (target: Element, isIntersecting: boolean, top: number) => ({ target, isIntersecting, boundingClientRect: { top } }) as unknown as IntersectionObserverEntry;
+    act(() => steps.cb([entry(stops[0], true, 300), entry(stops[1], true, 420)], steps.io));
+    expect(read()).toEqual([true, true, false, false]);
+    expect(done()).toBe(2);
+    // a step scrolled above the viewport stays read; the next one crosses the line
+    act(() => steps.cb([entry(stops[0], false, -80), entry(stops[2], true, 500)], steps.io));
+    expect(read()).toEqual([true, true, true, false]);
+    // scrolling back up, a step that drops below the line goes dark again
+    act(() => steps.cb([entry(stops[2], false, 700)], steps.io));
+    expect(read()).toEqual([true, true, false, false]);
+    expect(done()).toBe(2);
+  });
+
+  it('jumps to a shared link to a part of the page once the sections are there', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    const jumped: string[] = [];
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      jumped.push(this.id);
+    });
+    history.pushState(null, '', '/#faq');
+    try {
+      render(<Landing />);
+      await waitFor(() => expect(jumped).toContain('faq'));
+    } finally {
+      spy.mockRestore();
+      history.pushState(null, '', '/');
+    }
   });
 
   it('shows nothing closed while the settings are still loading, and stays closed when the server cannot be reached', async () => {

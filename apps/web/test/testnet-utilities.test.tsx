@@ -180,8 +180,11 @@ describe('why get the NFT: the holder perks', () => {
     expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
     expect(cards[0].title).toBe('Lower fee: 10% instead of 20%');
     expect(cards[0].note).toBe('We take less of your profit: 8% is burned and 2% goes to the team wallet.');
-    expect(cards[1].title).toBe('$10 room for holders');
+    expect(cards[1].title).toBe('$10 Room for holders');
     expect(cards[2].title).toBe('20% off power-ups');
+    // a true minus sign on the figure; the skin has no figure (the card shows the holder badge's laurel)
+    expect(cards[2].big).toBe('\u221220%');
+    expect(cards[4]).toMatchObject({ id: 'skin', big: null });
     expect(cards[2].note).toMatch(/1 extra power-up in every paid round/);
     expect(cards[3].title).toBe('1 free private room a day');
   });
@@ -191,6 +194,7 @@ describe('why get the NFT: the holder perks', () => {
     expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
     expect(cards[2].title).toBe('30% off power-ups');
     expect(cards[3].title).toBe('50% off private rooms');
+    expect(cards[3].big).toBe('\u221250%');
     // a closed shop or no room perk falls back to the configured defaults
     expect(configuredPerks({ shopPct: null, room: { perk: 'none', pct: 0 } }).shopPct).toBe(20);
   });
