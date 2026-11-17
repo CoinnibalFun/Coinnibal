@@ -3,6 +3,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { BEAT } from '../src/design/motion';
 
 const SRC = join(__dirname, '../src');
 /** The design gallery is a dev-only specimen sheet, not a page players see. */
@@ -67,6 +68,44 @@ describe('layout css', () => {
     expect(/\n\.gm-intro__card \.av \{[^}]*\}/.exec(moments)![0]).toMatch(/width: 24px;/);
     const rooms = sheets.find((s) => s.file.endsWith('rooms/rooms.css'))!.css;
     expect(/\n\.pq--hud \{[^}]*\}/.exec(rooms)![0]).toMatch(/flex-direction: row;/);
+  });
+
+  it('names every @keyframes once across the app (a second sheet would silently replace the first)', () => {
+    const names = sheets.flatMap(({ file, css }) => [...css.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => `${m[1]} (${file})`));
+    const seen = new Map<string, string>();
+    const twice: string[] = [];
+    for (const n of names) {
+      const k = n.split(' ')[0];
+      if (seen.has(k)) twice.push(`${seen.get(k)} and ${n}`);
+      else seen.set(k, n);
+    }
+    expect(twice).toEqual([]);
+  });
+
+  it('keeps every hidden state of the landing reveals inside the motion media query, on the individual transform properties', () => {
+    const reveal = sheets.find((s) => s.file.endsWith('landing/reveal.css'))!.css;
+    const start = reveal.indexOf('@media (prefers-reduced-motion: no-preference) {');
+    expect(start).toBeGreaterThan(0);
+    // the block's end: its matching brace
+    let depth = 0;
+    let end = start;
+    for (let i = reveal.indexOf('{', start); i < reveal.length; i++) {
+      if (reveal[i] === '{') depth++;
+      else if (reveal[i] === '}' && --depth === 0) {
+        end = i;
+        break;
+      }
+    }
+    const outside = reveal.slice(0, start) + reveal.slice(end);
+    // reduced motion, print and old browsers never meet a waiting state, a play or a hiding rule
+    expect(outside).not.toMatch(/='(wait|in|set)'/);
+    expect(outside).not.toMatch(/\banimation:(?!\s*none)/);
+    // reveals never set `transform` (the CSS tilts on transform must survive), except the fan dealt from its deck
+    const transforms = [...reveal.matchAll(/([^{}]*)\{[^{}]*\btransform:/g)].map((m) => m[1].trim());
+    expect(transforms.length).toBeGreaterThan(0);
+    expect(transforms.filter((sel) => !sel.endsWith('.ld-fan__card'))).toEqual([]);
+    // the beat in CSS and in motion.ts are one number
+    expect(tokens).toMatch(new RegExp(`--beat:\\s*${Math.round(BEAT * 1000)}ms`));
   });
 
   it('has no shop key on the in-game top bar (the shop is in the lobby only)', () => {

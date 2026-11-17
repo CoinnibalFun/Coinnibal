@@ -1,10 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Landing } from '../src/site/landing/Landing';
 import { SiteApp } from '../src/site/mount';
 import { resetSiteSettings } from '../src/site/settings';
 import { setReducedMotion } from '../src/test/media';
-import { SETTINGS, installDomStubs, mockFetch } from './site-helpers';
+import { SETTINGS, installDomStubs, intersect, mockFetch } from './site-helpers';
 
 let restore = () => {};
 beforeEach(() => {
@@ -242,6 +242,114 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     const after = [...document.querySelectorAll('.ld-fan__card')].map((c) => c.getAttribute('data-slot')).join();
     expect(after).not.toBe(before);
     expect(front()).toBe('front');
+  });
+
+  const wait = (ms: number) =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+  const PLATES = ['#feast', '#round', '#arenas', '#nft', '#faq'];
+
+  it('with motion, every plate waits for the scroll and plays once; its bite makes the header coin gulp', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    for (const id of PLATES) expect(document.querySelector(id)?.getAttribute('data-seam')).toBe('wait');
+    // one gesture per seam: a bite at Feast, Arenas and FAQ, the seal at the NFT, the tablecloth (no overlay) at Round
+    expect(PLATES.map((id) => (document.querySelector(`${id} > .ld-bite`) ? 'bite' : document.querySelector(`${id} > .ld-seal`) ? 'seal' : '-'))).toEqual(['bite', '-', 'bite', 'seal', 'bite']);
+    expect(document.querySelectorAll('.ld-nap')).toHaveLength(1);
+    // the content stages wait too, and the long lists are armed card by card
+    expect(document.querySelector('.ld-feast__copy')?.getAttribute('data-reveal')).toBe('wait');
+    expect([...document.querySelectorAll('.ld-qa')].every((q) => q.getAttribute('data-reveal') === 'wait')).toBe(true);
+    expect([...document.querySelectorAll('.ld-nft__why .nf-card')].every((c) => c.getAttribute('data-reveal') === 'wait')).toBe(true);
+
+    const heard = vi.fn();
+    window.addEventListener('ld:gulp', heard);
+    try {
+      const feast = document.querySelector('#feast')!;
+      act(() => intersect(feast, 'line', true));
+      expect(feast.getAttribute('data-seam')).toBe('in');
+      // the others still wait: nothing plays before its own top reaches the line
+      expect(document.querySelector('#round')?.getAttribute('data-seam')).toBe('wait');
+      await wait(380);
+      expect(heard).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('.ld-rail__gulp')?.classList.contains('is-gulp')).toBe(true);
+      await wait(480);
+      expect(document.querySelector('.ld-rail__gulp')?.classList.contains('is-gulp')).toBe(false);
+      // played once: leaving and coming back does not replay or hide it
+      act(() => intersect(feast, 'line', false));
+      expect(feast.getAttribute('data-seam')).toBe('in');
+    } finally {
+      window.removeEventListener('ld:gulp', heard);
+    }
+  });
+
+  it('reduced motion: nothing is armed and every seam is a finished still', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    setReducedMotion(true);
+    render(<Landing />);
+    await wait(30);
+    expect(document.querySelector('[data-reveal], [data-seam]')).toBeNull();
+    const bites = [...document.querySelectorAll('.ld-bite')];
+    expect(bites).toHaveLength(3);
+    for (const b of bites) {
+      expect(b.getAttribute('aria-hidden')).toBe('true');
+      expect(b.querySelector('.ld-bite__face--after .kb-coin')).toBeTruthy();
+    }
+    expect(document.querySelector('.ld-seal')).toBeTruthy();
+    expect(document.querySelector('.ld-nap')).toBeTruthy();
+    // the fan is dealt, the header coin never gulps
+    expect(document.querySelector('.ld-nft__fan')?.hasAttribute('data-dealt')).toBe(true);
+    act(() => void window.dispatchEvent(new Event('ld:gulp')));
+    expect(document.querySelector('.ld-rail__gulp')?.classList.contains('is-gulp')).toBe(false);
+  });
+
+  it('without an IntersectionObserver the page is finished at once', async () => {
+    delete (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver;
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    await wait(30);
+    const armed = [...document.querySelectorAll('[data-reveal], [data-seam]')];
+    expect(armed.length).toBeGreaterThan(20);
+    expect(armed.filter((el) => (el.getAttribute('data-reveal') ?? el.getAttribute('data-seam')) !== 'set')).toEqual([]);
+    expect(document.querySelector('.ld-nft__fan')?.hasAttribute('data-dealt')).toBe(true);
+  });
+
+  it('the fan is dealt from a deck, then hands over to the shuffle', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    const fan = document.querySelector('.ld-nft__fan')!;
+    const slots = () => [...document.querySelectorAll('.ld-fan__card')].map((c) => c.getAttribute('data-slot')).join();
+    expect(fan.getAttribute('data-reveal')).toBe('wait');
+    expect(fan.hasAttribute('data-dealt')).toBe(false);
+    // Shuffle works before the deal has landed
+    const before = slots();
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Shuffle' })));
+    expect(slots()).not.toBe(before);
+    act(() => intersect(fan, 'line', true));
+    expect(fan.getAttribute('data-reveal')).toBe('in');
+    expect(fan.hasAttribute('data-dealt')).toBe(false);
+    await wait(1250);
+    expect(fan.hasAttribute('data-dealt')).toBe(true);
+    // the deal never changes which card sits where
+    expect(new Set(slots().split(','))).toEqual(new Set(['left', 'front', 'right']));
+  });
+
+  it('keeps the decorations out of the way: hidden from assistive tech, no new text, the copy unchanged', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    for (const el of document.querySelectorAll('.ld-bite, .ld-seal, .ld-nap')) {
+      expect(el.getAttribute('aria-hidden')).toBe('true');
+      expect(el.textContent).toBe('');
+    }
+    for (const h of ['You are a coin.', 'Four steps, one round.', 'Four rooms, one fee.', 'Why get the NFT?', 'Good to know.']) expect(screen.getByRole('heading', { name: h })).toBeTruthy();
+    expect([...document.querySelectorAll('main .kb-plate__title')].map((t) => t.textContent)).toEqual([
+      'Welcome to Coinnibal',
+      'What is Coinnibal?',
+      'How a round works',
+      'Rooms and the fee',
+      'The Coinnibal NFT',
+      'Questions',
+    ]);
   });
 
   it('shows a plain not-found page for a path the site does not know', async () => {

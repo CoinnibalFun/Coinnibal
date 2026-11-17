@@ -33,15 +33,48 @@ export function mockFetch(routes: Record<string, unknown | Handler>): { calls: C
 
 export const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
-/** jsdom has no IntersectionObserver or 2D canvas: quiet stand-ins. */
+/**
+ * Every stand-in IntersectionObserver made in this test file (kept across tests: the landing's reveal engine makes its
+ * observers once per module), with what each one observes, so a test can fire an entry by hand (`intersect`).
+ */
+const observers: { cb: IntersectionObserverCallback; opts?: IntersectionObserverInit; els: Set<Element>; io: IntersectionObserver }[] = [];
+
+/** Which of the reveal engine's observers (site/landing/reveal.ts) an entry goes to. */
+export type RevealObserver = 'line' | 'dwell' | 'passed';
+const isWhich = (which: RevealObserver, opts?: IntersectionObserverInit) =>
+  which === 'line' ? opts?.rootMargin === '0px 0px -10% 0px' : which === 'passed' ? !!opts?.rootMargin?.startsWith('100000px') : opts === undefined;
+
+/**
+ * Fires one entry per element, in ONE callback, on the reveal engine's `which` observer (only to observers that still
+ * observe the element). `rect` is the entry's boundingClientRect (the `passed` observer reads its bottom).
+ */
+export function intersect(els: Element | Element[], which: RevealObserver, isIntersecting: boolean, rect: Partial<DOMRectReadOnly> = { top: 100, bottom: 200 }): void {
+  const list = Array.isArray(els) ? els : [els];
+  for (const o of observers) {
+    if (!isWhich(which, o.opts)) continue;
+    const entries = list.filter((el) => o.els.has(el)).map((target) => ({ target, isIntersecting, boundingClientRect: rect, intersectionRatio: isIntersecting ? 1 : 0 }) as unknown as IntersectionObserverEntry);
+    if (entries.length) o.cb(entries, o.io);
+  }
+}
+
+/** jsdom has no IntersectionObserver or 2D canvas: quiet stand-ins (nothing is on screen until a test says so). */
 export function installDomStubs(): void {
   class IO {
-    constructor(private cb: IntersectionObserverCallback) {}
-    observe(el: Element) {
-      this.cb([{ isIntersecting: false, target: el } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+    private rec: (typeof observers)[number];
+    constructor(cb: IntersectionObserverCallback, opts?: IntersectionObserverInit) {
+      this.rec = { cb, opts, els: new Set(), io: this as unknown as IntersectionObserver };
+      observers.push(this.rec);
     }
-    unobserve() {}
-    disconnect() {}
+    observe(el: Element) {
+      this.rec.els.add(el);
+      this.rec.cb([{ isIntersecting: false, target: el } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+    }
+    unobserve(el: Element) {
+      this.rec.els.delete(el);
+    }
+    disconnect() {
+      this.rec.els.clear();
+    }
     takeRecords() {
       return [];
     }
