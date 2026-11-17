@@ -1333,6 +1333,8 @@
 /* the step the ticket stands on: one rise taller per room */
 .ld-stair__step {
   position: relative;
+  /* from its own column's left edge to the next column's: the stair is centred, the step must not be */
+  justify-self: start;
   width: calc(100% + var(--stair-gap));
   height: calc(40px + var(--step) * var(--rise));
   margin-top: 14px;

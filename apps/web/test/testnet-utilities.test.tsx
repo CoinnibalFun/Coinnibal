@@ -188,7 +188,7 @@ describe('why get the NFT: the holder perks', () => {
     // a true minus sign on the figure; the skin has no figure (the card shows the holder badge's laurel)
     expect(cards[2].big).toBe('\u221220%');
     expect(cards[4]).toMatchObject({ id: 'skin', big: null });
-    expect(cards[2].note).toMatch(/1 extra power-up in every paid round/);
+    expect(cards[2].note).toMatch(/1 extra power-up use in every paid round \(3 instead of 2\)/);
     expect(cards[3].title).toBe('1 free private room a day');
   });
   it('takes the live shop discount and private-room perk when the server reports them; no faucet card on mainnet', () => {

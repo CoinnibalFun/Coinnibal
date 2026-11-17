@@ -143,10 +143,24 @@
 .nf__lost.is-still .nf__huh {
   animation: none;
 }
-/* small laptops: an even split, so both buttons keep one row */
-@media (max-width: 1099px) {
+/* small laptops: an even split, so both buttons keep one row; the scene is narrower there, so the lost coin and its
+   map shrink with it (the phone sizes) and stay clear of the house and the swinging terrace */
+@media (min-width: 900px) and (max-width: 1099px) {
   .nf {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .nf__lost .kb-coin {
+    width: 72px !important;
+  }
+  .nf__lost .kb-coin svg {
+    width: 72px;
+    height: 72px;
+  }
+  .nf__map {
+    width: 48px;
+    height: 34px;
+    left: -16px;
+    bottom: 8px;
   }
 }
 @media (max-width: 899px) {

@@ -69,7 +69,7 @@ export function perkCards(v: NftPerkValues, t: (k: TKey, vars?: Record<string, s
     { id: 'fee', icon: 'flame', paint: 'sun', big: v.fee.holder, title: t('nf.fee.t', { holder: v.fee.holder, normal: v.fee.normal }), note: t('nf.fee.n', { burn: v.fee.burn, team: v.fee.team }) },
   ];
   if (v.room) cards.push({ id: 'room', icon: 'crown', paint: 'up', big: v.room, title: t('nf.room.t', { price: v.room }), note: t('nf.room.n') });
-  cards.push({ id: 'shop', icon: 'bag', paint: 'coral', big: `\u2212${v.shopPct}%`, title: t('nf.shop.t', { pct: v.shopPct }), note: t('nf.shop.n', { extra: v.shopExtra }) });
+  cards.push({ id: 'shop', icon: 'bag', paint: 'coral', big: `\u2212${v.shopPct}%`, title: t('nf.shop.t', { pct: v.shopPct }), note: t('nf.shop.n', { extra: v.shopExtra, base: SHOP_DEFAULTS.arenaUsesPerRound, total: SHOP_DEFAULTS.arenaUsesPerRound + v.shopExtra }) });
   if (v.privateRoom.perk === 'free_daily') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: '1/day', title: t('nf.free.t'), note: t('nf.free.n') });
   else if (v.privateRoom.perk === 'discount') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: `\u2212${v.privateRoom.pct}%`, title: t('nf.freeDiscount.t', { pct: v.privateRoom.pct }), note: t('nf.free.n') });
   cards.push({ id: 'skin', icon: 'user', paint: 'teal', big: null, title: t('nf.skin.t'), note: t('nf.skin.n') });

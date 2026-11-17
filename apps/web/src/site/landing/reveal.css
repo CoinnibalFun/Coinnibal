@@ -58,8 +58,10 @@
     --bite-x: var(--bxm);
     --bite-half: var(--bhm);
   }
+  /* the bite's x is a share of the full-width section; the title box starts after the plate's 16px padding, so measure
+     both from the viewport edge (a phone has no scrollbar): hole's left edge, less the padding, less a 16px gap */
   .ld-plate.has-bite > .kb-plate .kb-plate__title {
-    max-width: calc(var(--bite-x) - var(--bite-half) - 16px);
+    max-width: calc(var(--bxmv) - var(--bite-half) - 32px);
   }
 }
 
@@ -107,6 +109,10 @@
 .ld-bite__face {
   position: absolute;
   inset: 0;
+}
+/* the after-face's bob wrapper: no box of its own (the coin lays out as before); it only carries data-paused */
+.ld-bite__bob {
+  display: contents;
 }
 .ld-bite__face--chomp {
   visibility: hidden;
