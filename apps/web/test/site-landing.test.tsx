@@ -268,10 +268,12 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
   });
 
   it('a closed page says "not open yet" (never the real page or a 404); the same path opens when the admin opens it', async () => {
-    for (const [path, line] of [
-      ['/mint', 'The Coinnibal NFT is minted on this page. The guide explains what the NFT does.'],
-      ['/faucet', 'The faucet gives free test tokens for the game. The guide explains how the game works.'],
-      ['/collab', 'Communities ask for WL spots on this page. The guide explains how the game works.'],
+    for (const [path, line, plate] of [
+      // the mint: nothing about where or when the NFT is minted
+      ['/mint', 'The Coinnibal NFT collection is coming. The guide explains what the NFT gives you.', 'Coinnibal NFT'],
+      // the faucet is hidden: a neutral notice that never names it
+      ['/faucet', 'There is nothing here for now. The guide explains how the game works.', 'Coinnibal'],
+      ['/collab', 'This is where communities will ask for WL spots. The guide explains how the game works.', 'Collab'],
     ]) {
       resetSiteSettings();
       ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
@@ -280,6 +282,8 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
         const view = render(<SiteApp />);
         expect(await screen.findByRole('heading', { level: 1, name: 'Not open yet.' })).toBeTruthy();
         expect(screen.getByText(line)).toBeTruthy();
+        expect(document.querySelector('main .kb-plate')?.textContent).toBe(plate);
+        expect(document.querySelector('main')?.textContent).not.toMatch(/faucet|test tokens?|testnet|on this page|mint(ed)? (here|on)|price|\bdate\b/i);
         expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
         expect(screen.getByRole('link', { name: /Read the guide/ }).getAttribute('href')).toBe('/docs');
         expect(screen.getByRole('link', { name: /Follow @coinnibalfun/ }).getAttribute('href')).toBe('https://x.com/coinnibalfun');

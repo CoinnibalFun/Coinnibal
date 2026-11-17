@@ -11,6 +11,11 @@ body {
   background: var(--paper);
 }
 
+:root {
+  /* the sticky header's height (its rule included, the notch's inset not): what an anchor or an overlay clears */
+  --st-head-h: 75px;
+}
+
 .st-root {
   min-height: 100vh;
   min-height: 100svh;
@@ -22,6 +27,16 @@ body {
 .st-main {
   flex: 1 0 auto;
   outline: none;
+}
+/* the stickers have their own press (a shift and a shadow): no square browser flash on a tap */
+.st-root,
+.st-root * {
+  -webkit-tap-highlight-color: transparent;
+}
+/* the first plate under the header shares its rule (no doubled line): every page's title strip is one height */
+.st-main > .kb-plate:first-child,
+.st-main > :first-child > .kb-plate:first-child {
+  border-top: 0;
 }
 
 .st-skip {
@@ -176,6 +191,12 @@ body {
   border-color: transparent;
   user-select: none;
 }
+.st-nav__link--soon.is-here,
+.st-nav__link--soon.is-here:hover {
+  color: var(--ink) !important;
+  border-style: dashed;
+  border-color: var(--outline);
+}
 .st-soon {
   padding: 1px 6px 2px;
   font-family: var(--font-mono);
@@ -188,6 +209,11 @@ body {
   border: 1.5px solid var(--outline);
   border-radius: 6px;
   transform: rotate(-3deg);
+  transition: transform var(--dur-micro) var(--ease-spring);
+}
+/* a pointer on a Soon item: the tag tips the other way (it is still not a link) */
+.st-nav__link--soon:hover .st-soon {
+  transform: rotate(4deg) translateY(-1px);
 }
 .st-head__tools {
   display: flex;
@@ -240,12 +266,20 @@ body {
   box-shadow: var(--sh-press);
 }
 .st-menu {
+  /* tablets and landscape phones: a card under the menu button */
   position: absolute;
-  right: 12px;
+  z-index: 61;
+  right: var(--gutter);
   top: calc(100% + 10px);
   display: grid;
   gap: 2px;
-  min-width: 220px;
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 2 * var(--gutter)));
+  /* never past the bottom edge: a longer menu scrolls inside itself */
+  max-height: calc(100dvh - var(--st-head-h) - env(safe-area-inset-top, 0px) - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
   padding: 10px !important;
   transform: rotate(1deg);
   transform-origin: top right;
@@ -254,6 +288,9 @@ body {
 .st-menu .st-nav__link {
   min-height: 48px;
   font-size: 18px;
+}
+.st-menu .st-nav__link.is-on {
+  transform: none;
 }
 @keyframes st-drop {
   from {
@@ -289,36 +326,46 @@ body {
 .st-head__tools:empty {
   display: none;
 }
-/* phones: the menu is a sheet on the bottom edge (every link and Play under the thumb) */
+/* the dimmed page behind the open menu: it starts under the header, so the logo and the close button stay sharp
+   and the button is the real way to close it */
 .st-menu__scrim {
   position: fixed;
   inset: 0;
+  top: calc(var(--st-head-h) + env(safe-area-inset-top, 0px));
   z-index: 60;
   border: 0;
   padding: 0;
   background: rgb(4 24 28 / 0.28);
+  overscroll-behavior: contain;
+  touch-action: none;
   animation: st-fade 0.16s linear both;
 }
-.st-menu {
-  position: fixed;
-  z-index: 61;
-  left: 10px;
-  right: 10px;
-  top: auto;
-  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-  min-width: 0;
-  padding: 12px !important;
-  gap: 4px;
-  transform: none;
-  transform-origin: bottom center;
-  animation: st-rise 0.18s var(--ease-out) both;
+/* the page behind the open menu does not scroll (Shell.tsx sets the class while the menu is open) */
+html.st-menu-open {
+  overflow: hidden;
+  scrollbar-gutter: stable;
 }
-.st-menu .st-nav__link {
-  justify-content: center;
-  min-height: 52px;
-}
-.st-menu .st-nav__link.is-on {
-  transform: none;
+/* phones: the menu is a sheet on the bottom edge (every link and Play under the thumb) */
+@media (max-width: 599px) {
+  .st-menu {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    top: auto;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    min-width: 0;
+    max-width: none;
+    max-height: calc(100dvh - var(--st-head-h) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 20px);
+    padding: 12px !important;
+    gap: 4px;
+    transform: none;
+    transform-origin: bottom center;
+    animation: st-rise 0.18s var(--ease-out) both;
+  }
+  .st-menu .st-nav__link {
+    justify-content: center;
+    min-height: 52px;
+  }
 }
 .st-menu__play {
   margin-top: 6px;
@@ -348,6 +395,9 @@ body {
   .st-head__home {
     top: 2px;
   }
+  :root {
+    --st-head-h: 67px;
+  }
   .st-head__inner {
     height: 64px;
     gap: 8px;
@@ -374,10 +424,33 @@ body {
     display: none;
   }
 }
+/* landscape phones (about 390 px tall): a slimmer header and title strips, so a screen holds more than chrome */
+@media (max-height: 500px) and (orientation: landscape) {
+  :root {
+    --st-head-h: 59px;
+  }
+  .st-head__inner {
+    height: 56px;
+  }
+  .st-head .st-mark__art {
+    height: 32px;
+  }
+  .st-head__coin {
+    width: 36px;
+    height: 36px;
+    margin-top: -5px;
+  }
+  .st-root .kb-plate {
+    padding-block: 12px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .st-menu,
   .st-menu__scrim {
     animation: none;
+  }
+  .st-soon {
+    transition: none;
   }
   .st-head__home:hover .st-head__coin {
     transform: none;
@@ -436,6 +509,7 @@ body {
 .st-foot__eco {
   margin: 18px 0 0;
   max-width: 46ch;
+  text-wrap: pretty;
   font-size: 15px;
   color: var(--ink-2);
 }
@@ -492,12 +566,23 @@ body {
   border-top: 2px dashed var(--rule);
   font-size: var(--t-micro);
   color: var(--ink-3);
+  text-wrap: pretty;
+}
+/* wide: the name and the address read as one group on the left, the safety line on the right */
+@media (min-width: 900px) {
+  .st-foot__small {
+    justify-content: flex-start;
+  }
+  .st-foot__small > :last-child {
+    margin-left: auto;
+  }
 }
 
 /* ── shared page pieces (WL, collab, gate, mint) ──────────────────────── */
 .st-page {
   width: 100%;
-  max-width: 1240px;
+  /* the header's column (1312 px less the gutters), so a page's text lines up with the logo and the title strip */
+  max-width: 1312px;
   margin: 0 auto;
   padding: clamp(28px, 6vw, 64px) var(--gutter) clamp(56px, 8vw, 96px);
 }

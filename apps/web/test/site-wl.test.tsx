@@ -148,11 +148,26 @@ describe('/wl', { timeout: 30_000 }, () => {
     expect(screen.getByTestId('wl-status').textContent).toBe(status);
   });
 
-  it('says applications are closed (follow @coinnibalfun) when the WL is off', async () => {
+  it('when the WL is off: the site\'s shared closed notice (guide, home, X), the tab says so, and an earlier applicant can still sign in', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false } }, 'GET /api/site/tasks': { tasks: TASKS } }));
-    render(<WlPage />);
-    expect(await screen.findByRole('heading', { name: 'Applications are closed.' })).toBeTruthy();
+    document.title = 'WL · Coinnibal';
+    const view = render(<WlPage />);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Not open yet.' })).toBeTruthy();
+    expect(screen.getByTestId('closed-page')).toBeTruthy();
+    expect(screen.getByText('This is where you will join the WL. The guide explains how the game works.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Read the guide/ }).getAttribute('href')).toBe('/docs');
+    expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
     expect(screen.getAllByRole('link', { name: /@coinnibalfun/ })[0].getAttribute('href')).toBe('https://x.com/coinnibalfun');
+    expect(document.title).toBe('Not open yet · Coinnibal');
+    // the sign-in (and its "install a wallet" line) only after a click on "Applied before?"
+    expect(document.body.textContent).not.toMatch(/MetaMask|No browser wallet/);
+    const again = screen.getByRole('button', { name: 'Applied before? Sign in' });
+    expect(again.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(again);
+    expect(again.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Sign in with the wallet you applied with to see your status.')).toBeTruthy();
+    view.unmount();
+    expect(document.title).toBe('WL · Coinnibal');
   });
 
   it('the wallet step shows the full EVM address that goes on the list', async () => {
