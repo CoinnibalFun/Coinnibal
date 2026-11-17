@@ -40,7 +40,7 @@ export const SERVER = {
   privateCodeLength: 8,
 } as const;
 
-/** The worked example of the guide: a 1,000-token ticket worth 1,900 tokens at the bell. */
+/** The worked example of the guide: a ticket of 1,000 tokens worth 1,900 tokens at the bell. */
 export const EXAMPLE = { entry: 1000, cashout: 1900 } as const;
 
 /**
@@ -123,14 +123,20 @@ export const FACTS: DocsFacts = {
 /* Content model                                                       */
 /* ------------------------------------------------------------------ */
 
+/**
+ * A block of a guide section. Text may link to another section with `[label](#id)` (content.en.ts `see`): in the
+ * section ledes, paragraphs, list items and the controls' actions.
+ */
 export type DocBlock =
   | { kind: 'p'; text: string }
   /** Bulleted list; an item may lead with a bold term. */
   | { kind: 'list'; items: (string | { term: string; text: string })[] }
   /** Key → action rows (controls). */
   | { kind: 'keys'; rows: { key: string; action: string }[]; caption: string }
-  /** Newspaper table. */
-  | { kind: 'table'; caption: string; head: string[]; rows: string[][]; numeric?: number[] }
+  /** Small cards, each led by its key (the power-ups): a title, a line of text and a muted line (`meta`). */
+  | { kind: 'cards'; label: string; items: { key: string; title: string; text: string; meta?: string }[] }
+  /** Newspaper table. `stack`: on phones each row becomes a small card (a comparison with long cells). */
+  | { kind: 'table'; caption: string; head: string[]; rows: string[][]; numeric?: number[]; stack?: boolean }
   /** Boxes joined by arrows: how value moves. */
   | { kind: 'flow'; label: string; steps: { title: string; text: string }[]; diagram?: { ticket: string; vault: string; wallet: string; fee: string } }
   /** The worked payout example as a receipt (at the server's fee rate). */
@@ -163,8 +169,6 @@ export interface DocsContent {
   kicker: string;
   title: string;
   deck: string;
-  /** Short facts for the dateline strip under the head. */
-  dateline: string[];
   tocLabel: string;
   /** The worked payout receipt (its numbers come from `payoutExample(rates)`). */
   receipt: {
