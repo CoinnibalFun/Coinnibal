@@ -21,7 +21,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Coinnibal' })).toBeTruthy();
     expect(screen.getByText('Coins eating coins.')).toBeTruthy();
     // the pitch never promises the whole amount (the fee is told in step 04 and on the fee card)
-    expect(screen.getByText('Eat coins smaller than you. Run from the ones that are bigger. When the bell rings, every coin still standing gets paid.')).toBeTruthy();
+    expect(screen.getByText('Eat coins smaller than you. Run from the ones that are bigger. In a paid room, every coin still standing at the bell gets paid.')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/swallowed is yours|is yours\./);
     expect(screen.queryByText(/small change with a big appetite|Eat the food/)).toBeNull();
     // the hero links to the holder perks on the same page
@@ -153,7 +153,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       setActiveChain(chainInfo(4663));
       render(<Landing />);
       await settle();
-      expect(screen.getByTestId('ld-money').textContent).toBe('Playing is free at first. Later a ticket costs real tokens, and you lose it if you get eaten.');
+      expect(screen.getByTestId('ld-money').textContent).toBe('Playing is free at first. Later a ticket costs tokens, and you lose it if you get eaten.');
     } finally {
       setActiveChain(before);
     }
@@ -270,7 +270,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
   it('a closed page says "not open yet" (never the real page or a 404); the same path opens when the admin opens it', async () => {
     for (const [path, line, plate] of [
       // the mint: nothing about where or when the NFT is minted
-      ['/mint', 'The Coinnibal NFT collection is coming. The guide explains what the NFT gives you.', 'Coinnibal NFT'],
+      ['/mint', 'The Coinnibal NFT collection is coming. The mint will be on OpenSea: use only the OpenSea link that @coinnibalfun posts.', 'Coinnibal NFT'],
       // the faucet is hidden: a neutral notice that never names it
       ['/faucet', 'There is nothing here for now. The guide explains how the game works.', 'Coinnibal'],
       ['/collab', 'This is where communities will ask for WL spots. The guide explains how the game works.', 'Collab'],

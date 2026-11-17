@@ -41,9 +41,9 @@ describe('player guide facts', () => {
       [1000, true],
     ]);
     expect(FACTS.rules.roundMin).toBe(RULES.roundMs / 60_000);
-    // the full 5 minutes of play, the 30-second break on top of it (a round every 5.5 minutes), in words, not a clock
+    // the full 5 minutes of play, the 30-second break on top of it (a round every 5 minutes 30 seconds), in words, not a clock
     const play = JSON.stringify(en0);
-    expect(play).toContain('A round is 5 minutes of play, then a 30-second break, so a new round starts every 5.5 minutes.');
+    expect(play).toContain('A round is 5 minutes of play, then a 30-second break, so a new round starts every 5 minutes 30 seconds.');
     expect(play).not.toMatch(/\b5:00\b/);
     // durations in words, the number and its unit kept on one line (a no-break space), never "60 s"
     expect(play).toContain('close 60\u00a0seconds before the bell');

@@ -34,8 +34,9 @@ function writeHash(id: string | null): void {
 /** A plain click (not a new tab or window): the guide handles it in place. */
 const plainClick = (e: MouseEvent): boolean => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
-/** How far below the top of the window a section counts as the one being read (the sticky header and a little air). */
-const READ_LINE = 120;
+/** A section is the one being read once its top passes this line: the 75px header plus about one section gap, so the
+ * mark moves on when the previous section has gone under the header, not 50-80px later. */
+const READ_LINE = 160;
 
 /**
  * The player guide (`/docs`, `#docs`): how to play, rooms and tickets, how value moves, rounds and the fee on

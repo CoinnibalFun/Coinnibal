@@ -8,6 +8,7 @@ import { SiteWalletProvider, WalletSignIn } from '../wallet/SiteWallet';
 import { useT } from '../../i18n';
 import { em, T } from '../../i18n/rich';
 import { GateScene } from './GateScene';
+import { setPageHead } from '../seo';
 
 /*
  * The closed / holders-only page of `/play`: the site shell, the wallet sign-in and (holders mode, while it is
@@ -25,6 +26,10 @@ export function ArenaSoon({ holders = false, maintenance = false, onSignedIn }: 
   const { settings } = useSiteSettings();
   const closed = !holders && !maintenance;
   // closed, the tab reads like the site's other closed pages
+  // the closed game page shares and searches as a closed page (start.tsx set /play's own head before it rendered)
+  useEffect(() => {
+    if (!holders && !maintenance) setPageHead('/play', false);
+  }, [holders, maintenance]);
   useEffect(() => {
     if (!closed) return;
     document.title = t('site.title.closed');

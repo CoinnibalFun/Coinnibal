@@ -29,7 +29,12 @@ const num = (n: number): string => nf.format(n);
 /** `500` → `5%`, `450` → `4.5%`. */
 const pct = (bps: number): string => `${nf.format(bps / 100)}%`;
 /** `300000` → `5 minutes`, `30000` → `30 seconds`, `330000` → `5.5 minutes`. */
-const clock = (ms: number): string => (ms < 60_000 ? `${num(ms / 1000)} seconds` : `${num(ms / 60_000)} minutes`);
+const clock = (ms: number): string => {
+  if (ms < 60_000) return `${num(ms / 1000)} seconds`;
+  const min = Math.floor(ms / 60_000);
+  const sec = Math.round((ms % 60_000) / 1000);
+  return sec ? `${num(min)} minutes ${num(sec)} seconds` : `${num(min)} minutes`;
+};
 /** The same before a noun: `300000` → `5-minute`, `30000` → `30-second` ("a 30-second break"). */
 const clockAdj = (ms: number): string => (ms < 60_000 ? `${num(ms / 1000)}-second` : `${num(ms / 60_000)}-minute`);
 /** `8000` → `8 seconds`. A no-break space keeps the number and its unit on one line. */
@@ -246,7 +251,7 @@ export const docsEn = (
       {
         id: 'payout',
         title: 'Rounds, payout and fee',
-        lede: 'All paid rooms share one clock.',
+        lede: 'The four paid rooms share one clock.',
         strip: {
           label: 'One round',
           panels: [`${clock(RULES.roundMs)} of play.`, 'The bell: coins still alive are paid.', `The fee is ${total} of the profit.`],
@@ -370,7 +375,7 @@ export const docsEn = (
       {
         id: 'token',
         title: 'The game token',
-        lede: 'The token of the paid rooms.',
+        lede: 'What the token pays for, and what it does not.',
         blocks: [
           {
             kind: 'list',

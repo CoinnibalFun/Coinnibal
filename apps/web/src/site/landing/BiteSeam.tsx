@@ -55,7 +55,7 @@ const BODY = 0.82;
 
 /** The section's style: where its bite sits (reveal.css clamps it inside the page and keeps a phone title clear of it). */
 export const biteVars = (b: Bite) =>
-  ({ '--bx': `${b.x}%`, '--bxm': `${b.xm}%`, '--bh': `${HALF * BODY * b.size}px`, '--bhm': `${HALF * BODY * b.sizeM}px` }) as CSSProperties;
+  ({ '--bx': `${b.x}%`, '--bxm': `${b.xm}%`, '--bxmv': `${b.xm}vw`, '--bh': `${HALF * BODY * b.size}px`, '--bhm': `${HALF * BODY * b.sizeM}px` }) as CSSProperties;
 
 export function BiteSeam({ at }: { at: BiteAt }) {
   const b = BITES[at];
@@ -92,9 +92,12 @@ export function BiteSeam({ at }: { at: BiteAt }) {
         <span className="ld-bite__face ld-bite__face--chomp">
           <CoinCharacter paint="sun" mood="chomp" size={S} look={[0, -2]} blink={false} />
         </span>
-        {/* only the after-face loops (its bob): it pauses off screen; the one-shot bite never freezes half-chewed */}
-        <span className="ld-bite__face ld-bite__face--after" data-paused={!visible || undefined}>
-          <CoinCharacter paint="sun" mood={b.after} size={S} look={b.look} bob />
+        {/* only the after-face loops (its bob): the bob pauses off screen, on an inner wrapper, so the one-shot face swap
+            (ld-face-in on the face itself) always runs to the end, even when the visitor scrolls past mid-bite */}
+        <span className="ld-bite__face ld-bite__face--after">
+          <span className="ld-bite__bob" data-paused={!visible || undefined}>
+            <CoinCharacter paint="sun" mood={b.after} size={S} look={b.look} bob />
+          </span>
         </span>
       </span>
     </div>

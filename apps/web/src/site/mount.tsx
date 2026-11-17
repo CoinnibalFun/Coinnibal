@@ -77,8 +77,10 @@ export function SiteApp() {
   const closed = shut && admin === false;
   useEffect(() => {
     document.title = t(closed ? 'site.title.closed' : (TITLES[path] ?? (isSitePath(path) ? TITLES['/'] : 'site.nf.docTitle')));
-    setPageHead(path, !closed && !shut && (path === '/' || isLazyPage(path)));
-  }, [path, locale, t, closed, shut]);
+    // /wl draws its own closed card (the WL door is not a page door), but shares and searches see a closed page too
+    const wlShut = path === '/wl' && doors.loaded && !doors.wl;
+    setPageHead(path, !closed && !shut && !wlShut && (path === '/' || isLazyPage(path)));
+  }, [path, locale, t, closed, shut, doors.loaded, doors.wl]);
   useEffect(() => (path === '/' && doors.mint ? warmFromLanding() : undefined), [path, doors.mint]);
   if (path === '/')
     return (

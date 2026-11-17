@@ -87,7 +87,8 @@
     padding-bottom: 32px;
   }
   .cl__art {
-    margin: 0 -18px 0 0;
+    /* beside the card, clear of its ink border: the sleep Zs on the coin's right never touch it */
+    margin: 0 -2px 0 0;
     padding-top: 54px;
   }
   /* above the coin's left half: the sleep Zs keep the right */
