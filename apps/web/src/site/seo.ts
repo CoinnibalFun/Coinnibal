@@ -21,11 +21,44 @@ function origin(): string {
 }
 
 /**
+ * A page's own title and description for search results and share cards. index.html ships the landing's; a page
+ * listed here gets its own while it is shown, and every other page gets index.html's back.
+ */
+export const PAGE_META: Readonly<Record<string, { title: string; description: string }>> = {
+  '/docs': {
+    title: 'Player guide · Coinnibal',
+    description: 'How Coinnibal works: rounds, rooms and tickets, the fee, power-ups and what the NFT gives you.',
+  },
+};
+
+/** The head tags that carry a page's title and description (`attr` holds the text). */
+const META_TAGS = [
+  { selector: 'meta[name="description"]', key: 'description' },
+  { selector: 'meta[property="og:title"]', key: 'title' },
+  { selector: 'meta[property="og:description"]', key: 'description' },
+  { selector: 'meta[name="twitter:title"]', key: 'title' },
+  { selector: 'meta[name="twitter:description"]', key: 'description' },
+] as const;
+
+/** Sets each title / description tag to `path`'s own text, or back to index.html's (kept in `data-default`). */
+function setPageMeta(path: string): void {
+  const own = PAGE_META[path];
+  for (const { selector, key } of META_TAGS) {
+    const tag = document.head.querySelector<HTMLMetaElement>(selector);
+    if (!tag) continue;
+    if (!tag.hasAttribute('data-default')) tag.setAttribute('data-default', tag.getAttribute('content') ?? '');
+    tag.setAttribute('content', own ? own[key] : (tag.getAttribute('data-default') ?? ''));
+  }
+}
+
+/**
  * Points canonical and og:url at `path` and marks the page `noindex` when `indexable` is false
- * (the not-found page). `path` is the normalised pathname (`/`, `/mint`, ...).
+ * (the not-found page). `path` is the normalised pathname (`/`, `/mint`, ...). A page in `PAGE_META` also gets its
+ * own title and description in the share and search tags.
  */
 export function setPageHead(path: string, indexable = true): void {
   if (typeof document === 'undefined') return;
+  setPageMeta(path);
   const url = `${origin()}${path === '/' ? '/' : path}`;
   const canon = meta('link[rel="canonical"]', () => Object.assign(document.createElement('link'), { rel: 'canonical' }));
   canon.setAttribute('href', url);
