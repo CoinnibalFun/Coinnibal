@@ -23,7 +23,7 @@ import { configuredPerks, perkCards } from '../src/site/nft/WhyNft';
 import { isLazyPage, loadedPage, resetPages, warmPage } from '../src/site/pages';
 import { navigate } from '../src/site/router';
 import { resetServerChain } from '../src/site/serverChain';
-import { navFor } from '../src/site/Shell';
+import { NAV, navFor } from '../src/site/Shell';
 import { resetSiteSettings } from '../src/site/settings';
 import { Feed } from '../src/ui/game/Feed';
 import { useUi } from '../src/store';
@@ -50,20 +50,19 @@ afterEach(() => {
 /* ── navigation ───────────────────────────────────────────────────── */
 
 describe('fast navigation', () => {
-  it('keeps the header short: Play, Mint, Faucet only on testnet, WL, Docs', () => {
+  it('keeps the header short: Play, Mint, WL, Docs; never the faucet (hidden from visitors), on any network', () => {
     const open = { game: true, mint: true, wl: true, collab: true };
-    expect(navFor(true, open).map((n) => n.label)).toEqual(['Play', 'Mint', 'Faucet', 'WL', 'Docs']);
-    expect(navFor(false, open).map((n) => n.label)).toEqual(['Play', 'Mint', 'WL', 'Docs']);
-    expect(navFor(null, open).map((n) => n.label)).toEqual(['Play', 'Mint', 'WL', 'Docs']);
+    expect(navFor(open).map((n) => n.label)).toEqual(['Play', 'Mint', 'WL', 'Docs']);
+    expect(NAV.some((n) => n.href === '/faucet')).toBe(false);
   });
 
   it('links only to what the admin has opened: Docs alone when everything is closed', () => {
-    expect(navFor(true).map((n) => n.label)).toEqual(['Docs']);
-    expect(navFor(true, { game: false, mint: false, wl: false, collab: false }).map((n) => n.label)).toEqual(['Docs']);
+    expect(navFor().map((n) => n.label)).toEqual(['Docs']);
+    expect(navFor({ game: false, mint: false, wl: false, collab: false }).map((n) => n.label)).toEqual(['Docs']);
     // each part comes back on its own
-    expect(navFor(true, { game: true, mint: false, wl: false, collab: false }).map((n) => n.label)).toEqual(['Play', 'Faucet', 'Docs']);
-    expect(navFor(true, { game: false, mint: true, wl: false, collab: false }).map((n) => n.label)).toEqual(['Mint', 'Docs']);
-    expect(navFor(true, { game: false, mint: false, wl: true, collab: true }).map((n) => n.label)).toEqual(['WL', 'Docs']);
+    expect(navFor({ game: true, mint: false, wl: false, collab: false }).map((n) => n.label)).toEqual(['Play', 'Docs']);
+    expect(navFor({ game: false, mint: true, wl: false, collab: false }).map((n) => n.label)).toEqual(['Mint', 'Docs']);
+    expect(navFor({ game: false, mint: false, wl: true, collab: true }).map((n) => n.label)).toEqual(['WL', 'Docs']);
   });
 
   it('warms a page once and hands the loaded component back synchronously after that', async () => {
@@ -165,7 +164,11 @@ describe('the faucet', () => {
     }));
     ui(<FaucetPage />);
     expect(await screen.findByTestId('fc-no-token')).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Site' }).textContent).toContain('Faucet'));
+    // the game is open on a testnet, and still the header and the footer never name the faucet (hidden from visitors)
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Site' }).textContent).toContain('Play'));
+    expect(screen.getByRole('navigation', { name: 'Site' }).textContent).not.toContain('Faucet');
+    expect(screen.getByRole('navigation', { name: 'Footer' }).textContent).not.toContain('Faucet');
+    expect(document.querySelector('header a[href="/faucet"], footer a[href="/faucet"]')).toBeNull();
   });
 });
 
