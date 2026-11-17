@@ -170,6 +170,41 @@ async function newPage(browser, vp) {
   return { ctx, page };
 }
 
+/**
+ * In the page: the hero's pond coins, the chase, the sound button, the tap hint and the feast bite must not overlap one
+ * another or stick out of the screen (the hunter and its snack excepted: that overlap is the bite).
+ */
+function pondProblems() {
+  const seen = (e) => {
+    const r = e.getBoundingClientRect();
+    const cs = getComputedStyle(e);
+    return r.width > 4 && cs.visibility !== 'hidden' && cs.display !== 'none' && e.closest('[style*="display: none"]') === null && e.offsetParent !== null;
+  };
+  const chase = document.querySelector('.ld-chase');
+  const chaseOn = chase && getComputedStyle(chase).display !== 'none';
+  const pick = (sel, name) => [...document.querySelectorAll(sel)].filter(seen).map((e, i) => ({ n: `${name}${i}`, r: e.getBoundingClientRect() }));
+  const all = [
+    ...pick('.ld-pond__c .kb-coin', 'pond coin '),
+    ...(chaseOn ? [...pick('.ld-chase__hunter .kb-coin', 'chase hunter '), ...pick('.ld-chase__snack .kb-coin', 'chase snack ')] : []),
+    ...pick('.ld-sound', 'sound button '),
+    ...pick('.ld-pond__hint', 'tap hint '),
+    ...pick('#feast .ld-bite__coin', 'feast bite '),
+  ];
+  const out = [];
+  for (let i = 0; i < all.length; i++) {
+    const a = all[i];
+    if (a.r.left < -2 || a.r.right > innerWidth + 2) out.push(`${a.n} sticks out of the screen`);
+    for (let j = i + 1; j < all.length; j++) {
+      const b = all[j];
+      if (/hunter/.test(a.n) && /snack/.test(b.n)) continue;
+      const x = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
+      const y = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
+      if (x > 4 && y > 4) out.push(`${a.n} overlaps ${b.n} by ${Math.round(x)}x${Math.round(y)}px`);
+    }
+  }
+  return out;
+}
+
 const problems = [];
 async function checkViewport(browser, vp) {
   const { ctx, page } = await newPage(browser, vp);
@@ -193,6 +228,7 @@ async function checkViewport(browser, vp) {
         await sleep(400);
         const o = await closed.page.evaluate(overflowX);
         if (o > 1) problems.push(`${vp.name} ${path} (closed): the page scrolls sideways by ${o}px`);
+        if (path === '/') for (const p of await closed.page.evaluate(pondProblems)) problems.push(`${vp.name} / hero: ${p}`);
         const shut = await closed.page.locator('[data-testid="closed-page"]').count();
         if (['/mint', '/faucet', '/collab'].includes(path) && shut !== 1) problems.push(`${vp.name} ${path} (closed): the "not open yet" page did not show`);
         const links = await closed.page.locator('a[href="/play"], a[href="/mint"], a[href="/faucet"], a[href="/wl"], a[href="/collab"]').count();

@@ -204,6 +204,14 @@
   -webkit-tap-highlight-color: transparent;
   transition: transform 0.42s var(--ease-spring);
 }
+/* the terrace, left to right, measured so nothing ever overlaps at any width (CoinPond.tsx): the big coin, then the
+   small and the mid one chained after it in px, the feast bite at 42% (BiteSeam), the chase anchored from the right,
+   then the far coin and the shy one at the right edge. Narrower screens drop what no longer fits (see below). */
+.ld-pond__c--big { left: max(12px, 3%); bottom: 14px; }
+.ld-pond__c--small { left: calc(max(12px, 3%) + 134px); bottom: 6px; }
+.ld-pond__c--mid { left: calc(max(12px, 3%) + 212px); bottom: 52px; }
+.ld-pond__c--far { right: 102px; bottom: 46px; }
+.ld-pond__c--shy { right: 24px; bottom: 8px; }
 .ld-pond__body {
   display: block;
   transform: scale(var(--grow, 1));
@@ -321,7 +329,8 @@
 }
 .ld-chase {
   position: absolute;
-  left: 54%;
+  /* clear of the far coin and the shy one on its right, and of the feast bite on its left */
+  right: 222px;
   bottom: 16px;
   width: 340px;
   height: 200px;
@@ -403,10 +412,16 @@
 }
 /* wide screens: the shy coin hides a step further left; the sound button sits under the round sticker, out of the
    strip where the pond coins walk */
-@media (min-width: 900px) {
-  .ld-pond__c--shy {
-    left: 80.5% !important;
+/* 900-1279px: the far coin steps out, the chase moves up next to the shy one */
+@media (min-width: 900px) and (max-width: 1279px) {
+  .ld-pond__c--far {
+    display: none;
   }
+  .ld-chase {
+    right: 106px;
+  }
+}
+@media (min-width: 900px) {
   .ld-sound {
     top: 168px;
     bottom: auto;
@@ -446,14 +461,29 @@
   .ld-pond__c.is-far {
     display: none;
   }
+  /* the shy one stands right after the big one; the chase, smaller, at the right edge */
+  .ld-pond__c--shy {
+    right: auto;
+    left: calc(max(12px, 3%) + 130px);
+  }
   .ld-chase {
-    left: auto;
-    right: 4%;
-    transform: scale(0.72);
+    right: 2%;
+    transform: scale(0.6);
     transform-origin: 100% 100%;
   }
   .ld-hero__tag {
     font-size: 20px;
+  }
+}
+/* below 640px the feast bite sits at 62% (BiteSeam): too narrow for the chase beside it, so the big coin stands on the
+   left, the bite in the middle and the shy one at the right edge */
+@media (max-width: 639px) {
+  .ld-chase {
+    display: none;
+  }
+  .ld-pond__c--shy {
+    left: auto;
+    right: 16px;
   }
 }
 @media (max-width: 479px) {
@@ -465,10 +495,6 @@
   }
   .ld-hero__ctas .kb-btn {
     flex: 1 1 auto;
-  }
-  .ld-chase {
-    right: 0;
-    transform: scale(0.6);
   }
 }
 
