@@ -5,7 +5,7 @@
  * old browsers all see everything.
  *
  * Reveals touch only opacity, clip-path and the individual translate / rotate / scale properties. They never set
- * `transform`, so the CSS tilts on transform survive (the menu, the take strip, the tickets, the fee card, the odd FAQ
+ * `transform`, so the CSS tilts on transform survive (the menu, the take strip, the tickets, the fee card, the FAQ
  * cards, the perk cards). The fan's deal is the one exception: it reuses the fan's own transform slot transition.
  *
  * One beat B = --beat (70 ms). A plate seam: ink rule 0B, caption 1B, dashed rule 2B, aside 5B. A content stage:
@@ -427,10 +427,19 @@
       scale 0.36s var(--ease-settle) calc(var(--d) + var(--beat) * 3),
       rotate 0.36s var(--ease-settle) calc(var(--d) + var(--beat) * 3);
   }
-  /* FAQ: the cream coin peeks up from its own ground line */
+  /* FAQ: the moon (the cream coin) rises over the horizon, its own foot; then its light runs out on the water. Each
+     card's coin bobs up out of the pond a beat after its card lands */
   .ld-faq__side:is([data-reveal='wait'], [data-reveal='in']) .ld-faq__coin { clip-path: inset(-60% -60% 0 -60%); }
   .ld-faq__side[data-reveal='wait'] .ld-faq__coin > .ld-gaze { translate: 0 75%; }
   .ld-faq__side[data-reveal='in'] .ld-faq__coin > .ld-gaze { transition: translate 0.56s var(--ease-settle) calc(var(--beat) * 3); }
+  .ld-faq__side[data-reveal='wait'] ~ .ld-faq__water .ld-faq__glint i { scale: 0 1; }
+  .ld-faq__side[data-reveal='in'] ~ .ld-faq__water .ld-faq__glint i {
+    transition: scale 0.42s var(--ease-out) calc(var(--beat) * (7 + var(--i)));
+  }
+  .ld-qa[data-reveal='wait'] .ld-qa__face { opacity: 0; translate: 0 10px; }
+  .ld-qa[data-reveal='in'] .ld-qa__face {
+    transition: opacity 0.2s linear calc(var(--d) + var(--beat) * 2), translate 0.5s var(--ease-settle) calc(var(--d) + var(--beat) * 2);
+  }
 
   /* C. the bite plays when its section's seam does: rise, lunge, three chomps that open the cut, then the after-mood */
   .ld-plate[data-seam='wait'] > .ld-bite .ld-bite__cut { scale: 0; }
