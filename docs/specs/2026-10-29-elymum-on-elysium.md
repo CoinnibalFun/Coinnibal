@@ -355,8 +355,13 @@ tabs), `Toast`, `Counter`, `StampSpinner`/`Skeleton`, `ScreenTransition`. Utilit
 - Easing `--ease-out` cubic-bezier(0.22, 1, 0.36, 1) for entrances; springs for coins, buttons and stickers
   (`springs.pop`, `springs.drop`, `springs.press`).
 - Durations: 160 ms state, 320 ms enter, 640 ms scene; lists stagger 40 ms (`STAGGER`).
-- Presets (`moves`, or `useMoves()` for the reduced-motion twins): `popIn`, `stickerDrop` (custom = tilt), `press`,
-  `bob`, `chomp`, `stagger`.
+- Presets (`moves`, or `useMoves()` for the reduced-motion twins): `popIn` (custom = delay), `stickerDrop` (custom =
+  tilt), `press`, `bob`, `chomp`, `stagger`. A variant's own `transition` replaces the component's `transition` prop, so
+  a delay goes through `custom`, never the prop.
+- The landing's scroll reveals are CSS, not motion: `site/landing/reveal.ts` arms each plate and content stage once
+  (`data-seam` / `data-reveal` = wait, in, set) and `reveal.css` prints it on one beat (`--beat` 70 ms, `BEAT`): ink
+  rule, caption, dashed rule, then kicker, heading, visual, body, items; text is readable about 0.6 s after its top
+  passes 90 % of the viewport. Reveals animate opacity, clip-path and the individual translate / rotate / scale only.
 - Signature moves: buttons **sink into their shadow** on press (translate 3px, shadow 4 → 1px); stickers **drop** onto the
   page and settle on their tilt; coins **bob** (2.6 s) and **blink** (5 s); the hunter **chomps**; the DONE **stamp**
   lands with a squash and an ink bloom; countdown digits **flip**; the gauge needle swings on a spring.
