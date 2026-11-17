@@ -15,6 +15,7 @@ import {
   Sticker,
   Wordmark,
   useMoves,
+  useOffscreenPause,
   useReducedMotion,
   type CoinMood,
   type CoinPaint,
@@ -633,11 +634,34 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
 
 /* ── questions ────────────────────────────────────────────────────────── */
 
+/** The coin on each question card, in turn: it wonders ("?") until its answer opens, then it is happy. */
+const ASKERS: CoinPaint[] = ['cyan', 'sun', 'teal', 'coral', 'foam', 'up'];
+/** Bubbles rising through the pond: x and y (% of the water), size in px, delay in s. Every third is a little coin. */
+const BUBBLES: [number, number, number, number][] = [
+  [9, 34, 12, 0],
+  [18, 64, 8, 2.6],
+  [27, 20, 14, 5.2],
+  [34, 78, 10, 7.4],
+  [4, 52, 10, 8.8],
+  [95, 36, 12, 1.4],
+  [97, 82, 8, 4.6],
+];
+
+/**
+ * The questions, on a moonlit pond: the cream coin is the moon over the horizon, its light trembles on the water,
+ * which deepens in three rows of seigaiha down to a pebble shore (where the nap coin falls asleep). The cards float on
+ * it, each with a coin that wonders until its answer opens. The scene is decoration (aria-hidden); its loops stop off
+ * screen and under reduced motion.
+ */
 function Faq({ handle, doors }: { handle: string; doors: Doors }) {
   const t = useT();
   const plate = usePlate(BITE_GULP_MS);
   const side = useReveal<HTMLDivElement>();
   const list = useRef<HTMLDivElement>(null);
+  // the scene's loops (the moon's bob and sparkles, the water, the cards' blinking coins) stop off screen; the heading's
+  // one-shot print-in is left out of it, so it always runs to the end
+  const [pond, awake] = useOffscreenPause<HTMLDivElement>();
+  const paused = !awake || undefined;
   const tags = {
     x: (c: ReactNode) => (
       <a href={xProfile(handle)} target="_blank" rel="noreferrer">
@@ -663,30 +687,75 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
     <section ref={plate} className="ld-plate ld-faq has-bite" style={biteVars(BITES.faq)} id="faq" aria-labelledby="ld-faq-h">
       <BiteSeam at="faq" />
       <PlateLabel numeral={6} title={t('ld.faq.plate')} aside={t('ld.faq.aside')} />
-      <div className="ld-wrap ld-faq__grid">
+      <div ref={pond} className="ld-wrap ld-faq__grid">
         <div ref={side} className="ld-faq__side">
           <div>
             <h2 className="ld-h2 rv-h" id="ld-faq-h">
               {t('ld.faq.h')}
             </h2>
           </div>
-          <span className="ld-faq__coin" aria-hidden="true">
-            <GazeCoin paint="cream" mood="open" size={120} look={[3, -2]} feet ground bob />
+          <span className="ld-faq__coin" aria-hidden="true" data-paused={paused}>
+            <GazeCoin paint="cream" mood="open" size={120} look={[2, 3]} bob />
+            <i className="ld-faq__spark" />
+            <i className="ld-faq__spark" />
+            <i className="ld-faq__spark" />
           </span>
         </div>
-        <div ref={list} className="ld-faq__list">
-          {items.map((f, i) => (
-            <details key={f.q} className="ld-qa">
-              <summary className="ld-qa__q">
-                <span className="ld-qa__no num" aria-hidden="true">
-                  Q{i + 1}
-                </span>
-                <span className="ld-qa__text">{f.q}</span>
-                <span className="ld-qa__plus" aria-hidden="true" />
-              </summary>
-              <div className="ld-qa__a">{f.a}</div>
-            </details>
+        <div className="ld-faq__water" aria-hidden="true" data-paused={paused}>
+          <span className="ld-faq__glint">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <i key={i} style={v({ '--i': i })} />
+            ))}
+          </span>
+          {BUBBLES.map(([x, y, s, d], i) => (
+            <i key={i} className={`ld-faq__bubble${i % 3 === 2 ? ' is-coin' : ''}`} style={v({ '--x': `${x}%`, '--y': `${y}%`, '--s': `${s}px`, '--d': `${-d}s` })} />
           ))}
+          <span className="ld-faq__boat">
+            <svg className="ld-faq__boat-art" viewBox="0 0 120 72" focusable="false">
+              <path className="is-lit" d="M44 6 L18 44 H44Z" />
+              <path className="is-shade" d="M44 6 V44 H70Z" />
+              <path className="is-ink" d="M44 6 L18 44 H70Z M44 9 V43" />
+            </svg>
+            <span className="ld-faq__boat-coin">
+              <CoinCharacter paint="cyan" mood="happy" size={44} />
+            </span>
+            <svg className="ld-faq__boat-art" viewBox="0 0 120 72" focusable="false">
+              <path className="is-lit" d="M4 42 H116 L96 68 H24Z" />
+              <path className="is-shade" d="M60 42 H116 L96 68 H60Z" />
+              <path className="is-ink" d="M4 42 H116 L96 68 H24Z M60 44 L60 66" />
+            </svg>
+          </span>
+          <span className="ld-faq__peek">
+            <span className="ld-faq__peek-coin">
+              <CoinCharacter paint="coral" mood="smug" size={64} look={[4, 1]} bob phase={1.1} />
+            </span>
+            <FoodBit kind="seed" paint="sun" size={16} glow wiggle className="ld-faq__seed" />
+            <FoodBit kind="seed" paint="foam" size={12} wiggle className="ld-faq__seed" />
+          </span>
+          <span className="ld-faq__shore" />
+        </div>
+        <div ref={list} className="ld-faq__list" data-paused={paused}>
+          {items.map((f, i) => {
+            const paint = ASKERS[i % ASKERS.length];
+            return (
+              <details key={f.q} className="ld-qa">
+                <summary className="ld-qa__q">
+                  <span className="ld-qa__face" aria-hidden="true">
+                    <span className="ld-qa__ask">
+                      <CoinCharacter paint={paint} mood="open" size={44} look={[2, -3]} phase={i * 0.9} />
+                      <b className="ld-qa__huh">?</b>
+                    </span>
+                    <span className="ld-qa__yay">
+                      <CoinCharacter paint={paint} mood="happy" size={44} />
+                    </span>
+                  </span>
+                  <span className="ld-qa__text">{f.q}</span>
+                  <span className="ld-qa__plus" aria-hidden="true" />
+                </summary>
+                <div className="ld-qa__a">{f.a}</div>
+              </details>
+            );
+          })}
         </div>
       </div>
       <NapSeam />

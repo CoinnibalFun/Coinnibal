@@ -149,11 +149,11 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
     const before = activeChain();
     try {
-      // a mainnet build too: "free at first" (D12), never "real money" alone
+      // every build says the same: a paid room takes a ticket (no free-at-first phase, no test network)
       setActiveChain(chainInfo(4663));
       render(<Landing />);
       await settle();
-      expect(screen.getByTestId('ld-money').textContent).toBe('Playing is free at first. Later a ticket costs tokens, and you lose it if you get eaten.');
+      expect(screen.getByTestId('ld-money').textContent).toBe('A paid room takes a ticket in tokens. If you get eaten, you lose it.');
     } finally {
       setActiveChain(before);
     }
@@ -177,8 +177,10 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(answer('How many NFTs are there?')).toBe('The collection has 3,333 NFTs.');
     // the chain holds the money, the game runs on a server (as the guide says)
     expect(answer('What is Robinhood Chain?')).toMatch(/the game itself runs on a server/);
-    // D12's core, once
-    expect(answer('Does it cost money to play?')).toBe('Not at first: when the game opens, playing is free. Later, paid rooms take a ticket in tokens. Practice stays free.');
+    // the cost, once: paid rooms take a ticket, practice is free
+    expect(answer('Does it cost money to play?')).toBe('Yes. A paid room takes a ticket in tokens. Practice is free.');
+    // the owner's launch order: the NFT mint, then the token, then the game (no dates)
+    expect(answer('Is the game open?')).toBe('Not yet. First comes the NFT mint, then the token, then the game. News is on @coinnibalfun.');
     const page = document.querySelector('main')!.textContent ?? '';
     expect(page.match(/Practice (stays|is) free/g)).toHaveLength(1);
     expect(page.match(/explains every rule/g)).toBeNull();
@@ -459,6 +461,33 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       'The Coinnibal NFT',
       'Questions',
     ]);
+  });
+
+  it('floats the questions on a moonlit pond: still details and summaries, every coin and wave hidden from assistive tech', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    const faq = document.querySelector('#faq')!;
+    // the scene (the moon, the water with its boat, bubbles and shore) is decoration: hidden, no text, nothing to focus
+    const scene = [...faq.querySelectorAll('.ld-faq__coin, .ld-faq__water')];
+    expect(scene).toHaveLength(2);
+    for (const el of scene) {
+      expect(el.getAttribute('aria-hidden')).toBe('true');
+      expect(el.textContent).toBe('');
+      expect(el.querySelector('a, button, input, [tabindex]')).toBeNull();
+    }
+    const cards = [...faq.querySelectorAll('.ld-qa')];
+    expect(cards.length).toBeGreaterThan(5);
+    for (const card of cards) {
+      expect(card.tagName).toBe('DETAILS');
+      const q = card.querySelector(':scope > summary.ld-qa__q')!;
+      // one coin per card, hidden: it wonders until its answer opens, then it is happy (the CSS swaps them on [open])
+      const face = q.querySelector('.ld-qa__face')!;
+      expect(face.getAttribute('aria-hidden')).toBe('true');
+      expect(face.querySelectorAll(':scope > .ld-qa__ask .kb-coin, :scope > .ld-qa__yay .kb-coin')).toHaveLength(2);
+      // what a screen reader hears on the summary is the question alone
+      const heard = [...q.childNodes].filter((n) => !(n instanceof Element && n.getAttribute('aria-hidden') === 'true')).map((n) => n.textContent).join('');
+      expect(heard).toBe(q.querySelector('.ld-qa__text')!.textContent);
+    }
   });
 
   it('shows a plain not-found page for a path the site does not know', async () => {
