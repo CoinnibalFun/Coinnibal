@@ -1,8 +1,7 @@
 // Ring Storybook design system (spec §6): fonts, tokens (on :root and every `.kb`) and styles.
-// Fraunces "full" carries the SOFT and WONK axes (display); DM Sans with optical sizes (body);
-// Geist Mono (every number).
-import '@fontsource-variable/fraunces/full.css';
-import '@fontsource-variable/fraunces/full-italic.css';
+// Lilita One (display: one weight, upright, the chunky game-title face that sits with the hand-built
+// bubble wordmark); DM Sans with optical sizes (body); Geist Mono (numbers and other data).
+import '@fontsource/lilita-one/400.css';
 import '@fontsource-variable/dm-sans/opsz.css';
 import '@fontsource-variable/dm-sans/opsz-italic.css';
 import '@fontsource-variable/geist-mono/wght.css';

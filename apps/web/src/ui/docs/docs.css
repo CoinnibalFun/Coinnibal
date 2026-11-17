@@ -1,5 +1,5 @@
 /* Player guide (/docs and the lobby's #docs): the handbook in the Ring Storybook.
- * Long-form first: a 66ch column of DM Sans, Fraunces section heads with a sun
+ * Long-form first: a 66ch column of DM Sans, Lilita One section heads with a sun
  * number coin, cream stickers (kb-island) for the asides, Geist Mono for every
  * number. Works on the day plain and on the night page. */
 
@@ -44,7 +44,7 @@
   font-stretch: normal;
   font-size: clamp(44px, 6vw, 84px);
   line-height: 0.95;
-  letter-spacing: -0.025em;
+  letter-spacing: 0.005em;
   color: var(--ink);
   outline: none;
 }
@@ -249,7 +249,7 @@
   font-weight: 800;
   font-size: var(--t-h2);
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.005em;
   color: var(--ink);
   text-wrap: balance;
 }

@@ -598,7 +598,7 @@ html.st-menu-open {
   font-weight: 800;
   font-size: var(--t-h1);
   line-height: 0.98;
-  letter-spacing: -0.025em;
+  letter-spacing: 0.005em;
 }
 .st-deck {
   margin-top: 14px !important;
@@ -819,7 +819,7 @@ select.st-input {
   font-weight: 800;
   font-size: clamp(44px, 9vw, 76px);
   line-height: 0.95;
-  letter-spacing: -0.025em;
+  letter-spacing: 0.005em;
 }
 .st-gate__title span {
   display: block;

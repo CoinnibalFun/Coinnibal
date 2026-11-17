@@ -4,7 +4,7 @@ import { drawCoinLook } from './render/coin';
 import { flagSkins } from './render/flagskin';
 import { LookCache } from './render/looks';
 
-const DISPLAY = '800 26px "Fraunces Variable", Fraunces, Georgia, serif';
+const DISPLAY = '400 26px "Lilita One", "DM Sans Variable", sans-serif';
 const MONO = '"Geist Mono Variable", "Geist Mono", ui-monospace, monospace';
 
 /** The sheet's default line-up: the countries the owner checks first. */

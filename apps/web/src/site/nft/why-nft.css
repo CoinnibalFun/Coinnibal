@@ -19,7 +19,7 @@
   font-weight: 800;
   font-size: clamp(30px, 4vw, 44px);
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.005em;
   color: var(--ink);
   text-wrap: balance;
 }
@@ -109,7 +109,7 @@
   font-weight: 800;
   font-size: 34px;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.005em;
   color: var(--on-sticker);
 }
 /* the skin has no figure: the holder badge's laurel stands in, at the figure's size */

@@ -9,7 +9,7 @@ import { siteHost } from '../settings';
 export const CARD_W = 1200;
 export const CARD_H = 675;
 
-const DISPLAY = "'Fraunces Variable', 'Fraunces', Georgia, serif";
+const DISPLAY = "'Lilita One', 'DM Sans Variable', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 const INK = ELYSIUM.abyss;
 const NIGHT_SHADOW = '#000507';
