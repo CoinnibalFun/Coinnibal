@@ -1,7 +1,10 @@
 /* ── "Why get the NFT?": the holder perks as die-cut sticker cards (landing, mint page) ── */
 .nf-why {
   position: relative;
-  scroll-margin-top: 80px;
+  /* the header (75 px) and a little air; the landing adds its seed rail (landing.css) */
+  scroll-margin-top: 92px;
+  /* the perk grid follows the width it gets (the landing's wide wrap, the mint page's column) */
+  container-type: inline-size;
 }
 .nf-why__head {
   margin-bottom: 22px;
@@ -18,14 +21,41 @@
   line-height: 1;
   letter-spacing: -0.02em;
   color: var(--ink);
+  text-wrap: balance;
 }
+/* whole rows only: one column, then two (an odd last card takes the row), then three on six tracks (a last row of
+   two takes half each, a last card alone the whole row). perkCards() gives 3 to 5 cards; the landing shows 5. */
 .nf-why__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+@container (min-width: 600px) {
+  .nf-why__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .nf-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+@container (min-width: 880px) {
+  .nf-why__grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .nf-card,
+  .nf-card:last-child:nth-child(odd) {
+    grid-column: span 2;
+  }
+  .nf-card:nth-child(3n + 1):nth-last-child(2),
+  .nf-card:nth-child(3n + 1):nth-last-child(2) + .nf-card {
+    grid-column: span 3;
+  }
+  .nf-card:nth-child(3n + 1):last-child {
+    grid-column: 1 / -1;
+  }
 }
 .nf-card {
   position: relative;
@@ -36,6 +66,8 @@
     'title title'
     'note note';
   align-items: center;
+  /* a shorter card keeps its rows at the top, so the titles of a row line up */
+  align-content: start;
   column-gap: 14px;
   row-gap: 8px;
   min-width: 0;
@@ -45,12 +77,6 @@
   border: var(--stroke) solid var(--outline);
   border-radius: 18px;
   box-shadow: var(--sh-3, 4px 4px 0 var(--outline));
-}
-.nf-card:nth-child(odd) {
-  transform: rotate(-0.6deg);
-}
-.nf-card:nth-child(even) {
-  transform: rotate(0.5deg);
 }
 .nf-card__art {
   grid-area: art;
@@ -73,9 +99,11 @@
   color: var(--ink-fixed);
   border: 2.5px solid var(--outline);
 }
+/* the cards stand straight (tilted text panels look jagged at 1x); the figure is the stamped sticker */
 .nf-card__big {
   grid-area: big;
   justify-self: end;
+  transform: rotate(-4deg);
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
@@ -84,26 +112,28 @@
   letter-spacing: -0.02em;
   color: var(--on-sticker);
 }
+/* the skin has no figure: the holder badge's laurel stands in, at the figure's size */
+.nf-card__big.is-badge {
+  display: inline-flex;
+  color: var(--sun-s);
+}
 .nf-card__t {
   grid-area: title;
   font-size: 18px;
   line-height: 1.25;
   font-weight: 700;
+  text-wrap: balance;
 }
 .nf-card__n {
   grid-area: note;
   font-size: 15px;
   line-height: 1.45;
   color: var(--on-sticker-2);
+  text-wrap: pretty;
 }
 .nf-why__note {
   margin: 20px 0 0;
   max-width: 70ch;
   font-size: 14px;
   color: var(--ink-2);
-}
-@media (prefers-reduced-motion: reduce) {
-  .nf-card:nth-child(n) {
-    transform: none;
-  }
 }
