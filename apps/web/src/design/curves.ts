@@ -41,6 +41,10 @@ export const EASE = {
   out: [0.22, 1, 0.36, 1],
   /** A springy overshoot for CSS-like keyframes (stickers, buttons). */
   spring: [0.34, 1.56, 0.64, 1],
+  /** Ink rules and washes drawing across the page (`--ease-draw`). */
+  draw: [0.65, 0, 0.25, 1],
+  /** A sticker settling onto the page with a hair (about 3 %) of overshoot (`--ease-settle`). */
+  settle: [0.3, 1.25, 0.45, 1],
 } as const satisfies Record<string, readonly [number, number, number, number]>;
 
 /** Durations in seconds (spec: 180–600 ms; reduced motion: fades ≤ 150 ms). */

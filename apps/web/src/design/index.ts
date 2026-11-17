@@ -8,6 +8,7 @@ export {
   moves,
   useMoves,
   STAGGER,
+  BEAT,
   printerEase,
   stampKeyframes,
   useReducedMotion,

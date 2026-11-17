@@ -661,11 +661,23 @@
 }
 
 /* ── III · a round, in orbit ─────────────────────────────────────────── */
+/* the tablecloth: Round's linen is its own layer behind the content (reveal.css lays it from the left as the plate
+   prints), so the section itself is paper and its caption row lets the cloth show through. At rest it looks the
+   same as a linen section. The isolation keeps the -1 layer above the section's paper and below its text. */
 .ld-round {
+  background: var(--paper);
+  isolation: isolate;
+}
+.ld-round::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background: var(--linen);
+  transform-origin: 0 50%;
 }
 .ld-round > .kb-plate {
-  background: var(--linen);
+  background: transparent;
 }
 .ld-round__grid {
   display: grid;
@@ -1434,6 +1446,15 @@
 .ld-faq__list {
   display: grid;
   gap: 14px;
+}
+/* the floor the nap sleeps on (NapSeam.tsx): the coin and its drifting z's stay below the last question, never on it */
+.ld-plate.ld-faq > .ld-wrap {
+  padding-bottom: 176px;
+}
+@media (max-width: 639px) {
+  .ld-plate.ld-faq > .ld-wrap {
+    padding-bottom: 104px;
+  }
 }
 .ld-qa {
   background: var(--cream);

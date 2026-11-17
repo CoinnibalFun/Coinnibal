@@ -118,15 +118,5 @@ export function useLobbyModel(): LobbyModel {
   }, [rooms, blocked, data, chain, connected, verified, nowS, lastArena, owner]);
 }
 
-/** `(max-width: …)` as React state. */
-export function useMedia(query: string): boolean {
-  const [m, setM] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
-  useEffect(() => {
-    const mql = window.matchMedia(query);
-    const on = () => setM(mql.matches);
-    on();
-    mql.addEventListener('change', on);
-    return () => mql.removeEventListener('change', on);
-  }, [query]);
-  return m;
-}
+/** `(max-width: …)` as React state (it lives in the design system now; the lobby keeps importing it from here). */
+export { useMedia } from '../../design/useMedia';
