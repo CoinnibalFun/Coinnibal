@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { CAPACITY, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, MAX_TOTAL_FEE_BPS, RULES, profitFee } from '@elymum/shared';
-import { act, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { CAPACITY, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, INTEGRITY_SETTINGS_DEFAULT, MAX_TOTAL_FEE_BPS, RULES, profitFee } from '@elymum/shared';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { chainStatus } from './evm-helpers';
 import { Kb } from '../src/design';
 import { pageFromUrl, urlForPage, useUi } from '../src/store';
@@ -41,13 +41,17 @@ describe('player guide facts', () => {
       [1000, true],
     ]);
     expect(FACTS.rules.roundMin).toBe(RULES.roundMs / 60_000);
-    // the full 5 minutes of play, the 30 s break on top of it (a round every 5.5 minutes), in words, not a clock
+    // the full 5 minutes of play, the 30-second break on top of it (a round every 5 minutes 30 seconds), in words, not a clock
     const play = JSON.stringify(en0);
-    expect(play).toContain('A round is 5 minutes of play, then a 30 seconds break, so a new round starts every 5.5 minutes.');
-    expect(play).toContain('5 minutes rounds, 30 seconds break');
+    expect(play).toContain('A round is 5 minutes of play, then a 30-second break, so a new round starts every 5 minutes 30 seconds.');
     expect(play).not.toMatch(/\b5:00\b/);
-    // number and unit stay together on a line (no-break spaces)
-    expect(play).toContain('Joins close 60\u00a0s before the bell');
+    // durations in words, the number and its unit kept on one line (a no-break space), never "60 s"
+    expect(play).toContain('close 60\u00a0seconds before the bell');
+    expect(play).toContain('join again after 12\u00a0seconds or more');
+    expect(play).toContain('cannot eat or be eaten by other coins for 5.5\u00a0seconds');
+    expect(play).not.toMatch(/\d s\b|\d\u00a0s\b/);
+    // "a 5 minutes round" is not English: a duration before a noun is "5-minute"
+    expect(play).not.toMatch(/\d (minutes|seconds) (rounds?|break|bell)\b/);
     expect(FACTS.capacity).toEqual({ practice: CAPACITY.practice, private: CAPACITY.private, arena: 50 });
     // the USD tiers ($1 / $3 / $5 / $10) at the reference token price
     expect(FACTS.arenas.map((a) => [a.id, a.entry])).toEqual([
@@ -78,23 +82,28 @@ describe('player guide content', () => {
   const en = docsEn('$ELYMUM');
 
   it('explains the fee on profit with the worked example, at the live rates', () => {
-    const text = (c: typeof en) => JSON.stringify([c.dateline, c.sections]);
+    const text = (c: typeof en) => JSON.stringify(c.sections);
     expect(en.rates).toEqual({ burnBps: 1500, vaultBps: 500 });
-    expect(text(en)).toContain('Fee 20% of profit');
-    expect(text(en)).toContain('The only fee is 20% of your profit. Profit is your value at the bell minus the ticket price. 15% of the profit is burned and 5% goes to the team wallet.');
-    expect(text(en)).toContain('buying a ticket has no fee');
+    expect(text(en)).toContain('The fee is 20% of the profit.');
+    expect(text(en)).toContain('The game takes one fee: 20% of your profit. Profit is your value at the bell minus the ticket price. 15% of the profit is burned and 5% goes to the team wallet. No profit, no fee.');
+    // the network fees in ETH are not a game fee: the one-fee line says so instead of contradicting them
+    expect(text(en)).toContain('The network fees in ETH go to the network, not to Coinnibal.');
+    expect(text(en)).not.toMatch(/The only fee|buying a ticket has no fee/);
+    // the receipt's caption reads right with any token name from the server ("a ticket of 1,000 tokens")
+    expect(docsEn().receipt.caption).toBe('A ticket of 1,000 tokens, worth 1,900 tokens at the bell');
     expect(text(en)).not.toMatch(/entry fee|the cut|arena vault for the team|played by the team|fee wallet|\btill\b/);
     const live = docsEn('$ELYMUM', { burnBps: 1000, vaultBps: 200 });
     expect(live.rates).toEqual({ burnBps: 1000, vaultBps: 200 });
-    expect(text(live)).toContain('Fee 12% of profit');
+    expect(text(live)).toContain('The game takes one fee: 12% of your profit.');
     expect(text(live)).toContain('10% of the profit is burned and 2% goes to the team wallet');
     // the worked numbers stand once, on the receipt (the page test reads them there)
     expect(payoutExample(live.rates)).toMatchObject({ burned: 90, toVault: 18, net: 1792 });
   });
 
-  it('says bots never play in the paid rooms, in one line, and leaves the testnet test rooms out', () => {
+  it('says where bots play, in one line, and leaves the testnet test rooms out', () => {
     const all = JSON.stringify(en);
-    expect(all).toContain('Bots are labelled BOT and never play in paid rooms.');
+    expect(all).toContain('play only in free private rooms');
+    expect(all).toContain('Bots are labelled BOT.');
     // one list item speaks of bots, nothing else does
     const items = en.sections.flatMap((s) => s.blocks).flatMap((b) => (b.kind === 'list' ? b.items : []));
     const about = items.filter((it) => /\bbots?\b/i.test(JSON.stringify(it)));
@@ -118,9 +127,15 @@ describe('player guide content', () => {
 
   it('says each rule once: the fee split, the round clock, the holder fee, the refunds', () => {
     const t = JSON.stringify(en.sections);
-    const once = (re: RegExp) => expect(t.match(re) ?? [], String(re)).toHaveLength(1);
+    const once = (re: RegExp) => expect(t.match(new RegExp(re.source, `${re.flags}g`)) ?? [], String(re)).toHaveLength(1);
     once(/15% of the profit is burned/);
-    once(/5 minutes of play/);
+    once(/A round is 5 minutes of play/);
+    once(/share one clock/);
+    once(/goes into the room's vault/);
+    once(/unlimited amount/);
+    once(/know the risk/i);
+    // said twice before: in the same item, or again a few lines on
+    expect(t).not.toMatch(/never play in paid rooms|never unlimited|Payout is at the bell only|The whole price goes into/);
     once(/8% burned/);
     once(/20% off/);
     once(/Collect payout/);
@@ -165,20 +180,34 @@ describe('player guide content', () => {
       ['Private room', 'Paid in ETH', '1 free a day, up to 10 players'],
       ['Coin look', 'Standard skins', 'Also the NFT skin and a holder badge'],
     ]);
-    expect(nft).toContain('NFT holders only');
-    expect(nft).toContain('collection of 3,333 NFTs');
+    // the operator's access switch is not a game rule: the guide says nothing of a holders-only game (the landing FAQ
+    // answers "Do I need the NFT to play? No.")
+    expect(nft).not.toMatch(/holders only|Holders-only|needs the NFT to play/i);
+    expect(nft).toContain('The Coinnibal NFT collection has 3,333 NFTs.');
+    expect(nft).not.toMatch(/ERC-721/);
     const pu = JSON.stringify(en.sections.find((s) => s.id === 'powerups'));
     // no power-up prices in the guide (the shop shows them)
-    for (const line of ['Magnet (R):', 'Leap (F):', 'Speed burst (G):', 'Invisibility (V):']) expect(pu).toContain(line);
+    // the four power-ups as cards led by their keys, with the shared boost timings
+    const cards = en.sections.find((s) => s.id === 'powerups')!.blocks.find((b) => b.kind === 'cards');
+    expect(cards?.kind === 'cards' && cards.items.map((c) => [c.key, c.title, c.meta])).toEqual([
+      ['R', 'Magnet', 'Cooldown 20\u00a0seconds'],
+      ['F', 'Leap', 'Cooldown 12\u00a0seconds'],
+      ['G', 'Speed burst', 'Cooldown 18\u00a0seconds'],
+      ['V', 'Invisibility', 'Cooldown 30\u00a0seconds'],
+    ]);
+    expect(pu).toContain('Pulls nearby food to your coin for 8\u00a0seconds.');
     expect(pu).not.toMatch(/\$\d/);
     expect(pu).toContain('a pack holds 3 uses');
     expect(pu).toContain('50% is burned and 50% goes to the team wallet');
-    expect(pu).toContain('you can use 2 power-ups per round');
+    expect(pu).toContain('you can use 2 power-ups per round (per game in a ticket room)');
+    // the shop's power-ups are not the airdrops of section 01 (both have a Magnet, with different times)
+    expect(pu).toContain('They are not the free airdrops on the map (see [How to play](#play))');
     // the shop is in the lobby only (GameHud's top bar sells nothing)
     expect(pu).toContain('Nothing is sold during a game');
     const token = JSON.stringify(en.sections.find((s) => s.id === 'token'));
     expect(token).toContain('The game never creates new $ELYMUM');
-    expect(token).toContain('Until it is set, the paid rooms stay closed.');
+    expect(token).toContain('the game token is set in the contract once and can never be changed.');
+    expect(token).not.toMatch(/Until it is set|token address/);
     // floor loot exists only where something without a ticket eats a coin (the testnet's test rooms): not in the guide
     expect(JSON.stringify(en)).not.toMatch(/loot/i);
   });
@@ -189,8 +218,8 @@ describe('player guide content', () => {
   });
 
   it('describes timed rounds and promises no cash-out in arenas', () => {
-    const all = JSON.stringify([en.dateline, en.sections]);
-    expect(all).toContain('A round is 5 minutes of play.');
+    const all = JSON.stringify(en.sections);
+    expect(all).toContain('A round is 5 minutes of play,');
     expect(all).toContain('you cannot leave a round early with your value');
     expect(all).not.toMatch(/cash out in|Press C|cash-out button|cashes out in|anytime/i);
     expect(JSON.stringify(en.sections)).not.toContain('"key":"C"');
@@ -222,6 +251,50 @@ describe('player guide content', () => {
     expect(text).not.toMatch(/[\u00e7\u011f\u0131\u00f6\u015f\u00fc\u00c7\u011e\u0130\u00d6\u015e\u00dc]/);
   });
 
+  it('names the official links for the OpenSea mint, never a mint on this site', () => {
+    const wallet = JSON.stringify(docsEn('tokens', undefined, 'Robinhood Chain', { site: 'coinnibal.fun', x: 'coinnibalfun' }).sections.find((s) => s.id === 'wallet'));
+    expect(wallet).toContain('Official links:');
+    expect(wallet).toContain('the site is coinnibal.fun and the X account is @coinnibalfun. The NFT mint will be on OpenSea: use only the OpenSea link that @coinnibalfun posts.');
+    expect(wallet).not.toMatch(/only mint|the game and the/);
+    // one name for the phrase across the site (the footer says "seed phrase")
+    expect(wallet).toContain('seed phrase');
+    expect(JSON.stringify(en)).not.toMatch(/recovery phrase|To no one/i);
+    // the X handle follows the site settings; the shared default without them
+    expect(JSON.stringify(docsEn('tokens', undefined, undefined, { x: '@other' }))).toContain('the X account is @other.');
+    expect(JSON.stringify(docsEn())).toContain('the X account is @coinnibalfun.');
+  });
+
+  it('matches the code on shields, holds, ticket rooms and private-room prices', () => {
+    const t = JSON.stringify(en.sections);
+    // a shield (airdrop or spawn) blocks eating both ways (world.ts eatDynamic)
+    expect(t).toContain('HODL Shield stops other coins from eating you for 8\u00a0seconds, but you cannot eat them either.');
+    // an auto-held winning payout (integrity/service.ts holdDecision) and its release after the default hours
+    expect(t).toContain(`With no decision within ${INTEGRITY_SETTINGS_DEFAULT.autoReleaseHours} hours, it is paid as usual.`);
+    // a ticket room keeps one round number from its start to its end, so the power-up limit is per game there
+    expect(t).toContain('(per game in a ticket room)');
+    // only coins still alive at a ticket room's end are paid (an eaten coin's value already moved)
+    expect(t).toContain("Coins still alive at the room's end are paid, with the normal fee on profit.");
+    expect(t).not.toMatch(/All tickets are paid/);
+    // the admin re-prices private rooms as ETH moves: no fixed price in the guide
+    expect(t).not.toMatch(/\d\.\d+ ETH|of that for every/);
+    expect(t).toContain('Opening one costs a little ETH: bigger rooms cost more, and the price shows before you pay.');
+    // "open all day" read as "open now" while the game is closed
+    expect(t).not.toMatch(/open all day/);
+  });
+
+  it('links a section to another one instead of naming it, and every link has a target', () => {
+    const t = JSON.stringify(en.sections);
+    const links = [...t.matchAll(/\[([^[\]]+)\]\(#([a-z]+)\)/g)];
+    expect(links.length).toBeGreaterThanOrEqual(4);
+    for (const [, label, id] of links) {
+      const target = en.sections.find((s) => s.id === id);
+      expect(target, id).toBeTruthy();
+      expect(label).toBe(target!.title);
+    }
+    // no "(see X)" left as plain text
+    expect(t).not.toMatch(/see (Power-ups|Rounds, payout and fee|How to play)\b/);
+  });
+
   it('formats numbers in en-US', () => {
     expect(en.pct(500)).toBe('5%');
     expect(en.pct(450)).toBe('4.5%');
@@ -238,7 +311,16 @@ describe('player guide page', () => {
       </Kb>,
     );
     const toc = screen.getByRole('navigation', { name: en0.tocLabel });
-    expect(within(toc).getAllByRole('button')).toHaveLength(SECTION_IDS.length);
+    // every entry is a link to its section's address, so a section can be shared and bookmarked
+    const entries = within(toc).getAllByRole('link');
+    expect(entries.map((a) => a.getAttribute('href'))).toEqual(SECTION_IDS.map((id) => `/docs#docs-${id}`));
+    // the first chapter is marked as the one being read
+    expect(entries[0].getAttribute('aria-current')).toBe('location');
+    expect(entries.filter((a) => a.hasAttribute('aria-current'))).toHaveLength(1);
+    // the phones' fold button
+    expect(within(toc).getByRole('button', { name: /Contents/ }).getAttribute('aria-expanded')).toBe('false');
+    // no dateline strip under the head (it said four rules again that the chapters say)
+    expect(document.querySelector('.dc-dateline, .kb-dateline')).toBeNull();
     for (const s of en0.sections) expect(screen.getByRole('heading', { level: 3, name: s.title })).toBeTruthy();
     expect(screen.getByRole('heading', { level: 3, name: 'Rounds, payout and fee' })).toBeTruthy();
     // the receipt at the contract default rates (15 % + 5 % of profit): 1,900 at the bell, 900 profit
@@ -268,6 +350,89 @@ describe('player guide page', () => {
     expect(screen.getByText('−90')).toBeTruthy();
     expect(screen.getByText('−0')).toBeTruthy();
     expect(screen.queryByText(/Entry fee rate/)).toBeNull();
+  }, 20_000);
+});
+
+describe('player guide addresses', () => {
+  const path0 = location.pathname + location.search + location.hash;
+  afterEach(() => history.replaceState(null, '', path0));
+  const scrolls: { el: string; opts: unknown }[] = [];
+  const realScroll = Element.prototype.scrollIntoView;
+  const realScrollTo = window.scrollTo;
+  let top: unknown = null;
+  beforeEach(() => {
+    scrolls.length = 0;
+    top = null;
+    Element.prototype.scrollIntoView = function (this: Element, opts?: unknown) {
+      scrolls.push({ el: this.id, opts });
+    };
+    window.scrollTo = ((o: unknown) => {
+      top = o;
+    }) as typeof window.scrollTo;
+  });
+  afterEach(() => {
+    Element.prototype.scrollIntoView = realScroll;
+    window.scrollTo = realScrollTo;
+  });
+
+  it('writes the section into the address on /docs and marks it in the contents', () => {
+    history.replaceState(null, '', '/docs');
+    render(
+      <Kb theme="paper">
+        <DocsPage />
+      </Kb>,
+    );
+    const toc = screen.getByRole('navigation', { name: en0.tocLabel });
+    const nft = within(toc).getByRole('link', { name: /The Coinnibal NFT/ });
+    fireEvent.click(nft);
+    expect(location.pathname + location.hash).toBe('/docs#docs-nft');
+    expect(scrolls.map((s) => s.el)).toContain('docs-nft');
+    expect(nft.getAttribute('aria-current')).toBe('location');
+    // an in-text link goes the same way
+    fireEvent.click(screen.getAllByRole('link', { name: 'Power-ups' })[0]);
+    expect(location.hash).toBe('#docs-powerups');
+    // back to the very top (not 61px under it), and the address loses the section
+    fireEvent.click(screen.getByRole('button', { name: en0.backToTop }));
+    expect(top).toMatchObject({ top: 0 });
+    expect(location.pathname + location.hash).toBe('/docs');
+  }, 20_000);
+
+  it('lands on the section of a link opened from outside (/docs#docs-payout)', async () => {
+    history.replaceState(null, '', '/docs#docs-payout');
+    render(
+      <Kb theme="paper">
+        <DocsPage />
+      </Kb>,
+    );
+    await act(() => new Promise((r) => requestAnimationFrame(() => r(null))));
+    expect(scrolls.map((s) => s.el)).toContain('docs-payout');
+    const toc = screen.getByRole('navigation', { name: en0.tocLabel });
+    expect(within(toc).getByRole('link', { name: /Rounds, payout and fee/ }).getAttribute('aria-current')).toBe('location');
+  }, 20_000);
+
+  it('leaves the lobby address alone (/play#docs: the hash names the lobby page)', () => {
+    history.replaceState(null, '', '/play#docs');
+    render(
+      <Kb theme="paper">
+        <DocsPage />
+      </Kb>,
+    );
+    fireEvent.click(within(screen.getByRole('navigation', { name: en0.tocLabel })).getByRole('link', { name: /Wallet safety/ }));
+    expect(location.pathname + location.hash).toBe('/play#docs');
+    expect(scrolls.map((s) => s.el)).toContain('docs-wallet');
+  }, 20_000);
+
+  it('folds the contents into one button on phones', () => {
+    render(
+      <Kb theme="paper">
+        <DocsPage />
+      </Kb>,
+    );
+    const nav = screen.getByRole('navigation', { name: en0.tocLabel });
+    const toggle = within(nav).getByRole('button', { name: /Contents/ });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(nav.classList.contains('is-open')).toBe(true);
   }, 20_000);
 });
 

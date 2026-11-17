@@ -1,10 +1,11 @@
+import { activeChain, chainInfo, setActiveChain } from '@elymum/shared';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Landing } from '../src/site/landing/Landing';
 import { SiteApp } from '../src/site/mount';
 import { resetSiteSettings } from '../src/site/settings';
 import { setReducedMotion } from '../src/test/media';
-import { SETTINGS, installDomStubs, mockFetch } from './site-helpers';
+import { SETTINGS, installDomStubs, intersect, mockFetch } from './site-helpers';
 
 let restore = () => {};
 beforeEach(() => {
@@ -19,7 +20,9 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     render(<Landing />);
     expect(screen.getByRole('heading', { level: 1, name: 'Coinnibal' })).toBeTruthy();
     expect(screen.getByText('Coins eating coins.')).toBeTruthy();
-    expect(screen.getByText('Eat coins smaller than you. Run from the ones that are bigger. Five minutes later the bell rings and whatever you’ve swallowed is yours.')).toBeTruthy();
+    // the pitch never promises the whole amount (the fee is told in step 04 and on the fee card)
+    expect(screen.getByText('Eat coins smaller than you. Run from the ones that are bigger. In a paid room, every coin still standing at the bell gets paid.')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/swallowed is yours|is yours\./);
     expect(screen.queryByText(/small change with a big appetite|Eat the food/)).toBeNull();
     // the hero links to the holder perks on the same page
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
@@ -38,8 +41,13 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect([...why.querySelectorAll('.nf-card')].map((c) => c.getAttribute('data-perk'))).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
     expect(why.textContent).toContain('Lower fee: 10% instead of 20%');
     { const m = document.body.textContent?.match(/.{0,60}(testnet|faucet|Short answers).{0,40}/i); expect(m?.[0] ?? null).toBeNull(); }
+    // the team asked for NFT questions in the FAQ (what it gives, how many, is each one different)
     expect(screen.getByText('What does the Coinnibal NFT give me?')).toBeTruthy();
     expect(screen.getByText('How many NFTs are there?')).toBeTruthy();
+    expect(screen.getByText('Is every NFT different?')).toBeTruthy();
+    // the shared skin is one gold look, not the holder's own NFT art
+    expect(why.textContent).toContain('Your coin can wear the gold NFT skin, with a holder badge next to your name.');
+    expect(why.textContent).not.toMatch(/wears your NFT/);
     // the four rooms, named by price, priced in US dollars (paid in the game token); the $10 one for NFT holders
     for (const [name, fee] of [['$1 Room', '$1'], ['$3 Room', '$3'], ['$5 Room', '$5'], ['$10 Room', '$10']]) {
       expect(screen.getByRole('heading', { level: 3, name })).toBeTruthy();
@@ -113,16 +121,18 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     // the NFT's perks stay: they are information
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
     expect(screen.getByTestId('why-nft').querySelectorAll('.nf-card').length).toBeGreaterThan(3);
-    expect(screen.getByRole('heading', { name: 'The Coinnibal NFT.' })).toBeTruthy();
+    // the NFT's heading gives the count instead of repeating its plate
+    expect(screen.getByRole('heading', { level: 2, name: '3,333 coin characters.' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'The Coinnibal NFT.' })).toBeNull();
     // the header: Docs only, no wallet button; the footer: X and Docs
     expect([...screen.getByRole('navigation', { name: 'Site' }).querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Guide']);
     expect(screen.queryByRole('button', { name: /Connect/ })).toBeNull();
     expect([...screen.getByRole('navigation', { name: 'Footer' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://x.com/coinnibalfun', '/docs']);
     // the FAQ does not send anyone to the collab page
     expect(screen.queryByText('Can my community get WL spots?')).toBeNull();
-    // each idea once: "five minutes" stays in the hero sentence and on its sticker, nowhere else in the hero or its title strip
+    // each idea once: the round's length is the hero's sticker, nowhere else in the hero or its title strip
     const hero = `${document.querySelector('.ld-plate1')?.textContent} ${document.querySelector('.ld-hero')?.textContent}`;
-    expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toEqual(['Five minutes', '05:00']);
+    expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toEqual(['05:00']);
     const page = document.querySelector('main')!.textContent ?? '';
     expect(page.match(/Coins eating coins/g)).toHaveLength(1);
     expect(page.match(/Eat or be eaten/g)).toHaveLength(1);
@@ -133,6 +143,101 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     // information only: no price of the mint, no date, no promise
     expect(screen.queryByText('How much is the NFT?')).toBeNull();
     expect(document.body.textContent).not.toMatch(/\bsoon\b|start date|post the date|at launch|mint it with|mint page shows/i);
+  });
+
+  it('everything closed: each fact once, the FAQ agrees with the guide, the hero money line is the same on every chain', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
+    const before = activeChain();
+    try {
+      // a mainnet build too: "free at first" (D12), never "real money" alone
+      setActiveChain(chainInfo(4663));
+      render(<Landing />);
+      await settle();
+      expect(screen.getByTestId('ld-money').textContent).toBe('Playing is free at first. Later a ticket costs tokens, and you lose it if you get eaten.');
+    } finally {
+      setActiveChain(before);
+    }
+    const faq = [...document.querySelectorAll('.ld-qa')];
+    expect(faq.map((q) => q.querySelector('.ld-qa__text')?.textContent)).toEqual([
+      'Which wallet do I need?',
+      'What is Robinhood Chain?',
+      'What does the Coinnibal NFT give me?',
+      'How many NFTs are there?',
+      'Is every NFT different?',
+      'Do I need the NFT to play?',
+      'Is the game open?',
+      'Does it cost money to play?',
+      'Where are all the rules?',
+    ]);
+    const answer = (q: string) => faq.find((f) => f.querySelector('.ld-qa__text')?.textContent === q)!.querySelector('.ld-qa__a')!.textContent;
+    // the same answer as the guide (which describes no holders-only mode); the $10 Room is told by its ticket and perk card
+    expect(answer('Do I need the NFT to play?')).toBe('No. The NFT is not a ticket. It gives perks.');
+    // the team asked for the NFT's questions: what it gives (D11), how many, every one different
+    expect(answer('What does the Coinnibal NFT give me?')).toBe('Perks in the game: a lower fee on profit (10% instead of 20%), the $10 Room for holders only, 20% off power-ups plus 1 extra use in every paid round, one free private room a day, and the NFT skin with a holder badge.');
+    expect(answer('How many NFTs are there?')).toBe('The collection has 3,333 NFTs.');
+    // the chain holds the money, the game runs on a server (as the guide says)
+    expect(answer('What is Robinhood Chain?')).toMatch(/the game itself runs on a server/);
+    // D12's core, once
+    expect(answer('Does it cost money to play?')).toBe('Not at first: when the game opens, playing is free. Later, paid rooms take a ticket in tokens. Practice stays free.');
+    const page = document.querySelector('main')!.textContent ?? '';
+    expect(page.match(/Practice (stays|is) free/g)).toHaveLength(1);
+    expect(page.match(/explains every rule/g)).toBeNull();
+    // practice and private rooms run no 5-minute bell
+    expect(page).toContain('A round lasts 5 minutes in every paid room.');
+    // the pond's snack pays tokens, never dollars
+    expect(document.querySelector('.ld-chase__pop')?.textContent).toBe('+1,000');
+    // the perks are a part of the NFT section: their heading ranks under it
+    expect(screen.getByRole('heading', { level: 3, name: 'Why get the NFT?' })).toBeTruthy();
+    // no kicker repeats a plate or a heading
+    expect(document.querySelectorAll('.ld-feast__copy > .kicker, .ld-round__copy > .kicker, .ld-arenas__head .kicker, .ld-nft__copy > .kicker')).toHaveLength(0);
+    // the stairs stand level (only their tickets tilt, in CSS)
+    expect([...document.querySelectorAll<HTMLElement>('.ld-stair')].map((s) => s.style.getPropertyValue('--tilt'))).toEqual(['', '', '', '']);
+  });
+
+  it('lights each step of the round, and its station on the orbit, as the visitor reads down to it', async () => {
+    const made: { cb: IntersectionObserverCallback; opts?: IntersectionObserverInit; io: IntersectionObserver }[] = [];
+    const Base = globalThis.IntersectionObserver as unknown as new (cb: IntersectionObserverCallback, opts?: IntersectionObserverInit) => IntersectionObserver;
+    globalThis.IntersectionObserver = class extends Base {
+      constructor(cb: IntersectionObserverCallback, opts?: IntersectionObserverInit) {
+        super(cb, opts);
+        made.push({ cb, opts, io: this });
+      }
+    } as unknown as typeof IntersectionObserver;
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    const stops = [...document.querySelectorAll('.ld-stop')];
+    const read = () => stops.map((s) => s.classList.contains('is-read'));
+    const done = () => document.querySelectorAll('.ld-orbit .kb-orbit__station.is-done').length;
+    expect(read()).toEqual([false, false, false, false]);
+    expect(done()).toBe(0);
+    const steps = made.find((o) => o.opts?.rootMargin === '0px 0px -40% 0px')!;
+    const entry = (target: Element, isIntersecting: boolean, top: number) => ({ target, isIntersecting, boundingClientRect: { top } }) as unknown as IntersectionObserverEntry;
+    act(() => steps.cb([entry(stops[0], true, 300), entry(stops[1], true, 420)], steps.io));
+    expect(read()).toEqual([true, true, false, false]);
+    expect(done()).toBe(2);
+    // a step scrolled above the viewport stays read; the next one crosses the line
+    act(() => steps.cb([entry(stops[0], false, -80), entry(stops[2], true, 500)], steps.io));
+    expect(read()).toEqual([true, true, true, false]);
+    // scrolling back up, a step that drops below the line goes dark again
+    act(() => steps.cb([entry(stops[2], false, 700)], steps.io));
+    expect(read()).toEqual([true, true, false, false]);
+    expect(done()).toBe(2);
+  });
+
+  it('jumps to a shared link to a part of the page once the sections are there', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    const jumped: string[] = [];
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      jumped.push(this.id);
+    });
+    history.pushState(null, '', '/#faq');
+    try {
+      render(<Landing />);
+      await waitFor(() => expect(jumped).toContain('faq'));
+    } finally {
+      spy.mockRestore();
+      history.pushState(null, '', '/');
+    }
   });
 
   it('shows nothing closed while the settings are still loading, and stays closed when the server cannot be reached', async () => {
@@ -163,10 +268,12 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
   });
 
   it('a closed page says "not open yet" (never the real page or a 404); the same path opens when the admin opens it', async () => {
-    for (const [path, line] of [
-      ['/mint', 'The Coinnibal NFT is minted on this page. The guide explains what the NFT does.'],
-      ['/faucet', 'The faucet gives free test tokens for the game. The guide explains how the game works.'],
-      ['/collab', 'Communities ask for WL spots on this page. The guide explains how the game works.'],
+    for (const [path, line, plate] of [
+      // the mint: nothing about where or when the NFT is minted
+      ['/mint', 'The Coinnibal NFT collection is coming. The mint will be on OpenSea: use only the OpenSea link that @coinnibalfun posts.', 'Coinnibal NFT'],
+      // the faucet is hidden: a neutral notice that never names it
+      ['/faucet', 'There is nothing here for now. The guide explains how the game works.', 'Coinnibal'],
+      ['/collab', 'This is where communities will ask for WL spots. The guide explains how the game works.', 'Collab'],
     ]) {
       resetSiteSettings();
       ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
@@ -175,6 +282,8 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
         const view = render(<SiteApp />);
         expect(await screen.findByRole('heading', { level: 1, name: 'Not open yet.' })).toBeTruthy();
         expect(screen.getByText(line)).toBeTruthy();
+        expect(document.querySelector('main .kb-plate')?.textContent).toBe(plate);
+        expect(document.querySelector('main')?.textContent).not.toMatch(/faucet|test tokens?|testnet|on this page|mint(ed)? (here|on)|price|\bdate\b/i);
         expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
         expect(screen.getByRole('link', { name: /Read the guide/ }).getAttribute('href')).toBe('/docs');
         expect(screen.getByRole('link', { name: /Follow @coinnibalfun/ }).getAttribute('href')).toBe('https://x.com/coinnibalfun');
@@ -242,6 +351,114 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     const after = [...document.querySelectorAll('.ld-fan__card')].map((c) => c.getAttribute('data-slot')).join();
     expect(after).not.toBe(before);
     expect(front()).toBe('front');
+  });
+
+  const wait = (ms: number) =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+  const PLATES = ['#feast', '#round', '#arenas', '#nft', '#faq'];
+
+  it('with motion, every plate waits for the scroll and plays once; its bite makes the header coin gulp', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    for (const id of PLATES) expect(document.querySelector(id)?.getAttribute('data-seam')).toBe('wait');
+    // one gesture per seam: a bite at Feast, Arenas and FAQ, the seal at the NFT, the tablecloth (no overlay) at Round
+    expect(PLATES.map((id) => (document.querySelector(`${id} > .ld-bite`) ? 'bite' : document.querySelector(`${id} > .ld-seal`) ? 'seal' : '-'))).toEqual(['bite', '-', 'bite', 'seal', 'bite']);
+    expect(document.querySelectorAll('.ld-nap')).toHaveLength(1);
+    // the content stages wait too, and the long lists are armed card by card
+    expect(document.querySelector('.ld-feast__copy')?.getAttribute('data-reveal')).toBe('wait');
+    expect([...document.querySelectorAll('.ld-qa')].every((q) => q.getAttribute('data-reveal') === 'wait')).toBe(true);
+    expect([...document.querySelectorAll('.ld-nft__why .nf-card')].every((c) => c.getAttribute('data-reveal') === 'wait')).toBe(true);
+
+    const heard = vi.fn();
+    window.addEventListener('ld:gulp', heard);
+    try {
+      const feast = document.querySelector('#feast')!;
+      act(() => intersect(feast, 'line', true));
+      expect(feast.getAttribute('data-seam')).toBe('in');
+      // the others still wait: nothing plays before its own top reaches the line
+      expect(document.querySelector('#round')?.getAttribute('data-seam')).toBe('wait');
+      await wait(380);
+      expect(heard).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('.ld-rail__gulp')?.classList.contains('is-gulp')).toBe(true);
+      await wait(480);
+      expect(document.querySelector('.ld-rail__gulp')?.classList.contains('is-gulp')).toBe(false);
+      // played once: leaving and coming back does not replay or hide it
+      act(() => intersect(feast, 'line', false));
+      expect(feast.getAttribute('data-seam')).toBe('in');
+    } finally {
+      window.removeEventListener('ld:gulp', heard);
+    }
+  });
+
+  it('reduced motion: nothing is armed and every seam is a finished still', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    setReducedMotion(true);
+    render(<Landing />);
+    await wait(30);
+    expect(document.querySelector('[data-reveal], [data-seam]')).toBeNull();
+    const bites = [...document.querySelectorAll('.ld-bite')];
+    expect(bites).toHaveLength(3);
+    for (const b of bites) {
+      expect(b.getAttribute('aria-hidden')).toBe('true');
+      expect(b.querySelector('.ld-bite__face--after .kb-coin')).toBeTruthy();
+    }
+    expect(document.querySelector('.ld-seal')).toBeTruthy();
+    expect(document.querySelector('.ld-nap')).toBeTruthy();
+    // the fan is dealt, the header coin never gulps
+    expect(document.querySelector('.ld-nft__fan')?.hasAttribute('data-dealt')).toBe(true);
+    act(() => void window.dispatchEvent(new Event('ld:gulp')));
+    expect(document.querySelector('.ld-rail__gulp')?.classList.contains('is-gulp')).toBe(false);
+  });
+
+  it('without an IntersectionObserver the page is finished at once', async () => {
+    delete (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver;
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    await wait(30);
+    const armed = [...document.querySelectorAll('[data-reveal], [data-seam]')];
+    expect(armed.length).toBeGreaterThan(20);
+    expect(armed.filter((el) => (el.getAttribute('data-reveal') ?? el.getAttribute('data-seam')) !== 'set')).toEqual([]);
+    expect(document.querySelector('.ld-nft__fan')?.hasAttribute('data-dealt')).toBe(true);
+  });
+
+  it('the fan is dealt from a deck, then hands over to the shuffle', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    const fan = document.querySelector('.ld-nft__fan')!;
+    const slots = () => [...document.querySelectorAll('.ld-fan__card')].map((c) => c.getAttribute('data-slot')).join();
+    expect(fan.getAttribute('data-reveal')).toBe('wait');
+    expect(fan.hasAttribute('data-dealt')).toBe(false);
+    // Shuffle works before the deal has landed
+    const before = slots();
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Shuffle' })));
+    expect(slots()).not.toBe(before);
+    act(() => intersect(fan, 'line', true));
+    expect(fan.getAttribute('data-reveal')).toBe('in');
+    expect(fan.hasAttribute('data-dealt')).toBe(false);
+    await wait(1250);
+    expect(fan.hasAttribute('data-dealt')).toBe(true);
+    // the deal never changes which card sits where
+    expect(new Set(slots().split(','))).toEqual(new Set(['left', 'front', 'right']));
+  });
+
+  it('keeps the decorations out of the way: hidden from assistive tech, no new text, the copy unchanged', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    for (const el of document.querySelectorAll('.ld-bite, .ld-seal, .ld-nap')) {
+      expect(el.getAttribute('aria-hidden')).toBe('true');
+      expect(el.textContent).toBe('');
+    }
+    for (const h of ['You are a coin.', 'Four steps, one round.', 'Four rooms, one fee.', 'Why get the NFT?', 'Good to know.']) expect(screen.getByRole('heading', { name: h })).toBeTruthy();
+    expect([...document.querySelectorAll('main .kb-plate__title')].map((t) => t.textContent)).toEqual([
+      'Welcome to Coinnibal',
+      'What is Coinnibal?',
+      'How a round works',
+      'Rooms and the fee',
+      'The Coinnibal NFT',
+      'Questions',
+    ]);
   });
 
   it('shows a plain not-found page for a path the site does not know', async () => {

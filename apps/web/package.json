@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "shot": "node scripts/shot.mjs",
-    "layout:guard": "node scripts/layout-guard.mjs"
+    "layout:guard": "node scripts/layout-guard.mjs",
+    "motion:guard": "node scripts/landing-motion.mjs"
   },
   "dependencies": {
     "@elymum/art": "workspace:*",

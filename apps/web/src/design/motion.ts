@@ -6,7 +6,10 @@ import { DUR, EASE } from './curves';
  *  - things are stickers and toys: they pop, drop, sink into their shadow and
  *    bob; springs for coins, buttons and stickers, `EASE.out` for the rest;
  *  - 160 ms state, 320 ms enter, 640 ms scene; lists stagger 40 ms;
- *  - prefers-reduced-motion: loops stop, transitions shorten to fades.
+ *  - prefers-reduced-motion: loops stop, transitions shorten to fades;
+ *  - a variant's own `transition` replaces the component's `transition` prop (motion-dom 14.2) unless it sets
+ *    `inherit: true`: put a delay inside the variant through `custom` (see `moves.popIn`), never on the prop;
+ *  - the landing's scroll reveals are CSS, not motion: site/landing/reveal.ts arms them, reveal.css plays them.
  */
 
 export const springs = {
@@ -58,6 +61,9 @@ export type SpringName = keyof typeof springs;
 /** Lists appear 40 ms apart (spec §6.6). */
 export const STAGGER = 0.04;
 
+/** The landing's print beat in seconds (`--beat` in tokens.css): every reveal starts on a multiple of it. */
+export const BEAT = 0.07;
+
 /**
  * Storybook moves (spec §6.6) as motion variants: `hidden` → `shown`
  * (`rest` / `pressed` for press, `still` / `moving` for loops). Use with
@@ -65,10 +71,10 @@ export const STAGGER = 0.04;
  * the reduced-motion twins (a 120 ms fade; loops stand still).
  */
 export const moves = {
-  /** A sticker or coin popping into existence: 0.6 → 1 with a bounce. */
+  /** A sticker or coin popping into existence: 0.6 → 1 with a bounce (custom = delay in seconds). */
   popIn: {
     hidden: { opacity: 0, scale: 0.6, rotate: -4 },
-    shown: { opacity: 1, scale: 1, rotate: 0, transition: springs.pop },
+    shown: (delay: number = 0) => ({ opacity: 1, scale: 1, rotate: 0, transition: { ...springs.pop, delay } }),
   },
   /** A sticker slapped onto the page from above; lands on its tilt (custom = degrees). */
   stickerDrop: {
@@ -106,7 +112,7 @@ export const moves = {
 export type MoveName = keyof typeof moves;
 
 const REDUCED_MOVES: Record<MoveName, Variants> = {
-  popIn: { hidden: { opacity: 0 }, shown: { opacity: 1, transition: { duration: 0.12 } } },
+  popIn: { hidden: { opacity: 0 }, shown: (delay: number = 0) => ({ opacity: 1, transition: { duration: 0.12, delay } }) },
   stickerDrop: {
     hidden: (tilt: number = -1.5) => ({ opacity: 0, rotate: tilt }),
     shown: (tilt: number = -1.5) => ({ opacity: 1, rotate: tilt, transition: { duration: 0.12 } }),

@@ -29,7 +29,9 @@
 .wl-plate__props {
   position: absolute;
   right: 4%;
-  bottom: clamp(70px, 11.2vw, 162px);
+  /* the house stands on the hill's edge where it is (the hills stretch with the width; the row is a fixed 122 px):
+     two lines fit that edge, the first while the hills keep their 150 px floor, the second as they grow with 20vw */
+  bottom: min(158px, max(calc(6.6vw + 21px), calc(12.5vw - 24px)));
   display: flex;
   align-items: flex-end;
   gap: 2px;
@@ -749,77 +751,19 @@
   }
 }
 
-/* ── closed ───────────────────────────────────────────────────────────── */
-.wl-closed {
+/* ── closed: the site's shared closed notice (Closed.tsx), with the way back to an earlier entry ── */
+.wl-closed__again {
   display: grid;
-  gap: 40px;
-  align-items: center;
+  justify-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 2px dashed var(--rule);
 }
-@media (min-width: 900px) {
-  .wl-closed {
-    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-    gap: 56px;
-  }
-}
-.wl-closed__text {
-  display: grid;
-  gap: 22px;
-  justify-items: start;
-}
-.wl-closed__text > .wl-deck {
-  margin-top: -6px;
-}
-.wl-closed__text .wl-deck a {
-  color: var(--teal-ink);
-  font-weight: 700;
-}
-.wl-closed__art {
-  position: relative;
-  height: 340px;
-  max-width: 420px;
+.wl-closed__again .wl-signin-card {
   width: 100%;
-  justify-self: center;
-}
-.wl-closed__moon {
-  position: absolute;
-  top: 0;
-  right: 10%;
-}
-.wl-closed__sign {
-  position: absolute !important;
-  top: 64px;
-  left: 6%;
-  display: grid !important;
-  gap: 2px;
-}
-.wl-closed__sign .mono {
-  font-size: 12px;
-  color: #4A453B;
-}
-.wl-closed__sign strong {
-  font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
-  font-weight: 800;
-  font-size: 24px;
-  line-height: 1;
-}
-.wl-closed__coin {
-  position: absolute;
-  left: 50%;
-  bottom: 30px;
-  transform: translateX(-50%);
-  z-index: 1;
-}
-.wl-closed__ledge {
-  position: absolute;
-  left: 8%;
-  right: 8%;
-  bottom: 14px;
-  height: 46px;
-  border: var(--stroke) solid var(--outline);
-  border-radius: 50%;
-  background: var(--meadow);
-  box-shadow: var(--sh-2);
+  box-sizing: border-box;
+  text-align: left;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1109,11 +1053,5 @@
   100% {
     opacity: 0;
     transform: translate(var(--dx), -4px) scale(0.6) rotate(90deg);
-  }
-}
-/* the closed notice: below 1200 px the plate's cloud would drift over the moon, so the moon keeps the corner */
-@media (max-width: 1199px) {
-  .wl-plate--closed .wl-plate__cloud {
-    display: none;
   }
 }

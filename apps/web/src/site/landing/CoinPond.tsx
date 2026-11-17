@@ -5,7 +5,8 @@ import { useGaze } from './gaze';
 
 /**
  * The hero's pond: coin characters living on the front terrace of the ring. They bob and blink;
- * in the middle a big sun coin chases a small scared one and swallows it ("+$0.12"), then the
+ * in the middle a big sun coin chases a small scared one and swallows it ("+1,000": its tokens, as in the
+ * "Eat a coin, take its tokens" strip; the game counts value in tokens, never in dollars), then the
  * snack wanders back in and the loop starts over (4.8 s, pure CSS).
  *
  * The residents notice the visitor: their eyes follow the pointer, the little cyan one edges away
@@ -164,7 +165,7 @@ export function CoinPond({ still, events }: { still: boolean; events?: PondEvent
         <span className="ld-chase__snack">
           <CoinCharacter paint="foam" mood="scared" size={62} look={[-3, -1]} sweat feet ground />
         </span>
-        <span className="ld-chase__pop num">+$0.12</span>
+        <span className="ld-chase__pop num">+1,000</span>
       </div>
     </div>
   );

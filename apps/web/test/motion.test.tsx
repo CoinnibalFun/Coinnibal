@@ -1,6 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, renderHook, screen, waitFor } from '@testing-library/react';
+import { motion } from 'motion/react';
 import { describe, expect, it } from 'vitest';
 import {
+  BEAT,
   DROP_LAND,
   DUR,
   Kb,
@@ -11,6 +13,8 @@ import {
   Ticket,
   dropScale,
   markTransitionOrigin,
+  moves,
+  useMoves,
   slowmoScale,
   zoomIn,
 } from '../src/design';
@@ -157,5 +161,30 @@ describe('motion curves', () => {
     for (let i = 0; i < 120; i++) cam.follow(0, 0, 1000, 1 / 60);
     expect(cam.introducing).toBe(false);
     expect(cam.zoom).toBeCloseTo(normal);
+  });
+});
+
+describe('popIn: the delay rides inside the variant', () => {
+  type Shown = (delay?: number) => { opacity: number; transition: { delay: number; duration?: number } };
+  it('takes its delay through custom (a transition prop would be replaced by the variant own transition)', () => {
+    const shown = moves.popIn.shown as unknown as Shown;
+    expect(shown(0.5).transition.delay).toBe(0.5);
+    expect(shown().transition.delay).toBe(0);
+    expect(BEAT).toBe(0.07);
+  });
+
+  it('keeps the delay in the reduced-motion twin, as a 120 ms fade', () => {
+    setReducedMotion(true);
+    const { result } = renderHook(() => useMoves());
+    const shown = result.current.popIn.shown as unknown as Shown;
+    expect(shown(0.5)).toEqual({ opacity: 1, transition: { duration: 0.12, delay: 0.5 } });
+  });
+
+  it('a rendered popIn with custom={0.5} waits half a second before it appears', async () => {
+    render(<motion.div data-testid="badge" variants={moves.popIn} custom={0.5} initial="hidden" animate="shown" />);
+    const badge = screen.getByTestId('badge');
+    await new Promise((r) => setTimeout(r, 300));
+    expect(Number(badge.style.opacity)).toBe(0);
+    await waitFor(() => expect(Number(badge.style.opacity)).toBeGreaterThan(0.5), { timeout: 3000 });
   });
 });

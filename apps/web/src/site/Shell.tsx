@@ -4,7 +4,7 @@ import { ChompMark, CoinMark, Icon, Kb, RingScene, Wordmark as InkWordmark, type
 import { FooterLife } from './FooterLife';
 import { usePeelLetters } from './peel';
 import { Link, usePath } from './router';
-import { isTestnetChain, useServerChain } from './serverChain';
+import { useServerChain } from './serverChain';
 import { plainChainName, useT, type TKey } from '../i18n';
 import { strong, T } from '../i18n/rich';
 import { DOORS_CLOSED, linkOpen, useDoors, type Doors } from './doors';
@@ -87,22 +87,19 @@ export function SiteLinkButton({
 }
 
 /**
- * The site nav, kept short: Play, Mint, Faucet (testnet only), WL, Docs. Every link warms its page
- * on hover / touch (router `Link`), so the click turns the page at once.
+ * The site nav, kept short: Play, Mint, WL, Docs. Every link warms its page on hover / touch (router `Link`), so the
+ * click turns the page at once. The faucet is never in the header or the footer: it is hidden from visitors (the
+ * game's wallet panel links to it where test tokens exist).
  */
-export const NAV: { href: string; label: string; key: TKey; testnet?: true }[] = [
+export const NAV: { href: string; label: string; key: TKey }[] = [
   { href: '/play', label: 'Play', key: 'site.nav.play' },
   { href: '/mint', label: 'Mint', key: 'site.nav.mint' },
-  { href: '/faucet', label: 'Faucet', key: 'site.nav.faucet', testnet: true },
   { href: '/wl', label: 'WL', key: 'site.nav.wl' },
   { href: '/docs', label: 'Docs', key: 'site.nav.docs' },
 ];
 
-/**
- * The nav for a network and the admin's settings: the Faucet link only where test tokens exist (hidden while
- * unknown), and a link only to what is open (`doors`: Play and Faucet with the game, Mint, WL; Docs always).
- */
-export const navFor = (testnet: boolean | null, doors: Doors = DOORS_CLOSED) => NAV.filter((n) => (!n.testnet || testnet === true) && linkOpen(n.href, doors));
+/** The nav for the admin's settings: a link only to what is open (`doors`: Play with the game, Mint, WL; Docs always). */
+export const navFor = (doors: Doors = DOORS_CLOSED) => NAV.filter((n) => linkOpen(n.href, doors));
 
 /**
  * Pages that are closed but named in the header with a "Soon" tag, not clickable: the game (beta), the WL and the
@@ -133,9 +130,8 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
   const t = useT();
   const path = usePath();
   const peel = usePeelLetters<HTMLSpanElement>();
-  const testnet = isTestnetChain(useServerChain());
   const doors = useDoors();
-  const nav = navFor(testnet, doors);
+  const nav = navFor(doors);
   const soon = soonFor(doors);
   // one or two entries fit beside the logo on a phone too: no menu button for them
   const few = nav.length + soon.length <= 2 && !doors.game;
@@ -146,6 +142,13 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
   useEffect(() => setMenu(false), [path]);
   const menuBtn = useRef<HTMLButtonElement>(null);
   const sheet = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    // the page behind the open menu stays put (site.css: html.st-menu-open)
+    const root = document.documentElement;
+    root.classList.add('st-menu-open');
+    return () => root.classList.remove('st-menu-open');
+  }, [menu]);
   useEffect(() => {
     if (!menu) return;
     // the open menu is modal (a scrim covers the page): Tab cycles between the close button and its
@@ -180,12 +183,21 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
       </Link>
     );
   });
-  const soonItems = soon.map((n) => (
-    <span key={`soon:${n.href}`} className="st-nav__link st-nav__link--soon" aria-disabled="true">
-      {t(n.key)}
-      <span className="st-soon">{t('site.nav.soon')}</span>
-    </span>
-  ));
+  // still not a link; on its own (closed) page it is marked as the place the visitor is at
+  const soonItems = soon.map((n) => {
+    const here = path === n.href;
+    return (
+      <span
+        key={`soon:${n.href}`}
+        className={`st-nav__link st-nav__link--soon${here ? ' is-here' : ''}`}
+        aria-disabled="true"
+        aria-current={here ? 'page' : undefined}
+      >
+        {t(n.key)}
+        <span className="st-soon">{t('site.nav.soon')}</span>
+      </span>
+    );
+  });
   return (
     <header className={`st-head${few ? ' st-head--few' : ''}`}>
       <div className="st-head__inner">
@@ -224,7 +236,8 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
       {menu && !few && (
         <>
           <button type="button" className="st-menu__scrim" aria-label={t('site.menu.close')} tabIndex={-1} onClick={() => setMenu(false)} />
-          {/* phones: a sheet from the bottom edge, so every link and the Play button sit under the thumb */}
+          {/* phones: a sheet from the bottom edge, so every link and the Play button sit under the thumb; wider: a card
+              under the menu button */}
           <nav ref={sheet} id="st-menu" className="st-menu kb-sticker kb-sticker--cream" aria-label={t('site.menu.label')}>
             {links.filter((l) => l.key !== '/play')}
             {soonItems}
@@ -245,7 +258,8 @@ export function SiteFooter() {
   const t = useT();
   const { settings } = useSiteSettings();
   const handle = settings.xHandle.replace(/^@/, '');
-  const testnetFoot = isTestnetChain(useServerChain()) === true;
+  // the server's chain names the network in the line below: re-render once it is in
+  useServerChain();
   const doors = useDoors();
   return (
     <Kb theme="night" paper={false} className="st-foot-kb">
@@ -263,7 +277,6 @@ export function SiteFooter() {
           </a>
           {doors.game && <Link href="/play">{t('site.nav.play')}</Link>}
           {doors.mint && <Link href="/mint">{t('site.nav.mint')}</Link>}
-          {doors.game && testnetFoot && <Link href="/faucet">{t('site.nav.faucet')}</Link>}
           {doors.wl && <Link href="/wl">{t('site.nav.wl')}</Link>}
           {doors.collab && <Link href="/collab">{t('site.nav.collab')}</Link>}
           <Link href="/docs">{t('site.nav.docs')}</Link>

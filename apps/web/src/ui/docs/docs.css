@@ -6,14 +6,14 @@
 .dc-page {
   display: flex;
   flex-direction: column;
-  scroll-margin-top: 88px;
 }
 
 /* ── the head ─────────────────────────────────────────────────────── */
 .dc-page .pg-head {
   position: relative;
   display: flex;
-  flex-wrap: wrap;
+  /* the art stays beside the title (below 760px it is hidden), never alone on a line of its own */
+  flex-wrap: nowrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 14px 28px;
@@ -23,6 +23,7 @@
 }
 .dc-page .pg-head__text {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 10px;
   min-width: 0;
@@ -31,6 +32,9 @@
 .dc-page .pg-head__kicker {
   font-size: var(--t-label);
   color: var(--teal-ink);
+}
+.dc-page .pg-head__kicker:empty {
+  display: none;
 }
 .dc-page .pg-head__title {
   margin: 0;
@@ -71,9 +75,6 @@
   right: 0;
   top: 0;
 }
-.dc-dateline {
-  margin-top: 18px;
-}
 .dc-layout {
   display: grid;
   grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
@@ -89,12 +90,19 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* a short window scrolls the contents themselves instead of cutting them off */
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 18px 14px 12px;
   background: var(--sticker);
   border: var(--stroke) solid var(--outline);
   border-radius: var(--r-card);
   box-shadow: var(--sh-3);
-  transform: rotate(-0.6deg);
+}
+/* the phone's fold button (shown below 760px) */
+.dc-toc__toggle {
+  display: none;
 }
 .dc-toc__label {
   padding: 0 6px;
@@ -126,11 +134,17 @@
   font-size: 15.5px;
   font-weight: 700;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
   transition: background-color var(--dur-state) linear;
 }
-.dc-toc__item:hover {
+.dc-toc__item:hover,
+.dc-toc__item[aria-current] {
   background: color-mix(in srgb, var(--sun) 35%, transparent);
+}
+.dc-toc__item:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
 }
 .dc-toc__no {
   flex: none;
@@ -152,8 +166,33 @@
   background: var(--sun);
   transform: rotate(-10deg);
 }
+.dc-toc__item[aria-current] .dc-toc__no {
+  background: var(--sun);
+}
 .dc-toc__title {
   min-width: 0;
+  text-wrap: pretty;
+}
+.dc-toc__item[aria-current] .dc-toc__title {
+  text-decoration: underline 2px;
+  text-underline-offset: 4px;
+}
+
+/* a link from one section to another, in the text */
+.dc-see {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline 2px color-mix(in srgb, var(--teal-ink) 70%, transparent);
+  text-underline-offset: 3px;
+  border-radius: 3px;
+}
+.dc-see:hover {
+  text-decoration-color: var(--teal-ink);
+  background: color-mix(in srgb, var(--sun) 35%, transparent);
+}
+.dc-see:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 /* ── sections ─────────────────────────────────────────────────────── */
@@ -227,6 +266,7 @@
   font-size: var(--t-lede);
   line-height: 1.45;
   color: var(--ink-2);
+  text-wrap: pretty;
 }
 .dc-sec__body {
   display: flex;
@@ -239,6 +279,7 @@
   font-size: 16.5px;
   line-height: 1.65;
   color: var(--ink);
+  text-wrap: pretty;
 }
 .dc-list {
   margin: 0;
@@ -254,6 +295,7 @@
   padding-left: 28px;
   font-size: 16.5px;
   line-height: 1.6;
+  text-wrap: pretty;
 }
 .dc-list li::before {
   content: '';
@@ -278,7 +320,6 @@
   border: var(--stroke) solid var(--outline);
   border-radius: var(--r-card);
   box-shadow: var(--sh-3);
-  max-width: 520px;
 }
 .dc-cap,
 .dc-table caption {
@@ -300,11 +341,26 @@
   font-size: 15.5px;
 }
 .dc-keys th {
-  width: 96px;
-  padding-right: 14px;
+  /* as wide as the widest key, never wrapping a key inside its cap */
+  width: 1%;
+  white-space: nowrap;
+  padding-right: 18px;
+}
+.dc-keycaps {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+}
+.dc-keycaps__or,
+.dc-keycaps__note {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-3);
 }
 .dc-kbd {
   display: inline-block;
+  white-space: nowrap;
   min-width: 34px;
   padding: 3px 8px;
   border: var(--stroke-sm) solid var(--outline);
@@ -315,6 +371,65 @@
   font-size: 12px;
   font-weight: 600;
   text-align: center;
+}
+
+/* cards led by a key (the power-ups) */
+.dc-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px 14px;
+  background: var(--sticker);
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-3);
+}
+.dc-card__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dc-card__head .dc-kbd {
+  animation: none;
+  min-width: 36px;
+  padding: 5px 9px;
+  font-size: 14px;
+  background: var(--sun);
+}
+.dc-card__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: var(--t-h4);
+  line-height: 1.15;
+}
+.dc-card__text {
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.dc-card__meta {
+  margin: auto 0 0;
+  padding-top: 8px;
+  border-top: 2px dashed var(--rule);
+  font-size: var(--t-label);
+  color: var(--ink-3);
+}
+@media (max-width: 560px) {
+  .dc-cards {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
 }
 
 /* tables */
@@ -416,6 +531,7 @@
 .dc-flow__text {
   font-size: 15px;
   line-height: 1.5;
+  text-wrap: pretty;
 }
 .dc-flow__arrow {
   display: none;
@@ -497,9 +613,6 @@
 .dc-note.is-info {
   background: var(--mist);
 }
-.dc-note.is-warn {
-  transform: rotate(-0.5deg);
-}
 .dc-note__stamp {
   position: absolute !important;
   right: 18px;
@@ -518,6 +631,7 @@
   font-size: 15.5px;
   line-height: 1.6;
   color: var(--ink-2);
+  text-wrap: pretty;
 }
 
 /* FAQ */
@@ -612,14 +726,24 @@
 }
 
 /* ── narrow screens ───────────────────────────────────────────────── */
-@media (max-width: 1099px) {
+/* small laptops: a slimmer sidebar, still sticky (the body keeps about 620-660px) */
+@media (min-width: 980px) and (max-width: 1099px) {
+  .dc-layout {
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 40px;
+  }
+}
+@media (max-width: 979px) {
   .dc-layout {
     grid-template-columns: minmax(0, 1fr);
     gap: 36px;
   }
   .dc-toc {
     position: static;
-    transform: none;
+    max-height: none;
+    overflow: visible;
+    /* the same right edge as the sections below */
+    max-width: 760px;
   }
   .dc-toc__list {
     display: grid;
@@ -639,6 +763,59 @@
   }
   .dc-layout {
     margin-top: 24px;
+  }
+  /* the contents fold into one button; open, they list every chapter */
+  .dc-toc {
+    padding: 6px 8px;
+  }
+  .dc-toc.is-open {
+    padding-bottom: 10px;
+  }
+  .dc-toc__label {
+    display: none;
+  }
+  .dc-toc__toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 8px;
+    border: 0;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: var(--t-label);
+    cursor: pointer;
+    border-radius: var(--r-tag);
+  }
+  .dc-toc__toggle:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 1px;
+  }
+  .dc-toc__count {
+    display: grid;
+    place-items: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 6px;
+    border: var(--stroke-sm) solid var(--outline);
+    border-radius: 13px;
+    background: var(--sun);
+    color: var(--ink-fixed);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .dc-toc__chev {
+    margin-left: auto;
+    transform: rotate(90deg);
+    transition: transform var(--dur-state) var(--ease-out);
+  }
+  .dc-toc.is-open .dc-toc__chev {
+    transform: rotate(-90deg);
+  }
+  .dc-toc:not(.is-open) .dc-toc__list {
+    display: none;
   }
   .dc-toc__list {
     grid-template-columns: minmax(0, 1fr);
@@ -691,28 +868,88 @@
   }
 }
 
+/* phones: each key above its action, so a long key never squeezes the action into a narrow column */
+@media (max-width: 480px) {
+  .dc-keys th,
+  .dc-keys td {
+    display: block;
+    width: auto;
+  }
+  .dc-keys th {
+    padding: 10px 0 4px;
+    white-space: normal;
+  }
+  .dc-keycaps {
+    flex-wrap: wrap;
+  }
+  .dc-keys td {
+    border-top: 0;
+    padding: 0 0 10px;
+  }
+}
+
+/* phones: a comparison table (`stack`) turns each row into a small card (the cell names its column), so no cell is
+   squeezed to a word a line */
+@media (max-width: 479px) {
+  .dc-table--stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .dc-table--stack,
+  .dc-table--stack caption,
+  .dc-table--stack tbody,
+  .dc-table--stack tr,
+  .dc-table--stack td {
+    display: block;
+  }
+  .dc-table--stack tr {
+    padding: 10px 0;
+    border-bottom: 2px dashed var(--rule);
+  }
+  .dc-table--stack tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .dc-table--stack td,
+  .dc-table--stack tbody tr:last-child td {
+    padding: 2px 0;
+    border-bottom: 0;
+  }
+  .dc-table--stack td:first-child {
+    padding-bottom: 4px;
+    font-weight: 700;
+  }
+  .dc-table--stack td + td {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .dc-table--stack td + td::before {
+    content: attr(data-label);
+    flex: none;
+    width: 7.5em;
+    font-family: var(--font-mono);
+    font-size: var(--t-micro);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dc-toc__item,
   .dc-toc__no,
+  .dc-toc__chev,
   .dc-top,
   .dc-faq__chev {
     transition: none;
   }
   .dc-toc__item:hover .dc-toc__no {
     transform: none;
-  }
-}
-
-/* the dateline wraps on phones (one fact per line) */
-@media (max-width: 759px) {
-  .dc-dateline > li {
-    white-space: normal;
-  }
-  .dc-dateline {
-    flex-direction: column;
-  }
-  .dc-dateline > li + li::before {
-    content: none;
   }
 }
 
@@ -777,6 +1014,7 @@
   line-height: 1.35;
   font-weight: 600;
   color: var(--on-sticker);
+  text-wrap: pretty;
 }
 .cs svg text {
   font-family: var(--font-mono);
@@ -1102,16 +1340,24 @@
   animation-play-state: paused;
 }
 
-/* small screens: the strip scrolls sideways, panels keep their size */
+/* small screens: the strip scrolls sideways, panels keep their size. The next panel peeks in under a soft fade, and
+   on the site the row runs to the screen's edge, so it reads as a row to swipe rather than a cut-off box. */
 @media (max-width: 640px) {
   .cs__row {
     grid-template-columns: repeat(3, 72%);
     overflow-x: auto;
     scroll-snap-type: x mandatory;
-    padding: 4px 4px 12px;
+    padding: 4px 24px 12px 4px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
   }
   .cs__panel {
     scroll-snap-align: start;
+  }
+  .st-docs .cs__row {
+    margin-inline: calc(-1 * var(--gutter));
+    padding-inline: var(--gutter);
+    scroll-padding-inline: var(--gutter);
   }
 }
 @media (max-width: 560px) {

@@ -57,7 +57,8 @@ interface Card {
   id: 'fee' | 'room' | 'shop' | 'private' | 'skin' | 'faucet';
   icon: IconName;
   paint: CoinPaint;
-  big: string;
+  /** The card's figure; the skin has none, it shows the holder badge's laurel instead. */
+  big: string | null;
   title: string;
   note: string;
 }
@@ -68,38 +69,41 @@ export function perkCards(v: NftPerkValues, t: (k: TKey, vars?: Record<string, s
     { id: 'fee', icon: 'flame', paint: 'sun', big: v.fee.holder, title: t('nf.fee.t', { holder: v.fee.holder, normal: v.fee.normal }), note: t('nf.fee.n', { burn: v.fee.burn, team: v.fee.team }) },
   ];
   if (v.room) cards.push({ id: 'room', icon: 'crown', paint: 'up', big: v.room, title: t('nf.room.t', { price: v.room }), note: t('nf.room.n') });
-  cards.push({ id: 'shop', icon: 'bag', paint: 'coral', big: `-${v.shopPct}%`, title: t('nf.shop.t', { pct: v.shopPct }), note: t('nf.shop.n', { extra: v.shopExtra }) });
+  cards.push({ id: 'shop', icon: 'bag', paint: 'coral', big: `\u2212${v.shopPct}%`, title: t('nf.shop.t', { pct: v.shopPct }), note: t('nf.shop.n', { extra: v.shopExtra, base: SHOP_DEFAULTS.arenaUsesPerRound, total: SHOP_DEFAULTS.arenaUsesPerRound + v.shopExtra }) });
   if (v.privateRoom.perk === 'free_daily') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: '1/day', title: t('nf.free.t'), note: t('nf.free.n') });
-  else if (v.privateRoom.perk === 'discount') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: `-${v.privateRoom.pct}%`, title: t('nf.freeDiscount.t', { pct: v.privateRoom.pct }), note: t('nf.free.n') });
-  cards.push({ id: 'skin', icon: 'user', paint: 'teal', big: 'NFT', title: t('nf.skin.t'), note: t('nf.skin.n') });
+  else if (v.privateRoom.perk === 'discount') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: `\u2212${v.privateRoom.pct}%`, title: t('nf.freeDiscount.t', { pct: v.privateRoom.pct }), note: t('nf.free.n') });
+  cards.push({ id: 'skin', icon: 'user', paint: 'teal', big: null, title: t('nf.skin.t'), note: t('nf.skin.n') });
   return cards;
 }
 
 /**
  * "Why get the NFT?": every holder perk as a small card with a picture (landing and mint page). The numbers are the
- * game's configured holder perks; the note says the live fee is always on the ticket (a testnet contract can lag
- * behind the configured perks).
+ * game's configured holder perks; the note says every ticket shows its fee (a testnet contract can lag behind the
+ * configured perks). `level`: its heading's rank (3 under the landing's NFT section, 2 on a page of its own).
  */
-export function WhyNft({ values, testnet, tone = 'night', heading, id = 'why-nft', children }: { values?: NftPerkValues; testnet: boolean | null; tone?: 'night' | 'paper'; heading?: ReactNode; id?: string; children?: ReactNode }) {
+export function WhyNft({ values, testnet, tone = 'night', heading, id = 'why-nft', level = 2, children }: { values?: NftPerkValues; testnet: boolean | null; tone?: 'night' | 'paper'; heading?: ReactNode; id?: string; level?: 2 | 3; children?: ReactNode }) {
   const t = useT();
   const cards = perkCards(values ?? configuredPerks(), t, testnet);
+  const H = level === 3 ? 'h3' : 'h2';
   return (
     <section className={`nf-why nf-why--${tone}`} id={id} aria-labelledby={`${id}-h`} data-testid="why-nft">
       <header className="nf-why__head">
         <p className="kicker nf-why__kicker">{t('nf.kicker')}</p>
-        <h2 className="nf-why__h" id={`${id}-h`}>
+        <H className="nf-why__h" id={`${id}-h`}>
           {heading ?? t('ld.cta.why')}
-        </h2>
+        </H>
       </header>
       <ul className="nf-why__grid">
         {cards.map((c) => (
           <li key={c.id} className="nf-card" data-perk={c.id}>
             <span className="nf-card__art" aria-hidden="true">
               <CoinCharacter paint={c.paint} mood={c.id === 'fee' ? 'happy' : c.id === 'room' ? 'smug' : 'smile'} size={64} />
-              <span className="nf-card__icon">{c.id === 'skin' ? <Laurel size={18} /> : <Icon name={c.icon} size={18} />}</span>
+              <span className="nf-card__icon">
+                <Icon name={c.icon} size={18} />
+              </span>
             </span>
-            <span className="nf-card__big num" aria-hidden="true">
-              {c.big}
+            <span className={`nf-card__big num${c.big === null ? ' is-badge' : ''}`} aria-hidden="true">
+              {c.big ?? <Laurel size={46} />}
             </span>
             <strong className="nf-card__t">{c.title}</strong>
             <span className="nf-card__n">{c.note}</span>
