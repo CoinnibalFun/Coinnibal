@@ -461,6 +461,33 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     ]);
   });
 
+  it('floats the questions on a moonlit pond: still details and summaries, every coin and wave hidden from assistive tech', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
+    render(<Landing />);
+    const faq = document.querySelector('#faq')!;
+    // the scene (the moon, the water with its boat, bubbles and shore) is decoration: hidden, no text, nothing to focus
+    const scene = [...faq.querySelectorAll('.ld-faq__coin, .ld-faq__water')];
+    expect(scene).toHaveLength(2);
+    for (const el of scene) {
+      expect(el.getAttribute('aria-hidden')).toBe('true');
+      expect(el.textContent).toBe('');
+      expect(el.querySelector('a, button, input, [tabindex]')).toBeNull();
+    }
+    const cards = [...faq.querySelectorAll('.ld-qa')];
+    expect(cards.length).toBeGreaterThan(5);
+    for (const card of cards) {
+      expect(card.tagName).toBe('DETAILS');
+      const q = card.querySelector(':scope > summary.ld-qa__q')!;
+      // one coin per card, hidden: it wonders until its answer opens, then it is happy (the CSS swaps them on [open])
+      const face = q.querySelector('.ld-qa__face')!;
+      expect(face.getAttribute('aria-hidden')).toBe('true');
+      expect(face.querySelectorAll(':scope > .ld-qa__ask .kb-coin, :scope > .ld-qa__yay .kb-coin')).toHaveLength(2);
+      // what a screen reader hears on the summary is the question alone
+      const heard = [...q.childNodes].filter((n) => !(n instanceof Element && n.getAttribute('aria-hidden') === 'true')).map((n) => n.textContent).join('');
+      expect(heard).toBe(q.querySelector('.ld-qa__text')!.textContent);
+    }
+  });
+
   it('shows a plain not-found page for a path the site does not know', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
     history.pushState(null, '', '/Terrace-Nine');
