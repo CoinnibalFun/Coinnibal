@@ -31,8 +31,9 @@ interface Resident {
   paint: CoinPaint;
   mood: CoinMood;
   size: number;
-  left: string;
-  bottom: number;
+  /** Its place on the terrace: `.ld-pond__c--{spot}` in landing.css (left/right/bottom per width, so no two coins,
+   * the chase or the section's bite ever overlap). */
+  spot: 'big' | 'small' | 'mid' | 'far' | 'shy';
   look: [number, number];
   phase: number;
   temper: Temper;
@@ -42,11 +43,11 @@ interface Resident {
 }
 
 const RESIDENTS: Resident[] = [
-  { paint: 'teal', mood: 'smile', size: 118, left: '3%', bottom: 14, look: [3, 1], phase: 0, temper: 'hungry' },
-  { paint: 'foam', mood: 'happy', size: 62, left: '13%', bottom: 6, look: [0, 0], phase: 0.6, far: true, temper: 'calm' },
-  { paint: 'cream', mood: 'smile', size: 82, left: '22%', bottom: 52, look: [-3, 2], phase: 1.1, far: true, temper: 'calm' },
-  { paint: 'up', mood: 'open', size: 96, left: '83%', bottom: 46, look: [-3, 0], phase: 1.4, far: true, temper: 'calm' },
-  { paint: 'cyan', mood: 'scared', size: 58, left: '86.5%', bottom: 8, look: [-4, 0], phase: 0.9, sweat: true, temper: 'shy' },
+  { paint: 'teal', mood: 'smile', size: 118, spot: 'big', look: [3, 1], phase: 0, temper: 'hungry' },
+  { paint: 'foam', mood: 'happy', size: 62, spot: 'small', look: [0, 0], phase: 0.6, far: true, temper: 'calm' },
+  { paint: 'cream', mood: 'smile', size: 82, spot: 'mid', look: [-3, 2], phase: 1.1, far: true, temper: 'calm' },
+  { paint: 'up', mood: 'open', size: 96, spot: 'far', look: [-3, 0], phase: 1.4, far: true, temper: 'calm' },
+  { paint: 'cyan', mood: 'scared', size: 58, spot: 'shy', look: [-4, 0], phase: 0.9, sweat: true, temper: 'shy' },
 ];
 
 const LOOP_S = 4.8;
@@ -95,8 +96,8 @@ function PondResident({ r, still, onEat }: { r: Resident; still: boolean; onEat:
   return (
     <span
       ref={ref}
-      className={`ld-pond__c ld-pond__c--${r.temper}${r.far ? ' is-far' : ''}${fleeing ? ' is-fleeing' : ''} is-${phase}`}
-      style={{ left: r.left, bottom: r.bottom, ['--grow' as string]: grow, ['--flee' as string]: gaze.side < 0 ? '34px' : '-34px' } as CSSProperties}
+      className={`ld-pond__c ld-pond__c--${r.temper} ld-pond__c--${r.spot}${r.far ? ' is-far' : ''}${fleeing ? ' is-fleeing' : ''} is-${phase}`}
+      style={{ ['--grow' as string]: grow, ['--flee' as string]: gaze.side < 0 ? '34px' : '-34px' } as CSSProperties}
       onClick={feed}
     >
       <span className="ld-pond__body">
