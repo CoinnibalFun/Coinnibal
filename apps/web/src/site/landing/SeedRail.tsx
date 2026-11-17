@@ -5,10 +5,13 @@ import { CoinCharacter, useReducedMotion, type CoinMood } from '../../design';
 /**
  * The landing's reading progress, drawn as a snack: a row of seeds runs along the bottom of the
  * header and a little coin eats its way through them as the visitor scrolls (the seeds behind it
- * are gone). It chews while the page moves; when the page rests it wears the mood of the plate
+ * are gone). The rail is a band of the sticky header itself (opaque, above the header's rule), so
+ * nothing on the page ever scrolls under the seeds or the coin; its track keeps to the page gutter. It chews while the page moves; when the page rests it wears the mood of the plate
  * under it (sleepy once night falls, wary at the cast of big coins, hungry at the menu).
  * Transform and clip only; the coin's place is a CSS variable fed by the scroll.
- * Reduced motion: the coin still marks the place but does not chew.
+ * When a plate seam bites (`ld:gulp`, reveal.ts), the coin gulps with it, so the rail and the seams read as one
+ * creature eating its way down the page.
+ * Reduced motion: the coin still marks the place but does not chew or gulp.
  */
 
 /** Plate id → the mood the guide wears there. */
@@ -16,7 +19,6 @@ const MOODS: [string, CoinMood][] = [
   ['ld-hero', 'happy'],
   ['feast', 'open'],
   ['round', 'smile'],
-  ['cast', 'scared'],
   ['nft', 'sleepy'],
   ['arenas', 'smile'],
   ['faq', 'open'],
@@ -29,6 +31,22 @@ export function SeedRail() {
   const [moving, setMoving] = useState(false);
   const [mood, setMood] = useState<CoinMood>('happy');
   const rest = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [gulping, setGulping] = useState(false);
+
+  useEffect(() => {
+    if (reduced) return;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const on = () => {
+      setGulping(true);
+      clearTimeout(t);
+      t = setTimeout(() => setGulping(false), 420);
+    };
+    window.addEventListener('ld:gulp', on);
+    return () => {
+      window.removeEventListener('ld:gulp', on);
+      clearTimeout(t);
+    };
+  }, [reduced]);
 
   useMotionValueEvent(scrollYProgress, 'change', (p) => {
     rail.current?.style.setProperty('--p', p.toFixed(4));
@@ -67,9 +85,13 @@ export function SeedRail() {
 
   return (
     <div ref={rail} className="ld-rail" aria-hidden="true" style={{ ['--p' as string]: 0 } as CSSProperties}>
-      <span className="ld-rail__seeds" />
-      <span className="ld-rail__coin">
-        <CoinCharacter paint="sun" mood={moving ? 'chomp' : mood} size={30} look={[3, 0]} chewing={!reduced} blink={!reduced} />
+      <span className="ld-rail__track">
+        <span className="ld-rail__seeds" />
+        <span className="ld-rail__coin">
+          <span className={`ld-rail__gulp${gulping ? ' is-gulp' : ''}`}>
+            <CoinCharacter paint="sun" mood={gulping || moving ? 'chomp' : mood} size={20} look={[3, 0]} chewing={!reduced} blink={!reduced} />
+          </span>
+        </span>
       </span>
     </div>
   );

@@ -30,6 +30,9 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     expect(screen.getByRole('link', { name: /Follow @coinnibalfun/ }).getAttribute('href')).toBe('https://x.com/coinnibalfun');
     expect(document.querySelector('a[href="/wl"], a[href="/mint"], a[href="/collab"], a[href="/faucet"], a[href="/play"]')).toBeNull();
     expect(document.body.textContent).not.toMatch(/Join the WL|Go to the mint/);
+    // the same buttons as the site's other closed pages, and the same tab title
+    expect(screen.getByRole('link', { name: 'Back to home' }).className).toContain('kb-btn');
+    expect(document.title).toBe('Not open yet · Coinnibal');
     expect(onAllowed).not.toHaveBeenCalled();
   });
 
@@ -81,7 +84,12 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     expect(await playAccess()).toEqual({ allowed: false, reason: 'holders', session: null });
     render(<PlayGate onAllowed={vi.fn()} />);
     expect(await screen.findByRole('heading', { name: /NFT holders only/ })).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole('link', { name: 'Go to the mint' }).getAttribute('href')).toBe('/mint'));
+    // never the site's mint page (the NFT is not minted there), even with the mint door open; the WL, when open
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Join the WL' }).getAttribute('href')).toBe('/wl'));
+    expect(screen.getByText('Sign in with the wallet that holds your Coinnibal NFT.')).toBeTruthy();
+    const card = document.querySelector('.pg-card')!;
+    expect(card.querySelector('a[href="/mint"]')).toBeNull();
+    expect(card.textContent).not.toMatch(/Go to the mint|mint page|Mint to play/);
     restore();
     store(USER, 'holder-token');
     ({ restore } = mockFetch({ 'GET /api/site/settings': holders, 'GET /api/auth/me': { address: USER, admin: false, canPlay: true } }));
