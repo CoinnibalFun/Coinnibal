@@ -36,7 +36,7 @@ import { NapSeam } from './NapSeam';
 import { BITE_GULP_MS, SEAL_GULP_MS, gulp, useReveal, useRevealEach } from './reveal';
 import { SealSeam } from './SealSeam';
 import { SeedRail } from './SeedRail';
-import { WhyNft } from '../nft/WhyNft';
+import { WhyNft, configuredPerks } from '../nft/WhyNft';
 import { isTestnetChain, useServerChain } from '../serverChain';
 import { useLandingSound } from './sound';
 import './landing.css';
@@ -647,13 +647,15 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
     docs: (c: ReactNode) => <Link href="/docs">{c}</Link>,
     collab: (c: ReactNode) => <Link href="/collab">{c}</Link>,
   };
-  // each fact once: the NFT's perks and its count are in the NFT section above, the rules in the guide. "Is the game
-  // open?" only while it is closed, the collab question only with its page; the last answer sends the visitor to the
-  // guide for every rule
-  const asked = [1, 2, 11, 5, 6, 7, 8].filter((n) => (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
+  // the team asked for the NFT's questions here (what it gives, how many, is each one different) even though the NFT
+  // section above shows them as cards. "Is the game open?" only while it is closed, the collab question only with its
+  // page; the last answer sends the visitor to the guide for every rule
+  const perks = configuredPerks();
+  const nftVars = { supply: NFT_SUPPLY.toLocaleString('en-US'), holder: perks.fee.holder, normal: perks.fee.normal, room: perks.room ?? '', shop: perks.shopPct, extra: perks.shopExtra };
+  const asked = [1, 2, 9, 12, 10, 11, 5, 6, 7, 8].filter((n) => (n !== 9 || perks.room !== null)).filter((n) => (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
   const items: { q: string; a: ReactNode }[] = asked.map((n) => ({
     q: t(`ld.faq.q${n}` as TKey, { chain: plainChainName(activeChain().name) }),
-    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}`, sym: SYMBOL, chain: plainChainName(activeChain().name) }), tags),
+    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}`, sym: SYMBOL, chain: plainChainName(activeChain().name), ...nftVars }), tags),
   }));
   // re-arm when a card is remounted (its key is the question, which carries the chain's name)
   useRevealEach(list, '.ld-qa', items.map((f) => f.q).join('\n'));

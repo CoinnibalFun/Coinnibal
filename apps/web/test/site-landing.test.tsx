@@ -41,10 +41,10 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect([...why.querySelectorAll('.nf-card')].map((c) => c.getAttribute('data-perk'))).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
     expect(why.textContent).toContain('Lower fee: 10% instead of 20%');
     { const m = document.body.textContent?.match(/.{0,60}(testnet|faucet|Short answers).{0,40}/i); expect(m?.[0] ?? null).toBeNull(); }
-    // each fact once: the perks and the count live in the NFT section, not again in the FAQ
-    expect(screen.queryByText('What does the Coinnibal NFT give me?')).toBeNull();
-    expect(screen.queryByText('How many NFTs are there?')).toBeNull();
-    expect(screen.queryByText('Is every NFT different?')).toBeNull();
+    // the team asked for NFT questions in the FAQ (what it gives, how many, is each one different)
+    expect(screen.getByText('What does the Coinnibal NFT give me?')).toBeTruthy();
+    expect(screen.getByText('How many NFTs are there?')).toBeTruthy();
+    expect(screen.getByText('Is every NFT different?')).toBeTruthy();
     // the shared skin is one gold look, not the holder's own NFT art
     expect(why.textContent).toContain('Your coin can wear the gold NFT skin, with a holder badge next to your name.');
     expect(why.textContent).not.toMatch(/wears your NFT/);
@@ -161,6 +161,9 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(faq.map((q) => q.querySelector('.ld-qa__text')?.textContent)).toEqual([
       'Which wallet do I need?',
       'What is Robinhood Chain?',
+      'What does the Coinnibal NFT give me?',
+      'How many NFTs are there?',
+      'Is every NFT different?',
       'Do I need the NFT to play?',
       'Is the game open?',
       'Does it cost money to play?',
@@ -169,6 +172,9 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     const answer = (q: string) => faq.find((f) => f.querySelector('.ld-qa__text')?.textContent === q)!.querySelector('.ld-qa__a')!.textContent;
     // the same answer as the guide (which describes no holders-only mode); the $10 Room is told by its ticket and perk card
     expect(answer('Do I need the NFT to play?')).toBe('No. The NFT is not a ticket. It gives perks.');
+    // the team asked for the NFT's questions: what it gives (D11), how many, every one different
+    expect(answer('What does the Coinnibal NFT give me?')).toBe('Perks in the game: a lower fee on profit (10% instead of 20%), the $10 Room for holders only, 20% off power-ups plus 1 extra use in every paid round, one free private room a day, and the NFT skin with a holder badge.');
+    expect(answer('How many NFTs are there?')).toBe('The collection has 3,333 NFTs.');
     // the chain holds the money, the game runs on a server (as the guide says)
     expect(answer('What is Robinhood Chain?')).toMatch(/the game itself runs on a server/);
     // D12's core, once
