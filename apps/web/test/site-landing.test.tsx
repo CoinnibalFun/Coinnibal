@@ -149,11 +149,11 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
     const before = activeChain();
     try {
-      // a mainnet build too: "free at first" (D12), never "real money" alone
+      // every build says the same: a paid room takes a ticket (no free-at-first phase, no test network)
       setActiveChain(chainInfo(4663));
       render(<Landing />);
       await settle();
-      expect(screen.getByTestId('ld-money').textContent).toBe('Playing is free at first. Later a ticket costs tokens, and you lose it if you get eaten.');
+      expect(screen.getByTestId('ld-money').textContent).toBe('A paid room takes a ticket in tokens. If you get eaten, you lose it.');
     } finally {
       setActiveChain(before);
     }
@@ -177,8 +177,10 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(answer('How many NFTs are there?')).toBe('The collection has 3,333 NFTs.');
     // the chain holds the money, the game runs on a server (as the guide says)
     expect(answer('What is Robinhood Chain?')).toMatch(/the game itself runs on a server/);
-    // D12's core, once
-    expect(answer('Does it cost money to play?')).toBe('Not at first: when the game opens, playing is free. Later, paid rooms take a ticket in tokens. Practice stays free.');
+    // the cost, once: paid rooms take a ticket, practice is free
+    expect(answer('Does it cost money to play?')).toBe('Yes. A paid room takes a ticket in tokens. Practice is free.');
+    // the owner's launch order: the NFT mint, then the token, then the game (no dates)
+    expect(answer('Is the game open?')).toBe('Not yet. First comes the NFT mint, then the token, then the game. News is on @coinnibalfun.');
     const page = document.querySelector('main')!.textContent ?? '';
     expect(page.match(/Practice (stays|is) free/g)).toHaveLength(1);
     expect(page.match(/explains every rule/g)).toBeNull();
