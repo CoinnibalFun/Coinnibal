@@ -56,7 +56,7 @@
   font-weight: 800;
   font-size: var(--t-h1);
   line-height: 0.98;
-  letter-spacing: -0.025em;
+  letter-spacing: 0.005em;
   color: var(--ink);
   text-wrap: balance;
 }
@@ -637,7 +637,7 @@
   /* a card title, a step below the section headings */
   font-size: clamp(26px, 2.6vw, 36px);
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.005em;
 }
 .ld-menu__list {
   margin: 0;
@@ -1321,7 +1321,7 @@
   font-variation-settings: var(--fv-display);
   font-weight: 800;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.005em;
 }
 .ld-ticket__fee {
   font-size: 44px;
@@ -1419,7 +1419,7 @@
   font-weight: 800;
   font-size: 30px;
   line-height: 1.1;
-  letter-spacing: -0.015em;
+  letter-spacing: 0.005em;
 }
 .ld-feecard__n {
   margin: 0;

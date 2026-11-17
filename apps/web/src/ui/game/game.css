@@ -198,7 +198,7 @@
   font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 17px;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.005em;
 }
 .g-pond__label {
   overflow: hidden;
@@ -1149,7 +1149,7 @@
   font-size: 22px;
   font-weight: 800;
   line-height: 1.05;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.005em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1480,7 +1480,7 @@
   font-weight: 800;
   font-size: clamp(44px, 7vw, 60px);
   line-height: 0.95;
-  letter-spacing: -0.03em;
+  letter-spacing: 0.005em;
 }
 .g-death__title {
   color: var(--down-ink);
@@ -1754,7 +1754,7 @@
   font-weight: 800;
   font-size: 46px;
   line-height: 1;
-  letter-spacing: -0.03em;
+  letter-spacing: 0.005em;
 }
 .g-board__title {
   margin-top: 6px;
@@ -3286,7 +3286,7 @@
   font-weight: 800;
   font-size: 24px;
   line-height: 1.05;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.005em;
 }
 .g-tabboard .g-full__row {
   min-height: 34px;
