@@ -1552,36 +1552,306 @@
   }
 }
 
-/* ── VII · small print ───────────────────────────────────────────────── */
+/* ── VII · small print: questions on a moonlit pond ──────────────────────
+   Sky (the night paper, a few stars, the cream coin as the moon) over a horizon; under it the water deepens in three
+   rows of seigaiha (small far scales by the horizon, big near ones below), down to a pebble shore on the footer line
+   where the nap coin sleeps. The cards float on the water. The water is one grid item behind the list (row 2), bled to
+   the screen's edges and down to the section's floor. The waves are SVG tiles, one period of the pattern each (rows
+   k = 1..3 at baseline 0.85kr, every other row offset by r; an edge tile is row 0, the scallops a nearer tier lays over
+   the one behind it), so they keep their size on every screen and cost one painted background. */
 .ld-faq {
-  background: var(--paper);
+  --faq-gap: clamp(28px, 5vw, 72px);
+  /* from the horizon (the moon's foot) to the first card */
+  --tide-gap: 40px;
+  /* the floor the nap sleeps on (NapSeam.tsx): the coin and its drifting z's stay below the last question, never on it */
+  --floor: 176px;
+  --tide-far-c: #11313b;
+  --tide-mid-c: #143a45;
+  --tide-near-c: #17424e;
+  /* far: r 20, fill #11313b, lines #183f49; tile 40 x 34 */
+  --tide-far: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='34'%3E%3Cpath d='M0 17A20 20 0 0 1 40 17Z' fill='%2311313b'/%3E%3Cpath d='M0 17A20 20 0 0 1 40 17M6.4 17A13.6 13.6 0 0 1 33.6 17M12.8 17A7.2 7.2 0 0 1 27.2 17' fill='none' stroke='%23183f49' stroke-width='2'/%3E%3Cpath d='M-20 34A20 20 0 0 1 20 34Z' fill='%2311313b'/%3E%3Cpath d='M-20 34A20 20 0 0 1 20 34M-13.6 34A13.6 13.6 0 0 1 13.6 34M-7.2 34A7.2 7.2 0 0 1 7.2 34' fill='none' stroke='%23183f49' stroke-width='2'/%3E%3Cpath d='M20 34A20 20 0 0 1 60 34Z' fill='%2311313b'/%3E%3Cpath d='M20 34A20 20 0 0 1 60 34M26.4 34A13.6 13.6 0 0 1 53.6 34M32.8 34A7.2 7.2 0 0 1 47.2 34' fill='none' stroke='%23183f49' stroke-width='2'/%3E%3Cpath d='M0 51A20 20 0 0 1 40 51Z' fill='%2311313b'/%3E%3Cpath d='M0 51A20 20 0 0 1 40 51M6.4 51A13.6 13.6 0 0 1 33.6 51M12.8 51A7.2 7.2 0 0 1 27.2 51' fill='none' stroke='%23183f49' stroke-width='2'/%3E%3C/svg%3E");
+  /* mid: r 30, fill #143a45, lines #1c4a56; tile 60 x 51, edge 60 x 30 */
+  --tide-mid: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='51'%3E%3Cpath d='M0 25.5A30 30 0 0 1 60 25.5Z' fill='%23143a45'/%3E%3Cpath d='M0 25.5A30 30 0 0 1 60 25.5M9.6 25.5A20.4 20.4 0 0 1 50.4 25.5M19.2 25.5A10.8 10.8 0 0 1 40.8 25.5' fill='none' stroke='%231c4a56' stroke-width='2.5'/%3E%3Cpath d='M-30 51A30 30 0 0 1 30 51Z' fill='%23143a45'/%3E%3Cpath d='M-30 51A30 30 0 0 1 30 51M-20.4 51A20.4 20.4 0 0 1 20.4 51M-10.8 51A10.8 10.8 0 0 1 10.8 51' fill='none' stroke='%231c4a56' stroke-width='2.5'/%3E%3Cpath d='M30 51A30 30 0 0 1 90 51Z' fill='%23143a45'/%3E%3Cpath d='M30 51A30 30 0 0 1 90 51M39.6 51A20.4 20.4 0 0 1 80.4 51M49.2 51A10.8 10.8 0 0 1 70.8 51' fill='none' stroke='%231c4a56' stroke-width='2.5'/%3E%3Cpath d='M0 76.5A30 30 0 0 1 60 76.5Z' fill='%23143a45'/%3E%3Cpath d='M0 76.5A30 30 0 0 1 60 76.5M9.6 76.5A20.4 20.4 0 0 1 50.4 76.5M19.2 76.5A10.8 10.8 0 0 1 40.8 76.5' fill='none' stroke='%231c4a56' stroke-width='2.5'/%3E%3C/svg%3E");
+  --tide-mid-edge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='30'%3E%3Cpath d='M-30 30A30 30 0 0 1 30 30Z' fill='%23143a45'/%3E%3Cpath d='M-30 30A30 30 0 0 1 30 30M-20.4 30A20.4 20.4 0 0 1 20.4 30M-10.8 30A10.8 10.8 0 0 1 10.8 30' fill='none' stroke='%231c4a56' stroke-width='2.5'/%3E%3Cpath d='M30 30A30 30 0 0 1 90 30Z' fill='%23143a45'/%3E%3Cpath d='M30 30A30 30 0 0 1 90 30M39.6 30A20.4 20.4 0 0 1 80.4 30M49.2 30A10.8 10.8 0 0 1 70.8 30' fill='none' stroke='%231c4a56' stroke-width='2.5'/%3E%3C/svg%3E");
+  /* near: r 40, fill #17424e, lines #215665; tile 80 x 68, edge 80 x 40 */
+  --tide-near: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='68'%3E%3Cpath d='M0 34A40 40 0 0 1 80 34Z' fill='%2317424e'/%3E%3Cpath d='M0 34A40 40 0 0 1 80 34M12.8 34A27.2 27.2 0 0 1 67.2 34M25.6 34A14.4 14.4 0 0 1 54.4 34' fill='none' stroke='%23215665' stroke-width='3'/%3E%3Cpath d='M-40 68A40 40 0 0 1 40 68Z' fill='%2317424e'/%3E%3Cpath d='M-40 68A40 40 0 0 1 40 68M-27.2 68A27.2 27.2 0 0 1 27.2 68M-14.4 68A14.4 14.4 0 0 1 14.4 68' fill='none' stroke='%23215665' stroke-width='3'/%3E%3Cpath d='M40 68A40 40 0 0 1 120 68Z' fill='%2317424e'/%3E%3Cpath d='M40 68A40 40 0 0 1 120 68M52.8 68A27.2 27.2 0 0 1 107.2 68M65.6 68A14.4 14.4 0 0 1 94.4 68' fill='none' stroke='%23215665' stroke-width='3'/%3E%3Cpath d='M0 102A40 40 0 0 1 80 102Z' fill='%2317424e'/%3E%3Cpath d='M0 102A40 40 0 0 1 80 102M12.8 102A27.2 27.2 0 0 1 67.2 102M25.6 102A14.4 14.4 0 0 1 54.4 102' fill='none' stroke='%23215665' stroke-width='3'/%3E%3C/svg%3E");
+  --tide-near-edge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40'%3E%3Cpath d='M-40 40A40 40 0 0 1 40 40Z' fill='%2317424e'/%3E%3Cpath d='M-40 40A40 40 0 0 1 40 40M-27.2 40A27.2 27.2 0 0 1 27.2 40M-14.4 40A14.4 14.4 0 0 1 14.4 40' fill='none' stroke='%23215665' stroke-width='3'/%3E%3Cpath d='M40 40A40 40 0 0 1 120 40Z' fill='%2317424e'/%3E%3Cpath d='M40 40A40 40 0 0 1 120 40M52.8 40A27.2 27.2 0 0 1 107.2 40M65.6 40A14.4 14.4 0 0 1 94.4 40' fill='none' stroke='%23215665' stroke-width='3'/%3E%3C/svg%3E");
+  --tide-shore: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='40'%3E%3Cg stroke='%2304181C' stroke-width='2.5'%3E%3Cellipse cx='16' cy='31' rx='20' ry='10' fill='%231E4D5A'/%3E%3Cellipse cx='52' cy='34' rx='15' ry='8' fill='%232F6577'/%3E%3Cellipse cx='86' cy='30' rx='22' ry='11' fill='%2324515F'/%3E%3Cellipse cx='121' cy='35' rx='13' ry='7' fill='%231E4D5A'/%3E%3Cellipse cx='153' cy='31' rx='19' ry='10' fill='%232F6577'/%3E%3Cellipse cx='196' cy='31' rx='20' ry='10' fill='%231E4D5A'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F6EEDA' stroke-width='2' stroke-linecap='round' opacity='.35'%3E%3Cpath d='M76 25q4-4 10-4M147 26q3-3 8-3'/%3E%3C/g%3E%3C/svg%3E");
+}
+.ld-faq {
+  /* the water bleeds to the screen's edges: clipped here, sideways only (the bite still reaches up into the NFT plate) */
+  overflow-x: clip;
+  /* the night sky: a sparse tile of stars behind the moon (the label, the heading's patch and the water cover the rest) */
+  background:
+    radial-gradient(circle at 8% 24%, var(--cream) 0 1.6px, transparent 2.2px),
+    radial-gradient(circle at 31% 58%, var(--foam) 0 2px, transparent 2.6px),
+    radial-gradient(circle at 52% 14%, var(--cream) 0 1.4px, transparent 2px),
+    radial-gradient(circle at 71% 46%, var(--sun) 0 2.2px, transparent 2.8px),
+    radial-gradient(circle at 89% 20%, var(--cream) 0 1.8px, transparent 2.4px),
+    radial-gradient(circle at 96% 70%, var(--foam) 0 1.4px, transparent 2px);
+  background-size: 410px 190px;
+  background-color: var(--paper);
 }
 .ld-faq__grid {
+  z-index: 1;
   display: grid;
   grid-template-columns: 4fr 8fr;
-  gap: clamp(28px, 5vw, 72px);
+  column-gap: var(--faq-gap);
+  row-gap: var(--tide-gap);
   align-items: start;
 }
+.ld-plate.ld-faq > .ld-wrap {
+  padding-bottom: var(--floor);
+}
+/* the sky row: the moon over the empty side of the pond, the heading over its questions */
 .ld-faq__side {
-  position: sticky;
-  top: calc(var(--ld-head-h) + 24px);
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 4fr 8fr;
+  column-gap: var(--faq-gap);
+  align-items: end;
+}
+.ld-faq__side > div {
+  grid-column: 2;
+  grid-row: 1;
+  /* a patch of plain sky behind the heading: no star sits in or against the type */
+  justify-self: start;
+  margin: -12px -16px 0;
+  padding: 12px 16px 0;
+  background: var(--paper);
+}
+.ld-faq__side .ld-h2 {
+  margin-bottom: 4px;
 }
 .ld-faq__coin {
+  position: relative;
+  z-index: 0;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
   display: block;
-  margin-top: 28px;
+  line-height: 0;
 }
-.ld-faq__list {
+/* moonlight: two flat rings of light round the moon, cut off at the horizon */
+.ld-faq__coin::before,
+.ld-faq__coin::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: var(--halo);
+  border-radius: 50%;
+  background: rgba(246, 238, 218, var(--halo-a));
+  clip-path: inset(0 0 calc(var(--halo) * -1) 0);
+}
+.ld-faq__coin::before { --halo: -14px; --halo-a: 0.07; }
+.ld-faq__coin::after { --halo: -36px; --halo-a: 0.04; }
+/* three sparkles about the moon */
+.ld-faq__spark {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: var(--cream);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+}
+.ld-faq__spark:nth-of-type(1) { left: -24%; top: 4%; width: 18px; height: 18px; }
+.ld-faq__spark:nth-of-type(2) { right: -20%; top: 30%; width: 13px; height: 13px; background: var(--sun); }
+.ld-faq__spark:nth-of-type(3) { right: -4%; top: -16%; width: 10px; height: 10px; }
+
+/* the water */
+.ld-faq__water {
+  position: relative;
+  z-index: -1;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  align-self: stretch;
+  /* up to the horizon (the moon's foot), out to the screen's edges, down to the section's floor */
+  margin: calc(var(--tide-gap) * -1) calc(50% - 50vw) calc(var(--floor) * -1);
+  padding-inline: calc(50vw - 50%);
   display: grid;
-  gap: 14px;
+  grid-template-columns: 4fr 8fr;
+  grid-template-rows: 1fr;
+  column-gap: var(--faq-gap);
+  border-top: var(--stroke) solid var(--outline);
+  /* the moonlit surface, just under the horizon's ink */
+  box-shadow: inset 0 3px 0 rgba(147, 217, 238, 0.22);
+  background: var(--tide-far) 0 0 / 40px 34px;
+  background-color: var(--tide-far-c);
+  pointer-events: none;
 }
-/* the floor the nap sleeps on (NapSeam.tsx): the coin and its drifting z's stay below the last question, never on it */
-.ld-plate.ld-faq > .ld-wrap {
-  padding-bottom: 176px;
-}
-@media (max-width: 639px) {
-  .ld-plate.ld-faq > .ld-wrap {
-    padding-bottom: 104px;
+/* an old browser without overflow: clip keeps the water inside the page's columns (no sideways scroll) */
+@supports not (overflow: clip) {
+  .ld-faq__water {
+    margin-inline: calc(var(--gutter) * -1);
+    padding-inline: var(--gutter);
   }
+}
+/* the nearer rows: each tier starts with its own row of scallops over the one behind it */
+.ld-faq__water::before,
+.ld-faq__water::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-repeat: repeat-x, repeat;
+  background-clip: padding-box, content-box;
+  background-origin: padding-box, content-box;
+}
+.ld-faq__water::before {
+  top: 92px;
+  padding-top: 30px;
+  background-image: var(--tide-mid-edge), var(--tide-mid);
+  background-size: 60px 30px, 60px 51px;
+  background-color: var(--tide-mid-c);
+}
+.ld-faq__water::after {
+  top: 268px;
+  padding-top: 40px;
+  background-image: var(--tide-near-edge), var(--tide-near);
+  background-size: 80px 40px, 80px 68px;
+  background-color: var(--tide-near-c);
+}
+/* the moon's light on the water, under the moon */
+.ld-faq__glint {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
+  align-self: start;
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  width: 112px;
+  padding-top: 12px;
+}
+.ld-faq__glint i {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--cream);
+  opacity: calc(0.7 - var(--i) * 0.08);
+}
+.ld-faq__glint i:nth-child(1) { width: 100%; }
+.ld-faq__glint i:nth-child(2) { width: 64%; translate: -8px 0; }
+.ld-faq__glint i:nth-child(3) { width: 78%; translate: 6px 0; }
+.ld-faq__glint i:nth-child(4) { width: 40%; translate: -4px 0; }
+.ld-faq__glint i:nth-child(5) { width: 30%; translate: 8px 0; }
+.ld-faq__glint i:nth-child(6) { width: 14%; }
+/* bubbles on their way up (a third are little coins) */
+.ld-faq__bubble {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--s);
+  height: var(--s);
+  border: 2.5px solid var(--foam);
+  border-radius: 50%;
+  opacity: 0.55;
+}
+.ld-faq__bubble.is-coin {
+  border-color: var(--outline);
+  background: radial-gradient(circle at 35% 35%, #fff 0 18%, transparent 22%), var(--sun);
+  opacity: 1;
+}
+/* a paper boat (an answer, folded) in the middle of the open water, with a coin aboard; wide screens only */
+.ld-faq__boat {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
+  align-self: center;
+  width: 120px;
+  height: 72px;
+  margin-bottom: 18%;
+  transform-origin: 50% 90%;
+}
+/* the sail, the coin aboard, then the hull in front of it */
+.ld-faq__boat-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.ld-faq__boat-coin {
+  position: absolute;
+  left: 64px;
+  top: 8px;
+  line-height: 0;
+}
+.ld-faq__boat-art .is-lit { fill: var(--cream); }
+.ld-faq__boat-art .is-shade { fill: var(--cream-s); }
+.ld-faq__boat-art .is-ink { fill: none; stroke: var(--outline); stroke-width: 3; }
+.ld-faq__boat::after {
+  content: '';
+  position: absolute;
+  left: -10px;
+  right: -10px;
+  bottom: -6px;
+  height: 14px;
+  border: 2.5px solid var(--foam);
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0.6;
+}
+/* a coin up to its eyes in the pond, eyeing two floating seeds; it sits on the shore's edge, clear of the nap */
+.ld-faq__peek {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  align-self: end;
+  width: 64px;
+  height: 40px;
+  margin: 0 0 30px 12px;
+}
+.ld-faq__peek-coin {
+  display: block;
+  height: 100%;
+  overflow: hidden;
+  line-height: 0;
+}
+/* the ring of water round its middle */
+.ld-faq__peek::after {
+  content: '';
+  position: absolute;
+  left: -10px;
+  right: -10px;
+  bottom: -6px;
+  height: 12px;
+  border: 2.5px solid var(--foam);
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0.7;
+}
+.ld-faq__seed {
+  position: absolute;
+  left: calc(100% + 18px);
+  bottom: 2px;
+}
+.ld-faq__seed + .ld-faq__seed {
+  left: calc(100% + 44px);
+  bottom: 12px;
+}
+/* the pebbles on the footer line */
+.ld-faq__shore {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40px;
+  background: var(--tide-shore) 0 100% / 180px 40px repeat-x;
+}
+
+/* the cards float on the water, not quite in a line */
+.ld-faq__list {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  gap: 16px;
+  --drift: 22px;
 }
 .ld-qa {
   background: var(--cream);
@@ -1591,15 +1861,20 @@
   box-shadow: var(--sh-3);
 }
 .ld-qa:nth-child(odd) {
-  transform: rotate(-0.4deg);
+  margin-right: var(--drift);
+  transform: rotate(-0.5deg);
+}
+.ld-qa:nth-child(even) {
+  margin-left: var(--drift);
+  transform: rotate(0.4deg);
 }
 .ld-qa__q {
   display: grid;
-  grid-template-columns: 40px 1fr 28px;
+  grid-template-columns: 44px 1fr 28px;
   align-items: center;
-  gap: 12px;
-  min-height: 60px;
-  padding: 10px 18px;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 18px 10px 14px;
   cursor: pointer;
   list-style: none;
   font-weight: 700;
@@ -1616,9 +1891,36 @@
 .ld-qa__q:active {
   background: color-mix(in srgb, var(--sun) 25%, var(--cream));
 }
-.ld-qa__no {
-  font-size: 13px;
-  color: #2d7388;
+/* the card's coin: it wonders until its answer opens, then it is happy */
+.ld-qa__face {
+  display: grid;
+  line-height: 0;
+}
+.ld-qa__face > * {
+  grid-area: 1 / 1;
+  position: relative;
+}
+.ld-qa__yay,
+.ld-qa[open] .ld-qa__ask {
+  visibility: hidden;
+}
+.ld-qa[open] .ld-qa__yay {
+  visibility: visible;
+}
+.ld-qa__huh {
+  position: absolute;
+  right: -6px;
+  top: -12px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--outline);
+  border-radius: 50% 50% 50% 4px;
+  background: var(--sun);
+  color: var(--ink-fixed);
+  font: 800 13px/1 var(--font-display);
+  rotate: 8deg;
 }
 .ld-qa__plus {
   position: relative;
@@ -1652,7 +1954,7 @@
 }
 .ld-qa__a {
   /* a little room on top: a link on the first line keeps its taller tap target inside the clipped answer */
-  padding: 8px 22px 20px 70px;
+  padding: 8px 22px 20px 72px;
   color: #4a453b;
   font-size: 16px;
   line-height: 1.55;
@@ -1664,30 +1966,118 @@
   font-weight: 700;
   text-underline-offset: 3px;
 }
+@media (prefers-reduced-motion: no-preference) {
+  .ld-faq__spark {
+    animation: ld-twinkle 3.2s ease-in-out infinite;
+  }
+  .ld-faq__spark:nth-of-type(2) { animation-delay: -1.1s; }
+  .ld-faq__spark:nth-of-type(3) { animation-delay: -2.2s; }
+  .ld-faq__glint i {
+    animation: ld-shimmer 2.8s ease-in-out calc(var(--i) * -0.45s) infinite;
+  }
+  .ld-faq__bubble {
+    animation: ld-bubble 11s linear var(--d) infinite;
+  }
+  .ld-faq__boat {
+    animation: ld-rock 4.6s ease-in-out infinite;
+  }
+  .ld-qa__huh {
+    transition: rotate 0.3s var(--ease-spring), translate 0.3s var(--ease-spring);
+  }
+  .ld-qa__q:hover .ld-qa__huh {
+    rotate: -10deg;
+    translate: 0 -2px;
+  }
+  .ld-qa[open] .ld-qa__yay {
+    animation: ld-yay 0.46s var(--ease-spring) both;
+  }
+}
+@keyframes ld-twinkle {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  50% { transform: scale(0.5) rotate(45deg); opacity: 0.4; }
+}
+@keyframes ld-shimmer {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.72); }
+}
+@keyframes ld-bubble {
+  0% { transform: translateY(90px); opacity: 0; }
+  12% { opacity: 0.8; }
+  80% { opacity: 0.6; }
+  100% { transform: translate(8px, -260px); opacity: 0; }
+}
+@keyframes ld-rock {
+  0%, 100% { transform: rotate(-3deg) translateY(0); }
+  50% { transform: rotate(3deg) translateY(-3px); }
+}
+@keyframes ld-yay {
+  0% { transform: scale(0.6) rotate(-14deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
 @media (max-width: 899px) {
-  .ld-faq__grid {
+  .ld-faq {
+    --tide-gap: 34px;
+  }
+  .ld-faq__grid,
+  .ld-faq__water {
     grid-template-columns: 1fr;
   }
   .ld-faq__side {
-    position: static;
     display: flex;
-    align-items: flex-start;
+    align-items: flex-end;
     justify-content: space-between;
     gap: 12px;
   }
   .ld-faq__coin {
-    margin: 0;
+    flex: none;
     width: 88px;
+    margin-right: 6px;
   }
   .ld-faq__coin .kb-coin {
     width: 88px !important;
   }
+  .ld-faq__list {
+    grid-column: 1;
+  }
+  .ld-faq__boat {
+    display: none;
+  }
+  /* the moon stands at the right on a phone: its light falls there too */
+  .ld-faq__glint {
+    justify-self: end;
+    width: 84px;
+    margin-right: 8px;
+  }
+}
+@media (max-width: 639px) {
+  .ld-faq {
+    --floor: 104px;
+  }
+  .ld-faq__list {
+    --drift: 8px;
+    gap: 14px;
+  }
+  .ld-faq__water::before { top: 70px; }
+  .ld-faq__water::after { top: 210px; }
+  .ld-faq__shore {
+    height: 30px;
+    background-size: 135px 30px;
+  }
+  .ld-faq__peek {
+    margin: 0 0 18px 0;
+    scale: 0.75;
+    transform-origin: 0 100%;
+  }
 }
 @media (max-width: 479px) {
   .ld-qa__q {
-    grid-template-columns: 30px 1fr 28px;
-    padding: 10px 14px;
+    grid-template-columns: 38px 1fr 28px;
+    gap: 12px;
+    padding: 10px 14px 10px 10px;
     font-size: 16.5px;
+  }
+  .ld-qa__face .kb-coin {
+    width: 38px !important;
   }
   .ld-qa__a {
     padding: 8px 16px 18px 16px;
