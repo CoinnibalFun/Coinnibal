@@ -5,13 +5,15 @@
   gap: clamp(24px, 4vw, 56px);
   align-items: center;
   width: 100%;
-  max-width: 1240px;
+  /* the header's column: the copy starts under the logo and the title strip */
+  max-width: 1312px;
   margin: 0 auto;
   padding: clamp(28px, 6vw, 72px) var(--gutter) clamp(40px, 7vw, 96px);
   box-sizing: border-box;
 }
 .nf__title {
   margin: 6px 0 14px;
+  text-wrap: balance;
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
@@ -21,19 +23,32 @@
 }
 .nf__lede {
   margin: 0;
+  text-wrap: pretty;
   max-width: 34em;
   font-size: 17px;
   line-height: 1.55;
   color: var(--ink-2);
 }
 .nf__path {
+  /* the path exactly as typed (paths are case-sensitive): no mono capitals; a long one breaks with its sticker edges on
+     every line */
+  margin-right: 2px;
   padding: 1px 6px;
   font-size: 0.88em;
+  text-transform: none;
+  letter-spacing: 0;
   background: var(--cream);
   color: var(--ink-fixed);
   border: var(--stroke-sm) solid var(--outline);
   border-radius: 6px;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+/* the title strip echoes the path as typed too */
+.nf-root .kb-plate__aside {
+  text-transform: none;
+  letter-spacing: 0.02em;
 }
 .nf__ctas {
   display: flex;
@@ -127,6 +142,12 @@
 .nf__lost.is-still .nf__map,
 .nf__lost.is-still .nf__huh {
   animation: none;
+}
+/* small laptops: an even split, so both buttons keep one row */
+@media (max-width: 1099px) {
+  .nf {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 }
 @media (max-width: 899px) {
   .nf {

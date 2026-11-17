@@ -50,4 +50,36 @@ describe('the phone menu', () => {
     expect(container.querySelector('a[href="/play"], a[href="/mint"], a[href="/faucet"], a[href="/wl"], a[href="/collab"]')).toBeNull();
   });
 
+  it('locks the page behind the open menu, and lets it scroll again once the menu closes', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, gameAccess: 'admins' } } }));
+    const view = render(<SiteHeader />);
+    const btn = await screen.findByRole('button', { name: 'Open the menu' });
+    expect(document.documentElement.classList.contains('st-menu-open')).toBe(false);
+    act(() => btn.click());
+    expect(document.documentElement.classList.contains('st-menu-open')).toBe(true);
+    // the menu button turns into the close button (it stays above the dimmed page)
+    act(() => screen.getByRole('button', { name: 'Close the menu', expanded: true }).click());
+    expect(screen.queryByRole('navigation', { name: 'Site menu' })).toBeNull();
+    expect(document.documentElement.classList.contains('st-menu-open')).toBe(false);
+    act(() => btn.click());
+    view.unmount();
+    expect(document.documentElement.classList.contains('st-menu-open')).toBe(false);
+  });
+
+  it('on a closed page that has a Soon item, marks that item as the current place (still not a link)', async () => {
+    ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' } } }));
+    history.pushState(null, '', '/wl');
+    try {
+      const { container } = render(<SiteHeader />);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      const here = [...container.querySelectorAll('.st-nav [aria-current="page"]')];
+      expect(here.map((s) => [s.tagName, s.textContent, s.classList.contains('is-here')])).toEqual([['SPAN', 'WLSoon', true]]);
+      expect(here[0].getAttribute('aria-disabled')).toBe('true');
+    } finally {
+      history.pushState(null, '', '/');
+    }
+  });
+
 });

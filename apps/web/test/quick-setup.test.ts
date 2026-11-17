@@ -32,11 +32,30 @@ describe('finish setup', () => {
   it('leaves out what is already done on chain', () => {
     const arenas = [1, 2, 3, 4].map((id) => ({ id, exists: true, holdersOnly: id === 4 }));
     const c = ctx({
-      arena: { address: ARENA, config: { admin: '0x08b2b32E932D5f429073a441E6eFd8e3D42369b2', serverAuthority: KEY, token: TOKEN, burnBps: 1500, vaultBps: 500, holderNft: NFT }, token: { decimals: 18 }, arenas },
+      arena: { address: ARENA, config: { admin: '0x08b2b32E932D5f429073a441E6eFd8e3D42369b2', serverAuthority: KEY, token: TOKEN, burnBps: 1500, vaultBps: 500, holderNft: NFT, holderBurnBps: 800, holderVaultBps: 200 }, token: { decimals: 18 }, arenas },
       nft: { address: NFT, state: { phaseName: 'public' } },
       testToken: { address: TOKEN, faucet: { holderNft: NFT } },
     });
     expect(setupSteps(c, { openMint: true })).toEqual([]);
+  });
+
+  it('offers the holder pair again when the live one drifted from 8 % + 2 % (the NFT already set), and only that', () => {
+    const arenas = [1, 2, 3, 4].map((id) => ({ id, exists: true, holdersOnly: id === 4 }));
+    const done = (holderBurnBps: number, holderVaultBps: number, nft: unknown = { address: NFT, state: { phaseName: 'public' } }) =>
+      ctx({
+        arena: { address: ARENA, config: { admin: '0x08b2b32E932D5f429073a441E6eFd8e3D42369b2', serverAuthority: KEY, token: TOKEN, burnBps: 1500, vaultBps: 500, holderNft: NFT, holderBurnBps, holderVaultBps }, token: { decimals: 18 }, arenas },
+        nft,
+        testToken: { address: TOKEN, faucet: { holderNft: NFT } },
+      });
+    // the live testnet pair: 15 % burned, nothing to the fee wallet
+    const steps = setupSteps(done(1500, 0), { openMint: true });
+    expect(steps.map((s) => s.id)).toEqual(['perks']);
+    expect(steps[0].label).toBe('Emblem holders pay 10 % of profit instead of 20 %');
+    expect(steps[0].call).toMatchObject({ functionName: 'setHolderPerks', args: [expect.stringMatching(new RegExp(`^${NFT}$`, 'i')), 800, 200] });
+    // the NFT address unknown to the status: the arena's own holder NFT is kept
+    expect(setupSteps(done(800, 0, null), { openMint: true }).find((s) => s.id === 'perks')!.call).toMatchObject({ args: [expect.stringMatching(new RegExp(`^${NFT}$`, 'i')), 800, 200] });
+    // the owner's pair: nothing to do
+    expect(setupSteps(done(800, 200), { openMint: true })).toEqual([]);
   });
 
   it('never opens the mint on mainnet', () => {
