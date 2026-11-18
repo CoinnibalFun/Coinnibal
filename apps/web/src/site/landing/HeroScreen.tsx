@@ -2,7 +2,10 @@ import { useEffect, useRef } from 'react';
 import { useOffscreenPause, useReducedMotion } from '../../design';
 import { useT } from '../../i18n';
 
-/** The clip's files in public/media: a 7.5 s seamless loop of real play, 960x600, no audio track. */
+/**
+ * The clip's files in public/media: a 9.5 s seamless loop of real play, 960x600, no audio track. The camera follows one
+ * coin through a school of others and one whole bite (media/hero-loop/README.md has the recipe).
+ */
 const CLIP = '/media/hero-loop';
 
 /**

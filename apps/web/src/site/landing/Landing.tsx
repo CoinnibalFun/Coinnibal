@@ -6,7 +6,6 @@ import {
   FoodBit,
   Icon,
   Kb,
-  OrbitDots,
   RingScene,
   Stamp,
   StatusPill,
@@ -34,6 +33,7 @@ import { GazeCoin } from './GazeCoin';
 import { HeroScreen } from './HeroScreen';
 import { useIdleBudget } from './idle';
 import { NapSeam } from './NapSeam';
+import { RoundClock } from './RoundClock';
 import { BITE_GULP_MS, SEAL_GULP_MS, gulp, useReveal, useRevealEach } from './reveal';
 import { SealSeam } from './SealSeam';
 import { SeedRail } from './SeedRail';
@@ -72,10 +72,6 @@ const usePlate = (gulpAt: number) => useReveal<HTMLElement>(undefined, { attr: '
 
 /* ── the hero ─────────────────────────────────────────────────────────── */
 
-/** A round's length in words for the hero line ("Five minutes later"), digits past ten. */
-const WORDS = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
-const spelled = (n: number) => WORDS[n] ?? String(n);
-
 /**
  * The hero. Its buttons follow what is open (`doors`): with everything closed the main action is "How it works" (the
  * round, further down this page), then the NFT's perks and the project's X account; "Join the WL", Collab and Play come
@@ -103,9 +99,9 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
               <p className="ld-hero__tag">
                 {t('ld.hero.tag')} <span className="ld-hero__motto">{t('brand.tagline')}</span>
               </p>
-              {/* the ticket and what eating costs, in one paragraph: a paid room takes a ticket, getting eaten loses it */}
+              {/* the pitch in one paragraph: a paid room takes a ticket, getting eaten loses it, the bell pays the rest */}
               <p className="ld-hero__lede" data-testid="ld-money">
-                {t('ld.hero.lede', { sym: SYMBOL, mins: spelled(FACTS.rules.roundMin) })}
+                {t('ld.hero.lede', { sym: SYMBOL })}
               </p>
               <div className="ld-hero__ctas">
                 {doors.wl && (
@@ -276,7 +272,7 @@ function Feast() {
           </div>
         </div>
         <div ref={menu} className="ld-feast__menu-wrap rv-v">
-          <Sticker tone="white" pad="lg" lift="lg" className="ld-menu">
+          <Sticker tone="white" pad="lg" lift="none" className="ld-menu">
             <h3 className="ld-menu__title">{t('ld.menu.title')}</h3>
             <ul className="ld-menu__list">
               <MenuLine i={0} art={<FoodBit kind="pear" size={44} />} dish={t('ld.menu.food')} note={t('ld.menu.foodNote')} price={t('ld.menu.foodPrice')} />
@@ -301,7 +297,6 @@ const STATIONS: { no: string; title: TKey; body: TKey }[] = [
   { no: '03', title: 'ld.stop.bell', body: 'ld.stop.bellBody' },
   { no: '04', title: 'ld.stop.paid', body: 'ld.stop.paidBody' },
 ];
-const stationVars = () => ({ sym: SYMBOL, min: FACTS.rules.roundMin, s: FACTS.rules.joinCloseS, b: FACTS.rules.breakS });
 
 /**
  * How far the visitor has read down the steps: the index of the last step whose top has passed 60 % of the viewport
@@ -337,33 +332,20 @@ function useStepsRead(list: RefObject<HTMLOListElement | null>): number {
 
 function Round({ live }: { live: boolean }) {
   const t = useT();
+  const reduced = useReducedMotion();
   const plate = usePlate(0);
-  const orbit = useReveal<HTMLDivElement>();
+  const clock = useReveal<HTMLDivElement>();
   const copy = useReveal<HTMLDivElement>();
-  // the orbit's stations and the step numbers light up as the visitor reads down the steps (the card stays beside them)
+  // the step numbers light up as the visitor reads down to them (the clock stays beside them)
   const stops = useRef<HTMLOListElement>(null);
   const read = useStepsRead(stops);
   return (
     <section ref={plate} className="ld-plate ld-round" id="round" aria-labelledby="ld-round-h">
       <i className="ld-rule" aria-hidden="true" />
       <div className="ld-wrap ld-round__grid">
-        <div ref={orbit} className="ld-round__orbit-wrap rv-v">
-          <Sticker tone="night" pad="none" lift="lg" round="lg" className="ld-orbit">
-            {/* a status only while the game is open to someone */}
-            {live && <span className="ld-orbit__tag kb-tag">{t('ld.round.tag')}</span>}
-            <OrbitDots
-              width={640}
-              height={330}
-              coins={4}
-              duration={20}
-              tone="night"
-              className="ld-orbit__svg"
-              title={t('ld.round.svg')}
-              stations={STATIONS.map((s, i) => ({ at: i / STATIONS.length, label: t(s.title), done: i <= read }))}
-            />
-            <span className="ld-orbit__core" aria-hidden="true">
-              <GazeCoin paint="sun" mood="chomp" size={112} look={[2, 1]} reach={0.7} />
-            </span>
+        <div ref={clock} className="ld-round__clock-wrap rv-v">
+          <Sticker tone="night" pad="none" lift="sm" round="lg" className="ld-round__card">
+            <RoundClock live={live} still={reduced} />
           </Sticker>
         </div>
         <div ref={copy} className="ld-round__copy">
@@ -378,7 +360,7 @@ function Round({ live }: { live: boolean }) {
                 </span>
                 <span className="ld-stop__text">
                   <strong className="ld-stop__title">{t(s.title)}</strong>
-                  <span>{t(s.body, stationVars())}</span>
+                  <span>{t(s.body)}</span>
                 </span>
               </li>
             ))}
@@ -404,7 +386,7 @@ function Emblem({ paint, front, waking }: { paint: CoinPaint; front: boolean; wa
   return (
     <div className={`ld-emblem${front ? ' is-front' : ''}`}>
       <div className="ld-emblem__panel">
-        <span className="ld-emblem__no kb-tag num">No. ????</span>
+        <span className="ld-emblem__no">No. ????</span>
         <span className="ld-emblem__coin">
           <CoinCharacter paint={paint} mood={!front ? 'sleepy' : waking ? 'open' : 'smug'} size={150} look={waking ? [3, -3] : [2, 0]} bob={front} />
         </span>
@@ -548,6 +530,10 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
   const fee = useReveal<HTMLDivElement>();
   const open = gameAccess === 'public' ? { tone: 'live' as const, text: t('ld.ar.open') } : gameAccess === 'holders' ? { tone: 'ok' as const, text: t('ld.ar.holders') } : { tone: 'idle' as const, text: t('ld.ar.after') };
   const feeBps = FACTS.fee.burnBps + FACTS.fee.vaultBps;
+  // what a bigger ticket means: the dearest room's coins start this many times as rich as the cheapest room's
+  const cents = DEFAULT_ARENAS.map((a) => a.usdCents);
+  const usd = (c: number) => formatUsdCents(c).replace(/\.00$/, '');
+  const span = { lo: usd(Math.min(...cents)), hi: usd(Math.max(...cents)), x: Math.round(Math.max(...cents) / Math.min(...cents)) };
   const split = [
     { key: 'keep', bps: 10_000 - feeBps, label: t('ld.ar.keep', { pct: pct(10_000 - feeBps) }) },
     { key: 'burn', bps: FACTS.fee.burnBps, label: t('ld.ar.burn', { pct: pct(FACTS.fee.burnBps) }) },
@@ -562,8 +548,10 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
             {t('ld.ar.h')}
           </h2>
           <div className="ld-arenas__aside rv-b">
-            <StatusPill tone={open.tone}>{open.text}</StatusPill>
-            <p>{t('ld.ar.body')}</p>
+            <StatusPill tone={open.tone} className={`ld-status${open.tone === 'idle' ? ' is-soon' : ''}`}>
+              {open.text}
+            </StatusPill>
+            <p>{t('ld.ar.body', span)}</p>
           </div>
         </div>
         <ol ref={stairs} className="ld-stairs">
@@ -574,7 +562,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
             return (
               <li key={a.id} className={`ld-stair${a.holdersOnly ? ' is-holders' : ''}`} style={v({ '--step': i, '--ink-a': meta.ink, '--ink-b': meta.inkTo ?? meta.ink })}>
                 <div className="ld-stair__coin" aria-hidden="true">
-                  {i === 0 && <span className="kb-tag ld-stair__you">{t('ld.ar.you')}</span>}
+                  {i === 0 && <span className="ld-stair__you">{t('ld.ar.you')}</span>}
                   {a.holdersOnly && (
                     <span className="ld-stair__crown">
                       <Icon name="crown" size={22} />
