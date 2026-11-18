@@ -24,7 +24,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
  */
 function bootFailed(err: unknown): void {
   console.error('the page failed to load', err);
-  const KEY = 'elymum.boot-reload.v1';
+  const KEY = 'coinnibal.boot-reload.v1';
   try {
     const last = Number(sessionStorage.getItem(KEY) ?? 0);
     if (!last || Date.now() - last > 30_000) {

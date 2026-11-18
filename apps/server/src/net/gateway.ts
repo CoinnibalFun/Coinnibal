@@ -47,8 +47,17 @@ const STAKE_HEADROOM = 0.05;
  * carrier NAT address, and still a bound on one address that signs in with many throwaway wallets.
  */
 export const SIGNED_PER_IP_FACTOR = 8;
-/** A browser may offer its session token as a WebSocket subprotocol `elymum.auth.<token>` (no token in the URL). */
-export const AUTH_SUBPROTOCOL = 'elymum.auth.';
+/** The game's WebSocket subprotocol: the server answers with it (never with the token one). */
+const SUBPROTOCOL = 'coinnibal';
+/** A browser may offer its session token as a WebSocket subprotocol `coinnibal.auth.<token>` (no token in the URL). */
+export const AUTH_SUBPROTOCOL = 'coinnibal.auth.';
+/**
+ * The same two under the project's name before the rename (Elymum, November 2026), still accepted: a tab opened before
+ * the update offers them when it reconnects, and a browser refuses a socket whose server answers none of its offers.
+ * The server answers with the name the page offered.
+ */
+const OLD_SUBPROTOCOL = 'elymum';
+const OLD_AUTH_SUBPROTOCOL = 'elymum.auth.';
 
 /**
  * The network an address belongs to for the per-subnet connection limit: IPv4 /24, IPv6 /64 (an IPv4-mapped
@@ -136,8 +145,9 @@ export class Gateway {
     noServer: true,
     maxPayload: 4096,
     perMessageDeflate: false,
-    // the session token offered as a subprotocol (`elymum.auth.<token>`) is never echoed back: answer `elymum`
-    handleProtocols: (protocols) => (protocols.has('elymum') ? 'elymum' : false),
+    // the session token offered as a subprotocol (`coinnibal.auth.<token>`) is never echoed back: answer `coinnibal`
+    // (`elymum` to a page from before the rename)
+    handleProtocols: (protocols) => (protocols.has(SUBPROTOCOL) ? SUBPROTOCOL : protocols.has(OLD_SUBPROTOCOL) ? OLD_SUBPROTOCOL : false),
   });
   private readonly perIp = new Map<string, number>();
   private readonly perSubnet = new Map<string, number>();
@@ -158,7 +168,7 @@ export class Gateway {
   private profiles: ProfileStore | null = null;
   /** Wallets the admin banned from arenas (integrity); null: nobody (bare unit tests). */
   private banGate: ((wallet: string) => boolean) | null = null;
-  /** Whether a wallet holds an Elymum emblem (laurel flag, emblem skin); null: nobody does. */
+  /** Whether a wallet holds a Coinnibal emblem (laurel flag, emblem skin); null: nobody does. */
   private holderCheck: ((wallet: string) => Promise<boolean>) | null = null;
   /** Arenas closed for a re-price at their bell (`RepriceScheduler.closedForSeats`); absent: none. */
   private repricing: ((arenaId: number) => boolean) | null = null;
@@ -311,15 +321,16 @@ export class Gateway {
   }
 
   /**
-   * The session token a browser offered as a subprotocol (`elymum.auth.<token>`): `stake` when its wallet holds a
+   * The session token a browser offered as a subprotocol (`coinnibal.auth.<token>`): `stake` when its wallet holds a
    * live arena coin here (a reconnect: it always gets in), `signed` for any other valid session, null without one.
    */
   private priorityOf(req: IncomingMessage): 'stake' | 'signed' | null {
-    const offered = String(req.headers['sec-websocket-protocol'] ?? '')
+    const offers = String(req.headers['sec-websocket-protocol'] ?? '')
       .split(',')
-      .map((s) => s.trim())
-      .find((s) => s.startsWith(AUTH_SUBPROTOCOL));
-    const wallet = offered ? this.auth.verifyToken(offered.slice(AUTH_SUBPROTOCOL.length)) : null;
+      .map((s) => s.trim());
+    const prefix = offers.some((s) => s.startsWith(AUTH_SUBPROTOCOL)) ? AUTH_SUBPROTOCOL : OLD_AUTH_SUBPROTOCOL;
+    const offered = offers.find((s) => s.startsWith(prefix));
+    const wallet = offered ? this.auth.verifyToken(offered.slice(prefix.length)) : null;
     if (!wallet) return null;
     return this.rooms.holdsLiveStake(wallet) ? 'stake' : 'signed';
   }

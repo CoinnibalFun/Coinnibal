@@ -2,14 +2,14 @@ import { CLOSE_REPLACED, PROTOCOL_VERSION, type ClientMessage, type ServerMessag
 import type { NetDown } from '../store';
 
 /** The game's WebSocket subprotocol (the server answers with it; it never echoes the token one). */
-const SUBPROTOCOL = 'elymum';
+const SUBPROTOCOL = 'coinnibal';
 /** The session token rides in a second subprotocol, never in the URL (no proxy or access log sees it). */
-const AUTH_SUBPROTOCOL = 'elymum.auth.';
+const AUTH_SUBPROTOCOL = 'coinnibal.auth.';
 /** A subprotocol must be an HTTP token: a session token (`0x….exp.iat.mac`, base64url) always is. */
 const TOKEN_CHARS = /^[A-Za-z0-9._~-]{1,512}$/;
 
 /**
- * The subprotocols a socket offers: `elymum` alone for a guest, plus `elymum.auth.<token>` when signed in, so a
+ * The subprotocols a socket offers: `coinnibal` alone for a guest, plus `coinnibal.auth.<token>` when signed in, so a
  * signed-in player gets the server's reserved slots (and its live arena coin back) before any message is sent.
  */
 export function gameProtocols(token: string | null | undefined): string[] {

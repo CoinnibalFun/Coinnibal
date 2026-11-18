@@ -319,7 +319,7 @@ describe('map settings (/api/admin/maps)', () => {
   });
 
   it('takes the maps over from an old bots.json once (former model: auto kept, new defaults); its bot settings are ignored', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-maps-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-maps-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
     writeFileSync(
       join(dir, 'site', 'bots.json'),
@@ -338,7 +338,7 @@ describe('map settings (/api/admin/maps)', () => {
   });
 
   it('a maps.json in the former square-root model keeps auto and takes the new defaults', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-maps-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-maps-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
     writeFileSync(join(dir, 'site', 'maps.json'), JSON.stringify({ arena: { auto: false, perPlayer: 900, min: 9000, max: 12_000 }, private: { auto: true, base: 5000, perPlayer: 10, max: 7000 } }));
     const store = new MapSettingsStore(dir);

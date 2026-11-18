@@ -14,13 +14,13 @@ import { fileURLToPath } from 'node:url';
 import { freePort } from './hardhat-arena';
 
 const dist = join(dirname(fileURLToPath(import.meta.url)), '../../dist/index.js');
-const dir = mkdtempSync(join(tmpdir(), 'elymum-boot-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-boot-'));
 const out: Record<string, number> = {};
 for (const run of ['first boot (empty DATA_DIR)', 'second boot (same DATA_DIR)', 'third boot']) {
   const port = await freePort();
   const t0 = Date.now();
   const child = spawn(process.execPath, [dist], {
-    env: { ...process.env, NODE_ENV: 'production', DATA_DIR: dir, PORT: String(port), HOST: '127.0.0.1', GAME_WORKERS: '3', PUBLIC_URL: 'https://elymum.io', AUTH_SECRET: 'boot-test-secret-0123456789abcdef0123456789' },
+    env: { ...process.env, NODE_ENV: 'production', DATA_DIR: dir, PORT: String(port), HOST: '127.0.0.1', GAME_WORKERS: '3', PUBLIC_URL: 'https://coinnibal.fun', AUTH_SECRET: 'boot-test-secret-0123456789abcdef0123456789' },
     stdio: 'ignore',
   });
   for (;;) {

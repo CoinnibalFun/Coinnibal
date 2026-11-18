@@ -27,9 +27,9 @@ function setup(o: { holder?: boolean; journal?: Journal } = {}) {
   const chain = new PayChain(clock, [arena(1, FEE), arena(2, 10 * FEE), { ...arena(4, 250 * FEE), holdersOnly: true }]);
   const reader = chain;
   const journal = o.journal ?? new Journal(null);
-  const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-paid-')) } as NodeJS.ProcessEnv);
+  const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-paid-')) } as NodeJS.ProcessEnv);
   const rooms = new RoomManager(cfg, roomDeps(chain, journal, () => clock.t), chain);
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-paid-svc-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-paid-svc-'));
   const svc = new CustomRoomService({
     rooms,
     dataDir: dir,

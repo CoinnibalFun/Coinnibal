@@ -53,7 +53,7 @@ export const PlayerFlag = {
   Verified: 2,
   /** Plays an arena ticket (tokens at stake). */
   Staker: 4,
-  /** The wallet holds an Elymum emblem (the name tag wears a laurel). Old clients ignore the bit. */
+  /** The wallet holds a Coinnibal emblem (the name tag wears a laurel). Old clients ignore the bit. */
   Holder: 8,
   /**
    * The player wears an uploaded profile picture (`avatar`): the wire record carries the 8-byte avatar
@@ -105,7 +105,7 @@ export interface PlayerInfo {
    */
   isBot?: boolean;
   /**
-   * The player's wallet holds an Elymum emblem (show the laurel). On the wire this is
+   * The player's wallet holds a Coinnibal emblem (show the laurel). On the wire this is
    * `PlayerFlag.Holder` in `flags`; `decodeSnapshot` sets it only when true.
    */
   holder?: boolean;
@@ -408,7 +408,7 @@ export interface StandingRow {
   value?: number;
   isBot?: boolean;
   verified?: boolean;
-  /** Holds an Elymum emblem (laurel). */
+  /** Holds a Coinnibal emblem (laurel). */
   holder?: boolean;
   /** Profile picture id (`avatarPath(id)`); humans only. */
   avatar?: string;

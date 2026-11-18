@@ -53,7 +53,7 @@ export function toTransport(source: RpcSource): Transport {
 }
 
 /** Read-only client. Without `chain`, chain-aware helpers read `eth_chainId` themselves. */
-export function createElymumPublicClient(source: RpcSource, chain?: Chain, opts: { pollingInterval?: number } = {}): PublicClient {
+export function createCoinnibalPublicClient(source: RpcSource, chain?: Chain, opts: { pollingInterval?: number } = {}): PublicClient {
   return createPublicClient({ chain, transport: toTransport(source), ...(opts.pollingInterval ? { pollingInterval: opts.pollingInterval } : {}) }) as PublicClient;
 }
 
@@ -61,7 +61,7 @@ export function createElymumPublicClient(source: RpcSource, chain?: Chain, opts:
  * Signing client. `account` is a local account (`privateKeyToAccount`, the CLI and the server) or
  * a JSON-RPC account address (a browser wallet: pass the provider as `source`).
  */
-export function createElymumWalletClient(source: RpcSource, opts: { account: Account | Address; chain: Chain; pollingInterval?: number }): WalletClient {
+export function createCoinnibalWalletClient(source: RpcSource, opts: { account: Account | Address; chain: Chain; pollingInterval?: number }): WalletClient {
   return createWalletClient({ account: opts.account, chain: opts.chain, transport: toTransport(source), ...(opts.pollingInterval ? { pollingInterval: opts.pollingInterval } : {}) });
 }
 

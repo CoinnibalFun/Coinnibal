@@ -116,7 +116,7 @@ describe('the end-of-game share panel', () => {
     expect(fetched()).toEqual([`${SERVER.http}/share/AbCdE12345.png`]);
     fireEvent.click(screen.getByTestId('share-download'));
     await waitFor(() => expect(clicks).toHaveLength(1));
-    expect(clicks[0].download).toBe('elymum-1-room-result.png');
+    expect(clicks[0].download).toBe('coinnibal-1-room-result.png');
     expect(clicks[0].href).toMatch(/^blob:/);
     // the picture was fetched once: the download reuses the preview's bytes
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -126,7 +126,7 @@ describe('the end-of-game share panel', () => {
     await waitFor(() => expect(fetched()).toContain(`${SERVER.http}/share/AbCdE12345/standings.png`));
     fireEvent.click(screen.getByTestId('share-download'));
     await waitFor(() => expect(clicks).toHaveLength(2));
-    expect(clicks[1].download).toBe('elymum-1-room-standings.png');
+    expect(clicks[1].download).toBe('coinnibal-1-room-standings.png');
   });
 
   it('"Share on X" opens the intent with the result line and the card link; no standings tab without the picture', () => {
@@ -149,7 +149,7 @@ describe('the end-of-game share panel', () => {
     await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
     const arg = (share.mock.calls[0] as unknown as [{ files: File[]; text: string }])[0];
     expect(arg.files).toHaveLength(1);
-    expect(arg.files[0].name).toBe('elymum-1-room-result.png');
+    expect(arg.files[0].name).toBe('coinnibal-1-room-result.png');
     expect(arg.files[0].type).toBe('image/png');
     expect(arg.text).toContain(resultShareText(translate, { rank: 1, n: 2, room: '$1 Room' }));
     expect(arg.text).toContain(shareUrl('AbCdE12345'));
@@ -189,7 +189,7 @@ describe('the end-of-game share panel', () => {
     expect(posted).toContain('(TEST: testnet test room, no real money)');
     expect(new URL(x.href).searchParams.get('url')).toBe(shareUrl('KiLLbbbbbb'));
     fireEvent.click(rows[0].querySelector('[data-testid="moment-download"]')!);
-    await waitFor(() => expect(clicks.some((c) => c.download === 'elymum-1-room-ate-rocky-x.png')).toBe(true));
+    await waitFor(() => expect(clicks.some((c) => c.download === 'coinnibal-1-room-ate-rocky-x.png')).toBe(true));
     expect(fetched()).toContain(`${SERVER.http}/share/KiLLcccccc.png`);
   });
 
@@ -211,7 +211,7 @@ describe('the end-of-game share panel', () => {
     expect(url.searchParams.get('url')).toBe(shareUrl('DeAdD12345'));
     expect(screen.getByTestId('share-moments').textContent).toContain('Your moments: 1 kill');
     fireEvent.click(screen.getByTestId('share-download'));
-    await waitFor(() => expect(clicks[0]?.download).toBe('elymum-pro-pond-1-game.png'));
+    await waitFor(() => expect(clicks[0]?.download).toBe('coinnibal-pro-pond-1-game.png'));
   });
 
   it("a custom room's end: using the panel stops the sheet from leaving by itself", async () => {
@@ -228,7 +228,7 @@ describe('the end-of-game share panel', () => {
     expect(document.querySelector('.g-roomover__auto')).toBeTruthy();
     fireEvent.click(screen.getByTestId('share-download'));
     await waitFor(() => expect(clicks).toHaveLength(1));
-    expect(clicks[0].download).toBe('elymum-friday-pond-result.png');
+    expect(clicks[0].download).toBe('coinnibal-friday-pond-result.png');
     expect(document.querySelector('.g-roomover__auto')).toBeNull();
   });
 
@@ -245,7 +245,7 @@ describe('engine: the cards of a game', () => {
   beforeEach(() => {
     vi.stubGlobal('requestAnimationFrame', () => 0);
     vi.stubGlobal('cancelAnimationFrame', () => {});
-    localStorage.setItem('elymum.brief', '1');
+    localStorage.setItem('coinnibal.brief', '1');
     useUi.setState({ ...initial, rooms: [ARENA], screen: 'lobby' }, true);
     engine = new GameEngine(document.createElement('canvas'));
     recv({ t: 'welcome', v: 1, serverTime: Date.now(), serverNow: Date.now(), rooms: [ARENA], chain: initial.chain as never, online: 1 });

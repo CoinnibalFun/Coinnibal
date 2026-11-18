@@ -33,8 +33,8 @@ async function open(path, { viewport = D, mobile = false, wallet = true, admin =
     const s = await siteSession();
     await ctx.addInitScript(
       ([a, t]) => {
-        localStorage.setItem('elymum.auth.v1', JSON.stringify({ address: a, token: t, exp: Date.now() + 3600_000 }));
-        localStorage.setItem('elymum.site.admin.v1', a);
+        localStorage.setItem('coinnibal.auth.v1', JSON.stringify({ address: a, token: t, exp: Date.now() + 3600_000 }));
+        localStorage.setItem('coinnibal.site.admin.v1', a);
       },
       [s.address, s.token],
     );
@@ -89,10 +89,10 @@ for (const [tag, viewport, mobile] of [
   }
   if (want('lobby')) {
     const { ctx, page } = await open('/play', { viewport, mobile });
-    await page.waitForFunction(() => !!window.__elymum && window.__elymum.useUi.getState().connected, null, { timeout: 15000 });
+    await page.waitForFunction(() => !!window.__coinnibal && window.__coinnibal.useUi.getState().connected, null, { timeout: 15000 });
     await signInGame(page, base, account);
-    await page.waitForFunction(() => !!window.__elymumChain?.fakeWallet, null, { timeout: 10000 });
-    await page.evaluate(() => window.__elymumChain.refresh());
+    await page.waitForFunction(() => !!window.__coinnibalChain?.fakeWallet, null, { timeout: 10000 });
+    await page.evaluate(() => window.__coinnibalChain.refresh());
     await page.waitForTimeout(1500);
     await page.locator('[data-testid="holders-only"]').first().scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
@@ -101,13 +101,13 @@ for (const [tag, viewport, mobile] of [
     await page.evaluate(async () => {
       const dev = await import('/src/wallet/devFake.ts');
       dev.fakeFaucet.holder = true;
-      window.__elymumChain.refresh();
+      window.__coinnibalChain.refresh();
     });
     await page.waitForTimeout(1500);
     await page.locator('[data-testid="holders-only"]').first().scrollIntoViewIfNeeded();
     await shot(page, `lobby-holder-fee-${tag}`);
     // into a practice room: BOT chips in the standings, the feed and the name tags
-    await page.evaluate(() => window.__elymum.engine.play('practice'));
+    await page.evaluate(() => window.__coinnibal.engine.play('practice'));
     await page.waitForTimeout(6000);
     await shot(page, `room-bots-${tag}`);
     await ctx.close();

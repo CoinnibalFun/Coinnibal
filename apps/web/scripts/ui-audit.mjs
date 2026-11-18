@@ -117,7 +117,7 @@ const kids = [];
 async function startStack() {
   // another stack on these ports would be audited instead of this checkout's: refuse
   if (await fetch(`${BASE}/api/health`).then((r) => r.ok, () => false)) throw new Error(`${BASE} already serves a stack: pick other --web-port / --server-port`);
-  const data = mkdtempSync(join(tmpdir(), 'elymum-ui-audit-'));
+  const data = mkdtempSync(join(tmpdir(), 'coinnibal-ui-audit-'));
   // a fresh server starts closed (information site): this stack opens every part, as the admin would in /admin
   mkdirSync(join(data, 'site'), { recursive: true });
   writeFileSync(join(data, 'site/settings.json'), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', launch: 1 }));
@@ -186,17 +186,17 @@ async function settle(page, ms = 700) {
 async function ensureSession(page) {
   const ok = await page.evaluate(async () => {
     try {
-      const raw = localStorage.getItem('elymum.auth.v1');
+      const raw = localStorage.getItem('coinnibal.auth.v1');
       if (raw && JSON.parse(raw).exp > Date.now() + 120_000) return true;
-      const w = window.__elymumDevWallet;
+      const w = window.__coinnibalDevWallet;
       if (!w) return false;
       const n = await fetch(`/api/auth/nonce?address=${w.address}`).then((r) => r.json());
       const hex = '0x' + [...new TextEncoder().encode(n.message)].map((b) => b.toString(16).padStart(2, '0')).join('');
       const signature = await w.provider.request({ method: 'personal_sign', params: [hex, w.address] });
       const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: w.address, message: n.message, signature }) }).then((r) => r.json());
       if (!res.token) return false;
-      localStorage.setItem('elymum.auth.v1', JSON.stringify({ address: res.address, token: res.token, exp: Date.now() + 23 * 3600_000 }));
-      if (res.admin) localStorage.setItem('elymum.site.admin.v1', res.address);
+      localStorage.setItem('coinnibal.auth.v1', JSON.stringify({ address: res.address, token: res.token, exp: Date.now() + 23 * 3600_000 }));
+      if (res.admin) localStorage.setItem('coinnibal.site.admin.v1', res.address);
       return true;
     } catch (e) {
       return String(e);
@@ -209,14 +209,14 @@ async function ensureSession(page) {
 async function stressPlay(page, { token = 'max', hype = 'huge' } = {}) {
   await page.evaluate(
     ([tok, wei, LONG, LONG_M]) => {
-      const c = window.__elymumChain;
+      const c = window.__coinnibalChain;
       if (c?.fakeWallet) {
         c.fakeWallet.tokenBalance = BigInt(tok);
         c.fakeWallet.wei = BigInt(wei);
         c.fakeWallet.delayMs = 400;
         c.refresh();
       }
-      const E = window.__elymum?.engine;
+      const E = window.__coinnibal?.engine;
       if (E && !E.__auditWrapped) {
         E.__auditWrapped = true;
         const orig = E.onMessage.bind(E);
@@ -251,31 +251,31 @@ async function stressPlay(page, { token = 'max', hype = 'huge' } = {}) {
 
 const ui = (page, fn, arg) => page.evaluate(fn, arg);
 /** Sets the game app's UI store. */
-const setUi = (page, patch) => page.evaluate((p) => window.__elymum.useUi.setState(p), patch);
+const setUi = (page, patch) => page.evaluate((p) => window.__coinnibal.useUi.setState(p), patch);
 /** Feeds a server message to the engine (as if the server sent it). */
-const feed = (page, m) => page.evaluate((m) => window.__elymum.engine.onMessage(m), m);
+const feed = (page, m) => page.evaluate((m) => window.__coinnibal.engine.onMessage(m), m);
 
 async function openPlay(page, h, { hash = '', signed = true, token = 'max', hype = 'huge', wait = 900 } = {}) {
   await page.goto(`${BASE}/play${hash}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => !!window.__elymum && window.__elymum.useUi.getState().connected, null, { timeout: 30000 });
+  await page.waitForFunction(() => !!window.__coinnibal && window.__coinnibal.useUi.getState().connected, null, { timeout: 30000 });
   if (signed) {
-    await page.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 15000 }).catch(async () => {
+    await page.waitForFunction(() => !!window.__coinnibal.useUi.getState().auth, null, { timeout: 15000 }).catch(async () => {
       const acct = privateKeyToAccount(AUDIT_KEY);
       const res = await page.evaluate((a) => fetch(`/api/auth/nonce?address=${a}`).then((r) => r.json()), acct.address);
       const signature = await acct.signMessage({ message: res.message });
-      await page.evaluate(([a, m, s]) => window.__elymum.engine.authSignature(a, m, s), [acct.address, res.message, signature]);
-      await page.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 10000 });
+      await page.evaluate(([a, m, s]) => window.__coinnibal.engine.authSignature(a, m, s), [acct.address, res.message, signature]);
+      await page.waitForFunction(() => !!window.__coinnibal.useUi.getState().auth, null, { timeout: 10000 });
     });
-    await page.waitForFunction(() => !!window.__elymumChain?.fakeWallet, null, { timeout: 15000 });
+    await page.waitForFunction(() => !!window.__coinnibalChain?.fakeWallet, null, { timeout: 15000 });
   }
   await stressPlay(page, { token, hype });
-  await page.waitForFunction(() => window.__elymum.useUi.getState().rooms.length > 0, null, { timeout: 15000 }).catch(() => {});
+  await page.waitForFunction(() => window.__coinnibal.useUi.getState().rooms.length > 0, null, { timeout: 15000 }).catch(() => {});
   await settle(page, wait);
 }
 
 async function playPractice(page) {
-  await page.evaluate(() => window.__elymum.engine.play('practice'));
-  await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 15000 });
+  await page.evaluate(() => window.__coinnibal.engine.play('practice'));
+  await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 15000 });
   await settle(page, 1800);
   // the round intro card (a passing, pointer-transparent overlay) leaves first
   await page.waitForFunction(() => !document.querySelector('.gm-intro__card'), null, { timeout: 12000 }).catch(() => {});
@@ -441,7 +441,7 @@ const SCENES = [
       await page.evaluate((err) => {
         const now = Date.now();
         const kinds = ['info', 'success', 'error', 'warn', 'error', 'info'];
-        window.__elymum.useUi.setState({
+        window.__coinnibal.useUi.setState({
           toasts: kinds.map((kind, i) => ({ id: 9000 + i, kind, text: i === 2 ? err : i === 4 ? 'WWWWWWWWWWWWWWWW ate MMMMMMMMMMMMMMMM and took 999,999,999,999.12 tokens' : `Toast number ${i + 1}: something happened`, link: i === 1 ? { href: 'https://example.com/tx/0x' + 'ab'.repeat(32), label: 'View transaction' } : undefined, at: now })),
         });
       }, LONG_ERR);
@@ -461,11 +461,11 @@ const SCENES = [
       await page.waitForSelector('.tf-sheet', { timeout: 8000 });
       await settle(page, 900);
       await h.check('sheet');
-      await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 4000));
+      await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 4000));
       await page.locator('.tf-sheet .tf-pay').first().click();
       await page.waitForTimeout(700);
       await h.check('signing');
-      await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 300));
+      await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 300));
     },
     final: false,
   },
@@ -481,7 +481,7 @@ const SCENES = [
       await pickTicket(page, 'arena:2');
       await page.locator('.kl-cta').first().click();
       await page.waitForSelector('.tf-sheet', { timeout: 8000 });
-      await page.evaluate(() => (window.__elymumChain.fakeWallet.failNext = 'ArenaFull'));
+      await page.evaluate(() => (window.__coinnibalChain.fakeWallet.failNext = 'ArenaFull'));
       await page.locator('.tf-sheet .tf-pay').first().click();
       await page.waitForSelector('.tf-error', { timeout: 8000 }).catch(() => h.note('no .tf-error'));
       await settle(page, 600);
@@ -518,7 +518,7 @@ const SCENES = [
       await page.waitForSelector('[data-testid="cr-payment"]');
       await settle(page, 800);
       await h.check('payment');
-      await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 3000));
+      await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 3000));
       await page.getByTestId('cr-pay').click();
       await page.waitForTimeout(600);
       await h.check('paying');
@@ -547,7 +547,7 @@ const SCENES = [
       await page.waitForSelector('[data-testid="cr-payment"]');
       await settle(page, 800);
       await h.check('payment');
-      await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 100));
+      await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 100));
       await page.getByTestId('cr-pay').click();
       await page.waitForSelector('[data-testid="cr-done"]', { timeout: 20000 });
       await settle(page, 900);
@@ -580,11 +580,11 @@ const SCENES = [
       await page.locator('input[data-autofocus]').first().fill(LONG_ROOM); // the room name (any language)
       await page.getByTestId('cr-continue').click();
       await page.waitForSelector('[data-testid="cr-payment"]');
-      await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 100));
+      await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 100));
       await page.getByTestId('cr-pay').click();
       await page.waitForSelector('[data-testid="cr-done"]', { timeout: 20000 });
       await page.getByTestId('cr-enter').click();
-      await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 15000 });
+      await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 15000 });
       await settle(page, 2000);
       await page.waitForFunction(() => !document.querySelector('.gm-intro__card'), null, { timeout: 12000 }).catch(() => {});
       await settle(page, 300);
@@ -601,9 +601,9 @@ const SCENES = [
       await openPlay(page, h);
       await playPractice(page);
       await page.evaluate(() => {
-        const s = window.__elymum.useUi.getState();
+        const s = window.__coinnibal.useUi.getState();
         const now = Date.now();
-        window.__elymum.useUi.setState({
+        window.__coinnibal.useUi.setState({
           emoteSet: 'trash',
           boosts: { ...(s.boosts ?? {}), usable: true, signedIn: true, disabled: [], cooldownMs: { magnet: 0, leap: 6000, speed: 0, invis: 0 }, charges: { magnet: 3, leap: 2, speed: 3, invis: 3 } },
           boostReady: { magnet: 0, leap: now + 6000, speed: 0, invis: 0 },
@@ -622,9 +622,9 @@ const SCENES = [
       await pickTicket(page, 'arena:1');
       await page.locator('.kl-cta').first().click();
       await page.waitForSelector('.tf-sheet', { timeout: 8000 });
-      await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 50));
+      await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 50));
       await page.locator('.tf-sheet .tf-pay').first().click();
-      await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 20000 });
+      await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 20000 });
       await settle(page, 2000);
       await hudExtras(page);
     },
@@ -638,15 +638,15 @@ const SCENES = [
       await pickTicket(page, 'arena:1');
       await page.locator('.kl-cta').first().click();
       await page.waitForSelector('.tf-sheet', { timeout: 8000 });
-      await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 50));
+      await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 50));
       await page.locator('.tf-sheet .tf-pay').first().click();
-      await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 40000 });
+      await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 40000 });
       await settle(page, 1500);
       await hudExtras(page);
       // every power-up owned, the arena allowance shown: the bar at its largest
       await page.evaluate(() => {
-        const s = window.__elymum.useUi.getState();
-        window.__elymum.useUi.setState({ boosts: { ...(s.boosts ?? {}), usable: true, signedIn: true, disabled: [], cooldownMs: { magnet: 0, leap: 0, speed: 0, invis: 0 }, charges: { magnet: 3, leap: 3, speed: 3, invis: 3 }, arena: { left: 3, max: 3 } } });
+        const s = window.__coinnibal.useUi.getState();
+        window.__coinnibal.useUi.setState({ boosts: { ...(s.boosts ?? {}), usable: true, signedIn: true, disabled: [], cooldownMs: { magnet: 0, leap: 0, speed: 0, invis: 0 }, charges: { magnet: 3, leap: 3, speed: 3, invis: 3 }, arena: { left: 3, max: 3 } } });
       });
       await settle(page, 600);
     },
@@ -683,15 +683,15 @@ const SCENES = [
       await openPlay(page, h);
       await playPractice(page);
       await page.evaluate(([stats, standings]) => {
-        const s = window.__elymum.useUi.getState();
-        window.__elymum.useUi.setState({ room: { ...(s.room ?? {}), mode: 'arena' }, ticket: { entryFee: 999_999_999_999_000_000, arenaId: 1, session: '1' } });
-        window.__elymum.engine.endGame('round', 12345, 999_999_999_999_123_456, { ...stats, payout: 999_999_999_999_123_456, finalRank: 4, finalOf: 999 }, standings);
+        const s = window.__coinnibal.useUi.getState();
+        window.__coinnibal.useUi.setState({ room: { ...(s.room ?? {}), mode: 'arena' }, ticket: { entryFee: 999_999_999_999_000_000, arenaId: 1, session: '1' } });
+        window.__coinnibal.engine.endGame('round', 12345, 999_999_999_999_123_456, { ...stats, payout: 999_999_999_999_123_456, finalRank: 4, finalOf: 999 }, standings);
       }, [DEATH_STATS, ROUND_STANDINGS]);
       await feed(page, { t: 'share', kind: 'round', id: 'AuDiT00001' });
       await settle(page, 1500);
       await h.check('result');
       await page.evaluate(() =>
-        window.__elymum.useUi.setState({ lastSettlement: { session: '1', arenaId: 1, txHash: '0xde7fa4e0' + '0'.repeat(56), payout: 999_999_999_999_123_456, fee: 49_999_999_999_956_172, net: 949_999_999_999_167_284, at: Date.now() } }),
+        window.__coinnibal.useUi.setState({ lastSettlement: { session: '1', arenaId: 1, txHash: '0xde7fa4e0' + '0'.repeat(56), payout: 999_999_999_999_123_456, fee: 49_999_999_999_956_172, net: 949_999_999_999_167_284, at: Date.now() } }),
       );
       await settle(page, 1200);
     },
@@ -706,9 +706,9 @@ const SCENES = [
       await playPractice(page);
       await hudExtras(page);
       await page.evaluate(() => {
-        const s = window.__elymum.useUi.getState();
+        const s = window.__coinnibal.useUi.getState();
         const endsAt = Date.now() + 20_000;
-        window.__elymum.useUi.setState({ room: { ...(s.room ?? {}), mode: 'arena', arenaId: 1, round: { n: 0, endsAt, joinsCloseAt: endsAt - 5000, opensAt: 0 } } });
+        window.__coinnibal.useUi.setState({ room: { ...(s.room ?? {}), mode: 'arena', arenaId: 1, round: { n: 0, endsAt, joinsCloseAt: endsAt - 5000, opensAt: 0 } } });
       });
       // the room change replays the round intro card: the countdown comes once it has passed
       await page.waitForFunction(() => !document.querySelector('.gm-intro__card'), null, { timeout: 15000 }).catch(() => {});
@@ -724,7 +724,7 @@ const SCENES = [
     run: async (page, h) => {
       await openPlay(page, h);
       await playPractice(page);
-      await page.evaluate(() => window.__elymum.useUi.setState({ netDown: { kind: 'lost', attempt: 3, retryAt: performance.now() + 9000 } }));
+      await page.evaluate(() => window.__coinnibal.useUi.setState({ netDown: { kind: 'lost', attempt: 3, retryAt: performance.now() + 9000 } }));
       await settle(page, 2500);
     },
   },
@@ -737,12 +737,12 @@ const SCENES = [
       await openPlay(page, h);
       await playPractice(page);
       await page.evaluate(([stats, standings]) => {
-        const s = window.__elymum.useUi.getState();
+        const s = window.__coinnibal.useUi.getState();
         const T = Date.now();
         const R = 3_600_000;
         const n = Math.floor(T / R);
-        window.__elymum.useUi.setState({ room: { ...(s.room ?? {}), mode: 'arena', arenaId: 1, round: { n, endsAt: (n + 1) * R, joinsCloseAt: (n + 1) * R - 60_000, opensAt: T + 27_000 } }, ticket: { entryFee: 999_999_999_999_000_000, arenaId: 1, session: '1' } });
-        window.__elymum.engine.endGame('round', 12345, 999_999_999_999_123_456, { ...stats, payout: 999_999_999_999_123_456, finalRank: 4, finalOf: 999 }, standings);
+        window.__coinnibal.useUi.setState({ room: { ...(s.room ?? {}), mode: 'arena', arenaId: 1, round: { n, endsAt: (n + 1) * R, joinsCloseAt: (n + 1) * R - 60_000, opensAt: T + 27_000 } }, ticket: { entryFee: 999_999_999_999_000_000, arenaId: 1, session: '1' } });
+        window.__coinnibal.engine.endGame('round', 12345, 999_999_999_999_123_456, { ...stats, payout: 999_999_999_999_123_456, finalRank: 4, finalOf: 999 }, standings);
       }, [DEATH_STATS, ROUND_STANDINGS]);
       await feed(page, { t: 'share', kind: 'round', id: 'AuDiT00004' });
       await settle(page, 1500);
@@ -758,13 +758,13 @@ const SCENES = [
       await playPractice(page);
       // alone on the floor (the audit's stress data says 50 players otherwise)
       await page.evaluate(() => {
-        const E = window.__elymum.engine;
+        const E = window.__coinnibal.engine;
         const o = E.onMessage;
         E.onMessage = (m) => {
           o(m);
-          if (m.t === 'lb') window.__elymum.useUi.setState((s) => ({ hud: { ...s.hud, players: 1 } }));
+          if (m.t === 'lb') window.__coinnibal.useUi.setState((s) => ({ hud: { ...s.hud, players: 1 } }));
         };
-        window.__elymum.useUi.setState((s) => ({ hud: { ...s.hud, players: 1 } }));
+        window.__coinnibal.useUi.setState((s) => ({ hud: { ...s.hud, players: 1 } }));
       });
       await page.waitForSelector('[data-testid="practice-quiet-hud"]', { timeout: 8000 }).catch(() => h.note('no quiet-pond sticker'));
       await settle(page, 600);
@@ -807,8 +807,8 @@ const SCENES = [
       await playPractice(page);
       // a custom room closed by its creator: the countdown sticker and the big numerals
       await page.evaluate((LONG) => {
-        const s = window.__elymum.useUi.getState();
-        window.__elymum.useUi.setState({ room: { ...(s.room ?? {}), mode: 'private', name: LONG, code: 'PONDS', custom: { durationMin: 30, mapSize: 'auto', bots: 2, difficulty: 'easy', food: 'normal', traps: 'normal', powerUps: true, kind: 'free', creator: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', createdAt: Date.now() - 60_000, endsAt: Date.now() + 600_000 } } });
+        const s = window.__coinnibal.useUi.getState();
+        window.__coinnibal.useUi.setState({ room: { ...(s.room ?? {}), mode: 'private', name: LONG, code: 'PONDS', custom: { durationMin: 30, mapSize: 'auto', bots: 2, difficulty: 'easy', food: 'normal', traps: 'normal', powerUps: true, kind: 'free', creator: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', createdAt: Date.now() - 60_000, endsAt: Date.now() + 600_000 } } });
       }, LONG);
       await feed(page, { t: 'closing', endsAt: Date.now() + 8_500, message: 'The room creator closed this room.' });
       await settle(page, 900);
@@ -833,7 +833,7 @@ const SCENES = [
     brief: true,
     run: async (page, h) => {
       await openPlay(page, h);
-      await page.evaluate(() => window.__elymum.engine.play('practice'));
+      await page.evaluate(() => window.__coinnibal.engine.play('practice'));
       await page.waitForSelector('.g-brief__step', { timeout: 15000 });
       await settle(page, 900);
     },
@@ -862,7 +862,7 @@ const SCENES = [
     auth: 'signed',
     run: async (page, h) => {
       await openPlay(page, h);
-      await page.evaluate(() => window.__elymum.useUi.setState({ held: { arenaId: 1, opensAt: Date.now() + 3_600_000 } }));
+      await page.evaluate(() => window.__coinnibal.useUi.setState({ held: { arenaId: 1, opensAt: Date.now() + 3_600_000 } }));
       await settle(page, 900);
     },
   },
@@ -873,9 +873,9 @@ const SCENES = [
     run: async (page, h) => {
       await openPlay(page, h);
       await page.evaluate((addr) => {
-        const w = window.__elymumChain.fakeWallet;
+        const w = window.__coinnibalChain.fakeWallet;
         w.sessions[1] = { arenaId: 1, player: addr, id: 1n, entryFee: 999_999_999n * 10n ** 18n, openedAt: Math.floor(Date.now() / 1000) - 600, feeBps: 500, finalized: true, owed: 999_999_999_999_123_456n * 10n ** 6n };
-        window.__elymumChain.refresh();
+        window.__coinnibalChain.refresh();
       }, AUDIT_ADDRESS);
       await settle(page, 1500);
     },
@@ -1087,11 +1087,11 @@ async function newContext(browser, vp, theme, auth, app, brief = false, key = AU
   await ctx.addInitScript(
     ([theme, brief, name, locale]) => {
       try {
-        localStorage.setItem('elymum.locale.v1', locale);
-        localStorage.setItem('elymum.settings.v1', JSON.stringify({ name, skin: 4, theme: theme === 'night' ? 'dark' : 'light', quality: 'low', sound: false, showMinimap: true, showChat: true, showNames: true, showMass: true, showFps: true }));
-        if (!brief) localStorage.setItem('elymum.brief', '1');
-        else localStorage.removeItem('elymum.brief');
-        localStorage.setItem('elymum.autoQuality', 'off');
+        localStorage.setItem('coinnibal.locale.v1', locale);
+        localStorage.setItem('coinnibal.settings.v1', JSON.stringify({ name, skin: 4, theme: theme === 'night' ? 'dark' : 'light', quality: 'low', sound: false, showMinimap: true, showChat: true, showNames: true, showMass: true, showFps: true }));
+        if (!brief) localStorage.setItem('coinnibal.brief', '1');
+        else localStorage.removeItem('coinnibal.brief');
+        localStorage.setItem('coinnibal.autoQuality', 'off');
       } catch {}
     },
     [theme, brief, LONG, LOCALE],
@@ -1123,14 +1123,14 @@ async function runScene(browser, vp, theme, scene, sessionCtxCache) {
       // the site session (SIWE), shared by the site pages, /play and /admin
       if (sessionCtxCache.token && !scene.fresh) {
         await ctx.addInitScript((s) => {
-          localStorage.setItem('elymum.auth.v1', s.auth);
-          if (s.admin) localStorage.setItem('elymum.site.admin.v1', s.admin);
+          localStorage.setItem('coinnibal.auth.v1', s.auth);
+          if (s.admin) localStorage.setItem('coinnibal.site.admin.v1', s.admin);
         }, sessionCtxCache.token);
       } else {
         await page.goto(`${BASE}/no-such-page-audit`, { waitUntil: 'domcontentloaded' });
-        await page.waitForFunction(() => !!window.__elymumDevWallet, null, { timeout: 10000 });
+        await page.waitForFunction(() => !!window.__coinnibalDevWallet, null, { timeout: 10000 });
         await ensureSession(page);
-        if (!scene.fresh) sessionCtxCache.token = await page.evaluate(() => ({ auth: localStorage.getItem('elymum.auth.v1'), admin: localStorage.getItem('elymum.site.admin.v1') }));
+        if (!scene.fresh) sessionCtxCache.token = await page.evaluate(() => ({ auth: localStorage.getItem('coinnibal.auth.v1'), admin: localStorage.getItem('coinnibal.site.admin.v1') }));
       }
     }
     const h = {
@@ -1311,9 +1311,9 @@ if (firstSigned) {
   const ctx = await newContext(browser, firstSigned.vp, 'day', 'signed', 'site');
   const page = await ctx.newPage();
   await page.goto(`${BASE}/no-such-page-audit`, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => !!window.__elymumDevWallet, null, { timeout: 15000 });
+  await page.waitForFunction(() => !!window.__coinnibalDevWallet, null, { timeout: 15000 });
   await ensureSession(page);
-  sessionCache.token = await page.evaluate(() => ({ auth: localStorage.getItem('elymum.auth.v1'), admin: localStorage.getItem('elymum.site.admin.v1') }));
+  sessionCache.token = await page.evaluate(() => ({ auth: localStorage.getItem('coinnibal.auth.v1'), admin: localStorage.getItem('coinnibal.site.admin.v1') }));
   await ctx.close();
   adminToken = JSON.parse(sessionCache.token.auth).token;
   await adminApi('custom-rooms', 'PUT', { maxLive: 24, maxPerWallet: 10 });

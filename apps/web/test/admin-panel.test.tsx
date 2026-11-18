@@ -266,7 +266,7 @@ describe('Deploy wizard', () => {
   });
 
   it('registers a contract deployed while signed out as soon as the admin signs in', async () => {
-    localStorage.setItem('elymum.admin.deploy.v1', JSON.stringify({ '46630': { arena: { address: NEW, txHash: HASH } } }));
+    localStorage.setItem('coinnibal.admin.deploy.v1', JSON.stringify({ '46630': { arena: { address: NEW, txHash: HASH } } }));
     const registerContract = vi.fn(async () => ({ arena: null, nft: null, token: null }));
     const api = { registerContract, mintPrice: vi.fn(async () => ({ priceWei: null })) } as unknown as AdminApi;
     const ctx = ctxOf({ net: resolveNetwork(chainStatus({ arenaAddress: null })) });

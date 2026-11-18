@@ -57,7 +57,7 @@ const NEAR_MISS_MS = 450;
 /** At most one "phew" this often (ms). */
 const PHEW_COOLDOWN_MS = 5000;
 
-const TOKEN_KEY = 'elymum.auth.v1';
+const TOKEN_KEY = 'coinnibal.auth.v1';
 const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
 let killId = 1;
 let chatId = 1;
@@ -200,9 +200,9 @@ export class GameEngine {
       }
       this.particles.lowQuality = s.quality === 'low' || this.renderer.autoLow;
     };
-    // `localStorage['elymum.autoQuality'] = 'off'` keeps full quality whatever the frame rate (testing)
+    // `localStorage['coinnibal.autoQuality'] = 'off'` keeps full quality whatever the frame rate (testing)
     try {
-      this.governor.enabled = localStorage.getItem('elymum.autoQuality') !== 'off';
+      this.governor.enabled = localStorage.getItem('coinnibal.autoQuality') !== 'off';
     } catch {
       /* storage blocked: keep the default */
     }
@@ -215,7 +215,7 @@ export class GameEngine {
     this.reducedQuery?.addEventListener?.('change', this.onReducedChange);
     this.onReducedChange();
     // dev builds, and production builds made for the perf benchmark (scripts/perf.mjs --prod)
-    if (import.meta.env.DEV || import.meta.env.VITE_PERF_HOOK === '1') (window as unknown as { __elymum?: unknown }).__elymum = { engine: this, useUi };
+    if (import.meta.env.DEV || import.meta.env.VITE_PERF_HOOK === '1') (window as unknown as { __coinnibal?: unknown }).__coinnibal = { engine: this, useUi };
     this.resize();
     window.addEventListener('resize', this.resize);
     this.net.connect();

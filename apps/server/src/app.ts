@@ -272,7 +272,7 @@ export async function createApp(
   const xLinks: XLinkService = new XLinkService({
     dataDir: persist ? cfg.dataDir : null,
     suffix: cfg.devFakeChain ? '.dev-fake' : '',
-    // the dev stack (fake chain only) may ask for a fake X: posts carry the newest code, by @elymum_fan
+    // the dev stack (fake chain only) may ask for a fake X: posts carry the newest code, by @coinnibal_fan
     ...(opts.xFetch ? { fetch: opts.xFetch } : {}),
     ...(!opts.xFetch && cfg.devFakeChain && process.env.DEV_FAKE_X === '1' ? { fetch: fakeXFetch({ text: () => `Linking my X to Coinnibal: ${xLinks.lastCode() ?? ''} ${siteHostOf(cfg.publicUrl)}`, avatar: devFakeXPicture }) } : {}),
     log,

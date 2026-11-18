@@ -39,7 +39,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const WIRE_OVERHEAD_PER_FRAME = 2 + 22 + 52;
 const MSS = 1448;
 
-const dir = mkdtempSync(join(tmpdir(), 'elymum-audit-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-audit-'));
 const env: Record<string, string> = {
   NODE_ENV: 'development',
   DEV_FAKE_CHAIN: '1',

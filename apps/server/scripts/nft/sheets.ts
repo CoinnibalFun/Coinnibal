@@ -26,7 +26,7 @@ const arg = (name: string, def: string) => {
   const i = process.argv.indexOf(`--${name}`);
   return i > 0 ? process.argv[i + 1] : def;
 };
-const seed = arg('seed', 'elymum-preview-seed');
+const seed = arg('seed', 'coinnibal-preview-seed');
 const size = Number(arg('size', String(NFT_SUPPLY)));
 const out = resolve(arg('out', resolve(import.meta.dirname, '../../../../out/nft2')));
 mkdirSync(out, { recursive: true });

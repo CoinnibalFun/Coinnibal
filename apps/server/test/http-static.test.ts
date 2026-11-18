@@ -17,8 +17,8 @@ describe('static web client', () => {
   });
 
   async function start(): Promise<string> {
-    const web = mkdtempSync(join(tmpdir(), 'elymum-web-'));
-    writeFileSync(join(web, 'index.html'), '<!doctype html><title>Elymum</title>');
+    const web = mkdtempSync(join(tmpdir(), 'coinnibal-web-'));
+    writeFileSync(join(web, 'index.html'), '<!doctype html><title>Coinnibal</title>');
     mkdirSync(join(web, 'assets'));
     writeFileSync(join(web, 'assets', 'app-1234.js'), 'console.log(1)');
     writeFileSync(join(web, 'favicon-32.png'), 'png');
@@ -30,7 +30,7 @@ describe('static web client', () => {
     // far larger than a socket buffer: a client that hangs up after the first chunk leaves the transfer unfinished
     writeFileSync(join(web, 'media', 'big.mp4'), Buffer.alloc(16 * 1024 * 1024, 1));
     webRoot = web;
-    const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-data-')), WEB_DIST: web } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-data-')), WEB_DIST: web } as NodeJS.ProcessEnv);
     server = createHttpServer(cfg, { chain: new NullChain(), rooms: {} as never, leaderboards: {} as never, auth: {} as never, startedAt: Date.now() });
     await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
     const addr = server.address();
@@ -46,7 +46,7 @@ describe('static web client', () => {
       expect(res.headers.get('cache-control'), path).toBe('no-cache');
       expect(res.headers.get('x-frame-options'), path).toBe('DENY');
       expect(res.headers.get('content-security-policy'), path).toContain("frame-ancestors 'none'");
-      expect(await res.text(), path).toContain('<title>Elymum</title>');
+      expect(await res.text(), path).toContain('<title>Coinnibal</title>');
     }
   });
 
@@ -73,7 +73,7 @@ describe('static web client', () => {
 
   it('answers an unexpected error with a generic 500 and logs the details with URLs redacted', async () => {
     const logs: string[] = [];
-    const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-data-')) } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-data-')) } as NodeJS.ProcessEnv);
     const boom = () => {
       throw new Error('HTTP request failed. URL: https://rpc.example/v2/SECRETKEY123?apikey=SECRET2');
     };
@@ -91,14 +91,14 @@ describe('static web client', () => {
   });
 
   it('without WEB_DIST in production a page of the game domain redirects to the site (one copy of the web app)', async () => {
-    const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-data-')), NODE_ENV: 'production', PUBLIC_URL: 'https://elymum.io' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-data-')), NODE_ENV: 'production', PUBLIC_URL: 'https://coinnibal.fun' } as NodeJS.ProcessEnv);
     server = createHttpServer(cfg, { chain: new NullChain(), rooms: { online: () => 0, list: () => [] } as never, leaderboards: {} as never, auth: {} as never, startedAt: Date.now() });
     await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
     const addr = server.address();
     const base = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
     const page = await fetch(`${base}/play?room=AB2CD`, { redirect: 'manual' });
     expect(page.status).toBe(301);
-    expect(page.headers.get('location')).toBe('https://elymum.io/play?room=AB2CD');
+    expect(page.headers.get('location')).toBe('https://coinnibal.fun/play?room=AB2CD');
     // the API is served here, not redirected
     expect((await fetch(`${base}/api/nope`, { redirect: 'manual' })).status).toBe(404);
   });
@@ -174,7 +174,7 @@ describe('static web client', () => {
       expect(res.status, path).toBe(200);
       expect(res.headers.get('content-range'), path).toBeNull();
       expect(res.headers.get('accept-ranges'), path).toBeNull();
-      expect(await res.text(), path).toContain('<title>Elymum</title>');
+      expect(await res.text(), path).toContain('<title>Coinnibal</title>');
       const past = await fetch(url + path, { headers: { Range: 'bytes=999999-' } });
       expect(past.status, path).toBe(200);
       await past.text();

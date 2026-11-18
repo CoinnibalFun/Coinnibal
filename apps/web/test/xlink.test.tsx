@@ -73,7 +73,7 @@ describe('the Link X card', () => {
   it('get a code, post it, paste the link, verify; then the linked account and Unlink; the consent line throughout', async () => {
     useWallet.setState({ status: 'connected', address: ALICE, chainId: 46630, current: detail(fakeProvider({ accounts: [ALICE] })) });
     useUi.setState({ auth: { address: ALICE, token: 'tok', profile: null } });
-    const code = { code: 'ELYMUM-7F3K9Q', text: xLinkPostText('ELYMUM-7F3K9Q'), intentUrl: xLinkIntentUrl('ELYMUM-7F3K9Q'), expiresAt: Date.now() + 30 * 60_000 };
+    const code = { code: 'COIN-7F3K9Q', text: xLinkPostText('COIN-7F3K9Q'), intentUrl: xLinkIntentUrl('COIN-7F3K9Q'), expiresAt: Date.now() + 30 * 60_000 };
     const link = { handle: 'penny_x', name: 'Penny', userId: '44', avatar: true, linkedAt: Date.now() };
     const calls: string[] = [];
     vi.stubGlobal(
@@ -102,7 +102,7 @@ describe('the Link X card', () => {
     expect(card().textContent).toContain('Players who eat you can tag you on X.');
     fireEvent.click(screen.getByRole('button', { name: 'Get my code' }));
     await waitFor(() => expect(card().dataset.state).toBe('code'));
-    expect(screen.getByTestId('x-code').textContent).toContain('ELYMUM-7F3K9Q');
+    expect(screen.getByTestId('x-code').textContent).toContain('COIN-7F3K9Q');
     expect(screen.getByTestId('x-post').getAttribute('href')).toBe(code.intentUrl);
     // a wrong link: the server's refusal in words
     const field = screen.getByLabelText('Link to your post');

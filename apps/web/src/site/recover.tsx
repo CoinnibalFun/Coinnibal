@@ -10,7 +10,7 @@ import { useT } from '../i18n';
  * chunks. `reloadOnce` does that at most once per short window (a page that keeps failing does
  * not loop); after that the page shows a friendly retry instead of a blank or a 404.
  */
-export const RELOAD_KEY = 'elymum.chunk-reload.v1';
+export const RELOAD_KEY = 'coinnibal.chunk-reload.v1';
 /** A second failure within this window shows the retry instead of reloading again. */
 export const RELOAD_WINDOW_MS = 30_000;
 

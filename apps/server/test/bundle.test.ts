@@ -24,7 +24,7 @@ describe('production bundle (tsup)', () => {
         env: {
           ...process.env,
           NODE_ENV: 'production',
-          PUBLIC_URL: 'https://elymum.example',
+          PUBLIC_URL: 'https://coinnibal.example',
           PORT: '0',
           HOST: '127.0.0.1',
           DATA_DIR: join(outDir, 'data'),

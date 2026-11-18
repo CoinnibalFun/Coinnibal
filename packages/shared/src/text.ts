@@ -17,7 +17,7 @@ const LOOKALIKE: Record<string, string> = { '0': 'o', '1': 'l', '3': 'e', '4': '
 const RESERVED_WORDS = new Set(['admin', 'admins', 'administrator', 'moderator', 'mod', 'mods', 'support', 'official', 'system', 'staff', 'helpdesk']);
 
 /**
- * Names that impersonate the game or its staff: anything spelling "Coinnibal" or its old name "Elymum" (also
+ * Names that impersonate the game or its staff: anything spelling "Coinnibal" or its name before the rename, "Elymum" (also
  * "C0innibal", "COINNIBAL Support", "c.o.i.n.n.i.b.a.l", "E1ymum"), and names made of a staff word ("Admin", "Support", "Official Mod"). Case, accents, full-width
  * letters, separators and digit look-alikes are folded first.
  */

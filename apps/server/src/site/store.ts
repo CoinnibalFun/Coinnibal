@@ -37,7 +37,7 @@ import { SiteFail, bad } from './validate';
 const wkey = (w: string): string => w.toLowerCase();
 
 /**
- * Earlier defaults of the project's X handle. A stored `xHandle` equal to one of them (and not the current default:
+ * Earlier defaults of the project's X handle (the project was called Elymum until November 2026). A stored `xHandle` equal to one of them (and not the current default:
  * `X_HANDLE`, else `SITE_X_HANDLE_DEFAULT`) is switched to the default on load, and the seeded tasks' text and links that name one are rewritten to
  * the current handle (an admin-chosen handle, custom tasks and WL answers are never touched).
  */

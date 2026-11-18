@@ -196,7 +196,7 @@ export interface PendingClaim {
   at: number;
 }
 
-const CLAIM_KEY = 'elymum.shop.claim.v1';
+const CLAIM_KEY = 'coinnibal.shop.claim.v1';
 /** Refusals that are final for a payment (it was credited already, or it is not a valid payment). */
 const FINAL: readonly ShopBuyError[] = ['tx_used', 'tx_failed', 'no_payment', 'wrong_token', 'wrong_sender', 'wrong_recipient', 'wrong_pack', 'wrong_amount', 'tx_stale'];
 

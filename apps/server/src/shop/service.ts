@@ -8,8 +8,8 @@ import {
   normalizeCart,
   packPriceRaw,
   roundSigFigs,
-  shopCartRef,
-  shopPaymentRef,
+  shopCartRefs,
+  shopPaymentRefs,
   usdToTokenRaw,
   type BoostCounts,
   type BoostKind,
@@ -295,7 +295,7 @@ export class ShopService {
         token: token.address,
         from: wallet,
         arena,
-        ref: shopPaymentRef(kind),
+        ref: shopPaymentRefs(kind),
         amounts: [...new Set([...fulls, ...discounts])],
         now: this.now(),
       });
@@ -368,7 +368,7 @@ export class ShopService {
         token: token.address,
         from: wallet,
         arena,
-        ref: shopCartRef(cart),
+        ref: shopCartRefs(cart),
         amounts: [...new Set([...fulls, ...discounts].map((x) => x.total))],
         now: this.now(),
       });

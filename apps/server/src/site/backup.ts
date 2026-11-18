@@ -17,11 +17,11 @@ export interface BackupDeps {
   tar?: string;
 }
 
-/** `elymum-data-<chainId>-<YYYYmmdd-HHMMSS>.tar.gz` (UTC). */
+/** `coinnibal-data-<chainId>-<YYYYmmdd-HHMMSS>.tar.gz` (UTC). */
 export function backupFileName(chainId: number | null, now: number): string {
   const iso = new Date(now).toISOString(); // 2026-11-04T12:34:56.789Z
   const stamp = `${iso.slice(0, 10).replace(/-/g, '')}-${iso.slice(11, 19).replace(/:/g, '')}`;
-  return `elymum-data-${chainId ?? 'nochain'}-${stamp}.tar.gz`;
+  return `coinnibal-data-${chainId ?? 'nochain'}-${stamp}.tar.gz`;
 }
 
 let running = false;

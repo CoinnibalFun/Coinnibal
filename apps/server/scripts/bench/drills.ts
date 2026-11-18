@@ -330,7 +330,7 @@ function clientSummary() {
 }
 
 const results: Record<string, unknown> = {};
-let dataDir = mkdtempSync(join(tmpdir(), 'elymum-drill-'));
+let dataDir = mkdtempSync(join(tmpdir(), 'coinnibal-drill-'));
 say(`server boot: ${await startServer(dataDir)} ms`);
 
 for (const drill of DRILLS) {
@@ -367,7 +367,7 @@ for (const drill of DRILLS) {
     // a small tmpfs as DATA_DIR: stop, move the data onto it, start again
     server!.kill('SIGTERM');
     await waitExit(server!);
-    const tiny = mkdtempSync(join(tmpdir(), 'elymum-tiny-'));
+    const tiny = mkdtempSync(join(tmpdir(), 'coinnibal-tiny-'));
     execFileSync('mount', ['-t', 'tmpfs', '-o', 'size=48m', 'tmpfs', tiny]);
     execFileSync('cp', ['-a', `${dataDir}/.`, tiny]);
     dataDir = tiny;
@@ -389,8 +389,8 @@ for (const drill of DRILLS) {
     const late = players[0];
     const lateArena = late.arenaId === 1 ? 2 : 1;
     const lateWallet = hh.players[0];
-    const { joinCall, sendCall, createElymumWalletClient, viemChain } = await import('@coinnibal/sdk');
-    const w = createElymumWalletClient(hh.url, { account: lateWallet, chain: viemChain(31337, { rpcUrl: hh.url }), pollingInterval: 50 });
+    const { joinCall, sendCall, createCoinnibalWalletClient, viemChain } = await import('@coinnibal/sdk');
+    const w = createCoinnibalWalletClient(hh.url, { account: lateWallet, chain: viemChain(31337, { rpcUrl: hh.url }), pollingInterval: 50 });
     const h = await sendCall(w, joinCall(hh.arena, lateArena));
     await hh.pub.waitForTransactionReceipt({ hash: h, pollingInterval: 50 });
     const ls = await getSession(hh.pub, hh.arena, lateArena, lateWallet.address);

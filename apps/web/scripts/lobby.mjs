@@ -45,7 +45,7 @@ async function newPage({ viewport, mobile = false, theme = 'light', wallet = tru
         showMinimap: true,
         showChat: true,
       };
-      localStorage.setItem('elymum.settings.v1', JSON.stringify({ ...def, ...s }));
+      localStorage.setItem('coinnibal.settings.v1', JSON.stringify({ ...def, ...s }));
     },
     { theme },
   );
@@ -57,15 +57,15 @@ async function newPage({ viewport, mobile = false, theme = 'light', wallet = tru
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
   page.on('console', (m) => m.type() === 'error' && logs.push(`[console.error] ${m.text()}`));
   await page.goto(base, { waitUntil: 'networkidle' });
-  await page.waitForFunction(() => !!window.__elymum && window.__elymum.useUi.getState().connected, null, { timeout: 15000 });
+  await page.waitForFunction(() => !!window.__coinnibal && window.__coinnibal.useUi.getState().connected, null, { timeout: 15000 });
   if (wallet && verified) await signInGame(page, base, account);
   // (the token balance is only read once the game token is set)
   if (wallet && tokenReady)
-    await page.waitForFunction(() => !!window.__elymumChain?.fakeWallet && window.__elymumChain.useChainData.getState().tokenBalance !== null, null, {
+    await page.waitForFunction(() => !!window.__coinnibalChain?.fakeWallet && window.__coinnibalChain.useChainData.getState().tokenBalance !== null, null, {
       timeout: 10000,
     });
-  await page.waitForFunction(() => !!window.__elymumChain?.fakeWallet, null, { timeout: 10000 });
-  await page.evaluate(() => window.__elymumChain.refresh());
+  await page.waitForFunction(() => !!window.__coinnibalChain?.fakeWallet, null, { timeout: 10000 });
+  await page.evaluate(() => window.__coinnibalChain.refresh());
   await page.waitForTimeout(1600);
   return { ctx, page, address };
 }
@@ -133,7 +133,7 @@ for (const [k, viewport, mobile, theme, reduced] of [
   await page.waitForSelector('.tf-sheet', { timeout: 5000 });
   await page.waitForTimeout(700);
   await shot(page, `ticket-sheet-${k}`);
-  await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 700));
+  await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 700));
   await page.locator('.tf-sheet .kb-btn--pink').click();
   await page.waitForTimeout(350);
   await shot(page, `ticket-signing-${k}`);
@@ -142,7 +142,7 @@ for (const [k, viewport, mobile, theme, reduced] of [
   await shot(page, `ticket-stamp-${k}`);
   await page.waitForTimeout(reduced ? 200 : 520);
   await shot(page, `ticket-tear-${k}`);
-  await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 15000 });
+  await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 15000 });
   await page.waitForTimeout(1500);
   await shot(page, `ticket-ingame-${k}`);
   await ctx.close();
@@ -155,7 +155,7 @@ if (want('frames')) {
   await cta(page).click();
   await page.waitForSelector('.tf-sheet');
   await page.waitForTimeout(600);
-  await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 400));
+  await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 400));
   await page.locator('.tf-sheet .kb-btn--pink').click();
   await page.waitForSelector('.tf-ticket__stamp', { timeout: 5000 });
   const box = await page.locator('.tf-ticket').boundingBox();
@@ -173,12 +173,12 @@ if (want('newticket')) {
   await pickTicket(page, 'arena:2');
   await cta(page).click();
   await page.waitForSelector('.tf-sheet');
-  await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 300));
+  await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 300));
   await page.locator('.tf-sheet .kb-btn--pink').click();
-  await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 15000 });
+  await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 15000 });
   await page.waitForTimeout(800);
   await page.evaluate(() =>
-    window.__elymum.engine['onMessage']({
+    window.__coinnibal.engine['onMessage']({
       t: 'death',
       stats: { aliveMs: 61_000, finalMass: 0, maxMass: 300, foodEaten: 40, cellsEaten: 0, playersEaten: 0, bestRank: 4, valueLost: 10_000_000_000 },
       killer: 'Nakamoto',
@@ -187,7 +187,7 @@ if (want('newticket')) {
   );
   await page.waitForTimeout(1200);
   await page.locator('.g-death .kb-btn--pink').click();
-  await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'lobby', null, { timeout: 5000 });
+  await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'lobby', null, { timeout: 5000 });
   await page.waitForTimeout(1500);
   await shot(page, 'newticket-lobby');
   await ctx.close();
@@ -197,8 +197,8 @@ if (want('newticket')) {
 if (want('goldlake')) {
   const { ctx, page } = await newPage({ viewport: D });
   await page.evaluate(() => {
-    window.__elymumChain.fakeWallet.tokenBalance = 62_450n * 10n ** 18n;
-    window.__elymumChain.refresh();
+    window.__coinnibalChain.fakeWallet.tokenBalance = 62_450n * 10n ** 18n;
+    window.__coinnibalChain.refresh();
   });
   await page.waitForTimeout(900);
   await pickTicket(page, 'arena:3');
@@ -207,7 +207,7 @@ if (want('goldlake')) {
   await page.waitForTimeout(700);
   await shot(page, 'ticket-sheet-goldlake');
   // ArenaFull: the chain refuses the join
-  await page.evaluate(() => (window.__elymumChain.fakeWallet.failNext = 'ArenaFull'));
+  await page.evaluate(() => (window.__coinnibalChain.fakeWallet.failNext = 'ArenaFull'));
   await page.locator('.tf-sheet .kb-btn--pink').click();
   await page.waitForSelector('.tf-error', { timeout: 6000 });
   await page.waitForTimeout(300);
@@ -224,7 +224,7 @@ if (want('soon')) {
     ['mobile', P, true],
   ]) {
     const { ctx, page } = await newPage({ viewport, mobile, tokenReady: false });
-    const ready = await page.evaluate(() => window.__elymum.useUi.getState().chain?.tokenReady);
+    const ready = await page.evaluate(() => window.__coinnibal.useUi.getState().chain?.tokenReady);
     if (ready) {
       logs.push('[soon] the server already has the token set: run it without DEV_FAKE_TOKEN');
       await ctx.close();
@@ -235,8 +235,8 @@ if (want('soon')) {
       // the server sets the token and pushes `chain`: the arenas open with no reload
       const res = await fetch(`${api}/api/dev/token`, { method: 'POST' });
       logs.push(`[soon] POST /api/dev/token → ${res.status}`);
-      await page.waitForFunction(() => window.__elymum.useUi.getState().chain?.tokenReady === true, null, { timeout: 10000 });
-      await page.waitForFunction(() => window.__elymum.useUi.getState().rooms.some((r) => r.mode === 'arena'), null, { timeout: 15000 });
+      await page.waitForFunction(() => window.__coinnibal.useUi.getState().chain?.tokenReady === true, null, { timeout: 10000 });
+      await page.waitForFunction(() => window.__coinnibal.useUi.getState().rooms.some((r) => r.mode === 'arena'), null, { timeout: 15000 });
       await page.waitForTimeout(1200);
       await shot(page, 'soon-flipped-mobile');
     }
@@ -255,7 +255,7 @@ if (want('pending')) {
     // payout (`owed`) waits in the arena vault
     await page.evaluate(
       ([owed, player]) => {
-        const w = window.__elymumChain.fakeWallet;
+        const w = window.__coinnibalChain.fakeWallet;
         w.sessions[1] = {
           arenaId: 1,
           player,
@@ -266,7 +266,7 @@ if (want('pending')) {
           finalized: true,
           owed: BigInt(owed),
         };
-        window.__elymumChain.refresh();
+        window.__coinnibalChain.refresh();
       },
       [String(2_150n * ONE), address],
     );
@@ -299,7 +299,7 @@ if (want('sheets')) {
   await shot(page, 'tab-ranks');
   await ctx.close();
   const g = await newPage({ viewport: P, mobile: true, wallet: true, verified: false });
-  await g.page.evaluate(() => window.__elymum.useUi.setState({ modal: 'wallet' }));
+  await g.page.evaluate(() => window.__coinnibal.useUi.setState({ modal: 'wallet' }));
   await g.page.waitForTimeout(700);
   await shot(g.page, 'wallet-sheet-unverified');
   await g.ctx.close();

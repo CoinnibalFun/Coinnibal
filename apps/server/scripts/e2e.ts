@@ -1,5 +1,5 @@
 /**
- * End-to-end check of Elymum against a real EVM (a fresh `hardhat node`) and a real game server (real
+ * End-to-end check of Coinnibal against a real EVM (a fresh `hardhat node`) and a real game server (real
  * chain, never DEV_FAKE_CHAIN). It follows the launch order of /admin → Deploy:
  *
  *  1. a hardhat node starts (or `RPC_URL` points at one you run); the admin deploys the TestToken and the
@@ -27,8 +27,8 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createDefaultArenaCalls,
-  createElymumPublicClient,
-  createElymumWalletClient,
+  createCoinnibalPublicClient,
+  createCoinnibalWalletClient,
   deployArena,
   deployTestToken,
   deployedAddress,
@@ -121,7 +121,7 @@ async function startNode(): Promise<void> {
 
 /** Starts the game server (real chain, no arena address: it waits for the registry); resolves once it answers. */
 async function startServer(serverKey: string): Promise<void> {
-  dataDir = mkdtempSync(join(tmpdir(), 'elymum-e2e-'));
+  dataDir = mkdtempSync(join(tmpdir(), 'coinnibal-e2e-'));
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...ROUND_ENV,
@@ -247,8 +247,8 @@ async function main(): Promise<void> {
   step(`EVM node at ${rpcUrl}`);
   await startNode();
   const chain = viemChain(31337, { rpcUrl });
-  client = createElymumPublicClient(rpcUrl, chain, { pollingInterval: 100 });
-  for (const a of [admin, hunter, prey, idle, feeWallet]) wallets.set(a.address, createElymumWalletClient(rpcUrl, { account: a, chain, pollingInterval: 100 }));
+  client = createCoinnibalPublicClient(rpcUrl, chain, { pollingInterval: 100 });
+  for (const a of [admin, hunter, prey, idle, feeWallet]) wallets.set(a.address, createCoinnibalWalletClient(rpcUrl, { account: a, chain, pollingInterval: 100 }));
   const serverKey = generatePrivateKey();
   const server = privateKeyToAccount(serverKey);
   // the server key pays gas in ETH

@@ -12,10 +12,10 @@ const POST = 'https://x.com/riso_rita/status/1849000000000000001';
 
 const TASKS: PublicWlTask[] = [
   { id: 'follow_x', kind: 'follow_x', title: 'Follow @coinnibalfun', body: 'Follow us.', target: 'https://x.com/coinnibalfun', required: true, available: true },
-  { id: 'post_x', kind: 'post_x', title: 'Post about Elymum on X', body: 'Post and paste the link.', target: null, required: true, available: true },
+  { id: 'post_x', kind: 'post_x', title: 'Post about Coinnibal on X', body: 'Post and paste the link.', target: null, required: true, available: true },
   { id: 'engage_launch', kind: 'engage_x', title: 'Like, repost and reply', body: '', target: null, required: false, available: false },
-  { id: 't_join', kind: 'join_link', title: 'Join the Discord', body: '', target: 'https://discord.gg/elymum', required: true, available: true },
-  { id: 't_text', kind: 'text', title: 'Why Elymum?', body: '', target: null, required: false, available: true },
+  { id: 't_join', kind: 'join_link', title: 'Join the Discord', body: '', target: 'https://discord.gg/coinnibal', required: true, available: true },
+  { id: 't_text', kind: 'text', title: 'Why Coinnibal?', body: '', target: null, required: false, available: true },
   { id: 'x_handle', kind: 'text', title: 'Your X handle', body: 'The account you used.', target: null, required: true, available: true },
   { id: 'wallet', kind: 'wallet', title: 'Your EVM wallet', body: 'Sign in.', target: null, required: true, available: true },
 ];
@@ -75,7 +75,7 @@ describe('/wl', { timeout: 30_000 }, () => {
     render(<WlPage />);
     await screen.findByRole('heading', { name: 'Join the WL in 7 steps.' });
     // every kind renders its step
-    for (const t of ['Your X handle', 'Follow @coinnibalfun', 'Post about Elymum on X', 'Like, repost and reply', 'Join the Discord', 'Why Elymum?', 'Your EVM wallet']) expect(screen.getAllByText(t).length).toBeGreaterThan(0);
+    for (const t of ['Your X handle', 'Follow @coinnibalfun', 'Post about Coinnibal on X', 'Like, repost and reply', 'Join the Discord', 'Why Coinnibal?', 'Your EVM wallet']) expect(screen.getAllByText(t).length).toBeGreaterThan(0);
 
     const next = () => fireEvent.click(within(document.querySelector<HTMLElement>('.wl-step.is-active')!).getByRole('button', { name: /^(Next|Skip for now)$/ }));
     fireEvent.change(screen.getByLabelText('Your X handle'), { target: { value: 'bad handle!' } });
@@ -100,7 +100,7 @@ describe('/wl', { timeout: 30_000 }, () => {
     expect(screen.getByText('Opens when the post is live.')).toBeTruthy();
     next();
     // join link
-    expect(screen.getByRole('link', { name: /Open the invite/ }).getAttribute('href')).toBe('https://discord.gg/elymum');
+    expect(screen.getByRole('link', { name: /Open the invite/ }).getAttribute('href')).toBe('https://discord.gg/coinnibal');
     fireEvent.click(screen.getByRole('button', { name: 'I joined' }));
     next();
     // optional text

@@ -19,7 +19,7 @@ export function chainStatus(over: Partial<ChainStatus> = {}): ChainStatus {
     nftAddress: null,
     arenasEnabled: true,
     tokenReady: true,
-    token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$ELYMUM', decimals: 18 },
+    token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$NIBAL', decimals: 18 },
     fees: FEES,
     serverKey: '0x000000000000000000000000000000000000beef',
     ...over,

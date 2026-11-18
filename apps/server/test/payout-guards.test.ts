@@ -105,7 +105,7 @@ describe('server-key blast radius', () => {
   });
 
   it('a settlement reorged out is re-sent with the same payout, never refunded at the entry fee', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-reorg-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-reorg-'));
     const h = await harness({ STALE_SESSION_AFTER_S: '60' }, new Journal(null), dir);
     const winner = wallet();
     const s = h.evm.join(1, winner, { openedAt: Math.floor(T0 / 1000) - 3600 });
@@ -130,7 +130,7 @@ describe('server-key blast radius', () => {
   });
 
   it('the settled log survives restarts, skips malformed lines and forgets records after 14 days', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-settled-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-settled-'));
     const file = join(dir, 'settled.jsonl');
     let now = T0;
     const a = new SettledLog(file, () => {}, () => now);

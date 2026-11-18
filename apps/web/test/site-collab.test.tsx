@@ -94,10 +94,12 @@ describe('collab logic', () => {
     expect(countdown(1000 + 3_723_000, 1000)).toBe('01:02:03');
     expect(countdown(2 * 86_400_000 + 5000, 0)).toBe('2d 00:00:05');
     expect(countdown(0, 5000)).toBe('00:00:00');
-    const post = rafflePost('Riso Guild', 20, Date.UTC(2026, 9, 20), 'elymum.test');
+    const post = rafflePost('Riso Guild', 20, Date.UTC(2026, 9, 20), 'coinnibal.test');
     expect(post).toMatch(/@coinnibalfun\b/);
+    // @elymum: the project's X handle before the rename; a post never names it
+    // @elymum: the project's X handle before the rename; a post never names it
     expect(post).not.toMatch(/@elymum(?![a-z0-9_])/i);
-    expect(post).toMatch(/elymum\.test/);
+    expect(post).toMatch(/coinnibal\.test/);
     expect(post).toMatch(/20 Coinnibal WL spots/);
     expect(post).toMatch(/EVM wallet/);
   });

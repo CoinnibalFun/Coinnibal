@@ -1,5 +1,5 @@
 /**
- * The vector emblem (the house style, docs/NFT-DESIGN.md): a 512 × 512 SVG portrait of an Elymum coin in
+ * The vector emblem (the house style, docs/NFT-DESIGN.md): a 512 × 512 SVG portrait of a Coinnibal coin in
  * the Ring Storybook language: flat cel fills with one hard shade, a single 3 px ink line everywhere, no
  * gradients, no blur. The picture depends on the genome only (equal DNA, equal SVG); the token number is a
  * small tag on the frame.

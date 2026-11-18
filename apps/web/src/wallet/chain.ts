@@ -301,7 +301,7 @@ export const refreshChain = () => refreshNow();
 
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   void loadDevFake().then((dev) => {
-    const w = window as unknown as { __elymumChain?: unknown };
-    w.__elymumChain = { useChainData, fakeWallet: dev?.fakeWallet, refresh: () => refreshNow() };
+    const w = window as unknown as { __coinnibalChain?: unknown };
+    w.__coinnibalChain = { useChainData, fakeWallet: dev?.fakeWallet, refresh: () => refreshNow() };
   });
 }

@@ -28,7 +28,7 @@ describe('audit: one admin bearer token reads the server key (fixed)', () => {
   beforeAll(async () => {
     process.env.SERVER_PRIVATE_KEY = FAKE_KEY;
     process.env.AUTH_SECRET = FAKE_AUTH;
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-audit-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-audit-'));
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
     app = await createApp(cfg, {
       chain: new ArenaChain([arena(1, 1000)]),
@@ -59,8 +59,8 @@ describe('audit: one admin bearer token reads the server key (fixed)', () => {
       const { message } = (await r.json()) as { message: string };
       return Buffer.from(JSON.stringify({ message, signature: await signer.sign(message) })).toString('base64url');
     };
-    expect((await fetch(url, { headers: { Authorization: `Bearer ${token}`, 'X-Elymum-Proof': await ask('backup') } })).status).toBe(401);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, 'X-Elymum-Proof': await ask('migration') } });
+    expect((await fetch(url, { headers: { Authorization: `Bearer ${token}`, 'X-Coinnibal-Proof': await ask('backup') } })).status).toBe(401);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, 'X-Coinnibal-Proof': await ask('migration') } });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { env: Record<string, string> };
     expect(body.env.SERVER_PRIVATE_KEY).toBe(FAKE_KEY);
@@ -73,7 +73,7 @@ describe('audit: one admin bearer token reads the server key (fixed)', () => {
 
 describe('audit: AUTH_SECRET strength (fixed)', () => {
   it('refuses a short AUTH_SECRET on the mainnet and warns on a testnet', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-audit-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-audit-'));
     expect(() => checkAuthSecret(loadConfig({ AUTH_SECRET: 'x', CHAIN_ID: '4663', DATA_DIR: dir } as NodeJS.ProcessEnv))).toThrow(/refusing to start on the mainnet/);
     expect(checkAuthSecret(loadConfig({ AUTH_SECRET: 'x', CHAIN_ID: '46630', DATA_DIR: dir } as NodeJS.ProcessEnv))).toMatch(/^!!! AUTH_SECRET is 1 byte/);
     expect(checkAuthSecret(loadConfig({ AUTH_SECRET: 'a'.repeat(32), CHAIN_ID: '4663', DATA_DIR: dir } as NodeJS.ProcessEnv))).toBeNull();
@@ -87,26 +87,26 @@ describe('audit: AUTH_SECRET strength (fixed)', () => {
   });
 
   it('createApp refuses to boot on the mainnet with a weak AUTH_SECRET', async () => {
-    const cfg = loadConfig({ AUTH_SECRET: 'short', CHAIN_ID: '4663', PORT: '0', DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-audit-')) } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ AUTH_SECRET: 'short', CHAIN_ID: '4663', PORT: '0', DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-audit-')) } as NodeJS.ProcessEnv);
     await expect(createApp(cfg, { chain: new ArenaChain([arena(1, 1000)]), log: () => {}, persist: false })).rejects.toThrow(/AUTH_SECRET/);
   });
 });
 
 describe('audit: chat and name abuse (fixed)', () => {
   it('blocks the common scam lines in chat', () => {
-    expect(looksLikeScam('free airdrop at elymum-claim dot xyz')).toBe(true);
-    expect(looksLikeScam('elymum．com/claim for your bonus')).toBe(true); // a full-width dot
-    expect(looksLikeScam('send me elymum and I double it')).toBe(true);
+    expect(looksLikeScam('free airdrop at coinnibal-claim dot xyz')).toBe(true);
+    expect(looksLikeScam('coinnibal．com/claim for your bonus')).toBe(true); // a full-width dot
+    expect(looksLikeScam('send me coinnibal and I double it')).toBe(true);
     expect(looksLikeScam('admin here: DM me your recovery phrase')).toBe(true);
-    expect(looksLikeScam('claim at elymum.fun')).toBe(true);
+    expect(looksLikeScam('claim at coinnibal.fun')).toBe(true);
     expect(looksLikeScam('type your seed words here')).toBe(true);
-    expect(looksLikeScam('go to elymum [.] app')).toBe(true);
+    expect(looksLikeScam('go to coinnibal [.] app')).toBe(true);
     // ordinary game talk passes
     for (const ok of ['gg wp', 'nice split!', 'lol.so close', 'who wants to team? jk', 'send help', 'see you next round', 'polka dot coin']) expect(looksLikeScam(ok)).toBe(false);
   });
 
   it('refuses names that impersonate the system speaker or staff', () => {
-    for (const n of ['Elymum', 'Elymum Support', 'ELYMUM', 'E1ymum', 'e.l.y.m.u.m', 'Ｅｌｙｍｕｍ', 'Admin', 'admin', 'Support', 'Official Mod']) {
+    for (const n of ['Coinnibal', 'Coinnibal Support', 'COINNIBAL', 'E1ymum', 'e.l.y.m.u.m', 'Ｅｌｙｍｕｍ', 'Admin', 'admin', 'Support', 'Official Mod']) {
       expect(isReservedName(n)).toBe(true);
       expect(sanitizeName(n)).toBe('Coinie');
     }

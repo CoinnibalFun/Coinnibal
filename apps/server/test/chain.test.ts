@@ -128,7 +128,7 @@ describe('createChain', () => {
   });
 
   it('picks the EVM gateway when both are set; an unusable key keeps it disabled instead of crashing', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-chain-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-chain-'));
     writeFileSync(join(dir, 'bad.key'), 'not a key');
     const logs: string[] = [];
     const chain = await createChain(config({ SERVER_PRIVATE_KEY: join(dir, 'bad.key') }), new Journal(null), (m) => logs.push(m));
@@ -188,7 +188,7 @@ describe('status and reads', () => {
       explorerUrl: 'https://explorer.testnet.chain.robinhood.com',
       faucetUrl: 'https://faucet.testnet.chain.robinhood.com',
     });
-    // an RPC of another chain: no arenas, and the log says Elymum runs on Robinhood Chain only
+    // an RPC of another chain: no arenas, and the log says Coinnibal runs on Robinhood Chain only
     const other = await harness({ setup: (x) => (x.chainId = 99801) });
     expect(other.chain.status()).toMatchObject({ enabled: false, chainId: null, arenasEnabled: false, chainName: 'Robinhood Chain Testnet' });
     expect(other.logs.join('\n')).toMatch(/serves chain 99801: chain 99801 is not Robinhood Chain/);
@@ -688,7 +688,7 @@ describe('loot sweeps (sweepLoot burns, monotonic sweep ids)', () => {
   });
 
   it('a sweep item survives a journal reload with its id; a landed sweep is never sent again', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-sweep-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-sweep-'));
     const path = join(dir, 'journal.json');
     const before = new Journal(path);
     before.enqueue(sweepItem());
@@ -930,7 +930,7 @@ describe('stale sessions (the full entry fee back: cancel)', () => {
   });
 
   it('stays off after a journal quarantine until STALE_SWEEP_ACK=1', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-quarantine-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-quarantine-'));
     const path = join(dir, 'journal.json');
     writeFileSync(path, '{broken');
     const journal = new Journal(path);

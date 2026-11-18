@@ -184,7 +184,7 @@ export class ProfileStore {
   }
 
   /**
-   * `PUT /api/profile`: validates and stores the name and skin. `emblem`: the wallet holds an Elymum
+   * `PUT /api/profile`: validates and stores the name and skin. `emblem`: the wallet holds a Coinnibal
    * emblem (the caller checked on chain), so `EMBLEM_SKIN_ID` may be picked too.
    */
   update(wallet: string, body: { name?: unknown; skin?: unknown; country?: unknown; flagSkin?: unknown }, opts: { emblem?: boolean } = {}): ProfileView {

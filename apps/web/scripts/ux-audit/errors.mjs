@@ -33,13 +33,13 @@ async function setup({ eth = 1, tokens = 20000, allowTransactions = true, chainI
   if (rejectSwitch) {
     // the player presses "Cancel" on the wallet's network switch
     await ctx.addInitScript(() => {
-      const orig = window.__elymumWalletRequest;
-      window.__elymumWalletRequest = (m, params) =>
+      const orig = window.__coinnibalWalletRequest;
+      window.__coinnibalWalletRequest = (m, params) =>
         m === 'wallet_switchEthereumChain' || m === 'wallet_addEthereumChain' ? Promise.resolve({ error: { code: 4001, message: 'User rejected the request.' } }) : orig(m, params);
     });
   }
   if (eth || tokens) fund(address, eth, tokens);
-  await ctx.addInitScript(() => localStorage.setItem('elymum.brief', '1'));
+  await ctx.addInitScript(() => localStorage.setItem('coinnibal.brief', '1'));
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
@@ -48,11 +48,11 @@ async function setup({ eth = 1, tokens = 20000, allowTransactions = true, chainI
 
 async function signIn(p) {
   await p.goto(`${BASE}/play`, { waitUntil: 'load' });
-  await p.waitForFunction(() => window.__elymum?.useUi.getState().connected, null, { timeout: 120000 });
+  await p.waitForFunction(() => window.__coinnibal?.useUi.getState().connected, null, { timeout: 120000 });
   await p.getByRole('button', { name: /connect wallet/i }).first().click();
   await p.waitForTimeout(700);
   await p.getByText('Dev Wallet').first().click();
-  await p.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 20000 }).catch(() => {});
+  await p.waitForFunction(() => !!window.__coinnibal.useUi.getState().auth, null, { timeout: 20000 }).catch(() => {});
   await p.waitForTimeout(2500);
 }
 
@@ -73,7 +73,7 @@ async function openTicket(p) {
 const read = (p, sel) => p.locator(sel).first().innerText().catch(() => null);
 const state = (p) =>
   p.evaluate(() => {
-    const s = window.__elymum?.useUi.getState();
+    const s = window.__coinnibal?.useUi.getState();
     return { screen: s?.screen, room: s?.room?.id ?? null, connected: s?.connected, toasts: (s?.toasts ?? []).map((t) => t.text) };
   });
 
@@ -139,11 +139,11 @@ for (const c of cases) {
       await signIn(p);
       await openTicket(p);
       await p.locator('.tf-sheet .tf-pay').click();
-      await p.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 60000 }).catch(() => {});
+      await p.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 60000 }).catch(() => {});
       await p.waitForTimeout(2000);
       // the game server goes away: new sockets are refused, the open one drops
       await p.routeWebSocket(/\/ws/, (ws) => ws.close({ code: 1006, reason: 'down' }));
-      await p.evaluate(() => window.__elymum.engine.net.ws.close());
+      await p.evaluate(() => window.__coinnibal.engine.net.ws.close());
       for (const s of [2, 8, 20]) {
         await p.waitForTimeout(s * 1000);
         await p.screenshot({ path: `${OUT}${tag}-${s}s.png` });
@@ -161,11 +161,11 @@ for (const c of cases) {
       await signIn(p);
       await openTicket(p);
       await p.locator('.tf-sheet .tf-pay').click();
-      await p.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 60000 }).catch(() => {});
+      await p.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 60000 }).catch(() => {});
       await p.waitForTimeout(2000);
       // the server closes this socket with CLOSE_REPLACED (4000): another tab of the same wallet took the coin
       await p.evaluate(() => {
-        const ws = window.__elymum.engine.net.ws;
+        const ws = window.__coinnibal.engine.net.ws;
         const onclose = ws.onclose;
         ws.onclose = null;
         ws.close();

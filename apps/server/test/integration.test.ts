@@ -33,7 +33,7 @@ class FakeChain implements ChainGateway {
       nftAddress: null,
       arenasEnabled: true,
       tokenReady: true,
-      token: { address: '0x0000000000000000000000000000000000000707', symbol: '$ELYMUM', decimals: 18 },
+      token: { address: '0x0000000000000000000000000000000000000707', symbol: '$NIBAL', decimals: 18 },
       fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 500, holderPerks: false, paymentBurnBps: 5000, burnMode: 0 },
       serverKey: null,
     };
@@ -199,7 +199,7 @@ const jumpTo = (at: number) => {
 };
 
 beforeAll(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-int-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-int-'));
   const cfg = loadConfig({
     PORT: '0',
     HOST: '127.0.0.1',

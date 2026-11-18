@@ -1,5 +1,5 @@
 /**
- * The admin side of the server work: secret exports behind a fresh, purpose-bound signature (X-Elymum-Proof), short
+ * The admin side of the server work: secret exports behind a fresh, purpose-bound signature (X-Coinnibal-Proof), short
  * revocable admin sessions, the server key's gas runway, "Re-price at next bell", USD-priced power-ups and the
  * finer integrity flag kinds.
  */
@@ -19,7 +19,7 @@ import { useSession } from '../src/site/session';
 const ADMIN = '0x1111111111111111111111111111111111111111';
 const settle = () => act(async () => new Promise((r) => setTimeout(r, 20)));
 const decode = (proof: string) => JSON.parse(atob(proof.replace(/-/g, '+').replace(/_/g, '/'))) as { message: string; signature: string };
-const challenge = (purpose: string, n = 1) => ({ message: `Elymum admin: export the server secrets\n\nPurpose: ${purpose}\nNonce: ${String(n).padStart(32, '0')}`, nonce: String(n), expiresAt: Date.now() + 600_000 });
+const challenge = (purpose: string, n = 1) => ({ message: `Coinnibal admin: export the server secrets\n\nPurpose: ${purpose}\nNonce: ${String(n).padStart(32, '0')}`, nonce: String(n), expiresAt: Date.now() + 600_000 });
 
 afterEach(() => {
   cleanup();
@@ -41,7 +41,7 @@ function fakeApi(over: Partial<Record<keyof AdminApi, unknown>> = {}): AdminApi 
 }
 const ctxOf = (api: AdminApi | null) => ({ api }) as unknown as ChainCtx;
 
-describe('secret exports: sign the purpose-bound text, then send X-Elymum-Proof', () => {
+describe('secret exports: sign the purpose-bound text, then send X-Coinnibal-Proof', () => {
   it('encodes the proof as base64url JSON of {message, signature} (unicode safe)', () => {
     const p = encodeProof('Purpose: backup\nServer: é', '0xabc');
     expect(p).not.toMatch(/[+/=]/);

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
-# Elymum: one container = game server + static web client on the same origin.
-#   docker build -t elymum --build-arg VITE_PUBLIC_URL=https://your-domain .
-#   docker run -p 8787:8787 -v elymum-data:/data --env-file apps/server/.env elymum
+# Coinnibal: one container = game server + static web client on the same origin.
+#   docker build -t coinnibal --build-arg VITE_PUBLIC_URL=https://your-domain .
+#   docker run -p 8787:8787 -v coinnibal-data:/data --env-file apps/server/.env coinnibal
 # Solidity is not compiled here: packages/contracts/src/artifacts.ts (ABIs + bytecode) is committed.
 
 FROM node:22-bookworm-slim AS build

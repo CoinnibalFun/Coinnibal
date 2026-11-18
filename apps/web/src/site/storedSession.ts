@@ -10,8 +10,8 @@ export interface SiteSession {
   admin: boolean;
 }
 
-export const TOKEN_KEY = 'elymum.auth.v1';
-export const ADMIN_KEY = 'elymum.site.admin.v1';
+export const TOKEN_KEY = 'coinnibal.auth.v1';
+export const ADMIN_KEY = 'coinnibal.site.admin.v1';
 /** Tokens last 24 h on the server; reuse one only while it has a margin left. */
 export const TTL_MS = 23 * 3600_000;
 

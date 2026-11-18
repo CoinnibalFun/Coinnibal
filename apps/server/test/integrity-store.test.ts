@@ -37,7 +37,7 @@ const summary = (key: string, endedAt: number): SessionSummary => ({
 
 describe('integrity store', () => {
   it('appends immutable chunks, prunes by age and count, and reads the window back', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-ist-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-ist-'));
     const clock = { t: T - 40 * DAY };
     const store = new IntegrityStore(dir, { now: () => clock.t, retentionDays: 30, maxFiles: 5 });
     store.appendLog({ sessions: [summary('old', clock.t)], transfers: [] });
@@ -61,7 +61,7 @@ describe('integrity store', () => {
   });
 
   it('keeps one secret across restarts; quarantines an unreadable state file and starts safe (auto-hold off)', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-ist-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-ist-'));
     const a = new IntegrityStore(dir);
     const b = new IntegrityStore(dir);
     expect(a.secret.equals(b.secret)).toBe(true);
@@ -101,7 +101,7 @@ describe('auto-hold default per chain', () => {
     expect(integrityDefaults(4663).autoHold).toBe(true);
     expect(integrityDefaults(46630).autoHold).toBe(false);
     expect(integrityDefaults(null).autoHold).toBe(false);
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-int-def-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-int-def-'));
     const main = new IntegrityStore(dir, { defaults: integrityDefaults(4663) });
     expect(main.loadState().settings.autoHold).toBe(true);
     // a saved state without the field (an older file) takes the chain's default; a saved "off" stays off
@@ -109,6 +109,6 @@ describe('auto-hold default per chain', () => {
     expect(new IntegrityStore(dir, { defaults: integrityDefaults(4663) }).loadState().settings.autoHold).toBe(true);
     writeFileSync(join(dir, 'state.json'), JSON.stringify({ version: 1, settings: { autoHold: false }, bans: [], flags: [], scannedAt: null }));
     expect(new IntegrityStore(dir, { defaults: integrityDefaults(4663) }).loadState().settings.autoHold).toBe(false);
-    expect(new IntegrityStore(mkdtempSync(join(tmpdir(), 'elymum-int-def-')), { defaults: integrityDefaults(46630) }).loadState().settings.autoHold).toBe(false);
+    expect(new IntegrityStore(mkdtempSync(join(tmpdir(), 'coinnibal-int-def-')), { defaults: integrityDefaults(46630) }).loadState().settings.autoHold).toBe(false);
   });
 });

@@ -79,7 +79,7 @@ describe('v2 message shapes', () => {
       nftAddress: null,
       arenasEnabled: true,
       tokenReady: true,
-      token: { address: '0x2222222222222222222222222222222222222222', symbol: '$ELYMUM', decimals: 18 },
+      token: { address: '0x2222222222222222222222222222222222222222', symbol: '$NIBAL', decimals: 18 },
       testnet: true,
       faucetUrl: null,
       fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 0, holderPerks: true, paymentBurnBps: 5000, burnMode: 0 },
@@ -97,7 +97,7 @@ describe('v2 message shapes', () => {
     // @ts-expect-error clusters are gone (chainId)
     const cluster: ChainStatus = { ...chain, cluster: 'devnet' };
     // @ts-expect-error the token is an ERC-20 address, not a mint
-    const mint: ChainStatus = { ...chain, token: { mint: 'x', symbol: '$ELYMUM', decimals: 18 } };
+    const mint: ChainStatus = { ...chain, token: { mint: 'x', symbol: '$NIBAL', decimals: 18 } };
     const pushed: ServerMessage = { t: 'chain', chain };
     expect([opening.tokenReady, pass, season, cluster, mint, pushed.t]).toHaveLength(6);
     const arena: RoomInfo = {

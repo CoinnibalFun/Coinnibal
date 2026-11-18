@@ -38,7 +38,7 @@ function setup(o: { dir?: string | null; holder?: boolean; clock?: { t: number }
   const clock = o.clock ?? { t: 1_800_000_000_000 };
   const rooms = new RoomManager(loadConfig({} as NodeJS.ProcessEnv), roomDeps(new NullChain()), new NullChain());
   const reader = o.reader ?? new PayChain(clock);
-  const dir = o.dir === undefined ? mkdtempSync(join(tmpdir(), 'elymum-custom-')) : o.dir;
+  const dir = o.dir === undefined ? mkdtempSync(join(tmpdir(), 'coinnibal-custom-')) : o.dir;
   const used = new UsedPayments(dir ? join(dir, 'chains', '46630', 'room-payments.json') : null);
   const usd = { current: o.usd ?? null };
   const svc = new CustomRoomService({
@@ -202,7 +202,7 @@ describe('room fee payment (the game token, CoinnibalArena.pay)', () => {
 
   it('persists used hashes and requests and refuses an unreadable file instead of forgetting them', () => {
     const alice = testSigner().address;
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-pay-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-pay-'));
     const file = join(dir, 'room-payments.json');
     const a = new UsedPayments(file);
     a.markUsed(hash(1), { at: 1, wallet: alice, code: 'ABCDE', request: requestOf(1), paid: '5' });
@@ -222,7 +222,7 @@ describe('room fee payment (the game token, CoinnibalArena.pay)', () => {
 
   it('the file of the rooms paid in ETH loads as it is: those hashes stay used', () => {
     const alice = testSigner().address;
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-pay-old-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-pay-old-'));
     const file = join(dir, 'room-payments.json');
     writeFileSync(file, JSON.stringify({ v: 1, used: { [hash(9)]: { at: 1, wallet: alice, code: 'ABCDE' } } }));
     const u = new UsedPayments(file);
@@ -402,7 +402,7 @@ describe('custom rooms: create, caps, perks', () => {
   });
 
   it('a settings file from the rooms paid in ETH loads without an error: its price and treasury are dropped, the rest kept', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-custom-old-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-custom-old-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
     const file = join(dir, 'site', 'custom-rooms-settings.json');
     writeFileSync(file, JSON.stringify({ enabled: true, priceGas: '0.002', treasury: '0x2111111111111111111111111111111111111111', holderPerk: 'discount', holderDiscountPct: 40, maxLive: 5, maxPerWallet: 3, capacityStepPct: 50, maxPlayers: 100, maxSeats: 300, paidRooms: true }));
@@ -672,7 +672,7 @@ describe('custom rooms over HTTP and WebSocket', () => {
   });
 
   async function boot(chain: PayChain, admin: string, customNow?: () => number) {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-custom-http-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-custom-http-'));
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public' } as NodeJS.ProcessEnv);
     app = await createApp(cfg, {
       chain,

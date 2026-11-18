@@ -9,8 +9,12 @@ export interface PurchaseExpectation {
   from: string;
   /** The arena contract the payment was made to (`CoinnibalArena.pay`, any case). */
   arena: string;
-  /** The payment ref: a pack's (`shopPaymentRef(kind)`), a cart's (`shopCartRef`) or a room request's (`customRoomPaymentRef`). */
-  ref: string;
+  /**
+   * The payment ref: a pack's (`shopPaymentRefs(kind)`), a cart's (`shopCartRefs`) or a room request's
+   * (`customRoomPaymentRef`). A list: a payment matches when its ref is any one of them (a pack's or a cart's under the
+   * prefix of before the rename too); every other check is the same for each.
+   */
+  ref: string | readonly string[];
   /**
    * Accepted amounts, raw base units: exactly one of `amounts` (a pack: the wallet's price, and the full price for a
    * holder whose discount was not seen), or at least `minAmount` (a room fee: at least the quoted price).
@@ -52,7 +56,8 @@ export function verifyPurchase(receipt: TokenReceipt | null, exp: PurchaseExpect
   if (toArena.length === 0) return { ok: false, code: 'wrong_recipient' };
   const mine = toArena.filter((p) => eq(p.payer, exp.from));
   if (mine.length === 0) return { ok: false, code: 'wrong_sender' };
-  const forPack = mine.filter((p) => eq(p.ref, exp.ref));
+  const refs = typeof exp.ref === 'string' ? [exp.ref] : exp.ref;
+  const forPack = mine.filter((p) => refs.some((r) => eq(p.ref, r)));
   if (forPack.length === 0) return { ok: false, code: 'wrong_pack' };
   const accepted = exp.amounts;
   const hit = 'minAmount' in accepted ? forPack.find((p) => p.amount >= accepted.minAmount) : forPack.find((p) => accepted.includes(p.amount));

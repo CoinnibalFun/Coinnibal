@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url';
 import {
   BURN_ADDRESS,
   createDefaultArenaCalls,
-  createElymumPublicClient,
-  createElymumWalletClient,
+  createCoinnibalPublicClient,
+  createCoinnibalWalletClient,
   deployArena,
   deployTestToken,
   deployedAddress,
@@ -127,8 +127,8 @@ beforeAll(async () => {
     return;
   }
   const chain = viemChain(31337, { rpcUrl: url });
-  client = createElymumPublicClient(url, chain, { pollingInterval: 50 });
-  for (const a of [admin, server, p1, p2, feeWallet]) wallets.set(a.address, createElymumWalletClient(url, { account: a, chain, pollingInterval: 50 }));
+  client = createCoinnibalPublicClient(url, chain, { pollingInterval: 50 });
+  for (const a of [admin, server, p1, p2, feeWallet]) wallets.set(a.address, createCoinnibalWalletClient(url, { account: a, chain, pollingInterval: 50 }));
 }, 60_000);
 
 afterAll(() => killChild());
@@ -149,7 +149,7 @@ describe('EvmChain on a hardhat node', () => {
     const cfg = loadConfig({
       EVM_RPC_URL: url,
       SERVER_PRIVATE_KEY: KEYS[1],
-      DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-evm-')),
+      DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-evm-')),
       STALE_SESSION_AFTER_S: '60',
       LOG_CHUNK_BLOCKS: '5',
     } as unknown as NodeJS.ProcessEnv);

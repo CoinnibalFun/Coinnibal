@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { invalidAdminWallets, loadConfig, parseAdminWallets, parseRoundConfig } from '../src/config';
 
-describe('Elymum config', () => {
+describe('Coinnibal config', () => {
   it('has no Pass power, marketplace links or fake Pass collection any more', () => {
     const cfg = loadConfig({ PASS_START_MASS_MUL: '1.3', MARKET_URL_OPENSEA: 'https://opensea.io/x', DEV_FAKE_PASS: 'revealed' });
     expect('pass' in cfg).toBe(false);
@@ -137,7 +137,7 @@ describe('auth secret without AUTH_SECRET', () => {
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
     const { persistedAuthSecret } = await import('../src/config');
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-secret-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-secret-'));
     const a = persistedAuthSecret(dir);
     const b = persistedAuthSecret(dir);
     expect(a.equals(b)).toBe(true);

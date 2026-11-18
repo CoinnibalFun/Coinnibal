@@ -143,7 +143,7 @@ async function path(target: number, profile: { rttMs: number; loss: number }): P
 
 /* ------------------------------------------------------------ the app */
 
-const dir = mkdtempSync(join(tmpdir(), 'elymum-netem-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-netem-'));
 process.env.TRUST_PROXY = '1';
 const cfg = loadConfig({
   NODE_ENV: 'development',

@@ -32,7 +32,7 @@ describe('arena prices store', () => {
   });
 
   it('persists the admin price per chain, survives a restart, refuses bad values', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-prices-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-prices-'));
     let t = 1_800_000_000_000;
     const a = new ArenaPriceStore(dir, () => {}, () => t);
     a.update({ manualUsdPerToken: '0.00081', tiers: [...ARENA_PRICING_DEFAULT.tiers.slice(0, 3), { arenaId: 4, usdCents: 1500, holdersOnly: true }] });
@@ -48,7 +48,7 @@ describe('arena prices store', () => {
   });
 
   it('an unreadable file is moved aside (logged), the defaults apply: never a made-up price', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-prices-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-prices-'));
     writeFileSync(join(dir, ARENA_PRICES_FILE), JSON.stringify({ manualUsdPerToken: '-3' }));
     const logs: string[] = [];
     const s = new ArenaPriceStore(dir, (m) => logs.push(m));
@@ -60,7 +60,7 @@ describe('arena prices store', () => {
 
 describe('arena prices API', () => {
   async function server() {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-prices-api-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-prices-api-'));
     const admin = testWallet(0xad01);
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
     const app = await createApp(cfg, { chain: new ArenaChain([arena(1, 1_000_000_000)]), log: () => {}, persist: true });

@@ -1,5 +1,5 @@
 /**
- * The Elymum emblem collection, generated from a collection seed (docs/NFT-DESIGN.md):
+ * The Coinnibal emblem collection, generated from a collection seed (docs/NFT-DESIGN.md):
  *
  *  1. exact tier quotas (largest remainder of `TIER_SHARE`), shuffled by the seed into the "art order";
  *  2. each slot rolls its layers from its tier's weighted pools (`choicesFor`), rerolling on a broken

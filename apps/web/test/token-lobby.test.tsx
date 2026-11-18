@@ -83,7 +83,7 @@ const UNSET: ChainStatus = {
   fees: null,
   serverKey: null,
 };
-const SET: ChainStatus = { ...UNSET, arenasEnabled: true, tokenReady: true, token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$ELYMUM', decimals: 18 } };
+const SET: ChainStatus = { ...UNSET, arenasEnabled: true, tokenReady: true, token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$NIBAL', decimals: 18 } };
 
 let engine: InstanceType<typeof GameEngine>;
 
@@ -92,7 +92,7 @@ beforeEach(() => {
   vi.stubGlobal('cancelAnimationFrame', () => {});
   net.sent = [];
   // a returning player: the first-play brief does not hold the join
-  localStorage.setItem('elymum.brief', '1');
+  localStorage.setItem('coinnibal.brief', '1');
   useUi.setState({ ...ui0, screen: 'lobby', page: 'play' }, true);
   engine = new GameEngine(document.createElement('canvas'));
   setEngine(engine);
@@ -168,7 +168,7 @@ describe('lobby while the game token is not set', () => {
     // an arena can now be picked; without a wallet its button asks to connect (the path to buying)
     act(() => arenas[0].click());
     expect(cta().textContent).toContain('Connect wallet');
-    expect(cta().textContent).toContain('$1 Room · 1,000 $ELYMUM');
+    expect(cta().textContent).toContain('$1 Room · 1,000 $NIBAL');
     expect(cta().disabled).toBe(false);
   });
 });

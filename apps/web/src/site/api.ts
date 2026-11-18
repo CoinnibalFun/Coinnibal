@@ -133,7 +133,7 @@ export interface RequestOpts {
   body?: unknown;
   token?: string | null;
   signal?: AbortSignal;
-  /** Extra request headers (the secret exports' `X-Elymum-Proof`). */
+  /** Extra request headers (the secret exports' `X-Coinnibal-Proof`). */
   headers?: Record<string, string>;
 }
 
@@ -187,7 +187,7 @@ export async function downloadCsv(path: string, token: string, fallbackName: str
 }
 
 /** The header that carries a secret export's proof (`/api/admin/backup`, `/api/admin/migration-env`). */
-export const PROOF_HEADER = 'X-Elymum-Proof';
+export const PROOF_HEADER = 'X-Coinnibal-Proof';
 
 /** What the admin wallet signs to open one secret export (`POST /api/admin/secret-proof`). */
 export interface SecretProofChallenge {
@@ -199,7 +199,7 @@ export interface SecretProofChallenge {
 /** A purpose: `backup` opens one backup download; `migration` the settings and one backup (the move to a new server). */
 export type SecretPurpose = 'backup' | 'migration';
 
-/** The `X-Elymum-Proof` value: base64url of `{"message","signature"}` (pure, tested). */
+/** The `X-Coinnibal-Proof` value: base64url of `{"message","signature"}` (pure, tested). */
 export function encodeProof(message: string, signature: string): string {
   const bytes = new TextEncoder().encode(JSON.stringify({ message, signature }));
   let bin = '';
@@ -215,7 +215,7 @@ const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
  * opens one download within 10 minutes; the session lasts 2 hours at most.
  */
 export function backupCurlCommand(serverHttp: string, token: string, proof: string): string {
-  return `curl -fsS -H ${shellQuote(`Authorization: Bearer ${token}`)} -H ${shellQuote(`${PROOF_HEADER}: ${proof}`)} ${shellQuote(`${serverHttp.replace(/\/+$/, '')}/api/admin/backup`)} -o elymum-backup.tar.gz`;
+  return `curl -fsS -H ${shellQuote(`Authorization: Bearer ${token}`)} -H ${shellQuote(`${PROOF_HEADER}: ${proof}`)} ${shellQuote(`${serverHttp.replace(/\/+$/, '')}/api/admin/backup`)} -o coinnibal-backup.tar.gz`;
 }
 
 /** The whole move to a new server as one line (deploy/vps/install.sh --from): settings and data, with a `migration` proof. */
@@ -326,7 +326,7 @@ export function adminApi(token: string) {
     wlStatus: (entryId: string, status: WlStatus) => request<{ entry: WlEntryAdmin }>(`/api/admin/wl/${id(entryId)}/status`, { method: 'PUT', token, body: { status } }).then((r) => r.entry),
     wlBulk: (ids: string[], status: WlStatus) => request<{ updated: number }>('/api/admin/wl/status', { method: 'POST', token, body: { ids, status } }),
     wlNote: (entryId: string, note: string) => request<{ entry: WlEntryAdmin }>(`/api/admin/wl/${id(entryId)}/note`, { method: 'PUT', token, body: { note } }).then((r) => r.entry),
-    wlCsv: (scope: 'approved' | 'all') => downloadCsv(`/api/admin/wl.csv${q({ scope })}`, token, `elymum-wl-${scope}.csv`),
+    wlCsv: (scope: 'approved' | 'all') => downloadCsv(`/api/admin/wl.csv${q({ scope })}`, token, `coinnibal-wl-${scope}.csv`),
     collabs: (p: { status?: CollabStatus | 'closed' | ''; q?: string }) => request<{ items: CollabAdmin[] }>(`/api/admin/collabs${q(p)}`, { token }).then((r) => r.items),
     collab: (cid: string) => request<{ collab: CollabAdmin }>(`/api/admin/collabs/${id(cid)}`, { token }).then((r) => r.collab),
     approveCollab: (cid: string, spots: number, deadline: number) =>
@@ -336,8 +336,8 @@ export function adminApi(token: string) {
       request<{ collab: CollabAdmin }>(`/api/admin/collabs/${id(cid)}/extend`, { method: 'POST', token, body: spots === undefined ? { deadline } : { deadline, spots } }).then((r) => r.collab),
     unlockCollab: (cid: string) => request<{ collab: CollabAdmin }>(`/api/admin/collabs/${id(cid)}/unlock`, { method: 'POST', token }).then((r) => r.collab),
     collabNote: (cid: string, note: string) => request<{ collab: CollabAdmin }>(`/api/admin/collabs/${id(cid)}/note`, { method: 'PUT', token, body: { note } }).then((r) => r.collab),
-    collabCsv: (cid: string) => downloadCsv(`/api/admin/collabs/${id(cid)}/wallets.csv`, token, `elymum-collab-${cid}.csv`),
-    allCollabsCsv: () => downloadCsv('/api/admin/collabs/wallets.csv', token, 'elymum-collab-wallets.csv'),
+    collabCsv: (cid: string) => downloadCsv(`/api/admin/collabs/${id(cid)}/wallets.csv`, token, `coinnibal-collab-${cid}.csv`),
+    allCollabsCsv: () => downloadCsv('/api/admin/collabs/wallets.csv', token, 'coinnibal-collab-wallets.csv'),
     integrity: integrityApi(token),
     /** `GET /api/admin/avatars`: players' profile pictures, newest first. */
     avatars: (limit = 200) => request<{ items: AdminAvatarEntry[]; total: number }>(`/api/admin/avatars${q({ limit })}`, { token }),
@@ -403,7 +403,7 @@ export function adminApi(token: string) {
     /** `POST /api/admin/secret-proof`: the text the admin wallet signs to open one secret export (10 minutes, single use). */
     secretProof: (purpose: SecretPurpose) => request<SecretProofChallenge>('/api/admin/secret-proof', { method: 'POST', token, body: { purpose } }),
     /** `GET /api/admin/backup` with a `backup` proof: a gzip tar of the server's DATA_DIR (server key and secrets included), saved as a file. */
-    backup: (proof: string) => downloadCsv('/api/admin/backup', token, 'elymum-backup.tar.gz', { [PROOF_HEADER]: proof }),
+    backup: (proof: string) => downloadCsv('/api/admin/backup', token, 'coinnibal-backup.tar.gz', { [PROOF_HEADER]: proof }),
     /** The `curl` command that downloads the same backup with this session and a `backup` proof (one download, 10 minutes). */
     backupCommand: (proof: string) => backupCurlCommand(SERVER.http, token, proof),
     /** The new-server command with a `migration` proof (the settings and one backup, 10 minutes). */
@@ -453,7 +453,7 @@ function integrityApi(token: string) {
     overview: () => request<IntegrityOverview>(base, { token }),
     scan: () => request<IntegrityOverview>(`${base}/scan`, { method: 'POST', token, body: {} }),
     flags: (f: IntegrityFilter) => request<{ flags: IntegrityFlag[] }>(`${base}/flags${q({ ...f, minScore: f.minScore ?? undefined })}`, { token }).then((r) => r.flags),
-    flagsCsv: (f: IntegrityFilter) => downloadCsv(`${base}/flags.csv${q({ ...f, minScore: f.minScore ?? undefined })}`, token, 'elymum-integrity-flags.csv'),
+    flagsCsv: (f: IntegrityFilter) => downloadCsv(`${base}/flags.csv${q({ ...f, minScore: f.minScore ?? undefined })}`, token, 'coinnibal-integrity-flags.csv'),
     setStatus: (flagId: string, status: IntegrityFlagStatus, note?: string) =>
       request<{ flag: IntegrityFlag }>(`${base}/flags/${id(flagId)}/status`, { method: 'POST', token, body: note === undefined ? { status } : { status, note } }).then((r) => r.flag),
     wallet: (wallet: string, other?: string) => request<IntegrityWalletView>(`${base}/wallet/${id(wallet)}${q({ other })}`, { token }),

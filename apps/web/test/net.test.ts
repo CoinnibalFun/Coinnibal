@@ -150,27 +150,27 @@ describe('Net: the shared close code and the subprotocols', () => {
     expect('CLOSE_REPLACED' in netModule).toBe(false);
   });
 
-  it('a guest offers `elymum` alone; a signed-in socket adds `elymum.auth.<token>`, read at each connect', () => {
+  it('a guest offers `coinnibal` alone; a signed-in socket adds `coinnibal.auth.<token>`, read at each connect', () => {
     vi.useFakeTimers();
     vi.stubGlobal('WebSocket', FakeSocket);
     let token: string | null = null;
     const net = new Net('ws://x/ws', { onOpen() {}, onClose() {}, onMessage() {}, onSnapshot() {} }, WATCHDOG_MS, () => token);
     net.connect();
     expect(FakeSocket.all[0].url).toBe('ws://x/ws');
-    expect(FakeSocket.all[0].protocols).toEqual(['elymum']);
+    expect(FakeSocket.all[0].protocols).toEqual(['coinnibal']);
     // signed in meanwhile: the reconnect carries the token (never in the URL)
     token = '0xAbC0000000000000000000000000000000000001.1700000000000.1690000000000.mAc_-x';
     FakeSocket.all[0].close();
     vi.advanceTimersByTime(600);
-    expect(FakeSocket.all[1].protocols).toEqual(['elymum', `elymum.auth.${token}`]);
+    expect(FakeSocket.all[1].protocols).toEqual(['coinnibal', `coinnibal.auth.${token}`]);
     expect(FakeSocket.all[1].url).toBe('ws://x/ws');
     net.close();
   });
 
   it('a token that is not a valid subprotocol token is not offered (the socket still opens as a guest)', () => {
-    expect(gameProtocols(null)).toEqual(['elymum']);
-    expect(gameProtocols('')).toEqual(['elymum']);
-    expect(gameProtocols('bad token,with=chars')).toEqual(['elymum']);
-    expect(gameProtocols('a.b.c')).toEqual(['elymum', 'elymum.auth.a.b.c']);
+    expect(gameProtocols(null)).toEqual(['coinnibal']);
+    expect(gameProtocols('')).toEqual(['coinnibal']);
+    expect(gameProtocols('bad token,with=chars')).toEqual(['coinnibal']);
+    expect(gameProtocols('a.b.c')).toEqual(['coinnibal', 'coinnibal.auth.a.b.c']);
   });
 });

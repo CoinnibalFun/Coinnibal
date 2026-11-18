@@ -19,20 +19,20 @@ async function newPage(viewport, mobile, settings = {}, extra = {}) {
   const ctx = await browser.newContext({ ...extra, viewport, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, locale: 'en-US' });
   await ctx.addInitScript((s) => {
     const def = { name: 'Daphne', skin: 4, theme: 'light', quality: 'high', sound: false, volume: 0.6, showNames: true, showMass: true, showFps: false, showMinimap: true, showChat: true };
-    localStorage.setItem('elymum.settings.v1', JSON.stringify({ ...def, ...s }));
+    localStorage.setItem('coinnibal.settings.v1', JSON.stringify({ ...def, ...s }));
   }, { ...(process.env.SHOT_THEME ? { theme: process.env.SHOT_THEME } : {}), ...settings });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
   page.on('console', (m) => m.type() === 'error' && logs.push(`[console.error] ${m.text()}`));
   await page.goto(base, { waitUntil: 'networkidle' });
-  await page.waitForFunction(() => !!window.__elymum && window.__elymum.useUi.getState().connected, null, { timeout: 15000 });
+  await page.waitForFunction(() => !!window.__coinnibal && window.__coinnibal.useUi.getState().connected, null, { timeout: 15000 });
   await page.waitForTimeout(600);
   return { ctx, page };
 }
 
 const ev = (page, fn, arg) => page.evaluate(fn, arg);
-const play = (page, room) => ev(page, (r) => window.__elymum.engine.play(r), room);
-const waitScreen = (page, s, timeout = 15000) => page.waitForFunction((x) => window.__elymum.useUi.getState().screen === x, s, { timeout });
+const play = (page, room) => ev(page, (r) => window.__coinnibal.engine.play(r), room);
+const waitScreen = (page, s, timeout = 15000) => page.waitForFunction((x) => window.__coinnibal.useUi.getState().screen === x, s, { timeout });
 
 async function wander(page, ms, W, H, mouse = true) {
   const t0 = Date.now();
@@ -59,7 +59,7 @@ async function measureFps(page, ms = 5000) {
       };
       requestAnimationFrame(tick);
     });
-    const e = window.__elymum.engine;
+    const e = window.__coinnibal.engine;
     const cam = e.camera;
     const v = cam.visibleRect(0);
     let visible = 0;
@@ -94,7 +94,7 @@ if (want('desktop')) {
   results.desktopFps = await measureFps(page, 5000);
   // death sheet (practice; the death message is injected with this game's own stats)
   await ev(page, () =>
-    window.__elymum.engine['onMessage']({ t: 'death', stats: { aliveMs: 151_000, finalMass: 0, maxMass: 1204, foodEaten: 212, cellsEaten: 3, playersEaten: 2, bestRank: 3 }, killer: 'Nakamoto', killerSkin: 1 }),
+    window.__coinnibal.engine['onMessage']({ t: 'death', stats: { aliveMs: 151_000, finalMass: 0, maxMass: 1204, foodEaten: 212, cellsEaten: 3, playersEaten: 2, bestRank: 3 }, killer: 'Nakamoto', killerSkin: 1 }),
   );
   await page.waitForTimeout(1400);
   await page.screenshot({ path: `${out}/game-death-practice.png` });
@@ -112,19 +112,19 @@ if (want('mobile')) {
     const cx = stick.x + stick.width / 2;
     const cy = stick.y + stick.height / 2;
     await page.touchscreen.tap(cx, cy).catch(() => {});
-    await ev(page, () => window.__elymum.engine.input.setStick(40, -20, 68));
+    await ev(page, () => window.__coinnibal.engine.input.setStick(40, -20, 68));
   }
   for (let i = 0; i < 6; i++) {
     await page.waitForTimeout(500);
-    const dead = await ev(page, () => window.__elymum.useUi.getState().screen !== 'playing');
+    const dead = await ev(page, () => window.__coinnibal.useUi.getState().screen !== 'playing');
     if (dead) {
-      await ev(page, () => window.__elymum.engine.backToLobby());
+      await ev(page, () => window.__coinnibal.engine.backToLobby());
       await play(page, 'practice');
       await waitScreen(page, 'playing');
-      await ev(page, () => window.__elymum.engine.input.setStick(40, -20, 68));
+      await ev(page, () => window.__coinnibal.engine.input.setStick(40, -20, 68));
     }
   }
-  await ev(page, () => window.__elymum.engine.emote(5));
+  await ev(page, () => window.__coinnibal.engine.emote(5));
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${out}/game-mobile-game.png` });
   results.mobileFps = await measureFps(page, 3000);
@@ -148,8 +148,8 @@ if (want('arena')) {
   await play(page, 'arena:1');
   await waitScreen(page, 'playing');
   await wander(page, 2500, 1440, 900);
-  if (await ev(page, () => window.__elymum.useUi.getState().screen !== 'playing')) {
-    await ev(page, () => window.__elymum.engine.backToLobby());
+  if (await ev(page, () => window.__coinnibal.useUi.getState().screen !== 'playing')) {
+    await ev(page, () => window.__coinnibal.engine.backToLobby());
     await page.waitForTimeout(3500); // the fake chain settles the old ticket first
     await play(page, 'arena:1');
     await waitScreen(page, 'playing');
@@ -157,7 +157,7 @@ if (want('arena')) {
   }
   // loot on the floor around me (client-side injection to show the sprites; a real spill needs a bot kill)
   await ev(page, () => {
-    const e = window.__elymum.engine;
+    const e = window.__coinnibal.engine;
     const me = e.world.myStats();
     if (!me) return;
     const now = performance.now();
@@ -170,19 +170,19 @@ if (want('arena')) {
     e.particles.coinBurst(me.x + 240, me.y - 60, 60, 16);
   });
   await page.waitForTimeout(500);
-  await ev(page, () => window.__elymum.engine['onMessage']({ t: 'value', value: 2_450_000_000, delta: 1_450_000_000, reason: 'loot' }));
+  await ev(page, () => window.__coinnibal.engine['onMessage']({ t: 'value', value: 2_450_000_000, delta: 1_450_000_000, reason: 'loot' }));
   await page.waitForTimeout(450);
   await page.screenshot({ path: `${out}/game-arena-game.png` });
   await ev(page, () => {
-    const e = window.__elymum.engine;
+    const e = window.__coinnibal.engine;
     e.world.apply({ tick: 0, view: { x: 0, y: 0, h: 1200 }, players: [], upserts: [], removals: Array.from({ length: 9 }, (_, i) => ({ id: 900000 + i, eaterId: 0 })) }, performance.now());
-    window.__elymum.engine['onMessage']({ t: 'value', value: 1_000_000_000, delta: -1_450_000_000, reason: 'eaten' });
+    window.__coinnibal.engine['onMessage']({ t: 'value', value: 1_000_000_000, delta: -1_450_000_000, reason: 'eaten' });
   });
   await page.waitForTimeout(600);
-  const ses = await ev(page, () => window.__elymum.useUi.getState().ticket?.session ?? null);
+  const ses = await ev(page, () => window.__coinnibal.useUi.getState().ticket?.session ?? null);
   // arena death by a bot (injected): tokens spilled
   await ev(page, () =>
-    window.__elymum.engine['onMessage']({
+    window.__coinnibal.engine['onMessage']({
       t: 'death',
       stats: { aliveMs: 94_000, finalMass: 0, maxMass: 640, foodEaten: 88, cellsEaten: 1, playersEaten: 1, bestRank: 5, payout: 0, valueLost: 1_450_000_000, byBot: true, lootSpilled: 1_450_000_000 },
       killer: 'Bot Rocky',
@@ -194,7 +194,7 @@ if (want('arena')) {
   // paid arenas have no cash-out: the round ends at the bell and everyone alive is paid.
   // The roundOver message is injected here; against a stack with a short ROUND_SECONDS a real bell works too.
   await ev(page, () =>
-    window.__elymum.engine['onMessage']({
+    window.__coinnibal.engine['onMessage']({
       t: 'roundOver',
       round: Math.floor(Date.now() / 300_000),
       payout: 1_000_000_000,
@@ -212,10 +212,10 @@ if (want('arena')) {
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${out}/game-round-over.png` });
   // the payout lands (injected; a real stack sends `settled` after the bell)
-  await ev(page, (ses) => window.__elymum.engine['onMessage']({ t: 'settled', kind: 'payout', session: ses, txHash: '0x' + 'ab'.repeat(32), payout: 1_000_000_000, fee: 0, net: 1_000_000_000 }), ses);
+  await ev(page, (ses) => window.__coinnibal.engine['onMessage']({ t: 'settled', kind: 'payout', session: ses, txHash: '0x' + 'ab'.repeat(32), payout: 1_000_000_000, fee: 0, net: 1_000_000_000 }), ses);
   await page.waitForTimeout(1800);
   await page.screenshot({ path: `${out}/game-round-over-settled.png` });
-  results.settlement = await ev(page, () => window.__elymum.useUi.getState().lastSettlement);
+  results.settlement = await ev(page, () => window.__coinnibal.useUi.getState().lastSettlement);
   await ctx.close();
 }
 
@@ -226,7 +226,7 @@ if (want('mobiledeath')) {
   await waitScreen(page, 'playing');
   await page.waitForTimeout(1500);
   await ev(page, () =>
-    window.__elymum.engine['onMessage']({ t: 'death', stats: { aliveMs: 61_000, finalMass: 0, maxMass: 380, foodEaten: 40, cellsEaten: 0, playersEaten: 0, bestRank: 9 }, killer: 'Nakamoto', killerSkin: 1 }),
+    window.__coinnibal.engine['onMessage']({ t: 'death', stats: { aliveMs: 61_000, finalMass: 0, maxMass: 380, foodEaten: 40, cellsEaten: 0, playersEaten: 0, bestRank: 9 }, killer: 'Nakamoto', killerSkin: 1 }),
   );
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${out}/game-mobile-death.png` });
@@ -240,12 +240,12 @@ if (want('fps')) {
   await waitScreen(page, 'playing');
   await page.mouse.move(720, 450);
   await page.waitForTimeout(2500);
-  await ev(page, () => { window.__elymum.engine.camera.userZoom = 0.88; });
+  await ev(page, () => { window.__coinnibal.engine.camera.userZoom = 0.88; });
   await page.waitForTimeout(1200);
   results.fps = [];
   for (let i = 0; i < 3; i++) {
-    if (await ev(page, () => window.__elymum.useUi.getState().screen !== 'playing')) {
-      await ev(page, () => window.__elymum.engine.backToLobby());
+    if (await ev(page, () => window.__coinnibal.useUi.getState().screen !== 'playing')) {
+      await ev(page, () => window.__coinnibal.engine.backToLobby());
       await play(page, 'practice');
       await waitScreen(page, 'playing');
       await page.waitForTimeout(1500);
@@ -259,7 +259,7 @@ if (want('fps')) {
 if (want('fps2')) {
   const { ctx, page } = await newPage({ width: 1440, height: 900 }, false);
   // the lobby already spectates the busiest practice room: show it with the spectator camera
-  await ev(page, () => window.__elymum.useUi.setState({ screen: 'spectating' }));
+  await ev(page, () => window.__coinnibal.useUi.setState({ screen: 'spectating' }));
   await page.waitForTimeout(3000);
   results.fpsSpectate = [];
   for (let i = 0; i < 3; i++) results.fpsSpectate.push(await measureFps(page, 5000));
@@ -273,9 +273,9 @@ if (want('reduced')) {
   await play(page, 'practice');
   await waitScreen(page, 'playing');
   await wander(page, 2500, 1440, 900);
-  results.reducedParticles = await ev(page, () => window.__elymum.engine.particles.reduced);
+  results.reducedParticles = await ev(page, () => window.__coinnibal.engine.particles.reduced);
   await ev(page, () =>
-    window.__elymum.engine['onMessage']({ t: 'death', stats: { aliveMs: 31_000, finalMass: 0, maxMass: 120, foodEaten: 20, cellsEaten: 0, playersEaten: 0, bestRank: 12 }, killer: 'Nakamoto', killerSkin: 1 }),
+    window.__coinnibal.engine['onMessage']({ t: 'death', stats: { aliveMs: 31_000, finalMass: 0, maxMass: 120, foodEaten: 20, cellsEaten: 0, playersEaten: 0, bestRank: 12 }, killer: 'Nakamoto', killerSkin: 1 }),
   );
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${out}/game-reduced-death.png` });

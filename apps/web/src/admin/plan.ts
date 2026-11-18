@@ -118,7 +118,7 @@ export function planRefusals(plan: Plan, ctx: { me: Address | null; blockers: re
   return out;
 }
 
-/** The fresh `owner()` of an Ownable contract (both Elymum contracts share the function). */
+/** The fresh `owner()` of an Ownable contract (both Coinnibal contracts share the function). */
 export async function readOwner(client: Pick<PublicClient, 'readContract'>, contract: Address): Promise<Address> {
   return getAddress(await client.readContract({ address: contract, abi: coinnibalArenaAbi, functionName: 'owner' }));
 }

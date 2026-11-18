@@ -1,10 +1,10 @@
 import type { XLinkError } from './xlink';
 
 /**
- * Elymum site: WL (allowlist) and collab applications, the NFT mint, the contracts registry and
+ * Coinnibal site: WL (allowlist) and collab applications, the NFT mint, the contracts registry and
  * player profiles. Types shared by the server (`/api/site/*`, `/api/admin/*`, `/api/profile`) and
  * the web app, plus the validation rules both apply.
- * See docs/specs/2026-10-29-elymum-on-elysium.md (section 4.4).
+ * See docs/specs/2026-10-29-coinnibal-on-elysium.md (section 4.4).
  */
 
 /** The X account of the project (no `@`). */
@@ -157,7 +157,7 @@ export interface CollabApplyRequest {
   contactX: string;
   discord?: string;
   role: CollabRole;
-  /** A post about Elymum on the community's X (tags the project). */
+  /** A post about Coinnibal on the community's X (tags the project). */
   postUrl: string;
   about: string;
   /** Honeypot: must be absent or empty. */
@@ -283,7 +283,7 @@ export type SiteErrorCode =
   | 'bad_image'
   /** Profile picture: an admin removed this picture; it cannot be uploaded again. */
   | 'image_blocked'
-  /** A secret export (backup, migration settings) without a fresh, purpose-bound admin signature (`X-Elymum-Proof`). */
+  /** A secret export (backup, migration settings) without a fresh, purpose-bound admin signature (`X-Coinnibal-Proof`). */
   | 'proof_required'
   /** The admin session is too old for admin routes (short-lived, revocable), or of the earlier long form: sign in again. */
   | 'admin_session_expired'
@@ -551,7 +551,7 @@ export interface AdminAvatarEntry {
 }
 
 /**
- * The emblem skin: the Elymum emblem's coin face and colour as an in-game skin, unlocked for wallets
+ * The emblem skin: the Coinnibal emblem's coin face and colour as an in-game skin, unlocked for wallets
  * holding the NFT (checked by the server on `PUT /api/profile` and at every join). Outside the
  * `SKINS` table: a client renders it with its own emblem art.
  */
@@ -562,7 +562,7 @@ export interface ProfileResponse {
   profile: ProfileView;
   /** Skin ids this wallet may pick: the basic skins, plus `EMBLEM_SKIN_ID` for NFT holders. */
   skinOptions?: number[];
-  /** The wallet holds an Elymum emblem (laurel on the name tag, emblem skin). */
+  /** The wallet holds a Coinnibal emblem (laurel on the name tag, emblem skin). */
   holder?: boolean;
 }
 

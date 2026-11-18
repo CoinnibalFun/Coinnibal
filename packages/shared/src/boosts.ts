@@ -94,15 +94,35 @@ export function leapDistance(r: number): number {
 /** Where burned tokens go when the arena's burn mode is `0` (and the fallback of mode `1`). */
 export const BURN_ADDRESS = '0x000000000000000000000000000000000000dEaD';
 
+/** The prefix of the power-up refs. */
+const REF_PREFIX = 'coinnibal';
 /**
- * The `ref` of a power-up payment (`CoinnibalArena.pay(amount, ref)`): `elymum.shop.<kind>` in ASCII, right-padded to
- * 32 bytes. The server credits a payment only when its ref names the pack bought.
+ * The prefix of the power-up refs before the rename (the project was called Elymum until November 2026). Read only:
+ * a payment sent just before the switch still credits (`shopPaymentRefs`, `shopCartRefs`); new payments never use it.
  */
-export function shopPaymentRef(kind: BoostKind): `0x${string}` {
-  const ascii = `elymum.shop.${kind}`;
+const OLD_REF_PREFIX = 'elymum';
+
+/** ASCII, right-padded with zero bytes to a 32-byte `ref`. */
+function asciiRef(ascii: string): `0x${string}` {
   let hex = '';
   for (let i = 0; i < ascii.length; i++) hex += ascii.charCodeAt(i).toString(16).padStart(2, '0');
   return `0x${hex.padEnd(64, '0')}`;
+}
+
+/**
+ * The `ref` of a power-up payment (`CoinnibalArena.pay(amount, ref)`): `coinnibal.shop.<kind>` in ASCII, right-padded to
+ * 32 bytes. The server credits a payment only when its ref names the pack bought.
+ */
+export function shopPaymentRef(kind: BoostKind): `0x${string}` {
+  return asciiRef(`${REF_PREFIX}.shop.${kind}`);
+}
+
+/**
+ * The refs a pack's payment is accepted with: `shopPaymentRef(kind)`, and the same pack under the prefix of before
+ * the rename (`elymum.shop.<kind>`). Only the prefix differs: the pack, and every other check of the payment, do not.
+ */
+export function shopPaymentRefs(kind: BoostKind): readonly `0x${string}`[] {
+  return [shopPaymentRef(kind), asciiRef(`${OLD_REF_PREFIX}.shop.${kind}`)];
 }
 
 /**
@@ -220,7 +240,7 @@ export interface ShopView {
   /** Share of a payment the contract burns (bps); the rest goes to its fee wallet. Null while unknown. */
   burnBps: number | null;
   packs: ShopPack[];
-  /** The wallet holds an Elymum emblem (its prices carry the discount). */
+  /** The wallet holds a Coinnibal emblem (its prices carry the discount). */
   holder: boolean;
   holderDiscountPct: number;
   /** The token's USD price the packs were converted at (USD per whole token); absent when priced in tokens. */
@@ -267,15 +287,22 @@ export function normalizeCart(raw: unknown): Record<BoostKind, number> | null {
 }
 
 /**
- * The `CoinnibalArena.pay` ref of a cart: ASCII `elymum.cart.` and each power-up's letter and pack count in a fixed order
- * (`elymum.cart.m2l0s1i0`), zero-padded to 32 bytes. The ref names the whole cart, so one payment proves it.
+ * The `CoinnibalArena.pay` ref of a cart: ASCII `coinnibal.cart.` and each power-up's letter and pack count in a fixed order
+ * (`coinnibal.cart.m2l0s1i0`), zero-padded to 32 bytes. The ref names the whole cart, so one payment proves it.
  */
 export function shopCartRef(cart: Record<BoostKind, number>): `0x${string}` {
-  const ascii = `elymum.cart.${BOOST_KINDS.map((k) => `${CART_LETTER[k]}${cart[k] ?? 0}`).join('')}`;
-  let hex = '';
-  for (let i = 0; i < ascii.length; i++) hex += ascii.charCodeAt(i).toString(16).padStart(2, '0');
-  return `0x${hex.padEnd(64, '0')}`;
+  return asciiRef(cartAscii(REF_PREFIX, cart));
 }
+
+/**
+ * The refs a cart's payment is accepted with: `shopCartRef(cart)`, and the same cart under the prefix of before the
+ * rename (`elymum.cart.…`). Only the prefix differs: the cart, and every other check of the payment, do not.
+ */
+export function shopCartRefs(cart: Record<BoostKind, number>): readonly `0x${string}`[] {
+  return [shopCartRef(cart), asciiRef(cartAscii(OLD_REF_PREFIX, cart))];
+}
+
+const cartAscii = (prefix: string, cart: Record<BoostKind, number>): string => `${prefix}.cart.${BOOST_KINDS.map((k) => `${CART_LETTER[k]}${cart[k] ?? 0}`).join('')}`;
 
 /** The cart a ref names (`shopCartRef`), or null when it is not a cart ref. */
 export function parseShopCartRef(ref: string): Record<BoostKind, number> | null {
@@ -286,7 +313,8 @@ export function parseShopCartRef(ref: string): Record<BoostKind, number> | null 
     if (c === 0) break;
     ascii += String.fromCharCode(c);
   }
-  const m = /^elymum\.cart\.m(\d{1,2})l(\d{1,2})s(\d{1,2})i(\d{1,2})$/.exec(ascii);
+  // the prefix of before the rename too: a cart paid just before the switch still reads as that cart
+  const m = /^(?:coinnibal|elymum)\.cart\.m(\d{1,2})l(\d{1,2})s(\d{1,2})i(\d{1,2})$/.exec(ascii);
   if (!m) return null;
   return normalizeCart({ magnet: Number(m[1]), leap: Number(m[2]), speed: Number(m[3]), invis: Number(m[4]) });
 }

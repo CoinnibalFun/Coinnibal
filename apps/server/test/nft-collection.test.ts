@@ -146,7 +146,7 @@ describe('emblem art', () => {
 });
 
 describe('NftCollection', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-nft-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-nft-'));
 
   it('commits a random seed once, keeps it across restarts, and stores it privately', () => {
     const file = join(dir, 'a.json');

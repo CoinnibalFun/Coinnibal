@@ -87,7 +87,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
   const chain = net.info ? `${net.mainnet ? 'MAINNET' : 'Testnet'} · ${net.info.name} (${net.info.id})` : 'No chain';
   switch (group) {
     case 'network': {
-      if (!net.chain) return { now: 'The game server is not answering.', next: 'It retries every 5 s. If it stays down: on the server, run elymum-status (deploy/vps/README.md).' };
+      if (!net.chain) return { now: 'The game server is not answering.', next: 'It retries every 5 s. If it stays down: on the server, run coinnibal-status (deploy/vps/README.md).' };
       if (!net.info) return { now: 'The server has no chain.', next: 'Set EVM_RPC_URL (and CHAIN_ID) on the server and restart it.' };
       const bal = a?.serverBalance ?? null;
       const now = `${chain}${status ? ` · block ${status.block.toString()}` : ''}${bal !== null ? ` · server key ${formatGasAmount(bal, 4)}` : ''}`;

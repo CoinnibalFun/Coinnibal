@@ -6,11 +6,11 @@
  *
  *   node --import tsx scripts/bench/settle-gas.ts      (from apps/server)
  */
-import { createElymumWalletClient, getSession, sendCall, settleCall, viemChain } from '@coinnibal/sdk';
+import { createCoinnibalWalletClient, getSession, sendCall, settleCall, viemChain } from '@coinnibal/sdk';
 import { startHardhatArena } from './hardhat-arena';
 
 const hh = await startHardhatArena({ players: 51 });
-const wallet = createElymumWalletClient(hh.url, { account: hh.server, chain: viemChain(31337, { rpcUrl: hh.url }), pollingInterval: 20 });
+const wallet = createCoinnibalWalletClient(hh.url, { account: hh.server, chain: viemChain(31337, { rpcUrl: hh.url }), pollingInterval: 20 });
 const out: Record<string, number> = {};
 let offset = 0;
 for (const n of [1, 10, 40]) {

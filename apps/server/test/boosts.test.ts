@@ -1,4 +1,4 @@
-import { BOOST_RULES, CellFlag, PlayerFlag, RULES, OLD_SHOP_PRICES, SHOP_DEFAULTS, TICK_MS, leapDistance, packPriceRaw, parseUsdPrice, shopPaymentRef, type ServerMessage } from '@coinnibal/shared';
+import { BOOST_RULES, CellFlag, PlayerFlag, RULES, OLD_SHOP_PRICES, SHOP_DEFAULTS, TICK_MS, leapDistance, packPriceRaw, parseUsdPrice, customRoomPaymentRef, shopCartRefs, shopPaymentRef, shopPaymentRefs, type ServerMessage } from '@coinnibal/shared';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { BotBrain } from '../src/bots/brain';
 import { mulberry32 } from '../src/game/rng';
@@ -249,9 +249,36 @@ describe('boosts: verifyPurchase (a Paid event of CoinnibalArena.pay)', () => {
     expect(verifyPurchase(payReceipt(300n * ONE, { token: OTHER }), exp)).toEqual({ ok: false, code: 'wrong_token' });
     expect(verifyPurchase(payReceipt(300n * ONE, { transferValue: 1n }), exp)).toEqual({ ok: false, code: 'wrong_token' });
   });
-  it('the pack ref is elymum.shop.<kind> in ASCII, 32 bytes', () => {
-    expect(shopPaymentRef('magnet')).toBe(`0x${Buffer.from('elymum.shop.magnet').toString('hex').padEnd(64, '0')}`);
+  it('the pack ref is coinnibal.shop.<kind> in ASCII, 32 bytes', () => {
+    expect(shopPaymentRef('magnet')).toBe(`0x${Buffer.from('coinnibal.shop.magnet').toString('hex').padEnd(64, '0')}`);
     expect(new Set(['magnet', 'leap', 'speed', 'invis'].map((k) => shopPaymentRef(k as 'magnet'))).size).toBe(4);
+  });
+  it('accepts a pack paid with the ref of before the rename (elymum.shop.<kind>), with every other check unchanged', () => {
+    const old = `0x${Buffer.from('elymum.shop.magnet').toString('hex').padEnd(64, '0')}`;
+    expect(shopPaymentRefs('magnet')).toEqual([shopPaymentRef('magnet'), old]);
+    const both = { ...exp, ref: shopPaymentRefs('magnet') };
+    expect(verifyPurchase(payReceipt(300n * ONE), both)).toEqual({ ok: true, paid: 300n * ONE });
+    expect(verifyPurchase(payReceipt(300n * ONE, { ref: old }), both)).toEqual({ ok: true, paid: 300n * ONE });
+    // the old ref of another pack, from another wallet, of another amount, to another arena: refused as before
+    expect(verifyPurchase(payReceipt(300n * ONE, { ref: shopPaymentRefs('leap')[1] }), both)).toEqual({ ok: false, code: 'wrong_pack' });
+    expect(verifyPurchase(payReceipt(300n * ONE, { ref: old, from: OTHER }), both)).toEqual({ ok: false, code: 'wrong_sender' });
+    expect(verifyPurchase(payReceipt(299n * ONE, { ref: old }), both)).toEqual({ ok: false, code: 'wrong_amount' });
+    expect(verifyPurchase(payReceipt(300n * ONE, { ref: old, contract: OTHER }), both)).toEqual({ ok: false, code: 'wrong_recipient' });
+    expect(verifyPurchase(payReceipt(300n * ONE, { ref: old, token: OTHER }), both)).toEqual({ ok: false, code: 'wrong_token' });
+    // only where the expectation lists it: the new ref alone does not take the old one
+    expect(verifyPurchase(payReceipt(300n * ONE, { ref: old }), exp)).toEqual({ ok: false, code: 'wrong_pack' });
+  });
+  it('a ref of one kind never matches another kind, under either prefix (a pack, a cart, a room fee)', () => {
+    const kinds: Record<string, readonly string[]> = {
+      pack: shopPaymentRefs('magnet'),
+      cart: shopCartRefs({ magnet: 1, leap: 0, speed: 0, invis: 0 }),
+      room: [customRoomPaymentRef('abcdefghijk23456')],
+    };
+    for (const [a, mine] of Object.entries(kinds))
+      for (const [b, wanted] of Object.entries(kinds)) {
+        if (a === b) continue;
+        for (const ref of mine) expect(verifyPurchase(payReceipt(300n * ONE, { ref }), { ...exp, ref: wanted }), `${a} paid, ${b} wanted`).toEqual({ ok: false, code: 'wrong_pack' });
+      }
   });
   it('refuses a payment older than SHOP_PAYMENT_MAX_AGE_MS (a lost used-hash list cannot re-credit old purchases)', () => {
     const now = 1_900_000_000_000;
@@ -536,7 +563,7 @@ describe('boosts: buying', () => {
   });
 
   it('a saved shop file still holding every pre-2026-11 default price takes the new ones; an admin price stays', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-shop-prices-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-shop-prices-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
     writeFileSync(join(dir, 'site', 'shop.json'), JSON.stringify({ ...SHOP_DEFAULTS, prices: { ...OLD_SHOP_PRICES } }));
     expect(new ShopSettingsStore(dir).settings.prices).toEqual(SHOP_DEFAULTS.prices);

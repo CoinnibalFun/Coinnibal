@@ -28,10 +28,12 @@ describe('brand', () => {
   });
 
   it('adds the brand site origins to a CORS list, and leaves * and unset alone', () => {
+    // elymum.io, the domain of before the rename, stays a brand origin while the live config redirects it
+    expect(BRAND_SITE_ORIGINS).toEqual(['https://coinnibal.fun', 'https://www.coinnibal.fun', 'https://elymum.io']);
     expect(withBrandOrigins(undefined)).toBe('*');
     expect(withBrandOrigins('*')).toBe('*');
-    expect(withBrandOrigins('https://elymum.io/')).toBe('https://elymum.io,https://coinnibal.fun,https://www.coinnibal.fun');
+    expect(withBrandOrigins('https://coinnibal.fun/')).toBe('https://coinnibal.fun,https://www.coinnibal.fun,https://elymum.io');
     expect(withBrandOrigins('https://admin.example')).toBe(['https://admin.example', ...BRAND_SITE_ORIGINS].join(','));
-    expect(withBrandOrigins('https://coinnibal.fun, https://elymum.io').split(',')).toEqual(['https://coinnibal.fun', 'https://elymum.io', 'https://www.coinnibal.fun']);
+    expect(withBrandOrigins('https://coinnibal.fun, https://admin.example').split(',')).toEqual(['https://coinnibal.fun', 'https://admin.example', 'https://www.coinnibal.fun', 'https://elymum.io']);
   });
 });

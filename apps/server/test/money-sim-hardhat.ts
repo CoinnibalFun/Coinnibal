@@ -11,8 +11,8 @@ import {
   BURN_ADDRESS,
   approveCall,
   createDefaultArenaCalls,
-  createElymumPublicClient,
-  createElymumWalletClient,
+  createCoinnibalPublicClient,
+  createCoinnibalWalletClient,
   deployArena,
   deployNft,
   deployTestToken,
@@ -64,7 +64,7 @@ async function rpcUp(u: string): Promise<boolean> {
 
 /**
  * Starts a hardhat node, deploys and sets up the arena (arenas 1 and 2 used), funds `players` wallets. Every third
- * wallet holds an CoinnibalNFT (owner-minted), the arena's holder NFT at the owner's holder pair (8 % + 2 %).
+ * wallet holds a CoinnibalNFT (owner-minted), the arena's holder NFT at the owner's holder pair (8 % + 2 %).
  */
 export async function hardhatSimChain(opts: { players: number; seed: number }): Promise<SimChain> {
   const port = await freePort();
@@ -100,14 +100,14 @@ export async function hardhatSimChain(opts: { players: number; seed: number }): 
   // a local node: no request budget worth the name
   configureRpcBudgets({ ratePerSec: 100_000, burst: 100_000 });
   const chain = viemChain(31337, { rpcUrl: url });
-  const pub: PublicClient = createElymumPublicClient(url, chain, { pollingInterval: 20 });
+  const pub: PublicClient = createCoinnibalPublicClient(url, chain, { pollingInterval: 20 });
   const account = (i: number) => privateKeyToAccount(toHex(mnemonicToAccount(MNEMONIC, { addressIndex: i }).getHdKey().privateKey!));
   const admin = account(0);
   const server = account(1);
   const feeWallet = account(2);
   const playerAccounts = Array.from({ length: opts.players }, (_, i) => account(3 + i));
   const wallets = new Map<string, WalletClient>();
-  for (const a of [admin, ...playerAccounts]) wallets.set(a.address.toLowerCase(), createElymumWalletClient(url, { account: a, chain, pollingInterval: 20 }));
+  for (const a of [admin, ...playerAccounts]) wallets.set(a.address.toLowerCase(), createCoinnibalWalletClient(url, { account: a, chain, pollingInterval: 20 }));
   const send = async (from: Address, call: ContractCall): Promise<boolean> => {
     try {
       const hash = await sendCall(wallets.get(from.toLowerCase())!, call);

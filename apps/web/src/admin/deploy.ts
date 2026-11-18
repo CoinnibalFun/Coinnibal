@@ -9,7 +9,7 @@ import type { AdminNetwork } from './net';
  * wallet → check the chain → deploy the arena → deploy the NFT → register both with the server →
  * set the game token → create the default arenas. TestToken deploy + faucet are offered off
  * mainnet only. What was deployed from this browser but not registered yet is remembered locally
- * (`elymum.admin.deploy.v1`, per chain), so a failed registration can be retried.
+ * (`coinnibal.admin.deploy.v1`, per chain), so a failed registration can be retried.
  */
 export type DeployStepId = 'connect' | 'chain' | 'arena' | 'nft' | 'register' | 'token' | 'arenas';
 export type StepState = 'done' | 'active' | 'todo';
@@ -27,7 +27,7 @@ export interface LocalDeploy {
 }
 export type LocalDeploys = Partial<Record<'arena' | 'nft' | 'token', LocalDeploy>>;
 
-const KEY = 'elymum.admin.deploy.v1';
+const KEY = 'coinnibal.admin.deploy.v1';
 
 export function loadLocalDeploys(chainId: number | null | undefined): LocalDeploys {
   if (!chainId) return {};

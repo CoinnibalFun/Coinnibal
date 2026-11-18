@@ -7,7 +7,7 @@
  * nothing readable leaves the browser: only the hash, which the server hashes again with its own
  * secret and treats as untrusted evidence. Clearing site data or a private window gives a new one.
  */
-const KEY = 'elymum.device.v1';
+const KEY = 'coinnibal.device.v1';
 
 let value: string | null = null;
 let started = false;
@@ -42,6 +42,8 @@ async function compute(): Promise<string | null> {
     typeof screen === 'undefined' ? '' : `${screen.width}x${screen.height}@${Math.round((window.devicePixelRatio || 1) * 100)}`,
     String(navigator.hardwareConcurrency ?? ''),
   ];
+  // `elymum-fp|`: the hash's fixed prefix from before the rename to Coinnibal. It stays: a new prefix would give every
+  // device a new fingerprint, and the integrity checks would no longer see a device's earlier wallets.
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`elymum-fp|${parts.join('|')}`));
   return [...new Uint8Array(digest)]
     .slice(0, 16)

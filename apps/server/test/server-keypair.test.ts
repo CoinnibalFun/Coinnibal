@@ -9,7 +9,7 @@ const KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
 
 describe('SERVER_PRIVATE_KEY', () => {
   it('auto: creates the key once in DATA_DIR (0600) and reuses it', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-key-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-key-'));
     const a = loadServerKey('auto', dir);
     const b = loadServerKey(' auto ', dir);
     expect(b.address).toBe(a.address);
@@ -30,7 +30,7 @@ describe('SERVER_PRIVATE_KEY', () => {
     const expected = privateKeyToAccount(KEY).address;
     expect(loadServerKey(KEY).address).toBe(expected);
     expect(loadServerKey(KEY.slice(2)).address).toBe(expected);
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-key-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-key-'));
     writeFileSync(join(dir, 'bare.txt'), `${KEY}\n`);
     expect(loadServerKey(join(dir, 'bare.txt')).address).toBe(expected);
     writeFileSync(join(dir, 'json.json'), JSON.stringify({ privateKey: KEY }));
@@ -38,7 +38,7 @@ describe('SERVER_PRIVATE_KEY', () => {
   });
 
   it('refuses a missing file or a file without a key, never echoing the secret', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-key-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-key-'));
     expect(() => loadServerKey(join(dir, 'nope.txt'))).toThrow(/cannot read/);
     writeFileSync(join(dir, 'bad.txt'), 'hello');
     expect(() => loadServerKey(join(dir, 'bad.txt'))).toThrow(/does not hold a private key/);
@@ -59,7 +59,7 @@ describe('SERVER_PRIVATE_KEY', () => {
   });
 
   it('withholds a key file path whose name looks like a key', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-key-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-key-'));
     const hexName = join(dir, KEY.slice(2));
     const msg = (() => {
       try {

@@ -27,7 +27,7 @@
 // minimal DevTools hook), and the game server's CPU per tick (its process CPU time over the
 // window / 30 ticks per second, read from /proc). --profile adds a CDP CPU profile with the top
 // self-time functions; --trace a Chrome trace with the GC totals.
-// Output (default out: $TMPDIR/elymum-perf): <out>/<label>.json and a Markdown table on stdout.
+// Output (default out: $TMPDIR/coinnibal-perf): <out>/<label>.json and a Markdown table on stdout.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -43,7 +43,7 @@ const opt = (n, d) => (argv.includes(n) ? argv[argv.indexOf(n) + 1] : d);
 const PROD = flag('--prod');
 const URL_ = opt('--url', PROD ? 'http://localhost:4173/play' : 'http://localhost:5173/play');
 const LABEL = opt('--label', 'run');
-const OUT = resolve(opt('--out', join(tmpdir(), 'elymum-perf')));
+const OUT = resolve(opt('--out', join(tmpdir(), 'coinnibal-perf')));
 const SCENES = opt('--scenes', PROD ? 'practice' : 'practice,arena').split(',');
 const DEVICES = opt('--devices', 'desktop,phone').split(',');
 const SECS = Number(opt('--secs', '20'));
@@ -96,7 +96,7 @@ function stopDemo() {
 // ───────────────────────────── production build (optional) ─────────────────────────────
 let preview = null;
 async function startPreview() {
-  const dir = join(tmpdir(), 'elymum-perf-dist');
+  const dir = join(tmpdir(), 'coinnibal-perf-dist');
   log(`building a production bundle with the perf hook into ${dir}`);
   const web = join(ROOT, 'apps/web');
   const b = spawnSync('pnpm', ['exec', 'vite', 'build', '--outDir', dir, '--emptyOutDir'], { cwd: web, env: { ...process.env, VITE_PERF_HOOK: '1' }, encoding: 'utf8' });
@@ -201,7 +201,7 @@ function instrument() {
   }, 100);
   // wraps the engine frame and the renderer draw once the engine exists
   const hook = setInterval(() => {
-    const S = window.__elymum;
+    const S = window.__coinnibal;
     if (!S?.engine) return;
     clearInterval(hook);
     const e = S.engine;
@@ -252,7 +252,7 @@ function instrument() {
     });
   // steering through the virtual stick: food first, away from bigger coins, off the walls
   P.steer = () => {
-    const S = window.__elymum;
+    const S = window.__coinnibal;
     if (!S?.engine) return;
     const e = S.engine;
     const w = e.world;
@@ -337,8 +337,8 @@ async function settings(ctx, quality) {
   await ctx.addInitScript(
     ([s, noAuto]) => {
       if (!sessionStorage.getItem('__perfset')) {
-        localStorage.setItem('elymum.settings.v1', JSON.stringify(s));
-        if (noAuto) localStorage.setItem('elymum.autoQuality', 'off');
+        localStorage.setItem('coinnibal.settings.v1', JSON.stringify(s));
+        if (noAuto) localStorage.setItem('coinnibal.autoQuality', 'off');
         sessionStorage.setItem('__perfset', '1');
       }
     },
@@ -346,34 +346,34 @@ async function settings(ctx, quality) {
   );
 }
 
-const state = (page) => page.evaluate(() => window.__elymum.useUi.getState().screen);
+const state = (page) => page.evaluate(() => window.__coinnibal.useUi.getState().screen);
 
 async function joinPractice(page) {
   await page.evaluate(() => {
     window.__perf.room = 'practice';
-    window.__elymum.engine.play('practice');
+    window.__coinnibal.engine.play('practice');
   });
-  await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 20000 });
+  await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 20000 });
 }
 
 async function joinArena(page) {
   await page.locator('.kl-wallet').first().click();
   await page.waitForSelector('.wl-sheet, .kb-wallets', { timeout: 8000 });
   await page.locator('.wl-item, .kb-wallets .kb-wallet').first().click();
-  await page.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 20000 });
-  await page.waitForFunction(() => window.__elymumChain?.useChainData.getState().tokenBalance != null, null, { timeout: 20000 });
+  await page.waitForFunction(() => !!window.__coinnibal.useUi.getState().auth, null, { timeout: 20000 });
+  await page.waitForFunction(() => window.__coinnibalChain?.useChainData.getState().tokenBalance != null, null, { timeout: 20000 });
   await page.locator('[role="radio"][data-kb-value="arena:1"]').first().click();
   await sleep(300);
   await page.locator('.kl-cta').first().click();
   await page.waitForSelector('.tf-sheet', { timeout: 10000 });
   await page.evaluate(() => {
-    if (window.__elymumChain?.fakeWallet) window.__elymumChain.fakeWallet.delayMs = 50;
+    if (window.__coinnibalChain?.fakeWallet) window.__coinnibalChain.fakeWallet.delayMs = 50;
   });
   await page.locator('.tf-sheet .tf-pay, .tf-sheet .kb-btn--pink').first().click();
-  const ok = await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 20000 }).then(() => true, () => false);
+  const ok = await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 20000 }).then(() => true, () => false);
   if (!ok) {
     await page.locator('.kl-cta').first().click();
-    await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 20000 });
+    await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 20000 });
   }
 }
 
@@ -385,13 +385,13 @@ async function drive(page, ms, scene) {
     const s = await page
       .evaluate(() => {
         window.__perf.steer();
-        return window.__elymum.useUi.getState().screen;
+        return window.__coinnibal.useUi.getState().screen;
       })
       .catch(() => 'error');
     if (s === 'dead' || s === 'lobby') {
       deaths++;
       if (scene === 'practice') {
-        await page.evaluate(() => window.__elymum.engine.play(window.__perf.room)).catch(() => {});
+        await page.evaluate(() => window.__coinnibal.engine.play(window.__perf.room)).catch(() => {});
         await sleep(500);
       }
     }
@@ -430,7 +430,7 @@ async function run(browser, scene, device) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(URL_, { waitUntil: 'networkidle' });
-  await page.waitForFunction(() => !!window.__elymum && window.__elymum.useUi.getState().connected, null, { timeout: 30000 });
+  await page.waitForFunction(() => !!window.__coinnibal && window.__coinnibal.useUi.getState().connected, null, { timeout: 30000 });
   if (scene === 'arena') await joinArena(page);
   else await joinPractice(page);
   const cdp = await ctx.newCDPSession(page);
@@ -505,7 +505,7 @@ async function run(browser, scene, device) {
   if (flag('--dump')) {
     // the world as drawn right now (entities, players, camera), for perf-scene.mjs --world
     const dump = await page.evaluate(() => {
-      const e = window.__elymum.engine;
+      const e = window.__coinnibal.engine;
       const w = e.world;
       const ents = [...w.entities.values()].filter((x) => !x.dying).map(({ jelly, ...x }) => ({ ...x, jelly: !!jelly }));
       const players = [...w.players.values()].map((p) => ({ ...p, emote: null }));
@@ -516,11 +516,11 @@ async function run(browser, scene, device) {
     writeFileSync(join(OUT, `world-${scene}-${device}.json`), JSON.stringify(dump));
   }
   const scr = await state(page).catch(() => '?');
-  const entities = await page.evaluate(() => window.__elymum.engine.world.entities.size).catch(() => null);
+  const entities = await page.evaluate(() => window.__coinnibal.engine.world.entities.size).catch(() => null);
   // the automatic quality level reached (0 = full) and the canvas pixel ratio at the end
   const auto = await page
     .evaluate(() => {
-      const e = window.__elymum.engine;
+      const e = window.__coinnibal.engine;
       const c = document.querySelector('canvas.game-canvas');
       return e.governor ? { level: e.governor.level, dpr: c ? +(c.width / c.clientWidth).toFixed(2) : null } : null;
     })

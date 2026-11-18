@@ -28,7 +28,7 @@ const ROUND = { roundMs: 300_000, closeMs: 60_000 };
 
 /** A manager with arena #1, `cap` seats per instance and the scaler's settings, on a hand-driven clock 10 s into a round. */
 async function setup(cap: number, settings: Partial<ArenaScalingSettings> = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-scale-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-scale-'));
   const cfg = loadConfig({ DATA_DIR: dir, ARENA_INSTANCE_CAP: String(cap) });
   const journal = new Journal(null);
   const chain = new ArenaChain([arena(1, FEE)]);
@@ -78,7 +78,7 @@ describe('arena scaling settings', () => {
   });
 
   it('stores admin changes in DATA_DIR/site/arena-scaling.json and moves a broken file aside', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-scale-store-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-scale-store-'));
     const s = new ArenaScalingStore(dir);
     expect(s.settings).toEqual(ARENA_SCALING_DEFAULT);
     s.update({ maxInstances: 4, cooldownMin: 1 });

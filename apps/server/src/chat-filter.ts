@@ -48,7 +48,8 @@ const SCAM = new RegExp(
     'private\\s*key',
     // "send me ..." / "send 100 eth" / "dm me" (an off-site handover)
     'send\\s+me\\b',
-    'send\\s+(?:\\d[\\d.,]*\\s*)?(?:eth|usdc|usdt|tokens?|coins?|elymum|\\$elymum)\\b',
+    // the game's names too: "coinnibal", "$nibal", and "elymum" / "$elymum" of before the rename (a player may still type it)
+    'send\\s+(?:\\d[\\d.,]*\\s*)?(?:eth|usdc|usdt|tokens?|coins?|coinnibal|\\$?nibal|elymum|\\$elymum)\\b',
     '\\b(?:dm|pm|message)\\s+me\\b',
     'airdrop\\s*claim',
     '\\bclaim\\s+(?:your|the|free)\\b',

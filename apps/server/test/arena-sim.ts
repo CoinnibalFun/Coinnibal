@@ -66,7 +66,7 @@ export const ARENA_SIM_WAVES = (min: number): number => {
 const FEE = 1_000_000;
 
 export async function runArenaSim(o: ArenaSimOptions): Promise<ArenaSimResult> {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-arena-sim-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-arena-sim-'));
   const cfg = loadConfig({ DATA_DIR: dir, ARENA_INSTANCE_CAP: String(o.cap) });
   const journal = new Journal(null);
   const chain = new ArenaChain([arena(1, FEE)]);

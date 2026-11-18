@@ -11,8 +11,8 @@ import { fileURLToPath } from 'node:url';
 import {
   approveCall,
   createDefaultArenaCalls,
-  createElymumPublicClient,
-  createElymumWalletClient,
+  createCoinnibalPublicClient,
+  createCoinnibalWalletClient,
   deployArena,
   deployTestToken,
   deployedAddress,
@@ -90,7 +90,7 @@ export async function startHardhatArena(opts: { players: number; intervalMs?: nu
     await new Promise((r) => setTimeout(r, 300));
   }
   const chain = viemChain(31337, { rpcUrl: url });
-  const pub: PublicClient = createElymumPublicClient(url, chain, { pollingInterval: 20 });
+  const pub: PublicClient = createCoinnibalPublicClient(url, chain, { pollingInterval: 20 });
   const rpc = (method: string, params: unknown[]) => pub.request({ method: method as never, params: params as never });
   const admin = privateKeyToAccount(toHex(mnemonicToAccount(MNEMONIC, { addressIndex: 0 }).getHdKey().privateKey!));
   const serverKey = generatePrivateKey();
@@ -100,7 +100,7 @@ export async function startHardhatArena(opts: { players: number; intervalMs?: nu
   await rpc('hardhat_setBalance', [server.address, toHex(10n ** 18n)]);
   for (const p of players) await rpc('hardhat_setBalance', [p.address, gas]);
   const wallets = new Map<string, WalletClient>();
-  for (const a of [admin, ...players]) wallets.set(a.address.toLowerCase(), createElymumWalletClient(url, { account: a, chain, pollingInterval: 20 }));
+  for (const a of [admin, ...players]) wallets.set(a.address.toLowerCase(), createCoinnibalWalletClient(url, { account: a, chain, pollingInterval: 20 }));
   const send = async (from: Address, call: ContractCall): Promise<boolean> => {
     try {
       const hash = await sendCall(wallets.get(from.toLowerCase())!, call);

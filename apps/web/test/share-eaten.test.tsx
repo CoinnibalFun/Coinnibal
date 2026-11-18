@@ -135,7 +135,7 @@ describe("the others' stickers setting", () => {
     fireEvent.click(sw);
     expect(useUi.getState().settings.showEmotes).toBe(false);
     expect(useUi.getState().settings.showChat).toBe(true);
-    expect(JSON.parse(localStorage.getItem('elymum.settings.v1')!).showEmotes).toBe(false);
+    expect(JSON.parse(localStorage.getItem('coinnibal.settings.v1')!).showEmotes).toBe(false);
     act(() => updateSettings({ showEmotes: true }));
     expect(sw.getAttribute('aria-checked')).toBe('true');
   });

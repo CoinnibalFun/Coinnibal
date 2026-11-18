@@ -21,9 +21,9 @@ const P = { width: 390, height: 844 };
 async function newPage({ viewport, mobile = false, wallet = true, url = base, theme = 'light' }) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, locale: 'en-US' });
   await ctx.addInitScript((theme) => {
-    localStorage.setItem('elymum.settings.v1', JSON.stringify({ name: 'Daphne', skin: 4, theme, sound: false, showMinimap: true, showChat: true }));
+    localStorage.setItem('coinnibal.settings.v1', JSON.stringify({ name: 'Daphne', skin: 4, theme, sound: false, showMinimap: true, showChat: true }));
     // the first-play brief was read already
-    localStorage.setItem('elymum.brief', '1');
+    localStorage.setItem('coinnibal.brief', '1');
   }, theme);
   let account = null;
   if (wallet) ({ account } = await installEvmWallet(ctx, { privateKey: newDevKey(), autoConnect: true, allowTransactions: false }));
@@ -31,10 +31,10 @@ async function newPage({ viewport, mobile = false, wallet = true, url = base, th
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
   page.on('console', (m) => m.type() === 'error' && logs.push(`[console.error] ${m.text()}`));
   await page.goto(url, { waitUntil: 'networkidle' });
-  await page.waitForFunction(() => !!window.__elymum && window.__elymum.useUi.getState().connected, null, { timeout: 20000 });
+  await page.waitForFunction(() => !!window.__coinnibal && window.__coinnibal.useUi.getState().connected, null, { timeout: 20000 });
   if (wallet) {
     await signInGame(page, new URL(base).origin, account);
-    await page.waitForFunction(() => !!window.__elymumChain?.fakeWallet, null, { timeout: 10000 });
+    await page.waitForFunction(() => !!window.__coinnibalChain?.fakeWallet, null, { timeout: 10000 });
   }
   await page.waitForTimeout(1200);
   return { ctx, page };
@@ -65,7 +65,7 @@ let code = null;
   await page.waitForSelector('[data-testid="cr-payment"]');
   await page.waitForTimeout(600);
   await shot(page, 'payment-desktop');
-  await page.evaluate(() => (window.__elymumChain.fakeWallet.delayMs = 1500));
+  await page.evaluate(() => (window.__coinnibalChain.fakeWallet.delayMs = 1500));
   await page.getByTestId('cr-pay').click();
   await page.waitForTimeout(500);
   await shot(page, 'paying-desktop');
@@ -74,7 +74,7 @@ let code = null;
   code = (await page.getByTestId('cr-code').textContent())?.trim();
   await shot(page, 'invite-desktop');
   await page.getByTestId('cr-enter').click();
-  await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 10000 });
+  await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 10000 });
   await page.waitForTimeout(3000);
   await shot(page, 'in-room-desktop');
   await ctx.close();
@@ -84,7 +84,7 @@ let code = null;
 if (code) {
   const url = `${base}?room=${code}`;
   const { ctx, page } = await newPage({ viewport: P, mobile: true, wallet: false, url });
-  await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 15000 });
+  await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 15000 });
   await page.waitForTimeout(2500);
   await shot(page, 'guest-invite-mobile');
   await ctx.close();
