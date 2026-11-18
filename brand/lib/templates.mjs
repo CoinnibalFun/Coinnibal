@@ -71,7 +71,7 @@ export function xBanner() {
     <div class="sticker badge"><div class="n">05:00</div><div class="l">per round</div></div>
     <div class="card sticker">
       <div class="tape"></div>
-      <div class="kick" style="color:${C.teal}">5-minute rounds &middot; on Robinhood Chain</div>
+      <div class="kick" style="color:${C.teal}">A browser game on Robinhood Chain</div>
       <div style="margin:10px 0 6px">${wordmark({ width: 470 })}</div>
       <h2>Coins that eat coins.</h2>
       <div style="display:flex;align-items:center;justify-content:space-between">${flowPills()}<span class="mono" style="font-size:15px;font-weight:600">${HANDLE}</span></div>
@@ -102,16 +102,16 @@ export function ogCard() {
     ${at(826, 536, coin('foam', { mood: 'scared', look: [-3, -1], sweat: true, size: 66, ground: true }))}
     ${at(1020, 486, coin('up', { mood: 'open', look: [-3, 0], size: 96, ground: true }))}
     ${at(1124, 560, coin('cyan', { mood: 'smile', look: [-2, -1], size: 52, ground: true }))}
-    <div class="pop" style="left:812px;top:478px">+$0.12</div>
+    <div class="pop" style="left:812px;top:478px">+1,000</div>
     <div class="sticker badge"><div class="n">05:00</div><div class="l">per round</div></div>
     <div class="card sticker">
       <div class="tape"></div>
-      <div class="kick" style="color:${C.teal}">5-minute rounds &middot; on Robinhood Chain</div>
+      <div class="kick" style="color:${C.teal}">A browser game on Robinhood Chain</div>
       <div style="margin:10px 0 10px">${wordmark({ width: 500 })}</div>
       <h2>Coins eating coins. <span style="color:${C.teal}">${TAGLINE}</span></h2>
-      <p>Eat coins smaller than you. Run from the ones that are bigger. Five minutes later the bell rings and whatever you&rsquo;ve swallowed is yours.</p>
+      <p>Eat coins smaller than you and run from the ones that are bigger. In a paid room, every coin still alive at the bell gets paid.</p>
       <div style="display:flex;align-items:center;gap:18px">
-        <span class="btn sun">See how it works ${arrow}</span>
+        <span class="btn sun">How it works ${arrow}</span>
       </div>
     </div>`;
   return { w, h, html: page({ w, h, body, css, bg: C.teal }) };
@@ -277,7 +277,7 @@ export function postGameLive() {
     <div class="sticker head">
       <div class="kick" style="color:${C.teal}">Play now &middot; on Robinhood Chain</div>
       <div class="disp" style="font-size:66px;margin:12px 0 14px">The game is <span class="wonk" style="color:${C.teal}">open.</span></div>
-      <div style="font-size:19px;line-height:1.45;color:#3E3A31">Five-minute rounds. Eat smaller coins, run from bigger ones. At the bell, what you swallowed is paid out. NFT holders first.</div>
+      <div style="font-size:19px;line-height:1.45;color:#3E3A31">Five-minute rounds. Eat coins smaller than you and run from the ones that are bigger. Every coin still alive at the bell gets paid, minus the fee on profit.</div>
       <div style="display:flex;align-items:center;gap:16px;margin-top:22px"><span class="btn sun">Play a round ${arrow}</span><span class="mono" style="font-size:17px;font-weight:600">${HANDLE}</span></div>
     </div>
     <div class="sticker hud" style="left:760px;top:120px;display:flex;align-items:center;gap:14px;transform:rotate(1.5deg)">
