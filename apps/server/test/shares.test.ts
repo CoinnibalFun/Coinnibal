@@ -233,6 +233,11 @@ describe('share cards (made from the server records only)', () => {
   it('the startup self-check draws with the real addon here', async () => {
     const { shareCardSelfCheck } = await import('../src/site/share-card');
     expect(shareCardSelfCheck()).toEqual({ ok: true });
+    // the headline face is the site's display face (Lilita One), shipped with the server; Fraunces is gone
+    const { GlobalFonts } = await import('@napi-rs/canvas');
+    expect(GlobalFonts.has('Lilita One')).toBe(true);
+    expect(GlobalFonts.has('DM Sans')).toBe(true);
+    expect(GlobalFonts.has('Fraunces')).toBe(false);
   });
 });
 

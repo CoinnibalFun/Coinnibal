@@ -49,7 +49,8 @@ export function shareCardSelfCheck(): { ok: true } | { ok: false; error: string 
  * The "Share on X" card image (1200 x 630 PNG, X's summary_large_image): the player's coin drawn by the same
  * Storybook art as the game (`@elymum/art` on @napi-rs/canvas), the result or the kill in the display face, the
  * name, the wallet's short form, the flag's country code and the emblem badge, the numbers. Fonts are the site's
- * own (Fraunces, DM Sans), shipped with the server, so the card looks the same in a bare container. English only:
+ * own (Lilita One for the headline, DM Sans), shipped with the server, so the card looks the same in a bare
+ * container. English only:
  * the image is one picture for every reader.
  */
 
@@ -68,7 +69,8 @@ function fonts(): void {
   fontsReady = true;
   const require = createRequire(import.meta.url);
   const { GlobalFonts } = canvasModule()!;
-  GlobalFonts.registerFromPath(require.resolve('@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2'), 'Fraunces');
+  // the site's display face: one weight (400), upright; DM Sans is variable (every weight from one file)
+  GlobalFonts.registerFromPath(require.resolve('@fontsource/lilita-one/files/lilita-one-latin-400-normal.woff2'), 'Lilita One');
   GlobalFonts.registerFromPath(require.resolve('@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2'), 'DM Sans');
 }
 
@@ -273,7 +275,7 @@ export function renderShareCard(c: ShareCard, site: string = SITE_HOST_DEFAULT):
   ctx.fillText(fit(ctx, `${BRAND_NAME.toUpperCase()} · ${c.test ? 'TESTNET TEST ARENA · ' : ''}${c.room.toUpperCase()}`, (px) => `700 ${px}px "DM Sans"`, 22, max - 150), L, Y + 56);
   if (!c.test) brandMark(ctx, X + PW - 62, Y + 50, 62);
   ctx.fillStyle = INK;
-  const head = fit(ctx, shareHeadline(c), (px) => `800 ${px}px Fraunces`, 78, max);
+  const head = fit(ctx, shareHeadline(c), (px) => `400 ${px}px "Lilita One"`, 78, max);
   ctx.fillText(head, L, Y + 140);
   const name = fit(ctx, shareName(c.name), (px) => `700 ${px}px "DM Sans"`, 36, max);
   ctx.fillText(name, L, Y + 196);
@@ -329,7 +331,7 @@ export function renderStandingsCard(c: ShareCard, site: string = SITE_HOST_DEFAU
   if (!c.test) brandMark(ctx, X + PW - 64, Y + 50, 60);
   ctx.fillStyle = INK;
   const head = `Final standings${c.players ? ` · ${c.players} players` : ''}`;
-  ctx.fillText(fit(ctx, head, (px) => `800 ${px}px Fraunces`, 52, c.test ? max - 170 : max), L, Y + 108);
+  ctx.fillText(fit(ctx, head, (px) => `400 ${px}px "Lilita One"`, 52, c.test ? max - 170 : max), L, Y + 108);
 
   const rows = c.board ?? [];
   const top = rows.filter((r) => r.rank <= BOARD_COL_ROWS * 2).slice(0, BOARD_COL_ROWS * 2);
