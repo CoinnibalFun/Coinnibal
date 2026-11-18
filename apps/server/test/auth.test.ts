@@ -1,6 +1,6 @@
 import { SIWE_STATEMENT, siweMessage } from '@coinnibal/shared';
-import { describe, expect, it } from 'vitest';
-import { Auth, MAX_NONCES, MAX_NONCES_PER_CLIENT, MAX_NONCE_FAILURES, NONCE_TTL_MS, NonceLimitError, checksumAddress, loginMessage, type SiweOrigin } from '../src/auth';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { Auth, MAX_NONCES, MAX_NONCES_PER_ADDRESS, MAX_NONCES_PER_CLIENT, MAX_NONCE_FAILURES, NONCE_TTL_MS, NonceLimitError, SMART_WALLET_CHECKS, checksumAddress, loginMessage, type SiweOrigin } from '../src/auth';
 import { assertPublicUrl, loadConfig } from '../src/config';
 import { siweOrigin } from '../src/http';
 import { testSigner } from './signers';
@@ -208,5 +208,94 @@ describe('nonce pool under a flood', () => {
     for (let i = 0; i < MAX_NONCES + 500; i++) auth.issueNonce(someone(i), origin, 1_002, `10.0.${(i >> 2) & 255}.${i & 3}`);
     expect(auth.nonceCount).toBeLessThanOrEqual(MAX_NONCES);
     expect(await auth.verifySignature(honest.address, mine.message, await honest.sign(mine.message), 2_000)).toBe(honest.address);
+  });
+});
+
+describe('nobody can lock a wallet out of sign-in (S4)', () => {
+  it('another client asking for nonces for an address never evicts the nonce its owner is signing', async () => {
+    const auth = new Auth(Buffer.alloc(32, 3));
+    const owner = testSigner();
+    const mine = auth.issueNonce(owner.address, origin, 1_000, '198.51.100.7');
+    // the reviewer's attack: anyone polls nonces for the (public) address, from one or many clients
+    for (let i = 0; i < 10; i++) auth.issueNonce(owner.address, origin, 1_001, '203.0.113.9');
+    for (let i = 0; i < 40; i++) auth.issueNonce(owner.address, origin, 1_001, `2001:db8:${i.toString(16)}::/64`);
+    expect(await auth.verifySignature(owner.address, mine.message, await owner.sign(mine.message), 2_000)).toBe(owner.address);
+    // one client still keeps at most MAX_NONCES_PER_ADDRESS for one address (its own oldest goes)
+    const first = auth.issueNonce(owner.address, origin, 3_000, '198.51.100.7');
+    for (let i = 0; i < MAX_NONCES_PER_ADDRESS; i++) auth.issueNonce(owner.address, origin, 3_001, '198.51.100.7');
+    expect(await auth.verifySignature(owner.address, first.message, await owner.sign(first.message), 3_002)).toBeNull();
+  });
+
+  it('a full pool evicts the biggest network first: thousands of /64s of one /48 never flush an honest nonce', async () => {
+    const auth = new Auth(Buffer.alloc(32, 4));
+    const honest = testSigner();
+    const mine = auth.issueNonce(honest.address, origin, 1_000, '198.51.100.7');
+    const someone = (i: number) => `0x${'2'.repeat(32)}${i.toString(16).padStart(8, '0')}`;
+    // one nonce per /64 (no client holds many), all in one /48
+    for (let i = 0; i < MAX_NONCES + 500; i++) auth.issueNonce(someone(i), origin, 1_001, `2001:db8:7:${(i & 0xffff).toString(16)}::/64`);
+    expect(auth.nonceCount).toBeLessThanOrEqual(MAX_NONCES);
+    expect(await auth.verifySignature(honest.address, mine.message, await honest.sign(mine.message), 2_000)).toBe(honest.address);
+  });
+});
+
+describe('garbage signatures do not spend the shared RPC budget (S5)', () => {
+  const contract = '0x00000000000000000000000000000000000c0de1';
+
+  it('the smart-wallet fallback runs within a small budget of its own; an EOA never reaches it', async () => {
+    // the clock stands still: the server-wide bucket does not refill during the test
+    vi.useFakeTimers();
+    onTestFinished(() => void vi.useRealTimers());
+    let calls = 0;
+    const auth = new Auth(Buffer.alloc(32, 5), {
+      onChain: async (_a, _m, sig) => {
+        calls++;
+        return sig === '0x1271';
+      },
+    });
+    // many clients, each with a garbage signature on every nonce it may have
+    for (let c = 0; c < 20; c++) {
+      for (let n = 0; n < 3; n++) {
+        const issued = auth.issueNonce(contract, origin, Date.now(), `203.0.${c}.${n}`);
+        for (let f = 0; f < MAX_NONCE_FAILURES; f++) expect(await auth.verifySignature(contract, issued.message, '0xdeadbeef')).toBeNull();
+      }
+    }
+    expect(calls).toBe(SMART_WALLET_CHECKS.burst);
+    // an EOA's own signature is checked locally, whatever the budget
+    const eoa = testSigner();
+    const m = auth.issueNonce(eoa.address, origin, Date.now(), '198.51.100.1');
+    expect(await auth.verifySignature(eoa.address, m.message, await eoa.sign(m.message))).toBe(eoa.address);
+    expect(calls).toBe(SMART_WALLET_CHECKS.burst);
+  });
+
+  it('one client gets SMART_WALLET_CHECKS.perClient checks in its window; at most inFlight run at once, each for timeoutMs', async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      let hang = false;
+      const auth = new Auth(Buffer.alloc(32, 6), {
+        onChain: (_a, _m, sig) => {
+          calls++;
+          return hang ? new Promise<boolean>(() => {}) : Promise.resolve(sig === '0x1271');
+        },
+      });
+      const attempt = (client: string, sig: string) => auth.verifySignature(contract, auth.issueNonce(contract, origin, Date.now(), client).message, sig);
+      for (let i = 0; i < 10; i++) await attempt('203.0.113.9', '0xdeadbeef');
+      expect(calls).toBe(SMART_WALLET_CHECKS.perClient);
+      // later, the budget refilled: a real smart-wallet sign-in from another client passes
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(await attempt('198.51.100.2', '0x1271')).toBe(checksumAddress(contract));
+      // a check the RPC never answers holds its slot until it is given up; meanwhile nothing more starts
+      hang = true;
+      calls = 0;
+      await vi.advanceTimersByTimeAsync(60_000);
+      const held = [attempt('198.51.100.3', '0x1271'), attempt('198.51.100.4', '0x1271'), attempt('198.51.100.5', '0x1271')];
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toBe(SMART_WALLET_CHECKS.inFlight);
+      expect(await held[2]).toBeNull();
+      await vi.advanceTimersByTimeAsync(SMART_WALLET_CHECKS.timeoutMs);
+      expect(await Promise.all(held.slice(0, 2))).toEqual([null, null]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
