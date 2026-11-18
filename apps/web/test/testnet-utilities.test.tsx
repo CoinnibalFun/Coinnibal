@@ -321,9 +321,10 @@ describe('admin groups', () => {
     const mainnet = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, nftAddress: '0x0000000000000000000000000000000000000f7e' }));
     const noTt = { ...registered, testToken: null } as unknown as StatusSnapshot;
     expect(groupSummary('setup', { net: mainnet, status: noTt, registry: { token: { address: '0x0000000000000000000000000000000000007e57' } } as never }).next).toMatch(/Confirm the game token/);
-    expect(groupSummary('setup', { net: mainnet, status: noTt }).next).toMatch(/Register the game token in Setup → Advanced/);
+    // the real token cannot be registered before the arena uses it: it is typed by hand
+    expect(groupSummary('setup', { net: mainnet, status: noTt }).next).toMatch(/enter it in Setup → Set the game token, by hand and typed twice/);
     for (const g of ['setup', 'mint', 'game', 'network'] as const) expect(groupSummary(g, { net: both, status: registered }).next ?? '').not.toMatch(/regist|paste/i);
-    expect(groupSummary('network', { net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null }).next).toMatch(/COINNIBAL_RPC_URLS/);
+    expect(groupSummary('network', { net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null }).next).toMatch(/coinnibal-compose logs app.*COINNIBAL_RPC_URLS/);
     expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never }).next).toMatch(/open the testnet game \(Game → Who may play\)/);
   });
 

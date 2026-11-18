@@ -1256,7 +1256,7 @@ export const en = {
   'fc.kicker': "Testnet · {chain}",
   'fc.h1': "Free tokens.",
   'fc.h2': "<em>Test</em> tokens.",
-  'fc.lede': "Get free {sym} to play the rooms on testnet, once an hour. This faucet gives test tokens only, never ETH. They have <b>no value</b> and never move to mainnet.",
+  'fc.lede': "Get free {sym} to play the rooms on testnet. This faucet gives test tokens only, never ETH. They have <b>no value</b> and never move to mainnet.",
   'fc.bonusYou': "NFT holder: you get {n}x",
   'fc.bonus': "NFT holders get {n}x",
   'fc.every': "per claim · every {n} min",

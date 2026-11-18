@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Local chain for Coinnibal: starts `hardhat node` (chain id 31337, a local stand-in for Robinhood Chain Testnet, gas in ETH), deploys the
-// TestToken, CoinnibalArena and CoinnibalNFT with the SDK (the /admin → Deploy order), sets the token, creates
+// TestToken, CoinnibalArena and CoinnibalNFT with the SDK (the /admin → Setup order), sets the token, creates
 // the four default arenas, and writes the game server's env to .localnet/server.env (addresses also in
 // .localnet/contracts.json). It keeps the node running until Ctrl+C.
 //

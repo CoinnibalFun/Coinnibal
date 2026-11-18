@@ -1,8 +1,8 @@
 # Coinnibal
 
 **You are small change with a big appetite.** Coinnibal is a cute coin-eats-coin arena game on
-Robinhood Chain (an Arbitrum Orbit L2, gas token ETH). Its game token is launched on Pons (amounts are shown with
-`TOKEN_SYMBOL`, default "tokens"). Eat or be eaten.
+Robinhood Chain (an Arbitrum Orbit L2, gas token ETH). Its game token will be launched on Pons (mainnet only,
+after the NFT mint; amounts are shown with `TOKEN_SYMBOL`, default "tokens"). Eat or be eaten.
 You are a coin: eat food and smaller coins, run from bigger ones, and when the five-minute bell rings
 whatever you swallowed is paid out on chain.
 
@@ -49,7 +49,8 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
   payment) are paid to the same contract (`pay`: half burned, half to the fee wallet).
 - Coinnibal NFT: an ERC-721 with an allowlist (Merkle root) and a public phase, priced in ETH at the owner's USD
   target `MINT_USD_CENTS` (synced from `/admin` or kept there by the server's price keeper within the owner's bounds;
-  no price is published).
+  no visitor copy names a price or shows the target; the mint page, once open, shows the contract's live price in
+  ETH).
 - Sign-In with Ethereum (EIP-4361) for every wallet that speaks EIP-6963 (MetaMask, Rabby, Coinbase
   Wallet, OKX and the rest), smart wallets included (ERC-1271 / 6492).
 - Owner-run admin panel: deploy both contracts from your wallet, register them, set the token,

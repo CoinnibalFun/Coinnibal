@@ -15,7 +15,7 @@ export interface EmblemGateDeps {
   isHolder: (wallet: string, fresh: boolean) => Promise<boolean>;
   /** The token ids the wallet owns (fresh: the index catches up first); null when unknown. */
   emblemTokens: (wallet: string, fresh: boolean) => Promise<string[] | null>;
-  /** Raises an integrity flag (the admin's Integrity tab). */
+  /** Raises an integrity flag (`/admin` → Safety). */
   flag?: (c: Candidate) => void;
   /** Session keys seated in rooms now. */
   liveSessions: () => Set<string>;

@@ -72,7 +72,13 @@ export function DeployTab({ ctx, advanced = false }: { ctx: ChainCtx; advanced?:
         {active === 'register' && <RegisterStep ctx={ctx} local={local} onLocal={setLocal} kicker={kicker(n)} autoErr={autoErr} />}
         {active === 'token' &&
           (advanced ? (
-            <Card title="Set the game token" id="deploy-token-note" kicker={kicker(n)} tone="quiet" lede="Finish setup (top of Setup) sets it, or the game token card in this section with one confirmation." />
+            <Card
+              title="Set the game token"
+              id="deploy-token-note"
+              kicker={kicker(n)}
+              tone="quiet"
+              lede={net.mainnet ? 'The game token card above sets it: the token launched on Pons, typed twice.' : 'Finish setup (top of Setup) sets it, or the game token card in this section with one confirmation.'}
+            />
           ) : (
             <SetTokenForm ctx={ctx} kicker={kicker(n)} />
           ))}
@@ -290,7 +296,7 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
   const [form, setForm] = useState<NftForm>(() => defaultNftForm(location.origin, null, ctx.me));
   const [quote, setQuote] = useState<string | null>(null);
   const [err, guard, setErr] = useFormError();
-  // the $1 price in wei from the server (the gas token's USD price feed)
+  // the mint price (MINT_USD_CENTS) in wei from the server (the gas token's USD price feed)
   useEffect(() => {
     if (!ctx.api) return;
     let live = true;
@@ -485,9 +491,10 @@ export function registeredToken(ctx: Pick<ChainCtx, 'registry' | 'status'>): Add
 }
 
 /**
- * The set-token rail. With a token registered on the server (TOKEN_ADDRESS, or the deployed
- * TestToken) the owner only confirms it (the preview is the confirmation). A different address is
- * an override under Advanced, typed twice. It can be set only once.
+ * The set-token rail. With a token registered on the server (the deployed TestToken, or TOKEN_ADDRESS
+ * on a server outside Docker) the owner only confirms it (the preview is the confirmation). The real
+ * game token cannot be registered before the arena uses it (`registerContract`), so on the mainnet it
+ * is entered under Advanced, typed twice. It can be set only once.
  */
 export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }) {
   const [a, setA] = useState('');
@@ -532,7 +539,9 @@ export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }
       lede={
         known
           ? 'The ERC-20 the arenas take. The server already knows it: check it, then confirm once in the preview. It can never be changed.'
-          : 'The ERC-20 the arenas take (the game token). The server has no game token registered yet: register it (Setup → Advanced → Register a contract that is already deployed; TOKEN_ADDRESS when the server runs outside Docker) and it shows up here, or enter it by hand below.'
+          : ctx.net.mainnet
+            ? 'The ERC-20 the arenas take: the game token launched on Pons. The server registers no token before the arena uses it, so enter it by hand below, typed twice, and check it against the official announcement. (TOKEN_ADDRESS names it here only on a server outside Docker; the VPS setup clears that key.)'
+            : 'The ERC-20 the arenas take. No TestToken is registered yet: deploy one (Setup → TestToken) and it shows up here, to confirm once. Any other token is entered by hand below, typed twice.'
       }
     >
       {known && (

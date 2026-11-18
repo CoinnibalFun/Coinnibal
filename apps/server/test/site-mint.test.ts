@@ -269,7 +269,10 @@ describe('mint: allowlist, proofs, state, price', () => {
     h.evm.mintNft(wallet(), 2);
     h.evm.mintNft(wallet(), 1);
     await h.app.mint.chainState(true);
+    // the mint page is open: the public answer carries the USD target
+    h.app.site.store.updateSettings({ mintOpen: true });
     const m = (await h.call('GET', '/api/site/mint')).body;
+    h.app.site.store.updateSettings({ mintOpen: false });
     expect(m).toMatchObject({
       nftAddress: NFT,
       chainId: 31337,
@@ -284,6 +287,25 @@ describe('mint: allowlist, proofs, state, price', () => {
     const q = (await h.call('GET', '/api/admin/mint/price', { wallet: ADMIN })).body;
     expect(q).toMatchObject({ gasUsd: 40, targetUsdCents: 100, priceWei: '25000000000000000' });
     expect(q.fetchedAt).toBeGreaterThan(0);
+  });
+
+  it('GET /api/site/mint leaves MINT_USD_CENTS out while the mint page is closed; admins still get it', async () => {
+    await h.app.mint.chainState(true);
+    expect(h.app.site.store.settings.mintOpen).toBe(false);
+    // closed (a fresh server's default): nobody but an admin sees the target, signed in or not
+    const anon = (await h.call('GET', '/api/site/mint')).body;
+    expect(anon.contract).not.toBeNull();
+    expect(anon).not.toHaveProperty('targetUsdCents');
+    expect((await h.call('GET', '/api/site/mint', { wallet: wallet() })).body).not.toHaveProperty('targetUsdCents');
+    expect((await h.call('GET', '/api/site/mint', { wallet: ADMIN })).body.targetUsdCents).toBe(100);
+    expect((await h.call('GET', '/api/admin/mint/price', { wallet: ADMIN })).body.targetUsdCents).toBe(100);
+    // the owner opens the mint page: the public answer has it again
+    h.app.site.store.updateSettings({ mintOpen: true });
+    try {
+      expect((await h.call('GET', '/api/site/mint')).body.targetUsdCents).toBe(100);
+    } finally {
+      h.app.site.store.updateSettings({ mintOpen: false });
+    }
   });
 
   it('POST /api/admin/mint/refresh re-reads the NFT at once (a phase switch shows on the mint page now)', async () => {

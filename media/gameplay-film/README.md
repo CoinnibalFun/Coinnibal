@@ -3,7 +3,8 @@
 > **Before the next render.** This film's script still carries facts of the Elysium build (Elysium, HYPE, a $1
 > mint, the old arena names and fees). Rewrite it to the current game (Robinhood Chain, ETH gas, no mint price, the
 > $1 / $3 / $5 / $10 Rooms, 20 % of profit: 15 % burned + 5 % to the team wallet) before any re-render
-> ([media/README.md](../README.md)).
+> ([media/README.md](../README.md)). Also: the voice's `$NIBAL` pronunciation (`audio/voice.py`) goes; amounts are
+> "tokens" (there is no ticker).
 
 A film of about 120 s recorded from the real UI: the home page, what Coinnibal is, WL → Mint → Play,
 then a live round in the $1 Room (recorded when it was called Asphodel Meadow; re-take before the next render) (the drop-in, the first eat, a chase, a split, the final

@@ -36,7 +36,7 @@ export function launchChecklist(i: {
   const root = n?.state?.root ?? null;
   const snapRoot = i.allowlist?.snapshot?.root ?? null;
   return [
-    { id: 'chain', label: 'The server is on a chain', ok: !!i.net.info, detail: i.net.info ? `${i.net.info.name} (${i.net.info.id})${i.net.mainnet ? ' · MAINNET' : ''}` : 'No chain: COINNIBAL_RPC_URLS is unset on the VPS (EVM_RPC_URLS outside Docker).', tab: 'deploy' },
+    { id: 'chain', label: 'The server is on a chain', ok: !!i.net.info, detail: i.net.info ? `${i.net.info.name} (${i.net.info.id})${i.net.mainnet ? ' · MAINNET' : ''}` : 'No chain: the RPC did not answer or serves another chain (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker). Check coinnibal-compose logs app.', tab: 'deploy' },
     {
       id: 'server-key',
       label: `The server key has ${GAS_SYMBOL} for gas`,
@@ -53,7 +53,7 @@ export function launchChecklist(i: {
       tab: 'arena',
     },
     { id: 'nft', label: 'CoinnibalNFT deployed and registered', ok: !i.net.nftAddress ? false : n ? n.code === 'ok' : null, detail: i.net.nftAddress ? `${i.net.nftAddress} · code ${n?.code ?? '…'}` : 'Not deployed yet: Setup.', tab: 'deploy' },
-    { id: 'token', label: 'The game token is set', ok: cfg ? !!cfg.token : i.net.arenaAddress ? null : false, detail: cfg?.token ?? 'Setup → Finish setup (or confirm the registered token).', tab: 'deploy' },
+    { id: 'token', label: 'The game token is set', ok: cfg ? !!cfg.token : i.net.arenaAddress ? null : false, detail: cfg?.token ?? (i.net.mainnet ? 'Setup → Set the game token: the token launched on Pons, typed twice.' : 'Setup → Finish setup (it sets the registered TestToken).'), tab: 'deploy' },
     { id: 'arenas', label: 'The four default arenas exist', ok: missingArenas === null ? (cfg ? false : null) : missingArenas === 0, detail: missingArenas === null ? 'Needs the token.' : `${4 - missingArenas} / 4`, tab: 'arena' },
     {
       id: 'allowlist',
@@ -91,7 +91,7 @@ const STAGES: { id: string; title: string; blurb: string; items: string[]; paint
 
 type StageState = 'done' | 'now' | 'todo' | 'unknown';
 
-/** `/admin → Launch`: the checklist as a terrace path, WL → Deploy → Allowlist → Mint → Game. */
+/** `/admin → Network`, under the network cards: the launch checklist as a terrace path, WL → Deploy → Allowlist → Mint → Game. */
 export function LaunchTab({ ctx, go }: { ctx: ChainCtx; go: (tab: ChecklistTab | 'wl') => void }) {
   const [allowlist, setAllowlist] = useState<AllowlistStatus | null>(null);
   const [settings, setSettings] = useState<SiteSettings | null>(null);

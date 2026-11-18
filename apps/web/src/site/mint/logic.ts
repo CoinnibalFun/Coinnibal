@@ -125,7 +125,8 @@ export const DOLLAR_TOLERANCE = 0.1;
 export function priceStory(s: Pick<MintState, 'priceUsd' | 'targetUsdCents' | 'chainId'>, testnet: boolean | null): PriceStory {
   const onTestnet = testnet ?? (s.chainId != null ? isTestChainId(s.chainId) : null);
   if (onTestnet) return 'testnet';
-  const target = s.targetUsdCents / 100;
+  // the server leaves the target out while the mint page is closed: no target, no dollar story
+  const target = (s.targetUsdCents ?? 0) / 100;
   if (s.priceUsd !== null && Number.isFinite(s.priceUsd) && target > 0 && Math.abs(s.priceUsd - target) <= target * DOLLAR_TOLERANCE) return 'dollar';
   return 'plain';
 }

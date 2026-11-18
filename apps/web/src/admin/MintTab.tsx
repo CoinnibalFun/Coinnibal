@@ -189,6 +189,8 @@ const PHASE_COPY: Record<MintPhaseName, { title: string; line: string; mood: Coi
 /**
  * Whether the phase switch may also open the game to holders: only while the game is still closed to
  * everyone but the admins (never narrows "public" down to "holders"), and not when GAME_ACCESS pins it.
+ * The box starts unchecked: the launch order is the NFT mint, then the token, then the game, so the game
+ * opens last (Game → Who may play) unless the owner ticks it.
  */
 export function offerHolderAccess(access: { settings: { gameAccess: GameAccess }; gameAccessEnv?: GameAccess | null } | null): boolean {
   return !!access && !access.gameAccessEnv && access.settings.gameAccess === 'admins';
@@ -196,7 +198,8 @@ export function offerHolderAccess(access: { settings: { gameAccess: GameAccess }
 
 function PhaseCard({ ctx, current, open }: { ctx: ChainCtx; current: MintPhaseName; open: OpenFn }) {
   const [phase, setPhase] = useState<MintPhaseName>(current === 'closed' ? 'allowlist' : current);
-  const [activate, setActivate] = useState(true);
+  // unchecked by default: the game opens last, after the token and the rooms (the launch order)
+  const [activate, setActivate] = useState(false);
   // who may play now: the holders switch is offered only while the game is admins-only
   const [access, setAccess] = useState<{ settings: { gameAccess: GameAccess }; gameAccessEnv?: GameAccess | null } | null>(null);
   useEffect(() => {
@@ -215,7 +218,7 @@ function PhaseCard({ ctx, current, open }: { ctx: ChainCtx; current: MintPhaseNa
   const offer = phase !== 'closed' && offerHolderAccess(access);
   const withAccess = offer && activate;
   return (
-    <Card title="Start / stop the mint" id="mint-phase" kicker={`Now: ${current}`} lede="Closed → Allowlist → Public. Pick one, then preview the switch. Opening the mint can open the game to holders in the same go. Visitors see the mint page only while “Mint page open” is on in Settings.">
+    <Card title="Start / stop the mint" id="mint-phase" kicker={`Now: ${current}`} lede="Closed → Allowlist → Public. Pick one, then preview the switch. Opening the mint can also open the game to holders, but the game opens last: tick that only once the token and the rooms are set. Visitors see the mint page only while “Mint page open” is on in Settings.">
       <div className="ad-switchrow" role="radiogroup" aria-label="Mint phase">
         <span className="ad-switchrow__label mono">Mint phase</span>
         <div className="ad-switchrow__segs">
@@ -234,7 +237,7 @@ function PhaseCard({ ctx, current, open }: { ctx: ChainCtx; current: MintPhaseNa
           <input type="checkbox" checked={activate} onChange={() => setActivate(!activate)} />
           <span>
             Activate the game for holders
-            <span className="ad-check__sub">Saves “Who may play: NFT holders” after the receipt.</span>
+            <span className="ad-check__sub">Saves “Who may play: NFT holders” after the receipt. Leave it unchecked until the game token and the rooms are set.</span>
           </span>
         </label>
       )}

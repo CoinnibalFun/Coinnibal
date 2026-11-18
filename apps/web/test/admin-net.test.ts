@@ -71,8 +71,11 @@ describe('the deploy wizard steps', () => {
     expect(activeStep(deploySteps({ ...base, net: none, status: null, local: { arena: { address: ARENA, txHash: null }, nft: { address: NFT, txHash: null } } }))).toBe('register');
     const both = resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT }));
     expect(activeStep(deploySteps({ ...base, net: both, status: status({ nft: true }) }))).toBe('token');
-    // the wizard never asks to type an address, the token step included
+    // on a testnet the wizard never asks to type an address, the token step included
     expect(deploySteps({ ...base, net: both, status: status({ nft: true }) }).find((x) => x.id === 'token')?.detail).not.toMatch(/typed twice/i);
+    // mainnet: the server cannot register the real token before the arena uses it, so it is typed twice
+    const main = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, arenaAddress: ARENA, nftAddress: NFT }));
+    expect(deploySteps({ ...base, walletChainId: 4663, net: main, status: status({ nft: true }) }).find((x) => x.id === 'token')?.detail).toMatch(/launched on Pons, entered by hand and typed twice/);
     expect(activeStep(deploySteps({ ...base, net: both, status: status({ nft: true, token: BOB, arenas: [1, 2] }) }))).toBe('arenas');
     const done = deploySteps({ ...base, net: both, status: status({ nft: true, token: BOB, arenas: [1, 2, 3, 4] }) });
     expect(activeStep(done)).toBeNull();
@@ -92,7 +95,7 @@ describe('the deploy wizard steps', () => {
     expect(() => arenaDeployArgs(ALICE, null)).toThrow(/no server key/);
   });
 
-  it('NFT defaults: the fixed supply 3,333, the $1 price, 1 / 2 per wallet, `${origin}/api/nft/`, treasury = you', () => {
+  it('NFT defaults: the fixed supply 3,333, the mint price (MINT_USD_CENTS, $1 in the fixture), 1 / 2 per wallet, `${origin}/api/nft/`, treasury = you', () => {
     const form = defaultNftForm('https://coinnibal.test/', '30000000000000000', ALICE);
     expect(form).toEqual({ maxSupply: '3333', priceGas: '0.03', wlLimit: '1', publicLimit: '2', baseURI: 'https://coinnibal.test/api/nft/', treasury: ALICE });
     expect(nftDeployArgs(form, ALICE)).toEqual({ owner: ALICE, maxSupply: 3333, mintPrice: 30_000_000_000_000_000n, wlLimit: 1, publicLimit: 2, baseURI: 'https://coinnibal.test/api/nft/', treasury: ALICE });

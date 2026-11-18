@@ -77,8 +77,8 @@ export function mainnetChecklist(net: AdminNetwork, status: StatusSnapshot | nul
     { id: 'arena', label: 'Deploy CoinnibalArena from the owner wallet', detail: 'Setup → the deploy wizard. No address to type; it registers with the server by itself (code hash, owner and settler checked).', ok: when(!!net.arenaAddress && a?.code === 'ok'), where: 'Setup' },
     { id: 'nft', label: 'Deploy CoinnibalNFT from the owner wallet', detail: 'Setup → the deploy wizard, right after the arena. Treasury = you, base URI = this site.', ok: when(!!net.nftAddress && status?.nft?.code === 'ok'), where: 'Setup' },
     { id: 'allowlist', label: 'Build the mainnet allowlist and publish its root', detail: 'Import the testnet holders into the WL first (Mint), then build and publish.', ok: when(nft ? nft.root !== `0x${'0'.repeat(64)}` : null), where: 'Mint' },
-    { id: 'mint', label: 'Open the mint (Allowlist, then Public)', detail: 'Mint → the phase switch. The launch order: the NFT mint, then the token, then the game.', ok: when(nft ? nft.phaseName !== 'closed' : null), where: 'Mint' },
-    { id: 'token', label: 'Confirm the game token on the arena', detail: 'Once the token is launched on Pons, and only the real token: Setup shows the registered one and you confirm once (any other address goes under Advanced, typed twice).', ok: when(cfg ? !!cfg.token : null), where: 'Setup' },
+    { id: 'mint', label: 'Open the mint (Allowlist, then Public)', detail: 'Mint → the phase switch, with “Activate the game for holders” left unchecked. The launch order: the NFT mint, then the token, then the game.', ok: when(nft ? nft.phaseName !== 'closed' : null), where: 'Mint' },
+    { id: 'token', label: 'Set the game token on the arena', detail: 'Once the token is launched on Pons, and only the real token: Setup → Set the game token, entered by hand and typed twice. The server registers no token before the arena uses it (TOKEN_ADDRESS names one only on a server outside Docker).', ok: when(cfg ? !!cfg.token : null), where: 'Setup' },
     { id: 'arenas', label: 'Finish setup: the arenas, the holder perks and the holders-only $10 Room', detail: 'Setup → Finish setup, one button: your wallet confirms each step.', ok: when(cfg ? (a?.arenas.length ?? 0) >= 4 && !!cfg.holderNft : null), where: 'Setup' },
     { id: 'game', label: 'Open the game', detail: 'Game → who may play: holders, then everyone when you are ready.', ok: null, where: 'Game' },
   ];
@@ -162,7 +162,7 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
     <div className="ad-network">
       <Card title="The chain" id="net-chain" aside={<NetPill net={net} />}>
         <dl className="ad-kv">
-          <Row label="Chain">{net.info ? <span className="num">{`${net.info.name} (${net.info.id})`}</span> : <span className="ad-bad">none: COINNIBAL_RPC_URLS is unset</span>}</Row>
+          <Row label="Chain">{net.info ? <span className="num">{`${net.info.name} (${net.info.id})`}</span> : <span className="ad-bad">none: the RPC did not answer or serves another chain (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker; coinnibal-compose logs app)</span>}</Row>
           <Row label="RPC">
             {net.info?.rpcUrl ? <code className="ad-addr__v">{net.info.rpcUrl}</code> : <span className="ad-none">the wallet&apos;s own</span>}{' '}
             {health &&

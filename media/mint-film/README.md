@@ -3,7 +3,7 @@
 > **Before the next render.** This film's script still carries facts of the Elysium build (Elysium, HYPE, a $1
 > mint, the old arena names and fees). Rewrite it to the current game (Robinhood Chain, ETH gas, no mint price, the
 > $1 / $3 / $5 / $10 Rooms, 20 % of profit: 15 % burned + 5 % to the team wallet) before any re-render
-> ([media/README.md](../README.md)).
+> ([media/README.md](../README.md)). Unlike the gameplay cut, it has no `$NIBAL` label and no "PENNY POND" stub.
 
 A short announcement film for the Coinnibal NFT (the script still says the mint costs $1, paid in HYPE on Elysium:
 see the note above), the order is **WL → Mint → Play** (the emblem opens the game), and the WL is open at `<SITE_HOST>/wl`
