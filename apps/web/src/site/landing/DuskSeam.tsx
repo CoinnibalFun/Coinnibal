@@ -157,7 +157,7 @@ export function DuskSeam() {
         ))}
       </svg>
       <motion.span className="ld-dusk__clock num">{clock}</motion.span>
-      <span className="ld-dusk__note mono">{t('ld.dusk')}</span>
+      <span className="ld-dusk__note">{t('ld.dusk')}</span>
     </div>
   );
 }

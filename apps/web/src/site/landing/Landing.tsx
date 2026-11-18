@@ -8,7 +8,6 @@ import {
   Kb,
   OrbitDots,
   RingScene,
-  Seigaiha,
   Stamp,
   StatusPill,
   Sticker,
@@ -235,12 +234,12 @@ function TakeStrip() {
       <div className="ld-take__row" aria-hidden="true">
         <span className="ld-take__coin ld-take__coin--prey">
           <CoinCharacter paint="foam" mood="scared" size={58} blink={false} />
-          <span className="ld-take__tag mono">
+          <span className="ld-take__tag num">
             {fmt(1000)} <small>{SYMBOL}</small>
           </span>
         </span>
         <span className="ld-take__flow">
-          <span className="ld-take__gain mono">+{fmt(1000)}</span>
+          <span className="ld-take__gain num">+{fmt(1000)}</span>
           <svg viewBox="0 0 120 24" className="ld-take__arrow">
             <path d="M4 14 C 34 2, 74 2, 108 12" fill="none" />
             <path d="M100 5 L110 12 L100 19" fill="none" />
@@ -248,7 +247,7 @@ function TakeStrip() {
         </span>
         <span className="ld-take__coin ld-take__coin--eater">
           <CoinCharacter paint="sun" mood="chomp" size={82} />
-          <span className="ld-take__tag ld-take__tag--you mono">
+          <span className="ld-take__tag ld-take__tag--you num">
             {fmt(value)} <small>{SYMBOL}</small>
           </span>
         </span>
@@ -405,7 +404,6 @@ function Emblem({ paint, front, waking }: { paint: CoinPaint; front: boolean; wa
   return (
     <div className={`ld-emblem${front ? ' is-front' : ''}`}>
       <div className="ld-emblem__panel">
-        <Seigaiha tone="ink" rows={5} r={26} span={360} filled={false} className="ld-emblem__waves" />
         <span className="ld-emblem__no kb-tag num">No. ????</span>
         <span className="ld-emblem__coin">
           <CoinCharacter paint={paint} mood={!front ? 'sleepy' : waking ? 'open' : 'smug'} size={150} look={waking ? [3, -3] : [2, 0]} bob={front} />
