@@ -99,8 +99,8 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
       const parts = [`Arena ${net.arenaAddress ? (a?.code === 'ok' ? 'ok' : (a?.code ?? '…')) : 'missing'}`, `NFT ${net.nftAddress ? (status?.nft?.code === 'ok' ? 'ok' : (status?.nft?.code ?? '…')) : 'missing'}`];
       if (cfg) parts.push(`token ${cfg.token ? 'set' : 'not set'}`, `holder perks ${cfg.holderNft ? `on (${cfg.holderBurnBps} + ${cfg.holderVaultBps} bps)` : 'off'}`);
       const now = parts.join(' · ');
-      if (!net.arenaAddress) return { now, next: 'Deploy ElymumArena from the owner wallet (below).' };
-      if (!net.nftAddress) return { now, next: 'Deploy ElymumNFT from the owner wallet (below).' };
+      if (!net.arenaAddress) return { now, next: 'Deploy CoinnibalArena from the owner wallet (below).' };
+      if (!net.nftAddress) return { now, next: 'Deploy CoinnibalNFT from the owner wallet (below).' };
       if (!cfg) return { now, next: null };
       const steps = setupSteps({ status }, { openMint: !net.mainnet });
       if (!cfg.token && !steps.some((s) => s.id === 'token')) {
@@ -113,7 +113,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
       return { now, next: null };
     }
     case 'mint': {
-      if (!net.nftAddress) return { now: 'No NFT registered yet.', next: 'Deploy ElymumNFT in Setup.' };
+      if (!net.nftAddress) return { now: 'No NFT registered yet.', next: 'Deploy CoinnibalNFT in Setup.' };
       if (!nft) return { now: 'Reading the NFT…', next: null };
       const now = `Phase ${nft.phaseName} · ${nft.totalSupply} / ${nft.maxSupply} minted`;
       if (nft.phaseName === 'closed') return { now, next: net.mainnet ? 'Build and publish the allowlist, then open the allowlist mint.' : 'Open the mint (testnet: Public).' };

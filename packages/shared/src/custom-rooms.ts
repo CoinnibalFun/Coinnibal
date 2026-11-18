@@ -3,7 +3,7 @@ import { parseToken } from './token';
 
 /**
  * Custom rooms: a signed-in wallet pays a small fee in the GAME TOKEN and gets a private room with its own rules (map
- * size, practice bots in free rooms, duration, capacity, ...). The fee is one `ElymumArena.pay(amount, ref)`, like a
+ * size, practice bots in free rooms, duration, capacity, ...). The fee is one `CoinnibalArena.pay(amount, ref)`, like a
  * power-up pack: the contract burns `paymentBurnBps` of it (50 % by default) and sends the rest to its fee wallet (the
  * team wallet) in that call (owner decision 2026-11-18). `ref` names the room request (`customRoomPaymentRef`), so one
  * payment opens one room. The fee grows with the capacity (`customRoomFee`). Two kinds:
@@ -216,7 +216,7 @@ export interface CustomRoomView extends CustomRoomSummary {
   players: number;
   /** The room's own leaderboard, best first (up to 10). */
   best: CustomBest[];
-  /** How it was paid: `paid` (an `ElymumArena.pay` in the game token) or `free` (the holder perk: a free room of the day, or a 100 % discount). */
+  /** How it was paid: `paid` (an `CoinnibalArena.pay` in the game token) or `free` (the holder perk: a free room of the day, or a 100 % discount). */
   paidWith: 'paid' | 'free';
   /** The payment transaction (0x hash), when paid. */
   txHash: string | null;
@@ -228,7 +228,7 @@ export interface CustomRoomView extends CustomRoomSummary {
 
 /**
  * The admin settings (`/api/admin/custom-rooms`). Where the money goes is not a setting here: every room fee is paid with
- * `ElymumArena.pay`, which burns `paymentBurnBps` of it (default 50 %) and sends the rest to the arena's fee wallet on
+ * `CoinnibalArena.pay`, which burns `paymentBurnBps` of it (default 50 %) and sends the rest to the arena's fee wallet on
  * chain. Older files' `priceGas` / `treasury` (rooms paid in ETH, before 2026-11-18) are read and ignored.
  */
 export interface CustomRoomSettings {
@@ -325,7 +325,7 @@ export function customRoomBaseRaw(
 export const CUSTOM_REQUEST_RE = /^[a-z2-7]{16}$/;
 
 /**
- * The `ref` of a room fee payment (`ElymumArena.pay(amount, ref)`): `coinnibal.room.<request>` in ASCII, right-padded
+ * The `ref` of a room fee payment (`CoinnibalArena.pay(amount, ref)`): `coinnibal.room.<request>` in ASCII, right-padded
  * to 32 bytes. `request` is the creator's own random request id (`CUSTOM_REQUEST_RE`, made fresh for every room the
  * client pays for); the server opens a room for a payment only when its ref names the request the signed-in wallet
  * sent, and each request of a wallet opens one room (`UsedPayments`). A power-up ref (`elymum.shop.*` /

@@ -160,7 +160,7 @@ export async function fakeFaucetClaim(onPhase: (p: TxPhase, hash?: Hash) => void
 }
 
 /**
- * "Pays" a power-up pack or a custom room fee: the game server's fake chain records the `ElymumArena.pay`
+ * "Pays" a power-up pack or a custom room fee: the game server's fake chain records the `CoinnibalArena.pay`
  * (`POST /api/dev/pay`) and answers its hash, which the shop (or the room sheet) then claims like a real one.
  */
 export async function fakeShopPay(from: string, value: bigint, ref: string, onPhase: (p: TxPhase) => void): Promise<Hash> {

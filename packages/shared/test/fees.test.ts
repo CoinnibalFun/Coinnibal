@@ -15,14 +15,14 @@ import {
 
 const E = 10n ** 18n;
 
-describe('fee on profit (mirrors ElymumArena v3)', () => {
+describe('fee on profit (mirrors CoinnibalArena v3)', () => {
   it('has the contract defaults and cap', () => {
     expect(DEFAULT_FEE_RATES).toEqual({ burnBps: 1500, vaultBps: 500 });
     expect(MAX_TOTAL_FEE_BPS).toBe(2500);
     expect(DEFAULT_PAYMENT_BURN_BPS).toBe(5000);
   });
 
-  // the same vectors as packages/contracts/test/ElymumArena.t.sol
+  // the same vectors as packages/contracts/test/CoinnibalArena.t.sol
   it('matches the Solidity test vectors', () => {
     expect(computeProfitFee(1000n * E, 2000n * E, DEFAULT_FEE_RATES)).toEqual({
       payout: 2000n * E,

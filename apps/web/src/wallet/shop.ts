@@ -11,7 +11,7 @@ import { serverText, t } from '../i18n';
 
 /**
  * The power-up shop, client side: read the packs priced for the signed-in wallet, pay a pack with
- * `ElymumArena.pay(price, shopPaymentRef(kind))` (the arena burns `paymentBurnBps` of it, 50 % by default, and
+ * `CoinnibalArena.pay(price, shopPaymentRef(kind))` (the arena burns `paymentBurnBps` of it, 50 % by default, and
  * sends the rest to its fee wallet; an `approve` of the arena comes first when the allowance is short), then hand
  * the transaction hash to the server, which checks the `Paid` event and credits the charges.
  */
@@ -120,7 +120,7 @@ export async function buyPack(
 }
 
 /**
- * Pays a whole cart with ONE `ElymumArena.pay(total, shopCartRef(cart))` (an `approve` of exactly the total first when
+ * Pays a whole cart with ONE `CoinnibalArena.pay(total, shopCartRef(cart))` (an `approve` of exactly the total first when
  * the allowance is short), then claims it: the server applies every power-up at once. Throws `ShopError`.
  */
 export async function buyCart(
@@ -143,7 +143,7 @@ async function payShop(view: ShopView, amount: bigint, ref: `0x${string}`, ctx: 
 }
 
 /**
- * Pays `amount` of the game token with `ElymumArena.pay(amount, ref)` from the connected wallet: an `approve` of exactly
+ * Pays `amount` of the game token with `CoinnibalArena.pay(amount, ref)` from the connected wallet: an `approve` of exactly
  * `amount` first when the wallet's allowance for the arena is short (a ticket's larger approval covers it), then `pay`;
  * the arena burns its `paymentBurnBps` share and sends the rest to its fee wallet in that call. Pays the PINNED arena
  * only (the compiled code and its pinned token), never the server's word alone. In a dev build talking to a

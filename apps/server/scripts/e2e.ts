@@ -73,7 +73,7 @@ const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`.padStart(6);
 const step = (msg: string) => console.log(`${elapsed()}  > ${msg}`);
 const ok = (msg: string) => console.log(`${elapsed()}  OK ${msg}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const tok = (raw: bigint) => `${formatTokenAmount(raw, 18)} tELYMUM`;
+const tok = (raw: bigint) => `${formatTokenAmount(raw, 18)} TEST`;
 
 class Fail extends Error {}
 function assert(cond: unknown, msg: string): asserts cond {

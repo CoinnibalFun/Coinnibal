@@ -96,7 +96,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref?.
 
 /**
  * The power-up shop: prices and packs (`GET /api/shop`), purchase verification (`POST /api/shop/buy`: the receipt
- * of an `ElymumArena.pay` from the signed-in wallet, exactly the pack price and the pack's ref, a hash credited
+ * of an `CoinnibalArena.pay` from the signed-in wallet, exactly the pack price and the pack's ref, a hash credited
  * once; the contract burned half and sent half to the fee wallet in that call) and the in-room rules (charges,
  * cooldowns per power-up and wallet, the paid arenas' per-round cap). Bots never use bought power-ups.
  */
@@ -324,7 +324,7 @@ export class ShopService {
   }
 
   /**
-   * `POST /api/shop/buy {cart, txHash}`: several power-ups paid with ONE `ElymumArena.pay(total, shopCartRef(cart))`.
+   * `POST /api/shop/buy {cart, txHash}`: several power-ups paid with ONE `CoinnibalArena.pay(total, shopCartRef(cart))`.
    * The payment must name exactly this cart (its ref) and pay exactly its total at one quoted price table (full, or
    * discounted for an emblem holder). The whole cart is then applied in one write (`creditCart`): every power-up that
    * is still sold gets its charges; a power-up switched off between the quote and the payment cannot be applied, and

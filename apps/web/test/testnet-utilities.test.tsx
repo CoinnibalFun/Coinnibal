@@ -16,7 +16,7 @@ import type { ChainCtx } from '../src/admin/ui';
 import { Kb } from '../src/design';
 import { adminApi, type MapAdminView } from '../src/site/api';
 import { FaucetPage } from '../src/site/faucet/FaucetPage';
-import { claimErrorText, displaySymbol, faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
+import { TEST_SYMBOL_DEFAULT, claimErrorText, displaySymbol, faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
 import { translate, type TKey } from '../src/i18n';
 import { livePerks } from '../src/site/mint/logic';
 import { configuredPerks, perkCards } from '../src/site/nft/WhyNft';
@@ -93,10 +93,12 @@ describe('fast navigation', () => {
 
 describe('the faucet', () => {
   it("names the game token by the game's display symbol, another token by its own", () => {
-    const tt = { address: '0xAbC0000000000000000000000000000000000001', symbol: 'tELYMUM' };
+    const tt = { address: '0xAbC0000000000000000000000000000000000001', symbol: 'TEST' };
     expect(displaySymbol(tt, { address: tt.address.toLowerCase(), symbol: '$NIBAL' })).toBe('$NIBAL');
-    expect(displaySymbol(tt, { address: '0x0000000000000000000000000000000000000002', symbol: '$NIBAL' })).toBe('tELYMUM');
-    expect(displaySymbol(tt, null)).toBe('tELYMUM');
+    expect(displaySymbol(tt, { address: '0x0000000000000000000000000000000000000002', symbol: '$NIBAL' })).toBe('TEST');
+    expect(displaySymbol(tt, null)).toBe('TEST');
+    // the TestToken's own symbol (ERC20("Coinnibal Test Token", "TEST")) until the chain answers
+    expect(TEST_SYMBOL_DEFAULT).toBe('TEST');
   });
 
   it('picks what to show from the chain and the token', () => {
@@ -122,7 +124,7 @@ describe('the faucet', () => {
     expect(wholeTokens(1_000_000n * ONE, 18)).toBe('1,000,000');
     expect(holderMultiple({ amount: 1_000_000n * ONE, holderAmount: 2_000_000n * ONE, holderNft: '0xnft' })).toBe(2);
     expect(holderMultiple({ amount: 1n, holderAmount: 2n, holderNft: null })).toBeNull();
-    expect(watchAssetParams('0xabc', 'tELYMUM', 18)).toEqual({ type: 'ERC20', options: { address: '0xabc', symbol: 'tELYMUM', decimals: 18 } });
+    expect(watchAssetParams('0xabc', 'TEST', 18)).toEqual({ type: 'ERC20', options: { address: '0xabc', symbol: 'TEST', decimals: 18 } });
     expect(watchAssetParams('0xabc', 'AVERYLONGSYMBOL', 18).options.symbol).toHaveLength(11);
   });
 
@@ -306,7 +308,7 @@ describe('admin groups', () => {
     const status = { block: 12n, arena: { code: 'ok', serverBalance: 0n, config: { token: null, holderNft: null }, arenas: [] }, nft: null } as unknown as StatusSnapshot;
     expect(groupSummary('network', { net, status })).toMatchObject({ next: expect.stringMatching(/Fund the server key/) });
     expect(groupSummary('network', { net, status }).now).toMatch(/Testnet · Robinhood Chain Testnet \(46630\) · block 12/);
-    expect(groupSummary('setup', { net, status }).next).toMatch(/Deploy ElymumNFT/);
+    expect(groupSummary('setup', { net, status }).next).toMatch(/Deploy CoinnibalNFT/);
     // registered: the next step is Finish setup, never "register" or "paste an address"
     const both = resolveNetwork(chainStatus({ nftAddress: '0x0000000000000000000000000000000000000f7e' }));
     const registered = {

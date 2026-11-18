@@ -5,8 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
-import {ElymumNFT} from "../contracts/ElymumNFT.sol";
-import {RejectEther, ReentrantMinter, IElymumNFTMint} from "../contracts/test/Actors.sol";
+import {CoinnibalNFT} from "../contracts/CoinnibalNFT.sol";
+import {RejectEther, ReentrantMinter, ICoinnibalNFTMint} from "../contracts/test/Actors.sol";
 
 /// @dev Builds an OpenZeppelin-compatible Merkle tree (double-hashed `abi.encode(address)` leaves, sorted-pair
 ///      hashing) in the test, the same scheme the server uses.
@@ -49,8 +49,8 @@ contract MerkleHelper {
     }
 }
 
-contract ElymumNFTTest is Test, MerkleHelper {
-    ElymumNFT internal nft;
+contract CoinnibalNFTTest is Test, MerkleHelper {
+    CoinnibalNFT internal nft;
 
     address internal owner = makeAddr("owner");
     address internal treasury = makeAddr("treasury");
@@ -63,17 +63,17 @@ contract ElymumNFTTest is Test, MerkleHelper {
     uint256 internal constant PRICE = 0.03 ether;
     address[] internal wl;
 
-    event PhaseSet(ElymumNFT.Phase phase);
+    event PhaseSet(CoinnibalNFT.Phase phase);
     event MerkleRootSet(bytes32 root);
     event PriceSet(uint256 price, address indexed by);
-    event Minted(address indexed to, uint256 firstId, uint256 qty, ElymumNFT.Phase phase, uint256 paid);
+    event Minted(address indexed to, uint256 firstId, uint256 qty, CoinnibalNFT.Phase phase, uint256 paid);
     event Withdrawn(address indexed treasury, uint256 amount);
     event MetadataFrozen();
     event BatchMetadataUpdate(uint256 fromTokenId, uint256 toTokenId);
     event ContractURIUpdated();
 
     function setUp() public {
-        nft = new ElymumNFT(owner, 100, PRICE, 2, 3, "https://elymum.test/api/nft/", treasury);
+        nft = new CoinnibalNFT(owner, 100, PRICE, 2, 3, "https://coinnibal.test/api/nft/", treasury);
         wl.push(alice);
         wl.push(bob);
         wl.push(carol);
@@ -111,7 +111,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
         revert("not listed");
     }
 
-    function _phase(ElymumNFT.Phase p) internal {
+    function _phase(CoinnibalNFT.Phase p) internal {
         vm.prank(owner);
         nft.setPhase(p);
     }
@@ -126,8 +126,8 @@ contract ElymumNFTTest is Test, MerkleHelper {
         assertEq(nft.name(), "Coinnibal");
         assertEq(nft.symbol(), "NIBAL");
         assertEq(nft.owner(), owner);
-        ElymumNFT.MintStateView memory s = nft.mintState();
-        assertEq(uint8(s.phase), uint8(ElymumNFT.Phase.Closed));
+        CoinnibalNFT.MintStateView memory s = nft.mintState();
+        assertEq(uint8(s.phase), uint8(CoinnibalNFT.Phase.Closed));
         assertEq(s.price, PRICE);
         assertEq(s.minPrice, 0);
         assertEq(s.maxPrice, 0);
@@ -143,10 +143,10 @@ contract ElymumNFTTest is Test, MerkleHelper {
     }
 
     function test_constructor_rejectsZeroAddresses() public {
-        vm.expectRevert(ElymumNFT.ZeroAddress.selector);
-        new ElymumNFT(owner, 100, PRICE, 2, 3, "", address(0));
+        vm.expectRevert(CoinnibalNFT.ZeroAddress.selector);
+        new CoinnibalNFT(owner, 100, PRICE, 2, 3, "", address(0));
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
-        new ElymumNFT(address(0), 100, PRICE, 2, 3, "", treasury);
+        new CoinnibalNFT(address(0), 100, PRICE, 2, 3, "", treasury);
     }
 
     function test_supportsInterface() public view {
@@ -163,20 +163,20 @@ contract ElymumNFTTest is Test, MerkleHelper {
     function test_closed_blocksBothMints() public {
         bytes32[] memory p = _proof(alice);
         vm.prank(alice);
-        vm.expectRevert(ElymumNFT.MintClosed.selector);
+        vm.expectRevert(CoinnibalNFT.MintClosed.selector);
         nft.mintAllowlist{value: PRICE}(1, p);
         vm.prank(alice);
-        vm.expectRevert(ElymumNFT.MintClosed.selector);
+        vm.expectRevert(CoinnibalNFT.MintClosed.selector);
         nft.mintPublic{value: PRICE}(1);
     }
 
     function test_allowlistPhase() public {
         vm.expectEmit(address(nft));
-        emit PhaseSet(ElymumNFT.Phase.Allowlist);
-        _phase(ElymumNFT.Phase.Allowlist);
+        emit PhaseSet(CoinnibalNFT.Phase.Allowlist);
+        _phase(CoinnibalNFT.Phase.Allowlist);
         bytes32[] memory p = _proof(alice);
         vm.expectEmit(address(nft));
-        emit Minted(alice, 1, 2, ElymumNFT.Phase.Allowlist, 2 * PRICE);
+        emit Minted(alice, 1, 2, CoinnibalNFT.Phase.Allowlist, 2 * PRICE);
         vm.prank(alice);
         nft.mintAllowlist{value: 2 * PRICE}(2, p);
         assertEq(nft.ownerOf(1), alice);
@@ -189,19 +189,19 @@ contract ElymumNFTTest is Test, MerkleHelper {
 
         // Public mint is still closed.
         vm.prank(alice);
-        vm.expectRevert(ElymumNFT.MintClosed.selector);
+        vm.expectRevert(CoinnibalNFT.MintClosed.selector);
         nft.mintPublic{value: PRICE}(1);
     }
 
     function test_publicPhase_allowsBoth_withSeparateLimits() public {
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         bytes32[] memory p = _proof(bob);
         vm.startPrank(bob);
         nft.mintAllowlist{value: 2 * PRICE}(2, p);
         nft.mintPublic{value: 3 * PRICE}(3);
-        vm.expectRevert(ElymumNFT.WlLimitExceeded.selector);
+        vm.expectRevert(CoinnibalNFT.WlLimitExceeded.selector);
         nft.mintAllowlist{value: PRICE}(1, p);
-        vm.expectRevert(ElymumNFT.PublicLimitExceeded.selector);
+        vm.expectRevert(CoinnibalNFT.PublicLimitExceeded.selector);
         nft.mintPublic{value: PRICE}(1);
         vm.stopPrank();
         (uint16 w, uint16 pub) = nft.mintedBy(bob);
@@ -216,7 +216,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
 
     function test_renounceOwnership_disabled() public {
         vm.prank(owner);
-        vm.expectRevert(ElymumNFT.RenounceDisabled.selector);
+        vm.expectRevert(CoinnibalNFT.RenounceDisabled.selector);
         nft.renounceOwnership();
         vm.prank(alice);
         vm.expectRevert(_unauthorized(alice));
@@ -227,13 +227,13 @@ contract ElymumNFTTest is Test, MerkleHelper {
     function test_setPhase_onlyOwner() public {
         vm.prank(alice);
         vm.expectRevert(_unauthorized(alice));
-        nft.setPhase(ElymumNFT.Phase.Public);
+        nft.setPhase(CoinnibalNFT.Phase.Public);
     }
 
     // ---------------------------------------------------------------- allowlist proofs
 
     function test_allowlist_everyListedWalletVerifies() public {
-        _phase(ElymumNFT.Phase.Allowlist);
+        _phase(CoinnibalNFT.Phase.Allowlist);
         for (uint256 i; i < wl.length; ++i) {
             vm.deal(wl[i], 1 ether);
             bytes32[] memory p = _proof(wl[i]);
@@ -244,26 +244,26 @@ contract ElymumNFTTest is Test, MerkleHelper {
     }
 
     function test_allowlist_rejectsUnlistedAndStolenProofs() public {
-        _phase(ElymumNFT.Phase.Allowlist);
+        _phase(CoinnibalNFT.Phase.Allowlist);
         bytes32[] memory p = _proof(alice);
         // Mallory reuses Alice's proof: the leaf is bound to msg.sender.
         vm.prank(mallory);
-        vm.expectRevert(ElymumNFT.NotAllowlisted.selector);
+        vm.expectRevert(CoinnibalNFT.NotAllowlisted.selector);
         nft.mintAllowlist{value: PRICE}(1, p);
         // Empty proof.
         vm.prank(mallory);
-        vm.expectRevert(ElymumNFT.NotAllowlisted.selector);
+        vm.expectRevert(CoinnibalNFT.NotAllowlisted.selector);
         nft.mintAllowlist{value: PRICE}(1, new bytes32[](0));
         // A wrong root rejects everyone.
         vm.prank(owner);
         nft.setMerkleRoot(bytes32(uint256(1)));
         vm.prank(alice);
-        vm.expectRevert(ElymumNFT.NotAllowlisted.selector);
+        vm.expectRevert(CoinnibalNFT.NotAllowlisted.selector);
         nft.mintAllowlist{value: PRICE}(1, p);
     }
 
     function test_allowlist_secondPreimage_internalNodeIsNotALeaf() public {
-        _phase(ElymumNFT.Phase.Allowlist);
+        _phase(CoinnibalNFT.Phase.Allowlist);
         // An attacker shortens Alice's proof so that an internal node would be "the leaf". Because leaves are
         // double-hashed and bound to msg.sender, no caller address can produce that value: the shortened proof
         // is useless for everyone, including Alice.
@@ -273,7 +273,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
             shortP[i - 1] = p[i];
         }
         vm.prank(alice);
-        vm.expectRevert(ElymumNFT.NotAllowlisted.selector);
+        vm.expectRevert(CoinnibalNFT.NotAllowlisted.selector);
         nft.mintAllowlist{value: PRICE}(1, shortP);
         // A single-hashed leaf (the classic mistake) does not verify either.
         assertTrue(keccak256(abi.encode(alice)) != leaf(alice));
@@ -282,7 +282,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
     function test_allowlist_singleLeafTree() public {
         vm.prank(owner);
         nft.setMerkleRoot(leaf(carol));
-        _phase(ElymumNFT.Phase.Allowlist);
+        _phase(CoinnibalNFT.Phase.Allowlist);
         vm.prank(carol);
         nft.mintAllowlist{value: PRICE}(1, new bytes32[](0));
         assertEq(nft.ownerOf(1), carol);
@@ -302,14 +302,14 @@ contract ElymumNFTTest is Test, MerkleHelper {
     // ---------------------------------------------------------------- limits, payment, supply
 
     function test_limits_perWallet() public {
-        _phase(ElymumNFT.Phase.Allowlist);
+        _phase(CoinnibalNFT.Phase.Allowlist);
         bytes32[] memory p = _proof(alice);
         vm.startPrank(alice);
-        vm.expectRevert(ElymumNFT.WlLimitExceeded.selector);
+        vm.expectRevert(CoinnibalNFT.WlLimitExceeded.selector);
         nft.mintAllowlist{value: 3 * PRICE}(3, p);
         nft.mintAllowlist{value: PRICE}(1, p);
         nft.mintAllowlist{value: PRICE}(1, p);
-        vm.expectRevert(ElymumNFT.WlLimitExceeded.selector);
+        vm.expectRevert(CoinnibalNFT.WlLimitExceeded.selector);
         nft.mintAllowlist{value: PRICE}(1, p);
         vm.stopPrank();
 
@@ -318,23 +318,23 @@ contract ElymumNFTTest is Test, MerkleHelper {
         nft.setLimits(3, 0);
         vm.prank(alice);
         nft.mintAllowlist{value: PRICE}(1, p);
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         vm.prank(bob);
-        vm.expectRevert(ElymumNFT.PublicLimitExceeded.selector);
+        vm.expectRevert(CoinnibalNFT.PublicLimitExceeded.selector);
         nft.mintPublic{value: PRICE}(1);
     }
 
     function test_limits_hugeQuantityDoesNotWrap() public {
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         vm.prank(owner);
         nft.setLimits(type(uint16).max, type(uint16).max);
         vm.startPrank(alice);
-        vm.expectRevert(ElymumNFT.PublicLimitExceeded.selector);
+        vm.expectRevert(CoinnibalNFT.PublicLimitExceeded.selector);
         nft.mintPublic{value: 0}(uint256(type(uint16).max) + 1);
-        vm.expectRevert(ElymumNFT.PublicLimitExceeded.selector);
+        vm.expectRevert(CoinnibalNFT.PublicLimitExceeded.selector);
         nft.mintPublic{value: 0}(type(uint256).max);
         bytes32[] memory p = _proof(alice);
-        vm.expectRevert(ElymumNFT.WlLimitExceeded.selector);
+        vm.expectRevert(CoinnibalNFT.WlLimitExceeded.selector);
         nft.mintAllowlist{value: 0}(type(uint256).max, p);
         vm.stopPrank();
     }
@@ -350,35 +350,35 @@ contract ElymumNFTTest is Test, MerkleHelper {
     }
 
     function test_zeroQuantity() public {
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         bytes32[] memory p = _proof(alice);
         vm.startPrank(alice);
-        vm.expectRevert(ElymumNFT.ZeroQuantity.selector);
+        vm.expectRevert(CoinnibalNFT.ZeroQuantity.selector);
         nft.mintPublic(0);
-        vm.expectRevert(ElymumNFT.ZeroQuantity.selector);
+        vm.expectRevert(CoinnibalNFT.ZeroQuantity.selector);
         nft.mintAllowlist(0, p);
         vm.stopPrank();
         vm.prank(owner);
-        vm.expectRevert(ElymumNFT.ZeroQuantity.selector);
+        vm.expectRevert(CoinnibalNFT.ZeroQuantity.selector);
         nft.ownerMint(alice, 0);
     }
 
     function test_payment_insufficient() public {
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         vm.prank(alice);
-        vm.expectRevert(ElymumNFT.InsufficientPayment.selector);
+        vm.expectRevert(CoinnibalNFT.InsufficientPayment.selector);
         nft.mintPublic{value: 2 * PRICE - 1}(2);
     }
 
     function test_payment_excessIsRefunded() public {
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         uint256 a0 = alice.balance;
         vm.prank(alice);
         nft.mintPublic{value: 1 ether}(2);
         assertEq(a0 - alice.balance, 2 * PRICE);
         assertEq(address(nft).balance, 2 * PRICE);
 
-        _phase(ElymumNFT.Phase.Allowlist);
+        _phase(CoinnibalNFT.Phase.Allowlist);
         bytes32[] memory p = _proof(bob);
         uint256 b0 = bob.balance;
         vm.prank(bob);
@@ -388,19 +388,19 @@ contract ElymumNFTTest is Test, MerkleHelper {
     }
 
     function test_payment_refundFailureReverts() public {
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         RejectEther rej = new RejectEther();
         vm.deal(address(rej), 1 ether);
-        vm.expectRevert(ElymumNFT.RefundFailed.selector);
-        rej.call{value: PRICE + 1}(address(nft), abi.encodeCall(ElymumNFT.mintPublic, (1)));
+        vm.expectRevert(CoinnibalNFT.RefundFailed.selector);
+        rej.call{value: PRICE + 1}(address(nft), abi.encodeCall(CoinnibalNFT.mintPublic, (1)));
         // Exact payment needs no refund and works.
-        rej.call{value: PRICE}(address(nft), abi.encodeCall(ElymumNFT.mintPublic, (1)));
+        rej.call{value: PRICE}(address(nft), abi.encodeCall(CoinnibalNFT.mintPublic, (1)));
         assertEq(nft.ownerOf(1), address(rej));
     }
 
     function test_payment_refundCannotReenter() public {
-        _phase(ElymumNFT.Phase.Public);
-        ReentrantMinter atk = new ReentrantMinter(IElymumNFTMint(address(nft)));
+        _phase(CoinnibalNFT.Phase.Public);
+        ReentrantMinter atk = new ReentrantMinter(ICoinnibalNFTMint(address(nft)));
         vm.deal(address(atk), 0); // pays from msg.value only
         atk.attack{value: 3 * PRICE}(PRICE);
         assertTrue(atk.reentered());
@@ -414,7 +414,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
     function test_freeMintWhenPriceIsZero() public {
         vm.prank(owner);
         nft.setPrice(0);
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         vm.prank(alice);
         nft.mintPublic(1);
         assertEq(nft.ownerOf(1), alice);
@@ -423,29 +423,29 @@ contract ElymumNFTTest is Test, MerkleHelper {
     function test_supply_soldOut() public {
         vm.prank(owner);
         nft.setMaxSupply(4);
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         vm.prank(alice);
         nft.mintPublic{value: 3 * PRICE}(3);
         vm.prank(bob);
-        vm.expectRevert(ElymumNFT.SoldOut.selector);
+        vm.expectRevert(CoinnibalNFT.SoldOut.selector);
         nft.mintPublic{value: 2 * PRICE}(2);
         vm.prank(bob);
         nft.mintPublic{value: PRICE}(1);
         vm.prank(owner);
-        vm.expectRevert(ElymumNFT.SoldOut.selector);
+        vm.expectRevert(CoinnibalNFT.SoldOut.selector);
         nft.ownerMint(owner, 1);
     }
 
     function test_setMaxSupply_onlyDown() public {
         vm.startPrank(owner);
-        vm.expectRevert(ElymumNFT.MaxSupplyIncrease.selector);
+        vm.expectRevert(CoinnibalNFT.MaxSupplyIncrease.selector);
         nft.setMaxSupply(101);
         nft.ownerMint(owner, 10);
-        vm.expectRevert(ElymumNFT.MaxSupplyBelowTotal.selector);
+        vm.expectRevert(CoinnibalNFT.MaxSupplyBelowTotal.selector);
         nft.setMaxSupply(9);
         nft.setMaxSupply(10);
         assertEq(nft.mintState().maxSupply, 10);
-        vm.expectRevert(ElymumNFT.MaxSupplyIncrease.selector);
+        vm.expectRevert(CoinnibalNFT.MaxSupplyIncrease.selector);
         nft.setMaxSupply(11);
         vm.stopPrank();
         vm.prank(alice);
@@ -455,7 +455,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
 
     function test_ownerMint() public {
         vm.expectEmit(address(nft));
-        emit Minted(bob, 1, 5, ElymumNFT.Phase.Closed, 0);
+        emit Minted(bob, 1, 5, CoinnibalNFT.Phase.Closed, 0);
         vm.prank(owner);
         nft.ownerMint(bob, 5);
         assertEq(nft.balanceOf(bob), 5);
@@ -482,11 +482,11 @@ contract ElymumNFTTest is Test, MerkleHelper {
 
     function test_setPrice_strangerAndUnsetKeeper() public {
         vm.prank(alice);
-        vm.expectRevert(ElymumNFT.NotPriceSetter.selector);
+        vm.expectRevert(CoinnibalNFT.NotPriceSetter.selector);
         nft.setPrice(1);
         // No keeper set: address(0) can never pass.
         vm.prank(address(0));
-        vm.expectRevert(ElymumNFT.NotPriceSetter.selector);
+        vm.expectRevert(CoinnibalNFT.NotPriceSetter.selector);
         nft.setPrice(1);
     }
 
@@ -497,20 +497,20 @@ contract ElymumNFTTest is Test, MerkleHelper {
 
         // Bounds not set yet: the keeper can do nothing (in particular it cannot set the price to 0).
         vm.prank(keeper);
-        vm.expectRevert(ElymumNFT.PriceOutOfBounds.selector);
+        vm.expectRevert(CoinnibalNFT.PriceOutOfBounds.selector);
         nft.setPrice(0);
         vm.prank(keeper);
-        vm.expectRevert(ElymumNFT.PriceOutOfBounds.selector);
+        vm.expectRevert(CoinnibalNFT.PriceOutOfBounds.selector);
         nft.setPrice(PRICE);
 
         vm.prank(owner);
         nft.setPriceBounds(0.02 ether, 0.05 ether);
         vm.startPrank(keeper);
-        vm.expectRevert(ElymumNFT.PriceOutOfBounds.selector);
+        vm.expectRevert(CoinnibalNFT.PriceOutOfBounds.selector);
         nft.setPrice(0.02 ether - 1);
-        vm.expectRevert(ElymumNFT.PriceOutOfBounds.selector);
+        vm.expectRevert(CoinnibalNFT.PriceOutOfBounds.selector);
         nft.setPrice(0.05 ether + 1);
-        vm.expectRevert(ElymumNFT.PriceOutOfBounds.selector);
+        vm.expectRevert(CoinnibalNFT.PriceOutOfBounds.selector);
         nft.setPrice(0);
         nft.setPrice(0.02 ether);
         nft.setPrice(0.05 ether);
@@ -535,15 +535,15 @@ contract ElymumNFTTest is Test, MerkleHelper {
         vm.prank(owner);
         nft.setPriceKeeper(address(0));
         vm.prank(keeper);
-        vm.expectRevert(ElymumNFT.NotPriceSetter.selector);
+        vm.expectRevert(CoinnibalNFT.NotPriceSetter.selector);
         nft.setPrice(0.03 ether);
     }
 
     function test_setPriceBounds_validation() public {
         vm.startPrank(owner);
-        vm.expectRevert(ElymumNFT.InvalidPriceBounds.selector);
+        vm.expectRevert(CoinnibalNFT.InvalidPriceBounds.selector);
         nft.setPriceBounds(0, 1 ether);
-        vm.expectRevert(ElymumNFT.InvalidPriceBounds.selector);
+        vm.expectRevert(CoinnibalNFT.InvalidPriceBounds.selector);
         nft.setPriceBounds(2, 1);
         nft.setPriceBounds(1, 1);
         vm.stopPrank();
@@ -563,7 +563,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
         vm.stopPrank();
         vm.prank(keeper);
         if (p < lo || p > hi) {
-            vm.expectRevert(ElymumNFT.PriceOutOfBounds.selector);
+            vm.expectRevert(CoinnibalNFT.PriceOutOfBounds.selector);
             nft.setPrice(p);
         } else {
             nft.setPrice(p);
@@ -573,7 +573,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
 
     function testFuzz_paymentAndRefund(uint8 qty, uint96 extra) public {
         qty = uint8(bound(qty, 1, 3));
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         uint256 cost = PRICE * qty;
         uint256 a0 = alice.balance;
         vm.prank(alice);
@@ -588,8 +588,8 @@ contract ElymumNFTTest is Test, MerkleHelper {
     function test_tokenURI_andFreeze() public {
         vm.prank(owner);
         nft.ownerMint(alice, 12);
-        assertEq(nft.tokenURI(1), "https://elymum.test/api/nft/1");
-        assertEq(nft.tokenURI(12), "https://elymum.test/api/nft/12");
+        assertEq(nft.tokenURI(1), "https://coinnibal.test/api/nft/1");
+        assertEq(nft.tokenURI(12), "https://coinnibal.test/api/nft/12");
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, 13));
         nft.tokenURI(13);
 
@@ -605,9 +605,9 @@ contract ElymumNFTTest is Test, MerkleHelper {
         nft.freezeMetadata();
         assertTrue(nft.mintState().frozen);
         vm.startPrank(owner);
-        vm.expectRevert(ElymumNFT.MetadataIsFrozen.selector);
+        vm.expectRevert(CoinnibalNFT.MetadataIsFrozen.selector);
         nft.setBaseURI("x");
-        vm.expectRevert(ElymumNFT.MetadataIsFrozen.selector);
+        vm.expectRevert(CoinnibalNFT.MetadataIsFrozen.selector);
         nft.freezeMetadata();
         vm.stopPrank();
         assertEq(nft.tokenURI(3), "ipfs://cid/3");
@@ -628,8 +628,8 @@ contract ElymumNFTTest is Test, MerkleHelper {
         vm.expectEmit(address(nft));
         emit ContractURIUpdated();
         vm.prank(owner);
-        nft.setContractURI("https://elymum.test/api/nft/contract");
-        assertEq(nft.contractURI(), "https://elymum.test/api/nft/contract");
+        nft.setContractURI("https://coinnibal.test/api/nft/contract");
+        assertEq(nft.contractURI(), "https://coinnibal.test/api/nft/contract");
         vm.prank(alice);
         vm.expectRevert(_unauthorized(alice));
         nft.setContractURI("x");
@@ -638,7 +638,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
     // ---------------------------------------------------------------- treasury, withdraw, royalty
 
     function test_withdraw_toTreasury() public {
-        _phase(ElymumNFT.Phase.Public);
+        _phase(CoinnibalNFT.Phase.Public);
         vm.prank(alice);
         nft.mintPublic{value: 3 * PRICE}(3);
         vm.expectEmit(address(nft));
@@ -659,7 +659,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
         nft.setTreasury(address(rej));
         vm.deal(address(nft), 1 ether);
         vm.prank(owner);
-        vm.expectRevert(ElymumNFT.WithdrawFailed.selector);
+        vm.expectRevert(CoinnibalNFT.WithdrawFailed.selector);
         nft.withdraw();
     }
 
@@ -668,7 +668,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
         nft.setTreasury(bob);
         assertEq(nft.mintState().treasury, bob);
         vm.prank(owner);
-        vm.expectRevert(ElymumNFT.ZeroAddress.selector);
+        vm.expectRevert(CoinnibalNFT.ZeroAddress.selector);
         nft.setTreasury(address(0));
         vm.prank(alice);
         vm.expectRevert(_unauthorized(alice));
@@ -687,7 +687,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
         vm.prank(owner);
         nft.setRoyalty(treasury, 1_000);
         vm.startPrank(owner);
-        vm.expectRevert(ElymumNFT.RoyaltyTooHigh.selector);
+        vm.expectRevert(CoinnibalNFT.RoyaltyTooHigh.selector);
         nft.setRoyalty(treasury, 1_001);
         vm.expectRevert(abi.encodeWithSelector(ERC2981.ERC2981InvalidDefaultRoyaltyReceiver.selector, address(0)));
         nft.setRoyalty(address(0), 100);
@@ -712,7 +712,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
         assertEq(nft.owner(), bob);
         vm.prank(owner);
         vm.expectRevert(_unauthorized(owner));
-        nft.setPhase(ElymumNFT.Phase.Public);
+        nft.setPhase(CoinnibalNFT.Phase.Public);
         // The new owner also controls pricing.
         vm.prank(bob);
         nft.setPrice(1);
@@ -729,7 +729,7 @@ contract ElymumNFTTest is Test, MerkleHelper {
     // ---------------------------------------------------------------- gas
 
     function test_gas_mintAllowlist() public {
-        _phase(ElymumNFT.Phase.Allowlist);
+        _phase(CoinnibalNFT.Phase.Allowlist);
         bytes32[] memory p = _proof(alice);
         vm.prank(alice);
         uint256 g = gasleft();

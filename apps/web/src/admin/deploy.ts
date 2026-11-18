@@ -84,8 +84,8 @@ export function deploySteps(w: WizardInput): DeployStep[] {
       done: target !== null && w.walletChainId === target,
       detail: target === null ? 'The game server reports no chain yet.' : w.walletChainId === target ? `Wallet on ${w.net.info!.name} (${target}).` : `Switch the wallet to ${w.net.info!.name} (${target}).`,
     },
-    { id: 'arena', label: 'Deploy ElymumArena', done: arenaOk, detail: w.net.arenaAddress ?? w.local.arena?.address ?? 'admin = you, server authority = the server key, fee wallet = you.' },
-    { id: 'nft', label: 'Deploy ElymumNFT', done: nftOk, detail: w.net.nftAddress ?? w.local.nft?.address ?? `Max supply ${NFT_SUPPLY.toLocaleString('en-US')}, $1 in ${GAS_SYMBOL}, 1 allowlist / 2 public per wallet.` },
+    { id: 'arena', label: 'Deploy CoinnibalArena', done: arenaOk, detail: w.net.arenaAddress ?? w.local.arena?.address ?? 'admin = you, server authority = the server key, fee wallet = you.' },
+    { id: 'nft', label: 'Deploy CoinnibalNFT', done: nftOk, detail: w.net.nftAddress ?? w.local.nft?.address ?? `Max supply ${NFT_SUPPLY.toLocaleString('en-US')}, $1 in ${GAS_SYMBOL}, 1 allowlist / 2 public per wallet.` },
     { id: 'register', label: 'Register both with the server', done: registered, detail: registered ? 'The server checked the code hash, the owner and the server authority.' : 'POST /api/admin/contracts for each.' },
     { id: 'token', label: 'Set the game token', done: tokenSet, detail: cfg?.token ?? 'The registered token, confirmed once (it can be set only once). Nothing to type.' },
     { id: 'arenas', label: 'Create the four arenas', done: tokenSet && arenasLeft === 0, detail: tokenSet ? (arenasLeft === 0 ? 'All four default arenas exist.' : `${arenasLeft} to create.`) : 'Needs the token.' },
@@ -104,7 +104,7 @@ export function deploySteps(w: WizardInput): DeployStep[] {
 /** The active step (null when everything is done). */
 export const activeStep = (steps: readonly DeployStep[]): DeployStepId | null => steps.find((s) => s.state === 'active')?.id ?? null;
 
-/** `ElymumArena` constructor arguments: admin = fee wallet = the connected wallet, server authority = the server's key. */
+/** `CoinnibalArena` constructor arguments: admin = fee wallet = the connected wallet, server authority = the server's key. */
 export function arenaDeployArgs(me: Address | null, serverKey: string | null | undefined): DeployArenaArgs {
   if (!me) throw new AdminInputError('Connect the owner wallet first.');
   if (!serverKey) throw new AdminInputError('The game server publishes no server key (serverKey), so the arena would have no settler. Fix the server first.');

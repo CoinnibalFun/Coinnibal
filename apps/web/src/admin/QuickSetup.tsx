@@ -83,7 +83,7 @@ export function QuickSetup({ ctx }: { ctx: ChainCtx }) {
           )}
           {nft && (
             <Row label="Emblem">
-              <Addr value={nft} net={ctx.net} /> <span className="ad-role">the registered ElymumNFT</span>
+              <Addr value={nft} net={ctx.net} /> <span className="ad-role">the registered CoinnibalNFT</span>
             </Row>
           )}
           {serverKey && ctx.status?.testToken && (

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Authoritative Coinnibal game server (internal name elymum): simulation, rooms, settlement on chain (ElymumArena v3)",
+  "description": "Authoritative Coinnibal game server (internal name elymum): simulation, rooms, settlement on chain (CoinnibalArena v3)",
   "main": "./dist/index.js",
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",

@@ -4,7 +4,7 @@
 //                        (DEV_FAKE_TOKEN=0 pnpm demo: the game token starts unset, arenas "Opening soon";
 //                        `curl -X POST localhost:8787/api/dev/token` sets it live)
 //   pnpm demo:localnet   a real local EVM: `hardhat node` + the contracts deployed with the SDK (TestToken,
-//                        ElymumArena, ElymumNFT, token set, four arenas, mint open) + the production-built
+//                        CoinnibalArena, CoinnibalNFT, token set, four arenas, mint open) + the production-built
 //                        server on that chain (EVM_RPC_URL, SERVER_PRIVATE_KEY, ARENA_ADDRESS, NFT_ADDRESS,
 //                        ADMIN_WALLETS) + the web dev server
 // Flags: --browser  also open a Chromium with the Dev Wallet (an EIP-6963 wallet whose key stays in Node;
@@ -204,7 +204,7 @@ async function main() {
     });
     children.add(rec);
     if (shuttingDown) return;
-    say('deploying TestToken, ElymumArena and ElymumNFT with the SDK (the /admin deploy order)');
+    say('deploying TestToken, CoinnibalArena and CoinnibalNFT with the SDK (the /admin deploy order)');
     let deployed;
     try {
       // the browser talks to the web dev server (it proxies /api and /ws), so SIWE names it

@@ -10,7 +10,7 @@ export type PayResult = { ok: true; hash: Hash } | { ok: false; message: string;
 
 /**
  * Pays the room fee in the game token, exactly like a power-up cart (`payArena`): an `approve` of exactly `raw` when the
- * allowance is short, then `ElymumArena.pay(raw, customRoomPaymentRef(request))` to the pinned arena the quote names
+ * allowance is short, then `CoinnibalArena.pay(raw, customRoomPaymentRef(request))` to the pinned arena the quote names
  * (half burned, half to the fee wallet in that call). `request` is this room request's own id: the server opens one
  * room for it. On a DEV_FAKE_CHAIN server the payment is simulated (the server records a fake `pay`).
  */

@@ -58,7 +58,7 @@ These are the failure modes we design against. Each one has a guard in the code.
 - `attributes` is an array of `{ trait_type, value }`. A numeric trait takes `display_type` (`number`,
   `boost_number`, `boost_percentage`, `date`) and an optional `max_value`.
 - ERC-4906 `MetadataUpdate` / `BatchMetadataUpdate` tells marketplaces to re-fetch `tokenURI`
-  ([EIP-4906](https://eips.ethereum.org/EIPS/eip-4906)). ElymumNFT emits `BatchMetadataUpdate(1, max)` from
+  ([EIP-4906](https://eips.ethereum.org/EIPS/eip-4906)). CoinnibalNFT emits `BatchMetadataUpdate(1, max)` from
   `setBaseURI`, so the reveal can be announced without a new contract.
 
 ### Fair-mint provenance
@@ -291,7 +291,7 @@ option today. Before shipping it, its faces would need a hand-drawn pass at 2 ×
 
 ## 4. Fair mint: commit, seal, reveal
 
-No contract change is needed. ElymumNFT computes `tokenURI(id) = baseURI + id`, and its base URI points at the
+No contract change is needed. CoinnibalNFT computes `tokenURI(id) = baseURI + id`, and its base URI points at the
 server (`/api/nft/`). The server decides what each token shows, so the commit-and-reveal scheme runs server-side.
 
 1. **Commit (first boot).** The server generates a random 32-byte seed (or uses `NFT_COLLECTION_SEED`). It

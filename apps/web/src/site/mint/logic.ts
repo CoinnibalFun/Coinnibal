@@ -2,7 +2,7 @@
  * The mint page's logic, pure (no React, no network) so every state is unit-tested.
  * See docs/specs/2026-10-29-elymum-on-elysium.md (sections 3.2, 4.4 and 5).
  */
-import { MintPhase, elymumNFTAbi, mintRefusal, type DescribedError } from '@elymum/sdk';
+import { MintPhase, coinnibalNFTAbi, mintRefusal, type DescribedError } from '@elymum/sdk';
 import { bpsToPercent, isTestChainId, type ArenaFees, type CustomHolderPerk, type GameAccess, type MintContractState, type MintProofResponse, type MintState } from '@elymum/shared';
 import { parseEventLogs, type Address, type Log } from 'viem';
 import { t } from '../../i18n';
@@ -69,7 +69,7 @@ export function mintBlocker(
 
 /** Token ids minted to `to` in a receipt (ERC-721 `Transfer` from the zero address). */
 export function mintedTokenIds(logs: readonly Log[], nft: Address, to: Address): bigint[] {
-  const events = parseEventLogs({ abi: elymumNFTAbi, logs: logs as Log[], eventName: 'Transfer', strict: false });
+  const events = parseEventLogs({ abi: coinnibalNFTAbi, logs: logs as Log[], eventName: 'Transfer', strict: false });
   return events
     .filter((e) => e.address.toLowerCase() === nft.toLowerCase())
     .map((e) => e.args as { from?: Address; to?: Address; tokenId?: bigint })

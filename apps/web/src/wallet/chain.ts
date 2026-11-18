@@ -26,7 +26,7 @@ export interface ChainData {
   deployed: boolean | null;
   /** DEV_FAKE_CHAIN stand-in (see devFake.ts). */
   fake: boolean;
-  /** `ElymumArena.config()`. */
+  /** `CoinnibalArena.config()`. */
   config: ArenaConfig | null;
   /** Arenas on chain (only once the token is set). */
   arenas: ArenaInfo[];

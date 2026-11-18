@@ -1,5 +1,5 @@
 /**
- * The fee rules, in one place. They mirror `ElymumArena` v3 exactly (the contract is the authority; the server,
+ * The fee rules, in one place. They mirror `CoinnibalArena` v3 exactly (the contract is the authority; the server,
  * the web and the tests use this module to predict and explain what the contract does).
  *
  * - **Tickets.** No entry fee: the whole ticket price goes into the arena vault and the coin starts at it.
@@ -9,7 +9,7 @@
  *   so the player never pays more than the rate. A loss or a break-even pays nothing.
  * - **Rates are fixed at join** (a ticket keeps the rates it was bought with); emblem holders may get their own,
  *   lower pair (`DEFAULT_HOLDER_FEE_RATES`: 8 % + 2 %).
- * - **Payments** (power-up packs, through `ElymumArena.pay`): `paymentBurnBps` (default 50 %) is burned, the rest
+ * - **Payments** (power-up packs, through `CoinnibalArena.pay`): `paymentBurnBps` (default 50 %) is burned, the rest
  *   goes to the fee wallet.
  * - **Floor loot** still on the floor at the bell is burned.
  */
@@ -17,7 +17,7 @@
 /** Basis-point denominator (100 %). */
 export const BPS = 10_000;
 
-/** `ElymumArena.MAX_TOTAL_FEE_BPS`: the most the fee pair can take of a profit (25 %). */
+/** `CoinnibalArena.MAX_TOTAL_FEE_BPS`: the most the fee pair can take of a profit (25 %). */
 export const MAX_TOTAL_FEE_BPS = 2_500;
 
 /** A pair of fee rates on profit, in basis points. */
@@ -38,7 +38,7 @@ export const DEFAULT_FEE_RATES: Readonly<FeeRates> = Object.freeze({ burnBps: 1_
  */
 export const DEFAULT_HOLDER_FEE_RATES: Readonly<FeeRates> = Object.freeze({ burnBps: 800, vaultBps: 200 });
 
-/** `ElymumArena.DEFAULT_PAYMENT_BURN_BPS`: half of every power-up payment is burned, half goes to the fee wallet. */
+/** `CoinnibalArena.DEFAULT_PAYMENT_BURN_BPS`: half of every power-up payment is burned, half goes to the fee wallet. */
 export const DEFAULT_PAYMENT_BURN_BPS = 5_000;
 
 /** The pair is valid on chain: whole bps, each >= 0, together at most `MAX_TOTAL_FEE_BPS`. */
@@ -50,7 +50,7 @@ export function isValidFeeRates(r: FeeRates): boolean {
 /** The whole fee rate of a pair, in bps. */
 export const totalFeeBps = (r: FeeRates): number => r.burnBps + r.vaultBps;
 
-/** The rates a ticket gets: the holder pair when it totals less than the normal pair (`ElymumArena._ratesFor`). */
+/** The rates a ticket gets: the holder pair when it totals less than the normal pair (`CoinnibalArena._ratesFor`). */
 export function ratesFor(normal: FeeRates, holder: FeeRates | null, isHolder: boolean): FeeRates {
   if (isHolder && holder && totalFeeBps(holder) < totalFeeBps(normal)) return { ...holder };
   return { ...normal };
@@ -74,7 +74,7 @@ export interface ProfitFee<T extends number | bigint = bigint> {
 
 const nonNegBig = (v: bigint): bigint => (v < 0n ? 0n : v);
 
-/** `ElymumArena.computeFees` in base units (exact, rounding down each share). */
+/** `CoinnibalArena.computeFees` in base units (exact, rounding down each share). */
 export function computeProfitFee(entryFee: bigint, payout: bigint, rates: FeeRates): ProfitFee<bigint> {
   const p = nonNegBig(payout);
   const e = nonNegBig(entryFee);

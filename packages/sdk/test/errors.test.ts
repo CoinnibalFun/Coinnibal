@@ -1,4 +1,4 @@
-import { elymumArenaAbi, elymumNFTAbi, testTokenAbi } from '@elymum/contracts';
+import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi } from '@elymum/contracts';
 import {
   BaseError,
   ChainMismatchError,
@@ -11,7 +11,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import { ELYMUM_ERRORS_ABI, ERROR_MESSAGES, decodeRevertData, describeError, humanError } from '../src/errors';
 
-function reverted(abi: typeof elymumArenaAbi | typeof elymumNFTAbi, errorName: string, args: unknown[] = []) {
+function reverted(abi: typeof coinnibalArenaAbi | typeof coinnibalNFTAbi, errorName: string, args: unknown[] = []) {
   const data = encodeErrorResult({ abi, errorName, args } as never);
   const cause = new ContractFunctionRevertedError({ abi, data, functionName: 'join' } as never);
   return new ContractFunctionExecutionError(cause, { abi, functionName: 'join', args: [1] } as never);
@@ -26,17 +26,17 @@ describe('errors', () => {
   });
 
   it('decodes arena and NFT custom errors through viem', () => {
-    const d = describeError(reverted(elymumArenaAbi, 'ArenaFull'));
+    const d = describeError(reverted(coinnibalArenaAbi, 'ArenaFull'));
     expect(d).toMatchObject({ kind: 'contract', name: 'ArenaFull', message: ERROR_MESSAGES.ArenaFull });
-    expect(describeError(reverted(elymumNFTAbi, 'NotAllowlisted')).name).toBe('NotAllowlisted');
-    expect(describeError(reverted(elymumArenaAbi, 'HoldersOnly'))).toMatchObject({ kind: 'contract', name: 'HoldersOnly', message: ERROR_MESSAGES.HoldersOnly });
-    const own = describeError(reverted(elymumArenaAbi, 'OwnableUnauthorizedAccount', ['0x70997970C51812dc3A010C7d01b50e0d17dc79C8']));
+    expect(describeError(reverted(coinnibalNFTAbi, 'NotAllowlisted')).name).toBe('NotAllowlisted');
+    expect(describeError(reverted(coinnibalArenaAbi, 'HoldersOnly'))).toMatchObject({ kind: 'contract', name: 'HoldersOnly', message: ERROR_MESSAGES.HoldersOnly });
+    const own = describeError(reverted(coinnibalArenaAbi, 'OwnableUnauthorizedAccount', ['0x70997970C51812dc3A010C7d01b50e0d17dc79C8']));
     expect(own.name).toBe('OwnableUnauthorizedAccount');
     expect(own.args).toEqual(['0x70997970C51812dc3A010C7d01b50e0d17dc79C8']);
   });
 
   it('decodes raw revert data from a wallet error object', () => {
-    const data = encodeErrorResult({ abi: elymumNFTAbi, errorName: 'SoldOut' });
+    const data = encodeErrorResult({ abi: coinnibalNFTAbi, errorName: 'SoldOut' });
     expect(decodeRevertData(data)).toEqual({ name: 'SoldOut', args: [] });
     expect(describeError({ code: 3, message: 'execution reverted', data }).name).toBe('SoldOut');
     expect(describeError({ code: -32603, message: 'Internal', data: { code: 3, data } }).name).toBe('SoldOut');

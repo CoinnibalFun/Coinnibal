@@ -14,7 +14,7 @@ class FakeChain implements ChainGateway {
   readonly tokenReady = true;
   readonly stakeEnabled = true;
   sessions = new Map<string, ChainSession>();
-  /** `ElymumArena.pay` receipts by hash (custom room fees). */
+  /** `CoinnibalArena.pay` receipts by hash (custom room fees). */
   receipts = new Map<string, TokenReceipt>();
   kicked = 0;
   async tokenReceipt(hash: string): Promise<TokenReceipt | null> {
@@ -830,7 +830,7 @@ describe('server over websocket', () => {
   it('paid custom room: an invite-only arena instance seated by code with a normal ticket, never by quick play; on its own clock (no 5-minute bell), settled at the room end; closes once settled', async () => {
     const svc = app.customRooms;
     const creator = newWallet();
-    // the room fee: the creator's `ElymumArena.pay` of the base price in the game token (1,500 tokens without a USD price)
+    // the room fee: the creator's `CoinnibalArena.pay` of the base price in the game token (1,500 tokens without a USD price)
     const fee = 1500n * 10n ** 18n;
     const txHash = `0x${'ab'.repeat(32)}`;
     const request = 'integrationroom2';

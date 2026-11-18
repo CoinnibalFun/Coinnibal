@@ -147,13 +147,13 @@ export function AdminPanel({
             <dd className="ad-chainbar__chain">{net.info ? `${net.info.name} (${net.info.id})` : 'none'}</dd>
           </div>
           <div>
-            <dt className="mono">ElymumArena</dt>
+            <dt className="mono">CoinnibalArena</dt>
             <dd>
               <Addr value={net.arenaAddress} net={net} /> <CodeTag code={codes.arena} />
             </dd>
           </div>
           <div>
-            <dt className="mono">ElymumNFT</dt>
+            <dt className="mono">CoinnibalNFT</dt>
             <dd>
               <Addr value={net.nftAddress} net={net} /> <CodeTag code={codes.nft} />
             </dd>

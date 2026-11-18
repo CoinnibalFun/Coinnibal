@@ -249,7 +249,7 @@ export function ArenaPricesCard({ ctx }: { ctx: ChainCtx }) {
     for (let i = 0; i < calls.length; i++) {
       r.at = i;
       setRun({ ...r });
-      const plan: Plan = { title: calls[i].label, contract: 'ElymumArena', call: calls[i].call, ownerOf: arena!, owner: cfg!.admin };
+      const plan: Plan = { title: calls[i].label, contract: 'CoinnibalArena', call: calls[i].call, ownerOf: arena!, owner: cfg!.admin };
       const res = await sendWithWallet((wallet, from) => sendPlan(plan, wallet, from), { chain, publicClient: ctx.client });
       if (!res.ok) {
         r.error = `${calls[i].label}: ${txErrorText(res.error)}`;

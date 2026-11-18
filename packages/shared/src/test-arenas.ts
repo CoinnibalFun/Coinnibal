@@ -3,7 +3,7 @@ import { CUSTOM_DIFFICULTIES, type CustomDifficulty } from './custom-rooms';
 
 /**
  * Test arenas (testnet only): for every official arena (ticket tier) one extra instance, `test-<arenaId>`, that plays
- * EXACTLY the official arena path (real on-chain tickets of the same ElymumArena contract, the same seating, rounds and
+ * EXACTLY the official arena path (real on-chain tickets of the same CoinnibalArena contract, the same seating, rounds and
  * bell, settlement with the contract's fee on profit, loot burns, the journal, crash recovery), with one difference:
  * the room is populated with fair practice bots. Bots never buy a ticket and carry no value: eating a bot gives mass,
  * never value, and a bot that eats a player makes the eaten value spill as floor loot (burned at the bell if no

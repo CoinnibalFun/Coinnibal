@@ -2,7 +2,7 @@ import { concat, encodeAbiParameters, getAddress, isAddress, keccak256, type Add
 
 /**
  * OpenZeppelin `StandardMerkleTree`-compatible allowlist tree for address leaves, the scheme
- * `ElymumNFT.mintAllowlist` verifies with `MerkleProof.verifyCalldata`:
+ * `CoinnibalNFT.mintAllowlist` verifies with `MerkleProof.verifyCalldata`:
  *
  * - leaf = `keccak256(bytes.concat(keccak256(abi.encode(address))))` (double hashed, so an inner
  *   node can never pass as a leaf);

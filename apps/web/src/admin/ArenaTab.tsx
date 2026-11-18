@@ -46,18 +46,18 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
   const arena = ctx.net.arenaAddress;
   const a = ctx.status?.arena ?? null;
   const cfg = a?.config ?? null;
-  if (!arena) return <Card title="No arena yet" id="arena" tone="quiet" lede="Deploy ElymumArena first (Setup)." />;
+  if (!arena) return <Card title="No arena yet" id="arena" tone="quiet" lede="Deploy CoinnibalArena first (Setup)." />;
   if (!a || !cfg)
     return (
       <Card
         title={a?.code === 'missing' || a?.code === 'mismatch' ? 'That is not our arena' : 'Reading the arena…'}
         id="arena"
         tone={a?.code === 'missing' || a?.code === 'mismatch' ? 'danger' : 'quiet'}
-        lede={a?.code === 'missing' ? 'No code at the registered arena address.' : a?.code === 'mismatch' ? 'The code at the registered address is not the bundled ElymumArena.' : 'One moment: asking the chain.'}
+        lede={a?.code === 'missing' ? 'No code at the registered arena address. The arenas stay off: redeploy CoinnibalArena from your wallet (Setup).' : a?.code === 'mismatch' ? 'The code at the registered address is not the bundled CoinnibalArena (the code hash differs), so the server does not use it and the arenas stay off. Redeploy CoinnibalArena from your wallet (Setup).' : 'One moment: asking the chain.'}
       />
     );
   const open = (title: string, call: Plan['call'], extra: Partial<Plan> = {}) =>
-    ctx.open({ title, contract: 'ElymumArena', call, ownerOf: arena, owner: cfg.admin, onDone: () => ctx.refresh(), ...extra });
+    ctx.open({ title, contract: 'CoinnibalArena', call, ownerOf: arena, owner: cfg.admin, onDone: () => ctx.refresh(), ...extra });
   const d = cfg.decimals;
   const sym = a.token?.symbol ? ` ${a.token.symbol}` : '';
   const serverMismatch = !!ctx.net.serverKey && !sameAddress(ctx.net.serverKey, cfg.serverAuthority);

@@ -239,7 +239,7 @@ export interface CustomRoomDeps {
   /** Used payments of the server's chain (hashes and wallet requests; persisted per chain). */
   used: UsedPayments;
   /**
-   * The server's chain: its status names the game token and the arena contract fees are paid to (`ElymumArena.pay`),
+   * The server's chain: its status names the game token and the arena contract fees are paid to (`CoinnibalArena.pay`),
    * and `tokenReceipt` reads a payment's `Paid` event. The same reads as the power-up shop.
    */
   chain: Pick<ChainGateway, 'enabled' | 'status' | 'tokenReceipt'>;
@@ -440,7 +440,7 @@ export class CustomRoomService implements CustomRoomHooks {
   }
 
   /**
-   * Where a room fee is paid: the game token and the arena contract (`ElymumArena.pay`: `paymentBurnBps` burned, the
+   * Where a room fee is paid: the game token and the arena contract (`CoinnibalArena.pay`: `paymentBurnBps` burned, the
    * rest to its fee wallet), or why it cannot be paid now (no chain, no token set on the arena yet, no arena).
    */
   payTarget(): { ok: true; token: { address: string; symbol: string; decimals: number }; arena: string; burnBps: number | null } | { ok: false; reason: CustomPayClosed } {
@@ -734,7 +734,7 @@ export class CustomRoomService implements CustomRoomHooks {
   /**
    * Creates a room for a signed-in `wallet` (`POST /api/rooms/custom {config, txHash?, request?}`). The price (the fee
    * by capacity after the holder perk, `customRoomCost`, the function the quote uses) must be paid in the game token
-   * with `ElymumArena.pay(amount, customRoomPaymentRef(request))` from this wallet: the shop's check of the receipt
+   * with `CoinnibalArena.pay(amount, customRoomPaymentRef(request))` from this wallet: the shop's check of the receipt
    * (mined and succeeded, the arena's `Paid` event for this wallet with this ref, the token moved, at most
    * `CUSTOM_PAYMENT_MAX_AGE_MS` old) with an amount of at least the price quoted, and a hash and a wallet's request open
    * one room each (`UsedPayments`, on disk before the room opens). A free room (the holders' room of the day, a 100 %

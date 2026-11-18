@@ -89,7 +89,7 @@ V1 (legacy docs): no curve, a Uniswap V3 pool from launch. Not relevant for a ne
 
 ### What this means for the arena
 
-- **Burn mode.** `ElymumArena` burns in one of two ways: mode 0 transfers to `0x…dEaD` (works with any ERC-20),
+- **Burn mode.** `CoinnibalArena` burns in one of two ways: mode 0 transfers to `0x…dEaD` (works with any ERC-20),
   mode 1 calls the token's own `burn(uint256)` and accepts it only if the arena's balance fell by exactly the amount
   (anything else falls back to `0x…dEaD`, or reverts on a partial burn). Because a Pons token's `burn()` is not
   documented, **deploy with mode 0** and switch to mode 1 only after `/admin` shows "the token has a working burn()"

@@ -33,7 +33,7 @@ function price(x: unknown, field: string): string {
 }
 
 const KEYS = ['enabled', 'packSize', 'priceIn', 'usdCents', 'prices', 'kinds', 'holderDiscountPct', 'arenaUsesPerRound', 'holderExtraArenaUses'] as const;
-/** Fields of older files that are read and ignored (the payment split is on chain now: `ElymumArena.pay`). */
+/** Fields of older files that are read and ignored (the payment split is on chain now: `CoinnibalArena.pay`). */
 const RETIRED_KEYS = ['sink', 'treasury'] as const;
 
 /**

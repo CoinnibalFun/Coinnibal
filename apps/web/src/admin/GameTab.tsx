@@ -151,7 +151,7 @@ function StartStopCard({ ctx }: { ctx: ChainCtx }) {
                 v === "paused"
                   ? "Pause the arena (no new tickets)"
                   : "Unpause the arena",
-              contract: "ElymumArena",
+              contract: "CoinnibalArena",
               call: setPausedCall(arena, v === "paused"),
               ownerOf: arena,
               owner: cfg.admin,
@@ -182,7 +182,7 @@ function StartStopCard({ ctx }: { ctx: ChainCtx }) {
               onClick={() =>
                 ctx.open({
                   title: `${x.enabled ? "Close" : "Open"} arena #${x.id} ${arenaName(x.id)}`,
-                  contract: "ElymumArena",
+                  contract: "CoinnibalArena",
                   call: updateArenaFrom(arena, x, { enabled: !x.enabled }),
                   ownerOf: arena,
                   owner: cfg.admin,

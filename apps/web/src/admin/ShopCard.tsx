@@ -126,7 +126,7 @@ export function ShopCard({ ctx }: { ctx: ChainCtx }) {
       title="Power-ups"
       id="shop"
       kicker={`${view.purchaseCount} purchases`}
-      lede="Players buy packs of power-up charges with the game token: one ElymumArena.pay call (the server checks its Paid event). Practice and private rooms: free use with cooldowns. Paid arenas: a per-round limit. Practice bots never use them."
+      lede="Players buy packs of power-up charges with the game token: one CoinnibalArena.pay call (the server checks its Paid event). Practice and private rooms: free use with cooldowns. Paid arenas: a per-round limit. Practice bots never use them."
     >
       <SwitchRow
         label="Shop"

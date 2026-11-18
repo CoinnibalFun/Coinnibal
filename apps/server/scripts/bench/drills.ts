@@ -1,5 +1,5 @@
 /**
- * Failure drills against a real ElymumArena v3 (hardhat node, blocks every 250 ms) and the real game server in a
+ * Failure drills against a real CoinnibalArena v3 (hardhat node, blocks every 250 ms) and the real game server in a
  * child process (`drill-server.ts`, NODE_ENV=production, 3 room workers, the production viem client and RPC
  * budget). DRILL_PLAYERS players buy real tickets over the four arenas, connect over WebSocket, sign in (session
  * tokens), take their seats and steer. Then one failure per drill:
@@ -250,7 +250,7 @@ async function allClosed(tickets: Ticket[]): Promise<number> {
 async function verify(tickets: Ticket[], fromBlock: bigint) {
   const settled = await hh.logs('Settled', fromBlock);
   const cancelled = await hh.logs('Cancelled', fromBlock);
-  const loot = (await hh.pub.getContractEvents({ address: hh.arena, abi: (await import('@elymum/sdk')).elymumArenaAbi, eventName: 'LootBurned', fromBlock })) as unknown as { args: { amount: bigint } }[];
+  const loot = (await hh.pub.getContractEvents({ address: hh.arena, abi: (await import('@elymum/sdk')).coinnibalArenaAbi, eventName: 'LootBurned', fromBlock })) as unknown as { args: { amount: bigint } }[];
   const count = new Map<string, number>();
   for (const l of [...settled, ...cancelled]) count.set(String(l.args.sessionId), (count.get(String(l.args.sessionId)) ?? 0) + 1);
   const ids = tickets.map((t) => String(t.sessionId));

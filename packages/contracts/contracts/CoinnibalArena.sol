@@ -9,15 +9,15 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {HolderCheck} from "./HolderCheck.sol";
 
-/// @title ElymumArena (version 3: fee on profit, burned on chain)
-/// @notice Ticket escrow for the Elymum arenas. A player buys a ticket with `join`: the arena's whole entry fee goes
+/// @title CoinnibalArena (version 3: fee on profit, burned on chain)
+/// @notice Ticket escrow for the Coinnibal arenas. A player buys a ticket with `join`: the arena's whole entry fee goes
 ///         into the arena vault (there is no entry fee cut). At the bell the game server pays every ticket its in-game
 ///         value with `settle`. When that value is above the ticket's entry fee, a fee is taken from the PROFIT
 ///         (`payout - entryFee`): `burnBps` of it is burned and `vaultBps` of it goes to the fee wallet (defaults 15 %
 ///         and 5 %, together at most `MAX_TOTAL_FEE_BPS` = 25 %). A loss or a break-even pays no fee. A ticket that was
 ///         never played is cancelled by the server with `cancel` (full entry fee back), and a ticket the server never
 ///         settles can be refunded by its player after 24 h.
-///         Holders of the Elymum emblem (`setHolderPerks`) may get their own (lower) rates and may enter holders-only
+///         Holders of the Coinnibal emblem (`setHolderPerks`) may get their own (lower) rates and may enter holders-only
 ///         arenas. `pay` takes payments for what the game sells off chain (power-ups): `paymentBurnBps` (default 50 %)
 ///         is burned and the rest goes to the fee wallet at once.
 /// @dev    Accounting is internal: `Arena.vault` is what settlements, cancels, refunds, loot burns and sweeps may
@@ -26,7 +26,7 @@ import {HolderCheck} from "./HolderCheck.sol";
 ///         never touches the game token). Burning uses the token's own `burn(uint256)` when the owner turned that on
 ///         (`setBurnMode`) and the call really lowered the balance by the amount; otherwise (or as a fallback) the
 ///         tokens go to 0x…dEaD. No `immutable` variables, so the runtime bytecode is identical for every deployment.
-contract ElymumArena is Ownable2Step, ReentrancyGuard {
+contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ------------------------------------------------------------------------------------------------------------

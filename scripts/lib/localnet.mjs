@@ -1,6 +1,6 @@
 // A local Robinhood Chain stand-in: `hardhat node` (chain id 31337, gas in ETH) with the Elymum
 // contracts deployed in the same order as /admin → Deploy, through the SDK:
-//   TestToken → ElymumArena (server authority = the game server's key) → ElymumNFT
+//   TestToken → CoinnibalArena (server authority = the game server's key) → CoinnibalNFT
 //   → setToken → the four default arenas (→ optionally the mint opened to the public).
 // Shared by scripts/localnet.mjs, scripts/localnet-fund.mjs and scripts/demo.mjs.
 //
@@ -63,7 +63,7 @@ function clients(sdk, rpcUrl, chainId, key) {
 }
 
 /**
- * Deploys TestToken + ElymumArena + ElymumNFT from the owner account and (unless `noToken`) sets the
+ * Deploys TestToken + CoinnibalArena + CoinnibalNFT from the owner account and (unless `noToken`) sets the
  * token and creates the default arenas. Writes `.localnet/contracts.json` and `.localnet/server.env`.
  * Returns `{ token, arena, nft, owner, server, chainId, rpcUrl, env }`.
  */
@@ -84,9 +84,9 @@ export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http:/
 
   log(`deploying TestToken (owner ${owner.address})`);
   const token = await sdk.deployedAddress(publicClient, await sdk.deployTestToken(wallet, { owner: owner.address }));
-  log(`deploying ElymumArena (server authority ${server}, fee wallet = owner)`);
+  log(`deploying CoinnibalArena (server authority ${server}, fee wallet = owner)`);
   const arena = await sdk.deployedAddress(publicClient, await sdk.deployArena(wallet, { admin: owner.address, serverAuthority: server, feeWallet: owner.address }));
-  log('deploying ElymumNFT (supply 3,333, 0.02 ETH, WL 2 / public 5 per wallet)');
+  log('deploying CoinnibalNFT (supply 3,333, 0.02 ETH, WL 2 / public 5 per wallet)');
   const nft = await sdk.deployedAddress(
     publicClient,
     await sdk.deployNft(wallet, {

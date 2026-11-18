@@ -1,7 +1,7 @@
 /**
  * Money simulation: real arena rooms (`Room`, the real world physics and ledger), the real journal on disk and
  * the real settlement worker (`EvmChain`) against a chain (the TypeScript model `FakeEvm`, or a real `hardhat node`
- * with the real ElymumArena v3: `hardhatSimChain` in `money-sim-hardhat.ts`). Random joins, eats, disconnects,
+ * with the real CoinnibalArena v3: `hardhatSimChain` in `money-sim-hardhat.ts`). Random joins, eats, disconnects,
  * reconnects, unplayed tickets, loot spills, integrity holds (released or settled at 0), players whose transfers
  * fail (two-phase payouts), RPC errors, ambiguous sends, lost receipts, RPC outages, room-worker crashes and server
  * restarts (graceful and hard).
@@ -50,7 +50,7 @@ export interface Closure {
 /** What the simulation needs from a chain: the server's client plus the players' side and the books. */
 export interface SimChain {
   readonly name: string;
-  /** The ElymumArena contract. */
+  /** The CoinnibalArena contract. */
   readonly arenaAddress: Address;
   /** What the game server talks to (the simulation wraps it with faults). */
   readonly client: EvmClient;
@@ -865,7 +865,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
 export const feeOf = computeProfitFee;
 
 /**
- * The simulation on `FakeEvm` (the TypeScript model of ElymumArena v3: sessions, vaults, the skip rules, two-phase
+ * The simulation on `FakeEvm` (the TypeScript model of CoinnibalArena v3: sessions, vaults, the skip rules, two-phase
  * payouts, sweep ids, the 24 h refund). Fast enough for thousands of rounds.
  */
 /** The fee pair a ticket of `wallet` must carry (`holders`: lower-case holder wallets). */
@@ -907,7 +907,7 @@ export function fakeSimChain(opts: { players: number; seed: number; arenas?: { i
   const join = (w: Address, arenaId: number) => ({ address: ARENA, abi: [], functionName: 'join', args: [arenaId] }) as never;
   const refund = (arenaId: number) => ({ address: ARENA, abi: [], functionName: 'refund', args: [arenaId] }) as never;
   return {
-    name: 'FakeEvm (model of ElymumArena v3)',
+    name: 'FakeEvm (model of CoinnibalArena v3)',
     arenaAddress: ARENA,
     client: evm,
     decimals: 18,
@@ -932,7 +932,7 @@ export function fakeSimChain(opts: { players: number; seed: number; arenas?: { i
       }
     },
     async updateArena(arenaId, entryFee, enabled) {
-      // ElymumArena.updateArena: a new entry fee only while no ticket of the arena is open (ArenaBusy)
+      // CoinnibalArena.updateArena: a new entry fee only while no ticket of the arena is open (ArenaBusy)
       const a = evm.arenaMap.get(arenaId);
       if (!a || !a.exists || entryFee <= 0n) return false;
       if (entryFee !== a.entryFee && a.openSessions !== 0) return false;

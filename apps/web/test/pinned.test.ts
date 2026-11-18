@@ -1,4 +1,4 @@
-import { elymumArenaArtifact } from '@elymum/sdk';
+import { coinnibalArenaArtifact } from '@elymum/sdk';
 import { LOCALNET_CHAIN_ID, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID } from '@elymum/shared';
 import { getAddress, keccak256, type Hex } from 'viem';
 import { describe, expect, it } from 'vitest';
@@ -76,7 +76,7 @@ describe('arena code hash', () => {
   const HASH = keccak256(CODE);
 
   it('checks against the compiled artifact by default', async () => {
-    expect(elymumArenaArtifact.runtimeCodeHash).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(coinnibalArenaArtifact.runtimeCodeHash).toMatch(/^0x[0-9a-f]{64}$/);
     // code that is not the bundled build
     expect(await verifyArena(coder(CODE), ROBINHOOD_TESTNET_CHAIN_ID, arena, pins)).toEqual({ ok: false, reason: 'code_mismatch' });
   });

@@ -6,7 +6,7 @@ You are a coin: eat food and smaller coins, run from bigger ones, and when the f
 whatever you swallowed is paid out on chain.
 
 The game used to be called Elymum. The code keeps that as its internal name (`@elymum/*` packages,
-`ElymumArena` / `ElymumNFT`, env vars, storage keys); everything a player sees says Coinnibal. The domain and the X
+`CoinnibalArena` / `CoinnibalNFT`, env vars, storage keys); everything a player sees says Coinnibal. The domain and the X
 handle are configuration: see docs/OPERATIONS.md, "The name: Coinnibal, and moving to coinnibal.fun".
 
 The product flow is WL → Mint → Play: people apply for the whitelist, mint a Coinnibal NFT for
@@ -42,7 +42,7 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
 - Four arenas on the ring, tickets priced in US dollars and paid in `$NIBAL`: Asphodel Meadow ($1), Lethe Shore ($3),
   Golden Bough ($5) and Isles of the Blessed ($10, for emblem holders). Only people play the official arenas: no
   house bots (on the testnet each arena also has a labelled TEST room with practice bots that carry no value).
-- On-chain money in one contract: `ElymumArena` holds the entry fees in per-arena vaults; a payout
+- On-chain money in one contract: `CoinnibalArena` holds the entry fees in per-arena vaults; a payout
   can never exceed the vault, a settlement cannot replay, players refund unsettled tickets themselves
   after 24 h, floor loot is only ever burned. Power-ups (packs priced in US dollars, several in one cart, one
   payment) are paid to the same contract (`pay`: half burned, half to the fee wallet).
@@ -64,9 +64,9 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
 
 ```mermaid
 flowchart LR
-  W["Browser wallet (EIP-6963)"] -- "approve + join(arenaId)" --> A["ElymumArena<br/>(vault per arena)"]
+  W["Browser wallet (EIP-6963)"] -- "approve + join(arenaId)" --> A["CoinnibalArena<br/>(vault per arena)"]
   W -- "pay (power-ups)" --> A
-  W -- "mintAllowlist / mintPublic (ETH)" --> N["ElymumNFT"]
+  W -- "mintAllowlist / mintPublic (ETH)" --> N["CoinnibalNFT"]
   B["Browser (apps/web)"] <-- "WebSocket, binary, 30 Hz" --> S["Game server (apps/server)"]
   S -- "settle(batch) at the bell<br/>sweepLoot (burn)" --> A
   S -- "balanceOf: who may play" --> N
@@ -101,7 +101,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 | Path | What it is |
 |---|---|
-| `packages/contracts` | `ElymumArena`, `ElymumNFT`, `TestToken`; the committed `src/artifacts.ts` (ABIs, bytecode, pinned runtime code hashes) |
+| `packages/contracts` | `CoinnibalArena`, `CoinnibalNFT`, `TestToken`; the committed `src/artifacts.ts` (ABIs, bytecode, pinned runtime code hashes) |
 | `packages/sdk` | viem client: reads, call builders, deploy helpers, Merkle tree, ETH/USD price, the admin CLI (`pnpm admin`) |
 | `packages/shared` | Game rules, protocol, chains table, arenas, SIWE message, palette |
 | `packages/art` | Coin drawing shared by the web renderer and the films |
@@ -135,8 +135,8 @@ pnpm demo:localnet --browser    # ... and the Dev Wallet as the contract owner (
 node scripts/localnet-fund.mjs 0xYourAddress     # 10 ETH + 100,000 test tokens
 ```
 
-`demo:localnet` starts `hardhat node` (chain id 31337), deploys `TestToken`, `ElymumArena` and
-`ElymumNFT` from Hardhat account #0 (the owner and admin), sets the token, creates the four arenas,
+`demo:localnet` starts `hardhat node` (chain id 31337), deploys `TestToken`, `CoinnibalArena` and
+`CoinnibalNFT` from Hardhat account #0 (the owner and admin), sets the token, creates the four arenas,
 opens the mint and runs the built server with `EVM_RPC_URL`, `SERVER_PRIVATE_KEY` (Hardhat account #1),
 `ARENA_ADDRESS`, `NFT_ADDRESS` and `ADMIN_WALLETS`. To run the chain alone: `pnpm localnet`
 (`--no-token` stops before `setToken`, like a fresh deploy); the server env is written to

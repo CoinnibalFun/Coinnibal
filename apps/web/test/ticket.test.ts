@@ -1,4 +1,4 @@
-import { MAX_ALLOWANCE, approveCall, elymumArenaAbi, planJoin, refundCall, sessionRefundState } from '@elymum/sdk';
+import { MAX_ALLOWANCE, approveCall, coinnibalArenaAbi, planJoin, refundCall, sessionRefundState } from '@elymum/sdk';
 import type { RoomInfo } from '@elymum/shared';
 import { erc20Abi, type Address } from 'viem';
 import { describe, expect, it } from 'vitest';
@@ -127,7 +127,7 @@ describe('the ticket calls (approve, then join)', () => {
 
   it('collect and refund are the same refund(arenaId) call; the session state decides which', () => {
     const call = refundCall(ARENA, 2);
-    expect(call.abi).toBe(elymumArenaAbi);
+    expect(call.abi).toBe(coinnibalArenaAbi);
     expect(call).toMatchObject({ functionName: 'refund', args: [2] });
     const s = { id: 7n, finalized: false, openedAt: 1_000, owed: 0n, entryFee: 1000n * ONE };
     expect(sessionRefundState(s, 1_000 + 3600)).toEqual({ kind: 'wait', availableAt: 1_000 + 86_400 });
@@ -149,7 +149,7 @@ describe('the ticket calls (approve, then join)', () => {
     expect(arenaRates(undefined)).toEqual({ burnBps: 1500, vaultBps: 500 });
   });
 
-  it('a holder ticket gets the holder pair only while the perks are on and it totals less (ElymumArena._ratesFor)', () => {
+  it('a holder ticket gets the holder pair only while the perks are on and it totals less (CoinnibalArena._ratesFor)', () => {
     const normal = { burnBps: 1500, vaultBps: 500 };
     const cfg = { holderNft: '0xnft', holderBurnBps: 1500, holderVaultBps: 0 };
     expect(ticketRates(normal, cfg, true)).toEqual({ rates: { burnBps: 1500, vaultBps: 0 }, discount: true });

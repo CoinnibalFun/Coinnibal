@@ -5,7 +5,7 @@ default; the module that holds it is named so this page and the game cannot drif
 
 | What | Where |
 |---|---|
-| Fee on profit, payment split, cap | `packages/shared/src/fees.ts` (mirrors `ElymumArena` v3, `packages/contracts/contracts/ElymumArena.sol`) |
+| Fee on profit, payment split, cap | `packages/shared/src/fees.ts` (mirrors `CoinnibalArena` v3, `packages/contracts/contracts/CoinnibalArena.sol`) |
 | Arena tiers in US dollars, entry fees at the reference price | `DEFAULT_ARENAS`, `packages/shared/src/arenas.ts` |
 | USD → token conversion, rounding, the admin sync's diff | `packages/shared/src/arena-pricing.ts` (`usdToTokenRaw`, `arenaPriceDiff`) |
 | Token price source (manual; a Pons / DEX TWAP stub, not wired) | `apps/server/src/chain/token-price.ts` |
@@ -31,7 +31,7 @@ Game → Arena prices):
 | #3 Golden Bough | **$5** | everyone | 5,000 |
 | #4 Isles of the Blessed | **$10** | **emblem holders only** (on chain, `setArenaHoldersOnly`) | 10,000 |
 
-- **The chain keeps entry fees in token units** (`ElymumArena.createArena` / `updateArena`). The admin turns the
+- **The chain keeps entry fees in token units** (`CoinnibalArena.createArena` / `updateArena`). The admin turns the
   dollar prices into token amounts at the token's USD price and the **owner's wallet signs** the change
   (OPERATIONS.md, "Arena prices in US dollars"). The server never holds the owner key.
 - **Price source.** `manual`: a USD price per token the admin types (the testnet default; the TestToken has no
@@ -82,7 +82,7 @@ settles can be refunded by its player after 24 h (the entry fee, capped by the v
 
 ## 3. Power-ups: half burned, half to the fee wallet
 
-Packs of **3 charges**, paid in the game token through `ElymumArena.pay(amount, ref)`: the contract burns
+Packs of **3 charges**, paid in the game token through `CoinnibalArena.pay(amount, ref)`: the contract burns
 **50 %** (`paymentBurnBps`, owner-settable 0 to 100 %) and sends the rest to the fee wallet in the same call. The
 shop is a cart: the player picks several packs (+/−), and one `pay(total, ref)` pays them all (the `ref` names the
 cart, `elymum.cart.…`; a single pack is `elymum.shop.<kind>`). The server credits the charges after checking the

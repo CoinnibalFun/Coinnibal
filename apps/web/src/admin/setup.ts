@@ -42,7 +42,7 @@ export function setupSteps(ctx: { status: StatusSnapshot | null }, opts: { openM
   const out: SetupStep[] = [];
   if (!arena || !cfg) return out;
   const token = (cfg.token ?? tt?.address ?? null) as Address | null;
-  if (!cfg.token && tt?.address) out.push({ id: 'token', label: 'Set tELYMUM as the game token', call: setTokenCall(arena, tt.address) });
+  if (!cfg.token && tt?.address) out.push({ id: 'token', label: 'Set TEST as the game token', call: setTokenCall(arena, tt.address) });
   if (token) {
     const decimals = s?.arena?.token?.decimals ?? 18;
     const existing = (s?.arena?.arenas ?? []).filter((a) => a.exists).map((a) => a.id);

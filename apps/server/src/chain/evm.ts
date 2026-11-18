@@ -4,7 +4,7 @@ import {
   cancelCall,
   chunkSettlements,
   describeError,
-  elymumArenaArtifact,
+  coinnibalArenaArtifact,
   fromLedger,
   ledgerDecimals,
   settleCall,
@@ -167,7 +167,7 @@ export class EvmChain implements ChainGateway {
   /** The arena contract in use (checksummed); null while none is registered. */
   private arena: Address | null = null;
   private arenaTx: string | null = null;
-  /** `ok` once the code at `arena` matched the bundled artifact (ElymumArena v3). */
+  /** `ok` once the code at `arena` matched the bundled artifact (CoinnibalArena v3). */
   private arenaCode: 'ok' | 'missing' | 'mismatch' | null = null;
   private config: ArenaConfig | null = null;
   private configAt = 0;
@@ -439,14 +439,14 @@ export class EvmChain implements ChainGateway {
     }
     if (this.arenaCode !== 'ok') {
       // the bundled build's hash is part of the key: a check of an older build is never reused
-      const codeKey = `code:${this.arena.toLowerCase()}:${elymumArenaArtifact.runtimeCodeHash.toLowerCase()}`;
+      const codeKey = `code:${this.arena.toLowerCase()}:${coinnibalArenaArtifact.runtimeCodeHash.toLowerCase()}`;
       try {
         // a positive check is kept on disk (the code at an address does not change): no read after a restart
         const code = this.cache.get<string>(codeKey) === 'ok' ? 'ok' : await this.client!.codeCheck(this.arena, 'arena');
         this.arenaCode = code;
         if (code === 'ok') {
           this.cache.set(codeKey, 'ok');
-          this.log(`chain: arena ${this.arena} is ElymumArena v3 — the fee is taken from the profit (burned + to the fee wallet) at settlement`);
+          this.log(`chain: arena ${this.arena} is CoinnibalArena v3 — the fee is taken from the profit (burned + to the fee wallet) at settlement`);
         }
       } catch (err) {
         this.warn('code', `chain: code check of ${this.arena} failed (${firstLine(err)})`);
@@ -455,7 +455,7 @@ export class EvmChain implements ChainGateway {
       if (this.arenaCode !== 'ok') {
         this.warn(
           'code',
-          `!!! chain: ${this.arena} ${this.arenaCode === 'missing' ? 'holds no code' : 'is not the bundled ElymumArena (code hash differs)'} on chain ${this.chainId} — arenas stay off`,
+          `!!! chain: ${this.arena} ${this.arenaCode === 'missing' ? 'holds no code' : 'is not the bundled CoinnibalArena (code hash differs)'} on chain ${this.chainId} — arenas stay off`,
         );
         return;
       }

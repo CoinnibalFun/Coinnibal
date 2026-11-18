@@ -21,14 +21,14 @@ Environment
   EVM_RPC_URL            RPC endpoint (or --rpc <url>; default http://127.0.0.1:8545)
   ADMIN_PRIVATE_KEY      0x hex key of the owner wallet, or a path to a file holding one
                          (or --key <hex|path>; ADMIN_KEY_FILE=<path> also works)
-  ARENA_ADDRESS          the ElymumArena (or --arena <address>)
-  NFT_ADDRESS            the ElymumNFT (or --nft <address>)
+  ARENA_ADDRESS          the CoinnibalArena (or --arena <address>)
+  NFT_ADDRESS            the CoinnibalNFT (or --nft <address>)
   TEST_TOKEN_ADDRESS     the TestToken (or --token <address>; default: the arena's game token)
 
 Setup (in this order)
   status                                 chain, signer, arena config, token, arenas, NFT
   deploy-arena --server <addr> [--fee-wallet <addr>]
-                                         deploy ElymumArena (owner = the signer, fee wallet defaults to it)
+                                         deploy CoinnibalArena (owner = the signer, fee wallet defaults to it)
   deploy-nft --max-supply N (--price-wei N | --usd-cents 100) [--wl-limit 2] [--public-limit 2]
              --base-uri <url> [--treasury <addr>]
   deploy-test-token                      deploy the TestToken (localnet / testnet only)

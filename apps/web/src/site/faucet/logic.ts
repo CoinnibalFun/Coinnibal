@@ -11,7 +11,7 @@ export function gasFaucetUrl(served?: string | null): string | null {
 }
 
 /** The on-chain symbol of the testnet TestToken (what a wallet shows), when it cannot be read. */
-export const TEST_SYMBOL_DEFAULT = 'tELYMUM';
+export const TEST_SYMBOL_DEFAULT = 'TEST';
 
 /**
  * What the page calls the faucet token: the game's display symbol (`gameToken.symbol`, the server's `TOKEN_SYMBOL`)

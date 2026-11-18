@@ -223,7 +223,7 @@ describe('boosts: world effects', () => {
 const ARENA_ADDR = '0x00000000000000000000000000000000000A7e4A';
 const REF = shopPaymentRef('magnet');
 
-/** The receipt of `ElymumArena.pay(value, ref)` from `from`: the token transfer to the arena and the `Paid` event. */
+/** The receipt of `CoinnibalArena.pay(value, ref)` from `from`: the token transfer to the arena and the `Paid` event. */
 const payReceipt = (value: bigint, o: { from?: string; ref?: string; contract?: string; token?: string; transferValue?: bigint } = {}): TokenReceipt => ({
   status: 'success',
   blockNumber: 10n,
@@ -231,7 +231,7 @@ const payReceipt = (value: bigint, o: { from?: string; ref?: string; contract?: 
   payments: [{ contract: o.contract ?? ARENA_ADDR, payer: o.from ?? WALLET, ref: o.ref ?? REF, amount: value }],
 });
 
-describe('boosts: verifyPurchase (a Paid event of ElymumArena.pay)', () => {
+describe('boosts: verifyPurchase (a Paid event of CoinnibalArena.pay)', () => {
   const exp = { token: TOKEN, from: WALLET, arena: ARENA_ADDR, ref: REF, amounts: [300n * ONE] };
   it('accepts the exact payment (any address case)', () => {
     expect(verifyPurchase(payReceipt(300n * ONE), { ...exp, from: WALLET.toUpperCase().replace('0X', '0x'), arena: ARENA_ADDR.toLowerCase() })).toEqual({ ok: true, paid: 300n * ONE });

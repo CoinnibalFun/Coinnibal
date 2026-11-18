@@ -2,14 +2,14 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {ElymumArena} from "../contracts/ElymumArena.sol";
-import {ElymumNFT} from "../contracts/ElymumNFT.sol";
+import {CoinnibalArena} from "../contracts/CoinnibalArena.sol";
+import {CoinnibalNFT} from "../contracts/CoinnibalNFT.sol";
 import {MockERC20, BlockingToken, FakeBurnToken} from "../contracts/test/MockTokens.sol";
 
 /// @notice Test-only: a smart-contract wallet that borrows an emblem, joins an arena and gives the emblem back,
 ///         all in one transaction (a "flash" holder). Smart wallets can sign in to the game server (ERC-1271).
 contract FlashHolderWallet {
-    function borrowJoinReturn(ElymumNFT nft, uint256 tokenId, address lender, ElymumArena arena, uint16 arenaId, MockERC20 token)
+    function borrowJoinReturn(CoinnibalNFT nft, uint256 tokenId, address lender, CoinnibalArena arena, uint16 arenaId, MockERC20 token)
         external
     {
         nft.transferFrom(lender, address(this), tokenId);
@@ -23,8 +23,8 @@ contract FlashHolderWallet {
 ///         demonstrates a behaviour the audit report ranks as a finding, so a fix should make the matching
 ///         assertion fail (then flip the test).
 contract AuditFindingsTest is Test {
-    ElymumArena internal arena;
-    ElymumNFT internal nft;
+    CoinnibalArena internal arena;
+    CoinnibalNFT internal nft;
     MockERC20 internal token;
 
     address internal admin = makeAddr("admin");
@@ -42,9 +42,9 @@ contract AuditFindingsTest is Test {
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        token = new MockERC20("Elymum", "ELYMUM", 18);
-        arena = new ElymumArena(admin, server, feeWallet);
-        nft = new ElymumNFT(admin, 1_000, 0.0003 ether, 1, 1, "https://elymum.io/api/nft/", admin);
+        token = new MockERC20("Coinnibal", "COINNIBAL", 18);
+        arena = new CoinnibalArena(admin, server, feeWallet);
+        nft = new CoinnibalNFT(admin, 1_000, 0.0003 ether, 1, 1, "https://coinnibal.fun/api/nft/", admin);
         vm.startPrank(admin);
         arena.setToken(address(token));
         arena.createArena(OPEN, FEE, 300);
@@ -68,10 +68,10 @@ contract AuditFindingsTest is Test {
     function _one(uint16 id, address player, uint64 sid, uint128 payout)
         internal
         pure
-        returns (ElymumArena.Settlement[] memory items)
+        returns (CoinnibalArena.Settlement[] memory items)
     {
-        items = new ElymumArena.Settlement[](1);
-        items[0] = ElymumArena.Settlement(id, player, sid, payout);
+        items = new CoinnibalArena.Settlement[](1);
+        items[0] = CoinnibalArena.Settlement(id, player, sid, payout);
     }
 
     // ------------------------------------------------------------------------------------------------------------
@@ -85,7 +85,7 @@ contract AuditFindingsTest is Test {
         for (uint256 i; i < ring.length; ++i) {
             vm.prank(ring[i]);
             arena.join(ISLES);
-            ElymumArena.SessionView memory s = arena.getSession(ISLES, ring[i]);
+            CoinnibalArena.SessionView memory s = arena.getSession(ISLES, ring[i]);
             assertEq(s.burnBps, 800, "holder burn rate fixed in the ticket");
             assertEq(s.vaultBps, 200, "holder vault rate fixed in the ticket");
             if (i + 1 < ring.length) {
@@ -108,7 +108,7 @@ contract AuditFindingsTest is Test {
 
         assertEq(nft.ownerOf(1), alice, "the emblem is back with its owner");
         assertEq(nft.balanceOf(address(w)), 0, "the wallet holds no emblem");
-        ElymumArena.SessionView memory s = arena.getSession(ISLES, address(w));
+        CoinnibalArena.SessionView memory s = arena.getSession(ISLES, address(w));
         assertTrue(s.id != 0, "yet it holds a holders-only ticket");
         assertEq(uint256(s.burnBps) + s.vaultBps, 1_000, "at the holder fee (10 %)");
     }
@@ -175,18 +175,18 @@ contract AuditFindingsTest is Test {
         vm.prank(bob);
         arena.join(OPEN);
         vm.prank(carol);
-        vm.expectRevert(ElymumArena.ArenaFull.selector);
+        vm.expectRevert(CoinnibalArena.ArenaFull.selector);
         arena.join(OPEN);
 
         // the owner cannot re-price the arena while any ticket is open
         vm.prank(admin);
-        vm.expectRevert(ElymumArena.ArenaBusy.selector);
+        vm.expectRevert(CoinnibalArena.ArenaBusy.selector);
         arena.updateArena(OPEN, 1_200 ether, 2, true);
 
         // the stale sweeper cancels the griefer's ticket: the griefer loses nothing
         uint256 before = token.balanceOf(mallory);
-        ElymumArena.SessionRef[] memory refs = new ElymumArena.SessionRef[](1);
-        refs[0] = ElymumArena.SessionRef(OPEN, mallory, arena.getSession(OPEN, mallory).id);
+        CoinnibalArena.SessionRef[] memory refs = new CoinnibalArena.SessionRef[](1);
+        refs[0] = CoinnibalArena.SessionRef(OPEN, mallory, arena.getSession(OPEN, mallory).id);
         vm.prank(server);
         arena.cancel(refs);
         assertEq(token.balanceOf(mallory) - before, FEE, "full entry fee back, no fee");
@@ -197,7 +197,7 @@ contract AuditFindingsTest is Test {
     ///      fee wallet.
     function testAudit_feeWalletTransferFailureRevertsWholeBatch() public {
         BlockingToken blk = new BlockingToken();
-        ElymumArena a = new ElymumArena(admin, server, feeWallet);
+        CoinnibalArena a = new CoinnibalArena(admin, server, feeWallet);
         vm.startPrank(admin);
         a.setToken(address(blk));
         a.createArena(OPEN, FEE, 300);
@@ -214,19 +214,19 @@ contract AuditFindingsTest is Test {
         a.join(OPEN);
         blk.setBlocked(feeWallet, true);
 
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
-        items[0] = ElymumArena.Settlement(OPEN, alice, a.getSession(OPEN, alice).id, 2 * FEE); // alice won
-        items[1] = ElymumArena.Settlement(OPEN, bob, a.getSession(OPEN, bob).id, 0); // bob lost
+        CoinnibalArena.Settlement[] memory items = new CoinnibalArena.Settlement[](2);
+        items[0] = CoinnibalArena.Settlement(OPEN, alice, a.getSession(OPEN, alice).id, 2 * FEE); // alice won
+        items[1] = CoinnibalArena.Settlement(OPEN, bob, a.getSession(OPEN, bob).id, 0); // bob lost
         vm.prank(server);
         vm.expectRevert(bytes("blocked"));
         a.settle(items);
     }
 
     /// @dev Burn mode 1 with a token whose burn() burns a different amount reverts the whole batch (BurnMismatch):
-    ///      the burn() path must be probed against the real $ELYMUM before it is turned on.
+    ///      the burn() path must be probed against the real $NIBAL before it is turned on.
     function testAudit_partialBurnRevertsWholeBatchInBurnCallMode() public {
         FakeBurnToken fk = new FakeBurnToken();
-        ElymumArena a = new ElymumArena(admin, server, feeWallet);
+        CoinnibalArena a = new CoinnibalArena(admin, server, feeWallet);
         vm.startPrank(admin);
         a.setToken(address(fk));
         a.createArena(OPEN, FEE, 300);
@@ -244,11 +244,11 @@ contract AuditFindingsTest is Test {
         a.join(OPEN);
         fk.setMode(1); // burns half
 
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
-        items[0] = ElymumArena.Settlement(OPEN, alice, a.getSession(OPEN, alice).id, 2 * FEE);
-        items[1] = ElymumArena.Settlement(OPEN, bob, a.getSession(OPEN, bob).id, 0);
+        CoinnibalArena.Settlement[] memory items = new CoinnibalArena.Settlement[](2);
+        items[0] = CoinnibalArena.Settlement(OPEN, alice, a.getSession(OPEN, alice).id, 2 * FEE);
+        items[1] = CoinnibalArena.Settlement(OPEN, bob, a.getSession(OPEN, bob).id, 0);
         vm.prank(server);
-        vm.expectRevert(ElymumArena.BurnMismatch.selector);
+        vm.expectRevert(CoinnibalArena.BurnMismatch.selector);
         a.settle(items);
 
         // mode 0 (0x...dEaD) settles the same batch

@@ -1,7 +1,7 @@
 /**
  * Bell burst: every arena rings at once and the settlement worker must pay every ticket. The real settlement
  * worker (`EvmChain`, production viem client, RPC budget at the production defaults of 4 calls/s, burst 8) talks
- * to a real ElymumArena v3 on a hardhat node through `ChaosRpc`. Per scenario: BURST_TICKETS tickets are bought
+ * to a real CoinnibalArena v3 on a hardhat node through `ChaosRpc`. Per scenario: BURST_TICKETS tickets are bought
  * over the four arenas, the bell queues one settlement per ticket at once (payouts redistribute each arena's
  * stakes: the per-arena sum equals what was deposited), and we measure until every ticket is closed on chain:
  *

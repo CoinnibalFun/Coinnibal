@@ -7,7 +7,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {HolderCheck} from "./HolderCheck.sol";
 
 /// @title TestToken
-/// @notice Faucet ERC-20 for localnets and testnets only ("Elymum Test Token", tELYMUM, 18 decimals). Burnable
+/// @notice Faucet ERC-20 for localnets and testnets only ("Coinnibal Test Token", TEST, 18 decimals). Burnable
 ///         (ERC20Burnable), so a testnet arena can exercise `burn()`. Anyone can take `faucetAmount` (default
 ///         1,000,000) from `faucet` once per `faucetCooldown` (default 1 h); holders of `holderNft` take
 ///         `holderFaucetAmount` (default 2,000,000). The owner can mint any amount.
@@ -38,7 +38,7 @@ contract TestToken is ERC20, ERC20Burnable, Ownable {
     error InvalidFaucet();
     error NotAContract();
 
-    constructor(address owner_) ERC20("Elymum Test Token", "tELYMUM") Ownable(owner_) {}
+    constructor(address owner_) ERC20("Coinnibal Test Token", "TEST") Ownable(owner_) {}
 
     // ------------------------------------------------------------------------------------------------------------
     // Faucet

@@ -95,7 +95,7 @@ export function leapDistance(r: number): number {
 export const BURN_ADDRESS = '0x000000000000000000000000000000000000dEaD';
 
 /**
- * The `ref` of a power-up payment (`ElymumArena.pay(amount, ref)`): `elymum.shop.<kind>` in ASCII, right-padded to
+ * The `ref` of a power-up payment (`CoinnibalArena.pay(amount, ref)`): `elymum.shop.<kind>` in ASCII, right-padded to
  * 32 bytes. The server credits a payment only when its ref names the pack bought.
  */
 export function shopPaymentRef(kind: BoostKind): `0x${string}` {
@@ -107,7 +107,7 @@ export function shopPaymentRef(kind: BoostKind): `0x${string}` {
 
 /**
  * The admin's shop settings (`/api/admin/shop`, stored in `DATA_DIR/site/shop.json`). Where the money goes is not a
- * setting here: every pack is paid with `ElymumArena.pay`, which burns `paymentBurnBps` of it (default 50 %) and
+ * setting here: every pack is paid with `CoinnibalArena.pay`, which burns `paymentBurnBps` of it (default 50 %) and
  * sends the rest to the arena's fee wallet on chain (`fees.ts`). Older files' `sink` / `treasury` are ignored.
  */
 export interface ShopSettings {
@@ -267,7 +267,7 @@ export function normalizeCart(raw: unknown): Record<BoostKind, number> | null {
 }
 
 /**
- * The `ElymumArena.pay` ref of a cart: ASCII `elymum.cart.` and each power-up's letter and pack count in a fixed order
+ * The `CoinnibalArena.pay` ref of a cart: ASCII `elymum.cart.` and each power-up's letter and pack count in a fixed order
  * (`elymum.cart.m2l0s1i0`), zero-padded to 32 bytes. The ref names the whole cart, so one payment proves it.
  */
 export function shopCartRef(cart: Record<BoostKind, number>): `0x${string}` {

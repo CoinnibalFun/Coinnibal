@@ -72,6 +72,6 @@
     "inputBytes": 36
   },
   "join_typical": 135539,
-  "network": "hardhat (in-process), ElymumArena v3, TestToken (OpenZeppelin ERC-20), ElymumNFT holder NFT, burn mode 0 (0x…dEaD)",
+  "network": "hardhat (in-process), CoinnibalArena v3, TestToken (OpenZeppelin ERC-20), CoinnibalNFT holder NFT, burn mode 0 (0x…dEaD)",
   "measuredAt": "2026-11-06"
 }

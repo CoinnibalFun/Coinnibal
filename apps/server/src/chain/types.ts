@@ -123,7 +123,7 @@ export interface TokenTransfer {
   value: bigint;
 }
 
-/** A `Paid` event of the arena contract (a power-up payment, `ElymumArena.pay`). */
+/** A `Paid` event of the arena contract (a power-up payment, `CoinnibalArena.pay`). */
 export interface ArenaPayment {
   /** The arena contract that emitted it (EIP-55). */
   contract: string;

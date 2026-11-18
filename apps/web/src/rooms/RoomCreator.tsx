@@ -163,7 +163,7 @@ function Capacity({ value, steps, onPick, label, note }: { value: number; steps:
 
 /**
  * "Create your own room": the creator picks the rules, pays the small fee in the game token (approve when the
- * allowance is short, then one `ElymumArena.pay` to the arena, like the power-up cart: half burned, half to the team
+ * allowance is short, then one `CoinnibalArena.pay` to the arena, like the power-up cart: half burned, half to the team
  * wallet; NFT holders get the perk the admin chose, by default one free room a day without any payment), the server
  * checks the payment on chain and opens the room; the sheet ends on the invite code and share link. Before the game
  * token is live a room that costs something cannot be paid: the sheet says so (Practice with bots stays free).
