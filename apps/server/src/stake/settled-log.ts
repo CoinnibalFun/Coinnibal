@@ -4,6 +4,12 @@ import { dirname } from 'node:path';
 /** One confirmed money movement the server signed: a ticket settled or cancelled, or a loot burn. */
 export interface SettledRecord {
   kind: 'settle' | 'cancel' | 'sweep';
+  /**
+   * The arena contract that moved the money (lower case). Session ids restart at 1 on every new arena contract, so
+   * a record only ever describes a session of this contract; records written before this field existed have none
+   * and match no contract (`SettledLog.get`).
+   */
+  contract?: string;
   /** The journal key (`<arenaId>:<player>:<sessionId>`, or `sweep:<room>:<round>`). */
   key: string;
   arenaId: number;
@@ -36,7 +42,9 @@ const MAX_RECORDS = 200_000;
  * - **Reorg protection.** The journal forgets an item once its receipt is in. If a reorg dropped that
  *   transaction the session is open again on chain; the stale sweeper would then refund it at the entry fee
  *   (a winner would lose the winnings, a loser would get the stake back from the winners' share). With this
- *   record the sweeper re-sends the original settlement instead (`EvmChain.sweepStale`).
+ *   record the sweeper re-sends the original settlement instead (`EvmChain.sweepStale`). A record is scoped to the
+ *   arena contract that wrote it (a new arena restarts session ids at 1, so the same key names another ticket
+ *   there), and the sweeper re-sends only while the original transaction has no successful receipt.
  * - **Audit and appeals.** What every ticket was paid, why, and in which transaction, for 14 days.
  *
  * Appends are cheap (one line); the file is compacted when it is loaded and holds far more lines than records.
@@ -107,8 +115,17 @@ export class SettledLog {
     }
   }
 
-  get(key: string): SettledRecord | undefined {
-    return this.byKey.get(key);
+  /**
+   * The record of `key` written for the arena contract `contract`, within the last `SETTLED_KEEP_MS`. A record of
+   * another contract (an earlier arena on the same chain, whose session ids are reused by the new one) or one
+   * without a contract (written before records named it) never matches.
+   */
+  get(key: string, contract: string): SettledRecord | undefined {
+    const r = this.byKey.get(key);
+    if (!r || !r.contract || r.contract !== contract.toLowerCase()) return undefined;
+    // a long-running process keeps records in memory past the window the file keeps
+    if (r.at < this.now() - SETTLED_KEEP_MS) return undefined;
+    return r;
   }
 
   /** The newest records first (at most `limit`), optionally of one wallet. */

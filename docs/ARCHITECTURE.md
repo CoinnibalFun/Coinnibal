@@ -151,7 +151,8 @@ Off chain (the server; tests in `apps/server/test`):
     (`roundPool`: the entry fees seated in its instance that round) is held (without a pool: above
     `PAYOUT_GUARD_MULTIPLE` entry fees); an arena whose vault does not cover its journal pays nothing (the books
     guard); a ticket the server settled that is open again (a reorg) is re-sent with the same payout
-    (`settled.jsonl`), never refunded at the entry fee.
+    (`settled.jsonl`), never refunded at the entry fee. A record counts only for the arena contract that wrote
+    it (a new arena restarts the session ids) and only while its settlement has no successful receipt any more.
 16. **Refunds the server did not send:** a held (or never-sent) settlement whose ticket the player refunded after
     24 h is dropped and the difference (payout − entry fee) journaled as a forfeit, so (11) keeps holding.
 
