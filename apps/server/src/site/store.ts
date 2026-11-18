@@ -450,7 +450,7 @@ export class SiteStore {
 
   submitWl(wallet: string, body: Record<string, unknown>): WlEntryPublic {
     v.honeypot(body);
-    if (!this.settingsV.wlOpen) throw new SiteFail(403, 'wl_closed', `Applications are closed. Follow @${this.settingsV.xHandle}.`);
+    if (!this.settingsV.wlOpen) throw new SiteFail(403, 'wl_closed', `Applications are closed. Follow @${this.settingsV.xHandle} to hear when they open again.`);
     if (this.wlByWallet.has(wkey(wallet))) throw new SiteFail(409, 'already_applied', 'This wallet already applied.');
     const xHandle = v.handle(body.xHandle, 'xHandle');
     if (this.wlByHandle.has(xHandle)) throw new SiteFail(409, 'handle_taken', 'This X handle already applied.', 'xHandle');
@@ -599,7 +599,7 @@ export class SiteStore {
   applyCollab(wallet: string, body: Record<string, unknown>): CollabPublic {
     if (!this.settingsV.collabOpen) {
       v.honeypot(body);
-      throw new SiteFail(403, 'collab_closed', 'Collab applications are closed.');
+      throw new SiteFail(403, 'collab_closed', `Collab applications are closed. Follow @${this.settingsV.xHandle} to hear when they open again.`);
     }
     const form = v.collabApply(body);
     // the same application sent twice (a double click, a retry after a lost answer): the first one stands
