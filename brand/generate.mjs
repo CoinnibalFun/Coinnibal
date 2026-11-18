@@ -2,7 +2,7 @@
 // Renders the Coinnibal brand kit (Ring Storybook style) to PNGs with Playwright's Chromium.
 //
 //   node brand/generate.mjs            render everything into brand/out/ and refresh the web app's
-//                                      og-elymum.png, favicon-32.png, apple-touch-icon.png and the manifest icons
+//                                      og-coinnibal.png, favicon-32.png, apple-touch-icon.png and the manifest icons
 //   node brand/generate.mjs og x-banner   render only the named jobs
 //   node brand/generate.mjs --list     list the jobs
 //
