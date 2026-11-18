@@ -2,12 +2,14 @@
 # Coinnibal game server: one-command install on a fresh Ubuntu 22.04 / 24.04 VPS. Run as root:
 #   bash install.sh                       asks for the domain, repository and branch (Enter = default)
 #   bash install.sh --restore coinnibal-backup.tar.gz
-#   bash install.sh --restore-url https://game.elymum.io --token <admin session token> --proof <signed proof>
-#   bash install.sh --from https://game.elymum.io --token <admin session token> --proof <signed proof> --yes
-#       the whole move in one command: copies the old server's settings (.env) AND its data. The proof is a
-#       fresh signature of the admin wallet of purpose "migration" (POST /api/admin/secret-proof, README "Moving")
+#   bash install.sh --restore-url https://game.elymum.io      the data of a running server (it asks for the secrets)
+#   bash install.sh --yes --from https://game.elymum.io       the whole move in one command: copies the old server's
+#       settings (.env) AND its data. It needs the admin session token and a proof, a fresh signature of the admin
+#       wallet of purpose "migration" (POST /api/admin/secret-proof, README "Moving"). Neither is ever an argument
+#       (any local user can read a command line in ps): it asks for them at hidden prompts, or reads them from stdin,
+#       one per line (the token, then the proof; /admin -> Network -> Backup & move copies the command with both).
 # Options: --domain D, --repo SSH_URL, --branch B, --set KEY=VALUE (a .env setting; repeatable),
-#          --yes (no questions; defaults or the given values).
+#          --yes (no questions; defaults or the given values; the secrets of --from are still asked when not piped in).
 # Safe to run again: every step checks what is already done. Full guide: deploy/vps/README.md.
 set -euo pipefail
 
@@ -65,19 +67,39 @@ while [[ $# -gt 0 ]]; do
     --restore) restore_file="$(readlink -f "${2:?--restore needs a file}")"; shift 2 ;;
     --restore-url) restore_url="${2:?--restore-url needs a value}"; shift 2 ;;
     --from) from_url="${2:?--from needs the old server URL}"; restore_url="$from_url"; shift 2 ;;
-    --token) restore_token="${2:?--token needs a value}"; shift 2 ;;
-    --proof) restore_proof="${2:?--proof needs a value}"; shift 2 ;;
+    --token | --proof) die "$1 is not taken on the command line (any local user can read it in ps): leave it out and paste the value at the prompt, or send the token and the proof on stdin, one per line (see --help)" ;;
     --set) [[ "${2:-}" =~ ^[A-Z][A-Z0-9_]*=[^[:space:]]*$ ]] || die "--set needs KEY=VALUE (no spaces)"; sets+=("$2"); shift 2 ;;
     --yes | -y) yes=1; shift ;;
-    -h | --help) sed -n '2,8p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,13p' "$0"; exit 0 ;;
     *) die "unknown argument: $1 (see --help)" ;;
   esac
 done
 
 [[ "$(id -u)" -eq 0 ]] || die "run this as root: sudo -i, then bash install.sh"
 [[ -z "$restore_file" || -s "$restore_file" ]] || die "backup file not found: $restore_file"
-[[ -z "$restore_url" || -n "$restore_token" || "$yes" -eq 0 ]] || die "--restore-url needs --token"
 [[ -z "$restore_file" || -z "$restore_url" ]] || die "use --restore or --restore-url, not both"
+[[ -z "$restore_url" || "$restore_url" == https://* ]] || die "--from and --restore-url need an https:// URL (the token and the proof must not travel in clear): $restore_url"
+
+# read_secret VAR "label": a secret (the admin session token, a signed proof) never comes from a command line, which
+# any local user can read in ps: a hidden prompt on a terminal, else one line of stdin. Whitespace is dropped (the
+# values hold none; a paste may add some). The same function as deploy/vps/lib.sh (not checked out yet here).
+read_secret() {
+  local __v=""
+  if [[ -t 0 ]]; then
+    read -rsp "$2: " __v || true
+    echo >&2
+  else
+    IFS= read -r __v || true
+  fi
+  printf -v "$1" '%s' "${__v//[[:space:]]/}"
+}
+# both now, while someone is at the keyboard (the build takes minutes)
+if [[ -n "$restore_url" ]]; then
+  [[ -t 0 || "$yes" -eq 1 ]] || die "the token and the proof on stdin need --yes (the installer's other questions read the terminal)"
+  read_secret restore_token "Admin session token"
+  read_secret restore_proof "Signed proof (X-Coinnibal-Proof, purpose migration or backup)"
+  [[ -n "$restore_token" && -n "$restore_proof" ]] || die "the admin session token and the proof are both needed (README \"Moving to another VPS\")"
+fi
 
 # shellcheck disable=SC1091
 . /etc/os-release
@@ -286,16 +308,16 @@ for kv in "${sets[@]}"; do
   env_set "${kv%%=*}" "${kv#*=}"
 done
 if [[ -n "$from_url" ]]; then
-  [[ -n "$restore_token" ]] || die "--from needs --token (copy the command from /admin → Network → Backup & move)"
   note "copying the settings from $from_url"
   envjson="$(mktemp)"
   chmod 600 "$envjson"
-  [[ -n "$restore_proof" ]] || die "--from needs --proof (a signature of the admin wallet, purpose migration: README \"Moving to another VPS\")"
   hdr="$(mktemp)"
   chmod 600 "$hdr"
-  # the token and the proof go through a header file, not the command line (other users could read it in ps)
+  # the token and the proof stay off every command line (other users can read those in ps; printf is a shell
+  # builtin): read above, they reach curl through this 0600 header file, and restore.sh through its stdin (step 9).
+  # --proto: HTTPS only
   printf 'Authorization: Bearer %s\nX-Coinnibal-Proof: %s\n' "$restore_token" "$restore_proof" >"$hdr"
-  curl -fsS --max-time 30 -H @"$hdr" "${from_url%/}/api/admin/migration-env" -o "$envjson" \
+  curl -fsS --proto '=https' --max-time 30 -H @"$hdr" "${from_url%/}/api/admin/migration-env" -o "$envjson" \
     || { rm -f "$hdr"; die "could not read the settings from $from_url (expired token or proof? a proof opens it once, within 10 minutes)"; }
   rm -f "$hdr"
   # one KEY<TAB>VALUE line per setting; values never hold a newline (the server drops those). The chain settings go
@@ -362,11 +384,8 @@ if [[ -n "$restore_file" ]]; then
   "$DIR/deploy/vps/restore.sh" --yes --no-start "$restore_file"
 elif [[ -n "$restore_url" ]]; then
   note "downloading and restoring the backup from $restore_url before the first start"
-  if [[ -n "$restore_token" ]]; then
-    "$DIR/deploy/vps/restore.sh" --yes --no-start --url "$restore_url" --token "$restore_token" ${restore_proof:+--proof "$restore_proof"}
-  else
-    "$DIR/deploy/vps/restore.sh" --yes --no-start --url "$restore_url"
-  fi
+  # the secrets on restore.sh's stdin, one per line (never its arguments)
+  printf '%s\n%s\n' "$restore_token" "$restore_proof" | "$DIR/deploy/vps/restore.sh" --yes --no-start --url "$restore_url"
 fi
 dc up -d --remove-orphans
 git rev-parse HEAD >"$STATE/deployed"
