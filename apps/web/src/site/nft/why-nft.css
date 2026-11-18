@@ -105,12 +105,13 @@
   rotate: -8deg;
 }
 
-/* the rows: what changes, the perk's name between the two sides; one dashed rule runs the full width of a row */
+/* the rows: what changes, the perk's name between the two sides; a plain rule under each (a dashed one would restart
+   its dashes at every cell) */
 .nf-row {
-  border-top: 2px dashed var(--rule);
+  border-top: 2px solid var(--rule);
 }
 .nf-row:last-child {
-  border-bottom: 2px dashed var(--rule);
+  border-bottom: 2px solid var(--rule);
 }
 .nf-row :is(th, td) {
   padding: 15px 8px !important;

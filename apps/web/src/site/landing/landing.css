@@ -147,7 +147,8 @@
   flex-wrap: wrap;
   gap: 4px 14px;
   margin: 18px 0 0;
-  font-size: var(--t-micro);
+  font-size: 14px;
+  font-weight: 600;
   color: var(--ink-3);
 }
 .ld-flowline {
@@ -239,8 +240,9 @@
 }
 @media (min-width: 1024px) {
   .ld-hero__ring {
-    /* the first screen: what the header leaves of the window, never under 700 px or over 860 */
-    min-height: clamp(700px, calc(100svh - var(--ld-head-h)), 860px);
+    /* the first screen: what the header leaves of the window (never under 700 px or over 860), and a hair more, so the
+       next plate starts just below the fold and waits there for the scroll instead of touching the window's edge */
+    min-height: clamp(700px, calc(100svh - var(--ld-head-h) + 4px), 860px);
   }
   .ld-hero__inner {
     display: grid;
@@ -514,7 +516,9 @@
   .ld-hero__drop {
     align-self: flex-start;
   }
+  /* card on the left, the screen stepping out to the right under it (a phone gives both the full width) */
   .ld-hero__screen {
+    align-self: flex-end;
     width: min(560px, 100%);
     margin-top: 28px;
   }
@@ -1047,10 +1051,8 @@
   margin: 28px 0 0;
   padding: 0;
   list-style: none;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 14px;
+  font-weight: 700;
 }
 .ld-flow li {
   display: flex;
