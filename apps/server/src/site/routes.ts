@@ -311,8 +311,11 @@ export class SiteApi {
     return this.ext.chain?.status().chainId ?? null;
   }
 
-  /** Handles the request when the path is the site's; false otherwise. */
-  async handle(req: IncomingMessage, res: ServerResponse, url: URL, ip: string): Promise<boolean> {
+  /**
+   * Handles the request when the path is the site's; false otherwise. `ip`: the client's rate-limit key (`rateKey`:
+   * an IPv6 client counts as its /64); `auditIp`: its exact address, for the admin audit and the logs.
+   */
+  async handle(req: IncomingMessage, res: ServerResponse, url: URL, ip: string, auditIp = ip): Promise<boolean> {
     const path = url.pathname;
     const mine =
       path.startsWith('/api/site/') ||
@@ -340,7 +343,7 @@ export class SiteApi {
       else if (path.startsWith('/api/nft/')) await this.nftRoutes(req, res, url);
       else if (path.startsWith('/api/site/')) await this.siteRoutes(req, res, url, ip);
       else if (path.startsWith('/api/rooms/custom')) await this.customRoutes(req, res, path, ip);
-      else await this.audited(req, res, url, ip);
+      else await this.audited(req, res, url, auditIp);
     } catch (err) {
       if (err instanceof SiteFail && err.status === 413) res.setHeader('Connection', 'close');
       if (err instanceof SiteFail) fail(res, err.status, { error: err.code, message: err.message, ...(err.field ? { field: err.field } : {}) });

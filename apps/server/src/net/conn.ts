@@ -67,6 +67,8 @@ export class Conn implements RoomConn {
   countedAsSigned = false;
   /** Admitted with a session token that holds a live arena stake (the reserve is theirs). */
   priority: 'stake' | 'signed' | null = null;
+  /** The wallet (lower case) this socket counts under for `SOCKETS_PER_WALLET`: its token's, then its sign-in's. */
+  walletSlot: string | null = null;
 
   constructor(
     readonly ws: WebSocket,
