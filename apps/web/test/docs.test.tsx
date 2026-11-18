@@ -186,7 +186,7 @@ describe('player guide content', () => {
       ['Power-up packs', 'Full price', '20% off'],
       ['Power-ups per round in a paid room', '2', '3'],
       ['Private room', 'Paid in ETH', '1 free a day, up to 10 players'],
-      ['Coin look', 'Standard skins', 'Also the NFT skin and a holder badge'],
+      ['Coin look', 'Standard skins', 'The NFT skin and a holder badge'],
     ]);
     // the operator's access switch is not a game rule: the guide says nothing of a holders-only game (the landing FAQ
     // answers "Do I need the NFT to play? No.")
@@ -263,11 +263,10 @@ describe('player guide content', () => {
     expect(text).not.toMatch(/[\u00e7\u011f\u0131\u00f6\u015f\u00fc\u00c7\u011e\u0130\u00d6\u015e\u00dc]/);
   });
 
-  it('ends with the official links, the OpenSea-only rule and the seed-phrase line (said there, not again in a chapter)', () => {
+  it('ends with the official links and the OpenSea-only rule (said there, not again in a chapter)', () => {
     const c = docsEn('tokens', undefined, 'Robinhood Chain', { site: 'coinnibal.fun', x: 'coinnibalfun' });
     expect(c.closing.lines).toEqual([
       'The only official links are coinnibal.fun and @coinnibalfun on X. The NFT mint will be on OpenSea, through the one link @coinnibalfun posts.',
-      'Nobody from Coinnibal will ever ask for your seed phrase.',
     ]);
     expect(c.closing).toMatchObject({ follow: '@coinnibalfun', href: 'https://x.com/coinnibalfun' });
     const wallet = JSON.stringify(c.sections.find((s) => s.id === 'wallet'));
@@ -486,7 +485,7 @@ describe('player guide addresses', () => {
     }
   }, 20_000);
 
-  it('ends with the closing block beside Back to top: the official links, the seed-phrase line, the X account', () => {
+  it('ends with the closing block beside Back to top: the official links and the X account (the seed-phrase rule is said once in its chapter)', () => {
     render(
       <Kb theme="paper">
         <DocsPage />
@@ -494,7 +493,7 @@ describe('player guide addresses', () => {
     );
     const foot = document.querySelector('.dc-foot') as HTMLElement;
     expect(foot.textContent).toContain('The NFT mint will be on OpenSea, through the one link @coinnibalfun posts.');
-    expect(foot.textContent).toContain('Nobody from Coinnibal will ever ask for your seed phrase.');
+    expect(foot.textContent).not.toMatch(/seed phrase/);
     expect(within(foot).getByRole('link', { name: /@coinnibalfun/ }).getAttribute('href')).toBe('https://x.com/coinnibalfun');
     expect(within(foot).getByRole('button', { name: en0.backToTop })).toBeTruthy();
   }, 20_000);

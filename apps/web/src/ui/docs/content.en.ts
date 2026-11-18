@@ -110,12 +110,10 @@ export const docsEn = (
       caption: `A ticket of ${num(F.example.entry)} ${symbol}, worth ${num(F.example.cashout)} ${symbol} at the bell`,
     },
     backToTop: 'Back to top',
-    // the guide’s last word: the links to trust and the one rule that keeps a wallet safe (beside "Back to top")
+    // the guide’s last word: the links to trust (beside "Back to top"; the seed-phrase rule is the wallet chapter’s, and
+    // the footer right under this says it again, so it is not said a third time here)
     closing: {
-      lines: [
-        `The only official links are ${site} and @${x} on X. The NFT mint will be on OpenSea, through the one link @${x} posts.`,
-        'Nobody from Coinnibal will ever ask for your seed phrase.',
-      ],
+      lines: [`The only official links are ${site} and @${x} on X. The NFT mint will be on OpenSea, through the one link @${x} posts.`],
       follow: `@${x}`,
       href: `https://x.com/${x}`,
     },
@@ -337,12 +335,12 @@ export const docsEn = (
               ['Power-up packs', 'Full price', `${SH.holderDiscountPct}% off`],
               ['Power-ups per round in a paid room', String(SH.arenaUses), String(SH.arenaUses + SH.holderExtraUses)],
               ['Private room', `Paid in ${GAS_SYMBOL}`, `1 free a day, up to ${CUSTOM_CAPACITY_TIER} players`],
-              ['Coin look', 'Standard skins', 'Also the NFT skin and a holder badge'],
+              ['Coin look', 'Standard skins', 'The NFT skin and a holder badge'],
             ],
           },
           {
             kind: 'p',
-            text: 'Each NFT lends its perks to one open ticket at a time, and its free room and power-up discount to one wallet a day.',
+            text: 'One NFT covers one open ticket at a time. Its free room and power-up discount go to one wallet a day.',
           },
         ],
       },
@@ -378,7 +376,7 @@ export const docsEn = (
       {
         id: 'fair',
         title: 'Contract and server',
-        lede: 'Tickets, vaults and fees are held to the contract. The game itself runs on our server.',
+        lede: 'The contract keeps the ticket money and caps the fee. The game itself runs on our server.',
         blocks: [
           {
             kind: 'compare',
@@ -393,7 +391,7 @@ export const docsEn = (
               ],
             },
             right: {
-              title: 'On the server, so you trust it',
+              title: 'On our server, so you trust us',
               items: [
                 'The game itself: movement, who ate whom, and the value of each coin at the bell.',
                 `The dollar price of the game token, set by the team. It decides how many ${symbol} a ticket or a pack costs.`,

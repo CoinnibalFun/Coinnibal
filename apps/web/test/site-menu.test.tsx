@@ -51,6 +51,15 @@ describe('the phone menu', () => {
       'Where you’ll apply for the whitelist.',
       'Where communities ask for WL spots.',
     ]);
+    // a tip shown by a plain hover goes away on Escape even when the focus is elsewhere, and comes back next time
+    const wl = soon[1].parentElement!;
+    fireEvent.pointerEnter(wl);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(wl.hasAttribute('data-hush')).toBe(true);
+    fireEvent.pointerLeave(wl);
+    expect(wl.hasAttribute('data-hush')).toBe(false);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(wl.hasAttribute('data-hush')).toBe(false);
     // wide screens: the project's X account at the end of the nav
     expect(screen.getByRole('link', { name: '@coinnibalfun on X' }).getAttribute('href')).toBe('https://x.com/coinnibalfun');
     // on a phone the menu sheet holds the guide and X, each with a line on what is there, then the closed parts with

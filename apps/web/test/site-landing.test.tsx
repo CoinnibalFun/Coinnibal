@@ -66,7 +66,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(screen.getByText('How many NFTs are there?')).toBeTruthy();
     expect(screen.getByText('Is every NFT different?')).toBeTruthy();
     // the shared skin is one gold look, not the holder's own NFT art
-    expect(why.textContent).toContain('Gold NFT skin and a holder badge');
+    expect(why.textContent).toContain('The NFT skin and a holder badge');
     expect(why.textContent).not.toMatch(/wears your NFT/);
     // the four rooms, named by price, priced in US dollars (paid in the game token); the $10 one for NFT holders
     for (const [name, fee] of [['$1 Room', '$1'], ['$3 Room', '$3'], ['$5 Room', '$5'], ['$10 Room', '$10']]) {
@@ -85,7 +85,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(screen.getAllByRole('link', { name: /@coinnibalfun/ }).some((a) => a.getAttribute('href') === 'https://x.com/coinnibalfun')).toBe(true);
     // no way into the closed game anywhere on the page, and no "live" round
     expect(document.querySelector('a[href="/play"], a[href="/faucet"]')).toBeNull();
-    expect(document.body.textContent).not.toMatch(/Round 418/);
+    expect(document.body.textContent).not.toMatch(/Live now/);
     // sound is off until the visitor turns it on
     expect(screen.getByRole('button', { name: /Sound off/ }).getAttribute('aria-pressed')).toBe('false');
   });
@@ -94,7 +94,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, collabOpen: true, gameAccess: 'public' } } }));
     render(<Landing />);
     await waitFor(() => expect(within(document.querySelector('main')!).getByRole('link', { name: /^Play$/ }).getAttribute('href')).toBe('/play'));
-    expect(screen.getByText('Round 418 · live')).toBeTruthy();
+    expect(screen.getByText('Live now')).toBeTruthy();
     expect(screen.getByText('WL → Mint → Play')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /Collab/ })[0].getAttribute('href')).toBe('/collab');
   });
@@ -139,7 +139,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(how.className).toContain('kb-btn--primary');
     expect(screen.getByTestId('ld-x-link').getAttribute('href')).toBe('https://x.com/coinnibalfun');
     expect(document.querySelector(closedLinks)).toBeNull();
-    expect(document.body.textContent).not.toMatch(/Join the WL|Go to the mint|WL → Mint → Play|Round 418|WL is open|Play now/);
+    expect(document.body.textContent).not.toMatch(/Join the WL|Go to the mint|WL → Mint → Play|Live now|WL is open|Play now/);
     expect(document.querySelector('.ld-flow, .ld-flowline, .ld-nft__ctas')).toBeNull();
     // the NFT's perks stay: they are information
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
@@ -203,11 +203,11 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     const answer = (q: string) => faq.find((f) => f.querySelector('.ld-qa__text')?.textContent === q)!.querySelector('.ld-qa__a')!.textContent;
     // the guide's rule (the NFT isn't a ticket), told so it can't read as "the NFT is worthless"; the $10 Room is told by
     // its ticket and the comparison
-    expect(answer('Do I need the NFT to play?')).toBe('No. You play with the ticket you buy, and the NFT only adds perks. It’s never spent or put at risk in a round.');
+    expect(answer('Do I need the NFT to play?')).toBe('No. The NFT only adds perks, and it’s never spent or put at risk in a round.');
     // the team asked for the NFT's questions: what it gives (D11), how many, every one different. Their answers add what
     // the comparison above does not say: how long the perks last and what one NFT covers, where the mint is, and that
     // rarity changes no perk
-    expect(answer('What does the Coinnibal NFT give me?')).toBe('The perks above, while it’s in your wallet. One NFT covers one open ticket at a time, and its daily free room and power-up discount go to one wallet.');
+    expect(answer('What does the Coinnibal NFT give me?')).toBe('The perks above, while it’s in your wallet. One NFT covers one open ticket at a time, and its free room and power-up discount go to one wallet a day.');
     expect(faq.find((f) => f.querySelector('.ld-qa__text')?.textContent === 'What does the Coinnibal NFT give me?')!.querySelector('a')?.getAttribute('href')).toBe('#why-nft');
     expect(answer('How many NFTs are there?')).toBe('3,333 in all. The mint will be on OpenSea, and the only link to trust is the one @coinnibalfun posts.');
     expect(answer('Is every NFT different?')).toBe('Yes, every one is a coin character of its own. Some are rarer than others, but rarity never changes the perks.');
@@ -308,7 +308,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
   it('a closed page says "not open yet" (never the real page or a 404); the same path opens when the admin opens it', async () => {
     for (const [path, line, title] of [
       // the mint: nothing about when the NFT is minted, only where (and which link to trust, in a callout of its own)
-      ['/mint', 'The press is still locked, and the queue is already out the door. When it opens, the mint will be on OpenSea.', "The mint isn’t open yet"],
+      ['/mint', 'The press is still chained shut. When it opens, the mint will be on OpenSea.', "The mint isn’t open yet"],
       // the faucet is hidden: a neutral notice that never names it
       ['/faucet', 'There’s nothing here for now. The guide explains how the game works.', 'Not open yet'],
       ['/collab', 'Run a community? This is where you’ll ask for WL spots. @coinnibalfun will say when it opens.', "Collabs aren’t open yet"],

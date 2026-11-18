@@ -290,9 +290,9 @@ export class SiteApi {
     return false;
   }
 
-  /** The settings everyone can read; `gameAccess` is the effective value. */
+  /** The settings everyone can read; `gameAccess` is the effective value, `wlHadEntries` whether anyone has applied. */
   publicSettings(): SiteSettings {
-    return { ...this.store.settings, gameAccess: this.gameAccess() };
+    return { ...this.store.settings, gameAccess: this.gameAccess(), wlHadEntries: this.store.wlCount > 0 };
   }
 
   private baseUrl(req: IncomingMessage): string {

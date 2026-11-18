@@ -42,6 +42,11 @@ export interface SiteSettings {
   xHandle: string;
   /** The pinned launch post the `engage_x` task points at; null until it is live. */
   launchPostUrl: string | null;
+  /**
+   * Someone has applied to the WL. Only the public read (`/api/site/settings`) carries it, never a switch: a closed
+   * /wl offers a sign-in to earlier applicants only when there are any.
+   */
+  wlHadEntries?: boolean;
 }
 
 export const SITE_SETTINGS_DEFAULT: SiteSettings = {

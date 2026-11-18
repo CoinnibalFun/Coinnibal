@@ -204,8 +204,8 @@ describe('site API', () => {
   describe('public settings and tasks', () => {
     it('serves the defaults; the launch-post task opens when the link is set', async () => {
       const s = await h.call('GET', '/api/site/settings');
-      // the harness opened the WL; a fresh server has everything closed
-      expect(s.body.settings).toEqual({ wlOpen: true, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null });
+      // the harness opened the WL; a fresh server has everything closed (and nobody has applied yet)
+      expect(s.body.settings).toEqual({ wlOpen: true, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null, wlHadEntries: false });
       expect(new SiteStore(null).settings).toEqual({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null });
       // the mint page switch: a boolean like the other two
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { mintOpen: 'yes' } })).body.field).toBe('mintOpen');
@@ -255,6 +255,8 @@ describe('site API', () => {
       const w = wallet();
       const r = await h.call('POST', '/api/site/wl', { wallet: w, body: wlBody('@Alice') });
       expect(r.status).toBe(201);
+      // the public read now says someone has applied (a closed /wl then offers earlier applicants a sign-in)
+      expect((await h.call('GET', '/api/site/settings')).body.settings.wlHadEntries).toBe(true);
       const entry = r.body.entry as WlEntryPublic;
       expect(entry).toMatchObject({ wallet: w, xHandle: 'alice', status: 'pending' });
       expect(entry.tasks.find((t) => t.id === 'wallet')?.answer).toBe(w);
