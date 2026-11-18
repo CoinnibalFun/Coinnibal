@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CoinCharacter, Kb, RingScene, Sticker } from '../../design';
+import { CoinCharacter, Kb, PlateLabel, RingScene, Sticker } from '../../design';
 import { useDoors } from '../doors';
 import { useSiteSettings, xProfile } from '../settings';
 import { SiteLinkButton, SitePage, XIcon } from '../Shell';
@@ -12,9 +12,8 @@ import { setPageHead } from '../seo';
 
 /*
  * The closed / holders-only page of `/play`: the site shell, the wallet sign-in and (holders mode, while it is
- * open) the WL link. Never the site's mint page: the NFT is not minted here. Closed: the launch order in one
- * sentence, then the same buttons as the site's other closed pages (the guide, home) and the project's X account.
- * One label: the card's heading (no title strip, no eyebrow); the card stands straight on the night ring.
+ * open) the WL link. Never the site's mint page: the NFT is not minted here. Closed: one plain sentence, then the
+ * same buttons as the site's other closed pages (the guide, home) and the project's X account.
  * Loaded only when the gate stays shut (PlayGate lazy-loads it), so an open arena never downloads it.
  */
 
@@ -40,10 +39,12 @@ export function ArenaSoon({ holders = false, maintenance = false, onSignedIn }: 
   }, [closed, t]);
   return (
     <SitePage className="pg-root">
+      <PlateLabel numeral="III" title={holders ? t('pg.plateHolders') : maintenance ? t('pg.plateMaint') : t('pg.plate')} aside="/play" className="pg-platelabel" />
       <Kb theme="night" className="pg-night">
         <RingScene time="night" variant="full" className="pg-scene">
           <div className="pg-wrap">
-            <Sticker tone="cream" lift="lg" pad="lg" round="lg" className="pg-card" as="section">
+            <Sticker tone="cream" lift="lg" pad="lg" round="lg" tape className="pg-card" as="section">
+              <span className="kicker pg-kicker">{holders ? t('pg.kickerHolders') : maintenance ? t('pg.kickerMaint') : t('pg.kicker')}</span>
               {holders ? (
                 <h1 className="pg-h display">
                   {t('pg.hHolders1')}
@@ -57,7 +58,11 @@ export function ArenaSoon({ holders = false, maintenance = false, onSignedIn }: 
                   <em>{t('pg.hMaint2')}</em>
                 </h1>
               ) : (
-                <h1 className="pg-h display">{t('pg.h1')}</h1>
+                <h1 className="pg-h display">
+                  {t('pg.h1')}
+                  <br />
+                  <em>{t('pg.h2')}</em>
+                </h1>
               )}
               {holders ? (
                 <>

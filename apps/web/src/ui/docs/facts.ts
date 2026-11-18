@@ -125,32 +125,26 @@ export const FACTS: DocsFacts = {
 
 /**
  * A block of a guide section. Text may link to another section with `[label](#id)` (content.en.ts `see`): in the
- * section ledes, paragraphs, list items, steps, table cells and the controls' actions.
+ * section ledes, paragraphs, list items and the controls' actions.
  */
 export type DocBlock =
   | { kind: 'p'; text: string }
-  /** A small heading inside a long section (private rooms, linking X). */
-  | { kind: 'h'; text: string }
   /** Bulleted list; an item may lead with a bold term. */
   | { kind: 'list'; items: (string | { term: string; text: string })[] }
-  /** Numbered steps to follow in order. */
-  | { kind: 'steps'; label: string; items: string[] }
   /** Key → action rows (controls). */
   | { kind: 'keys'; rows: { key: string; action: string }[]; caption: string }
-  /**
-   * Open table (no box). `numeric`: columns of figures (mono, right on wide screens); `keys`: a column of keys drawn
-   * as key caps; `stack`: on phones each row becomes a small block that names its columns; `quiet`: the caption is
-   * read by screen readers only (where the chapter's title already says it).
-   */
-  | { kind: 'table'; caption: string; head: string[]; rows: string[][]; numeric?: number[]; keys?: number; stack?: boolean; quiet?: boolean }
-  /** The moving diagram of how value moves: ticket, vault, wallet, fee. */
-  | { kind: 'flow'; label: string; diagram: { ticket: string; vault: string; wallet: string; fee: string } }
+  /** Small cards, each led by its key (the power-ups): a title, a line of text and a muted line (`meta`). */
+  | { kind: 'cards'; label: string; items: { key: string; title: string; text: string; meta?: string }[] }
+  /** Newspaper table. `stack`: on phones each row becomes a small card (a comparison with long cells). */
+  | { kind: 'table'; caption: string; head: string[]; rows: string[][]; numeric?: number[]; stack?: boolean }
+  /** Boxes joined by arrows: how value moves. */
+  | { kind: 'flow'; label: string; steps: { title: string; text: string }[]; diagram?: { ticket: string; vault: string; wallet: string; fee: string } }
   /** The worked payout example as a receipt (at the server's fee rate). */
   | { kind: 'fee-example' }
-  /** Two columns compared side by side (open, no boxes). */
+  /** Two columns compared side by side. */
   | { kind: 'compare'; left: { title: string; items: string[] }; right: { title: string; items: string[] } }
-  /** A boxed notice (the risk before buying a ticket). */
-  | { kind: 'note'; tone: 'warn' | 'info'; title: string; text: string }
+  /** A boxed notice; `stamp` is printed on it. */
+  | { kind: 'note'; tone: 'warn' | 'info'; stamp: string; title: string; text: string }
   /** Questions and answers (disclosure widgets). */
   | { kind: 'faq'; items: { q: string; a: string }[] };
 
@@ -158,21 +152,21 @@ export interface DocSection {
   /** Anchor id (prefixed `docs-` on the page). */
   id: string;
   title: string;
-  /** A line under the title, only where it adds something the title does not say. */
-  lede?: string;
-  /** The three-panel comic that opens the section (captions; the drawings live in Comics.tsx). Only where a picture
-   * says it better than words: the basic rule and wallet safety. */
+  /** One-line summary under the title. */
+  lede: string;
+  /** The three-panel comic that opens the section (captions; the drawings live in Comics.tsx). */
   strip?: DocStrip;
   blocks: DocBlock[];
 }
 
-/** A section's comic strip: a label (read by screen readers) and one caption per panel. */
+/** A section's comic strip: a label and one caption per panel. */
 export interface DocStrip {
   label: string;
   panels: [string, string, string];
 }
 
 export interface DocsContent {
+  kicker: string;
   title: string;
   deck: string;
   tocLabel: string;
@@ -191,9 +185,8 @@ export interface DocsContent {
   };
   /** The fee rates on profit the guide quotes: the server's (`ChainStatus.fees`), else the contract defaults. */
   rates: FeeRates;
+  colophon: string;
   backToTop: string;
-  /** The guide's last word, beside "Back to top": the official links and the seed-phrase rule, and the X account. */
-  closing: { lines: string[]; follow: string; href: string };
   sections: DocSection[];
   /** Formats a percentage given in basis points (`500` → `%5` / `5%`). */
   pct: (bps: number) => string;

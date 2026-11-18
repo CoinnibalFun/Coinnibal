@@ -317,11 +317,6 @@ export class SiteStore {
     return { ...this.settingsV };
   }
 
-  /** WL entries on file (the public settings say whether there are any). */
-  get wlCount(): number {
-    return this.wl.length;
-  }
-
   updateSettings(body: Record<string, unknown>): SiteSettings {
     const next = { ...this.settingsV };
     for (const key of Object.keys(body)) {

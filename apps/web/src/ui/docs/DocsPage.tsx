@@ -1,10 +1,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { CoinCharacter, Icon, Receipt, useReducedMotion, type ReceiptLine } from '../../design';
+import { CoinCharacter, Icon, Receipt, Rule, Stamp, useOffscreenPause, useReducedMotion, type ReceiptLine } from '../../design';
 import { ourXHandle, useT } from '../../i18n';
 import { arenaRates } from '../../wallet/ticket';
 import { useUi } from '../../store';
 import { siteHost } from '../../site/settings';
 import { useTokenText } from '../lobby/useLobby';
+import { PageHead } from '../PageHead';
 import { docsEn } from './content.en';
 import { payoutExample, type DocBlock, type DocsContent } from './facts';
 import { ComicStrip } from './Comics';
@@ -33,28 +34,20 @@ function writeHash(id: string | null): void {
 /** A plain click (not a new tab or window): the guide handles it in place. */
 const plainClick = (e: MouseEvent): boolean => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
-/** A chapter is the one being read once its heading passes this line: 30% of the way down the window (never above the
- * sticky header and a little air), so the contents move on while the heading is still in plain view. */
-const readLine = (): number => Math.max(120, window.innerHeight * 0.3);
-
-/** Heading levels the guide uses: its title, then its sections one level under it, then their small heads. */
-type Level = 1 | 2;
-const H = { 1: 'h1', 2: 'h2', 3: 'h3', 4: 'h4' } as const;
+/** A section is the one being read once its top passes this line: the 75px header plus about one section gap, so the
+ * mark moves on when the previous section has gone under the header, not 50-80px later. */
+const READ_LINE = 160;
 
 /**
- * The guide (`/docs`, `#docs`): how to play, rooms and tickets, how value moves, rounds and the fee on
+ * The player guide (`/docs`, `#docs`): how to play, rooms and tickets, how value moves, rounds and the fee on
  * profit, power-ups, the Coinnibal NFT, the game token, the contract and the server, wallet safety, the profile and X,
  * and what happens when something goes wrong. Typed content lives in content.en.ts; every number comes from the code
  * through facts.ts, and the fee rates are the server's (`ChainStatus.fees`) when they are known.
  *
- * One label per section: its title (and a line under it only where that line adds something). Numbers sit in tables,
- * cause and effect in short prose; comics only where a picture says it better (the basic rule, wallet safety).
- * `level`: the title's heading level (1 on `/docs`, where the guide is the page; 2 inside the lobby).
- *
  * Every section has an address (`/docs#docs-payout`): a contents entry or an in-text link scrolls to it and writes it
  * into the address bar, and opening such a link lands on the section. The contents mark the section being read.
  */
-export function DocsPage({ level = 2 }: { level?: Level }) {
+export function DocsPage() {
   const tok = useTokenText();
   useT(); // re-renders when the project's X handle arrives with the site settings
   const x = ourXHandle();
@@ -79,7 +72,7 @@ export function DocsPage({ level = 2 }: { level?: Level }) {
   // (`performance.now()` deadline; 0: unlocked)
   const lockUntil = useRef(0);
 
-  // the section being read: the last one whose heading has passed the read line (the last one at the very bottom)
+  // the section being read: the last one whose top has passed the read line (the last one at the very bottom)
   useEffect(() => {
     let frame = 0;
     let idle = 0;
@@ -92,10 +85,9 @@ export function DocsPage({ level = 2 }: { level?: Level }) {
         return;
       }
       let cur = ids[0];
-      const line = readLine();
       for (const id of ids) {
-        const el = document.getElementById(`docs-${id}-h`) ?? document.getElementById(`docs-${id}`);
-        if (el && el.getBoundingClientRect().top <= line) cur = id;
+        const el = document.getElementById(`docs-${id}`);
+        if (el && el.getBoundingClientRect().top <= READ_LINE) cur = id;
       }
       setActive(cur);
     };
@@ -156,7 +148,7 @@ export function DocsPage({ level = 2 }: { level?: Level }) {
       lockUntil.current = performance.now() + (reduced ? 0 : 2500);
       setActive(id);
       el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
-      el.querySelector<HTMLElement>('.dc-sec__title')?.focus({ preventScroll: true });
+      el.querySelector<HTMLElement>('h3')?.focus({ preventScroll: true });
       writeHash(id);
     },
     [reduced],
@@ -169,30 +161,27 @@ export function DocsPage({ level = 2 }: { level?: Level }) {
     writeHash(null);
   };
 
-  const Title = H[level];
-  const SecTitle = H[(level + 1) as 2 | 3];
   return (
     <div className="dc-page">
-      <header className="dc-head">
-        <div className="dc-head__text">
-          <Title className="dc-head__title" id="dc-title" tabIndex={-1}>
-            {c.title}
-          </Title>
-          <p className="dc-head__deck">{c.deck}</p>
-        </div>
-        {/* the basic rule, acted out: a big coin closing in on a smaller one (decoration) */}
-        <div className="dc-head__art" aria-hidden="true">
-          <CoinCharacter paint="cyan" mood="scared" size={70} look={[-4, 0]} sweat feet ground className="dc-head__prey" />
-          <CoinCharacter paint="sun" mood="chomp" size={136} look={[-4, 1]} feet ground bob={!reduced} chewing={!reduced} className="dc-head__eater" />
-        </div>
-      </header>
+      <PageHead
+        kicker={c.kicker}
+        title={c.title}
+        deck={c.deck}
+        id="dc-title"
+        aside={
+          <span className="dc-head__art">
+            <CoinCharacter paint="cream" mood="smug" size={124} look={[-3, 1]} feet ground bob />
+            <Stamp text="Guide" tone="teal" round size="md" rotate={-8} className="dc-head__stamp" />
+          </span>
+        }
+      />
       <div className="dc-layout">
-        <nav className={`dc-toc${tocOpen ? ' is-open' : ''}`} aria-label={c.tocLabel}>
-          <span className="dc-toc__label">{c.tocLabel}</span>
+        <nav className={`dc-toc kb-island${tocOpen ? ' is-open' : ''}`} aria-label={c.tocLabel}>
+          <span className="dc-toc__label mono">{c.tocLabel}</span>
           {/* phones: the contents fold into one button, so the first chapter starts on the first screen */}
           <button type="button" className="dc-toc__toggle" aria-expanded={tocOpen} aria-controls="dc-toc-list" onClick={() => setTocOpen((o) => !o)}>
-            <span>{c.tocLabel}</span>
-            <span className="dc-toc__count num">{c.sections.length}</span>
+            <span className="mono">{c.tocLabel}</span>
+            <span className="dc-toc__count mono">{c.sections.length}</span>
             <Icon name="chevron" size={18} className="dc-toc__chev" />
           </button>
           <ol className="dc-toc__list" id="dc-toc-list">
@@ -208,7 +197,7 @@ export function DocsPage({ level = 2 }: { level?: Level }) {
                     jump(s.id);
                   }}
                 >
-                  <span className="dc-toc__no num" aria-hidden="true">
+                  <span className="dc-toc__no mono" aria-hidden="true">
                     {String(i + 1).padStart(2, '0')}
                   </span>
                   <span className="dc-toc__title">{s.title}</span>
@@ -222,52 +211,30 @@ export function DocsPage({ level = 2 }: { level?: Level }) {
           {c.sections.map((s, i) => (
             <section key={s.id} id={`docs-${s.id}`} className="dc-sec" aria-labelledby={`docs-${s.id}-h`}>
               <header className="dc-sec__head">
-                {/* the chapter's number on a coin (the same coin for every chapter: it numbers, nothing more) */}
-                <span className="dc-sec__no num" aria-hidden="true">
+                <span className="dc-sec__no mono" aria-hidden="true">
                   {String(i + 1).padStart(2, '0')}
                 </span>
-                <SecTitle id={`docs-${s.id}-h`} className="dc-sec__title" tabIndex={-1}>
-                  {s.title}
-                </SecTitle>
-                {s.lede && (
+                <div className="dc-sec__titles">
+                  <h3 id={`docs-${s.id}-h`} className="dc-sec__title" tabIndex={-1}>
+                    {s.title}
+                  </h3>
                   <p className="dc-sec__lede">
                     <RichText text={s.lede} jump={jump} />
                   </p>
-                )}
+                </div>
               </header>
               <div className="dc-sec__body">
                 {s.strip && <ComicStrip id={s.id} strip={s.strip} />}
                 {s.blocks.map((b, j) => (
-                  <Block key={j} block={b} c={c} jump={jump} sub={H[(level + 2) as 3 | 4]} />
+                  <Block key={j} block={b} c={c} jump={jump} />
                 ))}
               </div>
             </section>
           ))}
 
-          {/* the guide's last word: the links to trust and the seed-phrase rule, then the way back up (the last chapter's
-              table closes with its own rule: no second rule under it) */}
+          <Rule variant="double" />
           <footer className="dc-foot">
-            <div className="dc-close">
-              {c.closing.lines.map((l) => {
-                // the X account is a link where the line first names it
-                const at = l.indexOf(c.closing.follow);
-                return (
-                  <p key={l} className="dc-close__line">
-                    {at < 0 ? (
-                      l
-                    ) : (
-                      <>
-                        {l.slice(0, at)}
-                        <a className="dc-see dc-close__x" href={c.closing.href} target="_blank" rel="noreferrer">
-                          {c.closing.follow}
-                        </a>
-                        {l.slice(at + c.closing.follow.length)}
-                      </>
-                    )}
-                  </p>
-                );
-              })}
-            </div>
+            {c.colophon && <p className="dc-foot__text">{c.colophon}</p>}
             <button type="button" className="dc-top" onClick={toTop}>
               <Icon name="arrow" size={18} className="dc-top__icon" />
               <span>{c.backToTop}</span>
@@ -311,7 +278,7 @@ function RichText({ text, jump }: { text: string; jump: (id: string) => void }):
   return out.map((n, i) => <Fragment key={i}>{n}</Fragment>);
 }
 
-function Block({ block: b, c, jump, sub: Sub }: { block: DocBlock; c: DocsContent; jump: (id: string) => void; sub: 'h3' | 'h4' }) {
+function Block({ block: b, c, jump }: { block: DocBlock; c: DocsContent; jump: (id: string) => void }) {
   switch (b.kind) {
     case 'p':
       return (
@@ -319,8 +286,6 @@ function Block({ block: b, c, jump, sub: Sub }: { block: DocBlock; c: DocsConten
           <RichText text={b.text} jump={jump} />
         </p>
       );
-    case 'h':
-      return <Sub className="dc-sub">{b.text}</Sub>;
     case 'list':
       return (
         <ul className="dc-list">
@@ -337,30 +302,33 @@ function Block({ block: b, c, jump, sub: Sub }: { block: DocBlock; c: DocsConten
           )}
         </ul>
       );
-    case 'steps':
-      return (
-        <ol className="dc-steps" aria-label={b.label}>
-          {b.items.map((it, i) => (
-            <li key={i}>
-              <RichText text={it} jump={jump} />
-            </li>
-          ))}
-        </ol>
-      );
     case 'keys':
       return <KeysFig caption={b.caption} rows={b.rows} jump={jump} />;
-    case 'table': {
-      // a phone's stacked row names its columns only when there are more than two (two read as "this: that")
-      const named = b.stack && b.head.length > 2;
+    case 'cards':
       return (
-        <div className="dc-table-wrap">
-          <table className={`dc-table${b.stack ? ' dc-table--stack' : ''}${b.keys !== undefined ? ' dc-table--keys' : ''}`}>
-            <caption className={b.quiet ? 'dc-sr' : undefined}>{b.caption}</caption>
+        <ul className="dc-cards" aria-label={b.label}>
+          {b.items.map((it, i) => (
+            <li key={it.title} className="dc-card kb-island">
+              <div className="dc-card__head">
+                <KeyCaps keys={it.key} i={i} />
+                <h4 className="dc-card__title">{it.title}</h4>
+              </div>
+              <p className="dc-card__text">{it.text}</p>
+              {it.meta && <p className="dc-card__meta mono">{it.meta}</p>}
+            </li>
+          ))}
+        </ul>
+      );
+    case 'table':
+      return (
+        <div className="dc-table-wrap kb-island">
+          <table className={`dc-table${b.stack ? ' dc-table--stack' : ''}`}>
+            <caption className="mono">{b.caption}</caption>
             <thead>
               <tr>
                 {b.head.map((h, i) => (
                   <th key={i} scope="col" className={b.numeric?.includes(i) ? 'is-num' : undefined}>
-                    {h || <span className="dc-sr">{b.caption}</span>}
+                    {h}
                   </th>
                 ))}
               </tr>
@@ -369,10 +337,9 @@ function Block({ block: b, c, jump, sub: Sub }: { block: DocBlock; c: DocsConten
               {b.rows.map((r, i) => (
                 <tr key={i}>
                   {r.map((cell, j) => (
-                    // `data-label`: a `stack` table's row becomes a block on phones that names its columns (docs.css)
-                    // (the name beside a key cap needs no label: the cap leads it)
-                    <td key={j} className={b.numeric?.includes(j) ? 'is-num num' : undefined} data-label={named && j > 0 && j !== (b.keys ?? -1) + 1 ? b.head[j] : undefined}>
-                      {j === b.keys ? <KeyCaps keys={cell} /> : <RichText text={cell} jump={jump} />}
+                    // `data-label`: a `stack` table's row becomes a card on phones that names its columns (docs.css)
+                    <td key={j} className={b.numeric?.includes(j) ? 'is-num mono' : undefined} data-label={b.head[j]}>
+                      {cell}
                     </td>
                   ))}
                 </tr>
@@ -381,17 +348,35 @@ function Block({ block: b, c, jump, sub: Sub }: { block: DocBlock; c: DocsConten
           </table>
         </div>
       );
-    }
     case 'flow':
-      return <ValueFlow labels={b.diagram} label={b.label} />;
+      return (
+        <>
+          {b.diagram && <ValueFlow labels={b.diagram} />}
+          <ol className="dc-flow" aria-label={b.label}>
+            {b.steps.map((s, i) => (
+              <li key={i} className="dc-flow__step kb-island">
+                <span className="dc-flow__no num" aria-hidden="true">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <span className="dc-flow__title mono">{s.title}</span>
+                <span className="dc-flow__text">{s.text}</span>
+                {i < b.steps.length - 1 && <Icon name="arrow" size={20} className="dc-flow__arrow" />}
+              </li>
+            ))}
+          </ol>
+        </>
+      );
     case 'fee-example':
       return <FeeExample c={c} />;
     case 'compare':
       return (
         <div className="dc-compare">
           {[b.left, b.right].map((col, i) => (
-            <div key={i} className="dc-compare__col">
-              <Sub className="dc-compare__title">{col.title}</Sub>
+            <div key={i} className={`dc-compare__col kb-island${i === 0 ? ' is-chain' : ' is-server'}`}>
+              <h4 className="dc-compare__title">
+                <Icon name={i === 0 ? 'lock' : 'globe'} size={18} />
+                {col.title}
+              </h4>
               <ul className="dc-list">
                 {col.items.map((it, j) => (
                   <li key={j}>{it}</li>
@@ -403,8 +388,9 @@ function Block({ block: b, c, jump, sub: Sub }: { block: DocBlock; c: DocsConten
       );
     case 'note':
       return (
-        <aside className={`dc-note is-${b.tone}`} aria-label={b.title}>
-          <Sub className="dc-note__title">{b.title}</Sub>
+        <aside className={`dc-note kb-island is-${b.tone}`} aria-label={b.title}>
+          <Stamp text={b.stamp} tone={b.tone === 'warn' ? 'red' : 'teal'} size="sm" rotate={-4} className="dc-note__stamp" />
+          <h4 className="dc-note__title">{b.title}</h4>
           <p className="dc-note__text">{b.text}</p>
         </aside>
       );
@@ -412,7 +398,7 @@ function Block({ block: b, c, jump, sub: Sub }: { block: DocBlock; c: DocsConten
       return (
         <div className="dc-faq">
           {b.items.map((it, i) => (
-            <details key={i} className="dc-faq__item">
+            <details key={i} className="dc-faq__item kb-island">
               <summary className="dc-faq__q">
                 <span>{it.q}</span>
                 <Icon name="chevron" size={18} className="dc-faq__chev" />
@@ -427,17 +413,20 @@ function Block({ block: b, c, jump, sub: Sub }: { block: DocBlock; c: DocsConten
   }
 }
 
-/** The controls: each key as a cap beside what it does. A row's caps press down while the pointer is on the row. */
+/** The controls as key stickers that press themselves one after another (paused off screen). */
 function KeysFig({ caption, rows, jump }: { caption: string; rows: { key: string; action: string }[]; jump: (id: string) => void }) {
+  const [ref, visible] = useOffscreenPause<HTMLElement>();
   return (
-    <div className="dc-table-wrap">
-      <table className="dc-keys">
-        <caption>{caption}</caption>
+    <figure ref={ref} className="dc-keys-fig kb-island" data-paused={!visible || undefined}>
+      <figcaption className="dc-cap mono" id="dc-keys-cap">
+        {caption}
+      </figcaption>
+      <table className="dc-keys" aria-labelledby="dc-keys-cap">
         <tbody>
-          {rows.map((r) => (
+          {rows.map((r, i) => (
             <tr key={r.key}>
               <th scope="row">
-                <KeyCaps keys={r.key} />
+                <KeyCaps keys={r.key} i={i} />
               </th>
               <td>
                 <RichText text={r.action} jump={jump} />
@@ -446,15 +435,15 @@ function KeysFig({ caption, rows, jump }: { caption: string; rows: { key: string
           ))}
         </tbody>
       </table>
-    </div>
+    </figure>
   );
 }
 
 /**
  * A row's keys as separate caps: `Space / left click` → [Space] / [Left click], `Tab (hold)` → [Tab] (hold). A cap
- * never wraps inside itself.
+ * never wraps inside itself; the caps of a row press together (`--i`).
  */
-function KeyCaps({ keys }: { keys: string }) {
+function KeyCaps({ keys, i }: { keys: string; i: number }) {
   const note = /^(.+?)\s+(\(.+\))$/.exec(keys);
   const caps = (note ? note[1] : keys).split(' / ');
   return (
@@ -462,7 +451,9 @@ function KeyCaps({ keys }: { keys: string }) {
       {caps.map((k, j) => (
         <Fragment key={j}>
           {j > 0 && <span className="dc-keycaps__or">/</span>}
-          <kbd className="dc-kbd num">{k.charAt(0).toUpperCase() + k.slice(1)}</kbd>
+          <kbd className="dc-kbd mono" style={{ ['--i' as string]: i }}>
+            {k}
+          </kbd>
         </Fragment>
       ))}
       {note && <span className="dc-keycaps__note">{note[2]}</span>}
@@ -485,7 +476,7 @@ function FeeExample({ c }: { c: DocsContent }) {
   ];
   return (
     <figure className="dc-fee">
-      <figcaption className="dc-fee__cap">{r.caption}</figcaption>
+      <figcaption className="dc-fee__cap mono">{r.caption}</figcaption>
       <div className="dc-fee__slips">
         <Receipt title={r.title} meta={r.meta} lines={lines} footer={r.footer} className="dc-fee__slip" />
       </div>

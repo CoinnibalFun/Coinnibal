@@ -1,15 +1,16 @@
 import type { ChainStatus } from '@elymum/shared';
 import { useEffect } from 'react';
 import { SERVER } from '../config';
+import { PlateLabel } from '../design';
 import { useUi } from '../store';
 import { DocsPage } from '../ui/docs/DocsPage';
+import { useT } from '../i18n';
 import { SitePage } from './Shell';
+import '../ui/lobby/lobby.css';
 
-/**
- * `/docs`: the guide, public, inside the site (no game engine). The fee rate comes from `/api/config`. The guide's
- * own title is the page's heading (no title strip above it: the header's "Guide" already says where you are).
- */
+/** `/docs`: the player guide, public, inside the site (no game engine). The fee rate comes from `/api/config`. */
 export function DocsRoute() {
+  const t = useT();
   useEffect(() => {
     let live = true;
     fetch(`${SERVER.http}/api/config`)
@@ -24,8 +25,9 @@ export function DocsRoute() {
   }, []);
   return (
     <SitePage className="st-docs">
+      <PlateLabel numeral={8} title={t('site.docs.plate')} aside="/docs" className="st-docs__plate" />
       <div className="st-page">
-        <DocsPage level={1} />
+        <DocsPage />
       </div>
     </SitePage>
   );

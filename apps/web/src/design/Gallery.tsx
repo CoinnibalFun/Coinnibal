@@ -233,7 +233,7 @@ export function Gallery() {
       </Plate>
 
       {/* ── III: type ── */}
-      <Plate n={3} title="Type, set by hand" aside="Lilita One · DM Sans · Geist Mono">
+      <Plate n={3} title="Type, set by hand" aside="Fraunces · DM Sans · Geist Mono">
         <div className="gal-type">
           <div className="gal-type__display display">
             One emblem.
@@ -244,7 +244,7 @@ export function Gallery() {
           </div>
           <div className="gal-type__specs">
             <p className="kicker">Kicker · Geist Mono 12 · uppercase +0.08em</p>
-            <h2 className="gal-type__h2">Lilita One 400</h2>
+            <h2 className="gal-type__h2">Fraunces 800, SOFT 100</h2>
             <h3 className="gal-type__h3">Three small chores, then the feast.</h3>
             <p className="lede">DM Sans for everything you read. The ring noticed, and so did our follower count. Copy is short, specific and a little wry.</p>
             <p className="gal-type__body">

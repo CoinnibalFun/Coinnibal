@@ -1,9 +1,8 @@
 import type { ShareService } from './site/shares';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { pipeline } from 'node:stream';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION, isAppRoute } from '@elymum/shared';
+import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION } from '@elymum/shared';
 import { NonceLimitError, checksumAddress, type Auth, type SiweOrigin } from './auth';
 import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
@@ -35,8 +34,6 @@ const MIME: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
   '.m4a': 'audio/mp4',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
   '.webmanifest': 'application/manifest+json',
 };
 
@@ -134,20 +131,14 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   const base = resolve(root);
   let file = normalize(join(base, rel));
   if (file !== base && !file.startsWith(base + sep)) return false;
-  let fallback = false;
   if (!existsSync(file) || statSync(file).isDirectory()) {
     if (extname(rel)) return false;
     file = join(base, 'index.html'); // SPA fallback
     if (!existsSync(file)) return false;
-    fallback = true;
   }
-  // a path that is no page of the app (the route list is shared with the web router) is a real 404: the same
-  // index.html, which draws the not-found page, but crawlers and link checkers see the status
-  const status = fallback && !isAppRoute(rel) ? 404 : 200;
   const ext = extname(file);
-  // hashed bundle files never change; the page itself (also when it stands in for `/assets/<no file>`) always may
-  const immutable = !fallback && rel.startsWith('/assets/');
-  const headers: Record<string, string | number> = {
+  const immutable = rel.startsWith('/assets/');
+  res.writeHead(200, {
     'Content-Type': MIME[ext] ?? 'application/octet-stream',
     'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
     // the web app is never framed (clickjacking of wallet actions); scripts from this origin only (Vercel's old rule,
@@ -155,66 +146,10 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
     'X-Frame-Options': 'DENY',
     'Content-Security-Policy': WEB_CSP,
     'Referrer-Policy': 'strict-origin-when-cross-origin',
-  };
-  if (fallback) {
-    res.writeHead(status, headers);
-    if (req.method === 'HEAD') res.end();
-    else sendFile(file, res);
-    return true;
-  }
-  // a real file answers byte ranges: Safari and iOS play a <video> (the landing's gameplay loop) only from a server
-  // that does, probing with `Range: bytes=0-1` first
-  const size = statSync(file).size;
-  headers['Accept-Ranges'] = 'bytes';
-  const range = byteRange(req.headers.range, size);
-  if (range === 'unsatisfiable') {
-    res.writeHead(416, { ...headers, 'Content-Range': `bytes */${size}` });
-    res.end();
-    return true;
-  }
-  if (range) {
-    headers['Content-Range'] = `bytes ${range.start}-${range.end}/${size}`;
-    headers['Content-Length'] = range.end - range.start + 1;
-  } else {
-    headers['Content-Length'] = size;
-  }
-  res.writeHead(range ? 206 : 200, headers);
-  if (req.method === 'HEAD') res.end();
-  else sendFile(file, res, range ?? undefined);
-  return true;
-}
-
-/**
- * Streams a file (or one byte range of it) to the response. pipeline() closes the file when the client goes away
- * mid-transfer (a visitor leaving while the hero loop downloads) or a read fails, so no descriptor stays open and no
- * stream error goes unhandled.
- */
-function sendFile(file: string, res: ServerResponse, range?: { start: number; end: number }): void {
-  pipeline(createReadStream(file, range), res, () => {
-    /* the client left or the read failed: pipeline has already closed both ends */
   });
-}
-
-/**
- * The one byte range of a `Range` header (`bytes=a-b`, `bytes=a-`, `bytes=-n`) clamped to a file of `size` bytes;
- * null to send the whole file (no header, another unit, several ranges, or a header that does not parse, which
- * RFC 9110 lets a server ignore), 'unsatisfiable' for a range that starts past the end.
- */
-export function byteRange(header: string | undefined, size: number): { start: number; end: number } | 'unsatisfiable' | null {
-  if (!header) return null;
-  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
-  if (!m || (m[1] === '' && m[2] === '')) return null;
-  if (size === 0) return 'unsatisfiable';
-  if (m[1] === '') {
-    const n = Number(m[2]);
-    if (n === 0) return 'unsatisfiable';
-    return { start: Math.max(0, size - n), end: size - 1 };
-  }
-  const start = Number(m[1]);
-  const end = m[2] === '' ? size - 1 : Math.min(Number(m[2]), size - 1);
-  if (start >= size) return 'unsatisfiable';
-  if (end < start) return null;
-  return { start, end };
+  if (req.method === 'HEAD') res.end();
+  else createReadStream(file).pipe(res);
+  return true;
 }
 
 /**

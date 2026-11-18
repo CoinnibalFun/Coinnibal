@@ -195,9 +195,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 17px;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.01em;
 }
 .g-pond__label {
   overflow: hidden;
@@ -725,6 +726,7 @@
   overflow-wrap: break-word;
   font-size: 17px;
   line-height: 1.05;
+  font-variation-settings: var(--fv-wonk);
 }
 .g-standings__count {
   flex: none;
@@ -835,11 +837,7 @@
   box-shadow: var(--sh-1);
 }
 .g-standings.is-compact .g-standings__title {
-  /* DM Sans 700 at this size (the display face clots below ~15 px) */
-  font-family: var(--font-body);
-  font-weight: 700;
   font-size: 14px;
-  letter-spacing: 0;
 }
 /* landscape phones: the left column runs down to the thumb stick, so the card drops its name
    (the crown and the arrow say what it is; screen readers keep the section's label) */
@@ -1147,10 +1145,11 @@
 .g-spectate__name {
   overflow: hidden;
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-size: 22px;
   font-weight: 800;
   line-height: 1.05;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1351,16 +1350,8 @@
 .g-hud.is-narrow .g-round__label {
   letter-spacing: 0.02em;
 }
-/* the pond's tag ("Practice · no bell") the same way: at the wider tracking its last letters fell off */
-.g-hud.is-narrow .g-pond__label {
-  letter-spacing: 0.02em;
-}
-/* the display face clots below ~15 px: the pond's name in the narrow pill is DM Sans 700 */
 .g-hud.is-narrow .g-pond__name {
-  font-family: var(--font-body);
-  font-weight: 700;
   font-size: 14px;
-  letter-spacing: 0;
 }
 .g-hud.is-narrow .g-center {
   /* the right column ends where the left corner (100vw - 200px) begins */
@@ -1485,10 +1476,11 @@
 .g-roundover__title {
   display: inline-block;
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-wonk);
   font-weight: 800;
   font-size: clamp(44px, 7vw, 60px);
   line-height: 0.95;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.03em;
 }
 .g-death__title {
   color: var(--down-ink);
@@ -1541,11 +1533,11 @@
 .g-death__line {
   min-width: 0;
   overflow-wrap: anywhere;
-  /* a sentence ("Nakamoto ate you"), not a title: DM Sans 700 (the display face's narrow word spaces ran it together) */
-  font-family: var(--font-body);
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-weight: 700;
   font-size: 17px;
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--ink-2);
 }
 .g-death__loss {
@@ -1758,10 +1750,11 @@
 }
 .g-board__place dd {
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-wonk);
   font-weight: 800;
   font-size: 46px;
   line-height: 1;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.03em;
 }
 .g-board__title {
   margin-top: 6px;
@@ -2789,10 +2782,7 @@
   font-size: 18px;
 }
 .g-hud.is-short .g-pond__name {
-  font-family: var(--font-body);
-  font-weight: 700;
   font-size: 14px;
-  letter-spacing: 0;
 }
 .g-hud.is-short .g-round__label,
 .g-hud.is-short .g-pond__label {
@@ -3292,10 +3282,11 @@
 .g-tabboard__title {
   margin: 2px 0 6px;
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 24px;
   line-height: 1.05;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.02em;
 }
 .g-tabboard .g-full__row {
   min-height: 34px;

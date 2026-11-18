@@ -1,6 +1,6 @@
 import { activeChain } from '@elymum/shared';
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChompMark, CoinMark, Icon, Kb, Wordmark as InkWordmark, type IconName } from '../design';
+import { ChompMark, CoinMark, Icon, Kb, RingScene, Wordmark as InkWordmark, type IconName } from '../design';
 import { FooterLife } from './FooterLife';
 import { usePeelLetters } from './peel';
 import { Link, usePath } from './router';
@@ -105,10 +105,10 @@ export const navFor = (doors: Doors = DOORS_CLOSED) => NAV.filter((n) => linkOpe
  * Pages that are closed but named in the header with a "Soon" tag, not clickable: the game (beta), the WL and the
  * collab applications. The mint is not among them (it runs on OpenSea).
  */
-export const SOON: { href: string; key: TKey; note: TKey }[] = [
-  { href: '/play', key: 'site.nav.play', note: 'site.menu.soon.play' },
-  { href: '/wl', key: 'site.nav.wl', note: 'site.menu.soon.wl' },
-  { href: '/collab', key: 'site.nav.collab', note: 'site.menu.soon.collab' },
+export const SOON: { href: string; key: TKey }[] = [
+  { href: '/play', key: 'site.nav.play' },
+  { href: '/wl', key: 'site.nav.wl' },
+  { href: '/collab', key: 'site.nav.collab' },
 ];
 
 /** The "Soon" entries for the doors that are still closed. */
@@ -131,20 +131,8 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
   const path = usePath();
   const peel = usePeelLetters<HTMLSpanElement>();
   const doors = useDoors();
-  const { settings } = useSiteSettings();
   const nav = navFor(doors);
   const soon = soonFor(doors);
-  // a Soon name's tip also shows on a plain hover, when the keyboard's focus is somewhere else: while the pointer is on
-  // a name, Escape anywhere on the page puts its tip away (WCAG 1.4.13); leaving the name brings it back next time.
-  // One listener for the header's life, so nothing stays behind when a page change unmounts a hovered name
-  const hovered = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') hovered.current?.setAttribute('data-hush', '');
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
   // one or two entries fit beside the logo on a phone too: no menu button for them
   const few = nav.length + soon.length <= 2 && !doors.game;
   // the wallet button belongs to what needs a wallet (the game, the mint, the applications); a signed-in wallet keeps it
@@ -195,54 +183,21 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
       </Link>
     );
   });
-  // still not links. The closed parts read as one quiet group (muted names, one "Soon" chip after them); each name
-  // can take the keyboard's focus, so a pointer or a Tab shows its own small tip with what it will be (the lines the
-  // phone menu shows). Each name still says "Soon" to a screen reader (.st-soon), and its tip describes it. On its own
-  // (closed) page an item is marked as the place the visitor is at
-  const soonSet = soon.length > 0 && (
-    <span className="st-soonset">
-      {soon.map((n, i) => {
-        const here = path === n.href;
-        const tip = `st-tip-${n.href.slice(1)}`;
-        return (
-          <span
-            key={`soon:${n.href}`}
-            className={`st-soonitem${i === soon.length - 1 ? ' st-soonitem--end' : ''}`}
-            // Escape puts the tip away, from the focused name or while the pointer is on it (it comes back on the
-            // next hover or focus)
-            onKeyDown={(e) => e.key === 'Escape' && e.currentTarget.setAttribute('data-hush', '')}
-            onBlur={(e) => e.currentTarget.removeAttribute('data-hush')}
-            onPointerEnter={(e) => {
-              hovered.current = e.currentTarget;
-            }}
-            onPointerLeave={(e) => {
-              hovered.current = null;
-              e.currentTarget.removeAttribute('data-hush');
-            }}
-          >
-            <span
-              className={`st-nav__link st-nav__link--soon${here ? ' is-here' : ''}`}
-              tabIndex={0}
-              aria-disabled="true"
-              aria-current={here ? 'page' : undefined}
-              aria-describedby={tip}
-            >
-              {t(n.key)}
-              <span className="st-soon">{t('site.nav.soon')}</span>
-            </span>
-            <span className="st-tip" role="tooltip" id={tip}>
-              {t(n.note)}
-            </span>
-          </span>
-        );
-      })}
-      <span className="st-soonset__tag" aria-hidden="true">
-        {t('site.nav.soon')}
+  // still not a link; on its own (closed) page it is marked as the place the visitor is at
+  const soonItems = soon.map((n) => {
+    const here = path === n.href;
+    return (
+      <span
+        key={`soon:${n.href}`}
+        className={`st-nav__link st-nav__link--soon${here ? ' is-here' : ''}`}
+        aria-disabled="true"
+        aria-current={here ? 'page' : undefined}
+      >
+        {t(n.key)}
+        <span className="st-soon">{t('site.nav.soon')}</span>
       </span>
-    </span>
-  );
-  const handle = settings.xHandle.replace(/^@/, '');
-  const xHref = xProfile(handle);
+    );
+  });
   return (
     <header className={`st-head${few ? ' st-head--few' : ''}`}>
       <div className="st-head__inner">
@@ -255,15 +210,9 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
         </Link>
         <nav className="st-nav" aria-label={t('site.nav.label')}>
           {links}
-          {soonSet}
+          {soonItems}
         </nav>
         <div className="st-head__tools">
-          {/* wide screens: the project's X account at the end of the nav (narrower, it is in the menu) */}
-          {!few && (
-            <a className="st-head__x" href={xHref} target="_blank" rel="noreferrer" aria-label={t('site.nav.x', { handle })}>
-              <XIcon size={18} />
-            </a>
-          )}
           {connect && (
             <Suspense fallback={<ConnectFallback />}>
               <HeaderConnect />
@@ -288,56 +237,10 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
         <>
           <button type="button" className="st-menu__scrim" aria-label={t('site.menu.close')} tabIndex={-1} onClick={() => setMenu(false)} />
           {/* phones: a sheet from the bottom edge, so every link and the Play button sit under the thumb; wider: a card
-              under the menu button. What is open, each with a line on what is there (the guide, X), then what is
-              not open yet and what each will be */}
+              under the menu button */}
           <nav ref={sheet} id="st-menu" className="st-menu kb-sticker kb-sticker--cream" aria-label={t('site.menu.label')}>
-            {nav
-              .filter((n) => n.href !== '/play')
-              .map((n) => {
-                const on = path === n.href;
-                return (
-                  <Link
-                    key={n.href}
-                    href={n.href}
-                    className={`st-menu__row${on ? ' is-on' : ''}`}
-                    aria-current={on ? 'page' : undefined}
-                    onClick={() => setMenu(false)}
-                  >
-                    <span className="st-menu__name">{t(n.key)}</span>
-                    {n.href === '/docs' && <span className="st-menu__note">{t('site.menu.note.docs')}</span>}
-                    <Icon name="arrow" size={20} className="st-menu__go" />
-                  </Link>
-                );
-              })}
-            <a className="st-menu__row" href={xHref} target="_blank" rel="noreferrer">
-              <span className="st-menu__name">
-                <XIcon size={17} />@{handle}
-              </span>
-              <span className="st-menu__note">{t('site.menu.note.x')}</span>
-              <Icon name="arrow" size={20} className="st-menu__go st-menu__go--out" />
-            </a>
-            {soon.length > 0 && (
-              <div className="st-menu__soon">
-                <span className="st-soonset__tag" aria-hidden="true">
-                  {t('site.nav.soon')}
-                </span>
-                {soon.map((n) => {
-                  const here = path === n.href;
-                  return (
-                    <span
-                      key={`soon:${n.href}`}
-                      className={`st-nav__link st-nav__link--soon st-menu__soonrow${here ? ' is-here' : ''}`}
-                      aria-disabled="true"
-                      aria-current={here ? 'page' : undefined}
-                    >
-                      <span className="st-menu__name">{t(n.key)}</span>
-                      <span className="st-menu__note">{t(n.note)}</span>
-                      <span className="st-soon">{t('site.nav.soon')}</span>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
+            {links.filter((l) => l.key !== '/play')}
+            {soonItems}
             {doors.game && (
               <SiteLinkButton href="/play" variant="primary" size="lg" icon="arrow" className="st-menu__play" onClick={() => setMenu(false)}>
                 {t('site.menu.play')}
@@ -378,18 +281,16 @@ export function SiteFooter() {
           {doors.collab && <Link href="/collab">{t('site.nav.collab')}</Link>}
           <Link href="/docs">{t('site.nav.docs')}</Link>
         </nav>
-      </div>
-      {/* the footer's stage: the front terraces at night, whole, rising into the footer's sky; the last line stands on
-          the shore in front of them (its strip is the shore's own paint, so the ground runs on under it) */}
-      <div className="st-foot__land" aria-hidden="true">
-        <FooterLife />
-      </div>
-      <div className="st-foot__base">
-        <p className="st-foot__small">
+        <p className="st-foot__small mono">
           <span>Coinnibal · 2026</span>
           <span>{siteHost()}</span>
           <span>{t('site.foot.safety')}</span>
         </p>
+      </div>
+      {/* the front terraces under the footer's text (in the flow, so the text never runs onto the ground) */}
+      <div className="st-foot__land">
+        <RingScene time="night" variant="horizon" clouds={false} animate={false} className="st-foot__ring" />
+        <FooterLife />
       </div>
     </footer>
     </Kb>

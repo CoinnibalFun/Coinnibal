@@ -25,7 +25,7 @@ importers:
       '@fontsource-variable/dm-sans':
         specifier: ^5.3.0
         version: 5.3.0
-      '@fontsource/lilita-one':
+      '@fontsource-variable/fraunces':
         specifier: ^5.3.0
         version: 5.3.0
       '@napi-rs/canvas':
@@ -71,10 +71,10 @@ importers:
       '@fontsource-variable/dm-sans':
         specifier: ^5.3.0
         version: 5.3.0
-      '@fontsource-variable/geist-mono':
+      '@fontsource-variable/fraunces':
         specifier: ^5.3.0
         version: 5.3.0
-      '@fontsource/lilita-one':
+      '@fontsource-variable/geist-mono':
         specifier: ^5.3.0
         version: 5.3.0
       '@walletconnect/universal-provider':
@@ -630,11 +630,11 @@ packages:
   '@fontsource-variable/dm-sans@5.3.0':
     resolution: {integrity: sha512-BpUG5bqePiDFMBM4ZtLSlPdAIOM990uB1dlXzIf4aw21yQR7BmykedLXXXMqGWsR18aMLOsbWccwJNh3ztTQaA==}
 
+  '@fontsource-variable/fraunces@5.3.0':
+    resolution: {integrity: sha512-9BYGySn4AHEJdgp9Z28tQ3X+laJMEOITXkQarZXeloWQZDq5oOvXJ3kDA8c7MGIfpogIaZfjrQBqmda8POOCKA==}
+
   '@fontsource-variable/geist-mono@5.3.0':
     resolution: {integrity: sha512-vBbuwDEo9AkrqADMXOrlAR3DFcJi4/JxeuU43FoiQERnNwsfXNnvxvReZG02cQKmyk4DZkZdBZX3oTDvy2zBAw==}
-
-  '@fontsource/lilita-one@5.3.0':
-    resolution: {integrity: sha512-bNW3tD+m5pOsAQpW/NvtRbFthFe+B73hDJK2DLLCFCtF+1p+UMBgo7ibxdcb9Sftr06LKAVbt080wiMdSqGbOg==}
 
   '@jest/diff-sequences@30.5.0':
     resolution: {integrity: sha512-OsqBjHXCn8cadasoAZBP6nWYvMsRhpMzGXTpxJ5aO04NlbdhIz+FVe3q49l0AwVhsz/cEmIpBes6gAFl1/dWQg==}
@@ -2780,9 +2780,9 @@ snapshots:
 
   '@fontsource-variable/dm-sans@5.3.0': {}
 
-  '@fontsource-variable/geist-mono@5.3.0': {}
+  '@fontsource-variable/fraunces@5.3.0': {}
 
-  '@fontsource/lilita-one@5.3.0': {}
+  '@fontsource-variable/geist-mono@5.3.0': {}
 
   '@jest/diff-sequences@30.5.0': {}
 

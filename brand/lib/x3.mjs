@@ -100,12 +100,12 @@ export function xBanner3() {
   const h = 500;
   const css = `
     .title{position:absolute;left:515px;top:46px;transform:rotate(-2deg)}
-    .line{position:absolute;left:0;width:1500px;top:178px;text-align:center;font-family:var(--display);
-      font-weight:400;font-size:32px;color:${C.cream};transform:rotate(-2deg);letter-spacing:.01em}
-    .line b{font-weight:400;color:${C.sun}}
+    .line{position:absolute;left:0;width:1500px;top:178px;text-align:center;font-family:var(--display);font-style:italic;
+      font-variation-settings:"SOFT" 100,"WONK" 1;font-weight:500;font-size:32px;color:${C.cream};transform:rotate(-2deg);letter-spacing:-.01em}
+    .line b{font-style:normal;font-weight:800;color:${C.sun}}
     .site{position:absolute;right:62px;top:44px;transform:rotate(3deg);padding:11px 16px 12px;background:${C.sun};border-radius:14px}
     .site .k{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700}
-    .site .n{font-family:var(--display);font-weight:400;font-size:30px;line-height:1;letter-spacing:.01em;margin-top:4px}
+    .site .n{font-family:var(--display);font-variation-settings:"SOFT" 100,"WONK" 1,"opsz" 144;font-weight:800;font-size:30px;line-height:1;margin-top:4px}
     .gain{position:absolute;font-family:var(--mono);font-weight:700;font-size:17px;color:${C.ink};background:${C.sun};
       border:3px solid ${C.ink};border-radius:999px;padding:5px 12px 4px;box-shadow:3px 3px 0 ${C.ink};white-space:nowrap}
     .gain small{font-size:12px;opacity:.75}`;

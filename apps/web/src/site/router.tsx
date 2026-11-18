@@ -1,19 +1,23 @@
 import { useSyncExternalStore, type AnchorHTMLAttributes, type FocusEvent, type MouseEvent, type TouchEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { ENTRY_PATHS, normalizePath, SITE_PATHS, type SitePath } from '@elymum/shared';
 import { isLazyPage, loadedPage, pageFailed, warmPage } from './pages';
 
-// The route list is shared with the server (`@elymum/shared` routes.ts): it answers these paths with 200 and any
-// other with 404. Paths the site app renders itself; `/play` and `/admin` are full page loads (their own entries).
-export { normalizePath, SITE_PATHS, type SitePath };
+/** Paths the site app renders itself; anything else (`/play`, `/admin`) is a full page load. */
+export const SITE_PATHS = ['/', '/play', '/mint', '/faucet', '/wl', '/collab', '/docs'] as const;
+export type SitePath = (typeof SITE_PATHS)[number];
 
-/** `/play` is in `SITE_PATHS` for the page-turn order only: it is its own entry (a full page load). */
-const FULL_LOAD = new Set<string>(ENTRY_PATHS);
+/** `/play` is listed for the page-turn order only: it is its own entry (a full page load). */
+const FULL_LOAD = new Set(['/play']);
 
 const EVENT = 'site:navigate';
 
 /** How long a click waits for a page that was not warmed before the turn happens anyway (the loader shows then). */
 export const WARM_WAIT_MS = 600;
+
+export function normalizePath(pathname: string): string {
+  const p = pathname.replace(/\/+$/, '') || '/';
+  return p.toLowerCase();
+}
 
 export const isSitePath = (pathname: string): pathname is SitePath => {
   const p = normalizePath(pathname);

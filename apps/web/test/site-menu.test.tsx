@@ -42,40 +42,11 @@ describe('the phone menu', () => {
     expect(soon.map((s) => s.textContent)).toEqual(['PlaySoon', 'WLSoon', 'CollabSoon']);
     expect(soon.every((s) => s.tagName === 'SPAN' && s.getAttribute('aria-disabled') === 'true')).toBe(true);
     expect(screen.queryByRole('button', { name: /Connect/ })).toBeNull();
-    // on screen the three share one Soon chip (no dashed outline around them); a pointer or the keyboard's focus on one
-    // shows its own tip with what it will be (no native title tooltip on top of it)
-    expect(container.querySelectorAll('.st-nav .st-soonset__tag')).toHaveLength(1);
-    expect(soon.every((s) => s.getAttribute('tabindex') === '0' && !s.hasAttribute('title'))).toBe(true);
-    expect(soon.map((s) => document.getElementById(s.getAttribute('aria-describedby')!)?.textContent)).toEqual([
-      'The game. It opens after the NFT mint and the token.',
-      'Where you’ll apply for the whitelist.',
-      'Where communities ask for WL spots.',
-    ]);
-    // a tip shown by a plain hover goes away on Escape even when the focus is elsewhere, and comes back next time
-    const wl = soon[1].parentElement!;
-    fireEvent.pointerEnter(wl);
-    fireEvent.keyDown(document.body, { key: 'Escape' });
-    expect(wl.hasAttribute('data-hush')).toBe(true);
-    fireEvent.pointerLeave(wl);
-    expect(wl.hasAttribute('data-hush')).toBe(false);
-    fireEvent.keyDown(document.body, { key: 'Escape' });
-    expect(wl.hasAttribute('data-hush')).toBe(false);
-    // wide screens: the project's X account at the end of the nav
-    expect(screen.getByRole('link', { name: '@coinnibalfun on X' }).getAttribute('href')).toBe('https://x.com/coinnibalfun');
-    // on a phone the menu sheet holds the guide and X, each with a line on what is there, then the closed parts with
-    // what each will be (still not links)
+    // on a phone they sit in the menu sheet, still not links
     fireEvent.click(screen.getByRole('button', { name: 'Open the menu' }));
     const sheet = screen.getByRole('navigation', { name: 'Site menu' });
-    expect([...sheet.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['/docs', 'https://x.com/coinnibalfun']);
-    expect(sheet.textContent).toContain('Rules, fees, the risks and wallet safety');
-    expect(sheet.textContent).toContain('News, and the one OpenSea link to trust');
-    const rows = [...sheet.querySelectorAll('.st-nav__link--soon')];
-    expect(rows.map((r) => r.textContent)).toEqual([
-      'PlayThe game. It opens after the NFT mint and the token.Soon',
-      "WLWhere you’ll apply for the whitelist.Soon",
-      'CollabWhere communities ask for WL spots.Soon',
-    ]);
-    expect(rows.every((r) => r.tagName === 'SPAN' && r.getAttribute('aria-disabled') === 'true')).toBe(true);
+    expect([...sheet.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['/docs']);
+    expect(sheet.querySelectorAll('.st-nav__link--soon')).toHaveLength(3);
     expect(container.querySelector('a[href="/play"], a[href="/mint"], a[href="/faucet"], a[href="/wl"], a[href="/collab"]')).toBeNull();
   });
 

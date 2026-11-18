@@ -198,6 +198,7 @@
 }
 .ad-task__main strong {
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 19px;
 }
@@ -331,6 +332,7 @@
 .ad-opt__title {
   display: block;
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 20px;
   line-height: 1.1;

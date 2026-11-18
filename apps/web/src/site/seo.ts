@@ -33,16 +33,16 @@ export const NOT_FOUND_META = 'not-found';
  */
 export const PAGE_META: Readonly<Record<string, { title: string; description: string }>> = {
   '/docs': {
-    title: 'Guide · Coinnibal',
-    description: 'How Coinnibal works: rounds, rooms and tickets, the fee, power-ups, the NFT and wallet safety, with the real numbers.',
+    title: 'Player guide · Coinnibal',
+    description: 'How Coinnibal works: rounds, rooms and tickets, the fee, power-ups and what the NFT gives you.',
   },
   [CLOSED_META]: {
     title: 'Not open yet · Coinnibal',
-    description: 'This part of Coinnibal is not open yet. The guide explains how the game works.',
+    description: 'This part of Coinnibal is not open yet. The player guide explains how the game works.',
   },
   [NOT_FOUND_META]: {
     title: 'Page not found · Coinnibal',
-    description: 'There is no page here. The guide explains how Coinnibal works.',
+    description: 'There is no page here. The player guide explains how Coinnibal works.',
   },
 };
 

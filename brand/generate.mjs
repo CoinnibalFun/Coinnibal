@@ -2,7 +2,7 @@
 // Renders the Coinnibal brand kit (Ring Storybook style) to PNGs with Playwright's Chromium.
 //
 //   node brand/generate.mjs            render everything into brand/out/ and refresh the web app's
-//                                      og-coinnibal.png, favicon-32.png, apple-touch-icon.png and the manifest icons
+//                                      og-elymum.png, favicon-32.png, apple-touch-icon.png and the manifest icons
 //   node brand/generate.mjs og x-banner   render only the named jobs
 //   node brand/generate.mjs --list     list the jobs
 //
@@ -68,10 +68,10 @@ try {
     const page = await ctx.newPage();
     await page.setContent(html, { waitUntil: 'load' });
     await page.evaluate(async () => {
-      for (const f of ['Lilita One', 'DM Sans', 'Geist Mono']) await document.fonts.load(`16px "${f}"`).catch(() => {});
+      for (const f of ['Fraunces', 'DM Sans', 'Geist Mono']) await document.fonts.load(`700 16px "${f}"`).catch(() => {});
       await document.fonts.ready;
     });
-    const missing = await page.evaluate(() => ['Lilita One', 'DM Sans', 'Geist Mono'].filter((f) => !document.fonts.check(`16px "${f}"`)));
+    const missing = await page.evaluate(() => ['Fraunces', 'DM Sans', 'Geist Mono'].filter((f) => !document.fonts.check(`16px "${f}"`)));
     if (missing.length) console.warn(`  ! ${job.name}: font(s) not loaded: ${missing.join(', ')}`);
     const file = join(OUT, job.file);
     mkdirSync(join(file, '..'), { recursive: true });

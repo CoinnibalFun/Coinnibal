@@ -129,9 +129,10 @@
   border-radius: 50%;
   background: var(--sticker);
   color: #04181c;
-  font-family: var(--font-body);
+  font-family: var(--font-display);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
+  font-style: italic;
   line-height: 1;
   cursor: help;
 }

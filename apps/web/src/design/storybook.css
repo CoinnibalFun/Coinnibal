@@ -42,7 +42,7 @@
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.02em;
   line-height: 1.02;
 }
 .kb :where(a) {
@@ -125,7 +125,7 @@
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.025em;
   line-height: 0.95;
 }
 .wonk {
@@ -953,7 +953,7 @@ h2,
   font-size: 22px;
   font-weight: 800;
   line-height: 1.05;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.015em;
   /* two lines before the ellipsis: "Isles of the Blessed" was cut to "Isles of the Bles..." on a 1280 px lobby */
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -1102,7 +1102,7 @@ h2,
   font-weight: 800;
   font-size: 26px;
   line-height: 1;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.015em;
 }
 .kb-receipt__meta {
   font-size: var(--t-micro);
@@ -1495,7 +1495,7 @@ h2,
   font-weight: 800;
   font-size: clamp(26px, 4vw, 34px);
   line-height: 1;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.02em;
 }
 .kb-sheet__body {
   padding: 18px 24px;
@@ -2161,7 +2161,7 @@ h2,
   font-weight: 800;
   font-size: 25px;
   line-height: 1.1;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.01em;
 }
 .kb-step__body {
   margin-top: 4px;

@@ -158,18 +158,15 @@
 
   /* ── type ── */
   /* the bundled faces cover Latin (Geist Mono also Cyrillic); Cyrillic display and body text fall
-     back to the body face / the system UI face, Chinese to the platform's CJK faces (nothing downloaded) */
+     back to Georgia / the system UI face, Chinese to the platform's CJK faces (nothing downloaded) */
   --font-cjk: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', 'WenQuanYi Zen Hei';
-  /* Lilita One has a single weight (400) and no italic: font-synthesis is off on :root, so a heading
-     rule asking for 800 or italic gets the real face, never a smeared faux bold or a slanted oblique */
-  --font-display: 'Lilita One', 'DM Sans Variable', 'DM Sans', ui-rounded, system-ui, var(--font-cjk), sans-serif;
+  --font-display: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', var(--font-cjk), serif;
   --font-body: 'DM Sans Variable', 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, var(--font-cjk), sans-serif;
   --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, var(--font-cjk), monospace;
-  /* the display face has no variation axes (kept as hooks for rules that set them) */
-  --fv-display: normal;
-  --fv-wonk: normal;
+  /* Fraunces axes: SOFT 100 always; WONK only on the wordmark and one word per page */
+  --fv-display: 'SOFT' 100, 'WONK' 0;
+  --fv-wonk: 'SOFT' 100, 'WONK' 1;
   --display-stretch: 100%;
-  font-synthesis: none;
 
   --t-hero: clamp(48px, 7vw, 96px);
   --t-h1: clamp(40px, 5vw, 64px);
