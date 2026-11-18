@@ -59,11 +59,12 @@ export interface DocsEnv {
 }
 
 /**
- * The player guide in English: how the game, the rooms, the fee, the Coinnibal NFT and the token work. Plain words,
- * and one place per rule: another section links to that place (`see`) instead of saying the rule again. Every number comes from
- * `FACTS` (see facts.ts) or the shared rules; the fee rates on profit are the server's (`ChainStatus.fees`, the game
- * contract's `config()`) when known, else the contract defaults. `chain` names the Robinhood Chain network (testnet
- * or mainnet; the active one by default). Gas is ETH.
+ * The guide in English: how the game, the rooms, the fee, the Coinnibal NFT and the token work. Plain, natural words
+ * (contractions, short prose where one thing causes another), numbers in tables, and one place per rule: another
+ * section links to that place (`see`) instead of saying the rule again. Every number comes from `FACTS` (see facts.ts)
+ * or the shared rules; the fee rates on profit are the server's (`ChainStatus.fees`, the game contract's `config()`)
+ * when known, else the contract defaults. `chain` names the Robinhood Chain network (testnet or mainnet; the active
+ * one by default). Gas is ETH.
  *
  * One word per thing: room (practice, paid, private), ticket, round, bell, value, fee (only the fee on profit), burn,
  * team wallet, NFT, power-up. Temporary things (test rooms, the test network) are not described.
@@ -88,14 +89,11 @@ export const docsEn = (
     .filter((a) => a.holdersOnly)
     .map((a) => a.name)
     .join(', ');
-  const notAudited = 'The smart contracts have not been audited yet.';
   return {
     pct,
     num,
-    // the plate above already says "Player guide" (and the art's stamp "Guide"): no third label
-    kicker: '',
     title: 'How Coinnibal works',
-    deck: 'Everything about Coinnibal in one place: how a round works, the rooms and tickets, the fee, power-ups and what the NFT gives you.',
+    deck: 'Rounds, rooms and tickets, the fee, power-ups, the NFT and wallet safety, with the real numbers. Worth a read before you buy a ticket.',
     rates,
     tocLabel: 'Contents',
     receipt: {
@@ -111,25 +109,24 @@ export const docsEn = (
       // the token's name comes from the server: worded so any name reads right ("a ticket of 1,000 tokens")
       caption: `A ticket of ${num(F.example.entry)} ${symbol}, worth ${num(F.example.cashout)} ${symbol} at the bell`,
     },
-    colophon: '',
     backToTop: 'Back to top',
     sections: [
       {
         id: 'play',
         title: 'How to play',
-        lede: 'Eat food to grow. Eat smaller coins. Stay away from bigger ones.',
+        lede: "Eat food, eat smaller coins, and don't let a bigger one catch you.",
         strip: { label: 'The basic rule', panels: ['Eat food. Grow.', `${num(RULES.eatRatio)} times its mass? Eat it.`, 'Bigger than you? Run.'] },
         blocks: [
           {
             kind: 'p',
-            text: `Your coin follows the mouse. Food makes it bigger. A coin can eat another coin when it has at least ${num(RULES.eatRatio)} times its mass and covers most of it. Bigger coins move slower, and a coin above ${num(RULES.decayStartMass)} mass slowly loses mass.`,
+            text: `Your coin follows the mouse, and food makes it bigger. To eat another coin you need at least ${num(RULES.eatRatio)} times its mass, and you have to cover most of it. The catch: bigger coins move slower, and a coin above ${num(RULES.decayStartMass)} mass slowly loses mass.`,
           },
           {
             kind: 'keys',
             caption: 'Controls',
             rows: [
               { key: 'Mouse', action: 'Move toward the pointer' },
-              { key: 'WASD / arrows', action: 'Move with the keyboard' },
+              { key: 'WASD / arrow keys', action: 'Move with the keyboard' },
               { key: 'Space / left click', action: 'Split: shoot half of your coin forward' },
               { key: 'E', action: 'Push out a little mass (hold to repeat)' },
               { key: Object.values(BOOST_KEY_LABELS).join(' / '), action: `Use a power-up (see ${see('Power-ups', 'powerups')})` },
@@ -141,23 +138,38 @@ export const docsEn = (
             ],
           },
           {
-            kind: 'list',
-            items: [
-              {
-                term: 'On phones:',
-                text: 'a joystick at the bottom left moves your coin. The buttons for split, push-out and power-ups are on the right. A tap on the standings card opens the full standings.',
-              },
-              {
-                term: 'Split:',
-                text: `needs ${RULES.splitMinMass} mass. A coin can be in up to ${RULES.maxCells} pieces. The pieces stay close together and join again after ${secs(RULES.mergeBaseMs)} or more (bigger pieces take longer). Small pieces are easy to eat.`,
-              },
-              { term: 'Rug cacti:', text: 'a big coin that touches a cactus breaks into pieces. Small coins can hide behind one.' },
-              {
-                term: 'Airdrops:',
-                text: `free pickups that land on the map. Magnet pulls food for ${secs(RULES.magnetMs)}. Pump gives extra speed for ${secs(RULES.pumpMs)}. HODL Shield stops other coins from eating you for ${secs(RULES.shieldMs)}, but you cannot eat them either. Mega Bag adds mass at once.`,
-              },
-              { term: 'Spawn shield:', text: `a new coin cannot eat or be eaten by other coins for ${secs(RULES.spawnShieldMs)}.` },
+            kind: 'p',
+            text: "On a phone, a joystick at the bottom left moves your coin, and split, push-out and the power-ups are buttons on the right. Tap the standings card to open the full standings.",
+          },
+          {
+            kind: 'table',
+            caption: 'Splitting and shields',
+            head: ['', 'Number', 'What it means'],
+            numeric: [1],
+            stack: true,
+            rows: [
+              ['Split', `${RULES.splitMinMass} mass`, 'The least a coin needs before it can split. Small pieces are easy to eat.'],
+              ['Pieces', `up to ${RULES.maxCells}`, 'How many pieces one coin can be in. They stay close together.'],
+              ['Merge', `from ${secs(RULES.mergeBaseMs)}`, 'How long pieces take to join again. Bigger pieces take longer.'],
+              ['Spawn shield', secs(RULES.spawnShieldMs), "A new coin can't eat or be eaten by other coins."],
             ],
+          },
+          {
+            kind: 'table',
+            caption: 'Airdrops: free pickups that land on the map',
+            head: ['Airdrop', 'Lasts', 'What it does'],
+            numeric: [1],
+            stack: true,
+            rows: [
+              ['Magnet', secs(RULES.magnetMs), 'Pulls food to your coin.'],
+              ['Pump', secs(RULES.pumpMs), 'Extra speed.'],
+              ['HODL Shield', secs(RULES.shieldMs), "Other coins can't eat you, but you can't eat them either."],
+              ['Mega Bag', 'Instant', 'Adds mass at once.'],
+            ],
+          },
+          {
+            kind: 'p',
+            text: "Mind the rug cacti: a big coin that touches one breaks into pieces. Small coins can hide behind them.",
           },
         ],
       },
@@ -165,86 +177,72 @@ export const docsEn = (
         id: 'rooms',
         title: 'Rooms and tickets',
         lede: 'Three kinds of room: practice, paid and private.',
-        strip: { label: 'Free or paid', panels: ['Practice: free.', 'Paid room: one ticket, one coin.', "The ticket price goes into the room's vault."] },
         blocks: [
           {
-            kind: 'list',
-            items: [
-              {
-                term: 'Practice rooms',
-                text: `are free: no wallet, no token, no payout. They have no rounds and no bell. Up to ${F.capacity.practice} players per room.`,
-              },
-              {
-                term: 'Practice leagues:',
-                text: `Rookie and Pro. A profile at level ${S.proLevel} or higher plays in Pro. A Rookie game above ${num(S.promoteMaxMass)} mass or with ${S.promoteKills} coins eaten moves you to Pro for ${S.promotionHours} hours.`,
-              },
-              {
-                term: 'Paid rooms',
-                text: `are the four rooms in the table. They play in rounds, one after another (see ${see('Rounds, payout and fee', 'payout')}). A room holds up to ${F.capacity.arena} players; when it is full, another copy of the room opens with the same vault.`,
-              },
-            ],
+            kind: 'p',
+            text: `Practice rooms are free: no wallet, no tokens and no payout. They have no rounds and no bell, and up to ${F.capacity.practice} players share a room. Practice has two leagues, Rookie and Pro. A profile at level ${S.proLevel} or higher plays in Pro, and a Rookie game above ${num(S.promoteMaxMass)} mass or with ${S.promoteKills} coins eaten moves you up to Pro for ${S.promotionHours} hours.`,
+          },
+          {
+            kind: 'p',
+            text: `The paid rooms are the four below. They play in rounds, one after another (see ${see('Rounds, payout and fee', 'payout')}). A room holds up to ${F.capacity.arena} players; when it's full, another copy of the room opens with the same vault.`,
           },
           {
             kind: 'table',
-            caption: 'Paid rooms: ticket prices, paid in our game token',
+            caption: 'Ticket prices, paid in our game token',
             head: ['Room', 'Ticket', 'Who can join'],
+            numeric: [1],
             rows: F.arenas.map((a) => [a.name, formatUsdCents(a.usdCents), a.holdersOnly ? 'NFT holders' : 'Everyone']),
           },
           {
-            kind: 'list',
-            items: [
-              {
-                term: 'Ticket:',
-                text: `one ticket is one coin in one round. You pay for it in our game token; the lobby shows the amount. You can have one open ticket per room.`,
-              },
-              {
-                term: 'Buying a ticket',
-                text: `needs an EVM wallet (for example MetaMask or Rabby), ${symbol} for the ticket and a little ${GAS_SYMBOL} on ${chain} for network fees. It takes at most two signatures: an approval, then the ticket. The approval covers ${APPROVE.choices} tickets of that room (${APPROVE.preselected} is preselected), so the next tickets need one signature.`,
-              },
-            ],
+            kind: 'p',
+            text: `A ticket buys your coin a place in one round. You pay for it in our game token, the lobby shows the amount, and you can hold one open ticket per room.`,
+          },
+          {
+            kind: 'p',
+            text: `To buy one you need an EVM wallet (MetaMask or Rabby, for example), ${symbol} for the ticket and a little ${GAS_SYMBOL} on ${chain} for network fees. It takes at most two signatures: an approval, then the ticket. The approval covers ${APPROVE.choices} tickets of that room (${APPROVE.preselected} is preselected), so the next tickets need only one signature.`,
+          },
+          { kind: 'h', text: 'Private rooms' },
+          {
+            kind: 'p',
+            text: `A signed-in wallet can open a room with its own rules and an invite code: ${CUSTOM_DURATION_LIMITS.min} to ${CUSTOM_DURATION_LIMITS.max} minutes long, ${CUSTOM_LIMITS.playersMin} to ${CUSTOM_LIMITS.playersMax} players. Opening one costs a little ${GAS_SYMBOL}: bigger rooms cost more, and the price shows before you pay. There are two kinds.`,
           },
           {
             kind: 'list',
             items: [
+              { term: 'A free room', text: "has no tickets and no payout. Anyone with the code can join, even without a wallet." },
               {
-                term: 'Private rooms:',
-                text: `a signed-in wallet can open a room with its own rules and an invite code: ${CUSTOM_DURATION_LIMITS.min} to ${CUSTOM_DURATION_LIMITS.max} minutes long, ${CUSTOM_LIMITS.playersMin} to ${CUSTOM_LIMITS.playersMax} players. Opening one costs a little ${GAS_SYMBOL}: bigger rooms cost more, and the price shows before you pay. There are two kinds.`,
-              },
-              { term: 'Free room:', text: 'no tickets and no payout. Anyone with the code can join, even without a wallet.' },
-              {
-                term: 'Ticket room:',
-                text: `a private copy of a paid room. Every player buys the normal ticket of that room. The creator buys theirs while creating the room. The room has its own clock: one game from its creation to its end, with no ${clockAdj(RULES.roundMs)} bell. Coins still alive at the room's end are paid, with the normal fee on profit. Joins close ${secs(RULES.roundJoinCloseMs)} before the end; a ticket bought too late is refunded in full.`,
-              },
-              {
-                term: 'Bots',
-                text: `play only in free private rooms. When practice is quiet, the lobby offers "${PRACTICE_ROOM.name}": a free ${PRACTICE_ROOM.durationMin}-minute room with ${PRACTICE_ROOM.bots} bots for up to ${PRACTICE_ROOM.maxPlayers} players. Bots are labelled BOT.`,
+                term: 'A ticket room',
+                text: `is a private copy of a paid room, and every player buys that room's normal ticket (the creator buys theirs while creating it). It runs on its own clock: one game from its creation to its end, with no ${clockAdj(RULES.roundMs)} bell. Coins still alive at the room's end are paid, with the normal fee on profit. Joins close ${secs(RULES.roundJoinCloseMs)} before the end, and a ticket bought too late is refunded in full.`,
               },
             ],
+          },
+          {
+            kind: 'p',
+            text: `Bots play only in free private rooms. When practice is quiet, the lobby offers "${PRACTICE_ROOM.name}": a free ${PRACTICE_ROOM.durationMin}-minute room with ${PRACTICE_ROOM.bots} bots for up to ${PRACTICE_ROOM.maxPlayers} players. Bots are labelled BOT.`,
           },
         ],
       },
       {
         id: 'value',
-        title: 'Value: how tokens move',
-        lede: `In a paid room your coin has a value in ${symbol}.`,
-        strip: { label: 'Value moves by eating', panels: ['Eat a coin.', 'Its value moves to you.', 'Alive at the bell? Paid.'] },
+        title: 'How value moves',
+        lede: `In a paid room your coin is worth ${symbol}, and eating is the only thing that changes how many.`,
         blocks: [
           {
             kind: 'flow',
-            label: 'How value moves',
+            label: 'How value moves: from your ticket to the room vault, between coins as they eat, then to your wallet at the bell, minus the fee',
             diagram: { ticket: 'Your ticket', vault: 'Room vault', wallet: 'Your wallet', fee: 'Burn + team wallet' },
-            steps: [
-              { title: 'Ticket', text: 'Your coin starts with the whole ticket price as its value.' },
-              { title: 'Eating', text: "If a coin has split into pieces, eating one piece gives you a share of its value that matches the piece's size. The last piece gives the rest." },
-              { title: 'Bell', text: 'If your coin is alive at the bell, you are paid its value from the vault, minus the fee on profit.' },
-            ],
           },
           {
-            kind: 'list',
-            items: [
-              { term: 'Mass is not value.', text: 'Pushing out mass, breaking on a cactus and losing mass over time do not change the value. Only eating does.' },
-              { term: 'An eaten coin', text: 'has no value left, and its ticket is closed. You can buy a new ticket while joins are open.' },
-            ],
+            kind: 'p',
+            text: "Your ticket price goes into the room's vault, and your coin starts with all of it as its value. Eat a coin and its value moves to you. If it has split into pieces, each piece you eat gives you the share of its value that matches the piece's size, and the last piece gives you the rest.",
+          },
+          {
+            kind: 'p',
+            text: "If your coin is still alive at the bell, the vault pays you its value, minus the fee on profit. An eaten coin has no value left and its ticket is closed, but you can buy a new ticket while joins are open.",
+          },
+          {
+            kind: 'p',
+            text: "Mass isn't value. Pushing out mass, breaking on a cactus and losing mass over time don't change what your coin is worth. Only eating does.",
           },
         ],
       },
@@ -252,25 +250,14 @@ export const docsEn = (
         id: 'payout',
         title: 'Rounds, payout and fee',
         lede: 'The four paid rooms share one clock.',
-        strip: {
-          label: 'One round',
-          panels: [`${clock(RULES.roundMs)} of play.`, 'The bell: coins still alive are paid.', `The fee is ${total} of the profit.`],
-        },
         blocks: [
           {
             kind: 'p',
-            text: `A round is ${clock(RULES.roundMs)} of play, then a ${clockAdj(RULES.roundBreakMs)} break, so a new round starts every ${clock(RULES.roundMs + RULES.roundBreakMs)}.`,
+            text: `A round is ${clock(RULES.roundMs)} of play, then a ${clockAdj(RULES.roundBreakMs)} break, so a new round starts every ${clock(RULES.roundMs + RULES.roundBreakMs)}. Joins close ${secs(RULES.roundJoinCloseMs)} before the bell; a ticket bought after that, or in the break, is held and joins the next round by itself.`,
           },
           {
-            kind: 'list',
-            items: [
-              { term: 'Joins', text: `close ${secs(RULES.roundJoinCloseMs)} before the bell. A ticket bought after that or in the break is held and joins the next round by itself.` },
-              { term: 'No cash-out:', text: 'you cannot leave a round early with your value.' },
-              {
-                term: 'Payout:',
-                text: 'the server sends the payouts on-chain during the break and pays their network fee. The "Round over" sheet shows the amount and the transaction.',
-              },
-            ],
+            kind: 'p',
+            text: 'There\'s no cash-out: you can\'t leave a round early with your value. The server sends the payouts on-chain during the break and pays their network fee, and the "Round over" sheet shows the amount and the transaction.',
           },
           {
             kind: 'p',
@@ -280,72 +267,55 @@ export const docsEn = (
           {
             kind: 'note',
             tone: 'warn',
-            stamp: 'Risk',
-            title: 'Know the risk',
-            text: `In a paid room a ticket costs real money, and an eaten coin loses it. Check that playing is legal where you live. Burns are not a promise of profit. ${notAudited}`,
+            title: 'Before you buy a ticket',
+            text: `A ticket in a paid room costs real money, and you lose it if your coin gets eaten. Check that playing is legal where you live. Burns aren't a promise of profit, and the smart contracts haven't been audited yet.`,
           },
         ],
       },
       {
         id: 'powerups',
         title: 'Power-ups',
-        lede: `Four power-ups, sold in packs in the lobby shop, each with its own key. They are not the free airdrops on the map (see ${see('How to play', 'play')}), and their times are different.`,
+        lede: `You buy them in packs in the lobby shop, and each has its own key. They aren't the free airdrops on the map (see ${see('How to play', 'play')}), and their times are different.`,
         blocks: [
           {
-            kind: 'cards',
-            label: 'The four power-ups',
-            items: [
-              {
-                key: BOOST_KEY_LABELS.magnet,
-                title: 'Magnet',
-                text: `Pulls nearby food to your coin for ${secs(BOOST_RULES.magnet.durationMs)}.`,
-                meta: `Cooldown ${secs(BOOST_RULES.magnet.cooldownMs)}`,
-              },
-              {
-                key: BOOST_KEY_LABELS.leap,
-                title: 'Leap',
-                text: 'Jumps your coin toward the pointer at once. It cannot cross the wall.',
-                meta: `Cooldown ${secs(BOOST_RULES.leap.cooldownMs)}`,
-              },
-              {
-                key: BOOST_KEY_LABELS.speed,
-                title: 'Speed burst',
-                text: `Extra speed for ${secs(BOOST_RULES.speed.durationMs)}.`,
-                meta: `Cooldown ${secs(BOOST_RULES.speed.cooldownMs)}`,
-              },
-              {
-                key: BOOST_KEY_LABELS.invis,
-                title: 'Invisibility',
-                text: `Other players cannot see your coin, its name or its minimap dot for ${secs(BOOST_RULES.invis.durationMs)}. It can still eat and be eaten.`,
-                meta: `Cooldown ${secs(BOOST_RULES.invis.cooldownMs)}`,
-              },
+            kind: 'table',
+            caption: 'The four power-ups',
+            quiet: true,
+            head: ['Key', 'Power-up', 'What it does', 'Lasts', 'Cooldown'],
+            keys: 0,
+            numeric: [3, 4],
+            stack: true,
+            rows: [
+              [BOOST_KEY_LABELS.magnet, 'Magnet', 'Pulls nearby food to your coin.', secs(BOOST_RULES.magnet.durationMs), secs(BOOST_RULES.magnet.cooldownMs)],
+              [BOOST_KEY_LABELS.leap, 'Leap', "Jumps your coin toward the pointer. It can't cross the wall.", 'Instant', secs(BOOST_RULES.leap.cooldownMs)],
+              [BOOST_KEY_LABELS.speed, 'Speed burst', 'Extra speed.', secs(BOOST_RULES.speed.durationMs), secs(BOOST_RULES.speed.cooldownMs)],
+              [
+                BOOST_KEY_LABELS.invis,
+                'Invisibility',
+                "Other players can't see your coin, its name or its minimap dot. It can still eat and be eaten.",
+                secs(BOOST_RULES.invis.durationMs),
+                secs(BOOST_RULES.invis.cooldownMs),
+              ],
             ],
           },
           {
-            kind: 'list',
-            items: [
-              {
-                term: 'Packs:',
-                text: `a pack holds ${SH.packSize} uses of one power-up. The shop shows each price, paid in ${symbol}. Several packs can be paid in one transaction.`,
-              },
-              { term: 'Where the payment goes:', text: `${payBurn} is burned and ${payTeam} goes to the team wallet.` },
-              {
-                term: 'Limit:',
-                text: `in a paid room you can use ${SH.arenaUses} power-ups per round (per game in a ticket room), all four kinds together. Practice rooms and free private rooms have no limit, only the cooldown.`,
-              },
-              { term: 'Shop:', text: 'it needs a signed-in wallet. Nothing is sold during a game.' },
-            ],
+            kind: 'p',
+            text: `Each pack holds ${SH.packSize} uses of one power-up. The shop shows each price in ${symbol}, and several packs can be paid in one transaction: ${payBurn} is burned and ${payTeam} goes to the team wallet. The shop needs a signed-in wallet, and nothing is sold during a game.`,
+          },
+          {
+            kind: 'p',
+            text: `In a paid room you can use ${SH.arenaUses} power-ups per round (per game in a ticket room), all four kinds together. Practice rooms and free private rooms have no limit, only the cooldown.`,
           },
         ],
       },
       {
         id: 'nft',
         title: 'The Coinnibal NFT',
-        lede: `A coin character on ${chain}. A wallet that holds one gets perks in the game.`,
+        lede: `A coin character on ${chain}. Hold one and your wallet gets perks in the game.`,
         blocks: [
           {
             kind: 'p',
-            text: `The Coinnibal NFT collection has ${num(NFT_SUPPLY)} NFTs. The NFT is not a ticket and has no value in a round.`,
+            text: `The collection has ${num(NFT_SUPPLY)} NFTs. An NFT isn't a ticket and has no value in a round.`,
           },
           {
             kind: 'table',
@@ -362,58 +332,57 @@ export const docsEn = (
             ],
           },
           {
-            kind: 'list',
-            items: [
-              {
-                term: 'One NFT, one wallet:',
-                text: 'each NFT gives its perks to one open ticket at a time, and its free room and power-up discount to one wallet a day.',
-              },
-            ],
+            kind: 'p',
+            text: 'Each NFT lends its perks to one open ticket at a time, and its free room and power-up discount to one wallet a day.',
           },
         ],
       },
       {
         id: 'token',
         title: 'The game token',
-        lede: 'What the token pays for, and what it does not.',
         blocks: [
           {
-            kind: 'list',
-            items: [
-              { term: 'Used for:', text: 'the tickets and payouts of the paid rooms, and power-up packs.' },
-              { term: 'Not used for:', text: `the NFT mint, opening a private room and network fees. These are paid in ${GAS_SYMBOL}.` },
-              {
-                term: 'Burn:',
-                text: `a part of every fee on profit and of every power-up payment is burned (see ${see('Rounds, payout and fee', 'payout')} and ${see('Power-ups', 'powerups')}). Burned tokens are gone for good. The game never creates new ${symbol}.`,
-              },
-              {
-                term: 'Set once:',
-                text: 'the game token is set in the contract once and can never be changed.',
-              },
+            kind: 'table',
+            caption: `What is paid in ${symbol} and what in ${GAS_SYMBOL}`,
+            quiet: true,
+            head: ['What', 'Paid in'],
+            numeric: [1],
+            rows: [
+              ['Tickets and payouts in the paid rooms', symbol],
+              ['Power-up packs', symbol],
+              ['The NFT mint', GAS_SYMBOL],
+              ['Opening a private room', GAS_SYMBOL],
+              ['Network fees', GAS_SYMBOL],
             ],
+          },
+          {
+            kind: 'p',
+            text: `Part of every fee on profit and of every power-up payment is burned (see ${see('Rounds, payout and fee', 'payout')} and ${see('Power-ups', 'powerups')}). Burned tokens are gone for good, and the game never creates new ${symbol}.`,
+          },
+          {
+            kind: 'p',
+            text: 'The game token is set in the contract once and can never be changed.',
           },
         ],
       },
       {
         id: 'fair',
         title: 'Contract and server',
-        lede: 'What anyone can check on-chain, and what you trust the game server for.',
-        strip: { label: 'Who does what', panels: ['Money rules: in the contract.', 'The game: on the server.', 'Anyone can read the contract.'] },
         blocks: [
           {
             kind: 'compare',
             left: {
               title: 'On-chain: anyone can check',
               items: [
-                "Ticket money sits in the room's vault. A payout can never be more than the vault holds.",
-                `The fee rates are written on the ticket when it is bought. The contract allows at most ${pct(F.fee.maxBps)} of a profit.`,
+                "Ticket money sits in the room's vault, and a payout can never be more than the vault holds.",
+                `The fee rates are written on the ticket when it's bought, and the contract allows at most ${pct(F.fee.maxBps)} of a profit.`,
                 'The contract does the burns, so anyone can check them.',
-                'Every ticket has its own id, so a payout cannot be used twice.',
-                'The game server can only use a vault to pay players, refund tickets and burn tokens. The team cannot take tokens out of a vault that has open tickets.',
+                "Every ticket has its own id, so a payout can't be used twice.",
+                "The game server can only use a vault to pay players, refund tickets and burn tokens. The team can't take tokens out of a vault that has open tickets.",
               ],
             },
             right: {
-              title: 'On the server: players trust it',
+              title: 'On the server: you trust it',
               items: [
                 'The game itself: movement, who ate whom, and the value of each coin at the bell.',
                 `The dollar price of the game token, set by the team. It decides how many ${symbol} a ticket or a pack costs.`,
@@ -429,18 +398,15 @@ export const docsEn = (
         id: 'wallet',
         title: 'Wallet safety',
         lede: 'Read every request before you sign.',
-        strip: { label: 'Stay safe', panels: ['Someone asks for your seed phrase.', 'Never give it to anyone.', 'Sign only what you have read.'] },
+        strip: { label: 'Stay safe', panels: ['Someone asks for your seed phrase.', 'Never give it to anyone.', "Sign only what you've read."] },
         blocks: [
           {
             kind: 'list',
             items: [
-              { term: 'Sign-in', text: `is a free message, not a transaction. It reads: "${SIWE_STATEMENT}"` },
-              {
-                term: 'Approvals:',
-                text: `a ticket approval names the game contract and a fixed amount of ${symbol}. An approval for another address or for an unlimited amount is not from Coinnibal.`,
-              },
-              { term: 'Seed phrase:', text: 'Coinnibal never asks for your seed phrase or a private key. Anyone who asks is a scammer.' },
-              { term: 'Separate wallet:', text: 'use a wallet only for games and keep only the amount you play with in it.' },
+              `Signing in is a free message, not a transaction. It reads: "${SIWE_STATEMENT}"`,
+              `A ticket approval names the game contract and a fixed amount of ${symbol}. An approval for another address or for an unlimited amount isn't from Coinnibal.`,
+              'Coinnibal never asks for your seed phrase or a private key. Anyone who asks is a scammer.',
+              'Keep a separate wallet for games, with only the amount you play with in it.',
               {
                 term: 'Official links:',
                 text: `the site is ${site} and the X account is @${x}. The NFT mint will be on OpenSea: use only the OpenSea link that @${x} posts.`,
@@ -452,55 +418,54 @@ export const docsEn = (
       {
         id: 'profile',
         title: 'Profile, X and ranks',
-        lede: 'A signed-in wallet has a profile. Your X account can show on your coin.',
+        lede: 'A signed-in wallet gets a profile, and your X account can show on your coin.',
         blocks: [
+          { kind: 'p', text: 'Your profile has a name, a coin skin or picture, a country flag, a level and XP.' },
+          { kind: 'h', text: 'Linking X' },
           {
-            kind: 'list',
+            kind: 'steps',
+            label: 'How to link X',
             items: [
-              { term: 'Profile:', text: 'a name, a coin skin or picture, a country flag, a level and XP.' },
-              {
-                term: 'Link X:',
-                text: `Profile → Link X shows a code such as ${X_CODE_PREFIX}-7K2M9Q. You post it from your X account and paste the link of the post. There is no X login. A code is valid for ${X_CODE_TTL_MS / 60_000} minutes.`,
-              },
-              {
-                term: 'After linking,',
-                text: 'your @handle shows on your coin and your X picture can be your coin picture. Players who eat you can tag you when they share.',
-              },
-              {
-                term: 'Share on X',
-                text: 'is on the top bar during a game, on the sheet at the end of a game and right after eating a player. It opens X with a ready text and a link to a card of the game. The card picture can also be downloaded. Nothing is posted until you post it.',
-              },
-              { term: 'Ranks:', text: 'the Ranks page lists the best games of today and of all time, the last rounds and the countries. Ranks pay nothing.' },
+              `Open Profile → Link X. It shows a code such as ${X_CODE_PREFIX}-7K2M9Q, valid for ${X_CODE_TTL_MS / 60_000} minutes.`,
+              'Post the code from your X account.',
+              "Paste the link of the post. That's all: there's no X login.",
             ],
+          },
+          {
+            kind: 'p',
+            text: 'After linking, your @handle shows on your coin and your X picture can be your coin picture. Players who eat you can tag you when they share.',
+          },
+          {
+            kind: 'p',
+            text: 'Share on X is on the top bar during a game, on the sheet at the end of a game and right after eating a player. It opens X with a ready text and a link to a card of the game, and you can download the card picture too. Nothing is posted until you post it.',
+          },
+          {
+            kind: 'p',
+            text: 'The Ranks page lists the best games of today and of all time, the last rounds and the countries. Ranks pay nothing.',
           },
         ],
       },
       {
         id: 'help',
         title: 'When something goes wrong',
-        lede: 'What happens to a ticket in each case.',
+        lede: "Lost connections, missing payouts, crashes: here's what happens to your ticket.",
         blocks: [
           {
-            kind: 'list',
-            items: [
-              {
-                term: 'Lost connection:',
-                text: 'your coin stays in the paid room and can still be eaten. You can come back and keep playing. If it is alive at the bell, you are paid as usual.',
-              },
-              { term: 'Ticket not played:', text: `a ticket that never entered a room is refunded in full by the server after about ${S.staleTicketMinutes} minutes.` },
-              {
-                term: 'Payout not received:',
-                text: 'if the transfer to the wallet fails, the payout waits in the vault and the lobby shows "Collect payout". One transaction collects the exact amount, at any time.',
-              },
-              {
-                term: 'Payout on hold:',
-                text: `if the anti-cheat checks flag a winning game, its payout waits for a team check instead of going out in the break. With no decision within ${INTEGRITY_SETTINGS_DEFAULT.autoReleaseHours} hours, it is paid as usual. If the check finds cheating, nothing is paid.`,
-              },
-              {
-                term: 'Ticket never settled:',
-                text: `if the server never settles a ticket, you can refund the ticket price ${F.refundHours} hours after buying it ("Refund ticket" in the lobby).`,
-              },
-              { term: 'Server crash:', text: 'the server saves every change of value. After a restart, open tickets are settled at their last saved value.' },
+            kind: 'table',
+            caption: 'What happens to your ticket in each case',
+            quiet: true,
+            head: ['What went wrong', 'What happens'],
+            stack: true,
+            rows: [
+              ['You lose your connection', "Your coin stays in the paid room and can still be eaten. Come back and keep playing: if it's alive at the bell, you're paid as usual."],
+              ['Your ticket never enters a room', `The server refunds it in full after about ${S.staleTicketMinutes} minutes.`],
+              ["Your payout doesn't arrive", 'If the transfer to your wallet fails, the payout waits in the vault and the lobby shows "Collect payout". One transaction collects the exact amount, at any time.'],
+              [
+                'The anti-cheat checks flag a winning game',
+                `Its payout waits for a team check instead of going out in the break. With no decision within ${INTEGRITY_SETTINGS_DEFAULT.autoReleaseHours} hours, it's paid as usual. If the check finds cheating, nothing is paid.`,
+              ],
+              ['The server never settles a ticket', `You can refund the ticket price ${F.refundHours} hours after buying it ("Refund ticket" in the lobby).`],
+              ['The server crashes', 'It saves every change of value. After a restart, open tickets are settled at their last saved value.'],
             ],
           },
         ],
