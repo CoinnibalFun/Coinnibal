@@ -27,6 +27,7 @@ import type { RoomHandle } from '../rooms/handle';
 import type { RoomManager } from '../rooms/manager';
 import { MAX_STAKE_SESSION_AGE_S } from '../rooms/room';
 import type { Journal, SettlementItem } from '../stake/journal';
+import { asClient } from './client-scope';
 import { Conn, PING_REPLY_MIN_MS } from './conn';
 import { rateKey, subnetOf, wideNetOf } from './ip-key';
 import { Limiter } from './limiter';
@@ -106,6 +107,17 @@ export function clientIp(req: IncomingMessage, hops: number | boolean): string {
  * the RPC budget's own 429 retries); the player hears "network busy, retrying" once.
  */
 export const JOIN_CHAIN_RETRY_MS = [2_000, 4_000, 8_000];
+/**
+ * Ticket reads (`getSession`: a join, each of its retries, a bell re-check, a refund check) a minute per wallet and per
+ * client (`rateKey`), on top of each socket's own `allowChainOp`: many sockets or throwaway wallets do not add up.
+ */
+export const TICKET_READS_PER_WALLET_PER_MIN = 20;
+export const TICKET_READS_PER_IP_PER_MIN = 60;
+/**
+ * Ticket reads waiting at once, server-wide: this many seconds of the RPC budget (`RPC_MAX_RPS`), at least 16. Past
+ * it a join hears "network busy" at once (and retries) instead of queuing for minutes behind a flood.
+ */
+export const TICKET_READ_QUEUE_S = 16;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref());
 
@@ -162,6 +174,10 @@ export class Gateway {
   private readonly upgrades = new Limiter(UPGRADES_PER_IP_PER_MIN, 60_000);
   /** Upgrades per ticket-holder wallet (the stake path). */
   private readonly stakeUpgrades = new Limiter(STAKE_UPGRADES_PER_WALLET_PER_MIN, 60_000);
+  /** Ticket reads per wallet and per client (`allowTicketRead`), and how many are waiting now (`readTicket`). */
+  private readonly ticketReadsByWallet = new Limiter(TICKET_READS_PER_WALLET_PER_MIN, 60_000);
+  private readonly ticketReadsByIp = new Limiter(TICKET_READS_PER_IP_PER_MIN, 60_000);
+  private ticketReads = 0;
   /** Graceful degradation (new joins shed before live rooms suffer); null: never sheds (bare unit tests). */
   private shedder: LoadShedder | null = null;
   /** Connections closed for abuse (flood, garbage, no hello, a client that stops reading), for the load test and the logs. */
@@ -554,8 +570,11 @@ export class Gateway {
       const want = this.alive.get(ws);
       if (want instanceof Buffer && data.equals(want)) this.alive.set(ws, true);
     });
+    // a text message may trigger chain reads: they count against this client's own budgets (`asClient`)
+    const key = rateKey(ip);
     ws.on('message', (data, isBinary) => {
-      this.onMessage(conn, data, isBinary).catch((err) => this.log(`message handling failed: ${(err as Error).stack ?? err}`));
+      const handled = isBinary ? this.onMessage(conn, data, isBinary) : asClient(key, () => this.onMessage(conn, data, isBinary));
+      handled.catch((err) => this.log(`message handling failed: ${(err as Error).stack ?? err}`));
     });
     ws.on('close', () => {
       clearTimeout(helloTimer);
@@ -630,10 +649,10 @@ export class Gateway {
    */
   async refundUnseated(conn: Conn, arenaId: number): Promise<boolean> {
     const wallet = conn.wallet;
-    if (!wallet || arenaId < 0 || !this.chain.stakeEnabled || !conn.allowChainOp()) return false;
+    if (!wallet || arenaId < 0 || !this.chain.stakeEnabled || !this.allowTicketRead(conn, wallet)) return false;
     let s: ChainSession | null;
     try {
-      s = await this.chain.getSession(arenaId, wallet);
+      s = await this.readTicket(arenaId, wallet);
     } catch {
       return false; // the sweeper refunds it later
     }
@@ -955,7 +974,7 @@ export class Gateway {
     let told = false;
     for (let i = 0; ; i++) {
       try {
-        return await this.chain.getSession(arenaId, wallet);
+        return await this.readTicket(arenaId, wallet);
       } catch (err) {
         if (!(err instanceof ChainBusyError) || i >= JOIN_CHAIN_RETRY_MS.length || conn.ws.readyState > 1) throw err;
         if (!told) {
@@ -963,7 +982,26 @@ export class Gateway {
           this.error(conn, 'chain_busy', 'The network is busy, retrying your ticket…');
         }
         await sleep(JOIN_CHAIN_RETRY_MS[i]);
+        // every retry is a ticket read of its own (the limits per socket, wallet and client count it)
+        if (!this.allowTicketRead(conn, wallet)) throw err;
       }
+    }
+  }
+
+  /** One more ticket read for this socket and wallet: per socket (`allowChainOp`), per wallet and per client. */
+  private allowTicketRead(conn: Conn, wallet: string): boolean {
+    return conn.allowChainOp() && this.ticketReadsByWallet.allow(wallet.toLowerCase()) && this.ticketReadsByIp.allow(rateKey(conn.ip));
+  }
+
+  /** A ticket read within the server-wide bound (`TICKET_READ_QUEUE_S`); past it, `ChainBusyError` at once. */
+  private async readTicket(arenaId: number, wallet: string): Promise<ChainSession | null> {
+    const max = Math.max(16, Math.ceil(this.cfg.chain.rpcMaxRps * TICKET_READ_QUEUE_S));
+    if (this.ticketReads >= max) throw new ChainBusyError('ticket read', new Error(`${this.ticketReads} ticket reads are waiting already`));
+    this.ticketReads++;
+    try {
+      return await this.chain.getSession(arenaId, wallet);
+    } finally {
+      this.ticketReads--;
     }
   }
 
@@ -1032,7 +1070,7 @@ export class Gateway {
       if (bell) {
         const settling = this.journal.pending.some((p) => p.key === bell.session);
         // undefined: the chain could not be read (or this connection is rate-limited); the normal path below decides then
-        const live = settling ? null : conn.allowChainOp() ? await this.chain.getSession(target.arenaId, wallet).catch(() => undefined) : undefined;
+        const live = settling ? null : this.allowTicketRead(conn, wallet) ? await this.readTicket(target.arenaId, wallet).catch(() => undefined) : undefined;
         if (!same()) return;
         if (settling || live === null || (live && live.id === bell.sessionId && !live.finalized)) {
           this.roundEnded(conn);
@@ -1059,7 +1097,7 @@ export class Gateway {
         this.error(conn, 'server_full', 'The server is very busy right now. Your ticket is safe on chain: press Resume again in a minute.');
         return;
       }
-      if (!conn.allowChainOp()) {
+      if (!this.allowTicketRead(conn, wallet)) {
         this.error(conn, 'rate_limited', 'Too many join attempts — wait a moment.');
         return;
       }
