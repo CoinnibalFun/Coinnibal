@@ -33,9 +33,9 @@ function writeHash(id: string | null): void {
 /** A plain click (not a new tab or window): the guide handles it in place. */
 const plainClick = (e: MouseEvent): boolean => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
-/** A section is the one being read once its top passes this line: the 75px header plus about one section gap, so the
- * mark moves on when the previous section has gone under the header, not 50-80px later. */
-const READ_LINE = 160;
+/** A chapter is the one being read once its heading passes this line: 30% of the way down the window (never above the
+ * sticky header and a little air), so the contents move on while the heading is still in plain view. */
+const readLine = (): number => Math.max(120, window.innerHeight * 0.3);
 
 /** Heading levels the guide uses: its title, then its sections one level under it, then their small heads. */
 type Level = 1 | 2;
@@ -79,7 +79,7 @@ export function DocsPage({ level = 2 }: { level?: Level }) {
   // (`performance.now()` deadline; 0: unlocked)
   const lockUntil = useRef(0);
 
-  // the section being read: the last one whose top has passed the read line (the last one at the very bottom)
+  // the section being read: the last one whose heading has passed the read line (the last one at the very bottom)
   useEffect(() => {
     let frame = 0;
     let idle = 0;
@@ -92,9 +92,10 @@ export function DocsPage({ level = 2 }: { level?: Level }) {
         return;
       }
       let cur = ids[0];
+      const line = readLine();
       for (const id of ids) {
-        const el = document.getElementById(`docs-${id}`);
-        if (el && el.getBoundingClientRect().top <= READ_LINE) cur = id;
+        const el = document.getElementById(`docs-${id}-h`) ?? document.getElementById(`docs-${id}`);
+        if (el && el.getBoundingClientRect().top <= line) cur = id;
       }
       setActive(cur);
     };
@@ -243,8 +244,30 @@ export function DocsPage({ level = 2 }: { level?: Level }) {
             </section>
           ))}
 
-          {/* the last chapter's table closes with its own rule: no second rule under it */}
+          {/* the guide's last word: the links to trust and the seed-phrase rule, then the way back up (the last chapter's
+              table closes with its own rule: no second rule under it) */}
           <footer className="dc-foot">
+            <div className="dc-close">
+              {c.closing.lines.map((l) => {
+                // the X account is a link where the line first names it
+                const at = l.indexOf(c.closing.follow);
+                return (
+                  <p key={l} className="dc-close__line">
+                    {at < 0 ? (
+                      l
+                    ) : (
+                      <>
+                        {l.slice(0, at)}
+                        <a className="dc-see dc-close__x" href={c.closing.href} target="_blank" rel="noreferrer">
+                          {c.closing.follow}
+                        </a>
+                        {l.slice(at + c.closing.follow.length)}
+                      </>
+                    )}
+                  </p>
+                );
+              })}
+            </div>
             <button type="button" className="dc-top" onClick={toTop}>
               <Icon name="arrow" size={18} className="dc-top__icon" />
               <span>{c.backToTop}</span>
