@@ -1,7 +1,7 @@
 import { normalizeXHandle, type PublicWlTask, type SiteSettings, type WlEntryPublic } from '@elymum/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, CoinCharacter, Field, Icon, PlateLabel, Stamp, StampSpinner, StatusPill, Sticker, Tape, useReducedMotion } from '../../design';
+import { Button, CoinCharacter, Field, Icon, Stamp, StampSpinner, StatusPill, Sticker, Tape, useReducedMotion } from '../../design';
 import { SiteApiError, site } from '../api';
 import { ticketNo } from '../coinLook';
 import { Link } from '../router';
@@ -127,7 +127,7 @@ function Wl() {
   );
 }
 
-/** The WL while applications are not open: the site's shared closed notice, with the way back to an earlier entry. */
+/** The WL while applications are not open: the site's shared closed notice (its heading the one label), with the way back to an earlier entry. */
 function WlClosed() {
   const [signin, setSignin] = useState(false);
   const t = useT();
@@ -140,8 +140,7 @@ function WlClosed() {
   }, [t]);
   return (
     <>
-      <PlateLabel numeral="IV" title={t('wp.closed.plate')} />
-      <ClosedNotice lede={t('wp.closed.body')}>
+      <ClosedNotice title={t('wp.closed.title')} lede={t('wp.closed.body')}>
         <div className="wl-closed__again">
           <button type="button" className="wl-textlink" onClick={() => setSignin((v) => !v)} aria-expanded={signin}>
             {t('wp.closed.signin')}

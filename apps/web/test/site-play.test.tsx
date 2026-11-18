@@ -18,12 +18,15 @@ beforeEach(() => {
 afterEach(() => restore());
 
 describe('the /play gate', { timeout: 30_000 }, () => {
-  it('blocks a visitor with no session: "The game is not open yet", the guide, home and X; no WL or mint promise', async () => {
+  it('blocks a visitor with no session: "The game isn\'t open yet", the launch order, the guide, home and X; no WL or mint promise', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false } } }));
     const onAllowed = vi.fn();
     render(<PlayGate onAllowed={onAllowed} />);
-    expect(await screen.findByRole('heading', { name: /The game is not open yet/ })).toBeTruthy();
-    expect(screen.getByText('The guide explains every rule.')).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: /The game isn’t open yet/ })).toBeTruthy();
+    // the owner's launch order, no dates
+    expect(screen.getByText("Even the guard's asleep. First comes the NFT mint, then the token, then the game, and the guide already has every rule.")).toBeTruthy();
+    // one label: the heading (no title strip, no eyebrow over it)
+    expect(document.querySelector('.kb-plate, .pg-kicker')).toBeNull();
     expect(document.querySelector('main')?.textContent ?? document.body.textContent).not.toMatch(/start date|soon|until then/i);
     expect(screen.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/');
     expect(screen.getByRole('link', { name: 'Read the guide' }).getAttribute('href')).toBe('/docs');

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { CoinCharacter, PlateLabel, Sticker, useReducedMotion } from '../design';
+import { CoinCharacter, Sticker, useReducedMotion } from '../design';
 import { useT, type TKey } from '../i18n';
 import { SiteLinkButton, SitePage, XIcon } from './Shell';
 import { useSiteSettings, xProfile } from './settings';
@@ -14,15 +14,18 @@ const WHAT: Record<string, TKey> = {
   '/collab': 'site.closed.collab',
 };
 
-/** The name a closed page carries on its title strip. */
-const NAME: Record<string, TKey> = { '/mint': 'site.closed.nameMint', '/collab': 'site.nav.collab' };
+/** The heading of each such page: it says what is not open (the neutral page says only that). */
+const TITLE: Record<string, TKey> = {
+  '/mint': 'site.closed.titleMint',
+  '/collab': 'site.closed.titleCollab',
+};
 
 /**
- * The shared "not open yet" notice: a sleepy coin with a "Closed" tag on a cream card, one sentence, the guide,
- * the way home and the project's X account (`children`: anything a page adds under them, inside the card).
- * Nothing here links to another closed part of the site.
+ * The shared "not open yet" notice: a sleepy coin with a "Closed" tag on a cream card, its heading, one sentence,
+ * the guide, the way home and the project's X account (`children`: anything a page adds under them, inside the card).
+ * One label: the heading (no title strip above the page). Nothing here links to another closed part of the site.
  */
-export function ClosedNotice({ lede, children }: { lede: ReactNode; children?: ReactNode }) {
+export function ClosedNotice({ title, lede, children }: { title: ReactNode; lede: ReactNode; children?: ReactNode }) {
   const t = useT();
   const reduced = useReducedMotion();
   const { settings } = useSiteSettings();
@@ -36,7 +39,7 @@ export function ClosedNotice({ lede, children }: { lede: ReactNode; children?: R
       </div>
       <Sticker tone="cream" pad="lg" lift="lg" round="lg" className="cl__card">
         <h1 className="cl__title" id="cl-title">
-          {t('site.closed.title')}
+          {title}
         </h1>
         <p className="cl__lede">{lede}</p>
         <div className="cl__ctas">
@@ -54,13 +57,12 @@ export function ClosedNotice({ lede, children }: { lede: ReactNode; children?: R
   );
 }
 
-/** A page the admin has not opened yet (`/mint`, `/faucet`, `/collab`): the shared notice on its own plate. */
+/** A page the admin has not opened yet (`/mint`, `/faucet`, `/collab`): the shared notice. */
 export function ClosedPage({ path }: { path: string }) {
   const t = useT();
   return (
     <SitePage className="cl-root">
-      <PlateLabel numeral="·" title={t(NAME[path] ?? 'site.closed.plate')} />
-      <ClosedNotice lede={t(WHAT[path] ?? 'site.closed.page')} />
+      <ClosedNotice title={t(TITLE[path] ?? 'site.closed.title')} lede={t(WHAT[path] ?? 'site.closed.page')} />
     </SitePage>
   );
 }

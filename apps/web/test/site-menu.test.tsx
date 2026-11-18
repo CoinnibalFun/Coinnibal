@@ -42,11 +42,29 @@ describe('the phone menu', () => {
     expect(soon.map((s) => s.textContent)).toEqual(['PlaySoon', 'WLSoon', 'CollabSoon']);
     expect(soon.every((s) => s.tagName === 'SPAN' && s.getAttribute('aria-disabled') === 'true')).toBe(true);
     expect(screen.queryByRole('button', { name: /Connect/ })).toBeNull();
-    // on a phone they sit in the menu sheet, still not links
+    // on screen the three stand under one Soon tag; a pointer on one says what it will be
+    expect(container.querySelectorAll('.st-nav .st-soonset__tag')).toHaveLength(1);
+    expect(soon.map((s) => s.getAttribute('title'))).toEqual([
+      'The game. It opens after the NFT mint and the token.',
+      "Where you'll apply for the whitelist.",
+      'Where communities ask for WL spots.',
+    ]);
+    // wide screens: the project's X account at the end of the nav
+    expect(screen.getByRole('link', { name: '@coinnibalfun on X' }).getAttribute('href')).toBe('https://x.com/coinnibalfun');
+    // on a phone the menu sheet holds the guide and X, each with a line on what is there, then the closed parts with
+    // what each will be (still not links)
     fireEvent.click(screen.getByRole('button', { name: 'Open the menu' }));
     const sheet = screen.getByRole('navigation', { name: 'Site menu' });
-    expect([...sheet.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['/docs']);
-    expect(sheet.querySelectorAll('.st-nav__link--soon')).toHaveLength(3);
+    expect([...sheet.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['/docs', 'https://x.com/coinnibalfun']);
+    expect(sheet.textContent).toContain('Rules, fees, the risks and wallet safety');
+    expect(sheet.textContent).toContain('News, and the one OpenSea link to trust');
+    const rows = [...sheet.querySelectorAll('.st-nav__link--soon')];
+    expect(rows.map((r) => r.textContent)).toEqual([
+      'PlayThe game. It opens after the NFT mint and the token.Soon',
+      "WLWhere you'll apply for the whitelist.Soon",
+      'CollabWhere communities ask for WL spots.Soon',
+    ]);
+    expect(rows.every((r) => r.tagName === 'SPAN' && r.getAttribute('aria-disabled') === 'true')).toBe(true);
     expect(container.querySelector('a[href="/play"], a[href="/mint"], a[href="/faucet"], a[href="/wl"], a[href="/collab"]')).toBeNull();
   });
 

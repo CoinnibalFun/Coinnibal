@@ -152,9 +152,10 @@ describe('/wl', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false } }, 'GET /api/site/tasks': { tasks: TASKS } }));
     document.title = 'WL · Coinnibal';
     const view = render(<WlPage />);
-    expect(await screen.findByRole('heading', { level: 1, name: 'Not open yet.' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: "The WL isn’t open yet" })).toBeTruthy();
     expect(screen.getByTestId('closed-page')).toBeTruthy();
-    expect(screen.getByText('This is where you will join the WL. The guide explains how the game works.')).toBeTruthy();
+    expect(screen.getByText("This is where you'll apply for the whitelist. For now, the guide explains how the game works.")).toBeTruthy();
+    expect(document.querySelector('.kb-plate')).toBeNull();
     expect(screen.getByRole('link', { name: /Read the guide/ }).getAttribute('href')).toBe('/docs');
     expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
     expect(screen.getAllByRole('link', { name: /@coinnibalfun/ })[0].getAttribute('href')).toBe('https://x.com/coinnibalfun');
