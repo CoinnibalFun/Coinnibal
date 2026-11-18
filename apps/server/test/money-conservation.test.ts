@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_FAULTS, fakeSimChain, runMoneySim, type SimReport } from './money-sim';
+import { runRoomFeeConservation } from './room-pay';
 import { runCartConservation } from './shop-cart';
 
 const brief = (r: SimReport) =>
@@ -75,6 +76,19 @@ describe('money conservation: power-up carts (one payment, applied at once)', ()
       expect(r.violations).toEqual([]);
       expect(r.refunds).toBeGreaterThan(0);
       console.log(`carts seed ${seed}: ${r.purchases} payments, ${r.refused} refused, ${r.refunds} with a part owed back`);
+    }, 60_000);
+  }
+});
+
+describe('money conservation: custom room fees (paid in the game token, one room per payment)', () => {
+  for (const seed of [31, 32, 33]) {
+    it(`seed ${seed}: every room was paid at least its price by its creator, once; the fees add up; a refused payment opened nothing`, async () => {
+      const r = await runRoomFeeConservation(seed, 300);
+      expect(r.violations).toEqual([]);
+      expect(r.opened).toBeGreaterThan(20);
+      expect(r.refused).toBeGreaterThan(20);
+      expect(r.replays).toBeGreaterThan(5);
+      console.log(`room fees seed ${seed}: ${r.attempts} attempts, ${r.opened} rooms opened, ${r.refused} refused, ${r.replays} replays`);
     }, 60_000);
   }
 });

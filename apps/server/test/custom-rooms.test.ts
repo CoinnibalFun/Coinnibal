@@ -1,62 +1,57 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CUSTOM_DEFAULTS, PRACTICE_ROOM, PROTOCOL_VERSION, ROOM_CLOSE_COUNTDOWN_MS, TICK_MS, CUSTOM_MAP_WIDTH, CUSTOM_WORLD_CAPS, CUSTOM_PAYMENT_MAX_AGE_MS, type CustomRoomConfig, type ServerMessage } from '@elymum/shared';
-import { parseEther } from 'viem';
+import {
+  CUSTOM_DEFAULTS,
+  CUSTOM_PAYMENT_MAX_AGE_MS,
+  PRACTICE_ROOM,
+  PROTOCOL_VERSION,
+  ROOM_CLOSE_COUNTDOWN_MS,
+  TICK_MS,
+  CUSTOM_MAP_WIDTH,
+  CUSTOM_WORLD_CAPS,
+  customRoomPaymentRef,
+  parseUsdPrice,
+  shopCartRef,
+  shopPaymentRef,
+  type ChainStatus,
+  type CustomRoomConfig,
+  type ServerMessage,
+} from '@elymum/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
-import { PaymentChainBusy, UsedPayments, checkPayment, devFakePaymentReader, type NativeTransfer, type PaymentReader } from '../src/chain/payment';
-import { NullChain } from '../src/chain/types';
+import { UsedPayments } from '../src/chain/payment';
+import { ChainBusyError, NullChain, type ChainArena, type TokenReceipt } from '../src/chain/types';
 import type { Room } from '../src/rooms/room';
 import { loadConfig } from '../src/config';
 import { Limiter } from '../src/net/limiter';
-import { CustomRoomFail, CustomRoomService, customWorld } from '../src/rooms/custom';
+import { CUSTOM_QUOTE_VALID_MS, CustomRoomFail, CustomRoomService, customWorld } from '../src/rooms/custom';
 import { RoomManager } from '../src/rooms/manager';
-import { ArenaChain, arena, fakeConn, roomDeps } from './helpers';
+import { arena, fakeConn, roomDeps } from './helpers';
+import { ARENA_ADDR, ONE, PRICE, PayChain, TOKEN, hash, requestOf } from './room-pay';
 import { testSigner } from './signers';
 
-const TREASURY = '0x1111111111111111111111111111111111111111';
-const PRICE = parseEther('0.0005');
-const hash = (n: number) => `0x${n.toString(16).padStart(64, '0')}`;
 const cfgOf = (extra: Partial<CustomRoomConfig> = {}): CustomRoomConfig => ({ ...CUSTOM_DEFAULTS, name: 'Friday Pond', ...extra });
 
-/** A chain of native transfers keyed by hash; `busy` makes every read fail like a rate-limited RPC. */
-class FakeTransfers implements PaymentReader {
-  readonly txs = new Map<string, NativeTransfer>();
-  reads = 0;
-  busy = false;
-  constructor(private readonly clock: { t: number }) {}
-  pay(n: number, from: string, extra: Partial<NativeTransfer> = {}): string {
-    const h = hash(n);
-    this.txs.set(h, { hash: h, from, to: TREASURY, value: PRICE, status: 'success', blockNumber: 10n, timestamp: this.clock.t - 5_000, ...extra });
-    return h;
-  }
-  async transfer(h: string): Promise<NativeTransfer | null> {
-    this.reads++;
-    if (this.busy) throw new PaymentChainBusy();
-    return this.txs.get(h.toLowerCase()) ?? null;
-  }
-}
-
-function setup(o: { dir?: string | null; holder?: boolean; clock?: { t: number }; reader?: FakeTransfers } = {}) {
+function setup(o: { dir?: string | null; holder?: boolean; clock?: { t: number }; reader?: PayChain; usd?: { usdPerToken: string } | null } = {}) {
   const clock = o.clock ?? { t: 1_800_000_000_000 };
-  const chain = new NullChain();
-  const rooms = new RoomManager(loadConfig({} as NodeJS.ProcessEnv), roomDeps(chain), chain);
-  const reader = o.reader ?? new FakeTransfers(clock);
+  const rooms = new RoomManager(loadConfig({} as NodeJS.ProcessEnv), roomDeps(new NullChain()), new NullChain());
+  const reader = o.reader ?? new PayChain(clock);
   const dir = o.dir === undefined ? mkdtempSync(join(tmpdir(), 'elymum-custom-')) : o.dir;
   const used = new UsedPayments(dir ? join(dir, 'chains', '46630', 'room-payments.json') : null);
+  const usd = { current: o.usd ?? null };
   const svc = new CustomRoomService({
     rooms,
     dataDir: dir,
     used,
-    reader: () => reader,
-    chainId: () => 46630,
+    chain: reader,
+    usdPrice: async () => (usd.current ? { price: parseUsdPrice(usd.current.usdPerToken), usdPerToken: usd.current.usdPerToken, sigFigs: 2 } : null),
+    receiptRetryMs: [0],
     isHolder: async () => o.holder ?? false,
-    ownerWallet: TREASURY,
     now: () => clock.t,
   });
-  return { svc, rooms, reader, clock, dir, used };
+  return { svc, rooms, reader, clock, dir, used, usd };
 }
 
 const fail = async (p: Promise<unknown>): Promise<CustomRoomFail> => {
@@ -69,61 +64,170 @@ const fail = async (p: Promise<unknown>): Promise<CustomRoomFail> => {
   throw new Error('expected a CustomRoomFail');
 };
 
-describe('room payment verification', () => {
-  const clock = { t: 1_800_000_000_000 };
-  const alice = testSigner().address;
-  const check = (reader: PaymentReader, used: UsedPayments, h: string, from = alice) =>
-    checkPayment(reader, used, { hash: h, from, to: TREASURY, minWei: PRICE, now: clock.t });
-
-  it('accepts a recent transfer from the signed-in wallet to the treasury of at least the price', async () => {
-    const r = new FakeTransfers(clock);
-    const res = await check(r, new UsedPayments(null), r.pay(1, alice, { value: PRICE + 1n }));
-    expect(res.ok).toBe(true);
+describe('room fee payment (the game token, ElymumArena.pay)', () => {
+  it('opens a room for a pay of at least the price from the signed-in wallet with its request ref; the fee is recorded in tokens', async () => {
+    const { svc, reader } = setup();
+    const alice = testSigner().address;
+    const q = await svc.quote(alice);
+    expect(q).toMatchObject({ priceRaw: PRICE.toString(), youPayRaw: PRICE.toString(), pay: { token: { address: TOKEN }, payTo: ARENA_ADDR, burnBps: 5000 } });
+    expect(q).not.toHaveProperty('payClosed');
+    const v = await svc.create(alice, { config: cfgOf(), ...reader.pay(1, alice) });
+    expect(v).toMatchObject({ paidWith: 'paid', txHash: hash(1), feeRaw: PRICE.toString(), feeIn: 'token' });
+    // paying more than the price is accepted (and recorded as paid)
+    const more = await svc.create(alice, { config: cfgOf(), ...reader.pay(2, alice, { value: PRICE + 1n }) });
+    expect(more.feeRaw).toBe((PRICE + 1n).toString());
   });
 
-  it('refuses forged, wrong-sender, wrong-receiver, underpaid, reverted, stale and used payments', async () => {
-    const r = new FakeTransfers(clock);
-    const used = new UsedPayments(null);
+  it('refuses a forged, foreign, misdirected, mis-referenced, underpaid, reverted, tokenless or stale payment, naming the reason', async () => {
+    const { svc, reader, clock, used } = setup();
+    svc.updateSettings({ maxPerWallet: 10, maxLive: 20 });
+    const alice = testSigner().address;
     const bob = testSigner().address;
+    const create = (pay: { txHash: string; request: string }) => fail(svc.create(alice, { config: cfgOf(), ...pay }));
     // forged: no such transaction on chain (or not mined yet)
-    expect(await check(r, used, hash(404))).toMatchObject({ ok: false, code: 'payment_pending' });
-    expect(await check(r, used, 'not-a-hash')).toMatchObject({ ok: false, code: 'payment_invalid' });
-    // somebody else's payment cannot be claimed
-    expect(await check(r, used, r.pay(2, bob))).toMatchObject({ ok: false, code: 'payment_invalid', message: expect.stringMatching(/another wallet/) });
-    expect(await check(r, used, r.pay(3, alice, { to: bob }))).toMatchObject({ ok: false, code: 'payment_invalid', message: expect.stringMatching(/treasury/) });
-    expect(await check(r, used, r.pay(4, alice, { to: null }))).toMatchObject({ ok: false, code: 'payment_invalid' });
-    expect(await check(r, used, r.pay(5, alice, { value: PRICE - 1n }))).toMatchObject({ ok: false, code: 'payment_low' });
-    expect(await check(r, used, r.pay(6, alice, { status: 'reverted' }))).toMatchObject({ ok: false, code: 'payment_invalid' });
-    expect(await check(r, used, r.pay(7, alice, { timestamp: clock.t - CUSTOM_PAYMENT_MAX_AGE_MS - 1 }))).toMatchObject({ ok: false, code: 'payment_stale' });
-    const h = r.pay(8, alice);
-    used.markUsed(h, { at: clock.t, wallet: alice, code: 'AAAAA' });
-    const reads = r.reads;
-    // a used hash is refused without even reading the chain
-    expect(await check(r, used, h.toUpperCase().replace('0X', '0x'))).toMatchObject({ ok: false, code: 'payment_used' });
-    expect(r.reads).toBe(reads);
+    expect(await create({ txHash: hash(404), request: requestOf(404) })).toMatchObject({ code: 'payment_pending', status: 409 });
+    expect(await create({ txHash: 'not-a-hash', request: requestOf(1) })).toMatchObject({ code: 'payment_invalid' });
+    // the payment names its request: none, or a malformed one, is refused before the chain is read
+    const reads = reader.reads;
+    expect(await fail(svc.create(alice, { config: cfgOf(), txHash: reader.pay(2, alice).txHash }))).toMatchObject({ code: 'payment_invalid', field: 'request' });
+    expect(await create({ txHash: hash(2), request: 'NOT-A-REQUEST' })).toMatchObject({ code: 'payment_invalid', field: 'request' });
+    expect(reader.reads).toBe(reads);
+    // somebody else's payment cannot be claimed (bob paid, alice sends his hash and request)
+    expect(await create(reader.pay(3, bob))).toMatchObject({ code: 'payment_invalid', message: expect.stringMatching(/another wallet/) });
+    // a Paid event of another contract (a look-alike), or to a contract that is not the arena
+    expect(await create(reader.pay(4, alice, { contract: bob }))).toMatchObject({ code: 'payment_invalid', message: expect.stringMatching(/arena contract/) });
+    // the ref of another request, of a power-up pack or of a cart never opens this room
+    expect(await create({ ...reader.pay(5, alice, { ref: customRoomPaymentRef(requestOf(55)) }), request: requestOf(5) })).toMatchObject({ code: 'payment_invalid', message: expect.stringMatching(/something else/) });
+    expect(await create(reader.pay(6, alice, { ref: shopPaymentRef('magnet') }))).toMatchObject({ code: 'payment_invalid' });
+    expect(await create(reader.pay(7, alice, { ref: shopCartRef({ magnet: 3, leap: 0, speed: 0, invis: 0 }) }))).toMatchObject({ code: 'payment_invalid' });
+    expect(await create(reader.pay(8, alice, { value: PRICE - 1n }))).toMatchObject({ code: 'payment_low' });
+    expect(await create(reader.pay(9, alice, { status: 'reverted' }))).toMatchObject({ code: 'payment_invalid', message: expect.stringMatching(/failed/) });
+    // a Paid event without the token moving (another token, or none)
+    expect(await create(reader.pay(10, alice, { token: bob }))).toMatchObject({ code: 'payment_invalid', message: expect.stringMatching(/game token/) });
+    expect(await create(reader.pay(11, alice, { token: null }))).toMatchObject({ code: 'payment_invalid' });
+    expect(await create(reader.pay(12, alice, { timestamp: clock.t - CUSTOM_PAYMENT_MAX_AGE_MS - 1 }))).toMatchObject({ code: 'payment_stale' });
+    // nothing opened, nothing was used up
+    expect(svc.live).toBe(0);
+    expect(used.size).toBe(0);
+    // a refused hash is not burned: once it is a valid payment it opens the room
+    reader.pay(8, alice);
+    expect((await svc.create(alice, { config: cfgOf(), ...{ txHash: hash(8), request: requestOf(8) } })).paidWith).toBe('paid');
   });
 
-  it('case-insensitive addresses match; the fake chain only answers its own hashes', async () => {
-    const r = new FakeTransfers(clock);
-    expect((await check(r, new UsedPayments(null), r.pay(9, alice.toLowerCase()), alice.toUpperCase().replace('0X', '0x'))).ok).toBe(true);
-    const fake = devFakePaymentReader(() => clock.t);
-    expect(await fake.transfer(hash(1), { from: alice, to: TREASURY, minWei: PRICE })).toBeNull();
-    const fh = `0xde7fa4e0${'0'.repeat(48)}12345678`;
-    expect(await check(fake, new UsedPayments(null), fh)).toMatchObject({ ok: true });
+  it('replays: a hash opens one room, a request of a wallet opens one room, another wallet cannot borrow either', async () => {
+    const { svc, reader, used } = setup();
+    svc.updateSettings({ maxPerWallet: 10, maxLive: 20 });
+    const alice = testSigner().address;
+    const bob = testSigner().address;
+    const first = reader.pay(1, alice);
+    const room = await svc.create(alice, { config: cfgOf(), ...first });
+    // the same payment for another room: the room it opened, never a second one
+    expect((await svc.create(alice, { config: cfgOf({ maxPlayers: 4 }), ...first, request: requestOf(77) })).code).toBe(room.code);
+    expect(svc.live).toBe(1);
+    // a second payment naming the same request
+    expect(await fail(svc.create(alice, { config: cfgOf(), ...reader.pay(2, alice, { request: first.request }) }))).toMatchObject({ code: 'payment_used', field: 'request' });
+    // bob sends alice's paid hash: refused, and alice's room is not handed to him
+    expect(await fail(svc.create(bob, { config: cfgOf(), ...first }))).toMatchObject({ code: 'payment_used' });
+    // bob paying with alice's request id (seen on chain) opens his own room and takes nothing from alice
+    const copied = await svc.create(bob, { config: cfgOf(), ...reader.pay(3, bob, { request: requestOf(30) }) });
+    expect(copied.creator).toBe(bob);
+    expect(used.hasRequest(alice, requestOf(30))).toBe(false);
+    expect((await svc.create(alice, { config: cfgOf(), ...reader.pay(4, alice, { request: requestOf(30) }) })).paidWith).toBe('paid');
+    // alice asking again with the payment that opened her room (an answer that got lost): the same room, not a second
+    const again = await svc.create(alice, { config: cfgOf(), ...first });
+    expect(again.code).toBe(room.code);
+    expect(svc.mine(alice)).toHaveLength(2);
+    // two creates with one hash at once: one room
+    const h = reader.pay(5, alice);
+    const both = await Promise.allSettled([svc.create(alice, { config: cfgOf(), ...h }), svc.create(alice, { config: cfgOf(), ...h })]);
+    expect(both.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(svc.mine(alice)).toHaveLength(3);
   });
 
-  it('persists used hashes and refuses an unreadable file instead of forgetting them', () => {
+  it('the network being busy keeps the payment safe and unused', async () => {
+    const { svc, reader } = setup();
+    const alice = testSigner().address;
+    const h = reader.pay(1, alice);
+    reader.busy = true;
+    expect((await fail(svc.create(alice, { config: cfgOf(), ...h }))).code).toBe('chain_busy');
+    reader.busy = false;
+    expect((await svc.create(alice, { config: cfgOf(), ...h })).txHash).toBe(h.txHash);
+  });
+
+  it('before the game token is set: a room that costs something is refused with the reason; the free room of the day and practice still open', async () => {
+    const plain = setup();
+    plain.reader.tokenSet = false;
+    const alice = testSigner().address;
+    expect(await plain.svc.quote(alice)).toMatchObject({ pay: null, payClosed: 'no_token', enabled: true, priceRaw: PRICE.toString() });
+    const refused = await fail(plain.svc.create(alice, { config: cfgOf(), ...plain.reader.pay(1, alice) }));
+    expect(refused).toMatchObject({ code: 'token_not_set', status: 503, message: expect.stringMatching(/paid in tokens.*not live yet/) });
+    expect(plain.reader.reads).toBe(0);
+    expect(plain.svc.practice({ wallet: alice, ip: '10.0.0.1' }).paidWith).toBe('free');
+    // an emblem holder's free room of the day costs nothing: it opens
+    const holder = setup({ holder: true });
+    holder.reader.tokenSet = false;
+    expect(await holder.svc.quote(alice)).toMatchObject({ pay: null, freeAvailable: true, youPayRaw: '0' });
+    expect((await holder.svc.create(alice, { config: cfgOf() })).paidWith).toBe('free');
+    expect((await fail(holder.svc.create(alice, { config: cfgOf() }))).code).toBe('token_not_set');
+    // no chain at all: closed, with its own reason
+    const off = new CustomRoomService({ rooms: plain.rooms, dataDir: null, used: new UsedPayments(null), chain: new NullChain(), isHolder: async () => false });
+    expect(await off.quote(alice)).toMatchObject({ pay: null, payClosed: 'no_chain' });
+    expect((await fail(off.create(alice, { config: cfgOf() }))).code).toBe('rooms_closed');
+  });
+
+  it('priced in dollars: $1.50 at the arenas\' token price; a price quoted in the last 15 minutes is honoured', async () => {
+    const { svc, reader, clock, usd } = setup({ usd: { usdPerToken: '0.001' } });
+    svc.updateSettings({ maxPerWallet: 10, maxLive: 20 });
+    const alice = testSigner().address;
+    const q = await svc.quote(alice);
+    expect(q).toMatchObject({ priceRaw: (1500n * ONE).toString(), usdCents: 150, usdPerToken: '0.001' });
+    // the token doubles in dollars after the quote: the room now costs 750 tokens, the quoted 1,500 is more than enough
+    usd.current = { usdPerToken: '0.002' };
+    expect((await svc.quote(null)).priceRaw).toBe((750n * ONE).toString());
+    expect((await svc.create(alice, { config: cfgOf(), ...reader.pay(1, alice, { value: 750n * ONE }) })).feeRaw).toBe((750n * ONE).toString());
+    // the token halves: the new price is 3,000, but the 1,500 quoted a minute ago is accepted for 15 minutes
+    clock.t += 60_000;
+    usd.current = { usdPerToken: '0.001' };
+    await svc.quote(alice);
+    usd.current = { usdPerToken: '0.0005' };
+    expect((await svc.quote(null)).priceRaw).toBe((3000n * ONE).toString());
+    expect((await svc.create(alice, { config: cfgOf(), ...reader.pay(2, alice, { value: 1500n * ONE }) })).paidWith).toBe('paid');
+    clock.t += CUSTOM_QUOTE_VALID_MS + 1;
+    expect(await fail(svc.create(alice, { config: cfgOf(), ...reader.pay(3, alice, { value: 1500n * ONE }) }))).toMatchObject({ code: 'payment_low' });
+    // priced in tokens: whole tokens, whatever the dollar price
+    svc.updateSettings({ priceIn: 'token', priceTokens: '20' });
+    expect(await svc.quote(null)).toMatchObject({ priceRaw: (20n * ONE).toString() });
+    expect(await svc.quote(null)).not.toHaveProperty('usdCents');
+  });
+
+  it('persists used hashes and requests and refuses an unreadable file instead of forgetting them', () => {
+    const alice = testSigner().address;
     const dir = mkdtempSync(join(tmpdir(), 'elymum-pay-'));
     const file = join(dir, 'room-payments.json');
     const a = new UsedPayments(file);
-    a.markUsed(hash(1), { at: 1, wallet: alice, code: 'ABCDE' });
-    expect(new UsedPayments(file).has(hash(1))).toBe(true);
+    a.markUsed(hash(1), { at: 1, wallet: alice, code: 'ABCDE', request: requestOf(1), paid: '5' });
+    const b = new UsedPayments(file);
+    expect(b.has(hash(1))).toBe(true);
+    expect(b.hasRequest(alice.toLowerCase(), requestOf(1))).toBe(true);
+    expect(b.hasRequest(testSigner().address, requestOf(1))).toBe(false);
+    expect(b.get(hash(1))).toMatchObject({ code: 'ABCDE', paid: '5' });
     expect(a.claim(hash(2))).toBe(true);
     expect(a.claim(hash(2))).toBe(false); // in flight
     a.release(hash(2));
     expect(a.claim(hash(2))).toBe(true);
+    expect(() => a.markUsed(hash(3), { at: 1, wallet: alice, code: 'ABCDE', request: 'bad' })).toThrow(TypeError);
     writeFileSync(file, '{oops');
     expect(() => new UsedPayments(file)).toThrow(/unreadable/);
+  });
+
+  it('the file of the rooms paid in ETH loads as it is: those hashes stay used', () => {
+    const alice = testSigner().address;
+    const dir = mkdtempSync(join(tmpdir(), 'elymum-pay-old-'));
+    const file = join(dir, 'room-payments.json');
+    writeFileSync(file, JSON.stringify({ v: 1, used: { [hash(9)]: { at: 1, wallet: alice, code: 'ABCDE' } } }));
+    const u = new UsedPayments(file);
+    expect(u.has(hash(9))).toBe(true);
+    expect(u.size).toBe(1);
   });
 });
 
@@ -132,9 +236,9 @@ describe('custom rooms: create, caps, perks', () => {
     const { svc, rooms, reader } = setup();
     const alice = testSigner().address;
     const h = reader.pay(1, alice);
-    const view = await svc.create(alice, { config: cfgOf({ mapSize: 'S', bots: 4, difficulty: 'hard', maxPlayers: 6, powerUps: false }), txHash: h });
+    const view = await svc.create(alice, { config: cfgOf({ mapSize: 'S', bots: 4, difficulty: 'hard', maxPlayers: 6, powerUps: false }), ...h });
     expect(view.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
-    expect(view).toMatchObject({ name: 'Friday Pond', paidWith: 'paid', txHash: h, maxPlayers: 6, creator: alice, durationMin: 30 });
+    expect(view).toMatchObject({ name: 'Friday Pond', paidWith: 'paid', txHash: h.txHash, maxPlayers: 6, creator: alice, durationMin: 30 });
     expect(view.endsAt - view.createdAt).toBe(30 * 60_000);
     const room = rooms.privateRoom(view.code) as Room;
     expect(room.opts.custom?.creator).toBe(alice);
@@ -152,9 +256,9 @@ describe('custom rooms: create, caps, perks', () => {
     expect(room.bots?.count).toBe(4);
     // not listed publicly (invite only)
     expect(rooms.list().some((r) => r.code === view.code)).toBe(false);
-    // duplicate payment
-    const dup = await fail(svc.create(alice, { config: cfgOf(), txHash: h }));
-    expect(dup.code).toBe('payment_used');
+    // the same payment again: its room, not a second one
+    expect((await svc.create(alice, { config: cfgOf(), ...h })).code).toBe(view.code);
+    expect(svc.live).toBe(1);
   });
 
   it('refuses a missing, underpaid or foreign payment, and a bad config, without opening a room', async () => {
@@ -162,37 +266,28 @@ describe('custom rooms: create, caps, perks', () => {
     const alice = testSigner().address;
     const bob = testSigner().address;
     expect((await fail(svc.create(alice, { config: cfgOf() }))).code).toBe('payment_required');
-    expect((await fail(svc.create(alice, { config: cfgOf(), txHash: reader.pay(2, alice, { value: PRICE / 2n }) }))).code).toBe('payment_low');
-    expect((await fail(svc.create(alice, { config: cfgOf(), txHash: reader.pay(3, bob) }))).code).toBe('payment_invalid');
-    expect((await fail(svc.create(alice, { config: cfgOf(), txHash: hash(99) }))).code).toBe('payment_pending');
-    const bad = await fail(svc.create(alice, { config: cfgOf({ bots: 13 }), txHash: reader.pay(4, alice) }));
+    expect((await fail(svc.create(alice, { config: cfgOf(), ...reader.pay(2, alice, { value: PRICE / 2n }) }))).code).toBe('payment_low');
+    expect((await fail(svc.create(alice, { config: cfgOf(), ...reader.pay(3, bob) }))).code).toBe('payment_invalid');
+    expect((await fail(svc.create(alice, { config: cfgOf(), txHash: hash(99), request: requestOf(99) }))).code).toBe('payment_pending');
+    const four = reader.pay(4, alice);
+    const bad = await fail(svc.create(alice, { config: cfgOf({ bots: 13 }), ...four }));
     expect(bad).toMatchObject({ code: 'bad_request', field: 'bots' });
     expect(svc.live).toBe(0);
     expect(rooms.customRooms()).toHaveLength(0);
     // a refused hash was never marked used: it still works once valid
-    expect((await svc.create(alice, { config: cfgOf(), txHash: hash(4) })).paidWith).toBe('paid');
-  });
-
-  it('the network being busy keeps the payment safe and unused', async () => {
-    const { svc, reader } = setup();
-    const alice = testSigner().address;
-    const h = reader.pay(1, alice);
-    reader.busy = true;
-    expect((await fail(svc.create(alice, { config: cfgOf(), txHash: h }))).code).toBe('chain_busy');
-    reader.busy = false;
-    expect((await svc.create(alice, { config: cfgOf(), txHash: h })).txHash).toBe(h);
+    expect((await svc.create(alice, { config: cfgOf(), ...four })).paidWith).toBe('paid');
   });
 
   it('caps: a global cap of live rooms and a per-wallet cap, with a friendly message', async () => {
     const { svc, reader } = setup();
     svc.updateSettings({ maxLive: 3, maxPerWallet: 2 });
     const [a, b, c] = [testSigner().address, testSigner().address, testSigner().address];
-    await svc.create(a, { config: cfgOf(), txHash: reader.pay(1, a) });
-    await svc.create(a, { config: cfgOf(), txHash: reader.pay(2, a) });
-    const wl = await fail(svc.create(a, { config: cfgOf(), txHash: reader.pay(3, a) }));
+    await svc.create(a, { config: cfgOf(), ...reader.pay(1, a) });
+    await svc.create(a, { config: cfgOf(), ...reader.pay(2, a) });
+    const wl = await fail(svc.create(a, { config: cfgOf(), ...reader.pay(3, a) }));
     expect(wl.code).toBe('wallet_limit');
-    await svc.create(b, { config: cfgOf(), txHash: reader.pay(4, b) });
-    const busy = await fail(svc.create(c, { config: cfgOf(), txHash: reader.pay(5, c) }));
+    await svc.create(b, { config: cfgOf(), ...reader.pay(4, b) });
+    const busy = await fail(svc.create(c, { config: cfgOf(), ...reader.pay(5, c) }));
     expect(busy).toMatchObject({ code: 'slots_busy', status: 503 });
     expect(busy.message).toMatch(/All room slots are busy/);
     // checked before the payment is read: nothing was spent on the RPC
@@ -206,8 +301,8 @@ describe('custom rooms: create, caps, perks', () => {
     const ha = reader.pay(1, a);
     const hb = reader.pay(2, b);
     // both pass the first cap check; a's create finishes first
-    const pa = svc.create(a, { config: cfgOf(), txHash: ha });
-    const pb = svc.create(b, { config: cfgOf(), txHash: hb });
+    const pa = svc.create(a, { config: cfgOf(), ...ha });
+    const pb = svc.create(b, { config: cfgOf(), ...hb });
     await pa;
     const err = await fail(pb);
     expect(err).toMatchObject({ code: 'slots_busy', paid: true });
@@ -215,7 +310,7 @@ describe('custom rooms: create, caps, perks', () => {
     // the room ends after its countdown, then the slot is free
     clock.t += ROOM_CLOSE_COUNTDOWN_MS;
     svc.sweep();
-    expect((await svc.create(b, { config: cfgOf(), txHash: hb })).txHash).toBe(hb);
+    expect((await svc.create(b, { config: cfgOf(), ...hb })).txHash).toBe(hb.txHash);
   });
 
   it('holder perks: a discount, or one free room a day', async () => {
@@ -223,17 +318,17 @@ describe('custom rooms: create, caps, perks', () => {
     const a = testSigner().address;
     svc.updateSettings({ holderPerk: 'discount' });
     let q = await svc.quote(a);
-    expect(q).toMatchObject({ holder: true, holderPerk: 'discount', holderDiscountPct: 50, youPayWei: (PRICE / 2n).toString(), treasury: TREASURY });
+    expect(q).toMatchObject({ holder: true, holderPerk: 'discount', holderDiscountPct: 50, youPayRaw: (PRICE / 2n).toString(), pay: { payTo: ARENA_ADDR } });
     // half the price is enough for a holder
-    expect((await svc.create(a, { config: cfgOf(), txHash: reader.pay(1, a, { value: PRICE / 2n }) })).paidWith).toBe('paid');
+    expect((await svc.create(a, { config: cfgOf(), ...reader.pay(1, a, { value: PRICE / 2n }) })).paidWith).toBe('paid');
 
     svc.updateSettings({ holderPerk: 'free_daily', maxPerWallet: 5 });
     q = await svc.quote(a);
-    expect(q).toMatchObject({ freeAvailable: true, youPayWei: '0' });
+    expect(q).toMatchObject({ freeAvailable: true, youPayRaw: '0' });
     expect((await svc.create(a, { config: cfgOf() })).paidWith).toBe('free');
     // the free room of the day is used: the next one is paid in full
     q = await svc.quote(a);
-    expect(q).toMatchObject({ freeAvailable: false, youPayWei: PRICE.toString() });
+    expect(q).toMatchObject({ freeAvailable: false, youPayRaw: PRICE.toString() });
     expect((await fail(svc.create(a, { config: cfgOf() }))).code).toBe('payment_required');
     clock.t += 24 * 3600_000;
     expect((await svc.create(a, { config: cfgOf() })).paidWith).toBe('free');
@@ -246,7 +341,7 @@ describe('custom rooms: create, caps, perks', () => {
     const a = testSigner().address;
     const b = testSigner().address;
     expect(first.svc.settings.holderPerk).toBe('free_daily');
-    expect(await first.svc.quote(a)).toMatchObject({ holderPerk: 'free_daily', freeAvailable: true, youPayWei: '0' });
+    expect(await first.svc.quote(a)).toMatchObject({ holderPerk: 'free_daily', freeAvailable: true, youPayRaw: '0' });
     // two creates at once: one free room, the other is refused while the first is under way
     const [r1, r2] = await Promise.allSettled([first.svc.create(a, { config: cfgOf() }), first.svc.create(a, { config: cfgOf() })]);
     expect([r1.status, r2.status].sort()).toEqual(['fulfilled', 'rejected']);
@@ -279,25 +374,51 @@ describe('custom rooms: create, caps, perks', () => {
   it('the free room of the day is for emblem holders only', async () => {
     const { svc } = setup({ holder: false });
     const a = testSigner().address;
-    expect(await svc.quote(a)).toMatchObject({ holder: false, freeAvailable: false, youPayWei: PRICE.toString() });
+    expect(await svc.quote(a)).toMatchObject({ holder: false, freeAvailable: false, youPayRaw: PRICE.toString() });
     expect((await fail(svc.create(a, { config: cfgOf() }))).code).toBe('payment_required');
   });
 
-  it('closed creation, no treasury, guests and admin settings validation', async () => {
+  it('closed creation, guests and admin settings validation', async () => {
     const { svc } = setup();
     const a = testSigner().address;
     expect(await svc.quote(null)).toMatchObject({ holder: false, mine: 0, enabled: true });
     svc.updateSettings({ enabled: false });
     expect((await fail(svc.create(a, { config: cfgOf() }))).code).toBe('rooms_closed');
-    expect(() => svc.updateSettings({ priceGas: 'free' })).toThrow(CustomRoomFail);
-    expect(() => svc.updateSettings({ treasury: 'nope' })).toThrow(/treasury/);
+    // the ETH price and the treasury are retired, with the reason
+    expect(() => svc.updateSettings({ priceGas: '0.1' })).toThrow(/priceGas is retired: private rooms are paid in the game token/);
+    expect(() => svc.updateSettings({ treasury: '0x2111111111111111111111111111111111111111' })).toThrow(/treasury is retired/);
     expect(() => svc.updateSettings({ maxLive: 1000 })).toThrow(/maxLive/);
     expect(() => svc.updateSettings({ surprise: 1 })).toThrow(/unknown field/);
-    const s = svc.updateSettings({ enabled: true, priceGas: '0.1', treasury: TREASURY.replace('0x1', '0x2'), holderPerk: 'none' });
-    expect(s).toMatchObject({ priceGas: '0.1', holderPerk: 'none' });
-    expect(svc.treasury()).toBe('0x2111111111111111111111111111111111111111');
-    svc.updateSettings({ treasury: null });
-    expect(svc.treasury()).toBe(TREASURY);
+    expect(() => svc.updateSettings({ priceIn: 'eth' })).toThrow(/priceIn must be "usd" or "token"/);
+    expect(() => svc.updateSettings({ usdCents: 0 })).toThrow(/usdCents must be a whole number from 1 to 100000/);
+    expect(() => svc.updateSettings({ usdCents: 1.5 })).toThrow(CustomRoomFail);
+    expect(() => svc.updateSettings({ priceTokens: '0' })).toThrow(/priceTokens must be above 0/);
+    expect(() => svc.updateSettings({ priceTokens: 'free' })).toThrow(/priceTokens must be a token amount/);
+    expect(() => svc.updateSettings({ priceTokens: '1.1234567' })).toThrow(/priceTokens/);
+    const s = svc.updateSettings({ enabled: true, priceIn: 'token', usdCents: 250, priceTokens: '2000', holderPerk: 'none' });
+    expect(s).toMatchObject({ priceIn: 'token', usdCents: 250, priceTokens: '2000', holderPerk: 'none' });
+    expect(s).not.toHaveProperty('priceGas');
+    expect(s).not.toHaveProperty('treasury');
+  });
+
+  it('a settings file from the rooms paid in ETH loads without an error: its price and treasury are dropped, the rest kept', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'elymum-custom-old-'));
+    mkdirSync(join(dir, 'site'), { recursive: true });
+    const file = join(dir, 'site', 'custom-rooms-settings.json');
+    writeFileSync(file, JSON.stringify({ enabled: true, priceGas: '0.002', treasury: '0x2111111111111111111111111111111111111111', holderPerk: 'discount', holderDiscountPct: 40, maxLive: 5, maxPerWallet: 3, capacityStepPct: 50, maxPlayers: 100, maxSeats: 300, paidRooms: true }));
+    const logs: string[] = [];
+    const rooms = new RoomManager(loadConfig({} as NodeJS.ProcessEnv), roomDeps(new NullChain()), new NullChain());
+    const svc = new CustomRoomService({ rooms, dataDir: dir, used: new UsedPayments(null), chain: new PayChain({ t: 0 }), isHolder: async () => false, log: (m) => logs.push(m) });
+    expect(svc.settings).toMatchObject({ priceIn: 'usd', usdCents: 150, priceTokens: '1500', holderPerk: 'discount', holderDiscountPct: 40, maxLive: 5, maxPerWallet: 3 });
+    expect(svc.settings).not.toHaveProperty('priceGas');
+    expect(logs.some((m) => /ETH price \(0\.002\) and the treasury are retired/.test(m))).toBe(true);
+    // the next save writes the new shape
+    svc.updateSettings({ maxLive: 4 });
+    const saved = JSON.parse(readFileSync(file, 'utf8'));
+    expect(saved).toMatchObject({ priceIn: 'usd', usdCents: 150, maxLive: 4 });
+    expect(saved).not.toHaveProperty('priceGas');
+    expect(saved).not.toHaveProperty('treasury');
+    expect(existsSync(`${file}.corrupt`)).toBe(false);
   });
 });
 
@@ -305,7 +426,7 @@ describe('practice with bots (one click, free, short-lived)', () => {
   it('opens a free room with practice bots for a guest; asking again returns it; it is outside the paid caps', async () => {
     const { svc, rooms, reader, clock } = setup();
     const guest = svc.practice({ wallet: null, ip: '10.0.0.1' });
-    expect(guest).toMatchObject({ practice: true, kind: 'free', bots: PRACTICE_ROOM.bots, maxPlayers: PRACTICE_ROOM.maxPlayers, paidWith: 'free', feeWei: '0', name: PRACTICE_ROOM.name });
+    expect(guest).toMatchObject({ practice: true, kind: 'free', bots: PRACTICE_ROOM.bots, maxPlayers: PRACTICE_ROOM.maxPlayers, paidWith: 'free', feeRaw: '0', name: PRACTICE_ROOM.name });
     expect(guest.creator).toBe('0x0000000000000000000000000000000000000000');
     expect(guest.endsAt - clock.t).toBe(PRACTICE_ROOM.durationMin * 60_000);
     const room = rooms.privateRoom(guest.code) as Room;
@@ -326,7 +447,7 @@ describe('practice with bots (one click, free, short-lived)', () => {
     expect(svc.seatsUsed()).toBe(0);
     expect(svc.mine(a)).toEqual([]);
     svc.updateSettings({ maxLive: 1, maxPerWallet: 1 });
-    expect((await svc.create(a, { config: cfgOf(), txHash: reader.pay(1, a) })).practice).toBeUndefined();
+    expect((await svc.create(a, { config: cfgOf(), ...reader.pay(1, a) })).practice).toBeUndefined();
   });
 
   it('caps the live practice rooms, can be turned off, and a room nears its end is not handed back', () => {
@@ -371,7 +492,7 @@ describe('custom rooms: lifecycle', () => {
   it('expires at its end time: players and spectators hear room_closed, a late joiner too', async () => {
     const { svc, rooms, reader, clock } = setup();
     const a = testSigner().address;
-    const view = await svc.create(a, { config: cfgOf({ durationMin: 15, bots: 0 }), txHash: reader.pay(1, a) });
+    const view = await svc.create(a, { config: cfgOf({ durationMin: 15, bots: 0 }), ...reader.pay(1, a) });
     const room = rooms.privateRoom(view.code) as Room;
     const player = fakeConn(null, '10.0.0.1');
     const watcher = fakeConn(null, '10.0.0.2');
@@ -400,7 +521,7 @@ describe('custom rooms: lifecycle', () => {
   it('the creator (or an admin) closes early, after the 10 s countdown and the final board; nobody else can', async () => {
     const { svc, rooms, reader, clock } = setup();
     const [a, b] = [testSigner().address, testSigner().address];
-    const v1 = await svc.create(a, { config: cfgOf({ bots: 2 }), txHash: reader.pay(1, a) });
+    const v1 = await svc.create(a, { config: cfgOf({ bots: 2 }), ...reader.pay(1, a) });
     const room = rooms.privateRoom(v1.code) as Room;
     // the practice bots take their places
     for (let i = 0; i < 30; i++) room.tick(TICK_MS);
@@ -437,7 +558,7 @@ describe('custom rooms: lifecycle', () => {
     const seen = watcher.msgs.find((m) => m.t === 'roomOver') as Extract<ServerMessage, { t: 'roomOver' }>;
     expect(seen.stats).toBeNull();
     expect(seen.standings.some((s) => s.you)).toBe(false);
-    const v2 = await svc.create(a, { config: cfgOf(), txHash: reader.pay(2, a) });
+    const v2 = await svc.create(a, { config: cfgOf(), ...reader.pay(2, a) });
     svc.close(v2.code, { wallet: b, admin: true });
     clock.t += ROOM_CLOSE_COUNTDOWN_MS;
     svc.sweep();
@@ -448,7 +569,7 @@ describe('custom rooms: lifecycle', () => {
   it('a room whose time runs out shows the countdown 10 s before its end', async () => {
     const { svc, rooms, reader, clock } = setup();
     const a = testSigner().address;
-    const v = await svc.create(a, { config: cfgOf({ durationMin: 5 }), txHash: reader.pay(1, a) });
+    const v = await svc.create(a, { config: cfgOf({ durationMin: 5 }), ...reader.pay(1, a) });
     const c = fakeConn(null);
     (rooms.privateRoom(v.code) as Room).join(c, { name: 'Pip', skin: 1, flags: 0 });
     clock.t = v.endsAt - ROOM_CLOSE_COUNTDOWN_MS - 1000;
@@ -467,7 +588,7 @@ describe('custom rooms: lifecycle', () => {
   it('keeps its own leaderboard (best games) and stays off the global one', async () => {
     const { svc, rooms, reader } = setup();
     const a = testSigner().address;
-    const view = await svc.create(a, { config: cfgOf({ bots: 0 }), txHash: reader.pay(1, a) });
+    const view = await svc.create(a, { config: cfgOf({ bots: 0 }), ...reader.pay(1, a) });
     const room = rooms.privateRoom(view.code) as Room;
     const submitted: unknown[] = [];
     (room as unknown as { deps: { leaderboards: { submit: (e: unknown) => void } } }).deps.leaderboards.submit = (e) => submitted.push(e);
@@ -484,8 +605,8 @@ describe('custom rooms: lifecycle', () => {
     const first = setup({ clock });
     const a = testSigner().address;
     const h = first.reader.pay(1, a);
-    const keep = await first.svc.create(a, { config: cfgOf({ durationMin: 60, name: 'Long one', mapSize: 'L' }), txHash: h });
-    const gone = await first.svc.create(a, { config: cfgOf({ durationMin: 15 }), txHash: first.reader.pay(2, a) });
+    const keep = await first.svc.create(a, { config: cfgOf({ durationMin: 60, name: 'Long one', mapSize: 'L' }), ...h });
+    const gone = await first.svc.create(a, { config: cfgOf({ durationMin: 15 }), ...first.reader.pay(2, a) });
     first.svc.onGame(first.rooms.privateRoom(keep.code) as Room, { name: 'Pip', score: 300, kills: 1 });
     first.svc.flush();
     expect(existsSync(join(first.dir!, 'site', 'custom-rooms.json'))).toBe(true);
@@ -501,7 +622,13 @@ describe('custom rooms: lifecycle', () => {
     expect(back.opts.name).toBe('Long one');
     expect(second.svc.get(keep.code)!.best[0]).toMatchObject({ name: 'Pip' });
     expect(second.rooms.privateRoom(gone.code)).toBeNull();
-    expect((await fail(second.svc.create(a, { config: cfgOf(), txHash: h }))).code).toBe('payment_used');
+    // the payment stays used after the restart: asked again it is the room it opened, never a second one
+    expect((await second.svc.create(a, { config: cfgOf(), ...h })).code).toBe(keep.code);
+    expect(second.used.hasRequest(a, h.request)).toBe(true);
+    expect((await fail(second.svc.create(a, { config: cfgOf(), ...second.reader.pay(3, a, { request: h.request }) }))).code).toBe('payment_used');
+    // the hash of the room that ended is refused too
+    const goneHash = { txHash: hash(2), request: requestOf(2) };
+    expect((await fail(second.svc.create(a, { config: cfgOf(), ...goneHash }))).code).toBe('payment_used');
     const stored = JSON.parse(readFileSync(join(first.dir!, 'site', 'custom-rooms.json'), 'utf8'));
     expect(stored.rooms.map((r: { code: string }) => r.code)).toEqual([keep.code]);
   });
@@ -544,14 +671,13 @@ describe('custom rooms over HTTP and WebSocket', () => {
     app = null;
   });
 
-  async function boot(reader: PaymentReader, admin: string, customNow?: () => number) {
+  async function boot(chain: PayChain, admin: string, customNow?: () => number) {
     const dir = mkdtempSync(join(tmpdir(), 'elymum-custom-http-'));
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public' } as NodeJS.ProcessEnv);
     app = await createApp(cfg, {
-      chain: new ArenaChain([arena(1, 1000)]),
+      chain,
       log: () => {},
       persist: true,
-      paymentReader: reader,
       customNow,
       siteLimits: { writeIp: new Limiter(10_000, 60_000), writeWallet: new Limiter(10_000, 60_000), login: new Limiter(10_000, 60_000) },
       apiLimiter: new Limiter(10_000, 60_000),
@@ -569,7 +695,7 @@ describe('custom rooms over HTTP and WebSocket', () => {
 
   it('practice with bots over HTTP: a guest gets a room and an invite; creations are rate-limited per IP', async () => {
     const admin = testSigner().address;
-    const { call } = await boot(devFakePaymentReader(), admin);
+    const { call } = await boot(new PayChain({ t: Date.now() }, [arena(1, 1000)]), admin);
     const first = await call('POST', '/api/rooms/custom/practice');
     expect(first.status).toBe(200);
     expect(first.body.room).toMatchObject({ practice: true, bots: PRACTICE_ROOM.bots });
@@ -585,23 +711,14 @@ describe('custom rooms over HTTP and WebSocket', () => {
   it('guests cannot create; a wallet pays and gets an invite; anyone joins with the code; admin lists and closes', async () => {
     const admin = testSigner().address;
     const clock = { t: Date.now() };
-    const reader = new FakeTransfers(clock);
-    const { port, call } = await boot(
-      {
-        transfer: async (h, e) => {
-          const t = await reader.transfer(h);
-          return t ? { ...t, to: e.to } : null;
-        },
-      },
-      admin,
-      () => clock.t,
-    );
+    const reader = new PayChain(clock, [arena(1, 1000)]);
+    const { port, call } = await boot(reader, admin, () => clock.t);
     const alice = testSigner().address;
-    expect((await call('GET', '/api/rooms/custom/quote')).body).toMatchObject({ enabled: true, priceWei: PRICE.toString(), treasury: admin, chainId: 31337 });
+    expect((await call('GET', '/api/rooms/custom/quote')).body).toMatchObject({ enabled: true, priceRaw: PRICE.toString(), pay: { payTo: ARENA_ADDR, token: { address: TOKEN } }, chainId: 31337 });
     expect((await call('POST', '/api/rooms/custom', { body: { config: cfgOf() } })).status).toBe(401);
     const unpaid = await call('POST', '/api/rooms/custom', { wallet: alice, body: { config: cfgOf() } });
     expect(unpaid).toMatchObject({ status: 402, body: { error: 'payment_required' } });
-    const made = await call('POST', '/api/rooms/custom', { wallet: alice, body: { config: cfgOf({ bots: 2 }), txHash: reader.pay(1, alice) } });
+    const made = await call('POST', '/api/rooms/custom', { wallet: alice, body: { config: cfgOf({ bots: 2 }), ...reader.pay(1, alice) } });
     expect(made.status).toBe(201);
     const code: string = made.body.room.code;
     expect(made.body.invite).toMatch(new RegExp(`/play\\?room=${code}$`));
@@ -637,7 +754,10 @@ describe('custom rooms over HTTP and WebSocket', () => {
     expect((await call('GET', '/api/admin/custom-rooms', { wallet: bob })).status).toBe(403);
     const list = await call('GET', '/api/admin/custom-rooms', { wallet: admin });
     expect(list.body.rooms.map((r: { code: string }) => r.code)).toEqual([code]);
-    expect(list.body.settings).toMatchObject({ priceGas: '0.0005', maxLive: 6, maxPerWallet: 2 });
+    expect(list.body.settings).toMatchObject({ priceIn: 'usd', usdCents: 150, maxLive: 6, maxPerWallet: 2 });
+    // where fees are paid and the base price now (no USD price set: the token price)
+    expect(list.body).toMatchObject({ pay: { payTo: ARENA_ADDR, burnBps: 5000 }, base: { raw: PRICE.toString(), decimals: 18 } });
+    expect((await call('PUT', '/api/admin/custom-rooms', { wallet: admin, body: { priceGas: '0.1' } })).body).toMatchObject({ error: 'bad_request', field: 'priceGas' });
     expect((await call('PUT', '/api/admin/custom-rooms', { wallet: admin, body: { maxLive: 0 } })).body.settings.maxLive).toBe(0);
     expect((await call('DELETE', `/api/rooms/custom/${code}`, { wallet: bob })).status).toBe(403);
     // closing: the countdown first, the room still listed until it ends
@@ -649,7 +769,7 @@ describe('custom rooms over HTTP and WebSocket', () => {
     msgs.length = 0;
     ws.send(JSON.stringify({ t: 'join', room: `private:${code}`, name: 'Guest', skin: 1 }));
     expect(await waitFor((m) => m.t === 'error')).toMatchObject({ code: 'room_closed' });
-    const busy = await call('POST', '/api/rooms/custom', { wallet: alice, body: { config: cfgOf(), txHash: reader.pay(2, alice) } });
+    const busy = await call('POST', '/api/rooms/custom', { wallet: alice, body: { config: cfgOf(), ...reader.pay(2, alice) } });
     expect(busy).toMatchObject({ status: 503, body: { error: 'slots_busy' } });
     ws.close();
   });

@@ -1,11 +1,11 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLOSE_REPLACED, CUSTOM_DEFAULTS, EntityKind, PROTOCOL_VERSION, RULES, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, CUSTOM_DEFAULTS, EntityKind, customRoomPaymentRef, PROTOCOL_VERSION, RULES, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@elymum/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
-import type { ChainArena, ChainGateway, ChainSession, ServerKeyInfo } from '../src/chain/types';
+import type { ChainArena, ChainGateway, ChainSession, ServerKeyInfo, TokenReceipt } from '../src/chain/types';
 import { loadConfig } from '../src/config';
 import { testSigner } from './signers';
 
@@ -14,7 +14,12 @@ class FakeChain implements ChainGateway {
   readonly tokenReady = true;
   readonly stakeEnabled = true;
   sessions = new Map<string, ChainSession>();
+  /** `ElymumArena.pay` receipts by hash (custom room fees). */
+  receipts = new Map<string, TokenReceipt>();
   kicked = 0;
+  async tokenReceipt(hash: string): Promise<TokenReceipt | null> {
+    return this.receipts.get(hash.toLowerCase()) ?? null;
+  }
   status(): ChainStatus {
     return {
       enabled: true,
@@ -824,11 +829,20 @@ describe('server over websocket', () => {
 
   it('paid custom room: an invite-only arena instance seated by code with a normal ticket, never by quick play; on its own clock (no 5-minute bell), settled at the room end; closes once settled', async () => {
     const svc = app.customRooms;
-    // a free fee (no gas-token transfer to check) and a treasury: the room itself is what is tested here
-    svc.updateSettings({ priceGas: '0', treasury: '0x1111111111111111111111111111111111111111' });
     const creator = newWallet();
-    const view = await svc.create(creator, { config: { ...CUSTOM_DEFAULTS, name: 'Whale Club', kind: 'paid', arenaId: 1, bots: 0, maxPlayers: 4, durationMin: 15 } });
-    expect(view).toMatchObject({ kind: 'paid', arenaId: 1, maxPlayers: 4 });
+    // the room fee: the creator's `ElymumArena.pay` of the base price in the game token (1,500 tokens without a USD price)
+    const fee = 1500n * 10n ** 18n;
+    const txHash = `0x${'ab'.repeat(32)}`;
+    const request = 'integrationroom2';
+    const arenaAddr = chain.status().arenaAddress!;
+    chain.receipts.set(txHash, {
+      status: 'success',
+      blockNumber: 1n,
+      transfers: [{ token: chain.status().token!.address, from: creator, to: arenaAddr, value: fee }],
+      payments: [{ contract: arenaAddr, payer: creator, ref: customRoomPaymentRef(request), amount: fee }],
+    });
+    const view = await svc.create(creator, { config: { ...CUSTOM_DEFAULTS, name: 'Whale Club', kind: 'paid', arenaId: 1, bots: 0, maxPlayers: 4, durationMin: 15 }, txHash, request });
+    expect(view).toMatchObject({ kind: 'paid', arenaId: 1, maxPlayers: 4, paidWith: 'paid', feeRaw: fee.toString(), feeIn: 'token' });
     // it starts now (the server's clock) and ends exactly 15 minutes later: no arena bell involved
     expect(Math.abs(view.createdAt - serverNow())).toBeLessThan(1000);
     expect(view.endsAt - view.createdAt).toBe(15 * 60_000);
@@ -913,7 +927,6 @@ describe('server over websocket', () => {
       app.journal.remove(t.key);
       chain.sessions.delete(`1:${w}`);
     }
-    svc.updateSettings({ priceGas: '0.05', treasury: null });
     for (const x of [c, o, l, m]) x.close();
   }, 20_000);
   it('test arena (testnet): the official ticket in a room with labelled bots, settled at the bell, off every board; quick play never goes there', async () => {

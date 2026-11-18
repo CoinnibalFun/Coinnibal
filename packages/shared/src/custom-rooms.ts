@@ -1,7 +1,12 @@
+import { usdToTokenRaw } from './arena-pricing';
+import { parseToken } from './token';
+
 /**
- * Custom rooms: a signed-in wallet pays a small fee in the chain's gas token (to the treasury) and gets a
- * private room with its own rules (map size, practice bots in free rooms, duration, capacity, ...). The fee grows with the
- * capacity (`customRoomFee`). Two kinds:
+ * Custom rooms: a signed-in wallet pays a small fee in the GAME TOKEN and gets a private room with its own rules (map
+ * size, practice bots in free rooms, duration, capacity, ...). The fee is one `ElymumArena.pay(amount, ref)`, like a
+ * power-up pack: the contract burns `paymentBurnBps` of it (50 % by default) and sends the rest to its fee wallet (the
+ * team wallet) in that call (owner decision 2026-11-18). `ref` names the room request (`customRoomPaymentRef`), so one
+ * payment opens one room. The fee grows with the capacity (`customRoomFee`). Two kinds:
  *
  *  - `free`: no stakes, pure fun (like practice). A `private` room (`RoomInfo.mode`), joined with
  *    `private:<CODE>`; anyone with the invite code joins (guests too).
@@ -83,14 +88,14 @@ export function customCapacityTiers(capacity: number): number {
 }
 
 /**
- * The creation fee of a room of `capacity` (wei, before any holder perk): the base for up to 10
- * players, plus `stepPct` % of the base for every started 10 players above the first 10.
- * With the default 50 %: 11..20 → x1.5, 21..30 → x2, ..., 91..100 → x5.5. Rounded down to the wei.
+ * The creation fee of a room of `capacity` (raw base units of the game token, before any holder perk): the base for
+ * up to 10 players, plus `stepPct` % of the base for every started 10 players above the first 10. With the default
+ * 50 %: 11..20 → x1.5, 21..30 → x2, ..., 91..100 → x5.5. Rounded down to the base unit.
  */
-export function customRoomFee(baseWei: bigint, capacity: number, stepPct: number): bigint {
+export function customRoomFee(baseRaw: bigint, capacity: number, stepPct: number): bigint {
   const steps = BigInt(customCapacityTiers(capacity) - 1);
   const pct = BigInt(Math.max(0, Math.floor(stepPct)));
-  return baseWei + (baseWei * pct * steps) / 100n;
+  return baseRaw + (baseRaw * pct * steps) / 100n;
 }
 
 /** The capacity steps a creator may pick under the admin's cap (`maxPlayers`). */
@@ -211,22 +216,34 @@ export interface CustomRoomView extends CustomRoomSummary {
   players: number;
   /** The room's own leaderboard, best first (up to 10). */
   best: CustomBest[];
-  /** How it was paid: `paid` (a gas-token transfer) or `free` (the holder perk: a free room of the day, or a 100 % discount). */
+  /** How it was paid: `paid` (an `ElymumArena.pay` in the game token) or `free` (the holder perk: a free room of the day, or a 100 % discount). */
   paidWith: 'paid' | 'free';
   /** The payment transaction (0x hash), when paid. */
   txHash: string | null;
-  /** The creation fee paid, wei (decimal string; "0" for a free room). */
-  feeWei?: string;
+  /** The creation fee paid, raw base units of `feeIn` (decimal string; "0" for a free room). */
+  feeRaw?: string;
+  /** What `feeRaw` counts: `token` (the game token), or `gas` (wei) for a room opened before rooms were paid in tokens. */
+  feeIn?: 'token' | 'gas';
 }
 
-/** The admin settings (`/api/admin/custom-rooms`). */
+/**
+ * The admin settings (`/api/admin/custom-rooms`). Where the money goes is not a setting here: every room fee is paid with
+ * `ElymumArena.pay`, which burns `paymentBurnBps` of it (default 50 %) and sends the rest to the arena's fee wallet on
+ * chain. Older files' `priceGas` / `treasury` (rooms paid in ETH, before 2026-11-18) are read and ignored.
+ */
 export interface CustomRoomSettings {
   /** Creating rooms is open. */
   enabled: boolean;
-  /** Price in ETH (Robinhood Chain's gas token), decimal string (e.g. "0.0005"). */
-  priceGas: string;
-  /** Where the fee goes (EIP-55); null: the first `ADMIN_WALLETS` wallet (the owner). */
-  treasury: string | null;
+  /**
+   * `usd` (default): the base price is `usdCents`, converted to tokens with the arenas' price source and rounding (Game
+   * → Arena prices: the token's USD price and its significant figures), like the tickets and the power-up packs.
+   * `token`: `priceTokens` whole tokens. With `usd` and no token price set yet, `priceTokens` is used.
+   */
+  priceIn: 'usd' | 'token';
+  /** Base price (rooms of up to 10 players) in US cents (`priceIn: 'usd'`). */
+  usdCents: number;
+  /** Base price in whole game tokens as a decimal string ("1500", "12.5"): `priceIn: 'token'`, or no USD price yet. */
+  priceTokens: string;
   holderPerk: CustomHolderPerk;
   /** `discount` perk: percent off for NFT holders (0..100). */
   holderDiscountPct: number;
@@ -253,9 +270,11 @@ export interface CustomRoomSettings {
 
 export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
   enabled: true,
-  // about $1.50 at ETH = $3,000 (docs/ECONOMY.md); the admin re-prices it in /admin as ETH moves
-  priceGas: '0.0005',
-  treasury: null,
+  // owner decision 2026-11-18: paid in the game token; $1.50 is what the old 0.0005 ETH default stood for (ETH at
+  // $3,000), converted like the tickets; 1,500 tokens at the reference price of $0.001 until a token price is set
+  priceIn: 'usd',
+  usdCents: 150,
+  priceTokens: '1500',
   // owner decision 2026-11: an emblem holder opens one room of the base size a day (UTC) for free
   holderPerk: 'free_daily',
   holderDiscountPct: 50,
@@ -269,8 +288,57 @@ export const CUSTOM_SETTINGS_DEFAULT: CustomRoomSettings = {
   practiceMaxLive: 12,
 };
 
-/** Bounds of the admin caps. */
-export const CUSTOM_SETTINGS_LIMITS = { maxLive: 24, maxPerWallet: 10, capacityStepPct: 500, maxPlayers: CUSTOM_LIMITS.playersMax, maxSeats: 500, maxSeatsMin: 10, practiceMaxLive: 50 } as const;
+/** Bounds of the admin caps (`usdCents` up to $1,000, `priceTokens` up to a billion tokens). */
+export const CUSTOM_SETTINGS_LIMITS = {
+  maxLive: 24,
+  maxPerWallet: 10,
+  capacityStepPct: 500,
+  maxPlayers: CUSTOM_LIMITS.playersMax,
+  maxSeats: 500,
+  maxSeatsMin: 10,
+  practiceMaxLive: 50,
+  usdCents: 100_000,
+  priceTokens: 1_000_000_000,
+} as const;
+
+/**
+ * The base price (rooms of up to 10 players) in raw base units of a token with `decimals`: `usdCents` converted at the
+ * token's USD price and rounded to the arenas' significant figures (`usdToTokenRaw`) when priced in dollars and a price
+ * is known, else `priceTokens` whole tokens. Throws `SyntaxError` / `RangeError` on a malformed token price.
+ */
+export function customRoomBaseRaw(
+  s: Pick<CustomRoomSettings, 'priceIn' | 'usdCents' | 'priceTokens'>,
+  decimals: number,
+  usd: { price: bigint; sigFigs: number } | null,
+): { raw: bigint; usdCents: number | null } {
+  if (s.priceIn === 'usd' && usd) {
+    try {
+      return { raw: usdToTokenRaw(s.usdCents, usd.price, decimals, usd.sigFigs), usdCents: s.usdCents };
+    } catch {
+      // a price so far off that the dollars do not fit the contract: the token price applies
+    }
+  }
+  return { raw: parseToken(s.priceTokens, decimals), usdCents: null };
+}
+
+/** A room request id: 16 lower-case base32 characters (80 random bits, made by the paying client). */
+export const CUSTOM_REQUEST_RE = /^[a-z2-7]{16}$/;
+
+/**
+ * The `ref` of a room fee payment (`ElymumArena.pay(amount, ref)`): `coinnibal.room.<request>` in ASCII, right-padded
+ * to 32 bytes. `request` is the creator's own random request id (`CUSTOM_REQUEST_RE`, made fresh for every room the
+ * client pays for); the server opens a room for a payment only when its ref names the request the signed-in wallet
+ * sent, and each request of a wallet opens one room (`UsedPayments`). A power-up ref (`elymum.shop.*` /
+ * `elymum.cart.*`) never matches it, so one payment never buys both.
+ */
+export function customRoomPaymentRef(request: string): `0x${string}` {
+  if (!CUSTOM_REQUEST_RE.test(request)) throw new TypeError(`a room request id is 16 characters of a-z and 2-7, got ${JSON.stringify(request)}`);
+  const ascii = `coinnibal.room.${request}`;
+  let hex = '';
+  for (let i = 0; i < ascii.length; i++) hex += ascii.charCodeAt(i).toString(16).padStart(2, '0');
+  return `0x${hex.padEnd(64, '0')}`;
+}
+
 
 /** An arena tier a paid room can be made of (`CustomRoomQuote.tiers`). */
 export interface CustomArenaTier {
@@ -284,13 +352,28 @@ export interface CustomArenaTier {
 /** A payment older than this is refused (`payment_stale`). */
 export const CUSTOM_PAYMENT_MAX_AGE_MS = 2 * 3600_000;
 
+/** Why a room fee cannot be paid right now (`CustomRoomQuote.payClosed`): no chain, no game token on the arena yet, no arena. */
+export type CustomPayClosed = 'no_chain' | 'no_token' | 'no_arena';
+
 /** `GET /api/rooms/custom/quote`: what creating a room costs this wallet right now. */
 export interface CustomRoomQuote {
   enabled: boolean;
-  /** Base price (rooms of up to 10 players), wei (decimal string). */
-  priceWei: string;
-  /** What this wallet pays for a room of the base size, wei (decimal string; "0" with a free room). */
-  youPayWei: string;
+  /**
+   * Where the fee is paid: the game token and the arena contract the wallet approves and calls
+   * `pay(amount, customRoomPaymentRef(request))` on (EIP-55). Null while a fee cannot be paid (`payClosed`): only free
+   * rooms (the holders' free room of the day) open then.
+   */
+  pay: { token: { address: string; symbol: string; decimals: number }; payTo: string; burnBps: number | null } | null;
+  /** Why `pay` is null (absent when a fee can be paid). */
+  payClosed?: CustomPayClosed;
+  /** Base price (rooms of up to 10 players), raw base units of the game token (decimal string). */
+  priceRaw: string;
+  /** What this wallet pays for a room of the base size, raw base units (decimal string; "0" with a free room). */
+  youPayRaw: string;
+  /** The base price in US cents, when it was converted from dollars (absent: priced in tokens). */
+  usdCents?: number;
+  /** The token's USD price (USD per whole token) when one is set: the dollar value of an amount (display only). */
+  usdPerToken?: string;
   /** The fee grows by this percent of the base for every started 10 players above 10 (`customRoomFee`). */
   capacityStepPct: number;
   /** The biggest room this server lets a creator open. */
@@ -301,8 +384,6 @@ export interface CustomRoomQuote {
   paidRooms: boolean;
   /** The arena tiers a paid room can be made of (holders-only tiers are listed; the creator must hold). */
   tiers: CustomArenaTier[];
-  /** Fee receiver (EIP-55); null: none configured (creating is closed). */
-  treasury: string | null;
   holderPerk: CustomHolderPerk;
   holderDiscountPct: number;
   /** The signed-in wallet holds an Elymum NFT (false for guests). */
@@ -316,6 +397,28 @@ export interface CustomRoomQuote {
   maxPerWallet: number;
   /** The server's chain id (the payment must be sent on it); null while the chain is off. */
   chainId: number | null;
+}
+
+/** `GET /api/admin/custom-rooms` (and the answer of its `PUT`). */
+export interface CustomRoomAdminView {
+  settings: CustomRoomSettings;
+  /** Where fees are paid now (the arena contract and the game token), as the quote says; null while they cannot be paid. */
+  pay: CustomRoomQuote['pay'];
+  payClosed?: CustomPayClosed;
+  /**
+   * The base price now (rooms of up to 10 players), raw base units of a token with `decimals`, with its dollar source:
+   * the token's USD price and the arenas' significant figures when one is set (`customRoomBaseRaw` reprices a draft).
+   */
+  base: { raw: string; decimals: number; usdCents?: number; usdPerToken?: string; sigFigs?: number };
+  rooms: CustomRoomView[];
+}
+
+/** `POST /api/rooms/custom` body: the rules, and for a room that costs something the payment (`txHash`) and its `request`. */
+export interface CustomRoomCreate {
+  config: CustomRoomConfig;
+  txHash?: string;
+  /** The request id the payment's ref names (`customRoomPaymentRef`). */
+  request?: string;
 }
 
 /** Error codes of the custom room API (`{ error, message }`). */
@@ -336,7 +439,8 @@ export type CustomRoomError =
   | 'forbidden'
   | 'seats_busy'
   | 'paid_closed'
-  | 'holders_only';
+  | 'holders_only'
+  | 'token_not_set';
 
 const NAME_RE = /^[\p{L}\p{N} .,'!?&#@:()_-]+$/u;
 
@@ -407,24 +511,24 @@ export function inviteUrl(origin: string, code: string): string {
 }
 
 /**
- * What a wallet pays for a room (wei) given its fee (`customRoomFee`), the settings and its holder
- * status. The holders' free room of the day covers rooms of the base size (up to 10 players,
- * `capacity`); a bigger room pays its full fee (and the free room is kept for later).
+ * What a wallet pays for a room (raw base units of the game token) given its fee (`customRoomFee`), the settings and
+ * its holder status. The holders' free room of the day covers rooms of the base size (up to 10 players, `capacity`); a
+ * bigger room pays its full fee (and the free room is kept for later).
  */
 export function customRoomPrice(
-  priceWei: bigint,
+  priceRaw: bigint,
   s: Pick<CustomRoomSettings, 'holderPerk' | 'holderDiscountPct'>,
   holder: boolean,
   freeAvailable: boolean,
   capacity: number = CUSTOM_CAPACITY_TIER,
 ): bigint {
-  if (!holder) return priceWei;
+  if (!holder) return priceRaw;
   if (customUsesFreeRoom(s, holder, freeAvailable, capacity)) return 0n;
   if (s.holderPerk === 'discount') {
     const pct = BigInt(Math.max(0, Math.min(100, Math.floor(s.holderDiscountPct))));
-    return (priceWei * (100n - pct)) / 100n;
+    return (priceRaw * (100n - pct)) / 100n;
   }
-  return priceWei;
+  return priceRaw;
 }
 
 /** Whether a free-daily holder's room of `capacity` is their free room of the day (only rooms of the base size are). */
@@ -432,10 +536,24 @@ export function customUsesFreeRoom(s: Pick<CustomRoomSettings, 'holderPerk'>, ho
   return holder && freeAvailable && s.holderPerk === 'free_daily' && customCapacityTiers(capacity) === 1;
 }
 
-/** What the quoted wallet pays for a room of `capacity` (wei): the creator sheet's live price. */
-export function quotePrice(q: Pick<CustomRoomQuote, 'priceWei' | 'capacityStepPct' | 'holderPerk' | 'holderDiscountPct' | 'holder' | 'freeAvailable'>, capacity: number): bigint {
-  const fee = customRoomFee(BigInt(q.priceWei), capacity, q.capacityStepPct ?? 0);
-  return customRoomPrice(fee, q, q.holder, q.freeAvailable, capacity);
+/**
+ * What a wallet pays for a room of `capacity` at the base price `baseRaw` (raw base units): the fee by capacity, then
+ * the holder perk. The ONE price function: the server's quote, the creator sheet's live price (`quotePrice`) and the
+ * amount the server requires before it opens a room all come from it.
+ */
+export function customRoomCost(
+  baseRaw: bigint,
+  s: Pick<CustomRoomSettings, 'capacityStepPct' | 'holderPerk' | 'holderDiscountPct'>,
+  holder: boolean,
+  freeAvailable: boolean,
+  capacity: number,
+): bigint {
+  return customRoomPrice(customRoomFee(baseRaw, capacity, s.capacityStepPct ?? 0), s, holder, freeAvailable, capacity);
+}
+
+/** What the quoted wallet pays for a room of `capacity` (raw base units): the creator sheet's live price (`customRoomCost`). */
+export function quotePrice(q: Pick<CustomRoomQuote, 'priceRaw' | 'capacityStepPct' | 'holderPerk' | 'holderDiscountPct' | 'holder' | 'freeAvailable'>, capacity: number): bigint {
+  return customRoomCost(BigInt(q.priceRaw), q, q.holder, q.freeAvailable, capacity);
 }
 
 /** A paid room's share link lands here too (`/play?room=CODE`): the client reads the room's kind first. */

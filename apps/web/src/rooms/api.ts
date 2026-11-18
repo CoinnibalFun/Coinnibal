@@ -1,4 +1,4 @@
-import { SITE_URL_DEFAULT, type CustomRoomConfig, type CustomRoomError, type CustomRoomQuote, type CustomRoomView } from '@elymum/shared';
+import { CUSTOM_PAYMENT_MAX_AGE_MS, CUSTOM_REQUEST_RE, SITE_URL_DEFAULT, type CustomRoomConfig, type CustomRoomCreate, type CustomRoomError, type CustomRoomQuote, type CustomRoomView } from '@elymum/shared';
 import { SERVER } from '../config';
 import { serverText, t } from '../i18n';
 
@@ -40,9 +40,9 @@ async function call<T>(path: string, opts: { method?: 'GET' | 'POST' | 'DELETE';
 export const roomsApi = {
   /** What a room costs this wallet now (guests: the base price). */
   quote: (token: string | null) => call<CustomRoomQuote>('/api/rooms/custom/quote', { token }),
-  /** Opens a room: `txHash` is the fee payment (absent for a free room). */
-  create: (token: string, config: CustomRoomConfig, txHash: string | null) =>
-    call<{ room: CustomRoomView; invite: string }>('/api/rooms/custom', { method: 'POST', token, body: txHash ? { config, txHash } : { config } }),
+  /** Opens a room: `payment` is the fee's `pay` transaction and the request its ref names (absent for a free room). */
+  create: (token: string, config: CustomRoomConfig, payment: { txHash: string; request: string } | null) =>
+    call<{ room: CustomRoomView; invite: string }>('/api/rooms/custom', { method: 'POST', token, body: (payment ? { config, ...payment } : { config }) satisfies CustomRoomCreate }),
   get: (code: string) => call<{ room: CustomRoomView }>(`/api/rooms/custom/${encodeURIComponent(code)}`).then((r) => r.room),
   mine: (token: string) => call<{ rooms: CustomRoomView[] }>('/api/rooms/custom/mine', { token }).then((r) => r.rooms),
   close: (token: string, code: string) => call<{ closed: CustomRoomView }>(`/api/rooms/custom/${encodeURIComponent(code)}`, { method: 'DELETE', token }),
@@ -50,13 +50,17 @@ export const roomsApi = {
   practice: (token: string | null) => call<{ room: CustomRoomView; invite: string }>('/api/rooms/custom/practice', { method: 'POST', token }).then((r) => r.room),
 };
 
-const PAY_KEY = 'elymum.room-payment.v1';
+/** v2: rooms paid in the game token (a v1 entry was an ETH transfer, which can no longer open a room). */
+const PAY_KEY = 'elymum.room-payment.v2';
 
 /** A fee payment that went through but has not opened a room yet (kept for a retry: never pay twice). */
 export interface PendingRoomPayment {
   hash: string;
   wallet: string;
-  wei: string;
+  /** The room request its ref names (`customRoomPaymentRef`): the retry sends it again. */
+  request: string;
+  /** Raw base units of the game token paid. */
+  raw: string;
   at: number;
 }
 
@@ -65,7 +69,8 @@ export function loadPendingPayment(wallet: string | null): PendingRoomPayment | 
   try {
     const p = JSON.parse(localStorage.getItem(PAY_KEY) ?? 'null') as PendingRoomPayment | null;
     // the server refuses payments older than two hours
-    if (!p || p.wallet.toLowerCase() !== wallet.toLowerCase() || Date.now() - p.at > 2 * 3600_000) return null;
+    if (!p || typeof p.wallet !== 'string' || p.wallet.toLowerCase() !== wallet.toLowerCase() || Date.now() - p.at > CUSTOM_PAYMENT_MAX_AGE_MS) return null;
+    if (typeof p.request !== 'string' || !CUSTOM_REQUEST_RE.test(p.request) || typeof p.raw !== 'string') return null;
     return p;
   } catch {
     return null;

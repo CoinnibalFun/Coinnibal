@@ -2,10 +2,13 @@ import type { EmblemClaims } from '../site/emblem-claims';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
+  CUSTOM_CAPACITY_TIER,
   CUSTOM_HOLDER_PERKS,
   CUSTOM_LIMITS,
   CUSTOM_MAP_SIZES,
   CUSTOM_MAP_WIDTH,
+  CUSTOM_PAYMENT_MAX_AGE_MS,
+  CUSTOM_REQUEST_RE,
   CUSTOM_SETTINGS_DEFAULT,
   CUSTOM_SETTINGS_LIMITS,
   CUSTOM_TRAP_MUL,
@@ -13,14 +16,19 @@ import {
   PRACTICE_ROOM,
   ROOM_CLOSE_COUNTDOWN_MS,
   WORLD_PRESETS,
+  customRoomBaseRaw,
+  customRoomCost,
   customRoomFee,
-  customRoomPrice,
+  customRoomPaymentRef,
   customUsesFreeRoom,
+  parseToken,
   practiceRoomConfig,
   validateCustomConfig,
   type CustomArenaTier,
   type CustomBest,
   type CustomMapSize,
+  type CustomPayClosed,
+  type CustomRoomAdminView,
   type CustomRoomConfig,
   type CustomRoomError,
   type CustomRoomQuote,
@@ -28,10 +36,11 @@ import {
   type CustomRoomSummary,
   type CustomRoomView,
 } from '@elymum/shared';
-import { getAddress, parseEther } from 'viem';
+import { getAddress } from 'viem';
 import type { PracticeBotsOptions } from '../bots/practice';
-import { PaymentChainBusy, TX_HASH_RE, checkPayment, type PaymentReader, type UsedPayments } from '../chain/payment';
-import { ChainBusyError } from '../chain/types';
+import { TX_HASH_RE, type UsedPayments } from '../chain/payment';
+import { ChainBusyError, type ChainGateway, type TokenReceipt } from '../chain/types';
+import { verifyPurchase, type PurchaseCheck } from '../shop/verify';
 import type { CustomRoomHooks, PaidArena, RoomManager } from './manager';
 import type { RoomHandle } from './handle';
 import type { WorldShape } from './room';
@@ -59,8 +68,10 @@ export interface CustomRecord {
   endsAt: number;
   paidWith: 'paid' | 'free';
   txHash: string | null;
-  /** Wei paid (decimal string). */
-  paidWei: string;
+  /** Raw base units of the game token paid (decimal string; "0" for a free room). */
+  paidRaw?: string;
+  /** Rooms opened before 2026-11-18 (paid in ETH): wei paid (decimal string). Such a room has no `paidRaw`. */
+  paidWei?: string;
   best: CustomBest[];
   /** The "1 minute left" line was said. */
   warned?: boolean;
@@ -128,18 +139,60 @@ const BEST_KEPT = 10;
 const BEST_FLUSH_MS = 10_000;
 /** The room says "1 minute left" this long before it closes. */
 export const CUSTOM_WARN_MS = 60_000;
+/** A quoted room price is accepted this long (the wallet prompts, a slow block, a token price change), like the shop's. */
+export const CUSTOM_QUOTE_VALID_MS = 15 * 60_000;
+
+/** What a room creator reads when a fee would be due but the game token is not set on the arena yet. */
+const TOKEN_NOT_SET = 'Private rooms are paid in tokens, and the game token is not live yet. Practice with bots is free.';
+
+/** A refused payment (the shop's receipt check) in the room API's codes and words. */
+const PAY_REFUSAL: Record<Exclude<PurchaseCheck, { ok: true }>['code'], { code: CustomRoomError; message: string }> = {
+  tx_pending: { code: 'payment_pending', message: 'The payment is not confirmed yet. Try again in a few seconds.' },
+  tx_failed: { code: 'payment_invalid', message: 'The payment transaction failed on chain.' },
+  no_payment: { code: 'payment_invalid', message: 'That transaction is not a payment to the Coinnibal arena.' },
+  wrong_recipient: { code: 'payment_invalid', message: 'The payment did not go to the Coinnibal arena contract.' },
+  wrong_sender: { code: 'payment_invalid', message: 'The payment was sent from another wallet. Pay from the wallet you signed in with.' },
+  wrong_pack: { code: 'payment_invalid', message: 'That payment was made for something else, not for this room.' },
+  wrong_amount: { code: 'payment_low', message: 'The payment is less than the room price.' },
+  wrong_token: { code: 'payment_invalid', message: 'That transaction did not move the game token.' },
+  tx_stale: { code: 'payment_stale', message: 'This payment is too old to open a room.' },
+};
 
 const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 /** The creator of a guest's "Practice with bots" room. */
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
+/**
+ * Fields of the settings files written while rooms were paid in ETH (before 2026-11-18): read and ignored (the fee is
+ * paid in the game token to the arena contract now, whose fee wallet takes the half that is not burned). An admin
+ * update that still sends one is refused with the reason.
+ */
+const RETIRED_KEYS: Record<string, string> = {
+  priceGas: 'priceGas is retired: private rooms are paid in the game token now (set usdCents or priceTokens)',
+  treasury: 'treasury is retired: room fees are paid to the arena contract (half burned, half to its fee wallet)',
+};
+
+/** A base price in whole tokens: a decimal string above 0 and at most `CUSTOM_SETTINGS_LIMITS.priceTokens`, at most 6 decimals. */
+function tokenPrice(x: unknown, field: string, bad: (field: string, message: string) => CustomRoomFail): string {
+  if (typeof x !== 'string' || !/^\d{1,10}(\.\d{1,6})?$/.test(x)) throw bad(field, `${field} must be a token amount like "1500" or "12.5"`);
+  const raw = parseToken(x, 6);
+  if (raw <= 0n || raw > BigInt(CUSTOM_SETTINGS_LIMITS.priceTokens) * 10n ** 6n) throw bad(field, `${field} must be above 0 and at most ${CUSTOM_SETTINGS_LIMITS.priceTokens}`);
+  return x;
+}
+
 /** Validates an admin update of the settings; returns the merged settings. */
 export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string, unknown>, strict = true): CustomRoomSettings {
   const next = { ...cur };
+  for (const k of Object.keys(RETIRED_KEYS)) delete (next as Record<string, unknown>)[k];
   const bad = (field: string, message: string) => new CustomRoomFail(400, 'bad_request', message, field);
-  const keys: (keyof CustomRoomSettings)[] = ['enabled', 'priceGas', 'treasury', 'holderPerk', 'holderDiscountPct', 'maxLive', 'maxPerWallet', 'capacityStepPct', 'maxPlayers', 'maxSeats', 'paidRooms', 'practiceRooms', 'practiceMaxLive'];
-  for (const k of Object.keys(body)) if (!keys.includes(k as keyof CustomRoomSettings) && strict) throw bad(k, `unknown field ${k}`);
+  const keys: (keyof CustomRoomSettings)[] = ['enabled', 'priceIn', 'usdCents', 'priceTokens', 'holderPerk', 'holderDiscountPct', 'maxLive', 'maxPerWallet', 'capacityStepPct', 'maxPlayers', 'maxSeats', 'paidRooms', 'practiceRooms', 'practiceMaxLive'];
+  if (strict) {
+    for (const k of Object.keys(body)) {
+      if (k in RETIRED_KEYS) throw bad(k, RETIRED_KEYS[k]);
+      if (!keys.includes(k as keyof CustomRoomSettings)) throw bad(k, `unknown field ${k}`);
+    }
+  }
   if (body.enabled !== undefined) {
     if (typeof body.enabled !== 'boolean') throw bad('enabled', 'enabled must be true or false');
     next.enabled = body.enabled;
@@ -152,23 +205,11 @@ export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string
     if (typeof body.practiceRooms !== 'boolean') throw bad('practiceRooms', 'practiceRooms must be true or false');
     next.practiceRooms = body.practiceRooms;
   }
-  if (body.priceGas !== undefined) {
-    const p = body.priceGas;
-    if (typeof p !== 'string' || !/^\d{1,6}(\.\d{1,18})?$/.test(p)) throw bad('priceGas', 'priceGas must be an amount of the gas token like "0.05"');
-    if (parseEther(p) > parseEther('1000')) throw bad('priceGas', 'priceGas must be at most 1000 of the gas token');
-    next.priceGas = p;
+  if (body.priceIn !== undefined) {
+    if (body.priceIn !== 'usd' && body.priceIn !== 'token') throw bad('priceIn', 'priceIn must be "usd" or "token"');
+    next.priceIn = body.priceIn;
   }
-  if (body.treasury !== undefined) {
-    if (body.treasury === null || body.treasury === '') next.treasury = null;
-    else {
-      try {
-        if (typeof body.treasury !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(body.treasury)) throw new Error();
-        next.treasury = getAddress(body.treasury.toLowerCase());
-      } catch {
-        throw bad('treasury', 'treasury must be a wallet address (0x...) or empty for the owner wallet');
-      }
-    }
-  }
+  if (body.priceTokens !== undefined) next.priceTokens = tokenPrice(body.priceTokens, 'priceTokens', bad);
   if (body.holderPerk !== undefined) {
     if (!(CUSTOM_HOLDER_PERKS as readonly unknown[]).includes(body.holderPerk)) throw bad('holderPerk', `holderPerk must be one of ${CUSTOM_HOLDER_PERKS.join(', ')}`);
     next.holderPerk = body.holderPerk as CustomRoomSettings['holderPerk'];
@@ -177,6 +218,7 @@ export function applyCustomSettings(cur: CustomRoomSettings, body: Record<string
     if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) throw bad(field, `${field} must be a whole number from ${min} to ${max}`);
     return v;
   };
+  if (body.usdCents !== undefined) next.usdCents = int(body.usdCents, 'usdCents', 1, CUSTOM_SETTINGS_LIMITS.usdCents);
   if (body.holderDiscountPct !== undefined) next.holderDiscountPct = int(body.holderDiscountPct, 'holderDiscountPct', 0, 100);
   if (body.maxLive !== undefined) next.maxLive = int(body.maxLive, 'maxLive', 0, CUSTOM_SETTINGS_LIMITS.maxLive);
   if (body.maxPerWallet !== undefined) next.maxPerWallet = int(body.maxPerWallet, 'maxPerWallet', 1, CUSTOM_SETTINGS_LIMITS.maxPerWallet);
@@ -194,19 +236,25 @@ export interface CustomRoomDeps {
   dataDir: string | null;
   /** File-name suffix (`.dev-fake` on the fake chain, so dev rooms never mix with real ones). */
   suffix?: string;
-  /** Used payment hashes of the server's chain (persisted per chain). */
+  /** Used payments of the server's chain (hashes and wallet requests; persisted per chain). */
   used: UsedPayments;
-  /** Reads payments on the server's chain; null while the chain is off (paid rooms closed). */
-  reader: () => PaymentReader | null;
-  /** The server's chain id (shown in the quote: the payment goes there). */
-  chainId: () => number | null;
+  /**
+   * The server's chain: its status names the game token and the arena contract fees are paid to (`ElymumArena.pay`),
+   * and `tokenReceipt` reads a payment's `Paid` event. The same reads as the power-up shop.
+   */
+  chain: Pick<ChainGateway, 'enabled' | 'status' | 'tokenReceipt'>;
+  /**
+   * The token's USD price and the significant figures of the arenas' sync (`ArenaPriceStore`: Game → Arena prices): a
+   * fee priced in dollars (`priceIn: 'usd'`) is converted with them. Null / absent: the token price applies.
+   */
+  usdPrice?: () => Promise<{ price: bigint; usdPerToken: string; sigFigs: number } | null>;
+  /** Waits before re-reading a receipt that is not visible yet (default 0, 1.5 s, 3 s). */
+  receiptRetryMs?: readonly number[];
   /** Whether a wallet holds an Elymum NFT (cached by the mint service). */
   isHolder: (wallet: string) => Promise<boolean>;
   /** The emblem token ids a wallet owns (null: unknown); with `claims` the free daily room is one per token id a day. */
   emblemTokens?: (wallet: string, fresh?: boolean) => Promise<string[] | null>;
   claims?: EmblemClaims;
-  /** The treasury when the admin set none: the owner (first `ADMIN_WALLETS` wallet); null: none. */
-  ownerWallet: string | null;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -228,6 +276,8 @@ export class CustomRoomService implements CustomRoomHooks {
   private readonly emptySince = new Map<string, number>();
   private bestDirty = false;
   private lastBestFlush = 0;
+  /** Base prices quoted lately and until when each is accepted (a token price that moved between the quote and the payment). */
+  private readonly quoted: { raw: bigint; until: number }[] = [];
   private readonly now: () => number;
   private readonly log: (m: string) => void;
 
@@ -265,6 +315,11 @@ export class CustomRoomService implements CustomRoomHooks {
       if (raw.maxPlayers === 50 && (raw.maxSeats === undefined || raw.maxSeats === 200)) {
         raw.maxPlayers = CUSTOM_SETTINGS_DEFAULT.maxPlayers;
         raw.maxSeats = CUSTOM_SETTINGS_DEFAULT.maxSeats;
+      }
+      // a file from the rooms paid in ETH: its ETH price and treasury are dropped, the room fee is the token default
+      // (the dollar value the old ETH default stood for) until the admin sets one; the next save leaves them out
+      if (raw.priceGas !== undefined || raw.treasury !== undefined) {
+        this.log(`custom rooms: the ETH price${raw.priceGas !== undefined ? ` (${String(raw.priceGas)})` : ''} and the treasury are retired: rooms are paid in the game token now (50 % burned, 50 % to the fee wallet)`);
       }
       this.cur = applyCustomSettings(this.cur, raw, false);
     } catch (err) {
@@ -359,25 +414,79 @@ export class CustomRoomService implements CustomRoomHooks {
     return { ...this.cur };
   }
 
+  /** `GET /api/admin/custom-rooms`: the settings, where fees are paid, the base price now and the live rooms. */
+  async adminView(): Promise<CustomRoomAdminView> {
+    const target = this.payTarget();
+    const base = await this.basePrice();
+    return {
+      settings: this.settings,
+      pay: target.ok ? { token: target.token, payTo: target.arena, burnBps: target.burnBps } : null,
+      ...(target.ok ? {} : { payClosed: target.reason }),
+      base: {
+        raw: base.raw.toString(),
+        decimals: this.decimals(),
+        ...(base.usdCents !== null ? { usdCents: base.usdCents } : {}),
+        ...(base.usdPerToken ? { usdPerToken: base.usdPerToken } : {}),
+        ...(base.sigFigs !== null ? { sigFigs: base.sigFigs } : {}),
+      },
+      rooms: this.list(),
+    };
+  }
+
   updateSettings(body: Record<string, unknown>): CustomRoomSettings {
     this.cur = applyCustomSettings(this.cur, body);
     this.write(this.file('custom-rooms-settings'), this.cur);
     return this.settings;
   }
 
-  /** Where fees go: the admin's treasury, else the owner wallet. */
-  treasury(): string | null {
-    return this.cur.treasury ?? this.d.ownerWallet;
+  /**
+   * Where a room fee is paid: the game token and the arena contract (`ElymumArena.pay`: `paymentBurnBps` burned, the
+   * rest to its fee wallet), or why it cannot be paid now (no chain, no token set on the arena yet, no arena).
+   */
+  payTarget(): { ok: true; token: { address: string; symbol: string; decimals: number }; arena: string; burnBps: number | null } | { ok: false; reason: CustomPayClosed } {
+    if (!this.d.chain.enabled || !this.d.chain.tokenReceipt) return { ok: false, reason: 'no_chain' };
+    const st = this.d.chain.status();
+    if (!st.tokenReady || !st.token) return { ok: false, reason: 'no_token' };
+    if (!st.arenaAddress) return { ok: false, reason: 'no_arena' };
+    return { ok: true, token: st.token, arena: st.arenaAddress, burnBps: st.fees?.paymentBurnBps ?? null };
   }
 
-  /** Base price (rooms of up to 10 players), wei. */
-  priceWei(): bigint {
-    return parseEther(this.cur.priceGas);
+  /** The token's decimals (18 until the token is set, like the shop). */
+  private decimals(): number {
+    const t = this.payTarget();
+    return t.ok ? t.token.decimals : (this.d.chain.status().token?.decimals ?? 18);
   }
 
-  /** The fee of a room of `capacity` before any holder perk (`customRoomFee`), wei. */
-  feeWei(capacity: number): bigint {
-    return customRoomFee(this.priceWei(), capacity, this.cur.capacityStepPct);
+  /**
+   * The base price now (rooms of up to 10 players), raw base units: dollars converted at the arenas' token price and
+   * rounding, else the token price (`customRoomBaseRaw`).
+   */
+  async basePrice(): Promise<{ raw: bigint; usdCents: number | null; usdPerToken: string | null; sigFigs: number | null }> {
+    const usd = (await this.d.usdPrice?.().catch(() => null)) ?? null;
+    const b = customRoomBaseRaw(this.cur, this.decimals(), usd);
+    return { ...b, usdPerToken: usd?.usdPerToken ?? null, sigFigs: usd?.sigFigs ?? null };
+  }
+
+  /** The fee of a room of `capacity` before any holder perk (`customRoomFee`), raw base units, at the base price now. */
+  async feeRaw(capacity: number): Promise<bigint> {
+    return customRoomFee((await this.basePrice()).raw, capacity, this.cur.capacityStepPct);
+  }
+
+  private remember(raw: bigint): void {
+    const now = this.now();
+    for (let i = this.quoted.length - 1; i >= 0; i--) if (this.quoted[i].until <= now) this.quoted.splice(i, 1);
+    const q = this.quoted.find((x) => x.raw === raw);
+    if (q) q.until = now + CUSTOM_QUOTE_VALID_MS;
+    else this.quoted.push({ raw, until: now + CUSTOM_QUOTE_VALID_MS });
+    if (this.quoted.length > 12) this.quoted.splice(0, this.quoted.length - 12);
+  }
+
+  /** The lowest base price the server stands by now: the current one, or one it quoted in the last `CUSTOM_QUOTE_VALID_MS`. */
+  private async acceptedBase(): Promise<bigint> {
+    const now = (await this.basePrice()).raw;
+    let low = now;
+    for (const q of this.quoted) if (q.until > this.now() && q.raw < low) low = q.raw;
+    return low;
   }
 
   /** Seats taken by the live custom rooms (Σ capacity; "Practice with bots" rooms have their own cap). */
@@ -428,7 +537,8 @@ export class CustomRoomService implements CustomRoomHooks {
       best: r.best.slice(0, BEST_KEPT),
       paidWith: r.paidWith,
       txHash: r.txHash,
-      feeWei: r.paidWei,
+      // a room opened before rooms were paid in tokens shows its ETH fee as such
+      ...(r.paidRaw === undefined && r.paidWei !== undefined ? { feeRaw: r.paidWei, feeIn: 'gas' as const } : { feeRaw: r.paidRaw ?? '0', feeIn: 'token' as const }),
       ...(r.closing ? { closing: true } : {}),
     };
   }
@@ -486,7 +596,7 @@ export class CustomRoomService implements CustomRoomHooks {
       endsAt: now + config.durationMin * 60_000,
       paidWith: 'free',
       txHash: null,
-      paidWei: '0',
+      paidRaw: '0',
       best: [],
       practice: { owner: key },
     };
@@ -516,19 +626,24 @@ export class CustomRoomService implements CustomRoomHooks {
   async quote(wallet: string | null): Promise<CustomRoomQuote> {
     const holder = wallet ? await this.d.isHolder(wallet).catch(() => false) : false;
     const free = !!wallet && holder && this.freeAvailable(wallet, await this.tokensOf(wallet, false));
-    const price = this.priceWei();
-    const treasury = this.treasury();
+    const base = await this.basePrice();
+    const target = this.payTarget();
+    // the price shown is the price accepted (for `CUSTOM_QUOTE_VALID_MS`), whatever the token price does meanwhile
+    if (target.ok) this.remember(base.raw);
     const tiers: CustomArenaTier[] = (await this.tiers()).map((a) => ({ arenaId: a.arenaId, entryFee: a.buyIn, holdersOnly: a.holdersOnly }));
     return {
-      enabled: this.cur.enabled && !!treasury,
-      priceWei: price.toString(),
-      youPayWei: customRoomPrice(price, this.cur, holder, free).toString(),
+      enabled: this.cur.enabled,
+      pay: target.ok ? { token: target.token, payTo: target.arena, burnBps: target.burnBps } : null,
+      ...(target.ok ? {} : { payClosed: target.reason }),
+      priceRaw: base.raw.toString(),
+      youPayRaw: customRoomCost(base.raw, this.cur, holder, free, CUSTOM_CAPACITY_TIER).toString(),
+      ...(base.usdCents !== null ? { usdCents: base.usdCents } : {}),
+      ...(base.usdPerToken ? { usdPerToken: base.usdPerToken } : {}),
       capacityStepPct: this.cur.capacityStepPct,
       maxPlayers: this.cur.maxPlayers,
       seatsLeft: Math.max(0, this.cur.maxSeats - this.seatsUsed()),
       paidRooms: this.cur.paidRooms && tiers.length > 0,
       tiers,
-      treasury,
       holderPerk: this.cur.holderPerk,
       holderDiscountPct: this.cur.holderDiscountPct,
       holder,
@@ -537,7 +652,7 @@ export class CustomRoomService implements CustomRoomHooks {
       maxLive: this.cur.maxLive,
       mine: wallet ? this.mine(wallet).length : 0,
       maxPerWallet: this.cur.maxPerWallet,
-      chainId: this.d.chainId(),
+      chainId: this.d.chain.status().chainId,
     };
   }
 
@@ -598,14 +713,43 @@ export class CustomRoomService implements CustomRoomHooks {
   }
 
   /**
-   * Creates a room for a signed-in `wallet` (`POST /api/rooms/custom {config, txHash}`). The price
-   * (after the holder perk) must be paid with a native transfer to the treasury, checked on chain;
-   * a free room needs no transaction. Throws `CustomRoomFail`.
+   * Reads a payment's receipt (its token transfers and the arena's `Paid` events), looking again a few times while the
+   * RPC does not see it yet. Throws `CustomRoomFail` (`chain_busy`) when the chain cannot be read: the payment is safe.
+   */
+  private async receipt(hash: string): Promise<TokenReceipt | null> {
+    let receipt: TokenReceipt | null = null;
+    for (const wait of this.d.receiptRetryMs ?? [0, 1_500, 3_000]) {
+      if (wait > 0) await new Promise<void>((r) => setTimeout(r, wait).unref?.());
+      try {
+        receipt = (await this.d.chain.tokenReceipt?.(hash)) ?? null;
+      } catch (err) {
+        if (err instanceof ChainBusyError) throw new CustomRoomFail(503, 'chain_busy', 'The network is busy. Your payment is safe: try again in a moment.', 'txHash');
+        throw err;
+      }
+      if (receipt) break;
+    }
+    return receipt;
+  }
+
+  /**
+   * Creates a room for a signed-in `wallet` (`POST /api/rooms/custom {config, txHash?, request?}`). The price (the fee
+   * by capacity after the holder perk, `customRoomCost`, the function the quote uses) must be paid in the game token
+   * with `ElymumArena.pay(amount, customRoomPaymentRef(request))` from this wallet: the shop's check of the receipt
+   * (mined and succeeded, the arena's `Paid` event for this wallet with this ref, the token moved, at most
+   * `CUSTOM_PAYMENT_MAX_AGE_MS` old) with an amount of at least the price quoted, and a hash and a wallet's request open
+   * one room each (`UsedPayments`, on disk before the room opens). A free room (the holders' room of the day, a 100 %
+   * discount) needs no transaction. A room that costs something cannot open before the game token is set on the arena
+   * (`token_not_set`). The same payment sent again by its wallet (an answer that got lost) gets its room back. Throws
+   * `CustomRoomFail`.
    */
   async create(wallet: string, body: Record<string, unknown>): Promise<CustomRoomView> {
+    const hashIn = typeof body.txHash === 'string' ? body.txHash.trim() : '';
+    if (hashIn && TX_HASH_RE.test(hashIn)) {
+      const done = this.d.used.get(hashIn);
+      const r = done && done.wallet.toLowerCase() === wallet.toLowerCase() ? this.records.get(done.code) : undefined;
+      if (r && !r.closing && !r.closeMessage) return this.view(r);
+    }
     if (!this.cur.enabled) throw new CustomRoomFail(503, 'rooms_closed', 'Creating rooms is closed right now.');
-    const treasury = this.treasury();
-    if (!treasury) throw new CustomRoomFail(503, 'rooms_closed', 'Creating rooms is not set up on this server yet.');
     const v = validateCustomConfig(body.config);
     if (!v.ok) throw new CustomRoomFail(400, 'bad_request', v.message, v.field);
     const config = v.config;
@@ -625,27 +769,43 @@ export class CustomRoomService implements CustomRoomHooks {
       const arena = config.kind === 'paid' && config.arenaId !== null ? await this.paidArena(config.arenaId, holder) : null;
       const tokens = holder ? await this.tokensOf(wallet, true) : null;
       const free = holder && this.freeAvailable(wallet, tokens);
-      // the fee grows with the capacity; the server computes it, whatever the client showed
-      const price = customRoomPrice(this.feeWei(capacity), this.cur, holder, free, capacity);
+      // the fee grows with the capacity; the server computes it (at the lowest price it quoted lately), whatever the
+      // client showed
+      const price = customRoomCost(await this.acceptedBase(), this.cur, holder, free, capacity);
       let txHash: string | null = null;
+      let request: string | null = null;
+      let paid = 0n;
       if (price > 0n) {
-        const hash = typeof body.txHash === 'string' ? body.txHash.trim() : '';
+        const target = this.payTarget();
+        if (!target.ok) {
+          if (target.reason === 'no_token') throw new CustomRoomFail(503, 'token_not_set', TOKEN_NOT_SET);
+          throw new CustomRoomFail(503, 'rooms_closed', 'Paid rooms need the chain and the arena, which are not set up on this server.');
+        }
+        const hash = hashIn;
         if (!hash) throw new CustomRoomFail(402, 'payment_required', 'Pay the room fee first.', 'txHash');
         if (!TX_HASH_RE.test(hash)) throw new CustomRoomFail(400, 'payment_invalid', 'That is not a transaction hash.', 'txHash');
+        const req = typeof body.request === 'string' ? body.request : '';
+        if (!CUSTOM_REQUEST_RE.test(req)) throw new CustomRoomFail(400, 'payment_invalid', 'The payment names no room request. Open the room from the room sheet.', 'request');
         if (this.d.used.has(hash)) throw new CustomRoomFail(409, 'payment_used', 'This payment already opened a room.', 'txHash');
+        if (this.d.used.hasRequest(wallet, req)) throw new CustomRoomFail(409, 'payment_used', 'This room request was paid and opened a room already.', 'request');
         if (!this.d.used.claim(hash)) throw new CustomRoomFail(409, 'payment_pending', 'This payment is being checked. Wait a moment.', 'txHash');
         claimed = hash;
-        const reader = this.d.reader();
-        if (!reader) throw new CustomRoomFail(503, 'rooms_closed', 'Paid rooms need the chain, which is off on this server.');
-        let res;
-        try {
-          res = await checkPayment(reader, this.d.used, { hash, from: wallet, to: treasury, minWei: price, now: this.now() });
-        } catch (err) {
-          if (err instanceof PaymentChainBusy) throw new CustomRoomFail(503, 'chain_busy', 'The network is busy. Your payment is safe: try again in a moment.', 'txHash');
-          throw err;
+        const check = verifyPurchase(await this.receipt(hash), {
+          token: target.token.address,
+          from: wallet,
+          arena: target.arena,
+          ref: customRoomPaymentRef(req),
+          amounts: { minAmount: price },
+          now: this.now(),
+          maxAgeMs: CUSTOM_PAYMENT_MAX_AGE_MS,
+        });
+        if (!check.ok) {
+          const r = PAY_REFUSAL[check.code];
+          throw new CustomRoomFail(r.code === 'payment_pending' ? 409 : 400, r.code, r.message, 'txHash');
         }
-        if (!res.ok) throw new CustomRoomFail(res.code === 'payment_pending' ? 409 : 400, res.code, res.message, 'txHash');
         txHash = hash;
+        request = req;
+        paid = check.paid;
       }
       // the awaits above let other rooms open meanwhile: a paid hash stays unused when the slots filled up
       try {
@@ -664,12 +824,13 @@ export class CustomRoomService implements CustomRoomHooks {
         endsAt: this.endsAt(config, now),
         paidWith: txHash ? 'paid' : 'free',
         txHash,
-        paidWei: price.toString(),
+        paidRaw: paid.toString(),
         best: [],
         ...(arena ? { buyIn: arena.buyIn } : {}),
       };
-      // the hash is used for good before the room opens (a crash between the two loses the room, never doubles it)
-      if (txHash) this.d.used.markUsed(txHash, { at: now, wallet: rec.creator, code });
+      // the hash and the request are used for good before the room opens (a crash between the two loses the room,
+      // never doubles it)
+      if (txHash && request) this.d.used.markUsed(txHash, { at: now, wallet: rec.creator, code, request, paid: paid.toString() });
       claimed = null;
       if (!txHash && customUsesFreeRoom(this.cur, holder, free, capacity)) {
         this.freeUsed[w] = utcDay(now);
@@ -679,7 +840,7 @@ export class CustomRoomService implements CustomRoomHooks {
       this.open(rec);
       this.saveRooms();
       this.log(
-        `custom rooms: ${code} "${rec.config.name}" opened by ${rec.creator} (${rec.paidWith}${txHash ? ` ${txHash}` : ''}, ${rec.config.durationMin} min, ` +
+        `custom rooms: ${code} "${rec.config.name}" opened by ${rec.creator} (${rec.paidWith}${txHash ? ` ${paid} raw tokens, ${txHash}` : ''}, ${rec.config.durationMin} min, ` +
           `${capacity} players, ${arena ? `paid on arena #${arena.arenaId}` : 'free'})`,
       );
       return this.view(rec);

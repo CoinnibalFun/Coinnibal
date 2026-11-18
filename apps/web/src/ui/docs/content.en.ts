@@ -208,7 +208,7 @@ export const docsEn = (
             items: [
               {
                 term: 'Private rooms:',
-                text: `a signed-in wallet can open a room with its own rules and an invite code: ${CUSTOM_DURATION_LIMITS.min} to ${CUSTOM_DURATION_LIMITS.max} minutes long, ${CUSTOM_LIMITS.playersMin} to ${CUSTOM_LIMITS.playersMax} players. Opening one costs a little ${GAS_SYMBOL}: bigger rooms cost more, and the price shows before you pay. There are two kinds.`,
+                text: `a signed-in wallet can open a room with its own rules and an invite code: ${CUSTOM_DURATION_LIMITS.min} to ${CUSTOM_DURATION_LIMITS.max} minutes long, ${CUSTOM_LIMITS.playersMin} to ${CUSTOM_LIMITS.playersMax} players. Opening one costs a small fee in tokens: bigger rooms cost more, and the price shows before you pay. Like a power-up pack, ${payBurn} of the fee is burned and ${payTeam} goes to the team wallet. NFT holders open one room a day for free. There are two kinds.`,
               },
               { term: 'Free room:', text: 'no tickets and no payout. Anyone with the code can join, even without a wallet.' },
               {
@@ -357,7 +357,7 @@ export const docsEn = (
               [holdersRoom, 'Closed', 'Open'],
               ['Power-up packs', 'Full price', `${SH.holderDiscountPct}% off`],
               ['Power-ups per round in a paid room', String(SH.arenaUses), String(SH.arenaUses + SH.holderExtraUses)],
-              ['Private room', `Paid in ${GAS_SYMBOL}`, `1 free a day, up to ${CUSTOM_CAPACITY_TIER} players`],
+              ['Private room', 'Paid in tokens', `1 free a day, up to ${CUSTOM_CAPACITY_TIER} players`],
               ['Coin look', 'Standard skins', 'Also the NFT skin and a holder badge'],
             ],
           },
@@ -380,11 +380,11 @@ export const docsEn = (
           {
             kind: 'list',
             items: [
-              { term: 'Used for:', text: 'the tickets and payouts of the paid rooms, and power-up packs.' },
-              { term: 'Not used for:', text: `the NFT mint, opening a private room and network fees. These are paid in ${GAS_SYMBOL}.` },
+              { term: 'Used for:', text: 'the tickets and payouts of the paid rooms, power-up packs and opening a private room.' },
+              { term: 'Not used for:', text: `the NFT mint and network fees. These are paid in ${GAS_SYMBOL}.` },
               {
                 term: 'Burn:',
-                text: `a part of every fee on profit and of every power-up payment is burned (see ${see('Rounds, payout and fee', 'payout')} and ${see('Power-ups', 'powerups')}). Burned tokens are gone for good. The game never creates new ${symbol}.`,
+                text: `a part of every fee on profit is burned, and ${payBurn} of every power-up and private-room payment (see ${see('Rounds, payout and fee', 'payout')} and ${see('Power-ups', 'powerups')}). Burned tokens are gone for good. The game never creates new ${symbol}.`,
               },
               {
                 term: 'Set once:',

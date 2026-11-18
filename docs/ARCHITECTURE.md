@@ -254,8 +254,12 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   mainnet the setting is refused (`PUT /api/admin/test-arenas` answers 409), a stored file is ignored, the room
   directory opens none and `Room` refuses to build one. Turned off, each test arena takes no new seat and closes
   once its bell settled every ticket in it (nobody is evicted).
-- **Custom rooms** (`rooms/custom.ts`, `site/custom-rooms.ts`): a signed-in wallet pays a small ETH fee to the
-  treasury (checked on chain by tx hash, each hash used once) and gets a room `priv-<CODE>` with its own rules
+- **Custom rooms** (`rooms/custom.ts`, `site/custom-rooms.ts`): a signed-in wallet pays a small fee in the game token
+  with `ElymumArena.pay(amount, customRoomPaymentRef(request))` (half burned, half to the fee wallet, like a power-up
+  pack; checked with the shop's receipt check `shop/verify.ts`: the `Paid` event of this wallet with this request's ref
+  and at least the quoted price; a hash and a wallet's request open one room each, `chain/payment.ts` `UsedPayments`,
+  on disk per chain before the room opens; refused with `token_not_set` before the game token is set; NFT holders'
+  free room of the day needs no payment) and gets a room `priv-<CODE>` with its own rules
   (duration, map, traps, food, power-ups, capacity, practice bots in free rooms). A **ticket room** is an
   invite-only instance of an arena on its **own clock** (`RoomOptions.ownRound`, `ownRoundAt`): one game from its
   opening to its end, no tie to the arenas' 5-minute rounds; players buy that arena's normal ticket (the creator's own
