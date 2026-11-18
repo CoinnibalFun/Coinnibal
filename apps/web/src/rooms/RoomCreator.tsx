@@ -369,7 +369,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
     ticketInFlight.current = true;
     setTicketError(null);
     setTicketPhase('preparing');
-    const res = await buyTicket({ owner: address, chain, client, config, arenaId: room.arenaId, review: p.review, fake: data.fake }, (s, ph, h) => {
+    const res = await buyTicket({ owner: address, chain, client, config, arenaId: room.arenaId, review: p.review, fake: data.fake, token }, (s, ph, h) => {
       setTicketStep(s);
       setTicketPhase(ph);
       if (h) setHash(h);

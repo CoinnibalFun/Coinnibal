@@ -1,4 +1,5 @@
 import type { ArenaInfo, ContractCall, SessionInfo } from '@coinnibal/sdk';
+import type { JoinPermit } from '@coinnibal/shared';
 import { act, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Kb } from '../src/design';
@@ -23,7 +24,10 @@ const spies = vi.hoisted(() => ({
   getSession: vi.fn(),
   sendWalletCall: vi.fn(),
   verifyArena: vi.fn(),
+  fetchJoinPermit: vi.fn(),
 }));
+// the game server's join permit (CoinnibalArena v4): granted unless a test says otherwise
+vi.mock('../src/wallet/permit', async (orig) => ({ ...(await orig<typeof import('../src/wallet/permit')>()), fetchJoinPermit: spies.fetchJoinPermit }));
 // the money path's network edges: the fresh chain reads and the wallet send
 vi.mock('@coinnibal/sdk', async (orig) => ({
   ...(await orig<typeof import('@coinnibal/sdk')>()),
@@ -39,6 +43,8 @@ vi.mock('../src/wallet/tx', async (orig) => ({ ...(await orig<typeof import('../
 vi.mock('../src/wallet/pinned', async (orig) => ({ ...(await orig<typeof import('../src/wallet/pinned')>()), verifyArena: spies.verifyArena }));
 
 const CHAIN = chainStatus();
+/** The permit the game server grants ALICE for a room of the pinned arena. */
+const permitOf = (arenaId: number, o: Partial<JoinPermit> = {}): JoinPermit => ({ arena: ARENA, chainId: CHAIN.chainId!, player: ALICE, arenaId, nonce: '0', deadline: Math.floor(Date.now() / 1000) + 600, signature: `0x${'ef'.repeat(65)}`, ...o });
 const PENNY: TicketModel = { key: 'arena:1', arenaId: 1, entryFee: 1000n * ONE, humans: 3, bots: 10, loot: 0, open: true };
 const arena = (id: number, entryFee: bigint): ArenaInfo => ({
   id,
@@ -71,6 +77,8 @@ beforeEach(() => {
   spies.getSession.mockImplementation(async (_c: unknown, _a: unknown, id: number) => useChainData.getState().sessions[id] ?? session({ id: 0n }));
   spies.verifyArena.mockReset();
   spies.verifyArena.mockImplementation(async () => ({ ok: true, arena: ARENA }));
+  spies.fetchJoinPermit.mockReset();
+  spies.fetchJoinPermit.mockImplementation(async (_token: string, arenaId: number) => ({ ok: true, permit: permitOf(arenaId) }));
   spies.sendWalletCall.mockReset();
   spies.sendWalletCall.mockImplementation(async (_call: unknown, opts: { onPhase?: (p: string, h?: string) => void }) => {
     opts.onPhase?.('signing');
@@ -79,7 +87,7 @@ beforeEach(() => {
   });
   resetWallets();
   useWallet.setState({ status: 'connected', address: ALICE, chainId: 46630, current: detail(fakeProvider({ chainId: 46630, known: [46630] })) });
-  useUi.setState({ settings: { ...ui0.settings, name: 'Daphne', skin: 4 }, chain: CHAIN });
+  useUi.setState({ settings: { ...ui0.settings, name: 'Daphne', skin: 4 }, chain: CHAIN, auth: { address: ALICE, token: 'tok', profile: null } });
   useChainData.setState({
     config: config(),
     sessions: {},
@@ -287,6 +295,43 @@ describe('ticket flow: two prompts, progress and races', () => {
     expect(spies.sendWalletCall.mock.calls[0][1]).toMatchObject({ chain: CHAIN });
   });
 
+  it('asks the game server for the join permit first, and joins with it (CoinnibalArena v4)', async () => {
+    useChainData.setState({ allowance: 5000n * ONE });
+    spies.planJoin.mockImplementation(async () => ({ entryFee: 1000n * ONE, allowance: 5000n * ONE, balance: 12_450n * ONE, approve: null, join: joinCall, calls: [joinCall] }));
+    open(PENNY);
+    act(() => screen.getByRole('button', { name: /Pay 1,000 \$NIBAL/ }).click());
+    await settle();
+    expect(spies.fetchJoinPermit).toHaveBeenCalledWith('tok', 1);
+    const permit = spies.planJoin.mock.calls[0][1].permit as { deadline: bigint; signature: string };
+    expect(permit).toEqual({ deadline: BigInt(permitOf(1).deadline), signature: permitOf(1).signature });
+    expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('a refused permit says why and signs nothing (no-shows, an open ticket, a full room)', async () => {
+    spies.fetchJoinPermit.mockImplementation(async () => {
+      const { permitRefusalText } = await vi.importActual<typeof import('../src/wallet/permit')>('../src/wallet/permit');
+      return { ok: false, code: 'no_show', text: permitRefusalText('no_show', Date.UTC(2026, 10, 19, 15, 30)) };
+    });
+    open(PENNY);
+    act(() => screen.getByRole('button', { name: /^Pay / }).click());
+    await settle();
+    expect(screen.getByRole('alert').textContent).toMatch(/Your last tickets were bought but never played, so new tickets pause until .+\. Nothing was signed\./);
+    expect(spies.planJoin).not.toHaveBeenCalled();
+    expect(spies.sendWalletCall).not.toHaveBeenCalled();
+  });
+
+  it('a permit for another wallet, room or arena signs nothing', async () => {
+    for (const bad of [{ player: '0x2222222222222222222222222222222222222222' }, { arenaId: 3 }, { arena: '0x0000000000000000000000000000000000000bad' }, { chainId: 1 }]) {
+      spies.fetchJoinPermit.mockImplementation(async (_t: string, arenaId: number) => ({ ok: true, permit: permitOf(arenaId, bad) }));
+      const view = open(PENNY);
+      act(() => screen.getByRole('button', { name: /^Pay / }).click());
+      await settle();
+      expect(screen.getByRole('alert').textContent).toMatch(/does not recognise the arena contract/);
+      view.unmount();
+    }
+    expect(spies.sendWalletCall).not.toHaveBeenCalled();
+  });
+
   it('a double click (or two Enters) plans and sends once', async () => {
     useChainData.setState({ allowance: 5000n * ONE });
     spies.planJoin.mockImplementation(async () => ({ entryFee: 1000n * ONE, allowance: 5000n * ONE, balance: 12_450n * ONE, approve: null, join: joinCall, calls: [joinCall] }));
@@ -301,7 +346,8 @@ describe('ticket flow: two prompts, progress and races', () => {
     await settle();
     expect(spies.planJoin).toHaveBeenCalledTimes(1);
     expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
-    expect(spies.planJoin.mock.calls[0][1]).toEqual({ arena: ARENA, arenaId: 1, player: ALICE, token: TOKEN, approve: 'exact' });
+    expect(spies.planJoin.mock.calls[0][1]).toEqual({ arena: ARENA, arenaId: 1, player: ALICE, token: TOKEN, approve: 'exact', permit: { deadline: expect.any(BigInt), signature: permitOf(1).signature } });
+    expect(spies.fetchJoinPermit).toHaveBeenCalledTimes(1);
   });
 
   it('a failed approval stops before the join, and the retry re-plans', async () => {

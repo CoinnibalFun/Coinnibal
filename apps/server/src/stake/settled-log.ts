@@ -24,6 +24,8 @@ export interface SettledRecord {
   fee?: number;
   /** The journal reason (`round`, `death`, `crash`, `stale`, ...). */
   reason?: string;
+  /** A cancel of a ticket nobody seated while its arena was open (see `SettlementItem.noShow`). */
+  noShow?: true;
   sweepId?: number;
   tx: string;
   /** Unix ms. */
@@ -51,6 +53,8 @@ const MAX_RECORDS = 200_000;
  */
 export class SettledLog {
   private readonly byKey = new Map<string, SettledRecord>();
+  /** No-show cancels by wallet (lower case): key → Unix ms. */
+  private readonly noShows = new Map<string, Map<string, number>>();
 
   constructor(
     private readonly path: string | null,
@@ -89,7 +93,31 @@ export class SettledLog {
   private keep(r: SettledRecord): void {
     this.byKey.delete(r.key);
     this.byKey.set(r.key, r);
-    if (this.byKey.size > MAX_RECORDS) this.byKey.delete(this.byKey.keys().next().value!);
+    if (r.kind === 'cancel' && r.noShow && r.player) {
+      const who = r.player.toLowerCase();
+      const m = this.noShows.get(who) ?? new Map<string, number>();
+      m.set(r.key, r.at);
+      this.noShows.set(who, m);
+    }
+    if (this.byKey.size > MAX_RECORDS) {
+      const old = this.byKey.keys().next().value!;
+      const gone = this.byKey.get(old);
+      this.byKey.delete(old);
+      if (gone?.player) this.noShows.get(gone.player.toLowerCase())?.delete(old);
+    }
+  }
+
+  /** Unix ms of each no-show cancel of `player` at or after `since` (the join permits' no-show rule). */
+  noShowsSince(player: string, since: number): number[] {
+    const m = this.noShows.get(player.toLowerCase());
+    if (!m) return [];
+    const out: number[] = [];
+    for (const [k, at] of m) {
+      if (at >= since) out.push(at);
+      // older than the log keeps: never needed again
+      else if (at < this.now() - SETTLED_KEEP_MS) m.delete(k);
+    }
+    return out;
   }
 
   private compact(): void {

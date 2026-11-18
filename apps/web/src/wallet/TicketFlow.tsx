@@ -184,7 +184,10 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     const review = live;
     setFrozen(review);
     // the one checked money path (also the paid room creator's own ticket): re-reads, pins, exact approval, join
-    const res = await buyTicket({ owner, chain, client, config, arenaId, review, fake: data.fake }, (s, p, h) => onPhase(s)(p, h));
+    // the game session of this wallet asks the server for the join permit
+    const auth = useUi.getState().auth;
+    const token = auth && auth.address.toLowerCase() === owner.toLowerCase() ? auth.token : null;
+    const res = await buyTicket({ owner, chain, client, config, arenaId, review, fake: data.fake, token }, (s, p, h) => onPhase(s)(p, h));
     if (!res.ok) return fail(res.text);
     setHash(res.hash);
     enterRoom(res.hash);

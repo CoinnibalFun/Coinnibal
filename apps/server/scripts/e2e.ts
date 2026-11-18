@@ -45,7 +45,7 @@ import {
   type ContractCall,
 } from '@coinnibal/sdk';
 import { PROTOCOL_VERSION, type ChainStatus, type ServerMessage } from '@coinnibal/shared';
-import type { Address, PublicClient, WalletClient } from 'viem';
+import type { Address, Hex, PublicClient, WalletClient } from 'viem';
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import WebSocket from 'ws';
 
@@ -228,8 +228,8 @@ class Player {
   }
 }
 
-/** HTTP SIWE sign-in (the site's `/api/auth/login`); returns the session token. */
-async function httpLogin(account: PrivateKeyAccount): Promise<string> {
+/** HTTP SIWE sign-in (the site's `/api/auth/login`); returns the session token (`admin`: it must be an admin's). */
+async function httpLogin(account: PrivateKeyAccount, admin = true): Promise<string> {
   const n = await getJson<{ message: string }>(`/api/auth/nonce?address=${account.address}`);
   const res = await fetch(`${httpUrl}/api/auth/login`, {
     method: 'POST',
@@ -237,8 +237,21 @@ async function httpLogin(account: PrivateKeyAccount): Promise<string> {
     body: JSON.stringify({ address: account.address, message: n.message, signature: await account.signMessage({ message: n.message }) }),
   });
   const body = (await res.json()) as { token?: string; admin?: boolean; error?: string };
-  assert(res.ok && body.token && body.admin, `admin login failed: ${JSON.stringify(body)}`);
-  return body.token;
+  assert(res.ok && body.token && (body.admin || !admin), `${admin ? 'admin ' : ''}login failed: ${JSON.stringify(body)}`);
+  return body.token!;
+}
+
+/** The game server's join permit for one ticket (`POST /api/arena/permit`, CoinnibalArena v4), signed in over HTTP. */
+async function permitFor(account: PrivateKeyAccount, arenaId: number): Promise<{ deadline: bigint; signature: Hex }> {
+  const token = await httpLogin(account, false);
+  const res = await fetch(`${httpUrl}/api/arena/permit`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ arenaId }),
+  });
+  const body = (await res.json()) as { permit?: { deadline: number; signature: string; player: string; arenaId: number }; error?: string };
+  assert(res.ok && body.permit && body.permit.player === account.address && body.permit.arenaId === arenaId, `permit refused: ${JSON.stringify(body)}`);
+  return { deadline: BigInt(body.permit!.deadline), signature: body.permit!.signature as Hex };
 }
 
 /* ── the run ─────────────────────────────────────────────────────────────── */
@@ -297,7 +310,8 @@ async function main(): Promise<void> {
     ['idle', idle],
   ] as const) {
     await send(acct, faucetCall(token), `${who} faucet`);
-    for (const call of (await planJoin(client, { arena, arenaId: ARENA_ID, player: acct.address, token })).calls) await send(acct, call, `${who} ${call.functionName}`);
+    const permit = await permitFor(acct, ARENA_ID);
+    for (const call of (await planJoin(client, { arena, arenaId: ARENA_ID, player: acct.address, token, permit })).calls) await send(acct, call, `${who} ${call.functionName}`);
   }
   const p = await Player.connect('prey', prey);
   await p.signIn();

@@ -15,7 +15,7 @@ import {
   type SessionRef,
   type Settlement,
 } from '@coinnibal/sdk';
-import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatGas, isSupportedChainId, unsupportedChainMessage, formatToken, type ArenaFees, type ChainStatus } from '@coinnibal/shared';
+import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatGas, isSupportedChainId, unsupportedChainMessage, formatToken, type ArenaFees, type ChainStatus, type JoinPermit } from '@coinnibal/shared';
 import { getAddress, isAddress, isHash, type Address, type Hash, type Hex } from 'viem';
 import type { PrivateKeyAccount } from 'viem/accounts';
 import type { ServerConfig } from '../config';
@@ -167,7 +167,7 @@ export class EvmChain implements ChainGateway {
   /** The arena contract in use (checksummed); null while none is registered. */
   private arena: Address | null = null;
   private arenaTx: string | null = null;
-  /** `ok` once the code at `arena` matched the bundled artifact (CoinnibalArena v3). */
+  /** `ok` once the code at `arena` matched the bundled artifact (CoinnibalArena v4). */
   private arenaCode: 'ok' | 'missing' | 'mismatch' | null = null;
   private config: ArenaConfig | null = null;
   private configAt = 0;
@@ -446,7 +446,7 @@ export class EvmChain implements ChainGateway {
         this.arenaCode = code;
         if (code === 'ok') {
           this.cache.set(codeKey, 'ok');
-          this.log(`chain: arena ${this.arena} is CoinnibalArena v3 — the fee is taken from the profit (burned + to the fee wallet) at settlement`);
+          this.log(`chain: arena ${this.arena} is CoinnibalArena v4 — tickets need the server's join permit; the fee is taken from the profit (burned + to the fee wallet) at settlement`);
         }
       } catch (err) {
         this.warn('code', `chain: code check of ${this.arena} failed (${firstLine(err)})`);
@@ -784,6 +784,56 @@ export class EvmChain implements ChainGateway {
       if (this.arenaCache) return unknownPots(this.arenaCache.value);
       throw new ChainBusyError('arena list', err);
     }
+  }
+
+  /** The nonce the next join permit of `player` must name (one read at `normal` priority). */
+  async joinNonce(player: string): Promise<bigint> {
+    const client = this.client;
+    const arena = this.arena;
+    if (!client || !arena || !isEvm(player)) throw new ChainBusyError('join nonce');
+    try {
+      return await withRpcPriority('normal', () => client.joinNonce(arena, getAddress(player)));
+    } catch (err) {
+      this.warn('join-nonce', `chain: join nonce read failed (${firstLine(err)})`);
+      throw new ChainBusyError('join nonce', err);
+    }
+  }
+
+  /** A join permit signed by the server key; only while the key is the arena's server authority. */
+  async signJoinPermit(player: string, arenaId: number, nonce: bigint, deadlineS: number): Promise<JoinPermit> {
+    const client = this.client;
+    const arena = this.arena;
+    const chainId = this.chainId;
+    if (!client || !arena || chainId === null || this.authorized !== true || !isEvm(player)) throw new Error('the server key cannot sign join permits for this arena');
+    const who = getAddress(player);
+    const signature = await client.signJoinPermit({ chainId, arena, player: who, arenaId, nonce, deadline: BigInt(deadlineS) });
+    return { arena, chainId, player: who, arenaId, nonce: nonce.toString(), deadline: deadlineS, signature };
+  }
+
+  /**
+   * Whether `player` holds a ticket (open, or settled and waiting to be collected) in `arenaId`: one read at `normal`
+   * priority (a permit request must never take the budget a paid seat or a settlement needs).
+   */
+  async hasOpenTicket(arenaId: number, player: string): Promise<boolean> {
+    const client = this.client;
+    const arena = this.arena;
+    if (!this.tokenReady || !client || !arena || !isEvm(player)) return false;
+    try {
+      return (await withRpcPriority('normal', () => client.session(arena, arenaId, getAddress(player)))).id !== 0n;
+    } catch (err) {
+      this.warn('session', `chain: session lookup failed (${firstLine(err)})`);
+      throw new ChainBusyError('session lookup', err);
+    }
+  }
+
+  /** The contract is paused (`join` refuses every ticket). */
+  joinsPaused(): boolean {
+    return this.config?.paused === true;
+  }
+
+  /** No-show cancels of `player` (Unix ms) since `since` (the settled log keeps 14 days). */
+  noShowsSince(player: string, since: number): number[] {
+    return this.settledLog.noShowsSince(player, since);
   }
 
   /** The arena list goes stale (re-read at the next ask); its value stays for RPC errors. */
@@ -1281,7 +1331,7 @@ export class EvmChain implements ChainGateway {
     if (ev.name === 'Cancelled') {
       // an unplayed ticket: its full entry fee went back, no fee
       const amount = toLedger(ev.amount, t.decimals, 'floor');
-      this.settledLog.record({ kind: 'cancel', ...base, amount, net: amount, fee: 0 });
+      this.settledLog.record({ kind: 'cancel', ...base, amount, net: amount, fee: 0, ...(item.noShow ? { noShow: true as const } : {}) });
       const collect = !ev.collected && ev.amount > 0n;
       this.log(`chain: ${collect ? 'finalized' : 'cancelled'} ${short(item.key)} (${item.reason ?? 'stale'}) · full entry fee ${this.units(amount)} → ${short(item.player)}${collect ? ' (to collect)' : ''} · ${hash}`);
       this.emit({ key: item.key, player: getAddress(item.player), arenaId: item.arenaId, txHash: hash, payout: amount, fee: 0, net: amount, refund: true, ...(collect ? { collect: true } : {}) });
@@ -1606,7 +1656,8 @@ export class EvmChain implements ChainGateway {
             return;
           }
           // a closed arena (re-price, disabled, paused): nobody will seat it, the full entry fee goes back now
-          if (!closed.all && !closed.ids.has(c.arenaId) && chainNowS - s.openedAt < staleAfterS) return;
+          const arenaOpen = !closed.all && !closed.ids.has(c.arenaId);
+          if (arenaOpen && chainNowS - s.openedAt < staleAfterS) return;
           if (only.length > 0 && !only.includes(c.arenaId)) return;
           enqueue.push({
             kind: 'settle',
@@ -1621,6 +1672,8 @@ export class EvmChain implements ChainGateway {
             kills: 0,
             xp: 0,
             reason: 'stale',
+            // never seated while its arena was open: a no-show (the join permits count them)
+            ...(arenaOpen ? { noShow: true as const } : {}),
             attempts: 0,
             nextAttemptAt: now,
             createdAt: now,

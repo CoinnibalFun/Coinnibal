@@ -41,6 +41,7 @@ import { MintService, hyperliquidPrice, type PriceFetcher } from './site/mint';
 import { SiteApi, type SiteLimits } from './site/routes';
 import { SiteStore } from './site/store';
 import { Journal } from './stake/journal';
+import { JoinPermits } from './stake/join-permits';
 import { BoostInventory } from './shop/inventory';
 import { ShopService } from './shop/service';
 import { ShopSettingsStore } from './shop/settings';
@@ -424,7 +425,20 @@ export async function createApp(
   chain.onStatusChange(showChain);
   await rooms.ensureArenaRooms();
 
-  const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, shares, priceKeeper, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
+  // join permits (CoinnibalArena v4): who may buy a ticket, and how many may wait for a seat (stake/join-permits.ts)
+  const permits = new JoinPermits({
+    chain,
+    gameOpenFor: (wallet) => site.gameOpenFor(wallet, true),
+    isBanned: (wallet) => integrity.isBanned(wallet),
+    blocked: () => rooms.blockedArenas().map((b) => b.arenaId),
+    seatedKeys: () => rooms.liveSessions(),
+    pendingKeys: () => journal.pending.map((p) => p.key),
+    seatsPerRound: () => cfg.arenaInstanceCap * rooms.scaler.settings.maxInstances,
+    noShows: (wallet, since) => chain.noShowsSince?.(wallet, since) ?? [],
+    cfg: cfg.joinPermits,
+    log,
+  });
+  const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, shares, priceKeeper, permits, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
   const gateway = new Gateway(cfg, rooms, auth, chain, journal, log);
   gateway.setProfiles(profiles);
   // a linked X handle rides on the coin (read from memory at the join: X is never asked then)
