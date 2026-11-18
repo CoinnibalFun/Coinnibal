@@ -168,18 +168,42 @@ describe('/wl', { timeout: 30_000 }, () => {
     expect(document.title).toBe('WL · Coinnibal');
   });
 
-  it('when the WL is off after it was open: earlier applicants get a sign-in that leads to their status', async () => {
+  it('when the WL is off after it was open: closed, not "soon", with a sign-in that leads earlier applicants to their status', async () => {
     ({ restore } = mockFetch({
       'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false, wlHadEntries: true } },
       'GET /api/site/tasks': { tasks: TASKS },
     }));
     render(<WlPage />);
-    expect(await screen.findByRole('heading', { level: 1, name: "The WL isn’t open yet" }, { timeout: 5000 })).toBeTruthy();
-    const again = screen.getByRole('button', { name: 'Applied before? Sign in' });
-    expect(again.getAttribute('aria-expanded')).toBe('false');
-    fireEvent.click(again);
-    expect(again.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByText('Sign in with the wallet you applied with to see your status.')).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: 'WL applications are closed' }, { timeout: 5000 })).toBeTruthy();
+    expect(screen.getByText('If you applied, sign in with that wallet to see your status. Watch @coinnibalfun for news.')).toBeTruthy();
+    expect(document.querySelector('.cl-soon')).toBeNull();
+    // the wallet sign-in sits right in the card (its first step: pick a wallet)
+    expect(document.querySelector('.wl-closed__again')?.textContent).toMatch(/MetaMask|No browser wallet/);
+    expect(document.body.textContent).not.toMatch(/No WL application/);
+    expect(document.title).toBe('Not open yet · Coinnibal');
+  });
+
+  it('a wallet with no entry on the closed WL is told so; a failed lookup can be tried again', async () => {
+    ({ restore } = mockFetch({
+      'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false, wlHadEntries: true } },
+      'GET /api/site/tasks': { tasks: TASKS },
+      'GET /api/site/wl': { entry: null },
+    }));
+    useSession.setState({ session: { address: WALLET, token: 'tok', admin: false } });
+    const view = render(<WlPage />);
+    expect(await screen.findByText('This wallet has no WL application. Applied with another one? Use Switch wallet.', {}, { timeout: 5000 })).toBeTruthy();
+    view.unmount();
+    restore();
+    resetSiteSettings();
+    ({ restore } = mockFetch({
+      'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false, wlHadEntries: true } },
+      'GET /api/site/tasks': { tasks: TASKS },
+      'GET /api/site/wl': json(500, { error: 'internal', message: 'The server had a problem.' }),
+    }));
+    render(<WlPage />);
+    expect(await screen.findByRole('alert', {}, { timeout: 5000 })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Try again/ })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/No WL application/);
   });
 
   it('the wallet step shows the full EVM address that goes on the list', async () => {

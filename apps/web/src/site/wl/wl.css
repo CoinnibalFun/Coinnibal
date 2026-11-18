@@ -760,10 +760,15 @@
   padding-top: 10px;
   border-top: 2px dashed var(--rule);
 }
-.wl-closed__again .wl-signin-card {
-  width: 100%;
-  box-sizing: border-box;
-  text-align: left;
+.wl-closed__note {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin: 0;
+  max-width: 34ch;
+  font-size: 15px;
+  text-align: center;
+  color: var(--ink-2);
 }
 
 @media (prefers-reduced-motion: reduce) {
