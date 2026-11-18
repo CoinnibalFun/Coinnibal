@@ -22,7 +22,7 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false } } }));
     const onAllowed = vi.fn();
     render(<PlayGate onAllowed={onAllowed} />);
-    expect(await screen.findByRole('heading', { level: 1, name: /The game isn't open yet/ })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: /The game isn’t open yet/ })).toBeTruthy();
     // the owner's launch order, no dates
     expect(screen.getByText("Even the guard's asleep. First comes the NFT mint, then the token, then the game, and the guide already has every rule.")).toBeTruthy();
     // one label: the heading (no title strip, no eyebrow over it)

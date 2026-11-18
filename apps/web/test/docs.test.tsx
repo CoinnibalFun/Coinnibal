@@ -111,7 +111,7 @@ describe('player guide content', () => {
     expect(all).toContain('Bots play only in free private rooms.');
     expect(all).toContain('Bots are labelled BOT.');
     // one block speaks of bots, nothing else does
-    const items = en.sections.flatMap((s) => s.blocks).flatMap((b) => (b.kind === 'list' ? b.items : [b]));
+    const items = en.sections.flatMap((s) => s.blocks).flatMap((b): unknown[] => (b.kind === 'list' ? [...b.items] : [b]));
     const about = items.filter((it) => /\bbots?\b/i.test(JSON.stringify(it)));
     expect(about).toHaveLength(1);
     expect(all.replace(JSON.stringify(about[0]), '')).not.toMatch(/\bbots?\b/i);

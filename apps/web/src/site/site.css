@@ -182,38 +182,86 @@ body {
   box-shadow: var(--sh-1);
   transform: rotate(-2deg);
 }
+/* the closed parts of the site stand together in one dashed outline under one Soon tag, drawn like the 404's unbuilt
+   terrace: planned, not built yet. Their names are not links (a pointer on one says what it will be) */
+.st-soonset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  margin-left: 8px;
+  padding: 0 4px 0 9px;
+  min-height: 42px;
+  box-sizing: border-box;
+  border: 2px dashed var(--cyan-s);
+  border-radius: 12px;
+}
+.st-soonset__tag {
+  flex: none;
+  padding: 2px 7px 3px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--ink-fixed);
+  background: var(--sun);
+  border: 1.5px solid var(--outline);
+  border-radius: 6px;
+  transform: rotate(-3deg);
+}
 .st-nav__link--soon,
 .st-nav__link--soon:hover {
-  gap: 6px;
   cursor: default;
   color: var(--ink-2) !important;
   background: none;
   border-color: transparent;
   user-select: none;
 }
+.st-soonset .st-nav__link--soon {
+  min-height: 38px;
+  padding: 0 9px;
+}
+/* on its own closed page: the brand's sun highlighter under the name (the place the visitor is at) */
 .st-nav__link--soon.is-here,
 .st-nav__link--soon.is-here:hover {
   color: var(--ink) !important;
-  border-style: dashed;
+  background: linear-gradient(transparent 52%, var(--sun) 52%, var(--sun) 72%, transparent 72%) no-repeat center /
+    calc(100% - 12px) 100%;
+}
+/* each name still says "Soon" to a screen reader; on screen the set's one tag says it */
+.st-soon {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+/* the project's X account at the end of the nav (narrower screens: in the menu) */
+.st-head__x {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  color: var(--ink) !important;
+  border: var(--stroke-sm) solid transparent;
+  border-radius: 11px;
+  transition:
+    background-color var(--dur-state) linear,
+    border-color var(--dur-state) linear;
+}
+.st-head__x:hover {
+  color: var(--ink-fixed) !important;
+  background: var(--sticker);
   border-color: var(--outline);
 }
-.st-soon {
-  padding: 1px 6px 2px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-fixed);
-  background: var(--sun);
-  border: 1.5px solid var(--outline);
-  border-radius: 6px;
-  transform: rotate(-3deg);
-  transition: transform var(--dur-micro) var(--ease-spring);
-}
-/* a pointer on a Soon item: the tag tips the other way (it is still not a link) */
-.st-nav__link--soon:hover .st-soon {
-  transform: rotate(4deg) translateY(-1px);
+@media (max-width: 899px) {
+  .st-head__x {
+    display: none;
+  }
 }
 .st-head__tools {
   display: flex;
@@ -272,30 +320,119 @@ body {
   right: var(--gutter);
   top: calc(100% + 10px);
   display: grid;
-  gap: 2px;
-  min-width: 240px;
-  max-width: min(360px, calc(100vw - 2 * var(--gutter)));
+  gap: 4px;
+  width: min(360px, calc(100vw - 2 * var(--gutter)));
   /* never past the bottom edge: a longer menu scrolls inside itself */
   max-height: calc(100dvh - var(--st-head-h) - env(safe-area-inset-top, 0px) - 24px);
   overflow-y: auto;
   overscroll-behavior: contain;
   box-sizing: border-box;
   padding: 10px !important;
-  transform: rotate(1deg);
   transform-origin: top right;
   animation: st-drop var(--dur-enter) var(--ease-out) both;
 }
-.st-menu .st-nav__link {
-  min-height: 48px;
-  font-size: 18px;
+/* an open part of the site: its name, a line on what is there, an arrow */
+.st-menu__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name go'
+    'note go';
+  align-items: center;
+  column-gap: 12px;
+  padding: 11px 12px 12px;
+  color: var(--ink-fixed) !important;
+  text-decoration: none;
+  border: var(--stroke-sm) solid transparent;
+  border-radius: 12px;
+  transition:
+    background-color var(--dur-state) linear,
+    border-color var(--dur-state) linear;
 }
-.st-menu .st-nav__link.is-on {
-  transform: none;
+.st-menu__row:hover {
+  background: var(--white);
+  border-color: var(--outline);
+}
+.st-menu__row.is-on {
+  background: var(--sun);
+  border-color: var(--outline);
+  box-shadow: var(--sh-1);
+}
+.st-menu__name {
+  grid-area: name;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.st-menu__note {
+  grid-area: note;
+  margin-top: 2px;
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--on-sticker-2);
+}
+.st-menu__go {
+  grid-area: go;
+  transition: transform var(--dur-micro) var(--ease-out);
+}
+.st-menu__row:hover .st-menu__go {
+  transform: translateX(3px);
+}
+/* X opens in a new tab: its arrow points out */
+.st-menu__go--out {
+  transform: rotate(-45deg);
+}
+.st-menu__row:hover .st-menu__go--out {
+  transform: rotate(-45deg) translateX(3px);
+}
+/* what is not open yet: the header's dashed outline and Soon tag, with what each part will be */
+.st-menu__soon {
+  position: relative;
+  display: grid;
+  margin: 16px 4px 4px;
+  padding: 16px 12px 8px;
+  border: 2px dashed var(--cyan-s);
+  border-radius: 14px;
+}
+.st-menu__soon > .st-soonset__tag {
+  position: absolute;
+  left: 12px;
+  top: -12px;
+}
+.st-menu .st-menu__soonrow {
+  display: grid;
+  grid-template-columns: 4.2em minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 10px;
+  min-height: 0;
+  padding: 6px 0;
+  border: 0;
+  border-radius: 0;
+}
+.st-menu__soonrow .st-menu__name {
+  grid-area: auto;
+  font-size: 16px;
+  color: var(--ink-fixed);
+}
+.st-menu__soonrow .st-menu__note {
+  grid-area: auto;
+  margin: 0;
+  font-size: 14px;
+}
+.st-menu .st-menu__soonrow.is-here {
+  background: none;
+}
+.st-menu__soonrow.is-here .st-menu__name {
+  background: linear-gradient(transparent 58%, var(--sun) 58%, var(--sun) 88%, transparent 88%);
 }
 @keyframes st-drop {
   from {
     opacity: 0;
-    transform: translateY(-10px) rotate(-2deg);
+    transform: translateY(-10px);
   }
 }
 @media (max-width: 899px) {
@@ -313,7 +450,7 @@ body {
   }
 }
 /* a link that stands alone beside the logo is drawn as a small sticker, so it reads as the way into the guide */
-.st-head--few .st-nav__link:not(.is-on) {
+.st-head--few .st-nav__link:not(.is-on, .st-nav__link--soon) {
   padding: 0 16px;
   border-color: var(--outline);
   background: var(--sticker);
@@ -353,18 +490,13 @@ html.st-menu-open {
     right: 10px;
     top: auto;
     bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    min-width: 0;
-    max-width: none;
+    width: auto;
     max-height: calc(100dvh - var(--st-head-h) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 20px);
     padding: 12px !important;
     gap: 4px;
     transform: none;
     transform-origin: bottom center;
     animation: st-rise 0.18s var(--ease-out) both;
-  }
-  .st-menu .st-nav__link {
-    justify-content: center;
-    min-height: 52px;
   }
 }
 .st-menu__play {
@@ -449,9 +581,6 @@ html.st-menu-open {
   .st-menu__scrim {
     animation: none;
   }
-  .st-soon {
-    transition: none;
-  }
   .st-head__home:hover .st-head__coin {
     transform: none;
     animation: none;
@@ -508,7 +637,7 @@ html.st-menu-open {
 }
 .st-foot__eco {
   margin: 18px 0 0;
-  max-width: 46ch;
+  max-width: 60ch;
   text-wrap: pretty;
   font-size: 15px;
   color: var(--ink-2);
@@ -564,9 +693,14 @@ html.st-menu-open {
   gap: 8px 20px;
   padding-top: 16px;
   border-top: 2px dashed var(--rule);
-  font-size: var(--t-micro);
+  font-size: 14px;
   color: var(--ink-3);
   text-wrap: pretty;
+}
+/* the safety line is the one that matters: it reads a step brighter than the name and the address */
+.st-foot__small > :last-child {
+  font-weight: 600;
+  color: var(--ink-2);
 }
 /* wide: the name and the address read as one group on the left, the safety line on the right */
 @media (min-width: 900px) {

@@ -105,10 +105,10 @@ export const navFor = (doors: Doors = DOORS_CLOSED) => NAV.filter((n) => linkOpe
  * Pages that are closed but named in the header with a "Soon" tag, not clickable: the game (beta), the WL and the
  * collab applications. The mint is not among them (it runs on OpenSea).
  */
-export const SOON: { href: string; key: TKey }[] = [
-  { href: '/play', key: 'site.nav.play' },
-  { href: '/wl', key: 'site.nav.wl' },
-  { href: '/collab', key: 'site.nav.collab' },
+export const SOON: { href: string; key: TKey; note: TKey }[] = [
+  { href: '/play', key: 'site.nav.play', note: 'site.menu.soon.play' },
+  { href: '/wl', key: 'site.nav.wl', note: 'site.menu.soon.wl' },
+  { href: '/collab', key: 'site.nav.collab', note: 'site.menu.soon.collab' },
 ];
 
 /** The "Soon" entries for the doors that are still closed. */
@@ -131,6 +131,7 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
   const path = usePath();
   const peel = usePeelLetters<HTMLSpanElement>();
   const doors = useDoors();
+  const { settings } = useSiteSettings();
   const nav = navFor(doors);
   const soon = soonFor(doors);
   // one or two entries fit beside the logo on a phone too: no menu button for them
@@ -183,21 +184,33 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
       </Link>
     );
   });
-  // still not a link; on its own (closed) page it is marked as the place the visitor is at
-  const soonItems = soon.map((n) => {
-    const here = path === n.href;
-    return (
-      <span
-        key={`soon:${n.href}`}
-        className={`st-nav__link st-nav__link--soon${here ? ' is-here' : ''}`}
-        aria-disabled="true"
-        aria-current={here ? 'page' : undefined}
-      >
-        {t(n.key)}
-        <span className="st-soon">{t('site.nav.soon')}</span>
+  // still not links. The closed parts stand together in one dashed outline (drawn like the 404's unbuilt terrace:
+  // planned, not built yet) under one "Soon" tag; each name still says "Soon" to a screen reader (.st-soon), and a
+  // pointer on it says what it will be. On its own (closed) page an item is marked as the place the visitor is at
+  const soonSet = soon.length > 0 && (
+    <span className="st-soonset">
+      <span className="st-soonset__tag" aria-hidden="true">
+        {t('site.nav.soon')}
       </span>
-    );
-  });
+      {soon.map((n) => {
+        const here = path === n.href;
+        return (
+          <span
+            key={`soon:${n.href}`}
+            className={`st-nav__link st-nav__link--soon${here ? ' is-here' : ''}`}
+            aria-disabled="true"
+            aria-current={here ? 'page' : undefined}
+            title={t(n.note)}
+          >
+            {t(n.key)}
+            <span className="st-soon">{t('site.nav.soon')}</span>
+          </span>
+        );
+      })}
+    </span>
+  );
+  const handle = settings.xHandle.replace(/^@/, '');
+  const xHref = xProfile(handle);
   return (
     <header className={`st-head${few ? ' st-head--few' : ''}`}>
       <div className="st-head__inner">
@@ -210,9 +223,15 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
         </Link>
         <nav className="st-nav" aria-label={t('site.nav.label')}>
           {links}
-          {soonItems}
+          {soonSet}
         </nav>
         <div className="st-head__tools">
+          {/* wide screens: the project's X account at the end of the nav (narrower, it is in the menu) */}
+          {!few && (
+            <a className="st-head__x" href={xHref} target="_blank" rel="noreferrer" aria-label={t('site.nav.x', { handle })}>
+              <XIcon size={18} />
+            </a>
+          )}
           {connect && (
             <Suspense fallback={<ConnectFallback />}>
               <HeaderConnect />
@@ -237,10 +256,56 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
         <>
           <button type="button" className="st-menu__scrim" aria-label={t('site.menu.close')} tabIndex={-1} onClick={() => setMenu(false)} />
           {/* phones: a sheet from the bottom edge, so every link and the Play button sit under the thumb; wider: a card
-              under the menu button */}
+              under the menu button. What is open, each with a line on what is there (the guide, X), then what is
+              not open yet and what each will be */}
           <nav ref={sheet} id="st-menu" className="st-menu kb-sticker kb-sticker--cream" aria-label={t('site.menu.label')}>
-            {links.filter((l) => l.key !== '/play')}
-            {soonItems}
+            {nav
+              .filter((n) => n.href !== '/play')
+              .map((n) => {
+                const on = path === n.href;
+                return (
+                  <Link
+                    key={n.href}
+                    href={n.href}
+                    className={`st-menu__row${on ? ' is-on' : ''}`}
+                    aria-current={on ? 'page' : undefined}
+                    onClick={() => setMenu(false)}
+                  >
+                    <span className="st-menu__name">{t(n.key)}</span>
+                    {n.href === '/docs' && <span className="st-menu__note">{t('site.menu.note.docs')}</span>}
+                    <Icon name="arrow" size={20} className="st-menu__go" />
+                  </Link>
+                );
+              })}
+            <a className="st-menu__row" href={xHref} target="_blank" rel="noreferrer">
+              <span className="st-menu__name">
+                <XIcon size={17} />@{handle}
+              </span>
+              <span className="st-menu__note">{t('site.menu.note.x')}</span>
+              <Icon name="arrow" size={20} className="st-menu__go st-menu__go--out" />
+            </a>
+            {soon.length > 0 && (
+              <div className="st-menu__soon">
+                <span className="st-soonset__tag" aria-hidden="true">
+                  {t('site.nav.soon')}
+                </span>
+                {soon.map((n) => {
+                  const here = path === n.href;
+                  return (
+                    <span
+                      key={`soon:${n.href}`}
+                      className={`st-nav__link st-nav__link--soon st-menu__soonrow${here ? ' is-here' : ''}`}
+                      aria-disabled="true"
+                      aria-current={here ? 'page' : undefined}
+                    >
+                      <span className="st-menu__name">{t(n.key)}</span>
+                      <span className="st-menu__note">{t(n.note)}</span>
+                      <span className="st-soon">{t('site.nav.soon')}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
             {doors.game && (
               <SiteLinkButton href="/play" variant="primary" size="lg" icon="arrow" className="st-menu__play" onClick={() => setMenu(false)}>
                 {t('site.menu.play')}
@@ -281,7 +346,7 @@ export function SiteFooter() {
           {doors.collab && <Link href="/collab">{t('site.nav.collab')}</Link>}
           <Link href="/docs">{t('site.nav.docs')}</Link>
         </nav>
-        <p className="st-foot__small mono">
+        <p className="st-foot__small">
           <span>Coinnibal · 2026</span>
           <span>{siteHost()}</span>
           <span>{t('site.foot.safety')}</span>
