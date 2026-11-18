@@ -2,7 +2,6 @@ import { ELYSIUM } from '@elymum/shared';
 import { motion, useScroll, useTransform, type MotionValue } from 'motion/react';
 import { useOffscreenPause, useReducedMotion } from '../../design';
 import { useMedia } from '../../design/useMedia';
-import { useT } from '../../i18n';
 
 /**
  * The seam between the day plates and the night plates: dusk on the plain, driven by the scroll.
@@ -70,7 +69,6 @@ function House({ p, h }: { p: MotionValue<number>; h: (typeof HOUSES)[number] })
 }
 
 export function DuskSeam() {
-  const t = useT();
   const reduced = useReducedMotion();
   const [ref, visible] = useOffscreenPause<HTMLDivElement>();
   const at = useMedia('(max-width: 1279px)') ? NARROW : WIDE;
@@ -157,7 +155,6 @@ export function DuskSeam() {
         ))}
       </svg>
       <motion.span className="ld-dusk__clock num">{clock}</motion.span>
-      <span className="ld-dusk__note">{t('ld.dusk')}</span>
     </div>
   );
 }

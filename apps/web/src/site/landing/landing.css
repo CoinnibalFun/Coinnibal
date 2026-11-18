@@ -821,7 +821,7 @@
   }
 }
 
-/* ── III · a round, in orbit ─────────────────────────────────────────── */
+/* ── III · a round, on the clock ─────────────────────────────────────── */
 /* the tablecloth: Round's linen is its own layer behind the content (reveal.css lays it from the left as the plate
    prints), so the section itself is paper. At rest it looks the same as a linen section. The isolation keeps the -1
    layer above the section's paper and below its text. */
@@ -843,45 +843,198 @@
   gap: clamp(32px, 5vw, 72px);
   align-items: start;
 }
-/* the orbit card stays beside the steps while they are read, its stations lighting up with them */
+/* the clock stays beside the steps while they are read */
 @media (min-width: 900px) {
-  .ld-round__orbit-wrap {
+  .ld-round__clock-wrap {
     position: sticky;
     top: calc(var(--ld-head-h) + 32px);
   }
 }
-.ld-orbit {
+/* the round's clock: a stopwatch on the night card, its key beside it (under it on a narrow card) */
+.ld-round__card {
   position: relative;
-  overflow: hidden;
-  padding: 40px 24px 44px !important;
+  padding: 36px 32px !important;
 }
-.ld-orbit__tag {
+.ld-clock {
+  --clock-open: var(--up);
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  align-items: center;
+  gap: 28px;
+}
+.ld-clock__tag {
   position: absolute;
   left: 20px;
-  top: 18px;
-  z-index: 2;
+  top: 16px;
+  padding: 3px 10px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--sun);
+  color: var(--ink-fixed);
+  font-size: 13px;
+  font-weight: 700;
 }
-.ld-orbit__svg {
+.ld-clock__dial {
   position: relative;
-  z-index: 1;
+  width: 100%;
+  max-width: 300px;
+  justify-self: center;
+}
+.ld-clock__svg {
   display: block;
   width: 100%;
   height: auto;
+  overflow: visible;
 }
-/* the stations are named in the body face, like the steps beside them (mono is kept for numbers) */
-.ld-orbit .kb-orbit__label {
-  font-family: var(--font-body);
+.ld-clock__crown {
+  fill: var(--current);
+  stroke: var(--outline);
+  stroke-width: 3;
+}
+.ld-clock__case {
+  fill: var(--trench);
+  stroke: var(--outline);
+  stroke-width: 3;
+}
+/* ink under the phases: each painted arc sits in a dark channel, with a hair of ink between two phases */
+.ld-clock__ring {
+  fill: none;
+  stroke: var(--outline);
+  stroke-width: 30;
+}
+.ld-clock__arc {
+  fill: none;
+  stroke-width: 22;
+}
+.ld-clock__tick {
+  stroke: var(--outline);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.ld-clock__min {
+  fill: var(--foam);
+  font-family: var(--font-mono);
   font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: none;
+  font-weight: 600;
 }
-.ld-orbit__core {
+.ld-clock__hand line {
+  stroke: var(--cream);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.ld-clock__hand circle {
+  fill: var(--sun);
+  stroke: var(--outline);
+  stroke-width: 3;
+}
+.ld-clock__hand {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  /* where it rests with reduced motion: a minute and a half into the round */
+  rotate: 49deg;
+}
+.ld-clock__core {
   position: absolute;
   left: 50%;
   top: 50%;
-  z-index: 1;
-  transform: translate(-50%, -58%);
+  transform: translate(-50%, -50%);
+  line-height: 0;
+}
+.ld-clock__side {
+  display: grid;
+  gap: 18px;
+  max-width: 260px;
+}
+.ld-clock__key {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ld-clock__note {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 2px dashed var(--current);
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--foam);
+}
+.ld-clock__phase {
+  display: grid;
+  grid-template-columns: 18px auto;
+  grid-template-areas: 'swatch when' '. what';
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: center;
+  color: var(--mist);
+}
+.ld-clock__swatch {
+  grid-area: swatch;
+  width: 18px;
+  height: 18px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 50%;
+}
+.ld-clock__when {
+  grid-area: when;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--foam);
+}
+.ld-clock__what {
+  grid-area: what;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--cream);
+}
+/* the hand sweeps one lap (a whole round and its break) at ten times the real speed; the phase it is in lights up in
+   the key, in step with it */
+@media (prefers-reduced-motion: no-preference) {
+  .ld-clock:not(.is-still) .ld-clock__hand {
+    rotate: 0deg;
+    animation: ld-clock-lap var(--lap) linear infinite;
+  }
+  .ld-clock:not(.is-still) .ld-clock__phase .ld-clock__when {
+    animation: var(--lap) step-end infinite;
+  }
+  .ld-clock:not(.is-still) .ld-clock__phase.is-open .ld-clock__when { animation-name: ld-clock-open; }
+  .ld-clock:not(.is-still) .ld-clock__phase.is-closed .ld-clock__when { animation-name: ld-clock-closed; }
+  .ld-clock:not(.is-still) .ld-clock__phase.is-break .ld-clock__when { animation-name: ld-clock-break; }
+}
+@keyframes ld-clock-lap {
+  to { rotate: 360deg; }
+}
+/* 0:00-4:00, 4:00-5:00 and 5:00-5:30 of a 5:30 lap */
+@keyframes ld-clock-open {
+  0% { color: var(--sun); }
+  72.73% { color: var(--foam); }
+}
+@keyframes ld-clock-closed {
+  0% { color: var(--foam); }
+  72.73% { color: var(--sun); }
+  90.91% { color: var(--foam); }
+}
+@keyframes ld-clock-break {
+  0% { color: var(--foam); }
+  90.91% { color: var(--sun); }
+}
+@media (max-width: 1099px) {
+  .ld-clock {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 22px;
+  }
+  .ld-clock__dial {
+    max-width: 280px;
+  }
+}
+@media (min-width: 640px) and (max-width: 899px) {
+  .ld-clock {
+    grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+    justify-items: stretch;
+  }
 }
 .ld-stops {
   margin: 30px 0 0;
@@ -909,13 +1062,12 @@
   box-shadow: var(--sh-1);
   font-size: 13px;
 }
-/* a step lights up once it has been read (Landing.tsx useStepsRead), with its station on the orbit */
+/* a step lights up once it has been read (Landing.tsx useStepsRead) */
 .ld-stop.is-read .ld-stop__no {
   background: var(--sun);
 }
 @media (prefers-reduced-motion: no-preference) {
-  .ld-stop__no,
-  .ld-orbit .kb-orbit__station circle {
+  .ld-stop__no {
     transition: background-color 0.3s var(--ease-out), fill 0.3s var(--ease-out);
   }
 }
@@ -942,23 +1094,11 @@
   }
 }
 @media (max-width: 479px) {
-  .ld-orbit {
-    padding: 44px 20px 32px !important;
+  .ld-round__card {
+    padding: 30px 20px 26px !important;
   }
-  .ld-orbit__core {
-    transform: translate(-50%, -58%) scale(0.62);
-  }
-  .ld-orbit .kb-orbit__label {
-    font-size: 27px;
-  }
-  /* at this size the side labels would run past the card's edge: they turn to face inwards */
-  .ld-orbit .kb-orbit__station.is-left .kb-orbit__label {
-    text-anchor: start;
-    transform: translateX(36px);
-  }
-  .ld-orbit .kb-orbit__station.is-right .kb-orbit__label {
-    text-anchor: end;
-    transform: translateX(-36px);
+  .ld-clock__dial {
+    max-width: 252px;
   }
 }
 
@@ -1214,10 +1354,19 @@
     radial-gradient(circle, rgb(246 238 218 / 0.22) 0 2px, transparent 2.6px) 15px 15px / 30px 30px,
     repeating-linear-gradient(-24deg, transparent 0 44px, rgb(255 255 255 / 0.13) 44px 47px);
 }
+/* the card's number, still sealed: a plain label in the body face, like every status on the page */
 .ld-emblem__no {
   position: absolute;
   left: 12px;
   top: 12px;
+  padding: 2px 9px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 8px;
+  background: var(--cream);
+  color: var(--ink-fixed);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 .ld-emblem__coin {
   position: relative;
@@ -1299,6 +1448,24 @@
   margin: 0;
   color: var(--ink-2);
 }
+/* the rooms' status in the body face, sentence case; closed, it is the site's one closed word, "Soon", on the same sun
+   chip as the header's */
+.ld-status.kb-pill {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ld-status.is-soon {
+  padding: 3px 11px 4px;
+  font-weight: 800;
+  background: var(--sun);
+  border-radius: 8px;
+}
+.ld-status.is-soon .kb-pill__dot {
+  display: none;
+}
 /* the rooms as a staircase: each step up is a bigger ticket, with a bigger coin standing on it */
 .ld-stairs {
   --rise: 46px;
@@ -1328,6 +1495,15 @@
   position: absolute;
   top: -34px;
   transform: rotate(-4deg);
+  padding: 2px 10px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 8px;
+  background: var(--cream);
+  color: var(--ink-fixed);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 .ld-stair__crown {
   position: absolute;
@@ -2198,25 +2374,9 @@
   box-shadow: var(--sh-2);
   transform: rotate(-3deg);
 }
-.ld-dusk__note {
-  position: absolute;
-  left: max(var(--gutter, 20px), calc(50% - 640px));
-  top: 78px;
-  max-width: 60%;
-  padding: 4px 10px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink-fixed);
-  background: var(--cream);
-  border: var(--stroke-sm) solid var(--outline);
-  border-radius: var(--r-tag);
-}
 @media (max-width: 479px) {
   .ld-dusk {
     height: 260px;
-  }
-  .ld-dusk__note {
-    display: none;
   }
   .ld-dusk__clock {
     font-size: 18px;
@@ -2236,13 +2396,10 @@
 
 /* a landscape phone (about 300 px under the header): the key pictures fit on one screen */
 @media (max-height: 500px) and (orientation: landscape) {
-  .ld-round__orbit-wrap {
+  .ld-round__clock-wrap {
     width: 100%;
-    max-width: 420px;
+    max-width: 560px;
     margin-inline: auto;
-  }
-  .ld-orbit {
-    padding: 40px 20px 56px !important;
   }
   .ld-nft__fan {
     height: 370px;

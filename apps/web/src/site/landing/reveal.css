@@ -297,7 +297,7 @@
   .ld-feast__menu-wrap[data-reveal='in'] .ld-menu__dots {
     animation: ld-unclip 0.6s var(--ease-out) calc(var(--d) + var(--beat)) backwards;
   }
-  /* Round: each stop's number stamps in a beat after its row; the orbit's sun coin rolls into its seat */
+  /* Round: each stop's number stamps in a beat after its row; the clock's sun coin rolls into its seat */
   .ld-round__copy[data-reveal='wait'] .ld-stop__no { scale: 0.6; rotate: -14deg; }
   .ld-round__copy[data-reveal='in'] .ld-stop__no {
     transition:
@@ -305,8 +305,8 @@
       rotate 0.36s var(--ease-settle) calc(var(--d) + var(--beat)),
       background-color 0.3s var(--ease-out);
   }
-  .ld-round__orbit-wrap[data-reveal='wait'] .ld-orbit__core > .ld-gaze { opacity: 0; translate: -112px 0; rotate: -140deg; }
-  .ld-round__orbit-wrap[data-reveal='in'] .ld-orbit__core > .ld-gaze {
+  .ld-round__clock-wrap[data-reveal='wait'] .ld-clock__core > .ld-gaze { opacity: 0; translate: -112px 0; rotate: -140deg; }
+  .ld-round__clock-wrap[data-reveal='in'] .ld-clock__core > .ld-gaze {
     transition:
       opacity 0.15s linear calc(var(--beat) * 5),
       translate 0.7s var(--ease-settle) calc(var(--beat) * 5),
