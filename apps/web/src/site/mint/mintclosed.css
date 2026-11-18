@@ -172,6 +172,20 @@
     grid-template-columns: 1fr;
   }
 }
+/* landscape phones: the scene stays beside the copy, so the first screen shows the press too */
+@media (max-height: 500px) and (orientation: landscape) and (min-width: 640px) {
+  .mc {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    padding-top: 20px;
+  }
+  .mc__scene {
+    margin-top: 28px;
+  }
+  .mc__title {
+    font-size: 36px;
+  }
+}
 @media (max-width: 479px) {
   .mc__ctas .st-btn {
     width: 100%;
