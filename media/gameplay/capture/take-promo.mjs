@@ -43,7 +43,7 @@ const hero = new Player(browser, { name: 'goldie', skin: 1, keyPath: resolve(CAC
 let stopAll = false;
 const heroPos = { wx: 3200, wy: 3200, big: 30, mass: 0 };
 const plan = new Map();
-const pidOf = (p) => p.ui(() => window.__elymum.useUi.getState().me?.pid);
+const pidOf = (p) => p.ui(() => window.__coinnibal.useUi.getState().me?.pid);
 const distTo = (r) => (r.pos && !r.dead ? Math.hypot(r.pos.wx - heroPos.wx, r.pos.wy - heroPos.wy) : Infinity);
 const leftS = async () => ((await hero.round(ARENA))?.left ?? 0) / 1000;
 let rec;
@@ -64,7 +64,7 @@ async function enter(r, held = false) {
 }
 /** Once a rival plays: a tiny window (costs almost nothing to draw) and its pid. */
 async function settle(r) {
-  await r.page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 120000 });
+  await r.page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 120000 });
   await r.page.setViewportSize({ width: 192, height: 108 });
   r.o.w = 192; r.o.h = 108;
   r.pid = await pidOf(r);
@@ -74,7 +74,7 @@ async function buyBack(p, o = {}) {
   await p.page.waitForSelector('.g-death .kb-btn--primary', { timeout: 8000 });
   await p.wait(o.pause ?? 400);
   await p.click('.g-death .kb-btn--primary', { before: o.before ?? 200 });
-  await p.page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'lobby', null, { timeout: 10000 }).catch(() => {});
+  await p.page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'lobby', null, { timeout: 10000 }).catch(() => {});
   await p.page.waitForFunction(() => !!document.querySelector('.tf-sheet') || !document.querySelector('.kl-cta')?.disabled, null, { timeout: 25000 }).catch(() => {});
 }
 async function rivalLoop(r) {
@@ -143,7 +143,7 @@ async function beat(name, fn, tries = 3) {
   }
   throw new Error(`beat ${name} failed`);
 }
-const screenOf = (pos) => hero.ui((q) => window.__elymum.engine.camera.toScreen(q.wx, q.wy), pos);
+const screenOf = (pos) => hero.ui((q) => window.__coinnibal.engine.camera.toScreen(q.wx, q.wy), pos);
 
 /** A rival is baited onto Goldie and eaten; with `split` she splits onto it as it turns to run. */
 async function hunt(r, split, tag) {

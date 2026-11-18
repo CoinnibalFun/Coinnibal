@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Video B: "How to play Elymum" (about 2:25). Narrated, in seven chapters. The layout follows the
+// Video B: "How to play Coinnibal" (about 2:25). Narrated, in seven chapters. The layout follows the
 // voiceover: each line gets its stretch of picture, and the chapter cards sit between them.
 // Footage and the render kit are shared with the gameplay video (media/gameplay).
 // Writes cache/edit/howto.json and howto-music.json.
@@ -11,7 +11,7 @@ import { Edit, events, mark, take } from '../gameplay/render/timeline.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // the site's host on the end card (no domain is hard-coded: set SITE_HOST to the PUBLIC_URL host)
-const SITE = (process.env.SITE_HOST || 'elymum.io').toUpperCase();
+const SITE = (process.env.SITE_HOST || 'coinnibal.fun').toUpperCase();
 const OUT = resolve(HERE, 'cache/edit');
 mkdirSync(OUT, { recursive: true });
 const DUR = JSON.parse(readFileSync(resolve(HERE, 'cache/vo-raw/durations.json'), 'utf8'));
@@ -79,8 +79,8 @@ for (let i = 0; i < 4; i++) e.cue('stamp', 1.3 + i * 0.14 + 0.1, 0.25);
 say('intro', 0.75);
 e.at(3.15);
 
-// ── 01 · what Elymum is ──
-let t = chapter(1, 'What Elymum is', 'On-chain coin arenas on Elysium.');
+// ── 01 · what Coinnibal is ──
+let t = chapter(1, 'What Coinnibal is', 'On-chain coin arenas on Elysium.');
 let end = say('c1', t);
 const eats = events(A, 'value', (v) => v.reason === 'eat');
 // the bell and the receipt come from arena2 (a last gulp before the bell, till 3,250)
@@ -98,7 +98,7 @@ const tBell = events(A2, 'roundResult')[0].t, tPaid = mark(A2, 'paid');
   e.cue('gulp', b.start + 0.8, 0.4);
   e.cue('stamp', e.timeOf(c, tPaid) + 0.3, 0.6).cue('kaching', e.timeOf(c, tPaid) + 0.3, 0.4);
 }
-chips.push([1, 'WHAT ELYMUM IS', t, e.t]);
+chips.push([1, 'WHAT COINNIBAL IS', t, e.t]);
 
 // ── 02 · warm up in Practice ──
 t = chapter(2, 'Warm up', 'No tokens at stake. Just bots.', { stamp: 'PRACTICE' });
@@ -315,7 +315,7 @@ chips.push([7, 'TIPS', t, e.t]);
   e.add('wipe', tN - 0.35, 0.7, { colors: ['pink', 'card'] }, 90);
   e.cue('paper', tN - 0.35, 0.45);
   const ND = vo + DUR.nft + 0.7;
-  // beats follow the line: "And the Elymum NFT?" / "It mints for one dollar, in HYPE." / "The WL comes first, ..."
+  // beats follow the line: "And the Coinnibal NFT?" / "It mints for one dollar, in HYPE." / "The WL comes first, ..."
   e.add('nft', tN, ND, { lead, times: { deal: [0, 0.12, 0.24], l1: 0.1, l2: vo + 1.25, flip: [vo + 1.45, vo + 1.75, vo + 2.05], ticket: vo + 3.2, underline: vo + 4.9 } }, 50);
   say('nft', tN + lead + vo);
   const b = tN + lead;
@@ -329,7 +329,7 @@ chips.push([7, 'TIPS', t, e.t]);
 const tOut = e.t;
 e.add('wipe', tOut - 0.35, 0.7, { colors: ['ink', 'card'] }, 90);
 e.cue('paper', tOut - 0.35, 0.45);
-e.add('card', tOut, 4.3, { variant: 'outro', kicker: 'ELYMUM / ON ELYSIUM', tagline: 'Eat. Grow. Last the round.', tagAccent: 4, tagAt: 0.75, tagGap: 0.42, foot: `MINT AN EMBLEM, THEN PLAY  /  ${SITE}  /  @ELYMUMIO`, footAt: 2.0, footY: 812 }, 50);
+e.add('card', tOut, 4.3, { variant: 'outro', kicker: 'COINNIBAL / ON ELYSIUM', tagline: 'Eat. Grow. Last the round.', tagAccent: 4, tagAt: 0.75, tagGap: 0.42, foot: `MINT AN EMBLEM, THEN PLAY  /  ${SITE}  /  @COINNIBALFUN`, footAt: 2.0, footY: 812 }, 50);
 for (let i = 0; i < 3; i++) e.cue('stamp', tOut + 0.75 + i * 0.42 + 0.1, 0.55);
 say('outro', tOut + 0.55);
 e.at(tOut + 4.3);

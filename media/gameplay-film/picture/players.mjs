@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TAKES as FILM_TAKES, WEB } from './lib.mjs';
-process.env.ELYMUM_URL ||= `${WEB}/play`;
+process.env.COINNIBAL_URL ||= `${WEB}/play`;
 const { Player, log } = await import('../../gameplay/capture/lib.mjs');
 const { viem } = await import('../../../scripts/lib/common.mjs');
 
@@ -17,16 +17,16 @@ class FilmPlayer extends Player {
     this.account = viem('/accounts').privateKeyToAccount(this.pkey);
     const browser = this.browser;
     const origNew = browser.newContext.bind(browser);
-    browser.newContext = async (...a) => { const c = await origNew(...a); await c.addInitScript(() => localStorage.setItem('elymum.wallet.v1', 'dev.elymum.wallet')); browser.newContext = origNew; return c; };
+    browser.newContext = async (...a) => { const c = await origNew(...a); await c.addInitScript(() => localStorage.setItem('coinnibal.wallet.v1', 'dev.coinnibal.wallet')); browser.newContext = origNew; return c; };
     return super.open();
   }
   async login() {
     const res = await fetch(`${WEB}/api/auth/nonce?address=${this.account.address}`);
     const { message } = await res.json();
     const signature = await this.account.signMessage({ message });
-    await this.page.evaluate(([a, m, s]) => window.__elymum.engine.authSignature(a, m, s), [this.account.address, message, signature]);
-    await this.page.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 15000 });
-    await this.page.waitForFunction(() => window.__elymumChain?.useChainData.getState().tokenBalance != null, null, { timeout: 20000 });
+    await this.page.evaluate(([a, m, s]) => window.__coinnibal.engine.authSignature(a, m, s), [this.account.address, message, signature]);
+    await this.page.waitForFunction(() => !!window.__coinnibal.useUi.getState().auth, null, { timeout: 15000 });
+    await this.page.waitForFunction(() => window.__coinnibalChain?.useChainData.getState().tokenBalance != null, null, { timeout: 20000 });
     await this.wait(600);
   }
   async buyTicket(arena = 1, { slow = false, signDelay = 900, onSheet = null } = {}) {
@@ -43,13 +43,13 @@ class FilmPlayer extends Player {
     await this.page.waitForSelector('.tf-sheet .tf-pay', { timeout: 10000 });
     await this.wait(slow ? 900 : 400);
     if (onSheet) await onSheet();
-    await this.ui((ms) => { if (window.__elymumChain?.fakeWallet) window.__elymumChain.fakeWallet.delayMs = ms; }, signDelay);
+    await this.ui((ms) => { if (window.__coinnibalChain?.fakeWallet) window.__coinnibalChain.fakeWallet.delayMs = ms; }, signDelay);
     await this.click('.tf-sheet .tf-pay', { before: slow ? 350 : 150 });
-    const ok = await this.page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 20000 }).then(() => true, () => false);
+    const ok = await this.page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 20000 }).then(() => true, () => false);
     if (!ok) {
       log(`${this.o.name}: resume`);
       await this.click('.kl-cta');
-      await this.page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 20000 });
+      await this.page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 20000 });
     }
   }
 }

@@ -1,4 +1,4 @@
-# Elymum gameplay film: the narration
+# Coinnibal gameplay film: the narration
 
 About 120 s, recorded from the real UI: it opens on the home page and goes into a live round in
 Asphodel Meadow. One voice tells the story: a warm, witty narrator who has seen a few rounds and
@@ -67,10 +67,10 @@ Intent: the first dry joke. Say it as plain fact. Emphasis: a little on "perfect
 conversational; the two breaths are tiny, the sentence still flows.
 
 **3 · what_a** `[the feast]` (0.96)
-> This is Elymum. || Coins eat coins, | on Elysium's ring.
+> This is Coinnibal. || Coins eat coins, | on Elysium's ring.
 
 Intent: the name, said warmly, once. "Coins eat coins" is matter-of-fact, almost a shrug. Emphasis:
-"Elymum" (EL-ih-mum), then nothing loud. Pace: a touch slower; the beat lets the name land.
+"Coinnibal" (EL-ih-mum), then nothing loud. Pace: a touch slower; the beat lets the name land.
 
 **4 · what_b** `[a round, in orbit]` (1.0)
 > Rounds last *five* minutes. | One bell, | for every arena at once.
@@ -85,7 +85,7 @@ hold the pause before "was lunch", keep the voice up through "isn't" so it is a 
 not two sentences.
 
 **6 · flow** `[WL page]` then `[mint page]` (1.02)
-> Getting in is short. || Join the WL. | Mint your Elymum NFT, | one dollar in HYPE. || Then play.
+> Getting in is short. || Join the WL. | Mint your Coinnibal NFT, | one dollar in HYPE. || Then play.
 
 Intent: practical, three steps, no fuss. Emphasis: "one dollar". Pace: brisk on the steps; "Then
 play." alone, with a small lift, as the payoff. WL is spoken "double-u L"; HYPE is "hype".
@@ -152,9 +152,9 @@ Intent: the reward, warm and honest. Emphasis: *yours*. Pace: relaxed; the fee i
 a fact that is fine to hear, not small print.
 
 **17 · close** `[end card]` (0.94)
-> Elymum. || Join the WL. | Follow *@elymumio.* || And bring an appetite.
+> Coinnibal. || Join the WL. | Follow *@coinnibalfun.* || And bring an appetite.
 
-Intent: a sign-off, a small callback to the first line. Emphasis: "@elymumio" ("at elymum eye-oh"). Pace:
+Intent: a sign-off, a small callback to the first line. Emphasis: "@coinnibalfun" ("at coinnibal fun"). Pace:
 slowest of the film; the last line soft, with a smile you can just about hear.
 
 ## Facts the lines rely on
@@ -163,4 +163,4 @@ All from `docs/PROJECT.md` and the spec: rounds are 5 minutes on the wall clock 
 at the bell every live ticket is paid its value on chain minus a fee on profit only (5 % by
 default); joins close in the final minute; bigger coins are slower (speed falls with radius);
 split is `Space` (a button on phones); the flow is WL → Mint ($1 in HYPE) → Play; the X handle is
-@elymumio. If the fee or the handle changes in the admin settings, lines 16 and 17 change with it.
+@coinnibalfun. If the fee or the handle changes in the admin settings, lines 16 and 17 change with it.

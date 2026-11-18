@@ -1,19 +1,19 @@
-/* Elymum NFT kit: the sealed cards, the hero coin (the X profile coin, brand/out/x) and the NFT beat.
+/* Coinnibal NFT kit: the sealed cards, the hero coin (the X profile coin, brand/out/x) and the NFT beat.
  *
  * Shared by the promo (media/promo/scenes), the gameplay kit's motion graphics (the vertical promo
  * and how-to-play, media/gameplay/motion) and the mint film (media/mint-film). It draws with the
  * promo's drawing kit (media/promo/scenes/lib.js: inks, type, tickets, stamps, coins) and the art
- * package bundle (window.ElymumArt). Deterministic: every pose is a pure function of time.
+ * package bundle (window.CoinnibalArt). Deterministic: every pose is a pure function of time.
  *
- * Facts on screen (keep them exactly so): the Elymum NFT mints at $1 IN HYPE, the WL is open at
+ * Facts on screen (keep them exactly so): the Coinnibal NFT mints at $1 IN HYPE, the WL is open at
  * <site>/wl (SITE_HOST). No price other than "$1 in HYPE", no supply, no dates, no perks.
  */
 'use strict';
 // The site's host for the films' on-screen address (no domain is hard-coded: the site is served at
 // whatever PUBLIC_URL says). The renderers pass it as ?site=<host> from the SITE_HOST env var.
-window.SITE_HOST = window.SITE_HOST || new URLSearchParams(location.search).get('site') || 'elymum.io';
+window.SITE_HOST = window.SITE_HOST || new URLSearchParams(location.search).get('site') || 'coinnibal.fun';
 (() => {
-  const A = () => window.ElymumArt;
+  const A = () => window.CoinnibalArt;
 
   /* ───────────── the hero coin (the X profile coin, ported) ─────────────
    * A gold coin with a reeded edge, a teal misregistered pass, the inner rim, the halftone shade,
@@ -187,7 +187,7 @@ window.SITE_HOST = window.SITE_HOST || new URLSearchParams(location.search).get(
     ctx.fillRect(-w / 2, h * 0.07 - 3, w, 3);
     font(ctx, w * 0.068, 500, 'mono'); ctx.letterSpacing = (w * 0.012) + 'px';
     ctx.fillStyle = C.nightInk; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('ELYMUM NFT', 0, -h * 0.36);
+    ctx.fillText('COINNIBAL NFT', 0, -h * 0.36);
     ctx.fillText('SEALED', 0, h * 0.36);
     ctx.restore();
     cardPath(ctx, w, h);
@@ -273,10 +273,10 @@ window.SITE_HOST = window.SITE_HOST || new URLSearchParams(location.search).get(
     ctx.restore();
     rrect(ctx, wx, wy, ww, wh, w * 0.035);
     ctx.lineWidth = w * 0.012; ctx.strokeStyle = C.ink; ctx.stroke();
-    // header: ELYMUM NFT and the mark
+    // header: COINNIBAL NFT and the mark
     font(ctx, w * 0.06, 500, 'mono'); ctx.letterSpacing = (w * 0.008) + 'px';
     ctx.fillStyle = C.ink; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText('ELYMUM NFT', wx + w * 0.01, -h / 2 + h * 0.068);
+    ctx.fillText('COINNIBAL NFT', wx + w * 0.01, -h / 2 + h * 0.068);
     brandMark(ctx, wx + ww - w * 0.04, -h / 2 + h * 0.066, w * 0.035, 1, 1);
     // name + the $1-mint tag (o.tag === false: the name and the barcode only)
     font(ctx, w * 0.13, 800, 'display'); ctx.letterSpacing = (-w * 0.003) + 'px';
@@ -482,7 +482,7 @@ window.SITE_HOST = window.SITE_HOST || new URLSearchParams(location.search).get(
   }
 
   /* ───────────── the NFT beat (about 4.8 s; t = 0 on the downbeat) ─────────────
-   * Three sealed cards are dealt face down, "Elymum NFT." / "$1 in HYPE." rise, the seals crack and
+   * Three sealed cards are dealt face down, "Coinnibal NFT." / "$1 in HYPE." rise, the seals crack and
    * the cards turn over one by one, then the WL ticket lands with its stamp. Landscape or portrait.
    *
    * Options (all optional; leaving them out draws the beat exactly as above):
@@ -492,7 +492,7 @@ window.SITE_HOST = window.SITE_HOST || new URLSearchParams(location.search).get(
    *   plain    the plain mention instead: the cards dealt face up with no $1 MINT tag, one
    *            headline line, no WL ticket, on the promo's paper stock (ink type on a light
    *            ground, so the brand mark's pink disc stays legible). Its own fields:
-   *            {head: 'Elymum NFTs.', layout: {...beatLayout overrides}} */
+   *            {head: 'Coinnibal NFTs.', layout: {...beatLayout overrides}} */
   const BEAT_T = { deal: [0.0, 0.12, 0.24], l1: 0.08, l2: 1.2, flip: [1.2, 1.5, 1.8], ticket: 1.95, underline: 3.75 };
   function beatLayout() {
     if (H > W) {
@@ -533,8 +533,8 @@ window.SITE_HOST = window.SITE_HOST || new URLSearchParams(location.search).get(
       card(ctx, x, y, L.cw, L.ch, { i: o.cardSet ? o.cardSet[i] : i, rot: rot * k + (1 - k) * (i - 1) * 0.5, flip: fl, crack, t, scale: sc });
     });
     // kicker + headline
-    pill(ctx, o.kicker || 'COMING SOON / ELYMUM NFT', L.kx, L.ky, L.portrait ? 26 : 24, t, T.l1, { align: L.align === 'center' ? 'center' : 'left' });
-    riseLine(ctx, 'Elymum NFT.', L.hx, L.hy1, L.hs, C.card, t, T.l1, { align: L.align, out });
+    pill(ctx, o.kicker || 'COMING SOON / COINNIBAL NFT', L.kx, L.ky, L.portrait ? 26 : 24, t, T.l1, { align: L.align === 'center' ? 'center' : 'left' });
+    riseLine(ctx, 'Coinnibal NFT.', L.hx, L.hy1, L.hs, C.card, t, T.l1, { align: L.align, out });
     riseLine(ctx, '$1 in HYPE.', L.hx, L.hy2, L.hs, C.mustard, t, T.l2, { align: L.align, out });
     // the ticket and its stamp
     const tp = E.outBack(prog(t, T.ticket, T.ticket + 0.45), 1.4) * (out != null ? 1 - E.inCubic(prog(t, out, out + 0.3)) : 1);
@@ -563,7 +563,7 @@ window.SITE_HOST = window.SITE_HOST || new URLSearchParams(location.search).get(
       card(ctx, x, y, L.cw, L.ch, { i: o.cardSet ? o.cardSet[i] : i, rot: rot * k + (1 - k) * (i - 1) * 0.5, flip: 1, t, scale: sc, tag: false });
     });
     pill(ctx, o.kicker || 'COMING SOON', L.kx, L.ky, L.portrait ? 26 : 24, t, T.l1, { align: L.align === 'center' ? 'center' : 'left', lip: C.pink });
-    riseLine(ctx, P.head || 'Elymum NFTs.', L.hx, L.hy1, L.hs, C.ink, t, T.l1, { align: L.align, out, shadow: C.pink });
+    riseLine(ctx, P.head || 'Coinnibal NFTs.', L.hx, L.hy1, L.hs, C.ink, t, T.l1, { align: L.align, out, shadow: C.pink });
   }
 
   window.NFT = { heroCoin, card, cardFront, cardBack, waxSeal, wlTicket, pinkStock, sunburst, inkText, riseLine, pill, drawBeat, BEAT_T, lookOf, edgePath };

@@ -45,7 +45,7 @@ const hero = new Player(browser, { name: 'Daphne', skin: 4, keyPath: resolve(CAC
 let stopAll = false;
 const heroPos = { wx: 3200, wy: 3200, big: 30, mass: 0 };
 const plan = new Map();
-const pidOf = (p) => p.ui(() => window.__elymum.useUi.getState().me?.pid);
+const pidOf = (p) => p.ui(() => window.__coinnibal.useUi.getState().me?.pid);
 const distTo = (r) => (r.pos && !r.dead ? Math.hypot(r.pos.wx - heroPos.wx, r.pos.wy - heroPos.wy) : Infinity);
 const leftS = async () => ((await hero.round(ARENA))?.left ?? 0) / 1000;
 let rec;
@@ -67,7 +67,7 @@ async function buyBack(p, o = {}) {
   await p.page.waitForSelector('.g-death .kb-btn--primary', { timeout: 8000 });
   await p.wait(o.pause ?? 400);
   await p.click('.g-death .kb-btn--primary', { before: o.before ?? 200 });
-  await p.page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'lobby', null, { timeout: 10000 }).catch(() => {});
+  await p.page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'lobby', null, { timeout: 10000 }).catch(() => {});
   await p.page.waitForFunction(() => !!document.querySelector('.tf-sheet') || !document.querySelector('.kl-cta')?.disabled, null, { timeout: 25000 }).catch(() => {});
 }
 async function rivalLoop(r) {
@@ -145,7 +145,7 @@ async function beat(name, fn, tries = 3) {
   }
   throw new Error(`beat ${name} failed`);
 }
-const screenOf = (pos) => hero.ui((q) => window.__elymum.engine.camera.toScreen(q.wx, q.wy), pos);
+const screenOf = (pos) => hero.ui((q) => window.__coinnibal.engine.camera.toScreen(q.wx, q.wy), pos);
 
 try {
   // every browser signs in first; then a fresh round (the next bell if this one is under way)
@@ -254,9 +254,9 @@ try {
   }, { late: false });
   stopAll = true;
   // 6. the bell, the frozen world, the receipt
-  await hero.page.waitForFunction(() => !!window.__elymum.useUi.getState().roundResult, null, { timeout: 15000 }).catch(() => log('no round result'));
+  await hero.page.waitForFunction(() => !!window.__coinnibal.useUi.getState().roundResult, null, { timeout: 15000 }).catch(() => log('no round result'));
   rec.mark('bell');
-  await hero.page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'roundover', null, { timeout: 15000 }).catch(() => log('no roundover screen'));
+  await hero.page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'roundover', null, { timeout: 15000 }).catch(() => log('no roundover screen'));
   rec.mark('receipt');
   await hero.page.waitForSelector('.g-roundover__stamp', { timeout: 25000 }).catch(() => log('no PAID stamp'));
   rec.mark('paid');

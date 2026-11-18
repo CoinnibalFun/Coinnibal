@@ -4,6 +4,9 @@
 > Robinhood Chain only, with ElymumArena v3 (a fee on profit, no entry fee) and no house bots. Current docs:
 > [ARCHITECTURE.md](../ARCHITECTURE.md), [ECONOMY.md](../ECONOMY.md), [RESEARCH.md](../RESEARCH.md),
 > [OPERATIONS.md](../OPERATIONS.md).
+>
+> **Renamed (2026-11-18).** The project was called Elymum and ran on Elysium until November 2026; it is Coinnibal now
+> (the contracts `CoinnibalArena` and `CoinnibalNFT`). This record keeps the names of its time.
 
 Status: accepted (2026-10-29). This spec is the single source of truth for Elymum on Elysium: the contracts, the
 server and web chain layer, the site and mint, and the interface.
