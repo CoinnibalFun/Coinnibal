@@ -2,7 +2,7 @@ import { availableParallelism } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, normalizeXHandle, SITE_URL_DEFAULT, withBrandOrigins, type GameAccess } from '@elymum/shared';
+import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, normalizeXHandle, SITE_URL_DEFAULT, withBrandOrigins, NFT_SUPPLY, type GameAccess } from '@elymum/shared';
 import { GAS_PRICE_URL_DEFAULT } from '@elymum/sdk';
 import { getAddress, isAddress } from 'viem';
 import { DEFAULT_ART_STYLE, parseArtStyle, type ArtStyle } from './site/nft/render';
@@ -192,7 +192,7 @@ export interface ServerConfig {
    */
   mint: { usdCents: number; gasPriceUrl: string };
   /**
-   * The emblem collection (docs/NFT-DESIGN.md): `NFT_COLLECTION_SIZE` (default 5000; the contract's max supply),
+   * The emblem collection (docs/NFT-DESIGN.md): `NFT_COLLECTION_SIZE` (default `NFT_SUPPLY`, 3,333: the contract's max supply),
    * `NFT_COLLECTION_SEED` (default: 32 random bytes, generated once and committed to the chain's state directory),
    * `NFT_ART_STYLE` (`vector`, the default, or `pixel`).
    */
@@ -464,7 +464,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       maxPendingAgeS: Math.max(30, int(env.HEALTH_MAX_PENDING_AGE_S, 900)),
     },
     nft: {
-      size: Math.max(1, int(env.NFT_COLLECTION_SIZE, 5000)),
+      size: Math.max(1, int(env.NFT_COLLECTION_SIZE, NFT_SUPPLY)),
       seed: blank(env.NFT_COLLECTION_SEED),
       style: parseArtStyle(blank(env.NFT_ART_STYLE)) ?? DEFAULT_ART_STYLE,
     },

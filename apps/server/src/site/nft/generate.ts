@@ -87,7 +87,7 @@ export function drawGenome(r: () => number, tier: Exclude<Tier, 'Mythic'>): Geno
   return cand;
 }
 
-/** Most rerolls a slot gets before its pools are taken as exhausted (never reached at 5,000). */
+/** Most rerolls a slot gets before its pools are taken as exhausted (never reached at the collection's 3,333). */
 const MAX_REROLLS = 10_000;
 
 /** The art order: `size` unique genomes. Throws when a tier's pools cannot hold its quota. */

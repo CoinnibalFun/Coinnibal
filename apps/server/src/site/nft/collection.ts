@@ -129,7 +129,7 @@ export class NftCollection {
     }
   }
 
-  /** The art order (generated once, ~150 ms for 5,000). */
+  /** The art order (generated once, ~100 ms for the 3,333 of the collection). */
   private get genomes(): Genome[] {
     this.genomesV ??= generateCollection(this.state.seed, this.state.size);
     return this.genomesV;

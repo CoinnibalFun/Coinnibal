@@ -1,4 +1,4 @@
-import { GAS_SYMBOL } from '@elymum/shared';
+import { GAS_SYMBOL, NFT_SUPPLY } from '@elymum/shared';
 import { planDefaultArenas, parseAddressInput, parseGasInput, parseIntInput, AdminInputError, type StatusSnapshot } from '@elymum/sdk/ops';
 import type { DeployArenaArgs, DeployNftArgs } from '@elymum/sdk';
 import { formatEther, getAddress, type Address, type Hash } from 'viem';
@@ -85,7 +85,7 @@ export function deploySteps(w: WizardInput): DeployStep[] {
       detail: target === null ? 'The game server reports no chain yet.' : w.walletChainId === target ? `Wallet on ${w.net.info!.name} (${target}).` : `Switch the wallet to ${w.net.info!.name} (${target}).`,
     },
     { id: 'arena', label: 'Deploy ElymumArena', done: arenaOk, detail: w.net.arenaAddress ?? w.local.arena?.address ?? 'admin = you, server authority = the server key, fee wallet = you.' },
-    { id: 'nft', label: 'Deploy ElymumNFT', done: nftOk, detail: w.net.nftAddress ?? w.local.nft?.address ?? `Max supply 5,000, $1 in ${GAS_SYMBOL}, 1 allowlist / 2 public per wallet.` },
+    { id: 'nft', label: 'Deploy ElymumNFT', done: nftOk, detail: w.net.nftAddress ?? w.local.nft?.address ?? `Max supply ${NFT_SUPPLY.toLocaleString('en-US')}, $1 in ${GAS_SYMBOL}, 1 allowlist / 2 public per wallet.` },
     { id: 'register', label: 'Register both with the server', done: registered, detail: registered ? 'The server checked the code hash, the owner and the server authority.' : 'POST /api/admin/contracts for each.' },
     { id: 'token', label: 'Set the game token', done: tokenSet, detail: cfg?.token ?? 'The registered token, confirmed once (it can be set only once). Nothing to type.' },
     { id: 'arenas', label: 'Create the four arenas', done: tokenSet && arenasLeft === 0, detail: tokenSet ? (arenasLeft === 0 ? 'All four default arenas exist.' : `${arenasLeft} to create.`) : 'Needs the token.' },
@@ -121,10 +121,10 @@ export interface NftForm {
   treasury: string;
 }
 
-/** The deploy form's defaults: 5,000 tokens, the $1 price from `/api/admin/mint/price`, 1 WL / 2 public, `${origin}/api/nft/`, treasury = you. */
+/** The deploy form's defaults: the owner's fixed supply (`NFT_SUPPLY`, 3,333 tokens), the $1 price from `/api/admin/mint/price`, 1 WL / 2 public, `${origin}/api/nft/`, treasury = you. */
 export function defaultNftForm(origin: string, priceWei: string | null | undefined, me: Address | null): NftForm {
   return {
-    maxSupply: '5000',
+    maxSupply: String(NFT_SUPPLY),
     priceGas: priceWei ? formatEther(BigInt(priceWei)) : '',
     wlLimit: '1',
     publicLimit: '2',
