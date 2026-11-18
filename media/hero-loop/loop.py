@@ -10,6 +10,13 @@ action; the cycle stays seamless.
 
   python3 media/hero-loop/loop.py render.mkv --fade 0.5 --start 2.0 --out DIR
   python3 media/hero-loop/loop.py render.mkv --fade 0.5 --start-src 279.42 --out DIR
+  python3 media/hero-loop/loop.py render.mkv --fade 0.6 --a 229.0 --b 238.2 --search 0.3 --start-src 231.7 --out DIR
+
+`--a`/`--b` (times of the take) set the loop's ends instead of the render's first `fade` seconds and its end;
+with `--search` the render must reach that far beyond both (render.mjs --from a-fade-search --to b+search) and
+the ends move by up to that much each, to where the frames at both ends match best (the moving camera of the
+school loop: the coins' faces and blinks run on the page clock, so a few frames either way can matter). The
+match weighs the middle of the frame (the coin the camera follows) most.
 Writes DIR/hero-loop.webm (VP9), hero-loop.mp4 (H.264 main, yuv420p, faststart), hero-loop-poster.webp
 and contact-sheet.png (12 evenly spaced frames of the encoded mp4, with their times). Needs ffmpeg, numpy
 and Pillow.
@@ -35,6 +42,9 @@ ap.add_argument('--out', required=True)
 ap.add_argument('--crf264', type=int, default=20)
 ap.add_argument('--crf-vp9', type=int, default=32)
 ap.add_argument('--poster-q', type=int, default=82)
+ap.add_argument('--a', type=float, default=None)
+ap.add_argument('--b', type=float, default=None)
+ap.add_argument('--search', type=float, default=0.0)
 a = ap.parse_args()
 W, H = map(int, a.size.split('x'))
 os.makedirs(a.out, exist_ok=True)
@@ -46,8 +56,31 @@ raw = subprocess.run([FF, '-v', 'error', '-i', a.render, '-vf', f'scale={W}:{H}:
 S = np.frombuffer(raw, np.uint8).reshape(-1, H, W, 3)
 N = len(S)
 F = round(a.fade * a.fps)
-L = N - F
-print(f'render: {N} frames; loop {L} frames ({L / a.fps:.2f} s), seam blend {F} frames')
+times = json.load(open(os.path.splitext(a.render)[0] + '.json'))['times'] if (a.start_src is not None or a.a is not None) else None
+near = lambda t: min(range(N), key=lambda k: abs(times[k] - t))
+# the loop is frames [iA, iB); its last F frames blend into the F before iA
+iA, iB = (near(a.a), near(a.b) if a.b is not None else N) if a.a is not None else (F, N)
+if a.search > 0:
+    # small grey copies, weighted to the middle (the coin the camera follows)
+    g = S[:, ::6, ::6, :].astype(np.float32).mean(axis=3)
+    yy, xx = np.mgrid[0:g.shape[1], 0:g.shape[2]]
+    wgt = 1 + 3 * np.exp(-(((xx - g.shape[2] / 2) / (g.shape[2] * 0.12)) ** 2 + ((yy - g.shape[1] / 2) / (g.shape[1] * 0.15)) ** 2))
+    k = round(a.search * a.fps)
+    best = None
+    for da in range(-k, k + 1):
+        for db in range(-k, k + 1):
+            A, B = iA + da, iB + db
+            if A - F < 0 or B + F // 2 > N:
+                continue
+            # the blend window and a little past the seam
+            c = sum(float((np.abs(g[B + j] - g[A + j]) * wgt).mean()) for j in range(-F, F // 2))
+            if best is None or c < best[0]:
+                best = (c, A, B)
+    c0 = sum(float((np.abs(g[iB + j] - g[iA + j]) * wgt).mean()) for j in range(-F, F // 2)) if iA - F >= 0 and iB + F // 2 <= N else float('nan')
+    print(f'seam search: ends moved by {best[1] - iA:+d} / {best[2] - iB:+d} frames; mismatch {c0:.2f} -> {best[0]:.2f}')
+    _, iA, iB = best
+L = iB - iA
+print(f'render: {N} frames; loop {L} frames ({L / a.fps:.2f} s) from frame {iA}, seam blend {F} frames')
 
 def smooth(x):
     return x * x * (3 - 2 * x)
@@ -55,16 +88,15 @@ def smooth(x):
 cycle = []
 for x in range(L):
     if x < L - F:
-        cycle.append(S[F + x])
+        cycle.append(S[iA + x])
     else:
         j = x - (L - F)
         w = smooth((j + 1) / (F + 1))
-        cycle.append(((1 - w) * S[F + x].astype(np.float32) + w * S[j].astype(np.float32) + 0.5).astype(np.uint8))
+        cycle.append(((1 - w) * S[iA + x].astype(np.float32) + w * S[iA - F + j].astype(np.float32) + 0.5).astype(np.uint8))
 if a.start_src is not None:
     # the render's frame times (render.mjs writes them next to the video): the frame nearest that take time
-    times = json.load(open(os.path.splitext(a.render)[0] + '.json'))['times']
-    i = min(range(F, N), key=lambda k: abs(times[k] - a.start_src))
-    p = (i - F) % L
+    i = min(range(iA, iB), key=lambda k: abs(times[k] - a.start_src))
+    p = (i - iA) % L
 else:
     p = round(a.start * a.fps) % L
 print(f'first frame: loop frame {p} ({p / a.fps:.2f} s into the loop)')
