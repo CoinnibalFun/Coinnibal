@@ -1541,10 +1541,11 @@
 .g-death__line {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-family: var(--font-display);
+  /* a sentence ("Nakamoto ate you"), not a title: DM Sans 700 (the display face's narrow word spaces ran it together) */
+  font-family: var(--font-body);
   font-weight: 700;
   font-size: 17px;
-  line-height: 1.2;
+  line-height: 1.25;
   color: var(--ink-2);
 }
 .g-death__loss {
