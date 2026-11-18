@@ -133,14 +133,6 @@
   font-size: 17px;
   line-height: 1.55;
 }
-/* the small print under a testnet lede ("the mainnet mint will be much cheaper") */
-.mt-note {
-  max-width: 440px;
-  margin: 8px 0 0;
-  color: var(--foam);
-  font-size: 13px;
-  line-height: 1.45;
-}
 .mt-limits {
   margin: 14px 0 0;
   font-size: 12px;
@@ -187,9 +179,6 @@
 }
 .mt-about .nf-why__kicker {
   color: var(--foam);
-}
-.mt-about .nf-why__note {
-  color: #bfd8dd;
 }
 @media (min-width: 961px) {
   .mt-page > .mt-card {
