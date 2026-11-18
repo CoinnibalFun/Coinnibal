@@ -25,6 +25,8 @@ import { getAddress, type Address, type Hash } from 'viem';
 import { ChainCache } from '../chain/chain-cache';
 import type { EvmClient } from '../chain/evm-client';
 import { isRateLimited, withRpcPriority } from '../chain/rpc-budget';
+import { currentClient } from '../net/client-scope';
+import { Limiter } from '../net/limiter';
 import type { SiteStore } from './store';
 import { SiteFail, userWallet } from './validate';
 
@@ -46,6 +48,12 @@ export const MINT_CACHE_FILE = 'mint-cache.json';
 export const HOLDER_TTL_MS = 15_000;
 /** A negative holder check is reused only this long (a fresh mint must open /play at once). */
 export const HOLDER_MISS_TTL_MS = 2_000;
+/**
+ * Holder checks that read the chain (a cache miss) per client a minute (`currentClient`): a client signing in with
+ * many throwaway wallets cannot turn its joins and page loads into `balanceOf` calls without a bound. Past it the
+ * last known answer is used (none: not a holder) until the minute is over.
+ */
+export const HOLDER_READS_PER_CLIENT_PER_MIN = 60;
 /** `royaltyInfo` of the collection (`/api/nft/contract`, an unauthenticated route) is read at most this often. */
 export const ROYALTY_TTL_MS = 5 * 60_000;
 const ROYALTY_RETRY_MS = 30_000;
@@ -102,6 +110,9 @@ export class MintService {
   /** When `minted()` last forced a fresh state read for an id above the cached supply. */
   private missReadAt = -Infinity;
   private readonly holderCache = new Map<string, { at: number; value: boolean }>();
+  /** Holder reads in flight (one per wallet), and the chain reads each client triggered (`HOLDER_READS_PER_CLIENT_PER_MIN`). */
+  private readonly holderReads = new Map<string, Promise<boolean>>();
+  private readonly holderReadsByClient = new Limiter(HOLDER_READS_PER_CLIENT_PER_MIN, 60_000);
   private holders: HolderIndex | null = null;
   private holdersScan: Promise<number> | null = null;
   /** Holder scans failed in a row, and when the next may run. */
@@ -328,7 +339,10 @@ export class MintService {
     return this.stateFetch;
   }
 
-  /** Whether a wallet holds a Coinnibal NFT (`balanceOf > 0`), cached 15 s (`fresh` re-reads). False without an NFT. */
+  /**
+   * Whether a wallet holds a Coinnibal NFT (`balanceOf > 0`), cached 15 s (`fresh` re-reads). False without an NFT.
+   * Concurrent checks of one wallet share one read; a client's cache misses are bounded (`HOLDER_READS_PER_CLIENT_PER_MIN`).
+   */
   async isHolder(wallet: string, fresh = false): Promise<boolean> {
     const nft = this.deps.nft();
     const client = this.deps.client();
@@ -338,16 +352,26 @@ export class MintService {
     // a "not a holder" answer is kept only briefly: the wallet may be minting right now, and the
     // mint page sends it straight to /play (a refused visit just before must not lock it out)
     if (!fresh && hit && this.now() - hit.at < (hit.value ? HOLDER_TTL_MS : HOLDER_MISS_TTL_MS)) return hit.value;
-    let value: boolean;
-    try {
-      value = (await withRpcPriority('normal', () => client.nftBalance(nft.address as Address, getAddress(wallet)))) > 0n;
-    } catch (err) {
-      this.log(`mint: balanceOf failed (${(err as Error).message})`);
-      return hit?.value ?? false;
-    }
-    if (this.holderCache.size >= MAX_HOLDER_CACHE) this.holderCache.delete(this.holderCache.keys().next().value!);
-    this.holderCache.set(key, { at: this.now(), value });
-    return value;
+    // one read per wallet at a time: the callers of a moment share it
+    const running = this.holderReads.get(key);
+    if (running) return running;
+    // a `fresh` check (an arena seat, a purchase) is bounded by its caller and never answered from the cache
+    const who = currentClient();
+    if (!fresh && who !== null && !this.holderReadsByClient.allow(who)) return hit?.value ?? false;
+    const read = (async () => {
+      let value: boolean;
+      try {
+        value = (await withRpcPriority('normal', () => client.nftBalance(nft.address as Address, getAddress(wallet)))) > 0n;
+      } catch (err) {
+        this.log(`mint: balanceOf failed (${(err as Error).message})`);
+        return hit?.value ?? false;
+      }
+      if (this.holderCache.size >= MAX_HOLDER_CACHE) this.holderCache.delete(this.holderCache.keys().next().value!);
+      this.holderCache.set(key, { at: this.now(), value });
+      return value;
+    })().finally(() => this.holderReads.delete(key));
+    this.holderReads.set(key, read);
+    return read;
   }
 
   /**

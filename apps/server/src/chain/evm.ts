@@ -709,16 +709,30 @@ export class EvmChain implements ChainGateway {
   }
 
   /**
-   * Always read fresh from the chain (high priority: a paid join waits on it); null when there is no
-   * session. An RPC failure (after the budget's retries) throws `ChainBusyError`: never "no ticket".
+   * Read fresh from the chain; null when there is no session. An RPC failure (after the budget's retries) throws
+   * `ChainBusyError`: never "no ticket". Every caller is a client's join (or its bell or refund check), which any
+   * signed-in wallet can send: it runs at `normal` priority, so settlements and payouts (`high`) always go first, and
+   * concurrent reads of one wallet's ticket share one call.
    */
-  async getSession(arenaId: number, player: string): Promise<ChainSession | null> {
+  getSession(arenaId: number, player: string): Promise<ChainSession | null> {
+    const key = `${this.arena ?? ''}:${arenaId}:${String(player).toLowerCase()}`;
+    const running = this.sessionReads.get(key);
+    if (running) return running;
+    const read = this.readSession(arenaId, player).finally(() => this.sessionReads.delete(key));
+    this.sessionReads.set(key, read);
+    return read;
+  }
+
+  /** Ticket reads in flight, per arena, arena id and wallet (`getSession`). */
+  private readonly sessionReads = new Map<string, Promise<ChainSession | null>>();
+
+  private async readSession(arenaId: number, player: string): Promise<ChainSession | null> {
     const t = this.token();
     if (!this.tokenReady || !t || !this.client || !this.arena || !isEvm(player) || !Number.isInteger(arenaId) || arenaId < 1 || arenaId > 65_535) return null;
     const client = this.client;
     const arena = this.arena;
     try {
-      const s = await withRpcPriority('high', () => client.session(arena, arenaId, getAddress(player)));
+      const s = await withRpcPriority('normal', () => client.session(arena, arenaId, getAddress(player)));
       if (s.id === 0n || s.id > BigInt(Number.MAX_SAFE_INTEGER)) return null;
       return {
         key: sessionKey(arenaId, player, s.id),

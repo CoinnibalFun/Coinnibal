@@ -11,6 +11,7 @@ import type { ServerConfig } from './config';
 import type { Leaderboards } from './leaderboards';
 import { healthReport } from './health';
 import { clientIp, trustProxyHops } from './net/gateway';
+import { asClient } from './net/client-scope';
 import { rateKey } from './net/ip-key';
 import { Limiter } from './net/limiter';
 import type { PriceKeeper } from './chain/price-keeper';
@@ -276,7 +277,11 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
   };
 
   // the request and header timeouts are enforced by a sweep every `connectionsCheckingInterval` (Node default 30 s)
-  const server = createServer({ connectionsCheckingInterval: 2_000 }, async (req, res) => {
+  const server = createServer({ connectionsCheckingInterval: 2_000 }, (req, res) => {
+    // per-client budgets deep down (holder checks) count this request's client
+    void asClient(rateKey(clientIp(req, trustProxy)), () => handleRequest(req, res));
+  });
+  const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const allow = corsAllow(cfg.corsOrigin, req.headers.origin);
     if (allow) res.setHeader('Access-Control-Allow-Origin', allow);
@@ -393,7 +398,7 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
       if (!res.headersSent) json(res, 500, { error: 'internal', message: 'internal server error' });
       else res.end();
     }
-  });
+  };
   server.headersTimeout = HTTP_TIMEOUTS.headersMs;
   server.requestTimeout = HTTP_TIMEOUTS.requestMs;
   server.keepAliveTimeout = HTTP_TIMEOUTS.keepAliveMs;
