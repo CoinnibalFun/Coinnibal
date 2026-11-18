@@ -485,6 +485,31 @@
   text-wrap: balance;
 }
 
+/* wide screens: the risk slip stands beside the receipt it is about (tops level), instead of under an empty half */
+@media (min-width: 1100px) {
+  .dc-sec__body:has(> .dc-fee + .dc-note) {
+    display: grid;
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+    gap: 22px 32px;
+  }
+  .dc-sec__body:has(> .dc-fee + .dc-note) > * {
+    grid-column: 1 / -1;
+  }
+  .dc-sec__body > .dc-fee:has(+ .dc-note) {
+    grid-column: 1;
+  }
+  /* the caption stays one line (it may run into the gap; the slip starts below it) */
+  .dc-fee:has(+ .dc-note) .dc-fee__cap {
+    width: max-content;
+  }
+  .dc-sec__body > .dc-fee + .dc-note {
+    grid-column: 2;
+    align-self: start;
+    /* level with the receipt's top edge, under the figure's caption */
+    margin-top: 38px;
+  }
+}
+
 /* ── two columns side by side (on-chain and server; tokens and ETH): open, an ink rule over each ── */
 .dc-compare {
   display: grid;
@@ -581,6 +606,7 @@
 .dc-foot {
   display: flex;
   justify-content: flex-start;
+  margin-top: clamp(40px, 5vw, 64px);
 }
 .dc-top {
   display: inline-flex;
