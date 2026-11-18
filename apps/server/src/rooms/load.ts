@@ -1,5 +1,5 @@
 import { monitorEventLoopDelay, performance, type EventLoopUtilization, type IntervalHistogram } from 'node:perf_hooks';
-import type { GameServerLoad, GameThreadLoad } from '@elymum/shared';
+import type { GameServerLoad, GameThreadLoad } from '@coinnibal/shared';
 
 /** Tick time of the last few seconds: mean, p95 and max (ms). */
 export interface TickSummary {

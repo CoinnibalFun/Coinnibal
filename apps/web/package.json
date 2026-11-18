@@ -1,5 +1,5 @@
 {
-  "name": "@elymum/web",
+  "name": "@coinnibal/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,9 +15,9 @@
     "motion:guard": "node scripts/landing-motion.mjs"
   },
   "dependencies": {
-    "@elymum/art": "workspace:*",
-    "@elymum/sdk": "workspace:*",
-    "@elymum/shared": "workspace:*",
+    "@coinnibal/art": "workspace:*",
+    "@coinnibal/sdk": "workspace:*",
+    "@coinnibal/shared": "workspace:*",
     "@fontsource-variable/dm-sans": "^5.3.0",
     "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",

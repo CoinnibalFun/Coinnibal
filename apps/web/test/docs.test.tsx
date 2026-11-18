@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { CAPACITY, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, INTEGRITY_SETTINGS_DEFAULT, MAX_TOTAL_FEE_BPS, RULES, profitFee } from '@elymum/shared';
+import { CAPACITY, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, INTEGRITY_SETTINGS_DEFAULT, MAX_TOTAL_FEE_BPS, RULES, profitFee } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { chainStatus } from './evm-helpers';

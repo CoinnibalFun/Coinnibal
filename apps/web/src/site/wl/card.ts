@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE, TEXT_INKS, activeChain } from '@elymum/shared';
+import { ELYSIUM, SHADE, TEXT_INKS, activeChain } from '@coinnibal/shared';
 import { BITTEN_COIN, WORD_COIN_SCALE, WORD_LETTERS, type BrandLetter } from '../../design/motifs/brandShapes';
 import { ourXHandle } from '../../i18n';
 import { drawCoinLook } from '../../render/coin';

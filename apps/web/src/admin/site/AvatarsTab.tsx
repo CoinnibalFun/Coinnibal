@@ -1,4 +1,4 @@
-import { avatarPath, shortAddress, type AdminAvatarEntry } from '@elymum/shared';
+import { avatarPath, shortAddress, type AdminAvatarEntry } from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '../../design';
 import { SERVER } from '../../config';

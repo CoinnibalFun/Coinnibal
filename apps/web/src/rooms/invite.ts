@@ -1,4 +1,4 @@
-import { paidRoomTarget, testArenaTarget, type CustomRoomView } from '@elymum/shared';
+import { paidRoomTarget, testArenaTarget, type CustomRoomView } from '@coinnibal/shared';
 import { engine } from '../game/instance';
 import { t } from '../i18n';
 import { toast, useUi } from '../store';

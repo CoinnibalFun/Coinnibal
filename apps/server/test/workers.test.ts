@@ -1,12 +1,12 @@
 /**
  * Room workers (GAME_WORKERS > 0): the rooms run in worker threads, the main thread keeps the sockets,
  * the journal and the chain. These tests drive the real app over WebSockets with two workers; the
- * whole integration suite also runs in this mode (`pnpm -F @elymum/server test:workers`).
+ * whole integration suite also runs in this mode (`pnpm -F @coinnibal/server test:workers`).
  */
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLOSE_REPLACED, PROTOCOL_VERSION, TEST_ARENA_DEFAULT, encodeTarget, roundAt, type ChainStatus, type ServerMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, PROTOCOL_VERSION, TEST_ARENA_DEFAULT, encodeTarget, roundAt, type ChainStatus, type ServerMessage } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';

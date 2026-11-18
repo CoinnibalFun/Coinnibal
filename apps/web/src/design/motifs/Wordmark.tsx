@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { useId, type CSSProperties, type ReactElement } from 'react';
 import { BITTEN_COIN, MARK_C, WORD_COIN_SCALE, WORD_H, WORD_LETTERS, WORD_W, type BrandLetter } from './brandShapes';
 

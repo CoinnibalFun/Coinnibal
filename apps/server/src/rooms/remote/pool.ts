@@ -13,7 +13,7 @@ import {
   type MapScaleSettings,
   type RoomInfo,
   type RoundWindow,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import type { ChainGateway } from '../../chain/types';
 import type { Player } from '../../game/entities';
 import type { IntegrityService } from '../../integrity/service';

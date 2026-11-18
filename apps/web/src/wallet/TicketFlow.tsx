@@ -1,5 +1,5 @@
-import { getSession, refundCall, sessionRefundState, formatGasAmount } from '@elymum/sdk';
-import { activeChain, arenaMeta, bpsToPercent, totalFeeBps, type FeeRates } from '@elymum/shared';
+import { getSession, refundCall, sessionRefundState, formatGasAmount } from '@coinnibal/sdk';
+import { activeChain, arenaMeta, bpsToPercent, totalFeeBps, type FeeRates } from '@coinnibal/shared';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Address, Hash } from 'viem';

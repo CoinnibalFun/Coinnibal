@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { X_CODE_RE, X_CODE_TTL_MS, isAvatarId, xPostTime } from '@elymum/shared';
+import { X_CODE_RE, X_CODE_TTL_MS, isAvatarId, xPostTime } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { encodePng } from '../src/avatars';
@@ -11,7 +11,7 @@ import { EatenTracker } from '../src/rooms/eaten';
 import { ShareService } from '../src/site/shares';
 import { shareEaten, shareHeadline } from '../src/site/share-card';
 import { XLinkService, XLinkStore, carriesCode, cleanXName, oembedText, sniffImage, xAvatarUrl, type XFetch } from '../src/xlink';
-import { TICK_MS, decodeSnapshot, encodeSnapshot, xLinkPostText } from '@elymum/shared';
+import { TICK_MS, decodeSnapshot, encodeSnapshot, xLinkPostText } from '@coinnibal/shared';
 import { Room } from '../src/rooms/room';
 import { ArenaChain, arena, fakeConn, freeCustom, roomDeps, testWallet } from './helpers';
 

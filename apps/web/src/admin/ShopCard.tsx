@@ -1,4 +1,4 @@
-import { BOOST_KINDS, BPS, SHOP_DEFAULTS, SHOP_LIMITS, bpsToPercent, formatToken, formatUsdCents, type BoostKind, type ShopSettings } from '@elymum/shared';
+import { BOOST_KINDS, BPS, SHOP_DEFAULTS, SHOP_LIMITS, bpsToPercent, formatToken, formatUsdCents, type BoostKind, type ShopSettings } from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { SiteApiError, type ShopAdminView } from '../site/api';
 import { SwitchRow } from './GameTab';

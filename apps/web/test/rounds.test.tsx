@@ -1,4 +1,4 @@
-import { RULES, roundAt, type DeathStats, type RoomInfo, type RoundInfo, type RoundStanding } from '@elymum/shared';
+import { RULES, roundAt, type DeathStats, type RoomInfo, type RoundInfo, type RoundStanding } from '@coinnibal/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Kb } from '../src/design';

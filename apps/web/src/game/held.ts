@@ -1,4 +1,4 @@
-import { joinTargetArena } from '@elymum/shared';
+import { joinTargetArena } from '@coinnibal/shared';
 import { useUi } from '../store';
 import { serverClock } from './clock';
 

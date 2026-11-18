@@ -1,7 +1,7 @@
 import { SiteFail } from './site/validate';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
-import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain, siteHostOf } from '@elymum/shared';
+import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain, siteHostOf } from '@coinnibal/shared';
 import { chainOverridesFor } from './chain/evm';
 import type { Hex } from 'viem';
 import { Auth } from './auth';

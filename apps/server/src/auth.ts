@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { DEFAULT_CHAIN_ID, parseSiweMessage, siweMessage } from '@elymum/shared';
+import { DEFAULT_CHAIN_ID, parseSiweMessage, siweMessage } from '@coinnibal/shared';
 import { getAddress, type Address, type Hex } from 'viem';
 import { verifyEoa } from './chain/evm-client';
 

@@ -1,6 +1,6 @@
-import { coinnibalNFTAbi } from '@elymum/sdk';
-import type { ChainStatus } from '@elymum/shared';
-import type { MintContractState, MintState } from '@elymum/shared';
+import { coinnibalNFTAbi } from '@coinnibal/sdk';
+import type { ChainStatus } from '@coinnibal/shared';
+import type { MintContractState, MintState } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { encodeErrorResult, encodeEventTopics, padHex, type Log } from 'viem';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,7 +23,7 @@ const spies = vi.hoisted(() => ({
   fetchServerChain: vi.fn(),
   client: { getBalance: vi.fn(), estimateGas: vi.fn() },
 }));
-vi.mock('@elymum/sdk', async (orig) => ({ ...(await orig<typeof import('@elymum/sdk')>()), getMintState: spies.getMintState, getMintedBy: spies.getMintedBy }));
+vi.mock('@coinnibal/sdk', async (orig) => ({ ...(await orig<typeof import('@coinnibal/sdk')>()), getMintState: spies.getMintState, getMintedBy: spies.getMintedBy }));
 vi.mock('../src/wallet/tx', async (orig) => ({ ...(await orig<typeof import('../src/wallet/tx')>()), sendWalletCall: spies.sendWalletCall }));
 vi.mock('../src/wallet/network', async (orig) => ({
   ...(await orig<typeof import('../src/wallet/network')>()),

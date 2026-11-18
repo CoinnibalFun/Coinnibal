@@ -1,4 +1,4 @@
-import { ledgerDecimals } from '@elymum/sdk';
+import { ledgerDecimals } from '@coinnibal/sdk';
 import {
   INTEGRITY_FLAG_KINDS,
   INTEGRITY_THRESHOLD_RANGES,
@@ -13,7 +13,7 @@ import {
   type IntegritySettings,
   type IntegrityThresholds,
   type IntegrityWalletView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chip, InkButton, Sheet, StampSpinner } from '../../design';
 import { request, type IntegrityApi, type IntegrityFilter } from '../../site/api';

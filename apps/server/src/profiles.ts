@@ -14,7 +14,7 @@ import {
   type ProfileSummary,
   type AdminAvatarEntry,
   type ProfileView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { getAddress } from 'viem';
 
 /** Profile names: 1 to 16 characters and at most 32 UTF-8 bytes after `sanitizeName`. */

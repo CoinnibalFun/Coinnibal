@@ -1,4 +1,4 @@
-import { approveCall, formatGasAmount } from '@elymum/sdk';
+import { approveCall, formatGasAmount } from '@coinnibal/sdk';
 import { useState } from 'react';
 import { Button, Chip, CoinCharacter, Icon, Sheet, WalletPicker } from '../design';
 import { useT } from '../i18n';
@@ -14,8 +14,8 @@ import { signInWithWallet } from './signIn';
 import { connectWallet, disconnectWallet, initWallets, useWallet } from './store';
 import { APPROVE_MAX_TICKETS, ticketsLeft } from './ticket';
 import { sendWalletCall, txErrorText } from './tx';
-import { describeError } from '@elymum/sdk';
-import { arenaName as arenaRoomName } from '@elymum/sdk/ops';
+import { describeError } from '@coinnibal/sdk';
+import { arenaName as arenaRoomName } from '@coinnibal/sdk/ops';
 
 /**
  * An allowance left from before approvals were exact (an "approve once" was unlimited): more than the largest ticket

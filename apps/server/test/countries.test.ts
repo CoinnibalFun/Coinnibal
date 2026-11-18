@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION, PlayerFlag, decodeSnapshot, type PlayerInfo, type ServerMessage } from '@elymum/shared';
+import { PROTOCOL_VERSION, PlayerFlag, decodeSnapshot, type PlayerInfo, type ServerMessage } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';

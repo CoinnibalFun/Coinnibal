@@ -4,7 +4,7 @@
  * gradients, no blur. The picture depends on the genome only (equal DNA, equal SVG); the token number is a
  * small tag on the frame.
  */
-import { NFT_NAME } from '@elymum/shared';
+import { NFT_NAME } from '@coinnibal/shared';
 import { BLUSH, CREAM, HOLO, INK, MATERIAL_SPECS, P, SHADES, TIER_FRAME, WHITE, type MaterialSpec } from './palette';
 import type { Genome } from './traits';
 

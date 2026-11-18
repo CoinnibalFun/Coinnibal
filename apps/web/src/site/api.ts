@@ -48,7 +48,7 @@ import type {
   WlStatus,
   WlSubmitRequest,
   WlTask,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { SERVER } from '../config';
 import { X_HANDLE_BUILD, getLocale, t, type TKey } from '../i18n';
 

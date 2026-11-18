@@ -9,8 +9,8 @@
 //   - no HUD piece over my coin and its name tag in the middle of the screen (the engine's `myCoinBox`).
 // It needs a Chromium (the CI job skips the browser download), so it is a script, not a vitest test:
 //
-//   pnpm -F @elymum/web layout:guard             starts its own stack (fake chain) on ports 8897 / 5197
-//   pnpm -F @elymum/web layout:guard -- --base http://localhost:5173    against a running dev stack
+//   pnpm -F @coinnibal/web layout:guard             starts its own stack (fake chain) on ports 8897 / 5197
+//   pnpm -F @coinnibal/web layout:guard -- --base http://localhost:5173    against a running dev stack
 //
 // About a minute on a laptop. Exits 1 with a list of problems when the layout regresses.
 import { spawn } from 'node:child_process';

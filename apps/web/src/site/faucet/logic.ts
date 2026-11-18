@@ -1,10 +1,10 @@
-import { activeChain, type ContractsRegistry, type FaucetConfig } from '@elymum/shared';
-import type { TestTokenFaucetConfig } from '@elymum/sdk';
+import { activeChain, type ContractsRegistry, type FaucetConfig } from '@coinnibal/shared';
+import type { TestTokenFaucetConfig } from '@coinnibal/sdk';
 import { t } from '../../i18n';
 
 /**
  * The gas faucet to send players to: the server's `GAS_FAUCET_URL` when it is known, else the active chain's
- * (`faucetUrl` in the `@elymum/shared` chain registry). null on a chain without one (a mainnet, a localnet).
+ * (`faucetUrl` in the `@coinnibal/shared` chain registry). null on a chain without one (a mainnet, a localnet).
  */
 export function gasFaucetUrl(served?: string | null): string | null {
   return served || activeChain().faucetUrl || null;

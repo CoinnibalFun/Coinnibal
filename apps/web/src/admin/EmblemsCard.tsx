@@ -1,4 +1,4 @@
-import type { NftCollectionAdminView } from '@elymum/shared';
+import type { NftCollectionAdminView } from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { SERVER } from '../config';
 import { Btn, Card, FormError, Input, NeedsSession, Row, type ChainCtx } from './ui';

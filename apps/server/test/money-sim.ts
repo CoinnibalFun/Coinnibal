@@ -23,8 +23,8 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { computeProfitFee, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, PlayerFlag, ROBINHOOD_TESTNET_CHAIN_ID, roundAt, TEST_ARENA_ARRIVE_MS, TEST_ARENA_BOTS, testArenaRoomId, TICK_MS, type CustomDifficulty, type ServerMessage } from '@elymum/shared';
-import type { ArenaInfo, SessionInfo } from '@elymum/sdk';
+import { computeProfitFee, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, PlayerFlag, ROBINHOOD_TESTNET_CHAIN_ID, roundAt, TEST_ARENA_ARRIVE_MS, TEST_ARENA_BOTS, testArenaRoomId, TICK_MS, type CustomDifficulty, type ServerMessage } from '@coinnibal/shared';
+import type { ArenaInfo, SessionInfo } from '@coinnibal/sdk';
 import { getAddress, type Address } from 'viem';
 import { generatePrivateKey } from 'viem/accounts';
 import { EvmChain } from '../src/chain/evm';

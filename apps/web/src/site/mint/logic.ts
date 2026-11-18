@@ -2,8 +2,8 @@
  * The mint page's logic, pure (no React, no network) so every state is unit-tested.
  * See docs/specs/2026-10-29-elymum-on-elysium.md (sections 3.2, 4.4 and 5).
  */
-import { MintPhase, coinnibalNFTAbi, mintRefusal, type DescribedError } from '@elymum/sdk';
-import { bpsToPercent, isTestChainId, type ArenaFees, type CustomHolderPerk, type GameAccess, type MintContractState, type MintProofResponse, type MintState } from '@elymum/shared';
+import { MintPhase, coinnibalNFTAbi, mintRefusal, type DescribedError } from '@coinnibal/sdk';
+import { bpsToPercent, isTestChainId, type ArenaFees, type CustomHolderPerk, type GameAccess, type MintContractState, type MintProofResponse, type MintState } from '@coinnibal/shared';
 import { parseEventLogs, type Address, type Log } from 'viem';
 import { t } from '../../i18n';
 

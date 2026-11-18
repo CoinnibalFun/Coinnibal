@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BOOST_KINDS, LEGACY_BOOST_KINDS, OLD_SHOP_PRICES, SHOP_DEFAULTS, SHOP_LIMITS, parseToken, type ShopSettings } from '@elymum/shared';
+import { BOOST_KINDS, LEGACY_BOOST_KINDS, OLD_SHOP_PRICES, SHOP_DEFAULTS, SHOP_LIMITS, parseToken, type ShopSettings } from '@coinnibal/shared';
 
 /** A bad admin value: `field` names it (`prices.magnet`, `arenaUsesPerRound`, …). */
 export class ShopSettingsError extends Error {

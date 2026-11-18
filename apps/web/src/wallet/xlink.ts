@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import type { ProfileView, XCodeView, XLinkError, XLinkView, XStatusView } from '@elymum/shared';
+import type { ProfileView, XCodeView, XLinkError, XLinkView, XStatusView } from '@coinnibal/shared';
 import { SERVER } from '../config';
 import { serverText, t, type TKey } from '../i18n';
 

@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { useId, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { WOBBLE } from './InkDefs';
 import { useOffscreenPause } from './useOffscreenPause';

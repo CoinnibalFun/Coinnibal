@@ -20,9 +20,9 @@ import {
   type MintState,
   type SessionInfo,
   type TestTokenFaucetConfig,
-} from '@elymum/sdk';
-import { checkDeployedCode, type CodeCheck } from '@elymum/sdk/ops';
-import { chainInfo, type ChainOverrides } from '@elymum/shared';
+} from '@coinnibal/sdk';
+import { checkDeployedCode, type CodeCheck } from '@coinnibal/sdk/ops';
+import { chainInfo, type ChainOverrides } from '@coinnibal/shared';
 import {
   createPublicClient,
   createWalletClient,
@@ -43,7 +43,7 @@ import {
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import { rpcBudgetFor } from './rpc-budget';
 
-export type { CodeCheck } from '@elymum/sdk/ops';
+export type { CodeCheck } from '@coinnibal/sdk/ops';
 export type ContractKindCode = 'arena' | 'nft' | 'token';
 
 /** An `CoinnibalArena` event the settlement worker reads from a receipt. */

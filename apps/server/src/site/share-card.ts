@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
-import { drawRisoCoin, lookForBasicSkin } from '@elymum/art';
-import { BRAND_NAME, SHARE_IMAGE, SITE_HOST_DEFAULT, eatenLine, ordinal, shareName, xMention, type ShareBoardRow, type ShareCard } from '@elymum/shared';
+import { drawRisoCoin, lookForBasicSkin } from '@coinnibal/art';
+import { BRAND_NAME, SHARE_IMAGE, SITE_HOST_DEFAULT, eatenLine, ordinal, shareName, xMention, type ShareBoardRow, type ShareCard } from '@coinnibal/shared';
 import type { SKRSContext2D } from '@napi-rs/canvas';
 
 type Canvas = typeof import('@napi-rs/canvas');
@@ -47,7 +47,7 @@ export function shareCardSelfCheck(): { ok: true } | { ok: false; error: string 
 
 /**
  * The "Share on X" card image (1200 x 630 PNG, X's summary_large_image): the player's coin drawn by the same
- * Storybook art as the game (`@elymum/art` on @napi-rs/canvas), the result or the kill in the display face, the
+ * Storybook art as the game (`@coinnibal/art` on @napi-rs/canvas), the result or the kill in the display face, the
  * name, the wallet's short form, the flag's country code and the emblem badge, the numbers. Fonts are the site's
  * own (Fraunces, DM Sans), shipped with the server, so the card looks the same in a bare container. English only:
  * the image is one picture for every reader.

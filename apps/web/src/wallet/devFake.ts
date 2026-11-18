@@ -1,5 +1,5 @@
-import { MAX_ALLOWANCE, type ArenaConfig, type SessionInfo } from '@elymum/sdk';
-import { DEFAULT_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, type ChainStatus, type FeeRates } from '@elymum/shared';
+import { MAX_ALLOWANCE, type ArenaConfig, type SessionInfo } from '@coinnibal/sdk';
+import { DEFAULT_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, type ChainStatus, type FeeRates } from '@coinnibal/shared';
 import type { Address, Hash } from 'viem';
 import { SERVER } from '../config';
 import { DEV_FAKE_ARENA_ADDRESS } from './devFakeLoader';

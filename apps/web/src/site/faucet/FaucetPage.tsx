@@ -1,6 +1,6 @@
-import { activeChain } from '@elymum/shared';
-import { faucetCall, getFaucetInfo, getTestTokenFaucet, getTokenInfo, type FaucetInfo, type TestTokenFaucetConfig } from '@elymum/sdk';
-import type { ContractsRegistry, FaucetConfig } from '@elymum/shared';
+import { activeChain } from '@coinnibal/shared';
+import { faucetCall, getFaucetInfo, getTestTokenFaucet, getTokenInfo, type FaucetInfo, type TestTokenFaucetConfig } from '@coinnibal/sdk';
+import type { ContractsRegistry, FaucetConfig } from '@coinnibal/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Address, Hash } from 'viem';
 import { AddressChip, Button, CoinCharacter, Icon, Kb, Laurel, PlateLabel, StampSpinner, Sticker, type CoinMood } from '../../design';

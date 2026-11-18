@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync, inflateSync } from 'node:zlib';
-import { AVATAR_LIMITS, isAvatarId, type AvatarType } from '@elymum/shared';
+import { AVATAR_LIMITS, isAvatarId, type AvatarType } from '@coinnibal/shared';
 
 /**
  * Profile pictures: strict validation of uploaded images (`sanitizeAvatar`) and the content-addressed

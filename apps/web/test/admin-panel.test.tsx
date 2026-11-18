@@ -1,5 +1,5 @@
-import { setPaymentBurnBpsCall } from '@elymum/sdk';
-import type { StatusSnapshot } from '@elymum/sdk/ops';
+import { setPaymentBurnBpsCall } from '@coinnibal/sdk';
+import type { StatusSnapshot } from '@coinnibal/sdk/ops';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

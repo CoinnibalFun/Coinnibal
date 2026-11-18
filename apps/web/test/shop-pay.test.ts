@@ -1,4 +1,4 @@
-import { parseShopCartRef, shopCartRef, shopPaymentRef, type ShopView } from '@elymum/shared';
+import { parseShopCartRef, shopCartRef, shopPaymentRef, type ShopView } from '@coinnibal/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chainStatus, ONE } from './evm-helpers';
 
@@ -6,7 +6,7 @@ const spies = vi.hoisted(() => ({ sendWalletCall: vi.fn(), getAllowance: vi.fn()
 // the pin and code-hash check (pinned.test.ts): this test's arena passes unless a test says otherwise
 vi.mock('../src/wallet/pinned', async (orig) => ({ ...(await orig<typeof import('../src/wallet/pinned')>()), verifyArena: spies.verifyArena }));
 vi.mock('../src/wallet/tx', async (orig) => ({ ...(await orig<typeof import('../src/wallet/tx')>()), sendWalletCall: spies.sendWalletCall }));
-vi.mock('@elymum/sdk', async (orig) => ({ ...(await orig<typeof import('@elymum/sdk')>()), getAllowance: spies.getAllowance }));
+vi.mock('@coinnibal/sdk', async (orig) => ({ ...(await orig<typeof import('@coinnibal/sdk')>()), getAllowance: spies.getAllowance }));
 
 import { ShopError, buyCart, buyPack, cartTotals, loadPendingClaim, savePendingClaim } from '../src/wallet/shop';
 

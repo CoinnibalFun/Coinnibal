@@ -1,4 +1,4 @@
-import type { RoundStanding } from '@elymum/shared';
+import type { RoundStanding } from '@coinnibal/shared';
 import { useT } from '../../i18n';
 import { BotTag } from './BotTag';
 import { CoinPortrait } from './CoinPortrait';

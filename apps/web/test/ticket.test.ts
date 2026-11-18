@@ -1,5 +1,5 @@
-import { MAX_ALLOWANCE, approveCall, coinnibalArenaAbi, planJoin, refundCall, sessionRefundState } from '@elymum/sdk';
-import type { RoomInfo } from '@elymum/shared';
+import { MAX_ALLOWANCE, approveCall, coinnibalArenaAbi, planJoin, refundCall, sessionRefundState } from '@coinnibal/sdk';
+import type { RoomInfo } from '@coinnibal/shared';
 import { erc20Abi, type Address } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { openSessionOf } from '../src/wallet/chain';

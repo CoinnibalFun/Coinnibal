@@ -1,4 +1,4 @@
-import { isCountryCode } from '@elymum/shared';
+import { isCountryCode } from '@coinnibal/shared';
 import { useRef } from 'react';
 import { sound } from '../../audio';
 import { useT } from '../../i18n';

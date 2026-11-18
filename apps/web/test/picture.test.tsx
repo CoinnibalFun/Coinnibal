@@ -1,4 +1,4 @@
-import { EMBLEM_SKIN_ID, EntityKind, PlayerFlag, encodeSnapshot, type ProfileView } from '@elymum/shared';
+import { EMBLEM_SKIN_ID, EntityKind, PlayerFlag, encodeSnapshot, type ProfileView } from '@coinnibal/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClientWorld } from '../src/game/state';

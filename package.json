@@ -1,8 +1,8 @@
 {
-  "name": "elymum",
+  "name": "coinnibal",
   "private": true,
   "version": "0.1.0",
-  "description": "Coinnibal (internal name elymum): a cute coin-eats-coin arena game on Robinhood Chain (Arbitrum Orbit L2, gas ETH), with the Coinnibal NFT",
+  "description": "Coinnibal: a cute coin-eats-coin arena game on Robinhood Chain (Arbitrum Orbit L2, gas ETH), with the Coinnibal NFT",
   "license": "MIT",
   "packageManager": "pnpm@10.28.0",
   "engines": {
@@ -12,19 +12,19 @@
     "demo": "node scripts/demo.mjs",
     "demo:localnet": "node scripts/demo.mjs --localnet",
     "demo:record": "node scripts/record-walkthrough.mjs",
-    "dev": "pnpm -r --parallel --filter @elymum/server --filter @elymum/web dev",
-    "dev:server": "pnpm -F @elymum/server dev",
-    "dev:web": "pnpm -F @elymum/web dev",
+    "dev": "pnpm -r --parallel --filter @coinnibal/server --filter @coinnibal/web dev",
+    "dev:server": "pnpm -F @coinnibal/server dev",
+    "dev:web": "pnpm -F @coinnibal/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "check": "node scripts/check.mjs",
     "check:fast": "node scripts/check.mjs --fast",
     "check:exports": "node scripts/check-exports.mjs",
-    "contracts:build": "pnpm -F @elymum/contracts build",
-    "contracts:test": "pnpm -F @elymum/contracts test",
+    "contracts:build": "pnpm -F @coinnibal/contracts build",
+    "contracts:test": "pnpm -F @coinnibal/contracts test",
     "localnet": "node scripts/localnet.mjs",
     "localnet:fund": "node scripts/localnet-fund.mjs",
-    "admin": "pnpm -F @elymum/sdk admin"
+    "admin": "pnpm -F @coinnibal/sdk admin"
   }
 }

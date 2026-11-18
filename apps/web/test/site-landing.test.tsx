@@ -1,4 +1,4 @@
-import { activeChain, chainInfo, setActiveChain } from '@elymum/shared';
+import { activeChain, chainInfo, setActiveChain } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Landing } from '../src/site/landing/Landing';

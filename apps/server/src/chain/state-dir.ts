@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { LOCALNET_CHAIN_ID, isChainId, isSupportedChainId, isTestChainId, unsupportedChainMessage } from '@elymum/shared';
+import { LOCALNET_CHAIN_ID, isChainId, isSupportedChainId, isTestChainId, unsupportedChainMessage } from '@coinnibal/shared';
 
 /** The chain id the files written before the chain-keyed layout belong to (the retired pre-Robinhood testnet). */
 const RETIRED_LEGACY_CHAIN_ID = 99801;

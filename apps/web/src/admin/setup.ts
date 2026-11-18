@@ -10,9 +10,9 @@ import {
   setPhaseCall,
   setTokenCall,
   type ContractCall,
-} from '@elymum/sdk';
-import { bpsToPercent } from '@elymum/shared';
-import { arenaName, type StatusSnapshot } from '@elymum/sdk/ops';
+} from '@coinnibal/sdk';
+import { bpsToPercent } from '@coinnibal/shared';
+import { arenaName, type StatusSnapshot } from '@coinnibal/sdk/ops';
 import type { Address } from 'viem';
 
 /** True when the arena's holder pair is not the owner's (8 % burned + 2 % to the fee wallet, as the site tells holders). */

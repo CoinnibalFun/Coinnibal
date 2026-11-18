@@ -1,4 +1,4 @@
-import { TICK_MS } from '@elymum/shared';
+import { TICK_MS } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { RENDER_DELAY_MS, SnapshotTimeline } from '../src/game/jitter';
 

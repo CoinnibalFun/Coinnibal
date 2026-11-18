@@ -1,4 +1,4 @@
-import { CARD_PAPER, ELYSIUM, INK, RISO } from '@elymum/art';
+import { CARD_PAPER, ELYSIUM, INK, RISO } from '@coinnibal/art';
 import {
   PlayerFlag,
   PowerUpType,
@@ -18,8 +18,8 @@ import {
   type RoundStanding,
   type ServerMessage,
   joinTargetArena,
-} from '@elymum/shared';
-import { ledgerDecimals } from '@elymum/sdk';
+} from '@coinnibal/shared';
+import { ledgerDecimals } from '@coinnibal/sdk';
 import { SERVER } from '../config';
 import { DROP_LAND, DUR, SLOWMO_TOTAL, slowmoScale } from '../design/curves';
 import { serverText, t } from '../i18n';

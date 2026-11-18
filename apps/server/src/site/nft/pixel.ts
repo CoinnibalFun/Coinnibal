@@ -4,7 +4,7 @@
  * pass, so it is always one pixel and always ink), hand-authored sprites for faces, hats and accessories,
  * and a 3 × 5 pixel font for the tags. Output: a 512 × 512 SVG of crisp 8 px cells (row runs merged).
  */
-import { NFT_NAME } from '@elymum/shared';
+import { NFT_NAME } from '@coinnibal/shared';
 import { BLUSH, CREAM, HOLO, INK, MATERIAL_SPECS, P, SHADES, TIER_FRAME, WHITE, type MaterialSpec } from './palette';
 import type { Genome } from './traits';
 

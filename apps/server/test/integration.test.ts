@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLOSE_REPLACED, CUSTOM_DEFAULTS, EntityKind, customRoomPaymentRef, PROTOCOL_VERSION, RULES, TEST_ARENA_DEFAULT, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, CUSTOM_DEFAULTS, EntityKind, customRoomPaymentRef, PROTOCOL_VERSION, RULES, TEST_ARENA_DEFAULT, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';

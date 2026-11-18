@@ -1,4 +1,4 @@
-import { formatUsd, parseUsdPrice, tokenRawToUsd, type ArenaPricesView } from '@elymum/shared';
+import { formatUsd, parseUsdPrice, tokenRawToUsd, type ArenaPricesView } from '@coinnibal/shared';
 
 /**
  * US dollars where money is spent (the ticket sheet, the round receipt): "≈ $1.00 · price set 14:20", from the token

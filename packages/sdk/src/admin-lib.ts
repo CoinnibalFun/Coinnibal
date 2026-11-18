@@ -1,13 +1,13 @@
 /**
  * Admin CLI building blocks (Node only, not exported from the SDK entry point): argument
  * parsing, the private key loader and the `status` report. Validation, refusals and the status
- * read are shared with the web admin panel and live in `ops.ts` (browser-safe, `@elymum/sdk/ops`);
+ * read are shared with the web admin panel and live in `ops.ts` (browser-safe, `@coinnibal/sdk/ops`);
  * this file adapts them to command-line options. `admin.ts` wires them to the RPC.
  */
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
-import { arenaMeta } from '@elymum/shared';
+import { arenaMeta } from '@coinnibal/shared';
 import type { Address, Hex } from 'viem';
 import { DEFAULT_BURN_BPS, DEFAULT_PAYMENT_BURN_BPS, DEFAULT_VAULT_BPS, MAX_ARENA_SESSIONS, MAX_TOTAL_FEE_BPS, MIN_ARENA_SESSIONS, MINT_PHASE_NAMES, SUGGESTED_HOLDER_BURN_BPS, SUGGESTED_HOLDER_VAULT_BPS } from './constants';
 import { formatBps, formatGasAmount, formatTokenAmount } from './format';

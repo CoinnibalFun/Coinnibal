@@ -1,5 +1,5 @@
 import type { PlayerLook } from '../handle';
-import type { CustomDifficulty, DeathStats, IntegrityTransfer, MapScaleSettings, RoomInfo, RoundBoard, RoundStanding } from '@elymum/shared';
+import type { CustomDifficulty, DeathStats, IntegrityTransfer, MapScaleSettings, RoomInfo, RoundBoard, RoundStanding } from '@coinnibal/shared';
 import type { SessionSummary } from '../../integrity/types';
 import type { CountryGame, LbRecord } from '../../leaderboards';
 import type { JournalItem, LiveStake, LootRecord, SettleReason, SettlementItem } from '../../stake/journal';

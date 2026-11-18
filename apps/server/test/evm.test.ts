@@ -1,5 +1,5 @@
 /**
- * The EVM gateway against a real chain: spawns `hardhat node` (from @elymum/contracts) on a free port,
+ * The EVM gateway against a real chain: spawns `hardhat node` (from @coinnibal/contracts) on a free port,
  * deploys the TestToken and the arena with the SDK, then runs `EvmChain` through the money paths:
  * waiting for contracts → token set → join (real tickets) → one settle batch (the fee on profit: burned + to the
  * fee wallet) → the token's own burn() in burn mode 1 → loot burn with a sweep id → the stale-session sweeper
@@ -33,7 +33,7 @@ import {
   testTokenAbi,
   setTokenCall,
   type ContractCall,
-} from '@elymum/sdk';
+} from '@coinnibal/sdk';
 
 import type { Address, PublicClient, WalletClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -106,7 +106,7 @@ async function send(from: Address, call: ContractCall): Promise<void> {
 beforeAll(async () => {
   const port = await freePort();
   url = `http://127.0.0.1:${port}`;
-  child = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
+  child = spawn('pnpm', ['-F', '@coinnibal/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
     cwd: repoRoot,
     detached: true,
     stdio: 'ignore',

@@ -7,7 +7,7 @@
 import { appendFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SessionInfo } from '@elymum/sdk';
+import type { SessionInfo } from '@coinnibal/sdk';
 import { generatePrivateKey } from 'viem/accounts';
 import { describe, expect, it } from 'vitest';
 import { EvmChain } from '../src/chain/evm';

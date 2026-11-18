@@ -1,4 +1,4 @@
-import { ELYSIUM, NFT_SUPPLY, SHADE, SITE_X_HANDLE_DEFAULT as X_HANDLE, type ElysiumPaint } from '@elymum/shared';
+import { ELYSIUM, NFT_SUPPLY, SHADE, SITE_X_HANDLE_DEFAULT as X_HANDLE, type ElysiumPaint } from '@coinnibal/shared';
 import { motion } from 'motion/react';
 import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';

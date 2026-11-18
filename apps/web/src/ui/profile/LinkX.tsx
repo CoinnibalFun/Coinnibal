@@ -1,4 +1,4 @@
-import { xAvatarPath } from '@elymum/shared';
+import { xAvatarPath } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Button, Field } from '../../design';
 import { sound } from '../../audio';

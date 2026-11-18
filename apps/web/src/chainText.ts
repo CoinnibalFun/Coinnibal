@@ -1,4 +1,4 @@
-import { chainInfo, configuredChainId, isSupportedChainId, setActiveChain, type ChainStatus } from '@elymum/shared';
+import { chainInfo, configuredChainId, isSupportedChainId, setActiveChain, type ChainStatus } from '@coinnibal/shared';
 import { refreshChainText } from './i18n';
 
 /**

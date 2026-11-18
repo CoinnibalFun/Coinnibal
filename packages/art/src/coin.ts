@@ -1,4 +1,4 @@
-import { CellFlag } from '@elymum/shared';
+import { CellFlag } from '@coinnibal/shared';
 import { drawAccessoryBack, drawAccessoryFront, symbolAnchor, type AccessoryColors } from './accessories';
 import { drawFace, type Expression, type FaceOpts } from './faces';
 import type { CoinLook } from './looks';

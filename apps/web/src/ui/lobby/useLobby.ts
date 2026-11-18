@@ -1,5 +1,5 @@
-import { ledgerDecimals } from '@elymum/sdk';
-import { TOKEN_SYMBOL_DEFAULT, arenaMeta, formatToken, testArenaName } from '@elymum/shared';
+import { ledgerDecimals } from '@coinnibal/sdk';
+import { TOKEN_SYMBOL_DEFAULT, arenaMeta, formatToken, testArenaName } from '@coinnibal/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { openSessionOf, useChainData } from '../../wallet/chain';
 import { useAddress } from '../../wallet/store';

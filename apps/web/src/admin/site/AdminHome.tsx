@@ -1,5 +1,5 @@
-import { GAS_SYMBOL } from '@elymum/shared';
-import type { SiteCounts, SiteSettings } from '@elymum/shared';
+import { GAS_SYMBOL } from '@coinnibal/shared';
+import type { SiteCounts, SiteSettings } from '@coinnibal/shared';
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { CoinCharacter, CoinMark, StatusPill, Tabs, TabPanel, tabId, type TabItem } from '../../design';
 import { adminApi } from '../../site/api';

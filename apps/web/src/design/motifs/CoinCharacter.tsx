@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { useId, type CSSProperties, type ReactElement } from 'react';
 
 /** Body paints a coin can wear (fill + its one hard shade). */

@@ -9,7 +9,7 @@ import {
   type CollabRole,
   type CollabType,
   type CollabWalletRow,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 
 import { siteHost } from '../settings';
 

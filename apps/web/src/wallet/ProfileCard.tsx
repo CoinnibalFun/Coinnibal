@@ -1,4 +1,4 @@
-import { shortAddress } from '@elymum/shared';
+import { shortAddress } from '@coinnibal/shared';
 import { Button, Laurel } from '../design';
 import { levelProgress } from '../game/engine';
 import { useT } from '../i18n';

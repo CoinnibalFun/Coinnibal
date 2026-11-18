@@ -9,7 +9,7 @@ import {
   type CollabWalletRow,
   type SiteErrorCode,
   type WlTaskKind,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { checksumAddress } from '../auth';
 
 /** A refused site / admin request: HTTP status, error code, message and the offending field. */

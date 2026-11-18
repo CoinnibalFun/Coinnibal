@@ -1,11 +1,11 @@
-import { GAS_SYMBOL } from '@elymum/shared';
-import { createArenaCall, deployArenaParams, deployNftParams, deployTestTokenParams, faucetCall, testTokenArtifact } from '@elymum/sdk';
-import { checkDeployedCode, confirmTypedAddress, planDefaultArenas, setTokenRefusal, testTokenRefusal, arenaName, fmtTok } from '@elymum/sdk/ops';
-import { setTokenCall } from '@elymum/sdk';
-import type { ContractKind } from '@elymum/shared';
+import { GAS_SYMBOL } from '@coinnibal/shared';
+import { createArenaCall, deployArenaParams, deployNftParams, deployTestTokenParams, faucetCall, testTokenArtifact } from '@coinnibal/sdk';
+import { checkDeployedCode, confirmTypedAddress, planDefaultArenas, setTokenRefusal, testTokenRefusal, arenaName, fmtTok } from '@coinnibal/sdk/ops';
+import { setTokenCall } from '@coinnibal/sdk';
+import type { ContractKind } from '@coinnibal/shared';
 import { useEffect, useRef, useState } from 'react';
 import type { Address, Hash } from 'viem';
-import { describeError } from '@elymum/sdk';
+import { describeError } from '@coinnibal/sdk';
 import { ensureChain } from '../wallet/network';
 import { connected } from '../wallet/store';
 import { activeStep, arenaDeployArgs, defaultNftForm, deploySteps, loadLocalDeploys, nftDeployArgs, saveLocalDeploy, type LocalDeploys, type NftForm } from './deploy';

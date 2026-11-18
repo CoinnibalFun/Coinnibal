@@ -1,4 +1,4 @@
-import { COLLAB_ROLES, COLLAB_TYPES, SITE_LIMITS, isXStatusUrl, type CollabPublic, type CollabWalletRow } from '@elymum/shared';
+import { COLLAB_ROLES, COLLAB_TYPES, SITE_LIMITS, isXStatusUrl, type CollabPublic, type CollabWalletRow } from '@coinnibal/shared';
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type ReactNode } from 'react';
 import { Button, CoinCharacter, Field, FoodBit, Icon, Stamp, StampSpinner, Sticker, Tape, useOffscreenPause, type CoinMood, type CoinPaint, type StampTone } from '../../design';
 import { SiteApiError, site } from '../api';

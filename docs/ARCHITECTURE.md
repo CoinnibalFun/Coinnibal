@@ -155,7 +155,7 @@ Off chain (the server; tests in `apps/server/test`):
 16. **Refunds the server did not send:** a held (or never-sent) settlement whose ticket the player refunded after
     24 h is dropped and the difference (payout − entry fee) journaled as a forfeit, so (11) keeps holding.
 
-The money simulation (`test/money-sim.ts`, `pnpm -F @elymum/server money-sim`) checks 11 to 16 together: the real
+The money simulation (`test/money-sim.ts`, `pnpm -F @coinnibal/server money-sim`) checks 11 to 16 together: the real
 rooms, journal and settlement worker against the contract model or a hardhat node with the real contract, with
 random joins, eats, disconnects, unplayed tickets, holds, failed transfers, RPC errors, ambiguous sends, lost
 receipts, outages, worker crashes, restarts and days passing; after every chain pass the vault must equal the rooms +
@@ -312,7 +312,7 @@ has more bots than its setting, nor more playing than the setting minus its peop
   in memory (the newest 20,000, for 6 h) and kept for good only when their page is first opened, so the many cards
   nobody shares never push a result card out. Nothing of a card comes from a client. `GET /share/<id>` is a page with
   the Open Graph / Twitter `summary_large_image` tags; `GET /share/<id>.png` the 1200 x 630 card drawn with
-  `@elymum/art` on `@napi-rs/canvas` with the site's own fonts, and `GET /share/<id>/standings.png` a result's final
+  `@coinnibal/art` on `@napi-rs/canvas` with the site's own fonts, and `GET /share/<id>/standings.png` a result's final
   standings in the same style (cached; 30 renders per IP a minute; a picture fetch never keeps an offer). Cards are
   kept in `DATA_DIR/site/shares.json` (the newest 5,000). The web's end sheets (`SharePanel`) preview the pictures,
   save them as files and hand them to the Web Share API (`navigator.canShare({ files })`), and open X's web intent
@@ -353,7 +353,7 @@ has more bots than its setting, nor more playing than the setting minus its peop
   (`VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS`, `VITE_TOKEN_ADDRESS` for the build's `VITE_CHAIN_ID`; the testnet
   deployment is the default for 46630; a mainnet build without them signs nothing; the local node may run unpinned).
   Before every approval, ticket, refund and shop payment the web checks that the server's arena is the pinned one and
-  that its runtime code hash is the compiled `@elymum/contracts` build; the mint checks its NFT the same way. A
+  that its runtime code hash is the compiled `@coinnibal/contracts` build; the mint checks its NFT the same way. A
   mismatch is refused with a clear error and the lobby says "Contract check failed".
 - **Game connection** (`src/game/net.ts`, `jitter.ts`): a watchdog drops a socket that delivered no frame and no pong
   for 4 s and reconnects (backoff 0.5 s to 8 s); while it is down a blocking banner says the coin is still in the
@@ -429,13 +429,13 @@ with 0 everything runs on the main thread exactly as before (tests, `pnpm dev`).
 - **Load.** Each thread reports its tick (mean / p95 / max), event-loop utilisation and lag, rooms and
   players every second: `GET /api/admin/load`, the Network tab ("Game server load") and `game` in
   `/api/health`.
-- **Tests.** The usual suite runs with 0 workers; `pnpm -F @elymum/server test:workers` runs the WebSocket
+- **Tests.** The usual suite runs with 0 workers; `pnpm -F @coinnibal/server test:workers` runs the WebSocket
   integration suite with two workers (`TEST_GAME_WORKERS=2`) plus `test/workers.test.ts` (bell settlement,
   reattach, crash and hang recovery, custom-room close, shutdown); `workers.test.ts` runs only there (vitest.config.ts).
 
 ### Capacity (measured)
 
-`pnpm -F @elymum/server load` (`scripts/bench/load.ts`) runs the real app with N WebSocket clients in child
+`pnpm -F @coinnibal/server load` (`scripts/bench/load.ts`) runs the real app with N WebSocket clients in child
 processes (35 % arena players with tickets on the dev fake chain, 45 % practice, 10 % private, 10 % custom
 rooms; aim updates at 30 Hz, rejoin after a death), measured before the 2026-11 rebuild with the then-default
 house bots in every room (the rooms now hold people only, so these numbers are conservative). Measured on a 4-core

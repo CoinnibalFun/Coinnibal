@@ -1,4 +1,4 @@
-import { activeChain } from '@elymum/shared';
+import { activeChain } from '@coinnibal/shared';
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChompMark, CoinMark, Icon, Kb, RingScene, Wordmark as InkWordmark, type IconName } from '../design';
 import { FooterLife } from './FooterLife';

@@ -3,7 +3,7 @@
  * People count everywhere; practice bots only in a testnet test arena (tagged BOT). A split coin is one coin; the same
  * person eaten again (a rejoin, same wallet) is one entry ×2. Names are cleaned for a share card and an X post.
  */
-import { EATEN_SHOWN, ROBINHOOD_TESTNET_CHAIN_ID, TICK_MS, eatenLine, shareName, type DeathStats, type ServerMessage } from '@elymum/shared';
+import { EATEN_SHOWN, ROBINHOOD_TESTNET_CHAIN_ID, TICK_MS, eatenLine, shareName, type DeathStats, type ServerMessage } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import type { Player } from '../src/game/entities';
 import { EatenTracker } from '../src/rooms/eaten';

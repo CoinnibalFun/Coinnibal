@@ -19,8 +19,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getSession } from '@elymum/sdk';
-import { toLedger } from '@elymum/sdk';
+import { getSession } from '@coinnibal/sdk';
+import { toLedger } from '@coinnibal/sdk';
 import { privateKeyToAccount } from 'viem/accounts';
 import { EvmChain } from '../../src/chain/evm';
 import { configureRpcBudgets } from '../../src/chain/rpc-budget';

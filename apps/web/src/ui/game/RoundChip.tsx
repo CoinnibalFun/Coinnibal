@@ -1,4 +1,4 @@
-import { RULES } from '@elymum/shared';
+import { RULES } from '@coinnibal/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { springs, useReducedMotion } from '../../design';

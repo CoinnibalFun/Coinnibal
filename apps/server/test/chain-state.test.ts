@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BinaryWriter, EMBLEM_SKIN_ID, PlayerFlag, decodeSnapshot, writeSnapshot, type ChainStatus } from '@elymum/shared';
+import { BinaryWriter, EMBLEM_SKIN_ID, PlayerFlag, decodeSnapshot, writeSnapshot, type ChainStatus } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createApp, type App } from '../src/app';

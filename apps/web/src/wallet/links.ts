@@ -1,4 +1,4 @@
-import { explorerAddressUrl, explorerTxUrl } from '@elymum/shared';
+import { explorerAddressUrl, explorerTxUrl } from '@coinnibal/shared';
 import { useUi } from '../store';
 
 /** Explorer links on the server's chain (Blockscout layout); null when the chain has no explorer. */

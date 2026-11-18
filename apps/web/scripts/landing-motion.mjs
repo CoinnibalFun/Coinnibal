@@ -2,8 +2,8 @@
 // Motion guard for the landing's scroll reveals (site/landing/reveal.ts + reveal.css): a Playwright check that the
 // print rhythm never gets in the way of reading. It needs a Chromium, so it is a script, not a vitest test:
 //
-//   pnpm -F @elymum/web motion:guard                                  its own stack (fake chain) on ports 8896 / 5196
-//   pnpm -F @elymum/web motion:guard -- --base http://localhost:5173  against a running dev stack
+//   pnpm -F @coinnibal/web motion:guard                                  its own stack (fake chain) on ports 8896 / 5196
+//   pnpm -F @coinnibal/web motion:guard -- --base http://localhost:5173  against a running dev stack
 //   ... --server-port 8930 --web-port 5330                            its own stack on other ports
 //   ... --perf                                                        also: 4x CPU throttle, no long task, no layout shift
 //   ... --shots DIR                                                   save the reduced-motion full pages there

@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CUSTOM_DEFAULTS, CUSTOM_DURATION_LIMITS, ROOM_CLOSE_COUNTDOWN_MS, TICK_MS, profitFee, type CustomRoomConfig, type ServerMessage } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, CUSTOM_DURATION_LIMITS, ROOM_CLOSE_COUNTDOWN_MS, TICK_MS, profitFee, type CustomRoomConfig, type ServerMessage } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { UsedPayments } from '../src/chain/payment';
 import { loadConfig } from '../src/config';

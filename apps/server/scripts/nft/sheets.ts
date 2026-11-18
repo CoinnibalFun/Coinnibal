@@ -1,7 +1,7 @@
 /**
  * Contact sheets of the emblem collection, for picking a style and checking the art (docs/NFT-DESIGN.md):
  *
- *   pnpm -F @elymum/server nft:sheets [--seed <s>] [--size 3333] [--out <dir>]
+ *   pnpm -F @coinnibal/server nft:sheets [--seed <s>] [--size 3333] [--out <dir>]
  *
  * Writes compare.png (the same 12 tokens in both styles), vector-tiers.png and pixel-tiers.png (five of
  * each tier), vector-traits.png and pixel-traits.png (every trait value), rarity-table.png and
@@ -10,7 +10,7 @@
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { NFT_SUPPLY } from '@elymum/shared';
+import { NFT_SUPPLY } from '@coinnibal/shared';
 import { GlobalFonts, createCanvas, loadImage, type Canvas, type SKRSContext2D } from '@napi-rs/canvas';
 import { generateCollection, rarityStats, tierQuotas } from '../../src/site/nft/generate';
 import { pixelSvg } from '../../src/site/nft/pixel';

@@ -1,4 +1,4 @@
-import { normalizeXHandle } from '@elymum/shared';
+import { normalizeXHandle } from '@coinnibal/shared';
 import { useEffect, useRef, useState } from 'react';
 import { Button, useReducedMotion } from '../../design';
 import { useT } from '../../i18n';

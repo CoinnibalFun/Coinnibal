@@ -9,7 +9,7 @@ import {
   weiToUsdCents,
   type AllowlistTree,
   type MintState as ChainMintState,
-} from '@elymum/sdk';
+} from '@coinnibal/sdk';
 import type {
   AllowlistBuildResponse,
   AllowlistSnapshot,
@@ -19,8 +19,8 @@ import type {
   MintPriceQuote,
   MintProofResponse,
   MintState,
-} from '@elymum/shared';
-import { BRAND_NAME, NFT_NAME } from '@elymum/shared';
+} from '@coinnibal/shared';
+import { BRAND_NAME, NFT_NAME } from '@coinnibal/shared';
 import { getAddress, type Address, type Hash } from 'viem';
 import { ChainCache } from '../chain/chain-cache';
 import type { EvmClient } from '../chain/evm-client';

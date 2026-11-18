@@ -158,10 +158,10 @@ function openSite(data) {
 
 async function buildServer() {
   if (NO_BUILD) {
-    if (!existsSync(join(ROOT, 'apps/server/dist/index.js'))) fail('apps/server/dist/index.js is missing and --no-build was given.', 'Run: pnpm -F @elymum/server build');
+    if (!existsSync(join(ROOT, 'apps/server/dist/index.js'))) fail('apps/server/dist/index.js is missing and --no-build was given.', 'Run: pnpm -F @coinnibal/server build');
     return;
   }
-  if ((await runStep('building the game server (tsup)', 'pnpm', ['-F', '@elymum/server', 'build'])) !== 0) fail('The server build failed.', 'Run: pnpm -F @elymum/server build');
+  if ((await runStep('building the game server (tsup)', 'pnpm', ['-F', '@coinnibal/server', 'build'])) !== 0) fail('The server build failed.', 'Run: pnpm -F @coinnibal/server build');
 }
 
 async function main() {
@@ -184,7 +184,7 @@ async function main() {
     // anyone who signs in may play the demo
     serverEnv.GAME_ACCESS ??= 'public';
     openSite(data);
-    serverCmd = ['pnpm', ['-F', '@elymum/server', 'dev']];
+    serverCmd = ['pnpm', ['-F', '@coinnibal/server', 'dev']];
   } else {
     await buildServer();
     say(`starting hardhat node on 127.0.0.1:${RPC_PORT}`);
@@ -192,7 +192,7 @@ async function main() {
     try {
       node = await startHardhatNode({ port: RPC_PORT });
     } catch (e) {
-      fail(`hardhat node did not start: ${e.message}`, 'Try it by hand: pnpm -F @elymum/contracts exec hardhat node');
+      fail(`hardhat node did not start: ${e.message}`, 'Try it by hand: pnpm -F @coinnibal/contracts exec hardhat node');
     }
     const rec = { child: node, exited: false };
     node.on('exit', () => {
@@ -227,7 +227,7 @@ async function main() {
 
   say(LOCALNET ? 'starting the game server (production build) and the web app' : 'starting the game server (fake chain) and the web app');
   start('server', serverCmd[0], serverCmd[1], { cwd: serverCwd, env: serverEnv, tagColor: '36' });
-  start('web', 'pnpm', ['-F', '@elymum/web', 'dev'], { env: { ...ENV, GAME_SERVER: `http://127.0.0.1:${SERVER_PORT}` }, tagColor: '33' });
+  start('web', 'pnpm', ['-F', '@coinnibal/web', 'dev'], { env: { ...ENV, GAME_SERVER: `http://127.0.0.1:${SERVER_PORT}` }, tagColor: '33' });
 
   const alive = () => shuttingDown;
   const okServer = await waitForHttp(`http://127.0.0.1:${SERVER_PORT}/api/health`, 90_000, alive);

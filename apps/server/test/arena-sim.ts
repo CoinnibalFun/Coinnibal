@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ArenaScalingDecision, ArenaScalingSettings } from '@elymum/shared';
+import type { ArenaScalingDecision, ArenaScalingSettings } from '@coinnibal/shared';
 import { loadConfig } from '../src/config';
 import { ArenaScalingStore, SCALER_SAMPLE_MS } from '../src/rooms/arena-scaler';
 import { RoomManager } from '../src/rooms/manager';

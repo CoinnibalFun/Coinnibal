@@ -1,4 +1,4 @@
-import { SIWE_STATEMENT, siweMessage } from '@elymum/shared';
+import { SIWE_STATEMENT, siweMessage } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { Auth, MAX_NONCES, MAX_NONCES_PER_CLIENT, MAX_NONCE_FAILURES, NONCE_TTL_MS, NonceLimitError, checksumAddress, loginMessage, type SiweOrigin } from '../src/auth';
 import { assertPublicUrl, loadConfig } from '../src/config';

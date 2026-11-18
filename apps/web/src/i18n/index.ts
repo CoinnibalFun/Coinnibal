@@ -1,4 +1,4 @@
-import { SITE_X_HANDLE_DEFAULT, activeChain, isXHandle } from '@elymum/shared';
+import { SITE_X_HANDLE_DEFAULT, activeChain, isXHandle } from '@coinnibal/shared';
 import { useSyncExternalStore } from 'react';
 import { en } from './en';
 import { LOCALES, type Locale } from './locales/meta';
@@ -59,7 +59,7 @@ export const X_HANDLE_BUILD: string = (() => {
 /**
  * The placeholders every string may use without the caller passing them:
  * - `{chain}`, the name of the Robinhood Chain network the game runs on ("Robinhood Chain Testnet" now, "Robinhood
- *   Chain" at mainnet). It follows the active network (`setActiveChain` in `@elymum/shared`: `VITE_CHAIN_ID` at boot,
+ *   Chain" at mainnet). It follows the active network (`setActiveChain` in `@coinnibal/shared`: `VITE_CHAIN_ID` at boot,
  *   then the server's); `refreshChainText` re-renders on a change.
  * - `{ourX}`, the project's X handle with its `@` (`X_HANDLE_BUILD`, then the server's site setting once it is
  *   loaded: `setOurXHandle`).

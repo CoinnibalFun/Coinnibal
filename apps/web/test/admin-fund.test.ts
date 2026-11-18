@@ -1,4 +1,4 @@
-import { deployArenaParams, deployNftParams, deployTestTokenParams } from '@elymum/sdk';
+import { deployArenaParams, deployNftParams, deployTestTokenParams } from '@coinnibal/sdk';
 import { getAddress } from 'viem';
 import { describe, expect, it, vi } from 'vitest';
 import { arenaDeployArgs, defaultNftForm, nftDeployArgs } from '../src/admin/deploy';

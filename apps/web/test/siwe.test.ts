@@ -1,4 +1,4 @@
-import { SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS, siweMessage } from '@elymum/shared';
+import { SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS, siweMessage } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { expectedLoginMessage, personalSign } from '../src/wallet/siwe';

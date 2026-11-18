@@ -8,8 +8,8 @@ import {
   type ArenaConfig,
   type ArenaInfo,
   type SessionInfo,
-} from '@elymum/sdk';
-import type { ArenaPricesView, ChainStatus, ProfileView } from '@elymum/shared';
+} from '@coinnibal/sdk';
+import type { ArenaPricesView, ChainStatus, ProfileView } from '@coinnibal/shared';
 import type { Address, PublicClient } from 'viem';
 import { useCallback, useEffect, useMemo } from 'react';
 import { create } from 'zustand';

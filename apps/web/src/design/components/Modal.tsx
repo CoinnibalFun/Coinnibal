@@ -1,4 +1,4 @@
-import { activeChain } from '@elymum/shared';
+import { activeChain } from '@coinnibal/shared';
 import type { ReactNode } from 'react';
 import { Icon } from '../icons';
 import { Sheet, type SheetProps } from './Sheet';

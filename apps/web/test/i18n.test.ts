@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { EMOTES, PowerUpType, activeChain, chainInfo, setActiveChain } from '@elymum/shared';
+import { EMOTES, PowerUpType, activeChain, chainInfo, setActiveChain } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { detectLocale, formatMessage, getLocale, initLocale, ourXHandle, refreshChainText, setOurXHandle, translate, X_HANDLE_BUILD, type Dict, type Locale, type TKey } from '../src/i18n';
 import { renderRich } from '../src/i18n/rich';

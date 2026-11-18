@@ -1,5 +1,5 @@
-import { approveCall, getAllowance, getArenaConfig, planJoin, type ArenaConfig } from '@elymum/sdk';
-import type { ChainStatus, FeeRates } from '@elymum/shared';
+import { approveCall, getAllowance, getArenaConfig, planJoin, type ArenaConfig } from '@coinnibal/sdk';
+import type { ChainStatus, FeeRates } from '@coinnibal/shared';
 import { encodeFunctionData, type Address, type Hash, type Hex, type PublicClient } from 'viem';
 import { useUi } from '../store';
 import { loadDevFake } from './devFakeLoader';

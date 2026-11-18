@@ -1,4 +1,4 @@
-import { avatarPath, isAvatarId } from '@elymum/shared';
+import { avatarPath, isAvatarId } from '@coinnibal/shared';
 import { SERVER } from '../config';
 
 /**

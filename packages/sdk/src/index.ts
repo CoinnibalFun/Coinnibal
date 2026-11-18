@@ -1,6 +1,6 @@
-// @elymum/sdk: the browser-safe entry point. Nothing reachable from here may import Node built-ins.
+// @coinnibal/sdk: the browser-safe entry point. Nothing reachable from here may import Node built-ins.
 // (The admin CLI lives in src/admin.ts and src/admin-lib.ts; the admin panel's shared logic is
-// `@elymum/sdk/ops`. Neither is re-exported here.)
+// `@coinnibal/sdk/ops`. Neither is re-exported here.)
 export * from './constants';
 export * from './math';
 export * from './format';
@@ -22,4 +22,4 @@ export {
   type CoinnibalArtifact,
   type CoinnibalContractName,
   COINNIBAL_ARENA_VERSION,
-} from '@elymum/contracts';
+} from '@coinnibal/contracts';

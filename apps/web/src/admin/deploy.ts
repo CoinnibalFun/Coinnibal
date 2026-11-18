@@ -1,6 +1,6 @@
-import { GAS_SYMBOL, NFT_SUPPLY } from '@elymum/shared';
-import { planDefaultArenas, parseAddressInput, parseGasInput, parseIntInput, AdminInputError, type StatusSnapshot } from '@elymum/sdk/ops';
-import type { DeployArenaArgs, DeployNftArgs } from '@elymum/sdk';
+import { GAS_SYMBOL, NFT_SUPPLY } from '@coinnibal/shared';
+import { planDefaultArenas, parseAddressInput, parseGasInput, parseIntInput, AdminInputError, type StatusSnapshot } from '@coinnibal/sdk/ops';
+import type { DeployArenaArgs, DeployNftArgs } from '@coinnibal/sdk';
 import { formatEther, getAddress, type Address, type Hash } from 'viem';
 import type { AdminNetwork } from './net';
 

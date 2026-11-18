@@ -1,4 +1,4 @@
-import { BOOST_RULES, CellFlag, EntityKind, SHOP_DEFAULTS, type BoostState, type ShopView, type SnapshotData } from '@elymum/shared';
+import { BOOST_RULES, CellFlag, EntityKind, SHOP_DEFAULTS, type BoostState, type ShopView, type SnapshotData } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { shopPatch } from '../src/admin/ShopCard';

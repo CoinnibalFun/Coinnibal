@@ -24,7 +24,7 @@
  *  4. **Abuse** (`abuseStudy`): feeding with fixed wallets and with fresh wallets per round, teaming, all in the real
  *     room with the real integrity detectors, against an honest control on the same seeds.
  *
- * `scripts/mainnet-econ-sim.ts` prints the report (`pnpm -F @elymum/server econ-sim`); `mainnet-econ.test.ts` runs a
+ * `scripts/mainnet-econ-sim.ts` prints the report (`pnpm -F @coinnibal/server econ-sim`); `mainnet-econ.test.ts` runs a
  * short version and the mainnet scenario of the money simulation.
  */
 import { readFileSync } from 'node:fs';
@@ -52,7 +52,7 @@ import {
   type ClientInput,
   type FeeRates,
   type IntegrityFlag,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { BotBrain, type BotLevel } from '../src/bots/brain';
 import { NullChain } from '../src/chain/types';
 import type { Player } from '../src/game/entities';

@@ -1,4 +1,4 @@
-import type { CollabRole, CollabType } from '@elymum/shared';
+import type { CollabRole, CollabType } from '@coinnibal/shared';
 import { t } from '../../i18n';
 
 export const TYPE_LABEL: Record<CollabType, string> = { dao: 'DAO', guild: 'Guild', alpha: 'Alpha group', nft: 'NFT project', other: 'Other' };

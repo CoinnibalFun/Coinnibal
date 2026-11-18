@@ -7,7 +7,7 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CellFlag, PROTOCOL_VERSION, PlayerFlag, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, TEST_ARENA_ARRIVE_MS, TEST_ARENA_DEFAULT, TICK_MS, type ServerMessage } from '@elymum/shared';
+import { CellFlag, PROTOCOL_VERSION, PlayerFlag, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, TEST_ARENA_ARRIVE_MS, TEST_ARENA_DEFAULT, TICK_MS, type ServerMessage } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { BOT_LEAVE_MAX_MS } from '../src/bots/practice';

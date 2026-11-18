@@ -1,4 +1,4 @@
-import type { GasRunway } from '@elymum/shared';
+import type { GasRunway } from '@coinnibal/shared';
 
 /** Samples older than this are dropped. */
 const KEEP_MS = 7 * 24 * 3600_000;

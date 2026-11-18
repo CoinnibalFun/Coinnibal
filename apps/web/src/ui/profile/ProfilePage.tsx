@@ -1,4 +1,4 @@
-import { BASIC_SKINS, EMBLEM_SKIN_ID, MAX_NAME_LENGTH, isBasicSkin, sanitizeName, shortAddress, utf8Length } from '@elymum/shared';
+import { BASIC_SKINS, EMBLEM_SKIN_ID, MAX_NAME_LENGTH, isBasicSkin, sanitizeName, shortAddress, utf8Length } from '@coinnibal/shared';
 import { useEffect, useId, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Button, Field, Icon, Seigaiha, staggerIn, useReducedMotion } from '../../design';

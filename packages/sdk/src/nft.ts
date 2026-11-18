@@ -1,4 +1,4 @@
-import { coinnibalNFTAbi, coinnibalNFTArtifact } from '@elymum/contracts';
+import { coinnibalNFTAbi, coinnibalNFTArtifact } from '@coinnibal/contracts';
 import { getAddress, type Account, type Address, type Chain, type Hash, type Hex, type PublicClient, type WalletClient } from 'viem';
 import { checkAddress } from './arena';
 import type { ContractCall } from './call';

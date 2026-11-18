@@ -1,4 +1,4 @@
-import { CUSTOM_DEFAULTS, EntityKind, PlayerFlag, TICK_MS, VIEW, canEat, viewSize, type CustomRoomSummary } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, EntityKind, PlayerFlag, TICK_MS, VIEW, canEat, viewSize, type CustomRoomSummary } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { BOT_TUNING, BotBrain, botView, levelFor } from '../src/bots/brain';
 import { BOT_LEAVE_MAX_MS, BOT_RESPAWN_MS, PracticeBots, type BotSurroundings, type PracticeBot } from '../src/bots/practice';

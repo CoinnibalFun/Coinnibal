@@ -1,4 +1,4 @@
-import type { GameAccess } from '@elymum/shared';
+import type { GameAccess } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Chip, CoinCharacter } from '../../design';
 import { errText, type TabProps } from './common';

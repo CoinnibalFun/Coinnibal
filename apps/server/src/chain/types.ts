@@ -1,9 +1,9 @@
-import type { GasRunway } from '@elymum/shared';
-import { activeChain, type ChainInfo, type ChainStatus, type FeeRates } from '@elymum/shared';
+import type { GasRunway } from '@coinnibal/shared';
+import { activeChain, type ChainInfo, type ChainStatus, type FeeRates } from '@coinnibal/shared';
 import type { EvmClient } from './evm-client';
 
 /**
- * Amounts in this module are **ledger units** (see `toLedger` / `fromLedger` in `@elymum/sdk`): the game
+ * Amounts in this module are **ledger units** (see `toLedger` / `fromLedger` in `@coinnibal/sdk`): the game
  * token with at most 6 decimals, a safe JS integer. The EVM gateway converts at the chain boundary only.
  */
 

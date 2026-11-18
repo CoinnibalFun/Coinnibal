@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { useEffect, useState, type ReactElement } from 'react';
 import { CoinCharacter, useOffscreenPause, useReducedMotion, type CoinMood } from '../../design';
 import { useT } from '../../i18n';

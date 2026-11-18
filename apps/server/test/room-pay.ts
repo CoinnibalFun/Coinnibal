@@ -2,7 +2,7 @@
  * Custom-room fees paid in the game token (`CoinnibalArena.pay`): a chain fixture shared by test/custom-rooms.test.ts and
  * test/custom-paid-rooms.test.ts.
  */
-import { CUSTOM_DEFAULTS, ROOM_CLOSE_COUNTDOWN_MS, customRoomCost, customRoomPaymentRef, shopPaymentRef, type ChainStatus } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, ROOM_CLOSE_COUNTDOWN_MS, customRoomCost, customRoomPaymentRef, shopPaymentRef, type ChainStatus } from '@coinnibal/shared';
 import { UsedPayments } from '../src/chain/payment';
 import { ChainBusyError, NullChain, type ChainArena, type TokenReceipt } from '../src/chain/types';
 import { loadConfig } from '../src/config';

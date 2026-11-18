@@ -3,8 +3,8 @@
  * sends them on mainnet, measured on the in-process Hardhat network with the real CoinnibalArena v3, the real CoinnibalNFT
  * as the holder NFT and an OpenZeppelin ERC-20 as the game token (a Pons token is a plain fixed-supply ERC-20):
  *
- *   pnpm -F @elymum/contracts gas:mainnet            # prints JSON
- *   GAS_OUT=../../apps/server/test/mainnet-gas.json pnpm -F @elymum/contracts gas:mainnet
+ *   pnpm -F @coinnibal/contracts gas:mainnet            # prints JSON
+ *   GAS_OUT=../../apps/server/test/mainnet-gas.json pnpm -F @coinnibal/contracts gas:mainnet
  *
  * The figures are L2 execution gas (21k base, calldata and cold storage included). Arbitrum's L1 data fee comes on
  * top and depends on the (compressed) calldata: `inputBytes` is recorded for each shape so the economic simulation

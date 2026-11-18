@@ -16,8 +16,8 @@ import {
   type ServerMessage,
   type SnapshotData,
   type SnapshotSink,
-} from '@elymum/shared';
-import type { Expression } from '@elymum/art';
+} from '@coinnibal/shared';
+import type { Expression } from '@coinnibal/art';
 import { JellyBody } from '../render/jelly';
 
 /** Movement between two snapshots is eased over this window (classic agar feel) when no snapshot step is given. */

@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { verifyMerkleProof } from '@elymum/sdk';
-import { PROTOCOL_VERSION, type ChainStatus, type ServerMessage } from '@elymum/shared';
+import { verifyMerkleProof } from '@coinnibal/sdk';
+import { PROTOCOL_VERSION, type ChainStatus, type ServerMessage } from '@coinnibal/shared';
 import type { Address, Hex } from 'viem';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';

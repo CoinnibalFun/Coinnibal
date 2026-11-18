@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fromLedger, type SessionInfo } from '@elymum/sdk';
+import { fromLedger, type SessionInfo } from '@coinnibal/sdk';
 import { generatePrivateKey } from 'viem/accounts';
 import { describe, expect, it } from 'vitest';
 import { createChain } from '../src/chain';

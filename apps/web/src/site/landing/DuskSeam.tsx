@@ -1,4 +1,4 @@
-import { ELYSIUM } from '@elymum/shared';
+import { ELYSIUM } from '@coinnibal/shared';
 import { motion, useScroll, useTransform, type MotionValue } from 'motion/react';
 import { useOffscreenPause, useReducedMotion } from '../../design';
 import { useMedia } from '../../design/useMedia';

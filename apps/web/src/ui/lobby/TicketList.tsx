@@ -1,4 +1,4 @@
-import { arenaMeta, arenaUsdLabel, bpsToPercent, totalFeeBps } from '@elymum/shared';
+import { arenaMeta, arenaUsdLabel, bpsToPercent, totalFeeBps } from '@coinnibal/shared';
 import { motion } from 'motion/react';
 import type { CSSProperties } from 'react';
 import { Laurel, STAGGER, Ticket, TicketGroup, TicketStub, springs, useReducedMotion } from '../../design';

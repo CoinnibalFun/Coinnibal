@@ -1,5 +1,5 @@
-import { ledgerDecimals } from '@elymum/sdk';
-import { TOKEN_SYMBOL_DEFAULT, arenaMeta, formatToken, type RoomInfo } from '@elymum/shared';
+import { ledgerDecimals } from '@coinnibal/sdk';
+import { TOKEN_SYMBOL_DEFAULT, arenaMeta, formatToken, type RoomInfo } from '@coinnibal/shared';
 import { useUi } from '../../store';
 
 export interface TokenFormat {
@@ -95,4 +95,4 @@ export function sectorOf(x: number, y: number, width: number, height: number): s
 }
 
 /** English ordinals live with the shared text helpers (the server's share cards use them too). */
-export { ordinal } from '@elymum/shared';
+export { ordinal } from '@coinnibal/shared';

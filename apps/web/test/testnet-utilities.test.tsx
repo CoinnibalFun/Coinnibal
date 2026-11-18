@@ -1,8 +1,8 @@
-import type { StatusSnapshot } from '@elymum/sdk/ops';
+import type { StatusSnapshot } from '@coinnibal/sdk/ops';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ARENA_SCALING_DEFAULT, ARENA_SCALING_LIMITS, TEST_ARENA_DEFAULT, type ArenaScalingView, type TestArenaView } from '@elymum/shared';
+import { ARENA_SCALING_DEFAULT, ARENA_SCALING_LIMITS, TEST_ARENA_DEFAULT, type ArenaScalingView, type TestArenaView } from '@coinnibal/shared';
 import { ArenaScalingCard, scalingPatch } from '../src/admin/ArenaScalingCard';
 import { TestArenasCard, testArenaPatch } from '../src/admin/TestArenasCard';
 import { MapsCard, mapsPatch } from '../src/admin/GameTab';

@@ -3,7 +3,7 @@
  * (count the flags they raise at the default thresholds, and the payouts the auto-hold would keep), and with two
  * scripted bots among them (count how often both are caught).
  *
- *   pnpm -F @elymum/server exec tsx scripts/integrity-fp.ts [seeds=8] [minutes=8]
+ *   pnpm -F @coinnibal/server exec tsx scripts/integrity-fp.ts [seeds=8] [minutes=8]
  */
 import { runIntegritySim } from './integrity-sim';
 

@@ -1,5 +1,5 @@
-import { ELYSIUM, INK, PICTURE_R, SHADE, type CoinInterior, type CoinLook, type Expression } from '@elymum/art';
-import { CellFlag, EntityKind, PlayerFlag } from '@elymum/shared';
+import { ELYSIUM, INK, PICTURE_R, SHADE, type CoinInterior, type CoinLook, type Expression } from '@coinnibal/art';
+import { CellFlag, EntityKind, PlayerFlag } from '@coinnibal/shared';
 import { DROP_LAND, dropScale } from '../design/curves';
 import type { Camera } from '../game/camera';
 import type { Particles } from '../game/particles';

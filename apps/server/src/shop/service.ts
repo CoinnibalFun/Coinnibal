@@ -21,7 +21,7 @@ import {
   type ShopPack,
   type ShopSettings,
   type ShopView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { ChainBusyError, type ChainGateway } from '../chain/types';
 import { InventoryError, type BoostInventory } from './inventory';
 import type { ShopSettingsStore } from './settings';

@@ -1,5 +1,5 @@
-import { FINAL_BOARD_ROWS } from '@elymum/shared';
-import { PlayerFlag, TICK_MS, type ServerMessage } from '@elymum/shared';
+import { FINAL_BOARD_ROWS } from '@coinnibal/shared';
+import { PlayerFlag, TICK_MS, type ServerMessage } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { Gateway } from '../src/net/gateway';
 import { Room, boardRows } from '../src/rooms/room';

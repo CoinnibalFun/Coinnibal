@@ -5,7 +5,7 @@ Robinhood Chain (an Arbitrum Orbit L2, gas token ETH). Its token is `$NIBAL`. Ea
 You are a coin: eat food and smaller coins, run from bigger ones, and when the five-minute bell rings
 whatever you swallowed is paid out on chain.
 
-The game used to be called Elymum. The code keeps that as its internal name (`@elymum/*` packages,
+The game used to be called Elymum. The code keeps that as its internal name (`@coinnibal/*` packages,
 `CoinnibalArena` / `CoinnibalNFT`, env vars, storage keys); everything a player sees says Coinnibal. The domain and the X
 handle are configuration: see docs/OPERATIONS.md, "The name: Coinnibal, and moving to coinnibal.fun".
 
@@ -148,7 +148,7 @@ opens the mint and runs the built server with `EVM_RPC_URL`, `SERVER_PRIVATE_KEY
 pnpm typecheck && pnpm test     # every package
 pnpm contracts:build            # compile + export packages/contracts/src/artifacts.ts (commit it)
 pnpm contracts:test             # forge-std unit and fuzz tests
-pnpm -F @elymum/server e2e      # a real hardhat node + the real server: deploy, register, setToken, play, settle
+pnpm -F @coinnibal/server e2e      # a real hardhat node + the real server: deploy, register, setToken, play, settle
 ```
 
 `pnpm check` runs everything CI runs, one suite at a time (`pnpm check:fast` skips the contracts and the web

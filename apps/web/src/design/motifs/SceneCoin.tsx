@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { useId, type ReactElement, type SVGProps } from 'react';
 import type { CoinPaint } from './CoinCharacter';
 

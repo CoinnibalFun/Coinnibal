@@ -25,8 +25,8 @@ import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getArena, getSession } from '@elymum/sdk';
-import { PROTOCOL_VERSION, encodeTarget } from '@elymum/shared';
+import { getArena, getSession } from '@coinnibal/sdk';
+import { PROTOCOL_VERSION, encodeTarget } from '@coinnibal/shared';
 import WebSocket from 'ws';
 import { Auth } from '../../src/auth';
 import { ChaosRpc, CLEAN } from './chaos-rpc';
@@ -250,7 +250,7 @@ async function allClosed(tickets: Ticket[]): Promise<number> {
 async function verify(tickets: Ticket[], fromBlock: bigint) {
   const settled = await hh.logs('Settled', fromBlock);
   const cancelled = await hh.logs('Cancelled', fromBlock);
-  const loot = (await hh.pub.getContractEvents({ address: hh.arena, abi: (await import('@elymum/sdk')).coinnibalArenaAbi, eventName: 'LootBurned', fromBlock })) as unknown as { args: { amount: bigint } }[];
+  const loot = (await hh.pub.getContractEvents({ address: hh.arena, abi: (await import('@coinnibal/sdk')).coinnibalArenaAbi, eventName: 'LootBurned', fromBlock })) as unknown as { args: { amount: bigint } }[];
   const count = new Map<string, number>();
   for (const l of [...settled, ...cancelled]) count.set(String(l.args.sessionId), (count.get(String(l.args.sessionId)) ?? 0) + 1);
   const ids = tickets.map((t) => String(t.sessionId));
@@ -389,7 +389,7 @@ for (const drill of DRILLS) {
     const late = players[0];
     const lateArena = late.arenaId === 1 ? 2 : 1;
     const lateWallet = hh.players[0];
-    const { joinCall, sendCall, createElymumWalletClient, viemChain } = await import('@elymum/sdk');
+    const { joinCall, sendCall, createElymumWalletClient, viemChain } = await import('@coinnibal/sdk');
     const w = createElymumWalletClient(hh.url, { account: lateWallet, chain: viemChain(31337, { rpcUrl: hh.url }), pollingInterval: 50 });
     const h = await sendCall(w, joinCall(hh.arena, lateArena));
     await hh.pub.waitForTransactionReceipt({ hash: h, pollingInterval: 50 });

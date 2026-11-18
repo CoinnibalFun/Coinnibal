@@ -1,4 +1,4 @@
-import type { ServerMessage } from '@elymum/shared';
+import type { ServerMessage } from '@coinnibal/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The engine without a canvas renderer or a real socket: the test plays the server.

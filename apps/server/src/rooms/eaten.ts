@@ -1,4 +1,4 @@
-import { EATEN_SHOWN, isXHandle, shareName, type EatenName } from '@elymum/shared';
+import { EATEN_SHOWN, isXHandle, shareName, type EatenName } from '@coinnibal/shared';
 
 /** Distinct coins remembered per eater (a game with more only counts them in `eatenMore`). */
 const KEYS_KEPT = 64;

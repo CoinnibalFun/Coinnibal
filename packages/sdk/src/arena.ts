@@ -1,5 +1,5 @@
-import { coinnibalArenaAbi, coinnibalArenaArtifact, testTokenAbi, testTokenArtifact } from '@elymum/contracts';
-import { DEFAULT_ARENAS, formatUsdCents, type ArenaPriceRow } from '@elymum/shared';
+import { coinnibalArenaAbi, coinnibalArenaArtifact, testTokenAbi, testTokenArtifact } from '@coinnibal/contracts';
+import { DEFAULT_ARENAS, formatUsdCents, type ArenaPriceRow } from '@coinnibal/shared';
 import { BaseError, erc20Abi, getAddress, isAddress, type Account, type Address, type Chain, type Hash, type PublicClient, type WalletClient } from 'viem';
 import type { ContractCall } from './call';
 import {
@@ -600,7 +600,7 @@ export function acceptOwnershipCall(contract: Address): ArenaCall {
   return { address: contract, abi: coinnibalArenaAbi, functionName: 'acceptOwnership', args: [] };
 }
 
-/** The four default tiers of `@elymum/shared` in base units of a token with `decimals`. */
+/** The four default tiers of `@coinnibal/shared` in base units of a token with `decimals`. */
 export function defaultArenaParams(decimals: number): ArenaParams[] {
   return DEFAULT_ARENAS.map((a) => ({ id: a.id, entryFee: BigInt(a.entryTokens) * 10n ** BigInt(decimals), maxSessions: a.maxSessions }));
 }

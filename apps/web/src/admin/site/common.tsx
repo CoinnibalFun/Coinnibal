@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ELYSIUM } from '@elymum/shared';
+import { ELYSIUM } from '@coinnibal/shared';
 import { SceneCoin, useOffscreenPause, type CoinMood } from '../../design';
 import type { AdminApi } from '../../site/api';
 

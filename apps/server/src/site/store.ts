@@ -29,7 +29,7 @@ import {
   type WlTask,
   type WlTaskAnswer,
   BRAND_NAME,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import * as v from './validate';
 import { SiteFail, bad } from './validate';
 

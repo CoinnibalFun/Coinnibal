@@ -1,4 +1,4 @@
-import { PRACTICE_ROOM } from '@elymum/shared';
+import { PRACTICE_ROOM } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Kb } from '../src/design';

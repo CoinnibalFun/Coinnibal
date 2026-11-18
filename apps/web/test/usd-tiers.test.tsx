@@ -1,5 +1,5 @@
-import { ARENA_PRICING_DEFAULT, type ArenaPricingSettings } from '@elymum/shared';
-import type { StatusSnapshot } from '@elymum/sdk/ops';
+import { ARENA_PRICING_DEFAULT, type ArenaPricingSettings } from '@coinnibal/shared';
+import type { StatusSnapshot } from '@coinnibal/sdk/ops';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';

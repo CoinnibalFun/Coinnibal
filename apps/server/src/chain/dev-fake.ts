@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, LOCALNET_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, chainInfo, profitFee, type ChainStatus } from '@elymum/shared';
+import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, LOCALNET_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, chainInfo, profitFee, type ChainStatus } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import type { Journal } from '../stake/journal';
 import { sessionKey, type ChainArena, type ChainGateway, type ChainSession, type ServerKeyInfo, type SettledEvent, type TokenReceipt } from './types';

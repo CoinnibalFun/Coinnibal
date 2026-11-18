@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
-import { AVATAR_LIMITS, PROTOCOL_VERSION, PlayerFlag, decodeSnapshot, type PlayerInfo, type ServerMessage } from '@elymum/shared';
+import { AVATAR_LIMITS, PROTOCOL_VERSION, PlayerFlag, decodeSnapshot, type PlayerInfo, type ServerMessage } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';

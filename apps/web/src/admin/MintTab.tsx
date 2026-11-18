@@ -1,4 +1,4 @@
-import { GAS_SYMBOL } from '@elymum/shared';
+import { GAS_SYMBOL } from '@coinnibal/shared';
 import {
   formatGasAmount,
   freezeMetadataCall,
@@ -17,9 +17,9 @@ import {
   withdrawCall,
   MINT_PHASE_NAMES,
   type MintPhaseName,
-} from '@elymum/sdk';
-import { parseAddressInput, parseGasInput, parseIntInput } from '@elymum/sdk/ops';
-import type { AllowlistStatus, GameAccess, HolderWlView, MintPriceQuote } from '@elymum/shared';
+} from '@coinnibal/sdk';
+import { parseAddressInput, parseGasInput, parseIntInput } from '@coinnibal/sdk/ops';
+import type { AllowlistStatus, GameAccess, HolderWlView, MintPriceQuote } from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { formatEther, type Address, type Hex } from 'viem';
 import { ArcGauge, GasAmount, Icon, type CoinMood } from '../design';

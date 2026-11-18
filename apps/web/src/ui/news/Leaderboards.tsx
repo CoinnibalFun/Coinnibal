@@ -1,4 +1,4 @@
-import { arenaMeta, type CountryBoardRow, type RoundBoard } from '@elymum/shared';
+import { arenaMeta, type CountryBoardRow, type RoundBoard } from '@coinnibal/shared';
 import { motion } from 'motion/react';
 import { useAddress } from '../../wallet/store';
 import { useEffect, useState, type ReactNode } from 'react';

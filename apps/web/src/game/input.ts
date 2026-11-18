@@ -1,4 +1,4 @@
-import { BOOST_KEYS, BOOST_KINDS, type BoostKind } from '@elymum/shared';
+import { BOOST_KEYS, BOOST_KINDS, type BoostKind } from '@coinnibal/shared';
 
 export interface InputActions {
   split(): void;

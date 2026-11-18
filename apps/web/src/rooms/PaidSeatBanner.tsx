@@ -1,4 +1,4 @@
-import { arenaMeta } from '@elymum/shared';
+import { arenaMeta } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Button } from '../design';
 import { useT } from '../i18n';

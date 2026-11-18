@@ -1,5 +1,5 @@
 /**
- * End to end against a real EVM: spawns `hardhat node` (from @elymum/contracts) on a free port,
+ * End to end against a real EVM: spawns `hardhat node` (from @coinnibal/contracts) on a free port,
  * deploys the TestToken, the arena and the NFT with the SDK's helpers, and runs the money paths:
  * set the token, create the default arenas, join (approve-if-needed), settle a batch (the fee on profit checked
  * against math.ts and the contract's computeFees: burned + to the fee wallet), cancel an unplayed ticket, burn loot,
@@ -143,7 +143,7 @@ async function send(from: Address, call: ContractCall): Promise<Hash> {
 beforeAll(async () => {
   const port = await freePort();
   const url = `http://127.0.0.1:${port}`;
-  child = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
+  child = spawn('pnpm', ['-F', '@coinnibal/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
     cwd: repoRoot,
     detached: true,
     stdio: 'ignore',

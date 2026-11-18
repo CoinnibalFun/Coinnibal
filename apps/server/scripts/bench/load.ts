@@ -20,7 +20,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CUSTOM_DEFAULTS, DEFAULT_ARENAS } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, DEFAULT_ARENAS } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import { createApp } from '../../src/app';
 import { loadConfig } from '../../src/config';

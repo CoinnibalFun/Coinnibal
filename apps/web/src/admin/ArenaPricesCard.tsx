@@ -1,5 +1,5 @@
-import { arenaPriceSyncCalls, sameAddress } from '@elymum/sdk';
-import { arenaName, fmtTok } from '@elymum/sdk/ops';
+import { arenaPriceSyncCalls, sameAddress } from '@coinnibal/sdk';
+import { arenaName, fmtTok } from '@coinnibal/sdk/ops';
 import {
   ARENA_PRICING_LIMITS,
   arenaPriceDiff,
@@ -9,7 +9,7 @@ import {
   type ArenaPriceRow,
   type ArenaPricingSettings,
   type ArenaUsdTier,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Hash } from 'viem';
 import { sendWithWallet, txErrorText } from '../wallet/tx';

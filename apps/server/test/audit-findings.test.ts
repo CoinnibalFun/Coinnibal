@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isReservedName, sanitizeName } from '@elymum/shared';
+import { isReservedName, sanitizeName } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp, type App } from '../src/app';
 import { Auth } from '../src/auth';

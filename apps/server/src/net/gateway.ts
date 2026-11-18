@@ -16,7 +16,7 @@ import {
   sanitizeName,
   type ErrorCode,
   type ServerMessage,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import type { Auth } from '../auth';
 import { ChainBusyError, type ChainGateway, type ChainSession, type SettledEvent } from '../chain/types';
