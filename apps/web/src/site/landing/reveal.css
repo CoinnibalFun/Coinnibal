@@ -40,7 +40,7 @@
 .rv-v { --rv-at: 2; }
 .rv-i { --rv-at: 2; }
 .rv-b { --rv-at: 3; }
-:is(.rv-k, .rv-h, .rv-v, .rv-b, .rv-i, .ld-qa, .nf-card) {
+:is(.rv-k, .rv-h, .rv-v, .rv-b, .rv-i, .ld-qa, .nf-row) {
   --d: calc(var(--beat) * (var(--rv-at, 0) + var(--rv-n, 0)));
 }
 /* the resting tilt the motion wrappers used to carry, motion or not (the stairs stand level: only their tickets tilt) */
@@ -357,29 +357,28 @@
       transform var(--dur-state) var(--ease-spring),
       box-shadow var(--dur-state);
   }
-  /* Why get the NFT (scoped: WhyNft is shared with /mint): the perk cards arrive in batches, their numbers stamp in */
-  .ld-nft__why[data-reveal='wait'] :is(.nf-why__kicker, .nf-why__note) { opacity: 0; translate: 0 var(--rv-rise); }
-  .ld-nft__why[data-reveal='in'] .nf-why__kicker { transition: opacity 0.24s linear, translate calc(0.5s * var(--rv-k)) var(--ease-out); }
+  /* Why get the NFT (scoped: WhyNft is shared with /mint): the two coins square up, then the rows come in one by one */
+  .ld-nft__why[data-reveal='wait'] .nf-why__note { opacity: 0; translate: 0 var(--rv-rise); }
   .ld-nft__why[data-reveal='in'] .nf-why__note {
-    transition: opacity 0.24s linear calc(var(--beat) * 4), translate calc(0.5s * var(--rv-k)) var(--ease-out) calc(var(--beat) * 4);
+    transition: opacity 0.24s linear calc(var(--beat) * 8), translate calc(0.5s * var(--rv-k)) var(--ease-out) calc(var(--beat) * 8);
   }
   .ld-nft__why[data-reveal='wait'] .nf-why__h { opacity: 0; clip-path: inset(-0.3em -0.5em 100% -0.5em); }
   .ld-nft__why[data-reveal='in'] .nf-why__h {
     animation: ld-feed calc(0.68s * var(--rv-k)) var(--ease-paper) var(--beat) backwards, ld-fade 0.24s linear var(--beat) backwards;
   }
-  .ld-nft__why .nf-card[data-reveal='wait'] { opacity: 0; translate: 0 20px; rotate: 2deg; }
-  .ld-nft__why .nf-card[data-reveal='in'] {
-    transition:
-      opacity 0.24s linear var(--d),
-      translate calc(0.48s * var(--rv-k)) var(--ease-settle) var(--d),
-      rotate calc(0.48s * var(--rv-k)) var(--ease-settle) var(--d);
+  .ld-nft__why[data-reveal='wait'] .nf-tape__coin { opacity: 0; translate: var(--from, -28px) 0; }
+  .ld-nft__why .is-holder .nf-tape__coin { --from: 28px; }
+  .ld-nft__why[data-reveal='in'] .nf-tape__coin {
+    transition: opacity 0.16s linear calc(var(--beat) * 2), translate 0.5s var(--ease-settle) calc(var(--beat) * 2);
   }
-  .ld-nft__why .nf-card[data-reveal='wait'] .nf-card__big { opacity: 0; scale: 1.35; rotate: -6deg; }
-  .ld-nft__why .nf-card[data-reveal='in'] .nf-card__big {
-    transition:
-      opacity 0.12s linear calc(var(--d) + var(--beat) * 3),
-      scale 0.36s var(--ease-settle) calc(var(--d) + var(--beat) * 3),
-      rotate 0.36s var(--ease-settle) calc(var(--d) + var(--beat) * 3);
+  .ld-nft__why[data-reveal='wait'] .nf-tape__vs { opacity: 0; scale: 1.6; }
+  .ld-nft__why[data-reveal='in'] .nf-tape__vs {
+    transition: opacity 0.12s linear calc(var(--beat) * 5), scale 0.36s var(--ease-settle) calc(var(--beat) * 5);
+  }
+  .ld-nft__why .nf-row { --rv-at: 3; }
+  .ld-nft__why .nf-row[data-reveal='wait'] { opacity: 0; translate: 0 14px; }
+  .ld-nft__why .nf-row[data-reveal='in'] {
+    transition: opacity 0.24s linear var(--d), translate calc(0.44s * var(--rv-k)) var(--ease-settle) var(--d);
   }
   /* FAQ: the moon (the cream coin) rises over the horizon, its own foot; then its light runs out on the water */
   .ld-faq__side:is([data-reveal='wait'], [data-reveal='in']) .ld-faq__coin { clip-path: inset(-60% -60% 0 -60%); }
