@@ -44,6 +44,7 @@ import { currentRound } from './round';
 import { RoundCues } from './roundCues';
 import { ClientWorld } from './state';
 import { fingerprint } from '../integrity/fingerprint';
+import { storageKey } from '../storageKey';
 
 /** "Whale alert." once a life reaches this mass (25 times the start mass). */
 const WHALE_MASS = 500;
@@ -57,7 +58,8 @@ const NEAR_MISS_MS = 450;
 /** At most one "phew" this often (ms). */
 const PHEW_COOLDOWN_MS = 5000;
 
-const TOKEN_KEY = 'coinnibal.auth.v1';
+const TOKEN_KEY = storageKey('auth.v1');
+const AUTO_QUALITY_KEY = storageKey('autoQuality');
 const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
 let killId = 1;
 let chatId = 1;
@@ -202,7 +204,7 @@ export class GameEngine {
     };
     // `localStorage['coinnibal.autoQuality'] = 'off'` keeps full quality whatever the frame rate (testing)
     try {
-      this.governor.enabled = localStorage.getItem('coinnibal.autoQuality') !== 'off';
+      this.governor.enabled = localStorage.getItem(AUTO_QUALITY_KEY) !== 'off';
     } catch {
       /* storage blocked: keep the default */
     }

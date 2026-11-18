@@ -1,3 +1,4 @@
+import { storageKey } from '../storageKey';
 /**
  * The stored site session, readable without the wallet code (no viem): the `/play` gate checks it
  * before anything heavy loads. `session.ts` signs in and writes it.
@@ -10,8 +11,8 @@ export interface SiteSession {
   admin: boolean;
 }
 
-export const TOKEN_KEY = 'coinnibal.auth.v1';
-export const ADMIN_KEY = 'coinnibal.site.admin.v1';
+export const TOKEN_KEY = storageKey('auth.v1');
+export const ADMIN_KEY = storageKey('site.admin.v1');
 /** Tokens last 24 h on the server; reuse one only while it has a margin left. */
 export const TTL_MS = 23 * 3600_000;
 

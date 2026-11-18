@@ -2,6 +2,7 @@ import { SITE_X_HANDLE_DEFAULT, activeChain, isXHandle } from '@coinnibal/shared
 import { useSyncExternalStore } from 'react';
 import { en } from './en';
 import { LOCALES, type Locale } from './locales/meta';
+import { storageKey } from '../storageKey';
 
 export { LOCALES, type Locale, type LocaleInfo } from './locales/meta';
 
@@ -10,7 +11,7 @@ export type TKey = keyof typeof en;
 export type Dict = Record<TKey, string>;
 export type TVars = Record<string, string | number>;
 
-const STORAGE_KEY = 'coinnibal.locale.v1';
+const STORAGE_KEY = storageKey('locale.v1');
 
 let current: Locale = 'en';
 let dict: Dict = en;

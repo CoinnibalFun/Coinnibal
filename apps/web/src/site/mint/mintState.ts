@@ -1,6 +1,7 @@
 import type { MintState } from '@coinnibal/shared';
 import { t } from '../../i18n';
 import { SiteApiError, site } from '../api';
+import { storageKey } from '../../storageKey';
 
 /**
  * The mint state outside the mint page's heavy chunk (no wallet code, no viem): a fetch with a
@@ -9,7 +10,7 @@ import { SiteApiError, site } from '../api';
  * the real card at once and refreshes it behind the scenes.
  */
 
-const KEY = 'coinnibal.mint-state.v1';
+const KEY = storageKey('mint-state.v1');
 /** Older than this, a kept state is not shown (the phase or the supply may have moved a lot). */
 const MAX_AGE_MS = 3 * 24 * 3600_000;
 
