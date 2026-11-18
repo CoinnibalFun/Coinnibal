@@ -63,12 +63,21 @@ describe('storageKey: the keys of before the rename (elymum.*) move to coinnibal
     const rooms = await import('../src/rooms/api');
     const shop = await import('../src/wallet/shop');
     const session = await import('../src/site/storedSession');
-    expect(rooms.loadPendingPayment(WALLET)).toEqual(room);
-    expect(shop.loadPendingClaim(WALLET)).toEqual(claim);
+    expect(rooms.loadPendingPayments(WALLET)).toEqual([room]);
+    expect(shop.loadPendingClaims(WALLET)).toEqual([claim]);
     expect(session.readStoredSession()).toEqual({ address: WALLET, token: 'tok.en', admin: true });
-    for (const k of ['room-payment.v2', 'shop.claim.v1', 'auth.v1', 'site.admin.v1']) {
+    for (const k of ['auth.v1', 'site.admin.v1']) {
       expect(localStorage.getItem(`elymum.${k}`)).toBeNull();
       expect(localStorage.getItem(`coinnibal.${k}`)).not.toBeNull();
+    }
+    // the kept payments' single slots moved into their lists (one entry per wallet and payment)
+    for (const [k, list] of [
+      ['room-payment.v2', 'room-payments.v3'],
+      ['shop.claim.v1', 'shop.claims.v2'],
+    ]) {
+      expect(localStorage.getItem(`elymum.${k}`)).toBeNull();
+      expect(localStorage.getItem(`coinnibal.${k}`)).toBeNull();
+      expect(JSON.parse(localStorage.getItem(`coinnibal.${list}`) ?? '[]')).toHaveLength(1);
     }
   });
 });

@@ -204,6 +204,14 @@ describe('ticket confirm sheet', () => {
     expect(within(screen.getByRole('dialog')).getByText('15% · on profit only · fixed for this ticket · 15% burned · 0% to the fee wallet · holder rate, not 20%')).toBeTruthy();
   });
 
+  it('a ticket headed for a private ticket room says, before it is paid, that the room can end early', () => {
+    useUi.setState({ paidSeat: { code: 'AB2CD', arenaId: 1, name: 'Friday Pond', endsAt: Date.now() + 20 * 60_000 } });
+    open(PENNY);
+    expect(screen.getByTestId('tf-paid-seat').textContent).toMatch(
+      /seated in the private room "Friday Pond" \(AB2CD\)\. Its creator or an admin can end the room early, with a 10-second warning: every ticket is settled at that moment\./,
+    );
+  });
+
   it('one call only when the allowance already covers the entry fee', () => {
     useChainData.setState({ allowance: 5000n * ONE });
     open(PENNY);
