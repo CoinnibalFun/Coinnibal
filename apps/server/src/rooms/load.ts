@@ -144,7 +144,7 @@ export function gameLoad(s: ServerLoad): GameServerLoad {
 }
 
 /** Bytes and messages written to WebSockets by this process (counted where frames are sent). */
-export const wsOut = { bytes: 0, msgs: 0 };
+export const wsOut = { bytes: 0, msgs: 0, overflow: 0 };
 
 const roomStats = new WeakMap<object, TickStats>();
 
