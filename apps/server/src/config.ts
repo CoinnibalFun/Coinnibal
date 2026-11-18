@@ -244,13 +244,22 @@ export const AUTH_SECRET_MIN_BYTES = 32;
 
 /**
  * A weak `AUTH_SECRET` (under `AUTH_SECRET_MIN_BYTES` bytes) lets anyone who guesses it forge an admin session
- * offline. On the mainnet (`CHAIN_ID=4663`) the server refuses to start with one; elsewhere it returns the
- * warning to log (null: fine). The generated `DATA_DIR/auth-secret` (64 hex characters) always passes.
+ * offline. On the mainnet the server refuses to start with one: when `CHAIN_ID` is 4663, and when the RPC serves
+ * 4663 (`served`: the ids its `eth_chainId` answered or the state was opened for, so an unset `CHAIN_ID` cannot slip
+ * past). `unknown`: a real chain is configured without `CHAIN_ID` and the RPC told nothing (unreachable at a first
+ * boot): it may be the mainnet, so that refuses too. Elsewhere it returns the warning to log (null: fine). The
+ * generated `DATA_DIR/auth-secret` (64 hex characters) always passes.
  */
-export function checkAuthSecret(cfg: Pick<ServerConfig, 'authSecret' | 'authSecretFromEnv' | 'chain'>): string | null {
+export function checkAuthSecret(
+  cfg: Pick<ServerConfig, 'authSecret' | 'authSecretFromEnv' | 'chain'>,
+  served: readonly (number | null)[] = [],
+  unknown = false,
+): string | null {
   if (!cfg.authSecretFromEnv || cfg.authSecret.length >= AUTH_SECRET_MIN_BYTES) return null;
   const msg = `AUTH_SECRET is ${cfg.authSecret.length} byte(s): it must be at least ${AUTH_SECRET_MIN_BYTES} (e.g. openssl rand -hex 32), or unset to use a generated one`;
   if (cfg.chain.chainId === ROBINHOOD_CHAIN_ID) throw new Error(`${msg}; refusing to start on the mainnet`);
+  if (served.includes(ROBINHOOD_CHAIN_ID)) throw new Error(`${msg}; refusing to start: EVM_RPC_URL serves the mainnet (chain ${ROBINHOOD_CHAIN_ID})`);
+  if (unknown) throw new Error(`${msg}; refusing to start: CHAIN_ID is not set and the RPC did not answer, so this may be the mainnet (set CHAIN_ID, or a strong AUTH_SECRET)`);
   return `!!! ${msg} (a mainnet server refuses to start with it)`;
 }
 
