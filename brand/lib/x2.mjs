@@ -72,11 +72,11 @@ export function xBanner2() {
   const h = 500;
   const css = `
     .title{position:absolute;left:470px;top:44px;transform:rotate(-2deg)}
-    .line{position:absolute;left:520px;top:178px;font-family:var(--display);font-style:italic;font-variation-settings:"SOFT" 100,"WONK" 1;
-      font-weight:500;font-size:30px;color:${C.cream};transform:rotate(-2deg);letter-spacing:-.01em}
+    .line{position:absolute;left:520px;top:178px;font-family:var(--display);
+      font-weight:400;font-size:30px;color:${C.cream};transform:rotate(-2deg);letter-spacing:.01em}
     .live{position:absolute;right:58px;top:40px;transform:rotate(3deg);padding:12px 16px 12px;background:${C.sun};border-radius:14px}
     .live .k{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700}
-    .live .n{font-family:var(--display);font-variation-settings:"SOFT" 100,"WONK" 1,"opsz" 144;font-weight:800;font-size:30px;line-height:1;margin-top:4px}
+    .live .n{font-family:var(--display);font-weight:400;font-size:30px;line-height:1;letter-spacing:.01em;margin-top:4px}
     .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:${C.down};border:2px solid ${C.ink};margin-right:6px;vertical-align:-1px}
     .handle{position:absolute;right:62px;bottom:26px;font-family:var(--mono);font-weight:700;font-size:16px;color:${C.cream};letter-spacing:.04em}`;
   // the ring overhead: a huge arc, lights on

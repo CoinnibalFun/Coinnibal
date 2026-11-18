@@ -8,12 +8,14 @@ import '@fontsource-variable/geist-mono/wght.css';
 import './design/tokens.css';
 import './design/storybook.css';
 import './chainText';
+import { appEntry } from '@elymum/shared';
 import { initLocale, t } from './i18n';
 
 const root = document.getElementById('root')!;
 const params = new URLSearchParams(location.search);
 
-const path = location.pathname.replace(/\/+$/, '') || '/';
+// the route list is shared with the server, which answers any other path with 404 (and this page's not-found view)
+const entry = appEntry(location.pathname);
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -48,7 +50,7 @@ function boot<M>(page: Promise<M>, start: (m: M) => void): void {
     .catch(bootFailed);
 }
 
-if (path === '/admin') {
+if (entry === 'admin') {
   // Operator panel (chain admin, WL, collabs, site settings): its own lazy chunk, English only.
   void import('./admin/mount').then((m) => m.mount(root)).catch(bootFailed);
 } else if (params.has('gallery')) {
@@ -60,7 +62,7 @@ if (path === '/admin') {
 } else if (params.has('flagskins')) {
   // Flag skin proof sheet (coins painted with their flags; `?flagskins=TR,US` for a list, `all` for every flag).
   boot(import('./flag-gallery'), (m) => m.startFlagGallery(root, params.get('flagskins') ?? ''));
-} else if (path === '/play') {
+} else if (entry === 'play') {
   // The arena (lobby + game engine), behind the game gate: admins only until the game is public.
   boot(import('./site/play/start'), (m) => m.startPlay(root));
 } else {

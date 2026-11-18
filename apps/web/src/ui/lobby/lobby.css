@@ -732,7 +732,6 @@
 }
 .kl-owed__title {
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 20px;
   line-height: 1.15;
@@ -828,7 +827,6 @@
 .kl-live__room {
   overflow: hidden;
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 20px;
   line-height: 1.15;
@@ -1536,7 +1534,6 @@
 .tf-ticket__room {
   padding-right: 60px;
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-wonk);
   font-weight: 800;
   font-size: 28px;
   line-height: 1;
@@ -1764,7 +1761,6 @@
   align-items: center;
   gap: 10px;
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 20px;
 }

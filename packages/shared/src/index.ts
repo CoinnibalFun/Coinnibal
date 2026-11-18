@@ -26,3 +26,4 @@ export * from './share';
 export * from './xlink';
 export * from './test-arenas';
 export * from './brand';
+export * from './routes';
