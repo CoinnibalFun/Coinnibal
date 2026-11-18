@@ -256,7 +256,7 @@ describe('the room creator', () => {
     fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Dollar room' } });
     fireEvent.click(screen.getByTestId('cr-continue'));
     await settle();
-    expect(screen.getByTestId('cr-payment').textContent).toMatch(/Total1,500 \$ELYMUM \(≈ \$1\.50\)/);
+    expect(screen.getByTestId('cr-payment').textContent).toMatch(/Total1,500 \$ELYMUMIn dollars≈ \$1\.50/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
     expect(screen.getByRole('status').textContent).toMatch(/Approve 1,500 \$ELYMUM in your wallet/);

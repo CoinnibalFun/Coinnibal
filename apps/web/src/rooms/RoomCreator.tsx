@@ -17,7 +17,6 @@ import {
   customCapacityChoices,
   customCapacityTiers,
   customRoomFee,
-  formatUsd,
   parseUsdPrice,
   quotePrice,
   tokenRawToUsd,
@@ -30,7 +29,7 @@ import {
 } from '@elymum/shared';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Address, Hash } from 'viem';
-import { AddressChip, Button, Chip, CoinCharacter, Field, GasAmount, QuantityStepper, Receipt, Sheet, Stamp, StampSpinner } from '../design';
+import { AddressChip, Button, Chip, CoinCharacter, Field, GasAmount, QuantityStepper, Receipt, Sheet, Stamp, StampSpinner, formatUsd } from '../design';
 import { engine } from '../game/instance';
 import { sound } from '../audio';
 import { useT, type TKey } from '../i18n';
@@ -107,10 +106,10 @@ export function roomFeeText(q: Pick<CustomRoomQuote, 'pay' | 'usdPerToken'> | nu
   };
 }
 
-/** A fee with its dollar value for a line of text: `1,500 $NIBAL (about $1.50)`. */
-const withUsd = (f: ReturnType<typeof roomFeeText>, raw: bigint) => {
+/** A fee's dollar value as the price box shows it (`≈ $1.50`), or null without a token price. */
+const usdText = (f: ReturnType<typeof roomFeeText>, raw: bigint): string | null => {
   const usd = f.usd(raw);
-  return usd !== null ? `${f.tokens(raw)} (≈ ${formatUsd(usd)})` : f.tokens(raw);
+  return usd !== null ? `≈ ${formatUsd(usd)}` : null;
 };
 
 /** Refusals that are final for a payment: it is not one, it opened a room already, or it is too old. */
@@ -730,7 +729,9 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
                     { label: t('cr.stakes'), value: `${tok.wire(tier.entryFee)} ${tok.symbol}` },
                   ]
                 : [{ label: t('cr.stakes'), value: t('cr.noStakes'), muted: true }]),
-              { label: t('cr.total'), value: frozen.raw === 0n ? t('cr.free') : withUsd(fee, frozen.raw), strong: true },
+              { label: t('cr.total'), value: frozen.raw === 0n ? t('cr.free') : fee.tokens(frozen.raw), strong: true },
+              // the same tokens in dollars, at the token price the server converts with
+              ...(frozen.raw > 0n && usdText(fee, frozen.raw) ? [{ label: t('cr.inDollars'), value: usdText(fee, frozen.raw)!, muted: true }] : []),
               // then the creator's own ticket of the room's arena (its own signatures, right after the fee)
               ...(seat?.kind === 'buy' ? [{ label: t('cr.yourTicket'), value: `${tok.exact(seat.review.fee)} ${tok.symbol}`, strong: true }] : []),
               ...(seat?.kind === 'resume' ? [{ label: t('cr.yourTicket'), value: t('cr.ticketResume'), muted: true }] : []),

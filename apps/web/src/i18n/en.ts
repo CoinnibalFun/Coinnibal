@@ -777,6 +777,7 @@ export const en = {
   'cr.stakes': 'Token stakes',
   'cr.noStakes': 'none, pure fun',
   'cr.total': 'Total',
+  'cr.inDollars': 'In dollars',
   'cr.to': 'Paid to',
   'cr.arenaContract': 'Coinnibal arena',
   'cr.copy': 'Copy address',
