@@ -23,7 +23,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     // one paragraph: the ticket, how it is lost, and the share card's line (the fee on profit is told by the rooms)
     const lede = screen.getByTestId('ld-money').textContent ?? '';
     expect(lede).toMatch(/^A paid room takes a ticket in tokens\./);
-    expect(lede).toMatch(/whatever you've swallowed is yours\.$/);
+    expect(lede).toMatch(/whatever you’ve swallowed is yours\.$/);
     expect(screen.getByRole('heading', { level: 3, name: 'We take 20% of your profit' })).toBeTruthy();
     expect(screen.queryByText(/small change with a big appetite|Eat the food/)).toBeNull();
     // no welcome plate, no mono kicker: the wordmark is the first thing in the card
@@ -40,7 +40,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       ['/media/hero-loop.webm', 'video/webm'],
       ['/media/hero-loop.mp4', 'video/mp4'],
     ]);
-    expect(screen.getByTestId('ld-screen').textContent).toBe('Real gameplay');
+    expect(screen.getByTestId('ld-screen').textContent).toBe('Gameplay');
     // the hero links to the holder perks on the same page
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
     // the nav (and every button) follows the settings once they are in: Mint and WL are open here, collab and the game are not
@@ -74,7 +74,8 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       expect(within(screen.getByRole('heading', { level: 3, name }).closest('.ld-ticket') as HTMLElement).getByText(fee)).toBeTruthy();
     }
     expect(within(screen.getByRole('heading', { level: 3, name: '$10 Room' }).closest('.ld-ticket') as HTMLElement).getByText('NFT holders only')).toBeTruthy();
-    expect(screen.getByText('Not open yet')).toBeTruthy();
+    // the closed state's one word, as everywhere on the site
+    expect(document.querySelector('#arenas .ld-status')?.textContent).toBe('Soon');
     // the NFT plate links to the mint; the header has the nav and Connect
     expect(screen.getAllByRole('link', { name: 'Go to the mint' })[0].getAttribute('href')).toBe('/mint');
     const nav = screen.getByRole('navigation', { name: 'Site' });
@@ -143,8 +144,8 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     // the NFT's perks stay: they are information
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
     expect(screen.getByTestId('why-nft').querySelectorAll('tbody tr').length).toBeGreaterThan(3);
-    // the NFT's heading gives the count instead of repeating its plate
-    expect(screen.getByRole('heading', { level: 2, name: '3,333 coins, no two alike' })).toBeTruthy();
+    // the NFT's heading gives the count (and claims nothing the cards can't show)
+    expect(screen.getByRole('heading', { level: 2, name: '3,333 coin characters' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'The Coinnibal NFT.' })).toBeNull();
     // the header: Docs only, no wallet button; the footer: X and Docs
     expect([...screen.getByRole('navigation', { name: 'Site' }).querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Guide']);
@@ -152,19 +153,24 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect([...screen.getByRole('navigation', { name: 'Footer' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://x.com/coinnibalfun', '/docs']);
     // the FAQ does not send anyone to the collab page
     expect(screen.queryByText('Can my community get WL spots?')).toBeNull();
-    // each idea once: the round's length is said once in the hero, in its paragraph (no 05:00 sticker beside it)
+    // each idea once: the round's timing belongs to the round's clock, not the hero (no 05:00 sticker, no "five minutes")
     const hero = document.querySelector('.ld-hero')?.textContent ?? '';
-    expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toEqual(['Five minutes']);
+    expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toBeNull();
     const page = document.querySelector('main')!.textContent ?? '';
     expect(page.match(/Coins eating coins/g)).toHaveLength(1);
     expect(page.match(/Eat or be eaten/g)).toHaveLength(1);
     expect(document.querySelector('.st-foot')!.textContent).not.toMatch(/Coins eating coins|Eat or be eaten|Five minutes/);
+    // no sentence-case "the ticket price becomes the value" said over and over: once, by the hero
+    expect(page.match(/become (its|your coin’s) value/g)).toBeNull();
     // the fee's numbers: once for everyone (the rooms), once for holders (the NFT's first perk)
     expect(page.match(/15% burned/g)).toHaveLength(1);
     expect(page.match(/8% burned, 2% to the team wallet/g)).toHaveLength(1);
     // information only: no price of the mint, no date, no promise
     expect(screen.queryByText('How much is the NFT?')).toBeNull();
-    expect(document.body.textContent).not.toMatch(/\bsoon\b|start date|post the date|at launch|mint it with|mint page shows/i);
+    // ("Soon" is only ever the closed state's label: the rooms' chip)
+    const said = document.body.cloneNode(true) as HTMLElement;
+    for (const chip of said.querySelectorAll('.ld-status, .st-soonset__tag, .st-soon')) chip.remove();
+    expect(said.textContent).not.toMatch(/\bsoon\b|start date|post the date|at launch|mint it with|mint page shows/i);
   });
 
   it('everything closed: each fact once, the FAQ agrees with the guide, the hero money line is the same on every chain', async () => {
@@ -176,7 +182,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       render(<Landing />);
       await settle();
       expect(screen.getByTestId('ld-money').textContent).toBe(
-        "A paid room takes a ticket in tokens. Eat the coins smaller than you, dodge the bigger ones and try not to get eaten: that's how you lose your ticket. Five minutes later the bell rings and whatever you've swallowed is yours.",
+        'A paid room takes a ticket in tokens. Your coin carries it into the round, so getting eaten means losing it. Eat the coins smaller than you, and when the bell rings, whatever you’ve swallowed is yours.',
       );
     } finally {
       setActiveChain(before);
@@ -195,27 +201,31 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       'Where are all the rules?',
     ]);
     const answer = (q: string) => faq.find((f) => f.querySelector('.ld-qa__text')?.textContent === q)!.querySelector('.ld-qa__a')!.textContent;
-    // the same answer as the guide (the NFT is not a ticket and has no value in a round); the $10 Room is told by its
-    // ticket and the comparison
-    expect(answer('Do I need the NFT to play?')).toBe("No. The NFT isn't a ticket and has no value in a round: you play with the ticket you buy, and the NFT adds perks.");
+    // the guide's rule (the NFT isn't a ticket), told so it can't read as "the NFT is worthless"; the $10 Room is told by
+    // its ticket and the comparison
+    expect(answer('Do I need the NFT to play?')).toBe('No. You play with the ticket you buy, and the NFT only adds perks. It’s never spent or put at risk in a round.');
     // the team asked for the NFT's questions: what it gives (D11), how many, every one different. Their answers add what
     // the comparison above does not say: how long the perks last and what one NFT covers, where the mint is, and that
     // rarity changes no perk
-    expect(answer('What does the Coinnibal NFT give me?')).toBe('The perks above, for as long as it sits in your wallet. One NFT covers one open ticket at a time, and its free room and power-up discount go to one wallet a day.');
+    expect(answer('What does the Coinnibal NFT give me?')).toBe('The perks above, while it’s in your wallet. One NFT covers one open ticket at a time, and its daily free room and power-up discount go to one wallet.');
     expect(faq.find((f) => f.querySelector('.ld-qa__text')?.textContent === 'What does the Coinnibal NFT give me?')!.querySelector('a')?.getAttribute('href')).toBe('#why-nft');
     expect(answer('How many NFTs are there?')).toBe('3,333 in all. The mint will be on OpenSea, and the only link to trust is the one @coinnibalfun posts.');
-    expect(answer('Is every NFT different?')).toBe('Yes, each one is its own coin character, and some are rarer than others. The perks are the same whichever one you hold.');
+    expect(answer('Is every NFT different?')).toBe('Yes, every one is a coin character of its own. Some are rarer than others, but rarity never changes the perks.');
+    // and in its own words: the NFT section above doesn't say it too
+    expect(document.querySelector('#nft .ld-nft__text')?.textContent).not.toMatch(/rarer|its own coin character/);
     // the chain holds the money, the game runs on a server (as the guide says)
     expect(answer('What is Robinhood Chain?')).toMatch(/the game itself runs on a server/);
-    // the cost, once: paid rooms take a ticket, practice is free
-    expect(answer('Does it cost money to play?')).toBe('Yes. A paid room takes a ticket in tokens, and that ticket is what your coin plays with. Practice is free.');
+    // the cost, once: paid rooms take a ticket (the hero said how), practice rooms are free
+    expect(answer('Does it cost money to play?')).toBe('In a paid room, yes. The ticket is what your coin plays with. Practice rooms are free.');
     // the owner's launch order: the NFT mint, then the token, then the game (no dates)
     expect(answer('Is the game open?')).toBe('Not yet. The NFT mint comes first, then the token, then the game. Follow @coinnibalfun for news.');
     const page = document.querySelector('main')!.textContent ?? '';
-    expect(page.match(/Practice (stays|is) free/g)).toHaveLength(1);
+    expect(page.match(/Practice (stays|is|rooms are) free/g)).toHaveLength(1);
     expect(page.match(/explains every rule/g)).toBeNull();
-    // practice and private rooms run no 5-minute bell
-    expect(page).toContain('A round lasts 5 minutes in every paid room.');
+    // the round's timing, once, on its clock (practice and private rooms run no 5-minute bell: the clock is the paid rooms')
+    expect([...document.querySelectorAll('.ld-clock__phase')].map((p) => p.textContent)).toEqual(['0:00–4:00Play, joins open', '4:00–5:00Play, joins closed', '5:00–5:30The bell, then a break']);
+    expect(page).toContain('Every paid room runs on this clock, round after round.');
+    expect(document.querySelector('.ld-stops')?.textContent).not.toMatch(/\d+ (minutes|seconds)/);
     // the pond's snack pays tokens, never dollars
     expect(document.querySelector('.ld-chase__pop')?.textContent).toBe('+1,000');
     // the perks are a part of the NFT section: their heading ranks under it
@@ -226,7 +236,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect([...document.querySelectorAll<HTMLElement>('.ld-stair')].map((s) => s.style.getPropertyValue('--tilt'))).toEqual(['', '', '', '']);
   });
 
-  it('lights each step of the round, and its station on the orbit, as the visitor reads down to it', async () => {
+  it('lights each step of the round as the visitor reads down to it', async () => {
     const made: { cb: IntersectionObserverCallback; opts?: IntersectionObserverInit; io: IntersectionObserver }[] = [];
     const Base = globalThis.IntersectionObserver as unknown as new (cb: IntersectionObserverCallback, opts?: IntersectionObserverInit) => IntersectionObserver;
     globalThis.IntersectionObserver = class extends Base {
@@ -239,21 +249,17 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     render(<Landing />);
     const stops = [...document.querySelectorAll('.ld-stop')];
     const read = () => stops.map((s) => s.classList.contains('is-read'));
-    const done = () => document.querySelectorAll('.ld-orbit .kb-orbit__station.is-done').length;
     expect(read()).toEqual([false, false, false, false]);
-    expect(done()).toBe(0);
     const steps = made.find((o) => o.opts?.rootMargin === '0px 0px -40% 0px')!;
     const entry = (target: Element, isIntersecting: boolean, top: number) => ({ target, isIntersecting, boundingClientRect: { top } }) as unknown as IntersectionObserverEntry;
     act(() => steps.cb([entry(stops[0], true, 300), entry(stops[1], true, 420)], steps.io));
     expect(read()).toEqual([true, true, false, false]);
-    expect(done()).toBe(2);
     // a step scrolled above the viewport stays read; the next one crosses the line
     act(() => steps.cb([entry(stops[0], false, -80), entry(stops[2], true, 500)], steps.io));
     expect(read()).toEqual([true, true, true, false]);
     // scrolling back up, a step that drops below the line goes dark again
     act(() => steps.cb([entry(stops[2], false, 700)], steps.io));
     expect(read()).toEqual([true, true, false, false]);
-    expect(done()).toBe(2);
   });
 
   it('jumps to a shared link to a part of the page once the sections are there', async () => {
