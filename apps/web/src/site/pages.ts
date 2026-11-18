@@ -1,3 +1,4 @@
+import type { SitePagePath } from '@elymum/shared';
 import type { ComponentType } from 'react';
 
 /**
@@ -8,7 +9,9 @@ import type { ComponentType } from 'react';
  */
 type Loader = () => Promise<ComponentType>;
 
-const LOADERS: Record<string, Loader> = {
+// every site page but the landing (which is in the entry chunk), keyed by the shared route list: a page added to
+// `SITE_PATHS` without a loader here (or a loader for a path the list lacks) does not compile
+const LOADERS: Record<Exclude<SitePagePath, '/'>, Loader> = {
   '/wl': () => import('./wl/WlPage').then((m) => m.WlPage),
   '/collab': () => import('./collab/CollabPage').then((m) => m.CollabPage),
   '/docs': () => import('./DocsRoute').then((m) => m.DocsRoute),
@@ -49,7 +52,7 @@ export function warmPage(path: string): Promise<ComponentType | null> {
     pending.set(path, p);
     return p;
   }
-  const load = LOADERS[path];
+  const load = (LOADERS as Record<string, Loader | undefined>)[path];
   if (!load) return Promise.resolve(null);
   const p = load().then(
     (c) => {
