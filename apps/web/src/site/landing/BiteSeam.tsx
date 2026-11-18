@@ -34,7 +34,7 @@ export type BiteAt = 'feast' | 'arenas' | 'faq';
 export const BITES: Record<BiteAt, Bite> = {
   feast: { x: 42, xm: 62, size: 56, sizeM: 40, after: 'happy', look: [-3, 2], crumbs: ['var(--sand)', 'var(--clover)', 'var(--sun)', 'var(--sand)'] },
   arenas: { x: 64, xm: 80, size: 72, sizeM: 48, after: 'smug', look: [2, 3], crumbs: ['var(--current)', 'var(--sun)', 'var(--reef)', 'var(--sun)'] },
-  faq: { x: 60, xm: 50, size: 88, sizeM: 56, after: 'open', look: [2, 3], crumbs: ['var(--cream)', 'var(--foam)', 'var(--cream)', 'var(--teal)'] },
+  faq: { x: 60, xm: 80, size: 88, sizeM: 56, after: 'open', look: [2, 3], crumbs: ['var(--cream)', 'var(--foam)', 'var(--cream)', 'var(--teal)'] },
 };
 
 /**

@@ -4,7 +4,7 @@ import type { Expression } from '@elymum/art';
 import { JellyBody } from './render/jelly';
 import { SpriteCache, drawSprite } from './render/sprites';
 
-const DISPLAY = '400 28px "Lilita One", "DM Sans Variable", sans-serif';
+const DISPLAY = '800 28px "Fraunces Variable", Fraunces, Georgia, serif';
 const MONO = '"Geist Mono Variable", "Geist Mono", ui-monospace, monospace';
 const HEIGHT = 1240;
 

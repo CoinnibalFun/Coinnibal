@@ -1,21 +1,20 @@
 // Ring Storybook design system (spec §6): fonts, tokens (on :root and every `.kb`) and styles.
-// Lilita One (display: one weight, upright, the chunky game-title face that sits with the hand-built
-// bubble wordmark); DM Sans with optical sizes (body); Geist Mono (numbers and other data).
-import '@fontsource/lilita-one/400.css';
+// Fraunces "full" carries the SOFT and WONK axes (display); DM Sans with optical sizes (body);
+// Geist Mono (every number).
+import '@fontsource-variable/fraunces/full.css';
+import '@fontsource-variable/fraunces/full-italic.css';
 import '@fontsource-variable/dm-sans/opsz.css';
 import '@fontsource-variable/dm-sans/opsz-italic.css';
 import '@fontsource-variable/geist-mono/wght.css';
 import './design/tokens.css';
 import './design/storybook.css';
 import './chainText';
-import { appEntry } from '@elymum/shared';
 import { initLocale, t } from './i18n';
 
 const root = document.getElementById('root')!;
 const params = new URLSearchParams(location.search);
 
-// the route list is shared with the server, which answers any other path with 404 (and this page's not-found view)
-const entry = appEntry(location.pathname);
+const path = location.pathname.replace(/\/+$/, '') || '/';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -50,7 +49,7 @@ function boot<M>(page: Promise<M>, start: (m: M) => void): void {
     .catch(bootFailed);
 }
 
-if (entry === 'admin') {
+if (path === '/admin') {
   // Operator panel (chain admin, WL, collabs, site settings): its own lazy chunk, English only.
   void import('./admin/mount').then((m) => m.mount(root)).catch(bootFailed);
 } else if (params.has('gallery')) {
@@ -62,7 +61,7 @@ if (entry === 'admin') {
 } else if (params.has('flagskins')) {
   // Flag skin proof sheet (coins painted with their flags; `?flagskins=TR,US` for a list, `all` for every flag).
   boot(import('./flag-gallery'), (m) => m.startFlagGallery(root, params.get('flagskins') ?? ''));
-} else if (entry === 'play') {
+} else if (path === '/play') {
   // The arena (lobby + game engine), behind the game gate: admins only until the game is public.
   boot(import('./site/play/start'), (m) => m.startPlay(root));
 } else {

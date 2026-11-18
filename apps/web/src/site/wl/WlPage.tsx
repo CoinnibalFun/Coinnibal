@@ -1,7 +1,7 @@
 import { normalizeXHandle, type PublicWlTask, type SiteSettings, type WlEntryPublic } from '@elymum/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, CoinCharacter, Field, Icon, Stamp, StampSpinner, StatusPill, Sticker, Tape, useReducedMotion } from '../../design';
+import { Button, CoinCharacter, Field, Icon, PlateLabel, Stamp, StampSpinner, StatusPill, Sticker, Tape, useReducedMotion } from '../../design';
 import { SiteApiError, site } from '../api';
 import { ticketNo } from '../coinLook';
 import { Link } from '../router';
@@ -53,10 +53,6 @@ function Wl() {
   const [fresh, setFresh] = useState(false);
   /** A returning visitor: their status is looked up before the form is shown (later sign-ins keep the form mounted). */
   const [booting, setBooting] = useState(() => !!session);
-  /** The status lookup failed (not an expired session): the closed WL says so and offers a retry. */
-  const [lookupError, setLookupError] = useState<string | null>(null);
-  /** Bumped by that retry. */
-  const [lookup, setLookup] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -77,7 +73,6 @@ function Wl() {
     }
     let live = true;
     setEntry(undefined);
-    setLookupError(null);
     site.myWl(session.token).then(
       (e) => {
         if (!live) return;
@@ -86,7 +81,7 @@ function Wl() {
       },
       (err) => {
         if (!live) return;
-        if (!dropExpired(err)) setLookupError(err instanceof Error ? err.message : String(err));
+        dropExpired(err);
         setEntry(null);
         setBooting(false);
       },
@@ -94,7 +89,7 @@ function Wl() {
     return () => {
       live = false;
     };
-  }, [session, lookup]);
+  }, [session]);
 
   if (entry) return <WlStatus entry={entry} fresh={fresh} />;
   if (loadError)
@@ -118,16 +113,7 @@ function Wl() {
         </div>
       </WlPlate>
     );
-  if (!settings.wlOpen)
-    return settings.wlHadEntries === true ? (
-      <WlClosedNow
-        noEntry={!!session && entry === null && !lookupError}
-        lookupError={lookupError}
-        onRetry={() => setLookup((n) => n + 1)}
-      />
-    ) : (
-      <WlClosed />
-    );
+  if (!settings.wlOpen) return <WlClosed />;
   return (
     <WlStepper
       tasks={tasks}
@@ -141,54 +127,34 @@ function Wl() {
   );
 }
 
-/** The tab of a closed WL reads like the site's other closed pages (the WL page itself, open or with a status, keeps its own title). */
-function useClosedTitle() {
+/** The WL while applications are not open: the site's shared closed notice, with the way back to an earlier entry. */
+function WlClosed() {
+  const [signin, setSignin] = useState(false);
   const t = useT();
+  // the tab reads like the site's other closed pages (the WL page itself, open or with a status, keeps its own title)
   useEffect(() => {
     document.title = t('site.title.closed');
     return () => {
       document.title = t('site.title.wl');
     };
   }, [t]);
-}
-
-/**
- * The WL before its applications ever opened: the site's shared closed notice (its heading the one label). Nobody can
- * have applied yet, so there is no sign-in here.
- */
-function WlClosed() {
-  const t = useT();
-  useClosedTitle();
-  return <ClosedNotice title={t('wp.closed.title')} lede={t('wp.closed.body')} />;
-}
-
-/**
- * The WL after it was open (someone applied) and its applications are closed now: no "Soon", and the way back to an
- * entry, a sign-in that shows the status. A wallet with no entry is told so (with the wallet switch beside it), and a
- * failed lookup can be tried again. A returning applicant who is signed in sees their status before this page.
- */
-function WlClosedNow({ noEntry, lookupError, onRetry }: { noEntry: boolean; lookupError: string | null; onRetry: () => void }) {
-  const t = useT();
-  useClosedTitle();
   return (
-    <ClosedNotice title={t('wp.closed.nowTitle')} lede={t('wp.closed.nowBody')} soon={false}>
-      <div className="wl-closed__again">
-        <WalletSignIn label={t('wp.signinStatus')} />
-        {noEntry && (
-          <p className="wl-closed__note" role="status">
-            {t('wp.closed.noEntry')}
-          </p>
-        )}
-        {lookupError && (
-          <div className="wl-closed__note" role="alert">
-            <p className="st-err">{lookupError}</p>
-            <Button variant="secondary" size="sm" onClick={onRetry}>
-              {t('tf.retry')}
-            </Button>
-          </div>
-        )}
-      </div>
-    </ClosedNotice>
+    <>
+      <PlateLabel numeral="IV" title={t('wp.closed.plate')} />
+      <ClosedNotice lede={t('wp.closed.body')}>
+        <div className="wl-closed__again">
+          <button type="button" className="wl-textlink" onClick={() => setSignin((v) => !v)} aria-expanded={signin}>
+            {t('wp.closed.signin')}
+          </button>
+          {signin && (
+            <Sticker className="wl-signin-card" tone="white" pad="sm">
+              <p className="wl-signin-card__lede">{t('wp.closed.signinLede')}</p>
+              <WalletSignIn label={t('wp.signinStatus')} />
+            </Sticker>
+          )}
+        </div>
+      </ClosedNotice>
+    </>
   );
 }
 

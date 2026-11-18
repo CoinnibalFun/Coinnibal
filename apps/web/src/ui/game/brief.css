@@ -7,10 +7,11 @@
 }
 .g-brief__title {
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-wonk);
   font-weight: 800;
   font-size: clamp(34px, 6vw, 46px);
   line-height: 0.98;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.03em;
 }
 .g-brief__steps {
   display: grid;
@@ -74,10 +75,11 @@
   align-items: baseline;
   gap: 8px;
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 19px;
   line-height: 1.1;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.01em;
 }
 .g-brief__n {
   font-size: 12px;

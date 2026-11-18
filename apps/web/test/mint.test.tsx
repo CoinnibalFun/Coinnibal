@@ -297,7 +297,7 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
     expect(screen.getByTestId('mt-why-link').getAttribute('href')).toBe('#why-nft');
     expect(screen.getByRole('heading', { level: 2, name: 'Why get the NFT?' })).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: 'About the collection' })).toBeTruthy();
-    expect(screen.getByRole('rowheader', { name: 'Fee on your profit' }).closest('tr')?.textContent).toMatch(/20%.*10%/);
+    expect(screen.getByTestId('mt-about').textContent).toMatch(/Lower fee: 10% instead of 20%/);
   });
 
   it('a session from another page without a connected wallet still offers Connect, then mints (no new signature)', async () => {

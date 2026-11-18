@@ -46,10 +46,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 18px;
   line-height: 1.2;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.01em;
 }
 .gm-intro__sub {
   min-width: 0;

@@ -1,119 +1,112 @@
-/* The guide (/docs and the lobby's #docs): a handbook, not a stack of cards.
- * Long-form first: a 66ch column of DM Sans, Lilita One for the title and the chapter heads, a sun coin for each
- * chapter's number, open tables with ink and dashed rules, Geist Mono only for figures and keys. The objects that
- * are objects keep their sticker look (the receipt, the key caps, the comic panels, the risk note). Works on the
- * day paper and on the night page. */
+/* Player guide (/docs and the lobby's #docs): the handbook in the Ring Storybook.
+ * Long-form first: a 66ch column of DM Sans, Fraunces section heads with a sun
+ * number coin, cream stickers (kb-island) for the asides, Geist Mono for every
+ * number. Works on the day plain and on the night page. */
 
 .dc-page {
   display: flex;
   flex-direction: column;
 }
-/* read by screen readers, not drawn (a strip's or a diagram's label: the chapter title already names it) */
-.dc-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
 
-/* ── the head: the title and one line under it, a big coin closing in on a small one ── */
-.dc-head {
+/* ── the head ─────────────────────────────────────────────────────── */
+.dc-page .pg-head {
+  position: relative;
   display: flex;
+  /* the art stays beside the title (below 760px it is hidden), never alone on a line of its own */
   flex-wrap: nowrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 14px 40px;
+  gap: 14px 28px;
+  padding-bottom: 22px;
+  border-bottom: 0;
+  box-shadow: none;
 }
-.dc-head__text {
+.dc-page .pg-head__text {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   min-width: 0;
-  max-width: 800px;
+  max-width: 760px;
 }
-.dc-head__title {
+.dc-page .pg-head__kicker {
+  font-size: var(--t-label);
+  color: var(--teal-ink);
+}
+.dc-page .pg-head__kicker:empty {
+  display: none;
+}
+.dc-page .pg-head__title {
   margin: 0;
   font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(46px, 6.2vw, 88px);
-  line-height: 1.04;
-  letter-spacing: 0.005em;
-  text-wrap: balance;
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-stretch: normal;
+  font-size: clamp(44px, 6vw, 84px);
+  line-height: 0.95;
+  letter-spacing: -0.025em;
   color: var(--ink);
   outline: none;
 }
-.dc-head__deck {
-  max-width: 56ch;
-  margin: 0;
+.dc-page .pg-head__deck {
+  max-width: 58ch;
+  margin: 6px 0 0;
   font-size: var(--t-lede);
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--ink-2);
   text-wrap: pretty;
 }
+.dc-page .pg-head__aside {
+  flex: none;
+}
 .dc-head__art {
   position: relative;
-  flex: none;
-  width: 236px;
-  height: 160px;
+  display: block;
+  width: 190px;
+  height: 170px;
 }
 .dc-head__art .kb-coin {
   position: absolute;
+  left: 0;
   bottom: 0;
 }
-.dc-head__prey {
-  left: 0;
-}
-.dc-head__eater {
+.dc-head__stamp {
+  position: absolute !important;
   right: 0;
+  top: 0;
 }
-/* speed lines behind the small coin: it is running, not posing */
-.dc-head__art::before {
-  content: '';
-  position: absolute;
-  left: 70px;
-  bottom: 30px;
-  width: 26px;
-  height: 18px;
-  background:
-    linear-gradient(var(--outline), var(--outline)) 0 0 / 22px 3px no-repeat,
-    linear-gradient(var(--outline), var(--outline)) 6px 8px / 20px 3px no-repeat,
-    linear-gradient(var(--outline), var(--outline)) 0 16px / 16px 3px no-repeat;
-  border-radius: 2px;
-  opacity: 0.7;
-}
-
 .dc-layout {
   display: grid;
-  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
-  gap: clamp(32px, 5vw, 80px);
+  grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 72px);
   align-items: start;
-  margin-top: clamp(36px, 5vw, 64px);
-  padding-top: clamp(28px, 3vw, 40px);
-  border-top: var(--stroke) solid var(--outline);
+  margin-top: 40px;
 }
 
-/* ── contents: an open list in the margin; the chapter being read gets the sun coin ── */
+/* ── contents: a sticky cream sticker ─────────────────────────────── */
 .dc-toc {
   position: sticky;
   top: 96px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   /* a short window scrolls the contents themselves instead of cutting them off */
   max-height: calc(100vh - 112px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding: 18px 14px 12px;
+  background: var(--sticker);
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-3);
 }
 /* the phone's fold button (shown below 760px) */
 .dc-toc__toggle {
   display: none;
 }
 .dc-toc__label {
-  font-size: 14px;
-  font-weight: 700;
+  padding: 0 6px;
+  font-size: var(--t-label);
   color: var(--ink-3);
 }
 .dc-toc__list {
@@ -123,26 +116,31 @@
   display: flex;
   flex-direction: column;
 }
+.dc-toc__list li + li {
+  border-top: 2px dashed var(--rule);
+}
 .dc-toc__item {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 40px;
-  padding: 4px 0;
-  color: var(--ink-2);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.3;
-  text-decoration: none;
+  min-height: 46px;
+  padding: 6px;
+  border: 0;
   border-radius: var(--r-tag);
-}
-.dc-toc__item:hover {
+  background: none;
   color: var(--ink);
+  font: inherit;
+  font-size: 15.5px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--dur-state) linear;
 }
-.dc-toc__item:hover .dc-toc__title {
-  text-decoration: underline 2px;
-  text-underline-offset: 4px;
+.dc-toc__item:hover,
+.dc-toc__item[aria-current] {
+  background: color-mix(in srgb, var(--sun) 35%, transparent);
 }
 .dc-toc__item:focus-visible {
   outline: 3px solid var(--focus);
@@ -152,29 +150,32 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border: var(--stroke-sm) solid transparent;
+  width: 30px;
+  height: 30px;
+  border: var(--stroke-sm) solid var(--outline);
   border-radius: 50%;
+  background: var(--white, #fff);
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-3);
-  transition:
-    background-color var(--dur-state) linear,
-    border-color var(--dur-state) linear;
-}
-.dc-toc__item[aria-current] {
+  letter-spacing: 0;
   color: var(--ink);
-  font-weight: 700;
+  transition: background-color var(--dur-state) linear, transform var(--dur-state) var(--ease-spring);
+}
+.dc-toc__item:hover .dc-toc__no {
+  background: var(--sun);
+  transform: rotate(-10deg);
 }
 .dc-toc__item[aria-current] .dc-toc__no {
   background: var(--sun);
-  border-color: var(--outline);
-  color: var(--ink-fixed);
 }
 .dc-toc__title {
   min-width: 0;
   text-wrap: pretty;
+}
+.dc-toc__item[aria-current] .dc-toc__title {
+  text-decoration: underline 2px;
+  text-underline-offset: 4px;
 }
 
 /* a link from one section to another, in the text */
@@ -194,11 +195,11 @@
   outline-offset: 2px;
 }
 
-/* ── chapters ─────────────────────────────────────────────────────── */
+/* ── sections ─────────────────────────────────────────────────────── */
 .dc-body {
   display: flex;
   flex-direction: column;
-  gap: clamp(56px, 7vw, 96px);
+  gap: clamp(48px, 6vw, 80px);
   min-width: 0;
   max-width: 760px;
 }
@@ -207,37 +208,48 @@
 }
 .dc-sec__head {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr);
-  column-gap: 16px;
-  row-gap: 10px;
-  align-items: center;
-  margin-bottom: 26px;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 2px dashed var(--rule);
 }
-/* the chapter's number, struck on a coin: the same sun coin for every chapter */
 .dc-sec__no {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 56px;
+  height: 56px;
+  margin-top: 2px;
   border: var(--stroke) solid var(--outline);
   border-radius: 50%;
   background: var(--sun);
-  /* the coin's rim */
-  box-shadow:
-    inset 0 0 0 3px var(--sun),
-    inset 0 0 0 5px color-mix(in srgb, var(--outline) 28%, var(--sun)),
-    var(--sh-1);
   color: var(--ink-fixed);
-  font-size: 14px;
-  font-weight: 700;
+  box-shadow: var(--sh-2);
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.dc-sec:nth-child(even) .dc-sec__no {
+  background: var(--spray);
+  transform: rotate(-6deg);
+}
+.dc-sec__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 .dc-sec__title {
   margin: 0;
   font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(31px, 3.75vw, 48px);
-  line-height: 1.04;
-  letter-spacing: 0.005em;
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: var(--t-h2);
+  line-height: 1;
+  letter-spacing: -0.02em;
   color: var(--ink);
   text-wrap: balance;
 }
@@ -250,11 +262,9 @@
   border-radius: 4px;
 }
 .dc-sec__lede {
-  grid-column: 2;
   margin: 0;
-  max-width: 58ch;
   font-size: var(--t-lede);
-  line-height: 1.5;
+  line-height: 1.45;
   color: var(--ink-2);
   text-wrap: pretty;
 }
@@ -270,16 +280,6 @@
   line-height: 1.65;
   color: var(--ink);
   text-wrap: pretty;
-}
-/* a small head inside a long chapter */
-.dc-sub {
-  margin: 14px 0 -8px;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 24px;
-  line-height: 1.1;
-  letter-spacing: 0.01em;
-  color: var(--ink);
 }
 .dc-list {
   margin: 0;
@@ -311,119 +311,40 @@
 .dc-list strong {
   font-weight: 700;
 }
-/* steps to follow in order: the numbers hang in the margin */
-.dc-steps {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: dc-step;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 66ch;
-}
-.dc-steps li {
-  position: relative;
-  padding-left: 34px;
-  font-size: 16.5px;
-  line-height: 1.6;
-  counter-increment: dc-step;
-  text-wrap: pretty;
-}
-.dc-steps li::before {
-  content: counter(dc-step) '.';
-  position: absolute;
-  left: 0;
-  top: 0;
-  font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.75;
-  color: var(--teal-ink);
-}
 
-/* ── tables: open, on the page (an ink rule over the head, dashed rules between rows) ── */
-.dc-table-wrap {
-  overflow-x: auto;
+/* keys */
+.dc-keys-fig {
+  margin: 0;
+  padding: 18px 20px 12px;
+  background: var(--sticker);
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-3);
 }
-.dc-table,
+.dc-cap,
+.dc-table caption {
+  font-size: var(--t-label);
+  color: var(--ink-3);
+  text-align: left;
+  padding-bottom: 10px;
+}
 .dc-keys {
   width: 100%;
   border-collapse: collapse;
-  font-size: 15.5px;
-  line-height: 1.5;
 }
-.dc-table caption,
-.dc-keys caption {
-  padding-bottom: 10px;
-  text-align: left;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ink);
-}
-.dc-table thead th {
-  padding: 10px 14px 8px 0;
-  border-top: var(--stroke) solid var(--outline);
-  border-bottom: var(--stroke-sm) solid var(--outline);
-  text-align: left;
-  vertical-align: bottom;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink-3);
-}
-.dc-table td {
-  padding: 11px 14px 11px 0;
-  border-bottom: 2px dashed var(--rule);
-  vertical-align: top;
-  text-wrap: pretty;
-}
-.dc-table td:last-child,
-.dc-table th:last-child {
-  padding-right: 0;
-}
-.dc-table tbody tr:last-child td {
-  border-bottom: var(--stroke-sm) solid var(--outline);
-}
-.dc-table td:first-child {
-  font-weight: 700;
-}
-/* figures: mono, on one line */
-.dc-table .is-num {
-  font-family: var(--font-mono);
-  font-size: 14.5px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.dc-table th.is-num {
-  font-family: var(--font-body);
-  font-size: 13px;
-}
-.dc-table--keys td:first-child {
-  width: 1%;
-}
-/* the controls: a cap (or two) beside what it does */
 .dc-keys th,
 .dc-keys td {
   padding: 9px 0;
-  border-bottom: 2px dashed var(--rule);
+  border-top: 2px dashed var(--rule);
   text-align: left;
   vertical-align: middle;
-}
-.dc-keys tr:first-child :is(th, td) {
-  border-top: var(--stroke) solid var(--outline);
-}
-.dc-keys tr:last-child :is(th, td) {
-  border-bottom: var(--stroke-sm) solid var(--outline);
+  font-size: 15.5px;
 }
 .dc-keys th {
   /* as wide as the widest key, never wrapping a key inside its cap */
   width: 1%;
   white-space: nowrap;
-  padding-right: 22px;
-}
-.dc-keys td {
-  font-weight: 500;
+  padding-right: 18px;
 }
 .dc-keycaps {
   display: inline-flex;
@@ -445,38 +366,194 @@
   border: var(--stroke-sm) solid var(--outline);
   border-radius: var(--r-key);
   background: var(--white, #fff);
-  color: var(--ink-fixed);
+  color: var(--ink);
   box-shadow: var(--sh-1);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   text-align: center;
-  transition:
-    transform 0.12s ease-out,
-    box-shadow 0.12s ease-out,
-    background-color 0.12s linear;
-}
-/* the pointer on a row presses its keys */
-:is(.dc-keys, .dc-table--keys) tr:hover .dc-kbd {
-  transform: translate(2px, 2px);
-  box-shadow: 0 0 0 var(--shadow-ink);
-  background: var(--sun);
 }
 
-/* ── the worked example: the receipt, standing straight ── */
+/* cards led by a key (the power-ups) */
+.dc-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px 14px;
+  background: var(--sticker);
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-3);
+}
+.dc-card__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dc-card__head .dc-kbd {
+  animation: none;
+  min-width: 36px;
+  padding: 5px 9px;
+  font-size: 14px;
+  background: var(--sun);
+}
+.dc-card__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: var(--t-h4);
+  line-height: 1.15;
+}
+.dc-card__text {
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.dc-card__meta {
+  margin: auto 0 0;
+  padding-top: 8px;
+  border-top: 2px dashed var(--rule);
+  font-size: var(--t-label);
+  color: var(--ink-3);
+}
+@media (max-width: 560px) {
+  .dc-cards {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+
+/* tables */
+.dc-table-wrap {
+  overflow-x: auto;
+  padding: 18px 20px 8px;
+  background: var(--sticker);
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-3);
+}
+.dc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15.5px;
+}
+.dc-table thead th {
+  padding: 8px 10px 8px 0;
+  border-bottom: var(--stroke) solid var(--outline);
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.dc-table td {
+  padding: 11px 10px 11px 0;
+  border-bottom: 2px dashed var(--rule);
+}
+.dc-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.dc-table thead th.is-num {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.dc-table .is-num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+/* value flow: three stations on a dotted orbit line */
+.dc-flow {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dc-flow::before {
+  content: '';
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 22px;
+  border-top: 3px dotted var(--teal-ink);
+}
+.dc-flow__step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 0;
+  padding: 16px 16px 18px;
+  background: var(--sticker);
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-3);
+}
+.dc-flow__step:nth-child(1) {
+  transform: rotate(-1deg);
+}
+.dc-flow__step:nth-child(3) {
+  transform: rotate(1deg);
+}
+.dc-flow__no {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 50%;
+  background: var(--sun);
+  font-size: 12px;
+}
+.dc-flow__title {
+  font-size: var(--t-label);
+  color: var(--teal-ink);
+}
+.dc-flow__text {
+  font-size: 15px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.dc-flow__arrow {
+  display: none;
+}
+
+/* the worked example */
 .dc-fee {
-  margin: 4px 0 0;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 .dc-fee__cap {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ink);
+  font-size: var(--t-label);
+  color: var(--ink-3);
 }
 .dc-fee__slips {
   display: grid;
   grid-template-columns: minmax(0, 380px);
+}
+.dc-fee__slip {
+  transform: rotate(-1deg);
 }
 /* a long label wraps inside its own column: the amount stays on the label's line, right aligned */
 .dc-fee__slip .kb-receipt__line dt {
@@ -485,103 +562,102 @@
   text-wrap: balance;
 }
 
-/* wide screens: the risk slip stands beside the receipt it is about (tops level), instead of under an empty half */
-@media (min-width: 1100px) {
-  .dc-sec__body:has(> .dc-fee + .dc-note) {
-    display: grid;
-    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
-    gap: 22px 32px;
-  }
-  .dc-sec__body:has(> .dc-fee + .dc-note) > * {
-    grid-column: 1 / -1;
-  }
-  .dc-sec__body > .dc-fee:has(+ .dc-note) {
-    grid-column: 1;
-  }
-  /* the caption stays one line (it may run into the gap; the slip starts below it) */
-  .dc-fee:has(+ .dc-note) .dc-fee__cap {
-    width: max-content;
-  }
-  .dc-sec__body > .dc-fee + .dc-note {
-    grid-column: 2;
-    align-self: start;
-    /* level with the receipt's top edge, under the figure's caption */
-    margin-top: 38px;
-  }
-}
-
-/* ── two columns side by side (on-chain and server; tokens and ETH): open, an ink rule over each ── */
+/* on-chain vs server */
 .dc-compare {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px 36px;
+  gap: 18px;
+  /* each card as tall as its own list (the short one is not stretched into an empty box) */
   align-items: start;
 }
 .dc-compare__col {
-  padding-top: 14px;
-  border-top: var(--stroke) solid var(--outline);
-}
-.dc-compare__title {
-  margin: 0 0 14px;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 23px;
-  line-height: 1.1;
-  letter-spacing: 0.01em;
-  color: var(--ink);
-}
-.dc-compare .dc-list li {
-  font-size: 15.5px;
-  line-height: 1.55;
-}
-
-/* ── the risk note: a tinted slip, straight ── */
-.dc-note {
-  padding: 20px 22px 22px;
-  background: color-mix(in srgb, var(--coral) 14%, var(--paper));
+  padding: 20px 20px 22px;
+  background: var(--sticker);
   border: var(--stroke) solid var(--outline);
   border-radius: var(--r-card);
+  box-shadow: var(--sh-3);
+}
+.dc-compare__col.is-chain {
+  background: var(--mist);
+}
+.dc-compare__title {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: var(--t-h4);
+  line-height: 1.15;
+}
+.dc-compare__title .kb-icon {
+  flex: none;
+  margin-top: 2px;
+}
+.dc-compare .dc-list li {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* notes: a sticker with a stamp */
+.dc-note {
+  position: relative;
+  padding: 22px 22px 22px;
+  padding-right: 120px;
+  background: var(--sticker);
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-3);
 }
 .dc-note.is-info {
-  background: color-mix(in srgb, var(--mist) 60%, var(--paper));
+  background: var(--mist);
+}
+.dc-note__stamp {
+  position: absolute !important;
+  right: 18px;
+  top: 18px;
 }
 .dc-note__title {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 24px;
-  line-height: 1.1;
-  letter-spacing: 0.01em;
-  color: var(--ink);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: var(--t-h4);
+  line-height: 1.15;
 }
 .dc-note__text {
   margin: 0;
-  max-width: 64ch;
-  font-size: 16px;
+  font-size: 15.5px;
   line-height: 1.6;
-  color: var(--ink);
+  color: var(--ink-2);
   text-wrap: pretty;
 }
 
-/* FAQ (no chapter uses one today) */
+/* FAQ */
 .dc-faq {
   display: flex;
   flex-direction: column;
-  border-top: var(--stroke) solid var(--outline);
+  gap: 12px;
 }
 .dc-faq__item {
-  border-bottom: 2px dashed var(--rule);
+  background: var(--sticker);
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-2);
 }
 .dc-faq__q {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 52px;
+  min-height: 56px;
+  padding: 10px 18px;
   cursor: pointer;
   list-style: none;
   font-weight: 700;
   font-size: 16.5px;
+  border-radius: var(--r-card);
 }
 .dc-faq__q::-webkit-details-marker {
   display: none;
@@ -594,54 +670,30 @@
 .dc-faq__item[open] .dc-faq__chev {
   transform: rotate(-90deg);
 }
+.dc-faq__item[open] {
+  box-shadow: var(--sh-3);
+}
 .dc-faq__a {
   margin: 0;
-  padding: 0 0 16px;
+  padding: 0 18px 18px;
   font-size: 15.5px;
   line-height: 1.6;
   color: var(--ink-2);
 }
 
-/* the guide's last word: the links to trust and the seed-phrase rule on a calm panel (read, not pressed), with the X
-   account and the way back up beside it */
+/* colophon + back to top */
 .dc-foot {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 18px 32px;
-  /* the chapters' gap is a big pause; the closing word follows the last table at a smaller one */
-  margin-top: calc(48px - clamp(56px, 7vw, 96px));
-  padding: 22px 24px;
-  background: color-mix(in srgb, var(--cream) 85%, var(--paper));
-  border-radius: 18px;
+  justify-content: space-between;
+  gap: 16px 24px;
 }
-.dc-close {
-  display: grid;
-  gap: 8px;
-}
-.dc-close__line {
+.dc-foot__text {
   margin: 0;
-  max-width: 46em;
-  text-wrap: pretty;
-  font-size: 16px;
-  line-height: 1.55;
-  color: var(--ink-2);
-}
-.dc-close__line:last-child {
-  font-weight: 600;
-  color: var(--ink);
-}
-.dc-close__x {
-  white-space: nowrap;
-}
-.dc-foot .dc-top {
-  justify-self: start;
-}
-@media (max-width: 719px) {
-  .dc-foot {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 18px 18px 20px;
-  }
+  max-width: 54ch;
+  font-size: 14px;
+  color: var(--ink-3);
 }
 .dc-top {
   display: inline-flex;
@@ -673,53 +725,51 @@
   transform: rotate(-90deg);
 }
 
-
 /* ── narrow screens ───────────────────────────────────────────────── */
-/* small laptops: a slimmer margin for the contents, still sticky */
+/* small laptops: a slimmer sidebar, still sticky (the body keeps about 620-660px) */
 @media (min-width: 980px) and (max-width: 1099px) {
   .dc-layout {
-    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-columns: 230px minmax(0, 1fr);
     gap: 40px;
   }
 }
 @media (max-width: 979px) {
   .dc-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: 40px;
+    gap: 36px;
   }
   .dc-toc {
     position: static;
     max-height: none;
     overflow: visible;
+    /* the same right edge as the sections below */
     max-width: 760px;
   }
   .dc-toc__list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 24px;
+    column-gap: 18px;
+  }
+  .dc-toc__list li + li {
+    border-top: 0;
+  }
+  .dc-toc__list li {
+    border-bottom: 2px dashed var(--rule);
   }
 }
 @media (max-width: 759px) {
-  .dc-head__art {
+  .dc-page .pg-head__aside {
     display: none;
   }
   .dc-layout {
-    margin-top: 28px;
-    padding-top: 0;
-    border-top: 0;
-    gap: 36px;
+    margin-top: 24px;
   }
   /* the contents fold into one button; open, they list every chapter */
   .dc-toc {
-    gap: 0;
-    padding: 4px 6px;
-    background: var(--sticker);
-    border: var(--stroke-sm) solid var(--outline);
-    border-radius: var(--r-card);
-    box-shadow: var(--sh-2);
+    padding: 6px 8px;
   }
   .dc-toc.is-open {
-    padding-bottom: 8px;
+    padding-bottom: 10px;
   }
   .dc-toc__label {
     display: none;
@@ -733,10 +783,9 @@
     padding: 0 8px;
     border: 0;
     background: none;
-    color: var(--on-sticker);
+    color: var(--ink);
     font: inherit;
-    font-size: 16px;
-    font-weight: 700;
+    font-size: var(--t-label);
     cursor: pointer;
     border-radius: var(--r-tag);
   }
@@ -748,10 +797,10 @@
     display: grid;
     place-items: center;
     min-width: 26px;
-    height: 24px;
+    height: 26px;
     padding: 0 6px;
     border: var(--stroke-sm) solid var(--outline);
-    border-radius: 12px;
+    border-radius: 13px;
     background: var(--sun);
     color: var(--ink-fixed);
     font-size: 12px;
@@ -770,35 +819,52 @@
   }
   .dc-toc__list {
     grid-template-columns: minmax(0, 1fr);
-    padding: 4px 8px 0;
-    border-top: 2px dashed var(--rule);
   }
   .dc-toc__item {
-    min-height: 44px;
-    color: var(--on-sticker);
+    font-size: 15px;
   }
   .dc-sec__head {
-    grid-template-columns: 38px minmax(0, 1fr);
-    column-gap: 12px;
-    margin-bottom: 20px;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 12px;
   }
   .dc-sec__no {
-    width: 38px;
-    height: 38px;
-    font-size: 12.5px;
+    width: 44px;
+    height: 44px;
+    font-size: 14px;
   }
-  /* the line under a chapter's title runs the full width under its coin */
   .dc-sec__lede {
-    grid-column: 1 / -1;
-    font-size: 16.5px;
+    font-size: 16px;
   }
   .dc-p,
-  .dc-list li,
-  .dc-steps li {
+  .dc-list li {
     font-size: 16px;
+  }
+  .dc-flow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dc-flow::before {
+    left: 30px;
+    right: auto;
+    top: 8%;
+    bottom: 8%;
+    border-top: 0;
+    border-left: 3px dotted var(--teal-ink);
+  }
+  .dc-flow__step:nth-child(n) {
+    transform: none;
   }
   .dc-compare {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .dc-note {
+    padding: 64px 18px 20px;
+  }
+  .dc-note__stamp {
+    left: 18px;
+    right: auto;
+  }
+  .dc-table-wrap {
+    padding: 14px 14px 6px;
   }
 }
 
@@ -812,22 +878,19 @@
   .dc-keys th {
     padding: 10px 0 4px;
     white-space: normal;
-    border-bottom: 0;
-  }
-  .dc-keys tr:first-child td {
-    border-top: 0;
   }
   .dc-keycaps {
     flex-wrap: wrap;
   }
   .dc-keys td {
+    border-top: 0;
     padding: 0 0 10px;
   }
 }
 
-/* phones: a `stack` table turns each row into a small block (its first cell leads; with more than two columns each
-   cell names its column), so no cell is squeezed to a word a line */
-@media (max-width: 559px) {
+/* phones: a comparison table (`stack`) turns each row into a small card (the cell names its column), so no cell is
+   squeezed to a word a line */
+@media (max-width: 479px) {
   .dc-table--stack thead {
     position: absolute;
     width: 1px;
@@ -843,15 +906,12 @@
   .dc-table--stack td {
     display: block;
   }
-  .dc-table--stack tbody {
-    border-top: var(--stroke) solid var(--outline);
-  }
   .dc-table--stack tr {
-    padding: 12px 0;
+    padding: 10px 0;
     border-bottom: 2px dashed var(--rule);
   }
   .dc-table--stack tbody tr:last-child {
-    border-bottom: var(--stroke-sm) solid var(--outline);
+    border-bottom: 0;
   }
   .dc-table--stack td,
   .dc-table--stack tbody tr:last-child td {
@@ -860,52 +920,48 @@
   }
   .dc-table--stack td:first-child {
     padding-bottom: 4px;
-    width: auto;
+    font-weight: 700;
   }
-  .dc-table--stack td[data-label] {
+  .dc-table--stack td + td {
     display: flex;
     gap: 10px;
     align-items: baseline;
   }
-  .dc-table--stack td[data-label]::before {
+  .dc-table--stack td + td::before {
     content: attr(data-label);
     flex: none;
-    width: 6.5em;
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 700;
+    width: 7.5em;
+    font-family: var(--font-mono);
+    font-size: var(--t-micro);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--ink-3);
-    white-space: normal;
-  }
-  /* a key column leads its block: the cap, then the name beside it */
-  .dc-table--keys.dc-table--stack tr {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    column-gap: 12px;
-    align-items: center;
-  }
-  .dc-table--keys.dc-table--stack td:not(:first-child):not(:nth-child(2)) {
-    grid-column: 1 / -1;
-  }
-  .dc-table--keys.dc-table--stack td:nth-child(2) {
-    padding-bottom: 4px;
-    font-weight: 700;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .dc-toc__item,
   .dc-toc__no,
   .dc-toc__chev,
   .dc-top,
-  .dc-faq__chev,
-  .dc-kbd {
+  .dc-faq__chev {
     transition: none;
+  }
+  .dc-toc__item:hover .dc-toc__no {
+    transform: none;
   }
 }
 
-/* ── comic strips (Comics.tsx): three straight panels, only where a picture says it better ── */
+/* ── comic strips that open a section (Comics.tsx) ────────────────────── */
 .cs {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
+}
+.cs__label {
+  display: block;
+  font-size: var(--t-label);
+  color: var(--teal-ink);
+  margin-bottom: 10px;
 }
 .cs__row {
   display: grid;
@@ -924,6 +980,11 @@
   border-radius: 14px;
   box-shadow: var(--sh-2, 3px 3px 0 var(--shadow-ink));
   overflow: hidden;
+  transform: rotate(var(--tilt, 0deg));
+  transition: transform 0.25s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.cs__panel:hover {
+  transform: rotate(0deg) translateY(-3px);
 }
 .cs__art {
   display: block;
@@ -931,24 +992,42 @@
   height: auto;
   border-bottom: var(--stroke-sm) solid var(--outline);
 }
+.cs__no {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--outline);
+  border-radius: 50%;
+  background: var(--sun);
+  color: var(--ink-fixed);
+  font-size: 12px;
+  font-weight: 700;
+}
 .cs__cap {
   margin: 0;
   padding: 8px 12px 10px;
-  font-size: 14.5px;
+  font-size: 14px;
   line-height: 1.35;
   font-weight: 600;
   color: var(--on-sticker);
   text-wrap: pretty;
 }
 .cs svg text {
-  font-family: var(--font-body);
+  font-family: var(--font-mono);
   font-weight: 700;
   fill: var(--ink-fixed);
 }
 .cs-say__t { font-size: 12px; }
-.cs-no { font-size: 22px; fill: var(--down-ink) !important; letter-spacing: 0.06em; font-family: var(--font-display); font-weight: 400; }
+.cs-tag { font-size: 12px; fill: #fff !important; letter-spacing: 0.08em; }
+.cs-tag--ink { fill: var(--ink-fixed) !important; font-size: 15px; }
+.cs-note { font-size: 12px; }
+.cs-no { font-size: 22px; fill: var(--down-ink) !important; letter-spacing: 0.06em; }
 
-/* the basic rule */
+/* play */
 .cs-graze { animation: cs-graze 4.8s ease-in-out infinite; }
 @keyframes cs-graze {
   0%, 6% { transform: translateX(0); opacity: 1; }
@@ -1014,6 +1093,104 @@
   to { opacity: 0.4; transform: translateX(-6px); }
 }
 
+/* rooms */
+.cs-bounce { animation: cs-bounce 1.2s ease-in-out infinite alternate; }
+@keyframes cs-bounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(-6px); }
+}
+.cs-hold { animation: cs-hold 4.8s ease-in-out infinite; }
+@keyframes cs-hold {
+  0%, 100% { transform: rotate(-6deg); }
+  40%, 60% { transform: rotate(4deg) translateX(10px); }
+}
+.cs-punch { animation: cs-punch 4.8s steps(1, end) infinite; }
+@keyframes cs-punch {
+  0%, 44% { opacity: 0; }
+  45%, 100% { opacity: 1; }
+}
+.cs-slot { animation: cs-slot 4.8s cubic-bezier(0.6, 0, 0.4, 1) infinite; }
+@keyframes cs-slot {
+  0%, 10% { transform: translate(0, 0) rotate(-8deg); opacity: 1; }
+  50% { transform: translate(80px, 2px) rotate(0); opacity: 1; }
+  58% { transform: translate(86px, 14px) rotate(0) scaleY(0.2); opacity: 0; }
+  92% { opacity: 0; transform: translate(0, 0); }
+  100% { transform: translate(0, 0) rotate(-8deg); opacity: 1; }
+}
+.cs-shine { opacity: 0; animation: cs-shine 4.8s ease-out infinite; }
+@keyframes cs-shine {
+  0%, 58% { opacity: 0; }
+  64%, 80% { opacity: 1; }
+  92%, 100% { opacity: 0; }
+}
+
+/* value */
+.cs-lunge { animation: cs-lunge 2.4s ease-in-out infinite; }
+@keyframes cs-lunge {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(16px); }
+}
+.cs-hop { animation: cs-hop 2.4s ease-in-out infinite; }
+@keyframes cs-hop {
+  0% { transform: translate(0, 0); opacity: 0; }
+  10% { opacity: 1; }
+  45% { transform: translate(-50px, -64px); }
+  80% { transform: translate(-96px, -26px); opacity: 1; }
+  90%, 100% { transform: translate(-100px, -22px) scale(0.4); opacity: 0; }
+}
+.cs-wobble { animation: cs-wobble 1.6s ease-in-out infinite alternate; }
+@keyframes cs-wobble {
+  from { transform: rotate(-5deg); }
+  to { transform: rotate(5deg); }
+}
+
+/* payout */
+.cs-hand { animation: cs-hand 4.8s linear infinite; }
+@keyframes cs-hand {
+  from { transform: rotate(0); }
+  to { transform: rotate(360deg); }
+}
+.cs-trot { animation: cs-bounce 0.5s ease-in-out infinite alternate; }
+.cs-bell { animation: cs-bell 1.6s ease-in-out infinite; }
+@keyframes cs-bell {
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(16deg); }
+  35% { transform: rotate(-13deg); }
+  55% { transform: rotate(8deg); }
+  75% { transform: rotate(-4deg); }
+}
+.cs-ring { animation: cs-ringwave 1.6s ease-out infinite; }
+@keyframes cs-ringwave {
+  0%, 10% { opacity: 0; }
+  25% { opacity: 1; }
+  80%, 100% { opacity: 0; }
+}
+.cs-slice { animation: cs-slice 4.8s cubic-bezier(0.5, 0, 0.3, 1) infinite; }
+@keyframes cs-slice {
+  0%, 30% { transform: translate(0, 0); opacity: 1; }
+  60% { transform: translate(67px, -6px) scale(0.6); opacity: 1; }
+  70%, 92% { transform: translate(67px, -6px) scale(0.6); opacity: 0; }
+  100% { transform: translate(0, 0); opacity: 1; }
+}
+
+/* fair */
+.cs-lock { animation: cs-lock 2.4s ease-in-out infinite; }
+@keyframes cs-lock {
+  0%, 40% { transform: translateY(-6px); }
+  50%, 100% { transform: translateY(0); }
+}
+.cs-led { animation: cs-led 1.2s steps(2, jump-none) infinite; }
+@keyframes cs-led {
+  0% { opacity: 1; }
+  100% { opacity: 0.25; }
+}
+.cs-gear { animation: cs-hand 3s linear infinite; }
+.cs-lens { animation: cs-lens 3.2s ease-in-out infinite; }
+@keyframes cs-lens {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(40px, -6px); }
+}
+
 /* wallet */
 .cs-say { animation: cs-say 2.4s ease-in-out infinite; }
 @keyframes cs-say {
@@ -1048,13 +1225,15 @@
   height: auto;
   border: var(--stroke) solid var(--outline);
   border-radius: 20px;
+  box-shadow: var(--sh-3);
   background: var(--mist);
 }
 .vf__t {
-  font-family: var(--font-body);
-  font-size: 15px;
+  font-family: var(--font-mono);
+  font-size: 14px;
   font-weight: 700;
   fill: var(--ink-fixed);
+  letter-spacing: 0.04em;
 }
 .vf__t--sm {
   font-size: 12px;
@@ -1140,6 +1319,27 @@
   92%, 100% { transform: translate(148px, 87px) scale(0.3); opacity: 0; }
 }
 
+/* ── controls: key stickers that press themselves, one after another ──── */
+.dc-kbd {
+  position: relative;
+  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
+  animation: dc-keytap 7s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 0.55s + 0.6s);
+}
+@keyframes dc-keytap {
+  0%, 6%, 100% { transform: translate(0, 0); box-shadow: var(--sh-1); background: var(--white, #fff); }
+  2.5% { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--shadow-ink); background: var(--sun); }
+}
+.dc-keys tr:hover .dc-kbd {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--shadow-ink);
+  background: var(--sun);
+  animation: none;
+}
+.dc-keys-fig[data-paused] .dc-kbd {
+  animation-play-state: paused;
+}
+
 /* small screens: the strip scrolls sideways, panels keep their size. The next panel peeks in under a soft fade, and
    on the site the row runs to the screen's edge, so it reads as a row to swipe rather than a cut-off box. */
 @media (max-width: 640px) {
@@ -1176,7 +1376,8 @@
    composition, so the page reads right in any still (a screenshot, a print, coming back to it). */
 @media (prefers-reduced-motion: reduce) {
   .cs *,
-  .vf__svg * {
+  .vf__svg *,
+  .dc-kbd {
     animation: none !important;
   }
 }
@@ -1186,7 +1387,7 @@
 .vf[data-paused] * {
   animation: none !important;
 }
-:is(.cs.is-still, .cs[data-paused]) :is(.cs-pop, .cs-slurp, .cs-stamp),
+:is(.cs.is-still, .cs[data-paused]) :is(.cs-pop, .cs-slurp, .cs-slot, .cs-shine, .cs-stamp),
 :is(.vf.is-still, .vf[data-paused]) :is(.vf-prey, .vf-in, .vf-out, .vf-fee, .vf-hop) {
   opacity: 1;
 }
@@ -1194,8 +1395,8 @@
   stroke-dashoffset: 0;
 }
 @media (prefers-reduced-motion: reduce) {
-  .cs-pop, .cs-slurp, .vf-prey { opacity: 1; }
-  .vf-in, .vf-out, .vf-fee, .vf-hop { opacity: 1; }
+  .cs-pop, .cs-slurp, .cs-slot, .vf-prey { opacity: 1; }
+  .cs-shine, .vf-in, .vf-out, .vf-fee, .vf-hop { opacity: 1; }
   .cs-check { stroke-dashoffset: 0; }
   .cs-stamp { opacity: 1; }
 }

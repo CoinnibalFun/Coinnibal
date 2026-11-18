@@ -2,15 +2,13 @@ import { ELYSIUM, SHADE } from '@elymum/shared';
 import { useEffect, useState, type ReactElement } from 'react';
 import { CoinCharacter, useOffscreenPause, useReducedMotion, type CoinMood } from '../../design';
 import { useT } from '../../i18n';
-import { SoonStamp } from '../SoonStamp';
 
 /**
  * The gate to the ring, drawn as a little ferry gate on the night shore: two stone posts with
  * lanterns, an arched board, a striped barrier arm, an emblem slot with a lamp, and the guard: a
  * coin in a peaked cap.
  *
- * - `closed`: the guard is asleep (z's float off), the lamp is red, the lanterns are low, and the site's Soon stamp
- *   hangs off the barrier arm.
+ * - `closed`: the guard is asleep (z's float off), the lamp is red, the lanterns are low.
  * - `holders`: the guard dozes, wakes with a start, then holds up an "Emblem?" card; while the
  *   visitor is at the sign-in (`attention`), the guard leans and looks over at them.
  * - `checking`: the guard inspects with a magnifier; the lamp blinks sun.
@@ -81,8 +79,6 @@ export function GateScene({ mode, attention = false }: { mode: GateMode; attenti
             <path key={i} d={`M${100 + i * 24} 191.5 l12 0 l-8 13 l-12 0Z`} fill={i % 2 ? ELYSIUM.coral : ELYSIUM.sun} />
           ))}
           <rect x={80} y={190} width={162} height={16} rx={8} fill="none" {...S} />
-          {/* closed: the site's Soon stamp hangs off the arm on two cords */}
-          {mode === 'closed' && <path d="M146 206 V226 M174 206 V226" stroke={INK} strokeWidth={2.4} />}
           <circle cx={78} cy={198} r={11} fill={ELYSIUM.teal} {...S} />
           <circle cx={78} cy={198} r={3.5} fill={INK} />
         </g>
@@ -104,7 +100,6 @@ export function GateScene({ mode, attention = false }: { mode: GateMode; attenti
           <circle className="pg-gate__signal" cx={17} cy={12} r={6} fill={lamp} stroke={INK} strokeWidth={2.4} />
         </g>
       </svg>
-      {mode === 'closed' && <SoonStamp className="pg-gate__soon" />}
 
       {/* the guard */}
       <span className="pg-gate__guard">

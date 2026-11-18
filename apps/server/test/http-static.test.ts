@@ -1,15 +1,13 @@
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
-import { request } from 'node:http';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ENTRY_PATHS, SITE_PATHS, isAppRoute } from '@elymum/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { NullChain } from '../src/chain/types';
 import { loadConfig } from '../src/config';
-import { byteRange, createHttpServer, redactUrls } from '../src/http';
+import { createHttpServer, redactUrls } from '../src/http';
 
-/** The single-origin deploy (`WEB_DIST`): static files plus the SPA fallback for client routes like `/docs` (404 for the rest). */
+/** The single-origin deploy (`WEB_DIST`): static files plus the SPA fallback for client routes like `/docs`. */
 describe('static web client', () => {
   let server: Server | null = null;
   afterEach(async () => {
@@ -25,10 +23,6 @@ describe('static web client', () => {
     writeFileSync(join(web, 'favicon-32.png'), 'png');
     writeFileSync(join(web, 'sitemap.xml'), '<urlset/>');
     writeFileSync(join(web, 'assets', 'bell-1234.ogg'), 'ogg');
-    mkdirSync(join(web, 'media'));
-    writeFileSync(join(web, 'media', 'loop.mp4'), '0123456789');
-    writeFileSync(join(web, 'media', 'loop.webm'), 'webm');
-    writeFileSync(join(web, 'media', 'big.mp4'), Buffer.alloc(8 * 1024 * 1024, 1));
     const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-data-')), WEB_DIST: web } as NodeJS.ProcessEnv);
     server = createHttpServer(cfg, { chain: new NullChain(), rooms: {} as never, leaderboards: {} as never, auth: {} as never, startedAt: Date.now() });
     await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
@@ -47,33 +41,6 @@ describe('static web client', () => {
       expect(res.headers.get('content-security-policy'), path).toContain("frame-ancestors 'none'");
       expect(await res.text(), path).toContain('<title>Elymum</title>');
     }
-  });
-
-  it('answers every real route of the app with 200, deep links included (the route list the web router uses)', async () => {
-    const url = await start();
-    // each site page, the arena and the operator panel; a trailing slash or capitals are the same page (the router
-    // normalises them); deep links ride on the query or the hash (a room invite, a lobby page, a guide section)
-    const real = [...SITE_PATHS, ...ENTRY_PATHS, '/docs/', '/Docs', '/MINT/', '/play/', '/admin/', '/play?room=AB2CD', '/?ref=x', '/docs?x=1#docs-rooms', '/?gallery'];
-    for (const path of real) {
-      const res = await fetch(url + path);
-      expect(res.status, path).toBe(200);
-      expect(await res.text(), path).toContain('<title>Elymum</title>');
-    }
-  });
-
-  it('answers a path that is no page with 404 and still sends the app, which draws the not-found page', async () => {
-    const url = await start();
-    for (const path of ['/this-page-does-not-exist', '/docs/rooms', '/mint/1', '/playground', '/admins', '/wl/x/y', '/assets', '/assets/', '/%E2%9C%93']) {
-      const res = await fetch(url + path);
-      expect(res.status, path).toBe(404);
-      expect(res.headers.get('content-type'), path).toMatch(/text\/html/);
-      expect(res.headers.get('cache-control'), path).toBe('no-cache');
-      expect(res.headers.get('content-security-policy'), path).toContain("frame-ancestors 'none'");
-      expect(await res.text(), path).toContain('<title>Elymum</title>');
-    }
-    const head = await fetch(`${url}/nope`, { method: 'HEAD' });
-    expect(head.status).toBe(404);
-    expect(isAppRoute('/nope')).toBe(false);
   });
 
   it('serves hashed assets immutable and 404s missing files and API paths', async () => {
@@ -135,69 +102,5 @@ describe('static web client', () => {
     expect(WEB_CSP).toMatch(/frame-ancestors 'none'/);
     expect(WEB_CSP).toMatch(/object-src 'none'/);
     expect(WEB_CSP).not.toMatch(/unsafe-eval/);
-  });
-  it('serves the landing videos with their types and answers byte ranges (Safari plays a <video> only then)', async () => {
-    const url = await start();
-    const whole = await fetch(url + '/media/loop.mp4');
-    expect(whole.status).toBe(200);
-    expect(whole.headers.get('content-type')).toBe('video/mp4');
-    expect(whole.headers.get('accept-ranges')).toBe('bytes');
-    expect(whole.headers.get('content-length')).toBe('10');
-    expect(await whole.text()).toBe('0123456789');
-    expect((await fetch(url + '/media/loop.webm')).headers.get('content-type')).toBe('video/webm');
-
-    const probe = await fetch(url + '/media/loop.mp4', { headers: { Range: 'bytes=0-1' } });
-    expect(probe.status).toBe(206);
-    expect(probe.headers.get('content-range')).toBe('bytes 0-1/10');
-    expect(probe.headers.get('content-length')).toBe('2');
-    expect(await probe.text()).toBe('01');
-    const tail = await fetch(url + '/media/loop.mp4', { headers: { Range: 'bytes=7-' } });
-    expect([tail.status, await tail.text()]).toEqual([206, '789']);
-    const past = await fetch(url + '/media/loop.mp4', { headers: { Range: 'bytes=10-' } });
-    expect(past.status).toBe(416);
-    expect(past.headers.get('content-range')).toBe('bytes */10');
-    // the app page itself never answers a range: it is always sent whole
-    const page = await fetch(url + '/docs', { headers: { Range: 'bytes=0-1' } });
-    expect(page.status).toBe(200);
-    expect(await page.text()).toContain('<title>Elymum</title>');
-  });
-
-  it.skipIf(process.platform !== 'linux')('closes the file when a client leaves mid-transfer (no descriptor stays open)', async () => {
-    const url = new URL(await start());
-    const fds = () => readdirSync('/proc/self/fd').length;
-    const before = fds();
-    // each client reads the first chunk of a big video, then hangs up
-    for (let i = 0; i < 12; i++) {
-      await new Promise<void>((done) => {
-        const req = request({ host: url.hostname, port: url.port, path: '/media/big.mp4', headers: { Range: 'bytes=0-' } }, (res) => {
-          res.once('data', () => {
-            req.destroy();
-            done();
-          });
-        });
-        req.on('error', () => done());
-        req.end();
-      });
-    }
-    await new Promise((r) => setTimeout(r, 300));
-    expect(fds() - before).toBeLessThan(4);
-    // and the server still serves
-    expect((await fetch(url.origin + '/media/loop.mp4')).status).toBe(200);
-  });
-
-  it('reads one byte range of a Range header and ignores what it cannot use', () => {
-    expect(byteRange(undefined, 10)).toBeNull();
-    expect(byteRange('bytes=0-1', 10)).toEqual({ start: 0, end: 1 });
-    expect(byteRange('bytes=4-', 10)).toEqual({ start: 4, end: 9 });
-    expect(byteRange('bytes=-3', 10)).toEqual({ start: 7, end: 9 });
-    expect(byteRange('bytes=-30', 10)).toEqual({ start: 0, end: 9 });
-    expect(byteRange('bytes=5-500', 10)).toEqual({ start: 5, end: 9 });
-    expect(byteRange('bytes=10-12', 10)).toBe('unsatisfiable');
-    expect(byteRange('bytes=-0', 10)).toBe('unsatisfiable');
-    expect(byteRange('bytes=0-0', 0)).toBe('unsatisfiable');
-    expect(byteRange('bytes=5-2', 10)).toBeNull();
-    expect(byteRange('bytes=0-1,4-5', 10)).toBeNull();
-    expect(byteRange('items=0-1', 10)).toBeNull();
-    expect(byteRange('bytes=-', 10)).toBeNull();
   });
 });

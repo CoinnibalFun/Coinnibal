@@ -38,78 +38,68 @@
 .ld-root .nf-why {
   scroll-margin-top: calc(var(--ld-head-h) + 20px);
 }
-/* the section's top line: an ink rule (reveal.css draws it from the left as the plate prints; a bite cuts into it) */
-.ld-rule {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--stroke);
-  background: var(--outline);
-  transform-origin: 0 50%;
-  pointer-events: none;
-}
 .ld-plate > .ld-wrap {
-  padding-top: clamp(64px, 8vw, 120px);
+  padding-top: clamp(40px, 6vw, 88px);
   padding-bottom: clamp(56px, 8vw, 120px);
 }
 /* a landscape phone: the header already takes a fifth of the height, so a topic starts sooner under its plate */
 @media (max-height: 500px) and (orientation: landscape) {
   .ld-plate > .ld-wrap {
-    padding-top: 40px;
+    padding-top: 28px;
     padding-bottom: 48px;
   }
 }
 .ld-h2 {
-  margin: 0;
+  margin: 10px 0 0;
   font-family: var(--font-display);
-  font-weight: 400;
-  font-size: calc(var(--t-h1) * 1.04);
-  line-height: 1.04;
-  letter-spacing: 0.005em;
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: var(--t-h1);
+  line-height: 0.98;
+  letter-spacing: -0.025em;
   color: var(--ink);
   text-wrap: balance;
 }
-/* the sun highlighter under a word or two: Lilita sits high on its line, so the bar rides just under the baseline */
+.ld-h2 .wonk {
+  font-variation-settings: var(--fv-wonk);
+}
+/* a hand-drawn sun underline on one word */
 .ld-ul {
-  background: linear-gradient(var(--sun), var(--sun)) 0 92% / 100% 0.2em no-repeat;
-  padding: 0 0.05em;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
+  background: linear-gradient(var(--sun), var(--sun)) 0 88% / 100% 0.22em no-repeat;
+  padding: 0 0.04em;
 }
 
 /* ── I · the plain at dawn ───────────────────────────────────────────── */
-/* The first screen: the hero card on the left, the game's screen on the right, the pond's coins along the bottom.
-   On a wide screen the scene fills what the header leaves of the window (up to 860 px), so at 1440x900 the pond's
-   coins stand whole above the fold; below 1024 px the screen drops under the card and the scene grows with them. */
-/* the sky holds still: no twinkling stars behind the card (the clouds still drift) */
-.ld-hero .kb-ring__twinkle {
-  animation: none !important;
+.ld-plate1 {
+  border-top: 0;
 }
 .ld-hero__ring {
   aspect-ratio: auto !important;
   min-height: 860px;
+  border-top: var(--stroke) solid var(--outline);
   border-bottom: var(--stroke) solid var(--outline);
 }
 .ld-hero__inner {
   position: relative;
   max-width: 1312px;
   margin: 0 auto;
-  padding: 40px var(--gutter) 300px;
+  padding: 64px var(--gutter) 300px;
 }
 .ld-hero__drop {
-  width: min(540px, 100%);
+  width: min(560px, 100%);
 }
 .ld-hero__card {
   z-index: 3;
 }
+.ld-hero__kicker {
+  margin: 0;
+}
 .ld-hero__title {
-  margin: 4px 0 14px;
+  margin: 10px 0 14px;
   line-height: 0;
 }
 .ld-hero__mark {
-  width: min(100%, 440px);
+  width: 100%;
   height: auto;
   overflow: visible;
 }
@@ -126,29 +116,41 @@
 }
 .ld-hero__lede {
   margin: 0;
-  max-width: 46ch;
+  max-width: 44ch;
   font-size: 16.5px;
-  line-height: 1.55;
   color: var(--ink-2);
+}
+.ld-hero__money {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 48ch;
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border: 2px solid var(--outline);
+  border-radius: 12px;
+  background: #fbe7b0;
+  color: #04181c;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.ld-hero__money-icon {
+  flex: none;
+  margin-top: 2px;
 }
 .ld-hero__ctas {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 14px;
-  margin-top: 20px;
-}
-/* "How it works" goes down the page, not away from it */
-.ld-hero__down {
-  rotate: 90deg;
+  gap: 14px;
+  margin-top: 16px;
 }
 .ld-hero__note {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
   margin: 18px 0 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--t-micro);
   color: var(--ink-3);
 }
 .ld-flowline {
@@ -156,7 +158,7 @@
 }
 /* everything is closed: the project's X account under the buttons */
 .ld-hero__note--x {
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .ld-hero__x {
   display: inline-flex;
@@ -167,103 +169,22 @@
   font-weight: 700;
   color: var(--ink) !important;
 }
-
-/* the screen: real play in a cream set with an ink bezel, standing in the world beside the card. It sits straight
-   (only the card is slapped on at a tilt); the sound switch for the pond hangs under it */
-.ld-hero__screen {
-  width: 100%;
-  min-width: 0;
-}
-.ld-screen {
-  position: relative;
-  margin: 0;
-  padding: 12px 12px 0;
-  background: var(--cream);
-  color: var(--ink-fixed);
-  border: var(--stroke) solid var(--outline);
-  border-radius: 24px;
-  box-shadow: var(--sh-5);
-}
-.ld-screen__glass {
-  position: relative;
-  aspect-ratio: 16 / 10;
-  overflow: hidden;
-  /* the arena floor's own teal while the first frame loads */
-  background: #11292f;
-  border: var(--stroke) solid var(--outline);
-  border-radius: 14px;
-}
-.ld-screen__media {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-/* glass: a soft sheen in the top-left corner and the bezel's lip shading the top edge */
-.ld-screen__glass::after {
-  content: '';
+.ld-hero__badge-wrap {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background: linear-gradient(135deg, rgb(255 255 255 / 0.16) 0 14%, transparent 34%);
-  box-shadow: inset 0 4px 0 rgb(0 0 0 / 0.22);
+  right: var(--gutter);
+  top: 56px;
+  z-index: 3;
 }
-.ld-screen__cap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 6px 0 4px;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.2;
+.ld-hero__badge {
+  display: grid;
+  gap: 2px;
 }
-.ld-screen__dot {
-  flex: none;
-  width: 11px;
-  height: 11px;
-  border: 2px solid var(--outline);
-  border-radius: 50%;
-  background: var(--coral);
+.ld-hero__badge-n {
+  font-size: 28px;
+  line-height: 1;
 }
-/* the set's speaker grille, at the right of the chin */
-.ld-screen__cap::after {
-  content: '';
-  flex: none;
-  width: 38px;
-  height: 12px;
-  margin-left: auto;
-  border-radius: 3px;
-  background: repeating-linear-gradient(90deg, var(--outline) 0 3px, transparent 3px 8px);
-  opacity: 0.5;
-}
-@media (min-width: 1024px) {
-  .ld-hero__ring {
-    /* the first screen: what the header leaves of the window (never under 700 px or over 860), and a hair more, so the
-       next plate starts just below the fold and waits there for the scroll instead of touching the window's edge */
-    min-height: clamp(700px, calc(100svh - var(--ld-head-h) + 4px), 860px);
-  }
-  .ld-hero__inner {
-    display: grid;
-    grid-template-columns: minmax(0, 540px) minmax(0, 1fr);
-    column-gap: clamp(36px, 4.4vw, 72px);
-    align-items: start;
-    padding-bottom: 256px;
-  }
-  .ld-hero__screen {
-    /* the arch of the ring road shows above the set */
-    justify-self: end;
-    max-width: 560px;
-    margin-top: 34px;
-  }
-}
-/* 1024-1199px: the card gives up a little width so the screen stays big enough to read the school's name tags */
-@media (min-width: 1024px) and (max-width: 1199px) {
-  .ld-hero__inner {
-    grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
-    column-gap: 32px;
-  }
+.ld-hero__badge-l {
+  font-size: var(--t-micro);
 }
 
 /* the pond on the front terrace */
@@ -383,15 +304,14 @@
   bottom: 150px;
   z-index: 3;
   margin: 0;
-  padding: 5px 12px;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.2;
+  padding: 4px 10px;
+  font-size: var(--t-micro);
   color: var(--ink-fixed);
   background: var(--cream);
   border: var(--stroke-sm) solid var(--outline);
   border-radius: var(--r-tag);
   box-shadow: var(--sh-1);
+  transform: rotate(-3deg);
   pointer-events: none;
 }
 .ld-pond__hint::after {
@@ -472,26 +392,26 @@
   transform: translateX(60px);
 }
 
-/* the sound switch stands in the pond, over the coins it makes chomp: at the right, the tap hint at the left */
 .ld-sound {
   position: absolute;
-  right: max(16px, 2%, env(safe-area-inset-right, 0px));
-  bottom: 164px;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: 14px;
   z-index: 4;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 44px;
-  padding: 0 14px 0 12px;
+  padding: 0 12px;
   background: var(--sticker);
   color: var(--ink-fixed);
   border: var(--stroke-sm) solid var(--outline);
   border-radius: var(--r-pill);
   box-shadow: var(--sh-2);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--t-micro);
   cursor: pointer;
 }
+/* wide screens: the shy coin hides a step further left; the sound button sits under the round sticker, out of the
+   strip where the pond coins walk */
 /* 900-1279px: the far coin steps out, the chase moves up next to the shy one */
 @media (min-width: 900px) and (max-width: 1279px) {
   .ld-pond__c--far {
@@ -499,6 +419,13 @@
   }
   .ld-chase {
     right: 106px;
+  }
+}
+@media (min-width: 900px) {
+  .ld-sound {
+    top: 168px;
+    bottom: auto;
+    right: max(var(--gutter), calc(50% - 656px + var(--gutter)));
   }
 }
 .ld-sound[aria-pressed='true'] {
@@ -509,28 +436,25 @@
   box-shadow: var(--sh-press);
 }
 
-/* below 1024 px: the card, then the screen under it, then the pond */
-@media (max-width: 1023px) {
-  .ld-hero__ring {
-    min-height: 0;
-  }
+@media (max-width: 899px) {
   .ld-hero__inner {
     display: flex;
     flex-direction: column;
     /* the page gutter (a landscape phone's notch sits at the sides): the tilted card's corner stays clear of the edge */
     padding: 36px max(24px, var(--gutter)) 236px;
   }
-  .ld-hero__drop {
-    align-self: flex-start;
-  }
-  /* card on the left, the screen stepping out to the right under it (a phone gives both the full width) */
-  .ld-hero__screen {
+  .ld-hero__badge-wrap {
+    position: relative;
+    right: auto;
+    top: auto;
     align-self: flex-end;
-    width: min(560px, 100%);
-    margin-top: 28px;
+    margin: -18px 6px 0 0;
   }
-}
-@media (max-width: 899px) {
+  .ld-sound {
+    right: auto;
+    left: max(16px, env(safe-area-inset-left, 0px));
+    bottom: 200px;
+  }
   .ld-pond {
     height: 190px;
   }
@@ -562,46 +486,15 @@
     right: 16px;
   }
 }
-/* a phone: a shorter card (a smaller wordmark, both buttons on one row) so the screen shows in the first screen */
 @media (max-width: 479px) {
   .ld-hero__inner {
-    padding: 22px 20px 236px;
+    padding: 28px 20px 240px;
   }
   .ld-hero__mark {
-    width: min(100%, 268px);
-  }
-  .ld-hero__title {
-    margin-bottom: 10px;
-  }
-  .ld-hero__tag {
-    font-size: 19px;
-    margin-bottom: 8px;
-  }
-  .ld-hero__lede {
-    font-size: 15.5px;
-    line-height: 1.5;
-  }
-  .ld-hero__ctas {
-    gap: 10px;
-    margin-top: 16px;
+    margin-top: 2px;
   }
   .ld-hero__ctas .kb-btn {
     flex: 1 1 auto;
-    padding-inline: 14px;
-  }
-  .ld-hero__screen {
-    margin-top: 22px;
-  }
-  .ld-screen {
-    padding: 8px 8px 0;
-    border-radius: 20px;
-  }
-  .ld-screen__glass {
-    border-radius: 12px;
-  }
-  .ld-screen__cap {
-    min-height: 34px;
-    font-size: 13px;
   }
 }
 
@@ -621,18 +514,22 @@
 .ld-feast__copy .lede {
   margin: 20px 0 0;
 }
-/* the core rule as a picture, straight on the page under a dashed rule: eat a coin, take its tokens */
+/* the core rule as a picture: eat a coin, take its tokens */
 .ld-take {
-  max-width: 440px;
-  margin-top: 30px;
-  padding-top: 22px;
-  border-top: 2px dashed var(--rule);
+  margin-top: 28px;
+  padding: 18px 20px 16px;
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card, 18px);
+  background: var(--cream, #f6eeda);
+  box-shadow: 4px 4px 0 var(--outline);
+  transform: rotate(-0.6deg);
 }
 .ld-take__h {
-  margin: 0 0 14px;
-  font-size: 19px;
-  font-weight: 600;
-  line-height: 1.3;
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-size: clamp(20px, 2.1vw, 26px);
+  line-height: 1.15;
   color: var(--ink);
 }
 .ld-take__row {
@@ -647,17 +544,15 @@
   gap: 6px;
 }
 .ld-take__tag {
-  padding: 3px 9px;
+  padding: 3px 8px;
   border: 2px solid var(--outline);
   border-radius: 999px;
   background: #fff;
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .ld-take__tag small {
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
   color: var(--ink-3);
 }
 .ld-take__tag--you {
@@ -718,21 +613,31 @@
   }
 }
 @media (max-width: 479px) {
+  .ld-take {
+    padding: 14px 14px 12px;
+  }
   .ld-take__row {
     gap: 6px;
   }
 }
-/* the menu card stands straight: only the hero card, the room tickets and the NFT fan are slapped on at a tilt */
+.ld-menu {
+  transform: rotate(1.2deg);
+}
+.ld-menu__head {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 16px;
+  border-bottom: var(--stroke) solid var(--outline);
+}
 .ld-menu__title {
   margin: 0;
-  padding-bottom: 14px;
-  border-bottom: var(--stroke) solid var(--outline);
   font-family: var(--font-display);
-  font-weight: 400;
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
   /* a card title, a step below the section headings */
-  font-size: clamp(28px, 2.7vw, 36px);
-  line-height: 1.1;
-  letter-spacing: 0.01em;
+  font-size: clamp(26px, 2.6vw, 36px);
+  line-height: 1;
+  letter-spacing: -0.02em;
 }
 .ld-menu__list {
   margin: 0;
@@ -774,31 +679,28 @@
 .ld-menu__price {
   /* on the end of its leader, like a menu's price: its baseline on the dotted line */
   align-self: end;
-  margin-bottom: 1px;
-  font-family: var(--font-display);
-  font-size: 22px;
-  line-height: 1.1;
-  letter-spacing: 0.01em;
-  color: var(--teal-ink);
+  margin-bottom: 6px;
+  font-size: var(--t-label);
+  line-height: 1.4;
+  color: var(--ink);
   white-space: nowrap;
 }
-.ld-menu__line:last-child .ld-menu__price {
-  color: #b4462e;
-}
 .ld-menu__foot {
-  margin: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   padding-top: 16px;
-  font-size: 15px;
-  line-height: 1.45;
-  color: var(--ink-2);
-}
-.ld-menu__foot b {
-  font-weight: 700;
-  color: var(--ink);
+  font-size: var(--t-micro);
+  color: var(--ink-3);
 }
 @media (max-width: 899px) {
   .ld-feast__grid {
     grid-template-columns: 1fr;
+  }
+  .ld-menu {
+    transform: rotate(0.6deg);
   }
 }
 @media (max-width: 479px) {
@@ -813,18 +715,23 @@
     display: none;
   }
   .ld-menu__price {
-    align-self: center;
+    align-self: start;
+    margin-top: 4px;
     /* a long price note (other languages) wraps instead of squeezing the dish */
     max-width: 7.5em;
     white-space: normal;
     text-align: right;
   }
+  .ld-menu__foot {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
-/* ── III · a round, on the clock ─────────────────────────────────────── */
+/* ── III · a round, in orbit ─────────────────────────────────────────── */
 /* the tablecloth: Round's linen is its own layer behind the content (reveal.css lays it from the left as the plate
-   prints), so the section itself is paper. At rest it looks the same as a linen section. The isolation keeps the -1
-   layer above the section's paper and below its text. */
+   prints), so the section itself is paper and its caption row lets the cloth show through. At rest it looks the
+   same as a linen section. The isolation keeps the -1 layer above the section's paper and below its text. */
 .ld-round {
   background: var(--paper);
   isolation: isolate;
@@ -837,214 +744,61 @@
   background: var(--linen);
   transform-origin: 0 50%;
 }
+.ld-round > .kb-plate {
+  background: transparent;
+}
 .ld-round__grid {
   display: grid;
   grid-template-columns: 7fr 5fr;
   gap: clamp(32px, 5vw, 72px);
   align-items: start;
 }
-/* the clock sits level with the middle of the steps, and stays beside them while they are read */
+/* the orbit card stays beside the steps while they are read, its stations lighting up with them */
 @media (min-width: 900px) {
-  .ld-round__clock-wrap {
+  .ld-round__orbit-wrap {
     position: sticky;
     top: calc(var(--ld-head-h) + 32px);
-    align-self: center;
   }
 }
-/* the round's clock: a stopwatch on the night card, its key beside it (under it on a narrow card) */
-.ld-round__card {
+.ld-orbit {
   position: relative;
-  padding: 36px 32px !important;
+  overflow: hidden;
+  padding: 56px 24px 64px !important;
+  transform: rotate(-0.8deg);
 }
-.ld-clock {
-  --clock-open: var(--up);
-  display: grid;
-  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
-  align-items: center;
-  gap: 28px;
-}
-.ld-clock__tag {
+.ld-orbit__tag {
   position: absolute;
   left: 20px;
-  top: 16px;
-  padding: 3px 10px;
-  border: var(--stroke-sm) solid var(--outline);
-  border-radius: var(--r-pill);
-  background: var(--sun);
-  color: var(--ink-fixed);
-  font-size: 13px;
-  font-weight: 700;
+  top: 18px;
+  z-index: 2;
 }
-.ld-clock__dial {
+.ld-orbit__svg {
   position: relative;
-  width: 100%;
-  max-width: 300px;
-  justify-self: center;
-}
-.ld-clock__svg {
+  z-index: 1;
   display: block;
   width: 100%;
   height: auto;
-  overflow: visible;
 }
-.ld-clock__crown {
-  fill: var(--current);
-  stroke: var(--outline);
-  stroke-width: 3;
+.ld-orbit .kb-orbit__label {
+  font-size: 15px;
 }
-.ld-clock__case {
-  fill: var(--trench);
-  stroke: var(--outline);
-  stroke-width: 3;
-}
-/* ink under the phases: each painted arc sits in a dark channel, with a hair of ink between two phases */
-.ld-clock__ring {
-  fill: none;
-  stroke: var(--outline);
-  stroke-width: 30;
-}
-.ld-clock__arc {
-  fill: none;
-  stroke-width: 22;
-}
-.ld-clock__tick {
-  stroke: var(--outline);
-  stroke-width: 3;
-  stroke-linecap: round;
-}
-.ld-clock__min {
-  fill: var(--foam);
-  font-family: var(--font-mono);
-  font-size: 17px;
-  font-weight: 600;
-}
-.ld-clock__hand line {
-  stroke: var(--cream);
-  stroke-width: 5;
-  stroke-linecap: round;
-}
-.ld-clock__hand circle {
-  fill: var(--sun);
-  stroke: var(--outline);
-  stroke-width: 3;
-}
-.ld-clock__hand {
-  transform-box: view-box;
-  transform-origin: 50% 50%;
-  /* where it rests with reduced motion: a minute and a half into the round */
-  rotate: 49deg;
-}
-.ld-clock__core {
+.ld-orbit__core {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
-  line-height: 0;
+  z-index: 1;
+  transform: translate(-50%, -58%);
 }
-.ld-clock__side {
-  display: grid;
-  gap: 18px;
-  max-width: 260px;
-}
-.ld-clock__key {
-  display: grid;
-  gap: 14px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.ld-clock__note {
-  margin: 0;
-  padding-top: 14px;
-  border-top: 2px dashed var(--current);
-  font-size: 14.5px;
-  line-height: 1.45;
-  color: var(--foam);
-}
-.ld-clock__phase {
-  display: grid;
-  grid-template-columns: 18px auto;
-  grid-template-areas: 'swatch when' '. what';
-  column-gap: 12px;
-  row-gap: 2px;
-  align-items: center;
-  color: var(--mist);
-}
-.ld-clock__swatch {
-  grid-area: swatch;
-  width: 18px;
-  height: 18px;
-  border: var(--stroke-sm) solid var(--outline);
-  border-radius: 50%;
-}
-.ld-clock__when {
-  grid-area: when;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--foam);
-}
-.ld-clock__what {
-  grid-area: what;
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.25;
-  color: var(--cream);
-}
-/* the hand sweeps one lap (a whole round and its break) at ten times the real speed; the phase it is in lights up in
-   the key, in step with it */
-@media (prefers-reduced-motion: no-preference) {
-  .ld-clock:not(.is-still) .ld-clock__hand {
-    rotate: 0deg;
-    animation: ld-clock-lap var(--lap) linear infinite;
-  }
-  .ld-clock:not(.is-still) .ld-clock__phase .ld-clock__when {
-    animation: var(--lap) step-end infinite;
-  }
-  .ld-clock:not(.is-still) .ld-clock__phase.is-open .ld-clock__when { animation-name: ld-clock-open; }
-  .ld-clock:not(.is-still) .ld-clock__phase.is-closed .ld-clock__when { animation-name: ld-clock-closed; }
-  .ld-clock:not(.is-still) .ld-clock__phase.is-break .ld-clock__when { animation-name: ld-clock-break; }
-}
-@keyframes ld-clock-lap {
-  to { rotate: 360deg; }
-}
-/* 0:00-4:00, 4:00-5:00 and 5:00-5:30 of a 5:30 lap */
-@keyframes ld-clock-open {
-  0% { color: var(--sun); }
-  72.73% { color: var(--foam); }
-}
-@keyframes ld-clock-closed {
-  0% { color: var(--foam); }
-  72.73% { color: var(--sun); }
-  90.91% { color: var(--foam); }
-}
-@keyframes ld-clock-break {
-  0% { color: var(--foam); }
-  90.91% { color: var(--sun); }
-}
-@media (max-width: 1099px) {
-  .ld-clock {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    gap: 22px;
-  }
-  .ld-clock__dial {
-    max-width: 280px;
-  }
-}
-@media (min-width: 640px) and (max-width: 899px) {
-  .ld-clock {
-    grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
-    justify-items: stretch;
-  }
-}
-/* a single column puts the dial's crown in the top-left corner's way: the "live" tag gets a row of its own */
-@media (max-width: 639px), (min-width: 900px) and (max-width: 1099px) {
-  .ld-round__card:has(.ld-clock__tag) {
-    padding-top: 60px !important;
-  }
+.ld-orbit__waves {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 52px;
 }
 .ld-stops {
-  margin: 30px 0 0;
+  margin: 26px 0 0;
   padding: 0;
   list-style: none;
   display: grid;
@@ -1069,12 +823,13 @@
   box-shadow: var(--sh-1);
   font-size: 13px;
 }
-/* a step lights up once it has been read (Landing.tsx useStepsRead) */
+/* a step lights up once it has been read (Landing.tsx useStepsRead), with its station on the orbit */
 .ld-stop.is-read .ld-stop__no {
   background: var(--sun);
 }
 @media (prefers-reduced-motion: no-preference) {
-  .ld-stop__no {
+  .ld-stop__no,
+  .ld-orbit .kb-orbit__station circle {
     transition: background-color 0.3s var(--ease-out), fill 0.3s var(--ease-out);
   }
 }
@@ -1086,10 +841,9 @@
 }
 .ld-stop__title {
   font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 21px;
-  line-height: 1.1;
-  letter-spacing: 0.01em;
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: var(--t-h4);
   color: var(--ink);
 }
 @media (max-width: 899px) {
@@ -1101,11 +855,27 @@
   }
 }
 @media (max-width: 479px) {
-  .ld-round__card {
-    padding: 30px 20px 26px !important;
+  .ld-orbit {
+    padding: 56px 20px 40px !important;
+    transform: none;
   }
-  .ld-clock__dial {
-    max-width: 252px;
+  .ld-orbit__waves {
+    height: 30px;
+  }
+  .ld-orbit__core {
+    transform: translate(-50%, -58%) scale(0.62);
+  }
+  .ld-orbit .kb-orbit__label {
+    font-size: 24px;
+  }
+  /* at this size the side labels would run past the card's edge: they turn to face inwards */
+  .ld-orbit .kb-orbit__station.is-left .kb-orbit__label {
+    text-anchor: start;
+    transform: translateX(36px);
+  }
+  .ld-orbit .kb-orbit__station.is-right .kb-orbit__label {
+    text-anchor: end;
+    transform: translateX(-36px);
   }
 }
 
@@ -1168,24 +938,23 @@
   display: grid;
   grid-template-columns: 5fr 7fr;
   gap: clamp(32px, 5vw, 72px);
-  /* the copy is short (the heading and one line): it sits level with the middle of the fan, so neither column leaves a
-     hole under it */
-  align-items: center;
+  /* the copy opens at the top like every plate, not halfway down the card fan */
+  align-items: start;
   padding-top: clamp(40px, 6vw, 88px);
   padding-bottom: clamp(32px, 5vw, 64px);
 }
 @media (min-width: 900px) {
   .ld-nft__copy {
-    /* level with the cards, not with the Shuffle button under them */
-    padding-bottom: 56px;
+    padding-top: 24px;
   }
 }
 .ld-nft__why {
-  padding-bottom: clamp(80px, 10vw, 140px);
+  padding-bottom: 150px;
 }
 .ld-nft__title em {
   font-style: normal;
   color: var(--sun);
+  font-variation-settings: var(--fv-wonk);
 }
 .ld-nft__text {
   margin: 20px 0 0;
@@ -1209,8 +978,10 @@
   margin: 28px 0 0;
   padding: 0;
   list-style: none;
-  font-size: 14px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .ld-flow li {
   display: flex;
@@ -1291,10 +1062,12 @@
   width: fit-content;
   margin-inline: auto;
   z-index: 4;
-  min-height: 44px;
-  padding: 6px 16px;
-  font-size: 15px;
+  min-height: 40px;
+  padding: 6px 14px;
+  font-size: var(--t-micro);
   font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--ink-fixed);
   background: var(--cream);
   border: var(--stroke-sm) solid var(--outline);
@@ -1353,29 +1126,17 @@
   opacity: 0;
   transform: scale(1.4);
 }
-/* the card's ground is the arena's own floor: long light lanes running across it, pellets scattered over them */
-.ld-emblem__panel::before {
-  content: '';
+.ld-emblem__waves {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(circle, rgb(4 24 28 / 0.3) 0 2.6px, transparent 3.2px) 0 0 / 30px 30px,
-    radial-gradient(circle, rgb(246 238 218 / 0.22) 0 2px, transparent 2.6px) 15px 15px / 30px 30px,
-    repeating-linear-gradient(-24deg, transparent 0 44px, rgb(255 255 255 / 0.13) 44px 47px);
+  width: 100%;
+  height: 100%;
+  opacity: 0.35;
 }
-/* the card's number, still sealed: a plain label in the body face, like every status on the page */
 .ld-emblem__no {
   position: absolute;
   left: 12px;
   top: 12px;
-  padding: 2px 9px;
-  border: var(--stroke-sm) solid var(--outline);
-  border-radius: 8px;
-  background: var(--cream);
-  color: var(--ink-fixed);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.3;
 }
 .ld-emblem__coin {
   position: relative;
@@ -1389,16 +1150,23 @@
   border: var(--stroke) solid var(--outline);
   border-radius: 12px;
   font-family: var(--font-display);
-  font-weight: 400;
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
   font-size: 22px;
-  line-height: 1.1;
-  letter-spacing: 0.01em;
   text-align: center;
 }
 .ld-emblem__stamp {
   position: absolute;
   right: 16px;
   bottom: 40px;
+}
+.ld-nft__waves {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 110px;
 }
 @media (max-width: 1099px) {
   .ld-nft__fan {
@@ -1445,7 +1213,7 @@
 .ld-arenas__head {
   display: grid;
   grid-template-columns: 7fr 5fr;
-  gap: 20px 48px;
+  gap: 24px 48px;
   align-items: end;
 }
 .ld-arenas__aside {
@@ -1456,24 +1224,6 @@
 .ld-arenas__aside p {
   margin: 0;
   color: var(--ink-2);
-}
-/* the rooms' status in the body face, sentence case; closed, it is the site's one closed word, "Soon", on the same sun
-   chip as the header's */
-.ld-status.kb-pill {
-  font-family: var(--font-body);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: none;
-}
-.ld-status.is-soon {
-  padding: 3px 11px 4px;
-  font-weight: 800;
-  background: var(--sun);
-  border-radius: 8px;
-}
-.ld-status.is-soon .kb-pill__dot {
-  display: none;
 }
 /* the rooms as a staircase: each step up is a bigger ticket, with a bigger coin standing on it */
 .ld-stairs {
@@ -1504,15 +1254,6 @@
   position: absolute;
   top: -34px;
   transform: rotate(-4deg);
-  padding: 2px 10px;
-  border: var(--stroke-sm) solid var(--outline);
-  border-radius: 8px;
-  background: var(--cream);
-  color: var(--ink-fixed);
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.3;
-  white-space: nowrap;
 }
 .ld-stair__crown {
   position: absolute;
@@ -1577,16 +1318,17 @@
   gap: 6px;
   margin: 0;
   font-family: var(--font-display);
-  font-weight: 400;
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
   line-height: 1;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.02em;
 }
 .ld-ticket__fee {
   font-size: 44px;
   color: var(--ink-fixed);
 }
 .ld-ticket__room {
-  font-size: 22px;
+  font-size: 20px;
 }
 .ld-ticket__line {
   display: inline-flex;
@@ -1637,40 +1379,62 @@
   border-top-right-radius: 14px;
   width: 100%;
 }
+.ld-stair__step .num {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: var(--cream);
+  opacity: 0.85;
+}
 .ld-stair.is-holders .ld-ticket {
   box-shadow:
     4px 4px 0 var(--shadow-ink),
     0 0 0 6px rgb(244 193 75 / 0.25);
 }
 
-/* the fee: no card, straight on the night under a dashed rule; one line says it, the bar shows where the profit goes */
-.ld-fee {
+/* the fee: one card, the profit as a bar */
+.ld-feecard {
   display: grid;
   grid-template-columns: 5fr 7fr;
-  gap: 18px 48px;
+  gap: 18px 40px;
   align-items: center;
-  margin-top: 56px;
-  padding-top: 36px;
-  border-top: 2px dashed var(--rule);
+  margin-top: 40px;
+  padding: 26px 30px;
+  background: var(--cream);
+  color: var(--ink-fixed);
+  border: var(--stroke) solid var(--outline);
+  border-radius: 20px;
+  box-shadow: 6px 6px 0 var(--shadow-ink);
+  transform: rotate(-0.6deg);
 }
-.ld-fee__t {
+.ld-feecard__t {
   margin: 0 0 6px;
   text-wrap: balance;
   font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(26px, 2.6vw, 32px);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: 30px;
   line-height: 1.1;
-  letter-spacing: 0.01em;
-  color: var(--ink);
+  letter-spacing: -0.015em;
 }
-.ld-fee__n {
+.ld-feecard__n {
   margin: 0;
-  font-size: 17px;
-  color: var(--ink-2);
+  color: #4a453b;
+}
+.ld-feecard__cap {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4a453b;
 }
 .ld-feebar {
   display: flex;
-  height: 34px;
+  height: 30px;
   overflow: hidden;
   border: var(--stroke) solid var(--outline);
   border-radius: 999px;
@@ -1701,13 +1465,12 @@
 .ld-feebar__keys {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 20px;
-  margin: 12px 0 0;
+  gap: 6px 18px;
+  margin: 10px 0 0;
   padding: 0;
   list-style: none;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  color: var(--ink);
 }
 .ld-feebar__keys li {
   display: inline-flex;
@@ -1729,10 +1492,13 @@
     font-size: 12px;
     white-space: nowrap;
   }
-  .ld-fee {
+  .ld-feecard {
     grid-template-columns: 1fr;
-    margin-top: 44px;
-    padding-top: 28px;
+    padding: 22px 20px;
+    transform: none;
+  }
+  .ld-feecard__t {
+    font-size: 25px;
   }
 }
 /* a tablet: still a staircase, on smaller steps */
@@ -1749,7 +1515,7 @@
     font-size: 30px;
   }
   .ld-ticket__room {
-    font-size: 18px;
+    font-size: 17px;
   }
   .ld-ticket__stub {
     margin-inline: -8px;
@@ -1879,6 +1645,18 @@
 }
 .ld-faq__coin::before { --halo: -14px; --halo-a: 0.07; }
 .ld-faq__coin::after { --halo: -36px; --halo-a: 0.04; }
+/* three sparkles about the moon */
+.ld-faq__spark {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: var(--cream);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+}
+.ld-faq__spark:nth-of-type(1) { left: -24%; top: 4%; width: 18px; height: 18px; }
+.ld-faq__spark:nth-of-type(2) { right: -20%; top: 30%; width: 13px; height: 13px; background: var(--sun); }
+.ld-faq__spark:nth-of-type(3) { right: -4%; top: -16%; width: 10px; height: 10px; }
+
 /* the water */
 .ld-faq__water {
   position: relative;
@@ -2067,54 +1845,82 @@
   background: var(--tide-shore) 0 100% / 180px 40px repeat-x;
 }
 
-/* the questions float on the water in one straight column: one calm night panel, the questions parted by hairlines.
-   Only the sun "+" says a row opens; no card and no offset shadow, so nothing here looks like a button it isn't */
+/* the cards float on the water, not quite in a line */
 .ld-faq__list {
   grid-column: 2;
   grid-row: 2;
-  align-self: start;
   display: grid;
-  padding: 6px 0;
-  background: var(--trench);
-  border: var(--stroke) solid var(--outline);
-  border-radius: 22px;
+  gap: 16px;
+  --drift: 22px;
 }
 .ld-qa {
-  color: var(--cream);
+  background: var(--cream);
+  color: var(--ink-fixed);
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-3);
 }
-.ld-qa + .ld-qa {
-  border-top: 1.5px solid var(--current);
+.ld-qa:nth-child(odd) {
+  margin-right: var(--drift);
+  transform: rotate(-0.5deg);
+}
+.ld-qa:nth-child(even) {
+  margin-left: var(--drift);
+  transform: rotate(0.4deg);
 }
 .ld-qa__q {
   display: grid;
-  grid-template-columns: 1fr 28px;
+  grid-template-columns: 44px 1fr 28px;
   align-items: center;
-  gap: 16px;
-  min-height: 62px;
-  padding: 12px 20px 12px 24px;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 18px 10px 14px;
   cursor: pointer;
   list-style: none;
   font-weight: 700;
   font-size: 18px;
-  line-height: 1.3;
-  border-radius: 14px;
-  transition: background-color var(--dur-state) var(--ease-out);
+  border-radius: var(--r-card);
 }
 .ld-qa__q::-webkit-details-marker {
   display: none;
 }
-.ld-qa__q:hover {
-  background: color-mix(in srgb, var(--reef) 70%, transparent);
-}
 .ld-qa__q:focus-visible {
   outline: 3px solid var(--cyan);
-  outline-offset: -3px;
+  outline-offset: 4px;
 }
 .ld-qa__q:active {
-  background: var(--reef);
+  background: color-mix(in srgb, var(--sun) 25%, var(--cream));
 }
-.ld-qa[open] .ld-qa__q {
-  color: var(--sun);
+/* the card's coin: it wonders until its answer opens, then it is happy */
+.ld-qa__face {
+  display: grid;
+  line-height: 0;
+}
+.ld-qa__face > * {
+  grid-area: 1 / 1;
+  position: relative;
+}
+.ld-qa__yay,
+.ld-qa[open] .ld-qa__ask {
+  visibility: hidden;
+}
+.ld-qa[open] .ld-qa__yay {
+  visibility: visible;
+}
+.ld-qa__huh {
+  position: absolute;
+  right: -6px;
+  top: -12px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--outline);
+  border-radius: 50% 50% 50% 4px;
+  background: var(--sun);
+  color: var(--ink-fixed);
+  font: 800 13px/1 var(--font-display);
+  rotate: 8deg;
 }
 .ld-qa__plus {
   position: relative;
@@ -2148,26 +1954,51 @@
 }
 .ld-qa__a {
   /* a little room on top: a link on the first line keeps its taller tap target inside the clipped answer */
-  max-width: 64ch;
-  padding: 0 24px 20px;
-  color: var(--mist);
+  padding: 8px 22px 20px 72px;
+  color: #4a453b;
   font-size: 16px;
   line-height: 1.55;
 }
 .ld-qa__a a {
   /* the padding grows the tap target, not the line */
   padding-block: 8px;
-  color: var(--sun);
+  color: #2d7388;
   font-weight: 700;
   text-underline-offset: 3px;
 }
 @media (prefers-reduced-motion: no-preference) {
+  .ld-faq__spark {
+    animation: ld-twinkle 3.2s ease-in-out infinite;
+  }
+  .ld-faq__spark:nth-of-type(2) { animation-delay: -1.1s; }
+  .ld-faq__spark:nth-of-type(3) { animation-delay: -2.2s; }
+  .ld-faq__glint i {
+    animation: ld-shimmer 2.8s ease-in-out calc(var(--i) * -0.45s) infinite;
+  }
   .ld-faq__bubble {
     animation: ld-bubble 11s linear var(--d) infinite;
   }
   .ld-faq__boat {
     animation: ld-rock 4.6s ease-in-out infinite;
   }
+  .ld-qa__huh {
+    transition: rotate 0.3s var(--ease-spring), translate 0.3s var(--ease-spring);
+  }
+  .ld-qa__q:hover .ld-qa__huh {
+    rotate: -10deg;
+    translate: 0 -2px;
+  }
+  .ld-qa[open] .ld-qa__yay {
+    animation: ld-yay 0.46s var(--ease-spring) both;
+  }
+}
+@keyframes ld-twinkle {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  50% { transform: scale(0.5) rotate(45deg); opacity: 0.4; }
+}
+@keyframes ld-shimmer {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.72); }
 }
 @keyframes ld-bubble {
   0% { transform: translateY(90px); opacity: 0; }
@@ -2178,6 +2009,10 @@
 @keyframes ld-rock {
   0%, 100% { transform: rotate(-3deg) translateY(0); }
   50% { transform: rotate(3deg) translateY(-3px); }
+}
+@keyframes ld-yay {
+  0% { transform: scale(0.6) rotate(-14deg); }
+  100% { transform: scale(1) rotate(0deg); }
 }
 @media (max-width: 899px) {
   .ld-faq {
@@ -2218,6 +2053,10 @@
   .ld-faq {
     --floor: 104px;
   }
+  .ld-faq__list {
+    --drift: 8px;
+    gap: 14px;
+  }
   .ld-faq__water::before { top: 70px; }
   .ld-faq__water::after { top: 210px; }
   .ld-faq__shore {
@@ -2232,12 +2071,16 @@
 }
 @media (max-width: 479px) {
   .ld-qa__q {
+    grid-template-columns: 38px 1fr 28px;
     gap: 12px;
-    padding: 10px 14px 10px 18px;
+    padding: 10px 14px 10px 10px;
     font-size: 16.5px;
   }
+  .ld-qa__face .kb-coin {
+    width: 38px !important;
+  }
   .ld-qa__a {
-    padding: 0 18px 18px;
+    padding: 8px 16px 18px 16px;
   }
 }
 
@@ -2273,7 +2116,7 @@
   right: 18px;
   top: 50%;
   height: 0;
-  border-top: 2px dashed color-mix(in srgb, var(--foam) 30%, transparent);
+  border-top: 2px dashed rgba(26, 47, 58, 0.2);
   z-index: -1;
   animation: ld-crease 0.9s ease-out both;
   pointer-events: none;
@@ -2378,9 +2221,40 @@
   height: 100%;
   display: block;
 }
+.ld-dusk__clock {
+  position: absolute;
+  left: max(var(--gutter, 20px), calc(50% - 640px));
+  top: 22px;
+  padding: 6px 12px;
+  font-size: 22px;
+  color: var(--ink-fixed);
+  background: var(--sun);
+  border: var(--stroke) solid var(--outline);
+  border-radius: 12px;
+  box-shadow: var(--sh-2);
+  transform: rotate(-3deg);
+}
+.ld-dusk__note {
+  position: absolute;
+  left: max(var(--gutter, 20px), calc(50% - 640px));
+  top: 78px;
+  max-width: 60%;
+  padding: 3px 9px;
+  font-size: var(--t-micro);
+  color: var(--ink-fixed);
+  background: var(--cream);
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: var(--r-tag);
+}
 @media (max-width: 479px) {
   .ld-dusk {
     height: 260px;
+  }
+  .ld-dusk__note {
+    display: none;
+  }
+  .ld-dusk__clock {
+    font-size: 18px;
   }
 }
 .ld-dusk__lights {
@@ -2397,10 +2271,13 @@
 
 /* a landscape phone (about 300 px under the header): the key pictures fit on one screen */
 @media (max-height: 500px) and (orientation: landscape) {
-  .ld-round__clock-wrap {
+  .ld-round__orbit-wrap {
     width: 100%;
-    max-width: 560px;
+    max-width: 420px;
     margin-inline: auto;
+  }
+  .ld-orbit {
+    padding: 40px 20px 56px !important;
   }
   .ld-nft__fan {
     height: 370px;

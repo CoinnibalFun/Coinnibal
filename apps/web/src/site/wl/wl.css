@@ -62,7 +62,7 @@
   font-weight: 800;
   font-size: var(--t-h1);
   line-height: 0.98;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.025em;
   color: var(--ink);
   text-wrap: balance;
 }
@@ -395,7 +395,7 @@
   font-weight: 800;
   font-size: 23px;
   line-height: 1.1;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.01em;
   color: var(--ink-fixed);
 }
 .wl-step.is-todo .wl-step__title {
@@ -751,7 +751,7 @@
   }
 }
 
-/* ── closed after it was open: the way back to an earlier entry, under the shared closed notice ── */
+/* ── closed: the site's shared closed notice (Closed.tsx), with the way back to an earlier entry ── */
 .wl-closed__again {
   display: grid;
   justify-items: center;
@@ -760,21 +760,10 @@
   padding-top: 10px;
   border-top: 2px dashed var(--rule);
 }
-.wl-closed__again .sw {
-  justify-items: center;
-}
-.wl-closed__again .sw-note {
-  text-align: center;
-}
-.wl-closed__note {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  margin: 0;
-  max-width: 34ch;
-  font-size: 15px;
-  text-align: center;
-  color: var(--ink-2);
+.wl-closed__again .wl-signin-card {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
 }
 
 @media (prefers-reduced-motion: reduce) {
