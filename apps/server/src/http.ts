@@ -1,6 +1,7 @@
 import type { ShareService } from './site/shares';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { pipeline } from 'node:stream';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION } from '@elymum/shared';
 import { NonceLimitError, checksumAddress, type Auth, type SiweOrigin } from './auth';
@@ -34,6 +35,8 @@ const MIME: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
   '.m4a': 'audio/mp4',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
   '.webmanifest': 'application/manifest+json',
 };
 
@@ -131,14 +134,16 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   const base = resolve(root);
   let file = normalize(join(base, rel));
   if (file !== base && !file.startsWith(base + sep)) return false;
+  let fallback = false;
   if (!existsSync(file) || statSync(file).isDirectory()) {
     if (extname(rel)) return false;
     file = join(base, 'index.html'); // SPA fallback
     if (!existsSync(file)) return false;
+    fallback = true;
   }
   const ext = extname(file);
   const immutable = rel.startsWith('/assets/');
-  res.writeHead(200, {
+  const headers: Record<string, string | number> = {
     'Content-Type': MIME[ext] ?? 'application/octet-stream',
     'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
     // the web app is never framed (clickjacking of wallet actions); scripts from this origin only (Vercel's old rule,
@@ -146,10 +151,72 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
     'X-Frame-Options': 'DENY',
     'Content-Security-Policy': WEB_CSP,
     'Referrer-Policy': 'strict-origin-when-cross-origin',
-  });
+  };
+  if (fallback) {
+    // the app page stands in for every client route: always sent whole, never a byte range of it
+    res.writeHead(200, headers);
+    if (req.method === 'HEAD') res.end();
+    else sendFile(file, res);
+    return true;
+  }
+  // a real file answers one byte range: Safari and iOS play a <video> only from a server that does (they probe
+  // with `Range: bytes=0-1` first), and a download can resume
+  const stat = statSync(file);
+  const size = stat.size;
+  const lastModified = stat.mtime.toUTCString();
+  headers['Accept-Ranges'] = 'bytes';
+  headers['Last-Modified'] = lastModified;
+  // `If-Range` with any other validator than this file's date means the client's copy is stale: send it whole
+  const ifRange = req.headers['if-range'];
+  const range = ifRange === undefined || ifRange === lastModified ? byteRange(req.headers.range, size) : null;
+  if (range === 'unsatisfiable') {
+    res.writeHead(416, { ...headers, 'Content-Range': `bytes */${size}` });
+    res.end();
+    return true;
+  }
+  if (range) {
+    headers['Content-Range'] = `bytes ${range.start}-${range.end}/${size}`;
+    headers['Content-Length'] = range.end - range.start + 1;
+  } else {
+    headers['Content-Length'] = size;
+  }
+  res.writeHead(range ? 206 : 200, headers);
   if (req.method === 'HEAD') res.end();
-  else createReadStream(file).pipe(res);
+  else sendFile(file, res, range ?? undefined);
   return true;
+}
+
+/**
+ * Streams a file (or one byte range of it) to the response. pipeline() destroys both ends when the client goes away
+ * mid-transfer or the read fails, so the file descriptor is always closed and no stream error goes unhandled (with
+ * `.pipe()` an aborted download kept its descriptor open: enough of them exhaust the process's descriptors, and the
+ * next unhandled stream error crashes the server).
+ */
+function sendFile(file: string, res: ServerResponse, range?: { start: number; end: number }): void {
+  pipeline(createReadStream(file, range), res, () => {
+    /* finished, the client left, or the read failed: pipeline has already closed the file and the response */
+  });
+}
+
+/**
+ * The one byte range of a `Range` header (`bytes=a-b`, `bytes=a-`, `bytes=-n`) clamped to a file of `size` bytes;
+ * null to send the whole file (no header, another unit, several ranges, or a header that does not parse, which
+ * RFC 9110 lets a server ignore), 'unsatisfiable' for a range that starts past the end (or an empty suffix).
+ */
+export function byteRange(header: string | undefined, size: number): { start: number; end: number } | 'unsatisfiable' | null {
+  if (!header) return null;
+  const m = /^bytes=(\d{0,16})-(\d{0,16})$/.exec(header.trim());
+  if (!m || (m[1] === '' && m[2] === '')) return null;
+  if (m[1] === '') {
+    const n = Number(m[2]);
+    if (n === 0 || size === 0) return 'unsatisfiable';
+    return { start: Math.max(0, size - n), end: size - 1 };
+  }
+  const start = Number(m[1]);
+  if (start >= size) return 'unsatisfiable';
+  if (m[2] !== '' && Number(m[2]) < start) return null;
+  const end = m[2] === '' ? size - 1 : Math.min(Number(m[2]), size - 1);
+  return { start, end };
 }
 
 /**

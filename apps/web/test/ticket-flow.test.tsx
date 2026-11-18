@@ -241,7 +241,7 @@ describe('ticket confirm sheet', () => {
     open(PENNY);
     expect(screen.getByText(/You have no ETH on Robinhood Chain Testnet/)).toBeTruthy();
     expect((screen.getByRole('button', { name: /^Pay / }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole('link', { name: /Get test ETH from the faucet/ }).getAttribute('href')).toBe(CHAIN.faucetUrl);
+    expect(screen.getByRole('link', { name: /Get test ETH from the official .* faucet/ }).getAttribute('href')).toBe(CHAIN.faucetUrl);
   });
 
   it('the collect sheet shows the payout and one refund call', () => {

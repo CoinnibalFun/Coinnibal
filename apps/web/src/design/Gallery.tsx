@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE, SITE_X_HANDLE_DEFAULT as X_HANDLE, type ElysiumPaint } from '@elymum/shared';
+import { ELYSIUM, NFT_SUPPLY, SHADE, SITE_X_HANDLE_DEFAULT as X_HANDLE, type ElysiumPaint } from '@elymum/shared';
 import { motion } from 'motion/react';
 import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -248,7 +248,7 @@ export function Gallery() {
             <h3 className="gal-type__h3">Three small chores, then the feast.</h3>
             <p className="lede">DM Sans for everything you read. The ring noticed, and so did our follower count. Copy is short, specific and a little wry.</p>
             <p className="gal-type__body">
-              Body 16/1.5. Numbers are always Geist Mono: <span className="num">0.0213 ETH</span>, <span className="num">2,614 / 5,000</span>,{' '}
+              Body 16/1.5. Numbers are always Geist Mono: <span className="num">0.0213 ETH</span>, <span className="num">2,614 / 3,333</span>,{' '}
               <span className="num">0x7a3f…e91c</span>.
             </p>
             <p className="quote gal-type__quote">&ldquo;To the Elysian plain, where life is easiest for men.&rdquo;</p>
@@ -445,7 +445,7 @@ export function Gallery() {
       <Plate n={6} title="The mint, after dark" aside="ArcGauge · GasAmount · QuantityStepper · Countdown · AddressChip" className="gal-plate--mint">
         <div className="gal-mint">
           <div className="gal-mint__copy">
-            <div className="kicker">Sealed emblems · supply 5,000</div>
+            <div className="kicker">Sealed emblems · supply 3,333</div>
             <h2 className="gal-mint__h display">
               One emblem.
               <br />
@@ -467,7 +467,7 @@ export function Gallery() {
               <span className="gal-emblem__rib display">Sealed. For now.</span>
             </div>
             <div className="gal-mint__right">
-              <ArcGauge value={minted} max={5000} caption={`${Math.round((minted / 5000) * 100)}% minted. The rest are still deciding.`} />
+              <ArcGauge value={minted} max={NFT_SUPPLY} caption={`${Math.round((minted / NFT_SUPPLY) * 100)}% minted. The rest are still deciding.`} />
               <div className="gal-mint__price">
                 <GasAmount value={0.0213} usd={1} size="lg" />
                 <div className="gal-mint__tick num">ETH/USD 46.94 · updated 4s ago · gas on Robinhood Chain, also in ETH</div>
@@ -482,7 +482,7 @@ export function Gallery() {
                   <GasAmount value={0.0213 * qty} usd={qty} size="sm" stack />
                 </div>
               </div>
-              <Button variant="primary" size="lg" block onClick={() => setMinted((m) => Math.min(5000, m + qty))}>
+              <Button variant="primary" size="lg" block onClick={() => setMinted((m) => Math.min(NFT_SUPPLY, m + qty))}>
                 Mint {qty} emblem{qty > 1 ? 's' : ''}
               </Button>
               <div className="gal-mint__wl">

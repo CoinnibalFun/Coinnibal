@@ -45,7 +45,7 @@ const contract = (o: Partial<MintContractState> = {}): MintContractState => ({
   maxPriceWei: '0',
   keeper: '0x0000000000000000000000000000000000000000',
   merkleRoot: ROOT,
-  maxSupply: 5000,
+  maxSupply: 3333,
   totalSupply: 10,
   wlLimit: 1,
   publicLimit: 2,
@@ -88,7 +88,7 @@ describe('mint logic', () => {
     expect(mintView(mintState(contract({ phase: 'closed' })))).toBe('closed');
     expect(mintView(mintState(contract()))).toBe('allowlist');
     expect(mintView(mintState(contract({ phase: 'public' })))).toBe('public');
-    expect(mintView(mintState(contract({ totalSupply: 5000 })))).toBe('soldout');
+    expect(mintView(mintState(contract({ totalSupply: 3333 })))).toBe('soldout');
   });
 
   it('pre-checks like the contract (mintRefusal) plus the proof and the published root', () => {
@@ -99,7 +99,7 @@ describe('mint logic', () => {
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true, `0x${'00'.repeat(32)}`) })).toMatch(/not published/);
     expect(mintBlocker(c, { wl: 1, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true) })).toMatch(/allowlist limit is 1/);
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'public', qty: 1, proof: null })).toMatch(/public mint is not open/);
-    const pub = contract({ phase: 'public', totalSupply: 4999 });
+    const pub = contract({ phase: 'public', totalSupply: 3332 });
     expect(mintBlocker(pub, { wl: 0, pub: 0 }, { kind: 'public', qty: 2, proof: null })).toMatch(/only 1 left/);
     expect(remaining(pub, { wl: 0, pub: 0 }, 'public')).toBe(1);
     expect(remaining(contract({ phase: 'public' }), { wl: 0, pub: 1 }, 'public')).toBe(1);
@@ -160,7 +160,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
   it('Allowlist: eligibility, quantity bounded by the limit, and the mint call with the proof', async () => {
     connect();
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract({ wlLimit: 2 })), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(true) }));
-    const fresh = { phase: 1, phaseName: 'allowlist', price: 31_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: ROOT, maxSupply: 5000, totalSupply: 10, wlLimit: 2, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
+    const fresh = { phase: 1, phaseName: 'allowlist', price: 31_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: ROOT, maxSupply: 3333, totalSupply: 10, wlLimit: 2, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
     spies.getMintState.mockResolvedValue(fresh);
     spies.sendWalletCall.mockImplementation(async (_call: unknown, opts: { onPhase?: (p: string) => void }) => {
       opts.onPhase?.('signing');
@@ -210,7 +210,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
   });
 
   it('Sold out, with Play for holders', async () => {
-    ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract({ totalSupply: 5000 }), { soldOut: true }) }));
+    ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract({ totalSupply: 3333 }), { soldOut: true }) }));
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(screen.getByTestId('mt-phase').textContent).toBe('Sold out'));
     expect(screen.getByRole('link', { name: 'Play' })).toBeTruthy();

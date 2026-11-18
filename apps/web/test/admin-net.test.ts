@@ -92,10 +92,10 @@ describe('the deploy wizard steps', () => {
     expect(() => arenaDeployArgs(ALICE, null)).toThrow(/no server key/);
   });
 
-  it('NFT defaults: 5,000, the $1 price, 1 / 2 per wallet, `${origin}/api/nft/`, treasury = you', () => {
+  it('NFT defaults: the fixed supply 3,333, the $1 price, 1 / 2 per wallet, `${origin}/api/nft/`, treasury = you', () => {
     const form = defaultNftForm('https://elymum.test/', '30000000000000000', ALICE);
-    expect(form).toEqual({ maxSupply: '5000', priceGas: '0.03', wlLimit: '1', publicLimit: '2', baseURI: 'https://elymum.test/api/nft/', treasury: ALICE });
-    expect(nftDeployArgs(form, ALICE)).toEqual({ owner: ALICE, maxSupply: 5000, mintPrice: 30_000_000_000_000_000n, wlLimit: 1, publicLimit: 2, baseURI: 'https://elymum.test/api/nft/', treasury: ALICE });
+    expect(form).toEqual({ maxSupply: '3333', priceGas: '0.03', wlLimit: '1', publicLimit: '2', baseURI: 'https://elymum.test/api/nft/', treasury: ALICE });
+    expect(nftDeployArgs(form, ALICE)).toEqual({ owner: ALICE, maxSupply: 3333, mintPrice: 30_000_000_000_000_000n, wlLimit: 1, publicLimit: 2, baseURI: 'https://elymum.test/api/nft/', treasury: ALICE });
     expect(() => nftDeployArgs({ ...form, priceGas: '' }, ALICE)).toThrow(/Mint price/);
     expect(() => nftDeployArgs({ ...form, baseURI: 'https://x.test/nft' }, ALICE)).toThrow(/Base URI/);
     expect(() => nftDeployArgs({ ...form, treasury: 'nope' }, ALICE)).toThrow(/Treasury/);

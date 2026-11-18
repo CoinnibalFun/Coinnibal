@@ -9,7 +9,7 @@ export interface ArcGaugeProps extends Omit<HTMLAttributes<HTMLDivElement>, 'chi
   tone?: 'up' | 'sun' | 'cyan';
   /** Gauge width in px (default 150). */
   size?: number;
-  /** Show the readout beside the arc ("2,614 / 5,000"). Default true. */
+  /** Show the readout beside the arc ("2,614 / 3,333"). Default true. */
   readout?: boolean;
   /** Line under the readout, e.g. "52% minted. The rest are still deciding." */
   caption?: ReactNode;
