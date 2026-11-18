@@ -136,7 +136,7 @@ async function checkViewport(browser, vp) {
         return { id: b.parentElement.id, above: cut.top < sec.top - 10, z: getComputedStyle(b).zIndex };
       }),
     );
-    if (bites.length !== 3) say(`${bites.length} bites on the page (3 expected)`);
+    if (bites.length !== 2) say(`${bites.length} bites on the page (2 expected: Feast and FAQ)`);
     for (const b of bites) if (!b.above || b.z !== '5') say(`the bite at #${b.id} does not paint over the plate above it (z-index ${b.z})`);
     // (3) nothing blocks a tap
     for (const sel of ['.ld-sound', '.ld-fan__deal', '.ld-qa__q']) {
