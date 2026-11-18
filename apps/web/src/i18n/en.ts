@@ -1072,7 +1072,7 @@ export const en = {
   'nf.shop.yes': "{pct}% off",
   'nf.uses.l': "Power-ups in a paid round",
   'nf.private.l': "Private room",
-  'nf.private.no': "Paid in {gas}",
+  'nf.private.no': "Paid in ETH",
   'nf.private.free': "1 free a day",
   'nf.private.off': "{pct}% off",
   'nf.skin.l': "Coin look",

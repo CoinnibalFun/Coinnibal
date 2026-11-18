@@ -3,7 +3,6 @@ import {
   DEFAULT_ARENAS,
   DEFAULT_FEE_RATES,
   DEFAULT_HOLDER_FEE_RATES,
-  GAS_SYMBOL,
   SHOP_DEFAULTS,
   bpsToPercent,
   formatUsdCents,
@@ -74,8 +73,8 @@ export function perkRows(v: NftPerkValues, t: (k: TKey, vars?: Record<string, st
   if (v.room) rows.push({ id: 'room', label: t('nf.room.l', { price: v.room }), without: t('nf.room.no'), with: t('nf.room.yes') });
   rows.push({ id: 'shop', label: t('nf.shop.l'), without: t('nf.shop.no'), with: t('nf.shop.yes', { pct: v.shopPct }) });
   rows.push({ id: 'uses', label: t('nf.uses.l'), without: String(base), with: String(base + v.shopExtra) });
-  if (v.privateRoom.perk === 'free_daily') rows.push({ id: 'private', label: t('nf.private.l'), without: t('nf.private.no', { gas: GAS_SYMBOL }), with: t('nf.private.free') });
-  else if (v.privateRoom.perk === 'discount') rows.push({ id: 'private', label: t('nf.private.l'), without: t('nf.private.no', { gas: GAS_SYMBOL }), with: t('nf.private.off', { pct: v.privateRoom.pct }) });
+  if (v.privateRoom.perk === 'free_daily') rows.push({ id: 'private', label: t('nf.private.l'), without: t('nf.private.no'), with: t('nf.private.free') });
+  else if (v.privateRoom.perk === 'discount') rows.push({ id: 'private', label: t('nf.private.l'), without: t('nf.private.no'), with: t('nf.private.off', { pct: v.privateRoom.pct }) });
   rows.push({ id: 'skin', label: t('nf.skin.l'), without: t('nf.skin.no'), with: t('nf.skin.yes') });
   return rows;
 }
