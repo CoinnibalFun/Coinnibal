@@ -941,7 +941,7 @@ export const en = {
   'site.hc.connect': "Connect a wallet",
   'site.hc.titleIn': "Signed in",
   'site.hc.title': "Bring a wallet",
-  'site.hc.lede': "Any EVM wallet works. We ask for one signature to know it is you: free, and it sends no transaction. We will never ask for your seed phrase.",
+  'site.hc.lede': "Any EVM wallet works. We ask for one signature to know it's you. It's free and sends no transaction, and we'll never ask for your seed phrase.",
   'site.hc.signIn': "Sign in",
   'site.nf.sign': "404",
   'site.nf.title': "Somebody ate this page",
@@ -972,7 +972,7 @@ export const en = {
   'site.closed.mint': "The coins are still asleep. When the mint opens, it'll be on OpenSea: use only the OpenSea link that {ourX} posts.",
   'site.closed.collab': "This is where communities will ask for WL spots. For now, the guide explains how the game works.",
   'site.closed.page': "There's nothing here for now. The guide explains how the game works.",
-  'site.closed.preview': "Admin preview · visitors do not see this page",
+  'site.closed.preview': "Admin preview · visitors don't see this page",
   // landing
   'ld.hero.kicker': "A browser game · on {chain}",
   'ld.hero.tag': "Coins eating coins.",
