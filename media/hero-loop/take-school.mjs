@@ -428,11 +428,12 @@ function laneClear(x0, y0, hx, hy, len, spot, R, wide = false) {
  * A course from where she is, near the horizontal (the frame is wide: the prey then comes in from the side, its
  * name tag clear of hers), or null.
  */
+/** The courses tried (radians off the horizontal). */
+const TILTS = [0, 0.08, -0.08, 0.15, -0.15, 0.22, -0.22, 0.3, -0.3, 0.37, -0.37];
 function pickHeading(len, spot, wide) {
   const R = radius(me.mass);
   let best = null;
-  for (let k = -6; k <= 6; k++) for (const dir of [1, -1]) {
-    const a = (k / 6) * 0.42;
+  for (const a of TILTS) for (const dir of [1, -1]) {
     const hx = dir * Math.cos(a), hy = Math.sin(a);
     if (!laneClear(me.wx, me.wy, hx, hy, len, spot, R, wide)) continue;
     const score = -Math.abs(a);
@@ -444,10 +445,11 @@ function pickHeading(len, spot, wide) {
 function laneStart(len, spot, wide) {
   const R = radius(me.mass);
   let best = null;
-  for (const dir of [1, -1]) for (const a of [0, 0.15, -0.15, 0.3, -0.3]) {
+  for (const dir of [1, -1]) for (const a of TILTS) {
     const hx = dir * Math.cos(a), hy = Math.sin(a);
-    for (let y = room[1] + 1400; y <= room[3] - 1400; y += 150) {
-      const x = dir > 0 ? room[0] + 1400 : room[2] - 1400;
+    for (let y = room[1] + 1600; y <= room[3] - 1600; y += 150) {
+      // (a little further in than the walls allow: she stops up to 150 short of it)
+      const x = dir > 0 ? room[0] + 1600 : room[2] - 1600;
       if (!laneClear(x, y, hx, hy, len, spot, R, wide)) continue;
       const d = Math.hypot(x - me.wx, y - me.wy) + Math.abs(a) * 800;
       if (!best || d < best.d) best = { x, y, d };
@@ -500,8 +502,10 @@ try {
         rec.mark('survey');
       }
       const [wx, wy] = survey[0];
+      const p0 = [me.wx, me.wy];
       await heroFor(3000, { mode: 'goto', wx, wy, split: false, margin: 300 }, async () => Math.hypot(wx - me.wx, wy - me.wy) < 300 || raining);
-      if (Math.hypot(wx - me.wx, wy - me.wy) < 300) survey.shift();
+      // there, or stuck (a cactus she must not touch in the way): on to the next point
+      if (Math.hypot(wx - me.wx, wy - me.wy) < 300 || (!raining && Math.hypot(me.wx - p0[0], me.wy - p0[1]) < 150)) survey.shift();
       if (!survey.length) log(`survey done: ${cactusMap.size} cacti`);
       continue;
     }
@@ -524,6 +528,7 @@ try {
       // no room from here: over to the start of a lane across the pond (the school comes along), else toward
       // the middle for a while
       const L = wideStart ?? laneStart(need, spot, false);
+      if (L) log(`to a lane start ${Math.round(L.x)},${Math.round(L.y)}${wideStart ? ' (no cactus in the frame)' : ''}`);
       if (L) await heroFor(20000, { mode: 'goto', wx: L.x, wy: L.y, noFood: true, split: false, margin: 300 }, async () => Math.hypot(L.x - me.wx, L.y - me.wy) < 150 || raining);
       else { const cx = midX(), cy = midY(), d = Math.hypot(cx - me.wx, cy - me.wy) || 1; await heroFor(2500, { ahead: [(cx - me.wx) / d, (cy - me.wy) / d] }); }
       continue;
