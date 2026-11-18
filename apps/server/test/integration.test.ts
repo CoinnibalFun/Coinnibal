@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLOSE_REPLACED, CUSTOM_DEFAULTS, EntityKind, PROTOCOL_VERSION, RULES, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, CUSTOM_DEFAULTS, EntityKind, PROTOCOL_VERSION, RULES, TEST_ARENA_DEFAULT, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@elymum/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
@@ -994,6 +994,42 @@ describe('server over websocket', () => {
     c2.close();
     o.close();
   }, 20_000);
+
+  it('test arena: each person seated takes a bot\'s place; after the bell the bot comes back with the arrival pacing', async () => {
+    // the lobby's room list (in room workers too: the worker's figures reach the main thread)
+    const testRoom = async () => app.rooms.list().find((r) => r.id === 'test-1');
+    const until = async (ok: (r: { players: number; bots: number }) => boolean, ms: number) => {
+      for (const end = Date.now() + ms; Date.now() < end; await sleep(50)) {
+        const r = await testRoom();
+        if (r && ok(r)) return r;
+      }
+      throw new Error(`test-1 is ${JSON.stringify(await testRoom())}`);
+    };
+    // three bots in the empty test arena (the admin's setting)
+    app.rooms.testArenas.update({ bots: 3 });
+    await until((r) => r.players === 0 && r.bots === 3, 20_000);
+    const player = newWallet();
+    const ticket = session(player);
+    chain.sessions.set(`1:${player}`, ticket);
+    const c = await signedIn(player);
+    c.send({ t: 'join', room: 'arena:1:test', name: 'MakeRoom', skin: 0 });
+    expect((await c.wait('joined')).room).toMatchObject({ id: 'test-1', test: true });
+    // one person: one bot fewer, and it stays that way while the person plays
+    await until((r) => r.players === 1 && r.bots === 2, 4000);
+    await sleep(600);
+    expect(await testRoom()).toMatchObject({ players: 1, bots: 2 });
+    // the bell settles the ticket: the person is gone, a bot comes back, not at once
+    jumpTo(roundAt(serverNow()).endsAt);
+    await c.wait('roundOver', 4000);
+    await sleep(500);
+    expect((await testRoom())?.bots).toBe(2);
+    await until((r) => r.players === 0 && r.bots === 3, 15_000);
+    app.journal.remove(ticket.key);
+    for (const p of [...app.journal.pending]) if (p.kind === 'sweep') app.journal.remove(p.key);
+    chain.sessions.delete(`1:${player}`);
+    app.rooms.testArenas.update({ bots: TEST_ARENA_DEFAULT.bots });
+    c.close();
+  }, 45_000);
 
   it('test arenas turned off: closed (nothing of value in them), joins refused; on again: back', async () => {
     app.rooms.testArenas.update({ enabled: false });

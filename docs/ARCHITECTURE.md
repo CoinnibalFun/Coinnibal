@@ -134,8 +134,9 @@ Off chain (the server; tests in `apps/server/test`):
 11. **Value conservation per arena:** Σ live values + Σ floor loot + Σ pending payouts and sweeps + Σ forfeited =
     Σ entry fees − Σ paid. Only people hold value in an arena (there are no house bots). The practice bots of the
     testnet's test arenas hold none either: they are never in the arena ledger, eating one moves no value, one
-    that eats a staker makes the eaten share spill as floor loot (burned at the bell unless a player takes it), and
-    bots pick up no loot. The journal
+    that eats a staker makes the eaten share spill as floor loot (burned at the bell unless a player takes it),
+    bots pick up no loot, and a bot leaving to make room for a person (shielded, so it eats nobody on its way out)
+    or coming back moves none. The journal
     (`DATA_DIR/chains/<id>/journal.json`) is written with write-to-temp + rename.
 12. **Crash recovery:** live tickets found in the journal at start are settled at their last journaled value; loot
     is restored. An arena whose vault does not cover what the journal owes it stays disabled (`!!! arena #N KEPT
@@ -160,7 +161,9 @@ random joins, eats, disconnects, unplayed tickets, holds, failed transfers, RPC 
 receipts, outages, worker crashes, restarts and days passing; after every chain pass the vault must equal the rooms +
 the journal + forfeits + unseated tickets exactly, and at the end every ticket is closed exactly once. The test-arena
 scenario (`testArenas`, `money-sim --test-arenas`) adds a test arena with practice bots next to every arena's
-instances (players eat bots, bots eat stake cells) and must hold the same books to the unit.
+instances (players eat bots, bots eat stake cells, seated players make bots leave and the bots come back) and must
+hold the same books to the unit; every tick it also checks that no bot holds a ticket and that a test arena never
+has more bots than its setting, nor more playing than the setting minus its people.
 
 ## Trust model
 
@@ -246,8 +249,14 @@ instances (players eat bots, bots eat stake cells) and must hold the same books 
   `join(arenaId)`, joined with `arena:<id>:test`), the same seating checks (game access, holders gate, bans, round
   windows, one session per wallet per arena across every room of the arena), rounds and bell, settlement with the
   contract's fee on profit, loot burns, the journal, crash recovery and the integrity telemetry. The one difference:
-  practice bots (default 10, mixed, 3..20; the first at once, then one about every 4 s). They carry no value (see
-  invariant 11). The scaler never sees them (`publicInstances` excludes them) and quick play never seats there.
+  practice bots (default 10, mixed, 3..20; the first at once, then one about every 4 s). The setting is the bots of
+  an EMPTY test arena: every person's coin in it takes one bot's place (`PracticeBots` with `makeRoom`, set by `Room`
+  from `test`; `max(0, bots − people)` play). A person seated: a bot on its way in is called off, else the playing
+  bot least in the way (no chase with a person, the farthest from the people; else the smallest) turns harmless
+  (shielded), swims to an edge away from the people and leaves the world once no connection has it in view (at the
+  latest after `BOT_LEAVE_MAX_MS`, 8 s), with a `feed` "went home" line. A person gone: a bot comes back with the
+  arrival pacing, one at a time; never more bots in the world than the setting. The rule runs inside `Room`, so a
+  test arena in a room worker follows it the same way. They carry no value (see invariant 11). The scaler never sees them (`publicInstances` excludes them) and quick play never seats there.
   Their games count on no board: no leaderboard record, country game or "Last rounds" entry, no profile stats; their Share on X
   cards are stamped TEST and never show a payout. **Guards:** they exist only when the server's `CHAIN_ID` is a testnet (46630, or 31337 locally)
   and the RPC serves a testnet, AND the admin switch "Test arenas with bots" is on (default on on a testnet). On the

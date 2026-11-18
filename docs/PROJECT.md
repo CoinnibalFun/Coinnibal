@@ -72,8 +72,9 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
   with the retired keys ignored).
 - A **free** custom room may field practice bots: its creator turns them on and picks the count (1 to 12) and the
   difficulty (easy, mixed, hard). On the testnet each arena also has a **test arena** (`test-<id>`, marked TEST in
-  the lobby) with practice bots (default 10, mixed; OPERATIONS.md, "Test arenas with bots"). Ticket rooms and every
-  other room refuse them (`Room` throws).
+  the lobby) with practice bots (default 10 in an empty test arena, mixed; OPERATIONS.md, "Test arenas with bots").
+  Every person in a test arena takes one bot's place: a bot leaves when someone is seated and comes back, one at a
+  time, after they are gone. Ticket rooms and every other room refuse them (`Room` throws).
 - Fair by construction (`apps/server/src/bots/brain.ts`): a bot sees only what the server would show a player of its
   size (its view rectangle; invisible players excluded), re-thinks every ~650 / 450 / 300 ms (easy / normal /
   hard; "mixed" rolls a third of each), misses a threat or a prey 35 / 25 / 12 % of the time (`BOT_TUNING`
