@@ -6,7 +6,7 @@
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLOSE_REPLACED, PROTOCOL_VERSION, encodeTarget, roundAt, type ChainStatus, type ServerMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, PROTOCOL_VERSION, TEST_ARENA_DEFAULT, encodeTarget, roundAt, type ChainStatus, type ServerMessage } from '@elymum/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
@@ -273,8 +273,11 @@ describe('room workers', () => {
     b.ws.close();
   });
 
-  it('a test arena in a worker: the official ticket journaled by the main thread; a crash settles it once and the test arena reopens', async () => {
+  it('a test arena in a worker: the person takes a bot\'s place, the official ticket is journaled by the main thread; a crash settles it once and the test arena reopens', async () => {
     await until(() => !!app.rooms.get('test-1'), 8000);
+    // three bots in the empty test arena, all arrived (one by one)
+    app.rooms.testArenas.update({ bots: 3 });
+    await until(() => app.rooms.get('test-1')!.botCounts().bots === 3, 20_000);
     const w = testWallet(0xa0f1);
     const t = ticket(w);
     chain.sessions.set(`1:${w}`, t);
@@ -286,7 +289,10 @@ describe('room workers', () => {
     await until(() => app.journal.live().some((l) => l.session === t.key && l.roomId === 'test-1'));
     expect(app.rooms.findArenaStake(1, w)?.room.id).toBe('test-1');
     const room = app.rooms.get('test-1') as RemoteRoom;
-    await until(() => room.botCounts().bots > 0, 8000);
+    // the worker's room made room for the person: one bot fewer (the lobby and the admin view read it here)
+    await until(() => room.botCounts().bots === 2 && room.humanCount === 1, 8000);
+    expect(app.rooms.list().find((r) => r.id === 'test-1')).toMatchObject({ players: 1, bots: 2 });
+    expect(app.rooms.testArenaView().rooms.find((r) => r.id === 'test-1')).toMatchObject({ people: 1, bots: 2 });
 
     app.rooms.pool!.crash(room.slot.index);
     await until(() => app.journal.settlements().some((p) => p.key === t.key));
@@ -302,7 +308,8 @@ describe('room workers', () => {
     app.journal.remove(t.key);
     for (const p of [...app.journal.pending]) if (p.kind === 'sweep' && p.roomId === 'test-1') app.journal.remove(p.key);
     chain.sessions.delete(`1:${w}`);
-  }, 30_000);
+    app.rooms.testArenas.update({ bots: TEST_ARENA_DEFAULT.bots });
+  }, 60_000);
 
   it('a crashed worker: its live tickets are settled once at their journaled value, its sockets closed, the worker respawned', async () => {
     const w = testWallet(0xa003);

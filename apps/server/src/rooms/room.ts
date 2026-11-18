@@ -42,7 +42,7 @@ import {
   type ServerMessage,
   type StandingRow,
 } from '@elymum/shared';
-import { PracticeBots, type PracticeBotsOptions } from '../bots/practice';
+import { PracticeBots, type BotDeparture, type BotSurroundings, type PracticeBotsOptions } from '../bots/practice';
 import type { ChainGateway } from '../chain/types';
 import { looksLikeScam, maskProfanity } from '../chat-filter';
 import type { Player } from '../game/entities';
@@ -153,7 +153,8 @@ export interface RoomOptions {
   /**
    * Practice bots: only a FREE custom room (`mode: 'private'` with `custom`, no `stake`) and a test arena (`test`,
    * on a testnet chain) may have them; the constructor refuses them anywhere else. Null / absent / a count of 0: no
-   * bots.
+   * bots. In a test arena `count` is the bots of the EMPTY room: every person's coin in it takes one bot's place
+   * (`PracticeBots`, `makeRoom`); a free custom room keeps its creator's count.
    */
   bots?: PracticeBotsOptions | null;
   /**
@@ -282,7 +283,13 @@ export class Room implements RoomHandle {
     // a resizable room opens at the size its bots alone call for (the first joins grow it)
     const first = this.map ? this.shapeFor(this.wantedSide(0, botCount)) : preset;
     this.world = new World({ ...first, powerUps: opts.powerUps ?? true, coinRain: opts.mode !== 'arena', seed, ...(this.map ? { space: MAP_SPACE } : {}) });
-    this.bots = botCount > 0 && opts.bots ? new PracticeBots(this.world, opts.bots, mulberry32(seed ^ 0xb07)) : null;
+    // a test arena's bots make room for people: decided here from `test`, whatever the options say
+    let botOpts: PracticeBotsOptions | null = null;
+    if (opts.bots) {
+      const { makeRoom: _ignored, ...own } = opts.bots;
+      botOpts = opts.test ? { ...own, makeRoom: true } : own;
+    }
+    this.bots = botCount > 0 && botOpts ? new PracticeBots(this.world, botOpts, mulberry32(seed ^ 0xb07)) : null;
     this.ledger = opts.mode === 'arena' ? new ArenaLedger() : null;
     this.eaten = new EatenTracker(!!opts.test);
     this.clock = deps.clock ?? new RoundClock(deps.now, deps.round);
@@ -400,7 +407,34 @@ export class Room implements RoomHandle {
   /** A test arena's new bot settings (the admin's, applied live). Ignored in any other room. */
   setBots(count: number, difficulty: PracticeBotsOptions['difficulty']): void {
     if (!this.opts.test || !this.bots) return;
-    for (const pid of this.bots.reconfigure(count, difficulty)) for (const c of this.conns) c.view.forgetPlayer(pid);
+    this.botsGone(this.bots.reconfigure(count, difficulty, this.botSurroundings()));
+  }
+
+  /**
+   * What the practice bots are told each tick: the coins of the people here (connected or away; in a test arena
+   * each takes one bot's place) and whether a connection has a coin in view (a leaving bot goes once nobody does).
+   */
+  private botSurroundings(): BotSurroundings {
+    const people: Player[] = [];
+    for (const pid of this.humans.keys()) {
+      const p = this.world.players.get(pid);
+      if (p?.alive) people.push(p);
+    }
+    return {
+      people,
+      seen: (pid) => {
+        for (const c of this.conns) if (c.open && c.view.knownPlayers.has(pid)) return true;
+        return false;
+      },
+    };
+  }
+
+  /** Bots that left the world (to make room for a person, or after a lower setting): viewers forget them, the feed says so. */
+  private botsGone(gone: BotDeparture[]): void {
+    for (const { player, reason } of gone) {
+      for (const c of this.conns) c.view.forgetPlayer(player.id);
+      this.broadcast({ t: 'feed', kind: 'left', pid: player.id, name: player.name, skin: player.skin, isBot: true, reason });
+    }
   }
 
   setBuyIn(buyIn: number): void {
@@ -501,6 +535,9 @@ export class Room implements RoomHandle {
       this.integrity?.join(this, player.id, conn, opts.stake);
       this.commitJournal();
     }
+    // a test arena: the person takes a bot's place at once (the bot leaves out of sight, see `PracticeBots`); the
+    // viewers hear of it after the person's own `joined` (which already counts one bot fewer)
+    const madeRoom = this.opts.test && this.bots ? this.bots.fit(this.botSurroundings()) : [];
     conn.send({
       t: 'joined',
       room: this.info(),
@@ -516,6 +553,7 @@ export class Room implements RoomHandle {
     conn.send({ t: 'history', chat: this.chatLog });
     if (this.closing) conn.send({ t: 'closing', ...this.closing });
     this.sendBoosts(conn);
+    this.botsGone(madeRoom);
     return player;
   }
 
@@ -1027,9 +1065,9 @@ export class Room implements RoomHandle {
   /* Dynamic map size                                                 */
   /* ---------------------------------------------------------------- */
 
-  /** Players this room expects with `humans` people in it: them plus its practice bots. */
+  /** Players this room expects with `humans` people in it: them plus its practice bots (a test arena's make room). */
   expectedPlayers(humans = this.humans.size): number {
-    return humans + (this.bots?.count ?? 0);
+    return humans + (this.bots?.targetFor(humans) ?? 0);
   }
 
   /** The side the room wants now: auto from the expected count, else its preset. */
@@ -1171,7 +1209,7 @@ export class Room implements RoomHandle {
       if (ev.coinRain === 'start') this.pushChat({ pid: 0, from: 'Coinnibal', skin: 1, text: 'COIN RAIN!', system: true });
     }
 
-    this.bots?.update(world.now);
+    if (this.bots) this.botsGone(this.bots.update(world.now, this.botSurroundings()));
 
     if (this.ledger) this.stakeHousekeeping();
 

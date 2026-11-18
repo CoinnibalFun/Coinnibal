@@ -190,6 +190,7 @@ export interface RoomInfo {
   x0?: number;
   y0?: number;
   players: number;
+  /** Practice bots playing now (a test arena: fewer with every person in it, `test-arenas.ts`). */
   bots: number;
   maxPlayers: number;
   /** Arena rooms only. */

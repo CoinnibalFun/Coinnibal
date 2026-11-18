@@ -9,7 +9,8 @@ import { TicketList } from '../src/ui/lobby/TicketList';
 const M = 10n ** 18n;
 const practice: TicketModel = { key: 'practice', arenaId: null, entryFee: 0n, humans: 0, bots: 0, loot: 0, open: true };
 const official: TicketModel = { key: 'arena:1', arenaId: 1, entryFee: 1000n * M, humans: 3, bots: 0, loot: 0, open: true };
-const test: TicketModel = { ...official, key: 'test:1', humans: 1, bots: 10, test: true };
+// the setting is 10 bots in the empty room: one person there, 9 play
+const test: TicketModel = { ...official, key: 'test:1', humans: 1, bots: 9, test: true };
 
 afterEach(() => useUi.setState({ testSeat: null, paidSeat: null, lobbyIntent: null }));
 
@@ -34,7 +35,7 @@ describe('lobby: the testnet test arenas', () => {
     expect(screen.getByText('testnet test room with bots; same tickets and payouts')).toBeTruthy();
     expect(screen.getByText('Test rooms · testnet')).toBeTruthy();
     expect(document.querySelector('[data-test-arena="1"]')?.textContent).toMatch(/Test · /);
-    expect(document.querySelector('[data-test-arena="1"]')?.textContent).toMatch(/10 bots/);
+    expect(document.querySelector('[data-test-arena="1"]')?.textContent).toMatch(/1 player · 9 bots/);
   });
 
   it('a ticket picked in the test arena joins arena:<id>:test; an official one the arena; "New ticket" stays where it played', () => {

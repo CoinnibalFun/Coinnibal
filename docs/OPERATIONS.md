@@ -537,18 +537,29 @@ that eats a player makes the eaten value spill as loot (burned at the bell if no
 arena's normal ticket: the same on-chain session can be played in an official instance or in the test arena (one
 seat at a time).
 
-- **Lobby:** listed after the official arenas under "Test arenas · testnet", each with a TEST badge and the line
-  "testnet test room with bots; same tickets and payouts". Quick play never goes there. Who may play follows the
-  normal game access rule (`gameAccess` / `GAME_ACCESS`): admins during maintenance, everyone when the game is open.
+**People take the bots' places.** The setting is the number of bots in an EMPTY test arena; every person's coin in
+it (playing or away) takes one bot's place, so the room plays with the setting minus the people (never fewer than
+none). A person seated: one bot leaves at once, first one still on its way in, else the bot least in the way (in no
+chase with a person, the farthest from the people; when every bot is busy with someone, the smallest). It turns
+harmless (shielded: it eats nobody and nobody eats it), swims toward an edge away from the people and leaves once no
+screen has it in view (at the latest after 8 s); the room's feed says "Bot N went home." A person gone (eaten, or
+settled at the bell): a bot comes back one at a time about 4 s apart (± 40 %), never all at once. A bot holds no
+value, so its leaving or coming back moves none: ticket values, floor loot, settlements and burns stay as they are.
+
+- **Lobby:** listed after the official arenas under "Test rooms · testnet", each with a TEST badge, the line
+  "testnet test room with bots; same tickets and payouts" and its live count of players and bots. Quick play never
+  goes there. Who may play follows the normal game access rule (`gameAccess` / `GAME_ACCESS`): admins only while it
+  is `admins` (as now), NFT holders and admins with `holders`, everyone with `public`. The server checks it at every
+  join and watch (`game_closed`), not only in the lobby.
 - **Boards:** test-arena games count nowhere official: no leaderboard record, country game or "Last rounds" entry,
   no profile stats (XP, games, best). Their Share on X cards are stamped TEST and never show a payout; eating a
   practice bot offers a kill card there only.
 - **Admin:** `/admin` → Game → **Test arenas (testnet)** (`GET` / `PUT /api/admin/test-arenas`, stored in
-  `DATA_DIR/site/test-arenas.json`): "Test arenas with bots" on / off (default on), bots per test arena (3..20,
-  default 10), difficulty (easy / mixed / hard, default mixed), and every test arena live (people, bots, open or
-  closing, its worker). New settings apply at once: more bots arrive one by one, extra bots leave, the difficulty
-  applies to bots that arrive from then on. Turned off, no test arena takes a new seat and each closes once its bell
-  settled every ticket in it.
+  `DATA_DIR/site/test-arenas.json`): "Test arenas with bots" on / off (default on), the bots of an empty test arena
+  (3..20, default 10), difficulty (easy / mixed / hard, default mixed), and every test arena live (people, bots
+  playing, open or closing, its worker). New settings apply at once: more bots arrive one by one, extra bots leave
+  the same way as for a person, the difficulty applies to bots that arrive from then on. Turned off, no test arena
+  takes a new seat and each closes once its bell settled every ticket in it.
 - **Mainnet:** impossible. With `CHAIN_ID=4663` (or an RPC that serves the mainnet) no test arena opens, `PUT` answers
   409 and the card says test arenas exist on a testnet only; a `test-arenas.json` left from the testnet is ignored.
 

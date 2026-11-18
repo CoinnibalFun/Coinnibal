@@ -9,6 +9,11 @@ import { CUSTOM_DIFFICULTIES, type CustomDifficulty } from './custom-rooms';
  * never value, and a bot that eats a player makes the eaten value spill as floor loot (burned at the bell if no
  * player picks it up), so the vault books stay exactly as in an official arena.
  *
+ * The bots make room for people: `bots` is the number of bots in an EMPTY test arena, and every person's coin in it
+ * takes one bot's place (`max(0, bots − people)` play). A person seated: one bot leaves (harmless and out of sight; it
+ * holds no value, so nothing is settled, moved or burned). A person gone (eaten, or settled at the bell): a bot comes
+ * back, one at a time about `TEST_ARENA_ARRIVE_MS` apart, never all at once.
+ *
  * They exist only while the server's chain is a testnet (Robinhood Chain Testnet, or the local node) AND the admin
  * switch is on (default on). On the mainnet the setting is refused and ignored and the server never opens one.
  * Quick play never seats anyone there; the lobby lists them after the official arenas, marked TEST; their results
@@ -18,17 +23,20 @@ import { CUSTOM_DIFFICULTIES, type CustomDifficulty } from './custom-rooms';
 export interface TestArenaSettings {
   /** The admin switch "Test arenas with bots" (testnet only). */
   enabled: boolean;
-  /** Practice bots in every test arena. */
+  /** Practice bots in an EMPTY test arena: every person in it takes one bot's place. */
   bots: number;
   difficulty: CustomDifficulty;
 }
 
 export const TEST_ARENA_DEFAULT: TestArenaSettings = { enabled: true, bots: 10, difficulty: 'mixed' };
 
-/** Bots per test arena: at least 3 (a test arena is never empty), at most 20. */
+/** Bots of an empty test arena: at least 3 (nobody arrives to an empty room), at most 20. */
 export const TEST_ARENA_BOTS = { min: 3, max: 20 } as const;
 
-/** Bots arrive one by one: the first at once, then one about every this many ms (± 40 %). */
+/**
+ * Bots arrive one by one: in a new test arena the first at once, then one about every this many ms (± 40 %); a bot
+ * coming back after a person left arrives the same way, about this long after.
+ */
 export const TEST_ARENA_ARRIVE_MS = 4000;
 
 /** The test arena of `arenaId` (room id). */
@@ -72,6 +80,7 @@ export interface TestArenaRoomView {
   id: string;
   name: string;
   people: number;
+  /** Bots playing now (the setting minus the people, as they leave and come back one by one). */
   bots: number;
   capacity: number;
   /** Takes no new seat; closes once its bell settled every ticket in it (the switch was turned off). */

@@ -179,8 +179,12 @@ export interface SimReport {
   /** Per arena (base units): deposited, paid to players, burned (fees + loot), fees to the fee wallet, forfeited. */
   books: Record<number, { deposited: string; paidOut: string; burned: string; fees: string; vaultLeft: string; forfeited: number }>;
   faults: { rpcErrors: number; ambiguousSends: number; lostReceipts: number; outages: number; workerCrashes: number; restarts: number; hardKills: number; holds: number; released: number; zeroed: number; refusingPlayers: number; spills: number; daysPassed: number; dayRefunds: number };
-  /** The test-arena scenario: bots eaten by players (mass, no value) and stake cells eaten by bots (value spilled as loot). */
-  testArenas: { rooms: number; botsEaten: number; botSpills: number; botSpillValue: number } | null;
+  /**
+   * The test-arena scenario: bots eaten by players (mass, no value), stake cells eaten by bots (value spilled as loot)
+   * and bots that left to make room for a seated player (`botsLeft`; checked every tick: never more bots than the
+   * setting, never more playing than the setting minus the people in the room).
+   */
+  testArenas: { rooms: number; botsEaten: number; botSpills: number; botSpillValue: number; botsLeft: number } | null;
   /** Emblem holders: wallets, tickets bought, tickets settled and settled with a profit (paying the holder pair). */
   holders: { wallets: number; tickets: number; settled: number; winners: number };
   /** Settled tickets paid more than their entry fee / less than it (eaten or shrunk). */
@@ -320,11 +324,12 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   const instances = opts.instances ?? 2;
   const rooms = new Map<string, Room>();
   const leaderboards = new Leaderboards(null);
-  const testBots = { botsEaten: 0, botSpills: 0, botSpillValue: 0 };
+  const testBots = { botsEaten: 0, botSpills: 0, botSpillValue: 0, botsLeft: 0 };
   /** Counts a test arena's bot figures before the room goes (crash, restart) or at the end. */
   const tallyBots = (r: Room) => {
     if (!r.opts.test) return;
     testBots.botsEaten += r.bots?.eaten ?? 0;
+    testBots.botsLeft += r.bots?.left ?? 0;
     testBots.botSpills += r.botSpills.n;
     testBots.botSpillValue += r.botSpills.value;
   };
@@ -416,7 +421,8 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   function botEncounters(): void {
     for (const room of rooms.values()) {
       if (!room.opts.test || !room.bots || rng() > 0.05) continue;
-      const bots = [...room.bots.bots.values()].map((b) => b.player).filter((b) => b.alive && b.cells.length > 0);
+      // a leaving bot is shielded on its way out (harmless): only playing bots meet stakers
+      const bots = [...room.bots.bots.values()].filter((b) => !b.leaving).map((b) => b.player).filter((b) => b.alive && b.cells.length > 0);
       const stakers = room.ledger!.all().map((e) => room.world.players.get(e.pid)).filter((p) => !!p && p.alive && p.cells.length > 0);
       if (bots.length === 0 || stakers.length === 0) continue;
       const bot = bots[Math.floor(rng() * bots.length)];
@@ -428,6 +434,20 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
       bot.cells[0].y = big.y;
       bot.shieldUntil = 0;
       staker.shieldUntil = 0;
+    }
+  }
+
+  /**
+   * Test arenas, every tick: each person's coin takes a bot's place (never more bots in the world than the setting,
+   * never more playing than the setting minus the people), and no bot ever holds a ticket.
+   */
+  function checkBots(): void {
+    for (const room of rooms.values()) {
+      const b = room.bots;
+      if (!room.opts.test || !b) continue;
+      if (b.bots.size > b.count) violate(`${room.id}: ${b.bots.size} bots in the world, the setting is ${b.count}`);
+      if (b.size > Math.max(0, b.count - room.humanCount)) violate(`${room.id}: ${b.size} bots playing with ${room.humanCount} people (setting ${b.count})`);
+      for (const pid of b.bots.keys()) if (room.ledger!.has(pid)) violate(`${room.id}: bot ${pid} holds a ticket`);
     }
   }
 
@@ -651,6 +671,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
     }
     play();
     for (const r of rooms.values()) r.tick(TICK_MS);
+    checkBots();
     clock += TICK_MS;
 
     if (ticks % passEvery === 0) {

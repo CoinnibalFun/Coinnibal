@@ -906,13 +906,14 @@ export class RoomManager {
 
   /**
    * Opens the test arena of an arena: `test-<id>`, an arena instance (number 0) on the official arena's tickets and
-   * vault, with the admin's practice bots (arriving one by one). Never on a chain that is not a testnet.
+   * vault, with the admin's practice bots (arriving one by one; every person in it takes one bot's place, see
+   * `PracticeBots`). Never on a chain that is not a testnet.
    */
   private createTestArena(arenaId: number, arena: ArenaData): RoomHandle | null {
     if (!this.testActive()) return null;
     const s = this.testArenas.settings;
     this.closingTests.delete(testArenaRoomId(arenaId));
-    this.deps.log(`test arenas: opening ${testArenaRoomId(arenaId)} (${s.bots} ${s.difficulty} bots, chain ${this.cfg.chain.chainId})`);
+    this.deps.log(`test arenas: opening ${testArenaRoomId(arenaId)} (${s.bots} ${s.difficulty} bots when empty, chain ${this.cfg.chain.chainId})`);
     return this.open({
       id: testArenaRoomId(arenaId),
       mode: 'arena',
