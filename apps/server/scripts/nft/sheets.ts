@@ -18,7 +18,8 @@ import { vectorSvg } from '../../src/site/nft/vector';
 import { LAYERS, MYTHICS, TIERS, valueTier, type Genome, type Tier } from '../../src/site/nft/traits';
 
 const require = createRequire(import.meta.url);
-GlobalFonts.registerFromPath(require.resolve('@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2'), 'Fraunces');
+// the site's display face (one weight, 400) for the titles; DM Sans for everything else
+GlobalFonts.registerFromPath(require.resolve('@fontsource/lilita-one/files/lilita-one-latin-400-normal.woff2'), 'Lilita One');
 GlobalFonts.registerFromPath(require.resolve('@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2'), 'DM Sans');
 
 const arg = (name: string, def: string) => {
@@ -53,7 +54,7 @@ function sheet(w: number, h: number): { c: Canvas; ctx: SKRSContext2D } {
 
 function title(ctx: SKRSContext2D, text: string, sub: string, x = 40, y = 64): void {
   ctx.fillStyle = INK;
-  ctx.font = '600 40px Fraunces';
+  ctx.font = '400 40px "Lilita One"';
   ctx.fillText(text, x, y);
   ctx.font = '400 20px "DM Sans"';
   ctx.fillStyle = '#6B655A';
@@ -113,7 +114,7 @@ async function tiers(style: keyof typeof styles): Promise<void> {
   for (const [r, tier] of TIERS.entries()) {
     const y = 130 + r * (S + 30);
     ctx.fillStyle = TIER_INK[tier];
-    ctx.font = '600 30px Fraunces';
+    ctx.font = '400 30px "Lilita One"';
     ctx.fillText(tier, 40, y + 60);
     ctx.font = '400 17px "DM Sans"';
     ctx.fillStyle = INK;
@@ -148,7 +149,7 @@ async function traits(style: keyof typeof styles): Promise<void> {
   let y = 130;
   for (const row of rows) {
     ctx.fillStyle = INK;
-    ctx.font = '600 24px Fraunces';
+    ctx.font = '400 24px "Lilita One"';
     ctx.fillText(row.label, 30, y + 40);
     for (const [i, it] of row.items.entries()) {
       const x = 200 + (i % cols) * (S + 12);
@@ -191,7 +192,7 @@ function rarityTable(): void {
   title(ctx, 'Rarity table', `The full collection: ${size} tokens from seed "${seed}". Duplicate DNA: ${st.duplicates}. Tiers are exact quotas.`);
   for (const { x, y, b } of placed) {
     ctx.fillStyle = INK;
-    ctx.font = '600 24px Fraunces';
+    ctx.font = '400 24px "Lilita One"';
     ctx.fillText(b.label, x, y + 24);
     for (const [i, [name, n]] of b.entries.entries()) {
       const yy = y + 54 + i * lineH;
