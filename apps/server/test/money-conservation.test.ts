@@ -38,10 +38,12 @@ describe('money conservation under faults (simulation)', () => {
       const r = await runMoneySim(fakeSimChain({ players: 14, seed }), { seed, rounds: 200, faults: DEFAULT_FAULTS, testArenas: { bots: 10, difficulty: 'mixed' } });
       expect(r.violations).toEqual([]);
       expect(r.closures.Settled).toBeGreaterThan(150);
-      // the bots really played: players ate bots (mass, no value) and bots ate stake cells (value spilled as loot)
+      // the bots really played: players ate bots (mass, no value) and bots ate stake cells (value spilled as loot);
+      // seated players made bots leave and the bots came back after them (the bounds are checked every tick)
       expect(r.testArenas!.botsEaten).toBeGreaterThan(0);
       expect(r.testArenas!.botSpills).toBeGreaterThan(0);
-      console.log(`${brief(r)}; test arenas: ${r.testArenas!.botsEaten} bots eaten, ${r.testArenas!.botSpills} stake cells eaten by bots (${r.testArenas!.botSpillValue} spilled as loot)`);
+      expect(r.testArenas!.botsLeft).toBeGreaterThan(0);
+      console.log(`${brief(r)}; test arenas: ${r.testArenas!.botsEaten} bots eaten, ${r.testArenas!.botSpills} stake cells eaten by bots (${r.testArenas!.botSpillValue} spilled as loot), ${r.testArenas!.botsLeft} left for players`);
     }, 180_000);
   }
 
