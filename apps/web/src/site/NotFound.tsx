@@ -1,5 +1,5 @@
 import { ELYSIUM, SHADE } from '@elymum/shared';
-import { PlateLabel, useReducedMotion } from '../design';
+import { useReducedMotion } from '../design';
 import { useT } from '../i18n';
 import { T } from '../i18n/rich';
 import { GazeCoin } from './landing/GazeCoin';
@@ -84,7 +84,10 @@ function UnbuiltTerrace() {
   );
 }
 
-/** Any path the site does not know: a lost coin on a terrace that is not built yet. */
+/**
+ * Any path the site does not know: a lost coin on a terrace that is not built yet. One label: the heading (the 404
+ * itself is on the sign in the picture; no title strip, no "Error 404" eyebrow).
+ */
 export function NotFound({ path: normal }: { path: string }) {
   const t = useT();
   const reduced = useReducedMotion();
@@ -92,10 +95,8 @@ export function NotFound({ path: normal }: { path: string }) {
   const path = typeof location !== 'undefined' ? location.pathname : normal;
   return (
     <SitePage className="nf-root">
-      <PlateLabel numeral="404" title={t('site.nf.plate')} aside={path} />
       <section className="nf" aria-labelledby="nf-title">
         <div className="nf__copy">
-          <p className="kicker">{t('site.nf.kicker')}</p>
           <h1 className="nf__title" id="nf-title">
             {t('site.nf.title')}
           </h1>
