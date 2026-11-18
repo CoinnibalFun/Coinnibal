@@ -40,7 +40,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       ['/media/hero-loop.webm', 'video/webm'],
       ['/media/hero-loop.mp4', 'video/mp4'],
     ]);
-    expect(screen.getByTestId('ld-screen').textContent).toBe('Real gameplay');
+    expect(screen.getByTestId('ld-screen').textContent).toBe('Gameplay');
     // the hero links to the holder perks on the same page
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
     // the nav (and every button) follows the settings once they are in: Mint and WL are open here, collab and the game are not

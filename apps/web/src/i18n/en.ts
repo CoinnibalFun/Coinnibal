@@ -987,7 +987,7 @@ export const en = {
   'ld.wlOpen': "WL is open · signing is free",
   'ld.pondHint': "Tap a coin to feed it",
   'ld.pondHintClick': "Click a coin to feed it",
-  'ld.screen.cap': "Real gameplay",
+  'ld.screen.cap': "Gameplay",
   'ld.soundOn': "Sound on",
   'ld.soundOff': "Sound off",
   'ld.feast.h': "You’re <u>a coin</u> in a room full of them",

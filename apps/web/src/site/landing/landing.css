@@ -258,6 +258,13 @@
     margin-top: 34px;
   }
 }
+/* 1024-1199px: the card gives up a little width so the screen stays big enough to read the school's name tags */
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .ld-hero__inner {
+    grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
+    column-gap: 32px;
+  }
+}
 
 /* the pond on the front terrace */
 .ld-pond {
