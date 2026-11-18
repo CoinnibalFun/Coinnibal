@@ -281,8 +281,11 @@ export const site = {
   mint: (signal?: AbortSignal) => request<MintState>('/api/site/mint', { signal }),
   /** `GET /api/site/mint/proof?wallet=0x…`. */
   mintProof: (wallet: string, signal?: AbortSignal) => request<MintProofResponse>(`/api/site/mint/proof${q({ wallet })}`, { signal }),
-  /** `GET /api/site/faucet`: the TestToken faucet (testnet only; amounts in base units). */
-  faucet: () => request<FaucetConfig>('/api/site/faucet'),
+  /**
+   * `GET /api/site/faucet`: the TestToken faucet (testnet only; amounts in base units). While only admins play, the
+   * server answers an admin's session only (`token`: the owner looking the page over before opening the game).
+   */
+  faucet: (token?: string | null) => request<FaucetConfig>('/api/site/faucet', { token }),
   /** `GET /api/site/contracts`: the registered contracts. */
   contracts: () => request<ContractsRegistry>('/api/site/contracts'),
 };

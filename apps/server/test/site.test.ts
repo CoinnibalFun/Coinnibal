@@ -732,6 +732,12 @@ describe('game gate', () => {
     { t: 'join', room: 'private:NEW', name: 'gate', skin: 0 },
     { t: 'join', room: 'arena:1', name: 'gate', skin: 0 },
     { t: 'spectate' },
+    // the other ways in: a private room by its code, a paid custom room, the test arena, watching a given room
+    { t: 'join', room: 'private:AB2CD', name: 'gate', skin: 0 },
+    { t: 'join', room: 'arena:1:AB2CD', name: 'gate', skin: 0 },
+    { t: 'join', room: 'arena:1:test', name: 'gate', skin: 0 },
+    { t: 'spectate', room: 'arena:1' },
+    { t: 'spectate', room: 'practice' },
   ];
 
   it('refuses every room entry for guests and non-admin wallets with game_closed', async () => {
@@ -776,6 +782,53 @@ describe('game gate', () => {
     expect((await h.call('GET', '/api/rooms')).status).toBe(200);
   });
 
+  it('a closed game quotes no play over HTTP: the room quote, the power-up prices and the faucet answer admins only', async () => {
+    const user = wallet();
+    for (const path of ['/api/rooms/custom/quote', '/api/shop', '/api/site/faucet']) {
+      for (const who of [undefined, user]) {
+        const r = await h.call('GET', path, { wallet: who });
+        expect([r.status, r.body?.error], `${path} ${who ?? 'guest'}`).toEqual([403, 'game_closed']);
+      }
+      // the owner reaches all of it (the admin panel, a closed page looked over before it opens)
+      const own = await h.call('GET', path, { wallet: h.admin });
+      expect(own.status, path).toBe(200);
+    }
+    // what is not a way in stays readable: the settings, the room list, the contracts
+    for (const path of ['/api/site/settings', '/api/rooms', '/api/site/contracts']) expect((await h.call('GET', path)).status, path).toBe(200);
+  });
+
+  it('holders mode: a non-holder is refused the room quote and the shop, while the faucet shows (as the /faucet page does)', async () => {
+    await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'holders' } });
+    try {
+      const user = wallet();
+      expect((await h.call('GET', '/api/rooms/custom/quote', { wallet: user })).body?.error).toBe('game_closed');
+      expect((await h.call('GET', '/api/shop', { wallet: user })).body?.error).toBe('game_closed');
+      expect((await h.call('POST', '/api/rooms/custom/practice', { wallet: user })).body?.error).toBe('game_closed');
+      expect((await h.call('GET', '/api/site/faucet')).status).toBe(200);
+      const c = await Ws.open(h.port);
+      c.send({ t: 'auth', token: h.token(user) });
+      await c.next('authed');
+      for (const m of entries) expect(await c.attempt(m), JSON.stringify(m)).toMatchObject({ t: 'error', code: 'game_closed' });
+      c.close();
+    } finally {
+      await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'admins' } });
+    }
+  });
+
+  it('maintenance mode: only admins play, the faucet still shows', async () => {
+    await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'maintenance' } });
+    try {
+      const guest = await Ws.open(h.port);
+      for (const m of entries) expect(await guest.attempt(m), JSON.stringify(m)).toMatchObject({ t: 'error', code: 'game_closed' });
+      guest.close();
+      expect((await h.call('GET', '/api/rooms/custom/quote')).body?.error).toBe('game_closed');
+      expect((await h.call('POST', '/api/rooms/custom', { wallet: wallet(), body: { config: {} } })).body?.error).toBe('game_closed');
+      expect((await h.call('GET', '/api/site/faucet')).status).toBe(200);
+    } finally {
+      await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'admins' } });
+    }
+  });
+
   it('lets everyone in once gameAccess is public, and closes again when it is admins', async () => {
     expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'public' } })).body.settings.gameAccess).toBe('public');
     expect((await h.call('GET', '/api/site/settings')).body.settings.gameAccess).toBe('public');
@@ -786,6 +839,8 @@ describe('game gate', () => {
     watcher.close();
     // arena: past the gate (a guest needs a wallet for a ticket)
     expect(await guest.attempt(entries[2])).toMatchObject({ t: 'error', code: 'auth_required' });
+    // the quotes and the faucet answer everyone too
+    for (const path of ['/api/rooms/custom/quote', '/api/shop', '/api/site/faucet']) expect((await h.call('GET', path)).status, path).toBe(200);
     guest.close();
     await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'admins' } });
     const late = await Ws.open(h.port);

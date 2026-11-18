@@ -149,6 +149,22 @@ describe('the faucet', () => {
     expect(await screen.findByTestId('fc-no-token')).toBeTruthy();
   });
 
+  it("sends the stored session with the faucet read (while only admins play, the server answers an admin's only)", async () => {
+    localStorage.setItem('elymum.auth.v1', JSON.stringify({ address: '0x00000000000000000000000000000000000000Ad', token: 'admin-token', exp: Date.now() + 3_600_000 }));
+    let calls: { method: string; path: string; auth: string | null }[] = [];
+    try {
+      ({ calls, restore } = mockFetch({
+        'GET /api/config': { chain: chainStatus() },
+        'GET /api/site/faucet': { enabled: false, chainId: 46630, token: null, decimals: 18, amount: null, holderAmount: null, cooldownSecs: null, holderNft: null, gasFaucetUrl: 'https://x' },
+      }));
+      ui(<FaucetPage />);
+      expect(await screen.findByTestId('fc-no-token')).toBeTruthy();
+      expect(calls.find((c) => c.path === '/api/site/faucet')?.auth).toBe('Bearer admin-token');
+    } finally {
+      localStorage.removeItem('elymum.auth.v1');
+    }
+  });
+
   it('on mainnet the route says the faucet is testnet only', async () => {
     ({ restore } = mockFetch({ 'GET /api/config': { chain: chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null }) } }));
     ui(<FaucetPage />);

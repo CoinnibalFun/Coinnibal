@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { AdminAudit } from './audit';
 import { SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
-import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf } from '@elymum/shared';
+import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import { XLinkFail, type XLinkService } from '../xlink';
@@ -290,6 +290,14 @@ export class SiteApi {
     return false;
   }
 
+  /**
+   * Whether `wallet` may read the test-token faucet (`GET /api/site/faucet`): everyone while the game shows on the site
+   * (`gameVisible`: every mode but `admins`, the rule of the site's /faucet page), else admins only.
+   */
+  faucetOpenFor(wallet: string | null | undefined): boolean {
+    return gameVisible(this.gameAccess()) || this.isAdmin(wallet);
+  }
+
   /** The settings everyone can read; `gameAccess` is the effective value. */
   publicSettings(): SiteSettings {
     return { ...this.store.settings, gameAccess: this.gameAccess() };
@@ -380,7 +388,11 @@ export class SiteApi {
     if (!shop) throw new SiteFail(404, 'not_found', 'Not found');
     if (path === '/api/shop') {
       this.method(req, 'GET');
-      return send(res, 200, await shop.service.view(bearerWallet(this.auth, req)));
+      const wallet = bearerWallet(this.auth, req);
+      // the packs' prices are a quote for play: only for whoever may play now. A purchase (below) is not gated: a
+      // payment someone made anyway is credited (or owed back), never kept for nothing
+      if (!(await this.gameOpenFor(wallet))) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
+      return send(res, 200, await shop.service.view(wallet));
     }
     this.method(req, 'POST');
     const wallet = this.session(req);
@@ -668,9 +680,9 @@ export class SiteApi {
     const svc = this.customRooms;
     if (!svc) throw new SiteFail(404, 'not_found', 'Not found');
     const rest = path.slice('/api/rooms/custom'.length).replace(/^\//, '');
-    // opening a room (paid, or free practice) follows the game gate: the join over the WebSocket would be refused
-    // anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter
-    if (req.method === 'POST' && !(await this.gameOpenFor(bearerWallet(this.auth, req)))) {
+    // opening a room (paid, or free practice) and its price quote follow the game gate: the join over the WebSocket
+    // would be refused anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter
+    if ((req.method === 'POST' || (req.method === 'GET' && rest === 'quote')) && !(await this.gameOpenFor(bearerWallet(this.auth, req)))) {
       throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
     }
     return customRoomRoutes(
@@ -719,6 +731,8 @@ export class SiteApi {
       case 'faucet': {
         if (seg.length !== 1) break;
         this.method(req, 'GET');
+        // the test-token faucet belongs to the game: hidden (like the site's /faucet page) while only admins play
+        if (!this.faucetOpenFor(bearerWallet(this.auth, req))) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
         const faucet = this.ext.faucet ?? (this.ext.chain ? new FaucetInfo({ chain: this.ext.chain, contracts: this.ext.contracts ?? null }) : null);
         if (!faucet) throw new SiteFail(503, 'chain_off', 'The faucet is not available on this server.');
         return send(res, 200, await faucet.get());

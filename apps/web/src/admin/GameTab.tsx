@@ -204,6 +204,14 @@ function StartStopCard({ ctx }: { ctx: ChainCtx }) {
             <span className="kb-btn__text">Open the arena as admin</span>
           </span>
         </a>
+        {/* the test-token faucet belongs to the game: hidden from visitors while only admins play, one click away here */}
+        {ctx.net.info && !ctx.net.mainnet && (
+          <a className="kb-btn kb-btn--secondary kb-btn--sm" href="/faucet" data-testid="admin-faucet-link">
+            <span className="kb-btn__label">
+              <span className="kb-btn__text">Open the test-token faucet</span>
+            </span>
+          </a>
+        )}
       </div>
     </Card>
   );
