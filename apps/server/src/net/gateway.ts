@@ -19,7 +19,7 @@ import {
 } from '@coinnibal/shared';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import type { Auth } from '../auth';
-import { ChainBusyError, type ChainGateway, type ChainSession, type SettledEvent } from '../chain/types';
+import { ChainBusyError, sessionKey, type ChainGateway, type ChainSession, type SettledEvent } from '../chain/types';
 import type { ServerConfig } from '../config';
 import type { ProfileStore } from '../profiles';
 import type { RoomHandle } from '../rooms/handle';
@@ -241,11 +241,11 @@ export class Gateway {
    * Refuses (`game_closed`) a room entry the game gate does not allow for this session. `fresh`: the
    * holder check bypasses its cache (each arena seat, i.e. every new ticket and round, re-checks it).
    */
-  private async gameClosed(conn: Conn, fresh = false): Promise<boolean> {
+  private async gameClosed(conn: Conn, fresh = false, wallet: string | null = conn.wallet): Promise<boolean> {
     if (!this.gameGate) return false;
-    const open = await Promise.resolve(this.gameGate(conn.wallet, fresh)).catch(() => false);
+    const open = await Promise.resolve(this.gameGate(wallet, fresh)).catch(() => false);
     if (open) return false;
-    this.error(conn, 'game_closed', conn.wallet ? 'The game is not open to this wallet yet.' : 'The game is not open yet. Sign in with your wallet if you hold a Coinnibal NFT.');
+    this.error(conn, 'game_closed', wallet ? 'The game is not open to this wallet yet.' : 'The game is not open yet. Sign in with your wallet if you hold a Coinnibal NFT.');
     return true;
   }
 
@@ -672,13 +672,17 @@ export class Gateway {
 
   private async onJoin(conn: Conn, msg: Record<string, unknown>): Promise<void> {
     if (conn.joining) return;
+    // the wallet this join is for: an `auth` or `logout` that lands during an await below changes `conn.wallet`, and
+    // the join then stops (everything it checked was for this wallet)
+    const wallet = conn.wallet;
     // every room entry (practice, private, arena ticket) is gated before anything else is looked at
     conn.joining = true;
     try {
-      if (await this.gameClosed(conn)) return;
+      if (await this.gameClosed(conn, false, wallet)) return;
     } finally {
       conn.joining = false;
     }
+    if (conn.wallet !== wallet) return;
     const target = typeof msg.room === 'string' ? parseJoinTarget(msg.room) : null;
     if (!target) {
       this.error(conn, 'bad_request', 'Unknown room');
@@ -690,8 +694,9 @@ export class Gateway {
     try {
       const wantsEmblem = msg.skin === EMBLEM_SKIN_ID;
       const skin = wantsEmblem ? EMBLEM_SKIN_ID : Number.isInteger(msg.skin) && (msg.skin as number) >= 0 && (msg.skin as number) < SKIN_COUNT ? (msg.skin as number) : 0;
-      if (conn.wallet) conn.profile = this.profiles?.summary(conn.wallet) ?? null;
-      const holder = conn.wallet && this.holderCheck ? await this.holderCheck(conn.wallet).catch(() => false) : false;
+      if (wallet) conn.profile = this.profiles?.summary(wallet) ?? null;
+      const holder = wallet && this.holderCheck ? await this.holderCheck(wallet).catch(() => false) : false;
+      if (conn.wallet !== wallet) return;
       // only the basic skins can be picked, and the emblem skin by emblem holders
       if (wantsEmblem ? !holder : !isBasicSkin(skin)) {
         this.error(conn, 'skin_locked', wantsEmblem ? 'The emblem skin is for Coinnibal NFT holders.' : 'That skin is locked.');
@@ -704,16 +709,16 @@ export class Gateway {
         flags |= PlayerFlag.Verified;
       }
       // the signed-in wallet's own profile picture, when it asked to wear it (guests and bots never have one)
-      const avatar = msg.pic === true && conn.wallet ? (this.profiles?.avatar(conn.wallet) ?? null) : null;
+      const avatar = msg.pic === true && wallet ? (this.profiles?.avatar(wallet) ?? null) : null;
       // the flag by the name: an allowlisted ISO 3166-1 alpha-2 code exactly, anything else is no flag
       // (a join that leaves it out entirely takes the signed-in wallet's saved one; '' means no flag)
-      const country = isCountryCode(msg.country) ? msg.country : msg.country === undefined && conn.wallet ? (this.profiles?.country(conn.wallet) ?? null) : null;
+      const country = isCountryCode(msg.country) ? msg.country : msg.country === undefined && wallet ? (this.profiles?.country(wallet) ?? null) : null;
       // the flag skin: the coin painted with that flag (needs a country; a worn picture wins, so it is
       // not sent with one). A join that leaves `flag` out takes the signed-in wallet's saved choice.
-      const wantsFlag = msg.flag === true || (msg.flag === undefined && !!conn.wallet && (this.profiles?.flagSkin(conn.wallet) ?? false));
+      const wantsFlag = msg.flag === true || (msg.flag === undefined && !!wallet && (this.profiles?.flagSkin(wallet) ?? false));
       if (wantsFlag && country && !avatar) flags |= PlayerFlag.FlagSkin;
       // the linked X handle comes from the server's own store (a client never names one)
-      const xHandle = conn.wallet ? (this.xHandleOf?.(conn.wallet) ?? null) : null;
+      const xHandle = wallet ? (this.xHandleOf?.(wallet) ?? null) : null;
 
       // overloaded: a new free game waits (live games, reconnects and paid seats go on)
       if (target.mode !== 'arena' && !(conn.player?.alive) && this.shedder && !this.shedder.admitFree()) {
@@ -760,22 +765,22 @@ export class Gateway {
         this.error(conn, 'arenas_disabled', 'High-stakes arenas are offline.');
         return;
       }
-      if (!conn.wallet) {
+      if (!wallet) {
         this.error(conn, 'auth_required', 'Connect and sign in with your wallet first.');
         return;
       }
       // banned wallets cannot start new arena games (a live ticket can still be resumed below: it is their money)
-      const banned = this.banGate?.(conn.wallet) === true;
-      if (banned && !this.rooms.findArenaStake(target.arenaId, conn.wallet)) {
+      const banned = this.banGate?.(wallet) === true;
+      if (banned && !this.rooms.findArenaStake(target.arenaId, wallet)) {
         this.error(conn, 'banned', 'This wallet is banned from paid arenas after an integrity review. Practice is open.');
         return;
       }
       try {
-        await this.joinArena(conn, target.arenaId, { name, skin, flags, avatar, country, xHandle }, target.code ?? null, target.test === true);
+        await this.joinArena(conn, wallet, target.arenaId, { name, skin, flags, avatar, country, xHandle }, target.code ?? null, target.test === true);
       } catch (err) {
         if (!(err instanceof ChainBusyError)) throw err;
         // the RPC refused us even after the retries: the ticket is untouched on chain, the player tries again
-        this.log(`join: arena #${target.arenaId} for ${conn.wallet} — ${err.message}`);
+        this.log(`join: arena #${target.arenaId} for ${wallet} — ${err.message}`);
         this.error(conn, 'chain_busy', 'The network is busy. Your ticket is safe on chain: press Resume again in a moment.');
       }
     } finally {
@@ -827,25 +832,29 @@ export class Gateway {
   }
 
   /**
-   * The arena part of a join (the caller checked the wallet, the gate and the ban). `code`: seat the
-   * ticket in that paid custom room (an invite-only instance of this arena) instead of a public
-   * instance; `test`: in the arena's test arena (testnet only, with practice bots). A live ticket comes back
-   * to wherever its coin is, either way. Throws `ChainBusyError`.
+   * The arena part of a join (the caller checked the wallet, the gate and the ban). `wallet`: the signed-in wallet the
+   * join is for. Every check and the seat are for that wallet only: when the socket's wallet changes during an await
+   * (an `auth` or `logout` sent meanwhile) the join stops, so a ticket is never seated under another wallet. `code`:
+   * seat the ticket in that paid custom room (an invite-only instance of this arena) instead of a public instance;
+   * `test`: in the arena's test arena (testnet only, with practice bots). A live ticket comes back to wherever its coin
+   * is, either way. Throws `ChainBusyError`.
    */
   private async joinArena(
     conn: Conn,
+    wallet: string,
     arenaId: number,
     look: { name: string; skin: number; flags: number; avatar: string | null; country: string | null; xHandle?: string | null },
     code: string | null = null,
     test = false,
   ): Promise<void> {
-    if (!conn.wallet) return;
-    const wallet = conn.wallet;
+    /** The socket is still signed in as the wallet this join is for (false: stop, say nothing more). */
+    const same = () => conn.wallet === wallet;
+    if (!same()) return;
     const target = { arenaId };
     const { name, skin, flags, avatar, country, xHandle = null } = look;
     {
       // a live ticket comes back first, with no chain read at all: its coin is in this process already
-      const existing = this.rooms.findArenaStake(target.arenaId, conn.wallet);
+      const existing = this.rooms.findArenaStake(target.arenaId, wallet);
       if (existing) {
         // the same signed-in wallet on a new socket (a reconnect after a network switch, a reload, another tab): it
         // takes the coin over at once. The old socket, often a dead one the heartbeat has not noticed yet, is closed
@@ -856,8 +865,9 @@ export class Gateway {
           const back = existing.room.reattach(conn, existing.entry.pid);
           if (back === true || (back !== false && (await back))) return;
         }
+        if (!same()) return;
         // `reattach` rings a due bell first: the ticket may have been settled at that bell just now
-        if (!this.rooms.findArenaStake(target.arenaId, conn.wallet) && this.rooms.bellSettled(target.arenaId, conn.wallet)) {
+        if (!this.rooms.findArenaStake(target.arenaId, wallet) && this.rooms.bellSettled(target.arenaId, wallet)) {
           this.roundEnded(conn);
           return;
         }
@@ -865,6 +875,7 @@ export class Gateway {
         return;
       }
       const pick = test ? await this.rooms.testRoom(target.arenaId) : code ? await this.rooms.paidRoom(target.arenaId, code) : await this.rooms.arenaRoom(target.arenaId);
+      if (!same()) return; // signed out (or in as another wallet) during the await
       if (pick === 'closed') {
         this.error(conn, 'room_closed', 'This room has closed.');
         // the paid room this ticket was bought for ended (or is closing): its unseated ticket goes back in full now
@@ -880,20 +891,20 @@ export class Gateway {
         return;
       }
       let room: RoomHandle | null = pick;
-      if (!conn.wallet) return; // signed out during the await
       // a player back after a bell that settled their ticket while they were away (AFK)
-      const bell = this.rooms.bellSettled(target.arenaId, conn.wallet);
+      const bell = this.rooms.bellSettled(target.arenaId, wallet);
       if (bell) {
         const settling = this.journal.pending.some((p) => p.key === bell.session);
         // undefined: the chain could not be read (or this connection is rate-limited); the normal path below decides then
-        const live = settling ? null : conn.allowChainOp() ? await this.chain.getSession(target.arenaId, conn.wallet).catch(() => undefined) : undefined;
+        const live = settling ? null : conn.allowChainOp() ? await this.chain.getSession(target.arenaId, wallet).catch(() => undefined) : undefined;
+        if (!same()) return;
         if (settling || live === null || (live && live.id === bell.sessionId && !live.finalized)) {
           this.roundEnded(conn);
           return;
         }
         // a newer ticket (or a payout waiting to be collected): the usual checks apply. When the chain
         // could not be read (`live` undefined) the memo stays, so a later retry still hears round_ended.
-        if (live !== undefined) this.rooms.forgetBellSettled(target.arenaId, conn.wallet);
+        if (live !== undefined) this.rooms.forgetBellSettled(target.arenaId, wallet);
       }
       // a new join (not the AFK return above): only while the round's joins are open (a paid room: its own game's)
       if (this.roundClosed(conn, room)) return;
@@ -916,9 +927,15 @@ export class Gateway {
         this.error(conn, 'rate_limited', 'Too many join attempts — wait a moment.');
         return;
       }
-      const session = await this.sessionWithRetry(conn, target.arenaId, conn.wallet);
-      if (!conn.wallet || conn.wallet !== wallet) return; // signed out (or in as another wallet) during the retries
+      const session = await this.sessionWithRetry(conn, target.arenaId, wallet);
+      if (!same()) return; // signed out (or in as another wallet) during the retries
       if (!session) {
+        this.error(conn, 'no_session', 'No open arena ticket found for your wallet.');
+        return;
+      }
+      // the ticket read is this wallet's own ticket of this arena (the seat and its settlement go to `wallet`)
+      if (session.arenaId !== target.arenaId || session.player.toLowerCase() !== wallet.toLowerCase() || session.key !== sessionKey(target.arenaId, wallet, session.id)) {
+        this.log(`!!! join: the ticket read for ${wallet} in arena #${target.arenaId} names ${session.player} (${session.key}): not seated`);
         this.error(conn, 'no_session', 'No open arena ticket found for your wallet.');
         return;
       }
@@ -938,15 +955,16 @@ export class Gateway {
       }
       // holders gate: re-checked uncached right before every arena seat (each round needs a new ticket and
       // join), so an NFT sold since the sign-in no longer seats its former holder
-      if (await this.gameClosed(conn, true)) return;
+      if (await this.gameClosed(conn, true, wallet)) return;
+      if (!same()) return;
       // a holder ticket (holders-only arena, holder fee rates): the emblem is there now, and serves no other open ticket
       if (this.emblemGate) {
         const refused = await this.emblemGate(wallet, session);
+        if (!same()) return;
         if (refused) {
           this.error(conn, refused.code, refused.message);
           return;
         }
-        if (!conn.wallet || conn.wallet !== wallet) return;
       }
       // the instance may have filled up or been closed during the awaits above: pick again (arena data is cached)
       if (code || test) {
@@ -959,12 +977,14 @@ export class Gateway {
           return;
         }
       } else room = await this.rooms.confirmArenaRoom(target.arenaId, room);
+      // the last await: from here to the seat nothing waits, so the socket is still this wallet's at the seat
+      if (!same()) return;
       if (!room) {
         this.error(conn, 'room_full', 'Arena is full — try again in a moment.');
         return;
       }
       // re-check after the awaits above: another tab may have joined with the same ticket meanwhile (in any instance)
-      if (this.rooms.findArenaStake(target.arenaId, conn.wallet) || this.rooms.liveSessions().has(session.key)) {
+      if (this.rooms.findArenaStake(target.arenaId, wallet) || this.rooms.liveSessions().has(session.key)) {
         this.error(conn, 'session_busy', 'You are already playing in this arena.');
         return;
       }
@@ -980,7 +1000,7 @@ export class Gateway {
         return;
       }
       // a new arena game (not a resumed ticket): refused for a banned wallet (the ban may be new since the check above)
-      if (this.banGate?.(conn.wallet) === true) {
+      if (this.banGate?.(wallet) === true) {
         this.error(conn, 'banned', 'This wallet is banned from paid arenas after an integrity review. Practice is open.');
         return;
       }
@@ -993,7 +1013,7 @@ export class Gateway {
         xHandle,
         flags: flags | PlayerFlag.Staker,
         stake: {
-          player: conn.wallet,
+          player: wallet,
           session: session.key,
           sessionId: session.id,
           arenaId: target.arenaId,
