@@ -990,7 +990,7 @@ export const en = {
   'ld.screen.cap': "Real gameplay",
   'ld.soundOn': "Sound on",
   'ld.soundOff': "Sound off",
-  'ld.feast.h': "You're <u>a coin</u> in a room full of them",
+  'ld.feast.h': "You’re <u>a coin</u> in a room full of them",
   'ld.feast.lede': "One coin in a paid room of up to {n}. The {sym} you pay for its ticket become its value, and that's exactly what every other coin is after.",
   'ld.take.h': "Eat a coin, take its tokens.",
   'ld.take.aria': "A smaller coin worth 1,000 {sym} is eaten. The coin that ate it goes from 1,000 to 2,000 {sym}.",

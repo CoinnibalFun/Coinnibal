@@ -48,7 +48,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(document.querySelector('a[href="/collab"]')).toBeNull();
     const wl = screen.getAllByRole('link', { name: /Join the WL/ });
     expect(wl.every((a) => a.getAttribute('href') === '/wl')).toBe(true);
-    for (const h of ["You're a coin in a room full of them", 'How a round plays out', 'Get the Coinnibal NFT', 'Why get the NFT?', 'How big is your appetite?', 'Asked around the pond'])
+    for (const h of ["You’re a coin in a room full of them", 'How a round plays out', 'Get the Coinnibal NFT', 'Why get the NFT?', 'How big is your appetite?', 'Asked around the pond'])
       expect(screen.getByRole('heading', { name: h })).toBeTruthy();
     // no character cards with prices and jokes, no story lines under the rooms
     expect(document.querySelector('.ld-cast, .ld-suspect')).toBeNull();
@@ -484,7 +484,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       expect(el.getAttribute('aria-hidden')).toBe('true');
       expect(el.textContent).toBe('');
     }
-    for (const h of ["You're a coin in a room full of them", 'How a round plays out', 'How big is your appetite?', 'Why get the NFT?', 'Asked around the pond']) expect(screen.getByRole('heading', { name: h })).toBeTruthy();
+    for (const h of ["You’re a coin in a room full of them", 'How a round plays out', 'How big is your appetite?', 'Why get the NFT?', 'Asked around the pond']) expect(screen.getByRole('heading', { name: h })).toBeTruthy();
     // one label per section: the H2. No caption bar over it, no mono aside; the section's top line is a bare ink rule
     expect(document.querySelectorAll('main .kb-plate')).toHaveLength(0);
     const plates = [...document.querySelectorAll('main .ld-plate')];
