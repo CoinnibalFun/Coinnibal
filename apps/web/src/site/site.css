@@ -38,6 +38,51 @@ body {
 .st-main > :first-child > .kb-plate:first-child {
   border-top: 0;
 }
+/* the section title on every top bar: a sun tab, half the section heading's size (founder, 18 Nov: "headings must be
+   big"). Scoped to the site, so the game lobby's own bars (.kl-plate) keep their caption. */
+.st-root {
+  --plate-fs: clamp(22px, calc(1.4vw + 12.5px), 32px);
+}
+.st-root .kb-plate {
+  padding-block: 18px;
+  gap: 18px;
+}
+.st-root .kb-plate__title {
+  font-size: var(--plate-fs);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  padding: 6px 16px 8px;
+  color: var(--ink-fixed);
+  background: var(--sun);
+  border: var(--stroke) solid var(--outline);
+  border-radius: 12px;
+  /* a label, not a button: a smaller shadow than the buttons' --sh-3, no hover */
+  box-shadow: var(--sh-2);
+  /* `rotate`, not `transform`: reveal.css slides the title in with `translate` */
+  rotate: -1.5deg;
+}
+.st-root .kb-plate__rule {
+  border-top-width: 3px;
+}
+@media (max-width: 639px) {
+  .st-root .kb-plate {
+    padding: 14px 16px;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .st-root .kb-plate__title {
+    padding: 5px 12px 7px;
+  }
+  /* the tab may wrap to two lines inside itself: the rule stays level with its first line */
+  .st-root .kb-plate__rule {
+    margin-top: calc((var(--plate-fs) * 1.05 + 18px) / 2 - 1.5px);
+  }
+}
+/* every heading on a site page balances its lines (the lobby's own copy of the guide keeps its wrapping) */
+.st-root :where(h1, h2, h3, h4) {
+  text-wrap: balance;
+}
 
 .st-skip {
   position: absolute;
@@ -194,8 +239,11 @@ body {
 .st-nav__link--soon.is-here,
 .st-nav__link--soon.is-here:hover {
   color: var(--ink) !important;
-  border-style: dashed;
+  /* "you are here": a solid cream chip, the same shape family as the current link's (a dashed box read as a stray
+     focus ring) */
+  border-style: solid;
   border-color: var(--outline);
+  background: var(--cream);
 }
 .st-soon {
   padding: 1px 6px 2px;
@@ -516,6 +564,14 @@ html.st-menu-open {
 .st-foot__eco strong {
   color: var(--ink);
 }
+/* the safety line is a sentence of its own, in body type under the network line */
+.st-foot__safety {
+  margin: 10px 0 0;
+  max-width: 46ch;
+  text-wrap: pretty;
+  font-size: 15px;
+  color: var(--ink-2);
+}
 .st-foot__links {
   display: flex;
   flex-wrap: wrap;
@@ -568,13 +624,10 @@ html.st-menu-open {
   color: var(--ink-3);
   text-wrap: pretty;
 }
-/* wide: the name and the address read as one group on the left, the safety line on the right */
+/* wide: the name and the address read as one group on the left */
 @media (min-width: 900px) {
   .st-foot__small {
     justify-content: flex-start;
-  }
-  .st-foot__small > :last-child {
-    margin-left: auto;
   }
 }
 
