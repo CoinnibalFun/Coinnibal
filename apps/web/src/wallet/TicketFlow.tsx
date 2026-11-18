@@ -1,5 +1,5 @@
 import { getSession, refundCall, sessionRefundState, formatGasAmount } from '@coinnibal/sdk';
-import { activeChain, arenaMeta, bpsToPercent, totalFeeBps, type FeeRates } from '@coinnibal/shared';
+import { ROOM_CLOSE_COUNTDOWN_MS, activeChain, arenaMeta, bpsToPercent, totalFeeBps, type FeeRates } from '@coinnibal/shared';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Address, Hash } from 'viem';
@@ -355,7 +355,7 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
         {mode === 'buy' && paidSeat && paidSeat.arenaId === arenaId && (
           <p className="tf-seat" data-testid="tf-paid-seat">
             <Icon name="key" size={16} />
-            <span>{t('cr.seat.ticketNote', { name: paidSeat.name, code: paidSeat.code })}</span>
+            <span>{t('cr.seat.ticketNote', { name: paidSeat.name, code: paidSeat.code, s: ROOM_CLOSE_COUNTDOWN_MS / 1000 })}</span>
           </p>
         )}
         {/* no ETH for gas: said first (Pay is off), with the way to get some */}

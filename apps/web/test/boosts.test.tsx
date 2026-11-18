@@ -10,7 +10,7 @@ import { ClientWorld } from '../src/game/state';
 import { useUi } from '../src/store';
 import { BoostBar, cooldownFrac, shownKinds } from '../src/ui/game/BoostBar';
 import { ShopSheet, priceText } from '../src/ui/shop/ShopSheet';
-import { ShopError, claimPack, loadPendingClaim, savePendingClaim, settleClaim, totalCharges } from '../src/wallet/shop';
+import { ShopError, claimPack, loadPendingClaims, savePendingClaim, settleClaim, totalCharges } from '../src/wallet/shop';
 import { chainStatus } from './evm-helpers';
 
 const initial = useUi.getState();
@@ -298,22 +298,22 @@ describe('claimPack', () => {
 describe('a paid pack whose claim did not get through', () => {
   const OWNER = '0x1111111111111111111111111111111111111111';
   const HASH = `0x${'3'.repeat(64)}`;
-  afterEach(() => savePendingClaim(null));
+  afterEach(() => localStorage.clear());
 
   it('keeps the payment while the claim cannot reach the server, and drops it once credited or finally refused', async () => {
     savePendingClaim({ owner: OWNER, kind: 'magnet', txHash: HASH, at: Date.now() });
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))));
     await expect(settleClaim('tok', OWNER, 'magnet', HASH, { retryMs: [0] })).rejects.toBeInstanceOf(ShopError);
-    expect(loadPendingClaim(OWNER)?.txHash).toBe(HASH);
+    expect(loadPendingClaims(OWNER).map((c) => c.txHash)).toEqual([HASH]);
     // another wallet does not see it
-    expect(loadPendingClaim('0x2222222222222222222222222222222222222222')).toBeNull();
+    expect(loadPendingClaims('0x2222222222222222222222222222222222222222')).toEqual([]);
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true, kind: 'magnet', added: 3, charges: { magnet: 3, leap: 0, speed: 0, invis: 0 } }), { status: 200 })));
     await settleClaim('tok', OWNER, 'magnet', HASH, { retryMs: [0] });
-    expect(loadPendingClaim(OWNER)).toBeNull();
+    expect(loadPendingClaims(OWNER)).toEqual([]);
     savePendingClaim({ owner: OWNER, kind: 'magnet', txHash: HASH, at: Date.now() });
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'tx_used', message: 'used' }), { status: 409 })));
     await expect(settleClaim('tok', OWNER, 'magnet', HASH, { retryMs: [0] })).rejects.toMatchObject({ code: 'tx_used' });
-    expect(loadPendingClaim(OWNER)).toBeNull();
+    expect(loadPendingClaims(OWNER)).toEqual([]);
   });
 
   it('the shop offers to claim it again (no second payment)', async () => {
@@ -336,7 +336,25 @@ describe('a paid pack whose claim did not get through', () => {
     await waitFor(() => expect(screen.queryByTestId('shop-pending')).toBeNull());
     const claimCall = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/api/shop/buy')) as unknown as [string, RequestInit];
     expect(JSON.parse(claimCall[1].body as string)).toEqual({ kind: 'speed', txHash: HASH });
-    expect(loadPendingClaim(OWNER)).toBeNull();
+    expect(loadPendingClaims(OWNER)).toEqual([]);
+  });
+
+  it('every kept claim of the wallet is offered, and "Buy all" waits until they are claimed (audit S12)', async () => {
+    const SECOND = `0x${'8'.repeat(64)}`;
+    savePendingClaim({ owner: OWNER, kind: 'speed', txHash: HASH, at: Date.now() - 1000 });
+    savePendingClaim({ owner: OWNER, kind: 'magnet', txHash: SECOND, at: Date.now() });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(VIEW), { status: 200 })));
+    act(() => useUi.setState({ chain: chainStatus(), modal: 'shop', auth: { address: OWNER, token: 'tok', profile: null } }));
+    render(
+      <Kb>
+        <ShopSheet />
+      </Kb>,
+    );
+    await waitFor(() => expect(screen.getAllByTestId('shop-claim')).toHaveLength(2));
+    expect(screen.getAllByTestId('shop-pending').map((e) => e.textContent)).toEqual([expect.stringMatching(/Speed burst/), expect.stringMatching(/Magnet/)]);
+    const pay = screen.getByTestId('shop-pay') as HTMLButtonElement;
+    expect(pay.disabled).toBe(true);
+    expect(pay.textContent).toMatch(/claim your paid packs above first/);
   });
 });
 

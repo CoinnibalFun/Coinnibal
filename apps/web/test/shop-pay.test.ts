@@ -8,7 +8,7 @@ vi.mock('../src/wallet/pinned', async (orig) => ({ ...(await orig<typeof import(
 vi.mock('../src/wallet/tx', async (orig) => ({ ...(await orig<typeof import('../src/wallet/tx')>()), sendWalletCall: spies.sendWalletCall }));
 vi.mock('@coinnibal/sdk', async (orig) => ({ ...(await orig<typeof import('@coinnibal/sdk')>()), getAllowance: spies.getAllowance }));
 
-import { ShopError, buyCart, buyPack, cartTotals, loadPendingClaim, savePendingClaim } from '../src/wallet/shop';
+import { ShopError, buyCart, buyPack, cartTotals, loadPendingClaims, settleCartClaim } from '../src/wallet/shop';
 
 const OWNER = '0x1111111111111111111111111111111111111111';
 const ARENA = '0x00000000000000000000000000000000000a4e4a';
@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
-  savePendingClaim(null);
+  localStorage.clear();
 });
 
 describe('buyPack: a power-up pack is paid with CoinnibalArena.pay', () => {
@@ -67,7 +67,7 @@ describe('buyPack: a power-up pack is paid with CoinnibalArena.pay', () => {
     spies.sendWalletCall.mockImplementationOnce(async () => ({ ok: false, hash: null, error: { kind: 'rejected', name: 'UserRejected', args: [], code: 4001, message: 'no' } }));
     await expect(buyPack(VIEW, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() })).rejects.toMatchObject({ code: 'rejected' });
     expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
-    expect(loadPendingClaim(OWNER)).toBeNull();
+    expect(loadPendingClaims(OWNER)).toEqual([]);
     await expect(buyPack({ ...VIEW, payTo: null }, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() })).rejects.toBeInstanceOf(ShopError);
     await expect(buyPack({ ...VIEW, open: false }, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() })).rejects.toMatchObject({ code: 'shop_closed' });
   });
@@ -112,14 +112,33 @@ describe('buyCart: several power-ups, one CoinnibalArena.pay', () => {
     expect(parseShopCartRef(calls[1].args[1] as string)).toEqual(cart);
     const body = JSON.parse(((fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0][1].body as string) ?? '{}');
     expect(body).toEqual({ cart, txHash: HASH });
-    expect(loadPendingClaim(OWNER)).toBeNull();
+    expect(loadPendingClaims(OWNER)).toEqual([]);
   });
 
   it('keeps a paid cart whose claim did not get through, to claim it again without paying twice', async () => {
     spies.getAllowance.mockResolvedValue(10n ** 30n);
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))));
     await expect(buyCart(CART_VIEW, cart, { token: 'tok', owner: OWNER, chain: chainStatus(), retryMs: [0] })).rejects.toBeInstanceOf(ShopError);
-    expect(loadPendingClaim(OWNER)).toMatchObject({ txHash: HASH, cart });
+    expect(loadPendingClaims(OWNER)).toMatchObject([{ txHash: HASH, cart }]);
     expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second purchase whose claim also fails is kept beside the first, never over it (audit S12)', async () => {
+    spies.getAllowance.mockResolvedValue(10n ** 30n);
+    const SECOND = `0x${'5'.repeat(64)}`;
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))));
+    await expect(buyCart(CART_VIEW, cart, { token: 'tok', owner: OWNER, chain: chainStatus(), retryMs: [0] })).rejects.toBeInstanceOf(ShopError);
+    spies.sendWalletCall.mockImplementation(async () => ({ ok: true, hash: SECOND, receipt: { status: 'success', logs: [] } }));
+    await expect(buyCart(CART_VIEW, cart, { token: 'tok', owner: OWNER, chain: chainStatus(), retryMs: [0] })).rejects.toBeInstanceOf(ShopError);
+    // another wallet of this browser buys too: its claim is its own
+    const OTHER = '0x2222222222222222222222222222222222222222';
+    await expect(buyCart(CART_VIEW, cart, { token: 'tok', owner: OTHER, chain: chainStatus(), retryMs: [0] })).rejects.toBeInstanceOf(ShopError);
+    expect(loadPendingClaims(OWNER).map((c) => c.txHash)).toEqual([HASH, SECOND]);
+    expect(loadPendingClaims(OTHER).map((c) => c.txHash)).toEqual([SECOND]);
+    // the second one is credited: only it is dropped
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(credited), { status: 200 })));
+    await settleCartClaim('tok', OWNER, cart, SECOND, { retryMs: [0] });
+    expect(loadPendingClaims(OWNER).map((c) => c.txHash)).toEqual([HASH]);
+    expect(loadPendingClaims(OTHER).map((c) => c.txHash)).toEqual([SECOND]);
   });
 });

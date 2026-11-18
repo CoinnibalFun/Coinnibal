@@ -4,7 +4,7 @@ import { Button, Chip, Sheet, shortAddress } from '../../design';
 import { useT } from '../../i18n';
 import { closeModal, openModal, toast, useUi } from '../../store';
 import { SHOP_CART_LIMITS, TOKEN_SYMBOL_DEFAULT } from '@coinnibal/shared';
-import { ShopError, buyCart, cartTotals, emptyCart, fetchShop, loadPendingClaim, settleCartClaim, settleClaim, type BuyPhase, type Cart, type PendingClaim } from '../../wallet/shop';
+import { ShopError, buyCart, cartTotals, emptyCart, fetchShop, loadPendingClaims, settleCartClaim, settleClaim, type BuyPhase, type Cart, type PendingClaim } from '../../wallet/shop';
 import { summaryAmount } from '../amount';
 import { BOOST_PATH } from '../game/BoostBar';
 import './shop.css';
@@ -145,10 +145,10 @@ export function ShopSheet() {
     return () => ac.abort();
   }, [open, load]);
 
-  // a pack paid for earlier whose claim did not get through: offered again (never paid twice)
-  const [pending, setPending] = useState<PendingClaim | null>(null);
+  // packs paid for earlier whose claim did not get through: each offered again (never paid twice)
+  const [pending, setPending] = useState<PendingClaim[]>([]);
   useEffect(() => {
-    if (open) setPending(loadPendingClaim(auth?.address));
+    if (open) setPending(loadPendingClaims(auth?.address));
   }, [open, auth?.address, buying]);
   const [claiming, setClaiming] = useState(false);
   const claim = async (p: PendingClaim) => {
@@ -172,7 +172,7 @@ export function ShopSheet() {
       void load();
     } finally {
       setClaiming(false);
-      setPending(loadPendingClaim(auth.address));
+      setPending(loadPendingClaims(auth.address));
     }
   };
 
@@ -186,8 +186,10 @@ export function ShopSheet() {
   const totals = view ? cartTotals(view, cart) : null;
   const setQty = (kind: BoostKind, n: number) => setCart((c) => ({ ...c, [kind]: Math.max(0, Math.min(SHOP_CART_LIMITS.perKind, n)) }));
   const room = totals ? totals.packs < SHOP_CART_LIMITS.total : true;
+  // a paid claim waits: claimed first, never a second payment over it
+  const waiting = !!auth && pending.length > 0;
   const buy = async () => {
-    if (!view || !auth || !chain || !totals || totals.packs === 0) return;
+    if (!view || !auth || !chain || !totals || totals.packs === 0 || waiting) return;
     setBuying({ phase: 'switching' });
     try {
       const r = await buyCart(view, cart, { token: auth.token, owner: auth.address, chain, onPhase: (phase) => setBuying({ phase }) });
@@ -227,14 +229,15 @@ export function ShopSheet() {
       ) : (
         <p className="sh-hint mono">{t('shop.holderHint', { pct, extra })}</p>
       )}
-      {pending && auth && (
-        <div className="sh-closed sh-pending" role="status" data-testid="shop-pending">
-          <p>{t('shop.pending', { name: t(`boost.${pending.kind}` as 'boost.magnet') })}</p>
-          <Button variant="primary" size="sm" loading={claiming} disabled={claiming || !!buying} onClick={() => void claim(pending)} data-testid="shop-claim">
-            {t('shop.claim')}
-          </Button>
-        </div>
-      )}
+      {auth &&
+        pending.map((p) => (
+          <div key={p.txHash} className="sh-closed sh-pending" role="status" data-testid="shop-pending">
+            <p>{t('shop.pending', { name: t(`boost.${p.kind}` as 'boost.magnet') })}</p>
+            <Button variant="primary" size="sm" loading={claiming} disabled={claiming || !!buying} onClick={() => void claim(p)} data-testid="shop-claim">
+              {t('shop.claim')}
+            </Button>
+          </div>
+        ))}
       {closed && <p className="sh-closed">{closed}</p>}
       {err && <p className="sh-closed">{err}</p>}
       {s ? (
@@ -288,9 +291,9 @@ export function ShopSheet() {
               size="md"
               lead="wallet"
               loading={!!buying}
-              disabled={!auth || !s.open || !!buying || claiming || totals.packs === 0}
+              disabled={!auth || !s.open || !!buying || claiming || waiting || totals.packs === 0}
               onClick={() => void buy()}
-              sub={buying?.phase === 'verifying' ? t('shop.verifying') : buying?.phase === 'confirming' ? t('shop.confirming') : buying ? t('shop.paying') : t('shop.oneTx')}
+              sub={buying?.phase === 'verifying' ? t('shop.verifying') : buying?.phase === 'confirming' ? t('shop.confirming') : buying ? t('shop.paying') : waiting ? t('shop.claimFirst') : t('shop.oneTx')}
               data-testid="shop-pay"
             >
               {totals.packs > 0 ? t('shop.buyAll', { price: priceText(totals.raw.toString(), s) }) : t('shop.buyAll', { price: '—' })}

@@ -187,7 +187,7 @@ export async function payArena(
   return hash;
 }
 
-/** A paid pack the server has not credited yet (kept in this browser, per wallet). */
+/** A paid pack the server has not credited yet (kept in this browser, per wallet and payment). */
 export interface PendingClaim {
   owner: string;
   kind: BoostKind;
@@ -197,50 +197,106 @@ export interface PendingClaim {
   at: number;
 }
 
-const CLAIM_KEY = storageKey('shop.claim.v1');
+/**
+ * Every kept claim, of every wallet of this browser: a list keyed by wallet and transaction (2026-11 audit S12: one
+ * slot for all of them let a second purchase, or another wallet's, overwrite a payment the server never credited).
+ */
+const CLAIMS_KEY = storageKey('shop.claims.v2');
+/** The single slot of earlier builds: its claim moves into the list once. */
+const OLD_CLAIM_KEY = storageKey('shop.claim.v1');
+/**
+ * How long this browser keeps a claim the server never answered for good. The server refuses a payment older than a
+ * day for good (`tx_stale`); a week is far past that, so no claim the server would still credit is ever forgotten.
+ */
+const CLAIM_KEEP_MS = 7 * 24 * 3600_000;
 /** Refusals that are final for a payment (it was credited already, or it is not a valid payment). */
 const FINAL: readonly ShopBuyError[] = ['tx_used', 'tx_failed', 'no_payment', 'wrong_token', 'wrong_sender', 'wrong_recipient', 'wrong_pack', 'wrong_amount', 'tx_stale'];
 
-export function savePendingClaim(p: PendingClaim | null): void {
+const isClaim = (p: unknown): p is PendingClaim => {
+  const c = p as PendingClaim | null;
+  return !!c && typeof c === 'object' && typeof c.owner === 'string' && typeof c.txHash === 'string' && typeof c.kind === 'string' && typeof c.at === 'number';
+};
+const sameClaim = (owner: string, txHash: string) => (c: PendingClaim) => c.owner.toLowerCase() === owner.toLowerCase() && c.txHash.toLowerCase() === txHash.toLowerCase();
+/** Claims this page could not write (no storage, a full storage): kept for this page at least. */
+let unsaved: PendingClaim[] = [];
+
+function readClaims(): PendingClaim[] {
+  let list: PendingClaim[] = [];
   try {
-    if (p) localStorage.setItem(CLAIM_KEY, JSON.stringify(p));
-    else localStorage.removeItem(CLAIM_KEY);
+    const raw: unknown = JSON.parse(localStorage.getItem(CLAIMS_KEY) ?? '[]');
+    if (Array.isArray(raw)) list = raw.filter(isClaim);
   } catch {
-    /* storage unavailable: the claim lasts for this page only */
+    /* no storage, or an unreadable list */
+  }
+  for (const c of unsaved) if (!list.some(sameClaim(c.owner, c.txHash))) list.push(c);
+  try {
+    const old: unknown = JSON.parse(localStorage.getItem(OLD_CLAIM_KEY) ?? 'null');
+    if (isClaim(old)) {
+      if (!list.some(sameClaim(old.owner, old.txHash))) list.push(old);
+      // the list first: should that fail, the old slot keeps the claim
+      if (!writeClaims(list)) return list;
+    }
+    localStorage.removeItem(OLD_CLAIM_KEY);
+  } catch {
+    /* an unreadable old slot holds nothing to keep */
+  }
+  return list;
+}
+
+function writeClaims(list: PendingClaim[]): boolean {
+  try {
+    if (list.length) localStorage.setItem(CLAIMS_KEY, JSON.stringify(list));
+    else localStorage.removeItem(CLAIMS_KEY);
+    unsaved = [];
+    return true;
+  } catch {
+    unsaved = list;
+    return false;
   }
 }
 
-/** The pending claim of `owner`, if one is kept. */
-export function loadPendingClaim(owner: string | null | undefined): PendingClaim | null {
-  if (!owner) return null;
-  try {
-    const p = JSON.parse(localStorage.getItem(CLAIM_KEY) ?? 'null') as PendingClaim | null;
-    return p && typeof p.txHash === 'string' && typeof p.owner === 'string' && p.owner.toLowerCase() === owner.toLowerCase() ? p : null;
-  } catch {
-    return null;
-  }
+/** Keeps a paid claim beside every other kept one (the same wallet and transaction again: replaced, never doubled). */
+export function savePendingClaim(p: PendingClaim): void {
+  const now = Date.now();
+  const list = readClaims().filter((c) => !sameClaim(p.owner, p.txHash)(c) && now - c.at < CLAIM_KEEP_MS);
+  writeClaims([...list, p]);
 }
 
-/** Claims a paid pack; the kept hash is dropped once credited or finally refused. */
+/** Forgets exactly one kept claim: the server credited it, or refused it for good. */
+export function dropPendingClaim(owner: string, txHash: string): void {
+  const list = readClaims();
+  const next = list.filter((c) => !sameClaim(owner, txHash)(c));
+  if (next.length !== list.length) writeClaims(next);
+}
+
+/** Every claim kept for `owner`, oldest first. */
+export function loadPendingClaims(owner: string | null | undefined): PendingClaim[] {
+  if (!owner) return [];
+  return readClaims()
+    .filter((c) => c.owner.toLowerCase() === owner.toLowerCase())
+    .sort((a, b) => a.at - b.at);
+}
+
+/** Claims a paid pack; this payment's kept claim (and only it) is dropped once credited or finally refused. */
 export async function settleClaim(token: string, owner: string, kind: BoostKind, txHash: string, opts: { retryMs?: readonly number[] } = {}): Promise<ShopBuyResult> {
   try {
     const r = await claimPack(token, kind, txHash, opts);
-    if (loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
+    dropPendingClaim(owner, txHash);
     return r;
   } catch (e) {
-    if (e instanceof ShopError && (FINAL as readonly string[]).includes(e.code) && loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
+    if (e instanceof ShopError && (FINAL as readonly string[]).includes(e.code)) dropPendingClaim(owner, txHash);
     throw e;
   }
 }
 
-/** Claims a paid cart; the kept hash is dropped once credited or finally refused. */
+/** Claims a paid cart; this payment's kept claim (and only it) is dropped once credited or finally refused. */
 export async function settleCartClaim(token: string, owner: string, cart: Cart, txHash: string, opts: { retryMs?: readonly number[] } = {}): Promise<ShopCartResult> {
   try {
     const r = await claimCart(token, cart, txHash, opts);
-    if (loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
+    dropPendingClaim(owner, txHash);
     return r;
   } catch (e) {
-    if (e instanceof ShopError && (FINAL as readonly string[]).includes(e.code) && loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
+    if (e instanceof ShopError && (FINAL as readonly string[]).includes(e.code)) dropPendingClaim(owner, txHash);
     throw e;
   }
 }
