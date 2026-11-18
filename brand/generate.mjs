@@ -68,10 +68,10 @@ try {
     const page = await ctx.newPage();
     await page.setContent(html, { waitUntil: 'load' });
     await page.evaluate(async () => {
-      for (const f of ['Fraunces', 'DM Sans', 'Geist Mono']) await document.fonts.load(`700 16px "${f}"`).catch(() => {});
+      for (const f of ['Lilita One', 'DM Sans', 'Geist Mono']) await document.fonts.load(`16px "${f}"`).catch(() => {});
       await document.fonts.ready;
     });
-    const missing = await page.evaluate(() => ['Fraunces', 'DM Sans', 'Geist Mono'].filter((f) => !document.fonts.check(`16px "${f}"`)));
+    const missing = await page.evaluate(() => ['Lilita One', 'DM Sans', 'Geist Mono'].filter((f) => !document.fonts.check(`16px "${f}"`)));
     if (missing.length) console.warn(`  ! ${job.name}: font(s) not loaded: ${missing.join(', ')}`);
     const file = join(OUT, job.file);
     mkdirSync(join(file, '..'), { recursive: true });

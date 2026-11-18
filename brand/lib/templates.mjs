@@ -84,16 +84,17 @@ export function xBanner() {
 export function ogCard() {
   const w = 1200;
   const h = 630;
+  // the hero card of the site, as a share picture: the wordmark, the headline in the display face and the one line
+  // that says what you get. No button (a picture cannot be clicked) and no invented payout; the round clock is real.
   const css = `
     .scene{position:absolute;left:-60px;top:-177px;width:1320px;height:807px}
-    .card{position:absolute;left:48px;top:56px;width:590px;padding:28px 34px 30px;transform:rotate(-1.6deg)}
+    .card{position:absolute;left:48px;top:62px;width:584px;padding:30px 40px 36px;transform:rotate(-1.6deg)}
     .card .tape{left:50%;top:-17px;margin-left:-52px;transform:rotate(3deg)}
-    .card h2{font-family:var(--body);font-weight:600;font-size:26px;line-height:1.22;letter-spacing:-.01em;margin:2px 0 10px}
-    .card p{font-size:18px;line-height:1.45;color:#3E3A31;margin-bottom:20px}
-    .badge{position:absolute;right:58px;top:52px;transform:rotate(4deg);padding:14px 18px;background:var(--sun);border-radius:14px}
-    .badge .n{font-family:var(--display);font-variation-settings:"SOFT" 100,"opsz" 144;font-weight:800;font-size:34px;line-height:1}
-    .badge .l{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-top:6px}
-    .pop{position:absolute;font-family:var(--mono);font-weight:600;font-size:18px;background:var(--cream);border:2.5px solid var(--ink);border-radius:8px;padding:3px 8px;box-shadow:3px 3px 0 var(--ink);transform:rotate(-4deg)}`;
+    .card h1{font-weight:400;font-size:60px;margin:16px 0 14px;color:var(--ink);white-space:nowrap}
+    .card p{font-size:25px;line-height:1.36;color:#2A2822;max-width:500px;text-wrap:pretty}
+    .badge{position:absolute;right:58px;top:52px;transform:rotate(4deg);padding:13px 18px 12px;background:var(--sun);border-radius:14px}
+    .badge .n{font-family:var(--mono);font-weight:600;font-size:36px;line-height:1;font-variant-numeric:tabular-nums}
+    .badge .l{font-family:var(--body);font-weight:700;font-size:16px;margin-top:6px}`;
   const body = `
     <div class="scene">${ringScene({ par: 'xMidYMid slice', style: 'width:100%;height:100%' })}</div>
     ${at(46, 488, coin('teal', { mood: 'smile', look: [3, 1], size: 112, ground: true }))}
@@ -102,17 +103,12 @@ export function ogCard() {
     ${at(826, 536, coin('foam', { mood: 'scared', look: [-3, -1], sweat: true, size: 66, ground: true }))}
     ${at(1020, 486, coin('up', { mood: 'open', look: [-3, 0], size: 96, ground: true }))}
     ${at(1124, 560, coin('cyan', { mood: 'smile', look: [-2, -1], size: 52, ground: true }))}
-    <div class="pop" style="left:812px;top:478px">+$0.12</div>
     <div class="sticker badge"><div class="n">05:00</div><div class="l">per round</div></div>
     <div class="card sticker">
       <div class="tape"></div>
-      <div class="kick" style="color:${C.teal}">5-minute rounds &middot; on Robinhood Chain</div>
-      <div style="margin:10px 0 10px">${wordmark({ width: 500 })}</div>
-      <h2>Coins eating coins. <span style="color:${C.teal}">${TAGLINE}</span></h2>
-      <p>Eat coins smaller than you. Run from the ones that are bigger. Five minutes later the bell rings and whatever you&rsquo;ve swallowed is yours.</p>
-      <div style="display:flex;align-items:center;gap:18px">
-        <span class="btn sun">See how it works ${arrow}</span>
-      </div>
+      ${wordmark({ width: 496 })}
+      <h1 class="disp">Coins eating coins.</h1>
+      <p>Five minutes later the bell rings and whatever you&rsquo;ve swallowed is yours.</p>
     </div>`;
   return { w, h, html: page({ w, h, body, css, bg: C.teal }) };
 }
@@ -147,7 +143,7 @@ const plate = (num, title, route, night = false) => `
   <div class="abs plate" style="left:0;right:0;top:0;height:64px;display:flex;align-items:center;gap:14px;padding:0 48px;
     font-family:var(--mono);font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:${night ? C.foam : C.stone};
     border-bottom:3px solid ${C.ink};background:${night ? C.deep : C.plain}">
-    <b style="font-family:var(--display);font-variation-settings:'SOFT' 100,'WONK' 1;font-weight:700;font-size:22px;letter-spacing:0;text-transform:none;color:${night ? C.cream : C.ink}">${title}</b>
+    <b style="font-family:var(--display);font-weight:400;font-size:22px;letter-spacing:.01em;text-transform:none;color:${night ? C.cream : C.ink}">${title}</b>
     <span style="flex:1;border-top:2px dashed ${night ? C.current : C.sand2}"></span><span>${route}</span></div>`;
 
 export function postWlOpen() {
@@ -162,7 +158,7 @@ export function postWlOpen() {
         <div style="font-size:16px;line-height:1.4;color:#3E3A31">${text}</div>
       </div>
       ${done
-        ? `<div style="font-family:var(--display);font-variation-settings:'SOFT' 100;font-weight:900;font-size:22px;letter-spacing:.06em;color:${C.upS};border:4px solid ${C.upS};border-radius:10px;padding:4px 12px;transform:rotate(-8deg)">DONE</div>`
+        ? `<div style="font-family:var(--display);font-weight:400;font-size:22px;letter-spacing:.06em;color:${C.upS};border:4px solid ${C.upS};border-radius:10px;padding:4px 12px;transform:rotate(-8deg)">DONE</div>`
         : `<span class="btn ${action === 'Connect' ? '' : 'teal'}" style="font-size:16px;padding:10px 16px${action === 'Connect' ? ';border-style:dashed;box-shadow:none' : ''}">${action}</span>`}
     </div>`;
   const css = '';
@@ -173,7 +169,7 @@ export function postWlOpen() {
     ${plate('IV', 'Join the WL', '/wl')}
     <div class="abs" style="left:72px;top:150px;width:600px">
       <div class="kick" style="color:${C.teal}">Whitelist &middot; join</div>
-      <div class="disp" style="font-size:86px;margin:16px 0 22px">The WL is <span class="wonk" style="color:${C.teal}">open.</span></div>
+      <div class="disp" style="font-size:86px;margin:16px 0 22px">The WL is <span style="color:${C.teal}">open.</span></div>
       <div style="font-size:23px;line-height:1.45;color:#3E3A31;max-width:500px">Three simple steps. Finish them all to get a mint spot and a pass card to share.</div>
       <div style="display:flex;align-items:center;gap:16px;margin-top:34px">
         <span class="btn sun" style="font-size:20px">Join the WL ${arrow}</span>
@@ -198,9 +194,9 @@ export function postMint() {
     .emblem{position:relative;height:440px;background:${C.teal};border:3px solid ${C.ink};border-radius:20px;overflow:hidden;display:flex;align-items:center;justify-content:center}
     .emblem .no{position:absolute;left:12px;top:12px;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.08em;background:${C.cream};border:2.5px solid ${C.ink};border-radius:8px;padding:3px 8px}
     .emblem .rib{position:absolute;left:-3px;right:-3px;bottom:20px;text-align:center;background:${C.sun};border-top:3px solid ${C.ink};border-bottom:3px solid ${C.ink};
-      font-family:var(--display);font-variation-settings:"SOFT" 100,"WONK" 1;font-weight:800;font-size:24px;padding:5px 0}
+      font-family:var(--display);font-weight:400;font-size:24px;letter-spacing:.01em;padding:5px 0}
     .right{display:flex;flex-direction:column;gap:18px;padding-top:6px}
-    .price{font-family:var(--display);font-variation-settings:"SOFT" 100,"opsz" 144;font-weight:800;font-size:76px;line-height:1;letter-spacing:-.02em}
+    .price{font-family:var(--display);font-weight:400;font-size:76px;line-height:1;letter-spacing:.005em}
     .row{display:flex;justify-content:space-between;align-items:center;font-size:16px;padding:10px 0;border-top:2px dashed ${C.sand2}}
     .note{display:flex;gap:12px;align-items:flex-start;background:${C.mist};border:2.5px solid ${C.ink};border-radius:14px;padding:12px 14px;font-size:15px;line-height:1.4}`;
   const rays = `<svg class="abs" style="inset:0" viewBox="0 0 290 440" width="290" height="440"><g fill="none" stroke="${C.tealS}" stroke-width="3">
@@ -214,7 +210,7 @@ export function postMint() {
     ${plate('II', 'The Coinnibal NFT', '/mint', true)}
     <div class="abs" style="left:76px;top:150px;width:640px;color:${C.cream}">
       <div class="kick" style="color:${C.foam}">Coinnibal NFT &middot; on Robinhood Chain</div>
-      <div class="disp" style="font-size:96px;margin:18px 0 26px;color:${C.cream}">Get the <span class="wonk" style="color:${C.sun}">Coinnibal NFT.</span></div>
+      <div class="disp" style="font-size:96px;margin:18px 0 26px;color:${C.cream}">Get the <span style="color:${C.sun}">Coinnibal NFT.</span></div>
       <div style="font-size:22px;line-height:1.5;color:#BFD8DD;max-width:540px">Your key to the game. Holders pay a lower fee, get a holders-only room, cheaper power-ups and a free private room every day. You pay in ETH.</div>
       <div style="margin-top:30px">${flowPills(true)}</div>
     </div>
@@ -276,7 +272,7 @@ export function postGameLive() {
     ${plate('III', 'The game is open', '/play', true)}
     <div class="sticker head">
       <div class="kick" style="color:${C.teal}">Play now &middot; on Robinhood Chain</div>
-      <div class="disp" style="font-size:66px;margin:12px 0 14px">The game is <span class="wonk" style="color:${C.teal}">open.</span></div>
+      <div class="disp" style="font-size:66px;margin:12px 0 14px">The game is <span style="color:${C.teal}">open.</span></div>
       <div style="font-size:19px;line-height:1.45;color:#3E3A31">Five-minute rounds. Eat smaller coins, run from bigger ones. At the bell, what you swallowed is paid out. NFT holders first.</div>
       <div style="display:flex;align-items:center;gap:16px;margin-top:22px"><span class="btn sun">Play a round ${arrow}</span><span class="mono" style="font-size:17px;font-weight:600">${HANDLE}</span></div>
     </div>
