@@ -29,7 +29,7 @@ const P = {
  * (720, c) to (1480, e): the ground rises at both ends, and its highest point (y 34, at the very ends) sits well under
  * the top of the box, so the sky shows above every edge at any width.
  */
-export const LAND_H = 260;
+const LAND_H = 260;
 interface Band {
   e: number;
   c: number;
@@ -54,13 +54,13 @@ const piece = (b: Band, x0: number, x1: number, dy = 0): string => {
   return `M${x0} ${edge(b, x0) + dy} Q ${m} ${cy + dy} ${x1} ${edge(b, x1) + dy}`;
 };
 
-type Kind = 'house' | 'lit' | 'tree' | 'pine' | 'bush';
+type Kind = 'house' | 'lit' | 'glow' | 'tree' | 'pine' | 'bush';
 /** Props on the terraces: kind, x, band (they stand a little under the band's lip). */
 const PROPS: [Kind, number, number][] = [
-  ['pine', 58, 0], ['pine', 82, 0], ['tree', 128, 0], ['lit', 180, 0], ['tree', 610, 0], ['house', 652, 0], ['tree', 792, 0],
+  ['pine', 58, 0], ['pine', 82, 0], ['tree', 128, 0], ['glow', 180, 0], ['tree', 610, 0], ['house', 652, 0], ['tree', 792, 0],
   ['lit', 1262, 0], ['tree', 1304, 0], ['pine', 1370, 0], ['pine', 1394, 0],
-  ['bush', 150, 1], ['tree', 262, 1], ['lit', 312, 1], ['tree', 914, 1], ['lit', 958, 1], ['tree', 1046, 1], ['pine', 1132, 1], ['bush', 1250, 1],
-  ['pine', 168, 2], ['tree', 194, 2], ['bush', 560, 2], ['lit', 1182, 2], ['tree', 1224, 2],
+  ['bush', 150, 1], ['tree', 262, 1], ['lit', 312, 1], ['tree', 914, 1], ['glow', 958, 1], ['tree', 1046, 1], ['pine', 1132, 1], ['bush', 1250, 1],
+  ['pine', 168, 2], ['tree', 194, 2], ['bush', 560, 2], ['glow', 1182, 2], ['tree', 1224, 2],
 ];
 /** Where the windmill stands (band 1, by the canal: inside the middle that a phone still shows). */
 const MILL_X = 516;
@@ -81,16 +81,17 @@ const PEBBLES: [number, number, number][] = [
   [1336, 230, 6],
 ];
 
-/** A house (lit: its window glows), lollipop tree, pine or bush at the origin (base centre), ink-outlined. */
+/** A house (lit: its window is lit; glow: a warm halo breathes round it too), lollipop tree, pine or bush at the origin
+ * (base centre), ink-outlined. */
 function Prop({ kind }: { kind: Kind }): ReactElement {
-  if (kind === 'house' || kind === 'lit') {
+  if (kind === 'house' || kind === 'lit' || kind === 'glow') {
     return (
       <g>
-        {kind === 'lit' && <circle className="st-life__glow" cx={0} cy={-7} r={18} fill={ELYSIUM.sun} />}
+        {kind === 'glow' && <circle className="st-life__glow" cx={0} cy={-7} r={18} fill={ELYSIUM.sun} />}
         <path d="M-12 0 V-16 L0 -27 L12 -16 V0 Z" fill={P.house} stroke={INK} strokeWidth={2.5} strokeLinejoin="round" />
         <path d="M-15 -14 L0 -29 L15 -14 L12 -16 L0 -27 L-12 -16Z" fill={P.roof} />
         <path d="M-15 -14 L0 -29 L15 -14" fill="none" stroke={INK} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-        <rect x={-4} y={-11} width={8} height={8} rx={1.5} fill={kind === 'lit' ? ELYSIUM.sun : ELYSIUM.current} stroke={INK} strokeWidth={2} />
+        <rect x={-4} y={-11} width={8} height={8} rx={1.5} fill={kind === 'house' ? ELYSIUM.current : ELYSIUM.sun} stroke={INK} strokeWidth={2} />
       </g>
     );
   }
