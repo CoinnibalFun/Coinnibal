@@ -214,7 +214,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     // and in its own words: the NFT section above doesn't say it too
     expect(document.querySelector('#nft .ld-nft__text')?.textContent).not.toMatch(/rarer|its own coin character/);
     // the chain holds the money, the game runs on a server (as the guide says)
-    expect(answer('What is Robinhood Chain?')).toMatch(/the game itself runs on a server/);
+    expect(answer('What is Robinhood Chain?')).toMatch(/the game itself will run on our server/);
     // the cost, once: paid rooms take a ticket (the hero said how), practice rooms are free
     expect(answer('Does it cost money to play?')).toBe('In a paid room, yes. The ticket is what your coin plays with. Practice rooms are free.');
     // the owner's launch order: the NFT mint, then the token, then the game (no dates)

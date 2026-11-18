@@ -1,6 +1,7 @@
 import type { ShareService } from './site/shares';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { pipeline } from 'node:stream';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION, isAppRoute } from '@elymum/shared';
 import { NonceLimitError, checksumAddress, type Auth, type SiweOrigin } from './auth';
@@ -158,7 +159,7 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   if (fallback) {
     res.writeHead(status, headers);
     if (req.method === 'HEAD') res.end();
-    else createReadStream(file).pipe(res);
+    else sendFile(file, res);
     return true;
   }
   // a real file answers byte ranges: Safari and iOS play a <video> (the landing's gameplay loop) only from a server
@@ -179,8 +180,19 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   }
   res.writeHead(range ? 206 : 200, headers);
   if (req.method === 'HEAD') res.end();
-  else createReadStream(file, range ?? {}).pipe(res);
+  else sendFile(file, res, range ?? undefined);
   return true;
+}
+
+/**
+ * Streams a file (or one byte range of it) to the response. pipeline() closes the file when the client goes away
+ * mid-transfer (a visitor leaving while the hero loop downloads) or a read fails, so no descriptor stays open and no
+ * stream error goes unhandled.
+ */
+function sendFile(file: string, res: ServerResponse, range?: { start: number; end: number }): void {
+  pipeline(createReadStream(file, range), res, () => {
+    /* the client left or the read failed: pipeline has already closed both ends */
+  });
 }
 
 /**

@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { request } from 'node:http';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,6 +28,7 @@ describe('static web client', () => {
     mkdirSync(join(web, 'media'));
     writeFileSync(join(web, 'media', 'loop.mp4'), '0123456789');
     writeFileSync(join(web, 'media', 'loop.webm'), 'webm');
+    writeFileSync(join(web, 'media', 'big.mp4'), Buffer.alloc(8 * 1024 * 1024, 1));
     const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-data-')), WEB_DIST: web } as NodeJS.ProcessEnv);
     server = createHttpServer(cfg, { chain: new NullChain(), rooms: {} as never, leaderboards: {} as never, auth: {} as never, startedAt: Date.now() });
     await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
@@ -158,6 +160,29 @@ describe('static web client', () => {
     const page = await fetch(url + '/docs', { headers: { Range: 'bytes=0-1' } });
     expect(page.status).toBe(200);
     expect(await page.text()).toContain('<title>Elymum</title>');
+  });
+
+  it.skipIf(process.platform !== 'linux')('closes the file when a client leaves mid-transfer (no descriptor stays open)', async () => {
+    const url = new URL(await start());
+    const fds = () => readdirSync('/proc/self/fd').length;
+    const before = fds();
+    // each client reads the first chunk of a big video, then hangs up
+    for (let i = 0; i < 12; i++) {
+      await new Promise<void>((done) => {
+        const req = request({ host: url.hostname, port: url.port, path: '/media/big.mp4', headers: { Range: 'bytes=0-' } }, (res) => {
+          res.once('data', () => {
+            req.destroy();
+            done();
+          });
+        });
+        req.on('error', () => done());
+        req.end();
+      });
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    expect(fds() - before).toBeLessThan(4);
+    // and the server still serves
+    expect((await fetch(url.origin + '/media/loop.mp4')).status).toBe(200);
   });
 
   it('reads one byte range of a Range header and ignores what it cannot use', () => {

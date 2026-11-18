@@ -24,15 +24,16 @@ const TITLE: Record<string, TKey> = {
  * The shared "not open yet" notice: a sleepy coin with the Soon stamp on a cream card, its heading, one sentence,
  * the guide, the way home and the project's X account (`children`: anything a page adds under them, inside the card).
  * One label: the heading (no title strip above the page). Nothing here links to another closed part of the site.
+ * `soon={false}` drops the stamp, for a part that was open once and is closed now (the WL after its applications).
  */
-export function ClosedNotice({ title, lede, children }: { title: ReactNode; lede: ReactNode; children?: ReactNode }) {
+export function ClosedNotice({ title, lede, soon = true, children }: { title: ReactNode; lede: ReactNode; soon?: boolean; children?: ReactNode }) {
   const t = useT();
   const reduced = useReducedMotion();
   const { settings } = useSiteSettings();
   return (
     <section className="cl" aria-labelledby="cl-title" data-testid="closed-page">
       <div className="cl__art" aria-hidden="true">
-        <SoonStamp className="cl__sign" />
+        {soon && <SoonStamp className="cl__sign" />}
         <CoinCharacter paint="cream" mood="sleepy" size={120} feet ground bob={!reduced} />
       </div>
       <Sticker tone="cream" pad="lg" lift="lg" round="lg" className="cl__card">

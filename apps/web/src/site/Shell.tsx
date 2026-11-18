@@ -114,25 +114,6 @@ export const SOON: { href: string; key: TKey; note: TKey }[] = [
 /** The "Soon" entries for the doors that are still closed. */
 export const soonFor = (doors: Doors = DOORS_CLOSED) => SOON.filter((n) => !linkOpen(n.href, doors));
 
-/**
- * A Soon name's tip also shows on a plain hover, when the keyboard's focus is somewhere else: while the pointer is on
- * the name, Escape anywhere on the page puts the tip away (WCAG 1.4.13); leaving the name brings it back next time.
- */
-const escapeHush = new WeakMap<HTMLElement, () => void>();
-function hushOnEscape(el: HTMLElement): void {
-  if (escapeHush.has(el)) return;
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') el.setAttribute('data-hush', '');
-  };
-  document.addEventListener('keydown', onKey);
-  escapeHush.set(el, () => document.removeEventListener('keydown', onKey));
-}
-function endHush(el: HTMLElement): void {
-  escapeHush.get(el)?.();
-  escapeHush.delete(el);
-  el.removeAttribute('data-hush');
-}
-
 function ConnectFallback() {
   const t = useT();
   return (
@@ -153,6 +134,17 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
   const { settings } = useSiteSettings();
   const nav = navFor(doors);
   const soon = soonFor(doors);
+  // a Soon name's tip also shows on a plain hover, when the keyboard's focus is somewhere else: while the pointer is on
+  // a name, Escape anywhere on the page puts its tip away (WCAG 1.4.13); leaving the name brings it back next time.
+  // One listener for the header's life, so nothing stays behind when a page change unmounts a hovered name
+  const hovered = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') hovered.current?.setAttribute('data-hush', '');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
   // one or two entries fit beside the logo on a phone too: no menu button for them
   const few = nav.length + soon.length <= 2 && !doors.game;
   // the wallet button belongs to what needs a wallet (the game, the mint, the applications); a signed-in wallet keeps it
@@ -220,8 +212,13 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
             // next hover or focus)
             onKeyDown={(e) => e.key === 'Escape' && e.currentTarget.setAttribute('data-hush', '')}
             onBlur={(e) => e.currentTarget.removeAttribute('data-hush')}
-            onPointerEnter={(e) => hushOnEscape(e.currentTarget)}
-            onPointerLeave={(e) => endHush(e.currentTarget)}
+            onPointerEnter={(e) => {
+              hovered.current = e.currentTarget;
+            }}
+            onPointerLeave={(e) => {
+              hovered.current = null;
+              e.currentTarget.removeAttribute('data-hush');
+            }}
           >
             <span
               className={`st-nav__link st-nav__link--soon${here ? ' is-here' : ''}`}
