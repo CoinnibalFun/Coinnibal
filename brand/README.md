@@ -44,9 +44,9 @@ template, regenerate only the jobs whose committed copy changes (`node brand/gen
 ## Rules the templates follow
 
 - Copy is plain, short English a beginner reads at a glance ("simple is the best"); the product is
-  "Coinnibal", its token `$NIBAL`, the chain "Robinhood Chain", the gas token ETH, the handle `BRAND_X_HANDLE`
-  (default `@elymumio` until @coinnibal is live). The one brand line is "Eat or be eaten." No domain is written
-  into the art but the X banner's "Testnet open" sticker (`BRAND_SITE`, default elymum.io): the site lives at
+  "Coinnibal", its token is "tokens" (never a ticker), the chain "Robinhood Chain", the gas token ETH, the
+  handle `BRAND_X_HANDLE` (default `@coinnibalfun`). The one brand line is "Eat or be eaten." No domain is
+  written into the art but the X banner's site sticker (`BRAND_SITE`, default coinnibal.fun): the site lives at
   whatever `PUBLIC_URL` says.
 - The logo: the COINNIBAL brush letters (the web app's `Wordmark`) with a gold coin with a bite out of it as the
   "O"; the mark is a cyan coin with a bite out of its upper right edge and a fat cream C. The shapes live in
