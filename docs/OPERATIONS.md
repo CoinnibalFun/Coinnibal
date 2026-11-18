@@ -285,7 +285,7 @@ URL, shows the traffic and the 429s.
 
 ## Fees, burns and the fee wallet
 
-CoinnibalArena v3 takes **no entry fee**. A winning ticket pays a fee on its **profit** (payout − entry fee):
+CoinnibalArena v3 takes **nothing from the ticket** (its `entryFee` goes whole into the vault). A winning ticket pays a fee on its **profit** (payout − entry fee):
 `burnBps` (15 %) is burned and `vaultBps` (5 %) goes to the fee wallet, both in the `settle` batch that settles it
 (one burn and one transfer per batch). A loss or a break-even pays nothing; an unplayed ticket is cancelled with its
 full entry fee back. Power-up packs are paid with `pay`: `paymentBurnBps` (50 %) is burned and the rest goes to the
