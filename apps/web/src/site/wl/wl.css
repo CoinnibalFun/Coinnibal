@@ -760,6 +760,12 @@
   padding-top: 10px;
   border-top: 2px dashed var(--rule);
 }
+.wl-closed__again .sw {
+  justify-items: center;
+}
+.wl-closed__again .sw-note {
+  text-align: center;
+}
 .wl-closed__note {
   display: grid;
   justify-items: center;
