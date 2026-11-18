@@ -203,7 +203,7 @@ function Faucet() {
     );
   if (view === 'mainnet' || view === 'offline' || view === 'no-token') return <Quiet view={view} />;
   const m = meta as TokenMeta;
-  // what the page calls the token: the game's display symbol (server `TOKEN_SYMBOL`, e.g. $NIBAL) when the faucet token
+  // what the page calls the token: the game's display symbol (server `TOKEN_SYMBOL`, default "tokens") when the faucet token
   // is the game token, else its on-chain symbol; the wallet's "add token" always gets the on-chain symbol
   const sym = displaySymbol(m, chain?.token);
   const chainInfo = serverChainInfo(chain);

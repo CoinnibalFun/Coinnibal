@@ -1084,7 +1084,7 @@ export class GameEngine {
     return me.bbox.y0 - (nameTagRise(me.maxR * z, true) + 6 + half) / z;
   }
 
-  /** Floating "+X $NIBAL" ink numbers from `value` messages (ledger units). */
+  /** Floating "+X tokens" ink numbers from `value` messages (ledger units). */
   private handleFloats(): void {
     const floats = this.world.drainFloats();
     if (floats.length === 0) return;

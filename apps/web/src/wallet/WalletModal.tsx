@@ -29,7 +29,7 @@ export function allowanceTooHigh(allowance: bigint | null, entryFees: readonly b
 
 /**
  * Wallet sheet. Disconnected: the EVM wallets found in the browser (EIP-6963: MetaMask, Rabby or
- * any browser wallet). Connected: address, $NIBAL and gas-token balances, the network (with a switch
+ * any browser wallet). Connected: address, game token and gas-token balances, the network (with a switch
  * when the wallet is on another chain), the free sign-in signature, explorer and disconnect.
  */
 export function WalletModal() {

@@ -226,7 +226,13 @@ has more bots than its setting, nor more playing than the setting minus its peop
   exports (backup, migration settings) need a fresh purpose-bound signature (`site/secret-proof.ts`).
 - **Who may play** (`gameAccess`: `admins` | `holders` | `public` | `maintenance`; `GAME_ACCESS` overrides):
   holders are wallets with `balanceOf > 0` on the NFT (cached 15 s, re-read uncached at every arena seat) plus the
-  admins. On the testnet the default is `public`.
+  admins. The default is `admins` on every chain (`GAME_ACCESS_DEFAULT`: a fresh server starts closed); the owner
+  opens it in `/admin` (Game → Who may play, or Settings). The game's quotes follow the same gate: `GET /api/shop`,
+  `GET /api/rooms/custom/quote` and every `POST /api/rooms/custom*` (practice with bots included) answer 403
+  `game_closed` to a wallet the game is closed for (`gameOpenFor`: only admins in `admins` and `maintenance`, holders
+  and admins in `holders`). `GET /api/site/faucet` follows the site's /faucet door (`faucetOpenFor`): open to everyone
+  in `holders`, `public` and `maintenance`, admins only in `admins`. `POST /api/shop/buy` is never gated: a payment
+  made anyway is credited or owed back.
 - **Rooms** (`rooms/manager.ts`, `rooms/room.ts`): practice ponds (Rookie and Pro leagues, 40 people), arena
   instances `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) people on the same vault, opened ahead of demand and
   drained when quiet by the instance scaler (`rooms/arena-scaler.ts`, OPERATIONS.md "Arena instances"; a draining
@@ -279,7 +285,7 @@ has more bots than its setting, nor more playing than the setting minus its peop
   ahead (`closing`, repeated to late joiners); a free room then sends its final board (`roomOver`, the same
   `RoundStanding` rows as a bell's `roundOver`) before `room_closed`; a ticket room closes after its own bell at its end.
   **Practice with bots** (`POST /api/rooms/custom/practice`, `CustomRoomService.practice`): a free custom room with
-  practice bots in one click, for guests too, no fee; limited to one live room per player, 4 per IP per 30 min,
+  practice bots in one click, for guests too while the game is public (the gate above), no fee; limited to one live room per player, 4 per IP per 30 min,
   `practiceMaxLive` at once, 15 minutes, closed after 2 minutes empty.
 - **Arena prices in US dollars** (`site/arena-prices.ts`, `chain/token-price.ts`, shared `arena-pricing.ts`): the
   tiers, the price source (`manual`; `dex_twap` is an unwired stub) and the rounding, per chain in
@@ -287,7 +293,7 @@ has more bots than its setting, nor more playing than the setting minus its peop
   The admin panel computes the sync's diff and the owner wallet signs `updateArena`; the server only stores settings.
   When an arena's entry fee changes on chain its rooms follow (`RoomHandle.setBuyIn`, display and evidence only:
   money always uses the ticket's own `Session.entryFee`).
-- **Power-up shop** (`shop/`): `GET /api/shop`, `POST /api/shop/buy {cart, txHash}` (a cart of several packs paid
+- **Power-up shop** (`shop/`): `GET /api/shop` (gated: "Who may play" above), `POST /api/shop/buy {cart, txHash}` (a cart of several packs paid
   with one `pay(total, ref)`, `ref` = `coinnibal.cart.` and each power-up's letter and pack count; older clients send
   `{kind, txHash}` for one pack, `ref` = `coinnibal.shop.<kind>`; a pack or cart paid with the `elymum.` prefix of before
   the rename still credits, with the same checks); packs are priced in US cents and converted at the
@@ -349,7 +355,7 @@ has more bots than its setting, nor more playing than the setting minus its peop
   re-read right before the wallet opens and a changed price or rate is refused), the shop payment (`shop.ts`: approve
   exactly the price when short, then `pay`), the chain data hook (`chain.ts`). On a phone without a browser wallet:
   deep links that open the page in MetaMask or Coinbase Wallet (`deeplinks.ts`), and WalletConnect when the build has
-  `VITE_WALLETCONNECT_PROJECT_ID` (`walletconnect.ts`, loaded only when picked). "How to get $NIBAL"
+  `VITE_WALLETCONNECT_PROJECT_ID` (`walletconnect.ts`, loaded only when picked). "How to get tokens"
   (`GetTokensSheet.tsx`; the Pons link is `VITE_TOKEN_BUY_URL`).
 - **Contract pins** (`src/wallet/pinned.ts`): the arena, NFT and token addresses are fixed per chain at build time
   (`VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS`, `VITE_TOKEN_ADDRESS` for the build's `VITE_CHAIN_ID`; the testnet
@@ -363,9 +369,10 @@ has more bots than its setting, nor more playing than the setting minus its peop
   the player chooses "Play here". Snapshots are drawn on a steady timeline 100 ms behind the newest (a jitter buffer,
   by server tick), and a coin keeps its last velocity up to 250 ms when the next snapshot is late
   (`apps/web/test/netsim.ts`: at 150 ms RTT and 2 % loss, about 36 freezes a minute before, none after).
-- **Copy** (`src/i18n`): English plus five translations; `{chain}` names the network; ETH is written out.
+- **Copy** (`src/i18n`): English only (`locales/meta.ts`); `{chain}` names the network; ETH is written out.
 - **Admin** (`src/admin`): the deploy wizard (arena v3, NFT, TestToken on testnets), Finish setup (token, the four
-  arenas, holder perks 8 % + 2 %, the Isles holders-only, the faucet's 2x), arena prices in US dollars (the sync's
+  arenas, holder perks 8 % + 2 %, the $10 Room holders-only, the faucet's 2x and, on a testnet, the public mint:
+  `setPhase(public)`), arena prices in US dollars (the sync's
   diff and the owner-signed `updateArena` calls), the arena controls (fee pair, burn
   mode with the token's burn() probe, payment burn share, fee wallet, pause, sweeps, rescue), the mint, maps, shop,
   custom rooms, integrity. Every write is previewed and sent once.
@@ -394,7 +401,7 @@ with 0 everything runs on the main thread exactly as before (tests, `pnpm dev`).
 ```
 
 - **What runs where.** A worker (`rooms/remote/host.ts`) runs whole rooms with the unchanged `Room` class:
-  simulation, the practice bots of free custom rooms, snapshot building and encoding. The main thread keeps every socket, the HTTP/site API,
+  simulation, the practice bots of free custom rooms and test arenas, snapshot building and encoding. The main thread keeps every socket, the HTTP/site API,
   auth, the chain gateway, the journal, the stores (profiles, leaderboards, shop charges, custom-room
   records, integrity flags) and the room directory (`RoomManager` with `RemoteRoom` proxies,
   `rooms/remote/pool.ts`). A new room instance goes to the least-loaded worker (measured tick time, plus the

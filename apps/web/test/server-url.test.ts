@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * The web on Vercel talks to the game server on its own origin (VITE_SERVER_URL=https://game.coinnibal.fun):
+ * A web build on a separate origin talks to the game server on its own origin (VITE_SERVER_URL=https://game.coinnibal.fun):
  * every REST call, the socket, the pictures and the admin backup command use that absolute origin.
  */
 describe('VITE_SERVER_URL (web and game server on different origins)', () => {

@@ -1,20 +1,22 @@
 # Coinnibal
 
 **You are small change with a big appetite.** Coinnibal is a cute coin-eats-coin arena game on
-Robinhood Chain (an Arbitrum Orbit L2, gas token ETH). Its token is `$NIBAL`. Eat or be eaten.
+Robinhood Chain (an Arbitrum Orbit L2, gas token ETH). Its game token is launched on Pons (amounts are shown with
+`TOKEN_SYMBOL`, default "tokens"). Eat or be eaten.
 You are a coin: eat food and smaller coins, run from bigger ones, and when the five-minute bell rings
 whatever you swallowed is paid out on chain.
 
 Coinnibal was formerly Elymum (docs/OPERATIONS.md, "The name: Coinnibal (formerly Elymum)", lists the few names the
 live server keeps). The domain and the X handle are configuration.
 
-The product flow is WL → Mint → Play: people apply for the whitelist, mint a Coinnibal NFT for
-$1 in ETH, and the game opens for holders. The money rules live in two Solidity contracts; the
+The product flow is WL → Mint → Play: people apply for the whitelist, get a Coinnibal NFT, and the game opens for
+holders. No mint price is published; the public mint is planned on OpenSea (the link @coinnibalfun posts), and the
+contract's own allowlist and public phases and `/mint` are the owner's tools until the owner decides how they fit. The money rules live in two Solidity contracts; the
 game itself runs on an authoritative server; the owner deploys and runs everything from their own
 wallet in `/admin`.
 
-Status: the contracts and the whole mint system are ready and run from `/admin`; the public site
-collects WL applications for now. Coinnibal runs on Robinhood Chain only: Robinhood Chain Testnet (chain id
+Status: the contracts and the mint system are ready and run from `/admin`; the public site is information-only
+(game, mint, WL and collab closed) until the owner opens them in `/admin` → Settings. Coinnibal runs on Robinhood Chain only: Robinhood Chain Testnet (chain id
 46630) now, Robinhood Chain (4663) later, switched with `CHAIN_ID`. The contracts have not been audited, and a game
 played with a token of real value may need a licence where you operate.
 
@@ -35,25 +37,26 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
 - Real-time arena game: a 30 Hz authoritative server (physics, rounds) and a canvas client with
   split, eject, viruses, power-ups and floor loot.
 - Rounds, not cash-outs: paid arenas play 5-minute wall-clock rounds (the full 5:00 of play, then a 30 s break after
-  each bell; joins closed in the final minute). Join late or buy back in; everyone alive at the bell is paid their value. There is no entry
-  fee; the arena contract takes 20 % of a ticket's **profit** only (15 % burned, 5 % to the fee wallet; emblem
-  holders 10 %: 8 % + 2 %); a loss pays nothing.
-- Four arenas on the ring, tickets priced in US dollars and paid in `$NIBAL`: Asphodel Meadow ($1), Lethe Shore ($3),
-  Golden Bough ($5) and Isles of the Blessed ($10, for emblem holders). Only people play the official arenas: no
+  each bell; joins closed in the final minute). Join late or buy back in; everyone alive at the bell is paid their value. No fee
+  is taken from the ticket; the arena contract takes 20 % of a ticket's **profit** only (15 % burned, 5 % to the fee
+  wallet, the team wallet; NFT holders 10 %: 8 % + 2 %); a loss pays nothing.
+- Four rooms, tickets priced in US dollars and paid in the game token: the $1 Room, the $3 Room, the $5 Room and the
+  $10 Room (NFT holders only). Only people play the official arenas: no
   house bots (on the testnet each arena also has a labelled TEST room with practice bots that carry no value).
-- On-chain money in one contract: `CoinnibalArena` holds the entry fees in per-arena vaults; a payout
+- On-chain money in one contract: `CoinnibalArena` holds the ticket money (the contract's `entryFee`) in per-arena vaults; a payout
   can never exceed the vault, a settlement cannot replay, players refund unsettled tickets themselves
   after 24 h, floor loot is only ever burned. Power-ups (packs priced in US dollars, several in one cart, one
   payment) are paid to the same contract (`pay`: half burned, half to the fee wallet).
-- Coinnibal NFT: an ERC-721 with an allowlist (Merkle root) and a public phase, priced at $1 in
-  ETH (synced from `/admin` or kept there by the server's price keeper within the owner's bounds).
+- Coinnibal NFT: an ERC-721 with an allowlist (Merkle root) and a public phase, priced in ETH at the owner's USD
+  target `MINT_USD_CENTS` (synced from `/admin` or kept there by the server's price keeper within the owner's bounds;
+  no price is published).
 - Sign-In with Ethereum (EIP-4361) for every wallet that speaks EIP-6963 (MetaMask, Rabby, Coinbase
   Wallet, OKX and the rest), smart wallets included (ERC-1271 / 6492).
 - Owner-run admin panel: deploy both contracts from your wallet, register them, set the token,
   create arenas, publish the allowlist, open the mint, review the WL and collabs, integrity flags,
   bans and held payouts. Every transaction is previewed before the wallet prompt.
 - Practice: two leagues of free practice rooms; nothing touches the chain.
-- Custom rooms: your own rules for a small fee in the game token, half burned and half to the team wallet (emblem
+- Custom rooms: your own rules for a small fee in the game token, half burned and half to the team wallet (NFT
   holders: one free room a day); free rooms may add fair
   practice bots (count and difficulty, tagged BOT, no value, they see only what a player sees).
 - Share on X and Link X: result and kill cards drawn by the server, opened in X's composer; a player can tie an X
@@ -75,12 +78,12 @@ flowchart LR
 ```
 
 1. A player signs in with SIWE (free, no transaction), approves the game token and calls `join` on the
-   arena: the whole entry fee moves into that arena's vault and a session opens with the fee rates fixed.
+   arena: the whole ticket price moves into that arena's vault and a session opens with the fee rates fixed.
 2. The server seats the ticket. Value moves between players off chain as they eat each other; a
-   crash-safe journal keeps the books (live values + floor loot + pending payouts = entry fees − payouts).
+   crash-safe journal keeps the books (live values + floor loot + pending payouts = tickets paid in − payouts).
 3. At the bell the server settles every live ticket of the arena in one `settle` batch: each is paid its value
-   less the fee on its profit (entry 1,000, payout 2,000: 150 burned, 50 to the fee wallet, 1,800 to the player;
-   at most 25 % together); floor loot is burned with `sweepLoot`. A ticket that was never played is cancelled with its full entry fee back (`cancel`).
+   less the fee on its profit (ticket 1,000, payout 2,000: 150 burned, 50 to the fee wallet, 1,800 to the player;
+   at most 25 % together); floor loot is burned with `sweepLoot`. A ticket that was never played is cancelled with its full ticket price back (`cancel`).
 4. If the server never settles a ticket, the player calls `refund` after 24 h. If a payout transfer
    fails, the session is finalized with what is `owed` and the player collects it with `refund`.
 
@@ -105,11 +108,11 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | `packages/shared` | Game rules, protocol, chains table, arenas, SIWE message, palette |
 | `packages/art` | Coin drawing shared by the web renderer and the films |
 | `apps/server` | The game server (rooms, rounds, ledger, journal, chain gateway, site and admin API, integrity, practice bots for free custom rooms and the testnet's test arenas, the shop, Share on X and Link X) |
-| `apps/web` | The client: landing, `/wl`, `/collab`, `/mint`, `/play`, `/docs`, `/admin` |
+| `apps/web` | The client: landing, `/wl`, `/collab`, `/mint`, `/faucet`, `/play`, `/docs`, `/admin` |
 | `scripts/` | `demo.mjs`, `localnet.mjs`, `localnet-fund.mjs`, `dev-browser.mjs`, `record-walkthrough.mjs` and the Dev Wallet |
-| `brand/` | The brand kit generator and its PNGs (X avatar and banner, OG card, favicons, posts, stickers, arena posters) |
+| `brand/` | The brand kit generator (PNGs into `brand/out/`, gitignored: X avatar and banner, OG card, favicons, posts, stickers, arena posters) |
 | `media/` | Film pipelines (promo, gameplay, how-to-play, mint film, roadmap chomp) |
-| `docs/` | [PROJECT](docs/PROJECT.md), [ARCHITECTURE](docs/ARCHITECTURE.md), [DEPLOY](docs/DEPLOY.md), [OPERATIONS](docs/OPERATIONS.md), the spec and the design reference |
+| `docs/` | [PROJECT](docs/PROJECT.md), [ARCHITECTURE](docs/ARCHITECTURE.md), [ECONOMY](docs/ECONOMY.md), [NFT-DESIGN](docs/NFT-DESIGN.md), [RESEARCH](docs/RESEARCH.md), [DEPLOY](docs/DEPLOY.md), [OPERATIONS](docs/OPERATIONS.md), the historical specs and the design reference |
 
 ## Getting started
 
@@ -158,9 +161,9 @@ the web, and builds the Docker image.
 ### Deploying
 
 Deploy the server (Docker on a VPS: deploy/vps/README.md), then deploy the contracts from your own wallet in
-`/admin`: Deploy Arena → Deploy NFT → register both → set the token (when it exists) → create the
-arenas → publish the allowlist → open the mint. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
-Day-to-day running (gas for the server key, the allowlist, the $1 price, pausing, ownership):
+`/admin`: Deploy Arena → Deploy NFT → register both → publish the allowlist → open the mint → set the token (when
+it exists) → create the arenas → open the game. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
+Day-to-day running (gas for the server key, the allowlist, the mint price, pausing, ownership):
 [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## Security and trust model

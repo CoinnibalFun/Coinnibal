@@ -40,7 +40,7 @@ export function tokenText(decimals: number, symbol: string): TokenText {
 /**
  * The game token's display: symbol and decimals from the server's config (`ChainStatus.token`),
  * the on-chain decimals once the config is read. Until the token is set the symbol shows as
- * `$NIBAL` and amounts use 18 decimals (the contract's default).
+ * "tokens" and amounts use 18 decimals (the contract's default).
  */
 export function useTokenText(): TokenText {
   const token = useUi((s) => s.chain?.token ?? null);

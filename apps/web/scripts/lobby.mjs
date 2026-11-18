@@ -193,7 +193,7 @@ if (want('newticket')) {
   await ctx.close();
 }
 
-// ── Gold Lake (balance topped up): every arena is open to everyone; then a refused transaction ──
+// ── "goldlake" (balance topped up): every arena is open to everyone; then a refused transaction ──
 if (want('goldlake')) {
   const { ctx, page } = await newPage({ viewport: D });
   await page.evaluate(() => {

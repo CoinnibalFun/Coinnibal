@@ -1,4 +1,4 @@
-// UX audit helper: the connection banner over the lobby and over a game, and the "How to get $NIBAL" sheet, at
+// UX audit helper: the connection banner over the lobby and over a game, and the "How to get tokens" sheet, at
 // phone and desktop size (screenshots to out/ux-audit/). It sets the store's `netDown` the way the socket would, and
 // opens the sheet the way its links do (stack: pnpm demo:localnet).
 //   node apps/web/scripts/ux-audit/banner-check.mjs
@@ -27,7 +27,7 @@ for (const [name, vp, mobile] of [
   });
   console.log(name, 'scrim', bg);
   await p.screenshot({ path: `${OUT}banner-${name}-replaced.png` });
-  // "How to get $NIBAL"
+  // "How to get tokens"
   await p.evaluate(() => window.__coinnibal.useUi.setState({ netDown: null, modal: 'tokens' }));
   await p.waitForTimeout(900);
   await p.screenshot({ path: `${OUT}gettokens-${name}.png` });

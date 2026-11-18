@@ -40,9 +40,10 @@ function publicUrlFiles(): Plugin {
   };
 }
 
-// On Vercel (a static host) the browser must reach the game server directly: vercel.json proxies only the NFT
-// metadata and the share cards, and proxied API calls would all come from Vercel's addresses (the server's per-IP
-// limits could not tell players apart). Fail the build loudly instead of shipping a site whose API calls 404.
+// A web build on a separate static host (here: Vercel) must reach the game server directly: proxied API calls would
+// all come from the host's addresses (the server's per-IP limits could not tell players apart). Fail the build loudly
+// instead of shipping a site whose API calls 404. (The repository's vercel.json builds no web app any more: it only
+// redirects the old elymum.io to coinnibal.fun, and the VPS serves the site.)
 if (process.env.VERCEL === '1' && !process.env.VITE_SERVER_URL && !process.env.VITE_WS_URL) {
   throw new Error('VITE_SERVER_URL is not set: set it to the game server (e.g. https://game.coinnibal.fun) in the Vercel project settings');
 }

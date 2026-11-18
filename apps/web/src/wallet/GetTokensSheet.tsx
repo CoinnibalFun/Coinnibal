@@ -30,8 +30,8 @@ function tokenAddress(chainId: number | null | undefined, announced: string | nu
 }
 
 /**
- * "How to get $NIBAL" (modal `tokens`): ETH for gas, then the token (the testnet faucet page, or Pons on mainnet when
- * the build names it), then back to the ticket. Opened from the wallet sheets and from "Get $NIBAL" when a ticket
+ * "How to get tokens" (modal `tokens`): ETH for gas, then the token (the testnet faucet page, or Pons on mainnet when
+ * the build names it), then back to the ticket. Opened from the wallet sheets and from "Get tokens" when a ticket
  * costs more than the wallet holds.
  */
 export function GetTokensSheet() {

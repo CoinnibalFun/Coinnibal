@@ -8,7 +8,7 @@ import { useWallet } from './store';
 
 /**
  * The wallet in the masthead: a cream sticker with a little coin, the short address over the
- * $NIBAL balance. Disconnected, it is a teal "connect" sticker (practice needs none).
+ * game token balance. Disconnected, it is a teal "connect" sticker (practice needs none).
  */
 export function WalletButton() {
   const t = useT();

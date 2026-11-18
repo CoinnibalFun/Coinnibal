@@ -518,7 +518,7 @@ describe('the chain panel', () => {
 });
 
 describe('addresses keep their case', () => {
-  it('the capitalised mono style is undone for addresses (custom rooms treasury, shop sink, avatars)', () => {
+  it('the capitalised mono style is undone for addresses (custom rooms, shop, avatars)', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/admin/admin.css'), 'utf8');
     expect(css).toMatch(/\.ad-hex,\s*\.ad-hex::placeholder\s*\{\s*text-transform: none;/);
     for (const f of ['src/admin/CustomRoomsCard.tsx', 'src/admin/ShopCard.tsx', 'src/admin/site/AvatarsTab.tsx']) {

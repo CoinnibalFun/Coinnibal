@@ -1,10 +1,13 @@
 # Coinnibal "Roadmap Chomp" (14 s, 1920x1080, 1080x1920 and 1080x1080, 60 fps)
 
+> **Before the next render.** The second heading still reads "$1 MINT" (`scenes/scenes.js`): the current game
+> publishes no mint price, so it becomes "MINT" ([media/README.md](../README.md)).
+
 Modern and minimal: the Storybook plain (`#F8F7F4`), a faint dot grid, one ink (`#04181C`) and lots of
 air, a light grain and no vignette. The X profile coin (the sun coin of `brand/out/x`, drawn by the
 NFT kit's `heroCoin`) gets a Pac-Man bite that opens and shuts on the eighth
 notes. It wakas along a dotted line and eats the roadmap one heading at a time, letter by letter, and
-grows with a pop on each downbeat: **01 WL OPEN** (4.0 s), **02 $1 MINT** (6.0 s), **03 GAME LIVE**
+grows with a pop on each downbeat: **01 WL OPEN** (4.0 s), **02 MINT** (6.0 s; the scene still says "$1 MINT"), **03 GAME LIVE**
 (8.0 s): the product order, WL → Mint → Play. It reaches the end, takes a big bite on 9.0 and settles as the closing card on
 10.0: the coin grins, the wordmark, the site's host (`SITE_HOST`, the `PUBLIC_URL` host; default
 coinnibal.fun), @coinnibalfun. No VO: music and sound only, 120 BPM.

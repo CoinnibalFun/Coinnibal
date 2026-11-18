@@ -1,7 +1,12 @@
 # Coinnibal mint film (19.5 s, 1920x1080 and 1080x1920, 60 fps)
 
-A short announcement film for the Coinnibal NFT: the mint costs **$1, paid in HYPE** on Elysium, the
-order is **WL → Mint → Play** (the emblem opens the game), and the WL is open at `<SITE_HOST>/wl`
+> **Before the next render.** This film's script still carries facts of the Elysium build (Elysium, HYPE, a $1
+> mint, the old arena names and fees). Rewrite it to the current game (Robinhood Chain, ETH gas, no mint price, the
+> $1 / $3 / $5 / $10 Rooms, 20 % of profit: 15 % burned + 5 % to the team wallet) before any re-render
+> ([media/README.md](../README.md)).
+
+A short announcement film for the Coinnibal NFT (the script still says the mint costs $1, paid in HYPE on Elysium:
+see the note above), the order is **WL → Mint → Play** (the emblem opens the game), and the WL is open at `<SITE_HOST>/wl`
 (@coinnibalfun on X). 120 BPM; every cut and slam sits on the beat grid (downbeats at 0.5 + 2k s). The
 canvas kit draws in the Ring Storybook palette and type (Fraunces, Geist Mono; see `media/README.md`).
 
@@ -12,8 +17,7 @@ canvas kit draws in the Ring Storybook palette and type (Fraunces, Geist Mono; s
 | 0:08.5 | The order | An ink flood to night; three tickets; the mascot hops 01 WL OPEN, 02 $1 MINT, 03 GAME LIVE, each prints in its ink on the landing; it leaps at the camera. | "The roadmap: The whitelist. The mint. Then the game." |
 | 0:12.5 | WL open | The coin pulls back: "WL open.", the `<SITE_HOST>/wl` ticket, the wordmark, @COINNIBALFUN and the foot line "WL OPEN · <SITE_HOST>/WL · @COINNIBALFUN". | "The WL is open. @coinnibalfun, on X." |
 
-Facts: $1 in HYPE (never a HYPE number: the price is held at a dollar and its HYPE value moves), the
-WL first, the order WL → Mint → Play. No supply, no dates, no perks. The VO lines changed length
+Facts (to rewrite: the current game publishes no mint price and runs on Robinhood Chain), the WL first, the order WL → Mint → Play. No supply, no dates, no perks. The VO lines changed length
 with the rebrand: check the cue times in `timeline.json` against the new takes before the final render.
 
 `SITE_HOST` is the host of the site's `PUBLIC_URL` (no domain is written into the scenes). The

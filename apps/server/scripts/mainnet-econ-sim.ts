@@ -54,7 +54,7 @@ for (const concurrent of [100, 200]) {
 // the emblem costs $1 and halves the fee: if every player mints one (or borrows one, see F-emblem)
 reports.push(runEconomy(cal, { ...MAINNET_DEFAULT, usdPerToken: price, name: '200 players, every player holds the emblem', concurrent: 200, holderShare: 1 }, gas));
 for (const r of reports) {
-  console.log(`\n## Economy: ${r.scenario.name}, ${r.scenario.hours} h (${r.rounds} rounds), $NIBAL at $${r.scenario.usdPerToken}`);
+  console.log(`\n## Economy: ${r.scenario.name}, ${r.scenario.hours} h (${r.rounds} rounds), the game token at $${r.scenario.usdPerToken}`);
   console.log('arena  ticket   entry (tokens)  players  instances  tickets/day  winners  burned/day  fee wallet/day  power-ups/day (tokens)');
   for (const t of r.tiers) {
     const d = 24 / r.scenario.hours;

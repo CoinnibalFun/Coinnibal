@@ -1,6 +1,6 @@
 // The Coinnibal brand kit templates. Each export returns { w, h, html } (CSS pixels; the generator
 // picks the device scale). Copy is plain, short English a beginner reads at a glance ("simple is
-// the best", "just having fun"): the product is "Coinnibal", its token $NIBAL, the chain "Robinhood
+// the best", "just having fun"): the product is "Coinnibal", played with the game token (no ticker in the art), the chain "Robinhood
 // Chain", the gas token ETH, the X handle `BRAND_X_HANDLE` (default @coinnibalfun). No mint price is written
 // into the art (the mint page reads it from the contract).
 // No domain is written into the art (the site's domain is whatever PUBLIC_URL says).

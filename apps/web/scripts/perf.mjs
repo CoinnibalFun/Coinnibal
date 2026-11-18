@@ -9,11 +9,11 @@
 //           overhead): builds apps/web with VITE_PERF_HOOK=1 into a temp dir, serves it with
 //           `vite preview` on :4173 (proxying the demo's game server) and runs practice only
 //           (the fake chain behind the arena scene exists in dev builds only).
-// --start   spawns `GAME_PUBLIC=1 pnpm demo` itself (fake chain) with a busy arena
+// --start   spawns `pnpm demo` itself (fake chain; the demo opens the game to everyone) with an open arena
 //           (long rounds so joins never close mid-run; arenas and practice have people only, no bots),
 //           and stops it at the end. Without it, a demo must already be running.
 // Scenes:   practice  joins the free practice room (people only);
-//           arena     signs in with a Dev Wallet, buys a Penny Pond ticket (fake chain) and plays.
+//           arena     signs in with a Dev Wallet, buys a $1 Room ticket (fake chain) and plays.
 // Devices:  desktop   1920x1080, dpr 1;
 //           phone     390x844, dpr 3, touch, with a 4x CPU throttle (CDP Emulation).
 // The coin is steered in-page through the virtual stick (food first, away from bigger coins),
@@ -69,12 +69,12 @@ const DEVICE = {
 // ───────────────────────────── demo (optional) ─────────────────────────────
 let demo = null;
 async function startDemo() {
-  log('starting GAME_PUBLIC=1 pnpm demo');
+  log('starting pnpm demo');
   demo = spawn('pnpm', ['demo'], {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', 'ignore', 'ignore'],
-    env: { ...process.env, GAME_PUBLIC: '1', ROUND_SECONDS: '1800', ROUND_JOIN_CLOSE_SECONDS: '60' },
+    env: { ...process.env, ROUND_SECONDS: '1800', ROUND_JOIN_CLOSE_SECONDS: '60' },
   });
   for (let i = 0; i < 120; i++) {
     const ok = await fetch(URL_).then((r) => r.ok, () => false);

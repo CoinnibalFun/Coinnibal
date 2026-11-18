@@ -1,5 +1,10 @@
 # How to play Coinnibal (Video B)
 
+> **Before the next render.** This film's script still carries facts of the Elysium build (Elysium, HYPE, a $1
+> mint, the old arena names and fees). Rewrite it to the current game (Robinhood Chain, ETH gas, no mint price, the
+> $1 / $3 / $5 / $10 Rooms, 20 % of profit: 15 % burned + 5 % to the team wallet) before any re-render
+> ([media/README.md](../README.md)).
+
 A narrated tutorial, about 2:45, 1920x1080, 30 fps (every frame an exact replayed game frame), H.264 +
 AAC, -14 LUFS with the true peak at or below -1.5 dBTP after encoding, in seven chapters with the
 brand's ticket chapter cards:
@@ -23,9 +28,9 @@ brand's ticket chapter cards:
    of `media/mint-film/scenes/nft.js` through the gameplay kit's `nft` component) and the end card
    (the site's host from `SITE_HOST`, @coinnibalfun)
 
-Every rule and number on screen and in the voiceover comes from the in-app
-guide (`apps/web/src/ui/docs/content.en.ts` and `facts.ts`), `docs/PROJECT.md` and the controls
-from `apps/web/src/game/input.ts`. Arenas have no cash-out key.
+The rules and numbers on screen and in the voiceover were taken from the in-app guide of the Elysium build; the
+rewrite takes them from today's guide (`apps/web/src/ui/docs/content.en.ts` and `facts.ts`), `docs/ECONOMY.md` and the
+controls from `apps/web/src/game/input.ts`. Arenas have no cash-out key.
 
 ## Layout
 

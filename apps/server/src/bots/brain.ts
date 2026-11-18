@@ -4,8 +4,8 @@ import type { Rng } from '../game/rng';
 import type { World } from '../game/world';
 
 /**
- * A practice bot's brain. Bots exist only in free custom rooms whose creator asked for them (see
- * `PracticeBots`), and they play FAIR: a bot sees exactly what a person of its size would see on a
+ * A practice bot's brain. Bots exist only in free custom rooms whose creator asked for them and in the testnet's
+ * test arenas (see `PracticeBots`), and they play FAIR: a bot sees exactly what a person of its size would see on a
  * 16:9 screen (the same view rectangle the server sends a player, `viewSize` and `VIEW.serverMargin`),
  * nothing outside it, never an invisible coin, no other bot's knowledge (no teams, no shared reports),
  * and it reacts with a delay and aims with an error that depend on the difficulty. It steers like a

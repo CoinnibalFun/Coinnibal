@@ -138,7 +138,7 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
   (`.github/workflows/ci.yml`, job `mark-green`). `update.sh` fetches it with the code (the deploy key is enough; the
   CI status of a private repository is not readable from the VPS without a GitHub token, so the marker travels
   through git) and deploys the newest commit it marks. A commit pushed while CI runs waits (`journalctl -u
-  coinnibal-update` says so). Without the tag (CI never ran the job yet) the branch head is deployed as before;
+  elymum-update` says so). Without the tag (CI never ran the job yet) the branch head is deployed as before;
   `COINNIBAL_REQUIRE_CI=1` in `.env` refuses that.
 - **In the round break.** The new image is built while the old container serves; the swap waits for the break after
   an arena bell (no live stake then: SIGTERM mid-round would cash every arena player out). `COINNIBAL_DEPLOY_NOW=1
@@ -226,7 +226,7 @@ All commands as root on the VPS (`sudo -i`).
 | Deploy now instead of waiting 2 minutes | `coinnibal-update` |
 | Restart the game server (in a round break) | `coinnibal-compose restart app` (any time it cashes the arenas out: prefer a break) |
 | Change a setting | `nano /opt/elymum/.env`, then `coinnibal-compose up -d app` |
-| Backup now / log | `coinnibal-backup` / `journalctl -u coinnibal-backup -n 50` |
+| Backup now / log | `coinnibal-backup` / `journalctl -u elymum-backup -n 50` |
 | Restore a backup | `coinnibal-restore /opt/elymum/backups/elymum-data-YYYYmmdd-HHMM.tar.gz` |
 | Pause auto-deploy | `systemctl stop elymum-update.timer` (`start` to resume) |
 | Reboot for an update now, in the next round break | `coinnibal-reboot --force` |

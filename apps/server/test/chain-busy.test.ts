@@ -78,7 +78,7 @@ describe('paid joins while the RPC answers 429', () => {
     (t.rooms as unknown as { arenaCache: unknown }).arenaCache = null;
     t.evm.limited.set('arenas', Infinity).set('session', Infinity).set('arena', Infinity);
     const sessionReads = t.evm.sessionReads;
-    // "Resume Golden Bough · no transaction": the same join again, from a new connection
+    // "Resume $5 Room · no transaction": the same join again, from a new connection
     const b = await t.connect(w);
     await t.send(b, { t: 'join', room: 'arena:3', name: 'Paid', skin: 0 });
     expect(errors(b)).toEqual([]);

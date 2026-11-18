@@ -21,13 +21,18 @@ Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testne
 2. **Fund the server key** with a little ETH (it pays gas for settlements, cancels and loot burns).
 3. In `/admin` on the site, with the owner wallet on Robinhood Chain: **Deploy Arena → Deploy NFT → register both**
    (on the testnet also the TestToken).
-4. **Set the `$NIBAL` token** on the arena when the token exists (once and for good), then **create the four
-   arenas**. On testnet you can deploy the `TestToken` first and use it.
-5. **WL**: review applications in `/admin` → WL and Collabs → **publish the allowlist root**.
-6. **Open the mint**: phase Allowlist (with "activate the game for holders" checked), later Public.
-7. Keep the mint at **$1 in ETH**: the Sync button, or let the server's price keeper do it within your bounds.
+4. **WL**: review applications in `/admin` → Community (WL, Collabs) → **publish the allowlist root**.
+5. **Open the mint**: phase Allowlist (with "activate the game for holders" checked), later Public (on the testnet
+   Finish setup has already opened it to the public). The visitor site says the public mint will be on OpenSea; how
+   that sale and this contract's phases fit together is an open owner decision.
+6. Keep the mint at its USD target (`MINT_USD_CENTS`) in ETH: the Sync button, or let the server's price keeper do it
+   within your bounds.
+7. **Set the game token** on the arena when the token exists (once and for good; the launch order is the NFT mint,
+   then the token, then the game), then **create the four arenas**. On testnet you can deploy the `TestToken` first
+   and use it (Finish setup does the token, the arenas and the perks in one go).
+8. **Open the game** (`/admin` → Game → Who may play): it starts closed (`admins`).
 
-`/admin` → **Launch** shows this checklist live, each line with a link to the tab that finishes it.
+`/admin` → **Network** shows the launch checklist live, each line with a link to the drawer that finishes it.
 
 ## 0. Robinhood Chain
 
@@ -40,7 +45,7 @@ Coinnibal runs on Robinhood Chain only (an Arbitrum Orbit L2, gas in ETH). Sourc
 | Public RPC | `https://rpc.testnet.chain.robinhood.com` | `https://rpc.mainnet.chain.robinhood.com` (rate-limited: use a provider such as Alchemy, `https://robinhood-mainnet.g.alchemy.com/v2/<key>`) |
 | Explorer (built in) | `https://explorer.testnet.chain.robinhood.com` | `https://robinhoodchain.blockscout.com` |
 | Gas token | ETH (18 decimals) | ETH |
-| Faucet | `https://faucet.testnet.chain.robinhood.com` (unconfirmed; Alchemy's faucet also works) | none: bridge ETH with the Arbitrum portal |
+| Faucet | `https://faucet.testnet.chain.robinhood.com` (the official faucet, confirmed on docs.robinhood.com/chain/connecting; Alchemy's also works) | none: bridge ETH with the Arbitrum portal |
 
 The server's RPC must serve `CHAIN_ID`: an RPC of another chain keeps the arenas off, and any other `CHAIN_ID`
 refuses to start. The web asks the wallet to switch to (or add) exactly the chain the server reports, so moving
@@ -77,7 +82,7 @@ before the rename still work: deploy/vps/README.md section 4):
 | `MAX_CONNECTIONS`, `MAX_CONNECTIONS_PER_IP`, `MAX_CONNECTIONS_PER_SUBNET` | `1500`, `8`, `48` (defaults): WebSocket caps (total, guests per IP, guests per IPv4 /24 or IPv6 /64) |
 | `GAME_WORKERS` | `5` on 8 vCPU |
 | `LOAD_SHED` | on by default in production: new free games, then new sockets and arena seats wait while the server is overloaded |
-| `MINT_USD_CENTS` | `100` (the $1 target; default) |
+| `MINT_USD_CENTS` | the mint's USD target in US cents (default `100`; an owner setting, never published) |
 | `NFT_COLLECTION_SIZE`, `NFT_ART_STYLE` | `3333` (= the NFT's max supply), `vector` (or `pixel`): the emblem collection (docs/NFT-DESIGN.md). Leave `NFT_COLLECTION_SEED` empty: the seed is generated and committed on first boot (`DATA_DIR/chains/<id>/nft-collection.json`, keep it in the backups) |
 | `TOKEN_SYMBOL` | unset: amounts say `tokens` (display only) |
 | `X_HANDLE` | the project's X handle by default (unset: `coinnibalfun`) |
@@ -116,30 +121,36 @@ Open `https://<your site>/admin`. Connect the **owner wallet** (the one in `ADMI
 opens a preview (function, arguments, value, network, signer) before the wallet prompt, and a double click cannot
 send twice. Open **Setup**; the wizard walks the steps and remembers where you are:
 
-1. **Connect the owner wallet.** This wallet becomes the owner of both contracts.
+1. **Connect the owner wallet.** This wallet becomes the owner of both contracts. Every contract is a plain
+   creation from the connected wallet (no factory, proxy or CREATE2 deployer), so the explorer shows your wallet as
+   the deployer; the preview refuses a deploy whose owner is not the wallet signing it (a wallet switched after the
+   preview).
 2. **Check the chain.** The wallet must be on the chain the server reports; the panel asks the wallet to switch
    (or to add the chain) and blocks signing otherwise.
 3. **Deploy CoinnibalArena (v3).** Constructor: admin = you, server authority = the server key (prefilled from
    `/api/config`), fee wallet = you (change it if you like; it receives the fee wallet's 5 % of every profit and
    half of every power-up payment). Defaults: 15 % of profit burned + 5 % to the fee wallet, burn mode 0
    (`0x…dEaD`), power-ups 50 % burned.
-4. **Deploy CoinnibalNFT.** Defaults: max supply 5,000, price = $1 in ETH at today's ETH/USD, 1 allowlist and 2
+4. **Deploy CoinnibalNFT.** Defaults: max supply 3,333 (`NFT_SUPPLY`, the owner's fixed supply), price = the USD
+   target `MINT_USD_CENTS` in ETH at today's ETH/USD, 1 allowlist and 2
    public mints per wallet, base URI `${PUBLIC_URL}/api/nft/`, treasury = you. Everything except the base URI
    once frozen can be changed later.
 5. **Register both with the server.** `POST /api/admin/contracts` for each: the server checks that the code hash is
    the bundled one, that the owner is you and that the arena's server authority is its key, then stores the
    addresses in `/data/chains/<chainId>/contracts.json`. The server picks the arena up without a restart.
-6. **Set the game token** (later, when `$NIBAL` exists). Type the token address twice. It can be set **once**: a
+6. **Set the game token** (later, when the game token exists). Confirm the registered token once in the preview (a
+   different address goes under Advanced and is typed twice). It can be set **once**: a
    wrong address means deploying a new arena. Until it is set the arenas show "Opening soon" and only practice
    runs.
 7. **Create the four arenas** (needs the token): the $1 / $3 / $5 / $10 tiers, created at 1,000 / 3,000 / 5,000 /
-   10,000 tokens (the reference price $0.001 a token), 300 open tickets each; the Isles ($10) are for emblem holders.
+   10,000 tokens (the reference price $0.001 a token), 300 open tickets each; the $10 Room is for NFT holders.
    Then price them at the token's real USD price: Game → Arena prices → set the price, sync, sign (OPERATIONS.md,
    "Arena prices in US dollars"). The lobby opens them within about a minute.
 
 **The testnet token.** On Robinhood Chain Testnet the wizard offers **Deploy TestToken** (an ERC20Burnable faucet
-token: `faucet()` gives 1,000,000 per hour, 2x for emblem holders; only its owner mints). **Finish setup** sets it as
-the arena's token, creates the four arenas and the holder perks in one go. The game token itself is launched on Pons,
+token: `faucet()` gives 1,000,000 per hour, 2x for NFT holders; only its owner mints). **Finish setup** sets it as
+the arena's token, creates the four rooms, sets the holder perks (8 % + 2 %), makes the $10 Room holders-only, makes the
+NFT the faucet's 2x and, on a testnet, calls `CoinnibalNFT.setPhase(public)`: the TEST mint opens to everyone. The game token itself is launched on Pons,
 which exists on mainnet only (RESEARCH.md). Remember the token is final for an arena deployment.
 
 ## 4. The allowlist and the mint
@@ -149,24 +160,29 @@ which exists on mainnet only (RESEARCH.md). Remember the token is final for an a
 2. **Publish the allowlist root** (Mint tab): the server builds a snapshot of every approved WL wallet plus every
    wallet in a submitted collab list (checksummed, de-duplicated, sorted) and its Merkle root; you sign
    `setMerkleRoot`. The panel warns when approvals changed since the published root: publish again.
-3. **Set the price to $1** (Mint → Sync to $1): it reads ETH/USD and asks your wallet to call `setPrice`.
+3. **Set the price to its USD target** (Mint → Sync; `MINT_USD_CENTS`): it reads ETH/USD and asks your wallet to
+   call `setPrice`.
 4. **Open the mint**: Mint → phase **Allowlist**. "Activate the game for holders" is offered checked: it sets who
    may play to `holders` (NFT holders plus admins). Later switch the phase to **Public**.
-5. **Keep it at $1** (see OPERATIONS): press Sync now and then, or set the price bounds and make the server key the
+5. **Keep it at the target** (see OPERATIONS): press Sync now and then, or set the price bounds and make the server key the
    price keeper; the server then re-prices every 5 minutes when the price drifts more than 2 %, always inside your
    bounds.
 
 ## 5. Mainnet (Robinhood Chain)
 
+The launch order is the NFT mint first, then the token, then the game.
+
 1. Do the whole flow on Robinhood Chain Testnet first, including tickets, rounds, power-ups and the burn mode probe.
-2. Launch the game token on Pons (mainnet only).
-3. Set `COINNIBAL_CHAIN_ID=4663` and `COINNIBAL_RPC_URLS` (a provider RPC first; it may contain a key) in `/opt/elymum/.env`, optionally
+2. Set `COINNIBAL_CHAIN_ID=4663` and `COINNIBAL_RPC_URLS` (a provider RPC first; it may contain a key) in `/opt/elymum/.env`, optionally
    `PUBLIC_RPC_URL` (secret-free). Redeploy. The server opens a clean state for chain 4663; the testnet's records stay
    in `/data/chains/46630/`.
-4. **New contracts.** Testnet addresses are not mainnet addresses. Fund the server key with ETH, redo section 3 on
-   mainnet (the red MAINNET banner shows): deploy Arena and NFT, register, set the token, create the arenas, the
-   holder perks, publish the root, sync the price. Keep burn mode 0 unless the probe shows the token's `burn()` works.
-5. Start with small arenas; watch `/admin` → Launch and the server log (`!!!` lines).
+3. **New contracts.** Testnet addresses are not mainnet addresses. Fund the server key with ETH, redo section 3 on
+   mainnet (the red MAINNET banner shows): deploy Arena and NFT, register, publish the root, sync the price, open the
+   mint (section 4).
+4. **The token.** Launch the game token on Pons (mainnet only), then set it on the arena, create the arenas and the
+   holder perks, price the arenas and open the game. Keep burn mode 0 unless the probe shows the token's `burn()`
+   works.
+5. Start with small arenas; watch `/admin` → Network (the launch checklist) and the server log (`!!!` lines).
 
 ## The admin CLI (alternative)
 
@@ -178,7 +194,7 @@ export ADMIN_PRIVATE_KEY=/path/to/owner.key     # 0x hex, or a file holding it
 pnpm admin status
 pnpm admin deploy-test-token                    # testnet only
 pnpm admin deploy-arena --server <serverKey>
-pnpm admin deploy-nft --max-supply 5000 --usd-cents 100 --base-uri https://<site>/api/nft/
+pnpm admin deploy-nft --max-supply 3333 --usd-cents 100 --base-uri https://<site>/api/nft/
 pnpm admin set-token --token <addr> --confirm <addr>
 pnpm admin create-arena --defaults
 pnpm admin nft:root --file allowlist.txt && pnpm admin nft:phase allowlist

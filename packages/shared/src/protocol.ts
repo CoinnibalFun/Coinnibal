@@ -267,7 +267,7 @@ export const FINAL_STANDINGS_ROWS = 10;
 
 /**
  * Rows of the final board each player gets at an arena's bell or a custom room's end (`RoundStanding`): the whole room
- * (an arena instance holds 50 people, a custom room 20 and its bots), capped for safety; the receiver's own row is
+ * (an arena instance holds 50 people, a custom room up to 100 and its bots), capped for safety; the receiver's own row is
  * always on it.
  */
 export const FINAL_BOARD_ROWS = 120;

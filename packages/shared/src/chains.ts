@@ -32,7 +32,7 @@ export interface NetworkDef {
   rpcUrl: string;
   /** Blockscout explorer base URL (no trailing slash); null on the local node. */
   explorerUrl: string | null;
-  /** Gas faucet (testnet; unconfirmed, see docs/RESEARCH.md). */
+  /** The official gas faucet (testnet; confirmed 2026-11-18 on docs.robinhood.com/chain/connecting, docs/RESEARCH.md). */
   faucetUrl: string | null;
   /** Where players bring ETH from (the canonical Arbitrum bridge). */
   bridgeUrl: string | null;

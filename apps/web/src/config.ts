@@ -1,9 +1,9 @@
 /**
  * Where the game server lives. Same origin by default (Vite dev proxies /ws and /api; the Docker image serves the
- * client itself). On a static host (Vercel) the browser talks to the game server DIRECTLY, for the API as well as
+ * client itself). On a separate static host the browser talks to the game server DIRECTLY, for the API as well as
  * the WebSocket (`VITE_SERVER_URL`, or the origin of `VITE_WS_URL`): requests through the host's proxy would all
- * arrive from the host's few addresses, so the server's per-IP limits could not tell players apart. The static
- * host only proxies what must live on the site's own domain (the NFT metadata, the share cards).
+ * arrive from the host's few addresses, so the server's per-IP limits could not tell players apart. Such a
+ * host would proxy only what must live on the site's own domain (the NFT metadata, the share cards).
  */
 export function resolveServer(env: { server?: string; ws?: string }, loc: { protocol: string; host: string }): { http: string; ws: string } {
   const direct = env.server || env.ws;

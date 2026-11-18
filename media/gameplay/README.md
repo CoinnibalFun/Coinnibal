@@ -1,9 +1,15 @@
 # Coinnibal gameplay video (Video A)
 
-A cut of a real paid round in Asphodel Meadow, about 57 s, 1920x1080, **60 fps**, H.264 + AAC, -14 LUFS
+> **Before the next render.** This film's script still carries facts of the Elysium build (Elysium, HYPE, a $1
+> mint, the old arena names and fees). Rewrite it to the current game (Robinhood Chain, ETH gas, no mint price, the
+> $1 / $3 / $5 / $10 Rooms, 20 % of profit: 15 % burned + 5 % to the team wallet) before any re-render
+> ([media/README.md](../README.md)).
+
+A cut of a real paid round in the $1 Room (recorded when it was called Asphodel Meadow; re-take before the next render), about 57 s, 1920x1080, **60 fps**, H.264 + AAC, -14 LUFS
 (true peak at or below -1.5 dBTP after encoding): a mid-round join (the round chip), she eats a
 player (slow motion through the gulp, a punch-in and the value floating off the coin), loot swept
-up, a bot eats her and she buys back in, the final minute (joins closed), the last ten seconds with
+up, she is eaten (by a house bot in the take of the Elysium build; official arenas have no bots now, so the
+re-take stages a rival wallet) and buys back in, the final minute (joins closed), the last ten seconds with
 a last gulp four seconds before the bell, the bell and the "Round over" receipt with the PAID stamp.
 Cuts sit on the bar lines of the game's own score (82 BPM). It is in the same language as the promo
 (`media/promo`), now in the Ring Storybook palette and type: Fraunces wordmark with a ghost pass, Geist
@@ -32,7 +38,7 @@ This folder also holds the capture and render kit that the how-to-play video
 | `capture/lib.mjs` | Playwright kit. `Player` drives the real app (dev wallet, lobby, tickets, "Buy back in", held tickets, an in-page steering brain that eats, flees, seeks open water and keeps away from the world edge) and reads the arena round clock (`round()`, `untilRound()`). `Recorder` records a take: the journal (a player opened with `journal`), the game audio from the dev tap (`window.__coinnibalAudioTap`), and a 10 Hz telemetry log (HUD, the round's time left and phase, where Daphne, prey, threats and loot are on screen) plus store events (value floats, kills, rank, banners, the bell's round result, held tickets). |
 | `capture/journal.mjs` | The journal recorder (WebSockets, fetch, input, clock) and the replay shim (virtual clock, journal-fed WebSocket and fetch, animations on the virtual clock). |
 | `capture/replay.mjs` | Renders a journal take: `--edit a.json,b.json` captures every source span the edits use (padded), at 60 fps, 240 fps where a shot runs slower than 0.75x, and each output frame's exact source time. Writes `video.mkv`, `frames.json`, `pts.json` and `fsamples.json` (per-frame telemetry: the coin on screen, the camera, the world size). |
-| `capture/take-*.mjs` | One script per take: `arena` (a whole round: five staged rival wallets with real tickets, Daphne joins mid-round, eats, buys back in if eaten, plays safe through the final minute, a rival comes at her in the last seconds, the bell, the receipt; recorded twice as `arena` and `arena2`), `spill` (a bot eats Daphne, "Buy back in", the same round again), `held` (the lobby in a final minute: joins closed, a held ticket that joins the next round by itself), `practice` (growth, controls, cacti, coin rain; the coin is steered back to open water before each beat), `lobby` (tickets, wallet, ticket sheet, the four arenas, ranks, guide), `music` (the score only, no video). The round takes wait for the right moment of the wall-clock round. |
+| `capture/take-*.mjs` | One script per take: `arena` (a whole round: five staged rival wallets with real tickets, Daphne joins mid-round, eats, buys back in if eaten, plays safe through the final minute, a rival comes at her in the last seconds, the bell, the receipt; recorded twice as `arena` and `arena2`), `spill` (Daphne is eaten, "Buy back in", the same round again; the old take used a house bot, the re-take needs a rival wallet), `held` (the lobby in a final minute: joins closed, a held ticket that joins the next round by itself), `practice` (growth, controls, cacti, coin rain; the coin is steered back to open water before each beat), `lobby` (tickets, wallet, ticket sheet, the four arenas, ranks, guide), `music` (the score only, no video). The round takes wait for the right moment of the wall-clock round. |
 | `capture/take-all.sh` | Records every take in turn. |
 | `capture/pack.mjs`, `capture/trim.py` | For the older screencast takes (unused by journal takes). |
 | `motion/motion.html`, `motion/motion.js` | The motion graphics: deterministic components (cards, wipes, lower-thirds, kickers, stamps, keycaps, mouse, hand-drawn rings, arrows and boxes, captions, receipts, fee-split bar, rank counter, the eating-rule diagram, value floats, the riso kinetic headline, the NFT beat via `media/mint-film/scenes/nft.js` and the promo's canvas kit) drawn as a pure function of time, at any frame size (`?w=&h=`). Coin characters come from `packages/art` (`motion/build-art.mjs`). |
@@ -57,8 +63,8 @@ media/gameplay/cache/venv/bin/pip install kokoro-onnx soundfile scipy numpy pill
 node media/gameplay/motion/build-art.mjs
 
 # 1. takes (journals). Needs the demo with the default 5-minute rounds and the game open to the
-#    capture wallets; fewer arena bots so the staged beats survive. Ports 5173 and 8787 free first.
-GAME_PUBLIC=1 ARENA_BOT_TARGET=15 pnpm demo &
+#    capture wallets (the demo opens the game to everyone; official arenas have no bots). Ports 5173 and 8787 free first.
+pnpm demo &
 media/gameplay/capture/take-all.sh            # ~30 min; logs in media/gameplay/cache/*.log
 node media/gameplay/capture/take-arena.mjs --name arena2 --grow 75 --rival-mass 30 --join 272
 
@@ -82,7 +88,7 @@ Takes are live play, so a new recording tells a slightly different story. The ed
 moments by marks and events (the mid-round join, the gulps, the loot pickups, the death and the
 buy-back, the final minute, the last gulp, the bell, the PAID stamp); check a new take's events
 before trusting the cut. The delivered cut uses `arena` (the join, the first gulp), `arena2` (loot,
-the final minute, the last gulp, the bell and the receipt) and `spill` (eaten by a bot, buy back in).
+the final minute, the last gulp, the bell and the receipt) and `spill` (eaten, buy back in). A beat with bots today needs a test arena (testnet) or a free custom room with bots.
 
 ## Notes
 
@@ -92,7 +98,7 @@ the final minute, the last gulp, the bell and the receipt) and `spill` (eaten by
 - Rounds are wall-clock aligned (`ROUND_SECONDS` of play, default 300, plus the `ROUND_BREAK_SECONDS` break,
   default 30). The takes use the default so the round chip shows real five-minute times.
 - The rivals (`mochi_moon`, `bonk_bae`, `lil_wei`, `rug_ruth`, `pixel_penny`) are real wallets
-  with real (fake-chain) tickets, played by the capture script. Bots are the game's own.
+  with real (fake-chain) tickets, played by the capture script.
 - The end card reads the site's host (`SITE_HOST`, the `PUBLIC_URL` host; default coinnibal.fun) and @coinnibalfun (X).
 - Colours follow the Ring Storybook palette (spec section 6.3, `packages/shared/src/palette.ts`);
   `motion/` repeats the hex values under the old names, so update both when the palette moves.

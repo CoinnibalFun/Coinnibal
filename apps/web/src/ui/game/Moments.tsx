@@ -14,8 +14,8 @@ import './moments.css';
  * The game's authored beats, drawn over the canvas (all decoration: aria-hidden, no pointer
  * events, transform / opacity only, and each has a still or no version under reduced motion):
  *
- * - `RoundIntro`: entering a room, a slim banner slides in and out ("The 14:05 round · Asphodel
- *   Meadow", with the arena's small stamp from the departures board).
+ * - `RoundIntro`: entering a room, a slim banner slides in and out ("The 14:05 round · $1 Room",
+ *   with the arena's small stamp from the departures board).
  * - `SunsetSky`: the final minute; the sky band at the edges of the screen turns to sunset and a
  *   sun sinks behind the bottom edge as the bell comes.
  * - `BellMoment`: the bell itself swings in over the frozen world and rings out its shock rings
