@@ -7,7 +7,8 @@ import { useMedia } from '../../design/useMedia';
  * The seam between the day plates and the night plates: dusk on the plain, driven by the scroll.
  * As the visitor scrolls through it the sun sinks behind the terraces, the sky deepens, the
  * planet rises over the far rim, stars blink on one by one and the windows of the little houses
- * light up, while a clock in the corner runs from 18:10 to 21:40. Decoration (aria-hidden).
+ * light up. No clock or caption: right after the round's stopwatch a wall time would read as a second timer, and the
+ * scene says dusk by itself. Decoration (aria-hidden).
  * Transform and opacity only. Reduced motion: one fixed frame at early night.
  */
 
@@ -16,10 +17,9 @@ const W = 1440;
 const H = 340;
 
 /**
- * Where the sun sets and the planet rises (scene x). The scene is cropped around its middle, and the clock and its
- * note sit at the left gutter: on a wide screen the sun sets left of the middle, clear of them; on anything narrower
- * (where the crop brings the left side under the clock) it sets just right of the middle, the planet beside it, so
- * both stay whole on a phone and the sun never passes behind the labels.
+ * Where the sun sets and the planet rises (scene x). The scene is cropped around its middle: on a wide screen the sun
+ * sets left of the middle; on anything narrower it sets just right of the middle, the planet beside it, so both stay
+ * whole on a phone.
  */
 const WIDE = { sun: 520, planet: 930 };
 const NARROW = { sun: 760, planet: 950 };
@@ -82,11 +82,6 @@ export function DuskSeam() {
   const dusk = useTransform(p, [0.12, 0.36, 0.62], [0, 1, 0.4]);
   const night = useTransform(p, [0.36, 0.72], [0, 1]);
   const planetY = useTransform(p, [0.2, 0.75], [190, -96]);
-  const minutes = useTransform(p, [0.1, 0.9], [18 * 60 + 10, 21 * 60 + 40]);
-  const clock = useTransform(minutes, (m) => {
-    const q = Math.round(m / 5) * 5;
-    return `${String(Math.floor(q / 60)).padStart(2, '0')}:${String(q % 60).padStart(2, '0')}`;
-  });
 
   return (
     <div ref={ref} className="ld-dusk" aria-hidden="true" data-paused={!visible || undefined}>
@@ -154,7 +149,6 @@ export function DuskSeam() {
           </g>
         ))}
       </svg>
-      <motion.span className="ld-dusk__clock num">{clock}</motion.span>
     </div>
   );
 }

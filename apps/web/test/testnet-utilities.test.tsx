@@ -188,7 +188,7 @@ describe('why get the NFT: the holder perks', () => {
     expect(rows[3]).toMatchObject({ without: '2', with: '3' });
     expect(rows[4]).toMatchObject({ label: 'Private room', without: 'Paid in ETH', with: '1 free a day' });
     // the shared skin is one gold look, not the holder's own NFT art
-    expect(rows[5].with).toBe('Gold NFT skin and a holder badge');
+    expect(rows[5].with).toBe('The NFT skin and a holder badge');
   });
   it('takes the live shop discount and private-room perk when the server reports them; no faucet row on mainnet', () => {
     const v = configuredPerks({ shopPct: 30, room: { perk: 'discount', pct: 50 } });

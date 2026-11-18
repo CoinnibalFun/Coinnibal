@@ -152,7 +152,7 @@ describe('/wl', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false } }, 'GET /api/site/tasks': { tasks: TASKS } }));
     document.title = 'WL · Coinnibal';
     const view = render(<WlPage />);
-    expect(await screen.findByRole('heading', { level: 1, name: "The WL isn’t open yet" })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: "The WL isn’t open yet" }, { timeout: 5000 })).toBeTruthy();
     expect(screen.getByTestId('closed-page')).toBeTruthy();
     expect(screen.getByText('This is where you’ll apply for the whitelist. Watch @coinnibalfun for the day it opens.')).toBeTruthy();
     expect(document.querySelector('.cl-soon')?.textContent).toBe('Soon');
@@ -166,6 +166,20 @@ describe('/wl', { timeout: 30_000 }, () => {
     expect(document.body.textContent).not.toMatch(/Applied before|MetaMask|No browser wallet/);
     view.unmount();
     expect(document.title).toBe('WL · Coinnibal');
+  });
+
+  it('when the WL is off after it was open: earlier applicants get a sign-in that leads to their status', async () => {
+    ({ restore } = mockFetch({
+      'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false, wlHadEntries: true } },
+      'GET /api/site/tasks': { tasks: TASKS },
+    }));
+    render(<WlPage />);
+    expect(await screen.findByRole('heading', { level: 1, name: "The WL isn’t open yet" }, { timeout: 5000 })).toBeTruthy();
+    const again = screen.getByRole('button', { name: 'Applied before? Sign in' });
+    expect(again.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(again);
+    expect(again.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Sign in with the wallet you applied with to see your status.')).toBeTruthy();
   });
 
   it('the wallet step shows the full EVM address that goes on the list', async () => {

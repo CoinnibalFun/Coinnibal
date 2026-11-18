@@ -751,6 +751,21 @@
   }
 }
 
+/* ── closed after it was open: the way back to an earlier entry, under the shared closed notice ── */
+.wl-closed__again {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 2px dashed var(--rule);
+}
+.wl-closed__again .wl-signin-card {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .wl-ascent__ring,
   .wl-tick.is-on .wl-tick__box {

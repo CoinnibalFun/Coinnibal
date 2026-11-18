@@ -6,7 +6,7 @@ import { ENTRY_PATHS, SITE_PATHS, isAppRoute } from '@elymum/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { NullChain } from '../src/chain/types';
 import { loadConfig } from '../src/config';
-import { createHttpServer, redactUrls } from '../src/http';
+import { byteRange, createHttpServer, redactUrls } from '../src/http';
 
 /** The single-origin deploy (`WEB_DIST`): static files plus the SPA fallback for client routes like `/docs` (404 for the rest). */
 describe('static web client', () => {
@@ -24,6 +24,9 @@ describe('static web client', () => {
     writeFileSync(join(web, 'favicon-32.png'), 'png');
     writeFileSync(join(web, 'sitemap.xml'), '<urlset/>');
     writeFileSync(join(web, 'assets', 'bell-1234.ogg'), 'ogg');
+    mkdirSync(join(web, 'media'));
+    writeFileSync(join(web, 'media', 'loop.mp4'), '0123456789');
+    writeFileSync(join(web, 'media', 'loop.webm'), 'webm');
     const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-data-')), WEB_DIST: web } as NodeJS.ProcessEnv);
     server = createHttpServer(cfg, { chain: new NullChain(), rooms: {} as never, leaderboards: {} as never, auth: {} as never, startedAt: Date.now() });
     await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
@@ -130,5 +133,46 @@ describe('static web client', () => {
     expect(WEB_CSP).toMatch(/frame-ancestors 'none'/);
     expect(WEB_CSP).toMatch(/object-src 'none'/);
     expect(WEB_CSP).not.toMatch(/unsafe-eval/);
+  });
+  it('serves the landing videos with their types and answers byte ranges (Safari plays a <video> only then)', async () => {
+    const url = await start();
+    const whole = await fetch(url + '/media/loop.mp4');
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get('content-type')).toBe('video/mp4');
+    expect(whole.headers.get('accept-ranges')).toBe('bytes');
+    expect(whole.headers.get('content-length')).toBe('10');
+    expect(await whole.text()).toBe('0123456789');
+    expect((await fetch(url + '/media/loop.webm')).headers.get('content-type')).toBe('video/webm');
+
+    const probe = await fetch(url + '/media/loop.mp4', { headers: { Range: 'bytes=0-1' } });
+    expect(probe.status).toBe(206);
+    expect(probe.headers.get('content-range')).toBe('bytes 0-1/10');
+    expect(probe.headers.get('content-length')).toBe('2');
+    expect(await probe.text()).toBe('01');
+    const tail = await fetch(url + '/media/loop.mp4', { headers: { Range: 'bytes=7-' } });
+    expect([tail.status, await tail.text()]).toEqual([206, '789']);
+    const past = await fetch(url + '/media/loop.mp4', { headers: { Range: 'bytes=10-' } });
+    expect(past.status).toBe(416);
+    expect(past.headers.get('content-range')).toBe('bytes */10');
+    // the app page itself never answers a range: it is always sent whole
+    const page = await fetch(url + '/docs', { headers: { Range: 'bytes=0-1' } });
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain('<title>Elymum</title>');
+  });
+
+  it('reads one byte range of a Range header and ignores what it cannot use', () => {
+    expect(byteRange(undefined, 10)).toBeNull();
+    expect(byteRange('bytes=0-1', 10)).toEqual({ start: 0, end: 1 });
+    expect(byteRange('bytes=4-', 10)).toEqual({ start: 4, end: 9 });
+    expect(byteRange('bytes=-3', 10)).toEqual({ start: 7, end: 9 });
+    expect(byteRange('bytes=-30', 10)).toEqual({ start: 0, end: 9 });
+    expect(byteRange('bytes=5-500', 10)).toEqual({ start: 5, end: 9 });
+    expect(byteRange('bytes=10-12', 10)).toBe('unsatisfiable');
+    expect(byteRange('bytes=-0', 10)).toBe('unsatisfiable');
+    expect(byteRange('bytes=0-0', 0)).toBe('unsatisfiable');
+    expect(byteRange('bytes=5-2', 10)).toBeNull();
+    expect(byteRange('bytes=0-1,4-5', 10)).toBeNull();
+    expect(byteRange('items=0-1', 10)).toBeNull();
+    expect(byteRange('bytes=-', 10)).toBeNull();
   });
 });

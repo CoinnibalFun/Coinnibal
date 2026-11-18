@@ -114,6 +114,25 @@ export const SOON: { href: string; key: TKey; note: TKey }[] = [
 /** The "Soon" entries for the doors that are still closed. */
 export const soonFor = (doors: Doors = DOORS_CLOSED) => SOON.filter((n) => !linkOpen(n.href, doors));
 
+/**
+ * A Soon name's tip also shows on a plain hover, when the keyboard's focus is somewhere else: while the pointer is on
+ * the name, Escape anywhere on the page puts the tip away (WCAG 1.4.13); leaving the name brings it back next time.
+ */
+const escapeHush = new WeakMap<HTMLElement, () => void>();
+function hushOnEscape(el: HTMLElement): void {
+  if (escapeHush.has(el)) return;
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') el.setAttribute('data-hush', '');
+  };
+  document.addEventListener('keydown', onKey);
+  escapeHush.set(el, () => document.removeEventListener('keydown', onKey));
+}
+function endHush(el: HTMLElement): void {
+  escapeHush.get(el)?.();
+  escapeHush.delete(el);
+  el.removeAttribute('data-hush');
+}
+
 function ConnectFallback() {
   const t = useT();
   return (
@@ -197,10 +216,12 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
           <span
             key={`soon:${n.href}`}
             className={`st-soonitem${i === soon.length - 1 ? ' st-soonitem--end' : ''}`}
-            // Escape puts the tip away (it comes back on the next hover or focus)
+            // Escape puts the tip away, from the focused name or while the pointer is on it (it comes back on the
+            // next hover or focus)
             onKeyDown={(e) => e.key === 'Escape' && e.currentTarget.setAttribute('data-hush', '')}
             onBlur={(e) => e.currentTarget.removeAttribute('data-hush')}
-            onPointerLeave={(e) => e.currentTarget.removeAttribute('data-hush')}
+            onPointerEnter={(e) => hushOnEscape(e.currentTarget)}
+            onPointerLeave={(e) => endHush(e.currentTarget)}
           >
             <span
               className={`st-nav__link st-nav__link--soon${here ? ' is-here' : ''}`}

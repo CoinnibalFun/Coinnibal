@@ -34,6 +34,8 @@ const MIME: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
   '.m4a': 'audio/mp4',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
   '.webmanifest': 'application/manifest+json',
 };
 
@@ -144,7 +146,7 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   const ext = extname(file);
   // hashed bundle files never change; the page itself (also when it stands in for `/assets/<no file>`) always may
   const immutable = !fallback && rel.startsWith('/assets/');
-  res.writeHead(status, {
+  const headers: Record<string, string | number> = {
     'Content-Type': MIME[ext] ?? 'application/octet-stream',
     'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
     // the web app is never framed (clickjacking of wallet actions); scripts from this origin only (Vercel's old rule,
@@ -152,10 +154,55 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
     'X-Frame-Options': 'DENY',
     'Content-Security-Policy': WEB_CSP,
     'Referrer-Policy': 'strict-origin-when-cross-origin',
-  });
+  };
+  if (fallback) {
+    res.writeHead(status, headers);
+    if (req.method === 'HEAD') res.end();
+    else createReadStream(file).pipe(res);
+    return true;
+  }
+  // a real file answers byte ranges: Safari and iOS play a <video> (the landing's gameplay loop) only from a server
+  // that does, probing with `Range: bytes=0-1` first
+  const size = statSync(file).size;
+  headers['Accept-Ranges'] = 'bytes';
+  const range = byteRange(req.headers.range, size);
+  if (range === 'unsatisfiable') {
+    res.writeHead(416, { ...headers, 'Content-Range': `bytes */${size}` });
+    res.end();
+    return true;
+  }
+  if (range) {
+    headers['Content-Range'] = `bytes ${range.start}-${range.end}/${size}`;
+    headers['Content-Length'] = range.end - range.start + 1;
+  } else {
+    headers['Content-Length'] = size;
+  }
+  res.writeHead(range ? 206 : 200, headers);
   if (req.method === 'HEAD') res.end();
-  else createReadStream(file).pipe(res);
+  else createReadStream(file, range ?? {}).pipe(res);
   return true;
+}
+
+/**
+ * The one byte range of a `Range` header (`bytes=a-b`, `bytes=a-`, `bytes=-n`) clamped to a file of `size` bytes;
+ * null to send the whole file (no header, another unit, several ranges, or a header that does not parse, which
+ * RFC 9110 lets a server ignore), 'unsatisfiable' for a range that starts past the end.
+ */
+export function byteRange(header: string | undefined, size: number): { start: number; end: number } | 'unsatisfiable' | null {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m || (m[1] === '' && m[2] === '')) return null;
+  if (size === 0) return 'unsatisfiable';
+  if (m[1] === '') {
+    const n = Number(m[2]);
+    if (n === 0) return 'unsatisfiable';
+    return { start: Math.max(0, size - n), end: size - 1 };
+  }
+  const start = Number(m[1]);
+  const end = m[2] === '' ? size - 1 : Math.min(Number(m[2]), size - 1);
+  if (start >= size) return 'unsatisfiable';
+  if (end < start) return null;
+  return { start, end };
 }
 
 /**

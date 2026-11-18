@@ -2075,7 +2075,7 @@
   align-self: start;
   display: grid;
   padding: 6px 0;
-  background: color-mix(in srgb, var(--trench) 94%, transparent);
+  background: var(--trench);
   border: var(--stroke) solid var(--outline);
   border-radius: 22px;
 }
@@ -2378,25 +2378,9 @@
   height: 100%;
   display: block;
 }
-.ld-dusk__clock {
-  position: absolute;
-  left: max(var(--gutter, 20px), calc(50% - 640px));
-  top: 22px;
-  padding: 6px 12px;
-  font-size: 22px;
-  color: var(--ink-fixed);
-  background: var(--sun);
-  border: var(--stroke) solid var(--outline);
-  border-radius: 12px;
-  box-shadow: var(--sh-2);
-  transform: rotate(-3deg);
-}
 @media (max-width: 479px) {
   .ld-dusk {
     height: 260px;
-  }
-  .ld-dusk__clock {
-    font-size: 18px;
   }
 }
 .ld-dusk__lights {
