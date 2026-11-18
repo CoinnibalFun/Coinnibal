@@ -164,20 +164,20 @@ export function MintClosed() {
             <XIcon size={16} /> <span>{t('pg.follow')}</span>
           </a>
         </div>
-        <div ref={ref} className="mc__scene" data-paused={!visible || reduced || undefined}>
+        <div ref={ref} className="mc__scene" aria-hidden="true" data-paused={!visible || reduced || undefined}>
           <MintPress supply={NFT_SUPPLY.toLocaleString('en-US')} />
           <SoonStamp className="mc__soon" />
           {/* the queue, front to back: a small coin first in line, glancing back at the big one behind it */}
-          <span className="mc-coin mc-coin--1" aria-hidden="true">
+          <span className="mc-coin mc-coin--1">
             <CoinCharacter paint="cyan" mood="scared" size={70} look={[-4, 0]} sweat feet ground />
           </span>
-          <span className="mc-coin mc-coin--2" aria-hidden="true">
+          <span className="mc-coin mc-coin--2">
             <CoinCharacter paint="sun" mood="smug" size={112} look={[4, 2]} feet ground bob={!reduced} phase={0.6} />
           </span>
-          <span className="mc-coin mc-coin--3" aria-hidden="true">
+          <span className="mc-coin mc-coin--3">
             <CoinCharacter paint="coral" mood="smile" size={78} look={[4, -1]} feet ground />
           </span>
-          <span className="mc-coin mc-coin--4" aria-hidden="true">
+          <span className="mc-coin mc-coin--4">
             <CoinCharacter paint="teal" mood="happy" size={68} feet ground />
           </span>
         </div>
