@@ -200,13 +200,13 @@ describe('why get the NFT: the holder perks', () => {
     const cards = perkCards(v, t, true);
     expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
     expect(cards[0].title).toBe('Lower fee: 10% instead of 20%');
-    expect(cards[0].note).toBe('We take less of your profit: 8% is burned and 2% goes to the team wallet.');
+    expect(cards[0].note).toBe('8% of your profit is burned and 2% goes to the team wallet.');
     expect(cards[1].title).toBe('$10 Room for holders');
     expect(cards[2].title).toBe('20% off power-ups');
     // a true minus sign on the figure; the skin has no figure (the card shows the holder badge's laurel)
     expect(cards[2].big).toBe('\u221220%');
     expect(cards[4]).toMatchObject({ id: 'skin', big: null });
-    expect(cards[2].note).toMatch(/1 extra power-up use in every paid round \(3 instead of 2\)/);
+    expect(cards[2].note).toBe('You can use 3 power-ups in each paid round instead of 2.');
     expect(cards[3].title).toBe('1 free private room a day');
   });
   it('takes the live shop discount and private-room perk when the server reports them; no faucet card on mainnet', () => {
