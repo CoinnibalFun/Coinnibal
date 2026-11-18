@@ -97,7 +97,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     render(<Landing />);
     await waitFor(() => expect(screen.getAllByRole('link', { name: /@feastbot/ }).length).toBeGreaterThan(0));
     expect(screen.getAllByRole('link', { name: /@feastbot/ }).every((a) => a.getAttribute('href') === 'https://x.com/feastbot')).toBe(true);
-    expect(screen.getByText(/using ETH for gas/)).toBeTruthy();
+    expect(screen.getByText(/Gas is paid in ETH/)).toBeTruthy();
   });
 
   const CLOSED = { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' as const };
@@ -272,10 +272,10 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
   it('a closed page says "not open yet" (never the real page or a 404); the same path opens when the admin opens it', async () => {
     for (const [path, line, title] of [
       // the mint: nothing about when the NFT is minted, only where (and which link to trust)
-      ['/mint', "The coins are still asleep. When the mint opens, it'll be on OpenSea: use only the OpenSea link that @coinnibalfun posts.", "The mint isn't open yet"],
+      ['/mint', "The coins are still asleep. When the mint opens, it'll be on OpenSea: use only the OpenSea link that @coinnibalfun posts.", "The mint isn’t open yet"],
       // the faucet is hidden: a neutral notice that never names it
       ['/faucet', "There's nothing here for now. The guide explains how the game works.", 'Not open yet'],
-      ['/collab', 'This is where communities will ask for WL spots. For now, the guide explains how the game works.', "Collabs aren't open yet"],
+      ['/collab', 'This is where communities will ask for WL spots. For now, the guide explains how the game works.', "Collabs aren’t open yet"],
     ]) {
       resetSiteSettings();
       ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
