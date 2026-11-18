@@ -52,10 +52,10 @@ const v = (o: Record<string, string | number>) => o as CSSProperties;
 
 /*
  * Scrolling down, every plate is printed in one rhythm (reveal.ts arms it, reveal.css plays it): the section's ink
- * rule draws, its caption slides in, its dashed rule runs out, while a bite, the seal or the tablecloth plays on the
- * seam; then each content stage lays down heading (rv-h, fed out top-down), visual (rv-v, settling up with the
- * scroll), body (rv-b) and items (rv-i). The plate's caption names the section, so no kicker repeats it above the
- * heading. Text is never hidden longer than about 0.6 s; reduced motion is never armed and sees the finished page.
+ * rule draws while a bite, the seal or the tablecloth plays on the seam; then each content stage lays down heading
+ * (rv-h, fed out top-down), visual (rv-v, settling up with the scroll), body (rv-b) and items (rv-i). Each section has
+ * one label, its H2: no caption bar or kicker repeats it. Text is never hidden longer than about 0.6 s; reduced motion
+ * is never armed and sees the finished page.
  */
 
 const NO_REF: RefObject<Element | null> = { current: null };
@@ -142,7 +142,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
                 )}
               </div>
               {doors.wl ? (
-                <p className="ld-hero__note mono">
+                <p className="ld-hero__note">
                   {doors.mint && doors.game && <span className="ld-flowline">{t('ld.flowline')}</span>}
                   <span>{t('ld.wlOpen')}</span>
                 </p>
