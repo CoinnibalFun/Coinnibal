@@ -63,8 +63,9 @@ describe('chain env (EVM)', () => {
     const cfg = loadConfig({} as NodeJS.ProcessEnv);
     expect(cfg.chain).toMatchObject({ rpcUrl: null, publicRpcUrl: null, serverKey: null, arenaAddress: null, nftAddress: null, tokenSymbol: 'tokens' });
     expect(cfg.mint).toEqual({ usdCents: 100, gasPriceUrl: 'https://api.hyperliquid.xyz/info' });
-    expect(cfg.nft).toEqual({ size: 5000, seed: null, style: 'vector' });
-    expect(loadConfig({ NFT_ART_STYLE: 'pixel', NFT_COLLECTION_SIZE: '3333', NFT_COLLECTION_SEED: ' 0xabc ' } as NodeJS.ProcessEnv).nft).toEqual({ size: 3333, seed: '0xabc', style: 'pixel' });
+    // the owner's fixed supply (3,333), the same as the NFT contract's max supply at deploy
+    expect(cfg.nft).toEqual({ size: 3333, seed: null, style: 'vector' });
+    expect(loadConfig({ NFT_ART_STYLE: 'pixel', NFT_COLLECTION_SIZE: '500', NFT_COLLECTION_SEED: ' 0xabc ' } as NodeJS.ProcessEnv).nft).toEqual({ size: 500, seed: '0xabc', style: 'pixel' });
     expect(loadConfig({ NFT_ART_STYLE: 'oil' } as NodeJS.ProcessEnv).nft.style).toBe('vector');
     expect(cfg.gameAccess).toBeNull();
     // the project's X handle: unset is the shared default; X_HANDLE moves it (e.g. to another account)
