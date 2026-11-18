@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Elymum daily backup (elymum-backup.timer, 04:00; safe to run by hand any time).
+# Coinnibal daily backup (elymum-backup.timer, 04:00; safe to run by hand any time).
 # Tars the elymum-data volume through a throwaway container of the app image (no download needed) into
 # /opt/elymum/backups/elymum-data-YYYYmmdd-HHMM.tar.gz (mode 600, the file holds the server key) and keeps
 # the newest 14. The game keeps running: the journal is written atomically on every change, other stores
@@ -15,29 +15,29 @@ set -euo pipefail
 need_root
 
 KEEP="${KEEP:-14}"
-mkdir -p "$ELYMUM_BACKUPS" "$(dirname "$ELYMUM_LOCK")"
-chmod 700 "$ELYMUM_BACKUPS"
+mkdir -p "$COINNIBAL_BACKUPS" "$(dirname "$COINNIBAL_LOCK")"
+chmod 700 "$COINNIBAL_BACKUPS"
 
 # wait (at most 30 min) for a running deploy to finish instead of skipping the day
 # (restore.sh already holds it when it asks for a safety backup)
-if [[ "${ELYMUM_LOCK_HELD:-0}" != "1" ]]; then
-  exec 9>"$ELYMUM_LOCK"
-  flock -w 1800 9 || die "another Elymum job held the lock for 30 minutes; no backup today"
+if [[ "$COINNIBAL_LOCK_HELD" != "1" ]]; then
+  exec 9>"$COINNIBAL_LOCK"
+  flock -w 1800 9 || die "another Coinnibal job held the lock for 30 minutes; no backup today"
 fi
 
-docker volume inspect "$ELYMUM_VOLUME" >/dev/null 2>&1 || die "volume $ELYMUM_VOLUME does not exist (is the server installed?)"
-image="$ELYMUM_IMAGE"
+docker volume inspect "$COINNIBAL_VOLUME" >/dev/null 2>&1 || die "volume $COINNIBAL_VOLUME does not exist (is the server installed?)"
+image="$COINNIBAL_IMAGE"
 docker image inspect "$image" >/dev/null 2>&1 || image="debian:bookworm-slim"
 
-name="elymum-data-$(date -u +%Y%m%d-%H%M).tar.gz"
-tmp="$ELYMUM_BACKUPS/.$name.partial"
+name="$INSTALLED_BACKUP_PREFIX$(date -u +%Y%m%d-%H%M).tar.gz"
+tmp="$COINNIBAL_BACKUPS/.$name.partial"
 umask 077
 rm -f "$tmp"
-log "backing up volume $ELYMUM_VOLUME to $ELYMUM_BACKUPS/$name"
+log "backing up volume $COINNIBAL_VOLUME to $COINNIBAL_BACKUPS/$name"
 # tar exit 1 = a file changed while it was read (the archive is still complete)
 set +e
 docker run --rm --network none --user 0 --entrypoint tar \
-  -v "$ELYMUM_VOLUME":/data:ro \
+  -v "$COINNIBAL_VOLUME":/data:ro \
   "$image" czf - --warning=no-file-changed --warning=no-file-removed --ignore-failed-read -C /data . >"$tmp"
 rc=$?
 set -e
@@ -50,11 +50,11 @@ gzip -t "$tmp" || {
   die "the new backup does not pass gzip -t"
 }
 chmod 600 "$tmp"
-mv "$tmp" "$ELYMUM_BACKUPS/$name"
-log "backup done: $name ($(du -h "$ELYMUM_BACKUPS/$name" | cut -f1))"
+mv "$tmp" "$COINNIBAL_BACKUPS/$name"
+log "backup done: $name ($(du -h "$COINNIBAL_BACKUPS/$name" | cut -f1))"
 
 # keep the newest $KEEP
-mapfile -t old < <(find "$ELYMUM_BACKUPS" -maxdepth 1 -type f -name 'elymum-data-*.tar.gz' -printf '%T@ %p\n' | sort -rn | tail -n +"$((KEEP + 1))" | cut -d' ' -f2-)
+mapfile -t old < <(find "$COINNIBAL_BACKUPS" -maxdepth 1 -type f -name "$INSTALLED_BACKUP_GLOB" -printf '%T@ %p\n' | sort -rn | tail -n +"$((KEEP + 1))" | cut -d' ' -f2-)
 for f in "${old[@]}"; do
   rm -f -- "$f"
   log "removed old backup $(basename "$f")"
@@ -74,10 +74,10 @@ if [[ -n "$remote" ]]; then
   fi
   days="$(env_get BACKUP_RCLONE_KEEP_DAYS)"
   [[ "$days" =~ ^[0-9]+$ ]] || days=30
-  if rclone copy --no-traverse "$ELYMUM_BACKUPS/$name" "$remote" 2>&1 | tail -n 5; then
+  if rclone copy --no-traverse "$COINNIBAL_BACKUPS/$name" "$remote" 2>&1 | tail -n 5; then
     log "offsite copy done: $name -> ${remote%%:*}"
-    rclone delete --min-age "${days}d" "$remote" --include 'elymum-data-*.tar.gz' >/dev/null 2>&1 || log "offsite: pruning old copies failed"
+    rclone delete --min-age "${days}d" "$remote" --include "$INSTALLED_BACKUP_GLOB" >/dev/null 2>&1 || log "offsite: pruning old copies failed"
   else
-    notify "offsite backup of $name to ${remote%%:*} failed (journalctl -u elymum-backup -n 50)"
+    notify "offsite backup of $name to ${remote%%:*} failed (journalctl -u $INSTALLED_UNIT_PREFIX-backup -n 50)"
   fi
 fi

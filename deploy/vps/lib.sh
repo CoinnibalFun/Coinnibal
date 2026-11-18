@@ -1,14 +1,38 @@
 # shellcheck shell=bash
-# Shared settings of the Elymum VPS scripts (sourced, not run).
+# Shared settings of the Coinnibal VPS scripts (sourced, not run).
 
-ELYMUM_DIR="${ELYMUM_DIR:-/opt/elymum}"
-ELYMUM_ENV="${ELYMUM_ENV:-$ELYMUM_DIR/.env}"
-ELYMUM_COMPOSE="$ELYMUM_DIR/deploy/vps/docker-compose.yml"
-ELYMUM_BACKUPS="${ELYMUM_BACKUPS:-$ELYMUM_DIR/backups}"
-ELYMUM_STATE="/var/lib/elymum"
-ELYMUM_LOCK="/run/lock/elymum.lock"
-ELYMUM_VOLUME="elymum-data"
-ELYMUM_IMAGE="elymum-app:latest"
+# The live server's installed names, kept from before the rename (Elymum, November 2026); changing them moves the
+# data. A new Docker project name would mean a new, empty volume (the game's data would seem lost) and a port clash
+# with the running container; the units, the lock, the state directory, the backups and the commands were installed
+# under these names. docker-compose.yml (name, image, volumes, log tag) and systemd/*.service|timer (the file names
+# and their ExecStart paths) use the same literals.
+INSTALLED_DIR="/opt/elymum"
+INSTALLED_PROJECT="elymum"
+INSTALLED_STATE="/var/lib/elymum"
+INSTALLED_LOCK="/run/lock/elymum.lock"
+INSTALLED_VOLUME="elymum-data"
+INSTALLED_IMAGE="elymum-app:latest"
+# systemd units elymum-<job>.service|timer and the commands /usr/local/bin/elymum-<job> (coinnibal-<job> links too)
+INSTALLED_UNIT_PREFIX="elymum"
+# backups: elymum-data-YYYYmmdd-HHMM.tar.gz here and offsite (restore.sh and status.sh find the old ones by it)
+INSTALLED_BACKUP_GLOB="elymum-data-*.tar.gz"
+INSTALLED_BACKUP_PREFIX="elymum-data-"
+# host settings install.sh wrote (update.sh rewrites them in place); install.sh, which runs before this checkout
+# exists, carries the same literals
+INSTALLED_JOURNALD_CONF="/etc/systemd/journald.conf.d/elymum.conf"
+INSTALLED_APT_CONF="/etc/apt/apt.conf.d/52elymum-unattended"
+
+# Overrides from the environment: the COINNIBAL_* name wins, the ELYMUM_* name of before the rename still works.
+COINNIBAL_DIR="${COINNIBAL_DIR:-${ELYMUM_DIR:-$INSTALLED_DIR}}"
+COINNIBAL_ENV="${COINNIBAL_ENV:-${ELYMUM_ENV:-$COINNIBAL_DIR/.env}}"
+COINNIBAL_COMPOSE="$COINNIBAL_DIR/deploy/vps/docker-compose.yml"
+COINNIBAL_BACKUPS="${COINNIBAL_BACKUPS:-${ELYMUM_BACKUPS:-$COINNIBAL_DIR/backups}}"
+COINNIBAL_STATE="$INSTALLED_STATE"
+COINNIBAL_LOCK="$INSTALLED_LOCK"
+COINNIBAL_VOLUME="$INSTALLED_VOLUME"
+COINNIBAL_IMAGE="$INSTALLED_IMAGE"
+# set by a job that already holds the lock for the scripts it runs (install.sh, restore.sh)
+COINNIBAL_LOCK_HELD="${COINNIBAL_LOCK_HELD:-${ELYMUM_LOCK_HELD:-0}}"
 
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*"; }
 die() {
@@ -16,37 +40,47 @@ die() {
   exit 1
 }
 
-# docker compose with the project's file and .env (for ${GAME_DOMAIN})
+# docker compose with the project's file and .env (for ${GAME_DOMAIN}, and the COINNIBAL_* keys, which
+# docker-compose.yml reads with the ELYMUM_* key of before the rename as the fallback)
 dc() {
-  docker compose -f "$ELYMUM_COMPOSE" --env-file "$ELYMUM_ENV" "$@"
+  docker compose -f "$COINNIBAL_COMPOSE" --env-file "$COINNIBAL_ENV" "$@"
 }
 
 # value of KEY in the .env file (empty when unset)
 env_get() {
   local key="$1"
-  [[ -f "$ELYMUM_ENV" ]] || return 0
-  sed -n "s/^${key}=//p" "$ELYMUM_ENV" | tail -n 1 | sed -e "s/^['\"]//" -e "s/['\"]$//"
+  [[ -f "$COINNIBAL_ENV" ]] || return 0
+  sed -n "s/^${key}=//p" "$COINNIBAL_ENV" | tail -n 1 | sed -e "s/^['\"]//" -e "s/['\"]$//"
+}
+
+# value of the renamed .env key COINNIBAL_<NAME>; when it is unset or empty, the ELYMUM_<NAME> key of before the
+# rename (a live .env keeps working unchanged)
+env_get_renamed() {
+  local v
+  v="$(env_get "COINNIBAL_$1")"
+  [[ -n "$v" ]] || v="$(env_get "ELYMUM_$1")"
+  printf '%s' "$v"
 }
 
 # sets KEY=VALUE in the .env file (replaces the line, or appends it)
 env_set() {
   local key="$1" value="$2" tmp
-  tmp="$(mktemp "$ELYMUM_ENV.XXXXXX")"
-  if grep -q "^${key}=" "$ELYMUM_ENV" 2>/dev/null; then
-    awk -v k="$key" -v v="$value" 'BEGIN { FS = OFS = "=" } $1 == k { print k "=" v; next } { print }' "$ELYMUM_ENV" >"$tmp"
+  tmp="$(mktemp "$COINNIBAL_ENV.XXXXXX")"
+  if grep -q "^${key}=" "$COINNIBAL_ENV" 2>/dev/null; then
+    awk -v k="$key" -v v="$value" 'BEGIN { FS = OFS = "=" } $1 == k { print k "=" v; next } { print }' "$COINNIBAL_ENV" >"$tmp"
   else
-    cat "$ELYMUM_ENV" >"$tmp" 2>/dev/null || true
+    cat "$COINNIBAL_ENV" >"$tmp" 2>/dev/null || true
     printf '%s=%s\n' "$key" "$value" >>"$tmp"
   fi
   chmod 600 "$tmp"
-  mv "$tmp" "$ELYMUM_ENV"
+  mv "$tmp" "$COINNIBAL_ENV"
 }
 
 # a persistent journal (survives reboots, 2 GB at most): Docker's journald log driver keeps the server log there,
 # so it survives a redeploy (a new container) too. Idempotent.
 host_journald() {
   mkdir -p /var/log/journal /etc/systemd/journald.conf.d
-  local conf=/etc/systemd/journald.conf.d/elymum.conf want
+  local conf="$INSTALLED_JOURNALD_CONF" want
   want=$'[Journal]\nStorage=persistent\nSystemMaxUse=2G\nMaxRetentionSec=1month'
   if [[ "$(cat "$conf" 2>/dev/null)" != "$want" ]]; then
     printf '%s\n' "$want" >"$conf"
@@ -61,9 +95,9 @@ host_journald() {
 # rings at a multiple of the cycle and the floor reopens ROUND_BREAK_SECONDS later (apps/server/src/config.ts
 # parseRoundConfig, packages/shared/src/rounds.ts roundAt). Stopping the server there finds no live stake (every
 # ticket was just settled at the bell); anywhere else SIGTERM cashes every arena player out mid-round.
-# ELYMUM_DEPLOY_NOW=1 skips the wait (an urgent fix).
+# COINNIBAL_DEPLOY_NOW=1 skips the wait (an urgent fix; ELYMUM_DEPLOY_NOW=1 of before the rename too).
 wait_for_round_break() {
-  [[ "${ELYMUM_DEPLOY_NOW:-0}" == "1" ]] && return 0
+  [[ "${COINNIBAL_DEPLOY_NOW:-${ELYMUM_DEPLOY_NOW:-0}}" == "1" ]] && return 0
   local round brk cycle s last
   round="$(env_get ROUND_SECONDS)"
   [[ "$round" =~ ^[0-9]+$ ]] || round=300
@@ -103,6 +137,17 @@ notify() {
       --data-urlencode "disable_web_page_preview=true" -o /dev/null || log "telegram: sending failed"
 }
 
+# the commands /usr/local/bin/elymum-<job> (the installed names) and coinnibal-<job> next to them: the same scripts
+link_commands() {
+  local s target
+  for s in status compose backup restore update alert reboot; do
+    target="$COINNIBAL_DIR/deploy/vps/$s.sh"
+    # a link that cannot be written never stops a deploy (the scripts run by their path too)
+    [[ "$(readlink "/usr/local/bin/$INSTALLED_UNIT_PREFIX-$s" 2>/dev/null)" == "$target" ]] || ln -sf "$target" "/usr/local/bin/$INSTALLED_UNIT_PREFIX-$s" 2>/dev/null || true
+    [[ "$(readlink "/usr/local/bin/coinnibal-$s" 2>/dev/null)" == "$target" ]] || ln -sf "$target" "/usr/local/bin/coinnibal-$s" 2>/dev/null || true
+  done
+}
+
 need_root() {
   [[ "$(id -u)" -eq 0 ]] || die "run this as root (sudo -i first)"
 }
@@ -117,5 +162,5 @@ verify_backup() {
     die "$file contains absolute or '..' paths; refusing it"
   fi
   grep -Eq '^(\./)?(server-key\.json|auth-secret|chains/|site/|profiles|leaderboards)' <<<"$listing" ||
-    log "warning: $file does not look like an Elymum data directory (no server-key.json, chains/, site/ ...)"
+    log "warning: $file does not look like a Coinnibal data directory (no server-key.json, chains/, site/ ...)"
 }

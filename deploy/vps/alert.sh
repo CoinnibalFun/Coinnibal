@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Elymum alert job (elymum-alert.timer, every minute; safe to run by hand). Posts to the owner's Telegram
+# Coinnibal alert job (elymum-alert.timer, every minute; safe to run by hand). Posts to the owner's Telegram
 # (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env; without them the alerts only go to the journal) when:
 #   - the server logged a line starting with "!!!" (an unreadable journal, a vault short, no gas, a wrong server key...)
 #   - /api/health answers 503 (its reasons: the journal cannot be written, settlements backed up or stuck, the RPC
@@ -18,7 +18,7 @@ set -euo pipefail
 . "$(dirname "$(readlink -f "$0")")/lib.sh"
 need_root
 
-STATE_DIR="$ELYMUM_STATE/alerts"
+STATE_DIR="$COINNIBAL_STATE/alerts"
 mkdir -p "$STATE_DIR"
 now="$(date +%s)"
 REPEAT_S=1800
@@ -42,7 +42,7 @@ cid="$(dc ps -q app 2>/dev/null || true)"
 
 # --- the container: running, live
 if [[ -z "$cid" ]] || [[ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null)" != "true" ]]; then
-  raise app-down "the app container is not running (elymum-status; journalctl -u elymum-update -n 50)"
+  raise app-down "the app container is not running (coinnibal-status; journalctl -u $INSTALLED_UNIT_PREFIX-update -n 50)"
   echo 0 >"$STATE_DIR/unhealthy-runs"
 else
   clear_alert app-down "the app container runs"

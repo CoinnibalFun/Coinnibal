@@ -1,4 +1,4 @@
-# Caddy behind Cloudflare (orange cloud on game.elymum.io). Use it instead of Caddyfile:
+# Caddy behind Cloudflare (orange cloud on GAME_DOMAIN). Use it instead of Caddyfile:
 #   cp deploy/vps/caddy/Caddyfile.cloudflare deploy/vps/caddy/Caddyfile   (on the VPS, then reload Caddy)
 # See deploy/vps/README.md, "Cloudflare in front".
 #
