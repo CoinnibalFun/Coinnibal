@@ -17,7 +17,7 @@ price at $1.
 | Tab | What it does |
 |---|---|
 | **Launch** | The live checklist: chain, server key gas, contracts deployed and registered, token, arenas, allowlist root, $1 price, mint phase, game access. Each line links to the tab that fixes it |
-| **Setup** | The deploy wizard (ElymumArena v3, ElymumNFT and, on the testnet, the TestToken), Finish setup, holder perks, the TestToken faucet, register an already deployed contract |
+| **Setup** | The deploy wizard (CoinnibalArena v3, CoinnibalNFT and, on the testnet, the TestToken), Finish setup, holder perks, the TestToken faucet, register an already deployed contract |
 | **Mint** | Phase (closed / allowlist / public), publish the allowlist root, Sync to $1, price bounds and keeper, per-wallet limits, max supply (down only), base URI and freeze, contract URI, royalty, treasury, withdraw, owner mint |
 | **Game** | Who may play, pause and per-arena open / close, map sizes, **arena prices in US dollars** (the token price, the tiers, "Sync arena prices to USD", "Re-price at next bell"), arena instances (auto-scaling), custom rooms, power-ups (priced in US dollars, converted like the tickets), leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance and gas runway |
 | **Play** | Play the arenas yourself before launch |
@@ -284,7 +284,7 @@ URL, shows the traffic and the 429s.
 
 ## Fees, burns and the fee wallet
 
-ElymumArena v3 takes **no entry fee**. A winning ticket pays a fee on its **profit** (payout − entry fee):
+CoinnibalArena v3 takes **no entry fee**. A winning ticket pays a fee on its **profit** (payout − entry fee):
 `burnBps` (15 %) is burned and `vaultBps` (5 %) goes to the fee wallet, both in the `settle` batch that settles it
 (one burn and one transfer per batch). A loss or a break-even pays nothing; an unplayed ticket is cancelled with its
 full entry fee back. Power-up packs are paid with `pay`: `paymentBurnBps` (50 %) is burned and the rest goes to the
@@ -315,8 +315,8 @@ by themselves.
 ## The name: Coinnibal, and moving to coinnibal.fun
 
 The product is **Coinnibal** (a coin + a cannibal: coins that eat coins), its token **$NIBAL**. "Elymum" is the old
-name and stays as the **internal** name on purpose: the packages (`@elymum/*`), the contract names (`ElymumArena`,
-`ElymumNFT`), the env vars (`ELYMUM_*` on the VPS), `/opt/elymum`, the `elymum-*` systemd units and compose project,
+name and stays as the **internal** name on purpose: the packages (`@elymum/*`), the contract names (`CoinnibalArena`,
+`CoinnibalNFT`), the env vars (`ELYMUM_*` on the VPS), `/opt/elymum`, the `elymum-*` systemd units and compose project,
 the DATA_DIR files, the browser storage keys (`elymum.*`), the WebSocket protocol (`elymum.auth.`), the
 `X-Elymum-Proof` header and the file `og-elymum.png`. Renaming those would break deploys and saved data; players
 never see them.
@@ -330,8 +330,8 @@ What players see follows configuration, not code:
 | The token's display symbol (lobby, HUD, receipts, shop, faucet page) | server `TOKEN_SYMBOL` | `$NIBAL` (the default) |
 | The brand kit art (`node brand/generate.mjs`) | `BRAND_X_HANDLE`, `BRAND_SITE` | `@coinnibalfun`, `coinnibal.fun` |
 
-On-chain names cannot change after a deploy. The testnet TestToken's symbol is `tELYMUM` (wallets show it; the site
-says `$NIBAL`), and the deployed testnet NFT keeps `name()` / `symbol()` "Elymum" / "ELYMUM". A **new** `ElymumNFT`
+On-chain names cannot change after a deploy. The testnet TestToken's symbol is `TEST` (wallets show it; the site
+says `$NIBAL`), and the deployed testnet NFT keeps `name()` / `symbol()` "Elymum" / "ELYMUM". A **new** `CoinnibalNFT`
 deployment (mainnet) is "Coinnibal" / "NIBAL": only the constructor changed, the runtime code and its pinned hash are
 the same, so the deployed contracts still pass every code check. Marketplaces show the collection name from the
 server's contract metadata (`contractURI`), which says "Coinnibal".
@@ -379,9 +379,9 @@ Everything is done from `/admin` with the owner wallet; nothing needs a terminal
 4. **Deploy** (Setup → the deploy wizard; each step is previewed and registered with the server on success):
    - **TestToken** (testnet only): an ERC20Burnable game token with a public faucet (1,000,000 an hour per wallet,
      2,000,000 for emblem holders); apart from the faucet only the owner mints.
-   - **ElymumArena v3** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
+   - **CoinnibalArena v3** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
      The server checks the code hash and the server authority before it registers it.
-   - **ElymumNFT** at the $1 price in ETH (the wizard reads ETH/USD).
+   - **CoinnibalNFT** at the $1 price in ETH (the wizard reads ETH/USD).
 5. **Finish setup** (one button, the remaining steps in order): set the TestToken as the arena's game token, create
    the four arenas (1,000 / 3,000 / 5,000 / 10,000: the $1 / $3 / $5 / $10 tiers at the reference price of $0.001 a
    token), the holder perks (8 % + 2 %), the Isles of the Blessed ($10) holders-only, the emblem as the faucet's 2x, and on the testnet open the mint to the public. The server picks the
@@ -433,7 +433,7 @@ The testnet and the mainnet are two networks of the same chain; the server follo
    (the mainnet refuses less), keep `SERVER_PRIVATE_KEY` or rotate it, fund the server key with ETH, and restart.
    Integrity auto-hold is on by default there, and the secret exports are off (`ADMIN_SECRET_EXPORT`). The server opens a clean state in `DATA_DIR/chains/4663/`; the testnet's records stay in
    `chains/46630/` (the Network tab lists them).
-2. Deploy ElymumArena v3 and ElymumNFT from `/admin` (no TestToken on mainnet), set the token, create the arenas,
+2. Deploy CoinnibalArena v3 and CoinnibalNFT from `/admin` (no TestToken on mainnet), set the token, create the arenas,
    set the holder perks, publish the allowlist root, Sync to $1, then price the arenas in US dollars (set the token
    price → sync → sign, "Arena prices in US dollars"). Keep burn mode 0 until the probe shows the token's
    `burn()` works.
@@ -478,7 +478,7 @@ running rooms of a re-priced arena take the new price for their own figures at t
 minute; the log says `arena #N: ticket price … on chain`). Re-sync whenever the token's price moves enough to matter;
 `dex_twap` (a Pons / DEX TWAP) will replace the manual price once it is wired.
 
-**The holder pair** (holders pay 10 % of their profit): Setup → Holder perks → `setHolderPerks(<ElymumNFT>, 800, 200)`
+**The holder pair** (holders pay 10 % of their profit): Setup → Holder perks → `setHolderPerks(<CoinnibalNFT>, 800, 200)`
 (Finish setup does it on a fresh deploy). An arena deployed earlier with the old suggestion (1,500 + 0) needs this
 call once; tickets bought before it keep the pair they joined with.
 
@@ -530,7 +530,7 @@ only free rooms open (the holders' room of the day, practice with bots); the car
 ## Test arenas with bots (testnet)
 
 On the testnet every official arena (ticket tier) gets one extra instance, **Test · <arena>** (`test-<arenaId>`):
-the same arena, the same ElymumArena contract and vault, real tickets, rounds, bell, settlement with the fee on
+the same arena, the same CoinnibalArena contract and vault, real tickets, rounds, bell, settlement with the fee on
 profit, loot burns, journal and crash recovery as the official instances, plus practice bots so the whole system can
 be tested with few people. Bots never buy a ticket and carry no value: eating one gives mass, never tokens; a bot
 that eats a player makes the eaten value spill as loot (burned at the bell if nobody picks it up). A ticket is the

@@ -59,7 +59,7 @@ export async function stageRoutes(ctx) {
 /** The fake NFT chain for the Dev Wallet (`rpcUrl`). Returns { url, close }. */
 export async function startFakeRpc() {
   const sdk = await importSdk();
-  const abi = sdk.elymumNFTAbi;
+  const abi = sdk.coinnibalNFTAbi;
   const v = viem();
   const minted = new Map(); // tx hash -> { from, qty }
   let supply = MINTED_BEFORE;

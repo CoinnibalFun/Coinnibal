@@ -359,7 +359,7 @@ export function arenaRates(server: Pick<ArenaFees, 'burnBps' | 'vaultBps'> | nul
 
 /**
  * The rates a ticket of this wallet gets (`planJoin`'s `rates`): the holder pair for emblem holders while the perks
- * are on and it totals less (`ElymumArena._ratesFor`), else the normal pair.
+ * are on and it totals less (`CoinnibalArena._ratesFor`), else the normal pair.
  */
 export function ticketRates(
   normal: FeeRates,

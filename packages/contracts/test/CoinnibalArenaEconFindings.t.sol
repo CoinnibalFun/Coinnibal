@@ -2,18 +2,18 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {ElymumArena} from "../contracts/ElymumArena.sol";
-import {ElymumNFT} from "../contracts/ElymumNFT.sol";
+import {CoinnibalArena} from "../contracts/CoinnibalArena.sol";
+import {CoinnibalNFT} from "../contracts/CoinnibalNFT.sol";
 import {MockERC20} from "../contracts/test/MockTokens.sol";
 
 /// @notice Findings of the mainnet economic audit (apps/server/test/mainnet-econ-sim.ts). Each test states the
-///         behaviour the audit asks for and FAILS on the current ElymumArena v3. They run only with
-///         `ELYMUM_ECON_FINDINGS=true` (the `test:econ-findings` script of this package), so the normal
+///         behaviour the audit asks for and FAILS on the current CoinnibalArena v3. They run only with
+///         `COINNIBAL_ECON_FINDINGS=true` (the `test:econ-findings` script of this package), so the normal
 ///         suite stays green until a fix lands; without it each test returns at once.
-contract ElymumArenaEconFindingsTest is Test {
-    ElymumArena internal arena;
+contract CoinnibalArenaEconFindingsTest is Test {
+    CoinnibalArena internal arena;
     MockERC20 internal token;
-    ElymumNFT internal nft;
+    CoinnibalNFT internal nft;
 
     address internal admin = makeAddr("admin");
     address internal server = makeAddr("server");
@@ -27,14 +27,14 @@ contract ElymumArenaEconFindingsTest is Test {
     uint128 internal constant FEE = 10_000 ether;
 
     function _on() internal view returns (bool) {
-        return vm.envOr("ELYMUM_ECON_FINDINGS", false);
+        return vm.envOr("COINNIBAL_ECON_FINDINGS", false);
     }
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        token = new MockERC20("Elymum", "ELYMUM", 18);
-        arena = new ElymumArena(admin, server, feeWallet);
-        nft = new ElymumNFT(admin, 10_000, 0.0003 ether, 2, 3, "https://x/api/nft/", admin);
+        token = new MockERC20("Coinnibal", "COINNIBAL", 18);
+        arena = new CoinnibalArena(admin, server, feeWallet);
+        nft = new CoinnibalNFT(admin, 10_000, 0.0003 ether, 2, 3, "https://x/api/nft/", admin);
         vm.startPrank(admin);
         arena.setToken(address(token));
         arena.createArena(OPEN, FEE, 300);
@@ -72,7 +72,7 @@ contract ElymumArenaEconFindingsTest is Test {
         address[3] memory ps = [alice, bob, carol];
         uint16[3] memory ids = [HOLDERS, HOLDERS, OPEN];
         for (uint256 i; i < 3; ++i) {
-            ElymumArena.SessionView memory s = arena.getSession(ids[i], ps[i]);
+            CoinnibalArena.SessionView memory s = arena.getSession(ids[i], ps[i]);
             if (s.id != 0 && s.burnBps == 800 && s.vaultBps == 200) holderTickets++;
         }
         assertEq(holderTickets, 1, "one emblem gave holder tickets to several wallets at once");
@@ -93,8 +93,8 @@ contract ElymumArenaEconFindingsTest is Test {
         vm.warp(block.timestamp + 24 hours + 1);
         vm.prank(carol);
         arena.refund(OPEN); // carol, the loser, takes back her entry fee
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](1);
-        items[0] = ElymumArena.Settlement(OPEN, bob, bobId, 2 * FEE);
+        CoinnibalArena.Settlement[] memory items = new CoinnibalArena.Settlement[](1);
+        items[0] = CoinnibalArena.Settlement(OPEN, bob, bobId, 2 * FEE);
         uint256 before = token.balanceOf(bob);
         vm.prank(server);
         arena.settle(items);

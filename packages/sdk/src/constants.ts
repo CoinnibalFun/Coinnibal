@@ -8,16 +8,16 @@ import { DEFAULT_ARENAS, DEFAULT_HOLDER_FEE_RATES } from '@elymum/shared';
 
 /** Basis-point denominator (100 %). */
 export const BPS = 10_000;
-/** Upper bound of the arena's fee pair on profit, `burnBps + vaultBps` (25 %): `ElymumArena.MAX_TOTAL_FEE_BPS`. */
+/** Upper bound of the arena's fee pair on profit, `burnBps + vaultBps` (25 %): `CoinnibalArena.MAX_TOTAL_FEE_BPS`. */
 export const MAX_TOTAL_FEE_BPS = 2_500;
 /** Share of the profit a freshly deployed arena burns (15 %) and sends to the fee wallet (5 %). */
 export const DEFAULT_BURN_BPS = 1_500;
 export const DEFAULT_VAULT_BPS = 500;
 /** Share of a `pay` payment (power-ups) a freshly deployed arena burns (50 %); the rest goes to the fee wallet. */
 export const DEFAULT_PAYMENT_BURN_BPS = 5_000;
-/** `ElymumArena.burnMode`: send burned tokens to `BURN_ADDRESS` (the default; works with every ERC-20). */
+/** `CoinnibalArena.burnMode`: send burned tokens to `BURN_ADDRESS` (the default; works with every ERC-20). */
 export const BURN_MODE_DEAD = 0;
-/** `ElymumArena.burnMode`: call the token's `burn(uint256)` (ERC20Burnable), falling back to `BURN_ADDRESS`. */
+/** `CoinnibalArena.burnMode`: call the token's `burn(uint256)` (ERC20Burnable), falling back to `BURN_ADDRESS`. */
 export const BURN_MODE_CALL = 1;
 /** Bounds of `maxSessions` (open tickets per arena). */
 export const MIN_ARENA_SESSIONS = 2;
@@ -62,7 +62,7 @@ export function settleSkipReasonText(reason: number): string {
 /** Items per `settle` transaction (the server chunks a bell's batch at this size). */
 export const SETTLE_CHUNK = 40;
 
-/** NFT mint phases (`ElymumNFT.Phase`). */
+/** NFT mint phases (`CoinnibalNFT.Phase`). */
 export const MintPhase = {
   Closed: 0,
   Allowlist: 1,

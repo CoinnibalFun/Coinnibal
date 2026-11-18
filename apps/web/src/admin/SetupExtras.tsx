@@ -17,7 +17,7 @@ import { Addr, Advanced, Btn, Card, FormError, Input, Row, useFormError, type Ch
 /**
  * Setup → the emblem's perks on the arena: `setHolderPerks(nft, holderBurnBps, holderVaultBps)` (holders' tickets
  * get this pair on their profit when it totals less than the normal one, and holders may enter holders-only arenas)
- * and `setArenaHoldersOnly(id, on)` per arena. The NFT is the registered ElymumNFT (shown, not typed); another
+ * and `setArenaHoldersOnly(id, on)` per arena. The NFT is the registered CoinnibalNFT (shown, not typed); another
  * address is an override under Advanced. The owner's pair (2026-11): holders pay 10 % of their profit instead of
  * 20 %, 8 % burned + 2 % to the fee wallet (`DEFAULT_HOLDER_FEE_RATES`).
  */
@@ -38,7 +38,7 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
     let addr: Address | null = null;
     let rates = { burnBps: cfg.holderBurnBps, vaultBps: cfg.holderVaultBps };
     try {
-      if (!off && !override.trim() && !registered) throw new Error('No ElymumNFT is registered with the server yet: deploy it in Setup (or enter one under Advanced).');
+      if (!off && !override.trim() && !registered) throw new Error('No CoinnibalNFT is registered with the server yet: deploy it in Setup (or enter one under Advanced).');
       addr = off ? null : override.trim() ? parseAddressInput('Holder NFT', override) : registered;
       if (!off) rates = { burnBps: parseIntInput('Holder burn', burn, 0, MAX_TOTAL_FEE_BPS), vaultBps: parseIntInput('Holder fee wallet', vault, 0, MAX_TOTAL_FEE_BPS) };
     } catch (e) {
@@ -53,7 +53,7 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
     guard(() =>
       ctx.open({
         title: off ? 'Turn the holder perks off' : `Holder perks: ${rates.burnBps} + ${rates.vaultBps} bps of profit for emblem holders`,
-        contract: 'ElymumArena',
+        contract: 'CoinnibalArena',
         call: setHolderPerksCall(arena, addr, rates),
         ownerOf: arena,
         owner: cfg.admin,
@@ -77,10 +77,10 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
         <Row label="Uses">
           {registered ? (
             <>
-              <Addr value={registered} net={ctx.net} /> <span className="ad-role">the registered ElymumNFT</span>
+              <Addr value={registered} net={ctx.net} /> <span className="ad-role">the registered CoinnibalNFT</span>
             </>
           ) : (
-            <span className="ad-none">no ElymumNFT registered yet</span>
+            <span className="ad-none">no CoinnibalNFT registered yet</span>
           )}
         </Row>
       </dl>
@@ -89,7 +89,7 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
         <Input label="Holder fee wallet" value={vault} onChange={setVault} suffix="bps" hint="200 = 2 % of the profit to the fee wallet." />
       </div>
       <Advanced title="Advanced: a different holder NFT" testId="holder-perks-advanced">
-        <Input label="Holder NFT (override)" value={override} onChange={setOverride} placeholder={registered ?? '0x…'} hint="Leave empty to use the registered ElymumNFT." />
+        <Input label="Holder NFT (override)" value={override} onChange={setOverride} placeholder={registered ?? '0x…'} hint="Leave empty to use the registered CoinnibalNFT." />
       </Advanced>
       <div className="ad-actions">
         <Btn sun testId="holder-perks" onClick={() => void preview(false)}>
@@ -146,7 +146,7 @@ export function HoldersOnlyCard({ ctx }: { ctx: ChainCtx }) {
                         setErr(null);
                         ctx.open({
                           title: `${x.holdersOnly ? 'Open' : 'Reserve'} arena #${x.id} ${arenaName(x.id)} ${x.holdersOnly ? 'to everyone' : 'for holders'}`,
-                          contract: 'ElymumArena',
+                          contract: 'CoinnibalArena',
                           call: setArenaHoldersOnlyCall(arena, x.id, !x.holdersOnly),
                           ownerOf: arena,
                           owner: cfg.admin,
@@ -207,7 +207,7 @@ export function TestTokenAdminCard({ ctx }: { ctx: ChainCtx }) {
           <Addr value={server} net={ctx.net} /> <span className="ad-role">from the game server</span>
         </Row>
         <Row label="Emblem">
-          <Addr value={nft} net={ctx.net} /> <span className="ad-role">the registered ElymumNFT</span>
+          <Addr value={nft} net={ctx.net} /> <span className="ad-role">the registered CoinnibalNFT</span>
         </Row>
       </dl>
       <div className="ad-actions">

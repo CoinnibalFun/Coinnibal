@@ -73,8 +73,8 @@ export function mainnetChecklist(net: AdminNetwork, status: StatusSnapshot | nul
     { id: 'rpc', label: 'Point the server at the mainnet (ELYMUM_CHAIN_ID and ELYMUM_RPC_URLS)', detail: '/opt/elymum/.env on the VPS → ELYMUM_CHAIN_ID=4663 and ELYMUM_RPC_URLS=<Alchemy URL>,https://rpc.mainnet.chain.robinhood.com, then elymum-compose up -d app. The server follows that chain; testnet records stay on file.', ok: on, where: 'Server' },
     { id: 'access', label: 'Set Game access explicitly', detail: 'The site settings carry over from testnet (where the game is public): pick Admins or Holders in Game before anything else opens.', ok: null, where: 'Game' },
     { id: 'fund', label: `Fund the server key with ${GAS_SYMBOL}`, detail: 'It sends every settlement; a little gas lasts a long time.', ok: when(a?.serverBalance != null ? a.serverBalance >= LOW_SERVER_GAS : null), where: 'Server' },
-    { id: 'arena', label: 'Deploy ElymumArena from the owner wallet', detail: 'Setup → the deploy wizard. No address to type; it registers with the server by itself (code hash, owner and settler checked).', ok: when(!!net.arenaAddress && a?.code === 'ok'), where: 'Setup' },
-    { id: 'nft', label: 'Deploy ElymumNFT from the owner wallet', detail: 'Setup → the deploy wizard, right after the arena. Treasury = you, base URI = this site.', ok: when(!!net.nftAddress && status?.nft?.code === 'ok'), where: 'Setup' },
+    { id: 'arena', label: 'Deploy CoinnibalArena from the owner wallet', detail: 'Setup → the deploy wizard. No address to type; it registers with the server by itself (code hash, owner and settler checked).', ok: when(!!net.arenaAddress && a?.code === 'ok'), where: 'Setup' },
+    { id: 'nft', label: 'Deploy CoinnibalNFT from the owner wallet', detail: 'Setup → the deploy wizard, right after the arena. Treasury = you, base URI = this site.', ok: when(!!net.nftAddress && status?.nft?.code === 'ok'), where: 'Setup' },
     { id: 'token', label: 'Confirm the game token on the arena', detail: 'Once, and only the real token (TOKEN_ADDRESS on the server): Setup shows it, you confirm once.', ok: when(cfg ? !!cfg.token : null), where: 'Setup' },
     { id: 'arenas', label: 'Finish setup: the arenas, the holder perks and the holders-only $10 Room', detail: 'Setup → Finish setup, one button: your wallet confirms each step.', ok: when(cfg ? (a?.arenas.length ?? 0) >= 4 && !!cfg.holderNft : null), where: 'Setup' },
     { id: 'allowlist', label: 'Build the mainnet allowlist and publish its root', detail: 'Import the testnet holders into the WL first (Mint), then build and publish.', ok: when(nft ? nft.root !== `0x${'0'.repeat(64)}` : null), where: 'Mint' },
@@ -155,7 +155,7 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
     const c = info?.contracts.find((x) => x.kind === kind);
     return c ? c.code : codes[kind];
   };
-  const NAMES: Record<ContractKind, string> = { arena: 'ElymumArena', nft: 'ElymumNFT', token: 'Game token / TestToken' };
+  const NAMES: Record<ContractKind, string> = { arena: 'CoinnibalArena', nft: 'CoinnibalNFT', token: 'Game token / TestToken' };
 
   return (
     <div className="ad-network">

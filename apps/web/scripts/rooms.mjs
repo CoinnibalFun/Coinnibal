@@ -4,7 +4,7 @@
 // Needs a dev server whose game server runs NODE_ENV=development DEV_FAKE_CHAIN=1 DEV_FAKE_TOKEN=1
 // with GAME_ACCESS=public: the web dev build then pays the room fee in the game token through its
 // fake chain (src/wallet/devFake.ts `fakeShopPay`: the server's fake chain records the
-// `ElymumArena.pay` with the room request's ref) and the server checks that receipt like a real one.
+// `CoinnibalArena.pay` with the room request's ref) and the server checks that receipt like a real one.
 // An EIP-6963 dev wallet signs the free sign-in.
 // Usage: node scripts/rooms.mjs <playUrl> <outDir>   → <outDir>/rooms-*.png
 import { mkdirSync } from 'node:fs';

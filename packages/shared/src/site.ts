@@ -403,7 +403,7 @@ export interface ContractRegisterRequest {
 /* Mint (`/api/site/mint*`, `/api/admin/mint/*`)                        */
 /* ------------------------------------------------------------------ */
 
-/** `ElymumNFT.Phase`, in contract order (Closed = 0, Allowlist = 1, Public = 2). */
+/** `CoinnibalNFT.Phase`, in contract order (Closed = 0, Allowlist = 1, Public = 2). */
 export type MintPhase = 'closed' | 'allowlist' | 'public';
 export const MINT_PHASES: readonly MintPhase[] = ['closed', 'allowlist', 'public'];
 
@@ -411,7 +411,7 @@ export const MINT_PHASES: readonly MintPhase[] = ['closed', 'allowlist', 'public
 export const MINT_USD_CENTS_DEFAULT = 100;
 
 /**
- * `ElymumNFT.mintState()`. Wei amounts are decimal strings (JSON has no bigint);
+ * `CoinnibalNFT.mintState()`. Wei amounts are decimal strings (JSON has no bigint);
  * addresses and the root are 0x hex.
  */
 export interface MintContractState {

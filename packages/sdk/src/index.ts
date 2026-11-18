@@ -13,13 +13,13 @@ export * from './price';
 export * from './errors';
 export {
   artifacts,
-  elymumArenaAbi,
-  elymumArenaArtifact,
-  elymumNFTAbi,
-  elymumNFTArtifact,
+  coinnibalArenaAbi,
+  coinnibalArenaArtifact,
+  coinnibalNFTAbi,
+  coinnibalNFTArtifact,
   testTokenAbi,
   testTokenArtifact,
-  type ElymumArtifact,
-  type ElymumContractName,
-  ELYMUM_ARENA_VERSION,
+  type CoinnibalArtifact,
+  type CoinnibalContractName,
+  COINNIBAL_ARENA_VERSION,
 } from '@elymum/contracts';

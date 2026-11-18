@@ -349,7 +349,7 @@ export async function createApp(
     // "Test arenas with bots" (testnet only; DATA_DIR/site/test-arenas.json; refused and ignored on the mainnet)
     new TestArenaStore(cfg.chain.chainId, persist ? cfg.dataDir : null, log),
   );
-  // custom rooms: paid in the game token with `ElymumArena.pay` (half burned, half to the fee wallet; the receipt
+  // custom rooms: paid in the game token with `CoinnibalArena.pay` (half burned, half to the fee wallet; the receipt
   // checked like a power-up purchase), restored after a restart
   const customRooms = new CustomRoomService({
     rooms,

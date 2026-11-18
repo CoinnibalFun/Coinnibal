@@ -285,7 +285,7 @@ export interface BlockedArena {
   reason: 'vault_short' | 'repricing';
 }
 
-/** The arena contract's fee settings (`config()` of ElymumArena v3), basis points. */
+/** The arena contract's fee settings (`config()` of CoinnibalArena v3), basis points. */
 export interface ArenaFees {
   /** Share of a ticket's profit burned. */
   burnBps: number;
@@ -317,9 +317,9 @@ export interface ChainStatus {
   rpcUrl: string | null;
   /** Blockscout-style explorer base URL (`/tx/<hash>`, `/address/<addr>`); null when there is none. */
   explorerUrl: string | null;
-  /** The registered `ElymumArena` contract (0x address), null until one is deployed and registered. */
+  /** The registered `CoinnibalArena` contract (0x address), null until one is deployed and registered. */
   arenaAddress: string | null;
-  /** The registered `ElymumNFT` contract (0x address), null until one is deployed and registered. */
+  /** The registered `CoinnibalNFT` contract (0x address), null until one is deployed and registered. */
   nftAddress: string | null;
   /** Paid arenas are open for tickets (false when the chain is off, the token is not set yet or is unusable). */
   arenasEnabled: boolean;

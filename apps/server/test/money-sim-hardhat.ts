@@ -1,5 +1,5 @@
 /**
- * The money simulation's chain on a real `hardhat node` with the real ElymumArena v3 and the TestToken (deployed
+ * The money simulation's chain on a real `hardhat node` with the real CoinnibalArena v3 and the TestToken (deployed
  * with the SDK, like /admin does). The game server talks to it through its production client (`viemEvmClient`).
  * Returns null when the node does not start within 40 s (Hardhat missing): callers skip.
  */
@@ -17,7 +17,7 @@ import {
   deployNft,
   deployTestToken,
   deployedAddress,
-  elymumArenaAbi,
+  coinnibalArenaAbi,
   getArena,
   getSession,
   getTokenBalance,
@@ -64,7 +64,7 @@ async function rpcUp(u: string): Promise<boolean> {
 
 /**
  * Starts a hardhat node, deploys and sets up the arena (arenas 1 and 2 used), funds `players` wallets. Every third
- * wallet holds an ElymumNFT (owner-minted), the arena's holder NFT at the owner's holder pair (8 % + 2 %).
+ * wallet holds an CoinnibalNFT (owner-minted), the arena's holder NFT at the owner's holder pair (8 % + 2 %).
  */
 export async function hardhatSimChain(opts: { players: number; seed: number }): Promise<SimChain> {
   const port = await freePort();
@@ -141,10 +141,10 @@ export async function hardhatSimChain(opts: { players: number; seed: number }): 
   const client = viemEvmClient(url, server, { chainId: 31337, pollingInterval: 20, multicall: false });
 
   const logs = async (eventName: 'Settled' | 'Cancelled' | 'Refunded' | 'Collected' | 'Joined') =>
-    (await pub.getContractEvents({ address: arena, abi: elymumArenaAbi, eventName, fromBlock: 0n })) as unknown as { args: Record<string, unknown> }[];
+    (await pub.getContractEvents({ address: arena, abi: coinnibalArenaAbi, eventName, fromBlock: 0n })) as unknown as { args: Record<string, unknown> }[];
 
   return {
-    name: 'hardhat node (ElymumArena v3, TestToken)',
+    name: 'hardhat node (CoinnibalArena v3, TestToken)',
     arenaAddress: arena,
     client,
     decimals: 18,

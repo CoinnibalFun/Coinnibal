@@ -1,6 +1,6 @@
 /**
  * Gas of every call the server authority pays for (`settle`, `cancel`, `sweepLoot`), in the shapes the game server
- * sends them on mainnet, measured on the in-process Hardhat network with the real ElymumArena v3, the real ElymumNFT
+ * sends them on mainnet, measured on the in-process Hardhat network with the real CoinnibalArena v3, the real CoinnibalNFT
  * as the holder NFT and an OpenZeppelin ERC-20 as the game token (a Pons token is a plain fixed-supply ERC-20):
  *
  *   pnpm -F @elymum/contracts gas:mainnet            # prints JSON
@@ -31,8 +31,8 @@ async function measure(hash: Hex): Promise<Measured> {
 }
 
 const token = await viem.deployContract('TestToken', [admin.account.address]);
-const arena = await viem.deployContract('ElymumArena', [admin.account.address, server.account.address, feeWallet.account.address]);
-const nft = await viem.deployContract('ElymumNFT', [admin.account.address, 10_000, parseEther('0.0003'), 2, 3, 'https://x/api/nft/', admin.account.address]);
+const arena = await viem.deployContract('CoinnibalArena', [admin.account.address, server.account.address, feeWallet.account.address]);
+const nft = await viem.deployContract('CoinnibalNFT', [admin.account.address, 10_000, parseEther('0.0003'), 2, 3, 'https://x/api/nft/', admin.account.address]);
 await arena.write.setToken([token.address]);
 await arena.write.setHolderPerks([nft.address, 800, 200]);
 const FEE = parseEther('10000');
@@ -110,7 +110,7 @@ out.nft_transfer = await measure(await nft.write.transferFrom([holderA, holderB,
 out.join_holder_arena4_after_transfer = await measure(await arena.write.join([4], { account: holderB }));
 const sorted = [...joinGas].sort((a, b) => a - b);
 out.join_typical = sorted[Math.floor(sorted.length / 2)];
-out.network = 'hardhat (in-process), ElymumArena v3, TestToken (OpenZeppelin ERC-20), ElymumNFT holder NFT, burn mode 0 (0x…dEaD)';
+out.network = 'hardhat (in-process), CoinnibalArena v3, TestToken (OpenZeppelin ERC-20), CoinnibalNFT holder NFT, burn mode 0 (0x…dEaD)';
 out.measuredAt = new Date().toISOString().slice(0, 10);
 
 const json = JSON.stringify(out, null, 2);

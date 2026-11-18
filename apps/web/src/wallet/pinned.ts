@@ -1,4 +1,4 @@
-import { elymumArenaArtifact, getCodeHash } from '@elymum/sdk';
+import { coinnibalArenaArtifact, getCodeHash } from '@elymum/sdk';
 import { LOCALNET_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, configuredChainId } from '@elymum/shared';
 import { getAddress, isAddress, type Address, type PublicClient } from 'viem';
 
@@ -135,7 +135,7 @@ export async function verifyArena(
   announced: { arena: string | null | undefined; token?: string | null },
   pins: BuildPins = PINS,
   /** The runtime code hash of the compiled arena (`@elymum/contracts`). */
-  expected: string = elymumArenaArtifact.runtimeCodeHash,
+  expected: string = coinnibalArenaArtifact.runtimeCodeHash,
 ): Promise<PinCheck> {
   const pinned = checkAnnounced(chainId, announced, pins);
   if (!pinned.ok) return pinned;

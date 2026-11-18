@@ -197,7 +197,7 @@ export function CustomRoomsCard({ ctx }: { ctx: ChainCtx }) {
     <Card
       title="Custom rooms"
       id="custom-rooms"
-      lede="Players pay a small fee in the game token to open a private room with their own rules: a free room (no stakes) or a ticket room (an invite-only instance of an arena: players buy that arena's normal ticket, settled at its end). Like a power-up pack it is one ElymumArena.pay: half burned, half to the fee wallet. The fee grows with the room's size. The server checks every payment on chain (its Paid event, the room request it names) before the room opens; NFT holders open one room a day for free by default."
+      lede="Players pay a small fee in the game token to open a private room with their own rules: a free room (no stakes) or a ticket room (an invite-only instance of an arena: players buy that arena's normal ticket, settled at its end). Like a power-up pack it is one CoinnibalArena.pay: half burned, half to the fee wallet. The fee grows with the room's size. The server checks every payment on chain (its Paid event, the room request it names) before the room opens; NFT holders open one room a day for free by default."
     >
       <SwitchRow
         label="Creating rooms"

@@ -64,7 +64,7 @@ const fail = async (p: Promise<unknown>): Promise<CustomRoomFail> => {
   throw new Error('expected a CustomRoomFail');
 };
 
-describe('room fee payment (the game token, ElymumArena.pay)', () => {
+describe('room fee payment (the game token, CoinnibalArena.pay)', () => {
   it('opens a room for a pay of at least the price from the signed-in wallet with its request ref; the fee is recorded in tokens', async () => {
     const { svc, reader } = setup();
     const alice = testSigner().address;

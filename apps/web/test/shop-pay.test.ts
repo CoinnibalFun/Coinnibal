@@ -16,7 +16,7 @@ const TOKEN = '0x0000000000000000000000000000000000000707';
 const HASH = `0x${'4'.repeat(64)}`;
 const VIEW: ShopView = {
   open: true,
-  token: { address: TOKEN, symbol: 'tELYMUM', decimals: 18 },
+  token: { address: TOKEN, symbol: 'TEST', decimals: 18 },
   payTo: ARENA,
   burnBps: 5000,
   packs: [{ kind: 'leap', charges: 3, priceRaw: (900n * ONE).toString(), fullPriceRaw: (900n * ONE).toString(), enabled: true }],
@@ -39,7 +39,7 @@ afterEach(() => {
   savePendingClaim(null);
 });
 
-describe('buyPack: a power-up pack is paid with ElymumArena.pay', () => {
+describe('buyPack: a power-up pack is paid with CoinnibalArena.pay', () => {
   it('approves the arena for exactly the price when the allowance is short, then pays with the pack ref', async () => {
     spies.getAllowance.mockResolvedValue(0n);
     const r = await buyPack(VIEW, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() });
@@ -81,7 +81,7 @@ describe('buyPack: a power-up pack is paid with ElymumArena.pay', () => {
   });
 });
 
-describe('buyCart: several power-ups, one ElymumArena.pay', () => {
+describe('buyCart: several power-ups, one CoinnibalArena.pay', () => {
   const CART_VIEW: ShopView = {
     ...VIEW,
     holder: true,

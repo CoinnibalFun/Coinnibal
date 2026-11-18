@@ -1,4 +1,4 @@
-import { elymumNFTAbi } from '@elymum/sdk';
+import { coinnibalNFTAbi } from '@elymum/sdk';
 import type { ChainStatus } from '@elymum/shared';
 import type { MintContractState, MintState } from '@elymum/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -71,7 +71,7 @@ const proof = (eligible: boolean, onchain = ROOT) => ({ eligible, proof: eligibl
 const transferLog = (to: string, id: bigint, from = '0x0000000000000000000000000000000000000000', address = NFT): Log =>
   ({
     address,
-    topics: encodeEventTopics({ abi: elymumNFTAbi, eventName: 'Transfer', args: { from: from as `0x${string}`, to: to as `0x${string}`, tokenId: id } }),
+    topics: encodeEventTopics({ abi: coinnibalNFTAbi, eventName: 'Transfer', args: { from: from as `0x${string}`, to: to as `0x${string}`, tokenId: id } }),
     data: '0x',
     blockHash: padHex('0x1'),
     blockNumber: 1n,
@@ -236,7 +236,7 @@ const minted = (ids: bigint[]) => async (_call: unknown, opts: { onPhase?: (p: s
   return { ok: true, hash: `0x${'cd'.repeat(32)}`, receipt: { status: 'success', logs: ids.map((id) => transferLog(ALICE, id)) } };
 };
 const revert = (errorName: 'SoldOut' | 'PublicLimitExceeded') =>
-  Object.assign(new Error('execution reverted'), { code: 3, data: encodeErrorResult({ abi: elymumNFTAbi, errorName }) });
+  Object.assign(new Error('execution reverted'), { code: 3, data: encodeErrorResult({ abi: coinnibalNFTAbi, errorName }) });
 
 describe('mint logic: price copy, funds, errors', () => {
   it('tells the testnet price plainly, keeps the dollar story only within ±10 % of the target', () => {

@@ -14,7 +14,7 @@ async function gas(hash: Hex): Promise<bigint> {
 }
 
 const token = await viem.deployContract('TestToken', [admin.account.address]);
-const arena = await viem.deployContract('ElymumArena', [
+const arena = await viem.deployContract('CoinnibalArena', [
   admin.account.address,
   server.account.address,
   feeWallet.account.address,
@@ -49,7 +49,7 @@ const s40 = await gas(await arena.write.settle([many], { account: server.account
 const sweep = await gas(await arena.write.sweepLoot([1, 1n, parseEther('100')], { account: server.account }));
 
 // NFT
-const nft = await viem.deployContract('ElymumNFT', [admin.account.address, 10_000, parseEther('0.03'), 2, 3, 'https://x/api/nft/', admin.account.address]);
+const nft = await viem.deployContract('CoinnibalNFT', [admin.account.address, 10_000, parseEther('0.03'), 2, 3, 'https://x/api/nft/', admin.account.address]);
 const minter = players[0].account.address;
 const leaf = (a: Address) => keccak256(keccak256(encodeAbiParameters([{ type: 'address' }], [a])));
 const other = leaf('0x0000000000000000000000000000000000001111');

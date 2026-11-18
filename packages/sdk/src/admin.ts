@@ -171,7 +171,7 @@ async function requireArenaOwner(ctx: Ctx): Promise<ArenaConfig> {
   const arena = ctx.arena();
   const code = await checkDeployedCode(ctx.client, arena, 'arena');
   if (code === 'missing') throw new UsageError(`no contract at ARENA_ADDRESS ${arena} on chain ${ctx.chainId}`);
-  if (code === 'mismatch') console.log(`! ${arena}: code differs from the bundled ElymumArena artifact`);
+  if (code === 'mismatch') console.log(`! ${arena}: code differs from the bundled CoinnibalArena artifact`);
   const config = await getArenaConfig(ctx.client, arena);
   const refusal = ownerRefusal(config.admin, ctx.account().address, 'arena');
   if (refusal) throw new UsageError(refusal);
@@ -182,7 +182,7 @@ async function requireNftOwner(ctx: Ctx): Promise<Address> {
   const nft = ctx.nft();
   const code = await checkDeployedCode(ctx.client, nft, 'nft');
   if (code === 'missing') throw new UsageError(`no contract at NFT_ADDRESS ${nft} on chain ${ctx.chainId}`);
-  if (code === 'mismatch') console.log(`! ${nft}: code differs from the bundled ElymumNFT artifact`);
+  if (code === 'mismatch') console.log(`! ${nft}: code differs from the bundled CoinnibalNFT artifact`);
   const refusal = ownerRefusal(await getNftOwner(ctx.client, nft), ctx.account().address, 'NFT');
   if (refusal) throw new UsageError(refusal);
   return nft;
@@ -229,7 +229,7 @@ async function cmdDeployArena(ctx: Ctx): Promise<void> {
   const server = addressOpt(ctx.opts, 'server');
   if (!server) throw new UsageError('deploy-arena needs --server <address> (the game server key, shown in /admin as serverKey)');
   const feeWallet = addressOpt(ctx.opts, 'fee-wallet') ?? admin;
-  const address = await deploy(ctx, 'ElymumArena', deployArenaParams({ admin, serverAuthority: server, feeWallet }), ['admin', 'serverAuthority', 'feeWallet']);
+  const address = await deploy(ctx, 'CoinnibalArena', deployArenaParams({ admin, serverAuthority: server, feeWallet }), ['admin', 'serverAuthority', 'feeWallet']);
   if (address) {
     console.log(`  next: export ARENA_ADDRESS=${address}`);
     console.log('        register it in /admin (Deploy) so the server uses it, then set-token and create-arena --defaults');
@@ -256,7 +256,7 @@ async function cmdDeployNft(ctx: Ctx): Promise<void> {
     treasury: addressOpt(o, 'treasury') ?? owner,
   };
   console.log(`  price ${formatGasAmount(price)} per token`);
-  const address = await deploy(ctx, 'ElymumNFT', deployNftParams(args), ['owner', 'maxSupply', 'mintPrice', 'wlLimit', 'publicLimit', 'baseURI', 'treasury']);
+  const address = await deploy(ctx, 'CoinnibalNFT', deployNftParams(args), ['owner', 'maxSupply', 'mintPrice', 'wlLimit', 'publicLimit', 'baseURI', 'treasury']);
   if (address) console.log(`  next: export NFT_ADDRESS=${address}  (and register it in /admin)`);
 }
 

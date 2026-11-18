@@ -29,7 +29,7 @@ const requestKey = (wallet: string, request: string) => `${wallet.toLowerCase()}
 /**
  * Custom-room payments that already opened a room, persisted per chain (`DATA_DIR/chains/<id>/room-payments.json`,
  * atomic write) so a restart can never let one payment open two rooms: a transaction hash opens one room, and so does
- * a wallet's room request (the ref of its `ElymumArena.pay`; another wallet paying with the same ref changes nothing for
+ * a wallet's room request (the ref of its `CoinnibalArena.pay`; another wallet paying with the same ref changes nothing for
  * this one). Also holds hashes being checked right now (`claim`), so two requests with the same hash cannot both pass.
  * The file of the rooms paid in ETH (before 2026-11-18) loads as it is: those hashes stay used.
  */

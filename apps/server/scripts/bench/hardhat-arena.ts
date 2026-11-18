@@ -1,5 +1,5 @@
 /**
- * A real ElymumArena v3 + TestToken on a local `hardhat node` for the bell-burst and failure drills: deploys with
+ * A real CoinnibalArena v3 + TestToken on a local `hardhat node` for the bell-burst and failure drills: deploys with
  * the SDK (the /admin order), creates the four default arenas, funds `players` fresh wallets with gas
  * (`hardhat_setBalance`) and tokens, and buys tickets for them. `interval` > 0 mines a block every that many ms
  * instead of on every transaction (Robinhood Chain, an Arbitrum Orbit chain, makes blocks about every 250 ms).
@@ -16,7 +16,7 @@ import {
   deployArena,
   deployTestToken,
   deployedAddress,
-  elymumArenaAbi,
+  coinnibalArenaAbi,
   getArena,
   getSession,
   joinCall,
@@ -155,7 +155,7 @@ export async function startHardhatArena(opts: { players: number; intervalMs?: nu
       return n;
     },
     async logs(eventName, fromBlock = 0n) {
-      return (await pub.getContractEvents({ address: arena, abi: elymumArenaAbi, eventName, fromBlock })) as unknown as { args: Record<string, unknown>; transactionHash: Hex; blockNumber: bigint }[];
+      return (await pub.getContractEvents({ address: arena, abi: coinnibalArenaAbi, eventName, fromBlock })) as unknown as { args: Record<string, unknown>; transactionHash: Hex; blockNumber: bigint }[];
     },
     nonce: (addr) => pub.getTransactionCount({ address: addr }),
     stop,

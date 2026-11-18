@@ -179,7 +179,7 @@ describe('BoostBar', () => {
 
 const VIEW: ShopView = {
   open: true,
-  token: { address: '0x0000000000000000000000000000000000000707', symbol: 'tELYMUM', decimals: 18 },
+  token: { address: '0x0000000000000000000000000000000000000707', symbol: 'TEST', decimals: 18 },
   payTo: '0x00000000000000000000000000000000000a4e4a',
   burnBps: 5000,
   packs: [
@@ -207,18 +207,18 @@ describe('ShopSheet', () => {
     await waitFor(() => expect(screen.getByTestId('shop-more-magnet')).toBeTruthy());
     // every pack has its stepper from the start (0 in the cart) with its price a pack
     expect(screen.getByTestId('shop-qty-magnet').textContent).toBe('0 × pack');
-    expect(screen.getByTestId('shop-more-magnet').getAttribute('title')).toBe('Add 3 · 1,050 tELYMUM');
+    expect(screen.getByTestId('shop-more-magnet').getAttribute('title')).toBe('Add 3 · 1,050 TEST');
     expect((screen.getByTestId('shop-less-magnet') as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getAllByText('1,050 tELYMUM a pack').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1,050 TEST a pack').length).toBeGreaterThan(0);
     expect(screen.getByText(/Pick as many as you like with \+ and −, then pay once/)).toBeTruthy();
-    expect(screen.getAllByText('1,500 tELYMUM')).toHaveLength(2);
+    expect(screen.getAllByText('1,500 TEST')).toHaveLength(2);
     expect(screen.getByText(/You have 4/)).toBeTruthy();
     expect(screen.getByText(/30% off and \+1 power-up per paid round/)).toBeTruthy();
     expect(screen.getByText(/Each pack is paid to the arena contract \(0x0000…4e4a\): 50% is burned, 50% goes to the fee wallet\./)).toBeTruthy();
     expect((screen.getByTestId('shop-more-speed') as HTMLButtonElement).disabled).toBe(true);
     // the two new power-ups are on sale, the Shockwave is gone
-    expect(screen.getByTestId('shop-more-leap').getAttribute('title')).toBe('Add 3 · 1,750 tELYMUM');
-    expect(screen.getByTestId('shop-more-invis').getAttribute('title')).toBe('Add 3 · 2,100 tELYMUM');
+    expect(screen.getByTestId('shop-more-leap').getAttribute('title')).toBe('Add 3 · 1,750 TEST');
+    expect(screen.getByTestId('shop-more-invis').getAttribute('title')).toBe('Add 3 · 2,100 TEST');
     expect(screen.getByText('Leap')).toBeTruthy();
     expect(screen.getByText('Invisibility')).toBeTruthy();
     expect(screen.queryByText(/Shockwave/)).toBeNull();
@@ -241,10 +241,10 @@ describe('ShopSheet', () => {
     fireEvent.click(screen.getByTestId('shop-more-invis'));
     expect(screen.getByTestId('shop-qty-magnet').textContent).toBe('2 × pack');
     // 2 x 1,050 + 2,100 at the holder price; 2 x 1,500 + 3,000 before the discount
-    expect(screen.getByTestId('shop-cart-total').textContent).toBe('4,200 tELYMUM');
-    expect(screen.getByTestId('shop-cart-full').textContent).toBe('6,000 tELYMUM');
+    expect(screen.getByTestId('shop-cart-total').textContent).toBe('4,200 TEST');
+    expect(screen.getByTestId('shop-cart-full').textContent).toBe('6,000 TEST');
     expect(screen.getByTestId('shop-cart').textContent).toMatch(/Total · 3 packs/);
-    expect(screen.getByTestId('shop-pay').textContent).toMatch(/Buy all · 4,200 tELYMUM/);
+    expect(screen.getByTestId('shop-pay').textContent).toMatch(/Buy all · 4,200 TEST/);
     expect((screen.getByTestId('shop-pay') as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByTestId('shop-less-magnet'));
     fireEvent.click(screen.getByTestId('shop-less-magnet'));
@@ -268,7 +268,7 @@ describe('ShopSheet', () => {
   });
 
   it('price text', () => {
-    expect(priceText((12_500_000n * 10n ** 12n).toString(), VIEW)).toBe('12.5 tELYMUM');
+    expect(priceText((12_500_000n * 10n ** 12n).toString(), VIEW)).toBe('12.5 TEST');
   });
 });
 

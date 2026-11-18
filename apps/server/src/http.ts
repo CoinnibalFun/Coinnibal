@@ -356,7 +356,7 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             return json(res, 200, { changed, chain: ctx.chain.status() });
           }
           case '/api/dev/pay': {
-            // DEV ONLY: the web's fake wallet "pays" a power-up pack (`ElymumArena.pay`); answers its fake hash
+            // DEV ONLY: the web's fake wallet "pays" a power-up pack (`CoinnibalArena.pay`); answers its fake hash
             const dev = cfg.devFakeChain ? (ctx.chain as Partial<DevFakeChainActions>) : null;
             if (!dev?.devPay) return json(res, 404, { error: 'not found' });
             if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });

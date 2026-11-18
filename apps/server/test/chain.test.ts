@@ -175,7 +175,7 @@ describe('status and reads', () => {
     // an arena whose code is not the bundled v3 build (an old v1 / v2 deployment) keeps the arenas off
     const old = await harness({ setup: (e) => e.code.set(ARENA.toLowerCase(), 'mismatch') });
     expect(old.chain.status()).toMatchObject({ arenasEnabled: false });
-    expect(old.logs.join()).toMatch(/is not the bundled ElymumArena/);
+    expect(old.logs.join()).toMatch(/is not the bundled CoinnibalArena/);
   });
 
   it('names the Robinhood Chain network the RPC serves (EXPLORER_URL overrides its explorer); any other chain stays off', async () => {
@@ -348,7 +348,7 @@ describe('contracts and the token watcher', () => {
     const h = await harness({ setup: (e) => e.code.set(ARENA.toLowerCase(), 'mismatch') });
     expect(h.chain.tokenReady).toBe(false);
     expect(h.chain.stakeEnabled).toBe(false);
-    expect(h.logs.join()).toMatch(/is not the bundled ElymumArena/);
+    expect(h.logs.join()).toMatch(/is not the bundled CoinnibalArena/);
   });
 
   it('keeps settlements queued while the server key is not the server authority; resumes once fixed', async () => {

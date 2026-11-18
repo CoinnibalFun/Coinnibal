@@ -2,13 +2,13 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {ElymumArena} from "../contracts/ElymumArena.sol";
+import {CoinnibalArena} from "../contracts/CoinnibalArena.sol";
 import {BlockingToken, BurnableMock} from "../contracts/test/MockTokens.sol";
 
 /// @notice Drives an arena with random joins, settlements (any payout), cancels, refunds, collects, loot burns, rate
 ///         changes and blocked transfers, keeping a ghost ledger of every session it opened.
 contract ArenaHandler is Test {
-    ElymumArena public arena;
+    CoinnibalArena public arena;
     BlockingToken public token;
     address public server;
     address public admin;
@@ -24,7 +24,7 @@ contract ArenaHandler is Test {
     uint256 public ghostFeeToVault;
     uint256 public ghostLootBurned;
 
-    constructor(ElymumArena a, BlockingToken t, address s, address ad) {
+    constructor(CoinnibalArena a, BlockingToken t, address s, address ad) {
         arena = a;
         token = t;
         server = s;
@@ -57,13 +57,13 @@ contract ArenaHandler is Test {
     function settle(uint256 who, uint256 which, uint256 payout, bool blocked) external {
         address p = _p(who);
         uint16 id = _id(which);
-        ElymumArena.SessionView memory s = arena.getSession(id, p);
+        CoinnibalArena.SessionView memory s = arena.getSession(id, p);
         if (s.id == 0 || s.finalized) return;
         uint128 vault = arena.getArena(id).vault;
         uint128 pay = uint128(bound(payout, 0, vault));
         token.setBlocked(p, blocked);
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](1);
-        items[0] = ElymumArena.Settlement(id, p, s.id, pay);
+        CoinnibalArena.Settlement[] memory items = new CoinnibalArena.Settlement[](1);
+        items[0] = CoinnibalArena.Settlement(id, p, s.id, pay);
         (uint128 net, uint128 burned, uint128 toVault) = arena.computeFees(s.entryFee, pay, s.burnBps, s.vaultBps);
         vm.prank(server);
         arena.settle(items);
@@ -76,11 +76,11 @@ contract ArenaHandler is Test {
     function cancel(uint256 who, uint256 which, bool blocked) external {
         address p = _p(who);
         uint16 id = _id(which);
-        ElymumArena.SessionView memory s = arena.getSession(id, p);
+        CoinnibalArena.SessionView memory s = arena.getSession(id, p);
         if (s.id == 0 || s.finalized || arena.getArena(id).vault < s.entryFee) return;
         token.setBlocked(p, blocked);
-        ElymumArena.SessionRef[] memory items = new ElymumArena.SessionRef[](1);
-        items[0] = ElymumArena.SessionRef(id, p, s.id);
+        CoinnibalArena.SessionRef[] memory items = new CoinnibalArena.SessionRef[](1);
+        items[0] = CoinnibalArena.SessionRef(id, p, s.id);
         vm.prank(server);
         arena.cancel(items);
         token.setBlocked(p, false);
@@ -90,7 +90,7 @@ contract ArenaHandler is Test {
     function refund(uint256 who, uint256 which, uint256 wait) external {
         address p = _p(who);
         uint16 id = _id(which);
-        ElymumArena.SessionView memory s = arena.getSession(id, p);
+        CoinnibalArena.SessionView memory s = arena.getSession(id, p);
         if (s.id == 0) return;
         if (!s.finalized) {
             vm.warp(block.timestamp + bound(wait, 0, 2 days));
@@ -130,9 +130,9 @@ contract ArenaHandler is Test {
     }
 }
 
-/// @notice Invariants of ElymumArena v3 under random use.
-contract ElymumArenaInvariantTest is Test {
-    ElymumArena internal arena;
+/// @notice Invariants of CoinnibalArena v3 under random use.
+contract CoinnibalArenaInvariantTest is Test {
+    CoinnibalArena internal arena;
     BlockingToken internal token;
     ArenaHandler internal handler;
     address internal admin = makeAddr("admin");
@@ -143,7 +143,7 @@ contract ElymumArenaInvariantTest is Test {
     function setUp() public {
         vm.warp(1_800_000_000);
         token = new BlockingToken();
-        arena = new ElymumArena(admin, server, feeWallet);
+        arena = new CoinnibalArena(admin, server, feeWallet);
         vm.startPrank(admin);
         arena.setToken(address(token));
         arena.createArena(1, 1_000 ether, 2_000);
@@ -155,8 +155,8 @@ contract ElymumArenaInvariantTest is Test {
 
     /// The contract holds exactly the open vaults plus what finalized players are owed.
     function invariant_balanceIsVaultsPlusOwed() public view {
-        ElymumArena.ArenaView memory a1 = arena.getArena(1);
-        ElymumArena.ArenaView memory a2 = arena.getArena(2);
+        CoinnibalArena.ArenaView memory a1 = arena.getArena(1);
+        CoinnibalArena.ArenaView memory a2 = arena.getArena(2);
         assertEq(token.balanceOf(address(arena)), uint256(a1.vault) + a1.owed + a2.vault + a2.owed);
     }
 
@@ -168,14 +168,14 @@ contract ElymumArenaInvariantTest is Test {
     /// Every token that entered an arena is in its vault, was paid to a player, burned or sent to the fee wallet.
     function invariant_perArenaAccounting() public view {
         for (uint16 id = 1; id <= 2; ++id) {
-            ElymumArena.ArenaView memory v = arena.getArena(id);
+            CoinnibalArena.ArenaView memory v = arena.getArena(id);
             assertEq(uint256(v.totalDeposited), uint256(v.vault) + v.totalPaidOut + v.totalBurned + v.totalFees);
         }
     }
 
     /// The burns and fee-wallet shares on chain match what the handler expected, and moved real tokens.
     function invariant_feesMatchAndLeftTheContract() public view {
-        ElymumArena.ConfigView memory c = arena.config();
+        CoinnibalArena.ConfigView memory c = arena.config();
         assertEq(c.totalFeeBurned, handler.ghostFeeBurned());
         assertEq(c.totalFeeToVault, handler.ghostFeeToVault());
         assertEq(c.totalLootBurned, handler.ghostLootBurned());
@@ -185,15 +185,15 @@ contract ElymumArenaInvariantTest is Test {
 
     /// Fees never exceed the cap on the profit (checked globally: Σ fees <= 25 % of Σ payouts).
     function invariant_feesWithinCap() public view {
-        ElymumArena.ConfigView memory c = arena.config();
+        CoinnibalArena.ConfigView memory c = arena.config();
         uint256 fees = uint256(c.totalFeeBurned) + c.totalFeeToVault;
         assertLe(fees * 10_000, (uint256(c.totalPaidOut) + fees) * 2_500);
     }
 }
 
 /// @notice The same invariants with the token's own `burn()` (supply really goes down).
-contract ElymumArenaBurnCallInvariantTest is Test {
-    ElymumArena internal arena;
+contract CoinnibalArenaBurnCallInvariantTest is Test {
+    CoinnibalArena internal arena;
     BurnableMock internal token;
     address internal admin = makeAddr("admin");
     address internal server = makeAddr("server");
@@ -202,7 +202,7 @@ contract ElymumArenaBurnCallInvariantTest is Test {
 
     function setUp() public {
         token = new BurnableMock();
-        arena = new ElymumArena(admin, server, feeWallet);
+        arena = new CoinnibalArena(admin, server, feeWallet);
         vm.startPrank(admin);
         arena.setToken(address(token));
         arena.setBurnMode(1);
@@ -213,22 +213,22 @@ contract ElymumArenaBurnCallInvariantTest is Test {
     }
 
     function invariant_supplyFallsByTheBurns() public view {
-        ElymumArena.ConfigView memory c = arena.config();
+        CoinnibalArena.ConfigView memory c = arena.config();
         assertEq(token.totalSupply(), handler.minted() - c.totalFeeBurned - c.totalLootBurned);
-        ElymumArena.ArenaView memory v = arena.getArena(1);
+        CoinnibalArena.ArenaView memory v = arena.getArena(1);
         assertEq(token.balanceOf(address(arena)), uint256(v.vault) + v.owed);
     }
 }
 
 contract BurnHandler is Test {
-    ElymumArena public arena;
+    CoinnibalArena public arena;
     BurnableMock public token;
     address public server;
     uint256 public minted;
     uint64 public sweepId;
     address[] public players;
 
-    constructor(ElymumArena a, BurnableMock t, address s) {
+    constructor(CoinnibalArena a, BurnableMock t, address s) {
         arena = a;
         token = t;
         server = s;
@@ -251,10 +251,10 @@ contract BurnHandler is Test {
 
     function settle(uint256 who, uint256 payout) external {
         address p = players[who % players.length];
-        ElymumArena.SessionView memory s = arena.getSession(1, p);
+        CoinnibalArena.SessionView memory s = arena.getSession(1, p);
         if (s.id == 0) return;
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](1);
-        items[0] = ElymumArena.Settlement(1, p, s.id, uint128(bound(payout, 0, arena.getArena(1).vault)));
+        CoinnibalArena.Settlement[] memory items = new CoinnibalArena.Settlement[](1);
+        items[0] = CoinnibalArena.Settlement(1, p, s.id, uint128(bound(payout, 0, arena.getArena(1).vault)));
         vm.prank(server);
         arena.settle(items);
     }

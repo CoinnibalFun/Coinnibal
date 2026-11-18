@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-interface IElymumNFTMint {
+interface ICoinnibalNFTMint {
     function mintPublic(uint256 qty) external payable;
     function withdraw() external;
 }
@@ -21,12 +21,12 @@ contract RejectEther {
 
 /// @notice Test-only: re-enters the NFT mint from the excess-payment refund.
 contract ReentrantMinter {
-    IElymumNFTMint public nft;
+    ICoinnibalNFTMint public nft;
     uint256 public price;
     bool public reentered;
     bool public reentrySucceeded;
 
-    constructor(IElymumNFTMint nft_) {
+    constructor(ICoinnibalNFTMint nft_) {
         nft = nft_;
     }
 

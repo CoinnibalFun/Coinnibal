@@ -1,14 +1,14 @@
-import { elymumNFTAbi, elymumNFTArtifact } from '@elymum/contracts';
+import { coinnibalNFTAbi, coinnibalNFTArtifact } from '@elymum/contracts';
 import { getAddress, type Account, type Address, type Chain, type Hash, type Hex, type PublicClient, type WalletClient } from 'viem';
 import { checkAddress } from './arena';
 import type { ContractCall } from './call';
 import { BPS, DEFAULT_MINT_BUFFER_BPS, MAX_ROYALTY_BPS, MINT_PHASE_NAMES, MintPhase, type MintPhaseName } from './constants';
 import { isZeroAddress } from './format';
 
-/** `ElymumNFT`: typed reads, mint and owner call builders, deploy. */
+/** `CoinnibalNFT`: typed reads, mint and owner call builders, deploy. */
 
 type ReadClient = Pick<PublicClient, 'readContract'>;
-export type NftAbi = typeof elymumNFTAbi;
+export type NftAbi = typeof coinnibalNFTAbi;
 export type NftCall = ContractCall<NftAbi>;
 
 export interface MintState {
@@ -33,7 +33,7 @@ export interface MintState {
 }
 
 export async function getMintState(client: ReadClient, nft: Address): Promise<MintState> {
-  const s = await client.readContract({ address: nft, abi: elymumNFTAbi, functionName: 'mintState' });
+  const s = await client.readContract({ address: nft, abi: coinnibalNFTAbi, functionName: 'mintState' });
   const phase = Number(s.phase) as MintPhase;
   return {
     address: getAddress(nft),
@@ -56,20 +56,20 @@ export async function getMintState(client: ReadClient, nft: Address): Promise<Mi
 
 /** How many tokens a wallet minted in each phase. */
 export async function getMintedBy(client: ReadClient, nft: Address, account: Address): Promise<{ wl: number; pub: number }> {
-  const [wl, pub] = await client.readContract({ address: nft, abi: elymumNFTAbi, functionName: 'mintedBy', args: [account] });
+  const [wl, pub] = await client.readContract({ address: nft, abi: coinnibalNFTAbi, functionName: 'mintedBy', args: [account] });
   return { wl: Number(wl), pub: Number(pub) };
 }
 
 export function getNftBalance(client: ReadClient, nft: Address, owner: Address): Promise<bigint> {
-  return client.readContract({ address: nft, abi: elymumNFTAbi, functionName: 'balanceOf', args: [owner] });
+  return client.readContract({ address: nft, abi: coinnibalNFTAbi, functionName: 'balanceOf', args: [owner] });
 }
 
 export function getNftOwner(client: ReadClient, nft: Address): Promise<Address> {
-  return client.readContract({ address: nft, abi: elymumNFTAbi, functionName: 'owner' });
+  return client.readContract({ address: nft, abi: coinnibalNFTAbi, functionName: 'owner' });
 }
 
 export function getTokenURI(client: ReadClient, nft: Address, id: bigint): Promise<string> {
-  return client.readContract({ address: nft, abi: elymumNFTAbi, functionName: 'tokenURI', args: [id] });
+  return client.readContract({ address: nft, abi: coinnibalNFTAbi, functionName: 'tokenURI', args: [id] });
 }
 
 /** Parses a phase name (`closed`, `allowlist` / `wl`, `public`) or number. */
@@ -101,11 +101,11 @@ export function mintValue(price: bigint, qty: number, bufferBps: number = DEFAUL
 }
 
 export function mintAllowlistCall(nft: Address, p: { qty: number; proof: readonly Hex[]; price: bigint; bufferBps?: number }): NftCall {
-  return { address: nft, abi: elymumNFTAbi, functionName: 'mintAllowlist', args: [BigInt(p.qty), [...p.proof]], value: mintValue(p.price, p.qty, p.bufferBps) };
+  return { address: nft, abi: coinnibalNFTAbi, functionName: 'mintAllowlist', args: [BigInt(p.qty), [...p.proof]], value: mintValue(p.price, p.qty, p.bufferBps) };
 }
 
 export function mintPublicCall(nft: Address, p: { qty: number; price: bigint; bufferBps?: number }): NftCall {
-  return { address: nft, abi: elymumNFTAbi, functionName: 'mintPublic', args: [BigInt(p.qty)], value: mintValue(p.price, p.qty, p.bufferBps) };
+  return { address: nft, abi: coinnibalNFTAbi, functionName: 'mintPublic', args: [BigInt(p.qty)], value: mintValue(p.price, p.qty, p.bufferBps) };
 }
 
 /**
@@ -131,7 +131,7 @@ export function mintRefusal(
 /* Owner                                                                 */
 /* -------------------------------------------------------------------- */
 
-const call = (nft: Address, functionName: string, args: readonly unknown[]): NftCall => ({ address: nft, abi: elymumNFTAbi, functionName, args });
+const call = (nft: Address, functionName: string, args: readonly unknown[]): NftCall => ({ address: nft, abi: coinnibalNFTAbi, functionName, args });
 
 export const setPhaseCall = (nft: Address, phase: MintPhase | MintPhaseName): NftCall =>
   call(nft, 'setPhase', [parseMintPhase(phase)]);
@@ -215,13 +215,13 @@ export function deployNftParams(args: DeployNftArgs) {
   checkU16('public limit', args.publicLimit);
   if (args.mintPrice < 0n) throw new RangeError('mint price must not be negative');
   return {
-    abi: elymumNFTAbi,
-    bytecode: elymumNFTArtifact.bytecode,
+    abi: coinnibalNFTAbi,
+    bytecode: coinnibalNFTArtifact.bytecode,
     args: [getAddress(args.owner), args.maxSupply, args.mintPrice, args.wlLimit, args.publicLimit, args.baseURI, getAddress(args.treasury)] as const,
   };
 }
 
-/** Deploys `ElymumNFT` with the bundled bytecode. Returns the transaction hash (see `deployedAddress`). */
+/** Deploys `CoinnibalNFT` with the bundled bytecode. Returns the transaction hash (see `deployedAddress`). */
 export function deployNft(wallet: WalletClient, args: DeployNftArgs, opts: { account?: Account | Address; chain?: Chain | null } = {}): Promise<Hash> {
   const p = deployNftParams(args);
   return wallet.deployContract({

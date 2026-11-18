@@ -171,7 +171,7 @@ export async function registerContract(deps: RegisterDeps, body: Record<string, 
     if (!(await client.hasCode(address))) throw new SiteFail(400, 'code_mismatch', `${address} holds no code on chain ${chainId}.`, 'address');
     if (!same(arenaToken, address)) throw new SiteFail(400, 'code_mismatch', `${address} is not the bundled TestToken and not the arena's game token.`, 'address');
   } else if (code !== 'ok') {
-    throw new SiteFail(400, 'code_mismatch', code === 'missing' ? `${address} holds no code on chain ${chainId}.` : `${address} is not the bundled ${k === 'arena' ? 'ElymumArena' : k === 'nft' ? 'ElymumNFT' : 'TestToken'} (code hash differs).`, 'address');
+    throw new SiteFail(400, 'code_mismatch', code === 'missing' ? `${address} holds no code on chain ${chainId}.` : `${address} is not the bundled ${k === 'arena' ? 'CoinnibalArena' : k === 'nft' ? 'CoinnibalNFT' : 'TestToken'} (code hash differs).`, 'address');
   } else {
     const owner = k === 'arena' ? (await client.arenaConfig(address)).admin : await client.ownerOf(address);
     if (!same(owner, admin)) throw new SiteFail(403, 'not_owner', `The contract owner is ${owner}, not the signed-in admin ${admin}.`, 'address');

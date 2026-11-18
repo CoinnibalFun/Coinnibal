@@ -9,6 +9,7 @@ import { AdminPanel } from '../src/admin/AdminPanel';
 import { DeployTab, SetTokenForm } from '../src/admin/DeployTab';
 import { SetupTab } from '../src/admin/SetupTab';
 import { GameTab } from '../src/admin/GameTab';
+import { ArenaTab } from '../src/admin/ArenaTab';
 import { MintTab } from '../src/admin/MintTab';
 import { resolveNetwork } from '../src/admin/net';
 import type { Plan } from '../src/admin/plan';
@@ -45,7 +46,7 @@ const client = (owner = ALICE) =>
   }) as never;
 
 describe('TxPreview: every write is previewed, checked and sent once', () => {
-  const plan = (extra: Partial<Plan> = {}): Plan => ({ title: 'Set the fee', contract: 'ElymumArena', call: setPaymentBurnBpsCall(ARENA, 300), ownerOf: ARENA, owner: ALICE, ...extra });
+  const plan = (extra: Partial<Plan> = {}): Plan => ({ title: 'Set the fee', contract: 'CoinnibalArena', call: setPaymentBurnBpsCall(ARENA, 300), ownerOf: ARENA, owner: ALICE, ...extra });
 
   it('shows the function, the named arguments, the network and the signer before the wallet opens', () => {
     ui(<TxPreview plan={plan()} net={resolveNetwork(chainStatus())} me={ALICE} client={client()} blockers={[]} onClose={() => {}} />);
@@ -192,7 +193,7 @@ describe('Deploy wizard', () => {
     act(() => screen.getByTestId('deploy-arena').click());
     expect(ctx.plans).toHaveLength(1);
     const p = ctx.plans[0];
-    expect(p.deploy?.name).toBe('ElymumArena');
+    expect(p.deploy?.name).toBe('CoinnibalArena');
     expect(p.deploy?.params.args).toEqual([ALICE, '0x000000000000000000000000000000000000bEEF', ALICE]);
     await p.onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: NEW as `0x${string}` });
     expect(registerContract).toHaveBeenCalledWith({ kind: 'arena', address: NEW, txHash: HASH });
@@ -209,7 +210,7 @@ describe('Deploy wizard', () => {
     expect((screen.getByLabelText(/Base URI/) as HTMLInputElement).value).toBe(`${location.origin}/api/nft/`);
     act(() => screen.getByTestId('deploy-nft').click());
     const p = ctx.plans[0];
-    expect(p.deploy?.name).toBe('ElymumNFT');
+    expect(p.deploy?.name).toBe('CoinnibalNFT');
     expect(p.deploy?.params.args).toEqual([ALICE, 3333, 30_000_000_000_000_000n, 1, 2, `${location.origin}/api/nft/`, ALICE]);
     await p.onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: NFT as `0x${string}` });
     expect(registerContract).toHaveBeenCalledWith({ kind: 'nft', address: NFT, txHash: HASH });
@@ -320,7 +321,7 @@ describe('Setup with the contracts registered', () => {
     const registry = { arena: { address: ARENA }, nft: { address: NFT }, token: { address: TOKEN } } as never;
     ui(<SetupTab ctx={ctxOf({ net, status: registeredStatus(), registry })} />);
     expect(screen.getByTestId('quick-setup-go')).toBeTruthy();
-    expect(screen.getByTestId('quick-setup-steps').textContent).toMatch(/Set tELYMUM as the game token/);
+    expect(screen.getByTestId('quick-setup-steps').textContent).toMatch(/Set TEST as the game token/);
     const advanced = screen.getByTestId('setup-advanced') as HTMLDetailsElement;
     expect(advanced.open).toBe(false);
     expect(advanced.querySelector('summary')?.textContent).toBe('Advanced: manual controls');
@@ -466,7 +467,7 @@ describe('Mint and Game: only the owner decisions up front', () => {
     const totals = { sessions: 0n, staked: 0n, paidOut: 0n, feeBurned: 0n, feeToVault: 0n, lootBurned: 0n, payments: 0n, paymentBurned: 0n };
     const cfg = { admin: ALICE, pendingAdmin: null, serverAuthority: '0x000000000000000000000000000000000000bEEF', feeWallet: ALICE, burnBps: 1500, vaultBps: 500, paused: false, token: TOKEN, decimals: 18, totals, holderNft: null, holderBurnBps: 1500, holderVaultBps: 500, burnMode: 0, paymentBurnBps: 5000 };
     const arenas = [{ id: 1, exists: true, enabled: true, entryFee: 1000n * 10n ** 18n, maxSessions: 300, openSessions: 0, vault: 0n, owed: 0n, holdersOnly: false }];
-    const status = { arena: { address: ARENA, code: 'ok', config: cfg, arenas, serverBalance: 10n ** 18n, token: { symbol: 'tELYMUM', decimals: 18, feeWalletBalance: 0n } } } as unknown as StatusSnapshot;
+    const status = { arena: { address: ARENA, code: 'ok', config: cfg, arenas, serverBalance: 10n ** 18n, token: { symbol: 'TEST', decimals: 18, feeWalletBalance: 0n } } } as unknown as StatusSnapshot;
     ui(<GameTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT })), status })} />);
     expect(outsideAdvanced()).toEqual([]);
     expect(screen.getByTestId('arena-pause')).toBeTruthy();
@@ -526,5 +527,18 @@ describe('addresses keep their case', () => {
       expect(src).toMatch(/ad-hex/);
       expect(src).not.toMatch(/className="ad-input mono"/);
     }
+  });
+});
+
+describe('A registered contract whose code is not the bundled build', () => {
+  it('Arena and Mint say plainly that the server does not use it and that it must be redeployed', () => {
+    const net = resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT }));
+    const view = ui(<ArenaTab ctx={ctxOf({ net, status: { arena: { address: ARENA, code: 'mismatch', config: null } } as unknown as StatusSnapshot })} />);
+    expect(screen.getByText('That is not our arena')).toBeTruthy();
+    expect(document.body.textContent).toMatch(/code hash differs\), so the server does not use it and the arenas stay off\. Redeploy CoinnibalArena from your wallet \(Setup\)\./);
+    view.unmount();
+    ui(<MintTab ctx={ctxOf({ net, status: { nft: { address: NFT, code: 'mismatch', balance: 0n, state: null } } as unknown as StatusSnapshot })} />);
+    expect(screen.getByText('That is not our NFT')).toBeTruthy();
+    expect(document.body.textContent).toMatch(/so the server does not use it\. Redeploy CoinnibalNFT from your wallet \(Setup\)\./);
   });
 });

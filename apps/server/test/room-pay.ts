@@ -1,5 +1,5 @@
 /**
- * Custom-room fees paid in the game token (`ElymumArena.pay`): a chain fixture shared by test/custom-rooms.test.ts and
+ * Custom-room fees paid in the game token (`CoinnibalArena.pay`): a chain fixture shared by test/custom-rooms.test.ts and
  * test/custom-paid-rooms.test.ts.
  */
 import { CUSTOM_DEFAULTS, ROOM_CLOSE_COUNTDOWN_MS, customRoomCost, customRoomPaymentRef, shopPaymentRef, type ChainStatus } from '@elymum/shared';
@@ -41,7 +41,7 @@ export interface PayOpts {
 }
 
 /**
- * The server's chain for room fees: the arena's `ElymumArena.pay` receipts keyed by hash (the token transfer to the
+ * The server's chain for room fees: the arena's `CoinnibalArena.pay` receipts keyed by hash (the token transfer to the
  * arena and its `Paid` event), the game token set unless `tokenSet` is false, and `busy` failing every read like a
  * rate-limited RPC.
  */

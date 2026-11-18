@@ -57,8 +57,8 @@ describe('the deploy wizard: plain contract creations from the owner wallet', ()
   const OTHER = '0x1111111111111111111111111111111111111111' as const;
   const plans: Plan[] = [
     { title: 'Deploy TestToken', contract: 'TestToken', deploy: { name: 'TestToken', params: deployTestTokenParams({ owner: OWNER }) } },
-    { title: 'Deploy ElymumArena', contract: 'ElymumArena', deploy: { name: 'ElymumArena', params: deployArenaParams(arenaDeployArgs(OWNER, KEY)) } },
-    { title: 'Deploy ElymumNFT', contract: 'ElymumNFT', deploy: { name: 'ElymumNFT', params: deployNftParams(nftDeployArgs({ ...defaultNftForm('https://site.test', '1000', OWNER), priceGas: '0.01' }, OWNER)) } },
+    { title: 'Deploy CoinnibalArena', contract: 'CoinnibalArena', deploy: { name: 'CoinnibalArena', params: deployArenaParams(arenaDeployArgs(OWNER, KEY)) } },
+    { title: 'Deploy CoinnibalNFT', contract: 'CoinnibalNFT', deploy: { name: 'CoinnibalNFT', params: deployNftParams(nftDeployArgs({ ...defaultNftForm('https://site.test', '1000', OWNER), priceGas: '0.01' }, OWNER)) } },
   ];
 
   it('each deploy is viem deployContract from the connected wallet (EOA CREATE: no factory, no CREATE2, no proxy), owned by that wallet', async () => {

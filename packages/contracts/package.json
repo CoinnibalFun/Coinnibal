@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Elymum smart contracts: the arena v3 (tickets, settlements with an on-chain fee on profit, burns) and the NFT (allowlist + public mint)",
+  "description": "Coinnibal smart contracts: the arena v3 (tickets, settlements with an on-chain fee on profit, burns) and the NFT (allowlist + public mint)",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit",
     "gas": "hardhat run scripts/gas-report.ts",
     "gas:mainnet": "hardhat run scripts/mainnet-gas.ts",
-    "test:econ-findings": "ELYMUM_ECON_FINDINGS=true hardhat test solidity test/ElymumArenaEconFindings.t.sol"
+    "test:econ-findings": "COINNIBAL_ECON_FINDINGS=true hardhat test solidity test/CoinnibalArenaEconFindings.t.sol"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.7",

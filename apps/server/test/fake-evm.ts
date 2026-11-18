@@ -1,4 +1,4 @@
-import { elymumArenaAbi, elymumNFTAbi, testTokenAbi, type ArenaConfig, type ArenaInfo, type ContractCall, type MintState, type SessionInfo, type TestTokenFaucetConfig } from '@elymum/sdk';
+import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi, type ArenaConfig, type ArenaInfo, type ContractCall, type MintState, type SessionInfo, type TestTokenFaucetConfig } from '@elymum/sdk';
 import { encodeErrorResult, getAddress, keccak256, toHex, type Address, type Hash, type Hex } from 'viem';
 import { computeProfitFee, ratesFor } from '@elymum/shared';
 import type { ArenaEvent, CodeCheck, ContractKindCode, EvmClient, JoinedLog, TransferLog, TxReceipt } from '../src/chain/evm-client';
@@ -13,7 +13,7 @@ export const E18 = 10n ** 18n;
 const ZERO = '0x0000000000000000000000000000000000000000' as Address;
 
 /** An error shaped like a viem/RPC revert carrying a custom error of the contracts (decoded by `describeError`). */
-export function revert(name: string, args: readonly unknown[] = [], abi: readonly unknown[] = elymumArenaAbi): Error & { data: Hex } {
+export function revert(name: string, args: readonly unknown[] = [], abi: readonly unknown[] = coinnibalArenaAbi): Error & { data: Hex } {
   const data = encodeErrorResult({ abi: abi as never, errorName: name, args } as never);
   return Object.assign(new Error(`execution reverted: ${name}`), { code: 3, data });
 }
@@ -22,7 +22,7 @@ let hashSeq = 0;
 const nextHash = (): Hash => keccak256(toHex(`tx-${++hashSeq}-${Math.random()}`));
 
 /**
- * A TypeScript model of `ElymumArena` + `ElymumNFT` behind the `EvmClient` seam: sessions, vaults, the
+ * A TypeScript model of `CoinnibalArena` + `CoinnibalNFT` behind the `EvmClient` seam: sessions, vaults, the
  * skip rules of `settle`, sweep ids, `Joined` logs and receipts. Tests poke its state directly.
  */
 export class FakeEvm implements EvmClient {
@@ -160,7 +160,7 @@ export class FakeEvm implements EvmClient {
   }
 
   /**
-   * `ElymumArena._ratesFor`: the holder pair for a wallet holding the holder NFT (`arenaHolders`, perks on) when it
+   * `CoinnibalArena._ratesFor`: the holder pair for a wallet holding the holder NFT (`arenaHolders`, perks on) when it
    * totals less than the normal pair, else the normal pair.
    */
   ratesFor(player: string): { burnBps: number; vaultBps: number } {
@@ -315,7 +315,7 @@ export class FakeEvm implements EvmClient {
         a.owed -= s.owed;
         this.closures.push({ name: 'Collected', arenaId, player: getAddress(from), sessionId: s.id, amount: s.owed });
       } else {
-        // ElymumArena.refund: an unsettled ticket 24 h after its join pays min(entryFee, vault)
+        // CoinnibalArena.refund: an unsettled ticket 24 h after its join pays min(entryFee, vault)
         if (this.nowS() < s.openedAt + 24 * 3600) throw revert('RefundTooEarly');
         const amount = s.entryFee < a.vault ? s.entryFee : a.vault;
         a.vault -= amount;
@@ -393,8 +393,8 @@ export class FakeEvm implements EvmClient {
       this.addTokens(to, amount);
     } else if (call.functionName === 'setPrice') {
       const [wei] = call.args as [bigint];
-      if (this.mint.keeper?.toLowerCase() !== this.address.toLowerCase()) throw revert('NotPriceSetter', [], elymumNFTAbi);
-      if (this.mint.maxPrice !== 0n && (wei < this.mint.minPrice || wei > this.mint.maxPrice)) throw revert('PriceOutOfBounds', [], elymumNFTAbi);
+      if (this.mint.keeper?.toLowerCase() !== this.address.toLowerCase()) throw revert('NotPriceSetter', [], coinnibalNFTAbi);
+      if (this.mint.maxPrice !== 0n && (wei < this.mint.minPrice || wei > this.mint.maxPrice)) throw revert('PriceOutOfBounds', [], coinnibalNFTAbi);
       this.mint.price = wei;
     }
     this.sent.push(call);
@@ -403,7 +403,7 @@ export class FakeEvm implements EvmClient {
     return hash;
   }
 
-  /** ElymumArena v3's fee on the profit of a settlement (the shared fee module mirrors the contract). */
+  /** CoinnibalArena v3's fee on the profit of a settlement (the shared fee module mirrors the contract). */
   feeOf(it: { arenaId: number; player: Address; payout: bigint }): { burned: bigint; toVault: bigint; net: bigint } {
     const s = this.sessions.get(`${it.arenaId}:${it.player.toLowerCase()}`);
     if (!s || s.finalized) return { burned: 0n, toVault: 0n, net: it.payout };

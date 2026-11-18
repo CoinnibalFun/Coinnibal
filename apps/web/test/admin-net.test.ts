@@ -113,29 +113,29 @@ describe('the deploy wizard steps', () => {
 
 describe('transaction preview content and gating', () => {
   it('describes a call (function, named and typed args) and a deploy (constructor args)', () => {
-    const p = previewOf({ title: 'fee', contract: 'ElymumArena', call: setFeeRatesCall(ARENA, { burnBps: 1500, vaultBps: 300 }) });
+    const p = previewOf({ title: 'fee', contract: 'CoinnibalArena', call: setFeeRatesCall(ARENA, { burnBps: 1500, vaultBps: 300 }) });
     expect(p).toMatchObject({ signature: 'setFeeRates(uint16,uint16)', functionName: 'setFeeRates', to: ARENA, valueText: null });
     expect(p.args).toEqual([
       { name: 'burnBps', type: 'uint16', value: '1500' },
       { name: 'vaultBps', type: 'uint16', value: '300' },
     ]);
-    const create = previewOf({ title: 'c', contract: 'ElymumArena', call: createArenaCall(ARENA, { id: 1, entryFee: 1000n * ONE, maxSessions: 300 }) });
+    const create = previewOf({ title: 'c', contract: 'CoinnibalArena', call: createArenaCall(ARENA, { id: 1, entryFee: 1000n * ONE, maxSessions: 300 }) });
     expect(create.args.map((a) => [a.name, a.value])).toEqual([
       ['id', '1'],
       ['entryFee', (1000n * ONE).toString()],
       ['maxSessions', '300'],
     ]);
-    const d = previewOf({ title: 'd', contract: 'ElymumArena', deploy: { name: 'ElymumArena', params: deployArenaParams({ admin: ALICE, serverAuthority: BOB, feeWallet: ALICE }) } });
+    const d = previewOf({ title: 'd', contract: 'CoinnibalArena', deploy: { name: 'CoinnibalArena', params: deployArenaParams({ admin: ALICE, serverAuthority: BOB, feeWallet: ALICE }) } });
     expect(d.signature).toBe('constructor(address,address,address)');
     expect(d.args.map((a) => a.name)).toEqual(['admin', 'serverAuthority', 'feeWallet']);
     expect(d.to).toBeNull();
   });
 
   it('refuses without a wallet, with chain blockers, or when the signer is not the owner', () => {
-    const plan = { title: 'fee', contract: 'ElymumArena', call: setFeeRatesCall(ARENA, { burnBps: 1500, vaultBps: 300 }), owner: ALICE };
+    const plan = { title: 'fee', contract: 'CoinnibalArena', call: setFeeRatesCall(ARENA, { burnBps: 1500, vaultBps: 300 }), owner: ALICE };
     expect(planRefusals(plan, { me: ALICE, blockers: [] })).toEqual([]);
     expect(planRefusals(plan, { me: null, blockers: [] })).toEqual(['Connect the owner wallet first.']);
-    expect(planRefusals(plan, { me: BOB, blockers: [] })[0]).toMatch(/Owner check: the connected wallet .* is not the ElymumArena owner/);
+    expect(planRefusals(plan, { me: BOB, blockers: [] })[0]).toMatch(/Owner check: the connected wallet .* is not the CoinnibalArena owner/);
     expect(planRefusals(plan, { me: ALICE, blockers: ['RPC mismatch'] })).toEqual(['RPC mismatch']);
   });
 });

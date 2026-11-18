@@ -43,7 +43,7 @@ export function allowlistWarnings(a: AllowlistStatus | null, onchainRoot: string
 }
 
 /**
- * `/admin → Mint`: the ElymumNFT owner's decisions (the phase switch, the price, the supply and
+ * `/admin → Mint`: the CoinnibalNFT owner's decisions (the phase switch, the price, the supply and
  * limits, withdraw), each through the transaction preview. Address fields (treasury, royalty
  * receiver, owner mint, keeper) sit under Advanced, prefilled.
  */
@@ -64,14 +64,14 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
     };
   }, [nft, ctx.client, ctx.status]);
 
-  if (!nft) return <Card title="No NFT yet" id="mint" tone="quiet" lede="Deploy ElymumNFT first (Setup). The mint has nothing to run until then." />;
+  if (!nft) return <Card title="No NFT yet" id="mint" tone="quiet" lede="Deploy CoinnibalNFT first (Setup). The mint has nothing to run until then." />;
   if (!s)
     return (
       <Card
         title={ctx.status?.nft?.code === 'mismatch' ? 'That is not our NFT' : 'Reading the NFT…'}
         id="mint"
         tone={ctx.status?.nft?.code === 'mismatch' ? 'danger' : 'quiet'}
-        lede={ctx.status?.nft?.code === 'mismatch' ? 'The code at the registered NFT address is not the bundled ElymumNFT.' : 'One moment: asking the chain.'}
+        lede={ctx.status?.nft?.code === 'mismatch' ? 'The code at the registered NFT address is not the bundled CoinnibalNFT (the code hash differs), so the server does not use it. Redeploy CoinnibalNFT from your wallet (Setup).' : 'One moment: asking the chain.'}
       />
     );
 
@@ -82,7 +82,7 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
   const open = (title: string, call: Plan['call'], extra: Partial<Plan> = {}) =>
     ctx.open({
       title,
-      contract: 'ElymumNFT',
+      contract: 'CoinnibalNFT',
       call,
       ownerOf: nft,
       owner: nftOwner,

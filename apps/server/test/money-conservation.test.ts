@@ -2,7 +2,7 @@
  * The money simulation (test/money-sim.ts) in the test suite: randomized rounds with every fault on, the
  * conservation checker after every chain pass, the drain at the end (no ticket left open, every ticket closed
  * exactly once, every vault down to its forfeits). On the contract model (fast, several seeds) and on a real
- * hardhat node with the real ElymumArena v3 (skipped when the node does not start). The long runs:
+ * hardhat node with the real CoinnibalArena v3 (skipped when the node does not start). The long runs:
  * `pnpm -F @elymum/server money-sim` (see scripts/money-sim.ts).
  */
 import { describe, expect, it } from 'vitest';
@@ -48,7 +48,7 @@ describe('money conservation under faults (simulation)', () => {
     }, 180_000);
   }
 
-  it('the real ElymumArena v3 on a hardhat node: the same checks', async (ctx) => {
+  it('the real CoinnibalArena v3 on a hardhat node: the same checks', async (ctx) => {
     const { hardhatSimChain } = await import('./money-sim-hardhat');
     let sim;
     try {

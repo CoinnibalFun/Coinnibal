@@ -17,7 +17,7 @@ const FEE = 1_000_000;
 const cfgOf = (extra: Partial<CustomRoomConfig> = {}): CustomRoomConfig => ({ ...CUSTOM_DEFAULTS, name: 'Whale Club', bots: 0, ...extra });
 const paid = (arenaId: number, extra: Partial<CustomRoomConfig> = {}) => cfgOf({ kind: 'paid', arenaId, ...extra });
 
-/** `from` pays `value` for a room in transaction `n` (`ElymumArena.pay`, the room request's ref); the create body's payment part. */
+/** `from` pays `value` for a room in transaction `n` (`CoinnibalArena.pay`, the room request's ref); the create body's payment part. */
 const payOf = (reader: PayChain, n: number, from: string, value: bigint) => reader.pay(n, from, { value });
 
 /** A manager with arenas 1 (1.0), 2 (10.0) and the holders-only 4 (250.0), and the custom-room service, on one hand-driven clock. */

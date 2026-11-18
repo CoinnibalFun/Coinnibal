@@ -107,8 +107,8 @@ function StepCrane() {
 /** Everything is deployed: the registered contracts, their explorer links and the code hash verdict. */
 function DoneCard({ ctx }: { ctx: ChainCtx }) {
   const rows: { name: string; address: string | null; code: string | undefined }[] = [
-    { name: 'ElymumArena', address: ctx.net.arenaAddress, code: ctx.status?.arena?.code },
-    { name: 'ElymumNFT', address: ctx.net.nftAddress, code: ctx.status?.nft?.code },
+    { name: 'CoinnibalArena', address: ctx.net.arenaAddress, code: ctx.status?.arena?.code },
+    { name: 'CoinnibalNFT', address: ctx.net.nftAddress, code: ctx.status?.nft?.code },
   ];
   return (
     <Card title="The ring is built." id="deploy-done" kicker="All seven steps" tone="done" lede="Both contracts are live and registered, the token is set and the four arenas exist. Launch shows what is left: the allowlist, the mint and who may play.">
@@ -236,7 +236,7 @@ function useAutoRegister(ctx: ChainCtx): string | null {
 function ArenaStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDeploys) => void; kicker: string }) {
   const [err, guard] = useFormError();
   return (
-    <Card title="Deploy ElymumArena" id="deploy-arena" kicker={kicker} lede="The arena holds the ticket money (one vault per room) and settles rounds with the server's key. Its fee comes from profit only: 15 % burned and 5 % to the fee wallet (NFT holders 8 % + 2 %, set by Finish setup); an unplayed ticket is refunded in full. Its constructor takes three addresses:">
+    <Card title="Deploy CoinnibalArena" id="deploy-arena" kicker={kicker} lede="The arena holds the ticket money (one vault per room) and settles rounds with the server's key. Its fee comes from profit only: 15 % burned and 5 % to the fee wallet (NFT holders 8 % + 2 %, set by Finish setup); an unplayed ticket is refunded in full. Its constructor takes three addresses:">
       <dl className="ad-kv ad-kv--args">
         <div>
           <dt className="mono">admin</dt>
@@ -266,9 +266,9 @@ function ArenaStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: Local
           guard(() => {
             const params = deployArenaParams(arenaDeployArgs(ctx.me, ctx.net.serverKey));
             ctx.open({
-              title: 'Deploy ElymumArena',
-              contract: 'ElymumArena',
-              deploy: { name: 'ElymumArena', params },
+              title: 'Deploy CoinnibalArena',
+              contract: 'CoinnibalArena',
+              deploy: { name: 'CoinnibalArena', params },
               onDone: async ({ address, hash }) => {
                 if (!address || !ctx.net.info) return;
                 onLocal(saveLocalDeploy(ctx.net.info.id, 'arena', { address, txHash: hash }));
@@ -311,7 +311,7 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
   }, [ctx.me]);
   const set = (k: keyof NftForm) => (v: string) => setForm({ ...form, [k]: v });
   return (
-    <Card title="Deploy ElymumNFT" id="deploy-nft" kicker={kicker} lede="The emblem contract. Everything below goes into its constructor; most of it can be changed later from Mint.">
+    <Card title="Deploy CoinnibalNFT" id="deploy-nft" kicker={kicker} lede="The emblem contract. Everything below goes into its constructor; most of it can be changed later from Mint.">
       <div className="ad-form ad-form--grid">
         <Input label="Max supply" value={form.maxSupply} onChange={set('maxSupply')} />
         <Input label={`Mint price (${GAS_SYMBOL})`} suffix={GAS_SYMBOL} value={form.priceGas} onChange={set('priceGas')} hint={quote ? `$1 at ${quote}` : 'From /api/admin/mint/price'} />
@@ -344,9 +344,9 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
           guard(() => {
             const params = deployNftParams(nftDeployArgs(form, ctx.me));
             ctx.open({
-              title: 'Deploy ElymumNFT',
-              contract: 'ElymumNFT',
-              deploy: { name: 'ElymumNFT', params },
+              title: 'Deploy CoinnibalNFT',
+              contract: 'CoinnibalNFT',
+              deploy: { name: 'CoinnibalNFT', params },
               onDone: async ({ address, hash }) => {
                 if (!address || !ctx.net.info) return;
                 onLocal(saveLocalDeploy(ctx.net.info.id, 'nft', { address, txHash: hash }));
@@ -382,7 +382,7 @@ function RegisterStep({ ctx, local, onLocal, kicker, autoErr }: { ctx: ChainCtx;
       {todo.length === 0 && <p className="ad-note">Nothing deployed from this browser is waiting. Deploy the missing contract first.</p>}
       {todo.map((k) => (
         <p key={k} className="ad-registered__row">
-          <span className="ad-registered__name">{k === 'arena' ? 'ElymumArena' : 'ElymumNFT'}</span> <Addr value={local[k]!.address} net={ctx.net} />
+          <span className="ad-registered__name">{k === 'arena' ? 'CoinnibalArena' : 'CoinnibalNFT'}</span> <Addr value={local[k]!.address} net={ctx.net} />
         </p>
       ))}
       <div className="ad-actions">
@@ -432,7 +432,7 @@ export function RegisterExisting({ ctx }: { ctx: ChainCtx }) {
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const address = /^0x[0-9a-fA-F]{40}$/.test(text.trim()) ? (text.trim() as Address) : null;
-  const NAMES: Record<ContractKind, string> = { arena: 'ElymumArena', nft: 'ElymumNFT', token: 'Game token / TestToken' };
+  const NAMES: Record<ContractKind, string> = { arena: 'CoinnibalArena', nft: 'CoinnibalNFT', token: 'Game token / TestToken' };
   return (
     <Card title="Register a contract that is already deployed" id="deploy-register-existing" lede="Deployed it but it does not show as registered? Paste its address. The server checks the code hash, that you own it, and for the arena that the server key settles it.">
       <div className="ad-choice" role="radiogroup" aria-label="Contract">
@@ -511,7 +511,7 @@ export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }
     if (refusal) throw new Error(refusal);
     ctx.open({
       title: 'Set the game token (once, forever)',
-      contract: 'ElymumArena',
+      contract: 'CoinnibalArena',
       call: setTokenCall(arena, token),
       ownerOf: arena,
       owner: cfg.admin,
@@ -606,7 +606,7 @@ export function DefaultArenas({ ctx, kicker }: { ctx: ChainCtx; kicker?: string 
           onClick={() =>
             ctx.open({
               title: `Create arena #${next.id} ${arenaName(next.id)}`,
-              contract: 'ElymumArena',
+              contract: 'CoinnibalArena',
               call: createArenaCall(arena, next),
               ownerOf: arena,
               owner: cfg.admin,

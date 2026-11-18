@@ -7,7 +7,7 @@ export interface PurchaseExpectation {
   token: string;
   /** The signed-in wallet that claims the purchase (any case). */
   from: string;
-  /** The arena contract the payment was made to (`ElymumArena.pay`, any case). */
+  /** The arena contract the payment was made to (`CoinnibalArena.pay`, any case). */
   arena: string;
   /** The payment ref: a pack's (`shopPaymentRef(kind)`), a cart's (`shopCartRef`) or a room request's (`customRoomPaymentRef`). */
   ref: string;

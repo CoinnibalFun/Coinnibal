@@ -20,7 +20,7 @@ export interface DevFakeChainActions {
   /** Sets the fake game token (like `setToken` from /admin); false when it was already set. */
   devSetToken(): boolean;
   /**
-   * "Mines" an `ElymumArena.pay` (the web's fake wallet buying power-ups): `tokenReceipt` of the returned hash
+   * "Mines" an `CoinnibalArena.pay` (the web's fake wallet buying power-ups): `tokenReceipt` of the returned hash
    * shows the token transfer to the arena and the `Paid` event. Null while the token is not set or an input is
    * malformed.
    */
@@ -215,7 +215,7 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
     const session = this.byKey.get(key);
     if (!session) return;
     const payout = item.payout ?? 0;
-    // the contract's fee on profit (`fees.ts`), as ElymumArena v3 would take it
+    // the contract's fee on profit (`fees.ts`), as CoinnibalArena v3 would take it
     const f = profitFee(session.entryFee, payout, session.rates);
     this.journal.remove(key);
     this.sessions.delete(`${session.arenaId}:${session.player.toLowerCase()}`);

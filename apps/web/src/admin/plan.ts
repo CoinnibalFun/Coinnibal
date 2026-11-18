@@ -1,5 +1,5 @@
 import { GAS_SYMBOL } from '@elymum/shared';
-import { describeCall, elymumArenaAbi, sendCall, type ContractCall, type DescribedArg } from '@elymum/sdk';
+import { describeCall, coinnibalArenaAbi, sendCall, type ContractCall, type DescribedArg } from '@elymum/sdk';
 import { ownerRefusal } from '@elymum/sdk/ops';
 import { formatEther, getAddress, type Abi, type Address, type Hash, type Hex, type PublicClient, type TransactionReceipt, type WalletClient } from 'viem';
 
@@ -8,7 +8,7 @@ import { formatEther, getAddress, type Abi, type Address, type Hash, type Hex, t
  * shown in the transaction preview (`TxPreview`) before the wallet opens; the preview runs the
  * owner and chain checks and guards against double clicks.
  */
-export type DeployName = 'ElymumArena' | 'ElymumNFT' | 'TestToken';
+export type DeployName = 'CoinnibalArena' | 'CoinnibalNFT' | 'TestToken';
 
 export interface DeployParams {
   abi: Abi | readonly unknown[];
@@ -25,7 +25,7 @@ export interface PlanResult {
 
 export interface Plan {
   title: string;
-  /** Contract name for the preview (`ElymumArena`, `ElymumNFT`, `ERC-20`). */
+  /** Contract name for the preview (`CoinnibalArena`, `CoinnibalNFT`, `ERC-20`). */
   contract: string;
   call?: ContractCall;
   deploy?: { name: DeployName; params: DeployParams };
@@ -86,7 +86,7 @@ export function previewOf(plan: Plan): PlanPreview {
 export const gasText = (wei: bigint): string => `${formatEther(wei)} ${GAS_SYMBOL}`;
 
 /**
- * The owner a deploy names: each bundled constructor (`ElymumArena(admin, …)`, `ElymumNFT(owner, …)`,
+ * The owner a deploy names: each bundled constructor (`CoinnibalArena(admin, …)`, `CoinnibalNFT(owner, …)`,
  * `TestToken(owner)`) takes it first. A deploy is a plain contract creation from the connected wallet (EOA CREATE,
  * no factory, no proxy), and that wallet must be this owner.
  */
@@ -120,7 +120,7 @@ export function planRefusals(plan: Plan, ctx: { me: Address | null; blockers: re
 
 /** The fresh `owner()` of an Ownable contract (both Elymum contracts share the function). */
 export async function readOwner(client: Pick<PublicClient, 'readContract'>, contract: Address): Promise<Address> {
-  return getAddress(await client.readContract({ address: contract, abi: elymumArenaAbi, functionName: 'owner' }));
+  return getAddress(await client.readContract({ address: contract, abi: coinnibalArenaAbi, functionName: 'owner' }));
 }
 
 /** What the wallet sends for a plan. */
