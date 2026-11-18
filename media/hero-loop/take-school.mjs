@@ -405,13 +405,22 @@ async function dropInFresh() {
 const cactusMap = new Map();
 const cacti = () => [...cactusMap.values()];
 /** A heading with room for the whole scene (no wall, no cactus on her path or at the prey's spot), or null. */
-/** Is the course from (x, y) along (hx, hy) clear for `len` (no wall, no cactus near it or the prey's spot)? */
-function laneClear(x0, y0, hx, hy, len, spot, R) {
+/**
+ * Is the course from (x, y) along (hx, hy) clear for `len` (no wall, no cactus near it or the prey's spot)? With
+ * `wide`, no cactus within the loop's frame either (12 radii by 7.5 around her): a cactus in the frame at one end
+ * of the loop and not at the other would cross-fade in or out at the seam.
+ */
+function laneClear(x0, y0, hx, hy, len, spot, R, wide = false) {
   for (let s = 0; s <= len; s += 100) {
     const x = x0 + hx * s, y = y0 + hy * s;
     if (x < room[0] + 1350 || y < room[1] + 1350 || x > room[2] - 1350 || y > room[3] - 1350) return false;
-    for (const [cx, cy, cr] of cacti()) if (Math.hypot(cx - x, cy - y) < R * 1.4 + cr * 1.3 + 150) return false;
+    for (const [cx, cy, cr] of cacti()) {
+      if (Math.hypot(cx - x, cy - y) < R * 1.4 + cr * 1.3 + 150) return false;
+      if (wide && Math.abs((cx - x) * hy - (cy - y) * hx) < R * 4.4 + cr && Math.abs((cx - x) * hx + (cy - y) * hy) < 120) return false;
+    }
   }
+  // (the frame also reaches six radii behind her at the start)
+  if (wide && cacti().some(([cx, cy, cr]) => { const al = (cx - x0) * hx + (cy - y0) * hy; return al < 0 && al > -R * 6 - cr && Math.abs((cx - x0) * hy - (cy - y0) * hx) < R * 4.4 + cr; })) return false;
   const px = x0 + hx * spot, py = y0 + hy * spot;
   return !cacti().some(([cx, cy, cr]) => Math.hypot(cx - px, cy - py) < cr * 1.3 + 400);
 }
@@ -419,27 +428,27 @@ function laneClear(x0, y0, hx, hy, len, spot, R) {
  * A course from where she is, near the horizontal (the frame is wide: the prey then comes in from the side, its
  * name tag clear of hers), or null.
  */
-function pickHeading(len, spot) {
+function pickHeading(len, spot, wide) {
   const R = radius(me.mass);
   let best = null;
   for (let k = -6; k <= 6; k++) for (const dir of [1, -1]) {
     const a = (k / 6) * 0.42;
     const hx = dir * Math.cos(a), hy = Math.sin(a);
-    if (!laneClear(me.wx, me.wy, hx, hy, len, spot, R)) continue;
+    if (!laneClear(me.wx, me.wy, hx, hy, len, spot, R, wide)) continue;
     const score = -Math.abs(a);
     if (!best || score > best.score) best = { hx, hy, score };
   }
   return best;
 }
 /** The nearest start of such a course: near one side of the pond, a lane across it with room. */
-function laneStart(len, spot) {
+function laneStart(len, spot, wide) {
   const R = radius(me.mass);
   let best = null;
   for (const dir of [1, -1]) for (const a of [0, 0.15, -0.15, 0.3, -0.3]) {
     const hx = dir * Math.cos(a), hy = Math.sin(a);
-    for (let y = room[1] + 1400; y <= room[3] - 1400; y += 250) {
+    for (let y = room[1] + 1400; y <= room[3] - 1400; y += 150) {
       const x = dir > 0 ? room[0] + 1400 : room[2] - 1400;
-      if (!laneClear(x, y, hx, hy, len, spot, R)) continue;
+      if (!laneClear(x, y, hx, hy, len, spot, R, wide)) continue;
       const d = Math.hypot(x - me.wx, y - me.wy) + Math.abs(a) * 800;
       if (!best || d < best.d) best = { x, y, d };
     }
@@ -474,6 +483,9 @@ try {
   const keep = keeper();
 
   let scene = 0, lastLog = 0, preyTurn = 0;
+  // first a survey: four passes across the pond, so every cactus is known before a lane is picked (her view
+  // only reaches so far; a lane through a cactus nobody has seen yet would put it in the loop's frame)
+  let survey = null;
   while (Date.now() - T0 < MINUTES * 60_000 && !existsSync(STOP)) {
     if (Date.now() - lastLog > 15000) {
       lastLog = Date.now();
@@ -481,6 +493,18 @@ try {
     }
     if ((await hero.screen()) !== 'playing') { rec.mark('hero-died'); await sleep(2500); await respawn(hero); continue; }
     if (raining) { await heroFor(1000, still); continue; }
+    if (!survey || survey.length) {
+      if (!survey) {
+        const ys = [0, 1, 2, 3].map((k) => room[1] + 1400 + (k * (room[3] - room[1] - 2800)) / 3);
+        survey = ys.flatMap((y, k) => (k % 2 ? [[room[2] - 1400, y], [room[0] + 1400, y]] : [[room[0] + 1400, y], [room[2] - 1400, y]]));
+        rec.mark('survey');
+      }
+      const [wx, wy] = survey[0];
+      await heroFor(3000, { mode: 'goto', wx, wy, split: false, margin: 300 }, async () => Math.hypot(wx - me.wx, wy - me.wy) < 300 || raining);
+      if (Math.hypot(wx - me.wx, wy - me.wy) < 300) survey.shift();
+      if (!survey.length) log(`survey done: ${cactusMap.size} cacti`);
+      continue;
+    }
     if (me.mass > HERO_MAX) { await dropInFresh(); continue; }
     if (me.mass < HERO_MIN) {
       const p0 = [me.wx, me.wy];
@@ -492,11 +516,14 @@ try {
     const R = radius(me.mass), v = speedOf(me.mass);
     const spot = v * LEAD + SPOT_R * R;
     const need = spot + v * 7.5 + 400;
-    const h = pickHeading(need, spot);
+    // a course with no cactus in the frame if there is one from here or from a lane start, else one clear of
+    // cacti on her path
+    const wideStart = laneStart(need, spot, true);
+    const h = pickHeading(need, spot, true) ?? (wideStart ? null : pickHeading(need, spot, false));
     if (!h) {
       // no room from here: over to the start of a lane across the pond (the school comes along), else toward
       // the middle for a while
-      const L = laneStart(need, spot);
+      const L = wideStart ?? laneStart(need, spot, false);
       if (L) await heroFor(20000, { mode: 'goto', wx: L.x, wy: L.y, noFood: true, split: false, margin: 300 }, async () => Math.hypot(L.x - me.wx, L.y - me.wy) < 150 || raining);
       else { const cx = midX(), cy = midY(), d = Math.hypot(cx - me.wx, cy - me.wy) || 1; await heroFor(2500, { ahead: [(cx - me.wx) / d, (cy - me.wy) / d] }); }
       continue;
