@@ -181,41 +181,121 @@ body {
   border-color: var(--outline);
   box-shadow: var(--sh-1);
 }
-/* the closed parts of the site stand together in one dashed outline under one Soon tag, drawn like the 404's unbuilt
-   terrace: planned, not built yet. Their names are not links (a pointer on one says what it will be) */
+/* the closed parts of the site: a quiet group after the open links, muted names and one Soon chip after them. Their
+   names are not links; a pointer or the keyboard's focus on one shows its tip (what it will be) */
 .st-soonset {
   display: inline-flex;
   align-items: center;
   gap: 0;
-  margin-left: 8px;
-  padding: 0 4px 0 9px;
-  min-height: 42px;
-  box-sizing: border-box;
-  border: 2px dashed var(--cyan-s);
-  border-radius: 12px;
+  margin-left: 10px;
+  padding-left: 10px;
+  /* a hairline between what is open and what is not */
+  border-left: 1.5px solid var(--rule);
 }
 .st-soonset__tag {
   flex: none;
-  padding: 2px 7px 3px;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.2;
-  color: var(--ink-fixed);
-  background: var(--sun);
-  border: 1.5px solid var(--outline);
-  border-radius: 6px;
+  margin-left: 4px;
+  padding: 3px 8px 4px;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0;
+  color: var(--sun-ink);
+  background: color-mix(in srgb, var(--sun) 26%, var(--paper));
+  border: 1.5px solid color-mix(in srgb, var(--sun-s) 60%, var(--paper));
+  border-radius: 999px;
+}
+.st-soonitem {
+  position: relative;
+  display: inline-flex;
 }
 .st-nav__link--soon,
 .st-nav__link--soon:hover {
   cursor: default;
-  color: var(--ink-2) !important;
+  color: var(--ink-3) !important;
   background: none;
   border-color: transparent;
   user-select: none;
 }
 .st-soonset .st-nav__link--soon {
-  min-height: 38px;
+  min-height: 40px;
   padding: 0 9px;
+  font-weight: 600;
+}
+.st-soonitem:hover .st-nav__link--soon {
+  color: var(--ink-2) !important;
+}
+.st-nav__link--soon:focus-visible {
+  outline: var(--stroke-sm) solid var(--teal-ink);
+  outline-offset: -2px;
+}
+/* the tip: a small ink label under the name, its notch pointing up at it */
+.st-tip {
+  position: absolute;
+  z-index: 40;
+  /* clear of the header's rule: the notch points up across it at the name */
+  top: calc(100% + 28px);
+  left: 50%;
+  width: max-content;
+  max-width: 380px;
+  padding: 8px 11px 9px;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  text-wrap: pretty;
+  color: var(--paper-fixed);
+  background: var(--ink-fixed);
+  border-radius: 10px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition:
+    opacity var(--dur-micro) linear,
+    transform var(--dur-micro) var(--ease-out),
+    visibility 0s linear var(--dur-micro);
+}
+.st-tip::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border-radius: 2px;
+  transform: translateX(-50%) rotate(45deg);
+}
+/* the last name's tip keeps inside the header's column (its right edge under the name's) */
+.st-soonitem--end .st-tip {
+  left: auto;
+  right: 0;
+  transform: translate(0, -4px);
+}
+.st-soonitem--end .st-tip::before {
+  left: auto;
+  right: 22px;
+  transform: rotate(45deg);
+}
+.st-soonitem:hover .st-tip,
+.st-soonitem:has(:focus-visible) .st-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition:
+    opacity var(--dur-micro) linear,
+    transform var(--dur-micro) var(--ease-out),
+    visibility 0s;
+}
+.st-soonitem--end:hover .st-tip,
+.st-soonitem--end:has(:focus-visible) .st-tip {
+  transform: none;
+}
+.st-soonitem[data-hush] .st-tip {
+  opacity: 0;
+  visibility: hidden;
 }
 /* on its own closed page: the brand's sun highlighter under the name (the place the visitor is at) */
 .st-nav__link--soon.is-here,
@@ -387,19 +467,18 @@ body {
 .st-menu__row:hover .st-menu__go--out {
   transform: rotate(-45deg) translateX(3px);
 }
-/* what is not open yet: the header's dashed outline and Soon tag, with what each part will be */
+/* what is not open yet: a calm tone-on-tone panel under the open links, the header's Soon chip at its head, and what
+   each part will be */
 .st-menu__soon {
-  position: relative;
   display: grid;
-  margin: 16px 4px 4px;
-  padding: 16px 12px 8px;
-  border: 2px dashed var(--cyan-s);
-  border-radius: 14px;
+  margin: 10px 0 2px;
+  padding: 12px 12px 6px;
+  background: color-mix(in srgb, var(--outline) 6%, var(--sticker));
+  border-radius: 12px;
 }
 .st-menu__soon > .st-soonset__tag {
-  position: absolute;
-  left: 12px;
-  top: -12px;
+  justify-self: start;
+  margin: 0 0 4px;
 }
 .st-menu .st-menu__soonrow {
   display: grid;
@@ -578,6 +657,9 @@ html.st-menu-open {
   .st-menu,
   .st-menu__scrim {
     animation: none;
+  }
+  .st-tip {
+    transition: none !important;
   }
   .st-head__home:hover .st-head__coin {
     transform: none;
