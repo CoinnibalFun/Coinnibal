@@ -188,7 +188,7 @@ export function TestTokenAdminCard({ ctx }: { ctx: ChainCtx }) {
     ctx.open({ title, contract: 'TestToken', call, ownerOf: token, owner, onDone: () => ctx.refresh() });
 
   return (
-    <Card title="TestToken faucet" id="test-token-admin" kicker="Testnet only" lede="The faucet players use on /faucet. Only the TestToken owner mints; the game server never does.">
+    <Card title="TestToken faucet" id="test-token-admin" kicker="Testnet only" lede="The faucet players use on /faucet. It gives test tokens only, never ETH: players get gas from the network's official faucet. Only the TestToken owner mints; the game server never does.">
       <dl className="ad-kv">
         <Row label="Token">
           <Addr value={token} net={ctx.net} /> <span className={`ad-code mono${tt.code === 'ok' ? ' is-ok' : ' is-bad'}`}>{tt.code === 'ok' ? 'TestToken' : `code ${tt.code}`}</span>
