@@ -205,12 +205,12 @@ describe('Deploy wizard', () => {
     const ctx = ctxOf({ api, net: resolveNetwork(chainStatus({ arenaAddress: ARENA })), status: { arena: { code: 'ok', config: { token: null }, arenas: [] }, nft: null } as unknown as StatusSnapshot });
     ui(<DeployTab ctx={ctx} />);
     await waitFor(() => expect((screen.getByLabelText(/Mint price/) as HTMLInputElement).value).toBe('0.03'));
-    expect((screen.getByLabelText('Max supply') as HTMLInputElement).value).toBe('5000');
+    expect((screen.getByLabelText('Max supply') as HTMLInputElement).value).toBe('3333');
     expect((screen.getByLabelText(/Base URI/) as HTMLInputElement).value).toBe(`${location.origin}/api/nft/`);
     act(() => screen.getByTestId('deploy-nft').click());
     const p = ctx.plans[0];
     expect(p.deploy?.name).toBe('ElymumNFT');
-    expect(p.deploy?.params.args).toEqual([ALICE, 5000, 30_000_000_000_000_000n, 1, 2, `${location.origin}/api/nft/`, ALICE]);
+    expect(p.deploy?.params.args).toEqual([ALICE, 3333, 30_000_000_000_000_000n, 1, 2, `${location.origin}/api/nft/`, ALICE]);
     await p.onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: NFT as `0x${string}` });
     expect(registerContract).toHaveBeenCalledWith({ kind: 'nft', address: NFT, txHash: HASH });
   });
@@ -357,7 +357,7 @@ describe('Setup with the contracts registered', () => {
 });
 
 describe('Mint tab', () => {
-  const state = { phase: 0, phaseName: 'closed', price: 30_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'0'.repeat(64)}`, maxSupply: 5000, totalSupply: 0, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
+  const state = { phase: 0, phaseName: 'closed', price: 30_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'0'.repeat(64)}`, maxSupply: 3333, totalSupply: 0, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
   const mintCtx = (api: Partial<AdminApi>, gameAccess = 'admins', gameAccessEnv: string | null = null) =>
     ctxOf({
       api: { settings: vi.fn(async () => ({ settings: { gameAccess }, gameAccessEnv })), allowlist: vi.fn(async () => ({ snapshot: null, diff: { added: [], removed: [] }, onchainRoot: null, published: false })), mintPrice: vi.fn(async () => ({ gasUsd: 33.3, targetUsdCents: 100, priceWei: '30000000000000000', fetchedAt: 1 })), ...api } as unknown as AdminApi,
@@ -453,7 +453,7 @@ describe('Mint and Game: only the owner decisions up front', () => {
   const outsideAdvanced = () => [...document.querySelectorAll('input')].filter((i) => !i.closest('details[data-advanced]') && i.type !== 'radio' && i.type !== 'checkbox').map((i) => i.labels?.[0]?.textContent ?? i.getAttribute('aria-label'));
 
   it('Mint: limits and supply up front; treasury, royalty, owner mint, keeper and base URI under Advanced (prefilled)', () => {
-    const state = { phase: 0, phaseName: 'closed', price: 30_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'0'.repeat(64)}`, maxSupply: 5000, totalSupply: 0, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
+    const state = { phase: 0, phaseName: 'closed', price: 30_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'0'.repeat(64)}`, maxSupply: 3333, totalSupply: 0, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
     ui(<MintTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT })), status: { nft: { address: NFT, code: 'ok', balance: 0n, state } } as unknown as StatusSnapshot })} />);
     expect(outsideAdvanced()).toEqual(['Allowlist per wallet', 'Public per wallet', 'Max supply (minted: 0)']);
     expect((screen.getByTestId('mint-advanced') as HTMLDetailsElement).open).toBe(false);
@@ -491,6 +491,15 @@ describe('Game: who may play', () => {
     await settle();
     expect(saveSettings).toHaveBeenCalledWith({ gameAccess: 'public' });
     expect(settingsChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the arena and, off mainnet, the test-token faucet (both hidden from visitors while only admins play)', () => {
+    const view = ui(<GameTab ctx={ctxOf()} />);
+    expect(screen.getByRole('link', { name: 'Open the arena as admin' }).getAttribute('href')).toBe('/play');
+    expect(screen.getByTestId('admin-faucet-link').getAttribute('href')).toBe('/faucet');
+    view.unmount();
+    ui(<GameTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, arenaAddress: null })) })} />);
+    expect(screen.queryByTestId('admin-faucet-link')).toBeNull();
   });
 });
 

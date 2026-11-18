@@ -12,6 +12,7 @@ import { sendWalletCall, txErrorText, type TxPhase } from '../../wallet/tx';
 import { useT, type TKey } from '../../i18n';
 import { b, em, T } from '../../i18n/rich';
 import { site } from '../api';
+import { readStoredSession } from '../storedSession';
 import { useDoors } from '../doors';
 import { isTestnetChain, useServerChain } from '../serverChain';
 import { SiteLinkButton, SitePage } from '../Shell';
@@ -96,7 +97,7 @@ function Faucet() {
   useEffect(() => {
     if (testnet !== true) return;
     let live = true;
-    site.faucet().then(
+    site.faucet(readStoredSession()?.token).then(
       (f) => {
         if (!live) return;
         setServed(f);

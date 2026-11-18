@@ -176,7 +176,9 @@ describe('faucet config (GET /api/site/faucet)', () => {
     writeFileSync(join(chainDir(dir, 46630), 'contracts.json'), JSON.stringify({ arena: null, nft: record(NFT, 46630), token: record(TOKEN, 46630) }));
     const t = await start(dir, 46630);
     t.evm.faucet.holderNft = NFT;
-    const f = (await t.call('GET', '/api/site/faucet')).body;
+    // while only admins play (the launch default) the faucet answers the admin only, like the site's /faucet page
+    expect((await t.call('GET', '/api/site/faucet')).body).toMatchObject({ error: 'game_closed' });
+    const f = (await t.call('GET', '/api/site/faucet', { wallet: ADMIN })).body;
     expect(f).toEqual({
       enabled: true,
       chainId: 46630,
@@ -193,12 +195,12 @@ describe('faucet config (GET /api/site/faucet)', () => {
 
   it('off without a token, and on mainnet', async () => {
     const t = await start(mkdtempSync(join(tmpdir(), 'elymum-app-')), 46630);
-    expect((await t.call('GET', '/api/site/faucet')).body).toMatchObject({ enabled: false, token: null, amount: null });
+    expect((await t.call('GET', '/api/site/faucet', { wallet: ADMIN })).body).toMatchObject({ enabled: false, token: null, amount: null });
     const dir = mkdtempSync(join(tmpdir(), 'elymum-app-'));
     mkdirSync(chainDir(dir, 4663), { recursive: true });
     writeFileSync(join(chainDir(dir, 4663), 'contracts.json'), JSON.stringify({ arena: null, nft: null, token: record(TOKEN, 4663) }));
     const m = await start(dir, 4663);
-    expect((await m.call('GET', '/api/site/faucet')).body).toMatchObject({ enabled: false, chainId: 4663, token: TOKEN });
+    expect((await m.call('GET', '/api/site/faucet', { wallet: ADMIN })).body).toMatchObject({ enabled: false, chainId: 4663, token: TOKEN });
   });
 });
 
