@@ -270,6 +270,7 @@ export function SiteFooter() {
           <p className="st-foot__eco">
             <T k="site.foot.eco" tags={{ strong }} vars={{ chain: plainChainName(activeChain().name) }} />
           </p>
+          <p className="st-foot__safety">{t('site.foot.safety')}</p>
         </div>
         <nav className="st-foot__links" aria-label={t('site.foot.nav')}>
           <a href={xProfile(handle)} target="_blank" rel="noreferrer" className="st-foot__x">
@@ -284,7 +285,6 @@ export function SiteFooter() {
         <p className="st-foot__small mono">
           <span>Coinnibal · 2026</span>
           <span>{siteHost()}</span>
-          <span>{t('site.foot.safety')}</span>
         </p>
       </div>
       {/* the front terraces under the footer's text (in the flow, so the text never runs onto the ground) */}

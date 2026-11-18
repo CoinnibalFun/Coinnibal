@@ -1,11 +1,11 @@
 import { describeError, encodeCall, getMintState, getMintedBy, mintAllowlistCall, mintPublicCall, mintValue, type MintState as ChainMintState } from '@coinnibal/sdk';
-import type { ChainStatus, MintContractState, MintProofResponse, MintState, WlEntryPublic } from '@coinnibal/shared';
+import { activeChain, type ChainStatus, type MintContractState, type MintProofResponse, type MintState, type WlEntryPublic } from '@coinnibal/shared';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Address, Hash, Hex } from 'viem';
 import { AddressChip, ArcGauge, Button, CoinCharacter, FoodBit, GasAmount, Icon, QuantityStepper, useMoves, useReducedMotion } from '../../design';
 import { SERVER } from '../../config';
-import { intlLocale, useT, type TKey } from '../../i18n';
+import { intlLocale, plainChainName, useT, type TKey } from '../../i18n';
 import { renderRich } from '../../i18n/rich';
 import { explorerTx } from '../../wallet/links';
 import { fetchServerChain, publicClientFor } from '../../wallet/network';
@@ -485,7 +485,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
         ) : (
           t('mn.tick.napping')
         )}
-        {t('mn.tick.gas')}
+        {t('mn.tick.gas', { chain: plainChainName(activeChain().name) })}
       </p>
     </div>
   );
@@ -499,7 +499,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
         <div className="mt-card__head">
           <span className="kicker mt-card__kick">{t('mn.na.status')}</span>
           <h2 className="mt-card__h display">{t('mn.na.h')}</h2>
-          <p>{t('mn.na.body')}</p>
+          <p>{t('mn.na.body', { chain: plainChainName(activeChain().name) })}</p>
         </div>
         <dl className="mt-facts">
           <div>
@@ -638,7 +638,9 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
     );
   }
 
-  const kicker = c ? t('mn.kickerSupply', { n: fmt(c.maxSupply) }) : t('mn.kicker');
+  // visitor copy names the network plainly (no "Testnet"; the wallet shows the exact network)
+  const chainName = plainChainName(activeChain().name);
+  const kicker = c ? t('mn.kickerSupply', { n: fmt(c.maxSupply) }) : t('mn.kicker', { chain: chainName });
 
   return (
     <NightPlate>
@@ -661,7 +663,7 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
             {t('mn.about.h')}
           </h2>
           <ul className="mt-about__list">
-            <li>{c ? t('mn.about.supply', { n: fmt(c.maxSupply) }) : t('mn.about.supplyUnknown')}</li>
+            <li>{c ? t('mn.about.supply', { n: fmt(c.maxSupply), chain: chainName }) : t('mn.about.supplyUnknown', { chain: chainName })}</li>
             <li>{t('mn.about.art')}</li>
             <li>{c ? t('mn.about.order', { wl: c.wlLimit, pub: c.publicLimit }) : t('mn.about.orderUnknown')}</li>
           </ul>

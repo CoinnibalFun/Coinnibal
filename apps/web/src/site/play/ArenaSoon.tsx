@@ -39,7 +39,7 @@ export function ArenaSoon({ holders = false, maintenance = false, onSignedIn }: 
   }, [closed, t]);
   return (
     <SitePage className="pg-root">
-      <PlateLabel numeral="III" title={holders ? t('pg.plateHolders') : maintenance ? t('pg.plateMaint') : t('pg.plate')} aside="/play" className="pg-platelabel" />
+      <PlateLabel numeral="III" title={holders ? t('pg.plateHolders') : maintenance ? t('pg.plateMaint') : t('pg.plate')} className="pg-platelabel" />
       <Kb theme="night" className="pg-night">
         <RingScene time="night" variant="full" className="pg-scene">
           <div className="pg-wrap">
