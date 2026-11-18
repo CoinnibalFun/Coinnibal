@@ -112,7 +112,7 @@ describe('/wl', { timeout: 30_000 }, () => {
     act(() => useSession.setState({ session: { address: WALLET, token: 'tok', admin: false } }));
     await waitFor(() => expect((screen.getByRole('button', { name: 'Join the WL' }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: 'Join the WL' }));
-    await screen.findByRole('heading', { name: "You're in the queue." });
+    await screen.findByRole('heading', { name: 'You’re in the queue.' });
     expect(sent).toEqual({ xHandle: 'riso_rita', answers: { follow_x: true, post_x: POST, t_join: true, t_text: 'Coins.' } });
     expect(screen.getByTestId('wl-status').textContent).toBe('pending');
   });
@@ -134,7 +134,7 @@ describe('/wl', { timeout: 30_000 }, () => {
   });
 
   it.each([
-    ['approved', "You're on the list."],
+    ['approved', 'You’re on the list.'],
     ['rejected', 'Not this time.'],
   ] as const)('shows a returning applicant their status (%s)', async (status, title) => {
     ({ restore } = mockFetch({
@@ -148,25 +148,22 @@ describe('/wl', { timeout: 30_000 }, () => {
     expect(screen.getByTestId('wl-status').textContent).toBe(status);
   });
 
-  it('when the WL is off: the site\'s shared closed notice (guide, home, X), the tab says so, and an earlier applicant can still sign in', async () => {
+  it('when the WL is off: the site\'s shared closed notice (guide, home, X) with the Soon stamp, the tab says so, and no sign-in for a WL that never opened', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false } }, 'GET /api/site/tasks': { tasks: TASKS } }));
     document.title = 'WL · Coinnibal';
     const view = render(<WlPage />);
     expect(await screen.findByRole('heading', { level: 1, name: "The WL isn’t open yet" })).toBeTruthy();
     expect(screen.getByTestId('closed-page')).toBeTruthy();
-    expect(screen.getByText("This is where you'll apply for the whitelist. For now, the guide explains how the game works.")).toBeTruthy();
+    expect(screen.getByText('This is where you’ll apply for the whitelist. Watch @coinnibalfun for the day it opens.')).toBeTruthy();
+    expect(document.querySelector('.cl-soon')?.textContent).toBe('Soon');
     expect(document.querySelector('.kb-plate')).toBeNull();
     expect(screen.getByRole('link', { name: /Read the guide/ }).getAttribute('href')).toBe('/docs');
     expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
     expect(screen.getAllByRole('link', { name: /@coinnibalfun/ })[0].getAttribute('href')).toBe('https://x.com/coinnibalfun');
     expect(document.title).toBe('Not open yet · Coinnibal');
-    // the sign-in (and its "install a wallet" line) only after a click on "Applied before?"
-    expect(document.body.textContent).not.toMatch(/MetaMask|No browser wallet/);
-    const again = screen.getByRole('button', { name: 'Applied before? Sign in' });
-    expect(again.getAttribute('aria-expanded')).toBe('false');
-    fireEvent.click(again);
-    expect(again.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByText('Sign in with the wallet you applied with to see your status.')).toBeTruthy();
+    // nobody can have applied to a WL that never opened: no "Applied before?" and no wallet sign-in
+    expect(screen.queryByRole('button', { name: /Applied before/ })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Applied before|MetaMask|No browser wallet/);
     view.unmount();
     expect(document.title).toBe('WL · Coinnibal');
   });

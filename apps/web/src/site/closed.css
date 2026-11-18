@@ -19,15 +19,10 @@
   z-index: 1;
 }
 .cl__sign {
-  /* on the coin's left: its sleep Zs float up on the right, and the tag never covers them or the head */
+  /* on the coin's left: its sleep Zs float up on the right, and the stamp never covers them or the head */
   position: absolute;
-  right: calc(50% + 58px);
-  top: 30px;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  right: calc(50% + 60px);
+  top: 40px;
 }
 .cl__card {
   width: 100%;

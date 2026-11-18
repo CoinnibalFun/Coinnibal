@@ -192,6 +192,8 @@ export interface DocsContent {
   /** The fee rates on profit the guide quotes: the server's (`ChainStatus.fees`), else the contract defaults. */
   rates: FeeRates;
   backToTop: string;
+  /** The guide's last word, beside "Back to top": the official links and the seed-phrase rule, and the X account. */
+  closing: { lines: string[]; follow: string; href: string };
   sections: DocSection[];
   /** Formats a percentage given in basis points (`500` → `%5` / `5%`). */
   pct: (bps: number) => string;

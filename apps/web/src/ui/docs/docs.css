@@ -602,11 +602,46 @@
   color: var(--ink-2);
 }
 
-/* back to top */
+/* the guide's last word: the links to trust and the seed-phrase rule on a calm panel (read, not pressed), with the X
+   account and the way back up beside it */
 .dc-foot {
-  display: flex;
-  justify-content: flex-start;
-  margin-top: clamp(40px, 5vw, 64px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px 32px;
+  /* the chapters' gap is a big pause; the closing word follows the last table at a smaller one */
+  margin-top: calc(48px - clamp(56px, 7vw, 96px));
+  padding: 22px 24px;
+  background: color-mix(in srgb, var(--cream) 85%, var(--paper));
+  border-radius: 18px;
+}
+.dc-close {
+  display: grid;
+  gap: 8px;
+}
+.dc-close__line {
+  margin: 0;
+  max-width: 46em;
+  text-wrap: pretty;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.dc-close__line:last-child {
+  font-weight: 600;
+  color: var(--ink);
+}
+.dc-close__x {
+  white-space: nowrap;
+}
+.dc-foot .dc-top {
+  justify-self: start;
+}
+@media (max-width: 719px) {
+  .dc-foot {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 18px 20px;
+  }
 }
 .dc-top {
   display: inline-flex;
@@ -637,6 +672,7 @@
 .dc-top__icon {
   transform: rotate(-90deg);
 }
+
 
 /* ── narrow screens ───────────────────────────────────────────────── */
 /* small laptops: a slimmer margin for the contents, still sticky */

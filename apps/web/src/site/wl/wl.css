@@ -751,21 +751,6 @@
   }
 }
 
-/* ── closed: the site's shared closed notice (Closed.tsx), with the way back to an earlier entry ── */
-.wl-closed__again {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 2px dashed var(--rule);
-}
-.wl-closed__again .wl-signin-card {
-  width: 100%;
-  box-sizing: border-box;
-  text-align: left;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .wl-ascent__ring,
   .wl-tick.is-on .wl-tick__box {
