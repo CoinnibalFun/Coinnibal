@@ -62,9 +62,10 @@ function seam(a, T) {
 function covered(t0, t1) {
   for (let i = at(t0); i < tele.length && tele[i].t <= t1; i++) {
     const s = tele[i], b = boxAt(s.t);
-    const [vx, vy, vh] = s.view, vw = vh * ASPECT, [ww, wh] = s.world;
+    const [vx, vy, vh] = s.view, vw = vh * ASPECT;
+    const [X0, Y0, X1, Y1] = s.bounds ?? [0, 0, ...s.world];
     if (b.x0 < vx - vw / 2 + 60 || b.x1 > vx + vw / 2 - 60 || b.y0 < vy - vh / 2 + 60 || b.y1 > vy + vh / 2 - 60) return false;
-    if (b.x0 < 40 || b.y0 < 40 || b.x1 > ww - 40 || b.y1 > wh - 40) return false;
+    if (b.x0 < X0 + 40 || b.y0 < Y0 + 40 || b.x1 > X1 - 40 || b.y1 > Y1 - 40) return false;
     if (s.rain) return false;
   }
   return true;
@@ -124,7 +125,8 @@ for (const cr of marks.filter((m) => m.label === 'cruise')) {
     const cac = cactusIn(a - FADE, a) + cactusIn(b - FADE, b);
     const cut = cactusIn(a, b);
     const { mean, six } = crowd(a, b);
-    const score = Math.min(mean, 9) * 0.8 + six * 3 + Math.min(seen, 3) * 0.6 - s1.cost * 25 - s1.odd * 4 - cac * 0.3 - cut * 0.02 - off * 4;
+    // a cactus at the seam would cross-fade with itself somewhere else: as bad as a coin that differs
+    const score = Math.min(mean, 9) * 0.8 + six * 3 + Math.min(seen, 3) * 0.6 - s1.cost * 25 - s1.odd * 4 - cac * 0.6 - cut * 0.01 - off * 4;
     cands.push({ n: cr.n, score: +score.toFixed(2), a: +a.toFixed(2), b: +b.toFixed(2), T, gulpAt: +(g.t - a).toFixed(2), seam: +s1.cost.toFixed(3), odd: +s1.odd.toFixed(2), crowd: +mean.toFixed(1), six: +six.toFixed(2), preySeen: +seen.toFixed(1), off: +off.toFixed(2), cactusSeam: cac, cactus: cut, heroMass: cr.heroMass, preyMass: cr.preyMass, g: g.t });
   }
 }

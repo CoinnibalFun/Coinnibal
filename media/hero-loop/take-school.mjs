@@ -36,7 +36,7 @@ const PERIOD = Number(opt('--period', '8.6'));
 const HERO_MIN = Number(opt('--hero-min', '240'));
 const HERO_MAX = Number(opt('--hero-max', '430'));
 // the school stays smaller than a cactus (a coin bigger than one pops on it)
-const ESC_MIN = 26, ESC_MAX = 110;
+const ESC_MIN = 22, ESC_MAX = 110;
 const PREY_MIN = 40, PREY_MAX = 95;
 /** Goldie's sway (radians each way). */
 const SWAY = (Number(opt('--sway', '8')) * Math.PI) / 180;
@@ -95,7 +95,7 @@ function heroHelpers() {
       else if (e.kind === 4) cacti.push([Math.round(e.x), Math.round(e.y), Math.round(e.r)]);
     }
     const rain = !!ui.banner && ui.banner.kind === 'coinrain' && ui.banner.until > Date.now();
-    return { t: Date.now() / 1000, screen: ui.screen, pid: w.myPid, me: m ? [Math.round(m.x), Math.round(m.y), Math.round(m.mass)] : null, view: [Math.round(w.serverView.x), Math.round(w.serverView.y), Math.round(w.serverView.h)], world: [w.width, w.height], rain: rain ? 1 : 0, cells, cacti };
+    return { t: Date.now() / 1000, screen: ui.screen, pid: w.myPid, me: m ? [Math.round(m.x), Math.round(m.y), Math.round(m.mass)] : null, view: [Math.round(w.serverView.x), Math.round(w.serverView.y), Math.round(w.serverView.h)], world: [w.width, w.height], bounds: [w.x0, w.y0, w.x0 + w.width, w.y0 + w.height], rain: rain ? 1 : 0, cells, cacti };
   };
   /** Steers at the point where she meets `pid` (its velocity from the snapshots), or straight at it once close. */
   window.__intercept = (pid, reach) => {
@@ -158,7 +158,8 @@ function escHelpers() {
     let d = Math.atan2(ty - gy, tx - gx) - angA;
     while (d > Math.PI) d -= TAU;
     while (d < -Math.PI) d += TAU;
-    const ang = angA + Math.sign(d) * Math.min(Math.abs(d), 1.0), rad = Math.max(da, safe * 1.2);
+    // round her on a circle just outside `safe` (from far away: in toward it while turning)
+    const ang = angA + Math.sign(d) * Math.min(Math.abs(d), 1.0), rad = Math.min(da, safe * 1.3);
     return [gx + Math.cos(ang) * rad, gy + Math.sin(ang) * rad];
   };
   window.__esc.state = () => {
@@ -223,6 +224,15 @@ function escHelpers() {
     }
     if (tx == null) return;
     if (gx != null && (c.mode === 'slot' || c.mode === 'goto')) [tx, ty] = around(tx, ty, m.x, m.y, gx, gy, R * 1.6 + Math.sqrt(m.mass) * 10 + 60);
+    if (c.mode === 'slot' || c.mode === 'goto') {
+      // and clear of the other small coins (one 1.25 times the other's mass would eat it)
+      const mr = Math.sqrt(m.mass) * 10, mine = w.myPid;
+      for (const en of w.entities.values()) {
+        if (en.kind !== 1 || en.playerId === mine || (hg && en.playerId === hg.pid) || en.dying) continue;
+        const dx = m.x - en.x, dy = m.y - en.y, dd = Math.hypot(dx, dy) || 1, near = mr + en.r + 170;
+        if (dd < near) { tx += (dx / dd) * (near - dd) * 2; ty += (dy / dd) * (near - dd) * 2; }
+      }
+    }
     const p = e.camera.toScreen(tx, ty);
     e.input.mouse = { x: p.x, y: p.y, active: true };
   }, 33);
@@ -299,8 +309,8 @@ async function keeper() {
       // the band during the next one starts fresh)
       // (relative caps only once she is big: while she regrows they would only churn)
       const big = me.mass >= HERO_MIN * 0.9;
-      const cap = o.role === 'school' ? Math.min(ESC_MAX, big ? me.mass * 0.42 : ESC_MAX) : Math.min(PREY_MAX, big ? me.mass / 2.8 : PREY_MAX);
-      if (!sceneOn && o.pos.mass > Math.max(cap * 0.8, (o.role === 'school' ? ESC_MIN : PREY_MIN) * 1.6)) { dropInFreshOther(o).catch((e) => { o.busy = false; log(`${o.o.name}: reset failed ${e.message}`); }); continue; }
+      const cap = o.role === 'school' ? Math.min(ESC_MAX, big ? me.mass * 0.5 : ESC_MAX) : Math.min(PREY_MAX, big ? me.mass / 2.8 : PREY_MAX);
+      if (!sceneOn && o.pos.mass > Math.max(cap * (o.role === 'school' ? 0.85 : 1), (o.role === 'school' ? ESC_MIN : PREY_MIN) * 1.6)) { dropInFreshOther(o).catch((e) => { o.busy = false; log(`${o.o.name}: reset failed ${e.message}`); }); continue; }
       // light ones graze (and keep near goldie); the school holds its spots between scenes too
       const min = o.role === 'school' ? ESC_MIN : PREY_MIN;
       // nobody grazes in coin rain or while goldie grows up again (the floor is rich: they would soon be too
@@ -308,9 +318,10 @@ async function keeper() {
       const hold = raining || (o.role === 'school' && me.mass < HERO_MIN * 0.9);
       if (hold) {
         if (o.mode !== 'hold') { o.mode = 'hold'; await setCfg(o, { mode: 'brain', brain: { mode: 'still' } }); }
-      } else if (o.pos.mass < min) {
+      } else if (o.pos.mass < min || (sceneOn && o.mode === 'graze')) {
+        // (one that is still grazing when a scene starts grazes on, well clear of her frame, until it ends)
         const d = Math.hypot(o.pos.wx - me.wx, o.pos.wy - me.wy);
-        const want = d > 2600 ? { mode: 'brain', brain: { mode: 'goto', wx: me.wx, wy: me.wy, noCells: true, margin: 900, splitMargin: 0 } } : { mode: 'brain', brain: { mode: 'free', humans: 0, noCells: true, margin: 900, splitMargin: 0 } };
+        const want = d > 2600 ? { mode: 'brain', brain: { mode: 'goto', wx: me.wx, wy: me.wy, noCells: true, margin: 1500, splitMargin: 0 } } : { mode: 'brain', brain: { mode: 'free', humans: 0, noCells: true, margin: 1500, splitMargin: 0 } };
         if (o.mode !== 'graze' || Date.now() - (o.cfgAt ?? 0) > 2000) { o.mode = 'graze'; o.cfgAt = Date.now(); await setCfg(o, want); }
       } else if (o.role === 'school' && o.mode !== 'slot') {
         o.mode = 'slot';
@@ -329,15 +340,17 @@ async function keeper() {
   }
 }
 
-let room = [6800, 6800];
-const clampW = (v, k, m = 900) => Math.max(m, Math.min(room[k] - m, v));
+/** The pond's floor (world units: x0, y0, x1, y1; it grows with the number of players). */
+let room = [0, 0, 6800, 6800];
+const clampW = (v, k, m = 900) => Math.max(room[k] + m, Math.min(room[k + 2] - m, v));
+const midX = () => (room[0] + room[2]) / 2, midY = () => (room[1] + room[3]) / 2;
 let heading = [1, 0];
 let swayT0 = Date.now() / 1000;
 const drifts = SCHOOL.map(([name]) => {
   const r = rng(name.split('').reduce((s, c) => s * 31 + c.charCodeAt(0), 7));
   return [0.22 + 0.16 * r(), r() * 6.283, 0.06 + 0.07 * r(), r() * 6.283, 0.2 + 0.16 * r(), r() * 6.283, 0.05 + 0.07 * r(), r() * 6.283];
 });
-const slotCfg = (o, extra = {}) => ({ mode: 'slot', u: SLOTS[o.i][0], v: SLOTS[o.i][1], hx: heading[0], hy: heading[1], t0: swayT0, T: PERIOD, drift: drifts[o.i], flinch: null, ...extra });
+const slotCfg = (o, extra = {}) => ({ mode: 'slot', u: SLOTS[o.slot ?? o.i][0], v: SLOTS[o.slot ?? o.i][1], hx: heading[0], hy: heading[1], t0: swayT0, T: PERIOD, drift: drifts[o.i], flinch: null, ...extra });
 
 /** goldie steers by `fn` until `until()` or `ms`; `fn` returns { ahead: [hx, hy] } | { intercept: pid } | brain options. */
 async function heroFor(ms, fn, until) {
@@ -364,7 +377,8 @@ async function heroFor(ms, fn, until) {
   return 'time';
 }
 const forage = () => ({ mode: 'free', humans: 0, noCells: true, margin: 300, splitMargin: 0, split: false });
-const still = { mode: 'still' };
+// (split: false: the kit's brain would otherwise point her at a small coin in reach, even when still)
+const still = { mode: 'still', split: false };
 
 /** Back to the lobby and into the pond again: a fresh 20-mass coin. */
 async function dropInFresh() {
@@ -391,14 +405,15 @@ function pickHeading(len, spot) {
     let ok = true;
     for (let s = 0; s <= len && ok; s += 100) {
       const x = me.wx + hx * s, y = me.wy + hy * s;
-      if (x < 1350 || y < 1350 || x > room[0] - 1350 || y > room[1] - 1350) ok = false;
+      if (x < room[0] + 1350 || y < room[1] + 1350 || x > room[2] - 1350 || y > room[3] - 1350) ok = false;
       for (const [cx, cy, cr] of cacti()) if (Math.hypot(cx - x, cy - y) < R * 1.4 + cr * 1.3 + 150) ok = false;
     }
     if (!ok) continue;
     const px = me.wx + hx * spot, py = me.wy + hy * spot;
     if (cacti().some(([cx, cy, cr]) => Math.hypot(cx - px, cy - py) < cr * 1.3 + 400)) continue;
-    // the frame is wide: a course near the horizontal reads best
-    const score = hx * hx + (k % 2 ? 0 : 0.01);
+    // the frame is wide: a course near the horizontal reads best (the prey then comes from the side, its name
+    // tag clear of hers); a steep one only when nothing else has room
+    const score = hx * hx + (Math.abs(hy) <= 0.45 ? 1 : 0);
     if (!best || score > best.score) best = { hx, hy, score };
   }
   return best;
@@ -424,7 +439,7 @@ try {
   const sampler = (async () => {
     while (!stop) {
       const s = await hero.ui(() => window.__tele()).catch(() => null);
-      if (s) { tele.push(s); room = s.world; raining = !!s.rain; if (s.me) Object.assign(me, { wx: s.me[0], wy: s.me[1], mass: s.me[2] }); for (const c of s.cacti) cactusMap.set(`${Math.round(c[0] / 150)}:${Math.round(c[1] / 150)}`, c); }
+      if (s) { tele.push(s); room = s.bounds; raining = !!s.rain; if (s.me) Object.assign(me, { wx: s.me[0], wy: s.me[1], mass: s.me[2] }); for (const c of s.cacti) cactusMap.set(`${Math.round(c[0] / 150)}:${Math.round(c[1] / 150)}`, c); }
       await sleep(100);
     }
   })();
@@ -439,14 +454,20 @@ try {
     if ((await hero.screen()) !== 'playing') { rec.mark('hero-died'); await sleep(2500); await respawn(hero); continue; }
     if (raining) { await heroFor(1000, still); continue; }
     if (me.mass > HERO_MAX) { await dropInFresh(); continue; }
-    if (me.mass < HERO_MIN) { await heroFor(1500, forage); continue; }
+    if (me.mass < HERO_MIN) {
+      const p0 = [me.wx, me.wy];
+      await heroFor(1500, forage);
+      // stalled (food next to a cactus she must not touch): off toward the middle of the pond for a while
+      if (Math.hypot(me.wx - p0[0], me.wy - p0[1]) < 200) await heroFor(2500, { mode: 'goto', wx: midX() + (Math.random() - 0.5) * 2400, wy: midY() + (Math.random() - 0.5) * 2400, noFood: true, split: false });
+      continue;
+    }
     const R = radius(me.mass), v = speedOf(me.mass);
     const spot = v * LEAD + SPOT_R * R;
     const need = spot + v * 7.5 + 400;
     const h = pickHeading(need, spot);
     if (!h) {
       // no room: swim toward the middle of the pond for a while
-      const cx = room[0] / 2, cy = room[1] / 2, d = Math.hypot(cx - me.wx, cy - me.wy) || 1;
+      const cx = midX(), cy = midY(), d = Math.hypot(cx - me.wx, cy - me.wy) || 1;
       await heroFor(2500, { ahead: [(cx - me.wx) / d, (cy - me.wy) / d] });
       continue;
     }
@@ -455,29 +476,40 @@ try {
     if (!prey || ready.length < 5) { await heroFor(1000, still); continue; }
     scene++;
     preyTurn++;
-    sceneOn = true;
     // staging: she waits facing the new heading, the school takes its spots around her, the prey goes to its spot
     heading = [h.hx, h.hy];
     swayT0 = Date.now() / 1000;
+    // each spot to the nearest coin of the school still free (a new heading moves the spots: nobody crosses the
+    // whole school to reach one)
+    const spotAt = (k) => [me.wx + R * (SLOTS[k][0] * h.hx + SLOTS[k][1] * h.hy), me.wy + R * (SLOTS[k][0] * h.hy - SLOTS[k][1] * h.hx)];
+    const free = new Set(school);
+    for (const k of SLOTS.map((_, k) => k).sort((x, y) => Math.hypot(...SLOTS[y]) - Math.hypot(...SLOTS[x]))) {
+      let bestO = null, bestD = Infinity;
+      for (const o of free) { if (!o.pos) continue; const [tx, ty] = spotAt(k); const d = Math.hypot(o.pos.wx - tx, o.pos.wy - ty); if (d < bestD) { bestD = d; bestO = o; } }
+      if (bestO) { bestO.slot = k; free.delete(bestO); }
+    }
+    for (const o of free) o.slot = o.i;
     for (const o of school) if (o.mode === 'slot') await setCfg(o, slotCfg(o));
     const sx = me.wx + h.hx * spot + R * 0.25 * h.hy, sy = me.wy + h.hy * spot - R * 0.25 * h.hx;
     prey.locked = true;
     await setCfg(prey, { mode: 'goto', wx: sx, wy: sy });
     rec.mark('stage', { n: scene });
-    const settled = () => ready.every((o) => {
-      if (!o.pos || o.dead) return true;
-      const tx = me.wx + R * (SLOTS[o.i][0] * h.hx + SLOTS[o.i][1] * h.hy), ty = me.wy + R * (SLOTS[o.i][0] * h.hy - SLOTS[o.i][1] * h.hx);
-      return Math.hypot(o.pos.wx - tx, o.pos.wy - ty) < R * 0.9;
-    });
-    const res0 = await heroFor(25000, still, async () => raining || (prey.pos && Math.hypot(prey.pos.wx - sx, prey.pos.wy - sy) < 140 && settled()));
-    if (res0 !== 'until' || raining || prey.dead || !prey.pos) {
-      const off = ready.filter((o) => o.pos && !o.dead).map((o) => { const tx = me.wx + R * (SLOTS[o.i][0] * h.hx + SLOTS[o.i][1] * h.hy), ty = me.wy + R * (SLOTS[o.i][0] * h.hy - SLOTS[o.i][1] * h.hx); return `${o.o.name} ${Math.round(Math.hypot(o.pos.wx - tx, o.pos.wy - ty))}`; });
-      log(`scene ${scene}: staging failed (${res0}${raining ? ', rain' : ''}); prey ${prey.pos ? Math.round(Math.hypot(prey.pos.wx - sx, prey.pos.wy - sy)) : '-'} from its spot; school off its spots: ${off.join(', ')}`); prey.locked = false; prey.mode = null; sceneOn = false; continue; }
+    const onSpot = (o) => { if (!o.pos || o.dead || o.mode !== 'slot') return false; const [tx, ty] = spotAt(o.slot); return Math.hypot(o.pos.wx - tx, o.pos.wy - ty) < R * 0.9; };
+    // all of the school on its spots, or six after a while (the rest graze clear of her frame through the scene)
+    const t0s = Date.now();
+    const settled = () => { const n = school.filter(onSpot).length; return n >= ready.length || (n >= 6 && Date.now() - t0s > 8000); };
+    const res0 = await heroFor(32000, still, async () => raining || (prey.pos && Math.hypot(prey.pos.wx - sx, prey.pos.wy - sy) < 140 && settled()));
+    if (res0 !== 'until' || raining || prey.dead || !prey.pos || ready.some((o) => o.pos && o.pos.mass > Math.min(ESC_MAX, me.mass * 0.5))) {
+      const off = ready.filter((o) => o.pos && !o.dead).map((o) => { const [tx, ty] = spotAt(o.slot); return `${o.o.name} ${Math.round(Math.hypot(o.pos.wx - tx, o.pos.wy - ty))}`; });
+      log(`scene ${scene}: staging failed (${res0}${raining ? ', rain' : ''}); prey ${prey.pos ? Math.round(Math.hypot(prey.pos.wx - sx, prey.pos.wy - sy)) : '-'} from its spot; school off its spots: ${off.join(', ')}`); prey.locked = false; prey.mode = null; continue; }
     await setCfg(prey, { mode: 'dawdle', wx: sx, wy: sy, rad: 45, per: 3.4 });
+    sceneOn = true;
+    const inSchool = school.filter(onSpot);
+    for (const o of school) if (!inSchool.includes(o) && o.pos && !o.dead && !o.busy) { o.mode = 'graze'; o.cfgAt = Date.now(); await setCfg(o, { mode: 'brain', brain: { mode: 'free', humans: 0, noCells: true, margin: 1500, splitMargin: 0 } }); }
     // the cruise: her course sways on the period, the school drifts on it
     const t0 = Date.now() / 1000;
-    rec.mark('cruise', { n: scene, t0: +(t0 - rec.t0).toFixed(3), sway0: +(swayT0 - rec.t0).toFixed(3), period: PERIOD, heading, prey: prey.o.name, preyPid: prey.pid, preyMass: Math.round(prey.pos.mass), heroMass: Math.round(me.mass), school: ready.map((o) => o.pid) });
-    log(`scene ${scene}: heading ${h.hx.toFixed(2)},${h.hy.toFixed(2)}; ${prey.o.name} (${Math.round(prey.pos.mass)}) -> goldie (${Math.round(me.mass)}); school ${ready.length}`);
+    rec.mark('cruise', { n: scene, t0: +(t0 - rec.t0).toFixed(3), sway0: +(swayT0 - rec.t0).toFixed(3), period: PERIOD, heading, prey: prey.o.name, preyPid: prey.pid, preyMass: Math.round(prey.pos.mass), heroMass: Math.round(me.mass), school: inSchool.map((o) => o.pid) });
+    log(`scene ${scene}: heading ${h.hx.toFixed(2)},${h.hy.toFixed(2)}; ${prey.o.name} (${Math.round(prey.pos.mass)}) -> goldie (${Math.round(me.mass)}); school ${inSchool.length}`);
     const sway = () => { const a = SWAY * Math.sin((2 * Math.PI * (Date.now() / 1000 - swayT0)) / PERIOD); const c = Math.cos(a), s = Math.sin(a); return [heading[0] * c - heading[1] * s, heading[0] * s + heading[1] * c]; };
     let eaten = null, fleeing = false;
     const dist = () => (prey.pos ? Math.hypot(prey.pos.wx - me.wx, prey.pos.wy - me.wy) : Infinity);
