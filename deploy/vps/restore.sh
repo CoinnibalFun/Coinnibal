@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Elymum: load a backup (.tar.gz of DATA_DIR) into the elymum-data volume.
+# Coinnibal: load a backup (.tar.gz of DATA_DIR) into the elymum-data volume.
 #   restore.sh <file.tar.gz>                       a file on this server
 #   restore.sh --url <server> --token <token> --proof <proof>
 #                                                  download it from the running server first (<server> e.g.
@@ -36,19 +36,19 @@ done
 if [[ -n "$url" ]]; then
   [[ -n "$token" ]] || { read -rsp "Admin session token: " token; echo; }
   [[ -n "$token" ]] || die "a token is needed to download the backup"
-  [[ -n "$proof" ]] || { read -rsp "Signed proof (X-Elymum-Proof): " proof; echo; }
+  [[ -n "$proof" ]] || { read -rsp "Signed proof (X-Coinnibal-Proof): " proof; echo; }
   [[ -n "$proof" ]] || die "a proof (a fresh signature of the admin wallet) is needed to download the backup"
   url="${url%/}"
   [[ "$url" == */api/admin/backup ]] || url="$url/api/admin/backup"
-  mkdir -p "$ELYMUM_BACKUPS"
-  chmod 700 "$ELYMUM_BACKUPS"
-  file="$ELYMUM_BACKUPS/migrated-$(date -u +%Y%m%d-%H%M%S).tar.gz"
+  mkdir -p "$COINNIBAL_BACKUPS"
+  chmod 700 "$COINNIBAL_BACKUPS"
+  file="$COINNIBAL_BACKUPS/migrated-$(date -u +%Y%m%d-%H%M%S).tar.gz"
   log "downloading the backup from ${url%%/api/*}"
   umask 077
   # the token goes through a header file, not the command line (other users could read it in ps)
   hdr="$(mktemp)"
   trap 'rm -f "$hdr"' EXIT
-  printf 'Authorization: Bearer %s\nX-Elymum-Proof: %s\n' "$token" "$proof" >"$hdr"
+  printf 'Authorization: Bearer %s\nX-Coinnibal-Proof: %s\n' "$token" "$proof" >"$hdr"
   # no --retry: a proof opens the backup once
   curl -fsS -H @"$hdr" "$url" -o "$file" || die "download failed (expired token or proof? wrong URL? on the mainnet ADMIN_SECRET_EXPORT=1 must be set)"
   log "downloaded $(du -h "$file" | cut -f1)"
@@ -59,27 +59,27 @@ log "checking $file"
 verify_backup "$file"
 log "archive OK: $(tar tzf "$file" | wc -l) entries"
 
-image="$ELYMUM_IMAGE"
+image="$COINNIBAL_IMAGE"
 docker image inspect "$image" >/dev/null 2>&1 || image="debian:bookworm-slim"
 
-if ! docker volume inspect "$ELYMUM_VOLUME" >/dev/null 2>&1; then
+if ! docker volume inspect "$COINNIBAL_VOLUME" >/dev/null 2>&1; then
   # labelled as compose's own volume, so `docker compose up` uses it without a warning
-  docker volume create --label com.docker.compose.project=elymum --label com.docker.compose.volume=elymum-data "$ELYMUM_VOLUME" >/dev/null
+  docker volume create --label "com.docker.compose.project=$INSTALLED_PROJECT" --label "com.docker.compose.volume=$COINNIBAL_VOLUME" "$COINNIBAL_VOLUME" >/dev/null
 fi
 
 was_running=0
-if [[ -f "$ELYMUM_COMPOSE" && -f "$ELYMUM_ENV" ]] && [[ -n "$(dc ps --status running -q app 2>/dev/null)" ]]; then
+if [[ -f "$COINNIBAL_COMPOSE" && -f "$COINNIBAL_ENV" ]] && [[ -n "$(dc ps --status running -q app 2>/dev/null)" ]]; then
   was_running=1
 fi
 
-nonempty="$(docker run --rm --network none --user 0 --entrypoint sh -v "$ELYMUM_VOLUME":/data "$image" -c 'ls -A /data | head -n 1')"
+nonempty="$(docker run --rm --network none --user 0 --entrypoint sh -v "$COINNIBAL_VOLUME":/data "$image" -c 'ls -A /data | head -n 1')"
 if [[ -n "$nonempty" || "$was_running" -eq 1 ]]; then
   echo
   if [[ "$was_running" -eq 1 ]]; then
-    echo "The game server is running on volume $ELYMUM_VOLUME; it will be stopped."
+    echo "The game server is running on volume $COINNIBAL_VOLUME; it will be stopped."
   fi
-  echo "The volume $ELYMUM_VOLUME already holds data or is in use."
-  echo "It will be backed up to $ELYMUM_BACKUPS first, then REPLACED by $file."
+  echo "The volume $COINNIBAL_VOLUME already holds data or is in use."
+  echo "It will be backed up to $COINNIBAL_BACKUPS first, then REPLACED by $file."
   if [[ "$yes" -ne 1 ]]; then
     read -rp "Type RESTORE to continue: " answer
     [[ "$answer" == "RESTORE" ]] || die "cancelled"
@@ -87,11 +87,11 @@ if [[ -n "$nonempty" || "$was_running" -eq 1 ]]; then
 fi
 
 # no auto-deploy may restart the app while the volume is replaced
-if [[ "${ELYMUM_LOCK_HELD:-0}" != "1" ]]; then # (install.sh already holds it)
-  mkdir -p "$(dirname "$ELYMUM_LOCK")"
-  exec 9>"$ELYMUM_LOCK"
-  flock -w 1800 9 || die "another Elymum job held the lock for 30 minutes; try again later"
-  export ELYMUM_LOCK_HELD=1
+if [[ "$COINNIBAL_LOCK_HELD" != "1" ]]; then # (install.sh already holds it)
+  mkdir -p "$(dirname "$COINNIBAL_LOCK")"
+  exec 9>"$COINNIBAL_LOCK"
+  flock -w 1800 9 || die "another Coinnibal job held the lock for 30 minutes; try again later"
+  export COINNIBAL_LOCK_HELD=1
 fi
 
 if [[ "$was_running" -eq 1 ]]; then
@@ -100,18 +100,18 @@ if [[ "$was_running" -eq 1 ]]; then
 fi
 if [[ -n "$nonempty" ]]; then
   log "safety backup of the current data"
-  "$ELYMUM_DIR/deploy/vps/backup.sh"
+  "$COINNIBAL_DIR/deploy/vps/backup.sh"
 fi
 
-log "restoring into volume $ELYMUM_VOLUME"
+log "restoring into volume $COINNIBAL_VOLUME"
 # shellcheck disable=SC2016 # $1 is expanded by the container's shell
 docker run --rm --network none --user 0 --entrypoint sh \
-  -v "$ELYMUM_VOLUME":/data \
+  -v "$COINNIBAL_VOLUME":/data \
   -v "$(dirname "$file")":/restore:ro \
   "$image" -c 'find /data -mindepth 1 -delete && tar xzf "/restore/$1" -C /data --no-same-owner && chown -R 1000:1000 /data' sh "$(basename "$file")"
 log "restore done"
 
-if [[ "$start" -eq 1 && -f "$ELYMUM_ENV" ]] && docker image inspect "$ELYMUM_IMAGE" >/dev/null 2>&1; then
+if [[ "$start" -eq 1 && -f "$COINNIBAL_ENV" ]] && docker image inspect "$COINNIBAL_IMAGE" >/dev/null 2>&1; then
   log "starting the stack"
   dc up -d
 fi

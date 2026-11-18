@@ -1,5 +1,7 @@
+# The file name (elymum-*) and the /opt/elymum path are the live server's installed names, kept from before the
+# rename (deploy/vps/lib.sh): a new name would install a second unit next to the running one.
 [Unit]
-Description=Elymum: the reboot a system update asks for, in a round break
+Description=Coinnibal: the reboot a system update asks for, in a round break
 After=docker.service
 
 [Service]

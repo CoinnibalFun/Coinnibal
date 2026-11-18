@@ -1,10 +1,14 @@
-# Elymum game server on a VPS: the game server (app) behind Caddy (automatic HTTPS, WebSockets).
-# Do not run `docker compose` on this file directly: use deploy/vps/compose.sh, which passes the project
-# name and /opt/elymum/.env (for ${GAME_DOMAIN}). Paths below are relative to this folder.
+# Coinnibal game server on a VPS: the game server (app) behind Caddy (automatic HTTPS, WebSockets).
+# Do not run `docker compose` on this file directly: use deploy/vps/compose.sh (coinnibal-compose), which passes the
+# project name and /opt/elymum/.env (for ${GAME_DOMAIN}). Paths below are relative to this folder.
+#
+# The project name, the image, the volume names and the log tag are the live server's installed names, kept from
+# before the rename (Elymum, November 2026); changing them moves the data: a new project name means a new, empty
+# volume and a port clash with the running container. deploy/vps/lib.sh lists them (INSTALLED_*), with these literals.
 name: elymum
 
 # journald: the logs outlive a container (a redeploy replaces it) and, with the persistent journal install.sh and
-# update.sh set up, a reboot. Read them with: elymum-compose logs app, or journalctl CONTAINER_NAME=elymum-app-1
+# update.sh set up, a reboot. Read them with: coinnibal-compose logs app, or journalctl CONTAINER_NAME=elymum-app-1
 x-logging: &logging
   driver: journald
   options:
@@ -31,17 +35,19 @@ services:
       HOST: 0.0.0.0
       TRUST_PROXY: "1"
       TRUST_PROXY_HOPS: "1"
-      # Robinhood Chain (the only network). These come from ELYMUM_* keys of /opt/elymum/.env, never from CHAIN_ID,
+      # Robinhood Chain (the only network). These come from COINNIBAL_* keys of /opt/elymum/.env, never from CHAIN_ID,
       # EVM_RPC_URL(S), RPC_MAX_RPS or GAME_ACCESS there: that file was filled from an older (Elysium / Render) setup and
-      # may still hold stale values of those, which this block always shadows. Unset ELYMUM_* keys = the values below
-      # (the live testnet). Mainnet: ELYMUM_CHAIN_ID=4663 and
-      # ELYMUM_RPC_URLS=<your Alchemy URL>,https://rpc.mainnet.chain.robinhood.com (README "RPC").
-      CHAIN_ID: "${ELYMUM_CHAIN_ID:-46630}"
+      # may still hold stale values of those, which this block always shadows. Each COINNIBAL_* key falls back to its
+      # ELYMUM_* name of before the rename (nested interpolation, Compose spec "Interpolation"), so a live .env keeps
+      # working unchanged; the new name wins when both are set. Unset = the values below (the live testnet). Mainnet:
+      # COINNIBAL_CHAIN_ID=4663 and COINNIBAL_RPC_URLS=<your Alchemy URL>,https://rpc.mainnet.chain.robinhood.com
+      # (README "RPC").
+      CHAIN_ID: "${COINNIBAL_CHAIN_ID:-${ELYMUM_CHAIN_ID:-46630}}"
       # several RPCs in order (a viem fallback); EVM_RPC_URL is always empty here (= unset) so a stale one never wins
-      EVM_RPC_URLS: "${ELYMUM_RPC_URLS:-https://rpc.testnet.chain.robinhood.com}"
+      EVM_RPC_URLS: "${COINNIBAL_RPC_URLS:-${ELYMUM_RPC_URLS:-https://rpc.testnet.chain.robinhood.com}}"
       EVM_RPC_URL: ""
       # calls per second per EVM_RPC_URLS entry (one number, or a comma list: "25,4")
-      RPC_MAX_RPS: "${ELYMUM_RPC_MAX_RPS:-4}"
+      RPC_MAX_RPS: "${COINNIBAL_RPC_MAX_RPS:-${ELYMUM_RPC_MAX_RPS:-4}}"
       # Elysium-era settings that must not carry over (empty = unset; the /admin registry decides)
       PUBLIC_RPC_URL: ""
       TESTNET_RPC_URL: ""
@@ -51,13 +57,13 @@ services:
       TOKEN_ADDRESS: ""
       JOURNAL_ABANDON_CONTRACT: ""
       # who may play: the /admin -> Settings switch decides (site, the default; a fresh server starts closed: admins
-      # only). ELYMUM_GAME_ACCESS in .env (admins | holders | public | maintenance) overrides that switch
-      GAME_ACCESS: "${ELYMUM_GAME_ACCESS:-site}"
+      # only). COINNIBAL_GAME_ACCESS in .env (admins | holders | public | maintenance) overrides that switch
+      GAME_ACCESS: "${COINNIBAL_GAME_ACCESS:-${ELYMUM_GAME_ACCESS:-site}}"
       # the site lives here (no Vercel): the app serves the bundled web client (with a strict CSP) on every domain
       # Caddy hands it, SITE_DOMAIN first. PUBLIC_URL is that site (sign-ins, share cards, X posts name it);
-      # ELYMUM_PUBLIC_URL in .env overrides it, a stale PUBLIC_URL there does not
-      WEB_DIST: "${ELYMUM_WEB_DIST:-/app/web}"
-      PUBLIC_URL: "${ELYMUM_PUBLIC_URL:-https://${SITE_DOMAIN:-coinnibal.fun}}"
+      # COINNIBAL_PUBLIC_URL in .env overrides it, a stale PUBLIC_URL there does not
+      WEB_DIST: "${COINNIBAL_WEB_DIST:-${ELYMUM_WEB_DIST:-/app/web}}"
+      PUBLIC_URL: "${COINNIBAL_PUBLIC_URL:-${ELYMUM_PUBLIC_URL:-https://${SITE_DOMAIN:-coinnibal.fun}}}"
     volumes:
       - elymum-data:/data
     expose:
@@ -111,7 +117,7 @@ services:
 
 volumes:
   elymum-data:
-    # a fixed name: backup.sh, restore.sh and the README use it
+    # a fixed name: backup.sh, restore.sh and the README use it (an installed name, see the top of this file)
     name: elymum-data
   caddy-data:
     name: elymum-caddy-data

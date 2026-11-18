@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Elymum game server: one-command install on a fresh Ubuntu 22.04 / 24.04 VPS. Run as root:
+# Coinnibal game server: one-command install on a fresh Ubuntu 22.04 / 24.04 VPS. Run as root:
 #   bash install.sh                       asks for the domain, repository and branch (Enter = default)
-#   bash install.sh --restore elymum-backup.tar.gz
+#   bash install.sh --restore coinnibal-backup.tar.gz
 #   bash install.sh --restore-url https://game.elymum.io --token <admin session token> --proof <signed proof>
 #   bash install.sh --from https://game.elymum.io --token <admin session token> --proof <signed proof> --yes
 #       the whole move in one command: copies the old server's settings (.env) AND its data. The proof is a
@@ -11,9 +11,14 @@
 # Safe to run again: every step checks what is already done. Full guide: deploy/vps/README.md.
 set -euo pipefail
 
+# the live server's game domain: a record under elymum.io, kept from before the rename (its DNS record and certificate
+# exist; game.coinnibal.fun needs a new A record first, README "DNS")
 DOMAIN_DEFAULT="game.elymum.io"
 REPO_DEFAULT="https://github.com/furkan3152/Solagel.git"  # public repo: no deploy key needed (an SSH URL still works for a private one)
 BRANCH_DEFAULT="main"
+# The live server's installed names, kept from before the rename (Elymum, November 2026); changing them moves the
+# data. The same literals as deploy/vps/lib.sh (this file runs before the checkout exists; it sources lib.sh after),
+# and the host files below (journald, unattended-upgrades, fail2ban, sysctl, the deploy key and its ssh config block).
 DIR="/opt/elymum"
 STATE="/var/lib/elymum"
 LOCK="/run/lock/elymum.lock"
@@ -97,8 +102,8 @@ ask branch "Branch to run" "$BRANCH_DEFAULT"
 
 mkdir -p "$STATE" "$(dirname "$LOCK")"
 exec 9>"$LOCK"
-flock -w 600 9 || die "another Elymum job (update or backup) is running; try again in a few minutes"
-export ELYMUM_LOCK_HELD=1
+flock -w 600 9 || die "another Coinnibal job (update or backup) is running; try again in a few minutes"
+export COINNIBAL_LOCK_HELD=1
 
 export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
 APT_OPTS=(-y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
@@ -187,7 +192,7 @@ else
   note "swap not needed (RAM $((mem_kb / 1024)) MB, or swap already on)"
 fi
 cat >/etc/sysctl.d/99-elymum.conf <<'CONF'
-# Elymum: many concurrent WebSocket connections
+# Coinnibal: many concurrent WebSocket connections
 net.core.somaxconn = 4096
 net.ipv4.tcp_max_syn_backlog = 8192
 net.core.netdev_max_backlog = 16384
@@ -209,7 +214,7 @@ sysctl --system >/dev/null
 say "7/10 Deploy key and code ($branch)"
 install -d -m 700 /root/.ssh
 if [[ ! -f "$KEY" ]]; then
-  ssh-keygen -q -t ed25519 -N "" -C "elymum-vps-$(hostname)" -f "$KEY"
+  ssh-keygen -q -t ed25519 -N "" -C "coinnibal-vps-$(hostname)" -f "$KEY"
 fi
 if ! grep -q 'elymum deploy key' /root/.ssh/config 2>/dev/null; then
   cat >>/root/.ssh/config <<CONF
@@ -240,7 +245,7 @@ until git ls-remote --exit-code "$repo" "refs/heads/$branch" >/dev/null 2>&1; do
   echo
   echo "   1. Open https://github.com/$repo_path/settings/keys"
   echo "      (GitHub → the repository → Settings → Deploy keys)"
-  echo "   2. Click \"Add deploy key\". Title: elymum-vps"
+  echo "   2. Click \"Add deploy key\". Title: coinnibal-vps"
   echo "   3. Key: paste the whole line below"
   echo "   4. Leave \"Allow write access\" UNCHECKED, then click \"Add key\""
   echo
@@ -268,14 +273,14 @@ note "code at $(git log -1 --format='%h %s')"
 # shellcheck source=lib.sh
 . "$DIR/deploy/vps/lib.sh"
 
-say "8/10 Settings (/opt/elymum/.env)"
-if [[ ! -f "$ELYMUM_ENV" ]]; then
-  install -m 600 deploy/vps/env.example "$ELYMUM_ENV"
+say "8/10 Settings ($COINNIBAL_ENV)"
+if [[ ! -f "$COINNIBAL_ENV" ]]; then
+  install -m 600 deploy/vps/env.example "$COINNIBAL_ENV"
   created=1
 else
   created=0
 fi
-chmod 600 "$ELYMUM_ENV"
+chmod 600 "$COINNIBAL_ENV"
 env_set GAME_DOMAIN "$domain"
 for kv in "${sets[@]}"; do
   env_set "${kv%%=*}" "${kv#*=}"
@@ -289,43 +294,43 @@ if [[ -n "$from_url" ]]; then
   hdr="$(mktemp)"
   chmod 600 "$hdr"
   # the token and the proof go through a header file, not the command line (other users could read it in ps)
-  printf 'Authorization: Bearer %s\nX-Elymum-Proof: %s\n' "$restore_token" "$restore_proof" >"$hdr"
+  printf 'Authorization: Bearer %s\nX-Coinnibal-Proof: %s\n' "$restore_token" "$restore_proof" >"$hdr"
   curl -fsS --max-time 30 -H @"$hdr" "${from_url%/}/api/admin/migration-env" -o "$envjson" \
     || { rm -f "$hdr"; die "could not read the settings from $from_url (expired token or proof? a proof opens it once, within 10 minutes)"; }
   rm -f "$hdr"
   # one KEY<TAB>VALUE line per setting; values never hold a newline (the server drops those). The chain settings go
-  # to the ELYMUM_* keys docker-compose.yml reads (it ignores CHAIN_ID, EVM_RPC_URL(S) and RPC_MAX_RPS in .env)
+  # to the COINNIBAL_* keys docker-compose.yml reads (it ignores CHAIN_ID, EVM_RPC_URL(S) and RPC_MAX_RPS in .env)
   old_single_rpc=""
   have_rpc_list=0
   while IFS=$'\t' read -r k v; do
     [[ "$k" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
     case "$k" in
-      CHAIN_ID) env_set ELYMUM_CHAIN_ID "$v" ;;
-      EVM_RPC_URLS) env_set ELYMUM_RPC_URLS "$v"; have_rpc_list=1 ;;
+      CHAIN_ID) env_set COINNIBAL_CHAIN_ID "$v" ;;
+      EVM_RPC_URLS) env_set COINNIBAL_RPC_URLS "$v"; have_rpc_list=1 ;;
       EVM_RPC_URL) old_single_rpc="$v" ;;
-      RPC_MAX_RPS) env_set ELYMUM_RPC_MAX_RPS "$v" ;;
+      RPC_MAX_RPS) env_set COINNIBAL_RPC_MAX_RPS "$v" ;;
       *) env_set "$k" "$v" ;;
     esac
   done < <(python3 -I -c 'import json,sys; [print(k + "\t" + str(v)) for k, v in json.load(open(sys.argv[1]))["env"].items()]' "$envjson")
   # an older server with one RPC only
-  if [[ "$have_rpc_list" -eq 0 && -n "$old_single_rpc" ]]; then env_set ELYMUM_RPC_URLS "$old_single_rpc"; fi
+  if [[ "$have_rpc_list" -eq 0 && -n "$old_single_rpc" ]]; then env_set COINNIBAL_RPC_URLS "$old_single_rpc"; fi
   direct="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("directUrl") or "")' "$envjson")"
   if [[ "$direct" =~ ^https://[A-Za-z0-9.-]+$ ]]; then
     restore_url="$direct"
     note "the backup comes straight from $direct"
   fi
   rm -f "$envjson"
-  # this host's own values (never copied): the site's origin for CORS
-  env_set CORS_ORIGIN "https://elymum.io"
-  note "settings copied ($(grep -c '=' "$ELYMUM_ENV") lines in $ELYMUM_ENV)"
+  # this host's own values (never copied): the site's origin for CORS (the server always adds the brand's own sites)
+  env_set CORS_ORIGIN "https://coinnibal.fun"
+  note "settings copied ($(grep -c '=' "$COINNIBAL_ENV") lines in $COINNIBAL_ENV)"
 fi
 edit_env() {
   echo
   echo " The settings file opens in the nano editor. Fill in the values (deploy/vps/README.md section 4:"
-  echo " ADMIN_WALLETS, AUTH_SECRET, ELYMUM_CHAIN_ID, ELYMUM_RPC_URLS, TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID, ...)."
+  echo " ADMIN_WALLETS, AUTH_SECRET, COINNIBAL_CHAIN_ID, COINNIBAL_RPC_URLS, TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID, ...)."
   echo " Save: Ctrl+O then Enter. Quit: Ctrl+X."
   read -rp " Press Enter to open it... " _
-  nano "$ELYMUM_ENV"
+  nano "$COINNIBAL_ENV"
 }
 if [[ "$yes" -eq 0 ]]; then
   if [[ "$created" -eq 1 ]]; then
@@ -336,7 +341,7 @@ if [[ "$yes" -eq 0 ]]; then
   fi
   while :; do
     missing=()
-    # the chain (ELYMUM_CHAIN_ID, ELYMUM_RPC_URLS) has testnet defaults in docker-compose.yml: not asked for here
+    # the chain (COINNIBAL_CHAIN_ID, COINNIBAL_RPC_URLS) has testnet defaults in docker-compose.yml: not asked for here
     for k in ADMIN_WALLETS PUBLIC_URL CORS_ORIGIN; do
       [[ -n "$(env_get "$k")" ]] || missing+=("$k")
     done
@@ -344,11 +349,11 @@ if [[ "$yes" -eq 0 ]]; then
     echo "Empty in .env: ${missing[*]}"
     read -rp "Edit again? [Y/n] " a
     if [[ "$a" =~ ^[Nn] ]]; then break; fi
-    nano "$ELYMUM_ENV"
+    nano "$COINNIBAL_ENV"
   done
 fi
-chmod 600 "$ELYMUM_ENV"
-[[ -n "$(env_get PUBLIC_URL)" ]] || die "PUBLIC_URL is empty in $ELYMUM_ENV (the server refuses to start without it)"
+chmod 600 "$COINNIBAL_ENV"
+[[ -n "$(env_get PUBLIC_URL)" ]] || die "PUBLIC_URL is empty in $COINNIBAL_ENV (the server refuses to start without it)"
 
 say "9/10 Build and start (the first build takes a few minutes)"
 dc build app
@@ -371,11 +376,9 @@ date -u +%FT%TZ >"$STATE/deployed-at"
 say "10/10 Auto-deploy, daily backups, shortcuts"
 install -m 644 deploy/vps/systemd/*.service deploy/vps/systemd/*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now elymum-update.timer elymum-backup.timer elymum-alert.timer elymum-reboot.timer >/dev/null
-for s in status compose backup restore update alert reboot; do
-  ln -sf "$DIR/deploy/vps/$s.sh" "/usr/local/bin/elymum-$s"
-done
-note "commands: elymum-status, elymum-compose logs -f app, elymum-backup, elymum-restore, elymum-update"
+systemctl enable --now "$INSTALLED_UNIT_PREFIX-update.timer" "$INSTALLED_UNIT_PREFIX-backup.timer" "$INSTALLED_UNIT_PREFIX-alert.timer" "$INSTALLED_UNIT_PREFIX-reboot.timer" >/dev/null
+link_commands
+note "commands: coinnibal-status, coinnibal-compose logs -f app, coinnibal-backup, coinnibal-restore, coinnibal-update"
 grep -qxF 'backups/' .git/info/exclude 2>/dev/null || echo 'backups/' >>.git/info/exclude
 
 echo
@@ -389,10 +392,10 @@ for _ in $(seq 1 60); do
   sleep 5
 done
 if [[ "$ok" -eq 1 ]]; then
-  printf '\n\033[1;32mElymum is running at https://%s\033[0m\n' "$domain"
+  printf '\n\033[1;32mCoinnibal is running at https://%s\033[0m\n' "$domain"
   curl -sS "https://$domain/api/health" || true
   echo
-  note "Status any time: elymum-status. New commits on $branch deploy by themselves within 2 minutes."
+  note "Status any time: coinnibal-status. New commits on $branch deploy by themselves within 2 minutes."
 else
   printf '\n\033[1;33mThe server is installed, but https://%s/api/health does not answer yet.\033[0m\n' "$domain"
   note "This server's addresses: $(hostname -I 2>/dev/null)"
@@ -404,5 +407,5 @@ else
   exit 1
 fi
 if [[ -f /var/run/reboot-required ]]; then
-  note "The system update wants a reboot; elymum-reboot.timer does it at 04:30 in a round break (or now: elymum-reboot)"
+  note "The system update wants a reboot; elymum-reboot.timer does it at 04:30 in a round break (or now: coinnibal-reboot)"
 fi

@@ -1,5 +1,7 @@
+# The file name (elymum-*) is the live server's installed unit name, kept from before the rename
+# (deploy/vps/lib.sh): a new name would install a second timer next to the running one.
 [Unit]
-Description=Elymum: daily backup at 04:00 (server time)
+Description=Coinnibal: daily backup at 04:00 (server time)
 
 [Timer]
 OnCalendar=*-*-* 04:00:00
