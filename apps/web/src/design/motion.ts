@@ -70,16 +70,35 @@ export const BEAT = 0.07;
  * `initial="hidden" animate="shown"`, or through `useMoves()`, which swaps in
  * the reduced-motion twins (a 120 ms fade; loops stand still).
  */
+const popShown = (delay: number = 0) => ({ opacity: 1, scale: 1, rotate: 0, transition: { ...springs.pop, delay } });
+const dropShown = (tilt: number = -1.5) => ({ opacity: 1, y: 0, scale: 1, rotate: tilt, transition: { ...springs.drop, opacity: { duration: 0.12 } } });
+
 export const moves = {
   /** A sticker or coin popping into existence: 0.6 → 1 with a bounce (custom = delay in seconds). */
   popIn: {
     hidden: { opacity: 0, scale: 0.6, rotate: -4 },
-    shown: (delay: number = 0) => ({ opacity: 1, scale: 1, rotate: 0, transition: { ...springs.pop, delay } }),
+    shown: popShown,
+  },
+  /**
+   * `popIn` without the fade: opaque from its first frame, only the scale and the turn play. For a sticker in the
+   * first viewport (the hero's round badge): a fade-in there holds the first paint back on a busy phone.
+   */
+  popInSolid: {
+    hidden: { opacity: 1, scale: 0.6, rotate: -4 },
+    shown: popShown,
   },
   /** A sticker slapped onto the page from above; lands on its tilt (custom = degrees). */
   stickerDrop: {
     hidden: (tilt: number = -1.5) => ({ opacity: 0, y: -28, scale: 1.06, rotate: tilt - 5 }),
-    shown: (tilt: number = -1.5) => ({ opacity: 1, y: 0, scale: 1, rotate: tilt, transition: { ...springs.drop, opacity: { duration: 0.12 } } }),
+    shown: dropShown,
+  },
+  /**
+   * `stickerDrop` without the fade: opaque from its first frame, only the drop plays. For the hero's card, the first
+   * viewport's largest paint (LCP): with the fade, a busy phone painted it about half a second after the page.
+   */
+  stickerSlap: {
+    hidden: (tilt: number = -1.5) => ({ opacity: 1, y: -28, scale: 1.06, rotate: tilt - 5 }),
+    shown: dropShown,
   },
   /** A button sinking into its hard shadow. Pair with the CSS shadow (or use the .kb-btn press). */
   press: {
@@ -113,8 +132,13 @@ export type MoveName = keyof typeof moves;
 
 const REDUCED_MOVES: Record<MoveName, Variants> = {
   popIn: { hidden: { opacity: 0 }, shown: (delay: number = 0) => ({ opacity: 1, transition: { duration: 0.12, delay } }) },
+  popInSolid: { hidden: { opacity: 1 }, shown: { opacity: 1 } },
   stickerDrop: {
     hidden: (tilt: number = -1.5) => ({ opacity: 0, rotate: tilt }),
+    shown: (tilt: number = -1.5) => ({ opacity: 1, rotate: tilt, transition: { duration: 0.12 } }),
+  },
+  stickerSlap: {
+    hidden: (tilt: number = -1.5) => ({ opacity: 1, rotate: tilt }),
     shown: (tilt: number = -1.5) => ({ opacity: 1, rotate: tilt, transition: { duration: 0.12 } }),
   },
   press: { rest: {}, hover: {}, pressed: {} },

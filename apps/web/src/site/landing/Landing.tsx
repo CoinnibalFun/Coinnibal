@@ -88,7 +88,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
     <section className="ld-hero" aria-labelledby="ld-hero-title">
       <RingScene time="dawn" variant="full" animate={!reduced} className="ld-hero__ring">
         <div className="ld-hero__inner">
-          <motion.div className="ld-hero__drop" variants={m.stickerDrop} custom={phone ? -0.8 : -1.6} initial="hidden" animate="shown">
+          <motion.div className="ld-hero__drop" variants={m.stickerSlap} custom={phone ? -0.8 : -1.6} initial="hidden" animate="shown">
             <Sticker pad="lg" lift="lg" tape className="ld-hero__card">
               <p className="kicker ld-hero__kicker">{t('ld.hero.kicker', { chain: plainChainName(activeChain().name) })}</p>
               <h1 id="ld-hero-title" ref={peel.ref} className={`ld-hero__title ${peel.className}`}>
@@ -147,7 +147,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
               )}
             </Sticker>
           </motion.div>
-          <motion.div className="ld-hero__badge-wrap" variants={m.popIn} custom={0.5} initial="hidden" animate="shown">
+          <motion.div className="ld-hero__badge-wrap" variants={m.popInSolid} custom={0.5} initial="hidden" animate="shown">
             <Sticker tone="sun" pad="sm" tilt={4} className="ld-hero__badge">
               <span className="num ld-hero__badge-n">{String(FACTS.rules.roundMin).padStart(2, '0')}:00</span>
               <span className="mono ld-hero__badge-l">{t('ld.badge')}</span>
