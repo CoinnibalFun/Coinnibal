@@ -2,12 +2,13 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ENTRY_PATHS, SITE_PATHS, isAppRoute } from '@elymum/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { NullChain } from '../src/chain/types';
 import { loadConfig } from '../src/config';
 import { createHttpServer, redactUrls } from '../src/http';
 
-/** The single-origin deploy (`WEB_DIST`): static files plus the SPA fallback for client routes like `/docs`. */
+/** The single-origin deploy (`WEB_DIST`): static files plus the SPA fallback for client routes like `/docs` (404 for the rest). */
 describe('static web client', () => {
   let server: Server | null = null;
   afterEach(async () => {
@@ -41,6 +42,33 @@ describe('static web client', () => {
       expect(res.headers.get('content-security-policy'), path).toContain("frame-ancestors 'none'");
       expect(await res.text(), path).toContain('<title>Elymum</title>');
     }
+  });
+
+  it('answers every real route of the app with 200, deep links included (the route list the web router uses)', async () => {
+    const url = await start();
+    // each site page, the arena and the operator panel; a trailing slash or capitals are the same page (the router
+    // normalises them); deep links ride on the query or the hash (a room invite, a lobby page, a guide section)
+    const real = [...SITE_PATHS, ...ENTRY_PATHS, '/docs/', '/Docs', '/MINT/', '/play/', '/admin/', '/play?room=AB2CD', '/?ref=x', '/docs?x=1#docs-rooms', '/?gallery'];
+    for (const path of real) {
+      const res = await fetch(url + path);
+      expect(res.status, path).toBe(200);
+      expect(await res.text(), path).toContain('<title>Elymum</title>');
+    }
+  });
+
+  it('answers a path that is no page with 404 and still sends the app, which draws the not-found page', async () => {
+    const url = await start();
+    for (const path of ['/this-page-does-not-exist', '/docs/rooms', '/mint/1', '/playground', '/admins', '/wl/x/y', '/assets', '/assets/', '/%E2%9C%93']) {
+      const res = await fetch(url + path);
+      expect(res.status, path).toBe(404);
+      expect(res.headers.get('content-type'), path).toMatch(/text\/html/);
+      expect(res.headers.get('cache-control'), path).toBe('no-cache');
+      expect(res.headers.get('content-security-policy'), path).toContain("frame-ancestors 'none'");
+      expect(await res.text(), path).toContain('<title>Elymum</title>');
+    }
+    const head = await fetch(`${url}/nope`, { method: 'HEAD' });
+    expect(head.status).toBe(404);
+    expect(isAppRoute('/nope')).toBe(false);
   });
 
   it('serves hashed assets immutable and 404s missing files and API paths', async () => {

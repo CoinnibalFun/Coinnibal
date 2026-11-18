@@ -1,9 +1,9 @@
 // Drawing kit for the Coinnibal brand renders, in the "Ring Storybook" language of
 // docs/design/storybook-reference.html and docs/specs/2026-10-29-elymum-on-elysium.md (section 6):
 // ink outlines (#04181C), flat cel fills with one shade tone, hard offset shadows (no blur), cream
-// die-cut stickers, Fraunces (display, SOFT 100), DM Sans (reading), Geist Mono (numbers, kickers).
-// Everything is inline: fonts come from the web app's @fontsource-variable packages as data URIs
-// (Google Fonts as a fallback when they are not installed).
+// die-cut stickers, Lilita One (display: one weight, upright), DM Sans (reading), Geist Mono (numbers).
+// Everything is inline: fonts come from the web app's @fontsource packages as data URIs (Google Fonts
+// as a fallback when they are not installed).
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,23 +57,22 @@ export const PAINTS = {
 
 /* ------------------------------------------------------------------ fonts */
 
-const FONT_DIR = join(ROOT, 'apps/web/node_modules/@fontsource-variable');
+const FONT_DIR = join(ROOT, 'apps/web/node_modules');
 const FONT_SOURCES = [
-  // [our family, fontsource css file, style]
-  ['Fraunces', 'fraunces/full.css'],
-  ['Fraunces', 'fraunces/full-italic.css'],
-  ['DM Sans', 'dm-sans/opsz.css'],
-  ['DM Sans', 'dm-sans/opsz-italic.css'],
-  ['Geist Mono', 'geist-mono/wght.css'],
+  // [our family, fontsource css file] (the web app's own fonts, apps/web/src/main.tsx)
+  ['Lilita One', '@fontsource/lilita-one/400.css'],
+  ['DM Sans', '@fontsource-variable/dm-sans/opsz.css'],
+  ['DM Sans', '@fontsource-variable/dm-sans/opsz-italic.css'],
+  ['Geist Mono', '@fontsource-variable/geist-mono/wght.css'],
 ];
 
 let fontCache = null;
 /** @font-face rules (latin subsets, inlined as data URIs). */
 export function fontFaces() {
   if (fontCache !== null) return fontCache;
-  if (!existsSync(FONT_DIR)) {
+  if (!existsSync(join(FONT_DIR, '@fontsource'))) {
     fontCache =
-      '@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,100..900,0..100,0..1;1,9..144,100..900,0..100,0..1&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Geist+Mono:wght@400..600&display=block");';
+      '@import url("https://fonts.googleapis.com/css2?family=Lilita+One&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Geist+Mono:wght@400..600&display=block");';
     return fontCache;
   }
   const rules = [];
@@ -105,15 +104,14 @@ export function fontFaces() {
 export function baseCss() {
   return `${fontFaces()}
 :root{--ink:${C.ink};--cream:${C.cream};--sun:${C.sun};--stone:${C.stone};--trench:${C.trench};
-  --display:"Fraunces",Georgia,serif;--body:"DM Sans",system-ui,sans-serif;--mono:"Geist Mono",ui-monospace,monospace}
+  --display:"Lilita One","DM Sans",system-ui,sans-serif;--body:"DM Sans",system-ui,sans-serif;--mono:"Geist Mono",ui-monospace,monospace}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:transparent}
-body{font-family:var(--body);color:var(--ink);-webkit-font-smoothing:antialiased;font-optical-sizing:auto}
+body{font-family:var(--body);color:var(--ink);-webkit-font-smoothing:antialiased;font-optical-sizing:auto;font-synthesis:none}
 .frame{position:relative;overflow:hidden}
 .abs{position:absolute}
-.disp{font-family:var(--display);font-variation-settings:"SOFT" 100,"WONK" 0,"opsz" 144;font-weight:800;letter-spacing:-.02em;line-height:.98}
-.wonk{font-variation-settings:"SOFT" 100,"WONK" 1,"opsz" 144}
-.quote{font-family:var(--display);font-style:italic;font-variation-settings:"SOFT" 100,"WONK" 1;font-weight:500}
+/* Lilita One has one weight and no italic: display text is 400, upright, a hair of tracking; emphasis is colour */
+.disp{font-family:var(--display);font-weight:400;letter-spacing:.005em;line-height:1.04}
 .mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .kick{font-family:var(--mono);font-size:13px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
 .sticker{background:var(--cream);border:3px solid var(--ink);border-radius:18px;box-shadow:4px 4px 0 var(--ink)}

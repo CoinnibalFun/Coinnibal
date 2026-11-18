@@ -2,7 +2,7 @@ import type { ShareService } from './site/shares';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION } from '@elymum/shared';
+import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION, isAppRoute } from '@elymum/shared';
 import { NonceLimitError, checksumAddress, type Auth, type SiweOrigin } from './auth';
 import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
@@ -131,14 +131,20 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   const base = resolve(root);
   let file = normalize(join(base, rel));
   if (file !== base && !file.startsWith(base + sep)) return false;
+  let fallback = false;
   if (!existsSync(file) || statSync(file).isDirectory()) {
     if (extname(rel)) return false;
     file = join(base, 'index.html'); // SPA fallback
     if (!existsSync(file)) return false;
+    fallback = true;
   }
+  // a path that is no page of the app (the route list is shared with the web router) is a real 404: the same
+  // index.html, which draws the not-found page, but crawlers and link checkers see the status
+  const status = fallback && !isAppRoute(rel) ? 404 : 200;
   const ext = extname(file);
-  const immutable = rel.startsWith('/assets/');
-  res.writeHead(200, {
+  // hashed bundle files never change; the page itself (also when it stands in for `/assets/<no file>`) always may
+  const immutable = !fallback && rel.startsWith('/assets/');
+  res.writeHead(status, {
     'Content-Type': MIME[ext] ?? 'application/octet-stream',
     'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
     // the web app is never framed (clickjacking of wallet actions); scripts from this origin only (Vercel's old rule,

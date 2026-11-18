@@ -74,7 +74,6 @@ body {
 }
 .ad-brand__name {
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 25px;
   letter-spacing: 0.005em;
@@ -477,7 +476,6 @@ body {
 }
 .ad-card__title {
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 24px;
   line-height: 1.05;
@@ -502,7 +500,6 @@ body {
 }
 .ad-h3 {
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 19px;
 }
@@ -1189,7 +1186,6 @@ body {
   align-items: center;
   gap: 14px;
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 22px;
 }
@@ -1386,7 +1382,6 @@ body {
   background: var(--sand);
   color: var(--ink-fixed);
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 20px;
   text-transform: capitalize;
@@ -1444,7 +1439,6 @@ body {
 }
 .ad-phase__title {
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 22px;
   line-height: 1.05;
