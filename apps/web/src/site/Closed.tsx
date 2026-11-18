@@ -18,11 +18,12 @@ const WHAT: Record<string, TKey> = {
 const NAME: Record<string, TKey> = { '/mint': 'site.closed.nameMint', '/collab': 'site.nav.collab' };
 
 /**
- * The shared "not open yet" notice: a sleepy coin with a "Closed" tag on a cream card, one sentence, the guide,
+ * The shared "not open yet" notice: a sleepy coin with a "Soon" tag on a cream card, one sentence, the guide,
  * the way home and the project's X account (`children`: anything a page adds under them, inside the card).
+ * `perks` (the closed /mint): the main button shows what the NFT gives (`/#why-nft`), the guide comes second.
  * Nothing here links to another closed part of the site.
  */
-export function ClosedNotice({ lede, children }: { lede: ReactNode; children?: ReactNode }) {
+export function ClosedNotice({ lede, perks = false, children }: { lede: ReactNode; perks?: boolean; children?: ReactNode }) {
   const t = useT();
   const reduced = useReducedMotion();
   const { settings } = useSiteSettings();
@@ -40,10 +41,21 @@ export function ClosedNotice({ lede, children }: { lede: ReactNode; children?: R
         </h1>
         <p className="cl__lede">{lede}</p>
         <div className="cl__ctas">
-          <SiteLinkButton href="/docs" variant="primary" icon="arrow">
-            {t('site.nf.guide')}
-          </SiteLinkButton>
-          <SiteLinkButton href="/">{t('site.nf.home')}</SiteLinkButton>
+          {perks ? (
+            <>
+              <SiteLinkButton href="/#why-nft" variant="primary" icon="arrow">
+                {t('site.closed.perks')}
+              </SiteLinkButton>
+              <SiteLinkButton href="/docs">{t('site.nf.guide')}</SiteLinkButton>
+            </>
+          ) : (
+            <>
+              <SiteLinkButton href="/docs" variant="primary" icon="arrow">
+                {t('site.nf.guide')}
+              </SiteLinkButton>
+              <SiteLinkButton href="/">{t('site.nf.home')}</SiteLinkButton>
+            </>
+          )}
         </div>
         <a className="cl__x" href={xProfile(settings.xHandle)} target="_blank" rel="noreferrer">
           <XIcon size={16} /> <span>{t('pg.follow')}</span>
@@ -60,7 +72,7 @@ export function ClosedPage({ path }: { path: string }) {
   return (
     <SitePage className="cl-root">
       <PlateLabel numeral="·" title={t(NAME[path] ?? 'site.closed.plate')} />
-      <ClosedNotice lede={t(WHAT[path] ?? 'site.closed.page')} />
+      <ClosedNotice lede={t(WHAT[path] ?? 'site.closed.page')} perks={path === '/mint'} />
     </SitePage>
   );
 }

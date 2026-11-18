@@ -95,9 +95,9 @@ describe('mint logic', () => {
     const c = contract();
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true) })).toBeNull();
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: null })).toMatch(/checking/);
-    expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(false) })).toMatch(/not on the allowlist/);
+    expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(false) })).toMatch(/not on the WL/);
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true, `0x${'00'.repeat(32)}`) })).toMatch(/not published/);
-    expect(mintBlocker(c, { wl: 1, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true) })).toMatch(/allowlist limit is 1/);
+    expect(mintBlocker(c, { wl: 1, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true) })).toMatch(/WL limit is 1/);
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'public', qty: 1, proof: null })).toMatch(/public mint is not open/);
     const pub = contract({ phase: 'public', totalSupply: 3332 });
     expect(mintBlocker(pub, { wl: 0, pub: 0 }, { kind: 'public', qty: 2, proof: null })).toMatch(/only 1 left/);
@@ -167,7 +167,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
       return { ok: true, hash: `0x${'cd'.repeat(32)}`, receipt: { status: 'success', logs: [transferLog(ALICE, 11n), transferLog(ALICE, 12n)] } };
     });
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(screen.getByTestId('mt-eligibility').textContent).toMatch(/is on the allowlist\./));
+    await waitFor(() => expect(screen.getByTestId('mt-eligibility').textContent).toMatch(/is on the WL\./));
     fireEvent.click(screen.getByRole('button', { name: 'One more' }));
     expect(screen.getByRole('spinbutton', { name: 'How many NFTs' }).textContent).toBe('2');
     expect((screen.getByRole('button', { name: 'One more' }) as HTMLButtonElement).disabled).toBe(true);
@@ -185,7 +185,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
     connect();
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract()), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(false) }));
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(screen.getByTestId('mt-blocker').textContent).toMatch(/not on the allowlist/));
+    await waitFor(() => expect(screen.getByTestId('mt-blocker').textContent).toMatch(/not on the WL/));
     expect((screen.getByRole('button', { name: /^Mint/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -279,10 +279,12 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
   it('says the testnet price plainly, and makes no dollar claim', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/mint': testnetState() }));
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(document.querySelector('.mt-lede')!.textContent).toMatch(/testnet mint: 1 ETH, paid with free test ETH/));
+    await waitFor(() => expect(document.querySelector('.mt-lede')!.textContent).toMatch(/test network\. The price is 1 ETH, and you pay with free test ETH/));
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Get the Coinnibal NFT.');
     expect(document.querySelector('.mt-page')!.textContent).not.toMatch(/\$1\b|dollar/i);
-    expect(screen.getByTestId('mt-mainnet-note').textContent).toMatch(/mainnet mint will cost much less/);
+    // no price claim about another network, and the word "testnet" is not on a visitor page
+    expect(screen.queryByTestId('mt-mainnet-note')).toBeNull();
+    { const m = document.querySelector('.mt-page')!.textContent?.match(/.{0,80}(testnet|mainnet).{0,40}/i); expect(m?.[0] ?? null).toBeNull(); }
   });
 
   it('mainnet: no dollar story, whatever the price; the card shows the price read from the contract', async () => {

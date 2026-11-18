@@ -1,6 +1,6 @@
-import { ELYSIUM, SHADE, TEXT_INKS, activeChain } from '@coinnibal/shared';
+import { ELYSIUM, RULES, SHADE, TEXT_INKS, activeChain } from '@coinnibal/shared';
 import { BITTEN_COIN, WORD_COIN_SCALE, WORD_LETTERS, type BrandLetter } from '../../design/motifs/brandShapes';
-import { ourXHandle } from '../../i18n';
+import { ourXHandle, plainChainName, t } from '../../i18n';
 import { drawCoinLook } from '../../render/coin';
 import { hash32, lookForHandle, seeded, ticketNo } from '../coinLook';
 import { siteHost } from '../settings';
@@ -333,11 +333,11 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
     ctx.restore();
     return;
   }
-  label(ctx, 'Coinnibal WL pass', BX, Y + 62, TEAL_INK, 19);
-  label(ctx, 'Coins eat coins', PERF - 40, Y + 62, STONE, 17, 'right');
+  label(ctx, t('wp.img.title'), BX, Y + 62, TEAL_INK, 19);
+  label(ctx, t('wp.img.motto'), PERF - 40, Y + 62, STONE, 17, 'right');
   drawWordmark(ctx, BX - 4, Y + 88, 0.48);
 
-  label(ctx, 'Passenger', BX, Y + 222);
+  label(ctx, t('wp.img.passenger'), BX, Y + 222);
   if (upto < 3) {
     ctx.restore();
     return;
@@ -363,10 +363,10 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
   ctx.stroke();
   ctx.setLineDash([]);
   const cols: [string, string][] = [
-    ['Game', 'Coinnibal'],
-    ['Rounds', '5 min'],
-    ['Gate', 'WL'],
-    ['Boards', 'Round 001'],
+    [t('wp.img.game'), 'Coinnibal'],
+    [t('wp.img.rounds'), t('wp.img.roundsV', { min: Math.round(RULES.roundMs / 60_000) })],
+    [t('wp.img.pass'), 'WL'],
+    [t('wp.img.mint'), 'OpenSea'],
   ];
   const colW = (PERF - 40 - BX) / cols.length;
   cols.forEach(([k, v], i) => {
@@ -384,7 +384,7 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
   }
   // the stub: number, the handle's own coin, admit one
   const SX = PERF + STUB / 2;
-  label(ctx, 'No.', SX, Y + 58, INK, 17, 'center');
+  label(ctx, t('wp.img.no'), SX, Y + 58, INK, 17, 'center');
   ctx.font = `600 58px ${MONO}`;
   ctx.fillStyle = INK;
   ctx.textAlign = 'center';
@@ -398,7 +398,7 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
   ctx.fill();
   drawCoinLook(ctx, SX, cy, 84, look, { time: 0, lookX: -0.3, lookY: 0.1, expression: handle ? 'happy' : 'sleep', pxPerUnit: 1, seed: hash32(name) % 1000 });
 
-  label(ctx, 'Admit one', SX, Y + H - 66, INK, 18, 'center');
+  label(ctx, t('wp.img.admit'), SX, Y + H - 66, INK, 18, 'center');
   label(ctx, siteHost(), SX, Y + H - 38, INK, 15, 'center');
 
   if (upto < 6) {
@@ -424,21 +424,21 @@ export function drawTicketCard(canvas: HTMLCanvasElement, handle: string, opts: 
   ctx.stroke();
   ctx.font = `900 ${handle ? 34 : 24}px ${DISPLAY}`;
   ctx.textAlign = 'center';
-  ctx.fillText(handle ? 'WL' : 'BLANK', 0, handle ? 8 : 6);
+  ctx.fillText(handle ? 'WL' : t('wp.img.blank'), 0, handle ? 8 : 6);
   ctx.font = `600 13px ${MONO}`;
-  ctx.fillText(handle ? activeChain().name.toUpperCase() : 'ADD HANDLE', 0, 30);
-  ctx.fillText('ROUND 001', 0, -26);
+  ctx.fillText(handle ? plainChainName(activeChain().name).toUpperCase() : t('wp.img.addHandle'), 0, 30);
+  ctx.fillText(t('wp.img.stampTop'), 0, -26);
   ctx.restore();
 
   ctx.restore(); // the tilt
   if (ss > 1.02) return; // the stamp is still in the air
 
-  // the Homer line under the pass, on the night
+  // the tagline under the pass, on the night
   ctx.font = `italic 500 21px ${DISPLAY}`;
   ctx.fillStyle = ELYSIUM.cream;
   ctx.textAlign = 'left';
   ctx.globalAlpha = 0.92;
-  ctx.fillText('"No snow is there, nor heavy storm, nor ever rain."', X + 6, 590);
+  ctx.fillText(t('brand.tagline'), X + 6, 590);
   ctx.globalAlpha = 1;
   label(ctx, ourXHandle(), CARD_W - X - 4, 590, ELYSIUM.foam, 17, 'right');
 }
