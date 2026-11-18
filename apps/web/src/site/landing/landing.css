@@ -1037,6 +1037,12 @@
     justify-items: stretch;
   }
 }
+/* a single column puts the dial's crown in the top-left corner's way: the "live" tag gets a row of its own */
+@media (max-width: 639px), (min-width: 900px) and (max-width: 1099px) {
+  .ld-round__card:has(.ld-clock__tag) {
+    padding-top: 60px !important;
+  }
+}
 .ld-stops {
   margin: 30px 0 0;
   padding: 0;
