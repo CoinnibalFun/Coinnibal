@@ -44,7 +44,8 @@ export function GetTokensSheet() {
   const steps = tokenSteps({ testnet, faucetUrl: chain?.faucetUrl ?? info?.faucetUrl ?? null, bridgeUrl: info?.bridgeUrl ?? null, buyUrl: TOKEN_BUY_URL });
   const token = tokenAddress(chain?.chainId, chain?.token?.address);
   const tokenLink = token ? explorerAddress(token) : null;
-  const vars = { sym: tok.symbol, chain: info?.name ?? '' };
+  // an unknown network keeps the global `{chain}` (the active one), never an empty name
+  const vars = { sym: tok.symbol, ...(info?.name ? { chain: info.name } : {}) };
   return (
     <Sheet open={open} onClose={closeModal} closeLabel={t('gt.close')} kicker={t('gt.kicker', vars)} title={t('gt.title', vars)} className="kl-sheet gt-sheet">
       <div className="gt-body" data-testid="get-tokens">

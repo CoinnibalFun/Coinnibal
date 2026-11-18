@@ -11,7 +11,7 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { LOCALNET_RPC_PORT, ROOT, hardhatAccount, hardhatKey, importSdk, rpcUp, viem } from './common.mjs';
+import { LOCALNET_CHAIN_ID, LOCALNET_RPC_PORT, ROOT, hardhatAccount, hardhatKey, importSdk, rpcUp, viem } from './common.mjs';
 
 export const STATE_DIR = join(ROOT, '.localnet');
 export const ADDRESSES_FILE = join(STATE_DIR, 'contracts.json');
@@ -86,12 +86,13 @@ export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http:/
   const token = await sdk.deployedAddress(publicClient, await sdk.deployTestToken(wallet, { owner: owner.address }));
   log(`deploying ElymumArena (server authority ${server}, fee wallet = owner)`);
   const arena = await sdk.deployedAddress(publicClient, await sdk.deployArena(wallet, { admin: owner.address, serverAuthority: server, feeWallet: owner.address }));
-  log('deploying ElymumNFT (supply 5,000, 0.02 ETH, WL 2 / public 5 per wallet)');
+  log('deploying ElymumNFT (supply 3,333, 0.02 ETH, WL 2 / public 5 per wallet)');
   const nft = await sdk.deployedAddress(
     publicClient,
     await sdk.deployNft(wallet, {
       owner: owner.address,
-      maxSupply: 5000,
+      // the owner's fixed supply (NFT_SUPPLY in @elymum/shared)
+      maxSupply: 3333,
       mintPrice: 2n * 10n ** 16n,
       wlLimit: 2,
       publicLimit: 5,
@@ -137,13 +138,18 @@ export function readAddresses() {
   }
 }
 
-/** Sends `hype` ETH and `tokens` test tokens from the owner to `to`. */
+/**
+ * Sends `hype` ETH and `tokens` test tokens from the owner to `to`: a developer's own wallet on the local hardhat
+ * chain only (31337, the well-known hardhat accounts). It refuses every other chain: nothing in this repo sends
+ * ETH to players; on the testnet gas comes from the network's official faucet.
+ */
 export async function fundAddress(to, { hype = 10, tokens = 100_000, log = console.log } = {}) {
   const { token, rpcUrl } = readAddresses();
   const sdk = await importSdk();
   const { parseEther, getAddress } = viem();
   const probe = sdk.createElymumPublicClient(rpcUrl);
   const chainId = await probe.getChainId();
+  if (chainId !== LOCALNET_CHAIN_ID) throw new Error(`${rpcUrl} is chain ${chainId}, not the local chain (${LOCALNET_CHAIN_ID}): localnet-fund runs on the local chain only`);
   const { publicClient, wallet } = clients(sdk, rpcUrl, chainId, hardhatKey(ACCOUNT.owner));
   const addr = getAddress(to);
   if (hype > 0) {
