@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import {
@@ -26,7 +27,7 @@ import type { RoomHandle } from '../rooms/handle';
 import type { RoomManager } from '../rooms/manager';
 import { MAX_STAKE_SESSION_AGE_S } from '../rooms/room';
 import type { Journal, SettlementItem } from '../stake/journal';
-import { Conn } from './conn';
+import { Conn, PING_REPLY_MIN_MS } from './conn';
 import { rateKey, subnetOf, wideNetOf } from './ip-key';
 import { Limiter } from './limiter';
 import type { LoadShedder } from './shedder';
@@ -41,6 +42,8 @@ export const GUEST_SHARE = 0.8;
 export const IDLE_GUEST_MS = 30_000;
 /** Above this share of `MAX_CONNECTIONS` the heartbeat closes guests idle for `2 × IDLE_GUEST_MS` (down to the share). */
 const IDLE_SWEEP_SHARE = 0.9;
+/** A send buffer over this (the snapshot skip of `room.ts`) at two heartbeats in a row closes the socket. */
+const SLOW_SEND_BYTES = 768 * 1024;
 /** Live-stake holders reconnecting get this much room above `MAX_CONNECTIONS` (one slot per wallet, see `admit`). */
 const STAKE_HEADROOM = 0.05;
 /**
@@ -161,14 +164,17 @@ export class Gateway {
   private readonly stakeUpgrades = new Limiter(STAKE_UPGRADES_PER_WALLET_PER_MIN, 60_000);
   /** Graceful degradation (new joins shed before live rooms suffer); null: never sheds (bare unit tests). */
   private shedder: LoadShedder | null = null;
-  /** Connections closed for abuse (flood, garbage, no hello), for the load test and the logs. */
-  readonly dropped = { noHello: 0, flood: 0, limit: 0, idle: 0 };
+  /** Connections closed for abuse (flood, garbage, no hello, a client that stops reading), for the load test and the logs. */
+  readonly dropped = { noHello: 0, flood: 0, limit: 0, idle: 0, slow: 0 };
   /**
    * Sockets closed because a newer one of the same wallet took their arena coin over, or their place beyond
    * `SOCKETS_PER_WALLET` (`CLOSE_REPLACED`).
    */
   replaced = 0;
-  private readonly alive = new WeakMap<WebSocket, boolean>();
+  /** Liveness: true once the client answered, else the payload of the ping it has to echo (`beat`). */
+  private readonly alive = new WeakMap<WebSocket, true | Buffer>();
+  /** Sockets whose send buffer was over `SLOW_SEND_BYTES` at the last beat. */
+  private readonly slowAtBeat = new WeakSet<WebSocket>();
   private timers: NodeJS.Timeout[] = [];
   /** Who may enter a room (join or spectate); null: everyone (unit tests that build a bare gateway). */
   private gameGate: ((wallet: string | null, fresh?: boolean) => boolean | Promise<boolean>) | null = null;
@@ -296,24 +302,41 @@ export class Gateway {
     });
     // heartbeat + lobby room list
     this.timers.push(
-      setInterval(() => {
-        for (const ws of this.wss.clients) {
-          if (this.alive.get(ws) === false) {
-            ws.terminate();
-            continue;
-          }
-          this.alive.set(ws, false);
-          ws.ping();
-        }
-        // close to the cap: lobby guests idle for a minute make room before anyone is refused
-        const max = this.cfg.maxConnections;
-        while (this.rooms.conns.size > max * IDLE_SWEEP_SHARE && this.evictIdleGuest(2 * IDLE_GUEST_MS));
-      }, 25_000),
+      setInterval(() => this.beat(), 25_000),
       setInterval(() => {
         const msg = { t: 'rooms', rooms: this.rooms.list(), online: this.rooms.online(), blocked: this.rooms.blockedArenas() } as const;
         for (const c of this.rooms.conns) if (c.helloed && !c.player?.alive) c.send(msg);
       }, 5000),
     );
+  }
+
+  /**
+   * The heartbeat (every 25 s): a socket that did not echo the last ping is closed. Each ping carries a fresh random
+   * payload that the pong must echo (browsers and the ws client do so by themselves), so a client that stopped reading
+   * cannot stay "alive" by sending pongs of its own: the ping waits behind what it does not read. A socket whose send
+   * buffer stayed over `SLOW_SEND_BYTES` for two beats is closed too (its snapshots are skipped all that time).
+   */
+  beat(): void {
+    for (const ws of this.wss.clients) {
+      if (this.alive.get(ws) !== true) {
+        ws.terminate();
+        continue;
+      }
+      if (ws.bufferedAmount > SLOW_SEND_BYTES) {
+        if (this.slowAtBeat.has(ws)) {
+          this.dropped.slow++;
+          ws.terminate();
+          continue;
+        }
+        this.slowAtBeat.add(ws);
+      } else this.slowAtBeat.delete(ws);
+      const probe = randomBytes(8);
+      this.alive.set(ws, probe);
+      ws.ping(probe);
+    }
+    // close to the cap: lobby guests idle for a minute make room before anyone is refused
+    const max = this.cfg.maxConnections;
+    while (this.rooms.conns.size > max * IDLE_SWEEP_SHARE && this.evictIdleGuest(2 * IDLE_GUEST_MS));
   }
 
   /** The server is shutting down: every new WebSocket is refused (503) from now on. */
@@ -526,7 +549,11 @@ export class Gateway {
       ws.terminate();
     }, this.cfg.wsHelloTimeoutMs ?? HELLO_TIMEOUT_MS);
     helloTimer.unref();
-    ws.on('pong', () => this.alive.set(ws, true));
+    // only the echo of the server's last ping counts (an unsolicited pong proves nothing)
+    ws.on('pong', (data) => {
+      const want = this.alive.get(ws);
+      if (want instanceof Buffer && data.equals(want)) this.alive.set(ws, true);
+    });
     ws.on('message', (data, isBinary) => {
       this.onMessage(conn, data, isBinary).catch((err) => this.log(`message handling failed: ${(err as Error).stack ?? err}`));
     });
@@ -661,6 +688,8 @@ export class Gateway {
 
     switch (msg.t) {
       case 'hello': {
+        // one hello per socket: a repeat would make the server send the (much larger) welcome again and again
+        if (conn.hellos++ > 0) return this.strike(conn);
         if (msg.v !== PROTOCOL_VERSION) {
           this.error(conn, 'version_mismatch', 'A new version of Coinnibal is available. Please refresh.');
           return;
@@ -736,9 +765,14 @@ export class Gateway {
         else if (on !== was) conn.room?.connChanged?.(conn);
         return;
       }
-      case 'ping':
-        conn.send({ t: 'pong', ts: Number(msg.ts) || 0, serverTime: Date.now(), serverNow: this.rooms.now() });
+      case 'ping': {
+        // answered at most every PING_REPLY_MIN_MS (the web client pings every 2 s); more are dropped silently
+        const now = Date.now();
+        if (now - conn.lastPongAt < PING_REPLY_MIN_MS) return;
+        conn.lastPongAt = now;
+        conn.send({ t: 'pong', ts: Number(msg.ts) || 0, serverTime: now, serverNow: this.rooms.now() });
         return;
+      }
     }
   }
 

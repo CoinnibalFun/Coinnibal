@@ -10,6 +10,14 @@ let nextConnId = 1;
 /** Strikes (dropped, malformed or premature messages) a connection may collect per window before it is closed. */
 export const STRIKE_LIMIT = 300;
 export const STRIKE_WINDOW_MS = 10_000;
+/**
+ * A socket whose send buffer holds more than this is closed instead of queuing more: its client stopped reading, and
+ * what the server keeps sending it would otherwise pile up in memory without end. Snapshots are already skipped above
+ * 768 KiB (`room.ts`, `pool.ts`), so a client that still reads never gets near it.
+ */
+export const SEND_BUFFER_MAX_BYTES = 2 * 1024 * 1024;
+/** `ping` messages answered at most this often per socket (the web client pings every 2 s). */
+export const PING_REPLY_MIN_MS = 500;
 
 /** A frame of a room worker held back while a reattach is answered (worker mode). */
 export interface HeldFrame {
@@ -34,6 +42,10 @@ export class Conn implements RoomConn {
   /** The signed-in wallet's server profile (name, skin, XP); null for guests and wallets without a name. */
   profile: ProfileSummary | null = null;
   helloed = false;
+  /** `hello` messages received: only the first is answered (a `welcome` is far larger than a `hello`). */
+  hellos = 0;
+  /** When the last `ping` was answered (`PING_REPLY_MIN_MS`). */
+  lastPongAt = 0;
   joining = false;
   /** Name used for chat while dead/spectating after having played. */
   lastName: string | null = null;
@@ -119,17 +131,27 @@ export class Conn implements RoomConn {
 
   /** A message already serialised (a room's broadcast stringifies once for every viewer). */
   sendText(json: string): void {
-    if (!this.open) return;
+    if (!this.open || !this.canSend()) return;
     wsOut.bytes += json.length;
     wsOut.msgs++;
     this.ws.send(json);
   }
 
   sendBinary(buf: ArrayBuffer): void {
-    if (!this.open) return;
+    if (!this.open || !this.canSend()) return;
     wsOut.bytes += buf.byteLength;
     wsOut.msgs++;
     this.ws.send(buf, { binary: true });
+  }
+
+  /** False, and the socket is closed, when its send buffer is over `SEND_BUFFER_MAX_BYTES` (every send checks it). */
+  canSend(): boolean {
+    if (this.ws.bufferedAmount <= SEND_BUFFER_MAX_BYTES) return true;
+    if (this.ws.readyState <= WebSocket.OPEN) {
+      wsOut.overflow++;
+      this.ws.terminate();
+    }
+    return false;
   }
 
   get buffered(): number {

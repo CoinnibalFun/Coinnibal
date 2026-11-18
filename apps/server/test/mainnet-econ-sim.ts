@@ -122,7 +122,7 @@ function walletOf(seat: number, round: number, rotate: boolean): string {
 }
 
 function fakeConn(wallet: string, ip: string, fp: string): Conn {
-  const ws = { readyState: 1, bufferedAmount: 1 << 30, send() {} };
+  const ws = { readyState: 1, bufferedAmount: 1 << 30, send() {}, terminate() {} };
   const conn = new Conn(ws as never, ip);
   conn.wallet = wallet;
   conn.fp = fp;
