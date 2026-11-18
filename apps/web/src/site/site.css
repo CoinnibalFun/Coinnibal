@@ -180,7 +180,6 @@ body {
   color: var(--ink-fixed) !important;
   border-color: var(--outline);
   box-shadow: var(--sh-1);
-  transform: rotate(-2deg);
 }
 /* the closed parts of the site stand together in one dashed outline under one Soon tag, drawn like the 404's unbuilt
    terrace: planned, not built yet. Their names are not links (a pointer on one says what it will be) */
@@ -205,7 +204,6 @@ body {
   background: var(--sun);
   border: 1.5px solid var(--outline);
   border-radius: 6px;
-  transform: rotate(-3deg);
 }
 .st-nav__link--soon,
 .st-nav__link--soon:hover {

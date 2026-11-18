@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { CoinCharacter, Icon, Receipt, Rule, useReducedMotion, type ReceiptLine } from '../../design';
+import { CoinCharacter, Icon, Receipt, useReducedMotion, type ReceiptLine } from '../../design';
 import { ourXHandle, useT } from '../../i18n';
 import { arenaRates } from '../../wallet/ticket';
 import { useUi } from '../../store';
@@ -243,7 +243,7 @@ export function DocsPage({ level = 2 }: { level?: Level }) {
             </section>
           ))}
 
-          <Rule variant="double" />
+          {/* the last chapter's table closes with its own rule: no second rule under it */}
           <footer className="dc-foot">
             <button type="button" className="dc-top" onClick={toTop}>
               <Icon name="arrow" size={18} className="dc-top__icon" />
