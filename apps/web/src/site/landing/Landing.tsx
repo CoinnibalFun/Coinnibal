@@ -480,7 +480,7 @@ function Nft({ doors }: { doors: Doors }) {
   const copy = useReveal<HTMLDivElement>();
   const why = useRef<HTMLDivElement>(null);
   useReveal(why);
-  useRevealEach(why, '.nf-card');
+  useRevealEach(why, '.nf-row');
   return (
     <section ref={plate} className="ld-plate ld-nft" id="nft" aria-labelledby="ld-nft-h">
       <i className="ld-rule" aria-hidden="true" />

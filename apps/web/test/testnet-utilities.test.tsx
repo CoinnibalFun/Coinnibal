@@ -19,7 +19,7 @@ import { FaucetPage } from '../src/site/faucet/FaucetPage';
 import { claimErrorText, displaySymbol, faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
 import { translate, type TKey } from '../src/i18n';
 import { livePerks } from '../src/site/mint/logic';
-import { configuredPerks, perkCards } from '../src/site/nft/WhyNft';
+import { configuredPerks, perkRows } from '../src/site/nft/WhyNft';
 import { isLazyPage, loadedPage, resetPages, warmPage } from '../src/site/pages';
 import { navigate } from '../src/site/router';
 import { resetServerChain } from '../src/site/serverChain';
@@ -176,28 +176,26 @@ describe('the faucet', () => {
 
 describe('why get the NFT: the holder perks', () => {
   const t = (k: TKey, vars?: Record<string, string | number>) => translate(k, vars);
-  it('lists every configured perk: the fee, the $10 room, power-ups, the free room and the skin (no test faucet)', () => {
+  it('lists every configured perk, without the NFT and with it: the fee, the $10 room, power-ups, the free room and the skin (no test faucet)', () => {
     const v = configuredPerks();
     expect(v.fee).toEqual({ normal: '20%', holder: '10%', burn: '8%', team: '2%' });
-    const cards = perkCards(v, t, true);
-    expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
-    expect(cards[0].title).toBe('Lower fee: 10% instead of 20%');
-    expect(cards[0].note).toBe('We take less of your profit: 8% is burned and 2% goes to the team wallet.');
-    expect(cards[1].title).toBe('$10 Room for holders');
-    expect(cards[2].title).toBe('20% off power-ups');
-    // a true minus sign on the figure; the skin has no figure (the card shows the holder badge's laurel)
-    expect(cards[2].big).toBe('\u221220%');
-    expect(cards[4]).toMatchObject({ id: 'skin', big: null });
-    expect(cards[2].note).toMatch(/1 extra power-up use in every paid round \(3 instead of 2\)/);
-    expect(cards[3].title).toBe('1 free private room a day');
+    const rows = perkRows(v, t);
+    expect(rows.map((r) => r.id)).toEqual(['fee', 'room', 'shop', 'uses', 'private', 'skin']);
+    expect(rows[0]).toMatchObject({ label: 'Fee on your profit', without: '20%', with: '10%', note: '8% burned, 2% to the team wallet' });
+    expect(rows[1]).toMatchObject({ label: 'The $10 Room', without: 'Closed', with: 'Open' });
+    expect(rows[2]).toMatchObject({ label: 'Power-up packs', without: 'Full price', with: '20% off' });
+    // one extra power-up use in every paid round: 3 instead of 2
+    expect(rows[3]).toMatchObject({ without: '2', with: '3' });
+    expect(rows[4]).toMatchObject({ label: 'Private room', without: 'Paid in ETH', with: '1 free a day' });
+    // the shared skin is one gold look, not the holder's own NFT art
+    expect(rows[5].with).toBe('Gold NFT skin and a holder badge');
   });
-  it('takes the live shop discount and private-room perk when the server reports them; no faucet card on mainnet', () => {
+  it('takes the live shop discount and private-room perk when the server reports them; no faucet row on mainnet', () => {
     const v = configuredPerks({ shopPct: 30, room: { perk: 'discount', pct: 50 } });
-    const cards = perkCards(v, t, false);
-    expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
-    expect(cards[2].title).toBe('30% off power-ups');
-    expect(cards[3].title).toBe('50% off private rooms');
-    expect(cards[3].big).toBe('\u221250%');
+    const rows = perkRows(v, t);
+    expect(rows.map((r) => r.id)).toEqual(['fee', 'room', 'shop', 'uses', 'private', 'skin']);
+    expect(rows[2].with).toBe('30% off');
+    expect(rows[4].with).toBe('50% off');
     // a closed shop or no room perk falls back to the configured defaults
     expect(configuredPerks({ shopPct: null, room: { perk: 'none', pct: 0 } }).shopPct).toBe(20);
   });
