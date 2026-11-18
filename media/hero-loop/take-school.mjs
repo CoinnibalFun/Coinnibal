@@ -15,7 +15,7 @@
 // sees her too late and scurries off, she eats it. It drops back in fresh, grazes and waits for its next turn.
 //
 // Masses stay in bands (the school and the prey drop in fresh when they grow too heavy, goldie too) so the
-// sizes keep reading: goldie about 240-430, the school about 22-110 (at most a third of her), the prey about 40-95.
+// sizes keep reading: goldie about 270-450, the school about 22-110 (at most a third of her), the prey about 40-95.
 //
 // Besides the journal the take writes `tele.json`: 10 times a second, every coin and cactus goldie's page
 // knows about (world units), the server's view and whether coin rain is falling (its screen-space coins
@@ -36,8 +36,9 @@ const MINUTES = Number(opt('--minutes', '10'));
  * twice the coins' blink cycle (4.6 s of the page clock), so every coin blinks at the same moments at both ends.
  */
 const PERIOD = Number(opt('--period', '9.2'));
-const HERO_MIN = Number(opt('--hero-min', '240'));
-const HERO_MAX = Number(opt('--hero-max', '430'));
+// (above 256 her radius reaches the game's "smug" size: her face then stays the same between moods)
+const HERO_MIN = Number(opt('--hero-min', '270'));
+const HERO_MAX = Number(opt('--hero-max', '450'));
 // the school stays smaller than a cactus (a coin bigger than one pops on it)
 const ESC_MIN = 22, ESC_MAX = 110;
 const PREY_MIN = 40, PREY_MAX = 95;
@@ -407,20 +408,23 @@ const cacti = () => [...cactusMap.values()];
 /** A heading with room for the whole scene (no wall, no cactus on her path or at the prey's spot), or null. */
 /**
  * Is the course from (x, y) along (hx, hy) clear for `len` (no wall, no cactus near it or the prey's spot)? With
- * `wide`, no cactus within the loop's frame either (12 radii by 7.5 around her): a cactus in the frame at one end
- * of the loop and not at the other would cross-fade in or out at the seam.
+ * `wide`, no cactus either in the loop's frame (12 radii by 7.5 around her) where she will likely be at the loop's
+ * two ends (about 4.4 s before the gulp at the prey's spot and a period later, give or take a second): a cactus
+ * in the frame at one end of the loop and not at the other would cross-fade in or out at the seam.
  */
 function laneClear(x0, y0, hx, hy, len, spot, R, wide = false) {
   for (let s = 0; s <= len; s += 100) {
     const x = x0 + hx * s, y = y0 + hy * s;
     if (x < room[0] + 1350 || y < room[1] + 1350 || x > room[2] - 1350 || y > room[3] - 1350) return false;
+    for (const [cx, cy, cr] of cacti()) if (Math.hypot(cx - x, cy - y) < R * 1.4 + cr * 1.3 + 150) return false;
+  }
+  if (wide) {
+    const v = speedOf(me.mass), sa = spot - 0.9 * R - 4.4 * v, sb = sa + PERIOD * v, reach = 6 * R + v;
     for (const [cx, cy, cr] of cacti()) {
-      if (Math.hypot(cx - x, cy - y) < R * 1.4 + cr * 1.3 + 150) return false;
-      if (wide && Math.abs((cx - x) * hy - (cy - y) * hx) < R * 4.4 + cr && Math.abs((cx - x) * hx + (cy - y) * hy) < 120) return false;
+      const al = (cx - x0) * hx + (cy - y0) * hy, ac = Math.abs((cx - x0) * hy - (cy - y0) * hx);
+      if (ac < R * 4.3 + cr && (Math.abs(al - sa) < reach + cr || Math.abs(al - sb) < reach + cr)) return false;
     }
   }
-  // (the frame also reaches six radii behind her at the start)
-  if (wide && cacti().some(([cx, cy, cr]) => { const al = (cx - x0) * hx + (cy - y0) * hy; return al < 0 && al > -R * 6 - cr && Math.abs((cx - x0) * hy - (cy - y0) * hx) < R * 4.4 + cr; })) return false;
   const px = x0 + hx * spot, py = y0 + hy * spot;
   return !cacti().some(([cx, cy, cr]) => Math.hypot(cx - px, cy - py) < cr * 1.3 + 400);
 }
