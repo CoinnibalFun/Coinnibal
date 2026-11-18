@@ -503,7 +503,7 @@ describe('/mint loads fast: skeleton, kept state, early start, timeouts', { time
   });
 
   it('ignores a kept state that is unreadable or too old', () => {
-    localStorage.setItem('elymum.mint-state.v1', '{not json');
+    localStorage.setItem('coinnibal.mint-state.v1', '{not json');
     expect(readCachedMint()).toBeNull();
     writeCachedMint(mintState(contract()), Date.now() - 10 * 24 * 3600_000);
     expect(readCachedMint()).toBeNull();

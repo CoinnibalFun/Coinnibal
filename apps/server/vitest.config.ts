@@ -5,7 +5,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
 // - the room-worker suite starts worker threads that compile TypeScript on boot and waits on them with timeouts
 //   (`pnpm test:workers`, together with the WebSocket suite on two workers).
 const alone = [
-  ...(process.env.ELYMUM_MONEY_SIM === '1' ? [] : ['test/money-conservation.test.ts']),
+  ...(process.env.COINNIBAL_MONEY_SIM === '1' ? [] : ['test/money-conservation.test.ts']),
   ...(process.env.TEST_GAME_WORKERS ? [] : ['test/workers.test.ts']),
 ];
 

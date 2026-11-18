@@ -111,7 +111,7 @@ describe('invites', () => {
     expect(parseInviteCode('ABCDEFGHJKL')).toBeNull();
     expect(parseInviteCode('ABC1EFGH')).toBeNull();
     expect(parseInviteCode(null)).toBeNull();
-    expect(inviteUrl('https://elymum.io/', 'AB2CD')).toBe('https://elymum.io/play?room=AB2CD');
+    expect(inviteUrl('https://coinnibal.fun/', 'AB2CD')).toBe('https://coinnibal.fun/play?room=AB2CD');
     expect(parseJoinTarget('private:AB2CD')).toEqual({ mode: 'private', code: 'AB2CD' });
   });
 

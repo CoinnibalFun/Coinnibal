@@ -111,17 +111,17 @@ describe('ticket confirm sheet', () => {
   it('shows the exact amount, the fee policy, the network fee and both calls before signing', () => {
     open(PENNY);
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getAllByText('1,000 $ELYMUM').length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText('1,000 $NIBAL').length).toBeGreaterThan(0);
     // arena v3: no entry fee; the fee is on profit only, split burned / fee wallet
     expect(within(dialog).getByText('20% · on profit only · fixed for this ticket · 15% burned · 5% to the fee wallet')).toBeTruthy();
     expect(within(dialog).queryByText('Your coin starts at')).toBeNull();
     expect(within(dialog).getByText(/No profit, no fee/)).toBeTruthy();
     expect(within(dialog).getByText(/paid in ETH on Robinhood Chain Testnet · you have 0.42 ETH/)).toBeTruthy();
-    expect(within(dialog).getByText('12,450 → 11,450 $ELYMUM')).toBeTruthy();
+    expect(within(dialog).getByText('12,450 → 11,450 $NIBAL')).toBeTruthy();
     const steps = within(within(dialog).getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
     // no allowance yet: an approval for 5 tickets of this room first (preselected; what the wallet will show), then the ticket
-    expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take up to 5,000 $ELYMUM (5 tickets of this room)', '2Buy the ticket · $1 Room']);
-    expect((within(dialog).getByRole('button', { name: /Pay 1,000 \$ELYMUM/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take up to 5,000 $NIBAL (5 tickets of this room)', '2Buy the ticket · $1 Room']);
+    expect((within(dialog).getByRole('button', { name: /Pay 1,000 \$NIBAL/ }) as HTMLButtonElement).disabled).toBe(false);
     // the approval covers 1, 5, 10 or 20 tickets, 5 preselected
     expect(within(dialog).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['1 ticket', '5 tickets', '10 tickets', '20 tickets']);
     expect(within(dialog).getByRole('radio', { name: '5 tickets' }).getAttribute('aria-checked')).toBe('true');
@@ -148,7 +148,7 @@ describe('ticket confirm sheet', () => {
     act(() => screen.getByRole('radio', { name: '10 tickets' }).click());
     expect(useUi.getState().settings.approveTickets).toBe(10);
     const steps = within(screen.getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
-    expect(steps[0].textContent).toBe('1Allow the arena to take up to 10,000 $ELYMUM (10 tickets of this room)');
+    expect(steps[0].textContent).toBe('1Allow the arena to take up to 10,000 $NIBAL (10 tickets of this room)');
     expect(screen.getByText(/your next 9 tickets here need a single transaction each/)).toBeTruthy();
     act(() => screen.getByRole('button', { name: /^Pay / }).click());
     await settle();
@@ -247,10 +247,10 @@ describe('ticket confirm sheet', () => {
   it('the collect sheet shows the payout and one refund call', () => {
     useChainData.setState({ sessions: { 1: session({ finalized: true, owed: 2150n * ONE }) } });
     open(PENNY, 'collect');
-    expect(screen.getAllByText('2,150 $ELYMUM').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('2,150 $NIBAL').length).toBeGreaterThan(0);
     const steps = within(screen.getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
     expect(steps.map((li) => li.textContent)).toEqual([expect.stringContaining('Collect your payout')]);
-    expect(screen.getByRole('button', { name: /Collect · 2,150 \$ELYMUM/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Collect · 2,150 \$NIBAL/ })).toBeTruthy();
   });
 });
 
@@ -265,9 +265,9 @@ describe('ticket flow: two prompts, progress and races', () => {
     open(PENNY);
     act(() => screen.getByRole('button', { name: /^Pay / }).click());
     await settle();
-    expect(screen.getByTestId('tf-step').textContent).toBe('Step 1 of 2 · Allow the arena to take up to 5,000 $ELYMUM (5 tickets of this room)');
+    expect(screen.getByTestId('tf-step').textContent).toBe('Step 1 of 2 · Allow the arena to take up to 5,000 $NIBAL (5 tickets of this room)');
     expect(screen.getByText('Approve the game token in your wallet')).toBeTruthy();
-    expect(screen.getByText(/Your wallet shows 5,000 \$ELYMUM: enough for 5 tickets of this room/)).toBeTruthy();
+    expect(screen.getByText(/Your wallet shows 5,000 \$NIBAL: enough for 5 tickets of this room/)).toBeTruthy();
     // the plan is always exact (the batch, when ticked, is built here and checked call by call)
     expect(spies.planJoin.mock.calls[0][1]).toMatchObject({ approve: 'exact' });
     await act(async () => release());
@@ -283,7 +283,7 @@ describe('ticket flow: two prompts, progress and races', () => {
     useChainData.setState({ allowance: 5000n * ONE });
     spies.planJoin.mockImplementation(async () => ({ entryFee: 1000n * ONE, allowance: 5000n * ONE, balance: 12_450n * ONE, approve: null, join: joinCall, calls: [joinCall] }));
     open(PENNY);
-    const pay = screen.getByRole('button', { name: /Pay 1,000 \$ELYMUM/ });
+    const pay = screen.getByRole('button', { name: /Pay 1,000 \$NIBAL/ });
     act(() => {
       pay.click();
       pay.click();

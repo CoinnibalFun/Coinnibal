@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 /** localStorage key: set once the first-play brief has been read (or waved away). */
-export const BRIEF_KEY = 'elymum.brief';
+export const BRIEF_KEY = 'coinnibal.brief';
 
 interface BriefState {
   open: boolean;

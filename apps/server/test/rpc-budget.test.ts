@@ -138,8 +138,9 @@ describe('several RPCs (EVM_RPC_URLS)', () => {
   });
 
   it('the VPS compose environment: an empty EVM_RPC_URL is unset, EVM_RPC_URLS and CHAIN_ID win over stale values', () => {
-    // deploy/vps/docker-compose.yml sets EVM_RPC_URL: "" and EVM_RPC_URLS / CHAIN_ID / GAME_ACCESS from ELYMUM_* keys
-    // (a stale CHAIN_ID or EVM_RPC_URL of /opt/elymum/.env never reaches the app)
+    // deploy/vps/docker-compose.yml sets EVM_RPC_URL: "" and EVM_RPC_URLS / CHAIN_ID / GAME_ACCESS from COINNIBAL_* keys
+    // (a stale CHAIN_ID or EVM_RPC_URL of /opt/elymum/.env, the install directory kept from before the rename, never
+    // reaches the app)
     const cfg = loadConfig({
       EVM_RPC_URL: '',
       EVM_RPC_URLS: 'https://rpc.testnet.chain.robinhood.com',

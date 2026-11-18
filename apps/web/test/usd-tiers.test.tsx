@@ -48,10 +48,10 @@ describe('lobby: tickets in US dollars with the token amount', () => {
   };
   const row = (id: number) => document.querySelector(`[data-kb-value="arena:${id}"]`) as HTMLElement;
 
-  it('"$1" with "1,000 $ELYMUM" next to it; an arena not at its tier price shows its value', () => {
+  it('"$1" with "1,000 $NIBAL" next to it; an arena not at its tier price shows its value', () => {
     list(prices);
     expect(within(row(1)).getByTestId('ticket-usd').textContent).toBe('$1');
-    expect(within(row(1)).getByText('1,000 $ELYMUM')).toBeTruthy();
+    expect(within(row(1)).getByText('1,000 $NIBAL')).toBeTruthy();
     expect(within(row(2)).getByTestId('ticket-usd').textContent).toBe('$3');
     expect(within(row(3)).getByTestId('ticket-usd')).toMatchObject({ textContent: '≈ $50' });
     expect(within(row(3)).getByTestId('ticket-usd').getAttribute('data-exact')).toBe('no');
@@ -96,7 +96,7 @@ describe('admin: Sync arena prices to USD', () => {
     const plans: Plan[] = [];
     return {
       net: resolveNetwork(chainStatus({ arenaAddress: ARENA })),
-      status: { arena: { code: 'ok', config: { admin: ALICE, token: BOB, decimals: 18, holderNft: BOB }, token: { symbol: '$ELYMUM' }, arenas } } as unknown as StatusSnapshot,
+      status: { arena: { code: 'ok', config: { admin: ALICE, token: BOB, decimals: 18, holderNft: BOB }, token: { symbol: '$NIBAL' }, arenas } } as unknown as StatusSnapshot,
       refresh: vi.fn(async () => {}),
       reloadNet: vi.fn(async () => {}),
       me,
@@ -114,12 +114,12 @@ describe('admin: Sync arena prices to USD', () => {
     await waitFor(() => expect(screen.getByTestId('arena-price-sync')).toBeTruthy());
     const sync = screen.getByTestId('arena-price-sync');
     const r = (id: number) => sync.querySelector(`[data-arena="${id}"]`) as HTMLElement;
-    expect(r(1).textContent).toContain('1,000 $ELYMUM · $0.81');
-    expect(r(1).textContent).toContain('1,200 $ELYMUM · $0.97');
+    expect(r(1).textContent).toContain('1,000 $NIBAL · $0.81');
+    expect(r(1).textContent).toContain('1,200 $NIBAL · $0.97');
     expect(r(1).textContent).toContain('updateArena');
     expect(r(2).textContent).toContain('in sync');
     expect(r(3).textContent).toMatch(/4 open tickets/);
-    expect(r(4).textContent).toContain('12,000 $ELYMUM · $9.72');
+    expect(r(4).textContent).toContain('12,000 $NIBAL · $9.72');
     expect(r(4).textContent).toContain('updateArena + holders only: on');
     // #1 and #4 entries + #4 holders-only; #3 waits for its tickets
     expect(screen.getByTestId('arena-price-sync-go').textContent).toBe('Sign 3 changes with the owner wallet');

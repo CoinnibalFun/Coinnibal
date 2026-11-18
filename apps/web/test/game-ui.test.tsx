@@ -49,7 +49,7 @@ describe('round receipt numbers', () => {
 
 describe('format helpers', () => {
   it('signs token deltas with a real minus and no sign on zero', () => {
-    const tf = tokenFormat(6, '$ELYMUM');
+    const tf = tokenFormat(6, '$NIBAL');
     expect(tf.signed(1250 * M)).toBe('+1,250');
     expect(tf.signed(-1250 * M)).toBe('−1,250');
     expect(tf.fmt(1500 * M, { compact: true })).toBe('1.5K');

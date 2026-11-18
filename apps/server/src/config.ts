@@ -136,7 +136,7 @@ export interface ServerConfig {
     journalAbandonContract: string | null;
     /** Arena ids to open as stake rooms (empty = discover on-chain). */
     arenaIds: number[];
-    /** Display symbol of the game token (`TOKEN_SYMBOL`, default `$NIBAL`; the on-chain symbol is not used for display). */
+    /** Display symbol of the game token (`TOKEN_SYMBOL`, default `tokens`; the on-chain symbol is not used for display). */
     tokenSymbol: string;
     /**
      * Seconds after which an open session nobody plays is settled at its entry fee by the sweeper

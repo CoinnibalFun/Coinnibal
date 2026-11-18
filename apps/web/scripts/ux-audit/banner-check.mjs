@@ -14,12 +14,12 @@ for (const [name, vp, mobile] of [
   ['desktop', { width: 1440, height: 900 }, false],
 ]) {
   const ctx = await b.newContext({ viewport: vp, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: mobile ? 2 : 1 });
-  await ctx.addInitScript(() => localStorage.setItem('elymum.brief', '1'));
+  await ctx.addInitScript(() => localStorage.setItem('coinnibal.brief', '1'));
   const p = await ctx.newPage();
   await p.goto(`${BASE}/play`, { waitUntil: 'load' });
-  await p.waitForFunction(() => window.__elymum?.useUi.getState().connected, null, { timeout: 120000 });
+  await p.waitForFunction(() => window.__coinnibal?.useUi.getState().connected, null, { timeout: 120000 });
   await p.waitForTimeout(1200);
-  await p.evaluate(() => window.__elymum.useUi.setState({ netDown: { kind: 'replaced', attempt: 0, retryAt: null } }));
+  await p.evaluate(() => window.__coinnibal.useUi.setState({ netDown: { kind: 'replaced', attempt: 0, retryAt: null } }));
   await p.waitForTimeout(600);
   const bg = await p.evaluate(() => {
     const el = document.querySelector('.g-conn');
@@ -28,17 +28,17 @@ for (const [name, vp, mobile] of [
   console.log(name, 'scrim', bg);
   await p.screenshot({ path: `${OUT}banner-${name}-replaced.png` });
   // "How to get $NIBAL"
-  await p.evaluate(() => window.__elymum.useUi.setState({ netDown: null, modal: 'tokens' }));
+  await p.evaluate(() => window.__coinnibal.useUi.setState({ netDown: null, modal: 'tokens' }));
   await p.waitForTimeout(900);
   await p.screenshot({ path: `${OUT}gettokens-${name}.png` });
-  await p.evaluate(() => window.__elymum.useUi.setState({ modal: null }));
+  await p.evaluate(() => window.__coinnibal.useUi.setState({ modal: null }));
   await p.waitForTimeout(500);
   // a practice game, then the socket drops
-  await p.evaluate(() => window.__elymum.useUi.setState({ netDown: null }));
-  await p.evaluate(() => window.__elymum.engine.play('practice'));
-  await p.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 20000 }).catch(() => {});
+  await p.evaluate(() => window.__coinnibal.useUi.setState({ netDown: null }));
+  await p.evaluate(() => window.__coinnibal.engine.play('practice'));
+  await p.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 20000 }).catch(() => {});
   await p.waitForTimeout(1500);
-  await p.evaluate(() => window.__elymum.useUi.setState({ netDown: { kind: 'lost', attempt: 3, retryAt: performance.now() + 4000 } }));
+  await p.evaluate(() => window.__coinnibal.useUi.setState({ netDown: { kind: 'lost', attempt: 3, retryAt: performance.now() + 4000 } }));
   await p.waitForTimeout(1200);
   await p.screenshot({ path: `${OUT}banner-${name}-lost.png` });
   await ctx.close();

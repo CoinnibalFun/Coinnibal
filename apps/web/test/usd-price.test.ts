@@ -41,7 +41,7 @@ describe('USD where money is spent (price and its age)', () => {
   });
 });
 
-describe('How to get $ELYMUM', () => {
+describe('How to get $NIBAL', () => {
   it('testnet: gas from the faucet, test tokens from the site faucet', () => {
     const s = tokenSteps({ testnet: true, faucetUrl: 'https://faucet.testnet.chain.robinhood.com', bridgeUrl: null, buyUrl: null });
     expect(s.map((x) => [x.key, x.href])).toEqual([
@@ -79,14 +79,14 @@ describe('How to get $ELYMUM', () => {
 
 describe('phone wallets (deep links)', () => {
   it('opens this page in the wallet apps', () => {
-    const links = walletLinks('https://elymum.io/play?room=arena-1');
+    const links = walletLinks('https://coinnibal.fun/play?room=arena-1');
     expect(links.map((l) => [l.id, l.href, l.opensHere])).toEqual([
-      ['metamask', 'https://metamask.app.link/dapp/elymum.io/play?room=arena-1', true],
-      ['coinbase', 'https://go.cb-w.com/dapp?cb_url=https%3A%2F%2Felymum.io%2Fplay%3Froom%3Darena-1', true],
+      ['metamask', 'https://metamask.app.link/dapp/coinnibal.fun/play?room=arena-1', true],
+      ['coinbase', 'https://go.cb-w.com/dapp?cb_url=https%3A%2F%2Fcoinnibal.fun%2Fplay%3Froom%3Darena-1', true],
       ['rabby', 'https://rabby.io/', false],
     ]);
     // with WalletConnect, Rabby connects through it
-    expect(walletLinks('https://elymum.io/play', { walletConnect: true }).map((l) => l.id)).toEqual(['metamask', 'coinbase']);
+    expect(walletLinks('https://coinnibal.fun/play', { walletConnect: true }).map((l) => l.id)).toEqual(['metamask', 'coinbase']);
     expect(walletLinks('not a url')).toEqual([]);
   });
 

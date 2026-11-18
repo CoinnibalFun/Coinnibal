@@ -73,7 +73,7 @@ const PIECES = [
 const kids = [];
 async function startStack() {
   if (await fetch(`${BASE}/api/health`).then((r) => r.ok, () => false)) throw new Error(`${BASE} already serves a stack: pass --base to use it, or pick other ports`);
-  const data = mkdtempSync(join(tmpdir(), 'elymum-layout-guard-'));
+  const data = mkdtempSync(join(tmpdir(), 'coinnibal-layout-guard-'));
   // a fresh server starts closed (information site): this stack opens every part, as the admin would in /admin
   mkdirSync(join(data, 'site'), { recursive: true });
   writeFileSync(join(data, 'site/settings.json'), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', launch: 1 }));
@@ -122,7 +122,7 @@ function hudProblems([pieces, safe, dbg]) {
   const W = innerWidth;
   const H = innerHeight;
   // my coin and its name tag (canvas): no HUD piece may cover them
-  const coin = window.__elymum?.engine?.myCoinBox?.() ?? null;
+  const coin = window.__coinnibal?.engine?.myCoinBox?.() ?? null;
   const seen = [];
   for (const sel of pieces)
     for (const el of document.querySelectorAll(`.g-hud ${sel}`)) {
@@ -161,9 +161,9 @@ function hudProblems([pieces, safe, dbg]) {
 async function newPage(browser, vp) {
   const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: 1, isMobile: vp.touch, hasTouch: vp.touch, locale: 'en-US', reducedMotion: 'reduce' });
   await ctx.addInitScript(() => {
-    localStorage.setItem('elymum.settings.v1', JSON.stringify({ name: 'WWWWWWWWWWWWWWWW', skin: 4, theme: 'light', quality: 'low', sound: false, showMinimap: true, showChat: true, showFps: true }));
-    localStorage.setItem('elymum.brief', '1');
-    localStorage.setItem('elymum.autoQuality', 'off');
+    localStorage.setItem('coinnibal.settings.v1', JSON.stringify({ name: 'WWWWWWWWWWWWWWWW', skin: 4, theme: 'light', quality: 'low', sound: false, showMinimap: true, showChat: true, showFps: true }));
+    localStorage.setItem('coinnibal.brief', '1');
+    localStorage.setItem('coinnibal.autoQuality', 'off');
   });
   const page = await ctx.newPage();
   if (vp.safe) await (await ctx.newCDPSession(page)).send('Emulation.setSafeAreaInsetsOverride', { insets: vp.safe }).catch(() => {});
@@ -220,7 +220,7 @@ async function checkViewport(browser, vp) {
     const closed = await newPage(browser, vp);
     try {
       await closed.page.route('**/api/site/settings', (r) =>
-        r.fulfill({ contentType: 'application/json', body: JSON.stringify({ settings: { wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'elymumio', launchPostUrl: null } }) }),
+        r.fulfill({ contentType: 'application/json', body: JSON.stringify({ settings: { wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null } }) }),
       );
       for (const path of ['/', '/mint', '/faucet', '/collab', '/wl']) {
         await closed.page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
@@ -238,12 +238,12 @@ async function checkViewport(browser, vp) {
       await closed.ctx.close();
     }
     await page.goto(`${BASE}/play`, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.__elymum?.useUi.getState().connected, null, { timeout: 30000 });
+    await page.waitForFunction(() => window.__coinnibal?.useUi.getState().connected, null, { timeout: 30000 });
     await sleep(600);
     const lobbyO = await page.evaluate(overflowX);
     if (lobbyO > 1) problems.push(`${vp.name} lobby: the page scrolls sideways by ${lobbyO}px`);
-    await page.evaluate(() => window.__elymum.engine.play('practice'));
-    await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 15000 });
+    await page.evaluate(() => window.__coinnibal.engine.play('practice'));
+    await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 15000 });
     // the round intro card passes over the HUD for a few seconds: let it come and go
     await page.waitForSelector('.gm-intro__card', { timeout: 3000 }).catch(() => {});
     await page.waitForFunction(() => !document.querySelector('.gm-intro__card'), null, { timeout: 12000 }).catch(() => {});
@@ -256,8 +256,8 @@ async function checkViewport(browser, vp) {
     // (1) a quiet practice pond: the "You are alone in this pond" chip with power-ups owned and
     // running, coin rain, chat and kill feed lines
     await page.evaluate(() => {
-      const E = window.__elymum.engine;
-      const ui = window.__elymum.useUi;
+      const E = window.__coinnibal.engine;
+      const ui = window.__coinnibal.useUi;
       const s = ui.getState();
       const orig = E.onMessage.bind(E);
       E.onMessage = (m) => {
@@ -281,7 +281,7 @@ async function checkViewport(browser, vp) {
     // (2) an arena round 20 s from its bell: once the intro card (replayed by the room change) has passed,
     // the last-10-seconds count comes in over the same busy HUD
     await page.evaluate(() => {
-      const ui = window.__elymum.useUi;
+      const ui = window.__coinnibal.useUi;
       const s = ui.getState();
       const endsAt = Date.now() + 20_000;
       ui.setState({ room: { ...(s.room ?? {}), mode: 'arena', arenaId: 1, round: { n: 0, endsAt, joinsCloseAt: endsAt - 5000, opensAt: 0 } } });

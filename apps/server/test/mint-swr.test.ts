@@ -63,7 +63,7 @@ describe('mint page state while the RPC is rate-limited (stale-while-revalidate)
   });
 
   it('after a restart the persisted state and holder index answer at once, even with the RPC refusing everything', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-mint-swr-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-mint-swr-'));
     const evm = new FakeEvm();
     evm.mintNft(testSigner().address, 2);
     evm.mintNft(testSigner().address, 1);

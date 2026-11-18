@@ -250,7 +250,7 @@ export interface CustomRoomDeps {
   usdPrice?: () => Promise<{ price: bigint; usdPerToken: string; sigFigs: number } | null>;
   /** Waits before re-reading a receipt that is not visible yet (default 0, 1.5 s, 3 s). */
   receiptRetryMs?: readonly number[];
-  /** Whether a wallet holds an Elymum NFT (cached by the mint service). */
+  /** Whether a wallet holds a Coinnibal NFT (cached by the mint service). */
   isHolder: (wallet: string) => Promise<boolean>;
   /** The emblem token ids a wallet owns (null: unknown); with `claims` the free daily room is one per token id a day. */
   emblemTokens?: (wallet: string, fresh?: boolean) => Promise<string[] | null>;

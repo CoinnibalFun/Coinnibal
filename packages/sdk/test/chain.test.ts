@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createElymumPublicClient, createElymumWalletClient, getCodeHash, isMainnetChain, resolveChain, toTransport, viemChain } from '../src/chain';
+import { createCoinnibalPublicClient, createCoinnibalWalletClient, getCodeHash, isMainnetChain, resolveChain, toTransport, viemChain } from '../src/chain';
 import { privateKeyToAccount } from 'viem/accounts';
 import { keccak256 } from 'viem';
 
@@ -35,12 +35,12 @@ describe('chain', () => {
         throw new Error(method);
       },
     };
-    const client = createElymumPublicClient(provider);
+    const client = createCoinnibalPublicClient(provider);
     expect(await client.getChainId()).toBe(46630);
     expect((await resolveChain(client)).name).toBe('Robinhood Chain Testnet');
     expect(await getCodeHash(client, '0x5FbDB2315678afecb367f032d93F642f64180aa3')).toBe(keccak256('0x6001'));
     const account = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80');
-    const wallet = createElymumWalletClient('http://127.0.0.1:1', { account, chain: viemChain(31337) });
+    const wallet = createCoinnibalWalletClient('http://127.0.0.1:1', { account, chain: viemChain(31337) });
     expect(wallet.account?.address).toBe(account.address);
   });
 });

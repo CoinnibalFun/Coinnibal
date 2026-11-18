@@ -1,5 +1,5 @@
 /**
- * The Elymum emblem trait catalogue (docs/NFT-DESIGN.md): tiers, the layers and their odds per tier, the
+ * The Coinnibal emblem trait catalogue (docs/NFT-DESIGN.md): tiers, the layers and their odds per tier, the
  * exclusion rules and the ten hand-authored 1/1s. Pure data plus two small helpers; the generator
  * (`./generate`) draws from it and the renderers (`./vector`, `./pixel`) draw the values.
  *

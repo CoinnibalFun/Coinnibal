@@ -45,6 +45,8 @@ const pick = <T,>(list: readonly T[], r: () => number): T => list[Math.floor(r()
 
 /** The coin of an X handle: ink, symbol, face and hat all come from the handle. */
 export function lookForHandle(handle: string): CoinLook {
+  // `elymum:`: the seed's fixed prefix from before the rename to Coinnibal. It stays: a new prefix would give every
+  // handle another coin, and the boarding passes players already shared would no longer match their cards.
   const r = seeded(hash32(`elymum:${handle.toLowerCase()}`));
   const [body, overprint] = pick(INKS, r);
   const dx = r() < 0.5 ? -3 : 3;

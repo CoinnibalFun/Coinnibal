@@ -1,5 +1,5 @@
 /**
- * Elymum admin CLI (Node only, not exported from the SDK entry point).
+ * Coinnibal admin CLI (Node only, not exported from the SDK entry point).
  *
  *   pnpm -F @coinnibal/sdk admin <command> [options]      (or `pnpm admin <command>` at the repo root)
  *
@@ -61,7 +61,7 @@ import {
   type ArenaConfig,
 } from './arena';
 import { describeCall, sendCall, simulateCall, type ContractCall } from './call';
-import { createElymumPublicClient, createElymumWalletClient, isMainnetChain, viemChain } from './chain';
+import { createCoinnibalPublicClient, createCoinnibalWalletClient, isMainnetChain, viemChain } from './chain';
 import { BPS, MAX_TOTAL_FEE_BPS, SUGGESTED_HOLDER_BURN_BPS, SUGGESTED_HOLDER_VAULT_BPS } from './constants';
 import { describeError } from './errors';
 import { formatBps, formatGasAmount, formatTokenAmount } from './format';
@@ -557,13 +557,13 @@ async function main(argv: string[]): Promise<number> {
   let url = '';
   try {
     url = str(opts, 'rpc') ?? process.env.EVM_RPC_URL ?? 'http://127.0.0.1:8545';
-    const probe = createElymumPublicClient(url);
+    const probe = createCoinnibalPublicClient(url);
     const chainId = await probe.getChainId();
     // Robinhood Chain only: an RPC of any other chain is refused here (chainInfo throws)
     const overrides = { explorerUrl: process.env.EXPLORER_URL, rpcUrl: url };
     setActiveChain(chainInfo(chainId, overrides));
     const chain = viemChain(chainId, overrides);
-    const client = createElymumPublicClient(url, chain);
+    const client = createCoinnibalPublicClient(url, chain);
     let account: PrivateKeyAccount | null = null;
     let wallet: WalletClient | null = null;
     const keySource = str(opts, 'key') ?? process.env.ADMIN_PRIVATE_KEY ?? process.env.ADMIN_KEY_FILE;
@@ -582,7 +582,7 @@ async function main(argv: string[]): Promise<number> {
         }
         return account;
       },
-      wallet: () => (wallet ??= createElymumWalletClient(url, { account: ctx.account(), chain })),
+      wallet: () => (wallet ??= createCoinnibalWalletClient(url, { account: ctx.account(), chain })),
       arena: envAddress(opts, 'arena', 'ARENA_ADDRESS'),
       nft: envAddress(opts, 'nft', 'NFT_ADDRESS'),
       confirmed: false,

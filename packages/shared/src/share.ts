@@ -26,7 +26,7 @@ export interface ShareCard {
   skin: number;
   /** ISO country code of the flag the player played for, or null. */
   country: string | null;
-  /** An Elymum emblem holder. */
+  /** A Coinnibal emblem holder. */
   holder: boolean;
   /** The room's name (an arena's, a custom room's, a pond's). */
   room: string;
@@ -36,7 +36,7 @@ export interface ShareCard {
   /** Mass at the end (results) or after the kill. */
   mass: number;
   kills: number;
-  /** Arena results: what reached the wallet, formatted ("1,234.5 $ELYMUM"); absent elsewhere and when nothing was paid. */
+  /** Arena results: what reached the wallet, formatted ("1,234.5 $NIBAL"); absent elsewhere and when nothing was paid. */
   paid?: string;
   /** Kills: the coin eaten and its mass. */
   victim?: string;
@@ -63,7 +63,7 @@ export interface ShareBoardRow {
   name: string;
   mass: number;
   kills: number;
-  /** Arena rooms (never a test arena): the value at the bell, formatted ("1,234.5 $ELYMUM"). */
+  /** Arena rooms (never a test arena): the value at the bell, formatted ("1,234.5 $NIBAL"). */
   value?: string;
   /** A practice bot (test arenas, free custom rooms). */
   bot?: boolean;

@@ -1,5 +1,5 @@
 /**
- * Robinhood Chain: the only chain Elymum runs on. Two networks of it, switched by configuration and nothing else:
+ * Robinhood Chain: the only chain Coinnibal runs on. Two networks of it, switched by configuration and nothing else:
  * the testnet now, the mainnet later. The server picks one with `CHAIN_ID` (46630 or 4663; default the testnet) and
  * checks that `EVM_RPC_URL` really serves it; the web names it with `VITE_CHAIN_ID` until the server's
  * `/api/config` answers (the server's network wins). The gas token is ETH on both.
@@ -122,15 +122,15 @@ export function networkOf(id: number | null | undefined): Readonly<NetworkDef> |
   return Object.values(NETWORKS).find((n) => n.id === id) ?? null;
 }
 
-/** Elymum runs on this chain id: Robinhood Chain Testnet, Robinhood Chain, or the local development node. */
+/** Coinnibal runs on this chain id: Robinhood Chain Testnet, Robinhood Chain, or the local development node. */
 export const isSupportedChainId = (id: unknown): id is number => isChainId(id) && networkOf(id) !== null;
 
-/** The testnet or the local node. Any other id (the mainnet, or a chain Elymum does not run on) is not. */
+/** The testnet or the local node. Any other id (the mainnet, or a chain Coinnibal does not run on) is not. */
 export function isTestChainId(id: number | null | undefined): boolean {
   return networkOf(id)?.testnet === true;
 }
 
-/** The error every wrong chain id gets: Elymum runs on Robinhood Chain only. */
+/** The error every wrong chain id gets: Coinnibal runs on Robinhood Chain only. */
 export function unsupportedChainMessage(id: unknown): string {
   return `chain ${String(id)} is not Robinhood Chain: Coinnibal runs on Robinhood Chain Testnet (${ROBINHOOD_TESTNET_CHAIN_ID}) or Robinhood Chain (${ROBINHOOD_CHAIN_ID}) only (${LOCALNET_CHAIN_ID}: local development node)`;
 }

@@ -13,15 +13,15 @@ const { address } = await installEvmWallet(ctx, { privateKey: newDevKey(), autoC
 await ctx.addInitScript((addr) => {
   if (sessionStorage.getItem('seeded')) return;
   sessionStorage.setItem('seeded', '1');
-  localStorage.setItem('elymum.brief', '1');
-  localStorage.setItem('elymum.auth.v1', JSON.stringify({ address: addr, token: `${addr}.${Date.now() + 3600_000}.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`, exp: Date.now() + 20 * 3600_000 }));
+  localStorage.setItem('coinnibal.brief', '1');
+  localStorage.setItem('coinnibal.auth.v1', JSON.stringify({ address: addr, token: `${addr}.${Date.now() + 3600_000}.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`, exp: Date.now() + 20 * 3600_000 }));
 }, address);
 const p = await ctx.newPage();
 watchPage(p, errors);
 await p.goto(`${BASE}/play`, { waitUntil: 'load' });
-await p.waitForFunction(() => window.__elymum?.useUi.getState().connected, null, { timeout: 90000 });
+await p.waitForFunction(() => window.__coinnibal?.useUi.getState().connected, null, { timeout: 90000 });
 await p.waitForTimeout(4000);
-const st = await p.evaluate(() => ({ auth: window.__elymum.useUi.getState().auth, stored: localStorage.getItem('elymum.auth.v1'), cta: document.querySelector('.kl-cta')?.textContent }));
+const st = await p.evaluate(() => ({ auth: window.__coinnibal.useUi.getState().auth, stored: localStorage.getItem('coinnibal.auth.v1'), cta: document.querySelector('.kl-cta')?.textContent }));
 console.log(st);
 check(st.auth === null, 'the rejected token leaves the UI signed out');
 check(st.stored === null, 'the rejected token is forgotten');

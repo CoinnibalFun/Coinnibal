@@ -120,7 +120,7 @@ describe('the music setting persists', () => {
   });
 
   it('an unknown saved track falls back to the default; old saves gain the field', async () => {
-    localStorage.setItem('elymum.settings.v1', JSON.stringify({ musicTrack: 'polka', volume: 0.3 }));
+    localStorage.setItem('coinnibal.settings.v1', JSON.stringify({ musicTrack: 'polka', volume: 0.3 }));
     const { useUi } = await import('../src/store');
     expect(useUi.getState().settings.musicTrack).toBe('classic');
     expect(musicChoice(undefined)).toBe('classic');
@@ -159,7 +159,7 @@ describe('the music picker (settings)', () => {
     fireEvent.click(screen.getByRole('radio', { name: /Chill/ }));
     expect(useUi.getState().settings.musicTrack).toBe('chill');
     expect(screen.getByRole('radio', { name: /Chill/ }).getAttribute('aria-checked')).toBe('true');
-    expect(JSON.parse(localStorage.getItem('elymum.settings.v1')!).musicTrack).toBe('chill');
+    expect(JSON.parse(localStorage.getItem('coinnibal.settings.v1')!).musicTrack).toBe('chill');
     fireEvent.click(screen.getByRole('radio', { name: /No music/ }));
     expect(useUi.getState().settings.musicOn).toBe(false);
     expect(useUi.getState().settings.musicTrack).toBe('chill');
@@ -182,7 +182,7 @@ describe('the music picker (settings)', () => {
   });
 
   it('a saved "your own music" from an earlier visit reads as the default soundtrack', async () => {
-    localStorage.setItem('elymum.settings.v1', JSON.stringify({ musicTrack: 'custom' }));
+    localStorage.setItem('coinnibal.settings.v1', JSON.stringify({ musicTrack: 'custom' }));
     const { useUi } = await mount();
     expect(useUi.getState().settings.musicTrack).toBe('classic');
     expect(screen.getByRole('radio', { name: /Classic/ }).getAttribute('aria-checked')).toBe('true');
@@ -193,6 +193,7 @@ describe('the music picker (settings)', () => {
     vi.stubGlobal('indexedDB', { deleteDatabase });
     const { forgetSavedMusic } = await import('../src/audio/custom');
     forgetSavedMusic();
+    // the database was named before the rename (Elymum), so the old name is the one deleted
     expect(deleteDatabase).toHaveBeenCalledWith('elymum.music');
     vi.unstubAllGlobals();
   });

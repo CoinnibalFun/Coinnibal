@@ -366,7 +366,7 @@ describe('test arenas: every person takes a bot\'s place', () => {
 
 describe('test arenas: the admin switch', () => {
   it('defaults on on the testnet and persists changes', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-tests-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-tests-'));
     const s = new TestArenaStore(ROBINHOOD_TESTNET_CHAIN_ID, dir);
     expect(s.available).toBe(true);
     expect(s.active).toBe(true);
@@ -378,7 +378,7 @@ describe('test arenas: the admin switch', () => {
   });
 
   it('is impossible on the mainnet: refused, a stored file ignored, never active', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-tests-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-tests-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
     writeFileSync(join(dir, 'site', 'test-arenas.json'), JSON.stringify({ enabled: true, bots: 10, difficulty: 'mixed' }));
     const s = new TestArenaStore(ROBINHOOD_CHAIN_ID, dir);
@@ -396,7 +396,7 @@ describe('test arenas: the admin switch', () => {
 
 describe('test arenas: the room directory', () => {
   async function setup(env: Record<string, string> = {}, chainId = 31337) {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-tests-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-tests-'));
     const cfg = loadConfig({ DATA_DIR: dir, ...env } as NodeJS.ProcessEnv);
     const journal = new Journal(null);
     const chain = new ArenaChain([arena(1, FEE), arena(2, 5 * FEE)]);
@@ -491,7 +491,7 @@ describe('test arenas: the room directory', () => {
 
 describe('test arenas: the admin API', () => {
   async function server(env: Record<string, string>) {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-tests-api-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-tests-api-'));
     const admin = testWallet(0xad01);
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', ...env } as NodeJS.ProcessEnv);
     const app = await createApp(cfg, { chain: new ArenaChain([arena(1, FEE)]), log: () => {}, persist: true });
@@ -522,7 +522,7 @@ describe('test arenas: the admin API', () => {
   });
 
   it('the game is for admins only: an admin plays a test arena (a bot makes room); a visitor, even with a ticket, is refused at the join', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-tests-gate-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-tests-gate-'));
     const admin = testWallet(0xad02);
     /** Every wallet holds an open ticket of arena 1. */
     class TicketChain extends ArenaChain {

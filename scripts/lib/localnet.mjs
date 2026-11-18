@@ -1,4 +1,4 @@
-// A local Robinhood Chain stand-in: `hardhat node` (chain id 31337, gas in ETH) with the Elymum
+// A local Robinhood Chain stand-in: `hardhat node` (chain id 31337, gas in ETH) with the Coinnibal
 // contracts deployed in the same order as /admin → Deploy, through the SDK:
 //   TestToken → CoinnibalArena (server authority = the game server's key) → CoinnibalNFT
 //   → setToken → the four default arenas (→ optionally the mint opened to the public).
@@ -57,8 +57,8 @@ function clients(sdk, rpcUrl, chainId, key) {
   const account = privateKeyToAccount(key);
   return {
     account,
-    publicClient: sdk.createElymumPublicClient(rpcUrl, chain, { pollingInterval: 200 }),
-    wallet: sdk.createElymumWalletClient(rpcUrl, { account, chain, pollingInterval: 200 }),
+    publicClient: sdk.createCoinnibalPublicClient(rpcUrl, chain, { pollingInterval: 200 }),
+    wallet: sdk.createCoinnibalWalletClient(rpcUrl, { account, chain, pollingInterval: 200 }),
   };
 }
 
@@ -69,7 +69,7 @@ function clients(sdk, rpcUrl, chainId, key) {
  */
 export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http://localhost:5173', noToken = false, openMint = false, log = console.log } = {}) {
   const sdk = await importSdk();
-  const probe = sdk.createElymumPublicClient(rpcUrl);
+  const probe = sdk.createCoinnibalPublicClient(rpcUrl);
   const chainId = await probe.getChainId();
   const ownerKey = hardhatKey(ACCOUNT.owner);
   const serverKey = hardhatKey(ACCOUNT.server);
@@ -147,7 +147,7 @@ export async function fundAddress(to, { hype = 10, tokens = 100_000, log = conso
   const { token, rpcUrl } = readAddresses();
   const sdk = await importSdk();
   const { parseEther, getAddress } = viem();
-  const probe = sdk.createElymumPublicClient(rpcUrl);
+  const probe = sdk.createCoinnibalPublicClient(rpcUrl);
   const chainId = await probe.getChainId();
   if (chainId !== LOCALNET_CHAIN_ID) throw new Error(`${rpcUrl} is chain ${chainId}, not the local chain (${LOCALNET_CHAIN_ID}): localnet-fund runs on the local chain only`);
   const { publicClient, wallet } = clients(sdk, rpcUrl, chainId, hardhatKey(ACCOUNT.owner));

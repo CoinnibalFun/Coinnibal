@@ -165,7 +165,7 @@ describe('paid joins while the RPC answers 429', () => {
   });
 
   it('a restart while rate-limited: the persisted config and arena list open the arenas, spectate creates them on demand', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-busy-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-busy-'));
     const first = await setup({ cacheDir: dir });
     expect(await first.chain.listArenas()).toHaveLength(2);
     await first.chain.stop(); // flushes the cache

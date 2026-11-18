@@ -159,7 +159,7 @@ export async function installDevWallet(ctx, key = viem('/accounts').generatePriv
           return provider;
         },
       };
-      const info = Object.freeze({ uuid: crypto.randomUUID?.() ?? `dev-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`, name: 'Dev Wallet', icon, rdns: 'dev.elymum.wallet' });
+      const info = Object.freeze({ uuid: crypto.randomUUID?.() ?? `dev-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`, name: 'Dev Wallet', icon, rdns: 'dev.coinnibal.wallet' });
       const announce = () => window.dispatchEvent(new CustomEvent('eip6963:announceProvider', { detail: Object.freeze({ info, provider }) }));
       window.addEventListener('eip6963:requestProvider', announce);
       announce();

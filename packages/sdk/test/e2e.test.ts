@@ -34,8 +34,8 @@ import {
   setBurnModeCall,
   settlementSplit,
   createDefaultArenaCalls,
-  createElymumPublicClient,
-  createElymumWalletClient,
+  createCoinnibalPublicClient,
+  createCoinnibalWalletClient,
   deployArena,
   deployNft,
   deployTestToken,
@@ -164,8 +164,8 @@ beforeAll(async () => {
     return;
   }
   const chain = viemChain(31337, { rpcUrl: url });
-  client = createElymumPublicClient(url, chain, { pollingInterval: 50 });
-  for (const a of [admin, server, p1, p2, feeWallet, outsider]) wallets.set(a.address, createElymumWalletClient(url, { account: a, chain, pollingInterval: 50 }));
+  client = createCoinnibalPublicClient(url, chain, { pollingInterval: 50 });
+  for (const a of [admin, server, p1, p2, feeWallet, outsider]) wallets.set(a.address, createCoinnibalWalletClient(url, { account: a, chain, pollingInterval: 50 }));
 }, 60_000);
 
 afterAll(() => killChild());
@@ -325,7 +325,7 @@ describe('e2e on a hardhat node', () => {
         mintPrice: price,
         wlLimit: 2,
         publicLimit: 2,
-        baseURI: 'https://elymum.test/api/nft/',
+        baseURI: 'https://coinnibal.test/api/nft/',
         treasury: feeWallet.address,
       }),
     );

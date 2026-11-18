@@ -1,5 +1,5 @@
 /**
- * Mainnet economic simulation of Elymum (Robinhood Chain 4663, $ELYMUM from Pons, USD tiers $1 / $3 / $5 / $10 with
+ * Mainnet economic simulation of Coinnibal (Robinhood Chain 4663, $NIBAL from Pons, USD tiers $1 / $3 / $5 / $10 with
  * the $10 arena for emblem holders, 20 % fee on profit for everyone else and 10 % for holders, no bots).
  *
  * Four layers, each built on the real code and nothing invented where the code has the answer:

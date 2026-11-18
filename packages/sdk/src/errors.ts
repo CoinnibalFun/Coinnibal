@@ -12,7 +12,7 @@ type AbiError = Extract<Abi[number], { type: 'error' }>;
  */
 
 /** Every custom error the SDK can decode (both contracts, the TestToken and OZ ERC-20 errors), de-duplicated by name (same-named errors have the same selector). */
-export const ELYMUM_ERRORS_ABI: readonly AbiError[] = (() => {
+export const COINNIBAL_ERRORS_ABI: readonly AbiError[] = (() => {
   const seen = new Map<string, AbiError>();
   for (const item of [...coinnibalArenaAbi, ...coinnibalNFTAbi, ...testTokenAbi] as readonly Abi[number][]) {
     if (item.type === 'error' && !seen.has(item.name)) seen.set(item.name, item as AbiError);
@@ -113,11 +113,11 @@ export interface DescribeContext {
   chainName?: string;
 }
 
-/** Decodes revert data (`0x` + selector + args) against `ELYMUM_ERRORS_ABI`; null when unknown. */
+/** Decodes revert data (`0x` + selector + args) against `COINNIBAL_ERRORS_ABI`; null when unknown. */
 export function decodeRevertData(data: Hex): { name: string; args: readonly unknown[] } | null {
   if (!/^0x[0-9a-fA-F]{8}/.test(data)) return null;
   try {
-    const r = decodeErrorResult({ abi: ELYMUM_ERRORS_ABI as Abi, data });
+    const r = decodeErrorResult({ abi: COINNIBAL_ERRORS_ABI as Abi, data });
     return { name: r.errorName, args: (r.args ?? []) as readonly unknown[] };
   } catch {
     return null;

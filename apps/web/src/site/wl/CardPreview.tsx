@@ -174,7 +174,7 @@ export function SaveCardButton({ handle, label }: { handle: string; label?: stri
         try {
           await cardFonts();
           const blob = await cardBlob(norm);
-          if (blob) saveBlob(blob, `elymum-boarding-pass-${norm}.png`);
+          if (blob) saveBlob(blob, `coinnibal-boarding-pass-${norm}.png`);
         } finally {
           setBusy(false);
         }

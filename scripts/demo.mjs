@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One-command Elymum demo.
+// One-command Coinnibal demo.
 //   pnpm demo            fake chain: server (NODE_ENV=development DEV_FAKE_CHAIN=1 DEV_FAKE_TOKEN=1) + web dev server
 //                        (DEV_FAKE_TOKEN=0 pnpm demo: the game token starts unset, arenas "Opening soon";
 //                        `curl -X POST localhost:8787/api/dev/token` sets it live)

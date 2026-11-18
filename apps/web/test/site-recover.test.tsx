@@ -6,7 +6,7 @@ import { SETTINGS, installDomStubs, mockFetch } from './site-helpers';
 
 // a tab from before a deploy: the MintPage chunk it names is gone on the host (404)
 vi.mock('../src/site/mint/MintPage', () => {
-  throw new TypeError('Failed to fetch dynamically imported module: https://elymum.io/assets/MintPage-OLDHASH.js');
+  throw new TypeError('Failed to fetch dynamically imported module: https://coinnibal.fun/assets/MintPage-OLDHASH.js');
 });
 const { SiteApp } = await import('../src/site/mount');
 const { resetPages, pageFailed } = await import('../src/site/pages');

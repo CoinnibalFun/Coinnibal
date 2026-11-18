@@ -39,7 +39,7 @@ afterAll(async () => {
 async function start(dir: string, chainId: number, extra: Parameters<typeof createApp>[1] = {}) {
   const evm = new FakeEvm();
   evm.chainId = chainId;
-  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: ADMIN, PUBLIC_URL: 'https://elymum.example' } as NodeJS.ProcessEnv);
+  const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: ADMIN, PUBLIC_URL: 'https://coinnibal.example' } as NodeJS.ProcessEnv);
   const app = await createApp(cfg, {
     chain: new EvmTestChain(evm),
     log: () => {},
@@ -71,7 +71,7 @@ function legacy(dir: string, opts: { contractsChain?: number | null } = {}) {
 
 describe('chain-keyed state: migration', () => {
   it('moves the legacy registry, journal (with quarantined copies) and allowlist into chains/<chain of the records>/, idempotently', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-state-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-state-'));
     legacy(dir);
     const logs: string[] = [];
     // even when this boot is on another chain: the records say where they belong
@@ -85,7 +85,7 @@ describe('chain-keyed state: migration', () => {
   });
 
   it('never overwrites: a legacy file whose target exists stays (logged)', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-state-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-state-'));
     legacy(dir);
     mkdirSync(chainDir(dir, 46630), { recursive: true });
     writeFileSync(join(chainDir(dir, 46630), 'journal.json'), '"newer"');
@@ -97,22 +97,22 @@ describe('chain-keyed state: migration', () => {
   });
 
   it('without a registry the files stay with a local node, else go under the retired pre-Robinhood testnet (never into Robinhood Chain state)', () => {
-    const local = mkdtempSync(join(tmpdir(), 'elymum-state-'));
+    const local = mkdtempSync(join(tmpdir(), 'coinnibal-state-'));
     legacy(local, { contractsChain: null });
     migrateLegacyState(local, 31337);
     expect(storedChains(local)).toEqual([31337]);
-    const main = mkdtempSync(join(tmpdir(), 'elymum-state-'));
+    const main = mkdtempSync(join(tmpdir(), 'coinnibal-state-'));
     legacy(main, { contractsChain: null });
     migrateLegacyState(main, 4663);
     expect(storedChains(main)).toEqual([99801]);
-    const test = mkdtempSync(join(tmpdir(), 'elymum-state-'));
+    const test = mkdtempSync(join(tmpdir(), 'coinnibal-state-'));
     legacy(test, { contractsChain: null });
     migrateLegacyState(test, 46630);
     expect(storedChains(test)).toEqual([99801]);
   });
 
   it('keys the state on eth_chainId of the RPC, remembered for a boot with the RPC down', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-state-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-state-'));
     const cfg = loadConfig({ DATA_DIR: dir, EVM_RPC_URL: 'https://rpc.example/key123', SERVER_PRIVATE_KEY: 'auto' } as NodeJS.ProcessEnv);
     const logs: string[] = [];
     expect(await resolveStateChainId(cfg, { persist: true, log: (m) => logs.push(m), readId: async () => 46630 })).toBe(46630);
@@ -131,7 +131,7 @@ describe('chain-keyed state: migration', () => {
 
 describe('chain-keyed state: the app', () => {
   it('testnet: migrates on first start, opens chains/46630, a fresh server is closed (admins only); mainnet then starts clean and keeps the testnet records', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-app-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-app-'));
     legacy(dir);
     const t = await start(dir, 46630);
     expect(t.app.stateChainId).toBe(46630);
@@ -161,7 +161,7 @@ describe('chain-keyed state: the app', () => {
   });
 
   it('a stored gameAccess is kept on the testnet', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-app-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-app-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
     writeFileSync(join(dir, 'site', 'settings.json'), JSON.stringify({ wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'coinnibalfun', launchPostUrl: null, launch: 1 }));
     const t = await start(dir, 46630);
@@ -171,7 +171,7 @@ describe('chain-keyed state: the app', () => {
 
 describe('faucet config (GET /api/site/faucet)', () => {
   it('enabled on a test chain with a registered TestToken: amounts from the token', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-app-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-app-'));
     mkdirSync(chainDir(dir, 46630), { recursive: true });
     writeFileSync(join(chainDir(dir, 46630), 'contracts.json'), JSON.stringify({ arena: null, nft: record(NFT, 46630), token: record(TOKEN, 46630) }));
     const t = await start(dir, 46630);
@@ -194,9 +194,9 @@ describe('faucet config (GET /api/site/faucet)', () => {
   });
 
   it('off without a token, and on mainnet', async () => {
-    const t = await start(mkdtempSync(join(tmpdir(), 'elymum-app-')), 46630);
+    const t = await start(mkdtempSync(join(tmpdir(), 'coinnibal-app-')), 46630);
     expect((await t.call('GET', '/api/site/faucet', { wallet: ADMIN })).body).toMatchObject({ enabled: false, token: null, amount: null });
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-app-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-app-'));
     mkdirSync(chainDir(dir, 4663), { recursive: true });
     writeFileSync(join(chainDir(dir, 4663), 'contracts.json'), JSON.stringify({ arena: null, nft: null, token: record(TOKEN, 4663) }));
     const m = await start(dir, 4663);
@@ -206,7 +206,7 @@ describe('faucet config (GET /api/site/faucet)', () => {
 
 describe('testnet emblem holders → mainnet WL', () => {
   it('imports the current owners of the testnet NFT (from its chain registry, over the testnet reader) and adds them to the allowlist', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-app-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-app-'));
     mkdirSync(chainDir(dir, 46630), { recursive: true });
     writeFileSync(join(chainDir(dir, 46630), 'contracts.json'), JSON.stringify({ arena: null, nft: record(NFT, 46630), token: null }));
     const testnet = new FakeEvm();
@@ -251,7 +251,7 @@ describe('testnet emblem holders → mainnet WL', () => {
 
 describe('NFT utilities: emblem skin and laurel flag', () => {
   it('the emblem skin is offered and accepted for holders only (checked server side)', async () => {
-    const t = await start(mkdtempSync(join(tmpdir(), 'elymum-app-')), 46630);
+    const t = await start(mkdtempSync(join(tmpdir(), 'coinnibal-app-')), 46630);
     t.app.contracts.set('nft', record(NFT, 46630));
     const holder = testSigner().address;
     const other = testSigner().address;
@@ -290,7 +290,7 @@ describe('NFT utilities: emblem skin and laurel flag', () => {
 
 describe('no house bots', () => {
   it('the app has no staked-bot source and no bots admin; the maps admin replaces it', async () => {
-    const t = await start(mkdtempSync(join(tmpdir(), 'elymum-app-')), 31337);
+    const t = await start(mkdtempSync(join(tmpdir(), 'coinnibal-app-')), 31337);
     expect((t.app as unknown as Record<string, unknown>).stakedBots).toBeUndefined();
     expect((await t.call('GET', '/api/admin/bots', { wallet: ADMIN })).status).toBe(404);
     const maps = (await t.call('GET', '/api/admin/maps', { wallet: ADMIN })).body as { settings: Record<string, unknown>; rooms: unknown[] };

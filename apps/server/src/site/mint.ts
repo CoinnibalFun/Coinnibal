@@ -328,7 +328,7 @@ export class MintService {
     return this.stateFetch;
   }
 
-  /** Whether a wallet holds an Elymum NFT (`balanceOf > 0`), cached 15 s (`fresh` re-reads). False without an NFT. */
+  /** Whether a wallet holds a Coinnibal NFT (`balanceOf > 0`), cached 15 s (`fresh` re-reads). False without an NFT. */
   async isHolder(wallet: string, fresh = false): Promise<boolean> {
     const nft = this.deps.nft();
     const client = this.deps.client();

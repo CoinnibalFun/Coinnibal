@@ -26,13 +26,13 @@ beforeAll(async () => {
   const cfg = loadConfig({
     PORT: '0',
     HOST: '127.0.0.1',
-    DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-abuse-')),
+    DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-abuse-')),
     GAME_ACCESS: 'public',
     NODE_ENV: 'development',
     WS_HELLO_TIMEOUT_MS: '400',
     MAX_CONNECTIONS_PER_IP: '6',
     MAX_CONNECTIONS_PER_SUBNET: '6',
-    CORS_ORIGIN: 'https://elymum.io,https://www.elymum.io',
+    CORS_ORIGIN: 'https://coinnibal.fun,https://www.coinnibal.fun',
   } as unknown as NodeJS.ProcessEnv);
   app = await createApp(cfg, { chain: new NullChain(), log: () => {}, persist: false });
   port = await app.listen();
@@ -153,10 +153,10 @@ describe('HTTP front door', () => {
 
   it('answers CORS for the allowed origins only (bearer tokens, never cookies)', async () => {
     expect(corsAllow('*', 'https://evil.example')).toBe('*');
-    expect(corsAllow('https://elymum.io, https://www.elymum.io/', 'https://www.elymum.io')).toBe('https://www.elymum.io');
-    expect(corsAllow('https://elymum.io', 'https://evil.example')).toBeNull();
-    const ok = await fetch(`http://127.0.0.1:${port}/api/health`, { headers: { Origin: 'https://elymum.io' } });
-    expect(ok.headers.get('access-control-allow-origin')).toBe('https://elymum.io');
+    expect(corsAllow('https://coinnibal.fun, https://www.coinnibal.fun/', 'https://www.coinnibal.fun')).toBe('https://www.coinnibal.fun');
+    expect(corsAllow('https://coinnibal.fun', 'https://evil.example')).toBeNull();
+    const ok = await fetch(`http://127.0.0.1:${port}/api/health`, { headers: { Origin: 'https://coinnibal.fun' } });
+    expect(ok.headers.get('access-control-allow-origin')).toBe('https://coinnibal.fun');
     expect(ok.headers.get('vary')).toMatch(/Origin/);
     const no = await fetch(`http://127.0.0.1:${port}/api/health`, { headers: { Origin: 'https://evil.example' } });
     expect(no.headers.get('access-control-allow-origin')).toBeNull();

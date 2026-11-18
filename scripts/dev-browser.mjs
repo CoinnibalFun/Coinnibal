@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Opens a visible Chromium on the Elymum URL with the Dev Wallet injected (an EIP-6963 wallet whose
+// Opens a visible Chromium on the Coinnibal URL with the Dev Wallet injected (an EIP-6963 wallet whose
 // key stays in this process; no extension needed). Started by `pnpm demo --browser`; can also be run by hand:
 //   node scripts/dev-browser.mjs [url] [--key <file>] [--account <n>] [--rpc <url>]
 //     --key <file>    a 0x private key file (created when missing; default out/dev-wallet.key)

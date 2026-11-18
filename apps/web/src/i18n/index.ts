@@ -10,7 +10,7 @@ export type TKey = keyof typeof en;
 export type Dict = Record<TKey, string>;
 export type TVars = Record<string, string | number>;
 
-const STORAGE_KEY = 'elymum.locale.v1';
+const STORAGE_KEY = 'coinnibal.locale.v1';
 
 let current: Locale = 'en';
 let dict: Dict = en;

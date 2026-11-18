@@ -9,7 +9,7 @@ import {
   UserRejectedRequestError,
 } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { ELYMUM_ERRORS_ABI, ERROR_MESSAGES, decodeRevertData, describeError, humanError } from '../src/errors';
+import { COINNIBAL_ERRORS_ABI, ERROR_MESSAGES, decodeRevertData, describeError, humanError } from '../src/errors';
 
 function reverted(abi: typeof coinnibalArenaAbi | typeof coinnibalNFTAbi, errorName: string, args: unknown[] = []) {
   const data = encodeErrorResult({ abi, errorName, args } as never);
@@ -19,7 +19,7 @@ function reverted(abi: typeof coinnibalArenaAbi | typeof coinnibalNFTAbi, errorN
 
 describe('errors', () => {
   it('every custom error of both contracts has a message', () => {
-    for (const e of ELYMUM_ERRORS_ABI) {
+    for (const e of COINNIBAL_ERRORS_ABI) {
       if (/^(ERC721(Incorrect|Insufficient|Invalid(Approver|Operator|Owner|Receiver|Sender))|ERC2981InvalidToken|ERC20InvalidApprover|ERC20InvalidSender)/.test(e.name)) continue;
       expect(ERROR_MESSAGES[e.name], e.name).toBeTruthy();
     }

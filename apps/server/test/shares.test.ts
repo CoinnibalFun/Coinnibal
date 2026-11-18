@@ -19,14 +19,14 @@ const testRoom = { opts: { id: 'test-1', mode: 'arena', name: 'Test · Arena', m
 const customRoom = { opts: { id: 'priv-PONDS', mode: 'private', name: 'Friday Pond', maxPlayers: 10, custom: freeCustom() } } as never;
 
 function service(dir: string | null = null, clock = { t: 1_800_000_000_000 }) {
-  return new ShareService({ dataDir: dir, baseUrl: () => 'https://elymum.io', token: () => ({ decimals: 18, symbol: '$ELYMUM' }), now: () => clock.t });
+  return new ShareService({ dataDir: dir, baseUrl: () => 'https://coinnibal.fun', token: () => ({ decimals: 18, symbol: '$NIBAL' }), now: () => clock.t });
 }
 
 describe('share cards (made from the server records only)', () => {
   it('a bell result: place, players, mass, kills, the net paid formatted, the wallet short, flag and emblem', () => {
     const s = service();
     const c = s.result({ room: arenaRoom, player: look, wallet: testWallet(0xabc) }, { rank: 2, of: 41, mass: 1234.7, kills: 5, payout: 2_600_000_000 });
-    expect(c).toMatchObject({ kind: 'round', name: 'Nakamoto', room: '$1 Room', rank: 2, players: 41, mass: 1234, kills: 5, paid: '2,600 $ELYMUM', country: 'JP', holder: true, skin: 2 });
+    expect(c).toMatchObject({ kind: 'round', name: 'Nakamoto', room: '$1 Room', rank: 2, players: 41, mass: 1234, kills: 5, paid: '2,600 $NIBAL', country: 'JP', holder: true, skin: 2 });
     expect(c.wallet).toBe('0x0000…0aBc');
     expect(SHARE_ID_RE.test(c.id)).toBe(true);
     expect(s.get(c.id)).toEqual(c);
@@ -49,7 +49,7 @@ describe('share cards (made from the server records only)', () => {
   });
 
   it('a kill card is an offer: kept on disk only once its link is opened; an unopened one expires', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-offers-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-offers-'));
     const clock = { t: 1_800_000_000_000 };
     const s = service(dir, clock);
     const small = { mass: 30, kills: 1, victim: 'Tiny', victimMass: 12 };
@@ -70,7 +70,7 @@ describe('share cards (made from the server records only)', () => {
   });
 
   it('keeps the newest cards on disk across a restart', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-shares-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-shares-'));
     const a = service(dir);
     const c = a.result({ room: customRoom, player: look, wallet: null }, { rank: 1, of: 2, mass: 10, kills: 0 });
     a.flush();
@@ -83,15 +83,15 @@ describe('share cards (made from the server records only)', () => {
   it('the page carries the Open Graph and Twitter card tags with the absolute image, names escaped', () => {
     const s = service();
     const c = s.kill({ room: customRoom, player: { ...look, name: '<b>"x"</b>' }, wallet: null }, 'k', { mass: 2000, kills: 1, victim: 'Penny & Co', victimMass: 1500 })!;
-    const html = sharePage(c, 'https://elymum.io');
+    const html = sharePage(c, 'https://coinnibal.fun');
     expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
-    expect(html).toContain(`<meta property="og:image" content="https://elymum.io/share/${c.id}.png">`);
-    expect(html).toContain(`<meta name="twitter:image" content="https://elymum.io/share/${c.id}.png">`);
+    expect(html).toContain(`<meta property="og:image" content="https://coinnibal.fun/share/${c.id}.png">`);
+    expect(html).toContain(`<meta name="twitter:image" content="https://coinnibal.fun/share/${c.id}.png">`);
     expect(html).toContain('<meta property="og:image:width" content="1200">');
     expect(html).toContain('Ate Penny &#38; Co!');
     expect(html).not.toContain('<b>"x"</b>');
-    expect(shareIntentUrl('I just ate Penny on Elymum! 🪙', `https://elymum.io/share/${c.id}`)).toBe(
-      `https://x.com/intent/post?text=I%20just%20ate%20Penny%20on%20Elymum!%20%F0%9F%AA%99&url=https%3A%2F%2Felymum.io%2Fshare%2F${c.id}`,
+    expect(shareIntentUrl('I just ate Penny on Coinnibal! 🪙', `https://coinnibal.fun/share/${c.id}`)).toBe(
+      `https://x.com/intent/post?text=I%20just%20ate%20Penny%20on%20Coinnibal!%20%F0%9F%AA%99&url=https%3A%2F%2Fcoinnibal.fun%2Fshare%2F${c.id}`,
     );
   });
 
@@ -109,7 +109,7 @@ describe('share cards (made from the server records only)', () => {
     const req = (path: string) => ({ method: 'GET', url: path, headers: {} }) as never;
     s.setRenderBroken('Cannot find module @napi-rs/canvas-linux-x64-gnu');
     expect(s.handle(req(`/share/${c.id}.png`), res, `/share/${c.id}.png`, '1.2.3.4')).toBe(true);
-    expect(out).toMatchObject({ status: 302, headers: { Location: 'https://elymum.io/og-coinnibal.png' } });
+    expect(out).toMatchObject({ status: 302, headers: { Location: 'https://coinnibal.fun/og-coinnibal.png' } });
     s.handle(req(`/share/${c.id}`), res, `/share/${c.id}`, '1.2.3.4');
     expect(out.status).toBe(200);
     expect(String(out.headers!['Content-Security-Policy'])).toMatch(/default-src 'none'/);
@@ -123,12 +123,12 @@ describe('share cards (made from the server records only)', () => {
     expect(c.eatenMore).toBe(3);
     expect(c.test).toBeUndefined();
     expect(shareEaten(c)).toBe('Ate: Penny, Rocky \u00D72, a\u00B7b\u00B7c, Zed (BOT), Ed +3');
-    expect(shareFacts(c)).toContain('took home 5,000 $ELYMUM');
+    expect(shareFacts(c)).toContain('took home 5,000 $NIBAL');
     const t = s.result({ room: testRoom, player: look, wallet: testWallet(1) }, { rank: 2, of: 4, mass: 900, kills: 1, payout: 5_000_000_000, eaten: [{ name: 'Botty', bot: true }] });
     expect(t).toMatchObject({ kind: 'round', test: true, eaten: [{ name: 'Botty', bot: true }] });
     expect(t.paid).toBeUndefined();
     expect(shareFacts(t).join(' ')).not.toMatch(/took home/);
-    const html = sharePage(t, 'https://elymum.io');
+    const html = sharePage(t, 'https://coinnibal.fun');
     expect(html).toContain('<title>TEST · Nakamoto · 2nd of 4 · Coinnibal</title>');
     expect(html).toContain('A testnet test arena: practice tokens, no real money.');
     // nobody eaten: no line
@@ -174,7 +174,7 @@ describe('share cards (made from the server records only)', () => {
     const standings = boardRows(ranked, 13, 10);
     const c = s.result({ room: arenaRoom, player: look, wallet: null }, { rank: 13, of: 14, mass: 3800, kills: 2, standings });
     expect(c.board).toHaveLength(11);
-    expect(c.board![2]).toMatchObject({ rank: 3, name: 'Rocky·com', value: '12,000 $ELYMUM' });
+    expect(c.board![2]).toMatchObject({ rank: 3, name: 'Rocky·com', value: '12,000 $NIBAL' });
     expect(c.board![4]).toMatchObject({ rank: 5, bot: true });
     expect(c.board![10]).toMatchObject({ rank: 13, name: 'Coin13', you: true, mass: 3800 });
     expect(c.board!.filter((r) => r.you)).toHaveLength(1);
@@ -188,7 +188,7 @@ describe('share cards (made from the server records only)', () => {
   });
 
   it('a death card is an offer with no place: the mass reached and the coins eaten', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-death-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-death-'));
     const s = service(dir);
     const d = s.game({ room: testRoom, player: look, wallet: null }, { mass: 1234.9, kills: 2, eaten: [{ name: 'Botty', bot: true }, { name: 'Penny' }] });
     expect(d).toMatchObject({ kind: 'round', mass: 1234, kills: 2, test: true, eaten: [{ name: 'Botty', bot: true }, { name: 'Penny' }] });
@@ -299,7 +299,7 @@ describe('share cards over HTTP and WebSocket', () => {
   });
 
   it('a custom room end sends my card; /share/<id> serves the page and a 1200 x 630 PNG; unknown ids are 404', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-share-http-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-share-http-'));
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, TRUST_PROXY: '0', GAME_ACCESS: 'public', NODE_ENV: 'development' } as NodeJS.ProcessEnv);
     app = await createApp(cfg, { chain: new ArenaChain([arena(1, 1000)]), log: () => {}, persist: true, apiLimiter: new Limiter(10_000, 60_000) });
     const port = await app.listen();

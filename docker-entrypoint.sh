@@ -1,5 +1,5 @@
 #!/bin/sh
-# Elymum container entrypoint. Hosts such as Render mount the persistent disk owned by root. Started as
+# Coinnibal container entrypoint. Hosts such as Render mount the persistent disk owned by root. Started as
 # root, make DATA_DIR (journal, contracts registry, server key, site data) writable for the unprivileged
 # `node` user, then drop to it; started as any other user, run as is.
 set -e

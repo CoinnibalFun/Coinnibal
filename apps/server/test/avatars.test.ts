@@ -175,7 +175,7 @@ describe('sanitizeAvatar', () => {
 
 describe('AvatarStore', () => {
   it('stores content-addressed files, reloads them and keeps blocked ids', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-av-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-av-'));
     const a = new AvatarStore(dir);
     const clean = sanitizeAvatar(png(64, 64, 3));
     const id = a.put(clean);
@@ -204,7 +204,7 @@ interface Harness {
 }
 
 async function harness(limits: { avatarWallet?: Limiter } = {}): Promise<Harness> {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-avatar-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-avatar-'));
   const admin = wallet();
   const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public' } as NodeJS.ProcessEnv);
   const big = () => new Limiter(10_000, 60_000);

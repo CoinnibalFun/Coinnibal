@@ -315,8 +315,8 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
 
   it('a signed-in admin still gets a closed page (to check it before opening), with a tag that says so', async () => {
     const ADMIN = '0xAdA0000000000000000000000000000000000001';
-    localStorage.setItem('elymum.auth.v1', JSON.stringify({ address: ADMIN, token: 'admin-token', exp: Date.now() + 3600_000 }));
-    localStorage.setItem('elymum.site.admin.v1', ADMIN);
+    localStorage.setItem('coinnibal.auth.v1', JSON.stringify({ address: ADMIN, token: 'admin-token', exp: Date.now() + 3600_000 }));
+    localStorage.setItem('coinnibal.site.admin.v1', ADMIN);
     resetSiteSettings();
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED }, 'GET /api/auth/me': { address: ADMIN, admin: true } }));
     history.pushState(null, '', '/collab');

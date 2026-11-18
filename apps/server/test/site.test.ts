@@ -30,7 +30,7 @@ interface Harness {
 }
 
 async function harness(env: Record<string, string> = {}, limits?: ConstructorParameters<typeof SiteApi>[3]): Promise<Harness> {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-site-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-site-'));
   const admin = wallet();
   const clock = { t: Date.now() };
   const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', ...env } as NodeJS.ProcessEnv);
@@ -308,7 +308,7 @@ describe('site API', () => {
       expect([bad.status, bad.body.field]).toEqual([400, 'kind']);
       expect((await h.call('POST', '/api/admin/tasks', { wallet: a, body: { kind: 'text', title: '' } })).body.field).toBe('title');
       expect((await h.call('POST', '/api/admin/tasks', { wallet: a, body: { kind: 'join_link', title: 'Discord', target: 'javascript:alert(1)' } })).body.field).toBe('target');
-      const made = await h.call('POST', '/api/admin/tasks', { wallet: a, body: { kind: 'join_link', title: 'Join the Discord', target: 'https://discord.gg/elymum', required: false } });
+      const made = await h.call('POST', '/api/admin/tasks', { wallet: a, body: { kind: 'join_link', title: 'Join the Discord', target: 'https://discord.gg/coinnibal', required: false } });
       expect(made.status).toBe(201);
       const id = made.body.task.id as string;
       let list = (await h.call('GET', '/api/admin/tasks', { wallet: a })).body.tasks as { id: string; order: number }[];
@@ -570,7 +570,7 @@ describe('site API', () => {
     });
 
     it('starts fresh (and keeps the bad file) when a file is unreadable', () => {
-      const dir = mkdtempSync(join(tmpdir(), 'elymum-site-bad-'));
+      const dir = mkdtempSync(join(tmpdir(), 'coinnibal-site-bad-'));
       const a = new SiteStore(dir);
       a.updateSettings({ collabOpen: true });
       writeFileSync(join(dir, SITE_FILES.wl), '{not json');
@@ -581,13 +581,13 @@ describe('site API', () => {
       expect(readdirSync(join(dir, 'site')).some((f) => f.startsWith('wl.json.corrupt-'))).toBe(true);
       expect(logs.join()).toMatch(/unreadable/);
       // no files until something changes
-      const empty = mkdtempSync(join(tmpdir(), 'elymum-site-empty-'));
+      const empty = mkdtempSync(join(tmpdir(), 'coinnibal-site-empty-'));
       new SiteStore(empty);
       expect(existsSync(join(empty, 'site'))).toBe(false);
     });
 
     it('the public launch closes an older settings file once; after that the admin decides', () => {
-      const dir = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));
+      const dir = mkdtempSync(join(tmpdir(), 'coinnibal-site-launch-'));
       mkdirSync(join(dir, 'site'), { recursive: true });
       // the live server before the launch: WL open, the game public, no marker
       writeFileSync(join(dir, SITE_FILES.settings), JSON.stringify({ wlOpen: true, collabOpen: true, gameAccess: 'public', xHandle: 'coinnibal', launchPostUrl: 'https://x.com/coinnibal/status/42' }));
@@ -607,12 +607,12 @@ describe('site API', () => {
       expect(b.settings).toMatchObject({ wlOpen: true, collabOpen: false, mintOpen: true, gameAccess: 'holders' });
       expect(again).toEqual([]);
       // a file that already carries the marker is never touched, whatever it holds
-      const kept = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));
+      const kept = mkdtempSync(join(tmpdir(), 'coinnibal-site-launch-'));
       mkdirSync(join(kept, 'site'), { recursive: true });
       writeFileSync(join(kept, SITE_FILES.settings), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', xHandle: 'coinnibalfun', launchPostUrl: null, launch: SETTINGS_LAUNCH }));
       expect(new SiteStore(kept).settings).toMatchObject({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public' });
       // a fresh server (no file) starts closed and writes the marker with its first save
-      const fresh = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));
+      const fresh = mkdtempSync(join(tmpdir(), 'coinnibal-site-launch-'));
       const f = new SiteStore(fresh);
       expect(f.settings).toMatchObject({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' });
       f.updateSettings({ gameAccess: 'public' });

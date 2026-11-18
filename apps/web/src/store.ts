@@ -257,7 +257,7 @@ export interface UiState {
   settings: Settings;
 }
 
-const SETTINGS_KEY = 'elymum.settings.v1';
+const SETTINGS_KEY = 'coinnibal.settings.v1';
 
 /** The first-visit guess at the player's country: the browser's language regions (`suggestCountry`). */
 export function guessCountry(): string {

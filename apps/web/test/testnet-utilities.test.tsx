@@ -152,7 +152,7 @@ describe('the faucet', () => {
   });
 
   it("sends the stored session with the faucet read (while only admins play, the server answers an admin's only)", async () => {
-    localStorage.setItem('elymum.auth.v1', JSON.stringify({ address: '0x00000000000000000000000000000000000000Ad', token: 'admin-token', exp: Date.now() + 3_600_000 }));
+    localStorage.setItem('coinnibal.auth.v1', JSON.stringify({ address: '0x00000000000000000000000000000000000000Ad', token: 'admin-token', exp: Date.now() + 3_600_000 }));
     let calls: { method: string; path: string; auth: string | null }[] = [];
     try {
       ({ calls, restore } = mockFetch({
@@ -163,7 +163,7 @@ describe('the faucet', () => {
       expect(await screen.findByTestId('fc-no-token')).toBeTruthy();
       expect(calls.find((c) => c.path === '/api/site/faucet')?.auth).toBe('Bearer admin-token');
     } finally {
-      localStorage.removeItem('elymum.auth.v1');
+      localStorage.removeItem('coinnibal.auth.v1');
     }
   });
 
@@ -329,7 +329,7 @@ describe('admin groups', () => {
 
   it('lists the mainnet launch with the server step first; nothing is ticked on testnet', () => {
     const steps = mainnetChecklist(resolveNetwork(chainStatus()), null);
-    expect(steps[0].label).toMatch(/Point the server at the mainnet \(ELYMUM_CHAIN_ID and ELYMUM_RPC_URLS\)/);
+    expect(steps[0].label).toMatch(/Point the server at the mainnet \(COINNIBAL_CHAIN_ID and COINNIBAL_RPC_URLS\)/);
     expect(steps.filter((s) => s.ok === true)).toHaveLength(0);
     const main = mainnetChecklist(resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null })), null);
     expect(main[0].ok).toBe(true);

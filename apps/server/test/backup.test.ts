@@ -22,9 +22,9 @@ describe('GET /api/admin/backup', () => {
   let cfgSecret: Buffer = Buffer.alloc(0);
 
   beforeAll(async () => {
-    dir = mkdtempSync(join(tmpdir(), 'elymum-backup-'));
+    dir = mkdtempSync(join(tmpdir(), 'coinnibal-backup-'));
     writeFileSync(join(dir, 'marker.txt'), 'known contents 42\n');
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', CORS_ORIGIN: 'https://elymum.io' } as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', CORS_ORIGIN: 'https://coinnibal.fun' } as NodeJS.ProcessEnv);
     cfgSecret = cfg.authSecret;
     app = await createApp(cfg, {
       chain: new ArenaChain([arena(1, 1000)]),
@@ -40,7 +40,7 @@ describe('GET /api/admin/backup', () => {
   });
 
   const get = (token?: string, proof?: string) =>
-    fetch(`http://127.0.0.1:${port}/api/admin/backup`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(proof ? { 'X-Elymum-Proof': proof } : {}) } });
+    fetch(`http://127.0.0.1:${port}/api/admin/backup`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(proof ? { 'X-Coinnibal-Proof': proof } : {}) } });
   /** A fresh, purpose-bound signature of the admin wallet (what the admin panel asks the wallet for). */
   const proofFor = async (token: string, purpose = 'backup', by = signer) => {
     const r = await fetch(`http://127.0.0.1:${port}/api/admin/secret-proof`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ purpose }) });
@@ -87,11 +87,11 @@ describe('GET /api/admin/backup', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('application/gzip');
     expect(res.headers.get('cache-control')).toBe('no-store');
-    expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="elymum-data-31337-\d{8}-\d{6}\.tar\.gz"$/);
+    expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="coinnibal-data-31337-\d{8}-\d{6}\.tar\.gz"$/);
     const gz = Buffer.from(await res.arrayBuffer());
     const tarBytes = gunzipSync(gz); // throws on a corrupt or truncated gzip
     expect(tarBytes.length).toBeGreaterThan(512);
-    const out = mkdtempSync(join(tmpdir(), 'elymum-backup-out-'));
+    const out = mkdtempSync(join(tmpdir(), 'coinnibal-backup-out-'));
     const file = join(out, 'b.tar.gz');
     writeFileSync(file, gz);
     const list = spawnSync('tar', ['tzf', file], { encoding: 'utf8' });
@@ -109,10 +109,10 @@ describe('GET /api/admin/backup', () => {
   it('answers the CORS preflight of the web origin with the Authorization header allowed', async () => {
     const res = await fetch(`http://127.0.0.1:${port}/api/admin/backup`, {
       method: 'OPTIONS',
-      headers: { Origin: 'https://elymum.io', 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Headers': 'authorization' },
+      headers: { Origin: 'https://coinnibal.fun', 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Headers': 'authorization' },
     });
     expect(res.status).toBe(204);
-    expect(res.headers.get('access-control-allow-origin')).toBe('https://elymum.io');
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://coinnibal.fun');
     expect(res.headers.get('access-control-allow-headers')).toMatch(/Authorization/);
   });
 
@@ -128,8 +128,8 @@ describe('GET /api/admin/backup', () => {
   });
 
   it('names the file after the chain and the UTC time', () => {
-    expect(backupFileName(46630, Date.UTC(2026, 10, 4, 3, 5, 9))).toBe('elymum-data-46630-20261104-030509.tar.gz');
-    expect(backupFileName(null, Date.UTC(2026, 0, 1))).toBe('elymum-data-nochain-20260101-000000.tar.gz');
+    expect(backupFileName(46630, Date.UTC(2026, 10, 4, 3, 5, 9))).toBe('coinnibal-data-46630-20261104-030509.tar.gz');
+    expect(backupFileName(null, Date.UTC(2026, 0, 1))).toBe('coinnibal-data-nochain-20260101-000000.tar.gz');
   });
 });
 
@@ -138,7 +138,7 @@ describe('secret exports on the mainnet', () => {
     const signer = testSigner();
     const base = { PORT: '0', HOST: '127.0.0.1', ADMIN_WALLETS: signer.address, TRUST_PROXY: '0', CHAIN_ID: '4663', AUTH_SECRET: 'x'.repeat(64) };
     for (const [flag, want] of [[undefined, 403], ['1', 200]] as const) {
-      const dir = mkdtempSync(join(tmpdir(), 'elymum-backup-main-'));
+      const dir = mkdtempSync(join(tmpdir(), 'coinnibal-backup-main-'));
       const cfg = loadConfig({ ...base, DATA_DIR: dir, ...(flag ? { ADMIN_SECRET_EXPORT: flag } : {}) } as NodeJS.ProcessEnv);
       const app = await createApp(cfg, { chain: new ArenaChain([arena(1, 1000)]), chainId: 4663, log: () => {}, persist: true, apiLimiter: new Limiter(10_000, 60_000) });
       const port = await app.listen();
@@ -150,7 +150,7 @@ describe('secret exports on the mainnet', () => {
           const { message } = (await r.json()) as { message: string };
           expect(message).toMatch(/Purpose: migration/);
           const proof = Buffer.from(JSON.stringify({ message, signature: await signer.sign(message) })).toString('base64url');
-          const headers = { Authorization: `Bearer ${token}`, 'X-Elymum-Proof': proof };
+          const headers = { Authorization: `Bearer ${token}`, 'X-Coinnibal-Proof': proof };
           // one proof of purpose "migration": the settings once and the backup once
           expect((await fetch(`http://127.0.0.1:${port}/api/admin/migration-env`, { headers })).status).toBe(200);
           expect((await fetch(`http://127.0.0.1:${port}/api/admin/migration-env`, { headers })).status).toBe(401);
@@ -163,6 +163,30 @@ describe('secret exports on the mainnet', () => {
       } finally {
         await app.close();
       }
+    }
+  });
+});
+
+describe('the proof header of before the rename', () => {
+  it('reads the proof from X-Elymum-Proof when X-Coinnibal-Proof is absent (a script copied before the rename), same rules', async () => {
+    const signer = testSigner();
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-backup-old-'));
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: signer.address, TRUST_PROXY: '0', CORS_ORIGIN: 'https://coinnibal.fun' } as NodeJS.ProcessEnv);
+    const app = await createApp(cfg, { chain: new ArenaChain([arena(1, 1000)]), log: () => {}, persist: true, apiLimiter: new Limiter(10_000, 60_000) });
+    try {
+      const port = await app.listen();
+      const token = app.auth.issueToken(signer.address);
+      const r = await fetch(`http://127.0.0.1:${port}/api/admin/secret-proof`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ purpose: 'backup' }) });
+      const { message } = (await r.json()) as { message: string };
+      const proof = Buffer.from(JSON.stringify({ message, signature: await signer.sign(message) })).toString('base64url');
+      const viaOld = () => fetch(`http://127.0.0.1:${port}/api/admin/backup`, { headers: { Authorization: `Bearer ${token}`, 'X-Elymum-Proof': proof } });
+      const ok = await viaOld();
+      expect(ok.status).toBe(200);
+      await ok.arrayBuffer();
+      // used once, like a proof in the new header
+      expect((await viaOld()).status).toBe(401);
+    } finally {
+      await app.close();
     }
   });
 });
@@ -208,7 +232,7 @@ describe('migrationEnv', () => {
       CORS_ORIGIN: '*',
       PATH: '/usr/bin',
       RENDER_SERVICE_ID: 'srv-x',
-      PUBLIC_URL: 'https://elymum.io',
+      PUBLIC_URL: 'https://coinnibal.fun',
       EXPLORER_URL: 'bad\nINJECT=1',
       CHAIN_NAME: 'Retired',
       GAME_ACCESS: 'admins',
@@ -219,7 +243,7 @@ describe('migrationEnv', () => {
       AUTH_SECRET: 's3cret',
       SERVER_PRIVATE_KEY: 'auto',
       EVM_RPC_URL: 'https://rpc.example',
-      PUBLIC_URL: 'https://elymum.io',
+      PUBLIC_URL: 'https://coinnibal.fun',
     });
   });
 });

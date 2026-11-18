@@ -79,7 +79,7 @@ describe('player guide facts', () => {
 });
 
 describe('player guide content', () => {
-  const en = docsEn('$ELYMUM');
+  const en = docsEn('$TOKEN');
 
   it('explains the fee on profit with the worked example, at the live rates', () => {
     const text = (c: typeof en) => JSON.stringify(c.sections);
@@ -92,7 +92,7 @@ describe('player guide content', () => {
     // the receipt's caption reads right with any token name from the server ("a ticket of 1,000 tokens")
     expect(docsEn().receipt.caption).toBe('A ticket of 1,000 tokens, worth 1,900 tokens at the bell');
     expect(text(en)).not.toMatch(/entry fee|the cut|arena vault for the team|played by the team|fee wallet|\btill\b/);
-    const live = docsEn('$ELYMUM', { burnBps: 1000, vaultBps: 200 });
+    const live = docsEn('$TOKEN', { burnBps: 1000, vaultBps: 200 });
     expect(live.rates).toEqual({ burnBps: 1000, vaultBps: 200 });
     expect(text(live)).toContain('The game takes one fee: 12% of your profit.');
     expect(text(live)).toContain('10% of the profit is burned and 2% goes to the team wallet');
@@ -205,7 +205,7 @@ describe('player guide content', () => {
     // the shop is in the lobby only (GameHud's top bar sells nothing)
     expect(pu).toContain('Nothing is sold during a game');
     const token = JSON.stringify(en.sections.find((s) => s.id === 'token'));
-    expect(token).toContain('The game never creates new $ELYMUM');
+    expect(token).toContain('The game never creates new $TOKEN');
     expect(token).toContain('the game token is set in the contract once and can never be changed.');
     expect(token).not.toMatch(/Until it is set|token address/);
     // floor loot exists only where something without a ticket eats a coin (the testnet's test rooms): not in the guide
@@ -244,7 +244,7 @@ describe('player guide content', () => {
     expect(text).not.toMatch(/\brent\b|token account/);
     expect(text).toContain('ETH on Robinhood Chain for network fees');
     expect(text).not.toMatch(/Testnet/);
-    expect(JSON.stringify(docsEn('$ELYMUM', undefined, 'Robinhood Chain'))).toContain('ETH on Robinhood Chain for network fees');
+    expect(JSON.stringify(docsEn('$TOKEN', undefined, 'Robinhood Chain'))).toContain('ETH on Robinhood Chain for network fees');
     expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
     expect(text).not.toMatch(/record_game/);
     // the CI guard's Turkish letters, written as escapes so this file passes the guard itself

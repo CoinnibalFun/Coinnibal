@@ -45,7 +45,7 @@ const VIEWPORTS = [
 const kids = [];
 async function startStack() {
   if (await fetch(`${BASE}/api/health`).then((r) => r.ok, () => false)) throw new Error(`${BASE} already serves a stack: pass --base to use it, or pick other ports`);
-  const data = mkdtempSync(join(tmpdir(), 'elymum-motion-guard-'));
+  const data = mkdtempSync(join(tmpdir(), 'coinnibal-motion-guard-'));
   mkdirSync(join(data, 'site'), { recursive: true });
   writeFileSync(join(data, 'site/settings.json'), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', launch: 1 }));
   kids.push(

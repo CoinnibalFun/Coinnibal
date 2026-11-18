@@ -286,7 +286,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   const passEvery = opts.passEvery ?? 6;
   const staleAfterS = opts.staleAfterS ?? 120;
   const log = opts.log ?? (() => {});
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-money-sim-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-money-sim-'));
   const journalPath = join(dir, 'journal.json');
   const violations: string[] = [];
   const recent: string[] = [];

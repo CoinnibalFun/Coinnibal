@@ -3,10 +3,10 @@ import { CUSTOM_LIMITS, PRACTICE_ROOM, SHARE_ID_RE, ordinal, practiceRoomConfig,
 
 describe('share on X and practice rooms (shared rules)', () => {
   it('builds the X web intent with the text and the card link, encoded', () => {
-    const u = new URL(shareIntentUrl('I just ate Ann & Bo on Elymum!', 'https://elymum.io/share/AbCdE12345'));
+    const u = new URL(shareIntentUrl('I just ate Ann & Bo on Coinnibal!', 'https://coinnibal.fun/share/AbCdE12345'));
     expect(u.origin + u.pathname).toBe('https://x.com/intent/post');
-    expect(u.searchParams.get('text')).toBe('I just ate Ann & Bo on Elymum!');
-    expect(u.searchParams.get('url')).toBe('https://elymum.io/share/AbCdE12345');
+    expect(u.searchParams.get('text')).toBe('I just ate Ann & Bo on Coinnibal!');
+    expect(u.searchParams.get('url')).toBe('https://coinnibal.fun/share/AbCdE12345');
     expect(SHARE_ID_RE.test('AbCdE12345')).toBe(true);
     expect(SHARE_ID_RE.test('AbCdE1234')).toBe(false);
     expect(SHARE_ID_RE.test('AbCdE1234/')).toBe(false);

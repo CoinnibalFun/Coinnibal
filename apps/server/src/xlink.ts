@@ -157,7 +157,8 @@ export function oembedText(html: string): string {
 
 /**
  * Whether the post's words carry `code` as a word of its own (any case). The code's six characters count under any of
- * `X_CODE_PREFIXES` (`COIN-7F3K9Q`, `NIBAL-7F3K9Q` and `ELYMUM-7F3K9Q` are the same code).
+ * `X_CODE_PREFIXES` (`COIN-7F3K9Q`, `NIBAL-7F3K9Q` and `ELYMUM-7F3K9Q`, of the project's name before the rename, are
+ * the same code).
  */
 export function carriesCode(text: string, code: string): boolean {
   const dash = code.indexOf('-');
@@ -610,11 +611,11 @@ export class XLinkService {
 }
 
 /**
- * A fake X for the dev stack (`DEV_FAKE_X=1`) and the screenshots: any post id answers as a post of `@elymum_fan`
+ * A fake X for the dev stack (`DEV_FAKE_X=1`) and the screenshots: any post id answers as a post of `@coinnibal_fan`
  * carrying `text()` (the newest code issued), with a picture (`avatar()`). Never used unless asked for.
  */
 export function fakeXFetch(opts: { text: () => string; handle?: string; avatar?: () => Buffer | null }): XFetch {
-  const handle = opts.handle ?? 'elymum_fan';
+  const handle = opts.handle ?? 'coinnibal_fan';
   const answer = (bytes: Buffer, type: string, status = 200) => ({
     ok: status < 400,
     status,

@@ -39,7 +39,7 @@ class FakeChain implements ChainGateway {
       nftAddress: null,
       arenasEnabled: true,
       tokenReady: true,
-      token: { address: '0x0000000000000000000000000000000000000707', symbol: '$ELYMUM', decimals: 18 },
+      token: { address: '0x0000000000000000000000000000000000000707', symbol: '$NIBAL', decimals: 18 },
       fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 500, holderPerks: false, paymentBurnBps: 5000, burnMode: 0 },
       serverKey: null,
     };
@@ -159,7 +159,7 @@ const jumpTo = (at: number) => {
 };
 
 beforeAll(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'elymum-workers-'));
+  dir = mkdtempSync(join(tmpdir(), 'coinnibal-workers-'));
   const cfg = loadConfig({
     PORT: '0',
     HOST: '127.0.0.1',
@@ -400,7 +400,7 @@ describe('room workers', () => {
 
 describe('room workers: shutdown', () => {
   it('a server stop settles the live tickets of every worker (an operator exit) before it returns', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-stop-'));
+    const d = mkdtempSync(join(tmpdir(), 'coinnibal-workers-stop-'));
     const ch = new FakeChain();
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
@@ -424,7 +424,7 @@ describe('room workers: shutdown', () => {
 
 describe('room workers: a hung worker', () => {
   it('is stopped by the watchdog, its tickets settled from the journal, and it comes back', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-hang-'));
+    const d = mkdtempSync(join(tmpdir(), 'coinnibal-workers-hang-'));
     const ch = new FakeChain();
     const logs: string[] = [];
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
@@ -502,7 +502,7 @@ describe('room workers: the money helpers', () => {
 
 describe('room workers: practice bots', () => {
   it('a free custom room in a worker fields its practice bots; official arenas in a worker have none, test arenas do', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-bots-'));
+    const d = mkdtempSync(join(tmpdir(), 'coinnibal-workers-bots-'));
     const ch = new FakeChain();
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
@@ -535,7 +535,7 @@ describe('room workers: practice bots', () => {
 
 describe('room workers: arena instance scaling', () => {
   it('an overflow instance opens on a worker; drained once empty, it closes there after its bell settled it', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-scale-'));
+    const d = mkdtempSync(join(tmpdir(), 'coinnibal-workers-scale-'));
     const ch = new FakeChain();
     const base = Date.now();
     let off = roundAt(base).startsAt + 2_000 - base;

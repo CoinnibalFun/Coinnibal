@@ -53,7 +53,7 @@ interface Harness {
 }
 
 async function harness(env: Record<string, string> = {}, setupDir?: (dir: string) => void): Promise<Harness> {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-mint-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-mint-'));
   setupDir?.(dir);
   const evm = new FakeEvm();
   const chain = new EvmTestChain(evm);
@@ -62,7 +62,7 @@ async function harness(env: Record<string, string> = {}, setupDir?: (dir: string
     HOST: '127.0.0.1',
     DATA_DIR: dir,
     ADMIN_WALLETS: ADMIN,
-    PUBLIC_URL: 'https://elymum.example',
+    PUBLIC_URL: 'https://coinnibal.example',
     ROUND_JOIN_CLOSE_SECONDS: '0',
     ROUND_BREAK_SECONDS: '0',
     ...env,
@@ -302,7 +302,7 @@ describe('mint: allowlist, proofs, state, price', () => {
   it('NFT metadata and the emblem SVG exist for minted ids only (sealed before the reveal)', async () => {
     const meta = await h.call('GET', '/api/nft/2');
     expect(meta.status).toBe(200);
-    expect(meta.body).toMatchObject({ name: 'Coinnibal No. 2', image: 'https://elymum.example/api/nft/2.svg', external_url: 'https://elymum.example' });
+    expect(meta.body).toMatchObject({ name: 'Coinnibal No. 2', image: 'https://coinnibal.example/api/nft/2.svg', external_url: 'https://coinnibal.example' });
     expect(meta.body.attributes).toEqual([{ trait_type: 'Status', value: 'Sealed' }]);
     expect(meta.headers.get('cache-control')).toBe('public, max-age=60');
     const svg = await h.call('GET', '/api/nft/2.svg');
@@ -321,7 +321,7 @@ describe('mint: allowlist, proofs, state, price', () => {
     // ids beyond the max supply never trigger a chain read
     expect((await h.call('GET', '/api/nft/5000000')).status).toBe(404);
     const contract = (await h.call('GET', '/api/nft/contract')).body;
-    expect(contract).toMatchObject({ name: 'Coinnibal', external_link: 'https://elymum.example', seller_fee_basis_points: 500, fee_recipient: ADMIN });
+    expect(contract).toMatchObject({ name: 'Coinnibal', external_link: 'https://coinnibal.example', seller_fee_basis_points: 500, fee_recipient: ADMIN });
     expect(contract.provenance_hash).toBe(h.app.nft.provenance().provenance);
     // royaltyInfo is cached (5 min): an unauthenticated route never turns every hit into an RPC call
     const calls = h.evm.royaltyCalls;
@@ -329,8 +329,8 @@ describe('mint: allowlist, proofs, state, price', () => {
     expect(h.evm.royaltyCalls).toBe(calls);
     // metadata links come from PUBLIC_URL, never from a spoofed X-Forwarded-Host
     expect((await h.call('GET', '/api/nft/2', { headers: { 'x-forwarded-host': 'evil.example', 'x-forwarded-proto': 'http' } })).body).toMatchObject({
-      image: 'https://elymum.example/api/nft/2.svg',
-      external_url: 'https://elymum.example',
+      image: 'https://coinnibal.example/api/nft/2.svg',
+      external_url: 'https://coinnibal.example',
     });
   }, 10_000);
 });
@@ -388,7 +388,7 @@ describe('emblem reveal (provenance, schedule, reveal) through the API', () => {
     const g = genomes[(1 + rev.body.offset) % 1000];
     const meta = await h.call('GET', '/api/nft/2');
     expect(meta.headers.get('cache-control')).toBe('public, max-age=300');
-    expect(meta.body.image).toBe(`https://elymum.example/api/nft/2.svg?v=${target}`);
+    expect(meta.body.image).toBe(`https://coinnibal.example/api/nft/2.svg?v=${target}`);
     expect(meta.body.attributes[0]).toEqual({ trait_type: 'Tier', value: g.tier });
     expect(meta.body.attributes.find((a: { trait_type: string }) => a.trait_type === 'Material').value).toBe(g.material);
     const svg = await h.call('GET', '/api/nft/2.svg');
@@ -540,7 +540,7 @@ describe('profiles', () => {
   });
 
   it('the store persists and reloads, and ignores malformed rows', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-profiles-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-profiles-'));
     const path = join(dir, 'profiles.json');
     const a = new ProfileStore(path);
     const w = wallet();
@@ -559,6 +559,8 @@ describe('profiles', () => {
   });
 });
 
+// The project was called Elymum until November 2026: a data dir from then may keep its earlier default handles
+// (@elymum, @elymumio) and seeded task texts that name it. These cases are that kept data, so they stay as written.
 describe('X handle migration (previous default @elymum → @elymumio → @coinnibalfun)', () => {
   const now = 1_700_000_000_000;
   const seededOld = [
@@ -587,7 +589,7 @@ describe('X handle migration (previous default @elymum → @elymumio → @coinni
   });
 
   it('switches a stored previous default handle and rewrites only the seeded tasks', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-handle-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-handle-'));
     seed(dir, { wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymum', launchPostUrl: null, launch: 1 });
     const logs: string[] = [];
     const s = new SiteStore(dir, { log: (m) => logs.push(m) });
@@ -613,7 +615,7 @@ describe('X handle migration (previous default @elymum → @elymumio → @coinni
   });
 
   it('keeps a handle the admin chose, and points the seeded tasks at it', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-handle-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-handle-'));
     seed(dir, { wlOpen: true, collabOpen: true, gameAccess: 'admins', xHandle: 'elymum_arena', launchPostUrl: null });
     const s = new SiteStore(dir);
     expect(s.settings.xHandle).toBe('elymum_arena');
@@ -622,7 +624,7 @@ describe('X handle migration (previous default @elymum → @elymumio → @coinni
   });
 
   it('never rewrites a longer handle that only starts with the previous one', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-handle-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-handle-'));
     mkdirSync(join(dir, 'site'), { recursive: true });
     const tasks = [{ ...seededOld[0], title: 'Follow @elymumio and @Elymum_fans', body: 'See https://x.com/elymumio and x.com/ELYMUM.', target: 'https://x.com/elymumio' }];
     writeFileSync(join(dir, SITE_FILES.tasks), JSON.stringify(tasks));
@@ -631,7 +633,7 @@ describe('X handle migration (previous default @elymum → @elymumio → @coinni
   });
 
   it('moves to a new default handle (X_HANDLE): the stored old default and the seeded tasks follow it', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-handle-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-handle-'));
     seed(dir, { wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymumio', launchPostUrl: null });
     const s = new SiteStore(dir, { defaults: { xHandle: 'coinnibal' } });
     expect(s.settings.xHandle).toBe('coinnibal');

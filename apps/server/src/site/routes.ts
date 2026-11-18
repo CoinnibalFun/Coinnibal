@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { AdminAudit } from './audit';
-import { SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
+import { OLD_SECRET_PROOF_HEADER, SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
 import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible } from '@coinnibal/shared';
 import { checksumAddress, type Auth } from '../auth';
@@ -151,7 +151,7 @@ export function bearerWallet(auth: Auth, req: IncomingMessage): string | null {
 }
 
 /**
- * The Elymum site API: wallet sign-in over HTTP (SIWE), `/api/site/*` (public + the signed-in
+ * The Coinnibal site API: wallet sign-in over HTTP (SIWE), `/api/site/*` (public + the signed-in
  * applicant), `/api/profile`, the NFT metadata (`/api/nft/*`) and `/api/admin/*` (a session of an
  * `ADMIN_WALLETS` wallet).
  */
@@ -274,7 +274,7 @@ export class SiteApi {
     return this.cfg.gameAccess ?? this.store.settings.gameAccess;
   }
 
-  /** Whether `wallet` holds an Elymum NFT (cached 15 s, `fresh` re-reads; false without an NFT or a chain). */
+  /** Whether `wallet` holds a Coinnibal NFT (cached 15 s, `fresh` re-reads; false without an NFT or a chain). */
   async isHolder(wallet: string | null | undefined, fresh = false): Promise<boolean> {
     return !!wallet && !!this.ext.mint && (await this.ext.mint.isHolder(wallet, fresh));
   }
@@ -812,7 +812,7 @@ export class SiteApi {
       throw new SiteFail(403, 'disabled', 'Secret exports are off on the mainnet. Set ADMIN_SECRET_EXPORT=1 on the server (and restart) for the time of the move, then remove it.');
     }
     try {
-      await this.proofs.consume(req.headers[SECRET_PROOF_HEADER], wallet, route);
+      await this.proofs.consume(req.headers[SECRET_PROOF_HEADER] ?? req.headers[OLD_SECRET_PROOF_HEADER], wallet, route);
     } catch (err) {
       if (err instanceof SecretProofError) throw new SiteFail(401, 'proof_required', err.message);
       throw err;
@@ -950,7 +950,7 @@ export class SiteApi {
         if (!SECRET_PURPOSES.includes(purpose as SecretPurpose)) throw new SiteFail(400, 'bad_request', `purpose must be one of ${SECRET_PURPOSES.join(', ')}`, 'purpose');
         if (!this.secretExportAllowed()) throw new SiteFail(403, 'disabled', 'Secret exports are off on the mainnet. Set ADMIN_SECRET_EXPORT=1 on the server for the time of the move.');
         const domain = new URL(this.baseUrl(req)).host;
-        return send(res, 200, { ...this.proofs.issue(wallet, purpose as SecretPurpose, { domain, chainId: this.chainId() }), header: 'X-Elymum-Proof' });
+        return send(res, 200, { ...this.proofs.issue(wallet, purpose as SecretPurpose, { domain, chainId: this.chainId() }), header: 'X-Coinnibal-Proof' });
       }
       case 'auth': {
         // POST /api/admin/auth/revoke {"wallet": "0x…"} ends that wallet's sessions; {"wallet": "admins"} every admin session
@@ -1141,7 +1141,7 @@ export class SiteApi {
       case 'wl.csv': {
         this.method(req, 'GET');
         const scope = q.get('scope') === 'all' ? 'all' : 'approved';
-        return sendCsv(res, `elymum-wl-${scope}-${day}.csv`, s.wlCsv(scope));
+        return sendCsv(res, `coinnibal-wl-${scope}-${day}.csv`, s.wlCsv(scope));
       }
       case 'wl': {
         if (seg.length === 1) {
@@ -1178,7 +1178,7 @@ export class SiteApi {
         }
         if (seg.length === 2 && seg[1] === 'wallets.csv') {
           this.method(req, 'GET');
-          return sendCsv(res, `elymum-collab-wallets-${day}.csv`, s.allCollabsCsv());
+          return sendCsv(res, `coinnibal-collab-wallets-${day}.csv`, s.allCollabsCsv());
         }
         const id = seg[1];
         if (seg.length === 2) {
@@ -1189,7 +1189,7 @@ export class SiteApi {
         switch (seg[2]) {
           case 'wallets.csv':
             this.method(req, 'GET');
-            return sendCsv(res, `elymum-collab-${id}-${day}.csv`, s.collabCsv(id));
+            return sendCsv(res, `coinnibal-collab-${id}-${day}.csv`, s.collabCsv(id));
           case 'approve':
             this.method(req, 'POST');
             return send(res, 200, { collab: s.approveCollab(id, await readJson(req)) });

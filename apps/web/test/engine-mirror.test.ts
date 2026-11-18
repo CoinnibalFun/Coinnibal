@@ -71,7 +71,7 @@ const snap = (buf: ArrayBuffer) => {
 beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', () => 0);
   vi.stubGlobal('cancelAnimationFrame', () => {});
-  localStorage.setItem('elymum.brief', '1');
+  localStorage.setItem('coinnibal.brief', '1');
   net.open = true;
   net.sent = [];
   useUi.setState({ ...initial, rooms: [A, B], screen: 'lobby' }, true);

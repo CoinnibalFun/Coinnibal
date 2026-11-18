@@ -185,7 +185,7 @@ describe('a room feeds the eaten list into my game-over stats', () => {
 
 describe('the app: a test arena result card', () => {
   it('the bell of a test arena sends a TEST card naming the eaten bots; the game counts in no profile', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-eaten-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-eaten-'));
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, TRUST_PROXY: '0', GAME_ACCESS: 'public', NODE_ENV: 'development' } as NodeJS.ProcessEnv);
     const app = await createApp(cfg, { chain: new ArenaChain([arena(1, FEE)]), log: () => {}, persist: false });
     try {

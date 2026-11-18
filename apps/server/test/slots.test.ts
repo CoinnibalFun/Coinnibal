@@ -1,6 +1,6 @@
 /**
  * Connection slots: guests (not signed in) hold at most GUEST_SHARE of MAX_CONNECTIONS and are limited per IP and
- * subnet; signed-in sockets (a session token offered as the `elymum.auth.<token>` subprotocol, or signed in after
+ * subnet; signed-in sockets (a session token offered as the `coinnibal.auth.<token>` subprotocol, or signed in after
  * the hello) are not limited per IP (carrier NAT) and take the reserve; an idle lobby guest makes room; a live-stake
  * holder's reconnect always gets in.
  */
@@ -25,7 +25,7 @@ beforeAll(async () => {
   const cfg = loadConfig({
     PORT: '0',
     HOST: '127.0.0.1',
-    DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-slots-')),
+    DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-slots-')),
     GAME_ACCESS: 'public',
     NODE_ENV: 'development',
     MAX_CONNECTIONS: '10',
@@ -45,7 +45,7 @@ afterAll(async () => {
 const opened: WebSocket[] = [];
 function open(ip: string, token?: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, token ? ['elymum', `elymum.auth.${token}`] : [], { headers: { 'X-Forwarded-For': ip } });
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, token ? ['coinnibal', `coinnibal.auth.${token}`] : [], { headers: { 'X-Forwarded-For': ip } });
     opened.push(ws);
     ws.once('open', () => {
       ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));
@@ -65,7 +65,7 @@ const idleGuests = () => {
 };
 
 describe('connection slots', () => {
-  it('guests and old clients: no subprotocol, plain `elymum`, or a bad token all get in as guests; the token is never echoed', async () => {
+  it('guests and old clients: no subprotocol, plain `coinnibal`, or a bad token all get in as guests; the token is never echoed', async () => {
     const withProtocols = (ip: string, protocols: string[]) =>
       new Promise<WebSocket>((resolve, reject) => {
         const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, protocols, { headers: { 'X-Forwarded-For': ip } });
@@ -79,16 +79,43 @@ describe('connection slots', () => {
       });
     const none = await withProtocols('192.0.2.10', []);
     expect(none.protocol).toBe('');
-    const plain = await withProtocols('192.0.2.11', ['elymum']);
-    expect(plain.protocol).toBe('elymum');
-    const forged = await withProtocols('192.0.2.12', ['elymum', 'elymum.auth.not-a-token']);
-    expect(forged.protocol).toBe('elymum');
-    const signed = await withProtocols('192.0.2.13', ['elymum', `elymum.auth.${app.auth.issueToken(testSigner().address)}`]);
-    expect(signed.protocol).toBe('elymum');
+    const plain = await withProtocols('192.0.2.11', ['coinnibal']);
+    expect(plain.protocol).toBe('coinnibal');
+    const forged = await withProtocols('192.0.2.12', ['coinnibal', 'coinnibal.auth.not-a-token']);
+    expect(forged.protocol).toBe('coinnibal');
+    const signed = await withProtocols('192.0.2.13', ['coinnibal', `coinnibal.auth.${app.auth.issueToken(testSigner().address)}`]);
+    expect(signed.protocol).toBe('coinnibal');
     await sleep(50);
     const conns = [...app.rooms.conns];
     expect(conns.filter((c) => c.priority === 'signed')).toHaveLength(1);
     expect(conns.filter((c) => !c.priority)).toHaveLength(3);
+    await closeAll();
+  });
+
+  it('a page from before the rename offers `elymum` / `elymum.auth.<token>`: answered with its own name, token honoured', async () => {
+    const withProtocols = (ip: string, protocols: string[]) =>
+      new Promise<WebSocket>((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, protocols, { headers: { 'X-Forwarded-For': ip } });
+        opened.push(ws);
+        ws.once('open', () => {
+          ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));
+          resolve(ws);
+        });
+        ws.once('unexpected-response', (_req, res) => reject(new Error(`HTTP ${res.statusCode}`)));
+        ws.once('error', reject);
+      });
+    const old = await withProtocols('192.0.2.21', ['elymum']);
+    expect(old.protocol).toBe('elymum');
+    const oldSigned = await withProtocols('192.0.2.22', ['elymum', `elymum.auth.${app.auth.issueToken(testSigner().address)}`]);
+    expect(oldSigned.protocol).toBe('elymum');
+    const oldForged = await withProtocols('192.0.2.23', ['elymum', 'elymum.auth.not-a-token']);
+    expect(oldForged.protocol).toBe('elymum');
+    // both offered: the current name wins
+    const both = await withProtocols('192.0.2.24', ['elymum', 'coinnibal']);
+    expect(both.protocol).toBe('coinnibal');
+    await sleep(50);
+    const conns = [...app.rooms.conns];
+    expect(conns.filter((c) => c.priority === 'signed')).toHaveLength(1);
     await closeAll();
   });
 
@@ -97,7 +124,7 @@ describe('connection slots', () => {
     await expect(open('198.51.100.1')).rejects.toThrow(/HTTP 429/);
     // a signed-in player (its token as the subprotocol) takes the reserve
     const signed = await open('198.51.101.1', app.auth.issueToken(testSigner().address));
-    expect(signed.protocol).toBe('elymum');
+    expect(signed.protocol).toBe('coinnibal');
     expect(app.rooms.conns.size).toBe(9);
     // the lobby guests went quiet: a new one takes the slot of the longest idle
     idleGuests();
@@ -124,13 +151,13 @@ describe('connection slots', () => {
 
   it('one address signing in with many throwaway wallets is still bounded (8 x the guest limit per IP)', async () => {
     const { SIGNED_PER_IP_FACTOR } = await import('../src/net/gateway');
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-slots2-')), GAME_ACCESS: 'public', NODE_ENV: 'development', MAX_CONNECTIONS: '100', MAX_CONNECTIONS_PER_IP: '1' } as unknown as NodeJS.ProcessEnv);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-slots2-')), GAME_ACCESS: 'public', NODE_ENV: 'development', MAX_CONNECTIONS: '100', MAX_CONNECTIONS_PER_IP: '1' } as unknown as NodeJS.ProcessEnv);
     const other = await createApp(cfg, { chain: new NullChain(), log: () => {}, persist: false });
     const p2 = await other.listen();
     const socks: WebSocket[] = [];
     const tryOpen = (token: string) =>
       new Promise<number | 'open'>((resolve) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${p2}/ws`, ['elymum', `elymum.auth.${token}`], { headers: { 'X-Forwarded-For': '203.0.113.77' } });
+        const ws = new WebSocket(`ws://127.0.0.1:${p2}/ws`, ['coinnibal', `coinnibal.auth.${token}`], { headers: { 'X-Forwarded-For': '203.0.113.77' } });
         socks.push(ws);
         ws.on('error', () => {});
         ws.once('open', () => resolve('open'));

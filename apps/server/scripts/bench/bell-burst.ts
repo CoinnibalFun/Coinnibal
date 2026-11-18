@@ -51,7 +51,7 @@ say(`hardhat: arena ${hh.arena}, ${TICKETS} players funded, blocks every ${BLOCK
 const chaos = new ChaosRpc(hh.url);
 const proxyUrl = await chaos.listen();
 
-const dir = mkdtempSync(join(tmpdir(), 'elymum-burst-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-burst-'));
 const cfg = loadConfig({
   NODE_ENV: 'production',
   CHAIN_ID: '31337',

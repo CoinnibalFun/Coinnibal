@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Authoritative Coinnibal game server (internal name elymum): simulation, rooms, settlement on chain (CoinnibalArena v3)",
+  "description": "Authoritative Coinnibal game server: simulation, rooms, settlement on chain (CoinnibalArena v3)",
   "main": "./dist/index.js",
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",
@@ -11,7 +11,7 @@
     "build": "tsup",
     "test": "vitest run",
     "test:workers": "TEST_GAME_WORKERS=2 vitest run test/integration.test.ts test/workers.test.ts",
-    "test:money": "ELYMUM_MONEY_SIM=1 vitest run test/money-conservation.test.ts",
+    "test:money": "COINNIBAL_MONEY_SIM=1 vitest run test/money-conservation.test.ts",
     "money-sim": "tsx scripts/money-sim.ts",
     "load": "node --import tsx scripts/bench/load.ts",
     "typecheck": "tsc --noEmit",

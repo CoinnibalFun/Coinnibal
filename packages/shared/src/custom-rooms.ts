@@ -328,8 +328,8 @@ export const CUSTOM_REQUEST_RE = /^[a-z2-7]{16}$/;
  * The `ref` of a room fee payment (`CoinnibalArena.pay(amount, ref)`): `coinnibal.room.<request>` in ASCII, right-padded
  * to 32 bytes. `request` is the creator's own random request id (`CUSTOM_REQUEST_RE`, made fresh for every room the
  * client pays for); the server opens a room for a payment only when its ref names the request the signed-in wallet
- * sent, and each request of a wallet opens one room (`UsedPayments`). A power-up ref (`elymum.shop.*` /
- * `elymum.cart.*`) never matches it, so one payment never buys both.
+ * sent, and each request of a wallet opens one room (`UsedPayments`). A power-up ref (`coinnibal.shop.*` /
+ * `coinnibal.cart.*`) never matches it, so one payment never buys both.
  */
 export function customRoomPaymentRef(request: string): `0x${string}` {
   if (!CUSTOM_REQUEST_RE.test(request)) throw new TypeError(`a room request id is 16 characters of a-z and 2-7, got ${JSON.stringify(request)}`);
@@ -386,7 +386,7 @@ export interface CustomRoomQuote {
   tiers: CustomArenaTier[];
   holderPerk: CustomHolderPerk;
   holderDiscountPct: number;
-  /** The signed-in wallet holds an Elymum NFT (false for guests). */
+  /** The signed-in wallet holds a Coinnibal NFT (false for guests). */
   holder: boolean;
   /** The holder's free room of the day is still available (`free_daily`). */
   freeAvailable: boolean;
@@ -505,7 +505,7 @@ export function parseInviteCode(raw: string | null | undefined): string | null {
   return INVITE_CODE_RE.test(c) ? c : null;
 }
 
-/** The share link of a room: `<origin>/play?room=CODE` (e.g. https://elymum.io/play?room=AB2CD). */
+/** The share link of a room: `<origin>/play?room=CODE` (e.g. https://coinnibal.fun/play?room=AB2CD). */
 export function inviteUrl(origin: string, code: string): string {
   return `${origin.replace(/\/+$/, '')}/play?room=${encodeURIComponent(code)}`;
 }

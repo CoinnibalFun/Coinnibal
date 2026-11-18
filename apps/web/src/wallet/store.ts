@@ -35,7 +35,7 @@ export const useWallet = create<WalletState>(() => ({
 }));
 
 /** localStorage key of the last wallet's rdns (silent reconnect on the next visit). */
-export const LAST_WALLET_KEY = 'elymum.wallet.v1';
+export const LAST_WALLET_KEY = 'coinnibal.wallet.v1';
 
 const remember = (rdns: string | null) => {
   try {

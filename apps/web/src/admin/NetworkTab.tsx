@@ -70,7 +70,8 @@ export function mainnetChecklist(net: AdminNetwork, status: StatusSnapshot | nul
   const nft = status?.nft?.state ?? null;
   const when = (v: boolean | null | undefined): boolean | null => (on ? (v ?? null) : false);
   return [
-    { id: 'rpc', label: 'Point the server at the mainnet (ELYMUM_CHAIN_ID and ELYMUM_RPC_URLS)', detail: '/opt/elymum/.env on the VPS → ELYMUM_CHAIN_ID=4663 and ELYMUM_RPC_URLS=<Alchemy URL>,https://rpc.mainnet.chain.robinhood.com, then elymum-compose up -d app. The server follows that chain; testnet records stay on file.', ok: on, where: 'Server' },
+    // /opt/elymum: the live server's install directory, kept from before the rename (deploy/vps/lib.sh)
+    { id: 'rpc', label: 'Point the server at the mainnet (COINNIBAL_CHAIN_ID and COINNIBAL_RPC_URLS)', detail: '/opt/elymum/.env on the VPS → COINNIBAL_CHAIN_ID=4663 and COINNIBAL_RPC_URLS=<Alchemy URL>,https://rpc.mainnet.chain.robinhood.com, then coinnibal-compose up -d app. The server follows that chain; testnet records stay on file.', ok: on, where: 'Server' },
     { id: 'access', label: 'Set Game access explicitly', detail: 'The site settings carry over from testnet (where the game is public): pick Admins or Holders in Game before anything else opens.', ok: null, where: 'Game' },
     { id: 'fund', label: `Fund the server key with ${GAS_SYMBOL}`, detail: 'It sends every settlement; a little gas lasts a long time.', ok: when(a?.serverBalance != null ? a.serverBalance >= LOW_SERVER_GAS : null), where: 'Server' },
     { id: 'arena', label: 'Deploy CoinnibalArena from the owner wallet', detail: 'Setup → the deploy wizard. No address to type; it registers with the server by itself (code hash, owner and settler checked).', ok: when(!!net.arenaAddress && a?.code === 'ok'), where: 'Setup' },
@@ -418,7 +419,7 @@ export function LoadCard({ load }: { load: GameServerLoad }) {
 /**
  * "Backup & move": downloads a gzip tar of the server's DATA_DIR, or copies the `curl` command that does the same from
  * another machine (the new server), or the whole new-server command. Each one hands out the server key, so each asks
- * the admin wallet for a fresh, purpose-bound signature first (`X-Elymum-Proof`): one download within 10 minutes.
+ * the admin wallet for a fresh, purpose-bound signature first (`X-Coinnibal-Proof`): one download within 10 minutes.
  */
 export function BackupCard({ ctx, sign = walletProofSigner() }: { ctx: ChainCtx; sign?: ProofSigner }) {
   const api = ctx.api;

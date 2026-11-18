@@ -35,7 +35,7 @@ const PROCS = Number(process.env.LOAD_PROCS ?? Math.max(1, Math.ceil(N / 200)));
 const MIX = (process.env.LOAD_MIX ?? '35,45,10,10').split(',').map(Number);
 const here = dirname(fileURLToPath(import.meta.url));
 
-const dir = mkdtempSync(join(tmpdir(), 'elymum-load-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-load-'));
 const env: Record<string, string> = {
   NODE_ENV: 'development',
   DEV_FAKE_CHAIN: '1',

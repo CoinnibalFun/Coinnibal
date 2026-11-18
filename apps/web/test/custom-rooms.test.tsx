@@ -37,7 +37,7 @@ vi.mock('../src/game/instance', () => ({ engine: () => ({ play: spies.play }) })
 
 const quote = (o: Partial<CustomRoomQuote> = {}): CustomRoomQuote => ({
   enabled: true,
-  pay: { token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$ELYMUM', decimals: 18 }, payTo: ARENA, burnBps: 5000 },
+  pay: { token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$NIBAL', decimals: 18 }, payTo: ARENA, burnBps: 5000 },
   priceRaw: PRICE.toString(),
   youPayRaw: PRICE.toString(),
   holderPerk: 'discount',
@@ -145,7 +145,7 @@ describe('the room creator', () => {
     await open();
     expect(spies.quote).toHaveBeenCalledWith('tok');
     // the fee in game tokens (no dollar value without a token price)
-    expect(screen.getByTestId('cr-price').textContent).toMatch(/1,500 \$ELYMUM/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/1,500 \$NIBAL/);
     expect(screen.getByTestId('cr-price').textContent).not.toMatch(/ETH/);
     // a name is required
     fireEvent.click(screen.getByTestId('cr-continue'));
@@ -167,11 +167,11 @@ describe('the room creator', () => {
     expect(payment.textContent).toMatch(/60 min/);
     expect(payment.textContent).toMatch(/Large · many cacti/);
     expect(payment.textContent).toMatch(/none, pure fun/);
-    expect(payment.textContent).toMatch(/Total1,500 \$ELYMUM/);
+    expect(payment.textContent).toMatch(/Total1,500 \$NIBAL/);
     expect(payment.textContent).not.toMatch(/\d ETH/);
     // paid to the arena like a power-up pack: half burned, half to the team wallet
     expect(screen.getByTestId('cr-pay-note').textContent).toMatch(/50% is burned and 50% goes to the team wallet/);
-    expect(screen.getByTestId('cr-pay').textContent).toMatch(/Pay 1,500 \$ELYMUM/);
+    expect(screen.getByTestId('cr-pay').textContent).toMatch(/Pay 1,500 \$NIBAL/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     fireEvent.click(screen.getByTestId('cr-pay')); // a double click never pays twice
     await settle();
@@ -251,15 +251,15 @@ describe('the room creator', () => {
       return { ok: true, hash: HASH };
     });
     await open();
-    expect(screen.getByTestId('cr-price').textContent).toMatch(/1,500 \$ELYMUM/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/1,500 \$NIBAL/);
     expect(screen.getByTestId('cr-price').textContent).toMatch(/\$1\.50/);
     fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Dollar room' } });
     fireEvent.click(screen.getByTestId('cr-continue'));
     await settle();
-    expect(screen.getByTestId('cr-payment').textContent).toMatch(/Total1,500 \$ELYMUMIn dollars≈ \$1\.50/);
+    expect(screen.getByTestId('cr-payment').textContent).toMatch(/Total1,500 \$NIBALIn dollars≈ \$1\.50/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
-    expect(screen.getByRole('status').textContent).toMatch(/Approve 1,500 \$ELYMUM in your wallet/);
+    expect(screen.getByRole('status').textContent).toMatch(/Approve 1,500 \$NIBAL in your wallet/);
     release();
     await settle();
     expect(screen.getByTestId('cr-code').textContent).toBe('AB2CD');
@@ -295,7 +295,7 @@ describe('the room creator', () => {
     fireEvent.click(screen.getByTestId('cr-continue'));
     await settle();
     expect(screen.queryByTestId('cr-payment')).toBeNull();
-    expect(screen.getByRole('alert').textContent).toMatch(/This room costs 1,500 \$ELYMUM, and this wallet has 1,000 \$ELYMUM/);
+    expect(screen.getByRole('alert').textContent).toMatch(/This room costs 1,500 \$NIBAL, and this wallet has 1,000 \$NIBAL/);
     expect(spies.pay).not.toHaveBeenCalled();
   });
 
@@ -364,7 +364,7 @@ describe('the room creator', () => {
     const range = screen.getByTestId('cr-capacity-range') as HTMLInputElement;
     fireEvent.change(range, { target: { value: '6' } }); // 20 players: 2,250, half off
     expect(screen.getByTestId('cr-price').textContent).toMatch(/1,125/);
-    expect(screen.getByTestId('cr-price').textContent).toMatch(/2,250 \$ELYMUM/); // the full price, struck
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/2,250 \$NIBAL/); // the full price, struck
     expect(screen.getByTestId('cr-seats').textContent).toMatch(/room for 12 more players/);
     expect((screen.getByTestId('cr-continue') as HTMLButtonElement).disabled).toBe(true);
   });
@@ -403,7 +403,7 @@ describe('the room creator', () => {
     const payment = screen.getByTestId('cr-payment');
     expect(payment.textContent).toMatch(/Paid room\$3 Room/);
     expect(payment.textContent).toMatch(/never holds anyone's tokens/);
-    expect(payment.textContent).toMatch(/Your ticket10,000 \$ELYMUM/);
+    expect(payment.textContent).toMatch(/Your ticket10,000 \$NIBAL/);
     expect(screen.getByTestId('cr-pay').textContent).toMatch(/then my ticket/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
@@ -446,7 +446,7 @@ describe('the room creator', () => {
     useChainData.setState({ tokenBalance: 11_000n * ONE });
     await ticketRoom();
     expect(screen.queryByTestId('cr-payment')).toBeNull();
-    expect(screen.getByRole('alert').textContent).toMatch(/You need 11,500 \$ELYMUM for the room fee and your own ticket/);
+    expect(screen.getByRole('alert').textContent).toMatch(/You need 11,500 \$NIBAL for the room fee and your own ticket/);
     expect(spies.pay).not.toHaveBeenCalled();
   });
 
@@ -491,17 +491,17 @@ describe('the room creator', () => {
 
 describe('room helpers', () => {
   it('writes a room fee in game tokens with its dollar value, and builds share links', () => {
-    const tok = tokenText(18, '$ELYMUM');
+    const tok = tokenText(18, '$NIBAL');
     const f = roomFeeText(quote({ usdPerToken: '0.001' }), tok);
-    expect(f.tokens(PRICE)).toBe('1,500 $ELYMUM');
+    expect(f.tokens(PRICE)).toBe('1,500 $NIBAL');
     expect(f.usd(PRICE)).toBeCloseTo(1.5, 6);
     expect(f.usd(0n)).toBeNull();
     // no token price known: no dollar value; another token's decimals and symbol from the quote
     expect(roomFeeText(quote(), tok).usd(PRICE)).toBeNull();
     expect(roomFeeText(quote({ pay: { token: { address: ARENA, symbol: 'TEST', decimals: 6 }, payTo: ARENA, burnBps: 5000 } }), tok).tokens(2_500_000n)).toBe('2.5 TEST');
     // before the token is set: the lobby's token text
-    expect(roomFeeText(quote({ pay: null }), tok).tokens(PRICE)).toBe('1,500 $ELYMUM');
-    expect(roomLink('AB2CD', 'https://elymum.io/')).toBe('https://elymum.io/play?room=AB2CD');
+    expect(roomFeeText(quote({ pay: null }), tok).tokens(PRICE)).toBe('1,500 $NIBAL');
+    expect(roomLink('AB2CD', 'https://coinnibal.fun/')).toBe('https://coinnibal.fun/play?room=AB2CD');
   });
 
   it('every payment gets its own request id (the ref the server opens one room for)', () => {
@@ -556,7 +556,7 @@ describe('room helpers', () => {
     savePendingPayment({ hash: HASH, wallet: ALICE, request, raw: '1', at: Date.now() - 3 * 3600_000 });
     expect(loadPendingPayment(ALICE)).toBeNull();
     // a kept payment without its request (or an ETH one of before) is not offered
-    localStorage.setItem('elymum.room-payment.v2', JSON.stringify({ hash: HASH, wallet: ALICE, raw: '1', at: Date.now() }));
+    localStorage.setItem('coinnibal.room-payment.v2', JSON.stringify({ hash: HASH, wallet: ALICE, raw: '1', at: Date.now() }));
     expect(loadPendingPayment(ALICE)).toBeNull();
   });
 });

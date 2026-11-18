@@ -5,7 +5,7 @@ import { assertPublicUrl, loadConfig } from '../src/config';
 import { siweOrigin } from '../src/http';
 import { testSigner } from './signers';
 
-const origin: SiweOrigin = { domain: 'elymum.io', uri: 'https://elymum.io', chainId: 46630 };
+const origin: SiweOrigin = { domain: 'coinnibal.fun', uri: 'https://coinnibal.fun', chainId: 46630 };
 
 describe('SIWE login message (EIP-4361)', () => {
   it('names the domain, URI and chain, and the client can rebuild it from the fields', async () => {
@@ -14,12 +14,12 @@ describe('SIWE login message (EIP-4361)', () => {
     const n = auth.issueNonce(address.toLowerCase(), origin, 1_760_000_000_000);
     expect(n.address).toBe(address); // checksummed
     expect(n.message.split('\n')).toEqual([
-      'elymum.io wants you to sign in with your Ethereum account:',
+      'coinnibal.fun wants you to sign in with your Ethereum account:',
       address,
       '',
       SIWE_STATEMENT,
       '',
-      'URI: https://elymum.io',
+      'URI: https://coinnibal.fun',
       'Version: 1',
       'Chain ID: 46630',
       `Nonce: ${n.nonce}`,
@@ -118,9 +118,9 @@ describe('SIWE login message (EIP-4361)', () => {
 
   it('takes the domain from PUBLIC_URL (the request host only in development); the chain id is the server\'s', () => {
     const req = { headers: { host: 'game.local:8787' } } as never;
-    expect(siweOrigin(loadConfig({ PUBLIC_URL: 'https://elymum.io/' } as NodeJS.ProcessEnv), req, false, 46630)).toEqual({
-      domain: 'elymum.io',
-      uri: 'https://elymum.io',
+    expect(siweOrigin(loadConfig({ PUBLIC_URL: 'https://coinnibal.fun/' } as NodeJS.ProcessEnv), req, false, 46630)).toEqual({
+      domain: 'coinnibal.fun',
+      uri: 'https://coinnibal.fun',
       chainId: 46630,
     });
     const dev = loadConfig({ NODE_ENV: 'development' } as NodeJS.ProcessEnv);
@@ -131,12 +131,13 @@ describe('SIWE login message (EIP-4361)', () => {
   });
 
   it('names the brand site (coinnibal.fun) for a sign-in from it, and only from that fixed list', () => {
-    const cfg = loadConfig({ PUBLIC_URL: 'https://elymum.io' } as NodeJS.ProcessEnv);
-    const from = (origin: string) => siweOrigin(cfg, { headers: { host: 'game.elymum.io', origin } } as never, false, 46630);
+    const cfg = loadConfig({ PUBLIC_URL: 'https://old-site.example' } as NodeJS.ProcessEnv);
+    const from = (origin: string) => siweOrigin(cfg, { headers: { host: 'game.old-site.example', origin } } as never, false, 46630);
     expect(from('https://coinnibal.fun')).toEqual({ domain: 'coinnibal.fun', uri: 'https://coinnibal.fun', chainId: 46630 });
     expect(from('https://www.coinnibal.fun/').domain).toBe('www.coinnibal.fun');
-    for (const other of ['https://evil.example', 'http://coinnibal.fun', 'https://coinnibal.fun.evil.example']) expect(from(other).domain).toBe('elymum.io');
-    // the site moved (PUBLIC_URL coinnibal.fun): a sign-in from the old elymum.io page still names elymum.io
+    for (const other of ['https://evil.example', 'http://coinnibal.fun', 'https://coinnibal.fun.evil.example']) expect(from(other).domain).toBe('old-site.example');
+    // the site moved (PUBLIC_URL coinnibal.fun): a sign-in from a page of elymum.io, the domain of before the rename
+    // (a kept brand origin while the live config redirects it), still names elymum.io
     const moved = loadConfig({ PUBLIC_URL: 'https://coinnibal.fun' } as NodeJS.ProcessEnv);
     expect(siweOrigin(moved, { headers: { host: 'coinnibal.fun', origin: 'https://elymum.io' } } as never, false, 46630).domain).toBe('elymum.io');
     expect(siweOrigin(moved, { headers: { host: 'coinnibal.fun', origin: 'https://evil.example' } } as never, false, 46630).domain).toBe('coinnibal.fun');
@@ -166,8 +167,8 @@ describe('SIWE login message (EIP-4361)', () => {
     expect(() => assertPublicUrl(loadConfig({ NODE_ENV: 'production' } as NodeJS.ProcessEnv))).toThrow(/PUBLIC_URL is required \(NODE_ENV is production\)/);
     expect(() => assertPublicUrl(loadConfig({} as NodeJS.ProcessEnv))).toThrow(/PUBLIC_URL is required \(NODE_ENV is unset\)/);
     expect(() => assertPublicUrl(loadConfig({ NODE_ENV: 'development' } as NodeJS.ProcessEnv))).not.toThrow();
-    expect(() => assertPublicUrl(loadConfig({ NODE_ENV: 'production', PUBLIC_URL: 'https://elymum.io/' } as NodeJS.ProcessEnv))).not.toThrow();
-    for (const bad of ['elymum.io', 'ftp://elymum.io', 'https://elymum.io/app', 'https://u:p@elymum.io'])
+    expect(() => assertPublicUrl(loadConfig({ NODE_ENV: 'production', PUBLIC_URL: 'https://coinnibal.fun/' } as NodeJS.ProcessEnv))).not.toThrow();
+    for (const bad of ['coinnibal.fun', 'ftp://coinnibal.fun', 'https://coinnibal.fun/app', 'https://u:p@coinnibal.fun'])
       expect(() => assertPublicUrl(loadConfig({ NODE_ENV: 'production', PUBLIC_URL: bad } as NodeJS.ProcessEnv)), bad).toThrow(/PUBLIC_URL must be/);
   });
 });

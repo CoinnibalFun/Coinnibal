@@ -72,7 +72,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Build
-        run: docker build -t elymum:ci .
+        run: docker build -t coinnibal:ci .
 
   # The VPS deploys only what passed: after every green run on a branch this moves the tag ci-green-<branch> to the
   # commit, and deploy/vps/update.sh deploys the newest commit it marks (a private repository's CI status is not
