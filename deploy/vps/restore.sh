@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Coinnibal: load a backup (.tar.gz of DATA_DIR) into the elymum-data volume.
 #   restore.sh <file.tar.gz>                       a file on this server
-#   restore.sh --url <server> --token <token> --proof <proof>
-#                                                  download it from the running server first (<server> e.g.
-#                                                  https://game.elymum.io, or the full .../api/admin/backup URL;
-#                                                  the admin session token, and a fresh signature of the admin
-#                                                  wallet of purpose backup or migration: README "Moving")
+#   restore.sh --url <server>                      download it from the running server first (<server> e.g.
+#                                                  https://game.elymum.io, or the full .../api/admin/backup URL).
+#                                                  It asks for the admin session token and a fresh signature of
+#                                                  the admin wallet of purpose backup or migration (README
+#                                                  "Moving") at hidden prompts, or reads them from stdin, one per
+#                                                  line; never from the command line (any local user can read
+#                                                  that in ps)
 # Options: --yes (no questions), --no-start (leave the app stopped afterwards).
 # The archive is checked first (complete gzip, readable tar, no absolute or '..' paths). If the volume
 # already holds data, a safety backup of it is written to /opt/elymum/backups before it is replaced.
@@ -23,20 +25,20 @@ start=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --url) url="${2:?--url needs a value}"; shift 2 ;;
-    --token) token="${2:?--token needs a value}"; shift 2 ;;
-    --proof) proof="${2:?--proof needs a value}"; shift 2 ;;
+    --token | --proof) die "$1 is not taken on the command line (any local user can read it in ps): leave it out and paste the value at the prompt, or send the token and the proof on stdin, one per line" ;;
     --yes | -y) yes=1; shift ;;
     --no-start) start=0; shift ;;
-    -h | --help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,13p' "$0"; exit 0 ;;
     -*) die "unknown option $1" ;;
     *) file="$1"; shift ;;
   esac
 done
 
 if [[ -n "$url" ]]; then
-  [[ -n "$token" ]] || { read -rsp "Admin session token: " token; echo; }
+  [[ "$url" == https://* ]] || die "--url must start with https:// (the token and the proof must not travel in clear): $url"
+  read_secret token "Admin session token"
   [[ -n "$token" ]] || die "a token is needed to download the backup"
-  [[ -n "$proof" ]] || { read -rsp "Signed proof (X-Coinnibal-Proof): " proof; echo; }
+  read_secret proof "Signed proof (X-Coinnibal-Proof)"
   [[ -n "$proof" ]] || die "a proof (a fresh signature of the admin wallet) is needed to download the backup"
   url="${url%/}"
   [[ "$url" == */api/admin/backup ]] || url="$url/api/admin/backup"
@@ -45,15 +47,16 @@ if [[ -n "$url" ]]; then
   file="$COINNIBAL_BACKUPS/migrated-$(date -u +%Y%m%d-%H%M%S).tar.gz"
   log "downloading the backup from ${url%%/api/*}"
   umask 077
-  # the token goes through a header file, not the command line (other users could read it in ps)
+  # the token and the proof reach curl through a 0600 header file (umask above), never a command line (other users
+  # can read those in ps; printf is a shell builtin); --proto: HTTPS only
   hdr="$(mktemp)"
   trap 'rm -f "$hdr"' EXIT
   printf 'Authorization: Bearer %s\nX-Coinnibal-Proof: %s\n' "$token" "$proof" >"$hdr"
   # no --retry: a proof opens the backup once
-  curl -fsS -H @"$hdr" "$url" -o "$file" || die "download failed (expired token or proof? wrong URL? on the mainnet ADMIN_SECRET_EXPORT=1 must be set)"
+  curl -fsS --proto '=https' -H @"$hdr" "$url" -o "$file" || die "download failed (expired token or proof? wrong URL? on the mainnet ADMIN_SECRET_EXPORT=1 must be set)"
   log "downloaded $(du -h "$file" | cut -f1)"
 fi
-[[ -n "$file" ]] || die "give a backup file, or --url and --token (see --help)"
+[[ -n "$file" ]] || die "give a backup file, or --url (see --help)"
 file="$(readlink -f "$file")"
 log "checking $file"
 verify_backup "$file"

@@ -152,6 +152,20 @@ need_root() {
   [[ "$(id -u)" -eq 0 ]] || die "run this as root (sudo -i first)"
 }
 
+# read_secret VAR "label": a secret (the admin session token, a signed proof) never comes from a command line, which
+# any local user can read in ps: a hidden prompt on a terminal, else one line of stdin (install.sh pipes them in).
+# Whitespace is dropped (the values hold none; a paste may add some). install.sh carries the same function.
+read_secret() {
+  local __v=""
+  if [[ -t 0 ]]; then
+    read -rsp "$2: " __v || true
+    echo >&2
+  else
+    IFS= read -r __v || true
+  fi
+  printf -v "$1" '%s' "${__v//[[:space:]]/}"
+}
+
 # checks that a .tar.gz is complete and holds only relative paths inside the archive
 verify_backup() {
   local file="$1" listing

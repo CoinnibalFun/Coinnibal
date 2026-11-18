@@ -190,12 +190,20 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
 2. The proof: `/admin` → Network → Backup & move asks the wallet to sign (purpose `migration`) where the panel offers it; by hand: with an
    admin session token, `POST /api/admin/secret-proof {"purpose":"migration"}`, sign the returned `message` with the
    admin wallet (`personal_sign`), and base64url-encode `{"message":"...","signature":"0x..."}`: that is the proof.
-3. On the new VPS (sections 1 to 3; the installer takes the old server's settings itself):
+3. On the new VPS (sections 1 to 3; the installer takes the old server's settings itself). Paste the
+   "Copy new-server command" of `/admin` → Network → Backup & move, or by hand:
    ```bash
-   bash install.sh --from https://<old GAME_DOMAIN> --token '<admin session token>' --proof '<proof>' --yes
+    bash install.sh --yes --from https://<old GAME_DOMAIN> <<'COINNIBAL_SECRETS'
+   <admin session token>
+   <proof>
+   COINNIBAL_SECRETS
    ```
    It reads the settings once (`/api/admin/migration-env`) and the backup once (`/api/admin/backup`), restores the
-   data before the first start, and starts.
+   data before the first start, and starts. The token and the proof are never arguments (any local user can read a
+   command line in `ps`): they come in on stdin, one per line (the here-document above), or at hidden prompts when
+   left out (`bash install.sh --yes --from https://<old GAME_DOMAIN>`). `--token` and `--proof` are refused. The
+   leading space keeps the command out of the shell history. `coinnibal-restore --url https://<server>` takes the
+   two the same way, and both refuse a URL that is not `https://`.
 4. **Stop the old server before the new one starts settling** (`coinnibal-compose down` there): two servers must never
    run with the same server key. Then point DNS at the new VPS; remove `ADMIN_SECRET_EXPORT`.
 
