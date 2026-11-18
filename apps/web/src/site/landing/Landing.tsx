@@ -33,6 +33,7 @@ import { CoinPond } from './CoinPond';
 import { DuskSeam } from './DuskSeam';
 import { GazeCoin } from './GazeCoin';
 import { HeroScreen } from './HeroScreen';
+import { useIdleBudget } from './idle';
 import { NapSeam } from './NapSeam';
 import { BITE_GULP_MS, SEAL_GULP_MS, gulp, useReveal, useRevealEach } from './reveal';
 import { SealSeam } from './SealSeam';
@@ -744,6 +745,9 @@ export function Landing() {
   const doors = useDoors();
   const sound = useLandingSound();
   const t = useT();
+  // only the part of the page on screen keeps its idle loops running
+  const main = useRef<HTMLElement>(null);
+  useIdleBudget(main);
   // a shared link to a part of the page (/#nft, /#why-nft, /#faq): the browser's own jump came before the sections
   // rendered, so it lands at the top; jump once they are there (the plates' scroll margin clears the header)
   useEffect(() => {
@@ -760,7 +764,7 @@ export function Landing() {
       <SiteHeader>
         <SeedRail />
       </SiteHeader>
-      <main id="main" className="ld-main" tabIndex={-1}>
+      <main ref={main} id="main" className="ld-main" tabIndex={-1}>
         <Hero doors={doors} gameAccess={settings.gameAccess} handle={settings.xHandle} sound={sound} />
         <Feast />
         <Round live={doors.game && settings.gameAccess !== 'maintenance'} />

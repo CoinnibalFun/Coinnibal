@@ -83,6 +83,10 @@
 /* The first screen: the hero card on the left, the game's screen on the right, the pond's coins along the bottom.
    On a wide screen the scene fills what the header leaves of the window (up to 860 px), so at 1440x900 the pond's
    coins stand whole above the fold; below 1024 px the screen drops under the card and the scene grows with them. */
+/* the sky holds still: no twinkling stars behind the card (the clouds still drift) */
+.ld-hero .kb-ring__twinkle {
+  animation: none !important;
+}
 .ld-hero__ring {
   aspect-ratio: auto !important;
   min-height: 860px;
@@ -851,8 +855,13 @@
   width: 100%;
   height: auto;
 }
+/* the stations are named in the body face, like the steps beside them (mono is kept for numbers) */
 .ld-orbit .kb-orbit__label {
-  font-size: 15px;
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .ld-orbit__core {
   position: absolute;
@@ -927,7 +936,7 @@
     transform: translate(-50%, -58%) scale(0.62);
   }
   .ld-orbit .kb-orbit__label {
-    font-size: 24px;
+    font-size: 27px;
   }
   /* at this size the side labels would run past the card's edge: they turn to face inwards */
   .ld-orbit .kb-orbit__station.is-left .kb-orbit__label {
