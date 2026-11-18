@@ -75,13 +75,23 @@ function covered(t0, t1) {
   }
   return true;
 }
-/** Cacti touching the box in [t0, t1] (any) and at the seam samples. */
+/** How much cactus shows in the box over [t0, t1]: per sample, the part of each cactus inside it (1: a whole one). */
 function cactusIn(t0, t1) {
   let n = 0;
+  const part = (lo, hi, a0, a1) => Math.max(0, Math.min(hi, a1) - Math.max(lo, a0)) / (hi - lo);
   for (let i = at(t0); i < tele.length && tele[i].t <= t1; i++) {
     const b = boxAt(tele[i].t);
-    for (const [x, y, r] of tele[i].cacti) if (x + r * 1.3 > b.x0 && x - r * 1.3 < b.x1 && y + r * 1.3 > b.y0 && y - r * 1.3 < b.y1) { n++; break; }
+    for (const [x, y, r] of tele[i].cacti) { const R = r * 1.25; n += part(x - R, x + R, b.x0, b.x1) * part(y - R, y + R, b.y0, b.y1); }
   }
+  return +n.toFixed(1);
+}
+/**
+ * Does goldie put on mass in [t0, t1]? Every pellet she eats makes her laugh for 0.65 s (the game's mood while a
+ * coin grows) and a gold one floats a "+8": at the seam that face would cross-fade with her calm one.
+ */
+function grows(t0, t1) {
+  let n = 0;
+  for (let i = Math.max(1, at(t0)); i < tele.length && tele[i].t <= t1; i++) if (tele[i].me[2] > tele[i - 1].me[2]) n++;
   return n;
 }
 /** Coins in the frame per sample over [t0, t1] (goldie included): the mean and the share of samples with 6 or more. */
@@ -124,17 +134,21 @@ for (const cr of marks.filter((m) => m.label === 'cruise')) {
   const off = Math.hypot((g.x - gb.x) / gb.w, (g.y - gb.y) / gb.h);
   for (let a = g.t - 5.4; a <= g.t - 2.6; a += 0.05) {
     const b = a + T;
-    if (a - FADE - SEARCH - 2.2 < cr.t0 + 0.6 || b + SEARCH > end.t - 0.2) continue;
+    // (the school needs about a second of the cruise to fall into its stride)
+    if (a - FADE - SEARCH < cr.t0 + 1.0 || b + SEARCH > end.t - 0.2) continue;
     if (!covered(a - FADE - SEARCH, b + SEARCH)) continue;
     const s1 = seam(a, T);
+    const laugh = grows(a - FADE - 0.7, a) + grows(b - FADE - 0.7, b);
     const cac = cactusIn(a - FADE, a) + cactusIn(b - FADE, b);
     const cut = cactusIn(a, b);
     const { mean, six } = crowd(a, b);
     // a cactus at the seam would cross-fade with itself somewhere else: as bad as a coin that differs
-    const score = Math.min(mean, 9) * 0.8 + six * 3 + Math.min(seen, 3) * 0.6 - s1.cost * 25 - s1.odd * 4 - s1.faces * 2 - cac * 0.6 - cut * 0.01 - off * 4;
-    cands.push({ n: cr.n, score: +score.toFixed(2), a: +a.toFixed(2), b: +b.toFixed(2), T, gulpAt: +(g.t - a).toFixed(2), seam: +s1.cost.toFixed(3), odd: +s1.odd.toFixed(2), faces: +s1.faces.toFixed(2), crowd: +mean.toFixed(1), six: +six.toFixed(2), preySeen: +seen.toFixed(1), off: +off.toFixed(2), cactusSeam: cac, cactus: cut, heroMass: cr.heroMass, preyMass: cr.preyMass, g: g.t });
+    const score = Math.min(mean, 9) * 0.8 + six * 3 + Math.min(seen, 3) * 0.6 - s1.cost * 25 - s1.odd * 4 - s1.faces * 2 - laugh * 1.5 - cac * 1.5 - cut * 0.01 - off * 4;
+    cands.push({ n: cr.n, score: +score.toFixed(2), a: +a.toFixed(2), b: +b.toFixed(2), T, gulpAt: +(g.t - a).toFixed(2), seam: +s1.cost.toFixed(3), odd: +s1.odd.toFixed(2), faces: +s1.faces.toFixed(2), laugh, crowd: +mean.toFixed(1), six: +six.toFixed(2), preySeen: +seen.toFixed(1), off: +off.toFixed(2), cactusSeam: cac, cactus: cut, heroMass: cr.heroMass, preyMass: cr.preyMass, g: g.t });
   }
 }
+// --scene n: every span of that scene, in order (to see the trade-offs)
+if (opt('--scene', null)) { for (const c of cands.filter((c) => c.n === Number(opt('--scene')))) console.log(JSON.stringify(c)); process.exit(0); }
 cands.sort((x, y) => y.score - x.score);
 const best = [];
 const seenN = new Set();

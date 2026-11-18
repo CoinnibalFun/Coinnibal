@@ -76,6 +76,8 @@ export function pageHelpers() {
     if (!s) return { wait: true };
     if (!s.w) return { dead: s.screen !== 'playing', screen: s.screen, wait: true };
     const { e, w, mine, mx, my, big, others, K } = s;
+    // the pond's floor (a growing map can start away from 0: x0, y0)
+    const X0 = w.x0 || 0, Y0 = w.y0 || 0, X1 = X0 + w.width, Y1 = Y0 + w.height, CX = (X0 + X1) / 2, CY = (Y0 + Y1) / 2;
     let fx = 0, fy = 0, best = null, bestScore = -Infinity;
     const lootW = o.loot ?? 4, humanW = o.humans ?? 1;
     const avoid = new Set(o.avoidPids || []);
@@ -118,7 +120,7 @@ export function pageHelpers() {
       if (en.kind === K.Loot) value = (1 + en.r / 10) * lootW;
       if (value <= 0) continue;
       if (threats.length && unsafe(en.x, en.y)) continue;
-      const edge = Math.min(en.x, en.y, w.width - en.x, w.height - en.y);
+      const edge = Math.min(en.x - X0, en.y - Y0, X1 - en.x, Y1 - en.y);
       if (edge < 1300) value *= 0.1 + 0.9 * (edge / 1300);
       const sc = value / (d + 40);
       if (sc > bestScore) { bestScore = sc; best = { x: en.x, y: en.y, r: en.r, kind: en.kind, d }; }
@@ -141,8 +143,8 @@ export function pageHelpers() {
     if (tgt) best = { ...best, ...tgt, kind: 0 };
     // walls
     const m = 600 + big; // walls: keep the camera off the world edge
-    if (mx < m) fx += (m - mx) / 120; if (my < m) fy += (m - my) / 120;
-    if (mx > w.width - m) fx -= (mx - (w.width - m)) / 120; if (my > w.height - m) fy -= (my - (w.height - m)) / 120;
+    if (mx < X0 + m) fx += (X0 + m - mx) / 120; if (my < Y0 + m) fy += (Y0 + m - my) / 120;
+    if (mx > X1 - m) fx -= (mx - (X1 - m)) / 120; if (my > Y1 - m) fy -= (my - (Y1 - m)) / 120;
     let vx = 0, vy = 0;
     if (best) { vx = (best.x - mx) / (best.d || 1); vy = (best.y - my) / (best.d || 1); }
     let flee = o.mode === 'still' ? 0 : Math.hypot(fx, fy);
@@ -156,19 +158,19 @@ export function pageHelpers() {
         const px = mx + Math.cos(a) * 420, py = my + Math.sin(a) * 420;
         let c = Infinity;
         for (const t of threats) c = Math.min(c, Math.hypot(t.x - px, t.y - py) - t.R);
-        const wall = Math.min(px - big, py - big, w.width - big - px, w.height - big - py);
+        const wall = Math.min(px - X0 - big, py - Y0 - big, X1 - big - px, Y1 - big - py);
         c = Math.min(c, wall * 1.5);
         if (pref !== null) c += Math.cos(a - pref) * 60;
-        c -= Math.hypot(px - w.width / 2, py - w.height / 2) * 0.12;
+        c -= Math.hypot(px - CX, py - CY) * 0.12;
         if (c > bestC) { bestC = c; bestA = a; }
       }
       vx = Math.cos(bestA); vy = Math.sin(bestA);
       flee = 2;
     } else if (flee > 0.3) { const f = Math.min(1, flee); vx = (fx / flee) * f + vx * (1 - f); vy = (fy / flee) * f + vy * (1 - f); }
-    if (!best && !inDanger && flee <= 0.3) { const cx = w.width / 2 - mx, cy = w.height / 2 - my, cd = Math.hypot(cx, cy) || 1; vx = cx / cd; vy = cy / cd; }
+    if (!best && !inDanger && flee <= 0.3) { const cx = CX - mx, cy = CY - my, cd = Math.hypot(cx, cy) || 1; vx = cx / cd; vy = cy / cd; }
     // a pull toward open water when near the walls
-    const edgeMe = Math.min(mx, my, w.width - mx, w.height - my);
-    if (!inDanger && edgeMe < 1500 && o.mode !== 'still') { const k = (1500 - edgeMe) / 1500 * 1.1; const cx = w.width / 2 - mx, cy = w.height / 2 - my, cd = Math.hypot(cx, cy) || 1; vx += (cx / cd) * k; vy += (cy / cd) * k; }
+    const edgeMe = Math.min(mx - X0, my - Y0, X1 - mx, Y1 - my);
+    if (!inDanger && edgeMe < 1500 && o.mode !== 'still') { const k = (1500 - edgeMe) / 1500 * 1.1; const cx = CX - mx, cy = CY - my, cd = Math.hypot(cx, cy) || 1; vx += (cx / cd) * k; vy += (cy / cd) * k; }
     const vn = Math.hypot(vx, vy) || 1;
     const me = e.camera.toScreen(mx, my);
     const reach = o.reach ?? 340;
