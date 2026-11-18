@@ -16,8 +16,8 @@ export type Tier = (typeof TIERS)[number];
 type RolledTier = Exclude<Tier, 'Mythic'>;
 
 /**
- * Target share of each tier. The generator hands out exact quotas (largest remainder), so a 5,000 collection
- * has exactly 3,000 / 1,250 / 550 / 190 / 10. Mythic = the 1/1s: never more than `MYTHICS.length`.
+ * Target share of each tier. The generator hands out exact quotas (largest remainder), so the 3,333 collection
+ * (`NFT_SUPPLY`) has exactly 2,000 / 833 / 366 / 127 / 7. Mythic = the 1/1s: never more than `MYTHICS.length`.
  */
 export const TIER_SHARE: Record<Tier, number> = { Common: 0.6, Rare: 0.25, Epic: 0.11, Legendary: 0.038, Mythic: 0.002 };
 

@@ -265,7 +265,7 @@ describe('Storybook building blocks', () => {
   it('ArcGauge is a meter; Stepper marks done steps; art is labelled or hidden', () => {
     render(
       <Kb>
-        <ArcGauge value={2614} max={5000} />
+        <ArcGauge value={2614} max={3333} />
         <Stepper
           label="Chores"
           steps={[
@@ -277,7 +277,7 @@ describe('Storybook building blocks', () => {
         <CoinCharacter mood="chomp" />
       </Kb>,
     );
-    expect(screen.getByRole('meter', { name: 'Minted' }).getAttribute('aria-valuetext')).toBe('2,614 of 5,000');
+    expect(screen.getByRole('meter', { name: 'Minted' }).getAttribute('aria-valuetext')).toBe('2,614 of 3,333');
     expect(screen.getByRole('progressbar', { name: 'Chores' }).getAttribute('aria-valuenow')).toBe('1');
     expect(screen.getByText('DONE')).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Coinnibal' })).toBeTruthy();
