@@ -1,7 +1,7 @@
 /* ─────────────────────── Ring Storybook · lobby, wallet & boarding ───────────────────────
  * The lobby is a page of the picture book (spec §6.9): a masthead with the
  * mark and page tabs, a plate caption, then the departures board of the four
- * Elysian arenas (cream boarding passes pinned to a night board) with the one
+ * rooms, $1 to $10 (cream boarding passes pinned to a night board) with the one
  * sun button under it; wide screens add the live window onto the floor (a
  * CSS mask cut through the page onto the game canvas) and the membership
  * sticker. Also here: the wallet sticker and sheet (wl-), the boarding
@@ -1078,15 +1078,9 @@
 .kl-root.is-mid .kl-wallet.is-off .kl-wallet__top {
   display: none;
 }
-/* small desktops: the kicker ("The arena · on Elysium") was cut to "The arena ·" by the tabs */
+/* small desktops: the kicker ("Play · on Robinhood Chain Testnet") was cut to "Play ·" by the tabs */
 @media (max-width: 1439px) {
   .kl-root.is-wide .kl-mast__kicker {
-    display: none;
-  }
-}
-/* translations of the kicker run longer ("Арена · в Elysium"): they need a wider window still */
-@media (max-width: 1599px) {
-  html:not(:lang(en)) .kl-root.is-wide .kl-mast__kicker {
     display: none;
   }
 }

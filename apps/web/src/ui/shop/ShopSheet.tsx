@@ -10,8 +10,8 @@ import { BOOST_PATH } from '../game/BoostBar';
 import './shop.css';
 
 /**
- * A pack price for display: `210 $NIBAL` (whole tokens, at most two decimals), with its dollar price first when the
- * pack is priced in US dollars (`$0.60 · 740 $NIBAL`): the token amount is what the wallet sends.
+ * A pack price for display: `210 tokens` (whole tokens, at most two decimals), with its dollar price first when the
+ * pack is priced in US dollars (`$0.60 · 740 tokens`): the token amount is what the wallet sends.
  */
 export function priceText(raw: string, view: Pick<ShopView, 'token'>, usdCents?: number): string {
   const decimals = view.token?.decimals ?? 18;

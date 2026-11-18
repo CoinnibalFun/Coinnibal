@@ -139,11 +139,11 @@ export function readAddresses() {
 }
 
 /**
- * Sends `hype` ETH and `tokens` test tokens from the owner to `to`: a developer's own wallet on the local hardhat
+ * Sends `eth` ETH and `tokens` test tokens from the owner to `to`: a developer's own wallet on the local hardhat
  * chain only (31337, the well-known hardhat accounts). It refuses every other chain: nothing in this repo sends
  * ETH to players; on the testnet gas comes from the network's official faucet.
  */
-export async function fundAddress(to, { hype = 10, tokens = 100_000, log = console.log } = {}) {
+export async function fundAddress(to, { eth = 10, tokens = 100_000, log = console.log } = {}) {
   const { token, rpcUrl } = readAddresses();
   const sdk = await importSdk();
   const { parseEther, getAddress } = viem();
@@ -152,10 +152,10 @@ export async function fundAddress(to, { hype = 10, tokens = 100_000, log = conso
   if (chainId !== LOCALNET_CHAIN_ID) throw new Error(`${rpcUrl} is chain ${chainId}, not the local chain (${LOCALNET_CHAIN_ID}): localnet-fund runs on the local chain only`);
   const { publicClient, wallet } = clients(sdk, rpcUrl, chainId, hardhatKey(ACCOUNT.owner));
   const addr = getAddress(to);
-  if (hype > 0) {
-    const hash = await wallet.sendTransaction({ to: addr, value: parseEther(String(hype)) });
+  if (eth > 0) {
+    const hash = await wallet.sendTransaction({ to: addr, value: parseEther(String(eth)) });
     await publicClient.waitForTransactionReceipt({ hash });
-    log(`sent ${hype} ETH to ${addr}`);
+    log(`sent ${eth} ETH to ${addr}`);
   }
   if (tokens > 0) {
     const hash = await sdk.sendCall(wallet, sdk.testTokenMintCall(token, addr, BigInt(tokens) * 10n ** 18n));

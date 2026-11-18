@@ -1,13 +1,13 @@
 # Coinnibal: the whole project on one page
 
 Coinnibal is a cute coin-eats-coin arena game on **Robinhood Chain** (an Arbitrum Orbit L2, gas token **ETH**). The
-money rules live in Solidity contracts, the game runs on an authoritative server, and an **Coinnibal NFT** minted for
-**$1 in ETH** opens the game. This page explains how the game plays, how money moves, how the code is laid out and
+money rules live in Solidity contracts, the game runs on an authoritative server, and a **Coinnibal NFT** opens the
+game (no mint price is published; the visitor site says the public mint will be on OpenSea). This page explains how the game plays, how money moves, how the code is laid out and
 how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY.md), [RESEARCH.md](RESEARCH.md)
 (the specs under `docs/specs/` are historical: they describe the earlier Elysium build).
 
-> **Status (2026-11-08).** Coinnibal runs on **Robinhood Chain only**: Robinhood Chain Testnet (46630) now, Robinhood
-> Chain (4663) later, switched with `CHAIN_ID`. The arena contract is v3 (no entry fee; 20 % of a ticket's profit:
+> **Status (2026-11-18).** Coinnibal runs on **Robinhood Chain only**: Robinhood Chain Testnet (46630) now, Robinhood
+> Chain (4663) later, switched with `CHAIN_ID`. The arena contract is v3 (no fee on the ticket; 20 % of a ticket's profit:
 > 15 % burned, 5 % to the fee wallet). Arenas and practice ponds are played by people only; fair practice bots exist
 > only in free custom rooms and, on the testnet, in each arena's labelled TEST room (bots carry no value). The flow
 > is **WL → Mint → Play**; the owner deploys every contract from their own wallet in `/admin`. The contracts have **not been audited**, and a game played with a token of real value may need a
@@ -19,14 +19,17 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
 
 - You are a coin. Eat food and smaller coins to grow, and run from bigger ones.
 - Practice rooms are free, two leagues (Rookie and Pro), people only, and touch nothing on chain.
-- Arenas are paid rooms with a fixed entry fee in `$NIBAL` (the game token the owner sets after deploy).
+- Arenas are paid rooms with a fixed ticket price (the contract's `entryFee`) in the game token (the owner sets it
+  after deploy; amounts read "tokens", `TOKEN_SYMBOL`).
   - Your value starts at the whole entry fee; eat a player and their value moves to you.
 - Rounds: 5 full minutes of play on the wall clock, the same for every arena, then a 30 s break after each bell (a
   round every 5:30; the break never comes out of the play). No cash-out: at
   the bell everyone still alive is paid their value on chain, less 20 % of their profit (15 % burned, 5 % to the fee wallet); a loss pays no fee.
 - Re-entry: eaten? Buy back in at the same fee while joins are open (they close in the final minute and in the
   break; a ticket bought then is held and seated when the next round opens).
-- The NFT: the Coinnibal NFT (an emblem) mints for $1 in ETH, allowlist first, then public. The owner decides who
+- The NFT: the Coinnibal NFT (an emblem), minted in ETH at the owner's USD target (`MINT_USD_CENTS`, never
+  published), allowlist first, then public. The public mint is planned on OpenSea (the link @coinnibalfun posts); how
+  that sale and the contract's own phases and `/mint` fit together is an open owner decision. The owner decides who
   may play: admins only, NFT holders, or everyone.
 - The token is set after deploy: until the owner sets it on the arena (once), the arenas read "Opening soon".
 
@@ -153,16 +156,16 @@ On screen:
 
 | Arena | Ticket | Created at (reference price $0.001 a token) |
 |---|---|---|
-| Asphodel Meadow | $1 | 1,000 `$NIBAL` |
-| Lethe Shore | $3 | 3,000 `$NIBAL` |
-| Golden Bough | $5 | 5,000 `$NIBAL` |
-| Isles of the Blessed (emblem holders only) | $10 | 10,000 `$NIBAL` |
+| $1 Room | $1 | 1,000 tokens |
+| $3 Room | $3 | 3,000 tokens |
+| $5 Room | $5 | 5,000 tokens |
+| $10 Room (NFT holders only) | $10 | 10,000 tokens |
 
 Tickets are priced in US dollars; the chain keeps the entry fee in tokens, and the owner re-prices the arenas at the
 token's USD price from `/admin` (ECONOMY.md section 1).
 
 Ids 1 to 4, created from `/admin` → Setup → Finish setup (or `pnpm admin create-arena --defaults`) once the token is
-set, 300 open tickets each; the Isles are for emblem holders. Each arena runs as 50-player instances on the same vault:
+set, 300 open tickets each; the $10 Room is for NFT holders. Each arena runs as 50-player instances on the same vault:
 another opens when they keep filling up, a quiet one drains (no new seats) and closes after its bell, nobody evicted
 (OPERATIONS.md, "Arena instances").
 
@@ -199,7 +202,7 @@ sharing (`/api/x/*`, ARCHITECTURE.md).
 
 **Practice with bots.** The ponds are people only, so at quiet hours they say so honestly: with fewer than two
 people in the ponds the lobby shows "Quiet right now" (invite friends, or practice with bots), and a player alone in
-a pond sees a slim one-line chip ("You are alone in this pond", a small "Practice with bots", Hide). "Practice with bots" opens, in one click and free (guests too), a short-lived
+a pond sees a slim one-line chip ("You are alone in this pond", a small "Practice with bots", Hide). "Practice with bots" opens, in one click and free (guests too while the game is public), a short-lived
 free custom room of their own (`PRACTICE_ROOM`: 8 practice bots of mixed difficulty, auto map, 15 minutes, room for
 3 friends with its code). Abuse limits instead of the creation fee: one live practice room per player (asking again
 returns it), 4 creations per IP per 30 minutes, at most `practiceMaxLive` (12) at once outside the paid rooms' slots
@@ -248,10 +251,11 @@ flowchart LR
 
 ### 3.3 The token and the mint
 
-- The arena is deployed without a token; the owner sets `$NIBAL` once (`setToken`, typed twice in `/admin`). It can
+- The arena is deployed without a token; the owner sets the game token once (`setToken`: the registered token confirmed in the preview; any other address
+  typed twice). It can
   never change. Until then the server plays practice only and the arenas show "Opening soon"; when it is set the lobby
   opens the arenas without a reload.
-- The NFT price is held in wei and kept at `MINT_USD_CENTS` (default $1) of ETH: by the owner's Sync button, or by
+- The NFT price is held in wei and kept at `MINT_USD_CENTS` (US cents, default 100; an owner setting) of ETH: by the owner's Sync button, or by
   the server as price keeper inside the owner's bounds (every 5 minutes, only when off by more than 2 %).
 - The allowlist is every approved WL wallet plus every wallet of a submitted collab list; the owner publishes its
   Merkle root.
@@ -272,11 +276,11 @@ tickets are a single `join` prompt; the wallet sheet shows what is left and revo
 | `packages/shared` | Rules (`RULES`), the binary protocol, the fee module (`fees.ts`), the Robinhood Chain networks (`chains.ts`), arenas, the SIWE message, the palette |
 | `packages/art` | The coin drawing used by the web renderer and the films |
 | `apps/server` | The game server: rooms, rounds, practice bots (free custom rooms, testnet test arenas), ledger, journal, `chain/evm.ts`, the price keeper, the site, mint, NFT metadata and admin API, integrity |
-| `apps/web` | The client: landing, `/wl`, `/collab`, `/mint`, `/play`, `/docs`, `/admin`; wallets via EIP-6963 + viem (`src/wallet`) |
+| `apps/web` | The client: landing, `/wl`, `/collab`, `/mint`, `/faucet`, `/play`, `/docs`, `/admin`; wallets via EIP-6963 + viem (`src/wallet`) |
 | `scripts/` | `demo.mjs`, `localnet.mjs`, `localnet-fund.mjs`, `dev-browser.mjs`, `record-walkthrough.mjs`, the Dev Wallet (`lib/dev-wallet.mjs`) |
 | `brand/` | The brand kit generator and its PNGs (section 9) |
 | `media/` | Film pipelines (section 10) |
-| `docs/` | This page, ARCHITECTURE, ECONOMY, RESEARCH, DEPLOY, OPERATIONS, the historical specs and the design reference |
+| `docs/` | This page, ARCHITECTURE, ECONOMY, NFT-DESIGN, RESEARCH, DEPLOY, OPERATIONS, the historical specs and the design reference |
 
 **Contract guarantees, in short:** a payout never exceeds the vault; one open ticket per player per arena; a
 settlement cannot replay (the session id must match); the fee is on profit only, at rates fixed at join, capped at
@@ -307,7 +311,7 @@ pnpm -F @coinnibal/server e2e       # real hardhat node + real server, the deplo
 | Robinhood Chain, the VPS, env vars, the domain, the `/admin` deploy flow, mainnet | [DEPLOY.md](DEPLOY.md), [deploy/vps/README.md](../deploy/vps/README.md) |
 | Robinhood Chain and Pons facts with sources | [RESEARCH.md](RESEARCH.md) |
 | Sinks, fees, prices, the NFT's utility | [ECONOMY.md](ECONOMY.md) |
-| Testnet deploy step by step, fees and burn mode, server key gas, allowlist, $1 price, pausing, mainnet, ownership, key rotation, backups, integrity | [OPERATIONS.md](OPERATIONS.md) |
+| Testnet deploy step by step, fees and burn mode, server key gas, allowlist, the mint price, pausing, mainnet, ownership, key rotation, backups, integrity | [OPERATIONS.md](OPERATIONS.md) |
 | Money flow, invariants, trust model, server internals | [ARCHITECTURE.md](ARCHITECTURE.md) |
 
 ## 6. Trust model in one table
@@ -329,7 +333,7 @@ the owner. Protect the server key.
 | Contracts | deployed by the owner from `/admin` → Setup and registered with the server (`DATA_DIR/chains/<id>/contracts.json`) |
 | Server key | `SERVER_PRIVATE_KEY=auto`, on the persistent disk; pays gas in ETH |
 | Admins | `ADMIN_WALLETS` = the owner's 0x address (no default) |
-| Hosting | the game server in Docker behind Caddy on a VPS (the data volume at `/data`, daily and offsite backups); the website on Vercel |
+| Hosting | the game server and the website in one Docker container behind Caddy on a VPS (`WEB_DIST=/app/web`; the data volume at `/data`, daily and offsite backups); Vercel only redirects the old elymum.io |
 | Domain | the site is served at `PUBLIC_URL` (`https://coinnibal.fun`); another domain needs only `PUBLIC_URL` / `VITE_PUBLIC_URL` and the DNS |
 
 ## 8. Website, allowlist, collabs and the admin panel
@@ -340,12 +344,14 @@ the owner. Protect the server key.
 | `/wl` | everyone | "Three small chores": the admin-defined steps (follow @coinnibalfun, repost the pinned post, connect an EVM wallet with a free SIWE signature), one entry per wallet and per X handle, a shareable boarding pass |
 | `/collab` | communities | Apply → in review → approved with spots and a deadline → raffle on X → paste the winners' EVM wallets → submit (locks) |
 | `/mint` | everyone | The mint after dark: phase, eligibility and proof, quantity, price in ETH with its USD value; minted emblems and a Play button when the game is open to holders |
+| `/faucet` | per `gameAccess` (testnet) | The TestToken faucet: test tokens only (2x for NFT holders), never ETH; a link to the official gas faucet |
 | `/play` | per `gameAccess` | The game: admins only, holders, or everyone |
-| `/admin` | `ADMIN_WALLETS` | Launch, Setup, Mint, Game, Network, Play, WL, Tasks, Collabs, Integrity, Settings (OPERATIONS.md) |
+| `/admin` | `ADMIN_WALLETS` | Network (with the launch checklist), Setup, Mint, Game, Community (WL, Tasks, Collabs), Safety, Settings (OPERATIONS.md) |
 | `/docs` | everyone | The player guide |
 
 **Admin panel safety:** the wallet must be on the server's chain and be the contract owner; every transaction is
-previewed (function, arguments, value, network, signer) before the wallet prompt; the token address is typed twice;
+previewed (function, arguments, value, network, signer) before the wallet prompt; the game token is the registered one, confirmed in the preview (any other address is
+typed twice);
 double clicks cannot send twice; mainnet shows a red MAINNET banner.
 
 **Integrity:** cheat and collusion flags from arena play (repeated value between wallets, feeding, shared IP or
@@ -361,14 +367,15 @@ Details: [OPERATIONS.md](OPERATIONS.md#integrity-cheat-and-collusion-detection).
   `#F6EEDA`, plain `#F8F7F4`, trench `#0F2A30`, and the rest of the spec's table.
 - Type: Fraunces (display, SOFT 100), DM Sans (reading), Geist Mono (numbers and kickers).
 - Kit: `node brand/generate.mjs` renders the X avatar and banner, the OG card (also `apps/web/public/og-coinnibal.png`),
-  the favicons, posts (WL open, $1 mint, game live), stickers and arena posters into `brand/out/`
+  the favicons, posts (WL open, the mint, game live), stickers and arena posters into `brand/out/`
   ([brand/README.md](../brand/README.md)).
 
 ## 10. Media
 
 Film sources in `media/`, renders in `out/videos/` (gitignored): the promo, gameplay, how-to-play, the mint film and
-Roadmap Chomp. Their text, voice lines, handles and colours are rebranded; they **must be re-rendered after the new UI
-lands** ([media/README.md](../media/README.md)).
+Roadmap Chomp. Only the promo is current; the other films' scripts still carry facts of the Elysium build (HYPE, a
+$1 mint, the old arenas, a flat 5 % fee) and **must be rewritten before they are re-rendered**
+([media/README.md](../media/README.md)).
 
 ## 11. Launch checklist
 
@@ -378,8 +385,8 @@ lands** ([media/README.md](../media/README.md)).
 | Fund the server key with ETH | owner |
 | `/admin` → Setup: TestToken, Arena, NFT, Finish setup (testnet first; OPERATIONS.md) | owner |
 | WL open; review WL and collabs | owner |
-| Publish the allowlist root; Sync to $1; open the mint (Allowlist) with "activate the game for holders" | owner |
-| `$NIBAL` exists → Set token (once) → create the four arenas | owner |
+| Publish the allowlist root; Sync the mint price; open the mint (Allowlist) with "activate the game for holders" | owner |
+| The game token exists → Set token (once) → create the four arenas | owner |
 | Public mint; optional price keeper with bounds | owner |
 | Mainnet: launch the token on Pons, `CHAIN_ID=4663` and a provider RPC, redeploy the contracts on mainnet | owner |
 | Re-render the films, regenerate the screenshots, upload the X art | owner |

@@ -44,7 +44,7 @@ export interface ShareDeps {
   dataDir: string | null;
   /** The site's public origin for the absolute card URLs (`publicBaseUrl`: `PUBLIC_URL`; never a forwarded header). */
   baseUrl: (req: IncomingMessage) => string;
-  /** The game token's decimals and symbol (for "took home 1,234.5 $NIBAL"). */
+  /** The game token's decimals and symbol (for "took home 1,234.5 tokens"). */
   token: () => { decimals: number; symbol: string } | null;
   /** "Link X": the handle is linked to a wallet right now (a card tags only such a handle; absent: never tag). */
   xLinked?: (handle: string) => boolean;
@@ -190,7 +190,7 @@ export class ShareService {
     return this.offer({ kind: o.room.opts.stake ? 'round' : 'room', ...this.base(o), mass: Math.floor(g.mass), kills: g.kills, ...this.eaten(g) });
   }
 
-  /** "1,234.5 $NIBAL" (ledger units), or undefined without the token. */
+  /** "1,234.5 tokens" (ledger units), or undefined without the token. */
   private money(v: number): string | undefined {
     const t = this.d.token();
     return t ? `${formatToken(v, ledgerDecimals(t.decimals), { maxFrac: 2 })} ${t.symbol}` : undefined;
@@ -324,7 +324,7 @@ export class ShareService {
         this.png.set(key, png);
         if (this.png.size > PNG_CACHE) this.png.delete(this.png.keys().next().value!);
       }
-      // a card never changes: CDNs (the Vercel rewrite, Cloudflare) may keep it as long as they like
+      // a card never changes: CDNs (Cloudflare) may keep it as long as they like
       res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable' });
       res.end(req.method === 'HEAD' ? undefined : png);
       return true;

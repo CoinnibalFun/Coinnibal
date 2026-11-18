@@ -1,5 +1,6 @@
 /**
- * The brand: Coinnibal (a coin + a cannibal: coins that eat coins), its token $NIBAL. Everything a player reads uses
+ * The brand: Coinnibal (a coin + a cannibal: coins that eat coins), played with its game token (shown as `TOKEN_SYMBOL`,
+ * default "tokens"; no ticker is announced). Everything a player reads uses
  * these names, and so do the code, the packages (`@coinnibal/*`), the contracts, the storage keys and the env vars. The
  * project was called Elymum until November 2026; the few names kept from then (the live server's installed names, the
  * fallbacks that still read an old name) say why where they are.

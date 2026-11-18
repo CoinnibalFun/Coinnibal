@@ -83,11 +83,11 @@ const DIFF_KEY: Record<CustomRoomConfig['difficulty'], TKey> = { easy: 'cr.diff.
 const FOOD_KEY: Record<CustomRoomConfig['food'], TKey> = { low: 'cr.food.low', normal: 'cr.food.normal', high: 'cr.food.high' };
 const KIND_KEY: Record<CustomRoomConfig['kind'], TKey> = { free: 'cr.kind.free', paid: 'cr.kind.paid' };
 
-/** "Arena · 10,000 $NIBAL": a paid room's tier. */
+/** "Arena · 10,000 tokens": a paid room's tier. */
 const tierText = (x: CustomArenaTier, tok: TokenText) => `${arenaMeta(x.arenaId).name} · ${tok.wire(x.entryFee)} ${tok.symbol}`;
 
 /**
- * How the sheet writes a room fee: the token amount (`1,500 $NIBAL`), and its dollar value when the server knows the
+ * How the sheet writes a room fee: the token amount (`1,500 tokens`), and its dollar value when the server knows the
  * token's price (`$1.50`), from the quote (pure, tested).
  */
 export function roomFeeText(q: Pick<CustomRoomQuote, 'pay' | 'usdPerToken'> | null, fallback: TokenText): { tokens: (raw: bigint) => string; usd: (raw: bigint) => number | null; symbol: string; tok: TokenText } {

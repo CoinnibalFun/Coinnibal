@@ -41,7 +41,7 @@ export function customRoomsPatch(saved: CustomRoomSettings, draft: CustomRoomSet
 
 const minutesLeft = (endsAt: number) => Math.max(0, Math.ceil((endsAt - Date.now()) / 60_000));
 
-/** "free", "practice with bots" or "paid · Lethe Shore #2" (a paid room is an invite-only instance of that arena). */
+/** "free", "practice with bots" or "paid · $3 Room #2" (a paid room is an invite-only instance of that arena). */
 export const roomKindText = (r: Pick<CustomRoomView, 'kind' | 'arenaId' | 'practice'>): string =>
   r.kind === 'paid' && r.arenaId ? `paid · ${arenaMeta(r.arenaId).name} #${r.arenaId}` : r.practice ? 'practice with bots' : 'free';
 

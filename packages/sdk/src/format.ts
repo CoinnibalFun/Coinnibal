@@ -11,7 +11,7 @@ export function formatTokenAmount(raw: bigint | number, decimals: number, opts: 
   return formatToken(raw, decimals, { maxFrac: opts.maxFrac ?? Math.min(decimals, 6), compact: opts.compact });
 }
 
-/** `1,234.5 $NIBAL`. */
+/** `1,234.5 tokens` (the symbol passed in). */
 export function formatTokenWithSymbol(raw: bigint | number, decimals: number, symbol: string, opts: { maxFrac?: number; compact?: boolean } = {}): string {
   return `${formatTokenAmount(raw, decimals, opts)} ${symbol}`;
 }

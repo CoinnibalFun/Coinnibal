@@ -4,7 +4,7 @@ import type { XLinkError } from './xlink';
  * Coinnibal site: WL (allowlist) and collab applications, the NFT mint, the contracts registry and
  * player profiles. Types shared by the server (`/api/site/*`, `/api/admin/*`, `/api/profile`) and
  * the web app, plus the validation rules both apply.
- * See docs/specs/2026-10-29-coinnibal-on-elysium.md (section 4.4).
+ * See docs/specs/2026-10-29-elymum-on-elysium.md (section 4.4; historical).
  */
 
 /** The X account of the project (no `@`). */

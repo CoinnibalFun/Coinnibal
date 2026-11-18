@@ -4,7 +4,7 @@
 //
 //   pnpm demo:record [-- --quick] [-- --url http://localhost:5173/] [-- --out out/videos]
 //
-//   --quick        a short clip (about a minute on a slow machine): lobby, wallet, one Asphodel Meadow
+//   --quick        a short clip (about a minute on a slow machine): lobby, wallet, one $1 Room
 //                  ticket, a short arena run, end card (no bell)
 //   --url <url>    record this running stack (it must be `pnpm demo`'s fake chain); by default
 //                  the stack is started for the recording (scripts/demo.mjs) and stopped afterwards
@@ -414,7 +414,7 @@ if (!QUICK) {
   await wait(1500);
 }
 
-// 4 · Buy a ticket (Asphodel Meadow)
+// 4 · Buy a ticket ($1 Room)
 async function buyTicket(first) {
   await click('[role="radio"][data-kb-value="arena:1"]', { fx: 0.45 });
   await wait(500);
@@ -446,7 +446,7 @@ await buyTicket(true);
 await wait(600);
 
 // 5 · Arena
-await chapter('5 · Asphodel Meadow arena');
+await chapter('5 · The $1 Room');
 let arenaMs = QUICK ? 7_000 : 52_000;
 const tA = Date.now();
 r = await autopilot(arenaMs);

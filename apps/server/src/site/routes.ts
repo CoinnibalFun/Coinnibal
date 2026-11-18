@@ -1090,7 +1090,8 @@ export class SiteApi {
         if (seg.length !== 1 || !this.maps) break;
         return mapRoutes(this.maps, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, wallet);
       case 'shop': {
-        // power-up prices, the sink (burn or treasury), on/off per power-up and the arena limits; plus recent purchases
+        // power-up prices, on/off per power-up and the arena limits (every pack is paid with CoinnibalArena.pay: half
+        // burned, half to the fee wallet); plus recent purchases
         const shop = this.shop;
         if (!shop) break;
         // POST /api/admin/shop/refunds/<tx>: the owner sent back the part of a cart payment that could not be applied

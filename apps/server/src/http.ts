@@ -240,7 +240,7 @@ export const WEB_CSP =
   "frame-ancestors 'none'; form-action 'self'";
 
 /**
- * Without `WEB_DIST` (production: the web app is the site's, e.g. coinnibal.fun on Vercel) a browser that opens a page of
+ * Without `WEB_DIST` (a deploy where the web app is hosted elsewhere; the VPS serves it itself) a browser that opens a page of
  * the game server's own domain is sent to the same page on `PUBLIC_URL`, so there is one copy of the site. Null when
  * there is nothing to redirect (development, no `PUBLIC_URL`, the request is already for that host).
  */

@@ -53,7 +53,7 @@ import { arenaTarget } from '../../rooms/invite';
 
 /**
  * The lobby, a page of the picture book: the masthead (mark, page tabs, wallet), a plate
- * caption with the arena's status, then the departures board of the four Elysian arenas
+ * caption with the arena's status, then the departures board of the four rooms ($1 to $10)
  * (and practice) with the one primary button under it. Wide screens add the live window
  * onto the floor and the membership sticker on the right; phones dock the button and the
  * page tabs at the bottom.

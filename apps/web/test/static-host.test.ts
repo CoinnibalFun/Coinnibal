@@ -18,7 +18,7 @@ describe('where the browser reaches the game server', () => {
     expect(resolveServer({}, { protocol: 'http:', host: 'localhost:5173' })).toEqual({ http: 'http://localhost:5173', ws: 'ws://localhost:5173/ws' });
   });
 
-  it('vercel.json only sends coinnibal.fun (the old Vercel site) to coinnibal.fun, path and all: the site lives on the VPS', () => {
+  it('vercel.json only sends elymum.io (the old Vercel site) to coinnibal.fun, path and all: the site lives on the VPS', () => {
     const v = JSON.parse(readFileSync(join(__dirname, '../../../vercel.json'), 'utf8')) as {
       redirects: { source: string; destination: string; permanent: boolean }[];
       rewrites?: unknown;

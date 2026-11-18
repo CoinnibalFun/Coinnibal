@@ -1,7 +1,12 @@
 # Coinnibal gameplay film (narrated)
 
+> **Before the next render.** This film's script still carries facts of the Elysium build (Elysium, HYPE, a $1
+> mint, the old arena names and fees). Rewrite it to the current game (Robinhood Chain, ETH gas, no mint price, the
+> $1 / $3 / $5 / $10 Rooms, 20 % of profit: 15 % burned + 5 % to the team wallet) before any re-render
+> ([media/README.md](../README.md)).
+
 A film of about 120 s recorded from the real UI: the home page, what Coinnibal is, WL → Mint → Play,
-then a live round in Asphodel Meadow (the drop-in, the first eat, a chase, a split, the final
+then a live round in the $1 Room (recorded when it was called Asphodel Meadow; re-take before the next render) (the drop-in, the first eat, a chase, a split, the final
 minute, the bell and the PAID stamp) and the end card. A storyteller narrates it. This folder holds
 the words, the timeline and the whole soundtrack pipeline. The picture is captured with the
 gameplay kit (`media/gameplay/capture`) and cut to `cues.json`.
