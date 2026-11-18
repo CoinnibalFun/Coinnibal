@@ -33,6 +33,7 @@ import { BITES, BiteSeam, biteVars } from './BiteSeam';
 import { CoinPond } from './CoinPond';
 import { DuskSeam } from './DuskSeam';
 import { GazeCoin } from './GazeCoin';
+import { HeroScreen } from './HeroScreen';
 import { NapSeam } from './NapSeam';
 import { BITE_GULP_MS, SEAL_GULP_MS, gulp, useReveal, useRevealEach } from './reveal';
 import { SealSeam } from './SealSeam';
@@ -72,16 +73,23 @@ const usePlate = (gulpAt: number) => useReveal<HTMLElement>(undefined, { attr: '
 
 /* ── the hero ─────────────────────────────────────────────────────────── */
 
+/** A round's length in words for the hero line ("Five minutes later"), digits past ten. */
+const WORDS = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+const spelled = (n: number) => WORDS[n] ?? String(n);
+
 /**
- * The hero. Its buttons follow what is open (`doors`): with everything closed the main action is "How it works"
- * (the guide), then the NFT's perks and the project's X account; "Join the WL", Collab and Play come back as the
- * admin opens them. Nothing here points at a closed page.
+ * The hero. Its buttons follow what is open (`doors`): with everything closed the main action is "How it works" (the
+ * round, further down this page), then the NFT's perks and the project's X account; "Join the WL", Collab and Play come
+ * back as the admin opens them. Nothing here points at a closed page. Beside the card (under it on a phone) the screen
+ * plays real gameplay; the pond's coins wait at the foot of the first screen.
  */
 function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: GameAccess; handle: string; sound: ReturnType<typeof useLandingSound> }) {
   const reduced = useReducedMotion();
   const m = useMoves();
   // on a phone the card fills the width: a smaller tilt keeps its corners off the screen's edges
   const phone = useMedia('(max-width: 479px)');
+  // a mouse clicks the pond's coins, a finger taps them
+  const fine = useMedia('(hover: hover) and (pointer: fine)');
   const peel = usePeelLetters<HTMLHeadingElement>();
   const t = useT();
   return (
@@ -90,18 +98,15 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
         <div className="ld-hero__inner">
           <motion.div className="ld-hero__drop" variants={m.stickerDrop} custom={phone ? -0.8 : -1.6} initial="hidden" animate="shown">
             <Sticker pad="lg" lift="lg" tape className="ld-hero__card">
-              <p className="kicker ld-hero__kicker">{t('ld.hero.kicker', { chain: plainChainName(activeChain().name) })}</p>
               <h1 id="ld-hero-title" ref={peel.ref} className={`ld-hero__title ${peel.className}`}>
                 <Wordmark height={104} playful={!reduced} className="ld-hero__mark" />
               </h1>
               <p className="ld-hero__tag">
                 {t('ld.hero.tag')} <span className="ld-hero__motto">{t('brand.tagline')}</span>
               </p>
-              <p className="ld-hero__lede">{t('ld.hero.lede')}</p>
-              {/* plainly: free at first, then a ticket is real money (D12), whatever chain the build is on */}
-              <p className="ld-hero__money" data-testid="ld-money">
-                <Icon name="info" size={16} className="ld-hero__money-icon" />
-                <span>{t('ld.hero.money', { sym: SYMBOL })}</span>
+              {/* the ticket and what eating costs, in one paragraph: a paid room takes a ticket, getting eaten loses it */}
+              <p className="ld-hero__lede" data-testid="ld-money">
+                {t('ld.hero.lede', { sym: SYMBOL, mins: spelled(FACTS.rules.roundMin) })}
               </p>
               <div className="ld-hero__ctas">
                 {doors.wl && (
@@ -110,13 +115,16 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
                   </SiteLinkButton>
                 )}
                 {!doors.wl && (
-                  <SiteLinkButton href="/docs" variant="primary" icon="arrow" onClick={sound.click} data-testid="ld-how-link">
-                    {t('ld.cta.how')}
-                  </SiteLinkButton>
+                  <a href="#round" className="kb-btn kb-btn--primary kb-btn--md st-btn" onClick={sound.click} data-testid="ld-how-link">
+                    <span className="kb-btn__label">
+                      <span className="kb-btn__text">{t('ld.cta.how')}</span>
+                    </span>
+                    <Icon name="arrow" size={20} className="kb-btn__icon ld-hero__down" />
+                  </a>
                 )}
                 <a href="#why-nft" className="kb-btn kb-btn--secondary kb-btn--md st-btn" onClick={sound.click} data-testid="ld-why-link">
                   <span className="kb-btn__label">
-                    <span className="kb-btn__text">{t('ld.cta.why')}</span>
+                    <span className="kb-btn__text">{t('ld.cta.perks')}</span>
                   </span>
                 </a>
                 {doors.collab && (
@@ -147,20 +155,18 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
               )}
             </Sticker>
           </motion.div>
-          <motion.div className="ld-hero__badge-wrap" variants={m.popIn} custom={0.5} initial="hidden" animate="shown">
-            <Sticker tone="sun" pad="sm" tilt={4} className="ld-hero__badge">
-              <span className="num ld-hero__badge-n">{String(FACTS.rules.roundMin).padStart(2, '0')}:00</span>
-              <span className="mono ld-hero__badge-l">{t('ld.badge')}</span>
-            </Sticker>
+          <motion.div className="ld-hero__screen" variants={m.popIn} custom={0.35} initial="hidden" animate="shown">
+            <HeroScreen />
           </motion.div>
         </div>
         <CoinPond still={reduced} events={{ onEat: sound.chomp }} />
         {!reduced && (
-          <p className="ld-pond__hint mono" aria-hidden="true">
-            {t('ld.pondHint')}
+          <p className="ld-pond__hint" aria-hidden="true">
+            {t(fine ? 'ld.pondHintClick' : 'ld.pondHint')}
           </p>
         )}
-        <button type="button" className="ld-sound mono" aria-pressed={sound.on} onClick={sound.toggle}>
+        {/* the pond's chomps (the clip has no sound): off until the visitor turns them on */}
+        <button type="button" className="ld-sound" aria-pressed={sound.on} onClick={sound.toggle}>
           <Icon name={sound.on ? 'sound' : 'mute'} size={16} />
           <span>{sound.on ? t('ld.soundOn') : t('ld.soundOff')}</span>
         </button>
@@ -786,7 +792,6 @@ export function Landing() {
         <SeedRail />
       </SiteHeader>
       <main id="main" className="ld-main" tabIndex={-1}>
-        <PlateLabel numeral={1} title={t('ld.plate1')} aside={t('ld.plate1.aside')} className="ld-plate1" />
         <Hero doors={doors} gameAccess={settings.gameAccess} handle={settings.xHandle} sound={sound} />
         <Feast />
         <Round live={doors.game && settings.gameAccess !== 'maintenance'} />
