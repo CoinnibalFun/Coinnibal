@@ -8,6 +8,7 @@ import { appendFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionInfo } from '@coinnibal/sdk';
+import { getAddress, type Address, type Hash } from 'viem';
 import { generatePrivateKey } from 'viem/accounts';
 import { describe, expect, it } from 'vitest';
 import { EvmChain } from '../src/chain/evm';
@@ -114,8 +115,11 @@ describe('server-key blast radius', () => {
     await h.chain.processPending();
     expect(h.settled.map((e) => e.payout)).toEqual([2 * K]);
     const key = sessionKey(1, winner, s.id);
-    expect(h.chain.settledLog.get(key)).toMatchObject({ kind: 'settle', amount: 2 * K, net: 1_800 * 1e6, fee: 200 * 1e6, reason: 'round' });
-    // the block with the batch is reorged away: the session is open again and the vault holds the stakes again
+    const done = h.chain.settledLog.get(key, ARENA)!;
+    expect(done).toMatchObject({ kind: 'settle', contract: ARENA.toLowerCase(), amount: 2 * K, net: 1_800 * 1e6, fee: 200 * 1e6, reason: 'round' });
+    // the block with the batch is reorged away: the transaction has no receipt any more, the session is open again
+    // and the vault holds the stakes again
+    h.evm.receipts.delete(done.tx as Hash);
     h.evm.sessions.set(`1:${winner.toLowerCase()}`, s);
     h.evm.arenaMap.get(1)!.vault += 2_000n * E18;
     h.evm.arenaMap.get(1)!.openSessions += 1;
@@ -126,7 +130,72 @@ describe('server-key blast radius', () => {
     expect(calls(h.evm, 'settle')).toHaveLength(2);
     expect(calls(h.evm, 'cancel')).toHaveLength(0);
     // the record is on disk (DATA_DIR/chains/<id>/settled.jsonl): a restarted server still knows it
-    expect(new SettledLog(join(dir, 'settled.jsonl'), () => {}, () => h.clock.now).get(key)).toMatchObject({ amount: 2 * K });
+    expect(new SettledLog(join(dir, 'settled.jsonl'), () => {}, () => h.clock.now).get(key, ARENA)).toMatchObject({ amount: 2 * K });
+  });
+
+  it('an open session whose settlement is still mined is a new ticket: refunded at the entry fee, never paid again', async () => {
+    const h = await harness({ STALE_SESSION_AFTER_S: '60' });
+    const winner = wallet();
+    const s = h.evm.join(1, winner, { openedAt: Math.floor(T0 / 1000) - 3600 });
+    h.evm.join(1, wallet());
+    h.journal.enqueue(item(s, 2 * K));
+    await h.chain.processPending();
+    // the session reads open again, but the settlement's receipt is still there with its `Settled`: no reorg
+    h.evm.sessions.set(`1:${winner.toLowerCase()}`, s);
+    h.evm.arenaMap.get(1)!.vault += 1_000n * E18;
+    h.evm.arenaMap.get(1)!.openSessions += 1;
+    expect(await h.chain.sweepStale()).toBe(1);
+    expect(h.journal.pending[0]).toMatchObject({ key: sessionKey(1, winner, s.id), payout: K, reason: 'stale' });
+    expect(h.logs.join()).toMatch(/still mined — treated as a new ticket/);
+    await h.chain.processPending();
+    expect(calls(h.evm, 'settle')).toHaveLength(1);
+    expect(calls(h.evm, 'cancel')).toHaveLength(1);
+  });
+
+  it('after an arena redeploy on the same chain, an unplayed ticket with a reused session id is refunded, never paid an old payout (audit S1)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-redeploy-'));
+    const clock = { now: T0 };
+    const attacker = wallet();
+    const start = async (evm: FakeEvm, arena: Address) => {
+      const journal = new Journal(null);
+      const logs: string[] = [];
+      const cfg = loadConfig({ EVM_RPC_URL: 'http://127.0.0.1:1', SERVER_PRIVATE_KEY: generatePrivateKey(), STALE_SESSION_AFTER_S: '60' } as unknown as NodeJS.ProcessEnv);
+      const chain = new EvmChain(cfg, journal, (m) => logs.push(m), { client: evm, contracts: () => ({ arena, nft: null }), loops: false, now: () => clock.now, receiptTimeoutMs: 10, cacheDir: dir });
+      chain.setLiveSessionProvider(() => new Set());
+      await chain.start();
+      return { chain, journal, logs };
+    };
+    // the old arena: the attacker's session #1 of arena 1 settled with a big win (5 entry fees)
+    const oldEvm = new FakeEvm();
+    oldEvm.addArena(1, 1_000n);
+    const s = oldEvm.join(1, attacker, { openedAt: Math.floor(T0 / 1000) });
+    for (let i = 0; i < 6; i++) oldEvm.join(1, wallet());
+    const a = await start(oldEvm, ARENA);
+    const key = sessionKey(1, attacker, s.id);
+    a.journal.enqueue(item(s, 5 * K));
+    await a.chain.processPending();
+    expect(a.chain.settledLog.get(key, ARENA)).toMatchObject({ kind: 'settle', amount: 5 * K });
+    await a.chain.stop();
+
+    // a day later a new arena contract on the same chain and DATA_DIR: session ids start at 1 again
+    clock.now += 24 * 3_600_000;
+    const NEW = getAddress('0x1111111111111111111111111111111111111111');
+    const newEvm = new FakeEvm();
+    newEvm.addArena(1, 1_000n);
+    newEvm.nowS = () => Math.floor(clock.now / 1000);
+    const mine = newEvm.join(1, attacker, { openedAt: Math.floor(clock.now / 1000) - 3600 });
+    for (let i = 0; i < 8; i++) newEvm.join(1, wallet(), { openedAt: Math.floor(clock.now / 1000) });
+    expect(sessionKey(1, attacker, mine.id)).toBe(key);
+    const b = await start(newEvm, NEW);
+    // the record of the old contract does not describe the new contract's session
+    expect(b.chain.settledLog.get(key, NEW)).toBeUndefined();
+    expect(await b.chain.sweepStale()).toBe(1);
+    expect(b.journal.pending[0]).toMatchObject({ key, payout: K, reason: 'stale' });
+    await b.chain.processPending();
+    expect(newEvm.sent.filter((c) => c.functionName === 'settle')).toHaveLength(0);
+    expect(newEvm.sent.filter((c) => c.functionName === 'cancel')).toHaveLength(1);
+    expect(b.logs.join()).not.toMatch(/reorg/);
+    await b.chain.stop();
   });
 
   it('the settled log survives restarts, skips malformed lines and forgets records after 14 days', () => {
@@ -134,15 +203,31 @@ describe('server-key blast radius', () => {
     const file = join(dir, 'settled.jsonl');
     let now = T0;
     const a = new SettledLog(file, () => {}, () => now);
-    a.record({ kind: 'settle', key: 'old', arenaId: 1, amount: 1, tx: '0x0', at: now - 15 * 24 * 3_600_000 });
-    a.record({ kind: 'settle', key: 'a', arenaId: 1, player: '0xA', amount: 5, tx: '0x1', at: now });
-    a.record({ kind: 'cancel', key: 'b', arenaId: 1, player: '0xB', amount: 7, tx: '0x2', at: now });
+    const c = ARENA.toLowerCase();
+    a.record({ kind: 'settle', contract: c, key: 'old', arenaId: 1, amount: 1, tx: '0x0', at: now - 15 * 24 * 3_600_000 });
+    a.record({ kind: 'settle', contract: c, key: 'a', arenaId: 1, player: '0xA', amount: 5, tx: '0x1', at: now });
+    a.record({ kind: 'cancel', contract: c, key: 'b', arenaId: 1, player: '0xB', amount: 7, tx: '0x2', at: now });
     appendFileSync(file, 'not json\n{"key":1}\n');
     const logs: string[] = [];
     now += 1000;
     const b = new SettledLog(file, (m) => logs.push(m), () => now);
-    expect([b.get('a')?.amount, b.get('b')?.kind, b.get('old'), b.size]).toEqual([5, 'cancel', undefined, 2]);
+    expect([b.get('a', ARENA)?.amount, b.get('b', ARENA)?.kind, b.get('old', ARENA), b.size]).toEqual([5, 'cancel', undefined, 2]);
     expect(b.recent(10, '0xa').map((r) => r.key)).toEqual(['a']);
     expect(logs.join()).toMatch(/ignored 2 malformed line/);
+    // a long-running process: a record older than 14 days is never used, even though it is still in memory
+    now += 15 * 24 * 3_600_000;
+    expect(b.get('a', ARENA)).toBeUndefined();
+  });
+
+  it('a settled record matches only the arena contract that wrote it; records without a contract match none', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-settled-'));
+    const file = join(dir, 'settled.jsonl');
+    // a line written before records named their contract
+    appendFileSync(file, JSON.stringify({ kind: 'settle', key: '1:0xa:1', arenaId: 1, amount: 5, tx: '0x1', at: T0 }) + '\n');
+    const log = new SettledLog(file, () => {}, () => T0);
+    log.record({ kind: 'settle', contract: ARENA.toLowerCase(), key: '1:0xb:2', arenaId: 1, amount: 9, tx: '0x2', at: T0 });
+    expect(log.get('1:0xa:1', ARENA)).toBeUndefined();
+    expect(log.get('1:0xb:2', ARENA)?.amount).toBe(9);
+    expect(log.get('1:0xb:2', '0x1111111111111111111111111111111111111111')).toBeUndefined();
   });
 });

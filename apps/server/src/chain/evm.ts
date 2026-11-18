@@ -16,7 +16,7 @@ import {
   type Settlement,
 } from '@coinnibal/sdk';
 import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatGas, isSupportedChainId, unsupportedChainMessage, formatToken, type ArenaFees, type ChainStatus } from '@coinnibal/shared';
-import { getAddress, isAddress, type Address, type Hash, type Hex } from 'viem';
+import { getAddress, isAddress, isHash, type Address, type Hash, type Hex } from 'viem';
 import type { PrivateKeyAccount } from 'viem/accounts';
 import type { ServerConfig } from '../config';
 import { join } from 'node:path';
@@ -24,7 +24,7 @@ import { PAYOUT_GUARD_FLAG, type Journal, type JournalItem, type SettlementItem,
 import { SettledLog } from '../stake/settled-log';
 import { GasRunwayTracker } from './gas-runway';
 import { ChainCache } from './chain-cache';
-import { multicallMode, readChainId, viemEvmClient, withTimeout, type ArenaEvent, type EvmClient, type MulticallMode } from './evm-client';
+import { multicallMode, readChainId, viemEvmClient, withTimeout, type ArenaEvent, type EvmClient, type MulticallMode, type TxReceipt } from './evm-client';
 import { isRateLimited, isTransientRpcError, withRpcPriority } from './rpc-budget';
 import { loadServerKey } from './server-key';
 import { isTestChain } from './state-dir';
@@ -1277,7 +1277,7 @@ export class EvmChain implements ChainGateway {
     const t = this.token()!;
     this.journal.remove(item.key);
     this.sentTx.delete(item.key);
-    const base = { key: item.key, arenaId: item.arenaId!, player: getAddress(item.player), sessionId: item.sessionId, reason: item.reason, tx: hash, at: this.now() };
+    const base = { contract: this.arena!.toLowerCase(), key: item.key, arenaId: item.arenaId!, player: getAddress(item.player), sessionId: item.sessionId, reason: item.reason, tx: hash, at: this.now() };
     if (ev.name === 'Cancelled') {
       // an unplayed ticket: its full entry fee went back, no fee
       const amount = toLedger(ev.amount, t.decimals, 'floor');
@@ -1398,7 +1398,7 @@ export class EvmChain implements ChainGateway {
     const last = Number(info.lastSweepId);
     if (item.sweepId !== undefined && last >= item.sweepId) {
       this.journal.remove(key);
-      this.settledLog.record({ kind: 'sweep', key, arenaId: item.arenaId, amount: item.amount, sweepId: item.sweepId, tx: item.sentTx ?? 'confirmed', at: this.now() });
+      this.settledLog.record({ kind: 'sweep', contract: this.arena!.toLowerCase(), key, arenaId: item.arenaId, amount: item.amount, sweepId: item.sweepId, tx: item.sentTx ?? 'confirmed', at: this.now() });
       this.arenasStale();
       this.log(`chain: burned ${this.units(item.amount)} loot of ${item.roomId} (round ${item.round}) · sweep #${item.sweepId} (confirmed)${item.sentTx ? ` · ${item.sentTx}` : ''}`);
       return;
@@ -1435,7 +1435,7 @@ export class EvmChain implements ChainGateway {
     const receipt = await client.receipt(hash, arenaAddr, this.deps.receiptTimeoutMs ?? RECEIPT_TIMEOUT_MS);
     if (receipt?.status === 'success') {
       this.journal.remove(key);
-      this.settledLog.record({ kind: 'sweep', key, arenaId: item.arenaId, amount: item.amount, sweepId, tx: hash, at: this.now() });
+      this.settledLog.record({ kind: 'sweep', contract: arenaAddr.toLowerCase(), key, arenaId: item.arenaId, amount: item.amount, sweepId, tx: hash, at: this.now() });
       this.arenasStale();
       this.log(`chain: burned ${this.units(item.amount)} loot of ${item.roomId} (round ${item.round}) · sweep #${sweepId} · ${hash}`);
       return;
@@ -1562,8 +1562,27 @@ export class EvmChain implements ChainGateway {
             return;
           }
           if (s.id > BigInt(Number.MAX_SAFE_INTEGER)) return;
-          const done = this.settledLog.get(key);
-          if (done?.kind === 'settle') {
+          // only a record of THIS arena contract: a new contract restarts the session ids, so an earlier contract's
+          // record of the same `<arenaId>:<player>:<sessionId>` describes another ticket (2026-11 audit S1)
+          const arenaNow = this.arena!;
+          const done = this.settledLog.get(key, arenaNow);
+          let reorged = done?.kind === 'settle';
+          if (done && reorged) {
+            // the original settlement still has a successful receipt with this session's `Settled`: it was not
+            // reorged out, so the open session is a new ticket and goes back at its entry fee like any stale one
+            let mined: TxReceipt | null = null;
+            try {
+              mined = isHash(done.tx) ? await this.client!.receipt(done.tx as Hash, arenaNow, LATE_RECEIPT_TIMEOUT_MS) : null;
+            } catch {
+              return; // next sweep
+            }
+            const same = mined?.status === 'success' && mined.events.some((e) => e.name === 'Settled' && e.arenaId === c.arenaId && e.player.toLowerCase() === c.player.toLowerCase() && e.sessionId === c.sessionId);
+            if (same) {
+              this.log(`!!! chain: ${short(key)} is open, but its settlement ${done.tx} is still mined — treated as a new ticket (refund at the entry fee), never paid the old result`);
+              reorged = false;
+            }
+          }
+          if (done && reorged) {
             // we settled exactly this session and saw the receipt, yet it is open again: the transaction was
             // reorged out. Send the same result again; never refund it at the entry fee (see SettledLog)
             this.log(`!!! chain: ${short(key)} was settled in ${done.tx} but is open again (reorg?) — re-sending the same payout`);
