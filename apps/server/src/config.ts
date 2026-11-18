@@ -6,6 +6,7 @@ import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MI
 import { GAS_PRICE_URL_DEFAULT } from '@coinnibal/sdk';
 import { getAddress, isAddress } from 'viem';
 import { DEFAULT_ART_STYLE, parseArtStyle, type ArtStyle } from './site/nft/render';
+import { JOIN_PERMIT_DEFAULTS, type JoinPermitConfig } from './stake/join-permits';
 
 export interface ServerConfig {
   port: number;
@@ -37,6 +38,14 @@ export interface ServerConfig {
   privateRoomCapacity: number;
   /** Humans per arena instance before another instance opens (`ARENA_INSTANCE_CAP`). */
   arenaInstanceCap: number;
+  /**
+   * Join permits (CoinnibalArena v4, `stake/join-permits.ts`): `JOIN_PERMIT_TTL_S` (default 600, at most 3600),
+   * `JOIN_PERMIT_PER_IP` (12 per 10 min), `JOIN_PERMIT_PER_SUBNET` (an IPv6 /64, 30 per 10 min),
+   * `JOIN_PERMIT_PER_WALLET` (20 per 10 min), `JOIN_PERMIT_ARENA_CAP` (live permits + unseated tickets per arena;
+   * 0 = the seats a round can take: `ARENA_INSTANCE_CAP` × the scaler's max instances) and `NO_SHOW_LIMIT` (tickets
+   * gone back unplayed in 24 h before a wallet gets no permit; default 3, 0 = off).
+   */
+  joinPermits: JoinPermitConfig;
   /**
    * Room worker threads (`GAME_WORKERS`): rooms (simulation, bots, snapshots) run in this many
    * `worker_threads`, the main thread keeps HTTP, sockets, the chain and the journal. 0: every room
@@ -408,6 +417,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     practiceCapacity: Math.max(1, int(env.PRACTICE_CAPACITY ?? env.FREE_ROOM_CAPACITY, CAPACITY.practice)),
     privateRoomCapacity: int(env.PRIVATE_ROOM_CAPACITY, CAPACITY.private),
     arenaInstanceCap: Math.max(1, int(env.ARENA_INSTANCE_CAP, CAPACITY.arena)),
+    joinPermits: {
+      ttlS: Math.max(60, Math.min(3600, int(env.JOIN_PERMIT_TTL_S, JOIN_PERMIT_DEFAULTS.ttlS))),
+      perIp: Math.max(1, int(env.JOIN_PERMIT_PER_IP, JOIN_PERMIT_DEFAULTS.perIp)),
+      perSubnet: Math.max(1, int(env.JOIN_PERMIT_PER_SUBNET, JOIN_PERMIT_DEFAULTS.perSubnet)),
+      perWallet: Math.max(1, int(env.JOIN_PERMIT_PER_WALLET, JOIN_PERMIT_DEFAULTS.perWallet)),
+      arenaCap: Math.max(0, int(env.JOIN_PERMIT_ARENA_CAP, JOIN_PERMIT_DEFAULTS.arenaCap)),
+      noShowLimit: Math.max(0, int(env.NO_SHOW_LIMIT, JOIN_PERMIT_DEFAULTS.noShowLimit)),
+    },
     gameWorkers: gameWorkers(env),
     gameWorkerHangMs: Math.max(2, int(env.GAME_WORKER_HANG_S, 10)) * 1000,
     round: parseRoundConfig(env),

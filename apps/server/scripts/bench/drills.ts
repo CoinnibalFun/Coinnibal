@@ -1,5 +1,5 @@
 /**
- * Failure drills against a real CoinnibalArena v3 (hardhat node, blocks every 250 ms) and the real game server in a
+ * Failure drills against a real CoinnibalArena v4 (hardhat node, blocks every 250 ms) and the real game server in a
  * child process (`drill-server.ts`, NODE_ENV=production, 3 room workers, the production viem client and RPC
  * budget). DRILL_PLAYERS players buy real tickets over the four arenas, connect over WebSocket, sign in (session
  * tokens), take their seats and steer. Then one failure per drill:
@@ -389,9 +389,13 @@ for (const drill of DRILLS) {
     const late = players[0];
     const lateArena = late.arenaId === 1 ? 2 : 1;
     const lateWallet = hh.players[0];
-    const { joinCall, sendCall, createCoinnibalWalletClient, viemChain } = await import('@coinnibal/sdk');
+    const { joinCall, sendCall, createCoinnibalWalletClient, viemChain, getJoinNonce, signJoinPermit } = await import('@coinnibal/sdk');
     const w = createCoinnibalWalletClient(hh.url, { account: lateWallet, chain: viemChain(31337, { rpcUrl: hh.url }), pollingInterval: 50 });
-    const h = await sendCall(w, joinCall(hh.arena, lateArena));
+    // the server key's join permit (CoinnibalArena v4)
+    const deadline = (await hh.pub.getBlock({ blockTag: 'latest' })).timestamp + 600n;
+    const nonce = await getJoinNonce(hh.pub, hh.arena, lateWallet.address);
+    const signature = await signJoinPermit(hh.server, { chainId: 31337, arena: hh.arena, player: lateWallet.address, arenaId: lateArena, nonce, deadline });
+    const h = await sendCall(w, joinCall(hh.arena, lateArena, { deadline, signature }));
     await hh.pub.waitForTransactionReceipt({ hash: h, pollingInterval: 50 });
     const ls = await getSession(hh.pub, hh.arena, lateArena, lateWallet.address);
     late.ws?.send(JSON.stringify({ t: 'join', room: `arena:${lateArena}`, name: 'late', skin: 1 }));

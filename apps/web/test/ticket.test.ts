@@ -63,16 +63,20 @@ function reader(o: { entryFee?: bigint; enabled?: boolean; exists?: boolean; ope
   } as never;
 }
 
+/** A join permit as the server hands it out (the contract checks the signature). */
+const PERMIT = { deadline: 1_790_000_600n, signature: `0x${'cd'.repeat(65)}` as const };
+
 describe('the ticket calls (approve, then join)', () => {
   it('asks for an exact-amount approve only when the allowance is short', async () => {
-    const plan = await planJoin(reader(), { arena: ARENA, arenaId: 3, player: ALICE, token: TOKEN });
+    const plan = await planJoin(reader(), { arena: ARENA, arenaId: 3, player: ALICE, token: TOKEN, permit: PERMIT });
     expect(plan.calls.map((c) => c.functionName)).toEqual(['approve', 'join']);
     // exactly the entry fee, to the arena: never an unlimited approval
     expect(plan.approve!.abi).toBe(erc20Abi);
     expect(plan.approve!.args).toEqual([ARENA, 1000n * ONE]);
     expect(plan.approve!.address).toBe(TOKEN);
-    expect(plan.join).toMatchObject({ address: ARENA, functionName: 'join', args: [3] });
-    const enough = await planJoin(reader({ allowance: 1000n * ONE }), { arena: ARENA, arenaId: 3, player: ALICE, token: TOKEN });
+    // the join carries the server's permit (CoinnibalArena v4)
+    expect(plan.join).toMatchObject({ address: ARENA, functionName: 'join', args: [3, PERMIT.deadline, PERMIT.signature] });
+    const enough = await planJoin(reader({ allowance: 1000n * ONE }), { arena: ARENA, arenaId: 3, player: ALICE, token: TOKEN, permit: PERMIT });
     expect(enough.calls.map((c) => c.functionName)).toEqual(['join']);
   });
 
@@ -116,9 +120,9 @@ describe('the ticket calls (approve, then join)', () => {
   });
 
   it('refuses a full or closed arena and a short balance before anything is signed', async () => {
-    await expect(planJoin(reader({ open: 300 }), { arena: ARENA, arenaId: 1, player: ALICE, token: TOKEN })).rejects.toThrow(/is full/);
-    await expect(planJoin(reader({ enabled: false }), { arena: ARENA, arenaId: 1, player: ALICE, token: TOKEN })).rejects.toThrow(/is closed/);
-    await expect(planJoin(reader({ balance: 10n }), { arena: ARENA, arenaId: 1, player: ALICE, token: TOKEN })).rejects.toThrow(/balance too low/);
+    await expect(planJoin(reader({ open: 300 }), { arena: ARENA, arenaId: 1, player: ALICE, token: TOKEN, permit: PERMIT })).rejects.toThrow(/is full/);
+    await expect(planJoin(reader({ enabled: false }), { arena: ARENA, arenaId: 1, player: ALICE, token: TOKEN, permit: PERMIT })).rejects.toThrow(/is closed/);
+    await expect(planJoin(reader({ balance: 10n }), { arena: ARENA, arenaId: 1, player: ALICE, token: TOKEN, permit: PERMIT })).rejects.toThrow(/balance too low/);
     expect(planErrorName('arena #1 is full')).toBe('ArenaFull');
     expect(planErrorName('arena #1 is closed')).toBe('ArenaDisabled');
     expect(planErrorName('balance too low for the ticket (need 1, have 0 base units)')).toBe('InsufficientBalance');

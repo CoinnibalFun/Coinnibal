@@ -92,7 +92,7 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
         <dl className="ad-kv">
           <Row label="Contract">
             <Addr value={arena} net={ctx.net} /> <span className={`ad-code mono${a.code === 'ok' ? ' is-ok' : ' is-bad'}`}>{a.code === 'ok' ? 'code hash ok' : `code ${a.code}`}</span>
-            <span className="ad-code mono is-ok">v3 · fee on profit</span>
+            <span className="ad-code mono is-ok">v4 · fee on profit · join permits</span>
           </Row>
           <Row label="Owner">
             <Addr value={cfg.admin} net={ctx.net} />
@@ -253,7 +253,7 @@ function ArenaEdit({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
 }
 
 /**
- * The fee rules of the arena v3: the pair taken from a ticket's profit (burned + to the fee wallet, at most 25 %
+ * The fee rules of the arena (since v3): the pair taken from a ticket's profit (burned + to the fee wallet, at most 25 %
  * together; new tickets only), the burn mode, the burned share of a power-up payment, and the fee wallet.
  */
 function FeeCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {

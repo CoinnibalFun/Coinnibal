@@ -5,7 +5,7 @@ default; the module that holds it is named so this page and the game cannot drif
 
 | What | Where |
 |---|---|
-| Fee on profit, payment split, cap | `packages/shared/src/fees.ts` (mirrors `CoinnibalArena` v3, `packages/contracts/contracts/CoinnibalArena.sol`) |
+| Fee on profit, payment split, cap | `packages/shared/src/fees.ts` (mirrors `CoinnibalArena` v4, `packages/contracts/contracts/CoinnibalArena.sol`) |
 | Arena tiers in US dollars, entry fees at the reference price | `DEFAULT_ARENAS`, `packages/shared/src/arenas.ts` |
 | USD → token conversion, rounding, the admin sync's diff | `packages/shared/src/arena-pricing.ts` (`usdToTokenRaw`, `arenaPriceDiff`) |
 | Token price source (manual; a Pons / DEX TWAP stub, not wired) | `apps/server/src/chain/token-price.ts` |
@@ -51,6 +51,12 @@ Game → Arena prices):
 
 - A ticket costs the arena's entry fee and **the whole of it goes into the arena vault**: the coin starts at the
   entry fee. There is no entry or ticket fee.
+- **A ticket needs the game server's permit** (`join(arenaId, deadline, signature)`, CoinnibalArena v4): a
+  single-use signature of the server key for that wallet and arena, valid for about 10 minutes. The server gives
+  one only while the game is open for the wallet, the arena is open, the wallet has no open ticket there, and the
+  arena is not full of tickets waiting for a seat. A wallet whose tickets went back unplayed 3 times in a day gets
+  no permit until the oldest of those is a day old. The permit costs nothing and changes no price or fee: it only
+  decides who may buy, so nobody can fill an arena with tickets nobody plays.
 - Value moves between players in play (eating). At the bell every live coin is paid its value.
 - **A winning ticket pays 20 % of its profit** (profit = payout − entry fee): **15 % is burned** and **5 % goes to
   the fee wallet** (the vault of the business). Each share rounds down. **A loss or a break-even pays nothing.**

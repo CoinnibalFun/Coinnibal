@@ -17,7 +17,7 @@ price at $1.
 | Tab | What it does |
 |---|---|
 | **Launch** | The live checklist: chain, server key gas, contracts deployed and registered, token, arenas, allowlist root, $1 price, mint phase, game access. Each line links to the tab that fixes it |
-| **Setup** | The deploy wizard (CoinnibalArena v3, CoinnibalNFT and, on the testnet, the TestToken), Finish setup, holder perks, the TestToken faucet, register an already deployed contract |
+| **Setup** | The deploy wizard (CoinnibalArena v4, CoinnibalNFT and, on the testnet, the TestToken), Finish setup, holder perks, the TestToken faucet, register an already deployed contract |
 | **Mint** | Phase (closed / allowlist / public), publish the allowlist root, Sync to $1, price bounds and keeper, per-wallet limits, max supply (down only), base URI and freeze, contract URI, royalty, treasury, withdraw, owner mint |
 | **Game** | Who may play, pause and per-arena open / close, map sizes, **arena prices in US dollars** (the token price, the tiers, "Sync arena prices to USD", "Re-price at next bell"), arena instances (auto-scaling), custom rooms, power-ups (priced in US dollars, converted like the tickets), leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance and gas runway |
 | **Play** | Play the arenas yourself before launch |
@@ -283,9 +283,28 @@ on a chain without Multicall3 (the log says which), so the bell of 200 tickets r
 instead of 216. Set-up and checks: deploy/vps/README.md, "RPC". `rpc: N calls/min …` in the log, once a minute per
 URL, shows the traffic and the 429s.
 
+## Join permits and no-shows
+
+Every ticket needs the game server's join permit (CoinnibalArena v4): the web asks `POST /api/arena/permit` before the
+wallet opens, and the contract refuses a `join` without the server key's signature for that wallet, arena and join
+nonce. The server refuses (and the ticket sheet says why): a game not open to the wallet (`game_closed`), a banned
+wallet, paid rooms off, an arena that is disabled, paused or kept closed (books guard, re-price), a wallet with an
+open ticket there (it resumes it), a repeated no-show (`no_show`), an arena whose live permits plus unseated tickets
+reach the seats a round can take (`arena_busy`), and too many requests from one IP, one IPv6 /64 or one wallet.
+
+- **No-shows.** A ticket the stale sweeper cancels at its entry fee because it was never seated while its arena was
+  open is a no-show (`noShow` in `chains/<id>/settled.jsonl`; a closed arena's refunds are not). `NO_SHOW_LIMIT`
+  (default 3) of them in 24 h and the wallet gets no permit until the oldest is a day old.
+- **Settings** (env): `JOIN_PERMIT_TTL_S` (600; at most 3600, the contract's window), `JOIN_PERMIT_PER_IP` (12),
+  `JOIN_PERMIT_PER_SUBNET` (30, an IPv6 /64), `JOIN_PERMIT_PER_WALLET` (20), all per 10 minutes;
+  `JOIN_PERMIT_ARENA_CAP` (0: `ARENA_INSTANCE_CAP` × the arena scaler's max instances), `NO_SHOW_LIMIT` (3; 0 = off).
+- **A new server key** (`setServerAuthority`) voids every permit the old key signed; players simply ask again.
+- A refused permit costs the player nothing: nothing is signed. A permit that runs out during a slow approval is asked
+  again before the join.
+
 ## Fees, burns and the fee wallet
 
-CoinnibalArena v3 takes **no entry fee**. A winning ticket pays a fee on its **profit** (payout − entry fee):
+CoinnibalArena v4 takes **no entry fee**. A winning ticket pays a fee on its **profit** (payout − entry fee):
 `burnBps` (15 %) is burned and `vaultBps` (5 %) goes to the fee wallet, both in the `settle` batch that settles it
 (one burn and one transfer per batch). A loss or a break-even pays nothing; an unplayed ticket is cancelled with its
 full entry fee back. Power-up packs are paid with `pay`: `paymentBurnBps` (50 %) is burned and the rest goes to the
@@ -379,8 +398,9 @@ Everything is done from `/admin` with the owner wallet; nothing needs a terminal
 4. **Deploy** (Setup → the deploy wizard; each step is previewed and registered with the server on success):
    - **TestToken** (testnet only): an ERC20Burnable game token with a public faucet (1,000,000 an hour per wallet,
      2,000,000 for emblem holders); apart from the faucet only the owner mints.
-   - **CoinnibalArena v3** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
-     The server checks the code hash and the server authority before it registers it.
+   - **CoinnibalArena v4** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
+     The server checks the code hash and the server authority before it registers it. An arena of an earlier build
+     (v3, before the join permits) reads "redeploy needed": deploy the new one and register it.
    - **CoinnibalNFT** at the $1 price in ETH (the wizard reads ETH/USD).
 5. **Finish setup** (one button, the remaining steps in order): set the TestToken as the arena's game token, create
    the four arenas (1,000 / 3,000 / 5,000 / 10,000: the $1 / $3 / $5 / $10 tiers at the reference price of $0.001 a
@@ -442,7 +462,7 @@ The testnet and the mainnet are two networks of the same chain; the server follo
    (the mainnet refuses less), keep `SERVER_PRIVATE_KEY` or rotate it, fund the server key with ETH, and restart.
    Integrity auto-hold is on by default there, and the secret exports are off (`ADMIN_SECRET_EXPORT`). The server opens a clean state in `DATA_DIR/chains/4663/`; the testnet's records stay in
    `chains/46630/` (the Network tab lists them).
-2. Deploy CoinnibalArena v3 and CoinnibalNFT from `/admin` (no TestToken on mainnet), set the token, create the arenas,
+2. Deploy CoinnibalArena v4 and CoinnibalNFT from `/admin` (no TestToken on mainnet), set the token, create the arenas,
    set the holder perks, publish the allowlist root, Sync to $1, then price the arenas in US dollars (set the token
    price → sync → sign, "Arena prices in US dollars"). Keep burn mode 0 until the probe shows the token's
    `burn()` works.
@@ -697,11 +717,14 @@ The fee wallet and the NFT treasury are separate settings: change them too if th
    start) or set `SERVER_PRIVATE_KEY` to a new 0x key or key file. Start the server and note the new `serverKey`.
 3. Fund the new key with ETH.
 4. Game → the arena contract → **Server authority** → the new key (`setServerAuthority`). If the old key was the NFT price keeper, set the
-   new one as keeper too (`setPriceKeeper`). The pending settlements in the journal go out with the new key.
+   new one as keeper too (`setPriceKeeper`). The pending settlements in the journal go out with the new key. Every
+   join permit the old key signed is refused from then on (players simply ask again); until step 4 the new key's
+   permits are refused, so new tickets wait for it.
 5. Move any ETH left on the old key elsewhere and destroy it.
 
 If the key **leaked**: pause first, then step 4 at once. Until it is replaced the old key can settle open tickets
-with any amount up to a vault and burn up to a vault with `sweepLoot`.
+with any amount up to a vault, burn up to a vault with `sweepLoot`, and sign join permits for any wallet (they only
+let a wallet buy a ticket at the arena's price, which pause stops).
 
 ## Journal and data backup
 
