@@ -127,9 +127,12 @@ function Wl() {
   );
 }
 
-/** The WL while applications are not open: the site's shared closed notice (its heading the one label), with the way back to an earlier entry. */
+/**
+ * The WL while applications are not open: the site's shared closed notice (its heading the one label). Nobody can have
+ * applied to a WL that never opened, so there is no sign-in here (a returning applicant who is signed in sees their
+ * status before this page).
+ */
 function WlClosed() {
-  const [signin, setSignin] = useState(false);
   const t = useT();
   // the tab reads like the site's other closed pages (the WL page itself, open or with a status, keeps its own title)
   useEffect(() => {
@@ -138,23 +141,7 @@ function WlClosed() {
       document.title = t('site.title.wl');
     };
   }, [t]);
-  return (
-    <>
-      <ClosedNotice title={t('wp.closed.title')} lede={t('wp.closed.body')}>
-        <div className="wl-closed__again">
-          <button type="button" className="wl-textlink" onClick={() => setSignin((v) => !v)} aria-expanded={signin}>
-            {t('wp.closed.signin')}
-          </button>
-          {signin && (
-            <Sticker className="wl-signin-card" tone="white" pad="sm">
-              <p className="wl-signin-card__lede">{t('wp.closed.signinLede')}</p>
-              <WalletSignIn label={t('wp.signinStatus')} />
-            </Sticker>
-          )}
-        </div>
-      </ClosedNotice>
-    </>
-  );
+  return <ClosedNotice title={t('wp.closed.title')} lede={t('wp.closed.body')} />;
 }
 
 const STATUS_COPY = {
