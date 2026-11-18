@@ -47,10 +47,10 @@ Game → Arena prices):
   books all use that recorded amount, never the arena's current entry fee. On top of that the contract refuses a new
   entry fee while any ticket of that arena is open (`ArenaBusy`): an arena is re-priced between rounds.
 
-## 2. No entry fee, a fee on profit
+## 2. No fee on the ticket, a fee on profit
 
-- A ticket costs the arena's entry fee and **the whole of it goes into the arena vault**: the coin starts at the
-  entry fee. There is no entry or ticket fee.
+- A ticket costs the arena's ticket price (the contract's `entryFee`) and **the whole of it goes into the arena
+  vault**: the coin starts at the ticket price. Nothing is taken from the ticket.
 - Value moves between players in play (eating). At the bell every live coin is paid its value.
 - **A winning ticket pays 20 % of its profit** (profit = payout − entry fee): **15 % is burned** and **5 % goes to
   the fee wallet** (the vault of the business). Each share rounds down. **A loss or a break-even pays nothing.**

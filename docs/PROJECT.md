@@ -212,7 +212,7 @@ and seats, and it closes as soon as it has stood empty for 2 minutes. `POST /api
 
 ### 3.1 The fee on profit (CoinnibalArena v3)
 
-There is no entry fee: the whole ticket price goes into the arena vault and the coin starts at it. When a ticket is
+No fee is taken from the ticket: the whole ticket price goes into the arena vault and the coin starts at it. When a ticket is
 settled for more than its entry fee, the arena contract takes a fee from the **profit**: 15 % is burned (the token's
 `burn()` in burn mode 1, else `0x…dEaD`) and 5 % goes to the fee wallet. A loss or a break-even pays nothing. The rates
 are fixed into the ticket at join, owner-settable for new tickets, together at most 25 %; emblem holders pay a
