@@ -3,8 +3,8 @@ import { useT } from '../../i18n';
 import { useUi } from '../../store';
 
 /**
- * The server answered a room entry with `game_closed` (the game is open to admins or NFT holders
- * only and this wallet is neither, or its sign-in expired). One calm sheet instead of an error loop.
+ * The server answered a room entry with `game_closed` (the game is open to admins only, or to NFT holders and admins,
+ * and this wallet is neither, or its sign-in expired). One calm sheet instead of an error loop; its copy fits both modes.
  */
 export function GameClosedSheet() {
   const t = useT();

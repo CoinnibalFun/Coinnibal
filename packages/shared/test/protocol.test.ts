@@ -103,7 +103,7 @@ describe('v2 message shapes', () => {
     const arena: RoomInfo = {
       id: 'arena-1-1',
       mode: 'arena',
-      name: 'Asphodel Meadow',
+      name: '$1 Room',
       width: 6400,
       height: 6400,
       players: 3,

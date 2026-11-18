@@ -113,7 +113,7 @@ describe('ticket confirm sheet', () => {
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getAllByText('1,000 $NIBAL').length).toBeGreaterThan(0);
     // arena v3: no entry fee; the fee is on profit only, split burned / fee wallet
-    expect(within(dialog).getByText('20% · on profit only · fixed for this ticket · 15% burned · 5% to the fee wallet')).toBeTruthy();
+    expect(within(dialog).getByText('20% · on profit only · fixed for this ticket · 15% burned · 5% to the team wallet')).toBeTruthy();
     expect(within(dialog).queryByText('Your coin starts at')).toBeNull();
     expect(within(dialog).getByText(/No profit, no fee/)).toBeTruthy();
     expect(within(dialog).getByText(/paid in ETH on Robinhood Chain Testnet · you have 0.42 ETH/)).toBeTruthy();
@@ -196,12 +196,12 @@ describe('ticket confirm sheet', () => {
   it("shows the server's live rates, and an emblem holder's lower pair against the normal one", () => {
     act(() => useUi.setState({ chain: { ...useUi.getState().chain!, fees: { ...useUi.getState().chain!.fees!, burnBps: 1000, vaultBps: 200 } } }));
     const view = open(PENNY);
-    expect(within(screen.getByRole('dialog')).getByText('12% · on profit only · fixed for this ticket · 10% burned · 2% to the fee wallet')).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByText('12% · on profit only · fixed for this ticket · 10% burned · 2% to the team wallet')).toBeTruthy();
     view.unmount();
     act(() => useUi.setState({ chain: chainStatus() }));
     useChainData.setState({ holder: true, config: { ...config(), holderBurnBps: 1500, holderVaultBps: 0 } });
     open(PENNY);
-    expect(within(screen.getByRole('dialog')).getByText('15% · on profit only · fixed for this ticket · 15% burned · 0% to the fee wallet · holder rate, not 20%')).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByText('15% · on profit only · fixed for this ticket · 15% burned · 0% to the team wallet · holder rate, not 20%')).toBeTruthy();
   });
 
   it('one call only when the allowance already covers the entry fee', () => {

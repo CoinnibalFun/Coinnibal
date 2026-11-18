@@ -260,7 +260,7 @@ describe('Round over sheet', () => {
     expect(screen.getByText('Fee 20% of profit')).toBeTruthy();
     expect(screen.getByText('≈ −500')).toBeTruthy();
     expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 3,000$NIBAL');
-    expect(screen.getByText('20% of your profit is the fee (15% burned, 5% to the fee wallet); no profit, no fee')).toBeTruthy();
+    expect(screen.getByText('20% of your profit is the fee (15% burned, 5% to the team wallet); no profit, no fee')).toBeTruthy();
     act(() =>
       useUi.setState({ lastSettlement: { session: 'SessV3', arenaId: 1, txHash: `0x${'5b'.repeat(32)}`, payout: 3500 * M, fee: 500 * M, burned: 375 * M, toVault: 125 * M, net: 3000 * M, at: Date.now() } }),
     );

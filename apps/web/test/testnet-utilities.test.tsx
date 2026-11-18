@@ -473,8 +473,8 @@ describe('admin groups', () => {
     defaults: { ...TEST_ARENA_DEFAULT },
     limits: { botsMin: 3, botsMax: 20 },
     rooms: [
-      { arenaId: 1, id: 'test-1', name: 'Test · Asphodel Meadow', people: 2, bots: 8, capacity: 50, closing: false, thread: 'w0' },
-      { arenaId: 2, id: 'test-2', name: 'Test · Lethe', people: 0, bots: 10, capacity: 50, closing: true },
+      { arenaId: 1, id: 'test-1', name: 'Test · $1 Room', people: 2, bots: 8, capacity: 50, closing: false, thread: 'w0' },
+      { arenaId: 2, id: 'test-2', name: 'Test · $3 Room', people: 0, bots: 10, capacity: 50, closing: true },
     ],
   };
 
@@ -489,7 +489,7 @@ describe('admin groups', () => {
     }));
     ui(<TestArenasCard ctx={ctxOf({ api: adminApi('t') })} />);
     const table = await screen.findByTestId('test-arenas-table');
-    expect(table.textContent).toContain('Test · Asphodel Meadow');
+    expect(table.textContent).toContain('Test · $1 Room');
     expect(table.textContent).toContain('2/50');
     // each person takes a bot's place: the setting (10) minus the 2 people play
     expect(table.querySelector('[data-room="test-1"]')?.textContent).toMatch(/2\/50\s*8/);

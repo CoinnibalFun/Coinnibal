@@ -208,7 +208,7 @@ export class ShareService {
 
   /**
    * The final standings a result card draws: the top `SHARE_BOARD_ROWS` and my own row (names cleaned, bots tagged);
-   * an arena's value at the bell formatted (never on a test arena's card: practice tokens).
+   * an arena's value at the bell formatted (never on a test arena's card: test tokens).
    */
   private board(o: ShareOrigin, rows: readonly RoundStanding[] | undefined): ShareBoardRow[] {
     if (!rows) return [];
@@ -345,7 +345,7 @@ export class ShareService {
 export function sharePage(card: ShareCard, origin: string): string {
   const title = `${card.test ? 'TEST · ' : ''}${card.name} · ${shareHeadline(card)} · ${BRAND_NAME}`;
   const desc = card.test
-    ? `${shareFacts(card).join(' · ')}. A testnet test arena: practice tokens, no real money.`
+    ? `${shareFacts(card).join(' · ')}. A testnet test room: test tokens, no real money.`
     : `${shareFacts(card).join(' · ')}. Coin eats coin on Robinhood Chain.`;
   const page = `${origin}/share/${card.id}`;
   const img = `${page}.png`;
