@@ -9,7 +9,7 @@ const short = (h: string) => (h.length > 22 ? `${h.slice(0, 12)}…${h.slice(-8)
 /** The step the reveal is at, in one line. */
 export function revealLine(v: NftCollectionAdminView): string {
   const p = v.provenance;
-  if (p.revealed) return `Revealed with block ${p.revealBlock} (offset ${p.offset}). Every emblem shows its art.`;
+  if (p.revealed) return `Revealed with block ${p.revealBlock} (offset ${p.offset}). Every NFT shows its art.`;
   if (p.revealBlock) return `Reveal scheduled at block ${p.revealBlock}${v.currentBlock ? ` (now ${v.currentBlock})` : ''}. Reveal once it is mined.`;
   if (v.mint && v.mint.phase !== 'closed' && !v.mint.soldOut) return 'Sealed. Close the mint (or sell out) before scheduling the reveal.';
   return 'Sealed. Schedule the reveal block when the mint is over.';
@@ -50,10 +50,10 @@ export function EmblemsCard({ ctx }: { ctx: ChainCtx }) {
   const p = view?.provenance;
   return (
     <Card
-      title="Emblems: provenance and reveal"
+      title="NFTs: provenance and reveal"
       id="mint-emblems"
       kicker="Sealed until the mint is over"
-      lede="Every token shows the sealed emblem until the reveal. Publish the two hashes before the mint opens (and put them on chain with setContractURI); after the mint, fix a future block, then reveal with its hash."
+      lede="Every token shows the sealed picture until the reveal. Publish the two hashes before the mint opens (and put them on chain with setContractURI); after the mint, fix a future block, then reveal with its hash."
     >
       {view && p && (
         <>

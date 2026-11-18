@@ -72,14 +72,14 @@ export function mainnetChecklist(net: AdminNetwork, status: StatusSnapshot | nul
   return [
     // /opt/elymum: the live server's install directory, kept from before the rename (deploy/vps/lib.sh)
     { id: 'rpc', label: 'Point the server at the mainnet (COINNIBAL_CHAIN_ID and COINNIBAL_RPC_URLS)', detail: '/opt/elymum/.env on the VPS → COINNIBAL_CHAIN_ID=4663 and COINNIBAL_RPC_URLS=<Alchemy URL>,https://rpc.mainnet.chain.robinhood.com, then coinnibal-compose up -d app. The server follows that chain; testnet records stay on file.', ok: on, where: 'Server' },
-    { id: 'access', label: 'Set Game access explicitly', detail: 'The site settings carry over from testnet (where the game is public): pick Admins or Holders in Game before anything else opens.', ok: null, where: 'Game' },
+    { id: 'access', label: 'Set Game access explicitly', detail: 'The site settings carry over from testnet: check Who may play in Game (Admins or Holders) before anything else opens.', ok: null, where: 'Game' },
     { id: 'fund', label: `Fund the server key with ${GAS_SYMBOL}`, detail: 'It sends every settlement; a little gas lasts a long time.', ok: when(a?.serverBalance != null ? a.serverBalance >= LOW_SERVER_GAS : null), where: 'Server' },
     { id: 'arena', label: 'Deploy CoinnibalArena from the owner wallet', detail: 'Setup → the deploy wizard. No address to type; it registers with the server by itself (code hash, owner and settler checked).', ok: when(!!net.arenaAddress && a?.code === 'ok'), where: 'Setup' },
     { id: 'nft', label: 'Deploy CoinnibalNFT from the owner wallet', detail: 'Setup → the deploy wizard, right after the arena. Treasury = you, base URI = this site.', ok: when(!!net.nftAddress && status?.nft?.code === 'ok'), where: 'Setup' },
-    { id: 'token', label: 'Confirm the game token on the arena', detail: 'Once, and only the real token (TOKEN_ADDRESS on the server): Setup shows it, you confirm once.', ok: when(cfg ? !!cfg.token : null), where: 'Setup' },
-    { id: 'arenas', label: 'Finish setup: the arenas, the holder perks and the holders-only $10 Room', detail: 'Setup → Finish setup, one button: your wallet confirms each step.', ok: when(cfg ? (a?.arenas.length ?? 0) >= 4 && !!cfg.holderNft : null), where: 'Setup' },
     { id: 'allowlist', label: 'Build the mainnet allowlist and publish its root', detail: 'Import the testnet holders into the WL first (Mint), then build and publish.', ok: when(nft ? nft.root !== `0x${'0'.repeat(64)}` : null), where: 'Mint' },
-    { id: 'mint', label: 'Open the mint (Allowlist, then Public)', detail: 'Mint → the phase switch.', ok: when(nft ? nft.phaseName !== 'closed' : null), where: 'Mint' },
+    { id: 'mint', label: 'Open the mint (Allowlist, then Public)', detail: 'Mint → the phase switch. The launch order: the NFT mint, then the token, then the game.', ok: when(nft ? nft.phaseName !== 'closed' : null), where: 'Mint' },
+    { id: 'token', label: 'Confirm the game token on the arena', detail: 'Once the token is launched on Pons, and only the real token: Setup shows the registered one and you confirm once (any other address goes under Advanced, typed twice).', ok: when(cfg ? !!cfg.token : null), where: 'Setup' },
+    { id: 'arenas', label: 'Finish setup: the arenas, the holder perks and the holders-only $10 Room', detail: 'Setup → Finish setup, one button: your wallet confirms each step.', ok: when(cfg ? (a?.arenas.length ?? 0) >= 4 && !!cfg.holderNft : null), where: 'Setup' },
     { id: 'game', label: 'Open the game', detail: 'Game → who may play: holders, then everyone when you are ready.', ok: null, where: 'Game' },
   ];
 }
@@ -162,7 +162,7 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
     <div className="ad-network">
       <Card title="The chain" id="net-chain" aside={<NetPill net={net} />}>
         <dl className="ad-kv">
-          <Row label="Chain">{net.info ? <span className="num">{`${net.info.name} (${net.info.id})`}</span> : <span className="ad-bad">none: EVM_RPC_URL is unset</span>}</Row>
+          <Row label="Chain">{net.info ? <span className="num">{`${net.info.name} (${net.info.id})`}</span> : <span className="ad-bad">none: COINNIBAL_RPC_URLS is unset</span>}</Row>
           <Row label="RPC">
             {net.info?.rpcUrl ? <code className="ad-addr__v">{net.info.rpcUrl}</code> : <span className="ad-none">the wallet&apos;s own</span>}{' '}
             {health &&
@@ -248,7 +248,7 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
         </div>
         {info && info.otherChains.length > 0 && (
           <p className="ad-note" data-testid="other-chains">
-            Records kept for other networks: {info.otherChains.map((id) => `${networkOf(id)?.name ?? 'a retired chain'} (${id})`).join(', ')}. They come back if CHAIN_ID points at that network again.
+            Records kept for other networks: {info.otherChains.map((id) => `${networkOf(id)?.name ?? 'a retired chain'} (${id})`).join(', ')}. They come back if COINNIBAL_CHAIN_ID points at that network again.
           </p>
         )}
       </Card>

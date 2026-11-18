@@ -70,8 +70,9 @@ export function QuickSetup({ ctx }: { ctx: ChainCtx }) {
       kicker={steps.length === 0 ? 'All set' : `${steps.length} step${steps.length === 1 ? '' : 's'} left`}
       lede={
         steps.length === 0
-          ? 'The token, the arenas, the bots, the emblem perks' + (openMint ? ' and the public mint' : '') + ' are all in place on this chain.'
-          : 'Everything still missing on this chain, in one go. Your wallet asks once per step; you only confirm.'
+          ? 'The token, the arenas, the holder perks' + (openMint ? ' and the open testnet mint' : '') + ' are all in place on this chain.'
+          : 'Everything still missing on this chain, in one go. Your wallet asks once per step; you only confirm.' +
+            (steps.some((s) => s.id === 'mint') ? ' On this testnet the last step opens the NFT mint on chain to every wallet.' : '')
       }
     >
       {steps.length > 0 && (
@@ -82,7 +83,7 @@ export function QuickSetup({ ctx }: { ctx: ChainCtx }) {
             </Row>
           )}
           {nft && (
-            <Row label="Emblem">
+            <Row label="NFT">
               <Addr value={nft} net={ctx.net} /> <span className="ad-role">the registered CoinnibalNFT</span>
             </Row>
           )}

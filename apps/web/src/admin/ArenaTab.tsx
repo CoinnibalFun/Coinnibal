@@ -109,7 +109,7 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
             {a.serverBalance === 0n && <span className="ad-bad"> no {GAS_SYMBOL} for gas: settlements cannot be sent</span>}
             {serverMismatch && <span className="ad-bad"> not this server's key ({ctx.net.serverKey})</span>}
           </Row>
-          <Row label="Fee wallet">
+          <Row label="Fee wallet (team wallet)">
             <Addr value={cfg.feeWallet} net={ctx.net} />
             {a.token && (
               <span className="ad-role num">
@@ -123,7 +123,7 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
               {cfg.burnBps} + {cfg.vaultBps} bps
             </span>{' '}
             <span className="ad-role">
-              {fmtPct(cfg.burnBps)} burned + {fmtPct(cfg.vaultBps)} to the fee wallet, of each ticket&apos;s profit only (no entry fee)
+              {fmtPct(cfg.burnBps)} burned + {fmtPct(cfg.vaultBps)} to the fee wallet, of each ticket&apos;s profit only (nothing is taken from the ticket)
             </span>
           </Row>
           <Row label="Burn mode">
@@ -272,7 +272,7 @@ function FeeCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
       title="Fees"
       id="arena-config"
       kicker={`Now ${cfg.burnBps} + ${cfg.vaultBps} bps of profit`}
-      lede={`Taken from a ticket's profit only (payout above its entry fee); a loss or a break-even pays nothing and there is no entry fee. The burned share leaves the supply, the rest goes to the fee wallet. At most ${MAX_TOTAL_FEE_BPS} bps (25 %) together; new tickets only, open ones keep the rates they were bought with.`}
+      lede={`Taken from a ticket's profit only (payout above its ticket price, the contract's entry fee); a loss or a break-even pays nothing, and nothing is taken from the ticket. The burned share leaves the supply, the rest goes to the fee wallet. At most ${MAX_TOTAL_FEE_BPS} bps (25 %) together; new tickets only, open ones keep the rates they were bought with.`}
     >
       <div className="ad-form ad-form--grid">
         <Input label="Burned" suffix="bps" value={burn} onChange={setBurn} hint={`${fmtPct(rates.burnBps)} of the profit`} />

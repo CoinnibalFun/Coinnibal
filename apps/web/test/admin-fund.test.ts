@@ -33,7 +33,7 @@ describe('a refused settings save reads in the panel words', () => {
     expect(saveErrorText(err('prices.magnet must be above 0 and at most 1000000000', 'prices.magnet'))).toBe('Pack price Magnet must be above 0 and at most 1000000000');
     expect(saveErrorText(err('kinds.practiceRookie.massCap must be 0 (no cap) or at least 200', 'kinds.practiceRookie.massCap'))).toBe('Practice · rookie mass cap must be 0 (no cap) or at least 200');
     expect(saveErrorText(err('priceGas must be an amount of the gas token like "0.05"', 'priceGas'))).toBe('Price (gas token) must be an amount of the gas token like "0.05"');
-    expect(saveErrorText(err('Not allowed', 'testnet.arenas.2.bankroll'))).toBe('Staked bots arena #2 bankroll: Not allowed');
+    expect(saveErrorText(err('Not allowed', 'tiers.2.usdCents'))).toBe('Tiers #2 Price (US cents): Not allowed');
     expect(saveErrorText(err('The server is busy', null))).toBe('The server is busy');
     expect(fieldLabel('someNewKey')).toBe('Some new key');
   });

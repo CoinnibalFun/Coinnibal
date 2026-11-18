@@ -72,7 +72,7 @@ export interface SummaryInput {
   bots?: { bots: number; humans: number; rooms: number } | null;
 }
 
-const ACCESS: Record<GameAccess, string> = { admins: 'admins only', holders: 'emblem holders', public: 'everyone', maintenance: 'maintenance (admins only)' };
+const ACCESS: Record<GameAccess, string> = { admins: 'admins only', holders: 'NFT holders', public: 'everyone', maintenance: 'maintenance (admins only)' };
 
 /**
  * "Status now / next step" for each drawer (pure, tested). The next step is always something only
@@ -88,7 +88,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
   switch (group) {
     case 'network': {
       if (!net.chain) return { now: 'The game server is not answering.', next: 'It retries every 5 s. If it stays down: on the server, run coinnibal-status (deploy/vps/README.md).' };
-      if (!net.info) return { now: 'The server has no chain.', next: 'Set EVM_RPC_URL (and CHAIN_ID) on the server and restart it.' };
+      if (!net.info) return { now: 'The server has no chain.', next: 'Set COINNIBAL_RPC_URLS and COINNIBAL_CHAIN_ID in /opt/elymum/.env on the VPS (EVM_RPC_URLS and CHAIN_ID when the server runs outside Docker), then coinnibal-compose up -d app.' };
       const bal = a?.serverBalance ?? null;
       const now = `${chain}${status ? ` · block ${status.block.toString()}` : ''}${bal !== null ? ` · server key ${formatGasAmount(bal, 4)}` : ''}`;
       if (bal === 0n) return { now, next: `Fund the server key with ${GAS_SYMBOL}: it pays the gas of every settlement.` };
@@ -107,7 +107,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
         const known = i.registry?.token?.address ?? status?.testToken?.address ?? null;
         if (known) return { now, next: 'Confirm the game token (one click, then your wallet).' };
         if (net.info && !testTokenRefusal(net.info.id)) return { now, next: 'Deploy a TestToken (below), then Finish setup.' };
-        return { now, next: 'Set TOKEN_ADDRESS on the game server to the game token, then confirm it here.' };
+        return { now, next: 'Register the game token in Setup → Advanced (Register a contract that is already deployed), then confirm it here; or enter it by hand there (typed twice).' };
       }
       if (steps.length > 0) return { now, next: `Finish setup: ${steps.length} step${steps.length === 1 ? '' : 's'} left, one button.` };
       return { now, next: null };
@@ -127,7 +127,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
       if (i.bots) parts.push(`${i.bots.humans} people · ${i.bots.bots} bots in ${i.bots.rooms} rooms`);
       const now = parts.join(' · ');
       if (cfg?.paused) return { now, next: 'Unpause the arena when it is safe to take joins again.' };
-      if (access === 'admins') return { now, next: net.mainnet ? 'Open the game to holders when the mint is live.' : 'Testnet: open the game to everyone.' };
+      if (access === 'admins') return { now, next: net.mainnet ? 'Open the game to holders when the mint is live and the token is set.' : 'When you decide: open the testnet game (Game → Who may play).' };
       return { now, next: null };
     }
     case 'community': {

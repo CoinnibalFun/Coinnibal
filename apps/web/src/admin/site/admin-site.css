@@ -263,24 +263,6 @@
   margin-top: -16px;
 }
 
-/* play */
-.ad-play {
-  padding-right: 180px;
-  min-height: 200px;
-}
-.ad-play__coin {
-  position: absolute;
-  right: 28px;
-  bottom: 18px;
-}
-.ad-playbtn {
-  text-decoration: none;
-}
-.kb .ad-playbtn {
-  color: var(--ink-fixed);
-  text-decoration: none;
-}
-
 /* settings: who may play */
 .ad-access {
   margin: 0;
@@ -454,10 +436,6 @@ label.ad-cap,
 @media (max-width: 639px) {
   .ad-int__banform {
     grid-template-columns: 1fr;
-  }
-  .ad-play {
-    padding-right: 16px;
-    padding-bottom: 150px;
   }
   .ad-gate {
     flex-direction: column;

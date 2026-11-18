@@ -321,10 +321,10 @@ describe('admin groups', () => {
     const mainnet = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, nftAddress: '0x0000000000000000000000000000000000000f7e' }));
     const noTt = { ...registered, testToken: null } as unknown as StatusSnapshot;
     expect(groupSummary('setup', { net: mainnet, status: noTt, registry: { token: { address: '0x0000000000000000000000000000000000007e57' } } as never }).next).toMatch(/Confirm the game token/);
-    expect(groupSummary('setup', { net: mainnet, status: noTt }).next).toMatch(/TOKEN_ADDRESS/);
+    expect(groupSummary('setup', { net: mainnet, status: noTt }).next).toMatch(/Register the game token in Setup → Advanced/);
     for (const g of ['setup', 'mint', 'game', 'network'] as const) expect(groupSummary(g, { net: both, status: registered }).next ?? '').not.toMatch(/regist|paste/i);
-    expect(groupSummary('network', { net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null }).next).toMatch(/EVM_RPC_URL/);
-    expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never }).next).toMatch(/Testnet: open the game to everyone/);
+    expect(groupSummary('network', { net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null }).next).toMatch(/COINNIBAL_RPC_URLS/);
+    expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never }).next).toMatch(/open the testnet game \(Game → Who may play\)/);
   });
 
   it('lists the mainnet launch with the server step first; nothing is ticked on testnet', () => {
@@ -367,7 +367,7 @@ describe('admin groups', () => {
     ui(<ImportHoldersCard ctx={ctxOf({ api: adminApi('t') })} />);
     await waitFor(() => expect((screen.getByTestId('mint-import') as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByTestId('mint-import'));
-    expect((await screen.findByTestId('mint-import-result')).textContent).toMatch(/^12 wallets \(15 emblems\) · 3 also on the WL · imported .* from chain 46630$/);
+    expect((await screen.findByTestId('mint-import-result')).textContent).toMatch(/^12 wallets \(15 NFTs\) · 3 also on the WL · imported .* from chain 46630$/);
     expect(body).toEqual({});
   });
 
@@ -408,7 +408,7 @@ describe('admin groups', () => {
     const table = await screen.findByTestId('maps-table');
     // people only in arenas and practice; the practice bots of a free custom room are counted apart
     expect(screen.getByText('3 people · 2 rooms · 3 practice bots')).toBeTruthy();
-    expect(document.body.textContent).toMatch(/Practice bots exist only in free custom rooms/);
+    expect(document.body.textContent).toMatch(/Practice bots play in free custom rooms .*and, on a testnet, in the test arenas/);
     // the side at 1 / 10 / 25 / 50 / 100 people, and the live room's side
     expect(table.textContent).toContain('3060 / 3600 / 4500 / 6000 / 9000');
     expect(table.textContent).toContain('3600');

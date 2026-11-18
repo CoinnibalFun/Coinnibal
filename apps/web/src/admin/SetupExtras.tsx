@@ -52,7 +52,7 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
     const warn = holderPerksWarnings({ nft: addr, holder: rates, normal: { burnBps: cfg.burnBps, vaultBps: cfg.vaultBps }, holdersOnlyIds });
     guard(() =>
       ctx.open({
-        title: off ? 'Turn the holder perks off' : `Holder perks: ${rates.burnBps} + ${rates.vaultBps} bps of profit for emblem holders`,
+        title: off ? 'Turn the holder perks off' : `Holder perks: ${rates.burnBps} + ${rates.vaultBps} bps of profit for NFT holders`,
         contract: 'CoinnibalArena',
         call: setHolderPerksCall(arena, addr, rates),
         ownerOf: arena,
@@ -68,7 +68,7 @@ export function HolderPerksCard({ ctx }: { ctx: ChainCtx }) {
       title="Holder perks"
       id="holder-perks"
       kicker={cfg.holderNft ? `On · ${cfg.holderBurnBps} + ${cfg.holderVaultBps} bps` : 'Off'}
-      lede={`Emblem holders' tickets get their own fee pair on profit (burned + to the fee wallet; used when it totals less than the normal pair, fixed into each ticket at join) and holders may enter holders-only arenas. Normal pair: ${cfg.burnBps} + ${cfg.vaultBps} bps.`}
+      lede={`NFT holders' tickets get their own fee pair on profit (burned + to the fee wallet; used when it totals less than the normal pair, fixed into each ticket at join) and holders may enter holders-only arenas. Normal pair: ${cfg.burnBps} + ${cfg.vaultBps} bps.`}
     >
       <dl className="ad-kv">
         <Row label="Holder NFT">{cfg.holderNft ? <Addr value={cfg.holderNft} net={ctx.net} /> : <span className="ad-none">none (perks off)</span>}</Row>
@@ -115,7 +115,7 @@ export function HoldersOnlyCard({ ctx }: { ctx: ChainCtx }) {
   if (!arena || !cfg || !a || a.arenas.length === 0) return null;
   const d = cfg.decimals;
   return (
-    <Card title="Holders-only arenas" id="holders-only" lede="A holders-only arena admits emblem holders only. Open tickets are not affected. The $10 Room (#4) is the holders' room.">
+    <Card title="Holders-only arenas" id="holders-only" lede="A holders-only arena admits NFT holders only. Open tickets are not affected. The $10 Room (#4) is the holders' room.">
       <div className="ad-tablewrap">
         <table className="ad-table">
           <thead>
@@ -206,7 +206,7 @@ export function TestTokenAdminCard({ ctx }: { ctx: ChainCtx }) {
         <Row label="Server key">
           <Addr value={server} net={ctx.net} /> <span className="ad-role">from the game server</span>
         </Row>
-        <Row label="Emblem">
+        <Row label="NFT">
           <Addr value={nft} net={ctx.net} /> <span className="ad-role">the registered CoinnibalNFT</span>
         </Row>
       </dl>
@@ -214,9 +214,9 @@ export function TestTokenAdminCard({ ctx }: { ctx: ChainCtx }) {
         <Btn
           disabled={!nft || (!!f?.holderNft && sameAddress(f.holderNft, nft))}
           testId="tt-holder-nft"
-          onClick={() => nft && open('Emblem holders get the holder faucet amount', setHolderNftCall(token, nft))}
+          onClick={() => nft && open('NFT holders get the holder faucet amount', setHolderNftCall(token, nft))}
         >
-          Use the emblem for the 2x
+          Use the NFT for the 2x
         </Btn>
       </div>
       <div className="ad-form2 ad-form3">
