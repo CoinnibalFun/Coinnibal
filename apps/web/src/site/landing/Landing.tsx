@@ -272,7 +272,7 @@ function Feast() {
           </div>
         </div>
         <div ref={menu} className="ld-feast__menu-wrap rv-v">
-          <Sticker tone="white" pad="lg" lift="lg" className="ld-menu">
+          <Sticker tone="white" pad="lg" lift="none" className="ld-menu">
             <h3 className="ld-menu__title">{t('ld.menu.title')}</h3>
             <ul className="ld-menu__list">
               <MenuLine i={0} art={<FoodBit kind="pear" size={44} />} dish={t('ld.menu.food')} note={t('ld.menu.foodNote')} price={t('ld.menu.foodPrice')} />
