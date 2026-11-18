@@ -11,6 +11,7 @@ import type { ServerConfig } from './config';
 import type { Leaderboards } from './leaderboards';
 import { healthReport } from './health';
 import { clientIp, trustProxyHops } from './net/gateway';
+import { rateKey } from './net/ip-key';
 import { Limiter } from './net/limiter';
 import type { PriceKeeper } from './chain/price-keeper';
 import type { RoomManager } from './rooms/manager';
@@ -290,10 +291,13 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
       return;
     }
     const ip = clientIp(req, trustProxy);
+    // every per-client limit counts an IPv6 client as its /64 (one customer holds the whole /64); the exact address
+    // is kept for the admin audit and the logs
+    const key = rateKey(ip);
     try {
       if (url.pathname.startsWith('/api/')) {
-        if (!apiLimiter.allow(ip)) return json(res, 429, { error: 'rate_limited' });
-        if (ctx.site && (await ctx.site.handle(req, res, url, ip))) return;
+        if (!apiLimiter.allow(key)) return json(res, 429, { error: 'rate_limited' });
+        if (ctx.site && (await ctx.site.handle(req, res, url, key, ip))) return;
         switch (url.pathname) {
           case '/api/health': {
             // `?live=1`: the container's liveness check (Docker HEALTHCHECK): the process answers. A server that only
@@ -320,11 +324,11 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             return json(res, 200, body);
           }
           case '/api/auth/nonce': {
-            if (!nonceLimiter.allow(ip)) return json(res, 429, { error: 'rate_limited' });
+            if (!nonceLimiter.allow(key)) return json(res, 429, { error: 'rate_limited' });
             const address = checksumAddress(url.searchParams.get('address'));
             if (!address) return json(res, 400, { error: 'bad_request', message: 'address must be an EVM address (0x…)' });
             try {
-              return json(res, 200, ctx.auth.issueNonce(address, siweOrigin(cfg, req, trustProxy, ctx.chain.status().chainId), Date.now(), ip));
+              return json(res, 200, ctx.auth.issueNonce(address, siweOrigin(cfg, req, trustProxy, ctx.chain.status().chainId), Date.now(), key));
             } catch (err) {
               if (err instanceof NonceLimitError) return json(res, 429, { error: 'rate_limited', message: 'Too many sign-in attempts. Wait a few minutes.' });
               throw err;
@@ -369,7 +373,7 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             return json(res, 404, { error: 'not found' });
         }
       }
-      if (url.pathname.startsWith('/share/') && ctx.shares?.handle(req, res, url.pathname, ip)) return;
+      if (url.pathname.startsWith('/share/') && ctx.shares?.handle(req, res, url.pathname, key)) return;
       if (cfg.webDist && (req.method === 'GET' || req.method === 'HEAD') && serveStatic(cfg.webDist, req, res, url.pathname)) return;
       const to = siteRedirect(cfg, req, url);
       if (to) {
