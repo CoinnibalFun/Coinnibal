@@ -16,7 +16,8 @@ export function useIdleBudget(root: RefObject<HTMLElement | null>): void {
     const main = root.current;
     if (!main || reduced || typeof IntersectionObserver === 'undefined') return;
     const parts = [...main.querySelectorAll<HTMLElement>(PARTS)];
-    // a part counts as on screen once 48 px of it are in (a sliver at the edge, or one just touching it, does not)
+    // a part counts as on screen once 48 px of it are in below the sticky header (about 90 px): a sliver at the edge,
+    // one just touching it, or one scrolled up under the header does not
     const io = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
@@ -25,7 +26,7 @@ export function useIdleBudget(root: RefObject<HTMLElement | null>): void {
           else el.setAttribute('data-paused', '');
         }
       },
-      { rootMargin: '-48px 0px' },
+      { rootMargin: '-140px 0px -48px 0px' },
     );
     for (const el of parts) io.observe(el);
     return () => {
