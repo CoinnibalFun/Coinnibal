@@ -27,8 +27,8 @@ const COMMUNITY_ITEMS: TabItem<CommunityTab>[] = [
 /** Each drawer's heading: a title and one honest line under it. */
 const BENCH: Record<AdminGroup, { title: string; lede: string }> = {
   network: { title: 'Network', lede: 'The chain the server follows, its RPC, the server key, the contracts, and the way to mainnet.' },
-  setup: { title: 'Setup', lede: 'Every contract leaves from your wallet, and your wallet becomes its owner. Then the emblem perks and the TestToken.' },
-  mint: { title: 'Mint', lede: 'Start and stop the mint, the allowlist, the $1 price and the small print of the Coinnibal NFT.' },
+  setup: { title: 'Setup', lede: 'Every contract leaves from your wallet, and your wallet becomes its owner. Then the NFT perks and the TestToken.' },
+  mint: { title: 'Mint', lede: 'Start and stop the mint, the allowlist, the price and the small print of the Coinnibal NFT.' },
   game: { title: 'Game', lede: 'Who may play, the arena switches, the bots and the rooms right now.' },
   community: { title: 'Community', lede: 'The WL, the chores applicants do, and the communities asking for spots.' },
   safety: { title: 'Safety', lede: 'Farming, feeding and collusion (evidence for a person to weigh, never a verdict), and the pictures players wear.' },

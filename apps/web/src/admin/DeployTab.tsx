@@ -111,7 +111,7 @@ function DoneCard({ ctx }: { ctx: ChainCtx }) {
     { name: 'CoinnibalNFT', address: ctx.net.nftAddress, code: ctx.status?.nft?.code },
   ];
   return (
-    <Card title="The ring is built." id="deploy-done" kicker="All seven steps" tone="done" lede="Both contracts are live and registered, the token is set and the four arenas exist. Launch shows what is left: the allowlist, the mint and who may play.">
+    <Card title="The ring is built." id="deploy-done" kicker="All seven steps" tone="done" lede="Both contracts are live and registered, the token is set and the four arenas exist. Network (the launch checklist) shows what is left: the allowlist, the mint and who may play.">
       <ul className="ad-registered">
         {rows.map((r) => (
           <li key={r.name}>
@@ -300,7 +300,7 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
         setQuote(q.gasUsd !== null ? `${GAS_SYMBOL} = $${q.gasUsd}` : null);
         setForm((f) => (f.priceGas ? f : defaultNftForm(location.origin, q.priceWei, ctx.me)));
       },
-      (e: Error) => live && setErr(`The $1 price could not be read (${e.message}); enter a price in ${GAS_SYMBOL}.`),
+      (e: Error) => live && setErr(`The server's mint price could not be read (${e.message}); enter a price in ${GAS_SYMBOL}.`),
     );
     return () => {
       live = false;
@@ -311,10 +311,10 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
   }, [ctx.me]);
   const set = (k: keyof NftForm) => (v: string) => setForm({ ...form, [k]: v });
   return (
-    <Card title="Deploy CoinnibalNFT" id="deploy-nft" kicker={kicker} lede="The emblem contract. Everything below goes into its constructor; most of it can be changed later from Mint.">
+    <Card title="Deploy CoinnibalNFT" id="deploy-nft" kicker={kicker} lede="The NFT contract. Everything below goes into its constructor; most of it can be changed later from Mint.">
       <div className="ad-form ad-form--grid">
         <Input label="Max supply" value={form.maxSupply} onChange={set('maxSupply')} />
-        <Input label={`Mint price (${GAS_SYMBOL})`} suffix={GAS_SYMBOL} value={form.priceGas} onChange={set('priceGas')} hint={quote ? `$1 at ${quote}` : 'From /api/admin/mint/price'} />
+        <Input label={`Mint price (${GAS_SYMBOL})`} suffix={GAS_SYMBOL} value={form.priceGas} onChange={set('priceGas')} hint={quote ? `The server's mint target at ${quote}` : 'From /api/admin/mint/price'} />
         <Input label="Allowlist limit per wallet" value={form.wlLimit} onChange={set('wlLimit')} />
         <Input label="Public limit per wallet" value={form.publicLimit} onChange={set('publicLimit')} />
       </div>
@@ -532,7 +532,7 @@ export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }
       lede={
         known
           ? 'The ERC-20 the arenas take. The server already knows it: check it, then confirm once in the preview. It can never be changed.'
-          : 'The ERC-20 the arenas take (the game token). The server has no game token registered yet: set TOKEN_ADDRESS on the game server and reload, and it shows up here.'
+          : 'The ERC-20 the arenas take (the game token). The server has no game token registered yet: register it (Setup → Advanced → Register a contract that is already deployed; TOKEN_ADDRESS when the server runs outside Docker) and it shows up here, or enter it by hand below.'
       }
     >
       {known && (
@@ -666,7 +666,7 @@ export function TestTokenCard({ ctx, local: given, onLocal: onGiven }: { ctx: Ch
         {token && (
           <Btn
             testId="faucet"
-            onClick={() => ctx.open({ title: 'TestToken faucet (1,000,000 to you)', contract: 'TestToken', call: faucetCall(token), onDone: () => ctx.refresh() })}
+            onClick={() => ctx.open({ title: 'TestToken faucet (one claim to your wallet; the holder amount if you hold the NFT)', contract: 'TestToken', call: faucetCall(token), onDone: () => ctx.refresh() })}
           >
             Faucet
           </Btn>

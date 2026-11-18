@@ -51,14 +51,14 @@ export function setupSteps(ctx: { status: StatusSnapshot | null }, opts: { openM
       out.push({ id: `arena-${id}`, label: `Create ${arenaName(id)}`, call });
     }
   }
-  if (tt?.address && nft && !sameAddress(tt.faucet?.holderNft ?? null, nft)) out.push({ id: 'faucet-nft', label: 'Emblem holders get 2x from the faucet', call: setHolderNftCall(tt.address, nft) });
+  if (tt?.address && nft && !sameAddress(tt.faucet?.holderNft ?? null, nft)) out.push({ id: 'faucet-nft', label: 'NFT holders get 2x from the faucet', call: setHolderNftCall(tt.address, nft) });
   // the holder perk: missing (or on another NFT), or on the right NFT with a pair that drifted from the owner's
   // (the site tells holders 8 % + 2 %): either way one call sets the NFT and the owner's pair
   const holderNft = (cfg.holderNft ?? null) as Address | null;
   const perksNft = nft && !sameAddress(holderNft, nft) ? nft : holderNft && holderPairDrifted(cfg) ? holderNft : null;
   if (perksNft) {
     const holder = { burnBps: SUGGESTED_HOLDER_BURN_BPS, vaultBps: SUGGESTED_HOLDER_VAULT_BPS };
-    const label = `Emblem holders pay ${bpsToPercent(holder.burnBps + holder.vaultBps)} % of profit instead of ${bpsToPercent(cfg.burnBps + cfg.vaultBps)} %`;
+    const label = `NFT holders pay ${bpsToPercent(holder.burnBps + holder.vaultBps)} % of profit instead of ${bpsToPercent(cfg.burnBps + cfg.vaultBps)} %`;
     out.push({ id: 'perks', label, call: setHolderPerksCall(arena, perksNft, holder) });
   }
   if (nft) {
@@ -66,10 +66,10 @@ export function setupSteps(ctx: { status: StatusSnapshot | null }, opts: { openM
     for (const id of DEFAULT_HOLDERS_ONLY_ARENA_IDS) {
       const a = known.get(id);
       // created in this run, or existing but still open to everyone
-      if ((!a || !a.exists) && token) out.push({ id: `holders-${id}`, label: `${arenaName(id)}: emblem holders only`, call: setArenaHoldersOnlyCall(arena, id, true) });
-      else if (a && a.exists && !a.holdersOnly) out.push({ id: `holders-${id}`, label: `${arenaName(id)}: emblem holders only`, call: setArenaHoldersOnlyCall(arena, id, true) });
+      if ((!a || !a.exists) && token) out.push({ id: `holders-${id}`, label: `${arenaName(id)}: NFT holders only`, call: setArenaHoldersOnlyCall(arena, id, true) });
+      else if (a && a.exists && !a.holdersOnly) out.push({ id: `holders-${id}`, label: `${arenaName(id)}: NFT holders only`, call: setArenaHoldersOnlyCall(arena, id, true) });
     }
   }
-  if (opts.openMint && nft && s?.nft?.state && s.nft.state.phaseName !== 'public') out.push({ id: 'mint', label: 'Open the mint to everyone (Public)', call: setPhaseCall(nft, 'public') });
+  if (opts.openMint && nft && s?.nft?.state && s.nft.state.phaseName !== 'public') out.push({ id: 'mint', label: "Open the testnet NFT mint to every wallet (CoinnibalNFT.setPhase(public)): anyone can mint on chain right after this, even while the site's mint page is closed", call: setPhaseCall(nft, 'public') });
   return out;
 }

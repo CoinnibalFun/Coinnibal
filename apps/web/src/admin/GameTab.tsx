@@ -389,8 +389,9 @@ function NumCell({
 }
 
 /**
- * Game → maps: the dynamic map size per room kind and every room's live numbers. Arenas and practice ponds have
- * people only; practice bots exist only in free custom rooms (their creator turns them on).
+ * Game → maps: the dynamic map size per room kind and every room's live numbers. Official arenas and practice ponds
+ * have people only; practice bots play in free custom rooms (their creator turns them on) and, on a testnet, in the
+ * test arenas.
  */
 export function MapsCard({ ctx }: { ctx: ChainCtx }) {
   const [view, setView] = useState<MapAdminView | null>(null);
@@ -458,7 +459,7 @@ export function MapsCard({ ctx }: { ctx: ChainCtx }) {
       title="Maps"
       id="maps"
       kicker={`${people} people · ${view.rooms.length} rooms${bots ? ` · ${bots} practice bots` : ""}`}
-      lede="Arenas and practice ponds are played by people only. Practice bots exist only in free custom rooms, where the creator turns them on (count and difficulty); they are tagged BOT and carry no value."
+      lede="Official arenas and practice ponds are played by people only. Practice bots play in free custom rooms (the creator picks count and difficulty) and, on a testnet, in the test arenas (Test arenas card). They are tagged BOT and carry no value."
     >
       <MapScaleTable draft={draft} view={view} setMap={setMap} />
       {view.rooms.length > 0 && (

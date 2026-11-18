@@ -277,7 +277,7 @@ describe('power-ups priced in US dollars', () => {
 describe('integrity: the finer flag kinds', () => {
   it('names the subtype next to the kind', () => {
     expect(flagKindText({ kind: 'pair_transfer', subtype: 'non_aggression' } as IntegrityFlag)).toBe('Pair transfer · Non-aggression pact');
-    expect(flagKindText({ kind: 'shared_device', subtype: 'emblem_shared' } as IntegrityFlag)).toBe('Shared IP or browser · Emblem shared');
+    expect(flagKindText({ kind: 'shared_device', subtype: 'emblem_shared' } as IntegrityFlag)).toBe('Shared IP or browser · NFT shared');
     expect(flagKindText({ kind: 'eject_feed' } as IntegrityFlag)).toBe('Eject feeding');
     expect(Object.keys(SUBTYPE_LABEL).sort()).toEqual(['emblem_shared', 'fresh_feeders', 'non_aggression', 'shared_funding']);
   });

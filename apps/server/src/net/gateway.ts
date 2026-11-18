@@ -694,7 +694,7 @@ export class Gateway {
       const holder = conn.wallet && this.holderCheck ? await this.holderCheck(conn.wallet).catch(() => false) : false;
       // only the basic skins can be picked, and the emblem skin by emblem holders
       if (wantsEmblem ? !holder : !isBasicSkin(skin)) {
-        this.error(conn, 'skin_locked', wantsEmblem ? 'The emblem skin is for Coinnibal NFT holders.' : 'That skin is locked.');
+        this.error(conn, 'skin_locked', wantsEmblem ? 'The NFT skin is for Coinnibal NFT holders.' : 'That skin is locked.');
         return;
       }
       let name = sanitizeName(msg.name);

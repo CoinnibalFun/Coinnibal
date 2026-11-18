@@ -105,7 +105,7 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
           Mint status
         </h2>
         <div className="ad-glance__gauge">
-          <ArcGauge value={s.totalSupply} max={s.maxSupply} size={150} tone="sun" caption={s.soldOut ? 'Sold out. Well done.' : `${s.maxSupply - s.totalSupply} emblems still sealed.`} />
+          <ArcGauge value={s.totalSupply} max={s.maxSupply} size={150} tone="sun" caption={s.soldOut ? 'Sold out. Well done.' : `${s.maxSupply - s.totalSupply} NFTs still sealed.`} />
         </div>
         <dl className="ad-glance__figs">
           <div>
@@ -183,7 +183,7 @@ type OpenFn = (title: string, call: Plan['call'], extra?: Partial<Plan>) => void
 const PHASE_COPY: Record<MintPhaseName, { title: string; line: string; mood: CoinMood }> = {
   closed: { title: 'Closed', line: 'Sealed. For now.', mood: 'sleepy' },
   allowlist: { title: 'Allowlist', line: 'Only wallets in the root may mint.', mood: 'smug' },
-  public: { title: 'Public', line: `Anyone with a dollar of ${GAS_SYMBOL}.`, mood: 'happy' },
+  public: { title: 'Public', line: 'Any wallet may mint.', mood: 'happy' },
 };
 
 /**
@@ -528,7 +528,7 @@ function MetadataCard({ frozen, open, nft }: { frozen: boolean; open: OpenFn; nf
       </div>
       <div className="ad-dangerrow">
         <p>
-          <strong>Freeze the metadata.</strong> Every emblem keeps its URI forever. You will type FREEZE to confirm.
+          <strong>Freeze the metadata.</strong> Every NFT keeps its URI forever. You will type FREEZE to confirm.
         </p>
         <Btn danger icon="lock" testId="mint-freeze" onClick={() => open('Freeze the metadata forever', freezeMetadataCall(nft), { confirmText: 'FREEZE', note: 'This can never be undone.' })}>
           Freeze metadata
@@ -579,7 +579,7 @@ function OwnerMintCard({ me, open, nft }: { me: Address | null; open: OpenFn; nf
 /** "12 wallets (15 emblems) · 3 also on the WL · imported 20:15 from chain 46630". */
 export function importLine(v: HolderWlView): string {
   const c = v.counts;
-  const parts = [`${c.wallets} ${c.wallets === 1 ? 'wallet' : 'wallets'} (${c.tokens} ${c.tokens === 1 ? 'emblem' : 'emblems'})`, `${c.alsoWl} also on the WL`];
+  const parts = [`${c.wallets} ${c.wallets === 1 ? 'wallet' : 'wallets'} (${c.tokens} ${c.tokens === 1 ? 'NFT' : 'NFTs'})`, `${c.alsoWl} also on the WL`];
   if (v.importedAt) parts.push(`imported ${new Date(v.importedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}${v.importedFrom ? ` from chain ${v.importedFrom}` : ''}`);
   return parts.join(' · ');
 }
@@ -617,7 +617,7 @@ export function ImportHoldersCard({ ctx }: { ctx: ChainCtx }) {
     } catch (e) {
       const status = (e as { status?: number }).status;
       if (status === 404) setView(null);
-      else if (status === 409) setErr('There is no emblem contract on the testnet to read holders from.');
+      else if (status === 409) setErr('There is no NFT contract on the testnet to read holders from.');
       else if (status === 502 || status === 503) setErr(`The testnet did not answer: ${(e as Error).message} Try again in a minute.`);
       else setErr((e as Error).message);
     } finally {
@@ -629,8 +629,8 @@ export function ImportHoldersCard({ ctx }: { ctx: ChainCtx }) {
     <Card
       title="Import testnet holders into the WL"
       id="mint-import"
-      kicker="Testnet emblem → mainnet WL"
-      lede="Adds every wallet holding a testnet emblem to the mainnet allowlist, marked with its source. Safe to run again: it re-reads the holders and replaces the last import. Build the allowlist after it."
+      kicker="Testnet NFT → mainnet WL"
+      lede="Adds every wallet holding a testnet NFT to the mainnet allowlist, marked with its source. Safe to run again: it re-reads the holders and replaces the last import. Build the allowlist after it."
     >
       <div className="ad-actions">
         <Btn primary disabled={!ctx.api || missing || view === undefined || busy} onClick={() => void run()} testId="mint-import">

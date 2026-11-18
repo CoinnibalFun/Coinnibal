@@ -51,7 +51,7 @@ export function SetupTab({ ctx }: { ctx: ChainCtx }) {
         {!tokenCard && <SetTokenForm ctx={ctx} />}
         {!testTokenCard && <TestTokenCard ctx={ctx} />}
         <RegisterExisting ctx={ctx} />
-        <h2 className="ad-h3 ad-section-h">Emblem perks</h2>
+        <h2 className="ad-h3 ad-section-h">NFT perks</h2>
         <div className="ad-mint__forms">
           <HolderPerksCard ctx={ctx} />
           <TestTokenAdminCard ctx={ctx} />

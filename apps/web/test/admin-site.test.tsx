@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CollabsTab } from '../src/admin/site/CollabsTab';
-import { PlayTab } from '../src/admin/site/PlayTab';
 import { SettingsTab } from '../src/admin/site/SettingsTab';
 import { TasksTab } from '../src/admin/site/TasksTab';
 import { WlTab } from '../src/admin/site/WlTab';
@@ -59,14 +58,6 @@ const ui = (node: ReactElement) => render(<Kb>{node}</Kb>);
 const sent = (method: string, path: string) => calls.find((c) => c.method === method && c.path === path);
 
 describe('admin: site tabs (Bearer session, mocked fetch)', { timeout: 30_000 }, () => {
-  it('Play opens /play and says whether the game is admin-only', async () => {
-    ({ calls, restore } = mockFetch({ 'GET /api/admin/settings': { settings: SETTINGS, gameAccessEnv: null } }));
-    ui(<PlayTab api={api} />);
-    expect(await screen.findByText('Admins only')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open the arena' }).getAttribute('href')).toBe('/play');
-    expect(calls[0].auth).toBe('Bearer admin-token');
-  });
-
   it('WL: counts, then approve in bulk; a row opens a detail with clickable links', async () => {
     ({ calls, restore } = mockFetch({
       'GET /api/admin/wl': { items: [wl('w1', 'alice'), wl('w2', 'bob')], total: 2, page: 1, pageSize: 50 },

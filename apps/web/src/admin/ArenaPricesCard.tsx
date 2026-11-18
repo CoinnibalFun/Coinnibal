@@ -317,7 +317,7 @@ export function ArenaPricesCard({ ctx }: { ctx: ChainCtx }) {
               <th scope="col" className="is-num">
                 Ticket (USD)
               </th>
-              <th scope="col">Emblem holders only</th>
+              <th scope="col">NFT holders only</th>
             </tr>
           </thead>
           <tbody>

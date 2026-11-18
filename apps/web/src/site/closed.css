@@ -127,3 +127,32 @@
   border-radius: 999px;
   pointer-events: none;
 }
+/* phones: a pill on the bottom edge wraps to three lines and covers the page (the faucet card with its gas link at
+   390 px). There it is a one-line strip at the top instead, sticky above the sticky site header: always in view and
+   never over the page. It takes the notch inset, so the header under it does not. */
+@media (max-width: 599px) {
+  .cl-preview {
+    position: sticky;
+    top: 0;
+    z-index: 31;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    display: block;
+    width: 100%;
+    max-width: none;
+    padding: calc(4px + env(safe-area-inset-top, 0px)) 8px 4px;
+    font-size: 12px;
+    line-height: 14px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-width: 0 0 2px;
+    border-radius: 0;
+  }
+  html:has(.cl-preview) .st-head {
+    top: calc(24px + env(safe-area-inset-top, 0px));
+    padding-top: 0;
+  }
+}

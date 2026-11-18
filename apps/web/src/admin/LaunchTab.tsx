@@ -36,7 +36,7 @@ export function launchChecklist(i: {
   const root = n?.state?.root ?? null;
   const snapRoot = i.allowlist?.snapshot?.root ?? null;
   return [
-    { id: 'chain', label: 'The server is on a chain', ok: !!i.net.info, detail: i.net.info ? `${i.net.info.name} (${i.net.info.id})${i.net.mainnet ? ' · MAINNET' : ''}` : 'EVM_RPC_URL is unset on the server.', tab: 'deploy' },
+    { id: 'chain', label: 'The server is on a chain', ok: !!i.net.info, detail: i.net.info ? `${i.net.info.name} (${i.net.info.id})${i.net.mainnet ? ' · MAINNET' : ''}` : 'No chain: COINNIBAL_RPC_URLS is unset on the VPS (EVM_RPC_URLS outside Docker).', tab: 'deploy' },
     {
       id: 'server-key',
       label: `The server key has ${GAS_SYMBOL} for gas`,
@@ -64,7 +64,7 @@ export function launchChecklist(i: {
     },
     {
       id: 'price',
-      label: `The mint price is $1 in ${GAS_SYMBOL}`,
+      label: "The mint price matches the server's target",
       ok: n?.state && target ? !needsReprice(n.state.price, target) : null,
       detail: n?.state ? `${formatGasAmount(n.state.price, 6)}${target ? ` · target ${formatGasAmount(target, 6)}` : ''}` : '—',
       tab: 'mint',
@@ -83,10 +83,10 @@ export function launchChecklist(i: {
 /** The five terraces of the launch, each holding its checklist lines. */
 const STAGES: { id: string; title: string; blurb: string; items: string[]; paint: CoinPaint }[] = [
   { id: 'wl', title: 'Whitelist', blurb: 'People ask in; you approve them.', items: [], paint: 'cream' },
-  { id: 'deploy', title: 'Deploy', blurb: 'Both contracts live, owned by you, wired to the server.', items: ['chain', 'server-key', 'arena', 'authority', 'nft', 'token', 'arenas'], paint: 'teal' },
+  { id: 'deploy', title: 'Deploy', blurb: 'Both contracts live, owned by you, wired to the server.', items: ['chain', 'server-key', 'arena', 'authority', 'nft'], paint: 'teal' },
   { id: 'allowlist', title: 'Allowlist', blurb: 'The approved wallets, hashed into one root on chain.', items: ['allowlist'], paint: 'spray' },
-  { id: 'mint', title: 'Mint', blurb: `One dollar in ${GAS_SYMBOL}, and the doors open.`, items: ['price', 'phase'], paint: 'sun' },
-  { id: 'game', title: 'Game', blurb: 'Holders walk onto the floor. Lunch is served.', items: ['access'], paint: 'up' },
+  { id: 'mint', title: 'Mint', blurb: 'The price is set, and the doors open.', items: ['price', 'phase'], paint: 'sun' },
+  { id: 'game', title: 'Game', blurb: 'The token, the four rooms, then holders walk onto the floor.', items: ['token', 'arenas', 'access'], paint: 'up' },
 ];
 
 type StageState = 'done' | 'now' | 'todo' | 'unknown';
