@@ -3,12 +3,15 @@
 // scene's period (b = a + period: the school and goldie's sway are where they were at a) with the follow camera
 // of cam.mjs, scored on
 //   - the seam: in the crossfade windows before a and before b the same coins are in the frame, each in about
-//     the same place in it (the prey and its next turn nowhere near), no coin rain, no cactus in the frame;
+//     the same place in it and with the same face (the game's moods), the prey and its next turn nowhere near,
+//     no coin rain, no cactus in the frame;
 //   - the frame: inside what the server sent goldie (no coin pops in at an edge) and inside the world (no wall);
 //   - the eat: the prey in the frame a while before the gulp, the gulp well inside the frame;
 //   - life: coins in the frame (6-10 most of the time is the aim).
 // Prints the best candidates (render.mjs and loop.py arguments).
-//   node media/hero-loop/plan-school.mjs <take> [--k 11] [--fade 0.6] [--top 6]
+//   node media/hero-loop/plan-school.mjs <take> [--k 12] [--fade 0.6] [--search 0.3] [--top 6]
+// --search: loop.py may move each end by up to this much (seconds) to the best-matching frames; the render
+// reaches that far beyond both ends.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TAKES } from '../gameplay/capture/lib.mjs';
@@ -21,7 +24,8 @@ const DIR = resolve(TAKES, NAME);
 const meta = JSON.parse(readFileSync(resolve(DIR, 'events.json'), 'utf8'));
 const tele = JSON.parse(readFileSync(resolve(DIR, 'tele.json'), 'utf8')).filter((s) => s.me);
 const ASPECT = meta.w / meta.h;
-const K = Number(opt('--k', '11'));
+const K = Number(opt('--k', '12'));
+const SEARCH = Number(opt('--search', '0.3'));
 const FADE = Number(opt('--fade', '0.6'));
 const TOP = Number(opt('--top', '6'));
 const cam = makeCam(tele, { k: K });
@@ -32,19 +36,18 @@ const boxAt = (t) => { const c = cam(t); const h = c.w / ASPECT; return { ...c, 
 function shown(i) {
   const s = tele[i], b = boxAt(s.t);
   const out = new Map();
-  for (const [, pid, x, y, r, dying] of s.cells) {
-    if (pid === s.pid) continue;
+  for (const [, pid, x, y, r, dying, mood] of s.cells) {
     const m = r * 1.05;
     if (x + m > b.x0 && x - m < b.x1 && y + m > b.y0 && y - m - (dying ? 0 : b.w * 0.05) < b.y1) {
       const prev = out.get(pid);
-      if (!prev || r > prev.r) out.set(pid, { u: (x - b.x) / b.w, v: (y - b.y) / b.w, r: r / b.w, dying });
+      if (!prev || r > prev.r) out.set(pid, { u: (x - b.x) / b.w, v: (y - b.y) / b.w, r: r / b.w, dying, mood });
     }
   }
   return out;
 }
 /** The seam: samples t in [a - FADE, a] against t + period; the cost of every coin that differs. */
 function seam(a, T) {
-  let cost = 0, odd = 0, n = 0;
+  let cost = 0, odd = 0, faces = 0, n = 0;
   for (let i = at(a - FADE); i < tele.length && tele[i].t <= a; i++) {
     const j = at(tele[i].t + T);
     if (!tele[j] || Math.abs(tele[j].t - tele[i].t - T) > 0.08) continue;
@@ -54,10 +57,12 @@ function seam(a, T) {
       const q = B.get(pid);
       if (!q) { odd += 1; continue; }
       cost += Math.hypot(p.u - q.u, p.v - q.v) + Math.abs(p.r - q.r);
+      // a different face: on goldie (big, in the middle of the frame) it counts ten times a small coin's
+      if (p.mood && q.mood && p.mood !== q.mood) faces += pid === tele[i].pid ? 3 : 0.3;
     }
     for (const pid of B.keys()) if (!A.has(pid)) odd += 1;
   }
-  return n ? { cost: cost / n, odd: odd / n } : { cost: 9, odd: 9 };
+  return n ? { cost: cost / n, odd: odd / n, faces: faces / n } : { cost: 9, odd: 9, faces: 9 };
 }
 function covered(t0, t1) {
   for (let i = at(t0); i < tele.length && tele[i].t <= t1; i++) {
@@ -119,15 +124,15 @@ for (const cr of marks.filter((m) => m.label === 'cruise')) {
   const off = Math.hypot((g.x - gb.x) / gb.w, (g.y - gb.y) / gb.h);
   for (let a = g.t - 5.4; a <= g.t - 2.6; a += 0.05) {
     const b = a + T;
-    if (a - FADE - 2.2 < cr.t0 + 0.6 || b > end.t - 0.2) continue;
-    if (!covered(a - FADE, b)) continue;
+    if (a - FADE - SEARCH - 2.2 < cr.t0 + 0.6 || b + SEARCH > end.t - 0.2) continue;
+    if (!covered(a - FADE - SEARCH, b + SEARCH)) continue;
     const s1 = seam(a, T);
     const cac = cactusIn(a - FADE, a) + cactusIn(b - FADE, b);
     const cut = cactusIn(a, b);
     const { mean, six } = crowd(a, b);
     // a cactus at the seam would cross-fade with itself somewhere else: as bad as a coin that differs
-    const score = Math.min(mean, 9) * 0.8 + six * 3 + Math.min(seen, 3) * 0.6 - s1.cost * 25 - s1.odd * 4 - cac * 0.6 - cut * 0.01 - off * 4;
-    cands.push({ n: cr.n, score: +score.toFixed(2), a: +a.toFixed(2), b: +b.toFixed(2), T, gulpAt: +(g.t - a).toFixed(2), seam: +s1.cost.toFixed(3), odd: +s1.odd.toFixed(2), crowd: +mean.toFixed(1), six: +six.toFixed(2), preySeen: +seen.toFixed(1), off: +off.toFixed(2), cactusSeam: cac, cactus: cut, heroMass: cr.heroMass, preyMass: cr.preyMass, g: g.t });
+    const score = Math.min(mean, 9) * 0.8 + six * 3 + Math.min(seen, 3) * 0.6 - s1.cost * 25 - s1.odd * 4 - s1.faces * 2 - cac * 0.6 - cut * 0.01 - off * 4;
+    cands.push({ n: cr.n, score: +score.toFixed(2), a: +a.toFixed(2), b: +b.toFixed(2), T, gulpAt: +(g.t - a).toFixed(2), seam: +s1.cost.toFixed(3), odd: +s1.odd.toFixed(2), faces: +s1.faces.toFixed(2), crowd: +mean.toFixed(1), six: +six.toFixed(2), preySeen: +seen.toFixed(1), off: +off.toFixed(2), cactusSeam: cac, cactus: cut, heroMass: cr.heroMass, preyMass: cr.preyMass, g: g.t });
   }
 }
 cands.sort((x, y) => y.score - x.score);
@@ -139,5 +144,5 @@ for (const c of cands) {
   best.push(c);
   if (best.length >= TOP) break;
 }
-for (const c of best) console.log(JSON.stringify(c), `\n  render: node media/hero-loop/render.mjs ${NAME} --from ${(c.a - FADE).toFixed(2)} --to ${c.b.toFixed(2)} --follow ${K}\n  loop:   --fade ${FADE} --start-src ${(c.g - 1.2).toFixed(2)}`);
+for (const c of best) console.log(JSON.stringify(c), `\n  render: node media/hero-loop/render.mjs ${NAME} --from ${(c.a - FADE - SEARCH).toFixed(2)} --to ${(c.b + SEARCH).toFixed(2)} --follow ${K} --no-mass\n  loop:   --fade ${FADE} --a ${c.a.toFixed(2)} --b ${c.b.toFixed(2)} --search ${SEARCH} --start-src ${(c.g - 1.2).toFixed(2)}`);
 if (!best.length) console.log('no loop found');
