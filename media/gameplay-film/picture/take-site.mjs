@@ -32,13 +32,13 @@ await pp.click('.st-connect');
 await pp.waitForSelector('.sw-opt', { timeout: 10000 });
 await pp.click('.sw-opt');
 await pp.waitForSelector('.st-connect.is-signed', { timeout: 20000 });
-const seed = await pp.evaluate(() => ({ auth: localStorage.getItem('elymum.auth.v1'), wallet: localStorage.getItem('elymum.wallet.v1') }));
+const seed = await pp.evaluate(() => ({ auth: localStorage.getItem('coinnibal.auth.v1'), wallet: localStorage.getItem('coinnibal.wallet.v1') }));
 await pre.close();
 log('seeded session', !!seed.auth, seed.wallet);
 const ctx = await browser.newContext({ viewport: { width: W, height: H }, locale: 'en-US' });
-await ctx.addInitScript((s) => { if (s.auth) localStorage.setItem('elymum.auth.v1', s.auth); if (s.wallet) localStorage.setItem('elymum.wallet.v1', s.wallet); }, seed);
+await ctx.addInitScript((s) => { if (s.auth) localStorage.setItem('coinnibal.auth.v1', s.auth); if (s.wallet) localStorage.setItem('coinnibal.wallet.v1', s.wallet); }, seed);
 if (!LIVE) await attachJournal(ctx, `${DIR}/journal.jsonl`);
-await ctx.addInitScript(() => { try { localStorage.setItem('elymum.site.sound', 'off'); } catch {} });
+await ctx.addInitScript(() => { try { localStorage.setItem('coinnibal.site.sound', 'off'); } catch {} });
 await installDevWallet(ctx, key, { rpcUrl: rpc.url, chainId: 31337 });
 await stageRoutes(ctx);
 await ctx.addInitScript(cursorInit);
@@ -139,7 +139,7 @@ try {
   await hand.click(null, null, 0, { before: 0, hold: 80 });
   await sleep(250);
   await shot('stamp1');
-  // chore 2: follow @elymum (a tick), then Next
+  // chore 2: follow @coinnibal (a tick), then Next
   const tick = page.locator('.wl-step.is-active .wl-tick').first();
   if (await tick.count()) {
     const tb = await tick.boundingBox();

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Lays the rendered frames out in film order and encodes the film with the narrated soundtrack:
 // H.264 1920x1080 30 fps CRF 18 + AAC 192k, plus four stills.
-//   node compose.mjs [--audio out/work/voice/preview/mix.wav] [--out out/videos/elymum-film-narrated.mp4]
+//   node compose.mjs [--audio out/work/voice/preview/mix.wav] [--out out/videos/coinnibal-film-narrated.mp4]
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -9,8 +9,8 @@ import { ROOT, WORK, log } from './lib.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (n, d) => (argv.includes(n) ? argv[argv.indexOf(n) + 1] : d);
-const AUDIO = resolve(ROOT, opt('--audio', 'out/work/voice/preview-elymumio/mix.wav'));
-const OUT = resolve(ROOT, opt('--out', 'out/videos/elymum-film-narrated.mp4'));
+const AUDIO = resolve(ROOT, opt('--audio', 'out/work/voice/preview-coinnibalio/mix.wav'));
+const OUT = resolve(ROOT, opt('--out', 'out/videos/coinnibal-film-narrated.mp4'));
 const plan = JSON.parse(readFileSync(resolve(WORK, 'edit/plan.json'), 'utf8'));
 const SEQ = resolve(WORK, 'seq');
 rmSync(SEQ, { recursive: true, force: true });

@@ -109,7 +109,7 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
   (growing is next to free), so 500 people cost nothing measurable (`test/map-bench.test.ts`).
 - Custom rooms: "Auto" (the default) follows the private rooms' settings for its people plus its practice bots; a
   chosen size (XS 3,000 .. XL 9,000) never changes.
-- `pnpm -F @elymum/server exec tsx scripts/bench/map-bench.ts [players] [people] [seconds]` times a full room on
+- `pnpm -F @coinnibal/server exec tsx scripts/bench/map-bench.ts [players] [people] [seconds]` times a full room on
   the dynamic map against the fixed arena preset, and the resizes themselves; `map-bench.ts rooms [rooms]
   [players] [people] [seconds]` times several quiet rooms in one process on the default and a small model.
 
@@ -207,7 +207,7 @@ and seats, and it closes as soon as it has stood empty for 2 minutes. `POST /api
 
 ## 3. Money
 
-### 3.1 The fee on profit (ElymumArena v3)
+### 3.1 The fee on profit (CoinnibalArena v3)
 
 There is no entry fee: the whole ticket price goes into the arena vault and the coin starts at it. When a ticket is
 settled for more than its entry fee, the arena contract takes a fee from the **profit**: 15 % is burned (the token's
@@ -228,7 +228,7 @@ to the same contract (`pay`): 50 % burned, 50 % to the fee wallet. Every flow: [
 
 ```mermaid
 flowchart LR
-  P["Player wallet"] -- "join: the entry fee" --> V["Arena vault (ElymumArena)"]
+  P["Player wallet"] -- "join: the entry fee" --> V["Arena vault (CoinnibalArena)"]
   V -- "settle at the bell: payout - fee on profit" --> P
   V -- "15 % of profit" --> B(("Burned"))
   V -- "5 % of profit" --> F["Fee wallet"]
@@ -267,7 +267,7 @@ tickets are a single `join` prompt; the wallet sheet shows what is left and revo
 
 | Path | What it is |
 |---|---|
-| `packages/contracts` | `ElymumArena` v3, `ElymumNFT`, `TestToken` (Hardhat 3, Solidity 0.8.28, OpenZeppelin 5.6.1, forge-std unit, fuzz and invariant tests); `src/artifacts.ts` is committed and pins the runtime code hashes |
+| `packages/contracts` | `CoinnibalArena` v3, `CoinnibalNFT`, `TestToken` (Hardhat 3, Solidity 0.8.28, OpenZeppelin 5.6.1, forge-std unit, fuzz and invariant tests); `src/artifacts.ts` is committed and pins the runtime code hashes |
 | `packages/sdk` | viem reads, call builders, deploy helpers, call previews, Merkle tree, ETH/USD price, the admin CLI (`pnpm admin`) |
 | `packages/shared` | Rules (`RULES`), the binary protocol, the fee module (`fees.ts`), the Robinhood Chain networks (`chains.ts`), arenas, the SIWE message, the palette |
 | `packages/art` | The coin drawing used by the web renderer and the films |
@@ -299,7 +299,7 @@ pnpm demo:record                 # the walkthrough video (fake chain)
 pnpm check                       # everything CI runs, one suite at a time
 pnpm typecheck && pnpm test      # every package
 pnpm contracts:build && pnpm contracts:test
-pnpm -F @elymum/server e2e       # real hardhat node + real server, the deploy order end to end
+pnpm -F @coinnibal/server e2e       # real hardhat node + real server, the deploy order end to end
 ```
 
 | Topic | Where |
@@ -330,14 +330,14 @@ the owner. Protect the server key.
 | Server key | `SERVER_PRIVATE_KEY=auto`, on the persistent disk; pays gas in ETH |
 | Admins | `ADMIN_WALLETS` = the owner's 0x address (no default) |
 | Hosting | the game server in Docker behind Caddy on a VPS (the data volume at `/data`, daily and offsite backups); the website on Vercel |
-| Domain | the site is served at `PUBLIC_URL` (your current domain); elymum.io can be set later by changing `PUBLIC_URL` / `VITE_PUBLIC_URL` and the DNS |
+| Domain | the site is served at `PUBLIC_URL` (`https://coinnibal.fun`); another domain needs only `PUBLIC_URL` / `VITE_PUBLIC_URL` and the DNS |
 
 ## 8. Website, allowlist, collabs and the admin panel
 
 | Route | Who | What |
 |---|---|---|
-| `/` | everyone | The landing in the Ring Storybook style: the ring at dawn, the coins, how a round works, the NFT plate, the arenas, FAQ, X @elymumio. CTAs: Join the WL, Collab |
-| `/wl` | everyone | "Three small chores": the admin-defined steps (follow @elymumio, repost the pinned post, connect an EVM wallet with a free SIWE signature), one entry per wallet and per X handle, a shareable boarding pass |
+| `/` | everyone | The landing in the Ring Storybook style: the ring at dawn, the coins, how a round works, the NFT plate, the arenas, FAQ, X @coinnibalfun. CTAs: Join the WL, Collab |
+| `/wl` | everyone | "Three small chores": the admin-defined steps (follow @coinnibalfun, repost the pinned post, connect an EVM wallet with a free SIWE signature), one entry per wallet and per X handle, a shareable boarding pass |
 | `/collab` | communities | Apply → in review → approved with spots and a deadline → raffle on X → paste the winners' EVM wallets → submit (locks) |
 | `/mint` | everyone | The mint after dark: phase, eligibility and proof, quantity, price in ETH with its USD value; minted emblems and a Play button when the game is open to holders |
 | `/play` | per `gameAccess` | The game: admins only, holders, or everyone |
@@ -360,7 +360,7 @@ Details: [OPERATIONS.md](OPERATIONS.md#integrity-cheat-and-collusion-detection).
 - Palette (`packages/shared/src/palette.ts`): teal `#2D7388`, cyan `#34B7DD`, sun `#F2C14E`, up `#3C9A87`, cream
   `#F6EEDA`, plain `#F8F7F4`, trench `#0F2A30`, and the rest of the spec's table.
 - Type: Fraunces (display, SOFT 100), DM Sans (reading), Geist Mono (numbers and kickers).
-- Kit: `node brand/generate.mjs` renders the X avatar and banner, the OG card (also `apps/web/public/og-elymum.png`),
+- Kit: `node brand/generate.mjs` renders the X avatar and banner, the OG card (also `apps/web/public/og-coinnibal.png`),
   the favicons, posts (WL open, $1 mint, game live), stickers and arena posters into `brand/out/`
   ([brand/README.md](../brand/README.md)).
 
@@ -400,4 +400,5 @@ lands** ([media/README.md](../media/README.md)).
 | 2026-11-08 | A 30 s break after every bell; a shop cart paid with one `pay`; approvals for 1 / 5 / 10 / 20 tickets; a kill card for every person eaten; Link X (`PROTOCOL_VERSION` 14); practice bots slower and sometimes distracted; the HUD's chat at the bottom left, Share on X and Shop on the top bar (the in-game Shop key was removed again on 2026-11-11: the shop is in the lobby only); `ELYMUM_*` keys on the VPS |
 | 2026-11-09 | The full 5:00 of play per round: the 30 s break after the bell comes on top of the play instead of out of it (a 5:30 cycle on Unix time; `ROUND_SECONDS` is the play). The server still sends every round time, so `PROTOCOL_VERSION` stays 14 |
 | 2026-11-18 | Private (custom) rooms are paid in the game token, not ETH (owner decision): one `pay` of the arena like a power-up pack (50 % burned, 50 % to the team wallet), $1.50 in tokens by default (converted like the tickets), its ref naming the room request; NFT holders keep one free private room a day; no room can be paid before the token is set (practice with bots stays free) |
+| 2026-11-18 | Renamed **Coinnibal** (owner decision): the project was called Elymum and ran on Elysium until November 2026, and the rows above keep the names of their time. The contracts are `CoinnibalArena` and `CoinnibalNFT`, the test token "Coinnibal Test Token" (`TEST`), the packages `@coinnibal/*` and the VPS keys `COINNIBAL_*` (the `ELYMUM_*` names still read); the live server's installed names stay (deploy/vps/README.md, section 4) |
 | 2026-11-02 | (superseded by v3) The fee moves from profit to the entry: every played ticket pays 5 % of its entry fee (holders 3 %), win or lose; unplayed tickets are refunded in full. ElymumArena v2 (`version()` 2); the server handles the legacy v1 testnet arena until it is redeployed. The leaderboards are reset once (epoch 2) |

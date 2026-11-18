@@ -17,7 +17,7 @@ Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testne
 
 1. **Server** on the VPS (deploy/vps/README.md), `SERVER_PRIVATE_KEY=auto`, `ADMIN_WALLETS` = your owner wallet,
    `CHAIN_ID=46630` and `EVM_RPC_URLS` = Robinhood Chain Testnet (later `4663` and Alchemy plus the public RPC; on the
-   VPS these are `ELYMUM_CHAIN_ID` and `ELYMUM_RPC_URLS`, and unset they already mean the testnet).
+   VPS these are `COINNIBAL_CHAIN_ID` and `COINNIBAL_RPC_URLS`, and unset they already mean the testnet).
 2. **Fund the server key** with a little ETH (it pays gas for settlements, cancels and loot burns).
 3. In `/admin` on the site, with the owner wallet on Robinhood Chain: **Deploy Arena → Deploy NFT → register both**
    (on the testnet also the TestToken).
@@ -52,34 +52,36 @@ Rabby works. Get testnet ETH for it (and later for the server key) from the fauc
 
 ## 1. The server
 
-One Docker container runs the game server (`Dockerfile` at the repository root, image `elymum-app`) behind Caddy on
-the VPS: deploy/vps/README.md installs it, keeps it up to date and backs it up. The website is Vercel's
-(`elymum.io`); the game domain sends a browser to it (`WEB_DIST` unset). The settings (`/opt/elymum/.env`; on the VPS
-the chain, RPC and access keys are the namespaced `ELYMUM_*` ones, which `docker-compose.yml` maps to the server's
-names and which a stale older `.env` cannot hold: deploy/vps/README.md section 4):
+One Docker container runs the game server (`Dockerfile` at the repository root, image `elymum-app`, a name of the live
+server kept from before the rename) behind Caddy on the VPS: deploy/vps/README.md installs it, keeps it up to date and
+backs it up. The same container serves the website (`https://coinnibal.fun`, `SITE_DOMAIN`, `WEB_DIST=/app/web`);
+`elymum.io`, the domain of before the rename, redirects every path to it (vercel.json). The settings
+(`/opt/elymum/.env`; on the VPS the chain, RPC and access keys are the namespaced `COINNIBAL_*` ones, which
+`docker-compose.yml` maps to the server's names and which a stale older `.env` cannot hold; their `ELYMUM_*` names of
+before the rename still work: deploy/vps/README.md section 4):
 
 | Variable | Value |
 |---|---|
 | `NODE_ENV` | `production` |
-| `PUBLIC_URL` | **required**: the site's address, `https://elymum.io` (the SIWE domain and the base of the NFT metadata URLs). The server refuses to start without it unless `NODE_ENV=development`; it never derives the sign-in domain from `Host` / `X-Forwarded-Host` |
-| `CHAIN_ID` (VPS: `ELYMUM_CHAIN_ID`) | `46630` (Robinhood Chain Testnet, the default), later `4663` (Robinhood Chain) |
-| `EVM_RPC_URLS` (VPS: `ELYMUM_RPC_URLS`) | the server's RPCs in order: on the mainnet the Alchemy URL, then `https://rpc.mainnet.chain.robinhood.com` (a fallback; may hold an API key; never sent to browsers). Off the VPS, `EVM_RPC_URL` (one URL) still works; an empty one is unset |
-| `RPC_MAX_RPS` (VPS: `ELYMUM_RPC_MAX_RPS`) | calls per second per URL (`25,4`; default 4) |
+| `PUBLIC_URL` | **required**: the site's address, `https://coinnibal.fun` (the SIWE domain and the base of the NFT metadata URLs). The server refuses to start without it unless `NODE_ENV=development`; it never derives the sign-in domain from `Host` / `X-Forwarded-Host` |
+| `CHAIN_ID` (VPS: `COINNIBAL_CHAIN_ID`) | `46630` (Robinhood Chain Testnet, the default), later `4663` (Robinhood Chain) |
+| `EVM_RPC_URLS` (VPS: `COINNIBAL_RPC_URLS`) | the server's RPCs in order: on the mainnet the Alchemy URL, then `https://rpc.mainnet.chain.robinhood.com` (a fallback; may hold an API key; never sent to browsers). Off the VPS, `EVM_RPC_URL` (one URL) still works; an empty one is unset |
+| `RPC_MAX_RPS` (VPS: `COINNIBAL_RPC_MAX_RPS`) | calls per second per URL (`25,4`; default 4) |
 | `PUBLIC_RPC_URL` | optional: an RPC for browsers, no secrets (default: the public Robinhood Chain RPC of the list, else the wallet's own RPC) |
 | `EXPLORER_URL`, `GAS_FAUCET_URL` | optional overrides of the built-in explorer and testnet faucet link |
 | `SERVER_PRIVATE_KEY` | `auto`: generated once into `/data/server-key.json` (mode 0600) and reused; its address is logged and published as `serverKey` |
 | `ADMIN_WALLETS` | your owner wallet's 0x address (comma-separated for more). **No default**: unset, nobody is admin |
 | `AUTH_SECRET` | `openssl rand -hex 32` (at least 32 bytes: the mainnet refuses to start with less), or empty for a generated one in the data volume |
-| `CORS_ORIGIN` | `https://elymum.io` |
+| `CORS_ORIGIN` | `https://coinnibal.fun` |
 | `PAYOUT_GUARD_MULTIPLE` | `100` (default): the payout guard of settlements without a round pool; see OPERATIONS.md, "The server key" |
 | `MAX_CONNECTIONS`, `MAX_CONNECTIONS_PER_IP`, `MAX_CONNECTIONS_PER_SUBNET` | `1500`, `8`, `48` (defaults): WebSocket caps (total, guests per IP, guests per IPv4 /24 or IPv6 /64) |
 | `GAME_WORKERS` | `5` on 8 vCPU |
 | `LOAD_SHED` | on by default in production: new free games, then new sockets and arena seats wait while the server is overloaded |
 | `MINT_USD_CENTS` | `100` (the $1 target; default) |
-| `NFT_COLLECTION_SIZE`, `NFT_ART_STYLE` | `5000` (= the NFT's max supply), `vector` (or `pixel`): the emblem collection (docs/NFT-DESIGN.md). Leave `NFT_COLLECTION_SEED` empty: the seed is generated and committed on first boot (`DATA_DIR/chains/<id>/nft-collection.json`, keep it in the backups) |
-| `TOKEN_SYMBOL` | `$NIBAL` (default; display only) |
-| `X_HANDLE` | the project's X handle by default (unset: `elymumio`; `coinnibal` once that account is live) |
-| `GAME_ACCESS` (VPS: `ELYMUM_GAME_ACCESS`) | unset (VPS: `site`): the `/admin` → Settings switch decides (a fresh server starts closed, `admins`); `public`, `holders`, `admins` or `maintenance` overrides that switch |
+| `NFT_COLLECTION_SIZE`, `NFT_ART_STYLE` | `3333` (= the NFT's max supply), `vector` (or `pixel`): the emblem collection (docs/NFT-DESIGN.md). Leave `NFT_COLLECTION_SEED` empty: the seed is generated and committed on first boot (`DATA_DIR/chains/<id>/nft-collection.json`, keep it in the backups) |
+| `TOKEN_SYMBOL` | unset: amounts say `tokens` (display only) |
+| `X_HANDLE` | the project's X handle by default (unset: `coinnibalfun`) |
+| `GAME_ACCESS` (VPS: `COINNIBAL_GAME_ACCESS`) | unset (VPS: `site`): the `/admin` → Settings switch decides (a fresh server starts closed, `admins`); `public`, `holders`, `admins` or `maintenance` overrides that switch |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `BACKUP_RCLONE_REMOTE` | the alerts and the encrypted offsite backup (deploy/vps/README.md) |
 
 Leave `ARENA_ADDRESS` and `NFT_ADDRESS` empty: the addresses come from the registry `/admin` writes. Never set
@@ -90,12 +92,12 @@ same (`chain.serverKey`). `GET /api/health` answers 503 with its reasons when so
 (OPERATIONS.md, "Monitoring"); `/api/health?live=1` is the container's liveness check. Deploys swap the container in
 the break after an arena bell (no live stake then).
 
-**Domain.** The site is wherever `PUBLIC_URL` says (`https://elymum.io`; the web build's `VITE_PUBLIC_URL`). Nothing in
-the code or the art names a domain; moving to coinnibal.fun is configuration only (OPERATIONS.md, "The name: Coinnibal,
-and moving to coinnibal.fun"). Players sign in again on a new domain (SIWE binds the domain). NFT metadata URLs follow the NFT's base URI:
+**Domain.** The site is wherever `PUBLIC_URL` says (`https://coinnibal.fun`; the web build's `VITE_PUBLIC_URL`). Nothing
+in the code or the art names a domain; another domain is configuration only (OPERATIONS.md, "The name: Coinnibal
+(formerly Elymum)"). Players sign in again on a new domain (SIWE binds the domain). NFT metadata URLs follow the NFT's base URI:
 update it with `setBaseURI` (Mint tab) unless you froze it.
 
-**Without Docker.** `pnpm install && pnpm -F @elymum/web build && pnpm -F @elymum/server build`, then run
+**Without Docker.** `pnpm install && pnpm -F @coinnibal/web build && pnpm -F @coinnibal/server build`, then run
 `node apps/server/dist/index.js` with the variables above and `WEB_DIST=apps/web/dist`. The server does not read a
 `.env` file itself: pass the variables through the environment.
 
@@ -158,7 +160,7 @@ which exists on mainnet only (RESEARCH.md). Remember the token is final for an a
 
 1. Do the whole flow on Robinhood Chain Testnet first, including tickets, rounds, power-ups and the burn mode probe.
 2. Launch the game token on Pons (mainnet only).
-3. Set `ELYMUM_CHAIN_ID=4663` and `ELYMUM_RPC_URLS` (a provider RPC first; it may contain a key) in `/opt/elymum/.env`, optionally
+3. Set `COINNIBAL_CHAIN_ID=4663` and `COINNIBAL_RPC_URLS` (a provider RPC first; it may contain a key) in `/opt/elymum/.env`, optionally
    `PUBLIC_RPC_URL` (secret-free). Redeploy. The server opens a clean state for chain 4663; the testnet's records stay
    in `/data/chains/46630/`.
 4. **New contracts.** Testnet addresses are not mainnet addresses. Fund the server key with ETH, redo section 3 on
@@ -194,4 +196,4 @@ stops after the preview, and Robinhood Chain mainnet needs
 - `pnpm demo:localnet`: `hardhat node` (chain 31337, a local stand-in for Robinhood Chain Testnet) + the
   contracts deployed with the SDK + the production server
   (`scripts/localnet.mjs`, `scripts/localnet-fund.mjs`; addresses in `.localnet/contracts.json`).
-- `pnpm -F @elymum/server e2e`: the deploy order above, end to end against a fresh hardhat node.
+- `pnpm -F @coinnibal/server e2e`: the deploy order above, end to end against a fresh hardhat node.

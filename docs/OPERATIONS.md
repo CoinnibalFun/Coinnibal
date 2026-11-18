@@ -37,7 +37,8 @@ a player's session lasts 24 h. `POST /api/admin/auth/revoke {"wallet":"0x…"}` 
 (the server's settings, `SERVER_PRIVATE_KEY` and `AUTH_SECRET` included) need, besides the session, a fresh
 signature of the admin wallet for that purpose: `POST /api/admin/secret-proof {"purpose":"backup"}` (or
 `"migration"`: the settings and the backup, each once) returns a text to sign with the wallet (`personal_sign`);
-the base64url of `{"message","signature"}` goes in the `X-Elymum-Proof` header. A proof is single use and expires
+the base64url of `{"message","signature"}` goes in the `X-Coinnibal-Proof` header (`X-Elymum-Proof`, its name before the
+rename, is still read). A proof is single use and expires
 after 10 minutes. Every request of these routes is in the audit log, reads included. On the mainnet they are off
 unless `ADMIN_SECRET_EXPORT=1` is set on the server for the time of a move.
 
@@ -54,7 +55,7 @@ unless `ADMIN_SECRET_EXPORT=1` is set on the server for the time of a move.
   `!!! chain: gas LOW`, `/api/health` answers 503 and the Launch and Game tabs show it (`GET /api/admin/network` →
   `gas`: balance, spend per day, days, level). With no gas at all the log says `!!! chain: the server key ... cannot
   pay gas` and settlements wait (nothing is lost: they stay in the journal). Top it up from any wallet; at the
-  mainnet gas price a week of runway is a few thousandths of an ETH (`pnpm -F @elymum/server econ-sim`).
+  mainnet gas price a week of runway is a few thousandths of an ETH (`pnpm -F @coinnibal/server econ-sim`).
 - `!!! chain: the server key ... is NOT the arena's server authority` means the arena points at another key: set
   the server authority again (Game tab, the arena contract) or run the server with the right key.
 
@@ -103,7 +104,7 @@ until you publish a root.
 
 - Wallets are EVM addresses (checksummed); anything else is refused. One entry per wallet and per X handle.
 - The X handle (Settings) defaults to `X_HANDLE`, else `coinnibalfun`. A data dir that still holds an earlier default
-  (`elymum`, or `elymumio` once `X_HANDLE` names another) is switched to the default on start, and the seeded WL tasks
+  (`elymum`, or `elymumio` once `X_HANDLE` names another: the defaults of before the rename) is switched to the default on start, and the seeded WL tasks
   (follow, post, launch post, handle, wallet) are pointed at the current handle and say "Coinnibal"; tasks you wrote and
   the answers stored in WL entries are never rewritten.
 - Duplicates are flagged, never dropped: a collab wallet that is also on the WL (`dup_wl`) or in another list
@@ -164,7 +165,7 @@ public info API (`GAS_PRICE_URL`). The UI always shows the ETH amount with its U
      block's hash, and every token shows its emblem. Then `setBaseURI` with the same URI (it emits ERC-4906
      `BatchMetadataUpdate`, so marketplaces refresh).
   Never reopen the mint after the reveal (the next ids' art would be known). `GET /api/admin/nft` shows the state,
-  the rarity counts and the mint; `pnpm -F @elymum/server nft:report --seed <seed>` re-checks a collection.
+  the rarity counts and the mint; `pnpm -F @coinnibal/server nft:report --seed <seed>` re-checks a collection.
 - Supply can only go down (`setMaxSupply`, never below what is minted). Owner mints are for giveaways and the team.
 
 ## Integrity (cheat and collusion detection)
@@ -239,7 +240,7 @@ transfers, one per 30 s flush, deleted after 30 days or beyond 3,000 files). An 
 20,000 tickets and 60,000 transfers.
 
 **Cost.** The telemetry runs in the arena rooms only: a few counters per input message and a threat check every second
-tick. `pnpm -F @elymum/server integrity-sim` plays the same seeded arena with and without it and prints both tick times,
+tick. `pnpm -F @coinnibal/server integrity-sim` plays the same seeded arena with and without it and prints both tick times,
 the flags honest players raise (none at the defaults) and those two scripted bots raise.
 
 ## Monitoring
@@ -273,11 +274,11 @@ the flags honest players raise (none at the defaults) and those two scripted bot
 
 ## RPC
 
-`EVM_RPC_URLS` (on the VPS: `ELYMUM_RPC_URLS` in `/opt/elymum/.env`) lists the server's RPCs in order: the provider (Alchemy, `https://robinhood-mainnet.g.alchemy.com/v2/<key>`)
+`EVM_RPC_URLS` (on the VPS: `COINNIBAL_RPC_URLS` in `/opt/elymum/.env`) lists the server's RPCs in order: the provider (Alchemy, `https://robinhood-mainnet.g.alchemy.com/v2/<key>`)
 first, the public RPC (`https://rpc.mainnet.chain.robinhood.com`) as fallback. Reads and sends go through a viem
 fallback: a URL that keeps answering 429 or is down hands the call on after two tries, and the first URL is tried
 first again for every new call; a resent transaction is the same signed one (same hash and nonce). Each URL has its
-own budget (`RPC_MAX_RPS`, on the VPS `ELYMUM_RPC_MAX_RPS`, e.g. `25,4`). Concurrent reads merge into one Multicall3 call, or a deployless multicall
+own budget (`RPC_MAX_RPS`, on the VPS `COINNIBAL_RPC_MAX_RPS`, e.g. `25,4`). Concurrent reads merge into one Multicall3 call, or a deployless multicall
 on a chain without Multicall3 (the log says which), so the bell of 200 tickets reads its sessions in about 24 calls
 instead of 216. Set-up and checks: deploy/vps/README.md, "RPC". `rpc: N calls/min …` in the log, once a minute per
 URL, shows the traffic and the 429s.
@@ -312,62 +313,61 @@ transfer to it fails (a token that refuses that address), the whole batch revert
 `!!! chain: settle batches revert on the fee transfer`: change the fee wallet and the pending settlements go out
 by themselves.
 
-## The name: Coinnibal, and moving to coinnibal.fun
+## The name: Coinnibal (formerly Elymum)
 
-The product is **Coinnibal** (a coin + a cannibal: coins that eat coins), its token **$NIBAL**. "Elymum" is the old
-name and stays as the **internal** name on purpose: the packages (`@elymum/*`), the contract names (`CoinnibalArena`,
-`CoinnibalNFT`), the env vars (`ELYMUM_*` on the VPS), `/opt/elymum`, the `elymum-*` systemd units and compose project,
-the DATA_DIR files, the browser storage keys (`elymum.*`), the WebSocket protocol (`elymum.auth.`), the
-`X-Elymum-Proof` header and the file `og-elymum.png`. Renaming those would break deploys and saved data; players
-never see them.
+The product is **Coinnibal** (a coin + a cannibal: coins that eat coins), its token **$NIBAL**. The project was called
+Elymum and ran on Elysium until November 2026. The code carries the new name: the contracts (`CoinnibalArena`,
+`CoinnibalNFT`, the "Coinnibal Test Token" `TEST`), the packages (`@coinnibal/*`), the VPS keys (`COINNIBAL_*`), the
+browser storage keys (`coinnibal.*`), the WebSocket protocol (`coinnibal`, `coinnibal.auth.<token>`), the
+`X-Coinnibal-Proof` header and the payment refs (`coinnibal.shop.`, `coinnibal.cart.`, `coinnibal.room.`).
+
+What still reads or keeps the old name, and why:
+
+| What | Why |
+|---|---|
+| The live server's installed names: `/opt/elymum`, the compose project and the volume `elymum-data`, the image, the `elymum-*` units and commands, the backups `elymum-data-*.tar.gz`, the game domain `game.elymum.io` | changing them moves the data (a new Docker project means a new, empty volume); deploy/vps/README.md, section 4. The commands also exist as `coinnibal-*` |
+| The VPS keys `ELYMUM_*` | still read when the `COINNIBAL_*` key is unset (section "Renamed keys" below) |
+| Browser storage `elymum.<key>` | moved to `coinnibal.<key>` the first time the page uses it (the session, the settings, the shop's and the rooms' kept payments), then deleted |
+| Payment refs `elymum.shop.` / `elymum.cart.` | a pack or a cart paid just before the switch still credits; the wallet, the pack or cart, the amount and the arena are checked as before |
+| The WebSocket names `elymum` / `elymum.auth.<token>`, the header `X-Elymum-Proof` | a tab opened, or a script copied, before the update still connects and still sends its proof |
+| Link X codes `ELYMUM-XXXXXX`, the sign-in line "Sign in to Elymum." | a code or a sign-in started on a page from before the rename still verifies (codes live 30 minutes) |
+| The X handles `elymum` / `elymumio` in a data dir, seeded WL task texts that say Elymum | moved to the current handle and name on start (tasks you wrote are never touched) |
+| Player names that spell Elymum, "send … elymum" in chat | refused like the current name (impersonation, scam bait) |
+| `elymum.io` | it redirects every path to coinnibal.fun (vercel.json), and the NFT's on-chain base URI and links posted on X point at it: it stays a brand origin (CORS, sign-in) |
+| The fixed hash prefixes `elymum:` (the coin of a WL card) and `elymum-fp|` (the device fingerprint) | a new prefix would change every shared card and every device's fingerprint |
 
 What players see follows configuration, not code:
 
 | What | Where it comes from | Today |
 |---|---|---|
-| The site's domain (canonical / Open Graph URLs, robots.txt, sitemap.xml, share cards, the Link X post, SIWE) | web build `VITE_PUBLIC_URL` (else `PUBLIC_URL`); server `PUBLIC_URL` | `https://elymum.io` |
-| The project's X handle (every "Follow @...", WL tasks, collab posts, the WL card, `twitter:site`) | the admin's **Settings → X handle** (live at once); its default: server `X_HANDLE`, web build `VITE_X_HANDLE` | `elymumio` |
-| The token's display symbol (lobby, HUD, receipts, shop, faucet page) | server `TOKEN_SYMBOL` | `$NIBAL` (the default) |
+| The site's domain (canonical / Open Graph URLs, robots.txt, sitemap.xml, share cards, the Link X post, SIWE) | web build `VITE_PUBLIC_URL` (else `PUBLIC_URL`); server `PUBLIC_URL` | `https://coinnibal.fun` |
+| The project's X handle (every "Follow @...", WL tasks, collab posts, the WL card, `twitter:site`) | the admin's **Settings → X handle** (live at once); its default: server `X_HANDLE`, web build `VITE_X_HANDLE` | `coinnibalfun` |
+| The token's display symbol (lobby, HUD, receipts, shop, faucet page) | server `TOKEN_SYMBOL` | `tokens` (the default) |
 | The brand kit art (`node brand/generate.mjs`) | `BRAND_X_HANDLE`, `BRAND_SITE` | `@coinnibalfun`, `coinnibal.fun` |
 
-On-chain names cannot change after a deploy. The testnet TestToken's symbol is `TEST` (wallets show it; the site
-says `$NIBAL`), and the deployed testnet NFT keeps `name()` / `symbol()` "Elymum" / "ELYMUM". A **new** `CoinnibalNFT`
-deployment (mainnet) is "Coinnibal" / "NIBAL": only the constructor changed, the runtime code and its pinned hash are
-the same, so the deployed contracts still pass every code check. Marketplaces show the collection name from the
-server's contract metadata (`contractURI`), which says "Coinnibal".
+On-chain names cannot change after a deploy. A contract deployed before the rename keeps the names it was deployed with
+(the testnet TestToken "Elymum Test Token" / `tELYMUM`, the testnet NFT "Elymum" / "ELYMUM"); this build deploys
+"Coinnibal" / "NIBAL" and "Coinnibal Test Token" / `TEST`. The rename changed no runtime code: the pinned runtime code
+hashes are the same, so contracts registered before still pass the code check. A registered contract whose code
+differs is never used (the arenas stay off) and the admin panel says to redeploy it. Marketplaces show the collection
+name from the server's contract metadata (`contractURI`), which says "Coinnibal".
 
-Transitions handled in code: Link X codes are now `NIBAL-XXXXXX` and a post with the old `ELYMUM-XXXXXX` form of the
-same code still verifies (codes live 30 minutes); the sign-in message says "Sign in to Coinnibal." and a page or server
-from before the rename that uses the old line still signs in (the web and the server deploy apart).
+**The domains.** The site is `coinnibal.fun` (the VPS serves it, `SITE_DOMAIN`; www redirects to it), and `elymum.io`
+redirects every path to it (vercel.json). The game server's own domain is `game.elymum.io` (`GAME_DOMAIN`); to move it
+to `game.coinnibal.fun`: an `A` record → the VPS, `GAME_DOMAIN=game.coinnibal.fun` in `/opt/elymum/.env`, then
+`coinnibal-compose up -d` (Caddy gets the certificate). NFT links: the metadata base URI is on chain; the redirect keeps
+the old links working, or set a new one in Admin → Mint (`setBaseURI`) unless you froze it.
 
-**Moving to coinnibal.fun** (when the domain is bought). Keep elymum.io working throughout: the NFT's on-chain base URI
-and links already posted on X point at it.
-
-1. DNS: point `coinnibal.fun` at Vercel (Project → Settings → Domains → add `coinnibal.fun` and `www.coinnibal.fun`).
-   Optionally add `game.coinnibal.fun` → the VPS (an `A` record, as for `game.elymum.io` in deploy/vps/README.md).
-2. Vercel → Environment Variables: `VITE_PUBLIC_URL=https://coinnibal.fun` (and `VITE_SERVER_URL=https://game.coinnibal.fun`
-   if you moved the game domain), then redeploy. index.html, robots.txt and sitemap.xml follow.
-3. VPS (`/opt/elymum/.env`): `PUBLIC_URL=https://coinnibal.fun` and `CORS_ORIGIN=https://coinnibal.fun,https://elymum.io`
-   (both while elymum.io still serves pages), then `elymum-compose up -d app`. With a new game domain also set
-   `GAME_DOMAIN=game.coinnibal.fun` (Caddy gets its certificate) and update the two `game.elymum.io` rewrites in
-   `vercel.json`.
-4. Make elymum.io redirect to coinnibal.fun in Vercel (Domains → elymum.io → Redirect to coinnibal.fun, 308) once step 3
-   is live. Players sign in again once (SIWE binds the domain).
-5. NFT links: the metadata base URI is on chain. Either keep `elymum.io/api/nft/*` answering (the redirect keeps it
-   working), or set the new one in Admin → Mint (`setBaseURI`) unless you froze it.
-6. Art: `BRAND_SITE=coinnibal.fun node brand/generate.mjs x2-banner` for the X banner's "Testnet open" sticker.
-   (No other image names a domain; share cards name `PUBLIC_URL`'s host by themselves.)
-
-**The X handle is @coinnibalfun** (the shared default since the account went live).
-
-A data dir that still stores `elymumio` (or `elymum`) is moved to `coinnibalfun` on start, and the seeded WL tasks
-follow. To use another account: Admin → Settings → X handle (live at once), or `X_HANDLE` on the VPS as the default.
+**The X handle is @coinnibalfun** (the shared default since the account went live). A data dir that still stores
+`elymumio` (or `elymum`), the defaults of before the rename, is moved to `coinnibalfun` on start, and the seeded WL
+tasks follow. To use another account: Admin → Settings → X handle (live at once), or `X_HANDLE` on the VPS as the
+default.
 
 ## Deploying on Robinhood Chain Testnet
 
 Everything is done from `/admin` with the owner wallet; nothing needs a terminal once the server runs.
 
-1. **Server.** On the VPS nothing is needed for the chain (`ELYMUM_CHAIN_ID` defaults to 46630 and `ELYMUM_RPC_URLS` to the public `https://rpc.testnet.chain.robinhood.com`;
+1. **Server.** On the VPS nothing is needed for the chain (`COINNIBAL_CHAIN_ID` defaults to 46630 and `COINNIBAL_RPC_URLS` to the public `https://rpc.testnet.chain.robinhood.com`;
    a provider such as Alchemy is better for production), then set `SERVER_PRIVATE_KEY=auto`, `ADMIN_WALLETS` and
    `PUBLIC_URL`, then start it. The log shows `chain: Robinhood Chain Testnet (chain id 46630)` and the server key;
    `/api/config` publishes it as `serverKey`.
@@ -395,41 +395,50 @@ Everything is done from `/admin` with the owner wallet; nothing needs a terminal
 The same can be scripted with the CLI (`pnpm admin help`: `deploy-test-token`, `deploy-arena`, `deploy-nft`, `set-token`, `create-arena`, `fee`,
 `burn-mode`, `payment-burn`, `holder-perks`, `status`) and a key file.
 
-## First deploy checklist (the ELYMUM_* keys)
+## First deploy checklist (the COINNIBAL_* keys)
 
 The VPS deploys `main` by itself (deploy/vps/update.sh). The first deploy of the server/ops release needs no change in
 `/opt/elymum/.env`: every new key is optional, and `docker-compose.yml` fills in the live values. Check, in order:
 
-1. **Nothing to add.** Unset `ELYMUM_CHAIN_ID`, `ELYMUM_RPC_URLS`, `ELYMUM_RPC_MAX_RPS` and `ELYMUM_GAME_ACCESS` mean
+1. **Nothing to add.** Unset `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `COINNIBAL_RPC_MAX_RPS` and `COINNIBAL_GAME_ACCESS` mean
    46630, `https://rpc.testnet.chain.robinhood.com`, 4 calls a second and `site`: the chain and contracts of today,
    and who may play is the `/admin` → Settings switch.
 2. **Stale keys are harmless.** `CHAIN_ID`, `EVM_RPC_URL`, `EVM_RPC_URLS`, `RPC_MAX_RPS`, `GAME_ACCESS`, `WEB_DIST`
    and the Elysium-era `PUBLIC_RPC_URL`, `EXPLORER_URL`, `ARENA_ADDRESS`, `NFT_ADDRESS`, `TOKEN_ADDRESS`,
    `TESTNET_RPC_URL`, `JOURNAL_ABANDON_CONTRACT` in `.env` are always overridden. Delete them when convenient, so the
-   file says what runs. If you tuned `RPC_MAX_RPS` there, copy it to `ELYMUM_RPC_MAX_RPS`.
+   file says what runs. If you tuned `RPC_MAX_RPS` there, copy it to `COINNIBAL_RPC_MAX_RPS`.
 3. **`AUTH_SECRET`.** Under 32 bytes the testnet server only warns (`!!! AUTH_SECRET is …`); the mainnet refuses to
    start. Replace it with `openssl rand -hex 32` before the mainnet, or leave it empty for the generated one (every
    session then has to sign in again once).
 4. **Sign in to `/admin` again.** Admin sessions are now 2 hours and the earlier long tokens are refused on admin
    routes (`admin_session_expired`); players keep theirs.
-5. **After the deploy:** `elymum-compose config | grep -E 'CHAIN_ID|EVM_RPC|GAME_ACCESS'` shows `46630`, the testnet
-   RPC and `site`; `elymum-status` shows `/api/health`; `/admin` → Network shows the chain, the server key's gas
+5. **After the deploy:** `coinnibal-compose config | grep -E 'CHAIN_ID|EVM_RPC|GAME_ACCESS'` shows `46630`, the testnet
+   RPC and `site`; `coinnibal-status` shows `/api/health`; `/admin` → Network shows the chain, the server key's gas
    runway and the same contracts.
-6. **Logs move to journald.** `elymum-compose logs app` keeps working; `journalctl CONTAINER_NAME=elymum-app-1` too.
+6. **Logs move to journald.** `coinnibal-compose logs app` keeps working; `journalctl CONTAINER_NAME=elymum-app-1` too.
 
-Optional keys (all have defaults): `ELYMUM_CHAIN_ID`, `ELYMUM_RPC_URLS`, `ELYMUM_RPC_MAX_RPS`, `ELYMUM_GAME_ACCESS`,
-`ELYMUM_WEB_DIST` (leave unset), `ELYMUM_REQUIRE_CI` (off: without the CI marker the branch head deploys as before),
+Optional keys (all have defaults): `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `COINNIBAL_RPC_MAX_RPS`, `COINNIBAL_GAME_ACCESS`,
+`COINNIBAL_WEB_DIST` (leave unset), `COINNIBAL_REQUIRE_CI` (off: without the CI marker the branch head deploys as before),
 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `BACKUP_RCLONE_REMOTE`, `BACKUP_RCLONE_KEEP_DAYS`, `ADMIN_TOKEN_TTL_MIN`
 (120), `ADMIN_SECRET_EXPORT` (on on testnet, off on mainnet), `DEATH_SETTLE_BATCH_S` (6), `GAS_FLOOR_ETH` (0.002),
 `GAS_RUNWAY_WARN_DAYS` (7), `GAS_RUNWAY_CRITICAL_DAYS` (2), `HEALTH_MAX_PENDING` (400), `HEALTH_MAX_PENDING_AGE_S`
 (900). Required as before: `GAME_DOMAIN`, `NODE_ENV=production`, `PUBLIC_URL`, `CORS_ORIGIN`, `ADMIN_WALLETS`.
 
+**Renamed keys (Elymum → Coinnibal, November 2026).** Every `ELYMUM_*` key the VPS reads is now `COINNIBAL_*`:
+`COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `COINNIBAL_RPC_MAX_RPS`, `COINNIBAL_GAME_ACCESS`, `COINNIBAL_PUBLIC_URL`,
+`COINNIBAL_WEB_DIST` and `COINNIBAL_REQUIRE_CI` in `.env`, `COINNIBAL_DEPLOY_NOW=1` on the command line and the
+scripts' overrides `COINNIBAL_DIR`, `COINNIBAL_ENV` and `COINNIBAL_BACKUPS`. The old `ELYMUM_*` name is still read as
+a fallback (docker-compose.yml with nested interpolation, the scripts in deploy/vps/lib.sh), so the live `.env` keeps
+working unchanged; when both are set, the `COINNIBAL_*` name wins. The server process itself reads none of them.
+The installed names stay (deploy/vps/README.md, section 4): `/opt/elymum`, the compose project and volume, the
+`elymum-*` units, the backups.
+
 ## Moving to Robinhood Chain (mainnet)
 
 The testnet and the mainnet are two networks of the same chain; the server follows `CHAIN_ID`.
 
-1. Deploy the game token on Pons (mainnet only; RESEARCH.md), then in `/opt/elymum/.env` set `ELYMUM_CHAIN_ID=4663`
-   and `ELYMUM_RPC_URLS` to the Alchemy mainnet URL and the public RPC (section "RPC"), an `AUTH_SECRET` of at least 32 bytes
+1. Deploy the game token on Pons (mainnet only; RESEARCH.md), then in `/opt/elymum/.env` set `COINNIBAL_CHAIN_ID=4663`
+   and `COINNIBAL_RPC_URLS` to the Alchemy mainnet URL and the public RPC (section "RPC"), an `AUTH_SECRET` of at least 32 bytes
    (the mainnet refuses less), keep `SERVER_PRIVATE_KEY` or rotate it, fund the server key with ETH, and restart.
    Integrity auto-hold is on by default there, and the secret exports are off (`ADMIN_SECRET_EXPORT`). The server opens a clean state in `DATA_DIR/chains/4663/`; the testnet's records stay in
    `chains/46630/` (the Network tab lists them).
@@ -614,7 +623,7 @@ are on. The scaler (`apps/server/src/rooms/arena-scaler.ts`, rules in
 `/admin` → Game → **Arena instances** (`GET` / `PUT /api/admin/arena-scaling`, stored in
 `DATA_DIR/site/arena-scaling.json`, applied at the next sample): the settings, every arena's instances (people /
 seats, draining, the worker each runs on) and the last 100 decisions (`open`, `overflow`, `drain`, `undrain`,
-`close`, each with its reason). `pnpm -F @elymum/server arena-sim` plays arrival waves against the real room
+`close`, each with its reason). `pnpm -F @coinnibal/server arena-sim` plays arrival waves against the real room
 directory and prints the instances minute by minute and every decision, then checks that every seated ticket was
 settled exactly once.
 
@@ -624,7 +633,7 @@ settled exactly once.
 |---|---|
 | Cloudflare (recommended, deploy/vps/README.md "Cloudflare in front") | volumetric floods, bad bots at the edge; WebSockets pass |
 | Caddy | headers in 10 s, bodies in 30 s and at most 1 MB, headers at most 16 KB, idle keep-alive 2 min |
-| WebSocket front door | `MAX_CONNECTIONS` (1500); guests (not signed in) at most 80 % of it, per IP (8) and per IPv4 /24 or IPv6 /64 (48); a signed-in socket leaves its IP's guest count (carrier NAT), up to 64 per IP; a socket offering its session token (`elymum.auth.<token>` subprotocol) takes the reserve, and a wallet with a live arena coin always gets in (5 % headroom, past the load shedder); near the cap the longest-idle lobby guest (30 s silent) is closed (1013) for a newcomer; 60 upgrades per IP a minute; a socket without a valid `hello` in 10 s is closed; 90 messages/s per socket (bursts of 120), a socket that floods or sends garbage (300 strikes in 10 s) is closed with 1008; at most 4 KB per message; sign-ins and ticket reads 1 per 2 s |
+| WebSocket front door | `MAX_CONNECTIONS` (1500); guests (not signed in) at most 80 % of it, per IP (8) and per IPv4 /24 or IPv6 /64 (48); a signed-in socket leaves its IP's guest count (carrier NAT), up to 64 per IP; a socket offering its session token (`coinnibal.auth.<token>` subprotocol) takes the reserve, and a wallet with a live arena coin always gets in (5 % headroom, past the load shedder); near the cap the longest-idle lobby guest (30 s silent) is closed (1013) for a newcomer; 60 upgrades per IP a minute; a socket without a valid `hello` in 10 s is closed; 90 messages/s per socket (bursts of 120), a socket that floods or sends garbage (300 strikes in 10 s) is closed with 1008; at most 4 KB per message; sign-ins and ticket reads 1 per 2 s |
 | HTTP | 240 API requests per IP a minute, 20 sign-in nonces per IP a minute (at most 24 unused per IP and 4 per address; a full pool evicts the biggest holder's first), headers in 15 s, the whole request in 30 s, 64 KiB bodies, `/api/rooms` and `/api/leaderboard` built at most once a second, 30 share-card renders per IP and 120 in all a minute |
 | Load shedding (`LOAD_SHED`, on in production) | when the game thread with the most headroom runs a tick p95 over 28 ms or the main thread lags over 150 ms (p99): new free games wait (`server_full`); over 45 ms / 400 ms: new sockets (503) and new arena seats wait too (the ticket stays on chain). Live games and reconnects always go on. Logged as `!!! load: BUSY` / `CRITICAL` |
 

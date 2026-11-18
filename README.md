@@ -5,9 +5,8 @@ Robinhood Chain (an Arbitrum Orbit L2, gas token ETH). Its token is `$NIBAL`. Ea
 You are a coin: eat food and smaller coins, run from bigger ones, and when the five-minute bell rings
 whatever you swallowed is paid out on chain.
 
-The game used to be called Elymum. The code keeps that as its internal name (`@coinnibal/*` packages,
-`CoinnibalArena` / `CoinnibalNFT`, env vars, storage keys); everything a player sees says Coinnibal. The domain and the X
-handle are configuration: see docs/OPERATIONS.md, "The name: Coinnibal, and moving to coinnibal.fun".
+Coinnibal was formerly Elymum (docs/OPERATIONS.md, "The name: Coinnibal (formerly Elymum)", lists the few names the
+live server keeps). The domain and the X handle are configuration.
 
 The product flow is WL → Mint → Play: people apply for the whitelist, mint a Coinnibal NFT for
 $1 in ETH, and the game opens for holders. The money rules live in two Solidity contracts; the

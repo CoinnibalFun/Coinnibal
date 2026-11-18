@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sound design + mix for the Elymum SOON promo (all procedural, numpy; no samples).
+"""Sound design + mix for the Coinnibal SOON promo (all procedural, numpy; no samples).
 
 Reuses the gameplay film's DSP kit (media/gameplay-film/audio/dsp.py, sfx.py: whoosh, thump, chomp,
 bell) and adds the creature's boings and footsteps, a sneaky pizzicato walk, a tension riser, the

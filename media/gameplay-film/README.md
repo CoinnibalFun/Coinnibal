@@ -1,6 +1,6 @@
-# Elymum gameplay film (narrated)
+# Coinnibal gameplay film (narrated)
 
-A film of about 120 s recorded from the real UI: the home page, what Elymum is, WL → Mint → Play,
+A film of about 120 s recorded from the real UI: the home page, what Coinnibal is, WL → Mint → Play,
 then a live round in Asphodel Meadow (the drop-in, the first eat, a chase, a split, the final
 minute, the bell and the PAID stamp) and the end card. A storyteller narrates it. This folder holds
 the words, the timeline and the whole soundtrack pipeline. The picture is captured with the
@@ -99,7 +99,7 @@ virtual clock and screenshots exact take times, so the film runs at a true 30 fp
 | `picture/take-round.mjs`, `take-arena.mjs`, `players.mjs` | Arena takes (1920x1080, journals): the lobby and the ticket, a round with staged rival wallets (snacks that come at her, a big coin that turns on her, a small one she splits onto), the final minute, the bell, the landing report |
 | `picture/endcard/` | The end card: a page drawn with the app's design system (served by the dev server) |
 | `picture/edit.mjs` | The edit: every output frame is a take and a take time, cut to `cues.json` from the takes' marks and events |
-| `picture/replay.mjs`, `compose.mjs`, `render.sh` | Render the frames the edit uses, lay them out, encode with `out/work/voice/preview-elymumio/mix.wav` |
+| `picture/replay.mjs`, `compose.mjs`, `render.sh` | Render the frames the edit uses, lay them out, encode with `out/work/voice/preview-coinnibalio/mix.wav` |
 
 ```bash
 # the stack: fake chain, public game, a fresh data dir, free ports
@@ -110,7 +110,7 @@ node media/gameplay-film/picture/take-arena.mjs --name arena      # a whole roun
 node media/gameplay-film/picture/take-round.mjs --name round      # the lobby, the ticket, the drop
 node media/gameplay-film/picture/take-round.mjs --name splitK --beats split --grow 100   # the split onto lil_wei
 EDIT_ARGS="--main arena --lobby round --eat arena --threat arena --split splitK" media/gameplay-film/picture/render.sh
-# -> out/videos/elymum-film-narrated.mp4 (+ four stills)
+# -> out/videos/coinnibal-film-narrated.mp4 (+ four stills)
 ```
 
 Takes are live play with bots, so a new take tells a slightly different story: check its marks and

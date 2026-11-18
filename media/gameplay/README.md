@@ -1,4 +1,4 @@
-# Elymum gameplay video (Video A)
+# Coinnibal gameplay video (Video A)
 
 A cut of a real paid round in Asphodel Meadow, about 57 s, 1920x1080, **60 fps**, H.264 + AAC, -14 LUFS
 (true peak at or below -1.5 dBTP after encoding): a mid-round join (the round chip), she eats a
@@ -29,7 +29,7 @@ This folder also holds the capture and render kit that the how-to-play video
 
 | Path | What it is |
 | --- | --- |
-| `capture/lib.mjs` | Playwright kit. `Player` drives the real app (dev wallet, lobby, tickets, "Buy back in", held tickets, an in-page steering brain that eats, flees, seeks open water and keeps away from the world edge) and reads the arena round clock (`round()`, `untilRound()`). `Recorder` records a take: the journal (a player opened with `journal`), the game audio from the dev tap (`window.__elymumAudioTap`), and a 10 Hz telemetry log (HUD, the round's time left and phase, where Daphne, prey, threats and loot are on screen) plus store events (value floats, kills, rank, banners, the bell's round result, held tickets). |
+| `capture/lib.mjs` | Playwright kit. `Player` drives the real app (dev wallet, lobby, tickets, "Buy back in", held tickets, an in-page steering brain that eats, flees, seeks open water and keeps away from the world edge) and reads the arena round clock (`round()`, `untilRound()`). `Recorder` records a take: the journal (a player opened with `journal`), the game audio from the dev tap (`window.__coinnibalAudioTap`), and a 10 Hz telemetry log (HUD, the round's time left and phase, where Daphne, prey, threats and loot are on screen) plus store events (value floats, kills, rank, banners, the bell's round result, held tickets). |
 | `capture/journal.mjs` | The journal recorder (WebSockets, fetch, input, clock) and the replay shim (virtual clock, journal-fed WebSocket and fetch, animations on the virtual clock). |
 | `capture/replay.mjs` | Renders a journal take: `--edit a.json,b.json` captures every source span the edits use (padded), at 60 fps, 240 fps where a shot runs slower than 0.75x, and each output frame's exact source time. Writes `video.mkv`, `frames.json`, `pts.json` and `fsamples.json` (per-frame telemetry: the coin on screen, the camera, the world size). |
 | `capture/take-*.mjs` | One script per take: `arena` (a whole round: five staged rival wallets with real tickets, Daphne joins mid-round, eats, buys back in if eaten, plays safe through the final minute, a rival comes at her in the last seconds, the bell, the receipt; recorded twice as `arena` and `arena2`), `spill` (a bot eats Daphne, "Buy back in", the same round again), `held` (the lobby in a final minute: joins closed, a held ticket that joins the next round by itself), `practice` (growth, controls, cacti, coin rain; the coin is steered back to open water before each beat), `lobby` (tickets, wallet, ticket sheet, the four arenas, ranks, guide), `music` (the score only, no video). The round takes wait for the right moment of the wall-clock round. |
@@ -74,8 +74,8 @@ node media/gameplay/edit.mjs                  # again: the framing now uses the 
 
 # 3. the render
 media/gameplay/render/render.sh media/gameplay/cache/edit/gameplay.json \
-  media/gameplay/cache/edit/gameplay-music.json elymum-gameplay
-# -> out/videos/elymum-gameplay.mp4 (web, < 30 MB) and elymum-gameplay-master.mp4
+  media/gameplay/cache/edit/gameplay-music.json coinnibal-gameplay
+# -> out/videos/coinnibal-gameplay.mp4 (web, < 30 MB) and coinnibal-gameplay-master.mp4
 ```
 
 Takes are live play, so a new recording tells a slightly different story. The edits find their
@@ -93,6 +93,6 @@ the final minute, the last gulp, the bell and the receipt) and `spill` (eaten by
   default 30). The takes use the default so the round chip shows real five-minute times.
 - The rivals (`mochi_moon`, `bonk_bae`, `lil_wei`, `rug_ruth`, `pixel_penny`) are real wallets
   with real (fake-chain) tickets, played by the capture script. Bots are the game's own.
-- The end card reads the site's host (`SITE_HOST`, the `PUBLIC_URL` host; default elymum.io) and @elymumio (X).
+- The end card reads the site's host (`SITE_HOST`, the `PUBLIC_URL` host; default coinnibal.fun) and @coinnibalfun (X).
 - Colours follow the Ring Storybook palette (spec section 6.3, `packages/shared/src/palette.ts`);
   `motion/` repeats the hex values under the old names, so update both when the palette moves.

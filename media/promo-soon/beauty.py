@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Soft "baby face" beauty pass + gentle grade for the Elymum SOON promo.
+"""Soft "baby face" beauty pass + gentle grade for the Coinnibal SOON promo.
 
 Reads the source clip (START..END), finds the face per frame with MediaPipe FaceLandmarker,
 smooths the landmarks over time (centred Gaussian, no lag), builds a feathered skin mask

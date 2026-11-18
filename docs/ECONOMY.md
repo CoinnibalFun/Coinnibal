@@ -85,8 +85,9 @@ settles can be refunded by its player after 24 h (the entry fee, capped by the v
 Packs of **3 charges**, paid in the game token through `CoinnibalArena.pay(amount, ref)`: the contract burns
 **50 %** (`paymentBurnBps`, owner-settable 0 to 100 %) and sends the rest to the fee wallet in the same call. The
 shop is a cart: the player picks several packs (+/−), and one `pay(total, ref)` pays them all (the `ref` names the
-cart, `elymum.cart.…`; a single pack is `elymum.shop.<kind>`). The server credits the charges after checking the
-`Paid` event (contract, payer, cart, amount).
+cart, `coinnibal.cart.…`; a single pack is `coinnibal.shop.<kind>`; a payment made just before the rename with the
+`elymum.` prefix still counts). The server credits the charges after checking the `Paid` event (contract, payer,
+cart, amount).
 
 **Priced in US dollars** like the tickets (`priceIn: 'usd'`, the default): the server converts each pack at the same
 token price source and the same significant figures as the arena tiers (Game → Arena prices: the manual price; the

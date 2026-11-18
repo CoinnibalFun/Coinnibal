@@ -288,8 +288,9 @@ has more bots than its setting, nor more playing than the setting minus its peop
   When an arena's entry fee changes on chain its rooms follow (`RoomHandle.setBuyIn`, display and evidence only:
   money always uses the ticket's own `Session.entryFee`).
 - **Power-up shop** (`shop/`): `GET /api/shop`, `POST /api/shop/buy {cart, txHash}` (a cart of several packs paid
-  with one `pay(total, ref)`, `ref` = `elymum.cart.` and each power-up's letter and pack count; older clients send
-  `{kind, txHash}` for one pack, `ref` = `elymum.shop.<kind>`); packs are priced in US cents and converted at the
+  with one `pay(total, ref)`, `ref` = `coinnibal.cart.` and each power-up's letter and pack count; older clients send
+  `{kind, txHash}` for one pack, `ref` = `coinnibal.shop.<kind>`; a pack or cart paid with the `elymum.` prefix of before
+  the rename still credits, with the same checks); packs are priced in US cents and converted at the
   arenas' token price and rounding (`priceIn: 'usd'`; token prices until a price is set); the server checks the
   receipt's `Paid` event (the arena, the payer, the cart's `ref`, the total at one price table quoted now or in the
   last 15 minutes, full or the holder's) and the token transfer, then credits the whole cart in one write (each hash
@@ -320,7 +321,7 @@ has more bots than its setting, nor more playing than the setting minus its peop
   Operator exits and the in-game HUD's share button (live mass, place and coins eaten) open the intent with the site's
   link.
 - **Link X** (`xlink.ts`, `shared/xlink.ts`): a signed-in wallet ties an X account to its coin without the X API.
-  `POST /api/x/code` issues a code (`NIBAL-` and six characters; the pre-rename `ELYMUM-` is still accepted, 30 minutes), the player posts it from X (the web
+  `POST /api/x/code` issues a code (`COIN-` and six characters; the earlier `NIBAL-` and the pre-rename `ELYMUM-` are still accepted, 30 minutes), the player posts it from X (the web
   intent) and sends the post's link to `POST /api/x/verify {url}`; the server reads the post from X's public embed
   endpoints and takes the handle, id, name and picture from X's answer. `GET /api/x` (the link and the pending code),
   `DELETE /api/x` (unlink), `POST /api/x/picture` (wear the X picture on the coin), `GET /api/x/avatar/<userId>`
@@ -333,7 +334,8 @@ has more bots than its setting, nor more playing than the setting minus its peop
   without it, in production, a page of its own domain redirects to `PUBLIC_URL`.
 - **Front door** (`net/gateway.ts`): guests hold at most 80 % of `MAX_CONNECTIONS` and are limited per IP and per
   subnet; a signed-in socket leaves its IP's guest count (carrier NAT, up to 64 per IP); a socket offering its
-  session token as the `elymum.auth.<token>` subprotocol takes the reserve, and one whose wallet holds a live coin
+  session token as the `coinnibal.auth.<token>` subprotocol (or `elymum.auth.<token>`, from a page of before the rename)
+  takes the reserve, and one whose wallet holds a live coin
   always gets in; an idle lobby guest makes room near the cap. A join of the wallet that holds a live coin takes it
   over on the new socket at once and closes the old one with `CLOSE_REPLACED` (4000).
 - **Dev fake chain** (`chain/dev-fake.ts`, `DEV_FAKE_CHAIN=1` with `NODE_ENV=development` only): an in-memory chain

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Final compositor for the Elymum SOON promo (16:9).
+"""Final compositor for the Coinnibal SOON promo (16:9).
 
 graded footage (beauty.py) -> push-in + creeping yellow before the bite -> graphics layer (overlay.mjs)
 -> camera shake (landing bumps, rumble, the bite's heavy decaying shake with motion blur) -> x264 + mix.wav.

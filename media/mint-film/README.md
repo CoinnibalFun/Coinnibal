@@ -1,23 +1,23 @@
-# Elymum mint film (19.5 s, 1920x1080 and 1080x1920, 60 fps)
+# Coinnibal mint film (19.5 s, 1920x1080 and 1080x1920, 60 fps)
 
-A short announcement film for the Elymum NFT: the mint costs **$1, paid in HYPE** on Elysium, the
+A short announcement film for the Coinnibal NFT: the mint costs **$1, paid in HYPE** on Elysium, the
 order is **WL → Mint → Play** (the emblem opens the game), and the WL is open at `<SITE_HOST>/wl`
-(@elymumio on X). 120 BPM; every cut and slam sits on the beat grid (downbeats at 0.5 + 2k s). The
+(@coinnibalfun on X). 120 BPM; every cut and slam sits on the beat grid (downbeats at 0.5 + 2k s). The
 canvas kit draws in the Ring Storybook palette and type (Fraunces, Geist Mono; see `media/README.md`).
 
 | Film | Beat | On screen | VO (Kokoro `af_heart`, the promo's chain) |
 | --- | --- | --- | --- |
-| 0:00.0 | $1 mint | A sealed card spins up and cracks; "$1" and "MINT" slam in on the cyan stock; the mascot (the X profile coin) rises and falls in love. | "A one dollar mint." "The Elymum NFT is coming." |
+| 0:00.0 | $1 mint | A sealed card spins up and cracks; "$1" and "MINT" slam in on the cyan stock; the mascot (the X profile coin) rises and falls in love. | "A one dollar mint." "The Coinnibal NFT is coming." |
 | 0:04.5 | Sealed | A paper wipe; five sealed cards dealt, the seals crack and the cards turn on the eighths; a $1 IN HYPE stamp. | "Sealed cards. One dollar, in HYPE." |
 | 0:08.5 | The order | An ink flood to night; three tickets; the mascot hops 01 WL OPEN, 02 $1 MINT, 03 GAME LIVE, each prints in its ink on the landing; it leaps at the camera. | "The roadmap: The whitelist. The mint. Then the game." |
-| 0:12.5 | WL open | The coin pulls back: "WL open.", the `<SITE_HOST>/wl` ticket, the wordmark, @ELYMUMIO and the foot line "WL OPEN · <SITE_HOST>/WL · @ELYMUMIO". | "The WL is open. @elymumio, on X." |
+| 0:12.5 | WL open | The coin pulls back: "WL open.", the `<SITE_HOST>/wl` ticket, the wordmark, @COINNIBALFUN and the foot line "WL OPEN · <SITE_HOST>/WL · @COINNIBALFUN". | "The WL is open. @coinnibalfun, on X." |
 
 Facts: $1 in HYPE (never a HYPE number: the price is held at a dollar and its HYPE value moves), the
 WL first, the order WL → Mint → Play. No supply, no dates, no perks. The VO lines changed length
 with the rebrand: check the cue times in `timeline.json` against the new takes before the final render.
 
 `SITE_HOST` is the host of the site's `PUBLIC_URL` (no domain is written into the scenes). The
-renderer passes it to the page as `?site=`; default `elymum.io`.
+renderer passes it to the page as `?site=`; default `coinnibal.fun`.
 
 ## Layout
 
@@ -40,6 +40,6 @@ media/gameplay/cache/venv/bin/python media/mint-film/audio/tts.py \
   --models media/gameplay/cache/models --out media/mint-film/cache/vo-raw
 SITE_HOST=<your host> node media/promo/render/render.mjs --project media/mint-film --preview 1.0,6.5,10.5,16.5   # stills
 SITE_HOST=<your host> node media/promo/render/render.mjs --project media/mint-film --w 1080 --h 1920 --preview 10.5
-SITE_HOST=<your host> media/mint-film/render.sh media/mint-film elymum-mint-film 1920x1080: 1080x1920:-vertical
-# -> out/videos/elymum-mint-film(.mp4|-master.mp4), elymum-mint-film-vertical(.mp4|-master.mp4)
+SITE_HOST=<your host> media/mint-film/render.sh media/mint-film coinnibal-mint-film 1920x1080: 1080x1920:-vertical
+# -> out/videos/coinnibal-mint-film(.mp4|-master.mp4), coinnibal-mint-film-vertical(.mp4|-master.mp4)
 ```

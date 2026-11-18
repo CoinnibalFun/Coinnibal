@@ -50,14 +50,14 @@ if (meta.kind === 'card') {
   // the end card: no wallet, no staging
 } else if (meta.kind === 'arena') {
   const { setupContext } = await import('../../gameplay/capture/lib.mjs');
-  await ctx.addInitScript(() => localStorage.setItem('elymum.wallet.v1', 'dev.elymum.wallet'));
+  await ctx.addInitScript(() => localStorage.setItem('coinnibal.wallet.v1', 'dev.coinnibal.wallet'));
   await setupContext(ctx, { ...meta.player, keyPath: resolve(DIR, 'wallet.key') });
 } else {
   const { installDevWallet, loadOrCreateKey } = await import(resolve(ROOT, 'scripts/lib/dev-wallet.mjs'));
   const { stageRoutes, startFakeRpc } = await import('./stage.mjs');
   rpc = await startFakeRpc();
-  if (meta.seed) await ctx.addInitScript((s) => { if (s.auth) localStorage.setItem('elymum.auth.v1', s.auth); if (s.wallet) localStorage.setItem('elymum.wallet.v1', s.wallet); }, meta.seed);
-  await ctx.addInitScript(() => { try { localStorage.setItem('elymum.site.sound', 'off'); } catch {} });
+  if (meta.seed) await ctx.addInitScript((s) => { if (s.auth) localStorage.setItem('coinnibal.auth.v1', s.auth); if (s.wallet) localStorage.setItem('coinnibal.wallet.v1', s.wallet); }, meta.seed);
+  await ctx.addInitScript(() => { try { localStorage.setItem('coinnibal.site.sound', 'off'); } catch {} });
   await installDevWallet(ctx, loadOrCreateKey(resolve(DIR, 'wallet.key')), { rpcUrl: rpc.url, chainId: 31337 });
   await stageRoutes(ctx);
 }
@@ -90,7 +90,7 @@ async function dispatch(e) {
 async function setDraw(on) {
   if (on === drawing) return;
   const ok = await page.evaluate((on) => {
-    const e = window.__elymum?.engine;
+    const e = window.__coinnibal?.engine;
     if (!e) return false;
     const r = e.renderer;
     if (!r.__draw) { r.__draw = r.draw; r.__mm = r.drawMinimap; }

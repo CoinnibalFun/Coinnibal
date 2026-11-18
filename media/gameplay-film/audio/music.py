@@ -4,7 +4,7 @@ box, pizzicato and harp (Karplus-Strong), a sneaky staccato bassoon for the chas
 soft string pads, brushes, a felt kick, timpani and cymbals. F major, 96 BPM (one bar = 2.5 s).
 
 Scored to ../cues.json "music" (film seconds):
-  intro     home page and what Elymum is: rolled piano chords, the music-box motif, harp later
+  intro     home page and what Coinnibal is: rolled piano chords, the music-box motif, harp later
   flow      WL -> mint -> lobby: walking pizzicato bass, broken piano, brushes come in
   pulse     the live round: bassoon ostinato, off-beat pizzicato, kick and brushes, music box answers
   break     one beat of air before the split, then the groove comes back fuller
