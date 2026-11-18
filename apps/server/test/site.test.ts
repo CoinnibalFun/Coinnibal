@@ -292,6 +292,7 @@ describe('site API', () => {
       await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { launchPostUrl: null, wlOpen: false } });
       const closed = await h.call('POST', '/api/site/wl', { wallet: wallet(), body: wlBody('carol') });
       expect([closed.status, closed.body.error]).toEqual([403, 'wl_closed']);
+      expect(closed.body.message).toBe('Applications are closed. Follow @coinnibalfun to hear when they open again.');
       await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { wlOpen: true } });
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { wlOpen: 'yes' } })).body.field).toBe('wlOpen');
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { bogus: 1 } })).body.field).toBe('bogus');
@@ -342,6 +343,7 @@ describe('site API', () => {
       const w = wallet();
       const closed = await h.call('POST', '/api/site/collab', { wallet: w, body: collabBody('dave') });
       expect([closed.status, closed.body.error]).toEqual([403, 'collab_closed']);
+      expect(closed.body.message).toBe('Collab applications are closed. Follow @coinnibalfun to hear when they open again.');
       await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { collabOpen: true } });
       expect((await h.call('GET', '/api/site/settings')).body.settings.collabOpen).toBe(true);
       const cases: [Record<string, unknown>, string][] = [
