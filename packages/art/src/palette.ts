@@ -1,11 +1,11 @@
 /**
- * The "Ring Storybook" paints (spec §6.3). The values live in `@elymum/shared`
+ * The "Ring Storybook" paints (spec §6.3). The values live in `@coinnibal/shared`
  * (one source for the art, the arena inks and the web app). `RISO` is the
  * deprecated alias set (old names mapped onto Storybook paints).
  */
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 
-export { CARD_PAPER, COIN_PAINTS, ELYSIUM, INK, INK_2, NIGHT, PAPER, RISO, SHADE, TEXT_INKS, type ElysiumPaint, type RisoInk } from '@elymum/shared';
+export { CARD_PAPER, COIN_PAINTS, ELYSIUM, INK, INK_2, NIGHT, PAPER, RISO, SHADE, TEXT_INKS, type ElysiumPaint, type RisoInk } from '@coinnibal/shared';
 
 const shadeByHex = new Map<string, string>();
 for (const [k, v] of Object.entries(ELYSIUM)) if (!shadeByHex.has(v)) shadeByHex.set(v, SHADE[k as keyof typeof SHADE]);

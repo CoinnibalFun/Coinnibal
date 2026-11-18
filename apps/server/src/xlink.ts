@@ -18,7 +18,7 @@ import {
   type XLinkError,
   type XLinkView,
   type XStatusView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import { encodePng } from './avatars';
 import { Limiter } from './net/limiter';

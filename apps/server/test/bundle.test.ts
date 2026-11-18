@@ -8,7 +8,7 @@ import config from '../tsup.config';
 
 /**
  * The Docker image runs the tsup bundle (`node dist/index.js`) with the workspace packages bundled in
- * (`@elymum/*` ship TypeScript sources) and viem external. Build the real entry like `pnpm build` and
+ * (`@coinnibal/*` ship TypeScript sources) and viem external. Build the real entry like `pnpm build` and
  * start it with an (unreachable) EVM chain configured: the gateway must load and keep the process up.
  */
 describe('production bundle (tsup)', () => {

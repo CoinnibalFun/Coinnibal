@@ -9,7 +9,7 @@
  *   :root[data-theme='dark'], [data-theme='night'] (on a .kb or around it),
  *   or prefers-color-scheme: dark when the root has no data-theme.
  *
- * The paint values repeat `@elymum/shared` palette.ts (ELYSIUM / SHADE).
+ * The paint values repeat `@coinnibal/shared` palette.ts (ELYSIUM / SHADE).
  * apps/web/test/palette.test.ts keeps both in step and checks every text /
  * background pair below for >= 4.5:1 (WCAG) in both themes.
  *

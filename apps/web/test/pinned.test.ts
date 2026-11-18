@@ -1,5 +1,5 @@
-import { coinnibalArenaArtifact } from '@elymum/sdk';
-import { LOCALNET_CHAIN_ID, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID } from '@elymum/shared';
+import { coinnibalArenaArtifact } from '@coinnibal/sdk';
+import { LOCALNET_CHAIN_ID, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID } from '@coinnibal/shared';
 import { getAddress, keccak256, type Hex } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { TESTNET_PINS, buildPins, checkAnnounced, checkNft, verifyArena } from '../src/wallet/pinned';

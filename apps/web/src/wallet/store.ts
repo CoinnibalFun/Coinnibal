@@ -1,6 +1,6 @@
 import { getAddress, isAddress, type Address } from 'viem';
 import { create } from 'zustand';
-import { describeError } from '@elymum/sdk';
+import { describeError } from '@coinnibal/sdk';
 import { discoverProviders, type Eip1193Provider, type ProviderDetail } from './eip6963';
 import { WC_RDNS, endWalletConnect } from './walletconnect';
 import { t } from '../i18n';

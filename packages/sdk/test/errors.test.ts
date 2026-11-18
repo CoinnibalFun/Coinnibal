@@ -1,4 +1,4 @@
-import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi } from '@elymum/contracts';
+import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi } from '@coinnibal/contracts';
 import {
   BaseError,
   ChainMismatchError,

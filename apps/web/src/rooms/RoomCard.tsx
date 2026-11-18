@@ -1,4 +1,4 @@
-import { parseInviteCode, type CustomRoomView } from '@elymum/shared';
+import { parseInviteCode, type CustomRoomView } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Button, Chip, CoinCharacter } from '../design';
 import { engine } from '../game/instance';

@@ -1,4 +1,4 @@
-import { SITE_SETTINGS_DEFAULT, type SiteSettings } from '@elymum/shared';
+import { SITE_SETTINGS_DEFAULT, type SiteSettings } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { X_HANDLE_BUILD, setOurXHandle } from '../i18n';
 import { site } from './api';

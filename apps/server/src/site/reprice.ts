@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { RoundWindow } from '@elymum/shared';
+import type { RoundWindow } from '@coinnibal/shared';
 import type { ChainArena } from '../chain/types';
 import type { Journal } from '../stake/journal';
 

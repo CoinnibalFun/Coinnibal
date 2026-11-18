@@ -16,7 +16,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION } from '@elymum/shared';
+import { PROTOCOL_VERSION } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import WebSocket from 'ws';
 import { createApp } from '../../src/app';

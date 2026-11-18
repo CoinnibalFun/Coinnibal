@@ -1,4 +1,4 @@
-import { CUSTOM_PAYMENT_MAX_AGE_MS, CUSTOM_REQUEST_RE, SITE_URL_DEFAULT, type CustomRoomConfig, type CustomRoomCreate, type CustomRoomError, type CustomRoomQuote, type CustomRoomView } from '@elymum/shared';
+import { CUSTOM_PAYMENT_MAX_AGE_MS, CUSTOM_REQUEST_RE, SITE_URL_DEFAULT, type CustomRoomConfig, type CustomRoomCreate, type CustomRoomError, type CustomRoomQuote, type CustomRoomView } from '@coinnibal/shared';
 import { SERVER } from '../config';
 import { serverText, t } from '../i18n';
 

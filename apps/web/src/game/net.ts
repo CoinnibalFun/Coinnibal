@@ -1,4 +1,4 @@
-import { CLOSE_REPLACED, PROTOCOL_VERSION, type ClientMessage, type ServerMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, PROTOCOL_VERSION, type ClientMessage, type ServerMessage } from '@coinnibal/shared';
 import type { NetDown } from '../store';
 
 /** The game's WebSocket subprotocol (the server answers with it; it never echoes the token one). */

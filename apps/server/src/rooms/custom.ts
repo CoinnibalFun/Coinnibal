@@ -35,7 +35,7 @@ import {
   type CustomRoomSettings,
   type CustomRoomSummary,
   type CustomRoomView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import type { PracticeBotsOptions } from '../bots/practice';
 import { TX_HASH_RE, type UsedPayments } from '../chain/payment';

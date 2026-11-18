@@ -1,6 +1,6 @@
-import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi, type ArenaConfig, type ArenaInfo, type ContractCall, type MintState, type SessionInfo, type TestTokenFaucetConfig } from '@elymum/sdk';
+import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi, type ArenaConfig, type ArenaInfo, type ContractCall, type MintState, type SessionInfo, type TestTokenFaucetConfig } from '@coinnibal/sdk';
 import { encodeErrorResult, getAddress, keccak256, toHex, type Address, type Hash, type Hex } from 'viem';
-import { computeProfitFee, ratesFor } from '@elymum/shared';
+import { computeProfitFee, ratesFor } from '@coinnibal/shared';
 import type { ArenaEvent, CodeCheck, ContractKindCode, EvmClient, JoinedLog, TransferLog, TxReceipt } from '../src/chain/evm-client';
 
 export const SERVER = getAddress('0x70997970c51812dc3a010c7d01b50e0d17dc79c8');

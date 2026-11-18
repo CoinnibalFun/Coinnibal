@@ -1,4 +1,4 @@
-import type { ChainStatus } from '@elymum/shared';
+import type { ChainStatus } from '@coinnibal/shared';
 import { getAddress, type Address } from 'viem';
 import type { Eip1193Provider, ProviderDetail } from '../src/wallet/eip6963';
 

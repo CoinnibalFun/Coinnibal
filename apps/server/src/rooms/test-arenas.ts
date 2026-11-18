@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { TEST_ARENA_DEFAULT, applyTestArenaSettings, testArenasAllowedOn, type TestArenaSettings } from '@elymum/shared';
+import { TEST_ARENA_DEFAULT, applyTestArenaSettings, testArenasAllowedOn, type TestArenaSettings } from '@coinnibal/shared';
 
 /**
  * The admin switch "Test arenas with bots" and its bot settings (`DATA_DIR/site/test-arenas.json`,

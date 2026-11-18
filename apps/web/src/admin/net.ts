@@ -1,4 +1,4 @@
-import { isTestChainId, type ChainInfo, type ChainStatus } from '@elymum/shared';
+import { isTestChainId, type ChainInfo, type ChainStatus } from '@coinnibal/shared';
 import { getAddress, isAddress, type Address } from 'viem';
 import { isDevFake } from '../wallet/devFakeLoader';
 import { fetchServerChain, serverChainInfo } from '../wallet/network';

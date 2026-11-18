@@ -1,10 +1,10 @@
-import { artifacts, coinnibalArenaArtifact, coinnibalNFTArtifact, testTokenArtifact } from '@elymum/contracts';
-import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi } from '@elymum/contracts';
+import { artifacts, coinnibalArenaArtifact, coinnibalNFTArtifact, testTokenArtifact } from '@coinnibal/contracts';
+import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi } from '@coinnibal/contracts';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { decodeFunctionData, erc20Abi, type Address } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { ARENA_PRICING_DEFAULT, NFT_NAME, arenaPriceDiff, parseUsdPrice, type ChainArenaState } from '@elymum/shared';
+import { ARENA_PRICING_DEFAULT, NFT_NAME, arenaPriceDiff, parseUsdPrice, type ChainArenaState } from '@coinnibal/shared';
 import {
   approveCall,
   arenaPriceSyncCalls,

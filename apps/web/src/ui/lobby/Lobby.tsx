@@ -1,4 +1,4 @@
-import { bpsToPercent, totalFeeBps } from '@elymum/shared';
+import { bpsToPercent, totalFeeBps } from '@coinnibal/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import {

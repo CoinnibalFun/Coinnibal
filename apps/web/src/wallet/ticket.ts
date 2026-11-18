@@ -7,9 +7,9 @@
  * **ledger units** (at most 6 decimals, see `fromLedger` / `ledgerDecimals` in the SDK); they
  * are converted with `fromLedger` before they meet a chain amount.
  */
-import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, ratesFor, totalFeeBps, type ArenaFees, type FeeRates, type RoomInfo } from '@elymum/shared';
+import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, ratesFor, totalFeeBps, type ArenaFees, type FeeRates, type RoomInfo } from '@coinnibal/shared';
 import type { Address, Hex } from 'viem';
-import { REFUND_DELAY_SECS, fromLedger, type Erc20Call } from '@elymum/sdk';
+import { REFUND_DELAY_SECS, fromLedger, type Erc20Call } from '@coinnibal/sdk';
 
 /* ── the ticket calls ───────────────────────────────────────────────── */
 

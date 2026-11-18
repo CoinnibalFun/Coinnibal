@@ -1,4 +1,4 @@
-import type { StandingRow } from '@elymum/shared';
+import type { StandingRow } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Kb } from '../src/design';

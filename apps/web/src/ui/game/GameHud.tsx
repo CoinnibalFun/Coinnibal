@@ -1,5 +1,5 @@
 import { lookForSkin as lookForBasicSkin } from '../../render/looks';
-import { BOOST_KEY_LABELS, BOOST_KINDS, EMOTE_BAR, PowerUpType, RULES, emoteEmoji } from '@elymum/shared';
+import { BOOST_KEY_LABELS, BOOST_KINDS, EMOTE_BAR, PowerUpType, RULES, emoteEmoji } from '@coinnibal/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Counter, DUR, Icon, Stamp, springs, useReducedMotion } from '../../design';

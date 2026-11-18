@@ -1,4 +1,4 @@
-import { GAS_DECIMALS, formatToken, GAS_SYMBOL, parseToken } from '@elymum/shared';
+import { GAS_DECIMALS, formatToken, GAS_SYMBOL, parseToken } from '@coinnibal/shared';
 import { getAddress, isAddress } from 'viem';
 
 /**

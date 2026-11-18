@@ -1,5 +1,5 @@
-import { addEthereumChainParams, chainInfo, isTestChainId, toHexChainId, type ChainInfo, type ChainStatus } from '@elymum/shared';
-import { createElymumPublicClient, createElymumWalletClient, describeError, toViemChain } from '@elymum/sdk';
+import { addEthereumChainParams, chainInfo, isTestChainId, toHexChainId, type ChainInfo, type ChainStatus } from '@coinnibal/shared';
+import { createElymumPublicClient, createElymumWalletClient, describeError, toViemChain } from '@coinnibal/sdk';
 import type { Address, Chain, PublicClient, WalletClient } from 'viem';
 import { CHAIN_OVERRIDES } from '../config';
 import type { Eip1193Provider } from './eip6963';

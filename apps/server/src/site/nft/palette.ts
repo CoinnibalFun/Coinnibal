@@ -1,8 +1,8 @@
 /**
- * The emblem palette: the Ring Storybook paints (`@elymum/shared`) plus a few curated material and tier
+ * The emblem palette: the Ring Storybook paints (`@coinnibal/shared`) plus a few curated material and tier
  * colours. Every colour an emblem uses comes from here (both styles), so a picture never invents a hue.
  */
-import { ELYSIUM as E, SHADE as S } from '@elymum/shared';
+import { ELYSIUM as E, SHADE as S } from '@coinnibal/shared';
 import type { Material, Tier } from './traits';
 
 export const INK = E.abyss;

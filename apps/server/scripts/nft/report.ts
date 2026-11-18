@@ -2,13 +2,13 @@
  * The collection distribution report (docs/NFT-DESIGN.md): generates the whole collection and proves the tier
  * shares, the trait odds, zero broken exclusion rules and zero duplicate DNA.
  *
- *   pnpm -F @elymum/server nft:report [--size 3333] [--seed <s>] [--seeds 3] [--json]
+ *   pnpm -F @coinnibal/server nft:report [--size 3333] [--seed <s>] [--seeds 3] [--json]
  *
  * `--seed` reports one seed (e.g. the committed one, after the reveal); otherwise `--seeds` random seeds are
  * generated and each is checked. Exits 1 when any check fails.
  */
 import { randomBytes } from 'node:crypto';
-import { NFT_SUPPLY } from '@elymum/shared';
+import { NFT_SUPPLY } from '@coinnibal/shared';
 import { drawGenome, generateCollection, provenanceHash, rarityStats, stream, tierQuotas } from '../../src/site/nft/generate';
 import { LAYERS, TIERS, TIER_SHARE, brokenRule, type Tier } from '../../src/site/nft/traits';
 

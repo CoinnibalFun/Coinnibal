@@ -15,7 +15,7 @@
  *     is published, and token `t` shows art `(t - 1 + offset) mod size`. Anyone can re-run the generator and
  *     check both hashes and the offset.
  */
-import { BRAND_NAME, NFT_NAME, type NftProvenance, type NftRarityStats } from '@elymum/shared';
+import { BRAND_NAME, NFT_NAME, type NftProvenance, type NftRarityStats } from '@coinnibal/shared';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';

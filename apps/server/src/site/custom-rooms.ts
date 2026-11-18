@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { INVITE_CODE_RE } from '@elymum/shared';
+import { INVITE_CODE_RE } from '@coinnibal/shared';
 import { CustomRoomFail, type CustomRoomService } from '../rooms/custom';
 import { SiteFail } from './validate';
 

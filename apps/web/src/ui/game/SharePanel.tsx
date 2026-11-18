@@ -1,4 +1,4 @@
-import { shareImagePath, shareIntentUrl, shareStandingsPath } from '@elymum/shared';
+import { shareImagePath, shareIntentUrl, shareStandingsPath } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Button, Icon } from '../../design';
 import { SERVER } from '../../config';

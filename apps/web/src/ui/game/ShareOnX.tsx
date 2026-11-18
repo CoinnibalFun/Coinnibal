@@ -1,4 +1,4 @@
-import { eatenLabel, eatenLine, shareIntentUrl, xMention, type EatenName } from '@elymum/shared';
+import { eatenLabel, eatenLine, shareIntentUrl, xMention, type EatenName } from '@coinnibal/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { SERVER } from '../../config';

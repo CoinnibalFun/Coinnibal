@@ -1,4 +1,4 @@
-import { EMOTES, EMOTE_BAR, emoteEmoji, emoteForSlot, type DeathStats, type RoomInfo } from '@elymum/shared';
+import { EMOTES, EMOTE_BAR, emoteEmoji, emoteForSlot, type DeathStats, type RoomInfo } from '@coinnibal/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chainStatus } from './evm-helpers';

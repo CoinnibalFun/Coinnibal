@@ -1,9 +1,9 @@
-import { BOOST_KEY_LABELS, BPS, DEFAULT_PAYMENT_BURN_BPS, SHOP_DEFAULTS, boostCooldownMs, bpsToPercent, formatUsdCents, type BoostKind, type ShopPack, type ShopView } from '@elymum/shared';
+import { BOOST_KEY_LABELS, BPS, DEFAULT_PAYMENT_BURN_BPS, SHOP_DEFAULTS, boostCooldownMs, bpsToPercent, formatUsdCents, type BoostKind, type ShopPack, type ShopView } from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Chip, Sheet, shortAddress } from '../../design';
 import { useT } from '../../i18n';
 import { closeModal, openModal, toast, useUi } from '../../store';
-import { SHOP_CART_LIMITS, TOKEN_SYMBOL_DEFAULT } from '@elymum/shared';
+import { SHOP_CART_LIMITS, TOKEN_SYMBOL_DEFAULT } from '@coinnibal/shared';
 import { ShopError, buyCart, cartTotals, emptyCart, fetchShop, loadPendingClaim, settleCartClaim, settleClaim, type BuyPhase, type Cart, type PendingClaim } from '../../wallet/shop';
 import { summaryAmount } from '../amount';
 import { BOOST_PATH } from '../game/BoostBar';

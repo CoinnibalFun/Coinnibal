@@ -1,4 +1,4 @@
-import type { NftCollectionAdminView } from '@elymum/shared';
+import type { NftCollectionAdminView } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { revealLine } from '../src/admin/EmblemsCard';
 

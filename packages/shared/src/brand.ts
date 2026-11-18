@@ -1,6 +1,6 @@
 /**
  * The brand: Coinnibal (a coin + a cannibal: coins that eat coins), its token $NIBAL. Everything a player reads uses
- * these names; the code, the packages (`@elymum/*`), the contracts, the storage keys and the env vars keep the old
+ * these names; the code, the packages (`@coinnibal/*`), the contracts, the storage keys and the env vars keep the old
  * internal name "elymum" on purpose (renaming them would break deploys and saved data).
  *
  * The domain and the X handle are configuration, not code: the site's origin is `PUBLIC_URL` (server) and

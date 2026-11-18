@@ -1,6 +1,6 @@
 import type { ServerConfig } from '../config';
 import type { Journal } from '../stake/journal';
-import { chainInfo } from '@elymum/shared';
+import { chainInfo } from '@coinnibal/shared';
 import { chainOverridesFor, type ContractsView } from './evm';
 import { NullChain, type ChainGateway } from './types';
 

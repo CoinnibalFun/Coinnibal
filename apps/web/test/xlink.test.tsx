@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { xLinkIntentUrl, xLinkPostText } from '@elymum/shared';
+import { xLinkIntentUrl, xLinkPostText } from '@coinnibal/shared';
 import { Kb } from '../src/design';
 import { translate } from '../src/i18n';
 import { labelName } from '../src/render/renderer';

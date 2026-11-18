@@ -1,4 +1,4 @@
-import { SHOP_CART_LIMITS, normalizeCart, parseShopCartRef, shopCartRef, shopPaymentRef } from '@elymum/shared';
+import { SHOP_CART_LIMITS, normalizeCart, parseShopCartRef, shopCartRef, shopPaymentRef } from '@coinnibal/shared';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

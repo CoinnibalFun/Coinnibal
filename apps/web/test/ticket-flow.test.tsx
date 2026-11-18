@@ -1,4 +1,4 @@
-import type { ArenaInfo, ContractCall, SessionInfo } from '@elymum/sdk';
+import type { ArenaInfo, ContractCall, SessionInfo } from '@coinnibal/sdk';
 import { act, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Kb } from '../src/design';
@@ -25,8 +25,8 @@ const spies = vi.hoisted(() => ({
   verifyArena: vi.fn(),
 }));
 // the money path's network edges: the fresh chain reads and the wallet send
-vi.mock('@elymum/sdk', async (orig) => ({
-  ...(await orig<typeof import('@elymum/sdk')>()),
+vi.mock('@coinnibal/sdk', async (orig) => ({
+  ...(await orig<typeof import('@coinnibal/sdk')>()),
   planJoin: spies.planJoin,
   getArenaConfig: spies.getArenaConfig,
   getSession: spies.getSession,

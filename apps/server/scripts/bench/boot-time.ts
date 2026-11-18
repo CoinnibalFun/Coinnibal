@@ -4,7 +4,7 @@
  * until `/api/health` answers. A deploy's downtime is this plus the old container's shutdown (see drills.ts) plus
  * Docker's container swap. No chain (practice only): the RPC probe at boot runs in the background either way.
  *
- *   pnpm -F @elymum/server build && node --import tsx scripts/bench/boot-time.ts      (from apps/server)
+ *   pnpm -F @coinnibal/server build && node --import tsx scripts/bench/boot-time.ts      (from apps/server)
  */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';

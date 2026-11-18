@@ -3,12 +3,12 @@
  * economy of 100 and 200 concurrent players, the re-pricing study and the abuse study. Prints readable tables and,
  * with `--json <file>`, writes every figure.
  *
- *   pnpm -F @elymum/server econ-sim                 # full run (several minutes)
- *   pnpm -F @elymum/server econ-sim --quick         # a short calibration (about a minute)
- *   pnpm -F @elymum/server econ-sim --price 0.00002 # another mainnet token price (USD per token)
+ *   pnpm -F @coinnibal/server econ-sim                 # full run (several minutes)
+ *   pnpm -F @coinnibal/server econ-sim --quick         # a short calibration (about a minute)
+ *   pnpm -F @coinnibal/server econ-sim --price 0.00002 # another mainnet token price (USD per token)
  */
 import { writeFileSync } from 'node:fs';
-import { DEFAULT_ARENAS, SHOP_DEFAULTS } from '@elymum/shared';
+import { DEFAULT_ARENAS, SHOP_DEFAULTS } from '@coinnibal/shared';
 import {
   ABUSE_CASES,
   ETH_USD,

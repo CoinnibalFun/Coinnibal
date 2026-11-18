@@ -1,5 +1,5 @@
-import { createArenaCall, deployArenaParams, setFeeRatesCall } from '@elymum/sdk';
-import type { StatusSnapshot } from '@elymum/sdk/ops';
+import { createArenaCall, deployArenaParams, setFeeRatesCall } from '@coinnibal/sdk';
+import type { StatusSnapshot } from '@coinnibal/sdk/ops';
 import { describe, expect, it } from 'vitest';
 import { activeStep, arenaDeployArgs, defaultNftForm, deploySteps, loadLocalDeploys, nftDeployArgs, saveLocalDeploy } from '../src/admin/deploy';
 import { launchChecklist } from '../src/admin/LaunchTab';

@@ -1,4 +1,4 @@
-import type { MintState } from '@elymum/shared';
+import type { MintState } from '@coinnibal/shared';
 import { t } from '../../i18n';
 import { SiteApiError, site } from '../api';
 

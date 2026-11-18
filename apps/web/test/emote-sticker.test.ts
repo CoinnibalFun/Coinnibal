@@ -1,4 +1,4 @@
-import { EntityKind } from '@elymum/shared';
+import { EntityKind } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Camera } from '../src/game/camera';
 import { Particles } from '../src/game/particles';

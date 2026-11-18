@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Journal, type LiveStake } from '../src/stake/journal';
-import { ROBINHOOD_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID } from '@elymum/shared';
+import { ROBINHOOD_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID } from '@coinnibal/shared';
 import { journalAbandonDecision } from '../src/chain/evm';
 
 const live = (session: string, value: number): LiveStake => ({

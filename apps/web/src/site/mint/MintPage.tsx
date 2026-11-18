@@ -1,5 +1,5 @@
-import { describeError, encodeCall, getMintState, getMintedBy, mintAllowlistCall, mintPublicCall, mintValue, type MintState as ChainMintState } from '@elymum/sdk';
-import type { ChainStatus, MintContractState, MintProofResponse, MintState, WlEntryPublic } from '@elymum/shared';
+import { describeError, encodeCall, getMintState, getMintedBy, mintAllowlistCall, mintPublicCall, mintValue, type MintState as ChainMintState } from '@coinnibal/sdk';
+import type { ChainStatus, MintContractState, MintProofResponse, MintState, WlEntryPublic } from '@coinnibal/shared';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Address, Hash, Hex } from 'viem';

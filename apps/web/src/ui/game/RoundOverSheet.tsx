@@ -1,4 +1,4 @@
-import { activeChain, bpsToPercent, profitFee, totalFeeBps, type FeeRates } from '@elymum/shared';
+import { activeChain, bpsToPercent, profitFee, totalFeeBps, type FeeRates } from '@coinnibal/shared';
 import { AnimatePresence, motion, type TargetAndTransition } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon, Receipt, Sheet, Stamp, useReducedMotion, type ReceiptLine } from '../../design';

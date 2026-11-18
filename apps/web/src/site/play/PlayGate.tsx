@@ -1,4 +1,4 @@
-import type { GameAccess } from '@elymum/shared';
+import type { GameAccess } from '@coinnibal/shared';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Kb, useReducedMotion } from '../../design';
 import { auth, site } from '../api';

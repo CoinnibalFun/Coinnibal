@@ -1,4 +1,4 @@
-import { emptyBoostCounts, isCountryCode, suggestCountry } from '@elymum/shared';
+import { emptyBoostCounts, isCountryCode, suggestCountry } from '@coinnibal/shared';
 import type {
   BoostKind,
   BoostState,
@@ -10,7 +10,7 @@ import type {
   ProfileSummary,
   RoomInfo,
   RoundStanding,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { create } from 'zustand';
 import { AUDIO_DEFAULTS } from './audio/mixer';
 import { DEFAULT_TRACK, musicChoice, type MusicChoice } from './audio/tracks';

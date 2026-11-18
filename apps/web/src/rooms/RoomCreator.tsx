@@ -26,7 +26,7 @@ import {
   type CustomRoomQuote,
   type CustomRoomView,
   activeChain,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Address, Hash } from 'viem';
 import { AddressChip, Button, Chip, CoinCharacter, Field, GasAmount, QuantityStepper, Receipt, Sheet, Stamp, StampSpinner, formatUsd } from '../design';

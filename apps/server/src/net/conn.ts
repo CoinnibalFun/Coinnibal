@@ -1,4 +1,4 @@
-import type { ProfileSummary, ServerMessage } from '@elymum/shared';
+import type { ProfileSummary, ServerMessage } from '@coinnibal/shared';
 import { WebSocket } from 'ws';
 import type { Player } from '../game/entities';
 import { wsOut } from '../rooms/load';

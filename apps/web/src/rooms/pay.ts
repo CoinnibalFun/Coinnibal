@@ -1,4 +1,4 @@
-import { customRoomPaymentRef, type ChainStatus, type CustomRoomQuote } from '@elymum/shared';
+import { customRoomPaymentRef, type ChainStatus, type CustomRoomQuote } from '@coinnibal/shared';
 import type { Hash } from 'viem';
 import { ShopError, payArena, type BuyPhase } from '../wallet/shop';
 

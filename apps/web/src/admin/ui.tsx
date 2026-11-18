@@ -1,5 +1,5 @@
-import { explorerAddressUrl, type ContractsRegistry } from '@elymum/shared';
-import type { StatusSnapshot } from '@elymum/sdk/ops';
+import { explorerAddressUrl, type ContractsRegistry } from '@coinnibal/shared';
+import type { StatusSnapshot } from '@coinnibal/sdk/ops';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { Address, PublicClient } from 'viem';
 import { Button, Icon } from '../design';

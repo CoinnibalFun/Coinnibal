@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { CUSTOM_REQUEST_RE } from '@elymum/shared';
+import { CUSTOM_REQUEST_RE } from '@coinnibal/shared';
 
 export const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 

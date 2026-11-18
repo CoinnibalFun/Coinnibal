@@ -10,7 +10,7 @@
  * A freeze is a run of frames lasting 100 ms or more in which the drawn coin does not move while the real one does (a
  * hitch: 50 ms or more); a jump is a frame in which it moves more than three frames' worth of the real speed.
  */
-import { EntityKind, TICK_MS, type SnapshotData } from '@elymum/shared';
+import { EntityKind, TICK_MS, type SnapshotData } from '@coinnibal/shared';
 import { ClientWorld } from '../src/game/state';
 import { EXTRAPOLATE_MS, SnapshotTimeline } from '../src/game/jitter';
 

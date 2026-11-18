@@ -11,7 +11,7 @@
  * away from the dollar ticket) are fixed and tested here as regular tests.
  */
 import { generatePrivateKey } from 'viem/accounts';
-import { DEFAULT_ARENAS, SHOP_DEFAULTS, parseUsdPrice, roundSigFigs, usdToTokenRaw } from '@elymum/shared';
+import { DEFAULT_ARENAS, SHOP_DEFAULTS, parseUsdPrice, roundSigFigs, usdToTokenRaw } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { EvmChain } from '../src/chain/evm';
 import { loadConfig } from '../src/config';

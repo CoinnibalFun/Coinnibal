@@ -1,4 +1,4 @@
-import { isCountryCode } from '@elymum/shared';
+import { isCountryCode } from '@coinnibal/shared';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon, useKbTheme } from '../design';

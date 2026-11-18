@@ -1,12 +1,12 @@
-import { sameAddress } from '@elymum/sdk';
-import { checkDeployedCode } from '@elymum/sdk/ops';
+import { sameAddress } from '@coinnibal/sdk';
+import { checkDeployedCode } from '@coinnibal/sdk/ops';
 import { useEffect, useMemo, useState } from 'react';
 import type { Address, PublicClient } from 'viem';
 import { Button } from '../design';
 import type { AdminApi } from '../site/api';
 import { publicClientFor } from '../wallet/network';
 import { useWallet } from '../wallet/store';
-import type { ContractsRegistry, GameAccess, SiteSettings } from '@elymum/shared';
+import type { ContractsRegistry, GameAccess, SiteSettings } from '@coinnibal/shared';
 import { site } from '../site/api';
 import { GameTab } from './GameTab';
 import { groupSummary, type AdminGroup } from './groups';

@@ -1,6 +1,6 @@
 import { getAddress } from 'viem';
 import { create } from 'zustand';
-import { describeError } from '@elymum/sdk';
+import { describeError } from '@coinnibal/sdk';
 import { allowedDomains, expectedLoginMessage, fetchNonce, type MessageSigner, type NonceResponse } from '../wallet/siwe';
 import { t } from '../i18n';
 import { SiteApiError, auth, onAdminSessionExpired } from './api';

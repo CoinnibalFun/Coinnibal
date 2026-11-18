@@ -1,4 +1,4 @@
-import { testTokenRefusal } from '@elymum/sdk/ops';
+import { testTokenRefusal } from '@coinnibal/sdk/ops';
 import { DeployTab, RegisterExisting, SetTokenForm, TestTokenCard, registeredToken } from './DeployTab';
 import { QuickSetup } from './QuickSetup';
 import { setupSteps } from './setup';

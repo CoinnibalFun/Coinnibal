@@ -1,7 +1,7 @@
-import type { CustomRoomQuote, CustomRoomView } from '@elymum/shared';
+import type { CustomRoomQuote, CustomRoomView } from '@coinnibal/shared';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CUSTOM_SETTINGS_DEFAULT } from '@elymum/shared';
+import { CUSTOM_SETTINGS_DEFAULT } from '@coinnibal/shared';
 import { customRoomsPatch, draftBase, feeLadder, feeText, roomKindText } from '../src/admin/CustomRoomsCard';
 import { arenaTarget, leavePaidSeat, openInvite, seatInPaidRoom } from '../src/rooms/invite';
 import { Kb } from '../src/design';

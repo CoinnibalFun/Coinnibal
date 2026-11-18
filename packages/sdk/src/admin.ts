@@ -1,7 +1,7 @@
 /**
  * Elymum admin CLI (Node only, not exported from the SDK entry point).
  *
- *   pnpm -F @elymum/sdk admin <command> [options]      (or `pnpm admin <command>` at the repo root)
+ *   pnpm -F @coinnibal/sdk admin <command> [options]      (or `pnpm admin <command>` at the repo root)
  *
  * Run `pnpm admin help` for the command list. Parsing, the key loader and the status report live
  * in `admin-lib.ts`; validation and refusals in `ops.ts` (shared with the web admin panel). This
@@ -9,10 +9,10 @@
  * before it is sent, `--dry-run` stops after the preview, a mainnet needs `--mainnet` and a
  * typed confirmation, and `set-token` takes the address twice.
  */
-import { chainInfo, setActiveChain } from '@elymum/shared';
+import { chainInfo, setActiveChain } from '@coinnibal/shared';
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
-import { explorerAddressUrl, explorerTxUrl } from '@elymum/shared';
+import { explorerAddressUrl, explorerTxUrl } from '@coinnibal/shared';
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import type { Address, Chain, Hash, PublicClient, WalletClient } from 'viem';
 import {

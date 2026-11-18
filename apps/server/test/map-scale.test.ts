@@ -14,7 +14,7 @@ import {
   worldForSide,
   type CustomRoomConfig,
   type MapScaleSettings,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { MapSettingsError, MapSettingsStore, applyMapSettings, defaultMapSettings } from '../src/rooms/map-settings';
 import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';

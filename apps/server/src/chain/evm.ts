@@ -14,8 +14,8 @@ import {
   type ArenaConfig,
   type SessionRef,
   type Settlement,
-} from '@elymum/sdk';
-import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatGas, isSupportedChainId, unsupportedChainMessage, formatToken, type ArenaFees, type ChainStatus } from '@elymum/shared';
+} from '@coinnibal/sdk';
+import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatGas, isSupportedChainId, unsupportedChainMessage, formatToken, type ArenaFees, type ChainStatus } from '@coinnibal/shared';
 import { getAddress, isAddress, type Address, type Hash, type Hex } from 'viem';
 import type { PrivateKeyAccount } from 'viem/accounts';
 import type { ServerConfig } from '../config';

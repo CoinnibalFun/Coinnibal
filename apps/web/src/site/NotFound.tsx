@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { PlateLabel, useReducedMotion } from '../design';
 import { useT } from '../i18n';
 import { T } from '../i18n/rich';

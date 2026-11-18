@@ -5,7 +5,7 @@ import {
   INTEGRITY_THRESHOLDS_DEFAULT,
   type IntegritySettings,
   type IntegrityThresholds,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 
 /**
  * Settings read from disk: unknown or out-of-range values fall back to `defaults` (auto-hold: as saved, else the

@@ -1,7 +1,7 @@
-import { GAS_SYMBOL } from '@elymum/shared';
-import { formatGasAmount, needsReprice, sameAddress } from '@elymum/sdk';
-import { planDefaultArenas, type StatusSnapshot } from '@elymum/sdk/ops';
-import type { AllowlistStatus, MintPriceQuote, SiteCounts, SiteSettings } from '@elymum/shared';
+import { GAS_SYMBOL } from '@coinnibal/shared';
+import { formatGasAmount, needsReprice, sameAddress } from '@coinnibal/sdk';
+import { planDefaultArenas, type StatusSnapshot } from '@coinnibal/sdk/ops';
+import type { AllowlistStatus, MintPriceQuote, SiteCounts, SiteSettings } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Button, CoinCharacter, Counter, Stamp, type CoinMood, type CoinPaint } from '../design';
 import { LaunchScene, type SceneStageId } from './LaunchScene';

@@ -1,4 +1,4 @@
-import { EntityKind, encodeSnapshot, type RoomInfo, type ServerMessage, type SnapshotData } from '@elymum/shared';
+import { EntityKind, encodeSnapshot, type RoomInfo, type ServerMessage, type SnapshotData } from '@coinnibal/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The engine without a canvas renderer or a real socket: the test drives the server side.

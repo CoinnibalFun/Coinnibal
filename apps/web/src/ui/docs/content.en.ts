@@ -21,7 +21,7 @@ import {
   formatUsdCents,
   totalFeeBps,
   type FeeRates,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { FACTS as F, type DocsContent } from './facts';
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });

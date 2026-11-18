@@ -1,5 +1,5 @@
 {
-  "name": "@elymum/sdk",
+  "name": "@coinnibal/sdk",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,8 +16,8 @@
     "admin": "tsx src/admin.ts"
   },
   "dependencies": {
-    "@elymum/contracts": "workspace:*",
-    "@elymum/shared": "workspace:*",
+    "@coinnibal/contracts": "workspace:*",
+    "@coinnibal/shared": "workspace:*",
     "viem": "^2.57.13"
   },
   "devDependencies": {

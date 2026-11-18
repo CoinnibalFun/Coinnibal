@@ -1,4 +1,4 @@
-import { GAS_SYMBOL } from '@elymum/shared';
+import { GAS_SYMBOL } from '@coinnibal/shared';
 import type { HTMLAttributes } from 'react';
 
 export interface GasAmountProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'children'> {

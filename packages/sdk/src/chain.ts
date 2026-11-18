@@ -1,4 +1,4 @@
-import { chainInfo, isTestChainId, type ChainInfo, type ChainOverrides } from '@elymum/shared';
+import { chainInfo, isTestChainId, type ChainInfo, type ChainOverrides } from '@coinnibal/shared';
 import {
   createPublicClient,
   createWalletClient,
@@ -17,7 +17,7 @@ import {
 } from 'viem';
 
 /**
- * Chains and clients. The chain registry lives in `@elymum/shared` (`chains.ts`); this module turns an entry into
+ * Chains and clients. The chain registry lives in `@coinnibal/shared` (`chains.ts`); this module turns an entry into
  * a viem `Chain` and builds clients from an RPC URL or an EIP-1193 provider (a browser wallet).
  */
 
@@ -25,7 +25,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type RpcSource = string | EIP1193Provider | { request: (args: { method: string; params?: any }) => Promise<any> };
 
-/** viem `Chain` for a resolved chain (`chainInfo(id, overrides)` from `@elymum/shared`). */
+/** viem `Chain` for a resolved chain (`chainInfo(id, overrides)` from `@coinnibal/shared`). */
 export function toViemChain(info: ChainInfo): Chain {
   return defineChain({
     id: info.id,

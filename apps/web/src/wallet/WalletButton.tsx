@@ -1,4 +1,4 @@
-import { shortAddress } from '@elymum/shared';
+import { shortAddress } from '@coinnibal/shared';
 import { Icon } from '../design';
 import { useT } from '../i18n';
 import { openModal, useUi } from '../store';

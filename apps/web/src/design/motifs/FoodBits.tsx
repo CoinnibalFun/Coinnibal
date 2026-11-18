@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import type { CSSProperties, ReactElement } from 'react';
 
 export type FoodKind = 'pear' | 'grapes' | 'seed';

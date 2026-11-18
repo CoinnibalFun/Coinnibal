@@ -1,4 +1,4 @@
-import { roundAt } from '@elymum/shared';
+import { roundAt } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import type { ChainArena } from '../src/chain/types';
 import { RepriceScheduler } from '../src/site/reprice';

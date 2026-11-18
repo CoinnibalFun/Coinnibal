@@ -10,15 +10,15 @@ import {
   feeExample,
   type FeeRates,
   type ProfitFee,
-} from '@elymum/shared';
-import { REFUND_DELAY_SECS } from '@elymum/sdk';
+} from '@coinnibal/shared';
+import { REFUND_DELAY_SECS } from '@coinnibal/sdk';
 import { APPROVE_DEFAULT_TICKETS, APPROVE_TICKET_CHOICES } from '../../wallet/ticket';
 
 /**
  * Every number the player guide quotes, taken from the code that enforces it, so the
- * page cannot drift from the game. Contract defaults come from `@elymum/sdk` (mirrors of
+ * page cannot drift from the game. Contract defaults come from `@coinnibal/sdk` (mirrors of
  * `packages/contracts/contracts/CoinnibalArena.sol`, checked against the ABI by an SDK test), gameplay from
- * `@elymum/shared` `RULES` / `CAPACITY` (server defaults; operators may change them with
+ * `@coinnibal/shared` `RULES` / `CAPACITY` (server defaults; operators may change them with
  * env vars). The few server-only timings are mirrored in `SERVER` below and checked
  * against the server source by `test/docs.test.ts`.
  */

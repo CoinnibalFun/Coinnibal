@@ -1,4 +1,4 @@
-import type { RoomInfo, ServerMessage } from '@elymum/shared';
+import type { RoomInfo, ServerMessage } from '@coinnibal/shared';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NetDown } from '../src/game/net';

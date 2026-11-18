@@ -11,7 +11,7 @@ import {
   setServerAuthorityCall,
   sweepArenaCall,
   updateArenaFrom,
-} from '@elymum/sdk';
+} from '@coinnibal/sdk';
 import {
   SWEEP_WARNING,
   arenaName,
@@ -26,9 +26,9 @@ import {
   parseTokenInput,
   sweepArenaRefusal,
   updateArenaRefusal,
-} from '@elymum/sdk/ops';
-import { sameAddress } from '@elymum/sdk';
-import { BPS, MAX_TOTAL_FEE_BPS, feeExample, GAS_SYMBOL } from '@elymum/shared';
+} from '@coinnibal/sdk/ops';
+import { sameAddress } from '@coinnibal/sdk';
+import { BPS, MAX_TOTAL_FEE_BPS, feeExample, GAS_SYMBOL } from '@coinnibal/shared';
 import { useState } from 'react';
 import type { Address } from 'viem';
 import { DefaultArenas, SetTokenForm } from './DeployTab';

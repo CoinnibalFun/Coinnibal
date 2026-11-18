@@ -1,4 +1,4 @@
-import { normalizeXHandle, type PublicWlTask, type SiteSettings, type WlEntryPublic } from '@elymum/shared';
+import { normalizeXHandle, type PublicWlTask, type SiteSettings, type WlEntryPublic } from '@coinnibal/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, CoinCharacter, Field, Icon, PlateLabel, Stamp, StampSpinner, StatusPill, Sticker, Tape, useReducedMotion } from '../../design';

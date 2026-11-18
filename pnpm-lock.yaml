@@ -13,13 +13,13 @@ importers:
 
   apps/server:
     dependencies:
-      '@elymum/art':
+      '@coinnibal/art':
         specifier: workspace:*
         version: link:../../packages/art
-      '@elymum/sdk':
+      '@coinnibal/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
-      '@elymum/shared':
+      '@coinnibal/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@fontsource-variable/dm-sans':
@@ -59,13 +59,13 @@ importers:
 
   apps/web:
     dependencies:
-      '@elymum/art':
+      '@coinnibal/art':
         specifier: workspace:*
         version: link:../../packages/art
-      '@elymum/sdk':
+      '@coinnibal/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
-      '@elymum/shared':
+      '@coinnibal/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@fontsource-variable/dm-sans':
@@ -132,7 +132,7 @@ importers:
 
   packages/art:
     dependencies:
-      '@elymum/shared':
+      '@coinnibal/shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:
@@ -175,10 +175,10 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@elymum/contracts':
+      '@coinnibal/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@elymum/shared':
+      '@coinnibal/shared':
         specifier: workspace:*
         version: link:../shared
       viem:
@@ -3949,7 +3949,7 @@ snapshots:
 
   is-safe-filename@0.1.1: {}
 
-  isows@1.0.7(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
+  isows@1.0.7(ws@8.21.0(bufferutil@4.1.0)):
     dependencies:
       ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
@@ -4563,7 +4563,7 @@ snapshots:
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
       abitype: 1.2.3(typescript@5.9.3)(zod@3.25.76)
-      isows: 1.0.7(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      isows: 1.0.7(ws@8.21.0(bufferutil@4.1.0))
       ox: 0.14.59(typescript@5.9.3)(zod@3.25.76)
       ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:

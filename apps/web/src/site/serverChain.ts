@@ -1,4 +1,4 @@
-import { isTestChainId, type ChainStatus } from '@elymum/shared';
+import { isTestChainId, type ChainStatus } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { showChain } from '../chainText';
 import { SERVER } from '../config';

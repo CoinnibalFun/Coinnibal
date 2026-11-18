@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { CONTRACT_KINDS, type ContractKind, type ContractRecord, type ContractsRegistry } from '@elymum/shared';
+import { CONTRACT_KINDS, type ContractKind, type ContractRecord, type ContractsRegistry } from '@coinnibal/shared';
 import { getAddress, isAddress, type Address, type Hash } from 'viem';
 import type { EvmClient } from '../chain/evm-client';
 import type { ContractsView } from '../chain/evm';

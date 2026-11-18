@@ -4,10 +4,10 @@
  * mirror the contracts' checks, the status read, and the default-arena plan. Previews of the
  * calls come from `describeCall` (call.ts).
  *
- * Browser-safe (no Node built-ins). Imported as `@elymum/sdk/ops`; it is deliberately not
+ * Browser-safe (no Node built-ins). Imported as `@coinnibal/sdk/ops`; it is deliberately not
  * re-exported from the SDK entry point, so the game bundle does not carry the admin code.
  */
-import { arenaMeta, chainInfo, isTestChainId, type ChainInfo } from '@elymum/shared';
+import { arenaMeta, chainInfo, isTestChainId, type ChainInfo } from '@coinnibal/shared';
 import { getAddress, isAddress, type Address, type PublicClient } from 'viem';
 import {
   defaultArenaParams,
@@ -27,7 +27,7 @@ import { getCodeHash } from './chain';
 import { MAX_ARENA_SESSIONS, MAX_TOTAL_FEE_BPS, MIN_ARENA_SESSIONS } from './constants';
 import { formatBps, formatTokenAmount, isZeroAddress, parseGasAmount, parseTokenAmount, sameAddress } from './format';
 import { getMintState, type MintState } from './nft';
-import { coinnibalArenaArtifact, coinnibalNFTArtifact, testTokenArtifact } from '@elymum/contracts';
+import { coinnibalArenaArtifact, coinnibalNFTArtifact, testTokenArtifact } from '@coinnibal/contracts';
 
 export { describeCall, describeCallLine, type DescribedCall, type DescribedArg } from './call';
 

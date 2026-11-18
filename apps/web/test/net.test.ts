@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CLOSE_REPLACED as SHARED_CLOSE_REPLACED } from '@elymum/shared';
+import { CLOSE_REPLACED as SHARED_CLOSE_REPLACED } from '@coinnibal/shared';
 import * as netModule from '../src/game/net';
 import { Net, WATCHDOG_MS, gameProtocols, retryDelay, type NetDown } from '../src/game/net';
 

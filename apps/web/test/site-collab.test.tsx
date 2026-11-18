@@ -1,4 +1,4 @@
-import type { CollabPublic } from '@elymum/shared';
+import type { CollabPublic } from '@coinnibal/shared';
 import { act, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

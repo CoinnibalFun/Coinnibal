@@ -7,7 +7,7 @@ import {
   bpsToPercent,
   formatUsdCents,
   totalFeeBps,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import type { ReactNode } from 'react';
 import { CoinCharacter, Icon, Laurel, type CoinPaint, type IconName } from '../../design';
 import { useT, type TKey } from '../../i18n';

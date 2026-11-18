@@ -1,5 +1,5 @@
-import { approveCall, getAllowance, payCall } from '@elymum/sdk';
-import { BOOST_KINDS, shopCartRef, shopPaymentRef, type BoostCounts, type BoostKind, type ChainStatus, type ShopBuyError, type ShopBuyResult, type ShopCartResult, type ShopPack, type ShopView } from '@elymum/shared';
+import { approveCall, getAllowance, payCall } from '@coinnibal/sdk';
+import { BOOST_KINDS, shopCartRef, shopPaymentRef, type BoostCounts, type BoostKind, type ChainStatus, type ShopBuyError, type ShopBuyResult, type ShopCartResult, type ShopPack, type ShopView } from '@coinnibal/shared';
 import type { Address } from 'viem';
 import { SERVER } from '../config';
 import { isDevFake, loadDevFake } from './devFakeLoader';

@@ -1,4 +1,4 @@
-import { DEFAULT_ARENAS, DEFAULT_HOLDER_FEE_RATES } from '@elymum/shared';
+import { DEFAULT_ARENAS, DEFAULT_HOLDER_FEE_RATES } from '@coinnibal/shared';
 
 /**
  * Constants mirrored from `packages/contracts/contracts/*.sol` (a unit test checks the ones the

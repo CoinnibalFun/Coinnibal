@@ -17,7 +17,7 @@ import {
   type ChainStatus,
   type CustomRoomConfig,
   type ServerMessage,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';

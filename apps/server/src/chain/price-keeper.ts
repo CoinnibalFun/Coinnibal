@@ -1,5 +1,5 @@
-import { clampPrice, describeError, formatGasAmount, needsReprice, priceDeviationBps, setPriceCall, usdCentsToWei } from '@elymum/sdk';
-import { GAS_SYMBOL } from '@elymum/shared';
+import { clampPrice, describeError, formatGasAmount, needsReprice, priceDeviationBps, setPriceCall, usdCentsToWei } from '@coinnibal/sdk';
+import { GAS_SYMBOL } from '@coinnibal/shared';
 import type { Address } from 'viem';
 import type { EvmClient } from './evm-client';
 

@@ -3,7 +3,7 @@
  * conservation checker after every chain pass, the drain at the end (no ticket left open, every ticket closed
  * exactly once, every vault down to its forfeits). On the contract model (fast, several seeds) and on a real
  * hardhat node with the real CoinnibalArena v3 (skipped when the node does not start). The long runs:
- * `pnpm -F @elymum/server money-sim` (see scripts/money-sim.ts).
+ * `pnpm -F @coinnibal/server money-sim` (see scripts/money-sim.ts).
  */
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_FAULTS, fakeSimChain, runMoneySim, type SimReport } from './money-sim';

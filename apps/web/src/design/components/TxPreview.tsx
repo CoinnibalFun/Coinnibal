@@ -1,4 +1,4 @@
-import { GAS_SYMBOL } from '@elymum/shared';
+import { GAS_SYMBOL } from '@coinnibal/shared';
 import { useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { AddressChip } from './AddressChip';
 import { Button } from './Button';

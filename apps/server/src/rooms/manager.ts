@@ -18,7 +18,7 @@ import {
   type RoomInfo,
   type RoundWindow,
   type TestArenaView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import type { ChainGateway } from '../chain/types';
 import type { ServerConfig } from '../config';
 import type { IntegrityService } from '../integrity/service';

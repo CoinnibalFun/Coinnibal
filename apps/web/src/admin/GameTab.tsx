@@ -1,5 +1,5 @@
-import { setPausedCall, updateArenaFrom } from "@elymum/sdk";
-import { arenaName } from "@elymum/sdk/ops";
+import { setPausedCall, updateArenaFrom } from "@coinnibal/sdk";
+import { arenaName } from "@coinnibal/sdk/ops";
 import {
   GAME_ACCESS_MODES,
   MAP_SCALE_FIELDS,
@@ -7,7 +7,7 @@ import {
   mapSideFor,
   type GameAccess,
   type MapScaleSettings,
-} from "@elymum/shared";
+} from "@coinnibal/shared";
 import { useCallback, useEffect, useState } from "react";
 import { SiteApiError, type MapAdminView, type MapSettingsPatch } from "../site/api";
 import { ArenaScalingCard } from "./ArenaScalingCard";

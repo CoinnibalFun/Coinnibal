@@ -15,8 +15,8 @@
  *     `txHash`), the fee wallet receives the fee on any profit, and the unplayed ticket is settled at its
  *     entry fee by the stale-session sweeper; the arena vault ends where it started (conservation).
  *
- *   pnpm -F @elymum/server e2e                 # starts hardhat node + the game server itself
- *   RPC_URL=http://127.0.0.1:8545 pnpm -F @elymum/server e2e   # use a node you started
+ *   pnpm -F @coinnibal/server e2e                 # starts hardhat node + the game server itself
+ *   RPC_URL=http://127.0.0.1:8545 pnpm -F @coinnibal/server e2e   # use a node you started
  *
  * Env: RPC_URL (default: spawn `hardhat node` on NODE_PORT, default 8545), PORT (game server, default 8787).
  */
@@ -43,8 +43,8 @@ import {
   sendCall,
   setTokenCall,
   type ContractCall,
-} from '@elymum/sdk';
-import { PROTOCOL_VERSION, type ChainStatus, type ServerMessage } from '@elymum/shared';
+} from '@coinnibal/sdk';
+import { PROTOCOL_VERSION, type ChainStatus, type ServerMessage } from '@coinnibal/shared';
 import type { Address, PublicClient, WalletClient } from 'viem';
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import WebSocket from 'ws';
@@ -114,7 +114,7 @@ async function startNode(): Promise<void> {
     assert(await rpcUp(), `no EVM node answers at ${rpcUrl}`);
     return;
   }
-  const child = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', 'node', '--port', String(nodePort)], { cwd: ROOT, detached: true, stdio: 'ignore' });
+  const child = spawn('pnpm', ['-F', '@coinnibal/contracts', 'exec', 'hardhat', 'node', '--port', String(nodePort)], { cwd: ROOT, detached: true, stdio: 'ignore' });
   children.push(child);
   await waitUntil('the hardhat node', 60_000, rpcUp, 300);
 }

@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ARENA_PRICING_DEFAULT } from '@elymum/shared';
+import { ARENA_PRICING_DEFAULT } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { DexTwapPriceSource, ManualPriceSource, priceSource } from '../src/chain/token-price';

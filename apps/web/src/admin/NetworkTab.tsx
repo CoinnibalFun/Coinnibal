@@ -1,6 +1,6 @@
-import { formatGasAmount } from '@elymum/sdk';
-import { checkDeployedCode, type CodeCheck, type StatusSnapshot } from '@elymum/sdk/ops';
-import { CONTRACT_KINDS, type ContractKind, type ContractsRegistry, type GameServerLoad, type GameThreadLoad, type GasRunway, type NetworkInfo, GAS_SYMBOL, networkOf } from '@elymum/shared';
+import { formatGasAmount } from '@coinnibal/sdk';
+import { checkDeployedCode, type CodeCheck, type StatusSnapshot } from '@coinnibal/sdk/ops';
+import { CONTRACT_KINDS, type ContractKind, type ContractsRegistry, type GameServerLoad, type GameThreadLoad, type GasRunway, type NetworkInfo, GAS_SYMBOL, networkOf } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { parseEther, type Address } from 'viem';
 import { gasFaucetUrl } from '../site/faucet/logic';

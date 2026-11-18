@@ -21,14 +21,14 @@ export const ACCOUNT = { owner: 0, server: 1, player: 2 };
 export const rpcUrlFor = (port = LOCALNET_RPC_PORT) => `http://127.0.0.1:${port}`;
 
 /**
- * Starts `pnpm -F @elymum/contracts exec hardhat node` in its own process group and waits for the RPC.
+ * Starts `pnpm -F @coinnibal/contracts exec hardhat node` in its own process group and waits for the RPC.
  * Returns the child (kill it with `process.kill(-child.pid)`).
  */
 export async function startHardhatNode({ port = LOCALNET_RPC_PORT, onLine = null, timeoutMs = 90_000 } = {}) {
   const url = rpcUrlFor(port);
   if (await rpcUp(url)) throw new Error(`something already answers JSON-RPC on ${url}; stop it first (lsof -i :${port})`);
   mkdirSync(STATE_DIR, { recursive: true });
-  const child = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
+  const child = spawn('pnpm', ['-F', '@coinnibal/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -91,7 +91,7 @@ export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http:/
     publicClient,
     await sdk.deployNft(wallet, {
       owner: owner.address,
-      // the owner's fixed supply (NFT_SUPPLY in @elymum/shared)
+      // the owner's fixed supply (NFT_SUPPLY in @coinnibal/shared)
       maxSupply: 3333,
       mintPrice: 2n * 10n ** 16n,
       wlLimit: 2,

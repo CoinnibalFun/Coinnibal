@@ -1,4 +1,4 @@
-import type { ChainStatus } from '@elymum/shared';
+import type { ChainStatus } from '@coinnibal/shared';
 import { useEffect } from 'react';
 import { SERVER } from '../config';
 import { PlateLabel } from '../design';

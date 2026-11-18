@@ -3,7 +3,7 @@
  * revocable admin sessions, the server key's gas runway, "Re-price at next bell", USD-priced power-ups and the
  * finer integrity flag kinds.
  */
-import { SHOP_DEFAULTS, type GasRunway, type IntegrityFlag, type ShopSettings } from '@elymum/shared';
+import { SHOP_DEFAULTS, type GasRunway, type IntegrityFlag, type ShopSettings } from '@coinnibal/shared';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RepriceAtBell, repriceText } from '../src/admin/ArenaPricesCard';

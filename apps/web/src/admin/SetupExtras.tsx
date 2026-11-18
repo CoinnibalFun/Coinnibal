@@ -7,9 +7,9 @@ import {
   setFaucetCall,
   setHolderNftCall,
   setHolderPerksCall,
-} from '@elymum/sdk';
-import { MAX_TOTAL_FEE_BPS } from '@elymum/shared';
-import { arenaName, fmtTok, holderPerksRefusal, holderPerksWarnings, holdersOnlyRefusal, parseAddressInput, parseIntInput, setFaucetRefusal, testTokenRefusal } from '@elymum/sdk/ops';
+} from '@coinnibal/sdk';
+import { MAX_TOTAL_FEE_BPS } from '@coinnibal/shared';
+import { arenaName, fmtTok, holderPerksRefusal, holderPerksWarnings, holdersOnlyRefusal, parseAddressInput, parseIntInput, setFaucetRefusal, testTokenRefusal } from '@coinnibal/sdk/ops';
 import { useState } from 'react';
 import type { Address } from 'viem';
 import { Addr, Advanced, Btn, Card, FormError, Input, Row, useFormError, type ChainCtx } from './ui';

@@ -1,4 +1,4 @@
-import { avatarPath, type LbEntry, type StandingRow } from '@elymum/shared';
+import { avatarPath, type LbEntry, type StandingRow } from '@coinnibal/shared';
 import { memo, useEffect, useState } from 'react';
 import { Icon, Laurel, Sheet } from '../../design';
 import { engine } from '../../game/instance';

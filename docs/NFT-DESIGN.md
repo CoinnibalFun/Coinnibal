@@ -5,9 +5,9 @@ drawn in the game's Ring Storybook style. Traits are layered, rarity comes in fi
 provably fair. This page covers the research behind the design, the design system, the odds, the comparison
 between the two art styles, and the commit-and-reveal flow. Researched and built 2026-11-05.
 
-Code: `apps/server/src/site/nft/` (see [Files](#files)). Previews: `pnpm -F @elymum/server nft:sheets` writes the
+Code: `apps/server/src/site/nft/` (see [Files](#files)). Previews: `pnpm -F @coinnibal/server nft:sheets` writes the
 contact sheets (`compare.png`, `vector-tiers.png`, `pixel-tiers.png`, `vector-traits.png`, `pixel-traits.png`,
-`rarity-table.png`, `unrevealed.png`) to `out/nft2/`. Distribution proof: `pnpm -F @elymum/server nft:report`.
+`rarity-table.png`, `unrevealed.png`) to `out/nft2/`. Distribution proof: `pnpm -F @coinnibal/server nft:report`.
 
 ## 1. Research
 
@@ -317,7 +317,7 @@ server (`/api/nft/`). The server decides what each token shows, so the commit-an
    the same URI. It emits ERC-4906 `BatchMetadataUpdate`, and marketplaces re-fetch. After the reveal the image URL
    carries `?v=<block>` so caches cannot serve the sealed picture.
 6. **Verify (anyone).** Check that `sha256(seed)` equals the committed hash. Run
-   `pnpm -F @elymum/server nft:report --seed <seed>`, or `generateCollection(seed, size)`, and compare the
+   `pnpm -F @coinnibal/server nft:report --seed <seed>`, or `generateCollection(seed, size)`, and compare the
    provenance hash. Recompute the offset from the block's hash.
 
 **Why nobody can snipe a rare:**

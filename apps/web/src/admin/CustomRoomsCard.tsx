@@ -19,7 +19,7 @@ import {
   type CustomRoomAdminView,
   type CustomRoomSettings,
   type CustomRoomView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { usdTextToCents } from './ShopCard';
 import { SiteApiError } from '../site/api';

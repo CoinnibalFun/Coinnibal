@@ -1,6 +1,6 @@
-import { GAS_SYMBOL } from '@elymum/shared';
-import { describeCall, coinnibalArenaAbi, sendCall, type ContractCall, type DescribedArg } from '@elymum/sdk';
-import { ownerRefusal } from '@elymum/sdk/ops';
+import { GAS_SYMBOL } from '@coinnibal/shared';
+import { describeCall, coinnibalArenaAbi, sendCall, type ContractCall, type DescribedArg } from '@coinnibal/sdk';
+import { ownerRefusal } from '@coinnibal/sdk/ops';
 import { formatEther, getAddress, type Abi, type Address, type Hash, type Hex, type PublicClient, type TransactionReceipt, type WalletClient } from 'viem';
 
 /**

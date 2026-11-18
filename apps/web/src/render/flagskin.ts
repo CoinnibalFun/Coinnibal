@@ -1,4 +1,4 @@
-import { INK, shadeOf, type CoinLook } from '@elymum/art';
+import { INK, shadeOf, type CoinLook } from '@coinnibal/art';
 import { FLAG_H, FLAG_W, flagArt, paintFlag, type FlagOp } from './flags';
 
 /**

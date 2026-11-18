@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Address, Hash, PublicClient, TransactionReceipt } from 'viem';
-import { explorerAddressUrl, explorerTxUrl, GAS_SYMBOL } from '@elymum/shared';
+import { explorerAddressUrl, explorerTxUrl, GAS_SYMBOL } from '@coinnibal/shared';
 import { Button, Stamp, StatusPill } from '../design';
 import { sendWithWallet, txErrorText, type TxPhase } from '../wallet/tx';
 import type { AdminNetwork } from './net';

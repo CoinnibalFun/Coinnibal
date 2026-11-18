@@ -6,7 +6,7 @@
  *
  *   node --import tsx scripts/bench/settle-gas.ts      (from apps/server)
  */
-import { createElymumWalletClient, getSession, sendCall, settleCall, viemChain } from '@elymum/sdk';
+import { createElymumWalletClient, getSession, sendCall, settleCall, viemChain } from '@coinnibal/sdk';
 import { startHardhatArena } from './hardhat-arena';
 
 const hh = await startHardhatArena({ players: 51 });

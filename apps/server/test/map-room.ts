@@ -1,4 +1,4 @@
-import { TICK_MS, type MapScaleSettings, type WorldShape } from '@elymum/shared';
+import { TICK_MS, type MapScaleSettings, type WorldShape } from '@coinnibal/shared';
 import { mulberry32 } from '../src/game/rng';
 import { Room } from '../src/rooms/room';
 import { ArenaChain, fakeConn, freeCustom, roomDeps } from './helpers';

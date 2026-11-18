@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadImage } from '@napi-rs/canvas';
-import { NFT_SUPPLY } from '@elymum/shared';
+import { NFT_SUPPLY } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { NftCollection } from '../src/site/nft/collection';
 import { artIndex, drawGenome, generateCollection, provenanceHash, rarityStats, revealOffset, sha256Hex, stream, tierQuotas } from '../src/site/nft/generate';

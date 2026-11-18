@@ -1,4 +1,4 @@
-import { CUSTOM_DIFFICULTIES, type CustomDifficulty, type TestArenaSettings, type TestArenaView } from '@elymum/shared';
+import { CUSTOM_DIFFICULTIES, type CustomDifficulty, type TestArenaSettings, type TestArenaView } from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { SiteApiError } from '../site/api';
 import { SwitchRow } from './GameTab';

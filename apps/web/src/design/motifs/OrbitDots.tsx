@@ -1,4 +1,4 @@
-import { ELYSIUM } from '@elymum/shared';
+import { ELYSIUM } from '@coinnibal/shared';
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { useReducedMotion } from '../motion';
 import { useOffscreenPause } from './useOffscreenPause';

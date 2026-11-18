@@ -1,4 +1,4 @@
-import { REFUSAL_CODES, type ErrorCode } from '@elymum/shared';
+import { REFUSAL_CODES, type ErrorCode } from '@coinnibal/shared';
 import type { ChainGateway, ChainSession } from '../chain/types';
 import type { Candidate } from '../integrity/detectors';
 import type { Journal, SettlementItem } from '../stake/journal';

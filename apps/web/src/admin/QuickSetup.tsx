@@ -1,4 +1,4 @@
-import { sameAddress } from '@elymum/sdk';
+import { sameAddress } from '@coinnibal/sdk';
 import { useRef, useState } from 'react';
 import type { Hash } from 'viem';
 import { sendWithWallet, txErrorText } from '../wallet/tx';

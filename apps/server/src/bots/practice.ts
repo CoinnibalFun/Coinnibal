@@ -1,4 +1,4 @@
-import { BASIC_SKINS, CUSTOM_LIMITS, PlayerFlag, RULES, canEat, type CustomDifficulty, type LeftReason } from '@elymum/shared';
+import { BASIC_SKINS, CUSTOM_LIMITS, PlayerFlag, RULES, canEat, type CustomDifficulty, type LeftReason } from '@coinnibal/shared';
 import type { Player } from '../game/entities';
 import type { Rng } from '../game/rng';
 import type { World } from '../game/world';

@@ -1,4 +1,4 @@
-import type { ShopBuyError } from '@elymum/shared';
+import type { ShopBuyError } from '@coinnibal/shared';
 import type { TokenReceipt } from '../chain/types';
 
 /** What a purchase transaction must contain. */

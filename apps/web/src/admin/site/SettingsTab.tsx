@@ -1,4 +1,4 @@
-import { GAME_ACCESS_MODES, normalizeXHandle, type GameAccess, type SiteSettings } from '@elymum/shared';
+import { GAME_ACCESS_MODES, normalizeXHandle, type GameAccess, type SiteSettings } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Field, InkButton, StampSpinner } from '../../design';
 import { errText, useFlash, type TabProps } from './common';

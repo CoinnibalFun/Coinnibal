@@ -1,7 +1,7 @@
-import { formatGasAmount } from '@elymum/sdk';
-import { testTokenRefusal, type StatusSnapshot } from '@elymum/sdk/ops';
-import { GAS_SYMBOL } from '@elymum/shared';
-import type { ContractsRegistry, GameAccess, SiteCounts, SiteSettings } from '@elymum/shared';
+import { formatGasAmount } from '@coinnibal/sdk';
+import { testTokenRefusal, type StatusSnapshot } from '@coinnibal/sdk/ops';
+import { GAS_SYMBOL } from '@coinnibal/shared';
+import type { ContractsRegistry, GameAccess, SiteCounts, SiteSettings } from '@coinnibal/shared';
 import type { AdminNetwork } from './net';
 import { setupSteps } from './setup';
 

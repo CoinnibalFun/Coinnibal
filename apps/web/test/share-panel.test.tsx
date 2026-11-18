@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { RULES, type DeathStats, type RoomInfo, type RoundInfo, type RoundStanding, type ServerMessage } from '@elymum/shared';
+import { RULES, type DeathStats, type RoomInfo, type RoundInfo, type RoundStanding, type ServerMessage } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

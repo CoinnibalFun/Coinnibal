@@ -49,20 +49,20 @@ jobs:
       # runtime code hash) are committed: a contract change without a fresh export fails the diff.
       - name: Contracts (build, artifacts in sync, unit + fuzz tests)
         run: |
-          pnpm -F @elymum/contracts build
+          pnpm -F @coinnibal/contracts build
           git diff --exit-code packages/contracts/src/artifacts.ts
-          pnpm -F @elymum/contracts typecheck
-          pnpm -F @elymum/contracts test
+          pnpm -F @coinnibal/contracts typecheck
+          pnpm -F @coinnibal/contracts test
       - name: Shared
-        run: pnpm -F @elymum/shared typecheck && pnpm -F @elymum/shared test
+        run: pnpm -F @coinnibal/shared typecheck && pnpm -F @coinnibal/shared test
       - name: Art
-        run: pnpm -F @elymum/art typecheck && pnpm -F @elymum/art test
+        run: pnpm -F @coinnibal/art typecheck && pnpm -F @coinnibal/art test
       - name: SDK
-        run: pnpm -F @elymum/sdk typecheck && pnpm -F @elymum/sdk test
+        run: pnpm -F @coinnibal/sdk typecheck && pnpm -F @coinnibal/sdk test
       - name: Server
-        run: pnpm -F @elymum/server typecheck && pnpm -F @elymum/server test && pnpm -F @elymum/server test:workers && pnpm -F @elymum/server build
+        run: pnpm -F @coinnibal/server typecheck && pnpm -F @coinnibal/server test && pnpm -F @coinnibal/server test:workers && pnpm -F @coinnibal/server build
       - name: Web
-        run: pnpm -F @elymum/web typecheck && pnpm -F @elymum/web test && pnpm -F @elymum/web build
+        run: pnpm -F @coinnibal/web typecheck && pnpm -F @coinnibal/web test && pnpm -F @coinnibal/web build
 
   docker:
     name: Docker image (build only, no push)

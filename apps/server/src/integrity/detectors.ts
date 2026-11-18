@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { IntegrityEvidence, IntegrityFlagKind, IntegrityFlagSubtype, IntegrityThresholds, IntegrityTransfer } from '@elymum/shared';
+import type { IntegrityEvidence, IntegrityFlagKind, IntegrityFlagSubtype, IntegrityThresholds, IntegrityTransfer } from '@coinnibal/shared';
 import { TURN_BINS, type IntegritySnapshot, type SessionSummary } from './types';
 
 /**

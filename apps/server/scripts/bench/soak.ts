@@ -10,7 +10,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION, encodeTarget } from '@elymum/shared';
+import { PROTOCOL_VERSION, encodeTarget } from '@coinnibal/shared';
 import WebSocket from 'ws';
 import { createApp } from '../../src/app';
 import { loadConfig } from '../../src/config';

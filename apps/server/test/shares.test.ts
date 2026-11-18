@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION, SHARE_ID_RE, TICK_MS, shareIntentUrl, type ServerMessage } from '@elymum/shared';
+import { PROTOCOL_VERSION, SHARE_ID_RE, TICK_MS, shareIntentUrl, type ServerMessage } from '@coinnibal/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';

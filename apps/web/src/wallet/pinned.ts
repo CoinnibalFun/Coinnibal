@@ -1,5 +1,5 @@
-import { coinnibalArenaArtifact, getCodeHash } from '@elymum/sdk';
-import { LOCALNET_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, configuredChainId } from '@elymum/shared';
+import { coinnibalArenaArtifact, getCodeHash } from '@coinnibal/sdk';
+import { LOCALNET_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, configuredChainId } from '@coinnibal/shared';
 import { getAddress, isAddress, type Address, type PublicClient } from 'viem';
 
 /**
@@ -14,7 +14,7 @@ import { getAddress, isAddress, type Address, type PublicClient } from 'viem';
  * - The local development node (31337) may run unpinned (its addresses change with every deploy); the arena's code
  *   hash is still checked.
  *
- * On top of the address, the arena's runtime code is checked against the build of `@elymum/contracts` this site was
+ * On top of the address, the arena's runtime code is checked against the build of `@coinnibal/contracts` this site was
  * made with (its `runtimeCodeHash`) before every approval and ticket.
  */
 
@@ -134,7 +134,7 @@ export async function verifyArena(
   chainId: number | null | undefined,
   announced: { arena: string | null | undefined; token?: string | null },
   pins: BuildPins = PINS,
-  /** The runtime code hash of the compiled arena (`@elymum/contracts`). */
+  /** The runtime code hash of the compiled arena (`@coinnibal/contracts`). */
   expected: string = coinnibalArenaArtifact.runtimeCodeHash,
 ): Promise<PinCheck> {
   const pinned = checkAnnounced(chainId, announced, pins);

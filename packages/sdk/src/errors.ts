@@ -1,5 +1,5 @@
-import { GAS_SYMBOL } from '@elymum/shared';
-import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi } from '@elymum/contracts';
+import { GAS_SYMBOL } from '@coinnibal/shared';
+import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi } from '@coinnibal/contracts';
 import { BaseError, ContractFunctionRevertedError, decodeErrorResult, type Abi, type Hex } from 'viem';
 
 type AbiError = Extract<Abi[number], { type: 'error' }>;

@@ -17,7 +17,7 @@ node brand/generate.mjs --list     # the jobs and their files
 It needs only what the repository already installs: Playwright and the `@fontsource-variable`
 fonts of `apps/web` (fonts are inlined as data URIs; when they are missing the templates fall back
 to Google Fonts). Chromium comes from `CHROME_PATH` or Playwright's own browser
-(`pnpm -F @elymum/web exec playwright install chromium` if you have none).
+(`pnpm -F @coinnibal/web exec playwright install chromium` if you have none).
 
 ## Outputs (`brand/out/`)
 

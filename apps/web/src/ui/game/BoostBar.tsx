@@ -1,4 +1,4 @@
-import { BOOST_KEY_LABELS, BOOST_KINDS, boostCooldownMs, type BoostKind } from '@elymum/shared';
+import { BOOST_KEY_LABELS, BOOST_KINDS, boostCooldownMs, type BoostKind } from '@coinnibal/shared';
 import { useRef, useState } from 'react';
 import { engine } from '../../game/instance';
 import { useT } from '../../i18n';

@@ -41,7 +41,7 @@ import {
   type RoundStanding,
   type ServerMessage,
   type StandingRow,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { PracticeBots, type BotDeparture, type BotSurroundings, type PracticeBotsOptions } from '../bots/practice';
 import type { ChainGateway } from '../chain/types';
 import { looksLikeScam, maskProfanity } from '../chat-filter';

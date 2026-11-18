@@ -1,4 +1,4 @@
-import { RULES, formatToken, type DeathStats, type RoomInfo, type RoundInfo } from '@elymum/shared';
+import { RULES, formatToken, type DeathStats, type RoomInfo, type RoundInfo } from '@coinnibal/shared';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Chip, Kb } from '../src/design';

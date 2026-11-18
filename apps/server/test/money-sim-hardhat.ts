@@ -30,8 +30,8 @@ import {
   testTokenMintCall,
   viemChain,
   type ContractCall,
-} from '@elymum/sdk';
-import { DEFAULT_HOLDER_FEE_RATES, computeProfitFee } from '@elymum/shared';
+} from '@coinnibal/sdk';
+import { DEFAULT_HOLDER_FEE_RATES, computeProfitFee } from '@coinnibal/shared';
 import { toHex, type Address, type PublicClient, type WalletClient } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { viemEvmClient } from '../src/chain/evm-client';
@@ -69,7 +69,7 @@ async function rpcUp(u: string): Promise<boolean> {
 export async function hardhatSimChain(opts: { players: number; seed: number }): Promise<SimChain> {
   const port = await freePort();
   const url = `http://127.0.0.1:${port}`;
-  const child: ChildProcess = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
+  const child: ChildProcess = spawn('pnpm', ['-F', '@coinnibal/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
     cwd: repoRoot,
     detached: true,
     stdio: 'ignore',

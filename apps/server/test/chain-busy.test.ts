@@ -9,8 +9,8 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ServerMessage } from '@elymum/shared';
-import { PROTOCOL_VERSION } from '@elymum/shared';
+import type { ServerMessage } from '@coinnibal/shared';
+import { PROTOCOL_VERSION } from '@coinnibal/shared';
 import { generatePrivateKey } from 'viem/accounts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Auth } from '../src/auth';

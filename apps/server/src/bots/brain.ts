@@ -1,4 +1,4 @@
-import { EntityKind, RULES, SPLIT_REACH, VIEW, canEat, viewSize, type CustomDifficulty } from '@elymum/shared';
+import { EntityKind, RULES, SPLIT_REACH, VIEW, canEat, viewSize, type CustomDifficulty } from '@coinnibal/shared';
 import type { Cell, Player } from '../game/entities';
 import type { Rng } from '../game/rng';
 import type { World } from '../game/world';

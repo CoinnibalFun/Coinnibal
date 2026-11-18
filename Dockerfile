@@ -34,9 +34,9 @@ ARG VITE_RPC_URL=""
 ARG VITE_PUBLIC_URL=""
 ENV VITE_SERVER_URL=$VITE_SERVER_URL VITE_RPC_URL=$VITE_RPC_URL VITE_PUBLIC_URL=$VITE_PUBLIC_URL
 
-RUN pnpm -F @elymum/web build \
- && pnpm -F @elymum/server build \
- && pnpm --filter @elymum/server deploy --legacy --prod /out
+RUN pnpm -F @coinnibal/web build \
+ && pnpm -F @coinnibal/server build \
+ && pnpm --filter @coinnibal/server deploy --legacy --prod /out
 
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production \

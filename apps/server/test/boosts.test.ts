@@ -1,4 +1,4 @@
-import { BOOST_RULES, CellFlag, PlayerFlag, RULES, OLD_SHOP_PRICES, SHOP_DEFAULTS, TICK_MS, leapDistance, packPriceRaw, parseUsdPrice, shopPaymentRef, type ServerMessage } from '@elymum/shared';
+import { BOOST_RULES, CellFlag, PlayerFlag, RULES, OLD_SHOP_PRICES, SHOP_DEFAULTS, TICK_MS, leapDistance, packPriceRaw, parseUsdPrice, shopPaymentRef, type ServerMessage } from '@coinnibal/shared';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { BotBrain } from '../src/bots/brain';
 import { mulberry32 } from '../src/game/rng';
