@@ -4,6 +4,8 @@ import { dirname } from 'node:path';
 import { DEFAULT_CHAIN_ID, parseSiweMessage, siweMessage } from '@coinnibal/shared';
 import { getAddress, type Address, type Hex } from 'viem';
 import { verifyEoa } from './chain/evm-client';
+import { wideNetOf } from './net/ip-key';
+import { Limiter } from './net/limiter';
 
 /** A nonce is single use and valid this long. */
 export const NONCE_TTL_MS = 10 * 60_000;
@@ -13,12 +15,22 @@ export const TOKEN_TTL_MS = 24 * 60 * 60_000;
 export const ADMIN_TOKEN_TTL_MS = 2 * 60 * 60_000;
 /** Hard cap on outstanding nonces. */
 export const MAX_NONCES = 10_000;
-/** Outstanding nonces per wallet address (a new one beyond it replaces that address's oldest). */
+/**
+ * Outstanding nonces one client holds for one wallet address (a new one beyond it replaces that client's oldest for
+ * the address). Never per address alone: anyone may ask for nonces for any address, and must not evict its owner's.
+ */
 export const MAX_NONCES_PER_ADDRESS = 4;
 /** Outstanding nonces per client (IP): beyond it `issueNonce` refuses (null), so one client cannot fill the pool. */
 export const MAX_NONCES_PER_CLIENT = 24;
 /** Wrong signatures a nonce survives; at this many it is gone (ask for a new one). */
 export const MAX_NONCE_FAILURES = 3;
+/**
+ * The smart-wallet fallback (ERC-1271 / ERC-6492, one `eth_call` each) of a signature that is not the address's own
+ * EOA signature runs within a small budget of its own, so garbage signatures cannot spend the shared RPC budget:
+ * at most `inFlight` at once and `burst` then `perSec` server-wide, `perClient` per client in `clientWindowMs`, each
+ * given up after `timeoutMs`. Past the budget the signature is refused at once (the player signs again later).
+ */
+export const SMART_WALLET_CHECKS = { inFlight: 2, burst: 4, perSec: 0.5, perClient: 4, clientWindowMs: 10 * 60_000, timeoutMs: 10_000 } as const;
 
 /** Where a login message says the player signs in (SIWE `domain`, `URI`, `Chain ID`). */
 export interface SiweOrigin {
@@ -83,8 +95,10 @@ interface NonceEntry {
   expires: number;
   origin: SiweOrigin;
   failures?: number;
-  /** The client that asked (its IP), for the per-client cap. */
+  /** The client that asked (its `rateKey`: an IPv4 address, an IPv6 /64), for the per-client caps. */
   client: string;
+  /** The client's wider network (an IPv6 /48; an IPv4 client is its own): a full pool evicts the biggest one's first. */
+  group: string;
 }
 
 /** Revoked sessions: tokens issued before these times are refused (`Auth.revoke`). */
@@ -115,10 +129,14 @@ export interface AuthOptions {
  */
 export class Auth {
   private readonly nonces = new Map<string, NonceEntry>();
-  /** Outstanding nonces per client (IP) and per address, oldest first. */
+  /** Outstanding nonces per client, per client network (`group`) and per client and address, oldest first. */
   private readonly byClient = new Map<string, Set<string>>();
-  private readonly byAddress = new Map<string, Set<string>>();
+  private readonly byGroup = new Map<string, Set<string>>();
+  private readonly byClientAddress = new Map<string, Set<string>>();
   private onChain: OnChainVerifier | null;
+  /** The smart-wallet budget (`SMART_WALLET_CHECKS`): checks running, the server-wide bucket, per client. */
+  private smart = { running: 0, tokens: SMART_WALLET_CHECKS.burst as number, at: 0 };
+  private readonly smartByClient = new Limiter(SMART_WALLET_CHECKS.perClient, SMART_WALLET_CHECKS.clientWindowMs);
   private isAdminWallet: (wallet: string) => boolean;
   readonly adminTtlMs: number;
   private revoked: Revocations = { adminsBefore: 0, wallets: {} };
@@ -145,24 +163,26 @@ export class Auth {
 
   /**
    * A one-time nonce and the SIWE message for it. The fields are returned too, so the web client
-   * can rebuild the message itself and refuse to sign anything else. `client` (the caller's IP) is held to
-   * `MAX_NONCES_PER_CLIENT` outstanding nonces (`NonceLimitError` beyond it: answer 429); a wallet address keeps at most
-   * `MAX_NONCES_PER_ADDRESS` (its oldest is replaced). When the pool is full, the client holding the most nonces
-   * loses its oldest first, so a flood from many addresses evicts its own nonces before anyone else's.
+   * can rebuild the message itself and refuse to sign anything else. `client` (the caller's `rateKey`) is held to
+   * `MAX_NONCES_PER_CLIENT` outstanding nonces (`NonceLimitError` beyond it: answer 429), and to
+   * `MAX_NONCES_PER_ADDRESS` per wallet address (its own oldest for that address is replaced). Nothing is capped per
+   * address alone: another client's requests for a wallet never touch the nonce its owner is signing. When the pool is
+   * full, the network (`group`: the client, an IPv6 client's /48) holding the most loses its oldest first, so a flood
+   * from many addresses or /64s evicts its own nonces before anyone else's.
    */
   issueNonce(address: string, origin: SiweOrigin = DEFAULT_ORIGIN, now = Date.now(), client = 'local'): IssuedNonce {
     const checksummed = checksumAddress(address);
     if (!checksummed) throw new Error('invalid address');
     this.prune(now);
     if ((this.byClient.get(client)?.size ?? 0) >= MAX_NONCES_PER_CLIENT) throw new NonceLimitError();
-    // one address keeps a few (two tabs, a retry), never thousands
-    const mine = this.byAddress.get(checksummed);
+    // one client keeps a few per address (two tabs, a retry), never thousands
+    const mine = this.byClientAddress.get(`${client}|${checksummed}`);
     while (mine && mine.size >= MAX_NONCES_PER_ADDRESS) this.dropNonce(mine.values().next().value!);
     if (this.nonces.size >= MAX_NONCES) this.evictOne();
     const nonce = randomBytes(12).toString('hex');
     const issuedAt = new Date(now).toISOString();
     const message = loginMessage(checksummed, nonce, issuedAt, origin);
-    this.track({ address: checksummed, message, expires: now + NONCE_TTL_MS, origin, client }, nonce);
+    this.track({ address: checksummed, message, expires: now + NONCE_TTL_MS, origin, client, group: wideNetOf(client) ?? client }, nonce);
     return { nonce, message, address: checksummed, domain: origin.domain, uri: origin.uri, chainId: origin.chainId, issuedAt };
   }
 
@@ -171,9 +191,17 @@ export class Auth {
     return this.nonces.size;
   }
 
+  private indexes(e: NonceEntry) {
+    return [
+      [this.byClient, e.client],
+      [this.byGroup, e.group],
+      [this.byClientAddress, `${e.client}|${e.address}`],
+    ] as const;
+  }
+
   private track(e: NonceEntry, nonce: string): void {
     this.nonces.set(nonce, e);
-    for (const [map, key] of [[this.byClient, e.client], [this.byAddress, e.address]] as const) {
+    for (const [map, key] of this.indexes(e)) {
       let set = map.get(key);
       if (!set) map.set(key, (set = new Set()));
       set.add(nonce);
@@ -184,17 +212,17 @@ export class Auth {
     const e = this.nonces.get(nonce);
     if (!e) return;
     this.nonces.delete(nonce);
-    for (const [map, key] of [[this.byClient, e.client], [this.byAddress, e.address]] as const) {
+    for (const [map, key] of this.indexes(e)) {
       const set = map.get(key);
       set?.delete(nonce);
       if (set && set.size === 0) map.delete(key);
     }
   }
 
-  /** The pool is full: the oldest nonce of the client that holds the most goes (the globally oldest when nobody holds many). */
+  /** The pool is full: the oldest nonce of the network (`group`) that holds the most goes (the globally oldest when nobody holds many). */
   private evictOne(): void {
     let top: Set<string> | null = null;
-    for (const set of this.byClient.values()) if (!top || set.size > top.size) top = set;
+    for (const set of this.byGroup.values()) if (!top || set.size > top.size) top = set;
     const victim = top && top.size > 2 ? top.values().next().value : this.nonces.keys().next().value;
     if (victim !== undefined) this.dropNonce(victim);
   }
@@ -217,7 +245,7 @@ export class Auth {
     if (fields.address !== checksummed || fields.domain !== o.domain || fields.uri !== o.uri || fields.chainId !== o.chainId) return null;
     // single use: taken out before the (async) check so two concurrent replays cannot both pass
     this.dropNonce(fields.nonce);
-    const ok = await this.signedBy(checksummed, message, signature);
+    const ok = await this.signedBy(checksummed, message, signature, entry.client);
     // a wrong signature gives the nonce back a few times only: each failure may cost an on-chain check
     // (ERC-1271 / ERC-6492 call), so one nonce must not let a client hammer the RPC with garbage signatures
     if (!ok && entry.expires >= now) {
@@ -227,14 +255,40 @@ export class Auth {
     return ok ? checksummed : null;
   }
 
-  /** `message` was signed by `address` (an EOA locally, a smart wallet through the chain). */
-  async signedBy(address: string, message: string, signature: string): Promise<boolean> {
+  /**
+   * `message` was signed by `address`: an EOA locally (no RPC), else a smart wallet through the chain. `client`: the
+   * client that asked (a sign-in); its smart-wallet check runs within `SMART_WALLET_CHECKS` (none: an admin's proof,
+   * which only a signed-in admin can send).
+   */
+  async signedBy(address: string, message: string, signature: string, client: string | null = null): Promise<boolean> {
     if (typeof signature !== 'string' || !/^0x[0-9a-fA-F]{2,4096}$/.test(signature)) return false;
     const a = checksumAddress(address);
     if (!a) return false;
-    let ok = await verifyEoa(a, message, signature as Hex);
-    if (!ok && this.onChain) ok = await this.onChain(a, message, signature).catch(() => false);
-    return ok;
+    if (await verifyEoa(a, message, signature as Hex)) return true;
+    const onChain = this.onChain;
+    if (!onChain) return false;
+    if (client === null) return onChain(a, message, signature).catch(() => false);
+    if (!this.smartCheckAllowed(client)) return false;
+    this.smart.running++;
+    const check = onChain(a, message, signature)
+      .catch(() => false)
+      .finally(() => this.smart.running--);
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<boolean>((r) => {
+      timer = setTimeout(() => r(false), SMART_WALLET_CHECKS.timeoutMs);
+      timer.unref();
+    });
+    return Promise.race([check, late]).finally(() => clearTimeout(timer));
+  }
+
+  /** One more smart-wallet check fits the budget (`SMART_WALLET_CHECKS`): it is spent when true. */
+  private smartCheckAllowed(client: string, now = Date.now()): boolean {
+    const b = this.smart;
+    b.tokens = Math.min(SMART_WALLET_CHECKS.burst, b.tokens + ((now - b.at) / 1000) * SMART_WALLET_CHECKS.perSec);
+    b.at = now;
+    if (b.running >= SMART_WALLET_CHECKS.inFlight || b.tokens < 1 || !this.smartByClient.allow(client, now)) return false;
+    b.tokens -= 1;
+    return true;
   }
 
   private mac(payload: string): string {
