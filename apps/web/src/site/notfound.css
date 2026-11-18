@@ -12,13 +12,12 @@
   box-sizing: border-box;
 }
 .nf__title {
-  margin: 6px 0 14px;
+  margin: 0 0 16px;
   text-wrap: balance;
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
-  font-weight: 800;
-  font-size: clamp(36px, 5vw, 60px);
-  line-height: 1.02;
+  font-weight: 400;
+  font-size: clamp(40px, 5.4vw, 66px);
+  line-height: 1.04;
   letter-spacing: 0.005em;
 }
 .nf__lede {
@@ -30,8 +29,10 @@
   color: var(--ink-2);
 }
 .nf__path {
-  /* the path exactly as typed (paths are case-sensitive): no mono capitals; a long one breaks with its sticker edges on
-     every line */
+  /* the path exactly as typed (paths are case-sensitive): no mono capitals. It moves to the next line whole when it
+     does not fit beside the words, and only a path longer than the line breaks inside its sticker */
+  display: inline-block;
+  max-width: 100%;
   margin-right: 2px;
   padding: 1px 6px;
   font-size: 0.88em;
@@ -44,11 +45,6 @@
   overflow-wrap: anywhere;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-}
-/* the title strip echoes the path as typed too */
-.nf-root .kb-plate__aside {
-  text-transform: none;
-  letter-spacing: 0.02em;
 }
 .nf__ctas {
   display: flex;
@@ -74,9 +70,9 @@
 }
 .nf-art__signtext {
   font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
-  font-weight: 800;
-  font-size: 20px;
+  font-weight: 400;
+  font-size: 22px;
+  letter-spacing: 0.02em;
 }
 .nf-art__swing {
   transform-origin: 470px 86px;

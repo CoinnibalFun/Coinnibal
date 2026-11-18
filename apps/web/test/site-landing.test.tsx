@@ -117,7 +117,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     render(<Landing />);
     await waitFor(() => expect(screen.getAllByRole('link', { name: /@feastbot/ }).length).toBeGreaterThan(0));
     expect(screen.getAllByRole('link', { name: /@feastbot/ }).every((a) => a.getAttribute('href') === 'https://x.com/feastbot')).toBe(true);
-    expect(screen.getByText(/using ETH for gas/)).toBeTruthy();
+    expect(screen.getByText(/Gas is paid in ETH/)).toBeTruthy();
   });
 
   const CLOSED = { ...SETTINGS, wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' as const };
@@ -300,27 +300,28 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
   });
 
   it('a closed page says "not open yet" (never the real page or a 404); the same path opens when the admin opens it', async () => {
-    for (const [path, line, plate] of [
-      // the mint: nothing about where or when the NFT is minted
-      ['/mint', 'The Coinnibal NFT collection is coming. The mint will be on OpenSea: use only the OpenSea link that @coinnibalfun posts.', 'Coinnibal NFT'],
+    for (const [path, line, title] of [
+      // the mint: nothing about when the NFT is minted, only where (and which link to trust)
+      ['/mint', "The coins are still asleep. When the mint opens, it'll be on OpenSea: use only the OpenSea link that @coinnibalfun posts.", "The mint isn’t open yet"],
       // the faucet is hidden: a neutral notice that never names it
-      ['/faucet', 'There is nothing here for now. The guide explains how the game works.', 'Coinnibal'],
-      ['/collab', 'This is where communities will ask for WL spots. The guide explains how the game works.', 'Collab'],
+      ['/faucet', "There's nothing here for now. The guide explains how the game works.", 'Not open yet'],
+      ['/collab', 'This is where communities will ask for WL spots. For now, the guide explains how the game works.', "Collabs aren’t open yet"],
     ]) {
       resetSiteSettings();
       ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
       history.pushState(null, '', path);
       try {
         const view = render(<SiteApp />);
-        expect(await screen.findByRole('heading', { level: 1, name: 'Not open yet.' })).toBeTruthy();
+        expect(await screen.findByRole('heading', { level: 1, name: title })).toBeTruthy();
         expect(screen.getByText(line)).toBeTruthy();
-        expect(document.querySelector('main .kb-plate')?.textContent).toBe(plate);
+        // one label: the heading (no title strip over the notice)
+        expect(document.querySelector('main .kb-plate')).toBeNull();
         expect(document.querySelector('main')?.textContent).not.toMatch(/faucet|test tokens?|testnet|on this page|mint(ed)? (here|on)|price|\bdate\b/i);
         expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
         expect(screen.getByRole('link', { name: /Read the guide/ }).getAttribute('href')).toBe('/docs');
         expect(screen.getByRole('link', { name: /Follow @coinnibalfun/ }).getAttribute('href')).toBe('https://x.com/coinnibalfun');
         expect(document.querySelector(closedLinks)).toBeNull();
-        expect(screen.queryByText('This page does not exist.')).toBeNull();
+        expect(screen.queryByText('Somebody ate this page')).toBeNull();
         await waitFor(() => expect(document.title).toBe('Not open yet · Coinnibal'));
         expect(document.head.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex');
         view.unmount();
@@ -526,8 +527,10 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     history.pushState(null, '', '/Terrace-Nine');
     try {
       render(<SiteApp />);
-      expect(screen.getByRole('heading', { level: 1, name: 'This page does not exist.' })).toBeTruthy();
+      expect(screen.getByRole('heading', { level: 1, name: 'Somebody ate this page' })).toBeTruthy();
       expect(screen.getByText('/Terrace-Nine', { selector: 'code' })).toBeTruthy();
+      // one label: the heading (the 404 is on the sign in the picture; no title strip, no "Error 404" eyebrow)
+      expect(document.querySelector('main .kb-plate, main .kicker')).toBeNull();
       expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
       await waitFor(() => expect(document.title).toBe('Page not found · Coinnibal'));
     } finally {

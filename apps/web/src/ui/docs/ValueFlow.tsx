@@ -78,13 +78,15 @@ const feeRail = { ...rail, stroke: ELYSIUM.coral };
  * hands inside it when a coin is eaten, and at the bell travel on to the player's wallet while
  * the fee on the profit drops to the burn and the team wallet. One 7 s loop while on screen; a still
  * picture under reduced motion and off screen. Wide screens get it left to right; phones get the
- * same picture top to bottom (CSS shows one of the two). The numbered steps under it carry the words.
+ * same picture top to bottom (CSS shows one of the two). `label` says it in words for screen readers; the prose
+ * under it explains each step.
  */
-export function ValueFlow({ labels }: { labels: ValueFlowLabels }) {
+export function ValueFlow({ labels, label }: { labels: ValueFlowLabels; label: string }) {
   const reduced = useReducedMotion();
   const [ref, visible] = useOffscreenPause<HTMLElement>();
   return (
     <figure ref={ref} className={`vf${reduced ? ' is-still' : ''}`} data-paused={!visible || undefined}>
+      <figcaption className="dc-sr">{label}</figcaption>
       {/* wide: ticket → vault → wallet, the fee wallet under the wallet */}
       <svg className="vf__svg vf__svg--wide" viewBox="0 0 640 210" aria-hidden="true" focusable="false">
         <rect x={2} y={2} width={636} height={206} rx={18} fill={ELYSIUM.mist} />
