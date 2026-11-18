@@ -1,5 +1,5 @@
 // A local Robinhood Chain stand-in: `hardhat node` (chain id 31337, gas in ETH) with the Coinnibal
-// contracts deployed in the same order as /admin → Deploy, through the SDK:
+// contracts deployed in the same order as /admin → Setup, through the SDK:
 //   TestToken → CoinnibalArena (server authority = the game server's key) → CoinnibalNFT
 //   → setToken → the four default arenas (→ optionally the mint opened to the public).
 // Shared by scripts/localnet.mjs, scripts/localnet-fund.mjs and scripts/demo.mjs.
@@ -107,7 +107,7 @@ export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http:/
     await send(sdk.setTokenCall(arena, token), 'setToken');
     for (const call of sdk.createDefaultArenaCalls(arena, 18)) await send(call, `createArena(${call.args[0]})`);
   } else {
-    log('--no-token: the token is NOT set on the arena (set it from /admin → Arena, like a fresh deploy)');
+    log('--no-token: the token is NOT set on the arena (set it from /admin → Setup, like a fresh deploy)');
   }
   if (openMint) {
     log('opening the mint to the public');

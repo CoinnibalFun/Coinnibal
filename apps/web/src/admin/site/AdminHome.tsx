@@ -41,11 +41,11 @@ export { NetPill };
 
 /**
  * `/admin`: the operator's workshop. A top bar (network, wallet, owner and admin badges), a rail
- * of drawers on the left and the open drawer on the right. The chain drawers (Launch, Deploy,
- * Mint, Arena; status for everyone, writes for the contract owner) sit above the site drawers.
- * The site drawers (and the server steps of the chain drawers: registering contracts, the
- * allowlist, the $1 price) need an admin session (SIWE with a wallet in ADMIN_WALLETS); every
- * call sends it as a Bearer token.
+ * of drawers on the left and the open drawer on the right. The chain drawers (Network, Setup,
+ * Mint, Game; status for everyone, writes for the contract owner) sit above the site drawers
+ * (Community, Safety, Settings). The site drawers (and the server steps of the chain drawers:
+ * registering contracts, the allowlist, the mint price (MINT_USD_CENTS)) need an admin session
+ * (SIWE with a wallet in ADMIN_WALLETS); every call sends it as a Bearer token.
  */
 export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: () => Promise<void> }) {
   const [tab, setTab] = useState<AdminGroup>(() => parseAdminHash(location.hash).group);

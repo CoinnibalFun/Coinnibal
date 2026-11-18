@@ -22,7 +22,7 @@ price at its USD target (`MINT_USD_CENTS`).
 | **Game** | Who may play, pause and per-arena open / close, map sizes, **arena prices in US dollars** (the token price, the tiers, "Sync arena prices to USD", "Re-price at next bell"), arena instances (auto-scaling), custom rooms, power-ups (priced in US dollars, converted like the tickets), leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance and gas runway |
 | **Community** (**WL**, **Tasks**, **Collabs**) | The whitelist applications, the WL steps, the community collabs |
 | **Safety** | Cheat and collusion flags, bans, held settlements, detector settings; the profile pictures players wear |
-| **Settings** | `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public / maintenance), the X handle (default `X_HANDLE`, else `coinnibalfun`) |
+| **Settings** | **Mint page open** (`mintOpen`: visitors see `/mint`; it does not change the phase on chain), `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public / maintenance), the X handle (default `X_HANDLE`, else `coinnibalfun`) |
 
 Admin endpoints need a SIWE session whose wallet is in `ADMIN_WALLETS`. Contract actions also need the
 connected wallet to be the contract's owner and on the chain the server reports; otherwise signing is blocked
@@ -95,7 +95,7 @@ until you publish a root.
 
 | Task | In `/admin` |
 |---|---|
-| Open or close the WL and collabs; the X handle | **Settings** |
+| Open or close the mint page, the WL and collabs; the X handle | **Settings** |
 | Review WL entries | **WL**: counts, filter, search (wallet, handle, note, id), open an entry for its answers, approve / reject / reset, a note; bulk actions on up to 500 rows |
 | Export | **WL** → CSV (approved or all): `wallet,x_handle,status,created_at,dup_collabs,note` |
 | Edit the WL steps | **Tasks**: add, edit, reorder, enable, delete; paste the launch post link to open the like / repost / reply step |
@@ -116,8 +116,9 @@ until you publish a root.
 
 ## The mint price: a USD target paid in ETH
 
-The price is held in wei; the target is `MINT_USD_CENTS` (US cents, default 100; an owner setting that no page
-publishes) at the ETH/USD price from Hyperliquid's
+The price is held in wei; the target is `MINT_USD_CENTS` (US cents, default 100; an owner setting: no visitor page
+shows it, and `GET /api/site/mint` leaves it out while the mint page is closed, Settings → Mint page open; the admin
+panel reads it from `GET /api/admin/mint/price`) at the ETH/USD price from Hyperliquid's
 public info API (`GAS_PRICE_URL`). The UI always shows the ETH amount with its USD value.
 
 - **By hand:** Mint → **Sync** computes the wei price for the current ETH/USD and asks your wallet to call
@@ -131,7 +132,7 @@ public info API (`GAS_PRICE_URL`). The UI always shows the ETH amount with its U
   (`setPriceKeeper(0)`) to stop it.
 - **Phases:** Closed → **Allowlist** (proof required, `wlLimit` per wallet) → **Public** (`publicLimit` per wallet;
   allowlisted wallets may still use their allowlist allowance). Opening the mint offers "activate the game for
-  holders" (sets `gameAccess` to `holders`).
+  holders" (sets `gameAccess` to `holders`), unchecked by default: the game opens last, after the token and the rooms.
 - **What visitors can see** (`/admin` → Settings; a fresh server starts with all four closed, and the public launch
   closed them once on the live server: the `launch` marker in `site/settings.json`): Game access, **Mint page open**
   (`mintOpen`), WL applications open, Collab applications open. A closed part has no link, button or widget on the

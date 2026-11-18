@@ -443,8 +443,11 @@ export interface MintState {
   gasUsd: number | null;
   /** Current mint price in USD at `gasUsd`; null when either is unknown. */
   priceUsd: number | null;
-  /** The target the price is kept at (`MINT_USD_CENTS`). */
-  targetUsdCents: number;
+  /**
+   * The target the price is kept at (`MINT_USD_CENTS`). Left out while the mint page is closed (Settings → "Mint page
+   * open" off), unless a signed-in admin asks.
+   */
+  targetUsdCents?: number;
   /** Distinct holders (wallets with `balanceOf > 0`). */
   holders: number;
   /** `totalSupply >= maxSupply`. */

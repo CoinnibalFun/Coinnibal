@@ -247,7 +247,7 @@ export function Gallery() {
             <h3 className="gal-type__h3">Three small chores, then the feast.</h3>
             <p className="lede">DM Sans for everything you read. The ring noticed, and so did our follower count. Copy is short, specific and a little wry.</p>
             <p className="gal-type__body">
-              Body 16/1.5. Numbers are always Geist Mono: <span className="num">0.0213 ETH</span>, <span className="num">2,614 / 3,333</span>,{' '}
+              Body 16/1.5. Numbers are always Geist Mono: <span className="num">0.0004 ETH</span> of gas, <span className="num">2,614 / 3,333</span>,{' '}
               <span className="num">0x7a3f…e91c</span>.
             </p>
             <p className="quote gal-type__quote">&ldquo;Small change, big appetite.&rdquo;</p>
@@ -454,7 +454,7 @@ export function Gallery() {
             </h2>
             <p>Every NFT is a different coin, with perks in the game. The mint page shows the price from the contract before you sign.</p>
             <div className="gal-row">
-              <Countdown seconds={2 * 86400 + 6 * 3600 + 14 * 60} label="WL window closes" />
+              <Countdown seconds={2 * 86400 + 6 * 3600 + 14 * 60} label="a sample countdown" />
               <Countdown to={deadline} label="until the bell" tone="sun" />
             </div>
           </div>
@@ -502,7 +502,7 @@ export function Gallery() {
           <div>
             <div className="kicker">Whitelist · the ascent</div>
             <h2 className="gal-wl__h display">Three small chores, then the feast.</h2>
-            <p className="lede">Each chore lifts you one terrace up the ring. Finish all three and you get a mint spot and a boarding pass to flex with.</p>
+            <p className="lede">Each chore lifts you one terrace up the ring. Finish all three and your entry goes to review, with a boarding pass to flex with.</p>
           </div>
           <Stepper
             label="Whitelist chores"

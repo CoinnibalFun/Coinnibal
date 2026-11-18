@@ -165,6 +165,18 @@ describe('NftCollection', () => {
     expect(logs.some((m) => m.includes('committed seed'))).toBe(true);
   });
 
+  it('a Mythic is "one of the one-of-a-kind coins", with no count (7 at 3,333, out of ten hand-authored 1/1s)', async () => {
+    const size = 1000;
+    const c = new NftCollection({ file: join(dir, 'mythic.json'), size, seed: 'mythic-line', style: 'vector' });
+    c.schedule({ block: 200n, current: 100n, mintOpen: false, soldOut: true, maxSupply: size });
+    await c.reveal(async () => `0x${'17'.repeat(32)}`);
+    const mythic = Array.from({ length: size }, (_, i) => i + 1).find((id) => c.genomeOf(id)?.tier === 'Mythic');
+    expect(mythic).toBeDefined();
+    const { description } = c.metadata(mythic!, 'https://x.example') as { description: string };
+    expect(description).toMatch(/^A Mythic \S+ NFT: one of the one-of-a-kind coins\. /);
+    expect(description).not.toMatch(/\bten\b/);
+  });
+
   it('shows only the sealed emblem until the reveal, then the art of (id - 1 + offset)', async () => {
     const c = new NftCollection({ file: join(dir, 'b.json'), size: 300, seed: 'reveal-me', style: 'pixel' });
     expect(c.genomeOf(1)).toBeNull();

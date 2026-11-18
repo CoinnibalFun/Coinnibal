@@ -742,7 +742,7 @@ export class SiteApi {
         if (seg.length === 1) {
           this.method(req, 'GET');
           if (!mint) throw new SiteFail(503, 'chain_off', 'The mint is not available on this server.');
-          return send(res, 200, await mint.publicState(this.gameAccess()));
+          return send(res, 200, await mint.publicState(this.gameAccess(), this.store.settings.mintOpen || this.isAdmin(bearerWallet(this.auth, req))));
         }
         if (seg.length === 2 && seg[1] === 'proof') {
           this.method(req, 'GET');

@@ -3,7 +3,8 @@
 > **Before the next render.** This film's script still carries facts of the Elysium build (Elysium, HYPE, a $1
 > mint, the old arena names and fees). Rewrite it to the current game (Robinhood Chain, ETH gas, no mint price, the
 > $1 / $3 / $5 / $10 Rooms, 20 % of profit: 15 % burned + 5 % to the team wallet) before any re-render
-> ([media/README.md](../README.md)).
+> ([media/README.md](../README.md)). Also: the "PENNY POND" ladder and receipt of `edit.mjs` become the $1 to $10
+> Rooms, and the `$NIBAL` pronunciation of `audio/tts.py` goes (amounts are "tokens": there is no ticker).
 
 A narrated tutorial, about 2:45, 1920x1080, 30 fps (every frame an exact replayed game frame), H.264 +
 AAC, -14 LUFS with the true peak at or below -1.5 dBTP after encoding, in seven chapters with the

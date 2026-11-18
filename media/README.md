@@ -24,7 +24,11 @@ scripts of `mint-film`, `roadmap-chomp`, `how-to-play`, `gameplay` and `gameplay
 Elysium build: Elysium and HYPE, a $1 mint, the old arena names and ladder, a flat 5 % fee and house bots in the paid
 arena. Rewrite their voice lines, captions and scenes to the current game (Robinhood Chain, ETH gas, no mint price, the
 $1 / $3 / $5 / $10 Rooms, 20 % of profit: 15 % burned + 5 % to the team wallet, holders 10 %, no bots in official
-arenas) before any re-render. The hand-drawn scenes
+arenas) before any re-render. Two leftovers to change on the way: `$NIBAL` becomes "tokens" (there is no ticker; the
+amount labels of `gameplay/edit.mjs` and the `$NIBAL` defaults of `gameplay/motion/motion.js`, and the `$NIBAL`
+pronunciations of `gameplay-film/audio/voice.py` and `how-to-play/audio/tts.py`), and the "PENNY POND" stub goes
+(the lower-third default and the intro kicker of `gameplay/edit.mjs`, the ladder and the receipt of
+`how-to-play/edit.mjs`: the room is the $1 Room). The hand-drawn scenes
 use the Ring Storybook palette (`#04181C` ink, cream, sun, cyan, teal, trench night) and type
 (Fraunces, DM Sans, Geist Mono, from `apps/web`'s `@fontsource-variable` packages). The captured
 films (gameplay, how-to-play, the promo's footage) record the real UI, so they pick up the new

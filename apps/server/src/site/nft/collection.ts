@@ -269,6 +269,7 @@ function tierLine(t: Tier): string {
     case 'Legendary':
       return `A Legendary ${NFT_NAME} NFT: one of the few coins of glass, crystal and foil.`;
     case 'Mythic':
-      return `A Mythic ${NFT_NAME} NFT: one of ten one-of-a-kind coins.`;
+      // no count: 7 Mythics at 3,333 tokens, drawn from ten hand-authored 1/1s (which ones is an open owner decision)
+      return `A Mythic ${NFT_NAME} NFT: one of the one-of-a-kind coins.`;
   }
 }

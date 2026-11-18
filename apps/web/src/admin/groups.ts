@@ -88,7 +88,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
   switch (group) {
     case 'network': {
       if (!net.chain) return { now: 'The game server is not answering.', next: 'It retries every 5 s. If it stays down: on the server, run coinnibal-status (deploy/vps/README.md).' };
-      if (!net.info) return { now: 'The server has no chain.', next: 'Set COINNIBAL_RPC_URLS and COINNIBAL_CHAIN_ID in /opt/elymum/.env on the VPS (EVM_RPC_URLS and CHAIN_ID when the server runs outside Docker), then coinnibal-compose up -d app.' };
+      if (!net.info) return { now: 'The server has no chain: its RPC did not answer or serves another chain.', next: 'Check coinnibal-compose logs app on the VPS, then fix COINNIBAL_RPC_URLS in /opt/elymum/.env (EVM_RPC_URL(S) when the server runs outside Docker) and run coinnibal-compose up -d app.' };
       const bal = a?.serverBalance ?? null;
       const now = `${chain}${status ? ` · block ${status.block.toString()}` : ''}${bal !== null ? ` · server key ${formatGasAmount(bal, 4)}` : ''}`;
       if (bal === 0n) return { now, next: `Fund the server key with ${GAS_SYMBOL}: it pays the gas of every settlement.` };
@@ -107,7 +107,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
         const known = i.registry?.token?.address ?? status?.testToken?.address ?? null;
         if (known) return { now, next: 'Confirm the game token (one click, then your wallet).' };
         if (net.info && !testTokenRefusal(net.info.id)) return { now, next: 'Deploy a TestToken (below), then Finish setup.' };
-        return { now, next: 'Register the game token in Setup → Advanced (Register a contract that is already deployed), then confirm it here; or enter it by hand there (typed twice).' };
+        return { now, next: 'Once the token is launched on Pons: enter it in Setup → Set the game token, by hand and typed twice (the server cannot know it before the arena uses it).' };
       }
       if (steps.length > 0) return { now, next: `Finish setup: ${steps.length} step${steps.length === 1 ? '' : 's'} left, one button.` };
       return { now, next: null };

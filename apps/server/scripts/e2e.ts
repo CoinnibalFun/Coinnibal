@@ -1,6 +1,6 @@
 /**
  * End-to-end check of Coinnibal against a real EVM (a fresh `hardhat node`) and a real game server (real
- * chain, never DEV_FAKE_CHAIN). It follows the launch order of /admin → Deploy:
+ * chain, never DEV_FAKE_CHAIN). It follows the launch order of /admin → Setup:
  *
  *  1. a hardhat node starts (or `RPC_URL` points at one you run); the admin deploys the TestToken and the
  *     arena (server authority = the game server's key) WITHOUT setting the token;

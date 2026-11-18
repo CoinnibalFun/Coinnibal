@@ -22,8 +22,9 @@ Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testne
 3. In `/admin` on the site, with the owner wallet on Robinhood Chain: **Deploy Arena → Deploy NFT → register both**
    (on the testnet also the TestToken).
 4. **WL**: review applications in `/admin` → Community (WL, Collabs) → **publish the allowlist root**.
-5. **Open the mint**: phase Allowlist (with "activate the game for holders" checked), later Public (on the testnet
-   Finish setup has already opened it to the public). The visitor site says the public mint will be on OpenSea; how
+5. **Open the mint**: phase Allowlist, later Public (on the testnet, Finish setup, step 7, opens it to the public).
+   Leave "activate the game for holders" unchecked (the default): the game opens last, at step 8, once the token
+   and the rooms are set. The visitor site says the public mint will be on OpenSea; how
    that sale and this contract's phases fit together is an open owner decision.
 6. Keep the mint at its USD target (`MINT_USD_CENTS`) in ETH: the Sync button, or let the server's price keeper do it
    within your bounds.
@@ -82,7 +83,7 @@ before the rename still work: deploy/vps/README.md section 4):
 | `MAX_CONNECTIONS`, `MAX_CONNECTIONS_PER_IP`, `MAX_CONNECTIONS_PER_SUBNET` | `1500`, `8`, `48` (defaults): WebSocket caps (total, guests per IP, guests per IPv4 /24 or IPv6 /64) |
 | `GAME_WORKERS` | `5` on 8 vCPU |
 | `LOAD_SHED` | on by default in production: new free games, then new sockets and arena seats wait while the server is overloaded |
-| `MINT_USD_CENTS` | the mint's USD target in US cents (default `100`; an owner setting, never published) |
+| `MINT_USD_CENTS` | the mint's USD target in US cents (default `100`; an owner setting). No visitor page shows it, and `GET /api/site/mint` leaves it out while the mint page is closed (Settings → Mint page open); the admin panel always reads it |
 | `NFT_COLLECTION_SIZE`, `NFT_ART_STYLE` | `3333` (= the NFT's max supply), `vector` (or `pixel`): the emblem collection (docs/NFT-DESIGN.md). Leave `NFT_COLLECTION_SEED` empty: the seed is generated and committed on first boot (`DATA_DIR/chains/<id>/nft-collection.json`, keep it in the backups) |
 | `TOKEN_SYMBOL` | unset: amounts say `tokens` (display only) |
 | `X_HANDLE` | the project's X handle by default (unset: `coinnibalfun`) |
@@ -138,10 +139,12 @@ send twice. Open **Setup**; the wizard walks the steps and remembers where you a
 5. **Register both with the server.** `POST /api/admin/contracts` for each: the server checks that the code hash is
    the bundled one, that the owner is you and that the arena's server authority is its key, then stores the
    addresses in `/data/chains/<chainId>/contracts.json`. The server picks the arena up without a restart.
-6. **Set the game token** (later, when the game token exists). Confirm the registered token once in the preview (a
-   different address goes under Advanced and is typed twice). It can be set **once**: a
-   wrong address means deploying a new arena. Until it is set the arenas show "Opening soon" and only practice
-   runs.
+6. **Set the game token** (later, when the game token exists). On a testnet, confirm the registered TestToken once
+   in the preview (Finish setup does it). The real game token cannot be registered with the server before the arena
+   uses it (`POST /api/admin/contracts` accepts only the TestToken or the arena's own token), so on the mainnet enter
+   it under **Advanced** in the game token card and type it twice. `TOKEN_ADDRESS` names it only on a server outside
+   Docker: the VPS compose file sets it empty. It can be set **once**: a wrong address means deploying a new arena.
+   Until it is set the arenas show "Opening soon" and only practice runs.
 7. **Create the four arenas** (needs the token): the $1 / $3 / $5 / $10 tiers, created at 1,000 / 3,000 / 5,000 /
    10,000 tokens (the reference price $0.001 a token), 300 open tickets each; the $10 Room is for NFT holders.
    Then price them at the token's real USD price: Game → Arena prices → set the price, sync, sign (OPERATIONS.md,
@@ -150,8 +153,9 @@ send twice. Open **Setup**; the wizard walks the steps and remembers where you a
 **The testnet token.** On Robinhood Chain Testnet the wizard offers **Deploy TestToken** (an ERC20Burnable faucet
 token: `faucet()` gives 1,000,000 per hour, 2x for NFT holders; only its owner mints). **Finish setup** sets it as
 the arena's token, creates the four rooms, sets the holder perks (8 % + 2 %), makes the $10 Room holders-only, makes the
-NFT the faucet's 2x and, on a testnet, calls `CoinnibalNFT.setPhase(public)`: the TEST mint opens to everyone. The game token itself is launched on Pons,
-which exists on mainnet only (RESEARCH.md). Remember the token is final for an arena deployment.
+NFT the faucet's 2x and, on a testnet, calls `CoinnibalNFT.setPhase(public)`: the TEST mint opens to everyone. The
+game token itself will be launched on Pons, which exists on mainnet only (RESEARCH.md), after the NFT mint. Remember
+the token is final for an arena deployment.
 
 ## 4. The allowlist and the mint
 
@@ -162,8 +166,10 @@ which exists on mainnet only (RESEARCH.md). Remember the token is final for an a
    `setMerkleRoot`. The panel warns when approvals changed since the published root: publish again.
 3. **Set the price to its USD target** (Mint → Sync; `MINT_USD_CENTS`): it reads ETH/USD and asks your wallet to
    call `setPrice`.
-4. **Open the mint**: Mint → phase **Allowlist**. "Activate the game for holders" is offered checked: it sets who
-   may play to `holders` (NFT holders plus admins). Later switch the phase to **Public**.
+4. **Open the mint**: Mint → phase **Allowlist**. Leave "Activate the game for holders" unchecked (the default):
+   ticked, it would also set who may play to `holders` (NFT holders plus admins) at mint time, but the game opens
+   last, once the game token and the rooms are set (Game → Who may play; section 5). Later switch the phase to
+   **Public**.
 5. **Keep it at the target** (see OPERATIONS): press Sync now and then, or set the price bounds and make the server key the
    price keeper; the server then re-prices every 5 minutes when the price drifts more than 2 %, always inside your
    bounds.

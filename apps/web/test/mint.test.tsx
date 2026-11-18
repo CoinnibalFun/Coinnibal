@@ -249,6 +249,8 @@ describe('mint logic: price copy, funds, errors', () => {
     expect(priceStory(s(1.12), false)).toBe('plain');
     expect(priceStory(s(0.85), false)).toBe('plain');
     expect(priceStory(s(null), false)).toBe('plain');
+    // the server leaves the target out while the mint page is closed: the page makes no dollar claim then
+    expect(priceStory({ priceUsd: 1, chainId: 999 }, false)).toBe('plain');
   });
 
   it('formats ETH for prose', () => {

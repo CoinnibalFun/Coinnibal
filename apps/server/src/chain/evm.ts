@@ -434,7 +434,7 @@ export class EvmChain implements ChainGateway {
       this.updateStakeEnabled();
     }
     if (!this.arena) {
-      this.warn('no-arena', 'chain: waiting for contracts — no arena registered yet (deploy and register it in /admin → Deploy); practice only', 30 * 60_000);
+      this.warn('no-arena', 'chain: waiting for contracts — no arena registered yet (deploy and register it in /admin → Setup); practice only', 30 * 60_000);
       return;
     }
     if (this.arenaCode !== 'ok') {
@@ -537,7 +537,7 @@ export class EvmChain implements ChainGateway {
     if (!authorized && this.authorized !== false) {
       this.log(
         `!!! chain: the server key ${ours} is NOT the arena's server authority (${config.serverAuthority}). ` +
-          'Arenas are OFF; pending settlements stay queued until this is fixed (/admin → Arena → server key).',
+          'Arenas are OFF; pending settlements stay queued until this is fixed (/admin → Game → the arena contract → The settler).',
       );
     } else if (authorized && this.authorized === false) {
       this.log('chain: server authority matches again — settlements resume');
@@ -1049,7 +1049,7 @@ export class EvmChain implements ChainGateway {
     if (!this.booksBlocked.has(arenaId)) {
       this.log(
         `!!! chain: arena #${arenaId} PAYOUTS STOPPED — ${why}. Nothing is paid from this arena until the books add up ` +
-          '(check /admin → Arena and the journal; the stakes stay in the vault and players can refund after 24 h)',
+          '(check /admin → Game → the arena contract, and the journal; the stakes stay in the vault and players can refund after 24 h)',
       );
     }
     this.booksBlocked.set(arenaId, why);
@@ -1063,7 +1063,7 @@ export class EvmChain implements ChainGateway {
 
   /**
    * Payout guard: a ticket paid more than every ticket seated in its round's instance put in (`roundPool`: no game
-   * can win more than that) is held for an admin (`/admin` → Integrity → Held settlements: release pays it as it was)
+   * can win more than that) is held for an admin (`/admin` → Safety → Held settlements: release pays it as it was)
    * instead of being sent. An item without a pool (crash recovery, an older journal) is held above
    * `PAYOUT_GUARD_MULTIPLE` entry fees (default 100). A real game never gets there; a bug or a tampered journal can.
    * `PAYOUT_GUARD_MULTIPLE=0` turns the guard off. Returns the items to send.
@@ -1083,7 +1083,7 @@ export class EvmChain implements ChainGateway {
           ? `payout guard: ${this.units(payout)} is more than every ticket of its round put in (${this.units(pool)})`
           : `payout guard: ${this.units(payout)} is more than ${multiple} times the ticket's entry fee (${this.units(entry)})`;
       if (this.journal.hold(c.item.key, { at: this.now(), score: 100, why, flags: [PAYOUT_GUARD_FLAG] })) {
-        this.log(`!!! chain: settlement ${c.item.key} HELD for review — ${why}. Release it in /admin → Integrity if it is right`);
+        this.log(`!!! chain: settlement ${c.item.key} HELD for review — ${why}. Release it in /admin → Safety → Held settlements if it is right`);
       }
       return false;
     });
@@ -1350,7 +1350,7 @@ export class EvmChain implements ChainGateway {
       this.warn(
         'fee-wallet',
         `!!! chain: settle batches revert on the fee transfer or the burn — the fee wallet ${this.config?.feeWallet ?? '?'} (or the burn) cannot take the game token. ` +
-          'Settlements with a profit are held (never counted against the players); set a working fee wallet (or burn mode 0) in /admin → Arena. They resume by themselves.',
+          'Settlements with a profit are held (never counted against the players); set a working fee wallet (or burn mode 0) in /admin → Game → the arena contract (Advanced → Fees). They resume by themselves.',
       );
     } else if (d.kind === 'insufficient-funds') {
       this.warn('gas', `!!! chain: the server key ${this.serverAddress} cannot pay gas — fund it with ${this.chainInfo().nativeCurrency.symbol} (${label})`);
