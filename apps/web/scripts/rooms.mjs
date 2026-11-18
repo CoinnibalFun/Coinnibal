@@ -1,10 +1,11 @@
 // Custom rooms tour: screenshots of the lobby's "Your own room" card, the room creator sheet,
-// the payment step, the transfer in flight, the invite (code + share link), the room with its
+// the payment step, the payment in flight, the invite (code + share link), the room with its
 // invite / close buttons, and a guest opening the invite link straight into the room.
 // Needs a dev server whose game server runs NODE_ENV=development DEV_FAKE_CHAIN=1 DEV_FAKE_TOKEN=1
-// with ADMIN_WALLETS set (the treasury defaults to the owner wallet) and GAME_ACCESS=public: the web
-// dev build then "sends" the ETH fee through its fake chain (src/wallet/devFake.ts) and the
-// server's fake payment reader accepts that hash. An EIP-6963 dev wallet signs the free sign-in.
+// with GAME_ACCESS=public: the web dev build then pays the room fee in the game token through its
+// fake chain (src/wallet/devFake.ts `fakeShopPay`: the server's fake chain records the
+// `ElymumArena.pay` with the room request's ref) and the server checks that receipt like a real one.
+// An EIP-6963 dev wallet signs the free sign-in.
 // Usage: node scripts/rooms.mjs <playUrl> <outDir>   → <outDir>/rooms-*.png
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
@@ -47,7 +48,7 @@ async function fillCreator(page) {
   await page.getByLabel('Room name').fill('Friday Night Pond');
   await page.getByRole('button', { name: '60 min' }).click();
   await page.getByRole('button', { name: 'Large' }).click();
-  await page.getByRole('group', { name: 'Bots' }).getByRole('button', { name: 'One more' }).click();
+  await page.getByRole('group', { name: 'Bots' }).getByRole('button', { name: 'On' }).click();
   await page.getByRole('button', { name: 'Hard' }).click();
   await page.waitForTimeout(600);
 }

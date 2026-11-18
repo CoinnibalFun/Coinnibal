@@ -177,7 +177,7 @@ describe('player guide content', () => {
       ['$10 Room', 'Closed', 'Open'],
       ['Power-up packs', 'Full price', '20% off'],
       ['Power-ups per round in a paid room', '2', '3'],
-      ['Private room', 'Paid in ETH', '1 free a day, up to 10 players'],
+      ['Private room', 'Paid in tokens', '1 free a day, up to 10 players'],
       ['Coin look', 'Standard skins', 'Also the NFT skin and a holder badge'],
     ]);
     // the operator's access switch is not a game rule: the guide says nothing of a holders-only game (the landing FAQ
@@ -275,9 +275,15 @@ describe('player guide content', () => {
     // only coins still alive at a ticket room's end are paid (an eaten coin's value already moved)
     expect(t).toContain("Coins still alive at the room's end are paid, with the normal fee on profit.");
     expect(t).not.toMatch(/All tickets are paid/);
-    // the admin re-prices private rooms as ETH moves: no fixed price in the guide
-    expect(t).not.toMatch(/\d\.\d+ ETH|of that for every/);
-    expect(t).toContain('Opening one costs a little ETH: bigger rooms cost more, and the price shows before you pay.');
+    // private rooms are paid in the game token (owner decision 2026-11-18), split like a power-up pack; the admin sets
+    // the price, so no fixed price in the guide
+    expect(t).not.toMatch(/\d\.\d+ ETH|of that for every|costs a little ETH/);
+    expect(t).toContain('Opening one costs a small fee in tokens: bigger rooms cost more, and the price shows before you pay.');
+    expect(t).toContain('Like a power-up pack, 50% of the fee is burned and 50% goes to the team wallet. NFT holders open one room a day for free.');
+    const token = JSON.stringify(en.sections.find((s) => s.id === 'token'));
+    expect(token).toContain('power-up packs and opening a private room');
+    expect(token).toContain('the NFT mint and network fees. These are paid in ETH.');
+    expect(token).not.toMatch(/opening a private room and network fees/);
     // "open all day" read as "open now" while the game is closed
     expect(t).not.toMatch(/open all day/);
   });

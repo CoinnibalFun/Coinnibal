@@ -511,13 +511,21 @@ journaled as a sweep and sent with `sweepLoot(arenaId, sweepId, amount)`, which 
 ## Custom rooms and practice with bots
 
 `/admin` → Game → **Custom rooms** (`/api/admin/custom-rooms`, `DATA_DIR/site/custom-rooms-settings.json`): creating
-on / off, ticket rooms on / off, the base price and its step per 10 players, the biggest room (up to 100 players),
+on / off, ticket rooms on / off, the base price (priced in US dollars, $1.50 by default and converted at the token
+price of Arena prices like the tickets, or in whole tokens; the token price also applies until a USD price is set) and
+its step per 10 players, the biggest room (up to 100 players),
 the seats of all live rooms together, the holder perk (default: one free room of up to 10 players a day per holder,
 UTC day, kept in `site/custom-rooms.json` across restarts; or a discount, or none), the live rooms (close one: a free room ends after a 10 s
 countdown and its final board, a ticket room too: its tickets are settled at that end). **Practice with bots** on / off and "practice rooms at
 once" (`practiceMaxLive`, default 12, 0..50): the free one-click rooms the quiet ponds offer (8 bots, 15 minutes, one
 per player, 4 per IP per 30 minutes, closed after 2 minutes empty). They take none of the paid rooms' slots or seats;
 each costs about 8 bots of CPU, so 12 at once is about 100 practice bots.
+
+Room fees are paid in the game token with the arena's `pay`, like power-up packs: 50 % is burned and 50 % goes to the
+fee wallet in that call (the card shows the arena and the split). There is no treasury setting any more; a settings
+file from the rooms paid in ETH (before 18 Nov 2026) loads with its `priceGas` / `treasury` ignored, and the used
+payments of that time stay used (`DATA_DIR/chains/<id>/room-payments.json`). Until the game token is set on the arena,
+only free rooms open (the holders' room of the day, practice with bots); the card says so.
 
 ## Test arenas with bots (testnet)
 

@@ -1,142 +1,41 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { CUSTOM_PAYMENT_MAX_AGE_MS } from '@elymum/shared';
-import { createPublicClient, getAddress, type Hash, type PublicClient } from 'viem';
-import { budgetTransport, type RpcUrls } from './evm-client';
-import { isTransientRpcError, withRpcPriority } from './rpc-budget';
-
-/**
- * A native gas-token transfer as the chain reports it (`eth_getTransactionByHash` +
- * `eth_getTransactionReceipt` + the block's timestamp).
- */
-export interface NativeTransfer {
-  hash: string;
-  /** Sender (EIP-55). */
-  from: string;
-  /** Receiver (EIP-55); null for a contract creation. */
-  to: string | null;
-  /** Value, wei. */
-  value: bigint;
-  status: 'success' | 'reverted';
-  blockNumber: bigint;
-  /** Unix ms of the block. */
-  timestamp: number;
-}
-
-/**
- * Reads payment transactions. `transfer` resolves null while the transaction is not mined (or
- * unknown), and throws `PaymentChainBusy` when the RPC cannot be read right now.
- */
-export interface PaymentReader {
-  /**
-   * `expect` is what the caller wants to see (the dev fake chain answers it for its fake hashes, so
-   * the whole flow can be driven without a node); real readers ignore it.
-   */
-  transfer(hash: string, expect: { from: string; to: string; minWei: bigint }): Promise<NativeTransfer | null>;
-}
-
-export class PaymentChainBusy extends Error {
-  constructor(cause?: unknown) {
-    super('The chain cannot be read right now.');
-    this.cause = cause;
-  }
-}
-
-/**
- * Payment reads on the server's RPC, through the process-wide RPC budget. Three calls per check
- * (transaction, receipt, block) at `normal` priority: room creation is rare and user-initiated,
- * and must never queue in front of paid joins and settlements (`high`).
- */
-export function viemPaymentReader(rpc: RpcUrls): PaymentReader {
-  const client = createPublicClient({ transport: budgetTransport(rpc, { batch: true }) }) as PublicClient;
-  return {
-    transfer: (hash) =>
-      withRpcPriority('normal', async () => {
-        try {
-          const h = hash as Hash;
-          const [tx, receipt] = await Promise.all([client.getTransaction({ hash: h }).catch(notFound), client.getTransactionReceipt({ hash: h }).catch(notFound)]);
-          if (!tx || !receipt) return null;
-          const block = await client.getBlock({ blockNumber: receipt.blockNumber });
-          return {
-            hash: h,
-            from: getAddress(tx.from),
-            to: tx.to ? getAddress(tx.to) : null,
-            value: tx.value,
-            status: receipt.status,
-            blockNumber: receipt.blockNumber,
-            timestamp: Number(block.timestamp) * 1000,
-          };
-        } catch (err) {
-          if (isTransientRpcError(err)) throw new PaymentChainBusy(err);
-          throw err;
-        }
-      }),
-  };
-}
-
-/** viem's "not found" errors mean "not mined (yet)"; anything else is rethrown. */
-function notFound(err: unknown): null {
-  const name = (err as { name?: string })?.name ?? '';
-  if (/NotFound/.test(name)) return null;
-  throw err;
-}
-
-/** The dev fake chain's hashes (`fakeHash` in the web's devFake.ts): `0xde7fa4e0…`. */
-export const isDevFakeHash = (h: string): boolean => /^0xde7fa4e0[0-9a-f]{56}$/i.test(h);
-
-/**
- * DEV ONLY (`DEV_FAKE_CHAIN=1`): every fake hash is a payment of exactly what was expected, mined
- * now. Any other hash is unknown.
- */
-export function devFakePaymentReader(now: () => number = Date.now): PaymentReader {
-  return {
-    transfer: async (hash, expect) =>
-      isDevFakeHash(hash)
-        ? { hash, from: expect.from, to: expect.to, value: expect.minWei, status: 'success', blockNumber: 1n, timestamp: now() }
-        : null,
-  };
-}
-
-export type PaymentCheck =
-  | { ok: true; transfer: NativeTransfer }
-  | { ok: false; code: 'payment_invalid' | 'payment_pending' | 'payment_stale' | 'payment_low' | 'payment_used'; message: string };
+import { CUSTOM_REQUEST_RE } from '@elymum/shared';
 
 export const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 
-/**
- * Checks a room payment: a successful native transfer from `from` to `to` of at least `minWei`,
- * mined within `CUSTOM_PAYMENT_MAX_AGE_MS`, whose hash was never used. Throws `PaymentChainBusy`.
- */
-export async function checkPayment(
-  reader: PaymentReader,
-  used: UsedPayments,
-  p: { hash: string; from: string; to: string; minWei: bigint; now: number },
-): Promise<PaymentCheck> {
-  if (!TX_HASH_RE.test(p.hash)) return { ok: false, code: 'payment_invalid', message: 'That is not a transaction hash.' };
-  if (used.has(p.hash)) return { ok: false, code: 'payment_used', message: 'This payment already opened a room.' };
-  const t = await reader.transfer(p.hash, { from: p.from, to: p.to, minWei: p.minWei });
-  if (!t) return { ok: false, code: 'payment_pending', message: 'The payment is not confirmed yet. Try again in a few seconds.' };
-  if (t.status !== 'success') return { ok: false, code: 'payment_invalid', message: 'The payment transaction failed on chain.' };
-  if (t.from.toLowerCase() !== p.from.toLowerCase()) return { ok: false, code: 'payment_invalid', message: 'The payment was sent from another wallet. Pay from the wallet you signed in with.' };
-  if (!t.to || t.to.toLowerCase() !== p.to.toLowerCase()) return { ok: false, code: 'payment_invalid', message: 'The payment did not go to the Coinnibal treasury.' };
-  if (t.value < p.minWei) return { ok: false, code: 'payment_low', message: 'The payment is less than the room price.' };
-  if (p.now - t.timestamp > CUSTOM_PAYMENT_MAX_AGE_MS) return { ok: false, code: 'payment_stale', message: 'This payment is too old to open a room.' };
-  return { ok: true, transfer: t };
+/** What a used payment opened: when, for whom, which room, and (rooms paid in tokens) its request and the amount. */
+export interface UsedPayment {
+  at: number;
+  /** EIP-55 wallet that paid and opened the room. */
+  wallet: string;
+  /** The room's invite code. */
+  code: string;
+  /** The room request the payment's ref named (`customRoomPaymentRef`); absent for the ETH payments of before 2026-11-18. */
+  request?: string;
+  /** Raw base units of the game token paid (decimal string); absent for the ETH payments of before 2026-11-18. */
+  paid?: string;
 }
 
 interface UsedFile {
   v: 1;
-  /** Lower-case hash → when it was used, who used it and for which room. */
-  used: Record<string, { at: number; wallet: string; code: string }>;
+  /** Lower-case hash → what it opened. */
+  used: Record<string, UsedPayment>;
 }
 
+/** The key of a wallet's room request (`wallet:request`, lower case). */
+const requestKey = (wallet: string, request: string) => `${wallet.toLowerCase()}:${request}`;
+
 /**
- * Payment hashes that already opened a room, persisted per chain (`DATA_DIR/chains/<id>/room-payments.json`,
- * atomic write) so a restart can never let one payment open two rooms. Also holds hashes being checked
- * right now (`claim`), so two requests with the same hash cannot both pass.
+ * Custom-room payments that already opened a room, persisted per chain (`DATA_DIR/chains/<id>/room-payments.json`,
+ * atomic write) so a restart can never let one payment open two rooms: a transaction hash opens one room, and so does
+ * a wallet's room request (the ref of its `ElymumArena.pay`; another wallet paying with the same ref changes nothing for
+ * this one). Also holds hashes being checked right now (`claim`), so two requests with the same hash cannot both pass.
+ * The file of the rooms paid in ETH (before 2026-11-18) loads as it is: those hashes stay used.
  */
 export class UsedPayments {
-  private readonly used = new Map<string, { at: number; wallet: string; code: string }>();
+  private readonly used = new Map<string, UsedPayment>();
+  private readonly requests = new Map<string, string>();
   private readonly inFlight = new Set<string>();
 
   constructor(
@@ -146,7 +45,11 @@ export class UsedPayments {
     if (!file || !existsSync(file)) return;
     try {
       const raw = JSON.parse(readFileSync(file, 'utf8')) as UsedFile;
-      for (const [h, e] of Object.entries(raw.used ?? {})) if (TX_HASH_RE.test(h)) this.used.set(h.toLowerCase(), e);
+      for (const [h, e] of Object.entries(raw.used ?? {})) {
+        if (!TX_HASH_RE.test(h)) continue;
+        this.used.set(h.toLowerCase(), e);
+        if (typeof e?.request === 'string' && typeof e.wallet === 'string') this.requests.set(requestKey(e.wallet, e.request), h.toLowerCase());
+      }
       if (this.used.size > 0) this.log(`room payments: ${this.used.size} used payment(s) loaded`);
     } catch (err) {
       // never start over silently: a lost file would let old payments open rooms again
@@ -163,6 +66,16 @@ export class UsedPayments {
     return this.used.has(hash.toLowerCase());
   }
 
+  /** What the hash opened (null: unused). */
+  get(hash: string): UsedPayment | null {
+    return this.used.get(hash.toLowerCase()) ?? null;
+  }
+
+  /** The wallet's room request already opened a room (with any transaction). */
+  hasRequest(wallet: string, request: string): boolean {
+    return this.requests.has(requestKey(wallet, request));
+  }
+
   /** Reserves a hash while it is being checked; false when it is used or already being checked. */
   claim(hash: string): boolean {
     const h = hash.toLowerCase();
@@ -175,12 +88,23 @@ export class UsedPayments {
     this.inFlight.delete(hash.toLowerCase());
   }
 
-  /** Marks a hash used for good (written before the room opens). */
-  markUsed(hash: string, e: { at: number; wallet: string; code: string }): void {
+  /**
+   * Marks a hash (and its wallet's request) used for good, written before the room opens. On a failed write nothing is
+   * marked (a retry after the disk is fixed still opens one room) and the error is thrown.
+   */
+  markUsed(hash: string, e: UsedPayment): void {
+    if (e.request !== undefined && !CUSTOM_REQUEST_RE.test(e.request)) throw new TypeError(`bad room request ${e.request}`);
     const h = hash.toLowerCase();
     this.used.set(h, e);
+    if (e.request) this.requests.set(requestKey(e.wallet, e.request), h);
+    try {
+      this.save();
+    } catch (err) {
+      this.used.delete(h);
+      if (e.request) this.requests.delete(requestKey(e.wallet, e.request));
+      throw err;
+    }
     this.inFlight.delete(h);
-    this.save();
   }
 
   private save(): void {

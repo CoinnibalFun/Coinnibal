@@ -6,6 +6,7 @@ import type {
   ArenaScalingView,
   TestArenaSettings,
   TestArenaView,
+  CustomRoomAdminView,
   CustomRoomSettings,
   MapScaleSettings,
   CustomRoomView,
@@ -56,12 +57,8 @@ import { X_HANDLE_BUILD, getLocale, t, type TKey } from '../i18n';
  * `SiteApiError` with the server's code, its short English message and the offending field.
  */
 /** `GET /api/admin/custom-rooms`. */
-export interface CustomRoomsAdminView {
-  settings: CustomRoomSettings;
-  /** Where fees go now: the setting, else the owner wallet (first ADMIN_WALLETS entry). */
-  treasury: string | null;
-  rooms: CustomRoomView[];
-}
+/** `GET /api/admin/custom-rooms`: the settings, where fees are paid (the arena), the base price now and the live rooms. */
+export type CustomRoomsAdminView = CustomRoomAdminView;
 
 export class SiteApiError extends Error {
   constructor(
@@ -355,7 +352,7 @@ export function adminApi(token: string) {
     maps: () => request<MapAdminView>('/api/admin/maps', { token }),
     /** `PUT /api/admin/maps`: a partial update (per room kind); answers like the GET. */
     saveMaps: (patch: MapSettingsPatch) => request<MapAdminView>('/api/admin/maps', { method: 'PUT', token, body: patch }),
-    /** `GET /api/admin/custom-rooms`: the custom room settings, the effective treasury and the live rooms. */
+    /** `GET /api/admin/custom-rooms`: the custom room settings, where fees are paid, the base price now and the live rooms. */
     customRooms: () => request<CustomRoomsAdminView>('/api/admin/custom-rooms', { token }),
     /** `PUT /api/admin/custom-rooms`: a partial settings update; answers like the GET. */
     saveCustomRooms: (patch: Partial<CustomRoomSettings>) => request<CustomRoomsAdminView>('/api/admin/custom-rooms', { method: 'PUT', token, body: patch }),

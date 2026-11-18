@@ -54,7 +54,8 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
   create arenas, publish the allowlist, open the mint, review the WL and collabs, integrity flags,
   bans and held payouts. Every transaction is previewed before the wallet prompt.
 - Practice: two leagues of free practice rooms; nothing touches the chain.
-- Custom rooms: your own rules for a small ETH fee (emblem holders: one free room a day); free rooms may add fair
+- Custom rooms: your own rules for a small fee in the game token, half burned and half to the team wallet (emblem
+  holders: one free room a day); free rooms may add fair
   practice bots (count and difficulty, tagged BOT, no value, they see only what a player sees).
 - Share on X and Link X: result and kill cards drawn by the server, opened in X's composer; a player can tie an X
   account to the coin by posting a code (no X API), so the `@handle` shows on the coin and eaters can tag it.

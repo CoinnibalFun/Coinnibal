@@ -159,26 +159,9 @@ export async function fakeFaucetClaim(onPhase: (p: TxPhase, hash?: Hash) => void
   return h;
 }
 
-/** "Sends" a native gas-token transfer (the custom room fee): the server's fake chain accepts this hash as the payment. */
-export async function fakeGasPayment(wei: bigint, onPhase: (p: TxPhase, hash?: Hash) => void): Promise<{ ok: true; hash: Hash } | { ok: false; name: string }> {
-  onPhase('signing');
-  await sleep(fakeWallet.delayMs);
-  if (fakeWallet.failNext) {
-    const name = fakeWallet.failNext;
-    fakeWallet.failNext = null;
-    return { ok: false, name };
-  }
-  if (fakeWallet.wei < wei) return { ok: false, name: 'InsufficientFunds' };
-  const h = fakeHash();
-  onPhase('confirming', h);
-  await sleep(fakeWallet.delayMs);
-  fakeWallet.wei -= wei;
-  return { ok: true, hash: h };
-}
-
 /**
- * "Pays" a power-up pack: the game server's fake chain records the `ElymumArena.pay` (`POST /api/dev/pay`) and
- * answers its hash, which the shop then claims like a real one.
+ * "Pays" a power-up pack or a custom room fee: the game server's fake chain records the `ElymumArena.pay`
+ * (`POST /api/dev/pay`) and answers its hash, which the shop (or the room sheet) then claims like a real one.
  */
 export async function fakeShopPay(from: string, value: bigint, ref: string, onPhase: (p: TxPhase) => void): Promise<Hash> {
   onPhase('signing');

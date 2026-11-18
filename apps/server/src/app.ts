@@ -31,7 +31,7 @@ import { FaucetInfo } from './site/network';
 import { RoomManager } from './rooms/manager';
 import { gameLoad } from './rooms/load';
 import { CustomRoomService } from './rooms/custom';
-import { UsedPayments, devFakePaymentReader, viemPaymentReader, type PaymentReader } from './chain/payment';
+import { UsedPayments } from './chain/payment';
 import { checksumAddress } from './auth';
 import { ProfileStore } from './profiles';
 import { AvatarStore } from './avatars';
@@ -112,8 +112,6 @@ export async function createApp(
     chainId?: number | null;
     /** Holder readers per chain (default: the server's client on its own chain, `TESTNET_RPC_URL` for the testnet). */
     holderReaderFor?: (chainId: number) => HolderReader | null;
-    /** Reads custom-room payments (default: the server's RPC; the fake chain's own on `DEV_FAKE_CHAIN`); tests inject one. */
-    paymentReader?: PaymentReader | null;
     /** Wall clock of the custom rooms (Unix ms); tests inject one. */
     customNow?: () => number;
     /** "Link X": the fetch that reads X's public endpoints (tests inject a fake X). */
@@ -252,6 +250,11 @@ export async function createApp(
   const boostInventory = new BoostInventory(chainState ? join(chainState, files.boosts) : null, log);
   // arena tiers in US dollars and the token's USD price (DATA_DIR/chains/<id>/arena-prices.json): the owner re-prices on chain
   const arenaPrices = new ArenaPriceStore(chainState, log);
+  // what is priced in dollars (power-up packs, custom room fees) converts at the arenas' price and rounding (the manual price today)
+  const usdPrice = async () => {
+    const r = await arenaPrices.price();
+    return r.ok ? { price: r.price, usdPerToken: r.usdPerToken, sigFigs: arenaPrices.settings.sigFigs } : null;
+  };
   const shop = new ShopService({
     settings: shopSettings,
     inventory: boostInventory,
@@ -259,11 +262,7 @@ export async function createApp(
     holder: (wallet, fresh) => mint.isHolder(wallet, fresh),
     emblemTokens,
     claims: emblemClaims,
-    // power-up packs priced in dollars convert at the arenas' price and rounding (the manual price today)
-    usdPrice: async () => {
-      const r = await arenaPrices.price();
-      return r.ok ? { price: r.price, usdPerToken: r.usdPerToken, sigFigs: arenaPrices.settings.sigFigs } : null;
-    },
+    usdPrice,
     log,
   });
   site.setShop({ service: shop, settings: shopSettings, inventory: boostInventory });
@@ -350,24 +349,18 @@ export async function createApp(
     // "Test arenas with bots" (testnet only; DATA_DIR/site/test-arenas.json; refused and ignored on the mainnet)
     new TestArenaStore(cfg.chain.chainId, persist ? cfg.dataDir : null, log),
   );
-  // custom rooms: paid with a gas-token transfer to the treasury (checked on chain), restored after a restart
-  let paymentReader: PaymentReader | null | undefined = opts.paymentReader;
+  // custom rooms: paid in the game token with `ElymumArena.pay` (half burned, half to the fee wallet; the receipt
+  // checked like a power-up purchase), restored after a restart
   const customRooms = new CustomRoomService({
     rooms,
     dataDir: persist ? cfg.dataDir : null,
     suffix: cfg.devFakeChain ? '.dev-fake' : '',
     used: new UsedPayments(chainState ? join(chainState, cfg.devFakeChain ? 'room-payments.dev-fake.json' : 'room-payments.json') : null, log),
-    reader: () => {
-      if (paymentReader !== undefined) return paymentReader;
-      if (cfg.devFakeChain) return (paymentReader = devFakePaymentReader());
-      if (!chain.enabled || !cfg.chain.rpcUrl) return null;
-      return (paymentReader = viemPaymentReader(cfg.chain.rpcUrls));
-    },
-    chainId: () => chain.status().chainId,
+    chain,
+    usdPrice,
     isHolder: (wallet) => mint.isHolder(wallet),
     emblemTokens,
     claims: emblemClaims,
-    ownerWallet: checksumAddress(cfg.adminWallets[0] ?? null),
     now: opts.customNow,
     log,
   });

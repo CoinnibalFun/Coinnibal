@@ -139,26 +139,46 @@ export async function buyCart(
 /** Pays `amount` to the pinned arena with `ref` (approve first when short); the transaction hash. */
 async function payShop(view: ShopView, amount: bigint, ref: `0x${string}`, ctx: { owner: string; chain: ChainStatus; onPhase?: (p: BuyPhase) => void }): Promise<string> {
   if (!view.open || !view.token || !view.payTo) throw new ShopError('shop_closed', t('shop.closed'));
+  return payArena({ token: view.token.address, payTo: view.payTo }, amount, ref, ctx);
+}
+
+/**
+ * Pays `amount` of the game token with `ElymumArena.pay(amount, ref)` from the connected wallet: an `approve` of exactly
+ * `amount` first when the wallet's allowance for the arena is short (a ticket's larger approval covers it), then `pay`;
+ * the arena burns its `paymentBurnBps` share and sends the rest to its fee wallet in that call. Pays the PINNED arena
+ * only (the compiled code and its pinned token), never the server's word alone. In a dev build talking to a
+ * `DEV_FAKE_CHAIN` server the payment is simulated (the server records a fake `pay`). Used by the power-up shop and the
+ * custom room fee. The transaction hash; throws `ShopError` (`txHash` set when the `pay` was sent but did not confirm).
+ */
+export async function payArena(
+  target: { token: string; payTo: string },
+  amount: bigint,
+  ref: `0x${string}`,
+  ctx: { owner: string; chain: ChainStatus; onPhase?: (p: BuyPhase) => void; onStep?: (step: 'approve' | 'pay') => void },
+): Promise<string> {
   let hash: string;
   if (isDevFake(ctx.chain)) {
     const dev = await loadDevFake();
     if (!dev) throw new ShopError('tx', 'No fake chain in this build.');
+    ctx.onStep?.('pay');
     hash = await dev.fakeShopPay(ctx.owner, amount, ref, (p) => ctx.onPhase?.(p));
   } else {
-    const token = view.token.address as Address;
+    const token = target.token as Address;
     const owner = ctx.owner as Address;
     const reader = publicClientFor(ctx.chain, connected()?.provider ?? null);
     if (!reader) throw new ShopError('network', t('api.reach'));
-    // the shop pays the pinned arena only (with the compiled code, and its pinned token): never the server's word alone
-    const pin = await verifyArena(reader, ctx.chain.chainId, { arena: view.payTo, token });
+    // the payment goes to the pinned arena only (with the compiled code, and its pinned token): never the server's word alone
+    const pin = await verifyArena(reader, ctx.chain.chainId, { arena: target.payTo, token });
     if (!pin.ok) throw new ShopError(pin.reason === 'unreadable' ? 'network' : 'tx', pin.reason === 'unreadable' ? t('api.reach') : t('tf.err.ContractMismatch'));
     const arena = pin.arena;
     // an unknown allowance asks for the approval, to be safe
     const allowance = await getAllowance(reader, token, owner, arena).catch(() => 0n);
     if (allowance < amount) {
+      ctx.onStep?.('approve');
       const ok = await sendWalletCall(approveCall(token, arena, amount), { chain: ctx.chain, onPhase: (p) => ctx.onPhase?.(p) });
       if (!ok.ok) throw new ShopError(ok.error.kind === 'rejected' ? 'rejected' : 'tx', txErrorText(ok.error), null);
     }
+    ctx.onStep?.('pay');
     const res = await sendWalletCall(payCall(arena, amount, ref), { chain: ctx.chain, onPhase: (p) => ctx.onPhase?.(p) });
     if (!res.ok) throw new ShopError(res.error.kind === 'rejected' ? 'rejected' : 'tx', txErrorText(res.error), res.hash);
     hash = res.hash;

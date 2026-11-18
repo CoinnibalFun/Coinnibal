@@ -32,7 +32,7 @@ const codeOf = (seg: string | undefined): string => {
 /**
  * The custom rooms API:
  *  - `GET  /api/rooms/custom/quote`  what creating a room costs (signed-in: with the holder perk);
- *  - `POST /api/rooms/custom`        `{ config, txHash? }` (signed-in) → 201 `{ room, invite }`;
+ *  - `POST /api/rooms/custom`        `{ config, txHash?, request? }` (signed-in; the fee's `pay` and its request) → 201 `{ room, invite }`;
  *  - `GET  /api/rooms/custom/mine`   the signed-in wallet's live rooms;
  *  - `POST /api/rooms/custom/practice` "Practice with bots": a free room with bots for the caller (guests too) → `{ room, invite }`;
  *  - `GET  /api/rooms/custom/<CODE>` a live room (anyone with the code);
@@ -78,7 +78,7 @@ export async function customRoomRoutes(svc: CustomRoomService, h: Helpers, req: 
 }
 
 /**
- * `GET /api/admin/custom-rooms` (settings + live rooms), `PUT` (a partial settings update) and
+ * `GET /api/admin/custom-rooms` (settings, where fees are paid, the base price now, live rooms), `PUT` (a partial settings update) and
  * `DELETE /api/admin/custom-rooms/<CODE>` (close a room). The caller checked the admin session.
  */
 export async function customRoomAdminRoutes(svc: CustomRoomService, h: Pick<Helpers, 'send' | 'method' | 'readJson'>, req: IncomingMessage, res: ServerResponse, seg: string[], wallet: string): Promise<void> {
@@ -89,7 +89,7 @@ export async function customRoomAdminRoutes(svc: CustomRoomService, h: Pick<Help
       return h.send(res, 200, { closed: svc.close(code, { wallet, admin: true }), rooms: svc.list() });
     }
     if (h.method(req, 'GET', 'PUT') === 'PUT') svc.updateSettings(await h.readJson(req));
-    return h.send(res, 200, { settings: svc.settings, treasury: svc.treasury(), rooms: svc.list() });
+    return h.send(res, 200, await svc.adminView());
   } catch (err) {
     if (err instanceof CustomRoomFail) return sendCustomFail(h, res, err);
     throw err;

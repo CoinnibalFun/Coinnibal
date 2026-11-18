@@ -165,8 +165,9 @@ set, 300 open tickets each; the Isles are for emblem holders. Each arena runs as
 another opens when they keep filling up, a quiet one drains (no new seats) and closes after its bell, nobody evicted
 (OPERATIONS.md, "Arena instances").
 
-Custom rooms: a player pays a small ETH fee (default 0.0005 ETH, ECONOMY.md) for a room with their own rules and capacity (2 to 100; the fee
-grows 50 % of the base for every started 10 players above 10). A **free** room has no stakes and may add practice bots. A **ticket
+Custom rooms: a player pays a small fee in the game token (default $1.50 in tokens, paid like a power-up pack: 50 % burned,
+50 % to the team wallet; ECONOMY.md) for a room with their own rules and capacity (2 to 100; the fee grows 50 % of the
+base for every started 10 players above 10); NFT holders open one a day for free. A **free** room has no stakes and may add practice bots. A **ticket
 room** is an invite-only instance of one of the arenas above: its players buy that arena's normal ticket and
 are seated there by the invite code; it starts at once and plays as ONE game for its whole duration (no 5-minute
 bell, no re-pay), and every ticket in it is settled at the room's end with the normal fee on profit. Its creator
@@ -261,7 +262,7 @@ transactions (approve, join, refund, pay, mint); the server key signs only `sett
 keeper) `setPrice`. A ticket's approval covers the entry fee of 1, 5, 10 or 20 tickets of that room (the player's
 choice in the confirm sheet, 5 preselected and remembered; capped at 20 entry fees, never unlimited), so the next
 tickets are a single `join` prompt; the wallet sheet shows what is left and revokes it. Shop carts are paid with one
-`pay` of the arena (covered by that approval, or an exact one); custom rooms with a plain ETH transfer. Details: [ARCHITECTURE.md](ARCHITECTURE.md).
+`pay` of the arena (covered by that approval, or an exact one); custom room fees the same way (one `pay` whose ref names the room request). Details: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 | Path | What it is |
 |---|---|
@@ -397,4 +398,5 @@ lands** ([media/README.md](../media/README.md)).
 | 2026-11-06 | Power-ups priced in US dollars like the tickets; holder perks bound to one emblem token id at a time; Share on X cards (TEST in test arenas); secret exports behind a purpose-bound signature, 2 h admin sessions, the gas runway; CI-green VPS deploys with rollback |
 | 2026-11-08 | A 30 s break after every bell; a shop cart paid with one `pay`; approvals for 1 / 5 / 10 / 20 tickets; a kill card for every person eaten; Link X (`PROTOCOL_VERSION` 14); practice bots slower and sometimes distracted; the HUD's chat at the bottom left, Share on X and Shop on the top bar (the in-game Shop key was removed again on 2026-11-11: the shop is in the lobby only); `ELYMUM_*` keys on the VPS |
 | 2026-11-09 | The full 5:00 of play per round: the 30 s break after the bell comes on top of the play instead of out of it (a 5:30 cycle on Unix time; `ROUND_SECONDS` is the play). The server still sends every round time, so `PROTOCOL_VERSION` stays 14 |
+| 2026-11-18 | Private (custom) rooms are paid in the game token, not ETH (owner decision): one `pay` of the arena like a power-up pack (50 % burned, 50 % to the team wallet), $1.50 in tokens by default (converted like the tickets), its ref naming the room request; NFT holders keep one free private room a day; no room can be paid before the token is set (practice with bots stays free) |
 | 2026-11-02 | (superseded by v3) The fee moves from profit to the entry: every played ticket pays 5 % of its entry fee (holders 3 %), win or lose; unplayed tickets are refunded in full. ElymumArena v2 (`version()` 2); the server handles the legacy v1 testnet arena until it is redeployed. The leaderboards are reset once (epoch 2) |
