@@ -1,15 +1,18 @@
 #!/usr/bin/env node
-// Renders a span of a journal take (take.mjs) for the hero loop: the take is replayed on the virtual clock of
-// media/gameplay/capture/journal.mjs (every frame at an exact time, however long it takes to draw), with
-//   - a fixed camera on a box of the world (the game's own camera keeps running underneath, so goldie's eyes
-//     still follow her cursor; only the draw sees the fixed box),
+// Renders a span of a journal take (take.mjs, take-school.mjs) for the hero loop: the take is replayed on the
+// virtual clock of media/gameplay/capture/journal.mjs (every frame at an exact time, however long it takes to
+// draw), with
+//   - a fixed camera on a box of the world (--box), or the follow camera of cam.mjs (--follow k: on goldie,
+//     k times her radius wide); the game's own camera keeps running underneath, so goldie's eyes still follow
+//     her cursor; only the draw sees the box,
 //   - the page's DOM hidden from the pre-roll on (HUD, standings, controls, chat, buttons): only the arena
 //     canvas shows.
 // Frames go to a near-lossless intermediate (x264 RGB, CRF 4); loop.py makes the loop from it.
 //
-//   node media/hero-loop/render.mjs <take> --from 61.2 --to 70.4 --box 3400,3100,1000 [--fps 30] [--scale 1.5]
-//     [--ramp 66.0-68.5@1.5] [--out x.mkv]
+//   node media/hero-loop/render.mjs <take> --from 61.2 --to 70.4 (--box 3400,3100,1000 | --follow 11) [--fps 30]
+//     [--scale 1.5] [--ramp 66.0-68.5@1.5] [--no-mass] [--out x.mkv]
 // --box is the world box: centre x, centre y and width (world units; the height follows the viewport's 16:10).
+// --no-mass draws the name tags without masses (the game's own "show mass" setting off), whatever the take had.
 // --ramp plays source spans faster (take seconds, comma-separated `from-to@speed`), with smooth 0.6 s speed
 // changes: for a stretch where a single coin swims out of the frame on its own. Keep the ramps clear of the
 // loop's crossfade windows (the first and the last --fade seconds of the render): loop.py blends those frame
@@ -21,6 +24,7 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { BASE, CHROME, FFMPEG, ROOT, TAKES, log, setupContext } from '../gameplay/capture/lib.mjs';
 import { replayShim } from '../gameplay/capture/journal.mjs';
+import { makeCam } from './cam.mjs';
 
 const require = createRequire(resolve(ROOT, 'apps/web/package.json'));
 const { chromium } = require('playwright');
@@ -31,11 +35,14 @@ const DIR = resolve(TAKES, NAME);
 const FROM = Number(opt('--from')), TO = Number(opt('--to'));
 const FPS = Number(opt('--fps', '30'));
 const SCALE = Number(opt('--scale', '1.5'));
-const [BX, BY, BW] = opt('--box').split(',').map(Number);
+const FOLLOW = opt('--follow', null);
+const [BX, BY, BW] = FOLLOW ? [0, 0, 1] : opt('--box').split(',').map(Number);
+const NO_MASS = argv.includes('--no-mass');
 const OUT = resolve(opt('--out', resolve(DIR, `render-${FROM}-${TO}.mkv`)));
 const RAMPS = (opt('--ramp', '') || '').split(',').filter(Boolean).map((r) => { const [span, sp] = r.split('@'); const [t0, t1] = span.split('-').map(Number); return { t0, t1, sp: Number(sp) }; });
 const meta = JSON.parse(readFileSync(resolve(DIR, 'events.json'), 'utf8'));
 if (!meta.journal) throw new Error(`${NAME} is not a journal take`);
+const camAt = FOLLOW ? makeCam(JSON.parse(readFileSync(resolve(DIR, 'tele.json'), 'utf8')), { k: Number(FOLLOW) }) : null;
 
 // ── journal ──
 const T0 = meta.t0 * 1000;
@@ -85,7 +92,8 @@ function heroLoopInit(cfg) {
     r.draw = (fi) => {
       if (!window.__drawOn) return;
       const keep = [cam.x, cam.y, cam.zoom];
-      cam.x = cfg.x; cam.y = cfg.y; cam.zoom = cam.w / cfg.w;
+      const b = window.__heroBox || cfg;
+      cam.x = b.x; cam.y = b.y; cam.zoom = cam.w / b.w;
       try { draw(fi); } finally { [cam.x, cam.y, cam.zoom] = keep; }
     };
     r.drawMinimap = () => {};
@@ -99,7 +107,7 @@ const ctx = await browser.newContext({ viewport: { width: meta.w, height: meta.h
 const wsMeta = {};
 for (const [k, v] of Object.entries(ws)) wsMeta[k] = { open: v.open ?? null };
 await ctx.addInitScript(replayShim, { V0: clock.perf, E, ws: wsMeta, fetches });
-await setupContext(ctx, meta.player);
+await setupContext(ctx, NO_MASS ? { ...meta.player, settings: { ...meta.player.settings, showMass: false } } : meta.player);
 await ctx.addInitScript(heroLoopInit, { x: BX, y: BY, w: BW });
 const page = await ctx.newPage();
 let pageErrors = 0;
@@ -143,7 +151,7 @@ while (first - PRE - V > 1) {
 if (!cam && !(await page.evaluate(() => window.__installHeroCam()))) throw new Error('no engine at the pre-roll');
 await page.evaluate(() => { window.__hideDom(); window.__drawOn = true; });
 const settle = await page.evaluate(() => window.__elymum.useUi.getState().screen);
-log(`${NAME}: at ${tOf(V).toFixed(2)}s, screen ${settle}; rendering ${FROM}..${TO} at ${FPS} fps, box ${BX},${BY} w ${BW}`);
+log(`${NAME}: at ${tOf(V).toFixed(2)}s, screen ${settle}; rendering ${FROM}..${TO} at ${FPS} fps, ${FOLLOW ? `following goldie, ${FOLLOW} radii wide` : `box ${BX},${BY} w ${BW}`}`);
 
 const W = Math.round(meta.w * SCALE), H = Math.round(meta.h * SCALE);
 const enc = spawn(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'png', '-i', '-',
@@ -173,6 +181,7 @@ const tStart = Date.now();
 const times = [];
 for (let k = 0; k < n; k++) {
   const target = vOf(src[k]);
+  if (camAt) { const c = camAt(src[k]); await page.evaluate((b) => { window.__heroBox = b; }, { x: c.x, y: c.y, w: c.w }); }
   while (target - V > 1000 / 60 + 0.5) await step(V + 1000 / 60);
   await step(target);
   await page.evaluate(() => window.__replay.paint());
@@ -196,6 +205,6 @@ const check = await page.evaluate(() => {
   return { visibleDom: vis.slice(0, 20), texts: [...window.__texts] };
 });
 await browser.close();
-writeFileSync(OUT.replace(/\.mkv$/, '.json'), JSON.stringify({ take: NAME, from: FROM, to: TO, fps: FPS, box: [BX, BY, BW], size: [W, H], ...check, times }));
+writeFileSync(OUT.replace(/\.mkv$/, '.json'), JSON.stringify({ take: NAME, from: FROM, to: TO, fps: FPS, ...(FOLLOW ? { follow: Number(FOLLOW) } : { box: [BX, BY, BW] }), size: [W, H], ...check, times }));
 log(`canvas texts while drawing: ${JSON.stringify(check.texts)}; visible DOM besides the canvas: ${check.visibleDom.length}`);
 log(`${NAME}: ${n} frames -> ${OUT}; page errors ${pageErrors}, callback errors ${errs}`);
