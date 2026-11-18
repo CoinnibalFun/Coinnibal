@@ -7,7 +7,6 @@ import {
   Icon,
   Kb,
   OrbitDots,
-  PlateLabel,
   RingScene,
   Seigaiha,
   Stamp,
@@ -38,7 +37,7 @@ import { NapSeam } from './NapSeam';
 import { BITE_GULP_MS, SEAL_GULP_MS, gulp, useReveal, useRevealEach } from './reveal';
 import { SealSeam } from './SealSeam';
 import { SeedRail } from './SeedRail';
-import { WhyNft, configuredPerks } from '../nft/WhyNft';
+import { WhyNft } from '../nft/WhyNft';
 import { isTestnetChain, useServerChain } from '../serverChain';
 import { useLandingSound } from './sound';
 import './landing.css';
@@ -188,7 +187,7 @@ function MenuLine({ i, art, dish, note, price }: { i: number; art: ReactNode; di
         <span className="ld-menu__note">{note}</span>
       </span>
       <span className="ld-menu__dots" aria-hidden="true" />
-      <span className="ld-menu__price mono">{price}</span>
+      <span className="ld-menu__price">{price}</span>
     </li>
   );
 }
@@ -220,8 +219,8 @@ function useCountUp(from: number, to: number, on: boolean, ms = 900): number {
 }
 
 /**
- * The core rule in one picture: a smaller coin worth 1,000 is eaten, and the eater's value runs from 1,000 to 2,000.
- * "Eat a coin, take its tokens."
+ * The core rule in one picture, straight on the page: a smaller coin worth 1,000 is eaten, and the eater's value runs
+ * from 1,000 to 2,000. "Eat a coin, take its tokens."
  */
 function TakeStrip() {
   const t = useT();
@@ -234,7 +233,7 @@ function TakeStrip() {
       <p className="ld-take__h">{t('ld.take.h')}</p>
       <div className="ld-take__row" aria-hidden="true">
         <span className="ld-take__coin ld-take__coin--prey">
-          <CoinCharacter paint="foam" mood="scared" size={58} />
+          <CoinCharacter paint="foam" mood="scared" size={58} blink={false} />
           <span className="ld-take__tag mono">
             {fmt(1000)} <small>{SYMBOL}</small>
           </span>
@@ -264,32 +263,29 @@ function Feast() {
   const menu = useReveal<HTMLDivElement>();
   return (
     <section ref={plate} className="ld-plate ld-feast has-bite" style={biteVars(BITES.feast)} id="feast" aria-labelledby="ld-feast-h">
+      <i className="ld-rule" aria-hidden="true" />
       <BiteSeam at="feast" />
-      <PlateLabel numeral={2} title={t('ld.feast.plate')} aside={t('ld.feast.aside')} />
       <div className="ld-wrap ld-feast__grid">
         <div ref={copy} className="ld-feast__copy">
           <h2 className="ld-h2 rv-h" id="ld-feast-h">
-            <T k="ld.feast.h" tags={{ u: (c) => <span className="wonk ld-ul">{c}</span> }} />
+            <T k="ld.feast.h" tags={{ u: (c) => <span className="ld-ul">{c}</span> }} />
           </h2>
           <p className="lede rv-b">{t('ld.feast.lede', { sym: SYMBOL, n: FACTS.capacity.arena })}</p>
           <div className="rv-b" style={v({ '--rv-at': 4 })}>
             <TakeStrip />
           </div>
         </div>
-        <div ref={menu} className="ld-feast__menu-wrap rv-v" style={v({ '--tilt': '1.2deg' })}>
-          <Sticker tone="white" pad="lg" lift="lg" tape className="ld-menu">
-            <header className="ld-menu__head">
-              <span className="kicker">{t('ld.menu.kicker')}</span>
-              <h3 className="ld-menu__title">{t('ld.menu.title')}</h3>
-            </header>
+        <div ref={menu} className="ld-feast__menu-wrap rv-v">
+          <Sticker tone="white" pad="lg" lift="lg" className="ld-menu">
+            <h3 className="ld-menu__title">{t('ld.menu.title')}</h3>
             <ul className="ld-menu__list">
               <MenuLine i={0} art={<FoodBit kind="pear" size={44} />} dish={t('ld.menu.food')} note={t('ld.menu.foodNote')} price={t('ld.menu.foodPrice')} />
-              <MenuLine i={1} art={<CoinCharacter paint="foam" mood="scared" size={46} />} dish={t('ld.menu.small')} note={t('ld.menu.smallNote')} price={t('ld.menu.smallPrice')} />
-              <MenuLine i={2} art={<CoinCharacter paint="sun" mood="smug" size={46} />} dish={t('ld.menu.big')} note={t('ld.menu.bigNote')} price={t('ld.menu.bigPrice')} />
+              <MenuLine i={1} art={<CoinCharacter paint="foam" mood="scared" size={46} blink={false} />} dish={t('ld.menu.small')} note={t('ld.menu.smallNote')} price={t('ld.menu.smallPrice')} />
+              <MenuLine i={2} art={<CoinCharacter paint="sun" mood="smug" size={46} blink={false} />} dish={t('ld.menu.big')} note={t('ld.menu.bigNote')} price={t('ld.menu.bigPrice')} />
             </ul>
-            <footer className="ld-menu__foot rv-b" style={v({ '--rv-at': 5 })}>
-              <span className="mono">{t('ld.menu.foot', { r: FACTS.rules.eatRatio })}</span>
-            </footer>
+            <p className="ld-menu__foot rv-b" style={v({ '--rv-at': 5 })}>
+              <T k="ld.menu.foot" tags={{ b: (c) => <b className="num">{c}</b> }} vars={{ r: FACTS.rules.eatRatio }} />
+            </p>
           </Sticker>
         </div>
       </div>
@@ -349,12 +345,12 @@ function Round({ live }: { live: boolean }) {
   const read = useStepsRead(stops);
   return (
     <section ref={plate} className="ld-plate ld-round" id="round" aria-labelledby="ld-round-h">
-      <PlateLabel numeral={3} title={t('ld.round.plate')} aside={t('ld.round.aside')} />
+      <i className="ld-rule" aria-hidden="true" />
       <div className="ld-wrap ld-round__grid">
-        <div ref={orbit} className="ld-round__orbit-wrap rv-v" style={v({ '--tilt': '-0.8deg' })}>
+        <div ref={orbit} className="ld-round__orbit-wrap rv-v">
           <Sticker tone="night" pad="none" lift="lg" round="lg" className="ld-orbit">
-            {/* "live" only while the game is open to someone */}
-            <span className="ld-orbit__tag kb-tag">{live ? t('ld.round.tag') : t('ld.round.tagInfo')}</span>
+            {/* a status only while the game is open to someone */}
+            {live && <span className="ld-orbit__tag kb-tag">{t('ld.round.tag')}</span>}
             <OrbitDots
               width={640}
               height={330}
@@ -368,7 +364,6 @@ function Round({ live }: { live: boolean }) {
             <span className="ld-orbit__core" aria-hidden="true">
               <GazeCoin paint="sun" mood="chomp" size={112} look={[2, 1]} reach={0.7} />
             </span>
-            <Seigaiha tone="night" rows={2} r={30} className="ld-orbit__waves" />
           </Sticker>
         </div>
         <div ref={copy} className="ld-round__copy">
@@ -470,7 +465,7 @@ function EmblemFan() {
           </div>
         );
       })}
-      <button type="button" className="ld-fan__deal mono rv-b" style={v({ '--rv-at': 6 })} onClick={deal}>
+      <button type="button" className="ld-fan__deal rv-b" style={v({ '--rv-at': 6 })} onClick={deal}>
         {t('ld.nft.shuffle')}
       </button>
     </div>
@@ -488,8 +483,8 @@ function Nft({ doors }: { doors: Doors }) {
   useRevealEach(why, '.nf-card');
   return (
     <section ref={plate} className="ld-plate ld-nft" id="nft" aria-labelledby="ld-nft-h">
+      <i className="ld-rule" aria-hidden="true" />
       <SealSeam />
-      <PlateLabel numeral={5} title={t('ld.nft.plate')} aside={t('ld.nft.aside')} />
       <div className="ld-nft__body">
         <div className="ld-wrap ld-nft__grid">
           <div ref={copy} className="ld-nft__copy">
@@ -530,7 +525,6 @@ function Nft({ doors }: { doors: Doors }) {
         <div ref={why} className="ld-wrap ld-nft__why">
           <WhyNft testnet={testnet} level={3} />
         </div>
-        <Seigaiha tone="night" rows={3} r={36} className="ld-nft__waves" />
       </div>
     </section>
   );
@@ -548,7 +542,8 @@ const STAIR: { paint: CoinPaint; mood: CoinMood; size: number }[] = [
 
 function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
   const t = useT();
-  const plate = usePlate(BITE_GULP_MS);
+  // no bite here: the dusk above already turns the page; the header coin still gulps as the plate prints
+  const plate = usePlate(0);
   const head = useReveal<HTMLDivElement>();
   const stairs = useReveal<HTMLOListElement>();
   const fee = useReveal<HTMLDivElement>();
@@ -560,16 +555,13 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
     { key: 'team', bps: FACTS.fee.vaultBps, label: t('ld.ar.team', { pct: pct(FACTS.fee.vaultBps) }) },
   ];
   return (
-    <section ref={plate} className="ld-plate ld-arenas has-bite" style={biteVars(BITES.arenas)} id="arenas" aria-labelledby="ld-arenas-h">
-      <BiteSeam at="arenas" />
-      <PlateLabel numeral={4} title={t('ld.ar.plate')} aside={t('ld.ar.aside')} />
+    <section ref={plate} className="ld-plate ld-arenas" id="arenas" aria-labelledby="ld-arenas-h">
+      <i className="ld-rule" aria-hidden="true" />
       <div className="ld-wrap">
         <div ref={head} className="ld-arenas__head">
-          <div>
-            <h2 className="ld-h2 rv-h" id="ld-arenas-h">
-              {t('ld.ar.h')}
-            </h2>
-          </div>
+          <h2 className="ld-h2 rv-h" id="ld-arenas-h">
+            {t('ld.ar.h')}
+          </h2>
           <div className="ld-arenas__aside rv-b">
             <StatusPill tone={open.tone}>{open.text}</StatusPill>
             <p>{t('ld.ar.body')}</p>
@@ -589,7 +581,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
                       <Icon name="crown" size={22} />
                     </span>
                   )}
-                  <CoinCharacter paint={look.paint} mood={look.mood} size={look.size} feet ground bob />
+                  <CoinCharacter paint={look.paint} mood={look.mood} size={look.size} feet ground bob={i === STAIR.length - 1} />
                 </div>
                 <div className="ld-ticket">
                   <h3 className="ld-ticket__name">
@@ -602,20 +594,18 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
                   )}
                   <span className="mono ld-ticket__stub">{t('ld.ar.stub')}</span>
                 </div>
-                <div className="ld-stair__step" aria-hidden="true">
-                  <span className="num">{String(i + 1).padStart(2, '0')}</span>
-                </div>
+                <div className="ld-stair__step" aria-hidden="true" />
               </li>
             );
           })}
         </ol>
-        <div ref={fee} className="ld-feecard rv-v">
-          <div className="ld-feecard__copy">
-            <h3 className="ld-feecard__t">{t('ld.ar.feeT', { fee: pct(feeBps) })}</h3>
-            <p className="ld-feecard__n">{t('ld.ar.feeN')}</p>
+        {/* the fee: straight on the night, no card. One line says it, the bar shows where the profit goes */}
+        <div ref={fee} className="ld-fee rv-v">
+          <div className="ld-fee__copy">
+            <h3 className="ld-fee__t">{t('ld.ar.feeT', { fee: pct(feeBps) })}</h3>
+            <p className="ld-fee__n">{t('ld.ar.feeN')}</p>
           </div>
-          <div className="ld-feecard__split">
-            <p className="mono ld-feecard__cap">{t('ld.ar.feeCap')}</p>
+          <div className="ld-fee__split">
             <div className="ld-feebar" role="img" aria-label={split.map((p) => p.label).join(', ')}>
               {split.map((p) => (
                 <span key={p.key} className={`ld-feebar__seg is-${p.key}`} style={{ flexGrow: p.bps }}>
@@ -640,32 +630,26 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
 
 /* ── questions ────────────────────────────────────────────────────────── */
 
-/** The coin on each question card, in turn: it wonders ("?") until its answer opens, then it is happy. */
-const ASKERS: CoinPaint[] = ['cyan', 'sun', 'teal', 'coral', 'foam', 'up'];
 /** Bubbles rising through the pond: x and y (% of the water), size in px, delay in s. Every third is a little coin. */
 const BUBBLES: [number, number, number, number][] = [
   [9, 34, 12, 0],
-  [18, 64, 8, 2.6],
   [27, 20, 14, 5.2],
-  [34, 78, 10, 7.4],
   [4, 52, 10, 8.8],
   [95, 36, 12, 1.4],
-  [97, 82, 8, 4.6],
 ];
 
 /**
- * The questions, on a moonlit pond: the cream coin is the moon over the horizon, its light trembles on the water,
- * which deepens in three rows of seigaiha down to a pebble shore (where the nap coin falls asleep). The cards float on
- * it, each with a coin that wonders until its answer opens. The scene is decoration (aria-hidden); its loops stop off
- * screen and under reduced motion.
+ * The questions, on a moonlit pond: the cream coin is the moon over the horizon, its light lies on the water, which
+ * deepens in three rows of scales down to a pebble shore (where the nap coin falls asleep). The questions float on it
+ * in one straight column. The scene is decoration (aria-hidden); its loops stop off screen and under reduced motion.
  */
 function Faq({ handle, doors }: { handle: string; doors: Doors }) {
   const t = useT();
   const plate = usePlate(BITE_GULP_MS);
   const side = useReveal<HTMLDivElement>();
   const list = useRef<HTMLDivElement>(null);
-  // the scene's loops (the moon's bob and sparkles, the water, the cards' blinking coins) stop off screen; the heading's
-  // one-shot print-in is left out of it, so it always runs to the end
+  // the scene's loops (the moon's bob, the bubbles, the boat) stop off screen; the heading's one-shot print-in is left
+  // out of it, so it always runs to the end
   const [pond, awake] = useOffscreenPause<HTMLDivElement>();
   const paused = !awake || undefined;
   const tags = {
@@ -676,23 +660,23 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
     ),
     docs: (c: ReactNode) => <Link href="/docs">{c}</Link>,
     collab: (c: ReactNode) => <Link href="/collab">{c}</Link>,
+    perks: (c: ReactNode) => <a href="#why-nft">{c}</a>,
   };
-  // the team asked for the NFT's questions here (what it gives, how many, is each one different) even though the NFT
-  // section above shows them as cards. "Is the game open?" only while it is closed, the collab question only with its
-  // page; the last answer sends the visitor to the guide for every rule
-  const perks = configuredPerks();
-  const nftVars = { supply: NFT_SUPPLY.toLocaleString('en-US'), holder: perks.fee.holder, normal: perks.fee.normal, room: perks.room ?? '', shop: perks.shopPct, extra: perks.shopExtra };
-  const asked = [1, 2, 9, 12, 10, 11, 5, 6, 7, 8].filter((n) => (n !== 9 || perks.room !== null)).filter((n) => (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
+  // the most asked first: is it open, what it costs, the NFT. The team asked for the NFT's questions here (what it
+  // gives, how many, is each one different); their answers add what the NFT section above does not say. "Is the game
+  // open?" only while it is closed, the collab question only with its page; the last answer sends the visitor to the
+  // guide for every rule
+  const asked = [5, 6, 11, 9, 12, 10, 1, 2, 7, 8].filter((n) => (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
   const items: { q: string; a: ReactNode }[] = asked.map((n) => ({
     q: t(`ld.faq.q${n}` as TKey, { chain: plainChainName(activeChain().name) }),
-    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}`, sym: SYMBOL, chain: plainChainName(activeChain().name), ...nftVars }), tags),
+    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}`, sym: SYMBOL, chain: plainChainName(activeChain().name), supply: NFT_SUPPLY.toLocaleString('en-US') }), tags),
   }));
   // re-arm when a card is remounted (its key is the question, which carries the chain's name)
   useRevealEach(list, '.ld-qa', items.map((f) => f.q).join('\n'));
   return (
     <section ref={plate} className="ld-plate ld-faq has-bite" style={biteVars(BITES.faq)} id="faq" aria-labelledby="ld-faq-h">
+      <i className="ld-rule" aria-hidden="true" />
       <BiteSeam at="faq" />
-      <PlateLabel numeral={6} title={t('ld.faq.plate')} aside={t('ld.faq.aside')} />
       <div ref={pond} className="ld-wrap ld-faq__grid">
         <div ref={side} className="ld-faq__side">
           <div>
@@ -702,9 +686,6 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
           </div>
           <span className="ld-faq__coin" aria-hidden="true" data-paused={paused}>
             <GazeCoin paint="cream" mood="open" size={120} look={[2, 3]} bob />
-            <i className="ld-faq__spark" />
-            <i className="ld-faq__spark" />
-            <i className="ld-faq__spark" />
           </span>
         </div>
         <div className="ld-faq__water" aria-hidden="true" data-paused={paused}>
@@ -723,7 +704,7 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
               <path className="is-ink" d="M44 6 L18 44 H70Z M44 9 V43" />
             </svg>
             <span className="ld-faq__boat-coin">
-              <CoinCharacter paint="cyan" mood="happy" size={44} />
+              <CoinCharacter paint="cyan" mood="happy" size={44} blink={false} />
             </span>
             <svg className="ld-faq__boat-art" viewBox="0 0 120 72" focusable="false">
               <path className="is-lit" d="M4 42 H116 L96 68 H24Z" />
@@ -733,35 +714,23 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
           </span>
           <span className="ld-faq__peek">
             <span className="ld-faq__peek-coin">
-              <CoinCharacter paint="coral" mood="smug" size={64} look={[4, 1]} bob phase={1.1} />
+              <CoinCharacter paint="coral" mood="smug" size={64} look={[4, 1]} phase={1.1} />
             </span>
-            <FoodBit kind="seed" paint="sun" size={16} glow wiggle className="ld-faq__seed" />
-            <FoodBit kind="seed" paint="foam" size={12} wiggle className="ld-faq__seed" />
+            <FoodBit kind="seed" paint="sun" size={16} glow className="ld-faq__seed" />
+            <FoodBit kind="seed" paint="foam" size={12} className="ld-faq__seed" />
           </span>
           <span className="ld-faq__shore" />
         </div>
-        <div ref={list} className="ld-faq__list" data-paused={paused}>
-          {items.map((f, i) => {
-            const paint = ASKERS[i % ASKERS.length];
-            return (
-              <details key={f.q} className="ld-qa">
-                <summary className="ld-qa__q">
-                  <span className="ld-qa__face" aria-hidden="true">
-                    <span className="ld-qa__ask">
-                      <CoinCharacter paint={paint} mood="open" size={44} look={[2, -3]} phase={i * 0.9} />
-                      <b className="ld-qa__huh">?</b>
-                    </span>
-                    <span className="ld-qa__yay">
-                      <CoinCharacter paint={paint} mood="happy" size={44} />
-                    </span>
-                  </span>
-                  <span className="ld-qa__text">{f.q}</span>
-                  <span className="ld-qa__plus" aria-hidden="true" />
-                </summary>
-                <div className="ld-qa__a">{f.a}</div>
-              </details>
-            );
-          })}
+        <div ref={list} className="ld-faq__list">
+          {items.map((f) => (
+            <details key={f.q} className="ld-qa">
+              <summary className="ld-qa__q">
+                <span className="ld-qa__text">{f.q}</span>
+                <span className="ld-qa__plus" aria-hidden="true" />
+              </summary>
+              <div className="ld-qa__a">{f.a}</div>
+            </details>
+          ))}
         </div>
       </div>
       <NapSeam />
