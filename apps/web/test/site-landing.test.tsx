@@ -301,8 +301,8 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
 
   it('a closed page says "not open yet" (never the real page or a 404); the same path opens when the admin opens it', async () => {
     for (const [path, line, title] of [
-      // the mint: nothing about when the NFT is minted, only where (and which link to trust)
-      ['/mint', 'The coins are still asleep. When the mint opens, it’ll be on OpenSea: use only the OpenSea link that @coinnibalfun posts.', "The mint isn’t open yet"],
+      // the mint: nothing about when the NFT is minted, only where (and which link to trust, in a callout of its own)
+      ['/mint', 'The press is still locked, and the queue is already out the door. When it opens, the mint will be on OpenSea.', "The mint isn’t open yet"],
       // the faucet is hidden: a neutral notice that never names it
       ['/faucet', 'There’s nothing here for now. The guide explains how the game works.', 'Not open yet'],
       ['/collab', 'Run a community? This is where you’ll ask for WL spots. @coinnibalfun will say when it opens.', "Collabs aren’t open yet"],
@@ -314,6 +314,15 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
         const view = render(<SiteApp />);
         expect(await screen.findByRole('heading', { level: 1, name: title })).toBeTruthy();
         expect(screen.getByText(line)).toBeTruthy();
+        if (path === '/mint') {
+          // its own scene (the locked press and its queue, not the sleepy coin's card) and the OpenSea rule as a callout
+          expect(document.querySelector('main .mc-art')).toBeTruthy();
+          expect(document.querySelector('main .cl__card')).toBeNull();
+          expect(screen.getByRole('complementary', { name: 'One link to trust.' }).textContent).toContain(
+            'Use only the OpenSea link that @coinnibalfun posts. A mint link in your DMs or in the replies isn’t ours.',
+          );
+          expect(document.querySelector('main')?.textContent).not.toMatch(/opensea\.io|royalt|per wallet|TBA/i);
+        }
         // the one stamp of every closed part of the site: "Soon", the header chip's word
         expect(document.querySelector('main .cl-soon')?.textContent).toBe('Soon');
         // one label: the heading (no title strip over the notice)

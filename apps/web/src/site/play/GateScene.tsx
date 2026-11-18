@@ -2,7 +2,7 @@ import { ELYSIUM, SHADE } from '@elymum/shared';
 import { useEffect, useState, type ReactElement } from 'react';
 import { CoinCharacter, useOffscreenPause, useReducedMotion, type CoinMood } from '../../design';
 import { useT } from '../../i18n';
-import { SoonStamp } from '../Closed';
+import { SoonStamp } from '../SoonStamp';
 
 /**
  * The gate to the ring, drawn as a little ferry gate on the night shore: two stone posts with

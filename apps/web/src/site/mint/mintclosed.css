@@ -1,0 +1,186 @@
+/* /mint while the mint is not open (MintClosed.tsx): the copy beside the locked press and its queue */
+.mc {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: clamp(24px, 4vw, 64px);
+  align-items: center;
+  width: 100%;
+  /* the header's column: the copy starts under the logo */
+  max-width: 1312px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 72px) var(--gutter) clamp(40px, 7vw, 96px);
+  box-sizing: border-box;
+}
+.mc__title {
+  margin: 0 0 16px;
+  text-wrap: balance;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(40px, 5.4vw, 66px);
+  line-height: 1.04;
+  letter-spacing: 0.005em;
+}
+.mc__lede {
+  margin: 0;
+  max-width: 32em;
+  text-wrap: pretty;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+/* the one rule that matters before the mint: a callout of its own (flat, no offset shadow: it is read, not pressed) */
+.mc-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 32em;
+  margin: 22px 0 0;
+  padding: 14px 16px 15px 14px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--sun) 18%, var(--paper));
+  border: var(--stroke-xs) solid var(--outline);
+  border-radius: 14px;
+}
+.mc-note__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-top: 1px;
+  color: var(--ink-fixed);
+  background: var(--sun);
+  border: var(--stroke-xs) solid var(--outline);
+  border-radius: 50%;
+}
+.mc-note__text {
+  margin: 0;
+  text-wrap: pretty;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.mc-note__text strong {
+  display: block;
+  margin-bottom: 1px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.mc__ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+}
+.mc__x {
+  margin-top: 12px;
+}
+
+/* the scene: the drawing, and the coins and the stamp laid over it in its own units (viewBox x 0-760, y 40-430) */
+.mc__scene {
+  position: relative;
+  container-type: inline-size;
+}
+.mc-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.mc-art__stencil {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0;
+  opacity: 0.8;
+}
+.mc-art__cloud {
+  animation: mc-cloud 10s ease-in-out infinite alternate;
+}
+@keyframes mc-cloud {
+  to {
+    transform: translateX(56px);
+  }
+}
+.mc-art__lock {
+  transform-box: view-box;
+  transform-origin: 520px 206px;
+  animation: mc-sway 3.8s ease-in-out infinite;
+}
+@keyframes mc-sway {
+  0%,
+  100% {
+    transform: rotate(-5deg);
+  }
+  50% {
+    transform: rotate(5deg);
+  }
+}
+/* the stamp on the plinth's face (x 520, y 340) */
+.mc__soon {
+  position: absolute;
+  left: 68.42%;
+  top: 76.9%;
+  translate: -50% -50%;
+  padding: 0.3em 0.9em 0.36em;
+  font-size: clamp(11px, 2.1cqw, 15px);
+}
+/* a coin stands on the ground line (y 362) at its x, its width in the drawing's units; its feet end 3.6% above the
+   bottom of its box */
+.mc-coin {
+  position: absolute;
+  bottom: 17.44%;
+  translate: -50% 3.6%;
+  line-height: 0;
+}
+.mc-coin .kb-coin {
+  display: block;
+  width: 100% !important;
+}
+.mc-coin .kb-coin svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.mc-coin--1 {
+  left: 52.37%;
+  width: 9.21%;
+  z-index: 2;
+}
+.mc-coin--2 {
+  left: 39.47%;
+  width: 14.74%;
+}
+.mc-coin--3 {
+  left: 26.32%;
+  width: 10.26%;
+}
+.mc-coin--4 {
+  left: 17.37%;
+  width: 8.95%;
+}
+
+/* small laptops: an even split, so both buttons keep one row */
+@media (min-width: 900px) and (max-width: 1099px) {
+  .mc {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@media (max-width: 899px) {
+  .mc {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 479px) {
+  .mc__ctas .st-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mc-art__cloud,
+  .mc-art__lock {
+    animation: none;
+  }
+}

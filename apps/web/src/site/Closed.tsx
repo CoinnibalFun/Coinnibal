@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { CoinCharacter, Sticker, useReducedMotion } from '../design';
 import { useT, type TKey } from '../i18n';
 import { SiteLinkButton, SitePage, XIcon } from './Shell';
+import { SoonStamp } from './SoonStamp';
+import { MintClosed } from './mint/MintClosed';
 import { useSiteSettings, xProfile } from './settings';
 import './closed.css';
 
@@ -10,24 +12,13 @@ import './closed.css';
  * visitors) gets the neutral line and is not named anywhere on its page.
  */
 const WHAT: Record<string, TKey> = {
-  '/mint': 'site.closed.mint',
   '/collab': 'site.closed.collab',
 };
 
 /** The heading of each such page: it says what is not open (the neutral page says only that). */
 const TITLE: Record<string, TKey> = {
-  '/mint': 'site.closed.titleMint',
   '/collab': 'site.closed.titleCollab',
 };
-
-/**
- * The one stamp of every part of the site that is not open yet (the closed notice, the game's gate, the mint): "Soon"
- * in the body face, sentence case, the same word as the header's chip. It stands straight.
- */
-export function SoonStamp({ className }: { className?: string }) {
-  const t = useT();
-  return <span className={`cl-soon${className ? ` ${className}` : ''}`}>{t('site.closed.sign')}</span>;
-}
 
 /**
  * The shared "not open yet" notice: a sleepy coin with the Soon stamp on a cream card, its heading, one sentence,
@@ -64,9 +55,10 @@ export function ClosedNotice({ title, lede, children }: { title: ReactNode; lede
   );
 }
 
-/** A page the admin has not opened yet (`/mint`, `/faucet`, `/collab`): the shared notice. */
+/** A page the admin has not opened yet: the mint has its own scene (MintClosed); `/faucet` and `/collab` the shared notice. */
 export function ClosedPage({ path }: { path: string }) {
   const t = useT();
+  if (path === '/mint') return <MintClosed />;
   return (
     <SitePage className="cl-root">
       <ClosedNotice title={t(TITLE[path] ?? 'site.closed.title')} lede={t(WHAT[path] ?? 'site.closed.page')} />
