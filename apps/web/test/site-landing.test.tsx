@@ -302,10 +302,10 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
   it('a closed page says "not open yet" (never the real page or a 404); the same path opens when the admin opens it', async () => {
     for (const [path, line, title] of [
       // the mint: nothing about when the NFT is minted, only where (and which link to trust)
-      ['/mint', "The coins are still asleep. When the mint opens, it'll be on OpenSea: use only the OpenSea link that @coinnibalfun posts.", "The mint isn’t open yet"],
+      ['/mint', 'The coins are still asleep. When the mint opens, it’ll be on OpenSea: use only the OpenSea link that @coinnibalfun posts.', "The mint isn’t open yet"],
       // the faucet is hidden: a neutral notice that never names it
-      ['/faucet', "There's nothing here for now. The guide explains how the game works.", 'Not open yet'],
-      ['/collab', 'This is where communities will ask for WL spots. For now, the guide explains how the game works.', "Collabs aren’t open yet"],
+      ['/faucet', 'There’s nothing here for now. The guide explains how the game works.', 'Not open yet'],
+      ['/collab', 'Run a community? This is where you’ll ask for WL spots. @coinnibalfun will say when it opens.', "Collabs aren’t open yet"],
     ]) {
       resetSiteSettings();
       ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
@@ -314,6 +314,8 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
         const view = render(<SiteApp />);
         expect(await screen.findByRole('heading', { level: 1, name: title })).toBeTruthy();
         expect(screen.getByText(line)).toBeTruthy();
+        // the one stamp of every closed part of the site: "Soon", the header chip's word
+        expect(document.querySelector('main .cl-soon')?.textContent).toBe('Soon');
         // one label: the heading (no title strip over the notice)
         expect(document.querySelector('main .kb-plate')).toBeNull();
         expect(document.querySelector('main')?.textContent).not.toMatch(/faucet|test tokens?|testnet|on this page|mint(ed)? (here|on)|price|\bdate\b/i);

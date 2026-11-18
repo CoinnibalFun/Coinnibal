@@ -207,6 +207,14 @@
   transition: fill 0.25s;
 }
 
+/* closed: the Soon stamp on its cords under the barrier arm (GateScene, arm centre x 160) */
+.pg-gate__soon {
+  position: absolute;
+  left: 160px;
+  top: 222px;
+  transform: translateX(-50%);
+}
+
 /* the guard, by the right post */
 .pg-gate__guard {
   position: absolute;

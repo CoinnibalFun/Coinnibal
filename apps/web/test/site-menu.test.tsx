@@ -48,7 +48,7 @@ describe('the phone menu', () => {
     expect(soon.every((s) => s.getAttribute('tabindex') === '0' && !s.hasAttribute('title'))).toBe(true);
     expect(soon.map((s) => document.getElementById(s.getAttribute('aria-describedby')!)?.textContent)).toEqual([
       'The game. It opens after the NFT mint and the token.',
-      "Where you'll apply for the whitelist.",
+      'Where you’ll apply for the whitelist.',
       'Where communities ask for WL spots.',
     ]);
     // wide screens: the project's X account at the end of the nav
@@ -63,7 +63,7 @@ describe('the phone menu', () => {
     const rows = [...sheet.querySelectorAll('.st-nav__link--soon')];
     expect(rows.map((r) => r.textContent)).toEqual([
       'PlayThe game. It opens after the NFT mint and the token.Soon',
-      "WLWhere you'll apply for the whitelist.Soon",
+      "WLWhere you’ll apply for the whitelist.Soon",
       'CollabWhere communities ask for WL spots.Soon',
     ]);
     expect(rows.every((r) => r.tagName === 'SPAN' && r.getAttribute('aria-disabled') === 'true')).toBe(true);

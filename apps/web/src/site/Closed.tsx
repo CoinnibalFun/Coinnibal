@@ -21,7 +21,16 @@ const TITLE: Record<string, TKey> = {
 };
 
 /**
- * The shared "not open yet" notice: a sleepy coin with a "Closed" tag on a cream card, its heading, one sentence,
+ * The one stamp of every part of the site that is not open yet (the closed notice, the game's gate, the mint): "Soon"
+ * in the body face, sentence case, the same word as the header's chip. It stands straight.
+ */
+export function SoonStamp({ className }: { className?: string }) {
+  const t = useT();
+  return <span className={`cl-soon${className ? ` ${className}` : ''}`}>{t('site.closed.sign')}</span>;
+}
+
+/**
+ * The shared "not open yet" notice: a sleepy coin with the Soon stamp on a cream card, its heading, one sentence,
  * the guide, the way home and the project's X account (`children`: anything a page adds under them, inside the card).
  * One label: the heading (no title strip above the page). Nothing here links to another closed part of the site.
  */
@@ -32,9 +41,7 @@ export function ClosedNotice({ title, lede, children }: { title: ReactNode; lede
   return (
     <section className="cl" aria-labelledby="cl-title" data-testid="closed-page">
       <div className="cl__art" aria-hidden="true">
-        <Sticker tone="sun" pad="sm" tilt={-4} lift="md" className="cl__sign">
-          <span className="mono">{t('site.closed.sign')}</span>
-        </Sticker>
+        <SoonStamp className="cl__sign" />
         <CoinCharacter paint="cream" mood="sleepy" size={120} feet ground bob={!reduced} />
       </div>
       <Sticker tone="cream" pad="lg" lift="lg" round="lg" className="cl__card">
