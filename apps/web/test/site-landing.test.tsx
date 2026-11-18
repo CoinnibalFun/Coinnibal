@@ -20,10 +20,27 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     render(<Landing />);
     expect(screen.getByRole('heading', { level: 1, name: 'Coinnibal' })).toBeTruthy();
     expect(screen.getByText('Coins eating coins.')).toBeTruthy();
-    // the pitch never promises the whole amount (the fee is told in step 04 and on the fee card)
-    expect(screen.getByText('Eat coins smaller than you. Run from the ones that are bigger. In a paid room, every coin still standing at the bell gets paid.')).toBeTruthy();
-    expect(document.body.textContent).not.toMatch(/swallowed is yours|is yours\./);
+    // one paragraph: the ticket, how it is lost, and the share card's line (the fee on profit is told by the rooms)
+    const lede = screen.getByTestId('ld-money').textContent ?? '';
+    expect(lede).toMatch(/^A paid room takes a ticket in tokens\./);
+    expect(lede).toMatch(/whatever you've swallowed is yours\.$/);
+    expect(screen.getByRole('heading', { level: 3, name: 'We take 20% of your profit' })).toBeTruthy();
     expect(screen.queryByText(/small change with a big appetite|Eat the food/)).toBeNull();
+    // no welcome plate, no mono kicker: the wordmark is the first thing in the card
+    expect(document.querySelector('.ld-plate1, .ld-hero .kicker, .ld-hero__money')).toBeNull();
+    // the game itself: a muted loop of real play with a poster, no controls, nothing to focus
+    const video = screen.getByTestId('ld-screen').querySelector('video')!;
+    expect(video.muted).toBe(true);
+    expect([video.loop, video.autoplay, video.controls]).toEqual([true, true, false]);
+    expect(video.hasAttribute('playsinline')).toBe(true);
+    expect(video.getAttribute('preload')).toBe('metadata');
+    expect(video.getAttribute('poster')).toBe('/media/hero-loop-poster.webp');
+    expect(video.getAttribute('aria-hidden')).toBe('true');
+    expect([...video.querySelectorAll('source')].map((x) => [x.getAttribute('src'), x.getAttribute('type')])).toEqual([
+      ['/media/hero-loop.webm', 'video/webm'],
+      ['/media/hero-loop.mp4', 'video/mp4'],
+    ]);
+    expect(screen.getByTestId('ld-screen').textContent).toBe('Real gameplay');
     // the hero links to the holder perks on the same page
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
     // the nav (and every button) follows the settings once they are in: Mint and WL are open here, collab and the game are not
@@ -31,22 +48,25 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(document.querySelector('a[href="/collab"]')).toBeNull();
     const wl = screen.getAllByRole('link', { name: /Join the WL/ });
     expect(wl.every((a) => a.getAttribute('href') === '/wl')).toBe(true);
-    for (const h of ['You are a coin.', 'Four steps, one round.', 'Get the Coinnibal NFT.', 'Why get the NFT?', 'Four rooms, one fee.', 'Good to know.'])
+    for (const h of ["You're a coin in a room full of them", 'How a round plays out', 'Get the Coinnibal NFT', 'Why get the NFT?', 'How big is your appetite?', 'Asked around the pond'])
       expect(screen.getByRole('heading', { name: h })).toBeTruthy();
     // no character cards with prices and jokes, no story lines under the rooms
     expect(document.querySelector('.ld-cast, .ld-suspect')).toBeNull();
     expect(document.body.textContent).not.toMatch(/Asphodel|Lethe|Golden Bough|Isles|Elysi|obol|feast|Homer/i);
-    // every holder perk as a card
+    // every holder perk as a row of the comparison: without the NFT, the perk, with the NFT
     const why = screen.getByTestId('why-nft');
-    expect([...why.querySelectorAll('.nf-card')].map((c) => c.getAttribute('data-perk'))).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
-    expect(why.textContent).toContain('Lower fee: 10% instead of 20%');
+    expect([...why.querySelectorAll('tbody tr')].map((c) => c.getAttribute('data-perk'))).toEqual(['fee', 'room', 'shop', 'uses', 'private', 'skin']);
+    expect([...why.querySelectorAll('thead th')].map((c) => c.textContent)).toEqual(['youWithout the NFT', 'youWith the NFT']);
+    expect(within(why).getByRole('rowheader', { name: 'Fee on your profit' }).closest('tr')?.textContent).toBe('20%Fee on your profit10%8% burned, 2% to the team wallet');
+    // no stat cards and no unexplained laurel standing in for a number
+    expect(why.querySelector('.nf-card, .nf-card__big')).toBeNull();
     { const m = document.body.textContent?.match(/.{0,60}(testnet|faucet|Short answers).{0,40}/i); expect(m?.[0] ?? null).toBeNull(); }
     // the team asked for NFT questions in the FAQ (what it gives, how many, is each one different)
     expect(screen.getByText('What does the Coinnibal NFT give me?')).toBeTruthy();
     expect(screen.getByText('How many NFTs are there?')).toBeTruthy();
     expect(screen.getByText('Is every NFT different?')).toBeTruthy();
     // the shared skin is one gold look, not the holder's own NFT art
-    expect(why.textContent).toContain('Your coin can wear the gold NFT skin, with a holder badge next to your name.');
+    expect(why.textContent).toContain('Gold NFT skin and a holder badge');
     expect(why.textContent).not.toMatch(/wears your NFT/);
     // the four rooms, named by price, priced in US dollars (paid in the game token); the $10 one for NFT holders
     for (const [name, fee] of [['$1 Room', '$1'], ['$3 Room', '$3'], ['$5 Room', '$5'], ['$10 Room', '$10']]) {
@@ -111,8 +131,10 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: CLOSED } }));
     render(<Landing />);
     await settle();
+    // "How it works" goes down to the round on this page, not away to the guide
     const how = screen.getByTestId('ld-how-link');
-    expect(how.getAttribute('href')).toBe('/docs');
+    expect(how.getAttribute('href')).toBe('#round');
+    expect(document.getElementById('round')?.contains(screen.getByRole('heading', { level: 2, name: 'How a round plays out' }))).toBe(true);
     expect(how.className).toContain('kb-btn--primary');
     expect(screen.getByTestId('ld-x-link').getAttribute('href')).toBe('https://x.com/coinnibalfun');
     expect(document.querySelector(closedLinks)).toBeNull();
@@ -120,9 +142,9 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(document.querySelector('.ld-flow, .ld-flowline, .ld-nft__ctas')).toBeNull();
     // the NFT's perks stay: they are information
     expect(screen.getByTestId('ld-why-link').getAttribute('href')).toBe('#why-nft');
-    expect(screen.getByTestId('why-nft').querySelectorAll('.nf-card').length).toBeGreaterThan(3);
+    expect(screen.getByTestId('why-nft').querySelectorAll('tbody tr').length).toBeGreaterThan(3);
     // the NFT's heading gives the count instead of repeating its plate
-    expect(screen.getByRole('heading', { level: 2, name: '3,333 coin characters.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: '3,333 coins, no two alike' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'The Coinnibal NFT.' })).toBeNull();
     // the header: Docs only, no wallet button; the footer: X and Docs
     expect([...screen.getByRole('navigation', { name: 'Site' }).querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Guide']);
@@ -130,16 +152,16 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect([...screen.getByRole('navigation', { name: 'Footer' }).querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://x.com/coinnibalfun', '/docs']);
     // the FAQ does not send anyone to the collab page
     expect(screen.queryByText('Can my community get WL spots?')).toBeNull();
-    // each idea once: the round's length is the hero's sticker, nowhere else in the hero or its title strip
-    const hero = `${document.querySelector('.ld-plate1')?.textContent} ${document.querySelector('.ld-hero')?.textContent}`;
-    expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toEqual(['05:00']);
+    // each idea once: the round's length is said once in the hero, in its paragraph (no 05:00 sticker beside it)
+    const hero = document.querySelector('.ld-hero')?.textContent ?? '';
+    expect(hero.match(/5-minute|five minutes?|0?5:00/gi)).toEqual(['Five minutes']);
     const page = document.querySelector('main')!.textContent ?? '';
     expect(page.match(/Coins eating coins/g)).toHaveLength(1);
     expect(page.match(/Eat or be eaten/g)).toHaveLength(1);
     expect(document.querySelector('.st-foot')!.textContent).not.toMatch(/Coins eating coins|Eat or be eaten|Five minutes/);
     // the fee's numbers: once for everyone (the rooms), once for holders (the NFT's first perk)
     expect(page.match(/15% burned/g)).toHaveLength(1);
-    expect(page.match(/8% is burned and 2% goes to the team wallet/g)).toHaveLength(1);
+    expect(page.match(/8% burned, 2% to the team wallet/g)).toHaveLength(1);
     // information only: no price of the mint, no date, no promise
     expect(screen.queryByText('How much is the NFT?')).toBeNull();
     expect(document.body.textContent).not.toMatch(/\bsoon\b|start date|post the date|at launch|mint it with|mint page shows/i);
@@ -153,34 +175,42 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       setActiveChain(chainInfo(4663));
       render(<Landing />);
       await settle();
-      expect(screen.getByTestId('ld-money').textContent).toBe('A paid room takes a ticket in tokens. If you get eaten, you lose it.');
+      expect(screen.getByTestId('ld-money').textContent).toBe(
+        "A paid room takes a ticket in tokens. Eat the coins smaller than you, dodge the bigger ones and try not to get eaten: that's how you lose your ticket. Five minutes later the bell rings and whatever you've swallowed is yours.",
+      );
     } finally {
       setActiveChain(before);
     }
     const faq = [...document.querySelectorAll('.ld-qa')];
+    // the most asked first: is it open, what it costs, the NFT; then the wallet and the chain; the guide last
     expect(faq.map((q) => q.querySelector('.ld-qa__text')?.textContent)).toEqual([
-      'Which wallet do I need?',
-      'What is Robinhood Chain?',
+      'Is the game open?',
+      'Does it cost money to play?',
+      'Do I need the NFT to play?',
       'What does the Coinnibal NFT give me?',
       'How many NFTs are there?',
       'Is every NFT different?',
-      'Do I need the NFT to play?',
-      'Is the game open?',
-      'Does it cost money to play?',
+      'Which wallet do I need?',
+      'What is Robinhood Chain?',
       'Where are all the rules?',
     ]);
     const answer = (q: string) => faq.find((f) => f.querySelector('.ld-qa__text')?.textContent === q)!.querySelector('.ld-qa__a')!.textContent;
-    // the same answer as the guide (which describes no holders-only mode); the $10 Room is told by its ticket and perk card
-    expect(answer('Do I need the NFT to play?')).toBe('No. The NFT is not a ticket. It gives perks.');
-    // the team asked for the NFT's questions: what it gives (D11), how many, every one different
-    expect(answer('What does the Coinnibal NFT give me?')).toBe('Perks in the game: a lower fee on profit (10% instead of 20%), the $10 Room for holders only, 20% off power-ups plus 1 extra use in every paid round, one free private room a day, and the NFT skin with a holder badge.');
-    expect(answer('How many NFTs are there?')).toBe('The collection has 3,333 NFTs.');
+    // the same answer as the guide (the NFT is not a ticket and has no value in a round); the $10 Room is told by its
+    // ticket and the comparison
+    expect(answer('Do I need the NFT to play?')).toBe("No. The NFT isn't a ticket and has no value in a round: you play with the ticket you buy, and the NFT adds perks.");
+    // the team asked for the NFT's questions: what it gives (D11), how many, every one different. Their answers add what
+    // the comparison above does not say: how long the perks last and what one NFT covers, where the mint is, and that
+    // rarity changes no perk
+    expect(answer('What does the Coinnibal NFT give me?')).toBe('The perks above, for as long as it sits in your wallet. One NFT covers one open ticket at a time, and its free room and power-up discount go to one wallet a day.');
+    expect(faq.find((f) => f.querySelector('.ld-qa__text')?.textContent === 'What does the Coinnibal NFT give me?')!.querySelector('a')?.getAttribute('href')).toBe('#why-nft');
+    expect(answer('How many NFTs are there?')).toBe('3,333 in all. The mint will be on OpenSea, and the only link to trust is the one @coinnibalfun posts.');
+    expect(answer('Is every NFT different?')).toBe('Yes, each one is its own coin character, and some are rarer than others. The perks are the same whichever one you hold.');
     // the chain holds the money, the game runs on a server (as the guide says)
     expect(answer('What is Robinhood Chain?')).toMatch(/the game itself runs on a server/);
     // the cost, once: paid rooms take a ticket, practice is free
-    expect(answer('Does it cost money to play?')).toBe('Yes. A paid room takes a ticket in tokens. Practice is free.');
+    expect(answer('Does it cost money to play?')).toBe('Yes. A paid room takes a ticket in tokens, and that ticket is what your coin plays with. Practice is free.');
     // the owner's launch order: the NFT mint, then the token, then the game (no dates)
-    expect(answer('Is the game open?')).toBe('Not yet. First comes the NFT mint, then the token, then the game. News is on @coinnibalfun.');
+    expect(answer('Is the game open?')).toBe('Not yet. The NFT mint comes first, then the token, then the game. Follow @coinnibalfun for news.');
     const page = document.querySelector('main')!.textContent ?? '';
     expect(page.match(/Practice (stays|is) free/g)).toHaveLength(1);
     expect(page.match(/explains every rule/g)).toBeNull();
@@ -248,7 +278,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(document.querySelector(closedLinks)).toBeNull();
     await settle();
     expect(document.querySelector(closedLinks)).toBeNull();
-    expect(screen.getByTestId('ld-how-link').getAttribute('href')).toBe('/docs');
+    expect(screen.getByTestId('ld-how-link').getAttribute('href')).toBe('#round');
   });
 
   it('each part comes back when the admin reopens it', async () => {
@@ -256,7 +286,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     const first = render(<Landing />);
     await waitFor(() => expect(screen.getAllByRole('link', { name: 'Go to the mint' })[0].getAttribute('href')).toBe('/mint'));
     expect(document.querySelector('a[href="/play"], a[href="/faucet"], a[href="/wl"], a[href="/collab"]')).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Get the Coinnibal NFT.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Get the Coinnibal NFT' })).toBeTruthy();
     first.unmount();
     restore();
     resetSiteSettings();
@@ -365,13 +395,14 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
     render(<Landing />);
     for (const id of PLATES) expect(document.querySelector(id)?.getAttribute('data-seam')).toBe('wait');
-    // one gesture per seam: a bite at Feast, Arenas and FAQ, the seal at the NFT, the tablecloth (no overlay) at Round
-    expect(PLATES.map((id) => (document.querySelector(`${id} > .ld-bite`) ? 'bite' : document.querySelector(`${id} > .ld-seal`) ? 'seal' : '-'))).toEqual(['bite', '-', 'bite', 'seal', 'bite']);
+    // one gesture per seam, the bite twice only: at Feast and FAQ, the seal at the NFT, the tablecloth (no overlay) at
+    // Round, the dusk before the rooms
+    expect(PLATES.map((id) => (document.querySelector(`${id} > .ld-bite`) ? 'bite' : document.querySelector(`${id} > .ld-seal`) ? 'seal' : '-'))).toEqual(['bite', '-', '-', 'seal', 'bite']);
     expect(document.querySelectorAll('.ld-nap')).toHaveLength(1);
     // the content stages wait too, and the long lists are armed card by card
     expect(document.querySelector('.ld-feast__copy')?.getAttribute('data-reveal')).toBe('wait');
     expect([...document.querySelectorAll('.ld-qa')].every((q) => q.getAttribute('data-reveal') === 'wait')).toBe(true);
-    expect([...document.querySelectorAll('.ld-nft__why .nf-card')].every((c) => c.getAttribute('data-reveal') === 'wait')).toBe(true);
+    expect([...document.querySelectorAll('.ld-nft__why .nf-row')].every((c) => c.getAttribute('data-reveal') === 'wait')).toBe(true);
 
     const heard = vi.fn();
     window.addEventListener('ld:gulp', heard);
@@ -401,7 +432,7 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     await wait(30);
     expect(document.querySelector('[data-reveal], [data-seam]')).toBeNull();
     const bites = [...document.querySelectorAll('.ld-bite')];
-    expect(bites).toHaveLength(3);
+    expect(bites).toHaveLength(2);
     for (const b of bites) {
       expect(b.getAttribute('aria-hidden')).toBe('true');
       expect(b.querySelector('.ld-bite__face--after .kb-coin')).toBeTruthy();
@@ -452,15 +483,17 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
       expect(el.getAttribute('aria-hidden')).toBe('true');
       expect(el.textContent).toBe('');
     }
-    for (const h of ['You are a coin.', 'Four steps, one round.', 'Four rooms, one fee.', 'Why get the NFT?', 'Good to know.']) expect(screen.getByRole('heading', { name: h })).toBeTruthy();
-    expect([...document.querySelectorAll('main .kb-plate__title')].map((t) => t.textContent)).toEqual([
-      'Welcome to Coinnibal',
-      'What is Coinnibal?',
-      'How a round works',
-      'Rooms and the fee',
-      'The Coinnibal NFT',
-      'Questions',
-    ]);
+    for (const h of ["You're a coin in a room full of them", 'How a round plays out', 'How big is your appetite?', 'Why get the NFT?', 'Asked around the pond']) expect(screen.getByRole('heading', { name: h })).toBeTruthy();
+    // one label per section: the H2. No caption bar over it, no mono aside; the section's top line is a bare ink rule
+    expect(document.querySelectorAll('main .kb-plate')).toHaveLength(0);
+    const plates = [...document.querySelectorAll('main .ld-plate')];
+    expect(plates.map((p) => p.id)).toEqual(['feast', 'round', 'arenas', 'nft', 'faq']);
+    for (const p of plates) {
+      expect(p.querySelector(':scope > .ld-rule')?.getAttribute('aria-hidden')).toBe('true');
+      expect(p.querySelectorAll('h2')).toHaveLength(1);
+    }
+    // no headline ends on a full stop
+    expect([...document.querySelectorAll('main h2, main h3')].map((h) => h.textContent ?? '').filter((h) => /\.$/.test(h))).toEqual([]);
   });
 
   it('floats the questions on a moonlit pond: still details and summaries, every coin and wave hidden from assistive tech', async () => {
@@ -480,10 +513,8 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     for (const card of cards) {
       expect(card.tagName).toBe('DETAILS');
       const q = card.querySelector(':scope > summary.ld-qa__q')!;
-      // one coin per card, hidden: it wonders until its answer opens, then it is happy (the CSS swaps them on [open])
-      const face = q.querySelector('.ld-qa__face')!;
-      expect(face.getAttribute('aria-hidden')).toBe('true');
-      expect(face.querySelectorAll(':scope > .ld-qa__ask .kb-coin, :scope > .ld-qa__yay .kb-coin')).toHaveLength(2);
+      // no coin on a question: the characters act in the scene, not as list bullets
+      expect(q.querySelector('.kb-coin')).toBeNull();
       // what a screen reader hears on the summary is the question alone
       const heard = [...q.childNodes].filter((n) => !(n instanceof Element && n.getAttribute('aria-hidden') === 'true')).map((n) => n.textContent).join('');
       expect(heard).toBe(q.querySelector('.ld-qa__text')!.textContent);

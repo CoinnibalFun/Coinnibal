@@ -8,8 +8,8 @@ import {
   formatUsdCents,
   totalFeeBps,
 } from '@elymum/shared';
-import type { ReactNode } from 'react';
-import { CoinCharacter, Icon, Laurel, type CoinPaint, type IconName } from '../../design';
+import type { CSSProperties, ReactNode } from 'react';
+import { CoinCharacter, Laurel } from '../../design';
 import { useT, type TKey } from '../../i18n';
 import './why-nft.css';
 
@@ -53,63 +53,88 @@ export function configuredPerks(live: { shopPct?: number | null; room?: { perk: 
   };
 }
 
-interface Card {
-  id: 'fee' | 'room' | 'shop' | 'private' | 'skin' | 'faucet';
-  icon: IconName;
-  paint: CoinPaint;
-  /** The card's figure; the skin has none, it shows the holder badge's laurel instead. */
-  big: string | null;
-  title: string;
-  note: string;
-}
-
-/** The holder perks as cards (the test faucet is not one of them: visitor pages do not talk about the test network). */
-export function perkCards(v: NftPerkValues, t: (k: TKey, vars?: Record<string, string | number>) => string, _testnet: boolean | null): Card[] {
-  const cards: Card[] = [
-    { id: 'fee', icon: 'flame', paint: 'sun', big: v.fee.holder, title: t('nf.fee.t', { holder: v.fee.holder, normal: v.fee.normal }), note: t('nf.fee.n', { burn: v.fee.burn, team: v.fee.team }) },
-  ];
-  if (v.room) cards.push({ id: 'room', icon: 'crown', paint: 'up', big: v.room, title: t('nf.room.t', { price: v.room }), note: t('nf.room.n') });
-  cards.push({ id: 'shop', icon: 'bag', paint: 'coral', big: `\u2212${v.shopPct}%`, title: t('nf.shop.t', { pct: v.shopPct }), note: t('nf.shop.n', { extra: v.shopExtra, base: SHOP_DEFAULTS.arenaUsesPerRound, total: SHOP_DEFAULTS.arenaUsesPerRound + v.shopExtra }) });
-  if (v.privateRoom.perk === 'free_daily') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: '1/day', title: t('nf.free.t'), note: t('nf.free.n') });
-  else if (v.privateRoom.perk === 'discount') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: `\u2212${v.privateRoom.pct}%`, title: t('nf.freeDiscount.t', { pct: v.privateRoom.pct }), note: t('nf.free.n') });
-  cards.push({ id: 'skin', icon: 'user', paint: 'teal', big: null, title: t('nf.skin.t'), note: t('nf.skin.n') });
-  return cards;
+/** One line of the tale of the tape: what a coin gets without the NFT and with it. */
+export interface PerkRow {
+  id: 'fee' | 'room' | 'shop' | 'uses' | 'private' | 'skin';
+  label: string;
+  without: string;
+  with: string;
+  /** A short line under the holder's value (the holder fee's split). */
+  note?: string;
 }
 
 /**
- * "Why get the NFT?": every holder perk as a small card with a picture (landing and mint page). The numbers are the
- * game's configured holder perks; the note says every ticket shows its fee (a testnet contract can lag behind the
- * configured perks). `level`: its heading's rank (3 under the landing's NFT section, 2 on a page of its own).
+ * The holder perks as a comparison, row by row, with the values the game configures (the test faucet is not one of
+ * them: visitor pages do not talk about the test network). The "without" side is what the guide's table says.
  */
-export function WhyNft({ values, testnet, tone = 'night', heading, id = 'why-nft', level = 2, children }: { values?: NftPerkValues; testnet: boolean | null; tone?: 'night' | 'paper'; heading?: ReactNode; id?: string; level?: 2 | 3; children?: ReactNode }) {
+export function perkRows(v: NftPerkValues, t: (k: TKey, vars?: Record<string, string | number>) => string): PerkRow[] {
+  const base = SHOP_DEFAULTS.arenaUsesPerRound;
+  const rows: PerkRow[] = [{ id: 'fee', label: t('nf.fee.l'), without: v.fee.normal, with: v.fee.holder, note: t('nf.fee.n', { burn: v.fee.burn, team: v.fee.team }) }];
+  if (v.room) rows.push({ id: 'room', label: t('nf.room.l', { price: v.room }), without: t('nf.room.no'), with: t('nf.room.yes') });
+  rows.push({ id: 'shop', label: t('nf.shop.l'), without: t('nf.shop.no'), with: t('nf.shop.yes', { pct: v.shopPct }) });
+  rows.push({ id: 'uses', label: t('nf.uses.l'), without: String(base), with: String(base + v.shopExtra) });
+  if (v.privateRoom.perk === 'free_daily') rows.push({ id: 'private', label: t('nf.private.l'), without: t('nf.private.no'), with: t('nf.private.free') });
+  else if (v.privateRoom.perk === 'discount') rows.push({ id: 'private', label: t('nf.private.l'), without: t('nf.private.no'), with: t('nf.private.off', { pct: v.privateRoom.pct }) });
+  rows.push({ id: 'skin', label: t('nf.skin.l'), without: t('nf.skin.no'), with: t('nf.skin.yes') });
+  return rows;
+}
+
+/**
+ * "Why get the NFT?" as a tale of the tape (landing and mint page): the same coin twice, without the NFT and with it,
+ * and between them what changes, row by row. It is a real table: the coins and the "vs" are pictures (hidden from
+ * assistive tech), the column heads name the two sides, each row's head names the perk. The numbers are the game's
+ * configured holder perks; the note says every ticket shows its fee (a testnet contract can lag behind the configured
+ * perks). `level`: its heading's rank (3 under the landing's NFT section, 2 on a page of its own).
+ */
+export function WhyNft({ values, testnet: _testnet, tone = 'night', heading, id = 'why-nft', level = 2, children }: { values?: NftPerkValues; testnet: boolean | null; tone?: 'night' | 'paper'; heading?: ReactNode; id?: string; level?: 2 | 3; children?: ReactNode }) {
   const t = useT();
-  const cards = perkCards(values ?? configuredPerks(), t, testnet);
+  const rows = perkRows(values ?? configuredPerks(), t);
   const H = level === 3 ? 'h3' : 'h2';
   return (
     <section className={`nf-why nf-why--${tone}`} id={id} aria-labelledby={`${id}-h`} data-testid="why-nft">
-      <header className="nf-why__head">
-        <p className="kicker nf-why__kicker">{t('nf.kicker')}</p>
-        <H className="nf-why__h" id={`${id}-h`}>
-          {heading ?? t('ld.cta.why')}
-        </H>
-      </header>
-      <ul className="nf-why__grid">
-        {cards.map((c) => (
-          <li key={c.id} className="nf-card" data-perk={c.id}>
-            <span className="nf-card__art" aria-hidden="true">
-              <CoinCharacter paint={c.paint} mood={c.id === 'fee' ? 'happy' : c.id === 'room' ? 'smug' : 'smile'} size={64} />
-              <span className="nf-card__icon">
-                <Icon name={c.icon} size={18} />
+      <H className="nf-why__h" id={`${id}-h`}>
+        {heading ?? t('ld.cta.why')}
+      </H>
+      <table className="nf-tape">
+        <thead>
+          <tr>
+            <th scope="col" className="nf-tape__side is-plain">
+              <span className="nf-tape__coin" aria-hidden="true">
+                <CoinCharacter paint="cyan" mood="scared" size={88} look={[3, -1]} sweat feet ground blink={false} />
+                <span className="nf-tape__name">{t('nf.you')}</span>
               </span>
-            </span>
-            <span className={`nf-card__big num${c.big === null ? ' is-badge' : ''}`} aria-hidden="true">
-              {c.big ?? <Laurel size={46} />}
-            </span>
-            <strong className="nf-card__t">{c.title}</strong>
-            <span className="nf-card__n">{c.note}</span>
-          </li>
-        ))}
-      </ul>
+              <span className="nf-tape__who">{t('nf.without')}</span>
+            </th>
+            <td className="nf-tape__mid" aria-hidden="true">
+              <span className="nf-tape__vs">vs</span>
+            </td>
+            <th scope="col" className="nf-tape__side is-holder">
+              <span className="nf-tape__coin" aria-hidden="true">
+                <CoinCharacter paint="sun" mood="smug" size={104} look={[-3, 0]} feet ground />
+                <span className="nf-tape__name">
+                  <Laurel size={14} />
+                  {t('nf.you')}
+                </span>
+              </span>
+              <span className="nf-tape__who">{t('nf.with')}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.id} className="nf-row" data-perk={r.id} style={{ '--rv-n': i } as CSSProperties}>
+              <td className="nf-row__was">{r.without}</td>
+              <th scope="row" className="nf-row__what">
+                {r.label}
+              </th>
+              <td className="nf-row__now">
+                <span className="nf-row__v">{r.with}</span>
+                {r.note && <small className="nf-row__note">{r.note}</small>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <p className="nf-why__note">{t('nf.note')}</p>
       {children}
     </section>

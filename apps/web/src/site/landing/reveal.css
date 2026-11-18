@@ -5,11 +5,11 @@
  * old browsers all see everything.
  *
  * Reveals touch only opacity, clip-path and the individual translate / rotate / scale properties. They never set
- * `transform`, so the CSS tilts on transform survive (the menu, the take strip, the tickets, the fee card, the FAQ
- * cards, the perk cards). The fan's deal is the one exception: it reuses the fan's own transform slot transition.
+ * `transform`, so the CSS tilts on transform survive (the room tickets). The fan's deal is the one exception: it
+ * reuses the fan's own transform slot transition.
  *
- * One beat B = --beat (70 ms). A plate seam: ink rule 0B, caption 1B, dashed rule 2B, aside 5B. A content stage:
- * kicker 0B, heading 1B (fed out top-down), visual 2B, items (2 + n)B, body 3B. Text starts within 5B of its trigger
+ * One beat B = --beat (70 ms). A plate seam: its ink rule draws from 0B. A content stage: kicker 0B, heading 1B (fed
+ * out top-down), visual 2B, items (2 + n)B, body 3B. Text starts within 5B of its trigger
  * and is fully there by about 0.6 s; only coins, ink rules and paper travel longer.
  * ------------------------------------------------------------------------- */
 
@@ -40,7 +40,7 @@
 .rv-v { --rv-at: 2; }
 .rv-i { --rv-at: 2; }
 .rv-b { --rv-at: 3; }
-:is(.rv-k, .rv-h, .rv-v, .rv-b, .rv-i, .ld-qa, .nf-card) {
+:is(.rv-k, .rv-h, .rv-v, .rv-b, .rv-i, .ld-qa, .nf-row) {
   --d: calc(var(--beat) * (var(--rv-at, 0) + var(--rv-n, 0)));
 }
 /* the resting tilt the motion wrappers used to carry, motion or not (the stairs stand level: only their tickets tilt) */
@@ -48,7 +48,7 @@
   rotate: var(--tilt, none);
 }
 
-/* where a bite sits on its section's top edge; on a phone the caption wraps before it */
+/* where a bite sits on its section's top edge */
 .ld-plate {
   --bite-x: var(--bx);
   --bite-half: var(--bh);
@@ -58,17 +58,12 @@
     --bite-x: var(--bxm);
     --bite-half: var(--bhm);
   }
-  /* the bite's x is a share of the full-width section; the title box starts after the plate's 16px padding, so measure
-     both from the viewport edge (a phone has no scrollbar): hole's left edge, less the padding, less a 16px gap */
-  .ld-plate.has-bite > .kb-plate .kb-plate__title {
-    max-width: calc(var(--bxmv) - var(--bite-half) - 32px);
-  }
 }
 
 /* ── the bite (BiteSeam.tsx). REST STATE = the finished scar, what reduced motion sees ── */
 .ld-bite {
-  /* the dashed rule of the plate caption, where two crumbs come to rest */
-  --rule-y: 33px;
+  /* where the two near crumbs land: on the paper just under the line, where they fade (none stays at rest) */
+  --rule-y: 14px;
   position: absolute;
   top: 0;
   left: clamp(calc(var(--bite-half) + 12px), var(--bite-x), calc(100% - var(--bite-half) - 12px));
@@ -138,18 +133,10 @@
   rotate: var(--r);
   opacity: var(--o);
 }
-.ld-bite__crumb:nth-of-type(1) { --x: calc(var(--bite-half) * -1 - 8px); --y: var(--rule-y); --r: -120deg; --up: -30px; }
-.ld-bite__crumb:nth-of-type(2) { --x: calc(var(--bite-half) + 8px); --y: var(--rule-y); --r: 110deg; --up: -26px; }
+.ld-bite__crumb:nth-of-type(1) { --x: calc(var(--bite-half) * -1 - 8px); --y: var(--rule-y); --r: -120deg; --up: -30px; --o: 0; }
+.ld-bite__crumb:nth-of-type(2) { --x: calc(var(--bite-half) + 8px); --y: var(--rule-y); --r: 110deg; --up: -26px; --o: 0; }
 .ld-bite__crumb:nth-of-type(3) { --x: calc(var(--bite-half) * -1 - 18px); --y: -8px; --r: -200deg; --up: -44px; --o: 0; --k: 1; }
 .ld-bite__crumb:nth-of-type(4) { --x: calc(var(--bite-half) + 20px); --y: -10px; --r: 180deg; --up: -40px; --o: 0; --k: 1; }
-@media (max-width: 639px) {
-  .ld-bite {
-    --rule-y: 26px;
-  }
-  /* on a phone the resting crumbs stay inside the bite's own span, clear of the caption */
-  .ld-bite__crumb:nth-of-type(1) { --x: calc(var(--bite-half) * -1 + 8px); }
-  .ld-bite__crumb:nth-of-type(2) { --x: calc(var(--bite-half) - 8px); }
-}
 
 /* ── the seal (SealSeam.tsx). REST = pressed ── */
 .ld-seal {
@@ -261,36 +248,10 @@
 
 /* ═════════════ every hidden state and every play lives in here ═════════════ */
 @media (prefers-reduced-motion: no-preference) {
-  /* A. the plate seam: the 3 px top border becomes an ink rule that draws from the left */
-  .ld-plate[data-seam] > .kb-plate {
-    position: relative;
-    border-top-color: transparent;
-  }
-  .ld-plate[data-seam] > .kb-plate::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(var(--stroke) * -1);
-    height: var(--stroke);
-    background: var(--outline);
-    transform-origin: 0 50%;
-  }
-  .ld-plate[data-seam='wait'] > .kb-plate::before { scale: 0 1; }
-  .ld-plate[data-seam='wait'] > .kb-plate .kb-plate__title { opacity: 0; translate: -12px 0; }
-  .ld-plate[data-seam='wait'] > .kb-plate .kb-plate__rule { clip-path: inset(0 100% 0 0); }
-  .ld-plate[data-seam='wait'] > .kb-plate .kb-plate__aside { opacity: 0; translate: 0 6px; }
-  .ld-plate[data-seam='in'] > .kb-plate::before {
+  /* A. the plate seam: the section's ink rule draws from the left */
+  .ld-plate[data-seam='wait'] > .ld-rule { scale: 0 1; }
+  .ld-plate[data-seam='in'] > .ld-rule {
     transition: scale calc(0.64s * var(--rv-k)) var(--ease-draw);
-  }
-  .ld-plate[data-seam='in'] > .kb-plate .kb-plate__title {
-    transition: opacity 0.2s linear var(--beat), translate 0.42s var(--ease-out) var(--beat);
-  }
-  .ld-plate[data-seam='in'] > .kb-plate .kb-plate__rule {
-    animation: ld-unclip calc(0.72s * var(--rv-k)) var(--ease-out) calc(var(--beat) * 2) backwards;
-  }
-  .ld-plate[data-seam='in'] > .kb-plate .kb-plate__aside {
-    transition: opacity 0.24s linear calc(var(--beat) * 5), translate 0.36s var(--ease-out) calc(var(--beat) * 5);
   }
   /* the tablecloth: Round's linen is laid left to right behind the ink roller */
   .ld-round[data-seam='wait']::before { scale: 0 1; }
@@ -329,19 +290,12 @@
       rotate calc(0.76s * var(--rv-k)) var(--ease-settle) var(--d);
   }
 
-  /* Feast: the sun marker swipes under "a coin", the menu's leaders run out, its tape slaps on */
+  /* Feast: the sun marker swipes under "a coin", the menu's leaders run out */
   [data-reveal='wait'] .ld-ul { background-size: 0% 0.22em; }
   [data-reveal='in'] .ld-ul { transition: background-size 0.42s var(--ease-out) calc(var(--beat) * 8); }
   .ld-feast__menu-wrap[data-reveal='wait'] .ld-menu__dots { clip-path: inset(0 100% 0 0); }
   .ld-feast__menu-wrap[data-reveal='in'] .ld-menu__dots {
     animation: ld-unclip 0.6s var(--ease-out) calc(var(--d) + var(--beat)) backwards;
-  }
-  .ld-feast__menu-wrap[data-reveal='wait'] .kb-sticker__tape { opacity: 0; translate: 0 -14px; scale: 1.25; }
-  .ld-feast__menu-wrap[data-reveal='in'] .kb-sticker__tape {
-    transition:
-      opacity 0.12s linear calc(var(--beat) * 9),
-      translate 0.38s var(--ease-spring) calc(var(--beat) * 9),
-      scale 0.38s var(--ease-spring) calc(var(--beat) * 9);
   }
   /* Round: each stop's number stamps in a beat after its row; the orbit's sun coin rolls into its seat */
   .ld-round__copy[data-reveal='wait'] .ld-stop__no { scale: 0.6; rotate: -14deg; }
@@ -377,12 +331,12 @@
     animation: ld-hop 0.48s linear calc((5 + var(--step) * 2) * var(--beat)) both;
   }
   .ld-feebar__seg { transform-origin: 0 50%; }
-  .ld-feecard[data-reveal='wait'] .ld-feebar__seg { scale: 0 1; }
-  .ld-feecard[data-reveal='in'] .ld-feebar__seg { transition: scale 0.52s var(--ease-draw) calc(var(--beat) * 2); }
-  .ld-feecard[data-reveal='in'] .ld-feebar__seg.is-burn { transition-delay: calc(var(--beat) * 3); }
-  .ld-feecard[data-reveal='in'] .ld-feebar__seg.is-team { transition-delay: calc(var(--beat) * 4); }
-  .ld-feecard[data-reveal='wait'] .ld-feebar__keys li { opacity: 0; }
-  .ld-feecard[data-reveal='in'] .ld-feebar__keys li { transition: opacity 0.24s linear calc(var(--beat) * 5); }
+  .ld-fee[data-reveal='wait'] .ld-feebar__seg { scale: 0 1; }
+  .ld-fee[data-reveal='in'] .ld-feebar__seg { transition: scale 0.52s var(--ease-draw) calc(var(--beat) * 2); }
+  .ld-fee[data-reveal='in'] .ld-feebar__seg.is-burn { transition-delay: calc(var(--beat) * 3); }
+  .ld-fee[data-reveal='in'] .ld-feebar__seg.is-team { transition-delay: calc(var(--beat) * 4); }
+  .ld-fee[data-reveal='wait'] .ld-feebar__keys li { opacity: 0; }
+  .ld-fee[data-reveal='in'] .ld-feebar__keys li { transition: opacity 0.24s linear calc(var(--beat) * 5); }
   /* NFT: the fan is dealt from a squared deck (data-slot never changes); the side cards' SEALED stamps press as they land */
   .ld-nft__fan[data-reveal='wait'] .ld-fan__card { opacity: 0; transform: translate(0, 40px) rotate(-1.5deg) scale(0.92); }
   .ld-nft__fan[data-reveal='in']:not([data-dealt]) .ld-fan__card {
@@ -403,42 +357,36 @@
       transform var(--dur-state) var(--ease-spring),
       box-shadow var(--dur-state);
   }
-  /* Why get the NFT (scoped: WhyNft is shared with /mint): the perk cards arrive in batches, their numbers stamp in */
-  .ld-nft__why[data-reveal='wait'] :is(.nf-why__kicker, .nf-why__note) { opacity: 0; translate: 0 var(--rv-rise); }
-  .ld-nft__why[data-reveal='in'] .nf-why__kicker { transition: opacity 0.24s linear, translate calc(0.5s * var(--rv-k)) var(--ease-out); }
+  /* Why get the NFT (scoped: WhyNft is shared with /mint): the two coins square up, then the rows come in one by one */
+  .ld-nft__why[data-reveal='wait'] .nf-why__note { opacity: 0; translate: 0 var(--rv-rise); }
   .ld-nft__why[data-reveal='in'] .nf-why__note {
-    transition: opacity 0.24s linear calc(var(--beat) * 4), translate calc(0.5s * var(--rv-k)) var(--ease-out) calc(var(--beat) * 4);
+    transition: opacity 0.24s linear calc(var(--beat) * 8), translate calc(0.5s * var(--rv-k)) var(--ease-out) calc(var(--beat) * 8);
   }
   .ld-nft__why[data-reveal='wait'] .nf-why__h { opacity: 0; clip-path: inset(-0.3em -0.5em 100% -0.5em); }
   .ld-nft__why[data-reveal='in'] .nf-why__h {
     animation: ld-feed calc(0.68s * var(--rv-k)) var(--ease-paper) var(--beat) backwards, ld-fade 0.24s linear var(--beat) backwards;
   }
-  .ld-nft__why .nf-card[data-reveal='wait'] { opacity: 0; translate: 0 20px; rotate: 2deg; }
-  .ld-nft__why .nf-card[data-reveal='in'] {
-    transition:
-      opacity 0.24s linear var(--d),
-      translate calc(0.48s * var(--rv-k)) var(--ease-settle) var(--d),
-      rotate calc(0.48s * var(--rv-k)) var(--ease-settle) var(--d);
+  .ld-nft__why[data-reveal='wait'] .nf-tape__coin { opacity: 0; translate: var(--from, -28px) 0; }
+  .ld-nft__why .is-holder .nf-tape__coin { --from: 28px; }
+  .ld-nft__why[data-reveal='in'] .nf-tape__coin {
+    transition: opacity 0.16s linear calc(var(--beat) * 2), translate 0.5s var(--ease-settle) calc(var(--beat) * 2);
   }
-  .ld-nft__why .nf-card[data-reveal='wait'] .nf-card__big { opacity: 0; scale: 1.35; rotate: -6deg; }
-  .ld-nft__why .nf-card[data-reveal='in'] .nf-card__big {
-    transition:
-      opacity 0.12s linear calc(var(--d) + var(--beat) * 3),
-      scale 0.36s var(--ease-settle) calc(var(--d) + var(--beat) * 3),
-      rotate 0.36s var(--ease-settle) calc(var(--d) + var(--beat) * 3);
+  .ld-nft__why[data-reveal='wait'] .nf-tape__vs { opacity: 0; scale: 1.6; }
+  .ld-nft__why[data-reveal='in'] .nf-tape__vs {
+    transition: opacity 0.12s linear calc(var(--beat) * 5), scale 0.36s var(--ease-settle) calc(var(--beat) * 5);
   }
-  /* FAQ: the moon (the cream coin) rises over the horizon, its own foot; then its light runs out on the water. Each
-     card's coin bobs up out of the pond a beat after its card lands */
+  .ld-nft__why .nf-row { --rv-at: 3; }
+  .ld-nft__why .nf-row[data-reveal='wait'] { opacity: 0; translate: 0 14px; }
+  .ld-nft__why .nf-row[data-reveal='in'] {
+    transition: opacity 0.24s linear var(--d), translate calc(0.44s * var(--rv-k)) var(--ease-settle) var(--d);
+  }
+  /* FAQ: the moon (the cream coin) rises over the horizon, its own foot; then its light runs out on the water */
   .ld-faq__side:is([data-reveal='wait'], [data-reveal='in']) .ld-faq__coin { clip-path: inset(-60% -60% 0 -60%); }
   .ld-faq__side[data-reveal='wait'] .ld-faq__coin > .ld-gaze { translate: 0 75%; }
   .ld-faq__side[data-reveal='in'] .ld-faq__coin > .ld-gaze { transition: translate 0.56s var(--ease-settle) calc(var(--beat) * 3); }
   .ld-faq__side[data-reveal='wait'] ~ .ld-faq__water .ld-faq__glint i { scale: 0 1; }
   .ld-faq__side[data-reveal='in'] ~ .ld-faq__water .ld-faq__glint i {
     transition: scale 0.42s var(--ease-out) calc(var(--beat) * (7 + var(--i)));
-  }
-  .ld-qa[data-reveal='wait'] .ld-qa__face { opacity: 0; translate: 0 10px; }
-  .ld-qa[data-reveal='in'] .ld-qa__face {
-    transition: opacity 0.2s linear calc(var(--d) + var(--beat) * 2), translate 0.5s var(--ease-settle) calc(var(--d) + var(--beat) * 2);
   }
 
   /* C. the bite plays when its section's seam does: rise, lunge, three chomps that open the cut, then the after-mood */
@@ -470,10 +418,6 @@
   }
   /* the SeedRail gulp */
   .ld-rail__gulp.is-gulp { animation: ld-rail-gulp 0.38s var(--ease-spring); }
-  /* Plate I prints on load, while the hero sticker lands */
-  .ld-plate1 .kb-plate__title { animation: ld-in-left 0.42s var(--ease-out) 0.2s backwards; }
-  .ld-plate1 .kb-plate__rule { animation: ld-unclip 0.72s var(--ease-out) 0.27s backwards; }
-  .ld-plate1 .kb-plate__aside { animation: ld-rise 0.36s var(--ease-out) 0.55s backwards; }
 }
 
 @keyframes ld-unclip {
@@ -486,12 +430,6 @@
 }
 @keyframes ld-fade {
   from { opacity: 0; }
-}
-@keyframes ld-in-left {
-  from { opacity: 0; translate: -12px 0; }
-}
-@keyframes ld-rise {
-  from { opacity: 0; translate: 0 6px; }
 }
 /* the bite, 1100 ms: rise 0-220, lunge 220-340, chomps at 340 / 470 / 600, swallow at 760, settle by 1100.
    The cut (720 ms) opens on the chomps: 0, then .45, .75, 1. */
