@@ -1,6 +1,6 @@
 import { activeChain } from '@elymum/shared';
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChompMark, CoinMark, Icon, Kb, RingScene, Wordmark as InkWordmark, type IconName } from '../design';
+import { ChompMark, CoinMark, Icon, Kb, Wordmark as InkWordmark, type IconName } from '../design';
 import { FooterLife } from './FooterLife';
 import { usePeelLetters } from './peel';
 import { Link, usePath } from './router';
@@ -184,29 +184,43 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
       </Link>
     );
   });
-  // still not links. The closed parts stand together in one dashed outline (drawn like the 404's unbuilt terrace:
-  // planned, not built yet) under one "Soon" tag; each name still says "Soon" to a screen reader (.st-soon), and a
-  // pointer on it says what it will be. On its own (closed) page an item is marked as the place the visitor is at
+  // still not links. The closed parts read as one quiet group (muted names, one "Soon" chip after them); each name
+  // can take the keyboard's focus, so a pointer or a Tab shows its own small tip with what it will be (the lines the
+  // phone menu shows). Each name still says "Soon" to a screen reader (.st-soon), and its tip describes it. On its own
+  // (closed) page an item is marked as the place the visitor is at
   const soonSet = soon.length > 0 && (
     <span className="st-soonset">
-      <span className="st-soonset__tag" aria-hidden="true">
-        {t('site.nav.soon')}
-      </span>
-      {soon.map((n) => {
+      {soon.map((n, i) => {
         const here = path === n.href;
+        const tip = `st-tip-${n.href.slice(1)}`;
         return (
           <span
             key={`soon:${n.href}`}
-            className={`st-nav__link st-nav__link--soon${here ? ' is-here' : ''}`}
-            aria-disabled="true"
-            aria-current={here ? 'page' : undefined}
-            title={t(n.note)}
+            className={`st-soonitem${i === soon.length - 1 ? ' st-soonitem--end' : ''}`}
+            // Escape puts the tip away (it comes back on the next hover or focus)
+            onKeyDown={(e) => e.key === 'Escape' && e.currentTarget.setAttribute('data-hush', '')}
+            onBlur={(e) => e.currentTarget.removeAttribute('data-hush')}
+            onPointerLeave={(e) => e.currentTarget.removeAttribute('data-hush')}
           >
-            {t(n.key)}
-            <span className="st-soon">{t('site.nav.soon')}</span>
+            <span
+              className={`st-nav__link st-nav__link--soon${here ? ' is-here' : ''}`}
+              tabIndex={0}
+              aria-disabled="true"
+              aria-current={here ? 'page' : undefined}
+              aria-describedby={tip}
+            >
+              {t(n.key)}
+              <span className="st-soon">{t('site.nav.soon')}</span>
+            </span>
+            <span className="st-tip" role="tooltip" id={tip}>
+              {t(n.note)}
+            </span>
           </span>
         );
       })}
+      <span className="st-soonset__tag" aria-hidden="true">
+        {t('site.nav.soon')}
+      </span>
     </span>
   );
   const handle = settings.xHandle.replace(/^@/, '');
@@ -346,16 +360,18 @@ export function SiteFooter() {
           {doors.collab && <Link href="/collab">{t('site.nav.collab')}</Link>}
           <Link href="/docs">{t('site.nav.docs')}</Link>
         </nav>
+      </div>
+      {/* the footer's stage: the front terraces at night, whole, rising into the footer's sky; the last line stands on
+          the shore in front of them (its strip is the shore's own paint, so the ground runs on under it) */}
+      <div className="st-foot__land" aria-hidden="true">
+        <FooterLife />
+      </div>
+      <div className="st-foot__base">
         <p className="st-foot__small">
           <span>Coinnibal · 2026</span>
           <span>{siteHost()}</span>
           <span>{t('site.foot.safety')}</span>
         </p>
-      </div>
-      {/* the front terraces under the footer's text (in the flow, so the text never runs onto the ground) */}
-      <div className="st-foot__land">
-        <RingScene time="night" variant="horizon" clouds={false} animate={false} className="st-foot__ring" />
-        <FooterLife />
       </div>
     </footer>
     </Kb>

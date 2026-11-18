@@ -42,11 +42,13 @@ describe('the phone menu', () => {
     expect(soon.map((s) => s.textContent)).toEqual(['PlaySoon', 'WLSoon', 'CollabSoon']);
     expect(soon.every((s) => s.tagName === 'SPAN' && s.getAttribute('aria-disabled') === 'true')).toBe(true);
     expect(screen.queryByRole('button', { name: /Connect/ })).toBeNull();
-    // on screen the three stand under one Soon tag; a pointer on one says what it will be
+    // on screen the three share one Soon chip (no dashed outline around them); a pointer or the keyboard's focus on one
+    // shows its own tip with what it will be (no native title tooltip on top of it)
     expect(container.querySelectorAll('.st-nav .st-soonset__tag')).toHaveLength(1);
-    expect(soon.map((s) => s.getAttribute('title'))).toEqual([
+    expect(soon.every((s) => s.getAttribute('tabindex') === '0' && !s.hasAttribute('title'))).toBe(true);
+    expect(soon.map((s) => document.getElementById(s.getAttribute('aria-describedby')!)?.textContent)).toEqual([
       'The game. It opens after the NFT mint and the token.',
-      "Where you'll apply for the whitelist.",
+      'Where you’ll apply for the whitelist.',
       'Where communities ask for WL spots.',
     ]);
     // wide screens: the project's X account at the end of the nav
@@ -61,7 +63,7 @@ describe('the phone menu', () => {
     const rows = [...sheet.querySelectorAll('.st-nav__link--soon')];
     expect(rows.map((r) => r.textContent)).toEqual([
       'PlayThe game. It opens after the NFT mint and the token.Soon',
-      "WLWhere you'll apply for the whitelist.Soon",
+      "WLWhere you’ll apply for the whitelist.Soon",
       'CollabWhere communities ask for WL spots.Soon',
     ]);
     expect(rows.every((r) => r.tagName === 'SPAN' && r.getAttribute('aria-disabled') === 'true')).toBe(true);
