@@ -4,6 +4,7 @@ import { describeError } from '@coinnibal/sdk';
 import { discoverProviders, type Eip1193Provider, type ProviderDetail } from './eip6963';
 import { WC_RDNS, endWalletConnect } from './walletconnect';
 import { t } from '../i18n';
+import { storageKey } from '../storageKey';
 
 /**
  * The browser wallet (EIP-1193 via EIP-6963): which wallets this browser has, which one is
@@ -35,7 +36,7 @@ export const useWallet = create<WalletState>(() => ({
 }));
 
 /** localStorage key of the last wallet's rdns (silent reconnect on the next visit). */
-export const LAST_WALLET_KEY = 'coinnibal.wallet.v1';
+export const LAST_WALLET_KEY = storageKey('wallet.v1');
 
 const remember = (rdns: string | null) => {
   try {

@@ -1,3 +1,4 @@
+import { storageKey } from '../storageKey';
 /**
  * A small, privacy-preserving browser fingerprint sent with `join` (`fp`) for the server's
  * multi-account check (several wallets playing one arena from one browser at the same time).
@@ -7,7 +8,7 @@
  * nothing readable leaves the browser: only the hash, which the server hashes again with its own
  * secret and treats as untrusted evidence. Clearing site data or a private window gives a new one.
  */
-const KEY = 'coinnibal.device.v1';
+const KEY = storageKey('device.v1');
 
 let value: string | null = null;
 let started = false;

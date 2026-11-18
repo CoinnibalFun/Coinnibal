@@ -10,6 +10,7 @@ import './design/tokens.css';
 import './design/storybook.css';
 import './chainText';
 import { initLocale, t } from './i18n';
+import { storageKey } from './storageKey';
 
 const root = document.getElementById('root')!;
 const params = new URLSearchParams(location.search);
@@ -24,7 +25,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
  */
 function bootFailed(err: unknown): void {
   console.error('the page failed to load', err);
-  const KEY = 'coinnibal.boot-reload.v1';
+  const KEY = storageKey('boot-reload.v1', 'session');
   try {
     const last = Number(sessionStorage.getItem(KEY) ?? 0);
     if (!last || Date.now() - last > 30_000) {

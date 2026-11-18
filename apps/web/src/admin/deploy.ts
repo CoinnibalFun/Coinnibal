@@ -3,6 +3,7 @@ import { planDefaultArenas, parseAddressInput, parseGasInput, parseIntInput, Adm
 import type { DeployArenaArgs, DeployNftArgs } from '@coinnibal/sdk';
 import { formatEther, getAddress, type Address, type Hash } from 'viem';
 import type { AdminNetwork } from './net';
+import { storageKey } from '../storageKey';
 
 /**
  * The deploy wizard of `/admin → Deploy` (spec section 5), as pure functions: connect the owner
@@ -27,7 +28,7 @@ export interface LocalDeploy {
 }
 export type LocalDeploys = Partial<Record<'arena' | 'nft' | 'token', LocalDeploy>>;
 
-const KEY = 'coinnibal.admin.deploy.v1';
+const KEY = storageKey('admin.deploy.v1');
 
 export function loadLocalDeploys(chainId: number | null | undefined): LocalDeploys {
   if (!chainId) return {};

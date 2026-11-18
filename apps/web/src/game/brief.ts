@@ -1,7 +1,8 @@
 import { create } from 'zustand';
+import { storageKey } from '../storageKey';
 
 /** localStorage key: set once the first-play brief has been read (or waved away). */
-export const BRIEF_KEY = 'coinnibal.brief';
+export const BRIEF_KEY = storageKey('brief');
 
 interface BriefState {
   open: boolean;

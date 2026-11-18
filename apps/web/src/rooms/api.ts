@@ -1,6 +1,7 @@
 import { CUSTOM_PAYMENT_MAX_AGE_MS, CUSTOM_REQUEST_RE, SITE_URL_DEFAULT, type CustomRoomConfig, type CustomRoomCreate, type CustomRoomError, type CustomRoomQuote, type CustomRoomView } from '@coinnibal/shared';
 import { SERVER } from '../config';
 import { serverText, t } from '../i18n';
+import { storageKey } from '../storageKey';
 
 /** A refusal of the custom room API, with the server's code and friendly message. */
 export class RoomApiError extends Error {
@@ -51,7 +52,7 @@ export const roomsApi = {
 };
 
 /** v2: rooms paid in the game token (a v1 entry was an ETH transfer, which can no longer open a room). */
-const PAY_KEY = 'coinnibal.room-payment.v2';
+const PAY_KEY = storageKey('room-payment.v2');
 
 /** A fee payment that went through but has not opened a room yet (kept for a retry: never pay twice). */
 export interface PendingRoomPayment {
