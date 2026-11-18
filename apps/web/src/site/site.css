@@ -685,36 +685,33 @@ html.st-menu-open {
   box-shadow: var(--sh-1);
 }
 
-/* ── footer: the front terraces at night ─────────────────────────────── */
+/* ── footer: a night stage. The text stands in the sky, the ring's front terraces rise under it (FooterLife.tsx,
+   drawn whole), and the last line stands on the shore in front of them: the page ends on the ground ──────────── */
 .st-foot-kb {
   margin-top: auto;
 }
 .st-foot {
   position: relative;
+  /* the night sky (the Kb night theme's paper) */
   background: var(--paper);
   color: var(--ink);
   border-top: var(--stroke) solid var(--outline);
   overflow: hidden;
 }
-/* the terraces: their own band under the text, as tall as the horizon art at 1440 (it slices to cover) */
+/* the terraces: at least as tall as the drawing's own ratio (1440 × 260), so a wide screen never cuts their tops and a
+   narrow one only loses the far ends */
 .st-foot__land {
   position: relative;
-  /* the ground runs on under a phone's home bar */
-  height: calc(clamp(190px, 20vw, 288px) + env(safe-area-inset-bottom, 0px));
+  height: max(190px, calc(100vw * 260 / 1440));
+  margin-top: 8px;
   pointer-events: none;
-}
-.st-foot__ring {
-  position: absolute !important;
-  inset: 0;
-  height: 100%;
-  min-height: 0 !important;
-  aspect-ratio: auto !important;
 }
 .st-foot__inner {
   position: relative;
+  z-index: 1;
   max-width: 1312px;
   margin: 0 auto;
-  padding: 56px var(--gutter) 28px;
+  padding: 56px var(--gutter) 0;
   display: grid;
   gap: 28px;
   grid-template-columns: 1fr;
@@ -725,8 +722,14 @@ html.st-menu-open {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
     padding-top: 72px;
-    padding-bottom: 32px;
   }
+}
+/* the shore in front: the drawing's shore paint runs on into this strip, and the footer's last line stands on it */
+.st-foot__base {
+  position: relative;
+  margin-top: -1px;
+  background: var(--reef);
+  padding: 2px 0 calc(22px + env(safe-area-inset-bottom, 0px));
 }
 .st-foot__mark {
   display: block;
@@ -784,13 +787,15 @@ html.st-menu-open {
   background: var(--sun);
 }
 .st-foot__small {
-  grid-column: 1 / -1;
+  /* the header's column, like the text above */
+  max-width: 1312px;
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  box-sizing: border-box;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 8px 20px;
-  padding-top: 16px;
-  border-top: 2px dashed var(--rule);
+  gap: 6px 20px;
   font-size: 14px;
   color: var(--ink-3);
   text-wrap: pretty;
@@ -798,7 +803,7 @@ html.st-menu-open {
 /* the safety line is the one that matters: it reads a step brighter than the name and the address */
 .st-foot__small > :last-child {
   font-weight: 600;
-  color: var(--ink-2);
+  color: var(--ink);
 }
 /* wide: the name and the address read as one group on the left, the safety line on the right */
 @media (min-width: 900px) {
@@ -1239,7 +1244,7 @@ html[data-turn='back']::view-transition-old(root) {
   }
 }
 
-/* footer night life over the terraces (FooterLife.tsx): same box and framing as .st-foot__ring */
+/* the footer's terraces and their night life (FooterLife.tsx): the drawing fills .st-foot__land */
 .st-life {
   position: absolute;
   inset: 0;

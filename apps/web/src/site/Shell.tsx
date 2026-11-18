@@ -1,6 +1,6 @@
 import { activeChain } from '@elymum/shared';
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChompMark, CoinMark, Icon, Kb, RingScene, Wordmark as InkWordmark, type IconName } from '../design';
+import { ChompMark, CoinMark, Icon, Kb, Wordmark as InkWordmark, type IconName } from '../design';
 import { FooterLife } from './FooterLife';
 import { usePeelLetters } from './peel';
 import { Link, usePath } from './router';
@@ -360,16 +360,18 @@ export function SiteFooter() {
           {doors.collab && <Link href="/collab">{t('site.nav.collab')}</Link>}
           <Link href="/docs">{t('site.nav.docs')}</Link>
         </nav>
+      </div>
+      {/* the footer's stage: the front terraces at night, whole, rising into the footer's sky; the last line stands on
+          the shore in front of them (its strip is the shore's own paint, so the ground runs on under it) */}
+      <div className="st-foot__land" aria-hidden="true">
+        <FooterLife />
+      </div>
+      <div className="st-foot__base">
         <p className="st-foot__small">
           <span>Coinnibal · 2026</span>
           <span>{siteHost()}</span>
           <span>{t('site.foot.safety')}</span>
         </p>
-      </div>
-      {/* the front terraces under the footer's text (in the flow, so the text never runs onto the ground) */}
-      <div className="st-foot__land">
-        <RingScene time="night" variant="horizon" clouds={false} animate={false} className="st-foot__ring" />
-        <FooterLife />
       </div>
     </footer>
     </Kb>
