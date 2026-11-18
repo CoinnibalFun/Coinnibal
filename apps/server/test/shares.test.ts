@@ -14,7 +14,7 @@ import { boardRows } from '../src/rooms/room';
 import { ArenaChain, arena, fakeConn, freeCustom, roomDeps, testWallet } from './helpers';
 
 const look = { name: 'Nakamoto', skin: 2, country: 'JP', flags: 8 };
-const arenaRoom = { opts: { id: 'arena-1-1', mode: 'arena', name: 'Asphodel Meadow', maxPlayers: 50, stake: { arenaId: 1, buyIn: 1 } } } as never;
+const arenaRoom = { opts: { id: 'arena-1-1', mode: 'arena', name: '$1 Room', maxPlayers: 50, stake: { arenaId: 1, buyIn: 1 } } } as never;
 const testRoom = { opts: { id: 'test-1', mode: 'arena', name: 'Test · Arena', maxPlayers: 50, stake: { arenaId: 1, buyIn: 1 }, test: { chainId: 46630 } } } as never;
 const customRoom = { opts: { id: 'priv-PONDS', mode: 'private', name: 'Friday Pond', maxPlayers: 10, custom: freeCustom() } } as never;
 
@@ -130,7 +130,7 @@ describe('share cards (made from the server records only)', () => {
     expect(shareFacts(t).join(' ')).not.toMatch(/took home/);
     const html = sharePage(t, 'https://coinnibal.fun');
     expect(html).toContain('<title>TEST · Nakamoto · 2nd of 4 · Coinnibal</title>');
-    expect(html).toContain('A testnet test arena: practice tokens, no real money.');
+    expect(html).toContain('A testnet test room: test tokens, no real money.');
     // nobody eaten: no line
     expect(shareEaten(s.result({ room: customRoom, player: look, wallet: null }, { rank: 1, of: 2, mass: 10, kills: 0 }))).toBeNull();
   });
@@ -178,7 +178,7 @@ describe('share cards (made from the server records only)', () => {
     expect(c.board![4]).toMatchObject({ rank: 5, bot: true });
     expect(c.board![10]).toMatchObject({ rank: 13, name: 'Coin13', you: true, mass: 3800 });
     expect(c.board!.filter((r) => r.you)).toHaveLength(1);
-    // a test arena: practice tokens, no value on the picture
+    // a test arena: test tokens, no value on the picture
     const t = s.result({ room: testRoom, player: look, wallet: null }, { rank: 1, of: 14, mass: 5000, kills: 14, standings: boardRows(ranked, 1, 10) });
     expect(t.board).toHaveLength(10);
     expect(t.board!.every((r) => r.value === undefined)).toBe(true);

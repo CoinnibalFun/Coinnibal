@@ -683,7 +683,7 @@ export class CustomRoomService implements CustomRoomHooks {
    * holders-only arena for an emblem holder only. Throws `CustomRoomFail`.
    */
   private async paidArena(arenaId: number, holder: boolean): Promise<PaidArena> {
-    if (!this.cur.paidRooms) throw new CustomRoomFail(503, 'paid_closed', 'Paid rooms are closed right now. Free rooms are open.', 'kind');
+    if (!this.cur.paidRooms) throw new CustomRoomFail(503, 'paid_closed', 'Ticket rooms are closed right now. Free rooms are open.', 'kind');
     let list: PaidArena[];
     try {
       list = await this.d.rooms.paidArenas();
@@ -757,7 +757,7 @@ export class CustomRoomService implements CustomRoomHooks {
     if (capacity > this.cur.maxPlayers) {
       throw new CustomRoomFail(400, 'bad_request', `Rooms on this server hold at most ${this.cur.maxPlayers} players.`, 'maxPlayers');
     }
-    if (config.kind === 'paid' && !this.cur.paidRooms) throw new CustomRoomFail(503, 'paid_closed', 'Paid rooms are closed right now. Free rooms are open.', 'kind');
+    if (config.kind === 'paid' && !this.cur.paidRooms) throw new CustomRoomFail(503, 'paid_closed', 'Ticket rooms are closed right now. Free rooms are open.', 'kind');
     const w = wallet.toLowerCase();
     if (this.creating.has(w)) throw new CustomRoomFail(409, 'bad_request', 'Your room is being created. Wait a moment.');
     this.checkCaps(wallet, 1, capacity);
@@ -779,7 +779,7 @@ export class CustomRoomService implements CustomRoomHooks {
         const target = this.payTarget();
         if (!target.ok) {
           if (target.reason === 'no_token') throw new CustomRoomFail(503, 'token_not_set', TOKEN_NOT_SET);
-          throw new CustomRoomFail(503, 'rooms_closed', 'Paid rooms need the chain and the arena, which are not set up on this server.');
+          throw new CustomRoomFail(503, 'rooms_closed', 'Private rooms with a fee need the chain and the arena, which are not set up on this server.');
         }
         const hash = hashIn;
         if (!hash) throw new CustomRoomFail(402, 'payment_required', 'Pay the room fee first.', 'txHash');
