@@ -8,6 +8,7 @@ import '@fontsource-variable/fraunces/full-italic.css';
 import './design/fonts/fraunces-soft.css';
 import '@fontsource-variable/dm-sans/opsz.css';
 import '@fontsource-variable/dm-sans/opsz-italic.css';
+import './design/fonts/dm-sans-fallback.css';
 import '@fontsource-variable/geist-mono/wght.css';
 import './design/tokens.css';
 import './design/storybook.css';
