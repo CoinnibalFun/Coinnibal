@@ -88,6 +88,62 @@ function precompress(): Plugin {
   };
 }
 
+/** What `site-preloads` reads of a chunk in the bundle. */
+interface BundleChunk {
+  type: 'chunk';
+  fileName: string;
+  facadeModuleId: string | null;
+  imports: string[];
+  viteMetadata?: { importedCss: Set<string> };
+}
+
+/**
+ * Build only: index.html starts the site's code in its first request round. Every visitor page goes through
+ * `src/site/mount.tsx`, which main.tsx imports dynamically, so its chunk, the chunks it imports and their CSS were found
+ * only after the entry had downloaded and run (a second round of requests). Adds `<link rel="modulepreload">` for those
+ * chunks and `<link rel="preload" as="style" crossorigin>` for their CSS (crossorigin: Vite's loader adds the
+ * stylesheet in CORS mode, and only a preload in the same mode is used), appended to `<head>`, each marked
+ * `data-site-preload`: a prerendered landing page (whose HTML paints before any script) leaves them out, because there
+ * they would take bandwidth from the page's own HTML and CSS.
+ */
+function sitePreloads(): Plugin {
+  let base = '/';
+  return {
+    name: 'site-preloads',
+    apply: 'build',
+    configResolved(c) {
+      base = c.base;
+    },
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        const chunks = Object.values(ctx.bundle ?? {}).filter((c) => c.type === 'chunk') as unknown as BundleChunk[];
+        const site = chunks.find((c) => c.facadeModuleId?.replace(/\\/g, '/').endsWith('/src/site/mount.tsx'));
+        if (!site) throw new Error('site-preloads: no chunk for src/site/mount.tsx in the build');
+        const byName = new Map(chunks.map((c) => [c.fileName, c]));
+        const js = new Set<string>();
+        const css = new Set<string>();
+        const walk = (c: BundleChunk) => {
+          if (js.has(c.fileName)) return;
+          js.add(c.fileName);
+          for (const f of c.viteMetadata?.importedCss ?? []) css.add(f);
+          for (const i of c.imports) {
+            const d = byName.get(i);
+            if (d) walk(d);
+          }
+        };
+        walk(site);
+        // what index.html already loads (the entry, its own imports and CSS) needs no second tag
+        const fresh = (f: string) => !html.includes(`"${base}${f}"`);
+        return [
+          ...[...js].filter(fresh).map((f) => ({ tag: 'link', attrs: { rel: 'modulepreload', crossorigin: true, href: base + f, 'data-site-preload': true }, injectTo: 'head' as const })),
+          ...[...css].filter(fresh).map((f) => ({ tag: 'link', attrs: { rel: 'preload', as: 'style', crossorigin: true, href: base + f, 'data-site-preload': true }, injectTo: 'head' as const })),
+        ];
+      },
+    },
+  };
+}
+
 // A web build on a separate static host (here: Vercel) must reach the game server directly: proxied API calls would
 // all come from the host's addresses (the server's per-IP limits could not tell players apart). Fail the build loudly
 // instead of shipping a site whose API calls 404. (The repository's vercel.json builds no web app any more: it only
@@ -141,7 +197,7 @@ function viemPackageDirs(): string[] {
 const VIEM_DIRS = viemPackageDirs();
 
 export default defineConfig({
-  plugins: [react(), publicUrlFiles(), precompress()],
+  plugins: [react(), publicUrlFiles(), sitePreloads(), precompress()],
   server: {
     port: 5173,
     host: true,
