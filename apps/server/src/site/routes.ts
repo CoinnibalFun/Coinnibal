@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { AdminAudit } from './audit';
 import { SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
-import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf } from '@elymum/shared';
+import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, isOpenPlayOrigin } from '@elymum/shared';
 import { checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import { XLinkFail, type XLinkService } from '../xlink';
@@ -269,9 +269,18 @@ export class SiteApi {
     return !!wallet && this.admins.has(wallet.toLowerCase());
   }
 
-  /** Who may play: `GAME_ACCESS` when set, else the admin's setting. */
-  gameAccess(): GameAccess {
-    return this.cfg.gameAccess ?? this.store.settings.gameAccess;
+  /**
+   * Who may play: `GAME_ACCESS` when set, else the admin's setting. A request from an open-play copy of the site
+   * (`OPEN_PLAY_ORIGINS`, its `Origin` header) gets `public` on the testnet, unless the server is in maintenance.
+   */
+  gameAccess(origin?: string | string[] | null): GameAccess {
+    const mode = this.cfg.gameAccess ?? this.store.settings.gameAccess;
+    return mode !== 'maintenance' && this.openPlay(origin) ? 'public' : mode;
+  }
+
+  /** Whether `origin` is an open-play copy of the site and this server runs on a testnet (never on mainnet). */
+  private openPlay(origin: string | string[] | null | undefined): boolean {
+    return typeof origin === 'string' && isOpenPlayOrigin(origin) && this.cfg.chain.chainId !== ROBINHOOD_CHAIN_ID && this.chainId() !== ROBINHOOD_CHAIN_ID;
   }
 
   /** Whether `wallet` holds an Elymum NFT (cached 15 s, `fresh` re-reads; false without an NFT or a chain). */
@@ -283,16 +292,16 @@ export class SiteApi {
    * Whether `wallet` may enter game rooms: admins always; NFT holders in `holders` mode; everyone in `public`.
    * `fresh`: the holder check skips its 15 s cache (the gateway asks so right before seating an arena ticket).
    */
-  async gameOpenFor(wallet: string | null | undefined, fresh = false): Promise<boolean> {
-    const mode = this.gameAccess();
+  async gameOpenFor(wallet: string | null | undefined, fresh = false, origin?: string | string[] | null): Promise<boolean> {
+    const mode = this.gameAccess(origin);
     if (mode === 'public' || this.isAdmin(wallet)) return true;
     if (mode === 'holders') return this.isHolder(wallet, fresh);
     return false;
   }
 
-  /** The settings everyone can read; `gameAccess` is the effective value. */
-  publicSettings(): SiteSettings {
-    return { ...this.store.settings, gameAccess: this.gameAccess() };
+  /** The settings everyone can read; `gameAccess` is the effective value (for this request's origin). */
+  publicSettings(origin?: string | string[] | null): SiteSettings {
+    return { ...this.store.settings, gameAccess: this.gameAccess(origin) };
   }
 
   private baseUrl(req: IncomingMessage): string {
@@ -357,7 +366,7 @@ export class SiteApi {
     if (path === '/api/auth/me') {
       this.method(req, 'GET');
       const wallet = this.session(req);
-      const [holder, canPlay] = await Promise.all([this.isHolder(wallet), this.gameOpenFor(wallet)]);
+      const [holder, canPlay] = await Promise.all([this.isHolder(wallet), this.gameOpenFor(wallet, false, req.headers.origin)]);
       return send(res, 200, { address: wallet, admin: this.isAdmin(wallet), holder, canPlay });
     }
     this.method(req, 'POST');
@@ -670,7 +679,7 @@ export class SiteApi {
     const rest = path.slice('/api/rooms/custom'.length).replace(/^\//, '');
     // opening a room (paid, or free practice) follows the game gate: the join over the WebSocket would be refused
     // anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter
-    if (req.method === 'POST' && !(await this.gameOpenFor(bearerWallet(this.auth, req)))) {
+    if (req.method === 'POST' && !(await this.gameOpenFor(bearerWallet(this.auth, req), false, req.headers.origin))) {
       throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
     }
     return customRoomRoutes(
@@ -701,7 +710,7 @@ export class SiteApi {
       case 'settings':
         if (seg.length !== 1) break;
         this.method(req, 'GET');
-        return send(res, 200, { settings: this.publicSettings() });
+        return send(res, 200, { settings: this.publicSettings(req.headers.origin) });
       case 'tasks':
         if (seg.length !== 1) break;
         this.method(req, 'GET');
@@ -728,7 +737,7 @@ export class SiteApi {
         if (seg.length === 1) {
           this.method(req, 'GET');
           if (!mint) throw new SiteFail(503, 'chain_off', 'The mint is not available on this server.');
-          return send(res, 200, await mint.publicState(this.gameAccess()));
+          return send(res, 200, await mint.publicState(this.gameAccess(req.headers.origin)));
         }
         if (seg.length === 2 && seg[1] === 'proof') {
           this.method(req, 'GET');
