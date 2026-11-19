@@ -869,6 +869,10 @@
   color: var(--ink-2);
   font-size: 15.5px;
 }
+/* "30-second" stays on one line (it breaks at its hyphen otherwise) */
+.ld-nowrap {
+  white-space: nowrap;
+}
 .ld-stop__title {
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);

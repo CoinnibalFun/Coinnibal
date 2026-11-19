@@ -170,7 +170,7 @@ describe('the faucet', () => {
   it('on mainnet the route says the faucet is testnet only', async () => {
     ({ restore } = mockFetch({ 'GET /api/config': { chain: chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null }) } }));
     ui(<FaucetPage />);
-    expect(await screen.findByText('Faucet is testnet only')).toBeTruthy();
+    expect(await screen.findByText('The faucet is testnet only.')).toBeTruthy();
     expect(screen.getByRole('navigation', { name: 'Site' }).textContent).not.toContain('Faucet');
   });
 

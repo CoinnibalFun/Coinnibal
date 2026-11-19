@@ -65,8 +65,9 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     // the lede counts the paid rooms: "four" stays true only while there are four
     expect(DEFAULT_ARENAS).toHaveLength(4);
     expect(document.querySelector('.ld-arenas__aside p')?.textContent).toMatch(/The four paid rooms/);
-    // the fee card states the fee in the guide's words, the no-profit case as a sentence, and the holders' fee
-    expect(document.querySelector('.ld-feecard')?.textContent).toMatch(/The game takes one fee: 20% of your profit\.If you don't make a profit, you pay no fee\.With a Coinnibal NFT, the fee is 10%\./);
+    // the fee card states the fee in the guide's words (a no-break space keeps "one fee" on one line), the no-profit case
+    // as a sentence, and the holders' fee
+    expect(document.querySelector('.ld-feecard')?.textContent).toMatch(/The game takes one\u00a0fee: 20% of your profit\.If you don't make a profit, you pay no fee\.With a Coinnibal NFT, the fee is 10%\./);
     expect(within(screen.getByRole('heading', { level: 3, name: '$10 Room' }).closest('.ld-ticket') as HTMLElement).getByText('NFT holders only')).toBeTruthy();
     expect(screen.getAllByText('Not open yet').length).toBeGreaterThan(0);
     // the NFT plate links to the mint; the header has the nav and Connect
@@ -234,6 +235,8 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: SETTINGS } }));
     render(<Landing />);
     const stops = [...document.querySelectorAll('.ld-stop')];
+    // the bell step keeps a number and its unit on one line ("30-second" broke at its hyphen)
+    expect(stops[2].querySelector('.ld-nowrap')?.textContent).toBe('30-second');
     const read = () => stops.map((s) => s.classList.contains('is-read'));
     const done = () => document.querySelectorAll('.ld-orbit .kb-orbit__station.is-done').length;
     expect(read()).toEqual([false, false, false, false]);

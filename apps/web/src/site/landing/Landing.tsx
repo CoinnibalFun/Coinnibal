@@ -319,6 +319,8 @@ const STATIONS: { no: string; title: TKey; body: TKey }[] = [
   { no: '04', title: 'ld.stop.paid', body: 'ld.stop.paidBody' },
 ];
 const stationVars = () => ({ sym: SYMBOL, min: FACTS.rules.roundMin, s: FACTS.rules.joinCloseS, b: FACTS.rules.breakS });
+/** A number and its unit on one line ("30-second" breaks at its hyphen otherwise). */
+const nb = (c: ReactNode) => <span className="ld-nowrap">{c}</span>;
 
 /**
  * How far the visitor has read down the steps: the index of the last step whose top has passed 60 % of the viewport
@@ -395,7 +397,7 @@ function Round() {
                 </span>
                 <span className="ld-stop__text">
                   <strong className="ld-stop__title">{t(s.title)}</strong>
-                  <span>{t(s.body, stationVars())}</span>
+                  <span>{renderRich(t(s.body, stationVars()), { nb })}</span>
                 </span>
               </li>
             ))}
