@@ -15,7 +15,7 @@ import { Card, FormError, type ChainCtx } from './ui';
 export type StartTone = 'ok' | 'todo' | 'off' | 'unknown';
 
 export interface StartRow {
-  id: 'network' | 'contracts' | 'game' | 'mint' | 'feedback';
+  id: 'network' | 'contracts' | 'game' | 'mint' | 'feedback' | 'community';
   label: string;
   value: string;
   tone: StartTone;
@@ -32,10 +32,20 @@ export interface StartInput {
   accessEnv: GameAccess | null;
   /** Feedback waiting (null: not signed in; undefined: this server has no feedback route). */
   feedback: number | null | undefined;
+  /** The WL and collab forms (null: not signed in or not read yet). */
+  community?: StartCommunity | null;
   /** Deploy steps left (`deployFlowSteps`). */
   deployLeft: number;
   /** Nothing is deployed yet. */
   fresh: boolean;
+}
+
+/** The WL and collab forms for the start screen: open or not, and the applications waiting for a decision. */
+export interface StartCommunity {
+  wlOpen: boolean;
+  collabOpen: boolean;
+  wlWaiting: number;
+  collabWaiting: number;
 }
 
 const GAME_NOW: Record<GameAccess, { value: string; tone: StartTone }> = {
@@ -45,7 +55,7 @@ const GAME_NOW: Record<GameAccess, { value: string; tone: StartTone }> = {
   maintenance: { value: 'Down for maintenance.', tone: 'todo' },
 };
 
-/** The start screen's five status lines (pure, tested). */
+/** The start screen's six status lines (pure, tested). */
 export function startRows(i: StartInput): StartRow[] {
   const { net } = i;
   const network: StartRow = !net.chain
@@ -81,12 +91,21 @@ export function startRows(i: StartInput): StartRow[] {
         : i.feedback === 0
           ? { id: 'feedback', label: 'Feedback', value: 'Nothing new.', tone: 'ok' }
           : { id: 'feedback', label: 'Feedback', value: `${i.feedback} new.`, tone: 'todo' };
-  return [network, contracts, game, mint, feedback];
+  const c = i.community;
+  const community: StartRow = !c
+    ? { id: 'community', label: 'WL & collabs', value: 'Sign in to see.', tone: 'unknown' }
+    : {
+        id: 'community',
+        label: 'WL & collabs',
+        value: `WL ${c.wlOpen ? 'open' : 'closed'} · ${c.wlWaiting} waiting. Collabs ${c.collabOpen ? 'open' : 'closed'} · ${c.collabWaiting} waiting.`,
+        tone: c.wlWaiting + c.collabWaiting > 0 ? 'todo' : c.wlOpen || c.collabOpen ? 'ok' : 'off',
+      };
+  return [network, contracts, game, mint, feedback, community];
 }
 
 export interface StartAction {
   /** The page it opens (`feedback` is lane FEED's drawer). */
-  go: 'deploy' | 'open' | 'minting' | 'feedback' | 'settings';
+  go: 'deploy' | 'open' | 'minting' | 'feedback' | 'community' | 'settings';
   title: string;
   hint: string;
   /** The next thing to do. */
@@ -102,11 +121,25 @@ export function startActions(i: StartInput): StartAction[] {
     { go: 'open', title: 'Open or close the game', hint: rows.get('game')!.value, next: false },
     { go: 'minting', title: 'Mint', hint: rows.get('mint')!.value, next: false },
     { go: 'feedback', title: 'Feedback', hint: rows.get('feedback')!.value, next: (i.feedback ?? 0) > 0 && !deployNext },
+    { go: 'community', title: 'WL and collab applications', hint: rows.get('community')!.value, next: !deployNext && !((i.feedback ?? 0) > 0) && !!i.community && i.community.wlWaiting + i.community.collabWaiting > 0 },
     { go: 'settings', title: 'Settings', hint: 'What visitors see: the mint page, WL and collab forms, the X handle.', next: false },
   ];
 }
 
 /** `GET /api/admin/feedback`'s unread count (lane FEED's drawer): undefined when this server has no such route. */
+/** The WL and collab forms and their waiting applications (`/api/admin/counts`, `/api/admin/settings`); null on any error. */
+async function communityNow(token: string): Promise<StartCommunity | null> {
+  try {
+    const [counts, settings] = await Promise.all([
+      request<{ wl: { pending: number }; collab: { pending: number; submitted: number } }>('/api/admin/counts', { token }),
+      request<{ settings: { wlOpen: boolean; collabOpen: boolean } }>('/api/admin/settings', { token }),
+    ]);
+    return { wlOpen: settings.settings.wlOpen === true, collabOpen: settings.settings.collabOpen === true, wlWaiting: counts.wl.pending ?? 0, collabWaiting: (counts.collab.pending ?? 0) + (counts.collab.submitted ?? 0) };
+  } catch {
+    return null;
+  }
+}
+
 async function feedbackWaiting(token: string): Promise<number | null | undefined> {
   try {
     const r = await request<{ unread?: unknown }>('/api/admin/feedback', { token });
@@ -119,15 +152,20 @@ async function feedbackWaiting(token: string): Promise<number | null | undefined
 const TONE_WORD: Record<StartTone, string> = { ok: 'ok', todo: 'to do', off: 'off', unknown: 'unknown' };
 
 /**
- * `/admin`'s first screen: five status lines and five big actions in order. Everything else (the drawers, their cards
+ * `/admin`'s first screen: six status lines and six big actions in order. Everything else (the drawers, their cards
  * and the long explanations) sits under Advanced, below it (AdminHome).
  */
 export function StartScreen({ ctx, go, token, access }: { ctx: ChainCtx; go: (page: string) => void; token: string | null; access: { settings: { gameAccess: GameAccess }; env: GameAccess | null } | null }) {
   const [feedback, setFeedback] = useState<number | null | undefined>(null);
+  const [community, setCommunity] = useState<StartCommunity | null>(null);
   useEffect(() => {
-    if (!token) return setFeedback(null);
+    if (!token) {
+      setCommunity(null);
+      return setFeedback(null);
+    }
     let live = true;
     void feedbackWaiting(token).then((n) => live && setFeedback(n));
+    void communityNow(token).then((c) => live && setCommunity(c));
     return () => {
       live = false;
     };
@@ -153,6 +191,7 @@ export function StartScreen({ ctx, go, token, access }: { ctx: ChainCtx; go: (pa
     access: access ? (access.env ?? access.settings.gameAccess) : null,
     accessEnv: access?.env ?? null,
     feedback: token ? feedback : null,
+    community: token ? community : null,
     deployLeft: steps.filter((s) => !s.done).length,
     fresh: !ctx.net.arenaAddress && !ctx.net.nftAddress && !local.arena && !local.nft,
   };

@@ -226,7 +226,7 @@ describe('the start screen', () => {
     ...over,
   });
 
-  it('five short status lines: network, contracts, game, mint, feedback', () => {
+  it('six short status lines: network, contracts, game, mint, feedback, WL and collabs', () => {
     const rows = startRows(input());
     expect(rows.map((r) => [r.label, r.value])).toEqual([
       ['Network', 'Robinhood Chain Testnet (46630)'],
@@ -234,30 +234,39 @@ describe('the start screen', () => {
       ['Game', 'Closed. Only admins play.'],
       ['Mint', 'No NFT yet.'],
       ['Feedback', '3 new.'],
+      ['WL & collabs', 'Sign in to see.'],
     ]);
-    expect(startRows(input({ fresh: false, deployLeft: 0, access: 'public', feedback: 0 })).map((r) => r.value)).toEqual(['Robinhood Chain Testnet (46630)', 'Live and signed for the site.', 'Open to everyone.', 'No NFT yet.', 'Nothing new.']);
+    expect(startRows(input({ fresh: false, deployLeft: 0, access: 'public', feedback: 0 })).map((r) => r.value)).toEqual(['Robinhood Chain Testnet (46630)', 'Live and signed for the site.', 'Open to everyone.', 'No NFT yet.', 'Nothing new.', 'Sign in to see.']);
     expect(startRows(input({ feedback: undefined }))[4].value).toBe('Not on this server yet.');
-    expect(startRows(input({ access: null, feedback: null })).slice(2).map((r) => r.value)).toEqual(['Sign in to see.', 'No NFT yet.', 'Sign in to see.']);
+    expect(startRows(input({ access: null, feedback: null })).slice(2).map((r) => r.value)).toEqual(['Sign in to see.', 'No NFT yet.', 'Sign in to see.', 'Sign in to see.']);
+    const open = startRows(input({ community: { wlOpen: true, collabOpen: false, wlWaiting: 4, collabWaiting: 1 } }))[5];
+    expect(open).toMatchObject({ value: 'WL open · 4 waiting. Collabs closed · 1 waiting.', tone: 'todo' });
+    expect(startRows(input({ community: { wlOpen: true, collabOpen: true, wlWaiting: 0, collabWaiting: 0 } }))[5].tone).toBe('ok');
     expect(startRows(input({ net: resolveNetwork(null) }))[0].value).toBe('The game server is not answering.');
   });
 
   it('the big actions in order; deploy comes first while anything is left', () => {
     const a = startActions(input());
-    expect(a.map((x) => x.title)).toEqual(['Deploy the contracts', 'Open or close the game', 'Mint', 'Feedback', 'Settings']);
-    expect(a.map((x) => x.go)).toEqual(['deploy', 'open', 'minting', 'feedback', 'settings']);
+    expect(a.map((x) => x.title)).toEqual(['Deploy the contracts', 'Open or close the game', 'Mint', 'Feedback', 'WL and collab applications', 'Settings']);
+    expect(a.map((x) => x.go)).toEqual(['deploy', 'open', 'minting', 'feedback', 'community', 'settings']);
     expect(a[0]).toMatchObject({ next: true, hint: 'Start here. One flow, from your wallet.' });
     const done = startActions(input({ fresh: false, deployLeft: 0 }));
     expect(done[0]).toMatchObject({ next: false, hint: 'Done.' });
     expect(done[3].next).toBe(true);
+    // nothing new in feedback: the waiting WL and collab applications come next
+    const wl = startActions(input({ fresh: false, deployLeft: 0, feedback: 0, community: { wlOpen: true, collabOpen: true, wlWaiting: 2, collabWaiting: 0 } }));
+    expect(wl[4]).toMatchObject({ go: 'community', next: true });
   });
 
   it('renders the lines and the actions; each action opens its page (Feedback: the feedback drawer)', async () => {
     const go = vi.fn();
     const net = resolveNetwork(chainStatus({ arenaAddress: null, nftAddress: null }));
     ui(<StartScreen ctx={{ net, status: null, refresh: vi.fn(async () => {}), reloadNet: vi.fn(async () => {}), me: ALICE, walletChainId: 46630, client: null, api: null, open: vi.fn() }} go={go} token={null} access={null} />);
-    expect(within(screen.getByTestId('start-status')).getAllByRole('definition')).toHaveLength(5);
+    expect(within(screen.getByTestId('start-status')).getAllByRole('definition')).toHaveLength(6);
     const buttons = within(screen.getByTestId('start-actions')).getAllByRole('button');
-    expect(buttons.map((b) => b.getAttribute('data-go'))).toEqual(['deploy', 'open', 'minting', 'feedback', 'settings']);
+    expect(buttons.map((b) => b.getAttribute('data-go'))).toEqual(['deploy', 'open', 'minting', 'feedback', 'community', 'settings']);
+    act(() => buttons[4].click());
+    expect(go).toHaveBeenLastCalledWith('community');
     act(() => buttons[3].click());
     expect(go).toHaveBeenLastCalledWith('feedback');
     act(() => buttons[0].click());
