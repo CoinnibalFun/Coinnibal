@@ -208,8 +208,12 @@ describe('ticket confirm sheet', () => {
     view.unmount();
     act(() => useUi.setState({ chain: chainStatus() }));
     useChainData.setState({ holder: true, config: { ...config(), holderBurnBps: 1500, holderVaultBps: 0 } });
-    open(PENNY);
+    const holder = open(PENNY);
     expect(within(screen.getByRole('dialog')).getByText('15% · on profit only · fixed for this ticket · 15% burned · 0% to the team wallet · holder rate, not 20%')).toBeTruthy();
+    holder.unmount();
+    // a holders-only room: every ticket there has the holder rate, so there is no "not 20 %" to compare with
+    open({ ...PENNY, holdersOnly: true });
+    expect(within(screen.getByRole('dialog')).getByText('15% · on profit only · fixed for this ticket · 15% burned · 0% to the team wallet')).toBeTruthy();
   });
 
   it('a ticket headed for a private ticket room says, before it is paid, that the room can end early', () => {

@@ -24,7 +24,10 @@ const STEP_LINK: Partial<Record<TokenStepKey, TKey>> = {
   buy: 'gt.link.buy',
 };
 
-/** The token contract a player should see in the swap: the pinned one, else (no token pin) the one the server names. */
+/**
+ * The token contract a player should see in the swap (or add to the wallet, on a testnet): the pinned one, else (no
+ * token pin) the one the server names.
+ */
 function tokenAddress(chainId: number | null | undefined, announced: string | null | undefined, pins: BuildPins): string | null {
   if (chainId == null) return null;
   return pins.chains[chainId]?.token ?? (announced || null);
@@ -89,7 +92,7 @@ export function GetTokensSheet() {
         </ol>
         {token && (
           <p className="gt-token mono">
-            {t('gt.token', vars)}{' '}
+            {t(testnet ? 'gt.tokenTest' : 'gt.token', vars)}{' '}
             {tokenLink ? (
               <a className="kl-link" href={tokenLink} target="_blank" rel="noreferrer">
                 <code>{token}</code>

@@ -13,9 +13,9 @@ export function boardPlace(rows: readonly RoundStanding[], outside: (n: number) 
 
 /**
  * The final standings of a room that ended, the same for an arena's bell and a custom room's end: my place on a sun
- * sticker, then the whole board (rank, name with its BOT / You tags, mass, kills and, in arenas, the payout at the
- * bell) in a scrolling list. My row is highlighted and pinned to the list's top or bottom edge while it is scrolled
- * out of view, so I always see where I finished.
+ * sticker, then the whole board (rank, name with its BOT / You tags, mass, kills and, in arenas, the till at the bell:
+ * the value before the fee on its profit, not what is paid) in a scrolling list. My row is highlighted and pinned to the
+ * list's top or bottom edge while it is scrolled out of view, so I always see where I finished.
  */
 export function FinalBoard({ rows, title, skin }: { rows: readonly RoundStanding[]; title: string; skin: number }) {
   const t = useT();

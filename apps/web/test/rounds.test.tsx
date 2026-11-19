@@ -257,6 +257,10 @@ describe('Round over sheet', () => {
       </Kb>,
     );
     expect(screen.getByText('3,500')).toBeTruthy();
+    // the ticket price and the profit over it: the fee can be checked on the slip (20 % of 2,500 is 500)
+    expect(receiptLine('Ticket price')).toBe('1,000');
+    expect(receiptLine('Your till')).toBe('3,500');
+    expect(receiptLine('Profit')).toBe('2,500');
     expect(screen.getByText('Fee 20% of profit')).toBeTruthy();
     expect(screen.getByText('≈ −500')).toBeTruthy();
     expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 3,000$NIBAL');
@@ -300,8 +304,8 @@ describe('Round over sheet', () => {
     const top = screen.getByRole('region', { name: 'Final standings · 6 at the bell' });
     const rows = [...top.querySelectorAll('li')].map((li) => li.textContent);
     expect(rows).toEqual(['01Nakamoto4,20069.1K', '02Penny2,60035.2K', '03DaphneYou1,80023K', '04Rocky90012.1K', '05Lulu70001.5K', '06Sixth3000900']);
-    // the same board as a custom room's end: rank, name, mass and kills next to the payout
-    expect(top.querySelector('.g-board__head')?.textContent).toBe('#PlayerMassKillsPayout');
+    // the same board as a custom room's end: rank, name, mass and kills next to the till at the bell (before the fee)
+    expect(top.querySelector('.g-board__head')?.textContent).toBe('#PlayerMassKillsTill');
     expect(top.querySelector('.is-me')?.textContent).toContain('Daphne');
     expect(top.querySelector('.is-me')?.getAttribute('aria-current')).toBe('true');
     expect(screen.getByRole('button', { name: /Next round/ })).toBeTruthy();
@@ -360,7 +364,57 @@ describe('Round over sheet', () => {
     expect(screen.getByText('≈ −100')).toBeTruthy();
     useChainData.setState({ sessions: {} });
   });
+
+  it("an NFT holder's ticket: the server's copy of its rates, then the holder pair once its session is gone; no profit, no fee", () => {
+    setReducedMotion(true);
+    clockAt(R.endsAt + 500);
+    // a 2,000 till on a 1,000 ticket at the holder pair (8 % + 2 %): 1,000 profit, 100 fee, 1,900 paid (what the chain pays)
+    useUi.setState({
+      screen: 'roundover',
+      room: ARENA,
+      ticket: { entryFee: 1000 * M, arenaId: 1, session: 'SessH' },
+      roundResult: { kind: 'round', round: N, payout: 1900 * M, stats: { ...STATS, gross: 2000 * M, cut: 100 * M, rates: { burnBps: 800, vaultBps: 200 } }, standings: [] },
+      lastSettlement: null,
+    });
+    const first = render(
+      <Kb>
+        <RoundOverSheet />
+      </Kb>,
+    );
+    expect(screen.getByText('Fee 10% of profit')).toBeTruthy();
+    expect(screen.getByText('≈ −100')).toBeTruthy();
+    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 1,900$NIBAL');
+    expect(screen.getByText("The fee is 10% of your profit. 8% is burned and 2% goes to the team wallet. If you don't make a profit, you pay no fee.")).toBeTruthy();
+    first.unmount();
+
+    // no rates from the server and the settled session no longer on chain: the holder pair this wallet's tickets get
+    act(() =>
+      useChainData.setState({
+        config: { burnBps: 1500, vaultBps: 500, holderNft: '0x00000000000000000000000000000000000000aa', holderBurnBps: 800, holderVaultBps: 200 } as never,
+        holder: true,
+        sessions: {},
+      }),
+    );
+    // a till under the ticket price: no profit, so no fee
+    useUi.setState({ roundResult: { kind: 'round', round: N, payout: 800 * M, stats: STATS, standings: [] } });
+    render(
+      <Kb>
+        <RoundOverSheet />
+      </Kb>,
+    );
+    expect(screen.getByText('Fee 10% of profit')).toBeTruthy();
+    expect(receiptLine('Ticket price')).toBe('1,000');
+    expect(receiptLine('Your till')).toBe('800');
+    expect(receiptLine('Profit')).toBe('0');
+    expect(receiptLine('Fee 10% of profit')).toBe('0');
+    act(() => useChainData.setState({ config: null, holder: null }));
+  });
 });
+
+/** The value of the receipt line labelled `label`. */
+function receiptLine(label: string): string | null | undefined {
+  return [...document.querySelectorAll('.kb-receipt__line')].find((el) => el.querySelector('dt')?.textContent === label)?.querySelector('dd')?.textContent;
+}
 
 describe('death sheet in an arena', () => {
   const eaten = () => {
