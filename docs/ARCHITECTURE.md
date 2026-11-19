@@ -224,7 +224,12 @@ has more bots than its setting, nor more playing than the setting minus its peop
   per address alone: another client's requests never evict the nonce the owner is signing); an IPv6 client counts as
   its /64 here and in every HTTP limit (`net/ip-key.ts`). An EOA signature is checked locally; the ERC-1271 / 6492
   smart-wallet check through the RPC runs within a small budget of its own (`SMART_WALLET_CHECKS`: 2 at once, 0.5 a
-  second server-wide, 4 per client in 10 minutes). Session tokens carry their issue time; an admin wallet's last
+  second server-wide, 4 per client and 8 per IPv6 /48 in 10 minutes; a check unanswered in 10 s gives its place
+  back), only for an address that holds code or a signature with the ERC-6492 suffix (`eth_getCode` at low priority,
+  cached, a budget of its own; an address it cannot read right now is checked anyway). A smart wallet that signed in before from the same network (an IPv4 address, an IPv6
+  /48) has a reserve beside it (`SMART_WALLET_RESERVE`, kept in `DATA_DIR/auth-smart-wallets.json`), so a flood of
+  garbage signatures cannot lock its owner out. Past the budget a sign-in is "busy, sign again in a moment" (no nonce
+  failure counted). Session tokens carry their issue time; an admin wallet's last
   `ADMIN_TOKEN_TTL_MIN` (2 h), are never extended, and can be revoked (`POST /api/admin/auth/revoke`). The secret
   exports (backup, migration settings) need a fresh purpose-bound signature (`site/secret-proof.ts`).
 - **Who may play** (`gameAccess`: `admins` | `holders` | `public` | `maintenance`; `GAME_ACCESS` overrides):

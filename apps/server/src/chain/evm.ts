@@ -812,6 +812,13 @@ export class EvmChain implements ChainGateway {
     if (this.arenaCache) this.arenaCache.at = -Infinity;
   }
 
+  /** Whether the address holds code (a sign-in's code check, `auth.ts` `CODE_CHECKS`): background work, low priority. */
+  async hasCode(address: string): Promise<boolean> {
+    const client = this.client;
+    if (!client || !isEvm(address)) return false;
+    return withRpcPriority('low', () => client.hasCode(getAddress(address)));
+  }
+
   async verifyMessage(address: string, message: string, signature: string): Promise<boolean> {
     if (!this.client || !isEvm(address) || !/^0x[0-9a-fA-F]*$/.test(signature)) return false;
     return this.client.verifyMessage(getAddress(address), message, signature as Hex);

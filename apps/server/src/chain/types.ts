@@ -189,6 +189,8 @@ export interface ChainGateway {
    * chain is off; EOA signatures are checked without it.
    */
   verifyMessage?(address: string, message: string, signature: string): Promise<boolean>;
+  /** Whether the address holds code (one `eth_getCode` at low priority): a sign-in's smart-wallet check is worth it. */
+  hasCode?(address: string): Promise<boolean>;
   /** The EVM access (the site reads the NFT and checks registered contracts through it); absent or null when off. */
   evm?(): EvmClient | null;
   /** Re-reads the registry and the arena config now (after a registry change). */

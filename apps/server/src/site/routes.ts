@@ -4,7 +4,7 @@ import { AdminAudit } from './audit';
 import { OLD_SECRET_PROOF_HEADER, SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
 import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible } from '@coinnibal/shared';
-import { checksumAddress, type Auth } from '../auth';
+import { SIGN_IN_BUSY_MESSAGE, SignInBusyError, checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import { XLinkFail, type XLinkService } from '../xlink';
 import { squarePng } from './share-card';
@@ -380,8 +380,16 @@ export class SiteApi {
     if (!this.limits.login.allow(ip)) throw new SiteFail(429, 'rate_limited', 'Too many sign-ins. Wait a moment.');
     const body = await readJson(req);
     const { address, message, signature } = body;
-    const wallet =
-      typeof address === 'string' && typeof message === 'string' && typeof signature === 'string' ? await this.auth.verifySignature(address, message, signature) : null;
+    let wallet: string | null = null;
+    if (typeof address === 'string' && typeof message === 'string' && typeof signature === 'string') {
+      try {
+        wallet = await this.auth.verifySignature(address, message, signature);
+      } catch (err) {
+        // the smart-wallet check cannot run right now: busy, not a wrong signature (the nonce is kept)
+        if (err instanceof SignInBusyError) throw new SiteFail(429, 'rate_limited', SIGN_IN_BUSY_MESSAGE);
+        throw err;
+      }
+    }
     if (!wallet) throw new SiteFail(401, 'auth_failed', 'Wallet sign-in failed. Please sign again.');
     send(res, 200, { address: wallet, token: this.auth.issueToken(wallet), admin: this.isAdmin(wallet) });
   }
