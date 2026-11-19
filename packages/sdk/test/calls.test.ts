@@ -58,6 +58,8 @@ const ARENA = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as Address;
 const NFT = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address;
 const TOKEN = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as Address;
 const P1 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as Address;
+/** A join permit (its signature is not checked here: the contract does). */
+const PERMIT = { deadline: 1_790_000_600, signature: `0x${'ab'.repeat(65)}` as const };
 
 const contractSource = (file: string) => readFileSync(fileURLToPath(new URL(`../../contracts/contracts/${file}`, import.meta.url)), 'utf8');
 
@@ -84,10 +86,15 @@ describe('constants mirror the contracts', () => {
 
 describe('arena calls', () => {
   it('builds player calls', () => {
-    expect(joinCall(ARENA, 1)).toMatchObject({ address: ARENA, functionName: 'join', args: [1] });
+    expect(joinCall(ARENA, 1, PERMIT)).toMatchObject({ address: ARENA, functionName: 'join', args: [1, 1_790_000_600n, PERMIT.signature] });
     expect(refundCall(ARENA, 4)).toMatchObject({ functionName: 'refund', args: [4] });
-    expect(() => joinCall(ARENA, 0)).toThrow(RangeError);
-    expect(() => joinCall(ARENA, 70_000)).toThrow(RangeError);
+    expect(() => joinCall(ARENA, 0, PERMIT)).toThrow(RangeError);
+    expect(() => joinCall(ARENA, 70_000, PERMIT)).toThrow(RangeError);
+    // a ticket needs the server's permit (CoinnibalArena v4): a malformed one is refused before anything is signed
+    expect(() => joinCall(ARENA, 1, { deadline: 0, signature: PERMIT.signature })).toThrow(RangeError);
+    expect(() => joinCall(ARENA, 1, { deadline: 1, signature: 'nope' as never })).toThrow(TypeError);
+    const data = encodeCall(joinCall(ARENA, 2, PERMIT)).data;
+    expect(decodeFunctionData({ abi: coinnibalArenaAbi, data })).toMatchObject({ functionName: 'join', args: [2, 1_790_000_600n, PERMIT.signature] });
     const a = approveCall(TOKEN, ARENA, 5n);
     expect(a.abi).toBe(erc20Abi);
     expect(decodeFunctionData({ abi: erc20Abi, data: encodeCall(a).data }).args).toEqual([ARENA, 5n]);
@@ -178,12 +185,12 @@ describe('arena calls', () => {
         }
       },
     });
-    const short = await planJoin(reads(999n) as never, { arena: ARENA, arenaId: 1, player: P1, token: TOKEN });
+    const short = await planJoin(reads(999n) as never, { arena: ARENA, arenaId: 1, player: P1, token: TOKEN, permit: PERMIT });
     expect(short.calls.map((c) => c.functionName)).toEqual(['approve', 'join']);
     expect(short.approve!.args).toEqual([ARENA, 1000n]);
-    const enough = await planJoin(reads(1000n) as never, { arena: ARENA, arenaId: 1, player: P1, token: TOKEN });
+    const enough = await planJoin(reads(1000n) as never, { arena: ARENA, arenaId: 1, player: P1, token: TOKEN, permit: PERMIT });
     expect(enough.calls.map((c) => c.functionName)).toEqual(['join']);
-    await expect(planJoin(reads(0n, 5n) as never, { arena: ARENA, arenaId: 1, player: P1, token: TOKEN })).rejects.toThrow(/balance/);
+    await expect(planJoin(reads(0n, 5n) as never, { arena: ARENA, arenaId: 1, player: P1, token: TOKEN, permit: PERMIT })).rejects.toThrow(/balance/);
   });
 
   it('planJoin can approve the largest allowance once (later tickets: join only)', async () => {
@@ -201,11 +208,11 @@ describe('arena calls', () => {
         }
       },
     });
-    const first = await planJoin(reads(0n) as never, { arena: ARENA, arenaId: 1, player: P1, token: TOKEN, approve: 'unlimited' });
+    const first = await planJoin(reads(0n) as never, { arena: ARENA, arenaId: 1, player: P1, token: TOKEN, approve: 'unlimited', permit: PERMIT });
     expect(first.approve!.args).toEqual([ARENA, MAX_ALLOWANCE]);
     expect(MAX_ALLOWANCE).toBe(2n ** 256n - 1n);
     // the allowance left after a ticket is still far above any entry fee
-    const later = await planJoin(reads(MAX_ALLOWANCE - 1000n) as never, { arena: ARENA, arenaId: 1, player: P1, token: TOKEN, approve: 'unlimited' });
+    const later = await planJoin(reads(MAX_ALLOWANCE - 1000n) as never, { arena: ARENA, arenaId: 1, player: P1, token: TOKEN, approve: 'unlimited', permit: PERMIT });
     expect(later.calls.map((c) => c.functionName)).toEqual(['join']);
   });
 });
@@ -260,16 +267,16 @@ describe('holder perks', () => {
   });
 
   it('planJoin reports the holder discount', async () => {
-    const h = await planJoin(chain({ holder: true }) as never, { arena: ARENA, arenaId: 4, player: P1 });
+    const h = await planJoin(chain({ holder: true }) as never, { arena: ARENA, arenaId: 4, player: P1, permit: PERMIT });
     expect(h).toMatchObject({ rates: { burnBps: 1500, vaultBps: 0 }, standardRates: { burnBps: 1500, vaultBps: 500 }, holder: true, holderDiscount: true, holdersOnly: false });
-    const n = await planJoin(chain({ holder: false }) as never, { arena: ARENA, arenaId: 4, player: P1 });
+    const n = await planJoin(chain({ holder: false }) as never, { arena: ARENA, arenaId: 4, player: P1, permit: PERMIT });
     expect(n).toMatchObject({ rates: { burnBps: 1500, vaultBps: 500 }, standardRates: { burnBps: 1500, vaultBps: 500 }, holder: false, holderDiscount: false });
     expect(n.approve!.address).toBe(TOKEN);
   });
 
   it('planJoin refuses a holders-only arena early for a wallet without an emblem', async () => {
-    await expect(planJoin(chain({ holder: false, holdersOnly: true, balance: 0n }) as never, { arena: ARENA, arenaId: 4, player: P1 })).rejects.toThrow(/holders only/);
-    const ok = await planJoin(chain({ holder: true, holdersOnly: true }) as never, { arena: ARENA, arenaId: 4, player: P1 });
+    await expect(planJoin(chain({ holder: false, holdersOnly: true, balance: 0n }) as never, { arena: ARENA, arenaId: 4, player: P1, permit: PERMIT })).rejects.toThrow(/holders only/);
+    const ok = await planJoin(chain({ holder: true, holdersOnly: true }) as never, { arena: ARENA, arenaId: 4, player: P1, permit: PERMIT });
     expect(ok).toMatchObject({ holdersOnly: true, rates: { burnBps: 1500, vaultBps: 0 } });
   });
 });

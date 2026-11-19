@@ -1,4 +1,4 @@
-import type { GasRunway } from '@coinnibal/shared';
+import type { GasRunway, JoinPermit } from '@coinnibal/shared';
 import { activeChain, type ChainInfo, type ChainStatus, type FeeRates } from '@coinnibal/shared';
 import type { EvmClient } from './evm-client';
 
@@ -99,6 +99,8 @@ export interface SettledEvent {
   refund?: boolean;
   /** The transfer to the player failed; the session is finalized and the player collects the net payout. */
   collect?: boolean;
+  /** A stale cancel of a ticket never seated while its arena was open (`SettlementItem.noShow`): the join permits count it. */
+  noShow?: boolean;
 }
 
 /** The server key and its gas balance (admins see it in `/api/config` and `/admin`). */
@@ -206,6 +208,31 @@ export interface ChainGateway {
    * `ChainBusyError` when the RPC refuses the read. Absent when the chain is off.
    */
   tokenReceipt?(hash: string): Promise<TokenReceipt | null>;
+  /**
+   * The nonce the next join permit of `player` must name (CoinnibalArena v4 `joinNonce`). Throws `ChainBusyError`
+   * when it cannot be read. Absent when the chain is off.
+   */
+  joinNonce?(player: string): Promise<bigint>;
+  /**
+   * A join permit (v4): the server key's EIP-712 signature of `JoinPermit(player, arenaId, nonce, deadline)` in the
+   * arena's domain. Throws when the server key is not the arena's server authority. Absent when the chain is off.
+   */
+  signJoinPermit?(player: string, arenaId: number, nonce: bigint, deadlineS: number): Promise<JoinPermit>;
+  /** The arena contract is paused: no ticket can be bought. */
+  joinsPaused?(): boolean;
+  /**
+   * Whether `player` holds an open ticket in `arenaId`, without opening one (the dev fake chain opens a ticket on its
+   * first `getSession`). Absent: `getSession` answers it.
+   */
+  hasOpenTicket?(arenaId: number, player: string): Promise<boolean>;
+  /** Unix ms of each no-show of `player` since `since`: a ticket cancelled unseated while its arena was open. */
+  noShowsSince?(player: string, since: number): number[];
+  /**
+   * The game token `player` holds, ledger units (rounded down; capped at the largest safe integer): one read at
+   * `normal` priority. Throws `ChainBusyError` when it cannot be read. Absent when the chain is off (and on the dev
+   * fake chain).
+   */
+  tokenBalance?(player: string): Promise<number>;
   /**
    * The chain's clock (Unix ms): the local clock corrected by the last latest-block timestamp read. Ticket ages
    * (the stale sweeper, the 6 h cap) are measured with it: a server clock that drifts never cancels a fresh ticket.

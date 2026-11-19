@@ -18,6 +18,7 @@ import type { PriceKeeper } from './chain/price-keeper';
 import type { RoomManager } from './rooms/manager';
 import { bearerWallet, type SiteApi } from './site/routes';
 import type { Journal } from './stake/journal';
+import { JoinPermitFail, type JoinPermits } from './stake/join-permits';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -58,6 +59,8 @@ interface Ctx {
   shares?: ShareService;
   /** The per-IP limiter of every `/api/*` request (default 240 a minute); tests inject a larger one. */
   apiLimiter?: Limiter;
+  /** Join permits for arena tickets (`POST /api/arena/permit`). */
+  permits?: JoinPermits;
   /** Server log (unexpected errors of a request go here, never to the client). Default: console.error. */
   log?: (m: string) => void;
 }
@@ -337,6 +340,21 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             } catch (err) {
               if (err instanceof NonceLimitError) return json(res, 429, { error: 'rate_limited', message: 'Too many sign-in attempts. Wait a few minutes.' });
               throw err;
+            }
+          }
+          case '/api/arena/permit': {
+            // a join permit (CoinnibalArena v4): the signed-in wallet may buy one ticket of `arenaId` (stake/join-permits.ts)
+            if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
+            if (!ctx.permits) return json(res, 503, { error: 'arenas_off', message: 'Paid rooms are not open right now.' });
+            const caller = bearerWallet(ctx.auth, req);
+            if (!caller) return json(res, 401, { error: 'unauthorized', message: 'Sign in with your wallet first.' });
+            const body = await readSmallJson(req);
+            try {
+              const permit = await ctx.permits.issue(caller, Number(body?.arenaId), ip);
+              return json(res, 200, { permit });
+            } catch (err) {
+              if (!(err instanceof JoinPermitFail)) throw err;
+              return json(res, err.status, { error: err.code, message: err.message, ...(err.retryAt !== undefined ? { retryAt: err.retryAt } : {}) });
             }
           }
           case '/api/pending': {

@@ -1,6 +1,6 @@
 import { coinnibalArenaAbi, coinnibalArenaArtifact, testTokenAbi, testTokenArtifact } from '@coinnibal/contracts';
-import { DEFAULT_ARENAS, formatUsdCents, type ArenaPriceRow } from '@coinnibal/shared';
-import { BaseError, erc20Abi, getAddress, isAddress, type Account, type Address, type Chain, type Hash, type PublicClient, type WalletClient } from 'viem';
+import { DEFAULT_ARENAS, JOIN_PERMIT_DOMAIN, formatUsdCents, type ArenaPriceRow } from '@coinnibal/shared';
+import { BaseError, erc20Abi, getAddress, isAddress, isHex, type Account, type Address, type Chain, type Hash, type Hex, type PublicClient, type WalletClient } from 'viem';
 import type { ContractCall } from './call';
 import {
   MAX_ARENA_ID,
@@ -21,7 +21,7 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
 const MAX_UINT256 = (1n << 256n) - 1n;
 
 /**
- * `CoinnibalArena` (v3: fee on profit, burned on chain): typed reads and call builders. Every builder validates its input like the
+ * `CoinnibalArena` (v4: fee on profit, burned on chain; `join` needs the server's permit): typed reads and call builders. Every builder validates its input like the
  * contract does (throws `RangeError` / `TypeError` before anything is signed) and returns a
  * `ContractCall` for `sendCall`, a browser wallet's `writeContract`, or a preview.
  */
@@ -311,9 +311,77 @@ export function approveCall(token: Address, spender: Address, amount: bigint): E
 /* Players                                                               */
 /* -------------------------------------------------------------------- */
 
-export function joinCall(arena: Address, arenaId: number): ArenaCall {
+/* -------------------------------------------------------------------- */
+/* Join permits (v4)                                                     */
+/* -------------------------------------------------------------------- */
+
+/**
+ * The game server's permit for one ticket: `join` checks `serverAuthority`'s EIP-712 signature of
+ * `JoinPermit(player, arenaId, nonce, deadline)` (the player's `joinNonce`, used up by the join) in the arena's domain.
+ */
+export interface JoinPermitSignature {
+  /** Unix seconds; at most `JOIN_PERMIT_MAX_WINDOW_S` after the block time it is used in. */
+  deadline: bigint | number;
+  signature: Hex;
+}
+
+/** The EIP-712 types of a join permit. */
+export const JOIN_PERMIT_TYPES = {
+  JoinPermit: [
+    { name: 'player', type: 'address' },
+    { name: 'arenaId', type: 'uint16' },
+    { name: 'nonce', type: 'uint64' },
+    { name: 'deadline', type: 'uint64' },
+  ],
+} as const;
+
+export interface JoinPermitFields {
+  chainId: number;
+  arena: Address;
+  player: Address;
+  arenaId: number;
+  nonce: bigint;
+  /** Unix seconds. */
+  deadline: bigint | number;
+}
+
+/** The typed data a join permit signs (for viem's `signTypedData` / `hashTypedData`). */
+export function joinPermitTypedData(p: JoinPermitFields) {
+  checkArenaId(p.arenaId);
+  checkAddress('arena', p.arena);
+  checkAddress('player', p.player);
+  const deadline = BigInt(p.deadline);
+  if (p.nonce < 0n || p.nonce > MAX_UINT64) throw new RangeError(`nonce must be a uint64, got ${p.nonce}`);
+  if (deadline <= 0n || deadline > MAX_UINT64) throw new RangeError(`deadline must be a uint64 > 0, got ${deadline}`);
+  return {
+    domain: { name: JOIN_PERMIT_DOMAIN.name, version: JOIN_PERMIT_DOMAIN.version, chainId: p.chainId, verifyingContract: getAddress(p.arena) },
+    types: JOIN_PERMIT_TYPES,
+    primaryType: 'JoinPermit' as const,
+    message: { player: getAddress(p.player), arenaId: p.arenaId, nonce: p.nonce, deadline },
+  };
+}
+
+/** Signs a join permit with the server key (`serverAuthority`); the game server does this, never a player. */
+export function signJoinPermit(account: { signTypedData: (t: ReturnType<typeof joinPermitTypedData>) => Promise<Hex> }, p: JoinPermitFields): Promise<Hex> {
+  return account.signTypedData(joinPermitTypedData(p));
+}
+
+/** The nonce the next join permit of `player` must name (`joinNonce`). */
+export function getJoinNonce(client: ReadClient, arena: Address, player: Address): Promise<bigint> {
+  return client.readContract({ address: arena, abi: coinnibalArenaAbi, functionName: 'joinNonce', args: [getAddress(player)] });
+}
+
+function checkPermit(permit: JoinPermitSignature): void {
+  const deadline = BigInt(permit.deadline);
+  if (deadline <= 0n || deadline > MAX_UINT64) throw new RangeError(`permit deadline must be a uint64 > 0, got ${deadline}`);
+  if (typeof permit.signature !== 'string' || !isHex(permit.signature)) throw new TypeError('permit signature must be 0x hex');
+}
+
+/** `join(arenaId, deadline, signature)`: one ticket, with the game server's permit (`JoinPermitSignature`). */
+export function joinCall(arena: Address, arenaId: number, permit: JoinPermitSignature): ArenaCall {
   checkArenaId(arenaId);
-  return { address: arena, abi: coinnibalArenaAbi, functionName: 'join', args: [arenaId] };
+  checkPermit(permit);
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'join', args: [arenaId, BigInt(permit.deadline), permit.signature] };
 }
 
 /** Refund after 24 h, or collect `owed` of a finalized session. */
@@ -350,13 +418,13 @@ export interface JoinPlan {
  * The ticket flow: reads the arena's entry fee, the fee rate the player will get (holder discount),
  * the player's allowance and balance, and returns `approve` (only when the allowance is short;
  * the exact entry fee, or with `approve: 'unlimited'` the largest allowance so later tickets need
- * `join` only) + `join`. Throws a `RangeError` when the arena is missing, disabled or full, the
+ * `join` only) + `join` with the game server's `permit` (`POST /api/arena/permit`). Throws a `RangeError` when the arena is missing, disabled or full, the
  * token is not set, the arena is holders-only and the player holds no emblem (message contains
  * "holders only"), or the balance is short.
  */
 export async function planJoin(
   client: ReadClient,
-  p: { arena: Address; arenaId: number; player: Address; token?: Address; approve?: 'exact' | 'unlimited' },
+  p: { arena: Address; arenaId: number; player: Address; token?: Address; approve?: 'exact' | 'unlimited'; permit: JoinPermitSignature },
 ): Promise<JoinPlan> {
   const [info, config, holder] = await Promise.all([
     getArena(client, p.arena, p.arenaId),
@@ -379,7 +447,7 @@ export async function planJoin(
   const [allowance, balance] = await Promise.all([getAllowance(client, token, p.player, p.arena), getTokenBalance(client, token, p.player)]);
   if (balance < info.entryFee) throw new RangeError(`balance too low for the ticket (need ${info.entryFee}, have ${balance} base units)`);
   const approve = allowance < info.entryFee ? approveCall(token, p.arena, p.approve === 'unlimited' ? MAX_ALLOWANCE : info.entryFee) : null;
-  const join = joinCall(p.arena, p.arenaId);
+  const join = joinCall(p.arena, p.arenaId, p.permit);
   return { entryFee: info.entryFee, ...fee, allowance, balance, approve, join, calls: approve ? [approve, join] : [join] };
 }
 

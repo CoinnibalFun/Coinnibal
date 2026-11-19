@@ -3,11 +3,17 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {CoinnibalArena} from "../contracts/CoinnibalArena.sol";
+import {JoinPermits} from "./JoinPermits.sol";
 import {BlockingToken, BurnableMock} from "../contracts/test/MockTokens.sol";
 
 /// @notice Drives an arena with random joins, settlements (any payout), cancels, refunds, collects, loot burns, rate
 ///         changes and blocked transfers, keeping a ghost ledger of every session it opened.
 contract ArenaHandler is Test {
+    /// @dev The game server's join permit (signed with the "server" test key) for `player` in `arenaId`, now.
+    function _permit(CoinnibalArena a, address player, uint16 arenaId) internal view returns (JoinPermits.Permit memory) {
+        return JoinPermits.permit(a, JoinPermits.keyOf("server"), player, arenaId);
+    }
+
     CoinnibalArena public arena;
     BlockingToken public token;
     address public server;
@@ -50,8 +56,9 @@ contract ArenaHandler is Test {
         address p = _p(who);
         uint16 id = _id(which);
         if (arena.getSession(id, p).id != 0) return;
+        JoinPermits.Permit memory pm1 = _permit(arena, p, id);
         vm.prank(p);
-        arena.join(id);
+        arena.join(id, pm1.deadline, pm1.sig);
     }
 
     function settle(uint256 who, uint256 which, uint256 payout, bool blocked) external {
@@ -221,6 +228,11 @@ contract CoinnibalArenaBurnCallInvariantTest is Test {
 }
 
 contract BurnHandler is Test {
+    /// @dev The game server's join permit (signed with the "server" test key) for `player` in `arenaId`, now.
+    function _permit(CoinnibalArena a, address player, uint16 arenaId) internal view returns (JoinPermits.Permit memory) {
+        return JoinPermits.permit(a, JoinPermits.keyOf("server"), player, arenaId);
+    }
+
     CoinnibalArena public arena;
     BurnableMock public token;
     address public server;
@@ -245,8 +257,9 @@ contract BurnHandler is Test {
     function join(uint256 who) external {
         address p = players[who % players.length];
         if (arena.getSession(1, p).id != 0) return;
+        JoinPermits.Permit memory pm2 = _permit(arena, p, 1);
         vm.prank(p);
-        arena.join(1);
+        arena.join(1, pm2.deadline, pm2.sig);
     }
 
     function settle(uint256 who, uint256 payout) external {

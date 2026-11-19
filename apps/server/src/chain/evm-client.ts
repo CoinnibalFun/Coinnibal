@@ -9,14 +9,17 @@ import {
   isArenaHolder,
   getMintState,
   getNftBalance,
+  getJoinNonce,
   getSession,
   listArenas,
   sendCall,
+  signJoinPermit,
   simulateCall,
   toViemChain,
   type ArenaConfig,
   type ArenaInfo,
   type ContractCall,
+  type JoinPermitFields,
   type MintState,
   type SessionInfo,
   type TestTokenFaucetConfig,
@@ -94,6 +97,10 @@ export interface EvmClient {
   arenas(arena: Address): Promise<ArenaInfo[]>;
   arena(arena: Address, id: number): Promise<ArenaInfo>;
   session(arena: Address, arenaId: number, player: Address): Promise<SessionInfo>;
+  /** `joinNonce(player)` of the arena (v4): the nonce its next join permit names. */
+  joinNonce(arena: Address, player: Address): Promise<bigint>;
+  /** Signs a join permit with the server key (EIP-712 typed data of the arena's domain). */
+  signJoinPermit(p: JoinPermitFields): Promise<Hex>;
   /** Gas-token balance (wei). */
   balance(address: Address): Promise<bigint>;
   /** `Joined` events of an arena contract in `[from, to]` (the caller chunks). */
@@ -332,6 +339,8 @@ export function viemEvmClient(
   return {
     ...viemReads(publicClient),
     address: account.address,
+    // a signature only, never a transaction: no gas, no queue
+    signJoinPermit: (p) => signJoinPermit(account, p),
     blockHash: async (n) => {
       try {
         return (await publicClient.getBlock({ blockNumber: n })).hash;
@@ -353,6 +362,7 @@ export function viemEvmClient(
     arenas: (arena) => listArenas(publicClient, arena),
     arena: (arena, id) => getArena(publicClient, arena, id),
     session: (arena, arenaId, player) => getSession(publicClient, arena, arenaId, player),
+    joinNonce: (arena, player) => getJoinNonce(publicClient, arena, player),
     balance: (address) => publicClient.getBalance({ address }),
     joinedLogs: async (arena, from, to) => {
       const logs = await publicClient.getContractEvents({ address: arena, abi: coinnibalArenaAbi, eventName: 'Joined', fromBlock: from, toBlock: to, strict: true });

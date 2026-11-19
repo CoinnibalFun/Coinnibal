@@ -1,5 +1,5 @@
 /**
- * The money simulation's chain on a real `hardhat node` with the real CoinnibalArena v3 and the TestToken (deployed
+ * The money simulation's chain on a real `hardhat node` with the real CoinnibalArena v4 and the TestToken (deployed
  * with the SDK, like /admin does). The game server talks to it through its production client (`viemEvmClient`).
  * Returns null when the node does not start within 40 s (Hardhat missing): callers skip.
  */
@@ -19,6 +19,7 @@ import {
   deployedAddress,
   coinnibalArenaAbi,
   getArena,
+  getJoinNonce,
   getSession,
   getTokenBalance,
   joinCall,
@@ -27,6 +28,7 @@ import {
   sendCall,
   setHolderPerksCall,
   setTokenCall,
+  signJoinPermit,
   testTokenMintCall,
   viemChain,
   type ContractCall,
@@ -144,7 +146,7 @@ export async function hardhatSimChain(opts: { players: number; seed: number }): 
     (await pub.getContractEvents({ address: arena, abi: coinnibalArenaAbi, eventName, fromBlock: 0n })) as unknown as { args: Record<string, unknown> }[];
 
   return {
-    name: 'hardhat node (CoinnibalArena v3, TestToken)',
+    name: 'hardhat node (CoinnibalArena v4, TestToken)',
     arenaAddress: arena,
     client,
     decimals: 18,
@@ -152,7 +154,12 @@ export async function hardhatSimChain(opts: { players: number; seed: number }): 
     holders,
     arenaIds: () => ids,
     entryFee: (id) => fees.get(id)!,
-    buy: (w, id) => send(w, joinCall(arena, id)),
+    // the server key's join permit (CoinnibalArena v4), then the join
+    buy: async (w, id) => {
+      const deadline = (await pub.getBlock({ blockTag: 'latest' })).timestamp + 600n;
+      const signature = await signJoinPermit(server, { chainId: 31337, arena, player: w, arenaId: id, nonce: await getJoinNonce(pub, arena, w), deadline });
+      return send(w, joinCall(arena, id, { deadline, signature }));
+    },
     refund: (w, id) => send(w, refundCall(arena, id)),
     async advance(s) {
       if (s <= 0) return;
