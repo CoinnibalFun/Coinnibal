@@ -16,6 +16,7 @@ import { ConnectionBanner } from './ui/game/ConnectionBanner';
 import { BellMoment, DeathMoment, DeathSheet, FirstPlayBrief, GameHud, HowToSheet, RoomOverSheet, RoundOverSheet, SettingsSheet, StandingsPeek, StandingsSheet } from './ui/game';
 import { ShopSheet } from './ui/shop/ShopSheet';
 import { GameClosedSheet } from './ui/gate/GameClosedSheet';
+import { FeedbackSheet } from './ui/feedback/FeedbackSheet';
 
 function GameCanvas() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -72,6 +73,7 @@ function Screens() {
         <WalletModal />
         <GetTokensSheet />
         <GameClosedSheet />
+        <FeedbackSheet />
         <ConnectionBanner />
         <Toasts />
       </Kb>

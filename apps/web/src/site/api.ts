@@ -33,6 +33,8 @@ import type {
   ContractRegisterRequest,
   ContractsRegistry,
   FaucetConfig,
+  FeedbackEntry,
+  FeedbackList,
   HolderWlView,
   NetworkInfo,
   GameAccess,
@@ -364,6 +366,12 @@ export function adminApi(token: string) {
     avatars: (limit = 200) => request<{ items: AdminAvatarEntry[]; total: number }>(`/api/admin/avatars${q({ limit })}`, { token }),
     /** `DELETE /api/admin/avatars/<wallet>`: removes (and blocks) the wallet's picture; its coin goes back to the basic skin. */
     removeAvatar: (wallet: string) => request<{ removed: string }>(`/api/admin/avatars/${id(wallet)}`, { method: 'DELETE', token }),
+    /** `GET /api/admin/feedback`: players' messages from the game page, newest first, and how many are unread. */
+    feedback: (opts: { limit?: number; offset?: number; unread?: boolean } = {}) =>
+      request<FeedbackList>(`/api/admin/feedback${q({ limit: opts.limit, offset: opts.offset, unread: opts.unread ? 1 : undefined })}`, { token }),
+    setFeedbackRead: (fid: string, read: boolean) => request<{ entry: FeedbackEntry; unread: number }>(`/api/admin/feedback/${id(fid)}`, { method: 'PUT', token, body: { read } }),
+    readAllFeedback: () => request<{ unread: number }>('/api/admin/feedback/read-all', { method: 'POST', token }),
+    deleteFeedback: (fid: string) => request<{ unread: number }>(`/api/admin/feedback/${id(fid)}`, { method: 'DELETE', token }),
     /** `GET /api/admin/arena-scaling`: the arena instance scaler's settings, every arena's instances and its decisions. */
     arenaScaling: () => request<ArenaScalingView>('/api/admin/arena-scaling', { token }),
     /** `PUT /api/admin/arena-scaling`: a partial update of the settings; answers like the GET. */

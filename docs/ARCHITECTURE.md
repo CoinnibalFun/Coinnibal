@@ -406,6 +406,11 @@ has more bots than its setting, nor more playing than the setting minus its peop
   (`x.com/intent/post`) with a localized line and the card's link: no X API (an intent cannot attach a picture).
   Operator exits and the in-game HUD's share button (live mass, place and coins eaten) open the intent with the site's
   link.
+- **Player feedback** (`site/feedback.ts`, `shared/feedback.ts`): the game page's Feedback sheet
+  (`ui/feedback/FeedbackSheet.tsx`) posts `POST /api/feedback` (a message, an optional contact line, the page, the
+  room kind, the viewport and the build; the wallet is the session's). Limited per client, per wallet and
+  server-wide; stored as plain text in `DATA_DIR/site/feedback.jsonl` (the newest 5,000, appended, rewritten
+  atomically on a change); read, marked and deleted in `/admin` → Feedback (`/api/admin/feedback`).
 - **Link X** (`xlink.ts`, `shared/xlink.ts`): a signed-in wallet ties an X account to its coin without the X API.
   `POST /api/x/code` issues a code (`COIN-` and six characters; the earlier `NIBAL-` and the pre-rename `ELYMUM-` are still accepted, 30 minutes), the player posts it from X (the web
   intent) and sends the post's link to `POST /api/x/verify {url}`; the server reads the post from X's public embed

@@ -2363,6 +2363,9 @@
   font-size: 12px;
   color: var(--ink-3);
 }
+.gs-feedback {
+  font-size: 13px;
+}
 
 /* the soundtrack picker: a sheet of little tickets, the picked one in sun */
 .gs-music {

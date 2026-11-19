@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { AdminAudit } from './audit';
 import { OLD_SECRET_PROOF_HEADER, SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
-import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible } from '@coinnibal/shared';
+import { FEEDBACK_LIMITS, ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible } from '@coinnibal/shared';
 import { SIGN_IN_BUSY_MESSAGE, SignInBusyError, checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import { XLinkFail, type XLinkService } from '../xlink';
@@ -38,6 +38,7 @@ import { CollectionFail, type NftCollection } from './nft/collection';
 import { parseArtStyle } from './nft/render';
 import type { SiteStore } from './store';
 import { SiteFail, obj } from './validate';
+import { FeedbackStore, parseFeedback } from './feedback';
 
 /** Admin routes whose every request (reads too) goes to the audit log: they hand out secrets. */
 const SECRET_ROUTES = new Set(['backup', 'migration-env', 'secret-proof', 'auth']);
@@ -81,6 +82,12 @@ export interface SiteLimits {
   avatarIp?: Limiter;
   /** Picture uploads per signed-in wallet (default 6 an hour). */
   avatarWallet?: Limiter;
+  /** `POST /api/feedback` per client (default 10 in 10 minutes). */
+  feedbackIp?: Limiter;
+  /** `POST /api/feedback` per signed-in wallet (default 5 in 10 minutes). */
+  feedbackWallet?: Limiter;
+  /** Messages stored server-wide (default 300 in 10 minutes): a flood from many addresses cannot churn the kept 5,000 in minutes. */
+  feedbackAll?: Limiter;
 }
 
 export const defaultSiteLimits = (): SiteLimits => ({
@@ -90,6 +97,8 @@ export const defaultSiteLimits = (): SiteLimits => ({
   avatarIp: new Limiter(20, 60 * 60_000),
   avatarWallet: new Limiter(6, 60 * 60_000),
 });
+
+type FeedbackLimits = Required<Pick<SiteLimits, 'feedbackIp' | 'feedbackWallet' | 'feedbackAll'>>;
 
 const send = (res: ServerResponse, status: number, body: unknown) => {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -188,6 +197,7 @@ export class SiteApi {
   private xLinks: XLinkService | null = null;
   private readonly avatarIp: Limiter;
   private readonly avatarWallet: Limiter;
+  private readonly feedbackLimits: FeedbackLimits;
 
   constructor(
     private readonly cfg: ServerConfig,
@@ -202,11 +212,20 @@ export class SiteApi {
     this.avatarIp = limits.avatarIp ?? new Limiter(20, 60 * 60_000);
     this.avatarWallet = limits.avatarWallet ?? new Limiter(6, 60 * 60_000);
     this.audit = new AdminAudit(ext.dataDir ? join(ext.dataDir, 'admin-audit.jsonl') : null, ext.log);
+    this.feedback = new FeedbackStore(ext.dataDir ? join(ext.dataDir, 'site', 'feedback.jsonl') : null, { log: ext.log });
+    this.feedbackLimits = {
+      feedbackIp: limits.feedbackIp ?? new Limiter(10, 10 * 60_000),
+      feedbackWallet: limits.feedbackWallet ?? new Limiter(5, 10 * 60_000),
+      feedbackAll: limits.feedbackAll ?? new Limiter(300, 10 * 60_000),
+    };
     this.proofs = new SecretProofs((w, m, sig) => this.auth.signedBy(w, m, sig));
   }
 
   /** Every admin write (`DATA_DIR/admin-audit.jsonl`, `GET /api/admin/audit`). */
   readonly audit: AdminAudit;
+
+  /** Player feedback (`POST /api/feedback`, `DATA_DIR/site/feedback.jsonl`, the admin's Feedback drawer). */
+  readonly feedback: FeedbackStore;
 
   /** `fn(wallet)`: the wallet's picture was removed or replaced (the rooms take it off live coins). */
   onAvatarChange(fn: ((wallet: string) => void) | null): void {
@@ -351,7 +370,8 @@ export class SiteApi {
       path === '/api/shop' ||
       path === '/api/shop/buy' ||
       path === '/api/x' ||
-      path.startsWith('/api/x/');
+      path.startsWith('/api/x/') ||
+      path === '/api/feedback';
     if (!mine) return false;
     try {
       if (path === '/api/auth/login' || path === '/api/auth/me') await this.authRoutes(req, res, path, ip);
@@ -363,6 +383,7 @@ export class SiteApi {
       else if (path.startsWith('/api/nft/')) await this.nftRoutes(req, res, url);
       else if (path.startsWith('/api/site/')) await this.siteRoutes(req, res, url, ip);
       else if (path.startsWith('/api/rooms/custom')) await this.customRoutes(req, res, path, ip);
+      else if (path === '/api/feedback') await this.feedbackRoute(req, res, ip);
       else await this.audited(req, res, url, auditIp);
     } catch (err) {
       if (err instanceof SiteFail && err.status === 413) res.setHeader('Connection', 'close');
@@ -707,6 +728,24 @@ export class SiteApi {
     throw new SiteFail(404, 'not_found', 'Not found');
   }
 
+  /**
+   * `POST /api/feedback {text, contact?, page?, room?, viewport?, build?}` from the game page's Feedback sheet: guests
+   * too; the wallet is the session's (`Authorization`, when it verifies), never the body's. Limited per client, per
+   * wallet and server-wide; answers `{ ok: true }`.
+   */
+  private async feedbackRoute(req: IncomingMessage, res: ServerResponse, ip: string): Promise<void> {
+    this.method(req, 'POST');
+    const lim = this.feedbackLimits;
+    const busy = () => new SiteFail(429, 'rate_limited', 'You sent several messages just now. Try again in a few minutes.');
+    if (!lim.feedbackIp.allow(ip)) throw busy();
+    const input = parseFeedback(await readJson(req, FEEDBACK_LIMITS.bodyBytes));
+    const wallet = bearerWallet(this.auth, req);
+    if (wallet && !lim.feedbackWallet.allow(wallet.toLowerCase())) throw busy();
+    if (!lim.feedbackAll.allow('all')) throw new SiteFail(429, 'rate_limited', 'Many messages are arriving right now. Try again in a few minutes.');
+    this.feedback.add(input, wallet);
+    return send(res, 201, { ok: true });
+  }
+
   /** Rate limits a write: per IP before the session is known, then per wallet. */
   private writer(req: IncomingMessage, ip: string): string {
     if (!this.limits.writeIp.allow(ip)) throw new SiteFail(429, 'rate_limited', 'Too many requests. Try again in a few minutes.');
@@ -1029,6 +1068,28 @@ export class SiteApi {
       case 'counts':
         this.method(req, 'GET');
         return send(res, 200, s.counts());
+      case 'feedback': {
+        // players' messages from the game page, newest first: GET the list (`?limit`, `?offset`, `?unread=1`), PUT
+        // `<id> {read}` marks one, POST `read-all` marks every one, DELETE `<id>` removes one
+        const fb = this.feedback;
+        if (seg.length === 1) {
+          this.method(req, 'GET');
+          return send(res, 200, fb.list({ limit: Number(q.get('limit') ?? 100), offset: Number(q.get('offset') ?? 0), unread: q.get('unread') === '1' }));
+        }
+        if (seg.length !== 2) break;
+        if (seg[1] === 'read-all') {
+          this.method(req, 'POST');
+          fb.readAll();
+          return send(res, 200, { unread: fb.unread() });
+        }
+        if (this.method(req, 'PUT', 'DELETE') === 'DELETE') {
+          fb.remove(seg[1]);
+          return send(res, 200, { unread: fb.unread() });
+        }
+        const read = (await readJson(req)).read;
+        if (typeof read !== 'boolean') throw new SiteFail(400, 'bad_request', 'read must be true or false', 'read');
+        return send(res, 200, { entry: fb.setRead(seg[1], read), unread: fb.unread() });
+      }
       case 'leaderboards': {
         // the daily and all-time boards: what they hold, and a reset (profiles, XP and levels are not touched)
         const lb = this.ext.leaderboards;

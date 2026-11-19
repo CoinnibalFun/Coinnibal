@@ -22,6 +22,7 @@ price at its USD target (`MINT_USD_CENTS`).
 | **Game** | Who may play, pause and per-arena open / close, map sizes, **arena prices in US dollars** (the token price, the tiers, "Sync arena prices to USD", "Re-price at next bell"), arena instances (auto-scaling), custom rooms, power-ups (priced in US dollars, converted like the tickets), leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance and gas runway |
 | **Community** (**WL**, **Tasks**, **Collabs**) | The whitelist applications, the WL steps, the community collabs |
 | **Safety** | Cheat and collusion flags, bans, held settlements, detector settings; the profile pictures players wear |
+| **Feedback** | Players' messages from the game page's Feedback button, newest first (the unread count is the drawer's badge): the time, the wallet (or guest), the page and room, the text and how to reach them; mark read / unread, delete |
 | **Settings** | **Mint page open** (`mintOpen`: visitors see `/mint`; it does not change the phase on chain), `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public / maintenance), the X handle (default `X_HANDLE`, else `coinnibalfun`) |
 
 Admin endpoints need a SIWE session whose wallet is in `ADMIN_WALLETS`. Contract actions also need the
@@ -801,6 +802,19 @@ result: the top 10 of its final board and the player's own row) are rendered on 
 a minute). The VPS serves the site and the game on one origin, so `/share/*` is the server's own; `pnpm dev` proxies
 it. (`vercel.json` now only redirects the old elymum.io to coinnibal.fun, path and all.)
 
+## Player feedback
+
+The game page has a **Feedback** button: in the `/play` lobby's header, on the in-game top bar (desktops and tablets;
+a phone keeps three keys there and has it at the foot of the settings sheet). It opens a small sheet: the message
+(required, up to 1,000 characters), an optional "How can we reach you?" line (up to 100) and Send. The sheet adds the
+page path, the room kind when in a game, the viewport size and the app build; the server adds the signed-in wallet
+from the session (never from the body). Guests can send too. `POST /api/feedback` takes at most 8 KB, 10 messages per
+client and 5 per wallet in 10 minutes, and 300 server-wide in 10 minutes. The messages are plain text (control
+characters removed, never rendered as HTML or links), kept in `DATA_DIR/site/feedback.jsonl` (one JSON line each, not
+per chain, the newest 5,000). `/admin` → Feedback reads them (`GET /api/admin/feedback`, newest first, with the unread
+count), marks them read or unread (`PUT /api/admin/feedback/<id> {"read":true}`, `POST /api/admin/feedback/read-all`)
+and deletes them (`DELETE /api/admin/feedback/<id>`); the writes are in the audit log.
+
 ## Arena instances (auto-scaling)
 
 Each official arena (ticket tier) runs as public instances `arena-<id>-<n>` of `ARENA_INSTANCE_CAP` (50) seats
@@ -963,6 +977,7 @@ let a wallet buy a ticket at the arena's price, which pause stops).
 | `integrity/` | integrity state, the hashing secret, ticket summaries | flags and bans are gone |
 | `chains/<id>/settled.jsonl` | every confirmed settlement, cancel and loot burn of the last 14 days | reorg protection and the payout record start empty |
 | `admin-audit.jsonl` | every admin write (who, what, when, from where) and every request of the secret exports | the audit trail is gone |
+| `site/feedback.jsonl` | players' messages from the game page (the newest 5,000) | the messages are gone |
 | `chains/<id>/emblem-claims.json`, `reprice.json`, `auth-revoked.json` | the token ids open holder tickets hold, the arenas closing for a re-price, revoked sessions | an emblem may serve one extra ticket; a re-price is asked again; revoked sessions come back until they expire |
 | `auth-smart-wallets.json` | the smart wallets that signed in, per network (their sign-in reserve) | during a flood of garbage signatures a known smart wallet waits like a new one, until it has signed in once more |
 

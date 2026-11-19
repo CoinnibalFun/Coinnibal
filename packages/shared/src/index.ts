@@ -27,3 +27,4 @@ export * from './xlink';
 export * from './test-arenas';
 export * from './brand';
 export * from './join-permit';
+export * from './feedback';
