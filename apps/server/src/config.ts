@@ -41,11 +41,13 @@ export interface ServerConfig {
   /**
    * Join permits (CoinnibalArena v4, `stake/join-permits.ts`): `JOIN_PERMIT_TTL_S` (default 600, at most 3300: the
    * contract's hour less a margin for the block time), `JOIN_PERMIT_PER_IP` (12 per 10 min), `JOIN_PERMIT_PER_SUBNET`
-   * (an IPv6 /64, 30 per 10 min), `JOIN_PERMIT_PER_WALLET` (20 per 10 min), `JOIN_PERMIT_ARENA_CAP` (unseated tickets
-   * + places held by new permits per arena; 0 = the seats a round can take: `ARENA_INSTANCE_CAP` × the scaler's max
-   * instances), `JOIN_PERMIT_HOLD_S` (how long a new permit holds a place; default 120, 0 = never) and `NO_SHOW_LIMIT`
-   * (tickets gone back unplayed in 24 h before a wallet gets no permit; 3× per IPv4 address or IPv6 /64 the permits
-   * were asked from, 8× per IPv6 /48; default 3, 0 = off).
+   * (an IPv6 /64, 30 per 10 min), `JOIN_PERMIT_PER_SITE` (an IPv6 /48, 60 per 10 min), `JOIN_PERMIT_PER_WALLET` (20
+   * per 10 min), `JOIN_PERMIT_OPEN_PER_IP` / `_SUBNET` / `_SITE` (an arena's permits not played yet asked from one
+   * IPv4 address / IPv6 /64 / /48: 8 / 4 / 16, 0 = no limit), `JOIN_PERMIT_ARENA_CAP` (unseated tickets + places held
+   * by new permits per arena; 0 = the seats a round can take: `ARENA_INSTANCE_CAP` × the scaler's max instances),
+   * `JOIN_PERMIT_HOLD_S` (how long a new permit holds a place; default 120, 0 = never) and `NO_SHOW_LIMIT` (tickets
+   * gone back unplayed in 24 h before a wallet gets no permit; 3× per IPv4 address or IPv6 /64 the permits were asked
+   * from, 8× per IPv6 /48; default 3, 0 = off).
    */
   joinPermits: JoinPermitConfig;
   /**
@@ -425,9 +427,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       holdS: Math.max(0, Math.min(JOIN_PERMIT_TTL_MAX_S, int(env.JOIN_PERMIT_HOLD_S, JOIN_PERMIT_DEFAULTS.holdS))),
       perIp: Math.max(1, int(env.JOIN_PERMIT_PER_IP, JOIN_PERMIT_DEFAULTS.perIp)),
       perSubnet: Math.max(1, int(env.JOIN_PERMIT_PER_SUBNET, JOIN_PERMIT_DEFAULTS.perSubnet)),
+      perSite: Math.max(1, int(env.JOIN_PERMIT_PER_SITE, JOIN_PERMIT_DEFAULTS.perSite)),
       perWallet: Math.max(1, int(env.JOIN_PERMIT_PER_WALLET, JOIN_PERMIT_DEFAULTS.perWallet)),
       arenaCap: Math.max(0, int(env.JOIN_PERMIT_ARENA_CAP, JOIN_PERMIT_DEFAULTS.arenaCap)),
       noShowLimit: Math.max(0, int(env.NO_SHOW_LIMIT, JOIN_PERMIT_DEFAULTS.noShowLimit)),
+      openPerIp: Math.max(0, int(env.JOIN_PERMIT_OPEN_PER_IP, JOIN_PERMIT_DEFAULTS.openPerIp)),
+      openPerNet: Math.max(0, int(env.JOIN_PERMIT_OPEN_PER_SUBNET, JOIN_PERMIT_DEFAULTS.openPerNet)),
+      openPerSite: Math.max(0, int(env.JOIN_PERMIT_OPEN_PER_SITE, JOIN_PERMIT_DEFAULTS.openPerSite)),
     },
     gameWorkers: gameWorkers(env),
     gameWorkerHangMs: Math.max(2, int(env.GAME_WORKER_HANG_S, 10)) * 1000,

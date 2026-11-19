@@ -56,8 +56,9 @@ Game → Arena prices):
   one only while the game is open for the wallet, the arena is open (a holders-only arena: to NFT holders), the
   wallet has no open ticket there, and the arena is not full of tickets waiting for a seat. A wallet whose tickets
   went back unplayed 3 times in a day gets no permit until the oldest of those is a day old, and so does a network
-  whose tickets went back unplayed too often (fresh wallets do not reset it). The permit costs nothing and changes no price or fee: it only
-  decides who may buy, so nobody can fill an arena with tickets nobody plays.
+  whose tickets went back unplayed too often (fresh wallets do not reset it). Each network (an IPv4 address, an IPv6
+  /64 or /48) may have only a few permits of an arena not played yet. The permit costs nothing and changes no price
+  or fee: it only decides who may buy, so nobody can fill an arena with tickets nobody plays.
 - Value moves between players in play (eating). At the bell every live coin is paid its value.
 - **A winning ticket pays 20 % of its profit** (profit = payout − entry fee): **15 % is burned** and **5 % goes to
   the fee wallet** (the vault of the business). Each share rounds down. **A loss or a break-even pays nothing.**

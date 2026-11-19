@@ -212,7 +212,8 @@ has more bots than its setting, nor more playing than the setting minus its peop
   `GAS_FLOOR_ETH`, `GAS_RUNWAY_WARN_DAYS`, `GAS_RUNWAY_CRITICAL_DAYS`, `HEALTH_MAX_PENDING`, `HEALTH_MAX_PENDING_AGE_S`,
   `LOG_CHUNK_BLOCKS`, `RPC_MAX_RPS` (one rate or one per URL), `RPC_BURST`, `TESTNET_RPC_URL`, `GAME_WORKERS`,
   `MAX_CONNECTIONS`, `JOIN_PERMIT_TTL_S`, `JOIN_PERMIT_HOLD_S`, `JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`,
-  `JOIN_PERMIT_PER_WALLET`, `JOIN_PERMIT_ARENA_CAP`, `NO_SHOW_LIMIT`, `DEV_FAKE_CHAIN`, `DEV_FAKE_TOKEN`.
+  `JOIN_PERMIT_PER_SITE`, `JOIN_PERMIT_PER_WALLET`, `JOIN_PERMIT_OPEN_PER_IP`, `JOIN_PERMIT_OPEN_PER_SUBNET`,
+  `JOIN_PERMIT_OPEN_PER_SITE`, `JOIN_PERMIT_ARENA_CAP`, `NO_SHOW_LIMIT`, `DEV_FAKE_CHAIN`, `DEV_FAKE_TOKEN`.
 - **Contracts registry** (`site/contracts.ts`): `DATA_DIR/chains/<id>/contracts.json`, written by `POST
   /api/admin/contracts` after a deploy from `/admin`. The server checks the code hash (the bundled v4 build only;
   an arena of an earlier build reads "redeploy needed"),
@@ -222,9 +223,13 @@ has more bots than its setting, nor more playing than the setting minus its peop
   the server decides who may buy one. A permit is issued only to a signed-in wallet for which the game is open and
   that is not banned, for an arena that exists, is enabled and not paused, and that the server does not keep closed
   (books guard, re-price), a holders-only arena only to a wallet with the NFT, and only when the wallet holds no open
-  ticket there. One live permit per wallet and arena (asking again returns the same one while it is valid and
-  unused). Limits: per IP, per IPv6 /64 and per wallet (`JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`,
-  `JOIN_PERMIT_PER_WALLET`, per 10 minutes); per arena, unseated tickets (open on chain, not seated, not being paid
+  ticket there. One live permit per wallet and arena (asking again returns the same one while it is valid, unused and
+  signed for the arena contract in use: a contract registered live starts the permits, places and shares afresh).
+  Limits: per IP, per IPv6 /64 and /48, and per wallet (`JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`,
+  `JOIN_PERMIT_PER_SITE`, `JOIN_PERMIT_PER_WALLET`, per 10 minutes); per network and arena, a share of the permits
+  not played yet (valid, or used for a ticket not seated and not settled): 8 per IPv4 address, 4 per IPv6 /64, 16 per
+  /48 (`JOIN_PERMIT_OPEN_PER_*`; at the share the tickets of its expired permits are read and those without one
+  leave), refused `network_busy`; per arena, unseated tickets (open on chain, not seated, not being paid
   out) plus the places held by new permits stay under the seats a round can take (`ARENA_INSTANCE_CAP` × the scaler's
   max instances, or `JOIN_PERMIT_ARENA_CAP`). A permit is free, so it holds a place only for `JOIN_PERMIT_HOLD_S`
   (120 s), only when the wallet holds the entry fee, once per wallet, arena and join nonce, and at most 4 per IPv4

@@ -320,6 +320,12 @@ describe('ticket flow: two prompts, progress and races', () => {
     expect(spies.sendWalletCall).not.toHaveBeenCalled();
   });
 
+  it('each refusal has its own words: a network at its share of the room is told so', async () => {
+    const { permitRefusalText } = await vi.importActual<typeof import('../src/wallet/permit')>('../src/wallet/permit');
+    expect(permitRefusalText('network_busy')).toMatch(/asked from your network and are not played yet\. Try again in a few minutes\. Nothing was signed\./);
+    expect(permitRefusalText('arena_busy')).toMatch(/as many tickets waiting for a seat/);
+  });
+
   it('a permit for another wallet, room or arena signs nothing', async () => {
     for (const bad of [{ player: '0x2222222222222222222222222222222222222222' }, { arenaId: 3 }, { arena: '0x0000000000000000000000000000000000000bad' }, { chainId: 1 }]) {
       spies.fetchJoinPermit.mockImplementation(async (_t: string, arenaId: number) => ({ ok: true, permit: permitOf(arenaId, bad) }));
