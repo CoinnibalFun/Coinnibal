@@ -23,6 +23,7 @@ import {
   type ShopView,
 } from '@coinnibal/shared';
 import { ChainBusyError, type ChainGateway } from '../chain/types';
+import { ClientBudgetError } from '../net/client-scope';
 import { InventoryError, type BoostInventory } from './inventory';
 import type { ShopSettingsStore } from './settings';
 import { verifyPurchase } from './verify';
@@ -207,7 +208,13 @@ export class ShopService {
    * ids has not given the discount to another wallet today. `commit`: the discounted purchase happens now.
    */
   private async discountFor(wallet: string, fresh: boolean, commit = false): Promise<boolean> {
-    const holds = (await this.deps.holder(wallet).catch(() => false)) || (fresh && (await this.deps.holder(wallet, true).catch(() => false)));
+    // a busy cached check (`ClientBudgetError`) is passed on for a price shown (never a holder's price lost), and
+    // falls through to the fresh read of a purchase
+    const cached = await this.deps.holder(wallet).catch((err) => {
+      if (err instanceof ClientBudgetError && !fresh) throw err;
+      return false;
+    });
+    const holds = cached || (fresh && (await this.deps.holder(wallet, true).catch(() => false)));
     if (!holds) return false;
     const claims = this.deps.claims;
     const tokens = claims && this.deps.emblemTokens ? await this.deps.emblemTokens(wallet, fresh).catch(() => null) : null;

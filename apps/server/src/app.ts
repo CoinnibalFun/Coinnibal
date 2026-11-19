@@ -123,9 +123,8 @@ export async function createApp(
   // refuse a misconfigured DEV_FAKE_CHAIN before any file is opened
   assertDevFakeChainAllowed(cfg);
   // the secret signs every session token (admin sessions too): a short one can be brute-forced offline from any
-  // token. The mainnet refuses to start with one (throws); a testnet logs it
-  const weakSecret = checkAuthSecret(cfg);
-  if (weakSecret) log(`auth: ${weakSecret}`);
+  // token. The mainnet refuses to start with one (throws, also below once the RPC told its chain); a testnet logs it
+  checkAuthSecret(cfg);
   // one request budget per RPC URL for the whole process (the public RPC answers 429 above its limit)
   configureRpcBudgets({ ratePerSec: cfg.chain.rpcMaxRps, burst: cfg.chain.rpcBurst });
   // EVM_RPC_URLS: each URL its own budget (RPC_MAX_RPS may give one rate per URL: a provider allows far more than a public RPC)
@@ -133,8 +132,13 @@ export async function createApp(
   const stopRpcLog = startRpcMinuteLog(log);
   const files = dataFileNames(cfg);
   // chain-keyed state: DATA_DIR/chains/<chainId>/ (registry, journal, bot wallets, allowlist snapshots)
-  const stateChainId =
-    opts.chainId !== undefined ? opts.chainId : opts.chain ? opts.chain.status().chainId : await resolveStateChainId(cfg, { persist, log });
+  let served: number | null = null;
+  const resolve = opts.chainId === undefined && !opts.chain;
+  const stateChainId = opts.chainId !== undefined ? opts.chainId : opts.chain ? opts.chain.status().chainId : await resolveStateChainId(cfg, { persist, log, served: (id) => (served = id) });
+  // the weak-secret refusal also looks at the chain the RPC really serves (CHAIN_ID may be unset): see checkAuthSecret
+  const realChain = resolve && !cfg.devFakeChain && !!cfg.chain.rpcUrl && !!cfg.chain.serverKey;
+  const weakSecret = checkAuthSecret(cfg, [stateChainId, served], realChain && !cfg.chain.chainIdExplicit && stateChainId === null && served === null);
+  if (weakSecret) log(`auth: ${weakSecret}`);
   if (persist && stateChainId !== null) migrateLegacyState(cfg.dataDir, stateChainId, log);
   const chainState = persist ? stateDir(cfg.dataDir, stateChainId) : null;
   if (stateChainId !== null) log(`state: chain ${stateChainId} (${persist ? join(cfg.dataDir, 'chains', String(stateChainId)) : 'in memory'})`);
@@ -155,10 +159,14 @@ export async function createApp(
   const adminSet = new Set(cfg.adminWallets.map((w) => w.toLowerCase()));
   const auth = new Auth(cfg.authSecret, {
     onChain: chain.verifyMessage ? (a, m, sig) => chain.verifyMessage!(a, m, sig) : null,
+    // garbage aimed at a plain account never reaches the smart-wallet check (`CODE_CHECKS`)
+    hasCode: chain.hasCode ? (a) => chain.hasCode!(a) : null,
     // admin sessions are short (ADMIN_TOKEN_TTL_MIN) and can be revoked (POST /api/admin/auth/revoke)
     isAdmin: (w) => adminSet.has(w.toLowerCase()),
     adminTtlMs: cfg.adminTokenTtlMs,
     revocationsFile: persist ? join(cfg.dataDir, 'auth-revoked.json') : null,
+    // smart wallets that signed in, per network: their sign-in reserve survives a restart (`SMART_WALLET_RESERVE`)
+    smartWalletsFile: persist ? join(cfg.dataDir, 'auth-smart-wallets.json') : null,
     log,
   });
   const profiles = new ProfileStore(persist ? join(cfg.dataDir, files.profiles) : null, log);
@@ -188,6 +196,7 @@ export async function createApp(
     usdCents: cfg.mint.usdCents,
     fetchPrice,
     logChunkBlocks: cfg.chain.logChunkBlocks,
+    rpcMaxRps: cfg.chain.rpcMaxRps,
     log,
   });
   // the testnet's NFT comes from the testnet's registry (the testnet emblem import after the move to mainnet)

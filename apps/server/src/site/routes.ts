@@ -4,7 +4,7 @@ import { AdminAudit } from './audit';
 import { OLD_SECRET_PROOF_HEADER, SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
 import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible } from '@coinnibal/shared';
-import { checksumAddress, type Auth } from '../auth';
+import { SIGN_IN_BUSY_MESSAGE, SignInBusyError, checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import { XLinkFail, type XLinkService } from '../xlink';
 import { squarePng } from './share-card';
@@ -12,6 +12,7 @@ import type { ChainGateway } from '../chain/types';
 import { integrityRoutes } from '../integrity/routes';
 import type { IntegrityService } from '../integrity/service';
 import type { ServerConfig } from '../config';
+import { CLIENT_BUSY_MESSAGE, ClientBudgetError } from '../net/client-scope';
 import { Limiter } from '../net/limiter';
 import { ProfileError, type ProfileStore } from '../profiles';
 import type { Journal } from '../stake/journal';
@@ -311,8 +312,11 @@ export class SiteApi {
     return this.ext.chain?.status().chainId ?? null;
   }
 
-  /** Handles the request when the path is the site's; false otherwise. */
-  async handle(req: IncomingMessage, res: ServerResponse, url: URL, ip: string): Promise<boolean> {
+  /**
+   * Handles the request when the path is the site's; false otherwise. `ip`: the client's rate-limit key (`rateKey`:
+   * an IPv6 client counts as its /64); `auditIp`: its exact address, for the admin audit and the logs.
+   */
+  async handle(req: IncomingMessage, res: ServerResponse, url: URL, ip: string, auditIp = ip): Promise<boolean> {
     const path = url.pathname;
     const mine =
       path.startsWith('/api/site/') ||
@@ -340,10 +344,12 @@ export class SiteApi {
       else if (path.startsWith('/api/nft/')) await this.nftRoutes(req, res, url);
       else if (path.startsWith('/api/site/')) await this.siteRoutes(req, res, url, ip);
       else if (path.startsWith('/api/rooms/custom')) await this.customRoutes(req, res, path, ip);
-      else await this.audited(req, res, url, ip);
+      else await this.audited(req, res, url, auditIp);
     } catch (err) {
       if (err instanceof SiteFail && err.status === 413) res.setHeader('Connection', 'close');
       if (err instanceof SiteFail) fail(res, err.status, { error: err.code, message: err.message, ...(err.field ? { field: err.field } : {}) });
+      // a holder check this client may not make right now, with no answer known: busy, never a wrong "no"
+      else if (err instanceof ClientBudgetError) fail(res, 429, { error: 'rate_limited', message: CLIENT_BUSY_MESSAGE });
       else throw err;
     }
     return true;
@@ -365,15 +371,25 @@ export class SiteApi {
     if (path === '/api/auth/me') {
       this.method(req, 'GET');
       const wallet = this.session(req);
-      const [holder, canPlay] = await Promise.all([this.isHolder(wallet), this.gameOpenFor(wallet)]);
-      return send(res, 200, { address: wallet, admin: this.isAdmin(wallet), holder, canPlay });
+      const admin = this.isAdmin(wallet);
+      // a busy holder check (`ClientBudgetError`) answers 429, except for an admin: its access does not hang on it
+      const [holder, canPlay] = await Promise.all([this.isHolder(wallet).catch((err) => (admin && err instanceof ClientBudgetError ? false : Promise.reject(err))), this.gameOpenFor(wallet)]);
+      return send(res, 200, { address: wallet, admin, holder, canPlay });
     }
     this.method(req, 'POST');
     if (!this.limits.login.allow(ip)) throw new SiteFail(429, 'rate_limited', 'Too many sign-ins. Wait a moment.');
     const body = await readJson(req);
     const { address, message, signature } = body;
-    const wallet =
-      typeof address === 'string' && typeof message === 'string' && typeof signature === 'string' ? await this.auth.verifySignature(address, message, signature) : null;
+    let wallet: string | null = null;
+    if (typeof address === 'string' && typeof message === 'string' && typeof signature === 'string') {
+      try {
+        wallet = await this.auth.verifySignature(address, message, signature);
+      } catch (err) {
+        // the smart-wallet check cannot run right now: busy, not a wrong signature (the nonce is kept)
+        if (err instanceof SignInBusyError) throw new SiteFail(429, 'rate_limited', SIGN_IN_BUSY_MESSAGE);
+        throw err;
+      }
+    }
     if (!wallet) throw new SiteFail(401, 'auth_failed', 'Wallet sign-in failed. Please sign again.');
     send(res, 200, { address: wallet, token: this.auth.issueToken(wallet), admin: this.isAdmin(wallet) });
   }

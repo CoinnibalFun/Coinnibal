@@ -281,8 +281,11 @@ fallback: a URL that keeps answering 429 or is down hands the call on after two 
 first again for every new call; a resent transaction is the same signed one (same hash and nonce). Each URL has its
 own budget (`RPC_MAX_RPS`, on the VPS `COINNIBAL_RPC_MAX_RPS`, e.g. `25,4`). Concurrent reads merge into one Multicall3 call, or a deployless multicall
 on a chain without Multicall3 (the log says which), so the bell of 200 tickets reads its sessions in about 24 calls
-instead of 216. Set-up and checks: deploy/vps/README.md, "RPC". `rpc: N calls/min …` in the log, once a minute per
-URL, shows the traffic and the 429s.
+instead of 216. Calls wait their turn by priority: settlements and loot burns (`critical`) first, then paid joins'
+ticket reads (`high`, bounded by the front door), then holder checks, the arena list and the mint state (`normal`),
+then background work (`low`: the stale sweeper, the holder index, balance checks). Set-up and checks:
+deploy/vps/README.md, "RPC". `rpc: N calls/min …` in the log, once a minute per URL, shows the traffic, the 429s and
+the calls per priority.
 
 ## Fees, burns and the fee wallet
 
@@ -426,8 +429,9 @@ site's contract pins are the exception (item 2). Check, in order:
    `TESTNET_RPC_URL`, `JOURNAL_ABANDON_CONTRACT` in `.env` are always overridden. Delete them when convenient, so the
    file says what runs. If you tuned `RPC_MAX_RPS` there, copy it to `COINNIBAL_RPC_MAX_RPS`.
 4. **`AUTH_SECRET`.** Under 32 bytes the testnet server only warns (`!!! AUTH_SECRET is …`); the mainnet refuses to
-   start. Replace it with `openssl rand -hex 32` before the mainnet, or leave it empty for the generated one (every
-   session then has to sign in again once).
+   start (`COINNIBAL_CHAIN_ID=4663`, an RPC that serves 4663, or, outside Docker, `CHAIN_ID` unset while the RPC does
+   not answer at a first boot). Replace it with `openssl rand -hex 32` before the mainnet, or leave it empty for the
+   generated one (every session then has to sign in again once).
 5. **Sign in to `/admin` again.** Admin sessions are now 2 hours and the earlier long tokens are refused on admin
    routes (`admin_session_expired`); players keep theirs.
 6. **After the deploy:** `coinnibal-compose config | grep -E 'CHAIN_ID|EVM_RPC|GAME_ACCESS'` shows `46630`, the testnet
@@ -659,8 +663,8 @@ settled exactly once.
 |---|---|
 | Cloudflare (recommended, deploy/vps/README.md "Cloudflare in front") | volumetric floods, bad bots at the edge; WebSockets pass |
 | Caddy | headers in 10 s, bodies in 30 s and at most 1 MB, headers at most 16 KB, idle keep-alive 2 min |
-| WebSocket front door | `MAX_CONNECTIONS` (1500); guests (not signed in) at most 80 % of it, per IP (8) and per IPv4 /24 or IPv6 /64 (48); a signed-in socket leaves its IP's guest count (carrier NAT), up to 64 per IP; a socket offering its session token (`coinnibal.auth.<token>` subprotocol) takes the reserve, and a wallet with a live arena coin always gets in (5 % headroom, past the load shedder); near the cap the longest-idle lobby guest (30 s silent) is closed (1013) for a newcomer; 60 upgrades per IP a minute; a socket without a valid `hello` in 10 s is closed; 90 messages/s per socket (bursts of 120), a socket that floods or sends garbage (300 strikes in 10 s) is closed with 1008; at most 4 KB per message; sign-ins and ticket reads 1 per 2 s |
-| HTTP | 240 API requests per IP a minute, 20 sign-in nonces per IP a minute (at most 24 unused per IP and 4 per address; a full pool evicts the biggest holder's first), headers in 15 s, the whole request in 30 s, 64 KiB bodies, `/api/rooms` and `/api/leaderboard` built at most once a second, 30 share-card renders per IP and 120 in all a minute |
+| WebSocket front door | `MAX_CONNECTIONS` (1500); guests (not signed in) at most 80 % of it, per IP (8), per IPv4 /24 or IPv6 /64 (48) and per IPv6 /48 (96); a signed-in socket leaves its IP's guest count (carrier NAT), up to 64 per address (an IPv6 client counts as its /64) and 192 per IPv4 /24 or IPv6 /48; at most 3 sockets per wallet (a newer one closes its oldest lobby socket with `CLOSE_REPLACED`; a socket counts under the wallet whose token opened it until it closes, signed out or not); a socket offering its session token (`coinnibal.auth.<token>` subprotocol) takes the reserve, and a wallet with a live arena coin gets in past the cap and the load shedder (20 upgrades per wallet a minute, 8 over the address bounds; past the cap it takes the place of its own lobby socket or of one silent 5 s, else one slot of the 5 % headroom per wallet, never closing a live game; a headroom socket that signs out while full is closed with 1013); near the cap the longest-idle lobby guest (30 s silent) is closed (1013) for a newcomer, and at the cap the signed-in socket that went longest without playing (2 min; pings do not count; never one that plays, joins or whose wallet holds a live coin); 60 upgrades per IP (IPv6 /64) a minute; a socket without a valid `hello` in 10 s is closed, a second `hello` is a strike; 90 messages/s per socket (bursts of 120), a socket that floods or sends garbage (300 strikes in 10 s) is closed with 1008; at most 4 KB per message; `ping` answered at most every 500 ms; a send buffer over 2 MiB, or over 768 KiB at two heartbeats in a row, closes the socket, and a socket that does not echo the heartbeat's ping payload within 25 s is closed; sign-ins 1 per 2 s per socket; ticket reads 1 per 2 s per socket, 20 per wallet, 60 per client and 120 per IPv6 /48 or IPv4 /24 a minute, at most 16 s of the RPC budget waiting (then `chain_busy` at once; 4 of those per client, 8 per IPv6 /48 or IPv4 /24, a quarter for wallets the `Joined` index does not know to hold a ticket, which a refused or seated join of such a wallet refreshes at once, every 4 s at most), at `high` RPC priority; holder checks that read the chain 60 per client and 120 per IPv6 /48 or IPv4 /24 a minute, a quarter of `RPC_MAX_RPS` server-wide (past it a "holder" on record, or "busy, try again": never "not a holder"); a join waits at most 1 s for its laurel's holder check |
+| HTTP | 240 API requests per IP a minute, 20 sign-in nonces per IP a minute (at most 24 unused per IP, expired ones not counted, and 4 per IP and address; a full pool evicts the biggest network's first); every per-IP limit counts an IPv6 client as its /64; smart-wallet (ERC-1271 / 6492) sign-in checks 2 at once, 0.5 a second server-wide, 4 per client and 8 per IPv6 /48 in 10 minutes (given up after 10 s), only for an address with code (`eth_getCode`: 1 a second, 8 per client in 10 minutes, cached) or an ERC-6492 / ERC-8010 signature, plus a reserve for smart wallets that signed in before from the same network (past it: 429 "sign-in is busy", the nonce kept); headers in 15 s, the whole request in 30 s, 64 KiB bodies, `/api/rooms` and `/api/leaderboard` built at most once a second, 30 share-card renders per IP and 120 in all a minute |
 | Load shedding (`LOAD_SHED`, on in production) | when the game thread with the most headroom runs a tick p95 over 28 ms or the main thread lags over 150 ms (p99): new free games wait (`server_full`); over 45 ms / 400 ms: new sockets (503) and new arena seats wait too (the ticket stays on chain). Live games and reconnects always go on. Logged as `!!! load: BUSY` / `CRITICAL` |
 
 The per-IP limits need the real client address: Caddy hands it on (one hop); the site is served by the game server
@@ -741,6 +745,7 @@ with any amount up to a vault and burn up to a vault with `sweepLoot`.
 | `chains/<id>/settled.jsonl` | every confirmed settlement, cancel and loot burn of the last 14 days | reorg protection and the payout record start empty |
 | `admin-audit.jsonl` | every admin write (who, what, when, from where) and every request of the secret exports | the audit trail is gone |
 | `chains/<id>/emblem-claims.json`, `reprice.json`, `auth-revoked.json` | the token ids open holder tickets hold, the arenas closing for a re-price, revoked sessions | an emblem may serve one extra ticket; a re-price is asked again; revoked sessions come back until they expire |
+| `auth-smart-wallets.json` | the smart wallets that signed in, per network (their sign-in reserve) | during a flood of garbage signatures a known smart wallet waits like a new one, until it has signed in once more |
 
 - The journal is written to a temporary file and renamed, so the file on disk is always a complete snapshot. Copy
   `DATA_DIR` regularly and keep the copies encrypted (they hold a private key and wallet addresses): on the VPS the
