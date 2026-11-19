@@ -24,10 +24,14 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /**
  * The entry's own chunk failed (a tab or cache from before a deploy, or the network): reload once,
- * then say so plainly instead of leaving a blank page.
+ * then say so plainly instead of leaving a blank page. The prerendered landing (`landing.html`) is
+ * left as it is: it is already painted and works without script (plain links, the FAQ's
+ * <details>), so a reload or the note would only take a readable page away.
  */
 function bootFailed(err: unknown): void {
   console.error('the page failed to load', err);
+  const first = root.firstElementChild;
+  if (first !== null && !first.classList.contains('boot')) return;
   const KEY = storageKey('boot-reload.v1', 'session');
   try {
     const last = Number(sessionStorage.getItem(KEY) ?? 0);
