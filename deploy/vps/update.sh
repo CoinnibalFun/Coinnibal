@@ -13,15 +13,30 @@
 #
 # Rollback: the running image is tagged elymum-app:previous before the build; when the new container is not
 # healthy (the liveness check, /api/health?live=1) within 60 s, the previous image and commit are put back at once.
-# Output goes to journald: journalctl -u elymum-update -n 100
+#
+# Security fixes of the images: every build pulls the newest base image (--pull: node:22-bookworm-slim, its Debian
+# and Node patches) and the Caddy image of docker-compose.yml (a pinned patch version; Dependabot proposes newer ones,
+# .github/dependabot.yml). `update.sh --refresh` (elymum-refresh.timer, weekly) does the same without a new commit:
+# it rebuilds the deployed commit and swaps the app and/or Caddy in the round break, only when an image changed.
+# Output goes to journald: journalctl -u elymum-update -n 100 (the refresh: -u elymum-refresh)
 set -euo pipefail
 # shellcheck source=lib.sh
 . "$(dirname "$(readlink -f "$0")")/lib.sh"
 need_root
 
+refresh=0
+case "${1:-}" in
+  "") ;;
+  --refresh) refresh=1 ;;
+  *) die "unknown argument: $1 (update.sh, or update.sh --refresh)" ;;
+esac
+
 mkdir -p "$COINNIBAL_STATE" "$(dirname "$COINNIBAL_LOCK")"
 exec 9>"$COINNIBAL_LOCK"
-if ! flock -n 9; then
+if [[ "$refresh" -eq 1 ]]; then
+  # the weekly refresh waits its turn (skipped, it would wait a whole week)
+  flock -w 1800 9 || die "another Coinnibal job held the lock for 30 minutes; no refresh now"
+elif ! flock -n 9; then
   log "another Coinnibal job (update, backup or install) is running; skipping this check"
   exit 0
 fi
@@ -72,7 +87,7 @@ sync_units() {
     systemctl daemon-reload
     log "systemd units updated"
   fi
-  for timer in "$INSTALLED_UNIT_PREFIX-alert.timer" "$INSTALLED_UNIT_PREFIX-reboot.timer"; do
+  for timer in "$INSTALLED_UNIT_PREFIX-alert.timer" "$INSTALLED_UNIT_PREFIX-reboot.timer" "$INSTALLED_UNIT_PREFIX-refresh.timer"; do
     [[ -f "/etc/systemd/system/$timer" ]] && ! systemctl is-enabled --quiet "$timer" 2>/dev/null && systemctl enable --now "$timer" >/dev/null 2>&1 && log "$timer enabled"
   done
   return 0
@@ -89,10 +104,16 @@ host_upgrade() {
   host_journald
 }
 
+# nothing can be deployed now: the check ends here, but the weekly refresh still rebuilds the deployed commit
+no_deploy() {
+  [[ "$refresh" -eq 1 ]] || exit 0
+  remote="$(cat "$COINNIBAL_STATE/deployed" 2>/dev/null || true)"
+}
+
 if ! timeout 120 git fetch --quiet origin "$branch" "+refs/tags/ci-green-$branch:refs/tags/ci-green-$branch" 2>/dev/null; then
   if ! timeout 120 git fetch --quiet origin "$branch"; then
     log "git fetch failed (network or deploy key); will retry at the next check"
-    exit 0
+    [[ "$refresh" -eq 1 ]] || exit 0
   fi
 fi
 head="$(git rev-parse "origin/$branch")"
@@ -105,16 +126,49 @@ if green="$(git rev-parse -q --verify "refs/tags/ci-green-$branch^{commit}" 2>/d
     remote="$head"
   else
     log "the CI marker ci-green-$branch is not on $branch; nothing is deployed until CI passes on it"
-    exit 0
+    no_deploy
   fi
 elif [[ "$(env_get_renamed REQUIRE_CI)" == "1" ]]; then
   log "COINNIBAL_REQUIRE_CI=1 and no CI marker ci-green-$branch: not deploying ${head:0:12} (see README \"Deploys\")"
-  exit 0
+  no_deploy
 fi
 deployed="$(cat "$COINNIBAL_STATE/deployed" 2>/dev/null || true)"
 failed="$(cat "$COINNIBAL_STATE/failed" 2>/dev/null || true)"
 
-if [[ "$remote" == "$deployed" ]]; then
+# same=1: the weekly refresh of the deployed commit (no newer deployable commit). A newer one deploys as usual.
+same=0
+if [[ "$refresh" -eq 1 ]] && [[ "$remote" == "$deployed" || "$remote" == "$failed" ]]; then
+  [[ -n "$deployed" ]] || {
+    log "nothing deployed yet; no refresh"
+    exit 0
+  }
+  remote="$deployed"
+  same=1
+fi
+# the refresh of the deployed commit never marks it failed (a newer failed commit stays marked)
+mark_failed() {
+  [[ "$same" -eq 1 ]] || echo "$remote" >"$COINNIBAL_STATE/failed"
+}
+image_id() {
+  docker image inspect -f '{{.Id}}' "$1" 2>/dev/null || true
+}
+# the running Caddy container is on an older image than the one its tag names now (after `dc pull caddy`)
+caddy_stale() {
+  local cid
+  cid="$(dc ps -q caddy 2>/dev/null)"
+  [[ -n "$cid" ]] || return 0
+  [[ "$(docker inspect -f '{{.Image}}' "$cid" 2>/dev/null)" != "$(image_id "$(docker inspect -f '{{.Config.Image}}' "$cid" 2>/dev/null)")" ]]
+}
+# the app image on the newest base image (--pull); a deploy whose pull fails (the registry down) builds once more
+# with the base images on this host, so an outage there never blocks a fix
+build_app() {
+  dc build --pull app && return 0
+  [[ "$same" -eq 0 ]] || return 1
+  log "the build with --pull failed (registry unreachable?); building with the base images on this host"
+  dc build app
+}
+
+if [[ "$same" -eq 0 && "$remote" == "$deployed" ]]; then
   [[ "$head" != "$remote" ]] && [[ ! -f "$COINNIBAL_STATE/waiting-ci" || "$(cat "$COINNIBAL_STATE/waiting-ci")" != "$head" ]] && {
     echo "$head" >"$COINNIBAL_STATE/waiting-ci"
     log "${head:0:12} on $branch waits for CI (deployed: the last green commit ${remote:0:12})"
@@ -124,35 +178,65 @@ if [[ "$remote" == "$deployed" ]]; then
     log "app container is not running; starting the stack"
     dc up -d || log "docker compose up failed"
   fi
+  # once per deployed commit, its units installed and its timers on: the deploy that brought a new one ran the
+  # update.sh of before it (so a server installed earlier gets the weekly refresh timer here)
+  if [[ "$(cat "$COINNIBAL_STATE/units-synced" 2>/dev/null)" != "$deployed" ]]; then
+    sync_units
+    echo "$deployed" >"$COINNIBAL_STATE/units-synced"
+  fi
   exit 0
 fi
-if [[ "$remote" == "$failed" ]]; then
+if [[ "$same" -eq 0 && "$remote" == "$failed" ]]; then
   exit 0
 fi
 
-log "new commit on $branch: ${deployed:0:12} -> ${remote:0:12} ($(git log -1 --format=%s "$remote" | cut -c1-80))"
+if [[ "$same" -eq 1 ]]; then
+  log "weekly refresh of ${remote:0:12}: rebuilding on the newest base image and pulling Caddy"
+else
+  log "new commit on $branch: ${deployed:0:12} -> ${remote:0:12} ($(git log -1 --format=%s "$remote" | cut -c1-80))"
+fi
 git reset --hard --quiet "$remote"
 
-# the image now serving becomes the rollback target
-if docker image inspect "$COINNIBAL_IMAGE" >/dev/null 2>&1; then
+# the image now serving becomes the rollback target (the refresh tags it below, once its build changed the image)
+before="$(image_id "$COINNIBAL_IMAGE")"
+if [[ "$same" -eq 0 && -n "$before" ]]; then
   docker tag "$COINNIBAL_IMAGE" "$PREVIOUS_IMAGE"
   [[ -n "$deployed" ]] && echo "$deployed" >"$COINNIBAL_STATE/previous"
 fi
 
 log "building the new image (the old container keeps serving)"
-if ! dc build app; then
-  echo "$remote" >"$COINNIBAL_STATE/failed"
+if ! build_app; then
+  if [[ "$same" -eq 1 ]]; then
+    notify "the weekly rebuild of ${remote:0:12} failed; the running version keeps serving (journalctl -u $INSTALLED_UNIT_PREFIX-refresh)"
+    exit 0
+  fi
+  mark_failed
   [[ -n "$deployed" ]] && git reset --hard --quiet "$deployed"
   log "BUILD FAILED for ${remote:0:12}; the previous version keeps running. It is retried when a newer commit arrives."
   notify "build failed for ${remote:0:12} ($(git log -1 --format=%s "$remote" 2>/dev/null | cut -c1-60)); the previous version keeps running"
   exit 0
+fi
+# Caddy: the newest build of its pinned tag (the swap below recreates it, in the break, when the image changed)
+dc pull --quiet caddy || log "could not pull the Caddy image; the one on this host stays"
+
+app_changed=1
+if [[ "$same" -eq 1 ]]; then
+  [[ "$(image_id "$COINNIBAL_IMAGE")" != "$before" ]] || app_changed=0
+  if [[ "$app_changed" -eq 0 ]] && ! caddy_stale; then
+    log "weekly refresh: the app image and Caddy are already the newest; nothing to swap"
+    exit 0
+  fi
+  if [[ "$app_changed" -eq 1 && -n "$before" ]]; then
+    docker tag "$before" "$PREVIOUS_IMAGE"
+    echo "$deployed" >"$COINNIBAL_STATE/previous"
+  fi
 fi
 
 wait_for_round_break
 
 log "swapping the app container (players reconnect in a few seconds)"
 if ! dc up -d --remove-orphans; then
-  echo "$remote" >"$COINNIBAL_STATE/failed"
+  mark_failed
   log "docker compose up failed for ${remote:0:12}"
 fi
 
@@ -160,14 +244,21 @@ status="$(wait_healthy "$HEALTHY_WITHIN_S")"
 if [[ "$status" != "healthy" ]]; then
   # the new version does not come up: the previous image and commit go back at once (no round-break wait: the arenas
   # are down anyway)
-  echo "$remote" >"$COINNIBAL_STATE/failed"
-  if docker image inspect "$PREVIOUS_IMAGE" >/dev/null 2>&1 && [[ -n "$deployed" ]]; then
+  mark_failed
+  if [[ "$app_changed" -eq 0 ]]; then
+    # only Caddy was refreshed: the app's image is the one that ran before, nothing to roll back
+    notify "after the weekly Caddy refresh the app is $status (its image did not change)"
+  elif docker image inspect "$PREVIOUS_IMAGE" >/dev/null 2>&1 && [[ -n "$deployed" ]]; then
     log "ROLLBACK: ${remote:0:12} is $status after ${HEALTHY_WITHIN_S} s; putting ${deployed:0:12} back"
     git reset --hard --quiet "$deployed"
     docker tag "$PREVIOUS_IMAGE" "$COINNIBAL_IMAGE"
     dc up -d --remove-orphans || log "docker compose up of the previous version failed"
     status="$(wait_healthy "$HEALTHY_WITHIN_S")"
-    notify "deploy of ${remote:0:12} rolled back (it was not healthy within ${HEALTHY_WITHIN_S} s); ${deployed:0:12} is $status again"
+    if [[ "$same" -eq 1 ]]; then
+      notify "the weekly rebuild of ${remote:0:12} was not healthy within ${HEALTHY_WITHIN_S} s and was rolled back; the image of before is $status again (retried next week)"
+    else
+      notify "deploy of ${remote:0:12} rolled back (it was not healthy within ${HEALTHY_WITHIN_S} s); ${deployed:0:12} is $status again"
+    fi
   else
     notify "deploy of ${remote:0:12} is $status after ${HEALTHY_WITHIN_S} s and there is no previous image to roll back to"
   fi
@@ -185,10 +276,11 @@ sync_units
 host_upgrade
 
 echo "$remote" >"$COINNIBAL_STATE/deployed"
-rm -f "$COINNIBAL_STATE/failed" "$COINNIBAL_STATE/waiting-ci"
+[[ "$same" -eq 1 ]] || rm -f "$COINNIBAL_STATE/failed" "$COINNIBAL_STATE/waiting-ci"
 date -u +%FT%TZ >"$COINNIBAL_STATE/deployed-at"
-log "deployed ${remote:0:12}; app is $status"
+log "$([[ "$same" -eq 1 ]] && echo refreshed || echo deployed) ${remote:0:12}; app is $status"
 
-# keep the disk clean: dangling images of earlier builds, build cache older than a week (elymum-app:previous stays)
+# keep the disk clean: dangling images of earlier builds and Caddy pulls, build cache older than a week
+# (elymum-app:previous stays)
 docker image prune -f >/dev/null 2>&1 || true
 docker builder prune -f --filter until=168h >/dev/null 2>&1 || true

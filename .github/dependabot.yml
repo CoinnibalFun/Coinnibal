@@ -1,0 +1,57 @@
+# Dependabot: version bumps arrive as pull requests, so every one goes through CI, and once merged through the
+# ci-green-<branch> gate of the VPS auto-deploy (deploy/vps/README.md, "Updates"). Weekly: the npm minor and patch
+# bumps in one pull request, a major one on its own; the actions in one; each image on its own (Node and Caddy majors
+# are not proposed). Security updates (on in the repository's Settings → Code security → Dependabot security
+# updates) are opened at once, apart from the schedule.
+version: 2
+updates:
+  # the pnpm workspace (pnpm-lock.yaml at the root)
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # the actions CI uses (pinned to a commit, with the version in a comment)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # the Dockerfile's base image (node:22-bookworm-slim; its patches arrive anyway: every VPS build pulls it)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    ignore:
+      # Node 22 is the runtime (package.json engines); moving to another major is a decision
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
+  # Caddy, pinned to a patch version in deploy/vps/docker-compose.yml
+  - package-ecosystem: docker-compose
+    directory: /deploy/vps
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    ignore:
+      - dependency-name: caddy
+        update-types: ["version-update:semver-major"]
