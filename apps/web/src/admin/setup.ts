@@ -11,13 +11,25 @@ import {
   setTokenCall,
   type ContractCall,
 } from '@coinnibal/sdk';
-import { bpsToPercent } from '@coinnibal/shared';
+import { bpsToPercent, type ContractsRegistry } from '@coinnibal/shared';
 import { arenaName, type StatusSnapshot } from '@coinnibal/sdk/ops';
-import type { Address } from 'viem';
+import { getAddress, type Address } from 'viem';
 
 /** True when the arena's holder pair is not the owner's (8 % burned + 2 % to the fee wallet, as the site tells holders). */
 export function holderPairDrifted(cfg: { holderBurnBps?: number; holderVaultBps?: number }): boolean {
   return cfg.holderBurnBps !== SUGGESTED_HOLDER_BURN_BPS || cfg.holderVaultBps !== SUGGESTED_HOLDER_VAULT_BPS;
+}
+
+/**
+ * The game token the faucet still waits for (pure, tested): `/faucet` hands out the token registered with the server
+ * (`GET /api/site/faucet` reads the registry, never the arena), so on a testnet the arena's game token must be the
+ * registered one too. Registering it takes no signature (`POST /api/admin/contracts`). null when it is, on mainnet,
+ * before the token is set, or while the registry is not read.
+ */
+export function faucetTokenToRegister(i: { testnet: boolean; status: StatusSnapshot | null; registry: ContractsRegistry | null | undefined }): Address | null {
+  const token = i.status?.arena?.config?.token ?? null;
+  if (!i.testnet || !token || !i.registry || sameAddress(i.registry.token?.address ?? null, token)) return null;
+  return getAddress(token);
 }
 
 /**

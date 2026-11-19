@@ -4,9 +4,10 @@
 //                        (DEV_FAKE_TOKEN=0 pnpm demo: the game token starts unset, arenas "Opening soon";
 //                        `curl -X POST localhost:8787/api/dev/token` sets it live)
 //   pnpm demo:localnet   a real local EVM: `hardhat node` + the contracts deployed with the SDK (TestToken,
-//                        CoinnibalArena, CoinnibalNFT, token set, four arenas, mint open) + the production-built
-//                        server on that chain (EVM_RPC_URL, SERVER_PRIVATE_KEY, ARENA_ADDRESS, NFT_ADDRESS,
-//                        ADMIN_WALLETS) + the web dev server
+//                        CoinnibalArena, CoinnibalNFT, token set, four arenas, NFT perks, mint open) + the
+//                        production-built server on that chain (EVM_RPC_URL, SERVER_PRIVATE_KEY, ARENA_ADDRESS,
+//                        NFT_ADDRESS, ADMIN_WALLETS; the TestToken registered in its DATA_DIR, so the faucet works)
+//                        + the web dev server
 // Flags: --browser  also open a Chromium with the Dev Wallet (an EIP-6963 wallet whose key stays in Node;
 //                   on localnet it is Hardhat account #0, the contract owner and admin; needs a display)
 //        --no-build (localnet) do not build the server first and fail if it is missing
@@ -18,7 +19,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LOCALNET_RPC_PORT, ROOT, portFree, waitForHttp } from './lib/common.mjs';
-import { ACCOUNT, STATE_DIR, deployLocalnet, startHardhatNode } from './lib/localnet.mjs';
+import { ACCOUNT, SERVER_DATA_DIR, deployLocalnet, startHardhatNode } from './lib/localnet.mjs';
 
 const argv = process.argv.slice(2);
 const KNOWN = new Set(['--localnet', '--browser', '--no-build', '--help', '-h']);
@@ -204,17 +205,18 @@ async function main() {
     });
     children.add(rec);
     if (shuttingDown) return;
+    // a fresh server state for the fresh chain; the deploy registers the TestToken in it (the faucet hands it out)
+    const data = SERVER_DATA_DIR;
+    rmSync(data, { recursive: true, force: true });
+    mkdirSync(data, { recursive: true });
     say('deploying TestToken, CoinnibalArena and CoinnibalNFT with the SDK (the /admin deploy order)');
     let deployed;
     try {
       // the browser talks to the web dev server (it proxies /api and /ws), so SIWE names it
-      deployed = await deployLocalnet({ rpcUrl: `http://127.0.0.1:${RPC_PORT}`, publicUrl: WEB_URL, openMint: true, log: (l) => say(l) });
+      deployed = await deployLocalnet({ rpcUrl: `http://127.0.0.1:${RPC_PORT}`, publicUrl: WEB_URL, dataDir: data, openMint: true, log: (l) => say(l) });
     } catch (e) {
       fail(`the local deploy failed: ${e.shortMessage ?? e.message}`);
     }
-    const data = join(STATE_DIR, 'server-data');
-    rmSync(data, { recursive: true, force: true });
-    mkdirSync(data, { recursive: true });
     serverEnv = { ...ENV, ...deployed.env, NODE_ENV: 'production', DATA_DIR: data, STALE_SESSION_AFTER_S: '60' };
     serverEnv.GAME_ACCESS ??= 'public';
     openSite(data);
