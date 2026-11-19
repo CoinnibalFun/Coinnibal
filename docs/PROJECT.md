@@ -2,9 +2,10 @@
 
 Coinnibal is a cute coin-eats-coin arena game on **Robinhood Chain** (an Arbitrum Orbit L2, gas token **ETH**). The
 money rules live in Solidity contracts, the game runs on an authoritative server, and a **Coinnibal NFT** opens the
-game (no mint price is published; the visitor site says the public mint will be on OpenSea). This page explains how the game plays, how money moves, how the code is laid out and
-how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY.md), [RESEARCH.md](RESEARCH.md)
-(the specs under `docs/specs/` are historical: they describe the earlier Elysium build).
+game (no visitor copy names a mint price; the visitor site says the public mint will be on OpenSea). This page
+explains how the game plays, how money moves, how the code is laid out and how it is run. Details:
+[ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY.md), [RESEARCH.md](RESEARCH.md) (the specs under
+`docs/specs/` are historical: they describe the earlier Elysium build).
 
 > **Status (2026-11-18).** Coinnibal runs on **Robinhood Chain only**: Robinhood Chain Testnet (46630) now, Robinhood
 > Chain (4663) later, switched with `CHAIN_ID`. The arena contract is v3 (no fee on the ticket; 20 % of a ticket's profit:

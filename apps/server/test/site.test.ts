@@ -193,6 +193,14 @@ describe('site API', () => {
       expect((await h.call('POST', '/api/site/collab', { body: collabBody('nobody') })).status).toBe(401);
     });
 
+    it('registering a contract without a chain says where to look (the RPC, not an unset key)', async () => {
+      const r = await h.call('POST', '/api/admin/contracts', { wallet: h.admin, body: { kind: 'arena', address: wallet() } });
+      expect(r.status).toBe(503);
+      expect(r.body.error).toBe('chain_off');
+      expect(r.body.message).toMatch(/its RPC did not answer or serves another chain \(COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL\(S\) outside Docker; coinnibal-compose logs app shows why\)/);
+      expect(r.body.message).not.toMatch(/unset/);
+    });
+
     it('allows the site methods and the Authorization header over CORS', async () => {
       const res = await fetch(`http://127.0.0.1:${h.port}/api/site/wl`, { method: 'OPTIONS' });
       expect(res.status).toBe(204);

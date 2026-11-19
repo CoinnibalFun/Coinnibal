@@ -555,11 +555,10 @@ export function Gallery() {
             contract={{ name: 'CoinnibalNFT', address: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' }}
             args={[
               { name: 'to', type: 'address', value: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
-              { name: 'quantity', type: 'uint256', value: '3' },
+              { name: 'qty', type: 'uint256', value: '3' },
             ]}
-            value={{ wei: 63_900_000_000_000_000n, usd: 3 }}
             network={{ name: 'Robinhood Chain', chainId: 4663, mainnet: true }}
-            note="This is mainnet. Real ETH leaves the owner wallet."
+            note="This is mainnet. The owner wallet signs it and pays only the gas."
             confirmLabel="Sign on mainnet"
             onConfirm={() => {}}
             onCancel={() => {}}

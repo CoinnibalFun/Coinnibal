@@ -275,7 +275,7 @@ export type SiteErrorCode =
   | 'not_owner'
   /** Contracts registry: the arena's server authority is not the server key. */
   | 'wrong_authority'
-  /** The server has no chain (`EVM_RPC_URL` unset) or the contract is not registered. */
+  /** The server has no chain (its RPC did not answer or serves another chain) or the contract is not registered. */
   | 'chain_off'
   /** The upstream price feed (gas token / USD) could not be read. */
   | 'price_unavailable'

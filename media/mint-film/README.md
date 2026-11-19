@@ -17,7 +17,7 @@ canvas kit draws in the Ring Storybook palette and type (Fraunces, Geist Mono; s
 | 0:08.5 | The order | An ink flood to night; three tickets; the mascot hops 01 WL OPEN, 02 $1 MINT, 03 GAME LIVE, each prints in its ink on the landing; it leaps at the camera. | "The roadmap: The whitelist. The mint. Then the game." |
 | 0:12.5 | WL open | The coin pulls back: "WL open.", the `<SITE_HOST>/wl` ticket, the wordmark, @COINNIBALFUN and the foot line "WL OPEN · <SITE_HOST>/WL · @COINNIBALFUN". | "The WL is open. @coinnibalfun, on X." |
 
-Facts (to rewrite: the current game publishes no mint price and runs on Robinhood Chain), the WL first, the order WL → Mint → Play. No supply, no dates, no perks. The VO lines changed length
+Facts (to rewrite: the current game names no mint price and runs on Robinhood Chain), the WL first, the order WL → Mint → Play. No supply, no dates, no perks. The VO lines changed length
 with the rebrand: check the cue times in `timeline.json` against the new takes before the final render.
 
 `SITE_HOST` is the host of the site's `PUBLIC_URL` (no domain is written into the scenes). The

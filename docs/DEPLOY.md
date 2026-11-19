@@ -210,7 +210,8 @@ pnpm admin help
 The CLI refuses an RPC of any chain but Robinhood Chain, previews and simulates every transaction, `--dry-run`
 stops after the preview, and Robinhood Chain mainnet needs
 `--mainnet` plus typing "mainnet". Contracts deployed with the CLI still have to be registered with the server: use
-`/admin` (Setup → Register) or set `ARENA_ADDRESS` / `NFT_ADDRESS`.
+`/admin` (Setup → Advanced: manual controls → Register a contract that is already deployed), or, on a server outside
+Docker only, set `ARENA_ADDRESS` / `NFT_ADDRESS` (the VPS compose file clears them).
 
 ## Local development
 

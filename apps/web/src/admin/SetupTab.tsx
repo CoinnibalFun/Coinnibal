@@ -8,7 +8,8 @@ import { Advanced, type ChainCtx } from './ui';
 /**
  * What Setup puts in front of the owner (pure, tested): the deploy wizard while the contracts are
  * not on the server yet, otherwise Finish setup, plus the few owner cards Finish setup cannot do
- * (confirming the game token on mainnet, deploying a TestToken on a testnet without one).
+ * (setting the game token on mainnet: the token launched on Pons, typed twice; deploying a TestToken on a testnet
+ * without one).
  */
 export function setupLayout(ctx: Pick<ChainCtx, 'net' | 'status' | 'registry'>): { registered: boolean; tokenCard: boolean; testTokenCard: boolean } {
   const { net, status } = ctx;

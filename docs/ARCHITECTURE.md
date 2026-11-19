@@ -40,8 +40,8 @@ examples) and the tests use it; the contract is the authority and the server rea
 
 - **Server:** `CHAIN_ID` (46630 by default; anything else refuses to start) and `EVM_RPC_URLS` (a comma list in
   order: a provider, then the public RPC; `EVM_RPC_URL` alone still works). The RPC's `eth_chainId` is checked: an
-  RPC of another chain keeps the arenas off (`!!! chain: EVM_RPC_URL serves chain …`), a fallback of another chain is
-  left out.
+  RPC of another chain keeps the arenas off (`!!! chain: the RPC (COINNIBAL_RPC_URLS on the VPS, …) serves chain …`),
+  a fallback of another chain is left out.
   `/api/config` publishes `{ chainId, chainName, testnet, faucetUrl, rpcUrl, explorerUrl, fees, … }`.
 - **Web:** `VITE_CHAIN_ID` names the network before the server answers; the server's network wins. Wallets are
   asked to switch to (or add) exactly the server's chain. Copy says "ETH" and uses `{chain}` for the network's name,

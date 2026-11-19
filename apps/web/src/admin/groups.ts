@@ -77,7 +77,8 @@ const ACCESS: Record<GameAccess, string> = { admins: 'admins only', holders: 'NF
 /**
  * "Status now / next step" for each drawer (pure, tested). The next step is always something only
  * the owner can do (deploy, Finish setup, open the mint, fund the server key): never "register" or
- * "paste an address", which the panel does by itself.
+ * "paste an address" the panel can fill in by itself (the one address typed by hand is the real game token on the
+ * mainnet, typed twice).
  */
 export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
   const { net, status } = i;
