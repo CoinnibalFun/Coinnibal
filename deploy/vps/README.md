@@ -42,7 +42,8 @@ proxy until "Cloudflare in front" below). `nslookup <GAME_DOMAIN>` must answer t
 needs it for the certificate.
 
 The site (`SITE_DOMAIN`, default `coinnibal.fun`, DNS on Cloudflare): `A` records for `@` and `www` → the same VPS
-address, **DNS only**, so Caddy can get their certificates too.
+address, **DNS only**, so Caddy can get their certificates too (proxied later with "Cloudflare in front", like
+`game`). `A` records only, no `AAAA`: the ports are published on IPv4 only.
 
 ## 3. Install
 
@@ -246,13 +247,19 @@ that never say hello, message floods, slowloris, HTTP rate limits, load shedding
 `node --import tsx scripts/bench/flood.ts` shows each). A volumetric attack fills the VPS's link before any of that
 runs: only a network in front absorbs it. Cloudflare's free plan proxies WebSockets and is enough.
 
-What to click (about 20 minutes; do it at a quiet hour):
+What to click (about 20 minutes; do it at a quiet hour). Every record that points at the VPS goes through Cloudflare:
+one left **DNS only** hands out the origin's address, and anyone can then go around Cloudflare.
 
-1. **Cloudflare → Add a site → the game domain's zone** (`elymum.io` for the live `game.elymum.io`; Free plan). Cloudflare lists the domain's DNS records; check that
-   `game` (A record to the VPS) and the Vercel records are there. At your registrar, replace the nameservers with
-   the two Cloudflare names it shows. Wait until Cloudflare says the site is active.
-2. **DNS:** the `game` A record **Proxied** (orange cloud). Leave the Vercel records (`@`, `www`) **DNS only** (grey
-   cloud): Vercel has its own edge, and a proxied Vercel record needs extra Vercel settings.
+1. **Cloudflare → the zones.** The site's zone (`coinnibal.fun`, `SITE_DOMAIN`) is on Cloudflare already (section 2).
+   Add the game domain's zone too if it is another one (`elymum.io` for the live `game.elymum.io`: Add a site → Free
+   plan; at the registrar, replace the nameservers with the two Cloudflare names it shows; wait until Cloudflare says
+   the site is active). Check the records Cloudflare lists: in `elymum.io`, `game` (A record to the VPS) and the `@`
+   and `www` records that point at Vercel (they only redirect the old domain to `coinnibal.fun`, `vercel.json`).
+2. **DNS: Proxied (orange cloud)** for `game`, and for the site's `@` and `www` (all three A records to the VPS;
+   `Caddyfile.cloudflare` serves the three names). The Vercel records of `elymum.io` do not point at the VPS and may
+   stay DNS only (Vercel has its own edge). No `AAAA` record for the VPS (the ports are published on IPv4 only). The
+   VPS address was public in DNS until now, and DNS history sites keep old answers: for a door that is really shut,
+   move the server to a new address once (section 9, or the provider's "new IP") and publish only proxied records.
 3. **SSL/TLS → Overview: Full (strict)** (Caddy keeps its own certificate; Cloudflare checks it). SSL/TLS → Edge
    Certificates: minimum TLS 1.2; leave **Always Use HTTPS off** (Caddy redirects to HTTPS itself, and its
    certificate renewals answer Let's Encrypt on plain HTTP through Cloudflare).
@@ -262,29 +269,46 @@ What to click (about 20 minutes; do it at a quiet hour):
    `max-age` by the server itself).
 6. **Security → WAF → Rate limiting rules** (the free plan has one rule): path starts with `/api/auth/` → 30 requests
    per 10 s per IP → Block for 10 s. Optional; the server limits it too.
-7. **On the VPS:** switch Caddy to the Cloudflare config (it trusts `CF-Connecting-IP` only from Cloudflare's ranges,
-   so per-IP limits keep seeing players):
+7. **On the VPS:** switch Caddy to the Cloudflare config. It trusts `CF-Connecting-IP` only from Cloudflare's ranges,
+   so per-IP limits keep seeing players, and it serves HTTP/1.1 and HTTP/2 only: Cloudflare reaches the origin over
+   TCP, so there is no HTTP/3 (UDP) listener to go around it (players keep HTTP/3 at Cloudflare's edge):
    ```bash
    echo 'CADDY_CONFIG=Caddyfile.cloudflare' >> /opt/elymum/.env
    coinnibal-compose up -d caddy
    ```
 8. **Close the back door** so attackers cannot hit the VPS address directly (Docker publishes 80/443 past ufw, so the
-   rule goes into Docker's own `DOCKER-USER` chain). As root:
+   rules go into Docker's own `DOCKER-USER` chain). They match only what arrives on the internet-facing interface
+   (`-i`), so the containers' own outgoing HTTPS (the RPC, Let's Encrypt) is untouched, and they are inserted in
+   order (the drops first, then the Cloudflare ranges above them). As root:
    ```bash
    apt-get install -y iptables-persistent
-   for r in $(curl -fsS https://www.cloudflare.com/ips-v4); do iptables -I DOCKER-USER -p tcp -m multiport --dports 80,443 -s "$r" -j RETURN; done
-   iptables -A DOCKER-USER -p tcp -m multiport --dports 80,443 -j DROP
-   for r in $(curl -fsS https://www.cloudflare.com/ips-v6); do ip6tables -I DOCKER-USER -p tcp -m multiport --dports 80,443 -s "$r" -j RETURN; done
-   ip6tables -A DOCKER-USER -p tcp -m multiport --dports 80,443 -j DROP
+   ext="$(ip -4 route show default | awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit } }')"
+   echo "internet-facing interface: ${ext:?no default route}"
+   iptables -I DOCKER-USER -i "$ext" -p udp --dport 443 -j DROP
+   iptables -I DOCKER-USER -i "$ext" -p tcp -m multiport --dports 80,443 -j DROP
+   for r in $(curl -fsS https://www.cloudflare.com/ips-v4); do iptables -I DOCKER-USER -i "$ext" -p tcp -m multiport --dports 80,443 -s "$r" -j RETURN; done
    netfilter-persistent save
    ```
-   Check from your laptop: `curl -sS https://<GAME_DOMAIN>/api/health` works, `curl -k https://<VPS IP>/api/health`
-   times out. Certificate renewals keep working (Let's Encrypt reaches Caddy through Cloudflare on port 80).
-9. **Check:** play a practice round; `/admin` → Network shows players' own addresses in the integrity tab, not
+   IPv6 needs no rule: nothing listens there (`docker-compose.yml` publishes on IPv4 only). Certificate renewals keep
+   working (Let's Encrypt reaches Caddy through Cloudflare on port 80).
+9. **Check from your laptop** (not from the VPS):
+   ```bash
+   dig +short <SITE_DOMAIN> www.<SITE_DOMAIN> <GAME_DOMAIN>     # Cloudflare's addresses only, never the VPS's
+   curl -sS https://<GAME_DOMAIN>/api/health                    # works (through Cloudflare)
+   curl -k --max-time 10 https://<VPS IPv4>/api/health          # times out
+   curl -k --max-time 10 --resolve <GAME_DOMAIN>:443:<VPS IPv4> https://<GAME_DOMAIN>/api/health          # times out
+   curl -k --max-time 10 --http3-only --resolve <GAME_DOMAIN>:443:<VPS IPv4> https://<GAME_DOMAIN>/api/health  # fails
+   curl -6 -k --max-time 10 'https://[<VPS IPv6>]/api/health'   # fails (refused), when the VPS has an IPv6 address
+   ```
+   `--http3-only` needs a curl built with HTTP/3 (`curl -V` lists `HTTP3`). On the VPS,
+   `coinnibal-compose exec caddy grep -i ':01BB ' /proc/net/udp /proc/net/udp6` must print nothing (no UDP 443
+   listener in Caddy: 01BB is 443).
+10. **Check:** play a practice round; `/admin` → Network shows players' own addresses in the integrity tab, not
    Cloudflare's.
 
-To undo: the `game` record back to DNS only, `CADDY_CONFIG` removed (`coinnibal-compose up -d caddy`), and
-`iptables -F DOCKER-USER && ip6tables -F DOCKER-USER && netfilter-persistent save`.
+To undo: the records back to DNS only, `CADDY_CONFIG` removed (`coinnibal-compose up -d caddy`), and
+`iptables -F DOCKER-USER && netfilter-persistent save` (also `ip6tables -F DOCKER-USER` if you added the IPv6 rules an
+earlier version of this README gave).
 
 ## Notes
 
@@ -292,8 +316,8 @@ To undo: the `game` record back to DNS only, `CADDY_CONFIG` removed (`coinnibal-
   `trusted_proxies` configured), so the app sees exactly one hop, the player's address. `docker-compose.yml`
   sets `TRUST_PROXY=1` and `TRUST_PROXY_HOPS=1` for it. Behind Cloudflare, `Caddyfile.cloudflare` keeps that single
   hop (above); do not put any other proxy in front without a config of its own.
-- **Ports.** Only Caddy publishes ports (80, 443, 443/udp for HTTP/3). The app listens on 8787 inside the
-  Docker network only. Docker opens its published ports itself; ufw covers everything else.
+- **Ports.** Only Caddy publishes ports (80, 443, 443/udp for HTTP/3), on IPv4 only. The app listens on 8787 inside
+  the Docker network only. Docker opens its published ports itself; ufw covers everything else.
 - **Shutdown.** On a restart or deploy the server gets SIGTERM and pays out every live stake player before it
   exits; compose waits up to 45 s for that (`stop_grace_period`).
 - **The `$` in settings.** docker compose expands `$NAME` in `.env` values: write a value containing `$` in
