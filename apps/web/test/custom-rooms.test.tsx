@@ -5,8 +5,9 @@ import { CUSTOM_SETTINGS_DEFAULT } from '@coinnibal/shared';
 import { customRoomsPatch, draftBase, feeLadder, feeText, roomKindText } from '../src/admin/CustomRoomsCard';
 import { arenaTarget, leavePaidSeat, openInvite, seatInPaidRoom } from '../src/rooms/invite';
 import { Kb } from '../src/design';
-import { RoomApiError, loadPendingPayment, roomLink, savePendingPayment } from '../src/rooms/api';
+import { RoomApiError, loadPendingPayments, roomLink, savePendingPayment } from '../src/rooms/api';
 import { RoomCreator, roomFeeText } from '../src/rooms/RoomCreator';
+import { PaidSeatBanner } from '../src/rooms/PaidSeatBanner';
 import { newRoomRequest } from '../src/rooms/pay';
 import { tokenText } from '../src/ui/lobby/useLobby';
 import { RoomCard, resetInviteLink, useInviteLink } from '../src/rooms/RoomCard';
@@ -119,9 +120,9 @@ beforeEach(() => {
     allowance: 0n,
     holder: false,
   });
-  savePendingPayment(null);
+  localStorage.clear();
 });
-afterEach(() => savePendingPayment(null));
+afterEach(() => localStorage.clear());
 
 const open = async () => {
   render(
@@ -184,7 +185,7 @@ describe('the room creator', () => {
     expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ name: 'Friday Pond', durationMin: 60, mapSize: 'L', bots: 6, difficulty: 'hard', traps: 'many' }), { txHash: HASH, request });
     expect(screen.getByTestId('cr-code').textContent).toBe('AB2CD');
     expect((screen.getByLabelText('Invite link') as HTMLInputElement).value).toMatch(/\/play\?room=AB2CD$/);
-    expect(loadPendingPayment(ALICE)).toBeNull();
+    expect(loadPendingPayments(ALICE)).toEqual([]);
     fireEvent.click(screen.getByTestId('cr-enter'));
     expect(spies.play).toHaveBeenCalledWith('private:AB2CD');
   });
@@ -199,7 +200,7 @@ describe('the room creator', () => {
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
     expect(screen.getByRole('alert').textContent).toMatch(/All room slots are busy.*Your payment is kept/);
-    expect(loadPendingPayment(ALICE)?.hash).toBe(HASH);
+    expect(loadPendingPayments(ALICE).map((p) => p.hash)).toEqual([HASH]);
     expect(screen.getByTestId('cr-pay').textContent).toMatch(/Open with my payment/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
@@ -220,7 +221,7 @@ describe('the room creator', () => {
     await settle();
     expect(screen.getByRole('alert').textContent).toMatch(/made for something else/);
     expect(screen.getByRole('alert').textContent).not.toMatch(/Your payment is kept/);
-    expect(loadPendingPayment(ALICE)).toBeNull();
+    expect(loadPendingPayments(ALICE)).toEqual([]);
     expect(screen.getByTestId('cr-pay').textContent).not.toMatch(/Open with my payment/);
   });
 
@@ -310,7 +311,7 @@ describe('the room creator', () => {
     await settle();
     expect(screen.getByRole('alert').textContent).toMatch(/You rejected/);
     expect(spies.create).not.toHaveBeenCalled();
-    expect(loadPendingPayment(ALICE)).toBeNull();
+    expect(loadPendingPayments(ALICE)).toEqual([]);
     // sent, the receipt timed out here: the server is asked (it says pending, then still pending), the payment is kept
     spies.pay.mockResolvedValueOnce({ ok: false, rejected: false, hash: HASH, message: 'The network did not answer in time.' });
     spies.create.mockRejectedValue(new RoomApiError(409, 'payment_pending', 'The payment is not confirmed yet. Try again in a few seconds.'));
@@ -325,7 +326,7 @@ describe('the room creator', () => {
     expect(spies.create).toHaveBeenCalledTimes(4);
     expect(spies.create).toHaveBeenLastCalledWith('tok', expect.anything(), { txHash: HASH, request: REQUEST });
     expect(screen.getByRole('alert').textContent).toMatch(/not confirmed yet.*Your payment is kept/);
-    expect(loadPendingPayment(ALICE)).toMatchObject({ hash: HASH, raw: PRICE.toString() });
+    expect(loadPendingPayments(ALICE)).toMatchObject([{ hash: HASH, raw: PRICE.toString() }]);
     expect(screen.getByTestId('cr-pay').textContent).toMatch(/Open with my payment/);
   });
 
@@ -551,13 +552,67 @@ describe('room helpers', () => {
   it('a kept payment belongs to its wallet and expires', () => {
     const request = newRoomRequest();
     savePendingPayment({ hash: HASH, wallet: ALICE, request, raw: '1', at: Date.now() });
-    expect(loadPendingPayment(ALICE.toLowerCase())).toMatchObject({ hash: HASH, request });
-    expect(loadPendingPayment('0x2222222222222222222222222222222222222222')).toBeNull();
+    expect(loadPendingPayments(ALICE.toLowerCase())).toMatchObject([{ hash: HASH, request }]);
+    expect(loadPendingPayments('0x2222222222222222222222222222222222222222')).toEqual([]);
     savePendingPayment({ hash: HASH, wallet: ALICE, request, raw: '1', at: Date.now() - 3 * 3600_000 });
-    expect(loadPendingPayment(ALICE)).toBeNull();
+    expect(loadPendingPayments(ALICE)).toEqual([]);
     // a kept payment without its request (or an ETH one of before) is not offered
+    localStorage.clear();
     localStorage.setItem('coinnibal.room-payment.v2', JSON.stringify({ hash: HASH, wallet: ALICE, raw: '1', at: Date.now() }));
-    expect(loadPendingPayment(ALICE)).toBeNull();
+    expect(loadPendingPayments(ALICE)).toEqual([]);
+  });
+
+  it('kept payments are a list per wallet and transaction: a new payment or another wallet never overwrites one (audit S12)', () => {
+    const OTHER = `0x${'9'.repeat(64)}`;
+    const BOB = '0x2222222222222222222222222222222222222222';
+    // a payment kept in the single slot of an earlier build moves into the list
+    localStorage.setItem('coinnibal.room-payment.v2', JSON.stringify({ hash: HASH, wallet: ALICE, request: newRoomRequest(), raw: '5', at: Date.now() }));
+    savePendingPayment({ hash: OTHER, wallet: ALICE, request: newRoomRequest(), raw: '9', at: Date.now() });
+    savePendingPayment({ hash: OTHER, wallet: BOB, request: newRoomRequest(), raw: '7', at: Date.now() });
+    expect(localStorage.getItem('coinnibal.room-payment.v2')).toBeNull();
+    expect(loadPendingPayments(ALICE).map((p) => [p.hash, p.raw])).toEqual([
+      [HASH, '5'],
+      [OTHER, '9'],
+    ]);
+    expect(loadPendingPayments(BOB).map((p) => p.raw)).toEqual(['7']);
+  });
+
+  it('a free room never erases a kept payment', async () => {
+    signIn();
+    const request = newRoomRequest();
+    savePendingPayment({ hash: HASH, wallet: ALICE, request, raw: PRICE.toString(), at: Date.now() });
+    spies.quote.mockResolvedValue(quote({ holder: true, holderPerk: 'free_daily', freeAvailable: true, youPayRaw: '0' }));
+    await open();
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Holder room' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+    // the free room says it is free, not that a kept payment is used
+    expect(screen.getByTestId('cr-pay-note').textContent).not.toMatch(/earlier payment/);
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(spies.create).toHaveBeenCalledWith('tok', expect.anything(), null);
+    expect(screen.getByTestId('cr-code')).toBeTruthy();
+    expect(loadPendingPayments(ALICE)).toMatchObject([{ hash: HASH, request }]);
+  });
+
+  it('a kept payment too small for a bigger room stays kept beside the new one; only the payment used is dropped', async () => {
+    signIn();
+    const NEW = `0x${'6'.repeat(64)}`;
+    const small = newRoomRequest();
+    savePendingPayment({ hash: HASH, wallet: ALICE, request: small, raw: (PRICE - 1n).toString(), at: Date.now() });
+    spies.pay.mockResolvedValue({ ok: true, hash: NEW });
+    await open();
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Big room' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+    // the player is told the earlier payment is kept and why this room needs a new one
+    expect(screen.getByTestId('cr-kept-smaller').textContent).toMatch(/earlier payment of .* is kept/);
+    expect(screen.getByTestId('cr-pay').textContent).toMatch(/Pay 1,500/);
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(spies.pay).toHaveBeenCalledTimes(1);
+    expect(spies.create).toHaveBeenLastCalledWith('tok', expect.anything(), { txHash: NEW, request: spies.pay.mock.calls[0][2] });
+    expect(loadPendingPayments(ALICE)).toMatchObject([{ hash: HASH, request: small }]);
   });
 });
 
@@ -643,5 +698,17 @@ describe('join by code (8-character room codes)', () => {
     fireEvent.submit(input.closest('form')!);
     await settle();
     expect(screen.getByText('Room codes are 8 letters and digits.')).toBeTruthy();
+  });
+});
+
+describe('a ticket room says it can end early, before anyone pays', () => {
+  it("the lobby's seat note of a ticket room names the early end, the warning and the settlement", () => {
+    useUi.setState({ paidSeat: { code: 'AB2CD', arenaId: 2, name: 'Friday Pond', endsAt: Date.now() + 20 * 60_000 } });
+    render(
+      <Kb>
+        <PaidSeatBanner />
+      </Kb>,
+    );
+    expect(screen.getByTestId('paid-seat-note').textContent).toMatch(/creator or an admin can end the room early: everyone gets a 10-second warning, then every ticket is settled at that moment/);
   });
 });

@@ -139,10 +139,10 @@ send twice. Open **Setup**; the wizard walks the steps and remembers where you a
    preview).
 2. **Check the chain.** The wallet must be on the chain the server reports; the panel asks the wallet to switch
    (or to add the chain) and blocks signing otherwise.
-3. **Deploy CoinnibalArena (v3).** Constructor: admin = you, server authority = the server key (prefilled from
-   `/api/config`), fee wallet = you (change it if you like; it receives the fee wallet's 5 % of every profit and
-   half of every power-up payment). Defaults: 15 % of profit burned + 5 % to the fee wallet, burn mode 0
-   (`0x…dEaD`), power-ups 50 % burned.
+3. **Deploy CoinnibalArena (v4).** Constructor: admin = you, server authority = the server key (prefilled from
+   `/api/config`; it settles tickets and signs the join permits every ticket needs), fee wallet = you (change it if
+   you like; it receives the fee wallet's 5 % of every profit and half of every power-up payment). Defaults: 15 % of
+   profit burned + 5 % to the fee wallet, burn mode 0 (`0x…dEaD`), power-ups 50 % burned.
 4. **Deploy CoinnibalNFT.** Defaults: max supply 3,333 (`NFT_SUPPLY`, the owner's fixed supply), price = the USD
    target `MINT_USD_CENTS` in ETH at today's ETH/USD, 1 allowlist and 2
    public mints per wallet, base URI `${PUBLIC_URL}/api/nft/`, treasury = you. Everything except the base URI

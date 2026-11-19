@@ -1,5 +1,5 @@
 /**
- * A real CoinnibalArena v3 + TestToken on a local `hardhat node` for the bell-burst and failure drills: deploys with
+ * A real CoinnibalArena v4 + TestToken on a local `hardhat node` for the bell-burst and failure drills: deploys with
  * the SDK (the /admin order), creates the four default arenas, funds `players` fresh wallets with gas
  * (`hardhat_setBalance`) and tokens, and buys tickets for them. `interval` > 0 mines a block every that many ms
  * instead of on every transaction (Robinhood Chain, an Arbitrum Orbit chain, makes blocks about every 250 ms).
@@ -18,10 +18,12 @@ import {
   deployedAddress,
   coinnibalArenaAbi,
   getArena,
+  getJoinNonce,
   getSession,
   joinCall,
   sendCall,
   setTokenCall,
+  signJoinPermit,
   testTokenMintCall,
   viemChain,
   type ContractCall,
@@ -150,7 +152,10 @@ export async function startHardhatArena(opts: { players: number; intervalMs?: nu
         const id = arenaOf(i);
         const s = await getSession(pub, arena, id, p.address);
         if (s.id !== 0n && !s.finalized) return;
-        if (await send(p.address, joinCall(arena, id))) n++;
+        // the server key's join permit (CoinnibalArena v4), then the join
+        const deadline = (await pub.getBlock({ blockTag: 'latest' })).timestamp + 600n;
+        const signature = await signJoinPermit(server, { chainId: 31337, arena, player: p.address, arenaId: id, nonce: await getJoinNonce(pub, arena, p.address), deadline });
+        if (await send(p.address, joinCall(arena, id, { deadline, signature }))) n++;
       });
       return n;
     },

@@ -1,6 +1,6 @@
 /**
  * Gas of every call the server authority pays for (`settle`, `cancel`, `sweepLoot`), in the shapes the game server
- * sends them on mainnet, measured on the in-process Hardhat network with the real CoinnibalArena v3, the real CoinnibalNFT
+ * sends them on mainnet, measured on the in-process Hardhat network with the real CoinnibalArena v4, the real CoinnibalNFT
  * as the holder NFT and an OpenZeppelin ERC-20 as the game token (a Pons token is a plain fixed-supply ERC-20):
  *
  *   pnpm -F @coinnibal/contracts gas:mainnet            # prints JSON
@@ -40,6 +40,28 @@ await arena.write.createArena([1, FEE, 2000]);
 await arena.write.createArena([4, FEE, 2000]);
 await arena.write.setArenaHoldersOnly([4, true]);
 
+/** The game server's join permit (CoinnibalArena v4): the server key signs `JoinPermit` for the player's next nonce. */
+const chainId = await publicClient.getChainId();
+async function permit(player: Address, arenaId: number): Promise<readonly [bigint, Hex]> {
+  const deadline = (await publicClient.getBlock()).timestamp + 600n;
+  const nonce = (await arena.read.joinNonce([player])) as bigint;
+  const signature = await server.signTypedData({
+    account: server.account,
+    domain: { name: 'CoinnibalArena', version: '4', chainId, verifyingContract: arena.address },
+    types: {
+      JoinPermit: [
+        { name: 'player', type: 'address' },
+        { name: 'arenaId', type: 'uint16' },
+        { name: 'nonce', type: 'uint64' },
+        { name: 'deadline', type: 'uint64' },
+      ],
+    },
+    primaryType: 'JoinPermit',
+    message: { player, arenaId, nonce, deadline },
+  });
+  return [deadline, signature] as const;
+}
+
 let nextAddr = 0x9000;
 const fresh = async (): Promise<Address> => {
   const a = `0x${(nextAddr++).toString(16).padStart(40, '0')}` as Address;
@@ -54,7 +76,7 @@ async function joined(n: number, arenaId = 1): Promise<{ player: Address; sessio
   const out = [];
   for (let i = 0; i < n; i++) {
     const p = await fresh();
-    joinGas.push((await measure(await arena.write.join([arenaId], { account: p }))).gas);
+    joinGas.push((await measure(await arena.write.join([arenaId, ...(await permit(p, arenaId))], { account: p }))).gas);
     const s = (await arena.read.getSession([arenaId, p])) as { id: bigint };
     out.push({ player: p, sessionId: s.id });
   }
@@ -105,12 +127,12 @@ await nft.write.setPhase([2]);
 const holderA = await fresh();
 const holderB = await fresh();
 await nft.write.mintPublic([1n], { account: holderA, value: parseEther('0.0003') });
-out.join_holder_arena4 = await measure(await arena.write.join([4], { account: holderA }));
+out.join_holder_arena4 = await measure(await arena.write.join([4, ...(await permit(holderA, 4))], { account: holderA }));
 out.nft_transfer = await measure(await nft.write.transferFrom([holderA, holderB, 1n], { account: holderA }));
-out.join_holder_arena4_after_transfer = await measure(await arena.write.join([4], { account: holderB }));
+out.join_holder_arena4_after_transfer = await measure(await arena.write.join([4, ...(await permit(holderB, 4))], { account: holderB }));
 const sorted = [...joinGas].sort((a, b) => a - b);
 out.join_typical = sorted[Math.floor(sorted.length / 2)];
-out.network = 'hardhat (in-process), CoinnibalArena v3, TestToken (OpenZeppelin ERC-20), CoinnibalNFT holder NFT, burn mode 0 (0x…dEaD)';
+out.network = 'hardhat (in-process), CoinnibalArena v4, TestToken (OpenZeppelin ERC-20), CoinnibalNFT holder NFT, burn mode 0 (0x…dEaD)';
 out.measuredAt = new Date().toISOString().slice(0, 10);
 
 const json = JSON.stringify(out, null, 2);

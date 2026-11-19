@@ -271,6 +271,8 @@ export class Gateway {
   private repricing: ((arenaId: number) => boolean) | null = null;
   /** The seat check of holder tickets (`EmblemGate.seat`): null to seat, else the refusal; absent: none. */
   private emblemGate: ((wallet: string, session: ChainSession) => Promise<{ code: ErrorCode; message: string } | null>) | null = null;
+  /** The join permits learn of a wallet's ticket (`JoinPermits.ticketSeen`); absent: none (bare unit tests). */
+  private ticketSeen: ((wallet: string, arenaId: number, openedAtS: number | null) => void) | null = null;
 
   constructor(
     private readonly cfg: ServerConfig,
@@ -322,6 +324,14 @@ export class Gateway {
   /** Sets the seat check of holder tickets (one emblem token id per open holder ticket; see `site/emblem-gate.ts`). */
   setEmblemGate(gate: ((wallet: string, session: ChainSession) => Promise<{ code: ErrorCode; message: string } | null>) | null): void {
     this.emblemGate = gate;
+  }
+
+  /**
+   * Sets who hears of a wallet's arena ticket (the join permits, `stake/join-permits.ts`): `openedAtS` null when the
+   * wallet asks to sit with a ticket there (a place its permit held is given up), the ticket's block time once it is read.
+   */
+  setTicketSeen(fn: ((wallet: string, arenaId: number, openedAtS: number | null) => void) | null): void {
+    this.ticketSeen = fn;
   }
 
   /** Sets the load shedder (see `net/shedder.ts`). */
@@ -1298,6 +1308,8 @@ export class Gateway {
     if (!same()) return;
     const target = { arenaId };
     const { name, skin, flags, avatar, country, xHandle = null } = look;
+    // the wallet sits down with its ticket (or comes back to it): a place its join permit held in the arena is given up
+    this.ticketSeen?.(wallet, arenaId, null);
     {
       // a live ticket comes back first, with no chain read at all: its coin is in this process already
       const existing = this.rooms.findArenaStake(target.arenaId, wallet);
@@ -1385,6 +1397,8 @@ export class Gateway {
         this.error(conn, 'no_session', 'No open arena ticket found for your wallet.');
         return;
       }
+      // the wallet's own ticket: it used up the join permits this wallet was given before it was bought
+      this.ticketSeen?.(wallet, target.arenaId, session.openedAt);
       if (session.finalized) {
         // this game is over (settled, but the transfer to the player failed); the payout waits for the player
         this.error(conn, 'payout_waiting', 'Your last game in this arena is settled. Collect your payout first.');

@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {CoinnibalArena} from "../contracts/CoinnibalArena.sol";
+import {JoinPermits} from "./JoinPermits.sol";
 import {CoinnibalNFT} from "../contracts/CoinnibalNFT.sol";
 import {MockERC20} from "../contracts/test/MockTokens.sol";
 
@@ -11,6 +12,11 @@ import {MockERC20} from "../contracts/test/MockTokens.sol";
 ///         `COINNIBAL_ECON_FINDINGS=true` (the `test:econ-findings` script of this package), so the normal
 ///         suite stays green until a fix lands; without it each test returns at once.
 contract CoinnibalArenaEconFindingsTest is Test {
+    /// @dev The game server's join permit (signed with the "server" test key) for `player` in `arenaId`, now.
+    function _permit(CoinnibalArena a, address player, uint16 arenaId) internal view returns (JoinPermits.Permit memory) {
+        return JoinPermits.permit(a, JoinPermits.keyOf("server"), player, arenaId);
+    }
+
     CoinnibalArena internal arena;
     MockERC20 internal token;
     CoinnibalNFT internal nft;
@@ -58,16 +64,19 @@ contract CoinnibalArenaEconFindingsTest is Test {
     ///      refused while the first one's ticket is open.
     function test_oneEmblemSeatsOnlyOneHolderTicketAtATime() public {
         if (!_on()) return;
+        JoinPermits.Permit memory pm1 = _permit(arena, alice, HOLDERS);
         vm.prank(alice);
-        arena.join(HOLDERS);
+        arena.join(HOLDERS, pm1.deadline, pm1.sig);
         vm.prank(alice);
         nft.transferFrom(alice, bob, 1);
+        JoinPermits.Permit memory pm2 = _permit(arena, bob, HOLDERS);
         vm.prank(bob);
-        arena.join(HOLDERS); // today: accepted, at the holder pair
+        arena.join(HOLDERS, pm2.deadline, pm2.sig); // today: accepted, at the holder pair
         vm.prank(bob);
         nft.transferFrom(bob, carol, 1);
+        JoinPermits.Permit memory pm3 = _permit(arena, carol, OPEN);
         vm.prank(carol);
-        arena.join(OPEN); // today: the open arena at the holder pair too
+        arena.join(OPEN, pm3.deadline, pm3.sig); // today: the open arena at the holder pair too
         uint256 holderTickets;
         address[3] memory ps = [alice, bob, carol];
         uint16[3] memory ids = [HOLDERS, HOLDERS, OPEN];
@@ -84,10 +93,12 @@ contract CoinnibalArenaEconFindingsTest is Test {
     ///      own entry: the round is unwound in favour of the loser. Wanted: the winner is paid what the game says.
     function test_loserRefundAfter24hDoesNotTakeTheWinnersPayout() public {
         if (!_on()) return;
+        JoinPermits.Permit memory pm4 = _permit(arena, bob, OPEN);
         vm.prank(bob);
-        arena.join(OPEN);
+        arena.join(OPEN, pm4.deadline, pm4.sig);
+        JoinPermits.Permit memory pm5 = _permit(arena, carol, OPEN);
         vm.prank(carol);
-        arena.join(OPEN);
+        arena.join(OPEN, pm5.deadline, pm5.sig);
         uint64 bobId = arena.getSession(OPEN, bob).id;
         // in play: bob ate carol (bob's coin is worth 2 tickets, carol's 0); the server is down for a day
         vm.warp(block.timestamp + 24 hours + 1);

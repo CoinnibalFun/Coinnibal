@@ -44,7 +44,7 @@ import { signInWithWallet } from '../wallet/signIn';
 import { useAddress } from '../wallet/store';
 import { approveTickets, arenaRates, ledgerToBase, sessionKey, ticketRates, ticketSteps, type TicketStep } from '../wallet/ticket';
 import type { TxPhase } from '../wallet/tx';
-import { RoomApiError, loadPendingPayment, roomLink, roomsApi, savePendingPayment } from './api';
+import { RoomApiError, dropPendingPayment, keptPaymentFor, loadPendingPayments, roomLink, roomsApi, savePendingPayment } from './api';
 import { arenaTarget, seatInPaidRoom } from './invite';
 import { newRoomRequest, payRoomFee } from './pay';
 import './rooms.css';
@@ -213,7 +213,8 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
 
   const signedIn = !!auth && !!address && auth.address.toLowerCase() === address.toLowerCase();
   const token = signedIn ? auth!.token : null;
-  const pending = signedIn ? loadPendingPayment(address) : null;
+  // every payment kept for this wallet (a list: a new payment or a free room never erases another one)
+  const pendings = signedIn ? loadPendingPayments(address) : [];
 
   useEffect(() => {
     if (!open) return;
@@ -276,8 +277,10 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
   const noSeats = !!quote && typeof quote.seatsLeft === 'number' && cfg.maxPlayers > quote.seatsLeft;
   const paidBlocked = cfg.kind === 'paid' && !tier;
   const chainName = serverChainInfo(chain)?.name ?? activeChain().name;
-  // a kept payment opens only a room it covers (a bigger room costs more)
-  const kept = pending && (!frozen || BigInt(pending.raw) >= frozen.raw) ? pending : null;
+  // a kept payment opens only a room it covers (a bigger room costs more): the smallest that covers the frozen fee
+  const kept = frozen && frozen.raw > 0n && signedIn ? keptPaymentFor(address, frozen.raw) : null;
+  // kept payments too small for this room: they stay kept (said on the pay step), the room needs a new payment
+  const keptSmaller = frozen && frozen.raw > 0n && !kept && pendings.length > 0 ? pendings[pendings.length - 1] : null;
 
   /**
    * The creator's own ticket of a paid room on `arenaId`, from the live chain data: an open ticket is resumed (no new
@@ -325,7 +328,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
       return;
     }
     // the fee itself: a kept payment covers it, else the wallet needs the tokens (said before any signature)
-    const keptCovers = !!pending && BigInt(pending.raw) >= youPay;
+    const keptCovers = youPay > 0n && pendings.some((p) => BigInt(p.raw) >= youPay);
     if (youPay > 0n && !keptCovers && !plan && data.tokenBalance !== null && data.tokenBalance < youPay) {
       setError(t('cr.short', { fee: fee.tokens(youPay), have: fee.tokens(data.tokenBalance) }));
       return;
@@ -366,7 +369,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
     ticketInFlight.current = true;
     setTicketError(null);
     setTicketPhase('preparing');
-    const res = await buyTicket({ owner: address, chain, client, config, arenaId: room.arenaId, review: p.review, fake: data.fake }, (s, ph, h) => {
+    const res = await buyTicket({ owner: address, chain, client, config, arenaId: room.arenaId, review: p.review, fake: data.fake, token }, (s, ph, h) => {
       setTicketStep(s);
       setTicketPhase(ph);
       if (h) setHash(h);
@@ -392,9 +395,12 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
     }, SEATED_MS);
   };
 
-  /** A room opened: a free room ends on its invite; a ticket room goes on to the creator's own ticket at once. */
-  const opened = (room: CustomRoomView) => {
-    savePendingPayment(null);
+  /**
+   * A room opened: a free room ends on its invite; a ticket room goes on to the creator's own ticket at once. Only the
+   * payment that opened it (`usedHash`) is forgotten: a free room never touches a kept payment.
+   */
+  const opened = (room: CustomRoomView, usedHash: string | null) => {
+    if (usedHash && address) dropPendingPayment(address, usedHash);
     setMade(room);
     if (room.kind === 'paid' && room.arenaId) {
       // the lobby remembers the seat too: "Later" (or a closed sheet) still sends this arena's next ticket here
@@ -419,7 +425,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
           setPhase('creating');
           const r = await roomsApi.create(token!, cfg, payment);
           setPhase(null);
-          opened(r.room);
+          opened(r.room, payment?.txHash ?? null);
           return;
         } catch (e) {
           if (payment && e instanceof RoomApiError && (e.code === 'payment_pending' || e.code === 'chain_busy') && i < 3) {
@@ -432,7 +438,7 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
     } catch (e) {
       const err = e as RoomApiError;
       const final = err instanceof RoomApiError && FINAL_PAYMENT.includes(err.code);
-      if (payment && final) savePendingPayment(null);
+      if (payment && final && address) dropPendingPayment(address, payment.txHash);
       setError(payment && !final ? `${err.message} ${t('cr.keptPayment')}` : err.message);
       setStep('pay');
     } finally {
@@ -755,6 +761,11 @@ export function RoomCreator({ open, onClose }: { open: boolean; onClose: () => v
                     team: bpsToPercent(BPS - (frozen.pay?.burnBps ?? DEFAULT_PAYMENT_BURN_BPS)),
                   })}
           </p>
+          {keptSmaller && (
+            <p className="cr-note" data-testid="cr-kept-smaller">
+              {t('cr.keptSmaller', { amount: fee.tokens(BigInt(keptSmaller.raw)) })}
+            </p>
+          )}
           {step === 'working' && (
             <p className="cr-phase" role="status">
               <StampSpinner size="sm" /> {phaseText}

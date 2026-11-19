@@ -255,7 +255,7 @@ async function codeCheck(client: PublicClient, address: Address, expected: `0x${
   return h === null ? 'missing' : h === expected ? 'ok' : 'mismatch';
 }
 
-/** Checks a deployed address against a bundled artifact (`CoinnibalArena` v3, `CoinnibalNFT`, `TestToken`). */
+/** Checks a deployed address against a bundled artifact (`CoinnibalArena` v4, `CoinnibalNFT`, `TestToken`). */
 export async function checkDeployedCode(client: PublicClient, address: Address, kind: 'arena' | 'nft' | 'token'): Promise<CodeCheck> {
   const expected = kind === 'arena' ? coinnibalArenaArtifact.runtimeCodeHash : kind === 'nft' ? coinnibalNFTArtifact.runtimeCodeHash : testTokenArtifact.runtimeCodeHash;
   return codeCheck(client, address, expected);

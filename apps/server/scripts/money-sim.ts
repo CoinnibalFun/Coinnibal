@@ -1,6 +1,6 @@
 /**
  * The long money simulation (see test/money-sim.ts): real rooms, journal and settlement worker against the
- * contract model (default) or a real hardhat node with the real CoinnibalArena v3 (`--hardhat`), with every fault on.
+ * contract model (default) or a real hardhat node with the real CoinnibalArena v4 (`--hardhat`), with every fault on.
  * Prints one report per seed and exits 1 on any broken invariant.
  *
  *   pnpm -F @coinnibal/server money-sim                          # 4 seeds x 500 rounds on the model

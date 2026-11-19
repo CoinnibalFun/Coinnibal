@@ -17,7 +17,7 @@ price at its USD target (`MINT_USD_CENTS`).
 | Drawer | What it does |
 |---|---|
 | **Network** | The chain the server follows, its RPCs, the server key and its gas, the contracts, the way to mainnet, and the live **launch checklist**: chain, server key gas, contracts deployed and registered, the site pins, token, arenas, allowlist root, the mint price, mint phase, game access. A line that is not done links to the drawer that fixes it (the chain and the server key's gas: Network itself) |
-| **Setup** | The deploy wizard (CoinnibalArena v3, CoinnibalNFT and, on the testnet, the TestToken), Finish setup, **Site pins** (the build's contract pins against the registered contracts, with the `/opt/elymum/.env` lines and the rebuild), holder perks, the TestToken faucet, register an already deployed contract |
+| **Setup** | The deploy wizard (CoinnibalArena v4, CoinnibalNFT and, on the testnet, the TestToken), Finish setup, **Site pins** (the build's contract pins against the registered contracts, with the `/opt/elymum/.env` lines and the rebuild), holder perks, the TestToken faucet, register an already deployed contract |
 | **Mint** | Phase (closed / allowlist / public), publish the allowlist root, Sync to the USD target, price bounds and keeper, per-wallet limits, max supply (down only), base URI and freeze, contract URI, royalty, treasury, withdraw, owner mint |
 | **Game** | Who may play, pause and per-arena open / close, map sizes, **arena prices in US dollars** (the token price, the tiers, "Sync arena prices to USD", "Re-price at next bell"), arena instances (auto-scaling), custom rooms, power-ups (priced in US dollars, converted like the tickets), leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance and gas runway |
 | **Community** (**WL**, **Tasks**, **Collabs**) | The whitelist applications, the WL steps, the community collabs |
@@ -73,7 +73,7 @@ The server limits what a bug, a tampered journal or a confused process can pay t
 |---|---|
 | **Payout guard** | a settlement paying one ticket more than every ticket of its round's instance put in (its `roundPool`: the entry fees seated there that round, plus loot restored into it; no game can win more) is not sent: it is held in `/admin` → Safety → Held settlements (`payout guard: ...`, `!!! chain: settlement ... HELD for review`). A settlement without a pool (crash recovery) is held above `PAYOUT_GUARD_MULTIPLE` (100) entry fees. **Release** pays it exactly as it was; **Settle at 0** keeps it in the vault. It is never released by itself; `PAYOUT_GUARD_MULTIPLE=0` turns the guard off |
 | **Books guard** | before anything leaves an arena vault, what the journal owes that arena (pending payouts and burns of tickets still open on chain, live tickets, floor loot) must fit in the vault. If not (`!!! chain: arena #N PAYOUTS STOPPED`), nothing is paid from that arena until the books add up again: the stakes stay in the vault, the Safety drawer shows "Payouts stopped" with the pending settlements, and each can be **held** by hand and settled at 0 |
-| **Settled log** (`DATA_DIR/chains/<id>/settled.jsonl`) | every settlement, cancel and loot burn the server saw confirmed, for 14 days: a settlement reorged out (the ticket open again) is sent again with the same payout instead of being refunded at the entry fee by the stale sweeper; the record of what each ticket was paid, and in which transaction, for appeals |
+| **Settled log** (`DATA_DIR/chains/<id>/settled.jsonl`) | every settlement, cancel and loot burn the server saw confirmed, for 14 days, each with the arena contract it was for: a settlement reorged out (the ticket open again on the same contract, its transaction without a successful receipt) is sent again with the same payout instead of being refunded at the entry fee by the stale sweeper; a record of an earlier arena contract never applies to a new one (session ids restart at 1); the record of what each ticket was paid, and in which transaction, for appeals |
 | **Sweep ids** | a `lastSweepId` beyond 2^53 (only a server key can set it) stops loot burns of that arena loudly instead of guessing |
 
 **Key management.**
@@ -287,9 +287,55 @@ then background work (`low`: the stale sweeper, the holder index, balance checks
 deploy/vps/README.md, "RPC". `rpc: N calls/min …` in the log, once a minute per URL, shows the traffic, the 429s and
 the calls per priority.
 
+## Join permits and no-shows
+
+Every ticket needs the game server's join permit (CoinnibalArena v4): the web asks `POST /api/arena/permit` before the
+wallet opens, and the contract refuses a `join` without the server key's signature for that wallet, arena and join
+nonce. The server refuses (and the ticket sheet says why): a game not open to the wallet (`game_closed`), a banned
+wallet, paid rooms off, an arena that is disabled, paused or kept closed (books guard, re-price), a holders-only arena
+for a wallet without the NFT (`holders_only`), a wallet with an open ticket there (it resumes it), a repeated no-show
+(`no_show`), a network with its share of the arena's permits not played yet (`network_busy`), an arena whose unseated
+tickets plus the places held by new permits reach the seats a round can take (`arena_busy`), and too many requests
+from one IP, one IPv6 /64 or /48, or one wallet.
+
+- **Held places.** A permit is free, so it holds a place in that cap only briefly and only when backed: a new permit
+  holds one for `JOIN_PERMIT_HOLD_S` (120 s, the approval and the join) if the wallet holds the entry fee (one
+  `balanceOf` read), no earlier permit of that wallet, arena and join nonce held one, and the network it was asked from
+  holds fewer than 4 places (an IPv4 address or an IPv6 /64) and 16 (an IPv6 /48). Any other permit is issued but holds
+  nothing. A place is given up when the wallet asks to sit with its ticket, the ticket is read, seated or settled, or
+  the wallet's join nonce moved (read at its next request, and for every held place once the arena is at its cap).
+  So signed-in wallets with no tokens never fill an arena, and a bought ticket is never counted twice.
+- **A share per network.** Each network has a share of an arena's permits not played yet (issued and valid, or used
+  for a ticket that is not seated and not settled): 8 per IPv4 address (carrier NAT puts many players behind one), 4
+  per IPv6 /64, 16 per IPv6 /48. A network at its share gets no new permit there (`network_busy`) until one of them is
+  played (seated), settled (a no-show included) or found unused: once the network is at its share, the server reads
+  the ticket of each of its expired permits (at most once per 10 s each) and a wallet with no ticket there frees its
+  place. Asking to sit, or asking again from the used wallet, frees nothing. So funded throwaway wallets from one
+  /48, or a handful of IPv4 addresses, can no longer collect a permit each and fill the arena's `maxSessions`: each
+  network holds at most its share of unplayed tickets until the stale sweeper cancels them, and those no-shows then
+  close it. A new arena contract registered in `/admin` starts the permits, places and shares afresh (no permit of
+  the old contract is handed out again).
+- **No-shows.** A ticket the stale sweeper cancels at its entry fee because it was never seated while its arena was
+  open is a no-show (`noShow` in `chains/<id>/settled.jsonl`; a closed arena's refunds are not). `NO_SHOW_LIMIT`
+  (default 3) of them in 24 h and the wallet gets no permit until the oldest is a day old. They also count against the
+  networks its permit was asked from: 3× `NO_SHOW_LIMIT` per IPv4 address or IPv6 /64 and 8× per IPv6 /48 close the
+  permits asked from there the same way (`no_show`, "from your network"), so fresh wallets do not reset the count.
+  The per-network count lives in the server's memory only (no address goes into the data files): a restart starts it
+  again; the wallet's count is in the settled log and stays.
+- **Settings** (env): `JOIN_PERMIT_TTL_S` (600; at most 3300: the contract's hour, checked against the block time,
+  less 5 minutes; the deadline is set on the chain's clock), `JOIN_PERMIT_HOLD_S` (120; 0 = permits hold no place),
+  `JOIN_PERMIT_PER_IP` (12), `JOIN_PERMIT_PER_SUBNET` (30, an IPv6 /64), `JOIN_PERMIT_PER_SITE` (60, an IPv6 /48),
+  `JOIN_PERMIT_PER_WALLET` (20), all per 10 minutes; `JOIN_PERMIT_OPEN_PER_IP` (8), `JOIN_PERMIT_OPEN_PER_SUBNET`
+  (4), `JOIN_PERMIT_OPEN_PER_SITE` (16): each network's share per arena (0 = no limit; raise the IPv4 one, and
+  `JOIN_PERMIT_PER_IP`, if many of your players share one carrier NAT address); `JOIN_PERMIT_ARENA_CAP` (0:
+  `ARENA_INSTANCE_CAP` × the arena scaler's max instances), `NO_SHOW_LIMIT` (3; 0 = off).
+- **A new server key** (`setServerAuthority`) voids every permit the old key signed; players simply ask again.
+- A refused permit costs the player nothing: nothing is signed. A permit that runs out during a slow approval is asked
+  again before the join.
+
 ## Fees, burns and the fee wallet
 
-CoinnibalArena v3 takes **nothing from the ticket** (its `entryFee` goes whole into the vault). A winning ticket pays a fee on its **profit** (payout − entry fee):
+CoinnibalArena v4 takes **nothing from the ticket** (its `entryFee` goes whole into the vault). A winning ticket pays a fee on its **profit** (payout − entry fee):
 `burnBps` (15 %) is burned and `vaultBps` (5 %) goes to the fee wallet, both in the `settle` batch that settles it
 (one burn and one transfer per batch). A loss or a break-even pays nothing; an unplayed ticket is cancelled with its
 full entry fee back. Power-up packs are paid with `pay`: `paymentBurnBps` (50 %) is burned and the rest goes to the
@@ -386,8 +432,9 @@ the site's contract pins (step 5), which only a rebuild changes.
    - **TestToken** (testnet only): an ERC20Burnable game token with a public faucet (by default 1,000,000 an hour per
      wallet, 2,000,000 for NFT holders; Setup → Advanced → TestToken faucet changes the amounts and the cooldown);
      apart from the faucet only the owner mints.
-   - **CoinnibalArena v3** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
-     The server checks the code hash and the server authority before it registers it.
+   - **CoinnibalArena v4** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
+     The server checks the code hash and the server authority before it registers it. An arena of an earlier build
+     (v3, before the join permits) reads "redeploy needed": deploy the new one and register it.
    - **CoinnibalNFT** at the USD target (`MINT_USD_CENTS`) in ETH (the wizard reads ETH/USD).
 5. **Pin the contracts in the site** (the VPS shell). The site signs only with the contracts it was built with
    (DEPLOY.md section 3, "Pin the contracts"); until the new ones are in the build it signs no ticket and no mint.
@@ -469,7 +516,7 @@ the NFT mint first, then the token, then the game.
    rebuild of step 2.
    Integrity auto-hold is on by default there, and the secret exports are off (`ADMIN_SECRET_EXPORT`). The server opens a clean state in `DATA_DIR/chains/4663/`; the testnet's records stay in
    `chains/46630/` (the Network tab lists them).
-2. Deploy CoinnibalArena v3 and CoinnibalNFT from `/admin` (no TestToken on mainnet), pin them in the site (Setup →
+2. Deploy CoinnibalArena v4 and CoinnibalNFT from `/admin` (no TestToken on mainnet), pin them in the site (Setup →
    Site pins: the `COINNIBAL_PIN_ARENA` and `COINNIBAL_PIN_NFT` lines in `/opt/elymum/.env`, checked against your
    wallet, then `coinnibal-compose up -d --build app`, which builds the site for chain 4663), publish the allowlist
    root, Sync the mint price and open the mint. Once the game token is launched on Pons (mainnet only; RESEARCH.md): set the
@@ -727,11 +774,14 @@ The fee wallet and the NFT treasury are separate settings: change them too if th
    start) or set `SERVER_PRIVATE_KEY` to a new 0x key or key file. Start the server and note the new `serverKey`.
 3. Fund the new key with ETH.
 4. Game → the arena contract → **Server authority** → the new key (`setServerAuthority`). If the old key was the NFT price keeper, set the
-   new one as keeper too (`setPriceKeeper`). The pending settlements in the journal go out with the new key.
+   new one as keeper too (`setPriceKeeper`). The pending settlements in the journal go out with the new key. Every
+   join permit the old key signed is refused from then on (players simply ask again); until step 4 the new key's
+   permits are refused, so new tickets wait for it.
 5. Move any ETH left on the old key elsewhere and destroy it.
 
 If the key **leaked**: pause first, then step 4 at once. Until it is replaced the old key can settle open tickets
-with any amount up to a vault and burn up to a vault with `sweepLoot`.
+with any amount up to a vault, burn up to a vault with `sweepLoot`, and sign join permits for any wallet (they only
+let a wallet buy a ticket at the arena's price, which pause stops).
 
 ## Journal and data backup
 

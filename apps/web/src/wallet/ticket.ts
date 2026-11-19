@@ -381,7 +381,7 @@ export function sessionsToCollect(sessions: Readonly<Record<number, OpenSession 
     .map(([id, s]) => ({ arenaId: Number(id), owed: s!.owed ?? 0n }));
 }
 
-/** Gas for `join` when the estimate cannot be read (a ticket uses about 125k, a holder's a little more). */
+/** Gas for `join` when the estimate cannot be read (a ticket with its permit uses about 165k, a holder's first one about 185k). */
 export const JOIN_GAS_FALLBACK = 260_000n;
 
 /**
