@@ -501,7 +501,8 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             const body = await readSmallJson(req);
             try {
               const room = body?.room === undefined || body?.room === null ? null : body.room;
-              const permit = await ctx.permits.issue(caller, Number(body?.arenaId), ip, room as string | null);
+              // the page's origin: an open-play copy of the site opens the game on a testnet (as on its socket)
+              const permit = await ctx.permits.issue(caller, Number(body?.arenaId), ip, room as string | null, typeof req.headers.origin === 'string' ? req.headers.origin : null);
               return json(res, 200, { permit });
             } catch (err) {
               if (!(err instanceof JoinPermitFail)) throw err;
