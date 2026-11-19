@@ -100,16 +100,26 @@ describe('a paid join seats the wallet it began for (S2)', () => {
     expect(t.rooms.liveSessions().size).toBe(0);
   });
 
-  it('a logout during the ticket read: no seat with a null player', async () => {
+  it('a logout while the instance is re-confirmed (the last await before the seat): no seat with a null player', async () => {
     const t = await setup();
     const A = testWallet(0xa1);
-    t.evm.join(3, A, { openedAt: Math.floor(Date.now() / 1000) - 60 });
+    const ticket = t.evm.join(3, A, { openedAt: Math.floor(Date.now() / 1000) - 60 });
     const conn = await t.connect(A);
     const join = t.send(conn, { t: 'join', room: 'arena:3', name: 'x', skin: 0 });
-    await sleep(10);
+    await sleep(10); // inside getSession(A): the checks right after it still see A
+    // the picked instance stops taking seats and both arena caches expire: the seat re-reads the arena list
+    (t.rooms as unknown as { scaler: { draining: Set<string> } }).scaler.draining.add('arena-3-1');
+    t.expireArenaCaches();
+    await sleep(60); // inside confirmArenaRoom's arena-list read
     await t.send(conn, { t: 'logout' });
     await join;
+    expect(conn.wallet).toBeNull();
     expect(seats(conn)).toHaveLength(0);
     expect(t.rooms.liveSessions().size).toBe(0);
+    // A's ticket is untouched: A seats it once, under A
+    const again = await t.connect(A);
+    await t.send(again, { t: 'join', room: 'arena:3', name: 'x', skin: 0 });
+    expect(seats(again).map((m) => m.session)).toEqual([sessionKey(3, A, ticket.id)]);
+    expect(t.rooms.findArenaStake(3, A)?.entry.player).toBe(A);
   });
 });

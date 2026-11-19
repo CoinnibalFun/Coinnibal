@@ -163,6 +163,11 @@ export interface ChainGateway {
    */
   getSession(arenaId: number, player: string): Promise<ChainSession | null>;
   /**
+   * Whether the server already knows that this wallet holds an open ticket of the arena (the `Joined` log index of the
+   * stale sweeper; no RPC call). False is "not known", never "no ticket". Absent: never known.
+   */
+  knowsOpenTicket?(arenaId: number, player: string): boolean;
+  /**
    * On-chain arenas; cached unless `fresh` (a re-read that bypasses the cache). When the RPC fails the
    * last good list is served (stale); `ChainBusyError` only when no list was ever read.
    */

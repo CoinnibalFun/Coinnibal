@@ -726,6 +726,13 @@ export class EvmChain implements ChainGateway {
   /** Ticket reads in flight, per arena, arena id and wallet (`getSession`). */
   private readonly sessionReads = new Map<string, Promise<ChainSession | null>>();
 
+  /** The open-session index (`Joined` logs, refreshed by the stale sweeper) holds a ticket of this wallet in this arena. */
+  knowsOpenTicket(arenaId: number, player: string): boolean {
+    const p = String(player).toLowerCase();
+    for (const c of this.index.candidates.values()) if (c.arenaId === arenaId && c.player.toLowerCase() === p) return true;
+    return false;
+  }
+
   private async readSession(arenaId: number, player: string): Promise<ChainSession | null> {
     const t = this.token();
     if (!this.tokenReady || !t || !this.client || !this.arena || !isEvm(player) || !Number.isInteger(arenaId) || arenaId < 1 || arenaId > 65_535) return null;

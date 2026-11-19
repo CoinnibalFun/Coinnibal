@@ -16,3 +16,16 @@ export function asClient<T>(key: string, fn: () => T): T {
 export function currentClient(): string | null {
   return scope.getStore() ?? null;
 }
+
+/**
+ * The current client's budget for this work is spent and there is no answer known to give (a holder check with
+ * nothing cached): never a "no", the caller answers "busy, try again in a moment".
+ */
+export class ClientBudgetError extends Error {
+  constructor(what: string) {
+    super(`${what}: this client's budget is spent for now; try again in a moment`);
+  }
+}
+
+/** The answer of a refusal for `ClientBudgetError` (the WebSocket `rate_limited` error, HTTP 429). */
+export const CLIENT_BUSY_MESSAGE = 'Busy checking your wallet right now. Try again in a moment.';

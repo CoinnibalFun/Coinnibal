@@ -25,7 +25,7 @@ import { getAddress, type Address, type Hash } from 'viem';
 import { ChainCache } from '../chain/chain-cache';
 import type { EvmClient } from '../chain/evm-client';
 import { isRateLimited, withRpcPriority } from '../chain/rpc-budget';
-import { currentClient } from '../net/client-scope';
+import { ClientBudgetError, currentClient } from '../net/client-scope';
 import { Limiter } from '../net/limiter';
 import type { SiteStore } from './store';
 import { SiteFail, userWallet } from './validate';
@@ -51,7 +51,8 @@ export const HOLDER_MISS_TTL_MS = 2_000;
 /**
  * Holder checks that read the chain (a cache miss) per client a minute (`currentClient`): a client signing in with
  * many throwaway wallets cannot turn its joins and page loads into `balanceOf` calls without a bound. Past it the
- * last known answer is used (none: not a holder) until the minute is over.
+ * last known answer is used until the minute is over; a wallet with none is never told "not a holder":
+ * `ClientBudgetError` (the caller answers "busy, try again in a moment").
  */
 export const HOLDER_READS_PER_CLIENT_PER_MIN = 60;
 /** `royaltyInfo` of the collection (`/api/nft/contract`, an unauthenticated route) is read at most this often. */
@@ -341,7 +342,8 @@ export class MintService {
 
   /**
    * Whether a wallet holds a Coinnibal NFT (`balanceOf > 0`), cached 15 s (`fresh` re-reads). False without an NFT.
-   * Concurrent checks of one wallet share one read; a client's cache misses are bounded (`HOLDER_READS_PER_CLIENT_PER_MIN`).
+   * Concurrent checks of one wallet share one read; a client's cache misses are bounded (`HOLDER_READS_PER_CLIENT_PER_MIN`):
+   * past the bound, with no answer known for the wallet, `ClientBudgetError` (busy), never a wrong "not a holder".
    */
   async isHolder(wallet: string, fresh = false): Promise<boolean> {
     const nft = this.deps.nft();
@@ -357,7 +359,10 @@ export class MintService {
     if (running) return running;
     // a `fresh` check (an arena seat, a purchase) is bounded by its caller and never answered from the cache
     const who = currentClient();
-    if (!fresh && who !== null && !this.holderReadsByClient.allow(who)) return hit?.value ?? false;
+    if (!fresh && who !== null && !this.holderReadsByClient.allow(who, this.now())) {
+      if (hit) return hit.value;
+      throw new ClientBudgetError('holder check');
+    }
     const read = (async () => {
       let value: boolean;
       try {

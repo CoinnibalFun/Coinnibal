@@ -254,6 +254,123 @@ describe('connection slots', () => {
     await closeAll();
   });
 
+  it('a ticket holder\'s sockets that sign out still count under its wallet: 3 sockets, past the cap one slot (NET-R1-1)', async () => {
+    const { SOCKETS_PER_WALLET } = await import('../src/net/gateway');
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-slots-out-')), GAME_ACCESS: 'public', NODE_ENV: 'development', MAX_CONNECTIONS: '40', MAX_CONNECTIONS_PER_IP: '3', MAX_CONNECTIONS_PER_SUBNET: '6' } as unknown as NodeJS.ProcessEnv);
+    const other = await createApp(cfg, { chain: new NullChain(), log: () => {}, persist: false });
+    const p2 = await other.listen();
+    const holders = new Set<string>();
+    const real = other.rooms.holdsLiveStake.bind(other.rooms);
+    other.rooms.holdsLiveStake = (w: string) => holders.has(w.toLowerCase()) || real(w);
+    const socks: WebSocket[] = [];
+    /** An upgrade with `token`; `logout`: the socket signs out right after its hello. */
+    const tryOpen = (ip: string, token: string, logout = false) =>
+      new Promise<number | 'open'>((resolve) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${p2}/ws`, ['coinnibal', `coinnibal.auth.${token}`], { headers: { 'X-Forwarded-For': ip } });
+        socks.push(ws);
+        ws.on('error', () => {});
+        ws.once('open', () => {
+          ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));
+          if (logout) ws.send(JSON.stringify({ t: 'logout' }));
+          resolve('open');
+        });
+        ws.once('unexpected-response', (_q, r) => resolve(r.statusCode ?? 0));
+      });
+    const openOf = (wallet: string) => [...other.rooms.conns].filter((c) => c.admitSlot === wallet.toLowerCase()).length;
+    try {
+      // one stake token, one address, every socket signs out after its hello: the wallet still holds 3
+      const a = testSigner().address;
+      holders.add(a.toLowerCase());
+      const ta = other.auth.issueToken(a);
+      for (let i = 0; i < 12; i++) {
+        await tryOpen('198.51.100.66', ta, true);
+        await sleep(10);
+      }
+      await sleep(150);
+      expect(other.rooms.conns.size).toBe(SOCKETS_PER_WALLET);
+      expect(openOf(a)).toBe(SOCKETS_PER_WALLET);
+      expect([...other.rooms.conns].every((c) => c.wallet === null)).toBe(true);
+      // signed-in players fill every slot
+      for (let i = 0; other.rooms.conns.size < 40; i++) expect(await tryOpen(`203.0.113.${i + 1}`, other.auth.issueToken(testSigner().address))).toBe('open');
+      // past the cap a second ticket holder gets one slot, whether its sockets stay or sign out
+      const b = testSigner().address;
+      holders.add(b.toLowerCase());
+      const tb = other.auth.issueToken(b);
+      for (let i = 0; i < 6; i++) {
+        expect(await tryOpen('198.51.100.67', tb, i % 2 === 1)).toBe('open');
+        await sleep(30);
+        expect(other.rooms.conns.size).toBeLessThanOrEqual(41);
+        expect(openOf(b)).toBeLessThanOrEqual(1);
+      }
+      // the headroom is still there for a real ticket holder reconnecting (it has no socket of its own)
+      const c = testSigner().address;
+      holders.add(c.toLowerCase());
+      expect(await tryOpen('192.0.2.9', other.auth.issueToken(c))).toBe('open');
+      await sleep(30);
+      expect(openOf(c)).toBe(1);
+    } finally {
+      for (const ws of socks) ws.terminate();
+      await other.close();
+    }
+  });
+
+  it('at the cap, a second tab of a ticket holder whose game is live leaves that game open (NET-R1-3)', async () => {
+    const { SILENT_PLAYER_MS } = await import('../src/net/gateway');
+    const holder = testSigner().address;
+    const real = app.rooms.holdsLiveStake.bind(app.rooms);
+    app.rooms.holdsLiveStake = (w: string) => w === holder || real(w);
+    const token = app.auth.issueToken(holder);
+    // the newest socket of the holder's wallet, marked as playing (its coin is alive)
+    const marked = new Set<unknown>();
+    const playNewest = () => {
+      const c = [...app.rooms.conns].filter((x) => x.ip === '192.0.2.9' && !marked.has(x)).at(-1)!;
+      marked.add(c);
+      c.player = { alive: true, id: marked.size } as never;
+      return c;
+    };
+    const closed = new Map<WebSocket, number>();
+    const watch = (ws: WebSocket) => ws.once('close', (code) => closed.set(ws, code));
+    try {
+      // the holder plays in its first tab
+      const tab1 = await open('192.0.2.9', token);
+      watch(tab1);
+      await sleep(50);
+      const c1 = playNewest();
+      // a busy server: every other slot is taken
+      for (let i = 0; app.rooms.conns.size < 10; i++) await open(`203.0.113.${i + 1}`, app.auth.issueToken(testSigner().address));
+      // a second tab: the game in the first goes on, the second takes the wallet's one extra slot
+      const tab2 = await open('192.0.2.9', token);
+      watch(tab2);
+      await sleep(100);
+      expect(closed.has(tab1)).toBe(false);
+      expect(app.rooms.conns.size).toBe(11);
+      // a third takes the place of the second (a lobby tab), never the game's
+      const tab3 = await open('192.0.2.9', token);
+      watch(tab3);
+      await sleep(100);
+      expect(closed.get(tab2)).toBe(CLOSE_REPLACED);
+      expect(closed.has(tab1)).toBe(false);
+      expect(app.rooms.conns.size).toBe(11);
+      // both play now, and the extra slot is taken: one more is refused rather than closing a live game
+      playNewest();
+      c1.lastMsgAt = Date.now();
+      await expect(open('192.0.2.9', token)).rejects.toThrow(/HTTP 429/);
+      expect(closed.has(tab1)).toBe(false);
+      // the first game went silent (a network switch: a dead socket): the reconnect takes its place, and its join
+      // takes the coin over
+      c1.lastMsgAt = Date.now() - SILENT_PLAYER_MS - 1;
+      await open('192.0.2.9', token);
+      await sleep(100);
+      expect(closed.get(tab1)).toBe(CLOSE_REPLACED);
+      expect(closed.has(tab3)).toBe(false);
+      expect(app.rooms.conns.size).toBe(11);
+    } finally {
+      app.rooms.holdsLiveStake = real;
+      for (const c of app.rooms.conns) c.player = null;
+      await closeAll();
+    }
+  });
+
   it('a ticket holder reconnecting always gets in, even when every slot is taken by signed-in players', async () => {
     for (let i = 0; i < 10; i++) await open(`192.0.2.${i}`, app.auth.issueToken(testSigner().address));
     await expect(open('192.0.2.200', app.auth.issueToken(testSigner().address))).rejects.toThrow(/HTTP 429/);
