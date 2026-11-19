@@ -96,7 +96,7 @@ describe('mint logic', () => {
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true) })).toBeNull();
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: null })).toMatch(/checking/);
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(false) })).toMatch(/not on the WL/);
-    expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true, `0x${'00'.repeat(32)}`) })).toMatch(/not published/);
+    expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true, `0x${'00'.repeat(32)}`) })).toMatch(/the WL is not on the contract yet\. Try again soon/i);
     expect(mintBlocker(c, { wl: 1, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true) })).toMatch(/WL limit is 1/);
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'public', qty: 1, proof: null })).toMatch(/public mint is not open/);
     const pub = contract({ phase: 'public', totalSupply: 3332 });
@@ -194,7 +194,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract()), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(true, `0x${'00'.repeat(32)}`) }));
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(screen.getByTestId('mt-eligibility').textContent).toMatch(/not on the contract yet/));
-    expect(screen.getByTestId('mt-blocker').textContent).toMatch(/not published/);
+    expect(screen.getByTestId('mt-blocker').textContent).toMatch(/the WL is not on the contract yet\. Try again soon/i);
     expect((screen.getByRole('button', { name: /^Mint/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
