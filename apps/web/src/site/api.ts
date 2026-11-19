@@ -43,6 +43,7 @@ import type {
   SiteCounts,
   SiteErrorCode,
   SiteSettings,
+  SitePinsRecord,
   WlEntryAdmin,
   WlEntryPublic,
   WlStatus,
@@ -327,6 +328,8 @@ export function adminApi(token: string) {
     /** `gameAccessEnv`: the server's `GAME_ACCESS` override (null when unset). */
     settings: () => request<AdminSettingsResponse>('/api/admin/settings', { token }),
     saveSettings: (patch: Partial<SiteSettings>) => request<AdminSettingsResponse>('/api/admin/settings', { method: 'PUT', token, body: patch }),
+    /** `POST /api/admin/pins`: the owner's signed site pins of the server's chain (the server checks them against the registry). */
+    savePins: (record: SitePinsRecord) => request<{ record: SitePinsRecord }>('/api/admin/pins', { method: 'POST', token, body: record }).then((r) => r.record),
     /** `POST /api/admin/contracts`: the server checks the code hash, the owner and (arena) the server authority. */
     registerContract: (body: ContractRegisterRequest) => request<{ registry: ContractsRegistry } | ContractsRegistry>('/api/admin/contracts', { method: 'POST', token, body }).then(registryOf),
     clearContract: (kind: ContractKind) => request<{ registry: ContractsRegistry } | ContractsRegistry>(`/api/admin/contracts${q({ kind })}`, { method: 'DELETE', token }).then(registryOf),

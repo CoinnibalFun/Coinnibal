@@ -5,6 +5,7 @@ import type { Address, PublicClient } from 'viem';
 import { Button } from '../design';
 import type { AdminApi } from '../site/api';
 import { publicClientFor } from '../wallet/network';
+import { signedPinsFor, type SignedPins } from '../wallet/pinned';
 import { useWallet } from '../wallet/store';
 import type { ContractsRegistry, GameAccess, SiteSettings } from '@coinnibal/shared';
 import { site } from '../site/api';
@@ -89,7 +90,22 @@ export function AdminPanel({
       live = false;
     };
   }, [api, tab, settingsRev]);
-  const summary = groupSummary(tab, { net, status, registry, settings: access?.settings ?? null, gameAccessEnv: access?.env ?? null });
+  // the owner's signed site pins of this chain (verified against the owner wallet this build knows)
+  const [signed, setSigned] = useState<SignedPins | null>(null);
+  const [pinsRev, setPinsRev] = useState(0);
+  useEffect(() => {
+    const id = net.info?.id;
+    if (!id) return;
+    let live = true;
+    signedPinsFor(id, { fresh: pinsRev > 0 }).then(
+      (p) => live && setSigned(p),
+      () => live && setSigned(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [net.info?.id, pinsRev]);
+  const summary = groupSummary(tab, { net, status, registry, settings: access?.settings ?? null, gameAccessEnv: access?.env ?? null, signed });
   const [plan, setPlan] = useState<Plan | null>(null);
   const [log, setLog] = useState<SignedEntry[]>([]);
   const [codes, setCodes] = useState<{ arena: string | null; nft: string | null }>({ arena: null, nft: null });
@@ -116,7 +132,21 @@ export function AdminPanel({
   const nftRole = !me || !net.nftAddress || !nftOwner ? null : sameAddress(nftOwner, me);
   useEffect(() => onRole?.({ arena: arenaRole, nft: nftRole }), [onRole, arenaRole, nftRole]);
 
-  const ctx: ChainCtx = { net, status, refresh, reloadNet, me, walletChainId, client, api, open: setPlan, registry, settingsChanged: () => setSettingsRev((n) => n + 1) };
+  const ctx: ChainCtx = {
+    net,
+    status,
+    refresh,
+    reloadNet,
+    me,
+    walletChainId,
+    client,
+    api,
+    open: setPlan,
+    registry,
+    settingsChanged: () => setSettingsRev((n) => n + 1),
+    signed,
+    pinsChanged: () => setPinsRev((n) => n + 1),
+  };
 
   return (
     <div className="ad-chain" aria-busy={loading}>

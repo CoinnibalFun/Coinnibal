@@ -33,6 +33,7 @@ import type { CustomRoomService } from '../rooms/custom';
 import { importHolders, type HolderWlStore } from './holder-wl';
 import { FaucetInfo, networkInfo } from './network';
 import { clearContract, registerContract, type ContractsStore } from './contracts';
+import { savePins, type SitePinsStore } from './pins';
 import { parseNftPath, type MintService } from './mint';
 import { CollectionFail, type NftCollection } from './nft/collection';
 import { parseArtStyle } from './nft/render';
@@ -46,6 +47,8 @@ const SECRET_ROUTES = new Set(['backup', 'migration-env', 'secret-proof', 'auth'
 export interface SiteExtras {
   chain?: ChainGateway;
   contracts?: ContractsStore;
+  /** The owner's signed site pins, per chain (`GET /api/site/pins`, `POST /api/admin/pins`). */
+  pins?: SitePinsStore;
   mint?: MintService;
   /** The emblem collection (art, metadata, provenance, reveal). */
   nft?: NftCollection;
@@ -763,6 +766,14 @@ export class SiteApi {
         if (seg.length !== 1) break;
         this.method(req, 'GET');
         return send(res, 200, this.ext.contracts?.effective(this.chainId()) ?? { arena: null, nft: null, token: null });
+      case 'pins': {
+        // the owner's signed pins: public, the browser checks the signature against the owner wallet it was built with
+        if (seg.length !== 1) break;
+        this.method(req, 'GET');
+        const asked = url.searchParams.get('chainId');
+        const id = asked === null ? this.chainId() : /^\d{1,12}$/.test(asked) ? Number(asked) : null;
+        return send(res, 200, { record: this.ext.pins?.get(id) ?? null });
+      }
       case 'arena-prices': {
         // the tiers in US dollars and the token's USD price: the lobby shows "$1" next to the token amount
         if (seg.length !== 1 || !this.arenaPrices) break;
@@ -916,6 +927,26 @@ export class SiteApi {
           wallet,
         );
         return send(res, 201, { record, registry: contracts.effective(this.chainId()) });
+      }
+      case 'pins': {
+        if (seg.length !== 1) break;
+        const pins = this.ext.pins;
+        if (!pins) throw new SiteFail(503, 'chain_off', 'Site pins are not available on this server.');
+        if (this.method(req, 'GET', 'POST') === 'GET') return send(res, 200, { record: pins.get(this.chainId()) });
+        const evm = this.ext.chain?.evm?.() ?? null;
+        const record = await savePins(
+          {
+            store: pins,
+            contracts: this.ext.contracts ?? null,
+            chainId: this.chainId(),
+            // the dev fake chain has no client: the token is not checked there
+            arenaToken: async (arena) => (evm ? ((await evm.arenaConfig(arena)).token ?? null) : undefined),
+            now: Date.now(),
+          },
+          await readJson(req),
+          wallet,
+        );
+        return send(res, 201, { record });
       }
       case 'mint': {
         const mint = this.ext.mint;

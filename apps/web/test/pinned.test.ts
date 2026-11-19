@@ -1,8 +1,9 @@
 import { coinnibalArenaArtifact } from '@coinnibal/sdk';
-import { LOCALNET_CHAIN_ID, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID } from '@coinnibal/shared';
+import { LOCALNET_CHAIN_ID, OWNER_WALLET, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, sitePinsMessage, type SitePinsFields } from '@coinnibal/shared';
 import { getAddress, keccak256, type Hex } from 'viem';
-import { describe, expect, it } from 'vitest';
-import { PIN_ENV, buildPins, checkAnnounced, checkNft, mayRunUnpinned, verifyArena } from '../src/wallet/pinned';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+import { describe, expect, it, vi } from 'vitest';
+import { OWNER_ENV, PIN_ENV, buildPins, checkAnnounced, checkNft, forgetSignedPins, mayRunUnpinned, pinsFor, signedPinsFor, verifyArena, verifySignedPins, withSigned } from '../src/wallet/pinned';
 
 const OTHER = '0x000000000000000000000000000000000000bEEF';
 const MAIN_ARENA = '0x00000000000000000000000000000000000a4e4a';
@@ -113,5 +114,90 @@ describe('arena code hash', () => {
     const client = { getCode: async () => ((read = true), CODE) };
     expect(await verifyArena(client, ROBINHOOD_TESTNET_CHAIN_ID, { arena: OTHER }, pins, HASH)).toEqual({ ok: false, reason: 'arena_mismatch' });
     expect(read).toBe(false);
+  });
+});
+
+describe('signed pins (the owner signs the contracts; the server only keeps the record)', () => {
+  const owner = privateKeyToAccount(generatePrivateKey());
+  const fields = (over: Partial<SitePinsFields> = {}): SitePinsFields => ({ chainId: ROBINHOOD_TESTNET_CHAIN_ID, arena: TEST_ARENA, nft: TEST_NFT, token: TEST_TOKEN, signedAt: '2026-11-19T10:00:00.000Z', ...over });
+  const sign = async (f: SitePinsFields, by = owner) => ({ ...f, signature: await by.signMessage({ message: sitePinsMessage(f) }) });
+
+  it('the build knows the owner wallet; VITE_OWNER_WALLET overrides it, and garbage there signs nothing', () => {
+    expect(buildPins({}).owner).toBe(getAddress(OWNER_WALLET));
+    expect(OWNER_WALLET).toBe('0x08b2b32E932D5f429073a441E6eFd8e3D42369b2');
+    expect(buildPins({ owner: owner.address.toLowerCase() }).owner).toBe(owner.address);
+    const bad = buildPins({ owner: 'me' });
+    expect([bad.owner, bad.invalid]).toEqual([null, [OWNER_ENV]]);
+    expect(checkAnnounced(ROBINHOOD_TESTNET_CHAIN_ID, { arena: TEST_ARENA }, withSigned(bad, ROBINHOOD_TESTNET_CHAIN_ID, { arena: TEST_ARENA, nft: null, token: null }))).toEqual({ ok: false, reason: 'bad_pin' });
+  });
+
+  it("accepts the owner's signature of exactly this chain and these addresses", async () => {
+    const rec = await sign(fields());
+    expect(await verifySignedPins(rec, ROBINHOOD_TESTNET_CHAIN_ID, owner.address)).toEqual({ chainId: ROBINHOOD_TESTNET_CHAIN_ID, arena: TEST_ARENA, nft: TEST_NFT, token: TEST_TOKEN, signedAt: rec.signedAt });
+    // no token yet
+    const none = await sign(fields({ token: null }));
+    expect((await verifySignedPins(none, ROBINHOOD_TESTNET_CHAIN_ID, owner.address))?.token).toBeNull();
+  });
+
+  it('refuses a wrong signer, a wrong chain, a changed address and garbage', async () => {
+    const rec = await sign(fields());
+    expect(await verifySignedPins(await sign(fields(), privateKeyToAccount(generatePrivateKey())), ROBINHOOD_TESTNET_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins(rec, ROBINHOOD_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins({ ...rec, chainId: ROBINHOOD_CHAIN_ID }, ROBINHOOD_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins({ ...rec, arena: OTHER }, ROBINHOOD_TESTNET_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins({ ...rec, nft: OTHER }, ROBINHOOD_TESTNET_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins({ ...rec, token: OTHER }, ROBINHOOD_TESTNET_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins({ ...rec, token: null }, ROBINHOOD_TESTNET_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins({ ...rec, signedAt: '2026-11-19T10:00:00.001Z' }, ROBINHOOD_TESTNET_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins({ ...rec, signature: '0x1234' }, ROBINHOOD_TESTNET_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins(null, ROBINHOOD_TESTNET_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins(rec, ROBINHOOD_TESTNET_CHAIN_ID, null)).toBeNull();
+  });
+
+  it('the build pins win per contract; the signed record fills the rest', () => {
+    const signed = { arena: TEST_ARENA, nft: TEST_NFT, token: TEST_TOKEN };
+    const merged = withSigned(buildPins({ arena: OTHER }), ROBINHOOD_TESTNET_CHAIN_ID, signed);
+    expect(merged.chains[ROBINHOOD_TESTNET_CHAIN_ID]).toEqual({ arena: getAddress(OTHER), nft: TEST_NFT, token: TEST_TOKEN });
+    // another chain than the build's: the signed record alone
+    expect(withSigned(buildPins({}), ROBINHOOD_CHAIN_ID, signed).chains[ROBINHOOD_CHAIN_ID]).toEqual(signed);
+    expect(checkAnnounced(ROBINHOOD_TESTNET_CHAIN_ID, { arena: TEST_ARENA, token: TEST_TOKEN }, withSigned(buildPins({}), ROBINHOOD_TESTNET_CHAIN_ID, signed))).toEqual({ ok: true, arena: TEST_ARENA });
+    expect(checkNft(ROBINHOOD_TESTNET_CHAIN_ID, OTHER, withSigned(buildPins({}), ROBINHOOD_TESTNET_CHAIN_ID, signed))).toEqual({ ok: false, reason: 'nft_mismatch' });
+  });
+
+  it('reads the record from the server, refuses one older than a record this browser accepted, and an unreadable server signs nothing', async () => {
+    localStorage.clear();
+    const newer = await sign(fields({ signedAt: '2026-11-19T12:00:00.000Z' }));
+    const older = await sign(fields({ signedAt: '2026-11-19T11:00:00.000Z' }));
+    expect((await signedPinsFor(ROBINHOOD_TESTNET_CHAIN_ID, { owner: owner.address, fetch: async () => newer }))?.signedAt).toBe(newer.signedAt);
+    expect(await signedPinsFor(ROBINHOOD_TESTNET_CHAIN_ID, { owner: owner.address, fetch: async () => older })).toBeNull();
+    // the same record again is fine
+    expect(await signedPinsFor(ROBINHOOD_TESTNET_CHAIN_ID, { owner: owner.address, fetch: async () => newer })).not.toBeNull();
+    await expect(signedPinsFor(ROBINHOOD_TESTNET_CHAIN_ID, { owner: owner.address, fetch: async () => Promise.reject(new Error('down')) })).rejects.toThrow('down');
+    forgetSignedPins();
+    localStorage.clear();
+  });
+
+  it("pinsFor asks GET /api/site/pins of the chain; verifyArena refuses while it cannot be read", async () => {
+    const rec = await sign(fields({ signedAt: '2026-11-19T13:00:00.000Z' }));
+    const asked: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      asked.push(url);
+      return new Response(JSON.stringify({ record: rec }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    try {
+      const pins = await pinsFor(ROBINHOOD_TESTNET_CHAIN_ID, buildPins({ owner: owner.address }));
+      expect(pins.chains[ROBINHOOD_TESTNET_CHAIN_ID]).toEqual({ arena: TEST_ARENA, nft: TEST_NFT, token: TEST_TOKEN });
+      expect(asked[0]).toMatch(/\/api\/site\/pins\?chainId=46630$/);
+      // a build that pins all three asks nothing
+      await pinsFor(ROBINHOOD_TESTNET_CHAIN_ID, testnetBuild());
+      expect(asked).toHaveLength(1);
+      forgetSignedPins();
+      vi.stubGlobal('fetch', async () => Promise.reject(new TypeError('fetch failed')));
+      expect(await verifyArena(coder('0x'), ROBINHOOD_TESTNET_CHAIN_ID, { arena: TEST_ARENA })).toEqual({ ok: false, reason: 'unreadable' });
+    } finally {
+      vi.unstubAllGlobals();
+      forgetSignedPins();
+      localStorage.clear();
+    }
   });
 });
