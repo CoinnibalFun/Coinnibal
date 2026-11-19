@@ -163,8 +163,11 @@ the web, and builds the Docker image.
 ### Deploying
 
 Deploy the server (Docker on a VPS: deploy/vps/README.md), then deploy the contracts from your own wallet in
-`/admin`: Deploy Arena → Deploy NFT → register both → publish the allowlist → open the mint → set the token (when
-it exists) → create the arenas → open the game. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
+`/admin`: Deploy Arena → Deploy NFT → register both → pin them in the site build → publish the allowlist → open the
+mint → set the token (when it exists) and pin it → create the arenas → open the game. The pins are the one step in
+the VPS shell: the site trusts only the contracts it was built with, so `/admin` → Setup → Site pins shows the
+`COINNIBAL_PIN_*` lines for `/opt/elymum/.env`, then `coinnibal-compose up -d --build app` rebuilds it. Moving to the
+mainnet is a server setting plus that rebuild with the mainnet pins. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
 Day-to-day running (gas for the server key, the allowlist, the mint price, pausing, ownership):
 [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
