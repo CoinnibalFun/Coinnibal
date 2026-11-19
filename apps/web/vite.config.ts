@@ -247,7 +247,9 @@ function prerenderLanding(): Plugin {
               rollupOptions: { output: { entryFileNames: 'prerender.mjs' } },
             },
           });
-          const entry = (await import(pathToFileURL(join(tmp, 'prerender.mjs')).href)) as typeof import('./src/site/landing/prerender');
+          // a fresh URL each build: Node keeps an imported module for the life of the process (`vite build --watch`)
+          const url = `${pathToFileURL(join(tmp, 'prerender.mjs')).href}?build=${Date.now()}`;
+          const entry = (await import(url)) as typeof import('./src/site/landing/prerender');
           const { html: markup, settings, bodyEnd } = entry.renderLanding();
           const manifest = JSON.parse(readFileSync(join(outDir, '.vite', 'manifest.json'), 'utf8')) as Manifest;
           const index = readFileSync(join(outDir, 'index.html'), 'utf8');
