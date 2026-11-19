@@ -10,6 +10,7 @@ import { X_HANDLE, X_URL, shortWallet, siteHost, useSiteSettings, xIntent } from
 import { intlLocale, plainChainName, t, useT, type TKey } from '../../i18n';
 import { T } from '../../i18n/rich';
 import { ClosedNotice } from '../Closed';
+import { useClaimTitle } from '../pageTitle';
 import { SitePage, XIcon } from '../Shell';
 import { SiteWalletProvider, WalletSignIn, useSiteSession } from '../wallet/SiteWallet';
 import { Ascent } from './Ascent';
@@ -132,12 +133,7 @@ function WlClosed() {
   const [signin, setSignin] = useState(false);
   const t = useT();
   // the tab reads like the site's other closed pages (the WL page itself, open or with a status, keeps its own title)
-  useEffect(() => {
-    document.title = t('site.title.closed');
-    return () => {
-      document.title = t('site.title.wl');
-    };
-  }, [t]);
+  useClaimTitle('site.title.closed');
   return (
     <>
       <PlateLabel numeral="IV" title={t('wp.closed.plate')} />
