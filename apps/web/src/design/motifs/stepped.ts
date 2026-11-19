@@ -40,8 +40,8 @@ export const SMIL_TICK_MS = 100;
 
 /**
  * An SVG's SMIL timeline on a touch phone: paused, and moved forward from script in `SMIL_TICK_MS` steps. Only while `on`
- * (animated and on screen). Each step pauses the timeline again: a `useOffscreenPause` on the SVG or on a section around
- * it unpauses every SVG inside when it comes back on screen.
+ * (animated and on screen). The SVG carries `data-stepped` meanwhile, so a `useOffscreenPause` around it does not resume
+ * its timeline; each step still pauses it again, in case something else did.
  */
 export function useSteppedSmil(svg: RefObject<SVGSVGElement | null>, on: boolean): void {
   useEffect(() => {
@@ -51,8 +51,12 @@ export function useSteppedSmil(svg: RefObject<SVGSVGElement | null>, on: boolean
       if (!el.animationsPaused()) el.pauseAnimations();
       el.setCurrentTime(el.getCurrentTime() + SMIL_TICK_MS / 1000);
     };
+    el.setAttribute('data-stepped', '');
     el.pauseAnimations();
     const timer = window.setInterval(tick, SMIL_TICK_MS);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      el.removeAttribute('data-stepped');
+    };
   }, [svg, on]);
 }
