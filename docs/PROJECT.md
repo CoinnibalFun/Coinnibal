@@ -2,9 +2,10 @@
 
 Coinnibal is a cute coin-eats-coin arena game on **Robinhood Chain** (an Arbitrum Orbit L2, gas token **ETH**). The
 money rules live in Solidity contracts, the game runs on an authoritative server, and a **Coinnibal NFT** opens the
-game (no mint price is published; the visitor site says the public mint will be on OpenSea). This page explains how the game plays, how money moves, how the code is laid out and
-how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY.md), [RESEARCH.md](RESEARCH.md)
-(the specs under `docs/specs/` are historical: they describe the earlier Elysium build).
+game (no visitor copy names a mint price; the visitor site says the public mint will be on OpenSea). This page
+explains how the game plays, how money moves, how the code is laid out and how it is run. Details:
+[ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY.md), [RESEARCH.md](RESEARCH.md) (the specs under
+`docs/specs/` are historical: they describe the earlier Elysium build).
 
 > **Status (2026-11-18).** Coinnibal runs on **Robinhood Chain only**: Robinhood Chain Testnet (46630) now, Robinhood
 > Chain (4663) later, switched with `CHAIN_ID`. The arena contract is v3 (no fee on the ticket; 20 % of a ticket's profit:
@@ -27,10 +28,11 @@ how it is run. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [ECONOMY.md](ECONOMY
   the bell everyone still alive is paid their value on chain, less 20 % of their profit (15 % burned, 5 % to the fee wallet); a loss pays no fee.
 - Re-entry: eaten? Buy back in at the same fee while joins are open (they close in the final minute and in the
   break; a ticket bought then is held and seated when the next round opens).
-- The NFT: the Coinnibal NFT (an emblem), minted in ETH at the owner's USD target (`MINT_USD_CENTS`, never
-  published), allowlist first, then public. The public mint is planned on OpenSea (the link @coinnibalfun posts); how
-  that sale and the contract's own phases and `/mint` fit together is an open owner decision. The owner decides who
-  may play: admins only, NFT holders, or everyone.
+- The NFT: the Coinnibal NFT (an emblem), minted in ETH at the owner's USD target (`MINT_USD_CENTS`: no visitor
+  page shows it, and `GET /api/site/mint` leaves it out while the mint page is closed), allowlist first, then public.
+  The public mint is planned on OpenSea (the link @coinnibalfun posts); how that sale and the contract's own phases
+  and `/mint` fit together is an open owner decision. The owner decides who may play: admins only, NFT holders, or
+  everyone.
 - The token is set after deploy: until the owner sets it on the arena (once), the arenas read "Opening soon".
 
 ## 2. Game mechanics
@@ -251,10 +253,11 @@ flowchart LR
 
 ### 3.3 The token and the mint
 
-- The arena is deployed without a token; the owner sets the game token once (`setToken`: the registered token confirmed in the preview; any other address
-  typed twice). It can
-  never change. Until then the server plays practice only and the arenas show "Opening soon"; when it is set the lobby
-  opens the arenas without a reload.
+- The arena is deployed without a token; the owner sets the game token once (`setToken`). On a testnet the
+  registered TestToken is confirmed once in the preview; the real game token (mainnet) cannot be registered before
+  the arena uses it, so the owner enters it under Advanced and types it twice (`TOKEN_ADDRESS` names it only on a
+  server outside Docker: the VPS compose file clears that key). It can never change. Until then the server plays
+  practice only and the arenas show "Opening soon"; when it is set the lobby opens the arenas without a reload.
 - The NFT price is held in wei and kept at `MINT_USD_CENTS` (US cents, default 100; an owner setting) of ETH: by the owner's Sync button, or by
   the server as price keeper inside the owner's bounds (every 5 minutes, only when off by more than 2 %).
 - The allowlist is every approved WL wallet plus every wallet of a submitted collab list; the owner publishes its
@@ -330,7 +333,7 @@ the owner. Protect the server key.
 | Item | Value |
 |---|---|
 | Chain | **Robinhood Chain Testnet** (`CHAIN_ID=46630`, RPC `https://rpc.testnet.chain.robinhood.com`, explorer `https://explorer.testnet.chain.robinhood.com`), later **Robinhood Chain** (`CHAIN_ID=4663`, a provider RPC) |
-| Contracts | deployed by the owner from `/admin` → Setup and registered with the server (`DATA_DIR/chains/<id>/contracts.json`) |
+| Contracts | deployed by the owner from `/admin` → Setup and registered with the server (`DATA_DIR/chains/<id>/contracts.json`), then pinned in the site build (`COINNIBAL_PIN_*` in `/opt/elymum/.env` and a rebuild; no chain has default pins) |
 | Server key | `SERVER_PRIVATE_KEY=auto`, on the persistent disk; pays gas in ETH |
 | Admins | `ADMIN_WALLETS` = the owner's 0x address (no default) |
 | Hosting | the game server and the website in one Docker container behind Caddy on a VPS (`WEB_DIST=/app/web`; the data volume at `/data`, daily and offsite backups); Vercel only redirects the old elymum.io |
@@ -350,8 +353,8 @@ the owner. Protect the server key.
 | `/docs` | everyone | The player guide |
 
 **Admin panel safety:** the wallet must be on the server's chain and be the contract owner; every transaction is
-previewed (function, arguments, value, network, signer) before the wallet prompt; the game token is the registered one, confirmed in the preview (any other address is
-typed twice);
+previewed (function, arguments, value, network, signer) before the wallet prompt; the game token is the registered
+TestToken on a testnet, confirmed in the preview, and the real token on the mainnet is typed twice under Advanced;
 double clicks cannot send twice; mainnet shows a red MAINNET banner.
 
 **Integrity:** cheat and collusion flags from arena play (repeated value between wallets, feeding, shared IP or
@@ -367,8 +370,8 @@ Details: [OPERATIONS.md](OPERATIONS.md#integrity-cheat-and-collusion-detection).
   `#F6EEDA`, plain `#F8F7F4`, trench `#0F2A30`, and the rest of the spec's table.
 - Type: Fraunces (display, SOFT 100), DM Sans (reading), Geist Mono (numbers and kickers).
 - Kit: `node brand/generate.mjs` renders the X avatar and banner, the OG card (also `apps/web/public/og-coinnibal.png`),
-  the favicons, posts (WL open, the mint, game live), stickers and arena posters into `brand/out/`
-  ([brand/README.md](../brand/README.md)).
+  the favicons, posts (WL open, the mint, game live), stickers and arena posters into `brand/out/` (gitignored: the
+  PNGs are not committed; [brand/README.md](../brand/README.md)).
 
 ## 10. Media
 
@@ -381,15 +384,17 @@ $1 mint, the old arenas, a flat 5 % fee) and **must be rewritten before they are
 
 | Step | Who |
 |---|---|
-| Server on the VPS (deploy/vps/README.md), `ADMIN_WALLETS`, `SERVER_PRIVATE_KEY=auto`, `EVM_RPC_URLS`, Telegram alerts | owner |
+| Server on the VPS (deploy/vps/README.md), `ADMIN_WALLETS`, `SERVER_PRIVATE_KEY=auto`, `COINNIBAL_RPC_URLS` (`EVM_RPC_URLS` outside Docker), Telegram alerts | owner |
 | Fund the server key with ETH | owner |
-| `/admin` → Setup: TestToken, Arena, NFT, Finish setup (testnet first; OPERATIONS.md) | owner |
-| WL open; review WL and collabs | owner |
-| Publish the allowlist root; Sync the mint price; open the mint (Allowlist) with "activate the game for holders" | owner |
-| The game token exists → Set token (once) → create the four arenas | owner |
-| Public mint; optional price keeper with bounds | owner |
-| Mainnet: launch the token on Pons, `CHAIN_ID=4663` and a provider RPC, redeploy the contracts on mainnet | owner |
-| Re-render the films, regenerate the screenshots, upload the X art | owner |
+| Testnet first: `/admin` → Setup: Arena, NFT, TestToken, Finish setup (it also opens the TEST mint to everyone; OPERATIONS.md) | owner |
+| Pin the registered contracts in the site build, right after they are registered (and the token once it is set): Setup → Site pins shows the `COINNIBAL_PIN_*` lines; check them against your wallet, set them in `/opt/elymum/.env`, then `coinnibal-compose up -d --build app` in the VPS shell. Until then the site signs no ticket and no mint (DEPLOY.md section 3) | owner |
+| Mainnet: `COINNIBAL_CHAIN_ID=4663` and a provider RPC first in `COINNIBAL_RPC_URLS`; deploy Arena and NFT from the owner wallet (they register themselves); pin them (the same rebuild builds the site for chain 4663) | owner |
+| WL open; review WL and collabs; publish the allowlist root | owner |
+| Sync the mint price; open the mint (Allowlist, "activate the game for holders" left unchecked), later Public; optional price keeper with bounds | owner |
+| Launch the game token on Pons (mainnet only) → set it on the arena (once, typed twice) → pin it (`COINNIBAL_PIN_TOKEN`, rebuild) | owner |
+| Create the four arenas and price them; the holder perks and the holders-only $10 Room | owner |
+| Open the game (`/admin` → Game → Who may play) | owner |
+| Rewrite, then re-render the films; regenerate the screenshots; upload the X art | owner |
 | Security audit; legal review for a real-money game | recommended before opening |
 
 ## 12. Decision log

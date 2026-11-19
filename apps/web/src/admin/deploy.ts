@@ -6,7 +6,7 @@ import type { AdminNetwork } from './net';
 import { storageKey } from '../storageKey';
 
 /**
- * The deploy wizard of `/admin → Deploy` (spec section 5), as pure functions: connect the owner
+ * The deploy wizard of `/admin → Setup` (spec section 5), as pure functions: connect the owner
  * wallet → check the chain → deploy the arena → deploy the NFT → register both with the server →
  * set the game token → create the default arenas. TestToken deploy + faucet are offered off
  * mainnet only. What was deployed from this browser but not registered yet is remembered locally
@@ -88,7 +88,7 @@ export function deploySteps(w: WizardInput): DeployStep[] {
     { id: 'arena', label: 'Deploy CoinnibalArena', done: arenaOk, detail: w.net.arenaAddress ?? w.local.arena?.address ?? 'admin = you, server authority = the server key, fee wallet = you.' },
     { id: 'nft', label: 'Deploy CoinnibalNFT', done: nftOk, detail: w.net.nftAddress ?? w.local.nft?.address ?? `Max supply ${NFT_SUPPLY.toLocaleString('en-US')}, the server's mint price in ${GAS_SYMBOL} (MINT_USD_CENTS), 1 allowlist / 2 public per wallet.` },
     { id: 'register', label: 'Register both with the server', done: registered, detail: registered ? 'The server checked the code hash, the owner and the server authority.' : 'POST /api/admin/contracts for each.' },
-    { id: 'token', label: 'Set the game token', done: tokenSet, detail: cfg?.token ?? 'The registered token, confirmed once (it can be set only once). Nothing to type.' },
+    { id: 'token', label: 'Set the game token', done: tokenSet, detail: cfg?.token ?? (w.net.mainnet ? 'The game token launched on Pons, entered by hand and typed twice (it can be set only once).' : 'The registered TestToken, confirmed once (it can be set only once).') },
     { id: 'arenas', label: 'Create the four arenas', done: tokenSet && arenasLeft === 0, detail: tokenSet ? (arenasLeft === 0 ? 'All four default arenas exist.' : `${arenasLeft} to create.`) : 'Needs the token.' },
   ];
   let activeSeen = false;

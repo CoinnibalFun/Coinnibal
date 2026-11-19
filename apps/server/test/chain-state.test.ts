@@ -127,6 +127,18 @@ describe('chain-keyed state: migration', () => {
     expect(logs.join('\n')).toMatch(/chain id is unknown/);
     expect(await resolveStateChainId(loadConfig({ DATA_DIR: dir } as NodeJS.ProcessEnv), { persist: true, log: () => {} })).toBeNull();
   });
+
+  it('a wrong chain is an alert line that names the keys the VPS reads (COINNIBAL_*), not only the shadowed ones', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-state-'));
+    const logs: string[] = [];
+    const log = (m: string) => logs.push(m);
+    const cfg = loadConfig({ DATA_DIR: dir, EVM_RPC_URLS: 'https://rpc.example', SERVER_PRIVATE_KEY: 'auto' } as NodeJS.ProcessEnv);
+    expect(await resolveStateChainId(cfg, { persist: false, log, readId: async () => 99801 })).toBeNull();
+    expect(logs.pop()).toMatch(/^!!! chain: the RPC \(COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL\(S\) outside Docker\) serves chain 99801: chain 99801 is not Robinhood Chain/);
+    const pinned = loadConfig({ DATA_DIR: dir, CHAIN_ID: '4663', EVM_RPC_URLS: 'https://rpc.example', SERVER_PRIVATE_KEY: 'auto' } as NodeJS.ProcessEnv);
+    expect(await resolveStateChainId(pinned, { persist: false, log, readId: async () => 46630 })).toBeNull();
+    expect(logs.pop()).toMatch(/^!!! chain: CHAIN_ID is 4663 but the RPC \(COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL\(S\) outside Docker\) serves chain 46630: .*COINNIBAL_CHAIN_ID \/ COINNIBAL_RPC_URLS on the VPS, then restart\)$/);
+  });
 });
 
 describe('chain-keyed state: the app', () => {

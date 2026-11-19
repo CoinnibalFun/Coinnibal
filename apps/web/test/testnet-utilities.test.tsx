@@ -28,6 +28,7 @@ import { resetSiteSettings } from '../src/site/settings';
 import { Feed } from '../src/ui/game/Feed';
 import { useUi } from '../src/store';
 import { buildTickets, quickPlayTarget, ticketGate, type TicketModel } from '../src/wallet/ticket';
+import { buildPins } from '../src/wallet/pinned';
 import { resetWallets } from '../src/wallet/store';
 import { ALICE, ONE, chainStatus } from './evm-helpers';
 import { SETTINGS, installDomStubs, mockFetch } from './site-helpers';
@@ -317,14 +318,23 @@ describe('admin groups', () => {
       nft: { address: '0x0000000000000000000000000000000000000f7e', code: 'ok', state: { phaseName: 'closed' } },
       testToken: { address: '0x0000000000000000000000000000000000007e57', faucet: { holderNft: null } },
     } as unknown as StatusSnapshot;
-    expect(groupSummary('setup', { net: both, status: registered }).next).toMatch(/^Finish setup: 9 steps left/);
+    // the site build must trust the new contracts first: the pin step, then Finish setup
+    expect(groupSummary('setup', { net: both, status: registered })).toMatchObject({ now: expect.stringMatching(/ · site pins to set$/), next: 'Pin the contracts in the site build: Setup → Site pins (the VPS shell, then a rebuild).' });
+    const pinned = buildPins({ arena: ARENA, nft: '0x0000000000000000000000000000000000000f7e' });
+    expect(groupSummary('setup', { net: both, status: registered, pins: pinned })).toMatchObject({ now: expect.stringMatching(/ · site pins ok$/), next: expect.stringMatching(/^Finish setup: 9 steps left/) });
     const mainnet = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, nftAddress: '0x0000000000000000000000000000000000000f7e' }));
     const noTt = { ...registered, testToken: null } as unknown as StatusSnapshot;
-    expect(groupSummary('setup', { net: mainnet, status: noTt, registry: { token: { address: '0x0000000000000000000000000000000000007e57' } } as never }).next).toMatch(/Confirm the game token/);
-    expect(groupSummary('setup', { net: mainnet, status: noTt }).next).toMatch(/Register the game token in Setup → Advanced/);
+    const mainPins = buildPins({ chainId: '4663', arena: ARENA, nft: '0x0000000000000000000000000000000000000f7e' });
+    expect(groupSummary('setup', { net: mainnet, status: noTt, registry: { token: { address: '0x0000000000000000000000000000000000007e57' } } as never, pins: mainPins }).next).toMatch(/Confirm the game token/);
+    // the real token cannot be registered before the arena uses it: it is typed by hand
+    expect(groupSummary('setup', { net: mainnet, status: noTt, pins: mainPins }).next).toMatch(/enter it in Setup → Set the game token, by hand and typed twice/);
     for (const g of ['setup', 'mint', 'game', 'network'] as const) expect(groupSummary(g, { net: both, status: registered }).next ?? '').not.toMatch(/regist|paste/i);
-    expect(groupSummary('network', { net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null }).next).toMatch(/COINNIBAL_RPC_URLS/);
+    const off = groupSummary('network', { net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null });
+    expect(off.now).toMatch(/its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid/);
+    expect(off.next).toMatch(/coinnibal-compose logs app.*COINNIBAL_RPC_URLS or SERVER_PRIVATE_KEY/);
     expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never }).next).toMatch(/open the testnet game \(Game → Who may play\)/);
+    // the override names the VPS key too (docker-compose.yml maps COINNIBAL_GAME_ACCESS to GAME_ACCESS)
+    expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never, gameAccessEnv: 'public' }).now).toMatch(/^Open to everyone \(COINNIBAL_GAME_ACCESS \/ GAME_ACCESS env\)/);
   });
 
   it('lists the mainnet launch with the server step first; nothing is ticked on testnet', () => {
@@ -333,6 +343,10 @@ describe('admin groups', () => {
     expect(steps.filter((s) => s.ok === true)).toHaveLength(0);
     const main = mainnetChecklist(resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null })), null);
     expect(main[0].ok).toBe(true);
+    // the game opens last: the early access step keeps it on Admins, the final step opens it
+    expect(steps.find((s) => s.id === 'access')?.detail).toMatch(/Who may play in Game is Admins/);
+    expect(steps.find((s) => s.id === 'access')?.detail).not.toMatch(/Holders/);
+    expect(steps.at(-1)?.id).toBe('game');
   });
 
   it('marks an arena holders-only through the transaction preview', () => {

@@ -29,7 +29,7 @@ export interface PriceKeeperDeps {
 }
 
 /**
- * Keeps the mint at $1 in the gas token when the owner made the server key the NFT's `priceKeeper` and set the
+ * Keeps the mint at the mint price (MINT_USD_CENTS) in the gas token when the owner made the server key the NFT's `priceKeeper` and set the
  * price bounds: every 5 minutes it reads the gas token's USD price and calls `setPrice` when the current price is off the
  * target by more than 2 %. The feed is a single source, so a move needs two consecutive readings whose
  * targets agree within 3 %, and one update moves the on-chain price by at most ±20 % (a large move takes
@@ -79,7 +79,7 @@ export class PriceKeeper {
   private note(o: KeeperOutcome): KeeperOutcome {
     const changed = o !== this.lastOutcome;
     this.lastOutcome = o;
-    if (changed && o === 'not-keeper') this.deps.log('price keeper: idle — the server key is not the NFT price keeper (the owner syncs the $1 price from /admin)');
+    if (changed && o === 'not-keeper') this.deps.log('price keeper: idle — the server key is not the NFT price keeper (the owner syncs the mint price (MINT_USD_CENTS) from /admin → Mint)');
     if (changed && o === 'no-bounds') this.deps.log('price keeper: idle — the NFT has no price bounds (setPriceBounds) yet');
     return o;
   }

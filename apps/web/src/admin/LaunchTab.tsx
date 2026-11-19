@@ -4,11 +4,16 @@ import { planDefaultArenas, type StatusSnapshot } from '@coinnibal/sdk/ops';
 import type { AllowlistStatus, MintPriceQuote, SiteCounts, SiteSettings } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Button, CoinCharacter, Counter, Stamp, type CoinMood, type CoinPaint } from '../design';
+import { GROUP_LABEL, parseAdminHash } from './groups';
 import { LaunchScene, type SceneStageId } from './LaunchScene';
 import type { AdminNetwork } from './net';
+import { pinSummary, registeredPinReport } from './pins';
+import { NO_TEST_TOKEN_YET } from './setup';
+import type { BuildPins } from '../wallet/pinned';
 import { Mark, type ChainCtx } from './ui';
 
-export type ChecklistTab = 'deploy' | 'mint' | 'arena' | 'settings';
+/** The drawer a line links to, by its old id (groups.ts LEGACY: deploy → Setup, arena → Game); `network`: this page, no link. */
+export type ChecklistTab = 'network' | 'deploy' | 'mint' | 'arena' | 'settings';
 
 export interface ChecklistItem {
   id: string;
@@ -19,6 +24,11 @@ export interface ChecklistItem {
   tab: ChecklistTab;
 }
 
+/** A line's link label: the drawer its tab id opens (`deploy` → Setup, `arena` → Game), as the rail names it. */
+export function checklistLink(tab: ChecklistTab): string {
+  return GROUP_LABEL[parseAdminHash(`#${tab}`).group];
+}
+
 /** The launch checklist, from the status read and the server's site data (pure, tested). */
 export function launchChecklist(i: {
   net: AdminNetwork;
@@ -26,6 +36,8 @@ export function launchChecklist(i: {
   allowlist: AllowlistStatus | null;
   settings: SiteSettings | null;
   quote: MintPriceQuote | null;
+  /** The site build's pins (default: this build's, `wallet/pinned.ts`). */
+  pins?: BuildPins;
 }): ChecklistItem[] {
   const a = i.status?.arena ?? null;
   const n = i.status?.nft ?? null;
@@ -35,14 +47,15 @@ export function launchChecklist(i: {
   const target = i.quote?.priceWei ? BigInt(i.quote.priceWei) : null;
   const root = n?.state?.root ?? null;
   const snapRoot = i.allowlist?.snapshot?.root ?? null;
+  const pins = registeredPinReport(i.net, i.status, i.pins);
   return [
-    { id: 'chain', label: 'The server is on a chain', ok: !!i.net.info, detail: i.net.info ? `${i.net.info.name} (${i.net.info.id})${i.net.mainnet ? ' · MAINNET' : ''}` : 'No chain: COINNIBAL_RPC_URLS is unset on the VPS (EVM_RPC_URLS outside Docker).', tab: 'deploy' },
+    { id: 'chain', label: 'The server is on a chain', ok: !!i.net.info, detail: i.net.info ? `${i.net.info.name} (${i.net.info.id})${i.net.mainnet ? ' · MAINNET' : ''}` : 'No chain: the RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker). Check coinnibal-compose logs app.', tab: 'network' },
     {
       id: 'server-key',
       label: `The server key has ${GAS_SYMBOL} for gas`,
       ok: !i.net.serverKey ? false : a?.serverBalance === null || a?.serverBalance === undefined ? null : a.serverBalance > 0n,
-      detail: i.net.serverKey ? `${i.net.serverKey}${a?.serverBalance != null ? ` · ${formatGasAmount(a.serverBalance, 4)}` : ''}` : 'The server publishes no key.',
-      tab: 'arena',
+      detail: i.net.serverKey ? `${i.net.serverKey}${a?.serverBalance != null ? ` · ${formatGasAmount(a.serverBalance, 4)}` : ''}${a?.serverBalance === 0n ? ' · send it gas in Server key, above' : ''}` : 'The server publishes no key.',
+      tab: 'network',
     },
     { id: 'arena', label: 'CoinnibalArena deployed and registered', ok: !i.net.arenaAddress ? false : a ? a.code === 'ok' : null, detail: i.net.arenaAddress ? `${i.net.arenaAddress} · code ${a?.code ?? '…'}` : 'Not deployed yet: Setup.', tab: 'deploy' },
     {
@@ -53,8 +66,10 @@ export function launchChecklist(i: {
       tab: 'arena',
     },
     { id: 'nft', label: 'CoinnibalNFT deployed and registered', ok: !i.net.nftAddress ? false : n ? n.code === 'ok' : null, detail: i.net.nftAddress ? `${i.net.nftAddress} · code ${n?.code ?? '…'}` : 'Not deployed yet: Setup.', tab: 'deploy' },
-    { id: 'token', label: 'The game token is set', ok: cfg ? !!cfg.token : i.net.arenaAddress ? null : false, detail: cfg?.token ?? 'Setup → Finish setup (or confirm the registered token).', tab: 'deploy' },
-    { id: 'arenas', label: 'The four default arenas exist', ok: missingArenas === null ? (cfg ? false : null) : missingArenas === 0, detail: missingArenas === null ? 'Needs the token.' : `${4 - missingArenas} / 4`, tab: 'arena' },
+    // the site build signs only with the contracts it pins: after a deploy (and after setToken) it must be rebuilt
+    { id: 'pins', label: 'The site trusts the registered contracts', ok: pins.ok, detail: pinSummary(pins), tab: 'deploy' },
+    { id: 'token', label: 'The game token is set', ok: cfg ? !!cfg.token : i.net.arenaAddress ? null : false, detail: cfg?.token ?? (i.net.mainnet ? 'Setup → Set the game token: the token launched on Pons, typed twice.' : (i.status?.testToken?.address ? 'Setup → Finish setup (it sets the registered TestToken).' : NO_TEST_TOKEN_YET)), tab: 'deploy' },
+    { id: 'arenas', label: 'The four default arenas exist', ok: missingArenas === null ? (cfg ? false : null) : missingArenas === 0, detail: missingArenas === null ? 'Needs the token.' : `${4 - missingArenas} / 4`, tab: 'deploy' },
     {
       id: 'allowlist',
       label: 'The allowlist root is published',
@@ -83,7 +98,7 @@ export function launchChecklist(i: {
 /** The five terraces of the launch, each holding its checklist lines. */
 const STAGES: { id: string; title: string; blurb: string; items: string[]; paint: CoinPaint }[] = [
   { id: 'wl', title: 'Whitelist', blurb: 'People ask in; you approve them.', items: [], paint: 'cream' },
-  { id: 'deploy', title: 'Deploy', blurb: 'Both contracts live, owned by you, wired to the server.', items: ['chain', 'server-key', 'arena', 'authority', 'nft'], paint: 'teal' },
+  { id: 'deploy', title: 'Deploy', blurb: 'Both contracts live, owned by you, wired to the server and pinned in the site.', items: ['chain', 'server-key', 'arena', 'authority', 'nft', 'pins'], paint: 'teal' },
   { id: 'allowlist', title: 'Allowlist', blurb: 'The approved wallets, hashed into one root on chain.', items: ['allowlist'], paint: 'spray' },
   { id: 'mint', title: 'Mint', blurb: 'The price is set, and the doors open.', items: ['price', 'phase'], paint: 'sun' },
   { id: 'game', title: 'Game', blurb: 'The token, the four rooms, then holders walk onto the floor.', items: ['token', 'arenas', 'access'], paint: 'up' },
@@ -91,7 +106,7 @@ const STAGES: { id: string; title: string; blurb: string; items: string[]; paint
 
 type StageState = 'done' | 'now' | 'todo' | 'unknown';
 
-/** `/admin → Launch`: the checklist as a terrace path, WL → Deploy → Allowlist → Mint → Game. */
+/** `/admin → Network`, under the network cards: the launch checklist as a terrace path, WL → Deploy → Allowlist → Mint → Game. */
 export function LaunchTab({ ctx, go }: { ctx: ChainCtx; go: (tab: ChecklistTab | 'wl') => void }) {
   const [allowlist, setAllowlist] = useState<AllowlistStatus | null>(null);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
@@ -135,7 +150,7 @@ export function LaunchTab({ ctx, go }: { ctx: ChainCtx; go: (tab: ChecklistTab |
           <h2 className="ad-launch__title" id="ad-launch-h">
             The way up
           </h2>
-          <p className="ad-card__lede">Each terrace lights up when its lines are done. A line that is not done links to the drawer that does it.</p>
+          <p className="ad-card__lede">Each terrace lights up when its lines are done. A line that is not done links to the drawer that does it; the chain and the server key are fixed on this page and on the server.</p>
         </div>
         <div className="ad-launch__prog">
           <span className="num ad-launch__count">
@@ -180,9 +195,9 @@ export function LaunchTab({ ctx, go }: { ctx: ChainCtx; go: (tab: ChecklistTab |
                       <Mark state={it.ok === null ? 'unknown' : it.ok ? 'ok' : 'todo'} />
                       <span className="ad-check-line__label">{it.label}</span>
                       <span className="ad-check-line__detail">{it.detail}</span>
-                      {it.ok !== true && (
+                      {it.ok !== true && it.tab !== 'network' && (
                         <button type="button" className="ad-golink" onClick={() => go(it.tab)}>
-                          {it.tab[0].toUpperCase() + it.tab.slice(1)} →
+                          {checklistLink(it.tab)} →
                         </button>
                       )}
                     </li>

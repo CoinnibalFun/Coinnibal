@@ -309,6 +309,9 @@ if [[ -n "$from_url" ]]; then
       EVM_RPC_URLS) env_set COINNIBAL_RPC_URLS "$v"; have_rpc_list=1 ;;
       EVM_RPC_URL) old_single_rpc="$v" ;;
       RPC_MAX_RPS) env_set COINNIBAL_RPC_MAX_RPS "$v" ;;
+      # never the site's contract pins (docker-compose.yml build args): a pin changes only in this shell, so a broken-into
+      # old server cannot pick the contracts the new build trusts. The server never sends them (MIGRATED in backup.ts)
+      COINNIBAL_PIN_* | ELYMUM_PIN_* | VITE_*) continue ;;
       *) env_set "$k" "$v" ;;
     esac
   done < <(python3 -I -c 'import json,sys; [print(k + "\t" + str(v)) for k, v in json.load(open(sys.argv[1]))["env"].items()]' "$envjson")

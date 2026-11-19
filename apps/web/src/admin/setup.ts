@@ -20,6 +20,12 @@ export function holderPairDrifted(cfg: { holderBurnBps?: number; holderVaultBps?
   return cfg.holderBurnBps !== SUGGESTED_HOLDER_BURN_BPS || cfg.holderVaultBps !== SUGGESTED_HOLDER_VAULT_BPS;
 }
 
+/**
+ * A testnet without a registered TestToken: Finish setup has no token to set (`setupSteps` adds the token step only
+ * once one is registered). The launch checklist and Setup → Advanced say so.
+ */
+export const NO_TEST_TOKEN_YET = 'Deploy a TestToken first (the TestToken card in Setup); then Finish setup sets it, with one confirmation.';
+
 /** One step of the setup: what it does, and the call the owner's wallet signs. */
 export interface SetupStep {
   id: string;

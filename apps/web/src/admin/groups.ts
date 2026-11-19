@@ -2,7 +2,9 @@ import { formatGasAmount } from '@coinnibal/sdk';
 import { testTokenRefusal, type StatusSnapshot } from '@coinnibal/sdk/ops';
 import { GAS_SYMBOL } from '@coinnibal/shared';
 import type { ContractsRegistry, GameAccess, SiteCounts, SiteSettings } from '@coinnibal/shared';
+import type { BuildPins } from '../wallet/pinned';
 import type { AdminNetwork } from './net';
+import { registeredPinReport } from './pins';
 import { setupSteps } from './setup';
 
 /**
@@ -70,6 +72,8 @@ export interface SummaryInput {
   gameAccessEnv?: GameAccess | null;
   counts?: SiteCounts | null;
   bots?: { bots: number; humans: number; rooms: number } | null;
+  /** The site build's contract pins (default: this build's). */
+  pins?: BuildPins;
 }
 
 const ACCESS: Record<GameAccess, string> = { admins: 'admins only', holders: 'NFT holders', public: 'everyone', maintenance: 'maintenance (admins only)' };
@@ -77,7 +81,8 @@ const ACCESS: Record<GameAccess, string> = { admins: 'admins only', holders: 'NF
 /**
  * "Status now / next step" for each drawer (pure, tested). The next step is always something only
  * the owner can do (deploy, Finish setup, open the mint, fund the server key): never "register" or
- * "paste an address", which the panel does by itself.
+ * "paste an address" the panel can fill in by itself (the one address typed by hand is the real game token on the
+ * mainnet, typed twice).
  */
 export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
   const { net, status } = i;
@@ -88,7 +93,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
   switch (group) {
     case 'network': {
       if (!net.chain) return { now: 'The game server is not answering.', next: 'It retries every 5 s. If it stays down: on the server, run coinnibal-status (deploy/vps/README.md).' };
-      if (!net.info) return { now: 'The server has no chain.', next: 'Set COINNIBAL_RPC_URLS and COINNIBAL_CHAIN_ID in /opt/elymum/.env on the VPS (EVM_RPC_URLS and CHAIN_ID when the server runs outside Docker), then coinnibal-compose up -d app.' };
+      if (!net.info) return { now: 'The server has no chain: its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid.', next: 'Check coinnibal-compose logs app on the VPS (its "chain:" lines say which), then fix COINNIBAL_RPC_URLS or SERVER_PRIVATE_KEY in /opt/elymum/.env (EVM_RPC_URL(S) when the server runs outside Docker) and run coinnibal-compose up -d app.' };
       const bal = a?.serverBalance ?? null;
       const now = `${chain}${status ? ` · block ${status.block.toString()}` : ''}${bal !== null ? ` · server key ${formatGasAmount(bal, 4)}` : ''}`;
       if (bal === 0n) return { now, next: `Fund the server key with ${GAS_SYMBOL}: it pays the gas of every settlement.` };
@@ -98,16 +103,20 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
     case 'setup': {
       const parts = [`Arena ${net.arenaAddress ? (a?.code === 'ok' ? 'ok' : (a?.code ?? '…')) : 'missing'}`, `NFT ${net.nftAddress ? (status?.nft?.code === 'ok' ? 'ok' : (status?.nft?.code ?? '…')) : 'missing'}`];
       if (cfg) parts.push(`token ${cfg.token ? 'set' : 'not set'}`, `holder perks ${cfg.holderNft ? `on (${cfg.holderBurnBps} + ${cfg.holderVaultBps} bps)` : 'off'}`);
+      const pins = registeredPinReport(net, status, i.pins);
+      if (pins.ok !== null) parts.push(`site pins ${pins.ok ? 'ok' : 'to set'}`);
       const now = parts.join(' · ');
       if (!net.arenaAddress) return { now, next: 'Deploy CoinnibalArena from the owner wallet (below).' };
       if (!net.nftAddress) return { now, next: 'Deploy CoinnibalNFT from the owner wallet (below).' };
       if (!cfg) return { now, next: null };
+      // right after the deploy (and after setToken): the site signs nothing with contracts it was not built with
+      if (pins.ok === false) return { now, next: 'Pin the contracts in the site build: Setup → Site pins (the VPS shell, then a rebuild).' };
       const steps = setupSteps({ status }, { openMint: !net.mainnet });
       if (!cfg.token && !steps.some((s) => s.id === 'token')) {
         const known = i.registry?.token?.address ?? status?.testToken?.address ?? null;
         if (known) return { now, next: 'Confirm the game token (one click, then your wallet).' };
         if (net.info && !testTokenRefusal(net.info.id)) return { now, next: 'Deploy a TestToken (below), then Finish setup.' };
-        return { now, next: 'Register the game token in Setup → Advanced (Register a contract that is already deployed), then confirm it here; or enter it by hand there (typed twice).' };
+        return { now, next: 'Once the token is launched on Pons: enter it in Setup → Set the game token, by hand and typed twice (the server cannot know it before the arena uses it).' };
       }
       if (steps.length > 0) return { now, next: `Finish setup: ${steps.length} step${steps.length === 1 ? '' : 's'} left, one button.` };
       return { now, next: null };
@@ -122,7 +131,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
     }
     case 'game': {
       const access = i.gameAccessEnv ?? i.settings?.gameAccess ?? null;
-      const parts = [access ? `Open to ${ACCESS[access]}${i.gameAccessEnv ? ' (GAME_ACCESS env)' : ''}` : 'Access unknown (sign in)'];
+      const parts = [access ? `Open to ${ACCESS[access]}${i.gameAccessEnv ? ' (COINNIBAL_GAME_ACCESS / GAME_ACCESS env)' : ''}` : 'Access unknown (sign in)'];
       if (cfg) parts.push(cfg.paused ? 'arena PAUSED' : 'arena taking joins');
       if (i.bots) parts.push(`${i.bots.humans} people · ${i.bots.bots} bots in ${i.bots.rooms} rooms`);
       const now = parts.join(' · ');

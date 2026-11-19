@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { setupSteps } from '../src/admin/QuickSetup';
 
 const ARENA = '0x9bdc7dcbb3ea173e3111093a64cbe547e2f82a68';
-const NFT = '0xfd31b13e6684465a3b3161375e7f82f6a3deea11';
+const NFT = '0x0000000000000000000000000000000000000f7e';
 const TOKEN = '0xfeeb469fe3c892ebb82e44cef5f3bf1c74c11167';
 const KEY = '0xabec7B8ed9b87989106f6d0510ec9Dd9DEE0a1FC';
 

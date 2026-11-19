@@ -200,7 +200,7 @@ describe('Deploy wizard', () => {
     expect(ctx.reloadNet).toHaveBeenCalled();
   });
 
-  it('then the NFT with the spec defaults and the $1 price from the server', async () => {
+  it('then the NFT with the spec defaults and the mint price (MINT_USD_CENTS) from the server', async () => {
     const registerContract = vi.fn(async () => ({ arena: null, nft: null, token: null }));
     const api = { registerContract, mintPrice: vi.fn(async () => ({ gasUsd: 33.3, targetUsdCents: 100, priceWei: '30000000000000000', fetchedAt: 1 })) } as unknown as AdminApi;
     const ctx = ctxOf({ api, net: resolveNetwork(chainStatus({ arenaAddress: ARENA })), status: { arena: { code: 'ok', config: { token: null }, arenas: [] }, nft: null } as unknown as StatusSnapshot });
@@ -242,10 +242,17 @@ describe('Deploy wizard', () => {
     await settle();
     expect(ctx.plans[1].call).toMatchObject({ functionName: 'setToken', args: [BOB] });
     view.unmount();
-    // nothing registered: no one-click button, the server env is the owner's step
-    ui(<SetTokenForm ctx={ctxOf({ net, status })} />);
+    // nothing registered on a testnet: no one-click button, deploy the TestToken first
+    const testnetView = ui(<SetTokenForm ctx={ctxOf({ net, status })} />);
     expect(screen.queryByTestId('set-token')).toBeNull();
-    expect(screen.getByText(/TOKEN_ADDRESS/)).toBeTruthy();
+    expect(screen.getByText(/No TestToken is registered yet: deploy one/)).toBeTruthy();
+    testnetView.unmount();
+    // mainnet: the real token cannot be registered before the arena uses it, so it is typed twice
+    // (TOKEN_ADDRESS only names it on a server outside Docker; the VPS compose file clears it)
+    const mainnet = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, arenaAddress: ARENA, nftAddress: NFT }));
+    ui(<SetTokenForm ctx={ctxOf({ net: mainnet, status })} />);
+    expect(screen.queryByTestId('set-token')).toBeNull();
+    expect(screen.getByText(/enter it by hand below, typed twice.*only on a server outside Docker/)).toBeTruthy();
   });
 
   it('creates the default arenas one by one', () => {
@@ -366,14 +373,18 @@ describe('Mint tab', () => {
       status: { nft: { address: NFT, code: 'ok', balance: 0n, state } } as unknown as StatusSnapshot,
     });
 
-  it('"Open mint" with "activate the game for holders" (checked) also saves gameAccess = holders', async () => {
+  it('"Open mint" with "activate the game for holders" ticked also saves gameAccess = holders', async () => {
     const saveSettings = vi.fn(async () => ({ settings: {} }));
     const mintRefresh = vi.fn(async () => ({ refreshed: true }));
     const ctx = mintCtx({ saveSettings, mintRefresh } as never);
     const settingsChanged = vi.fn();
     ctx.settingsChanged = settingsChanged;
     ui(<MintTab ctx={ctx} />);
-    expect((within(await screen.findByTestId('mint-activate')).getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+    const box = within(await screen.findByTestId('mint-activate')).getByRole('checkbox') as HTMLInputElement;
+    // the game opens last (NFT mint → token → game): the box starts unchecked
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    expect(box.checked).toBe(true);
     act(() => screen.getByTestId('mint-set-phase').click());
     const p = ctx.plans[0];
     expect(p.title).toBe('Open the mint (allowlist)');
@@ -413,12 +424,13 @@ describe('Mint tab', () => {
     expect((screen.getByTestId('mint-set-phase') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('unchecking it leaves the game access alone', async () => {
+  it('left unchecked (the default) it leaves the game access alone', async () => {
     const saveSettings = vi.fn();
     const ctx = mintCtx({ saveSettings } as never);
     ui(<MintTab ctx={ctx} />);
-    fireEvent.click(within(await screen.findByTestId('mint-activate')).getByRole('checkbox'));
+    expect((within(await screen.findByTestId('mint-activate')).getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
     act(() => screen.getByTestId('mint-set-phase').click());
+    expect(ctx.plans[0].note).toBeUndefined();
     await ctx.plans[0].onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: null });
     expect(saveSettings).not.toHaveBeenCalled();
   });
@@ -494,6 +506,14 @@ describe('Game: who may play', () => {
     expect(settingsChanged).toHaveBeenCalledTimes(1);
   });
 
+  it('names the key the owner edits on the VPS when the env override wins', async () => {
+    const known: Record<string, unknown> = { settings: vi.fn(async () => ({ settings: { gameAccess: 'admins' }, gameAccessEnv: 'holders' })) };
+    const api = new Proxy(known, { get: (t, k: string) => t[k] ?? (async () => Promise.reject(new Error('not in this test'))) }) as unknown as AdminApi;
+    ui(<GameTab ctx={ctxOf({ api })} />);
+    await settle();
+    expect(screen.getByText('GAME_ACCESS=holders is set on the server (COINNIBAL_GAME_ACCESS in /opt/elymum/.env on the VPS): it wins over this switch.')).toBeTruthy();
+  });
+
   it('opens the arena and, off mainnet, the test-token faucet (both hidden from visitors while only admins play)', () => {
     const view = ui(<GameTab ctx={ctxOf()} />);
     expect(screen.getByRole('link', { name: 'Open the arena as admin' }).getAttribute('href')).toBe('/play');
@@ -514,6 +534,23 @@ describe('the chain panel', () => {
     ui(<AdminPanel net={resolveNetwork(null)} api={null} tab="network" go={() => {}} reloadNet={async () => {}} />);
     expect(screen.getByText('SIGNING BLOCKED.')).toBeTruthy();
     expect(screen.queryByTestId('mainnet-banner')).toBeNull();
+  });
+
+  it("the launch checklist's links name the real drawers and open them; the chain and server key lines have none", () => {
+    const go = vi.fn();
+    ui(<AdminPanel net={resolveNetwork(chainStatus({ arenaAddress: null }))} api={null} tab="network" go={go} reloadNet={async () => {}} />);
+    const list = screen.getByTestId('launch-checklist');
+    const labels = [...list.querySelectorAll('.ad-golink')].map((b) => b.textContent);
+    expect(new Set(labels)).toEqual(new Set(['WL →', 'Setup →', 'Game →', 'Mint →', 'Settings →']));
+    const link = (id: string) => list.querySelector(`[data-item="${id}"] .ad-golink`);
+    expect(link('chain')).toBeNull();
+    expect(link('server-key')).toBeNull();
+    // Finish setup, in Setup, creates the four arenas
+    expect(link('arenas')?.textContent).toBe('Setup →');
+    act(() => (link('arenas') as HTMLButtonElement).click());
+    expect(go).toHaveBeenLastCalledWith('deploy');
+    act(() => (link('authority') as HTMLButtonElement).click());
+    expect(go).toHaveBeenLastCalledWith('arena');
   });
 });
 

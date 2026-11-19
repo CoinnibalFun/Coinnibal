@@ -1,8 +1,8 @@
 # Coinnibal
 
 **You are small change with a big appetite.** Coinnibal is a cute coin-eats-coin arena game on
-Robinhood Chain (an Arbitrum Orbit L2, gas token ETH). Its game token is launched on Pons (amounts are shown with
-`TOKEN_SYMBOL`, default "tokens"). Eat or be eaten.
+Robinhood Chain (an Arbitrum Orbit L2, gas token ETH). Its game token will be launched on Pons (mainnet only,
+after the NFT mint; amounts are shown with `TOKEN_SYMBOL`, default "tokens"). Eat or be eaten.
 You are a coin: eat food and smaller coins, run from bigger ones, and when the five-minute bell rings
 whatever you swallowed is paid out on chain.
 
@@ -10,10 +10,11 @@ Coinnibal was formerly Elymum (docs/OPERATIONS.md, "The name: Coinnibal (formerl
 live server keeps). The domain and the X handle are configuration.
 
 The product flow is WL → Mint → Play: people apply for the whitelist, get a Coinnibal NFT, and the game opens for
-holders. No mint price is published; the public mint is planned on OpenSea (the link @coinnibalfun posts), and the
-contract's own allowlist and public phases and `/mint` are the owner's tools until the owner decides how they fit. The money rules live in two Solidity contracts; the
-game itself runs on an authoritative server; the owner deploys and runs everything from their own
-wallet in `/admin`.
+holders. No visitor copy names a mint price (the mint page, once open, reads the contract's live price); the public
+mint is planned on OpenSea (the link @coinnibalfun posts), and the contract's own allowlist and public phases and
+`/mint` are the owner's tools until the owner decides how they fit. The money rules live in two Solidity contracts;
+the game itself runs on an authoritative server; the owner deploys the contracts and signs every transaction from
+their own wallet in `/admin` (pinning them in the site build is one step in the VPS shell).
 
 Status: the contracts and the mint system are ready and run from `/admin`; the public site is information-only
 (game, mint, WL and collab closed) until the owner opens them in `/admin` → Settings. Coinnibal runs on Robinhood Chain only: Robinhood Chain Testnet (chain id
@@ -49,7 +50,8 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
   payment) are paid to the same contract (`pay`: half burned, half to the fee wallet).
 - Coinnibal NFT: an ERC-721 with an allowlist (Merkle root) and a public phase, priced in ETH at the owner's USD
   target `MINT_USD_CENTS` (synced from `/admin` or kept there by the server's price keeper within the owner's bounds;
-  no price is published).
+  no visitor copy names a price or shows the target; the mint page, once open, shows the contract's live price in
+  ETH).
 - Sign-In with Ethereum (EIP-4361) for every wallet that speaks EIP-6963 (MetaMask, Rabby, Coinbase
   Wallet, OKX and the rest), smart wallets included (ERC-1271 / 6492).
 - Owner-run admin panel: deploy both contracts from your wallet, register them, set the token,
@@ -161,8 +163,11 @@ the web, and builds the Docker image.
 ### Deploying
 
 Deploy the server (Docker on a VPS: deploy/vps/README.md), then deploy the contracts from your own wallet in
-`/admin`: Deploy Arena → Deploy NFT → register both → publish the allowlist → open the mint → set the token (when
-it exists) → create the arenas → open the game. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
+`/admin`: Deploy Arena → Deploy NFT → register both → pin them in the site build → publish the allowlist → open the
+mint → set the token (when it exists) and pin it → create the arenas → open the game. The pins are the one step in
+the VPS shell: the site trusts only the contracts it was built with, so `/admin` → Setup → Site pins shows the
+`COINNIBAL_PIN_*` lines for `/opt/elymum/.env`, then `coinnibal-compose up -d --build app` rebuilds it. Moving to the
+mainnet is a server setting plus that rebuild with the mainnet pins. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
 Day-to-day running (gas for the server key, the allowlist, the mint price, pausing, ownership):
 [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
@@ -174,8 +179,9 @@ Day-to-day running (gas for the server key, the allowlist, the mint price, pausi
   move tokens to a wallet of its choice, change the config or touch the fee wallet. Because the owner can
   replace it, trusting the server means trusting the owner. Protect it; it only needs a little ETH.
 - The owner (Ownable2Step) sets the token once, the fee pair on profit (at most 25 %), the burn mode, the fee wallet, the server
-  authority, arenas and pause; on the NFT, the phase, the allowlist root, the price within the bounds,
-  limits, metadata and withdrawals. The owner cannot change an open ticket's rates or the token once set.
+  authority, arenas and pause; on the NFT, the phase, the allowlist root, the price, the price keeper and its
+  bounds (only the keeper is held to them), limits, metadata and withdrawals. The owner cannot change an open
+  ticket's rates or the token once set.
 - The game outcome is trusted: who ate whom is decided by the server. Integrity detectors flag
   collusion and bot-like play for review; an optional auto-hold keeps high-risk payouts for a decision.
 

@@ -45,8 +45,8 @@ export function formatUsd(usd: number): string {
 
 /**
  * A gas-token amount: the figure in Geist Mono (teal, bold), the unit after it, and
- * the dollar value in a little sun tag ("≈ $1.00"). Screen readers hear
- * "0.0213 ETH, about $1.00".
+ * the dollar value in a little sun tag ("≈ $1.30"). Screen readers hear
+ * "0.0004 ETH, about $1.30".
  */
 export function GasAmount({ value, wei, figure, decimals = 4, usd, unit = GAS_SYMBOL, size = 'md', stack = false, className, ...rest }: GasAmountProps) {
   const fig = figure ?? (wei !== undefined ? formatWei(wei, decimals) : value !== undefined ? formatGas(value, decimals) : '—');

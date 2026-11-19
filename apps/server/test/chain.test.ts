@@ -122,7 +122,8 @@ describe('createChain', () => {
     const logs: string[] = [];
     expect(await createChain(loadConfig({} as NodeJS.ProcessEnv), new Journal(null), (m) => logs.push(m))).toBeInstanceOf(NullChain);
     expect(await createChain(loadConfig({ EVM_RPC_URL: 'http://127.0.0.1:1' } as unknown as NodeJS.ProcessEnv), new Journal(null), () => {})).toBeInstanceOf(NullChain);
-    expect(logs.join()).toMatch(/EVM_RPC_URL and SERVER_PRIVATE_KEY/);
+    // the VPS names its RPC COINNIBAL_RPC_URLS (docker-compose.yml always sets EVM_RPC_URLS and empties EVM_RPC_URL)
+    expect(logs.join()).toContain('chain: off (set SERVER_PRIVATE_KEY and the RPC: COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker)');
     const off = new NullChain().status();
     expect(off).toMatchObject({ enabled: false, chainId: null, arenaAddress: null, nftAddress: null, tokenReady: false, token: null, serverKey: null });
   });
@@ -191,7 +192,7 @@ describe('status and reads', () => {
     // an RPC of another chain: no arenas, and the log says Coinnibal runs on Robinhood Chain only
     const other = await harness({ setup: (x) => (x.chainId = 99801) });
     expect(other.chain.status()).toMatchObject({ enabled: false, chainId: null, arenasEnabled: false, chainName: 'Robinhood Chain Testnet' });
-    expect(other.logs.join('\n')).toMatch(/serves chain 99801: chain 99801 is not Robinhood Chain/);
+    expect(other.logs.join('\n')).toMatch(/!!! chain: the RPC \(COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL\(S\) outside Docker\) serves chain 99801: chain 99801 is not Robinhood Chain/);
   });
 
   it('converts 18-decimal amounts to ledger units at the boundary (vaults rounded down)', async () => {

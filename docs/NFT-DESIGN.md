@@ -140,8 +140,9 @@ The generator does not roll tiers. It hands out exact quotas (largest remainder)
 | Legendary | 3.8 % | 127 |
 | Mythic (1/1s) | 0.2 % | 7 |
 
-The brief suggested Legendary 3.5 % and Mythic 0.5 %. We made the Mythics ten hand-authored, named 1/1s (25
-would no longer be landmarks) and gave the difference to Legendary.
+The brief suggested Legendary 3.5 % and Mythic 0.5 %. At 3,333 tokens 0.5 % is about 17 Mythics, too many to stay
+landmarks: the Mythic share is 0.2 % (7 tokens, each one of the hand-authored, named 1/1s below) and the difference
+went to Legendary.
 
 **The ten 1/1s:** The Sun Eater, The Abyss, The Moon Coin, The Prism, The First Coin, The Ember King, The Night
 Swimmer, The Last Bite, The Dreamer, The Old Gold. Each one has a Mythic-only material, background and effect,

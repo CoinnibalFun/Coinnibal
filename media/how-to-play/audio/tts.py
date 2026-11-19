@@ -4,7 +4,7 @@
 
 Reads vo-lines.json next to this file (spoken-rhythm script marks: | breath, || beat, {0.6} pause,
 *emphasis*; per-line "speed") and writes one 24 kHz mono wav per line plus durations.json. The
-voice, the fixed pronunciations (Coinnibal /ˈkɔɪnɪbəl/, Elysium, HYPE, @coinnibalfun, $NIBAL) and the chunked
+voice, the fixed pronunciations (Coinnibal /ˈkɔɪnɪbəl/, Coinnibal's, Robinhood, NFT, NFTs) and the chunked
 synthesis are in media/gameplay/render/voice.py; the voice was chosen by audition (README).
 """
 import argparse

@@ -67,7 +67,8 @@ Running it again is safe.
 | Key | What |
 |---|---|
 | `GAME_DOMAIN` | the game server's domain (section 2; the live server's is `game.elymum.io`) |
-| `PUBLIC_URL`, `CORS_ORIGIN` | `https://coinnibal.fun` (the site's origin: SIWE sign-ins are bound to it) |
+| `SITE_DOMAIN` | optional: the site (default `coinnibal.fun`). The server's `PUBLIC_URL` (the site's origin: SIWE sign-ins are bound to it, the NFT metadata links start with it) is `https://<SITE_DOMAIN>`; `COINNIBAL_PUBLIC_URL` overrides it. `install.sh` still wants a non-empty `PUBLIC_URL` line in `.env`, whose value `docker-compose.yml` ignores |
+| `CORS_ORIGIN` | `https://coinnibal.fun` |
 | `ADMIN_WALLETS` | the owner's 0x address(es) |
 | `AUTH_SECRET` | `openssl rand -hex 32` (at least 32 bytes; the mainnet refuses to start with less), or empty for the generated `DATA_DIR/auth-secret` |
 | `SERVER_PRIVATE_KEY` | `auto` (kept in the data volume and the backups) |
@@ -75,6 +76,8 @@ Running it again is safe.
 | `COINNIBAL_RPC_URLS` | optional: the RPCs in order, comma-separated: the Alchemy URL first, the public RPC as fallback (section 5). Unset: `https://rpc.testnet.chain.robinhood.com` |
 | `COINNIBAL_RPC_MAX_RPS` | optional: calls per second per URL, one per `COINNIBAL_RPC_URLS` entry (`25,4`); default 4 |
 | `COINNIBAL_GAME_ACCESS` | optional: `site` (the default when unset: the `/admin` → Settings switch decides), or `public`, `holders`, `admins`, `maintenance` to override that switch |
+| `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` | after the owner's deploy: the registered CoinnibalArena and CoinnibalNFT, the contracts the site trusts (below). Empty: the site signs no ticket and no mint |
+| `COINNIBAL_PIN_TOKEN` | once the game token is set on the arena: that token (empty: the site does not check the arena's token against a pin) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | alerts to Telegram (optional; section 7) |
 | `BACKUP_RCLONE_REMOTE` | the encrypted offsite remote, e.g. `elymum-offsite:` (optional; section 8; the name given before the rename) |
 | `GAME_WORKERS` | `5` on 8 vCPU |
@@ -96,6 +99,30 @@ written then keeps working unchanged; when both names are set, the `COINNIBAL_*`
 them with nested interpolation (`${COINNIBAL_CHAIN_ID:-${ELYMUM_CHAIN_ID:-46630}}`), the scripts through
 `env_get_renamed` and `${COINNIBAL_X:-${ELYMUM_X:-default}}` in `lib.sh`. Renaming the keys in `.env` is optional:
 `coinnibal-compose config` shows the same values either way.
+
+**Contract pins (the site build).** The site is built with the contracts it trusts (`apps/web/src/wallet/pinned.ts`):
+`docker-compose.yml` passes `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` and `COINNIBAL_PIN_TOKEN` to the image build as
+`VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS` and `VITE_TOKEN_ADDRESS`, for the chain of `COINNIBAL_CHAIN_ID` (as
+`VITE_CHAIN_ID`). Wallets approve, pay and mint only there, whatever the server announces: a stolen admin login, or a
+server API that names other contracts, cannot point them at another contract, because a pin changes only with shell
+access to this VPS and a rebuild. The pins do not guard against someone who has that shell: the site is built and
+served on this VPS, so they could rebuild it with other pins. No chain has default pins. After the owner deploys and
+registers the contracts in `/admin` (and again once the game token is set on the arena), `/admin` → Setup → **Site
+pins** shows the lines with the registered addresses: check each one against the deploy transaction in your own wallet
+(the panel's addresses come from the server, which is what the pins guard against), set them here, then rebuild and
+restart the app:
+
+```bash
+coinnibal-compose up -d --build app
+```
+
+`update.sh` rebuilds only when the tracked branch moves, so a `.env` change alone needs this command; later builds keep
+the pins (they are read from `.env` every time). It swaps the container as soon as the image is built, which takes
+minutes, longer than the break after a bell. Once players are in the arenas, build first and swap in the break
+(section 6): `coinnibal-compose build app`, then `coinnibal-compose up -d app` in the break after a bell. Check what
+the build gets with `coinnibal-compose config | grep VITE_`.
+The same applies when moving to the mainnet: the server follows `COINNIBAL_CHAIN_ID` after `coinnibal-compose up -d
+app`, the site signs nothing there until it is rebuilt with the mainnet pins.
 
 **Names kept from before the rename.** The server was installed under the old name, and these stay exactly as they
 are (`lib.sh` lists them): changing them moves the data. A new Docker project name means a new, empty volume (the
@@ -195,7 +222,12 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
    bash install.sh --from https://<old GAME_DOMAIN> --token '<admin session token>' --proof '<proof>' --yes
    ```
    It reads the settings once (`/api/admin/migration-env`) and the backup once (`/api/admin/backup`), restores the
-   data before the first start, and starts.
+   data before the first start, and starts. **It does not copy the site's contract pins** (section 4: a pin changes
+   only in this shell, never from another server's answer), so the moved site signs no ticket, refund, shop payment
+   or mint until they are back: set the `COINNIBAL_PIN_ARENA` and `COINNIBAL_PIN_NFT` lines (and `COINNIBAL_PIN_TOKEN`
+   once the game token is set) in `/opt/elymum/.env`, from your password manager or `/admin` → Setup → **Site pins**,
+   checking each address against the deploy transaction in your own wallet, then run
+   `coinnibal-compose up -d --build app`.
 4. **Stop the old server before the new one starts settling** (`coinnibal-compose down` there): two servers must never
    run with the same server key. Then point DNS at the new VPS; remove `ADMIN_SECRET_EXPORT`.
 
@@ -204,7 +236,9 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
 1. Pause the arena if the key may be exposed (`/admin` → Game → Pause); otherwise tickets stay safe on chain: unplayed
    ones are refunded in full by the next server, settled ones are paid, and a player can refund any ticket after 24 h.
 2. A new VPS (sections 1 to 3); stop at the settings step and put the old `.env` values back (from your password
-   manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, ...).
+   manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, the site's pins
+   `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` and `COINNIBAL_PIN_TOKEN`, ...). Without the pins the new site signs no
+   ticket, refund, shop payment or mint (section 4).
 3. The newest backup: from the offsite copy (`rclone copy elymum-offsite:elymum-data-<newest>.tar.gz /root/`), then
    `coinnibal-restore /root/elymum-data-<newest>.tar.gz`. It carries the server key, the journal (pending settlements go
    out), the contracts registry and the site data. What happened after that backup is lost: tickets settled since are
@@ -226,6 +260,7 @@ All commands as root on the VPS (`sudo -i`).
 | Deploy now instead of waiting 2 minutes | `coinnibal-update` |
 | Restart the game server (in a round break) | `coinnibal-compose restart app` (any time it cashes the arenas out: prefer a break) |
 | Change a setting | `nano /opt/elymum/.env`, then `coinnibal-compose up -d app` |
+| Change a site pin (`COINNIBAL_PIN_*`) | `nano /opt/elymum/.env`, then `coinnibal-compose up -d --build app` (section 4; with players in the arenas: build first, swap in the break) |
 | Backup now / log | `coinnibal-backup` / `journalctl -u elymum-backup -n 50` |
 | Restore a backup | `coinnibal-restore /opt/elymum/backups/elymum-data-YYYYmmdd-HHMM.tar.gz` |
 | Pause auto-deploy | `systemctl stop elymum-update.timer` (`start` to resume) |
@@ -272,8 +307,10 @@ What to click (about 20 minutes; do it at a quiet hour):
    ```
    Check from your laptop: `curl -sS https://<GAME_DOMAIN>/api/health` works, `curl -k https://<VPS IP>/api/health`
    times out. Certificate renewals keep working (Let's Encrypt reaches Caddy through Cloudflare on port 80).
-9. **Check:** play a practice round; `/admin` → Network shows players' own addresses in the integrity tab, not
-   Cloudflare's.
+9. **Check:** `curl -sS -D - -o /dev/null https://<GAME_DOMAIN>/api/health` answers through Cloudflare (its headers
+   carry a `cf-ray` line). The per-IP limits now see each player's own address, because Caddy passes
+   `CF-Connecting-IP` on as the one `X-Forwarded-For` hop. `/admin` shows no IP addresses: Safety keeps only hashes
+   of them, keyed with the server's secret.
 
 To undo: the `game` record back to DNS only, `CADDY_CONFIG` removed (`coinnibal-compose up -d caddy`), and
 `iptables -F DOCKER-USER && ip6tables -F DOCKER-USER && netfilter-persistent save`.

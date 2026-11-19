@@ -3,7 +3,9 @@
 > **Before the next render.** This film's script still carries facts of the Elysium build (Elysium, HYPE, a $1
 > mint, the old arena names and fees). Rewrite it to the current game (Robinhood Chain, ETH gas, no mint price, the
 > $1 / $3 / $5 / $10 Rooms, 20 % of profit: 15 % burned + 5 % to the team wallet) before any re-render
-> ([media/README.md](../README.md)).
+> ([media/README.md](../README.md)). Also: the `$NIBAL` amount labels become "tokens" (no ticker: the `unit` and `sub`
+> defaults of `edit.mjs` and `motion/motion.js`), and the "PENNY POND" stub (the lower-third default and the intro
+> kicker of `edit.mjs`) becomes the $1 Room.
 
 A cut of a real paid round in the $1 Room (recorded when it was called Asphodel Meadow; re-take before the next render), about 57 s, 1920x1080, **60 fps**, H.264 + AAC, -14 LUFS
 (true peak at or below -1.5 dBTP after encoding): a mid-round join (the round chip), she eats a
