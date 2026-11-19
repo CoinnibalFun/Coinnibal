@@ -14,7 +14,7 @@ reaches the server with their own IP address, so the per-IP limits work. Everyth
 | Crashes | containers restart by themselves (`restart: unless-stopped`); a hung app is restarted by the alert job after 3 minutes (autoheal) |
 | Alerts | every minute: `!!!` log lines, `/api/health` 503, gas runway, disk over 80 %, the container down, to Telegram (`elymum-alert.timer`) |
 | Backups | every day at 04:00, the newest 14 kept in `/opt/elymum/backups`; optional encrypted offsite copy (rclone crypt) |
-| Security updates | installed automatically; a reboot they need happens at 04:30 **in a round break** (`elymum-reboot.timer`) |
+| Security updates | Ubuntu's: installed automatically, and a reboot they need happens at 04:30 **in a round break** (`elymum-reboot.timer`). The Docker Engine, the images and the dependencies: section 6, "Updates" (not all of it is automatic) |
 | Logs | Docker's journald driver and a persistent journal: they survive redeploys and reboots |
 | Firewall, SSH brute force | ufw (only 22, 80, 443 open) and fail2ban |
 
@@ -56,9 +56,10 @@ bash /home/<user>/install.sh
 
 It asks for the domain (`GAME_DOMAIN`, section 2), the repository (an SSH URL for the private repository: it makes a
 read-only **deploy key** and shows the steps to add it on GitHub) and the branch. Then it updates Ubuntu, installs
-Docker, automatic security updates (no automatic reboot), the firewall, fail2ban, a persistent journal, network
-tuning, downloads the code to `/opt/elymum`, opens `/opt/elymum/.env` in nano (section 4), builds and starts the
-server, installs the timers and the commands (section 10) and waits for `https://<GAME_DOMAIN>/api/health?live=1`.
+Docker, automatic security updates of Ubuntu's packages (no automatic reboot; the rest: section 6, "Updates"), the
+firewall, fail2ban, a persistent journal, network tuning, downloads the code to `/opt/elymum`, opens
+`/opt/elymum/.env` in nano (section 4), builds and starts the server, installs the timers and the commands (section
+10) and waits for `https://<GAME_DOMAIN>/api/health?live=1`.
 Running it again is safe.
 
 ## 4. Settings (`/opt/elymum/.env`)
@@ -144,11 +145,28 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
 - **In the round break.** The new image is built while the old container serves; the swap waits for the break after
   an arena bell (no live stake then: SIGTERM mid-round would cash every arena player out). `COINNIBAL_DEPLOY_NOW=1
   coinnibal-update` skips the wait for an urgent fix.
-- **Rollback.** The running image is tagged `elymum-app:previous` before every build. When the new container is not
-  healthy (the liveness check) within 60 s, `update.sh` puts the previous image and commit back at once and alerts;
-  that commit is not retried until a newer one arrives. By hand: `docker tag elymum-app:previous elymum-app:latest
-  && coinnibal-compose up -d app`.
-- **Caddy** reloads when its file changed (`stream_close_delay 10m` keeps the game sockets open across a reload).
+- **Rollback.** The running image is tagged `elymum-app:previous` before every build (by the weekly refresh: once its
+  build changed the image). When the new container is not healthy (the liveness check) within 60 s, `update.sh` puts
+  the previous image and commit back at once and alerts; that commit is not retried until a newer one arrives. By
+  hand: `docker tag elymum-app:previous elymum-app:latest && coinnibal-compose up -d app`.
+- **Caddy** reloads when its file changed (`stream_close_delay 10m` keeps the game sockets open across a reload), and
+  is recreated in the round break when a newer build of its image was pulled (below).
+
+### Updates: what is automatic and what is not
+
+| What | How it gets its fixes |
+|---|---|
+| Ubuntu's packages | unattended-upgrades, daily (Ubuntu's own origins, security included); the reboot a kernel update needs at 04:30 in a round break (`elymum-reboot.timer`) |
+| The Docker Engine (`docker-ce`, `containerd.io` with runc, the CLI, the compose and buildx plugins, from Docker's repository) | `reboot.sh` (`elymum-reboot.timer`, 04:30), when Docker's repository has a newer version: `docker-ce` and `containerd.io` in the round break, with the app stopped first; the CLI and the plugins alone at once (they restart nothing). Never unattended-upgrades: an engine update restarts every container, which mid-round would cash every arena player out |
+| The app image's base (`node:22-bookworm-slim`: Debian's and Node 22's patches) | every deploy builds with `--pull`; `elymum-refresh.timer` (Sunday 05:00) rebuilds the deployed commit even without a new one and swaps it in in the round break, only when the image changed (with the same rollback as a deploy) |
+| Caddy (pinned to a patch version, `caddy:2.x.y` in `docker-compose.yml`) | the newest build of that tag is pulled on every deploy and every Sunday and swapped in in the round break; a newer Caddy version comes as a Dependabot pull request, and CI checks both Caddyfiles with it (`caddy validate`) |
+| npm dependencies, the GitHub Actions, the image tags | Dependabot pull requests, weekly (`.github/dependabot.yml`), through CI; a merged one deploys once CI passed |
+
+Not automatic: merging Dependabot's pull requests (a person reviews each), a new major version of Node or of a
+dependency (a pull request of its own; Node majors are not proposed), Ubuntu's release upgrades (`do-release-upgrade`,
+by hand) and anything below the VPS (the provider's). Dependabot's security updates are a repository setting
+(Settings → Code security → Dependabot security updates). By hand, in the next round break: `coinnibal-update
+--refresh` (the weekly rebuild now), `coinnibal-reboot` (a due reboot or engine update now).
 
 ## 7. Alerts and autoheal
 
@@ -238,7 +256,8 @@ All commands as root on the VPS (`sudo -i`).
 | Backup now / log | `coinnibal-backup` / `journalctl -u coinnibal-backup -n 50` |
 | Restore a backup | `coinnibal-restore /opt/elymum/backups/elymum-data-YYYYmmdd-HHMM.tar.gz` |
 | Pause auto-deploy | `systemctl stop elymum-update.timer` (`start` to resume) |
-| Reboot for an update now, in the next round break | `coinnibal-reboot --force` |
+| Rebuild on the newest base images now (the weekly refresh) / its log | `coinnibal-update --refresh` / `journalctl -u elymum-refresh -n 100` |
+| Reboot for an update now, in the next round break | `coinnibal-reboot --force` (a Docker Engine update is installed first) |
 
 ## Cloudflare in front (recommended for DDoS protection)
 

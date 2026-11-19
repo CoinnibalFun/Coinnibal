@@ -1,0 +1,14 @@
+# A unit added after the rename, under the installed prefix (elymum-*) like the other jobs, so `systemctl list-timers
+# 'elymum-*'` shows them all (deploy/vps/lib.sh, INSTALLED_UNIT_PREFIX).
+[Unit]
+Description=Coinnibal: weekly rebuild on the newest base images and Caddy pull, swapped in a round break
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/elymum/deploy/vps/update.sh --refresh
+# a full rebuild (the build cache is pruned after a week) and the wait for the lock and the round break
+TimeoutStartSec=90min
+Nice=5

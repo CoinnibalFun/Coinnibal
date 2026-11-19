@@ -162,6 +162,8 @@ fi
 systemctl enable --now docker >/dev/null
 
 say "3/10 Automatic security updates"
+# Ubuntu's own origins only (the default Allowed-Origins): Docker's repository is left out on purpose, since an engine
+# update restarts dockerd and every container mid-round; elymum-reboot.timer upgrades the engine in a round break
 cat >/etc/apt/apt.conf.d/20auto-upgrades <<'CONF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
@@ -378,7 +380,8 @@ chmod 600 "$COINNIBAL_ENV"
 [[ -n "$(env_get PUBLIC_URL)" ]] || die "PUBLIC_URL is empty in $COINNIBAL_ENV (the server refuses to start without it)"
 
 say "9/10 Build and start (the first build takes a few minutes)"
-dc build app
+# --pull: the newest base image, whatever an earlier install left on this host
+dc build --pull app
 if [[ -n "$restore_file" ]]; then
   note "restoring $restore_file into the data volume before the first start"
   "$DIR/deploy/vps/restore.sh" --yes --no-start "$restore_file"
@@ -395,7 +398,7 @@ date -u +%FT%TZ >"$STATE/deployed-at"
 say "10/10 Auto-deploy, daily backups, shortcuts"
 install -m 644 deploy/vps/systemd/*.service deploy/vps/systemd/*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now "$INSTALLED_UNIT_PREFIX-update.timer" "$INSTALLED_UNIT_PREFIX-backup.timer" "$INSTALLED_UNIT_PREFIX-alert.timer" "$INSTALLED_UNIT_PREFIX-reboot.timer" >/dev/null
+systemctl enable --now "$INSTALLED_UNIT_PREFIX-update.timer" "$INSTALLED_UNIT_PREFIX-backup.timer" "$INSTALLED_UNIT_PREFIX-alert.timer" "$INSTALLED_UNIT_PREFIX-reboot.timer" "$INSTALLED_UNIT_PREFIX-refresh.timer" >/dev/null
 link_commands
 note "commands: coinnibal-status, coinnibal-compose logs -f app, coinnibal-backup, coinnibal-restore, coinnibal-update"
 grep -qxF 'backups/' .git/info/exclude 2>/dev/null || echo 'backups/' >>.git/info/exclude
