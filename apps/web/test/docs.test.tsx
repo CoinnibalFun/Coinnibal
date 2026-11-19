@@ -540,6 +540,45 @@ describe('player guide addresses', () => {
     expect(location.pathname + location.hash).toBe('/docs');
   }, 20_000);
 
+  it('/docs lays out its chapters one at a time after the first paint, and all of them before a jump', async () => {
+    history.replaceState(null, '', '/docs');
+    const { container } = render(
+      <Kb theme="paper">
+        <DocsPage later />
+      </Kb>,
+    );
+    const later = () => [...container.querySelectorAll('.dc-sec')].map((s) => s.hasAttribute('data-later'));
+    // every chapter waits its turn (docs.css: content-visibility, so the browser lays out only those on screen)
+    expect(later()).toEqual(Array(11).fill(true));
+    // one chapter per idle moment
+    await act(() => new Promise((r) => setTimeout(r, 80)));
+    const left = later().filter(Boolean).length;
+    expect(left).toBeGreaterThan(0);
+    expect(left).toBeLessThan(11);
+    // a jump lays out every chapter on the way before it aims the scroll
+    fireEvent.click(within(screen.getByRole('navigation', { name: en0.tocLabel })).getByRole('link', { name: /The Coinnibal NFT/ }));
+    expect(later().some(Boolean)).toBe(false);
+    expect(scrolls.map((s) => s.el)).toContain('docs-nft');
+  }, 20_000);
+
+  it('/docs opened on a chapter (/docs#docs-payout) or the lobby: no chapter waits', () => {
+    history.replaceState(null, '', '/docs#docs-payout');
+    const a = render(
+      <Kb theme="paper">
+        <DocsPage later />
+      </Kb>,
+    );
+    expect(a.container.querySelectorAll('.dc-sec[data-later]')).toHaveLength(0);
+    a.unmount();
+    history.replaceState(null, '', '/docs');
+    const b = render(
+      <Kb theme="paper">
+        <DocsPage />
+      </Kb>,
+    );
+    expect(b.container.querySelectorAll('.dc-sec[data-later]')).toHaveLength(0);
+  });
+
   it('lands on the section of a link opened from outside (/docs#docs-payout)', async () => {
     history.replaceState(null, '', '/docs#docs-payout');
     render(

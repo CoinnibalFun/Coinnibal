@@ -51,9 +51,10 @@ const READ_LINE = 160;
  *
  * `headingLevel`: 1 where the guide is the page (`/docs`: the title is the h1, chapters h2, block titles h3); 2 inside
  * the lobby (h2, h3, h4). `symbol`: the token's name in the text, instead of the server's (`/docs` passes "tokens": a
- * visitor page shows no ticker).
+ * visitor page shows no ticker). `later`: the browser lays out only the chapters on screen in the first frame, the
+ * others one at a time after it (`/docs`; see `useLaterChapters`).
  */
-export function DocsPage({ headingLevel = 2, symbol }: { headingLevel?: 1 | 2; symbol?: string } = {}) {
+export function DocsPage({ headingLevel = 2, symbol, later: deferChapters = false }: { headingLevel?: 1 | 2; symbol?: string; later?: boolean } = {}) {
   const tok = useTokenText();
   const sym = symbol ?? tok.symbol;
   const SecTag = headingLevel === 1 ? 'h2' : 'h3';
@@ -80,6 +81,7 @@ export function DocsPage({ headingLevel = 2, symbol }: { headingLevel?: 1 | 2; s
   /** While a jump's smooth scroll runs, the contents keep the target marked (no flicker through the sections between). */
   // (`performance.now()` deadline; 0: unlocked)
   const lockUntil = useRef(0);
+  const [later, layOutAll] = useLaterChapters(deferChapters);
 
   // the section being read: the last one whose top has passed the read line (the last one at the very bottom)
   useEffect(() => {
@@ -135,7 +137,10 @@ export function DocsPage({ headingLevel = 2, symbol }: { headingLevel?: 1 | 2; s
       return; // a broken hash: stay at the top
     }
     if (!id.startsWith('docs-') || !document.getElementById(id)) return;
-    const land = () => document.getElementById(id)?.scrollIntoView({ block: 'start' });
+    const land = () => {
+      layOutAll();
+      document.getElementById(id)?.scrollIntoView({ block: 'start' });
+    };
     // the contents mark the linked section until the landing scroll has settled
     lockUntil.current = performance.now() + 400;
     const first = requestAnimationFrame(land);
@@ -153,6 +158,8 @@ export function DocsPage({ headingLevel = 2, symbol }: { headingLevel?: 1 | 2; s
     (id: string) => {
       const el = document.getElementById(`docs-${id}`);
       if (!el) return;
+      // the chapters on the way are laid out at their real height before the scroll is aimed
+      layOutAll();
       // at most this long; the scroll's end unlocks it sooner
       lockUntil.current = performance.now() + (reduced ? 0 : 2500);
       setActive(id);
@@ -160,7 +167,7 @@ export function DocsPage({ headingLevel = 2, symbol }: { headingLevel?: 1 | 2; s
       el.querySelector<HTMLElement>('.dc-sec__title')?.focus({ preventScroll: true });
       writeHash(id);
     },
-    [reduced],
+    [reduced, layOutAll],
   );
 
   const toTop = () => {
@@ -219,7 +226,7 @@ export function DocsPage({ headingLevel = 2, symbol }: { headingLevel?: 1 | 2; s
 
         <article className="dc-body" aria-labelledby="dc-title">
           {c.sections.map((s, i) => (
-            <section key={s.id} id={`docs-${s.id}`} className="dc-sec" aria-labelledby={`docs-${s.id}-h`}>
+            <section key={s.id} id={`docs-${s.id}`} className="dc-sec" aria-labelledby={`docs-${s.id}-h`} data-later={later ? '' : undefined}>
               <header className="dc-sec__head">
                 <span className="dc-sec__no mono" aria-hidden="true">
                   {String(i + 1).padStart(2, '0')}
@@ -538,4 +545,42 @@ function FeeExample({ c, text, jump }: { c: DocsContent; text: string; jump: (id
       </div>
     </figure>
   );
+}
+
+/**
+ * The guide is long (11 chapters, about 18,000 px on a phone): laid out at once, its first frame was one 160-230 ms
+ * task on a throttled phone. With `on`, every chapter starts with `data-later` (docs.css: under `.st-docs`,
+ * `content-visibility: auto`: the browser lays out and paints those on screen in the first frame as usual and skips
+ * the others), then loses it, one chapter per idle moment, a few tens of ms each. After that the page is exactly as
+ * without it (a chapter's box is the same either way: no margin crosses its edge). Not on a reload or
+ * a back/forward visit (the browser puts the scroll back where it was, which needs the real heights) nor with an
+ * address that names a chapter. Returns whether the chapters still wait and a function that lays them all out at
+ * once (before a scroll is aimed at a chapter).
+ */
+function useLaterChapters(on: boolean): [boolean, () => void] {
+  const [later, setLater] = useState(() => {
+    if (!on || typeof window === 'undefined' || location.hash) return false;
+    const nav = performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming | undefined;
+    return nav?.type !== 'reload' && nav?.type !== 'back_forward';
+  });
+  const waiting = () => [...document.querySelectorAll<HTMLElement>('.dc-sec[data-later]')];
+  const layOutAll = useCallback(() => {
+    for (const s of waiting()) s.removeAttribute('data-later');
+  }, []);
+  useEffect(() => {
+    if (!later) return;
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+    const idle = typeof w.requestIdleCallback === 'function';
+    let id = 0;
+    const schedule = (fn: () => void) => (id = idle ? w.requestIdleCallback!(fn, { timeout: 1000 }) : window.setTimeout(fn, 50));
+    const next = () => {
+      const s = waiting()[0];
+      if (!s) return setLater(false);
+      s.removeAttribute('data-later');
+      schedule(next);
+    };
+    schedule(next);
+    return () => (idle ? w.cancelIdleCallback?.(id) : clearTimeout(id));
+  }, [later]);
+  return [later, layOutAll];
 }
