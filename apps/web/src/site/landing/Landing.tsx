@@ -16,6 +16,7 @@ import {
   Wordmark,
   useMoves,
   useOffscreenPause,
+  useOffscreenPausedBlock,
   useReducedMotion,
   type CoinMood,
   type CoinPaint,
@@ -68,7 +69,20 @@ function useInViewSafe(ref: RefObject<Element | null>, opts: Parameters<typeof u
 }
 
 /** A plate section: its seam plays when its top crosses 90 % of the viewport, and the header's coin gulps with it. */
-const usePlate = (gulpAt: number) => useReveal<HTMLElement>(undefined, { attr: 'data-seam', onIn: () => gulp(gulpAt) });
+const usePlate = (gulpAt: number, ref?: RefObject<HTMLElement | null>) => useReveal<HTMLElement>(ref, { attr: 'data-seam', onIn: () => gulp(gulpAt) });
+
+/**
+ * A plate that pauses its loops (blinking, bobbing coins, the orbit) while it is off screen: the section's ref, shared
+ * with its seam reveal. Off screen the section carries `data-paused` (storybook.css stops every animation under it),
+ * set without a re-render of the section. Running off-screen loops kept a phone's main thread 84-97 % busy on the
+ * landing.
+ */
+function usePausedPlate(gulpAt: number): RefObject<HTMLElement | null> {
+  const ref = useRef<HTMLElement | null>(null);
+  useOffscreenPausedBlock(ref);
+  usePlate(gulpAt, ref);
+  return ref;
+}
 
 /* ── the hero ─────────────────────────────────────────────────────────── */
 
@@ -88,7 +102,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
     <section className="ld-hero" aria-labelledby="ld-hero-title">
       <RingScene time="dawn" variant="full" animate={!reduced} className="ld-hero__ring">
         <div className="ld-hero__inner">
-          <motion.div className="ld-hero__drop" variants={m.stickerDrop} custom={phone ? -0.8 : -1.6} initial="hidden" animate="shown">
+          <motion.div className="ld-hero__drop" variants={m.stickerSlap} custom={phone ? -0.8 : -1.6} initial="hidden" animate="shown">
             <Sticker pad="lg" lift="lg" tape className="ld-hero__card">
               <p className="kicker ld-hero__kicker">{t('ld.hero.kicker', { chain: plainChainName(activeChain().name) })}</p>
               <h1 id="ld-hero-title" ref={peel.ref} className={`ld-hero__title ${peel.className}`}>
@@ -147,7 +161,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
               )}
             </Sticker>
           </motion.div>
-          <motion.div className="ld-hero__badge-wrap" variants={m.popIn} custom={0.5} initial="hidden" animate="shown">
+          <motion.div className="ld-hero__badge-wrap" variants={m.popInSolid} custom={0.5} initial="hidden" animate="shown">
             <Sticker tone="sun" pad="sm" tilt={4} className="ld-hero__badge">
               <span className="num ld-hero__badge-n">{String(FACTS.rules.roundMin).padStart(2, '0')}:00</span>
               <span className="mono ld-hero__badge-l">{t('ld.badge')}</span>
@@ -257,7 +271,7 @@ function TakeStrip() {
 
 function Feast() {
   const t = useT();
-  const plate = usePlate(BITE_GULP_MS);
+  const plate = usePausedPlate(BITE_GULP_MS);
   const copy = useReveal<HTMLDivElement>();
   const menu = useReveal<HTMLDivElement>();
   return (
@@ -339,7 +353,7 @@ function useStepsRead(list: RefObject<HTMLOListElement | null>): number {
 
 function Round() {
   const t = useT();
-  const plate = usePlate(0);
+  const plate = usePausedPlate(0);
   const orbit = useReveal<HTMLDivElement>();
   const copy = useReveal<HTMLDivElement>();
   // the orbit's stations and the step numbers light up as the visitor reads down the steps (the card stays beside them)
@@ -478,7 +492,7 @@ function EmblemFan() {
 function Nft({ doors }: { doors: Doors }) {
   const t = useT();
   const testnet = isTestnetChain(useServerChain());
-  const plate = usePlate(SEAL_GULP_MS);
+  const plate = usePausedPlate(SEAL_GULP_MS);
   const copy = useReveal<HTMLDivElement>();
   const why = useRef<HTMLDivElement>(null);
   useReveal(why);
@@ -555,7 +569,7 @@ const STAIR: { paint: CoinPaint; mood: CoinMood; size: number }[] = [
 
 function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
   const t = useT();
-  const plate = usePlate(BITE_GULP_MS);
+  const plate = usePausedPlate(BITE_GULP_MS);
   const head = useReveal<HTMLDivElement>();
   const stairs = useReveal<HTMLOListElement>();
   const fee = useReveal<HTMLDivElement>();

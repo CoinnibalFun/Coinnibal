@@ -100,6 +100,7 @@
 .sh-pack__name {
   margin: 0;
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: 19px;
   line-height: 1.1;
@@ -130,6 +131,7 @@
   background: var(--sticker);
   color: #04181c;
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-size: 13px;
   font-weight: 800;
   font-style: italic;

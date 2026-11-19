@@ -2017,6 +2017,7 @@
   background: var(--sun);
   color: var(--ink-fixed);
   font: 800 13px/1 var(--font-display);
+  font-variation-settings: var(--fv-display);
   rotate: 8deg;
 }
 .ld-qa__plus {

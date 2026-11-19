@@ -32,6 +32,7 @@
 .g-conn__title {
   margin: 0;
   font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
   font-size: 22px;
   line-height: 1.2;
   hyphens: manual;

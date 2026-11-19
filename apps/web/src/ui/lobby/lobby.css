@@ -1306,39 +1306,6 @@
   }
 }
 
-/* ── page heads (also the guide's) ────────────────────────────────────── */
-.pg-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  padding-bottom: 18px;
-  margin-bottom: 26px;
-  border-bottom: 2px dashed var(--rule);
-}
-.pg-head__text {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-.pg-head__kicker {
-  font-size: var(--t-label);
-  color: var(--teal-ink);
-}
-.pg-head__title {
-  font-size: var(--t-h1);
-  line-height: 0.98;
-}
-.pg-head__deck {
-  max-width: var(--measure);
-  font-size: var(--t-lede);
-  color: var(--ink-2);
-}
-.pg-head__aside {
-  flex: none;
-}
-
 /* ─────────────────────────── the wallet sheet ─────────────────────────── */
 .wl-body {
   display: flex;

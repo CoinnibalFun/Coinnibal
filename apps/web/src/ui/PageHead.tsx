@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import './PageHead.css';
 
 /**
  * A section front: mono kicker, a display headline, an optional deck and a
