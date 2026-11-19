@@ -171,10 +171,11 @@ export function moduleCss(manifest: Manifest, key: string): string[] {
  * `landing.html` from the built `index.html`: `<html data-theme="light">` (what `mount()` sets: without it a dark-mode
  * phone gets the dark tokens outside `.kb` until the script runs), the prerendered markup in `#root` in place of the
  * `.boot` loader, a `<link rel="stylesheet">` for each of the landing's CSS chunks (the page paints styled from its
- * HTML; Vite's loader finds them there and does not add them again), and no `data-site-preload` tags (`site-preloads`:
+ * HTML; Vite's loader finds them there and does not add them again), `bodyEnd` before `</body>` (the inked-edge
+ * filters), and no `data-site-preload` tags (`site-preloads`:
  * on a page that paints from its HTML they took bandwidth from its HTML and CSS, B12 of the speed plan).
  */
-export function landingHtml(index: string, markup: string, css: string[], base = '/'): string {
+export function landingHtml(index: string, markup: string, css: string[], base = '/', bodyEnd = ''): string {
   const open = '<div id="root">';
   const at = index.indexOf(open);
   const end = index.lastIndexOf('</body>');
@@ -189,8 +190,8 @@ export function landingHtml(index: string, markup: string, css: string[], base =
     .filter((href) => !html.includes(`href="${href}"`))
     .map((href) => `    <link rel="stylesheet" crossorigin href="${href}">\n`)
     .join('');
-  if (!html.includes('</head>')) throw new Error('prerender-landing: index.html has no </head>');
-  return html.replace('</head>', `${links}  </head>`);
+  if (!html.includes('</head>') || !html.includes('</body>')) throw new Error('prerender-landing: index.html has no </head> or </body>');
+  return html.replace('</head>', `${links}  </head>`).replace('</body>', `${bodyEnd ? `    ${bodyEnd}\n` : ''}  </body>`);
 }
 
 /**
@@ -246,10 +247,10 @@ function prerenderLanding(): Plugin {
             },
           });
           const entry = (await import(pathToFileURL(join(tmp, 'prerender.mjs')).href)) as typeof import('./src/site/landing/prerender');
-          const { html: markup, settings } = entry.renderLanding();
+          const { html: markup, settings, bodyEnd } = entry.renderLanding();
           const manifest = JSON.parse(readFileSync(join(outDir, '.vite', 'manifest.json'), 'utf8')) as Manifest;
           const index = readFileSync(join(outDir, 'index.html'), 'utf8');
-          writeFileSync(join(outDir, 'landing.html'), landingHtml(index, markup, moduleCss(manifest, 'src/site/mount.tsx'), base));
+          writeFileSync(join(outDir, 'landing.html'), landingHtml(index, markup, moduleCss(manifest, 'src/site/mount.tsx'), base, bodyEnd));
           writeFileSync(join(outDir, 'landing.json'), JSON.stringify(settings) + '\n');
         } finally {
           rmSync(tmp, { recursive: true, force: true });

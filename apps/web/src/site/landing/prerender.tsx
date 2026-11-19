@@ -7,6 +7,7 @@ import '../../chainText';
 import type { SiteSettings } from '@coinnibal/shared';
 import { StrictMode } from 'react';
 import { renderToString } from 'react-dom/server';
+import { INK_DEFS_HTML } from '../../design/motifs/InkDefs';
 import { SiteApp } from '../mount';
 import { FALLBACK } from '../settings';
 import { setStaticEntrance } from './hydrated';
@@ -15,11 +16,12 @@ import { setStaticEntrance } from './hydrated';
 export type LandingSettings = Pick<SiteSettings, 'gameAccess' | 'mintOpen' | 'wlOpen' | 'collabOpen' | 'xHandle'>;
 
 /**
- * The landing's markup (the inside of `#root`) and the settings it assumed: the closed defaults with the build's X
- * handle (`FALLBACK`, what every page starts from until the server's settings are in), no server chain. The path is
- * `/` (the router's server answer; there is no `location` here).
+ * The landing's markup (the inside of `#root`), the settings it assumed: the closed defaults with the build's X
+ * handle (`FALLBACK`, what every page starts from until the server's settings are in), no server chain, and what goes
+ * at the end of `<body>` (the inked-edge filters `Kb` adds when it mounts: with them in the HTML the terraces' edges do
+ * not move at hydration). The path is `/` (the router's server answer; there is no `location` here).
  */
-export function renderLanding(): { html: string; settings: LandingSettings } {
+export function renderLanding(): { html: string; settings: LandingSettings; bodyEnd: string } {
   // the hero card, its badge, the wordmark and Plate I as they land (the browser sets the same before it hydrates)
   setStaticEntrance(true);
   const html = renderToString(
@@ -28,5 +30,5 @@ export function renderLanding(): { html: string; settings: LandingSettings } {
     </StrictMode>,
   );
   const { gameAccess, mintOpen, wlOpen, collabOpen, xHandle } = FALLBACK;
-  return { html, settings: { gameAccess, mintOpen, wlOpen, collabOpen, xHandle } };
+  return { html, settings: { gameAccess, mintOpen, wlOpen, collabOpen, xHandle }, bodyEnd: INK_DEFS_HTML };
 }

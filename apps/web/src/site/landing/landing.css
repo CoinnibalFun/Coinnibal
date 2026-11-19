@@ -2212,6 +2212,14 @@
   .ld-chase__pop {
     animation: none !important;
   }
+  /* the pond's still frame (CoinPond `still`, `.ld-chase.is-still`) and no "tap a coin" hint, from the first paint:
+     the prerendered landing is painted before the script knows about reduced motion */
+  .ld-chase__hunter {
+    transform: translateX(60px);
+  }
+  .ld-pond__hint {
+    display: none;
+  }
 }
 
 /* ── new: coins that notice you, notes that unfold ───────────────────── */

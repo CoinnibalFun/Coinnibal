@@ -171,13 +171,12 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
           </motion.div>
         </div>
         <CoinPond still={reduced} events={{ onEat: sound.chomp }} />
-        {!reduced && (
-          <p className="ld-pond__hint mono" aria-hidden="true">
-            {/* both hints are in the HTML; CSS shows the mouse one where the pointer is a mouse */}
-            <span className="ld-pond__hint-touch">{t('ld.pondHint')}</span>
-            <span className="ld-pond__hint-mouse">{t('ld.pondHintMouse')}</span>
-          </p>
-        )}
+        {/* both hints are in the HTML; CSS shows the mouse one where the pointer is a mouse, and neither with reduced
+            motion (the pond is still there: in CSS, so the prerendered page is right before any script) */}
+        <p className="ld-pond__hint mono" aria-hidden="true">
+          <span className="ld-pond__hint-touch">{t('ld.pondHint')}</span>
+          <span className="ld-pond__hint-mouse">{t('ld.pondHintMouse')}</span>
+        </p>
         <button type="button" className="ld-sound mono" aria-pressed={sound.on} onClick={sound.toggle}>
           <Icon name={sound.on ? 'sound' : 'mute'} size={16} />
           <span>{sound.on ? t('ld.soundOn') : t('ld.soundOff')}</span>

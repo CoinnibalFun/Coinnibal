@@ -125,7 +125,9 @@ describe('hydrating the prerendered landing', { timeout: 30_000 }, () => {
     expect(r.html).toContain('data-still="false"');
     expectKept(r);
     expect(container!.querySelector('.ld-pond')?.getAttribute('data-still')).toBe('true');
-    expect(container!.querySelector('.ld-pond__hint')).toBeNull();
+    // what reduced motion hides is hidden by CSS (landing.css), so nothing painted leaves the page at hydration
+    expect(r.html).toContain('ld-pond__hint');
+    expect(container!.querySelector('.ld-pond__hint')).toBeTruthy();
   });
 
   it('a phone: no error, then the bites take their phone size (the card tilt is CSS)', async () => {
