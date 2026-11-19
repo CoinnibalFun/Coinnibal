@@ -1,7 +1,8 @@
 // A local Robinhood Chain stand-in: `hardhat node` (chain id 31337, gas in ETH) with the Coinnibal
-// contracts deployed in the same order as /admin → Setup, through the SDK:
-//   TestToken → CoinnibalArena (server authority = the game server's key) → CoinnibalNFT
-//   → setToken → the four default arenas (→ optionally the mint opened to the public).
+// contracts deployed in the same order as /admin → Deploy the contracts, through the SDK:
+//   TestToken (registered with the game server: the faucet hands it out) → CoinnibalArena (server authority = the
+//   game server's key) → CoinnibalNFT → setToken → the four default arenas → the NFT perks (faucet 2x, the holder
+//   fee, the $10 Room holders-only) (→ optionally the mint opened to the public).
 // Shared by scripts/localnet.mjs, scripts/localnet-fund.mjs and scripts/demo.mjs.
 //
 // Accounts are Hardhat's well-known dev accounts (public keys, local only, 10,000 ETH each):
@@ -16,6 +17,8 @@ import { LOCALNET_CHAIN_ID, LOCALNET_RPC_PORT, ROOT, hardhatAccount, hardhatKey,
 export const STATE_DIR = join(ROOT, '.localnet');
 export const ADDRESSES_FILE = join(STATE_DIR, 'contracts.json');
 export const SERVER_ENV_FILE = join(STATE_DIR, 'server.env');
+/** The game server's DATA_DIR for the local chain (its contract registry holds the TestToken). */
+export const SERVER_DATA_DIR = join(STATE_DIR, 'server-data');
 export const ACCOUNT = { owner: 0, server: 1, player: 2 };
 
 export const rpcUrlFor = (port = LOCALNET_RPC_PORT) => `http://127.0.0.1:${port}`;
@@ -63,11 +66,25 @@ function clients(sdk, rpcUrl, chainId, key) {
 }
 
 /**
- * Deploys TestToken + CoinnibalArena + CoinnibalNFT from the owner account and (unless `noToken`) sets the
- * token and creates the default arenas. Writes `.localnet/contracts.json` and `.localnet/server.env`.
+ * Registers the TestToken with the game server, as /admin → Deploy the contracts does on the testnet
+ * (`POST /api/admin/contracts`): its contract registry, `<dataDir>/chains/<chainId>/contracts.json`, read when the
+ * server starts. The faucet (`/faucet`, `GET /api/site/faucet`) hands out the registry's token, never the arena's. The
+ * arena and the NFT stay env overrides (ARENA_ADDRESS / NFT_ADDRESS in server.env).
+ */
+function registerTokenWithServer(dataDir, { chainId, token, txHash, owner }) {
+  const dir = join(dataDir, 'chains', String(chainId));
+  mkdirSync(dir, { recursive: true });
+  const record = { address: token, txHash, chainId, registeredAt: Date.now(), registeredBy: owner };
+  writeFileSync(join(dir, 'contracts.json'), `${JSON.stringify({ arena: null, nft: null, token: record }, null, 2)}\n`);
+}
+
+/**
+ * Deploys TestToken + CoinnibalArena + CoinnibalNFT from the owner account, registers the TestToken in the game
+ * server's registry under `dataDir` (its DATA_DIR) and (unless `noToken`) sets the token, creates the default arenas and
+ * sets the NFT perks. Writes `.localnet/contracts.json` and `.localnet/server.env`.
  * Returns `{ token, arena, nft, owner, server, chainId, rpcUrl, env }`.
  */
-export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http://localhost:5173', noToken = false, openMint = false, log = console.log } = {}) {
+export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http://localhost:5173', dataDir = SERVER_DATA_DIR, noToken = false, openMint = false, log = console.log } = {}) {
   const sdk = await importSdk();
   const probe = sdk.createCoinnibalPublicClient(rpcUrl);
   const chainId = await probe.getChainId();
@@ -83,7 +100,8 @@ export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http:/
   };
 
   log(`deploying TestToken (owner ${owner.address})`);
-  const token = await sdk.deployedAddress(publicClient, await sdk.deployTestToken(wallet, { owner: owner.address }));
+  const tokenTx = await sdk.deployTestToken(wallet, { owner: owner.address });
+  const token = await sdk.deployedAddress(publicClient, tokenTx);
   log(`deploying CoinnibalArena (server authority ${server}, fee wallet = owner)`);
   const arena = await sdk.deployedAddress(publicClient, await sdk.deployArena(wallet, { admin: owner.address, serverAuthority: server, feeWallet: owner.address }));
   log('deploying CoinnibalNFT (supply 3,333, 0.02 ETH, WL 2 / public 5 per wallet)');
@@ -106,6 +124,12 @@ export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http:/
     log('setToken + the four default arenas');
     await send(sdk.setTokenCall(arena, token), 'setToken');
     for (const call of sdk.createDefaultArenaCalls(arena, 18)) await send(call, `createArena(${call.args[0]})`);
+    // the rest of Finish setup, as the deploy flow does: the faucet's 2x, the holder fee and the holders-only room(s)
+    const holder = { burnBps: sdk.SUGGESTED_HOLDER_BURN_BPS, vaultBps: sdk.SUGGESTED_HOLDER_VAULT_BPS };
+    log(`NFT perks: 2x from the faucet, holders pay ${(holder.burnBps + holder.vaultBps) / 100} % of profit, arena #${sdk.DEFAULT_HOLDERS_ONLY_ARENA_IDS.join(', #')} holders only`);
+    await send(sdk.setHolderNftCall(token, nft), 'TestToken.setHolderNft');
+    await send(sdk.setHolderPerksCall(arena, nft, holder), 'setHolderPerks');
+    for (const id of sdk.DEFAULT_HOLDERS_ONLY_ARENA_IDS) await send(sdk.setArenaHoldersOnlyCall(arena, id, true), `setArenaHoldersOnly(${id})`);
   } else {
     log('--no-token: the token is NOT set on the arena (set it from /admin → Setup, like a fresh deploy)');
   }
@@ -124,6 +148,8 @@ export async function deployLocalnet({ rpcUrl = rpcUrlFor(), publicUrl = 'http:/
     PUBLIC_URL: publicUrl,
   };
   mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
+  log(`registering the TestToken with the game server (DATA_DIR ${dataDir}): the faucet hands it out`);
+  registerTokenWithServer(dataDir, { chainId, token, txHash: tokenTx, owner: owner.address });
   writeFileSync(ADDRESSES_FILE, `${JSON.stringify({ chainId, rpcUrl, token, arena, nft, owner: owner.address, server }, null, 2)}\n`);
   writeFileSync(SERVER_ENV_FILE, `${Object.entries(env).map(([k, v]) => `${k}=${v}`).join('\n')}\n`, { mode: 0o600 });
   return { token, arena, nft, owner: owner.address, server, chainId, rpcUrl, env };
