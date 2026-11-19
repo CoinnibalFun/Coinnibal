@@ -1580,6 +1580,9 @@ export class Gateway {
           // the coin starts at the ticket's value: entry − fee on a fee-on-entry arena (v2), the entry fee on v1
           value: session.value,
           openedAt: session.openedAt,
+          // the fee rates fixed into the ticket at join (a holder's are the holder pair): the round result shows the
+          // fee the contract takes, not the default one
+          ...(session.rates ? { rates: session.rates } : {}),
         },
       });
     }

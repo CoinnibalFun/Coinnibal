@@ -782,6 +782,7 @@ export class Room implements RoomHandle {
         arenaId: e.arenaId,
         value: e.value,
         entryFee: e.entryFee,
+        ...(e.rates ? { rates: e.rates } : {}),
         score: Math.floor(p?.stats.maxMass ?? 0),
         kills: p?.stats.playersEaten ?? 0,
       };
@@ -899,6 +900,7 @@ export class Room implements RoomHandle {
       // the settlement carries the gross value; the arena contract takes the fee on the profit (`fees.ts`)
       const fee = profitFee(entry.entryFee, entry.value, entry.rates);
       stats.payout = fee.net;
+      if (entry.rates) stats.rates = { ...entry.rates };
       if (fee.fee > 0) {
         stats.gross = fee.payout;
         stats.cut = fee.fee;
@@ -1485,6 +1487,7 @@ function settlementOf(
     sessionId: entry.sessionId,
     payout: entry.value,
     entryFee: entry.entryFee,
+    ...(entry.rates ? { rates: entry.rates } : {}),
     ...(o.roundPool !== undefined && o.roundPool > 0 ? { roundPool: o.roundPool } : {}),
     score: o.score,
     kills: o.kills,
