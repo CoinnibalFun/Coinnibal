@@ -19,7 +19,9 @@
 # .github/dependabot.yml). `update.sh --refresh` does the same without a new commit: it rebuilds the deployed commit,
 # never a newer one (it fetches nothing: new code comes only through this check), and swaps the app and/or Caddy in
 # the round break, only when an image changed. elymum-refresh.timer runs it weekly with --scheduled: then it is
-# skipped while auto-deploy is paused (elymum-update.timer stopped); by hand it always runs.
+# skipped while auto-deploy is paused (elymum-update.timer stopped); by hand it always runs. It rebuilds only the image
+# a deploy put in (recorded with the commit, /var/lib/elymum/deployed-image): an image put back by hand (README
+# "Rollback") stays until the next deploy, and the refresh says so instead.
 # Output goes to journald: journalctl -u elymum-update -n 100 (the refresh: -u elymum-refresh)
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -126,6 +128,18 @@ if [[ "$refresh" -eq 1 ]]; then
     log "auto-deploy is paused ($INSTALLED_UNIT_PREFIX-update.timer stopped), and the weekly rebuild with it; by hand: coinnibal-update --refresh"
     exit 0
   fi
+  # only the image a deploy put in for the commit is rebuilt. Another one (a rollback by hand: README "Rollback") is
+  # left as it is: rebuilding the deployed commit would put back the version the owner took off
+  deployed_image="$(cat "$COINNIBAL_STATE/deployed-image" 2>/dev/null || true)"
+  if [[ -z "$deployed_image" ]]; then
+    log "no record yet of the image deployed for ${deployed:0:12} (every deploy writes it, and the first check after one); no refresh"
+    exit 0
+  fi
+  running_image="$(app_image)"
+  if [[ "$(image_id "$COINNIBAL_IMAGE")" != "$deployed_image" || (-n "$running_image" && "$running_image" != "$deployed_image") ]]; then
+    notify "weekly rebuild skipped: the app image is not the one deployed for ${deployed:0:12} (put back by hand?); it stays until the next deploy"
+    exit 0
+  fi
   remote="$deployed"
   same=1
 else
@@ -156,9 +170,6 @@ fi
 mark_failed() {
   [[ "$same" -eq 1 ]] || echo "$remote" >"$COINNIBAL_STATE/failed"
 }
-image_id() {
-  docker image inspect -f '{{.Id}}' "$1" 2>/dev/null || true
-}
 # the running Caddy container is on an older image than the one its tag names now (after `dc pull caddy`)
 caddy_stale() {
   local cid
@@ -184,6 +195,21 @@ if [[ "$same" -eq 0 && "$remote" == "$deployed" ]]; then
   if ! app_running; then
     log "app container is not running; starting the stack"
     dc up -d || log "docker compose up failed"
+  fi
+  # the image deployed for the commit, on a server whose last deploy ran an update.sh of before that record (the
+  # weekly refresh needs it): what runs now, when the tag names it too and its container is the one that deploy
+  # started (created before deployed-at; a container put in by hand later stays unrecorded, and so unrefreshed)
+  if [[ ! -s "$COINNIBAL_STATE/deployed-image" ]]; then
+    running_image="$(app_image)"
+    created="$(docker inspect -f '{{.Created}}' "$(dc ps -q app 2>/dev/null)" 2>/dev/null || true)"
+    deployed_at="$(cat "$COINNIBAL_STATE/deployed-at" 2>/dev/null || true)"
+    created_s="" deployed_s=""
+    [[ -z "$created" ]] || created_s="$(date -d "$created" +%s 2>/dev/null || true)"
+    [[ -z "$deployed_at" ]] || deployed_s="$(date -d "$deployed_at" +%s 2>/dev/null || true)"
+    if [[ -n "$running_image" && "$running_image" == "$(image_id "$COINNIBAL_IMAGE")" ]] &&
+      [[ "$created_s" =~ ^[0-9]+$ && "$deployed_s" =~ ^[0-9]+$ ]] && ((created_s <= deployed_s)); then
+      echo "$running_image" >"$COINNIBAL_STATE/deployed-image"
+    fi
   fi
   # once per deployed commit, its units installed and its timers on: the deploy that brought a new one ran the
   # update.sh of before it (so a server installed earlier gets the weekly refresh timer here)
@@ -257,6 +283,8 @@ if [[ "$status" != "healthy" ]]; then
     notify "after the weekly Caddy refresh the app is $status (its image did not change)"
   elif docker image inspect "$PREVIOUS_IMAGE" >/dev/null 2>&1 && [[ -n "$deployed" ]]; then
     log "ROLLBACK: ${remote:0:12} is $status after ${HEALTHY_WITHIN_S} s; putting ${deployed:0:12} back"
+    # the record of the deployed commit's image stays as it is: this puts that image back (or the one a rollback by
+    # hand had put in, which stays unrecorded, so the weekly refresh keeps leaving it alone)
     git reset --hard --quiet "$deployed"
     docker tag "$PREVIOUS_IMAGE" "$COINNIBAL_IMAGE"
     dc up -d --remove-orphans || log "docker compose up of the previous version failed"
@@ -282,9 +310,9 @@ fi
 sync_units
 host_upgrade
 
-echo "$remote" >"$COINNIBAL_STATE/deployed"
+# the commit and the image now serving it (the next weekly refresh rebuilds that one only)
+record_deployed "$remote"
 [[ "$same" -eq 1 ]] || rm -f "$COINNIBAL_STATE/failed" "$COINNIBAL_STATE/waiting-ci"
-date -u +%FT%TZ >"$COINNIBAL_STATE/deployed-at"
 log "$([[ "$same" -eq 1 ]] && echo refreshed || echo deployed) ${remote:0:12}; app is $status"
 
 # keep the disk clean: dangling images of earlier builds and Caddy pulls, build cache older than a week
