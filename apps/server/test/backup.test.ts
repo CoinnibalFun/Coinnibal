@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp, type App } from '../src/app';
@@ -237,6 +238,9 @@ describe('migrationEnv', () => {
       CHAIN_NAME: 'Retired',
       GAME_ACCESS: 'admins',
       STAKE_ENABLED: 'false',
+      // the VPS app reads the whole .env (env_file), the site's contract pins included: they never leave the server
+      COINNIBAL_PIN_ARENA: '0x1111111111111111111111111111111111111111',
+      VITE_ARENA_ADDRESS: '0x1111111111111111111111111111111111111111',
     });
     expect(out).toEqual({
       ADMIN_WALLETS: '0xabc',
@@ -245,5 +249,33 @@ describe('migrationEnv', () => {
       EVM_RPC_URL: 'https://rpc.example',
       PUBLIC_URL: 'https://coinnibal.fun',
     });
+  });
+
+  it('install.sh --from never writes a contract pin, whatever the old server answers', () => {
+    // a broken-into old server could answer with its own pins: the new build must trust only what the owner sets in the
+    // VPS shell (deploy/vps/install.sh, the import loop of --from, run here with env_set printing what it would write)
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+    const lines = readFileSync(join(repoRoot, 'deploy/vps/install.sh'), 'utf8').split('\n');
+    const start = lines.findIndex((l) => /^\s*while IFS=\$'\\t' read -r k v; do\s*$/.test(l));
+    const end = lines.findIndex((l, i) => i > start && /^\s*done < <\(/.test(l));
+    expect(start, 'the import loop of install.sh --from').toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const script = ['env_set() { printf \'%s=%s\\n\' "$1" "$2"; }', 'old_single_rpc=""', 'have_rpc_list=0', ...lines.slice(start, end), 'done'].join('\n');
+    const pin = '0x2222222222222222222222222222222222222222';
+    const answer = [
+      ['ADMIN_WALLETS', '0xabc'],
+      ['CHAIN_ID', '46630'],
+      ['COINNIBAL_PIN_ARENA', pin],
+      ['COINNIBAL_PIN_NFT', pin],
+      ['COINNIBAL_PIN_TOKEN', pin],
+      ['ELYMUM_PIN_ARENA', pin],
+      ['VITE_ARENA_ADDRESS', pin],
+      ['VITE_CHAIN_ID', '31337'],
+      ['EVM_RPC_URLS', 'https://rpc.example'],
+    ];
+    const r = spawnSync('bash', ['-c', script], { input: answer.map(([k, v]) => `${k}\t${v}\n`).join(''), encoding: 'utf8' });
+    expect(r.stderr).toBe('');
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim().split('\n')).toEqual(['ADMIN_WALLETS=0xabc', 'COINNIBAL_CHAIN_ID=46630', 'COINNIBAL_RPC_URLS=https://rpc.example']);
   });
 });

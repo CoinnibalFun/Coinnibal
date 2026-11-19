@@ -220,7 +220,12 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
    bash install.sh --from https://<old GAME_DOMAIN> --token '<admin session token>' --proof '<proof>' --yes
    ```
    It reads the settings once (`/api/admin/migration-env`) and the backup once (`/api/admin/backup`), restores the
-   data before the first start, and starts.
+   data before the first start, and starts. **It does not copy the site's contract pins** (section 4: a pin changes
+   only in this shell, never from another server's answer), so the moved site signs no ticket, refund, shop payment
+   or mint until they are back: set the `COINNIBAL_PIN_ARENA` and `COINNIBAL_PIN_NFT` lines (and `COINNIBAL_PIN_TOKEN`
+   once the game token is set) in `/opt/elymum/.env`, from your password manager or `/admin` → Setup → **Site pins**,
+   checking each address against the deploy transaction in your own wallet, then run
+   `coinnibal-compose up -d --build app`.
 4. **Stop the old server before the new one starts settling** (`coinnibal-compose down` there): two servers must never
    run with the same server key. Then point DNS at the new VPS; remove `ADMIN_SECRET_EXPORT`.
 
@@ -229,7 +234,9 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
 1. Pause the arena if the key may be exposed (`/admin` → Game → Pause); otherwise tickets stay safe on chain: unplayed
    ones are refunded in full by the next server, settled ones are paid, and a player can refund any ticket after 24 h.
 2. A new VPS (sections 1 to 3); stop at the settings step and put the old `.env` values back (from your password
-   manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, ...).
+   manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, the site's pins
+   `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` and `COINNIBAL_PIN_TOKEN`, ...). Without the pins the new site signs no
+   ticket, refund, shop payment or mint (section 4).
 3. The newest backup: from the offsite copy (`rclone copy elymum-offsite:elymum-data-<newest>.tar.gz /root/`), then
    `coinnibal-restore /root/elymum-data-<newest>.tar.gz`. It carries the server key, the journal (pending settlements go
    out), the contracts registry and the site data. What happened after that backup is lost: tickets settled since are
