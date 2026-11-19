@@ -6,7 +6,6 @@ import { useUi } from '../store';
 import { DocsPage } from '../ui/docs/DocsPage';
 import { useT } from '../i18n';
 import { SitePage } from './Shell';
-import '../ui/lobby/lobby.css';
 
 /**
  * `/docs`: the player guide, public, inside the site (no game engine). The fee rate comes from `/api/config`. The page
