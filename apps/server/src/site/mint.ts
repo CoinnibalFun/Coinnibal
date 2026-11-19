@@ -24,10 +24,10 @@ import { BRAND_NAME, NFT_NAME } from '@coinnibal/shared';
 import { getAddress, type Address, type Hash } from 'viem';
 import { ChainCache } from '../chain/chain-cache';
 import type { EvmClient } from '../chain/evm-client';
-import { isRateLimited, withRpcPriority } from '../chain/rpc-budget';
+import { isRateLimited, withRpcPriority, type RpcPriority } from '../chain/rpc-budget';
 import { ClientBudgetError, currentClient } from '../net/client-scope';
 import { subnetOf, wideNetOf } from '../net/ip-key';
-import { Limiter } from '../net/limiter';
+import { TokenBuckets } from '../net/limiter';
 import type { SiteStore } from './store';
 import { SiteFail, userWallet } from './validate';
 
@@ -50,21 +50,61 @@ export const HOLDER_TTL_MS = 15_000;
 /** A negative holder check is reused only this long (a fresh mint must open /play at once). */
 export const HOLDER_MISS_TTL_MS = 2_000;
 /**
- * Holder checks that read the chain (a cache miss) per client a minute (`currentClient`): a client signing in with
- * many throwaway wallets cannot turn its joins and page loads into `balanceOf` calls without a bound. Past it a
- * "holder" answer on record is used until the minute is over; anyone else is never told "not a holder" (a stale "no"
- * may predate a mint a moment ago): `ClientBudgetError` (the caller answers "busy, try again in a moment").
- */
-export const HOLDER_READS_PER_CLIENT_PER_MIN = 60;
-/** The same per network (an IPv6 /48, an IPv4 /24): many /64s or addresses of one customer do not add up. */
-export const HOLDER_READS_PER_NET_PER_MIN = HOLDER_READS_PER_CLIENT_PER_MIN * 2;
-/**
- * And server-wide: the holder checks clients trigger (`fresh` ones aside: their callers bound them) read the chain at
- * most this share of `RPC_MAX_RPS` a second, in bursts of `HOLDER_READS_BURST_S` seconds of it, so free wallets from
- * many networks cannot fill the RPC queue (`normal` priority) ahead of the server's own reads.
+ * Holder checks that read the chain (a cache miss) on behalf of clients (`currentClient`), `fresh` ones aside (their
+ * callers bound them), and only for a gate decision (`isHolder`: who may play, a holders-only permit, a room's
+ * creation): a value only shown (`shownHolder`) never reads the chain. Server-wide they read at most
+ * `HOLDER_READS_RPC_SHARE` of `RPC_MAX_RPS` a second, in bursts of `HOLDER_READS_BURST_S` seconds of it, so free wallets
+ * from many networks cannot fill the RPC queue (`normal` priority) ahead of the server's own reads. Shares of that
+ * rate, as smooth token buckets (no minute to spend in one burst): one client (an IPv4 address, an IPv6 /64)
+ * `HOLDER_READS_CLIENT_SHARE` of it, one network (an IPv6 /48, an IPv4 /24) `HOLDER_READS_NET_SHARE`, so fewer than
+ * 1 / `HOLDER_READS_NET_SHARE` networks can never keep the bucket empty. Its bottom `HOLDER_READS_RESERVE` is only for
+ * a newcomer: a client whose address and network had no holder read for `HOLDER_READS_QUIET_MS`, so each address and
+ * each network takes at most one token of it a quiet period (it takes 60 x the bucket's rate networks, each reading
+ * once a minute, to keep it empty).
+ *
+ * The bounds can only delay a gate decision, never refuse it: past a bound a wallet with a "holder" on record (a cached
+ * answer, or the holder index of the NFT's `Transfer` logs) gets it, and anyone else the holder index read by a scan
+ * that starts after the request (`indexedSince`: one scan for everyone, at most every `HOLDERS_FRESH_MS`), so a wallet
+ * that minted a moment ago is a holder and one absent from the caught-up index is not. Only while the index cannot
+ * catch up (a failed scan's back-off, an index that does not reach back to the NFT's creation) is it
+ * `ClientBudgetError` ("busy, try again in a moment"), never "not a holder" (a stale "no" may predate a mint).
  */
 export const HOLDER_READS_RPC_SHARE = 0.25;
 export const HOLDER_READS_BURST_S = 10;
+export const HOLDER_READS_CLIENT_SHARE = 1 / 16;
+export const HOLDER_READS_NET_SHARE = 1 / 8;
+export const HOLDER_READS_RESERVE = 0.5;
+/** A newcomer (who may take the bucket's reserve): no holder read from its address or its network for this long. */
+export const HOLDER_READS_QUIET_MS = 60_000;
+/** A value only shown with nothing on record has the holder index read the new blocks in the background, at most this often. */
+export const HOLDERS_ON_DEMAND_MS = 5_000;
+/** The holder index reads the new blocks for a gate decision (or a holder ticket's token ids) at most this often. */
+export const HOLDERS_FRESH_MS = 2_000;
+/** A gate decision waits at most this long for the holder index to catch up; past it, busy. */
+export const HOLDERS_GATE_WAIT_MS = 8_000;
+
+/** The holder-read bounds at `rpcMaxRps` (`RPC_MAX_RPS`): reads a second and their bursts, server-wide, per client and per network. */
+export interface HolderReadLimits {
+  rate: number;
+  burst: number;
+  /** The bottom of the server-wide bucket, kept for networks with no holder read lately. */
+  reserve: number;
+  client: { rate: number; burst: number };
+  net: { rate: number; burst: number };
+}
+
+export function holderReadLimits(rpcMaxRps = 4): HolderReadLimits {
+  const rate = Math.max(0.1, rpcMaxRps * HOLDER_READS_RPC_SHARE);
+  const burst = Math.max(4, Math.ceil(rate * HOLDER_READS_BURST_S));
+  return {
+    rate,
+    burst,
+    reserve: Math.floor(burst * HOLDER_READS_RESERVE),
+    // at the default 4 calls/s: 1 read/s in bursts of 10; a client 3.75 a minute (bursts of 2), a network 7.5 (of 3)
+    client: { rate: rate * HOLDER_READS_CLIENT_SHARE, burst: Math.max(2, Math.floor(burst * HOLDER_READS_CLIENT_SHARE * 2)) },
+    net: { rate: rate * HOLDER_READS_NET_SHARE, burst: Math.max(3, Math.floor(burst * HOLDER_READS_NET_SHARE * 2)) },
+  };
+}
 /** `royaltyInfo` of the collection (`/api/nft/contract`, an unauthenticated route) is read at most this often. */
 export const ROYALTY_TTL_MS = 5 * 60_000;
 const ROYALTY_RETRY_MS = 30_000;
@@ -102,6 +142,8 @@ export interface MintServiceDeps {
   rpcMaxRps?: number;
   log?: (m: string) => void;
   now?: () => number;
+  /** Waits `ms` (default: a timer): the pause before the holder index may read again for a gate decision. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /** The default feed: ETH (Robinhood Chain's gas token) on Hyperliquid's `allMids` at `url`. */
@@ -124,17 +166,32 @@ export class MintService {
   private missReadAt = -Infinity;
   private readonly holderCache = new Map<string, { at: number; value: boolean }>();
   /**
-   * Holder reads in flight (one per wallet), and the chain reads clients triggered: per client, per network and
-   * server-wide (`HOLDER_READS_PER_CLIENT_PER_MIN`, `HOLDER_READS_PER_NET_PER_MIN`, `HOLDER_READS_RPC_SHARE`).
+   * Holder reads in flight (one per wallet), and the chain reads clients triggered: server-wide, per client and per
+   * network (`holderReadLimits`).
    */
   private readonly holderReads = new Map<string, Promise<boolean>>();
-  private readonly holderReadsByClient = new Limiter(HOLDER_READS_PER_CLIENT_PER_MIN, 60_000);
-  private readonly holderReadsByNet = new Limiter(HOLDER_READS_PER_NET_PER_MIN, 60_000);
-  private readonly holderBucket: { rate: number; burst: number; tokens: number; at: number };
+  private readonly holderLimits: HolderReadLimits;
+  private readonly holderReadsByClient: TokenBuckets;
+  private readonly holderReadsByNet: TokenBuckets;
+  private readonly holderBucket: { tokens: number; at: number };
+  /**
+   * When each client (`c:` its `rateKey`) and network (`n:` its /24 or /48) last had a holder read, oldest first: those
+   * of the last `HOLDER_READS_QUIET_MS` only (each one took a token of the bucket, so there are few).
+   */
+  private readonly holderReadAt = new Map<string, number>();
   private holders: HolderIndex | null = null;
   private holdersScan: Promise<number> | null = null;
+  /** The RPC priority of the scan in flight: raised when a gate decision or a holder ticket waits for it. */
+  private scanPrio: RpcPriority = 'low';
+  /** When the last scan started (`HOLDERS_FRESH_MS` apart for gate decisions and holder tickets), and how many started. */
+  private holdersStartedAt = -Infinity;
+  private scanSeq = 0;
+  /** The next catch-up of the index that gate decisions wait for (one for everyone). */
+  private gateScan: Promise<void> | null = null;
   /** Holder scans failed in a row, and when the next may run. */
   private holdersFail = { n: 0, until: -Infinity };
+  /** When a value only shown last had the index read the new blocks (`refreshHolderIndex`). */
+  private holdersAskedAt = -Infinity;
   private holdersChunk: bigint;
   private stateFailedAt = -Infinity;
   /** Last good reads on disk (mint state, holder index), so a restart answers the page at once. */
@@ -145,14 +202,18 @@ export class MintService {
   private tree: AllowlistTree | null = null;
   private readonly now: () => number;
   private readonly log: (m: string) => void;
+  private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(private readonly deps: MintServiceDeps) {
     this.now = deps.now ?? Date.now;
     this.log = deps.log ?? (() => {});
+    // a request waits on it (at most HOLDERS_FRESH_MS): it keeps the process up meanwhile
+    this.sleep = deps.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
     this.holdersChunk = BigInt(Math.max(Number(HOLDERS_CHUNK_MIN), deps.logChunkBlocks));
-    const rate = Math.max(0.1, (deps.rpcMaxRps ?? 4) * HOLDER_READS_RPC_SHARE);
-    const burst = Math.max(4, Math.ceil(rate * HOLDER_READS_BURST_S));
-    this.holderBucket = { rate, burst, tokens: burst, at: this.now() };
+    const l = (this.holderLimits = holderReadLimits(deps.rpcMaxRps ?? 4));
+    this.holderReadsByClient = new TokenBuckets(l.client.rate, l.client.burst);
+    this.holderReadsByNet = new TokenBuckets(l.net.rate, l.net.burst);
+    this.holderBucket = { tokens: l.burst, at: this.now() };
     this.cache = ChainCache.in(deps.stateDir, MINT_CACHE_FILE, this.log);
     this.loadSnapshot();
     this.loadCached();
@@ -162,16 +223,17 @@ export class MintService {
   private loadCached(): void {
     const st = this.cache.get<{ nft: string; value: ChainMintState }>('state');
     if (st && typeof st.nft === 'string' && st.value && typeof st.value.totalSupply === 'number') this.state = { nft: st.nft, at: -Infinity, value: st.value };
-    const h = this.cache.get<{ nft: string; next: bigint | null; balances: Record<string, number>; owners?: Record<string, string> }>('holders');
+    const h = this.cache.get<{ nft: string; next: bigint | null; balances: Record<string, number>; owners?: Record<string, string>; complete?: boolean }>('holders');
     if (h && typeof h.nft === 'string' && h.balances && typeof h.balances === 'object') {
-      // an index written before token owners were kept is read again from the start (once), to learn them
-      const owners = h.owners && typeof h.owners === 'object' ? h.owners : null;
+      // an index written before token owners (or whether it reaches back to the NFT's creation) were kept is read
+      // again from the start (once), to learn them
+      const owners = h.owners && typeof h.owners === 'object' && typeof h.complete === 'boolean' ? h.owners : null;
       this.holders = {
-        nft: h.nft,
+        ...emptyIndex(h.nft),
         next: owners && typeof h.next === 'bigint' ? h.next : null,
         balances: owners ? new Map(Object.entries(h.balances)) : new Map(),
         owners: new Map(Object.entries(owners ?? {})),
-        at: -Infinity,
+        complete: !!owners && h.complete === true,
       };
     }
   }
@@ -361,10 +423,12 @@ export class MintService {
   }
 
   /**
-   * Whether a wallet holds a Coinnibal NFT (`balanceOf > 0`), cached 15 s (`fresh` re-reads). False without an NFT.
-   * Concurrent checks of one wallet share one read; the cache misses clients trigger are bounded per client, per
-   * network and server-wide (`allowHolderRead`): past a bound a wallet with a "holder" answer on record gets it,
-   * anyone else `ClientBudgetError` (busy), never a wrong "not a holder".
+   * Whether a wallet holds a Coinnibal NFT (`balanceOf > 0`), cached 15 s (`fresh` re-reads), for a gate decision (who
+   * may play, a holders-only ticket, a room's creation). False without an NFT. Concurrent checks of one wallet share
+   * one read; the cache misses clients trigger are bounded server-wide, per client and per network (`allowHolderRead`).
+   * Past a bound a wallet with a "holder" on record (`holderOnRecord`) gets it, anyone else the holder index read by a
+   * scan that starts after this request (`indexedSince`), and `ClientBudgetError` (busy) only while the index cannot
+   * tell: never a wrong "not a holder". A value only shown calls `shownHolder`.
    */
   async isHolder(wallet: string, fresh = false): Promise<boolean> {
     const nft = this.deps.nft();
@@ -381,9 +445,14 @@ export class MintService {
     // a `fresh` check (an arena seat, a purchase) is bounded by its caller and never answered from the cache
     const who = currentClient();
     if (!fresh && who !== null && !this.allowHolderRead(who)) {
-      // a "no" on record may be from before a mint a moment ago: busy, not "not a holder"
-      if (hit?.value) return true;
-      throw new ClientBudgetError('holder check');
+      // a holder on record keeps its answer: a cached "holder", or the NFT's `Transfer` logs (kept across restarts)
+      if (this.holderOnRecord(nft.address, wallet, hit)) return true;
+      // a "no" on record may be from before a mint a moment ago: the holder index, read by a scan that starts after
+      // this request, answers instead (a shared bound only delays a gate decision); busy only while it cannot
+      const held = await this.indexedSince(nft, client, wallet, this.scanSeq);
+      if (held === null) throw new ClientBudgetError('holder check');
+      this.remember(key, held, this.holders?.coveredAt ?? this.now());
+      return held;
     }
     const read = (async () => {
       let value: boolean;
@@ -393,27 +462,197 @@ export class MintService {
         this.log(`mint: balanceOf failed (${(err as Error).message})`);
         return hit?.value ?? false;
       }
-      if (this.holderCache.size >= MAX_HOLDER_CACHE) this.holderCache.delete(this.holderCache.keys().next().value!);
-      this.holderCache.set(key, { at: this.now(), value });
+      this.remember(key, value, this.now());
       return value;
     })().finally(() => this.holderReads.delete(key));
     this.holderReads.set(key, read);
     return read;
   }
 
+  /** Keeps a holder answer read at `at` (a newer one stays). */
+  private remember(key: string, value: boolean, at: number): void {
+    const cur = this.holderCache.get(key);
+    if (cur && cur.at > at) return;
+    this.holderCache.delete(key);
+    if (this.holderCache.size >= MAX_HOLDER_CACHE) this.holderCache.delete(this.holderCache.keys().next().value!);
+    this.holderCache.set(key, { at, value });
+  }
+
   /**
-   * One more holder read on behalf of client `who` (its `rateKey`): within the server-wide bucket
-   * (`HOLDER_READS_RPC_SHARE` of `RPC_MAX_RPS`), the client's minute and its network's (an IPv6 /48, an IPv4 /24).
+   * The holder check of a value that is only shown (a profile's skins, a shop or room price quote, the `holder` field
+   * of `/api/auth/me`, the laurel at a join): never busy, and never a chain read of its own, so pages and games never
+   * spend the holder reads of the gate decisions of anyone behind the same address. It is the answer on record: a
+   * recent check (or one in flight), the holder index, a cached "holder" the index has not read past; else "not a
+   * holder", which is not kept, and the index reads the new blocks in the background (`refreshHolderIndex`), so a
+   * wallet that minted a moment ago shows as a holder within seconds. A purchase or a seat checks again for real.
+   */
+  async shownHolder(wallet: string): Promise<boolean> {
+    const nft = this.deps.nft();
+    const client = this.deps.client();
+    if (!nft || !client) return false;
+    const key = `${nft.address}:${wallet.toLowerCase()}`;
+    const hit = this.holderCache.get(key);
+    if (hit && this.now() - hit.at < (hit.value ? HOLDER_TTL_MS : HOLDER_MISS_TTL_MS)) return hit.value;
+    const running = this.holderReads.get(key);
+    if (running) return running;
+    if (this.holderOnRecord(nft.address, wallet, hit)) return true;
+    this.refreshHolderIndex();
+    // the index never read yet (a new server): its first scan is worth a short wait, as on the mint page
+    const h = this.holders;
+    if (h?.nft === nft.address && h.next === null && this.holdersScan) {
+      await atMost(this.holdersScan, FIRST_READ_WAIT_MS, 0);
+      return this.holderOnRecord(nft.address, wallet, hit);
+    }
+    return false;
+  }
+
+  /**
+   * A "holder" on record for `wallet`: the holder index has it, or a cached "holder" that a complete index read since
+   * (a sale) does not contradict.
+   */
+  private holderOnRecord(nftAddress: string, wallet: string, hit: { at: number; value: boolean } | undefined): boolean {
+    if (this.indexedHolder(nftAddress, wallet)) return true;
+    if (!hit?.value) return false;
+    const h = this.holders;
+    return !(h && h.nft === nftAddress && h.next !== null && h.complete && h.coveredAt > hit.at);
+  }
+
+  /**
+   * One more holder read on behalf of client `who` (its `rateKey`): a token of the server-wide bucket, of the client's
+   * and of its network's (an IPv6 /48, an IPv4 /24). The bucket's bottom (`HOLDER_READS_RESERVE`) is only for a
+   * newcomer: neither the client nor its network had a holder read for `HOLDER_READS_QUIET_MS` (a network of one
+   * address that keeps reading is no newcomer, though its own bucket refills between its reads).
    */
   private allowHolderRead(who: string): boolean {
     const now = this.now();
+    const l = this.holderLimits;
     const b = this.holderBucket;
-    b.tokens = Math.min(b.burst, b.tokens + (Math.max(0, now - b.at) / 1000) * b.rate);
+    b.tokens = Math.min(l.burst, b.tokens + (Math.max(0, now - b.at) / 1000) * l.rate);
     b.at = now;
-    if (b.tokens < 1) return false;
-    if (!this.holderReadsByClient.allow(who, now) || !this.holderReadsByNet.allow(wideNetOf(who) ?? subnetOf(who), now)) return false;
+    const net = wideNetOf(who) ?? subnetOf(who);
+    const newcomer = this.quiet(`c:${who}`, now) && this.quiet(`n:${net}`, now);
+    const floor = newcomer ? 1 : 1 + l.reserve;
+    if (b.tokens < floor || !this.holderReadsByClient.has(who, now) || !this.holderReadsByNet.has(net, now)) return false;
+    this.holderReadsByClient.take(who, now);
+    this.holderReadsByNet.take(net, now);
     b.tokens -= 1;
+    this.readNow(`c:${who}`, now);
+    this.readNow(`n:${net}`, now);
     return true;
+  }
+
+  /** `key` had no holder read for `HOLDER_READS_QUIET_MS`. */
+  private quiet(key: string, now: number): boolean {
+    const at = this.holderReadAt.get(key);
+    return at === undefined || now - at >= HOLDER_READS_QUIET_MS;
+  }
+
+  /** Notes a holder read of `key` now; reads older than the quiet period are forgotten (oldest first). */
+  private readNow(key: string, now: number): void {
+    this.holderReadAt.delete(key);
+    this.holderReadAt.set(key, now);
+    for (const [k, at] of this.holderReadAt) {
+      if (now - at < HOLDER_READS_QUIET_MS) break;
+      this.holderReadAt.delete(k);
+    }
+  }
+
+  /** The holder index (the NFT's `Transfer` logs, kept across restarts) has `wallet` holding a token of `nftAddress`. */
+  private indexedHolder(nftAddress: string, wallet: string): boolean {
+    const h = this.holders;
+    return !!h && h.nft === nftAddress && h.next !== null && (h.balances.get(wallet.toLowerCase()) ?? 0) > 0;
+  }
+
+  /**
+   * A value only shown found nothing on record: the holder index reads the new blocks in the background (one
+   * `eth_blockNumber` and one `eth_getLogs` from where it stopped), one scan at a time, at most every
+   * `HOLDERS_ON_DEMAND_MS` and never during a failure's back-off. Its cost is the server's, whoever asks how often.
+   */
+  private refreshHolderIndex(): void {
+    const nft = this.deps.nft();
+    const client = this.deps.client();
+    if (!nft || !client || this.holdersScan) return;
+    const h = this.indexFor(nft.address);
+    const now = this.now();
+    if (now - h.at < HOLDERS_ON_DEMAND_MS || now - this.holdersAskedAt < HOLDERS_ON_DEMAND_MS || now < this.holdersFail.until) return;
+    this.holdersAskedAt = now;
+    void this.startScan('normal', nft, client);
+  }
+
+  /**
+   * Whether `wallet` holds a token by the holder index read by a scan that started after scan number `after` (the
+   * last one started when a gate decision past a bound, with no "holder" on record, asked): it holds every block mined
+   * before the request. The index first reads the new blocks: one scan for everyone at a time, at most every
+   * `HOLDERS_FRESH_MS` (`gateCatchUp`), waited for at most `HOLDERS_GATE_WAIT_MS`. Null when the index cannot tell: it
+   * does not reach back to the NFT's creation (`complete`), or it cannot catch up now (a failed scan's back-off).
+   */
+  private async indexedSince(nft: { address: string; txHash: string | null }, client: EvmClient, wallet: string, after: number): Promise<boolean | null> {
+    const w = wallet.toLowerCase();
+    const answer = (): boolean | null | undefined => {
+      const h = this.holders;
+      if (!h || h.nft !== nft.address || h.next === null || h.coveredSeq <= after) return undefined;
+      if ((h.balances.get(w) ?? 0) > 0) return true;
+      return h.complete ? false : null;
+    };
+    const run = async (): Promise<boolean | null> => {
+      // a catch-up already under way when this asked may have read the latest block before it: then the next one
+      for (let i = 0; i < 3; i++) {
+        const a = answer();
+        if (a !== undefined) return a;
+        if (this.now() < this.holdersFail.until) return null;
+        await this.gateCatchUp(nft, client);
+      }
+      return answer() ?? null;
+    };
+    return atMost(run(), HOLDERS_GATE_WAIT_MS, null);
+  }
+
+  /**
+   * The next catch-up of the holder index for the gate decisions waiting now: a scan running already is waited for (it
+   * may have read the latest block before they asked), then one more starts `HOLDERS_FRESH_MS` after the last one
+   * started, at `high` priority (bounded: one for everyone, so its cost is the server's however many ask).
+   */
+  private gateCatchUp(nft: { address: string; txHash: string | null }, client: EvmClient): Promise<void> {
+    this.gateScan ??= (async () => {
+      if (this.holdersScan) {
+        this.raiseScan('high');
+        await this.holdersScan;
+      }
+      const wait = this.holdersStartedAt + HOLDERS_FRESH_MS - this.now();
+      if (wait > 0) await this.sleep(Math.min(wait, HOLDERS_FRESH_MS));
+      if (this.now() < this.holdersFail.until) return;
+      // one that started meanwhile started after the askers: it serves them
+      if (this.holdersScan) {
+        this.raiseScan('high');
+        await this.holdersScan;
+        return;
+      }
+      await this.startScan('high', nft, client);
+    })().finally(() => (this.gateScan = null));
+    return this.gateScan;
+  }
+
+  /** The holder index of `nftAddress` (a new, empty one for another NFT). */
+  private indexFor(nftAddress: string): HolderIndex {
+    if (this.holders?.nft !== nftAddress) this.holders = emptyIndex(nftAddress);
+    return this.holders;
+  }
+
+  /** Starts a scan of the holder index at priority `p` (callers check that none runs). */
+  private startScan(p: RpcPriority, nft: { address: string; txHash: string | null }, client: EvmClient): Promise<number> {
+    const h = this.indexFor(nft.address);
+    this.scanPrio = p;
+    this.holdersStartedAt = this.now();
+    const scan = this.scanHolders(nft, client, h, ++this.scanSeq).finally(() => {
+      if (this.holdersScan === scan) this.holdersScan = null;
+    });
+    this.holdersScan = scan;
+    return scan;
+  }
+
+  /** The scan in flight reads the rest of its blocks at priority `p` at least (someone waits for it). */
+  private raiseScan(p: RpcPriority): void {
+    if (PRIORITY_RANK[p] > PRIORITY_RANK[this.scanPrio]) this.scanPrio = p;
   }
 
   /**
@@ -427,29 +666,28 @@ export class MintService {
     const nft = this.deps.nft();
     const client = this.deps.client();
     if (!nft || !client) return 0;
-    if (this.holders?.nft !== nft.address) this.holders = { nft: nft.address, next: null, balances: new Map(), owners: new Map(), at: -Infinity };
-    const h = this.holders;
+    const h = this.indexFor(nft.address);
     const due = this.now() - h.at >= HOLDERS_INDEX_TTL_MS && this.now() >= this.holdersFail.until;
     if (!due) return countHolders(h.balances);
-    const scan = (this.holdersScan ??= withRpcPriority('low', () => this.scanHolders(nft, client, h)).finally(() => (this.holdersScan = null)));
+    const scan = this.holdersScan ?? this.startScan('low', nft, client);
     // a first-ever scan is worth a short wait; afterwards the page never waits for the index
     return h.next === null ? atMost(scan, FIRST_READ_WAIT_MS, countHolders(h.balances)) : countHolders(h.balances);
   }
 
   /**
    * The emblem token ids `wallet` owns, from the NFT's `Transfer` logs (the holder index). `fresh`: the index first
-   * catches up to the latest block (an incremental read: one `eth_getLogs` of the new blocks, at most every 2 s).
+   * catches up to the latest block (an incremental read: one `eth_getLogs` of the new blocks, at most every
+   * `HOLDERS_FRESH_MS`).
    * Null when it cannot tell (no NFT, the index never read, or the scan failed while it is behind).
    */
   async emblemTokens(wallet: string, fresh = false): Promise<string[] | null> {
     const nft = this.deps.nft();
     const client = this.deps.client();
     if (!nft || !client) return null;
-    if (this.holders?.nft !== nft.address) this.holders = { nft: nft.address, next: null, balances: new Map(), owners: new Map(), at: -Infinity };
-    const h = this.holders;
-    if (fresh && this.now() - h.at >= 2_000 && this.now() >= this.holdersFail.until) {
-      const scan = (this.holdersScan ??= withRpcPriority('high', () => this.scanHolders(nft, client, h)).finally(() => (this.holdersScan = null)));
-      await scan;
+    const h = this.indexFor(nft.address);
+    if (fresh && this.now() - h.at >= HOLDERS_FRESH_MS && this.now() >= this.holdersFail.until) {
+      if (this.holdersScan) this.raiseScan('high');
+      await (this.holdersScan ?? this.startScan('high', nft, client));
     }
     if (h.next === null) return null;
     const w = wallet.toLowerCase();
@@ -458,13 +696,19 @@ export class MintService {
     return out.sort((a, b) => Number(a) - Number(b));
   }
 
-  private async scanHolders(nft: { address: string; txHash: string | null }, client: EvmClient, h: HolderIndex): Promise<number> {
+  private async scanHolders(nft: { address: string; txHash: string | null }, client: EvmClient, h: HolderIndex, seq: number): Promise<number> {
+    // every call at the scan's priority of the moment (`raiseScan`: someone waits for it)
+    const call = <T>(fn: () => Promise<T>): Promise<T> => withRpcPriority(this.scanPrio, fn);
+    // the index will hold every block mined before this moment
+    const startedAt = this.now();
     try {
-      const latest = await client.blockNumber();
+      const latest = await call(() => client.blockNumber());
       if (h.next === null) {
         let start: bigint | null = null;
-        if (nft.txHash) start = await client.txBlock(nft.txHash as Hash);
-        start ??= await client.deployBlock(nft.address as Address);
+        if (nft.txHash) start = await call(() => client.txBlock(nft.txHash as Hash));
+        start ??= await call(() => client.deployBlock(nft.address as Address));
+        // without the NFT's first block it reads back HOLDERS_LOOKBACK_BLOCKS: a wallet it misses may hold one
+        h.complete = start !== null || latest <= HOLDERS_LOOKBACK_BLOCKS;
         h.next = start ?? (latest > HOLDERS_LOOKBACK_BLOCKS ? latest - HOLDERS_LOOKBACK_BLOCKS : 0n);
       }
       while (h.next! <= latest) {
@@ -473,7 +717,7 @@ export class MintService {
         const to: bigint = from + chunk - 1n < latest ? from + chunk - 1n : latest;
         let logs;
         try {
-          logs = await client.transferLogs(nft.address as Address, from, to);
+          logs = await call(() => client.transferLogs(nft.address as Address, from, to));
         } catch (err) {
           // a refused range (too wide / too many results) is halved; a rate limit is not the range's fault
           if (!isRateLimited(err) && chunk > HOLDERS_CHUNK_MIN) this.holdersChunk = chunk / 2n > HOLDERS_CHUNK_MIN ? chunk / 2n : HOLDERS_CHUNK_MIN;
@@ -490,6 +734,8 @@ export class MintService {
         h.next = to + 1n;
       }
       h.at = this.now();
+      h.coveredAt = startedAt;
+      h.coveredSeq = seq;
       this.holdersFail = { n: 0, until: -Infinity };
     } catch (err) {
       const n = this.holdersFail.n + 1;
@@ -498,7 +744,7 @@ export class MintService {
       this.log(`mint: holder index failed (${firstLine(err)}); next try in ${Math.round(wait / 1000)} s`);
     }
     // what is indexed so far is kept, also across restarts
-    if (h.next !== null) this.cache.set('holders', { nft: h.nft, next: h.next, balances: Object.fromEntries(h.balances), owners: Object.fromEntries(h.owners) });
+    if (h.next !== null) this.cache.set('holders', { nft: h.nft, next: h.next, balances: Object.fromEntries(h.balances), owners: Object.fromEntries(h.owners), complete: h.complete });
     return countHolders(h.balances);
   }
 
@@ -619,8 +865,18 @@ interface HolderIndex {
   balances: Map<string, number>;
   /** Token id (decimal) → owner (lower-case). */
   owners: Map<string, string>;
+  /** When the last scan finished. */
   at: number;
+  /** It holds every block mined before this moment (the last good scan's start; not kept across restarts), and its number. */
+  coveredAt: number;
+  coveredSeq: number;
+  /** It reads from the NFT's first block: a wallet it does not have holds none (else it may predate the index). */
+  complete: boolean;
 }
+
+const emptyIndex = (nft: string): HolderIndex => ({ nft, next: null, balances: new Map(), owners: new Map(), at: -Infinity, coveredAt: -Infinity, coveredSeq: 0, complete: false });
+
+const PRIORITY_RANK: Record<RpcPriority, number> = { low: 0, normal: 1, high: 2, critical: 3 };
 
 function countHolders(balances: Map<string, number>): number {
   let n = 0;

@@ -9,7 +9,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * - a token bucket (`RPC_MAX_RPS` calls per second, `RPC_BURST` burst) that every JSON-RPC call goes
  *   through (a JSON-RPC batch costs one token per call in it);
  * - priorities: `critical` (settlements, loot sweeps: the server's own payouts) is served before `high` (a paid
- *   join's ticket read, bounded server-wide by the gateway; the on-demand `Joined`-index refresh), `normal` (holder
+ *   join's ticket read, bounded server-wide by the gateway; the on-demand `Joined`-index refresh; the holder index
+ *   reading the new blocks for a gate decision or a holder ticket, one scan every 2 s at most), `normal` (holder
  *   checks, bounded server-wide; config, arena list, mint state) and `low` (staked-bot purchases, holder index, stale
  *   sweeper, balance checks); low-priority calls also leave a reserve of the burst untouched, so a join never waits
  *   behind a bot. Work any client can trigger never runs above `high`, and only bounded work runs there;

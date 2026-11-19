@@ -653,9 +653,9 @@ export class JoinPermits {
     for (const a of arenas) this.arenaIds.add(a.id);
     const arena = arenas.find((a) => a.id === arenaId);
     if (!arena || !arena.enabled) throw new JoinPermitFail(409, 'arena_closed', 'This room is not open.');
-    // the contract refuses a non-holder's ticket there: no permit (it could only hold a place). A holder check this
-    // client may not make right now, with no "holder" on record (`ClientBudgetError`, `site/mint.ts`), is busy: a
-    // holder is never told the room is not for them
+    // the contract refuses a non-holder's ticket there: no permit (it could only hold a place). Past this client's
+    // holder reads the holder index answers; only while it cannot tell (`ClientBudgetError`, `site/mint.ts`) is it
+    // busy: a holder is never told the room is not for them
     if (arena.holdersOnly && this.d.isHolder) {
       const holder = await this.d.isHolder(wallet).catch((err: unknown) => {
         if (err instanceof ClientBudgetError) throw new JoinPermitFail(503, 'chain_busy', CLIENT_BUSY_MESSAGE);
