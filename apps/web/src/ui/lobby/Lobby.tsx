@@ -29,7 +29,7 @@ import { ProfileCard } from '../../wallet/ProfileCard';
 import { LINK_X_ID } from '../profile/LinkX';
 import { signInWithWallet } from '../../wallet/signIn';
 import { TicketFlow, type FlowMode } from '../../wallet/TicketFlow';
-import { arenaRates, sessionsToCollect, type TicketKey } from '../../wallet/ticket';
+import { arenaRates, sessionsToCollect, ticketRates, type TicketKey } from '../../wallet/ticket';
 import { useChainData } from '../../wallet/chain';
 import { GetTokensLink } from '../../wallet/GetTokensLink';
 import { WalletButton } from '../../wallet/WalletButton';
@@ -346,6 +346,8 @@ function Plate({ page, inline }: { page: LobbyPage; inline: boolean }) {
   const chain = useUi((st) => st.chain);
   const rpcDown = useChainData((d) => d.rpcDown);
   const badPin = useChainData((d) => d.pin !== null && !d.pin.ok && d.pin.reason !== 'unreadable');
+  const config = useChainData((d) => d.config);
+  const holder = useChainData((d) => d.holder);
   // the first item is the arenas' state: never "open" while this page cannot read the chain or trust its contract
   const arenas = !chain?.enabled
     ? null
@@ -358,7 +360,8 @@ function Plate({ page, inline }: { page: LobbyPage; inline: boolean }) {
           : { text: t('lo.arenasSoon'), tone: 'warn' as const };
   const items = [
     arenas?.text ?? null,
-    chain?.enabled ? t('lo.feeDate', { pct: bpsToPercent(totalFeeBps(arenaRates(chain.fees))) }) : null,
+    // the rate this wallet's tickets get: an NFT holder's is the holder pair
+    chain?.enabled ? t('lo.feeDate', { pct: bpsToPercent(totalFeeBps(ticketRates(arenaRates(chain.fees, config), config, holder).rates)) }) : null,
     connected ? t('lo.online', { n: online }) : t('lo.live.connecting'),
   ].filter((x): x is string => x !== null);
   const titles: Record<LobbyPage, TKey> = { play: 'lo.plate.play', ranks: 'lo.plate.ranks', profile: 'lo.plate.profile', docs: 'lo.plate.docs' };
