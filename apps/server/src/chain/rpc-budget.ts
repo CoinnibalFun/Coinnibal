@@ -8,9 +8,10 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  *
  * - a token bucket (`RPC_MAX_RPS` calls per second, `RPC_BURST` burst) that every JSON-RPC call goes
  *   through (a JSON-RPC batch costs one token per call in it);
- * - priorities: `high` (paid joins, settlements, loot sweeps) is served before `normal` (config, arena
- *   list, mint state) and `low` (staked-bot purchases, holder index, stale sweeper, balance checks);
- *   low-priority calls also leave a reserve of the burst untouched, so a join never waits behind a bot;
+ * - priorities: `high` (settlements, loot sweeps) is served before `normal` (a join's ticket read, which any
+ *   signed-in wallet can ask for; config, arena list, mint state) and `low` (staked-bot purchases, holder index,
+ *   stale sweeper, balance checks); low-priority calls also leave a reserve of the burst untouched, so a join never
+ *   waits behind a bot;
  * - on a 429 (HTTP 429, or a JSON-RPC error with code 429 / -32005 / "rate limit"): a global cool-down
  *   (the `Retry-After` header when present, else exponential backoff with jitter), the rate is cut
  *   (multiplicative decrease, raised again slowly on success), and the request is retried in place

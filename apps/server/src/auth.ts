@@ -388,9 +388,16 @@ export class Auth {
     }
   }
 
-  /** Drops expired nonces once there are many. */
+  /**
+   * Drops expired nonces once there are many. Oldest first, so it stops at the first live one: a request costs the
+   * nonces that expired since the last, not a scan of the whole pool (a nonce given back after a wrong signature is
+   * queued again and waits a little longer).
+   */
   private prune(now: number): void {
     if (this.nonces.size < 1000) return;
-    for (const [k, v] of this.nonces) if (v.expires < now) this.dropNonce(k);
+    for (const [k, v] of this.nonces) {
+      if (v.expires >= now) break;
+      this.dropNonce(k);
+    }
   }
 }
