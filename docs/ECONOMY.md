@@ -16,8 +16,9 @@ default; the module that holds it is named so this page and the game cannot drif
 The token is the game token on Robinhood Chain (to be launched on Pons, mainnet only, after the NFT mint: a fixed
 supply of 1,000,000,000 with no mint after launch; on the testnet the bundled `TestToken`). **Nothing in Coinnibal mints the game token**: the arena only holds,
 pays out and burns tokens players brought, so every sink below shrinks circulation for good. The server key cannot
-mint either (the testnet `TestToken` is minted only by its owner and its public faucet: 1,000,000 an hour per
-wallet, 2,000,000 for emblem holders).
+mint either (the testnet `TestToken` is minted only by its owner and its public faucet: by default 1,000,000 an
+hour per wallet, 2,000,000 for emblem holders; the amounts and the cooldown are an owner setting, `/admin` → Setup →
+Advanced → TestToken faucet).
 
 ## 1. Arena tickets: priced in US dollars, paid in the token
 

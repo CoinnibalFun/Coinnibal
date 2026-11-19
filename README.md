@@ -176,8 +176,9 @@ Day-to-day running (gas for the server key, the allowlist, the mint price, pausi
   move tokens to a wallet of its choice, change the config or touch the fee wallet. Because the owner can
   replace it, trusting the server means trusting the owner. Protect it; it only needs a little ETH.
 - The owner (Ownable2Step) sets the token once, the fee pair on profit (at most 25 %), the burn mode, the fee wallet, the server
-  authority, arenas and pause; on the NFT, the phase, the allowlist root, the price within the bounds,
-  limits, metadata and withdrawals. The owner cannot change an open ticket's rates or the token once set.
+  authority, arenas and pause; on the NFT, the phase, the allowlist root, the price, the price keeper and its
+  bounds (only the keeper is held to them), limits, metadata and withdrawals. The owner cannot change an open
+  ticket's rates or the token once set.
 - The game outcome is trusted: who ate whom is decided by the server. Integrity detectors flag
   collusion and bot-like play for review; an optional auto-hold keeps high-risk payouts for a decision.
 

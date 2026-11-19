@@ -16,7 +16,7 @@ price at its USD target (`MINT_USD_CENTS`).
 
 | Drawer | What it does |
 |---|---|
-| **Network** | The chain the server follows, its RPCs, the server key and its gas, the contracts, the way to mainnet, and the live **launch checklist**: chain, server key gas, contracts deployed and registered, token, arenas, allowlist root, the mint price, mint phase, game access. Each line links to the drawer that fixes it |
+| **Network** | The chain the server follows, its RPCs, the server key and its gas, the contracts, the way to mainnet, and the live **launch checklist**: chain, server key gas, contracts deployed and registered, token, arenas, allowlist root, the mint price, mint phase, game access. A line that is not done links to the drawer that fixes it (the chain and the server key's gas: Network itself) |
 | **Setup** | The deploy wizard (CoinnibalArena v3, CoinnibalNFT and, on the testnet, the TestToken), Finish setup, holder perks, the TestToken faucet, register an already deployed contract |
 | **Mint** | Phase (closed / allowlist / public), publish the allowlist root, Sync to the USD target, price bounds and keeper, per-wallet limits, max supply (down only), base URI and freeze, contract URI, royalty, treasury, withdraw, owner mint |
 | **Game** | Who may play, pause and per-arena open / close, map sizes, **arena prices in US dollars** (the token price, the tiers, "Sync arena prices to USD", "Re-price at next bell"), arena instances (auto-scaling), custom rooms, power-ups (priced in US dollars, converted like the tickets), leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance and gas runway |
@@ -379,8 +379,9 @@ Everything is done from `/admin` with the owner wallet; nothing needs a terminal
 3. **Wallet.** Open `/admin`, connect the owner wallet and Sign in. The panel asks the wallet to add or switch to
    Robinhood Chain Testnet (chain id 46630, RPC, explorer) when it does not know it.
 4. **Deploy** (Setup → the deploy wizard; each step is previewed and registered with the server on success):
-   - **TestToken** (testnet only): an ERC20Burnable game token with a public faucet (1,000,000 an hour per wallet,
-     2,000,000 for NFT holders); apart from the faucet only the owner mints.
+   - **TestToken** (testnet only): an ERC20Burnable game token with a public faucet (by default 1,000,000 an hour per
+     wallet, 2,000,000 for NFT holders; Setup → Advanced → TestToken faucet changes the amounts and the cooldown);
+     apart from the faucet only the owner mints.
    - **CoinnibalArena v3** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
      The server checks the code hash and the server authority before it registers it.
    - **CoinnibalNFT** at the USD target (`MINT_USD_CENTS`) in ETH (the wizard reads ETH/USD).

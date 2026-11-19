@@ -2,7 +2,7 @@ import { createArenaCall, deployArenaParams, setFeeRatesCall } from '@coinnibal/
 import type { StatusSnapshot } from '@coinnibal/sdk/ops';
 import { describe, expect, it } from 'vitest';
 import { activeStep, arenaDeployArgs, defaultNftForm, deploySteps, loadLocalDeploys, nftDeployArgs, saveLocalDeploy } from '../src/admin/deploy';
-import { launchChecklist } from '../src/admin/LaunchTab';
+import { checklistLink, launchChecklist } from '../src/admin/LaunchTab';
 import { allowlistWarnings } from '../src/admin/MintTab';
 import { chainBlockers, resolveNetwork, walletChainNote } from '../src/admin/net';
 import { planRefusals, previewOf } from '../src/admin/plan';
@@ -27,7 +27,7 @@ describe('admin network: exactly the server chain (no pinned program id)', () =>
 
   it('blocks signing when the server is unreachable, has no chain, or the RPC disagrees', () => {
     expect(chainBlockers(resolveNetwork(null), null)[0]).toMatch(/cannot be reached/);
-    expect(chainBlockers(resolveNetwork(chainStatus({ enabled: false, chainId: null })), null)[0]).toMatch(/no chain/);
+    expect(chainBlockers(resolveNetwork(chainStatus({ enabled: false, chainId: null })), null)[0]).toMatch(/no chain: its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid/);
     expect(chainBlockers(resolveNetwork(chainStatus()), 46630)).toEqual([]);
     expect(chainBlockers(resolveNetwork(chainStatus()), 1)[0]).toMatch(/RPC this panel reads is on chain 1/);
     expect(chainBlockers(resolveNetwork(chainStatus({ arenaAddress: DEV_FAKE_ARENA_ADDRESS })), 46630)[0]).toMatch(/DEV_FAKE_CHAIN/);
@@ -161,6 +161,13 @@ describe('launch checklist and allowlist warnings', () => {
     expect(other.find((i) => i.id === 'authority')?.ok).toBe(false);
     const empty = launchChecklist({ net: resolveNetwork(chainStatus({ arenaAddress: null })), status: null, allowlist: null, settings: null, quote: null });
     expect(empty.find((i) => i.id === 'arena')).toMatchObject({ ok: false, tab: 'deploy' });
+    // Finish setup (Setup) creates the four arenas; the chain and the server key are fixed on Network itself
+    expect(empty.find((i) => i.id === 'arenas')?.tab).toBe('deploy');
+    expect(empty.filter((i) => i.tab === 'network').map((i) => i.id)).toEqual(['chain', 'server-key']);
+    const off = launchChecklist({ net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null, allowlist: null, settings: null, quote: null });
+    expect(off.find((i) => i.id === 'chain')).toMatchObject({ ok: false, detail: expect.stringMatching(/serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid/) });
+    // the links name the drawers the rail shows, not the old tab ids
+    expect((['deploy', 'arena', 'mint', 'settings'] as const).map(checklistLink)).toEqual(['Setup', 'Game', 'Mint', 'Settings']);
     expect(empty.find((i) => i.id === 'access')?.ok).toBeNull();
   });
 

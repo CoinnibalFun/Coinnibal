@@ -272,8 +272,10 @@ What to click (about 20 minutes; do it at a quiet hour):
    ```
    Check from your laptop: `curl -sS https://<GAME_DOMAIN>/api/health` works, `curl -k https://<VPS IP>/api/health`
    times out. Certificate renewals keep working (Let's Encrypt reaches Caddy through Cloudflare on port 80).
-9. **Check:** play a practice round; `/admin` → Network shows players' own addresses in the integrity tab, not
-   Cloudflare's.
+9. **Check:** `curl -sS -D - -o /dev/null https://<GAME_DOMAIN>/api/health` answers through Cloudflare (its headers
+   carry a `cf-ray` line). The per-IP limits now see each player's own address, because Caddy passes
+   `CF-Connecting-IP` on as the one `X-Forwarded-For` hop. `/admin` shows no IP addresses: Safety keeps only hashes
+   of them, keyed with the server's secret.
 
 To undo: the `game` record back to DNS only, `CADDY_CONFIG` removed (`coinnibal-compose up -d caddy`), and
 `iptables -F DOCKER-USER && ip6tables -F DOCKER-USER && netfilter-persistent save`.

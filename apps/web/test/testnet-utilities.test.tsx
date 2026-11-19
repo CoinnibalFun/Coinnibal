@@ -324,7 +324,9 @@ describe('admin groups', () => {
     // the real token cannot be registered before the arena uses it: it is typed by hand
     expect(groupSummary('setup', { net: mainnet, status: noTt }).next).toMatch(/enter it in Setup → Set the game token, by hand and typed twice/);
     for (const g of ['setup', 'mint', 'game', 'network'] as const) expect(groupSummary(g, { net: both, status: registered }).next ?? '').not.toMatch(/regist|paste/i);
-    expect(groupSummary('network', { net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null }).next).toMatch(/coinnibal-compose logs app.*COINNIBAL_RPC_URLS/);
+    const off = groupSummary('network', { net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null });
+    expect(off.now).toMatch(/its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid/);
+    expect(off.next).toMatch(/coinnibal-compose logs app.*COINNIBAL_RPC_URLS or SERVER_PRIVATE_KEY/);
     expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never }).next).toMatch(/open the testnet game \(Game → Who may play\)/);
   });
 
@@ -334,6 +336,10 @@ describe('admin groups', () => {
     expect(steps.filter((s) => s.ok === true)).toHaveLength(0);
     const main = mainnetChecklist(resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null })), null);
     expect(main[0].ok).toBe(true);
+    // the game opens last: the early access step keeps it on Admins, the final step opens it
+    expect(steps.find((s) => s.id === 'access')?.detail).toMatch(/Who may play in Game is Admins/);
+    expect(steps.find((s) => s.id === 'access')?.detail).not.toMatch(/Holders/);
+    expect(steps.at(-1)?.id).toBe('game');
   });
 
   it('marks an arena holders-only through the transaction preview', () => {
