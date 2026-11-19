@@ -69,7 +69,7 @@ Running it again is safe.
 | `GAME_DOMAIN` | the game server's domain (section 2; the live server's is `game.elymum.io`) |
 | `PUBLIC_URL`, `CORS_ORIGIN` | `https://coinnibal.fun` (the site's origin: SIWE sign-ins are bound to it) |
 | `ADMIN_WALLETS` | the owner's 0x address(es) |
-| `AUTH_SECRET` | `openssl rand -hex 32` (at least 32 bytes; the mainnet refuses to start with less), or empty for the generated `DATA_DIR/auth-secret` |
+| `AUTH_SECRET` | `openssl rand -hex 32` (at least 32 bytes; the mainnet refuses to start with less, also when `CHAIN_ID` is unset and the RPC serves the mainnet), or empty for the generated `DATA_DIR/auth-secret` |
 | `SERVER_PRIVATE_KEY` | `auto` (kept in the data volume and the backups) |
 | `COINNIBAL_CHAIN_ID` | optional: `46630` (testnet, the default when unset) or `4663` (mainnet) |
 | `COINNIBAL_RPC_URLS` | optional: the RPCs in order, comma-separated: the Alchemy URL first, the public RPC as fallback (section 5). Unset: `https://rpc.testnet.chain.robinhood.com` |

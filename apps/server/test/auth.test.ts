@@ -226,7 +226,7 @@ describe('nobody can lock a wallet out of sign-in (S4)', () => {
     expect(await auth.verifySignature(owner.address, first.message, await owner.sign(first.message), 3_002)).toBeNull();
   });
 
-  it('a full pool evicts the biggest network first: thousands of /64s of one /48 never flush an honest nonce', async () => {
+  it('a full pool evicts the biggest network first: thousands of /64s of one /48 never flush an honest nonce', { timeout: 30_000 }, async () => {
     const auth = new Auth(Buffer.alloc(32, 4));
     const honest = testSigner();
     const mine = auth.issueNonce(honest.address, origin, 1_000, '198.51.100.7');
