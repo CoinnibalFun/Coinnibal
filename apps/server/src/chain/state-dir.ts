@@ -90,7 +90,8 @@ export function rememberedChainId(dataDir: string, rpcUrl: string): number | nul
 }
 
 /**
- * The chain id this boot keys its state on: `eth_chainId` of `EVM_RPC_URL` (remembered per RPC),
+ * The chain id this boot keys its state on: `eth_chainId` of the first server RPC (`EVM_RPC_URLS`, else
+ * `EVM_RPC_URL`; remembered per RPC),
  * the remembered id when the RPC does not answer, else null. Null without a real chain configured
  * (and for the dev fake chain, which keeps its own files in `DATA_DIR`).
  */
@@ -103,11 +104,11 @@ export async function resolveStateChainId(
   try {
     const id = await (opts.readId ?? readChainId)(rpcUrl);
     if (!isSupportedChainId(id)) {
-      opts.log(`!!! chain: EVM_RPC_URL serves chain ${id}: ${unsupportedChainMessage(id)}. Arena money stays OFF`);
+      opts.log(`!!! chain: the RPC (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker) serves chain ${id}: ${unsupportedChainMessage(id)}. Arena money stays OFF`);
       return null;
     }
     if (cfg.chain.chainIdExplicit && id !== cfg.chain.chainId) {
-      opts.log(`!!! chain: CHAIN_ID is ${cfg.chain.chainId} but EVM_RPC_URL serves chain ${id}: arena money stays OFF (fix CHAIN_ID or the RPC and restart)`);
+      opts.log(`!!! chain: CHAIN_ID is ${cfg.chain.chainId} but the RPC (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker) serves chain ${id}: arena money stays OFF (fix CHAIN_ID or the RPC: COINNIBAL_CHAIN_ID / COINNIBAL_RPC_URLS on the VPS, then restart)`);
       return null;
     }
     if (opts.persist) rememberChainId(cfg.dataDir, rpcUrl, id);

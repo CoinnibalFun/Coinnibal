@@ -90,7 +90,7 @@ export const hyperliquidPrice =
     fetchGasUsd({ url, timeoutMs: 10_000 });
 
 /**
- * The mint side of the site: the NFT's state, gas-token/USD and the $1 price, holders (for the game gate
+ * The mint side of the site: the NFT's state, gas-token/USD and the mint price (MINT_USD_CENTS), holders (for the game gate
  * and the mint page), the allowlist snapshot and its Merkle proofs, and the token metadata.
  */
 export class MintService {
@@ -436,8 +436,13 @@ export class MintService {
     return countHolders(h.balances);
   }
 
-  /** `GET /api/site/mint`. */
-  async publicState(gameAccess: GameAccess): Promise<MintState> {
+  /**
+   * `GET /api/site/mint`. `showTarget`: whether the answer carries the USD target (`MINT_USD_CENTS`, as
+   * `targetUsdCents`): the route passes true only while the mint page is open (Settings → "Mint page open") or for
+   * a signed-in admin. Otherwise the field is left out, so the public answer names no mint price target while the
+   * mint is closed. `GET /api/admin/mint/price` always has it.
+   */
+  async publicState(gameAccess: GameAccess, showTarget = false): Promise<MintState> {
     const nft = this.deps.nft();
     const [s, p, holders] = await Promise.all([this.chainState(), this.gasUsd(), this.holdersCount()]);
     const contract: MintContractState | null = s
@@ -462,7 +467,7 @@ export class MintService {
       contract,
       gasUsd: p?.value ?? null,
       priceUsd: s && p ? weiToUsdCents(s.price, p.price) / 100 : null,
-      targetUsdCents: this.deps.usdCents,
+      ...(showTarget ? { targetUsdCents: this.deps.usdCents } : {}),
       holders,
       soldOut: s?.soldOut ?? false,
       gameAccess,

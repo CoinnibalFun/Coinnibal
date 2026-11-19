@@ -8,6 +8,7 @@ import type { Address, Hash } from 'viem';
 import { describeError } from '@coinnibal/sdk';
 import { ensureChain } from '../wallet/network';
 import { connected } from '../wallet/store';
+import { NO_TEST_TOKEN_YET } from './setup';
 import { activeStep, arenaDeployArgs, defaultNftForm, deploySteps, loadLocalDeploys, nftDeployArgs, saveLocalDeploy, type LocalDeploys, type NftForm } from './deploy';
 import { Icon } from '../design';
 import { Addr, Advanced, Btn, Card, FormError, Input, NeedsSession, Row, useFormError, type ChainCtx } from './ui';
@@ -72,7 +73,19 @@ export function DeployTab({ ctx, advanced = false }: { ctx: ChainCtx; advanced?:
         {active === 'register' && <RegisterStep ctx={ctx} local={local} onLocal={setLocal} kicker={kicker(n)} autoErr={autoErr} />}
         {active === 'token' &&
           (advanced ? (
-            <Card title="Set the game token" id="deploy-token-note" kicker={kicker(n)} tone="quiet" lede="Finish setup (top of Setup) sets it, or the game token card in this section with one confirmation." />
+            <Card
+              title="Set the game token"
+              id="deploy-token-note"
+              kicker={kicker(n)}
+              tone="quiet"
+              lede={
+                net.mainnet
+                  ? 'The game token card above sets it: the token launched on Pons, typed twice.'
+                  : status?.testToken?.address
+                    ? 'Finish setup (top of Setup) sets it, or the game token card in this section with one confirmation.'
+                    : NO_TEST_TOKEN_YET
+              }
+            />
           ) : (
             <SetTokenForm ctx={ctx} kicker={kicker(n)} />
           ))}
@@ -111,7 +124,7 @@ function DoneCard({ ctx }: { ctx: ChainCtx }) {
     { name: 'CoinnibalNFT', address: ctx.net.nftAddress, code: ctx.status?.nft?.code },
   ];
   return (
-    <Card title="The ring is built." id="deploy-done" kicker="All seven steps" tone="done" lede="Both contracts are live and registered, the token is set and the four arenas exist. Network (the launch checklist) shows what is left: the allowlist, the mint and who may play.">
+    <Card title="The ring is built." id="deploy-done" kicker="All seven steps" tone="done" lede="Both contracts are live and registered, the token is set and the four arenas exist. Network (the launch checklist) shows what is left: the site pins (Site pins, above), the allowlist, the mint and who may play.">
       <ul className="ad-registered">
         {rows.map((r) => (
           <li key={r.name}>
@@ -290,7 +303,7 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
   const [form, setForm] = useState<NftForm>(() => defaultNftForm(location.origin, null, ctx.me));
   const [quote, setQuote] = useState<string | null>(null);
   const [err, guard, setErr] = useFormError();
-  // the $1 price in wei from the server (the gas token's USD price feed)
+  // the mint price (MINT_USD_CENTS) in wei from the server (the gas token's USD price feed)
   useEffect(() => {
     if (!ctx.api) return;
     let live = true;
@@ -485,9 +498,10 @@ export function registeredToken(ctx: Pick<ChainCtx, 'registry' | 'status'>): Add
 }
 
 /**
- * The set-token rail. With a token registered on the server (TOKEN_ADDRESS, or the deployed
- * TestToken) the owner only confirms it (the preview is the confirmation). A different address is
- * an override under Advanced, typed twice. It can be set only once.
+ * The set-token rail. With a token registered on the server (the deployed TestToken, or TOKEN_ADDRESS
+ * on a server outside Docker) the owner only confirms it (the preview is the confirmation). The real
+ * game token cannot be registered before the arena uses it (`registerContract`), so on the mainnet it
+ * is entered under Advanced, typed twice. It can be set only once.
  */
 export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }) {
   const [a, setA] = useState('');
@@ -532,7 +546,9 @@ export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }
       lede={
         known
           ? 'The ERC-20 the arenas take. The server already knows it: check it, then confirm once in the preview. It can never be changed.'
-          : 'The ERC-20 the arenas take (the game token). The server has no game token registered yet: register it (Setup → Advanced → Register a contract that is already deployed; TOKEN_ADDRESS when the server runs outside Docker) and it shows up here, or enter it by hand below.'
+          : ctx.net.mainnet
+            ? 'The ERC-20 the arenas take: the game token launched on Pons. The server registers no token before the arena uses it, so enter it by hand below, typed twice, and check it against the official announcement. (TOKEN_ADDRESS names it here only on a server outside Docker; the VPS setup clears that key.)'
+            : 'The ERC-20 the arenas take. No TestToken is registered yet: deploy one (Setup → TestToken) and it shows up here, to confirm once. Any other token is entered by hand below, typed twice.'
       }
     >
       {known && (
@@ -633,7 +649,7 @@ export function TestTokenCard({ ctx, local: given, onLocal: onGiven }: { ctx: Ch
   if (refusal) return null;
   const token = (ctx.status?.arena?.config?.token ?? registeredToken(ctx) ?? local.token?.address ?? null) as Address | null;
   return (
-    <Card title="TestToken" id="test-token" kicker="Off mainnet only" tone="quiet" lede={`A mintable ERC-20 with a faucet (1,000,000 per hour), to try the arena before the game token exists. ${testTokenArtifact.contractName} is never offered on mainnet.`}>
+    <Card title="TestToken" id="test-token" kicker="Off mainnet only" tone="quiet" lede={`A mintable ERC-20 with a faucet (by default 1,000,000 per hour), to try the arena before the game token exists. ${testTokenArtifact.contractName} is never offered on mainnet.`}>
       {token && (
         <p className="ad-inline">
           <span className="ad-registered__name">Token</span> <Addr value={token} net={ctx.net} />

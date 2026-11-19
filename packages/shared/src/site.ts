@@ -275,7 +275,7 @@ export type SiteErrorCode =
   | 'not_owner'
   /** Contracts registry: the arena's server authority is not the server key. */
   | 'wrong_authority'
-  /** The server has no chain (`EVM_RPC_URL` unset) or the contract is not registered. */
+  /** The server has no chain (its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid) or the contract is not registered. */
   | 'chain_off'
   /** The upstream price feed (gas token / USD) could not be read. */
   | 'price_unavailable'
@@ -443,8 +443,11 @@ export interface MintState {
   gasUsd: number | null;
   /** Current mint price in USD at `gasUsd`; null when either is unknown. */
   priceUsd: number | null;
-  /** The target the price is kept at (`MINT_USD_CENTS`). */
-  targetUsdCents: number;
+  /**
+   * The target the price is kept at (`MINT_USD_CENTS`). Left out while the mint page is closed (Settings → "Mint page
+   * open" off), unless a signed-in admin asks.
+   */
+  targetUsdCents?: number;
   /** Distinct holders (wallets with `balanceOf > 0`). */
   holders: number;
   /** `totalSupply >= maxSupply`. */

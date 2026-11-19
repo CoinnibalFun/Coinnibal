@@ -76,7 +76,7 @@ export type MintPhaseName = (typeof MINT_PHASE_NAMES)[number];
 export const MAX_ROYALTY_BPS = 1_000;
 /** Default overpayment on a mint (1 %): the contract refunds the excess, so a price change in between cannot fail the mint. */
 export const DEFAULT_MINT_BUFFER_BPS = 100;
-/** Hyperliquid's public info API (POST `{"type":"allMids"}`): ETH's USD price (the $1 NFT mint). */
+/** Hyperliquid's public info API (POST `{"type":"allMids"}`): ETH's USD price (for the NFT mint price, MINT_USD_CENTS). */
 export const GAS_PRICE_URL_DEFAULT = 'https://api.hyperliquid.xyz/info';
 
 /**

@@ -1,7 +1,7 @@
 # Coinnibal "Roadmap Chomp" (14 s, 1920x1080, 1080x1920 and 1080x1080, 60 fps)
 
 > **Before the next render.** The second heading still reads "$1 MINT" (`scenes/scenes.js`): the current game
-> publishes no mint price, so it becomes "MINT" ([media/README.md](../README.md)).
+> names no mint price, so it becomes "MINT" ([media/README.md](../README.md)).
 
 Modern and minimal: the Storybook plain (`#F8F7F4`), a faint dot grid, one ink (`#04181C`) and lots of
 air, a light grain and no vignette. The X profile coin (the sun coin of `brand/out/x`, drawn by the

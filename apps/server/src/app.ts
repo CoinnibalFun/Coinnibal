@@ -71,7 +71,7 @@ export interface App {
   mint: MintService;
   /** The emblem collection: committed seed, provenance, reveal, metadata and art (`DATA_DIR/chains/<id>/nft-collection.json`). */
   nft: NftCollection;
-  /** Keeps the mint price at $1 in the gas token when the server key is the NFT's price keeper; null without a chain. */
+  /** Keeps the mint at the mint price (MINT_USD_CENTS) in the gas token when the server key is the NFT's price keeper; null without a chain. */
   priceKeeper: PriceKeeper | null;
   /** Cheat and collusion detection: telemetry, flags, bans, auto-hold (`/api/admin/integrity/*`). */
   integrity: IntegrityService;
@@ -236,7 +236,7 @@ export async function createApp(
   });
   site.setIntegrity(integrity);
   const held = journal.held().length;
-  if (held > 0) log(`integrity: ${held} settlement(s) held for admin review (/admin → Integrity)`);
+  if (held > 0) log(`integrity: ${held} settlement(s) held for admin review (/admin → Safety → Held settlements)`);
 
   // the admin's map settings per room kind (DATA_DIR/site/maps.json; taken over once from the old bots.json)
   const mapSettings = new MapSettingsStore(persist ? cfg.dataDir : null, log);

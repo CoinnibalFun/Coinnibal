@@ -80,7 +80,7 @@ export function mintedTokenIds(logs: readonly Log[], nft: Address, to: Address):
 /** The game is open to holders (or everyone): the success state offers Play. */
 export const playOpenForHolders = (access: GameAccess | null | undefined): boolean => access === 'holders' || access === 'public';
 
-/** `0.0312` of the gas token ≈ `$1.00`: a USD amount for display (null when unknown). */
+/** `0.0004` ETH ≈ `$1.30`: a USD amount for display (null when unknown). */
 export function usdText(usd: number | null | undefined): string | null {
   if (usd === null || usd === undefined || !Number.isFinite(usd)) return null;
   return `$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -113,19 +113,22 @@ export function livePerks(quote: { enabled: boolean; tiers: { holdersOnly: boole
 
 /**
  * What the page may say about the price. `testnet`: a fixed test price (say it plainly, and that
- * mainnet is much cheaper). `dollar`: the price really tracks the USD target (within ±10 %), so
- * the "one dollar" story holds. `plain`: neither (the feed is off or the price drifted): state
- * the gas-token price and nothing more.
+ * mainnet is much cheaper). `dollar`: the live price is within ±10 % of the owner's USD target
+ * (MINT_USD_CENTS, sent only while the mint page is open, or to a signed-in admin); the copy is
+ * the same as `plain`, which names no dollar figure; only `data-story` differs. `plain`: neither
+ * (the feed is off, the price drifted or no target was sent): state the gas-token price and
+ * nothing more.
  */
 export type PriceStory = 'testnet' | 'dollar' | 'plain';
 
-/** How far the USD price may sit from the target and still be called "a dollar". */
+/** How far the USD price may sit from the target and still count as on target. */
 export const DOLLAR_TOLERANCE = 0.1;
 
 export function priceStory(s: Pick<MintState, 'priceUsd' | 'targetUsdCents' | 'chainId'>, testnet: boolean | null): PriceStory {
   const onTestnet = testnet ?? (s.chainId != null ? isTestChainId(s.chainId) : null);
   if (onTestnet) return 'testnet';
-  const target = s.targetUsdCents / 100;
+  // the server leaves the target out while the mint page is closed (admins aside): no target, no dollar story
+  const target = (s.targetUsdCents ?? 0) / 100;
   if (s.priceUsd !== null && Number.isFinite(s.priceUsd) && target > 0 && Math.abs(s.priceUsd - target) <= target * DOLLAR_TOLERANCE) return 'dollar';
   return 'plain';
 }

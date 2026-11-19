@@ -13,11 +13,12 @@ default; the module that holds it is named so this page and the game cannot drif
 | Custom rooms (in US cents, converted like the tickets; paid like a power-up pack) | `CUSTOM_SETTINGS_DEFAULT`, `customRoomCost`, `packages/shared/src/custom-rooms.ts`; `apps/server/src/rooms/custom.ts` |
 | Loot | `RULES.loot*`, `packages/shared/src/constants.ts` |
 
-The token is the game token on Robinhood Chain (launched on Pons: a fixed supply of 1,000,000,000 with no mint after
-launch; on the testnet the bundled `TestToken`). **Nothing in Coinnibal mints the game token**: the arena only holds,
+The token is the game token on Robinhood Chain (to be launched on Pons, mainnet only, after the NFT mint: a fixed
+supply of 1,000,000,000 with no mint after launch; on the testnet the bundled `TestToken`). **Nothing in Coinnibal mints the game token**: the arena only holds,
 pays out and burns tokens players brought, so every sink below shrinks circulation for good. The server key cannot
-mint either (the testnet `TestToken` is minted only by its owner and its public faucet: 1,000,000 an hour per
-wallet, 2,000,000 for emblem holders).
+mint either (the testnet `TestToken` is minted only by its owner and its public faucet: by default 1,000,000 an
+hour per wallet, 2,000,000 for emblem holders; the amounts and the cooldown are an owner setting, `/admin` → Setup →
+Advanced → TestToken faucet).
 
 ## 1. Arena tickets: priced in US dollars, paid in the token
 
@@ -166,7 +167,8 @@ power-ups.
 ## 6. The Coinnibal NFT (emblem)
 
 Minted in ETH at the owner's USD target (`MINT_USD_CENTS`; `/admin` → Mint → Sync, or the price keeper within
-owner-set bounds; no price is published), allowlist first, then public; proceeds go to the NFT treasury. The visitor
+owner-set bounds; no visitor copy names a price or shows the target; the mint page, once open, shows the contract's
+live price in ETH), allowlist first, then public; proceeds go to the NFT treasury. The visitor
 site says the mint will be on OpenSea (only through the link the project's X account posts); how that sale and this
 contract's own phases and `/mint` page fit together is an open owner decision. What it does in the economy:
 

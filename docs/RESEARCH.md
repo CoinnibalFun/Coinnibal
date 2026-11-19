@@ -1,7 +1,7 @@
 # Research: Robinhood Chain and Pons
 
 Coinnibal runs on **Robinhood Chain only**: Robinhood Chain Testnet now, Robinhood Chain (mainnet) later, switched by
-`CHAIN_ID` and nothing else. This page records what the code relies on, where each value comes from, and what is
+`CHAIN_ID` (the server) and a site rebuild for that chain with its contract pins (DEPLOY.md section 5). This page records what the code relies on, where each value comes from, and what is
 still unconfirmed. Researched 2026-11-05. The values used in code are in `packages/shared/src/chains.ts`.
 
 Status labels: **confirmed** (in the chain's or the project's own documentation), **third party** (a reputable
@@ -68,7 +68,7 @@ From Robinhood's "differences from Ethereum" page (Arbitrum Nitro behaviour):
 The game token is meant to be launched on **Pons** ([docs.ponsfamily.com](https://docs.ponsfamily.com),
 [V2 docs](https://docs.ponsfamily.com/docs/v2); [Bitquery's Pons API docs](https://docs.bitquery.io/docs/blockchain/robinhood/pons-api/);
 an explainer: [BingX, "What is Pons"](https://bingx.com/en/learn/article/what-is-pons-crypto-and-how-does-pons-robinhood-launchpad-work), third party). V2 went live on 2026-08-04, on **Robinhood Chain mainnet only** (no testnet deployment): on the testnet
-the game uses the bundled `TestToken` (ERC20Burnable; its public `faucet()` gives 1,000,000 an hour, 2,000,000 to emblem holders, and only its owner mints otherwise).
+the game uses the bundled `TestToken` (ERC20Burnable; its public `faucet()` gives by default 1,000,000 an hour, 2,000,000 to emblem holders (the owner can change the amounts and the cooldown), and only its owner mints otherwise).
 
 | Fact | Value | Status |
 |---|---|---|

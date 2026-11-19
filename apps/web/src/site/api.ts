@@ -92,7 +92,7 @@ const FALLBACK: Partial<Record<SiteApiError['code'], string>> = {
   code_mismatch: 'That address holds no code, or code other than the Coinnibal contract this server ships with.',
   not_owner: 'The contract owner is not the signed-in admin wallet.',
   wrong_authority: "The arena's server authority is not this server's key.",
-  chain_off: 'The server has no chain configured, or the contract is not registered.',
+  chain_off: 'The server has no chain (its RPC did not answer, serves another chain or is not set, or it has no usable server key), or the contract is not registered.',
   price_unavailable: 'The gas token price feed is unavailable right now.',
 };
 
@@ -314,7 +314,7 @@ export function adminApi(token: string) {
     allowlist: () => request<AllowlistStatus>('/api/admin/mint/allowlist', { token }),
     /** `POST /api/admin/mint/refresh`: the server re-reads the NFT now (after an owner transaction), for the public mint page. */
     mintRefresh: () => request<{ refreshed: boolean }>('/api/admin/mint/refresh', { method: 'POST', token, body: {} }),
-    /** `GET /api/admin/mint/price`: the gas token's USD price and the $1 price in wei. */
+    /** `GET /api/admin/mint/price`: the gas token's USD price and the mint price (MINT_USD_CENTS) in wei. */
     mintPrice: () => request<MintPriceQuote>('/api/admin/mint/price', { token }),
     tasks: () => request<{ tasks: WlTask[] }>('/api/admin/tasks', { token }).then((r) => r.tasks),
     createTask: (t: TaskInput) => request<{ task: WlTask }>('/api/admin/tasks', { method: 'POST', token, body: t }).then((r) => r.task),

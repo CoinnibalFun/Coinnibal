@@ -2,7 +2,7 @@ import { createArenaCall, deployArenaParams, setFeeRatesCall } from '@coinnibal/
 import type { StatusSnapshot } from '@coinnibal/sdk/ops';
 import { describe, expect, it } from 'vitest';
 import { activeStep, arenaDeployArgs, defaultNftForm, deploySteps, loadLocalDeploys, nftDeployArgs, saveLocalDeploy } from '../src/admin/deploy';
-import { launchChecklist } from '../src/admin/LaunchTab';
+import { checklistLink, launchChecklist } from '../src/admin/LaunchTab';
 import { allowlistWarnings } from '../src/admin/MintTab';
 import { chainBlockers, resolveNetwork, walletChainNote } from '../src/admin/net';
 import { planRefusals, previewOf } from '../src/admin/plan';
@@ -27,7 +27,7 @@ describe('admin network: exactly the server chain (no pinned program id)', () =>
 
   it('blocks signing when the server is unreachable, has no chain, or the RPC disagrees', () => {
     expect(chainBlockers(resolveNetwork(null), null)[0]).toMatch(/cannot be reached/);
-    expect(chainBlockers(resolveNetwork(chainStatus({ enabled: false, chainId: null })), null)[0]).toMatch(/no chain/);
+    expect(chainBlockers(resolveNetwork(chainStatus({ enabled: false, chainId: null })), null)[0]).toMatch(/no chain: its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid/);
     expect(chainBlockers(resolveNetwork(chainStatus()), 46630)).toEqual([]);
     expect(chainBlockers(resolveNetwork(chainStatus()), 1)[0]).toMatch(/RPC this panel reads is on chain 1/);
     expect(chainBlockers(resolveNetwork(chainStatus({ arenaAddress: DEV_FAKE_ARENA_ADDRESS })), 46630)[0]).toMatch(/DEV_FAKE_CHAIN/);
@@ -71,8 +71,11 @@ describe('the deploy wizard steps', () => {
     expect(activeStep(deploySteps({ ...base, net: none, status: null, local: { arena: { address: ARENA, txHash: null }, nft: { address: NFT, txHash: null } } }))).toBe('register');
     const both = resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT }));
     expect(activeStep(deploySteps({ ...base, net: both, status: status({ nft: true }) }))).toBe('token');
-    // the wizard never asks to type an address, the token step included
+    // on a testnet the wizard never asks to type an address, the token step included
     expect(deploySteps({ ...base, net: both, status: status({ nft: true }) }).find((x) => x.id === 'token')?.detail).not.toMatch(/typed twice/i);
+    // mainnet: the server cannot register the real token before the arena uses it, so it is typed twice
+    const main = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, arenaAddress: ARENA, nftAddress: NFT }));
+    expect(deploySteps({ ...base, walletChainId: 4663, net: main, status: status({ nft: true }) }).find((x) => x.id === 'token')?.detail).toMatch(/launched on Pons, entered by hand and typed twice/);
     expect(activeStep(deploySteps({ ...base, net: both, status: status({ nft: true, token: BOB, arenas: [1, 2] }) }))).toBe('arenas');
     const done = deploySteps({ ...base, net: both, status: status({ nft: true, token: BOB, arenas: [1, 2, 3, 4] }) });
     expect(activeStep(done)).toBeNull();
@@ -92,7 +95,7 @@ describe('the deploy wizard steps', () => {
     expect(() => arenaDeployArgs(ALICE, null)).toThrow(/no server key/);
   });
 
-  it('NFT defaults: the fixed supply 3,333, the $1 price, 1 / 2 per wallet, `${origin}/api/nft/`, treasury = you', () => {
+  it('NFT defaults: the fixed supply 3,333, the mint price (MINT_USD_CENTS, $1 in the fixture), 1 / 2 per wallet, `${origin}/api/nft/`, treasury = you', () => {
     const form = defaultNftForm('https://coinnibal.test/', '30000000000000000', ALICE);
     expect(form).toEqual({ maxSupply: '3333', priceGas: '0.03', wlLimit: '1', publicLimit: '2', baseURI: 'https://coinnibal.test/api/nft/', treasury: ALICE });
     expect(nftDeployArgs(form, ALICE)).toEqual({ owner: ALICE, maxSupply: 3333, mintPrice: 30_000_000_000_000_000n, wlLimit: 1, publicLimit: 2, baseURI: 'https://coinnibal.test/api/nft/', treasury: ALICE });
@@ -158,6 +161,13 @@ describe('launch checklist and allowlist warnings', () => {
     expect(other.find((i) => i.id === 'authority')?.ok).toBe(false);
     const empty = launchChecklist({ net: resolveNetwork(chainStatus({ arenaAddress: null })), status: null, allowlist: null, settings: null, quote: null });
     expect(empty.find((i) => i.id === 'arena')).toMatchObject({ ok: false, tab: 'deploy' });
+    // Finish setup (Setup) creates the four arenas; the chain and the server key are fixed on Network itself
+    expect(empty.find((i) => i.id === 'arenas')?.tab).toBe('deploy');
+    expect(empty.filter((i) => i.tab === 'network').map((i) => i.id)).toEqual(['chain', 'server-key']);
+    const off = launchChecklist({ net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null, allowlist: null, settings: null, quote: null });
+    expect(off.find((i) => i.id === 'chain')).toMatchObject({ ok: false, detail: expect.stringMatching(/serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid/) });
+    // the links name the drawers the rail shows, not the old tab ids
+    expect((['deploy', 'arena', 'mint', 'settings'] as const).map(checklistLink)).toEqual(['Setup', 'Game', 'Mint', 'Settings']);
     expect(empty.find((i) => i.id === 'access')?.ok).toBeNull();
   });
 

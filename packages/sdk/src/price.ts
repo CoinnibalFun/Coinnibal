@@ -1,7 +1,7 @@
 import { GAS_PRICE_URL_DEFAULT } from './constants';
 
 /**
- * ETH's USD price (Robinhood Chain's gas token) and the $1 mint price.
+ * ETH's USD price (Robinhood Chain's gas token) and the mint price (MINT_USD_CENTS) in wei.
  *
  * The price comes from Hyperliquid's public info API (a price source only, any exchange API would do):
  * `POST {"type":"allMids"}` returns a map of mid prices as decimal strings, keyed by coin (`ETH`). All conversions are
