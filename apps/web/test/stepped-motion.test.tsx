@@ -110,4 +110,48 @@ describe('a landing section pauses its loops off screen without re-rendering', (
       globalThis.IntersectionObserver = real;
     }
   });
+
+  it('coming back on screen, it leaves paused an SVG that is off screen by its own pause or stepped from script', () => {
+    let fire: (visible: boolean) => void = () => {};
+    const real = globalThis.IntersectionObserver;
+    globalThis.IntersectionObserver = class {
+      constructor(cb: IntersectionObserverCallback) {
+        fire = (visible) => cb([{ isIntersecting: visible } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+      observe() {}
+      disconnect() {}
+    } as unknown as typeof IntersectionObserver;
+    function Section() {
+      const ref = useRef<HTMLElement>(null);
+      useOffscreenPausedBlock(ref);
+      return (
+        <section ref={ref}>
+          <svg data-testid="plain" />
+          {/* the round's orbit while it is still below the screen: its own useOffscreenPause marks it */}
+          <svg data-testid="own" data-paused="" />
+          <div data-paused="">
+            <svg data-testid="inner" />
+          </div>
+          {/* the orbit on a touch phone: useSteppedSmil moves it */}
+          <svg data-testid="stepped" data-stepped="" />
+        </section>
+      );
+    }
+    type Smil = SVGSVGElement & { pauseAnimations: () => void; unpauseAnimations: () => void };
+    try {
+      const { getByTestId } = render(<Section />);
+      const svgs = ['plain', 'own', 'inner', 'stepped'].map((id) => {
+        const svg = getByTestId(id) as unknown as Smil;
+        svg.pauseAnimations = vi.fn();
+        svg.unpauseAnimations = vi.fn();
+        return svg;
+      });
+      act(() => fire(false));
+      for (const svg of svgs) expect(svg.pauseAnimations).toHaveBeenCalledTimes(1);
+      act(() => fire(true));
+      expect(svgs.map((svg) => (svg.unpauseAnimations as ReturnType<typeof vi.fn>).mock.calls.length)).toEqual([1, 0, 0, 0]);
+    } finally {
+      globalThis.IntersectionObserver = real;
+    }
+  });
 });

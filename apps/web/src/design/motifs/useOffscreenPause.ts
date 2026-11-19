@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
-/** Pauses (or resumes) the SVG SMIL timelines at or under `el`. */
+/**
+ * Pauses (or resumes) the SVG SMIL timelines at or under `el`. Resuming skips an SVG that something else keeps paused:
+ * one still under a `[data-paused]` element (its own `useOffscreenPause` marks it off screen, and resumes it when it comes
+ * on screen) and one that `useSteppedSmil` drives (`[data-stepped]`, moved from script on a touch phone). A section that
+ * came on screen used to resume the round's orbit while the orbit itself was still off screen, and its SMIL then ran at
+ * the full frame rate (#round: 58-65 % of a throttled phone's idle main thread).
+ */
 function pauseSmil(el: Element | null, paused: boolean): void {
   const svgs: SVGSVGElement[] = el instanceof SVGSVGElement ? [el] : [...(el?.querySelectorAll('svg') ?? [])];
   for (const s of svgs) {
     if (typeof s.pauseAnimations !== 'function') continue;
     if (paused) s.pauseAnimations();
-    else s.unpauseAnimations();
+    else if (!s.closest('[data-paused]') && !s.hasAttribute('data-stepped')) s.unpauseAnimations();
   }
 }
 
