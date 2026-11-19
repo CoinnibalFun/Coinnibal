@@ -150,8 +150,10 @@ describe('connection slots', () => {
   });
 
   it('signed-in sockets are bounded per IPv6 /64 and per /48, not per address', async () => {
-    const { SIGNED_PER_IP_FACTOR } = await import('../src/net/gateway');
-    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-slots6-')), GAME_ACCESS: 'public', NODE_ENV: 'development', MAX_CONNECTIONS: '200', MAX_CONNECTIONS_PER_IP: '1', MAX_CONNECTIONS_PER_SUBNET: '2' } as unknown as NodeJS.ProcessEnv);
+    const { SIGNED_PER_IP_FACTOR, SIGNED_PER_NET_FACTOR } = await import('../src/net/gateway');
+    // the /48 holds 4 x SIGNED_PER_NET_FACTOR (16) signed-in sockets: two /64s' worth
+    expect(4 * SIGNED_PER_NET_FACTOR).toBe(2 * SIGNED_PER_IP_FACTOR);
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-slots6-')), GAME_ACCESS: 'public', NODE_ENV: 'development', MAX_CONNECTIONS: '200', MAX_CONNECTIONS_PER_IP: '1', MAX_CONNECTIONS_PER_SUBNET: '4' } as unknown as NodeJS.ProcessEnv);
     const other = await createApp(cfg, { chain: new NullChain(), log: () => {}, persist: false });
     const p2 = await other.listen();
     const socks: WebSocket[] = [];
@@ -169,7 +171,7 @@ describe('connection slots', () => {
       for (let i = 0; i < SIGNED_PER_IP_FACTOR + 2; i++) one64.push(await tryOpen(`2001:db8:1:1::${(i + 1).toString(16)}`));
       expect(one64.filter((g) => g === 'open')).toHaveLength(SIGNED_PER_IP_FACTOR);
       expect(one64.at(-1)).toBe(429);
-      // more /64s of the same /48: the /48 holds 2 x 8 in all
+      // more /64s of the same /48: the /48 holds 4 x 4 in all
       const one48: (number | 'open')[] = [];
       for (let i = 0; i < SIGNED_PER_IP_FACTOR + 2; i++) one48.push(await tryOpen(`2001:db8:1:${(i + 2).toString(16)}::1`));
       expect(one48.filter((g) => g === 'open')).toHaveLength(SIGNED_PER_IP_FACTOR);
@@ -177,6 +179,114 @@ describe('connection slots', () => {
       expect(await tryOpen('2001:db8:2:1::1')).toBe('open');
     } finally {
       for (const ws of socks) ws.terminate();
+      await other.close();
+    }
+  });
+
+  it('one IPv6 /48 cannot take the guest share: guests are bounded per /48 too (R2-NET-4)', async () => {
+    const { GUESTS_PER_WIDE_FACTOR } = await import('../src/net/gateway');
+    // 80 guest places; a guest bound of 2 per address, 6 per /64 and 6 x 2 per /48
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-slots-g48-')), GAME_ACCESS: 'public', NODE_ENV: 'development', MAX_CONNECTIONS: '100', MAX_CONNECTIONS_PER_IP: '2', MAX_CONNECTIONS_PER_SUBNET: '6' } as unknown as NodeJS.ProcessEnv);
+    const other = await createApp(cfg, { chain: new NullChain(), log: () => {}, persist: false });
+    const p2 = await other.listen();
+    const socks: WebSocket[] = [];
+    const tryOpen = (ip: string) =>
+      new Promise<number | 'open'>((resolve) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${p2}/ws`, ['coinnibal'], { headers: { 'X-Forwarded-For': ip } });
+        socks.push(ws);
+        ws.on('error', () => {});
+        ws.once('open', () => {
+          ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));
+          resolve('open');
+        });
+        ws.once('unexpected-response', (_q, r) => resolve(r.statusCode ?? 0));
+      });
+    try {
+      // many /64s of one /48, a few addresses each: the /48 holds 12 guests, however many /64s it uses
+      const one48: (number | 'open')[] = [];
+      for (let net = 1; net <= 10; net++) for (let a = 1; a <= 3; a++) one48.push(await tryOpen(`2001:db8:77:${net.toString(16)}::${a}`));
+      expect(one48.filter((g) => g === 'open')).toHaveLength(cfg.maxConnectionsPerSubnet * GUESTS_PER_WIDE_FACTOR);
+      expect(one48.at(-1)).toBe(429);
+      // a visitor from another /48 or over IPv4 still gets in as a guest
+      expect(await tryOpen('2001:db8:78:1::1')).toBe('open');
+      expect(await tryOpen('192.0.2.50')).toBe('open');
+      // a guest that leaves gives its /48 place back
+      socks[0].close();
+      for (let i = 0; i < 50 && other.rooms.conns.size > 13; i++) await sleep(20);
+      expect(await tryOpen('2001:db8:77:20::1')).toBe('open');
+    } finally {
+      for (const ws of socks) ws.terminate();
+      await other.close();
+    }
+  });
+
+  it('signed-in sockets that never play do not hold a full server: four /48s at the cap, newcomers still get in (R2-NET-3)', async () => {
+    const { IDLE_SIGNED_MS, SIGNED_PER_NET_FACTOR } = await import('../src/net/gateway');
+    // 48 slots; a /48 holds 3 x SIGNED_PER_NET_FACTOR = 12 signed-in sockets: four /48s fill the server
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-slots-idle-')), GAME_ACCESS: 'public', NODE_ENV: 'development', MAX_CONNECTIONS: '48', MAX_CONNECTIONS_PER_IP: '2', MAX_CONNECTIONS_PER_SUBNET: '3' } as unknown as NodeJS.ProcessEnv);
+    const other = await createApp(cfg, { chain: new NullChain(), log: () => {}, persist: false });
+    const p2 = await other.listen();
+    const byIp = new Map<string, WebSocket>();
+    const closed = new Map<string, number>();
+    /** A socket from `ip`: with `token` it offers it at the upgrade and signs in with it (`auth`) after the hello. */
+    const tryOpen = (ip: string, token?: string) =>
+      new Promise<number | 'open'>((resolve) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${p2}/ws`, token ? ['coinnibal', `coinnibal.auth.${token}`] : ['coinnibal'], { headers: { 'X-Forwarded-For': ip } });
+        byIp.set(ip, ws);
+        ws.on('error', () => {});
+        ws.once('close', (code) => closed.set(ip, code));
+        ws.once('open', () => {
+          ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));
+          if (token) ws.send(JSON.stringify({ t: 'auth', token }));
+          resolve('open');
+        });
+        ws.once('unexpected-response', (_q, r) => resolve(r.statusCode ?? 0));
+      });
+    const holder = testSigner().address;
+    const real = other.rooms.holdsLiveStake.bind(other.rooms);
+    other.rooms.holdsLiveStake = (w: string) => w.toLowerCase() === holder.toLowerCase() || real(w);
+    try {
+      const ips: string[] = [];
+      for (let n = 0; n < 4; n++) {
+        for (let i = 0; i < 4 * SIGNED_PER_NET_FACTOR - 4; i++) {
+          const ip = `2001:db8:${(0x40 + n).toString(16)}:${(i % 2) + 1}::${(i + 1).toString(16)}`;
+          ips.push(ip);
+          expect(await tryOpen(ip, other.auth.issueToken(n === 3 && i === 0 ? holder : testSigner().address))).toBe('open');
+        }
+      }
+      for (let i = 0; i < 50 && [...other.rooms.conns].some((c) => !c.wallet); i++) await sleep(20);
+      expect(other.rooms.conns.size).toBe(48);
+      expect([...other.rooms.conns].every((c) => c.wallet)).toBe(true);
+      // the server is full of fresh signed-in sockets: a newcomer is refused
+      expect(await tryOpen('192.0.2.60')).toBe(429);
+      expect(await tryOpen('192.0.2.61', other.auth.issueToken(testSigner().address))).toBe(429);
+      // none of them played for IDLE_SIGNED_MS; they keep pinging (that does not count). One plays, one's wallet holds
+      // a live arena coin: neither is ever closed for a newcomer
+      const conns = new Map([...other.rooms.conns].map((c) => [c.ip, c]));
+      ips.forEach((ip, i) => (conns.get(ip)!.playedAt = Date.now() - IDLE_SIGNED_MS - 1_000 - (48 - i) * 10));
+      for (const ws of byIp.values()) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'ping', ts: 1 }));
+      const playing = conns.get(ips[0])!;
+      playing.player = { alive: true, id: 1 } as never;
+      const staker = ips[3 * (4 * SIGNED_PER_NET_FACTOR - 4)];
+      expect(conns.get(staker)!.wallet?.toLowerCase()).toBe(holder.toLowerCase());
+      await sleep(50);
+      // a new guest and a new signed-in player get in, each in the place of the signed-in socket idle the longest
+      expect(await tryOpen('192.0.2.62')).toBe('open');
+      expect(await tryOpen('192.0.2.63', other.auth.issueToken(testSigner().address))).toBe('open');
+      await sleep(100);
+      expect(closed.get(ips[1])).toBe(1013);
+      expect(closed.get(ips[2])).toBe(1013);
+      expect(closed.has(ips[0])).toBe(false);
+      expect(closed.has(staker)).toBe(false);
+      expect(other.rooms.conns.size).toBe(48);
+      expect(other.gateway.dropped.idle).toBe(2);
+      // a socket that played a moment ago is not idle: once only those are left, a newcomer is refused again
+      for (const c of other.rooms.conns) c.playedAt = Date.now();
+      expect(await tryOpen('192.0.2.64')).toBe(429);
+    } finally {
+      other.rooms.holdsLiveStake = real;
+      for (const c of other.rooms.conns) c.player = null;
+      for (const ws of byIp.values()) ws.terminate();
       await other.close();
     }
   });
@@ -290,8 +400,8 @@ describe('connection slots', () => {
       expect(other.rooms.conns.size).toBe(SOCKETS_PER_WALLET);
       expect(openOf(a)).toBe(SOCKETS_PER_WALLET);
       expect([...other.rooms.conns].every((c) => c.wallet === null)).toBe(true);
-      // signed-in players fill every slot
-      for (let i = 0; other.rooms.conns.size < 40; i++) expect(await tryOpen(`203.0.113.${i + 1}`, other.auth.issueToken(testSigner().address))).toBe('open');
+      // signed-in players (from a few /24s) fill every slot
+      for (let i = 0; other.rooms.conns.size < 40; i++) expect(await tryOpen(`203.0.${113 + (i >> 4)}.${(i & 15) + 1}`, other.auth.issueToken(testSigner().address))).toBe('open');
       // past the cap a second ticket holder gets one slot, whether its sockets stay or sign out
       const b = testSigner().address;
       holders.add(b.toLowerCase());

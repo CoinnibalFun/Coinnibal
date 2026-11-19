@@ -343,8 +343,8 @@ has more bots than its setting, nor more playing than the setting minus its peop
   "Re-price at next bell", `site/reprice.ts`). With `WEB_DIST` the server also serves the web build (strict CSP);
   without it, in production, a page of its own domain redirects to `PUBLIC_URL`.
 - **Front door** (`net/gateway.ts`, one admission policy): guests hold at most 80 % of `MAX_CONNECTIONS` and are
-  limited per IP and per subnet; a signed-in socket leaves its IP's guest count (carrier NAT), up to 64 per address
-  (an IPv6 /64) and 384 per IPv4 /24 or IPv6 /48; one wallet holds at most 3 sockets (a newer one closes its oldest
+  limited per IP, per subnet and per IPv6 /48; a signed-in socket leaves its IP's guest count (carrier NAT), up to 64
+  per address (an IPv6 /64) and 192 per IPv4 /24 or IPv6 /48; one wallet holds at most 3 sockets (a newer one closes its oldest
   lobby socket with `CLOSE_REPLACED`, 4000). A socket counts under the wallet whose token opened it for its whole life
   (a `logout` or a sign-in as another wallet does not free that place). A socket offering its session token as the
   `coinnibal.auth.<token>` subprotocol (or `elymum.auth.<token>`, from a page of before the rename) takes the reserve,
@@ -352,7 +352,9 @@ has more bots than its setting, nor more playing than the setting minus its peop
   bounds, one slot per wallet: it takes the place of a lobby socket of that wallet, or of one whose game went silent
   for 5 s, a dead socket; with every socket of the wallet in a live game it takes the wallet's one headroom slot, and
   is refused once that is taken: a live game is never closed for a new tab). A socket on a headroom slot that signs
-  out while the server is full is closed (1013). An idle lobby guest makes room near the cap. A join of the wallet
+  out while the server is full is closed (1013). An idle lobby guest makes room near the cap; at the cap a signed-in
+  socket that has not played for 2 minutes (its pings do not count), not joining and holding no live coin, makes room
+  too (1013), the longest idle first. A join of the wallet
   that holds a live coin takes it over on the new socket at once and closes the old one with `CLOSE_REPLACED`. A join
   seats only the wallet that was signed in when it began. Ticket reads (`getSession`) run at `normal` priority
   (settlements go first), shared per wallet, limited per socket, wallet, client and IPv6 /48, with a bounded queue:

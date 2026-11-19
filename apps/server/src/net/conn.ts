@@ -73,6 +73,12 @@ export class Conn implements RoomConn {
 
   /** The last message from the client (Unix ms): an idle lobby guest is the first to go when the server is full. */
   lastMsgAt = Date.now();
+  /**
+   * When it last played (Unix ms): its admission, a join that seated it, an input while its coin is alive. A signed-in
+   * lobby socket that has not played for `IDLE_SIGNED_MS` gives its slot to a newcomer at the cap; pings and lobby
+   * messages do not move it.
+   */
+  playedAt = Date.now();
   /** Counted in its IP's and subnet's guest limit (until it signs in: signed-in sockets have a far higher bound). */
   countedAsGuest = true;
   /** Counted in its IP's signed-in bound (`SIGNED_PER_IP_FACTOR`). */
