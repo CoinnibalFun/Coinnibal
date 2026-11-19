@@ -7,4 +7,5 @@ export { CoinCharacter, type CoinCharacterProps, type CoinMood, type CoinPaint }
 export { FoodBit, FoodScatter, type FoodBitProps, type FoodKind, type SeedPaint } from './FoodBits';
 export { ensureInkDefs, WOBBLE, WOBBLE_SOFT } from './InkDefs';
 export { useOffscreenPause } from './useOffscreenPause';
+export { useDashCrawl, useSteppedSmil, steppedMotion } from './stepped';
 export { Laurel } from './Laurel';

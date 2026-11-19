@@ -1,6 +1,7 @@
 import { ELYSIUM } from '@coinnibal/shared';
 import { motion, useScroll, useTransform, type MotionValue } from 'motion/react';
-import { useOffscreenPause, useReducedMotion } from '../../design';
+import { useRef } from 'react';
+import { useDashCrawl, useOffscreenPause, useReducedMotion } from '../../design';
 import { useMedia } from '../../design/useMedia';
 import { useT } from '../../i18n';
 
@@ -73,6 +74,9 @@ export function DuskSeam() {
   const t = useT();
   const reduced = useReducedMotion();
   const [ref, visible] = useOffscreenPause<HTMLDivElement>();
+  // a touch phone: the lights crawl in four steps a second (design/motifs/stepped.ts), not on every frame
+  const lights = useRef<SVGPathElement>(null);
+  useDashCrawl(lights, visible && !reduced, 25, 3200);
   const at = useMedia('(max-width: 1279px)') ? NARROW : WIDE;
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
   const still = useTransform(scrollYProgress, () => 0.72);
@@ -123,7 +127,7 @@ export function DuskSeam() {
         <motion.g style={{ opacity: night }}>
           <path d={`M-80 ${H} C 220 -70, ${W - 220} -70, ${W + 80} ${H}`} fill="none" stroke={INK} strokeWidth={34} />
           <path d={`M-80 ${H} C 220 -70, ${W - 220} -70, ${W + 80} ${H}`} fill="none" stroke={ELYSIUM.current} strokeWidth={28} />
-          <path className="ld-dusk__lights" d={`M-80 ${H} C 220 -70, ${W - 220} -70, ${W + 80} ${H}`} fill="none" stroke={ELYSIUM.sun} strokeWidth={5} strokeDasharray="3 22" strokeLinecap="round" />
+          <path ref={lights} className="ld-dusk__lights" d={`M-80 ${H} C 220 -70, ${W - 220} -70, ${W + 80} ${H}`} fill="none" stroke={ELYSIUM.sun} strokeWidth={5} strokeDasharray="3 22" strokeLinecap="round" />
         </motion.g>
         {/* the planet rising over the far rim */}
         <motion.g style={{ y: planetY }}>

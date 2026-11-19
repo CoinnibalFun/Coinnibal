@@ -1,6 +1,7 @@
 import { ELYSIUM, SHADE } from '@coinnibal/shared';
-import { useId, type CSSProperties, type ReactElement, type ReactNode } from 'react';
+import { useId, useRef, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { WOBBLE } from './InkDefs';
+import { useDashCrawl } from './stepped';
 import { useOffscreenPause } from './useOffscreenPause';
 
 /**
@@ -221,6 +222,10 @@ export function SceneProp({ kind, time = 'dawn', size = 40, className, style }: 
   );
 }
 
+/** The arch lights' crawl (storybook.css `kb-ring-lights`): the dashes move 250 units in 24 s. */
+const LIGHTS_SPAN = 250;
+const LIGHTS_LAP_MS = 24_000;
+
 export function RingScene({
   time = 'dawn',
   variant = 'full',
@@ -234,6 +239,9 @@ export function RingScene({
 }: RingSceneProps): ReactElement {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const [ref, visible] = useOffscreenPause<HTMLDivElement>();
+  // a touch phone: the arch lights crawl in four steps a second (stepped.ts), not on every frame
+  const lights = useRef<SVGPathElement>(null);
+  useDashCrawl(lights, animate && visible, LIGHTS_SPAN, LIGHTS_LAP_MS);
   const p = time === 'night' ? NIGHT : DAWN;
   const ink = ELYSIUM.abyss;
   const arch = 'M-60 520 C 180 40, 1260 40, 1500 520';
@@ -301,7 +309,7 @@ export function RingScene({
               <path d={arch} fill="none" stroke={ink} strokeWidth={58} strokeLinecap="round" />
               <path d={arch} fill="none" stroke={p.arch} strokeWidth={50} />
               <path d={arch} fill="none" stroke={p.archBand} strokeWidth={18} transform="translate(0,16)" />
-              <path className="kb-ring__lights" d={arch} fill="none" stroke={p.archLights} strokeWidth={6} strokeDasharray="3 22" strokeLinecap="round" transform="translate(0,-6)" />
+              <path ref={lights} className="kb-ring__lights" d={arch} fill="none" stroke={p.archLights} strokeWidth={6} strokeDasharray="3 22" strokeLinecap="round" transform="translate(0,-6)" />
               <path d={arch} fill="none" stroke={ink} strokeWidth={3} transform="translate(0,28)" />
               <g stroke={ink} strokeWidth={3} fill={p.spoke} strokeLinejoin="round">
                 <path d="M352 210 L376 210 L396 520 L338 520 Z" />
