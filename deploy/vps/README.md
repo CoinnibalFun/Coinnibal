@@ -76,6 +76,8 @@ Running it again is safe.
 | `COINNIBAL_RPC_URLS` | optional: the RPCs in order, comma-separated: the Alchemy URL first, the public RPC as fallback (section 5). Unset: `https://rpc.testnet.chain.robinhood.com` |
 | `COINNIBAL_RPC_MAX_RPS` | optional: calls per second per URL, one per `COINNIBAL_RPC_URLS` entry (`25,4`); default 4 |
 | `COINNIBAL_GAME_ACCESS` | optional: `site` (the default when unset: the `/admin` → Settings switch decides), or `public`, `holders`, `admins`, `maintenance` to override that switch |
+| `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` | after the owner's deploy: the registered CoinnibalArena and CoinnibalNFT, the contracts the site trusts (below). Empty: the site signs no ticket and no mint |
+| `COINNIBAL_PIN_TOKEN` | once the game token is set on the arena: that token (empty: the site does not check the arena's token against a pin) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | alerts to Telegram (optional; section 7) |
 | `BACKUP_RCLONE_REMOTE` | the encrypted offsite remote, e.g. `elymum-offsite:` (optional; section 8; the name given before the rename) |
 | `GAME_WORKERS` | `5` on 8 vCPU |
@@ -97,6 +99,26 @@ written then keeps working unchanged; when both names are set, the `COINNIBAL_*`
 them with nested interpolation (`${COINNIBAL_CHAIN_ID:-${ELYMUM_CHAIN_ID:-46630}}`), the scripts through
 `env_get_renamed` and `${COINNIBAL_X:-${ELYMUM_X:-default}}` in `lib.sh`. Renaming the keys in `.env` is optional:
 `coinnibal-compose config` shows the same values either way.
+
+**Contract pins (the site build).** The site is built with the contracts it trusts (`apps/web/src/wallet/pinned.ts`):
+`docker-compose.yml` passes `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` and `COINNIBAL_PIN_TOKEN` to the image build as
+`VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS` and `VITE_TOKEN_ADDRESS`, for the chain of `COINNIBAL_CHAIN_ID` (as
+`VITE_CHAIN_ID`). Wallets approve, pay and mint only there, whatever the server announces: a stolen admin login or a
+broken-into server cannot point them at another contract, because a pin changes only here, in the shell, with a
+rebuild. No chain has default pins. After the owner deploys and registers the contracts in `/admin` (and again once the
+game token is set on the arena), `/admin` → Setup → **Site pins** shows the lines with the registered addresses:
+check each one against the deploy transaction in your own wallet (the panel's addresses come from the server, which is
+what the pins guard against), set them here, then rebuild and restart the app:
+
+```bash
+coinnibal-compose up -d --build app
+```
+
+`update.sh` rebuilds only when the tracked branch moves, so a `.env` change alone needs this command; later builds keep
+the pins (they are read from `.env` every time). It swaps the container as soon as the image is built: once players
+are in the arenas, run it in the break after a bell (section 6). Check what the build gets with `coinnibal-compose config | grep VITE_`.
+The same applies when moving to the mainnet: the server follows `COINNIBAL_CHAIN_ID` after `coinnibal-compose up -d
+app`, the site signs nothing there until it is rebuilt with the mainnet pins.
 
 **Names kept from before the rename.** The server was installed under the old name, and these stay exactly as they
 are (`lib.sh` lists them): changing them moves the data. A new Docker project name means a new, empty volume (the
