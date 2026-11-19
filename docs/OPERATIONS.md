@@ -744,7 +744,9 @@ join of the same signed-in wallet takes the live coin over at once, and the old 
 `CLOSE_REPLACED` (4000) so it does not reconnect. Another wallet can never take a coin (it has no ticket there).
 
 **Deploys** go out only for commits CI passed (the `ci-green-<branch>` tag), in the round break, and roll back by
-themselves when the new container is not healthy within 60 s (deploy/vps/README.md, "Deploys"). If the VPS dies:
+themselves when the new container is not healthy within 60 s (deploy/vps/README.md, "Deploys"). The weekly
+image refresh rolls back to the build it replaced and leaves `elymum-app:previous`, the way back past the last
+deploy, alone. If the VPS dies:
 deploy/vps/README.md, "Moving to another VPS, or the VPS died".
 
 ### Retiring an arena (sweep)
