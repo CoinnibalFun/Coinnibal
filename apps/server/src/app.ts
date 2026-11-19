@@ -272,6 +272,7 @@ export async function createApp(
     inventory: boostInventory,
     chain,
     holder: (wallet, fresh) => mint.isHolder(wallet, fresh),
+    shownHolder: (wallet) => mint.shownHolder(wallet),
     emblemTokens,
     claims: emblemClaims,
     usdPrice,
@@ -371,6 +372,7 @@ export async function createApp(
     chain,
     usdPrice,
     isHolder: (wallet) => mint.isHolder(wallet),
+    shownHolder: (wallet) => mint.shownHolder(wallet),
     emblemTokens,
     claims: emblemClaims,
     now: opts.customNow,
@@ -465,7 +467,7 @@ export async function createApp(
   // wallets the admin banned after an integrity review cannot start arena games (practice still works)
   gateway.setBanGate((wallet) => integrity.isBanned(wallet));
   // emblem holders wear a laurel and may play the emblem skin (cached holder check of the NFT)
-  gateway.setHolderCheck((wallet) => mint.isHolder(wallet));
+  gateway.setHolderCheck((wallet, gate) => (gate ? mint.isHolder(wallet) : mint.shownHolder(wallet)));
   gateway.setRepricing((id) => reprice.closedForSeats(id));
   // holder tickets: the emblem is there at the seat (read fresh) and one token id serves one open holder ticket
   gateway.setEmblemGate((wallet, session) => emblems.seat(wallet, session));

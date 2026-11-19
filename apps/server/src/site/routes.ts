@@ -282,7 +282,7 @@ export class SiteApi {
 
   /**
    * The same for a value that is only shown (a profile's skins, the `holder` field of `/api/auth/me`): never busy (no
-   * 429 for a budget); past the client's holder-read bound the "holder" on record, else false, not kept.
+   * 429 for a budget) and never a chain read of its own: the "holder" on record, else false, not kept.
    */
   async shownHolder(wallet: string | null | undefined): Promise<boolean> {
     return !!wallet && !!this.ext.mint && (await this.ext.mint.shownHolder(wallet));
@@ -300,8 +300,8 @@ export class SiteApi {
   }
 
   /**
-   * `gameOpenFor` for a value that is only shown (the shop's prices): never busy; past the client's holder-read bound
-   * a holder on record may, anyone else is answered as not a holder (not kept: the next check reads the chain).
+   * `gameOpenFor` for a value that is only shown (the shop's prices): never busy, never a chain read of its own; a
+   * holder on record may, anyone else is answered as not a holder (not kept).
    */
   async gameShownFor(wallet: string | null | undefined): Promise<boolean> {
     const mode = this.gameAccess();
@@ -367,7 +367,7 @@ export class SiteApi {
     } catch (err) {
       if (err instanceof SiteFail && err.status === 413) res.setHeader('Connection', 'close');
       if (err instanceof SiteFail) fail(res, err.status, { error: err.code, message: err.message, ...(err.field ? { field: err.field } : {}) });
-      // a holder check this client may not make right now, with no answer known: busy, never a wrong "no"
+      // a holder check past this client's holder reads that the holder index cannot answer now: busy, never a wrong "no"
       else if (err instanceof ClientBudgetError) fail(res, 429, { error: 'rate_limited', message: CLIENT_BUSY_MESSAGE });
       else throw err;
     }
@@ -391,12 +391,11 @@ export class SiteApi {
       this.method(req, 'GET');
       const wallet = this.session(req);
       const admin = this.isAdmin(wallet);
-      // `holder` is only shown: never busy. `canPlay` is the gate: a holder check this client may not make right now,
-      // with no "holder" on record (`ClientBudgetError`), is `busy` (ask again in a moment), never a wrong "no"
-      const [holder, canPlay] = await Promise.all([
-        this.shownHolder(wallet),
-        this.gameOpenFor(wallet).catch((err: unknown) => (err instanceof ClientBudgetError ? ('busy' as const) : Promise.reject(err))),
-      ]);
+      // `canPlay` is the gate: a holder check the holder index cannot answer right now, past this client's holder
+      // reads (`ClientBudgetError`), is `busy` (ask again in a moment), never a wrong "no". `holder` is only shown,
+      // after it (the answer the gate just had is the one on record): never busy, never a chain read of its own
+      const canPlay = await this.gameOpenFor(wallet).catch((err: unknown) => (err instanceof ClientBudgetError ? ('busy' as const) : Promise.reject(err)));
+      const holder = await this.shownHolder(wallet);
       return send(res, 200, { address: wallet, admin, holder, canPlay: canPlay === true, ...(canPlay === 'busy' ? { busy: true } : {}) });
     }
     this.method(req, 'POST');

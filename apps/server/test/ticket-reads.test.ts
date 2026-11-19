@@ -30,7 +30,7 @@ import {
   TICKET_READ_QUEUE_S,
 } from '../src/net/gateway';
 import { RoomManager } from '../src/rooms/manager';
-import { HOLDER_READS_BURST_S, HOLDER_READS_RPC_SHARE, MintService, holderReadLimits } from '../src/site/mint';
+import { HOLDERS_FRESH_MS, HOLDERS_ON_DEMAND_MS, HOLDER_READS_BURST_S, HOLDER_READS_QUIET_MS, HOLDER_READS_RPC_SHARE, MintService, holderReadLimits } from '../src/site/mint';
 import { SiteStore } from '../src/site/store';
 import { Journal } from '../src/stake/journal';
 import { ARENA, FakeEvm, NFT } from './fake-evm';
@@ -284,7 +284,7 @@ describe('a paid join under a flood of client work (R2-NET-1, R2-NET-2)', () => 
   /** Every ticket and holder read of the fake chain waits for a real RPC budget (4 calls/s), at its own priority. */
   function onBudget(evm: FakeEvm, budget: RpcBudget): void {
     const ea = evm as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
-    for (const m of ['session', 'nftBalance']) {
+    for (const m of ['session', 'nftBalance', 'blockNumber', 'transferLogs']) {
       const real = ea[m].bind(evm);
       ea[m] = async (...a) => (await budget.acquire(1, currentRpcPriority()), real(...a));
     }
@@ -301,19 +301,26 @@ describe('a paid join under a flood of client work (R2-NET-1, R2-NET-2)', () => 
     t.evm.mintNft(holder);
     t.evm.join(3, holder, { openedAt: Math.floor(Date.now() / 1000) - 60 });
     expect(await asClient('192.0.2.20', () => mint.isHolder(holder))).toBe(true);
+    await mint.holdersCount(); // the holder index read once (the mint page): later scans read only the new blocks
     // six /64s of six /48s, free wallets: 60 holder checks each at once (360 balanceOf calls if nothing bounded them)
-    let busy = 0;
-    const flood: Promise<unknown>[] = [];
+    let reads = 0;
+    let scans = 0;
+    const realBalance = t.evm.nftBalance.bind(t.evm);
+    t.evm.nftBalance = async (...a: Parameters<typeof realBalance>) => (reads++, realBalance(...a));
+    const realLogs = t.evm.transferLogs.bind(t.evm);
+    t.evm.transferLogs = async (...a: Parameters<typeof realLogs>) => (scans++, realLogs(...a));
+    const flood: Promise<boolean | 'busy'>[] = [];
     for (let c = 0; c < 6; c++) {
       for (let i = 0; i < 60; i++) {
-        flood.push(asClient(`2001:db8:${(c + 1).toString(16)}:1::/64`, () => mint.isHolder(testWallet(0x10000 + c * 100 + i))).catch((err) => (expect(err).toBeInstanceOf(ClientBudgetError), busy++)));
+        flood.push(asClient(`2001:db8:${(c + 1).toString(16)}:1::/64`, () => mint.isHolder(testWallet(0x10000 + c * 100 + i))).catch((err) => (expect(err).toBeInstanceOf(ClientBudgetError), 'busy' as const)));
       }
     }
     await sleep(20);
-    // at most a burst of the server-wide share went to the chain; everyone else heard busy at once
+    // at most a burst of the server-wide share went to the chain as balanceOf; everyone else waits for the holder
+    // index to read the new blocks (one scan for all of them)
     const { burst } = holderReadLimits(4);
-    expect(busy).toBeGreaterThanOrEqual(6 * 60 - burst);
-    expect(budget.queued).toBeLessThanOrEqual(burst);
+    expect(reads).toBeLessThanOrEqual(burst);
+    expect(budget.queued).toBeLessThanOrEqual(burst + 2);
     // a settlement goes first, the paid join next: seated within a second or so
     const t0 = Date.now();
     const settled = withRpcPriority('critical', () => budget.acquire(1)).then(() => Date.now() - t0);
@@ -325,7 +332,12 @@ describe('a paid join under a flood of client work (R2-NET-1, R2-NET-2)', () => 
     expect(me.msgs.find((m) => m.t === 'joined')).toMatchObject({ skin: EMBLEM_SKIN_ID });
     expect(seatedAfter).toBeLessThan(1_500);
     expect(await settled).toBeLessThanOrEqual(seatedAfter);
-    await Promise.all(flood);
+    // every free wallet got its answer, "not a holder", none busy: from the index two scans at most (one already
+    // running when the rest asked, then one more), never a balanceOf of its own past the bound
+    const answers = await Promise.all(flood);
+    expect(answers.every((a) => a === false)).toBe(true);
+    expect(reads).toBeLessThanOrEqual(burst);
+    expect(scans).toBeLessThanOrEqual(2);
   });
 
   it('a slow holder check never holds a paid join: seated within HOLDER_CHECK_WAIT_MS, in a basic skin when it asked for the emblem', async () => {
@@ -418,7 +430,11 @@ describe('a paid join under a flood of client work (R2-NET-1, R2-NET-2)', () => 
 });
 
 describe('holder checks of a client (S11)', () => {
-  function holderSetup(rpcMaxRps = 1_000) {
+  /**
+   * `moveClock`: the pause before the holder index may read again for a gate decision (`HOLDERS_FRESH_MS` after the
+   * last scan) moves the test's clock; else it is no pause at all (the clock stands still or the test moves it).
+   */
+  function holderSetup(rpcMaxRps = 1_000, { moveClock = false } = {}) {
     const evm = new FakeEvm();
     let reads = 0;
     /** The wallets `balanceOf` was read for (lower case), in order. */
@@ -439,8 +455,13 @@ describe('holder checks of a client (S11)', () => {
       rpcMaxRps,
       log: () => {},
       now: () => clock.now,
+      sleep: async (ms) => void (moveClock && (clock.now += ms)),
     });
-    return { evm, mint, clock, read, reads: () => reads, reset: () => ((reads = 0), (read.length = 0)) };
+    // holder index scans (each reads the latest block number once)
+    let scans = 0;
+    const latest = evm.blockNumber.bind(evm);
+    evm.blockNumber = async () => (scans++, latest());
+    return { evm, mint, clock, read, reads: () => reads, scans: () => scans, reset: () => ((reads = 0), (read.length = 0), (scans = 0)) };
   }
   /** A holder check of `wallet` on behalf of client `ip`: true / false, or 'busy' (`ClientBudgetError`). */
   const check = (mint: MintService, ip: string, wallet: string) =>
@@ -479,11 +500,11 @@ describe('holder checks of a client (S11)', () => {
       Array.from({ length: 16 }, (_, i) => `2001:db8:b:${(i + 1).toString(16)}::/64`),
     ].flat();
     let w = 0x100000;
-    let attackerReads = 0;
+    const attackerAnswers = new Set<boolean | 'busy'>();
     const holders: string[] = [];
     const answers: (boolean | 'busy')[] = [];
     for (let step = 0; step < 1_200; step++) {
-      for (const ip of attackers) if ((await check(h.mint, ip, testWallet(w++))) !== 'busy') attackerReads++;
+      for (const ip of attackers) attackerAnswers.add(await check(h.mint, ip, testWallet(w++)));
       // a first-time holder on a network of its own every 4 s: never checked before, so nothing is on record
       if (step % 40 === 20) {
         const holder = testWallet(0x9000 + holders.length);
@@ -497,13 +518,16 @@ describe('holder checks of a client (S11)', () => {
     expect(answers).toHaveLength(30);
     expect(answers.every((a) => a === true)).toBe(true);
     for (const holder of holders) expect(h.read).toContain(holder.toLowerCase());
-    // the attackers got no more than their networks' shares (4 networks, plus their bursts)
+    // the attackers' balanceOf reads: no more than their networks' shares (4 networks, plus their bursts); past them
+    // the holder index answered "not a holder", never busy
+    const attackerReads = h.read.length - holders.length;
     expect(attackerReads).toBeLessThanOrEqual(Math.ceil(4 * (l.net.rate * 120 + l.net.burst)));
+    expect([...attackerAnswers]).toEqual([false]);
     // and the chain was read at most at the bucket's rate
     expect(h.reads()).toBeLessThanOrEqual(l.burst + l.rate * 120);
   });
 
-  it('client-triggered holder reads are bounded server-wide and per network (an IPv6 /48, an IPv4 /24) (R2-NET-1)', async () => {
+  it('client-triggered holder reads are bounded server-wide and per network (an IPv6 /48, an IPv4 /24); past them the caught-up holder index answers (R2-NET-1, R4-NET-1)', async () => {
     const h = holderSetup(4);
     const l = holderReadLimits(4);
     const known = testWallet(0x71);
@@ -515,21 +539,25 @@ describe('holder checks of a client (S11)', () => {
     h.reset();
     // a hundred clients of a hundred networks, a few throwaway wallets each: at most the bucket's burst is read (the
     // first check of 198.51.100.1 took one token)
-    let busy = 0;
+    const seen: (boolean | 'busy')[] = [];
     for (let c = 0; c < 100; c++) {
-      for (let i = 0; i < 3; i++) if ((await check(h.mint, `10.${c}.0.1`, testWallet(0x9000 + c * 10 + i))) === 'busy') busy++;
+      for (let i = 0; i < 3; i++) seen.push(await check(h.mint, `10.${c}.0.1`, testWallet(0x9000 + c * 10 + i)));
     }
     expect(h.reads()).toBe(l.burst - 1);
-    expect(busy).toBe(300 - (l.burst - 1));
-    // past the bucket a holder on record keeps its answer; a "no" is busy, never "not a holder"
+    // past the bucket the holder index, read up to a block mined after each check, answers: not a holder, never busy
+    expect(seen.filter((a) => a === 'busy')).toHaveLength(0);
+    expect(seen.filter((a) => a === false)).toHaveLength(300);
+    expect(h.scans()).toBeGreaterThan(0);
+    // past the bucket a holder on record keeps its answer; a "no" on record is never taken as it is (it may predate a
+    // mint): the index is read up to a block after the check
     h.clock.now += 20_000; // the holder's answer is old, the "no" too
     for (let i = 0; i < 30; i++) await check(h.mint, `10.200.${i}.1`, testWallet(0x9900 + i));
+    h.reset();
     expect(await check(h.mint, '198.51.100.1', known)).toBe(true);
-    expect(await check(h.mint, '198.51.100.1', testWallet(0x73))).toBe('busy');
-    // the refused checks had the holder index read the NFT's Transfer logs: the stale "no" that minted since is a
-    // holder on record now, with no read of its own
+    expect(await check(h.mint, '198.51.100.1', testWallet(0x73))).toBe(false);
+    // the stale "no" that minted since is a holder by the index caught up, with no read of its own
     expect(await check(h.mint, '198.51.100.1', stale)).toBe(true);
-    expect(h.read).not.toContain(stale.toLowerCase());
+    expect(h.read).toEqual([]);
     // the bucket refills at its rate
     h.reset();
     h.clock.now += 5_000;
@@ -562,12 +590,13 @@ describe('holder checks of a client (S11)', () => {
     const w = testWallet(0x61);
     await Promise.all(Array.from({ length: 8 }, () => h.mint.isHolder(w)));
     expect(h.reads()).toBe(1);
-    // one client, a new throwaway wallet for every join: the chain is read at most the client's burst
+    // one client, a new throwaway wallet for every join: the chain is read at most the client's burst; past it the
+    // holder index (read up to a block after each check) answers, never busy
     h.reset();
-    let busy = 0;
-    for (let i = 0; i < l.client.burst + 20; i++) if ((await check(h.mint, '2001:db8:9:9::/64', testWallet(0x4000 + i))) === 'busy') busy++;
+    const seen: (boolean | 'busy')[] = [];
+    for (let i = 0; i < l.client.burst + 20; i++) seen.push(await check(h.mint, '2001:db8:9:9::/64', testWallet(0x4000 + i)));
     expect(h.reads()).toBe(l.client.burst);
-    expect(busy).toBe(20);
+    expect(seen.every((a) => a === false)).toBe(true);
     // the server's own checks, another client, and a fresh check (an arena seat) still read
     await h.mint.isHolder(testWallet(0x5001));
     await asClient('198.51.100.1', () => h.mint.isHolder(testWallet(0x5002)));
@@ -575,7 +604,87 @@ describe('holder checks of a client (S11)', () => {
     expect(h.reads()).toBe(l.client.burst + 3);
   });
 
-  it('a spent client budget never tells a holder it is none: the last answer, the holder index, or busy (NET-R1-5, R3-NET-1)', async () => {
+  it('two players behind one address, no NFT, the default budget: one plays and browses, the other\'s room creation (a gate decision) is never busy (R4-NET-1)', async () => {
+    const h = holderSetup(4, { moveClock: true });
+    const nat = '198.51.100.200';
+    const a = testWallet(0xa11ce);
+    const b = testWallet(0xb0b);
+    const t0 = h.clock.now;
+    const creates: (boolean | 'busy')[] = [];
+    let pageB = t0;
+    let gateB = t0;
+    let createA = t0 + 5_000;
+    while (h.clock.now - t0 <= 180_000) {
+      // B: a page every 2 s (auth/me, the profile, a quote, the laurel at a join: only shown) and a gate decision
+      // every 4 s (who may play at a join, a join permit): more than the address's own holder reads (one per 16 s)
+      if (h.clock.now >= pageB) {
+        expect(await asClient(nat, () => h.mint.shownHolder(b))).toBe(false);
+        pageB += 2_000;
+      }
+      if (h.clock.now >= gateB) {
+        expect(await check(h.mint, nat, b)).toBe(false);
+        gateB += 4_000;
+      }
+      // A: its pages, then a custom room's creation (create() asks isHolder, not fresh), every 10 s
+      if (h.clock.now >= createA) {
+        await asClient(nat, () => h.mint.shownHolder(a));
+        creates.push(await check(h.mint, nat, a));
+        createA += 10_000;
+      }
+      h.clock.now += 100;
+    }
+    // every creation was answered (not a holder: the full price), none busy
+    expect(creates.length).toBeGreaterThanOrEqual(17);
+    expect(creates.every((x) => x === false)).toBe(true);
+    // A mints: its next creation is a holder's, though the address's holder reads are spent
+    h.evm.mintNft(a);
+    expect(await check(h.mint, nat, b)).toBe(false);
+    expect(await check(h.mint, nat, a)).toBe(true);
+    // the holder index read the new blocks for them at most every HOLDERS_FRESH_MS
+    expect(h.scans()).toBeLessThanOrEqual(Math.ceil((h.clock.now - t0) / HOLDERS_FRESH_MS) + 2);
+  });
+
+  it('networks of one address that keep reading never take the newcomer reserve: with 24 of them a first check on a new network reads at once, and no gate decision is busy (R4-NET-2)', async () => {
+    const h = holderSetup(4, { moveClock: true });
+    const l = holderReadLimits(4);
+    // 24 attacker addresses, each alone in its /24, a throwaway wallet for every check, as fast as they may
+    const attackers = Array.from({ length: 24 }, (_, i) => `100.64.${i}.7`);
+    let w = 0x200000;
+    const t0 = h.clock.now;
+    const victim = testWallet(0xdead);
+    const victims: (boolean | 'busy')[] = [];
+    const firsts: string[] = [];
+    let nextVictim = t0 + 30_000;
+    let nextFirst = t0 + HOLDER_READS_QUIET_MS + 10_000;
+    while (h.clock.now - t0 < 330_000) {
+      for (const ip of attackers) expect(await check(h.mint, ip, testWallet(w++))).toBe(false);
+      // a wallet with no NFT and nothing on record, on a network of its own, asking for a gate decision every 20 s
+      // (a room's creation): it read 20 s ago, so it is no newcomer either
+      if (h.clock.now >= nextVictim) {
+        victims.push(await check(h.mint, '10.200.0.9', victim));
+        nextVictim += 20_000;
+      }
+      // a first-time holder on a network of its own every 30 s, once the attackers kept reading for a minute
+      if (h.clock.now >= nextFirst) {
+        const holder = testWallet(0x9000 + firsts.length);
+        h.evm.mintNft(holder);
+        firsts.push(holder);
+        expect(await check(h.mint, `10.${100 + firsts.length}.0.9`, holder)).toBe(true);
+        nextFirst += 30_000;
+      }
+      h.clock.now += 100;
+    }
+    // the victim was answered every time (from the holder index past the bounds), never busy
+    expect(victims.length).toBeGreaterThanOrEqual(14);
+    expect(victims.every((x) => x === false)).toBe(true);
+    // every first check on a new network found a token of the reserve: its wallet was read on chain at once
+    expect(firsts.length).toBeGreaterThanOrEqual(8);
+    for (const holder of firsts) expect(h.read).toContain(holder.toLowerCase());
+    // and the chain was read at most at the bucket's rate
+    expect(h.reads()).toBeLessThanOrEqual(l.burst + l.rate * (h.clock.now - t0) / 1000);
+  });
+
+  it('a spent client budget never tells a holder it is none: the last answer, or the holder index read after the check; busy only while the index cannot tell (NET-R1-5, R3-NET-1, R4-NET-1)', async () => {
     const h = holderSetup(4);
     const l = holderReadLimits(4);
     const known = testWallet(0x62);
@@ -586,56 +695,76 @@ describe('holder checks of a client (S11)', () => {
     // others behind the same address spend its budget
     for (let i = 0; i < l.client.burst; i++) await check(h.mint, nat, testWallet(0x6000 + i));
     h.clock.now += 15_001; // the cached answer is old, the client's bucket still empty
-    // a holder with an answer on record gets it; one with none yet hears busy, never "not a holder"
+    h.reset();
+    // a holder with an answer on record gets it; a wallet with none, the holder index read up to a block mined after
+    // its check: it holds none, so the game is closed to it (the right answer, not busy)
     expect(await check(h.mint, nat, known)).toBe(true);
     const nobody = testWallet(0x64);
-    expect(await check(h.mint, nat, nobody)).toBe('busy');
-    // the game gate turns that into "busy, try again", not "the game is not open to this wallet"
+    expect(await check(h.mint, nat, nobody)).toBe(false);
     const t = await setup();
     t.gateway.setGameGate((wallet, isFresh) => !!wallet && h.mint.isHolder(wallet, isFresh));
     const c = await t.connect(nobody, nat);
     await asClient(nat, () => t.send(c, { t: 'join', room: 'practice', name: 'x', skin: 0 }));
-    expect(errors(c)).toEqual(['rate_limited']);
-    // a refused check had the holder index read the NFT's Transfer logs: a wallet that minted a moment ago is a
-    // holder on record by its retry, though this client still may not read the chain
+    expect(errors(c)).toEqual(['game_closed']);
+    // a wallet that minted a moment ago is a holder by the index read after its check, though this client still may
+    // not read the chain
     h.evm.mintNft(fresh);
-    h.clock.now += 5_001; // the index may read again (HOLDERS_ON_DEMAND_MS); the client's bucket stays spent
-    await check(h.mint, nat, testWallet(0x6300));
-    h.reset();
-    expect(await check(h.mint, nat, fresh)).toBe('busy');
-    for (let i = 0; i < 50 && !(await h.mint.emblemTokens(fresh))?.length; i++) await sleep(5);
+    h.clock.now += 100;
     expect(await check(h.mint, nat, fresh)).toBe(true);
-    expect(h.read).not.toContain(fresh.toLowerCase());
     const me = await t.connect(fresh, nat);
     await asClient(nat, () => t.send(me, { t: 'join', room: 'practice', name: 'x', skin: 0 }));
     expect(errors(me)).toEqual([]);
     expect(seated(me)).toBe(true);
-    // once the client's bucket refilled, the plain wallet is read and answered for real
+    expect(h.read).toEqual([]);
+    // the index cannot read the new blocks (the RPC refuses the logs: a failed scan's back-off): a wallet with nothing
+    // on record hears busy, never "not a holder", and the game gate says "busy, try again"; a holder on record plays
+    h.clock.now += 3_000;
+    await check(h.mint, nat, testWallet(0x6300)); // the token the client's bucket refilled meanwhile
+    h.evm.block += 1n;
+    h.evm.limited.set('transferLogs', 1);
+    expect(await check(h.mint, nat, testWallet(0x66))).toBe('busy');
+    c.msgs.length = 0;
+    await asClient(nat, () => t.send(c, { t: 'join', room: 'practice', name: 'x', skin: 0 }));
+    expect(errors(c)).toEqual(['rate_limited']);
+    expect(await check(h.mint, nat, fresh)).toBe(true);
+    // once the back-off is over and the client's bucket refilled, the plain wallet is read and answered for real
     h.clock.now += 60_000;
     c.msgs.length = 0;
     await asClient(nat, () => t.send(c, { t: 'join', room: 'practice', name: 'x', skin: 0 }));
     expect(errors(c)).toEqual(['game_closed']);
+    expect(h.read).toContain(nobody.toLowerCase());
   });
 
-  it('a value only shown (`shownHolder`) is never busy: the holder on record, else "not a holder", not kept (R3-NET-1)', async () => {
+  it('a value only shown (`shownHolder`) is never busy and never reads the chain: the holder on record, else "not a holder", not kept (R3-NET-1, R4-NET-1)', async () => {
     const h = holderSetup(4);
-    const l = holderReadLimits(4);
     const known = testWallet(0x65);
     const fresh = testWallet(0x66);
     h.evm.mintNft(known);
     const nat = '203.0.113.90';
+    // pages of many wallets behind one address: never busy, nothing read for them; the index (never read yet) reads
+    // the new blocks in the background, so the holder shows as one a moment later
+    for (let i = 0; i < 50; i++) expect(await asClient(nat, () => h.mint.shownHolder(testWallet(0x6100 + i)))).toBe(false);
+    for (let i = 0; i < 50 && !(await asClient(nat, () => h.mint.shownHolder(known))); i++) await sleep(2);
     expect(await asClient(nat, () => h.mint.shownHolder(known))).toBe(true);
-    for (let i = 0; i < l.client.burst; i++) await asClient(nat, () => h.mint.shownHolder(testWallet(0x6100 + i)));
-    h.clock.now += 15_001;
-    h.evm.mintNft(fresh);
-    h.reset();
-    // past the client's bound: the holder on record, else false (no 429, no busy), and nothing read
-    expect(await asClient(nat, () => h.mint.shownHolder(known))).toBe(true);
-    expect(await asClient(nat, () => h.mint.shownHolder(testWallet(0x6200)))).toBe(false);
     expect(h.reads()).toBe(0);
-    // the "no" is not kept: with a budget again the next check reads the chain
-    h.clock.now += 60_000;
-    expect(await asClient('198.51.100.90', () => h.mint.shownHolder(testWallet(0x6200)))).toBe(false);
-    expect(h.read).toContain(testWallet(0x6200).toLowerCase());
+    // a wallet that minted a moment ago: "not a holder" (not kept) until the index reads again, at most every
+    // HOLDERS_ON_DEMAND_MS, then a holder
+    h.evm.mintNft(fresh);
+    expect(await asClient(nat, () => h.mint.shownHolder(fresh))).toBe(false);
+    h.clock.now += HOLDERS_ON_DEMAND_MS;
+    for (let i = 0; i < 50 && !(await asClient(nat, () => h.mint.shownHolder(fresh))); i++) await sleep(2);
+    expect(await asClient(nat, () => h.mint.shownHolder(fresh))).toBe(true);
+    expect(h.reads()).toBe(0);
+    // the pages spent none of the address's holder reads: a gate decision behind it reads the chain at once
+    const plain = testWallet(0x6300);
+    expect(await check(h.mint, nat, plain)).toBe(false);
+    expect(h.read).toEqual([plain.toLowerCase()]);
+    // a wallet a gate check read as a holder is shown as one after the 15 s, until a complete index read since says
+    // otherwise (it sold the emblem)
+    const seller = testWallet(0x6301);
+    h.evm.mintNft(seller);
+    expect(await check(h.mint, '198.51.100.91', seller)).toBe(true);
+    h.clock.now += 20_000;
+    expect(await asClient(nat, () => h.mint.shownHolder(seller))).toBe(true);
   });
 });
