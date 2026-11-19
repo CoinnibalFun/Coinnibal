@@ -168,6 +168,11 @@ export interface ChainGateway {
    */
   knowsOpenTicket?(arenaId: number, player: string): boolean;
   /**
+   * Reads new `Joined` logs into that index now, in the background (coalesced, a few seconds apart at most): a join of
+   * a wallet it does not know was refused for a full queue, or found a ticket. Absent: the index is the sweeper's only.
+   */
+  refreshTicketIndex?(): void;
+  /**
    * On-chain arenas; cached unless `fresh` (a re-read that bypasses the cache). When the RPC fails the
    * last good list is served (stale); `ChainBusyError` only when no list was ever read.
    */
