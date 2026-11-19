@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { Address, PublicClient } from 'viem';
 import { Button, Icon } from '../design';
 import type { AdminApi } from '../site/api';
+import type { SignedPins } from '../wallet/pinned';
 import type { AdminNetwork } from './net';
 import type { Plan } from './plan';
 
@@ -25,6 +26,10 @@ export interface ChainCtx {
   registry?: ContractsRegistry | null;
   /** Tells the panel that a server setting changed (game access): its summary line re-reads them. */
   settingsChanged?: () => void;
+  /** The owner's signed site pins of this chain, verified (null: none yet; absent in tests). */
+  signed?: SignedPins | null;
+  /** Tells the panel that the owner signed new site pins: it reads them again. */
+  pinsChanged?: () => void;
 }
 
 /**

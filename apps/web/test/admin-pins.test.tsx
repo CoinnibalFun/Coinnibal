@@ -1,8 +1,9 @@
 import type { StatusSnapshot } from '@coinnibal/sdk/ops';
-import { LOCALNET_CHAIN_ID, ROBINHOOD_CHAIN_ID } from '@coinnibal/shared';
+import { LOCALNET_CHAIN_ID, OWNER_WALLET, ROBINHOOD_CHAIN_ID } from '@coinnibal/shared';
 import { act, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { getAddress } from 'viem';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeployTab } from '../src/admin/DeployTab';
 import { launchChecklist } from '../src/admin/LaunchTab';
@@ -14,7 +15,8 @@ import { NO_TEST_TOKEN_YET } from '../src/admin/setup';
 import { SetupTab } from '../src/admin/SetupTab';
 import type { ChainCtx } from '../src/admin/ui';
 import { Kb } from '../src/design';
-import { buildPins } from '../src/wallet/pinned';
+import { buildPins, verifySignedPins } from '../src/wallet/pinned';
+import { pinSignRefusal, signSitePins } from '../src/admin/sign-pins';
 import { resetWallets } from '../src/wallet/store';
 import { ALICE, chainStatus } from './evm-helpers';
 
@@ -61,7 +63,8 @@ describe('site pins against the registered contracts', () => {
     expect(r.todo).toEqual([]);
     expect(r.envLines).toEqual([`COINNIBAL_PIN_ARENA=${ARENA}`, `COINNIBAL_PIN_NFT=${NFT}`, `COINNIBAL_PIN_TOKEN=${TOKEN}`]);
     expect(r.viteLines).toEqual([`VITE_CHAIN_ID=${TESTNET}`, `VITE_ARENA_ADDRESS=${ARENA}`, `VITE_NFT_ADDRESS=${NFT}`, `VITE_TOKEN_ADDRESS=${TOKEN}`]);
-    expect(pinSummary(r)).toBe('Built with the registered CoinnibalArena, CoinnibalNFT, game token.');
+    expect(pinSummary(r)).toBe('Pinned in the build: CoinnibalArena, CoinnibalNFT, the game token.');
+    expect(r.rows.map((x) => x.source)).toEqual(['build', 'build', 'build']);
   });
 
   it("the owner's new deploy: nothing pinned yet, each contract named, the token only once it is set", () => {
@@ -73,17 +76,17 @@ describe('site pins against the registered contracts', () => {
       ['nft', 'missing'],
     ]);
     expect(r.envLines).toEqual([`COINNIBAL_PIN_ARENA=${ARENA}`, `COINNIBAL_PIN_NFT=${NFT}`]);
-    expect(pinSummary(r)).toBe(`Not pinned in this build: CoinnibalArena, CoinnibalNFT. Setup → Site pins: the lines for /opt/elymum/.env, then ${PIN_REBUILD} on the VPS.`);
+    expect(pinSummary(r)).toBe('Not signed yet: CoinnibalArena, CoinnibalNFT. Setup → Site pins: sign them with the owner wallet (free, no transaction).');
     // after setToken: the arena and NFT are pinned, the token is not yet
     const after = pinReport({ chainId: TESTNET, arena: ARENA, nft: NFT, token: TOKEN }, buildPins({ arena: ARENA, nft: NFT }));
     expect(after.ok).toBe(false);
     expect(after.todo.map((x) => x.kind)).toEqual(['token']);
     expect(after.envLines.at(-1)).toBe(`COINNIBAL_PIN_TOKEN=${TOKEN}`);
     // the token's name in mid-sentence is lower case; it opens a sentence only when it comes first
-    expect(pinTodoLine(after)).toBe('The game token is not pinned.');
+    expect(pinTodoLine(after)).toBe('The game token is not signed yet.');
     const none = pinReport({ chainId: TESTNET, arena: ARENA, nft: NFT, token: TOKEN }, fresh);
-    expect(pinTodoLine(none)).toBe('CoinnibalArena is not pinned; CoinnibalNFT is not pinned; the game token is not pinned.');
-    expect(pinSummary(none)).toMatch(/^Not pinned in this build: CoinnibalArena, CoinnibalNFT, the game token\. Setup → Site pins/);
+    expect(pinTodoLine(none)).toBe('CoinnibalArena is not signed yet; CoinnibalNFT is not signed yet; the game token is not signed yet.');
+    expect(pinSummary(none)).toMatch(/^Not signed yet: CoinnibalArena, CoinnibalNFT, the game token\. Setup → Site pins/);
     expect(pinTodoLine(pinReport({ chainId: TESTNET, arena: ARENA, nft: NFT, token: TOKEN }, buildPins({ arena: ARENA, nft: NFT, token: TOKEN })))).toBeNull();
     expect(PIN_REBUILD).toBe('coinnibal-compose up -d --build app');
     expect([PIN_BUILD_FIRST, PIN_SWAP]).toEqual(['coinnibal-compose build app', 'coinnibal-compose up -d app']);
@@ -93,10 +96,11 @@ describe('site pins against the registered contracts', () => {
   it('a pin of an older deployment is named as different', () => {
     const r = pinReport({ chainId: TESTNET, arena: ARENA, nft: NFT, token: null }, buildPins({ arena: OTHER, nft: NFT }));
     expect(r.rows.find((x) => x.kind === 'arena')).toMatchObject({ state: 'differs', pinned: OTHER });
-    expect(pinSummary(r)).toMatch(/^Pinned to another address: CoinnibalArena\./);
+    expect(pinSummary(r)).toBe('Signed for another address: CoinnibalArena. COINNIBAL_PIN_ARENA in /opt/elymum/.env names another address: clear it and rebuild (Setup → Site pins → Advanced).');
+    expect(r.overridden.map((x) => x.kind)).toEqual(['arena']);
     const token = pinReport({ chainId: TESTNET, arena: ARENA, nft: NFT, token: TOKEN }, buildPins({ arena: ARENA, nft: NFT, token: OTHER }));
-    expect(pinSummary(token)).toMatch(/^Pinned to another address: the game token\./);
-    expect(pinTodoLine(token)).toBe('The game token is pinned to another address.');
+    expect(pinSummary(token)).toMatch(/^Signed for another address: the game token\. COINNIBAL_PIN_TOKEN/);
+    expect(pinTodoLine(token)).toBe('The game token is pinned to another address in the build.');
   });
 
   it('a broken pin, a build for another chain, the local node, and nothing to compare', () => {
@@ -133,7 +137,9 @@ describe('the launch checklist line and the mainnet step', () => {
   it('"The site trusts the registered contracts" goes green only with the registered addresses pinned', () => {
     const todo = lines().find((x) => x.id === 'pins')!;
     expect(todo).toMatchObject({ label: 'The site trusts the registered contracts', ok: false, tab: 'deploy' });
-    expect(todo.detail).toMatch(/Not pinned in this build: CoinnibalArena, CoinnibalNFT\. Setup → Site pins/);
+    expect(todo.detail).toMatch(/Not signed yet: CoinnibalArena, CoinnibalNFT\. Setup → Site pins: sign them/);
+    // the owner's signed record counts the same as the build's pins
+    expect(launchChecklist({ net: registered(), status: status(), allowlist: null, settings: null, quote: null, pins: buildPins({}), signed: { arena: ARENA, nft: NFT, token: null } }).find((x) => x.id === 'pins')?.ok).toBe(true);
     expect(lines(buildPins({ arena: ARENA, nft: NFT })).find((x) => x.id === 'pins')?.ok).toBe(true);
     // once the token is set it needs its pin too
     expect(lines(buildPins({ arena: ARENA, nft: NFT }), status({ token: TOKEN })).find((x) => x.id === 'pins')?.ok).toBe(false);
@@ -149,9 +155,10 @@ describe('the launch checklist line and the mainnet step', () => {
     const main = resolveNetwork(chainStatus({ chainId: ROBINHOOD_CHAIN_ID, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, arenaAddress: ARENA, nftAddress: NFT }));
     const steps = mainnetChecklist(main, status(), buildPins({ chainId: String(ROBINHOOD_CHAIN_ID) }));
     expect(steps.map((s) => s.id).slice(3, 7)).toEqual(['arena', 'nft', 'pins', 'allowlist']);
-    expect(steps.find((s) => s.id === 'pins')).toMatchObject({ ok: false, where: 'Server', detail: expect.stringContaining(PIN_REBUILD) });
+    expect(steps.find((s) => s.id === 'pins')).toMatchObject({ ok: false, where: 'Setup', detail: expect.stringContaining('one free signature from the owner wallet') });
+    expect(mainnetChecklist(main, status(), buildPins({ chainId: String(ROBINHOOD_CHAIN_ID) }), { arena: ARENA, nft: NFT, token: null }).find((s) => s.id === 'pins')?.ok).toBe(true);
     expect(mainnetChecklist(main, status(), buildPins({ chainId: String(ROBINHOOD_CHAIN_ID), arena: ARENA, nft: NFT })).find((s) => s.id === 'pins')?.ok).toBe(true);
-    expect(steps.find((s) => s.id === 'token')?.detail).toMatch(/Then pin it: COINNIBAL_PIN_TOKEN/);
+    expect(steps.find((s) => s.id === 'token')?.detail).toMatch(/Then sign the site pins again/);
     // on the testnet nothing of the mainnet list is ticked
     expect(mainnetChecklist(registered(), status(), buildPins({ arena: ARENA, nft: NFT })).find((s) => s.id === 'pins')?.ok).toBe(false);
   });
@@ -165,36 +172,48 @@ describe('Setup → Site pins', () => {
     expect([...document.querySelectorAll('[data-pin]')].map((e) => e.getAttribute('data-state'))).toEqual(['match', 'match', 'match']);
   });
 
-  it('pins differ: names each contract, the .env lines, the wallet check, the rebuild and the build outside Docker', () => {
+  it('pins differ: names each contract and offers the signature; the .env override, the rebuild and the build outside Docker sit under Advanced', () => {
     ui(<PinsCard ctx={ctxOf()} pins={buildPins({ arena: OTHER })} />);
     const todo = screen.getByTestId('site-pins-todo');
-    expect(todo.textContent).toMatch(/CoinnibalArena is pinned to another address; CoinnibalNFT is not pinned\./);
+    expect(todo.textContent).toMatch(/CoinnibalArena is pinned to another address in the build; CoinnibalNFT is not signed yet\./);
     // each row: the state in a pill, what it means under it
-    expect([...document.querySelectorAll('[data-pin]')].map((e) => e.textContent)).toEqual(['pinned to another address', 'not pinned']);
-    expect(screen.getByText(`This build pins ${OTHER}: the site refuses the registered arena.`)).toBeTruthy();
-    expect(screen.getByText('The mint page signs nothing until it is pinned.')).toBeTruthy();
-    expect(todo.textContent).toContain('Check each address against the deploy transaction in your own wallet before you paste it.');
-    expect(todo.textContent).toContain('/opt/elymum/.env');
-    expect(todo.textContent).toContain(`COINNIBAL_PIN_ARENA=${ARENA}`);
-    expect(todo.textContent).toContain(`COINNIBAL_PIN_NFT=${NFT}`);
+    expect([...document.querySelectorAll('[data-pin]')].map((e) => e.textContent)).toEqual(['another address in the build', 'not signed yet']);
+    expect(screen.getByText(`The build pins ${OTHER}: the site refuses the registered arena.`)).toBeTruthy();
+    expect(screen.getByText('The mint page signs nothing until you sign it.')).toBeTruthy();
+    expect(screen.getByTestId('sign-pins').textContent).toContain('Sign the site pins');
+    expect(todo.textContent).toContain("The build's own pin wins over a signature here");
+    const adv = screen.getByTestId('site-pins-advanced');
+    expect(adv.tagName).toBe('DETAILS');
+    expect((adv as HTMLDetailsElement).open).toBe(false);
+    expect(adv.textContent).toContain('Check each address against the deploy transaction in your own wallet before you paste it.');
+    expect(adv.textContent).toContain('/opt/elymum/.env');
+    expect(adv.textContent).toContain(`COINNIBAL_PIN_ARENA=${ARENA}`);
+    expect(adv.textContent).toContain(`COINNIBAL_PIN_NFT=${NFT}`);
     // no token line before the arena's token is set
-    expect(todo.textContent).not.toContain('COINNIBAL_PIN_TOKEN');
-    expect(todo.textContent).toContain(PIN_REBUILD);
+    expect(adv.textContent).not.toContain('COINNIBAL_PIN_TOKEN');
+    expect(adv.textContent).toContain(PIN_REBUILD);
     // with players in the arenas: build first, swap in the break (up -d --build swaps only once the build is done)
     expect(screen.getByTestId('site-pins-break').textContent).toBe(
       `Once players are in the arenas: the build takes minutes, longer than the break after a bell, so build first (${PIN_BUILD_FIRST}), then swap in the break (${PIN_SWAP}).`,
     );
-    expect(todo.textContent).toContain(`VITE_CHAIN_ID=${TESTNET}`);
-    expect(todo.textContent).toContain(`VITE_ARENA_ADDRESS=${ARENA}`);
-    expect(screen.getByText(/The game token gets its line here once it is set on the arena/)).toBeTruthy();
-    expect(within(todo).getAllByRole('button', { name: /Copy the (lines|command)/ })).toHaveLength(3);
+    expect(adv.textContent).toContain(`VITE_CHAIN_ID=${TESTNET}`);
+    expect(adv.textContent).toContain(`VITE_ARENA_ADDRESS=${ARENA}`);
+    expect(screen.getByText(/Once the game token is set on the arena, sign again/)).toBeTruthy();
+    expect(within(adv).getAllByRole('button', { name: /Copy the (lines|command)/ })).toHaveLength(3);
+  });
+
+  it("signed by the owner: green, the pill says signed, nothing to sign", () => {
+    ui(<PinsCard ctx={ctxOf({ status: status({ token: TOKEN }), signed: { chainId: TESTNET, arena: ARENA, nft: NFT, token: TOKEN, signedAt: '2026-11-19T10:00:00.000Z' } })} pins={buildPins({})} />);
+    expect(screen.getByTestId('site-pins-ok')).toBeTruthy();
+    expect([...document.querySelectorAll('[data-pin]')].map((e) => e.textContent)).toEqual(['signed', 'signed', 'signed']);
+    expect(screen.queryByTestId('sign-pins')).toBeNull();
   });
 
   it('the token set and nothing pinned: the row label is capitalised, the red line names the token in lower case', () => {
     ui(<PinsCard ctx={ctxOf({ status: status({ token: TOKEN }) })} pins={buildPins({})} />);
-    expect(screen.getByTestId('site-pins-todo').textContent).toContain('CoinnibalArena is not pinned; CoinnibalNFT is not pinned; the game token is not pinned.');
+    expect(screen.getByTestId('site-pins-todo').textContent).toContain('CoinnibalArena is not signed yet; CoinnibalNFT is not signed yet; the game token is not signed yet.');
     expect(screen.getByText('The game token')).toBeTruthy();
-    expect(screen.queryByText(/The game token gets its line here/)).toBeNull();
+    expect(screen.queryByText(/Once the game token is set on the arena, sign again/)).toBeNull();
   });
 
   it('sits in Setup once the contracts are registered (this build pins nothing in tests)', () => {
@@ -213,5 +232,42 @@ describe('Setup → Advanced, the token step of the wizard (testnet)', () => {
     view.unmount();
     ui(<DeployTab ctx={ctxOf({ status: status({ testToken: TOKEN }) })} advanced />);
     expect(document.querySelector('[data-card="deploy-token-note"]')?.textContent).toContain('Finish setup (top of Setup) sets it, or the game token card in this section with one confirmation.');
+  });
+});
+
+describe('signing the site pins (one free signature from the owner wallet)', () => {
+  const owner = privateKeyToAccount(generatePrivateKey());
+  const targets = { arena: ARENA, nft: NFT, token: null };
+
+  it('refuses before the wallet opens: no owner wallet, another wallet, no session, nothing deployed', () => {
+    const base = { me: owner.address, owner: owner.address, chainId: TESTNET, targets, api: {} as never };
+    expect(pinSignRefusal(base)).toBeNull();
+    expect(pinSignRefusal({ ...base, owner: null })).toMatch(/no valid owner wallet/);
+    expect(pinSignRefusal({ ...base, me: null })).toMatch(/^Connect the owner wallet/);
+    expect(pinSignRefusal({ ...base, me: ALICE })).toBe(`Sign with the owner wallet ${owner.address.slice(0, 6)}…${owner.address.slice(-4)}. The connected wallet is ${ALICE.slice(0, 6)}…${ALICE.slice(-4)}.`);
+    expect(pinSignRefusal({ ...base, api: null })).toMatch(/Sign in at the top right/);
+    expect(pinSignRefusal({ ...base, targets: { arena: ARENA, nft: null, token: null } })).toMatch(/Deploy and register/);
+  });
+
+  it('signs the checksummed fields and stores them; the record verifies against the owner for that chain only', async () => {
+    const saved: unknown[] = [];
+    const api = { savePins: vi.fn(async (r: unknown) => (saved.push(r), r)) } as never;
+    const now = new Date('2026-11-19T10:00:00.000Z');
+    const rec = await signSitePins({ api, me: owner.address, owner: owner.address, chainId: TESTNET, targets: { arena: ARENA.toLowerCase() as never, nft: NFT, token: TOKEN }, now, sign: (m) => owner.signMessage({ message: m }) });
+    expect(rec).toMatchObject({ chainId: TESTNET, arena: ARENA, nft: NFT, token: TOKEN, signedAt: now.toISOString() });
+    expect(saved).toHaveLength(1);
+    expect(await verifySignedPins(rec, TESTNET, owner.address)).toMatchObject({ arena: ARENA, nft: NFT, token: TOKEN });
+    expect(await verifySignedPins(rec, ROBINHOOD_CHAIN_ID, owner.address)).toBeNull();
+    expect(await verifySignedPins(rec, TESTNET, ALICE)).toBeNull();
+    // a cancelled signature says so, and nothing is stored
+    await expect(signSitePins({ api, me: owner.address, owner: owner.address, chainId: TESTNET, targets, sign: async () => Promise.reject(Object.assign(new Error('User rejected the request.'), { code: 4001 })) })).rejects.toThrow(/Signature cancelled/);
+    expect(saved).toHaveLength(1);
+  });
+
+  it('the button names the owner wallet when another wallet is connected (this build trusts the built-in owner)', async () => {
+    ui(<PinsCard ctx={ctxOf({ api: {} as never })} pins={buildPins({})} />);
+    act(() => screen.getByTestId('sign-pins').click());
+    await act(async () => new Promise((r) => setTimeout(r, 10)));
+    expect(document.body.textContent).toContain(`Sign with the owner wallet ${OWNER_WALLET.slice(0, 6)}…${OWNER_WALLET.slice(-4)}.`);
   });
 });

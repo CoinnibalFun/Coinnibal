@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { verifyMerkleProof } from '@coinnibal/sdk';
-import { CUSTOM_DEFAULTS, PROTOCOL_VERSION, type ChainStatus, type ServerMessage } from '@coinnibal/shared';
+import { CUSTOM_DEFAULTS, PROTOCOL_VERSION, sitePinsMessage, type ChainStatus, type ServerMessage, type SitePinsFields } from '@coinnibal/shared';
 import type { Address, Hex } from 'viem';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
@@ -12,6 +12,7 @@ import { loadConfig } from '../src/config';
 import { Limiter } from '../src/net/limiter';
 import { ProfileStore } from '../src/profiles';
 import { CONTRACTS_FILE } from '../src/site/contracts';
+import { SITE_PINS_FILE, SitePinsStore } from '../src/site/pins';
 import { generateCollection, revealOffset, sha256Hex } from '../src/site/nft/generate';
 import { unrevealedSvg } from '../src/site/nft/unrevealed';
 import { ALLOWLIST_FILE, HOLDER_MISS_TTL_MS, parseNftPath } from '../src/site/mint';
@@ -224,6 +225,74 @@ describe('contracts registry', () => {
     } finally {
       await env.app.close();
     }
+  });
+});
+
+describe('site pins (the owner signs the contracts the site trusts)', () => {
+  // hardhat account #0 (the fake arena's admin): a well-known test key
+  const owner = testSigner('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80');
+  let h: Harness;
+  beforeAll(async () => {
+    h = await harness();
+    expect((await h.call('POST', '/api/admin/contracts', { wallet: ADMIN, body: { kind: 'arena', address: ARENA } })).status).toBe(201);
+    expect((await h.call('POST', '/api/admin/contracts', { wallet: ADMIN, body: { kind: 'nft', address: NFT } })).status).toBe(201);
+  });
+  afterAll(async () => {
+    await h.app.close();
+  });
+  const fields = (over: Partial<SitePinsFields> = {}): SitePinsFields => ({ chainId: 31337, arena: ARENA, nft: NFT, token: TOKEN, signedAt: new Date().toISOString(), ...over });
+  const signed = async (f: SitePinsFields, by = owner) => ({ ...f, signature: await by.sign(sitePinsMessage(f)) });
+  const save = (body: unknown, w: string = ADMIN) => h.call('POST', '/api/admin/pins', { wallet: w, body });
+
+  it('is public and empty at first; only an admin may write', async () => {
+    expect((await h.call('GET', '/api/site/pins')).body).toEqual({ record: null });
+    expect((await save(await signed(fields()), wallet())).status).toBe(403);
+    expect((await h.call('POST', '/api/admin/pins', { body: await signed(fields()) })).status).toBe(401);
+  });
+
+  it('refuses a bad shape, another chain, other contracts, a wrong token and a signer that is not the admin', async () => {
+    expect((await save({ chainId: 31337, arena: 'nope' })).body.error).toBe('bad_request');
+    const chain = await save(await signed(fields({ chainId: 46630 })));
+    expect([chain.status, chain.body.field]).toEqual([400, 'chainId']);
+    const other = await save(await signed(fields({ arena: '0x00000000000000000000000000000000000000b2' })));
+    expect([other.status, other.body.error]).toEqual([409, 'wrong_state']);
+    const token = await save(await signed(fields({ token: null })));
+    expect([token.status, token.body.field]).toEqual([409, 'token']);
+    const stranger = await save(await signed(fields(), testSigner()));
+    expect([stranger.status, stranger.body.error]).toEqual([403, 'not_owner']);
+    // the signature of other fields (a changed address after signing)
+    const f = fields();
+    const swapped = { ...(await signed(f)), nft: ARENA, arena: NFT };
+    expect((await save(swapped)).status).toBe(409);
+    const late = { ...(await signed(f)), signedAt: new Date(Date.parse(f.signedAt) + 1).toISOString() };
+    expect((await save(late)).body.error).toBe('not_owner');
+    const future = await save(await signed(fields({ signedAt: new Date(Date.now() + 86_400_000).toISOString() })));
+    expect([future.status, future.body.field]).toEqual([400, 'signedAt']);
+    expect((await h.call('GET', '/api/site/pins')).body.record).toBeNull();
+  });
+
+  it('stores the signed record per chain (file, public read), and refuses an older one after it', async () => {
+    const rec = await signed(fields({ arena: ARENA.toLowerCase(), signedAt: '2026-01-19T10:00:00.000Z' }));
+    // the panel signs checksummed addresses: a lower-case arena is another message
+    expect((await save(rec)).body.error).toBe('not_owner');
+    const good = await signed(fields({ signedAt: '2026-01-19T10:00:00.000Z' }));
+    const ok = await save(good);
+    expect(ok.status).toBe(201);
+    expect(ok.body.record).toEqual(good);
+    expect((await h.call('GET', '/api/site/pins')).body).toEqual({ record: good });
+    expect((await h.call('GET', '/api/site/pins?chainId=31337')).body).toEqual({ record: good });
+    expect((await h.call('GET', '/api/site/pins?chainId=46630')).body).toEqual({ record: null });
+    expect((await h.call('GET', '/api/admin/pins', { wallet: ADMIN })).body).toEqual({ record: good });
+    expect(JSON.parse(readFileSync(join(h.dir, SITE_PINS_FILE), 'utf8'))).toEqual({ '31337': good });
+    const older = await save(await signed(fields({ signedAt: '2026-01-19T09:00:00.000Z' })));
+    expect([older.status, older.body.field]).toEqual([409, 'signedAt']);
+    // a token not set on the arena yet: the pins name none
+    h.evm.config.token = null;
+    const none = await save(await signed(fields({ token: null, signedAt: '2026-01-19T11:00:00.000Z' })));
+    expect(none.status).toBe(201);
+    h.evm.config.token = TOKEN;
+    // a restart reads the file back
+    expect(new SitePinsStore(h.dir).get(31337)).toMatchObject({ token: null, signedAt: '2026-01-19T11:00:00.000Z' });
   });
 });
 

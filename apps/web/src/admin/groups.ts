@@ -2,7 +2,7 @@ import { formatGasAmount } from '@coinnibal/sdk';
 import { testTokenRefusal, type StatusSnapshot } from '@coinnibal/sdk/ops';
 import { GAS_SYMBOL } from '@coinnibal/shared';
 import type { ContractsRegistry, GameAccess, SiteCounts, SiteSettings } from '@coinnibal/shared';
-import type { BuildPins } from '../wallet/pinned';
+import type { BuildPins, Pins } from '../wallet/pinned';
 import type { AdminNetwork } from './net';
 import { registeredPinReport } from './pins';
 import { setupSteps } from './setup';
@@ -74,6 +74,8 @@ export interface SummaryInput {
   bots?: { bots: number; humans: number; rooms: number } | null;
   /** The site build's contract pins (default: this build's). */
   pins?: BuildPins;
+  /** The owner's verified signed pins of this chain. */
+  signed?: Pins | null;
 }
 
 const ACCESS: Record<GameAccess, string> = { admins: 'admins only', holders: 'NFT holders', public: 'everyone', maintenance: 'maintenance (admins only)' };
@@ -103,14 +105,14 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
     case 'setup': {
       const parts = [`Arena ${net.arenaAddress ? (a?.code === 'ok' ? 'ok' : (a?.code ?? '…')) : 'missing'}`, `NFT ${net.nftAddress ? (status?.nft?.code === 'ok' ? 'ok' : (status?.nft?.code ?? '…')) : 'missing'}`];
       if (cfg) parts.push(`token ${cfg.token ? 'set' : 'not set'}`, `holder perks ${cfg.holderNft ? `on (${cfg.holderBurnBps} + ${cfg.holderVaultBps} bps)` : 'off'}`);
-      const pins = registeredPinReport(net, status, i.pins);
-      if (pins.ok !== null) parts.push(`site pins ${pins.ok ? 'ok' : 'to set'}`);
+      const pins = registeredPinReport(net, status, i.pins, i.signed ?? null);
+      if (pins.ok !== null) parts.push(`site pins ${pins.ok ? 'ok' : 'to sign'}`);
       const now = parts.join(' · ');
       if (!net.arenaAddress) return { now, next: 'Deploy CoinnibalArena from the owner wallet (below).' };
       if (!net.nftAddress) return { now, next: 'Deploy CoinnibalNFT from the owner wallet (below).' };
       if (!cfg) return { now, next: null };
       // right after the deploy (and after setToken): the site signs nothing with contracts it was not built with
-      if (pins.ok === false) return { now, next: 'Pin the contracts in the site build: Setup → Site pins (the VPS shell, then a rebuild).' };
+      if (pins.ok === false) return { now, next: 'Sign the site pins: Setup → Site pins (one free signature from the owner wallet).' };
       const steps = setupSteps({ status }, { openMint: !net.mainnet });
       if (!cfg.token && !steps.some((s) => s.id === 'token')) {
         const known = i.registry?.token?.address ?? status?.testToken?.address ?? null;
