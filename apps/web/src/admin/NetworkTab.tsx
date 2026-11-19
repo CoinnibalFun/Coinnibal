@@ -450,7 +450,7 @@ export function BackupCard({ ctx, sign = walletProofSigner() }: { ctx: ChainCtx;
           text:
             what === 'copy'
               ? 'Command copied. Paste it on the new server within 10 minutes: the signature opens one download, and your session ends within 2 hours.'
-              : 'New-server command copied. Paste it into the new server (SSH, logged in as ubuntu) within 10 minutes. It copies the settings and the data once.',
+              : 'New-server command copied. Paste it into the new server (SSH, logged in as ubuntu) within 10 minutes. It copies the settings and the data once, never the site pins: set those again on the new server and rebuild there (Setup → Site pins).',
         });
       }
     } catch (e) {
