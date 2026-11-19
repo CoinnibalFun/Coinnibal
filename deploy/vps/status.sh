@@ -41,6 +41,11 @@ if [[ -n "$deployed" ]]; then
 else
   echo "deployed: (nothing recorded yet)"
 fi
+deployed_image="$(cat "$COINNIBAL_STATE/deployed-image" 2>/dev/null || true)"
+running_image="$(app_image)"
+if [[ -n "$deployed_image" && -n "$running_image" && "$running_image" != "$deployed_image" ]]; then
+  echo "RUNNING ANOTHER IMAGE than the one deployed for that commit (put back by hand?): the weekly rebuild waits for the next deploy"
+fi
 if [[ -s "$COINNIBAL_STATE/failed" ]]; then
   echo "LAST BUILD FAILED for $(cut -c1-12 "$COINNIBAL_STATE/failed"): journalctl -u $INSTALLED_UNIT_PREFIX-update -n 200"
 fi

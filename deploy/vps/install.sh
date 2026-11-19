@@ -391,9 +391,9 @@ elif [[ -n "$restore_url" ]]; then
   printf '%s\n%s\n' "$restore_token" "$restore_proof" | "$DIR/deploy/vps/restore.sh" --yes --no-start --url "$restore_url"
 fi
 dc up -d --remove-orphans
-git rev-parse HEAD >"$STATE/deployed"
+# the commit, the image it runs on (the weekly refresh rebuilds only that one) and the time
+record_deployed "$(git rev-parse HEAD)"
 rm -f "$STATE/failed"
-date -u +%FT%TZ >"$STATE/deployed-at"
 
 say "10/10 Auto-deploy, daily backups, shortcuts"
 install -m 644 deploy/vps/systemd/*.service deploy/vps/systemd/*.timer /etc/systemd/system/
