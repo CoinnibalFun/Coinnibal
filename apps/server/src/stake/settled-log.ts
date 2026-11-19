@@ -4,6 +4,12 @@ import { dirname } from 'node:path';
 /** One confirmed money movement the server signed: a ticket settled or cancelled, or a loot burn. */
 export interface SettledRecord {
   kind: 'settle' | 'cancel' | 'sweep';
+  /**
+   * The arena contract that moved the money (lower case). Session ids restart at 1 on every new arena contract, so
+   * a record only ever describes a session of this contract; records written before this field existed have none
+   * and match no contract (`SettledLog.get`).
+   */
+  contract?: string;
   /** The journal key (`<arenaId>:<player>:<sessionId>`, or `sweep:<room>:<round>`). */
   key: string;
   arenaId: number;
@@ -18,6 +24,8 @@ export interface SettledRecord {
   fee?: number;
   /** The journal reason (`round`, `death`, `crash`, `stale`, ...). */
   reason?: string;
+  /** A cancel of a ticket nobody seated while its arena was open (see `SettlementItem.noShow`). */
+  noShow?: true;
   sweepId?: number;
   tx: string;
   /** Unix ms. */
@@ -36,13 +44,19 @@ const MAX_RECORDS = 200_000;
  * - **Reorg protection.** The journal forgets an item once its receipt is in. If a reorg dropped that
  *   transaction the session is open again on chain; the stale sweeper would then refund it at the entry fee
  *   (a winner would lose the winnings, a loser would get the stake back from the winners' share). With this
- *   record the sweeper re-sends the original settlement instead (`EvmChain.sweepStale`).
+ *   record the sweeper re-sends the original settlement instead (`EvmChain.sweepStale`). A record is scoped to the
+ *   arena contract that wrote it (a new arena restarts session ids at 1, so the same key names another ticket
+ *   there), and the sweeper re-sends only while the original transaction has no successful receipt.
  * - **Audit and appeals.** What every ticket was paid, why, and in which transaction, for 14 days.
  *
  * Appends are cheap (one line); the file is compacted when it is loaded and holds far more lines than records.
  */
 export class SettledLog {
   private readonly byKey = new Map<string, SettledRecord>();
+  /** No-show cancels by wallet (lower case): key → Unix ms. */
+  private readonly noShows = new Map<string, Map<string, number>>();
+  /** The latest played ticket (`settle`) of each wallet (lower case), Unix ms; oldest-updated first. */
+  private readonly played = new Map<string, number>();
 
   constructor(
     private readonly path: string | null,
@@ -81,7 +95,53 @@ export class SettledLog {
   private keep(r: SettledRecord): void {
     this.byKey.delete(r.key);
     this.byKey.set(r.key, r);
-    if (this.byKey.size > MAX_RECORDS) this.byKey.delete(this.byKey.keys().next().value!);
+    if (r.kind === 'cancel' && r.noShow && r.player) {
+      const who = r.player.toLowerCase();
+      const m = this.noShows.get(who) ?? new Map<string, number>();
+      m.set(r.key, r.at);
+      this.noShows.set(who, m);
+    }
+    if (r.kind === 'settle' && r.player) {
+      const who = r.player.toLowerCase();
+      const at = Math.max(r.at, this.played.get(who) ?? -Infinity);
+      this.played.delete(who);
+      this.played.set(who, at);
+      if (this.played.size > MAX_RECORDS) this.played.delete(this.played.keys().next().value!);
+    }
+    if (this.byKey.size > MAX_RECORDS) {
+      const old = this.byKey.keys().next().value!;
+      const gone = this.byKey.get(old);
+      this.byKey.delete(old);
+      if (gone?.player) this.noShows.get(gone.player.toLowerCase())?.delete(old);
+    }
+  }
+
+  /** Unix ms of each no-show cancel of `player` at or after `since` (the join permits' no-show rule). */
+  noShowsSince(player: string, since: number): number[] {
+    const m = this.noShows.get(player.toLowerCase());
+    if (!m) return [];
+    const out: number[] = [];
+    for (const [k, at] of m) {
+      if (at >= since) out.push(at);
+      // older than the log keeps: never needed again
+      else if (at < this.now() - SETTLED_KEEP_MS) m.delete(k);
+    }
+    return out;
+  }
+
+  /**
+   * Unix ms of `player`'s latest played ticket (a `settle` record: seated and paid out, not a `cancel`) within the last
+   * `SETTLED_KEEP_MS`; null when it has none (the join permits' standing).
+   */
+  lastPlayedAt(player: string): number | null {
+    const who = player.toLowerCase();
+    const at = this.played.get(who);
+    if (at === undefined) return null;
+    if (at < this.now() - SETTLED_KEEP_MS) {
+      this.played.delete(who);
+      return null;
+    }
+    return at;
   }
 
   private compact(): void {
@@ -107,8 +167,17 @@ export class SettledLog {
     }
   }
 
-  get(key: string): SettledRecord | undefined {
-    return this.byKey.get(key);
+  /**
+   * The record of `key` written for the arena contract `contract`, within the last `SETTLED_KEEP_MS`. A record of
+   * another contract (an earlier arena on the same chain, whose session ids are reused by the new one) or one
+   * without a contract (written before records named it) never matches.
+   */
+  get(key: string, contract: string): SettledRecord | undefined {
+    const r = this.byKey.get(key);
+    if (!r || !r.contract || r.contract !== contract.toLowerCase()) return undefined;
+    // a long-running process keeps records in memory past the window the file keeps
+    if (r.at < this.now() - SETTLED_KEEP_MS) return undefined;
+    return r;
   }
 
   /** The newest records first (at most `limit`), optionally of one wallet. */

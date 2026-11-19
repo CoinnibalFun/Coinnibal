@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PlayGate, playAccess } from '../src/site/play/PlayGate';
+import { BUSY_RETRIES, PlayGate, playAccess } from '../src/site/play/PlayGate';
 import { TOKEN_KEY } from '../src/site/session';
 import { resetSiteSettings } from '../src/site/settings';
 import { SETTINGS, installDomStubs, json, mockFetch } from './site-helpers';
@@ -98,5 +98,28 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     // a non-holder stays outside
     ({ restore } = mockFetch({ 'GET /api/site/settings': holders, 'GET /api/auth/me': { address: USER, admin: false, canPlay: false } }));
     expect((await playAccess()).reason).toBe('holders');
+  });
+
+  it('holders mode: a busy NFT check (busy, or a 429) is asked again, never taken for "not a holder" (R3-NET-1)', async () => {
+    const holders = { settings: { ...SETTINGS, gameAccess: 'holders' } };
+    store(USER, 'holder-token');
+    // the server could not check the wallet right now, twice; then it knows
+    let n = 0;
+    const answers = [{ address: USER, admin: false, holder: false, canPlay: false, busy: true }, json(429, { error: 'rate_limited' }), { address: USER, admin: false, holder: true, canPlay: true }];
+    ({ restore } = mockFetch({ 'GET /api/site/settings': holders, 'GET /api/auth/me': () => answers[Math.min(n++, answers.length - 1)] }));
+    expect(await playAccess({ busyWaitMs: 1 })).toEqual({ allowed: true, reason: 'holder', session: { address: USER, token: 'holder-token', admin: false } });
+    expect(n).toBe(3);
+    restore();
+    // busy every time: asked BUSY_RETRIES more times, then the holders page
+    const { calls, restore: r } = mockFetch({ 'GET /api/site/settings': holders, 'GET /api/auth/me': { address: USER, admin: false, holder: false, canPlay: false, busy: true } });
+    restore = r;
+    expect((await playAccess({ busyWaitMs: 1 })).reason).toBe('holders');
+    expect(calls.filter((c) => c.path === '/api/auth/me')).toHaveLength(BUSY_RETRIES + 1);
+    restore();
+    // a plain "no" is not asked again
+    const plain = mockFetch({ 'GET /api/site/settings': holders, 'GET /api/auth/me': { address: USER, admin: false, holder: false, canPlay: false } });
+    restore = plain.restore;
+    expect((await playAccess({ busyWaitMs: 1 })).reason).toBe('holders');
+    expect(plain.calls.filter((c) => c.path === '/api/auth/me')).toHaveLength(1);
   });
 });

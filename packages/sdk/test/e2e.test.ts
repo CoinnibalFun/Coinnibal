@@ -77,6 +77,8 @@ import {
   verifyMerkleProof,
   withdrawCall,
   joinCall,
+  getJoinNonce,
+  signJoinPermit,
   type ContractCall,
 } from '../src/index';
 import { checkDeployedCode, fetchStatus } from '../src/ops';
@@ -92,6 +94,7 @@ const KEYS = [
 ] as const;
 const [admin, server, p1, p2, feeWallet, outsider] = KEYS.map((k) => privateKeyToAccount(k));
 const T = 10n ** 18n;
+
 
 let child: ChildProcess | null = null;
 let up = false;
@@ -173,6 +176,12 @@ afterAll(() => killChild());
 describe('e2e on a hardhat node', () => {
   let token: Address;
   let arena: Address;
+  /** The game server's join permit (CoinnibalArena v4), as `POST /api/arena/permit` hands it out: the server key signs. */
+  async function permitFor(player: Address, arenaId: number, key = server) {
+    const deadline = (await client.getBlock()).timestamp + 600n;
+    const nonce = await getJoinNonce(client, arena, player);
+    return { deadline, signature: await signJoinPermit(key, { chainId: await client.getChainId(), arena, player, arenaId, nonce, deadline }) };
+  }
   let nft: Address;
 
   it('deploys the TestToken and the arena with the bundled bytecode', async (ctx) => {
@@ -213,10 +222,10 @@ describe('e2e on a hardhat node', () => {
     for (const p of [p1, p2]) await send(p.address, faucetCall(token));
     expect(await getTokenBalance(client, token, p1.address)).toBe(1_000_000n * T);
 
-    const plan = await planJoin(client, { arena, arenaId: 1, player: p1.address });
+    const plan = await planJoin(client, { arena, arenaId: 1, player: p1.address, permit: await permitFor(p1.address, 1) });
     expect(plan.calls.map((c) => c.functionName)).toEqual(['approve', 'join']);
     for (const call of plan.calls) await send(p1.address, call);
-    for (const call of (await planJoin(client, { arena, arenaId: 1, player: p2.address, token })).calls) await send(p2.address, call);
+    for (const call of (await planJoin(client, { arena, arenaId: 1, player: p2.address, token, permit: await permitFor(p2.address, 1) })).calls) await send(p2.address, call);
 
     const s1 = await getSession(client, arena, 1, p1.address);
     const s2 = await getSession(client, arena, 1, p2.address);
@@ -226,8 +235,11 @@ describe('e2e on a hardhat node', () => {
     expect((await getArena(client, arena, 1)).vault).toBe(2000n * T);
 
     // the joining player cannot join twice
-    const twice = await simulateCall(client, (await planJoin(client, { arena, arenaId: 1, player: p1.address, token })).join, p1).catch((e) => e);
+    const twice = await simulateCall(client, (await planJoin(client, { arena, arenaId: 1, player: p1.address, token, permit: await permitFor(p1.address, 1) })).join, p1).catch((e) => e);
     expect(describeError(twice).name).toBe('SessionExists');
+    // CoinnibalArena v4: a permit the server key did not sign buys nothing (here the player signs its own)
+    const forged = await simulateCall(client, joinCall(arena, 2, await permitFor(p1.address, 2, p1)), p1).catch((e) => e);
+    expect(describeError(forged).name).toBe('InvalidPermit');
 
     // the server's ledger works in ledger units (6 decimals) and converts at the chain boundary
     const entryLedger = toLedger(s1.entryFee, 18);
@@ -261,7 +273,7 @@ describe('e2e on a hardhat node', () => {
     expect(await getTokenBalance(client, token, feeWallet.address)).toBe(split1.toVault);
 
     // a ticket that is never played is cancelled by the server: the full entry fee comes back, no fee
-    for (const call of (await planJoin(client, { arena, arenaId: 1, player: p2.address, token })).calls) await send(p2.address, call);
+    for (const call of (await planJoin(client, { arena, arenaId: 1, player: p2.address, token, permit: await permitFor(p2.address, 1) })).calls) await send(p2.address, call);
     const s3 = await getSession(client, arena, 1, p2.address);
     const before3 = await getTokenBalance(client, token, p2.address);
     await send(server.address, cancelCall(arena, [{ arenaId: 1, player: p2.address, sessionId: s3.id }]));
@@ -276,7 +288,7 @@ describe('e2e on a hardhat node', () => {
 
   it('burns floor loot with a monotonic sweep id', async (ctx) => {
     if (!up) return ctx.skip();
-    for (const call of (await planJoin(client, { arena, arenaId: 1, player: p1.address, token })).calls) await send(p1.address, call);
+    for (const call of (await planJoin(client, { arena, arenaId: 1, player: p1.address, token, permit: await permitFor(p1.address, 1) })).calls) await send(p1.address, call);
     const s = await getSession(client, arena, 1, p1.address);
     const burned0 = await getTokenBalance(client, token, BURN_ADDRESS);
     const totalBurned0 = (await getArena(client, arena, 1)).totalBurned;
@@ -290,7 +302,7 @@ describe('e2e on a hardhat node', () => {
 
     // pause blocks joins only
     await send(admin.address, setPausedCall(arena, true));
-    const paused = await simulateCall(client, (await planJoin(client, { arena, arenaId: 2, player: p2.address, token })).join, p2).catch((e) => e);
+    const paused = await simulateCall(client, (await planJoin(client, { arena, arenaId: 2, player: p2.address, token, permit: await permitFor(p2.address, 2) })).join, p2).catch((e) => e);
     expect(describeError(paused)).toMatchObject({ kind: 'contract', name: 'Paused' });
     await send(admin.address, setPausedCall(arena, false));
   }, 60_000);
@@ -392,10 +404,10 @@ describe('e2e on a hardhat node', () => {
     expect(await getFeeRatesFor(client, arena, outsider.address)).toEqual({ burnBps: 1500, vaultBps: 500 });
 
     await send(admin.address, testTokenMintCall(token, outsider.address, 20_000n * T)); // the owner mints
-    const plan = await planJoin(client, { arena, arenaId: 2, player: p1.address });
+    const plan = await planJoin(client, { arena, arenaId: 2, player: p1.address, permit: await permitFor(p1.address, 2) });
     expect(plan).toMatchObject({ rates: holder, standardRates: { burnBps: 1500, vaultBps: 500 }, holder: true, holderDiscount: true, holdersOnly: false });
     for (const call of plan.calls) await send(p1.address, call);
-    const outsiderPlan = await planJoin(client, { arena, arenaId: 2, player: outsider.address, token });
+    const outsiderPlan = await planJoin(client, { arena, arenaId: 2, player: outsider.address, token, permit: await permitFor(outsider.address, 2) });
     expect(outsiderPlan).toMatchObject({ rates: { burnBps: 1500, vaultBps: 500 }, holder: false, holderDiscount: false });
     for (const call of outsiderPlan.calls) await send(outsider.address, call);
     const s1 = await getSession(client, arena, 2, p1.address);
@@ -417,10 +429,10 @@ describe('e2e on a hardhat node', () => {
     expect((await getTokenBalance(client, token, feeWallet.address)) - fees0).toBe(30n * T);
 
     // holders-only: refused early by planJoin, and by the contract
-    await expect(planJoin(client, { arena, arenaId: 4, player: outsider.address, token })).rejects.toThrow(/holders only/);
-    const refused = await simulateCall(client, joinCall(arena, 4), outsider).catch((e) => e);
+    await expect(planJoin(client, { arena, arenaId: 4, player: outsider.address, token, permit: await permitFor(outsider.address, 4) })).rejects.toThrow(/holders only/);
+    const refused = await simulateCall(client, joinCall(arena, 4, await permitFor(outsider.address, 4)), outsider).catch((e) => e);
     expect(describeError(refused)).toMatchObject({ kind: 'contract', name: 'HoldersOnly' });
-    const holderPlan = await planJoin(client, { arena, arenaId: 4, player: p2.address, token });
+    const holderPlan = await planJoin(client, { arena, arenaId: 4, player: p2.address, token, permit: await permitFor(p2.address, 4) });
     expect(holderPlan).toMatchObject({ holdersOnly: true, holder: true, rates: holder });
   }, 60_000);
 

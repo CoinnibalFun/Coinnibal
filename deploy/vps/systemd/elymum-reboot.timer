@@ -1,7 +1,7 @@
 # The file name (elymum-*) is the live server's installed unit name, kept from before the rename
 # (deploy/vps/lib.sh): a new name would install a second timer next to the running one.
 [Unit]
-Description=Coinnibal: reboot at 04:30 when a system update asks for it (in the round break)
+Description=Coinnibal: at 04:30, the reboot a system update asks for and Docker Engine updates (in the round break)
 
 [Timer]
 OnCalendar=*-*-* 04:30:00

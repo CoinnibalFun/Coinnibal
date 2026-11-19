@@ -1,4 +1,4 @@
-import type { GasRunway } from '@coinnibal/shared';
+import type { GasRunway, JoinPermit } from '@coinnibal/shared';
 import { activeChain, type ChainInfo, type ChainStatus, type FeeRates } from '@coinnibal/shared';
 import type { EvmClient } from './evm-client';
 
@@ -99,6 +99,8 @@ export interface SettledEvent {
   refund?: boolean;
   /** The transfer to the player failed; the session is finalized and the player collects the net payout. */
   collect?: boolean;
+  /** A stale cancel of a ticket never seated while its arena was open (`SettlementItem.noShow`): the join permits count it. */
+  noShow?: boolean;
 }
 
 /** The server key and its gas balance (admins see it in `/api/config` and `/admin`). */
@@ -163,6 +165,16 @@ export interface ChainGateway {
    */
   getSession(arenaId: number, player: string): Promise<ChainSession | null>;
   /**
+   * Whether the server already knows that this wallet holds an open ticket of the arena (the `Joined` log index of the
+   * stale sweeper; no RPC call). False is "not known", never "no ticket". Absent: never known.
+   */
+  knowsOpenTicket?(arenaId: number, player: string): boolean;
+  /**
+   * Reads new `Joined` logs into that index now, in the background (coalesced, a few seconds apart at most): a join of
+   * a wallet it does not know was refused for a full queue, or found a ticket. Absent: the index is the sweeper's only.
+   */
+  refreshTicketIndex?(): void;
+  /**
    * On-chain arenas; cached unless `fresh` (a re-read that bypasses the cache). When the RPC fails the
    * last good list is served (stale); `ChainBusyError` only when no list was ever read.
    */
@@ -184,6 +196,8 @@ export interface ChainGateway {
    * chain is off; EOA signatures are checked without it.
    */
   verifyMessage?(address: string, message: string, signature: string): Promise<boolean>;
+  /** Whether the address holds code (one `eth_getCode` at low priority): a sign-in's smart-wallet check is worth it. */
+  hasCode?(address: string): Promise<boolean>;
   /** The EVM access (the site reads the NFT and checks registered contracts through it); absent or null when off. */
   evm?(): EvmClient | null;
   /** Re-reads the registry and the arena config now (after a registry change). */
@@ -194,6 +208,47 @@ export interface ChainGateway {
    * `ChainBusyError` when the RPC refuses the read. Absent when the chain is off.
    */
   tokenReceipt?(hash: string): Promise<TokenReceipt | null>;
+  /**
+   * The nonce the next join permit of `player` must name (CoinnibalArena v4 `joinNonce`). Throws `ChainBusyError`
+   * when it cannot be read. Absent when the chain is off.
+   */
+  joinNonce?(player: string): Promise<bigint>;
+  /**
+   * A join permit (v4): the server key's EIP-712 signature of `JoinPermit(player, arenaId, nonce, deadline)` in the
+   * arena's domain. Throws when the server key is not the arena's server authority. Absent when the chain is off.
+   */
+  signJoinPermit?(player: string, arenaId: number, nonce: bigint, deadlineS: number): Promise<JoinPermit>;
+  /** The arena contract is paused: no ticket can be bought. */
+  joinsPaused?(): boolean;
+  /**
+   * Whether `player` holds an open ticket in `arenaId`, without opening one (the dev fake chain opens a ticket on its
+   * first `getSession`). Absent: `getSession` answers it.
+   */
+  hasOpenTicket?(arenaId: number, player: string): Promise<boolean>;
+  /** Unix ms of each no-show of `player` since `since`: a ticket cancelled unseated while its arena was open. */
+  noShowsSince?(player: string, since: number): number[];
+  /**
+   * Unix ms of `player`'s latest played ticket (a `settle`, not a `cancel`, in the settled log: 14 days); null when it
+   * has none. A join permit's standing (`JoinPermits`).
+   */
+  lastPlayedAt?(player: string): number | null;
+  /**
+   * `player` asked to sit with its ticket of `arenaId` while joins were open, and the server refused for a reason of
+   * its own (overloaded, the journal cannot be written, a re-price, the chain could not be read): the stale sweeper
+   * does not count that ticket, if never seated, as a no-show. Absent: no such record (every unseated ticket counts).
+   */
+  excuseNoShow?(arenaId: number, player: string): void;
+  /**
+   * The server refused a seat request of `player` in `arenaId` for its own reason (`excuseNoShow`) at or after the
+   * ticket opened (`openedAtS`, the block time): its refund, if it is never seated, is not a no-show. Absent: never.
+   */
+  excusedSince?(arenaId: number, player: string, openedAtS: number): boolean;
+  /**
+   * The game token `player` holds, ledger units (rounded down; capped at the largest safe integer): one read at
+   * `normal` priority. Throws `ChainBusyError` when it cannot be read. Absent when the chain is off (and on the dev
+   * fake chain).
+   */
+  tokenBalance?(player: string): Promise<number>;
   /**
    * The chain's clock (Unix ms): the local clock corrected by the last latest-block timestamp read. Ticket ages
    * (the stale sweeper, the 6 h cap) are measured with it: a server clock that drifts never cancels a fresh ticket.

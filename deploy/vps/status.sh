@@ -41,13 +41,23 @@ if [[ -n "$deployed" ]]; then
 else
   echo "deployed: (nothing recorded yet)"
 fi
+deployed_image="$(cat "$COINNIBAL_STATE/deployed-image" 2>/dev/null || true)"
+running_image="$(app_image)"
+if [[ -n "$deployed_image" && -n "$running_image" && "$running_image" != "$deployed_image" ]]; then
+  echo "RUNNING ANOTHER IMAGE than the one deployed for that commit (put back by hand?): the weekly rebuild waits for the next deploy"
+fi
+postponed="$(cat "$COINNIBAL_STATE/postponed" 2>/dev/null || true)"
+if [[ -n "$postponed" && "$postponed" != "$deployed" ]]; then
+  echo "WAITING: ${postponed:0:12} needs an image this host could not pull yet (every check tries again): journalctl -u $INSTALLED_UNIT_PREFIX-update -n 50"
+fi
 if [[ -s "$COINNIBAL_STATE/failed" ]]; then
   echo "LAST BUILD FAILED for $(cut -c1-12 "$COINNIBAL_STATE/failed"): journalctl -u $INSTALLED_UNIT_PREFIX-update -n 200"
 fi
 echo "auto-deploy: $(systemctl is-active "$INSTALLED_UNIT_PREFIX-update.timer" 2>/dev/null || true) (next: $(systemctl show "$INSTALLED_UNIT_PREFIX-update.timer" -p NextElapseUSecRealtime --value 2>/dev/null || echo '?'))"
 echo "rollback image: $(docker image inspect -f '{{.Created}}' "${COINNIBAL_IMAGE%:*}:previous" 2>/dev/null || echo none) (commit $(cut -c1-12 "$COINNIBAL_STATE/previous" 2>/dev/null || echo '?'))"
 echo "alerts: $(systemctl is-active "$INSTALLED_UNIT_PREFIX-alert.timer" 2>/dev/null || true); Telegram $([[ -n "$(env_get TELEGRAM_BOT_TOKEN)" && -n "$(env_get TELEGRAM_CHAT_ID)" ]] && echo on || echo 'off (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set)')"
-echo "reboots: $(systemctl is-active "$INSTALLED_UNIT_PREFIX-reboot.timer" 2>/dev/null || true) (in a round break at 04:30 when an update asks; $([[ -f /var/run/reboot-required ]] && echo 'one is due' || echo 'none due'))"
+echo "reboots, Docker Engine updates: $(systemctl is-active "$INSTALLED_UNIT_PREFIX-reboot.timer" 2>/dev/null || true) (in a round break at 04:30 when due; $([[ -f /var/run/reboot-required ]] && echo 'a reboot is due' || echo 'no reboot due'); engine $(docker version -f '{{.Server.Version}}' 2>/dev/null || echo '?'))"
+echo "weekly image rebuild: $(systemctl is-active "$INSTALLED_UNIT_PREFIX-refresh.timer" 2>/dev/null || true) (next: $(systemctl show "$INSTALLED_UNIT_PREFIX-refresh.timer" -p NextElapseUSecRealtime --value 2>/dev/null || echo '?')$(systemctl is-active --quiet "$INSTALLED_UNIT_PREFIX-update.timer" 2>/dev/null || echo '; skipped while auto-deploy is paused'))"
 
 section "Backups"
 last="$(find "$COINNIBAL_BACKUPS" -maxdepth 1 -type f -name "$INSTALLED_BACKUP_GLOB" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n 1 | cut -d' ' -f2-)"

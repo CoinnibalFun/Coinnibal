@@ -504,6 +504,35 @@ describe('server over websocket', () => {
     b.close();
   }, 15_000);
 
+  it('the join permits hear when a wallet asks to sit (also while joins are closed) and when its ticket is read', async () => {
+    const seen: [string, number, number | null][] = [];
+    app.gateway.setTicketSeen((w, a, at) => void seen.push([w.toLowerCase(), a, at]));
+    const w = newWallet();
+    try {
+      const r = roundAt(serverNow());
+      jumpTo(r.joinsCloseAt);
+      const c = await signedIn(w);
+      // a ticket bought in the last minute: the web enters the room, the server holds it for the next round
+      c.send({ t: 'join', room: 'arena:1', name: 'Held', skin: 0 });
+      await c.wait('error', 2000, (m) => m.code === 'round_closed');
+      expect(seen).toEqual([[w.toLowerCase(), 1, null]]);
+      // joins open: the ticket is read (a finalized one here, so nobody sits down)
+      jumpTo(r.endsAt);
+      chain.sessions.set(`1:${w}`, session(w, { finalized: true, owed: 5, openedAt: 1_790_000_000 }));
+      c.send({ t: 'join', room: 'arena:1', name: 'Held', skin: 0 });
+      await c.wait('error', 2000, (m) => m.code === 'payout_waiting');
+      expect(seen).toEqual([
+        [w.toLowerCase(), 1, null],
+        [w.toLowerCase(), 1, null],
+        [w.toLowerCase(), 1, 1_790_000_000],
+      ]);
+      c.close();
+    } finally {
+      chain.sessions.delete(`1:${w}`);
+      app.gateway.setTicketSeen((wallet, arenaId, at) => app.permits.ticketSeen(wallet, arenaId, at));
+    }
+  });
+
   it('an AFK staker back after the bell hears round_ended (not session_busy), until a new ticket opens', async () => {
     const w = newWallet();
     const first = session(w);
@@ -903,7 +932,8 @@ describe('server over websocket', () => {
     l.send({ t: 'join', room: `arena:1:${code}`, name: 'Late', skin: 0 });
     expect((await l.wait('error', 2000, (x) => x.code === 'room_closed')).message).toMatch(/last minute/);
     for (let i = 0; i < 40 && !app.journal.pending.some((p) => p.key === lateTicket.key); i++) await sleep(25);
-    expect(app.journal.pending.find((p) => p.key === lateTicket.key)).toMatchObject({ kind: 'settle', reason: 'stale', payout: 10_000_000, entryFee: 10_000_000, player: late });
+    // bought for nothing in particular (no permit asked for this room: audit R4-M1), so a no-show like the sweeper's
+    expect(app.journal.pending.find((p) => p.key === lateTicket.key)).toMatchObject({ kind: 'settle', reason: 'stale', payout: 10_000_000, entryFee: 10_000_000, player: late, noShow: true });
     expect(l.msgs.some((x) => x.t === 'joined')).toBe(false);
 
     // the room's end settles every ticket in it by the normal server path; then the paid room closes

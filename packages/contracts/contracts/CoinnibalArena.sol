@@ -7,14 +7,20 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {HolderCheck} from "./HolderCheck.sol";
 
-/// @title CoinnibalArena (version 3: fee on profit, burned on chain)
+/// @title CoinnibalArena (version 4: fee on profit, burned on chain; a ticket needs the server's join permit)
 /// @notice Ticket escrow for the Coinnibal arenas. A player buys a ticket with `join`: the arena's whole entry fee goes
-///         into the arena vault (there is no entry fee cut). At the bell the game server pays every ticket its in-game
-///         value with `settle`. When that value is above the ticket's entry fee, a fee is taken from the PROFIT
-///         (`payout - entryFee`): `burnBps` of it is burned and `vaultBps` of it goes to the fee wallet (defaults 15 %
-///         and 5 %, together at most `MAX_TOTAL_FEE_BPS` = 25 %). A loss or a break-even pays no fee. A ticket that was
+///         into the arena vault (there is no entry fee cut). `join` takes a short-lived EIP-712 permit signed by
+///         `serverAuthority` for this player, this arena and the player's next join nonce (`JoinPermit`), so only
+///         a player the game server lets in can buy a ticket (it refuses a closed game, a disabled arena, an open
+///         ticket there, and wallets whose tickets go unplayed again and again). At the bell the game server pays
+///         every ticket its in-game value with `settle`. When that value is above the ticket's entry fee, a fee is
+///         taken from the PROFIT (`payout - entryFee`): `burnBps` of it is burned and `vaultBps` of it goes to the fee
+///         wallet (defaults 15 % and 5 %, together at most `MAX_TOTAL_FEE_BPS` = 25 %). A loss or a break-even pays no
+///         fee. A ticket that was
 ///         never played is cancelled by the server with `cancel` (full entry fee back), and a ticket the server never
 ///         settles can be refunded by its player after 24 h.
 ///         Holders of the Coinnibal emblem (`setHolderPerks`) may get their own (lower) rates and may enter holders-only
@@ -25,8 +31,13 @@ import {HolderCheck} from "./HolderCheck.sol";
 ///         balance is always `sum(vault) + sum(owed)` plus anything sent to it directly (which stays locked: `rescue`
 ///         never touches the game token). Burning uses the token's own `burn(uint256)` when the owner turned that on
 ///         (`setBurnMode`) and the call really lowered the balance by the amount; otherwise (or as a fallback) the
-///         tokens go to 0x…dEaD. No `immutable` variables, so the runtime bytecode is identical for every deployment.
-contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
+///         tokens go to 0x…dEaD. No `immutable` variables, so the runtime bytecode is identical for every deployment:
+///         the EIP-712 domain separator of the join permits is computed per call from constants, `block.chainid` and
+///         `address(this)`. OpenZeppelin's `EIP712` base caches it in immutables, and its `MessageHashUtils` pulls in
+///         code that needs Cancun (the chain target is Shanghai), so only OpenZeppelin's `ECDSA` is used: the typed
+///         data hash is EIP-712's `keccak256("\x19\x01" ‖ domainSeparator ‖ structHash)`, and `eip712Domain`
+///         (ERC-5267) is implemented here.
+contract CoinnibalArena is Ownable2Step, ReentrancyGuard, IERC5267 {
     using SafeERC20 for IERC20;
 
     // ------------------------------------------------------------------------------------------------------------
@@ -44,7 +55,7 @@ contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
     /// @notice Share of a `pay` payment (power-ups, ...) burned at deploy (50 %); the rest goes to the fee wallet.
     uint16 public constant DEFAULT_PAYMENT_BURN_BPS = 5_000;
     /// @notice Contract version.
-    uint16 public constant VERSION = 3;
+    uint16 public constant VERSION = 4;
     /// @notice Bounds of `Arena.maxSessions`.
     uint16 public constant MIN_ARENA_SESSIONS = 2;
     uint16 public constant MAX_ARENA_SESSIONS = 2_000;
@@ -52,6 +63,14 @@ contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
     uint64 public constant REFUND_DELAY = 24 hours;
     /// @notice Tokens are burned by sending them here unless the burn mode is `BURN_MODE_CALL` and the call works.
     address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+    /// @notice A join permit's deadline may be at most this far ahead of the block time (no stockpiled permits).
+    uint64 public constant MAX_PERMIT_WINDOW = 1 hours;
+    /// @notice EIP-712 type of a join permit: `nonce` is the player's join counter (`joinNonce`), used once.
+    bytes32 public constant JOIN_PERMIT_TYPEHASH =
+        keccak256("JoinPermit(address player,uint16 arenaId,uint64 nonce,uint64 deadline)");
+    /// @notice EIP-712 domain name and version of the join permits.
+    string public constant EIP712_NAME = "CoinnibalArena";
+    string public constant EIP712_VERSION = "4";
 
     /// @notice `burnMode`: send burned tokens to `BURN_ADDRESS` (works with every ERC-20; the default).
     uint8 public constant BURN_MODE_DEAD = 0;
@@ -69,6 +88,10 @@ contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
 
     /// @dev `burn(uint256)` of ERC20Burnable.
     bytes4 private constant BURN_SELECTOR = 0x42966c68;
+    bytes32 private constant EIP712_DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+    bytes32 private constant HASHED_NAME = keccak256(bytes(EIP712_NAME));
+    bytes32 private constant HASHED_VERSION = keccak256(bytes(EIP712_VERSION));
 
     // ------------------------------------------------------------------------------------------------------------
     // Types
@@ -207,6 +230,8 @@ contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
     uint16[] private _arenaIds;
     mapping(uint16 arenaId => Arena) private _arenas;
     mapping(uint16 arenaId => mapping(address player => Session)) private _sessions;
+    /// @dev Each player's join counter: a permit names the current value, and `join` moves it on.
+    mapping(address player => uint64) private _joinNonces;
 
     // ------------------------------------------------------------------------------------------------------------
     // Events
@@ -296,13 +321,16 @@ contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
     error NativeTransferFailed();
     error RenounceDisabled();
     error HoldersOnly();
+    error PermitExpired();
+    error PermitTooFarAhead();
+    error InvalidPermit();
 
     // ------------------------------------------------------------------------------------------------------------
     // Constructor & modifiers
     // ------------------------------------------------------------------------------------------------------------
 
     /// @param admin           Owner (Ownable2Step): configures the contract, creates and sweeps arenas.
-    /// @param serverAuthority Game server key: calls `settle`, `cancel` and `sweepLoot`.
+    /// @param serverAuthority Game server key: calls `settle`, `cancel` and `sweepLoot`, and signs the join permits.
     /// @param feeWallet       Receives the fee wallet's share of every profit and every swept arena vault.
     constructor(address admin, address serverAuthority, address feeWallet) Ownable(admin) {
         if (serverAuthority == address(0) || feeWallet == address(0)) revert ZeroAddress();
@@ -373,6 +401,7 @@ contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
         emit FeeWalletSet(w);
     }
 
+    /// @notice A new server key: permits the old key signed are refused from now on.
     function setServerAuthority(address s) external onlyOwner {
         if (s == address(0)) revert ZeroAddress();
         _serverAuthority = s;
@@ -474,7 +503,12 @@ contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
     /// @notice Buys a ticket: pulls the arena's entry fee (the exact amount must arrive, so fee-on-transfer tokens are
     ///         refused) into the vault and opens a session with the current fee rates (the holder rates for holders
     ///         when they are lower). Holders-only arenas refuse other wallets (`HoldersOnly`).
-    function join(uint16 arenaId) external nonReentrant {
+    /// @param deadline  the permit's expiry (Unix seconds): refused once past (`PermitExpired`) and when more than
+    ///                  `MAX_PERMIT_WINDOW` ahead of the block time (`PermitTooFarAhead`).
+    /// @param signature `serverAuthority`'s EIP-712 signature of
+    ///                  `JoinPermit(msg.sender, arenaId, joinNonce(msg.sender), deadline)` in this contract's domain
+    ///                  (`InvalidPermit` otherwise). The nonce moves on, so a permit buys one ticket only.
+    function join(uint16 arenaId, uint64 deadline, bytes calldata signature) external nonReentrant {
         if (_paused) revert Paused();
         IERC20 token = _token;
         if (address(token) == address(0)) revert TokenNotSet();
@@ -486,6 +520,7 @@ contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
         if (s.id != 0) revert SessionExists();
         bool holder = _holderNft != address(0) && HolderCheck.isHolder(_holderNft, msg.sender);
         if (a.holdersOnly && !holder) revert HoldersOnly();
+        _usePermit(arenaId, deadline, signature);
         (uint16 burnBps, uint16 vaultBps) = _ratesFor(holder);
 
         uint128 entryFee = a.entryFee;
@@ -705,6 +740,33 @@ contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
         return VERSION;
     }
 
+    /// @notice The nonce the next join permit of `player` must name.
+    function joinNonce(address player) external view returns (uint64) {
+        return _joinNonces[player];
+    }
+
+    /// @notice The EIP-712 domain separator of the join permits (this chain, this contract).
+    function DOMAIN_SEPARATOR() public view returns (bytes32) {
+        return keccak256(abi.encode(EIP712_DOMAIN_TYPEHASH, HASHED_NAME, HASHED_VERSION, block.chainid, address(this)));
+    }
+
+    /// @notice ERC-5267: the join permits' EIP-712 domain (name, version, chainId, verifyingContract).
+    function eip712Domain()
+        external
+        view
+        returns (
+            bytes1 fields,
+            string memory name,
+            string memory version_,
+            uint256 chainId,
+            address verifyingContract,
+            bytes32 salt,
+            uint256[] memory extensions
+        )
+    {
+        return (hex"0f", EIP712_NAME, EIP712_VERSION, block.chainid, address(this), bytes32(0), new uint256[](0));
+    }
+
     function burnMode() external view returns (uint8) {
         return _burnMode;
     }
@@ -712,6 +774,18 @@ contract CoinnibalArena is Ownable2Step, ReentrancyGuard {
     // ------------------------------------------------------------------------------------------------------------
     // Internal
     // ------------------------------------------------------------------------------------------------------------
+
+    /// @dev Checks the join permit of `msg.sender` for `arenaId` and uses it up (the player's nonce moves on).
+    function _usePermit(uint16 arenaId, uint64 deadline, bytes calldata signature) private {
+        if (block.timestamp > deadline) revert PermitExpired();
+        if (deadline > block.timestamp + MAX_PERMIT_WINDOW) revert PermitTooFarAhead();
+        uint64 nonce = _joinNonces[msg.sender];
+        bytes32 structHash = keccak256(abi.encode(JOIN_PERMIT_TYPEHASH, msg.sender, arenaId, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked(hex"1901", DOMAIN_SEPARATOR(), structHash));
+        (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecoverCalldata(digest, signature);
+        if (err != ECDSA.RecoverError.NoError || signer != _serverAuthority) revert InvalidPermit();
+        _joinNonces[msg.sender] = nonce + 1;
+    }
 
     function _ratesFor(bool holder) private view returns (uint16 burnBps, uint16 vaultBps) {
         burnBps = _burnBps;

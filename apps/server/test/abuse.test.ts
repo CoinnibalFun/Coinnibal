@@ -15,7 +15,7 @@ import { NullChain } from '../src/chain/types';
 import { loadConfig } from '../src/config';
 import { HTTP_TIMEOUTS, corsAllow } from '../src/http';
 import { STRIKE_LIMIT } from '../src/net/conn';
-import { subnetOf } from '../src/net/gateway';
+import { rateKey, subnetOf, wideNetOf } from '../src/net/ip-key';
 import { LoadShedder, SHED_THRESHOLDS } from '../src/net/shedder';
 
 let app: App;
@@ -112,6 +112,18 @@ describe('WebSocket front door', () => {
     expect(subnetOf('2001:db8:aa:bb::1')).toBe('2001:db8:aa:bb::/64');
     expect(subnetOf('2001:db8::1')).toBe('2001:db8:0:0::/64');
     expect(subnetOf('2001:0db8:00aa:00bb:0000::1')).toBe('2001:db8:aa:bb::/64');
+  });
+
+  it('the rate-limit key: an IPv4 address as it is, an IPv6 address as its /64; the IPv6 /48 above it', () => {
+    expect(rateKey('203.0.113.77')).toBe('203.0.113.77');
+    expect(rateKey('::ffff:203.0.113.77')).toBe('203.0.113.77');
+    // every address of one /64 is one client
+    expect(rateKey('2001:db8:aa:bb:1:2:3:4')).toBe('2001:db8:aa:bb::/64');
+    expect(rateKey('2001:DB8:AA:BB::99')).toBe('2001:db8:aa:bb::/64');
+    expect(wideNetOf('2001:db8:aa:bb:1:2:3:4')).toBe('2001:db8:aa::/48');
+    expect(wideNetOf(rateKey('2001:db8:aa:ff::1'))).toBe('2001:db8:aa::/48');
+    expect(wideNetOf('203.0.113.77')).toBeNull();
+    expect(wideNetOf('::ffff:203.0.113.77')).toBeNull();
   });
 });
 

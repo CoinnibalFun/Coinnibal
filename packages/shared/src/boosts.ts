@@ -179,6 +179,14 @@ export const SHOP_DEFAULTS: ShopSettings = {
 /** The default prices before the 2026-11 economy update (a saved file still holding all of them takes the new ones). */
 export const OLD_SHOP_PRICES: Readonly<Record<BoostKind, string>> = { magnet: '1500', leap: '2500', speed: '1500', invis: '3000' };
 
+/**
+ * Oldest payment a purchase may claim (24 h): the server refuses an older one for good (`tx_stale`). The used-hash list
+ * lives on the server's disk: should it be lost, only the payments of the last day could be credited a second time,
+ * never the whole history (and an old transfer of the right amount to the sink can never be claimed as a new
+ * purchase). The web forgets a kept claim past it: nothing could credit it any more.
+ */
+export const SHOP_PAYMENT_MAX_AGE_MS = 24 * 3600_000;
+
 /** Bounds of the admin values. */
 export const SHOP_LIMITS = { packSize: 20, holderDiscountPct: 90, arenaUsesPerRound: 20, holderExtraArenaUses: 10, priceTokens: 1_000_000_000, usdCents: 100_000 } as const;
 

@@ -40,12 +40,24 @@ import { getAddress } from 'viem';
 import type { PracticeBotsOptions } from '../bots/practice';
 import { TX_HASH_RE, type UsedPayments } from '../chain/payment';
 import { ChainBusyError, type ChainGateway, type TokenReceipt } from '../chain/types';
+import { ClientBudgetError } from '../net/client-scope';
 import { verifyPurchase, type PurchaseCheck } from '../shop/verify';
 import type { CustomRoomHooks, PaidArena, RoomManager } from './manager';
 import type { RoomHandle } from './handle';
 import type { WorldShape } from './room';
 
 /** A refusal of the custom room API: HTTP status, code and a friendly message. */
+/**
+ * A holder check of a room's creation that failed reads as "not a holder" (a free room or a discount is not given),
+ * except a busy one (`ClientBudgetError`: past this client's holder reads, the holder index cannot tell right now): that
+ * is passed on, so the creator hears "try again in a moment" instead of a price a holder would not pay. (A quote is
+ * only shown: never busy.)
+ */
+const holderUnknown = (err: unknown): false => {
+  if (err instanceof ClientBudgetError) throw err;
+  return false;
+};
+
 export class CustomRoomFail extends Error {
   constructor(
     readonly status: number,
@@ -250,8 +262,13 @@ export interface CustomRoomDeps {
   usdPrice?: () => Promise<{ price: bigint; usdPerToken: string; sigFigs: number } | null>;
   /** Waits before re-reading a receipt that is not visible yet (default 0, 1.5 s, 3 s). */
   receiptRetryMs?: readonly number[];
-  /** Whether a wallet holds a Coinnibal NFT (cached by the mint service). */
+  /**
+   * Whether a wallet holds a Coinnibal NFT (cached by the mint service), for a room's creation: past the client's
+   * holder reads the holder index answers, `ClientBudgetError` only while it cannot tell.
+   */
   isHolder: (wallet: string) => Promise<boolean>;
+  /** The same for a quote, only shown: the answer on record, never a chain read of its own (default: `isHolder`, false on error). */
+  shownHolder?: (wallet: string) => Promise<boolean>;
   /** The emblem token ids a wallet owns (null: unknown); with `claims` the free daily room is one per token id a day. */
   emblemTokens?: (wallet: string, fresh?: boolean) => Promise<string[] | null>;
   claims?: EmblemClaims;
@@ -624,7 +641,9 @@ export class CustomRoomService implements CustomRoomHooks {
   }
 
   async quote(wallet: string | null): Promise<CustomRoomQuote> {
-    const holder = wallet ? await this.d.isHolder(wallet).catch(() => false) : false;
+    // a quote is only shown: never busy, and it spends none of the holder reads a room's creation may need (a holder
+    // not on record yet is quoted the full price, not kept); the creation checks again
+    const holder = wallet ? await (this.d.shownHolder ?? ((w: string) => this.d.isHolder(w)))(wallet).catch(() => false) : false;
     const free = !!wallet && holder && this.freeAvailable(wallet, await this.tokensOf(wallet, false));
     const base = await this.basePrice();
     const target = this.payTarget();
@@ -764,7 +783,7 @@ export class CustomRoomService implements CustomRoomHooks {
     this.creating.add(w);
     let claimed: string | null = null;
     try {
-      const holder = await this.d.isHolder(wallet).catch(() => false);
+      const holder = await this.d.isHolder(wallet).catch(holderUnknown);
       // a paid room's arena is checked before any payment is looked at (a refused tier never claims a hash)
       const arena = config.kind === 'paid' && config.arenaId !== null ? await this.paidArena(config.arenaId, holder) : null;
       const tokens = holder ? await this.tokensOf(wallet, true) : null;

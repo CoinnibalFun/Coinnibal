@@ -1,11 +1,13 @@
-import { approveCall, getAllowance, getArenaConfig, planJoin, type ArenaConfig } from '@coinnibal/sdk';
+import { approveCall, getAllowance, getArenaConfig, joinCall, planJoin, type ArenaConfig, type JoinPermitSignature } from '@coinnibal/sdk';
 import type { ChainStatus, FeeRates } from '@coinnibal/shared';
 import { encodeFunctionData, type Address, type Hash, type Hex, type PublicClient } from 'viem';
 import { useUi } from '../store';
 import { loadDevFake } from './devFakeLoader';
+import { fetchJoinPermit, permitFits } from './permit';
 import { pinErrorName, verifyArena } from './pinned';
 import { approvalIsSafe, approveAmount, joinGasAfterApprove, planErrorName, sameRates, ticketRates, type TicketStep } from './ticket';
 import { sendWalletCall, txErrorText, type TxPhase } from './tx';
+import { t } from '../i18n';
 
 /** What the player was shown and agreed to (frozen at confirm): the ticket is bought at exactly this or not at all. */
 export interface TicketReview {
@@ -30,18 +32,30 @@ export interface TicketPurchase {
   review: TicketReview;
   /** The DEV_FAKE_CHAIN stand-in. */
   fake: boolean;
+  /** The game session token: the server's join permit is asked with it (CoinnibalArena v4). */
+  token: string | null;
+  /** The paid custom room this ticket is for (its code), if any: the permit is asked for that room. */
+  room?: string | null;
 }
 
 export type TicketPurchaseResult = { ok: true; hash: Hash } | { ok: false; text: string };
 
 const failName = (name: string, fallback?: string): TicketPurchaseResult => ({ ok: false, text: txErrorText({ kind: 'unknown', name, message: fallback ?? name }) });
 
+/** A permit with less than this left after the approval is asked again before the join (seconds). */
+const PERMIT_MIN_LEFT_S = 90;
+
+const signed = (permit: { deadline: number; signature: string }): JoinPermitSignature => ({ deadline: BigInt(permit.deadline), signature: permit.signature as Hex });
+
 /**
- * Buys one arena ticket: `approve` (only when the allowance is short) then `join`. The one money path of the ticket
- * sheet (`TicketFlow`) and of the paid room creator (`RoomCreator`, the creator's own ticket right after the room
- * opens), so both sign exactly the same checked calls:
+ * Buys one arena ticket: the game server's join permit, then `approve` (only when the allowance is short) and `join`.
+ * The one money path of the ticket sheet (`TicketFlow`) and of the paid room creator (`RoomCreator`, the creator's own
+ * ticket right after the room opens), so both sign exactly the same checked calls:
  *
  * - the server must not keep the arena closed (vault short of its journal);
+ * - the server must grant the permit (`POST /api/arena/permit`): it refuses a closed game or room, an open ticket, a
+ *   wallet whose tickets keep going back unplayed and a room full of tickets waiting for a seat, and says why; the
+ *   permit must name this wallet, this room and the pinned arena on the server's chain, else nothing is signed;
  * - the arena, its config and the allowance are re-read right before the wallet opens: the price and the fee rates
  *   signed must be the ones shown (`review`), else nothing is signed (`PriceChanged`, `FeeChanged`);
  * - the arena must be the one this build pins, with the compiled code, and its token the pinned token (`verifyArena`);
@@ -50,6 +64,12 @@ const failName = (name: string, fallback?: string): TicketPurchaseResult => ({ o
  */
 export async function buyTicket(p: TicketPurchase, onPhase: (step: TicketStep | null, phase: TxPhase, hash?: Hash) => void): Promise<TicketPurchaseResult> {
   const { owner, chain, client, config, arenaId, review } = p;
+  // the server's join permit first: its refusals (closed game, open ticket, no-shows, a full room) come before any wallet
+  if (!p.token) return { ok: false, text: t('tf.err.permit.unauthorized') };
+  if (useUi.getState().blockedArenas.includes(arenaId)) return failName('Maintenance');
+  const asked = await fetchJoinPermit(p.token, arenaId, p.room ?? null);
+  if (!asked.ok) return { ok: false, text: asked.text };
+  let permit = asked.permit;
   if (p.fake) {
     const dev = await loadDevFake();
     if (!dev) return failName('NetworkError');
@@ -66,12 +86,14 @@ export async function buyTicket(p: TicketPurchase, onPhase: (step: TicketStep | 
     // re-read the arena, the allowance and the config: the price and the fee rates (fixed into the ticket at join)
     // signed must be the ones shown
     const [pl, fresh] = await Promise.all([
-      planJoin(client, { arena: arenaAddress, arenaId, player: owner, token: config.token, approve: 'exact' }),
+      planJoin(client, { arena: arenaAddress, arenaId, player: owner, token: config.token, approve: 'exact', permit: signed(permit) }),
       getArenaConfig(client, arenaAddress),
     ]);
     // the arena must be the pinned one, with the compiled code, and its token the pinned token: else nothing is signed
     const pin = await verifyArena(client, chain.chainId!, { arena: arenaAddress, token: fresh.token });
     if (!pin.ok) return failName(pinErrorName(pin.reason));
+    // the permit names this wallet, this room and the pinned arena on this chain: anything else signs nothing
+    if (!permitFits(permit, { arena: pin.arena, chainId: chain.chainId!, player: owner, arenaId })) return failName('ContractMismatch');
     if (!fresh.token || fresh.token.toLowerCase() !== config.token.toLowerCase()) return failName('PriceChanged');
     arena = pin.arena;
     if (pl.entryFee !== review.fee) return failName('PriceChanged');
@@ -92,17 +114,26 @@ export async function buyTicket(p: TicketPurchase, onPhase: (step: TicketStep | 
     const ok = await sendWalletCall(call, { chain, onPhase: (ph, h) => onPhase('approve', ph, h) });
     if (!ok.ok) return { ok: false, text: txErrorText(ok.error) };
   }
+  // a slow approval may have used up most of the permit: a fresh one (the same wallet, room and arena) before the join
+  let join = plan.join;
+  if (permit.deadline - Math.floor(Date.now() / 1000) < PERMIT_MIN_LEFT_S) {
+    const again = await fetchJoinPermit(p.token, arenaId, p.room ?? null);
+    if (!again.ok) return { ok: false, text: again.text };
+    if (!permitFits(again.permit, { arena, chainId: chain.chainId!, player: owner, arenaId })) return failName('ContractMismatch');
+    permit = again.permit;
+    join = joinCall(arena, arenaId, signed(permit));
+  }
   // the join goes out with its own gas limit, estimated once the allowance is visible (a wallet whose node has not
   // seen the approval yet would otherwise guess, and the ticket would be refused)
   let joinData: Hex | null = null;
   try {
-    joinData = encodeFunctionData({ abi: plan.join.abi, functionName: plan.join.functionName, args: plan.join.args } as never);
+    joinData = encodeFunctionData({ abi: join.abi, functionName: join.functionName, args: join.args } as never);
   } catch {
     joinData = null;
   }
   const token = config.token;
   const gas = joinData ? await joinGasAfterApprove(client, () => getAllowance(client, token, owner, arena), { owner, arena, data: joinData, fee: plan.entryFee }) : undefined;
-  const res = await sendWalletCall(plan.join, { chain, onPhase: (ph, h) => onPhase('join', ph, h), ...(gas !== undefined ? { gas } : {}) });
+  const res = await sendWalletCall(join, { chain, onPhase: (ph, h) => onPhase('join', ph, h), ...(gas !== undefined ? { gas } : {}) });
   if (!res.ok) return { ok: false, text: txErrorText(res.error) };
   return { ok: true, hash: res.hash };
 }
