@@ -4,7 +4,7 @@ import { ourXHandle, useT } from '../../i18n';
 import { arenaRates } from '../../wallet/ticket';
 import { useUi } from '../../store';
 import { siteHost } from '../../site/settings';
-import { useTokenText } from '../lobby/useLobby';
+import { useTokenText } from '../tokenText';
 import { PageHead } from '../PageHead';
 import { docsEn } from './content.en';
 import { payoutExample, type DocBlock, type DocsContent } from './facts';
