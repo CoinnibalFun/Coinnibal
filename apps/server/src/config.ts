@@ -41,13 +41,15 @@ export interface ServerConfig {
   /**
    * Join permits (CoinnibalArena v4, `stake/join-permits.ts`): `JOIN_PERMIT_TTL_S` (default 600, at most 3300: the
    * contract's hour less a margin for the block time), `JOIN_PERMIT_PER_IP` (12 per 10 min), `JOIN_PERMIT_PER_SUBNET`
-   * (an IPv6 /64, 30 per 10 min), `JOIN_PERMIT_PER_SITE` (an IPv6 /48, 60 per 10 min), `JOIN_PERMIT_PER_WALLET` (20
+   * (an IPv6 /64, 30 per 10 min), `JOIN_PERMIT_PER_SITE` (an IPv4 /24 or IPv6 /48, 60 per 10 min), `JOIN_PERMIT_PER_WALLET` (20
    * per 10 min), `JOIN_PERMIT_OPEN_PER_IP` / `_SUBNET` / `_SITE` (an arena's permits not played yet asked from one
-   * IPv4 address / IPv6 /64 / /48: 8 / 4 / 16, 0 = no limit), `JOIN_PERMIT_ARENA_CAP` (unseated tickets + places held
-   * by new permits per arena; 0 = the seats a round can take: `ARENA_INSTANCE_CAP` × the scaler's max instances),
-   * `JOIN_PERMIT_HOLD_S` (how long a new permit holds a place; default 120, 0 = never) and `NO_SHOW_LIMIT` (tickets
-   * gone back unplayed in 24 h before a wallet gets no permit; 3× per IPv4 address or IPv6 /64 the permits were asked
-   * from, 8× per IPv6 /48; default 3, 0 = off).
+   * IPv4 address / IPv6 /64 / IPv4 /24 or IPv6 /48: 8 / 4 / 16, 0 = no limit), `JOIN_PERMIT_FRESH_SHARE` (the share of
+   * an arena's places, min(cap, maxSessions), wallets without standing may hold together; default 0.5, 0 = no limit),
+   * `JOIN_PERMIT_ARENA_CAP` (unseated tickets + places held by new permits per arena; 0 = the seats a round can take:
+   * `ARENA_INSTANCE_CAP` × the scaler's max instances), `JOIN_PERMIT_HOLD_S` (how long a new permit holds a place;
+   * default 120, 0 = never) and `NO_SHOW_LIMIT` (tickets gone back unplayed in 24 h before a wallet gets no permit; 3×
+   * per IPv4 address or IPv6 /64 the permits of wallets without standing were asked from, 8× per IPv4 /24 or IPv6 /48;
+   * default 3, 0 = off). The per-IP, /64 and /24 or /48 request limits, too, apply only to wallets without standing.
    */
   joinPermits: JoinPermitConfig;
   /**
@@ -443,6 +445,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       openPerIp: Math.max(0, int(env.JOIN_PERMIT_OPEN_PER_IP, JOIN_PERMIT_DEFAULTS.openPerIp)),
       openPerNet: Math.max(0, int(env.JOIN_PERMIT_OPEN_PER_SUBNET, JOIN_PERMIT_DEFAULTS.openPerNet)),
       openPerSite: Math.max(0, int(env.JOIN_PERMIT_OPEN_PER_SITE, JOIN_PERMIT_DEFAULTS.openPerSite)),
+      freshShare: Math.max(0, Math.min(1, num(env.JOIN_PERMIT_FRESH_SHARE, JOIN_PERMIT_DEFAULTS.freshShare))),
     },
     gameWorkers: gameWorkers(env),
     gameWorkerHangMs: Math.max(2, int(env.GAME_WORKER_HANG_S, 10)) * 1000,

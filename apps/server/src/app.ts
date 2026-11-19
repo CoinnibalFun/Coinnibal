@@ -447,6 +447,13 @@ export async function createApp(
     pendingKeys: () => journal.pending.map((p) => p.key),
     seatsPerRound: () => cfg.arenaInstanceCap * rooms.scaler.settings.maxInstances,
     noShows: (wallet, since) => chain.noShowsSince?.(wallet, since) ?? [],
+    // standing (exempt from the network rules): a played ticket of its own in 14 days, or an NFT of its own
+    playedAt: (wallet) => chain.lastPlayedAt?.(wallet) ?? null,
+    // the holder index (no chain read here); kept warm by a low-priority catch-up at most every 2 minutes
+    holderTokens: (wallet) => {
+      void mint.holdersCount().catch(() => 0);
+      return mint.emblemTokens(wallet);
+    },
     cfg: cfg.joinPermits,
     log,
   });

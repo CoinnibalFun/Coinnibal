@@ -25,6 +25,7 @@ export function permitRefusalText(code: JoinPermitError | 'network', retryAt?: n
     case 'session_open':
     case 'network_busy':
     case 'arena_busy':
+    case 'no_funds':
     case 'rate_limited':
     case 'chain_busy':
     case 'unauthorized':

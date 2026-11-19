@@ -151,6 +151,13 @@ export const TICKET_READS_IN_FLIGHT_PER_WIDE = 8;
  * read the new blocks at once (`refreshTicketIndex`), and its retry a few seconds later has the whole bound.
  */
 export const TICKET_READS_UNKNOWN_SHARE = 0.25;
+
+/**
+ * A ticket read the gateway refused for one of its own bounds on reads waiting at once (this client's, its
+ * network's, the server-wide queue): not the chain failing. A client can bring it on itself (many joins at once), so
+ * it never excuses a no-show (`seatRefused`); a `ChainBusyError` of the chain read itself does.
+ */
+export class TicketReadsBusy extends ChainBusyError {}
 /**
  * A join waits this long at most for the holder check of its laurel (`holderCheck`, cosmetic): past it the game starts
  * without the laurel (the check goes on and is cached for the next game). A paid seat never waits behind it.
@@ -826,6 +833,16 @@ export class Gateway {
   }
 
   /**
+   * `wallet` asked to sit with its ticket of `arenaId` while joins were open, and the server refused for a reason of
+   * its own (a re-price, the journal, overload, no seat in a public arena, the chain unreadable): if that ticket is
+   * never seated, the stale sweeper's refund is not a no-show (2026-11 audit R3-M1). Never for a refusal the client
+   * can bring on itself (its rate limits, its own bounds on reads waiting) or a closed round.
+   */
+  private seatRefused(wallet: string, arenaId: number): void {
+    this.chain.excuseNoShow?.(arenaId, wallet);
+  }
+
+  /**
    * New arena joins are refused from `joinsCloseAt` until the bell, and in the break after a bell
    * (`round_closed` with `opensAt` = when joins open again; the client holds the ticket until then).
    * Returns true when refused. Reconnects of a live staker never come here.
@@ -1265,10 +1282,10 @@ export class Gateway {
     ];
     if (this.ticketReads >= bound) {
       if (!known) this.chain.refreshTicketIndex?.();
-      throw new ChainBusyError('ticket read', new Error(`${this.ticketReads} ticket reads are waiting already`));
+      throw new TicketReadsBusy('ticket read', new Error(`${this.ticketReads} ticket reads are waiting already`));
     }
     for (const [key, limit] of keys) {
-      if ((this.ticketReadsOf.get(key) ?? 0) >= limit) throw new ChainBusyError('ticket read', new Error(`${limit} ticket reads of ${key.slice(2)} are waiting already`));
+      if ((this.ticketReadsOf.get(key) ?? 0) >= limit) throw new TicketReadsBusy('ticket read', new Error(`${limit} ticket reads of ${key.slice(2)} are waiting already`));
     }
     this.ticketReads++;
     for (const [key] of keys) this.ticketReadsOf.set(key, (this.ticketReadsOf.get(key) ?? 0) + 1);
@@ -1368,16 +1385,19 @@ export class Gateway {
       if (this.roundClosed(conn, room)) return;
       // closing for a re-price at its bell: the round plays out, nobody new sits down until the owner signed
       if (this.repricing?.(target.arenaId)) {
+        this.seatRefused(wallet, target.arenaId);
         this.error(conn, REFUSAL_CODES.repricing, 'This arena is closing for a moment to update its ticket price. Your ticket is safe on chain: an unseated one is refunded in full.');
         return;
       }
       // the journal cannot be written (disk full): a new seat would hold money the server could not record
       if (this.journal.writeFailing) {
+        this.seatRefused(wallet, target.arenaId);
         this.error(conn, REFUSAL_CODES.storage, 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
         return;
       }
       // badly overloaded: a new seat waits; the ticket stays on chain (seated later, or refunded in full if never played)
       if (this.shedder && !this.shedder.admitCritical()) {
+        this.seatRefused(wallet, target.arenaId);
         this.error(conn, 'server_full', 'The server is very busy right now. Your ticket is safe on chain: press Resume again in a minute.');
         return;
       }
@@ -1385,7 +1405,14 @@ export class Gateway {
         this.error(conn, 'rate_limited', 'Too many join attempts — wait a moment.');
         return;
       }
-      const session = await this.sessionWithRetry(conn, target.arenaId, wallet);
+      let session: ChainSession | null;
+      try {
+        session = await this.sessionWithRetry(conn, target.arenaId, wallet);
+      } catch (err) {
+        // the chain could not be read (not this client's or network's own bounds): the server's failure, not a no-show
+        if (err instanceof ChainBusyError && !(err instanceof TicketReadsBusy)) this.seatRefused(wallet, target.arenaId);
+        throw err;
+      }
       if (!same()) return; // signed out (or in as another wallet) during the retries
       if (!session) {
         this.error(conn, 'no_session', 'No open arena ticket found for your wallet.');
@@ -1440,6 +1467,8 @@ export class Gateway {
       // the last await: from here to the seat nothing waits, so the socket is still this wallet's at the seat
       if (!same()) return;
       if (!room) {
+        // every instance of the public arena is full: the server has no seat for the ticket now
+        this.seatRefused(wallet, target.arenaId);
         this.error(conn, 'room_full', 'Arena is full — try again in a moment.');
         return;
       }
@@ -1456,6 +1485,7 @@ export class Gateway {
       // the awaits above may have crossed into the closed window (or the disk filled meanwhile)
       if (this.roundClosed(conn, room)) return;
       if (this.journal.writeFailing) {
+        this.seatRefused(wallet, target.arenaId);
         this.error(conn, REFUSAL_CODES.storage, 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
         return;
       }

@@ -324,6 +324,8 @@ describe('ticket flow: two prompts, progress and races', () => {
     const { permitRefusalText } = await vi.importActual<typeof import('../src/wallet/permit')>('../src/wallet/permit');
     expect(permitRefusalText('network_busy')).toMatch(/asked from your network and are not played yet\. Try again in a few minutes\. Nothing was signed\./);
     expect(permitRefusalText('arena_busy')).toMatch(/as many tickets waiting for a seat/);
+    // a new wallet without the entry fee (round 4): told to get tokens, nothing signed
+    expect(permitRefusalText('no_funds')).toMatch(/does not hold the entry fee for this room yet\. Get tokens first, then buy the ticket\. Nothing was signed\./);
   });
 
   it('a permit for another wallet, room or arena signs nothing', async () => {
