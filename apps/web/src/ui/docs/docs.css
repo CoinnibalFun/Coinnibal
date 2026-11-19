@@ -586,6 +586,36 @@
     gap: 12px;
   }
 }
+/* a narrow card (two a row at 700 and 1024 px, the lobby at 1024 px, a 360 px phone): "Tap (glyph) at the bottom
+   right" needs 211 px and no longer fits beside the labels' column, so each label goes above its own line. The phrase
+   stays on one line, and no label floats between two lines. The list is the container, not the card: a card with
+   size containment drops out of the shared rows above. A card narrower than 334 px (its content box under 292 px):
+   two a row, a list under 684 px; one a row, a list under 334 px */
+.dc-cards {
+  container-type: inline-size;
+}
+@media (min-width: 561px) {
+  @container (width < 684px) {
+    .dc-card__use {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 2px;
+    }
+    .dc-card__way + .dc-card__way dt {
+      margin-top: 8px;
+    }
+  }
+}
+@media (max-width: 560px) {
+  @container (width < 334px) {
+    .dc-card__use {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 2px;
+    }
+    .dc-card__way + .dc-card__way dt {
+      margin-top: 8px;
+    }
+  }
+}
 
 /* tables */
 .dc-table-wrap {
@@ -767,6 +797,22 @@
 .dc-compare .dc-list li {
   font-size: 15.5px;
   line-height: 1.5;
+}
+/* side by side, the two titles share one row: both lists start at one height even where only one title wraps (at
+   1200 px "On the server: players trust it" takes two lines and "On-chain: anyone can check" one) */
+@media (min-width: 760px) {
+  .dc-compare {
+    grid-template-rows: auto 1fr;
+  }
+  .dc-compare__col {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    row-gap: 14px;
+  }
+  .dc-compare__title {
+    margin: 0;
+  }
 }
 
 /* notes: a sticker with a stamp */
