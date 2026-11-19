@@ -34,8 +34,31 @@ export function isReservedName(name: string): boolean {
   return words.length > 0 && words.length <= 3 && words.some((w) => RESERVED_WORDS.has(w));
 }
 
-/** Cleans a player name; returns the fallback when nothing usable remains or the name is reserved (`isReservedName`). */
-export function sanitizeName(raw: unknown, fallback = 'Coinie'): string {
+/** What a player who set no name is called, before the tag `defaultName` adds. */
+const DEFAULT_NAME = 'Coinie';
+
+/**
+ * The name of a player who set none (or none usable): "Coinie-" and four hex digits drawn from `seed` (FNV-1a over it,
+ * any case), e.g. "Coinie-3f2a". The seed is the signed-in wallet, else the browser's own tag (a guest) or, on the
+ * server, the connection: players who never picked a name are told apart (one bare "Coinie" for everyone made the kill
+ * feed read "you had you for lunch"). The same seed always gives the same name, on the client and on the server. The
+ * tag is hex, so the name is never reserved (`isReservedName`) and fits `MAX_NAME_LENGTH`.
+ */
+export function defaultName(seed: string): string {
+  let h = 0x811c9dc5;
+  const s = seed.toLowerCase();
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `${DEFAULT_NAME}-${((h >>> 16) ^ (h & 0xffff)).toString(16).padStart(4, '0')}`;
+}
+
+/**
+ * Cleans a player name; returns `fallback` when nothing usable remains or the name is reserved (`isReservedName`).
+ * A player's name falls back to their own `defaultName`, never to one word every such player would share.
+ */
+export function sanitizeName(raw: unknown, fallback: string): string {
   if (typeof raw !== 'string') return fallback;
   const cleaned = takeCodePoints(raw.replace(INVISIBLE, '').replace(/\s+/g, ' ').trim(), MAX_NAME_LENGTH).trim();
   return cleaned.length > 0 && !isReservedName(cleaned) ? cleaned : fallback;
