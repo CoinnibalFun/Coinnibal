@@ -308,7 +308,7 @@ describe('player guide content', () => {
   it('names the official links for the OpenSea mint, never a mint on this site', () => {
     const wallet = JSON.stringify(docsEn('tokens', undefined, 'Robinhood Chain', { site: 'coinnibal.fun', x: 'coinnibalfun' }).sections.find((s) => s.id === 'wallet'));
     expect(wallet).toContain('Official links:');
-    expect(wallet).toContain('the site is coinnibal.fun and the X account is @coinnibalfun. The NFT mint will be on OpenSea: use only the OpenSea link that @coinnibalfun posts.');
+    expect(wallet).toContain('the site is coinnibal.fun and the X account is @coinnibalfun. The NFT mint will be on OpenSea. Use only the OpenSea link that @coinnibalfun posts.');
     expect(wallet).not.toMatch(/only mint|the game and the/);
     // one name for the phrase across the site (the footer says "seed phrase")
     expect(wallet).toContain('seed phrase');

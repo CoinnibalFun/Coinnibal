@@ -507,7 +507,7 @@ export const docsEn = (
               { term: 'Separate wallet:', text: 'use a wallet only for games and keep only the amount you play with in it.' },
               {
                 term: 'Official links:',
-                text: `the site is ${site} and the X account is @${x}. The NFT mint will be on OpenSea: use only the OpenSea link that @${x} posts.`,
+                text: `the site is ${site} and the X account is @${x}. The NFT mint will be on OpenSea. Use only the OpenSea link that @${x} posts.`,
               },
             ],
           },
