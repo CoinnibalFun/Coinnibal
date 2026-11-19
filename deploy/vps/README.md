@@ -103,12 +103,14 @@ them with nested interpolation (`${COINNIBAL_CHAIN_ID:-${ELYMUM_CHAIN_ID:-46630}
 **Contract pins (the site build).** The site is built with the contracts it trusts (`apps/web/src/wallet/pinned.ts`):
 `docker-compose.yml` passes `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` and `COINNIBAL_PIN_TOKEN` to the image build as
 `VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS` and `VITE_TOKEN_ADDRESS`, for the chain of `COINNIBAL_CHAIN_ID` (as
-`VITE_CHAIN_ID`). Wallets approve, pay and mint only there, whatever the server announces: a stolen admin login or a
-broken-into server cannot point them at another contract, because a pin changes only here, in the shell, with a
-rebuild. No chain has default pins. After the owner deploys and registers the contracts in `/admin` (and again once the
-game token is set on the arena), `/admin` → Setup → **Site pins** shows the lines with the registered addresses:
-check each one against the deploy transaction in your own wallet (the panel's addresses come from the server, which is
-what the pins guard against), set them here, then rebuild and restart the app:
+`VITE_CHAIN_ID`). Wallets approve, pay and mint only there, whatever the server announces: a stolen admin login, or a
+server API that names other contracts, cannot point them at another contract, because a pin changes only with shell
+access to this VPS and a rebuild. The pins do not guard against someone who has that shell: the site is built and
+served on this VPS, so they could rebuild it with other pins. No chain has default pins. After the owner deploys and
+registers the contracts in `/admin` (and again once the game token is set on the arena), `/admin` → Setup → **Site
+pins** shows the lines with the registered addresses: check each one against the deploy transaction in your own wallet
+(the panel's addresses come from the server, which is what the pins guard against), set them here, then rebuild and
+restart the app:
 
 ```bash
 coinnibal-compose up -d --build app
