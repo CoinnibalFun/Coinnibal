@@ -243,6 +243,24 @@ describe('nobody can lock a wallet out of sign-in (S4)', () => {
     expect(await auth.verifySignature(owner.address, first.message, await owner.sign(first.message), 3_002)).toBeNull();
   });
 
+  it('a client\'s expired nonces never count against its cap, on a quiet server too (R2-NET-5)', async () => {
+    const auth = new Auth(Buffer.alloc(32, 5));
+    // one home /64: six wallets, four prompts each, none signed (cancelled, closed pages); the pool stays small
+    const t0 = 1_800_000_000_000;
+    for (let w = 0; w < 6; w++) for (let i = 0; i < 4; i++) auth.issueNonce(`0x${(0x100 + w).toString(16).padStart(40, '0')}`, origin, t0, '2001:db8:1:2::/64');
+    expect(auth.nonceCount).toBe(MAX_NONCES_PER_CLIENT);
+    expect(() => auth.issueNonce(testSigner().address, origin, t0 + 1, '2001:db8:1:2::/64')).toThrow(NonceLimitError);
+    // once they expired, another device of that /64 signs in
+    const owner = testSigner();
+    const n = auth.issueNonce(owner.address, origin, t0 + NONCE_TTL_MS + 1, '2001:db8:1:2::/64');
+    expect(await auth.verifySignature(owner.address, n.message, await owner.sign(n.message), t0 + NONCE_TTL_MS + 2)).toBe(owner.address);
+    expect(auth.nonceCount).toBe(0);
+    // the cap itself still holds for live nonces
+    for (let i = 1; i < MAX_NONCES_PER_CLIENT; i++) auth.issueNonce(testSigner().address, origin, t0 + NONCE_TTL_MS + 3, '2001:db8:1:2::/64');
+    auth.issueNonce(testSigner().address, origin, t0 + NONCE_TTL_MS + 3, '2001:db8:1:2::/64');
+    expect(() => auth.issueNonce(testSigner().address, origin, t0 + NONCE_TTL_MS + 4, '2001:db8:1:2::/64')).toThrow(NonceLimitError);
+  });
+
   it('a full pool evicts the biggest network first: thousands of /64s of one /48 never flush an honest nonce', { timeout: 30_000 }, async () => {
     const auth = new Auth(Buffer.alloc(32, 4));
     const honest = testSigner();
@@ -422,6 +440,39 @@ describe('nobody can lock a smart wallet out of sign-in (NET-R1-2)', () => {
       const u = auth.issueNonce(someone(99), origin, Date.now(), '198.51.100.7');
       expect(await auth.verifySignature(someone(99), u.message, GARBAGE)).toBeNull();
       expect(calls).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('an ERC-8010 signature (an EIP-7702 account not delegated yet: no code) reaches the on-chain check (R2-NET-6)', async () => {
+    vi.useFakeTimers();
+    try {
+      // a Porto-style account: no code until its first transaction; viem's verifyMessage checks the delegation
+      const porto = '0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a';
+      const signed = `0x${'cd'.repeat(200)}${'8010'.repeat(16)}`;
+      let calls = 0;
+      let codeReads = 0;
+      const auth = new Auth(Buffer.alloc(32, 10), {
+        onChain: async (a, _m, sig) => (calls++, a.toLowerCase() === porto && sig === signed),
+        hasCode: async () => (codeReads++, false),
+      });
+      const n = auth.issueNonce(porto, origin, Date.now(), '198.51.100.9');
+      expect(await auth.verifySignature(porto, n.message, signed)).toBe(checksumAddress(porto));
+      expect(calls).toBe(1);
+      expect(codeReads).toBe(0);
+      // another account without code and without the suffix: a wrong signature never reaches the chain
+      const m = auth.issueNonce(someone(50), origin, Date.now(), '198.51.100.9');
+      expect(await auth.verifySignature(someone(50), m.message, GARBAGE)).toBeNull();
+      expect(calls).toBe(1);
+      expect(codeReads).toBe(1);
+      // an ERC-8010-suffixed check still runs within the smart-wallet budget (per client here)
+      const tries: (string | null)[] = [];
+      for (let i = 0; i < SMART_WALLET_CHECKS.perClient + 1; i++) {
+        const k = auth.issueNonce(someone(i), origin, Date.now(), '203.0.113.200');
+        tries.push(await outcome(auth.verifySignature(someone(i), k.message, `${GARBAGE}${'8010'.repeat(16)}`)));
+      }
+      expect(tries.at(-1)).toBe('busy');
     } finally {
       vi.useRealTimers();
     }
