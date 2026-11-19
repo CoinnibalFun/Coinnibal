@@ -1,11 +1,12 @@
 import { mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { request, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { NullChain } from '../src/chain/types';
 import { loadConfig } from '../src/config';
-import { byteRange, createHttpServer, redactUrls } from '../src/http';
+import { acceptsEncoding, byteRange, createHttpServer, redactUrls } from '../src/http';
 
 /** The single-origin deploy (`WEB_DIST`): static files plus the SPA fallback for client routes like `/docs`. */
 describe('static web client', () => {
@@ -214,6 +215,79 @@ describe('static web client', () => {
     // and the server still serves
     const after = await fetch(url.origin + '/media/loop.mp4');
     expect([after.status, await after.text()]).toEqual([200, '0123456789']);
+  });
+
+  /** A raw GET (no automatic decompression): status, headers and the body bytes as sent. */
+  function raw(url: string, headers: Record<string, string> = {}, method = 'GET'): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: Buffer }> {
+    return new Promise((done, fail) => {
+      const u = new URL(url);
+      const req = request({ host: u.hostname, port: u.port, path: u.pathname, method, headers }, (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => done({ status: res.statusCode ?? 0, headers: res.headers, body: Buffer.concat(chunks) }));
+      });
+      req.on('error', fail);
+      req.end();
+    });
+  }
+
+  it('sends the build\'s precompressed copies: brotli when the browser takes it, else gzip, else the file (Vary: Accept-Encoding)', async () => {
+    const url = await start();
+    const js = 'console.log("a precompressed asset");'.repeat(40);
+    const html = '<!doctype html><title>Coinnibal</title>' + '<p>app</p>'.repeat(40);
+    writeFileSync(join(webRoot, 'assets', 'app-1234.js'), js);
+    writeFileSync(join(webRoot, 'assets', 'app-1234.js.br'), brotliCompressSync(js));
+    writeFileSync(join(webRoot, 'assets', 'app-1234.js.gz'), gzipSync(js));
+    writeFileSync(join(webRoot, 'index.html'), html);
+    writeFileSync(join(webRoot, 'index.html.br'), brotliCompressSync(html));
+    writeFileSync(join(webRoot, 'index.html.gz'), gzipSync(html));
+
+    const br = await raw(`${url}/assets/app-1234.js`, { 'Accept-Encoding': 'gzip, deflate, br, zstd' });
+    expect([br.status, br.headers['content-encoding'], br.headers.vary]).toEqual([200, 'br', 'Accept-Encoding']);
+    expect(br.headers['cache-control']).toMatch(/immutable/);
+    expect(br.headers['content-type']).toMatch(/javascript/);
+    expect(Number(br.headers['content-length'])).toBe(br.body.length);
+    expect(brotliDecompressSync(br.body).toString()).toBe(js);
+
+    for (const ae of ['gzip', 'br;q=0, gzip;q=0.8', 'deflate, gzip']) {
+      const gz = await raw(`${url}/assets/app-1234.js`, { 'Accept-Encoding': ae });
+      expect([gz.headers['content-encoding'], gz.headers.vary], ae).toEqual(['gzip', 'Accept-Encoding']);
+      expect(gunzipSync(gz.body).toString(), ae).toBe(js);
+    }
+    for (const ae of [undefined, 'identity', 'br;q=0, gzip;q=0', 'deflate']) {
+      const plain = await raw(`${url}/assets/app-1234.js`, ae ? { 'Accept-Encoding': ae } : {});
+      expect([plain.headers['content-encoding'], plain.headers.vary], String(ae)).toEqual([undefined, 'Accept-Encoding']);
+      expect(plain.body.toString(), String(ae)).toBe(js);
+    }
+
+    // the app page for client routes, too (no-cache, as before)
+    const page = await raw(`${url}/docs`, { 'Accept-Encoding': 'br' });
+    expect([page.headers['content-encoding'], page.headers['cache-control'], page.headers.vary]).toEqual(['br', 'no-cache', 'Accept-Encoding']);
+    expect(brotliDecompressSync(page.body).toString()).toBe(html);
+
+    // a HEAD has the same headers and no body; a byte range of a precompressed file gets the whole file
+    const head = await raw(`${url}/assets/app-1234.js`, { 'Accept-Encoding': 'br' }, 'HEAD');
+    expect([head.headers['content-encoding'], head.headers['content-length'], head.body.length]).toEqual(['br', String(br.body.length), 0]);
+    const ranged = await raw(`${url}/assets/app-1234.js`, { 'Accept-Encoding': 'br', Range: 'bytes=0-9' });
+    expect([ranged.status, ranged.headers['content-range'], ranged.headers['accept-ranges']]).toEqual([200, undefined, undefined]);
+    expect(brotliDecompressSync(ranged.body).toString()).toBe(js);
+
+    // a file the build did not compress: no Vary, no encoding, byte ranges as before
+    const png = await raw(`${url}/favicon-32.png`, { 'Accept-Encoding': 'br, gzip' });
+    expect([png.headers['content-encoding'], png.headers.vary, png.headers['accept-ranges']]).toEqual([undefined, undefined, 'bytes']);
+  });
+
+  it('reads Accept-Encoding with q-values and the * wildcard', () => {
+    expect(acceptsEncoding('gzip, deflate, br', 'br')).toBe(true);
+    expect(acceptsEncoding('GZIP;Q=1.0, BR', 'br')).toBe(true);
+    expect(acceptsEncoding('br;q=0', 'br')).toBe(false);
+    expect(acceptsEncoding('br;q=0.001', 'br')).toBe(true);
+    expect(acceptsEncoding('gzip', 'br')).toBe(false);
+    expect(acceptsEncoding('*', 'br')).toBe(true);
+    expect(acceptsEncoding('*;q=0', 'gzip')).toBe(false);
+    expect(acceptsEncoding('br;q=0, *', 'br')).toBe(false);
+    expect(acceptsEncoding(undefined, 'gzip')).toBe(false);
+    expect(acceptsEncoding('', 'gzip')).toBe(false);
   });
 
   it('reads one byte range of a Range header and ignores what it cannot use', () => {

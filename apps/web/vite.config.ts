@@ -1,7 +1,10 @@
 import react from '@vitejs/plugin-react';
-import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
+import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { brotliCompress, constants as zlibConstants, gzip } from 'node:zlib';
 import { defineConfig, type Plugin } from 'vite';
 
 const gameServer = process.env.GAME_SERVER ?? 'http://127.0.0.1:8787';
@@ -36,6 +39,51 @@ function publicUrlFiles(): Plugin {
         const p = join(outDir, f);
         if (existsSync(p)) writeFileSync(p, readFileSync(p, 'utf8').replaceAll(LIVE_URL, url));
       }
+    },
+  };
+}
+
+/** The text files the build precompresses (the game server sends `x.br` or `x.gz` in their place: http.ts). */
+export const PRECOMPRESS = new Set(['.js', '.css', '.svg', '.html', '.webmanifest']);
+
+/**
+ * Build only: writes a brotli (quality 11) and a gzip (level 9) copy next to every text file of `dist/` (`x.js.br`,
+ * `x.js.gz`), when it is smaller than the file. The game server (apps/server/src/http.ts `serveStatic`) sends the
+ * best one the browser takes; Caddy leaves a response that already has a Content-Encoding alone. Brotli 11 is about
+ * 12 % smaller than what Caddy compresses on the fly (zstd at its default level, about gzip 6): about 30 KB less on a
+ * first visit. Runs after every other plugin has written its files (`order: 'post'`).
+ */
+function precompress(): Plugin {
+  let outDir = '';
+  const br = promisify(brotliCompress);
+  const gz = promisify(gzip);
+  const walk = (dir: string): string[] =>
+    readdirSync(dir).flatMap((f) => {
+      const p = join(dir, f);
+      return statSync(p).isDirectory() ? walk(p) : PRECOMPRESS.has(extname(f)) ? [p] : [];
+    });
+  return {
+    name: 'precompress',
+    apply: 'build',
+    configResolved(c) {
+      outDir = c.build.outDir.startsWith('/') ? c.build.outDir : join(c.root, c.build.outDir);
+    },
+    closeBundle: {
+      order: 'post',
+      sequential: true,
+      async handler() {
+        await Promise.all(
+          walk(outDir).map(async (file) => {
+            const raw = await readFile(file);
+            const [b, g] = await Promise.all([
+              br(raw, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11, [zlibConstants.BROTLI_PARAM_SIZE_HINT]: raw.length } }),
+              gz(raw, { level: 9 }),
+            ]);
+            if (b.length < raw.length) await writeFile(file + '.br', b);
+            if (g.length < raw.length) await writeFile(file + '.gz', g);
+          }),
+        );
+      },
     },
   };
 }
@@ -93,7 +141,7 @@ function viemPackageDirs(): string[] {
 const VIEM_DIRS = viemPackageDirs();
 
 export default defineConfig({
-  plugins: [react(), publicUrlFiles()],
+  plugins: [react(), publicUrlFiles(), precompress()],
   server: {
     port: 5173,
     host: true,

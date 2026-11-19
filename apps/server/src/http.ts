@@ -122,6 +122,40 @@ async function readSmallJson(req: IncomingMessage): Promise<Record<string, unkno
   }
 }
 
+/** The precompressed copies the web build writes next to its text files (`x.js.br`, `x.js.gz`), best first. */
+const PRECOMPRESSED = [
+  ['br', '.br'],
+  ['gzip', '.gz'],
+] as const;
+
+/** Does this `Accept-Encoding` header take `coding` (listed, or `*`, without `q=0`)? */
+export function acceptsEncoding(header: string | undefined, coding: string): boolean {
+  if (!header) return false;
+  let star = false;
+  for (const part of header.toLowerCase().split(',')) {
+    const [name, ...params] = part.split(';').map((x) => x.trim());
+    const q = params.find((p) => p.startsWith('q='));
+    const ok = q === undefined || Number(q.slice(2)) > 0;
+    if (name === coding) return ok;
+    if (name === '*') star = ok;
+  }
+  return star;
+}
+
+/**
+ * What to send for a static file: its brotli copy when the browser takes brotli, else its gzip copy, else the file
+ * itself (`encoding` null). `vary`: the file has precompressed copies, so the answer depends on Accept-Encoding.
+ */
+export function precompressed(file: string, acceptEncoding: string | undefined): { file: string; encoding: string | null; vary: boolean } {
+  let vary = false;
+  for (const [coding, ext] of PRECOMPRESSED) {
+    if (!existsSync(file + ext)) continue;
+    vary = true;
+    if (acceptsEncoding(acceptEncoding, coding)) return { file: file + ext, encoding: coding, vary };
+  }
+  return { file, encoding: null, vary };
+}
+
 function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pathname: string): boolean {
   let rel: string;
   try {
@@ -152,11 +186,24 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
     'Content-Security-Policy': WEB_CSP,
     'Referrer-Policy': 'strict-origin-when-cross-origin',
   };
+  // a text file the build precompressed: its .br / .gz copy, always whole (a byte range is for media and downloads)
+  const sent = precompressed(file, req.headers['accept-encoding']);
+  if (sent.vary) headers['Vary'] = 'Accept-Encoding';
+  if (sent.encoding) headers['Content-Encoding'] = sent.encoding;
   if (fallback) {
     // the app page stands in for every client route: always sent whole, never a byte range of it
     res.writeHead(200, headers);
     if (req.method === 'HEAD') res.end();
-    else sendFile(file, res);
+    else sendFile(sent.file, res);
+    return true;
+  }
+  if (sent.vary) {
+    const stat = statSync(file);
+    headers['Last-Modified'] = stat.mtime.toUTCString();
+    headers['Content-Length'] = statSync(sent.file).size;
+    res.writeHead(200, headers);
+    if (req.method === 'HEAD') res.end();
+    else sendFile(sent.file, res);
     return true;
   }
   // a real file answers one byte range: Safari and iOS play a <video> only from a server that does (they probe
