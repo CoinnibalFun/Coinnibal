@@ -646,7 +646,7 @@ describe('each network has a share of an arena\'s permits not played yet (audit 
     expect(site.filter((r) => r.status === 'fulfilled')).toHaveLength(16);
   });
 
-  it('one IPv4 address (carrier NAT: many players) has 8 per arena; a seated or settled permit makes room, an unused one keeps its place a day', async () => {
+  it('one IPv4 address (carrier NAT: many players) has 8 per arena; a seated, settled or unused expired permit makes room', async () => {
     // a carrier NAT address: its request limit set high (JOIN_PERMIT_PER_IP)
     const h = harness({ arenas: [arena(1, 1000), arena(3, 1000)], cfg: { perIp: 1000 } });
     h.seats = 300;
@@ -656,6 +656,8 @@ describe('each network has a share of an arena\'s permits not played yet (audit 
     const e = await fail(h.permits.issue(ws[8], 1, ip));
     expect([e.code, e.status]).toEqual(['network_busy', 409]);
     expect(e.message).toMatch(/your network/);
+    // honest about the wait (audit R4b-M1): its places free up within half an hour
+    expect(e.message).toMatch(/within half an hour: try again soon, or from another connection\.$/);
     // another arena has its own share; a kept permit asked for again is no new one
     expect((await h.permits.issue(ws[8], 3, ip)).arenaId).toBe(3);
     expect((await h.permits.issue(ws[0], 1, ip)).nonce).toBe('0');
@@ -667,9 +669,9 @@ describe('each network has a share of an arena\'s permits not played yet (audit 
     buy(h, ws[1]);
     h.permits.ticketSeen(ws[1], 1, null);
     expect((await fail(h.permits.issue(ws[9], 1, ip))).code).toBe('network_busy');
-    // ten minutes on, the unused permits expired: read once at the share (the join nonce first), each of them bought
-    // nothing. Round 4: such a dud keeps its place in its networks' share for a day, so free permits asked again and
-    // again (new wallets each time) hold one network's share only, not the arena's
+    // ten minutes on, the unused permits expired: read once at the share (the join nonce first), those that bought
+    // nothing leave it at once (audit R4b-M1: a permit that bought nothing never holds a shared network past its 10
+    // minutes; free permits cycled from one wallet are bounded per wallet instead, `unused_permits`)
     let nonceReads = 0;
     let ticketReads = 0;
     const nonceOf = h.chain.joinNonce.bind(h.chain);
@@ -683,20 +685,16 @@ describe('each network has a share of an arena\'s permits not played yet (audit 
       return has(id, w);
     };
     h.clock.now += 11 * 60_000;
-    expect((await fail(h.permits.issue(ws[9], 1, ip))).code).toBe('network_busy');
+    expect((await h.permits.issue(ws[9], 1, ip)).player).toBe(ws[9]);
     // ws[9]'s own ticket and nonce; then the nonce of ws[1]..ws[8], and the ticket of ws[1] only (its nonce moved)
     expect([nonceReads, ticketReads]).toEqual([1 + 8, 1 + 1]);
-    // read once per 10 s: asking again reads none of them
-    await fail(h.permits.issue(ws[9], 1, ip));
-    expect([nonceReads, ticketReads]).toEqual([2 + 8, 2 + 1]);
-    // ws[1]'s ticket stays in the share until the stale sweeper settles it; then one place is free
-    swept(h, ws[1]);
-    expect((await h.permits.issue(ws[9], 1, ip)).player).toBe(ws[9]);
+    // ws[1]'s ticket stays in the share until the stale sweeper settles it
+    for (let i = 0; i < 6; i++) await h.permits.issue(testWallet(0x7400 + i), 1, ip);
     expect((await fail(h.permits.issue(testWallet(0x7406), 1, ip))).code).toBe('network_busy');
-    // a day after they were asked, those duds are gone; ws[9]'s permit expired unused meanwhile: it is the one left
-    h.clock.now += 24 * 3_600_000;
-    for (let i = 0; i < 7; i++) expect((await h.permits.issue(testWallet(0x7400 + i), 1, ip)).arenaId).toBe(1);
-    expect((await fail(h.permits.issue(testWallet(0x7407), 1, ip))).code).toBe('network_busy');
+    // read once per 10 s: asking again reads none of them
+    expect([nonceReads, ticketReads]).toEqual([1 + 8 + 7, 1 + 1 + 7]);
+    swept(h, ws[1]);
+    expect((await h.permits.issue(testWallet(0x7406), 1, ip)).arenaId).toBe(1);
     // a player with standing on that address is never refused for its share
     const regular = testWallet(0x7499);
     established(h, regular);
@@ -987,32 +985,111 @@ describe('an IPv4 /24 is one site, and new wallets hold at most their share of a
     expect(burst.filter((r) => r.status === 'fulfilled')).toHaveLength(20);
   });
 
-  it('free permits asked again and again cannot hold the new wallets\' share: unused, they leave it once expired, and keep their networks\' share a day', async () => {
+  it('free permits asked again and again cannot hold the new wallets\' share: unused, they leave it once expired, never hold their networks, and each wallet gets 3 a day', async () => {
     const h = harness({ arenas: [arena(1, 1000)] });
     h.seats = 40; // a share of 20
     // the attacker: 20 funded throwaway wallets on one /24 (16) and another /24 (4), permits never used
-    const ask = (i: number, n = 0) => h.permits.issue(testWallet(0x6400 + i + n), 1, i < 16 ? `198.18.1.${1 + (i >> 3)}` : `198.18.2.${1 + (i >> 3)}`);
-    for (let i = 0; i < 20; i++) await ask(i);
+    const attackers = Array.from({ length: 20 }, (_, i) => testWallet(0x6400 + i));
+    const ipOf = (i: number) => (i < 16 ? `198.18.1.${1 + (i >> 3)}` : `198.18.2.${1 + (i >> 3)}`);
+    const round = async () => {
+      const codes: string[] = [];
+      for (let i = 0; i < 20; i++) codes.push(await h.permits.issue(attackers[i], 1, ipOf(i)).then(() => 'permit', (err: JoinPermitFail) => err.code));
+      return codes;
+    };
+    expect(await round()).toEqual(Array(20).fill('permit'));
     expect((await fail(h.permits.issue(testWallet(0x64ff), 1, '10.80.0.1'))).code).toBe('arena_busy');
-    // ten minutes on they expired unused: the next new player's request reads them (duds) and gets in
+    // ten minutes on they expired unused: the next new player's request reads them and gets in
     h.clock.now += 11 * 60_000;
     expect((await h.permits.issue(testWallet(0x64ff), 1, '10.80.0.1')).arenaId).toBe(1);
-    // the attacker's first /24 asked 16 that bought nothing: its share is held for a day, new wallets or not
-    expect((await fail(h.permits.issue(testWallet(0x6500), 1, '198.18.1.77'))).code).toBe('network_busy');
-    h.clock.now += 23 * 3_600_000;
-    expect((await fail(h.permits.issue(testWallet(0x6501), 1, '198.18.1.77'))).code).toBe('network_busy');
-    h.clock.now += 3_600_000;
-    expect((await h.permits.issue(testWallet(0x6502), 1, '198.18.1.77')).arenaId).toBe(1);
-    // asking again with the same wallet once its permit expired is a dud too (its nonce never moved)
-    const w = testWallet(0x6600);
-    await h.permits.issue(w, 1, '198.18.3.1');
+    // the attacker's /24 is not held for a day (audit R4b-M1): a new player there is served at once
+    expect((await h.permits.issue(testWallet(0x6500), 1, '198.18.1.77')).arenaId).toBe(1);
+    // those two play (seated): the share is free for the attacker's second and third round
+    h.seated.add(sessionKey(1, testWallet(0x64ff), 1)).add(sessionKey(1, testWallet(0x6500), 1));
+    expect(await round()).toEqual(Array(20).fill('permit'));
     h.clock.now += 11 * 60_000;
-    await h.permits.issue(w, 1, '198.18.3.1');
+    expect(await round()).toEqual(Array(20).fill('permit'));
+    // a fourth round: each wallet let 3 permits of this arena run out unused today, so it waits until the first is a
+    // day old. Holding the share all day takes a new funded wallet every 3 permits
     h.clock.now += 11 * 60_000;
-    await h.permits.issue(w, 1, '198.18.3.1');
-    for (let i = 0; i < 5; i++) await h.permits.issue(testWallet(0x6610 + i), 1, '198.18.3.1');
-    // 2 duds, its live permit and 5 more: the address's 8
-    expect((await fail(h.permits.issue(testWallet(0x6620), 1, '198.18.3.1'))).code).toBe('network_busy');
+    expect(await round()).toEqual(Array(20).fill('unused_permits'));
+    for (let i = 0; i < 20; i++) expect((await h.permits.issue(testWallet(0x6600 + i), 1, `10.81.${i}.1`)).arenaId).toBe(1);
+    expect((await fail(h.permits.issue(testWallet(0x6620), 1, '10.81.99.1'))).code).toBe('arena_busy');
+  });
+
+  it('one wallet asking again and again cannot close its network: it gets 3 unused permits a day per arena, then waits (audit R4b-M1)', async () => {
+    const h = harness({ arenas: [arena(1, 1000), arena(3, 1000)], cfg: { perIp: 1000 } });
+    h.seats = 300;
+    const ip = '100.64.1.5'; // a carrier NAT address
+    const w = testWallet(0x6800);
+    const first = h.clock.now;
+    // the reviewer's one funded wallet: asks, never joins, asks again once each permit ran out
+    for (let i = 0; i < 3; i++) {
+      expect((await h.permits.issue(w, 1, ip)).player).toBe(w);
+      h.clock.now += 11 * 60_000;
+    }
+    const e = await fail(h.permits.issue(w, 1, ip));
+    expect([e.code, e.status, e.retryAt]).toEqual(['unused_permits', 403, first + NO_SHOW_WINDOW_MS]);
+    expect(e.message).toMatch(/asked for 3 tickets for this room today and bought none/);
+    // its address keeps its whole share for other wallets at once, and so does its /24
+    for (let i = 0; i < 8; i++) expect((await h.permits.issue(testWallet(0x6810 + i), 1, ip)).arenaId).toBe(1);
+    expect((await fail(h.permits.issue(testWallet(0x6818), 1, ip))).code).toBe('network_busy');
+    for (let i = 0; i < 8; i++) expect((await h.permits.issue(testWallet(0x6820 + i), 1, '100.64.1.6')).arenaId).toBe(1);
+    // the count is per arena: another arena serves it
+    expect((await h.permits.issue(w, 3, ip)).arenaId).toBe(3);
+    // 20 hours on it still waits in arena 1 (from another address too); a day after its first permit it is served
+    h.clock.now += 20 * 3_600_000;
+    expect((await fail(h.permits.issue(w, 1, '100.64.9.9'))).code).toBe('unused_permits');
+    h.clock.now = first + NO_SHOW_WINDOW_MS + 1;
+    expect((await h.permits.issue(w, 1, '100.64.9.9')).player).toBe(w);
+    // a ticket bought anywhere (its join nonce moved) starts the count afresh
+    const v = testWallet(0x6801);
+    for (let i = 0; i < 3; i++) {
+      await h.permits.issue(v, 1, ip);
+      h.clock.now += 11 * 60_000;
+    }
+    expect((await fail(h.permits.issue(v, 1, ip))).code).toBe('unused_permits');
+    h.chain.nonces.set(v.toLowerCase(), 1n);
+    expect((await h.permits.issue(v, 1, ip)).nonce).toBe('1');
+    // a player with standing is never counted; 0 turns the limit off
+    const regular = testWallet(0x6802);
+    established(h, regular);
+    for (let i = 0; i < 5; i++) {
+      expect((await h.permits.issue(regular, 1, ip)).player).toBe(regular);
+      h.clock.now += 11 * 60_000;
+    }
+    const off = harness({ arenas: [arena(1, 1000)], cfg: { unusedLimit: 0 } });
+    off.seats = 300;
+    for (let i = 0; i < 5; i++) {
+      expect((await off.permits.issue(w, 1, ip)).player).toBe(w);
+      off.clock.now += 11 * 60_000;
+    }
+    expect(loadConfig({} as unknown as NodeJS.ProcessEnv).joinPermits.unusedLimit).toBe(3);
+    expect(loadConfig({ JOIN_PERMIT_UNUSED_LIMIT: '0' } as unknown as NodeJS.ProcessEnv).joinPermits.unusedLimit).toBe(0);
+  });
+
+  it('players who leave the ticket sheet and come back a quarter of an hour later are served again, 8 behind one carrier NAT address (audit R4b-M1)', async () => {
+    const h = harness({ arenas: [arena(1, 1000)], cfg: { perIp: 1000 } });
+    h.seats = 300;
+    const ip = '100.64.1.5';
+    const ws = Array.from({ length: 8 }, (_, i) => testWallet(0x6900 + i));
+    for (const w of ws) await h.permits.issue(w, 1, ip);
+    // they declined in the wallet, had no gas, or went away: a quarter of an hour on, each one is back and served
+    h.clock.now += 15 * 60_000;
+    for (const w of ws) expect((await h.permits.issue(w, 1, ip)).player).toBe(w);
+    // and once more (2 unused each, under the 3); this time they buy and play: the count starts afresh
+    h.clock.now += 15 * 60_000;
+    for (const w of ws) expect((await h.permits.issue(w, 1, ip)).player).toBe(w);
+    for (const w of ws) {
+      h.chain.nonces.set(w.toLowerCase(), 1n);
+      h.seated.add(sessionKey(1, w, 1));
+    }
+    // a ninth new player on that address is served: the 8 played (seated) and left the share
+    expect((await h.permits.issue(testWallet(0x6908), 1, ip)).arenaId).toBe(1);
+    // their game is over and they come back for the next one: their count started afresh with the ticket (7 of them:
+    // the ninth player holds one of the address's 8 places)
+    for (const w of ws) h.seated.delete(sessionKey(1, w, 1));
+    h.clock.now += 15 * 60_000;
+    for (const w of ws.slice(0, 7)) expect((await h.permits.issue(w, 1, ip)).nonce).toBe('1');
   });
 });
 
