@@ -145,6 +145,17 @@
   gap: 14px;
   margin-top: 16px;
 }
+/* three buttons (the game is open): the first two share the width and the third spans both, so the block has one
+   left and one right edge. A phone stacks them at full width (479 px query) */
+@media (min-width: 480px) {
+  .ld-hero__ctas--three {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ld-hero__ctas--three > :last-child {
+    grid-column: 1 / -1;
+  }
+}
 .ld-hero__note {
   display: flex;
   flex-wrap: wrap;
@@ -156,7 +167,8 @@
 .ld-flowline {
   color: var(--teal-ink);
 }
-/* everything is closed: the project's X account under the buttons */
+/* quiet links under the buttons: the project's X account while the WL is closed, and the collab page while it is
+   open */
 .ld-hero__note--x {
   margin-top: 12px;
 }
