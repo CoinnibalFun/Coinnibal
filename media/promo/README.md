@@ -1,4 +1,4 @@
-# Coinnibal promo (29.4 s, 1920x1080, 60 fps)
+# Coinnibal promo (31.8 s, 1920x1080, 60 fps)
 
 The launch film for Coinnibal, in the web app's Storybook paints and type (`packages/shared/src/palette.ts`;
 Fraunces, DM Sans, Geist Mono) with the brand's own marks (the COINNIBAL wordmark with the bitten gold coin
@@ -21,12 +21,14 @@ The beat starts are in `timeline.json` ("beats"); the score, the SFX cues and th
 | 0:07.8 | Ticket + the token | Four room tickets dealt ($1, $3, $5, $10; the $10 one NFT HOLDERS ONLY); a big gold token coin drops in ("One token runs it all."); the $1 ticket is taped and stamped PAID, a hole is punched and the camera dives through it. | 7.95 "Buy a ticket. One token runs it all." |
 | 0:11.4 | Play | Real footage in a frame, cut on the beat: a gulp (EATEN, +1,000), a bigger coin chasing (RUN!), a split (SPLIT). | 11.55 "Eat smaller coins. Run from bigger ones." |
 | 0:15.0 | Round | The round clock spins 5:00 to the bell; a short receipt prints (ticket 1,000, coins eaten +3,000, your coin at the bell 4,000 tokens), PAID. | 15.1 "Five-minute rounds." 16.35 "Alive at the bell? You get paid." |
-| 0:19.2 | NFT collection | Twelve emblems dealt face down and flipped, swept into a fan; one comes forward, HOLDER; three perk stickers: half the fee, the $10 Room, cheaper power-ups. Ink flood to night. | 19.3 "The Coinnibal NFT collection. Half the fee, the ten-dollar room, cheaper power-ups." |
-| 0:24.6 | End card | Silence, then the hit: the die-cut wordmark, "Eat or be eaten.", the site (`SITE_HOST`) on a ticket, ON ROBINHOOD CHAIN, the cast peeks up, the chomp mark bites on the sting. | 24.85 "Coinnibal. Eat, or be eaten!" |
+| 0:19.2 | NFT collection | Twelve emblems dealt face down and flipped, swept into a fan; one comes forward, HOLDER; HOLD ONE: the five holder perks as the site lists them (`apps/web/src/site/nft/WhyNft.tsx`), each slapped on as a sticker as the voice names it: Half the fee (on your profit), $10 Room for holders, 20% off power-ups (+1 power-up every paid round), 1 free private room a day, NFT skin and holder badge (the gold emblem coin). Ink flood to night. | 19.3 "The Coinnibal NFT collection. Half the fee, the ten-dollar room, cheaper power-ups, a free room every day, and a gold holder skin." |
+| 0:27.0 | End card | Silence, then the hit: the die-cut wordmark, "Eat or be eaten.", the site (`SITE_HOST`) on a ticket, ON ROBINHOOD CHAIN, the cast peeks up, the chomp mark bites on the sting. | 27.25 "Coinnibal. Eat, or be eaten!" |
 
-Never in the film: the token's ticker or name, fees, burns, an X handle, a mint or NFT price, dates, other
-chains or the old names. The token is shown as a plain gold coin with a star. The receipt's numbers are
-an illustrative round.
+Never in the film: the token's ticker or name, fee or burn percentages (the holders' fee is "half the fee"), an
+X handle, a mint or NFT price, dates, other chains, the old names or the test network (so no faucet perk). The
+token is shown as a plain gold coin with a star. The receipt's numbers are an illustrative round. The NFT beat's
+perks follow the site (the `nf.*` strings and the shared defaults in `packages/shared`): when a perk changes
+there, change `PERKS` in `scenes/scenes.js`, the `nft` line and the sticker cues with it.
 
 ## Footage
 
@@ -43,9 +45,11 @@ round clock); the dev FPS counter is off.
 
 Kokoro TTS (local ONNX, `kokoro-v1.0`), voice `af_heart`, through the shared voice kit
 `media/gameplay/render/voice.py` (script marks: `|` a breath, `||` a beat, `*word*` an emphasis). Per-line
-speeds 1.0-1.14, a punchy read. Fixed pronunciations: Coinnibal /ˈkɔɪnɪbəl/ (like cannibal, with coin),
-Robinhood. Lines are written for the ear (numbers in words). The mixer gives
-every line the same loudness, runs the VO chain (high-pass, mud cut, presence, air, de-esser, 3:1
+speeds 1.0-1.14, a punchy read. Every phrase is read in one piece: a breath only between sentences, list items
+joined by commas, and no `*emphasis*` inside a phrase (the kit synthesises an emphasised word on its own after a
+lift-in pause, so "Run from *bigger* ones." came out as "run from bigger ... ones"). Fixed pronunciations:
+Coinnibal /ˈkɔɪnɪbəl/ (like cannibal, with coin), Robinhood. Lines are written for the ear (numbers in words).
+The mixer gives every line the same loudness, runs the VO chain (high-pass, mud cut, presence, air, de-esser, 3:1
 compression, a light room) and ducks the music 8 dB under the voice.
 
 ## Layout
@@ -89,7 +93,7 @@ node render/build-art.mjs
 (cd ../../apps/server && npx tsx ../../media/promo/render/nft-cards.ts)
 
 # 3. picture
-node render/render.mjs --preview 2,6,9,12,17,22,27      # stills in cache/preview/
+node render/render.mjs --preview 2,6,9,12,17,22,26,29      # stills in cache/preview/
 SITE_HOST=coinnibal.fun node render/render.mjs --workers 3   # -> cache/video.mp4
 
 # 4. sound
@@ -104,3 +108,15 @@ PY=$PY render/mux.sh            # -> out/videos/coinnibal-promo.mp4
 
 If you move a beat in `timeline.json`, the scenes, the score and the cue times follow the beat starts; the SFX
 and VO cue seconds are absolute, so move them with it.
+
+When only the later beats change and the footage cache is gone (a new take needs a dev stack), the picture can be
+re-rendered from a beat on and the earlier part taken from the last film, decoded once into a lossless
+intermediate (mux.sh then encodes it once). The frames are deterministic, so the cut has no seam as long as the
+earlier beats and the first frame of the cut beat are unchanged (the 19.2 s cut, 19 Nov 2026):
+
+```bash
+SITE_HOST=coinnibal.fun node render/render.mjs --from 19.2 --to 31.8 --workers 3 --out cache/video-tail.mp4
+ffmpeg -i ../../out/videos/coinnibal-promo.mp4 -i cache/video-tail.mp4 -filter_complex \
+  "[0:v]trim=end_frame=1152,setpts=PTS-STARTPTS[a];[1:v]setpts=PTS-STARTPTS[b];[a][b]concat=n=2:v=1[v]" \
+  -map "[v]" -c:v libx264 -preset veryfast -qp 0 -pix_fmt yuv420p -r 60 cache/video.mp4
+```

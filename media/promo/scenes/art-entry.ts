@@ -1,2 +1,2 @@
 // Browser bundle of the Coinnibal art package for the promo scenes (see render/build-art.mjs).
-export { drawRisoCoin, lookForBasicSkin, RISO, INK, PAPER, CARD_PAPER, drawFace, drawHalftoneDots, drawSymbol, starPath } from '../../../packages/art/src/index';
+export { drawRisoCoin, lookForBasicSkin, ELYSIUM, shadeOf, RISO, INK, PAPER, CARD_PAPER, drawFace, drawHalftoneDots, drawSymbol, starPath } from '../../../packages/art/src/index';
