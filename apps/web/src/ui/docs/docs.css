@@ -237,6 +237,12 @@
 .dc-sec {
   scroll-margin-top: 96px;
 }
+/* /docs: a chapter that waits for its turn (DocsPage `useLaterChapters`) is skipped by the layout while it is off
+   screen; once rendered it is the same box as without this (no margin crosses a chapter's edge) */
+.st-docs .dc-sec[data-later] {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 1400px;
+}
 .dc-sec__head {
   display: grid;
   grid-template-columns: 60px minmax(0, 1fr);

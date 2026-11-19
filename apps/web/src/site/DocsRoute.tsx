@@ -30,7 +30,7 @@ export function DocsRoute() {
     <SitePage className="st-docs">
       <PlateLabel numeral={8} title={t('site.docs.plate')} className="st-docs__plate" />
       <div className="st-page">
-        <DocsPage headingLevel={1} symbol={TOKEN_SYMBOL_DEFAULT} />
+        <DocsPage headingLevel={1} symbol={TOKEN_SYMBOL_DEFAULT} later />
       </div>
     </SitePage>
   );
