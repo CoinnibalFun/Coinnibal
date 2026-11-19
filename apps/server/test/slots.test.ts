@@ -388,6 +388,51 @@ describe('connection slots', () => {
   });
 });
 
+describe('a busy smart-wallet sign-in (NET-R1-2)', () => {
+  it('answers busy over HTTP (429) and the WebSocket (rate_limited), not a wrong signature, and keeps the nonce', async () => {
+    const smart = '0x5afe00000000000000000000000000000000c0de';
+    const good = `0x${'ab'.repeat(65)}`;
+    let calls = 0;
+    app.auth.setOnChainVerifier(async (a, _m, sig) => (calls++, a.toLowerCase() === smart && sig === good));
+    try {
+      const nonce = async (ip: string) =>
+        (await (await fetch(`http://127.0.0.1:${port}/api/auth/nonce?address=${smart}`, { headers: { 'X-Forwarded-For': ip } })).json()) as { message: string };
+      const login = (ip: string, message: string, signature: string) =>
+        fetch(`http://127.0.0.1:${port}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip }, body: JSON.stringify({ address: smart, message, signature }) });
+      // garbage from a few clients spends the server-wide smart-wallet bucket (the clock is real: answer fast)
+      const statuses: number[] = [];
+      for (let i = 0; i < 8; i++) {
+        const ip = `198.18.50.${i + 1}`;
+        statuses.push((await login(ip, (await nonce(ip)).message, `0x${'00'.repeat(65)}`)).status);
+      }
+      expect(statuses).toContain(401);
+      const busy = statuses.indexOf(429);
+      expect(busy).toBeGreaterThan(0);
+      // the owner's correct signature now: busy, with the reason
+      const mine = await nonce('198.18.51.1');
+      const res = await login('198.18.51.1', mine.message, good);
+      expect(res.status).toBe(429);
+      expect(((await res.json()) as { message: string }).message).toMatch(/busy/i);
+      // the same over the WebSocket
+      const ws = await open('198.18.51.2');
+      const got = new Promise<{ code: string; message: string }>((resolve) => ws.on('message', (d) => {
+        const m = JSON.parse(String(d)) as { t: string; code: string; message: string };
+        if (m.t === 'error' || m.t === 'authed') resolve(m);
+      }));
+      const viaWs = await nonce('198.18.51.2');
+      ws.send(JSON.stringify({ t: 'auth', address: smart, message: viaWs.message, signature: good }));
+      expect((await got).code).toBe('rate_limited');
+      // a moment later the bucket has refilled: the very same nonce and signature sign in
+      await sleep(2_200);
+      const later = await login('198.18.51.1', mine.message, good);
+      expect(later.status).toBe(200);
+    } finally {
+      app.auth.setOnChainVerifier(null);
+      await closeAll();
+    }
+  });
+});
+
 describe('HTTP limits per client (an IPv6 client is its /64)', () => {
   it('sign-in nonces: a new address of one /64 for every request still meets the per-client limit', async () => {
     const nonce = (ip: string) =>

@@ -159,10 +159,14 @@ export async function createApp(
   const adminSet = new Set(cfg.adminWallets.map((w) => w.toLowerCase()));
   const auth = new Auth(cfg.authSecret, {
     onChain: chain.verifyMessage ? (a, m, sig) => chain.verifyMessage!(a, m, sig) : null,
+    // garbage aimed at a plain account never reaches the smart-wallet check (`CODE_CHECKS`)
+    hasCode: chain.hasCode ? (a) => chain.hasCode!(a) : null,
     // admin sessions are short (ADMIN_TOKEN_TTL_MIN) and can be revoked (POST /api/admin/auth/revoke)
     isAdmin: (w) => adminSet.has(w.toLowerCase()),
     adminTtlMs: cfg.adminTokenTtlMs,
     revocationsFile: persist ? join(cfg.dataDir, 'auth-revoked.json') : null,
+    // smart wallets that signed in, per network: their sign-in reserve survives a restart (`SMART_WALLET_RESERVE`)
+    smartWalletsFile: persist ? join(cfg.dataDir, 'auth-smart-wallets.json') : null,
     log,
   });
   const profiles = new ProfileStore(persist ? join(cfg.dataDir, files.profiles) : null, log);

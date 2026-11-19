@@ -19,7 +19,7 @@ import {
   type ServerMessage,
 } from '@coinnibal/shared';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
-import type { Auth } from '../auth';
+import { SIGN_IN_BUSY_MESSAGE, SignInBusyError, type Auth } from '../auth';
 import { ChainBusyError, sessionKey, type ChainGateway, type ChainSession, type SettledEvent } from '../chain/types';
 import type { ServerConfig } from '../config';
 import type { ProfileStore } from '../profiles';
@@ -924,7 +924,14 @@ export class Gateway {
       // a player's session slides on; an admin's short token comes back unchanged (never extended)
       if (wallet) token = this.auth.refreshToken(msg.token);
     } else if (typeof msg.address === 'string' && typeof msg.message === 'string' && typeof msg.signature === 'string') {
-      wallet = await this.auth.verifySignature(msg.address, msg.message, msg.signature);
+      try {
+        wallet = await this.auth.verifySignature(msg.address, msg.message, msg.signature);
+      } catch (err) {
+        if (!(err instanceof SignInBusyError)) throw err;
+        // the smart-wallet check cannot run right now: not a wrong signature (the token is kept, the nonce too)
+        this.error(conn, 'rate_limited', SIGN_IN_BUSY_MESSAGE);
+        return;
+      }
     }
     if (!wallet) {
       this.error(conn, 'auth_failed', 'Wallet sign-in failed. Please sign again.');
