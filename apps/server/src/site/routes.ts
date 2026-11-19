@@ -281,6 +281,14 @@ export class SiteApi {
   }
 
   /**
+   * The same for a value that is only shown (a profile's skins, the `holder` field of `/api/auth/me`): never busy (no
+   * 429 for a budget); past the client's holder-read bound the "holder" on record, else false, not kept.
+   */
+  async shownHolder(wallet: string | null | undefined): Promise<boolean> {
+    return !!wallet && !!this.ext.mint && (await this.ext.mint.shownHolder(wallet));
+  }
+
+  /**
    * Whether `wallet` may enter game rooms: admins always; NFT holders in `holders` mode; everyone in `public`.
    * `fresh`: the holder check skips its 15 s cache (the gateway asks so right before seating an arena ticket).
    */
@@ -288,6 +296,17 @@ export class SiteApi {
     const mode = this.gameAccess();
     if (mode === 'public' || this.isAdmin(wallet)) return true;
     if (mode === 'holders') return this.isHolder(wallet, fresh);
+    return false;
+  }
+
+  /**
+   * `gameOpenFor` for a value that is only shown (the shop's prices): never busy; past the client's holder-read bound
+   * a holder on record may, anyone else is answered as not a holder (not kept: the next check reads the chain).
+   */
+  async gameShownFor(wallet: string | null | undefined): Promise<boolean> {
+    const mode = this.gameAccess();
+    if (mode === 'public' || this.isAdmin(wallet)) return true;
+    if (mode === 'holders') return this.shownHolder(wallet);
     return false;
   }
 
@@ -372,9 +391,13 @@ export class SiteApi {
       this.method(req, 'GET');
       const wallet = this.session(req);
       const admin = this.isAdmin(wallet);
-      // a busy holder check (`ClientBudgetError`) answers 429, except for an admin: its access does not hang on it
-      const [holder, canPlay] = await Promise.all([this.isHolder(wallet).catch((err) => (admin && err instanceof ClientBudgetError ? false : Promise.reject(err))), this.gameOpenFor(wallet)]);
-      return send(res, 200, { address: wallet, admin, holder, canPlay });
+      // `holder` is only shown: never busy. `canPlay` is the gate: a holder check this client may not make right now,
+      // with no "holder" on record (`ClientBudgetError`), is `busy` (ask again in a moment), never a wrong "no"
+      const [holder, canPlay] = await Promise.all([
+        this.shownHolder(wallet),
+        this.gameOpenFor(wallet).catch((err: unknown) => (err instanceof ClientBudgetError ? ('busy' as const) : Promise.reject(err))),
+      ]);
+      return send(res, 200, { address: wallet, admin, holder, canPlay: canPlay === true, ...(canPlay === 'busy' ? { busy: true } : {}) });
     }
     this.method(req, 'POST');
     if (!this.limits.login.allow(ip)) throw new SiteFail(429, 'rate_limited', 'Too many sign-ins. Wait a moment.');
@@ -407,7 +430,7 @@ export class SiteApi {
       const wallet = bearerWallet(this.auth, req);
       // the packs' prices are a quote for play: only for whoever may play now. A purchase (below) is not gated: a
       // payment someone made anyway is credited (or owed back), never kept for nothing
-      if (!(await this.gameOpenFor(wallet))) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
+      if (!(await this.gameShownFor(wallet))) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
       return send(res, 200, await shop.service.view(wallet));
     }
     this.method(req, 'POST');
@@ -434,13 +457,14 @@ export class SiteApi {
     if (!profiles) throw new SiteFail(404, 'not_found', 'Not found');
     if (this.method(req, 'GET', 'PUT') === 'GET') {
       const wallet = this.session(req);
-      const holder = await this.isHolder(wallet);
+      const holder = await this.shownHolder(wallet);
       return send(res, 200, { profile: profiles.view(wallet), skinOptions: this.skinOptions(holder), holder } satisfies ProfileResponse);
     }
     const wallet = this.writer(req, ip);
     const body = await readJson(req);
-    // the emblem skin is checked on chain right now (a sold emblem no longer unlocks it)
-    const holder = await this.isHolder(wallet, body.skin === EMBLEM_SKIN_ID);
+    // the emblem skin is checked on chain right now (a sold emblem no longer unlocks it); otherwise the answer's skin
+    // list is only shown
+    const holder = body.skin === EMBLEM_SKIN_ID ? await this.isHolder(wallet, true) : await this.shownHolder(wallet);
     try {
       return send(res, 200, { profile: profiles.update(wallet, body, { emblem: holder }), skinOptions: this.skinOptions(holder), holder } satisfies ProfileResponse);
     } catch (err) {
@@ -697,8 +721,10 @@ export class SiteApi {
     if (!svc) throw new SiteFail(404, 'not_found', 'Not found');
     const rest = path.slice('/api/rooms/custom'.length).replace(/^\//, '');
     // opening a room (paid, or free practice) and its price quote follow the game gate: the join over the WebSocket
-    // would be refused anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter
-    if ((req.method === 'POST' || (req.method === 'GET' && rest === 'quote')) && !(await this.gameOpenFor(bearerWallet(this.auth, req)))) {
+    // would be refused anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter. The
+    // quote is only shown (never busy: `gameShownFor`); opening one is the gate decision (busy, never a wrong "no")
+    const quote = req.method === 'GET' && rest === 'quote';
+    if ((req.method === 'POST' || quote) && !(await (quote ? this.gameShownFor(bearerWallet(this.auth, req)) : this.gameOpenFor(bearerWallet(this.auth, req))))) {
       throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
     }
     return customRoomRoutes(

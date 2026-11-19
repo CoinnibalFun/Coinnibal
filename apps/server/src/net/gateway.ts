@@ -128,10 +128,19 @@ export function clientIp(req: IncomingMessage, hops: number | boolean): string {
 export const JOIN_CHAIN_RETRY_MS = [2_000, 4_000, 8_000];
 /**
  * Ticket reads (`getSession`: a join, each of its retries, a bell re-check, a refund check) a minute per wallet and per
- * client (`rateKey`), on top of each socket's own `allowChainOp`: many sockets or throwaway wallets do not add up.
+ * client (`rateKey`), on top of each socket's own `allowChainOp`: many sockets or throwaway wallets do not add up. A
+ * client's reads for wallets the `Joined`-log index knows to hold a ticket count apart from its reads for any other
+ * wallet, so free wallets behind a carrier's NAT address never use up a ticket holder's reads there. Only reads for
+ * wallets the index does not know count per network too (`TICKET_READS_PER_NET_PER_MIN`).
  */
 export const TICKET_READS_PER_WALLET_PER_MIN = 20;
 export const TICKET_READS_PER_IP_PER_MIN = 60;
+/**
+ * Reads for wallets the `Joined` index does not know, a minute per network (`ticketNet`: an IPv6 /48, an IPv4 /24).
+ * Past it the join hears "network busy, retrying" and the index reads the new blocks (`refreshTicketIndex`): a
+ * ticket bought a moment ago is known by the retry, and a known wallet is never counted or refused per network.
+ */
+export const TICKET_READS_PER_NET_PER_MIN = TICKET_READS_PER_IP_PER_MIN * 2;
 /**
  * Ticket reads waiting at once, server-wide: this many seconds of the RPC budget (`RPC_MAX_RPS`), at least 16. Past
  * it a join hears "network busy" at once (and retries) instead of queuing for minutes behind a flood.
@@ -139,8 +148,9 @@ export const TICKET_READS_PER_IP_PER_MIN = 60;
 export const TICKET_READ_QUEUE_S = 16;
 /**
  * One network's share of that bound: ticket reads waiting at once per client (`rateKey`: an IPv4 address, an IPv6
- * /64) and per network (`ticketNet`: an IPv6 /48, an IPv4 /24). Many sockets or free wallets of one network cannot
- * hold the whole queue.
+ * /64; known wallets' reads apart from the others') and per network (`ticketNet`: an IPv6 /48, an IPv4 /24; only
+ * wallets the `Joined` index does not know). Many sockets or free wallets of one network cannot hold the whole queue,
+ * nor keep a ticket holder of that network out.
  */
 export const TICKET_READS_IN_FLIGHT_PER_CLIENT = 4;
 export const TICKET_READS_IN_FLIGHT_PER_WIDE = 8;
@@ -237,13 +247,16 @@ export class Gateway {
   private readonly upgrades = new Limiter(UPGRADES_PER_IP_PER_MIN, 60_000);
   /** Upgrades per ticket-holder wallet (the stake path). */
   private readonly stakeUpgrades = new Limiter(STAKE_UPGRADES_PER_WALLET_PER_MIN, 60_000);
-  /** Ticket reads per wallet and per client (`allowTicketRead`), and how many are waiting now (`readTicket`). */
+  /**
+   * Ticket reads per wallet and per client (`allowTicketRead`: `k <rateKey>` for wallets the `Joined` index knows,
+   * `c <rateKey>` for the others), and how many are waiting now (`readTicket`).
+   */
   private readonly ticketReadsByWallet = new Limiter(TICKET_READS_PER_WALLET_PER_MIN, 60_000);
   private readonly ticketReadsByIp = new Limiter(TICKET_READS_PER_IP_PER_MIN, 60_000);
-  /** The same per network (`ticketNet`: an IPv6 /48, an IPv4 /24), twice a client's. */
-  private readonly ticketReadsByWide = new Limiter(TICKET_READS_PER_IP_PER_MIN * 2, 60_000);
+  /** Reads for wallets the index does not know, per network (`ticketNet`: an IPv6 /48, an IPv4 /24; `readTicket`). */
+  private readonly ticketReadsByWide = new Limiter(TICKET_READS_PER_NET_PER_MIN, 60_000);
   private ticketReads = 0;
-  /** Ticket reads waiting now per client (`c <rateKey>`) and per network (`w <ticketNet>`). */
+  /** Ticket reads waiting now per client (`c`/`k <rateKey>`, as above) and per network (`w <ticketNet>`). */
   private readonly ticketReadsOf = new Map<string, number>();
   /** Graceful degradation (new joins shed before live rooms suffer); null: never sheds (bare unit tests). */
   private shedder: LoadShedder | null = null;
@@ -478,7 +491,8 @@ export class Gateway {
    * - A live stake's reconnect: the same bounds per wallet and network (with a margin of `MAX_CONNECTIONS_PER_IP` for a
    *   carrier NAT), its own upgrade budget, and past the cap one slot per wallet: a socket of its own that does not play
    *   (or whose game went silent: a dead socket) is swapped; a live game is never closed for it: with every socket of
-   *   the wallet playing, the new one takes the wallet's one extra slot (of the 5 % headroom, or an idle guest's).
+   *   the wallet playing, the new one takes the wallet's one extra slot (an idle guest's, of the 5 % headroom, or, the
+   *   headroom full, an idle signed-in socket's).
    * A socket counts under the wallet its token named for its whole life (`Conn.admitSlot`): a `logout` or a sign-in as
    * another wallet does not take it out of these bounds. Every socket counts in `MAX_CONNECTIONS`, the headroom's too;
    * the upgrade limits count per `rateKey`.
@@ -494,7 +508,9 @@ export class Gateway {
       const swap = mine.find((c) => this.swappable(c, now) === 'lobby') ?? mine.find((c) => this.swappable(c, now) === 'silent');
       if (swap) return { keep: Infinity, swap };
       if (mine.some((c) => c.headroom)) return null;
-      return this.evictIdleGuest(IDLE_GUEST_MS) || this.rooms.conns.size < max * (1 + STAKE_HEADROOM) ? { keep: Infinity, headroom: true } : null;
+      // an idle guest's place, the headroom, or (both gone) the place of the signed-in socket that went longest
+      // without playing: every lower priority may take that one, so the stake path may too
+      return this.evictIdleGuest(IDLE_GUEST_MS) || this.rooms.conns.size < max * (1 + STAKE_HEADROOM) || this.evictIdleSigned() ? { keep: Infinity, headroom: true } : null;
     }
     if (!this.upgrades.allow(rateKey(ip))) return null;
     if (offer) {
@@ -671,18 +687,25 @@ export class Gateway {
     setTimeout(() => old.ws.terminate(), 2_000).unref();
   }
 
+  /**
+   * The sockets that count as guests (`Conn.countedAsGuest`: in their IP's guest bounds). A socket its session token
+   * admitted is not one, whether or not it ever sends `auth` (it counts as signed in, `signedPerNet`).
+   */
   private guestCount(): number {
     let n = 0;
-    for (const c of this.rooms.conns) if (!c.wallet) n++;
+    for (const c of this.rooms.conns) if (c.countedAsGuest) n++;
     return n;
   }
 
-  /** Closes the longest-idle guest (not signed in, not playing, silent for `idleMs`). False when there is none. */
+  /**
+   * Closes the longest-idle guest (counted as a guest, not signed in, not playing, silent for `idleMs`). False when
+   * there is none. A socket a session token admitted is never one (`evictIdleSigned` covers it).
+   */
   private evictIdleGuest(idleMs: number): boolean {
     const now = Date.now();
     let worst: Conn | null = null;
     for (const c of this.rooms.conns) {
-      if (c.wallet || c.player?.alive || c.joining || c.ws.readyState > 1 || now - c.lastMsgAt < idleMs) continue;
+      if (!c.countedAsGuest || c.wallet || c.player?.alive || c.joining || c.ws.readyState > 1 || now - c.lastMsgAt < idleMs) continue;
       if (!worst || c.lastMsgAt < worst.lastMsgAt) worst = c;
     }
     if (!worst) return false;
@@ -861,7 +884,7 @@ export class Gateway {
    */
   async refundUnseated(conn: Conn, arenaId: number): Promise<boolean> {
     const wallet = conn.wallet;
-    if (!wallet || arenaId < 0 || !this.chain.stakeEnabled || !this.allowTicketRead(conn, wallet)) return false;
+    if (!wallet || arenaId < 0 || !this.chain.stakeEnabled || !this.allowTicketRead(conn, wallet, arenaId)) return false;
     let s: ChainSession | null;
     try {
       s = await this.readTicket(conn, arenaId, wallet);
@@ -1230,46 +1253,57 @@ export class Gateway {
         }
         await sleep(JOIN_CHAIN_RETRY_MS[i]);
         // every retry is a ticket read of its own (the limits per socket, wallet and client count it)
-        if (!this.allowTicketRead(conn, wallet)) throw err;
+        if (!this.allowTicketRead(conn, wallet, arenaId)) throw err;
       }
     }
   }
 
   /**
-   * One more ticket read for this socket and wallet: per socket (`allowChainOp`), per wallet, per client and per
-   * network (`ticketNet`: an IPv6 /48, an IPv4 /24).
+   * One more ticket read for this socket and wallet: per socket (`allowChainOp`), per wallet and per client (a wallet
+   * the `Joined` index knows to hold a ticket in `arenaId` counts under the client's known reads, `k`, apart from free
+   * wallets' `c`). A wallet the index does not know that is refused has the index read the new blocks
+   * (`refreshTicketIndex`): a ticket bought a moment ago is known, with its own reads, by the next try.
    */
-  private allowTicketRead(conn: Conn, wallet: string): boolean {
-    return (
-      conn.allowChainOp() &&
-      this.ticketReadsByWallet.allow(wallet.toLowerCase()) &&
-      this.ticketReadsByIp.allow(rateKey(conn.ip)) &&
-      this.ticketReadsByWide.allow(ticketNet(conn.ip))
-    );
+  private allowTicketRead(conn: Conn, wallet: string, arenaId: number): boolean {
+    const known = this.knowsTicket(arenaId, wallet);
+    const ok = conn.allowChainOp() && this.ticketReadsByWallet.allow(wallet.toLowerCase()) && this.ticketReadsByIp.allow(`${known ? 'k' : 'c'} ${rateKey(conn.ip)}`);
+    if (!ok && !known) this.chain.refreshTicketIndex?.();
+    return ok;
+  }
+
+  /** The `Joined`-log index knows `wallet` to hold an open ticket in `arenaId`. */
+  private knowsTicket(arenaId: number, wallet: string): boolean {
+    return this.chain.knowsOpenTicket?.(arenaId, wallet) === true;
   }
 
   /**
    * A ticket read within the bounds of the reads waiting at once: server-wide (`TICKET_READ_QUEUE_S`; a wallet the
-   * `Joined`-log index does not know to hold a ticket only within `TICKET_READS_UNKNOWN_SHARE` of it), per client and
-   * per network (an IPv6 /48, an IPv4 /24). Past one, `ChainBusyError` at once (the join says "network busy" and
-   * retries). A wallet the index does not know that is refused for a full share, or whose read finds a ticket, has the
-   * index read the new blocks (`refreshTicketIndex`): a ticket bought a moment ago is known by the join's next retry.
+   * `Joined`-log index does not know to hold a ticket only within `TICKET_READS_UNKNOWN_SHARE` of it) and per client;
+   * a wallet the index does not know also per network (an IPv6 /48, an IPv4 /24), waiting and a minute
+   * (`TICKET_READS_PER_NET_PER_MIN`). Past one, `ChainBusyError` at once (the join says "network busy" and retries). A
+   * wallet the index does not know that is refused, or whose read finds a ticket, has the index read the new blocks
+   * (`refreshTicketIndex`): a ticket bought a moment ago is known by the join's next retry, and then no network bound
+   * applies to it.
    */
   private async readTicket(conn: Conn, arenaId: number, wallet: string): Promise<ChainSession | null> {
     const max = Math.max(16, Math.ceil(this.cfg.chain.rpcMaxRps * TICKET_READ_QUEUE_S));
-    const known = this.chain.knowsOpenTicket?.(arenaId, wallet) === true;
+    const known = this.knowsTicket(arenaId, wallet);
     const bound = known ? max : Math.max(1, Math.floor(max * TICKET_READS_UNKNOWN_SHARE));
-    const keys: [string, number][] = [
-      [`c ${rateKey(conn.ip)}`, TICKET_READS_IN_FLIGHT_PER_CLIENT],
-      [`w ${ticketNet(conn.ip)}`, TICKET_READS_IN_FLIGHT_PER_WIDE],
-    ];
-    if (this.ticketReads >= bound) {
+    const keys: [string, number][] = known
+      ? [[`k ${rateKey(conn.ip)}`, TICKET_READS_IN_FLIGHT_PER_CLIENT]]
+      : [
+          [`c ${rateKey(conn.ip)}`, TICKET_READS_IN_FLIGHT_PER_CLIENT],
+          [`w ${ticketNet(conn.ip)}`, TICKET_READS_IN_FLIGHT_PER_WIDE],
+        ];
+    const busy = (why: string): never => {
       if (!known) this.chain.refreshTicketIndex?.();
-      throw new ChainBusyError('ticket read', new Error(`${this.ticketReads} ticket reads are waiting already`));
-    }
+      throw new ChainBusyError('ticket read', new Error(why));
+    };
+    if (this.ticketReads >= bound) busy(`${this.ticketReads} ticket reads are waiting already`);
     for (const [key, limit] of keys) {
-      if ((this.ticketReadsOf.get(key) ?? 0) >= limit) throw new ChainBusyError('ticket read', new Error(`${limit} ticket reads of ${key.slice(2)} are waiting already`));
+      if ((this.ticketReadsOf.get(key) ?? 0) >= limit) busy(`${limit} ticket reads of ${key.slice(2)} are waiting already`);
     }
+    if (!known && !this.ticketReadsByWide.allow(ticketNet(conn.ip))) busy(`the ticket reads of ${ticketNet(conn.ip)} this minute are spent`);
     this.ticketReads++;
     for (const [key] of keys) this.ticketReadsOf.set(key, (this.ticketReadsOf.get(key) ?? 0) + 1);
     try {
@@ -1354,7 +1388,7 @@ export class Gateway {
       if (bell) {
         const settling = this.journal.pending.some((p) => p.key === bell.session);
         // undefined: the chain could not be read (or this connection is rate-limited); the normal path below decides then
-        const live = settling ? null : this.allowTicketRead(conn, wallet) ? await this.readTicket(conn, target.arenaId, wallet).catch(() => undefined) : undefined;
+        const live = settling ? null : this.allowTicketRead(conn, wallet, target.arenaId) ? await this.readTicket(conn, target.arenaId, wallet).catch(() => undefined) : undefined;
         if (!same()) return;
         if (settling || live === null || (live && live.id === bell.sessionId && !live.finalized)) {
           this.roundEnded(conn);
@@ -1381,7 +1415,7 @@ export class Gateway {
         this.error(conn, 'server_full', 'The server is very busy right now. Your ticket is safe on chain: press Resume again in a minute.');
         return;
       }
-      if (!this.allowTicketRead(conn, wallet)) {
+      if (!this.allowTicketRead(conn, wallet, target.arenaId)) {
         this.error(conn, 'rate_limited', 'Too many join attempts — wait a moment.');
         return;
       }
