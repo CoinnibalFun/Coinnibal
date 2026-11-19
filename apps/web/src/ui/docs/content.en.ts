@@ -284,9 +284,10 @@ export const docsEn = (
                 text: 'only eating. Your coin gains value when it eats another coin or a piece of one, and loses value when another coin eats it or one of its pieces. Nothing else changes your value: not food, airdrops, power-ups, splitting, pushing out mass, a cactus, or the slow mass loss of big coins.',
               },
               {
-                // GameHud `WorthSticker`: `g.till` in a paid room (and a ticket room), `g.mass` elsewhere
+                // GameHud `WorthSticker`: `g.till` in a room of mode 'arena' (paid rooms and ticket rooms), `g.mass` in
+                // practice and free private rooms
                 term: 'Where you see it:',
-                text: `in a paid room, the yellow sticker at the top of the game shows your value next to "You're worth". In a free room the same sticker shows your mass next to "You weigh".`,
+                text: `in a paid room or a ticket room, the yellow sticker at the top of the game shows your value next to "You're worth". In practice rooms and free private rooms, the same sticker shows your mass next to "You weigh".`,
               },
               { term: 'An eaten coin', text: 'has no value left, and its ticket is closed. You can buy a new ticket and play again.' },
             ],
