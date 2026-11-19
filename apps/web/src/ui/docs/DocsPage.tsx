@@ -1,10 +1,12 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { CoinCharacter, Icon, Receipt, Rule, Stamp, useOffscreenPause, useReducedMotion, type ReceiptLine } from '../../design';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import type { BoostKind } from '@coinnibal/shared';
+import { CoinCharacter, Icon, Receipt, Stamp, useOffscreenPause, useReducedMotion, type ReceiptLine } from '../../design';
 import { ourXHandle, useT } from '../../i18n';
 import { arenaRates } from '../../wallet/ticket';
 import { useUi } from '../../store';
 import { siteHost } from '../../site/settings';
 import { useTokenText } from '../lobby/useLobby';
+import { BOOST_PATH } from '../game/boostGlyphs';
 import { PageHead } from '../PageHead';
 import { docsEn } from './content.en';
 import { payoutExample, type DocBlock, type DocsContent } from './facts';
@@ -46,9 +48,16 @@ const READ_LINE = 160;
  *
  * Every section has an address (`/docs#docs-payout`): a contents entry or an in-text link scrolls to it and writes it
  * into the address bar, and opening such a link lands on the section. The contents mark the section being read.
+ *
+ * `headingLevel`: 1 where the guide is the page (`/docs`: the title is the h1, chapters h2, block titles h3); 2 inside
+ * the lobby (h2, h3, h4). `symbol`: the token's name in the text, instead of the server's (`/docs` passes "tokens": a
+ * visitor page shows no ticker).
  */
-export function DocsPage() {
+export function DocsPage({ headingLevel = 2, symbol }: { headingLevel?: 1 | 2; symbol?: string } = {}) {
   const tok = useTokenText();
+  const sym = symbol ?? tok.symbol;
+  const SecTag = headingLevel === 1 ? 'h2' : 'h3';
+  const subTag = headingLevel === 1 ? 'h3' : 'h4';
   useT(); // re-renders when the project's X handle arrives with the site settings
   const x = ourXHandle();
   const burnBps = useUi((s) => s.chain?.fees?.burnBps ?? null);
@@ -57,12 +66,12 @@ export function DocsPage() {
   const testnet = useUi((s) => s.chain?.testnet ?? null);
   const c = useMemo(
     () =>
-      docsEn(tok.symbol, arenaRates(burnBps !== null && vaultBps !== null ? { burnBps, vaultBps } : null), chainName ?? undefined, {
+      docsEn(sym, arenaRates(burnBps !== null && vaultBps !== null ? { burnBps, vaultBps } : null), chainName ?? undefined, {
         testnet: testnet ?? undefined,
         site: siteHost(),
         x,
       }),
-    [tok.symbol, burnBps, vaultBps, chainName, testnet, x],
+    [sym, burnBps, vaultBps, chainName, testnet, x],
   );
   const reduced = useReducedMotion();
   const ids = useMemo(() => c.sections.map((s) => s.id), [c.sections]);
@@ -148,7 +157,7 @@ export function DocsPage() {
       lockUntil.current = performance.now() + (reduced ? 0 : 2500);
       setActive(id);
       el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
-      el.querySelector<HTMLElement>('h3')?.focus({ preventScroll: true });
+      el.querySelector<HTMLElement>('.dc-sec__title')?.focus({ preventScroll: true });
       writeHash(id);
     },
     [reduced],
@@ -168,6 +177,7 @@ export function DocsPage() {
         title={c.title}
         deck={c.deck}
         id="dc-title"
+        as={headingLevel === 1 ? 'h1' : 'h2'}
         aside={
           <span className="dc-head__art">
             <CoinCharacter paint="cream" mood="smug" size={124} look={[-3, 1]} feet ground bob />
@@ -180,8 +190,8 @@ export function DocsPage() {
           <span className="dc-toc__label mono">{c.tocLabel}</span>
           {/* phones: the contents fold into one button, so the first chapter starts on the first screen */}
           <button type="button" className="dc-toc__toggle" aria-expanded={tocOpen} aria-controls="dc-toc-list" onClick={() => setTocOpen((o) => !o)}>
-            <span className="mono">{c.tocLabel}</span>
-            <span className="dc-toc__count mono">{c.sections.length}</span>
+            <span className="dc-toc__label-text">{c.tocLabel}</span>{' '}
+            <span className="dc-toc__count">{c.tocCount(c.sections.length)}</span>
             <Icon name="chevron" size={18} className="dc-toc__chev" />
           </button>
           <ol className="dc-toc__list" id="dc-toc-list">
@@ -215,9 +225,9 @@ export function DocsPage() {
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 <div className="dc-sec__titles">
-                  <h3 id={`docs-${s.id}-h`} className="dc-sec__title" tabIndex={-1}>
+                  <SecTag id={`docs-${s.id}-h`} className="dc-sec__title" tabIndex={-1}>
                     {s.title}
-                  </h3>
+                  </SecTag>
                   <p className="dc-sec__lede">
                     <RichText text={s.lede} jump={jump} />
                   </p>
@@ -226,13 +236,12 @@ export function DocsPage() {
               <div className="dc-sec__body">
                 {s.strip && <ComicStrip id={s.id} strip={s.strip} />}
                 {s.blocks.map((b, j) => (
-                  <Block key={j} block={b} c={c} jump={jump} />
+                  <Block key={j} block={b} c={c} jump={jump} subTag={subTag} />
                 ))}
               </div>
             </section>
           ))}
 
-          <Rule variant="double" />
           <footer className="dc-foot">
             {c.colophon && <p className="dc-foot__text">{c.colophon}</p>}
             <button type="button" className="dc-top" onClick={toTop}>
@@ -278,7 +287,10 @@ function RichText({ text, jump }: { text: string; jump: (id: string) => void }):
   return out.map((n, i) => <Fragment key={i}>{n}</Fragment>);
 }
 
-function Block({ block: b, c, jump }: { block: DocBlock; c: DocsContent; jump: (id: string) => void }) {
+/** The level of a block's title inside a chapter: one under the chapter's own heading. */
+type SubTag = 'h3' | 'h4';
+
+function Block({ block: b, c, jump, subTag: Sub }: { block: DocBlock; c: DocsContent; jump: (id: string) => void; subTag: SubTag }) {
   switch (b.kind) {
     case 'p':
       return (
@@ -295,7 +307,8 @@ function Block({ block: b, c, jump }: { block: DocBlock; c: DocsContent; jump: (
                 <RichText text={it} jump={jump} />
               </li>
             ) : (
-              <li key={i}>
+              // `sub`: one kind of the item above it (the two kinds of private room), indented under it
+              <li key={i} className={it.sub ? 'is-sub' : undefined}>
                 <strong>{it.term}</strong> <RichText text={it.text} jump={jump} />
               </li>
             ),
@@ -303,18 +316,33 @@ function Block({ block: b, c, jump }: { block: DocBlock; c: DocsContent; jump: (
         </ul>
       );
     case 'keys':
-      return <KeysFig caption={b.caption} rows={b.rows} jump={jump} />;
+      return <KeysFig caption={b.caption} rows={b.rows} touch={b.touch === true} jump={jump} />;
     case 'cards':
       return (
         <ul className="dc-cards" aria-label={b.label}>
-          {b.items.map((it, i) => (
-            <li key={it.title} className="dc-card kb-island">
+          {b.items.map((it) => (
+            <li key={it.title} className={`dc-card kb-island is-${it.kind}`}>
               <div className="dc-card__head">
-                <KeyCaps keys={it.key} i={i} />
-                <h4 className="dc-card__title">{it.title}</h4>
+                <BoostGlyph kind={it.kind} className="dc-card__glyph" />
+                <Sub className="dc-card__title">{it.title}</Sub>
               </div>
               <p className="dc-card__text">{it.text}</p>
-              {it.meta && <p className="dc-card__meta mono">{it.meta}</p>}
+              {/* how to use it: its key on a keyboard, its in-game button on a phone (the same picture as here) */}
+              <dl className="dc-card__use">
+                <div className="dc-card__way">
+                  <dt>{b.use.keyboard}</dt>
+                  <dd>
+                    {b.use.press} <kbd className="dc-kbd dc-card__key mono">{it.key}</kbd>
+                  </dd>
+                </div>
+                <div className="dc-card__way">
+                  <dt>{b.use.phone}</dt>
+                  <dd>
+                    {b.use.tap} <BoostGlyph kind={it.kind} className="dc-card__btn" label={b.use.button(it.title)} /> {b.use.where}
+                  </dd>
+                </div>
+              </dl>
+              {it.meta && <p className="dc-card__meta">{it.meta}</p>}
             </li>
           ))}
         </ul>
@@ -323,7 +351,7 @@ function Block({ block: b, c, jump }: { block: DocBlock; c: DocsContent; jump: (
       return (
         <div className="dc-table-wrap kb-island">
           <table className={`dc-table${b.stack ? ' dc-table--stack' : ''}`}>
-            <caption className="mono">{b.caption}</caption>
+            <caption>{b.caption}</caption>
             <thead>
               <tr>
                 {b.head.map((h, i) => (
@@ -358,7 +386,7 @@ function Block({ block: b, c, jump }: { block: DocBlock; c: DocsContent; jump: (
                 <span className="dc-flow__no num" aria-hidden="true">
                   {String(i + 1).padStart(2, '0')}
                 </span>
-                <span className="dc-flow__title mono">{s.title}</span>
+                <span className="dc-flow__title">{s.title}</span>
                 <span className="dc-flow__text">{s.text}</span>
                 {i < b.steps.length - 1 && <Icon name="arrow" size={20} className="dc-flow__arrow" />}
               </li>
@@ -367,16 +395,16 @@ function Block({ block: b, c, jump }: { block: DocBlock; c: DocsContent; jump: (
         </>
       );
     case 'fee-example':
-      return <FeeExample c={c} />;
+      return <FeeExample c={c} text={b.text} jump={jump} />;
     case 'compare':
       return (
         <div className="dc-compare">
           {[b.left, b.right].map((col, i) => (
             <div key={i} className={`dc-compare__col kb-island${i === 0 ? ' is-chain' : ' is-server'}`}>
-              <h4 className="dc-compare__title">
+              <Sub className="dc-compare__title">
                 <Icon name={i === 0 ? 'lock' : 'globe'} size={18} />
                 {col.title}
-              </h4>
+              </Sub>
               <ul className="dc-list">
                 {col.items.map((it, j) => (
                   <li key={j}>{it}</li>
@@ -390,7 +418,7 @@ function Block({ block: b, c, jump }: { block: DocBlock; c: DocsContent; jump: (
       return (
         <aside className={`dc-note kb-island is-${b.tone}`} aria-label={b.title}>
           <Stamp text={b.stamp} tone={b.tone === 'warn' ? 'red' : 'teal'} size="sm" rotate={-4} className="dc-note__stamp" />
-          <h4 className="dc-note__title">{b.title}</h4>
+          <Sub className="dc-note__title">{b.title}</Sub>
           <p className="dc-note__text">{b.text}</p>
         </aside>
       );
@@ -413,20 +441,24 @@ function Block({ block: b, c, jump }: { block: DocBlock; c: DocsContent; jump: (
   }
 }
 
-/** The controls as key stickers that press themselves one after another (paused off screen). */
-function KeysFig({ caption, rows, jump }: { caption: string; rows: { key: string; action: string }[]; jump: (id: string) => void }) {
+/**
+ * The controls: on a computer, key stickers that press themselves one after another (paused off screen); on a phone
+ * (`touch`), the on-screen controls as plain pills that stay still. Each table names itself by its own caption id.
+ */
+function KeysFig({ caption, rows, touch, jump }: { caption: string; rows: { key: string; action: string }[]; touch: boolean; jump: (id: string) => void }) {
   const [ref, visible] = useOffscreenPause<HTMLElement>();
+  const capId = useId();
   return (
-    <figure ref={ref} className="dc-keys-fig kb-island" data-paused={!visible || undefined}>
-      <figcaption className="dc-cap mono" id="dc-keys-cap">
+    <figure ref={ref} className={`dc-keys-fig kb-island${touch ? ' is-touch' : ''}`} data-paused={!visible || undefined}>
+      <figcaption className="dc-cap" id={capId}>
         {caption}
       </figcaption>
-      <table className="dc-keys" aria-labelledby="dc-keys-cap">
+      <table className="dc-keys" aria-labelledby={capId}>
         <tbody>
           {rows.map((r, i) => (
             <tr key={r.key}>
               <th scope="row">
-                <KeyCaps keys={r.key} i={i} />
+                <KeyCaps keys={r.key} i={i} touch={touch} />
               </th>
               <td>
                 <RichText text={r.action} jump={jump} />
@@ -443,7 +475,7 @@ function KeysFig({ caption, rows, jump }: { caption: string; rows: { key: string
  * A row's keys as separate caps: `Space / left click` → [Space] / [Left click], `Tab (hold)` → [Tab] (hold). A cap
  * never wraps inside itself; the caps of a row press together (`--i`).
  */
-function KeyCaps({ keys, i }: { keys: string; i: number }) {
+function KeyCaps({ keys, i, touch = false }: { keys: string; i: number; touch?: boolean }) {
   const note = /^(.+?)\s+(\(.+\))$/.exec(keys);
   const caps = (note ? note[1] : keys).split(' / ');
   return (
@@ -451,9 +483,14 @@ function KeyCaps({ keys, i }: { keys: string; i: number }) {
       {caps.map((k, j) => (
         <Fragment key={j}>
           {j > 0 && <span className="dc-keycaps__or">/</span>}
-          <kbd className="dc-kbd mono" style={{ ['--i' as string]: i }}>
-            {k}
-          </kbd>
+          {touch ? (
+            // a control on the screen, not a key: a still pill in the game's words
+            <span className="dc-pill">{k}</span>
+          ) : (
+            <kbd className="dc-kbd mono" style={{ ['--i' as string]: i }}>
+              {k}
+            </kbd>
+          )}
         </Fragment>
       ))}
       {note && <span className="dc-keycaps__note">{note[2]}</span>}
@@ -461,8 +498,22 @@ function KeyCaps({ keys, i }: { keys: string; i: number }) {
   );
 }
 
-/** The worked example: a ticket of 1,000 tokens worth 1,900 at the bell, with the fee on its profit. */
-function FeeExample({ c }: { c: DocsContent }) {
+/**
+ * A power-up's picture as its in-game button draws it (`BOOST_PATH`, the button's tint): decorative beside the card's
+ * title, named (`label`) where it stands for the button to tap.
+ */
+function BoostGlyph({ kind, className, label }: { kind: BoostKind; className: string; label?: string }) {
+  return (
+    <span className={`dc-glyph is-${kind} ${className}`} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d={BOOST_PATH[kind]} />
+      </svg>
+    </span>
+  );
+}
+
+/** The worked example: a ticket of 1,000 tokens worth 1,900 at the bell, with the fee on its profit, beside its text. */
+function FeeExample({ c, text, jump }: { c: DocsContent; text: string; jump: (id: string) => void }) {
   const x = payoutExample(c.rates);
   const r = c.receipt;
   const n = (v: bigint | number) => c.num(Number(v));
@@ -476,9 +527,14 @@ function FeeExample({ c }: { c: DocsContent }) {
   ];
   return (
     <figure className="dc-fee">
-      <figcaption className="dc-fee__cap mono">{r.caption}</figcaption>
-      <div className="dc-fee__slips">
-        <Receipt title={r.title} meta={r.meta} lines={lines} footer={r.footer} className="dc-fee__slip" />
+      <figcaption className="dc-fee__cap">{r.caption}</figcaption>
+      <div className="dc-fee__grid">
+        <p className="dc-p">
+          <RichText text={text} jump={jump} />
+        </p>
+        <div className="dc-fee__slips">
+          <Receipt title={r.title} meta={r.meta} lines={lines} footer={r.footer} className="dc-fee__slip" />
+        </div>
       </div>
     </figure>
   );
