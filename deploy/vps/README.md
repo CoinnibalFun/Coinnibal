@@ -14,7 +14,7 @@ reaches the server with their own IP address, so the per-IP limits work. Everyth
 | Crashes | containers restart by themselves (`restart: unless-stopped`); a hung app is restarted by the alert job after 3 minutes (autoheal) |
 | Alerts | every minute: `!!!` log lines, `/api/health` 503, gas runway, disk over 80 %, the container down, to Telegram (`elymum-alert.timer`) |
 | Backups | every day at 04:00, the newest 14 kept in `/opt/elymum/backups`; optional encrypted offsite copy (rclone crypt) |
-| Security updates | installed automatically; a reboot they need happens at 04:30 **in a round break** (`elymum-reboot.timer`) |
+| Security updates | Ubuntu's: installed automatically, and a reboot they need happens at 04:30 **in a round break** (`elymum-reboot.timer`). The Docker Engine, the images and the dependencies: section 6, "Updates" (not all of it is automatic) |
 | Logs | Docker's journald driver and a persistent journal: they survive redeploys and reboots |
 | Firewall, SSH brute force | ufw (only 22, 80, 443 open) and fail2ban |
 
@@ -42,7 +42,8 @@ proxy until "Cloudflare in front" below). `nslookup <GAME_DOMAIN>` must answer t
 needs it for the certificate.
 
 The site (`SITE_DOMAIN`, default `coinnibal.fun`, DNS on Cloudflare): `A` records for `@` and `www` → the same VPS
-address, **DNS only**, so Caddy can get their certificates too.
+address, **DNS only**, so Caddy can get their certificates too (proxied later with "Cloudflare in front", like
+`game`). `A` records only, no `AAAA`: the ports are published on IPv4 only.
 
 ## 3. Install
 
@@ -55,9 +56,10 @@ bash /home/<user>/install.sh
 
 It asks for the domain (`GAME_DOMAIN`, section 2), the repository (an SSH URL for the private repository: it makes a
 read-only **deploy key** and shows the steps to add it on GitHub) and the branch. Then it updates Ubuntu, installs
-Docker, automatic security updates (no automatic reboot), the firewall, fail2ban, a persistent journal, network
-tuning, downloads the code to `/opt/elymum`, opens `/opt/elymum/.env` in nano (section 4), builds and starts the
-server, installs the timers and the commands (section 10) and waits for `https://<GAME_DOMAIN>/api/health?live=1`.
+Docker, automatic security updates of Ubuntu's packages (no automatic reboot; the rest: section 6, "Updates"), the
+firewall, fail2ban, a persistent journal, network tuning, downloads the code to `/opt/elymum`, opens
+`/opt/elymum/.env` in nano (section 4), builds and starts the server, installs the timers and the commands (section
+10) and waits for `https://<GAME_DOMAIN>/api/health?live=1`.
 Running it again is safe.
 
 ## 4. Settings (`/opt/elymum/.env`)
@@ -170,11 +172,36 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
 - **In the round break.** The new image is built while the old container serves; the swap waits for the break after
   an arena bell (no live stake then: SIGTERM mid-round would cash every arena player out). `COINNIBAL_DEPLOY_NOW=1
   coinnibal-update` skips the wait for an urgent fix.
-- **Rollback.** The running image is tagged `elymum-app:previous` before every build. When the new container is not
-  healthy (the liveness check) within 60 s, `update.sh` puts the previous image and commit back at once and alerts;
-  that commit is not retried until a newer one arrives. By hand: `docker tag elymum-app:previous elymum-app:latest
-  && coinnibal-compose up -d app`.
-- **Caddy** reloads when its file changed (`stream_close_delay 10m` keeps the game sockets open across a reload).
+- **Rollback.** The running image is tagged `elymum-app:previous` before every build (by the weekly refresh: once its
+  build changed the image). When the new container is not healthy (the liveness check) within 60 s, `update.sh` puts
+  the previous image and commit back at once and alerts; that commit is not retried until a newer one arrives. By
+  hand (a version that is healthy but wrong): `systemctl stop elymum-update.timer && docker tag elymum-app:previous
+  elymum-app:latest && coinnibal-compose up -d app`, and `systemctl start elymum-update.timer` once the fix is on the
+  branch (until then any newer commit would bring the fault back with it). The weekly refresh never puts the version
+  taken off back: it rebuilds only the image a deploy put in (`/var/lib/elymum/deployed-image`), skips with an alert
+  while another one runs, and is paused with auto-deploy anyway.
+- **Caddy** reloads when its file changed (`stream_close_delay 10m` keeps the game sockets open across a reload), and
+  is recreated in the round break when a newer build of its image was pulled (below). A deploy needs every image of
+  `docker-compose.yml` on this host: a Caddy tag new to it (a Dependabot bump) is pulled first, and while the registry
+  cannot be reached the commit waits (the running version serves on, one alert, `coinnibal-status` says WAITING) and
+  every check tries it again. A commit counts as deployed only once its app container runs.
+
+### Updates: what is automatic and what is not
+
+| What | How it gets its fixes |
+|---|---|
+| Ubuntu's packages | unattended-upgrades, daily (Ubuntu's own origins, security included); the reboot a kernel update needs at 04:30 in a round break (`elymum-reboot.timer`) |
+| The Docker Engine (`docker-ce`, `containerd.io` with runc, the CLI, the compose and buildx plugins, from Docker's repository) | `reboot.sh` (`elymum-reboot.timer`, 04:30), when Docker's repository has a newer version: `docker-ce` and `containerd.io` in the round break, with the app stopped first; the CLI and the plugins alone at once (they restart nothing). Never unattended-upgrades: an engine update restarts every container, which mid-round would cash every arena player out |
+| The app image's base (`node:22-bookworm-slim`: Debian's and Node 22's patches) | every deploy builds with `--pull`; `elymum-refresh.timer` (Sunday 05:00) rebuilds the deployed commit even without a new one and swaps it in in the round break, only when the image changed (with the same rollback as a deploy). It never deploys a newer commit (only the auto-deploy does), and it is skipped while auto-deploy is paused or an image put back by hand runs (Rollback, above) |
+| Caddy (pinned to a patch version, `caddy:2.x.y` in `docker-compose.yml`) | the newest build of that tag is pulled on every deploy and every Sunday and swapped in in the round break; a newer Caddy version comes as a Dependabot pull request, and CI checks both Caddyfiles with it (`caddy validate`) |
+| npm dependencies, the GitHub Actions, the image tags | Dependabot pull requests, weekly (`.github/dependabot.yml`), through CI; a merged one deploys once CI passed |
+
+Not automatic: merging Dependabot's pull requests (a person reviews each), a new major version of Node or of a
+dependency (a pull request of its own; Node majors are not proposed), Ubuntu's release upgrades (`do-release-upgrade`,
+by hand) and anything below the VPS (the provider's). Dependabot's security updates are a repository setting
+(Settings → Code security → Dependabot security updates). By hand, in the next round break: `coinnibal-update
+--refresh` (the weekly rebuild of the deployed commit now, also while auto-deploy is paused), `coinnibal-reboot` (a due
+reboot or engine update now).
 
 ## 7. Alerts and autoheal
 
@@ -217,17 +244,26 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
 2. The proof: `/admin` → Network → Backup & move asks the wallet to sign (purpose `migration`) where the panel offers it; by hand: with an
    admin session token, `POST /api/admin/secret-proof {"purpose":"migration"}`, sign the returned `message` with the
    admin wallet (`personal_sign`), and base64url-encode `{"message":"...","signature":"0x..."}`: that is the proof.
-3. On the new VPS (sections 1 to 3; the installer takes the old server's settings itself):
+3. On the new VPS (sections 1 to 3; the installer takes the old server's settings itself). Paste the
+   "Copy new-server command" of `/admin` → Network → Backup & move, or by hand:
    ```bash
-   bash install.sh --from https://<old GAME_DOMAIN> --token '<admin session token>' --proof '<proof>' --yes
+    bash install.sh --yes --from https://<old GAME_DOMAIN> <<'COINNIBAL_SECRETS'
+   <admin session token>
+   <proof>
+   COINNIBAL_SECRETS
    ```
    It reads the settings once (`/api/admin/migration-env`) and the backup once (`/api/admin/backup`), restores the
-   data before the first start, and starts. **It does not copy the site's contract pins** (section 4: a pin changes
-   only in this shell, never from another server's answer), so the moved site signs no ticket, refund, shop payment
-   or mint until they are back: set the `COINNIBAL_PIN_ARENA` and `COINNIBAL_PIN_NFT` lines (and `COINNIBAL_PIN_TOKEN`
-   once the game token is set) in `/opt/elymum/.env`, from your password manager or `/admin` → Setup → **Site pins**,
-   checking each address against the deploy transaction in your own wallet, then run
-   `coinnibal-compose up -d --build app`.
+   data before the first start, and starts. The token and the proof are never arguments (any local user can read a
+   command line in `ps`): they come in on stdin, one per line (the here-document above), or at hidden prompts when
+   left out (`bash install.sh --yes --from https://<old GAME_DOMAIN>`). `--token` and `--proof` are refused. The
+   leading space keeps the command out of the shell history. `coinnibal-restore --url https://<server>` takes the two
+   the same way (with them on stdin, its question before it replaces a volume that holds data reads the terminal;
+   with no terminal it needs `--yes`), and both refuse a URL that is not `https://`. **It does not copy the site's
+   contract pins** (section 4: a pin changes only in this shell, never from another server's answer), so the moved
+   site signs no ticket, refund, shop payment or mint until they are back: set the `COINNIBAL_PIN_ARENA` and
+   `COINNIBAL_PIN_NFT` lines (and `COINNIBAL_PIN_TOKEN` once the game token is set) in `/opt/elymum/.env`, from your
+   password manager or `/admin` → Setup → **Site pins**, checking each address against the deploy transaction in your
+   own wallet, then run `coinnibal-compose up -d --build app`.
 4. **Stop the old server before the new one starts settling** (`coinnibal-compose down` there): two servers must never
    run with the same server key. Then point DNS at the new VPS; remove `ADMIN_SECRET_EXPORT`.
 
@@ -263,8 +299,9 @@ All commands as root on the VPS (`sudo -i`).
 | Change a site pin (`COINNIBAL_PIN_*`) | `nano /opt/elymum/.env`, then `coinnibal-compose up -d --build app` (section 4; with players in the arenas: build first, swap in the break) |
 | Backup now / log | `coinnibal-backup` / `journalctl -u elymum-backup -n 50` |
 | Restore a backup | `coinnibal-restore /opt/elymum/backups/elymum-data-YYYYmmdd-HHMM.tar.gz` |
-| Pause auto-deploy | `systemctl stop elymum-update.timer` (`start` to resume) |
-| Reboot for an update now, in the next round break | `coinnibal-reboot --force` |
+| Pause auto-deploy | `systemctl stop elymum-update.timer` (`start` to resume); the weekly rebuild pauses with it |
+| Rebuild on the newest base images now (the weekly refresh) / its log | `coinnibal-update --refresh` / `journalctl -u elymum-refresh -n 100` |
+| Reboot for an update now, in the next round break | `coinnibal-reboot --force` (a Docker Engine update is installed first) |
 
 ## Cloudflare in front (recommended for DDoS protection)
 
@@ -273,13 +310,19 @@ that never say hello, message floods, slowloris, HTTP rate limits, load shedding
 `node --import tsx scripts/bench/flood.ts` shows each). A volumetric attack fills the VPS's link before any of that
 runs: only a network in front absorbs it. Cloudflare's free plan proxies WebSockets and is enough.
 
-What to click (about 20 minutes; do it at a quiet hour):
+What to click (about 20 minutes; do it at a quiet hour). Every record that points at the VPS goes through Cloudflare:
+one left **DNS only** hands out the origin's address, and anyone can then go around Cloudflare.
 
-1. **Cloudflare → Add a site → the game domain's zone** (`elymum.io` for the live `game.elymum.io`; Free plan). Cloudflare lists the domain's DNS records; check that
-   `game` (A record to the VPS) and the Vercel records are there. At your registrar, replace the nameservers with
-   the two Cloudflare names it shows. Wait until Cloudflare says the site is active.
-2. **DNS:** the `game` A record **Proxied** (orange cloud). Leave the Vercel records (`@`, `www`) **DNS only** (grey
-   cloud): Vercel has its own edge, and a proxied Vercel record needs extra Vercel settings.
+1. **Cloudflare → the zones.** The site's zone (`coinnibal.fun`, `SITE_DOMAIN`) is on Cloudflare already (section 2).
+   Add the game domain's zone too if it is another one (`elymum.io` for the live `game.elymum.io`: Add a site → Free
+   plan; at the registrar, replace the nameservers with the two Cloudflare names it shows; wait until Cloudflare says
+   the site is active). Check the records Cloudflare lists: in `elymum.io`, `game` (A record to the VPS) and the `@`
+   and `www` records that point at Vercel (they only redirect the old domain to `coinnibal.fun`, `vercel.json`).
+2. **DNS: Proxied (orange cloud)** for `game`, and for the site's `@` and `www` (all three A records to the VPS;
+   `Caddyfile.cloudflare` serves the three names). The Vercel records of `elymum.io` do not point at the VPS and may
+   stay DNS only (Vercel has its own edge). No `AAAA` record for the VPS (the ports are published on IPv4 only). The
+   VPS address was public in DNS until now, and DNS history sites keep old answers: for a door that is really shut,
+   move the server to a new address once (section 9, or the provider's "new IP") and publish only proxied records.
 3. **SSL/TLS → Overview: Full (strict)** (Caddy keeps its own certificate; Cloudflare checks it). SSL/TLS → Edge
    Certificates: minimum TLS 1.2; leave **Always Use HTTPS off** (Caddy redirects to HTTPS itself, and its
    certificate renewals answer Let's Encrypt on plain HTTP through Cloudflare).
@@ -289,31 +332,48 @@ What to click (about 20 minutes; do it at a quiet hour):
    `max-age` by the server itself).
 6. **Security → WAF → Rate limiting rules** (the free plan has one rule): path starts with `/api/auth/` → 30 requests
    per 10 s per IP → Block for 10 s. Optional; the server limits it too.
-7. **On the VPS:** switch Caddy to the Cloudflare config (it trusts `CF-Connecting-IP` only from Cloudflare's ranges,
-   so per-IP limits keep seeing players):
+7. **On the VPS:** switch Caddy to the Cloudflare config. It trusts `CF-Connecting-IP` only from Cloudflare's ranges,
+   so per-IP limits keep seeing players, and it serves HTTP/1.1 and HTTP/2 only: Cloudflare reaches the origin over
+   TCP, so there is no HTTP/3 (UDP) listener to go around it (players keep HTTP/3 at Cloudflare's edge):
    ```bash
    echo 'CADDY_CONFIG=Caddyfile.cloudflare' >> /opt/elymum/.env
    coinnibal-compose up -d caddy
    ```
 8. **Close the back door** so attackers cannot hit the VPS address directly (Docker publishes 80/443 past ufw, so the
-   rule goes into Docker's own `DOCKER-USER` chain). As root:
+   rules go into Docker's own `DOCKER-USER` chain). They match only what arrives on the internet-facing interface
+   (`-i`), so the containers' own outgoing HTTPS (the RPC, Let's Encrypt) is untouched, and they are inserted in
+   order (the drops first, then the Cloudflare ranges above them). As root:
    ```bash
    apt-get install -y iptables-persistent
-   for r in $(curl -fsS https://www.cloudflare.com/ips-v4); do iptables -I DOCKER-USER -p tcp -m multiport --dports 80,443 -s "$r" -j RETURN; done
-   iptables -A DOCKER-USER -p tcp -m multiport --dports 80,443 -j DROP
-   for r in $(curl -fsS https://www.cloudflare.com/ips-v6); do ip6tables -I DOCKER-USER -p tcp -m multiport --dports 80,443 -s "$r" -j RETURN; done
-   ip6tables -A DOCKER-USER -p tcp -m multiport --dports 80,443 -j DROP
+   ext="$(ip -4 route show default | awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit } }')"
+   echo "internet-facing interface: ${ext:?no default route}"
+   iptables -I DOCKER-USER -i "$ext" -p udp --dport 443 -j DROP
+   iptables -I DOCKER-USER -i "$ext" -p tcp -m multiport --dports 80,443 -j DROP
+   for r in $(curl -fsS https://www.cloudflare.com/ips-v4); do iptables -I DOCKER-USER -i "$ext" -p tcp -m multiport --dports 80,443 -s "$r" -j RETURN; done
    netfilter-persistent save
    ```
-   Check from your laptop: `curl -sS https://<GAME_DOMAIN>/api/health` works, `curl -k https://<VPS IP>/api/health`
-   times out. Certificate renewals keep working (Let's Encrypt reaches Caddy through Cloudflare on port 80).
-9. **Check:** `curl -sS -D - -o /dev/null https://<GAME_DOMAIN>/api/health` answers through Cloudflare (its headers
-   carry a `cf-ray` line). The per-IP limits now see each player's own address, because Caddy passes
-   `CF-Connecting-IP` on as the one `X-Forwarded-For` hop. `/admin` shows no IP addresses: Safety keeps only hashes
-   of them, keyed with the server's secret.
+   IPv6 needs no rule: nothing listens there (`docker-compose.yml` publishes on IPv4 only). Certificate renewals keep
+   working (Let's Encrypt reaches Caddy through Cloudflare on port 80).
+9. **Check from your laptop** (not from the VPS):
+   ```bash
+   dig +short <SITE_DOMAIN> www.<SITE_DOMAIN> <GAME_DOMAIN>     # Cloudflare's addresses only, never the VPS's
+   curl -sS https://<GAME_DOMAIN>/api/health                    # works (through Cloudflare)
+   curl -k --max-time 10 https://<VPS IPv4>/api/health          # times out
+   curl -k --max-time 10 --resolve <GAME_DOMAIN>:443:<VPS IPv4> https://<GAME_DOMAIN>/api/health          # times out
+   curl -k --max-time 10 --http3-only --resolve <GAME_DOMAIN>:443:<VPS IPv4> https://<GAME_DOMAIN>/api/health  # fails
+   curl -6 -k --max-time 10 'https://[<VPS IPv6>]/api/health'   # fails (refused), when the VPS has an IPv6 address
+   ```
+   `--http3-only` needs a curl built with HTTP/3 (`curl -V` lists `HTTP3`). On the VPS,
+   `coinnibal-compose exec caddy grep -i ':01BB ' /proc/net/udp /proc/net/udp6` must print nothing (no UDP 443
+   listener in Caddy: 01BB is 443).
+10. **Check:** `curl -sS -D - -o /dev/null https://<GAME_DOMAIN>/api/health` answers through Cloudflare (its headers
+    carry a `cf-ray` line). The per-IP limits now see each player's own address, because Caddy passes
+    `CF-Connecting-IP` on as the one `X-Forwarded-For` hop. `/admin` shows no IP addresses: Safety keeps only hashes
+    of them, keyed with the server's secret.
 
-To undo: the `game` record back to DNS only, `CADDY_CONFIG` removed (`coinnibal-compose up -d caddy`), and
-`iptables -F DOCKER-USER && ip6tables -F DOCKER-USER && netfilter-persistent save`.
+To undo: the records back to DNS only, `CADDY_CONFIG` removed (`coinnibal-compose up -d caddy`), and
+`iptables -F DOCKER-USER && netfilter-persistent save` (also `ip6tables -F DOCKER-USER` if you added the IPv6 rules an
+earlier version of this README gave).
 
 ## Notes
 
@@ -321,8 +381,8 @@ To undo: the `game` record back to DNS only, `CADDY_CONFIG` removed (`coinnibal-
   `trusted_proxies` configured), so the app sees exactly one hop, the player's address. `docker-compose.yml`
   sets `TRUST_PROXY=1` and `TRUST_PROXY_HOPS=1` for it. Behind Cloudflare, `Caddyfile.cloudflare` keeps that single
   hop (above); do not put any other proxy in front without a config of its own.
-- **Ports.** Only Caddy publishes ports (80, 443, 443/udp for HTTP/3). The app listens on 8787 inside the
-  Docker network only. Docker opens its published ports itself; ufw covers everything else.
+- **Ports.** Only Caddy publishes ports (80, 443, 443/udp for HTTP/3), on IPv4 only. The app listens on 8787 inside
+  the Docker network only. Docker opens its published ports itself; ufw covers everything else.
 - **Shutdown.** On a restart or deploy the server gets SIGTERM and pays out every live stake player before it
   exits; compose waits up to 45 s for that (`stop_grace_period`).
 - **The `$` in settings.** docker compose expands `$NAME` in `.env` values: write a value containing `$` in

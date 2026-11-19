@@ -732,8 +732,9 @@ spoofed addresses (idle sockets, a message flood, an HTTP flood, slowloris) and 
 | Change the fees | Game → the arena contract → Fees (`setFeeRates`, at most 2,500 bps together) | applies to tickets bought from now on; open tickets keep their rates |
 
 On `SIGTERM` the server settles the players in the arenas at their current value (an operator exit) and saves its
-state; Docker `stop` sends it. That is why deploys (`update.sh`) and the update reboots (`reboot.sh`) wait for the
-break after an arena bell, when no coin is live.
+state; Docker `stop` sends it. That is why deploys (`update.sh`), the weekly rebuild on the newest base images
+(`update.sh --refresh`), the update reboots and the Docker Engine updates (`reboot.sh`) wait for the break after an
+arena bell, when no coin is live (deploy/vps/README.md, "Updates").
 
 **Reconnects.** A player whose network switched comes back on a new socket while the old one still looks open: a
 join of the same signed-in wallet takes the live coin over at once, and the old socket is closed with
