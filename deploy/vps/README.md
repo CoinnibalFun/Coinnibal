@@ -223,7 +223,8 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
    command line in `ps`): they come in on stdin, one per line (the here-document above), or at hidden prompts when
    left out (`bash install.sh --yes --from https://<old GAME_DOMAIN>`). `--token` and `--proof` are refused. The
    leading space keeps the command out of the shell history. `coinnibal-restore --url https://<server>` takes the
-   two the same way, and both refuse a URL that is not `https://`.
+   two the same way (with them on stdin, its question before it replaces a volume that holds data reads the terminal;
+   with no terminal it needs `--yes`), and both refuse a URL that is not `https://`.
 4. **Stop the old server before the new one starts settling** (`coinnibal-compose down` there): two servers must never
    run with the same server key. Then point DNS at the new VPS; remove `ADMIN_SECRET_EXPORT`.
 
