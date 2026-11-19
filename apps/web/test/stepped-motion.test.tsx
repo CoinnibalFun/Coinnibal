@@ -154,4 +154,63 @@ describe('a landing section pauses its loops off screen without re-rendering', (
       globalThis.IntersectionObserver = real;
     }
   });
+
+  it('with the Web Animations API: pauses its endless CSS animations from script, never through a style rule', () => {
+    let fire: (visible: boolean) => void = () => {};
+    const real = globalThis.IntersectionObserver;
+    globalThis.IntersectionObserver = class {
+      constructor(cb: IntersectionObserverCallback) {
+        fire = (visible) => cb([{ isIntersecting: visible } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+      observe() {}
+      disconnect() {}
+    } as unknown as typeof IntersectionObserver;
+    type Fake = { animationName: string; playState: string; effect: { target: Element; getTiming: () => { iterations: number } }; pause: () => void; play: () => void };
+    const anim = (target: Element, iterations: number, playState = 'running'): Fake => ({
+      animationName: 'loop',
+      playState,
+      effect: { target, getTiming: () => ({ iterations }) },
+      pause() {
+        this.playState = 'paused';
+      },
+      play() {
+        this.playState = 'running';
+      },
+    });
+    function Section() {
+      const ref = useRef<HTMLElement>(null);
+      useOffscreenPausedBlock(ref);
+      return (
+        <section ref={ref} data-testid="section">
+          <span data-testid="coin" />
+          <span data-paused="" data-testid="motif">
+            <span data-testid="inner" />
+          </span>
+        </section>
+      );
+    }
+    try {
+      const { getByTestId } = render(<Section />);
+      const section = getByTestId('section');
+      const blink = anim(getByTestId('coin'), Infinity);
+      const reveal = anim(getByTestId('coin'), 1);
+      // a motif that is off screen by its own pause: storybook.css keeps its loop paused
+      const motifLoop = anim(getByTestId('inner'), Infinity, 'paused');
+      // a loop under that motif that was running when the block left the screen (the motif's pause came later)
+      const late = anim(getByTestId('inner'), Infinity);
+      (section as unknown as { getAnimations: () => Fake[] }).getAnimations = () => [blink, reveal, motifLoop, late];
+      act(() => fire(true));
+      act(() => fire(false));
+      // a marker no style rule reads (data-paused made the browser restyle the whole section)
+      expect(section.hasAttribute('data-paused')).toBe(false);
+      expect(section.getAttribute('data-offscreen')).toBe('');
+      expect([blink.playState, reveal.playState, motifLoop.playState, late.playState]).toEqual(['paused', 'running', 'paused', 'paused']);
+      act(() => fire(true));
+      expect(section.hasAttribute('data-offscreen')).toBe(false);
+      // the block plays what it paused, except under a motif that is still off screen: that one waits for the motif
+      expect([blink.playState, reveal.playState, motifLoop.playState, late.playState]).toEqual(['running', 'running', 'paused', 'paused']);
+    } finally {
+      globalThis.IntersectionObserver = real;
+    }
+  });
 });
