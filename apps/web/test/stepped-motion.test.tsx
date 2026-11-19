@@ -2,6 +2,7 @@ import { act, render } from '@testing-library/react';
 import { useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CRAWL_TICK_MS, steppedMotion, useDashCrawl } from '../src/design/motifs/stepped';
+import { useOffscreenPausedBlock } from '../src/design/motifs/useOffscreenPause';
 
 /** A touch phone (`(hover: none)`) or not, with or without reduced motion, for this test only. */
 function media(touch: boolean, reduced = false) {
@@ -64,5 +65,49 @@ describe('stepped motion on touch phones (the arch lights, the dusk lights, the 
       restore();
     }
     restore = () => {};
+  });
+});
+
+describe('a landing section pauses its loops off screen without re-rendering', () => {
+  it('sets data-paused on the element itself and pauses the SMIL timelines under it', () => {
+    let fire: (visible: boolean) => void = () => {};
+    const real = globalThis.IntersectionObserver;
+    globalThis.IntersectionObserver = class {
+      constructor(cb: IntersectionObserverCallback) {
+        fire = (visible) => cb([{ isIntersecting: visible } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+      observe() {}
+      disconnect() {}
+    } as unknown as typeof IntersectionObserver;
+    let renders = 0;
+    function Section() {
+      renders++;
+      const ref = useRef<HTMLElement>(null);
+      useOffscreenPausedBlock(ref);
+      return (
+        <section ref={ref} data-testid="section">
+          <svg data-testid="orbit" />
+        </section>
+      );
+    }
+    try {
+      const { getByTestId } = render(<Section />);
+      const section = getByTestId('section');
+      const svg = getByTestId('orbit') as unknown as SVGSVGElement & { pauseAnimations: () => void; unpauseAnimations: () => void };
+      svg.pauseAnimations = vi.fn();
+      svg.unpauseAnimations = vi.fn();
+      const before = renders;
+      act(() => fire(true));
+      expect(section.hasAttribute('data-paused')).toBe(false);
+      act(() => fire(false));
+      expect(section.getAttribute('data-paused')).toBe('');
+      expect(svg.pauseAnimations).toHaveBeenCalledTimes(1);
+      act(() => fire(true));
+      expect(section.hasAttribute('data-paused')).toBe(false);
+      expect(svg.unpauseAnimations).toHaveBeenCalledTimes(1);
+      expect(renders).toBe(before);
+    } finally {
+      globalThis.IntersectionObserver = real;
+    }
   });
 });
