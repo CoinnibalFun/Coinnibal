@@ -214,7 +214,7 @@ describe('ShopSheet', () => {
     expect(screen.getAllByText('1,500 TEST')).toHaveLength(2);
     expect(screen.getByText(/You have 4/)).toBeTruthy();
     expect(screen.getByText(/30% off and \+1 power-up per paid round/)).toBeTruthy();
-    expect(screen.getByText(/Each pack is paid to the arena contract \(0x0000…4e4a\): 50% is burned, 50% goes to the team wallet\./)).toBeTruthy();
+    expect(screen.getByText(/Each pack is paid to the game contract \(0x0000…4e4a\)\. 50% is burned and 50% goes to the team wallet\./)).toBeTruthy();
     expect((screen.getByTestId('shop-more-speed') as HTMLButtonElement).disabled).toBe(true);
     // the two new power-ups are on sale, the Shockwave is gone
     expect(screen.getByTestId('shop-more-leap').getAttribute('title')).toBe('Add 3 · 1,750 TEST');

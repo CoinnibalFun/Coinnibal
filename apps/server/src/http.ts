@@ -1,9 +1,10 @@
 import type { ShareService } from './site/shares';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { pipeline } from 'node:stream';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION } from '@coinnibal/shared';
+import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION, type SiteSettings } from '@coinnibal/shared';
 import { NonceLimitError, checksumAddress, type Auth, type SiweOrigin } from './auth';
 import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
@@ -105,6 +106,19 @@ export function siweOrigin(cfg: ServerConfig, req: IncomingMessage, _trustProxy:
   return { domain: new URL(uri).host, uri, chainId: chainId ?? cfg.chain.chainId };
 }
 
+/**
+ * The request's URL, or null for a target `new URL` rejects (`//`: a scheme-relative URL with no host). Without this
+ * the async handler threw before it wrote anything, the rejection was only logged, and the socket hung until the
+ * client gave up.
+ */
+export function requestUrl(target: string | undefined): URL | null {
+  try {
+    return new URL(target ?? '/', 'http://localhost');
+  } catch {
+    return null;
+  }
+}
+
 function json(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(body));
@@ -127,7 +141,120 @@ async function readSmallJson(req: IncomingMessage): Promise<Record<string, unkno
   }
 }
 
-function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pathname: string): boolean {
+/** The precompressed copies the web build writes next to its text files (`x.js.br`, `x.js.gz`), best first. */
+const PRECOMPRESSED = [
+  ['br', '.br'],
+  ['gzip', '.gz'],
+] as const;
+
+/** Does this `Accept-Encoding` header take `coding` (listed, or `*`, without `q=0`)? */
+export function acceptsEncoding(header: string | undefined, coding: string): boolean {
+  if (!header) return false;
+  let star = false;
+  for (const part of header.toLowerCase().split(',')) {
+    const [name, ...params] = part.split(';').map((x) => x.trim());
+    const q = params.find((p) => p.startsWith('q='));
+    const ok = q === undefined || Number(q.slice(2)) > 0;
+    if (name === coding) return ok;
+    if (name === '*') star = ok;
+  }
+  return star;
+}
+
+/**
+ * What to send for a static file: its brotli copy when the browser takes brotli, else its gzip copy, else the file
+ * itself (`encoding` null). `vary`: the file has precompressed copies, so the answer depends on Accept-Encoding.
+ */
+export function precompressed(file: string, acceptEncoding: string | undefined): { file: string; encoding: string | null; vary: boolean } {
+  let vary = false;
+  for (const [coding, ext] of PRECOMPRESSED) {
+    if (!existsSync(file + ext)) continue;
+    vary = true;
+    if (acceptsEncoding(acceptEncoding, coding)) return { file: file + ext, encoding: coding, vary };
+  }
+  return { file, encoding: null, vary };
+}
+
+/** The settings the web build prerendered `/` with (`landing.json`, next to `landing.html`): S1 of the site's speed plan. */
+const LANDING_KEYS = ['gameAccess', 'mintOpen', 'wlOpen', 'collabOpen', 'xHandle'] as const;
+type LandingSettings = Pick<SiteSettings, (typeof LANDING_KEYS)[number]>;
+
+/** A file read once and again only when it changes (its mtime or size). */
+function cachedByStat<T>(read: (file: string) => T): (file: string) => T {
+  const memo = new Map<string, { mtimeMs: number; size: number; value: T }>();
+  return (file) => {
+    const st = statSync(file);
+    const hit = memo.get(file);
+    if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.value;
+    const value = read(file);
+    memo.set(file, { mtimeMs: st.mtimeMs, size: st.size, value });
+    return value;
+  };
+}
+
+const landingJson = cachedByStat((file): LandingSettings | null => {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as LandingSettings;
+  } catch {
+    return null;
+  }
+});
+/** A content hash of a file (its ETag, before the encoding's suffix). */
+const contentHash = cachedByStat((file) => createHash('sha256').update(readFileSync(file)).digest('base64url').slice(0, 27));
+
+const sameHandle = (a: unknown, b: unknown) => typeof a === 'string' && typeof b === 'string' && a.replace(/^@/, '') === b.replace(/^@/, '');
+
+/**
+ * The file for `/`: the prerendered landing (`landing.html`) while the live site settings equal the ones it was
+ * rendered with (`landing.json`: the same game access, mint, WL and collab switches and X handle), else null (the app
+ * page, `index.html`: the browser renders `/` itself, as before). Once the owner opens a door the page must say so from
+ * its first paint, not read "Not open yet" until the settings arrive. With no site store the settings are the closed
+ * defaults the page was rendered with, so it is sent.
+ */
+export function landingPage(base: string, settings: (() => SiteSettings) | null): string | null {
+  const html = join(base, 'landing.html');
+  if (!existsSync(html)) return null;
+  if (!settings) return html;
+  const json = join(base, 'landing.json');
+  const built = existsSync(json) ? landingJson(json) : null;
+  if (!built) return null;
+  const live = settings();
+  return LANDING_KEYS.every((k) => (k === 'xHandle' ? sameHandle(live[k], built[k]) : live[k] === built[k])) ? html : null;
+}
+
+/** Does `If-None-Match` name `etag` (weak comparison, RFC 9110 13.1.2)? */
+export function etagMatches(header: string | undefined, etag: string): boolean {
+  if (!header) return false;
+  const bare = (t: string) => t.trim().replace(/^W\//, '');
+  return header.split(',').some((t) => t.trim() === '*' || bare(t) === bare(etag));
+}
+
+/**
+ * Sends the prerendered landing, or its .br / .gz copy (`sent`), with validators: it is about 290 KB (19 KB brotli)
+ * where the app page is 6 KB, so a repeat visit revalidates it instead of downloading it again. A content-hash ETag,
+ * a different one per encoding (`"<hash>"`, `"<hash>-br"`, `"<hash>-gz"`), and Last-Modified; a matching
+ * If-None-Match gets a 304 with no body. Still `no-cache`: every visit asks, because the server switches `/` to the
+ * app page as soon as a door opens (`landingPage`).
+ */
+function sendLanding(sent: { file: string; encoding: string | null }, req: IncomingMessage, res: ServerResponse, headers: Record<string, string | number>): void {
+  const suffix = sent.encoding === 'br' ? '-br' : sent.encoding === 'gzip' ? '-gz' : '';
+  const etag = `"${contentHash(sent.file)}${suffix}"`;
+  headers['ETag'] = etag;
+  headers['Last-Modified'] = statSync(sent.file).mtime.toUTCString();
+  if (etagMatches(req.headers['if-none-match'], etag)) {
+    delete headers['Content-Type'];
+    delete headers['Content-Encoding'];
+    res.writeHead(304, headers);
+    res.end();
+    return;
+  }
+  headers['Content-Length'] = statSync(sent.file).size;
+  res.writeHead(200, headers);
+  if (req.method === 'HEAD') res.end();
+  else sendFile(sent.file, res);
+}
+
+function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pathname: string, settings: (() => SiteSettings) | null = null): boolean {
   let rel: string;
   try {
     rel = decodeURIComponent(pathname);
@@ -140,11 +267,15 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   let file = normalize(join(base, rel));
   if (file !== base && !file.startsWith(base + sep)) return false;
   let fallback = false;
+  let landing = false;
   if (!existsSync(file) || statSync(file).isDirectory()) {
     if (extname(rel)) return false;
-    file = join(base, 'index.html'); // SPA fallback
+    // `/`: the prerendered landing while the settings match it; else (and every client route) the SPA fallback
+    const page = rel === '/' ? landingPage(base, settings) : null;
+    file = page ?? join(base, 'index.html');
     if (!existsSync(file)) return false;
     fallback = true;
+    landing = page !== null;
   }
   const ext = extname(file);
   const immutable = rel.startsWith('/assets/');
@@ -157,11 +288,28 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
     'Content-Security-Policy': WEB_CSP,
     'Referrer-Policy': 'strict-origin-when-cross-origin',
   };
+  // a text file the build precompressed: its .br / .gz copy, always whole (a byte range is for media and downloads)
+  const sent = precompressed(file, req.headers['accept-encoding']);
+  if (sent.vary) headers['Vary'] = 'Accept-Encoding';
+  if (sent.encoding) headers['Content-Encoding'] = sent.encoding;
+  if (landing) {
+    sendLanding(sent, req, res, headers);
+    return true;
+  }
   if (fallback) {
     // the app page stands in for every client route: always sent whole, never a byte range of it
     res.writeHead(200, headers);
     if (req.method === 'HEAD') res.end();
-    else sendFile(file, res);
+    else sendFile(sent.file, res);
+    return true;
+  }
+  if (sent.vary) {
+    const stat = statSync(file);
+    headers['Last-Modified'] = stat.mtime.toUTCString();
+    headers['Content-Length'] = statSync(sent.file).size;
+    res.writeHead(200, headers);
+    if (req.method === 'HEAD') res.end();
+    else sendFile(sent.file, res);
     return true;
   }
   // a real file answers one byte range: Safari and iOS play a <video> only from a server that does (they probe
@@ -285,7 +433,8 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
     void asClient(rateKey(clientIp(req, trustProxy)), () => handleRequest(req, res));
   });
   const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    const url = requestUrl(req.url);
+    if (!url) return json(res, 400, { error: 'bad_request' });
     const allow = corsAllow(cfg.corsOrigin, req.headers.origin);
     if (allow) res.setHeader('Access-Control-Allow-Origin', allow);
     if (allow && allow !== '*') res.setHeader('Vary', 'Origin');
@@ -399,7 +548,7 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
         }
       }
       if (url.pathname.startsWith('/share/') && ctx.shares?.handle(req, res, url.pathname, key)) return;
-      if (cfg.webDist && (req.method === 'GET' || req.method === 'HEAD') && serveStatic(cfg.webDist, req, res, url.pathname)) return;
+      if (cfg.webDist && (req.method === 'GET' || req.method === 'HEAD') && serveStatic(cfg.webDist, req, res, url.pathname, ctx.site ? () => ctx.site!.publicSettings() : null)) return;
       const to = siteRedirect(cfg, req, url);
       if (to) {
         res.writeHead(301, { Location: to, 'Cache-Control': 'public, max-age=3600' });

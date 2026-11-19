@@ -17,7 +17,8 @@ export function resolveServer(env: { server?: string; ws?: string }, loc: { prot
 
 export const SERVER = resolveServer(
   { server: import.meta.env.VITE_SERVER_URL as string | undefined, ws: import.meta.env.VITE_WS_URL as string | undefined },
-  window.location,
+  // the build's server render of the landing (site/landing/prerender.tsx) has no window, and calls no server
+  typeof window === 'undefined' ? { protocol: 'https:', host: '' } : window.location,
 );
 
 /** Optional client-side overrides for the chain settings the server advertises. */

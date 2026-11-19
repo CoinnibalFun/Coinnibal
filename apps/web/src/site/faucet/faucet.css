@@ -33,7 +33,8 @@
 }
 .fc-quiet__h {
   margin: 0 0 10px;
-  font-size: clamp(32px, 4vw, 46px);
+  /* the card-page title size (closed pages, 404, /play) */
+  font-size: clamp(36px, 4.6vw, 56px);
   line-height: 1.02;
 }
 .fc-lede {

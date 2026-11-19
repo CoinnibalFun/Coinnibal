@@ -1,6 +1,6 @@
 import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import { installMatchMedia, setReducedMotion } from './media';
+import { installMatchMedia, setMatchingQueries, setReducedMotion } from './media';
 
 // jsdom has no media queries or layout. matchMedia is a configurable stub
 // (reduced motion off by default; see ./media.ts), and elements get a client
@@ -18,4 +18,5 @@ afterEach(() => {
   if (!dom) return;
   cleanup();
   setReducedMotion(false);
+  setMatchingQueries([]);
 });

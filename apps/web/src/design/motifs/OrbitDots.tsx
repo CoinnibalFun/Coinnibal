@@ -1,6 +1,7 @@
 import { ELYSIUM } from '@coinnibal/shared';
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { useReducedMotion } from '../motion';
+import { useSteppedSmil } from './stepped';
 import { useOffscreenPause } from './useOffscreenPause';
 
 export interface OrbitStation {
@@ -33,11 +34,13 @@ const PAINTS = [ELYSIUM.sun, ELYSIUM.cyan, ELYSIUM.up, ELYSIUM.foam, ELYSIUM.blu
 /**
  * A dotted orbit ellipse with little outlined coins travelling it (and
  * optional stations: "ticket → eat → bell → paid"). SMIL motion, paused off
- * screen; reduced motion: the coins sit still on the orbit.
+ * screen and stepped on a touch phone; reduced motion: the coins sit still on the orbit.
  */
 export function OrbitDots({ width = 600, height = 240, coins = 3, duration = 18, stations = [], tone = 'night', className, style, title }: OrbitDotsProps): ReactElement {
   const reduced = useReducedMotion();
   const [ref, visible] = useOffscreenPause<SVGSVGElement>();
+  // a touch phone: the coins move ten steps a second (stepped.ts); SMIL every frame kept a phone's main thread 80 % busy
+  useSteppedSmil(ref, visible && !reduced);
   const cx = width / 2;
   const cy = height / 2;
   const rx = width / 2 - (stations.length ? 70 : 24);

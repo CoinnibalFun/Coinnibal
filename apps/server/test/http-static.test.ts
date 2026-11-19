@@ -1,11 +1,13 @@
-import { mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { request, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { NullChain } from '../src/chain/types';
 import { loadConfig } from '../src/config';
-import { byteRange, createHttpServer, redactUrls } from '../src/http';
+import { SITE_SETTINGS_DEFAULT, type SiteSettings } from '@coinnibal/shared';
+import { acceptsEncoding, byteRange, createHttpServer, etagMatches, redactUrls, requestUrl } from '../src/http';
 
 /** The single-origin deploy (`WEB_DIST`): static files plus the SPA fallback for client routes like `/docs`. */
 describe('static web client', () => {
@@ -48,6 +50,32 @@ describe('static web client', () => {
       expect(res.headers.get('content-security-policy'), path).toContain("frame-ancestors 'none'");
       expect(await res.text(), path).toContain('<title>Coinnibal</title>');
     }
+  });
+
+  it('requestUrl: null only for a target new URL rejects', () => {
+    expect(requestUrl('//')).toBeNull();
+    expect(requestUrl('/docs?x=1')?.pathname).toBe('/docs');
+    expect(requestUrl(undefined)?.pathname).toBe('/');
+  });
+
+  it('answers a target the URL parser rejects (`//`) with a 400 instead of leaving the socket open', async () => {
+    const url = new URL(await start());
+    for (const path of ['//', '//?x=1']) {
+      const res = await new Promise<{ status: number; body: string }>((done, fail) => {
+        const r = request({ host: url.hostname, port: url.port, path, timeout: 3000 }, (m) => {
+          let body = '';
+          m.on('data', (c) => (body += c));
+          m.on('end', () => done({ status: m.statusCode ?? 0, body }));
+        });
+        r.on('timeout', () => r.destroy(new Error(`no answer for ${path}`)));
+        r.on('error', fail);
+        r.end();
+      });
+      expect(res.status, path).toBe(400);
+      expect(JSON.parse(res.body), path).toEqual({ error: 'bad_request' });
+    }
+    // a path with a double slash inside is a path, not a host: the SPA as before
+    expect((await fetch(`${url.origin}/docs//x`)).status).toBe(200);
   });
 
   it('serves hashed assets immutable and 404s missing files and API paths', async () => {
@@ -214,6 +242,192 @@ describe('static web client', () => {
     // and the server still serves
     const after = await fetch(url.origin + '/media/loop.mp4');
     expect([after.status, await after.text()]).toEqual([200, '0123456789']);
+  });
+
+  /** A raw GET (no automatic decompression): status, headers and the body bytes as sent. */
+  function raw(url: string, headers: Record<string, string> = {}, method = 'GET'): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: Buffer }> {
+    return new Promise((done, fail) => {
+      const u = new URL(url);
+      const req = request({ host: u.hostname, port: u.port, path: u.pathname, method, headers }, (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => done({ status: res.statusCode ?? 0, headers: res.headers, body: Buffer.concat(chunks) }));
+      });
+      req.on('error', fail);
+      req.end();
+    });
+  }
+
+  it('sends the build\'s precompressed copies: brotli when the browser takes it, else gzip, else the file (Vary: Accept-Encoding)', async () => {
+    const url = await start();
+    const js = 'console.log("a precompressed asset");'.repeat(40);
+    const html = '<!doctype html><title>Coinnibal</title>' + '<p>app</p>'.repeat(40);
+    writeFileSync(join(webRoot, 'assets', 'app-1234.js'), js);
+    writeFileSync(join(webRoot, 'assets', 'app-1234.js.br'), brotliCompressSync(js));
+    writeFileSync(join(webRoot, 'assets', 'app-1234.js.gz'), gzipSync(js));
+    writeFileSync(join(webRoot, 'index.html'), html);
+    writeFileSync(join(webRoot, 'index.html.br'), brotliCompressSync(html));
+    writeFileSync(join(webRoot, 'index.html.gz'), gzipSync(html));
+
+    const br = await raw(`${url}/assets/app-1234.js`, { 'Accept-Encoding': 'gzip, deflate, br, zstd' });
+    expect([br.status, br.headers['content-encoding'], br.headers.vary]).toEqual([200, 'br', 'Accept-Encoding']);
+    expect(br.headers['cache-control']).toMatch(/immutable/);
+    expect(br.headers['content-type']).toMatch(/javascript/);
+    expect(Number(br.headers['content-length'])).toBe(br.body.length);
+    expect(brotliDecompressSync(br.body).toString()).toBe(js);
+
+    for (const ae of ['gzip', 'br;q=0, gzip;q=0.8', 'deflate, gzip']) {
+      const gz = await raw(`${url}/assets/app-1234.js`, { 'Accept-Encoding': ae });
+      expect([gz.headers['content-encoding'], gz.headers.vary], ae).toEqual(['gzip', 'Accept-Encoding']);
+      expect(gunzipSync(gz.body).toString(), ae).toBe(js);
+    }
+    for (const ae of [undefined, 'identity', 'br;q=0, gzip;q=0', 'deflate']) {
+      const plain = await raw(`${url}/assets/app-1234.js`, ae ? { 'Accept-Encoding': ae } : {});
+      expect([plain.headers['content-encoding'], plain.headers.vary], String(ae)).toEqual([undefined, 'Accept-Encoding']);
+      expect(plain.body.toString(), String(ae)).toBe(js);
+    }
+
+    // the app page for client routes, too (no-cache, as before)
+    const page = await raw(`${url}/docs`, { 'Accept-Encoding': 'br' });
+    expect([page.headers['content-encoding'], page.headers['cache-control'], page.headers.vary]).toEqual(['br', 'no-cache', 'Accept-Encoding']);
+    expect(brotliDecompressSync(page.body).toString()).toBe(html);
+
+    // a HEAD has the same headers and no body; a byte range of a precompressed file gets the whole file
+    const head = await raw(`${url}/assets/app-1234.js`, { 'Accept-Encoding': 'br' }, 'HEAD');
+    expect([head.headers['content-encoding'], head.headers['content-length'], head.body.length]).toEqual(['br', String(br.body.length), 0]);
+    const ranged = await raw(`${url}/assets/app-1234.js`, { 'Accept-Encoding': 'br', Range: 'bytes=0-9' });
+    expect([ranged.status, ranged.headers['content-range'], ranged.headers['accept-ranges']]).toEqual([200, undefined, undefined]);
+    expect(brotliDecompressSync(ranged.body).toString()).toBe(js);
+
+    // a file the build did not compress: no Vary, no encoding, byte ranges as before
+    const png = await raw(`${url}/favicon-32.png`, { 'Accept-Encoding': 'br, gzip' });
+    expect([png.headers['content-encoding'], png.headers.vary, png.headers['accept-ranges']]).toEqual([undefined, undefined, 'bytes']);
+  });
+
+  describe('the prerendered landing (landing.html for /)', () => {
+    const LANDING = '<!doctype html><html lang="en" data-theme="light"><title>Coinnibal</title><div id="root"><h1>prerendered</h1></div>' + '<p>landing</p>'.repeat(60);
+    const APP = '<!doctype html><title>Coinnibal</title><div id="root"><div class="boot"></div></div>' + '<p>app</p>'.repeat(60);
+    const BUILT = { gameAccess: 'admins', mintOpen: false, wlOpen: false, collabOpen: false, xHandle: 'coinnibalfun' };
+
+    /** A web dist with both pages (and their precompressed copies) behind a server whose site store answers `live()`. */
+    async function startLanding(live: (() => SiteSettings) | null): Promise<string> {
+      const web = mkdtempSync(join(tmpdir(), 'coinnibal-web-'));
+      for (const [name, body] of [['index.html', APP], ['landing.html', LANDING]]) {
+        writeFileSync(join(web, name), body);
+        writeFileSync(join(web, name + '.br'), brotliCompressSync(body));
+        writeFileSync(join(web, name + '.gz'), gzipSync(body));
+      }
+      writeFileSync(join(web, 'landing.json'), JSON.stringify(BUILT));
+      webRoot = web;
+      const cfg = loadConfig({ DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-data-')), WEB_DIST: web } as NodeJS.ProcessEnv);
+      const site = live ? ({ publicSettings: live, handle: async () => false } as never) : undefined;
+      server = createHttpServer(cfg, { chain: new NullChain(), rooms: {} as never, leaderboards: {} as never, auth: {} as never, startedAt: Date.now(), site });
+      await new Promise<void>((r) => server!.listen(0, '127.0.0.1', () => r()));
+      const addr = server.address();
+      return `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
+    }
+    const decode = (r: { headers: Record<string, string | string[] | undefined>; body: Buffer }) =>
+      r.headers['content-encoding'] === 'br' ? brotliDecompressSync(r.body).toString() : r.headers['content-encoding'] === 'gzip' ? gunzipSync(r.body).toString() : r.body.toString();
+
+    it('sends landing.html for / while the live settings equal landing.json, and with no site store', async () => {
+      let settings: SiteSettings = { ...SITE_SETTINGS_DEFAULT, xHandle: 'coinnibalfun', launchPostUrl: 'https://x.com/coinnibalfun/status/1' };
+      const url = await startLanding(() => settings);
+      for (const ae of ['br', 'gzip', 'identity']) {
+        const res = await raw(url + '/', { 'Accept-Encoding': ae });
+        expect([res.status, res.headers['cache-control'], res.headers.vary], ae).toEqual([200, 'no-cache', 'Accept-Encoding']);
+        expect(res.headers['content-encoding'], ae).toBe(ae === 'identity' ? undefined : ae);
+        expect(res.headers['content-type'], ae).toMatch(/text\/html/);
+        expect(res.headers['x-frame-options'], ae).toBe('DENY');
+        expect(Number(res.headers['content-length']), ae).toBe(res.body.length);
+        expect(decode(res), ae).toBe(LANDING);
+      }
+      // a handle stored with its @ is the same handle; a setting the page does not show (the launch post) changes nothing
+      settings = { ...settings, xHandle: '@coinnibalfun' };
+      expect(decode(await raw(url + '/', { 'Accept-Encoding': 'br' }))).toBe(LANDING);
+      // every other client route, and the query string of /, as before: /docs is the app page, /?x the landing
+      expect(decode(await raw(url + '/docs', { 'Accept-Encoding': 'br' }))).toBe(APP);
+      expect((await fetch(url + '/?ref=x')).headers.get('etag')).toMatch(/^"/);
+      server!.close();
+      const bare = await startLanding(null);
+      expect(decode(await raw(bare + '/', { 'Accept-Encoding': 'gzip' }))).toBe(LANDING);
+    });
+
+    it('sends index.html for / as soon as a door is open, the game access or the handle differs, or landing.json is gone', async () => {
+      let settings: SiteSettings = { ...SITE_SETTINGS_DEFAULT, xHandle: 'coinnibalfun' };
+      const url = await startLanding(() => settings);
+      const changes: Partial<SiteSettings>[] = [{ wlOpen: true }, { mintOpen: true }, { collabOpen: true }, { gameAccess: 'public' }, { gameAccess: 'holders' }, { gameAccess: 'maintenance' }, { xHandle: 'someoneelse' }];
+      for (const change of changes) {
+        settings = { ...SITE_SETTINGS_DEFAULT, xHandle: 'coinnibalfun', ...change };
+        const res = await raw(url + '/', { 'Accept-Encoding': 'br, gzip' });
+        expect([res.status, decode(res)], JSON.stringify(change)).toEqual([200, APP]);
+        // the app page keeps its headers: no validator, so a browser's cached landing is never answered with a 304
+        expect([res.headers.etag, res.headers['cache-control']], JSON.stringify(change)).toEqual([undefined, 'no-cache']);
+      }
+      settings = { ...SITE_SETTINGS_DEFAULT, xHandle: 'coinnibalfun' };
+      expect(decode(await raw(url + '/', { 'Accept-Encoding': 'br' }))).toBe(LANDING);
+      rmSync(join(webRoot, 'landing.json'));
+      expect(decode(await raw(url + '/', { 'Accept-Encoding': 'br' }))).toBe(APP);
+    });
+
+    it('validates landing.html with a content-hash ETag per encoding: a match is a 304, another encoding or a new build a 200', async () => {
+      let settings: SiteSettings = { ...SITE_SETTINGS_DEFAULT, xHandle: 'coinnibalfun' };
+      const url = await startLanding(() => settings);
+      const tags: Record<string, string> = {};
+      for (const ae of ['br', 'gzip', 'identity']) {
+        const first = await raw(url + '/', { 'Accept-Encoding': ae });
+        const etag = String(first.headers.etag);
+        expect(etag, ae).toMatch(ae === 'br' ? /^"[\w-]{27}-br"$/ : ae === 'gzip' ? /^"[\w-]{27}-gz"$/ : /^"[\w-]{27}"$/);
+        expect(first.headers['last-modified'], ae).toBe(statSync(join(webRoot, 'landing.html' + (ae === 'br' ? '.br' : ae === 'gzip' ? '.gz' : ''))).mtime.toUTCString());
+        tags[ae] = etag;
+        // the same copy again: 304, no body, the validator and the caching headers (Vary too) repeated
+        const again = await raw(url + '/', { 'Accept-Encoding': ae, 'If-None-Match': etag });
+        expect([again.status, again.body.length, again.headers.etag, again.headers.vary, again.headers['cache-control']], ae).toEqual([304, 0, etag, 'Accept-Encoding', 'no-cache']);
+        expect([again.headers['content-encoding'], again.headers['content-length']], ae).toEqual([undefined, undefined]);
+        // a list, a weak form (a proxy that re-encodes weakens it), a HEAD
+        expect((await raw(url + '/', { 'Accept-Encoding': ae, 'If-None-Match': `"nope", W/${etag}` })).status, ae).toBe(304);
+        expect((await raw(url + '/', { 'Accept-Encoding': ae, 'If-None-Match': etag }, 'HEAD')).status, ae).toBe(304);
+        const head = await raw(url + '/', { 'Accept-Encoding': ae }, 'HEAD');
+        expect([head.status, head.headers.etag, head.headers['content-length'], head.body.length], ae).toEqual([200, etag, String(first.body.length), 0]);
+      }
+      expect(new Set(Object.values(tags)).size).toBe(3);
+      // another encoding's tag is another representation: the whole page
+      const other = await raw(url + '/', { 'Accept-Encoding': 'br', 'If-None-Match': tags.gzip });
+      expect([other.status, decode(other)]).toEqual([200, LANDING]);
+      // a door opens: the browser's cached landing is not confirmed, it gets the app page
+      settings = { ...settings, mintOpen: true };
+      const opened = await raw(url + '/', { 'Accept-Encoding': 'br', 'If-None-Match': tags.br });
+      expect([opened.status, decode(opened), opened.headers.etag]).toEqual([200, APP, undefined]);
+      settings = { ...settings, mintOpen: false };
+      // a new build of the page: a new tag, so the old one gets the whole new page
+      const next = LANDING.replace('prerendered', 'rebuilt');
+      writeFileSync(join(webRoot, 'landing.html.br'), brotliCompressSync(next));
+      const rebuilt = await raw(url + '/', { 'Accept-Encoding': 'br', 'If-None-Match': tags.br });
+      expect([rebuilt.status, decode(rebuilt)]).toEqual([200, next]);
+      expect(rebuilt.headers.etag).not.toBe(tags.br);
+    });
+
+    it('reads If-None-Match with weak tags, lists and *', () => {
+      expect(etagMatches('"abc-br"', '"abc-br"')).toBe(true);
+      expect(etagMatches('W/"abc-br"', '"abc-br"')).toBe(true);
+      expect(etagMatches('"x", "abc-br" ', '"abc-br"')).toBe(true);
+      expect(etagMatches('*', '"abc"')).toBe(true);
+      expect(etagMatches('"abc"', '"abc-br"')).toBe(false);
+      expect(etagMatches('', '"abc"')).toBe(false);
+      expect(etagMatches(undefined, '"abc"')).toBe(false);
+    });
+  });
+
+  it('reads Accept-Encoding with q-values and the * wildcard', () => {
+    expect(acceptsEncoding('gzip, deflate, br', 'br')).toBe(true);
+    expect(acceptsEncoding('GZIP;Q=1.0, BR', 'br')).toBe(true);
+    expect(acceptsEncoding('br;q=0', 'br')).toBe(false);
+    expect(acceptsEncoding('br;q=0.001', 'br')).toBe(true);
+    expect(acceptsEncoding('gzip', 'br')).toBe(false);
+    expect(acceptsEncoding('*', 'br')).toBe(true);
+    expect(acceptsEncoding('*;q=0', 'gzip')).toBe(false);
+    expect(acceptsEncoding('br;q=0, *', 'br')).toBe(false);
+    expect(acceptsEncoding(undefined, 'gzip')).toBe(false);
+    expect(acceptsEncoding('', 'gzip')).toBe(false);
   });
 
   it('reads one byte range of a Range header and ignores what it cannot use', () => {

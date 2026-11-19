@@ -123,7 +123,7 @@ describe('ticket confirm sheet', () => {
     // arena v3: no entry fee; the fee is on profit only, split burned / fee wallet
     expect(within(dialog).getByText('20% · on profit only · fixed for this ticket · 15% burned · 5% to the team wallet')).toBeTruthy();
     expect(within(dialog).queryByText('Your coin starts at')).toBeNull();
-    expect(within(dialog).getByText(/No profit, no fee/)).toBeTruthy();
+    expect(within(dialog).getByText(/If you don't make a profit, you pay no fee\./)).toBeTruthy();
     expect(within(dialog).getByText(/paid in ETH on Robinhood Chain Testnet · you have 0.42 ETH/)).toBeTruthy();
     expect(within(dialog).getByText('12,450 → 11,450 $NIBAL')).toBeTruthy();
     const steps = within(within(dialog).getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
