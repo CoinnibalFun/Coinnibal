@@ -22,6 +22,13 @@ export const PIN_VPS_KEY: Readonly<Record<PinKind, string>> = Object.freeze({ ar
 /** Rebuilds the site with the pins of `/opt/elymum/.env` and restarts the app (deploy/vps/README.md, section 4). */
 export const PIN_REBUILD = 'coinnibal-compose up -d --build app';
 
+/**
+ * The same in two steps, once players are in the arenas: the build takes minutes (longer than the break after a bell)
+ * and the swap must land in the break (a SIGTERM mid-round cashes every arena player out), like update.sh does it.
+ */
+export const PIN_BUILD_FIRST = 'coinnibal-compose build app';
+export const PIN_SWAP = 'coinnibal-compose up -d app';
+
 /** The web build outside Docker. */
 export const PIN_BUILD_OUTSIDE = 'pnpm -F @coinnibal/web build';
 

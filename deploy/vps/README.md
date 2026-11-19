@@ -117,8 +117,10 @@ coinnibal-compose up -d --build app
 ```
 
 `update.sh` rebuilds only when the tracked branch moves, so a `.env` change alone needs this command; later builds keep
-the pins (they are read from `.env` every time). It swaps the container as soon as the image is built: once players
-are in the arenas, run it in the break after a bell (section 6). Check what the build gets with `coinnibal-compose config | grep VITE_`.
+the pins (they are read from `.env` every time). It swaps the container as soon as the image is built, which takes
+minutes, longer than the break after a bell. Once players are in the arenas, build first and swap in the break
+(section 6): `coinnibal-compose build app`, then `coinnibal-compose up -d app` in the break after a bell. Check what
+the build gets with `coinnibal-compose config | grep VITE_`.
 The same applies when moving to the mainnet: the server follows `COINNIBAL_CHAIN_ID` after `coinnibal-compose up -d
 app`, the site signs nothing there until it is rebuilt with the mainnet pins.
 

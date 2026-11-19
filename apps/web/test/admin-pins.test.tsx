@@ -8,7 +8,7 @@ import { DeployTab } from '../src/admin/DeployTab';
 import { launchChecklist } from '../src/admin/LaunchTab';
 import { mainnetChecklist } from '../src/admin/NetworkTab';
 import { resolveNetwork } from '../src/admin/net';
-import { PIN_REBUILD, PIN_VPS_KEY, pinReport, pinSummary, pinTodoLine, registeredPinReport } from '../src/admin/pins';
+import { PIN_BUILD_FIRST, PIN_REBUILD, PIN_SWAP, PIN_VPS_KEY, pinReport, pinSummary, pinTodoLine, registeredPinReport } from '../src/admin/pins';
 import { PinsCard } from '../src/admin/PinsCard';
 import { NO_TEST_TOKEN_YET } from '../src/admin/setup';
 import { SetupTab } from '../src/admin/SetupTab';
@@ -86,6 +86,7 @@ describe('site pins against the registered contracts', () => {
     expect(pinSummary(none)).toMatch(/^Not pinned in this build: CoinnibalArena, CoinnibalNFT, the game token\. Setup → Site pins/);
     expect(pinTodoLine(pinReport({ chainId: TESTNET, arena: ARENA, nft: NFT, token: TOKEN }, buildPins({ arena: ARENA, nft: NFT, token: TOKEN })))).toBeNull();
     expect(PIN_REBUILD).toBe('coinnibal-compose up -d --build app');
+    expect([PIN_BUILD_FIRST, PIN_SWAP]).toEqual(['coinnibal-compose build app', 'coinnibal-compose up -d app']);
     expect(PIN_VPS_KEY).toEqual({ arena: 'COINNIBAL_PIN_ARENA', nft: 'COINNIBAL_PIN_NFT', token: 'COINNIBAL_PIN_TOKEN' });
   });
 
@@ -179,6 +180,10 @@ describe('Setup → Site pins', () => {
     // no token line before the arena's token is set
     expect(todo.textContent).not.toContain('COINNIBAL_PIN_TOKEN');
     expect(todo.textContent).toContain(PIN_REBUILD);
+    // with players in the arenas: build first, swap in the break (up -d --build swaps only once the build is done)
+    expect(screen.getByTestId('site-pins-break').textContent).toBe(
+      `Once players are in the arenas: the build takes minutes, longer than the break after a bell, so build first (${PIN_BUILD_FIRST}), then swap in the break (${PIN_SWAP}).`,
+    );
     expect(todo.textContent).toContain(`VITE_CHAIN_ID=${TESTNET}`);
     expect(todo.textContent).toContain(`VITE_ARENA_ADDRESS=${ARENA}`);
     expect(screen.getByText(/The game token gets its line here once it is set on the arena/)).toBeTruthy();

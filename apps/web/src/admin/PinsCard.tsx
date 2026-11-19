@@ -1,5 +1,5 @@
 import type { BuildPins } from '../wallet/pinned';
-import { PIN_BUILD_OUTSIDE, PIN_LABEL, PIN_REBUILD, chainLabel, pinEffect, pinTodoLine, registeredPinReport } from './pins';
+import { PIN_BUILD_FIRST, PIN_BUILD_OUTSIDE, PIN_LABEL, PIN_REBUILD, PIN_SWAP, chainLabel, pinEffect, pinTodoLine, registeredPinReport } from './pins';
 import { Addr, Card, CopyButton, Row, type ChainCtx } from './ui';
 
 /** Lines to copy: one per line, with a copy button for all of them. */
@@ -69,8 +69,11 @@ export function PinsCard({ ctx, pins }: { ctx: ChainCtx; pins?: BuildPins }) {
               <Lines lines={r.envLines} label="Copy the lines" />
             </li>
             <li>
-              Rebuild the site and restart the app (once players are in the arenas, in the break after a bell):
+              Rebuild the site and restart the app:
               <Lines lines={[PIN_REBUILD]} label="Copy the command" />
+              <span className="ad-note ad-pins__effect" data-testid="site-pins-break">
+                Once players are in the arenas: the build takes minutes, longer than the break after a bell, so build first (<code>{PIN_BUILD_FIRST}</code>), then swap in the break (<code>{PIN_SWAP}</code>).
+              </span>
             </li>
           </ol>
           <p className="ad-note">Outside Docker, build the site ({PIN_BUILD_OUTSIDE}) with these set:</p>
