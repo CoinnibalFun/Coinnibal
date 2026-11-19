@@ -373,7 +373,7 @@ export class EvmChain implements ChainGateway {
 
   /** The RPC serves a chain that is not Robinhood Chain: the arenas stay off (logged every 5 minutes). */
   private refuseChain(id: number): false {
-    this.warn('chain', `!!! chain: EVM_RPC_URL serves chain ${id}: ${unsupportedChainMessage(id)} — arenas stay OFF`, 300_000);
+    this.warn('chain', `!!! chain: the RPC (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker) serves chain ${id}: ${unsupportedChainMessage(id)} — arenas stay OFF`, 300_000);
     return false;
   }
 

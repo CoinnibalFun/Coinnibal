@@ -191,7 +191,7 @@ describe('status and reads', () => {
     // an RPC of another chain: no arenas, and the log says Coinnibal runs on Robinhood Chain only
     const other = await harness({ setup: (x) => (x.chainId = 99801) });
     expect(other.chain.status()).toMatchObject({ enabled: false, chainId: null, arenasEnabled: false, chainName: 'Robinhood Chain Testnet' });
-    expect(other.logs.join('\n')).toMatch(/serves chain 99801: chain 99801 is not Robinhood Chain/);
+    expect(other.logs.join('\n')).toMatch(/!!! chain: the RPC \(COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL\(S\) outside Docker\) serves chain 99801: chain 99801 is not Robinhood Chain/);
   });
 
   it('converts 18-decimal amounts to ledger units at the boundary (vaults rounded down)', async () => {

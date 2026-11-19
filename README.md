@@ -10,10 +10,11 @@ Coinnibal was formerly Elymum (docs/OPERATIONS.md, "The name: Coinnibal (formerl
 live server keeps). The domain and the X handle are configuration.
 
 The product flow is WL → Mint → Play: people apply for the whitelist, get a Coinnibal NFT, and the game opens for
-holders. No mint price is published; the public mint is planned on OpenSea (the link @coinnibalfun posts), and the
-contract's own allowlist and public phases and `/mint` are the owner's tools until the owner decides how they fit. The money rules live in two Solidity contracts; the
-game itself runs on an authoritative server; the owner deploys and runs everything from their own
-wallet in `/admin`.
+holders. No visitor copy names a mint price (the mint page, once open, reads the contract's live price); the public
+mint is planned on OpenSea (the link @coinnibalfun posts), and the contract's own allowlist and public phases and
+`/mint` are the owner's tools until the owner decides how they fit. The money rules live in two Solidity contracts;
+the game itself runs on an authoritative server; the owner deploys and runs everything from their own wallet in
+`/admin`.
 
 Status: the contracts and the mint system are ready and run from `/admin`; the public site is information-only
 (game, mint, WL and collab closed) until the owner opens them in `/admin` → Settings. Coinnibal runs on Robinhood Chain only: Robinhood Chain Testnet (chain id

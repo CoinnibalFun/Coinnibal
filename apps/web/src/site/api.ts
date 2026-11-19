@@ -92,7 +92,7 @@ const FALLBACK: Partial<Record<SiteApiError['code'], string>> = {
   code_mismatch: 'That address holds no code, or code other than the Coinnibal contract this server ships with.',
   not_owner: 'The contract owner is not the signed-in admin wallet.',
   wrong_authority: "The arena's server authority is not this server's key.",
-  chain_off: 'The server has no chain configured, or the contract is not registered.',
+  chain_off: 'The server has no chain (its RPC did not answer or serves another chain), or the contract is not registered.',
   price_unavailable: 'The gas token price feed is unavailable right now.',
 };
 

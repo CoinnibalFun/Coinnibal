@@ -269,9 +269,9 @@ the flags honest players raise (none at the defaults) and those two scripted bot
 - Log lines starting with `!!!` need attention: an unreadable journal or one that cannot be written (disk full:
   nothing is sent and no new arena seat is taken until it can), an arena whose vault falls short, the wrong server
   authority, low gas, a fee wallet that cannot receive the token, an arena contract whose code hash differs, an RPC
-  that serves another chain than `CHAIN_ID` (`!!! chain: EVM_RPC_URL serves chain …`, or a fallback of
-  `EVM_RPC_URLS` left out), the server clock off the chain's, an emblem seat refused. `integrity: HELD ...` means a
-  payout waits in `/admin` → Safety.
+  that serves another chain than `CHAIN_ID` (`!!! chain: the RPC (COINNIBAL_RPC_URLS on the VPS, …) serves chain …`,
+  or a fallback of `EVM_RPC_URLS` left out), the server clock off the chain's, an emblem seat refused.
+  `integrity: HELD ...` means a payout waits in `/admin` → Safety.
 
 ## RPC
 
