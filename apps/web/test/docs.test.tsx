@@ -237,10 +237,11 @@ describe('player guide content', () => {
     expect(t).toContain('Eat a whole coin and all of its value moves to your coin. Eat one piece of a split coin and you get part of its value: the bigger the piece, the bigger the part. Its last piece gives you everything it has left.');
     expect(t).toContain('only eating. Your coin gains value when it eats another coin or a piece of one, and loses value when another coin eats it or one of its pieces.');
     expect(t).toContain('Nothing else changes your value: not food, airdrops, power-ups, splitting, pushing out mass, a cactus, or the slow mass loss of big coins.');
-    // the HUD's own words (en.ts `g.till`, `g.mass`)
+    // the HUD's own words (en.ts `g.till`, `g.mass`), in every kind of room: ticket rooms are mode 'arena' like the paid
+    // rooms, practice and free private rooms show the mass
     const where = v.blocks.flatMap((b) => (b.kind === 'list' ? b.items : [])).find((it) => typeof it !== 'string' && it.term === 'Where you see it:');
     expect(where && typeof where !== 'string' && where.text).toBe(
-      'in a paid room, the yellow sticker at the top of the game shows your value next to "You\'re worth". In a free room the same sticker shows your mass next to "You weigh".',
+      'in a paid room or a ticket room, the yellow sticker at the top of the game shows your value next to "You\'re worth". In practice rooms and free private rooms, the same sticker shows your mass next to "You weigh".',
     );
     // the line the founder did not understand is gone, and no claim of what each thing does to mass
     expect(t).not.toMatch(/Mass is not value|do not change the value|breaking on a cactus/);
