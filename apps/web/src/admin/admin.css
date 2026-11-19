@@ -123,6 +123,8 @@ body {
 }
 .ad-session__icon {
   border-radius: 4px;
+  /* centred on the words, not standing on their baseline */
+  vertical-align: middle;
 }
 .ad-session__hint {
   margin: 0;

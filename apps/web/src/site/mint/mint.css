@@ -376,6 +376,8 @@
   font-size: 12px;
   font-weight: 400;
   color: var(--ink-3);
+  /* no last word alone on its line ("… is also paid in / ETH") */
+  text-wrap: pretty;
 }
 
 /* quantity, total */
