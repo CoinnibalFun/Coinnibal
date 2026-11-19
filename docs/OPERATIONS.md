@@ -575,7 +575,7 @@ pins). The same steps one by one stay under Advanced → Setup.
    - **CoinnibalArena v4** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
      The server checks the code hash and the server authority before it registers it. An arena of an earlier build
      (v3, before the join permits) reads "redeploy needed": deploy the new one and register it.
-   - **CoinnibalNFT** at the USD target (`MINT_USD_CENTS`) in ETH (the wizard reads ETH/USD).
+   - **CoinnibalNFT** at the USD target (`MINT_USD_CENTS`) in ETH (the server reads ETH/USD).
 5. **The rooms** (the same flow goes on): set the TestToken as the arena's game token, create
    the four arenas (1,000 / 3,000 / 5,000 / 10,000: the $1 / $3 / $5 / $10 tiers at the reference price of $0.001 a
    token), the holder perks (8 % + 2 %), the $10 Room holders-only and the NFT as the faucet's 2x. The server picks the

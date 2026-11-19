@@ -178,35 +178,35 @@ export function AdminPanel({
         </p>
       )}
       {!view && (
-      <section className="ad-chainbar" aria-label="Registered contracts">
-        <dl className="ad-chainbar__list">
-          <div>
-            <dt className="mono">Chain</dt>
-            <dd className="ad-chainbar__chain">{net.info ? `${net.info.name} (${net.info.id})` : 'none'}</dd>
-          </div>
-          <div>
-            <dt className="mono">CoinnibalArena</dt>
-            <dd>
-              <Addr value={net.arenaAddress} net={net} /> <CodeTag code={codes.arena} />
-            </dd>
-          </div>
-          <div>
-            <dt className="mono">CoinnibalNFT</dt>
-            <dd>
-              <Addr value={net.nftAddress} net={net} /> <CodeTag code={codes.nft} />
-            </dd>
-          </div>
-          <div>
-            <dt className="mono">Server key</dt>
-            <dd>
-              <Addr value={net.serverKey} net={net} />
-            </dd>
-          </div>
-        </dl>
-        <Button variant="ghost" size="sm" disabled={loading} onClick={() => void refresh()} className="ad-chainbar__refresh">
-          {loading ? 'Reading…' : 'Re-read the chain'}
-        </Button>
-      </section>
+        <section className="ad-chainbar" aria-label="Registered contracts">
+          <dl className="ad-chainbar__list">
+            <div>
+              <dt className="mono">Chain</dt>
+              <dd className="ad-chainbar__chain">{net.info ? `${net.info.name} (${net.info.id})` : 'none'}</dd>
+            </div>
+            <div>
+              <dt className="mono">CoinnibalArena</dt>
+              <dd>
+                <Addr value={net.arenaAddress} net={net} /> <CodeTag code={codes.arena} />
+              </dd>
+            </div>
+            <div>
+              <dt className="mono">CoinnibalNFT</dt>
+              <dd>
+                <Addr value={net.nftAddress} net={net} /> <CodeTag code={codes.nft} />
+              </dd>
+            </div>
+            <div>
+              <dt className="mono">Server key</dt>
+              <dd>
+                <Addr value={net.serverKey} net={net} />
+              </dd>
+            </div>
+          </dl>
+          <Button variant="ghost" size="sm" disabled={loading} onClick={() => void refresh()} className="ad-chainbar__refresh">
+            {loading ? 'Reading…' : 'Re-read the chain'}
+          </Button>
+        </section>
       )}
 
       {tab === 'home' && <StartScreen ctx={ctx} go={go} token={token} access={access} />}

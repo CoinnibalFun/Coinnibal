@@ -1,5 +1,5 @@
 import { coinnibalArenaArtifact, getCodeHash } from '@coinnibal/sdk';
-import { LOCALNET_CHAIN_ID, OWNER_WALLET, configuredChainId, parseSitePinsRecord, sitePinsMessage } from '@coinnibal/shared';
+import { LOCALNET_CHAIN_ID, OWNER_WALLET, configuredChainId, parseSitePinsRecord, sitePinsMessage, type SitePinsResponse } from '@coinnibal/shared';
 import { getAddress, isAddress, verifyMessage, type Address, type Hex, type PublicClient } from 'viem';
 import { SERVER } from '../config';
 import { storageKey } from '../storageKey';
@@ -141,8 +141,10 @@ export type SignedPinsFetch = (chainId: number) => Promise<unknown>;
 
 const fetchSignedPins: SignedPinsFetch = async (chainId) => {
   const res = await fetch(`${SERVER.http}/api/site/pins?chainId=${chainId}`, { cache: 'no-store' });
+  // a server without the route has no signed record (the build's own pins still apply)
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error(`pins: HTTP ${res.status}`);
-  return ((await res.json()) as { record?: unknown }).record ?? null;
+  return ((await res.json()) as Partial<SitePinsResponse>).record ?? null;
 };
 
 const SIGNED_TTL_MS = 60_000;
