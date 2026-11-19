@@ -6,7 +6,7 @@ import { closeModal, openModal, toast, useUi } from '../../store';
 import { SHOP_CART_LIMITS, TOKEN_SYMBOL_DEFAULT } from '@coinnibal/shared';
 import { ShopError, buyCart, cartTotals, emptyCart, fetchShop, loadPendingClaim, settleCartClaim, settleClaim, type BuyPhase, type Cart, type PendingClaim } from '../../wallet/shop';
 import { summaryAmount } from '../amount';
-import { BOOST_PATH } from '../game/BoostBar';
+import { BOOST_PATH } from '../game/boostGlyphs';
 import './shop.css';
 
 /**
