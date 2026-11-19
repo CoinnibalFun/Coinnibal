@@ -1,4 +1,4 @@
-import type { ChainStatus } from '@coinnibal/shared';
+import { TOKEN_SYMBOL_DEFAULT, type ChainStatus } from '@coinnibal/shared';
 import { useEffect } from 'react';
 import { SERVER } from '../config';
 import { PlateLabel } from '../design';
@@ -8,7 +8,11 @@ import { useT } from '../i18n';
 import { SitePage } from './Shell';
 import '../ui/lobby/lobby.css';
 
-/** `/docs`: the player guide, public, inside the site (no game engine). The fee rate comes from `/api/config`. */
+/**
+ * `/docs`: the player guide, public, inside the site (no game engine). The fee rate comes from `/api/config`. The page
+ * title is the page's h1, and amounts always say "tokens": a visitor page shows no ticker, whatever the server's
+ * `TOKEN_SYMBOL` is (the lobby's guide keeps the server's symbol).
+ */
 export function DocsRoute() {
   const t = useT();
   useEffect(() => {
@@ -25,9 +29,9 @@ export function DocsRoute() {
   }, []);
   return (
     <SitePage className="st-docs">
-      <PlateLabel numeral={8} title={t('site.docs.plate')} aside="/docs" className="st-docs__plate" />
+      <PlateLabel numeral={8} title={t('site.docs.plate')} className="st-docs__plate" />
       <div className="st-page">
-        <DocsPage />
+        <DocsPage headingLevel={1} symbol={TOKEN_SYMBOL_DEFAULT} />
       </div>
     </SitePage>
   );
