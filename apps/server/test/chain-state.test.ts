@@ -267,7 +267,8 @@ describe('NFT utilities: emblem skin and laurel flag', () => {
     t.app.contracts.set('nft', record(NFT, 46630));
     const holder = testSigner().address;
     const other = testSigner().address;
-    t.evm.balances.set(holder.toLowerCase(), 1n);
+    // minted (a Transfer log): the profile's skins are only shown, from the holder index, never a chain read of their own
+    t.evm.mintNft(holder);
     const g = (await t.call('GET', '/api/profile', { wallet: holder })).body;
     expect(g).toMatchObject({ holder: true, skinOptions: [0, 1, 2, 3, 4, 5, 6, 7, EMBLEM_SKIN_ID] });
     expect((await t.call('GET', '/api/profile', { wallet: other })).body).toMatchObject({ holder: false, skinOptions: [0, 1, 2, 3, 4, 5, 6, 7] });

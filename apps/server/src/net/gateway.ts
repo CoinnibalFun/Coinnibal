@@ -278,8 +278,12 @@ export class Gateway {
   private profiles: ProfileStore | null = null;
   /** Wallets the admin banned from arenas (integrity); null: nobody (bare unit tests). */
   private banGate: ((wallet: string) => boolean) | null = null;
-  /** Whether a wallet holds a Coinnibal emblem (laurel flag, emblem skin); null: nobody does. */
-  private holderCheck: ((wallet: string) => Promise<boolean>) | null = null;
+  /**
+   * Whether a wallet holds a Coinnibal emblem (laurel flag, emblem skin); null: nobody does. `gate`: the emblem skin
+   * was asked for (a decision: the mint service's `isHolder`); else only the laurel is shown (`shownHolder`: the
+   * answer on record, never a chain read of its own).
+   */
+  private holderCheck: ((wallet: string, gate: boolean) => Promise<boolean>) | null = null;
   /** Arenas closed for a re-price at their bell (`RepriceScheduler.closedForSeats`); absent: none. */
   private repricing: ((arenaId: number) => boolean) | null = null;
   /** The seat check of holder tickets (`EmblemGate.seat`): null to seat, else the refusal; absent: none. */
@@ -324,8 +328,11 @@ export class Gateway {
     this.xHandleOf = fn;
   }
 
-  /** Sets the emblem holder check (cached by the mint service): holders wear a laurel and may pick the emblem skin. */
-  setHolderCheck(check: ((wallet: string) => Promise<boolean>) | null): void {
+  /**
+   * Sets the emblem holder check (cached by the mint service): holders wear a laurel and may pick the emblem skin.
+   * `gate`: the join asked for the emblem skin; else the answer is only shown (the laurel).
+   */
+  setHolderCheck(check: ((wallet: string, gate: boolean) => Promise<boolean>) | null): void {
     this.holderCheck = check;
   }
 
@@ -1101,12 +1108,13 @@ export class Gateway {
       let wantsEmblem = msg.skin === EMBLEM_SKIN_ID;
       let skin = wantsEmblem ? EMBLEM_SKIN_ID : Number.isInteger(msg.skin) && (msg.skin as number) >= 0 && (msg.skin as number) < SKIN_COUNT ? (msg.skin as number) : 0;
       if (wallet) conn.profile = this.profiles?.summary(wallet) ?? null;
-      // null: not known right now (this client's budget is spent, `ClientBudgetError`, or the check is slow: it goes on
-      // and is cached); the laurel waits for the next game
+      // null: not known right now (the holder index cannot tell, `ClientBudgetError`, or the check is slow: it goes on
+      // and is cached); the laurel waits for the next game. Only the emblem skin is a decision: the laurel alone is
+      // the answer on record, so a game never spends the holder reads of anyone behind the same address
       const holder =
         wallet && this.holderCheck
           ? await within(
-              this.holderCheck(wallet).catch((err) => (err instanceof ClientBudgetError ? null : false)),
+              this.holderCheck(wallet, wantsEmblem).catch((err) => (err instanceof ClientBudgetError ? null : false)),
               HOLDER_CHECK_WAIT_MS,
             )
           : false;

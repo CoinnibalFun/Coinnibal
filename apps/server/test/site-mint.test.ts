@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { verifyMerkleProof } from '@coinnibal/sdk';
-import { PROTOCOL_VERSION, type ChainStatus, type ServerMessage } from '@coinnibal/shared';
+import { CUSTOM_DEFAULTS, PROTOCOL_VERSION, type ChainStatus, type ServerMessage } from '@coinnibal/shared';
 import type { Address, Hex } from 'viem';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
@@ -14,7 +14,7 @@ import { ProfileStore } from '../src/profiles';
 import { CONTRACTS_FILE } from '../src/site/contracts';
 import { generateCollection, revealOffset, sha256Hex } from '../src/site/nft/generate';
 import { unrevealedSvg } from '../src/site/nft/unrevealed';
-import { ALLOWLIST_FILE, parseNftPath } from '../src/site/mint';
+import { ALLOWLIST_FILE, HOLDER_MISS_TTL_MS, parseNftPath } from '../src/site/mint';
 import { SITE_FILES, SiteStore } from '../src/site/store';
 import { ADMIN, ARENA, FakeEvm, NFT, SERVER, TOKEN } from './fake-evm';
 import { ArenaChain, arena } from './helpers';
@@ -65,9 +65,6 @@ async function harness(env: Record<string, string> = {}, setupDir?: (dir: string
     PUBLIC_URL: 'https://coinnibal.example',
     ROUND_JOIN_CLOSE_SECONDS: '0',
     ROUND_BREAK_SECONDS: '0',
-    // every request comes from one client (127.0.0.1): a budget far above the gates tested here (the holder-read
-    // bounds per client and network are derived from it; ticket-reads.test.ts tests them)
-    RPC_MAX_RPS: '1000',
     ...env,
   } as NodeJS.ProcessEnv);
   const app = await createApp(cfg, {
@@ -100,6 +97,34 @@ async function harness(env: Record<string, string> = {}, setupDir?: (dir: string
     return { status: res.status, body: parsed, text, headers: res.headers };
   };
   return { app, port, dir, evm, chain, call };
+}
+
+/** A practice join over the WebSocket as `w` (signed in) or a guest: `joined`, or the error's code. */
+async function joinPractice(h: Harness, w: string | null, skin = 0): Promise<string> {
+  const ws = new WebSocket(`ws://127.0.0.1:${h.port}/ws`);
+  const msgs: ServerMessage[] = [];
+  ws.on('message', (d, bin) => {
+    if (!bin) msgs.push(JSON.parse(d.toString()) as ServerMessage);
+  });
+  await new Promise((r) => ws.once('open', r));
+  const until = async (pred: (m: ServerMessage) => boolean) => {
+    for (let i = 0; i < 300; i++) {
+      const m = msgs.find(pred);
+      if (m) return m;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error(`no reply: ${JSON.stringify(msgs.map((m) => m.t))}`);
+  };
+  ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));
+  await until((m) => m.t === 'welcome');
+  if (w) {
+    ws.send(JSON.stringify({ t: 'auth', token: h.app.auth.issueToken(w) }));
+    await until((m) => m.t === 'authed');
+  }
+  ws.send(JSON.stringify({ t: 'join', room: 'practice', name: 'x', skin }));
+  const r = await until((m) => m.t === 'joined' || m.t === 'error');
+  ws.close();
+  return r.t === 'error' ? r.code : r.t;
 }
 
 const wlBody = (handle: string) => ({ xHandle: handle, answers: { follow_x: true, post_x: post(handle) } });
@@ -441,32 +466,7 @@ describe('game gate modes', () => {
     await h.app.close();
   });
 
-  async function tryJoin(w: string | null): Promise<string> {
-    const ws = new WebSocket(`ws://127.0.0.1:${h.port}/ws`);
-    const msgs: ServerMessage[] = [];
-    ws.on('message', (d, bin) => {
-      if (!bin) msgs.push(JSON.parse(d.toString()) as ServerMessage);
-    });
-    await new Promise((r) => ws.once('open', r));
-    const until = async (pred: (m: ServerMessage) => boolean) => {
-      for (let i = 0; i < 300; i++) {
-        const m = msgs.find(pred);
-        if (m) return m;
-        await new Promise((r) => setTimeout(r, 10));
-      }
-      throw new Error(`no reply: ${JSON.stringify(msgs.map((m) => m.t))}`);
-    };
-    ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));
-    await until((m) => m.t === 'welcome');
-    if (w) {
-      ws.send(JSON.stringify({ t: 'auth', token: h.app.auth.issueToken(w) }));
-      await until((m) => m.t === 'authed');
-    }
-    ws.send(JSON.stringify({ t: 'join', room: 'practice', name: 'x', skin: 0 }));
-    const r = await until((m) => m.t === 'joined' || m.t === 'error');
-    ws.close();
-    return r.t === 'error' ? r.code : r.t;
-  }
+  const tryJoin = (w: string | null): Promise<string> => joinPractice(h, w);
 
   it('admins: only admin wallets; holders: NFT holders + admins (balanceOf, cached 60 s); public: everyone', async () => {
     const holder = wallet();
@@ -512,55 +512,137 @@ describe('game gate modes', () => {
   });
 });
 
-describe('holder checks past a client\'s bound: values shown are never busy, gate decisions are (R3-NET-1)', () => {
-  let h: Harness;
-  beforeAll(async () => {
-    // the default RPC budget (4 calls/s): one client may read a holder 3.75 times a minute, in bursts of 2
-    h = await harness({ RPC_MAX_RPS: '4' });
+describe('holder checks behind one address at the default RPC budget (R3-NET-1, R4-NET-1)', () => {
+  // every request comes from 127.0.0.1, at the default RPC budget (4 calls/s): one client may read a holder 3.75
+  // times a minute, in bursts of 2, and only for a gate decision
+  async function holderHarness(gameAccess: 'public' | 'holders' = 'public'): Promise<Harness & { reads: () => number }> {
+    const h = await harness();
     h.app.contracts.set('nft', { address: NFT, txHash: null, chainId: 31337, registeredAt: 1, registeredBy: ADMIN });
-    await h.call('PUT', '/api/admin/settings', { wallet: ADMIN, body: { gameAccess: 'public' } });
-  });
-  afterAll(async () => {
-    await h.app.close();
-  });
+    await h.call('PUT', '/api/admin/settings', { wallet: ADMIN, body: { gameAccess } });
+    let reads = 0;
+    const balance = h.evm.nftBalance.bind(h.evm);
+    h.evm.nftBalance = async (...a: Parameters<typeof balance>) => (reads++, balance(...a));
+    return Object.assign(h, { reads: () => reads });
+  }
+  const create = (h: Harness, w: string) => h.call('POST', '/api/rooms/custom', { wallet: w, body: { config: { ...CUSTOM_DEFAULTS, name: 'Friday Pond' } } });
 
-  it('profile, auth/me, the shop and a room quote answer 200 (the holder on record, else not a holder); the gate says busy', { timeout: 30_000 }, async () => {
-    // every request comes from 127.0.0.1: throwaway wallets spend its holder reads (and the server-wide burst)
-    for (let i = 0; i < 12; i++) await h.call('GET', '/api/profile', { wallet: wallet() });
-    const plain = wallet();
-    for (const path of ['/api/profile', '/api/auth/me', '/api/shop', '/api/rooms/custom/quote']) {
-      const r = await h.call('GET', path, { wallet: plain });
-      expect(r.status, path).toBe(200);
-    }
-    expect((await h.call('GET', '/api/profile', { wallet: plain })).body.holder).toBe(false);
-    expect((await h.call('GET', '/api/auth/me', { wallet: plain })).body).toEqual({ address: plain, admin: false, holder: false, canPlay: true });
-    // a holder that minted a moment ago: a refused check has the holder index read the NFT's Transfer logs (at most
-    // every HOLDERS_ON_DEMAND_MS), so it is a holder on record within seconds, though this client still may not read
-    // the chain
-    const holder = wallet();
-    h.evm.mintNft(holder);
-    await h.call('GET', '/api/profile', { wallet: holder });
-    let me: any = null;
-    for (let i = 0; i < 150 && !me?.holder; i++) {
-      await new Promise((r) => setTimeout(r, 60));
-      me = (await h.call('GET', '/api/auth/me', { wallet: holder })).body;
-    }
-    expect(me).toEqual({ address: holder, admin: false, holder: true, canPlay: true });
-    expect((await h.call('GET', '/api/profile', { wallet: holder })).body.holder).toBe(true);
-    // holders mode: who may play is a gate decision. A wallet with nothing on record hears busy (ask again), never
-    // "not a holder"; the holder on record plays; an admin never waits on it
-    await h.call('PUT', '/api/admin/settings', { wallet: ADMIN, body: { gameAccess: 'holders' } });
+  it('values shown never read the chain and never say busy; a gate decision past the bound is answered from the holder index read after it, busy only while the index cannot catch up', { timeout: 30_000 }, async () => {
+    const h = await holderHarness();
     try {
+      // pages of many wallets: all answered, none read on chain
+      for (let i = 0; i < 12; i++) expect((await h.call('GET', '/api/profile', { wallet: wallet() })).status).toBe(200);
+      const plain = wallet();
+      for (const path of ['/api/profile', '/api/auth/me', '/api/shop', '/api/rooms/custom/quote']) {
+        const r = await h.call('GET', path, { wallet: plain });
+        expect(r.status, path).toBe(200);
+      }
+      expect((await h.call('GET', '/api/profile', { wallet: plain })).body.holder).toBe(false);
+      expect((await h.call('GET', '/api/auth/me', { wallet: plain })).body).toEqual({ address: plain, admin: false, holder: false, canPlay: true });
+      expect(await joinPractice(h, plain)).toBe('joined');
+      expect(h.reads()).toBe(0);
+      // a holder that minted a moment ago is shown as one within seconds: the index reads the new blocks in the
+      // background (at most every HOLDERS_ON_DEMAND_MS), still without a read of its own
+      const holder = wallet();
+      h.evm.mintNft(holder);
+      let me: any = null;
+      for (let i = 0; i < 150 && !me?.holder; i++) {
+        await new Promise((r) => setTimeout(r, 60));
+        me = (await h.call('GET', '/api/auth/me', { wallet: holder })).body;
+      }
+      expect(me).toEqual({ address: holder, admin: false, holder: true, canPlay: true });
+      expect((await h.call('GET', '/api/profile', { wallet: holder })).body.holder).toBe(true);
+      expect(h.reads()).toBe(0);
+      // holders mode: who may play is a gate decision. Throwaway wallets spend the address's holder reads; past them a
+      // wallet with nothing on record is answered from the holder index read after its request: not a holder, never
+      // busy; one that minted a moment ago plays; an admin never waits on it
+      await h.call('PUT', '/api/admin/settings', { wallet: ADMIN, body: { gameAccess: 'holders' } });
+      for (let i = 0; i < 3; i++) await h.call('GET', '/api/auth/me', { wallet: wallet() });
+      const spent = h.reads();
+      expect(spent).toBeGreaterThan(0);
       const other = wallet();
-      expect((await h.call('GET', '/api/auth/me', { wallet: other })).body).toEqual({ address: other, admin: false, holder: false, canPlay: false, busy: true });
+      expect((await h.call('GET', '/api/auth/me', { wallet: other })).body).toEqual({ address: other, admin: false, holder: false, canPlay: false });
+      expect(await joinPractice(h, other)).toBe('game_closed');
+      const minted = wallet();
+      h.evm.mintNft(minted);
+      expect((await h.call('GET', '/api/auth/me', { wallet: minted })).body).toEqual({ address: minted, admin: false, holder: true, canPlay: true });
+      expect(await joinPractice(h, minted)).toBe('joined');
       expect((await h.call('GET', '/api/auth/me', { wallet: holder })).body).toMatchObject({ holder: true, canPlay: true });
       expect((await h.call('GET', '/api/auth/me', { wallet: ADMIN })).body).toMatchObject({ admin: true, canPlay: true });
+      expect(h.reads()).toBe(spent);
       // the shop and a room quote are only shown: as not a holder (403 game_closed), never 429
       expect((await h.call('GET', '/api/shop', { wallet: other })).status).toBe(403);
       expect((await h.call('GET', '/api/rooms/custom/quote', { wallet: other })).status).toBe(403);
-      expect((await h.call('GET', '/api/shop', { wallet: holder })).status).toBe(200);
+      expect((await h.call('GET', '/api/shop', { wallet: minted })).status).toBe(200);
+      // the index cannot read the new blocks (the RPC refuses the logs; a failed scan backs off): a wallet with
+      // nothing on record hears busy, never "not a holder"
+      h.evm.block += 1n;
+      h.evm.limited.set('transferLogs', 1);
+      const later = wallet();
+      expect((await h.call('GET', '/api/auth/me', { wallet: later })).body).toEqual({ address: later, admin: false, holder: false, canPlay: false, busy: true });
+      expect((await h.call('GET', '/api/auth/me', { wallet: minted })).body).toMatchObject({ holder: true, canPlay: true });
     } finally {
-      await h.call('PUT', '/api/admin/settings', { wallet: ADMIN, body: { gameAccess: 'public' } });
+      await h.app.close();
+    }
+  });
+
+  it('one player alone: auth/me, the profile and a room quote, then the room\'s creation is answered, never busy (R4-NET-1)', { timeout: 30_000 }, async () => {
+    const h = await holderHarness();
+    try {
+      // no NFT, the pages a little more than HOLDER_MISS_TTL_MS apart (each would be a holder check of its own): the
+      // creation gets past the holder check, at the full price (no fee paid: this server has no payment target)
+      const me = wallet();
+      const pause = () => new Promise((r) => setTimeout(r, HOLDER_MISS_TTL_MS + 100));
+      for (const path of ['/api/auth/me', '/api/profile', '/api/rooms/custom/quote']) {
+        expect((await h.call('GET', path, { wallet: me })).status, path).toBe(200);
+        await pause();
+      }
+      const first = await create(h, me);
+      expect([first.status, first.body.error]).toEqual([503, 'rooms_closed']);
+      await pause();
+      const again = await create(h, me);
+      expect([again.status, again.body.error]).toEqual([503, 'rooms_closed']);
+      // a holder that minted a moment ago, the same pages: its free room of the day opens
+      const holder = wallet();
+      h.evm.mintNft(holder);
+      for (const path of ['/api/auth/me', '/api/profile', '/api/rooms/custom/quote']) expect((await h.call('GET', path, { wallet: holder })).status, path).toBe(200);
+      const free = await create(h, holder);
+      expect(free.status).toBe(201);
+      expect(free.body.room.paidWith).toBe('free');
+    } finally {
+      await h.app.close();
+    }
+  });
+
+  it('two players behind one address, no NFT: one browses, plays and creates rooms, the other\'s room creations are never busy (R4-NET-1)', { timeout: 60_000 }, async () => {
+    const h = await holderHarness();
+    try {
+      const a = wallet();
+      const b = wallet();
+      const until = Date.now() + 12_000;
+      const answers: string[] = [];
+      const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      // B: its pages and a practice game every second, and a room's creation (a gate decision) every 2 s
+      const browse = (async () => {
+        for (let n = 0; Date.now() < until; n++) {
+          for (const path of ['/api/auth/me', '/api/profile', '/api/shop', '/api/rooms/custom/quote']) expect((await h.call('GET', path, { wallet: b })).status, path).toBe(200);
+          expect(await joinPractice(h, b)).toBe('joined');
+          if (n % 2 === 0) expect((await create(h, b)).status).not.toBe(429);
+          await pause(1_000);
+        }
+      })();
+      // A: a room's creation every 2 s
+      const creates = (async () => {
+        while (Date.now() < until) {
+          const r = await create(h, a);
+          answers.push(`${r.status} ${r.body.error}`);
+          await pause(2_000);
+        }
+      })();
+      await Promise.all([browse, creates]);
+      expect(answers.length).toBeGreaterThanOrEqual(4);
+      expect(new Set(answers)).toEqual(new Set(['503 rooms_closed']));
+    } finally {
+      await h.app.close();
     }
   });
 });

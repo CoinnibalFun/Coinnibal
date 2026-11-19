@@ -268,8 +268,8 @@ export interface AuthMe {
   /** The wallet holds a Coinnibal NFT (`balanceOf > 0`). */
   holder?: boolean;
   /**
-   * The server could not check the wallet's NFT for `canPlay` right now (its holder reads are busy, and it knows no
-   * answer): ask again in a moment. `canPlay` is false then, which is not a "no".
+   * The server could not check the wallet's NFT for `canPlay` right now (past its holder reads the holder index could
+   * not catch up, and it knows no answer): ask again in a moment. `canPlay` is false then, which is not a "no".
    */
   busy?: boolean;
 }

@@ -276,10 +276,10 @@ has more bots than its setting, nor more playing than the setting minus its peop
   opens it in `/admin` (Game → Who may play, or Settings). The game's quotes follow the same gate: `GET /api/shop`,
   `GET /api/rooms/custom/quote` and every `POST /api/rooms/custom*` (practice with bots included) answer 403
   `game_closed` to a wallet the game is closed for (`gameOpenFor`: only admins in `admins` and `maintenance`, holders
-  and admins in `holders`; the two quotes are only shown, so a holder check this client may not make right now reads
-  as "not a holder" there, never 429, while a room's creation answers busy). `/api/auth/me` says `busy: true` (with
-  `canPlay: false`) when it cannot decide `canPlay` right now; `/play` asks again a few times before it shows the
-  holders page. `GET /api/site/faucet` follows the site's /faucet door (`faucetOpenFor`): open to everyone
+  and admins in `holders`; the two quotes are only shown, so they answer from the holder on record, never a chain read
+  of their own and never 429, while a room's creation decides it). `/api/auth/me` says `busy: true` (with
+  `canPlay: false`) when it cannot decide `canPlay` right now (the holder index cannot catch up); `/play` asks again
+  a few times before it shows the holders page. `GET /api/site/faucet` follows the site's /faucet door (`faucetOpenFor`): open to everyone
   in `holders`, `public` and `maintenance`, admins only in `admins`. `POST /api/shop/buy` is never gated: a payment
   made anyway is credited or owed back.
 - **Rooms** (`rooms/manager.ts`, `rooms/room.ts`): practice ponds (Rookie and Pro leagues, 40 people), arena
@@ -411,15 +411,19 @@ has more bots than its setting, nor more playing than the setting minus its peop
   apart from its reads for free wallets, and no network bound applies to them: free wallets behind one carrier NAT or
   in one /24 never keep a ticket holder of it out. A join of a wallet the index does not know that is refused (or
   finds a ticket) has the index read the new blocks at once (`refreshTicketIndex`, at most every 4 s), so a ticket
-  bought a moment ago is known at the join's next retry. Holder checks that read the chain for a client use a quarter
-  of `RPC_MAX_RPS` server-wide; one client at most 1/16 of that and one network 1/8, as smooth buckets, and the
-  bucket's bottom half only for a network with no holder read lately, so a few networks cannot keep a newcomer's
-  first check out. One a client may not make right now answers the "holder" on record (a cached answer, or the
-  holder index of the NFT's `Transfer` logs, which such a refusal has read the new blocks, at most every 5 s) for a
-  gate decision, else "busy, try again", never "not a holder"; a value only shown (a profile, the shop's or a room's
-  price, the `holder` field of `/api/auth/me`) answers "not a holder" instead, not kept, never 429. A join
-  waits at most 1 s for its laurel's holder check (then plays without it; a paid seat that asked for the emblem skin
-  starts in a basic skin). Every send checks the
+  bought a moment ago is known at the join's next retry. Holder checks read the chain for a client only for a gate
+  decision (who may play, a holders-only permit, a room's creation, the emblem skin at a join), within a quarter of
+  `RPC_MAX_RPS` server-wide; one client at most 1/16 of that and one network 1/8, as smooth buckets, and the bucket's
+  bottom half only for a newcomer (no holder read from its address or its network for 60 s: an address that keeps
+  reading never takes it, so it takes 60 networks pausing a minute each to empty it). The bounds only delay a gate
+  decision: past them it is the "holder" on record (a cached answer, or the holder index of the NFT's `Transfer`
+  logs), else the holder index read by a scan that starts after the request (one for everyone, at most every 2 s,
+  at `high` priority), so a wallet that minted a moment ago is a holder and one absent from the caught-up index is
+  not; "busy, try again" only while the index cannot catch up (a failed scan's back-off), never "not a holder". A
+  value only shown (a profile, the shop's or a room's price, the `holder` field of `/api/auth/me`, the laurel at a
+  join) never reads the chain: the answer on record, else "not a holder", not kept, never 429, and the index reads
+  the new blocks in the background (at most every 5 s). A join waits at most 1 s for its laurel's holder check (then
+  plays without it; a paid seat that asked for the emblem skin starts in a basic skin). Every send checks the
   socket's buffer (closed past 2 MiB); the heartbeat's ping carries a payload the pong must echo.
 - **Dev fake chain** (`chain/dev-fake.ts`, `DEV_FAKE_CHAIN=1` with `NODE_ENV=development` only): an in-memory chain
   with free tickets, simulated settlements and `pay`, for `pnpm demo` and the screenshot tours. It refuses to start

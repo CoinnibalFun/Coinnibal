@@ -49,8 +49,9 @@ import type { WorldShape } from './room';
 /** A refusal of the custom room API: HTTP status, code and a friendly message. */
 /**
  * A holder check of a room's creation that failed reads as "not a holder" (a free room or a discount is not given),
- * except a busy one (`ClientBudgetError`: this client may not read the chain right now): that is passed on, so the
- * creator hears "try again in a moment" instead of a price a holder would not pay. (A quote is only shown: never busy.)
+ * except a busy one (`ClientBudgetError`: past this client's holder reads, the holder index cannot tell right now): that
+ * is passed on, so the creator hears "try again in a moment" instead of a price a holder would not pay. (A quote is
+ * only shown: never busy.)
  */
 const holderUnknown = (err: unknown): false => {
   if (err instanceof ClientBudgetError) throw err;
@@ -261,8 +262,13 @@ export interface CustomRoomDeps {
   usdPrice?: () => Promise<{ price: bigint; usdPerToken: string; sigFigs: number } | null>;
   /** Waits before re-reading a receipt that is not visible yet (default 0, 1.5 s, 3 s). */
   receiptRetryMs?: readonly number[];
-  /** Whether a wallet holds a Coinnibal NFT (cached by the mint service). */
+  /**
+   * Whether a wallet holds a Coinnibal NFT (cached by the mint service), for a room's creation: past the client's
+   * holder reads the holder index answers, `ClientBudgetError` only while it cannot tell.
+   */
   isHolder: (wallet: string) => Promise<boolean>;
+  /** The same for a quote, only shown: the answer on record, never a chain read of its own (default: `isHolder`, false on error). */
+  shownHolder?: (wallet: string) => Promise<boolean>;
   /** The emblem token ids a wallet owns (null: unknown); with `claims` the free daily room is one per token id a day. */
   emblemTokens?: (wallet: string, fresh?: boolean) => Promise<string[] | null>;
   claims?: EmblemClaims;
@@ -635,9 +641,9 @@ export class CustomRoomService implements CustomRoomHooks {
   }
 
   async quote(wallet: string | null): Promise<CustomRoomQuote> {
-    // a quote is only shown: never busy (a check this client may not make right now quotes the full price, not kept);
-    // the room's creation checks again and passes a busy check on
-    const holder = wallet ? await this.d.isHolder(wallet).catch(() => false) : false;
+    // a quote is only shown: never busy, and it spends none of the holder reads a room's creation may need (a holder
+    // not on record yet is quoted the full price, not kept); the creation checks again
+    const holder = wallet ? await (this.d.shownHolder ?? ((w: string) => this.d.isHolder(w)))(wallet).catch(() => false) : false;
     const free = !!wallet && holder && this.freeAvailable(wallet, await this.tokensOf(wallet, false));
     const base = await this.basePrice();
     const target = this.payTarget();
