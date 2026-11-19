@@ -73,6 +73,10 @@ body {
   }
   .st-root .kb-plate__title {
     padding: 5px 12px 7px;
+    /* a title that wraps inside its tab (next to a bite on a narrow phone) keeps its last word company ("Rooms and /
+       the fee"), and its two lines sit in the middle of the tab, which keeps the width its first try took */
+    text-wrap: pretty;
+    text-align: center;
   }
   /* the tab may wrap to two lines inside itself: the rule stays level with its first line */
   .st-root .kb-plate__rule {
