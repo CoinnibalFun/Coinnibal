@@ -393,6 +393,35 @@ describe('Setup with the contracts registered', () => {
     expect(card().textContent).toMatch(/All set/);
   });
 
+  it('Finish setup stopped after it registered the game token: the panel reads the registry again (no stale "faucet not ready")', async () => {
+    provider.handlers.eth_sendTransaction = () => {
+      throw Object.assign(new Error('User rejected the request.'), { code: 4001 });
+    };
+    const net = resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT }));
+    // everything on chain but the open mint; the server does not know the game token
+    const status = registeredStatus({
+      arena: {
+        address: ARENA,
+        code: 'ok',
+        config: { admin: ALICE, serverAuthority: KEY, token: TOKEN, burnBps: 1500, vaultBps: 500, holderNft: NFT, holderBurnBps: 800, holderVaultBps: 200, decimals: 18 },
+        token: { decimals: 18 },
+        arenas: [1, 2, 3, 4].map((id) => ({ id, exists: true, holdersOnly: id === 4 })),
+      },
+      testToken: { address: TOKEN, code: 'ok', faucet: { holderNft: NFT } },
+    });
+    const registerContract = vi.fn(async () => ({ arena: null, nft: null, token: null }));
+    const ctx = ctxOf({ net, status, registry: { arena: { address: ARENA }, nft: { address: NFT }, token: null } as never, api: { registerContract } as unknown as AdminApi });
+    ui(<QuickSetup ctx={ctx} />);
+    expect(document.querySelector('[data-card="quick-setup"]')!.textContent).toMatch(/2 steps left/);
+    await act(async () => {
+      screen.getByTestId('quick-setup-go').click();
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(registerContract).toHaveBeenCalledWith({ kind: 'token', address: TOKEN, txHash: null });
+    await waitFor(() => expect(screen.getByTestId('quick-setup-go').textContent).toBe('Continue setup'));
+    expect(ctx.reloadNet).toHaveBeenCalled();
+  });
+
   it('testnet without a token: offers the TestToken deploy up front', () => {
     const net = resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT }));
     const registry = { arena: { address: ARENA }, nft: { address: NFT }, token: null } as never;

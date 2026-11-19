@@ -50,6 +50,8 @@ export function QuickSetup({ ctx }: { ctx: ChainCtx }) {
       setRun({ ...r });
       inFlight.current = false;
       await ctx.refresh();
+      // the game token was registered before a later step stopped: the panel reads the registry again (no stale "faucet not ready")
+      if (r.done.includes('faucet-token')) await ctx.reloadNet();
     };
     for (let i = 0; i < list.length; i++) {
       r.at = i;
