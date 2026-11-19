@@ -103,8 +103,8 @@ interface BundleChunk {
  * only after the entry had downloaded and run (a second round of requests). Adds `<link rel="modulepreload">` for those
  * chunks and `<link rel="preload" as="style" crossorigin>` for their CSS (crossorigin: Vite's loader adds the
  * stylesheet in CORS mode, and only a preload in the same mode is used), appended to `<head>`, each marked
- * `data-site-preload`: a prerendered landing page (whose HTML paints before any script) leaves them out, because there
- * they would take bandwidth from the page's own HTML and CSS.
+ * `data-site-preload`: the prerendered landing (whose HTML paints before any script) leaves them out, and Vite's own
+ * modulepreloads too (`landingHtml`), because there they would take bandwidth from the page's own HTML and CSS.
  */
 function sitePreloads(): Plugin {
   let base = '/';
@@ -172,8 +172,9 @@ export function moduleCss(manifest: Manifest, key: string): string[] {
  * phone gets the dark tokens outside `.kb` until the script runs), the prerendered markup in `#root` in place of the
  * `.boot` loader, a `<link rel="stylesheet">` for each of the landing's CSS chunks (the page paints styled from its
  * HTML; Vite's loader finds them there and does not add them again), `bodyEnd` before `</body>` (the inked-edge
- * filters), and no `data-site-preload` tags (`site-preloads`:
- * on a page that paints from its HTML they took bandwidth from its HTML and CSS, B12 of the speed plan).
+ * filters), and no preload of scripts: neither the `data-site-preload` tags (`site-preloads`) nor Vite's own
+ * `modulepreload` of the entry's imports. On a page that paints from its HTML they take bandwidth from its HTML and
+ * CSS (B12 of the speed plan): without Vite's three, phone FCP 1008 -> 948 ms on the replica, hydration ~0.36 s later.
  */
 export function landingHtml(index: string, markup: string, css: string[], base = '/', bodyEnd = ''): string {
   const open = '<div id="root">';
@@ -182,7 +183,7 @@ export function landingHtml(index: string, markup: string, css: string[], base =
   const loader = at < 0 || end < at ? '' : index.slice(at, end).trimEnd();
   if (!loader.endsWith('</div>') || !loader.includes('class="boot"')) throw new Error('prerender-landing: index.html has no <div id="root"> with the .boot loader');
   let html = index.slice(0, at) + open + markup + '</div>' + index.slice(at + loader.length);
-  html = html.replace(/[ \t]*<link\b[^>]*\bdata-site-preload\b[^>]*>\r?\n?/g, '');
+  html = html.replace(/[ \t]*<link\b[^>]*\b(?:data-site-preload\b|rel="modulepreload")[^>]*>\r?\n?/g, '');
   if (!html.includes('<html lang="en">')) throw new Error('prerender-landing: index.html has no <html lang="en">');
   html = html.replace('<html lang="en">', '<html lang="en" data-theme="light">');
   const links = css
