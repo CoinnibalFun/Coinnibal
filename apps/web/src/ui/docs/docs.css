@@ -100,6 +100,17 @@
     grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
   }
 }
+/* the one-column tablet layout: the contents box and the chapters reach the same right edge too (they stopped at 760px,
+   up to 133px short of the top bar at 979px); paragraphs keep their 66ch */
+@media (min-width: 760px) and (max-width: 979px) {
+  .st-docs .dc-body,
+  .st-docs .dc-toc {
+    max-width: none;
+  }
+  .st-docs .dc-sec__lede {
+    max-width: 62ch;
+  }
+}
 
 /* ── contents: a sticky cream sticker ─────────────────────────────── */
 .dc-toc {
@@ -718,6 +729,11 @@
   flex: 1 1 0;
   min-width: 9ch;
   text-wrap: balance;
+}
+/* the total's leader is invisible (storybook.css), so it reserves no width: on a 360px phone the slip is 328px and
+   "Paid to your wallet" then stays on one line beside its amount */
+.dc-fee__slip .kb-receipt__line.is-strong dt::after {
+  min-width: 0;
 }
 
 /* on-chain vs server */

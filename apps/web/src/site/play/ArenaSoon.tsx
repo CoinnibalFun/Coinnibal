@@ -47,21 +47,20 @@ export function ArenaSoon({ holders = false, maintenance = false, onSignedIn }: 
               <span className="kicker pg-kicker">{holders ? t('pg.kickerHolders') : maintenance ? t('pg.kickerMaint') : t('pg.kicker')}</span>
               {holders ? (
                 <h1 className="pg-h display">
-                  {t('pg.hHolders1')}
-                  <br />
-                  <T k="pg.hHolders2" tags={{ em }} />
+                  <span className="pg-h__line">{t('pg.hHolders1')}</span>{' '}
+                  <span className="pg-h__line">
+                    <T k="pg.hHolders2" tags={{ em }} />
+                  </span>
                 </h1>
               ) : maintenance ? (
                 <h1 className="pg-h display">
-                  {t('pg.hMaint1')}
-                  <br />
-                  <em>{t('pg.hMaint2')}</em>
+                  <span className="pg-h__line">{t('pg.hMaint1')}</span>{' '}
+                  <em className="pg-h__line">{t('pg.hMaint2')}</em>
                 </h1>
               ) : (
                 <h1 className="pg-h display">
-                  {t('pg.h1')}
-                  <br />
-                  <em>{t('pg.h2')}</em>
+                  <span className="pg-h__line">{t('pg.h1')}</span>{' '}
+                  <em className="pg-h__line">{t('pg.h2')}</em>
                 </h1>
               )}
               {holders ? (
