@@ -7,7 +7,7 @@ import type { Hex } from 'viem';
 import { Auth } from './auth';
 import { assertDevFakeChainAllowed, createChain, dataFileNames } from './chain';
 import { PriceKeeper } from './chain/price-keeper';
-import type { ChainGateway } from './chain/types';
+import { parseSessionKey, type ChainGateway } from './chain/types';
 import { checkAuthSecret, type ServerConfig } from './config';
 import { createHttpServer, publicBaseUrl, redactUrls } from './http';
 import { IntegrityService } from './integrity/service';
@@ -88,6 +88,8 @@ export interface App {
   gateway: Gateway;
   /** Graceful degradation under load (active with `LOAD_SHED`, default on in production). */
   shedder: LoadShedder;
+  /** Arena join permits (`POST /api/arena/permit`, `stake/join-permits.ts`). */
+  permits: JoinPermits;
   /** Resolves once the HTTP server is listening; returns the bound port. */
   listen(): Promise<number>;
   close(): Promise<void>;
@@ -430,6 +432,7 @@ export async function createApp(
     chain,
     gameOpenFor: (wallet) => site.gameOpenFor(wallet, true),
     isBanned: (wallet) => integrity.isBanned(wallet),
+    isHolder: (wallet) => mint.isHolder(wallet),
     blocked: () => rooms.blockedArenas().map((b) => b.arenaId),
     seatedKeys: () => rooms.liveSessions(),
     pendingKeys: () => journal.pending.map((p) => p.key),
@@ -437,6 +440,11 @@ export async function createApp(
     noShows: (wallet, since) => chain.noShowsSince?.(wallet, since) ?? [],
     cfg: cfg.joinPermits,
     log,
+  });
+  // a settled or cancelled ticket used its permit (a no-show also counts against the networks its permit was asked from)
+  chain.onSettled((e) => {
+    const arenaId = e.arenaId ?? parseSessionKey(e.key)?.arenaId;
+    if (arenaId !== undefined) permits.ticketDone(e.player, arenaId, e.noShow === true);
   });
   const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, shares, priceKeeper, permits, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
   const gateway = new Gateway(cfg, rooms, auth, chain, journal, log);
@@ -452,6 +460,8 @@ export async function createApp(
   gateway.setRepricing((id) => reprice.closedForSeats(id));
   // holder tickets: the emblem is there at the seat (read fresh) and one token id serves one open holder ticket
   gateway.setEmblemGate((wallet, session) => emblems.seat(wallet, session));
+  // a wallet sitting down with its ticket gives up the place its join permit held; a ticket read used up its permits
+  gateway.setTicketSeen((wallet, arenaId, openedAtS) => permits.ticketSeen(wallet, arenaId, openedAtS));
   chain.onSettled((e) => emblems.settled(e.key));
   const emblemTimer = setInterval(() => emblems.sweep(), 60_000);
   emblemTimer.unref();
@@ -493,6 +503,7 @@ export async function createApp(
     xLinks,
     gateway,
     shedder,
+    permits,
     listen: () =>
       new Promise((resolve) => {
         server.listen(cfg.port, cfg.host, () => {

@@ -211,8 +211,8 @@ has more bots than its setting, nor more playing than the setting minus its peop
   `STAKE_ENABLED`, `STAKE_ARENA_IDS`, `STALE_SESSION_AFTER_S`, `DEATH_SETTLE_BATCH_S`, `PAYOUT_GUARD_MULTIPLE`,
   `GAS_FLOOR_ETH`, `GAS_RUNWAY_WARN_DAYS`, `GAS_RUNWAY_CRITICAL_DAYS`, `HEALTH_MAX_PENDING`, `HEALTH_MAX_PENDING_AGE_S`,
   `LOG_CHUNK_BLOCKS`, `RPC_MAX_RPS` (one rate or one per URL), `RPC_BURST`, `TESTNET_RPC_URL`, `GAME_WORKERS`,
-  `MAX_CONNECTIONS`, `JOIN_PERMIT_TTL_S`, `JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`, `JOIN_PERMIT_PER_WALLET`,
-  `JOIN_PERMIT_ARENA_CAP`, `NO_SHOW_LIMIT`, `DEV_FAKE_CHAIN`, `DEV_FAKE_TOKEN`.
+  `MAX_CONNECTIONS`, `JOIN_PERMIT_TTL_S`, `JOIN_PERMIT_HOLD_S`, `JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`,
+  `JOIN_PERMIT_PER_WALLET`, `JOIN_PERMIT_ARENA_CAP`, `NO_SHOW_LIMIT`, `DEV_FAKE_CHAIN`, `DEV_FAKE_TOKEN`.
 - **Contracts registry** (`site/contracts.ts`): `DATA_DIR/chains/<id>/contracts.json`, written by `POST
   /api/admin/contracts` after a deploy from `/admin`. The server checks the code hash (the bundled v4 build only;
   an arena of an earlier build reads "redeploy needed"),
@@ -221,15 +221,22 @@ has more bots than its setting, nor more playing than the setting minus its peop
 - **Join permits** (`stake/join-permits.ts`, `POST /api/arena/permit`): a ticket needs the server's signature, so
   the server decides who may buy one. A permit is issued only to a signed-in wallet for which the game is open and
   that is not banned, for an arena that exists, is enabled and not paused, and that the server does not keep closed
-  (books guard, re-price), and only when the wallet holds no open ticket there. One live permit per wallet and arena
-  (asking again returns the same one while it is valid and unused). Limits: per IP, per IPv6 /64 and per wallet
-  (`JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`, `JOIN_PERMIT_PER_WALLET`, per 10 minutes); per arena, live permits
-  plus unseated tickets (open on chain, not seated, not being paid out) stay under the seats a round can take
-  (`ARENA_INSTANCE_CAP` × the scaler's max instances, or `JOIN_PERMIT_ARENA_CAP`). **No-shows:** a ticket the stale
-  sweeper cancels unseated while its arena was open is recorded as a no-show in the settled log; a wallet with
-  `NO_SHOW_LIMIT` (default 3) of them in 24 h gets no permit until the oldest is a day old, and the refusal says
-  when. Each refusal has its code and message (`JoinPermitError`); the ticket sheet shows it and signs nothing.
-  Permits last `JOIN_PERMIT_TTL_S` (default 600 s); the web asks again after a slow approval.
+  (books guard, re-price), a holders-only arena only to a wallet with the NFT, and only when the wallet holds no open
+  ticket there. One live permit per wallet and arena (asking again returns the same one while it is valid and
+  unused). Limits: per IP, per IPv6 /64 and per wallet (`JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`,
+  `JOIN_PERMIT_PER_WALLET`, per 10 minutes); per arena, unseated tickets (open on chain, not seated, not being paid
+  out) plus the places held by new permits stay under the seats a round can take (`ARENA_INSTANCE_CAP` × the scaler's
+  max instances, or `JOIN_PERMIT_ARENA_CAP`). A permit is free, so it holds a place only for `JOIN_PERMIT_HOLD_S`
+  (120 s), only when the wallet holds the entry fee, once per wallet, arena and join nonce, and at most 4 per IPv4
+  address or IPv6 /64 and 16 per /48; the place goes as soon as the permit is used (the gateway hears the wallet ask
+  to sit or reads its ticket, the ticket settles, or the wallet's join nonce moved: read at its next request and, at
+  the cap, for every held place). **No-shows:** a ticket the stale sweeper cancels unseated while its arena was open
+  is recorded as a no-show in the settled log; a wallet with `NO_SHOW_LIMIT` (default 3) of them in 24 h gets no
+  permit until the oldest is a day old, and the refusal says when. The no-show also counts (in memory) against the
+  networks its permit was asked from: 3× the limit per IPv4 address or IPv6 /64, 8× per /48. Each refusal has its
+  code and message (`JoinPermitError`); the ticket sheet shows it and signs nothing. Permits last
+  `JOIN_PERMIT_TTL_S` (default 600 s, at most 3300, the deadline on the chain's clock); the web asks again after a
+  slow approval.
 - **Chain gateway** (`chain/evm.ts`, `chain/evm-client.ts`): reads `config()` every 30 s (token, fee rates, burn
   mode, holder perks) and pushes `chain` to every client when it changes; lists arenas; runs the settlement worker
   (batches, read-back reconciliation, backoff), the loot burn with a monotonic `sweepId` kept in the journal, and

@@ -288,16 +288,30 @@ URL, shows the traffic and the 429s.
 Every ticket needs the game server's join permit (CoinnibalArena v4): the web asks `POST /api/arena/permit` before the
 wallet opens, and the contract refuses a `join` without the server key's signature for that wallet, arena and join
 nonce. The server refuses (and the ticket sheet says why): a game not open to the wallet (`game_closed`), a banned
-wallet, paid rooms off, an arena that is disabled, paused or kept closed (books guard, re-price), a wallet with an
-open ticket there (it resumes it), a repeated no-show (`no_show`), an arena whose live permits plus unseated tickets
-reach the seats a round can take (`arena_busy`), and too many requests from one IP, one IPv6 /64 or one wallet.
+wallet, paid rooms off, an arena that is disabled, paused or kept closed (books guard, re-price), a holders-only arena
+for a wallet without the NFT (`holders_only`), a wallet with an open ticket there (it resumes it), a repeated no-show
+(`no_show`), an arena whose unseated tickets plus the places held by new permits reach the seats a round can take
+(`arena_busy`), and too many requests from one IP, one IPv6 /64 or one wallet.
 
+- **Held places.** A permit is free, so it holds a place in that cap only briefly and only when backed: a new permit
+  holds one for `JOIN_PERMIT_HOLD_S` (120 s, the approval and the join) if the wallet holds the entry fee (one
+  `balanceOf` read), no earlier permit of that wallet, arena and join nonce held one, and the network it was asked from
+  holds fewer than 4 places (an IPv4 address or an IPv6 /64) and 16 (an IPv6 /48). Any other permit is issued but holds
+  nothing. A place is given up when the wallet asks to sit with its ticket, the ticket is read, seated or settled, or
+  the wallet's join nonce moved (read at its next request, and for every held place once the arena is at its cap).
+  So signed-in wallets with no tokens never fill an arena, and a bought ticket is never counted twice.
 - **No-shows.** A ticket the stale sweeper cancels at its entry fee because it was never seated while its arena was
   open is a no-show (`noShow` in `chains/<id>/settled.jsonl`; a closed arena's refunds are not). `NO_SHOW_LIMIT`
-  (default 3) of them in 24 h and the wallet gets no permit until the oldest is a day old.
-- **Settings** (env): `JOIN_PERMIT_TTL_S` (600; at most 3600, the contract's window), `JOIN_PERMIT_PER_IP` (12),
-  `JOIN_PERMIT_PER_SUBNET` (30, an IPv6 /64), `JOIN_PERMIT_PER_WALLET` (20), all per 10 minutes;
-  `JOIN_PERMIT_ARENA_CAP` (0: `ARENA_INSTANCE_CAP` × the arena scaler's max instances), `NO_SHOW_LIMIT` (3; 0 = off).
+  (default 3) of them in 24 h and the wallet gets no permit until the oldest is a day old. They also count against the
+  networks its permit was asked from: 3× `NO_SHOW_LIMIT` per IPv4 address or IPv6 /64 and 8× per IPv6 /48 close the
+  permits asked from there the same way (`no_show`, "from your network"), so fresh wallets do not reset the count.
+  The per-network count lives in the server's memory only (no address goes into the data files): a restart starts it
+  again; the wallet's count is in the settled log and stays.
+- **Settings** (env): `JOIN_PERMIT_TTL_S` (600; at most 3300: the contract's hour, checked against the block time,
+  less 5 minutes; the deadline is set on the chain's clock), `JOIN_PERMIT_HOLD_S` (120; 0 = permits hold no place),
+  `JOIN_PERMIT_PER_IP` (12), `JOIN_PERMIT_PER_SUBNET` (30, an IPv6 /64), `JOIN_PERMIT_PER_WALLET` (20), all per 10
+  minutes; `JOIN_PERMIT_ARENA_CAP` (0: `ARENA_INSTANCE_CAP` × the arena scaler's max instances), `NO_SHOW_LIMIT` (3;
+  0 = off).
 - **A new server key** (`setServerAuthority`) voids every permit the old key signed; players simply ask again.
 - A refused permit costs the player nothing: nothing is signed. A permit that runs out during a slow approval is asked
   again before the join.

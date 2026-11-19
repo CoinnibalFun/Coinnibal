@@ -6,7 +6,7 @@ import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MI
 import { GAS_PRICE_URL_DEFAULT } from '@coinnibal/sdk';
 import { getAddress, isAddress } from 'viem';
 import { DEFAULT_ART_STYLE, parseArtStyle, type ArtStyle } from './site/nft/render';
-import { JOIN_PERMIT_DEFAULTS, type JoinPermitConfig } from './stake/join-permits';
+import { JOIN_PERMIT_DEFAULTS, JOIN_PERMIT_TTL_MAX_S, type JoinPermitConfig } from './stake/join-permits';
 
 export interface ServerConfig {
   port: number;
@@ -39,11 +39,13 @@ export interface ServerConfig {
   /** Humans per arena instance before another instance opens (`ARENA_INSTANCE_CAP`). */
   arenaInstanceCap: number;
   /**
-   * Join permits (CoinnibalArena v4, `stake/join-permits.ts`): `JOIN_PERMIT_TTL_S` (default 600, at most 3600),
-   * `JOIN_PERMIT_PER_IP` (12 per 10 min), `JOIN_PERMIT_PER_SUBNET` (an IPv6 /64, 30 per 10 min),
-   * `JOIN_PERMIT_PER_WALLET` (20 per 10 min), `JOIN_PERMIT_ARENA_CAP` (live permits + unseated tickets per arena;
-   * 0 = the seats a round can take: `ARENA_INSTANCE_CAP` × the scaler's max instances) and `NO_SHOW_LIMIT` (tickets
-   * gone back unplayed in 24 h before a wallet gets no permit; default 3, 0 = off).
+   * Join permits (CoinnibalArena v4, `stake/join-permits.ts`): `JOIN_PERMIT_TTL_S` (default 600, at most 3300: the
+   * contract's hour less a margin for the block time), `JOIN_PERMIT_PER_IP` (12 per 10 min), `JOIN_PERMIT_PER_SUBNET`
+   * (an IPv6 /64, 30 per 10 min), `JOIN_PERMIT_PER_WALLET` (20 per 10 min), `JOIN_PERMIT_ARENA_CAP` (unseated tickets
+   * + places held by new permits per arena; 0 = the seats a round can take: `ARENA_INSTANCE_CAP` × the scaler's max
+   * instances), `JOIN_PERMIT_HOLD_S` (how long a new permit holds a place; default 120, 0 = never) and `NO_SHOW_LIMIT`
+   * (tickets gone back unplayed in 24 h before a wallet gets no permit; 3× per IPv4 address or IPv6 /64 the permits
+   * were asked from, 8× per IPv6 /48; default 3, 0 = off).
    */
   joinPermits: JoinPermitConfig;
   /**
@@ -418,7 +420,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     privateRoomCapacity: int(env.PRIVATE_ROOM_CAPACITY, CAPACITY.private),
     arenaInstanceCap: Math.max(1, int(env.ARENA_INSTANCE_CAP, CAPACITY.arena)),
     joinPermits: {
-      ttlS: Math.max(60, Math.min(3600, int(env.JOIN_PERMIT_TTL_S, JOIN_PERMIT_DEFAULTS.ttlS))),
+      ...JOIN_PERMIT_DEFAULTS,
+      ttlS: Math.max(60, Math.min(JOIN_PERMIT_TTL_MAX_S, int(env.JOIN_PERMIT_TTL_S, JOIN_PERMIT_DEFAULTS.ttlS))),
+      holdS: Math.max(0, Math.min(JOIN_PERMIT_TTL_MAX_S, int(env.JOIN_PERMIT_HOLD_S, JOIN_PERMIT_DEFAULTS.holdS))),
       perIp: Math.max(1, int(env.JOIN_PERMIT_PER_IP, JOIN_PERMIT_DEFAULTS.perIp)),
       perSubnet: Math.max(1, int(env.JOIN_PERMIT_PER_SUBNET, JOIN_PERMIT_DEFAULTS.perSubnet)),
       perWallet: Math.max(1, int(env.JOIN_PERMIT_PER_WALLET, JOIN_PERMIT_DEFAULTS.perWallet)),
