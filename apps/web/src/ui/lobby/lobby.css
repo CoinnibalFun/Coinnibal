@@ -1078,9 +1078,28 @@
 .kl-root.is-mid .kl-wallet.is-off .kl-wallet__top {
   display: none;
 }
-/* small desktops: the kicker ("Play · on Robinhood Chain Testnet") was cut to "Play ·" by the tabs */
-@media (max-width: 1439px) {
+/* small desktops: the kicker ("Play · on Robinhood Chain Testnet") was cut to "Play ·" by the tabs (and the header
+   keys with Feedback need its room up to 1560 px) */
+@media (max-width: 1559px) {
   .kl-root.is-wide .kl-mast__kicker {
+    display: none;
+  }
+}
+/* small desktops: the header keys sit closer, so the wallet keeps its one-line hint beside six keys */
+@media (max-width: 1439px) {
+  .kl-root.is-wide .kl-mast {
+    gap: 14px;
+  }
+  .kl-root.is-wide .kl-mast__right {
+    gap: 6px;
+  }
+  .kl-root.is-wide .kl-sections {
+    margin-left: 0;
+  }
+}
+/* below 1280 px the wordmark was squeezed and cut by the page tabs: the coin mark alone is the logo (as on tablets) */
+@media (max-width: 1279px) {
+  .kl-root.is-wide .kl-mast__word {
     display: none;
   }
 }

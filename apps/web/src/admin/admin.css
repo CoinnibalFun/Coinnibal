@@ -221,6 +221,9 @@ body {
   inset: 2px 0;
   border-radius: 12px;
 }
+.ad-rail .kb-tab__badge {
+  margin-left: auto;
+}
 .ad-rail__site {
   margin-top: 18px;
   padding: 12px 14px 0;

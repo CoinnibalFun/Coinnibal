@@ -10,6 +10,7 @@ import { SummaryBar } from '../SummaryBar';
 import { AdminSessionBar, useAdminSession, type OwnerRole } from './AdminSession';
 import { AvatarsTab } from './AvatarsTab';
 import { CollabsTab } from './CollabsTab';
+import { FeedbackTab, useFeedbackUnread } from './FeedbackTab';
 import { IntegrityTab } from './IntegrityTab';
 import { SettingsTab } from './SettingsTab';
 import { TasksTab } from './TasksTab';
@@ -32,6 +33,7 @@ const BENCH: Record<AdminGroup, { title: string; lede: string }> = {
   game: { title: 'Game', lede: 'Who may play, the arena switches, the bots and the rooms right now.' },
   community: { title: 'Community', lede: 'The WL, the chores applicants do, and the communities asking for spots.' },
   safety: { title: 'Safety', lede: 'Farming, feeding and collusion (evidence for a person to weigh, never a verdict), and the pictures players wear.' },
+  feedback: { title: 'Feedback', lede: 'What players tell you from the game page: problems, ideas, questions.' },
   settings: { title: 'Settings', lede: 'What visitors can see: the game (the same switch as in Game), the mint page, WL and collab applications. And the X handle.' },
 };
 
@@ -53,6 +55,9 @@ export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: ()
   const [role, setRole] = useState<OwnerRole>({ arena: null, nft: null });
   const state = useAdminSession();
   const api = useMemo(() => (state.kind === 'admin' ? adminApi(state.session.token) : null), [state]);
+  // players' messages waiting: the Feedback drawer's badge
+  const [unread, setUnread] = useFeedbackUnread(api);
+  const tabs = useMemo(() => TABS.map((it) => (it.id === 'feedback' && unread ? { ...it, badge: unread } : it)), [unread]);
 
   useEffect(() => {
     const on = () => {
@@ -101,7 +106,7 @@ export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: ()
         <CoinCharacter paint="cream" mood="sleepy" size={96} feet />
         <div>
           <h2 className="ad-gate__title">{state.kind === 'checking' ? 'Checking the session…' : 'This drawer is locked.'}</h2>
-          <p>The WL, collab, task, integrity and site settings drawers open for the admin wallet. Sign in at the top right: one free signature, no transaction.</p>
+          <p>The WL, collab, task, integrity, feedback and site settings drawers open for the admin wallet. Sign in at the top right: one free signature, no transaction.</p>
         </div>
       </section>
     );
@@ -113,6 +118,13 @@ export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: ()
         <TabPanel idBase="ad-com" id={sub} className="ad-subpanel">
           {sub === 'wl' ? <WlTab api={api} onSiteChange={onSiteChange} /> : sub === 'tasks' ? <TasksTab api={api} /> : <CollabsTab api={api} onSiteChange={onSiteChange} />}
         </TabPanel>
+      </>
+    );
+  else if (tab === 'feedback')
+    panel = (
+      <>
+        <SummaryBar summary={groupSummary('feedback', { net, status: null, feedbackUnread: unread })} />
+        <FeedbackTab api={api} onUnread={setUnread} />
       </>
     );
   else if (tab === 'safety')
@@ -157,7 +169,7 @@ export function AdminHome({ net, reloadNet }: { net: AdminNetwork; reloadNet: ()
       </header>
       <div className="ad-body">
         <nav className="ad-rail" aria-label="Admin drawers">
-          <Tabs items={TABS} value={tab} onChange={go} label="Admin sections" idBase="ad" className="ad-tabs" onKeyDown={onRailKey} />
+          <Tabs items={tabs} value={tab} onChange={go} label="Admin sections" idBase="ad" className="ad-tabs" onKeyDown={onRailKey} />
           <a className="ad-rail__site" href="/">
             Back to the site
           </a>

@@ -525,6 +525,9 @@ function Masthead({ full, wide, page, onPage }: { full: boolean; wide: boolean; 
             <Icon name="settings" size={20} />
           </button>
         )}
+        <button type="button" className="kb-iconbtn" aria-label={t('fb.open')} title={t('fb.open')} onClick={() => openModal('feedback')} data-testid="lobby-feedback">
+          <Icon name="feedback" size={20} />
+        </button>
         <button type="button" className="kb-iconbtn kl-mast__shop" aria-label={t('boost.openShop')} title={t('boost.openShop')} onClick={() => openModal('shop')} data-testid="lobby-shop">
           <svg viewBox="0 0 24 24" width={20} height={20} aria-hidden="true" className="kl-mast__shopicon">
             <path d={BOOST_PATH.speed} />

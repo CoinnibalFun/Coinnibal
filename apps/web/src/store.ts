@@ -144,7 +144,7 @@ export interface Toast {
   at: number;
 }
 
-export type Modal = 'settings' | 'howto' | 'wallet' | 'shop' | 'standings' | 'tokens' | null;
+export type Modal = 'settings' | 'howto' | 'wallet' | 'shop' | 'standings' | 'tokens' | 'feedback' | null;
 
 /** Lobby pages: the ticket front page, the newspaper leaderboard, the profile, the player guide. */
 export type LobbyPage = 'play' | 'ranks' | 'profile' | 'docs';

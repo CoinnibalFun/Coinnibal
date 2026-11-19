@@ -202,3 +202,14 @@ describe('lobby: the chain cannot be read, or its contract is not trusted', () =
     expect(screen.getByText('2-minute rounds · alive at the bell? You get paid')).toBeTruthy();
   });
 });
+
+describe('lobby: the masthead', () => {
+  it('has a Feedback key next to the other header keys that opens the Feedback sheet', () => {
+    lobby();
+    const key = screen.getByTestId('lobby-feedback');
+    expect(key.getAttribute('aria-label')).toBe('Feedback');
+    expect(key.closest('.kl-mast__right')).not.toBeNull();
+    act(() => key.click());
+    expect(useUi.getState().modal).toBe('feedback');
+  });
+});

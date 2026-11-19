@@ -9,10 +9,11 @@ import { setupSteps } from './setup';
 
 /**
  * The admin panel's drawers, few and grouped (the owner runs everything from here): Network,
- * Setup (deploy), Mint, Game, Community (WL, Tasks, Collabs), Safety (integrity), Settings.
+ * Setup (deploy), Mint, Game, Community (WL, Tasks, Collabs), Safety (integrity), Feedback (players' messages),
+ * Settings.
  */
-export type AdminGroup = 'network' | 'setup' | 'mint' | 'game' | 'community' | 'safety' | 'settings';
-export const ADMIN_GROUPS: readonly AdminGroup[] = ['network', 'setup', 'mint', 'game', 'community', 'safety', 'settings'];
+export type AdminGroup = 'network' | 'setup' | 'mint' | 'game' | 'community' | 'safety' | 'feedback' | 'settings';
+export const ADMIN_GROUPS: readonly AdminGroup[] = ['network', 'setup', 'mint', 'game', 'community', 'safety', 'feedback', 'settings'];
 
 /** The chain drawers (status for everyone, writes for the contract owner). */
 export const CHAIN_GROUPS: readonly AdminGroup[] = ['network', 'setup', 'mint', 'game'];
@@ -27,6 +28,7 @@ export const GROUP_LABEL: Record<AdminGroup, string> = {
   game: 'Game',
   community: 'Community',
   safety: 'Safety',
+  feedback: 'Feedback',
   settings: 'Settings',
 };
 
@@ -74,6 +76,8 @@ export interface SummaryInput {
   bots?: { bots: number; humans: number; rooms: number } | null;
   /** The site build's contract pins (default: this build's). */
   pins?: BuildPins;
+  /** Players' messages not read yet (null: not known, no admin session). */
+  feedbackUnread?: number | null;
 }
 
 const ACCESS: Record<GameAccess, string> = { admins: 'admins only', holders: 'NFT holders', public: 'everyone', maintenance: 'maintenance (admins only)' };
@@ -149,6 +153,11 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
     }
     case 'safety':
       return { now: 'Flags, bans and held settlements.', next: 'Scan after busy rounds; held payouts wait for a person.' };
+    case 'feedback': {
+      const n = i.feedbackUnread;
+      if (n === null || n === undefined) return { now: 'Sign in as the admin to read the messages.', next: null };
+      return { now: n === 0 ? 'No unread messages.' : `${n} unread message${n === 1 ? '' : 's'}.`, next: n > 0 ? 'Read them below, newest first.' : null };
+    }
     case 'settings': {
       const st = i.settings;
       if (!st) return { now: 'Sign in as the admin to see the switches.', next: null };
