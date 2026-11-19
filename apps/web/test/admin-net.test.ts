@@ -167,7 +167,7 @@ describe('launch checklist and allowlist warnings', () => {
     const off = launchChecklist({ net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null, allowlist: null, settings: null, quote: null });
     expect(off.find((i) => i.id === 'chain')).toMatchObject({ ok: false, detail: expect.stringMatching(/serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid/) });
     // the links name the drawers the rail shows, not the old tab ids
-    expect((['deploy', 'arena', 'mint', 'settings'] as const).map(checklistLink)).toEqual(['Setup', 'Game', 'Mint', 'Settings']);
+    expect((['deploy', 'setup', 'arena', 'mint', 'settings'] as const).map(checklistLink)).toEqual(['Deploy', 'Setup', 'Game', 'Mint', 'Settings']);
     expect(empty.find((i) => i.id === 'access')?.ok).toBeNull();
   });
 

@@ -2,7 +2,7 @@ import { formatGasAmount } from '@coinnibal/sdk';
 import { testTokenRefusal, type StatusSnapshot } from '@coinnibal/sdk/ops';
 import { GAS_SYMBOL } from '@coinnibal/shared';
 import type { ContractsRegistry, GameAccess, SiteCounts, SiteSettings } from '@coinnibal/shared';
-import type { BuildPins } from '../wallet/pinned';
+import type { BuildPins, Pins } from '../wallet/pinned';
 import type { AdminNetwork } from './net';
 import { registeredPinReport } from './pins';
 import { setupSteps } from './setup';
@@ -32,10 +32,32 @@ export const GROUP_LABEL: Record<AdminGroup, string> = {
   settings: 'Settings',
 };
 
+/**
+ * The start screen and its big actions, outside the drawers (`/admin` opens on `home`): a short status, then Deploy
+ * the contracts, Open or close the game, Mint, Feedback (the `feedback` drawer) and Settings (the drawer). Every
+ * drawer stays one click away under the start screen's Advanced section.
+ */
+export type AdminView = 'home' | 'deploy' | 'open' | 'minting';
+export const ADMIN_VIEWS: readonly AdminView[] = ['home', 'deploy', 'open', 'minting'];
+
+/** A page of `/admin`: the start screen, one of its actions, or a drawer. */
+export type AdminPage = AdminView | AdminGroup;
+
+export const VIEW_LABEL: Record<AdminView, string> = {
+  home: 'Start',
+  deploy: 'Deploy the contracts',
+  open: 'Open or close the game',
+  minting: 'Mint',
+};
+
+/** A page's name, as the rail or the start screen shows it. */
+export const pageLabel = (p: AdminPage): string => ((ADMIN_VIEWS as readonly string[]).includes(p) ? VIEW_LABEL[p as AdminView] : GROUP_LABEL[p as AdminGroup]);
+
+export const isAdminView = (p: string): p is AdminView => (ADMIN_VIEWS as readonly string[]).includes(p);
+
 /** Where an old drawer id (and the launch checklist's links) now lives. */
 const LEGACY: Record<string, { group: AdminGroup; sub?: CommunityTab }> = {
   launch: { group: 'network' },
-  deploy: { group: 'setup' },
   arena: { group: 'game' },
   play: { group: 'game' },
   wl: { group: 'community', sub: 'wl' },
@@ -44,18 +66,18 @@ const LEGACY: Record<string, { group: AdminGroup; sub?: CommunityTab }> = {
   integrity: { group: 'safety' },
 };
 
-/** `#community/tasks`, `#game`, old `#deploy`… → the drawer (and the Community sub-tab). Unknown → Network. */
-export function parseAdminHash(hash: string): { group: AdminGroup; sub: CommunityTab } {
+/** `#community/tasks`, `#game`, `#deploy`, old `#arena`… → the page (and the Community sub-tab). Unknown → the start screen. */
+export function parseAdminHash(hash: string): { group: AdminPage; sub: CommunityTab } {
   const [head, tail] = hash.replace(/^#/, '').split('/');
   const legacy = LEGACY[head];
   if (legacy) return { group: legacy.group, sub: legacy.sub ?? 'wl' };
-  const group = (ADMIN_GROUPS as readonly string[]).includes(head) ? (head as AdminGroup) : 'network';
+  const group: AdminPage = (ADMIN_GROUPS as readonly string[]).includes(head) ? (head as AdminGroup) : isAdminView(head) ? head : 'home';
   const sub = (COMMUNITY_TABS as readonly string[]).includes(tail) ? (tail as CommunityTab) : 'wl';
   return { group, sub };
 }
 
-export function adminHash(group: AdminGroup, sub: CommunityTab = 'wl'): string {
-  if (group === 'network') return '';
+export function adminHash(group: AdminPage, sub: CommunityTab = 'wl'): string {
+  if (group === 'home') return '';
   return group === 'community' && sub !== 'wl' ? `#community/${sub}` : `#${group}`;
 }
 
@@ -78,6 +100,8 @@ export interface SummaryInput {
   pins?: BuildPins;
   /** Players' messages not read yet (null: not known, no admin session). */
   feedbackUnread?: number | null;
+  /** The owner's verified signed pins of this chain. */
+  signed?: Pins | null;
 }
 
 const ACCESS: Record<GameAccess, string> = { admins: 'admins only', holders: 'NFT holders', public: 'everyone', maintenance: 'maintenance (admins only)' };
@@ -107,14 +131,14 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
     case 'setup': {
       const parts = [`Arena ${net.arenaAddress ? (a?.code === 'ok' ? 'ok' : (a?.code ?? '…')) : 'missing'}`, `NFT ${net.nftAddress ? (status?.nft?.code === 'ok' ? 'ok' : (status?.nft?.code ?? '…')) : 'missing'}`];
       if (cfg) parts.push(`token ${cfg.token ? 'set' : 'not set'}`, `holder perks ${cfg.holderNft ? `on (${cfg.holderBurnBps} + ${cfg.holderVaultBps} bps)` : 'off'}`);
-      const pins = registeredPinReport(net, status, i.pins);
-      if (pins.ok !== null) parts.push(`site pins ${pins.ok ? 'ok' : 'to set'}`);
+      const pins = registeredPinReport(net, status, i.pins, i.signed ?? null);
+      if (pins.ok !== null) parts.push(`site pins ${pins.ok ? 'ok' : 'to sign'}`);
       const now = parts.join(' · ');
       if (!net.arenaAddress) return { now, next: 'Deploy CoinnibalArena from the owner wallet (below).' };
       if (!net.nftAddress) return { now, next: 'Deploy CoinnibalNFT from the owner wallet (below).' };
       if (!cfg) return { now, next: null };
       // right after the deploy (and after setToken): the site signs nothing with contracts it was not built with
-      if (pins.ok === false) return { now, next: 'Pin the contracts in the site build: Setup → Site pins (the VPS shell, then a rebuild).' };
+      if (pins.ok === false) return { now, next: 'Sign the site pins: Setup → Site pins (one free signature from the owner wallet).' };
       const steps = setupSteps({ status }, { openMint: !net.mainnet });
       if (!cfg.token && !steps.some((s) => s.id === 'token')) {
         const known = i.registry?.token?.address ?? status?.testToken?.address ?? null;

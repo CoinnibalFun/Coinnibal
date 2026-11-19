@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { Address, PublicClient } from 'viem';
 import { Button, Icon } from '../design';
 import type { AdminApi } from '../site/api';
+import type { SignedPins } from '../wallet/pinned';
 import type { AdminNetwork } from './net';
 import type { Plan } from './plan';
 
@@ -25,6 +26,10 @@ export interface ChainCtx {
   registry?: ContractsRegistry | null;
   /** Tells the panel that a server setting changed (game access): its summary line re-reads them. */
   settingsChanged?: () => void;
+  /** The owner's signed site pins of this chain, verified (null: none yet; absent in tests). */
+  signed?: SignedPins | null;
+  /** Tells the panel that the owner signed new site pins: it reads them again. */
+  pinsChanged?: () => void;
 }
 
 /**
@@ -231,6 +236,18 @@ export function Btn({
       {children}
     </Button>
   );
+}
+
+/**
+ * An address field that starts as `initial` (else the connected wallet) and is filled with the signed-in wallet as soon
+ * as it connects, while the owner has typed nothing: the owner never types their own address.
+ */
+export function useOwnAddress(me: Address | null, initial?: string | null): [string, (v: string) => void] {
+  const [value, setValue] = useState<string>(initial ?? me ?? '');
+  useEffect(() => {
+    if (me) setValue((v) => (v.trim() ? v : me));
+  }, [me]);
+  return [value, setValue];
 }
 
 /** An inline input error kept next to a form (`AdminInputError` / `RangeError` messages). */

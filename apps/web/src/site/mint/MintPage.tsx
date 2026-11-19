@@ -40,7 +40,7 @@ import {
   type LivePerks,
   type MintView,
 } from './logic';
-import { checkNft } from '../../wallet/pinned';
+import { verifyNft } from '../../wallet/pinned';
 import { fetchShop } from '../../wallet/shop';
 import { roomsApi } from '../../rooms/api';
 
@@ -335,8 +335,8 @@ export function Mint({ pollMs = 30_000 }: { pollMs?: number }) {
     if (!target) return fail(t('mn.fail.server'));
     if (!chain) setChain(target);
     // the emblem contract must be the one this build pins: the server's word alone never gets a payment
-    const pinned = checkNft(target.chainId, nft);
-    if (!pinned.ok) return fail(t('mn.fail.pin'));
+    const pinned = await verifyNft(target.chainId, nft);
+    if (!pinned.ok) return fail(pinned.reason === 'unreadable' ? t('mn.fail.server') : t('mn.fail.pin'));
     const client = publicClientFor(target, provider);
     if (!client) return fail(t('mn.fail.chain'));
     let price: bigint;

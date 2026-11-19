@@ -333,7 +333,7 @@ the owner. Protect the server key.
 | Item | Value |
 |---|---|
 | Chain | **Robinhood Chain Testnet** (`CHAIN_ID=46630`, RPC `https://rpc.testnet.chain.robinhood.com`, explorer `https://explorer.testnet.chain.robinhood.com`), later **Robinhood Chain** (`CHAIN_ID=4663`, a provider RPC) |
-| Contracts | deployed by the owner from `/admin` → Setup and registered with the server (`DATA_DIR/chains/<id>/contracts.json`), then pinned in the site build (`COINNIBAL_PIN_*` in `/opt/elymum/.env` and a rebuild; no chain has default pins) |
+| Contracts | deployed by the owner from `/admin` (Start → Deploy the contracts, one flow) and registered with the server (`DATA_DIR/chains/<id>/contracts.json`), then trusted by the site through the owner wallet's signed site pins (`DATA_DIR/site/pins.json`, checked in every browser; `COINNIBAL_PIN_*` in `/opt/elymum/.env` an optional override; no chain has default pins) |
 | Server key | `SERVER_PRIVATE_KEY=auto`, on the persistent disk; pays gas in ETH |
 | Admins | `ADMIN_WALLETS` = the owner's 0x address (no default) |
 | Hosting | the game server and the website in one Docker container behind Caddy on a VPS (`WEB_DIST=/app/web`; the data volume at `/data`, daily and offsite backups); Vercel only redirects the old elymum.io |
@@ -387,7 +387,7 @@ $1 mint, the old arenas, a flat 5 % fee) and **must be rewritten before they are
 | Server on the VPS (deploy/vps/README.md), `ADMIN_WALLETS`, `SERVER_PRIVATE_KEY=auto`, `COINNIBAL_RPC_URLS` (`EVM_RPC_URLS` outside Docker), Telegram alerts | owner |
 | Fund the server key with ETH | owner |
 | Testnet first: `/admin` → Setup: Arena, NFT, TestToken, Finish setup (it also opens the TEST mint to everyone; OPERATIONS.md) | owner |
-| Pin the registered contracts in the site build, right after they are registered (and the token once it is set): Setup → Site pins shows the `COINNIBAL_PIN_*` lines; check them against your wallet, set them in `/opt/elymum/.env`, then `coinnibal-compose up -d --build app` in the VPS shell. Until then the site signs no ticket and no mint (DEPLOY.md section 3) | owner |
+| Sign the site pins with the owner wallet, right after the deploy (the deploy flow's last step) and again once the token is set (the panel asks): one free message, no shell. Until then the site signs no ticket and no mint (DEPLOY.md section 3) | owner |
 | Mainnet: `COINNIBAL_CHAIN_ID=4663` and a provider RPC first in `COINNIBAL_RPC_URLS`; deploy Arena and NFT from the owner wallet (they register themselves); pin them (the same rebuild builds the site for chain 4663) | owner |
 | WL open; review WL and collabs; publish the allowlist root | owner |
 | Sync the mint price; open the mint (Allowlist, "activate the game for holders" left unchecked), later Public; optional price keeper with bounds | owner |

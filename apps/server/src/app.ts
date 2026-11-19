@@ -37,6 +37,7 @@ import { ProfileStore } from './profiles';
 import { AvatarStore } from './avatars';
 import { XLinkService, devFakeXPicture, fakeXFetch, type XFetch } from './xlink';
 import { ContractsStore } from './site/contracts';
+import { SitePinsStore } from './site/pins';
 import { MintService, hyperliquidPrice, type PriceFetcher } from './site/mint';
 import { SiteApi, type SiteLimits } from './site/routes';
 import { SiteStore } from './site/store';
@@ -219,6 +220,7 @@ export async function createApp(
   const site = new SiteApi(cfg, auth, siteStore, opts.siteLimits, {
     chain,
     contracts,
+    pins: new SitePinsStore(persist ? cfg.dataDir : null, log),
     mint,
     nft,
     profiles,

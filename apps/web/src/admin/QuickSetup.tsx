@@ -1,9 +1,10 @@
 import { sameAddress } from '@coinnibal/sdk';
 import { useRef, useState } from 'react';
-import type { Hash } from 'viem';
+import type { Address, Hash } from 'viem';
 import { sendWithWallet, txErrorText } from '../wallet/tx';
 import { sendPlan, type Plan } from './plan';
 import { setupSteps, type SetupStep } from './setup';
+import { signSitePins } from './sign-pins';
 import { Addr, Btn, Card, FormError, Mark, Row, type ChainCtx } from './ui';
 
 export { setupSteps, type SetupStep };
@@ -47,6 +48,16 @@ export function QuickSetup({ ctx }: { ctx: ChainCtx }) {
       r.hashes.push(res.hash);
       setRun({ ...r });
     }
+    // the game token just joined the arena: the site pins name it, so the owner signs them again (free, no transaction)
+    if (list.some((x) => x.id === 'token') && ctx.net.info) {
+      const cfg = ctx.status?.arena?.config ?? null;
+      try {
+        await signSitePins({ api: ctx.api, me: ctx.me, chainId: ctx.net.info.id, targets: { arena: ctx.net.arenaAddress, nft: ctx.net.nftAddress, token: (cfg?.token ?? ctx.status?.testToken?.address ?? null) as Address | null } });
+        ctx.pinsChanged?.();
+      } catch (e) {
+        r.error = `Site pins: ${(e as Error).message} Sign them in Site pins, below.`;
+      }
+    }
     r.busy = false;
     r.at = list.length;
     setRun({ ...r });
@@ -72,6 +83,7 @@ export function QuickSetup({ ctx }: { ctx: ChainCtx }) {
         steps.length === 0
           ? 'The token, the arenas, the holder perks' + (openMint ? ' and the open testnet mint' : '') + ' are all in place on this chain.'
           : 'Everything still missing on this chain, in one go. Your wallet asks once per step; you only confirm.' +
+            (steps.some((s) => s.id === 'token') ? ' After the token, it asks you to sign the site pins again (free).' : '') +
             (steps.some((s) => s.id === 'mint') ? ' On this testnet the last step opens the NFT mint on chain to every wallet.' : '')
       }
     >

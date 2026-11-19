@@ -26,14 +26,15 @@ services:
         VITE_SERVER_URL: ""
         VITE_RPC_URL: ""
         VITE_PUBLIC_URL: "https://${SITE_DOMAIN:-coinnibal.fun}"
-        # the contracts the site trusts (apps/web/src/wallet/pinned.ts): the owner's registered arena, NFT and game
-        # token, from COINNIBAL_PIN_* in /opt/elymum/.env (/admin -> Setup -> "Site pins" shows the lines). Unset: no
-        # ticket and no mint is signed. Fixed at build time, so a pin changes only with shell access here and a rebuild:
-        # coinnibal-compose up -d --build app (README section 4). VITE_CHAIN_ID is the app's CHAIN_ID below.
+        # the contracts the site trusts (apps/web/src/wallet/pinned.ts): the ones the owner wallet signed for in /admin
+        # (Setup -> "Site pins"; no shell step). COINNIBAL_PIN_* in /opt/elymum/.env are an optional override, fixed at
+        # build time (coinnibal-compose up -d --build app, README section 4); COINNIBAL_OWNER_WALLET overrides the
+        # built-in owner wallet. VITE_CHAIN_ID is the app's CHAIN_ID below.
         VITE_CHAIN_ID: "${COINNIBAL_CHAIN_ID:-${ELYMUM_CHAIN_ID:-46630}}"
         VITE_ARENA_ADDRESS: "${COINNIBAL_PIN_ARENA:-}"
         VITE_NFT_ADDRESS: "${COINNIBAL_PIN_NFT:-}"
         VITE_TOKEN_ADDRESS: "${COINNIBAL_PIN_TOKEN:-}"
+        VITE_OWNER_WALLET: "${COINNIBAL_OWNER_WALLET:-}"
     env_file:
       - ../../.env
     environment:
