@@ -68,7 +68,18 @@ function useInViewSafe(ref: RefObject<Element | null>, opts: Parameters<typeof u
 }
 
 /** A plate section: its seam plays when its top crosses 90 % of the viewport, and the header's coin gulps with it. */
-const usePlate = (gulpAt: number) => useReveal<HTMLElement>(undefined, { attr: 'data-seam', onIn: () => gulp(gulpAt) });
+const usePlate = (gulpAt: number, ref?: RefObject<HTMLElement | null>) => useReveal<HTMLElement>(ref, { attr: 'data-seam', onIn: () => gulp(gulpAt) });
+
+/**
+ * A plate that pauses its loops (blinking, bobbing coins, the orbit) while it is off screen: the section's ref, shared
+ * with its seam reveal, and the `data-paused` value for it (storybook.css stops every animation under it). Running
+ * off-screen loops kept a phone's main thread 84-97 % busy on the landing.
+ */
+function usePausedPlate(gulpAt: number): [RefObject<HTMLElement | null>, true | undefined] {
+  const [ref, visible] = useOffscreenPause<HTMLElement>();
+  usePlate(gulpAt, ref);
+  return [ref, !visible || undefined];
+}
 
 /* ── the hero ─────────────────────────────────────────────────────────── */
 
@@ -253,11 +264,11 @@ function TakeStrip() {
 
 function Feast() {
   const t = useT();
-  const plate = usePlate(BITE_GULP_MS);
+  const [plate, paused] = usePausedPlate(BITE_GULP_MS);
   const copy = useReveal<HTMLDivElement>();
   const menu = useReveal<HTMLDivElement>();
   return (
-    <section ref={plate} className="ld-plate ld-feast has-bite" style={biteVars(BITES.feast)} id="feast" aria-labelledby="ld-feast-h">
+    <section ref={plate} className="ld-plate ld-feast has-bite" style={biteVars(BITES.feast)} id="feast" aria-labelledby="ld-feast-h" data-paused={paused}>
       <BiteSeam at="feast" />
       <PlateLabel numeral={2} title={t('ld.feast.plate')} aside={t('ld.feast.aside')} />
       <div className="ld-wrap ld-feast__grid">
@@ -335,14 +346,14 @@ function useStepsRead(list: RefObject<HTMLOListElement | null>): number {
 
 function Round({ live }: { live: boolean }) {
   const t = useT();
-  const plate = usePlate(0);
+  const [plate, paused] = usePausedPlate(0);
   const orbit = useReveal<HTMLDivElement>();
   const copy = useReveal<HTMLDivElement>();
   // the orbit's stations and the step numbers light up as the visitor reads down the steps (the card stays beside them)
   const stops = useRef<HTMLOListElement>(null);
   const read = useStepsRead(stops);
   return (
-    <section ref={plate} className="ld-plate ld-round" id="round" aria-labelledby="ld-round-h">
+    <section ref={plate} className="ld-plate ld-round" id="round" aria-labelledby="ld-round-h" data-paused={paused}>
       <PlateLabel numeral={3} title={t('ld.round.plate')} aside={t('ld.round.aside')} />
       <div className="ld-wrap ld-round__grid">
         <div ref={orbit} className="ld-round__orbit-wrap rv-v" style={v({ '--tilt': '-0.8deg' })}>
@@ -475,13 +486,13 @@ function EmblemFan() {
 function Nft({ doors }: { doors: Doors }) {
   const t = useT();
   const testnet = isTestnetChain(useServerChain());
-  const plate = usePlate(SEAL_GULP_MS);
+  const [plate, paused] = usePausedPlate(SEAL_GULP_MS);
   const copy = useReveal<HTMLDivElement>();
   const why = useRef<HTMLDivElement>(null);
   useReveal(why);
   useRevealEach(why, '.nf-card');
   return (
-    <section ref={plate} className="ld-plate ld-nft" id="nft" aria-labelledby="ld-nft-h">
+    <section ref={plate} className="ld-plate ld-nft" id="nft" aria-labelledby="ld-nft-h" data-paused={paused}>
       <SealSeam />
       <PlateLabel numeral={5} title={t('ld.nft.plate')} aside={t('ld.nft.aside')} />
       <div className="ld-nft__body">
@@ -542,7 +553,7 @@ const STAIR: { paint: CoinPaint; mood: CoinMood; size: number }[] = [
 
 function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
   const t = useT();
-  const plate = usePlate(BITE_GULP_MS);
+  const [plate, paused] = usePausedPlate(BITE_GULP_MS);
   const head = useReveal<HTMLDivElement>();
   const stairs = useReveal<HTMLOListElement>();
   const fee = useReveal<HTMLDivElement>();
@@ -554,7 +565,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
     { key: 'team', bps: FACTS.fee.vaultBps, label: t('ld.ar.team', { pct: pct(FACTS.fee.vaultBps) }) },
   ];
   return (
-    <section ref={plate} className="ld-plate ld-arenas has-bite" style={biteVars(BITES.arenas)} id="arenas" aria-labelledby="ld-arenas-h">
+    <section ref={plate} className="ld-plate ld-arenas has-bite" style={biteVars(BITES.arenas)} id="arenas" aria-labelledby="ld-arenas-h" data-paused={paused}>
       <BiteSeam at="arenas" />
       <PlateLabel numeral={4} title={t('ld.ar.plate')} aside={t('ld.ar.aside')} />
       <div className="ld-wrap">
