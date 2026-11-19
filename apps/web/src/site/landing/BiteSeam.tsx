@@ -32,6 +32,10 @@ export interface Bite {
 export type BiteAt = 'feast' | 'arenas' | 'faq';
 
 export const BITES: Record<BiteAt, Bite> = {
+  // The feast bite stays at xm 62 on phones, so "What is Coinnibal?" wraps to two lines inside its sun tab at 360-414 px
+  // (plan T3's fallback, accepted). One line needs the tab's 236 px (15-251 px at 390), and the bite (82 px with its
+  // coin) then has no room left of the hero pond's shy coin (316-374 px at 390, 340-398 at 414): xm 74 overlaps it by
+  // 14 px at 390 and 7 px at 414, xm 80 by 30 px at both; xm 62-72 keep two lines.
   feast: { x: 42, xm: 62, size: 56, sizeM: 40, after: 'happy', look: [-3, 2], crumbs: ['var(--sand)', 'var(--clover)', 'var(--sun)', 'var(--sand)'] },
   arenas: { x: 64, xm: 80, size: 72, sizeM: 48, after: 'smug', look: [2, 3], crumbs: ['var(--current)', 'var(--sun)', 'var(--reef)', 'var(--sun)'] },
   faq: { x: 60, xm: 80, size: 88, sizeM: 56, after: 'open', look: [2, 3], crumbs: ['var(--cream)', 'var(--foam)', 'var(--cream)', 'var(--teal)'] },
