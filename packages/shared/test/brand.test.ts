@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BRAND_NAME, BRAND_TAGLINE, NFT_NAME, SITE_HOST_DEFAULT, SITE_URL_DEFAULT, SITE_X_HANDLE_DEFAULT, isReservedName, sanitizeName, siteHostOf, BRAND_SITE_ORIGINS, withBrandOrigins } from '../src';
+import { BRAND_NAME, BRAND_TAGLINE, NFT_NAME, SITE_HOST_DEFAULT, SITE_URL_DEFAULT, SITE_X_HANDLE_DEFAULT, isReservedName, sanitizeName, siteHostOf, BRAND_SITE_ORIGINS, withBrandOrigins, isOpenPlayOrigin } from '../src';
 
 describe('brand', () => {
   it('is Coinnibal, with the live domain and X handle as defaults until the new ones are live', () => {
@@ -30,8 +30,12 @@ describe('brand', () => {
   it('adds the brand site origins to a CORS list, and leaves * and unset alone', () => {
     expect(withBrandOrigins(undefined)).toBe('*');
     expect(withBrandOrigins('*')).toBe('*');
-    expect(withBrandOrigins('https://elymum.io/')).toBe('https://elymum.io,https://coinnibal.fun,https://www.coinnibal.fun');
+    expect(withBrandOrigins('https://elymum.io/')).toBe('https://elymum.io,https://coinnibal.fun,https://www.coinnibal.fun,https://coinnibal.vercel.app');
+    expect(isOpenPlayOrigin('https://coinnibal.vercel.app')).toBe(true);
+    expect(isOpenPlayOrigin('https://coinnibal.vercel.app/')).toBe(true);
+    expect(isOpenPlayOrigin('https://coinnibal.fun')).toBe(false);
+    expect(isOpenPlayOrigin(undefined)).toBe(false);
     expect(withBrandOrigins('https://admin.example')).toBe(['https://admin.example', ...BRAND_SITE_ORIGINS].join(','));
-    expect(withBrandOrigins('https://coinnibal.fun, https://elymum.io').split(',')).toEqual(['https://coinnibal.fun', 'https://elymum.io', 'https://www.coinnibal.fun']);
+    expect(withBrandOrigins('https://coinnibal.fun, https://elymum.io').split(',')).toEqual(['https://coinnibal.fun', 'https://elymum.io', 'https://www.coinnibal.fun', 'https://coinnibal.vercel.app']);
   });
 });

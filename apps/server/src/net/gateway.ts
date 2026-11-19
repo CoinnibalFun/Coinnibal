@@ -153,7 +153,7 @@ export class Gateway {
   private readonly alive = new WeakMap<WebSocket, boolean>();
   private timers: NodeJS.Timeout[] = [];
   /** Who may enter a room (join or spectate); null: everyone (unit tests that build a bare gateway). */
-  private gameGate: ((wallet: string | null, fresh?: boolean) => boolean | Promise<boolean>) | null = null;
+  private gameGate: ((wallet: string | null, fresh?: boolean, origin?: string | null) => boolean | Promise<boolean>) | null = null;
   /** Server profiles (names, skins, XP); null: none (bare unit tests). */
   private profiles: ProfileStore | null = null;
   /** Wallets the admin banned from arenas (integrity); null: nobody (bare unit tests). */
@@ -186,7 +186,7 @@ export class Gateway {
   }
 
   /** Sets who may enter rooms (the site's game gate: admins, NFT holders, or everyone). */
-  setGameGate(gate: ((wallet: string | null, fresh?: boolean) => boolean | Promise<boolean>) | null): void {
+  setGameGate(gate: ((wallet: string | null, fresh?: boolean, origin?: string | null) => boolean | Promise<boolean>) | null): void {
     this.gameGate = gate;
   }
 
@@ -233,7 +233,7 @@ export class Gateway {
    */
   private async gameClosed(conn: Conn, fresh = false): Promise<boolean> {
     if (!this.gameGate) return false;
-    const open = await Promise.resolve(this.gameGate(conn.wallet, fresh)).catch(() => false);
+    const open = await Promise.resolve(this.gameGate(conn.wallet, fresh, conn.origin)).catch(() => false);
     if (open) return false;
     this.error(conn, 'game_closed', conn.wallet ? 'The game is not open to this wallet yet.' : 'The game is not open yet. Sign in with your wallet if you hold a Coinnibal NFT.');
     return true;
@@ -273,7 +273,8 @@ export class Gateway {
         refuse('503 Service Unavailable');
         return;
       }
-      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, ip, net, priority));
+      const origin = typeof req.headers.origin === 'string' ? req.headers.origin : null;
+      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, ip, net, priority, origin));
     });
     // heartbeat + lobby room list
     this.timers.push(
@@ -399,8 +400,9 @@ export class Gateway {
     else this.perSubnet.set(net, s);
   }
 
-  private onConnection(ws: WebSocket, ip: string, net = subnetOf(ip), priority: 'stake' | 'signed' | null = null): void {
+  private onConnection(ws: WebSocket, ip: string, net = subnetOf(ip), priority: 'stake' | 'signed' | null = null, origin: string | null = null): void {
     const conn = new Conn(ws, ip);
+    conn.origin = origin;
     conn.priority = priority;
     // a session-token socket is not a guest: it never counts in its IP's guest limit (players behind a carrier NAT)
     if (priority) {

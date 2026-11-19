@@ -29,7 +29,19 @@ export const SITE_URL_DEFAULT = `https://${SITE_HOST_DEFAULT}`;
  * the move lasts). A server whose `CORS_ORIGIN` is a list always accepts these too, and a sign-in from one of them
  * names that site, so both work whatever the server's `.env` says.
  */
-export const BRAND_SITE_ORIGINS: readonly string[] = ['https://coinnibal.fun', 'https://www.coinnibal.fun', 'https://elymum.io'];
+export const BRAND_SITE_ORIGINS: readonly string[] = ['https://coinnibal.fun', 'https://www.coinnibal.fun', 'https://elymum.io', 'https://coinnibal.vercel.app'];
+
+/**
+ * Open-play copies of the site: the same web client on a free host, talking to this same server and contracts, where
+ * the game is open to everyone on the testnet whatever the admin's `gameAccess` says (the main site keeps the
+ * setting). The browser sets `Origin`; a page cannot choose it. On mainnet the copies follow the main site's setting.
+ */
+export const OPEN_PLAY_ORIGINS: readonly string[] = ['https://coinnibal.vercel.app'];
+
+/** Whether a request's `Origin` is one of the open-play copies. */
+export function isOpenPlayOrigin(origin: string | null | undefined): boolean {
+  return typeof origin === 'string' && OPEN_PLAY_ORIGINS.includes(origin.replace(/\/+$/, ''));
+}
 
 /** A `CORS_ORIGIN` value with the brand's site origins added (`*` and an unset value stay as they are). */
 export function withBrandOrigins(corsOrigin: string | undefined): string {
