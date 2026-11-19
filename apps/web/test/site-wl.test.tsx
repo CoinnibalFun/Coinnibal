@@ -76,6 +76,8 @@ describe('/wl', { timeout: 30_000 }, () => {
     }));
     render(<WlPage />);
     await screen.findByRole('heading', { name: 'Join the WL in 7 steps.' });
+    // the way back to an earlier entry: the same plain sentence as on the closed WL
+    expect(screen.getByRole('button', { name: 'Sign in to see an earlier entry' })).toBeTruthy();
     // every kind renders its step
     for (const t of ['Your X handle', 'Follow @coinnibalfun', 'Post about Coinnibal on X', 'Like, repost and reply', 'Join the Discord', 'Why Coinnibal?', 'Your EVM wallet']) expect(screen.getAllByText(t).length).toBeGreaterThan(0);
 
