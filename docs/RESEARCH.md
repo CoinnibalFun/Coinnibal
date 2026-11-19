@@ -1,7 +1,7 @@
 # Research: Robinhood Chain and Pons
 
 Coinnibal runs on **Robinhood Chain only**: Robinhood Chain Testnet now, Robinhood Chain (mainnet) later, switched by
-`CHAIN_ID` and nothing else. This page records what the code relies on, where each value comes from, and what is
+`CHAIN_ID` (the server) and a site rebuild for that chain with its contract pins (DEPLOY.md section 5). This page records what the code relies on, where each value comes from, and what is
 still unconfirmed. Researched 2026-11-05. The values used in code are in `packages/shared/src/chains.ts`.
 
 Status labels: **confirmed** (in the chain's or the project's own documentation), **third party** (a reputable

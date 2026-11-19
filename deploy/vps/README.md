@@ -260,6 +260,7 @@ All commands as root on the VPS (`sudo -i`).
 | Deploy now instead of waiting 2 minutes | `coinnibal-update` |
 | Restart the game server (in a round break) | `coinnibal-compose restart app` (any time it cashes the arenas out: prefer a break) |
 | Change a setting | `nano /opt/elymum/.env`, then `coinnibal-compose up -d app` |
+| Change a site pin (`COINNIBAL_PIN_*`) | `nano /opt/elymum/.env`, then `coinnibal-compose up -d --build app` (section 4; with players in the arenas: build first, swap in the break) |
 | Backup now / log | `coinnibal-backup` / `journalctl -u elymum-backup -n 50` |
 | Restore a backup | `coinnibal-restore /opt/elymum/backups/elymum-data-YYYYmmdd-HHMM.tar.gz` |
 | Pause auto-deploy | `systemctl stop elymum-update.timer` (`start` to resume) |

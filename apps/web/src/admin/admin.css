@@ -1185,7 +1185,8 @@ body {
   font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--ink-3);
-  word-break: break-all;
+  /* hex addresses still wrap; words and commands break only when they must */
+  overflow-wrap: anywhere;
 }
 .ad-check-line .ad-golink {
   grid-area: go;
