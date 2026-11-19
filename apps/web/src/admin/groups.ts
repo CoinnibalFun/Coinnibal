@@ -5,7 +5,7 @@ import type { ContractsRegistry, GameAccess, SiteCounts, SiteSettings } from '@c
 import type { BuildPins, Pins } from '../wallet/pinned';
 import type { AdminNetwork } from './net';
 import { registeredPinReport } from './pins';
-import { setupSteps } from './setup';
+import { faucetTokenToRegister, setupSteps } from './setup';
 
 /**
  * The admin panel's drawers, few and grouped (the owner runs everything from here): Network,
@@ -131,6 +131,9 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
     case 'setup': {
       const parts = [`Arena ${net.arenaAddress ? (a?.code === 'ok' ? 'ok' : (a?.code ?? '…')) : 'missing'}`, `NFT ${net.nftAddress ? (status?.nft?.code === 'ok' ? 'ok' : (status?.nft?.code ?? '…')) : 'missing'}`];
       if (cfg) parts.push(`token ${cfg.token ? 'set' : 'not set'}`, `holder perks ${cfg.holderNft ? `on (${cfg.holderBurnBps} + ${cfg.holderVaultBps} bps)` : 'off'}`);
+      // the faucet hands out the token registered with the server (testnet), not the arena's
+      const faucetToken = faucetTokenToRegister({ testnet: !!net.info && !net.mainnet, status, registry: i.registry });
+      if (cfg?.token && net.info && !net.mainnet && i.registry) parts.push(`faucet ${faucetToken ? 'not ready' : 'ok'}`);
       const pins = registeredPinReport(net, status, i.pins, i.signed ?? null);
       if (pins.ok !== null) parts.push(`site pins ${pins.ok ? 'ok' : 'to sign'}`);
       const now = parts.join(' · ');
@@ -146,7 +149,9 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
         if (net.info && !testTokenRefusal(net.info.id)) return { now, next: 'Deploy a TestToken (below), then Finish setup.' };
         return { now, next: 'Once the token is launched on Pons: enter it in Setup → Set the game token, by hand and typed twice (the server cannot know it before the arena uses it).' };
       }
-      if (steps.length > 0) return { now, next: `Finish setup: ${steps.length} step${steps.length === 1 ? '' : 's'} left, one button.` };
+      // Finish setup registers the game token for the faucet too (no signature)
+      const left = steps.length + (faucetToken ? 1 : 0);
+      if (left > 0) return { now, next: `Finish setup: ${left} step${left === 1 ? '' : 's'} left, one button.` };
       return { now, next: null };
     }
     case 'mint': {

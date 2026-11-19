@@ -174,10 +174,15 @@ export function StartScreen({ ctx, go, token, access }: { ctx: ChainCtx; go: (pa
   const local = loadLocalDeploys(chainId);
   const cfg = ctx.status?.arena?.config ?? null;
   const pins = registeredPinReport(ctx.net, ctx.status, undefined, ctx.signed ?? null);
+  // until the registry is read, the server's arena and NFT (and the arena's game token) stand in for it
   const steps = deployFlowSteps({
     chainId,
     mainnet: ctx.net.mainnet,
-    registry: ctx.registry ?? (ctx.net.arenaAddress || ctx.net.nftAddress ? { arena: ctx.net.arenaAddress ? ({ address: ctx.net.arenaAddress } as never) : null, nft: ctx.net.nftAddress ? ({ address: ctx.net.nftAddress } as never) : null, token: null } : null),
+    registry:
+      ctx.registry ??
+      (ctx.net.arenaAddress || ctx.net.nftAddress
+        ? { arena: ctx.net.arenaAddress ? ({ address: ctx.net.arenaAddress } as never) : null, nft: ctx.net.nftAddress ? ({ address: ctx.net.nftAddress } as never) : null, token: cfg?.token ? ({ address: cfg.token } as never) : null }
+        : null),
     local,
     status: ctx.status,
     setup: ctx.status?.arena && cfg ? setupSteps({ status: ctx.status }, { openMint: false }) : [],

@@ -122,6 +122,24 @@ describe('the deploy flow plan', () => {
     expect(nextFlowStep(deployFlowSteps({ ...base, registry, status, setup: [], pinsOk: false }))?.id).toBe('pins');
   });
 
+  it('testnet: the faucet hands out the token the server knows, so a game token it does not know keeps "register" open', () => {
+    // the local chain before the fix: the arena and the NFT known (ARENA_ADDRESS / NFT_ADDRESS), the token set on chain
+    const registry = { arena: { address: ARENA }, nft: { address: NFT }, token: null } as unknown as ContractsRegistry;
+    const status = { arena: { address: ARENA, config: { token: TOKEN } } } as unknown as StatusSnapshot;
+    const steps = deployFlowSteps({ ...base, registry, status, setup: [], pinsOk: true });
+    expect(steps.filter((s) => !s.done).map((s) => s.id)).toEqual(['register']);
+    expect(steps.find((s) => s.id === 'register')?.detail).toMatch(/^The faucet hands out the token the server knows/);
+    expect(flowAsksLeft(steps)).toBe(0);
+    // registered (any letter case): all done
+    const known = { ...registry, token: { address: TOKEN.toLowerCase() } } as unknown as ContractsRegistry;
+    expect(nextFlowStep(deployFlowSteps({ ...base, registry: known, status, setup: [], pinsOk: true }))).toBeNull();
+    // another token registered than the arena's: the faucet would hand out the wrong one
+    const other = { ...registry, token: { address: ARENA } } as unknown as ContractsRegistry;
+    expect(nextFlowStep(deployFlowSteps({ ...base, registry: other, status, setup: [], pinsOk: true }))?.id).toBe('register');
+    // mainnet has no faucet
+    expect(nextFlowStep(deployFlowSteps({ ...base, chainId: 4663, mainnet: true, registry, status, setup: [], pinsOk: true }))).toBeNull();
+  });
+
   it('starts only from the owner wallet, signed in, on a chain the panel can sign on', () => {
     const ok = { me: ALICE, owner: ALICE, signedIn: true, blockers: [] };
     expect(flowRefusal(ok)).toBeNull();
@@ -186,6 +204,32 @@ describe('the deploy flow, run', () => {
     expect(screen.getByText('Done. The contracts are live.')).toBeTruthy();
     expect(screen.getByTestId('deploy-flow-done').textContent).toContain(ARENA.slice(0, 6));
     expect(screen.queryByTestId('deploy-flow-go')).toBeNull();
+  });
+
+  it('a game token the server does not know (a chain deployed outside the panel): Continue registers it, no wallet prompt', async () => {
+    Object.assign(world, { registry: { arena: { address: ARENA }, nft: { address: NFT }, token: null }, tokenSet: true, setupLeft: [], signed: { arena: ARENA, nft: NFT, token: TOKEN } });
+    const registered: unknown[] = [];
+    const api = {
+      registerContract: vi.fn(async (b: { kind: string; address: string; txHash: string | null }) => {
+        registered.push(b);
+        world.registry[b.kind] = { address: b.address };
+        return world.registry;
+      }),
+      mintRefresh: async () => ({ refreshed: true }),
+    } as never;
+    const net = resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT }));
+    const ctx = { net, status: null, refresh: vi.fn(async () => {}), reloadNet: vi.fn(async () => {}), me: ALICE, walletChainId: 46630, client: { getCode: async () => '0x6080' } as never, api, open: vi.fn(), registry: null, signed: null };
+    ui(<DeployFlow ctx={ctx} />);
+    await settle();
+    expect(document.querySelector('[data-step="register"]')?.getAttribute('data-state')).toBe('todo');
+    expect(screen.getByTestId('deploy-flow-go').textContent).toContain('Continue');
+    await act(async () => {
+      screen.getByTestId('deploy-flow-go').click();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    expect(registered).toEqual([{ kind: 'token', address: TOKEN, txHash: null }]);
+    expect(vi.mocked(tx.sendWithWallet)).not.toHaveBeenCalled();
+    expect(screen.getByText('Done. The contracts are live.')).toBeTruthy();
   });
 
   it('a refused step stops the flow with its reason; Continue picks up from there', async () => {
@@ -256,6 +300,27 @@ describe('the start screen', () => {
     // nothing new in feedback: the waiting WL and collab applications come next
     const wl = startActions(input({ fresh: false, deployLeft: 0, feedback: 0, community: { wlOpen: true, collabOpen: true, wlWaiting: 2, collabWaiting: 0 } }));
     expect(wl[4]).toMatchObject({ go: 'community', next: true });
+  });
+
+  it('never "Live and signed" while the faucet waits for the game token (testnet); no false alarm while the registry loads', () => {
+    const net = resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT }));
+    const status = {
+      block: 1n,
+      chain: { id: 46630 },
+      arena: { address: ARENA, code: 'ok', config: { admin: ALICE, serverAuthority: BOB, token: TOKEN, decimals: 18, burnBps: 1500, vaultBps: 500, holderNft: NFT }, token: null, arenas: [] },
+      nft: { address: NFT, code: 'ok', state: { phaseName: 'public', totalSupply: 0, maxSupply: 3333 } },
+      testToken: { address: TOKEN, code: 'ok', faucet: null },
+    } as unknown as StatusSnapshot;
+    const signed = { chainId: 46630, signedAt: '2026-11-19T10:00:00.000Z', arena: ARENA, nft: NFT, token: TOKEN } as never;
+    const contracts = (registry: ContractsRegistry | null) => {
+      const view = ui(<StartScreen ctx={{ net, status, refresh: vi.fn(async () => {}), reloadNet: vi.fn(async () => {}), me: ALICE, walletChainId: 46630, client: null, api: null, open: vi.fn(), registry, signed }} go={vi.fn()} token={null} access={null} />);
+      const text = screen.getByTestId('start-status').querySelector('[data-row="contracts"]')!.textContent;
+      view.unmount();
+      return text;
+    };
+    expect(contracts({ arena: { address: ARENA }, nft: { address: NFT }, token: null } as never)).toMatch(/1 deploy step left\.$/);
+    expect(contracts({ arena: { address: ARENA }, nft: { address: NFT }, token: { address: TOKEN } } as never)).toMatch(/Live and signed for the site\.$/);
+    expect(contracts(null)).toMatch(/Live and signed for the site\.$/);
   });
 
   it('renders the lines and the actions; each action opens its page (Feedback: the feedback drawer)', async () => {

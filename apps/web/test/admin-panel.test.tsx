@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminPanel } from '../src/admin/AdminPanel';
 import { DeployTab, SetTokenForm } from '../src/admin/DeployTab';
 import { SetupTab } from '../src/admin/SetupTab';
+import { QuickSetup } from '../src/admin/QuickSetup';
 import { GameTab } from '../src/admin/GameTab';
 import { ArenaTab } from '../src/admin/ArenaTab';
 import { MintTab } from '../src/admin/MintTab';
@@ -353,6 +354,43 @@ describe('Setup with the contracts registered', () => {
     expect(ctx.plans[0].call).toMatchObject({ functionName: 'setToken', args: [TOKEN] });
     expect(screen.queryByTestId('deploy-test-token')).toBeNull();
     noInputOutsideAdvanced();
+  });
+
+  it('testnet, all set on chain but the server does not know the game token: not "All set"; Finish setup registers it, no wallet prompt', async () => {
+    const net = resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT }));
+    // the chain deployed outside the panel (the local chain before the fix): the faucet had no token to hand out
+    const done = registeredStatus({
+      arena: {
+        address: ARENA,
+        code: 'ok',
+        config: { admin: ALICE, serverAuthority: KEY, token: TOKEN, burnBps: 1500, vaultBps: 500, holderNft: NFT, holderBurnBps: 800, holderVaultBps: 200, decimals: 18 },
+        token: { decimals: 18 },
+        arenas: [1, 2, 3, 4].map((id) => ({ id, exists: true, holdersOnly: id === 4 })),
+      },
+      nft: { address: NFT, code: 'ok', state: { phaseName: 'public' } },
+      testToken: { address: TOKEN, code: 'ok', faucet: { holderNft: NFT } },
+    });
+    const registerContract = vi.fn(async () => ({ arena: null, nft: null, token: null }));
+    const ctx = ctxOf({ net, status: done, registry: { arena: { address: ARENA }, nft: { address: NFT }, token: null } as never, api: { registerContract } as unknown as AdminApi });
+    const view = ui(<QuickSetup ctx={ctx} />);
+    const card = () => document.querySelector('[data-card="quick-setup"]')!;
+    expect(card().textContent).toMatch(/1 step left/);
+    expect(card().textContent).not.toMatch(/All set/i);
+    expect(screen.getByTestId('quick-setup-steps').textContent).toMatch(/The faucet hands out the game token/);
+    await act(async () => {
+      screen.getByTestId('quick-setup-go').click();
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(registerContract).toHaveBeenCalledWith({ kind: 'token', address: TOKEN, txHash: null });
+    expect(provider.calls.some((c) => c.method === 'eth_sendTransaction')).toBe(false);
+    expect(ctx.reloadNet).toHaveBeenCalled();
+    // once the server knows it: all set
+    view.rerender(
+      <Kb>
+        <QuickSetup ctx={{ ...ctx, registry: { arena: { address: ARENA }, nft: { address: NFT }, token: { address: TOKEN } } as never }} />
+      </Kb>,
+    );
+    expect(card().textContent).toMatch(/All set/);
   });
 
   it('testnet without a token: offers the TestToken deploy up front', () => {
