@@ -154,14 +154,15 @@ describe('/wl', { timeout: 30_000 }, () => {
     const view = render(<WlPage />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Not open yet.' })).toBeTruthy();
     expect(screen.getByTestId('closed-page')).toBeTruthy();
-    expect(screen.getByText('This is where you will join the WL. The guide explains how the game works.')).toBeTruthy();
+    // "WL" is defined once, in plain words
+    expect(screen.getByText('This is where you will join the WL (the whitelist). People on the WL can mint the NFT before everyone else. The guide explains how the game works.')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Read the guide/ }).getAttribute('href')).toBe('/docs');
     expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
     expect(screen.getAllByRole('link', { name: /@coinnibalfun/ })[0].getAttribute('href')).toBe('https://x.com/coinnibalfun');
     expect(document.title).toBe('Not open yet · Coinnibal');
     // the sign-in (and its "install a wallet" line) only after a click on "Applied before?"
     expect(document.body.textContent).not.toMatch(/MetaMask|No browser wallet/);
-    const again = screen.getByRole('button', { name: 'Applied before? Sign in' });
+    const again = screen.getByRole('button', { name: 'Sign in to see an earlier entry' });
     expect(again.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(again);
     expect(again.getAttribute('aria-expanded')).toBe('true');

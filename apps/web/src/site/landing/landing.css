@@ -314,6 +314,17 @@
   transform: rotate(-3deg);
   pointer-events: none;
 }
+.ld-pond__hint-mouse {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .ld-pond__hint-touch {
+    display: none;
+  }
+  .ld-pond__hint-mouse {
+    display: inline;
+  }
+}
 .ld-pond__hint::after {
   content: '';
   position: absolute;
@@ -507,7 +518,8 @@
 }
 .ld-feast__grid {
   display: grid;
-  grid-template-columns: 5fr 7fr;
+  /* "Meet Coinnibal." on one line from 900 px */
+  grid-template-columns: 11fr 13fr;
   gap: clamp(32px, 5vw, 80px);
   align-items: center;
 }
@@ -528,6 +540,7 @@
   margin: 0 0 12px;
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
+  font-weight: 800;
   font-size: clamp(20px, 2.1vw, 26px);
   line-height: 1.15;
   color: var(--ink);
@@ -542,6 +555,14 @@
   display: grid;
   justify-items: center;
   gap: 6px;
+}
+/* who is who: the same tag as the stairs' "You", over each coin */
+.ld-take__who {
+  transform: rotate(-3deg);
+  white-space: nowrap;
+}
+.ld-take__coin--eater .ld-take__who {
+  transform: rotate(3deg);
 }
 .ld-take__tag {
   padding: 3px 8px;
@@ -634,8 +655,8 @@
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  /* a card title, a step below the section headings */
-  font-size: clamp(26px, 2.6vw, 36px);
+  /* a big card title, a step below the section headings (the fee card's title has the same size) */
+  font-size: clamp(26px, calc(1.2vw + 16px), 34px);
   line-height: 1;
   letter-spacing: -0.02em;
 }
@@ -692,8 +713,10 @@
   justify-content: space-between;
   gap: 16px;
   padding-top: 16px;
-  font-size: var(--t-micro);
-  color: var(--ink-3);
+  /* the eating rule is a sentence: body type, not a mono label */
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink-2);
 }
 @media (max-width: 899px) {
   .ld-feast__grid {
@@ -844,6 +867,7 @@
   font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: var(--t-h4);
+  line-height: 1.2;
   color: var(--ink);
 }
 @media (max-width: 899px) {
@@ -943,9 +967,10 @@
   padding-top: clamp(40px, 6vw, 88px);
   padding-bottom: clamp(32px, 5vw, 64px);
 }
+/* the copy sits level with the middle of the card fan beside it */
 @media (min-width: 900px) {
-  .ld-nft__copy {
-    padding-top: 24px;
+  .ld-nft__grid {
+    align-items: center;
   }
 }
 .ld-nft__why {
@@ -960,7 +985,19 @@
   margin: 20px 0 0;
   max-width: 44ch;
   color: var(--ink-2);
-  font-size: 17px;
+  font-size: var(--t-lede);
+}
+/* the launch order while nothing is open: a status pill and one line */
+.ld-nft__next {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  margin-top: 22px;
+}
+.ld-nft__next p {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--ink-2);
 }
 .ld-nft__perks {
   margin: 10px 0 0;
@@ -1224,13 +1261,16 @@
 .ld-arenas__aside p {
   margin: 0;
   color: var(--ink-2);
+  font-size: var(--t-lede);
+  text-wrap: pretty;
 }
 /* the rooms as a staircase: each step up is a bigger ticket, with a bigger coin standing on it */
 .ld-stairs {
-  --rise: 46px;
+  --rise: 38px;
   --stair-gap: 18px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* free practice on the ground step, then the four paid rooms */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: end;
   gap: 0 var(--stair-gap);
   margin: 56px 0 0;
@@ -1285,7 +1325,8 @@
   border-radius: 16px;
   box-shadow: 4px 4px 0 var(--shadow-ink);
   text-align: center;
-  transform: rotate(calc((var(--step) - 1.5) * 1.4deg));
+  /* the five tickets lean around the middle one */
+  transform: rotate(calc((var(--step) - 2) * 1.2deg));
   transition: transform 0.25s var(--ease-out, ease-out);
 }
 .ld-stair:hover .ld-ticket {
@@ -1329,6 +1370,18 @@
 }
 .ld-ticket__room {
   font-size: 20px;
+}
+/* the practice ticket: "Free", then the room's name on its own line */
+.ld-stair.is-practice .ld-ticket__name {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.ld-stair.is-practice .ld-ticket__room {
+  flex-basis: 100%;
+}
+/* a long and a short form of the stub and the holders pill: the short one only where the tickets are narrow */
+.ld-ticket__short {
+  display: none;
 }
 .ld-ticket__line {
   display: inline-flex;
@@ -1417,13 +1470,16 @@
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  font-size: 30px;
+  font-size: clamp(26px, calc(1.2vw + 16px), 34px);
   line-height: 1.1;
   letter-spacing: -0.015em;
 }
 .ld-feecard__n {
   margin: 0;
   color: #4a453b;
+}
+.ld-feecard__n + .ld-feecard__n {
+  margin-top: 4px;
 }
 .ld-feecard__cap {
   margin: 0 0 8px;
@@ -1497,38 +1553,82 @@
     padding: 22px 20px;
     transform: none;
   }
-  .ld-feecard__t {
-    font-size: 25px;
+}
+/* L13: the fee legend one key per line on a phone (not two and one) */
+@media (max-width: 639px) {
+  .ld-feebar__keys {
+    flex-direction: column;
   }
 }
-/* a tablet: still a staircase, on smaller steps */
-@media (min-width: 768px) and (max-width: 899px) {
+/* a small laptop: five steps, a little tighter */
+@media (min-width: 900px) and (max-width: 1199px) {
   .ld-stairs {
-    --rise: 26px;
     --stair-gap: 14px;
-    margin-top: 48px;
   }
   .ld-ticket {
     padding-inline: 8px;
   }
   .ld-ticket__fee {
-    font-size: 30px;
+    font-size: 36px;
   }
   .ld-ticket__room {
-    font-size: 17px;
+    font-size: 18px;
   }
   .ld-ticket__stub {
     margin-inline: -8px;
+    letter-spacing: 0.04em;
+  }
+}
+/* a tablet: still a staircase, on smaller steps; the stubs and the holders pill take their short form */
+@media (min-width: 768px) and (max-width: 899px) {
+  .ld-stairs {
+    --rise: 22px;
+    --stair-gap: 10px;
+    margin-top: 48px;
+  }
+  .ld-ticket {
+    padding-inline: 6px;
+  }
+  .ld-ticket__fee {
+    font-size: 26px;
+  }
+  .ld-ticket__room {
+    font-size: 15px;
+  }
+  .ld-ticket__stub {
+    margin-inline: -6px;
     letter-spacing: 0.03em;
     white-space: nowrap;
   }
+  .ld-ticket__long {
+    display: none;
+  }
+  .ld-ticket__short {
+    display: inline;
+  }
 }
-/* two by two on a phone: the tickets alone, no steps under them */
+/* a phone: practice alone on a centred first row, then the paid rooms two by two, no steps under them. Each row's
+   two tickets lean in mirror (left -1deg, right +1deg); these come after the five-step rules on purpose */
 @media (max-width: 767px) {
   .ld-stairs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 34px 14px;
     margin-top: 48px;
+  }
+  .ld-stair.is-practice {
+    grid-column: 1 / -1;
+  }
+  .ld-stair.is-practice .ld-ticket {
+    max-width: calc(50% - 7px);
+  }
+  .ld-stair:nth-child(even) .ld-ticket {
+    transform: rotate(-1deg);
+  }
+  .ld-stair:nth-child(odd) .ld-ticket {
+    transform: rotate(1deg);
+  }
+  .ld-stair.is-practice .ld-ticket {
+    transform: rotate(-1deg);
   }
   .ld-stair__step {
     display: none;
@@ -1845,13 +1945,12 @@
   background: var(--tide-shore) 0 100% / 180px 40px repeat-x;
 }
 
-/* the cards float on the water, not quite in a line */
+/* the cards float on the water: one left edge and one right edge, each card with its own small tilt */
 .ld-faq__list {
   grid-column: 2;
   grid-row: 2;
   display: grid;
   gap: 16px;
-  --drift: 22px;
 }
 .ld-qa {
   background: var(--cream);
@@ -1861,11 +1960,9 @@
   box-shadow: var(--sh-3);
 }
 .ld-qa:nth-child(odd) {
-  margin-right: var(--drift);
   transform: rotate(-0.5deg);
 }
 .ld-qa:nth-child(even) {
-  margin-left: var(--drift);
   transform: rotate(0.4deg);
 }
 .ld-qa__q {
@@ -2054,8 +2151,11 @@
     --floor: 104px;
   }
   .ld-faq__list {
-    --drift: 8px;
     gap: 14px;
+  }
+  /* two grey bars under the moon read as a broken line on a phone */
+  .ld-faq__glint {
+    display: none;
   }
   .ld-faq__water::before { top: 70px; }
   .ld-faq__water::after { top: 210px; }
@@ -2067,6 +2167,21 @@
     margin: 0 0 18px 0;
     scale: 0.75;
     transform-origin: 0 100%;
+  }
+}
+/* L3: "Good to know." stays on one line beside a smaller moon on a phone */
+@media (max-width: 479px) {
+  .ld-faq__side {
+    gap: 10px;
+  }
+  .ld-faq__coin,
+  .ld-faq__coin .kb-coin {
+    width: 64px !important;
+  }
+}
+@media (max-width: 379px) {
+  .ld-faq__side .ld-h2 {
+    font-size: 36px;
   }
 }
 @media (max-width: 479px) {
@@ -2221,40 +2336,9 @@
   height: 100%;
   display: block;
 }
-.ld-dusk__clock {
-  position: absolute;
-  left: max(var(--gutter, 20px), calc(50% - 640px));
-  top: 22px;
-  padding: 6px 12px;
-  font-size: 22px;
-  color: var(--ink-fixed);
-  background: var(--sun);
-  border: var(--stroke) solid var(--outline);
-  border-radius: 12px;
-  box-shadow: var(--sh-2);
-  transform: rotate(-3deg);
-}
-.ld-dusk__note {
-  position: absolute;
-  left: max(var(--gutter, 20px), calc(50% - 640px));
-  top: 78px;
-  max-width: 60%;
-  padding: 3px 9px;
-  font-size: var(--t-micro);
-  color: var(--ink-fixed);
-  background: var(--cream);
-  border: var(--stroke-sm) solid var(--outline);
-  border-radius: var(--r-tag);
-}
 @media (max-width: 479px) {
   .ld-dusk {
     height: 260px;
-  }
-  .ld-dusk__note {
-    display: none;
-  }
-  .ld-dusk__clock {
-    font-size: 18px;
   }
 }
 .ld-dusk__lights {

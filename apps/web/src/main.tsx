@@ -53,13 +53,14 @@ function boot<M>(page: Promise<M>, start: (m: M) => void): void {
 if (path === '/admin') {
   // Operator panel (chain admin, WL, collabs, site settings): its own lazy chunk, English only.
   void import('./admin/mount').then((m) => m.mount(root)).catch(bootFailed);
-} else if (params.has('gallery')) {
-  // Design-system proof sheet (every component, both themes).
+} else if (import.meta.env.DEV && params.has('gallery')) {
+  // Design-system proof sheet (every component, both themes). The three proof sheets are dev-only: a production
+  // build drops them (they carry old copy no visitor should see), so `/?gallery` there is the landing.
   boot(import('./design/Gallery'), (m) => m.startDesignGallery(root));
-} else if (params.has('coins')) {
+} else if (import.meta.env.DEV && params.has('coins')) {
   // Coin / world sprite sheet (was ?gallery before v2).
   boot(import('./gallery'), (m) => m.startGallery(root));
-} else if (params.has('flagskins')) {
+} else if (import.meta.env.DEV && params.has('flagskins')) {
   // Flag skin proof sheet (coins painted with their flags; `?flagskins=TR,US` for a list, `all` for every flag).
   boot(import('./flag-gallery'), (m) => m.startFlagGallery(root, params.get('flagskins') ?? ''));
 } else if (path === '/play') {

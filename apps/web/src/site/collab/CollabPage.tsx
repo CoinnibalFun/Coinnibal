@@ -131,7 +131,7 @@ function Collab() {
 
   const STEPS = [t('cb.step.apply'), t('cb.step.review'), t('cb.step.wallets')];
   return (
-    <StoryPlate numeral="V" title={t('cb.plate')} aside="/collab" className="cb-plate">
+    <StoryPlate numeral="V" title={t('cb.plate')} className="cb-plate">
       <div className="cb-page">
         <header className="cb-head">
           <div className="cb-head__text">
