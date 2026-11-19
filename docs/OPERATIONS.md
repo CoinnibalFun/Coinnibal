@@ -342,7 +342,7 @@ What players see follows configuration, not code:
 
 | What | Where it comes from | Today |
 |---|---|---|
-| The site's domain (canonical / Open Graph URLs, robots.txt, sitemap.xml, share cards, the Link X post, SIWE) | web build `VITE_PUBLIC_URL` (else `PUBLIC_URL`); server `PUBLIC_URL` | `https://coinnibal.fun` |
+| The site's domain (canonical / Open Graph URLs, robots.txt, sitemap.xml, share cards, the Link X post, SIWE) | web build `VITE_PUBLIC_URL` (else `PUBLIC_URL`); server `PUBLIC_URL` (on the VPS both are `https://<SITE_DOMAIN>`; `COINNIBAL_PUBLIC_URL` overrides the server's) | `https://coinnibal.fun` |
 | The project's X handle (every "Follow @...", WL tasks, collab posts, the WL card, `twitter:site`) | the admin's **Settings → X handle** (live at once); its default: server `X_HANDLE`, web build `VITE_X_HANDLE` | `coinnibalfun` |
 | The token's display symbol (lobby, HUD, receipts, shop, faucet page) | server `TOKEN_SYMBOL` | `tokens` (the default) |
 | The brand kit art (`node brand/generate.mjs`) | `BRAND_X_HANDLE`, `BRAND_SITE` | `@coinnibalfun`, `coinnibal.fun` |
@@ -370,9 +370,9 @@ default.
 Everything is done from `/admin` with the owner wallet; nothing needs a terminal once the server runs.
 
 1. **Server.** On the VPS nothing is needed for the chain (`COINNIBAL_CHAIN_ID` defaults to 46630 and `COINNIBAL_RPC_URLS` to the public `https://rpc.testnet.chain.robinhood.com`;
-   a provider such as Alchemy is better for production), then set `SERVER_PRIVATE_KEY=auto`, `ADMIN_WALLETS` and
-   `PUBLIC_URL`, then start it. The log shows `chain: Robinhood Chain Testnet (chain id 46630)` and the server key;
-   `/api/config` publishes it as `serverKey`.
+   a provider such as Alchemy is better for production), then set `SERVER_PRIVATE_KEY=auto` and `ADMIN_WALLETS`, and
+   `SITE_DOMAIN` (or `COINNIBAL_PUBLIC_URL`) if the site is not `https://coinnibal.fun`, then start it. The log shows
+   `chain: Robinhood Chain Testnet (chain id 46630)` and the server key; `/api/config` publishes it as `serverKey`.
 2. **Gas.** Get testnet ETH for the owner wallet and the server key (the official faucet:
    `faucet.testnet.chain.robinhood.com`, confirmed in RESEARCH.md, or Alchemy's; `GAS_FAUCET_URL` overrides the link). A few
    hundredths of an ETH last a long time on an Arbitrum chain.
@@ -425,7 +425,9 @@ Optional keys (all have defaults): `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `
 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `BACKUP_RCLONE_REMOTE`, `BACKUP_RCLONE_KEEP_DAYS`, `ADMIN_TOKEN_TTL_MIN`
 (120), `ADMIN_SECRET_EXPORT` (on on testnet, off on mainnet), `DEATH_SETTLE_BATCH_S` (6), `GAS_FLOOR_ETH` (0.002),
 `GAS_RUNWAY_WARN_DAYS` (7), `GAS_RUNWAY_CRITICAL_DAYS` (2), `HEALTH_MAX_PENDING` (400), `HEALTH_MAX_PENDING_AGE_S`
-(900). Required as before: `GAME_DOMAIN`, `NODE_ENV=production`, `PUBLIC_URL`, `CORS_ORIGIN`, `ADMIN_WALLETS`.
+(900), `SITE_DOMAIN` (`coinnibal.fun`) or `COINNIBAL_PUBLIC_URL` for the site's origin (the server's `PUBLIC_URL`).
+Required as before: `GAME_DOMAIN`, `NODE_ENV=production`, `CORS_ORIGIN`, `ADMIN_WALLETS`, and a non-empty `PUBLIC_URL`
+line (install.sh checks it; docker-compose.yml ignores its value).
 
 **Renamed keys (Elymum → Coinnibal, November 2026).** Every `ELYMUM_*` key the VPS reads is now `COINNIBAL_*`:
 `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `COINNIBAL_RPC_MAX_RPS`, `COINNIBAL_GAME_ACCESS`, `COINNIBAL_PUBLIC_URL`,

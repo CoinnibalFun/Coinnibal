@@ -67,7 +67,8 @@ Running it again is safe.
 | Key | What |
 |---|---|
 | `GAME_DOMAIN` | the game server's domain (section 2; the live server's is `game.elymum.io`) |
-| `PUBLIC_URL`, `CORS_ORIGIN` | `https://coinnibal.fun` (the site's origin: SIWE sign-ins are bound to it) |
+| `SITE_DOMAIN` | optional: the site (default `coinnibal.fun`). The server's `PUBLIC_URL` (the site's origin: SIWE sign-ins are bound to it, the NFT metadata links start with it) is `https://<SITE_DOMAIN>`; `COINNIBAL_PUBLIC_URL` overrides it. `install.sh` still wants a non-empty `PUBLIC_URL` line in `.env`, whose value `docker-compose.yml` ignores |
+| `CORS_ORIGIN` | `https://coinnibal.fun` |
 | `ADMIN_WALLETS` | the owner's 0x address(es) |
 | `AUTH_SECRET` | `openssl rand -hex 32` (at least 32 bytes; the mainnet refuses to start with less), or empty for the generated `DATA_DIR/auth-secret` |
 | `SERVER_PRIVATE_KEY` | `auto` (kept in the data volume and the backups) |
