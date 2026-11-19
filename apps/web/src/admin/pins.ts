@@ -25,7 +25,11 @@ export const PIN_REBUILD = 'coinnibal-compose up -d --build app';
 /** The web build outside Docker. */
 export const PIN_BUILD_OUTSIDE = 'pnpm -F @coinnibal/web build';
 
+/** Each contract's row label on the card (a label, so the token's is capitalised). */
 export const PIN_NAME: Readonly<Record<PinKind, string>> = Object.freeze({ arena: 'CoinnibalArena', nft: 'CoinnibalNFT', token: 'The game token' });
+
+/** The same names in the middle of a sentence. */
+export const PIN_PROSE: Readonly<Record<PinKind, string>> = Object.freeze({ arena: 'CoinnibalArena', nft: 'CoinnibalNFT', token: 'the game token' });
 
 /**
  * - `match`: pinned to the registered address.
@@ -113,13 +117,20 @@ export function pinSummary(r: PinReport): string {
     return `Built with the registered ${r.rows.map((x) => (x.kind === 'token' ? 'game token' : x.name)).join(', ')}.`;
   }
   const parts: string[] = [];
-  const missing = r.todo.filter((x) => x.state === 'missing').map((x) => x.name);
-  const differs = r.todo.filter((x) => x.state === 'differs').map((x) => x.name);
+  const missing = r.todo.filter((x) => x.state === 'missing').map((x) => PIN_PROSE[x.kind]);
+  const differs = r.todo.filter((x) => x.state === 'differs').map((x) => PIN_PROSE[x.kind]);
   if (r.invalid.length) parts.push(`${r.invalid.map((x) => x.env).join(', ')} of this build is not an address: the site signs nothing.`);
   if (missing.length) parts.push(`Not pinned in this build: ${missing.join(', ')}.`);
   if (differs.length) parts.push(`Pinned to another address: ${differs.join(', ')}.`);
   parts.push(`Setup → Site pins: the lines for /opt/elymum/.env, then ${PIN_REBUILD} on the VPS.`);
   return parts.join(' ');
+}
+
+/** The card's red line: each contract whose pin is missing or different, in one sentence; null when none is (pure, tested). */
+export function pinTodoLine(r: PinReport): string | null {
+  if (r.todo.length === 0) return null;
+  const s = r.todo.map((x) => `${PIN_PROSE[x.kind]} is ${x.state === 'missing' ? 'not pinned' : 'pinned to another address'}`).join('; ');
+  return `${s.charAt(0).toUpperCase()}${s.slice(1)}.`;
 }
 
 /** A row's state in two or three words (the card's pill). */
