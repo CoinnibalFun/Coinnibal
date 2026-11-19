@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION, PlayerFlag, decodeSnapshot, type PlayerInfo, type ServerMessage } from '@elymum/shared';
+import { PROTOCOL_VERSION, PlayerFlag, decodeSnapshot, type PlayerInfo, type ServerMessage } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
@@ -44,7 +44,7 @@ describe('countries board (leaderboards)', () => {
   });
 
   it('persists, reads back only allowlisted rows and is cleared by the reset', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-countries-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-countries-'));
     const path = join(dir, 'leaderboards.json');
     const lb = new Leaderboards(path, NOW);
     lb.countryGame({ country: 'JP', mass: 300, paid: 0, at: NOW });
@@ -81,7 +81,7 @@ describe('country on the profile', () => {
   });
 
   it('stores the flag skin as true or false, keeps it when left out, persists it and refuses anything else', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-flagskin-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-flagskin-'));
     const path = join(dir, 'profiles.json');
     const p = new ProfileStore(path);
     expect(p.view(w).flagSkin).toBeUndefined();
@@ -158,7 +158,7 @@ describe('flags in game', () => {
   let app: App;
   let port: number;
   beforeAll(async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-flags-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-flags-'));
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, TRUST_PROXY: '0', GAME_ACCESS: 'public' } as NodeJS.ProcessEnv);
     const big = () => new Limiter(10_000, 60_000);
     app = await createApp(cfg, {

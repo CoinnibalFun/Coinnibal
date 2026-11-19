@@ -1,5 +1,5 @@
-import { ELYSIUM, lookForBasicSkin, shadeOf, type CoinLook } from '@elymum/art';
-import { EMBLEM_SKIN_ID } from '@elymum/shared';
+import { ELYSIUM, lookForBasicSkin, shadeOf, type CoinLook } from '@coinnibal/art';
+import { EMBLEM_SKIN_ID } from '@coinnibal/shared';
 
 /**
  * The emblem skin (`EMBLEM_SKIN_ID`, unlocked for Coinnibal NFT holders): the emblem's gold coin with

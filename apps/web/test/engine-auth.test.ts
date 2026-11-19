@@ -1,4 +1,4 @@
-import type { ServerMessage } from '@elymum/shared';
+import type { ServerMessage } from '@coinnibal/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The engine without a canvas renderer or a real socket: the test plays the server.
@@ -62,14 +62,14 @@ afterEach(() => {
 
 describe('a session token the server refuses', () => {
   it('signs the lobby out and forgets the stored token (the /play gate handed it over)', () => {
-    localStorage.setItem('elymum.auth.v1', JSON.stringify({ address: ADDR, token: STALE, exp: Date.now() + 3600_000 }));
+    localStorage.setItem('coinnibal.auth.v1', JSON.stringify({ address: ADDR, token: STALE, exp: Date.now() + 3600_000 }));
     useUi.setState({ auth: { address: ADDR, token: STALE, profile: null } });
     engine = new GameEngine(document.createElement('canvas'));
     welcome();
     expect(net.sent.find((m) => m.t === 'auth')?.token).toBe(STALE);
     authFailed();
     expect(useUi.getState().auth).toBeNull();
-    expect(localStorage.getItem('elymum.auth.v1')).toBeNull();
+    expect(localStorage.getItem('coinnibal.auth.v1')).toBeNull();
     // the wallet hook now finds no token and no session: the lobby offers "Sign in"
     expect(GameEngine.storedToken(ADDR)).toBeNull();
   });

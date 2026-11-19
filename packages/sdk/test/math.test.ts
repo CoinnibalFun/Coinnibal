@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BPS, MAX_UINT128 } from '../src/constants';
 import { fromLedger, ledgerDecimals, ledgerUnitScale, mulBps, settlementSplit, toBigInt, toLedger } from '../src/math';
 
-describe('settlementSplit (ElymumArena v3 computeFees)', () => {
+describe('settlementSplit (CoinnibalArena v3 computeFees)', () => {
   const R = { burnBps: 1_500, vaultBps: 500 };
   it('takes the fee from the profit only, each share rounded down', () => {
     expect(settlementSplit(1_000n, 2_000n, R)).toEqual({ profit: 1_000n, burned: 150n, toVault: 50n, net: 1_800n });

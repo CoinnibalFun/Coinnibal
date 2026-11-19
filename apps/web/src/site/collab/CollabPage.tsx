@@ -1,4 +1,4 @@
-import { COLLAB_ROLES, COLLAB_TYPES, SITE_LIMITS, isXStatusUrl, type CollabPublic, type CollabWalletRow } from '@elymum/shared';
+import { COLLAB_ROLES, COLLAB_TYPES, SITE_LIMITS, isXStatusUrl, type CollabPublic, type CollabWalletRow } from '@coinnibal/shared';
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type ReactNode } from 'react';
 import { Button, CoinCharacter, Field, FoodBit, Icon, Stamp, StampSpinner, Sticker, Tape, useOffscreenPause, type CoinMood, type CoinPaint, type StampTone } from '../../design';
 import { SiteApiError, site } from '../api';
@@ -131,7 +131,7 @@ function Collab() {
 
   const STEPS = [t('cb.step.apply'), t('cb.step.review'), t('cb.step.wallets')];
   return (
-    <StoryPlate numeral="V" title={t('cb.plate')} aside="/collab" className="cb-plate">
+    <StoryPlate numeral="V" title={t('cb.plate')} className="cb-plate">
       <div className="cb-page">
         <header className="cb-head">
           <div className="cb-head__text">

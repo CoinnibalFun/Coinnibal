@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { LEADERBOARD_SIZE, ROUND_BOARD_KEEP, ROUND_BOARD_TOP, isCountryCode, type CountryBoardRow, type RoundBoard } from '@elymum/shared';
+import { LEADERBOARD_SIZE, ROUND_BOARD_KEEP, ROUND_BOARD_TOP, isCountryCode, type CountryBoardRow, type RoundBoard } from '@coinnibal/shared';
 
 export interface LbRecord {
   name: string;

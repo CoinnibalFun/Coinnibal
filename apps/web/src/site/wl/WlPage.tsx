@@ -1,4 +1,4 @@
-import { normalizeXHandle, type PublicWlTask, type SiteSettings, type WlEntryPublic } from '@elymum/shared';
+import { activeChain, normalizeXHandle, type PublicWlTask, type SiteSettings, type WlEntryPublic } from '@coinnibal/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, CoinCharacter, Field, Icon, PlateLabel, Stamp, StampSpinner, StatusPill, Sticker, Tape, useReducedMotion } from '../../design';
@@ -7,9 +7,10 @@ import { ticketNo } from '../coinLook';
 import { Link } from '../router';
 import { dropExpired, signOut } from '../session';
 import { X_HANDLE, X_URL, shortWallet, siteHost, useSiteSettings, xIntent } from '../settings';
-import { intlLocale, t, useT, type TKey } from '../../i18n';
+import { intlLocale, plainChainName, t, useT, type TKey } from '../../i18n';
 import { T } from '../../i18n/rich';
 import { ClosedNotice } from '../Closed';
+import { useClaimTitle } from '../pageTitle';
 import { SitePage, XIcon } from '../Shell';
 import { SiteWalletProvider, WalletSignIn, useSiteSession } from '../wallet/SiteWallet';
 import { Ascent } from './Ascent';
@@ -34,7 +35,7 @@ export function WlPage() {
 /** Plate IV of the book: the WL. */
 export function WlPlate({ title, children, className }: { title: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <StoryPlate numeral="IV" title={title} aside="/wl" className={className}>
+    <StoryPlate numeral="IV" title={title} className={className}>
       {children}
     </StoryPlate>
   );
@@ -132,12 +133,7 @@ function WlClosed() {
   const [signin, setSignin] = useState(false);
   const t = useT();
   // the tab reads like the site's other closed pages (the WL page itself, open or with a status, keeps its own title)
-  useEffect(() => {
-    document.title = t('site.title.closed');
-    return () => {
-      document.title = t('site.title.wl');
-    };
-  }, [t]);
+  useClaimTitle('site.title.closed');
   return (
     <>
       <PlateLabel numeral="IV" title={t('wp.closed.plate')} />
@@ -419,7 +415,8 @@ function WlStepper({ tasks, settings, onEntry }: { tasks: PublicWlTask[]; settin
   const total = steps.length;
   // the wallet chore counts as done once signed in (it is the last terrace before the feast)
   const doneCount = steps.filter((s) => done.has(s.key) || (s.kind === 'sign' && !!session)).length;
-  const postText = `${no ? t('wp.post.no', { no }) : t('wp.post')} ${siteHost()}/wl`;
+  const chain = plainChainName(activeChain().name);
+  const postText = `${no ? t('wp.post.no', { no, chain }) : t('wp.post', { chain })} ${siteHost()}/wl`;
 
   return (
     <WlPlate title={t('wp.plate.n', { n: total })}>

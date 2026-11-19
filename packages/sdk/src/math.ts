@@ -36,7 +36,7 @@ function checkRate(name: string, bps: number): void {
 }
 
 /**
- * `ElymumArena.computeFees` exactly: the fee is taken from the profit only, each share rounded down. Pass the
+ * `CoinnibalArena.computeFees` exactly: the fee is taken from the profit only, each share rounded down. Pass the
  * session's own rates (fixed at join) for a settlement, the config's for a preview. Throws `RangeError` where the
  * contract could not run (a value outside uint128, a rate outside uint16).
  */

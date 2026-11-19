@@ -7,7 +7,7 @@ import {
   bpsToPercent,
   formatUsdCents,
   totalFeeBps,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import type { ReactNode } from 'react';
 import { CoinCharacter, Icon, Laurel, type CoinPaint, type IconName } from '../../design';
 import { useT, type TKey } from '../../i18n';
@@ -69,7 +69,7 @@ export function perkCards(v: NftPerkValues, t: (k: TKey, vars?: Record<string, s
     { id: 'fee', icon: 'flame', paint: 'sun', big: v.fee.holder, title: t('nf.fee.t', { holder: v.fee.holder, normal: v.fee.normal }), note: t('nf.fee.n', { burn: v.fee.burn, team: v.fee.team }) },
   ];
   if (v.room) cards.push({ id: 'room', icon: 'crown', paint: 'up', big: v.room, title: t('nf.room.t', { price: v.room }), note: t('nf.room.n') });
-  cards.push({ id: 'shop', icon: 'bag', paint: 'coral', big: `\u2212${v.shopPct}%`, title: t('nf.shop.t', { pct: v.shopPct }), note: t('nf.shop.n', { extra: v.shopExtra, base: SHOP_DEFAULTS.arenaUsesPerRound, total: SHOP_DEFAULTS.arenaUsesPerRound + v.shopExtra }) });
+  cards.push({ id: 'shop', icon: 'bag', paint: 'coral', big: `\u2212${v.shopPct}%`, title: t('nf.shop.t', { pct: v.shopPct }), note: t('nf.shop.n', { base: SHOP_DEFAULTS.arenaUsesPerRound, total: SHOP_DEFAULTS.arenaUsesPerRound + v.shopExtra }) });
   if (v.privateRoom.perk === 'free_daily') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: '1/day', title: t('nf.free.t'), note: t('nf.free.n') });
   else if (v.privateRoom.perk === 'discount') cards.push({ id: 'private', icon: 'users', paint: 'cyan', big: `\u2212${v.privateRoom.pct}%`, title: t('nf.freeDiscount.t', { pct: v.privateRoom.pct }), note: t('nf.free.n') });
   cards.push({ id: 'skin', icon: 'user', paint: 'teal', big: null, title: t('nf.skin.t'), note: t('nf.skin.n') });
@@ -78,8 +78,8 @@ export function perkCards(v: NftPerkValues, t: (k: TKey, vars?: Record<string, s
 
 /**
  * "Why get the NFT?": every holder perk as a small card with a picture (landing and mint page). The numbers are the
- * game's configured holder perks; the note says every ticket shows its fee (a testnet contract can lag behind the
- * configured perks). `level`: its heading's rank (3 under the landing's NFT section, 2 on a page of its own).
+ * game's configured holder perks. `level`: its heading's rank (3 under the landing's NFT section, 2 on a page of its
+ * own).
  */
 export function WhyNft({ values, testnet, tone = 'night', heading, id = 'why-nft', level = 2, children }: { values?: NftPerkValues; testnet: boolean | null; tone?: 'night' | 'paper'; heading?: ReactNode; id?: string; level?: 2 | 3; children?: ReactNode }) {
   const t = useT();
@@ -110,7 +110,6 @@ export function WhyNft({ values, testnet, tone = 'night', heading, id = 'why-nft
           </li>
         ))}
       </ul>
-      <p className="nf-why__note">{t('nf.note')}</p>
       {children}
     </section>
   );

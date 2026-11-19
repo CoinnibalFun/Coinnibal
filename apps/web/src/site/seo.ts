@@ -1,3 +1,4 @@
+import { en } from '../i18n/en';
 import { SITE_PATHS } from './router';
 
 /**
@@ -27,21 +28,22 @@ export const CLOSED_META = 'closed';
 export const NOT_FOUND_META = 'not-found';
 
 /**
- * A page's own title and description for search results and share cards. index.html ships the landing's; a page
+ * A page's own title and description for search results and share cards (the titles are the same keys as the tab
+ * titles, so the two never drift apart). index.html ships the landing's; a page
  * listed here gets its own while it is shown, and every other page gets index.html's back. Keyed by path, plus
  * `CLOSED_META` (any closed page, whatever it is: a closed page never names itself) and `NOT_FOUND_META`.
  */
 export const PAGE_META: Readonly<Record<string, { title: string; description: string }>> = {
   '/docs': {
-    title: 'Player guide · Coinnibal',
+    title: en['site.title.docs'],
     description: 'How Coinnibal works: rounds, rooms and tickets, the fee, power-ups and what the NFT gives you.',
   },
   [CLOSED_META]: {
-    title: 'Not open yet · Coinnibal',
+    title: en['site.title.closed'],
     description: 'This part of Coinnibal is not open yet. The player guide explains how the game works.',
   },
   [NOT_FOUND_META]: {
-    title: 'Page not found · Coinnibal',
+    title: en['site.nf.docTitle'],
     description: 'There is no page here. The player guide explains how Coinnibal works.',
   },
 };

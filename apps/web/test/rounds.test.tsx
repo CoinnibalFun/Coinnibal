@@ -1,4 +1,4 @@
-import { RULES, roundAt, type DeathStats, type RoomInfo, type RoundInfo, type RoundStanding } from '@elymum/shared';
+import { RULES, roundAt, type DeathStats, type RoomInfo, type RoundInfo, type RoundStanding } from '@coinnibal/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Kb } from '../src/design';
@@ -259,13 +259,13 @@ describe('Round over sheet', () => {
     expect(screen.getByText('3,500')).toBeTruthy();
     expect(screen.getByText('Fee 20% of profit')).toBeTruthy();
     expect(screen.getByText('≈ −500')).toBeTruthy();
-    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 3,000$ELYMUM');
-    expect(screen.getByText('20% of your profit is the fee (15% burned, 5% to the fee wallet); no profit, no fee')).toBeTruthy();
+    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 3,000$NIBAL');
+    expect(screen.getByText("The fee is 20% of your profit. 15% is burned and 5% goes to the team wallet. If you don't make a profit, you pay no fee.")).toBeTruthy();
     act(() =>
       useUi.setState({ lastSettlement: { session: 'SessV3', arenaId: 1, txHash: `0x${'5b'.repeat(32)}`, payout: 3500 * M, fee: 500 * M, burned: 375 * M, toVault: 125 * M, net: 3000 * M, at: Date.now() } }),
     );
     expect(screen.getByText('−500')).toBeTruthy();
-    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('3,000$ELYMUM');
+    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('3,000$NIBAL');
   });
 
   it('prints till, fee and paid; my place and the top 5; then the PAID transaction', () => {
@@ -293,7 +293,7 @@ describe('Round over sheet', () => {
     expect(screen.getByText('Fee 20% of profit')).toBeTruthy();
     expect(screen.getByText('≈ −400')).toBeTruthy();
     expect(screen.getByText('Paid')).toBeTruthy();
-    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 2,600$ELYMUM');
+    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 2,600$NIBAL');
     expect(screen.getByRole('status').textContent).toContain('Settling on Robinhood Chain Testnet');
     // my place and the room's whole board at the bell (scrolling, my row highlighted and pinned)
     expect(screen.getByText('Your place').nextElementSibling?.textContent).toBe('3rd');
@@ -330,7 +330,7 @@ describe('Round over sheet', () => {
     expect(screen.getByText('Your place').nextElementSibling?.textContent).toBe('Outside the top 6');
     // a loss pays no fee (the rate shown is the contract default while the server's is unknown)
     expect(screen.getByText('Fee 20% of profit')).toBeTruthy();
-    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 400$ELYMUM');
+    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('≈ 400$NIBAL');
   });
 
   it("estimates the fee at the server's live rates, and at the ticket's own rates once its session is read", () => {
@@ -377,7 +377,7 @@ describe('death sheet in an arena', () => {
     clockAt(START + 30_000);
     eaten();
     const cta = screen.getByRole('button', { name: /^Start over/ });
-    expect(cta.textContent).toContain('New ticket · 1K $ELYMUM');
+    expect(cta.textContent).toContain('New ticket · 1K $NIBAL');
     expect(screen.queryByText(/next round in/)).toBeNull();
   });
 
@@ -386,7 +386,7 @@ describe('death sheet in an arena', () => {
     eaten();
     const cta = screen.getByRole('button', { name: /^Start over/ });
     expect(cta.textContent).toContain('New ticket · next round in 0:42');
-    expect(screen.queryByText(/1K \$ELYMUM/)).toBeNull();
+    expect(screen.queryByText(/1K \$NIBAL/)).toBeNull();
   });
 
   it('"Start over" opens this arena\'s ticket flow from the lobby', () => {

@@ -3,8 +3,8 @@
 import { C, coin, page, seigaiha, star, starfield, wordmark } from './art.mjs';
 import { HANDLE } from './templates.mjs';
 
-/** The site named on the banner's "Testnet open" sticker: `BRAND_SITE` (a host, e.g. coinnibal.fun), else the current one. */
-const SITE = (process.env.BRAND_SITE || 'elymum.io').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+/** The site named on the banner's "Coming soon" sticker: `BRAND_SITE` (a host, e.g. coinnibal.fun), else the current one. */
+const SITE = (process.env.BRAND_SITE || 'coinnibal.fun').replace(/^https?:\/\//, '').replace(/\/+$/, '');
 
 const at = (x, y, html, extra = '') => `<div class="abs" style="left:${x}px;top:${y}px;${extra}">${html}</div>`;
 
@@ -113,7 +113,7 @@ export function xBanner2() {
     ${at(800, 222, coin('sun', { mood: 'chomp', look: [-7, 2], size: 176 }), 'transform:rotate(-7deg)')}
     ${at(1000, 268, coin('teal', { mood: 'smug', look: [-3, 0], size: 86 }), 'transform:rotate(4deg)')}
     ${at(1210, 272, coin('cream', { mood: 'sleepy', size: 64 }))}
-    <div class="live sticker"><div class="k"><span class="dot"></span>Testnet open</div><div class="n">${SITE}</div></div>
+    <div class="live sticker"><div class="k"><span class="dot"></span>Coming soon</div><div class="n">${SITE}</div></div>
     <div class="handle">${HANDLE}</div>`;
   return { w, h, html: page({ w, h, body, css, bg: C.trench }) };
 }

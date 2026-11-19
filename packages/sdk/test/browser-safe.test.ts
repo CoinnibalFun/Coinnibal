@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * The SDK is bundled by Vite for the browser, so nothing reachable from src/index.ts (or
- * src/ops.ts, `@elymum/sdk/ops`, used by the web admin panel) may import Node built-ins or rely on
+ * src/ops.ts, `@coinnibal/sdk/ops`, used by the web admin panel) may import Node built-ins or rely on
  * Node globals. src/admin.ts and src/admin-lib.ts are the Node-only CLI.
  */
 const src = resolve(dirname(fileURLToPath(import.meta.url)), '../src');

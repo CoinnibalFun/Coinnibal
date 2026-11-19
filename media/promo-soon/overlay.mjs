@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Renders the graphics layer of the Elymum SOON promo as transparent PNG frames (Ring Storybook style):
+// Renders the graphics layer of the Coinnibal SOON promo as transparent PNG frames (Ring Storybook style):
 // corner bug, kinetic captions, the sun coin creature hopping in and chomping the frame, the jaw wipe,
 // and the yellow SOON card (coins and confetti burst, bounce-in title, wordmark, handle).
 //
@@ -501,7 +501,7 @@ function card(t) {
     const y = L.soonY + fs * 0.72 + (V ? 230 : 180);
     foot += `<div class="abs" style="left:0;width:${w}px;top:${px(y)};display:flex;justify-content:center;opacity:${clamp(hu * 4).toFixed(2)}">
       <div class="tag" style="font-size:${V ? 32 : 30}px;padding:12px 26px;border-width:3.5px;box-shadow:5px 5px 0 var(--ink);gap:16px;transform:scale(${backOut(hu).toFixed(3)}) rotate(1.5deg)">
-        <span>elymum.io</span><span style="opacity:.5">&middot;</span><span>@elymumio</span></div></div>`;
+        <span>coinnibal.fun</span><span style="opacity:.5">&middot;</span><span>@coinnibalfun</span></div></div>`;
   }
   // white flash on the bite
   const fl = 1 - prog(t, CARD.flash + 0.06, CARD.flash + 0.2);

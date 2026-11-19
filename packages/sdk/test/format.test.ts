@@ -20,7 +20,7 @@ describe('format', () => {
     expect(formatTokenAmount(1n, 18)).toBe('0');
     expect(formatTokenAmount(1_000_000_000_000n, 18)).toBe('0.000001');
     expect(formatTokenAmount(12_400n * 10n ** 18n, 18, { compact: true })).toBe('12.4K');
-    expect(formatTokenWithSymbol(10n ** 18n, 18, '$ELYMUM')).toBe('1 $ELYMUM');
+    expect(formatTokenWithSymbol(10n ** 18n, 18, '$NIBAL')).toBe('1 $NIBAL');
   });
 
   it('parses token and gas-token amounts', () => {

@@ -1,4 +1,4 @@
-// Elymum motion graphics: Paper Ticket components drawn as a pure function of time.
+// Coinnibal motion graphics: Paper Ticket components drawn as a pure function of time.
 //
 // The page is driven frame by frame (render/overlays.mjs):
 //   setup(items)  builds every item once; an item is {id, type, start, dur, z?, props}
@@ -14,7 +14,7 @@
   stage.style.width = W + 'px'; stage.style.height = H + 'px';
   const C = {}; // component factories
   const live = [];
-  const ART = window.ElymumArt;
+  const ART = window.CoinnibalArt;
   const INKC = '#04181c', PAPER = '#f8f7f4', CARD = '#f6eeda';
   const COL = { pink: '#34b7dd', teal: '#2d7388', mustard: '#f2c14e', blue: '#93d9ee', green: '#3c9a87', red: '#ff5252', ink: INKC, paper: PAPER, card: CARD, pinkInk: '#2490b0', tealInk: '#1f5566' };
   const col = (c) => COL[c] || c || COL.pink;
@@ -99,7 +99,7 @@
       // the wordmark: ink letters over a misregistered pink print
       const wm = el('div');
       wm.style.cssText = 'position:absolute;left:0;right:0;top:300px;text-align:center;height:330px;';
-      const word = p.word || 'elymum';
+      const word = p.word || 'coinnibal';
       const mk = (color) => {
         const w = el('div', 'disp');
         w.style.cssText = `position:absolute;left:0;right:0;top:0;font-size:330px;letter-spacing:-.045em;color:${color};white-space:nowrap;`;
@@ -417,7 +417,7 @@
   };
 
   /** A value float: a big riso number ("+1,000") popping off the coin that ate, rising, fading.
-   * props: text, sub ('$ELYMUM'), x/y or track [[lt, x, y, r], ...] (follows a coin), color, size. */
+   * props: text, sub ('$NIBAL'), x/y or track [[lt, x, y, r], ...] (follows a coin), color, size. */
   C.float = (p) => {
     const root = el('div', 'it disp');
     const size = p.size || 132;
@@ -429,7 +429,7 @@
     const main = mk(c, true);
     const sub = el('div', 'mono');
     sub.style.cssText = `position:absolute;left:0;right:0;top:${size * 1.02}px;font-size:${size * 0.2}px;letter-spacing:0.18em;color:${INKC};text-align:center;`;
-    sub.textContent = p.sub ?? '$ELYMUM';
+    sub.textContent = p.sub ?? '$NIBAL';
     const box = el('div');
     box.style.cssText = 'position:relative;';
     box.appendChild(ghost); box.appendChild(main); box.appendChild(sub);
@@ -774,8 +774,8 @@
       const [l, v, style] = r;
       return `<div class="row" style="${style === 'dim' ? 'color:#6b655a' : style === 'pink' ? 'color:#1e6f8c' : style === 'teal' ? 'color:#1f5566' : ''}"><span class="l">${esc(l)}</span><span class="d"></span><span class="r">${esc(v)}</span></div>`;
     });
-    rc.innerHTML = `<div class="in"><h3>${esc(p.title || 'ELYMUM CASH-OUT')}</h3><div class="sub mono">${esc(p.sub || '')}</div>${rows.join('')}
-      ${p.net ? `<div class="rule2"></div><div class="net"><span class="mono" style="font-size:22px">${esc(p.netLabel || 'NET')}</span><span><b>${esc(p.net)}</b> <span class="mono" style="font-size:20px">$ELYMUM</span></span></div>` : ''}</div><div class="zig"></div>`;
+    rc.innerHTML = `<div class="in"><h3>${esc(p.title || 'COINNIBAL CASH-OUT')}</h3><div class="sub mono">${esc(p.sub || '')}</div>${rows.join('')}
+      ${p.net ? `<div class="rule2"></div><div class="net"><span class="mono" style="font-size:22px">${esc(p.netLabel || 'NET')}</span><span><b>${esc(p.net)}</b> <span class="mono" style="font-size:20px">$NIBAL</span></span></div>` : ''}</div><div class="zig"></div>`;
     const clip = el('div');
     clip.style.cssText = 'position:relative;overflow:hidden;padding:0 30px 40px 30px;margin:0 -30px;';
     clip.appendChild(rc);
@@ -992,7 +992,7 @@
   };
 
   /** The NFT beat (media/mint-film/scenes/nft.js), full frame on its canvas: sealed cards dealt and
-   *  turned, "Elymum NFT. / $1 in HYPE.", the WL ticket (<SITE_HOST>/wl). p: {times, out, kicker, lead,
+   *  turned, "Coinnibal NFT. / $1 in HYPE.", the WL ticket (<SITE_HOST>/wl). p: {times, out, kicker, lead,
    *  plain (the plain mention, see drawBeat)}. */
   C.nft = (p) => {
     const root = el('div', 'it');

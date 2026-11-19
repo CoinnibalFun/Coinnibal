@@ -2,11 +2,12 @@
  * The money simulation (test/money-sim.ts) in the test suite: randomized rounds with every fault on, the
  * conservation checker after every chain pass, the drain at the end (no ticket left open, every ticket closed
  * exactly once, every vault down to its forfeits). On the contract model (fast, several seeds) and on a real
- * hardhat node with the real ElymumArena v3 (skipped when the node does not start). The long runs:
- * `pnpm -F @elymum/server money-sim` (see scripts/money-sim.ts).
+ * hardhat node with the real CoinnibalArena v4 (skipped when the node does not start). The long runs:
+ * `pnpm -F @coinnibal/server money-sim` (see scripts/money-sim.ts).
  */
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_FAULTS, fakeSimChain, runMoneySim, type SimReport } from './money-sim';
+import { runRoomFeeConservation } from './room-pay';
 import { runCartConservation } from './shop-cart';
 
 const brief = (r: SimReport) =>
@@ -38,14 +39,16 @@ describe('money conservation under faults (simulation)', () => {
       const r = await runMoneySim(fakeSimChain({ players: 14, seed }), { seed, rounds: 200, faults: DEFAULT_FAULTS, testArenas: { bots: 10, difficulty: 'mixed' } });
       expect(r.violations).toEqual([]);
       expect(r.closures.Settled).toBeGreaterThan(150);
-      // the bots really played: players ate bots (mass, no value) and bots ate stake cells (value spilled as loot)
+      // the bots really played: players ate bots (mass, no value) and bots ate stake cells (value spilled as loot);
+      // seated players made bots leave and the bots came back after them (the bounds are checked every tick)
       expect(r.testArenas!.botsEaten).toBeGreaterThan(0);
       expect(r.testArenas!.botSpills).toBeGreaterThan(0);
-      console.log(`${brief(r)}; test arenas: ${r.testArenas!.botsEaten} bots eaten, ${r.testArenas!.botSpills} stake cells eaten by bots (${r.testArenas!.botSpillValue} spilled as loot)`);
+      expect(r.testArenas!.botsLeft).toBeGreaterThan(0);
+      console.log(`${brief(r)}; test arenas: ${r.testArenas!.botsEaten} bots eaten, ${r.testArenas!.botSpills} stake cells eaten by bots (${r.testArenas!.botSpillValue} spilled as loot), ${r.testArenas!.botsLeft} left for players`);
     }, 180_000);
   }
 
-  it('the real ElymumArena v3 on a hardhat node: the same checks', async (ctx) => {
+  it('the real CoinnibalArena v4 on a hardhat node: the same checks', async (ctx) => {
     const { hardhatSimChain } = await import('./money-sim-hardhat');
     let sim;
     try {
@@ -75,6 +78,19 @@ describe('money conservation: power-up carts (one payment, applied at once)', ()
       expect(r.violations).toEqual([]);
       expect(r.refunds).toBeGreaterThan(0);
       console.log(`carts seed ${seed}: ${r.purchases} payments, ${r.refused} refused, ${r.refunds} with a part owed back`);
+    }, 60_000);
+  }
+});
+
+describe('money conservation: custom room fees (paid in the game token, one room per payment)', () => {
+  for (const seed of [31, 32, 33]) {
+    it(`seed ${seed}: every room was paid at least its price by its creator, once; the fees add up; a refused payment opened nothing`, async () => {
+      const r = await runRoomFeeConservation(seed, 300);
+      expect(r.violations).toEqual([]);
+      expect(r.opened).toBeGreaterThan(20);
+      expect(r.refused).toBeGreaterThan(20);
+      expect(r.replays).toBeGreaterThan(5);
+      console.log(`room fees seed ${seed}: ${r.attempts} attempts, ${r.opened} rooms opened, ${r.refused} refused, ${r.replays} replays`);
     }, 60_000);
   }
 });

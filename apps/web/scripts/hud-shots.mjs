@@ -44,36 +44,36 @@ async function newPage(size) {
     locale: 'en-US',
   });
   await ctx.addInitScript(() => {
-    localStorage.setItem('elymum.settings.v1', JSON.stringify({ name: 'Daphne', skin: 4, theme: 'light', quality: 'high', sound: false, showMinimap: true, showChat: true }));
-    localStorage.setItem('elymum.brief', '1');
-    localStorage.setItem('elymum.autoQuality', 'off');
+    localStorage.setItem('coinnibal.settings.v1', JSON.stringify({ name: 'Daphne', skin: 4, theme: 'light', quality: 'high', sound: false, showMinimap: true, showChat: true }));
+    localStorage.setItem('coinnibal.brief', '1');
+    localStorage.setItem('coinnibal.autoQuality', 'off');
   });
   const { account } = await installEvmWallet(ctx, { privateKey: key, autoConnect: true, allowTransactions: false });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => logs.push(`[${size.name}] [pageerror] ${e.message}`));
   page.on('console', (m) => m.type() === 'error' && logs.push(`[${size.name}] [console.error] ${m.text()}`));
   await page.goto(`${base}/play`, { waitUntil: 'networkidle' });
-  await page.waitForFunction(() => !!window.__elymum && window.__elymum.useUi.getState().connected, null, { timeout: 20000 });
+  await page.waitForFunction(() => !!window.__coinnibal && window.__coinnibal.useUi.getState().connected, null, { timeout: 20000 });
   await signInGame(page, base, account);
-  await page.evaluate(() => window.__elymumChain && (window.__elymumChain.fakeWallet.delayMs = 50));
+  await page.evaluate(() => window.__coinnibalChain && (window.__coinnibalChain.fakeWallet.delayMs = 50));
   return { ctx, page };
 }
 
 async function buyAll(page) {
-  await page.evaluate(() => window.__elymum.useUi.setState({ modal: 'shop' }));
+  await page.evaluate(() => window.__coinnibal.useUi.setState({ modal: 'shop' }));
   for (const k of ['magnet', 'leap', 'speed', 'invis']) {
     await page.waitForSelector(`[data-testid="shop-more-${k}"]`);
     await page.getByTestId(`shop-more-${k}`).click();
     await page.waitForFunction((x) => (document.querySelector(`[data-testid="shop-more-${x}"]`)?.getAttribute('aria-busy') ?? 'false') !== 'true', k, { timeout: 20000 });
     await page.waitForTimeout(300);
   }
-  await page.evaluate(() => window.__elymum.useUi.setState({ modal: null }));
+  await page.evaluate(() => window.__coinnibal.useUi.setState({ modal: null }));
 }
 
 /** A few chat and kill lines so the feed has its usual load. */
 async function fillFeed(page) {
   await page.evaluate(() => {
-    const ui = window.__elymum.useUi;
+    const ui = window.__coinnibal.useUi;
     const chat = [
       { id: 9001, pid: 2, from: 'Mossy', skin: 2, text: 'gg, nice split' },
       { id: 9002, pid: 3, from: 'Pip', skin: 6, text: 'who has the magnet' },
@@ -95,9 +95,9 @@ for (const size of SIZES) {
     await buyAll(page);
     bought = true;
   }
-  await page.evaluate(() => window.__elymum.engine.play('practice'));
-  await page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 15000 });
-  await page.waitForFunction(() => !!window.__elymum.useUi.getState().boosts, null, { timeout: 10000 });
+  await page.evaluate(() => window.__coinnibal.engine.play('practice'));
+  await page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 15000 });
+  await page.waitForFunction(() => !!window.__coinnibal.useUi.getState().boosts, null, { timeout: 10000 });
   await fillFeed(page);
   // past the round intro card
   await page.waitForTimeout(5200);

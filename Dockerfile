@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
-# Elymum: one container = game server + static web client on the same origin.
-#   docker build -t elymum --build-arg VITE_PUBLIC_URL=https://your-domain .
-#   docker run -p 8787:8787 -v elymum-data:/data --env-file apps/server/.env elymum
+# Coinnibal: one container = game server + static web client on the same origin.
+#   docker build -t coinnibal --build-arg VITE_PUBLIC_URL=https://your-domain \
+#     --build-arg VITE_CHAIN_ID=46630 --build-arg VITE_ARENA_ADDRESS=0x... --build-arg VITE_NFT_ADDRESS=0x... .
+#   docker run -p 8787:8787 -v coinnibal-data:/data --env-file apps/server/.env coinnibal
 # Solidity is not compiled here: packages/contracts/src/artifacts.ts (ABIs + bytecode) is committed.
 
 FROM node:22-bookworm-slim AS build
@@ -29,14 +30,25 @@ COPY apps ./apps
 # Build-time settings for the browser bundle. VITE_PUBLIC_URL is the site's public origin (no trailing
 # slash): index.html uses it for the absolute canonical and Open Graph URLs. Set it to the same value as
 # the server's PUBLIC_URL; change both (and the DNS) to move the site to another domain.
+# The site trusts the contracts the owner wallet signed for in /admin (apps/web/src/wallet/pinned.ts; VITE_OWNER_WALLET
+# overrides the built-in owner, on the VPS from COINNIBAL_OWNER_WALLET). VITE_CHAIN_ID (the server's CHAIN_ID) and
+# VITE_ARENA_ADDRESS, VITE_NFT_ADDRESS, VITE_TOKEN_ADDRESS are an optional override of those pins (on the VPS from
+# COINNIBAL_PIN_* in .env).
 ARG VITE_SERVER_URL=""
 ARG VITE_RPC_URL=""
 ARG VITE_PUBLIC_URL=""
-ENV VITE_SERVER_URL=$VITE_SERVER_URL VITE_RPC_URL=$VITE_RPC_URL VITE_PUBLIC_URL=$VITE_PUBLIC_URL
+ARG VITE_CHAIN_ID=""
+ARG VITE_ARENA_ADDRESS=""
+ARG VITE_NFT_ADDRESS=""
+ARG VITE_TOKEN_ADDRESS=""
+ARG VITE_OWNER_WALLET=""
+ENV VITE_SERVER_URL=$VITE_SERVER_URL VITE_RPC_URL=$VITE_RPC_URL VITE_PUBLIC_URL=$VITE_PUBLIC_URL \
+    VITE_CHAIN_ID=$VITE_CHAIN_ID VITE_ARENA_ADDRESS=$VITE_ARENA_ADDRESS VITE_NFT_ADDRESS=$VITE_NFT_ADDRESS \
+    VITE_TOKEN_ADDRESS=$VITE_TOKEN_ADDRESS VITE_OWNER_WALLET=$VITE_OWNER_WALLET
 
-RUN pnpm -F @elymum/web build \
- && pnpm -F @elymum/server build \
- && pnpm --filter @elymum/server deploy --legacy --prod /out
+RUN pnpm -F @coinnibal/web build \
+ && pnpm -F @coinnibal/server build \
+ && pnpm --filter @coinnibal/server deploy --legacy --prod /out
 
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production \

@@ -1,4 +1,4 @@
-import { AVATAR_LIMITS, BASIC_SKINS } from '@elymum/shared';
+import { AVATAR_LIMITS, BASIC_SKINS } from '@coinnibal/shared';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Button } from '../../design';
 import { sound } from '../../audio';

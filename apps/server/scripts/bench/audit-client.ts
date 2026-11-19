@@ -7,7 +7,7 @@
  * IPC from the parent: `{ t: 'start', url, specs }`, `{ t: 'stats' }` (answers and starts a new window),
  * `{ t: 'stop' }`.
  */
-import { PROTOCOL_VERSION, encodeEject, encodeSplit, encodeTarget } from '@elymum/shared';
+import { PROTOCOL_VERSION, encodeEject, encodeSplit, encodeTarget } from '@coinnibal/shared';
 import WebSocket from 'ws';
 
 export interface AuditSpec {

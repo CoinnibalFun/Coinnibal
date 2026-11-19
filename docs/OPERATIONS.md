@@ -1,7 +1,7 @@
 # Coinnibal: operations guide
 
 What comes after the setup: deploying on Robinhood Chain Testnet, the server key and its gas, the fees and the
-burn mode, the allowlist, the $1 price, opening the game, pausing, retiring an arena, moving to mainnet, ownership,
+burn mode, the allowlist, the mint price, opening the game, pausing, retiring an arena, moving to mainnet, ownership,
 key rotation and backups. Coinnibal runs on **Robinhood Chain only** (testnet now, mainnet later; `CHAIN_ID`). Hosting:
 [DEPLOY.md](DEPLOY.md). Money flow and trust model: [ARCHITECTURE.md](ARCHITECTURE.md). The economy:
 [ECONOMY.md](ECONOMY.md). Chain facts and sources: [RESEARCH.md](RESEARCH.md).
@@ -10,20 +10,25 @@ Everything on chain is done from **`/admin`** with the **owner wallet** (connect
 CLI (`pnpm admin help`) has the same operations for a key file. Every transaction is previewed before the
 wallet prompt, a double click cannot send twice, and on mainnet a red MAINNET banner stays at the top. The
 server key is a separate hot key that only settles tickets, burns floor loot and (optionally) keeps the mint
-price at $1.
+price at its USD target (`MINT_USD_CENTS`).
 
 ## The admin panel
 
-| Tab | What it does |
+`/admin` opens on a **start screen**: five status lines (network, contracts, game, mint, feedback) and five big
+actions in order: **Deploy the contracts** (one flow, below), **Open or close the game** (who may play, no
+transaction), **Mint** (the phase switch), **Feedback** (the players' messages) and **Settings**. Every drawer below
+stays under its **Advanced** section, collapsed, and a drawer's rail has a way back to Start.
+
+| Drawer | What it does |
 |---|---|
-| **Launch** | The live checklist: chain, server key gas, contracts deployed and registered, token, arenas, allowlist root, $1 price, mint phase, game access. Each line links to the tab that fixes it |
-| **Setup** | The deploy wizard (ElymumArena v3, ElymumNFT and, on the testnet, the TestToken), Finish setup, holder perks, the TestToken faucet, register an already deployed contract |
-| **Mint** | Phase (closed / allowlist / public), publish the allowlist root, Sync to $1, price bounds and keeper, per-wallet limits, max supply (down only), base URI and freeze, contract URI, royalty, treasury, withdraw, owner mint |
+| **Network** | The chain the server follows, its RPCs, the server key and its gas, the contracts, the way to mainnet, and the live **launch checklist**: chain, server key gas, contracts deployed and registered, the site pins, token, arenas, allowlist root, the mint price, mint phase, game access. A line that is not done links to the drawer that fixes it (the chain and the server key's gas: Network itself) |
+| **Setup** | The deploy wizard step by step (CoinnibalArena v4, CoinnibalNFT and, on the testnet, the TestToken), Finish setup, **Site pins** (the contracts the owner wallet signed for against the registered ones, the Sign button, and under Advanced the optional `.env` override), holder perks, the TestToken faucet, register an already deployed contract |
+| **Mint** | Phase (closed / allowlist / public), publish the allowlist root, Sync to the USD target, price bounds and keeper, per-wallet limits, max supply (down only), base URI and freeze, contract URI, royalty, treasury, withdraw, owner mint |
 | **Game** | Who may play, pause and per-arena open / close, map sizes, **arena prices in US dollars** (the token price, the tiers, "Sync arena prices to USD", "Re-price at next bell"), arena instances (auto-scaling), custom rooms, power-ups (priced in US dollars, converted like the tickets), leaderboards; the arena contract: status, the fee pair on profit, the burn mode (with the token's `burn()` probe), the power-up burn share, the fee wallet, arenas, sweeps, rescue, the server key's ETH balance and gas runway |
-| **Play** | Play the arenas yourself before launch |
-| **WL**, **Tasks**, **Collabs** | The whitelist applications, the WL steps, the community collabs |
-| **Integrity** | Cheat and collusion flags, bans, held payouts, detector settings |
-| **Settings** | `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public / maintenance), the X handle (default `X_HANDLE`, else `coinnibalfun`) |
+| **Community** (**WL**, **Tasks**, **Collabs**) | The whitelist applications, the WL steps, the community collabs |
+| **Safety** | Cheat and collusion flags, bans, held settlements, detector settings; the profile pictures players wear |
+| **Feedback** | Players' messages from the game page's Feedback button, newest first (the unread count is the drawer's badge): the time, the wallet (or guest), the page and room, the text and how to reach them; mark read / unread, delete |
+| **Settings** | **Mint page open** (`mintOpen`: visitors see `/mint`; it does not change the phase on chain), `wlOpen`, `collabOpen`, who may play (`gameAccess`: admins / holders / public / maintenance), the X handle (default `X_HANDLE`, else `coinnibalfun`) |
 
 Admin endpoints need a SIWE session whose wallet is in `ADMIN_WALLETS`. Contract actions also need the
 connected wallet to be the contract's owner and on the chain the server reports; otherwise signing is blocked
@@ -37,24 +42,25 @@ a player's session lasts 24 h. `POST /api/admin/auth/revoke {"wallet":"0x…"}` 
 (the server's settings, `SERVER_PRIVATE_KEY` and `AUTH_SECRET` included) need, besides the session, a fresh
 signature of the admin wallet for that purpose: `POST /api/admin/secret-proof {"purpose":"backup"}` (or
 `"migration"`: the settings and the backup, each once) returns a text to sign with the wallet (`personal_sign`);
-the base64url of `{"message","signature"}` goes in the `X-Elymum-Proof` header. A proof is single use and expires
+the base64url of `{"message","signature"}` goes in the `X-Coinnibal-Proof` header (`X-Elymum-Proof`, its name before the
+rename, is still read). A proof is single use and expires
 after 10 minutes. Every request of these routes is in the audit log, reads included. On the mainnet they are off
 unless `ADMIN_SECRET_EXPORT=1` is set on the server for the time of a move.
 
 ## The server key and gas
 
 - `SERVER_PRIVATE_KEY=auto` keeps the key in `DATA_DIR/server-key.json` (mode 0600); its address is logged and
-  published as `serverKey`. It must be the arena's **server authority** (set at deploy, changeable in Arena).
+  published as `serverKey`. It must be the arena's **server authority** (set at deploy, changeable in Game → the arena contract).
 - It pays gas in **ETH** for every settlement batch (one per arena per bell, chunked at 40 tickets), every cancel,
   every loot burn and, when it is the price keeper, every re-price. Eaten tickets (payout 0) wait up to
   `DEATH_SETTLE_BATCH_S` (6 s) for each other and go out in one batch.
 - **Gas runway.** The balance is read every 5 minutes; its drops over the last day (a top-up is not spend) give the
   spend per day and the days left. Under **7 days** the log warns (`chain: WARNING gas runway under 7 days`, every
   6 h) and the alert job posts it; under **2 days**, or under the floor `GAS_FLOOR_ETH` (0.002 ETH), it is
-  `!!! chain: gas LOW`, `/api/health` answers 503 and the Launch and Game tabs show it (`GET /api/admin/network` →
+  `!!! chain: gas LOW`, `/api/health` answers 503 and the Network and Game drawers show it (`GET /api/admin/network` →
   `gas`: balance, spend per day, days, level). With no gas at all the log says `!!! chain: the server key ... cannot
   pay gas` and settlements wait (nothing is lost: they stay in the journal). Top it up from any wallet; at the
-  mainnet gas price a week of runway is a few thousandths of an ETH (`pnpm -F @elymum/server econ-sim`).
+  mainnet gas price a week of runway is a few thousandths of an ETH (`pnpm -F @coinnibal/server econ-sim`).
 - `!!! chain: the server key ... is NOT the arena's server authority` means the arena points at another key: set
   the server authority again (Game tab, the arena contract) or run the server with the right key.
 
@@ -71,9 +77,9 @@ The server limits what a bug, a tampered journal or a confused process can pay t
 
 | Guard | What it does |
 |---|---|
-| **Payout guard** | a settlement paying one ticket more than every ticket of its round's instance put in (its `roundPool`: the entry fees seated there that round, plus loot restored into it; no game can win more) is not sent: it is held in `/admin` → Integrity → Held settlements (`payout guard: ...`, `!!! chain: settlement ... HELD for review`). A settlement without a pool (crash recovery) is held above `PAYOUT_GUARD_MULTIPLE` (100) entry fees. **Release** pays it exactly as it was; **Settle at 0** keeps it in the vault. It is never released by itself; `PAYOUT_GUARD_MULTIPLE=0` turns the guard off |
-| **Books guard** | before anything leaves an arena vault, what the journal owes that arena (pending payouts and burns of tickets still open on chain, live tickets, floor loot) must fit in the vault. If not (`!!! chain: arena #N PAYOUTS STOPPED`), nothing is paid from that arena until the books add up again: the stakes stay in the vault, the Integrity tab shows "Payouts stopped" with the pending settlements, and each can be **held** by hand and settled at 0 |
-| **Settled log** (`DATA_DIR/chains/<id>/settled.jsonl`) | every settlement, cancel and loot burn the server saw confirmed, for 14 days: a settlement reorged out (the ticket open again) is sent again with the same payout instead of being refunded at the entry fee by the stale sweeper; the record of what each ticket was paid, and in which transaction, for appeals |
+| **Payout guard** | a settlement paying one ticket more than every ticket of its round's instance put in (its `roundPool`: the entry fees seated there that round, plus loot restored into it; no game can win more) is not sent: it is held in `/admin` → Safety → Held settlements (`payout guard: ...`, `!!! chain: settlement ... HELD for review`). A settlement without a pool (crash recovery) is held above `PAYOUT_GUARD_MULTIPLE` (100) entry fees. **Release** pays it exactly as it was; **Settle at 0** keeps it in the vault. It is never released by itself; `PAYOUT_GUARD_MULTIPLE=0` turns the guard off |
+| **Books guard** | before anything leaves an arena vault, what the journal owes that arena (pending payouts and burns of tickets still open on chain, live tickets, floor loot) must fit in the vault. If not (`!!! chain: arena #N PAYOUTS STOPPED`), nothing is paid from that arena until the books add up again: the stakes stay in the vault, the Safety drawer shows "Payouts stopped" with the pending settlements, and each can be **held** by hand and settled at 0 |
+| **Settled log** (`DATA_DIR/chains/<id>/settled.jsonl`) | every settlement, cancel and loot burn the server saw confirmed, for 14 days, each with the arena contract it was for: a settlement reorged out (the ticket open again on the same contract, its transaction without a successful receipt) is sent again with the same payout instead of being refunded at the entry fee by the stale sweeper; a record of an earlier arena contract never applies to a new one (session ids restart at 1); the record of what each ticket was paid, and in which transaction, for appeals |
 | **Sweep ids** | a `lastSweepId` beyond 2^53 (only a server key can set it) stops loot burns of that arena loudly instead of guessing |
 
 **Key management.**
@@ -95,7 +101,7 @@ until you publish a root.
 
 | Task | In `/admin` |
 |---|---|
-| Open or close the WL and collabs; the X handle | **Settings** |
+| Open or close the mint page, the WL and collabs; the X handle | **Settings** |
 | Review WL entries | **WL**: counts, filter, search (wallet, handle, note, id), open an entry for its answers, approve / reject / reset, a note; bulk actions on up to 500 rows |
 | Export | **WL** → CSV (approved or all): `wallet,x_handle,status,created_at,dup_collabs,note` |
 | Edit the WL steps | **Tasks**: add, edit, reorder, enable, delete; paste the launch post link to open the like / repost / reply step |
@@ -103,7 +109,7 @@ until you publish a root.
 
 - Wallets are EVM addresses (checksummed); anything else is refused. One entry per wallet and per X handle.
 - The X handle (Settings) defaults to `X_HANDLE`, else `coinnibalfun`. A data dir that still holds an earlier default
-  (`elymum`, or `elymumio` once `X_HANDLE` names another) is switched to the default on start, and the seeded WL tasks
+  (`elymum`, or `elymumio` once `X_HANDLE` names another: the defaults of before the rename) is switched to the default on start, and the seeded WL tasks
   (follow, post, launch post, handle, wallet) are pointed at the current handle and say "Coinnibal"; tasks you wrote and
   the answers stored in WL entries are never rewritten.
 - Duplicates are flagged, never dropped: a collab wallet that is also on the WL (`dup_wl`) or in another list
@@ -114,15 +120,17 @@ until you publish a root.
   shows the diff (to add / to drop): publish again. Publishing a new root does not affect tokens already minted.
 - Site files: `DATA_DIR/site/{settings,tasks,wl,collab}.json` (atomic writes). Back them up with the journal.
 
-## The mint at $1 in ETH
+## The mint price: a USD target paid in ETH
 
-The price is held in wei; the target is `MINT_USD_CENTS` (100 = $1) at the ETH/USD price from Hyperliquid's
+The price is held in wei; the target is `MINT_USD_CENTS` (US cents, default 100; an owner setting: no visitor page
+shows it, and `GET /api/site/mint` leaves it out while the mint page is closed, Settings → Mint page open; the admin
+panel reads it from `GET /api/admin/mint/price`) at the ETH/USD price from Hyperliquid's
 public info API (`GAS_PRICE_URL`). The UI always shows the ETH amount with its USD value.
 
-- **By hand:** Mint → **Sync to $1** computes the wei price for the current ETH/USD and asks your wallet to call
+- **By hand:** Mint → **Sync** computes the wei price for the current ETH/USD and asks your wallet to call
   `setPrice`. Do it before opening a phase and whenever the USD value drifts.
-- **Automatically (price keeper):** set **price bounds** (`setPriceBounds`, e.g. $0.80 to $1.25 in wei at today's
-  rate) and make the **server key the price keeper** (`setPriceKeeper`). Every 5 minutes the server re-prices when
+- **Automatically (price keeper):** set **price bounds** (`setPriceBounds`, e.g. 80 % to 125 % of the target in wei at
+  today's rate) and make the **server key the price keeper** (`setPriceKeeper`). Every 5 minutes the server re-prices when
   the price is off by more than 2 %, always clamped into your bounds; it logs `price keeper: ...`. It only moves after
   two consecutive ETH/USD readings agree within 3 %, and at most ±20 % per update (a big move takes several
   5-minute checks). The keeper can
@@ -130,7 +138,7 @@ public info API (`GAS_PRICE_URL`). The UI always shows the ETH amount with its U
   (`setPriceKeeper(0)`) to stop it.
 - **Phases:** Closed → **Allowlist** (proof required, `wlLimit` per wallet) → **Public** (`publicLimit` per wallet;
   allowlisted wallets may still use their allowlist allowance). Opening the mint offers "activate the game for
-  holders" (sets `gameAccess` to `holders`).
+  holders" (sets `gameAccess` to `holders`), unchecked by default: the game opens last, after the token and the rooms.
 - **What visitors can see** (`/admin` → Settings; a fresh server starts with all four closed, and the public launch
   closed them once on the live server: the `launch` marker in `site/settings.json`): Game access, **Mint page open**
   (`mintOpen`), WL applications open, Collab applications open. A closed part has no link, button or widget on the
@@ -145,9 +153,14 @@ public info API (`GAS_PRICE_URL`). The UI always shows the ETH amount with its U
   emblem can be passed from wallet to wallet in seconds (or flash-borrowed). So at the seat of a **holder ticket** (a
   holders-only arena, or a ticket bought at the holder fee rates) the server re-reads the holding fresh and binds the
   ticket to one of the wallet's token ids (from the NFT's `Transfer` logs, `DATA_DIR/chains/<id>/emblem-claims.json`)
-  until it is settled: a token id serves one open holder ticket at a time. An extra ticket is refused at its seat and
-  cancelled at once with its full entry fee; an emblem passed on while its ticket is open raises an integrity flag
-  (Shared device · emblem shared). The power-up holder discount and the free daily custom room go to one wallet per
+  until it is settled: a token id serves one open holder ticket at a time. A ticket whose emblem serves another
+  wallet's open ticket (passed on) is refused at its seat and cancelled at once with its full entry fee (a no-show), and
+  raises an integrity flag (Shared device · emblem shared). A ticket whose emblem still serves **its own wallet's**
+  other ticket (round 4b, R4b-M2: its last game being settled, or played in another arena now) is not cancelled: the
+  seat waits (`emblem_busy`, "press Resume again once that game is settled") and sits on the next try once that
+  settlement frees the token id; while that other ticket is seated or its settlement is in the journal (RPC back-off,
+  a death batch, a payout held for an admin) the wait is the server's, so the ticket is excused and its refund, should
+  it never sit, is no no-show. The power-up holder discount and the free daily custom room go to one wallet per
   token id per UTC day. A seated player is not removed mid-round if they transfer the emblem away (the ticket keeps
   its token id until its bell). Tickets are bought on chain, so the server cannot refuse a purchase itself.
 - **Money:** mint proceeds stay in the NFT contract until **Withdraw** sends the whole balance to the treasury.
@@ -164,13 +177,13 @@ public info API (`GAS_PRICE_URL`). The UI always shows the ETH amount with its U
      block's hash, and every token shows its emblem. Then `setBaseURI` with the same URI (it emits ERC-4906
      `BatchMetadataUpdate`, so marketplaces refresh).
   Never reopen the mint after the reveal (the next ids' art would be known). `GET /api/admin/nft` shows the state,
-  the rarity counts and the mint; `pnpm -F @elymum/server nft:report --seed <seed>` re-checks a collection.
+  the rarity counts and the mint; `pnpm -F @coinnibal/server nft:report --seed <seed>` re-checks a collection.
 - Supply can only go down (`setMaxSupply`, never below what is minted). Owner mints are for giveaways and the team.
 
 ## Integrity (cheat and collusion detection)
 
 The server is authoritative (it runs the physics), so speed hacks and teleporting cannot happen. What is left is economic
-and behavioural cheating, and the **Integrity** tab of `/admin` (admin wallet signed in) is where it shows up. The
+and behavioural cheating, and the **Safety** drawer of `/admin` (admin wallet signed in) is where it shows up. The
 detection is evidence for a person to review: nothing is punished automatically, and nothing on chain changes.
 
 **What is recorded.** For every arena ticket the server keeps a small summary: who ate whom and how much value moved,
@@ -239,7 +252,7 @@ transfers, one per 30 s flush, deleted after 30 days or beyond 3,000 files). An 
 20,000 tickets and 60,000 transfers.
 
 **Cost.** The telemetry runs in the arena rooms only: a few counters per input message and a threat check every second
-tick. `pnpm -F @elymum/server integrity-sim` plays the same seeded arena with and without it and prints both tick times,
+tick. `pnpm -F @coinnibal/server integrity-sim` plays the same seeded arena with and without it and prints both tick times,
 the flags honest players raise (none at the defaults) and those two scripted bots raise.
 
 ## Monitoring
@@ -267,24 +280,202 @@ the flags honest players raise (none at the defaults) and those two scripted bot
 - Log lines starting with `!!!` need attention: an unreadable journal or one that cannot be written (disk full:
   nothing is sent and no new arena seat is taken until it can), an arena whose vault falls short, the wrong server
   authority, low gas, a fee wallet that cannot receive the token, an arena contract whose code hash differs, an RPC
-  that serves another chain than `CHAIN_ID` (`!!! chain: EVM_RPC_URL serves chain …`, or a fallback of
-  `EVM_RPC_URLS` left out), the server clock off the chain's, an emblem seat refused. `integrity: HELD ...` means a
-  payout waits in `/admin` → Integrity.
+  that serves another chain than `CHAIN_ID` (`!!! chain: the RPC (COINNIBAL_RPC_URLS on the VPS, …) serves chain …`,
+  or a fallback RPC left out: `… not used (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URLS outside Docker)`), the server clock off the chain's, an emblem seat refused.
+  `integrity: HELD ...` means a payout waits in `/admin` → Safety.
 
 ## RPC
 
-`EVM_RPC_URLS` (on the VPS: `ELYMUM_RPC_URLS` in `/opt/elymum/.env`) lists the server's RPCs in order: the provider (Alchemy, `https://robinhood-mainnet.g.alchemy.com/v2/<key>`)
+`EVM_RPC_URLS` (on the VPS: `COINNIBAL_RPC_URLS` in `/opt/elymum/.env`) lists the server's RPCs in order: the provider (Alchemy, `https://robinhood-mainnet.g.alchemy.com/v2/<key>`)
 first, the public RPC (`https://rpc.mainnet.chain.robinhood.com`) as fallback. Reads and sends go through a viem
 fallback: a URL that keeps answering 429 or is down hands the call on after two tries, and the first URL is tried
 first again for every new call; a resent transaction is the same signed one (same hash and nonce). Each URL has its
-own budget (`RPC_MAX_RPS`, on the VPS `ELYMUM_RPC_MAX_RPS`, e.g. `25,4`). Concurrent reads merge into one Multicall3 call, or a deployless multicall
+own budget (`RPC_MAX_RPS`, on the VPS `COINNIBAL_RPC_MAX_RPS`, e.g. `25,4`). Concurrent reads merge into one Multicall3 call, or a deployless multicall
 on a chain without Multicall3 (the log says which), so the bell of 200 tickets reads its sessions in about 24 calls
-instead of 216. Set-up and checks: deploy/vps/README.md, "RPC". `rpc: N calls/min …` in the log, once a minute per
-URL, shows the traffic and the 429s.
+instead of 216. Calls wait their turn by priority: settlements and loot burns (`critical`) first, then paid joins'
+ticket reads (`high`, bounded by the front door) and the holder index reading the new blocks for a gate decision or
+a holder ticket (`high`, one scan every 2 s at most), then holder checks, the arena list, the mint state and the join
+permits' reads (the join nonce, an open ticket, the entry fee's balance; bounded by the permit limits) (`normal`),
+then background work (`low`: the stale sweeper, the holder index, balance checks). Set-up and checks:
+deploy/vps/README.md, "RPC". `rpc: N calls/min …` in the log, once a minute per URL, shows the traffic, the 429s and
+the calls per priority.
+
+## Join permits and no-shows
+
+Every ticket needs the game server's join permit (CoinnibalArena v4): the web asks `POST /api/arena/permit` before the
+wallet opens, and the contract refuses a `join` without the server key's signature for that wallet, arena and join
+nonce. A ticket for a paid custom room asks for that room too (`{arenaId, room}`): the room must take seats then (else
+`arena_closed`), and the permit is bound to it (below, no-shows). The server refuses (and the ticket sheet says why): a
+game not open to the wallet (`game_closed`), a banned wallet, paid rooms off, an arena that is disabled, paused or kept
+closed (books guard, re-price), a holders-only arena for a wallet without the NFT (`holders_only`; past the client's
+holder reads the holder index, read after the request, answers; only while it cannot catch up is it `chain_busy`:
+never a wrong "not a holder"), a wallet with an open ticket there (it resumes it), a repeated no-show (`no_show`), an
+arena whose unseated tickets plus the places held by new permits reach the seats a round can take (`arena_busy`), and
+too many requests from one wallet. A wallet **without standing** (below) is also refused for its network: a network
+that is a repeated no-show (`no_show`, "from your network"), one with its share of the arena's permits not played yet
+(`network_busy`, "places free up within half an hour"), a wallet that let 3 permits of the arena end unused that day
+(run out, or replaced by one signed again: `unused_permits`), new wallets holding their share of the arena
+(`arena_busy`, "many new players"), no entry fee in the wallet (`no_funds`), and too many requests from one IP, IPv6
+/64, IPv4 /24 or IPv6 /48.
+
+- **Standing** (round 4, R3-M1). The network rules exist because fresh wallets cost nothing; they must never refuse a
+  real player because of what other wallets on the same carrier NAT, VPN exit, iCloud Private Relay or WARP egress,
+  campus NAT or mobile /48 did. A wallet has standing when its latest ticket of the last 14 days was **played** (a
+  `settle` record in `chains/<id>/settled.jsonl`, never a `cancel`) and none of its tickets was a no-show since, or
+  when it holds a **Coinnibal NFT** that gives no other wallet standing (one wallet per token id a day, from the
+  holder index: an NFT passed from wallet to wallet gives standing to one of them); either way with no no-show of its
+  own in the last 24 h. It covers one unplayed ticket at a time (round 4, R4-M2): a ticket of another arena bought
+  with standing and not played yet (read once on chain) makes the next one follow the network rules, and a refusal by
+  them then says `ticket_elsewhere` ("play it first"), never the network's day-long block; a permit not used yet never
+  counts, since the wallet's join nonce buys one ticket in all arenas together. The wallet loses its standing at its
+  first no-show. A wallet with standing meets only the per-wallet request limit, its own no-show limit and the
+  arena's cap. So does an admin wallet (`ADMIN_WALLETS`, the owner), for every ticket, with or without standing.
+- **Held places.** A permit is free, so it holds a place in that cap only briefly and only when backed: a new permit
+  holds one for `JOIN_PERMIT_HOLD_S` (120 s, the approval and the join) if the wallet holds the entry fee (one
+  `balanceOf` read), no earlier permit of that wallet, arena and join nonce held one, and the network it was asked from
+  holds fewer than 4 places (an IPv4 address or an IPv6 /64) and 16 (an IPv4 /24 or an IPv6 /48). Any other permit is
+  issued but holds nothing. A place is given up when the wallet asks to sit with its ticket, the ticket is read, seated
+  or settled, or the wallet's join nonce moved (read at its next request, and for every held place once the arena is
+  at its cap). So signed-in wallets with no tokens never fill an arena, and a bought ticket is never counted twice.
+- **A share per network** (wallets without standing). Each network has a share of an arena's permits not played yet
+  (issued and valid, or used for a ticket that is not seated and not settled): 8 per IPv4 address (carrier NAT puts
+  many players behind one), 4 per IPv6 /64, 16 per IPv4 /24 or IPv6 /48 (round 4, R3-M2: one cheap block of IPv4
+  addresses is one network, like a /48). **A permit holds only for its lifetime, in one network** (round 5,
+  R4b-M1-refresh; the invariant at the top of `stake/join-permits.ts`): a lifetime starts with a wallet's first permit
+  of its join nonce in that arena and ends 2 minutes after that permit's deadline (`REFRESH_GRACE_S`: 12 minutes at
+  the default TTL). Asked again while it is valid, the wallet gets the same permit, or with under 2 minutes left one
+  signed again that ends with the lifetime, never later (the ticket sheet's slow-approval refresh); only once every
+  permit of a lifetime ran out does the next one start, through every check again. It counts in the share of the
+  network its lifetime's first permit was asked from (which passed that share's check then), never in another: a
+  wallet asking again from other networks holds none of their places (they are kept only to count its ticket's
+  no-show against them). Before round 5 a permit signed again kept its place without end and carried earlier
+  networks along, so 8 funded wallets that asked once at a carrier NAT address held it all day from anywhere, and
+  one set held 4 addresses. A permit that **bought nothing** (its lifetime over, the wallet's join nonce unmoved)
+  leaves the share then (round 4b, R4b-M1: it no longer keeps its place for a day, which let one funded wallet, or 8
+  hesitant players, close a carrier NAT address or a /24 to new players for a day). So a network is held only while
+  its permits' lifetimes last (12 minutes) and its tickets are unplayed (until seated, or the stale sweeper's refund):
+  places free up within half an hour, and `network_busy` says so. At a full share the server reads each permit past
+  its lifetime once (the join nonce, then the ticket); a seated or settled ticket leaves the share at once. Asking to
+  sit, or asking again while the permit is valid, frees nothing and holds nothing more. A new arena contract
+  registered in `/admin` starts the permits, places and shares afresh (no permit of the old contract is handed out
+  again).
+- **Unused permits** (wallets without standing; round 4b, R4b-M1; round 5). Free permits cycled to hold a share are
+  bounded per wallet, never per network: a wallet that let `JOIN_PERMIT_UNUSED_LIMIT` (3) permits of one arena end
+  unused in 24 h, counted since its last ticket, gets no new permit there until the first of them is a day old
+  (`unused_permits`, with the time). Every permit that ends without a ticket counts once: one that ran out, and one
+  replaced by a permit signed again while it was valid (round 5: before, a permit signed again with under 2 minutes
+  left was never counted, so asking every 8.5 minutes held a place without end). So a wallet holds a place in one
+  arena for at most 3 lifetimes a day, 32 minutes (3 × 10 minutes, plus one refresh's 2). The slow-approval refresh
+  is never refused for it (it holds nothing new) and counts once; the ticket it buys starts the count afresh. A player
+  who asks, declines in the wallet or goes away, and comes back later is served; a ticket bought, in any arena (its
+  join nonce moves), starts the count afresh, and a player with standing is never counted. Another wallet's unused
+  permits never refuse anyone.
+- **The new wallets' share** (round 4, R3-M2). Wallets without standing together hold at most
+  `JOIN_PERMIT_FRESH_SHARE` (0.5) of min(the arena's cap, its `maxSessions`) of the arena's permits not played yet
+  (150 of 300 by default), from however many networks they come; past it a new wallet hears "many new players are
+  buying tickets for this room, try again in a minute". The other half stays open to players with standing. Half,
+  because a launch of new players must still fill an arena: a permit is played (seated) about a minute after it is
+  asked and leaves the share then, so 300 new players fill the 300 seats within the first minutes of a round's
+  4-minute join window. A new wallet must also hold the entry fee (`no_funds`), so a permit that could buy nothing
+  holds no share.
+- **No-shows.** A ticket the stale sweeper cancels at its entry fee because it was never seated while its arena was
+  open is a no-show (`noShow` in `chains/<id>/settled.jsonl`; a closed arena's refunds are not). It is **not** one when
+  its wallet asked to sit while joins were open and the server refused for a reason of its own: overloaded
+  (`server_full`), the journal cannot be written, a re-price, no seat in the public arena (`room_full`), or the chain
+  could not be read (`chain_busy` from the RPC, never the client's own limits) (round 4, R3-M1). An unseated ticket
+  refunded **early** is a no-show the same way (round 4, R4-M1): one sent to a paid custom room of its arena that
+  closed in the last hour, closes, or is in its last minute (`refundUnseated`: the full entry fee back at once instead
+  of in 15 minutes), and a holder ticket refused at its seat because its emblem was moved away or serves another
+  wallet's open ticket (unless the token index cannot confirm it); never one whose emblem serves the wallet's own
+  other ticket (it waits, above). The early refund is excused only for a ticket bought for that very
+  room: its permit was asked for the room while the room took seats, by a wallet that did not open it, the refund
+  comes within 2 minutes of the ticket's opening (`ROOM_EXCUSE_S`), and the room has excused fewer refunds than it has
+  seats. A free or practice room's code, and another arena's, refunds nothing (the sweeper does). `NO_SHOW_LIMIT`
+  (default 3) of them in 24 h and the wallet gets no permit until the oldest is a day old. For wallets without
+  standing they also count against the networks the permit was asked from: 3× `NO_SHOW_LIMIT` per IPv4 address or IPv6
+  /64 and 8× per IPv4 /24 or IPv6 /48 close the permits of new wallets asked from there the same way (`no_show`, "from
+  your network"), so fresh wallets do not reset the count. The per-network counts, shares, unused permits and NFT
+  claims live in the server's memory only (no address goes into the data files): a restart starts them again; the
+  wallet's no-shows and played tickets are in the settled log and stay.
+- **Settings** (env): `JOIN_PERMIT_TTL_S` (600; at most 3300: the contract's hour, checked against the block time,
+  less 5 minutes; the deadline is set on the chain's clock), `JOIN_PERMIT_HOLD_S` (120; 0 = permits hold no place),
+  `JOIN_PERMIT_PER_IP` (12), `JOIN_PERMIT_PER_SUBNET` (30, an IPv6 /64), `JOIN_PERMIT_PER_SITE` (60, an IPv4 /24 or
+  IPv6 /48), `JOIN_PERMIT_PER_WALLET` (20), all per 10 minutes; `JOIN_PERMIT_OPEN_PER_IP` (8),
+  `JOIN_PERMIT_OPEN_PER_SUBNET` (4), `JOIN_PERMIT_OPEN_PER_SITE` (16): each network's share per arena (0 = no limit;
+  raise the IPv4 ones, and `JOIN_PERMIT_PER_IP` / `_PER_SITE`, if many new players share one carrier NAT address or
+  /24); `JOIN_PERMIT_FRESH_SHARE` (0.5; 0 = no limit, at most 1); `JOIN_PERMIT_UNUSED_LIMIT` (3 unused permits per
+  wallet and arena in 24 h; 0 = off); `JOIN_PERMIT_ARENA_CAP` (0: `ARENA_INSTANCE_CAP` × the arena scaler's max
+  instances), `NO_SHOW_LIMIT` (3; 0 = off).
+- **A new server key** (`setServerAuthority`) voids every permit the old key signed; players simply ask again.
+- A refused permit costs the player nothing: nothing is signed. A permit with under 90 s left after a slow approval is
+  asked again before the join: signed again, it gets 2 to 4 minutes (its lifetime's end) and counts once as unused
+  (the ticket it buys starts the count afresh); one that already ran out is a new permit.
+
+### Security notes: what an attacker can still do with permits (residual bounds)
+
+With unbounded fresh identities nothing can be prevented entirely; the rules make an attack cost far more than it
+costs the players, and never lock out a player with standing. Defaults, one arena of 300 places (cap = `maxSessions` =
+300), a stale cycle of about 20 minutes (15 minutes plus up to 5 of sweep):
+
+- **New players kept out of one arena with tickets nobody plays**: 150 unplayed tickets per cycle (the new wallets'
+  share). Each wallet makes 3 no-shows a day, each IPv4 address 9 and each /24 or /48 24, and one /24 holds 16 of the
+  share at a time: one cycle needs 150 funded wallets on at least 10 /24s (or /48s); all day, about 10,800 joins (and
+  the server's 10,800 cancels), 3,600 wallets and 450 /24s a day, with 150 entry fees locked at any time (refunded).
+  Players with standing keep the other 150 places.
+- **New players kept out with free permits** (funded wallets that never join, no transaction at all): a permit holds
+  the share for its lifetime (12 minutes at most, however often it is asked for again), and every permit that ends
+  unused, run out or replaced, is one of the 3 a wallet gets a day per arena (`unused_permits`): one wallet holds one
+  place of an arena for 32 minutes a day at most. Keeping the 150 places of one arena all day takes about 6,750 funded
+  wallets a day (150 × 1,440 minutes / 32; the same wallets can do it once more in each other arena; each holds the
+  entry fee when each of its lifetimes starts, so one fee moved from wallet to wallet costs a token transfer per
+  wallet), from at least 10 /24s or /48s at any time (16 each). Checked with the round-5 PoC: 150 wallets asking every
+  8.5 minutes held the share for about half an hour, then waited a day. Players with standing are not affected.
+- **Players with standing kept out of one arena**: the other 150 places must come from wallets with standing, each with
+  a ticket of its own really played in the last 14 days (a seat in a round: its entry fee in play, its join gas, the
+  server's settle), for one unplayed ticket at a time (its permits for other arenas share its join nonce: they buy one
+  ticket between them); each loses its standing at its first no-show, early refunds included, and needs another
+  played ticket to get it back. One cycle takes 150 such wallets beforehand; all day, about 10,800 played tickets a
+  day. With NFTs: one wallet per NFT a day, so 150 NFTs per cycle and about 10,800 NFTs all day.
+- **One shared network** (a carrier NAT address, a /24, a mobile /48): its new wallets can be refused for a day by 9
+  no-shows of tickets whose permits were asked from the address (3 wallets × 3 arenas; a no-show counts against every
+  network its wallet asked from for that ticket, up to 4) or 24 from the /24 or /48: tickets really bought (the entry
+  fee locked until the refund, the join gas) and never played. Free permits hold it only for their lifetimes: 8
+  (address) / 4 (IPv6 /64) / 16 (/24, /48) per arena at a time, each gone within 12 minutes of the permit that began
+  it, and one funded wallet holds one place of one network per arena at most (its live permit, in the network its
+  lifetime began in: asking again from elsewhere carries no network along). Keeping one address closed to new wallets
+  in one arena all day takes 8 places × 1,440 minutes / 32 minutes per wallet, about 360 funded wallets a day (720 for
+  a /24 or /48, 180 for an IPv6 /64), each asking from that very network at the start of each of its lifetimes;
+  checked with the round-5 PoCs: 8 wallets that ask once at a carrier NAT address and then every 8.5 minutes from
+  elsewhere close it for 12 minutes, and asking first from 4 addresses holds only the first. A ticket bought starts a
+  wallet's count afresh, but each is one of its 3 no-shows a day and one of the network's 9. Ordinary players who leave
+  a permit unused (they declined in the wallet, had no gas, came back later) never close it. Its players with standing
+  are never refused for it: the network's no-show block, its shares and its request limits do not apply to them,
+  whatever permits of other arenas they asked for and left unused; only a ticket they bought elsewhere and have not
+  played makes them wait (`ticket_elsewhere`) until they play it.
+- **Early refunds** (round 4, R4-M1): any wallet can name a closed or closing paid room's code, so such a refund
+  counts its no-show like the sweeper's and gives an attacker nothing over it (the ticket only stops holding its place
+  sooner); a free or practice room's code, or another arena's, refunds nothing. An excused early refund needs a ticket
+  bought for that very room while it took seats, by a wallet that did not open it, refunded within 2 minutes of its
+  opening, at most the room's seats per room: a room of its own (the fee: $1.50 for 10 seats up to $8.25 for 100;
+  never refunded) buys an attacker at most its seats × 2 minutes of held places. Holding 150 places all day that way
+  (either half of an arena: an excused refund costs no standing either) takes about 108,000 tickets bought and
+  cancelled and about 1,080 rooms of 100 seats a day (about $8,900 of room fees), with every permit still under the
+  network, new-wallet and one-ticket-per-standing rules above; an NFT holder's free room of the day gives 10 such
+  excuses per NFT. An emblem moved away or passed on refunds a holder ticket only as a no-show, so one NFT
+  passed from wallet to wallet buys nothing either.
+- **No-show excuses** need a refusal the server made for its own reason after the ticket was bought: an attacker can
+  only earn one by overloading the whole server (which every player sees), never with its own rate limits or reads.
+  The emblem's wait (round 4b, R4b-M2) excuses a ticket only while the wallet's own other holder ticket is seated or
+  being settled: a game really played (its entry fee in play) per excuse and arena, the same price as the standing
+  that ticket gives; a claim of a ticket never seated (a seat refused after the emblem check) excuses nothing.
+- **After a restart** the network counts, shares, unused permits and NFT claims start empty (memory only); the wallets'
+  no-shows and played tickets (the settled log) stay, and so does the arena's cap (its unseated tickets are read on
+  chain). Tickets bought before the restart are not in the new wallets' share, so in the first stale cycle after a
+  restart new wallets can take up to that many places more, until the sweeper cancels them.
 
 ## Fees, burns and the fee wallet
 
-ElymumArena v3 takes **no entry fee**. A winning ticket pays a fee on its **profit** (payout − entry fee):
+CoinnibalArena v4 takes **nothing from the ticket** (its `entryFee` goes whole into the vault). A winning ticket pays a fee on its **profit** (payout − entry fee):
 `burnBps` (15 %) is burned and `vaultBps` (5 %) goes to the fee wallet, both in the `settle` batch that settles it
 (one burn and one transfer per batch). A loss or a break-even pays nothing; an unplayed ticket is cancelled with its
 full entry fee back. Power-up packs are paid with `pay`: `paymentBurnBps` (50 %) is burned and the rest goes to the
@@ -312,131 +503,169 @@ transfer to it fails (a token that refuses that address), the whole batch revert
 `!!! chain: settle batches revert on the fee transfer`: change the fee wallet and the pending settlements go out
 by themselves.
 
-## The name: Coinnibal, and moving to coinnibal.fun
+## The name: Coinnibal (formerly Elymum)
 
-The product is **Coinnibal** (a coin + a cannibal: coins that eat coins), its token **$NIBAL**. "Elymum" is the old
-name and stays as the **internal** name on purpose: the packages (`@elymum/*`), the contract names (`ElymumArena`,
-`ElymumNFT`), the env vars (`ELYMUM_*` on the VPS), `/opt/elymum`, the `elymum-*` systemd units and compose project,
-the DATA_DIR files, the browser storage keys (`elymum.*`), the WebSocket protocol (`elymum.auth.`), the
-`X-Elymum-Proof` header and the file `og-elymum.png`. Renaming those would break deploys and saved data; players
-never see them.
+The product is **Coinnibal** (a coin + a cannibal: coins that eat coins), played with its game token (the display
+symbol is `TOKEN_SYMBOL`, default `tokens`; no ticker is announced). The project was called
+Elymum and ran on Elysium until November 2026. The code carries the new name: the contracts (`CoinnibalArena`,
+`CoinnibalNFT`, the "Coinnibal Test Token" `TEST`), the packages (`@coinnibal/*`), the VPS keys (`COINNIBAL_*`), the
+browser storage keys (`coinnibal.*`), the WebSocket protocol (`coinnibal`, `coinnibal.auth.<token>`), the
+`X-Coinnibal-Proof` header and the payment refs (`coinnibal.shop.`, `coinnibal.cart.`, `coinnibal.room.`).
+
+What still reads or keeps the old name, and why:
+
+| What | Why |
+|---|---|
+| The live server's installed names: `/opt/elymum`, the compose project and the volume `elymum-data`, the image, the `elymum-*` units and commands, the backups `elymum-data-*.tar.gz`, the game domain `game.elymum.io` | changing them moves the data (a new Docker project means a new, empty volume); deploy/vps/README.md, section 4. The commands also exist as `coinnibal-*` |
+| The VPS keys `ELYMUM_*` | still read when the `COINNIBAL_*` key is unset (section "Renamed keys" below) |
+| Browser storage `elymum.<key>` | moved to `coinnibal.<key>` the first time the page uses it (the session, the settings, the shop's and the rooms' kept payments), then deleted |
+| Payment refs `elymum.shop.` / `elymum.cart.` | a pack or a cart paid just before the switch still credits; the wallet, the pack or cart, the amount and the arena are checked as before |
+| The WebSocket names `elymum` / `elymum.auth.<token>`, the header `X-Elymum-Proof` | a tab opened, or a script copied, before the update still connects and still sends its proof |
+| Link X codes `ELYMUM-XXXXXX`, the sign-in line "Sign in to Elymum." | a code or a sign-in started on a page from before the rename still verifies (codes live 30 minutes) |
+| The X handles `elymum` / `elymumio` in a data dir, seeded WL task texts that say Elymum | moved to the current handle and name on start (tasks you wrote are never touched) |
+| Player names that spell Elymum, "send … elymum" in chat | refused like the current name (impersonation, scam bait) |
+| `elymum.io` | it redirects every path to coinnibal.fun (vercel.json), and the NFT's on-chain base URI and links posted on X point at it: it stays a brand origin (CORS, sign-in) |
+| The fixed hash prefixes `elymum:` (the coin of a WL card) and `elymum-fp|` (the device fingerprint) | a new prefix would change every shared card and every device's fingerprint |
 
 What players see follows configuration, not code:
 
 | What | Where it comes from | Today |
 |---|---|---|
-| The site's domain (canonical / Open Graph URLs, robots.txt, sitemap.xml, share cards, the Link X post, SIWE) | web build `VITE_PUBLIC_URL` (else `PUBLIC_URL`); server `PUBLIC_URL` | `https://elymum.io` |
-| The project's X handle (every "Follow @...", WL tasks, collab posts, the WL card, `twitter:site`) | the admin's **Settings → X handle** (live at once); its default: server `X_HANDLE`, web build `VITE_X_HANDLE` | `elymumio` |
-| The token's display symbol (lobby, HUD, receipts, shop, faucet page) | server `TOKEN_SYMBOL` | `$NIBAL` (the default) |
+| The site's domain (canonical / Open Graph URLs, robots.txt, sitemap.xml, share cards, the Link X post, SIWE) | web build `VITE_PUBLIC_URL` (else `PUBLIC_URL`); server `PUBLIC_URL` (on the VPS both are `https://<SITE_DOMAIN>`; `COINNIBAL_PUBLIC_URL` overrides the server's) | `https://coinnibal.fun` |
+| The project's X handle (every "Follow @...", WL tasks, collab posts, the WL card, `twitter:site`) | the admin's **Settings → X handle** (live at once); its default: server `X_HANDLE`, web build `VITE_X_HANDLE` | `coinnibalfun` |
+| The token's display symbol (lobby, HUD, receipts, shop, faucet page) | server `TOKEN_SYMBOL` | `tokens` (the default) |
 | The brand kit art (`node brand/generate.mjs`) | `BRAND_X_HANDLE`, `BRAND_SITE` | `@coinnibalfun`, `coinnibal.fun` |
 
-On-chain names cannot change after a deploy. The testnet TestToken's symbol is `tELYMUM` (wallets show it; the site
-says `$NIBAL`), and the deployed testnet NFT keeps `name()` / `symbol()` "Elymum" / "ELYMUM". A **new** `ElymumNFT`
-deployment (mainnet) is "Coinnibal" / "NIBAL": only the constructor changed, the runtime code and its pinned hash are
-the same, so the deployed contracts still pass every code check. Marketplaces show the collection name from the
-server's contract metadata (`contractURI`), which says "Coinnibal".
+On-chain names cannot change after a deploy. A contract deployed before the rename keeps the names it was deployed with
+(the testnet TestToken "Elymum Test Token" / `tELYMUM`, the testnet NFT "Elymum" / "ELYMUM"); this build deploys
+"Coinnibal" / "NIBAL" and "Coinnibal Test Token" / `TEST`. The rename changed no runtime code: the pinned runtime code
+hashes are the same, so contracts registered before still pass the code check. A registered contract whose code
+differs is never used (the arenas stay off) and the admin panel says to redeploy it. Marketplaces show the collection
+name from the server's contract metadata (`contractURI`), which says "Coinnibal".
 
-Transitions handled in code: Link X codes are now `NIBAL-XXXXXX` and a post with the old `ELYMUM-XXXXXX` form of the
-same code still verifies (codes live 30 minutes); the sign-in message says "Sign in to Coinnibal." and a page or server
-from before the rename that uses the old line still signs in (the web and the server deploy apart).
+**The domains.** The site is `coinnibal.fun` (the VPS serves it, `SITE_DOMAIN`; www redirects to it), and `elymum.io`
+redirects every path to it (vercel.json). The game server's own domain is `game.elymum.io` (`GAME_DOMAIN`); to move it
+to `game.coinnibal.fun`: an `A` record → the VPS, `GAME_DOMAIN=game.coinnibal.fun` in `/opt/elymum/.env`, then
+`coinnibal-compose up -d` (Caddy gets the certificate). NFT links: the metadata base URI is on chain; the redirect keeps
+the old links working, or set a new one in Admin → Mint (`setBaseURI`) unless you froze it.
 
-**Moving to coinnibal.fun** (when the domain is bought). Keep elymum.io working throughout: the NFT's on-chain base URI
-and links already posted on X point at it.
+**The open-play copy.** `https://coinnibal.vercel.app` is the same web client on Vercel (`apps/web`, built with
+`VITE_SERVER_URL=https://coinnibal.fun`; `apps/web/vercel.json` serves the single-page app), talking to this server
+and contracts. Requests and game sockets whose `Origin` is that copy (`OPEN_PLAY_ORIGINS` in
+`packages/shared/src/brand.ts`) get `gameAccess` `public` (the settings, `/api/auth/me`, the shop, custom rooms, the
+faucet, the mint page's state, ticket permits and the WebSocket gate) while the server runs on a testnet and is not in
+maintenance; every other origin keeps the admin's setting, and on the mainnet the copy follows it too. It is a brand
+origin, so CORS allows it and a sign-in from it names its own domain.
 
-1. DNS: point `coinnibal.fun` at Vercel (Project → Settings → Domains → add `coinnibal.fun` and `www.coinnibal.fun`).
-   Optionally add `game.coinnibal.fun` → the VPS (an `A` record, as for `game.elymum.io` in deploy/vps/README.md).
-2. Vercel → Environment Variables: `VITE_PUBLIC_URL=https://coinnibal.fun` (and `VITE_SERVER_URL=https://game.coinnibal.fun`
-   if you moved the game domain), then redeploy. index.html, robots.txt and sitemap.xml follow.
-3. VPS (`/opt/elymum/.env`): `PUBLIC_URL=https://coinnibal.fun` and `CORS_ORIGIN=https://coinnibal.fun,https://elymum.io`
-   (both while elymum.io still serves pages), then `elymum-compose up -d app`. With a new game domain also set
-   `GAME_DOMAIN=game.coinnibal.fun` (Caddy gets its certificate) and update the two `game.elymum.io` rewrites in
-   `vercel.json`.
-4. Make elymum.io redirect to coinnibal.fun in Vercel (Domains → elymum.io → Redirect to coinnibal.fun, 308) once step 3
-   is live. Players sign in again once (SIWE binds the domain).
-5. NFT links: the metadata base URI is on chain. Either keep `elymum.io/api/nft/*` answering (the redirect keeps it
-   working), or set the new one in Admin → Mint (`setBaseURI`) unless you froze it.
-6. Art: `BRAND_SITE=coinnibal.fun node brand/generate.mjs x2-banner` for the X banner's "Testnet open" sticker.
-   (No other image names a domain; share cards name `PUBLIC_URL`'s host by themselves.)
-
-**The X handle is @coinnibalfun** (the shared default since the account went live).
-
-A data dir that still stores `elymumio` (or `elymum`) is moved to `coinnibalfun` on start, and the seeded WL tasks
-follow. To use another account: Admin → Settings → X handle (live at once), or `X_HANDLE` on the VPS as the default.
+**The X handle is @coinnibalfun** (the shared default since the account went live). A data dir that still stores
+`elymumio` (or `elymum`), the defaults of before the rename, is moved to `coinnibalfun` on start, and the seeded WL
+tasks follow. To use another account: Admin → Settings → X handle (live at once), or `X_HANDLE` on the VPS as the
+default.
 
 ## Deploying on Robinhood Chain Testnet
 
-Everything is done from `/admin` with the owner wallet; nothing needs a terminal once the server runs.
+Every transaction is signed in `/admin` with the owner wallet; nothing after the server's start needs the VPS shell.
+Steps 4 to 6 are one button: Start → **Deploy the contracts** (one wallet signature per step, then the signed site
+pins). The same steps one by one stay under Advanced → Setup.
 
-1. **Server.** On the VPS nothing is needed for the chain (`ELYMUM_CHAIN_ID` defaults to 46630 and `ELYMUM_RPC_URLS` to the public `https://rpc.testnet.chain.robinhood.com`;
-   a provider such as Alchemy is better for production), then set `SERVER_PRIVATE_KEY=auto`, `ADMIN_WALLETS` and
-   `PUBLIC_URL`, then start it. The log shows `chain: Robinhood Chain Testnet (chain id 46630)` and the server key;
-   `/api/config` publishes it as `serverKey`.
-2. **Gas.** Get testnet ETH for the owner wallet and the server key (faucet: `faucet.testnet.chain.robinhood.com`,
-   or Alchemy's; see RESEARCH.md: the faucet URL is unconfirmed, override the link with `GAS_FAUCET_URL`). A few
+1. **Server.** On the VPS nothing is needed for the chain (`COINNIBAL_CHAIN_ID` defaults to 46630 and `COINNIBAL_RPC_URLS` to the public `https://rpc.testnet.chain.robinhood.com`;
+   a provider such as Alchemy is better for production), then set `SERVER_PRIVATE_KEY=auto` and `ADMIN_WALLETS`, and
+   `SITE_DOMAIN` (or `COINNIBAL_PUBLIC_URL`) if the site is not `https://coinnibal.fun`, then start it. The log shows
+   `chain: Robinhood Chain Testnet (chain id 46630)` and the server key; `/api/config` publishes it as `serverKey`.
+2. **Gas.** Get testnet ETH for the owner wallet and the server key (the official faucet:
+   `faucet.testnet.chain.robinhood.com`, confirmed in RESEARCH.md, or Alchemy's; `GAS_FAUCET_URL` overrides the link). A few
    hundredths of an ETH last a long time on an Arbitrum chain.
 3. **Wallet.** Open `/admin`, connect the owner wallet and Sign in. The panel asks the wallet to add or switch to
    Robinhood Chain Testnet (chain id 46630, RPC, explorer) when it does not know it.
-4. **Deploy** (Setup → the deploy wizard; each step is previewed and registered with the server on success):
-   - **TestToken** (testnet only): an ERC20Burnable game token with a public faucet (1,000,000 an hour per wallet,
-     2,000,000 for emblem holders); apart from the faucet only the owner mints.
-   - **ElymumArena v3** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
-     The server checks the code hash and the server authority before it registers it.
-   - **ElymumNFT** at the $1 price in ETH (the wizard reads ETH/USD).
-5. **Finish setup** (one button, the remaining steps in order): set the TestToken as the arena's game token, create
+4. **Deploy** (Start → Deploy the contracts; each contract registers with the server as soon as it is deployed):
+   - **TestToken** (testnet only): an ERC20Burnable game token with a public faucet (by default 1,000,000 an hour per
+     wallet, 2,000,000 for NFT holders; Setup → Advanced → TestToken faucet changes the amounts and the cooldown);
+     apart from the faucet only the owner mints.
+   - **CoinnibalArena v4** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
+     The server checks the code hash and the server authority before it registers it. An arena of an earlier build
+     (v3, before the join permits) reads "redeploy needed": deploy the new one and register it.
+   - **CoinnibalNFT** at the USD target (`MINT_USD_CENTS`) in ETH (the server reads ETH/USD).
+5. **The rooms** (the same flow goes on): set the TestToken as the arena's game token, create
    the four arenas (1,000 / 3,000 / 5,000 / 10,000: the $1 / $3 / $5 / $10 tiers at the reference price of $0.001 a
-   token), the holder perks (8 % + 2 %), the Isles of the Blessed ($10) holders-only, the emblem as the faucet's 2x, and on the testnet open the mint to the public. The server picks the
-   token up within 30 s and the lobby opens the arenas without a reload.
-6. **Burn mode** (optional on the testnet): Game → the arena contract → Advanced → Fees: the probe shows the
+   token), the holder perks (8 % + 2 %), the $10 Room holders-only and the NFT as the faucet's 2x. The server picks the
+   token up within 30 s and the lobby opens the arenas without a reload. (The flow leaves the mint closed: Start →
+   Mint opens it; Finish setup under Setup also opens the testnet mint to the public.)
+6. **Sign the site pins** (the flow's last step: one free message from the owner wallet, no transaction). The site
+   signs only with the contracts the owner wallet signed for (DEPLOY.md section 3, "Site pins"); until then it signs
+   no ticket and no mint. Network's line "The site trusts the registered contracts" turns green.
+7. **Burn mode** (optional on the testnet): Game → the arena contract → Advanced → Fees: the probe shows the
    TestToken's working `burn()`; preview mode 1 if you want `totalSupply` to fall.
-7. **Arena prices** (Game → Arena prices): set the token's USD price, save, then sync and sign (below).
-8. **Check**: Launch shows every line green; buy a ticket in the Play tab, play a round, see the receipt (fee on
-   profit), buy a power-up pack.
+8. **Arena prices** (Game → Arena prices): set the token's USD price, save, then sync and sign (below).
+9. **Check**: Network's launch checklist shows every line green except the WL, the allowlist root and "The game is
+   open to holders" (those wait for the WL and for you to open the game: Game → Who may play); buy a ticket from the
+   lobby (`/play`) as the admin (the site signs it once step 6's pins are signed), play a round, see the
+   receipt (fee on profit), buy a power-up pack.
 
 The same can be scripted with the CLI (`pnpm admin help`: `deploy-test-token`, `deploy-arena`, `deploy-nft`, `set-token`, `create-arena`, `fee`,
 `burn-mode`, `payment-burn`, `holder-perks`, `status`) and a key file.
 
-## First deploy checklist (the ELYMUM_* keys)
+## First deploy checklist (the COINNIBAL_* keys)
 
 The VPS deploys `main` by itself (deploy/vps/update.sh). The first deploy of the server/ops release needs no change in
 `/opt/elymum/.env`: every new key is optional, and `docker-compose.yml` fills in the live values. Check, in order:
 
-1. **Nothing to add.** Unset `ELYMUM_CHAIN_ID`, `ELYMUM_RPC_URLS`, `ELYMUM_RPC_MAX_RPS` and `ELYMUM_GAME_ACCESS` mean
+1. **Nothing to add for the server.** Unset `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `COINNIBAL_RPC_MAX_RPS` and `COINNIBAL_GAME_ACCESS` mean
    46630, `https://rpc.testnet.chain.robinhood.com`, 4 calls a second and `site`: the chain and contracts of today,
    and who may play is the `/admin` → Settings switch.
-2. **Stale keys are harmless.** `CHAIN_ID`, `EVM_RPC_URL`, `EVM_RPC_URLS`, `RPC_MAX_RPS`, `GAME_ACCESS`, `WEB_DIST`
+2. **The site's contract pins.** The site trusts no built-in deployment: until the owner wallet signs the site pins
+   (the last step of Deploy the contracts, DEPLOY.md section 3) it signs no ticket and no mint. No `.env` line is
+   needed; `COINNIBAL_PIN_*` are an optional override. The game stays closed (admins only) until then anyway.
+3. **Stale keys are harmless.** `CHAIN_ID`, `EVM_RPC_URL`, `EVM_RPC_URLS`, `RPC_MAX_RPS`, `GAME_ACCESS`, `WEB_DIST`
    and the Elysium-era `PUBLIC_RPC_URL`, `EXPLORER_URL`, `ARENA_ADDRESS`, `NFT_ADDRESS`, `TOKEN_ADDRESS`,
    `TESTNET_RPC_URL`, `JOURNAL_ABANDON_CONTRACT` in `.env` are always overridden. Delete them when convenient, so the
-   file says what runs. If you tuned `RPC_MAX_RPS` there, copy it to `ELYMUM_RPC_MAX_RPS`.
-3. **`AUTH_SECRET`.** Under 32 bytes the testnet server only warns (`!!! AUTH_SECRET is …`); the mainnet refuses to
-   start. Replace it with `openssl rand -hex 32` before the mainnet, or leave it empty for the generated one (every
-   session then has to sign in again once).
-4. **Sign in to `/admin` again.** Admin sessions are now 2 hours and the earlier long tokens are refused on admin
+   file says what runs. If you tuned `RPC_MAX_RPS` there, copy it to `COINNIBAL_RPC_MAX_RPS`.
+4. **`AUTH_SECRET`.** Under 32 bytes the testnet server only warns (`!!! AUTH_SECRET is …`); the mainnet refuses to
+   start (`COINNIBAL_CHAIN_ID=4663`, an RPC that serves 4663, or, outside Docker, `CHAIN_ID` unset while the RPC does
+   not answer at a first boot). Replace it with `openssl rand -hex 32` before the mainnet, or leave it empty for the
+   generated one (every session then has to sign in again once).
+5. **Sign in to `/admin` again.** Admin sessions are now 2 hours and the earlier long tokens are refused on admin
    routes (`admin_session_expired`); players keep theirs.
-5. **After the deploy:** `elymum-compose config | grep -E 'CHAIN_ID|EVM_RPC|GAME_ACCESS'` shows `46630`, the testnet
-   RPC and `site`; `elymum-status` shows `/api/health`; `/admin` → Network shows the chain, the server key's gas
+6. **After the deploy:** `coinnibal-compose config | grep -E 'CHAIN_ID|EVM_RPC|GAME_ACCESS'` shows `46630`, the testnet
+   RPC and `site`; `coinnibal-status` shows `/api/health`; `/admin` → Network shows the chain, the server key's gas
    runway and the same contracts.
-6. **Logs move to journald.** `elymum-compose logs app` keeps working; `journalctl CONTAINER_NAME=elymum-app-1` too.
+7. **Logs move to journald.** `coinnibal-compose logs app` keeps working; `journalctl CONTAINER_NAME=elymum-app-1` too.
 
-Optional keys (all have defaults): `ELYMUM_CHAIN_ID`, `ELYMUM_RPC_URLS`, `ELYMUM_RPC_MAX_RPS`, `ELYMUM_GAME_ACCESS`,
-`ELYMUM_WEB_DIST` (leave unset), `ELYMUM_REQUIRE_CI` (off: without the CI marker the branch head deploys as before),
+Optional keys (all have defaults): `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `COINNIBAL_RPC_MAX_RPS`, `COINNIBAL_GAME_ACCESS`,
+`COINNIBAL_WEB_DIST` (leave unset), `COINNIBAL_REQUIRE_CI` (off: without the CI marker the branch head deploys as before),
 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `BACKUP_RCLONE_REMOTE`, `BACKUP_RCLONE_KEEP_DAYS`, `ADMIN_TOKEN_TTL_MIN`
 (120), `ADMIN_SECRET_EXPORT` (on on testnet, off on mainnet), `DEATH_SETTLE_BATCH_S` (6), `GAS_FLOOR_ETH` (0.002),
 `GAS_RUNWAY_WARN_DAYS` (7), `GAS_RUNWAY_CRITICAL_DAYS` (2), `HEALTH_MAX_PENDING` (400), `HEALTH_MAX_PENDING_AGE_S`
-(900). Required as before: `GAME_DOMAIN`, `NODE_ENV=production`, `PUBLIC_URL`, `CORS_ORIGIN`, `ADMIN_WALLETS`.
+(900), `SITE_DOMAIN` (`coinnibal.fun`) or `COINNIBAL_PUBLIC_URL` for the site's origin (the server's `PUBLIC_URL`).
+Required as before: `GAME_DOMAIN`, `NODE_ENV=production`, `CORS_ORIGIN`, `ADMIN_WALLETS`, and a non-empty `PUBLIC_URL`
+line (install.sh checks it; docker-compose.yml ignores its value).
+
+**Renamed keys (Elymum → Coinnibal, November 2026).** Every `ELYMUM_*` key the VPS reads is now `COINNIBAL_*`:
+`COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `COINNIBAL_RPC_MAX_RPS`, `COINNIBAL_GAME_ACCESS`, `COINNIBAL_PUBLIC_URL`,
+`COINNIBAL_WEB_DIST` and `COINNIBAL_REQUIRE_CI` in `.env`, `COINNIBAL_DEPLOY_NOW=1` on the command line and the
+scripts' overrides `COINNIBAL_DIR`, `COINNIBAL_ENV` and `COINNIBAL_BACKUPS`. The old `ELYMUM_*` name is still read as
+a fallback (docker-compose.yml with nested interpolation, the scripts in deploy/vps/lib.sh), so the live `.env` keeps
+working unchanged; when both are set, the `COINNIBAL_*` name wins. The server process itself reads none of them.
+The installed names stay (deploy/vps/README.md, section 4): `/opt/elymum`, the compose project and volume, the
+`elymum-*` units, the backups.
 
 ## Moving to Robinhood Chain (mainnet)
 
-The testnet and the mainnet are two networks of the same chain; the server follows `CHAIN_ID`.
+The testnet and the mainnet are two networks of the same chain; the server follows `CHAIN_ID`. The launch order is
+the NFT mint first, then the token, then the game.
 
-1. Deploy the game token on Pons (mainnet only; RESEARCH.md), then in `/opt/elymum/.env` set `ELYMUM_CHAIN_ID=4663`
-   and `ELYMUM_RPC_URLS` to the Alchemy mainnet URL and the public RPC (section "RPC"), an `AUTH_SECRET` of at least 32 bytes
-   (the mainnet refuses less), keep `SERVER_PRIVATE_KEY` or rotate it, fund the server key with ETH, and restart.
+1. In `/opt/elymum/.env` set `COINNIBAL_CHAIN_ID=4663`
+   and `COINNIBAL_RPC_URLS` to the Alchemy mainnet URL and the public RPC (section "RPC"), an `AUTH_SECRET` of at least 32 bytes
+   (the mainnet refuses less), keep `SERVER_PRIVATE_KEY` or rotate it, fund the server key with ETH, and restart
+   (`coinnibal-compose up -d app`). The site signs nothing on the mainnet until the owner signs the mainnet pins
+   (step 2).
    Integrity auto-hold is on by default there, and the secret exports are off (`ADMIN_SECRET_EXPORT`). The server opens a clean state in `DATA_DIR/chains/4663/`; the testnet's records stay in
    `chains/46630/` (the Network tab lists them).
-2. Deploy ElymumArena v3 and ElymumNFT from `/admin` (no TestToken on mainnet), set the token, create the arenas,
-   set the holder perks, publish the allowlist root, Sync to $1, then price the arenas in US dollars (set the token
-   price → sync → sign, "Arena prices in US dollars"). Keep burn mode 0 until the probe shows the token's
-   `burn()` works.
+2. Start → **Deploy the contracts** (CoinnibalArena v4, CoinnibalNFT, their registration, the NFT perks and the signed
+   site pins for chain 4663; no TestToken on mainnet), publish the allowlist root, Sync the mint price and open the
+   mint. Once the game token is launched on Pons (mainnet only; RESEARCH.md): set the token (Setup → Set the game
+   token, typed twice), sign the site pins again (the panel asks), create the arenas (Deploy the contracts again), then price the arenas in US dollars (set the token price → sync →
+   sign, "Arena prices in US dollars"), and only then open the game. Keep burn mode 0 until the probe shows the
+   token's `burn()` works.
 3. "Import testnet emblem holders" (Mint tab) reads the testnet NFT through `TESTNET_RPC_URL` (default the public
    testnet RPC) and adds its holders to the mainnet allowlist.
 4. On mainnet a red MAINNET banner stays at the top of `/admin` and `JOURNAL_ABANDON_CONTRACT` is refused.
@@ -478,7 +707,7 @@ running rooms of a re-priced arena take the new price for their own figures at t
 minute; the log says `arena #N: ticket price … on chain`). Re-sync whenever the token's price moves enough to matter;
 `dex_twap` (a Pons / DEX TWAP) will replace the manual price once it is wired.
 
-**The holder pair** (holders pay 10 % of their profit): Setup → Holder perks → `setHolderPerks(<ElymumNFT>, 800, 200)`
+**The holder pair** (holders pay 10 % of their profit): Setup → Holder perks → `setHolderPerks(<CoinnibalNFT>, 800, 200)`
 (Finish setup does it on a fresh deploy). An arena deployed earlier with the old suggestion (1,500 + 0) needs this
 call once; tickets bought before it keep the pair they joined with.
 
@@ -504,14 +733,16 @@ journaled as a sweep and sent with `sweepLoot(arenaId, sweepId, amount)`, which 
 `sweepId` is monotonic and kept in the journal, so a sweep is never applied twice.
 
 - `!!! chain: arena #N vault cannot cover ...` means the vault holds less than the journal says; the server retries
-  with backoff. Check the arena in `/admin` → Arena before doing anything.
+  with backoff. Check the arena in `/admin` → Game → the arena contract before doing anything.
 - `sweepLoot` is capped only by the vault (the same trust as a payout): **protect the server key**.
 - Unplayed tickets are cancelled with their full entry fee after `STALE_SESSION_AFTER_S` (15 minutes).
 
 ## Custom rooms and practice with bots
 
 `/admin` → Game → **Custom rooms** (`/api/admin/custom-rooms`, `DATA_DIR/site/custom-rooms-settings.json`): creating
-on / off, ticket rooms on / off, the base price and its step per 10 players, the biggest room (up to 100 players),
+on / off, ticket rooms on / off, the base price (priced in US dollars, $1.50 by default and converted at the token
+price of Arena prices like the tickets, or in whole tokens; the token price also applies until a USD price is set) and
+its step per 10 players, the biggest room (up to 100 players),
 the seats of all live rooms together, the holder perk (default: one free room of up to 10 players a day per holder,
 UTC day, kept in `site/custom-rooms.json` across restarts; or a discount, or none), the live rooms (close one: a free room ends after a 10 s
 countdown and its final board, a ticket room too: its tickets are settled at that end). **Practice with bots** on / off and "practice rooms at
@@ -519,28 +750,45 @@ once" (`practiceMaxLive`, default 12, 0..50): the free one-click rooms the quiet
 per player, 4 per IP per 30 minutes, closed after 2 minutes empty). They take none of the paid rooms' slots or seats;
 each costs about 8 bots of CPU, so 12 at once is about 100 practice bots.
 
+Room fees are paid in the game token with the arena's `pay`, like power-up packs: 50 % is burned and 50 % goes to the
+fee wallet in that call (the card shows the arena and the split). There is no treasury setting any more; a settings
+file from the rooms paid in ETH (before 18 Nov 2026) loads with its `priceGas` / `treasury` ignored, and the used
+payments of that time stay used (`DATA_DIR/chains/<id>/room-payments.json`). Until the game token is set on the arena,
+only free rooms open (the holders' room of the day, practice with bots); the card says so.
+
 ## Test arenas with bots (testnet)
 
 On the testnet every official arena (ticket tier) gets one extra instance, **Test · <arena>** (`test-<arenaId>`):
-the same arena, the same ElymumArena contract and vault, real tickets, rounds, bell, settlement with the fee on
+the same arena, the same CoinnibalArena contract and vault, real tickets, rounds, bell, settlement with the fee on
 profit, loot burns, journal and crash recovery as the official instances, plus practice bots so the whole system can
 be tested with few people. Bots never buy a ticket and carry no value: eating one gives mass, never tokens; a bot
 that eats a player makes the eaten value spill as loot (burned at the bell if nobody picks it up). A ticket is the
 arena's normal ticket: the same on-chain session can be played in an official instance or in the test arena (one
 seat at a time).
 
-- **Lobby:** listed after the official arenas under "Test arenas · testnet", each with a TEST badge and the line
-  "testnet test room with bots; same tickets and payouts". Quick play never goes there. Who may play follows the
-  normal game access rule (`gameAccess` / `GAME_ACCESS`): admins during maintenance, everyone when the game is open.
+**People take the bots' places.** The setting is the number of bots in an EMPTY test arena; every person's coin in
+it (playing or away) takes one bot's place, so the room plays with the setting minus the people (never fewer than
+none). A person seated: one bot leaves at once, first one still on its way in, else the bot least in the way (in no
+chase with a person, the farthest from the people; when every bot is busy with someone, the smallest). It turns
+harmless (shielded: it eats nobody and nobody eats it), swims toward an edge away from the people and leaves once no
+screen has it in view (at the latest after 8 s); the room's feed says "Bot N went home." A person gone (eaten, or
+settled at the bell): a bot comes back one at a time about 4 s apart (± 40 %), never all at once. A bot holds no
+value, so its leaving or coming back moves none: ticket values, floor loot, settlements and burns stay as they are.
+
+- **Lobby:** listed after the official arenas under "Test rooms · testnet", each with a TEST badge, the line
+  "testnet test room with bots; same tickets and payouts" and its live count of players and bots. Quick play never
+  goes there. Who may play follows the normal game access rule (`gameAccess` / `GAME_ACCESS`): admins only while it
+  is `admins` (as now), NFT holders and admins with `holders`, everyone with `public`. The server checks it at every
+  join and watch (`game_closed`), not only in the lobby.
 - **Boards:** test-arena games count nowhere official: no leaderboard record, country game or "Last rounds" entry,
   no profile stats (XP, games, best). Their Share on X cards are stamped TEST and never show a payout; eating a
   practice bot offers a kill card there only.
 - **Admin:** `/admin` → Game → **Test arenas (testnet)** (`GET` / `PUT /api/admin/test-arenas`, stored in
-  `DATA_DIR/site/test-arenas.json`): "Test arenas with bots" on / off (default on), bots per test arena (3..20,
-  default 10), difficulty (easy / mixed / hard, default mixed), and every test arena live (people, bots, open or
-  closing, its worker). New settings apply at once: more bots arrive one by one, extra bots leave, the difficulty
-  applies to bots that arrive from then on. Turned off, no test arena takes a new seat and each closes once its bell
-  settled every ticket in it.
+  `DATA_DIR/site/test-arenas.json`): "Test arenas with bots" on / off (default on), the bots of an empty test arena
+  (3..20, default 10), difficulty (easy / mixed / hard, default mixed), and every test arena live (people, bots
+  playing, open or closing, its worker). New settings apply at once: more bots arrive one by one, extra bots leave
+  the same way as for a person, the difficulty applies to bots that arrive from then on. Turned off, no test arena
+  takes a new seat and each closes once its bell settled every ticket in it.
 - **Mainnet:** impossible. With `CHAIN_ID=4663` (or an RPC that serves the mainnet) no test arena opens, `PUT` answers
   409 and the card says test arenas exist on a testnet only; a `test-arenas.json` left from the testnet is ignored.
 
@@ -561,6 +809,19 @@ saved only when their page is first opened (a picture fetch does not save one); 
 result: the top 10 of its final board and the player's own row) are rendered on demand and cached (30 renders per IP
 a minute). The VPS serves the site and the game on one origin, so `/share/*` is the server's own; `pnpm dev` proxies
 it. (`vercel.json` now only redirects the old elymum.io to coinnibal.fun, path and all.)
+
+## Player feedback
+
+The game page has a **Feedback** button: in the `/play` lobby's header, on the in-game top bar (desktops and tablets;
+a phone keeps three keys there and has it at the foot of the settings sheet). It opens a small sheet: the message
+(required, up to 1,000 characters), an optional "How can we reach you?" line (up to 100) and Send. The sheet adds the
+page path, the room kind when in a game, the viewport size and the app build; the server adds the signed-in wallet
+from the session (never from the body). Guests can send too. `POST /api/feedback` takes at most 8 KB, 10 messages per
+client and 5 per wallet in 10 minutes, and 300 server-wide in 10 minutes. The messages are plain text (control
+characters removed, never rendered as HTML or links), kept in `DATA_DIR/site/feedback.jsonl` (one JSON line each, not
+per chain, the newest 5,000). `/admin` → Feedback reads them (`GET /api/admin/feedback`, newest first, with the unread
+count), marks them read or unread (`PUT /api/admin/feedback/<id> {"read":true}`, `POST /api/admin/feedback/read-all`)
+and deletes them (`DELETE /api/admin/feedback/<id>`); the writes are in the audit log.
 
 ## Arena instances (auto-scaling)
 
@@ -595,7 +856,7 @@ are on. The scaler (`apps/server/src/rooms/arena-scaler.ts`, rules in
 `/admin` → Game → **Arena instances** (`GET` / `PUT /api/admin/arena-scaling`, stored in
 `DATA_DIR/site/arena-scaling.json`, applied at the next sample): the settings, every arena's instances (people /
 seats, draining, the worker each runs on) and the last 100 decisions (`open`, `overflow`, `drain`, `undrain`,
-`close`, each with its reason). `pnpm -F @elymum/server arena-sim` plays arrival waves against the real room
+`close`, each with its reason). `pnpm -F @coinnibal/server arena-sim` plays arrival waves against the real room
 directory and prints the instances minute by minute and every decision, then checks that every seated ticket was
 settled exactly once.
 
@@ -605,12 +866,44 @@ settled exactly once.
 |---|---|
 | Cloudflare (recommended, deploy/vps/README.md "Cloudflare in front") | volumetric floods, bad bots at the edge; WebSockets pass |
 | Caddy | headers in 10 s, bodies in 30 s and at most 1 MB, headers at most 16 KB, idle keep-alive 2 min |
-| WebSocket front door | `MAX_CONNECTIONS` (1500); guests (not signed in) at most 80 % of it, per IP (8) and per IPv4 /24 or IPv6 /64 (48); a signed-in socket leaves its IP's guest count (carrier NAT), up to 64 per IP; a socket offering its session token (`elymum.auth.<token>` subprotocol) takes the reserve, and a wallet with a live arena coin always gets in (5 % headroom, past the load shedder); near the cap the longest-idle lobby guest (30 s silent) is closed (1013) for a newcomer; 60 upgrades per IP a minute; a socket without a valid `hello` in 10 s is closed; 90 messages/s per socket (bursts of 120), a socket that floods or sends garbage (300 strikes in 10 s) is closed with 1008; at most 4 KB per message; sign-ins and ticket reads 1 per 2 s |
-| HTTP | 240 API requests per IP a minute, 20 sign-in nonces per IP a minute (at most 24 unused per IP and 4 per address; a full pool evicts the biggest holder's first), headers in 15 s, the whole request in 30 s, 64 KiB bodies, `/api/rooms` and `/api/leaderboard` built at most once a second, 30 share-card renders per IP and 120 in all a minute |
+| WebSocket front door | `MAX_CONNECTIONS` (1500); guests (not signed in) at most 80 % of it, per IP (8), per IPv4 /24 or IPv6 /64 (48) and per IPv6 /48 (96); a signed-in socket leaves its IP's guest count (carrier NAT), up to 64 per address (an IPv6 client counts as its /64) and 192 per IPv4 /24 or IPv6 /48; at most 3 sockets per wallet (a newer one closes its oldest lobby socket with `CLOSE_REPLACED`; a socket counts under the wallet whose token opened it until it closes, signed out or not); a socket offering its session token (`coinnibal.auth.<token>` subprotocol) takes the reserve, and a wallet with a live arena coin gets in past the cap and the load shedder (20 upgrades per wallet a minute, 8 over the address bounds; past the cap it takes the place of its own lobby socket or of one silent 5 s, else one extra slot per wallet: an idle guest's, the 5 % headroom, or, the headroom full, an idle signed-in socket's, never closing a live game; a headroom socket that signs out while full is closed with 1013); a socket its session token admitted is never a guest, whether or not it sends `auth`; near the cap the longest-idle lobby guest (30 s silent) is closed (1013) for a newcomer, and at the cap the signed-in socket that went longest without playing (2 min; pings do not count; never one that plays, joins or whose wallet holds a live coin); 60 upgrades per IP (IPv6 /64) a minute; a socket without a valid `hello` in 10 s is closed, a second `hello` is a strike; 90 messages/s per socket (bursts of 120), a socket that floods or sends garbage (300 strikes in 10 s) is closed with 1008; at most 4 KB per message; `ping` answered at most every 500 ms; a send buffer over 2 MiB, or over 768 KiB at two heartbeats in a row, closes the socket, and a socket that does not echo the heartbeat's ping payload within 25 s is closed; sign-ins 1 per 2 s per socket; ticket reads 1 per 2 s per socket, 20 per wallet and 60 per client a minute (a client's reads for wallets the `Joined` index knows to hold a ticket count apart from the others), at most 16 s of the RPC budget waiting (then `chain_busy` at once; 4 of those per client); wallets the index does not know also at most a quarter of the queue, 8 waiting and 120 a minute per IPv6 /48 or IPv4 /24 (past it `chain_busy`, retried), and a refused or seated join of such a wallet refreshes the index at once, every 4 s at most; at `high` RPC priority; holder checks read the chain only for a gate decision (who may play, a holders-only permit, a room's creation, the emblem skin at a join), a quarter of `RPC_MAX_RPS` server-wide (1 a second, bursts of 10, at the default 4), a client 1/16 of it (3.75 a minute) and an IPv6 /48 or IPv4 /24 1/8 (7.5 a minute), smooth, the bottom half of the bucket only for a newcomer (no holder read from its address or its network for 60 s); past it a "holder" on record (cached, or in the holder index of the NFT's `Transfer` logs), else the holder index read by a scan that starts after the request (one for everyone, every 2 s at most, waited for at most 8 s): a wallet that minted a moment ago is a holder, one absent from it is not, and only while the index cannot catch up (a failed scan's back-off) "busy, try again"; a value only shown (profile, shop and room prices, the `holder` field of `/api/auth/me`, the laurel at a join) never reads the chain: the answer on record, else "not a holder", not kept (the index then reads the new blocks in the background, every 5 s at most): never a wrong "not a holder" at a gate, never a 429 for a display; a join waits at most 1 s for its laurel's holder check |
+| HTTP | 240 API requests per IP a minute, 20 sign-in nonces per IP a minute (at most 24 unused per IP, expired ones not counted, and 4 per IP and address; a full pool evicts the biggest network's first); every per-IP limit counts an IPv6 client as its /64; smart-wallet (ERC-1271 / 6492) sign-in checks 2 at once, 0.5 a second server-wide, 4 per client and 8 per IPv6 /48 in 10 minutes (given up after 10 s), only for an address with code (`eth_getCode`: 1 a second, 8 per client in 10 minutes, cached) or an ERC-6492 / ERC-8010 signature, plus a reserve for smart wallets that signed in before from the same network (past it: 429 "sign-in is busy", the nonce kept); headers in 15 s, the whole request in 30 s, 64 KiB bodies, `/api/rooms` and `/api/leaderboard` built at most once a second, 30 share-card renders per IP and 120 in all a minute |
 | Load shedding (`LOAD_SHED`, on in production) | when the game thread with the most headroom runs a tick p95 over 28 ms or the main thread lags over 150 ms (p99): new free games wait (`server_full`); over 45 ms / 400 ms: new sockets (503) and new arena seats wait too (the ticket stays on chain). Live games and reconnects always go on. Logged as `!!! load: BUSY` / `CRITICAL` |
 
 The per-IP limits need the real client address: Caddy hands it on (one hop); the site is served by the game server
 itself on the same origin, so every request reaches it straight from the player.
+
+### Security notes: what an attacker can still do (front door, holder checks, ticket reads)
+
+The bounds above follow standing where they can (a wallet the `Joined` index knows to hold a ticket, an NFT holder on
+record, a socket that plays or holds a live coin); shared bounds per network or server-wide never refuse those. With
+unbounded fresh identities nothing is prevented entirely; what is left, at the defaults (`RPC_MAX_RPS` 4,
+`MAX_CONNECTIONS` 1500):
+
+- Holder checks. Only gate decisions read the chain (pages and the laurel never do), so players behind one address or
+  one carrier NAT never spend each other's holder reads by browsing or playing. One address takes at most 3.75 holder
+  reads a minute and one network (an IPv4 /24, an IPv6 /48) 7.5, so 16 attacker addresses in 16 networks (or 8
+  networks of two addresses or more) asking gate decisions with throwaway wallets keep the top half of the bucket
+  empty. They never take the bottom half: it is only for a newcomer, a client whose address and network had no holder
+  read for 60 s, so each network takes at most one read of it a minute, and it takes about 60 networks, each pausing a
+  minute between reads, to keep it empty too. Even then no gate decision is refused: past the bounds a holder on
+  record (cached, or in the holder index, kept across restarts) is answered at once, and anyone else from the holder
+  index read by a scan that starts after the request, so a wallet that minted a moment ago plays and a non-holder
+  hears "not a holder" (its room at the full price, the holders page in `holders` mode). The attack delays those
+  answers by up to about 2 s plus the scan (and, with the bottom half empty, a newcomer's first check is answered from
+  the index instead of its own `balanceOf`). "Busy" is left for a holder index that cannot catch up: a scan the RPC
+  failed backs off 1 to 15 minutes (a gate decision with nothing on record hears busy meanwhile; `/play` asks again
+  for about 10 s), and an index that could not find the NFT's first block (no deploy transaction known and a pruned
+  node) never answers "not a holder". Their cost: the addresses, and a few signed-in throwaway wallets on each (a "no"
+  is kept 2 s); the RPC cost stays within the bucket (a quarter of `RPC_MAX_RPS`) plus one index scan (2 calls, at
+  `high` priority) every 2 s, the same however many ask.
+- Ticket reads. Free wallets take at most a quarter of the read queue, 8 waiting and 120 a minute per network; they
+  can keep fresh buyers of their own network waiting until the index refresh (every 4 s) knows the new ticket, never a
+  ticket the index knows. M funded wallets with open tickets (each a permit and an entry fee, refunded in full if
+  never played) read at most 20 a minute each and 60 a minute per client, within the server-wide queue.
+- Sockets. Signed-in sockets that never play hold a slot only until a newcomer needs it at the cap (2 minutes without
+  playing); M funded wallets with live coins hold at most 3 sockets each plus one extra slot past the cap, and never
+  close a game. Guests hold at most 80 % of the slots.
 
 `node --import tsx scripts/bench/flood.ts` (in `apps/server`) plays 60 people and runs four attacks from thousands of
 spoofed addresses (idle sockets, a message flood, an HTTP flood, slowloris) and prints what the players saw.
@@ -619,23 +912,26 @@ spoofed addresses (idle sockets, a message flood, an HTTP flood, slowloris) and 
 
 | What | How | Effect |
 |---|---|---|
-| Stop new tickets | Arena → **Pause** (`setPaused(true)`; CLI `pnpm admin pause`) | `join` is refused; **settlements, refunds and collects go on**; unseated tickets are cancelled at once (full entry fee back). Undo with Unpause |
-| Close one arena | Arena → disable it (`updateArena(..., enabled=false)`) | no new tickets there; seated ones are played and settle, unseated ones are cancelled at once (full entry fee back) |
+| Stop new tickets | Game → Start / stop → Arena tickets: **Paused** (`setPaused(true)`; CLI `pnpm admin pause`) | `join` is refused; **settlements, refunds and collects go on**; unseated tickets are cancelled at once (full entry fee back). Undo with Unpause |
+| Close one arena | Game → Start / stop → Per arena: close it (`updateArena(..., enabled=false)`) | no new tickets there; seated ones are played and settle, unseated ones are cancelled at once (full entry fee back) |
 | Close the arenas on the server | `STAKE_ENABLED=false`, restart | the arenas leave the lobby; the settlement queue keeps running |
 | Close the game to players | Settings → who may play: `admins` | everyone else sees the gate; tickets already bought can still be refunded after 24 h |
 | Close the mint | Mint → phase **Closed** | no mints; nothing else changes |
 | Change the fees | Game → the arena contract → Fees (`setFeeRates`, at most 2,500 bps together) | applies to tickets bought from now on; open tickets keep their rates |
 
 On `SIGTERM` the server settles the players in the arenas at their current value (an operator exit) and saves its
-state; Docker `stop` sends it. That is why deploys (`update.sh`) and the update reboots (`reboot.sh`) wait for the
-break after an arena bell, when no coin is live.
+state; Docker `stop` sends it. That is why deploys (`update.sh`), the weekly rebuild on the newest base images
+(`update.sh --refresh`), the update reboots and the Docker Engine updates (`reboot.sh`) wait for the break after an
+arena bell, when no coin is live (deploy/vps/README.md, "Updates").
 
 **Reconnects.** A player whose network switched comes back on a new socket while the old one still looks open: a
 join of the same signed-in wallet takes the live coin over at once, and the old socket is closed with
 `CLOSE_REPLACED` (4000) so it does not reconnect. Another wallet can never take a coin (it has no ticket there).
 
 **Deploys** go out only for commits CI passed (the `ci-green-<branch>` tag), in the round break, and roll back by
-themselves when the new container is not healthy within 60 s (deploy/vps/README.md, "Deploys"). If the VPS dies:
+themselves when the new container is not healthy within 60 s, or when Caddy does not come up after the swap (its
+image of before first; deploy/vps/README.md, "Deploys"). The weekly image refresh rolls back to the build it replaced
+and leaves `elymum-app:previous`, the way back past the last deploy, alone. If the VPS dies:
 deploy/vps/README.md, "Moving to another VPS, or the VPS died".
 
 ### Retiring an arena (sweep)
@@ -669,11 +965,14 @@ The fee wallet and the NFT treasury are separate settings: change them too if th
    start) or set `SERVER_PRIVATE_KEY` to a new 0x key or key file. Start the server and note the new `serverKey`.
 3. Fund the new key with ETH.
 4. Game → the arena contract → **Server authority** → the new key (`setServerAuthority`). If the old key was the NFT price keeper, set the
-   new one as keeper too (`setPriceKeeper`). The pending settlements in the journal go out with the new key.
+   new one as keeper too (`setPriceKeeper`). The pending settlements in the journal go out with the new key. Every
+   join permit the old key signed is refused from then on (players simply ask again); until step 4 the new key's
+   permits are refused, so new tickets wait for it.
 5. Move any ETH left on the old key elsewhere and destroy it.
 
 If the key **leaked**: pause first, then step 4 at once. Until it is replaced the old key can settle open tickets
-with any amount up to a vault and burn up to a vault with `sweepLoot`.
+with any amount up to a vault, burn up to a vault with `sweepLoot`, and sign join permits for any wallet (they only
+let a wallet buy a ticket at the arena's price, which pause stops).
 
 ## Journal and data backup
 
@@ -686,7 +985,9 @@ with any amount up to a vault and burn up to a vault with `sweepLoot`.
 | `integrity/` | integrity state, the hashing secret, ticket summaries | flags and bans are gone |
 | `chains/<id>/settled.jsonl` | every confirmed settlement, cancel and loot burn of the last 14 days | reorg protection and the payout record start empty |
 | `admin-audit.jsonl` | every admin write (who, what, when, from where) and every request of the secret exports | the audit trail is gone |
+| `site/feedback.jsonl` | players' messages from the game page (the newest 5,000) | the messages are gone |
 | `chains/<id>/emblem-claims.json`, `reprice.json`, `auth-revoked.json` | the token ids open holder tickets hold, the arenas closing for a re-price, revoked sessions | an emblem may serve one extra ticket; a re-price is asked again; revoked sessions come back until they expire |
+| `auth-smart-wallets.json` | the smart wallets that signed in, per network (their sign-in reserve) | during a flood of garbage signatures a known smart wallet waits like a new one, until it has signed in once more |
 
 - The journal is written to a temporary file and renamed, so the file on disk is always a complete snapshot. Copy
   `DATA_DIR` regularly and keep the copies encrypted (they hold a private key and wallet addresses): on the VPS the

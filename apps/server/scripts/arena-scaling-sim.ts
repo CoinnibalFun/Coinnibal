@@ -3,7 +3,7 @@
  * people show the scaling), 5-minute rounds, the real `RoomManager` and scaler on a simulated clock
  * (`test/arena-sim.ts`). Prints a minute-by-minute timeline, the scaler's decisions and the ticket checks
  * (every seated ticket settled exactly once, no seat refused, no instance above capacity).
- *   pnpm -F @elymum/server arena-sim
+ *   pnpm -F @coinnibal/server arena-sim
  */
 import { ARENA_SIM_WAVES, runArenaSim } from '../test/arena-sim';
 

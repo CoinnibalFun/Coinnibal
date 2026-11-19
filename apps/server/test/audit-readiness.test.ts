@@ -16,7 +16,7 @@ import { testSigner } from './signers';
 
 describe('audit: the journal cannot be written (disk full) (fixed)', () => {
   let app: App | null = null;
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-audit-disk-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-audit-disk-'));
   afterAll(async () => {
     await app?.close();
     rmSync(dir, { recursive: true, force: true });

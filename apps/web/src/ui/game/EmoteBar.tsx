@@ -1,4 +1,4 @@
-import { EMOTE_BAR, emoteEmoji } from '@elymum/shared';
+import { EMOTE_BAR, emoteEmoji } from '@coinnibal/shared';
 import { engine } from '../../game/instance';
 import { useT, type TKey } from '../../i18n';
 

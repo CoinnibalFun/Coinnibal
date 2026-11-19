@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { useEffect, useState, type ReactElement } from 'react';
 import { SceneCoin, useOffscreenPause, useReducedMotion } from '../../design';
 import type { DocStrip } from './facts';

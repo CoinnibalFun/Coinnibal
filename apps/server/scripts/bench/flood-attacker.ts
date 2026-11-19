@@ -6,7 +6,7 @@
  * IPC: `{ t: 'run', kind, url, seconds }` → `{ t: 'done', kind, stats }`.
  */
 import { connect } from 'node:net';
-import { PROTOCOL_VERSION } from '@elymum/shared';
+import { PROTOCOL_VERSION } from '@coinnibal/shared';
 import WebSocket from 'ws';
 
 type Kind = 'idle-sockets' | 'message-flood' | 'http-flood' | 'slowloris';

@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { useEffect, useState, type ReactElement } from 'react';
 import { CoinCharacter, useOffscreenPause, useReducedMotion, type CoinMood } from '../../design';
 import { useT } from '../../i18n';
@@ -90,7 +90,7 @@ export function GateScene({ mode, attention = false }: { mode: GateMode; attenti
           <rect x={-56} y={-18} width={112} height={34} rx={7} fill={INK} transform="translate(3 3)" />
           <rect x={-56} y={-18} width={112} height={34} rx={7} fill={ELYSIUM.cream} {...S} />
           <text className="pg-gate__board" x={0} y={5} textAnchor="middle">
-            RING GATE
+            {t('pg.gate')}
           </text>
         </g>
         {/* the emblem slot with its lamp, on the right post */}

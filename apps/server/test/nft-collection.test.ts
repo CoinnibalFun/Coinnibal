@@ -2,31 +2,41 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadImage } from '@napi-rs/canvas';
+import { NFT_SUPPLY } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { NftCollection } from '../src/site/nft/collection';
 import { artIndex, drawGenome, generateCollection, provenanceHash, rarityStats, revealOffset, sha256Hex, stream, tierQuotas } from '../src/site/nft/generate';
 import { pixelGrid, pixelSvg } from '../src/site/nft/pixel';
 import { renderEmblem } from '../src/site/nft/render';
-import { EXCLUSIONS, LAYERS, MYTHICS, TIERS, brokenRule, choicesFor, dna, type Genome } from '../src/site/nft/traits';
+import { EXCLUSIONS, LAYERS, MYTHICS, TIERS, TIER_SHARE, brokenRule, choicesFor, dna, type Genome } from '../src/site/nft/traits';
 import { unrevealedSvg } from '../src/site/nft/unrevealed';
 import { vectorSvg } from '../src/site/nft/vector';
 
 const SEED = 'test-seed';
-const full = generateCollection(SEED, 5000);
+/** The collection at the owner's fixed supply (3,333, the NFT contract's max supply). */
+const full = generateCollection(SEED, NFT_SUPPLY);
 
 describe('emblem generator', () => {
   it('is deterministic for a seed and size, and differs between seeds', () => {
-    const again = generateCollection(SEED, 5000);
+    const again = generateCollection(SEED, NFT_SUPPLY);
     expect(again.map(dna)).toEqual(full.map(dna));
     expect(provenanceHash(again)).toBe(provenanceHash(full));
-    expect(provenanceHash(generateCollection('other', 5000))).not.toBe(provenanceHash(full));
+    expect(provenanceHash(generateCollection('other', NFT_SUPPLY))).not.toBe(provenanceHash(full));
     expect(vectorSvg(full[7], 8)).toBe(vectorSvg(full[7], 8));
   });
 
-  it('hands out the exact tier quotas (5,000: 3,000 / 1,250 / 550 / 190 / 10) and every 1/1 once', () => {
+  it('hands out the exact tier quotas (3,333: 2,000 / 833 / 366 / 127 / 7) and each 1/1 at most once', () => {
+    expect(NFT_SUPPLY).toBe(3333);
     const st = rarityStats(full);
-    expect(st.tiers).toEqual({ Common: 3000, Rare: 1250, Epic: 550, Legendary: 190, Mythic: 10 });
-    expect(full.filter((g) => g.tier === 'Mythic').map((g) => g.name).sort()).toEqual(MYTHICS.map((g) => g.name).sort());
+    expect(st.tiers).toEqual({ Common: 2000, Rare: 833, Epic: 366, Legendary: 127, Mythic: 7 });
+    const names = full.filter((g) => g.tier === 'Mythic').map((g) => g.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const n of names) expect(MYTHICS.map((g) => g.name)).toContain(n);
+    // the generator itself: a collection large enough for every authored 1/1 (not the supply) has each exactly once
+    const roomy = Math.round(MYTHICS.length / TIER_SHARE.Mythic);
+    const big = generateCollection(SEED, roomy);
+    expect(tierQuotas(roomy).Mythic).toBe(MYTHICS.length);
+    expect(big.filter((g) => g.tier === 'Mythic').map((g) => g.name).sort()).toEqual(MYTHICS.map((g) => g.name).sort());
     for (const n of [1, 7, 333, 1000, 3333, 10_000]) {
       const q = tierQuotas(n);
       expect(TIERS.reduce((s, t) => s + q[t], 0)).toBe(n);
@@ -81,12 +91,12 @@ describe('emblem generator', () => {
   });
 
   it('maps tokens through the reveal offset as a permutation', () => {
-    const offset = revealOffset('0x' + 'ab'.repeat(32), provenanceHash(full), 5000);
+    const offset = revealOffset('0x' + 'ab'.repeat(32), provenanceHash(full), NFT_SUPPLY);
     expect(offset).toBeGreaterThanOrEqual(0);
-    expect(offset).toBeLessThan(5000);
+    expect(offset).toBeLessThan(NFT_SUPPLY);
     const seen = new Set<number>();
-    for (let id = 1; id <= 5000; id++) seen.add(artIndex(id, offset, 5000));
-    expect(seen.size).toBe(5000);
+    for (let id = 1; id <= NFT_SUPPLY; id++) seen.add(artIndex(id, offset, NFT_SUPPLY));
+    expect(seen.size).toBe(NFT_SUPPLY);
   });
 });
 
@@ -136,7 +146,7 @@ describe('emblem art', () => {
 });
 
 describe('NftCollection', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-nft-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-nft-'));
 
   it('commits a random seed once, keeps it across restarts, and stores it privately', () => {
     const file = join(dir, 'a.json');
@@ -153,6 +163,18 @@ describe('NftCollection', () => {
     const b = new NftCollection({ file, size: 900, seed: 'something else', style: 'vector', log: (m) => logs.push(m) });
     expect(b.provenance()).toEqual(p);
     expect(logs.some((m) => m.includes('committed seed'))).toBe(true);
+  });
+
+  it('a Mythic is "one of the one-of-a-kind coins", with no count (7 at 3,333, out of ten hand-authored 1/1s)', async () => {
+    const size = 1000;
+    const c = new NftCollection({ file: join(dir, 'mythic.json'), size, seed: 'mythic-line', style: 'vector' });
+    c.schedule({ block: 200n, current: 100n, mintOpen: false, soldOut: true, maxSupply: size });
+    await c.reveal(async () => `0x${'17'.repeat(32)}`);
+    const mythic = Array.from({ length: size }, (_, i) => i + 1).find((id) => c.genomeOf(id)?.tier === 'Mythic');
+    expect(mythic).toBeDefined();
+    const { description } = c.metadata(mythic!, 'https://x.example') as { description: string };
+    expect(description).toMatch(/^A Mythic \S+ NFT: one of the one-of-a-kind coins\. /);
+    expect(description).not.toMatch(/\bten\b/);
   });
 
   it('shows only the sealed emblem until the reveal, then the art of (id - 1 + offset)', async () => {

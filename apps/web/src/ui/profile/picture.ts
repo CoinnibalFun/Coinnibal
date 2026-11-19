@@ -1,4 +1,4 @@
-import { AVATAR_LIMITS, isAvatarId, isCountryCode } from '@elymum/shared';
+import { AVATAR_LIMITS, isAvatarId, isCountryCode } from '@coinnibal/shared';
 import { t } from '../../i18n';
 
 /**

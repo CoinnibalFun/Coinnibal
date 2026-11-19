@@ -130,3 +130,50 @@ export function AdminSessionBar({ state, role }: { state: AdminState; role?: Own
     </div>
   );
 }
+
+/**
+ * The start screen's first card while nobody is signed in: connect the owner wallet, then one free signature. The
+ * same buttons as the top bar, where the owner looks first.
+ */
+export function SignInCard({ state }: { state: AdminState }) {
+  const providers = useWallet((s) => s.providers);
+  const status = useWallet((s) => s.status);
+  const address = useWallet((s) => (s.status === 'connected' ? s.address : null));
+  const signing = useSession((s) => s.signing);
+  useEffect(() => initWallets(), []);
+  if (state.kind === 'admin') return null;
+  return (
+    <section className="ad-card ad-signin" aria-labelledby="ad-signin-h" data-testid="start-signin">
+      <h2 className="ad-card__title" id="ad-signin-h">
+        {address ? 'Sign in' : 'Connect your wallet'}
+      </h2>
+      <p className="ad-card__lede">
+        {state.kind === 'denied' ? 'This wallet is not an admin. Connect the owner wallet.' : address ? 'One free signature. No transaction.' : 'Use the owner wallet. It deploys the contracts and owns them.'}
+      </p>
+      <div className="ad-actions">
+        {address ? (
+          <Button
+            variant="primary"
+            size="sm"
+            lead="key"
+            disabled={signing || state.kind === 'checking'}
+            onClick={() => {
+              const w = connected();
+              if (w) void signIn(providerSigner(w.provider, w.address)).catch(() => {});
+            }}
+          >
+            {signing ? 'Check your wallet…' : 'Sign in'}
+          </Button>
+        ) : providers.length ? (
+          providers.map((d) => (
+            <Button key={d.info.uuid} variant="primary" size="sm" disabled={status === 'connecting'} onClick={() => void connectWallet(d)}>
+              {status === 'connecting' ? 'Connecting…' : `Connect ${d.info.name}`}
+            </Button>
+          ))
+        ) : (
+          <p className="ad-note">No browser wallet found. Install MetaMask or Rabby (a Ledger works through them).</p>
+        )}
+      </div>
+    </section>
+  );
+}

@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { AdminAudit } from './audit';
-import { SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
+import { OLD_SECRET_PROOF_HEADER, SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
-import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, isOpenPlayOrigin } from '@elymum/shared';
-import { checksumAddress, type Auth } from '../auth';
+import { FEEDBACK_LIMITS, ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible, isOpenPlayOrigin, isTestChainId } from '@coinnibal/shared';
+import { SIGN_IN_BUSY_MESSAGE, SignInBusyError, checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import { XLinkFail, type XLinkService } from '../xlink';
 import { squarePng } from './share-card';
@@ -12,6 +12,7 @@ import type { ChainGateway } from '../chain/types';
 import { integrityRoutes } from '../integrity/routes';
 import type { IntegrityService } from '../integrity/service';
 import type { ServerConfig } from '../config';
+import { CLIENT_BUSY_MESSAGE, ClientBudgetError } from '../net/client-scope';
 import { Limiter } from '../net/limiter';
 import { ProfileError, type ProfileStore } from '../profiles';
 import type { Journal } from '../stake/journal';
@@ -32,11 +33,16 @@ import type { CustomRoomService } from '../rooms/custom';
 import { importHolders, type HolderWlStore } from './holder-wl';
 import { FaucetInfo, networkInfo } from './network';
 import { clearContract, registerContract, type ContractsStore } from './contracts';
+import { savePins, type SitePinsStore } from './pins';
 import { parseNftPath, type MintService } from './mint';
 import { CollectionFail, type NftCollection } from './nft/collection';
 import { parseArtStyle } from './nft/render';
 import type { SiteStore } from './store';
 import { SiteFail, obj } from './validate';
+import { FeedbackStore, parseFeedback } from './feedback';
+
+/** A request's or a socket's `Origin` header (absent on a same-origin GET and on a server's own call). */
+type Origin = string | string[] | null | undefined;
 
 /** Admin routes whose every request (reads too) goes to the audit log: they hand out secrets. */
 const SECRET_ROUTES = new Set(['backup', 'migration-env', 'secret-proof', 'auth']);
@@ -45,6 +51,8 @@ const SECRET_ROUTES = new Set(['backup', 'migration-env', 'secret-proof', 'auth'
 export interface SiteExtras {
   chain?: ChainGateway;
   contracts?: ContractsStore;
+  /** The owner's signed site pins, per chain (`GET /api/site/pins`, `POST /api/admin/pins`). */
+  pins?: SitePinsStore;
   mint?: MintService;
   /** The emblem collection (art, metadata, provenance, reveal). */
   nft?: NftCollection;
@@ -80,6 +88,12 @@ export interface SiteLimits {
   avatarIp?: Limiter;
   /** Picture uploads per signed-in wallet (default 6 an hour). */
   avatarWallet?: Limiter;
+  /** `POST /api/feedback` per client (default 10 in 10 minutes). */
+  feedbackIp?: Limiter;
+  /** `POST /api/feedback` per signed-in wallet (default 5 in 10 minutes). */
+  feedbackWallet?: Limiter;
+  /** Messages stored server-wide (default 300 in 10 minutes): a flood from many addresses cannot churn the kept 5,000 in minutes. */
+  feedbackAll?: Limiter;
 }
 
 export const defaultSiteLimits = (): SiteLimits => ({
@@ -89,6 +103,8 @@ export const defaultSiteLimits = (): SiteLimits => ({
   avatarIp: new Limiter(20, 60 * 60_000),
   avatarWallet: new Limiter(6, 60 * 60_000),
 });
+
+type FeedbackLimits = Required<Pick<SiteLimits, 'feedbackIp' | 'feedbackWallet' | 'feedbackAll'>>;
 
 const send = (res: ServerResponse, status: number, body: unknown) => {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -151,7 +167,7 @@ export function bearerWallet(auth: Auth, req: IncomingMessage): string | null {
 }
 
 /**
- * The Elymum site API: wallet sign-in over HTTP (SIWE), `/api/site/*` (public + the signed-in
+ * The Coinnibal site API: wallet sign-in over HTTP (SIWE), `/api/site/*` (public + the signed-in
  * applicant), `/api/profile`, the NFT metadata (`/api/nft/*`) and `/api/admin/*` (a session of an
  * `ADMIN_WALLETS` wallet).
  */
@@ -187,6 +203,7 @@ export class SiteApi {
   private xLinks: XLinkService | null = null;
   private readonly avatarIp: Limiter;
   private readonly avatarWallet: Limiter;
+  private readonly feedbackLimits: FeedbackLimits;
 
   constructor(
     private readonly cfg: ServerConfig,
@@ -201,11 +218,20 @@ export class SiteApi {
     this.avatarIp = limits.avatarIp ?? new Limiter(20, 60 * 60_000);
     this.avatarWallet = limits.avatarWallet ?? new Limiter(6, 60 * 60_000);
     this.audit = new AdminAudit(ext.dataDir ? join(ext.dataDir, 'admin-audit.jsonl') : null, ext.log);
+    this.feedback = new FeedbackStore(ext.dataDir ? join(ext.dataDir, 'site', 'feedback.jsonl') : null, { log: ext.log });
+    this.feedbackLimits = {
+      feedbackIp: limits.feedbackIp ?? new Limiter(10, 10 * 60_000),
+      feedbackWallet: limits.feedbackWallet ?? new Limiter(5, 10 * 60_000),
+      feedbackAll: limits.feedbackAll ?? new Limiter(300, 10 * 60_000),
+    };
     this.proofs = new SecretProofs((w, m, sig) => this.auth.signedBy(w, m, sig));
   }
 
   /** Every admin write (`DATA_DIR/admin-audit.jsonl`, `GET /api/admin/audit`). */
   readonly audit: AdminAudit;
+
+  /** Player feedback (`POST /api/feedback`, `DATA_DIR/site/feedback.jsonl`, the admin's Feedback drawer). */
+  readonly feedback: FeedbackStore;
 
   /** `fn(wallet)`: the wallet's picture was removed or replaced (the rooms take it off live coins). */
   onAvatarChange(fn: ((wallet: string) => void) | null): void {
@@ -270,37 +296,66 @@ export class SiteApi {
   }
 
   /**
-   * Who may play: `GAME_ACCESS` when set, else the admin's setting. A request from an open-play copy of the site
-   * (`OPEN_PLAY_ORIGINS`, its `Origin` header) gets `public` on the testnet, unless the server is in maintenance.
+   * Who may play: `GAME_ACCESS` when set, else the admin's setting. A request or a socket from an open-play copy of the
+   * site (`OPEN_PLAY_ORIGINS`, its `Origin` header) gets `public` on a testnet, unless the server is in maintenance.
    */
-  gameAccess(origin?: string | string[] | null): GameAccess {
+  gameAccess(origin?: Origin): GameAccess {
     const mode = this.cfg.gameAccess ?? this.store.settings.gameAccess;
     return mode !== 'maintenance' && this.openPlay(origin) ? 'public' : mode;
   }
 
-  /** Whether `origin` is an open-play copy of the site and this server runs on a testnet (never on mainnet). */
-  private openPlay(origin: string | string[] | null | undefined): boolean {
-    return typeof origin === 'string' && isOpenPlayOrigin(origin) && this.cfg.chain.chainId !== ROBINHOOD_CHAIN_ID && this.chainId() !== ROBINHOOD_CHAIN_ID;
+  /** Whether `origin` is an open-play copy of the site and this server runs on a testnet (never on the mainnet). */
+  private openPlay(origin: Origin): boolean {
+    if (typeof origin !== 'string' || !isOpenPlayOrigin(origin)) return false;
+    const live = this.chainId();
+    return isTestChainId(this.cfg.chain.chainId) && (live === null || isTestChainId(live));
   }
 
-  /** Whether `wallet` holds an Elymum NFT (cached 15 s, `fresh` re-reads; false without an NFT or a chain). */
+  /** Whether `wallet` holds a Coinnibal NFT (cached 15 s, `fresh` re-reads; false without an NFT or a chain). */
   async isHolder(wallet: string | null | undefined, fresh = false): Promise<boolean> {
     return !!wallet && !!this.ext.mint && (await this.ext.mint.isHolder(wallet, fresh));
+  }
+
+  /**
+   * The same for a value that is only shown (a profile's skins, the `holder` field of `/api/auth/me`): never busy (no
+   * 429 for a budget) and never a chain read of its own: the "holder" on record, else false, not kept.
+   */
+  async shownHolder(wallet: string | null | undefined): Promise<boolean> {
+    return !!wallet && !!this.ext.mint && (await this.ext.mint.shownHolder(wallet));
   }
 
   /**
    * Whether `wallet` may enter game rooms: admins always; NFT holders in `holders` mode; everyone in `public`.
    * `fresh`: the holder check skips its 15 s cache (the gateway asks so right before seating an arena ticket).
    */
-  async gameOpenFor(wallet: string | null | undefined, fresh = false, origin?: string | string[] | null): Promise<boolean> {
+  async gameOpenFor(wallet: string | null | undefined, fresh = false, origin?: Origin): Promise<boolean> {
     const mode = this.gameAccess(origin);
     if (mode === 'public' || this.isAdmin(wallet)) return true;
     if (mode === 'holders') return this.isHolder(wallet, fresh);
     return false;
   }
 
+  /**
+   * `gameOpenFor` for a value that is only shown (the shop's prices): never busy, never a chain read of its own; a
+   * holder on record may, anyone else is answered as not a holder (not kept).
+   */
+  async gameShownFor(wallet: string | null | undefined, origin?: Origin): Promise<boolean> {
+    const mode = this.gameAccess(origin);
+    if (mode === 'public' || this.isAdmin(wallet)) return true;
+    if (mode === 'holders') return this.shownHolder(wallet);
+    return false;
+  }
+
+  /**
+   * Whether `wallet` may read the test-token faucet (`GET /api/site/faucet`): everyone while the game shows on the site
+   * (`gameVisible`: every mode but `admins`, the rule of the site's /faucet page), else admins only.
+   */
+  faucetOpenFor(wallet: string | null | undefined, origin?: Origin): boolean {
+    return gameVisible(this.gameAccess(origin)) || this.isAdmin(wallet);
+  }
+
   /** The settings everyone can read; `gameAccess` is the effective value (for this request's origin). */
-  publicSettings(origin?: string | string[] | null): SiteSettings {
+  publicSettings(origin?: Origin): SiteSettings {
     return { ...this.store.settings, gameAccess: this.gameAccess(origin) };
   }
 
@@ -312,8 +367,11 @@ export class SiteApi {
     return this.ext.chain?.status().chainId ?? null;
   }
 
-  /** Handles the request when the path is the site's; false otherwise. */
-  async handle(req: IncomingMessage, res: ServerResponse, url: URL, ip: string): Promise<boolean> {
+  /**
+   * Handles the request when the path is the site's; false otherwise. `ip`: the client's rate-limit key (`rateKey`:
+   * an IPv6 client counts as its /64); `auditIp`: its exact address, for the admin audit and the logs.
+   */
+  async handle(req: IncomingMessage, res: ServerResponse, url: URL, ip: string, auditIp = ip): Promise<boolean> {
     const path = url.pathname;
     const mine =
       path.startsWith('/api/site/') ||
@@ -329,7 +387,8 @@ export class SiteApi {
       path === '/api/shop' ||
       path === '/api/shop/buy' ||
       path === '/api/x' ||
-      path.startsWith('/api/x/');
+      path.startsWith('/api/x/') ||
+      path === '/api/feedback';
     if (!mine) return false;
     try {
       if (path === '/api/auth/login' || path === '/api/auth/me') await this.authRoutes(req, res, path, ip);
@@ -341,10 +400,13 @@ export class SiteApi {
       else if (path.startsWith('/api/nft/')) await this.nftRoutes(req, res, url);
       else if (path.startsWith('/api/site/')) await this.siteRoutes(req, res, url, ip);
       else if (path.startsWith('/api/rooms/custom')) await this.customRoutes(req, res, path, ip);
-      else await this.audited(req, res, url, ip);
+      else if (path === '/api/feedback') await this.feedbackRoute(req, res, ip);
+      else await this.audited(req, res, url, auditIp);
     } catch (err) {
       if (err instanceof SiteFail && err.status === 413) res.setHeader('Connection', 'close');
       if (err instanceof SiteFail) fail(res, err.status, { error: err.code, message: err.message, ...(err.field ? { field: err.field } : {}) });
+      // a holder check past this client's holder reads that the holder index cannot answer now: busy, never a wrong "no"
+      else if (err instanceof ClientBudgetError) fail(res, 429, { error: 'rate_limited', message: CLIENT_BUSY_MESSAGE });
       else throw err;
     }
     return true;
@@ -366,15 +428,28 @@ export class SiteApi {
     if (path === '/api/auth/me') {
       this.method(req, 'GET');
       const wallet = this.session(req);
-      const [holder, canPlay] = await Promise.all([this.isHolder(wallet), this.gameOpenFor(wallet, false, req.headers.origin)]);
-      return send(res, 200, { address: wallet, admin: this.isAdmin(wallet), holder, canPlay });
+      const admin = this.isAdmin(wallet);
+      // `canPlay` is the gate: a holder check the holder index cannot answer right now, past this client's holder
+      // reads (`ClientBudgetError`), is `busy` (ask again in a moment), never a wrong "no". `holder` is only shown,
+      // after it (the answer the gate just had is the one on record): never busy, never a chain read of its own
+      const canPlay = await this.gameOpenFor(wallet, false, req.headers.origin).catch((err: unknown) => (err instanceof ClientBudgetError ? ('busy' as const) : Promise.reject(err)));
+      const holder = await this.shownHolder(wallet);
+      return send(res, 200, { address: wallet, admin, holder, canPlay: canPlay === true, ...(canPlay === 'busy' ? { busy: true } : {}) });
     }
     this.method(req, 'POST');
     if (!this.limits.login.allow(ip)) throw new SiteFail(429, 'rate_limited', 'Too many sign-ins. Wait a moment.');
     const body = await readJson(req);
     const { address, message, signature } = body;
-    const wallet =
-      typeof address === 'string' && typeof message === 'string' && typeof signature === 'string' ? await this.auth.verifySignature(address, message, signature) : null;
+    let wallet: string | null = null;
+    if (typeof address === 'string' && typeof message === 'string' && typeof signature === 'string') {
+      try {
+        wallet = await this.auth.verifySignature(address, message, signature);
+      } catch (err) {
+        // the smart-wallet check cannot run right now: busy, not a wrong signature (the nonce is kept)
+        if (err instanceof SignInBusyError) throw new SiteFail(429, 'rate_limited', SIGN_IN_BUSY_MESSAGE);
+        throw err;
+      }
+    }
     if (!wallet) throw new SiteFail(401, 'auth_failed', 'Wallet sign-in failed. Please sign again.');
     send(res, 200, { address: wallet, token: this.auth.issueToken(wallet), admin: this.isAdmin(wallet) });
   }
@@ -389,7 +464,11 @@ export class SiteApi {
     if (!shop) throw new SiteFail(404, 'not_found', 'Not found');
     if (path === '/api/shop') {
       this.method(req, 'GET');
-      return send(res, 200, await shop.service.view(bearerWallet(this.auth, req)));
+      const wallet = bearerWallet(this.auth, req);
+      // the packs' prices are a quote for play: only for whoever may play now. A purchase (below) is not gated: a
+      // payment someone made anyway is credited (or owed back), never kept for nothing
+      if (!(await this.gameShownFor(wallet, req.headers.origin))) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
+      return send(res, 200, await shop.service.view(wallet));
     }
     this.method(req, 'POST');
     const wallet = this.session(req);
@@ -415,13 +494,14 @@ export class SiteApi {
     if (!profiles) throw new SiteFail(404, 'not_found', 'Not found');
     if (this.method(req, 'GET', 'PUT') === 'GET') {
       const wallet = this.session(req);
-      const holder = await this.isHolder(wallet);
+      const holder = await this.shownHolder(wallet);
       return send(res, 200, { profile: profiles.view(wallet), skinOptions: this.skinOptions(holder), holder } satisfies ProfileResponse);
     }
     const wallet = this.writer(req, ip);
     const body = await readJson(req);
-    // the emblem skin is checked on chain right now (a sold emblem no longer unlocks it)
-    const holder = await this.isHolder(wallet, body.skin === EMBLEM_SKIN_ID);
+    // the emblem skin is checked on chain right now (a sold emblem no longer unlocks it); otherwise the answer's skin
+    // list is only shown
+    const holder = body.skin === EMBLEM_SKIN_ID ? await this.isHolder(wallet, true) : await this.shownHolder(wallet);
     try {
       return send(res, 200, { profile: profiles.update(wallet, body, { emblem: holder }), skinOptions: this.skinOptions(holder), holder } satisfies ProfileResponse);
     } catch (err) {
@@ -665,6 +745,24 @@ export class SiteApi {
     throw new SiteFail(404, 'not_found', 'Not found');
   }
 
+  /**
+   * `POST /api/feedback {text, contact?, page?, room?, viewport?, build?}` from the game page's Feedback sheet: guests
+   * too; the wallet is the session's (`Authorization`, when it verifies), never the body's. Limited per client, per
+   * wallet and server-wide; answers `{ ok: true }`.
+   */
+  private async feedbackRoute(req: IncomingMessage, res: ServerResponse, ip: string): Promise<void> {
+    this.method(req, 'POST');
+    const lim = this.feedbackLimits;
+    const busy = () => new SiteFail(429, 'rate_limited', 'You sent several messages just now. Try again in a few minutes.');
+    if (!lim.feedbackIp.allow(ip)) throw busy();
+    const input = parseFeedback(await readJson(req, FEEDBACK_LIMITS.bodyBytes));
+    const wallet = bearerWallet(this.auth, req);
+    if (wallet && !lim.feedbackWallet.allow(wallet.toLowerCase())) throw busy();
+    if (!lim.feedbackAll.allow('all')) throw new SiteFail(429, 'rate_limited', 'Many messages are arriving right now. Try again in a few minutes.');
+    this.feedback.add(input, wallet);
+    return send(res, 201, { ok: true });
+  }
+
   /** Rate limits a write: per IP before the session is known, then per wallet. */
   private writer(req: IncomingMessage, ip: string): string {
     if (!this.limits.writeIp.allow(ip)) throw new SiteFail(429, 'rate_limited', 'Too many requests. Try again in a few minutes.');
@@ -677,9 +775,12 @@ export class SiteApi {
     const svc = this.customRooms;
     if (!svc) throw new SiteFail(404, 'not_found', 'Not found');
     const rest = path.slice('/api/rooms/custom'.length).replace(/^\//, '');
-    // opening a room (paid, or free practice) follows the game gate: the join over the WebSocket would be refused
-    // anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter
-    if (req.method === 'POST' && !(await this.gameOpenFor(bearerWallet(this.auth, req), false, req.headers.origin))) {
+    // opening a room (paid, or free practice) and its price quote follow the game gate: the join over the WebSocket
+    // would be refused anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter. The
+    // quote is only shown (never busy: `gameShownFor`); opening one is the gate decision (busy, never a wrong "no")
+    const quote = req.method === 'GET' && rest === 'quote';
+    const origin = req.headers.origin;
+    if ((req.method === 'POST' || quote) && !(await (quote ? this.gameShownFor(bearerWallet(this.auth, req), origin) : this.gameOpenFor(bearerWallet(this.auth, req), false, origin)))) {
       throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
     }
     return customRoomRoutes(
@@ -719,6 +820,14 @@ export class SiteApi {
         if (seg.length !== 1) break;
         this.method(req, 'GET');
         return send(res, 200, this.ext.contracts?.effective(this.chainId()) ?? { arena: null, nft: null, token: null });
+      case 'pins': {
+        // the owner's signed pins: public, the browser checks the signature against the owner wallet it was built with
+        if (seg.length !== 1) break;
+        this.method(req, 'GET');
+        const asked = url.searchParams.get('chainId');
+        const id = asked === null ? this.chainId() : /^\d{1,12}$/.test(asked) ? Number(asked) : null;
+        return send(res, 200, { record: this.ext.pins?.get(id) ?? null });
+      }
       case 'arena-prices': {
         // the tiers in US dollars and the token's USD price: the lobby shows "$1" next to the token amount
         if (seg.length !== 1 || !this.arenaPrices) break;
@@ -728,6 +837,8 @@ export class SiteApi {
       case 'faucet': {
         if (seg.length !== 1) break;
         this.method(req, 'GET');
+        // the test-token faucet belongs to the game: hidden (like the site's /faucet page) while only admins play
+        if (!this.faucetOpenFor(bearerWallet(this.auth, req), req.headers.origin)) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
         const faucet = this.ext.faucet ?? (this.ext.chain ? new FaucetInfo({ chain: this.ext.chain, contracts: this.ext.contracts ?? null }) : null);
         if (!faucet) throw new SiteFail(503, 'chain_off', 'The faucet is not available on this server.');
         return send(res, 200, await faucet.get());
@@ -737,7 +848,7 @@ export class SiteApi {
         if (seg.length === 1) {
           this.method(req, 'GET');
           if (!mint) throw new SiteFail(503, 'chain_off', 'The mint is not available on this server.');
-          return send(res, 200, await mint.publicState(this.gameAccess(req.headers.origin)));
+          return send(res, 200, await mint.publicState(this.gameAccess(req.headers.origin), this.store.settings.mintOpen || this.isAdmin(bearerWallet(this.auth, req))));
         }
         if (seg.length === 2 && seg[1] === 'proof') {
           this.method(req, 'GET');
@@ -807,7 +918,7 @@ export class SiteApi {
       throw new SiteFail(403, 'disabled', 'Secret exports are off on the mainnet. Set ADMIN_SECRET_EXPORT=1 on the server (and restart) for the time of the move, then remove it.');
     }
     try {
-      await this.proofs.consume(req.headers[SECRET_PROOF_HEADER], wallet, route);
+      await this.proofs.consume(req.headers[SECRET_PROOF_HEADER] ?? req.headers[OLD_SECRET_PROOF_HEADER], wallet, route);
     } catch (err) {
       if (err instanceof SecretProofError) throw new SiteFail(401, 'proof_required', err.message);
       throw err;
@@ -870,6 +981,26 @@ export class SiteApi {
           wallet,
         );
         return send(res, 201, { record, registry: contracts.effective(this.chainId()) });
+      }
+      case 'pins': {
+        if (seg.length !== 1) break;
+        const pins = this.ext.pins;
+        if (!pins) throw new SiteFail(503, 'chain_off', 'Site pins are not available on this server.');
+        if (this.method(req, 'GET', 'POST') === 'GET') return send(res, 200, { record: pins.get(this.chainId()) });
+        const evm = this.ext.chain?.evm?.() ?? null;
+        const record = await savePins(
+          {
+            store: pins,
+            contracts: this.ext.contracts ?? null,
+            chainId: this.chainId(),
+            // the dev fake chain has no client: the token is not checked there
+            arenaToken: async (arena) => (evm ? ((await evm.arenaConfig(arena)).token ?? null) : undefined),
+            now: Date.now(),
+          },
+          await readJson(req),
+          wallet,
+        );
+        return send(res, 201, { record });
       }
       case 'mint': {
         const mint = this.ext.mint;
@@ -945,7 +1076,7 @@ export class SiteApi {
         if (!SECRET_PURPOSES.includes(purpose as SecretPurpose)) throw new SiteFail(400, 'bad_request', `purpose must be one of ${SECRET_PURPOSES.join(', ')}`, 'purpose');
         if (!this.secretExportAllowed()) throw new SiteFail(403, 'disabled', 'Secret exports are off on the mainnet. Set ADMIN_SECRET_EXPORT=1 on the server for the time of the move.');
         const domain = new URL(this.baseUrl(req)).host;
-        return send(res, 200, { ...this.proofs.issue(wallet, purpose as SecretPurpose, { domain, chainId: this.chainId() }), header: 'X-Elymum-Proof' });
+        return send(res, 200, { ...this.proofs.issue(wallet, purpose as SecretPurpose, { domain, chainId: this.chainId() }), header: 'X-Coinnibal-Proof' });
       }
       case 'auth': {
         // POST /api/admin/auth/revoke {"wallet": "0x…"} ends that wallet's sessions; {"wallet": "admins"} every admin session
@@ -983,6 +1114,28 @@ export class SiteApi {
       case 'counts':
         this.method(req, 'GET');
         return send(res, 200, s.counts());
+      case 'feedback': {
+        // players' messages from the game page, newest first: GET the list (`?limit`, `?offset`, `?unread=1`), PUT
+        // `<id> {read}` marks one, POST `read-all` marks every one, DELETE `<id>` removes one
+        const fb = this.feedback;
+        if (seg.length === 1) {
+          this.method(req, 'GET');
+          return send(res, 200, fb.list({ limit: Number(q.get('limit') ?? 100), offset: Number(q.get('offset') ?? 0), unread: q.get('unread') === '1' }));
+        }
+        if (seg.length !== 2) break;
+        if (seg[1] === 'read-all') {
+          this.method(req, 'POST');
+          fb.readAll();
+          return send(res, 200, { unread: fb.unread() });
+        }
+        if (this.method(req, 'PUT', 'DELETE') === 'DELETE') {
+          fb.remove(seg[1]);
+          return send(res, 200, { unread: fb.unread() });
+        }
+        const read = (await readJson(req)).read;
+        if (typeof read !== 'boolean') throw new SiteFail(400, 'bad_request', 'read must be true or false', 'read');
+        return send(res, 200, { entry: fb.setRead(seg[1], read), unread: fb.unread() });
+      }
       case 'leaderboards': {
         // the daily and all-time boards: what they hold, and a reset (profiles, XP and levels are not touched)
         const lb = this.ext.leaderboards;
@@ -1085,7 +1238,8 @@ export class SiteApi {
         if (seg.length !== 1 || !this.maps) break;
         return mapRoutes(this.maps, { send, method: (r, ...m) => this.method(r, ...m), readJson: (r) => readJson(r) }, req, res, wallet);
       case 'shop': {
-        // power-up prices, the sink (burn or treasury), on/off per power-up and the arena limits; plus recent purchases
+        // power-up prices, on/off per power-up and the arena limits (every pack is paid with CoinnibalArena.pay: half
+        // burned, half to the fee wallet); plus recent purchases
         const shop = this.shop;
         if (!shop) break;
         // POST /api/admin/shop/refunds/<tx>: the owner sent back the part of a cart payment that could not be applied
@@ -1136,7 +1290,7 @@ export class SiteApi {
       case 'wl.csv': {
         this.method(req, 'GET');
         const scope = q.get('scope') === 'all' ? 'all' : 'approved';
-        return sendCsv(res, `elymum-wl-${scope}-${day}.csv`, s.wlCsv(scope));
+        return sendCsv(res, `coinnibal-wl-${scope}-${day}.csv`, s.wlCsv(scope));
       }
       case 'wl': {
         if (seg.length === 1) {
@@ -1173,7 +1327,7 @@ export class SiteApi {
         }
         if (seg.length === 2 && seg[1] === 'wallets.csv') {
           this.method(req, 'GET');
-          return sendCsv(res, `elymum-collab-wallets-${day}.csv`, s.allCollabsCsv());
+          return sendCsv(res, `coinnibal-collab-wallets-${day}.csv`, s.allCollabsCsv());
         }
         const id = seg[1];
         if (seg.length === 2) {
@@ -1184,7 +1338,7 @@ export class SiteApi {
         switch (seg[2]) {
           case 'wallets.csv':
             this.method(req, 'GET');
-            return sendCsv(res, `elymum-collab-${id}-${day}.csv`, s.collabCsv(id));
+            return sendCsv(res, `coinnibal-collab-${id}-${day}.csv`, s.collabCsv(id));
           case 'approve':
             this.method(req, 'POST');
             return send(res, 200, { collab: s.approveCollab(id, await readJson(req)) });

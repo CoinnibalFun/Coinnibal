@@ -1,13 +1,13 @@
 /**
  * Admin CLI building blocks (Node only, not exported from the SDK entry point): argument
  * parsing, the private key loader and the `status` report. Validation, refusals and the status
- * read are shared with the web admin panel and live in `ops.ts` (browser-safe, `@elymum/sdk/ops`);
+ * read are shared with the web admin panel and live in `ops.ts` (browser-safe, `@coinnibal/sdk/ops`);
  * this file adapts them to command-line options. `admin.ts` wires them to the RPC.
  */
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
-import { arenaMeta } from '@elymum/shared';
+import { arenaMeta } from '@coinnibal/shared';
 import type { Address, Hex } from 'viem';
 import { DEFAULT_BURN_BPS, DEFAULT_PAYMENT_BURN_BPS, DEFAULT_VAULT_BPS, MAX_ARENA_SESSIONS, MAX_TOTAL_FEE_BPS, MIN_ARENA_SESSIONS, MINT_PHASE_NAMES, SUGGESTED_HOLDER_BURN_BPS, SUGGESTED_HOLDER_VAULT_BPS } from './constants';
 import { formatBps, formatGasAmount, formatTokenAmount } from './format';
@@ -21,14 +21,14 @@ Environment
   EVM_RPC_URL            RPC endpoint (or --rpc <url>; default http://127.0.0.1:8545)
   ADMIN_PRIVATE_KEY      0x hex key of the owner wallet, or a path to a file holding one
                          (or --key <hex|path>; ADMIN_KEY_FILE=<path> also works)
-  ARENA_ADDRESS          the ElymumArena (or --arena <address>)
-  NFT_ADDRESS            the ElymumNFT (or --nft <address>)
+  ARENA_ADDRESS          the CoinnibalArena (or --arena <address>)
+  NFT_ADDRESS            the CoinnibalNFT (or --nft <address>)
   TEST_TOKEN_ADDRESS     the TestToken (or --token <address>; default: the arena's game token)
 
 Setup (in this order)
   status                                 chain, signer, arena config, token, arenas, NFT
   deploy-arena --server <addr> [--fee-wallet <addr>]
-                                         deploy ElymumArena (owner = the signer, fee wallet defaults to it)
+                                         deploy CoinnibalArena (owner = the signer, fee wallet defaults to it)
   deploy-nft --max-supply N (--price-wei N | --usd-cents 100) [--wl-limit 2] [--public-limit 2]
              --base-uri <url> [--treasury <addr>]
   deploy-test-token                      deploy the TestToken (localnet / testnet only)

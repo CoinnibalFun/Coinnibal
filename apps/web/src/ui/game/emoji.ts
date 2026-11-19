@@ -1,4 +1,4 @@
-import { emoteEmoji } from '@elymum/shared';
+import { emoteEmoji } from '@coinnibal/shared';
 
 /** The platform's colour emoji fonts, in the order the systems ship them. */
 export const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';

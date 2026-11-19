@@ -1,3 +1,4 @@
+import { RULES } from '@coinnibal/shared';
 import { Icon, Sheet } from '../../design';
 import { openBrief } from '../../game/brief';
 import { roundMinutes } from '../../game/round';
@@ -45,7 +46,7 @@ export function HowToSheet() {
               {String(i + 1).padStart(2, '0')}
             </span>
             <Icon name={h.icon} size={22} className="g-howto__icon" />
-            <span>{t(h.key, { min })}</span>
+            <span>{t(h.key, { min, r: RULES.eatRatio })}</span>
           </li>
         ))}
       </ol>

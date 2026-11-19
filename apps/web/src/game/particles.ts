@@ -1,4 +1,4 @@
-import { CARD_PAPER, ELYSIUM, INK, SHADE, TEXT_INKS } from '@elymum/art';
+import { CARD_PAPER, ELYSIUM, INK, SHADE, TEXT_INKS } from '@coinnibal/art';
 
 type Kind = 'splat' | 'coin' | 'scrap' | 'ring' | 'text' | 'dot' | 'wave' | 'sweat';
 

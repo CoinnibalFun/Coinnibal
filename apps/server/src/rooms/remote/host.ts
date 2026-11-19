@@ -1,4 +1,4 @@
-import { PlayerFlag, TICK_MS, type ClientInput, type ServerMessage } from '@elymum/shared';
+import { PlayerFlag, TICK_MS, type ClientInput, type ServerMessage } from '@coinnibal/shared';
 import { IntegrityMonitor } from '../../integrity/telemetry';
 import type { Player } from '../../game/entities';
 import type { LootRecord } from '../../stake/journal';

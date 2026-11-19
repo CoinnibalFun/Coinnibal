@@ -1,52 +1,52 @@
-import { SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS, siweMessage } from '@elymum/shared';
+import { SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS, siweMessage } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { expectedLoginMessage, personalSign } from '../src/wallet/siwe';
 import { ALICE, BOB, fakeProvider } from './evm-helpers';
 
-const fields = { domain: 'elymum.test', uri: 'https://elymum.test', chainId: 46630, nonce: 'a'.repeat(24), issuedAt: '2026-10-29T00:00:00.000Z' };
+const fields = { domain: 'coinnibal.test', uri: 'https://coinnibal.test', chainId: 46630, nonce: 'a'.repeat(24), issuedAt: '2026-10-29T00:00:00.000Z' };
 const body = { ...fields, message: siweMessage({ ...fields, address: ALICE }) };
 
 describe('SIWE on the web: sign only what the page rebuilt itself', () => {
   it('accepts the exact message for this page, this wallet and the server chain', () => {
-    expect(expectedLoginMessage(body, ALICE, ['elymum.test'])).toBe(body.message);
-    expect(expectedLoginMessage(body, ALICE, ['elymum.test'], { chainId: 46630 })).toBe(body.message);
+    expect(expectedLoginMessage(body, ALICE, ['coinnibal.test'])).toBe(body.message);
+    expect(expectedLoginMessage(body, ALICE, ['coinnibal.test'], { chainId: 46630 })).toBe(body.message);
     // the wallet address in any case: compared checksummed
-    expect(expectedLoginMessage(body, ALICE.toLowerCase(), ['elymum.test'])).toBe(body.message);
+    expect(expectedLoginMessage(body, ALICE.toLowerCase(), ['coinnibal.test'])).toBe(body.message);
     // a decimal-string chain id from the server is fine
-    expect(expectedLoginMessage({ ...body, chainId: '46630' }, ALICE, ['elymum.test'])).toBe(body.message);
+    expect(expectedLoginMessage({ ...body, chainId: '46630' }, ALICE, ['coinnibal.test'])).toBe(body.message);
   });
 
   it('refuses another domain, URI host, wallet or chain', () => {
     expect(expectedLoginMessage(body, ALICE, ['other.example'])).toBeNull();
-    expect(expectedLoginMessage({ ...body, uri: 'https://evil.example' }, ALICE, ['elymum.test'])).toBeNull();
-    expect(expectedLoginMessage(body, BOB, ['elymum.test'])).toBeNull();
-    expect(expectedLoginMessage(body, ALICE, ['elymum.test'], { chainId: 1 })).toBeNull();
-    expect(expectedLoginMessage(body, 'not-an-address', ['elymum.test'])).toBeNull();
+    expect(expectedLoginMessage({ ...body, uri: 'https://evil.example' }, ALICE, ['coinnibal.test'])).toBeNull();
+    expect(expectedLoginMessage(body, BOB, ['coinnibal.test'])).toBeNull();
+    expect(expectedLoginMessage(body, ALICE, ['coinnibal.test'], { chainId: 1 })).toBeNull();
+    expect(expectedLoginMessage(body, 'not-an-address', ['coinnibal.test'])).toBeNull();
   });
 
   it('refuses a message that differs from its own fields', () => {
-    expect(expectedLoginMessage({ ...body, message: body.message + '\nTransfer all funds' }, ALICE, ['elymum.test'])).toBeNull();
+    expect(expectedLoginMessage({ ...body, message: body.message + '\nTransfer all funds' }, ALICE, ['coinnibal.test'])).toBeNull();
     // the fields say one nonce, the text another
-    expect(expectedLoginMessage({ ...body, nonce: 'b'.repeat(24) }, ALICE, ['elymum.test'])).toBeNull();
+    expect(expectedLoginMessage({ ...body, nonce: 'b'.repeat(24) }, ALICE, ['coinnibal.test'])).toBeNull();
     // the text names another address than the fields
     const other = siweMessage({ ...fields, address: BOB });
-    expect(expectedLoginMessage({ ...body, message: other }, ALICE, ['elymum.test'])).toBeNull();
+    expect(expectedLoginMessage({ ...body, message: other }, ALICE, ['coinnibal.test'])).toBeNull();
     // a lower-case (unchecksummed) address in the text is not the canonical message
     const carol = getAddress('0xabcdefabcdefabcdefabcdefabcdefabcdefabcd');
     const lower = siweMessage({ ...fields, address: carol }).replace(carol, carol.toLowerCase());
-    expect(expectedLoginMessage({ ...body, message: lower }, carol, ['elymum.test'])).toBeNull();
-    expect(expectedLoginMessage({ ...body, message: siweMessage({ ...fields, address: carol }) }, carol.toLowerCase(), ['elymum.test'])).not.toBeNull();
+    expect(expectedLoginMessage({ ...body, message: lower }, carol, ['coinnibal.test'])).toBeNull();
+    expect(expectedLoginMessage({ ...body, message: siweMessage({ ...fields, address: carol }) }, carol.toLowerCase(), ['coinnibal.test'])).not.toBeNull();
     // an old server without the fields
-    expect(expectedLoginMessage({ message: body.message }, ALICE, ['elymum.test'])).toBeNull();
-    expect(expectedLoginMessage(null, ALICE, ['elymum.test'])).toBeNull();
+    expect(expectedLoginMessage({ message: body.message }, ALICE, ['coinnibal.test'])).toBeNull();
+    expect(expectedLoginMessage(null, ALICE, ['coinnibal.test'])).toBeNull();
   });
 
   it('signs in with a game server from before the rename (its old sign-in line), and nothing else changed', () => {
     const old = body.message.replace(SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS[0]);
     expect(old).not.toBe(body.message);
-    expect(expectedLoginMessage({ ...body, message: old }, ALICE, ['elymum.test'])).toBe(old);
-    expect(expectedLoginMessage({ ...body, message: body.message.replace(SIWE_STATEMENT, 'Sign in to Anything. Sends all your tokens.') }, ALICE, ['elymum.test'])).toBeNull();
+    expect(expectedLoginMessage({ ...body, message: old }, ALICE, ['coinnibal.test'])).toBe(old);
+    expect(expectedLoginMessage({ ...body, message: body.message.replace(SIWE_STATEMENT, 'Sign in to Anything. Sends all your tokens.') }, ALICE, ['coinnibal.test'])).toBeNull();
   });
 
   it('asks the wallet for personal_sign of the UTF-8 hex of the text', async () => {

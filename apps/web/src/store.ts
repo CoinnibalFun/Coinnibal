@@ -1,4 +1,4 @@
-import { emptyBoostCounts, isCountryCode, suggestCountry } from '@elymum/shared';
+import { emptyBoostCounts, isCountryCode, suggestCountry } from '@coinnibal/shared';
 import type {
   BoostKind,
   BoostState,
@@ -10,11 +10,12 @@ import type {
   ProfileSummary,
   RoomInfo,
   RoundStanding,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { create } from 'zustand';
 import { AUDIO_DEFAULTS } from './audio/mixer';
 import { DEFAULT_TRACK, musicChoice, type MusicChoice } from './audio/tracks';
 import { showChain } from './chainText';
+import { storageKey } from './storageKey';
 
 export type Screen = 'lobby' | 'playing' | 'dead' | 'spectating' | 'roundover' | 'roomover';
 export type Quality = 'high' | 'low';
@@ -143,7 +144,7 @@ export interface Toast {
   at: number;
 }
 
-export type Modal = 'settings' | 'howto' | 'wallet' | 'shop' | 'standings' | 'tokens' | null;
+export type Modal = 'settings' | 'howto' | 'wallet' | 'shop' | 'standings' | 'tokens' | 'feedback' | null;
 
 /** Lobby pages: the ticket front page, the newspaper leaderboard, the profile, the player guide. */
 export type LobbyPage = 'play' | 'ranks' | 'profile' | 'docs';
@@ -257,7 +258,7 @@ export interface UiState {
   settings: Settings;
 }
 
-const SETTINGS_KEY = 'elymum.settings.v1';
+const SETTINGS_KEY = storageKey('settings.v1');
 
 /** The first-visit guess at the player's country: the browser's language regions (`suggestCountry`). */
 export function guessCountry(): string {

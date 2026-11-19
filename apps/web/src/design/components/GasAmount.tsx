@@ -1,4 +1,4 @@
-import { GAS_SYMBOL } from '@elymum/shared';
+import { GAS_SYMBOL } from '@coinnibal/shared';
 import type { HTMLAttributes } from 'react';
 
 export interface GasAmountProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'children'> {
@@ -6,6 +6,8 @@ export interface GasAmountProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'c
   value?: number | string;
   /** Amount in wei (18 decimals), exact. */
   wei?: bigint;
+  /** The figure, already formatted (an amount of another token, e.g. the game token with its `unit`); wins over `wei` and `value`. */
+  figure?: string;
   /** Decimals shown (default 4). Rounds half up. */
   decimals?: number;
   /** USD value to show as "≈ $1.00" (omit or null to hide; the sun tag only shows with a value). */
@@ -43,11 +45,11 @@ export function formatUsd(usd: number): string {
 
 /**
  * A gas-token amount: the figure in Geist Mono (teal, bold), the unit after it, and
- * the dollar value in a little sun tag ("≈ $1.00"). Screen readers hear
- * "0.0213 ETH, about $1.00".
+ * the dollar value in a little sun tag ("≈ $1.30"). Screen readers hear
+ * "0.0004 ETH, about $1.30".
  */
-export function GasAmount({ value, wei, decimals = 4, usd, unit = GAS_SYMBOL, size = 'md', stack = false, className, ...rest }: GasAmountProps) {
-  const fig = wei !== undefined ? formatWei(wei, decimals) : value !== undefined ? formatGas(value, decimals) : '—';
+export function GasAmount({ value, wei, figure, decimals = 4, usd, unit = GAS_SYMBOL, size = 'md', stack = false, className, ...rest }: GasAmountProps) {
+  const fig = figure ?? (wei !== undefined ? formatWei(wei, decimals) : value !== undefined ? formatGas(value, decimals) : '—');
   const hasUsd = usd != null && Number.isFinite(usd);
   return (
     <span {...rest} className={`kb-gas kb-gas--${size}${stack ? ' kb-gas--stack' : ''}${className ? ` ${className}` : ''}`}>

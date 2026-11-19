@@ -7,6 +7,8 @@ export interface TabItem<T extends string> {
   id: T;
   label: string;
   icon?: IconName;
+  /** A small count after the label (e.g. unread messages); nothing when absent or 0. */
+  badge?: number;
 }
 
 export interface TabsProps<T extends string> extends Omit<HTMLAttributes<HTMLElement>, 'onChange' | 'role'> {
@@ -119,6 +121,8 @@ export function Tabs<T extends string>({
           >
             {it.icon && <Icon name={it.icon} size={18} />}
             <span>{it.label}</span>
+            {/* the space keeps the accessible name "Feedback 3" (a flex row ignores it on screen) */}
+            {!!it.badge && <> <span className="kb-tab__badge num">{it.badge > 99 ? '99+' : it.badge}</span></>}
             {on && ink}
           </button>
         );

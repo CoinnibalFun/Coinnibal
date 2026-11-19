@@ -1,4 +1,4 @@
-# Elymum: read it yourself (about 100 seconds of talking)
+# Coinnibal: read it yourself (about 100 seconds of talking)
 
 You're telling a friend how a little game works. Warm, dry, slightly amused. You're not selling
 anything. Talk, don't announce: no lift at the end of every line. Let the short lines be short,
@@ -10,10 +10,10 @@ and let the pauses make the jokes.
 
 1. You are small change. // With a **big** appetite.
 2. Which, / around here, / is a perfectly good career.
-3. This is Elymum. // Coins eat coins, / on Elysium's ring.
+3. This is Coinnibal. // Coins eat coins, / on Elysium's ring.
 4. Rounds last **five** minutes. / One bell, / for every arena at once.
 5. When it rings, / whoever's still alive gets paid. // Whoever isn't (pause) was lunch.
-6. Getting in is short. // Join the WL. / Mint your Elymum NFT, / one dollar in HYPE. // Then play.
+6. Getting in is short. // Join the WL. / Mint your Coinnibal NFT, / one dollar in HYPE. // Then play.
 7. Pick a room. / Buy a ticket. // In you go.
 8. Right. / You're the little one. // Don't take it personally.
 9. Smaller than you? // **Dinner.** // And whatever they were worth / is yours now.
@@ -24,12 +24,12 @@ and let the pauses make the jokes.
 14. Big coins slow down. / Small coins get ideas.
 15. Ten seconds. // Keep your head down. (pause) Coins don't have heads. / Keep it down anyway.
 16. Still here at the bell? // Then it's **yours.** / Paid out, / minus five percent of the profit.
-17. Elymum. // Join the WL. / Follow **@elymumio.** // And bring an appetite.
+17. Coinnibal. // Join the WL. / Follow **@coinnibalfun.** // And bring an appetite.
 
 ---
 
-**Say it like this:** Elymum = *EL-ih-mum*. Elysium = *ih-LIZ-ee-um*. WL = *double-u L*.
-HYPE = *hype*. NFT = *N-F-T*. @elymumio = *at elymum eye-oh*.
+**Say it like this:** Coinnibal = *EL-ih-mum*. Elysium = *ih-LIZ-ee-um*. WL = *double-u L*.
+HYPE = *hype*. NFT = *N-F-T*. @coinnibalfun = *at coinnibal fun*.
 
 **Recording:** a quiet room with soft things around you (a wardrobe of clothes is ideal), the
 mic a hand's width from your mouth and a little to the side. Keep a glass of water close.

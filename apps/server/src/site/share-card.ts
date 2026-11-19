@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
-import { drawRisoCoin, lookForBasicSkin } from '@elymum/art';
-import { BRAND_NAME, SHARE_IMAGE, SITE_HOST_DEFAULT, eatenLine, ordinal, shareName, xMention, type ShareBoardRow, type ShareCard } from '@elymum/shared';
+import { drawRisoCoin, lookForBasicSkin } from '@coinnibal/art';
+import { BRAND_NAME, SHARE_IMAGE, SITE_HOST_DEFAULT, eatenLine, ordinal, shareName, xMention, type ShareBoardRow, type ShareCard } from '@coinnibal/shared';
 import type { SKRSContext2D } from '@napi-rs/canvas';
 
 type Canvas = typeof import('@napi-rs/canvas');
@@ -47,7 +47,7 @@ export function shareCardSelfCheck(): { ok: true } | { ok: false; error: string 
 
 /**
  * The "Share on X" card image (1200 x 630 PNG, X's summary_large_image): the player's coin drawn by the same
- * Storybook art as the game (`@elymum/art` on @napi-rs/canvas), the result or the kill in the display face, the
+ * Storybook art as the game (`@coinnibal/art` on @napi-rs/canvas), the result or the kill in the display face, the
  * name, the wallet's short form, the flag's country code and the emblem badge, the numbers. Fonts are the site's
  * own (Fraunces, DM Sans), shipped with the server, so the card looks the same in a bare container. English only:
  * the image is one picture for every reader.
@@ -270,7 +270,7 @@ export function renderShareCard(c: ShareCard, site: string = SITE_HOST_DEFAULT):
   const max = PW - 80;
   ctx.fillStyle = c.test ? CORAL : TEAL;
   ctx.font = '700 22px "DM Sans"';
-  ctx.fillText(fit(ctx, `${BRAND_NAME.toUpperCase()} · ${c.test ? 'TESTNET TEST ARENA · ' : ''}${c.room.toUpperCase()}`, (px) => `700 ${px}px "DM Sans"`, 22, max - 150), L, Y + 56);
+  ctx.fillText(fit(ctx, `${BRAND_NAME.toUpperCase()} · ${c.test ? 'TESTNET TEST ROOM · ' : ''}${c.room.toUpperCase()}`, (px) => `700 ${px}px "DM Sans"`, 22, max - 150), L, Y + 56);
   if (!c.test) brandMark(ctx, X + PW - 62, Y + 50, 62);
   ctx.fillStyle = INK;
   const head = fit(ctx, shareHeadline(c), (px) => `800 ${px}px Fraunces`, 78, max);
@@ -294,7 +294,7 @@ export function renderShareCard(c: ShareCard, site: string = SITE_HOST_DEFAULT):
   }
   ctx.fillStyle = c.test ? CORAL : TEAL;
   ctx.font = '700 22px "DM Sans"';
-  ctx.fillText(c.test ? 'TESTNET TEST ARENA · practice tokens, no real money' : `${site} · coins that eat coins, on Robinhood Chain`, L, Y + PH - 30);
+  ctx.fillText(c.test ? 'TESTNET TEST ROOM · test tokens, no real money' : `${site} · coins that eat coins, on Robinhood Chain`, L, Y + PH - 30);
   if (c.test) testStamp(ctx, X + PW - 40, Y + 18);
   return canvas.toBuffer('image/png');
 }
@@ -325,7 +325,7 @@ export function renderStandingsCard(c: ShareCard, site: string = SITE_HOST_DEFAU
   const max = PW - 72;
   ctx.fillStyle = c.test ? CORAL : TEAL;
   ctx.font = '700 22px "DM Sans"';
-  ctx.fillText(fit(ctx, `${BRAND_NAME.toUpperCase()} · ${c.test ? 'TESTNET TEST ARENA · ' : ''}${c.room.toUpperCase()}`, (px) => `700 ${px}px "DM Sans"`, 22, max - 170), L, Y + 48);
+  ctx.fillText(fit(ctx, `${BRAND_NAME.toUpperCase()} · ${c.test ? 'TESTNET TEST ROOM · ' : ''}${c.room.toUpperCase()}`, (px) => `700 ${px}px "DM Sans"`, 22, max - 170), L, Y + 48);
   if (!c.test) brandMark(ctx, X + PW - 64, Y + 50, 60);
   ctx.fillStyle = INK;
   const head = `Final standings${c.players ? ` · ${c.players} players` : ''}`;
@@ -357,7 +357,7 @@ export function renderStandingsCard(c: ShareCard, site: string = SITE_HOST_DEFAU
   }
   ctx.fillStyle = c.test ? CORAL : TEAL;
   ctx.font = '700 22px "DM Sans"';
-  ctx.fillText(c.test ? 'TESTNET TEST ARENA · practice tokens, no real money' : `${site} · coins that eat coins, on Robinhood Chain`, L, Y + PH - 26);
+  ctx.fillText(c.test ? 'TESTNET TEST ROOM · test tokens, no real money' : `${site} · coins that eat coins, on Robinhood Chain`, L, Y + PH - 26);
   if (c.test) testStamp(ctx, X + PW - 36, Y + 16);
   return canvas.toBuffer('image/png');
 }

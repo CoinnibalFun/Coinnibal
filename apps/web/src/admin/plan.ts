@@ -1,6 +1,6 @@
-import { GAS_SYMBOL } from '@elymum/shared';
-import { describeCall, elymumArenaAbi, sendCall, type ContractCall, type DescribedArg } from '@elymum/sdk';
-import { ownerRefusal } from '@elymum/sdk/ops';
+import { GAS_SYMBOL } from '@coinnibal/shared';
+import { describeCall, coinnibalArenaAbi, sendCall, type ContractCall, type DescribedArg } from '@coinnibal/sdk';
+import { ownerRefusal } from '@coinnibal/sdk/ops';
 import { formatEther, getAddress, type Abi, type Address, type Hash, type Hex, type PublicClient, type TransactionReceipt, type WalletClient } from 'viem';
 
 /**
@@ -8,7 +8,7 @@ import { formatEther, getAddress, type Abi, type Address, type Hash, type Hex, t
  * shown in the transaction preview (`TxPreview`) before the wallet opens; the preview runs the
  * owner and chain checks and guards against double clicks.
  */
-export type DeployName = 'ElymumArena' | 'ElymumNFT' | 'TestToken';
+export type DeployName = 'CoinnibalArena' | 'CoinnibalNFT' | 'TestToken';
 
 export interface DeployParams {
   abi: Abi | readonly unknown[];
@@ -25,7 +25,7 @@ export interface PlanResult {
 
 export interface Plan {
   title: string;
-  /** Contract name for the preview (`ElymumArena`, `ElymumNFT`, `ERC-20`). */
+  /** Contract name for the preview (`CoinnibalArena`, `CoinnibalNFT`, `ERC-20`). */
   contract: string;
   call?: ContractCall;
   deploy?: { name: DeployName; params: DeployParams };
@@ -85,6 +85,24 @@ export function previewOf(plan: Plan): PlanPreview {
 /** `0.0312 ETH` for a wei value, in the chain's gas token (the preview shows the same text). */
 export const gasText = (wei: bigint): string => `${formatEther(wei)} ${GAS_SYMBOL}`;
 
+/**
+ * The owner a deploy names: each bundled constructor (`CoinnibalArena(admin, …)`, `CoinnibalNFT(owner, …)`,
+ * `TestToken(owner)`) takes it first. A deploy is a plain contract creation from the connected wallet (EOA CREATE,
+ * no factory, no proxy), and that wallet must be this owner.
+ */
+export function deployOwner(d: NonNullable<Plan['deploy']>): Address | null {
+  const a = d.params.args[0];
+  return typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a) ? getAddress(a) : null;
+}
+
+/** Why a deploy may not be signed by `from` (null: it may): the deployer must be the owner it names. */
+export function deployRefusal(d: NonNullable<Plan['deploy']>, from: Address): string | null {
+  const owner = deployOwner(d);
+  if (!owner) return `${d.name}: the deploy names no owner.`;
+  if (owner.toLowerCase() !== from.toLowerCase()) return `${d.name} would be owned by ${owner}, but the wallet signing is ${from}. Close the preview and deploy again from the owner wallet.`;
+  return null;
+}
+
 /** Why the preview cannot open the wallet (empty = it may): the chain blockers, then the owner check. */
 export function planRefusals(plan: Plan, ctx: { me: Address | null; blockers: readonly string[] }): string[] {
   const out = [...ctx.blockers];
@@ -93,18 +111,25 @@ export function planRefusals(plan: Plan, ctx: { me: Address | null; blockers: re
     const r = ownerRefusal(plan.owner, ctx.me, plan.contract);
     if (r) out.push(`Owner check: ${r}.`);
   }
+  if (ctx.me && plan.deploy) {
+    const r = deployRefusal(plan.deploy, ctx.me);
+    if (r) out.push(`Owner check: ${r}`);
+  }
   return out;
 }
 
-/** The fresh `owner()` of an Ownable contract (both Elymum contracts share the function). */
+/** The fresh `owner()` of an Ownable contract (both Coinnibal contracts share the function). */
 export async function readOwner(client: Pick<PublicClient, 'readContract'>, contract: Address): Promise<Address> {
-  return getAddress(await client.readContract({ address: contract, abi: elymumArenaAbi, functionName: 'owner' }));
+  return getAddress(await client.readContract({ address: contract, abi: coinnibalArenaAbi, functionName: 'owner' }));
 }
 
 /** What the wallet sends for a plan. */
 export function sendPlan(plan: Plan, wallet: WalletClient, from: Address): Promise<Hash> {
   if (plan.call) return sendCall(wallet, plan.call, { account: from });
   if (plan.deploy) {
+    // the account may have changed in the wallet since the preview was built: never deploy for another owner
+    const refused = deployRefusal(plan.deploy, from);
+    if (refused) return Promise.reject(new Error(refused));
     const p = plan.deploy.params;
     return wallet.deployContract({ abi: p.abi as Abi, bytecode: p.bytecode, args: p.args as unknown[], account: from, chain: wallet.chain } as never);
   }

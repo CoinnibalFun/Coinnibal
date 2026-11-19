@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { useReducedMotion } from '../../design';
+import { isStaticEntrance } from './hydrated';
 
 /**
  * The landing's one reveal engine: every plate seam, content stage and list item is armed here and played by CSS
@@ -13,6 +14,10 @@ import { useReducedMotion } from '../../design';
  *  - dwell: plays a target once any part of it has stayed on screen for 300 ms (a visitor who stops just short);
  *  - passed: finishes, without playing, a target that was jumped past (an anchor, scroll restoration).
  * Focus moving into a waiting target and `beforeprint` finish it at once. Everything plays once and never hides again.
+ *
+ * On the prerendered landing (hydrated.ts) the page was painted, whole, before any script: a target that is on screen
+ * when it is armed (at hydration, or later while it is in view) is finished at once (`set`), never hidden again.
+ * (`in` would not do: the heading's and the rule's keyframes start from hidden, so they would flash out and back.)
  */
 
 export type RevealAttr = 'data-reveal' | 'data-seam';
@@ -88,10 +93,48 @@ function ensure() {
 }
 
 /** Arms one element. Returns its cleanup: a target still waiting loses its attribute (the finished state). */
-export function watch(el: Element, { attr = 'data-reveal', batch = false, onIn, onSet }: RevealOpts = {}): () => void {
-  const was = el.getAttribute(attr);
+export function watch(el: Element, opts: RevealOpts = {}): () => void {
+  const was = el.getAttribute(opts.attr ?? 'data-reveal');
   if (was === 'in' || was === 'set') return () => {};
-  if (typeof IntersectionObserver === 'undefined' || el.getBoundingClientRect().bottom < 0) {
+  if (!isStaticEntrance() || typeof IntersectionObserver === 'undefined') return arm(el, el.getBoundingClientRect(), opts);
+  // The prerendered page: nothing on it is hidden yet, so a target can wait for an observer to say where it is, and
+  // is marked only once it is less than one and a half screens below the viewport (or above it: jumped past). Measuring
+  // every target in React's commit made the browser restyle and lay out the whole page in the middle of the hydration,
+  // and marking them all at once restyled the page again right after it (about 90 + 100 ms on a throttled phone).
+  // Unmarked, a target is the finished page; it is hidden (`wait`) while still well below the screen, as before.
+  first ??= new IntersectionObserver(
+    (es) => {
+      for (const e of es) {
+        if (!e.isIntersecting) continue;
+        const q = placing.get(e.target);
+        first!.unobserve(e.target);
+        placing.delete(e.target);
+        if (q && !q.off) q.off = arm(e.target, e.boundingClientRect, q.opts);
+      }
+    },
+    { rootMargin: '100000px 0px 150% 0px' },
+  );
+  const q: Placing = { opts, off: null };
+  placing.set(el, q);
+  first.observe(el);
+  return () => {
+    if (placing.get(el) === q) {
+      placing.delete(el);
+      first?.unobserve(el);
+    }
+    q.off?.();
+    q.off = () => {};
+  };
+}
+
+/** Targets of the prerendered page waiting for their first position report. */
+type Placing = { opts: RevealOpts; off: (() => void) | null };
+const placing = new Map<Element, Placing>();
+let first: IntersectionObserver | undefined;
+
+function arm(el: Element, box: Pick<DOMRectReadOnly, 'top' | 'bottom'>, { attr = 'data-reveal', batch = false, onIn, onSet }: RevealOpts): () => void {
+  // jumped past already, or (prerendered page) already painted on screen
+  if (typeof IntersectionObserver === 'undefined' || box.bottom < 0 || (isStaticEntrance() && box.top < innerHeight)) {
     el.setAttribute(attr, 'set');
     onSet?.();
     return () => {};

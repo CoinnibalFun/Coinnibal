@@ -51,8 +51,8 @@ try {
     await hero.page.waitForSelector('.wl-sheet', { timeout: 5000 });
     await hero.wait(1400);
     await hero.click('.wl-item');
-    await hero.page.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 15000 });
-    await hero.page.waitForFunction(() => window.__elymumChain?.useChainData.getState().tokenBalance != null, null, { timeout: 15000 });
+    await hero.page.waitForFunction(() => !!window.__coinnibal.useUi.getState().auth, null, { timeout: 15000 });
+    await hero.page.waitForFunction(() => window.__coinnibalChain?.useChainData.getState().tokenBalance != null, null, { timeout: 15000 });
     await hero.wait(1800);
     await hero.hover('.kl-wallet', { pause: 1200 });
   });

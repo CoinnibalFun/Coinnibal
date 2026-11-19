@@ -8,8 +8,8 @@ import {
   type ArenaConfig,
   type ArenaInfo,
   type SessionInfo,
-} from '@elymum/sdk';
-import type { ArenaPricesView, ChainStatus, ProfileView } from '@elymum/shared';
+} from '@coinnibal/sdk';
+import type { ArenaPricesView, ChainStatus, ProfileView } from '@coinnibal/shared';
 import type { Address, PublicClient } from 'viem';
 import { useCallback, useEffect, useMemo } from 'react';
 import { create } from 'zustand';
@@ -26,7 +26,7 @@ export interface ChainData {
   deployed: boolean | null;
   /** DEV_FAKE_CHAIN stand-in (see devFake.ts). */
   fake: boolean;
-  /** `ElymumArena.config()`. */
+  /** `CoinnibalArena.config()`. */
   config: ArenaConfig | null;
   /** Arenas on chain (only once the token is set). */
   arenas: ArenaInfo[];
@@ -301,7 +301,7 @@ export const refreshChain = () => refreshNow();
 
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   void loadDevFake().then((dev) => {
-    const w = window as unknown as { __elymumChain?: unknown };
-    w.__elymumChain = { useChainData, fakeWallet: dev?.fakeWallet, refresh: () => refreshNow() };
+    const w = window as unknown as { __coinnibalChain?: unknown };
+    w.__coinnibalChain = { useChainData, fakeWallet: dev?.fakeWallet, refresh: () => refreshNow() };
   });
 }

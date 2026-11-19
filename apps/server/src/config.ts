@@ -2,10 +2,11 @@ import { availableParallelism } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, normalizeXHandle, SITE_URL_DEFAULT, withBrandOrigins, type GameAccess } from '@elymum/shared';
-import { GAS_PRICE_URL_DEFAULT } from '@elymum/sdk';
+import { CAPACITY, NETWORKS, RULES, ROBINHOOD_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, MINT_USD_CENTS_DEFAULT, configuredChainId, unsupportedChainMessage, isGameAccess, normalizeXHandle, SITE_URL_DEFAULT, withBrandOrigins, NFT_SUPPLY, type GameAccess } from '@coinnibal/shared';
+import { GAS_PRICE_URL_DEFAULT } from '@coinnibal/sdk';
 import { getAddress, isAddress } from 'viem';
 import { DEFAULT_ART_STYLE, parseArtStyle, type ArtStyle } from './site/nft/render';
+import { JOIN_PERMIT_DEFAULTS, JOIN_PERMIT_TTL_MAX_S, type JoinPermitConfig } from './stake/join-permits';
 
 export interface ServerConfig {
   port: number;
@@ -37,6 +38,23 @@ export interface ServerConfig {
   privateRoomCapacity: number;
   /** Humans per arena instance before another instance opens (`ARENA_INSTANCE_CAP`). */
   arenaInstanceCap: number;
+  /**
+   * Join permits (CoinnibalArena v4, `stake/join-permits.ts`): `JOIN_PERMIT_TTL_S` (default 600, at most 3300: the
+   * contract's hour less a margin for the block time), `JOIN_PERMIT_PER_IP` (12 per 10 min), `JOIN_PERMIT_PER_SUBNET`
+   * (an IPv6 /64, 30 per 10 min), `JOIN_PERMIT_PER_SITE` (an IPv4 /24 or IPv6 /48, 60 per 10 min), `JOIN_PERMIT_PER_WALLET` (20
+   * per 10 min), `JOIN_PERMIT_OPEN_PER_IP` / `_SUBNET` / `_SITE` (an arena's permits not played yet asked from one
+   * IPv4 address / IPv6 /64 / IPv4 /24 or IPv6 /48: 8 / 4 / 16, 0 = no limit), `JOIN_PERMIT_FRESH_SHARE` (the share of
+   * an arena's places, min(cap, maxSessions), wallets without standing may hold together; default 0.5, 0 = no limit),
+   * `JOIN_PERMIT_UNUSED_LIMIT` (permits of one arena a wallet without standing lets end unused in 24 h, run out or
+   * replaced by one signed again, since its last ticket, before it gets no new one there until the oldest is a day old;
+   * default 3, 0 = off),
+   * `JOIN_PERMIT_ARENA_CAP` (unseated tickets + places held by new permits per arena; 0 = the seats a round can take:
+   * `ARENA_INSTANCE_CAP` × the scaler's max instances), `JOIN_PERMIT_HOLD_S` (how long a new permit holds a place;
+   * default 120, 0 = never) and `NO_SHOW_LIMIT` (tickets gone back unplayed in 24 h before a wallet gets no permit; 3×
+   * per IPv4 address or IPv6 /64 the permits of wallets without standing were asked from, 8× per IPv4 /24 or IPv6 /48;
+   * default 3, 0 = off). The per-IP, /64 and /24 or /48 request limits, too, apply only to wallets without standing.
+   */
+  joinPermits: JoinPermitConfig;
   /**
    * Room worker threads (`GAME_WORKERS`): rooms (simulation, bots, snapshots) run in this many
    * `worker_threads`, the main thread keeps HTTP, sockets, the chain and the journal. 0: every room
@@ -136,7 +154,7 @@ export interface ServerConfig {
     journalAbandonContract: string | null;
     /** Arena ids to open as stake rooms (empty = discover on-chain). */
     arenaIds: number[];
-    /** Display symbol of the game token (`TOKEN_SYMBOL`, default `$NIBAL`; the on-chain symbol is not used for display). */
+    /** Display symbol of the game token (`TOKEN_SYMBOL`, default `tokens`; the on-chain symbol is not used for display). */
     tokenSymbol: string;
     /**
      * Seconds after which an open session nobody plays is settled at its entry fee by the sweeper
@@ -192,7 +210,7 @@ export interface ServerConfig {
    */
   mint: { usdCents: number; gasPriceUrl: string };
   /**
-   * The emblem collection (docs/NFT-DESIGN.md): `NFT_COLLECTION_SIZE` (default 5000; the contract's max supply),
+   * The emblem collection (docs/NFT-DESIGN.md): `NFT_COLLECTION_SIZE` (default `NFT_SUPPLY`, 3,333: the contract's max supply),
    * `NFT_COLLECTION_SEED` (default: 32 random bytes, generated once and committed to the chain's state directory),
    * `NFT_ART_STYLE` (`vector`, the default, or `pixel`).
    */
@@ -244,13 +262,22 @@ export const AUTH_SECRET_MIN_BYTES = 32;
 
 /**
  * A weak `AUTH_SECRET` (under `AUTH_SECRET_MIN_BYTES` bytes) lets anyone who guesses it forge an admin session
- * offline. On the mainnet (`CHAIN_ID=4663`) the server refuses to start with one; elsewhere it returns the
- * warning to log (null: fine). The generated `DATA_DIR/auth-secret` (64 hex characters) always passes.
+ * offline. On the mainnet the server refuses to start with one: when `CHAIN_ID` is 4663, and when the RPC serves
+ * 4663 (`served`: the ids its `eth_chainId` answered or the state was opened for, so an unset `CHAIN_ID` cannot slip
+ * past). `unknown`: a real chain is configured without `CHAIN_ID` and the RPC told nothing (unreachable at a first
+ * boot): it may be the mainnet, so that refuses too. Elsewhere it returns the warning to log (null: fine). The
+ * generated `DATA_DIR/auth-secret` (64 hex characters) always passes.
  */
-export function checkAuthSecret(cfg: Pick<ServerConfig, 'authSecret' | 'authSecretFromEnv' | 'chain'>): string | null {
+export function checkAuthSecret(
+  cfg: Pick<ServerConfig, 'authSecret' | 'authSecretFromEnv' | 'chain'>,
+  served: readonly (number | null)[] = [],
+  unknown = false,
+): string | null {
   if (!cfg.authSecretFromEnv || cfg.authSecret.length >= AUTH_SECRET_MIN_BYTES) return null;
   const msg = `AUTH_SECRET is ${cfg.authSecret.length} byte(s): it must be at least ${AUTH_SECRET_MIN_BYTES} (e.g. openssl rand -hex 32), or unset to use a generated one`;
   if (cfg.chain.chainId === ROBINHOOD_CHAIN_ID) throw new Error(`${msg}; refusing to start on the mainnet`);
+  if (served.includes(ROBINHOOD_CHAIN_ID)) throw new Error(`${msg}; refusing to start: EVM_RPC_URL serves the mainnet (chain ${ROBINHOOD_CHAIN_ID})`);
+  if (unknown) throw new Error(`${msg}; refusing to start: CHAIN_ID is not set and the RPC did not answer, so this may be the mainnet (set CHAIN_ID, or a strong AUTH_SECRET)`);
   return `!!! ${msg} (a mainnet server refuses to start with it)`;
 }
 
@@ -408,6 +435,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     practiceCapacity: Math.max(1, int(env.PRACTICE_CAPACITY ?? env.FREE_ROOM_CAPACITY, CAPACITY.practice)),
     privateRoomCapacity: int(env.PRIVATE_ROOM_CAPACITY, CAPACITY.private),
     arenaInstanceCap: Math.max(1, int(env.ARENA_INSTANCE_CAP, CAPACITY.arena)),
+    joinPermits: {
+      ...JOIN_PERMIT_DEFAULTS,
+      ttlS: Math.max(60, Math.min(JOIN_PERMIT_TTL_MAX_S, int(env.JOIN_PERMIT_TTL_S, JOIN_PERMIT_DEFAULTS.ttlS))),
+      holdS: Math.max(0, Math.min(JOIN_PERMIT_TTL_MAX_S, int(env.JOIN_PERMIT_HOLD_S, JOIN_PERMIT_DEFAULTS.holdS))),
+      perIp: Math.max(1, int(env.JOIN_PERMIT_PER_IP, JOIN_PERMIT_DEFAULTS.perIp)),
+      perSubnet: Math.max(1, int(env.JOIN_PERMIT_PER_SUBNET, JOIN_PERMIT_DEFAULTS.perSubnet)),
+      perSite: Math.max(1, int(env.JOIN_PERMIT_PER_SITE, JOIN_PERMIT_DEFAULTS.perSite)),
+      perWallet: Math.max(1, int(env.JOIN_PERMIT_PER_WALLET, JOIN_PERMIT_DEFAULTS.perWallet)),
+      arenaCap: Math.max(0, int(env.JOIN_PERMIT_ARENA_CAP, JOIN_PERMIT_DEFAULTS.arenaCap)),
+      noShowLimit: Math.max(0, int(env.NO_SHOW_LIMIT, JOIN_PERMIT_DEFAULTS.noShowLimit)),
+      openPerIp: Math.max(0, int(env.JOIN_PERMIT_OPEN_PER_IP, JOIN_PERMIT_DEFAULTS.openPerIp)),
+      openPerNet: Math.max(0, int(env.JOIN_PERMIT_OPEN_PER_SUBNET, JOIN_PERMIT_DEFAULTS.openPerNet)),
+      openPerSite: Math.max(0, int(env.JOIN_PERMIT_OPEN_PER_SITE, JOIN_PERMIT_DEFAULTS.openPerSite)),
+      freshShare: Math.max(0, Math.min(1, num(env.JOIN_PERMIT_FRESH_SHARE, JOIN_PERMIT_DEFAULTS.freshShare))),
+      unusedLimit: Math.max(0, int(env.JOIN_PERMIT_UNUSED_LIMIT, JOIN_PERMIT_DEFAULTS.unusedLimit)),
+    },
     gameWorkers: gameWorkers(env),
     gameWorkerHangMs: Math.max(2, int(env.GAME_WORKER_HANG_S, 10)) * 1000,
     round: parseRoundConfig(env),
@@ -464,7 +507,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       maxPendingAgeS: Math.max(30, int(env.HEALTH_MAX_PENDING_AGE_S, 900)),
     },
     nft: {
-      size: Math.max(1, int(env.NFT_COLLECTION_SIZE, 5000)),
+      size: Math.max(1, int(env.NFT_COLLECTION_SIZE, NFT_SUPPLY)),
       seed: blank(env.NFT_COLLECTION_SEED),
       style: parseArtStyle(blank(env.NFT_ART_STYLE)) ?? DEFAULT_ART_STYLE,
     },

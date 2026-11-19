@@ -1,4 +1,4 @@
-import { EntityKind, PowerUpType, RULES, SPLIT_REACH, TICK_MS, massToRadius, mergeDelayMs } from '@elymum/shared';
+import { EntityKind, PowerUpType, RULES, SPLIT_REACH, TICK_MS, massToRadius, mergeDelayMs } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { World, type WorldConfig } from '../src/game/world';
 

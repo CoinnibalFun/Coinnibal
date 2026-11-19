@@ -1,5 +1,5 @@
 /**
- * The EVM gateway against a real chain: spawns `hardhat node` (from @elymum/contracts) on a free port,
+ * The EVM gateway against a real chain: spawns `hardhat node` (from @coinnibal/contracts) on a free port,
  * deploys the TestToken and the arena with the SDK, then runs `EvmChain` through the money paths:
  * waiting for contracts → token set → join (real tickets) → one settle batch (the fee on profit: burned + to the
  * fee wallet) → the token's own burn() in burn mode 1 → loot burn with a sweep id → the stale-session sweeper
@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url';
 import {
   BURN_ADDRESS,
   createDefaultArenaCalls,
-  createElymumPublicClient,
-  createElymumWalletClient,
+  createCoinnibalPublicClient,
+  createCoinnibalWalletClient,
   deployArena,
   deployTestToken,
   deployedAddress,
@@ -33,9 +33,9 @@ import {
   testTokenAbi,
   setTokenCall,
   type ContractCall,
-} from '@elymum/sdk';
+} from '@coinnibal/sdk';
 
-import type { Address, PublicClient, WalletClient } from 'viem';
+import type { Address, Hex, PublicClient, WalletClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { EvmChain, type ContractsView } from '../src/chain/evm';
@@ -106,7 +106,7 @@ async function send(from: Address, call: ContractCall): Promise<void> {
 beforeAll(async () => {
   const port = await freePort();
   url = `http://127.0.0.1:${port}`;
-  child = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
+  child = spawn('pnpm', ['-F', '@coinnibal/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
     cwd: repoRoot,
     detached: true,
     stdio: 'ignore',
@@ -127,8 +127,8 @@ beforeAll(async () => {
     return;
   }
   const chain = viemChain(31337, { rpcUrl: url });
-  client = createElymumPublicClient(url, chain, { pollingInterval: 50 });
-  for (const a of [admin, server, p1, p2, feeWallet]) wallets.set(a.address, createElymumWalletClient(url, { account: a, chain, pollingInterval: 50 }));
+  client = createCoinnibalPublicClient(url, chain, { pollingInterval: 50 });
+  for (const a of [admin, server, p1, p2, feeWallet]) wallets.set(a.address, createCoinnibalWalletClient(url, { account: a, chain, pollingInterval: 50 }));
 }, 60_000);
 
 afterAll(() => killChild());
@@ -143,13 +143,19 @@ describe('EvmChain on a hardhat node', () => {
   const logs: string[] = [];
   /** The gateway's clock (moved forward to make tickets stale). */
   let skewMs = 0;
+  /** The join permit (CoinnibalArena v4) the server's own EvmChain signs, as `POST /api/arena/permit` hands it out. */
+  const permitFor = async (player: Address, arenaId: number) => {
+    const deadline = Number((await client.getBlock()).timestamp) + 600;
+    const p = await chain.signJoinPermit(player, arenaId, await chain.joinNonce(player), deadline);
+    return { deadline: BigInt(p.deadline), signature: p.signature as Hex };
+  };
 
   it('starts waiting for contracts, then picks up the deployed arena and its token without a restart', async (ctx) => {
     if (!up) return ctx.skip();
     const cfg = loadConfig({
       EVM_RPC_URL: url,
       SERVER_PRIVATE_KEY: KEYS[1],
-      DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-evm-')),
+      DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-evm-')),
       STALE_SESSION_AFTER_S: '60',
       LOG_CHUNK_BLOCKS: '5',
     } as unknown as NodeJS.ProcessEnv);
@@ -188,10 +194,12 @@ describe('EvmChain on a hardhat node', () => {
     if (!up) return ctx.skip();
     for (const p of [p1, p2]) {
       await send(p.address, faucetCall(token));
-      for (const call of (await planJoin(client, { arena, arenaId: 1, player: p.address, token })).calls) await send(p.address, call);
+      for (const call of (await planJoin(client, { arena, arenaId: 1, player: p.address, token, permit: await permitFor(p.address, 1) })).calls) await send(p.address, call);
     }
     const s1 = (await chain.getSession(1, p1.address))!;
     const s2 = (await chain.getSession(1, p2.address.toLowerCase()))!;
+    // the server key's permit was used up by the join (CoinnibalArena v4): its nonce moved on
+    expect(await chain.joinNonce(p1.address)).toBe(1n);
     // arena v3: no entry fee, the ticket plays its whole 1,000; its fee rates on profit are fixed at the join
     expect(s1).toMatchObject({ key: sessionKey(1, p1.address, s1.id), player: p1.address, entryFee: K, value: K, rates: { burnBps: 1500, vaultBps: 500 }, finalized: false });
     expect(s2.id).toBe(s1.id + 1);
@@ -235,7 +243,7 @@ describe('EvmChain on a hardhat node', () => {
     await chain.refresh();
     expect(chain.status().fees?.burnMode).toBe(1);
     const supply = async () => (await client.readContract({ address: token, abi: testTokenAbi, functionName: 'totalSupply' })) as bigint;
-    for (const p of [p1, p2]) for (const call of (await planJoin(client, { arena, arenaId: 1, player: p.address, token })).calls) await send(p.address, call);
+    for (const p of [p1, p2]) for (const call of (await planJoin(client, { arena, arenaId: 1, player: p.address, token, permit: await permitFor(p.address, 1) })).calls) await send(p.address, call);
     const a = (await chain.getSession(1, p1.address))!;
     const b = (await chain.getSession(1, p2.address))!;
     const mk = (s: typeof a, payout: number, createdAt: number): SettlementItem => ({ kind: 'settle', key: s.key, player: s.player, arenaId: 1, session: s.key, sessionId: s.id, payout, score: 1, kills: 0, xp: 1, reason: 'round', attempts: 0, nextAttemptAt: 0, createdAt });
@@ -252,7 +260,7 @@ describe('EvmChain on a hardhat node', () => {
 
   it('burns floor loot with a sweep id the journal assigned', async (ctx) => {
     if (!up) return ctx.skip();
-    for (const call of (await planJoin(client, { arena, arenaId: 1, player: p1.address, token })).calls) await send(p1.address, call);
+    for (const call of (await planJoin(client, { arena, arenaId: 1, player: p1.address, token, permit: await permitFor(p1.address, 1) })).calls) await send(p1.address, call);
     const s = (await chain.getSession(1, p1.address))!;
     const dead0 = await getTokenBalance(client, token, BURN_ADDRESS);
     const burned0 = (await getArena(client, arena, 1)).totalBurned;
@@ -274,7 +282,7 @@ describe('EvmChain on a hardhat node', () => {
 
   it('the stale sweeper finds unplayed tickets in the Joined logs and cancels them: the full entry fee back', async (ctx) => {
     if (!up) return ctx.skip();
-    for (const call of (await planJoin(client, { arena, arenaId: 2, player: p2.address, token })).calls) await send(p2.address, call);
+    for (const call of (await planJoin(client, { arena, arenaId: 2, player: p2.address, token, permit: await permitFor(p2.address, 2) })).calls) await send(p2.address, call);
     expect(await chain.sweepStale()).toBe(0); // fresh tickets are not stale
     // an hour passes on the chain (ticket ages are measured on the chain's clock, not the server's)
     await client.request({ method: 'evm_increaseTime' as never, params: [3600] as never });

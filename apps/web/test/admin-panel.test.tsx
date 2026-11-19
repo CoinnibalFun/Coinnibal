@@ -1,5 +1,5 @@
-import { setPaymentBurnBpsCall } from '@elymum/sdk';
-import type { StatusSnapshot } from '@elymum/sdk/ops';
+import { setPaymentBurnBpsCall } from '@coinnibal/sdk';
+import type { StatusSnapshot } from '@coinnibal/sdk/ops';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -9,6 +9,7 @@ import { AdminPanel } from '../src/admin/AdminPanel';
 import { DeployTab, SetTokenForm } from '../src/admin/DeployTab';
 import { SetupTab } from '../src/admin/SetupTab';
 import { GameTab } from '../src/admin/GameTab';
+import { ArenaTab } from '../src/admin/ArenaTab';
 import { MintTab } from '../src/admin/MintTab';
 import { resolveNetwork } from '../src/admin/net';
 import type { Plan } from '../src/admin/plan';
@@ -45,7 +46,7 @@ const client = (owner = ALICE) =>
   }) as never;
 
 describe('TxPreview: every write is previewed, checked and sent once', () => {
-  const plan = (extra: Partial<Plan> = {}): Plan => ({ title: 'Set the fee', contract: 'ElymumArena', call: setPaymentBurnBpsCall(ARENA, 300), ownerOf: ARENA, owner: ALICE, ...extra });
+  const plan = (extra: Partial<Plan> = {}): Plan => ({ title: 'Set the fee', contract: 'CoinnibalArena', call: setPaymentBurnBpsCall(ARENA, 300), ownerOf: ARENA, owner: ALICE, ...extra });
 
   it('shows the function, the named arguments, the network and the signer before the wallet opens', () => {
     ui(<TxPreview plan={plan()} net={resolveNetwork(chainStatus())} me={ALICE} client={client()} blockers={[]} onClose={() => {}} />);
@@ -192,25 +193,25 @@ describe('Deploy wizard', () => {
     act(() => screen.getByTestId('deploy-arena').click());
     expect(ctx.plans).toHaveLength(1);
     const p = ctx.plans[0];
-    expect(p.deploy?.name).toBe('ElymumArena');
+    expect(p.deploy?.name).toBe('CoinnibalArena');
     expect(p.deploy?.params.args).toEqual([ALICE, '0x000000000000000000000000000000000000bEEF', ALICE]);
     await p.onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: NEW as `0x${string}` });
     expect(registerContract).toHaveBeenCalledWith({ kind: 'arena', address: NEW, txHash: HASH });
     expect(ctx.reloadNet).toHaveBeenCalled();
   });
 
-  it('then the NFT with the spec defaults and the $1 price from the server', async () => {
+  it('then the NFT with the spec defaults and the mint price (MINT_USD_CENTS) from the server', async () => {
     const registerContract = vi.fn(async () => ({ arena: null, nft: null, token: null }));
     const api = { registerContract, mintPrice: vi.fn(async () => ({ gasUsd: 33.3, targetUsdCents: 100, priceWei: '30000000000000000', fetchedAt: 1 })) } as unknown as AdminApi;
     const ctx = ctxOf({ api, net: resolveNetwork(chainStatus({ arenaAddress: ARENA })), status: { arena: { code: 'ok', config: { token: null }, arenas: [] }, nft: null } as unknown as StatusSnapshot });
     ui(<DeployTab ctx={ctx} />);
     await waitFor(() => expect((screen.getByLabelText(/Mint price/) as HTMLInputElement).value).toBe('0.03'));
-    expect((screen.getByLabelText('Max supply') as HTMLInputElement).value).toBe('5000');
+    expect((screen.getByLabelText('Max supply') as HTMLInputElement).value).toBe('3333');
     expect((screen.getByLabelText(/Base URI/) as HTMLInputElement).value).toBe(`${location.origin}/api/nft/`);
     act(() => screen.getByTestId('deploy-nft').click());
     const p = ctx.plans[0];
-    expect(p.deploy?.name).toBe('ElymumNFT');
-    expect(p.deploy?.params.args).toEqual([ALICE, 5000, 30_000_000_000_000_000n, 1, 2, `${location.origin}/api/nft/`, ALICE]);
+    expect(p.deploy?.name).toBe('CoinnibalNFT');
+    expect(p.deploy?.params.args).toEqual([ALICE, 3333, 30_000_000_000_000_000n, 1, 2, `${location.origin}/api/nft/`, ALICE]);
     await p.onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: NFT as `0x${string}` });
     expect(registerContract).toHaveBeenCalledWith({ kind: 'nft', address: NFT, txHash: HASH });
   });
@@ -241,10 +242,17 @@ describe('Deploy wizard', () => {
     await settle();
     expect(ctx.plans[1].call).toMatchObject({ functionName: 'setToken', args: [BOB] });
     view.unmount();
-    // nothing registered: no one-click button, the server env is the owner's step
-    ui(<SetTokenForm ctx={ctxOf({ net, status })} />);
+    // nothing registered on a testnet: no one-click button, deploy the TestToken first
+    const testnetView = ui(<SetTokenForm ctx={ctxOf({ net, status })} />);
     expect(screen.queryByTestId('set-token')).toBeNull();
-    expect(screen.getByText(/TOKEN_ADDRESS/)).toBeTruthy();
+    expect(screen.getByText(/No TestToken is registered yet: deploy one/)).toBeTruthy();
+    testnetView.unmount();
+    // mainnet: the real token cannot be registered before the arena uses it, so it is typed twice
+    // (TOKEN_ADDRESS only names it on a server outside Docker; the VPS compose file clears it)
+    const mainnet = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, arenaAddress: ARENA, nftAddress: NFT }));
+    ui(<SetTokenForm ctx={ctxOf({ net: mainnet, status })} />);
+    expect(screen.queryByTestId('set-token')).toBeNull();
+    expect(screen.getByText(/enter it by hand below, typed twice.*only on a server outside Docker/)).toBeTruthy();
   });
 
   it('creates the default arenas one by one', () => {
@@ -265,7 +273,7 @@ describe('Deploy wizard', () => {
   });
 
   it('registers a contract deployed while signed out as soon as the admin signs in', async () => {
-    localStorage.setItem('elymum.admin.deploy.v1', JSON.stringify({ '46630': { arena: { address: NEW, txHash: HASH } } }));
+    localStorage.setItem('coinnibal.admin.deploy.v1', JSON.stringify({ '46630': { arena: { address: NEW, txHash: HASH } } }));
     const registerContract = vi.fn(async () => ({ arena: null, nft: null, token: null }));
     const api = { registerContract, mintPrice: vi.fn(async () => ({ priceWei: null })) } as unknown as AdminApi;
     const ctx = ctxOf({ net: resolveNetwork(chainStatus({ arenaAddress: null })) });
@@ -320,7 +328,7 @@ describe('Setup with the contracts registered', () => {
     const registry = { arena: { address: ARENA }, nft: { address: NFT }, token: { address: TOKEN } } as never;
     ui(<SetupTab ctx={ctxOf({ net, status: registeredStatus(), registry })} />);
     expect(screen.getByTestId('quick-setup-go')).toBeTruthy();
-    expect(screen.getByTestId('quick-setup-steps').textContent).toMatch(/Set tELYMUM as the game token/);
+    expect(screen.getByTestId('quick-setup-steps').textContent).toMatch(/Set TEST as the game token/);
     const advanced = screen.getByTestId('setup-advanced') as HTMLDetailsElement;
     expect(advanced.open).toBe(false);
     expect(advanced.querySelector('summary')?.textContent).toBe('Advanced: manual controls');
@@ -357,7 +365,7 @@ describe('Setup with the contracts registered', () => {
 });
 
 describe('Mint tab', () => {
-  const state = { phase: 0, phaseName: 'closed', price: 30_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'0'.repeat(64)}`, maxSupply: 5000, totalSupply: 0, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
+  const state = { phase: 0, phaseName: 'closed', price: 30_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'0'.repeat(64)}`, maxSupply: 3333, totalSupply: 0, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
   const mintCtx = (api: Partial<AdminApi>, gameAccess = 'admins', gameAccessEnv: string | null = null) =>
     ctxOf({
       api: { settings: vi.fn(async () => ({ settings: { gameAccess }, gameAccessEnv })), allowlist: vi.fn(async () => ({ snapshot: null, diff: { added: [], removed: [] }, onchainRoot: null, published: false })), mintPrice: vi.fn(async () => ({ gasUsd: 33.3, targetUsdCents: 100, priceWei: '30000000000000000', fetchedAt: 1 })), ...api } as unknown as AdminApi,
@@ -365,14 +373,18 @@ describe('Mint tab', () => {
       status: { nft: { address: NFT, code: 'ok', balance: 0n, state } } as unknown as StatusSnapshot,
     });
 
-  it('"Open mint" with "activate the game for holders" (checked) also saves gameAccess = holders', async () => {
+  it('"Open mint" with "activate the game for holders" ticked also saves gameAccess = holders', async () => {
     const saveSettings = vi.fn(async () => ({ settings: {} }));
     const mintRefresh = vi.fn(async () => ({ refreshed: true }));
     const ctx = mintCtx({ saveSettings, mintRefresh } as never);
     const settingsChanged = vi.fn();
     ctx.settingsChanged = settingsChanged;
     ui(<MintTab ctx={ctx} />);
-    expect((within(await screen.findByTestId('mint-activate')).getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+    const box = within(await screen.findByTestId('mint-activate')).getByRole('checkbox') as HTMLInputElement;
+    // the game opens last (NFT mint → token → game): the box starts unchecked
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    expect(box.checked).toBe(true);
     act(() => screen.getByTestId('mint-set-phase').click());
     const p = ctx.plans[0];
     expect(p.title).toBe('Open the mint (allowlist)');
@@ -412,12 +424,13 @@ describe('Mint tab', () => {
     expect((screen.getByTestId('mint-set-phase') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('unchecking it leaves the game access alone', async () => {
+  it('left unchecked (the default) it leaves the game access alone', async () => {
     const saveSettings = vi.fn();
     const ctx = mintCtx({ saveSettings } as never);
     ui(<MintTab ctx={ctx} />);
-    fireEvent.click(within(await screen.findByTestId('mint-activate')).getByRole('checkbox'));
+    expect((within(await screen.findByTestId('mint-activate')).getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
     act(() => screen.getByTestId('mint-set-phase').click());
+    expect(ctx.plans[0].note).toBeUndefined();
     await ctx.plans[0].onDone!({ hash: HASH as `0x${string}`, receipt: {} as never, address: null });
     expect(saveSettings).not.toHaveBeenCalled();
   });
@@ -453,7 +466,7 @@ describe('Mint and Game: only the owner decisions up front', () => {
   const outsideAdvanced = () => [...document.querySelectorAll('input')].filter((i) => !i.closest('details[data-advanced]') && i.type !== 'radio' && i.type !== 'checkbox').map((i) => i.labels?.[0]?.textContent ?? i.getAttribute('aria-label'));
 
   it('Mint: limits and supply up front; treasury, royalty, owner mint, keeper and base URI under Advanced (prefilled)', () => {
-    const state = { phase: 0, phaseName: 'closed', price: 30_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'0'.repeat(64)}`, maxSupply: 5000, totalSupply: 0, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
+    const state = { phase: 0, phaseName: 'closed', price: 30_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: `0x${'0'.repeat(64)}`, maxSupply: 3333, totalSupply: 0, wlLimit: 1, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
     ui(<MintTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT })), status: { nft: { address: NFT, code: 'ok', balance: 0n, state } } as unknown as StatusSnapshot })} />);
     expect(outsideAdvanced()).toEqual(['Allowlist per wallet', 'Public per wallet', 'Max supply (minted: 0)']);
     expect((screen.getByTestId('mint-advanced') as HTMLDetailsElement).open).toBe(false);
@@ -466,7 +479,7 @@ describe('Mint and Game: only the owner decisions up front', () => {
     const totals = { sessions: 0n, staked: 0n, paidOut: 0n, feeBurned: 0n, feeToVault: 0n, lootBurned: 0n, payments: 0n, paymentBurned: 0n };
     const cfg = { admin: ALICE, pendingAdmin: null, serverAuthority: '0x000000000000000000000000000000000000bEEF', feeWallet: ALICE, burnBps: 1500, vaultBps: 500, paused: false, token: TOKEN, decimals: 18, totals, holderNft: null, holderBurnBps: 1500, holderVaultBps: 500, burnMode: 0, paymentBurnBps: 5000 };
     const arenas = [{ id: 1, exists: true, enabled: true, entryFee: 1000n * 10n ** 18n, maxSessions: 300, openSessions: 0, vault: 0n, owed: 0n, holdersOnly: false }];
-    const status = { arena: { address: ARENA, code: 'ok', config: cfg, arenas, serverBalance: 10n ** 18n, token: { symbol: 'tELYMUM', decimals: 18, feeWalletBalance: 0n } } } as unknown as StatusSnapshot;
+    const status = { arena: { address: ARENA, code: 'ok', config: cfg, arenas, serverBalance: 10n ** 18n, token: { symbol: 'TEST', decimals: 18, feeWalletBalance: 0n } } } as unknown as StatusSnapshot;
     ui(<GameTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT })), status })} />);
     expect(outsideAdvanced()).toEqual([]);
     expect(screen.getByTestId('arena-pause')).toBeTruthy();
@@ -492,6 +505,23 @@ describe('Game: who may play', () => {
     expect(saveSettings).toHaveBeenCalledWith({ gameAccess: 'public' });
     expect(settingsChanged).toHaveBeenCalledTimes(1);
   });
+
+  it('names the key the owner edits on the VPS when the env override wins', async () => {
+    const known: Record<string, unknown> = { settings: vi.fn(async () => ({ settings: { gameAccess: 'admins' }, gameAccessEnv: 'holders' })) };
+    const api = new Proxy(known, { get: (t, k: string) => t[k] ?? (async () => Promise.reject(new Error('not in this test'))) }) as unknown as AdminApi;
+    ui(<GameTab ctx={ctxOf({ api })} />);
+    await settle();
+    expect(screen.getByText('GAME_ACCESS=holders is set on the server (COINNIBAL_GAME_ACCESS in /opt/elymum/.env on the VPS): it wins over this switch.')).toBeTruthy();
+  });
+
+  it('opens the arena and, off mainnet, the test-token faucet (both hidden from visitors while only admins play)', () => {
+    const view = ui(<GameTab ctx={ctxOf()} />);
+    expect(screen.getByRole('link', { name: 'Open the arena as admin' }).getAttribute('href')).toBe('/play');
+    expect(screen.getByTestId('admin-faucet-link').getAttribute('href')).toBe('/faucet');
+    view.unmount();
+    ui(<GameTab ctx={ctxOf({ net: resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, arenaAddress: null })) })} />);
+    expect(screen.queryByTestId('admin-faucet-link')).toBeNull();
+  });
 });
 
 describe('the chain panel', () => {
@@ -505,10 +535,27 @@ describe('the chain panel', () => {
     expect(screen.getByText('SIGNING BLOCKED.')).toBeTruthy();
     expect(screen.queryByTestId('mainnet-banner')).toBeNull();
   });
+
+  it("the launch checklist's links name the real drawers and open them; the chain and server key lines have none", () => {
+    const go = vi.fn();
+    ui(<AdminPanel net={resolveNetwork(chainStatus({ arenaAddress: null }))} api={null} tab="network" go={go} reloadNet={async () => {}} />);
+    const list = screen.getByTestId('launch-checklist');
+    const labels = [...list.querySelectorAll('.ad-golink')].map((b) => b.textContent);
+    expect(new Set(labels)).toEqual(new Set(['WL →', 'Deploy →', 'Game →', 'Mint →', 'Settings →']));
+    const link = (id: string) => list.querySelector(`[data-item="${id}"] .ad-golink`);
+    expect(link('chain')).toBeNull();
+    expect(link('server-key')).toBeNull();
+    // the deploy flow creates the four arenas
+    expect(link('arenas')?.textContent).toBe('Deploy →');
+    act(() => (link('arenas') as HTMLButtonElement).click());
+    expect(go).toHaveBeenLastCalledWith('deploy');
+    act(() => (link('authority') as HTMLButtonElement).click());
+    expect(go).toHaveBeenLastCalledWith('arena');
+  });
 });
 
 describe('addresses keep their case', () => {
-  it('the capitalised mono style is undone for addresses (custom rooms treasury, shop sink, avatars)', () => {
+  it('the capitalised mono style is undone for addresses (custom rooms, shop, avatars)', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/admin/admin.css'), 'utf8');
     expect(css).toMatch(/\.ad-hex,\s*\.ad-hex::placeholder\s*\{\s*text-transform: none;/);
     for (const f of ['src/admin/CustomRoomsCard.tsx', 'src/admin/ShopCard.tsx', 'src/admin/site/AvatarsTab.tsx']) {
@@ -517,5 +564,18 @@ describe('addresses keep their case', () => {
       expect(src).toMatch(/ad-hex/);
       expect(src).not.toMatch(/className="ad-input mono"/);
     }
+  });
+});
+
+describe('A registered contract whose code is not the bundled build', () => {
+  it('Arena and Mint say plainly that the server does not use it and that it must be redeployed', () => {
+    const net = resolveNetwork(chainStatus({ arenaAddress: ARENA, nftAddress: NFT }));
+    const view = ui(<ArenaTab ctx={ctxOf({ net, status: { arena: { address: ARENA, code: 'mismatch', config: null } } as unknown as StatusSnapshot })} />);
+    expect(screen.getByText('That is not our arena')).toBeTruthy();
+    expect(document.body.textContent).toMatch(/code hash differs\), so the server does not use it and the arenas stay off\. Redeploy CoinnibalArena from your wallet \(Setup\)\./);
+    view.unmount();
+    ui(<MintTab ctx={ctxOf({ net, status: { nft: { address: NFT, code: 'mismatch', balance: 0n, state: null } } as unknown as StatusSnapshot })} />);
+    expect(screen.getByText('That is not our NFT')).toBeTruthy();
+    expect(document.body.textContent).toMatch(/so the server does not use it\. Redeploy CoinnibalNFT from your wallet \(Setup\)\./);
   });
 });

@@ -1,7 +1,7 @@
-import { parseUsdPrice, type PriceSourceKind } from '@elymum/shared';
+import { parseUsdPrice, type PriceSourceKind } from '@coinnibal/shared';
 
 /**
- * The game token's USD price, for pricing the arena tiers in dollars (`@elymum/shared` `arena-pricing.ts`). A source
+ * The game token's USD price, for pricing the arena tiers in dollars (`@coinnibal/shared` `arena-pricing.ts`). A source
  * only reads a price: nothing here signs or sends anything, and the arenas are re-priced by the owner's own wallet.
  */
 export type TokenPriceReading =

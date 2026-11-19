@@ -1,5 +1,5 @@
 /**
- * The money simulation's chain on a real `hardhat node` with the real ElymumArena v3 and the TestToken (deployed
+ * The money simulation's chain on a real `hardhat node` with the real CoinnibalArena v4 and the TestToken (deployed
  * with the SDK, like /admin does). The game server talks to it through its production client (`viemEvmClient`).
  * Returns null when the node does not start within 40 s (Hardhat missing): callers skip.
  */
@@ -11,14 +11,15 @@ import {
   BURN_ADDRESS,
   approveCall,
   createDefaultArenaCalls,
-  createElymumPublicClient,
-  createElymumWalletClient,
+  createCoinnibalPublicClient,
+  createCoinnibalWalletClient,
   deployArena,
   deployNft,
   deployTestToken,
   deployedAddress,
-  elymumArenaAbi,
+  coinnibalArenaAbi,
   getArena,
+  getJoinNonce,
   getSession,
   getTokenBalance,
   joinCall,
@@ -27,11 +28,12 @@ import {
   sendCall,
   setHolderPerksCall,
   setTokenCall,
+  signJoinPermit,
   testTokenMintCall,
   viemChain,
   type ContractCall,
-} from '@elymum/sdk';
-import { DEFAULT_HOLDER_FEE_RATES, computeProfitFee } from '@elymum/shared';
+} from '@coinnibal/sdk';
+import { DEFAULT_HOLDER_FEE_RATES, computeProfitFee } from '@coinnibal/shared';
 import { toHex, type Address, type PublicClient, type WalletClient } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { viemEvmClient } from '../src/chain/evm-client';
@@ -64,12 +66,12 @@ async function rpcUp(u: string): Promise<boolean> {
 
 /**
  * Starts a hardhat node, deploys and sets up the arena (arenas 1 and 2 used), funds `players` wallets. Every third
- * wallet holds an ElymumNFT (owner-minted), the arena's holder NFT at the owner's holder pair (8 % + 2 %).
+ * wallet holds a CoinnibalNFT (owner-minted), the arena's holder NFT at the owner's holder pair (8 % + 2 %).
  */
 export async function hardhatSimChain(opts: { players: number; seed: number }): Promise<SimChain> {
   const port = await freePort();
   const url = `http://127.0.0.1:${port}`;
-  const child: ChildProcess = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
+  const child: ChildProcess = spawn('pnpm', ['-F', '@coinnibal/contracts', 'exec', 'hardhat', 'node', '--port', String(port)], {
     cwd: repoRoot,
     detached: true,
     stdio: 'ignore',
@@ -100,14 +102,14 @@ export async function hardhatSimChain(opts: { players: number; seed: number }): 
   // a local node: no request budget worth the name
   configureRpcBudgets({ ratePerSec: 100_000, burst: 100_000 });
   const chain = viemChain(31337, { rpcUrl: url });
-  const pub: PublicClient = createElymumPublicClient(url, chain, { pollingInterval: 20 });
+  const pub: PublicClient = createCoinnibalPublicClient(url, chain, { pollingInterval: 20 });
   const account = (i: number) => privateKeyToAccount(toHex(mnemonicToAccount(MNEMONIC, { addressIndex: i }).getHdKey().privateKey!));
   const admin = account(0);
   const server = account(1);
   const feeWallet = account(2);
   const playerAccounts = Array.from({ length: opts.players }, (_, i) => account(3 + i));
   const wallets = new Map<string, WalletClient>();
-  for (const a of [admin, ...playerAccounts]) wallets.set(a.address.toLowerCase(), createElymumWalletClient(url, { account: a, chain, pollingInterval: 20 }));
+  for (const a of [admin, ...playerAccounts]) wallets.set(a.address.toLowerCase(), createCoinnibalWalletClient(url, { account: a, chain, pollingInterval: 20 }));
   const send = async (from: Address, call: ContractCall): Promise<boolean> => {
     try {
       const hash = await sendCall(wallets.get(from.toLowerCase())!, call);
@@ -141,10 +143,10 @@ export async function hardhatSimChain(opts: { players: number; seed: number }): 
   const client = viemEvmClient(url, server, { chainId: 31337, pollingInterval: 20, multicall: false });
 
   const logs = async (eventName: 'Settled' | 'Cancelled' | 'Refunded' | 'Collected' | 'Joined') =>
-    (await pub.getContractEvents({ address: arena, abi: elymumArenaAbi, eventName, fromBlock: 0n })) as unknown as { args: Record<string, unknown> }[];
+    (await pub.getContractEvents({ address: arena, abi: coinnibalArenaAbi, eventName, fromBlock: 0n })) as unknown as { args: Record<string, unknown> }[];
 
   return {
-    name: 'hardhat node (ElymumArena v3, TestToken)',
+    name: 'hardhat node (CoinnibalArena v4, TestToken)',
     arenaAddress: arena,
     client,
     decimals: 18,
@@ -152,7 +154,12 @@ export async function hardhatSimChain(opts: { players: number; seed: number }): 
     holders,
     arenaIds: () => ids,
     entryFee: (id) => fees.get(id)!,
-    buy: (w, id) => send(w, joinCall(arena, id)),
+    // the server key's join permit (CoinnibalArena v4), then the join
+    buy: async (w, id) => {
+      const deadline = (await pub.getBlock({ blockTag: 'latest' })).timestamp + 600n;
+      const signature = await signJoinPermit(server, { chainId: 31337, arena, player: w, arenaId: id, nonce: await getJoinNonce(pub, arena, w), deadline });
+      return send(w, joinCall(arena, id, { deadline, signature }));
+    },
     refund: (w, id) => send(w, refundCall(arena, id)),
     async advance(s) {
       if (s <= 0) return;

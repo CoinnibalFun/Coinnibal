@@ -89,6 +89,20 @@ describe('rpc budget', () => {
     expect(order.slice(2)).toEqual(['low0', 'low1', 'low2']);
   });
 
+  it('settlements (critical) go before paid joins\' ticket reads (high), and those before client work (normal) (R2-NET-1)', async () => {
+    const budget = new RpcBudget({ ratePerSec: 20, burst: 4 });
+    const order: string[] = [];
+    for (let i = 0; i < 4; i++) await budget.acquire(1, 'critical');
+    const jobs = [
+      ...Array.from({ length: 3 }, (_, i) => budget.acquire(1, 'normal').then(() => order.push(`normal${i}`))),
+      ...Array.from({ length: 2 }, (_, i) => budget.acquire(1, 'high').then(() => order.push(`high${i}`))),
+      withRpcPriority('critical', () => budget.acquire(1)).then(() => order.push('critical')),
+    ];
+    await Promise.all(jobs);
+    expect(order).toEqual(['critical', 'high0', 'high1', 'normal0', 'normal1', 'normal2']);
+    expect(formatRpcMinute(budget.takeMinute())).toMatch(/critical 0 \/ high 0 \/ normal 0 \/ low 0$/);
+  });
+
   it('a 429 holds every request for the cool-down (no hammering)', async () => {
     const budget = new RpcBudget({ ratePerSec: 1000, burst: 10, backoffBaseMs: 40, backoffMaxMs: 40, random: () => 1 });
     budget.noteRateLimited();
@@ -138,8 +152,9 @@ describe('several RPCs (EVM_RPC_URLS)', () => {
   });
 
   it('the VPS compose environment: an empty EVM_RPC_URL is unset, EVM_RPC_URLS and CHAIN_ID win over stale values', () => {
-    // deploy/vps/docker-compose.yml sets EVM_RPC_URL: "" and EVM_RPC_URLS / CHAIN_ID / GAME_ACCESS from ELYMUM_* keys
-    // (a stale CHAIN_ID or EVM_RPC_URL of /opt/elymum/.env never reaches the app)
+    // deploy/vps/docker-compose.yml sets EVM_RPC_URL: "" and EVM_RPC_URLS / CHAIN_ID / GAME_ACCESS from COINNIBAL_* keys
+    // (a stale CHAIN_ID or EVM_RPC_URL of /opt/elymum/.env, the install directory kept from before the rename, never
+    // reaches the app)
     const cfg = loadConfig({
       EVM_RPC_URL: '',
       EVM_RPC_URLS: 'https://rpc.testnet.chain.robinhood.com',

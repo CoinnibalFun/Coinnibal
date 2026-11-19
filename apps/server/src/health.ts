@@ -1,4 +1,4 @@
-import type { GasRunway } from '@elymum/shared';
+import type { GasRunway } from '@coinnibal/shared';
 import type { ChainGateway } from './chain/types';
 import type { ServerConfig } from './config';
 import type { RoomManager } from './rooms/manager';

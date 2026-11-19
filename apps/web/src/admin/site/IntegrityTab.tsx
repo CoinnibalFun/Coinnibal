@@ -1,4 +1,4 @@
-import { ledgerDecimals } from '@elymum/sdk';
+import { ledgerDecimals } from '@coinnibal/sdk';
 import {
   INTEGRITY_FLAG_KINDS,
   INTEGRITY_THRESHOLD_RANGES,
@@ -13,7 +13,7 @@ import {
   type IntegritySettings,
   type IntegrityThresholds,
   type IntegrityWalletView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chip, InkButton, Sheet, StampSpinner } from '../../design';
 import { request, type IntegrityApi, type IntegrityFilter } from '../../site/api';
@@ -31,7 +31,7 @@ const KIND_LABEL: Record<IntegrityFlagKind, string> = {
 
 /** The finer kinds of the newer detectors (a flag of the original detectors has none). */
 export const SUBTYPE_LABEL: Record<IntegrityFlagSubtype, { label: string; hint: string }> = {
-  emblem_shared: { label: 'Emblem shared', hint: 'one emblem served holder tickets of several wallets at once' },
+  emblem_shared: { label: 'NFT shared', hint: 'one NFT served holder tickets of several wallets at once' },
   fresh_feeders: { label: 'Fresh feeders', hint: 'value flowed to one wallet from young or fresh wallets' },
   shared_funding: { label: 'Shared funding', hint: 'the feeder wallets got their first gas from one source' },
   non_aggression: { label: 'Non-aggression pact', hint: 'two wallets often within eating range that never ate each other' },

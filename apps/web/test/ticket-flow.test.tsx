@@ -1,4 +1,5 @@
-import type { ArenaInfo, ContractCall, SessionInfo } from '@elymum/sdk';
+import type { ArenaInfo, ContractCall, SessionInfo } from '@coinnibal/sdk';
+import type { JoinPermit } from '@coinnibal/shared';
 import { act, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Kb } from '../src/design';
@@ -23,10 +24,13 @@ const spies = vi.hoisted(() => ({
   getSession: vi.fn(),
   sendWalletCall: vi.fn(),
   verifyArena: vi.fn(),
+  fetchJoinPermit: vi.fn(),
 }));
+// the game server's join permit (CoinnibalArena v4): granted unless a test says otherwise
+vi.mock('../src/wallet/permit', async (orig) => ({ ...(await orig<typeof import('../src/wallet/permit')>()), fetchJoinPermit: spies.fetchJoinPermit }));
 // the money path's network edges: the fresh chain reads and the wallet send
-vi.mock('@elymum/sdk', async (orig) => ({
-  ...(await orig<typeof import('@elymum/sdk')>()),
+vi.mock('@coinnibal/sdk', async (orig) => ({
+  ...(await orig<typeof import('@coinnibal/sdk')>()),
   planJoin: spies.planJoin,
   getArenaConfig: spies.getArenaConfig,
   getSession: spies.getSession,
@@ -39,6 +43,8 @@ vi.mock('../src/wallet/tx', async (orig) => ({ ...(await orig<typeof import('../
 vi.mock('../src/wallet/pinned', async (orig) => ({ ...(await orig<typeof import('../src/wallet/pinned')>()), verifyArena: spies.verifyArena }));
 
 const CHAIN = chainStatus();
+/** The permit the game server grants ALICE for a room of the pinned arena. */
+const permitOf = (arenaId: number, o: Partial<JoinPermit> = {}): JoinPermit => ({ arena: ARENA, chainId: CHAIN.chainId!, player: ALICE, arenaId, nonce: '0', deadline: Math.floor(Date.now() / 1000) + 600, signature: `0x${'ef'.repeat(65)}`, ...o });
 const PENNY: TicketModel = { key: 'arena:1', arenaId: 1, entryFee: 1000n * ONE, humans: 3, bots: 10, loot: 0, open: true };
 const arena = (id: number, entryFee: bigint): ArenaInfo => ({
   id,
@@ -71,6 +77,8 @@ beforeEach(() => {
   spies.getSession.mockImplementation(async (_c: unknown, _a: unknown, id: number) => useChainData.getState().sessions[id] ?? session({ id: 0n }));
   spies.verifyArena.mockReset();
   spies.verifyArena.mockImplementation(async () => ({ ok: true, arena: ARENA }));
+  spies.fetchJoinPermit.mockReset();
+  spies.fetchJoinPermit.mockImplementation(async (_token: string, arenaId: number) => ({ ok: true, permit: permitOf(arenaId) }));
   spies.sendWalletCall.mockReset();
   spies.sendWalletCall.mockImplementation(async (_call: unknown, opts: { onPhase?: (p: string, h?: string) => void }) => {
     opts.onPhase?.('signing');
@@ -79,7 +87,7 @@ beforeEach(() => {
   });
   resetWallets();
   useWallet.setState({ status: 'connected', address: ALICE, chainId: 46630, current: detail(fakeProvider({ chainId: 46630, known: [46630] })) });
-  useUi.setState({ settings: { ...ui0.settings, name: 'Daphne', skin: 4 }, chain: CHAIN });
+  useUi.setState({ settings: { ...ui0.settings, name: 'Daphne', skin: 4 }, chain: CHAIN, auth: { address: ALICE, token: 'tok', profile: null } });
   useChainData.setState({
     config: config(),
     sessions: {},
@@ -111,17 +119,17 @@ describe('ticket confirm sheet', () => {
   it('shows the exact amount, the fee policy, the network fee and both calls before signing', () => {
     open(PENNY);
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getAllByText('1,000 $ELYMUM').length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText('1,000 $NIBAL').length).toBeGreaterThan(0);
     // arena v3: no entry fee; the fee is on profit only, split burned / fee wallet
-    expect(within(dialog).getByText('20% · on profit only · fixed for this ticket · 15% burned · 5% to the fee wallet')).toBeTruthy();
+    expect(within(dialog).getByText('20% · on profit only · fixed for this ticket · 15% burned · 5% to the team wallet')).toBeTruthy();
     expect(within(dialog).queryByText('Your coin starts at')).toBeNull();
-    expect(within(dialog).getByText(/No profit, no fee/)).toBeTruthy();
+    expect(within(dialog).getByText(/If you don't make a profit, you pay no fee\./)).toBeTruthy();
     expect(within(dialog).getByText(/paid in ETH on Robinhood Chain Testnet · you have 0.42 ETH/)).toBeTruthy();
-    expect(within(dialog).getByText('12,450 → 11,450 $ELYMUM')).toBeTruthy();
+    expect(within(dialog).getByText('12,450 → 11,450 $NIBAL')).toBeTruthy();
     const steps = within(within(dialog).getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
     // no allowance yet: an approval for 5 tickets of this room first (preselected; what the wallet will show), then the ticket
-    expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take up to 5,000 $ELYMUM (5 tickets of this room)', '2Buy the ticket · $1 Room']);
-    expect((within(dialog).getByRole('button', { name: /Pay 1,000 \$ELYMUM/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect(steps.map((s) => s.textContent)).toEqual(['1Allow the arena to take up to 5,000 $NIBAL (5 tickets of this room)', '2Buy the ticket · $1 Room']);
+    expect((within(dialog).getByRole('button', { name: /Pay 1,000 \$NIBAL/ }) as HTMLButtonElement).disabled).toBe(false);
     // the approval covers 1, 5, 10 or 20 tickets, 5 preselected
     expect(within(dialog).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['1 ticket', '5 tickets', '10 tickets', '20 tickets']);
     expect(within(dialog).getByRole('radio', { name: '5 tickets' }).getAttribute('aria-checked')).toBe('true');
@@ -148,7 +156,7 @@ describe('ticket confirm sheet', () => {
     act(() => screen.getByRole('radio', { name: '10 tickets' }).click());
     expect(useUi.getState().settings.approveTickets).toBe(10);
     const steps = within(screen.getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
-    expect(steps[0].textContent).toBe('1Allow the arena to take up to 10,000 $ELYMUM (10 tickets of this room)');
+    expect(steps[0].textContent).toBe('1Allow the arena to take up to 10,000 $NIBAL (10 tickets of this room)');
     expect(screen.getByText(/your next 9 tickets here need a single transaction each/)).toBeTruthy();
     act(() => screen.getByRole('button', { name: /^Pay / }).click());
     await settle();
@@ -196,12 +204,20 @@ describe('ticket confirm sheet', () => {
   it("shows the server's live rates, and an emblem holder's lower pair against the normal one", () => {
     act(() => useUi.setState({ chain: { ...useUi.getState().chain!, fees: { ...useUi.getState().chain!.fees!, burnBps: 1000, vaultBps: 200 } } }));
     const view = open(PENNY);
-    expect(within(screen.getByRole('dialog')).getByText('12% · on profit only · fixed for this ticket · 10% burned · 2% to the fee wallet')).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByText('12% · on profit only · fixed for this ticket · 10% burned · 2% to the team wallet')).toBeTruthy();
     view.unmount();
     act(() => useUi.setState({ chain: chainStatus() }));
     useChainData.setState({ holder: true, config: { ...config(), holderBurnBps: 1500, holderVaultBps: 0 } });
     open(PENNY);
-    expect(within(screen.getByRole('dialog')).getByText('15% · on profit only · fixed for this ticket · 15% burned · 0% to the fee wallet · holder rate, not 20%')).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByText('15% · on profit only · fixed for this ticket · 15% burned · 0% to the team wallet · holder rate, not 20%')).toBeTruthy();
+  });
+
+  it('a ticket headed for a private ticket room says, before it is paid, that the room can end early', () => {
+    useUi.setState({ paidSeat: { code: 'AB2CD', arenaId: 1, name: 'Friday Pond', endsAt: Date.now() + 20 * 60_000 } });
+    open(PENNY);
+    expect(screen.getByTestId('tf-paid-seat').textContent).toMatch(
+      /seated in the private room "Friday Pond" \(AB2CD\)\. Its creator or an admin can end the room early, with a 10-second warning: every ticket is settled at that moment\./,
+    );
   });
 
   it('one call only when the allowance already covers the entry fee', () => {
@@ -241,16 +257,16 @@ describe('ticket confirm sheet', () => {
     open(PENNY);
     expect(screen.getByText(/You have no ETH on Robinhood Chain Testnet/)).toBeTruthy();
     expect((screen.getByRole('button', { name: /^Pay / }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole('link', { name: /Get test ETH from the faucet/ }).getAttribute('href')).toBe(CHAIN.faucetUrl);
+    expect(screen.getByRole('link', { name: /Get test ETH from the official .* faucet/ }).getAttribute('href')).toBe(CHAIN.faucetUrl);
   });
 
   it('the collect sheet shows the payout and one refund call', () => {
     useChainData.setState({ sessions: { 1: session({ finalized: true, owed: 2150n * ONE }) } });
     open(PENNY, 'collect');
-    expect(screen.getAllByText('2,150 $ELYMUM').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('2,150 $NIBAL').length).toBeGreaterThan(0);
     const steps = within(screen.getByRole('region', { name: 'Your wallet signs' })).getAllByRole('listitem');
     expect(steps.map((li) => li.textContent)).toEqual([expect.stringContaining('Collect your payout')]);
-    expect(screen.getByRole('button', { name: /Collect · 2,150 \$ELYMUM/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Collect · 2,150 \$NIBAL/ })).toBeTruthy();
   });
 });
 
@@ -265,9 +281,9 @@ describe('ticket flow: two prompts, progress and races', () => {
     open(PENNY);
     act(() => screen.getByRole('button', { name: /^Pay / }).click());
     await settle();
-    expect(screen.getByTestId('tf-step').textContent).toBe('Step 1 of 2 · Allow the arena to take up to 5,000 $ELYMUM (5 tickets of this room)');
+    expect(screen.getByTestId('tf-step').textContent).toBe('Step 1 of 2 · Allow the arena to take up to 5,000 $NIBAL (5 tickets of this room)');
     expect(screen.getByText('Approve the game token in your wallet')).toBeTruthy();
-    expect(screen.getByText(/Your wallet shows 5,000 \$ELYMUM: enough for 5 tickets of this room/)).toBeTruthy();
+    expect(screen.getByText(/Your wallet shows 5,000 \$NIBAL: enough for 5 tickets of this room/)).toBeTruthy();
     // the plan is always exact (the batch, when ticked, is built here and checked call by call)
     expect(spies.planJoin.mock.calls[0][1]).toMatchObject({ approve: 'exact' });
     await act(async () => release());
@@ -279,11 +295,74 @@ describe('ticket flow: two prompts, progress and races', () => {
     expect(spies.sendWalletCall.mock.calls[0][1]).toMatchObject({ chain: CHAIN });
   });
 
+  it('asks the game server for the join permit first, and joins with it (CoinnibalArena v4)', async () => {
+    useChainData.setState({ allowance: 5000n * ONE });
+    spies.planJoin.mockImplementation(async () => ({ entryFee: 1000n * ONE, allowance: 5000n * ONE, balance: 12_450n * ONE, approve: null, join: joinCall, calls: [joinCall] }));
+    open(PENNY);
+    act(() => screen.getByRole('button', { name: /Pay 1,000 \$NIBAL/ }).click());
+    await settle();
+    expect(spies.fetchJoinPermit).toHaveBeenCalledWith('tok', 1, null);
+    const permit = spies.planJoin.mock.calls[0][1].permit as { deadline: bigint; signature: string };
+    // the permit the server handed out (its deadline is read from the clock: compare with that one, not a new one)
+    const served = ((await spies.fetchJoinPermit.mock.results[0].value) as { permit: JoinPermit }).permit;
+    expect(permit).toEqual({ deadline: BigInt(served.deadline), signature: served.signature });
+    expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('a ticket headed for a paid room asks the permit for that room (audit R4-M1: its refund, should the room close first, is no no-show)', async () => {
+    useChainData.setState({ allowance: 5000n * ONE });
+    spies.planJoin.mockImplementation(async () => ({ entryFee: 1000n * ONE, allowance: 5000n * ONE, balance: 12_450n * ONE, approve: null, join: joinCall, calls: [joinCall] }));
+    useUi.setState({ paidSeat: { code: 'AB2CD', arenaId: 1, name: 'Friday Pond', endsAt: Date.now() + 20 * 60_000 } });
+    open(PENNY);
+    act(() => screen.getByRole('button', { name: /Pay 1,000 \$NIBAL/ }).click());
+    await settle();
+    expect(spies.fetchJoinPermit).toHaveBeenCalledWith('tok', 1, 'AB2CD');
+  });
+
+  it('a refused permit says why and signs nothing (no-shows, an open ticket, a full room)', async () => {
+    spies.fetchJoinPermit.mockImplementation(async () => {
+      const { permitRefusalText } = await vi.importActual<typeof import('../src/wallet/permit')>('../src/wallet/permit');
+      return { ok: false, code: 'no_show', text: permitRefusalText('no_show', Date.UTC(2026, 10, 19, 15, 30)) };
+    });
+    open(PENNY);
+    act(() => screen.getByRole('button', { name: /^Pay / }).click());
+    await settle();
+    expect(screen.getByRole('alert').textContent).toMatch(/Your last tickets were bought but never played, so new tickets pause until .+\. Nothing was signed\./);
+    expect(spies.planJoin).not.toHaveBeenCalled();
+    expect(spies.sendWalletCall).not.toHaveBeenCalled();
+  });
+
+  it('each refusal has its own words: a network at its share of the room is told so', async () => {
+    const { permitRefusalText } = await vi.importActual<typeof import('../src/wallet/permit')>('../src/wallet/permit');
+    // honest about the wait (audit R4b-M1): a network is held only while its permits are valid and its tickets unplayed
+    expect(permitRefusalText('network_busy')).toMatch(/asked from your network and are not played yet\. Places free up as they are played or run out, within half an hour: try again soon, or from another connection\. Nothing was signed\./);
+    // one wallet's own unused permits pause that wallet only, and the sheet says until when
+    expect(permitRefusalText('unused_permits', Date.UTC(2026, 10, 20, 9, 15))).toMatch(/^You asked for tickets for this room several times today and bought none, so new tickets for this room pause until .+\. A ticket bought in another room starts afresh\. Nothing was signed\.$/);
+    expect(permitRefusalText('unused_permits')).toMatch(/pause for a while\./);
+    expect(permitRefusalText('arena_busy')).toMatch(/as many tickets waiting for a seat/);
+    // a new wallet without the entry fee (round 4): told to get tokens, nothing signed
+    expect(permitRefusalText('no_funds')).toMatch(/does not hold the entry fee for this room yet\. Get tokens first, then buy the ticket\. Nothing was signed\./);
+    // standing covers one unplayed ticket at a time (audit R4-M2): the other ticket is named, never a day's block
+    expect(permitRefusalText('ticket_elsewhere')).toBe('You hold a ticket for another room that is not played yet. Play it first, then buy this one. Nothing was signed.');
+  });
+
+  it('a permit for another wallet, room or arena signs nothing', async () => {
+    for (const bad of [{ player: '0x2222222222222222222222222222222222222222' }, { arenaId: 3 }, { arena: '0x0000000000000000000000000000000000000bad' }, { chainId: 1 }]) {
+      spies.fetchJoinPermit.mockImplementation(async (_t: string, arenaId: number) => ({ ok: true, permit: permitOf(arenaId, bad) }));
+      const view = open(PENNY);
+      act(() => screen.getByRole('button', { name: /^Pay / }).click());
+      await settle();
+      expect(screen.getByRole('alert').textContent).toMatch(/does not recognise the arena contract/);
+      view.unmount();
+    }
+    expect(spies.sendWalletCall).not.toHaveBeenCalled();
+  });
+
   it('a double click (or two Enters) plans and sends once', async () => {
     useChainData.setState({ allowance: 5000n * ONE });
     spies.planJoin.mockImplementation(async () => ({ entryFee: 1000n * ONE, allowance: 5000n * ONE, balance: 12_450n * ONE, approve: null, join: joinCall, calls: [joinCall] }));
     open(PENNY);
-    const pay = screen.getByRole('button', { name: /Pay 1,000 \$ELYMUM/ });
+    const pay = screen.getByRole('button', { name: /Pay 1,000 \$NIBAL/ });
     act(() => {
       pay.click();
       pay.click();
@@ -293,7 +372,8 @@ describe('ticket flow: two prompts, progress and races', () => {
     await settle();
     expect(spies.planJoin).toHaveBeenCalledTimes(1);
     expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
-    expect(spies.planJoin.mock.calls[0][1]).toEqual({ arena: ARENA, arenaId: 1, player: ALICE, token: TOKEN, approve: 'exact' });
+    expect(spies.planJoin.mock.calls[0][1]).toEqual({ arena: ARENA, arenaId: 1, player: ALICE, token: TOKEN, approve: 'exact', permit: { deadline: expect.any(BigInt), signature: permitOf(1).signature } });
+    expect(spies.fetchJoinPermit).toHaveBeenCalledTimes(1);
   });
 
   it('a failed approval stops before the join, and the retry re-plans', async () => {

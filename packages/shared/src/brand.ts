@@ -1,12 +1,14 @@
 /**
- * The brand: Coinnibal (a coin + a cannibal: coins that eat coins), its token $NIBAL. Everything a player reads uses
- * these names; the code, the packages (`@elymum/*`), the contracts, the storage keys and the env vars keep the old
- * internal name "elymum" on purpose (renaming them would break deploys and saved data).
+ * The brand: Coinnibal (a coin + a cannibal: coins that eat coins), played with its game token (shown as `TOKEN_SYMBOL`,
+ * default "tokens"; no ticker is announced). Everything a player reads uses
+ * these names, and so do the code, the packages (`@coinnibal/*`), the contracts, the storage keys and the env vars. The
+ * project was called Elymum until November 2026; the few names kept from then (the live server's installed names, the
+ * fallbacks that still read an old name) say why where they are.
  *
  * The domain and the X handle are configuration, not code: the site's origin is `PUBLIC_URL` (server) and
  * `VITE_PUBLIC_URL` (web build), the X handle is the admin setting (Admin, Settings) with `X_HANDLE` /
  * `VITE_X_HANDLE` as the default. The defaults below are the live ones (coinnibal.fun, @coinnibalfun; see
- * docs/OPERATIONS.md, "Moving to coinnibal.fun").
+ * docs/OPERATIONS.md, "The name: Coinnibal (formerly Elymum)").
  */
 
 /** The Coinnibal NFT collection's size (the team's decision; the contract's `maxSupply` is set to it at deploy). */
@@ -25,16 +27,20 @@ export const SITE_HOST_DEFAULT = 'coinnibal.fun';
 export const SITE_URL_DEFAULT = `https://${SITE_HOST_DEFAULT}`;
 
 /**
- * The brand's own site origins: coinnibal.fun (the site) and elymum.io (the old name, still serving players while
- * the move lasts). A server whose `CORS_ORIGIN` is a list always accepts these too, and a sign-in from one of them
- * names that site, so both work whatever the server's `.env` says.
+ * The brand's own site origins: coinnibal.fun (the site), elymum.io, the domain of before the rename (the live
+ * config still answers there: it redirects every path to coinnibal.fun, vercel.json, and the NFT's on-chain base URI
+ * and links already posted on X point at it, so it stays on this list), and the open-play copies
+ * (`OPEN_PLAY_ORIGINS`). A server whose `CORS_ORIGIN` is a list always accepts these too, and a sign-in from one of
+ * them names that site, so they all work whatever the server's `.env` says.
  */
 export const BRAND_SITE_ORIGINS: readonly string[] = ['https://coinnibal.fun', 'https://www.coinnibal.fun', 'https://elymum.io', 'https://coinnibal.vercel.app'];
 
 /**
- * Open-play copies of the site: the same web client on a free host, talking to this same server and contracts, where
- * the game is open to everyone on the testnet whatever the admin's `gameAccess` says (the main site keeps the
- * setting). The browser sets `Origin`; a page cannot choose it. On mainnet the copies follow the main site's setting.
+ * Open-play copies of the site: the same web client on a free host (built from apps/web with
+ * `VITE_SERVER_URL=https://coinnibal.fun`), talking to this same server and contracts, where the game is open to
+ * everyone on a testnet whatever the admin's `gameAccess` says (the main site keeps the setting; maintenance closes
+ * them too). The browser sets `Origin`; a page cannot choose it. On the mainnet the copies follow the main site's
+ * setting.
  */
 export const OPEN_PLAY_ORIGINS: readonly string[] = ['https://coinnibal.vercel.app'];
 

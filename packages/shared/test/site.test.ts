@@ -22,11 +22,11 @@ const ADDR = '0x52908400098527886E0F7030069857D2E4169EE7';
 
 describe('site helpers', () => {
   it('normalises X handles', () => {
-    expect(normalizeXHandle('@ElymumIO')).toBe('elymumio');
-    expect(normalizeXHandle('  elymum_io ')).toBe('elymum_io');
-    expect(normalizeXHandle('https://x.com/ElymumIO')).toBe('elymumio');
-    expect(normalizeXHandle('https://twitter.com/elymumio/')).toBe('elymumio');
-    expect(normalizeXHandle('x.com/elymumio?s=21')).toBe('elymumio');
+    expect(normalizeXHandle('@CoinnibalFun')).toBe('coinnibalfun');
+    expect(normalizeXHandle('  coinnibal_io ')).toBe('coinnibal_io');
+    expect(normalizeXHandle('https://x.com/CoinnibalFun')).toBe('coinnibalfun');
+    expect(normalizeXHandle('https://twitter.com/coinnibalfun/')).toBe('coinnibalfun');
+    expect(normalizeXHandle('x.com/coinnibalfun?s=21')).toBe('coinnibalfun');
     expect(normalizeXHandle('')).toBeNull();
     expect(normalizeXHandle('@')).toBeNull();
     expect(normalizeXHandle('a'.repeat(16))).toBeNull();
@@ -35,11 +35,11 @@ describe('site helpers', () => {
   });
 
   it('accepts X status links only', () => {
-    expect(isXStatusUrl('https://x.com/elymumio/status/1790000000000000000')).toBe(true);
+    expect(isXStatusUrl('https://x.com/coinnibalfun/status/1790000000000000000')).toBe(true);
     expect(isXStatusUrl('https://twitter.com/a_b/status/1?s=20')).toBe(true);
-    expect(isXStatusUrl('http://x.com/elymumio/status/1')).toBe(false);
-    expect(isXStatusUrl('https://x.com/elymumio')).toBe(false);
-    expect(isXStatusUrl('https://evil.com/x.com/elymumio/status/1')).toBe(false);
+    expect(isXStatusUrl('http://x.com/coinnibalfun/status/1')).toBe(false);
+    expect(isXStatusUrl('https://x.com/coinnibalfun')).toBe(false);
+    expect(isXStatusUrl('https://evil.com/x.com/coinnibalfun/status/1')).toBe(false);
     expect(isXStatusUrl('https://x.com/toolonghandle1234/status/1')).toBe(false);
     expect(isXStatusUrl('https://x.com/a/status/1 javascript:')).toBe(false);
   });
@@ -80,7 +80,7 @@ describe('EVM addresses', () => {
       '0X' + ADDR.slice(2),
       '0x' + 'g'.repeat(40),
       ` ${ADDR}`,
-      'elymumio.eth',
+      'coinnibalfun.eth',
       42,
       null,
       undefined,

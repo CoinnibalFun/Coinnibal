@@ -1,4 +1,4 @@
-import { INTEGRITY_SETTINGS_DEFAULT, type IntegrityFlag, type IntegrityOverview, type IntegrityWalletView } from '@elymum/shared';
+import { INTEGRITY_SETTINGS_DEFAULT, type IntegrityFlag, type IntegrityOverview, type IntegrityWalletView } from '@coinnibal/shared';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IntegrityTab } from '../src/admin/site/IntegrityTab';
@@ -65,7 +65,7 @@ const ui = () => render(
   </Kb>,
 );
 const routes = (extra: Record<string, unknown> = {}) => ({
-  'GET /api/config': { chain: { token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$ELYMUM', decimals: 18 } } },
+  'GET /api/config': { chain: { token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$NIBAL', decimals: 18 } } },
   'GET /api/admin/integrity': overview(),
   'GET /api/admin/integrity/flags': { flags: [flag] },
   [`GET /api/admin/integrity/wallet/${B}`]: walletView,
@@ -79,7 +79,7 @@ describe('admin: Integrity tab (mocked fetch)', { timeout: 30_000 }, () => {
     ui();
     expect(await screen.findByText('Held settlements')).toBeTruthy();
     expect(within(screen.getByLabelText('Integrity counts')).getByText('40')).toBeTruthy();
-    expect(await screen.findByText('5,000 $ELYMUM')).toBeTruthy();
+    expect(await screen.findByText('5,000 $NIBAL')).toBeTruthy();
     expect(screen.getAllByText(flag.summary).length).toBeGreaterThan(0);
     expect(sent('GET', '/api/admin/integrity')?.auth).toBe('Bearer admin-token');
     fireEvent.click(screen.getByRole('button', { name: 'Release' }));

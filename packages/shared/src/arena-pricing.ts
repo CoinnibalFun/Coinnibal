@@ -3,7 +3,7 @@ import { DEFAULT_ARENAS } from './arenas';
 /**
  * Arena tickets priced in US dollars (owner decision 2026-11: $1, $3, $5, $10; the $10 arena for emblem holders only).
  *
- * The chain keeps entry fees in token units (`ElymumArena` `createArena` / `updateArena`), and each ticket records the
+ * The chain keeps entry fees in token units (`CoinnibalArena` `createArena` / `updateArena`), and each ticket records the
  * entry fee it was bought with (`Session.entryFee`: settlements, cancels and refunds use that, never the arena's
  * current price). So a dollar price is turned into a token amount at a USD price of the token, by the admin:
  *
@@ -56,7 +56,7 @@ export const ARENA_PRICING_DEFAULT: ArenaPricingSettings = {
   sigFigs: 2,
 };
 
-/** The largest entry fee `ElymumArena` can store (`uint128`). */
+/** The largest entry fee `CoinnibalArena` can store (`uint128`). */
 const MAX_UINT128 = (1n << 128n) - 1n;
 
 /**

@@ -1,5 +1,6 @@
-import { testTokenRefusal } from '@elymum/sdk/ops';
+import { testTokenRefusal } from '@coinnibal/sdk/ops';
 import { DeployTab, RegisterExisting, SetTokenForm, TestTokenCard, registeredToken } from './DeployTab';
+import { PinsCard } from './PinsCard';
 import { QuickSetup } from './QuickSetup';
 import { setupSteps } from './setup';
 import { HolderPerksCard, HoldersOnlyCard, TestTokenAdminCard } from './SetupExtras';
@@ -8,7 +9,8 @@ import { Advanced, type ChainCtx } from './ui';
 /**
  * What Setup puts in front of the owner (pure, tested): the deploy wizard while the contracts are
  * not on the server yet, otherwise Finish setup, plus the few owner cards Finish setup cannot do
- * (confirming the game token on mainnet, deploying a TestToken on a testnet without one).
+ * (setting the game token on mainnet: the token launched on Pons, typed twice; deploying a TestToken on a testnet
+ * without one).
  */
 export function setupLayout(ctx: Pick<ChainCtx, 'net' | 'status' | 'registry'>): { registered: boolean; tokenCard: boolean; testTokenCard: boolean } {
   const { net, status } = ctx;
@@ -25,9 +27,12 @@ export function setupLayout(ctx: Pick<ChainCtx, 'net' | 'status' | 'registry'>):
 }
 
 /**
- * `/admin → Setup`. Contracts registered: Finish setup first (every missing owner step in one go),
- * and every manual control and address override in ONE collapsed "Advanced" section at the bottom.
- * Nothing deployed yet (a fresh chain, mainnet day): the deploy wizard, which asks for no address.
+ * `/admin → Setup`. Contracts registered: Finish setup first (every missing owner step in one go), the game token or
+ * TestToken card when Finish setup cannot set the token, Site pins (the owner wallet signs the registered contracts
+ * for the site: one free signature), and every manual control and address override in ONE
+ * collapsed "Advanced" section at the bottom.
+ * Nothing deployed yet (a fresh chain, mainnet day): the deploy wizard, which asks for no address (the same steps as
+ * Start → Deploy the contracts, one by one).
  */
 export function SetupTab({ ctx }: { ctx: ChainCtx }) {
   const { registered, tokenCard, testTokenCard } = setupLayout(ctx);
@@ -45,13 +50,14 @@ export function SetupTab({ ctx }: { ctx: ChainCtx }) {
       <QuickSetup ctx={ctx} />
       {tokenCard && <SetTokenForm ctx={ctx} />}
       {testTokenCard && <TestTokenCard ctx={ctx} />}
+      <PinsCard ctx={ctx} />
       <Advanced title="Advanced: manual controls" testId="setup-advanced" section>
         <p className="ad-note">Finish setup does all of this for you. These are the same steps one by one, and the places to override an address.</p>
         <DeployTab ctx={ctx} advanced />
         {!tokenCard && <SetTokenForm ctx={ctx} />}
         {!testTokenCard && <TestTokenCard ctx={ctx} />}
         <RegisterExisting ctx={ctx} />
-        <h2 className="ad-h3 ad-section-h">Emblem perks</h2>
+        <h2 className="ad-h3 ad-section-h">NFT perks</h2>
         <div className="ad-mint__forms">
           <HolderPerksCard ctx={ctx} />
           <TestTokenAdminCard ctx={ctx} />

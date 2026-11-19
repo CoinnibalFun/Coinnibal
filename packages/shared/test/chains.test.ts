@@ -77,7 +77,7 @@ describe('chainInfo', () => {
     expect(chainInfo(31337)).toMatchObject({ key: 'localnet', name: 'Localnet', explorerUrl: null, testnet: true });
   });
 
-  it('refuses any other chain, saying Elymum runs on Robinhood Chain only', () => {
+  it('refuses any other chain, saying Coinnibal runs on Robinhood Chain only', () => {
     for (const bad of [1, 99801, 555, 0, -1, 1.5, Number.NaN, 2 ** 60]) expect(() => chainInfo(bad), String(bad)).toThrow(/Robinhood Chain/);
   });
 

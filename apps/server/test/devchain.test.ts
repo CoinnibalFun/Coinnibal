@@ -2,7 +2,7 @@ import type { AddressInfo } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { profitFee } from '@elymum/shared';
+import { profitFee } from '@coinnibal/shared';
 import { createChain, dataFileNames } from '../src/chain';
 import { DevFakeChain } from '../src/chain/dev-fake';
 import { NullChain, type SettledEvent } from '../src/chain/types';

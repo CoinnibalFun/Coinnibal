@@ -2,18 +2,24 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {ElymumArena} from "../contracts/ElymumArena.sol";
-import {ElymumNFT} from "../contracts/ElymumNFT.sol";
+import {CoinnibalArena} from "../contracts/CoinnibalArena.sol";
+import {JoinPermits} from "./JoinPermits.sol";
+import {CoinnibalNFT} from "../contracts/CoinnibalNFT.sol";
 import {MockERC20} from "../contracts/test/MockTokens.sol";
 
 /// @notice Findings of the mainnet economic audit (apps/server/test/mainnet-econ-sim.ts). Each test states the
-///         behaviour the audit asks for and FAILS on the current ElymumArena v3. They run only with
-///         `ELYMUM_ECON_FINDINGS=true` (the `test:econ-findings` script of this package), so the normal
+///         behaviour the audit asks for and FAILS on the current CoinnibalArena v3. They run only with
+///         `COINNIBAL_ECON_FINDINGS=true` (the `test:econ-findings` script of this package), so the normal
 ///         suite stays green until a fix lands; without it each test returns at once.
-contract ElymumArenaEconFindingsTest is Test {
-    ElymumArena internal arena;
+contract CoinnibalArenaEconFindingsTest is Test {
+    /// @dev The game server's join permit (signed with the "server" test key) for `player` in `arenaId`, now.
+    function _permit(CoinnibalArena a, address player, uint16 arenaId) internal view returns (JoinPermits.Permit memory) {
+        return JoinPermits.permit(a, JoinPermits.keyOf("server"), player, arenaId);
+    }
+
+    CoinnibalArena internal arena;
     MockERC20 internal token;
-    ElymumNFT internal nft;
+    CoinnibalNFT internal nft;
 
     address internal admin = makeAddr("admin");
     address internal server = makeAddr("server");
@@ -27,14 +33,14 @@ contract ElymumArenaEconFindingsTest is Test {
     uint128 internal constant FEE = 10_000 ether;
 
     function _on() internal view returns (bool) {
-        return vm.envOr("ELYMUM_ECON_FINDINGS", false);
+        return vm.envOr("COINNIBAL_ECON_FINDINGS", false);
     }
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        token = new MockERC20("Elymum", "ELYMUM", 18);
-        arena = new ElymumArena(admin, server, feeWallet);
-        nft = new ElymumNFT(admin, 10_000, 0.0003 ether, 2, 3, "https://x/api/nft/", admin);
+        token = new MockERC20("Coinnibal", "COINNIBAL", 18);
+        arena = new CoinnibalArena(admin, server, feeWallet);
+        nft = new CoinnibalNFT(admin, 10_000, 0.0003 ether, 2, 3, "https://x/api/nft/", admin);
         vm.startPrank(admin);
         arena.setToken(address(token));
         arena.createArena(OPEN, FEE, 300);
@@ -58,21 +64,24 @@ contract ElymumArenaEconFindingsTest is Test {
     ///      refused while the first one's ticket is open.
     function test_oneEmblemSeatsOnlyOneHolderTicketAtATime() public {
         if (!_on()) return;
+        JoinPermits.Permit memory pm1 = _permit(arena, alice, HOLDERS);
         vm.prank(alice);
-        arena.join(HOLDERS);
+        arena.join(HOLDERS, pm1.deadline, pm1.sig);
         vm.prank(alice);
         nft.transferFrom(alice, bob, 1);
+        JoinPermits.Permit memory pm2 = _permit(arena, bob, HOLDERS);
         vm.prank(bob);
-        arena.join(HOLDERS); // today: accepted, at the holder pair
+        arena.join(HOLDERS, pm2.deadline, pm2.sig); // today: accepted, at the holder pair
         vm.prank(bob);
         nft.transferFrom(bob, carol, 1);
+        JoinPermits.Permit memory pm3 = _permit(arena, carol, OPEN);
         vm.prank(carol);
-        arena.join(OPEN); // today: the open arena at the holder pair too
+        arena.join(OPEN, pm3.deadline, pm3.sig); // today: the open arena at the holder pair too
         uint256 holderTickets;
         address[3] memory ps = [alice, bob, carol];
         uint16[3] memory ids = [HOLDERS, HOLDERS, OPEN];
         for (uint256 i; i < 3; ++i) {
-            ElymumArena.SessionView memory s = arena.getSession(ids[i], ps[i]);
+            CoinnibalArena.SessionView memory s = arena.getSession(ids[i], ps[i]);
             if (s.id != 0 && s.burnBps == 800 && s.vaultBps == 200) holderTickets++;
         }
         assertEq(holderTickets, 1, "one emblem gave holder tickets to several wallets at once");
@@ -84,17 +93,19 @@ contract ElymumArenaEconFindingsTest is Test {
     ///      own entry: the round is unwound in favour of the loser. Wanted: the winner is paid what the game says.
     function test_loserRefundAfter24hDoesNotTakeTheWinnersPayout() public {
         if (!_on()) return;
+        JoinPermits.Permit memory pm4 = _permit(arena, bob, OPEN);
         vm.prank(bob);
-        arena.join(OPEN);
+        arena.join(OPEN, pm4.deadline, pm4.sig);
+        JoinPermits.Permit memory pm5 = _permit(arena, carol, OPEN);
         vm.prank(carol);
-        arena.join(OPEN);
+        arena.join(OPEN, pm5.deadline, pm5.sig);
         uint64 bobId = arena.getSession(OPEN, bob).id;
         // in play: bob ate carol (bob's coin is worth 2 tickets, carol's 0); the server is down for a day
         vm.warp(block.timestamp + 24 hours + 1);
         vm.prank(carol);
         arena.refund(OPEN); // carol, the loser, takes back her entry fee
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](1);
-        items[0] = ElymumArena.Settlement(OPEN, bob, bobId, 2 * FEE);
+        CoinnibalArena.Settlement[] memory items = new CoinnibalArena.Settlement[](1);
+        items[0] = CoinnibalArena.Settlement(OPEN, bob, bobId, 2 * FEE);
         uint256 before = token.balanceOf(bob);
         vm.prank(server);
         arena.settle(items);

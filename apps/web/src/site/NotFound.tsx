@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { PlateLabel, useReducedMotion } from '../design';
 import { useT } from '../i18n';
 import { T } from '../i18n/rich';
@@ -92,10 +92,9 @@ export function NotFound({ path: normal }: { path: string }) {
   const path = typeof location !== 'undefined' ? location.pathname : normal;
   return (
     <SitePage className="nf-root">
-      <PlateLabel numeral="404" title={t('site.nf.plate')} aside={path} />
+      <PlateLabel numeral="404" title={t('site.nf.plate')} />
       <section className="nf" aria-labelledby="nf-title">
         <div className="nf__copy">
-          <p className="kicker">{t('site.nf.kicker')}</p>
           <h1 className="nf__title" id="nf-title">
             {t('site.nf.title')}
           </h1>

@@ -5,7 +5,7 @@
  *
  *   node --import tsx scripts/bench/snapshot-bench.ts [viewers=40] [players=80] [seconds=10]
  */
-import { BinaryWriter, MAP_SPACE, TICK_MS, VIEW, viewSize, worldForSide, writeSnapshot } from '@elymum/shared';
+import { BinaryWriter, MAP_SPACE, TICK_MS, VIEW, viewSize, worldForSide, writeSnapshot } from '@coinnibal/shared';
 import { mulberry32 } from '../../src/game/rng';
 import { World } from '../../src/game/world';
 import { ViewState } from '../../src/rooms/visibility';

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Button, Kb, PlateLabel, Seigaiha, Skeleton } from '../../design';
-import { useT } from '../../i18n';
+import { activeChain } from '@coinnibal/shared';
+import { plainChainName, useT } from '../../i18n';
 import { SitePage } from '../Shell';
 import { EmblemPanel, MintSky, MintTrack } from './MintArt';
 import { MintHeadline } from './MintHeadline';
@@ -17,7 +18,7 @@ export function NightPlate({ children, className }: { children: ReactNode; class
   const t = useT();
   return (
     <>
-      <PlateLabel numeral="II" title={t('ld.nft.plate')} aside="/mint" className="mt-platelabel" />
+      <PlateLabel numeral="II" title={t('ld.nft.plate')} className="mt-platelabel" />
       <Kb theme="night" className={`mt-night${className ? ` ${className}` : ''}`}>
         <MintSky />
         {children}
@@ -36,7 +37,7 @@ export function MintSkeleton() {
     <NightPlate>
       <div className="mt-wrap mt-page" data-loading="">
         <div className="mt-copy">
-          <span className="kicker mt-kicker">{t('mn.kicker')}</span>
+          <span className="kicker mt-kicker">{t('mn.kicker', { chain: plainChainName(activeChain().name) })}</span>
           <MintHeadline story="plain" price={null} />
           <MintTrack at="mint" />
           <p className="mt-limits num mt-skel-text">{t('mn.limits', { wl: '?', pub: '?' })}</p>

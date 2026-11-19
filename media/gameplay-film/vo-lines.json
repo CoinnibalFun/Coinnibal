@@ -11,7 +11,7 @@
  },
  {
   "id": "what_a",
-  "text": "This is Elymum. || Coins eat coins, | on Elysium's ring.",
+  "text": "This is Coinnibal. || Coins eat coins, | on Elysium's ring.",
   "speed": 0.96
  },
  {
@@ -26,7 +26,7 @@
  },
  {
   "id": "flow",
-  "text": "Getting in is short. || Join the WL. | Mint your Elymum NFT, | one dollar in HYPE. || Then play.",
+  "text": "Getting in is short. || Join the WL. | Mint your Coinnibal NFT, | one dollar in HYPE. || Then play.",
   "speed": 1.02
  },
  {
@@ -81,8 +81,8 @@
  },
  {
   "id": "close",
-  "text": "Elymum. || Join the WL. | Follow *@elymumio.* || And bring an appetite.",
-  "pronunciation": "@elymumio = at elymum eye-oh",
+  "text": "Coinnibal. || Join the WL. | Follow *@coinnibalfun.* || And bring an appetite.",
+  "pronunciation": "@coinnibalfun = at coinnibal fun",
   "speed": 0.94
  }
 ]

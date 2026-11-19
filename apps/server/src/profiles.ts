@@ -14,7 +14,7 @@ import {
   type ProfileSummary,
   type AdminAvatarEntry,
   type ProfileView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { getAddress } from 'viem';
 
 /** Profile names: 1 to 16 characters and at most 32 UTF-8 bytes after `sanitizeName`. */
@@ -184,7 +184,7 @@ export class ProfileStore {
   }
 
   /**
-   * `PUT /api/profile`: validates and stores the name and skin. `emblem`: the wallet holds an Elymum
+   * `PUT /api/profile`: validates and stores the name and skin. `emblem`: the wallet holds a Coinnibal
    * emblem (the caller checked on chain), so `EMBLEM_SKIN_ID` may be picked too.
    */
   update(wallet: string, body: { name?: unknown; skin?: unknown; country?: unknown; flagSkin?: unknown }, opts: { emblem?: boolean } = {}): ProfileView {
@@ -195,7 +195,7 @@ export class ProfileStore {
     if (name.length === 0) throw new ProfileError('name', 'name is required');
     if ([...name].length > MAX_NAME_LENGTH || utf8Length(name) > PROFILE_NAME_MAX_BYTES) throw new ProfileError('name', `name is longer than ${MAX_NAME_LENGTH} characters`);
     if (body.skin === EMBLEM_SKIN_ID) {
-      if (!opts.emblem) throw new ProfileError('skin', 'the emblem skin is for Coinnibal NFT holders');
+      if (!opts.emblem) throw new ProfileError('skin', 'the NFT skin is for Coinnibal NFT holders');
     } else if (typeof body.skin !== 'number' || !isBasicSkin(body.skin)) throw new ProfileError('skin', 'that skin cannot be picked');
     // the country: an allowlisted ISO 3166-1 alpha-2 code exactly, or null for no flag; absent keeps the saved one
     if (body.country !== undefined && body.country !== null && !isCountryCode(body.country)) throw new ProfileError('country', 'that country cannot be picked');

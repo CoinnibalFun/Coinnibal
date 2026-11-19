@@ -1,15 +1,16 @@
-import { GAS_SYMBOL } from '@elymum/shared';
-import { planDefaultArenas, parseAddressInput, parseGasInput, parseIntInput, AdminInputError, type StatusSnapshot } from '@elymum/sdk/ops';
-import type { DeployArenaArgs, DeployNftArgs } from '@elymum/sdk';
+import { GAS_SYMBOL, NFT_SUPPLY } from '@coinnibal/shared';
+import { planDefaultArenas, parseAddressInput, parseGasInput, parseIntInput, AdminInputError, type StatusSnapshot } from '@coinnibal/sdk/ops';
+import type { DeployArenaArgs, DeployNftArgs } from '@coinnibal/sdk';
 import { formatEther, getAddress, type Address, type Hash } from 'viem';
 import type { AdminNetwork } from './net';
+import { storageKey } from '../storageKey';
 
 /**
- * The deploy wizard of `/admin → Deploy` (spec section 5), as pure functions: connect the owner
+ * The deploy wizard of `/admin → Setup` (spec section 5), as pure functions: connect the owner
  * wallet → check the chain → deploy the arena → deploy the NFT → register both with the server →
  * set the game token → create the default arenas. TestToken deploy + faucet are offered off
  * mainnet only. What was deployed from this browser but not registered yet is remembered locally
- * (`elymum.admin.deploy.v1`, per chain), so a failed registration can be retried.
+ * (`coinnibal.admin.deploy.v1`, per chain), so a failed registration can be retried.
  */
 export type DeployStepId = 'connect' | 'chain' | 'arena' | 'nft' | 'register' | 'token' | 'arenas';
 export type StepState = 'done' | 'active' | 'todo';
@@ -27,7 +28,7 @@ export interface LocalDeploy {
 }
 export type LocalDeploys = Partial<Record<'arena' | 'nft' | 'token', LocalDeploy>>;
 
-const KEY = 'elymum.admin.deploy.v1';
+const KEY = storageKey('admin.deploy.v1');
 
 export function loadLocalDeploys(chainId: number | null | undefined): LocalDeploys {
   if (!chainId) return {};
@@ -84,10 +85,10 @@ export function deploySteps(w: WizardInput): DeployStep[] {
       done: target !== null && w.walletChainId === target,
       detail: target === null ? 'The game server reports no chain yet.' : w.walletChainId === target ? `Wallet on ${w.net.info!.name} (${target}).` : `Switch the wallet to ${w.net.info!.name} (${target}).`,
     },
-    { id: 'arena', label: 'Deploy ElymumArena', done: arenaOk, detail: w.net.arenaAddress ?? w.local.arena?.address ?? 'admin = you, server authority = the server key, fee wallet = you.' },
-    { id: 'nft', label: 'Deploy ElymumNFT', done: nftOk, detail: w.net.nftAddress ?? w.local.nft?.address ?? `Max supply 5,000, $1 in ${GAS_SYMBOL}, 1 allowlist / 2 public per wallet.` },
+    { id: 'arena', label: 'Deploy CoinnibalArena', done: arenaOk, detail: w.net.arenaAddress ?? w.local.arena?.address ?? 'admin = you, server authority = the server key, fee wallet = you.' },
+    { id: 'nft', label: 'Deploy CoinnibalNFT', done: nftOk, detail: w.net.nftAddress ?? w.local.nft?.address ?? `Max supply ${NFT_SUPPLY.toLocaleString('en-US')}, the server's mint price in ${GAS_SYMBOL} (MINT_USD_CENTS), 1 allowlist / 2 public per wallet.` },
     { id: 'register', label: 'Register both with the server', done: registered, detail: registered ? 'The server checked the code hash, the owner and the server authority.' : 'POST /api/admin/contracts for each.' },
-    { id: 'token', label: 'Set the game token', done: tokenSet, detail: cfg?.token ?? 'The registered token, confirmed once (it can be set only once). Nothing to type.' },
+    { id: 'token', label: 'Set the game token', done: tokenSet, detail: cfg?.token ?? (w.net.mainnet ? 'The game token launched on Pons, entered by hand and typed twice (it can be set only once).' : 'The registered TestToken, confirmed once (it can be set only once).') },
     { id: 'arenas', label: 'Create the four arenas', done: tokenSet && arenasLeft === 0, detail: tokenSet ? (arenasLeft === 0 ? 'All four default arenas exist.' : `${arenasLeft} to create.`) : 'Needs the token.' },
   ];
   let activeSeen = false;
@@ -104,7 +105,7 @@ export function deploySteps(w: WizardInput): DeployStep[] {
 /** The active step (null when everything is done). */
 export const activeStep = (steps: readonly DeployStep[]): DeployStepId | null => steps.find((s) => s.state === 'active')?.id ?? null;
 
-/** `ElymumArena` constructor arguments: admin = fee wallet = the connected wallet, server authority = the server's key. */
+/** `CoinnibalArena` constructor arguments: admin = fee wallet = the connected wallet, server authority = the server's key. */
 export function arenaDeployArgs(me: Address | null, serverKey: string | null | undefined): DeployArenaArgs {
   if (!me) throw new AdminInputError('Connect the owner wallet first.');
   if (!serverKey) throw new AdminInputError('The game server publishes no server key (serverKey), so the arena would have no settler. Fix the server first.');
@@ -121,10 +122,10 @@ export interface NftForm {
   treasury: string;
 }
 
-/** The deploy form's defaults: 5,000 tokens, the $1 price from `/api/admin/mint/price`, 1 WL / 2 public, `${origin}/api/nft/`, treasury = you. */
+/** The deploy form's defaults: the owner's fixed supply (`NFT_SUPPLY`, 3,333 tokens), the server's mint price from `/api/admin/mint/price` (`MINT_USD_CENTS`), 1 WL / 2 public, `${origin}/api/nft/`, treasury = you. */
 export function defaultNftForm(origin: string, priceWei: string | null | undefined, me: Address | null): NftForm {
   return {
-    maxSupply: '5000',
+    maxSupply: String(NFT_SUPPLY),
     priceGas: priceWei ? formatEther(BigInt(priceWei)) : '',
     wlLimit: '1',
     publicLimit: '2',
@@ -136,7 +137,7 @@ export function defaultNftForm(origin: string, priceWei: string | null | undefin
 /** Parses the NFT deploy form (throws `AdminInputError` naming the field). */
 export function nftDeployArgs(form: NftForm, me: Address | null): DeployNftArgs {
   if (!me) throw new AdminInputError('Connect the owner wallet first.');
-  if (!form.priceGas.trim()) throw new AdminInputError(`Mint price: enter a price in ${GAS_SYMBOL} (the $1 price could not be read).`);
+  if (!form.priceGas.trim()) throw new AdminInputError(`Mint price: enter a price in ${GAS_SYMBOL} (the server's mint price could not be read).`);
   const baseURI = form.baseURI.trim();
   if (!/^https?:\/\/\S+\/$/.test(baseURI)) throw new AdminInputError('Base URI: an http(s) URL ending with "/" (tokenURI = baseURI + id).');
   return {

@@ -1,4 +1,4 @@
-import { describeError } from '@elymum/sdk';
+import { describeError } from '@coinnibal/sdk';
 import { GameEngine } from '../game/engine';
 import { engine } from '../game/instance';
 import { t } from '../i18n';

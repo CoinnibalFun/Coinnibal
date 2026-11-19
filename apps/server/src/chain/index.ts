@@ -1,6 +1,6 @@
 import type { ServerConfig } from '../config';
 import type { Journal } from '../stake/journal';
-import { chainInfo } from '@elymum/shared';
+import { chainInfo } from '@coinnibal/shared';
 import { chainOverridesFor, type ContractsView } from './evm';
 import { NullChain, type ChainGateway } from './types';
 
@@ -28,7 +28,7 @@ export function dataFileNames(cfg: ServerConfig): { journal: string; leaderboard
 }
 
 /**
- * Picks the EVM gateway when `EVM_RPC_URL` and `SERVER_PRIVATE_KEY` are configured; the contract
+ * Picks the EVM gateway when `EVM_RPC_URL(S)` and `SERVER_PRIVATE_KEY` are configured; the contract
  * addresses may come later from the registry (the gateway then waits for contracts, practice only).
  * Otherwise the game runs practice only, without a chain.
  */
@@ -49,7 +49,9 @@ export async function createChain(
   const { rpcUrl, serverKey } = cfg.chain;
   const want = chainInfo(cfg.chain.chainId, chainOverridesFor(cfg));
   if (!rpcUrl || !serverKey) {
-    log(`chain: off (set EVM_RPC_URL and SERVER_PRIVATE_KEY to enable the arenas and the mint on ${want.name}) — practice only`);
+    log(
+      `chain: off (set SERVER_PRIVATE_KEY and the RPC: COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker) to enable the arenas and the mint on ${want.name} — practice only`,
+    );
     return new NullChain(want);
   }
   try {

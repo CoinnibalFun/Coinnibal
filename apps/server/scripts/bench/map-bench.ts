@@ -2,17 +2,17 @@
  * Dynamic map benchmark: CPU per tick of a full 100-player room (people with connections and
  * snapshots, plus bots) on the auto-sized map, against the same room on a fixed arena preset,
  * and the cost of the resizes themselves.
- *   pnpm -F @elymum/server exec tsx scripts/bench/map-bench.ts [players] [humans] [seconds]
+ *   pnpm -F @coinnibal/server exec tsx scripts/bench/map-bench.ts [players] [humans] [seconds]
  *
  * `rooms` mode: several quiet rooms side by side in one process (the usual production load: a
  * handful of rooms of ~12 players, mostly bots), all ticked every 33 ms, on the default model
  * (base 8000 + 40 per person) and on a small one (base 3000 + 60 per person).
- *   pnpm -F @elymum/server exec tsx scripts/bench/map-bench.ts rooms [rooms=6] [players=13] [humans=1] [seconds=20]
+ *   pnpm -F @coinnibal/server exec tsx scripts/bench/map-bench.ts rooms [rooms=6] [players=13] [humans=1] [seconds=20]
  *
  * The production server runs on a 0.5 CPU instance: a tick has 33 ms; read the numbers below
  * as roughly twice as slow there.
  */
-import { MAP_SCALE_DEFAULT, MAP_SPACE, TICK_MS, WORLD_PRESETS, worldForSide, type MapScaleSettings } from '@elymum/shared';
+import { MAP_SCALE_DEFAULT, MAP_SPACE, TICK_MS, WORLD_PRESETS, worldForSide, type MapScaleSettings } from '@coinnibal/shared';
 
 const SMALL: MapScaleSettings = { auto: true, base: 3000, perPlayer: 60, max: 9000 };
 import { World } from '../../src/game/world';

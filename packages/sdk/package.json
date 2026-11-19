@@ -1,9 +1,9 @@
 {
-  "name": "@elymum/sdk",
+  "name": "@coinnibal/sdk",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "TypeScript client (viem) + admin CLI for the Elymum contracts on Robinhood Chain",
+  "description": "TypeScript client (viem) + admin CLI for the Coinnibal contracts on Robinhood Chain",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
@@ -16,8 +16,8 @@
     "admin": "tsx src/admin.ts"
   },
   "dependencies": {
-    "@elymum/contracts": "workspace:*",
-    "@elymum/shared": "workspace:*",
+    "@coinnibal/contracts": "workspace:*",
+    "@coinnibal/shared": "workspace:*",
     "viem": "^2.57.13"
   },
   "devDependencies": {

@@ -17,7 +17,12 @@ export const SECRET_PROOF_TTL_MS = 10 * 60_000;
 const MAX_PER_WALLET = 4;
 
 /** The HTTP header that carries a proof: base64url of `{"message": "...", "signature": "0x..."}`. */
-export const SECRET_PROOF_HEADER = 'x-elymum-proof';
+export const SECRET_PROOF_HEADER = 'x-coinnibal-proof';
+/**
+ * The same header under the project's name before the rename (Elymum, November 2026), still read when the new one is
+ * absent: an install.sh / restore.sh copied before the rename sends it. The proof is checked the same way.
+ */
+export const OLD_SECRET_PROOF_HEADER = 'x-elymum-proof';
 
 interface Challenge {
   wallet: string;
@@ -35,7 +40,7 @@ export class SecretProofError extends Error {}
  * Purpose-bound, single-use owner signatures for the routes that hand out the server's secrets (the backup holds the
  * server key; the migration settings hold `SERVER_PRIVATE_KEY` and `AUTH_SECRET`). A session token alone (it sits in
  * the browser's storage) never opens them: the admin asks for a challenge (`issue`), signs its text with the admin
- * wallet (`personal_sign`), and sends `{message, signature}` in the `X-Elymum-Proof` header. The challenge names the
+ * wallet (`personal_sign`), and sends `{message, signature}` in the `X-Coinnibal-Proof` header. The challenge names the
  * purpose, the wallet, this server and the chain, expires after 10 minutes and opens each of its routes once.
  */
 export class SecretProofs {
@@ -72,15 +77,15 @@ export class SecretProofs {
    */
   async consume(header: string | string[] | undefined, wallet: string, route: SecretRoute, now = Date.now()): Promise<SecretPurpose> {
     if (typeof header !== 'string' || header.length === 0 || header.length > 8_000) {
-      throw new SecretProofError('This needs a fresh signature of the admin wallet: ask POST /api/admin/secret-proof for the text, sign it, and send it in the X-Elymum-Proof header.');
+      throw new SecretProofError('This needs a fresh signature of the admin wallet: ask POST /api/admin/secret-proof for the text, sign it, and send it in the X-Coinnibal-Proof header.');
     }
     let body: { message?: unknown; signature?: unknown };
     try {
       body = JSON.parse(Buffer.from(header, 'base64url').toString('utf8')) as typeof body;
     } catch {
-      throw new SecretProofError('X-Elymum-Proof is not base64url JSON {"message","signature"}.');
+      throw new SecretProofError('X-Coinnibal-Proof is not base64url JSON {"message","signature"}.');
     }
-    if (typeof body.message !== 'string' || typeof body.signature !== 'string') throw new SecretProofError('X-Elymum-Proof needs "message" and "signature".');
+    if (typeof body.message !== 'string' || typeof body.signature !== 'string') throw new SecretProofError('X-Coinnibal-Proof needs "message" and "signature".');
     const nonce = /^Nonce: ([0-9a-f]{32})$/m.exec(body.message)?.[1];
     const c = nonce ? this.open.get(nonce) : undefined;
     if (!c || c.message !== body.message) throw new SecretProofError('Unknown or already used signature request: ask for a new one.');

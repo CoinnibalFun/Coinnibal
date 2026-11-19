@@ -1,3 +1,4 @@
+import { RULES } from '@coinnibal/shared';
 import { useEffect, type ReactNode } from 'react';
 import { Button, CoinCharacter, FoodBit, Sheet } from '../../design';
 import { briefSeen, closeBrief, openBrief, useBrief } from '../../game/brief';
@@ -87,7 +88,7 @@ export function FirstPlayBrief() {
             </>
           }
         >
-          {t('brief.eat.text')}
+          {t('brief.eat.text', { r: RULES.eatRatio })}
         </Step>
         <Step
           n={3}

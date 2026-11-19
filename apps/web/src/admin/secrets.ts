@@ -17,7 +17,7 @@ export function walletProofSigner(): ProofSigner {
 
 /**
  * The secret exports (backup, migration settings) need a fresh, purpose-bound signature of the admin wallet besides the
- * session: ask the server for the text, sign it, and send it as `X-Elymum-Proof`. A `proof_required` answer (the proof
+ * session: ask the server for the text, sign it, and send it as `X-Coinnibal-Proof`. A `proof_required` answer (the proof
  * expired or was used already) asks for one new signature, once.
  */
 export async function withSecretProof<T>(api: AdminApi, purpose: SecretPurpose, sign: ProofSigner, run: (proof: string) => Promise<T>): Promise<T> {

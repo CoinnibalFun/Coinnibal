@@ -1,5 +1,7 @@
+# The file name (elymum-*) is the live server's installed unit name, kept from before the rename
+# (deploy/vps/lib.sh): a new name would install a second timer next to the running one.
 [Unit]
-Description=Elymum: check for a new commit every 2 minutes
+Description=Coinnibal: check for a new commit every 2 minutes
 
 [Timer]
 OnBootSec=3min

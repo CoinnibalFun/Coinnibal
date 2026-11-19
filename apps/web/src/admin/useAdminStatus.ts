@@ -1,4 +1,4 @@
-import { fetchStatus, type StatusSnapshot } from '@elymum/sdk/ops';
+import { fetchStatus, type StatusSnapshot } from '@coinnibal/sdk/ops';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Address, PublicClient } from 'viem';
 import type { AdminNetwork } from './net';

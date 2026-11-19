@@ -1,4 +1,4 @@
-import type { FeeRates } from '@elymum/shared';
+import type { FeeRates } from '@coinnibal/shared';
 
 export interface ArenaEntry {
   pid: number;

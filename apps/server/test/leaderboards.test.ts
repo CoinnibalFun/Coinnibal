@@ -9,7 +9,7 @@ const rec = (name: string, score: number, at = NOW): LbRecord => ({ name, score,
 
 describe('leaderboards: epochs and the reset', () => {
   it('a file from an older epoch (or none) is backed up and the boards start empty, once', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-lb-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-lb-'));
     const path = join(dir, 'leaderboards.json');
     // written before epochs existed
     writeFileSync(path, JSON.stringify({ day: '2026-11-02', daily: [rec('Old', 500)], allTime: [rec('Old', 500), rec('Older', 400)] }));
@@ -36,7 +36,7 @@ describe('leaderboards: epochs and the reset', () => {
   });
 
   it('reset clears both boards, writes at once and keeps a backup with the unflushed records', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-lb-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-lb-'));
     const path = join(dir, 'leaderboards.json');
     const lb = new Leaderboards(path, NOW);
     lb.submit(rec('A', 100));
@@ -60,7 +60,7 @@ describe('leaderboards: the last rounds', () => {
   const row = (name: string, value: number, isBot = false) => ({ name, value, skin: 1, ...(isBot ? { isBot: true } : {}) });
 
   it('keeps each bell newest first, merges instances of one arena, and survives a restart', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-rounds-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-rounds-'));
     const path = join(dir, 'lb.json');
     const lb = new Leaderboards(path);
     lb.roundOver({ n: 10, endedAt: 1000, arenaId: 1, entryFee: 50, players: 2, top: [row('ann', 120), row('bo', 30, true)] });

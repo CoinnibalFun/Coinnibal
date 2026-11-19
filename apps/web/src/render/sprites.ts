@@ -1,6 +1,6 @@
 import { lookForSkin } from './looks';
-import { CARD_PAPER, ELYSIUM, INK, SHADE, drawCoinInterior, heartPath, lookForBasicSkin, shadeOf, starPath, type CoinInterior, type CoinLook } from '@elymum/art';
-import { PowerUpType } from '@elymum/shared';
+import { CARD_PAPER, ELYSIUM, INK, SHADE, drawCoinInterior, heartPath, lookForBasicSkin, shadeOf, starPath, type CoinInterior, type CoinLook } from '@coinnibal/art';
+import { PowerUpType } from '@coinnibal/shared';
 
 const TAU = Math.PI * 2;
 const P = ELYSIUM;

@@ -17,7 +17,7 @@
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  font-size: clamp(36px, 5vw, 60px);
+  font-size: clamp(36px, 4.6vw, 56px);
   line-height: 1.02;
   letter-spacing: -0.02em;
 }
@@ -30,8 +30,11 @@
   color: var(--ink-2);
 }
 .nf__path {
-  /* the path exactly as typed (paths are case-sensitive): no mono capitals; a long one breaks with its sticker edges on
-     every line */
+  /* the path exactly as typed (paths are case-sensitive): no mono capitals; one chip, a long path wraps inside it */
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+  vertical-align: baseline;
   margin-right: 2px;
   padding: 1px 6px;
   font-size: 0.88em;
@@ -42,13 +45,6 @@
   border: var(--stroke-sm) solid var(--outline);
   border-radius: 6px;
   overflow-wrap: anywhere;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-}
-/* the title strip echoes the path as typed too */
-.nf-root .kb-plate__aside {
-  text-transform: none;
-  letter-spacing: 0.02em;
 }
 .nf__ctas {
   display: flex;

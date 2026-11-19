@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { invalidAdminWallets, loadConfig, parseAdminWallets, parseRoundConfig } from '../src/config';
 
-describe('Elymum config', () => {
+describe('Coinnibal config', () => {
   it('has no Pass power, marketplace links or fake Pass collection any more', () => {
     const cfg = loadConfig({ PASS_START_MASS_MUL: '1.3', MARKET_URL_OPENSEA: 'https://opensea.io/x', DEV_FAKE_PASS: 'revealed' });
     expect('pass' in cfg).toBe(false);
@@ -63,8 +63,9 @@ describe('chain env (EVM)', () => {
     const cfg = loadConfig({} as NodeJS.ProcessEnv);
     expect(cfg.chain).toMatchObject({ rpcUrl: null, publicRpcUrl: null, serverKey: null, arenaAddress: null, nftAddress: null, tokenSymbol: 'tokens' });
     expect(cfg.mint).toEqual({ usdCents: 100, gasPriceUrl: 'https://api.hyperliquid.xyz/info' });
-    expect(cfg.nft).toEqual({ size: 5000, seed: null, style: 'vector' });
-    expect(loadConfig({ NFT_ART_STYLE: 'pixel', NFT_COLLECTION_SIZE: '3333', NFT_COLLECTION_SEED: ' 0xabc ' } as NodeJS.ProcessEnv).nft).toEqual({ size: 3333, seed: '0xabc', style: 'pixel' });
+    // the owner's fixed supply (3,333), the same as the NFT contract's max supply at deploy
+    expect(cfg.nft).toEqual({ size: 3333, seed: null, style: 'vector' });
+    expect(loadConfig({ NFT_ART_STYLE: 'pixel', NFT_COLLECTION_SIZE: '500', NFT_COLLECTION_SEED: ' 0xabc ' } as NodeJS.ProcessEnv).nft).toEqual({ size: 500, seed: '0xabc', style: 'pixel' });
     expect(loadConfig({ NFT_ART_STYLE: 'oil' } as NodeJS.ProcessEnv).nft.style).toBe('vector');
     expect(cfg.gameAccess).toBeNull();
     // the project's X handle: unset is the shared default; X_HANDLE moves it (e.g. to another account)
@@ -136,7 +137,7 @@ describe('auth secret without AUTH_SECRET', () => {
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
     const { persistedAuthSecret } = await import('../src/config');
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-secret-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-secret-'));
     const a = persistedAuthSecret(dir);
     const b = persistedAuthSecret(dir);
     expect(a.equals(b)).toBe(true);

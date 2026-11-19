@@ -1,6 +1,8 @@
-import type { PublicWlTask, WlEntryPublic } from '@elymum/shared';
+import type { PublicWlTask, WlEntryPublic } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { SiteApp } from '../src/site/mount';
+import { navigate } from '../src/site/router';
 import { useSession } from '../src/site/session';
 import { resetSiteSettings } from '../src/site/settings';
 import { buildSteps, stepError, submitBody } from '../src/site/wl/steps';
@@ -12,10 +14,10 @@ const POST = 'https://x.com/riso_rita/status/1849000000000000001';
 
 const TASKS: PublicWlTask[] = [
   { id: 'follow_x', kind: 'follow_x', title: 'Follow @coinnibalfun', body: 'Follow us.', target: 'https://x.com/coinnibalfun', required: true, available: true },
-  { id: 'post_x', kind: 'post_x', title: 'Post about Elymum on X', body: 'Post and paste the link.', target: null, required: true, available: true },
+  { id: 'post_x', kind: 'post_x', title: 'Post about Coinnibal on X', body: 'Post and paste the link.', target: null, required: true, available: true },
   { id: 'engage_launch', kind: 'engage_x', title: 'Like, repost and reply', body: '', target: null, required: false, available: false },
-  { id: 't_join', kind: 'join_link', title: 'Join the Discord', body: '', target: 'https://discord.gg/elymum', required: true, available: true },
-  { id: 't_text', kind: 'text', title: 'Why Elymum?', body: '', target: null, required: false, available: true },
+  { id: 't_join', kind: 'join_link', title: 'Join the Discord', body: '', target: 'https://discord.gg/coinnibal', required: true, available: true },
+  { id: 't_text', kind: 'text', title: 'Why Coinnibal?', body: '', target: null, required: false, available: true },
   { id: 'x_handle', kind: 'text', title: 'Your X handle', body: 'The account you used.', target: null, required: true, available: true },
   { id: 'wallet', kind: 'wallet', title: 'Your EVM wallet', body: 'Sign in.', target: null, required: true, available: true },
 ];
@@ -74,8 +76,10 @@ describe('/wl', { timeout: 30_000 }, () => {
     }));
     render(<WlPage />);
     await screen.findByRole('heading', { name: 'Join the WL in 7 steps.' });
+    // the way back to an earlier entry: the same plain sentence as on the closed WL
+    expect(screen.getByRole('button', { name: 'Sign in to see an earlier entry' })).toBeTruthy();
     // every kind renders its step
-    for (const t of ['Your X handle', 'Follow @coinnibalfun', 'Post about Elymum on X', 'Like, repost and reply', 'Join the Discord', 'Why Elymum?', 'Your EVM wallet']) expect(screen.getAllByText(t).length).toBeGreaterThan(0);
+    for (const t of ['Your X handle', 'Follow @coinnibalfun', 'Post about Coinnibal on X', 'Like, repost and reply', 'Join the Discord', 'Why Coinnibal?', 'Your EVM wallet']) expect(screen.getAllByText(t).length).toBeGreaterThan(0);
 
     const next = () => fireEvent.click(within(document.querySelector<HTMLElement>('.wl-step.is-active')!).getByRole('button', { name: /^(Next|Skip for now)$/ }));
     fireEvent.change(screen.getByLabelText('Your X handle'), { target: { value: 'bad handle!' } });
@@ -100,7 +104,7 @@ describe('/wl', { timeout: 30_000 }, () => {
     expect(screen.getByText('Opens when the post is live.')).toBeTruthy();
     next();
     // join link
-    expect(screen.getByRole('link', { name: /Open the invite/ }).getAttribute('href')).toBe('https://discord.gg/elymum');
+    expect(screen.getByRole('link', { name: /Open the invite/ }).getAttribute('href')).toBe('https://discord.gg/coinnibal');
     fireEvent.click(screen.getByRole('button', { name: 'I joined' }));
     next();
     // optional text
@@ -148,26 +152,51 @@ describe('/wl', { timeout: 30_000 }, () => {
     expect(screen.getByTestId('wl-status').textContent).toBe(status);
   });
 
-  it('when the WL is off: the site\'s shared closed notice (guide, home, X), the tab says so, and an earlier applicant can still sign in', async () => {
+  it('when the WL is off: the site\'s shared closed notice (guide, home, X), and an earlier applicant can still sign in', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: { ...SETTINGS, wlOpen: false } }, 'GET /api/site/tasks': { tasks: TASKS } }));
-    document.title = 'WL · Coinnibal';
-    const view = render(<WlPage />);
+    render(<WlPage />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Not open yet.' })).toBeTruthy();
     expect(screen.getByTestId('closed-page')).toBeTruthy();
-    expect(screen.getByText('This is where you will join the WL. The guide explains how the game works.')).toBeTruthy();
+    // "WL" is defined once, in plain words
+    expect(screen.getByText('This is where you will join the WL (the whitelist). People on the WL can mint the NFT before everyone else. The guide explains how the game works.')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Read the guide/ }).getAttribute('href')).toBe('/docs');
     expect(screen.getByRole('link', { name: /Back to home/ }).getAttribute('href')).toBe('/');
     expect(screen.getAllByRole('link', { name: /@coinnibalfun/ })[0].getAttribute('href')).toBe('https://x.com/coinnibalfun');
-    expect(document.title).toBe('Not open yet · Coinnibal');
-    // the sign-in (and its "install a wallet" line) only after a click on "Applied before?"
+    // the sign-in (and its "install a wallet" line) only after a click on "Sign in to see an earlier entry"
     expect(document.body.textContent).not.toMatch(/MetaMask|No browser wallet/);
-    const again = screen.getByRole('button', { name: 'Applied before? Sign in' });
+    const again = screen.getByRole('button', { name: 'Sign in to see an earlier entry' });
     expect(again.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(again);
     expect(again.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Sign in with the wallet you applied with to see your status.')).toBeTruthy();
-    view.unmount();
-    expect(document.title).toBe('WL · Coinnibal');
+  });
+
+  it('the tab of a closed WL reads like every other closed page; an earlier applicant\'s status keeps "WL"', async () => {
+    const closed = { ...SETTINGS, wlOpen: false };
+    history.pushState(null, '', '/wl');
+    try {
+      ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: closed }, 'GET /api/site/tasks': { tasks: TASKS } }));
+      const view = render(<SiteApp />);
+      expect(await screen.findByRole('heading', { level: 1, name: 'Not open yet.' })).toBeTruthy();
+      // the settings landed after the page claimed its title: SiteApp's title effect ran again and kept the claim
+      await waitFor(() => expect(document.title).toBe('Not open yet · Coinnibal'));
+      // leaving the page drops the claim
+      act(() => navigate('/'));
+      await waitFor(() => expect(document.title).toBe('Coinnibal · Coins eating coins'));
+      view.unmount();
+      restore();
+
+      // the WL closed, but this wallet applied before: its status page, under the WL's own title
+      history.pushState(null, '', '/wl');
+      resetSiteSettings();
+      ({ restore } = mockFetch({ 'GET /api/site/settings': { settings: closed }, 'GET /api/site/tasks': { tasks: TASKS }, 'GET /api/site/wl': { entry: entry('pending') } }));
+      useSession.setState({ session: { address: WALLET, token: 'tok', admin: false } });
+      render(<SiteApp />);
+      expect(await screen.findByTestId('wl-status')).toBeTruthy();
+      await waitFor(() => expect(document.title).toBe('WL · Coinnibal'));
+    } finally {
+      history.pushState(null, '', '/');
+    }
   });
 
   it('the wallet step shows the full EVM address that goes on the list', async () => {

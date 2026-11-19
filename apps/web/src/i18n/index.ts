@@ -1,7 +1,8 @@
-import { SITE_X_HANDLE_DEFAULT, activeChain, isXHandle } from '@elymum/shared';
+import { SITE_X_HANDLE_DEFAULT, activeChain, isXHandle } from '@coinnibal/shared';
 import { useSyncExternalStore } from 'react';
 import { en } from './en';
 import { LOCALES, type Locale } from './locales/meta';
+import { storageKey } from '../storageKey';
 
 export { LOCALES, type Locale, type LocaleInfo } from './locales/meta';
 
@@ -10,7 +11,7 @@ export type TKey = keyof typeof en;
 export type Dict = Record<TKey, string>;
 export type TVars = Record<string, string | number>;
 
-const STORAGE_KEY = 'elymum.locale.v1';
+const STORAGE_KEY = storageKey('locale.v1');
 
 let current: Locale = 'en';
 let dict: Dict = en;
@@ -59,7 +60,7 @@ export const X_HANDLE_BUILD: string = (() => {
 /**
  * The placeholders every string may use without the caller passing them:
  * - `{chain}`, the name of the Robinhood Chain network the game runs on ("Robinhood Chain Testnet" now, "Robinhood
- *   Chain" at mainnet). It follows the active network (`setActiveChain` in `@elymum/shared`: `VITE_CHAIN_ID` at boot,
+ *   Chain" at mainnet). It follows the active network (`setActiveChain` in `@coinnibal/shared`: `VITE_CHAIN_ID` at boot,
  *   then the server's); `refreshChainText` re-renders on a change.
  * - `{ourX}`, the project's X handle with its `@` (`X_HANDLE_BUILD`, then the server's site setting once it is
  *   loaded: `setOurXHandle`).
@@ -126,9 +127,14 @@ function fnFor(k: string) {
 }
 const textKey = (): string => `${current}|${chainVars.chain}|${chainVars.ourX}`;
 
-/** React hook: `const t = useT(); t('lo.tab.play')`. Re-renders when the language or the chain changes. */
+/**
+ * React hook: `const t = useT(); t('lo.tab.play')`. Re-renders when the language or the chain changes.
+ * The server render and a browser hydrating it read the same key as the browser (the build's language, chain and
+ * handle, which the prerendered landing was rendered with): a different server answer made React re-render every
+ * component that uses `useT`, in one blocking task, right after it hydrated the landing (about 100 ms on a phone).
+ */
 export function useT(): (key: TKey, vars?: TVars) => string {
-  return fnFor(useSyncExternalStore(subscribe, textKey, () => 'en'));
+  return fnFor(useSyncExternalStore(subscribe, textKey, textKey));
 }
 
 export function useLocale(): Locale {

@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { motion } from 'motion/react';
 import type { ReactElement } from 'react';
 import { springs, useReducedMotion, type CoinPaint } from '../../design';

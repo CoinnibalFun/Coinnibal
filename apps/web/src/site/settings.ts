@@ -1,5 +1,5 @@
-import { SITE_SETTINGS_DEFAULT, type SiteSettings } from '@elymum/shared';
-import { useEffect, useState } from 'react';
+import { SITE_SETTINGS_DEFAULT, type SiteSettings } from '@coinnibal/shared';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { X_HANDLE_BUILD, setOurXHandle } from '../i18n';
 import { site } from './api';
 
@@ -8,8 +8,11 @@ import { site } from './api';
  * know the settings use `xProfile(settings.xHandle)`.
  */
 export const X_HANDLE = X_HANDLE_BUILD;
-/** The settings while loading or when the server is down: the defaults, with the build's X handle. */
-const FALLBACK: SiteSettings = { ...SITE_SETTINGS_DEFAULT, xHandle: X_HANDLE_BUILD };
+/**
+ * The settings while loading or when the server is down: the defaults, with the build's X handle. The prerendered
+ * landing is rendered with these (landing/prerender.tsx), and the server sends it only while its settings equal them.
+ */
+export const FALLBACK: SiteSettings = { ...SITE_SETTINGS_DEFAULT, xHandle: X_HANDLE_BUILD };
 export const X_URL = `https://x.com/${X_HANDLE}`;
 
 let cache: SiteSettings | null = null;
@@ -64,6 +67,24 @@ export function siteHost(): string {
   } catch {
     return '';
   }
+}
+
+/** The host index.html names (the build's `VITE_PUBLIC_URL`): what the prerendered landing prints before any script. */
+const BUILD_HOST = (() => {
+  try {
+    return new URL(String(import.meta.env.VITE_PUBLIC_URL ?? '')).host;
+  } catch {
+    return '';
+  }
+})();
+const unchanging = () => () => {};
+
+/**
+ * `siteHost()` for a render: the build's host in the server render and while a browser hydrates it (so the first
+ * client render equals the HTML), then the page's own.
+ */
+export function useSiteHost(): string {
+  return useSyncExternalStore(unchanging, siteHost, () => BUILD_HOST);
 }
 
 /** `0x1234…abcd` for an EVM address. */

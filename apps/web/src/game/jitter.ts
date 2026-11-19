@@ -1,4 +1,4 @@
-import { TICK_MS } from '@elymum/shared';
+import { TICK_MS } from '@coinnibal/shared';
 
 /**
  * The jitter buffer: snapshots are drawn on a steady timeline about `RENDER_DELAY_MS` behind the newest one, instead of

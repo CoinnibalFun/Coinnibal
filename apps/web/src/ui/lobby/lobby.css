@@ -1,7 +1,7 @@
 /* ─────────────────────── Ring Storybook · lobby, wallet & boarding ───────────────────────
  * The lobby is a page of the picture book (spec §6.9): a masthead with the
  * mark and page tabs, a plate caption, then the departures board of the four
- * Elysian arenas (cream boarding passes pinned to a night board) with the one
+ * rooms, $1 to $10 (cream boarding passes pinned to a night board) with the one
  * sun button under it; wide screens add the live window onto the floor (a
  * CSS mask cut through the page onto the game canvas) and the membership
  * sticker. Also here: the wallet sticker and sheet (wl-), the boarding
@@ -1078,15 +1078,28 @@
 .kl-root.is-mid .kl-wallet.is-off .kl-wallet__top {
   display: none;
 }
-/* small desktops: the kicker ("The arena · on Elysium") was cut to "The arena ·" by the tabs */
-@media (max-width: 1439px) {
+/* small desktops: the kicker ("Play · on Robinhood Chain Testnet") was cut to "Play ·" by the tabs (and the header
+   keys with Feedback need its room up to 1560 px) */
+@media (max-width: 1559px) {
   .kl-root.is-wide .kl-mast__kicker {
     display: none;
   }
 }
-/* translations of the kicker run longer ("Арена · в Elysium"): they need a wider window still */
-@media (max-width: 1599px) {
-  html:not(:lang(en)) .kl-root.is-wide .kl-mast__kicker {
+/* small desktops: the header keys sit closer, so the wallet keeps its one-line hint beside six keys */
+@media (max-width: 1439px) {
+  .kl-root.is-wide .kl-mast {
+    gap: 14px;
+  }
+  .kl-root.is-wide .kl-mast__right {
+    gap: 6px;
+  }
+  .kl-root.is-wide .kl-sections {
+    margin-left: 0;
+  }
+}
+/* below 1280 px the wordmark was squeezed and cut by the page tabs: the coin mark alone is the logo (as on tablets) */
+@media (max-width: 1279px) {
+  .kl-root.is-wide .kl-mast__word {
     display: none;
   }
 }
@@ -1310,39 +1323,6 @@
   .kl-wallet:active {
     transform: none;
   }
-}
-
-/* ── page heads (also the guide's) ────────────────────────────────────── */
-.pg-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  padding-bottom: 18px;
-  margin-bottom: 26px;
-  border-bottom: 2px dashed var(--rule);
-}
-.pg-head__text {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-.pg-head__kicker {
-  font-size: var(--t-label);
-  color: var(--teal-ink);
-}
-.pg-head__title {
-  font-size: var(--t-h1);
-  line-height: 0.98;
-}
-.pg-head__deck {
-  max-width: var(--measure);
-  font-size: var(--t-lede);
-  color: var(--ink-2);
-}
-.pg-head__aside {
-  flex: none;
 }
 
 /* ─────────────────────────── the wallet sheet ─────────────────────────── */

@@ -1,4 +1,4 @@
-import { MAP_GROW, encodeSnapshot, type SnapshotData } from '@elymum/shared';
+import { MAP_GROW, encodeSnapshot, type SnapshotData } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { Camera } from '../src/game/camera';
 import { ClientWorld } from '../src/game/state';

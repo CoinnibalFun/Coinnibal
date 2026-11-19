@@ -1,4 +1,4 @@
-import type { ProfileUpdate, ProfileView } from '@elymum/shared';
+import type { ProfileUpdate, ProfileView } from '@coinnibal/shared';
 import { SERVER } from '../config';
 import { serverText, t } from '../i18n';
 

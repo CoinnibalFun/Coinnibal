@@ -10,18 +10,18 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   // workspace packages ship TypeScript sources → bundle them; npm deps (viem, ws) stay external
-  noExternal: [/^@elymum\//],
+  noExternal: [/^@coinnibal\//],
   splitting: false,
   // a CommonJS dependency bundled through a workspace package would need `require`, `__filename` and
   // `__dirname`, which an ESM bundle does not have: define them so such a dependency never crashes the process
   banner: {
     js: [
-      "import { createRequire as __elymumCreateRequire } from 'node:module';",
-      "import { fileURLToPath as __elymumFileURLToPath } from 'node:url';",
-      "import { dirname as __elymumDirname } from 'node:path';",
-      'const require = __elymumCreateRequire(import.meta.url);',
-      'const __filename = __elymumFileURLToPath(import.meta.url);',
-      'const __dirname = __elymumDirname(__filename);',
+      "import { createRequire as __coinnibalCreateRequire } from 'node:module';",
+      "import { fileURLToPath as __coinnibalFileURLToPath } from 'node:url';",
+      "import { dirname as __coinnibalDirname } from 'node:path';",
+      'const require = __coinnibalCreateRequire(import.meta.url);',
+      'const __filename = __coinnibalFileURLToPath(import.meta.url);',
+      'const __dirname = __coinnibalDirname(__filename);',
     ].join('\n'),
   },
 });

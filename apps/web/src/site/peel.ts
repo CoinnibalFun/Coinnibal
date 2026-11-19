@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useReducedMotion } from '../design';
+import { isStaticEntrance } from './landing/hydrated';
 
 /**
  * Wordmark letters as stickers: point at a letter (or tap it) and it peels up off the page, wobbles
  * on its tape and slaps back down (site.css `.st-peel`). Works on any `.kb-wordmark` inside the
  * returned ref. The load hop plays first; after it the letters rest (`is-settled`) so a peel never
- * replays the entrance. Reduced motion: nothing peels.
+ * replays the entrance. The prerendered landing starts settled (no hop: its HTML shows the finished
+ * letters, landing/hydrated.ts). Reduced motion: nothing peels.
  */
 export function usePeelLetters<T extends HTMLElement>(): { ref: RefObject<T | null>; className: string } {
   const ref = useRef<T | null>(null);
   const reduced = useReducedMotion();
-  const [settled, setSettled] = useState(false);
+  const [settled, setSettled] = useState(isStaticEntrance);
   useEffect(() => {
+    if (isStaticEntrance()) return;
     const t = setTimeout(() => setSettled(true), 1100);
     return () => clearTimeout(t);
   }, []);

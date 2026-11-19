@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { PROTOCOL_VERSION, type CollabAdmin, type CollabPublic, type ServerMessage, type WlEntryAdmin, type WlEntryPublic } from '@elymum/shared';
+import { PROTOCOL_VERSION, type CollabAdmin, type CollabPublic, type ServerMessage, type WlEntryAdmin, type WlEntryPublic } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
@@ -30,7 +30,7 @@ interface Harness {
 }
 
 async function harness(env: Record<string, string> = {}, limits?: ConstructorParameters<typeof SiteApi>[3]): Promise<Harness> {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-site-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-site-'));
   const admin = wallet();
   const clock = { t: Date.now() };
   const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', ...env } as NodeJS.ProcessEnv);
@@ -193,6 +193,14 @@ describe('site API', () => {
       expect((await h.call('POST', '/api/site/collab', { body: collabBody('nobody') })).status).toBe(401);
     });
 
+    it('registering a contract without a chain names every cause and where to look (never "COINNIBAL_RPC_URLS is unset")', async () => {
+      const r = await h.call('POST', '/api/admin/contracts', { wallet: h.admin, body: { kind: 'arena', address: wallet() } });
+      expect(r.status).toBe(503);
+      expect(r.body.error).toBe('chain_off');
+      expect(r.body.message).toMatch(/its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid \(COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL\(S\) outside Docker; coinnibal-compose logs app shows why\)/);
+      expect(r.body.message).not.toMatch(/unset/);
+    });
+
     it('allows the site methods and the Authorization header over CORS', async () => {
       const res = await fetch(`http://127.0.0.1:${h.port}/api/site/wl`, { method: 'OPTIONS' });
       expect(res.status).toBe(204);
@@ -292,6 +300,7 @@ describe('site API', () => {
       await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { launchPostUrl: null, wlOpen: false } });
       const closed = await h.call('POST', '/api/site/wl', { wallet: wallet(), body: wlBody('carol') });
       expect([closed.status, closed.body.error]).toEqual([403, 'wl_closed']);
+      expect(closed.body.message).toBe('Applications are closed. Follow @coinnibalfun to hear when they open again.');
       await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { wlOpen: true } });
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { wlOpen: 'yes' } })).body.field).toBe('wlOpen');
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { bogus: 1 } })).body.field).toBe('bogus');
@@ -308,7 +317,7 @@ describe('site API', () => {
       expect([bad.status, bad.body.field]).toEqual([400, 'kind']);
       expect((await h.call('POST', '/api/admin/tasks', { wallet: a, body: { kind: 'text', title: '' } })).body.field).toBe('title');
       expect((await h.call('POST', '/api/admin/tasks', { wallet: a, body: { kind: 'join_link', title: 'Discord', target: 'javascript:alert(1)' } })).body.field).toBe('target');
-      const made = await h.call('POST', '/api/admin/tasks', { wallet: a, body: { kind: 'join_link', title: 'Join the Discord', target: 'https://discord.gg/elymum', required: false } });
+      const made = await h.call('POST', '/api/admin/tasks', { wallet: a, body: { kind: 'join_link', title: 'Join the Discord', target: 'https://discord.gg/coinnibal', required: false } });
       expect(made.status).toBe(201);
       const id = made.body.task.id as string;
       let list = (await h.call('GET', '/api/admin/tasks', { wallet: a })).body.tasks as { id: string; order: number }[];
@@ -342,6 +351,7 @@ describe('site API', () => {
       const w = wallet();
       const closed = await h.call('POST', '/api/site/collab', { wallet: w, body: collabBody('dave') });
       expect([closed.status, closed.body.error]).toEqual([403, 'collab_closed']);
+      expect(closed.body.message).toBe('Collab applications are closed. Follow @coinnibalfun to hear when they open again.');
       await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { collabOpen: true } });
       expect((await h.call('GET', '/api/site/settings')).body.settings.collabOpen).toBe(true);
       const cases: [Record<string, unknown>, string][] = [
@@ -570,7 +580,7 @@ describe('site API', () => {
     });
 
     it('starts fresh (and keeps the bad file) when a file is unreadable', () => {
-      const dir = mkdtempSync(join(tmpdir(), 'elymum-site-bad-'));
+      const dir = mkdtempSync(join(tmpdir(), 'coinnibal-site-bad-'));
       const a = new SiteStore(dir);
       a.updateSettings({ collabOpen: true });
       writeFileSync(join(dir, SITE_FILES.wl), '{not json');
@@ -581,13 +591,13 @@ describe('site API', () => {
       expect(readdirSync(join(dir, 'site')).some((f) => f.startsWith('wl.json.corrupt-'))).toBe(true);
       expect(logs.join()).toMatch(/unreadable/);
       // no files until something changes
-      const empty = mkdtempSync(join(tmpdir(), 'elymum-site-empty-'));
+      const empty = mkdtempSync(join(tmpdir(), 'coinnibal-site-empty-'));
       new SiteStore(empty);
       expect(existsSync(join(empty, 'site'))).toBe(false);
     });
 
     it('the public launch closes an older settings file once; after that the admin decides', () => {
-      const dir = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));
+      const dir = mkdtempSync(join(tmpdir(), 'coinnibal-site-launch-'));
       mkdirSync(join(dir, 'site'), { recursive: true });
       // the live server before the launch: WL open, the game public, no marker
       writeFileSync(join(dir, SITE_FILES.settings), JSON.stringify({ wlOpen: true, collabOpen: true, gameAccess: 'public', xHandle: 'coinnibal', launchPostUrl: 'https://x.com/coinnibal/status/42' }));
@@ -607,12 +617,12 @@ describe('site API', () => {
       expect(b.settings).toMatchObject({ wlOpen: true, collabOpen: false, mintOpen: true, gameAccess: 'holders' });
       expect(again).toEqual([]);
       // a file that already carries the marker is never touched, whatever it holds
-      const kept = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));
+      const kept = mkdtempSync(join(tmpdir(), 'coinnibal-site-launch-'));
       mkdirSync(join(kept, 'site'), { recursive: true });
       writeFileSync(join(kept, SITE_FILES.settings), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', xHandle: 'coinnibalfun', launchPostUrl: null, launch: SETTINGS_LAUNCH }));
       expect(new SiteStore(kept).settings).toMatchObject({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public' });
       // a fresh server (no file) starts closed and writes the marker with its first save
-      const fresh = mkdtempSync(join(tmpdir(), 'elymum-site-launch-'));
+      const fresh = mkdtempSync(join(tmpdir(), 'coinnibal-site-launch-'));
       const f = new SiteStore(fresh);
       expect(f.settings).toMatchObject({ wlOpen: false, collabOpen: false, mintOpen: false, gameAccess: 'admins' });
       f.updateSettings({ gameAccess: 'public' });
@@ -732,6 +742,12 @@ describe('game gate', () => {
     { t: 'join', room: 'private:NEW', name: 'gate', skin: 0 },
     { t: 'join', room: 'arena:1', name: 'gate', skin: 0 },
     { t: 'spectate' },
+    // the other ways in: a private room by its code, a paid custom room, the test arena, watching a given room
+    { t: 'join', room: 'private:AB2CD', name: 'gate', skin: 0 },
+    { t: 'join', room: 'arena:1:AB2CD', name: 'gate', skin: 0 },
+    { t: 'join', room: 'arena:1:test', name: 'gate', skin: 0 },
+    { t: 'spectate', room: 'arena:1' },
+    { t: 'spectate', room: 'practice' },
   ];
 
   it('refuses every room entry for guests and non-admin wallets with game_closed', async () => {
@@ -776,6 +792,53 @@ describe('game gate', () => {
     expect((await h.call('GET', '/api/rooms')).status).toBe(200);
   });
 
+  it('a closed game quotes no play over HTTP: the room quote, the power-up prices and the faucet answer admins only', async () => {
+    const user = wallet();
+    for (const path of ['/api/rooms/custom/quote', '/api/shop', '/api/site/faucet']) {
+      for (const who of [undefined, user]) {
+        const r = await h.call('GET', path, { wallet: who });
+        expect([r.status, r.body?.error], `${path} ${who ?? 'guest'}`).toEqual([403, 'game_closed']);
+      }
+      // the owner reaches all of it (the admin panel, a closed page looked over before it opens)
+      const own = await h.call('GET', path, { wallet: h.admin });
+      expect(own.status, path).toBe(200);
+    }
+    // what is not a way in stays readable: the settings, the room list, the contracts
+    for (const path of ['/api/site/settings', '/api/rooms', '/api/site/contracts']) expect((await h.call('GET', path)).status, path).toBe(200);
+  });
+
+  it('holders mode: a non-holder is refused the room quote and the shop, while the faucet shows (as the /faucet page does)', async () => {
+    await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'holders' } });
+    try {
+      const user = wallet();
+      expect((await h.call('GET', '/api/rooms/custom/quote', { wallet: user })).body?.error).toBe('game_closed');
+      expect((await h.call('GET', '/api/shop', { wallet: user })).body?.error).toBe('game_closed');
+      expect((await h.call('POST', '/api/rooms/custom/practice', { wallet: user })).body?.error).toBe('game_closed');
+      expect((await h.call('GET', '/api/site/faucet')).status).toBe(200);
+      const c = await Ws.open(h.port);
+      c.send({ t: 'auth', token: h.token(user) });
+      await c.next('authed');
+      for (const m of entries) expect(await c.attempt(m), JSON.stringify(m)).toMatchObject({ t: 'error', code: 'game_closed' });
+      c.close();
+    } finally {
+      await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'admins' } });
+    }
+  });
+
+  it('maintenance mode: only admins play, the faucet still shows', async () => {
+    await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'maintenance' } });
+    try {
+      const guest = await Ws.open(h.port);
+      for (const m of entries) expect(await guest.attempt(m), JSON.stringify(m)).toMatchObject({ t: 'error', code: 'game_closed' });
+      guest.close();
+      expect((await h.call('GET', '/api/rooms/custom/quote')).body?.error).toBe('game_closed');
+      expect((await h.call('POST', '/api/rooms/custom', { wallet: wallet(), body: { config: {} } })).body?.error).toBe('game_closed');
+      expect((await h.call('GET', '/api/site/faucet')).status).toBe(200);
+    } finally {
+      await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'admins' } });
+    }
+  });
+
   it('lets everyone in once gameAccess is public, and closes again when it is admins', async () => {
     expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'public' } })).body.settings.gameAccess).toBe('public');
     expect((await h.call('GET', '/api/site/settings')).body.settings.gameAccess).toBe('public');
@@ -786,6 +849,8 @@ describe('game gate', () => {
     watcher.close();
     // arena: past the gate (a guest needs a wallet for a ticket)
     expect(await guest.attempt(entries[2])).toMatchObject({ t: 'error', code: 'auth_required' });
+    // the quotes and the faucet answer everyone too
+    for (const path of ['/api/rooms/custom/quote', '/api/shop', '/api/site/faucet']) expect((await h.call('GET', path)).status, path).toBe(200);
     guest.close();
     await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { gameAccess: 'admins' } });
     const late = await Ws.open(h.port);

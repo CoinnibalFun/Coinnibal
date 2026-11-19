@@ -1,4 +1,4 @@
-import { normalizeXHandle } from '@elymum/shared';
+import { normalizeXHandle } from '@coinnibal/shared';
 import { useEffect, useRef, useState } from 'react';
 import { Button, useReducedMotion } from '../../design';
 import { useT } from '../../i18n';
@@ -174,7 +174,7 @@ export function SaveCardButton({ handle, label }: { handle: string; label?: stri
         try {
           await cardFonts();
           const blob = await cardBlob(norm);
-          if (blob) saveBlob(blob, `elymum-boarding-pass-${norm}.png`);
+          if (blob) saveBlob(blob, `coinnibal-wl-pass-${norm}.png`);
         } finally {
           setBusy(false);
         }

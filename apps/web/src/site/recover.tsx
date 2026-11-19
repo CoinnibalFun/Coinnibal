@@ -1,16 +1,17 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { useT } from '../i18n';
+import { storageKey } from '../storageKey';
 
 /**
  * Recovery for the site's lazily loaded pages.
  *
  * A tab opened before a deploy still runs the old `index` chunk; its lazy page chunks
- * (`MintPage-<oldhash>.js`) are gone on the host after the deploy (Vercel serves only the current
- * deployment's assets: 404). The cure is one full reload, which fetches the new index and its
+ * (`MintPage-<oldhash>.js`) are gone on the host after the deploy (the host serves only the current
+ * build's assets: 404). The cure is one full reload, which fetches the new index and its
  * chunks. `reloadOnce` does that at most once per short window (a page that keeps failing does
  * not loop); after that the page shows a friendly retry instead of a blank or a 404.
  */
-export const RELOAD_KEY = 'elymum.chunk-reload.v1';
+export const RELOAD_KEY = storageKey('chunk-reload.v1', 'session');
 /** A second failure within this window shows the retry instead of reloading again. */
 export const RELOAD_WINDOW_MS = 30_000;
 

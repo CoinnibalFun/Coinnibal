@@ -1,8 +1,8 @@
 /**
- * "How to get $NIBAL": the short path for a player who has a wallet but nothing to play with. Pure: unit-tested.
+ * "How to get tokens": the short path for a player who has a wallet but nothing to play with. Pure: unit-tested.
  *
- * - Testnet: test ETH from the network's faucet (gas), test $NIBAL from the site's own faucet page.
- * - Mainnet: ETH bridged onto Robinhood Chain, then $NIBAL bought on Pons (`VITE_TOKEN_BUY_URL`; without it the step
+ * - Testnet: test ETH from the network's faucet (gas), test tokens from the site's own faucet page.
+ * - Mainnet: ETH bridged onto Robinhood Chain, then the game token bought on Pons (`VITE_TOKEN_BUY_URL`; without it the step
  *   names no link: never a guessed one).
  */
 
@@ -18,7 +18,7 @@ export function safeHttpsUrl(raw: string | null | undefined): string | null {
   }
 }
 
-/** Where $NIBAL is bought (Pons), set at build time; null: no link is shown. */
+/** Where the game token is bought (Pons), set at build time; null: no link is shown. */
 export const TOKEN_BUY_URL = safeHttpsUrl(import.meta.env.VITE_TOKEN_BUY_URL as string | undefined);
 
 export type TokenStepKey = 'gasFaucet' | 'gasBridge' | 'gasAny' | 'testTokens' | 'buy' | 'play';
@@ -46,7 +46,7 @@ export function tokenSteps(o: { testnet: boolean; faucetUrl: string | null; brid
   ];
 }
 
-/** Where "Get $NIBAL" goes in one click: the testnet faucet page, else the buy link (null: open the guide). */
+/** Where "Get tokens" goes in one click: the testnet faucet page, else the buy link (null: open the guide). */
 export function getTokensHref(testnet: boolean, buyUrl: string | null = TOKEN_BUY_URL): string | null {
   return testnet ? '/faucet' : buyUrl;
 }

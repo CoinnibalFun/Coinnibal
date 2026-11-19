@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ArenaScalingDecision, ArenaScalingSettings } from '@elymum/shared';
+import type { ArenaScalingDecision, ArenaScalingSettings } from '@coinnibal/shared';
 import { loadConfig } from '../src/config';
 import { ArenaScalingStore, SCALER_SAMPLE_MS } from '../src/rooms/arena-scaler';
 import { RoomManager } from '../src/rooms/manager';
@@ -66,7 +66,7 @@ export const ARENA_SIM_WAVES = (min: number): number => {
 const FEE = 1_000_000;
 
 export async function runArenaSim(o: ArenaSimOptions): Promise<ArenaSimResult> {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-arena-sim-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-arena-sim-'));
   const cfg = loadConfig({ DATA_DIR: dir, ARENA_INSTANCE_CAP: String(o.cap) });
   const journal = new Journal(null);
   const chain = new ArenaChain([arena(1, FEE)]);

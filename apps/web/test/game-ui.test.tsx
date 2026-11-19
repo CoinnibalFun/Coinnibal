@@ -1,4 +1,4 @@
-import { EMOTES, EMOTE_BAR, emoteEmoji, emoteForSlot, type DeathStats, type RoomInfo } from '@elymum/shared';
+import { EMOTES, EMOTE_BAR, emoteEmoji, emoteForSlot, type DeathStats, type RoomInfo } from '@coinnibal/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chainStatus } from './evm-helpers';
@@ -49,7 +49,7 @@ describe('round receipt numbers', () => {
 
 describe('format helpers', () => {
   it('signs token deltas with a real minus and no sign on zero', () => {
-    const tf = tokenFormat(6, '$ELYMUM');
+    const tf = tokenFormat(6, '$NIBAL');
     expect(tf.signed(1250 * M)).toBe('+1,250');
     expect(tf.signed(-1250 * M)).toBe('−1,250');
     expect(tf.fmt(1500 * M, { compact: true })).toBe('1.5K');

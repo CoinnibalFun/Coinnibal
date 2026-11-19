@@ -1,6 +1,6 @@
-import { activeChain } from '@elymum/shared';
-import { faucetCall, getFaucetInfo, getTestTokenFaucet, getTokenInfo, type FaucetInfo, type TestTokenFaucetConfig } from '@elymum/sdk';
-import type { ContractsRegistry, FaucetConfig } from '@elymum/shared';
+import { activeChain } from '@coinnibal/shared';
+import { faucetCall, getFaucetInfo, getTestTokenFaucet, getTokenInfo, type FaucetInfo, type TestTokenFaucetConfig } from '@coinnibal/sdk';
+import type { ContractsRegistry, FaucetConfig } from '@coinnibal/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Address, Hash } from 'viem';
 import { AddressChip, Button, CoinCharacter, Icon, Kb, Laurel, PlateLabel, StampSpinner, Sticker, type CoinMood } from '../../design';
@@ -12,6 +12,7 @@ import { sendWalletCall, txErrorText, type TxPhase } from '../../wallet/tx';
 import { useT, type TKey } from '../../i18n';
 import { b, em, T } from '../../i18n/rich';
 import { site } from '../api';
+import { readStoredSession } from '../storedSession';
 import { useDoors } from '../doors';
 import { isTestnetChain, useServerChain } from '../serverChain';
 import { SiteLinkButton, SitePage } from '../Shell';
@@ -96,7 +97,7 @@ function Faucet() {
   useEffect(() => {
     if (testnet !== true) return;
     let live = true;
-    site.faucet().then(
+    site.faucet(readStoredSession()?.token).then(
       (f) => {
         if (!live) return;
         setServed(f);
@@ -202,7 +203,7 @@ function Faucet() {
     );
   if (view === 'mainnet' || view === 'offline' || view === 'no-token') return <Quiet view={view} />;
   const m = meta as TokenMeta;
-  // what the page calls the token: the game's display symbol (server `TOKEN_SYMBOL`, e.g. $NIBAL) when the faucet token
+  // what the page calls the token: the game's display symbol (server `TOKEN_SYMBOL`, default "tokens") when the faucet token
   // is the game token, else its on-chain symbol; the wallet's "add token" always gets the on-chain symbol
   const sym = displaySymbol(m, chain?.token);
   const chainInfo = serverChainInfo(chain);
@@ -377,7 +378,7 @@ function Plate({ children }: { children: ReactNode }) {
   const t = useT();
   return (
     <>
-      <PlateLabel numeral="IV" title={t('fc.plate')} aside="/faucet" />
+      <PlateLabel numeral="IV" title={t('fc.plate')} />
       <Kb theme="paper" className="fc-plate">
         {children}
       </Kb>

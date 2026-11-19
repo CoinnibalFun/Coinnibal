@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ARENA_SCALING_DEFAULT, applyArenaScaling, roundAt, type ArenaScalingSettings } from '@elymum/shared';
+import { ARENA_SCALING_DEFAULT, applyArenaScaling, roundAt, type ArenaScalingSettings } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config';
 import { ArenaScalingFail, ArenaScalingStore, SCALER_SAMPLE_MS } from '../src/rooms/arena-scaler';
@@ -9,7 +9,7 @@ import { RoomManager } from '../src/rooms/manager';
 import type { Room } from '../src/rooms/room';
 import { Journal } from '../src/stake/journal';
 import { ARENA_SIM_WAVES, runArenaSim } from './arena-sim';
-import { TICK_MS } from '@elymum/shared';
+import { TICK_MS } from '@coinnibal/shared';
 import { ArenaChain, arena, fakeConn, roomDeps, stakeJoin, type TestConn } from './helpers';
 
 /** A zero-value eater lands on the coin and eats it (its ticket settles at its death). */
@@ -28,7 +28,7 @@ const ROUND = { roundMs: 300_000, closeMs: 60_000 };
 
 /** A manager with arena #1, `cap` seats per instance and the scaler's settings, on a hand-driven clock 10 s into a round. */
 async function setup(cap: number, settings: Partial<ArenaScalingSettings> = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-scale-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-scale-'));
   const cfg = loadConfig({ DATA_DIR: dir, ARENA_INSTANCE_CAP: String(cap) });
   const journal = new Journal(null);
   const chain = new ArenaChain([arena(1, FEE)]);
@@ -78,7 +78,7 @@ describe('arena scaling settings', () => {
   });
 
   it('stores admin changes in DATA_DIR/site/arena-scaling.json and moves a broken file aside', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-scale-store-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-scale-store-'));
     const s = new ArenaScalingStore(dir);
     expect(s.settings).toEqual(ARENA_SCALING_DEFAULT);
     s.update({ maxInstances: 4, cooldownMin: 1 });

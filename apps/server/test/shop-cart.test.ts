@@ -1,4 +1,4 @@
-import { SHOP_CART_LIMITS, normalizeCart, parseShopCartRef, shopCartRef, shopPaymentRef } from '@elymum/shared';
+import { SHOP_CART_LIMITS, normalizeCart, parseShopCartRef, shopCartRef, shopCartRefs, shopPaymentRef, shopPaymentRefs } from '@coinnibal/shared';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,6 +27,12 @@ describe('the power-up cart: the ref and the limits', () => {
     expect(parseShopCartRef(ref)).toEqual(cart);
     expect(parseShopCartRef(shopPaymentRef('magnet'))).toBeNull();
     expect(shopCartRef(cartOf({ magnet: 1 }))).not.toBe(shopCartRef(cartOf({ leap: 1 })));
+    // the ref of before the rename (elymum.cart.…) names the same cart; a pack ref under either prefix is no cart
+    const [now, old] = shopCartRefs(cart);
+    expect(now).toBe(ref);
+    expect(old).toBe(`0x${Buffer.from('elymum.cart.m2l0s0i1').toString('hex').padEnd(64, '0')}`);
+    expect(parseShopCartRef(old)).toEqual(cart);
+    expect(parseShopCartRef(shopPaymentRefs('magnet')[1])).toBeNull();
   });
 
   it('refuses empty carts, fractions, unknown power-ups and carts over the limits', () => {
@@ -53,6 +59,21 @@ describe('the power-up cart: one payment, applied at once', () => {
     expect(r.refund).toBeUndefined();
     expect(await code(shop.buyCart(WALLET, { cart, txHash: hash(1) }))).toBe('tx_used');
     expect(inventory.recent(1)[0]).toMatchObject({ kind: 'cart', charges: 9, paid: (2400n * ONE).toString(), cart: { magnet: 6, invis: 3 } });
+  });
+
+  it('credits a cart paid just before the rename (the elymum.cart. ref), with the same checks; a replay is refused', async () => {
+    const { chain, shop } = cartFixture();
+    await shop.view(WALLET);
+    const cart = cartOf({ magnet: 2, invis: 1 });
+    const old = shopCartRefs(cart)[1];
+    chain.pay(hash(21), WALLET, 2400n * ONE, old);
+    expect(await shop.buyCart(WALLET, { cart, txHash: hash(21) })).toMatchObject({ ok: true, added: { magnet: 6, invis: 3 } });
+    expect(await code(shop.buyCart(WALLET, { cart, txHash: hash(21) }))).toBe('tx_used');
+    // another cart under the old prefix, or the old pack ref: refused
+    chain.pay(hash(22), WALLET, 2400n * ONE, shopCartRefs(cartOf({ magnet: 3 }))[1]);
+    expect(await code(shop.buyCart(WALLET, { cart, txHash: hash(22) }))).toBe('wrong_pack');
+    chain.pay(hash(23), WALLET, 600n * ONE, shopPaymentRefs('magnet')[1]);
+    expect(await code(shop.buyCart(WALLET, { cart: cartOf({ magnet: 1 }), txHash: hash(23) }))).toBe('wrong_pack');
   });
 
   it('refuses a payment of another amount, of another cart, or of a single pack; nothing is credited', async () => {
@@ -100,7 +121,7 @@ describe('the power-up cart: one payment, applied at once', () => {
   });
 
   it('is atomic: a failed write credits nothing and marks nothing used, so the retry credits it once', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-cart-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-cart-'));
     try {
       const path = join(dir, 'boosts.json');
       const { chain, shop, inventory } = cartFixture({ path });

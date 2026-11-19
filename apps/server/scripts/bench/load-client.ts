@@ -7,7 +7,7 @@
  * Messages from the parent (IPC): `{ t: 'start', url, specs }`, `{ t: 'stats' }` (answers with the
  * window's figures and starts a new window), `{ t: 'stop' }`.
  */
-import { PROTOCOL_VERSION, encodeTarget } from '@elymum/shared';
+import { PROTOCOL_VERSION, encodeTarget } from '@coinnibal/shared';
 import WebSocket from 'ws';
 
 export interface ClientSpec {

@@ -1,7 +1,7 @@
-import type { GameAccess } from '@elymum/shared';
+import type { GameAccess } from '@coinnibal/shared';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Kb, useReducedMotion } from '../../design';
-import { auth, site } from '../api';
+import { SiteApiError, auth, site } from '../api';
 import { readStoredSession, type SiteSession } from '../storedSession';
 import { useT } from '../../i18n';
 import { GateScene } from './GateScene';
@@ -15,13 +15,19 @@ export type PlayAccess =
   /** `holders`: the game is open to NFT holders and this visitor is not a signed-in holder (yet). */
   | { allowed: false; reason: 'closed' | 'holders' | 'maintenance'; session: null };
 
+/** A busy NFT check (`/api/auth/me` says `busy`, or answers 429) is asked again this many times, this far apart. */
+export const BUSY_RETRIES = 4;
+export const BUSY_WAIT_MS = 2_500;
+
 /**
  * Who may open `/play` (`gameAccess`, the server's `GAME_ACCESS` overrides it): everyone when
  * `public`; when `holders`, a signed-in wallet holding a Coinnibal NFT (`/api/auth/me` says
  * `canPlay`) or an admin; when `admins`, only a signed-in admin wallet. The server enforces the
  * same rule on the WebSocket; this only spares visitors the game download and a refused join.
+ * A check the server could not make right now (busy) is asked again (`BUSY_RETRIES`), never
+ * taken for "not a holder" at once.
  */
-export async function playAccess(): Promise<PlayAccess> {
+export async function playAccess(opts: { busyWaitMs?: number } = {}): Promise<PlayAccess> {
   const stored = readStoredSession();
   let access: GameAccess = 'admins';
   try {
@@ -32,12 +38,19 @@ export async function playAccess(): Promise<PlayAccess> {
     /* the server is down: only a session can be checked, and that needs the server too */
   }
   if (stored) {
-    try {
-      const me = await auth.me(stored.token);
-      if (me.admin) return { allowed: true, reason: 'admin', session: { ...stored, admin: true } };
-      if (access === 'holders' && (me.canPlay === true || me.holder === true)) return { allowed: true, reason: 'holder', session: stored };
-    } catch {
-      /* expired or unreachable */
+    for (let attempt = 0; ; attempt++) {
+      let busy = false;
+      try {
+        const me = await auth.me(stored.token);
+        if (me.admin) return { allowed: true, reason: 'admin', session: { ...stored, admin: true } };
+        if (access === 'holders' && (me.canPlay === true || me.holder === true)) return { allowed: true, reason: 'holder', session: stored };
+        busy = access === 'holders' && me.busy === true;
+      } catch (err) {
+        /* expired or unreachable; a 429 is a busy check */
+        busy = access === 'holders' && err instanceof SiteApiError && err.code === 'rate_limited';
+      }
+      if (!busy || attempt >= BUSY_RETRIES) break;
+      await new Promise((r) => setTimeout(r, opts.busyWaitMs ?? BUSY_WAIT_MS));
     }
   }
   return { allowed: false, reason: access === 'holders' ? 'holders' : access === 'maintenance' ? 'maintenance' : 'closed', session: null };

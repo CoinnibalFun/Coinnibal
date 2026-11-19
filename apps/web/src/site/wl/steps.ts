@@ -1,4 +1,4 @@
-import { SITE_LIMITS, WL_TASK_X_HANDLE, isXStatusUrl, normalizeXHandle, type PublicWlTask, type WlSubmitRequest } from '@elymum/shared';
+import { SITE_LIMITS, WL_TASK_X_HANDLE, isXStatusUrl, normalizeXHandle, type PublicWlTask, type WlSubmitRequest } from '@coinnibal/shared';
 import { t } from '../../i18n';
 
 /**

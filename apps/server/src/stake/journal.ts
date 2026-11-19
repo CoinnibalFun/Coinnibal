@@ -51,6 +51,11 @@ export interface SettlementItem {
   guardCleared?: boolean;
   /** When this server first broadcast a transaction with this item (Unix ms): from then on it may be settled by us. */
   sentAt?: number;
+  /**
+   * A stale cancel of a ticket that was never seated while its arena was open (not a closed arena's refund): a
+   * no-show. Too many in a day and the wallet gets no join permit for a while (`JoinPermits`).
+   */
+  noShow?: true;
 }
 
 /**

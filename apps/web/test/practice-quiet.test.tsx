@@ -1,4 +1,4 @@
-import { PRACTICE_ROOM } from '@elymum/shared';
+import { PRACTICE_ROOM } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Kb } from '../src/design';
@@ -24,7 +24,7 @@ describe('practice ponds: the honest empty state', () => {
     ({ restore } = mockFetch({
       'POST /api/rooms/custom/practice': (c: { auth: string | null }) => {
         auth = c.auth;
-        return { room: { code: 'PR4CT' }, invite: 'https://elymum.io/play?room=PR4CT' };
+        return { room: { code: 'PR4CT' }, invite: 'https://coinnibal.fun/play?room=PR4CT' };
       },
     }));
     render(

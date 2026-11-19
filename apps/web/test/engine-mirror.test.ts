@@ -1,4 +1,4 @@
-import { EntityKind, encodeSnapshot, type RoomInfo, type ServerMessage, type SnapshotData } from '@elymum/shared';
+import { EntityKind, encodeSnapshot, type RoomInfo, type ServerMessage, type SnapshotData } from '@coinnibal/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The engine without a canvas renderer or a real socket: the test drives the server side.
@@ -71,7 +71,7 @@ const snap = (buf: ArrayBuffer) => {
 beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', () => 0);
   vi.stubGlobal('cancelAnimationFrame', () => {});
-  localStorage.setItem('elymum.brief', '1');
+  localStorage.setItem('coinnibal.brief', '1');
   net.open = true;
   net.sent = [];
   useUi.setState({ ...initial, rooms: [A, B], screen: 'lobby' }, true);

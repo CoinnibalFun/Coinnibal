@@ -1,17 +1,17 @@
-import { BOOST_KEY_LABELS, BPS, DEFAULT_PAYMENT_BURN_BPS, SHOP_DEFAULTS, boostCooldownMs, bpsToPercent, formatUsdCents, type BoostKind, type ShopPack, type ShopView } from '@elymum/shared';
+import { BOOST_KEY_LABELS, BPS, DEFAULT_PAYMENT_BURN_BPS, SHOP_DEFAULTS, boostCooldownMs, bpsToPercent, formatUsdCents, type BoostKind, type ShopPack, type ShopView } from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Chip, Sheet, shortAddress } from '../../design';
 import { useT } from '../../i18n';
 import { closeModal, openModal, toast, useUi } from '../../store';
-import { SHOP_CART_LIMITS, TOKEN_SYMBOL_DEFAULT } from '@elymum/shared';
-import { ShopError, buyCart, cartTotals, emptyCart, fetchShop, loadPendingClaim, settleCartClaim, settleClaim, type BuyPhase, type Cart, type PendingClaim } from '../../wallet/shop';
+import { SHOP_CART_LIMITS, TOKEN_SYMBOL_DEFAULT } from '@coinnibal/shared';
+import { ShopError, buyCart, cartTotals, claimBlocksBuying, emptyCart, fetchShop, loadPendingClaims, settleCartClaim, settleClaim, type BuyPhase, type Cart, type PendingClaim } from '../../wallet/shop';
 import { summaryAmount } from '../amount';
-import { BOOST_PATH } from '../game/BoostBar';
+import { BOOST_PATH } from '../game/boostGlyphs';
 import './shop.css';
 
 /**
- * A pack price for display: `210 $NIBAL` (whole tokens, at most two decimals), with its dollar price first when the
- * pack is priced in US dollars (`$0.60 · 740 $NIBAL`): the token amount is what the wallet sends.
+ * A pack price for display: `210 tokens` (whole tokens, at most two decimals), with its dollar price first when the
+ * pack is priced in US dollars (`$0.60 · 740 tokens`): the token amount is what the wallet sends.
  */
 export function priceText(raw: string, view: Pick<ShopView, 'token'>, usdCents?: number): string {
   const decimals = view.token?.decimals ?? 18;
@@ -145,11 +145,15 @@ export function ShopSheet() {
     return () => ac.abort();
   }, [open, load]);
 
-  // a pack paid for earlier whose claim did not get through: offered again (never paid twice)
-  const [pending, setPending] = useState<PendingClaim | null>(null);
+  // packs paid for earlier whose claim did not get through: each offered again (never paid twice). Only those paid on
+  // the chain the site runs on, to the arena the shop names: another network's payment can never be credited here
+  const chainId = chain?.chainId ?? null;
+  const payTo = view?.payTo ?? null;
+  const keptClaims = useCallback(() => loadPendingClaims(auth?.address, { chainId, payTo }), [auth?.address, chainId, payTo]);
+  const [pending, setPending] = useState<PendingClaim[]>([]);
   useEffect(() => {
-    if (open) setPending(loadPendingClaim(auth?.address));
-  }, [open, auth?.address, buying]);
+    if (open) setPending(keptClaims());
+  }, [open, keptClaims, buying]);
   const [claiming, setClaiming] = useState(false);
   const claim = async (p: PendingClaim) => {
     if (!auth || claiming) return;
@@ -172,7 +176,7 @@ export function ShopSheet() {
       void load();
     } finally {
       setClaiming(false);
-      setPending(loadPendingClaim(auth.address));
+      setPending(keptClaims());
     }
   };
 
@@ -186,8 +190,11 @@ export function ShopSheet() {
   const totals = view ? cartTotals(view, cart) : null;
   const setQty = (kind: BoostKind, n: number) => setCart((c) => ({ ...c, [kind]: Math.max(0, Math.min(SHOP_CART_LIMITS.perKind, n)) }));
   const room = totals ? totals.packs < SHOP_CART_LIMITS.total : true;
+  // a paid claim waits: claimed first, never a second payment over it by mistake. For its first hour: one the server
+  // still cannot credit after that (its chain never shows the payment) stays offered, but blocks no purchase
+  const waiting = !!auth && pending.some((p) => claimBlocksBuying(p));
   const buy = async () => {
-    if (!view || !auth || !chain || !totals || totals.packs === 0) return;
+    if (!view || !auth || !chain || !totals || totals.packs === 0 || waiting) return;
     setBuying({ phase: 'switching' });
     try {
       const r = await buyCart(view, cart, { token: auth.token, owner: auth.address, chain, onPhase: (phase) => setBuying({ phase }) });
@@ -227,14 +234,15 @@ export function ShopSheet() {
       ) : (
         <p className="sh-hint mono">{t('shop.holderHint', { pct, extra })}</p>
       )}
-      {pending && auth && (
-        <div className="sh-closed sh-pending" role="status" data-testid="shop-pending">
-          <p>{t('shop.pending', { name: t(`boost.${pending.kind}` as 'boost.magnet') })}</p>
-          <Button variant="primary" size="sm" loading={claiming} disabled={claiming || !!buying} onClick={() => void claim(pending)} data-testid="shop-claim">
-            {t('shop.claim')}
-          </Button>
-        </div>
-      )}
+      {auth &&
+        pending.map((p) => (
+          <div key={p.txHash} className="sh-closed sh-pending" role="status" data-testid="shop-pending">
+            <p>{t('shop.pending', { name: t(`boost.${p.kind}` as 'boost.magnet') })}</p>
+            <Button variant="primary" size="sm" loading={claiming} disabled={claiming || !!buying} onClick={() => void claim(p)} data-testid="shop-claim">
+              {t('shop.claim')}
+            </Button>
+          </div>
+        ))}
       {closed && <p className="sh-closed">{closed}</p>}
       {err && <p className="sh-closed">{err}</p>}
       {s ? (
@@ -288,9 +296,9 @@ export function ShopSheet() {
               size="md"
               lead="wallet"
               loading={!!buying}
-              disabled={!auth || !s.open || !!buying || claiming || totals.packs === 0}
+              disabled={!auth || !s.open || !!buying || claiming || waiting || totals.packs === 0}
               onClick={() => void buy()}
-              sub={buying?.phase === 'verifying' ? t('shop.verifying') : buying?.phase === 'confirming' ? t('shop.confirming') : buying ? t('shop.paying') : t('shop.oneTx')}
+              sub={buying?.phase === 'verifying' ? t('shop.verifying') : buying?.phase === 'confirming' ? t('shop.confirming') : buying ? t('shop.paying') : waiting ? t('shop.claimFirst') : t('shop.oneTx')}
               data-testid="shop-pay"
             >
               {totals.packs > 0 ? t('shop.buyAll', { price: priceText(totals.raw.toString(), s) }) : t('shop.buyAll', { price: '—' })}

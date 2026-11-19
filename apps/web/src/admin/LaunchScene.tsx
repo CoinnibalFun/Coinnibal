@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { SceneCoin, useOffscreenPause, useReducedMotion, type SceneCoinMood } from '../design';
 import './launch-scene.css';

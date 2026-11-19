@@ -1,4 +1,4 @@
-import { VIEW, clamp, viewSize } from '@elymum/shared';
+import { VIEW, clamp, viewSize } from '@coinnibal/shared';
 import { zoomIn } from '../design/curves';
 
 export class Camera {

@@ -31,6 +31,7 @@ export const ICON_NAMES = [
   'sun',
   'moon',
   'chat',
+  'feedback',
   'emote',
   'split',
   'eject',
@@ -163,6 +164,12 @@ const P: Record<IconName, ReactElement> = {
     <>
       <path d="M5 4.8h14a1.8 1.8 0 0 1 1.8 1.8v8.2a1.8 1.8 0 0 1-1.8 1.8h-6.6l-4.6 3.6v-3.6H5a1.8 1.8 0 0 1-1.8-1.8V6.6A1.8 1.8 0 0 1 5 4.8z" />
       <path d="M7.8 9.4h8.4M7.8 12.4h5" />
+    </>
+  ),
+  feedback: (
+    <>
+      <path d="M5 4.8h14a1.8 1.8 0 0 1 1.8 1.8v8.2a1.8 1.8 0 0 1-1.8 1.8h-6.6l-4.6 3.6v-3.6H5a1.8 1.8 0 0 1-1.8-1.8V6.6A1.8 1.8 0 0 1 5 4.8z" />
+      <path d="M12 7.9v3.6M12 14.2v0" />
     </>
   ),
   emote: (

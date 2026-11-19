@@ -1,4 +1,4 @@
-import { EntityKind, RULES, TICK_MS } from '@elymum/shared';
+import { EntityKind, RULES, TICK_MS } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { World, type WorldConfig } from '../src/game/world';
 

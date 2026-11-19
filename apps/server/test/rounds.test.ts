@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { RULES, TICK_MS, roundAt, type ServerMessage } from '@elymum/shared';
+import { RULES, TICK_MS, roundAt, type ServerMessage } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { Room } from '../src/rooms/room';
 import { Journal, itemAmount, type JournalItem } from '../src/stake/journal';
@@ -160,7 +160,7 @@ describe('arena rounds (room)', () => {
   });
 
   it('the bell settles everyone at value and sweeps the floor loot in one journal write', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'elymum-round-')), 'journal.json');
+    const path = join(mkdtempSync(join(tmpdir(), 'coinnibal-round-')), 'journal.json');
     const { room, journal, clock, commits, round, kicks } = setup({ journal: new Journal(path) });
     const a = fakeConn('wa');
     const b = fakeConn('wb');

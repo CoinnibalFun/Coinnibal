@@ -1,6 +1,6 @@
 import {
-  elymumArenaAbi,
-  elymumNFTAbi,
+  coinnibalArenaAbi,
+  coinnibalNFTAbi,
   getAllowance,
   getArena,
   getArenaConfig,
@@ -9,20 +9,23 @@ import {
   isArenaHolder,
   getMintState,
   getNftBalance,
+  getJoinNonce,
   getSession,
   listArenas,
   sendCall,
+  signJoinPermit,
   simulateCall,
   toViemChain,
   type ArenaConfig,
   type ArenaInfo,
   type ContractCall,
+  type JoinPermitFields,
   type MintState,
   type SessionInfo,
   type TestTokenFaucetConfig,
-} from '@elymum/sdk';
-import { checkDeployedCode, type CodeCheck } from '@elymum/sdk/ops';
-import { chainInfo, type ChainOverrides } from '@elymum/shared';
+} from '@coinnibal/sdk';
+import { checkDeployedCode, type CodeCheck } from '@coinnibal/sdk/ops';
+import { chainInfo, type ChainOverrides } from '@coinnibal/shared';
 import {
   createPublicClient,
   createWalletClient,
@@ -43,10 +46,10 @@ import {
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import { rpcBudgetFor } from './rpc-budget';
 
-export type { CodeCheck } from '@elymum/sdk/ops';
+export type { CodeCheck } from '@coinnibal/sdk/ops';
 export type ContractKindCode = 'arena' | 'nft' | 'token';
 
-/** An `ElymumArena` event the settlement worker reads from a receipt. */
+/** An `CoinnibalArena` event the settlement worker reads from a receipt. */
 export type ArenaEvent =
   /** `settle`: `payout` (gross) left the vault; `burned` + `toVault` is the fee on its profit, `net` reached the player. */
   | { name: 'Settled'; arenaId: number; player: Address; sessionId: bigint; payout: bigint; net: bigint; burned: bigint; toVault: bigint; collected: boolean }
@@ -94,6 +97,10 @@ export interface EvmClient {
   arenas(arena: Address): Promise<ArenaInfo[]>;
   arena(arena: Address, id: number): Promise<ArenaInfo>;
   session(arena: Address, arenaId: number, player: Address): Promise<SessionInfo>;
+  /** `joinNonce(player)` of the arena (v4): the nonce its next join permit names. */
+  joinNonce(arena: Address, player: Address): Promise<bigint>;
+  /** Signs a join permit with the server key (EIP-712 typed data of the arena's domain). */
+  signJoinPermit(p: JoinPermitFields): Promise<Hex>;
   /** Gas-token balance (wei). */
   balance(address: Address): Promise<bigint>;
   /** `Joined` events of an arena contract in `[from, to]` (the caller chunks). */
@@ -140,7 +147,7 @@ export interface EvmClient {
   allowance(token: Address, owner: Address, spender: Address): Promise<bigint>;
   /** The TestToken's faucet settings. */
   testTokenFaucet(token: Address): Promise<TestTokenFaucetConfig>;
-  /** `ElymumArena.isHolder(who)`: holds the arena's holder NFT. */
+  /** `CoinnibalArena.isHolder(who)`: holds the arena's holder NFT. */
   isArenaHolder(arena: Address, who: Address): Promise<boolean>;
 }
 
@@ -228,7 +235,7 @@ const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref
 /** Decodes the arena's events of a receipt (logs of other contracts are ignored). */
 export function decodeArenaEvents(logs: readonly { address: string; data: Hex; topics: readonly Hex[] }[], arena: Address | null): ArenaEvent[] {
   const own = arena ? logs.filter((l) => l.address.toLowerCase() === arena.toLowerCase()) : [];
-  const parsed = parseEventLogs({ abi: elymumArenaAbi, logs: own as never, strict: false });
+  const parsed = parseEventLogs({ abi: coinnibalArenaAbi, logs: own as never, strict: false });
   const out: ArenaEvent[] = [];
   for (const e of parsed) {
     const a = e.args as Record<string, unknown>;
@@ -268,7 +275,7 @@ function viemReads(publicClient: PublicClient): HolderReader {
     getChainId: () => publicClient.getChainId(),
     blockNumber: () => publicClient.getBlockNumber({ cacheTime: 0 }),
     transferLogs: async (nft, from, to) => {
-      const logs = await publicClient.getContractEvents({ address: nft, abi: elymumNFTAbi, eventName: 'Transfer', fromBlock: from, toBlock: to, strict: true });
+      const logs = await publicClient.getContractEvents({ address: nft, abi: coinnibalNFTAbi, eventName: 'Transfer', fromBlock: from, toBlock: to, strict: true });
       return logs.map((l) => ({ from: getAddress(l.args.from), to: getAddress(l.args.to), tokenId: l.args.tokenId, blockNumber: l.blockNumber }));
     },
     deployBlock: async (address) => {
@@ -332,6 +339,8 @@ export function viemEvmClient(
   return {
     ...viemReads(publicClient),
     address: account.address,
+    // a signature only, never a transaction: no gas, no queue
+    signJoinPermit: (p) => signJoinPermit(account, p),
     blockHash: async (n) => {
       try {
         return (await publicClient.getBlock({ blockNumber: n })).hash;
@@ -353,9 +362,10 @@ export function viemEvmClient(
     arenas: (arena) => listArenas(publicClient, arena),
     arena: (arena, id) => getArena(publicClient, arena, id),
     session: (arena, arenaId, player) => getSession(publicClient, arena, arenaId, player),
+    joinNonce: (arena, player) => getJoinNonce(publicClient, arena, player),
     balance: (address) => publicClient.getBalance({ address }),
     joinedLogs: async (arena, from, to) => {
-      const logs = await publicClient.getContractEvents({ address: arena, abi: elymumArenaAbi, eventName: 'Joined', fromBlock: from, toBlock: to, strict: true });
+      const logs = await publicClient.getContractEvents({ address: arena, abi: coinnibalArenaAbi, eventName: 'Joined', fromBlock: from, toBlock: to, strict: true });
       return logs.map((l) => ({
         arenaId: Number(l.args.arenaId),
         player: getAddress(l.args.player),
@@ -379,7 +389,7 @@ export function viemEvmClient(
       }
       const logs = parseEventLogs({ abi: erc20TransferAbi, eventName: 'Transfer', logs: r.logs, strict: true });
       const own = arena ? r.logs.filter((l) => l.address.toLowerCase() === arena.toLowerCase()) : [];
-      const paid = parseEventLogs({ abi: elymumArenaAbi, eventName: 'Paid', logs: own, strict: true });
+      const paid = parseEventLogs({ abi: coinnibalArenaAbi, eventName: 'Paid', logs: own, strict: true });
       // the block time: a purchase is credited only for a recent payment (see `SHOP_PAYMENT_MAX_AGE_MS`)
       const block = await publicClient.getBlock({ blockNumber: r.blockNumber });
       return {
@@ -417,7 +427,7 @@ export function viemEvmClient(
     mintState: (nft) => getMintState(publicClient, nft),
     royalty: async (nft) => {
       try {
-        const [receiver, amount] = await publicClient.readContract({ address: nft, abi: elymumNFTAbi, functionName: 'royaltyInfo', args: [1n, 10_000n] });
+        const [receiver, amount] = await publicClient.readContract({ address: nft, abi: coinnibalNFTAbi, functionName: 'royaltyInfo', args: [1n, 10_000n] });
         return { receiver: getAddress(receiver), bps: Number(amount) };
       } catch {
         return null;

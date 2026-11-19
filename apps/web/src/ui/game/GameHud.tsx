@@ -1,5 +1,5 @@
 import { lookForSkin as lookForBasicSkin } from '../../render/looks';
-import { BOOST_KEY_LABELS, BOOST_KINDS, EMOTE_BAR, PowerUpType, RULES, emoteEmoji } from '@elymum/shared';
+import { BOOST_KEY_LABELS, BOOST_KINDS, EMOTE_BAR, PowerUpType, RULES, emoteEmoji } from '@coinnibal/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Counter, DUR, Icon, Stamp, springs, useReducedMotion } from '../../design';
@@ -388,11 +388,12 @@ function Banner() {
 }
 
 /**
- * The top bar: "Share on X" (the game as it stands) while playing, then the menu and the settings. `labels`: the share
- * key prints its word (desktop); on smaller screens it is a round icon key like the others. The power-up shop is in
- * the lobby only: nothing is sold over the floor.
+ * The top bar: "Share on X" (the game as it stands) while playing, then the menu, Feedback and the settings. `labels`:
+ * the share key prints its word (desktop); on smaller screens it is a round icon key like the others. `feedback`: the
+ * Feedback key (desktops and tablets; a phone keeps three keys, its Feedback is in the settings sheet). The power-up
+ * shop is in the lobby only: nothing is sold over the floor.
  */
-function TopButtons({ labels }: { labels: boolean }) {
+function TopButtons({ labels, feedback }: { labels: boolean; feedback: boolean }) {
   const t = useT();
   const screen = useUi((s) => s.screen);
   return (
@@ -401,6 +402,11 @@ function TopButtons({ labels }: { labels: boolean }) {
       {screen === 'playing' && (
         <button type="button" className="kb-iconbtn g-topbar__btn" onClick={() => engine()?.backToLobby()} aria-label={t('g.menu')} title={t('g.menu')}>
           <Icon name="menu" size={20} />
+        </button>
+      )}
+      {feedback && (
+        <button type="button" className="kb-iconbtn g-topbar__btn" onClick={() => openModal('feedback')} aria-label={t('fb.open')} title={t('fb.open')} data-testid="hud-feedback">
+          <Icon name="feedback" size={20} />
         </button>
       )}
       <button type="button" className="kb-iconbtn g-topbar__btn" onClick={() => openModal('settings')} aria-label={t('g.settings')} title={t('g.settings')}>
@@ -558,7 +564,7 @@ export function GameHud() {
       </div>
 
       <motion.div className="g-corner g-corner--tr" {...drop(0.8, 0.1)}>
-        <TopButtons labels={cls === 'desktop'} />
+        <TopButtons labels={cls === 'desktop'} feedback={cls === 'desktop' || cls === 'tablet'} />
         {!compact && <Standings compact={false} />}
         {/* touch: the bottom right is the thumb cluster, so the minimap lives up here */}
         {!narrow && (touch || short) && <MapSheet inline size={mapSize} />}

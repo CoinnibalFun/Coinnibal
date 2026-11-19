@@ -1,4 +1,4 @@
-/* Elymum "Roadmap Chomp" (14 s, 120 BPM: a beat is 0.5 s, downbeats on the even seconds).
+/* Coinnibal "Roadmap Chomp" (14 s, 120 BPM: a beat is 0.5 s, downbeats on the even seconds).
  *
  * Modern and minimal: flat paper, a faint dot grid, one ink, lots of air. The X profile coin
  * (the sun coin of brand/out/x, the face) with a Pac-Man bite wakas
@@ -6,7 +6,7 @@
  *   01 WL OPEN (eaten by 4.0) -> 02 $1 MINT (6.0) -> 03 GAME LIVE (8.0)  (the product flow: WL -> Mint -> Play)
  * Each heading is eaten letter by letter as the mouth reaches it (a faint trace stays) and the
  * coin grows with a pop on the downbeat. 9.0 the big bite, 10.0 the closing card: the coin grins,
- * the wordmark, the site's host (SITE_HOST), @elymumio.
+ * the wordmark, the site's host (SITE_HOST), @coinnibalfun.
  *
  * Landscape (one row), portrait and square (three rows, a snake) from the same code (?w=&h=).
  */
@@ -255,7 +255,7 @@
       ctx.globalAlpha = E.outCubic(k3);
       font(ctx, Math.round(c.wm * 0.17), 500, 'mono'); ctx.letterSpacing = '6px';
       ctx.fillStyle = C.pinkText; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('@ELYMUMIO', W / 2, c.at + (1 - E.outExpo(k3)) * 20);
+      ctx.fillText('@COINNIBALFUN', W / 2, c.at + (1 - E.outExpo(k3)) * 20);
       ctx.restore();
     }
   }
@@ -275,9 +275,9 @@
       font(ctx, MODE === 'landscape' ? 24 : 26, 500, 'mono'); ctx.letterSpacing = '8px';
       ctx.fillStyle = C.ink2; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const ky = MODE === 'landscape' ? 300 : MODE === 'portrait' ? 520 : 180;
-      ctx.fillText('ELYMUM  /  ROADMAP', W / 2, ky);
+      ctx.fillText('COINNIBAL  /  ROADMAP', W / 2, ky);
       ctx.fillStyle = C.pink;
-      ctx.beginPath(); ctx.arc(W / 2 - ctx.measureText('ELYMUM  /  ROADMAP').width / 2 - 22, ky, 6, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(W / 2 - ctx.measureText('COINNIBAL  /  ROADMAP').width / 2 - 22, ky, 6, 0, TAU); ctx.fill();
       ctx.restore();
     }
     pellets(ctx, L, t, s, fade);

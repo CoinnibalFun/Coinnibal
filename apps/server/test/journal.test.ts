@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Journal, type LiveStake } from '../src/stake/journal';
-import { ROBINHOOD_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID } from '@elymum/shared';
+import { ROBINHOOD_TESTNET_CHAIN_ID, LOCALNET_CHAIN_ID } from '@coinnibal/shared';
 import { journalAbandonDecision } from '../src/chain/evm';
 
 const live = (session: string, value: number): LiveStake => ({
@@ -17,7 +17,7 @@ const live = (session: string, value: number): LiveStake => ({
   kills: 2,
 });
 
-const tmpPath = () => join(mkdtempSync(join(tmpdir(), 'elymum-journal-')), 'journal.json');
+const tmpPath = () => join(mkdtempSync(join(tmpdir(), 'coinnibal-journal-')), 'journal.json');
 
 describe('journal v2', () => {
   it('loot survives restart', () => {
@@ -162,7 +162,7 @@ describe('sweep ids and the contract binding (EVM)', () => {
   const sweep = (key: string, arenaId = 1) => ({ kind: 'sweep' as const, key, arenaId, roomId: `arena-${arenaId}-1`, round: 1, amount: 10, attempts: 0, nextAttemptAt: 0, createdAt: 0 });
 
   it('assigns monotonic sweep ids per arena, above the on-chain lastSweepId, and keeps them across reloads', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-journal-sweep-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-journal-sweep-'));
     const path = join(dir, 'journal.json');
     const j = new Journal(path);
     j.commit({ enqueue: [sweep('a'), sweep('b'), sweep('c', 2)] });
@@ -222,7 +222,7 @@ describe('journal: crash recovery settles at the gross value (the contract takes
   const stake = (session: string, value: number, roomId = 'arena-1-1'): LiveStake => ({ roomId, session, sessionId: 1, player: '0xP', arenaId: 1, value, score: 0, kills: 0 });
 
   it('crash recovery pays live tickets their whole value: no off-chain cut, no extra sweep', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'elymum-journal-v3-')), 'journal.json');
+    const path = join(mkdtempSync(join(tmpdir(), 'coinnibal-journal-v3-')), 'journal.json');
     const j = new Journal(path);
     j.commit({ roomId: 'arena-1-1', live: [stake('S1', 1900), stake('S2', 600)] });
     expect(j.owedByArena(1)).toBe(1900 + 600);
@@ -246,7 +246,7 @@ describe('journal: crash recovery settles at the gross value (the contract takes
   });
 
   it('a journal written with house-bot purses, a team reserve and start values loads; those fields are ignored and dropped', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'elymum-journal-old-')), 'journal.json');
+    const path = join(mkdtempSync(join(tmpdir(), 'coinnibal-journal-old-')), 'journal.json');
     writeFileSync(
       path,
       JSON.stringify({

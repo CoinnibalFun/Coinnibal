@@ -1,12 +1,15 @@
-import type { CustomRoomQuote, CustomRoomView } from '@elymum/shared';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import type { CustomRoomQuote, CustomRoomView } from '@coinnibal/shared';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CUSTOM_SETTINGS_DEFAULT } from '@elymum/shared';
-import { customRoomsPatch, feeLadder, feeText, roomKindText } from '../src/admin/CustomRoomsCard';
+import { CUSTOM_SETTINGS_DEFAULT } from '@coinnibal/shared';
+import { customRoomsPatch, draftBase, feeLadder, feeText, roomKindText } from '../src/admin/CustomRoomsCard';
 import { arenaTarget, leavePaidSeat, openInvite, seatInPaidRoom } from '../src/rooms/invite';
 import { Kb } from '../src/design';
-import { RoomApiError, loadPendingPayment, roomLink, savePendingPayment } from '../src/rooms/api';
-import { RoomCreator, gasText } from '../src/rooms/RoomCreator';
+import { RoomApiError, loadPendingPayments, roomLink, savePendingPayment } from '../src/rooms/api';
+import { RoomCreator, roomFeeText } from '../src/rooms/RoomCreator';
+import { PaidSeatBanner } from '../src/rooms/PaidSeatBanner';
+import { newRoomRequest } from '../src/rooms/pay';
+import { tokenText } from '../src/ui/lobby/useLobby';
 import { RoomCard, resetInviteLink, useInviteLink } from '../src/rooms/RoomCard';
 
 function Probe() {
@@ -19,8 +22,10 @@ import { useChainData } from '../src/wallet/chain';
 import { ALICE, ONE, chainStatus, detail, fakeProvider } from './evm-helpers';
 
 const HASH = `0x${'ab'.repeat(32)}`;
-const TREASURY = '0x3333333333333333333333333333333333333333';
-const PRICE = 5n * 10n ** 16n;
+const ARENA = '0x00000000000000000000000000000000000A7e4A';
+/** The base room fee: 1,500 game tokens. */
+const PRICE = 1500n * 10n ** 18n;
+const REQUEST = expect.stringMatching(/^[a-z2-7]{16}$/);
 
 const spies = vi.hoisted(() => ({ quote: vi.fn(), create: vi.fn(), pay: vi.fn(), play: vi.fn(), get: vi.fn(), buy: vi.fn() }));
 vi.mock('../src/wallet/buyTicket', () => ({ buyTicket: spies.buy }));
@@ -28,14 +33,14 @@ vi.mock('../src/rooms/api', async (orig) => {
   const real = await orig<typeof import('../src/rooms/api')>();
   return { ...real, roomsApi: { ...real.roomsApi, quote: spies.quote, create: spies.create, get: spies.get, mine: async () => [] } };
 });
-vi.mock('../src/rooms/pay', () => ({ payRoomFee: spies.pay }));
+vi.mock('../src/rooms/pay', async (orig) => ({ ...(await orig<typeof import('../src/rooms/pay')>()), payRoomFee: spies.pay }));
 vi.mock('../src/game/instance', () => ({ engine: () => ({ play: spies.play }) }));
 
 const quote = (o: Partial<CustomRoomQuote> = {}): CustomRoomQuote => ({
   enabled: true,
-  priceWei: PRICE.toString(),
-  youPayWei: PRICE.toString(),
-  treasury: TREASURY,
+  pay: { token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$NIBAL', decimals: 18 }, payTo: ARENA, burnBps: 5000 },
+  priceRaw: PRICE.toString(),
+  youPayRaw: PRICE.toString(),
   holderPerk: 'discount',
   holderDiscountPct: 50,
   holder: false,
@@ -87,9 +92,12 @@ beforeEach(() => {
   for (const s of Object.values(spies)) s.mockReset();
   spies.quote.mockResolvedValue(quote());
   spies.create.mockResolvedValue({ room: roomView(), invite: 'http://localhost/play?room=AB2CD' });
-  spies.pay.mockImplementation(async (_c: unknown, _to: unknown, _wei: bigint, onPhase: (p: string, h?: string) => void) => {
-    onPhase('signing');
-    onPhase('confirming', HASH);
+  spies.pay.mockImplementation(async (_pay: unknown, _raw: bigint, _request: string, ctx: { onPhase: (p: string) => void; onStep?: (s: string) => void }) => {
+    ctx.onStep?.('approve');
+    ctx.onPhase('signing');
+    ctx.onStep?.('pay');
+    ctx.onPhase('signing');
+    ctx.onPhase('confirming');
     return { ok: true, hash: HASH };
   });
   spies.get.mockRejectedValue(new RoomApiError(404, 'not_found', 'No open room with that code.'));
@@ -112,9 +120,9 @@ beforeEach(() => {
     allowance: 0n,
     holder: false,
   });
-  savePendingPayment(null);
+  localStorage.clear();
 });
-afterEach(() => savePendingPayment(null));
+afterEach(() => localStorage.clear());
 
 const open = async () => {
   render(
@@ -137,7 +145,9 @@ describe('the room creator', () => {
     signIn();
     await open();
     expect(spies.quote).toHaveBeenCalledWith('tok');
-    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.05/);
+    // the fee in game tokens (no dollar value without a token price)
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/1,500 \$NIBAL/);
+    expect(screen.getByTestId('cr-price').textContent).not.toMatch(/ETH/);
     // a name is required
     fireEvent.click(screen.getByTestId('cr-continue'));
     expect(screen.getByText(/Give the room a name/)).toBeTruthy();
@@ -158,17 +168,24 @@ describe('the room creator', () => {
     expect(payment.textContent).toMatch(/60 min/);
     expect(payment.textContent).toMatch(/Large · many cacti/);
     expect(payment.textContent).toMatch(/none, pure fun/);
-    expect(payment.textContent).toMatch(/0\.05 ETH/);
+    expect(payment.textContent).toMatch(/Total1,500 \$NIBAL/);
+    expect(payment.textContent).not.toMatch(/\d ETH/);
+    // paid to the arena like a power-up pack: half burned, half to the team wallet
+    expect(screen.getByTestId('cr-pay-note').textContent).toMatch(/50% is burned and 50% goes to the team wallet/);
+    expect(screen.getByTestId('cr-pay').textContent).toMatch(/Pay 1,500 \$NIBAL/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     fireEvent.click(screen.getByTestId('cr-pay')); // a double click never pays twice
     await settle();
     expect(spies.pay).toHaveBeenCalledTimes(1);
-    expect(spies.pay.mock.calls[0][1]).toBe(TREASURY);
-    expect(spies.pay.mock.calls[0][2]).toBe(PRICE);
-    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ name: 'Friday Pond', durationMin: 60, mapSize: 'L', bots: 6, difficulty: 'hard', traps: 'many' }), HASH);
+    expect(spies.pay.mock.calls[0][0]).toMatchObject({ payTo: ARENA });
+    expect(spies.pay.mock.calls[0][1]).toBe(PRICE);
+    const request = spies.pay.mock.calls[0][2] as string;
+    expect(request).toMatch(/^[a-z2-7]{16}$/);
+    // the server gets the payment and the request its ref names
+    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ name: 'Friday Pond', durationMin: 60, mapSize: 'L', bots: 6, difficulty: 'hard', traps: 'many' }), { txHash: HASH, request });
     expect(screen.getByTestId('cr-code').textContent).toBe('AB2CD');
     expect((screen.getByLabelText('Invite link') as HTMLInputElement).value).toMatch(/\/play\?room=AB2CD$/);
-    expect(loadPendingPayment(ALICE)).toBeNull();
+    expect(loadPendingPayments(ALICE)).toEqual([]);
     fireEvent.click(screen.getByTestId('cr-enter'));
     expect(spies.play).toHaveBeenCalledWith('private:AB2CD');
   });
@@ -183,33 +200,34 @@ describe('the room creator', () => {
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
     expect(screen.getByRole('alert').textContent).toMatch(/All room slots are busy.*Your payment is kept/);
-    expect(loadPendingPayment(ALICE)?.hash).toBe(HASH);
+    expect(loadPendingPayments(ALICE).map((p) => p.hash)).toEqual([HASH]);
     expect(screen.getByTestId('cr-pay').textContent).toMatch(/Open with my payment/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
     expect(spies.pay).toHaveBeenCalledTimes(1);
-    expect(spies.create).toHaveBeenLastCalledWith('tok', expect.anything(), HASH);
+    // the kept payment goes again with its own request (the ref it paid)
+    expect(spies.create).toHaveBeenLastCalledWith('tok', expect.anything(), { txHash: HASH, request: spies.pay.mock.calls[0][2] });
     expect(screen.getByTestId('cr-code')).toBeTruthy();
   });
 
   it('a payment the server refuses for good is not offered again as the kept payment', async () => {
     signIn();
-    spies.create.mockRejectedValueOnce(new RoomApiError(400, 'payment_low', 'That payment is below the room price.', undefined, false));
+    spies.create.mockRejectedValueOnce(new RoomApiError(400, 'payment_invalid', 'That payment was made for something else, not for this room.', undefined, false));
     await open();
     fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Short room' } });
     fireEvent.click(screen.getByTestId('cr-continue'));
     await settle();
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
-    expect(screen.getByRole('alert').textContent).toMatch(/below the room price/);
+    expect(screen.getByRole('alert').textContent).toMatch(/made for something else/);
     expect(screen.getByRole('alert').textContent).not.toMatch(/Your payment is kept/);
-    expect(loadPendingPayment(ALICE)).toBeNull();
+    expect(loadPendingPayments(ALICE)).toEqual([]);
     expect(screen.getByTestId('cr-pay').textContent).not.toMatch(/Open with my payment/);
   });
 
   it('a holder with a free room opens it without a payment', async () => {
     signIn();
-    spies.quote.mockResolvedValue(quote({ holder: true, holderPerk: 'free_daily', freeAvailable: true, youPayWei: '0' }));
+    spies.quote.mockResolvedValue(quote({ holder: true, holderPerk: 'free_daily', freeAvailable: true, youPayRaw: '0' }));
     await open();
     expect(screen.getByTestId('cr-price').textContent).toMatch(/Free/);
     fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Holder room' } });
@@ -221,32 +239,123 @@ describe('the room creator', () => {
     expect(spies.create).toHaveBeenCalledWith('tok', expect.anything(), null);
   });
 
+  it('shows the dollar value of the fee when the token has a price; the wallet first approves, then pays', async () => {
+    signIn();
+    spies.quote.mockResolvedValue(quote({ usdCents: 150, usdPerToken: '0.001' }));
+    let release: () => void = () => {};
+    spies.pay.mockImplementation(async (_pay: unknown, _raw: bigint, _request: string, ctx: { onPhase: (p: string) => void; onStep?: (s: string) => void }) => {
+      ctx.onStep?.('approve');
+      ctx.onPhase('signing');
+      await new Promise<void>((r) => (release = r));
+      ctx.onStep?.('pay');
+      ctx.onPhase('signing');
+      return { ok: true, hash: HASH };
+    });
+    await open();
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/1,500 \$NIBAL/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/\$1\.50/);
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Dollar room' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+    expect(screen.getByTestId('cr-payment').textContent).toMatch(/Total1,500 \$NIBALIn dollars≈ \$1\.50/);
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(screen.getByRole('status').textContent).toMatch(/Approve 1,500 \$NIBAL in your wallet/);
+    release();
+    await settle();
+    expect(screen.getByTestId('cr-code').textContent).toBe('AB2CD');
+  });
+
+  it('before the game token is live: a room that costs something cannot be paid, a holder\'s free room still opens', async () => {
+    signIn();
+    spies.quote.mockResolvedValue(quote({ pay: null, payClosed: 'no_token' }));
+    await open();
+    expect(screen.getByTestId('cr-token-soon').textContent).toMatch(/paid in tokens, and the game token is not live yet\. Practice with bots is free/);
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Too early' } });
+    const btn = screen.getByTestId('cr-continue') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent).toMatch(/opens when the token is live/);
+    cleanup();
+    spies.quote.mockResolvedValue(quote({ pay: null, payClosed: 'no_token', holder: true, holderPerk: 'free_daily', freeAvailable: true, youPayRaw: '0' }));
+    await open();
+    expect(screen.queryByTestId('cr-token-soon')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Holder room' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(spies.pay).not.toHaveBeenCalled();
+    expect(spies.create).toHaveBeenCalledWith('tok', expect.anything(), null);
+  });
+
+  it('too few tokens for the fee is said before any signature', async () => {
+    signIn();
+    useChainData.setState({ tokenBalance: 1_000n * ONE });
+    await open();
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Poor room' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+    expect(screen.queryByTestId('cr-payment')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toMatch(/This room costs 1,500 \$NIBAL, and this wallet has 1,000 \$NIBAL/);
+    expect(spies.pay).not.toHaveBeenCalled();
+  });
+
+  it('a declined payment pays nothing and keeps nothing; a payment sent but not seen confirming is checked by the server and kept', async () => {
+    signIn();
+    spies.pay.mockResolvedValueOnce({ ok: false, rejected: true, hash: null, message: 'You rejected the request in your wallet.' });
+    await open();
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Shy room' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(screen.getByRole('alert').textContent).toMatch(/You rejected/);
+    expect(spies.create).not.toHaveBeenCalled();
+    expect(loadPendingPayments(ALICE)).toEqual([]);
+    // sent, the receipt timed out here: the server is asked (it says pending, then still pending), the payment is kept
+    spies.pay.mockResolvedValueOnce({ ok: false, rejected: false, hash: HASH, message: 'The network did not answer in time.' });
+    spies.create.mockRejectedValue(new RoomApiError(409, 'payment_pending', 'The payment is not confirmed yet. Try again in a few seconds.'));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(screen.getByTestId('cr-pay'));
+      for (let i = 0; i < 4; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(2600)));
+    } finally {
+      vi.useRealTimers();
+    }
+    await settle();
+    expect(spies.create).toHaveBeenCalledTimes(4);
+    expect(spies.create).toHaveBeenLastCalledWith('tok', expect.anything(), { txHash: HASH, request: REQUEST });
+    expect(screen.getByRole('alert').textContent).toMatch(/not confirmed yet.*Your payment is kept/);
+    expect(loadPendingPayments(ALICE)).toMatchObject([{ hash: HASH, raw: PRICE.toString() }]);
+    expect(screen.getByTestId('cr-pay').textContent).toMatch(/Open with my payment/);
+  });
+
   it('the fee follows the capacity live: x1.5 from 11 players, x2 from 21; the payment is the scaled fee', async () => {
     signIn();
     await open();
     const range = screen.getByTestId('cr-capacity-range') as HTMLInputElement;
     expect(screen.getByTestId('cr-capacity').textContent).toMatch(/^Max players10/);
-    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.05/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/1,500/);
     expect(screen.getByTestId('cr-capacity-note').textContent).toMatch(/up to 10 players/);
     // the steps: 2 4 6 8 10 15 20 25 30 40 50 (the server's biggest room is 50)
     expect(range.max).toBe('10');
     fireEvent.change(range, { target: { value: '6' } }); // 20 players
     expect(screen.getByTestId('cr-capacity').textContent).toMatch(/20/);
-    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.075/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/2,250/);
     expect(screen.getByTestId('cr-price').textContent).toMatch(/for up to 20 players/);
     expect(screen.getByTestId('cr-capacity-note').textContent).toMatch(/1\.5 times the base/);
     fireEvent.change(range, { target: { value: '8' } }); // 30 players
-    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.10/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/3,000/);
     fireEvent.change(range, { target: { value: '10' } }); // 50 players: x3
-    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.15/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/4,500/);
     fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Big pond' } });
     fireEvent.click(screen.getByTestId('cr-continue'));
     await settle();
     expect(screen.getByTestId('cr-payment').textContent).toMatch(/up to 50/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
-    expect(spies.pay.mock.calls[0][2]).toBe(PRICE * 3n);
-    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ maxPlayers: 50, kind: 'free', arenaId: null }), HASH);
+    expect(spies.pay.mock.calls[0][1]).toBe(PRICE * 3n);
+    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ maxPlayers: 50, kind: 'free', arenaId: null }), { txHash: HASH, request: REQUEST });
   });
 
   it('a holder discount applies to the scaled fee; too many seats for the server is said and blocks', async () => {
@@ -254,8 +363,9 @@ describe('the room creator', () => {
     spies.quote.mockResolvedValue(quote({ holder: true, seatsLeft: 12 }));
     await open();
     const range = screen.getByTestId('cr-capacity-range') as HTMLInputElement;
-    fireEvent.change(range, { target: { value: '6' } }); // 20 players: 0.075, half off
-    expect(screen.getByTestId('cr-price').textContent).toMatch(/0\.0375/);
+    fireEvent.change(range, { target: { value: '6' } }); // 20 players: 2,250, half off
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/1,125/);
+    expect(screen.getByTestId('cr-price').textContent).toMatch(/2,250 \$NIBAL/); // the full price, struck
     expect(screen.getByTestId('cr-seats').textContent).toMatch(/room for 12 more players/);
     expect((screen.getByTestId('cr-continue') as HTMLButtonElement).disabled).toBe(true);
   });
@@ -294,12 +404,12 @@ describe('the room creator', () => {
     const payment = screen.getByTestId('cr-payment');
     expect(payment.textContent).toMatch(/Paid room\$3 Room/);
     expect(payment.textContent).toMatch(/never holds anyone's tokens/);
-    expect(payment.textContent).toMatch(/Your ticket10,000 \$ELYMUM/);
+    expect(payment.textContent).toMatch(/Your ticket10,000 \$NIBAL/);
     expect(screen.getByTestId('cr-pay').textContent).toMatch(/then my ticket/);
     fireEvent.click(screen.getByTestId('cr-pay'));
     await settle();
     expect(spies.pay).toHaveBeenCalledTimes(1);
-    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ kind: 'paid', arenaId: 2, bots: 0 }), HASH);
+    expect(spies.create).toHaveBeenCalledWith('tok', expect.objectContaining({ kind: 'paid', arenaId: 2, bots: 0 }), { txHash: HASH, request: REQUEST });
     // straight on: the creator's ticket of arena 2, the price on chain, approve then join (no second trip)
     expect(spies.buy).toHaveBeenCalledTimes(1);
     expect(spies.buy.mock.calls[0][0]).toMatchObject({ owner: ALICE, arenaId: 2, fake: false, review: { fee: 10_000n * ONE, steps: ['approve', 'join'], rates: { burnBps: 1500, vaultBps: 500 } } });
@@ -331,12 +441,13 @@ describe('the room creator', () => {
     expect(spies.play).toHaveBeenCalledWith('arena:2:AB2CD', { awaitTicket: true });
   });
 
-  it('a ticket room: too few tokens for the creator\'s own ticket is said before any fee is paid', async () => {
+  it('a ticket room: too few tokens for the room fee and the creator\'s own ticket is said before any fee is paid', async () => {
     signIn();
-    useChainData.setState({ tokenBalance: 9_000n * ONE });
+    // 10,000 for the ticket, 1,500 for the room: 11,000 is not enough
+    useChainData.setState({ tokenBalance: 11_000n * ONE });
     await ticketRoom();
     expect(screen.queryByTestId('cr-payment')).toBeNull();
-    expect(screen.getByRole('alert').textContent).toMatch(/You need 10,000 \$ELYMUM for your own ticket/);
+    expect(screen.getByRole('alert').textContent).toMatch(/You need 11,500 \$NIBAL for the room fee and your own ticket/);
     expect(spies.pay).not.toHaveBeenCalled();
   });
 
@@ -380,17 +491,47 @@ describe('the room creator', () => {
 });
 
 describe('room helpers', () => {
-  it('formats ETH with as few decimals as needed and builds share links', () => {
-    expect(gasText(PRICE)).toBe('0.05');
-    expect(gasText(PRICE / 2n)).toBe('0.025');
-    expect(gasText(10n ** 18n)).toBe('1.00');
-    expect(roomLink('AB2CD', 'https://elymum.io/')).toBe('https://elymum.io/play?room=AB2CD');
+  it('writes a room fee in game tokens with its dollar value, and builds share links', () => {
+    const tok = tokenText(18, '$NIBAL');
+    const f = roomFeeText(quote({ usdPerToken: '0.001' }), tok);
+    expect(f.tokens(PRICE)).toBe('1,500 $NIBAL');
+    expect(f.usd(PRICE)).toBeCloseTo(1.5, 6);
+    expect(f.usd(0n)).toBeNull();
+    // no token price known: no dollar value; another token's decimals and symbol from the quote
+    expect(roomFeeText(quote(), tok).usd(PRICE)).toBeNull();
+    expect(roomFeeText(quote({ pay: { token: { address: ARENA, symbol: 'TEST', decimals: 6 }, payTo: ARENA, burnBps: 5000 } }), tok).tokens(2_500_000n)).toBe('2.5 TEST');
+    // before the token is set: the lobby's token text
+    expect(roomFeeText(quote({ pay: null }), tok).tokens(PRICE)).toBe('1,500 $NIBAL');
+    expect(roomLink('AB2CD', 'https://coinnibal.fun/')).toBe('https://coinnibal.fun/play?room=AB2CD');
+  });
+
+  it('every payment gets its own request id (the ref the server opens one room for)', () => {
+    const ids = new Set(Array.from({ length: 50 }, () => newRoomRequest()));
+    expect(ids.size).toBe(50);
+    for (const id of ids) expect(id).toMatch(/^[a-z2-7]{16}$/);
   });
 
   it('the admin card sends only the changed settings', () => {
     const s = { ...CUSTOM_SETTINGS_DEFAULT };
     expect(customRoomsPatch(s, { ...s })).toEqual({});
-    expect(customRoomsPatch(s, { ...s, priceGas: '0.1', maxLive: 4, capacityStepPct: 25, paidRooms: false })).toEqual({ priceGas: '0.1', maxLive: 4, capacityStepPct: 25, paidRooms: false });
+    expect(customRoomsPatch(s, { ...s, priceIn: 'token', priceTokens: '2000', usdCents: 200, maxLive: 4, capacityStepPct: 25, paidRooms: false })).toEqual({
+      priceIn: 'token',
+      priceTokens: '2000',
+      usdCents: 200,
+      maxLive: 4,
+      capacityStepPct: 25,
+      paidRooms: false,
+    });
+  });
+
+  it('the admin card prices a draft with the server\'s own function', () => {
+    const view = { settings: { ...CUSTOM_SETTINGS_DEFAULT }, base: { raw: PRICE.toString(), decimals: 18, usdCents: 150, usdPerToken: '0.001', sigFigs: 2 } };
+    expect(draftBase(view, view.settings)).toEqual({ raw: PRICE, usdCents: 150 });
+    // $2.50 at $0.001: 2,500 tokens; at $0.00081 the arenas' rounding (2 figures): 3,100
+    expect(draftBase(view, { ...view.settings, usdCents: 250 })).toEqual({ raw: 2500n * ONE, usdCents: 250 });
+    expect(draftBase({ ...view, base: { ...view.base, usdPerToken: '0.00081' } }, { ...view.settings, usdCents: 250 })).toEqual({ raw: 3100n * ONE, usdCents: 250 });
+    expect(draftBase(view, { ...view.settings, priceIn: 'token', priceTokens: '12.5' })).toEqual({ raw: 125n * 10n ** 17n, usdCents: null });
+    expect(draftBase(view, { ...view.settings, priceIn: 'token', priceTokens: '12.' })).toBeNull();
   });
 
   it('the admin card lists the kind, tier and fee of each room, and the fee by size', () => {
@@ -398,20 +539,80 @@ describe('room helpers', () => {
     expect(roomKindText({ kind: 'free' })).toBe('free');
     expect(roomKindText({})).toBe('free');
     expect(roomKindText({ kind: 'free', practice: true })).toBe('practice with bots');
-    expect(feeText({ feeWei: (PRICE * 3n).toString() })).toBe('0.15');
-    expect(feeText({ feeWei: '0' })).toBe('0');
-    expect(feeText({})).toBe('0');
-    expect(feeLadder('0.05', 50, 100)).toBe('10: 0.05 · 20: 0.075 · 50: 0.15 · 100: 0.275');
-    expect(feeLadder('0.05', 50, 36)).toBe('10: 0.05 · 20: 0.075 · 36: 0.125');
-    expect(feeLadder('nope', 50, 50)).toBeNull();
+    expect(feeText({ feeRaw: (PRICE * 3n).toString(), feeIn: 'token' }, 18)).toBe('4,500');
+    expect(feeText({ feeRaw: '0' }, 18)).toBe('0');
+    expect(feeText({}, 18)).toBe('0');
+    // a room opened before rooms were paid in tokens shows its ETH fee as such
+    expect(feeText({ feeRaw: (5n * 10n ** 14n).toString(), feeIn: 'gas' }, 18)).toBe('0.0005 ETH');
+    expect(feeLadder(PRICE, 18, 50, 100)).toBe('10: 1,500 · 20: 2,250 · 50: 4,500 · 100: 8,250');
+    expect(feeLadder(PRICE, 18, 50, 36)).toBe('10: 1,500 · 20: 2,250 · 36: 3,750');
+    expect(feeLadder(PRICE, 18, 50, 20, 150)).toBe('10: $1.50 (1,500) · 20: $2.25 (2,250)');
   });
 
   it('a kept payment belongs to its wallet and expires', () => {
-    savePendingPayment({ hash: HASH, wallet: ALICE, wei: '1', at: Date.now() });
-    expect(loadPendingPayment(ALICE.toLowerCase())?.hash).toBe(HASH);
-    expect(loadPendingPayment('0x2222222222222222222222222222222222222222')).toBeNull();
-    savePendingPayment({ hash: HASH, wallet: ALICE, wei: '1', at: Date.now() - 3 * 3600_000 });
-    expect(loadPendingPayment(ALICE)).toBeNull();
+    const request = newRoomRequest();
+    savePendingPayment({ hash: HASH, wallet: ALICE, request, raw: '1', at: Date.now() });
+    expect(loadPendingPayments(ALICE.toLowerCase())).toMatchObject([{ hash: HASH, request }]);
+    expect(loadPendingPayments('0x2222222222222222222222222222222222222222')).toEqual([]);
+    savePendingPayment({ hash: HASH, wallet: ALICE, request, raw: '1', at: Date.now() - 3 * 3600_000 });
+    expect(loadPendingPayments(ALICE)).toEqual([]);
+    // a kept payment without its request (or an ETH one of before) is not offered
+    localStorage.clear();
+    localStorage.setItem('coinnibal.room-payment.v2', JSON.stringify({ hash: HASH, wallet: ALICE, raw: '1', at: Date.now() }));
+    expect(loadPendingPayments(ALICE)).toEqual([]);
+  });
+
+  it('kept payments are a list per wallet and transaction: a new payment or another wallet never overwrites one (audit S12)', () => {
+    const OTHER = `0x${'9'.repeat(64)}`;
+    const BOB = '0x2222222222222222222222222222222222222222';
+    // a payment kept in the single slot of an earlier build moves into the list
+    localStorage.setItem('coinnibal.room-payment.v2', JSON.stringify({ hash: HASH, wallet: ALICE, request: newRoomRequest(), raw: '5', at: Date.now() }));
+    savePendingPayment({ hash: OTHER, wallet: ALICE, request: newRoomRequest(), raw: '9', at: Date.now() });
+    savePendingPayment({ hash: OTHER, wallet: BOB, request: newRoomRequest(), raw: '7', at: Date.now() });
+    expect(localStorage.getItem('coinnibal.room-payment.v2')).toBeNull();
+    expect(loadPendingPayments(ALICE).map((p) => [p.hash, p.raw])).toEqual([
+      [HASH, '5'],
+      [OTHER, '9'],
+    ]);
+    expect(loadPendingPayments(BOB).map((p) => p.raw)).toEqual(['7']);
+  });
+
+  it('a free room never erases a kept payment', async () => {
+    signIn();
+    const request = newRoomRequest();
+    savePendingPayment({ hash: HASH, wallet: ALICE, request, raw: PRICE.toString(), at: Date.now() });
+    spies.quote.mockResolvedValue(quote({ holder: true, holderPerk: 'free_daily', freeAvailable: true, youPayRaw: '0' }));
+    await open();
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Holder room' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+    // the free room says it is free, not that a kept payment is used
+    expect(screen.getByTestId('cr-pay-note').textContent).not.toMatch(/earlier payment/);
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(spies.create).toHaveBeenCalledWith('tok', expect.anything(), null);
+    expect(screen.getByTestId('cr-code')).toBeTruthy();
+    expect(loadPendingPayments(ALICE)).toMatchObject([{ hash: HASH, request }]);
+  });
+
+  it('a kept payment too small for a bigger room stays kept beside the new one; only the payment used is dropped', async () => {
+    signIn();
+    const NEW = `0x${'6'.repeat(64)}`;
+    const small = newRoomRequest();
+    savePendingPayment({ hash: HASH, wallet: ALICE, request: small, raw: (PRICE - 1n).toString(), at: Date.now() });
+    spies.pay.mockResolvedValue({ ok: true, hash: NEW });
+    await open();
+    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'Big room' } });
+    fireEvent.click(screen.getByTestId('cr-continue'));
+    await settle();
+    // the player is told the earlier payment is kept and why this room needs a new one
+    expect(screen.getByTestId('cr-kept-smaller').textContent).toMatch(/earlier payment of .* is kept/);
+    expect(screen.getByTestId('cr-pay').textContent).toMatch(/Pay 1,500/);
+    fireEvent.click(screen.getByTestId('cr-pay'));
+    await settle();
+    expect(spies.pay).toHaveBeenCalledTimes(1);
+    expect(spies.create).toHaveBeenLastCalledWith('tok', expect.anything(), { txHash: NEW, request: spies.pay.mock.calls[0][2] });
+    expect(loadPendingPayments(ALICE)).toMatchObject([{ hash: HASH, request: small }]);
   });
 });
 
@@ -497,5 +698,17 @@ describe('join by code (8-character room codes)', () => {
     fireEvent.submit(input.closest('form')!);
     await settle();
     expect(screen.getByText('Room codes are 8 letters and digits.')).toBeTruthy();
+  });
+});
+
+describe('a ticket room says it can end early, before anyone pays', () => {
+  it("the lobby's seat note of a ticket room names the early end, the warning and the settlement", () => {
+    useUi.setState({ paidSeat: { code: 'AB2CD', arenaId: 2, name: 'Friday Pond', endsAt: Date.now() + 20 * 60_000 } });
+    render(
+      <Kb>
+        <PaidSeatBanner />
+      </Kb>,
+    );
+    expect(screen.getByTestId('paid-seat-note').textContent).toMatch(/creator or an admin can end the room early: everyone gets a 10-second warning, then every ticket is settled at that moment/);
   });
 });

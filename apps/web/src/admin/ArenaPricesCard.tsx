@@ -1,5 +1,5 @@
-import { arenaPriceSyncCalls, sameAddress } from '@elymum/sdk';
-import { arenaName, fmtTok } from '@elymum/sdk/ops';
+import { arenaPriceSyncCalls, sameAddress } from '@coinnibal/sdk';
+import { arenaName, fmtTok } from '@coinnibal/sdk/ops';
 import {
   ARENA_PRICING_LIMITS,
   arenaPriceDiff,
@@ -9,7 +9,7 @@ import {
   type ArenaPriceRow,
   type ArenaPricingSettings,
   type ArenaUsdTier,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Hash } from 'viem';
 import { sendWithWallet, txErrorText } from '../wallet/tx';
@@ -249,7 +249,7 @@ export function ArenaPricesCard({ ctx }: { ctx: ChainCtx }) {
     for (let i = 0; i < calls.length; i++) {
       r.at = i;
       setRun({ ...r });
-      const plan: Plan = { title: calls[i].label, contract: 'ElymumArena', call: calls[i].call, ownerOf: arena!, owner: cfg!.admin };
+      const plan: Plan = { title: calls[i].label, contract: 'CoinnibalArena', call: calls[i].call, ownerOf: arena!, owner: cfg!.admin };
       const res = await sendWithWallet((wallet, from) => sendPlan(plan, wallet, from), { chain, publicClient: ctx.client });
       if (!res.ok) {
         r.error = `${calls[i].label}: ${txErrorText(res.error)}`;
@@ -317,7 +317,7 @@ export function ArenaPricesCard({ ctx }: { ctx: ChainCtx }) {
               <th scope="col" className="is-num">
                 Ticket (USD)
               </th>
-              <th scope="col">Emblem holders only</th>
+              <th scope="col">NFT holders only</th>
             </tr>
           </thead>
           <tbody>

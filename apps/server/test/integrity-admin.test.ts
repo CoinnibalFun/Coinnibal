@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION, type ServerMessage } from '@elymum/shared';
+import { PROTOCOL_VERSION, type ServerMessage } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
@@ -23,7 +23,7 @@ interface Harness {
 }
 
 async function harness(): Promise<Harness> {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-integrity-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-integrity-'));
   const admin = wallet();
   const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, ADMIN_WALLETS: admin, TRUST_PROXY: '0', GAME_ACCESS: 'public', ROUND_JOIN_CLOSE_SECONDS: '0', ROUND_BREAK_SECONDS: '0' } as NodeJS.ProcessEnv);
   const app = await createApp(cfg, {

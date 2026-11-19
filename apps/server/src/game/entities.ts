@@ -1,4 +1,4 @@
-import { EntityKind, PowerUpType, RULES, massToRadius } from '@elymum/shared';
+import { EntityKind, PowerUpType, RULES, massToRadius } from '@coinnibal/shared';
 import type { Gridded } from './grid';
 
 export abstract class Entity implements Gridded {

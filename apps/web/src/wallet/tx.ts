@@ -1,4 +1,4 @@
-import { describeError, sendCall, type ContractCall, type DescribedError } from '@elymum/sdk';
+import { describeError, sendCall, type ContractCall, type DescribedError } from '@coinnibal/sdk';
 import type { Address, Hash, PublicClient, TransactionReceipt, WalletClient } from 'viem';
 import { t } from '../i18n';
 import type { Eip1193Provider } from './eip6963';

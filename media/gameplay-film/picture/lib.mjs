@@ -51,7 +51,7 @@ export function cursorInit() {
   let x = -200, y = -200;
   const place = () => { const el = window.__filmCursor; if (el) el.style.transform = `translate(${x - 3}px,${y - 2}px)`; };
   const hidden = () => {
-    const S = window.__elymum;
+    const S = window.__coinnibal;
     if (!S) return false;
     const s = S.useUi.getState().screen;
     return s === 'playing' || s === 'dead' || s === 'roundover' || s === 'spectating';

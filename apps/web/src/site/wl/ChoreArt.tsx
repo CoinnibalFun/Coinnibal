@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import type { ReactElement, ReactNode } from 'react';
 import { CoinCharacter, type CoinPaint } from '../../design';
 import { hash32 } from '../coinLook';

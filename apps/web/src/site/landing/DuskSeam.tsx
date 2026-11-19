@@ -1,14 +1,14 @@
-import { ELYSIUM } from '@elymum/shared';
+import { ELYSIUM } from '@coinnibal/shared';
 import { motion, useScroll, useTransform, type MotionValue } from 'motion/react';
-import { useOffscreenPause, useReducedMotion } from '../../design';
+import { useRef } from 'react';
+import { useDashCrawl, useOffscreenPause, useReducedMotion } from '../../design';
 import { useMedia } from '../../design/useMedia';
-import { useT } from '../../i18n';
 
 /**
  * The seam between the day plates and the night plates: dusk on the plain, driven by the scroll.
  * As the visitor scrolls through it the sun sinks behind the terraces, the sky deepens, the
  * planet rises over the far rim, stars blink on one by one and the windows of the little houses
- * light up, while a clock in the corner runs from 18:10 to 21:40. Decoration (aria-hidden).
+ * light up. No clock and no caption: the page's only time is the round's. Decoration (aria-hidden).
  * Transform and opacity only. Reduced motion: one fixed frame at early night.
  */
 
@@ -17,10 +17,9 @@ const W = 1440;
 const H = 340;
 
 /**
- * Where the sun sets and the planet rises (scene x). The scene is cropped around its middle, and the clock and its
- * note sit at the left gutter: on a wide screen the sun sets left of the middle, clear of them; on anything narrower
- * (where the crop brings the left side under the clock) it sets just right of the middle, the planet beside it, so
- * both stay whole on a phone and the sun never passes behind the labels.
+ * Where the sun sets and the planet rises (scene x). The scene is cropped around its middle: on a wide screen the sun
+ * sets left of the middle; on anything narrower it sets just right of the middle, the planet beside it, so both stay
+ * whole on a phone.
  */
 const WIDE = { sun: 520, planet: 930 };
 const NARROW = { sun: 760, planet: 950 };
@@ -70,9 +69,11 @@ function House({ p, h }: { p: MotionValue<number>; h: (typeof HOUSES)[number] })
 }
 
 export function DuskSeam() {
-  const t = useT();
   const reduced = useReducedMotion();
   const [ref, visible] = useOffscreenPause<HTMLDivElement>();
+  // a touch phone: the lights crawl in four steps a second (design/motifs/stepped.ts), not on every frame
+  const lights = useRef<SVGPathElement>(null);
+  useDashCrawl(lights, visible && !reduced, 25, 3200);
   const at = useMedia('(max-width: 1279px)') ? NARROW : WIDE;
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
   const still = useTransform(scrollYProgress, () => 0.72);
@@ -84,11 +85,6 @@ export function DuskSeam() {
   const dusk = useTransform(p, [0.12, 0.36, 0.62], [0, 1, 0.4]);
   const night = useTransform(p, [0.36, 0.72], [0, 1]);
   const planetY = useTransform(p, [0.2, 0.75], [190, -96]);
-  const minutes = useTransform(p, [0.1, 0.9], [18 * 60 + 10, 21 * 60 + 40]);
-  const clock = useTransform(minutes, (m) => {
-    const q = Math.round(m / 5) * 5;
-    return `${String(Math.floor(q / 60)).padStart(2, '0')}:${String(q % 60).padStart(2, '0')}`;
-  });
 
   return (
     <div ref={ref} className="ld-dusk" aria-hidden="true" data-paused={!visible || undefined}>
@@ -123,7 +119,7 @@ export function DuskSeam() {
         <motion.g style={{ opacity: night }}>
           <path d={`M-80 ${H} C 220 -70, ${W - 220} -70, ${W + 80} ${H}`} fill="none" stroke={INK} strokeWidth={34} />
           <path d={`M-80 ${H} C 220 -70, ${W - 220} -70, ${W + 80} ${H}`} fill="none" stroke={ELYSIUM.current} strokeWidth={28} />
-          <path className="ld-dusk__lights" d={`M-80 ${H} C 220 -70, ${W - 220} -70, ${W + 80} ${H}`} fill="none" stroke={ELYSIUM.sun} strokeWidth={5} strokeDasharray="3 22" strokeLinecap="round" />
+          <path ref={lights} className="ld-dusk__lights" d={`M-80 ${H} C 220 -70, ${W - 220} -70, ${W + 80} ${H}`} fill="none" stroke={ELYSIUM.sun} strokeWidth={5} strokeDasharray="3 22" strokeLinecap="round" />
         </motion.g>
         {/* the planet rising over the far rim */}
         <motion.g style={{ y: planetY }}>
@@ -156,8 +152,6 @@ export function DuskSeam() {
           </g>
         ))}
       </svg>
-      <motion.span className="ld-dusk__clock num">{clock}</motion.span>
-      <span className="ld-dusk__note mono">{t('ld.dusk')}</span>
     </div>
   );
 }

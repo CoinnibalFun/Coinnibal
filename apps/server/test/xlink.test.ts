@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { X_CODE_RE, X_CODE_TTL_MS, isAvatarId, xPostTime } from '@elymum/shared';
+import { X_CODE_RE, X_CODE_TTL_MS, isAvatarId, xPostTime } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { encodePng } from '../src/avatars';
@@ -11,7 +11,7 @@ import { EatenTracker } from '../src/rooms/eaten';
 import { ShareService } from '../src/site/shares';
 import { shareEaten, shareHeadline } from '../src/site/share-card';
 import { XLinkService, XLinkStore, carriesCode, cleanXName, oembedText, sniffImage, xAvatarUrl, type XFetch } from '../src/xlink';
-import { TICK_MS, decodeSnapshot, encodeSnapshot, xLinkPostText } from '@elymum/shared';
+import { TICK_MS, decodeSnapshot, encodeSnapshot, xLinkPostText } from '@coinnibal/shared';
 import { Room } from '../src/rooms/room';
 import { ArenaChain, arena, fakeConn, freeCustom, roomDeps, testWallet } from './helpers';
 
@@ -110,7 +110,7 @@ describe('Link X: the proof post', () => {
     const clock = { t: T0 };
     const s = service(x, null, clock);
     const { code } = s.issueCode(W1, IP);
-    x.synd = { text: `Linking my X to Elymum: ${code} https://t.co/abc`, screen_name: 'penny_lane', id_str: '44196397' };
+    x.synd = { text: `Linking my X to Coinnibal: ${code} https://t.co/abc`, screen_name: 'penny_lane', id_str: '44196397' };
     x.picture = { bytes: jpeg(1000), type: 'image/jpeg' };
     clock.t += 60_000;
     // the handle in the typed link is ignored: X's answer names the account
@@ -146,7 +146,7 @@ describe('Link X: the proof post', () => {
     x.synd = { text: code, screen_name: 'penny', id_str: '1', created_at: new Date(T0 - 3_600_000).toUTCString() };
     await expect(s.verify(W1, IP, postUrl(T0 + 1000))).rejects.toMatchObject({ code: 'x_post_old' });
     // another code, or the code inside a longer word
-    x.synd = { text: 'Linking my X to Elymum: ELYMUM-ZZZZZZ', screen_name: 'penny', id_str: '1' };
+    x.synd = { text: 'Linking my X to Coinnibal: COIN-ZZZZZZ', screen_name: 'penny', id_str: '1' };
     await expect(s.verify(W1, IP, postUrl(T0 + 1000))).rejects.toMatchObject({ code: 'x_code_mismatch' });
     x.synd = { text: `x${code}Q`, screen_name: 'penny', id_str: '1' };
     await expect(s.verify(W1, IP, postUrl(T0 + 1000))).rejects.toMatchObject({ code: 'x_code_mismatch' });
@@ -174,7 +174,7 @@ describe('Link X: the proof post', () => {
     const id = postId(T0 + 5000);
     x.synd = 'throw';
     x.oembed = {
-      html: `<blockquote class="twitter-tweet"><p lang="en" dir="ltr">Linking my X to Elymum: ${code} <a href="https://t.co/x">elymum.io</a></p>&mdash; Penny (@Penny_L) <a href="https://twitter.com/Penny_L/status/${id}?ref_src=twsrc%5Etfw">November 8, 2026</a></blockquote>`,
+      html: `<blockquote class="twitter-tweet"><p lang="en" dir="ltr">Linking my X to Coinnibal: ${code} <a href="https://t.co/x">coinnibal.fun</a></p>&mdash; Penny (@Penny_L) <a href="https://twitter.com/Penny_L/status/${id}?ref_src=twsrc%5Etfw">November 8, 2026</a></blockquote>`,
       author_url: 'https://twitter.com/Penny_L',
       author_name: 'Penny',
     };
@@ -188,7 +188,7 @@ describe('Link X: the proof post', () => {
   });
 
   it('one X account, one wallet: a newer proof moves it; unlink; kept on disk', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-xlink-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-xlink-'));
     const x = fakeX();
     const clock = { t: T0 };
     const s = service(x, dir, clock);
@@ -258,11 +258,12 @@ describe('Link X: the proof post', () => {
   it('cleans what X answers: names, oEmbed text, the code as a word', () => {
     expect(cleanXName('  Penny‮\u0000 Lane  ')).toBe('Penny Lane');
     expect([...cleanXName('a'.repeat(80))].length).toBe(50);
-    expect(oembedText('<p lang="en">Hi &amp; ELYMUM-ABCDEF<br>next <a href="x">elymum.io</a></p>&mdash; x')).toBe('Hi & ELYMUM-ABCDEF next elymum.io');
-    expect(carriesCode('Linking: elymum-abcdef!', 'ELYMUM-ABCDEF')).toBe(true);
-    expect(carriesCode(xLinkPostText('ELYMUM-ABCDEF'), 'ELYMUM-ABCDEF')).toBe(true);
-    expect(carriesCode('ELYMUM-ABCDEFG', 'ELYMUM-ABCDEF')).toBe(false);
-    // the rename: new codes are NIBAL-, and a code counts under either prefix (a page open across the deploy)
+    expect(oembedText('<p lang="en">Hi &amp; COIN-ABCDEF<br>next <a href="x">coinnibal.fun</a></p>&mdash; x')).toBe('Hi & COIN-ABCDEF next coinnibal.fun');
+    expect(carriesCode('Linking: coin-abcdef!', 'COIN-ABCDEF')).toBe(true);
+    expect(carriesCode(xLinkPostText('COIN-ABCDEF'), 'COIN-ABCDEF')).toBe(true);
+    expect(carriesCode('COIN-ABCDEFG', 'COIN-ABCDEF')).toBe(false);
+    // the renames: codes were ELYMUM- (the project's old name), then NIBAL-; a code counts under any of the prefixes
+    // (a post made with a page open across the deploy). The ELYMUM- lines test that kept fallback.
     expect(carriesCode(xLinkPostText('NIBAL-ABCDEF'), 'NIBAL-ABCDEF')).toBe(true);
     expect(carriesCode('my code: ELYMUM-ABCDEF', 'NIBAL-ABCDEF')).toBe(true);
     expect(carriesCode('my code: NIBAL-ABCDEF', 'COIN-ABCDEF')).toBe(true);
@@ -280,7 +281,7 @@ describe('Link X: tagging the eaten', () => {
   const customRoom = { opts: { id: 'priv-PONDS', mode: 'private', name: 'Friday Pond', maxPlayers: 10, custom: freeCustom() } } as never;
   const testRoom = { opts: { id: 'test-1', mode: 'arena', name: 'Test · Arena', maxPlayers: 50, stake: { arenaId: 1, buyIn: 1 }, test: { chainId: 46630 } } } as never;
   const linked = new Set(['penny_x', 'rocky']);
-  const shares = () => new ShareService({ dataDir: null, baseUrl: () => 'https://elymum.io', token: () => null, xLinked: (h) => linked.has(h.toLowerCase()) });
+  const shares = () => new ShareService({ dataDir: null, baseUrl: () => 'https://coinnibal.fun', token: () => null, xLinked: (h) => linked.has(h.toLowerCase()) });
 
   it('a kill card tags the victim by its linked handle (still linked, valid, never a bot)', () => {
     const s = shares();
@@ -350,7 +351,7 @@ describe('Link X: in a room', () => {
 
 describe('Link X: the routes', () => {
   async function harness() {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-xroutes-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-xroutes-'));
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, TRUST_PROXY: '0', GAME_ACCESS: 'public' } as NodeJS.ProcessEnv);
     const big = () => new Limiter(10_000, 60_000);
     const x = fakeX();
@@ -393,7 +394,7 @@ describe('Link X: the routes', () => {
       // a real 128 px PNG as the account's picture (the server squares and cleans it for the coin)
       const px = new Uint8Array(64 * 48 * 4).fill(200);
       h.x.picture = { bytes: encodePng(px, 64, 48, 4), type: 'image/png' };
-      h.x.synd = { text: `Linking my X to Elymum: ${code} elymum.io`, screen_name: 'penny_x', id_str: '777' };
+      h.x.synd = { text: `Linking my X to Coinnibal: ${code} coinnibal.fun`, screen_name: 'penny_x', id_str: '777' };
       const bad = await h.call('POST', '/api/x/verify', { wallet: W1, body: { url: 'https://example.com/nope' } });
       expect(bad).toMatchObject({ status: 400, body: { error: 'x_bad_url' } });
       const ok = await h.call('POST', '/api/x/verify', { wallet: W1, body: { url: postUrl(Date.now()) } });

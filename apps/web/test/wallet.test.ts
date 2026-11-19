@@ -1,4 +1,4 @@
-import { addEthereumChainParams, chainInfo } from '@elymum/shared';
+import { addEthereumChainParams, chainInfo } from '@coinnibal/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { announceProvider, discoverProviders, mergeProviders, type ProviderDetail } from '../src/wallet/eip6963';
 import { ensureChain, publicClientFor, serverChainInfo, WrongChainError } from '../src/wallet/network';

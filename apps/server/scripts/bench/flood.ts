@@ -14,7 +14,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_ARENAS } from '@elymum/shared';
+import { DEFAULT_ARENAS } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import { createApp } from '../../src/app';
 import { loadConfig } from '../../src/config';
@@ -30,7 +30,7 @@ const env: Record<string, string> = {
   DEV_FAKE_TOKEN: '1',
   PORT: '0',
   HOST: '127.0.0.1',
-  DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-flood-')),
+  DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-flood-')),
   GAME_ACCESS: 'public',
   LOAD_SHED: '1',
   GAME_WORKERS: process.env.GAME_WORKERS ?? '2',

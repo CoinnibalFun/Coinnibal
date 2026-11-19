@@ -4,7 +4,7 @@
  * until `/api/health` answers. A deploy's downtime is this plus the old container's shutdown (see drills.ts) plus
  * Docker's container swap. No chain (practice only): the RPC probe at boot runs in the background either way.
  *
- *   pnpm -F @elymum/server build && node --import tsx scripts/bench/boot-time.ts      (from apps/server)
+ *   pnpm -F @coinnibal/server build && node --import tsx scripts/bench/boot-time.ts      (from apps/server)
  */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -14,13 +14,13 @@ import { fileURLToPath } from 'node:url';
 import { freePort } from './hardhat-arena';
 
 const dist = join(dirname(fileURLToPath(import.meta.url)), '../../dist/index.js');
-const dir = mkdtempSync(join(tmpdir(), 'elymum-boot-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-boot-'));
 const out: Record<string, number> = {};
 for (const run of ['first boot (empty DATA_DIR)', 'second boot (same DATA_DIR)', 'third boot']) {
   const port = await freePort();
   const t0 = Date.now();
   const child = spawn(process.execPath, [dist], {
-    env: { ...process.env, NODE_ENV: 'production', DATA_DIR: dir, PORT: String(port), HOST: '127.0.0.1', GAME_WORKERS: '3', PUBLIC_URL: 'https://elymum.io', AUTH_SECRET: 'boot-test-secret-0123456789abcdef0123456789' },
+    env: { ...process.env, NODE_ENV: 'production', DATA_DIR: dir, PORT: String(port), HOST: '127.0.0.1', GAME_WORKERS: '3', PUBLIC_URL: 'https://coinnibal.fun', AUTH_SECRET: 'boot-test-secret-0123456789abcdef0123456789' },
     stdio: 'ignore',
   });
   for (;;) {

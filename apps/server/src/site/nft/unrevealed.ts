@@ -3,7 +3,7 @@
  * nothing that could tell a rare apart). The coin is turned face-down: a blank, reeded coin with a question
  * mark, on the ring at night, in the style the collection will be revealed in.
  */
-import { NFT_NAME } from '@elymum/shared';
+import { NFT_NAME } from '@coinnibal/shared';
 import { CREAM, INK, P } from './palette';
 import type { ArtStyle } from './render';
 

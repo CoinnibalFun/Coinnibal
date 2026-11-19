@@ -1,11 +1,11 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLOSE_REPLACED, CUSTOM_DEFAULTS, EntityKind, PROTOCOL_VERSION, RULES, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, CUSTOM_DEFAULTS, EntityKind, customRoomPaymentRef, PROTOCOL_VERSION, RULES, TEST_ARENA_DEFAULT, decodeSnapshot, encodeTarget, type ChainStatus, type ServerMessage, type SnapshotData, roundAt, siweMessage } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
-import type { ChainArena, ChainGateway, ChainSession, ServerKeyInfo } from '../src/chain/types';
+import type { ChainArena, ChainGateway, ChainSession, ServerKeyInfo, TokenReceipt } from '../src/chain/types';
 import { loadConfig } from '../src/config';
 import { testSigner } from './signers';
 
@@ -14,7 +14,12 @@ class FakeChain implements ChainGateway {
   readonly tokenReady = true;
   readonly stakeEnabled = true;
   sessions = new Map<string, ChainSession>();
+  /** `CoinnibalArena.pay` receipts by hash (custom room fees). */
+  receipts = new Map<string, TokenReceipt>();
   kicked = 0;
+  async tokenReceipt(hash: string): Promise<TokenReceipt | null> {
+    return this.receipts.get(hash.toLowerCase()) ?? null;
+  }
   status(): ChainStatus {
     return {
       enabled: true,
@@ -28,7 +33,7 @@ class FakeChain implements ChainGateway {
       nftAddress: null,
       arenasEnabled: true,
       tokenReady: true,
-      token: { address: '0x0000000000000000000000000000000000000707', symbol: '$ELYMUM', decimals: 18 },
+      token: { address: '0x0000000000000000000000000000000000000707', symbol: '$NIBAL', decimals: 18 },
       fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 500, holderPerks: false, paymentBurnBps: 5000, burnMode: 0 },
       serverKey: null,
     };
@@ -194,7 +199,7 @@ const jumpTo = (at: number) => {
 };
 
 beforeAll(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-int-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-int-'));
   const cfg = loadConfig({
     PORT: '0',
     HOST: '127.0.0.1',
@@ -498,6 +503,35 @@ describe('server over websocket', () => {
     a2.close();
     b.close();
   }, 15_000);
+
+  it('the join permits hear when a wallet asks to sit (also while joins are closed) and when its ticket is read', async () => {
+    const seen: [string, number, number | null][] = [];
+    app.gateway.setTicketSeen((w, a, at) => void seen.push([w.toLowerCase(), a, at]));
+    const w = newWallet();
+    try {
+      const r = roundAt(serverNow());
+      jumpTo(r.joinsCloseAt);
+      const c = await signedIn(w);
+      // a ticket bought in the last minute: the web enters the room, the server holds it for the next round
+      c.send({ t: 'join', room: 'arena:1', name: 'Held', skin: 0 });
+      await c.wait('error', 2000, (m) => m.code === 'round_closed');
+      expect(seen).toEqual([[w.toLowerCase(), 1, null]]);
+      // joins open: the ticket is read (a finalized one here, so nobody sits down)
+      jumpTo(r.endsAt);
+      chain.sessions.set(`1:${w}`, session(w, { finalized: true, owed: 5, openedAt: 1_790_000_000 }));
+      c.send({ t: 'join', room: 'arena:1', name: 'Held', skin: 0 });
+      await c.wait('error', 2000, (m) => m.code === 'payout_waiting');
+      expect(seen).toEqual([
+        [w.toLowerCase(), 1, null],
+        [w.toLowerCase(), 1, null],
+        [w.toLowerCase(), 1, 1_790_000_000],
+      ]);
+      c.close();
+    } finally {
+      chain.sessions.delete(`1:${w}`);
+      app.gateway.setTicketSeen((wallet, arenaId, at) => app.permits.ticketSeen(wallet, arenaId, at));
+    }
+  });
 
   it('an AFK staker back after the bell hears round_ended (not session_busy), until a new ticket opens', async () => {
     const w = newWallet();
@@ -824,11 +858,20 @@ describe('server over websocket', () => {
 
   it('paid custom room: an invite-only arena instance seated by code with a normal ticket, never by quick play; on its own clock (no 5-minute bell), settled at the room end; closes once settled', async () => {
     const svc = app.customRooms;
-    // a free fee (no gas-token transfer to check) and a treasury: the room itself is what is tested here
-    svc.updateSettings({ priceGas: '0', treasury: '0x1111111111111111111111111111111111111111' });
     const creator = newWallet();
-    const view = await svc.create(creator, { config: { ...CUSTOM_DEFAULTS, name: 'Whale Club', kind: 'paid', arenaId: 1, bots: 0, maxPlayers: 4, durationMin: 15 } });
-    expect(view).toMatchObject({ kind: 'paid', arenaId: 1, maxPlayers: 4 });
+    // the room fee: the creator's `CoinnibalArena.pay` of the base price in the game token (1,500 tokens without a USD price)
+    const fee = 1500n * 10n ** 18n;
+    const txHash = `0x${'ab'.repeat(32)}`;
+    const request = 'integrationroom2';
+    const arenaAddr = chain.status().arenaAddress!;
+    chain.receipts.set(txHash, {
+      status: 'success',
+      blockNumber: 1n,
+      transfers: [{ token: chain.status().token!.address, from: creator, to: arenaAddr, value: fee }],
+      payments: [{ contract: arenaAddr, payer: creator, ref: customRoomPaymentRef(request), amount: fee }],
+    });
+    const view = await svc.create(creator, { config: { ...CUSTOM_DEFAULTS, name: 'Whale Club', kind: 'paid', arenaId: 1, bots: 0, maxPlayers: 4, durationMin: 15 }, txHash, request });
+    expect(view).toMatchObject({ kind: 'paid', arenaId: 1, maxPlayers: 4, paidWith: 'paid', feeRaw: fee.toString(), feeIn: 'token' });
     // it starts now (the server's clock) and ends exactly 15 minutes later: no arena bell involved
     expect(Math.abs(view.createdAt - serverNow())).toBeLessThan(1000);
     expect(view.endsAt - view.createdAt).toBe(15 * 60_000);
@@ -889,7 +932,8 @@ describe('server over websocket', () => {
     l.send({ t: 'join', room: `arena:1:${code}`, name: 'Late', skin: 0 });
     expect((await l.wait('error', 2000, (x) => x.code === 'room_closed')).message).toMatch(/last minute/);
     for (let i = 0; i < 40 && !app.journal.pending.some((p) => p.key === lateTicket.key); i++) await sleep(25);
-    expect(app.journal.pending.find((p) => p.key === lateTicket.key)).toMatchObject({ kind: 'settle', reason: 'stale', payout: 10_000_000, entryFee: 10_000_000, player: late });
+    // bought for nothing in particular (no permit asked for this room: audit R4-M1), so a no-show like the sweeper's
+    expect(app.journal.pending.find((p) => p.key === lateTicket.key)).toMatchObject({ kind: 'settle', reason: 'stale', payout: 10_000_000, entryFee: 10_000_000, player: late, noShow: true });
     expect(l.msgs.some((x) => x.t === 'joined')).toBe(false);
 
     // the room's end settles every ticket in it by the normal server path; then the paid room closes
@@ -913,7 +957,6 @@ describe('server over websocket', () => {
       app.journal.remove(t.key);
       chain.sessions.delete(`1:${w}`);
     }
-    svc.updateSettings({ priceGas: '0.05', treasury: null });
     for (const x of [c, o, l, m]) x.close();
   }, 20_000);
   it('test arena (testnet): the official ticket in a room with labelled bots, settled at the bell, off every board; quick play never goes there', async () => {
@@ -994,6 +1037,42 @@ describe('server over websocket', () => {
     c2.close();
     o.close();
   }, 20_000);
+
+  it('test arena: each person seated takes a bot\'s place; after the bell the bot comes back with the arrival pacing', async () => {
+    // the lobby's room list (in room workers too: the worker's figures reach the main thread)
+    const testRoom = async () => app.rooms.list().find((r) => r.id === 'test-1');
+    const until = async (ok: (r: { players: number; bots: number }) => boolean, ms: number) => {
+      for (const end = Date.now() + ms; Date.now() < end; await sleep(50)) {
+        const r = await testRoom();
+        if (r && ok(r)) return r;
+      }
+      throw new Error(`test-1 is ${JSON.stringify(await testRoom())}`);
+    };
+    // three bots in the empty test arena (the admin's setting)
+    app.rooms.testArenas.update({ bots: 3 });
+    await until((r) => r.players === 0 && r.bots === 3, 20_000);
+    const player = newWallet();
+    const ticket = session(player);
+    chain.sessions.set(`1:${player}`, ticket);
+    const c = await signedIn(player);
+    c.send({ t: 'join', room: 'arena:1:test', name: 'MakeRoom', skin: 0 });
+    expect((await c.wait('joined')).room).toMatchObject({ id: 'test-1', test: true });
+    // one person: one bot fewer, and it stays that way while the person plays
+    await until((r) => r.players === 1 && r.bots === 2, 4000);
+    await sleep(600);
+    expect(await testRoom()).toMatchObject({ players: 1, bots: 2 });
+    // the bell settles the ticket: the person is gone, a bot comes back, not at once
+    jumpTo(roundAt(serverNow()).endsAt);
+    await c.wait('roundOver', 4000);
+    await sleep(500);
+    expect((await testRoom())?.bots).toBe(2);
+    await until((r) => r.players === 0 && r.bots === 3, 15_000);
+    app.journal.remove(ticket.key);
+    for (const p of [...app.journal.pending]) if (p.kind === 'sweep') app.journal.remove(p.key);
+    chain.sessions.delete(`1:${player}`);
+    app.rooms.testArenas.update({ bots: TEST_ARENA_DEFAULT.bots });
+    c.close();
+  }, 45_000);
 
   it('test arenas turned off: closed (nothing of value in them), joins refused; on again: back', async () => {
     app.rooms.testArenas.update({ enabled: false });
