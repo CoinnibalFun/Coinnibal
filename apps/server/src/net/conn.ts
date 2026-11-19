@@ -79,8 +79,15 @@ export class Conn implements RoomConn {
   countedAsSigned = false;
   /** Admitted with a session token that holds a live arena stake (the reserve is theirs). */
   priority: 'stake' | 'signed' | null = null;
-  /** The wallet (lower case) this socket counts under for `SOCKETS_PER_WALLET`: its token's, then its sign-in's. */
+  /**
+   * The wallet (lower case) whose session token admitted this socket at the upgrade: it counts under that wallet for
+   * `SOCKETS_PER_WALLET` for its whole life (a `logout` or a sign-in as another wallet does not free the slot).
+   */
+  admitSlot: string | null = null;
+  /** The wallet (lower case) of its sign-in (`auth`) when that is not `admitSlot`: it counts under it too, until it signs out. */
   walletSlot: string | null = null;
+  /** Admitted past `MAX_CONNECTIONS` on the stake path without a socket of its own to swap: its wallet's one extra slot. */
+  headroom = false;
 
   constructor(
     readonly ws: WebSocket,

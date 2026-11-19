@@ -40,12 +40,23 @@ import { getAddress } from 'viem';
 import type { PracticeBotsOptions } from '../bots/practice';
 import { TX_HASH_RE, type UsedPayments } from '../chain/payment';
 import { ChainBusyError, type ChainGateway, type TokenReceipt } from '../chain/types';
+import { ClientBudgetError } from '../net/client-scope';
 import { verifyPurchase, type PurchaseCheck } from '../shop/verify';
 import type { CustomRoomHooks, PaidArena, RoomManager } from './manager';
 import type { RoomHandle } from './handle';
 import type { WorldShape } from './room';
 
 /** A refusal of the custom room API: HTTP status, code and a friendly message. */
+/**
+ * A holder check that failed reads as "not a holder" (a free room or a discount is not given), except a busy one
+ * (`ClientBudgetError`: this client may not read the chain right now): that is passed on, so the creator hears "try
+ * again in a moment" instead of a price a holder would not pay.
+ */
+const holderUnknown = (err: unknown): false => {
+  if (err instanceof ClientBudgetError) throw err;
+  return false;
+};
+
 export class CustomRoomFail extends Error {
   constructor(
     readonly status: number,
@@ -624,7 +635,7 @@ export class CustomRoomService implements CustomRoomHooks {
   }
 
   async quote(wallet: string | null): Promise<CustomRoomQuote> {
-    const holder = wallet ? await this.d.isHolder(wallet).catch(() => false) : false;
+    const holder = wallet ? await this.d.isHolder(wallet).catch(holderUnknown) : false;
     const free = !!wallet && holder && this.freeAvailable(wallet, await this.tokensOf(wallet, false));
     const base = await this.basePrice();
     const target = this.payTarget();
@@ -764,7 +775,7 @@ export class CustomRoomService implements CustomRoomHooks {
     this.creating.add(w);
     let claimed: string | null = null;
     try {
-      const holder = await this.d.isHolder(wallet).catch(() => false);
+      const holder = await this.d.isHolder(wallet).catch(holderUnknown);
       // a paid room's arena is checked before any payment is looked at (a refused tier never claims a hash)
       const arena = config.kind === 'paid' && config.arenaId !== null ? await this.paidArena(config.arenaId, holder) : null;
       const tokens = holder ? await this.tokensOf(wallet, true) : null;

@@ -27,7 +27,7 @@ import type { RoomHandle } from '../rooms/handle';
 import type { RoomManager } from '../rooms/manager';
 import { MAX_STAKE_SESSION_AGE_S } from '../rooms/room';
 import type { Journal, SettlementItem } from '../stake/journal';
-import { asClient } from './client-scope';
+import { CLIENT_BUSY_MESSAGE, ClientBudgetError, asClient } from './client-scope';
 import { Conn, PING_REPLY_MIN_MS } from './conn';
 import { rateKey, subnetOf, wideNetOf } from './ip-key';
 import { Limiter } from './limiter';
@@ -61,6 +61,11 @@ export const SIGNED_PER_IP_FACTOR = 8;
 export const SOCKETS_PER_WALLET = 3;
 /** WebSocket upgrades a minute of one ticket holder's wallet (the stake path's own budget: not its NAT address's). */
 export const STAKE_UPGRADES_PER_WALLET_PER_MIN = 20;
+/**
+ * A playing socket that sent nothing for this long is taken for a dead one (a network switch the heartbeat has not
+ * noticed yet): past the cap, its wallet's reconnect may take its place. The web client pings every 2 s while it plays.
+ */
+export const SILENT_PLAYER_MS = 5_000;
 /** The game's WebSocket subprotocol: the server answers with it (never with the token one). */
 const SUBPROTOCOL = 'coinnibal';
 /** A browser may offer its session token as a WebSocket subprotocol `coinnibal.auth.<token>` (no token in the URL). */
@@ -118,6 +123,17 @@ export const TICKET_READS_PER_IP_PER_MIN = 60;
  * it a join hears "network busy" at once (and retries) instead of queuing for minutes behind a flood.
  */
 export const TICKET_READ_QUEUE_S = 16;
+/**
+ * One network's share of that bound: ticket reads waiting at once per client (`rateKey`: an IPv4 address, an IPv6
+ * /64) and per IPv6 /48. Many sockets or free wallets of one network cannot hold the whole queue.
+ */
+export const TICKET_READS_IN_FLIGHT_PER_CLIENT = 4;
+export const TICKET_READS_IN_FLIGHT_PER_WIDE = 8;
+/**
+ * The share of the server-wide bound kept for wallets the server already knows hold an open ticket (the `Joined`
+ * log index of the stale sweeper): wallets with no ticket, however many networks they come from, never fill it.
+ */
+export const TICKET_READ_RESERVE = 0.25;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref());
 
@@ -154,6 +170,16 @@ interface Offer {
   wallet: string;
 }
 
+/** What `admit` lets in (null: refused). */
+interface Admission {
+  /** The offered wallet's open sockets that may stay beside the new one (`addToWallet` replaces the oldest beyond it). */
+  keep: number;
+  /** Past the cap: the wallet's own socket (a lobby one, or a silent game's) the new one takes the place of. */
+  swap?: Conn;
+  /** Past the cap with none to swap: the wallet's one extra slot (`Conn.headroom`). */
+  headroom?: boolean;
+}
+
 /** WebSocket front door: connection limits, message parsing and routing. */
 export class Gateway {
   private readonly wss = new WebSocketServer({
@@ -177,7 +203,11 @@ export class Gateway {
   /** Ticket reads per wallet and per client (`allowTicketRead`), and how many are waiting now (`readTicket`). */
   private readonly ticketReadsByWallet = new Limiter(TICKET_READS_PER_WALLET_PER_MIN, 60_000);
   private readonly ticketReadsByIp = new Limiter(TICKET_READS_PER_IP_PER_MIN, 60_000);
+  /** The same per IPv6 /48 (twice a client's: the ratio of the signed-socket bounds). */
+  private readonly ticketReadsByWide = new Limiter(TICKET_READS_PER_IP_PER_MIN * 2, 60_000);
   private ticketReads = 0;
+  /** Ticket reads waiting now per client (`c <rateKey>`) and per IPv6 /48 (`w <net>`). */
+  private readonly ticketReadsOf = new Map<string, number>();
   /** Graceful degradation (new joins shed before live rooms suffer); null: never sheds (bare unit tests). */
   private shedder: LoadShedder | null = null;
   /** Connections closed for abuse (flood, garbage, no hello, a client that stops reading), for the load test and the logs. */
@@ -273,7 +303,12 @@ export class Gateway {
    */
   private async gameClosed(conn: Conn, fresh = false, wallet: string | null = conn.wallet): Promise<boolean> {
     if (!this.gameGate) return false;
-    const open = await Promise.resolve(this.gameGate(wallet, fresh)).catch(() => false);
+    const open = await Promise.resolve(this.gameGate(wallet, fresh)).catch((err) => (err instanceof ClientBudgetError ? 'busy' : false));
+    // the holder check could not run for this client right now (and knows no answer): busy, never "not open to you"
+    if (open === 'busy') {
+      this.error(conn, 'rate_limited', CLIENT_BUSY_MESSAGE);
+      return true;
+    }
     if (open) return false;
     this.error(conn, 'game_closed', wallet ? 'The game is not open to this wallet yet.' : 'The game is not open yet. Sign in with your wallet if you hold a Coinnibal NFT.');
     return true;
@@ -304,8 +339,8 @@ export class Gateway {
         return;
       }
       const offer = this.priorityOf(req);
-      const keep = this.admit(ip, net, offer);
-      if (keep === null) {
+      const admitted = this.admit(ip, net, offer);
+      if (admitted === null) {
         refuse('429 Too Many Requests');
         return;
       }
@@ -314,7 +349,7 @@ export class Gateway {
         refuse('503 Service Unavailable');
         return;
       }
-      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, ip, net, offer, keep));
+      this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, ip, net, offer, admitted));
     });
     // heartbeat + lobby room list
     this.timers.push(
@@ -385,37 +420,55 @@ export class Gateway {
   }
 
   /**
-   * One admission policy for every upgrade. Null refuses it (429); otherwise the number of the offered wallet's open
-   * sockets that may stay beside the new one (`claimWallet` replaces the rest; `Infinity` for a guest).
+   * One admission policy for every upgrade. Null refuses it (429); otherwise how many of the offered wallet's open
+   * sockets may stay beside the new one (`addToWallet` replaces the rest; `Infinity` for a guest), and past the cap the
+   * socket it takes the place of, or that it takes its wallet's one extra slot.
    * - Guests: per IP and per subnet, at most `GUEST_SHARE` of the slots.
    * - Signed-in (a session token): `signedRoom` per address (an IPv6 /64), per /24 or /64 and per IPv6 /48; at most
    *   `SOCKETS_PER_WALLET` per wallet; the reserve the guests leave.
    * - A live stake's reconnect: the same bounds per wallet and network (with a margin of `MAX_CONNECTIONS_PER_IP` for a
-   *   carrier NAT), its own upgrade budget, and past the cap one slot per wallet: a socket of its own is swapped, or one
-   *   slot of the 5 % headroom (or an idle guest's) is taken.
-   * Every socket counts in `MAX_CONNECTIONS`, the headroom's too; the upgrade limits count per `rateKey`.
+   *   carrier NAT), its own upgrade budget, and past the cap one slot per wallet: a socket of its own that does not play
+   *   (or whose game went silent: a dead socket) is swapped; a live game is never closed for it: with every socket of
+   *   the wallet playing, the new one takes the wallet's one extra slot (of the 5 % headroom, or an idle guest's).
+   * A socket counts under the wallet its token named for its whole life (`Conn.admitSlot`): a `logout` or a sign-in as
+   * another wallet does not take it out of these bounds. Every socket counts in `MAX_CONNECTIONS`, the headroom's too;
+   * the upgrade limits count per `rateKey`.
    */
-  private admit(ip: string, net: string, offer: Offer | null): number | null {
+  private admit(ip: string, net: string, offer: Offer | null): Admission | null {
     const max = this.cfg.maxConnections;
     if (offer?.priority === 'stake') {
       if (!this.stakeUpgrades.allow(offer.wallet.toLowerCase())) return null;
       if (!this.signedRoom(ip, this.cfg.maxConnectionsPerIp)) return null;
-      if (this.rooms.conns.size < max) return SOCKETS_PER_WALLET - 1;
-      const mine = this.walletConns(offer.wallet).length;
-      if (mine > 0) return Math.min(SOCKETS_PER_WALLET, mine) - 1;
-      return this.evictIdleGuest(IDLE_GUEST_MS) || this.rooms.conns.size < max * (1 + STAKE_HEADROOM) ? 0 : null;
+      if (this.rooms.conns.size < max) return { keep: SOCKETS_PER_WALLET - 1 };
+      const now = Date.now();
+      const mine = this.walletConns(offer.wallet);
+      const swap = mine.find((c) => this.swappable(c, now) === 'lobby') ?? mine.find((c) => this.swappable(c, now) === 'silent');
+      if (swap) return { keep: Infinity, swap };
+      if (mine.some((c) => c.headroom)) return null;
+      return this.evictIdleGuest(IDLE_GUEST_MS) || this.rooms.conns.size < max * (1 + STAKE_HEADROOM) ? { keep: Infinity, headroom: true } : null;
     }
     if (!this.upgrades.allow(rateKey(ip))) return null;
     if (offer) {
       if (!this.signedRoom(ip)) return null;
       const keep = SOCKETS_PER_WALLET - 1;
       const freed = Math.max(0, this.walletConns(offer.wallet).length - keep);
-      return this.rooms.conns.size - freed < max || this.evictIdleGuest(IDLE_GUEST_MS) ? keep : null;
+      return this.rooms.conns.size - freed < max || this.evictIdleGuest(IDLE_GUEST_MS) ? { keep } : null;
     }
     if ((this.perIp.get(ip) ?? 0) >= this.cfg.maxConnectionsPerIp || (this.perSubnet.get(net) ?? 0) >= this.cfg.maxConnectionsPerSubnet) return null;
     // guests use at most GUEST_SHARE of the slots; at the cap (or the guest share) an idle guest makes room
-    if (this.rooms.conns.size < max && this.guestCount() < max * GUEST_SHARE) return Infinity;
-    return this.evictIdleGuest(IDLE_GUEST_MS) ? Infinity : null;
+    if (this.rooms.conns.size < max && this.guestCount() < max * GUEST_SHARE) return { keep: Infinity };
+    return this.evictIdleGuest(IDLE_GUEST_MS) ? { keep: Infinity } : null;
+  }
+
+  /**
+   * Whether a socket of a ticket holder's wallet may make room for its reconnect past the cap: `lobby` (open, not
+   * playing, not joining), `silent` (its game sent nothing for `SILENT_PLAYER_MS`: a dead socket; the new socket's join
+   * takes the coin over), or null (a live game, or a join on its way).
+   */
+  private swappable(c: Conn, now: number): 'lobby' | 'silent' | null {
+    if (c.ws.readyState > 1 || c.joining) return null;
+    if (!c.player?.alive) return 'lobby';
+    return now - c.lastMsgAt >= SILENT_PLAYER_MS ? 'silent' : null;
   }
 
   /** The networks a signed-in socket counts in, with their bounds: its address (an IPv6 /64), its /24 or /64, an IPv6 /48. */
@@ -459,13 +512,10 @@ export class Gateway {
   }
 
   /**
-   * The socket counts under `wallet` (its token at the upgrade, or its sign-in). Beyond `keep` other sockets of that
-   * wallet, the oldest are replaced: lobby sockets before one that plays.
+   * The socket joins `key`'s sockets. Beyond `keep` others of that wallet, the oldest are replaced: lobby sockets
+   * before one that plays.
    */
-  private claimWallet(conn: Conn, wallet: string, keep = SOCKETS_PER_WALLET - 1): void {
-    const key = wallet.toLowerCase();
-    if (conn.walletSlot === key) return;
-    this.releaseWallet(conn);
+  private addToWallet(conn: Conn, key: string, keep: number): void {
     const mine = this.byWallet.get(key) ?? [];
     if (mine.length > keep) {
       // a stable sort: the age order stays within lobby sockets and within playing ones
@@ -475,17 +525,72 @@ export class Gateway {
     const list = this.byWallet.get(key) ?? [];
     list.push(conn);
     this.byWallet.set(key, list);
-    conn.walletSlot = key;
   }
 
-  private releaseWallet(conn: Conn): void {
-    const key = conn.walletSlot;
-    if (!key) return;
-    conn.walletSlot = null;
+  private removeFromWallet(conn: Conn, key: string): void {
     const list = this.byWallet.get(key);
     const i = list ? list.indexOf(conn) : -1;
     if (i >= 0) list!.splice(i, 1);
     if (list && list.length === 0) this.byWallet.delete(key);
+  }
+
+  /** The socket counts under the wallet its upgrade token named, for its whole life (`Conn.admitSlot`). */
+  private admitWallet(conn: Conn, wallet: string, keep: number): void {
+    const key = wallet.toLowerCase();
+    this.addToWallet(conn, key, keep);
+    conn.admitSlot = key;
+  }
+
+  /**
+   * The socket signed in as `wallet` (`auth`): it counts under that wallet too (beside the one that admitted it, if
+   * another), and beyond `keep` other sockets of it the oldest are replaced.
+   */
+  private claimWallet(conn: Conn, wallet: string, keep = SOCKETS_PER_WALLET - 1): void {
+    const key = wallet.toLowerCase();
+    if (conn.walletSlot === key) return;
+    this.releaseWallet(conn);
+    if (conn.admitSlot === key) return;
+    this.addToWallet(conn, key, keep);
+    conn.walletSlot = key;
+  }
+
+  /** The socket signed out (or in as another wallet): it stops counting under its sign-in's wallet; its admission slot stays. */
+  private releaseWallet(conn: Conn): void {
+    const key = conn.walletSlot;
+    if (!key) return;
+    conn.walletSlot = null;
+    this.removeFromWallet(conn, key);
+  }
+
+  /** The socket is gone: it counts under no wallet. */
+  private releaseAllWallets(conn: Conn): void {
+    this.releaseWallet(conn);
+    const key = conn.admitSlot;
+    if (!key) return;
+    conn.admitSlot = null;
+    this.removeFromWallet(conn, key);
+  }
+
+  /**
+   * A socket that took its wallet's extra slot past the cap (`Conn.headroom`) and no longer speaks for that wallet
+   * (a `logout`, a sign-in as another wallet) is closed while the server is still full: the slot was granted for that
+   * wallet's coin. A socket that plays stays (its game goes on). True when it was closed.
+   */
+  private dropHeadroom(conn: Conn): boolean {
+    if (!conn.headroom || conn.player?.alive || conn.joining || this.rooms.conns.size < this.cfg.maxConnections) return false;
+    this.dropped.limit++;
+    this.log(`ws: ${conn.admitSlot ?? 'a wallet'} signed out on a socket that took a reserved slot past the cap (${conn.ip}): closed`);
+    this.rooms.removeConn(conn);
+    this.uncountSigned(conn);
+    this.releaseAllWallets(conn);
+    conn.room?.leave(conn, 'disconnect');
+    try {
+      conn.ws.close(1013, 'the server is full');
+    } catch {
+      /* already closing */
+    }
+    setTimeout(() => conn.ws.terminate(), 1_000).unref();
+    return true;
   }
 
   /**
@@ -494,8 +599,8 @@ export class Gateway {
    */
   private replaceSocket(old: Conn): void {
     this.replaced++;
-    this.log(`ws: ${old.walletSlot ?? 'a wallet'} opened more than ${SOCKETS_PER_WALLET} connections: its oldest (${old.ip}) is closed`);
-    this.releaseWallet(old);
+    this.log(`ws: ${old.admitSlot ?? old.walletSlot ?? 'a wallet'} opened more than ${SOCKETS_PER_WALLET} connections: its oldest (${old.ip}) is closed`);
+    this.releaseAllWallets(old);
     this.rooms.removeConn(old);
     this.uncountGuest(old);
     this.uncountSigned(old);
@@ -544,14 +649,24 @@ export class Gateway {
     else this.perSubnet.set(net, s);
   }
 
-  private onConnection(ws: WebSocket, ip: string, net = subnetOf(ip), offer: Offer | null = null, keep = SOCKETS_PER_WALLET - 1): void {
+  private onConnection(ws: WebSocket, ip: string, net = subnetOf(ip), offer: Offer | null = null, admitted: Admission = { keep: SOCKETS_PER_WALLET - 1 }): void {
     const conn = new Conn(ws, ip);
     conn.priority = offer?.priority ?? null;
     // a session-token socket is not a guest: it never counts in its IP's guest limit (players behind a carrier NAT)
     if (offer) {
       conn.countedAsGuest = false;
       this.countSigned(conn);
-      this.claimWallet(conn, offer.wallet, keep);
+      const { swap } = admitted;
+      // past the cap: the socket it was let in for is swapped (its extra slot, if it held it, goes with its place),
+      // unless it started a game meanwhile (then this one is the wallet's extra slot) or is gone already
+      if (swap && swap.ws.readyState <= 1 && this.walletConns(offer.wallet).includes(swap)) {
+        if (this.swappable(swap, Date.now())) {
+          conn.headroom = swap.headroom;
+          this.replaceSocket(swap);
+        } else conn.headroom = true;
+      } else if (swap?.headroom) conn.headroom = true;
+      if (admitted.headroom) conn.headroom = true;
+      this.admitWallet(conn, offer.wallet, admitted.keep);
     } else {
       this.perIp.set(ip, (this.perIp.get(ip) ?? 0) + 1);
       this.perSubnet.set(net, (this.perSubnet.get(net) ?? 0) + 1);
@@ -596,7 +711,7 @@ export class Gateway {
   private onClose(conn: Conn, net = subnetOf(conn.ip)): void {
     this.uncountGuest(conn, net);
     this.uncountSigned(conn);
-    this.releaseWallet(conn);
+    this.releaseAllWallets(conn);
     this.rooms.removeConn(conn);
     conn.room?.leave(conn, 'disconnect');
   }
@@ -652,7 +767,7 @@ export class Gateway {
     if (!wallet || arenaId < 0 || !this.chain.stakeEnabled || !this.allowTicketRead(conn, wallet)) return false;
     let s: ChainSession | null;
     try {
-      s = await this.readTicket(arenaId, wallet);
+      s = await this.readTicket(conn, arenaId, wallet);
     } catch {
       return false; // the sweeper refunds it later
     }
@@ -732,7 +847,9 @@ export class Gateway {
       case 'logout':
         conn.wallet = null;
         conn.profile = null;
+        // the wallet its token named still counts it (`admitSlot`); a sign-in's own slot goes
         this.releaseWallet(conn);
+        this.dropHeadroom(conn);
         return;
       case 'join':
         await this.onJoin(conn, msg);
@@ -813,8 +930,11 @@ export class Gateway {
       this.error(conn, 'auth_failed', 'Wallet sign-in failed. Please sign again.');
       return;
     }
+    // a reserved slot past the cap was for the wallet that took it: another wallet's sign-in does not keep it
+    if (conn.admitSlot !== wallet.toLowerCase() && this.dropHeadroom(conn)) return;
     conn.wallet = wallet;
-    // at most SOCKETS_PER_WALLET sockets per wallet: one more replaces its oldest
+    // at most SOCKETS_PER_WALLET sockets per wallet: one more replaces its oldest (the wallet its token named still
+    // counts this socket too)
     this.claimWallet(conn, wallet);
     // signed in: no longer a guest of its IP (many players share a carrier's NAT address), up to the signed-in bound
     if (conn.countedAsGuest && this.signedRoom(conn.ip)) {
@@ -850,8 +970,13 @@ export class Gateway {
       const wantsEmblem = msg.skin === EMBLEM_SKIN_ID;
       const skin = wantsEmblem ? EMBLEM_SKIN_ID : Number.isInteger(msg.skin) && (msg.skin as number) >= 0 && (msg.skin as number) < SKIN_COUNT ? (msg.skin as number) : 0;
       if (wallet) conn.profile = this.profiles?.summary(wallet) ?? null;
-      const holder = wallet && this.holderCheck ? await this.holderCheck(wallet).catch(() => false) : false;
+      // null: the check could not run for this client right now (`ClientBudgetError`); the laurel waits for the next game
+      const holder = wallet && this.holderCheck ? await this.holderCheck(wallet).catch((err) => (err instanceof ClientBudgetError ? null : false)) : false;
       if (conn.wallet !== wallet) return;
+      if (holder === null && wantsEmblem) {
+        this.error(conn, 'rate_limited', CLIENT_BUSY_MESSAGE);
+        return;
+      }
       // only the basic skins can be picked, and the emblem skin by emblem holders
       if (wantsEmblem ? !holder : !isBasicSkin(skin)) {
         this.error(conn, 'skin_locked', wantsEmblem ? 'The emblem skin is for Coinnibal NFT holders.' : 'That skin is locked.');
@@ -974,7 +1099,7 @@ export class Gateway {
     let told = false;
     for (let i = 0; ; i++) {
       try {
-        return await this.readTicket(arenaId, wallet);
+        return await this.readTicket(conn, arenaId, wallet);
       } catch (err) {
         if (!(err instanceof ChainBusyError) || i >= JOIN_CHAIN_RETRY_MS.length || conn.ws.readyState > 1) throw err;
         if (!told) {
@@ -988,20 +1113,44 @@ export class Gateway {
     }
   }
 
-  /** One more ticket read for this socket and wallet: per socket (`allowChainOp`), per wallet and per client. */
+  /** One more ticket read for this socket and wallet: per socket (`allowChainOp`), per wallet, per client and per IPv6 /48. */
   private allowTicketRead(conn: Conn, wallet: string): boolean {
-    return conn.allowChainOp() && this.ticketReadsByWallet.allow(wallet.toLowerCase()) && this.ticketReadsByIp.allow(rateKey(conn.ip));
+    const wide = wideNetOf(conn.ip);
+    return (
+      conn.allowChainOp() &&
+      this.ticketReadsByWallet.allow(wallet.toLowerCase()) &&
+      this.ticketReadsByIp.allow(rateKey(conn.ip)) &&
+      (wide === null || this.ticketReadsByWide.allow(wide))
+    );
   }
 
-  /** A ticket read within the server-wide bound (`TICKET_READ_QUEUE_S`); past it, `ChainBusyError` at once. */
-  private async readTicket(arenaId: number, wallet: string): Promise<ChainSession | null> {
+  /**
+   * A ticket read within the bounds of the reads waiting at once: server-wide (`TICKET_READ_QUEUE_S`, its last
+   * `TICKET_READ_RESERVE` for wallets known to hold an open ticket), per client and per IPv6 /48. Past one,
+   * `ChainBusyError` at once (the join says "network busy" and retries).
+   */
+  private async readTicket(conn: Conn, arenaId: number, wallet: string): Promise<ChainSession | null> {
     const max = Math.max(16, Math.ceil(this.cfg.chain.rpcMaxRps * TICKET_READ_QUEUE_S));
-    if (this.ticketReads >= max) throw new ChainBusyError('ticket read', new Error(`${this.ticketReads} ticket reads are waiting already`));
+    const known = this.chain.knowsOpenTicket?.(arenaId, wallet) === true;
+    const bound = known ? max : Math.max(1, Math.floor(max * (1 - TICKET_READ_RESERVE)));
+    const wide = wideNetOf(conn.ip);
+    const keys: [string, number][] = [[`c ${rateKey(conn.ip)}`, TICKET_READS_IN_FLIGHT_PER_CLIENT]];
+    if (wide) keys.push([`w ${wide}`, TICKET_READS_IN_FLIGHT_PER_WIDE]);
+    if (this.ticketReads >= bound) throw new ChainBusyError('ticket read', new Error(`${this.ticketReads} ticket reads are waiting already`));
+    for (const [key, limit] of keys) {
+      if ((this.ticketReadsOf.get(key) ?? 0) >= limit) throw new ChainBusyError('ticket read', new Error(`${limit} ticket reads of ${key.slice(2)} are waiting already`));
+    }
     this.ticketReads++;
+    for (const [key] of keys) this.ticketReadsOf.set(key, (this.ticketReadsOf.get(key) ?? 0) + 1);
     try {
       return await this.chain.getSession(arenaId, wallet);
     } finally {
       this.ticketReads--;
+      for (const [key] of keys) {
+        const n = (this.ticketReadsOf.get(key) ?? 1) - 1;
+        if (n <= 0) this.ticketReadsOf.delete(key);
+        else this.ticketReadsOf.set(key, n);
+      }
     }
   }
 
@@ -1070,7 +1219,7 @@ export class Gateway {
       if (bell) {
         const settling = this.journal.pending.some((p) => p.key === bell.session);
         // undefined: the chain could not be read (or this connection is rate-limited); the normal path below decides then
-        const live = settling ? null : this.allowTicketRead(conn, wallet) ? await this.readTicket(target.arenaId, wallet).catch(() => undefined) : undefined;
+        const live = settling ? null : this.allowTicketRead(conn, wallet) ? await this.readTicket(conn, target.arenaId, wallet).catch(() => undefined) : undefined;
         if (!same()) return;
         if (settling || live === null || (live && live.id === bell.sessionId && !live.finalized)) {
           this.roundEnded(conn);

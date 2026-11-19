@@ -12,6 +12,7 @@ import type { ChainGateway } from '../chain/types';
 import { integrityRoutes } from '../integrity/routes';
 import type { IntegrityService } from '../integrity/service';
 import type { ServerConfig } from '../config';
+import { CLIENT_BUSY_MESSAGE, ClientBudgetError } from '../net/client-scope';
 import { Limiter } from '../net/limiter';
 import { ProfileError, type ProfileStore } from '../profiles';
 import type { Journal } from '../stake/journal';
@@ -347,6 +348,8 @@ export class SiteApi {
     } catch (err) {
       if (err instanceof SiteFail && err.status === 413) res.setHeader('Connection', 'close');
       if (err instanceof SiteFail) fail(res, err.status, { error: err.code, message: err.message, ...(err.field ? { field: err.field } : {}) });
+      // a holder check this client may not make right now, with no answer known: busy, never a wrong "no"
+      else if (err instanceof ClientBudgetError) fail(res, 429, { error: 'rate_limited', message: CLIENT_BUSY_MESSAGE });
       else throw err;
     }
     return true;
@@ -368,8 +371,10 @@ export class SiteApi {
     if (path === '/api/auth/me') {
       this.method(req, 'GET');
       const wallet = this.session(req);
-      const [holder, canPlay] = await Promise.all([this.isHolder(wallet), this.gameOpenFor(wallet)]);
-      return send(res, 200, { address: wallet, admin: this.isAdmin(wallet), holder, canPlay });
+      const admin = this.isAdmin(wallet);
+      // a busy holder check (`ClientBudgetError`) answers 429, except for an admin: its access does not hang on it
+      const [holder, canPlay] = await Promise.all([this.isHolder(wallet).catch((err) => (admin && err instanceof ClientBudgetError ? false : Promise.reject(err))), this.gameOpenFor(wallet)]);
+      return send(res, 200, { address: wallet, admin, holder, canPlay });
     }
     this.method(req, 'POST');
     if (!this.limits.login.allow(ip)) throw new SiteFail(429, 'rate_limited', 'Too many sign-ins. Wait a moment.');

@@ -338,14 +338,21 @@ has more bots than its setting, nor more playing than the setting minus its peop
 - **Front door** (`net/gateway.ts`, one admission policy): guests hold at most 80 % of `MAX_CONNECTIONS` and are
   limited per IP and per subnet; a signed-in socket leaves its IP's guest count (carrier NAT), up to 64 per address
   (an IPv6 /64) and 384 per IPv4 /24 or IPv6 /48; one wallet holds at most 3 sockets (a newer one closes its oldest
-  lobby socket with `CLOSE_REPLACED`, 4000). A socket offering its session token as the `coinnibal.auth.<token>`
-  subprotocol (or `elymum.auth.<token>`, from a page of before the rename) takes the reserve, and one whose wallet
-  holds a live coin gets in past the cap (its own upgrade budget, a margin over the address bounds, one headroom slot
-  per wallet); an idle lobby guest makes room near the cap. A join of the wallet that holds a live coin takes it over
-  on the new socket at once and closes the old one with `CLOSE_REPLACED`. A join seats only the wallet that was signed
-  in when it began. Ticket reads (`getSession`) run at `normal` priority (settlements go first), shared per wallet,
-  limited per socket, wallet and client, with a bounded queue. Every send checks the socket's buffer (closed past
-  2 MiB); the heartbeat's ping carries a payload the pong must echo.
+  lobby socket with `CLOSE_REPLACED`, 4000). A socket counts under the wallet whose token opened it for its whole life
+  (a `logout` or a sign-in as another wallet does not free that place). A socket offering its session token as the
+  `coinnibal.auth.<token>` subprotocol (or `elymum.auth.<token>`, from a page of before the rename) takes the reserve,
+  and one whose wallet holds a live coin gets in past the cap (its own upgrade budget, a margin over the address
+  bounds, one slot per wallet: it takes the place of a lobby socket of that wallet, or of one whose game went silent
+  for 5 s, a dead socket; with every socket of the wallet in a live game it takes the wallet's one headroom slot, and
+  is refused once that is taken: a live game is never closed for a new tab). A socket on a headroom slot that signs
+  out while the server is full is closed (1013). An idle lobby guest makes room near the cap. A join of the wallet
+  that holds a live coin takes it over on the new socket at once and closes the old one with `CLOSE_REPLACED`. A join
+  seats only the wallet that was signed in when it began. Ticket reads (`getSession`) run at `normal` priority
+  (settlements go first), shared per wallet, limited per socket, wallet, client and IPv6 /48, with a bounded queue:
+  one client holds at most 4 of its places and one /48 at most 8, and its last quarter is kept for wallets the
+  stale sweeper's `Joined`-log index knows to hold an open ticket. A holder check a client may not make right now
+  (its budget spent, no answer cached) answers "busy, try again", never "not a holder". Every send checks the
+  socket's buffer (closed past 2 MiB); the heartbeat's ping carries a payload the pong must echo.
 - **Dev fake chain** (`chain/dev-fake.ts`, `DEV_FAKE_CHAIN=1` with `NODE_ENV=development` only): an in-memory chain
   with free tickets, simulated settlements and `pay`, for `pnpm demo` and the screenshot tours. It refuses to start
   next to `EVM_RPC_URL` or `SERVER_PRIVATE_KEY`.
