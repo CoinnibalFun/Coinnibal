@@ -7,7 +7,7 @@ import { Button, CoinCharacter, Icon, Sheet, Stamp, StampSpinner, markTransition
 import { engine } from '../game/instance';
 import { sound } from '../audio';
 import { useT } from '../i18n';
-import { arenaTarget } from '../rooms/invite';
+import { arenaTarget, paidSeatCode } from '../rooms/invite';
 import { toast, updateSettings, useUi } from '../store';
 import { ticketName, useTokenText } from '../ui/lobby/useLobby';
 import { refreshChain, useChainData, useReadClient } from './chain';
@@ -187,7 +187,8 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
     // the game session of this wallet asks the server for the join permit
     const auth = useUi.getState().auth;
     const token = auth && auth.address.toLowerCase() === owner.toLowerCase() ? auth.token : null;
-    const res = await buyTicket({ owner, chain, client, config, arenaId, review, fake: data.fake, token }, (s, p, h) => onPhase(s)(p, h));
+    // the paid room this ticket is headed for (the permit is asked for it): the same room the join goes to
+    const res = await buyTicket({ owner, chain, client, config, arenaId, review, fake: data.fake, token, room: paidSeatCode(arenaId) }, (s, p, h) => onPhase(s)(p, h));
     if (!res.ok) return fail(res.text);
     setHash(res.hash);
     enterRoom(res.hash);

@@ -161,6 +161,13 @@ export const TICKET_READS_IN_FLIGHT_PER_WIDE = 8;
  * read the new blocks at once (`refreshTicketIndex`), and its retry a few seconds later has the whole bound.
  */
 export const TICKET_READS_UNKNOWN_SHARE = 0.25;
+
+/**
+ * A ticket read the gateway refused for one of its own bounds on reads waiting at once (this client's, its
+ * network's, the server-wide queue): not the chain failing. A client can bring it on itself (many joins at once), so
+ * it never excuses a no-show (`seatRefused`); a `ChainBusyError` of the chain read itself does.
+ */
+export class TicketReadsBusy extends ChainBusyError {}
 /**
  * A join waits this long at most for the holder check of its laurel (`holderCheck`, cosmetic): past it the game starts
  * without the laurel (the check goes on and is cached for the next game). A paid seat never waits behind it.
@@ -290,6 +297,11 @@ export class Gateway {
   private emblemGate: ((wallet: string, session: ChainSession) => Promise<{ code: ErrorCode; message: string } | null>) | null = null;
   /** The join permits learn of a wallet's ticket (`JoinPermits.ticketSeen`); absent: none (bare unit tests). */
   private ticketSeen: ((wallet: string, arenaId: number, openedAtS: number | null) => void) | null = null;
+  /**
+   * Whether the early refund of a ticket, as the paid room `code` stopped taking seats, is excused
+   * (`JoinPermits.roomExcuse`: bound to that room, just bought); absent: never (bare unit tests).
+   */
+  private roomExcuse: ((wallet: string, arenaId: number, code: string, openedAtS: number) => boolean) | null = null;
 
   constructor(
     private readonly cfg: ServerConfig,
@@ -352,6 +364,11 @@ export class Gateway {
    */
   setTicketSeen(fn: ((wallet: string, arenaId: number, openedAtS: number | null) => void) | null): void {
     this.ticketSeen = fn;
+  }
+
+  /** Sets who decides whether a paid room's early refund of an unseated ticket is excused (`JoinPermits.roomExcuse`). */
+  setRoomExcuse(fn: ((wallet: string, arenaId: number, code: string, openedAtS: number) => boolean) | null): void {
+    this.roomExcuse = fn;
   }
 
   /** Sets the load shedder (see `net/shedder.ts`). */
@@ -856,6 +873,16 @@ export class Gateway {
   }
 
   /**
+   * `wallet` asked to sit with its ticket of `arenaId` while joins were open, and the server refused for a reason of
+   * its own (a re-price, the journal, overload, no seat in a public arena, the chain unreadable): if that ticket is
+   * never seated, the stale sweeper's refund is not a no-show (2026-11 audit R3-M1). Never for a refusal the client
+   * can bring on itself (its rate limits, its own bounds on reads waiting) or a closed round.
+   */
+  private seatRefused(wallet: string, arenaId: number): void {
+    this.chain.excuseNoShow?.(arenaId, wallet);
+  }
+
+  /**
    * New arena joins are refused from `joinsCloseAt` until the bell, and in the break after a bell
    * (`round_closed` with `opensAt` = when joins open again; the client holds the ticket until then).
    * Returns true when refused. Reconnects of a live staker never come here.
@@ -868,7 +895,7 @@ export class Gateway {
       const own = this.rooms.roomWindow(room, now);
       if (now >= own.opensAt && now < own.joinsCloseAt) return false;
       this.error(conn, 'room_closed', now >= own.endsAt ? 'This room has ended.' : 'This room is in its last minute: joins are closed. Your unplayed ticket is refunded in full.');
-      void this.refundUnseated(conn, room.opts.stake?.arenaId ?? -1);
+      void this.refundUnseated(conn, room.opts.stake?.arenaId ?? -1, room.opts.code ?? null);
       return true;
     }
     const r = this.rooms.roundWindow(now);
@@ -882,14 +909,19 @@ export class Gateway {
   }
 
   /**
-   * The paid custom room a ticket was bought for has ended, closes, or is in its last minute (it never seats again):
-   * the wallet's open ticket of that arena goes back in full now (`cancel`: the whole entry fee, no fee) instead of
-   * waiting for the stale sweeper (15 minutes). Only a ticket that is open on chain, not finalized, not seated in
+   * The paid custom room `code` (an instance of `arenaId`) has ended, closes, or is in its last minute (it never seats
+   * again): the wallet's open ticket of that arena goes back in full now (`cancel`: the whole entry fee, no fee) instead
+   * of waiting for the stale sweeper (15 minutes). Only a ticket that is open on chain, not finalized, not seated in
    * any room and not queued: checked again synchronously right before the one journal write, so a seat that won
    * meanwhile keeps the ticket (and the chain worker drops a `cancel` of a seated ticket too). Returns whether one was
    * queued.
+   *
+   * It is a no-show like the stale sweeper's (audit R4-M1: anyone may name a closed room's code) unless the server owes
+   * the excuse: the arena takes no seat (closed, paused, re-pricing), the server refused this ticket a seat for a
+   * reason of its own (`excusedSince`), or the ticket was bought for this very room just now (`roomExcuse`: its permit
+   * was bound to the room while it took seats, not by its creator, within the room's seats).
    */
-  async refundUnseated(conn: Conn, arenaId: number): Promise<boolean> {
+  async refundUnseated(conn: Conn, arenaId: number, code: string | null): Promise<boolean> {
     const wallet = conn.wallet;
     if (!wallet || arenaId < 0 || !this.chain.stakeEnabled || !this.allowTicketRead(conn, wallet, arenaId)) return false;
     let s: ChainSession | null;
@@ -903,6 +935,9 @@ export class Gateway {
     if (this.rooms.findArenaStake(arenaId, wallet) || this.rooms.liveSessions().has(key) || this.journal.pending.some((p) => p.key === key)) return false;
     if (this.journal.writeFailing) return false;
     const now = Date.now();
+    const arenaOpen = !this.chain.joinsPaused?.() && this.rooms.arenaTakesSeats(arenaId) && !this.repricing?.(arenaId);
+    const excused =
+      !arenaOpen || this.chain.excusedSince?.(arenaId, s.player, s.openedAt) === true || (code !== null && this.roomExcuse?.(s.player, arenaId, code, s.openedAt) === true);
     const item: SettlementItem = {
       kind: 'settle',
       key,
@@ -917,13 +952,15 @@ export class Gateway {
       xp: 0,
       // an unplayed ticket: the chain worker sends it as `cancel` (the full entry fee back, no fee)
       reason: 'stale',
+      // never seated while its arena took seats, and the server owes no excuse: a no-show (the join permits count it)
+      ...(excused ? {} : { noShow: true as const }),
       attempts: 0,
       nextAttemptAt: now,
       createdAt: now,
     };
     this.journal.commit({ enqueue: [item] });
     this.chain.kick();
-    this.log(`join: the paid room ${wallet} was headed for has ended; its unplayed ticket ${key} is refunded in full (cancel)`);
+    this.log(`join: the paid room ${wallet} was headed for has ended; its unplayed ticket ${key} is refunded in full (cancel${excused ? '' : ', a no-show'})`);
     return true;
   }
 
@@ -1305,7 +1342,7 @@ export class Gateway {
         ];
     const busy = (why: string): never => {
       if (!known) this.chain.refreshTicketIndex?.();
-      throw new ChainBusyError('ticket read', new Error(why));
+      throw new TicketReadsBusy('ticket read', new Error(why));
     };
     if (this.ticketReads >= bound) busy(`${this.ticketReads} ticket reads are waiting already`);
     for (const [key, limit] of keys) {
@@ -1378,8 +1415,9 @@ export class Gateway {
       if (!same()) return; // signed out (or in as another wallet) during the await
       if (pick === 'closed') {
         this.error(conn, 'room_closed', 'This room has closed.');
-        // the paid room this ticket was bought for ended (or is closing): its unseated ticket goes back in full now
-        if (code) void this.refundUnseated(conn, target.arenaId);
+        // this arena's paid room ended (or is closing): an unseated ticket goes back in full now (a no-show unless it
+        // was bought for this room just now: `refundUnseated`)
+        if (code) void this.refundUnseated(conn, target.arenaId, code);
         return;
       }
       if (pick === 'missing') {
@@ -1410,16 +1448,19 @@ export class Gateway {
       if (this.roundClosed(conn, room)) return;
       // closing for a re-price at its bell: the round plays out, nobody new sits down until the owner signed
       if (this.repricing?.(target.arenaId)) {
+        this.seatRefused(wallet, target.arenaId);
         this.error(conn, REFUSAL_CODES.repricing, 'This arena is closing for a moment to update its ticket price. Your ticket is safe on chain: an unseated one is refunded in full.');
         return;
       }
       // the journal cannot be written (disk full): a new seat would hold money the server could not record
       if (this.journal.writeFailing) {
+        this.seatRefused(wallet, target.arenaId);
         this.error(conn, REFUSAL_CODES.storage, 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
         return;
       }
       // badly overloaded: a new seat waits; the ticket stays on chain (seated later, or refunded in full if never played)
       if (this.shedder && !this.shedder.admitCritical()) {
+        this.seatRefused(wallet, target.arenaId);
         this.error(conn, 'server_full', 'The server is very busy right now. Your ticket is safe on chain: press Resume again in a minute.');
         return;
       }
@@ -1427,7 +1468,14 @@ export class Gateway {
         this.error(conn, 'rate_limited', 'Too many join attempts — wait a moment.');
         return;
       }
-      const session = await this.sessionWithRetry(conn, target.arenaId, wallet);
+      let session: ChainSession | null;
+      try {
+        session = await this.sessionWithRetry(conn, target.arenaId, wallet);
+      } catch (err) {
+        // the chain could not be read (not this client's or network's own bounds): the server's failure, not a no-show
+        if (err instanceof ChainBusyError && !(err instanceof TicketReadsBusy)) this.seatRefused(wallet, target.arenaId);
+        throw err;
+      }
       if (!same()) return; // signed out (or in as another wallet) during the retries
       if (!session) {
         this.error(conn, 'no_session', 'No open arena ticket found for your wallet.');
@@ -1482,6 +1530,8 @@ export class Gateway {
       // the last await: from here to the seat nothing waits, so the socket is still this wallet's at the seat
       if (!same()) return;
       if (!room) {
+        // every instance of the public arena is full: the server has no seat for the ticket now
+        this.seatRefused(wallet, target.arenaId);
         this.error(conn, 'room_full', 'Arena is full — try again in a moment.');
         return;
       }
@@ -1498,6 +1548,7 @@ export class Gateway {
       // the awaits above may have crossed into the closed window (or the disk filled meanwhile)
       if (this.roundClosed(conn, room)) return;
       if (this.journal.writeFailing) {
+        this.seatRefused(wallet, target.arenaId);
         this.error(conn, REFUSAL_CODES.storage, 'Arena seats are paused for a moment: the server cannot save right now. Your ticket is safe on chain (seated later, or refunded in full).');
         return;
       }
