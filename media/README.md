@@ -6,7 +6,7 @@ rendered in the repository; the outputs go to `out/videos/` (gitignored).
 
 | Folder | Film |
 |---|---|
-| `promo/` | The 30 s Coinnibal launch film (re-made for the new brand: scenes in `promo/scenes`, the shared canvas kit with the Coinnibal marks in `promo/scenes/lib.js`; see `promo/README.md`) |
+| `promo/` | The 32 s Coinnibal launch film (re-made for the new brand: scenes in `promo/scenes`, the shared canvas kit with the Coinnibal marks in `promo/scenes/lib.js`; see `promo/README.md`) |
 | `gameplay/` | Video A: a real paid round, captured from the app (`gameplay/capture`), cut by `gameplay/edit.mjs` |
 | `how-to-play/` | Video B: the narrated guide, built on the gameplay kit |
 | `gameplay-film/` | The narrated gameplay film (about 120 s, home page into a live round): script, voice-actor page, cue timeline, Kokoro or human voice with a humanising post chain, synthesised storybook score and sfx, mixer |
