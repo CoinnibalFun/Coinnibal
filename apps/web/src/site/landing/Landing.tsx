@@ -100,6 +100,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
   // (hydrated.ts). The card's tilt is -1.6 deg; on a phone landing.css turns it back to -0.8 (the card fills the width
   // there: a smaller tilt keeps its corners off the screen's edges), in CSS so the HTML is right before any script.
   const entrance = isStaticEntrance() ? false : 'hidden';
+  const play = doors.game && gameAccess !== 'maintenance';
   return (
     <section className="ld-hero" aria-labelledby="ld-hero-title">
       <RingScene time="dawn" variant="full" animate={!reduced} className="ld-hero__ring">
@@ -119,7 +120,9 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
                 <Icon name="info" size={16} className="ld-hero__money-icon" />
                 <span>{t('ld.hero.money', { sym: SYMBOL })}</span>
               </p>
-              <div className="ld-hero__ctas">
+              {/* at most three buttons: with a third (Play) the two above share the width and Play spans both, so the
+                  block stays even; Collab is for community leads, a quiet link under them like the X link */}
+              <div className={`ld-hero__ctas${play ? ' ld-hero__ctas--three' : ''}`}>
                 {doors.wl && (
                   <SiteLinkButton href="/wl" variant="primary" icon="arrow" onClick={sound.click}>
                     {t('ld.cta.wl')}
@@ -135,12 +138,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
                     <span className="kb-btn__text">{t('ld.cta.why')}</span>
                   </span>
                 </a>
-                {doors.collab && (
-                  <SiteLinkButton href="/collab" onClick={sound.click}>
-                    {t('site.nav.collab')}
-                  </SiteLinkButton>
-                )}
-                {doors.game && gameAccess !== 'maintenance' && (
+                {play && (
                   <a href="/play" className="kb-btn kb-btn--teal kb-btn--md st-btn" onClick={sound.click}>
                     <Icon name="play" size={20} className="kb-btn__lead" />
                     <span className="kb-btn__label">
@@ -149,16 +147,24 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
                   </a>
                 )}
               </div>
-              {doors.wl ? (
+              {(!doors.wl || doors.collab) && (
+                <p className="ld-hero__note ld-hero__note--x">
+                  {!doors.wl && (
+                    <a href={xProfile(handle)} target="_blank" rel="noreferrer" className="ld-hero__x" onClick={sound.click} data-testid="ld-x-link">
+                      <XIcon size={16} /> <span>{t('pg.follow')}</span>
+                    </a>
+                  )}
+                  {doors.collab && (
+                    <Link href="/collab" className="ld-hero__x" onClick={sound.click} data-testid="ld-collab-link">
+                      <span>{t('ld.collabLink')}</span> <Icon name="arrow" size={16} />
+                    </Link>
+                  )}
+                </p>
+              )}
+              {doors.wl && (
                 <p className="ld-hero__note mono">
                   {doors.mint && doors.game && <span className="ld-flowline">{t('ld.flowline')}</span>}
                   <span>{t('ld.wlOpen')}</span>
-                </p>
-              ) : (
-                <p className="ld-hero__note ld-hero__note--x">
-                  <a href={xProfile(handle)} target="_blank" rel="noreferrer" className="ld-hero__x" onClick={sound.click} data-testid="ld-x-link">
-                    <XIcon size={16} /> <span>{t('pg.follow')}</span>
-                  </a>
                 </p>
               )}
             </Sticker>

@@ -985,6 +985,7 @@ export const en = {
   'ld.hero.money': "A paid room takes a ticket in {sym}. If you get eaten, you lose it.",
   'ld.cta.why': "Why get the NFT?",
   'ld.cta.wl': "Join the WL",
+  'ld.collabLink': "Communities can ask for WL spots",
   'ld.cta.how': "How it works",
   'ld.soon': "Soon",
   'ld.cta.playHolders': "Play (NFT holders)",

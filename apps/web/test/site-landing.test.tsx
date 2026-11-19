@@ -93,6 +93,12 @@ describe('the landing (/)', { timeout: 30_000 }, () => {
     expect(document.body.textContent).not.toMatch(/Round 418|· live/);
     expect(screen.getByText('WL → Mint → Play')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /Collab/ })[0].getAttribute('href')).toBe('/collab');
+    // the hero: two buttons and Play under them across both (an even block); Collab is a quiet link, not a button
+    const ctas = document.querySelector('.ld-hero__ctas')!;
+    expect(ctas.classList.contains('ld-hero__ctas--three')).toBe(true);
+    expect([...ctas.querySelectorAll('a')].map((a) => a.textContent?.trim())).toEqual(['Join the WL', 'Why get the NFT?', 'Play']);
+    expect(screen.getByTestId('ld-collab-link').textContent?.trim()).toBe('Communities can ask for WL spots');
+    expect(screen.getByTestId('ld-collab-link').getAttribute('href')).toBe('/collab');
   });
 
   it('animates the pond, the chase and the wordmark, and holds them still with reduced motion', async () => {
