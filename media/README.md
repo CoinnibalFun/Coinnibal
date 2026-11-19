@@ -26,13 +26,12 @@ arena. Rewrite their voice lines, captions and scenes to the current game (Robin
 $1 / $3 / $5 / $10 Rooms, 20 % of profit: 15 % burned + 5 % to the team wallet, holders 10 %, no bots in official
 arenas) before any re-render. Two leftovers to change on the way: `$NIBAL` becomes "tokens" (there is no ticker: the
 amount labels of `gameplay/edit.mjs`; the `$NIBAL` defaults of `gameplay/motion/motion.js` and the `$NIBAL` its
-receipt prints, hard-coded, after the net amount; the `$NIBAL` pronunciations of `gameplay-film/audio/voice.py` and
-`how-to-play/audio/tts.py`), and the "PENNY POND" stub goes (the lower-third default and the intro kicker of
-`gameplay/edit.mjs`, the ladder and the receipt of `how-to-play/edit.mjs`: the room is the $1 Room). The
-hand-drawn scenes use the Ring Storybook palette (`#04181C` ink, cream, sun, cyan, teal, trench night) and type
-(Fraunces, DM Sans, Geist Mono, from `apps/web`'s `@fontsource-variable` packages). The captured
-films (gameplay, how-to-play, the promo's footage) record the real UI, so they pick up the new
-interface on their own, but only once it has landed:
+receipt prints, hard-coded, after the net amount; the `$NIBAL` pronunciation of `gameplay-film/audio/voice.py`),
+and the "PENNY POND" stub goes (the lower-third default and the intro kicker of `gameplay/edit.mjs`, the ladder and
+the receipt of `how-to-play/edit.mjs`: the room is the $1 Room). The hand-drawn scenes use the Ring Storybook
+palette (`#04181C` ink, cream, sun, cyan, teal, trench night) and type (Fraunces, DM Sans, Geist Mono, from
+`apps/web`'s `@fontsource-variable` packages). The captured films (gameplay, how-to-play, the promo's footage) record
+the real UI, so they pick up the new interface on their own, but only once it has landed:
 
 1. Wait until the new web UI (spec section 6) is in `apps/web`, then re-take the captures
    (`media/gameplay/capture/take-all.sh` against `pnpm demo`). The capture kit's selectors and the

@@ -70,7 +70,7 @@ before the rename still work: deploy/vps/README.md section 4):
 | Variable | Value |
 |---|---|
 | `NODE_ENV` | `production` |
-| `PUBLIC_URL` | **required**: the site's address, `https://coinnibal.fun` (the SIWE domain and the base of the NFT metadata URLs). The server refuses to start without it unless `NODE_ENV=development`; it never derives the sign-in domain from `Host` / `X-Forwarded-Host` |
+| `PUBLIC_URL` (VPS: `SITE_DOMAIN` or `COINNIBAL_PUBLIC_URL`) | **required**: the site's address, `https://coinnibal.fun` (the SIWE domain and the base of the NFT metadata URLs). The server refuses to start without it unless `NODE_ENV=development`; it never derives the sign-in domain from `Host` / `X-Forwarded-Host`. On the VPS, `docker-compose.yml` sets it to `https://<SITE_DOMAIN>` (default `coinnibal.fun`) unless `COINNIBAL_PUBLIC_URL` is set, and ignores a `PUBLIC_URL` in `.env` (install.sh only checks that line is not empty) |
 | `CHAIN_ID` (VPS: `COINNIBAL_CHAIN_ID`) | `46630` (Robinhood Chain Testnet, the default), later `4663` (Robinhood Chain) |
 | `EVM_RPC_URLS` (VPS: `COINNIBAL_RPC_URLS`) | the server's RPCs in order: on the mainnet the Alchemy URL, then `https://rpc.mainnet.chain.robinhood.com` (a fallback; may hold an API key; never sent to browsers). Off the VPS, `EVM_RPC_URL` (one URL) still works; an empty one is unset |
 | `RPC_MAX_RPS` (VPS: `COINNIBAL_RPC_MAX_RPS`) | calls per second per URL (`25,4`; default 4) |
@@ -99,9 +99,9 @@ same (`chain.serverKey`). `GET /api/health` answers 503 with its reasons when so
 (OPERATIONS.md, "Monitoring"); `/api/health?live=1` is the container's liveness check. Deploys swap the container in
 the break after an arena bell (no live stake then).
 
-**Domain.** The site is wherever `PUBLIC_URL` says (`https://coinnibal.fun`; the web build's `VITE_PUBLIC_URL`). Nothing
-in the code or the art names a domain; another domain is configuration only (OPERATIONS.md, "The name: Coinnibal
-(formerly Elymum)"). Players sign in again on a new domain (SIWE binds the domain). NFT metadata URLs follow the NFT's base URI:
+**Domain.** The site is wherever `PUBLIC_URL` says (`https://coinnibal.fun`; on the VPS `https://<SITE_DOMAIN>`; the
+web build's `VITE_PUBLIC_URL`). Nothing in the code or the art names a domain; another domain is configuration only
+(OPERATIONS.md, "The name: Coinnibal (formerly Elymum)"). Players sign in again on a new domain (SIWE binds the domain). NFT metadata URLs follow the NFT's base URI:
 update it with `setBaseURI` (Mint tab) unless you froze it.
 
 **Without Docker.** `pnpm install && pnpm -F @coinnibal/web build && pnpm -F @coinnibal/server build`, then run
