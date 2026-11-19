@@ -134,6 +134,12 @@
   font-size: 14px;
   line-height: 1.4;
 }
+/* each sentence is a box of its own: the note breaks between the two, not before a lone "lose it.", and a sentence
+   too long for a phone's line balances inside its box */
+.ld-hero__money-s {
+  display: inline-block;
+  text-wrap: balance;
+}
 .ld-hero__money-icon {
   flex: none;
   margin-top: 2px;
@@ -566,13 +572,18 @@
 .ld-take__row {
   display: grid;
   grid-template-columns: auto 1fr auto;
+  /* three rows shared by both coins: the who-is-who tags on one level, the coins standing on one line, the token
+     chips on one level (the eater is the bigger coin) */
+  grid-template-rows: auto auto auto;
   align-items: end;
-  gap: 10px;
+  gap: 6px 10px;
 }
 .ld-take__coin {
+  grid-row: 1 / span 3;
   display: grid;
+  grid-template-rows: subgrid;
   justify-items: center;
-  gap: 6px;
+  align-items: end;
 }
 /* who is who: the same tag as the stairs' "You", over each coin */
 .ld-take__who {
@@ -603,6 +614,7 @@
   color: var(--on-sticker-2);
 }
 .ld-take__flow {
+  grid-row: 2;
   display: grid;
   justify-items: center;
   align-self: center;
@@ -2174,11 +2186,10 @@
   .ld-faq__boat {
     display: none;
   }
-  /* the moon stands at the right on a phone: its light falls there too */
+  /* the moon stands at the right, above the card column: the first card would cover most of its light on the water
+     and leave two grey bars that read as a broken line (from 640 px to 899 px as on a phone) */
   .ld-faq__glint {
-    justify-self: end;
-    width: 84px;
-    margin-right: 8px;
+    display: none;
   }
 }
 @media (max-width: 639px) {
@@ -2187,10 +2198,6 @@
   }
   .ld-faq__list {
     gap: 14px;
-  }
-  /* two grey bars under the moon read as a broken line on a phone */
-  .ld-faq__glint {
-    display: none;
   }
   .ld-faq__water::before { top: 70px; }
   .ld-faq__water::after { top: 210px; }

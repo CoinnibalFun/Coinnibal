@@ -118,7 +118,10 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
               {/* plainly: free at first, then a ticket is real money (D12), whatever chain the build is on */}
               <p className="ld-hero__money" data-testid="ld-money">
                 <Icon name="info" size={16} className="ld-hero__money-icon" />
-                <span>{t('ld.hero.money', { sym: SYMBOL })}</span>
+                {/* one sentence a piece: the line breaks between them, never before a lone "lose it." */}
+                <span>
+                  <T k="ld.hero.money" vars={{ sym: SYMBOL }} tags={{ s: (c) => <span className="ld-hero__money-s">{c}</span> }} />
+                </span>
               </p>
               {/* at most three buttons: with a third (Play) the two above share the width and Play spans both, so the
                   block stays even; Collab is for community leads, a quiet link under them like the X link */}

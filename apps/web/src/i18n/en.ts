@@ -982,7 +982,7 @@ export const en = {
   'ld.hero.tag': "Coins eating coins.",
   'brand.tagline': "Eat or be eaten.",
   'ld.hero.lede': "Eat coins smaller than you and run from the ones that are bigger. In a paid room, every coin still alive at the bell gets paid.",
-  'ld.hero.money': "A paid room takes a ticket in {sym}. If you get eaten, you lose it.",
+  'ld.hero.money': "<s>A paid room takes a ticket in {sym}.</s> <s>If you get eaten, you lose it.</s>",
   'ld.cta.why': "Why get the NFT?",
   'ld.cta.wl': "Join the WL",
   'ld.collabLink': "Communities can ask for WL spots",
