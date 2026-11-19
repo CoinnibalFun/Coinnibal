@@ -14,7 +14,8 @@ holders. No visitor copy names a mint price (the mint page, once open, reads the
 mint is planned on OpenSea (the link @coinnibalfun posts), and the contract's own allowlist and public phases and
 `/mint` are the owner's tools until the owner decides how they fit. The money rules live in two Solidity contracts;
 the game itself runs on an authoritative server; the owner deploys the contracts and signs every transaction from
-their own wallet in `/admin` (pinning them in the site build is one step in the VPS shell).
+their own wallet in `/admin`, in one flow that ends with one free signed message telling the site which contracts to
+trust.
 
 Status: the contracts and the mint system are ready and run from `/admin`; the public site is information-only
 (game, mint, WL and collab closed) until the owner opens them in `/admin` → Settings. Coinnibal runs on Robinhood Chain only: Robinhood Chain Testnet (chain id
@@ -164,12 +165,12 @@ the web, and builds the Docker image.
 
 ### Deploying
 
-Deploy the server (Docker on a VPS: deploy/vps/README.md), then deploy the contracts from your own wallet in
-`/admin`: Deploy Arena → Deploy NFT → register both → pin them in the site build → publish the allowlist → open the
-mint → set the token (when it exists) and pin it → create the arenas → open the game. The pins are the one step in
-the VPS shell: the site trusts only the contracts it was built with, so `/admin` → Setup → Site pins shows the
-`COINNIBAL_PIN_*` lines for `/opt/elymum/.env`, then `coinnibal-compose up -d --build app` rebuilds it. Moving to the
-mainnet is a server setting plus that rebuild with the mainnet pins. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
+Deploy the server (Docker on a VPS: deploy/vps/README.md), then open `/admin` with the owner wallet and press
+**Deploy the contracts**: one flow deploys the arena and the NFT from your wallet (on the testnet also the test
+token, the game token and the rooms), registers them with the server and ends with one free signed message, the
+site pins: the site trusts only the contracts the owner wallet signed for, whatever the server says. No shell step.
+Then publish the allowlist → open the mint → set the token (when it exists) and sign the pins again → open the game.
+Moving to the mainnet is a server setting plus the same flow there. Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
 Day-to-day running (gas for the server key, the allowlist, the mint price, pausing, ownership):
 [docs/OPERATIONS.md](docs/OPERATIONS.md).
 

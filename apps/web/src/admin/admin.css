@@ -372,7 +372,7 @@ body {
   color: var(--ink-2);
   font-size: var(--t-small);
 }
-/* Setup → Site pins: the .env lines and the rebuild command, to copy */
+/* Setup → Site pins: the sign button, and under Advanced the .env override lines and the rebuild command, to copy */
 .ad-pins__todo {
   display: grid;
   gap: 10px;
@@ -1834,6 +1834,227 @@ body {
     transform: scale(1.25);
   }
 }
+/* ── the start screen (/admin opens here) and its pages ─────────────────── */
+.ad-body--simple {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 920px;
+}
+.ad-bench--simple {
+  gap: 6px;
+  padding-bottom: 16px;
+}
+.ad-back,
+.ad-rail__start {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 0 14px;
+  border: var(--stroke-xs) solid var(--outline);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink-fixed);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ad-back:hover,
+.ad-rail__start:hover {
+  background: var(--sun);
+}
+.ad-rail__start {
+  margin-bottom: 8px;
+}
+.ad-start {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.ad-start__rows {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+.ad-start__row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 10px 0;
+  border-top: 1px solid var(--rule);
+}
+.ad-start__row:first-child {
+  border-top: 0;
+}
+.ad-start__row dt {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.ad-start__row dd {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-size: 16px;
+}
+.ad-start__dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: var(--stroke-xs) solid var(--outline);
+  border-radius: 50%;
+  background: var(--paper);
+  transform: translateY(1px);
+}
+.ad-start__row.is-ok .ad-start__dot {
+  background: var(--up);
+}
+.ad-start__row.is-todo .ad-start__dot {
+  background: var(--sun);
+}
+.ad-start__row.is-unknown .ad-start__dot {
+  border-style: dashed;
+  border-color: var(--stone);
+}
+.ad-start__actions {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ad-start__action {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  min-height: 76px;
+  padding: 14px 20px;
+  border: var(--stroke) solid var(--outline);
+  border-radius: var(--r-card);
+  background: var(--sticker);
+  color: var(--ink);
+  box-shadow: var(--sh-2);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.ad-start__action:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--sh-3);
+}
+.ad-start__action:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+.ad-start__action.is-next {
+  background: var(--sun);
+}
+.ad-start__n {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--ink-fixed);
+  font-size: 16px;
+}
+.ad-start__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ad-start__title {
+  font-size: 20px;
+  line-height: 1.2;
+}
+.ad-start__hint {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.ad-start__next {
+  padding: 3px 8px;
+  border: var(--stroke-xs) solid var(--outline);
+  border-radius: 8px;
+  background: var(--white);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ad-start__drawers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ad-start__drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-height: 44px;
+  padding: 12px 14px;
+  border: var(--stroke-xs) solid var(--outline);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.ad-start__drawer:hover {
+  background: var(--surface);
+}
+.ad-start__drawer span {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.ad-view__more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ad-signin .ad-actions {
+  margin-top: 0;
+}
+@media (max-width: 639px) {
+  .ad-start__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .ad-start__action {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+  .ad-start__action .kb-icon {
+    display: none;
+  }
+  .ad-start__n {
+    width: 34px;
+    height: 34px;
+  }
+  .ad-start__title {
+    font-size: 17px;
+  }
+}
+@media (max-width: 900px) {
+  .ad-rail__start {
+    margin-bottom: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ad-stations li.is-now .ad-stations__dot {
     animation: none;

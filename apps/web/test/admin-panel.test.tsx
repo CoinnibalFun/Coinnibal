@@ -541,12 +541,12 @@ describe('the chain panel', () => {
     ui(<AdminPanel net={resolveNetwork(chainStatus({ arenaAddress: null }))} api={null} tab="network" go={go} reloadNet={async () => {}} />);
     const list = screen.getByTestId('launch-checklist');
     const labels = [...list.querySelectorAll('.ad-golink')].map((b) => b.textContent);
-    expect(new Set(labels)).toEqual(new Set(['WL →', 'Setup →', 'Game →', 'Mint →', 'Settings →']));
+    expect(new Set(labels)).toEqual(new Set(['WL →', 'Deploy →', 'Game →', 'Mint →', 'Settings →']));
     const link = (id: string) => list.querySelector(`[data-item="${id}"] .ad-golink`);
     expect(link('chain')).toBeNull();
     expect(link('server-key')).toBeNull();
-    // Finish setup, in Setup, creates the four arenas
-    expect(link('arenas')?.textContent).toBe('Setup →');
+    // the deploy flow creates the four arenas
+    expect(link('arenas')?.textContent).toBe('Deploy →');
     act(() => (link('arenas') as HTMLButtonElement).click());
     expect(go).toHaveBeenLastCalledWith('deploy');
     act(() => (link('authority') as HTMLButtonElement).click());

@@ -43,8 +43,8 @@ examples) and the tests use it; the contract is the authority and the server rea
   RPC of another chain keeps the arenas off (`!!! chain: the RPC (COINNIBAL_RPC_URLS on the VPS, …) serves chain …`),
   a fallback of another chain is left out.
   `/api/config` publishes `{ chainId, chainName, testnet, faucetUrl, rpcUrl, explorerUrl, fees, … }`.
-- **Web:** `VITE_CHAIN_ID` names the network before the server answers; the server's network wins (the contract pins
-  are for `VITE_CHAIN_ID` only: Web internals, "Contract pins"). Wallets are
+- **Web:** `VITE_CHAIN_ID` names the network before the server answers; the server's network wins (the owner signs
+  the contract pins per chain: Web internals, "Contract pins"). Wallets are
   asked to switch to (or add) exactly the server's chain. Copy says "ETH" and uses `{chain}` for the network's name,
   filled in by `translate()` from the active network.
 - **State** is keyed by chain id (`DATA_DIR/chains/<id>/`): the testnet's records stay on file when `CHAIN_ID` moves
@@ -469,18 +469,21 @@ has more bots than its setting, nor more playing than the setting minus its peop
   deep links that open the page in MetaMask or Coinbase Wallet (`deeplinks.ts`), and WalletConnect when the build has
   `VITE_WALLETCONNECT_PROJECT_ID` (`walletconnect.ts`, loaded only when picked). "How to get tokens"
   (`GetTokensSheet.tsx`; the Pons link is `VITE_TOKEN_BUY_URL`).
-- **Contract pins** (`src/wallet/pinned.ts`): the arena, NFT and token addresses are fixed at build time for the
-  build's chain (`VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS`, `VITE_TOKEN_ADDRESS` for `VITE_CHAIN_ID`; on the VPS
-  `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT`, `COINNIBAL_PIN_TOKEN` in `/opt/elymum/.env`, passed as build args by
-  `deploy/vps/docker-compose.yml` with `COINNIBAL_CHAIN_ID` as the chain). No chain has defaults: without an arena pin
-  the site signs no ticket, refund or shop payment, without an NFT pin no mint, and without a token pin the arena's
-  token is not checked against one; the local node may run unpinned. A pin changes only with shell access to the VPS
-  (or a new build) and a rebuild (`coinnibal-compose up -d --build app`), never from the admin panel, so a stolen
-  admin login, or a server API that names other contracts, cannot point wallets at another contract. The pins do not
-  guard against someone with the VPS shell: the same server builds and serves the site, so they could rebuild it.
-  After the owner's deploy (and after `setToken`), `/admin` → Setup → Site pins and the Network checklist line "The
-  site trusts the registered contracts" compare the build's pins with the registered contracts and show the lines to
-  set. Moving to the mainnet needs that rebuild too. Before every approval, ticket, refund and shop payment the web
+- **Contract pins** (`src/wallet/pinned.ts`): the site trusts the arena, NFT and token the **owner wallet signed for**.
+  After a deploy (and again after `setToken`) `/admin` asks the owner for one free `personal_sign` of a plain message
+  naming the chain id, the arena, the NFT and the token (`sitePinsMessage`, `packages/shared/src/site-pins.ts`). The
+  server stores the record per chain (`POST /api/admin/pins`: admin only, and only for the registered arena and NFT,
+  the arena's on-chain token and the signed-in admin as signer; `GET /api/site/pins`: public;
+  `DATA_DIR/site/pins.json`). A browser uses it only when viem's `verifyMessage` recovers `OWNER_WALLET` (built into
+  the site, `VITE_OWNER_WALLET` overrides it) from exactly that chain and those addresses, and refuses a record older
+  than one it has already accepted. So a stolen admin login, or a server API that names other contracts, cannot
+  point wallets at another contract: neither can forge the owner's signature. `VITE_ARENA_ADDRESS`,
+  `VITE_NFT_ADDRESS`, `VITE_TOKEN_ADDRESS` (for `VITE_CHAIN_ID`; on the VPS `COINNIBAL_PIN_*`) stay as an optional
+  override that wins per contract. Nothing signed or pinned: no ticket, refund or shop payment, no mint, and the
+  arena's token is not checked against a pin; the local node may run unpinned. The pins do not guard against someone
+  with the VPS shell: the same server builds and serves the site. `/admin` → Setup → Site pins and the Network
+  checklist line "The site trusts the registered contracts" compare the pins with the registered contracts and offer
+  the signature. Before every approval, ticket, refund and shop payment the web
   checks that the server's arena is the pinned one and that its runtime code hash is the compiled
   `@coinnibal/contracts` build; the mint checks its NFT the same way. A mismatch is refused with a clear error and the
   lobby says "Contract check failed".
@@ -491,10 +494,12 @@ has more bots than its setting, nor more playing than the setting minus its peop
   by server tick), and a coin keeps its last velocity up to 250 ms when the next snapshot is late
   (`apps/web/test/netsim.ts`: at 150 ms RTT and 2 % loss, about 36 freezes a minute before, none after).
 - **Copy** (`src/i18n`): English only (`locales/meta.ts`); `{chain}` names the network; ETH is written out.
-- **Admin** (`src/admin`): the deploy wizard (arena v4, NFT, TestToken on testnets), Finish setup (token, the four
+- **Admin** (`src/admin`): the start screen (`Start.tsx`: five status lines and the big actions), the one-button
+  deploy flow (`flow.ts`, `DeployFlow.tsx`: every step the network needs, one signature each, re-read before each
+  step), the deploy wizard step by step (arena v4, NFT, TestToken on testnets), Finish setup (token, the four
   arenas, holder perks 8 % + 2 %, the $10 Room holders-only, the faucet's 2x and, on a testnet, the public mint:
-  `setPhase(public)`), Site pins (the build's contract pins against the registered contracts, with the `.env` lines
-  and the rebuild), arena prices in US dollars (the sync's
+  `setPhase(public)`), Site pins (the owner-signed pins against the registered contracts, the Sign button, the `.env`
+  override under Advanced), arena prices in US dollars (the sync's
   diff and the owner-signed `updateArena` calls), the arena controls (fee pair, burn
   mode with the token's burn() probe, payment burn share, fee wallet, pause, sweeps, rescue), the mint, maps, shop,
   custom rooms, integrity. Every write is previewed and sent once.

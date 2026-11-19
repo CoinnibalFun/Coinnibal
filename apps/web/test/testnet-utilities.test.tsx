@@ -293,13 +293,20 @@ const ctxOf = (over: Partial<ChainCtx> = {}): ChainCtx & { plans: Plan[] } => {
 
 describe('admin groups', () => {
   it('maps the old drawers into the groups and back to a hash', () => {
-    expect(parseAdminHash('#deploy')).toEqual({ group: 'setup', sub: 'wl' });
+    // `#deploy` is the deploy flow now; the empty hash and anything unknown open the start screen
+    expect(parseAdminHash('#deploy')).toEqual({ group: 'deploy', sub: 'wl' });
+    expect(parseAdminHash('#setup').group).toBe('setup');
+    expect(parseAdminHash('#open').group).toBe('open');
+    expect(parseAdminHash('#minting').group).toBe('minting');
+    expect(parseAdminHash('#feedback-later').group).toBe('home');
     expect(parseAdminHash('#arena').group).toBe('game');
     expect(parseAdminHash('#tasks')).toEqual({ group: 'community', sub: 'tasks' });
     expect(parseAdminHash('#community/collabs')).toEqual({ group: 'community', sub: 'collabs' });
     expect(parseAdminHash('#integrity').group).toBe('safety');
-    expect(parseAdminHash('')).toEqual({ group: 'network', sub: 'wl' });
-    expect(adminHash('network')).toBe('');
+    expect(parseAdminHash('')).toEqual({ group: 'home', sub: 'wl' });
+    expect(adminHash('home')).toBe('');
+    expect(adminHash('network')).toBe('#network');
+    expect(adminHash('deploy')).toBe('#deploy');
     expect(adminHash('community', 'tasks')).toBe('#community/tasks');
     expect(adminHash('game')).toBe('#game');
   });
@@ -319,7 +326,9 @@ describe('admin groups', () => {
       testToken: { address: '0x0000000000000000000000000000000000007e57', faucet: { holderNft: null } },
     } as unknown as StatusSnapshot;
     // the site build must trust the new contracts first: the pin step, then Finish setup
-    expect(groupSummary('setup', { net: both, status: registered })).toMatchObject({ now: expect.stringMatching(/ · site pins to set$/), next: 'Pin the contracts in the site build: Setup → Site pins (the VPS shell, then a rebuild).' });
+    expect(groupSummary('setup', { net: both, status: registered })).toMatchObject({ now: expect.stringMatching(/ · site pins to sign$/), next: 'Sign the site pins: Setup → Site pins (one free signature from the owner wallet).' });
+    // the owner's signed record counts as pinned
+    expect(groupSummary('setup', { net: both, status: registered, pins: buildPins({}), signed: { arena: ARENA, nft: '0x0000000000000000000000000000000000000f7e', token: null } })).toMatchObject({ now: expect.stringMatching(/ · site pins ok$/) });
     const pinned = buildPins({ arena: ARENA, nft: '0x0000000000000000000000000000000000000f7e' });
     expect(groupSummary('setup', { net: both, status: registered, pins: pinned })).toMatchObject({ now: expect.stringMatching(/ · site pins ok$/), next: expect.stringMatching(/^Finish setup: 9 steps left/) });
     const mainnet = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, nftAddress: '0x0000000000000000000000000000000000000f7e' }));

@@ -2,9 +2,9 @@
 
 This is the whole path from an empty host to a running game with an open mint. The server goes up first;
 then the owner deploys both contracts **from their own wallet in `/admin`** and the server registers them. Every
-transaction is signed in `/admin` (the CLI, `pnpm admin` at the end, is an alternative). One step needs the VPS
-shell: the site is built with the contracts it trusts, so after the deploy the owner puts their addresses in
-`/opt/elymum/.env` and rebuilds the site (section 3, "Pin the contracts").
+transaction is signed in `/admin` (the CLI, `pnpm admin` at the end, is an alternative). `/admin` opens on a short
+start screen: **Deploy the contracts** runs every deploy step in one flow, one wallet signature each, and ends with
+one free signed message that tells the site which contracts to trust (section 3, "Site pins"). No shell step.
 
 The game server runs on a VPS (Docker + Caddy, CI-green auto-deploy with rollback, alerts, daily and offsite
 backups, one-command install): [deploy/vps/README.md](../deploy/vps/README.md). The backup of the whole data folder
@@ -21,12 +21,13 @@ Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testne
    `CHAIN_ID=46630` and `EVM_RPC_URLS` = Robinhood Chain Testnet (later `4663` and Alchemy plus the public RPC; on the
    VPS these are `COINNIBAL_CHAIN_ID` and `COINNIBAL_RPC_URLS`, and unset they already mean the testnet).
 2. **Fund the server key** with a little ETH (it pays gas for settlements, cancels and loot burns).
-3. In `/admin` on the site, with the owner wallet on Robinhood Chain: **Deploy Arena → Deploy NFT → register both**
-   (on the testnet also the TestToken).
-4. **Pin the contracts in the site build** (the VPS shell): `/admin` → Setup → **Site pins** shows the
-   `COINNIBAL_PIN_ARENA` and `COINNIBAL_PIN_NFT` lines with the registered addresses. Check each address against the
-   deploy transaction in your own wallet, set the lines in `/opt/elymum/.env`, then run
-   `coinnibal-compose up -d --build app`. Until then the site signs no ticket and no mint.
+3. In `/admin` on the site, with the owner wallet (`0x08b2b32E932D5f429073a441E6eFd8e3D42369b2`) on Robinhood Chain:
+   sign in, then **Deploy the contracts**. One button runs, in order: on the testnet the TestToken (when none is
+   registered), the arena, the NFT, their registration with the server, the game token, the rooms and the NFT perks;
+   on the mainnet the arena, the NFT, their registration and the NFT perks (the token comes later).
+4. **Sign the site pins**: the flow's last step, one free message (no transaction) naming the chain, the arena, the
+   NFT and the token. The server stores it; every browser checks that the owner wallet signed it. Until then the site
+   signs no ticket and no mint.
 5. **WL**: review applications in `/admin` → Community (WL, Collabs) → **publish the allowlist root**.
 6. **Open the mint**: phase Allowlist, later Public (on the testnet, Finish setup, step 8, opens it to the public).
    Leave "activate the game for holders" unchecked (the default): the game opens last, at step 9, once the token
@@ -36,8 +37,8 @@ Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testne
    within your bounds.
 8. **Set the game token** on the arena when the token exists (once and for good; the launch order is the NFT mint,
    then the token, then the game), then **create the four arenas**. On testnet you can deploy the `TestToken` first
-   and use it (Finish setup does the token, the arenas and the perks in one go). Then **pin the token** too:
-   `COINNIBAL_PIN_TOKEN` (Setup → Site pins) and the same rebuild.
+   and use it (the deploy flow does the token, the arenas and the perks). After the token is set the panel asks you to
+   **sign the site pins again** (the token joins them).
 9. **Open the game** (`/admin` → Game → Who may play): it starts closed (`admins`).
 
 `/admin` → **Network** shows the launch checklist live: a line that is not done links to the drawer that finishes it
@@ -58,8 +59,8 @@ Coinnibal runs on Robinhood Chain only (an Arbitrum Orbit L2, gas in ETH). Sourc
 
 The server's RPC must serve `CHAIN_ID`: an RPC of another chain keeps the arenas off, and any other `CHAIN_ID`
 refuses to start. The web asks the wallet to switch to (or add) exactly the chain the server reports. Moving from
-testnet to mainnet is a server setting plus a site rebuild with the mainnet pins: the site trusts only the contracts
-it was built with, on the chain it was built for (section 3, "Pin the contracts"; section 5).
+testnet to mainnet is a server setting plus the owner's signed pins for the mainnet contracts: the site trusts only
+the contracts the owner wallet signed for, on that chain (section 3, "Site pins"; section 5).
 
 **Wallets.** Any EVM browser wallet that announces itself with EIP-6963 (MetaMask, Rabby, Coinbase Wallet, OKX,
 ...). The owner wallet is the one you will keep: it owns the contracts. A hardware wallet behind MetaMask or
@@ -96,7 +97,7 @@ before the rename still work: deploy/vps/README.md section 4):
 | `NFT_COLLECTION_SIZE`, `NFT_ART_STYLE` | `3333` (= the NFT's max supply), `vector` (or `pixel`): the emblem collection (docs/NFT-DESIGN.md). Leave `NFT_COLLECTION_SEED` empty: the seed is generated and committed on first boot (`DATA_DIR/chains/<id>/nft-collection.json`, keep it in the backups) |
 | `TOKEN_SYMBOL` | unset: amounts say `tokens` (display only) |
 | `X_HANDLE` | the project's X handle by default (unset: `coinnibalfun`) |
-| `VITE_CHAIN_ID`, `VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS`, `VITE_TOKEN_ADDRESS` (VPS: `COINNIBAL_CHAIN_ID`, `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT`, `COINNIBAL_PIN_TOKEN`) | the site build, not the server: the chain and the contracts the site trusts (section 3, "Pin the contracts"). Empty until the owner's deploy; no chain has defaults |
+| `VITE_CHAIN_ID`, `VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS`, `VITE_TOKEN_ADDRESS`, `VITE_OWNER_WALLET` (VPS: `COINNIBAL_CHAIN_ID`, `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT`, `COINNIBAL_PIN_TOKEN`, `COINNIBAL_OWNER_WALLET`) | the site build, not the server. Leave the pins empty: the site trusts what the owner wallet signs in `/admin` (section 3, "Site pins"). Set, a pin overrides the signed one; `VITE_OWNER_WALLET` replaces the built-in owner wallet |
 | `GAME_ACCESS` (VPS: `COINNIBAL_GAME_ACCESS`) | unset (VPS: `site`): the `/admin` → Settings switch decides (a fresh server starts closed, `admins`); `public`, `holders`, `admins` or `maintenance` overrides that switch |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `BACKUP_RCLONE_REMOTE` | the alerts and the encrypted offsite backup (deploy/vps/README.md) |
 
@@ -114,7 +115,7 @@ web build's `VITE_PUBLIC_URL`). Nothing in the code or the art names a domain; a
 update it with `setBaseURI` (Mint tab) unless you froze it.
 
 **Without Docker.** `pnpm install && pnpm -F @coinnibal/web build && pnpm -F @coinnibal/server build` (the web build
-with `VITE_CHAIN_ID` and the `VITE_*_ADDRESS` pins set, section 3), then run
+with `VITE_CHAIN_ID` set to the server's chain), then run
 `node apps/server/dist/index.js` with the variables above and `WEB_DIST=apps/web/dist`. The server does not read a
 `.env` file itself: pass the variables through the environment.
 
@@ -129,9 +130,15 @@ red (OPERATIONS.md, "The server key and gas").
 ## 3. Deploy the contracts from `/admin`
 
 Open `https://<your site>/admin`. Connect the **owner wallet** (the one in `ADMIN_WALLETS`), press **Sign in**
-(a free SIWE signature, no transaction). The header shows a TESTNET or a red **MAINNET** pill. Every transaction
-opens a preview (function, arguments, value, network, signer) before the wallet prompt, and a double click cannot
-send twice. Open **Setup**; the wizard walks the steps and remembers where you are:
+(a free SIWE signature, no transaction). The header shows a TESTNET or a red **MAINNET** pill. The panel opens on
+the start screen: a short status (network, contracts, game, mint, feedback) and five big actions in order.
+
+**Deploy the contracts** is one flow: one button runs every step below that this network still needs, in order,
+one wallet signature per step, with progress and a clear "Done" at the end. It types no address: admin, treasury
+and fee wallet are your wallet, the settler is the server key, the NFT's base URI is this site. It reads the server
+and the chain again before each step, so it can stop anywhere (a refused signature, a closed tab) and **Continue**
+picks it up. Only the owner wallet built into the site can run it (the one that signs the site pins). The same steps
+one by one, with a transaction preview each, stay under **Advanced → Setup** (the wizard below):
 
 1. **Connect the owner wallet.** This wallet becomes the owner of both contracts. Every contract is a plain
    creation from the connected wallet (no factory, proxy or CREATE2 deployer), so the explorer shows your wallet as
@@ -151,36 +158,27 @@ send twice. Open **Setup**; the wizard walks the steps and remembers where you a
    the bundled one, that the owner is you and that the arena's server authority is its key, then stores the
    addresses in `/data/chains/<chainId>/contracts.json`. The server picks the arena up without a restart.
 
-   **Pin the contracts** (not a wizard step: it needs the VPS shell). The site signs only with the arena, NFT and
-   token it was built with (`apps/web/src/wallet/pinned.ts`), whatever the server announces, so a stolen admin login,
-   or a server API that names other contracts, cannot point wallets at another contract: a pin changes only with shell
-   access to the VPS and a rebuild. No chain has default pins. Until the new addresses are in the build, the site
-   signs no ticket, refund or shop payment (no arena pin) and no mint (no NFT pin), and the lobby says "Contract check
-   failed". `/admin` → Setup → **Site pins** (and the line "The site trusts the registered contracts" on Network's
-   checklist) compares the build with the registered contracts and shows the lines. Check each address against the
-   deploy transaction in your own wallet (the panel's addresses come from the server, which is what the pins guard
-   against), set them in `/opt/elymum/.env`, and rebuild:
+   **Site pins** (the flow's last step: one free message, no transaction). The site signs only with the arena, NFT
+   and token the owner wallet signed for (`apps/web/src/wallet/pinned.ts`), whatever the server announces, so a
+   stolen admin login, or a server API that names other contracts, cannot point wallets at another contract. The
+   message names the chain id, the arena, the NFT and the token; the server stores it per chain
+   (`POST /api/admin/pins`, admin only; `GET /api/site/pins`, public, in `DATA_DIR/site/pins.json`) and every browser
+   checks it with the owner wallet built into the site (`OWNER_WALLET`, `0x08b2b32E932D5f429073a441E6eFd8e3D42369b2`):
+   a wrong signer, another chain or a changed address is refused, and so is a record older than one the browser has
+   seen. The arena's runtime code hash is checked as well. Until the pins are signed the site signs no ticket,
+   refund or shop payment and no mint, and the lobby says "Contract check failed". `/admin` → Setup → **Site pins**
+   (and the line "The site trusts the registered contracts" on Network's checklist) shows the state and the button.
 
-   ```bash
-   # /opt/elymum/.env: the registered addresses, as Setup → Site pins shows them
-   COINNIBAL_PIN_ARENA=0x…
-   COINNIBAL_PIN_NFT=0x…
-   # then, in the VPS shell
-   coinnibal-compose up -d --build app
-   ```
-
-   `docker-compose.yml` passes them to the image build as `VITE_ARENA_ADDRESS` and `VITE_NFT_ADDRESS`, for the chain
-   of `COINNIBAL_CHAIN_ID` (`VITE_CHAIN_ID`); `update.sh` rebuilds only when the branch moves, so a `.env` change
-   needs this command, and later builds keep the pins (deploy/vps/README.md section 4). Outside Docker, build the web
-   with `VITE_CHAIN_ID` and the `VITE_*_ADDRESS` names set (`apps/web/.env.example`). A pin changes only this way.
+   Optional override (Advanced): `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT`, `COINNIBAL_PIN_TOKEN` in
+   `/opt/elymum/.env` pin addresses in the build itself (`VITE_*_ADDRESS`, a pin there wins over the signed one) and
+   need `coinnibal-compose up -d --build app`; `COINNIBAL_OWNER_WALLET` replaces the built-in owner wallet.
 6. **Set the game token** (later, when the game token exists). On a testnet, confirm the registered TestToken once
    in the preview (Finish setup does it). The real game token cannot be registered with the server before the arena
    uses it (`POST /api/admin/contracts` accepts only the TestToken or the arena's own token), so on the mainnet enter
    it under **Advanced** in the game token card and type it twice. `TOKEN_ADDRESS` names it only on a server outside
    Docker: the VPS compose file sets it empty. It can be set **once**: a wrong address means deploying a new arena.
-   Until it is set the arenas show "Opening soon" and only practice runs. Then **pin it**: Site pins shows
-   `COINNIBAL_PIN_TOKEN=<the arena's token>`; the same check and the same rebuild. (On a testnet you can also pin
-   once, after Finish setup, with all three lines.)
+   Until it is set the arenas show "Opening soon" and only practice runs. Right after it is set, the panel asks you
+   to **sign the site pins again** (the token joins them; Setup → Site pins otherwise).
 7. **Create the four arenas** (needs the token): the $1 / $3 / $5 / $10 tiers, created at 1,000 / 3,000 / 5,000 /
    10,000 tokens (the reference price $0.001 a token), 300 open tickets each; the $10 Room is for NFT holders.
    Then price them at the token's real USD price: Game → Arena prices → set the price, sync, sign (OPERATIONS.md,
@@ -217,15 +215,13 @@ The launch order is the NFT mint first, then the token, then the game.
 1. Do the whole flow on Robinhood Chain Testnet first, including tickets, rounds, power-ups and the burn mode probe.
 2. Set `COINNIBAL_CHAIN_ID=4663` and `COINNIBAL_RPC_URLS` (a provider RPC first; it may contain a key) in `/opt/elymum/.env`, optionally
    `PUBLIC_RPC_URL` (secret-free). Redeploy (`coinnibal-compose up -d app`). The server opens a clean state for chain
-   4663; the testnet's records stay in `/data/chains/46630/`. The site keeps its testnet build (and signs nothing on
-   the mainnet) until the rebuild of step 3.
+   4663; the testnet's records stay in `/data/chains/46630/`. The site signs nothing on the mainnet until the owner signs
+   the mainnet pins (step 3).
 3. **New contracts.** Testnet addresses are not mainnet addresses. Fund the server key with ETH, redo section 3 on
-   mainnet (the red MAINNET banner shows): deploy Arena and NFT, register, **pin them** (the `COINNIBAL_PIN_ARENA`
-   and `COINNIBAL_PIN_NFT` lines from Setup → Site pins in `/opt/elymum/.env`, then `coinnibal-compose up -d --build
-   app`: the site is built for chain 4663 with the mainnet pins), publish the root, sync the price, open the mint
-   (section 4).
-4. **The token.** Launch the game token on Pons (mainnet only), then set it on the arena, pin it
-   (`COINNIBAL_PIN_TOKEN`, the same rebuild), create the arenas and the holder perks, price the arenas and open the
+   mainnet (the red MAINNET banner shows): **Deploy the contracts** (the arena, the NFT, their registration, the NFT
+   perks and the signed site pins for chain 4663), publish the root, sync the price, open the mint (section 4).
+4. **The token.** Launch the game token on Pons (mainnet only), then set it on the arena (Setup → Set the game token,
+   typed twice) and sign the site pins again (the panel asks), create the arenas (Deploy the contracts, again), price the arenas and open the
    game. Keep burn mode 0 unless the probe shows the token's `burn()` works.
 5. Start with small arenas; watch `/admin` → Network (the launch checklist) and the server log (`!!!` lines).
 
