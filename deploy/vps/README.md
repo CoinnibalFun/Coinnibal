@@ -172,14 +172,17 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
 - **In the round break.** The new image is built while the old container serves; the swap waits for the break after
   an arena bell (no live stake then: SIGTERM mid-round would cash every arena player out). `COINNIBAL_DEPLOY_NOW=1
   coinnibal-update` skips the wait for an urgent fix.
-- **Rollback.** The running image is tagged `elymum-app:previous` before every build (by the weekly refresh: once its
-  build changed the image). When the new container is not healthy (the liveness check) within 60 s, `update.sh` puts
-  the previous image and commit back at once and alerts; that commit is not retried until a newer one arrives. By
-  hand (a version that is healthy but wrong): `systemctl stop elymum-update.timer && docker tag elymum-app:previous
-  elymum-app:latest && coinnibal-compose up -d app`, and `systemctl start elymum-update.timer` once the fix is on the
-  branch (until then any newer commit would bring the fault back with it). The weekly refresh never puts the version
-  taken off back: it rebuilds only the image a deploy put in (`/var/lib/elymum/deployed-image`), skips with an alert
-  while another one runs, and is paused with auto-deploy anyway.
+- **Rollback.** Before every deploy's build the running image is tagged `elymum-app:previous` (its commit in
+  `/var/lib/elymum/previous`; `coinnibal-status` shows both): the version before the last deploy. When the new
+  container is not healthy (the liveness check) within 60 s, `update.sh` puts the previous image and commit back at
+  once and alerts; that commit is not retried until a newer one arrives. The weekly refresh keeps a rollback image of
+  its own (`elymum-app:refresh-rollback`, the build it replaces, removed once the new build is healthy) and never
+  moves `elymum-app:previous`, so after any Sunday it still holds the commit before the last deploy. By hand (a version
+  that is healthy but wrong): `systemctl stop elymum-update.timer && docker tag elymum-app:previous elymum-app:latest
+  && coinnibal-compose up -d app`, and `systemctl start elymum-update.timer` once the fix is on the branch (until then
+  any newer commit would bring the fault back with it). The weekly refresh never puts the version taken off back: it
+  rebuilds only the image a deploy put in (`/var/lib/elymum/deployed-image`), skips with an alert while another one
+  runs, and is paused with auto-deploy anyway.
 - **Caddy** reloads when its file changed (`stream_close_delay 10m` keeps the game sockets open across a reload), and
   is recreated in the round break when a newer build of its image was pulled (below). A deploy needs every image of
   `docker-compose.yml` on this host: a Caddy tag new to it (a Dependabot bump) is pulled first, and while the registry
@@ -192,7 +195,7 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
 |---|---|
 | Ubuntu's packages | unattended-upgrades, daily (Ubuntu's own origins, security included); the reboot a kernel update needs at 04:30 in a round break (`elymum-reboot.timer`) |
 | The Docker Engine (`docker-ce`, `containerd.io` with runc, the CLI, the compose and buildx plugins, from Docker's repository) | `reboot.sh` (`elymum-reboot.timer`, 04:30), when Docker's repository has a newer version: `docker-ce` and `containerd.io` in the round break, with the app stopped first; the CLI and the plugins alone at once (they restart nothing). Never unattended-upgrades: an engine update restarts every container, which mid-round would cash every arena player out |
-| The app image's base (`node:22-bookworm-slim`: Debian's and Node 22's patches) | every deploy builds with `--pull`; `elymum-refresh.timer` (Sunday 05:00) rebuilds the deployed commit even without a new one and swaps it in in the round break, only when the image changed (with the same rollback as a deploy). It never deploys a newer commit (only the auto-deploy does), and it is skipped while auto-deploy is paused or an image put back by hand runs (Rollback, above) |
+| The app image's base (`node:22-bookworm-slim`: Debian's and Node 22's patches) | every deploy builds with `--pull`; `elymum-refresh.timer` (Sunday 05:00) rebuilds the deployed commit even without a new one and swaps it in in the round break, only when the image changed (with the same rollback as a deploy, from its own `elymum-app:refresh-rollback`: `elymum-app:previous` stays the commit before the last deploy). It never deploys a newer commit (only the auto-deploy does), and it is skipped while auto-deploy is paused or an image put back by hand runs (Rollback, above) |
 | Caddy (pinned to a patch version, `caddy:2.x.y` in `docker-compose.yml`) | the newest build of that tag is pulled on every deploy and every Sunday and swapped in in the round break; a newer Caddy version comes as a Dependabot pull request, and CI checks both Caddyfiles with it (`caddy validate`) |
 | npm dependencies, the GitHub Actions, the image tags | Dependabot pull requests, weekly (`.github/dependabot.yml`), through CI; a merged one deploys once CI passed |
 

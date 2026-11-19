@@ -13,8 +13,11 @@
 # without the marker (a private repository's CI status is not readable from here without a GitHub token; the marker
 # comes through the same git fetch as the code).
 #
-# Rollback: the running image is tagged elymum-app:previous before the build; when the new container is not
-# healthy (the liveness check, /api/health?live=1) within 60 s, the previous image and commit are put back at once.
+# Rollback: before a deploy's build the running image is tagged elymum-app:previous (its commit in
+# /var/lib/elymum/previous); when the new container is not healthy (the liveness check, /api/health?live=1) within
+# 60 s, the previous image and commit are put back at once. The weekly refresh has a rollback image of its own
+# (elymum-app:refresh-rollback, the build it replaces, removed once the new one is healthy) and never moves :previous,
+# which so stays the version before the last deploy (README "Rollback": the way back by hand).
 #
 # Security fixes of the images: every build pulls the newest base image (--pull: node:22-bookworm-slim, its Debian
 # and Node patches) and the Caddy image of docker-compose.yml (a pinned patch version; Dependabot proposes newer ones,
@@ -57,6 +60,8 @@ link_commands
 branch="$(cat "$COINNIBAL_STATE/branch" 2>/dev/null || git rev-parse --abbrev-ref HEAD)"
 [[ -n "$branch" && "$branch" != "HEAD" ]] || die "no branch recorded in $COINNIBAL_STATE/branch"
 PREVIOUS_IMAGE="${COINNIBAL_IMAGE%:*}:previous"
+# the weekly refresh's rollback target: the build it replaces (never :previous, the way back past the last deploy)
+REFRESH_ROLLBACK_IMAGE="${COINNIBAL_IMAGE%:*}:refresh-rollback"
 HEALTHY_WITHIN_S=60
 
 app_running() {
@@ -82,6 +87,12 @@ wait_healthy() {
     sleep 1
   done
   echo "$status"
+}
+
+# the refresh's rollback image is done with (a deploy drops one an interrupted refresh left too). Only that tag goes:
+# an image that holds another one as well (elymum-app:latest, :previous) stays
+drop_refresh_rollback() {
+  docker image rm "$REFRESH_ROLLBACK_IMAGE" >/dev/null 2>&1 || true
 }
 
 # installs the systemd units of this checkout when they differ from the installed ones, and enables new timers
@@ -269,12 +280,16 @@ dc pull --quiet caddy || log "could not pull the Caddy image; the one on this ho
 missing="$(missing_images)"
 [[ -z "$missing" ]] || postpone "$missing"
 
-# the image now serving becomes the rollback target (the refresh tags it below, once its build changed the image)
+# the image now serving becomes the rollback target: a deploy's elymum-app:previous (with its commit), the refresh's
+# own elymum-app:refresh-rollback (tagged below, once its build changed the image), so :previous keeps the commit
+# before the last deploy
 before="$(image_id "$COINNIBAL_IMAGE")"
 if [[ "$same" -eq 0 && -n "$before" ]]; then
   docker tag "$COINNIBAL_IMAGE" "$PREVIOUS_IMAGE"
   [[ -n "$deployed" ]] && echo "$deployed" >"$COINNIBAL_STATE/previous"
 fi
+rollback_image="$PREVIOUS_IMAGE"
+[[ "$same" -eq 0 ]] || rollback_image="$REFRESH_ROLLBACK_IMAGE"
 
 log "building the new image (the old container keeps serving)"
 if ! build_app; then
@@ -297,8 +312,7 @@ if [[ "$same" -eq 1 ]]; then
     exit 0
   fi
   if [[ "$app_changed" -eq 1 && -n "$before" ]]; then
-    docker tag "$before" "$PREVIOUS_IMAGE"
-    echo "$deployed" >"$COINNIBAL_STATE/previous"
+    docker tag "$before" "$REFRESH_ROLLBACK_IMAGE"
   fi
 fi
 
@@ -318,6 +332,7 @@ fi
 running_image="$(app_image)"
 if [[ -n "$running_image" && "$running_image" != "$(image_id "$COINNIBAL_IMAGE")" ]]; then
   if [[ -n "$before" ]]; then docker tag "$before" "$COINNIBAL_IMAGE"; fi
+  [[ "$same" -eq 0 ]] || drop_refresh_rollback
   missing="$(missing_images)"
   [[ -z "$missing" ]] || postpone "$missing"
   if [[ -n "$deployed" ]]; then git reset --hard --quiet "$deployed"; fi
@@ -338,12 +353,13 @@ if [[ "$status" != "healthy" ]]; then
   if [[ "$app_changed" -eq 0 ]]; then
     # only Caddy was refreshed: the app's image is the one that ran before, nothing to roll back
     notify "after the weekly Caddy refresh the app is $status (its image did not change)"
-  elif docker image inspect "$PREVIOUS_IMAGE" >/dev/null 2>&1 && [[ -n "$deployed" ]]; then
+  elif docker image inspect "$rollback_image" >/dev/null 2>&1 && [[ -n "$deployed" ]]; then
     log "ROLLBACK: ${remote:0:12} is $status after ${HEALTHY_WITHIN_S} s; putting ${deployed:0:12} back"
     # the record of the deployed commit's image stays as it is: this puts that image back (or the one a rollback by
-    # hand had put in, which stays unrecorded, so the weekly refresh keeps leaving it alone)
+    # hand had put in, which stays unrecorded, so the weekly refresh keeps leaving it alone). The refresh puts back
+    # the build it replaced, from its own tag: elymum-app:previous stays the commit before the last deploy
     git reset --hard --quiet "$deployed"
-    docker tag "$PREVIOUS_IMAGE" "$COINNIBAL_IMAGE"
+    docker tag "$rollback_image" "$COINNIBAL_IMAGE"
     dc up -d --remove-orphans || log "docker compose up of the previous version failed"
     status="$(wait_healthy "$HEALTHY_WITHIN_S")"
     if [[ "$same" -eq 1 ]]; then
@@ -354,6 +370,7 @@ if [[ "$status" != "healthy" ]]; then
   else
     notify "deploy of ${remote:0:12} is $status after ${HEALTHY_WITHIN_S} s and there is no previous image to roll back to"
   fi
+  [[ "$same" -eq 0 ]] || drop_refresh_rollback
   exit 0
 fi
 
@@ -375,7 +392,8 @@ if [[ "$up_failed" -eq 1 ]]; then
   notify "$([[ "$same" -eq 1 ]] && echo refreshed || echo deployed) ${remote:0:12}: the app is $status, but docker compose up reported an error (Caddy? coinnibal-status, journalctl -u $INSTALLED_UNIT_PREFIX-$([[ "$same" -eq 1 ]] && echo refresh || echo update))"
 fi
 
-# keep the disk clean: dangling images of earlier builds and Caddy pulls, build cache older than a week
-# (elymum-app:previous stays)
+# keep the disk clean: the refresh's rollback image (the new build is healthy), dangling images of earlier builds and
+# Caddy pulls, build cache older than a week (elymum-app:previous stays: the commit before the last deploy)
+drop_refresh_rollback
 docker image prune -f >/dev/null 2>&1 || true
 docker builder prune -f --filter until=168h >/dev/null 2>&1 || true
