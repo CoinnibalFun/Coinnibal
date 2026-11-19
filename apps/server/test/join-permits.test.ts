@@ -303,9 +303,10 @@ describe('a permit is free, so it holds a place only briefly and only when backe
     expect((await h.permits.issue(ALICE, 4, '10.0.0.1')).arenaId).toBe(4);
   });
 
-  it('a holders-only arena: a holder check the client may not make right now is busy, never "not a holder"', async () => {
-    // the holder reads of one client are bounded (site/mint.ts): past the bound, with no "holder" on record, the
-    // check throws ClientBudgetError. A holder asking for a permit then hears "busy", not that the room is not theirs
+  it('a holders-only arena: a holder check the server cannot answer right now is busy, never "not a holder"', async () => {
+    // the holder reads of one client are bounded (site/mint.ts): past the bound, with no "holder" on record and the
+    // holder index unable to catch up, the check throws ClientBudgetError. A holder asking for a permit then hears
+    // "busy", not that the room is not theirs
     let spent = true;
     const h = harness({
       arenas: [{ ...arena(4, 5000), holdersOnly: true }],

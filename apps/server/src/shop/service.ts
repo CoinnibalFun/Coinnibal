@@ -23,7 +23,6 @@ import {
   type ShopView,
 } from '@coinnibal/shared';
 import { ChainBusyError, type ChainGateway } from '../chain/types';
-import { ClientBudgetError } from '../net/client-scope';
 import { InventoryError, type BoostInventory } from './inventory';
 import type { ShopSettingsStore } from './settings';
 import { verifyPurchase } from './verify';
@@ -78,6 +77,8 @@ export interface ShopDeps {
   chain: ChainGateway;
   /** Emblem holder check (cached; `fresh` re-reads the chain). */
   holder: (wallet: string, fresh?: boolean) => Promise<boolean>;
+  /** The same for a price only shown: the answer on record, never a chain read of its own (default: `holder`, false on error). */
+  shownHolder?: (wallet: string) => Promise<boolean>;
   /** The emblem token ids a wallet owns (null: unknown); with `claims`, the discount is one wallet per token id a day. */
   emblemTokens?: (wallet: string, fresh?: boolean) => Promise<string[] | null>;
   claims?: EmblemClaims;
@@ -208,13 +209,9 @@ export class ShopService {
    * ids has not given the discount to another wallet today. `commit`: the discounted purchase happens now.
    */
   private async discountFor(wallet: string, fresh: boolean, commit = false): Promise<boolean> {
-    // a busy cached check (`ClientBudgetError`) is passed on for a price shown (never a holder's price lost), and
-    // falls through to the fresh read of a purchase
-    const cached = await this.deps.holder(wallet).catch((err) => {
-      if (err instanceof ClientBudgetError && !fresh) throw err;
-      return false;
-    });
-    const holds = cached || (fresh && (await this.deps.holder(wallet, true).catch(() => false)));
+    // a price shown is never busy and spends no holder read: the answer on record (a holder not on record yet sees the
+    // full price, not kept); a discounted purchase reads the chain fresh, so a holder who paid it is credited
+    const holds = fresh ? await this.deps.holder(wallet, true).catch(() => false) : await (this.deps.shownHolder ?? ((w: string) => this.deps.holder(w)))(wallet).catch(() => false);
     if (!holds) return false;
     const claims = this.deps.claims;
     const tokens = claims && this.deps.emblemTokens ? await this.deps.emblemTokens(wallet, fresh).catch(() => null) : null;

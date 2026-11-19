@@ -498,6 +498,121 @@ describe('connection slots', () => {
   });
 });
 
+describe('round-3 front door findings (R3-NET-2, R3-NET-4)', () => {
+  /** An app of its own with `max` slots, and a socket opener that reports `open` or the HTTP refusal. */
+  async function small(max: number) {
+    const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-slots-r3-')), GAME_ACCESS: 'public', NODE_ENV: 'development', MAX_CONNECTIONS: String(max) } as unknown as NodeJS.ProcessEnv);
+    const other = await createApp(cfg, { chain: new NullChain(), log: () => {}, persist: false });
+    const p2 = await other.listen();
+    const socks = new Map<WebSocket, string>();
+    const closed = new Map<string, number>();
+    /** `ping`: the socket pings every 200 ms (a page that is open: never idle by its messages). */
+    const tryOpen = (ip: string, token?: string, ping = false) =>
+      new Promise<number | 'open'>((resolve) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${p2}/ws`, token ? ['coinnibal', `coinnibal.auth.${token}`] : ['coinnibal'], { headers: { 'X-Forwarded-For': ip } });
+        socks.set(ws, ip);
+        ws.on('error', () => {});
+        ws.once('close', (code) => closed.set(ip, code));
+        ws.once('open', () => {
+          ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));
+          if (ping) setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ t: 'ping', ts: 1 })), 200).unref();
+          resolve('open');
+        });
+        ws.once('unexpected-response', (_q, r) => resolve(r.statusCode ?? 0));
+      });
+    const done = async () => {
+      for (const ws of socks.keys()) ws.terminate();
+      await other.close();
+    };
+    return { app: other, tryOpen, closed, done };
+  }
+
+  it('past the cap with the headroom taken, a reconnecting ticket holder takes an idle signed-in socket\'s place (R3-NET-2)', async () => {
+    const { IDLE_SIGNED_MS } = await import('../src/net/gateway');
+    const s = await small(20);
+    const holders = new Set<string>();
+    const real = s.app.rooms.holdsLiveStake.bind(s.app.rooms);
+    s.app.rooms.holdsLiveStake = (w: string) => holders.has(w.toLowerCase()) || real(w);
+    try {
+      // 20 signed-in sockets fill the server
+      for (let i = 0; i < 20; i++) expect(await s.tryOpen(`203.0.113.${i + 1}`, s.app.auth.issueToken(testSigner().address))).toBe('open');
+      // one ticket holder reconnects past the cap: the one headroom slot (20 x 1.05 = 21)
+      const first = testSigner().address;
+      holders.add(first.toLowerCase());
+      expect(await s.tryOpen('198.51.100.1', s.app.auth.issueToken(first))).toBe('open');
+      await sleep(50);
+      expect(s.app.rooms.conns.size).toBe(21);
+      // none of the 20 signed-in sockets played for IDLE_SIGNED_MS; one of them plays now, another's wallet holds a coin
+      const conns = [...s.app.rooms.conns].filter((c) => c.admitSlot && !holders.has(c.admitSlot));
+      conns.forEach((c, i) => (c.playedAt = Date.now() - IDLE_SIGNED_MS - 1_000 - (20 - i) * 10));
+      conns[0].player = { alive: true, id: 1 } as never;
+      holders.add(conns[1].admitSlot!);
+      // a second ticket holder whose socket the heartbeat dropped: it gets in, in the place of the socket idle the longest
+      const second = testSigner().address;
+      holders.add(second.toLowerCase());
+      expect(await s.tryOpen('198.51.100.2', s.app.auth.issueToken(second))).toBe('open');
+      await sleep(100);
+      expect(s.closed.get(conns[2].ip)).toBe(1013);
+      expect(s.closed.has(conns[0].ip)).toBe(false);
+      expect(s.closed.has(conns[1].ip)).toBe(false);
+      expect(s.app.rooms.conns.size).toBe(21);
+      // still one slot per wallet: a second socket of it (its first does not play) takes the place of its own
+      expect(await s.tryOpen('198.51.100.2', s.app.auth.issueToken(second))).toBe('open');
+      await sleep(100);
+      expect([...s.app.rooms.conns].filter((c) => c.admitSlot === second.toLowerCase())).toHaveLength(1);
+      // with only sockets that play or hold a coin left idle-free, a third holder is refused rather than closing one
+      for (const c of s.app.rooms.conns) c.playedAt = Date.now();
+      const third = testSigner().address;
+      holders.add(third.toLowerCase());
+      expect(await s.tryOpen('198.51.100.3', s.app.auth.issueToken(third))).toBe(429);
+    } finally {
+      s.app.rooms.holdsLiveStake = real;
+      for (const c of s.app.rooms.conns) c.player = null;
+      await s.done();
+    }
+  });
+
+  it('sockets a session token admitted are not guests, whether or not they send auth: they never fill the guest share (R3-NET-4)', async () => {
+    const { GUEST_SHARE } = await import('../src/net/gateway');
+    const s = await small(20);
+    try {
+      // 16 token-only sockets (80 % of 20) that ping and never send `auth`
+      for (let i = 0; i < 16; i++) expect(await s.tryOpen(`203.0.113.${i + 1}`, s.app.auth.issueToken(testSigner().address), true)).toBe('open');
+      await sleep(50);
+      expect([...s.app.rooms.conns].filter((c) => c.wallet)).toHaveLength(0);
+      // real guests still get in: the 4 free slots, up to the guest share once the token sockets are gone
+      for (let i = 0; i < 4; i++) expect(await s.tryOpen(`198.51.100.${i + 1}`)).toBe('open');
+      expect(s.app.rooms.conns.size).toBe(20);
+      expect(await s.tryOpen('198.51.100.9')).toBe(429);
+      // the token-only sockets never played: at the cap they give their place to a newcomer (`evictIdleSigned`), and
+      // one guest after another gets in, up to the guest share, never beyond
+      for (const c of s.app.rooms.conns) if (!c.countedAsGuest) c.playedAt = 0;
+      let guests = 4;
+      for (let i = 10; i < 40; i++) if ((await s.tryOpen(`198.51.100.${i}`)) === 'open') guests++;
+      await sleep(50);
+      expect(guests).toBe(20 * GUEST_SHARE);
+      expect([...s.app.rooms.conns].filter((c) => c.countedAsGuest)).toHaveLength(20 * GUEST_SHARE);
+      // a token-only socket is never closed as an idle guest, even silent: at the cap with the guests at their share
+      // and every socket having played a moment ago, a new guest is refused instead
+      for (const c of s.app.rooms.conns) {
+        c.playedAt = Date.now();
+        if (!c.countedAsGuest) c.lastMsgAt = Date.now() - 60_000;
+      }
+      const tokenClosed = [...s.closed.keys()].filter((ip) => ip.startsWith('203.0.113.')).length;
+      expect(await s.tryOpen('198.51.100.98')).toBe(429);
+      await sleep(50);
+      expect([...s.closed.keys()].filter((ip) => ip.startsWith('203.0.113.'))).toHaveLength(tokenClosed);
+      // a quiet guest does make room for a newcomer
+      for (const c of s.app.rooms.conns) if (c.countedAsGuest) c.lastMsgAt = Date.now() - 60_000;
+      expect(await s.tryOpen('198.51.100.99', s.app.auth.issueToken(testSigner().address))).toBe('open');
+      await sleep(50);
+      expect([...s.closed.keys()].filter((ip) => ip.startsWith('203.0.113.'))).toHaveLength(tokenClosed);
+    } finally {
+      await s.done();
+    }
+  });
+});
+
 describe('a busy smart-wallet sign-in (NET-R1-2)', () => {
   it('answers busy over HTTP (429) and the WebSocket (rate_limited), not a wrong signature, and keeps the nonce', async () => {
     const smart = '0x5afe00000000000000000000000000000000c0de';
