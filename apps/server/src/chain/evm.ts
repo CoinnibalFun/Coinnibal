@@ -15,8 +15,8 @@ import {
   type SessionRef,
   type Settlement,
 } from '@coinnibal/sdk';
-import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatGas, isSupportedChainId, unsupportedChainMessage, formatToken, type ArenaFees, type ChainStatus } from '@coinnibal/shared';
-import { getAddress, isAddress, type Address, type Hash, type Hex } from 'viem';
+import { TOKEN_SYMBOL_DEFAULT, chainInfo, formatGas, isSupportedChainId, unsupportedChainMessage, formatToken, type ArenaFees, type ChainStatus, type JoinPermit } from '@coinnibal/shared';
+import { getAddress, isAddress, isHash, type Address, type Hash, type Hex } from 'viem';
 import type { PrivateKeyAccount } from 'viem/accounts';
 import type { ServerConfig } from '../config';
 import { join } from 'node:path';
@@ -24,7 +24,7 @@ import { PAYOUT_GUARD_FLAG, type Journal, type JournalItem, type SettlementItem,
 import { SettledLog } from '../stake/settled-log';
 import { GasRunwayTracker } from './gas-runway';
 import { ChainCache } from './chain-cache';
-import { multicallMode, readChainId, viemEvmClient, withTimeout, type ArenaEvent, type EvmClient, type MulticallMode } from './evm-client';
+import { multicallMode, readChainId, viemEvmClient, withTimeout, type ArenaEvent, type EvmClient, type MulticallMode, type TxReceipt } from './evm-client';
 import { isRateLimited, isTransientRpcError, withRpcPriority } from './rpc-budget';
 import { loadServerKey } from './server-key';
 import { isTestChain } from './state-dir';
@@ -39,6 +39,12 @@ const REFRESH_INTERVAL_MS = 30_000;
 const SWEEP_INTERVAL_MS = 5 * 60_000;
 /** Sessions nobody plays for this long get their full entry fee back (`cancel`, no fee); `STALE_SESSION_AFTER_S` overrides it. */
 export const STALE_SESSION_AFTER_S = 15 * 60;
+/** Seat requests the server refused for its own reason are remembered this long (a ticket's whole life) ... */
+const EXCUSE_KEEP_S = 24 * 3600;
+/** ... and at most this many (oldest first). */
+const MAX_EXCUSED = 50_000;
+/** A refusal up to this long before a ticket's block time counts as after it (block times trail). */
+const EXCUSE_CLOCK_SLACK_S = 5;
 /** The arena list is re-read at most this often (settlements mark it stale; RPC errors serve the last good one). */
 export const ARENA_TTL_MS = 60_000;
 /** After a failed arena-list read the last good list is served this long before the next try. */
@@ -65,6 +71,8 @@ const STOP_GRACE_MS = 5_000;
 const INDEX_LOOKBACK_BLOCKS = 1_000_000n;
 /** Concurrent session reads of the stale sweeper (merged into one multicall where the RPC allows it). */
 const READ_CONCURRENCY = 40;
+/** The open-ticket index reads new `Joined` logs on demand (`refreshTicketIndex`: a fresh buyer's join) at most this often. */
+export const TICKET_INDEX_REFRESH_MS = 4_000;
 /** The confirmed settlements, cancels and loot burns (`DATA_DIR/chains/<id>/settled.jsonl`). */
 export const SETTLED_LOG_FILE = 'settled.jsonl';
 /** A held settlement's session is re-read at most this often (a player may refund it after 24 h). */
@@ -119,6 +127,8 @@ export interface EvmChainDeps {
   loops?: boolean;
   /** Receipt wait per transaction (default 90 s). */
   receiptTimeoutMs?: number;
+  /** `refreshTicketIndex` at most this often (default `TICKET_INDEX_REFRESH_MS`; wall clock). */
+  ticketIndexRefreshMs?: number;
   /**
    * The chain id the server's chain-keyed state (journal, registry) was opened for at boot
    * (`DATA_DIR/chains/<id>/`). When the RPC answers another id (or the id was unknown at boot: null),
@@ -167,7 +177,7 @@ export class EvmChain implements ChainGateway {
   /** The arena contract in use (checksummed); null while none is registered. */
   private arena: Address | null = null;
   private arenaTx: string | null = null;
-  /** `ok` once the code at `arena` matched the bundled artifact (CoinnibalArena v3). */
+  /** `ok` once the code at `arena` matched the bundled artifact (CoinnibalArena v4). */
   private arenaCode: 'ok' | 'missing' | 'mismatch' | null = null;
   private config: ArenaConfig | null = null;
   private configAt = 0;
@@ -205,6 +215,9 @@ export class EvmChain implements ChainGateway {
 
   /** Open-session index for the stale sweeper (from `Joined` logs). */
   private index: { next: bigint | null; candidates: Map<string, { arenaId: number; player: Address; sessionId: bigint }> } = { next: null, candidates: new Map() };
+  /** The on-demand scan of new `Joined` logs in flight (`refreshTicketIndex`), and when the last one started (wall clock). */
+  private indexRefresh: Promise<void> | null = null;
+  private indexRefreshAt = -Infinity;
 
   private timers: NodeJS.Timeout[] = [];
   private running: Promise<void> | null = null;
@@ -446,7 +459,7 @@ export class EvmChain implements ChainGateway {
         this.arenaCode = code;
         if (code === 'ok') {
           this.cache.set(codeKey, 'ok');
-          this.log(`chain: arena ${this.arena} is CoinnibalArena v3 — the fee is taken from the profit (burned + to the fee wallet) at settlement`);
+          this.log(`chain: arena ${this.arena} is CoinnibalArena v4 — tickets need the server's join permit; the fee is taken from the profit (burned + to the fee wallet) at settlement`);
         }
       } catch (err) {
         this.warn('code', `chain: code check of ${this.arena} failed (${firstLine(err)})`);
@@ -709,10 +722,51 @@ export class EvmChain implements ChainGateway {
   }
 
   /**
-   * Always read fresh from the chain (high priority: a paid join waits on it); null when there is no
-   * session. An RPC failure (after the budget's retries) throws `ChainBusyError`: never "no ticket".
+   * Read fresh from the chain; null when there is no session. An RPC failure (after the budget's retries) throws
+   * `ChainBusyError`: never "no ticket". Every caller is a client's join (or its bell or refund check), which any
+   * signed-in wallet can send: it runs at `high` priority, below settlements and payouts (`critical`) and above the
+   * work any client can queue in numbers (`normal`: holder checks). The gateway bounds how many wait at once
+   * (`readTicket`), and concurrent reads of one wallet's ticket share one call.
    */
-  async getSession(arenaId: number, player: string): Promise<ChainSession | null> {
+  getSession(arenaId: number, player: string): Promise<ChainSession | null> {
+    const key = `${this.arena ?? ''}:${arenaId}:${String(player).toLowerCase()}`;
+    const running = this.sessionReads.get(key);
+    if (running) return running;
+    const read = this.readSession(arenaId, player).finally(() => this.sessionReads.delete(key));
+    this.sessionReads.set(key, read);
+    return read;
+  }
+
+  /** Ticket reads in flight, per arena, arena id and wallet (`getSession`). */
+  private readonly sessionReads = new Map<string, Promise<ChainSession | null>>();
+
+  /**
+   * The open-session index (`Joined` logs, refreshed by the stale sweeper and by `refreshTicketIndex`) holds a ticket
+   * of this wallet in this arena.
+   */
+  knowsOpenTicket(arenaId: number, player: string): boolean {
+    const p = String(player).toLowerCase();
+    for (const c of this.index.candidates.values()) if (c.arenaId === arenaId && c.player.toLowerCase() === p) return true;
+    return false;
+  }
+
+  /**
+   * Brings the open-session index up to the latest block now, in the background: a join of a wallet it does not know
+   * (a ticket bought a moment ago) was refused for a full queue, or found a ticket. The stale sweeper's own scan runs
+   * every 5 minutes at `low` priority, which starves while the RPC is busy; this one runs at `high`, one at a time and
+   * at most every `TICKET_INDEX_REFRESH_MS` (one `eth_blockNumber` and one `eth_getLogs` from where the index stopped).
+   */
+  refreshTicketIndex(): void {
+    if (this.stopped || !this.client || !this.arena || !this.tokenReady || this.chainMismatch || this.indexRefresh) return;
+    const now = Date.now();
+    if (now - this.indexRefreshAt < (this.deps.ticketIndexRefreshMs ?? TICKET_INDEX_REFRESH_MS)) return;
+    this.indexRefreshAt = now;
+    this.indexRefresh = withRpcPriority('high', () => this.scanJoined())
+      .catch((err) => this.warn('index', `chain: ticket index refresh failed (${firstLine(err)})`))
+      .finally(() => (this.indexRefresh = null));
+  }
+
+  private async readSession(arenaId: number, player: string): Promise<ChainSession | null> {
     const t = this.token();
     if (!this.tokenReady || !t || !this.client || !this.arena || !isEvm(player) || !Number.isInteger(arenaId) || arenaId < 1 || arenaId > 65_535) return null;
     const client = this.client;
@@ -786,9 +840,116 @@ export class EvmChain implements ChainGateway {
     }
   }
 
+  /** The nonce the next join permit of `player` must name (one read at `normal` priority). */
+  async joinNonce(player: string): Promise<bigint> {
+    const client = this.client;
+    const arena = this.arena;
+    if (!client || !arena || !isEvm(player)) throw new ChainBusyError('join nonce');
+    try {
+      return await withRpcPriority('normal', () => client.joinNonce(arena, getAddress(player)));
+    } catch (err) {
+      this.warn('join-nonce', `chain: join nonce read failed (${firstLine(err)})`);
+      throw new ChainBusyError('join nonce', err);
+    }
+  }
+
+  /** A join permit signed by the server key; only while the key is the arena's server authority. */
+  async signJoinPermit(player: string, arenaId: number, nonce: bigint, deadlineS: number): Promise<JoinPermit> {
+    const client = this.client;
+    const arena = this.arena;
+    const chainId = this.chainId;
+    if (!client || !arena || chainId === null || this.authorized !== true || !isEvm(player)) throw new Error('the server key cannot sign join permits for this arena');
+    const who = getAddress(player);
+    const signature = await client.signJoinPermit({ chainId, arena, player: who, arenaId, nonce, deadline: BigInt(deadlineS) });
+    return { arena, chainId, player: who, arenaId, nonce: nonce.toString(), deadline: deadlineS, signature };
+  }
+
+  /**
+   * Whether `player` holds a ticket (open, or settled and waiting to be collected) in `arenaId`: one read at `normal`
+   * priority (a permit request must never take the budget a paid seat or a settlement needs).
+   */
+  async hasOpenTicket(arenaId: number, player: string): Promise<boolean> {
+    const client = this.client;
+    const arena = this.arena;
+    if (!this.tokenReady || !client || !arena || !isEvm(player)) return false;
+    try {
+      return (await withRpcPriority('normal', () => client.session(arena, arenaId, getAddress(player)))).id !== 0n;
+    } catch (err) {
+      this.warn('session', `chain: session lookup failed (${firstLine(err)})`);
+      throw new ChainBusyError('session lookup', err);
+    }
+  }
+
+  /** The contract is paused (`join` refuses every ticket). */
+  joinsPaused(): boolean {
+    return this.config?.paused === true;
+  }
+
+  /** No-show cancels of `player` (Unix ms) since `since` (the settled log keeps 14 days). */
+  noShowsSince(player: string, since: number): number[] {
+    return this.settledLog.noShowsSince(player, since);
+  }
+
+  /** `player`'s latest played ticket (Unix ms; a `settle` record of the settled log, 14 days), or null. */
+  lastPlayedAt(player: string): number | null {
+    return this.settledLog.lastPlayedAt(player);
+  }
+
+  /**
+   * Seat requests the server refused for a reason of its own, by `<arenaId>:<player lower>`: the chain's clock (Unix s)
+   * of the latest. A ticket opened before then and never seated is not a no-show (`sweepStale`).
+   */
+  private readonly excused = new Map<string, number>();
+
+  /** `player` asked to sit in `arenaId` while joins were open and the server refused for its own reason (see the type). */
+  excuseNoShow(arenaId: number, player: string): void {
+    if (!isEvm(player) || !Number.isInteger(arenaId)) return;
+    const nowS = Math.floor(this.chainNow() / 1000);
+    const key = `${arenaId}:${player.toLowerCase()}`;
+    this.excused.delete(key);
+    this.excused.set(key, nowS);
+    // oldest first: entries past a ticket's longest life go, then the oldest beyond the bound
+    for (const [k, at] of this.excused) {
+      if (at >= nowS - EXCUSE_KEEP_S && this.excused.size <= MAX_EXCUSED) break;
+      this.excused.delete(k);
+    }
+  }
+
+  /** The server refused a seat request of `player` in `arenaId` for its own reason after its ticket opened (`openedAtS`). */
+  excusedSince(arenaId: number, player: string, openedAtS: number): boolean {
+    const at = this.excused.get(`${arenaId}:${player.toLowerCase()}`);
+    return at !== undefined && at >= openedAtS - EXCUSE_CLOCK_SLACK_S;
+  }
+
+  /** The game token `player` holds (ledger units, rounded down): one `balanceOf` read at `normal` priority. */
+  async tokenBalance(player: string): Promise<number> {
+    const client = this.client;
+    const t = this.token();
+    if (!client || !t || !isEvm(player)) throw new ChainBusyError('token balance');
+    let raw: bigint;
+    try {
+      raw = await withRpcPriority('normal', () => client.tokenBalance(t.address, getAddress(player)));
+    } catch (err) {
+      this.warn('token-balance', `chain: token balance read failed (${firstLine(err)})`);
+      throw new ChainBusyError('token balance', err);
+    }
+    try {
+      return toLedger(raw, t.decimals, 'floor');
+    } catch {
+      return Number.MAX_SAFE_INTEGER; // more than the ledger can count: plenty
+    }
+  }
+
   /** The arena list goes stale (re-read at the next ask); its value stays for RPC errors. */
   private arenasStale(): void {
     if (this.arenaCache) this.arenaCache.at = -Infinity;
+  }
+
+  /** Whether the address holds code (a sign-in's code check, `auth.ts` `CODE_CHECKS`): background work, low priority. */
+  async hasCode(address: string): Promise<boolean> {
+    const client = this.client;
+    if (!client || !isEvm(address)) return false;
+    return withRpcPriority('low', () => client.hasCode(getAddress(address)));
   }
 
   async verifyMessage(address: string, message: string, signature: string): Promise<boolean> {
@@ -886,8 +1047,8 @@ export class EvmChain implements ChainGateway {
       do {
         this.rerun = false;
         try {
-          // settlements and loot sweeps go before every background read
-          await withRpcPriority('high', () => this.pass());
+          // settlements and loot sweeps go before every other call (paid joins' ticket reads included)
+          await withRpcPriority('critical', () => this.pass());
         } catch (err) {
           this.log(`chain: worker error: ${(err as Error).stack ?? err}`);
         }
@@ -1277,14 +1438,25 @@ export class EvmChain implements ChainGateway {
     const t = this.token()!;
     this.journal.remove(item.key);
     this.sentTx.delete(item.key);
-    const base = { key: item.key, arenaId: item.arenaId!, player: getAddress(item.player), sessionId: item.sessionId, reason: item.reason, tx: hash, at: this.now() };
+    const base = { contract: this.arena!.toLowerCase(), key: item.key, arenaId: item.arenaId!, player: getAddress(item.player), sessionId: item.sessionId, reason: item.reason, tx: hash, at: this.now() };
     if (ev.name === 'Cancelled') {
       // an unplayed ticket: its full entry fee went back, no fee
       const amount = toLedger(ev.amount, t.decimals, 'floor');
-      this.settledLog.record({ kind: 'cancel', ...base, amount, net: amount, fee: 0 });
+      this.settledLog.record({ kind: 'cancel', ...base, amount, net: amount, fee: 0, ...(item.noShow ? { noShow: true as const } : {}) });
       const collect = !ev.collected && ev.amount > 0n;
       this.log(`chain: ${collect ? 'finalized' : 'cancelled'} ${short(item.key)} (${item.reason ?? 'stale'}) · full entry fee ${this.units(amount)} → ${short(item.player)}${collect ? ' (to collect)' : ''} · ${hash}`);
-      this.emit({ key: item.key, player: getAddress(item.player), arenaId: item.arenaId, txHash: hash, payout: amount, fee: 0, net: amount, refund: true, ...(collect ? { collect: true } : {}) });
+      this.emit({
+        key: item.key,
+        player: getAddress(item.player),
+        arenaId: item.arenaId,
+        txHash: hash,
+        payout: amount,
+        fee: 0,
+        net: amount,
+        refund: true,
+        ...(collect ? { collect: true } : {}),
+        ...(item.noShow ? { noShow: true } : {}),
+      });
       return;
     }
     const payout = item.payout ?? 0;
@@ -1398,7 +1570,7 @@ export class EvmChain implements ChainGateway {
     const last = Number(info.lastSweepId);
     if (item.sweepId !== undefined && last >= item.sweepId) {
       this.journal.remove(key);
-      this.settledLog.record({ kind: 'sweep', key, arenaId: item.arenaId, amount: item.amount, sweepId: item.sweepId, tx: item.sentTx ?? 'confirmed', at: this.now() });
+      this.settledLog.record({ kind: 'sweep', contract: this.arena!.toLowerCase(), key, arenaId: item.arenaId, amount: item.amount, sweepId: item.sweepId, tx: item.sentTx ?? 'confirmed', at: this.now() });
       this.arenasStale();
       this.log(`chain: burned ${this.units(item.amount)} loot of ${item.roomId} (round ${item.round}) · sweep #${item.sweepId} (confirmed)${item.sentTx ? ` · ${item.sentTx}` : ''}`);
       return;
@@ -1435,7 +1607,7 @@ export class EvmChain implements ChainGateway {
     const receipt = await client.receipt(hash, arenaAddr, this.deps.receiptTimeoutMs ?? RECEIPT_TIMEOUT_MS);
     if (receipt?.status === 'success') {
       this.journal.remove(key);
-      this.settledLog.record({ kind: 'sweep', key, arenaId: item.arenaId, amount: item.amount, sweepId, tx: hash, at: this.now() });
+      this.settledLog.record({ kind: 'sweep', contract: arenaAddr.toLowerCase(), key, arenaId: item.arenaId, amount: item.amount, sweepId, tx: hash, at: this.now() });
       this.arenasStale();
       this.log(`chain: burned ${this.units(item.amount)} loot of ${item.roomId} (round ${item.round}) · sweep #${sweepId} · ${hash}`);
       return;
@@ -1471,7 +1643,11 @@ export class EvmChain implements ChainGateway {
     return false;
   }
 
-  /** Scans new `Joined` logs into the open-session index (chunked; resumes where it stopped). */
+  /**
+   * Scans new `Joined` logs into the open-session index (chunked; resumes where it stopped). The sweeper's scan and an
+   * on-demand one (`refreshTicketIndex`) may overlap: the index only moves forward, and a scan that finds it ahead of
+   * itself goes on from there.
+   */
   private async scanJoined(): Promise<void> {
     const client = this.client!;
     const arena = this.arena!;
@@ -1509,7 +1685,8 @@ export class EvmChain implements ChainGateway {
       // a full-width success widens the next request (fewer calls while catching up)
       if (to - from + 1n === chunk && chunk < LOG_CHUNK_MAX) this.logChunk = chunk * 2n < LOG_CHUNK_MAX ? chunk * 2n : LOG_CHUNK_MAX;
       from = to + 1n;
-      index.next = from;
+      if (index.next !== null && index.next > from) from = index.next;
+      else index.next = from;
     }
   }
 
@@ -1562,8 +1739,27 @@ export class EvmChain implements ChainGateway {
             return;
           }
           if (s.id > BigInt(Number.MAX_SAFE_INTEGER)) return;
-          const done = this.settledLog.get(key);
-          if (done?.kind === 'settle') {
+          // only a record of THIS arena contract: a new contract restarts the session ids, so an earlier contract's
+          // record of the same `<arenaId>:<player>:<sessionId>` describes another ticket (2026-11 audit S1)
+          const arenaNow = this.arena!;
+          const done = this.settledLog.get(key, arenaNow);
+          let reorged = done?.kind === 'settle';
+          if (done && reorged) {
+            // the original settlement still has a successful receipt with this session's `Settled`: it was not
+            // reorged out, so the open session is a new ticket and goes back at its entry fee like any stale one
+            let mined: TxReceipt | null = null;
+            try {
+              mined = isHash(done.tx) ? await this.client!.receipt(done.tx as Hash, arenaNow, LATE_RECEIPT_TIMEOUT_MS) : null;
+            } catch {
+              return; // next sweep
+            }
+            const same = mined?.status === 'success' && mined.events.some((e) => e.name === 'Settled' && e.arenaId === c.arenaId && e.player.toLowerCase() === c.player.toLowerCase() && e.sessionId === c.sessionId);
+            if (same) {
+              this.log(`!!! chain: ${short(key)} is open, but its settlement ${done.tx} is still mined — treated as a new ticket (refund at the entry fee), never paid the old result`);
+              reorged = false;
+            }
+          }
+          if (done && reorged) {
             // we settled exactly this session and saw the receipt, yet it is open again: the transaction was
             // reorged out. Send the same result again; never refund it at the entry fee (see SettledLog)
             this.log(`!!! chain: ${short(key)} was settled in ${done.tx} but is open again (reorg?) — re-sending the same payout`);
@@ -1587,8 +1783,13 @@ export class EvmChain implements ChainGateway {
             return;
           }
           // a closed arena (re-price, disabled, paused): nobody will seat it, the full entry fee goes back now
-          if (!closed.all && !closed.ids.has(c.arenaId) && chainNowS - s.openedAt < staleAfterS) return;
+          const arenaOpen = !closed.all && !closed.ids.has(c.arenaId);
+          if (arenaOpen && chainNowS - s.openedAt < staleAfterS) return;
           if (only.length > 0 && !only.includes(c.arenaId)) return;
+          // the player asked to sit while joins were open and the server refused for its own reason (overloaded, the
+          // journal, a re-price, the chain unreadable): not the player's doing, so not a no-show (2026-11 audit R3-M1)
+          const excused = arenaOpen && this.excusedSince(c.arenaId, c.player, s.openedAt);
+          if (excused) this.log(`chain: ${short(key)} was refused a seat by the server itself — its refund is not a no-show`);
           enqueue.push({
             kind: 'settle',
             key,
@@ -1602,6 +1803,8 @@ export class EvmChain implements ChainGateway {
             kills: 0,
             xp: 0,
             reason: 'stale',
+            // never seated while its arena was open: a no-show (the join permits count them)
+            ...(arenaOpen && !excused ? { noShow: true as const } : {}),
             attempts: 0,
             nextAttemptAt: now,
             createdAt: now,

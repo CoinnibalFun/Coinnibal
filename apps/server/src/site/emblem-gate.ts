@@ -4,11 +4,13 @@ import type { Candidate } from '../integrity/detectors';
 import type { Journal, SettlementItem } from '../stake/journal';
 import type { EmblemClaims } from './emblem-claims';
 
+type Claim = ReturnType<EmblemClaims['tickets']>[number]['claim'];
+
 /** A claim whose ticket is neither in a room nor in the journal any more is let go after this. */
 const ORPHAN_MS = 10 * 60_000;
 
 export interface EmblemGateDeps {
-  chain: Pick<ChainGateway, 'status' | 'listArenas' | 'kick'>;
+  chain: Pick<ChainGateway, 'status' | 'listArenas' | 'kick' | 'excuseNoShow'>;
   journal: Journal;
   claims: EmblemClaims;
   /** `balanceOf > 0` (fresh: uncached). */
@@ -19,6 +21,11 @@ export interface EmblemGateDeps {
   flag?: (c: Candidate) => void;
   /** Session keys seated in rooms now. */
   liveSessions: () => Set<string>;
+  /**
+   * Whether the cancel of this unseated ticket counts as a no-show now: its arena takes seats and the server owes it no
+   * excuse (it refused it a seat for a reason of its own). Absent: never (bare unit tests).
+   */
+  noShow?: (s: ChainSession) => boolean;
   log: (m: string) => void;
   now?: () => number;
 }
@@ -28,7 +35,17 @@ export interface EmblemGateDeps {
  * must hold the emblem now (read fresh), and one of its token ids must be free of other open holder tickets
  * (`EmblemClaims`). Otherwise the seat is refused and the ticket cancelled at once with its full entry fee back (the
  * holder rates or the holders-only seat were bought with an emblem that is not there, or that already serves another
- * open ticket); a token id caught serving two raises an integrity flag.
+ * open ticket of another wallet); a token id caught serving two raises an integrity flag. That cancel is the player's
+ * own doing (an emblem moved away or passed on), so it is a no-show like the stale sweeper's (audit R4-M1: one emblem
+ * passed from wallet to wallet must not refund unplayed tickets past the no-show rules), unless the server cannot tell
+ * for sure (the token index does not confirm that the wallet holds none).
+ *
+ * When only this wallet's own tickets hold its emblems (audit R4b-M2: its last game still being settled, or played in
+ * another arena right now), nothing was passed on: the seat waits (`emblem_busy`), the ticket stays the player's and
+ * seats once that claim is released (the game's settlement). The wait is the server's while that ticket is seated or
+ * its settlement is in the journal (RPC back-off, a death batch, a payout held for an admin), so the ticket is excused
+ * (`excuseNoShow`): its refund, if it is never seated, is no no-show. An own claim of a ticket neither seated nor being
+ * settled (a seat refused after the emblem check) waits too, without the excuse: sitting with that ticket is the way on.
  */
 export class EmblemGate {
   private readonly now: () => number;
@@ -52,7 +69,9 @@ export class EmblemGate {
   async seat(wallet: string, s: ChainSession): Promise<{ code: ErrorCode; message: string } | null> {
     if (!(await this.isHolderTicket(s))) return null;
     if (!(await this.d.isHolder(wallet, true).catch(() => false))) {
-      this.cancel(wallet, s, 'the wallet no longer holds an emblem');
+      // a no-show only when the token index agrees the wallet holds none (a failed `balanceOf` reads as "none")
+      const left = await this.d.emblemTokens(wallet, true).catch(() => null);
+      this.cancel(wallet, s, 'the wallet no longer holds an emblem', left !== null && left.length === 0);
       return { code: REFUSAL_CODES.emblem, message: 'This ticket needs a Coinnibal NFT in your wallet, and it is not there now. The ticket is refunded in full.' };
     }
     const tokens = await this.d.emblemTokens(wallet, true).catch(() => null);
@@ -63,22 +82,45 @@ export class EmblemGate {
     }
     const r = this.d.claims.claimTicket(s.key, wallet, s.arenaId, tokens);
     if (r.ok) return null;
-    this.cancel(wallet, s, `emblem #${tokens.join(', #')} already serves ${r.heldBy.length} open holder ticket(s)`);
     const others = [...new Set(r.heldBy.map((c) => c.wallet))].filter((w) => w !== wallet.toLowerCase());
-    if (others.length > 0) {
-      this.d.flag?.({
-        kind: 'shared_device',
-        subtype: 'emblem_shared',
-        id: `emblem_shared:${tokens[0]}`,
-        score: 70,
-        wallets: [wallet.toLowerCase(), ...others],
-        beneficiary: wallet.toLowerCase(),
-        arenaId: s.arenaId,
-        summary: `Emblem #${tokens[0]} was passed on while it served an open holder ticket: ${wallet} tried to seat a second holder ticket with it.`,
-        evidence: { tokenIds: tokens, session: s.key, heldBy: r.heldBy.map((c) => c.session) },
-      });
-    }
+    // only its own tickets hold the wallet's emblems: nothing was passed on, the seat waits (audit R4b-M2)
+    if (others.length === 0) return this.ownWait(wallet, s, r.heldBy);
+    // another wallet's ticket holds one: the emblem was passed on (audit R4-M1), the ticket goes back as a no-show
+    this.cancel(wallet, s, `emblem #${tokens.join(', #')} already serves ${r.heldBy.length} open holder ticket(s)`, true);
+    this.d.flag?.({
+      kind: 'shared_device',
+      subtype: 'emblem_shared',
+      id: `emblem_shared:${tokens[0]}`,
+      score: 70,
+      wallets: [wallet.toLowerCase(), ...others],
+      beneficiary: wallet.toLowerCase(),
+      arenaId: s.arenaId,
+      summary: `Emblem #${tokens[0]} was passed on while it served an open holder ticket: ${wallet} tried to seat a second holder ticket with it.`,
+      evidence: { tokenIds: tokens, session: s.key, heldBy: r.heldBy.map((c) => c.session) },
+    });
     return { code: REFUSAL_CODES.emblem, message: 'Your emblem already serves another open holder ticket (one ticket per emblem at a time). This ticket is refunded in full.' };
+  }
+
+  /**
+   * Every emblem of `wallet` serves another ticket of its own (`held`): the seat of `s` is refused and the ticket kept
+   * (no cancel). Excused while one of those tickets is seated or being settled (the server's wait).
+   */
+  private ownWait(wallet: string, s: ChainSession, held: readonly Claim[]): { code: ErrorCode; message: string } {
+    const live = this.d.liveSessions();
+    const pending = new Set(this.d.journal.pending.map((p) => p.key));
+    const seated = held.find((c) => live.has(c.session));
+    const settling = seated ? undefined : held.find((c) => pending.has(c.session));
+    const other = seated ?? settling ?? held[0];
+    if (seated || settling) this.d.chain.excuseNoShow?.(s.arenaId, s.player);
+    this.d.log(
+      `emblem: seat of ${s.key} waits — ${wallet}'s emblem serves its own ticket ${other.session} (${seated ? 'seated' : settling ? 'being settled' : 'not seated'}); the ticket is kept${seated || settling ? ' (excused)' : ''}`,
+    );
+    const message = seated
+      ? `Your emblem serves your game in arena #${other.arenaId} until it is settled (one holder ticket per emblem at a time). This ticket stays yours: sit with it once that game is over.`
+      : settling
+        ? `Your last game (arena #${other.arenaId}) is still being settled, and your emblem serves it until then. This ticket stays yours: try again in a moment.`
+        : `Your emblem serves your other ticket in arena #${other.arenaId}, not seated yet (one holder ticket per emblem at a time). This ticket stays yours: sit with that one first, or try again later.`;
+    return { code: 'emblem_busy', message };
   }
 
   /** The seated ticket was settled: its token id is free. */
@@ -98,10 +140,14 @@ export class EmblemGate {
     return n;
   }
 
-  /** The ticket goes back in full (`cancel`, no fee), now. */
-  private cancel(wallet: string, s: ChainSession, why: string): void {
+  /**
+   * The ticket goes back in full (`cancel`, no fee), now. `own`: for certain the player's doing; then a no-show when
+   * the arena takes seats and the server owes no excuse (`noShow`).
+   */
+  private cancel(wallet: string, s: ChainSession, why: string, own: boolean): void {
     const now = this.now();
     if (this.d.journal.pending.some((p) => p.key === s.key)) return;
+    const noShow = own && this.d.noShow?.(s) === true;
     const item: SettlementItem = {
       kind: 'settle',
       key: s.key,
@@ -116,12 +162,13 @@ export class EmblemGate {
       xp: 0,
       // an unplayed ticket: the worker sends it as `cancel` (the full entry fee back)
       reason: 'stale',
+      ...(noShow ? { noShow: true as const } : {}),
       attempts: 0,
       nextAttemptAt: now,
       createdAt: now,
     };
     this.d.journal.commit({ enqueue: [item] });
     this.d.chain.kick();
-    this.d.log(`!!! emblem: seat of ${s.key} refused (${why}) — the ticket of ${wallet} is cancelled with its full entry fee`);
+    this.d.log(`!!! emblem: seat of ${s.key} refused (${why}) — the ticket of ${wallet} is cancelled with its full entry fee${noShow ? ' (a no-show)' : ''}`);
   }
 }

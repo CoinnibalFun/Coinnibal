@@ -101,14 +101,19 @@ services:
     logging: *logging
 
   caddy:
-    image: caddy:2.10
+    # a patch version (Dependabot proposes newer ones, .github/dependabot.yml); update.sh pulls its newest build on
+    # every deploy and in the weekly refresh, and swaps Caddy in a round break when the image changed
+    image: caddy:2.11.9
     depends_on:
       - app
     restart: unless-stopped
+    # IPv4 only (the DNS has A records only): on IPv6 Docker's userland proxy would hand every connection to Caddy
+    # from the bridge's own address, past the DOCKER-USER firewall rules of README "Cloudflare in front" and with
+    # every IPv6 player on one address for the per-IP limits. 443/udp is HTTP/3 (Caddyfile.cloudflare turns it off)
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:443:443/udp"
     environment:
       GAME_DOMAIN: ${GAME_DOMAIN:?set GAME_DOMAIN in /opt/elymum/.env}
       # the site's domain (the web client on the same origin as the game); www.<it> redirects to it

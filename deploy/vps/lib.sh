@@ -46,6 +46,30 @@ dc() {
   docker compose -f "$COINNIBAL_COMPOSE" --env-file "$COINNIBAL_ENV" "$@"
 }
 
+# the ID of an image (empty when it is not on this host)
+image_id() {
+  docker image inspect -f '{{.Id}}' "$1" 2>/dev/null || true
+}
+
+# the image ID the app container runs (empty: no app container running), as image_id gives it, so the two compare
+app_image() {
+  local cid img id
+  cid="$(dc ps -q app 2>/dev/null)"
+  [[ -n "$cid" ]] || return 0
+  img="$(docker inspect -f '{{.Image}}' "$cid" 2>/dev/null || true)"
+  [[ -n "$img" ]] || return 0
+  id="$(image_id "$img")"
+  printf '%s\n' "${id:-$img}"
+}
+
+# records COMMIT as deployed, with the image put in for it (deployed-image: the one elymum-app:latest names now). The
+# weekly refresh rebuilds only that image, so one put back by hand (README "Rollback") stays until the next deploy
+record_deployed() {
+  echo "$1" >"$COINNIBAL_STATE/deployed"
+  image_id "$COINNIBAL_IMAGE" >"$COINNIBAL_STATE/deployed-image"
+  date -u +%FT%TZ >"$COINNIBAL_STATE/deployed-at"
+}
+
 # value of KEY in the .env file (empty when unset)
 env_get() {
   local key="$1"
@@ -150,6 +174,20 @@ link_commands() {
 
 need_root() {
   [[ "$(id -u)" -eq 0 ]] || die "run this as root (sudo -i first)"
+}
+
+# read_secret VAR "label": a secret (the admin session token, a signed proof) never comes from a command line, which
+# any local user can read in ps: a hidden prompt on a terminal, else one line of stdin (install.sh pipes them in).
+# Whitespace is dropped (the values hold none; a paste may add some). install.sh carries the same function.
+read_secret() {
+  local __v=""
+  if [[ -t 0 ]]; then
+    read -rsp "$2: " __v || true
+    echo >&2
+  else
+    IFS= read -r __v || true
+  fi
+  printf -v "$1" '%s' "${__v//[[:space:]]/}"
 }
 
 # checks that a .tar.gz is complete and holds only relative paths inside the archive

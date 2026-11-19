@@ -1,5 +1,5 @@
 /**
- * Gas of the server key's transactions on the real CoinnibalArena v3 (hardhat node): one `settle` batch of 1, 10 and
+ * Gas of the server key's transactions on the real CoinnibalArena v4 (hardhat node): one `settle` batch of 1, 10 and
  * 40 tickets (the worker's chunk size), so the server key's ETH budget can be planned:
  *   ETH per bell ~= sum over arenas of ceil(tickets / 40) batches x gas per batch x gas price (+ the L1 data fee
  *   of an Orbit chain, which this local node does not charge).

@@ -1,16 +1,19 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { FIRST_READ_WAIT_MS, HOLDERS_INDEX_TTL_MS, HOLDERS_RETRY_MS, MintService } from '../src/site/mint';
+import { asClient, ClientBudgetError } from '../src/net/client-scope';
+import { FIRST_READ_WAIT_MS, HOLDERS_INDEX_TTL_MS, HOLDERS_RETRY_MS, MINT_CACHE_FILE, MintService } from '../src/site/mint';
 import { SiteStore } from '../src/site/store';
 import { FakeEvm, NFT } from './fake-evm';
 import { testSigner } from './signers';
 
-function service(evm: FakeEvm, clock: { now: number }, stateDir: string | null = null) {
+function service(evm: FakeEvm, clock: { now: number }, stateDir: string | null = null, rpcMaxRps?: number) {
   const logs: string[] = [];
   const mint = new MintService({
+    rpcMaxRps,
+    sleep: async () => {},
     store: new SiteStore(null),
     client: () => evm,
     nft: () => ({ address: NFT, txHash: null }),
@@ -121,5 +124,55 @@ describe('emblem token owners (the Transfer index)', () => {
     clock.now += 5_000;
     expect(await mint.emblemTokens(b, true)).toEqual(['2']);
     expect(await mint.emblemTokens(a)).toEqual(['1']);
+  });
+});
+
+describe('the holder index answers a gate decision past the bounds only when it reaches back to the NFT\'s creation (R4-NET-1)', () => {
+  /** A gate decision from client `ip` past its holder reads (RPC_MAX_RPS 0.4: one client's burst is 2): true / false / busy. */
+  const gate = (mint: MintService, ip: string, wallet: string) =>
+    asClient(ip, () => mint.isHolder(wallet)).catch((err) => {
+      expect(err).toBeInstanceOf(ClientBudgetError);
+      return 'busy' as const;
+    });
+  const spend = async (mint: MintService, ip: string) => {
+    for (let i = 0; i < 4; i++) await gate(mint, ip, testSigner().address);
+  };
+
+  it('an index that starts at a lookback (no deploy block found) never says "not a holder": busy instead', async () => {
+    const evm = new FakeEvm();
+    evm.block = 3_000_000n;
+    (evm as unknown as { deployAt: bigint | null }).deployAt = null; // a pruned node: the NFT's first block is unknown
+    const holder = testSigner().address;
+    evm.mintNft(holder);
+    const clock = { now: 1_800_000_000_000 };
+    const { mint } = service(evm, clock, null, 0.4);
+    await spend(mint, '198.51.100.7');
+    // the holder minted inside the lookback: the index has it; a wallet it does not have may have minted before it
+    expect(await gate(mint, '198.51.100.7', holder)).toBe(true);
+    expect(await gate(mint, '198.51.100.7', testSigner().address)).toBe('busy');
+  });
+
+  it('an index kept before it knew whether it reaches the NFT\'s creation is read again from the start, once', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-mint-index-'));
+    const evm = new FakeEvm();
+    const holder = testSigner().address;
+    evm.mintNft(holder);
+    const clock = { now: 1_800_000_000_000 };
+    const first = service(evm, clock, dir);
+    expect(await first.mint.holdersCount()).toBe(1);
+    first.mint.flush();
+    const file = join(dir, MINT_CACHE_FILE);
+    const kept = JSON.parse(readFileSync(file, 'utf8')) as { holders: Record<string, unknown> };
+    expect(kept.holders.complete).toBe(true);
+    delete kept.holders.complete;
+    writeFileSync(file, JSON.stringify(kept));
+    const again = service(evm, clock, dir, 0.4);
+    // not taken as it is: never read yet
+    expect(await again.mint.emblemTokens(holder)).toBeNull();
+    // a gate decision past the bounds reads it from the NFT's first block, then answers "not a holder" for real
+    await spend(again.mint, '198.51.100.8');
+    expect(await gate(again.mint, '198.51.100.8', testSigner().address)).toBe(false);
+    expect(await gate(again.mint, '198.51.100.8', holder)).toBe(true);
+    expect(await again.mint.emblemTokens(holder)).toEqual(['1']);
   });
 });

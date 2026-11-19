@@ -7,6 +7,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {CoinnibalArena} from "../contracts/CoinnibalArena.sol";
+import {JoinPermits} from "./JoinPermits.sol";
 import {TestToken} from "../contracts/TestToken.sol";
 import {
     MockERC20,
@@ -22,6 +23,11 @@ import {RejectEther} from "../contracts/test/Actors.sol";
 
 /// @notice Unit and fuzz tests of CoinnibalArena v3 (fee on profit: 15 % burned, 5 % to the fee wallet by default).
 contract CoinnibalArenaTest is Test {
+    /// @dev The game server's join permit (signed with the "server" test key) for `player` in `arenaId`, now.
+    function _permit(CoinnibalArena a, address player, uint16 arenaId) internal view returns (JoinPermits.Permit memory) {
+        return JoinPermits.permit(a, JoinPermits.keyOf("server"), player, arenaId);
+    }
+
     CoinnibalArena internal arena;
     MockERC20 internal token;
 
@@ -92,8 +98,9 @@ contract CoinnibalArenaTest is Test {
     }
 
     function _join(address who) internal returns (uint64) {
+        JoinPermits.Permit memory pm1 = _permit(arena, who, ID);
         vm.prank(who);
-        arena.join(ID);
+        arena.join(ID, pm1.deadline, pm1.sig);
         return arena.getSession(ID, who).id;
     }
 
@@ -170,7 +177,7 @@ contract CoinnibalArenaTest is Test {
         assertFalse(c.paused);
         assertEq(c.totalSessions, 0);
         assertEq(a.arenaIds().length, 0);
-        assertEq(a.version(), 3);
+        assertEq(a.version(), 4);
         assertEq(a.MAX_TOTAL_FEE_BPS(), 2_500);
     }
 
@@ -283,9 +290,10 @@ contract CoinnibalArenaTest is Test {
         arena.setPaused(true);
         address p = makeAddr("late");
         _fund(p);
+        JoinPermits.Permit memory pm2 = _permit(arena, p, ID);
         vm.prank(p);
         vm.expectRevert(CoinnibalArena.Paused.selector);
-        arena.join(ID);
+        arena.join(ID, pm2.deadline, pm2.sig);
         // settle, cancel, refund and loot burns keep working
         _settle(_one(ID, alice, sa, 1_200 ether));
         _cancel(_ref(ID, bob, sb));
@@ -296,8 +304,9 @@ contract CoinnibalArenaTest is Test {
         arena.refund(ID);
         vm.prank(admin);
         arena.setPaused(false);
+        JoinPermits.Permit memory pm3 = _permit(arena, p, ID);
         vm.prank(p);
-        arena.join(ID);
+        arena.join(ID, pm3.deadline, pm3.sig);
     }
 
     function test_createArena_and_reverts() public {
@@ -336,9 +345,10 @@ contract CoinnibalArenaTest is Test {
         emit ArenaUpdated(ID, FEE, 5, false);
         vm.prank(admin);
         arena.updateArena(ID, FEE, 5, false); // same fee: allowed while busy
+        JoinPermits.Permit memory pm4 = _permit(arena, bob, ID);
         vm.prank(bob);
         vm.expectRevert(CoinnibalArena.ArenaDisabled.selector);
-        arena.join(ID);
+        arena.join(ID, pm4.deadline, pm4.sig);
         vm.prank(admin);
         vm.expectRevert(CoinnibalArena.UnknownArena.selector);
         arena.updateArena(9, FEE, 5, true);
@@ -347,10 +357,11 @@ contract CoinnibalArenaTest is Test {
     // ---------------------------------------------------------------- join
 
     function test_join_opensSessionWithTheWholeEntryInTheVault() public {
+        JoinPermits.Permit memory pm5 = _permit(arena, alice, ID);
         vm.expectEmit(address(arena));
         emit Joined(ID, alice, 1, FEE, 1_500, 500);
         vm.prank(alice);
-        arena.join(ID);
+        arena.join(ID, pm5.deadline, pm5.sig);
         CoinnibalArena.SessionView memory s = arena.getSession(ID, alice);
         assertEq(s.id, 1);
         assertEq(s.entryFee, FEE);
@@ -366,24 +377,183 @@ contract CoinnibalArenaTest is Test {
         _assertSolvent(arena, address(token));
     }
 
+    // ---------------------------------------------------------------- join permits (v4)
+
+    uint256 internal constant SERVER_KEY = uint256(keccak256(abi.encodePacked("server")));
+
+    function _sig(uint256 key, address player, uint16 id, uint64 nonce, uint64 deadline) internal view returns (bytes memory) {
+        return JoinPermits.sign(key, address(arena), block.chainid, player, id, nonce, deadline);
+    }
+
+    function _joinWith(address who, uint16 id, uint64 deadline, bytes memory sig) internal {
+        vm.prank(who);
+        arena.join(id, deadline, sig);
+    }
+
+    function _expectJoinRevert(address who, uint16 id, uint64 deadline, bytes memory sig, bytes4 err) internal {
+        vm.prank(who);
+        vm.expectRevert(err);
+        arena.join(id, deadline, sig);
+    }
+
+    function test_permit_validJoinUsesTheNonce() public {
+        assertEq(server, vm.addr(SERVER_KEY), "the test server key");
+        assertEq(arena.joinNonce(alice), 0);
+        uint64 dl = uint64(block.timestamp) + 10 minutes;
+        _joinWith(alice, ID, dl, _sig(SERVER_KEY, alice, ID, 0, dl));
+        assertEq(arena.getSession(ID, alice).id, 1);
+        assertEq(arena.joinNonce(alice), 1, "the permit is used up");
+        assertEq(arena.joinNonce(bob), 0, "per player");
+        // the edges of the window: a permit that expires this very second, and one exactly MAX_PERMIT_WINDOW ahead
+        _joinWith(bob, ID, uint64(block.timestamp), _sig(SERVER_KEY, bob, ID, 0, uint64(block.timestamp)));
+        uint64 far = uint64(block.timestamp) + arena.MAX_PERMIT_WINDOW();
+        _joinWith(carol, ID, far, _sig(SERVER_KEY, carol, ID, 0, far));
+        assertEq(arena.getArena(ID).openSessions, 3);
+    }
+
+    function test_permit_expired() public {
+        uint64 dl = uint64(block.timestamp) + 10 minutes;
+        bytes memory sig = _sig(SERVER_KEY, alice, ID, 0, dl);
+        vm.warp(uint256(dl) + 1);
+        _expectJoinRevert(alice, ID, dl, sig, CoinnibalArena.PermitExpired.selector);
+        assertEq(arena.joinNonce(alice), 0);
+    }
+
+    function test_permit_tooFarAhead_noStockpiling() public {
+        uint64 far = uint64(block.timestamp) + arena.MAX_PERMIT_WINDOW() + 1;
+        _expectJoinRevert(alice, ID, far, _sig(SERVER_KEY, alice, ID, 0, far), CoinnibalArena.PermitTooFarAhead.selector);
+        uint64 huge = type(uint64).max;
+        _expectJoinRevert(alice, ID, huge, _sig(SERVER_KEY, alice, ID, 0, huge), CoinnibalArena.PermitTooFarAhead.selector);
+        // a permit for a later nonce cannot be kept for later either: it names a nonce the player has not reached
+        uint64 dl = uint64(block.timestamp) + 10 minutes;
+        _expectJoinRevert(alice, ID, dl, _sig(SERVER_KEY, alice, ID, 1, dl), CoinnibalArena.InvalidPermit.selector);
+    }
+
+    function test_permit_wrongSigner() public {
+        uint64 dl = uint64(block.timestamp) + 10 minutes;
+        _expectJoinRevert(alice, ID, dl, _sig(uint256(keccak256("stranger")), alice, ID, 0, dl), CoinnibalArena.InvalidPermit.selector);
+        // the player cannot sign their own permit, nor can the owner
+        _expectJoinRevert(alice, ID, dl, _sig(JoinPermits.keyOf("alice"), alice, ID, 0, dl), CoinnibalArena.InvalidPermit.selector);
+        _expectJoinRevert(alice, ID, dl, _sig(JoinPermits.keyOf("admin"), alice, ID, 0, dl), CoinnibalArena.InvalidPermit.selector);
+    }
+
+    function test_permit_wrongPlayerArenaChainOrContract() public {
+        vm.prank(admin);
+        arena.createArena(2, FEE, 300);
+        uint64 dl = uint64(block.timestamp) + 10 minutes;
+        // alice's permit is alice's: bob cannot use it
+        _expectJoinRevert(bob, ID, dl, _sig(SERVER_KEY, alice, ID, 0, dl), CoinnibalArena.InvalidPermit.selector);
+        // a permit for arena 1 does not open arena 2
+        _expectJoinRevert(alice, 2, dl, _sig(SERVER_KEY, alice, ID, 0, dl), CoinnibalArena.InvalidPermit.selector);
+        // the other deadline than the one signed
+        _expectJoinRevert(alice, ID, dl + 1, _sig(SERVER_KEY, alice, ID, 0, dl), CoinnibalArena.InvalidPermit.selector);
+        // signed for another chain, or another arena contract
+        bytes memory otherChain = JoinPermits.sign(SERVER_KEY, address(arena), block.chainid + 1, alice, ID, 0, dl);
+        _expectJoinRevert(alice, ID, dl, otherChain, CoinnibalArena.InvalidPermit.selector);
+        CoinnibalArena twin = _arenaWith(address(token));
+        bytes memory forTwin = JoinPermits.sign(SERVER_KEY, address(twin), block.chainid, alice, ID, 0, dl);
+        _expectJoinRevert(alice, ID, dl, forTwin, CoinnibalArena.InvalidPermit.selector);
+        // ...where it does work, once
+        vm.prank(alice);
+        token.approve(address(twin), type(uint256).max);
+        vm.prank(alice);
+        twin.join(ID, dl, forTwin);
+        assertEq(twin.getSession(ID, alice).id, 1);
+        // the same permit on a chain id the contract now reads differently: refused (the domain is read per call)
+        uint64 dl2 = uint64(block.timestamp) + 10 minutes;
+        bytes memory here = _sig(SERVER_KEY, alice, ID, 0, dl2);
+        vm.chainId(block.chainid + 7);
+        _expectJoinRevert(alice, ID, dl2, here, CoinnibalArena.InvalidPermit.selector);
+    }
+
+    function test_permit_replay() public {
+        uint64 dl = uint64(block.timestamp) + 10 minutes;
+        bytes memory sig = _sig(SERVER_KEY, alice, ID, 0, dl);
+        _joinWith(alice, ID, dl, sig);
+        // the ticket is cancelled (never played): the same permit cannot buy another one
+        _cancel(_ref(ID, alice, arena.getSession(ID, alice).id));
+        _expectJoinRevert(alice, ID, dl, sig, CoinnibalArena.InvalidPermit.selector);
+        // a permit issued for the same nonce in another arena is spent too (one counter per player)
+        vm.prank(admin);
+        arena.createArena(2, FEE, 300);
+        _expectJoinRevert(alice, 2, dl, _sig(SERVER_KEY, alice, 2, 0, dl), CoinnibalArena.InvalidPermit.selector);
+        _joinWith(alice, 2, dl, _sig(SERVER_KEY, alice, 2, 1, dl));
+        assertEq(arena.joinNonce(alice), 2);
+    }
+
+    function test_permit_rotatedServerAuthorityInvalidatesOldPermits() public {
+        uint64 dl = uint64(block.timestamp) + 10 minutes;
+        bytes memory old = _sig(SERVER_KEY, alice, ID, 0, dl);
+        (address next, uint256 nextKey) = makeAddrAndKey("server-2");
+        vm.prank(admin);
+        arena.setServerAuthority(next);
+        _expectJoinRevert(alice, ID, dl, old, CoinnibalArena.InvalidPermit.selector);
+        _joinWith(alice, ID, dl, _sig(nextKey, alice, ID, 0, dl));
+        assertEq(arena.getSession(ID, alice).id, 1);
+    }
+
+    function test_permit_malformedSignatures() public {
+        uint64 dl = uint64(block.timestamp) + 10 minutes;
+        bytes memory good = _sig(SERVER_KEY, alice, ID, 0, dl);
+        _expectJoinRevert(alice, ID, dl, "", CoinnibalArena.InvalidPermit.selector);
+        _expectJoinRevert(alice, ID, dl, new bytes(65), CoinnibalArena.InvalidPermit.selector);
+        bytes memory short = new bytes(64);
+        for (uint256 i; i < 64; ++i) short[i] = good[i];
+        _expectJoinRevert(alice, ID, dl, short, CoinnibalArena.InvalidPermit.selector);
+        // the malleable twin (s' = n - s, v flipped) of a valid signature is refused (OpenZeppelin ECDSA)
+        (uint8 v, bytes32 r, bytes32 sv) = vm.sign(SERVER_KEY, JoinPermits.digest(address(arena), block.chainid, alice, ID, 0, dl));
+        bytes32 n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+        bytes memory twin = abi.encodePacked(r, bytes32(uint256(n) - uint256(sv)), v == 27 ? uint8(28) : uint8(27));
+        _expectJoinRevert(alice, ID, dl, twin, CoinnibalArena.InvalidPermit.selector);
+        _joinWith(alice, ID, dl, good);
+    }
+
+    function test_permit_domain() public view {
+        assertEq(arena.DOMAIN_SEPARATOR(), JoinPermits.domain(address(arena), block.chainid));
+        assertEq(arena.JOIN_PERMIT_TYPEHASH(), JoinPermits.PERMIT_TYPEHASH);
+        (bytes1 fields, string memory name, string memory version, uint256 chainId, address verifying, bytes32 salt, uint256[] memory ext) =
+            arena.eip712Domain();
+        assertEq(fields, hex"0f");
+        assertEq(name, "CoinnibalArena");
+        assertEq(version, "4");
+        assertEq(chainId, block.chainid);
+        assertEq(verifying, address(arena));
+        assertEq(salt, bytes32(0));
+        assertEq(ext.length, 0);
+        assertEq(arena.version(), 4);
+    }
+
+    function testFuzz_permit_anyDeadlineInTheWindowJoinsOnce(uint64 ahead) public {
+        ahead = uint64(bound(ahead, 0, arena.MAX_PERMIT_WINDOW()));
+        uint64 dl = uint64(block.timestamp) + ahead;
+        bytes memory sig = _sig(SERVER_KEY, alice, ID, 0, dl);
+        _joinWith(alice, ID, dl, sig);
+        _cancel(_ref(ID, alice, arena.getSession(ID, alice).id));
+        _expectJoinRevert(alice, ID, dl, sig, CoinnibalArena.InvalidPermit.selector);
+    }
+
     function test_join_reverts() public {
         _join(alice);
+        JoinPermits.Permit memory pm6 = _permit(arena, alice, ID);
         vm.prank(alice);
         vm.expectRevert(CoinnibalArena.SessionExists.selector);
-        arena.join(ID);
+        arena.join(ID, pm6.deadline, pm6.sig);
+        JoinPermits.Permit memory pm7 = _permit(arena, bob, 9);
         vm.prank(bob);
         vm.expectRevert(CoinnibalArena.UnknownArena.selector);
-        arena.join(9);
+        arena.join(9, pm7.deadline, pm7.sig);
         vm.prank(admin);
         arena.updateArena(ID, FEE, 2, true);
         _join(bob);
+        JoinPermits.Permit memory pm8 = _permit(arena, carol, ID);
         vm.prank(carol);
         vm.expectRevert(CoinnibalArena.ArenaFull.selector);
-        arena.join(ID);
+        arena.join(ID, pm8.deadline, pm8.sig);
         CoinnibalArena a = new CoinnibalArena(admin, server, feeWallet);
+        JoinPermits.Permit memory pm9 = _permit(a, alice, ID);
         vm.prank(alice);
         vm.expectRevert(CoinnibalArena.TokenNotSet.selector);
-        a.join(ID);
+        a.join(ID, pm9.deadline, pm9.sig);
     }
 
     function test_join_refusesFeeOnTransferToken() public {
@@ -392,9 +562,10 @@ contract CoinnibalArenaTest is Test {
         fot.mint(alice, 10 * FEE);
         vm.prank(alice);
         fot.approve(address(a), type(uint256).max);
+        JoinPermits.Permit memory pm10 = _permit(a, alice, ID);
         vm.prank(alice);
         vm.expectRevert(CoinnibalArena.FeeOnTransferToken.selector);
-        a.join(ID);
+        a.join(ID, pm10.deadline, pm10.sig);
     }
 
     function test_join_ratesFixedAtJoin() public {
@@ -610,10 +781,12 @@ contract CoinnibalArenaTest is Test {
 
     function test_settle_failingFeeTransferRevertsBatch() public {
         (CoinnibalArena a, BlockingToken blk) = _blockingArena();
+        JoinPermits.Permit memory pm11 = _permit(a, alice, ID);
         vm.prank(alice);
-        a.join(ID);
+        a.join(ID, pm11.deadline, pm11.sig);
+        JoinPermits.Permit memory pm12 = _permit(a, bob, ID);
         vm.prank(bob);
-        a.join(ID);
+        a.join(ID, pm12.deadline, pm12.sig);
         blk.setBlocked(feeWallet, true);
         CoinnibalArena.Settlement[] memory items = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
         vm.prank(server);
@@ -630,10 +803,12 @@ contract CoinnibalArenaTest is Test {
 
     function test_settle_failingBurnRevertsBatch() public {
         (CoinnibalArena a, BlockingToken blk) = _blockingArena();
+        JoinPermits.Permit memory pm13 = _permit(a, alice, ID);
         vm.prank(alice);
-        a.join(ID);
+        a.join(ID, pm13.deadline, pm13.sig);
+        JoinPermits.Permit memory pm14 = _permit(a, bob, ID);
         vm.prank(bob);
-        a.join(ID);
+        a.join(ID, pm14.deadline, pm14.sig);
         blk.setBlocked(DEAD, true);
         CoinnibalArena.Settlement[] memory items = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
         vm.prank(server);
@@ -653,12 +828,15 @@ contract CoinnibalArenaTest is Test {
     function _twoPhase(uint8 mode) internal {
         (CoinnibalArena a, BlockingToken blk) = _blockingArena();
         blk.setMode(mode);
+        JoinPermits.Permit memory pm15 = _permit(a, alice, ID);
         vm.prank(alice);
-        a.join(ID);
+        a.join(ID, pm15.deadline, pm15.sig);
+        JoinPermits.Permit memory pm16 = _permit(a, bob, ID);
         vm.prank(bob);
-        a.join(ID);
+        a.join(ID, pm16.deadline, pm16.sig);
+        JoinPermits.Permit memory pm17 = _permit(a, carol, ID);
         vm.prank(carol);
-        a.join(ID);
+        a.join(ID, pm17.deadline, pm17.sig);
         uint64 sa = a.getSession(ID, alice).id;
         uint64 sb = a.getSession(ID, bob).id;
         blk.setBlocked(alice, true);
@@ -699,9 +877,10 @@ contract CoinnibalArenaTest is Test {
         a.cancel(_ref(ID, alice, sa));
 
         // A finalized player cannot open a second ticket before collecting.
+        JoinPermits.Permit memory pm18 = _permit(a, alice, ID);
         vm.prank(alice);
         vm.expectRevert(CoinnibalArena.SessionExists.selector);
-        a.join(ID);
+        a.join(ID, pm18.deadline, pm18.sig);
 
         // Collect while still blocked reverts (and keeps the claim).
         vm.prank(alice);
@@ -722,12 +901,15 @@ contract CoinnibalArenaTest is Test {
 
     function test_settle_cannotSpendOwedOfAnotherPlayer() public {
         (CoinnibalArena a, BlockingToken blk) = _blockingArena();
+        JoinPermits.Permit memory pm19 = _permit(a, alice, ID);
         vm.prank(alice);
-        a.join(ID);
+        a.join(ID, pm19.deadline, pm19.sig);
+        JoinPermits.Permit memory pm20 = _permit(a, bob, ID);
         vm.prank(bob);
-        a.join(ID);
+        a.join(ID, pm20.deadline, pm20.sig);
+        JoinPermits.Permit memory pm21 = _permit(a, carol, ID);
         vm.prank(carol);
-        a.join(ID);
+        a.join(ID, pm21.deadline, pm21.sig);
         blk.setBlocked(alice, true);
         CoinnibalArena.Settlement[] memory it1 = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
         vm.prank(server);
@@ -758,9 +940,10 @@ contract CoinnibalArenaTest is Test {
         vm.prank(admin);
         arena.updateArena(ID, FEE, 2, true);
         _settle(_one(ID, alice, sa, FEE));
+        JoinPermits.Permit memory pm22 = _permit(arena, alice, ID);
         vm.prank(alice);
         vm.expectRevert(CoinnibalArena.ArenaFull.selector);
-        arena.join(ID);
+        arena.join(ID, pm22.deadline, pm22.sig);
         _settle(_one(ID, bob, sb, FEE));
         _join(alice);
         assertEq(arena.getArena(ID).openSessions, 2);
@@ -778,8 +961,9 @@ contract CoinnibalArenaTest is Test {
             brn.mint(ps[i], 10 * FEE);
             vm.prank(ps[i]);
             brn.approve(address(a), type(uint256).max);
+            JoinPermits.Permit memory pm23 = _permit(a, ps[i], ID);
             vm.prank(ps[i]);
-            a.join(ID);
+            a.join(ID, pm23.deadline, pm23.sig);
         }
         uint256 supply = brn.totalSupply();
         CoinnibalArena.Settlement[] memory it2 = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
@@ -819,8 +1003,9 @@ contract CoinnibalArenaTest is Test {
             fk.mint(ps[i], 10 * FEE);
             vm.prank(ps[i]);
             fk.approve(address(a), type(uint256).max);
+            JoinPermits.Permit memory pm24 = _permit(a, ps[i], ID);
             vm.prank(ps[i]);
-            a.join(ID);
+            a.join(ID, pm24.deadline, pm24.sig);
         }
         CoinnibalArena.Settlement[] memory s1 = _one(ID, alice, a.getSession(ID, alice).id, 1_500 ether);
         vm.prank(server);
@@ -853,10 +1038,12 @@ contract CoinnibalArenaTest is Test {
         tt.approve(address(a), type(uint256).max);
         vm.prank(bob);
         tt.approve(address(a), type(uint256).max);
+        JoinPermits.Permit memory pm25 = _permit(a, alice, ID);
         vm.prank(alice);
-        a.join(ID);
+        a.join(ID, pm25.deadline, pm25.sig);
+        JoinPermits.Permit memory pm26 = _permit(a, bob, ID);
         vm.prank(bob);
-        a.join(ID);
+        a.join(ID, pm26.deadline, pm26.sig);
         uint256 supply = tt.totalSupply();
         CoinnibalArena.Settlement[] memory it5 = _one(ID, alice, a.getSession(ID, alice).id, 2 * FEE);
         vm.prank(server);
@@ -999,8 +1186,9 @@ contract CoinnibalArenaTest is Test {
 
     function test_cancel_twoPhase() public {
         (CoinnibalArena a, BlockingToken blk) = _blockingArena();
+        JoinPermits.Permit memory pm27 = _permit(a, alice, ID);
         vm.prank(alice);
-        a.join(ID);
+        a.join(ID, pm27.deadline, pm27.sig);
         uint64 sa = a.getSession(ID, alice).id;
         blk.setBlocked(alice, true);
         vm.expectEmit(address(a));
@@ -1115,10 +1303,12 @@ contract CoinnibalArenaTest is Test {
 
     function test_sweepArena_keepsOwed() public {
         (CoinnibalArena a, BlockingToken blk) = _blockingArena();
+        JoinPermits.Permit memory pm28 = _permit(a, alice, ID);
         vm.prank(alice);
-        a.join(ID);
+        a.join(ID, pm28.deadline, pm28.sig);
+        JoinPermits.Permit memory pm29 = _permit(a, bob, ID);
         vm.prank(bob);
-        a.join(ID);
+        a.join(ID, pm29.deadline, pm29.sig);
         blk.setBlocked(alice, true);
         CoinnibalArena.Settlement[] memory it6 = _one(ID, alice, a.getSession(ID, alice).id, 1_500 ether);
         vm.prank(server);
@@ -1186,14 +1376,16 @@ contract CoinnibalArenaTest is Test {
         re.mint(alice, 10 * FEE);
         vm.prank(alice);
         re.approve(address(a), type(uint256).max);
+        JoinPermits.Permit memory pm30 = _permit(a, alice, ID);
         vm.prank(alice);
-        a.join(ID);
+        a.join(ID, pm30.deadline, pm30.sig);
         re.mint(address(re), 10 * FEE);
         vm.prank(address(re));
         re.approve(address(a), type(uint256).max);
-        // the token re-enters `join` / `settle` / `refund` during the payout transfer
+        // the token re-enters `join` (with a valid permit of its own) / `settle` / `refund` during the payout transfer
+        JoinPermits.Permit memory rp = _permit(a, address(re), ID);
         bytes[3] memory calls = [
-            abi.encodeCall(CoinnibalArena.join, (ID)),
+            abi.encodeCall(CoinnibalArena.join, (ID, rp.deadline, rp.sig)),
             abi.encodeCall(CoinnibalArena.settle, (_one(ID, alice, 1, 0))),
             abi.encodeCall(CoinnibalArena.refund, (ID))
         ];
@@ -1204,8 +1396,9 @@ contract CoinnibalArenaTest is Test {
         assertEq(bytes4(re.lastRevert()), ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
         assertEq(a.getSession(ID, address(re)).id, 0);
         for (uint256 i = 1; i < 3; ++i) {
+            JoinPermits.Permit memory pm31 = _permit(a, alice, ID);
             vm.prank(alice);
-            a.join(ID);
+            a.join(ID, pm31.deadline, pm31.sig);
             re.arm(address(a), calls[i]);
             CoinnibalArena.Settlement[] memory it8 = _one(ID, alice, a.getSession(ID, alice).id, FEE);
             vm.prank(server);
@@ -1326,8 +1519,9 @@ contract CoinnibalArenaTest is Test {
             address p = address(uint160(0xB000 + m));
             assertFalse(arena.isHolder(p));
             _fund(p);
+            JoinPermits.Permit memory pm32 = _permit(arena, p, ID);
             vm.prank(p);
-            arena.join(ID);
+            arena.join(ID, pm32.deadline, pm32.sig);
             assertEq(arena.getSession(ID, p).burnBps, 1_500);
         }
     }
@@ -1341,15 +1535,17 @@ contract CoinnibalArenaTest is Test {
         emit ArenaHoldersOnlySet(ID, true);
         vm.prank(admin);
         arena.setArenaHoldersOnly(ID, true);
+        JoinPermits.Permit memory pm33 = _permit(arena, bob, ID);
         vm.prank(bob);
         vm.expectRevert(CoinnibalArena.HoldersOnly.selector);
-        arena.join(ID);
+        arena.join(ID, pm33.deadline, pm33.sig);
         _join(alice);
         vm.prank(admin);
         arena.setHolderPerks(address(0), 0, 0);
+        JoinPermits.Permit memory pm34 = _permit(arena, carol, ID);
         vm.prank(carol);
         vm.expectRevert(CoinnibalArena.HoldersOnly.selector);
-        arena.join(ID);
+        arena.join(ID, pm34.deadline, pm34.sig);
         vm.prank(admin);
         arena.setArenaHoldersOnly(ID, false);
         _join(carol);
@@ -1368,17 +1564,20 @@ contract CoinnibalArenaTest is Test {
         blk.mint(attacker, 10 * FEE);
         vm.prank(attacker);
         blk.approve(address(a), type(uint256).max);
+        JoinPermits.Permit memory pm35 = _permit(a, bob, ID);
         vm.prank(bob);
-        a.join(ID);
+        a.join(ID, pm35.deadline, pm35.sig);
         blk.setBlocked(bob, true);
         CoinnibalArena.Settlement[] memory it9 = _one(ID, bob, a.getSession(ID, bob).id, FEE);
         vm.prank(server);
         a.settle(it9);
         blk.setBlocked(bob, false);
+        JoinPermits.Permit memory pm36 = _permit(a, alice, ID);
         vm.prank(alice);
-        a.join(ID);
+        a.join(ID, pm36.deadline, pm36.sig);
+        JoinPermits.Permit memory pm37 = _permit(a, attacker, ID);
         vm.prank(attacker);
-        a.join(ID);
+        a.join(ID, pm37.deadline, pm37.sig);
         assertEq(a.getArena(ID).vault, 2 * FEE);
         CoinnibalArena.Settlement[] memory items = new CoinnibalArena.Settlement[](2);
         items[0] = CoinnibalArena.Settlement(ID, alice, a.getSession(ID, alice).id, 0);
@@ -1411,9 +1610,10 @@ contract CoinnibalArenaTest is Test {
         _fund(g2);
         uint64 s1 = _join(g1);
         uint64 s2 = _join(g2);
+        JoinPermits.Permit memory pm38 = _permit(arena, alice, ID);
         vm.prank(alice);
         vm.expectRevert(CoinnibalArena.ArenaFull.selector);
-        arena.join(ID);
+        arena.join(ID, pm38.deadline, pm38.sig);
         CoinnibalArena.SessionRef[] memory refs = new CoinnibalArena.SessionRef[](2);
         refs[0] = CoinnibalArena.SessionRef(ID, g1, s1);
         refs[1] = CoinnibalArena.SessionRef(ID, g2, s2);
@@ -1494,8 +1694,9 @@ contract CoinnibalArenaTest is Test {
             blk.mint(ps[i], FEE);
             vm.prank(ps[i]);
             blk.approve(address(a), type(uint256).max);
+            JoinPermits.Permit memory pm39 = _permit(a, ps[i], ID);
             vm.prank(ps[i]);
-            a.join(ID);
+            a.join(ID, pm39.deadline, pm39.sig);
         }
         uint256 supply = blk.totalSupply();
         CoinnibalArena.Settlement[] memory items = new CoinnibalArena.Settlement[](6);
@@ -1537,9 +1738,10 @@ contract CoinnibalArenaTest is Test {
         _join(alice);
         address p = makeAddr("gas-player");
         _fund(p);
+        JoinPermits.Permit memory pm40 = _permit(arena, p, ID);
         vm.prank(p);
         uint256 g = gasleft();
-        arena.join(ID);
+        arena.join(ID, pm40.deadline, pm40.sig);
         emit log_named_uint("gas join", g - gasleft());
         CoinnibalArena.Settlement[] memory first = _one(ID, p, arena.getSession(ID, p).id, 1_500 ether);
         vm.prank(server);
@@ -1553,8 +1755,9 @@ contract CoinnibalArenaTest is Test {
         for (uint256 i; i < 40; ++i) {
             address q = address(uint160(0x5000 + i));
             _fund(q);
+            JoinPermits.Permit memory pm41 = _permit(arena, q, ID);
             vm.prank(q);
-            arena.join(ID);
+            arena.join(ID, pm41.deadline, pm41.sig);
             many[i] = CoinnibalArena.Settlement(ID, q, arena.getSession(ID, q).id, uint128(500 ether + i * 30 ether));
         }
         vm.prank(server);

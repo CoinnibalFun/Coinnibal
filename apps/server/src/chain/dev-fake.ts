@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, LOCALNET_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, chainInfo, profitFee, type ChainStatus } from '@coinnibal/shared';
+import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, DEFAULT_PAYMENT_BURN_BPS, LOCALNET_CHAIN_ID, TOKEN_SYMBOL_DEFAULT, chainInfo, profitFee, type ChainStatus, type JoinPermit } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import type { Journal } from '../stake/journal';
 import { sessionKey, type ChainArena, type ChainGateway, type ChainSession, type ServerKeyInfo, type SettledEvent, type TokenReceipt } from './types';
@@ -137,6 +137,20 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
     return this.transfers.get(hash.toLowerCase()) ?? null;
   }
 
+  /** Join permits: nothing to sign on the fake chain (the web's fake wallet needs none), but the server's rules run. */
+  async joinNonce(): Promise<bigint> {
+    return 0n;
+  }
+
+  async signJoinPermit(player: string, arenaId: number, nonce: bigint, deadlineS: number): Promise<JoinPermit> {
+    return { arena: FAKE_ARENA, chainId: LOCALNET_CHAIN_ID, player: getAddress(player), arenaId, nonce: nonce.toString(), deadline: deadlineS, signature: `0x${'0'.repeat(130)}` };
+  }
+
+  /** A ticket this fake chain has open for `player` (without opening one, unlike `getSession`). */
+  async hasOpenTicket(arenaId: number, player: string): Promise<boolean> {
+    return this.sessions.has(`${arenaId}:${player.toLowerCase()}`);
+  }
+
   async getSession(arenaId: number, player: string): Promise<ChainSession | null> {
     const arena = (await this.listArenas()).find((a) => a.id === arenaId);
     if (!arena) return null;
@@ -215,7 +229,7 @@ export class DevFakeChain implements ChainGateway, DevFakeChainActions {
     const session = this.byKey.get(key);
     if (!session) return;
     const payout = item.payout ?? 0;
-    // the contract's fee on profit (`fees.ts`), as CoinnibalArena v3 would take it
+    // the contract's fee on profit (`fees.ts`), as CoinnibalArena v4 would take it
     const f = profitFee(session.entryFee, payout, session.rates);
     this.journal.remove(key);
     this.sessions.delete(`${session.arenaId}:${session.player.toLowerCase()}`);

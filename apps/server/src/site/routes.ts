@@ -4,7 +4,7 @@ import { AdminAudit } from './audit';
 import { OLD_SECRET_PROOF_HEADER, SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
 import { ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible } from '@coinnibal/shared';
-import { checksumAddress, type Auth } from '../auth';
+import { SIGN_IN_BUSY_MESSAGE, SignInBusyError, checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import { XLinkFail, type XLinkService } from '../xlink';
 import { squarePng } from './share-card';
@@ -12,6 +12,7 @@ import type { ChainGateway } from '../chain/types';
 import { integrityRoutes } from '../integrity/routes';
 import type { IntegrityService } from '../integrity/service';
 import type { ServerConfig } from '../config';
+import { CLIENT_BUSY_MESSAGE, ClientBudgetError } from '../net/client-scope';
 import { Limiter } from '../net/limiter';
 import { ProfileError, type ProfileStore } from '../profiles';
 import type { Journal } from '../stake/journal';
@@ -280,6 +281,14 @@ export class SiteApi {
   }
 
   /**
+   * The same for a value that is only shown (a profile's skins, the `holder` field of `/api/auth/me`): never busy (no
+   * 429 for a budget) and never a chain read of its own: the "holder" on record, else false, not kept.
+   */
+  async shownHolder(wallet: string | null | undefined): Promise<boolean> {
+    return !!wallet && !!this.ext.mint && (await this.ext.mint.shownHolder(wallet));
+  }
+
+  /**
    * Whether `wallet` may enter game rooms: admins always; NFT holders in `holders` mode; everyone in `public`.
    * `fresh`: the holder check skips its 15 s cache (the gateway asks so right before seating an arena ticket).
    */
@@ -287,6 +296,17 @@ export class SiteApi {
     const mode = this.gameAccess();
     if (mode === 'public' || this.isAdmin(wallet)) return true;
     if (mode === 'holders') return this.isHolder(wallet, fresh);
+    return false;
+  }
+
+  /**
+   * `gameOpenFor` for a value that is only shown (the shop's prices): never busy, never a chain read of its own; a
+   * holder on record may, anyone else is answered as not a holder (not kept).
+   */
+  async gameShownFor(wallet: string | null | undefined): Promise<boolean> {
+    const mode = this.gameAccess();
+    if (mode === 'public' || this.isAdmin(wallet)) return true;
+    if (mode === 'holders') return this.shownHolder(wallet);
     return false;
   }
 
@@ -311,8 +331,11 @@ export class SiteApi {
     return this.ext.chain?.status().chainId ?? null;
   }
 
-  /** Handles the request when the path is the site's; false otherwise. */
-  async handle(req: IncomingMessage, res: ServerResponse, url: URL, ip: string): Promise<boolean> {
+  /**
+   * Handles the request when the path is the site's; false otherwise. `ip`: the client's rate-limit key (`rateKey`:
+   * an IPv6 client counts as its /64); `auditIp`: its exact address, for the admin audit and the logs.
+   */
+  async handle(req: IncomingMessage, res: ServerResponse, url: URL, ip: string, auditIp = ip): Promise<boolean> {
     const path = url.pathname;
     const mine =
       path.startsWith('/api/site/') ||
@@ -340,10 +363,12 @@ export class SiteApi {
       else if (path.startsWith('/api/nft/')) await this.nftRoutes(req, res, url);
       else if (path.startsWith('/api/site/')) await this.siteRoutes(req, res, url, ip);
       else if (path.startsWith('/api/rooms/custom')) await this.customRoutes(req, res, path, ip);
-      else await this.audited(req, res, url, ip);
+      else await this.audited(req, res, url, auditIp);
     } catch (err) {
       if (err instanceof SiteFail && err.status === 413) res.setHeader('Connection', 'close');
       if (err instanceof SiteFail) fail(res, err.status, { error: err.code, message: err.message, ...(err.field ? { field: err.field } : {}) });
+      // a holder check past this client's holder reads that the holder index cannot answer now: busy, never a wrong "no"
+      else if (err instanceof ClientBudgetError) fail(res, 429, { error: 'rate_limited', message: CLIENT_BUSY_MESSAGE });
       else throw err;
     }
     return true;
@@ -365,15 +390,28 @@ export class SiteApi {
     if (path === '/api/auth/me') {
       this.method(req, 'GET');
       const wallet = this.session(req);
-      const [holder, canPlay] = await Promise.all([this.isHolder(wallet), this.gameOpenFor(wallet)]);
-      return send(res, 200, { address: wallet, admin: this.isAdmin(wallet), holder, canPlay });
+      const admin = this.isAdmin(wallet);
+      // `canPlay` is the gate: a holder check the holder index cannot answer right now, past this client's holder
+      // reads (`ClientBudgetError`), is `busy` (ask again in a moment), never a wrong "no". `holder` is only shown,
+      // after it (the answer the gate just had is the one on record): never busy, never a chain read of its own
+      const canPlay = await this.gameOpenFor(wallet).catch((err: unknown) => (err instanceof ClientBudgetError ? ('busy' as const) : Promise.reject(err)));
+      const holder = await this.shownHolder(wallet);
+      return send(res, 200, { address: wallet, admin, holder, canPlay: canPlay === true, ...(canPlay === 'busy' ? { busy: true } : {}) });
     }
     this.method(req, 'POST');
     if (!this.limits.login.allow(ip)) throw new SiteFail(429, 'rate_limited', 'Too many sign-ins. Wait a moment.');
     const body = await readJson(req);
     const { address, message, signature } = body;
-    const wallet =
-      typeof address === 'string' && typeof message === 'string' && typeof signature === 'string' ? await this.auth.verifySignature(address, message, signature) : null;
+    let wallet: string | null = null;
+    if (typeof address === 'string' && typeof message === 'string' && typeof signature === 'string') {
+      try {
+        wallet = await this.auth.verifySignature(address, message, signature);
+      } catch (err) {
+        // the smart-wallet check cannot run right now: busy, not a wrong signature (the nonce is kept)
+        if (err instanceof SignInBusyError) throw new SiteFail(429, 'rate_limited', SIGN_IN_BUSY_MESSAGE);
+        throw err;
+      }
+    }
     if (!wallet) throw new SiteFail(401, 'auth_failed', 'Wallet sign-in failed. Please sign again.');
     send(res, 200, { address: wallet, token: this.auth.issueToken(wallet), admin: this.isAdmin(wallet) });
   }
@@ -391,7 +429,7 @@ export class SiteApi {
       const wallet = bearerWallet(this.auth, req);
       // the packs' prices are a quote for play: only for whoever may play now. A purchase (below) is not gated: a
       // payment someone made anyway is credited (or owed back), never kept for nothing
-      if (!(await this.gameOpenFor(wallet))) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
+      if (!(await this.gameShownFor(wallet))) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
       return send(res, 200, await shop.service.view(wallet));
     }
     this.method(req, 'POST');
@@ -418,13 +456,14 @@ export class SiteApi {
     if (!profiles) throw new SiteFail(404, 'not_found', 'Not found');
     if (this.method(req, 'GET', 'PUT') === 'GET') {
       const wallet = this.session(req);
-      const holder = await this.isHolder(wallet);
+      const holder = await this.shownHolder(wallet);
       return send(res, 200, { profile: profiles.view(wallet), skinOptions: this.skinOptions(holder), holder } satisfies ProfileResponse);
     }
     const wallet = this.writer(req, ip);
     const body = await readJson(req);
-    // the emblem skin is checked on chain right now (a sold emblem no longer unlocks it)
-    const holder = await this.isHolder(wallet, body.skin === EMBLEM_SKIN_ID);
+    // the emblem skin is checked on chain right now (a sold emblem no longer unlocks it); otherwise the answer's skin
+    // list is only shown
+    const holder = body.skin === EMBLEM_SKIN_ID ? await this.isHolder(wallet, true) : await this.shownHolder(wallet);
     try {
       return send(res, 200, { profile: profiles.update(wallet, body, { emblem: holder }), skinOptions: this.skinOptions(holder), holder } satisfies ProfileResponse);
     } catch (err) {
@@ -681,8 +720,10 @@ export class SiteApi {
     if (!svc) throw new SiteFail(404, 'not_found', 'Not found');
     const rest = path.slice('/api/rooms/custom'.length).replace(/^\//, '');
     // opening a room (paid, or free practice) and its price quote follow the game gate: the join over the WebSocket
-    // would be refused anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter
-    if ((req.method === 'POST' || (req.method === 'GET' && rest === 'quote')) && !(await this.gameOpenFor(bearerWallet(this.auth, req)))) {
+    // would be refused anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter. The
+    // quote is only shown (never busy: `gameShownFor`); opening one is the gate decision (busy, never a wrong "no")
+    const quote = req.method === 'GET' && rest === 'quote';
+    if ((req.method === 'POST' || quote) && !(await (quote ? this.gameShownFor(bearerWallet(this.auth, req)) : this.gameOpenFor(bearerWallet(this.auth, req))))) {
       throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
     }
     return customRoomRoutes(

@@ -68,7 +68,7 @@ added back under `docs/images/` once the Ring Storybook UI has landed. Until the
 
 ```mermaid
 flowchart LR
-  W["Browser wallet (EIP-6963)"] -- "approve + join(arenaId)" --> A["CoinnibalArena<br/>(vault per arena)"]
+  W["Browser wallet (EIP-6963)"] -- "approve + join(arenaId, permit)" --> A["CoinnibalArena<br/>(vault per arena)"]
   W -- "pay (power-ups)" --> A
   W -- "mintAllowlist / mintPublic (ETH)" --> N["CoinnibalNFT"]
   B["Browser (apps/web)"] <-- "WebSocket, binary, 30 Hz" --> S["Game server (apps/server)"]
@@ -79,8 +79,10 @@ flowchart LR
   A -- "5 % of profit, 50 % of payments" --> F["Fee wallet"]
 ```
 
-1. A player signs in with SIWE (free, no transaction), approves the game token and calls `join` on the
-   arena: the whole ticket price moves into that arena's vault and a session opens with the fee rates fixed.
+1. A player signs in with SIWE (free, no transaction), gets a single-use join permit from the server (signed by the
+   server key: only while the game and the room are open for that wallet), approves the game token and calls `join`
+   on the arena with it: the whole ticket price moves into that arena's vault and a session opens with the fee rates
+   fixed.
 2. The server seats the ticket. Value moves between players off chain as they eat each other; a
    crash-safe journal keeps the books (live values + floor loot + pending payouts = tickets paid in − payouts).
 3. At the bell the server settles every live ticket of the arena in one `settle` batch: each is paid its value

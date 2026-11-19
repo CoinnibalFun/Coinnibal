@@ -334,6 +334,7 @@ export class WorkerPool {
   }
 
   write(conn: Conn, binary: boolean, data: Buffer): void {
+    if (!conn.canSend()) return;
     wsOut.bytes += data.byteLength;
     wsOut.msgs++;
     conn.ws.send(data, { binary });

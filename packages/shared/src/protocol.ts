@@ -642,14 +642,21 @@ export type ErrorCode =
    * The room is a paid custom room (an invite-only arena instance): it is entered with a ticket of
    * its arena (`arena:<id>:<CODE>`), not with `private:<CODE>`.
    */
-  | 'paid_room';
+  | 'paid_room'
+  /**
+   * A holder ticket's seat waits: the wallet's emblem still serves another ticket of its own (its last game being
+   * settled, or played in another arena now). The ticket is untouched (no refund): the player tries again once that
+   * game is settled.
+   */
+  | 'emblem_busy';
 
 /**
  * Refusals that reuse a code above (the client shows the code's text; the server's `message` says more):
  * - the journal cannot be written (disk full): `server_full`, no new arena seat until it can;
  * - an arena closing for a re-price at its bell (`/admin` "Re-price at next bell"): `arenas_disabled`;
- * - a holder ticket whose wallet holds no emblem now, or whose emblem already serves another open holder ticket:
- *   `game_closed` (the ticket is refunded in full).
+ * - a holder ticket whose wallet holds no emblem now, or whose emblem already serves another wallet's open holder
+ *   ticket: `game_closed` (the ticket is refunded in full). Its emblem serving the wallet's own other ticket is
+ *   `emblem_busy` (the ticket waits).
  */
 export const REFUSAL_CODES = { storage: 'server_full', repricing: 'arenas_disabled', emblem: 'game_closed' } as const satisfies Record<string, ErrorCode>;
 

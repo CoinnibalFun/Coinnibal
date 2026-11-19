@@ -1,7 +1,7 @@
 /**
  * Money simulation: real arena rooms (`Room`, the real world physics and ledger), the real journal on disk and
  * the real settlement worker (`EvmChain`) against a chain (the TypeScript model `FakeEvm`, or a real `hardhat node`
- * with the real CoinnibalArena v3: `hardhatSimChain` in `money-sim-hardhat.ts`). Random joins, eats, disconnects,
+ * with the real CoinnibalArena v4: `hardhatSimChain` in `money-sim-hardhat.ts`). Random joins, eats, disconnects,
  * reconnects, unplayed tickets, loot spills, integrity holds (released or settled at 0), players whose transfers
  * fail (two-phase payouts), RPC errors, ambiguous sends, lost receipts, RPC outages, room-worker crashes and server
  * restarts (graceful and hard).
@@ -256,7 +256,7 @@ class Faulty {
 
 function fakeConn(wallet: string): Conn {
   // a socket that always looks backed up: the rooms skip its snapshots (the simulation needs no frames)
-  const ws = { readyState: 1, bufferedAmount: 1 << 30, send(_d: unknown) {} };
+  const ws = { readyState: 1, bufferedAmount: 1 << 30, send(_d: unknown) {}, terminate() {} };
   const conn = new Conn(ws as never, '127.0.0.1');
   conn.wallet = wallet;
   // messages are not needed: drop them (the rooms send a lot)
@@ -865,7 +865,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
 export const feeOf = computeProfitFee;
 
 /**
- * The simulation on `FakeEvm` (the TypeScript model of CoinnibalArena v3: sessions, vaults, the skip rules, two-phase
+ * The simulation on `FakeEvm` (the TypeScript model of CoinnibalArena v4: sessions, vaults, the skip rules, two-phase
  * payouts, sweep ids, the 24 h refund). Fast enough for thousands of rounds.
  */
 /** The fee pair a ticket of `wallet` must carry (`holders`: lower-case holder wallets). */
@@ -904,10 +904,16 @@ export function fakeSimChain(opts: { players: number; seed: number; arenas?: { i
     }
   }
   const minted = grant * BigInt(opts.players);
-  const join = (w: Address, arenaId: number) => ({ address: ARENA, abi: [], functionName: 'join', args: [arenaId] }) as never;
+  // the server key's join permit (the FakeEvm model of CoinnibalArena v4 checks it), then the join
+  const join = (w: Address, arenaId: number) => {
+    const deadline = BigInt(evm.nowS() + 600);
+    const nonce = evm.joinNonces.get(w.toLowerCase()) ?? 0n;
+    const signature = evm.permitSignature({ chainId: evm.chainId, arena: ARENA, player: w, arenaId, nonce, deadline });
+    return { address: ARENA, abi: [], functionName: 'join', args: [arenaId, deadline, signature] } as never;
+  };
   const refund = (arenaId: number) => ({ address: ARENA, abi: [], functionName: 'refund', args: [arenaId] }) as never;
   return {
-    name: 'FakeEvm (model of CoinnibalArena v3)',
+    name: 'FakeEvm (model of CoinnibalArena v4)',
     arenaAddress: ARENA,
     client: evm,
     decimals: 18,

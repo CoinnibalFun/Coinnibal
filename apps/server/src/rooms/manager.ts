@@ -172,8 +172,11 @@ export class RoomManager {
   readonly mapSettings: MapSettingsStore;
   private custom: CustomRoomHooks | null = null;
   private lastCustomSweep = 0;
-  /** Codes of custom rooms that closed lately → when. */
-  private readonly closedCodes = new Map<string, number>();
+  /**
+   * Codes of custom rooms that closed lately → when, and the arena a paid one was an instance of (null: a free room,
+   * a "Practice with bots" room included). Only a paid room's code refunds a ticket, and only one of its own arena.
+   */
+  private readonly closedCodes = new Map<string, { at: number; arenaId: number | null }>();
   /** How many public instances of each arena take seats, and which one a seat goes to (`arena-scaler.ts`). */
   readonly scaler: ArenaScaler;
   /** The admin switch "Test arenas with bots" and their bot settings (testnet only, `test-arenas.ts`). */
@@ -250,7 +253,7 @@ export class RoomManager {
               if (!ok || this.remote.get(room.id) !== room) return;
               this.remote.delete(room.id);
               // a paid custom room closes in its worker once settled (`closePaidRoom`)
-              if (room.opts.custom && room.opts.code) this.closedCodes.set(room.opts.code, Date.now());
+              if (room.opts.custom && room.opts.code) this.rememberClosed(room);
             },
             hangMs: cfg.gameWorkerHangMs,
           })
@@ -473,15 +476,31 @@ export class RoomManager {
       else (room as Room).evict(message);
     } finally {
       this.drop(room);
-      this.closedCodes.set(code, Date.now());
+      this.rememberClosed(room);
     }
     return true;
   }
 
+  /** Remembers that the custom room `room` closed (an hour): a free one by its code, a paid one with its arena. */
+  private rememberClosed(room: Pick<RoomHandle, 'opts'>): void {
+    const code = room.opts.code;
+    if (!code) return;
+    this.closedCodes.set(code, { at: Date.now(), arenaId: isPaidCustom(room.opts) ? (room.opts.stake?.arenaId ?? null) : null });
+  }
+
   /** The custom room `code` closed within the last hour. */
   customClosedLately(code: string, now = Date.now()): boolean {
-    const at = this.closedCodes.get(code);
-    return at !== undefined && now - at < CLOSED_MEMO_MS;
+    const m = this.closedCodes.get(code);
+    return m !== undefined && now - m.at < CLOSED_MEMO_MS;
+  }
+
+  /**
+   * The paid custom room `code`, an instance of `arenaId`, closed within the last hour. A free room's code (a practice
+   * room's too) or another arena's never answers yes: only a ticket of the room's own arena may go back through it.
+   */
+  paidClosedLately(arenaId: number, code: string, now = Date.now()): boolean {
+    const m = this.closedCodes.get(code);
+    return m !== undefined && m.arenaId === arenaId && now - m.at < CLOSED_MEMO_MS;
   }
 
   /**
@@ -501,7 +520,7 @@ export class RoomManager {
     }
     if (!(room as Room).closeSettled(message)) return 'pending';
     this.drop(room);
-    this.closedCodes.set(code, Date.now());
+    this.rememberClosed(room);
     return 'closed';
   }
 
@@ -541,12 +560,12 @@ export class RoomManager {
    * The paid custom room `code` for a new seat with a ticket of `arenaId`: the arena must be
    * allowed, enabled on chain and not kept closed by the vault guard (as for `arenaRoom`), the room
    * must be an instance of that arena and take seats (not closing, time left). Otherwise why not:
-   * `missing` (no paid room of this arena with that code), `closed` (it closed or is closing),
-   * `arena` (the arena itself is not available).
+   * `missing` (no paid room of this arena with that code: a free or practice room's code, or another arena's, closed
+   * or not), `closed` (this arena's paid room closed lately or is closing), `arena` (the arena itself is not available).
    */
   async paidRoom(arenaId: number, code: string): Promise<RoomHandle | 'missing' | 'closed' | 'arena'> {
     const room = this.get(`priv-${code}`);
-    if (!room) return this.customClosedLately(code) ? 'closed' : 'missing';
+    if (!room) return this.paidClosedLately(arenaId, code) ? 'closed' : 'missing';
     if (!isPaidCustom(room.opts) || room.opts.stake?.arenaId !== arenaId) return 'missing';
     if (!this.paidSeatable(room)) return 'closed';
     if (!this.arenaAllowed(arenaId) || this.underfunded.has(arenaId)) return 'arena';
@@ -570,6 +589,30 @@ export class RoomManager {
     if (room.opts.stake && this.underfunded.has(room.opts.stake.arenaId)) return null;
     room.lastActivity = Date.now();
     return room;
+  }
+
+  /**
+   * The seats of the paid custom room `code` when it is an instance of `arenaId` that takes new seats now (open here,
+   * not closing, its joins open: not in its last minute, its arena allowed and not kept closed); else null.
+   * Synchronous: a join permit is bound to the room with it (`JoinPermits`, audit R4-M1).
+   */
+  paidRoomSeats(arenaId: number, code: string, now = this.now()): number | null {
+    const room = this.get(`priv-${code}`);
+    if (!room || !isPaidCustom(room.opts) || room.opts.stake?.arenaId !== arenaId || !this.paidSeatable(room)) return null;
+    if (!this.arenaAllowed(arenaId) || this.underfunded.has(arenaId) || this.arenaCache?.ids.get(arenaId)?.enabled === false) return null;
+    const w = this.roomWindow(room, now);
+    if (now < w.opensAt || now >= w.joinsCloseAt) return null;
+    return Math.max(1, room.opts.maxPlayers);
+  }
+
+  /**
+   * The arena takes seats as far as the server knows (synchronously): not kept closed (the books guard, a re-price),
+   * not disabled at the last read of the arena list. An unseated ticket refunded while it does is a no-show unless the
+   * server owes the excuse (the gateway's `refundUnseated`, as the stale sweeper decides).
+   */
+  arenaTakesSeats(arenaId: number): boolean {
+    if (this.blockedArenas().some((b) => b.arenaId === arenaId)) return false;
+    return this.arenaCache?.ids.get(arenaId)?.enabled !== false;
   }
 
   private paidSeatable(room: RoomHandle): boolean {
@@ -1166,7 +1209,7 @@ export class RoomManager {
       } else this.drop(room);
     }
     for (const [ip, at] of this.promotions) if (now - at >= PROMOTION_MS) this.promotions.delete(ip);
-    for (const [code, at] of this.closedCodes) if (now - at >= CLOSED_MEMO_MS) this.closedCodes.delete(code);
+    for (const [code, m] of this.closedCodes) if (now - m.at >= CLOSED_MEMO_MS) this.closedCodes.delete(code);
   }
 
   /**

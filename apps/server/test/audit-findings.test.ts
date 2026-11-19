@@ -1,10 +1,12 @@
 // Regression tests of the mainnet-readiness audit's findings (2026-11): each one was a repro of a finding and now
 // asserts the fixed behaviour.
 import { createHmac } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isReservedName, sanitizeName } from '@coinnibal/shared';
+import { ROBINHOOD_CHAIN_ID, isReservedName, sanitizeName } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp, type App } from '../src/app';
 import { Auth } from '../src/auth';
@@ -89,6 +91,40 @@ describe('audit: AUTH_SECRET strength (fixed)', () => {
   it('createApp refuses to boot on the mainnet with a weak AUTH_SECRET', async () => {
     const cfg = loadConfig({ AUTH_SECRET: 'short', CHAIN_ID: '4663', PORT: '0', DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-audit-')) } as NodeJS.ProcessEnv);
     await expect(createApp(cfg, { chain: new ArenaChain([arena(1, 1000)]), log: () => {}, persist: false })).rejects.toThrow(/AUTH_SECRET/);
+  });
+
+  it('the refusal looks at the chain the RPC serves too: CHAIN_ID unset never lets a weak secret onto the mainnet (S6)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-audit-'));
+    const unset = loadConfig({ AUTH_SECRET: 'x', DATA_DIR: dir } as NodeJS.ProcessEnv);
+    expect(() => checkAuthSecret(unset, [ROBINHOOD_CHAIN_ID])).toThrow(/serves the mainnet/);
+    expect(() => checkAuthSecret(unset, [null, ROBINHOOD_CHAIN_ID])).toThrow(/serves the mainnet/);
+    expect(() => checkAuthSecret(unset, [], true)).toThrow(/may be the mainnet/);
+    expect(checkAuthSecret(unset, [46630, null])).toMatch(/^!!! AUTH_SECRET/);
+    // a strong secret passes whatever the chain
+    expect(checkAuthSecret(loadConfig({ AUTH_SECRET: 'a'.repeat(32), DATA_DIR: dir } as NodeJS.ProcessEnv), [ROBINHOOD_CHAIN_ID], true)).toBeNull();
+
+    // the whole boot: EVM_RPC_URL answers eth_chainId 4663, CHAIN_ID is not set
+    const rpc = createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        const calls = [JSON.parse(body)].flat() as { id: number; method: string }[];
+        const out = calls.map((c) => ({ jsonrpc: '2.0', id: c.id, ...(c.method === 'eth_chainId' ? { result: `0x${ROBINHOOD_CHAIN_ID.toString(16)}` } : { error: { code: -32601, message: 'no' } }) }));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(Array.isArray(JSON.parse(body)) ? out : out[0]));
+      });
+    });
+    await new Promise<void>((r) => rpc.listen(0, '127.0.0.1', () => r()));
+    try {
+      const url = `http://127.0.0.1:${(rpc.address() as AddressInfo).port}/`;
+      const boot = (env: Record<string, string>) =>
+        createApp(loadConfig({ AUTH_SECRET: 'short', SERVER_PRIVATE_KEY: FAKE_KEY, PORT: '0', DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-audit-')), ...env } as NodeJS.ProcessEnv), { log: () => {}, persist: false });
+      await expect(boot({ EVM_RPC_URL: url })).rejects.toThrow(/serves the mainnet/);
+      // the RPC does not answer at a first boot and CHAIN_ID is not set: it may be the mainnet
+      await expect(boot({ EVM_RPC_URL: 'http://127.0.0.1:1/' })).rejects.toThrow(/may be the mainnet/);
+    } finally {
+      rpc.close();
+    }
   });
 });
 
