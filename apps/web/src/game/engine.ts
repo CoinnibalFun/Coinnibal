@@ -36,6 +36,7 @@ import { HeldTicket } from './held';
 import { Input } from './input';
 import { EXTRAPOLATE_MS, SnapshotTimeline } from './jitter';
 import { Net } from './net';
+import { joinName } from './playerName';
 import { readStoredSession } from '../site/storedSession';
 import { Particles } from './particles';
 import { announce, caller, music, powerUpKind, sound, unlockAudio } from '../audio';
@@ -292,12 +293,13 @@ export class GameEngine {
   private ticketRetry: { room: string; left: number } | null = null;
 
   private sendJoin(room: string): void {
-    const { settings } = useUi.getState();
+    const { settings, auth } = useUi.getState();
     this.lastJoin = { room };
+    // `name`: the chosen one, else "Coinie" and a tag of the signed-in wallet or of this browser (`joinName`)
     // `pic`: wear the profile picture (the server takes it from the signed-in wallet's profile; guests get the basic coin)
     // `country`: the flag by the name ('' for none: the server then shows no flag, not the profile's)
     // `flag`: paint the coin with that flag (the flag skin; the server ignores it without a country or with a picture)
-    this.net.send({ t: 'join', room, name: settings.name || 'Coinie', skin: settings.skin, fp: fingerprint(), country: settings.country, flag: settings.flagSkin === true, ...(settings.picture ? { pic: true } : {}) });
+    this.net.send({ t: 'join', room, name: joinName(settings.name, auth?.address ?? null), skin: settings.skin, fp: fingerprint(), country: settings.country, flag: settings.flagSkin === true, ...(settings.picture ? { pic: true } : {}) });
   }
 
   spectate(room?: string): void {
@@ -699,13 +701,18 @@ export class GameEngine {
         // a late answer after the sheet (and the peek) closed is dropped
         if (this.standingsWatchers > 0) useUi.setState({ standings: { rows: m.rows, players: m.players, watching: m.watching, at: Date.now() } });
         return;
-      case 'kf':
+      case 'kf': {
+        // "you" is my coin's player id, never a name (players may share one), read now: my `death` follows the line
+        const myPid = this.world.myPid;
+        const killerIsMe = myPid !== null && m.killerPid === myPid;
+        const victimIsMe = myPid !== null && m.victimPid === myPid;
         useUi.setState((s) => ({
-          killfeed: [...s.killfeed.slice(-4), { id: killId++, ...m, at: Date.now() }],
-          // my bites, for the HUD's "Share on X" line (the feed prints "you" the same way: by my name)
-          myEaten: s.screen === 'playing' && !m.killerIsBot && s.me?.name === m.killer && m.victim !== m.killer ? s.myEaten + 1 : s.myEaten,
+          killfeed: [...s.killfeed.slice(-4), { id: killId++, ...m, killerIsMe, victimIsMe, at: Date.now() }],
+          // my bites, for the HUD's "Share on X" line (the feed prints "you" the same way: by my player id)
+          myEaten: s.screen === 'playing' && killerIsMe && !victimIsMe ? s.myEaten + 1 : s.myEaten,
         }));
         return;
+      }
       case 'feed': {
         // a player left without dying (a bot making room for a person, or going home): one feed line
         const item = { id: killId++, killer: '', killerSkin: 0, victim: m.name, victimSkin: m.skin, victimIsBot: m.isBot, cause: 'left' as const, at: Date.now() };

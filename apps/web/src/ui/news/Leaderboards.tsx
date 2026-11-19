@@ -152,7 +152,8 @@ const bellTime = (ms: number) => new Date(ms).toLocaleTimeString('en-GB', { hour
 function RoundsFront({ boards }: { boards: Boards }) {
   const t = useT();
   const tf = useTokenFormat();
-  const me = useUi((s) => s.me?.name ?? null);
+  // "you" is the connected wallet's ticket, never a name (players may share one)
+  const me = useAddress();
   const rounds = boards.state === 'ok' ? boards.rounds : [];
   return (
     <div className="nw-cols">
@@ -170,7 +171,7 @@ function RoundsFront({ boards }: { boards: Boards }) {
                 key: `${r.n}:${r.arenaId}:${i}`,
                 name: x.name,
                 skin: x.skin,
-                me: !x.isBot && me !== null && x.name === me,
+                me: !x.isBot && !!me && !!x.wallet && x.wallet.toLowerCase() === me.toLowerCase(),
                 country: x.country,
                 bot: x.isBot,
                 value: `${tf.fmt(x.value, { compact: true, maxFrac: 1 })} ${tf.symbol}`,

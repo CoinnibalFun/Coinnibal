@@ -525,6 +525,12 @@ export type ServerMessage =
       killerSkin: number;
       victim: string;
       victimSkin: number;
+      /**
+       * The killer's and the victim's player ids (`joined.playerId`; no killer id when nobody ate it): a client prints
+       * "you" by these, never by a name (two players may carry the same one).
+       */
+      killerPid?: number;
+      victimPid: number;
       cause: 'eat' | 'virus';
       /** The killer is a server bot (BOT tag). */
       killerIsBot?: boolean;

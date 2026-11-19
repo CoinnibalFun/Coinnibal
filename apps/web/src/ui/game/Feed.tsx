@@ -16,22 +16,19 @@ function InkDot({ skin }: { skin: number }) {
 /** The feed's wry ways of saying "ate" (picked by the event id, so a line never changes its mind). */
 const EAT_LINES: readonly TKey[] = ['g.kill.0', 'g.kill.1', 'g.kill.2', 'g.kill.3'];
 
-/** One kill as a sentence: the killer and the victim keep their dots; "you" is printed in sun. */
-function KillLine({ k, myName }: { k: KillItem; myName: string | null }) {
+/** One kill as a sentence: the killer and the victim keep their dots; "you" (my coin, by player id) is printed in sun. */
+function KillLine({ k }: { k: KillItem }) {
   const t = useT();
   const key = k.cause === 'left' ? 'g.wentHome' : k.cause === 'virus' ? 'g.kill.cactus' : EAT_LINES[k.id % EAT_LINES.length];
-  const who = (name: string, skin: number, bot: boolean | undefined, mark: string) => {
-    const me = myName !== null && name === myName && !bot;
-    return (
-      <b className={me ? 'is-me' : undefined} key={mark}>
-        <InkDot skin={skin} />
-        <span className="g-kill__nm" title={me ? undefined : name}>
-          {me ? t('g.youName') : name}
-        </span>
-        {bot && <BotTag />}
-      </b>
-    );
-  };
+  const who = (name: string, skin: number, bot: boolean | undefined, me: boolean, mark: string) => (
+    <b className={me ? 'is-me' : undefined} key={mark}>
+      <InkDot skin={skin} />
+      <span className="g-kill__nm" title={me ? undefined : name}>
+        {me ? t('g.youName') : name}
+      </span>
+      {bot && <BotTag />}
+    </b>
+  );
   // the sentence comes from the copy with two markers for the names; it runs as plain inline text around them
   const text = t(key as 'g.kill.0', { k: '\u0001', v: '\u0002' });
   const bits = text.split(/(\u0001|\u0002)/);
@@ -42,7 +39,7 @@ function KillLine({ k, myName }: { k: KillItem; myName: string | null }) {
       if (p) parts.push(<Fragment key={i}>{p}</Fragment>);
       continue;
     }
-    const name = p === '\u0001' ? who(k.killer, k.killerSkin, k.killerIsBot, `k${i}`) : who(k.victim, k.victimSkin, k.victimIsBot, `v${i}`);
+    const name = p === '\u0001' ? who(k.killer, k.killerSkin, k.killerIsBot, k.killerIsMe === true, `k${i}`) : who(k.victim, k.victimSkin, k.victimIsBot, k.victimIsMe === true, `v${i}`);
     // punctuation right after a name ("{v}.") stays glued to it: a line never starts with ". No crumbs."
     const glue = /^\p{P}+/u.exec(bits[i + 1] ?? '')?.[0] ?? '';
     if (!glue) {
@@ -69,7 +66,6 @@ function KillLine({ k, myName }: { k: KillItem; myName: string | null }) {
 export function Feed({ narrow }: { narrow: boolean; fold?: boolean }) {
   const t = useT();
   const killfeed = useUi((s) => s.killfeed);
-  const myName = useUi((s) => s.me?.name ?? null);
   const reduced = useReducedMotion();
   const spring = usePreset('press', { fade: true });
   const [hover, setHover] = useState(false);
@@ -104,7 +100,7 @@ export function Feed({ narrow }: { narrow: boolean; fold?: boolean }) {
               exit={{ opacity: 0, transition: { duration: 0.2 } }}
               transition={spring}
             >
-              <KillLine k={k} myName={myName} />
+              <KillLine k={k} />
             </motion.li>
           ))}
         </AnimatePresence>

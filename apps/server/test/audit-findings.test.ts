@@ -144,11 +144,11 @@ describe('audit: chat and name abuse (fixed)', () => {
   it('refuses names that impersonate the system speaker or staff', () => {
     for (const n of ['Coinnibal', 'Coinnibal Support', 'COINNIBAL', 'E1ymum', 'e.l.y.m.u.m', 'Ｅｌｙｍｕｍ', 'Admin', 'admin', 'Support', 'Official Mod']) {
       expect(isReservedName(n)).toBe(true);
-      expect(sanitizeName(n)).toBe('Coinie');
+      expect(sanitizeName(n, 'Coinie-0a1b')).toBe('Coinie-0a1b');
     }
     for (const n of ['Coinie', 'Badminton Ace', 'Modesty', 'Sam', 'Dev']) {
       expect(isReservedName(n)).toBe(false);
-      expect(sanitizeName(n)).toBe(n);
+      expect(sanitizeName(n, 'Coinie-0a1b')).toBe(n);
     }
   });
 });
