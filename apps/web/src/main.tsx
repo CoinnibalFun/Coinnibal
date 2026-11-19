@@ -1,11 +1,17 @@
 // Ring Storybook design system (spec §6): fonts, tokens (on :root and every `.kb`) and styles.
 // Fraunces "full" carries the SOFT and WONK axes (display); DM Sans with optical sizes (body);
-// Geist Mono (every number).
+// Geist Mono (every number). The latin upright Fraunces comes from design/fonts (SOFT pinned at 100, the only value
+// the site uses): imported after fontsource's faces, so it wins for latin text and the fontsource latin file is
+// never fetched; fontsource still serves latin-ext letters (player names) and the italic. Last, the three upright faces
+// cut down to basic latin and punctuation (design/fonts/core.css): all a first visit of the landing draws.
 import '@fontsource-variable/fraunces/full.css';
 import '@fontsource-variable/fraunces/full-italic.css';
+import './design/fonts/fraunces-soft.css';
 import '@fontsource-variable/dm-sans/opsz.css';
 import '@fontsource-variable/dm-sans/opsz-italic.css';
+import './design/fonts/dm-sans-fallback.css';
 import '@fontsource-variable/geist-mono/wght.css';
+import './design/fonts/core.css';
 import './design/tokens.css';
 import './design/storybook.css';
 import './chainText';
@@ -21,10 +27,14 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /**
  * The entry's own chunk failed (a tab or cache from before a deploy, or the network): reload once,
- * then say so plainly instead of leaving a blank page.
+ * then say so plainly instead of leaving a blank page. The prerendered landing (`landing.html`) is
+ * left as it is: it is already painted and works without script (plain links, the FAQ's
+ * <details>), so a reload or the note would only take a readable page away.
  */
 function bootFailed(err: unknown): void {
   console.error('the page failed to load', err);
+  const first = root.firstElementChild;
+  if (first !== null && !first.classList.contains('boot')) return;
   const KEY = storageKey('boot-reload.v1', 'session');
   try {
     const last = Number(sessionStorage.getItem(KEY) ?? 0);
@@ -53,13 +63,14 @@ function boot<M>(page: Promise<M>, start: (m: M) => void): void {
 if (path === '/admin') {
   // Operator panel (chain admin, WL, collabs, site settings): its own lazy chunk, English only.
   void import('./admin/mount').then((m) => m.mount(root)).catch(bootFailed);
-} else if (params.has('gallery')) {
-  // Design-system proof sheet (every component, both themes).
+} else if (import.meta.env.DEV && params.has('gallery')) {
+  // Design-system proof sheet (every component, both themes). The three proof sheets are dev-only: a production
+  // build drops them (they carry old copy no visitor should see), so `/?gallery` there is the landing.
   boot(import('./design/Gallery'), (m) => m.startDesignGallery(root));
-} else if (params.has('coins')) {
+} else if (import.meta.env.DEV && params.has('coins')) {
   // Coin / world sprite sheet (was ?gallery before v2).
   boot(import('./gallery'), (m) => m.startGallery(root));
-} else if (params.has('flagskins')) {
+} else if (import.meta.env.DEV && params.has('flagskins')) {
   // Flag skin proof sheet (coins painted with their flags; `?flagskins=TR,US` for a list, `all` for every flag).
   boot(import('./flag-gallery'), (m) => m.startFlagGallery(root, params.get('flagskins') ?? ''));
 } else if (path === '/play') {

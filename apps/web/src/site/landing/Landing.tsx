@@ -1,4 +1,4 @@
-import { DEFAULT_ARENAS, NFT_SUPPLY, TOKEN_SYMBOL_DEFAULT, activeChain, arenaMeta, formatUsdCents, type GameAccess } from '@coinnibal/shared';
+import { DEFAULT_ARENAS, NFT_SUPPLY, SHOP_DEFAULTS, TOKEN_SYMBOL_DEFAULT, activeChain, arenaMeta, formatUsdCents, type GameAccess } from '@coinnibal/shared';
 import { motion, useInView } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import {
@@ -16,6 +16,7 @@ import {
   Wordmark,
   useMoves,
   useOffscreenPause,
+  useOffscreenPausedBlock,
   useReducedMotion,
   type CoinMood,
   type CoinPaint,
@@ -25,7 +26,6 @@ import { em, renderRich, T } from '../../i18n/rich';
 import { FACTS } from '../../ui/docs/facts';
 import { usePeelLetters } from '../peel';
 import { Link } from '../router';
-import { useMedia } from '../../design/useMedia';
 import { useDoors, type Doors } from '../doors';
 import { SiteFooter, SiteHeader, SiteLinkButton, XIcon } from '../Shell';
 import { useSiteSettings, xProfile } from '../settings';
@@ -33,6 +33,7 @@ import { BITES, BiteSeam, biteVars } from './BiteSeam';
 import { CoinPond } from './CoinPond';
 import { DuskSeam } from './DuskSeam';
 import { GazeCoin } from './GazeCoin';
+import { isStaticEntrance } from './hydrated';
 import { NapSeam } from './NapSeam';
 import { BITE_GULP_MS, SEAL_GULP_MS, gulp, useReveal, useRevealEach } from './reveal';
 import { SealSeam } from './SealSeam';
@@ -68,7 +69,20 @@ function useInViewSafe(ref: RefObject<Element | null>, opts: Parameters<typeof u
 }
 
 /** A plate section: its seam plays when its top crosses 90 % of the viewport, and the header's coin gulps with it. */
-const usePlate = (gulpAt: number) => useReveal<HTMLElement>(undefined, { attr: 'data-seam', onIn: () => gulp(gulpAt) });
+const usePlate = (gulpAt: number, ref?: RefObject<HTMLElement | null>) => useReveal<HTMLElement>(ref, { attr: 'data-seam', onIn: () => gulp(gulpAt) });
+
+/**
+ * A plate that pauses its loops (blinking, bobbing coins, the orbit) while it is off screen: the section's ref, shared
+ * with its seam reveal. Off screen its endless animations are paused from script (useOffscreenPausedBlock), without a
+ * re-render of the section and without restyling it. Running off-screen loops kept a phone's main thread 84-97 % busy
+ * on the landing.
+ */
+function usePausedPlate(gulpAt: number): RefObject<HTMLElement | null> {
+  const ref = useRef<HTMLElement | null>(null);
+  useOffscreenPausedBlock(ref);
+  usePlate(gulpAt, ref);
+  return ref;
+}
 
 /* ── the hero ─────────────────────────────────────────────────────────── */
 
@@ -80,15 +94,18 @@ const usePlate = (gulpAt: number) => useReveal<HTMLElement>(undefined, { attr: '
 function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: GameAccess; handle: string; sound: ReturnType<typeof useLandingSound> }) {
   const reduced = useReducedMotion();
   const m = useMoves();
-  // on a phone the card fills the width: a smaller tilt keeps its corners off the screen's edges
-  const phone = useMedia('(max-width: 479px)');
   const peel = usePeelLetters<HTMLHeadingElement>();
   const t = useT();
+  // the prerendered page (and the browser hydrating it) shows the card and the badge where they land: no drop, no pop
+  // (hydrated.ts). The card's tilt is -1.6 deg; on a phone landing.css turns it back to -0.8 (the card fills the width
+  // there: a smaller tilt keeps its corners off the screen's edges), in CSS so the HTML is right before any script.
+  const entrance = isStaticEntrance() ? false : 'hidden';
+  const play = doors.game && gameAccess !== 'maintenance';
   return (
     <section className="ld-hero" aria-labelledby="ld-hero-title">
       <RingScene time="dawn" variant="full" animate={!reduced} className="ld-hero__ring">
         <div className="ld-hero__inner">
-          <motion.div className="ld-hero__drop" variants={m.stickerDrop} custom={phone ? -0.8 : -1.6} initial="hidden" animate="shown">
+          <motion.div className="ld-hero__drop" variants={m.stickerSlap} custom={-1.6} initial={entrance} animate="shown">
             <Sticker pad="lg" lift="lg" tape className="ld-hero__card">
               <p className="kicker ld-hero__kicker">{t('ld.hero.kicker', { chain: plainChainName(activeChain().name) })}</p>
               <h1 id="ld-hero-title" ref={peel.ref} className={`ld-hero__title ${peel.className}`}>
@@ -101,9 +118,14 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
               {/* plainly: free at first, then a ticket is real money (D12), whatever chain the build is on */}
               <p className="ld-hero__money" data-testid="ld-money">
                 <Icon name="info" size={16} className="ld-hero__money-icon" />
-                <span>{t('ld.hero.money', { sym: SYMBOL })}</span>
+                {/* one sentence a piece: the line breaks between them, never before a lone "lose it." */}
+                <span>
+                  <T k="ld.hero.money" vars={{ sym: SYMBOL }} tags={{ s: (c) => <span className="ld-hero__money-s">{c}</span> }} />
+                </span>
               </p>
-              <div className="ld-hero__ctas">
+              {/* at most three buttons: with a third (Play) the two above share the width and Play spans both, so the
+                  block stays even; Collab is for community leads, a quiet link under them like the X link */}
+              <div className={`ld-hero__ctas${play ? ' ld-hero__ctas--three' : ''}`}>
                 {doors.wl && (
                   <SiteLinkButton href="/wl" variant="primary" icon="arrow" onClick={sound.click}>
                     {t('ld.cta.wl')}
@@ -119,12 +141,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
                     <span className="kb-btn__text">{t('ld.cta.why')}</span>
                   </span>
                 </a>
-                {doors.collab && (
-                  <SiteLinkButton href="/collab" onClick={sound.click}>
-                    {t('site.nav.collab')}
-                  </SiteLinkButton>
-                )}
-                {doors.game && gameAccess !== 'maintenance' && (
+                {play && (
                   <a href="/play" className="kb-btn kb-btn--teal kb-btn--md st-btn" onClick={sound.click}>
                     <Icon name="play" size={20} className="kb-btn__lead" />
                     <span className="kb-btn__label">
@@ -133,21 +150,29 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
                   </a>
                 )}
               </div>
-              {doors.wl ? (
+              {(!doors.wl || doors.collab) && (
+                <p className="ld-hero__note ld-hero__note--x">
+                  {!doors.wl && (
+                    <a href={xProfile(handle)} target="_blank" rel="noreferrer" className="ld-hero__x" onClick={sound.click} data-testid="ld-x-link">
+                      <XIcon size={16} /> <span>{t('pg.follow')}</span>
+                    </a>
+                  )}
+                  {doors.collab && (
+                    <Link href="/collab" className="ld-hero__x" onClick={sound.click} data-testid="ld-collab-link">
+                      <span>{t('ld.collabLink')}</span> <Icon name="arrow" size={16} />
+                    </Link>
+                  )}
+                </p>
+              )}
+              {doors.wl && (
                 <p className="ld-hero__note mono">
                   {doors.mint && doors.game && <span className="ld-flowline">{t('ld.flowline')}</span>}
                   <span>{t('ld.wlOpen')}</span>
                 </p>
-              ) : (
-                <p className="ld-hero__note ld-hero__note--x">
-                  <a href={xProfile(handle)} target="_blank" rel="noreferrer" className="ld-hero__x" onClick={sound.click} data-testid="ld-x-link">
-                    <XIcon size={16} /> <span>{t('pg.follow')}</span>
-                  </a>
-                </p>
               )}
             </Sticker>
           </motion.div>
-          <motion.div className="ld-hero__badge-wrap" variants={m.popIn} custom={0.5} initial="hidden" animate="shown">
+          <motion.div className="ld-hero__badge-wrap" variants={m.popInSolid} custom={0.5} initial={entrance} animate="shown">
             <Sticker tone="sun" pad="sm" tilt={4} className="ld-hero__badge">
               <span className="num ld-hero__badge-n">{String(FACTS.rules.roundMin).padStart(2, '0')}:00</span>
               <span className="mono ld-hero__badge-l">{t('ld.badge')}</span>
@@ -155,11 +180,12 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
           </motion.div>
         </div>
         <CoinPond still={reduced} events={{ onEat: sound.chomp }} />
-        {!reduced && (
-          <p className="ld-pond__hint mono" aria-hidden="true">
-            {t('ld.pondHint')}
-          </p>
-        )}
+        {/* both hints are in the HTML; CSS shows the mouse one where the pointer is a mouse, and neither with reduced
+            motion (the pond is still there: in CSS, so the prerendered page is right before any script) */}
+        <p className="ld-pond__hint mono" aria-hidden="true">
+          <span className="ld-pond__hint-touch">{t('ld.pondHint')}</span>
+          <span className="ld-pond__hint-mouse">{t('ld.pondHintMouse')}</span>
+        </p>
         <button type="button" className="ld-sound mono" aria-pressed={sound.on} onClick={sound.toggle}>
           <Icon name={sound.on ? 'sound' : 'mute'} size={16} />
           <span>{sound.on ? t('ld.soundOn') : t('ld.soundOff')}</span>
@@ -215,7 +241,7 @@ function useCountUp(from: number, to: number, on: boolean, ms = 900): number {
 
 /**
  * The core rule in one picture: a smaller coin worth 1,000 is eaten, and the eater's value runs from 1,000 to 2,000.
- * "Eat a coin, take its tokens."
+ * A tag over each coin says who is who: "Smaller coin" over the prey, "You" over the eater (the stairs' tag).
  */
 function TakeStrip() {
   const t = useT();
@@ -228,6 +254,7 @@ function TakeStrip() {
       <p className="ld-take__h">{t('ld.take.h')}</p>
       <div className="ld-take__row" aria-hidden="true">
         <span className="ld-take__coin ld-take__coin--prey">
+          <span className="kb-tag ld-take__who">{t('ld.take.prey')}</span>
           <CoinCharacter paint="foam" mood="scared" size={58} />
           <span className="ld-take__tag mono">
             {fmt(1000)} <small>{SYMBOL}</small>
@@ -241,6 +268,7 @@ function TakeStrip() {
           </svg>
         </span>
         <span className="ld-take__coin ld-take__coin--eater">
+          <span className="kb-tag ld-take__who">{t('ld.ar.you')}</span>
           <CoinCharacter paint="sun" mood="chomp" size={82} />
           <span className="ld-take__tag ld-take__tag--you mono">
             {fmt(value)} <small>{SYMBOL}</small>
@@ -253,13 +281,13 @@ function TakeStrip() {
 
 function Feast() {
   const t = useT();
-  const plate = usePlate(BITE_GULP_MS);
+  const plate = usePausedPlate(BITE_GULP_MS);
   const copy = useReveal<HTMLDivElement>();
   const menu = useReveal<HTMLDivElement>();
   return (
     <section ref={plate} className="ld-plate ld-feast has-bite" style={biteVars(BITES.feast)} id="feast" aria-labelledby="ld-feast-h">
       <BiteSeam at="feast" />
-      <PlateLabel numeral={2} title={t('ld.feast.plate')} aside={t('ld.feast.aside')} />
+      <PlateLabel numeral={2} title={t('ld.feast.plate')} />
       <div className="ld-wrap ld-feast__grid">
         <div ref={copy} className="ld-feast__copy">
           <h2 className="ld-h2 rv-h" id="ld-feast-h">
@@ -282,7 +310,7 @@ function Feast() {
               <MenuLine i={2} art={<CoinCharacter paint="sun" mood="smug" size={46} />} dish={t('ld.menu.big')} note={t('ld.menu.bigNote')} price={t('ld.menu.bigPrice')} />
             </ul>
             <footer className="ld-menu__foot rv-b" style={v({ '--rv-at': 5 })}>
-              <span className="mono">{t('ld.menu.foot', { r: FACTS.rules.eatRatio })}</span>
+              {t('ld.menu.foot', { r: FACTS.rules.eatRatio })}
             </footer>
           </Sticker>
         </div>
@@ -300,6 +328,8 @@ const STATIONS: { no: string; title: TKey; body: TKey }[] = [
   { no: '04', title: 'ld.stop.paid', body: 'ld.stop.paidBody' },
 ];
 const stationVars = () => ({ sym: SYMBOL, min: FACTS.rules.roundMin, s: FACTS.rules.joinCloseS, b: FACTS.rules.breakS });
+/** A number and its unit on one line ("30-second" breaks at its hyphen otherwise). */
+const nb = (c: ReactNode) => <span className="ld-nowrap">{c}</span>;
 
 /**
  * How far the visitor has read down the steps: the index of the last step whose top has passed 60 % of the viewport
@@ -333,9 +363,9 @@ function useStepsRead(list: RefObject<HTMLOListElement | null>): number {
   return at;
 }
 
-function Round({ live }: { live: boolean }) {
+function Round() {
   const t = useT();
-  const plate = usePlate(0);
+  const plate = usePausedPlate(0);
   const orbit = useReveal<HTMLDivElement>();
   const copy = useReveal<HTMLDivElement>();
   // the orbit's stations and the step numbers light up as the visitor reads down the steps (the card stays beside them)
@@ -343,12 +373,11 @@ function Round({ live }: { live: boolean }) {
   const read = useStepsRead(stops);
   return (
     <section ref={plate} className="ld-plate ld-round" id="round" aria-labelledby="ld-round-h">
-      <PlateLabel numeral={3} title={t('ld.round.plate')} aside={t('ld.round.aside')} />
+      <PlateLabel numeral={3} title={t('ld.round.plate')} />
       <div className="ld-wrap ld-round__grid">
         <div ref={orbit} className="ld-round__orbit-wrap rv-v" style={v({ '--tilt': '-0.8deg' })}>
           <Sticker tone="night" pad="none" lift="lg" round="lg" className="ld-orbit">
-            {/* "live" only while the game is open to someone */}
-            <span className="ld-orbit__tag kb-tag">{live ? t('ld.round.tag') : t('ld.round.tagInfo')}</span>
+            <span className="ld-orbit__tag kb-tag">{t('ld.round.tagInfo')}</span>
             <OrbitDots
               width={640}
               height={330}
@@ -377,7 +406,7 @@ function Round({ live }: { live: boolean }) {
                 </span>
                 <span className="ld-stop__text">
                   <strong className="ld-stop__title">{t(s.title)}</strong>
-                  <span>{t(s.body, stationVars())}</span>
+                  <span>{renderRich(t(s.body, stationVars()), { nb })}</span>
                 </span>
               </li>
             ))}
@@ -404,7 +433,7 @@ function Emblem({ paint, front, waking }: { paint: CoinPaint; front: boolean; wa
     <div className={`ld-emblem${front ? ' is-front' : ''}`}>
       <div className="ld-emblem__panel">
         <Seigaiha tone="ink" rows={5} r={26} span={360} filled={false} className="ld-emblem__waves" />
-        <span className="ld-emblem__no kb-tag num">No. ????</span>
+        <span className="ld-emblem__no kb-tag num">{t('mn.noUnknown')}</span>
         <span className="ld-emblem__coin">
           <CoinCharacter paint={paint} mood={!front ? 'sleepy' : waking ? 'open' : 'smug'} size={150} look={waking ? [3, -3] : [2, 0]} bob={front} />
         </span>
@@ -475,7 +504,7 @@ function EmblemFan() {
 function Nft({ doors }: { doors: Doors }) {
   const t = useT();
   const testnet = isTestnetChain(useServerChain());
-  const plate = usePlate(SEAL_GULP_MS);
+  const plate = usePausedPlate(SEAL_GULP_MS);
   const copy = useReveal<HTMLDivElement>();
   const why = useRef<HTMLDivElement>(null);
   useReveal(why);
@@ -483,7 +512,7 @@ function Nft({ doors }: { doors: Doors }) {
   return (
     <section ref={plate} className="ld-plate ld-nft" id="nft" aria-labelledby="ld-nft-h">
       <SealSeam />
-      <PlateLabel numeral={5} title={t('ld.nft.plate')} aside={t('ld.nft.aside')} />
+      <PlateLabel numeral={5} title={t('ld.nft.plate')} />
       <div className="ld-nft__body">
         <div className="ld-wrap ld-nft__grid">
           <div ref={copy} className="ld-nft__copy">
@@ -491,6 +520,13 @@ function Nft({ doors }: { doors: Doors }) {
               <T k={doors.mint ? 'ld.nft.h' : 'ld.nft.hInfo'} tags={{ em }} vars={{ supply: NFT_SUPPLY.toLocaleString('en-US') }} />
             </h2>
             <p className="ld-nft__text rv-b">{t('ld.nft.body')}</p>
+            {/* the launch order while nothing is open yet: the NFT first, on OpenSea */}
+            {!doors.wl && !doors.mint && (
+              <div className="ld-nft__next rv-b">
+                <StatusPill tone="idle">{t('ld.ar.after')}</StatusPill>
+                <p>{t('ld.nft.next')}</p>
+              </div>
+            )}
             {doors.wl && doors.mint && doors.game && (
               <ol className="ld-flow rv-i" style={v({ '--rv-n': 2 })} aria-label={t('ld.nft.order')}>
                 <li className="is-on">
@@ -530,9 +566,12 @@ function Nft({ doors }: { doors: Doors }) {
   );
 }
 
-/* ── the four rooms ───────────────────────────────────────────────────── */
+/* ── the rooms: free practice, then the four paid rooms ───────────────── */
 
-/** Each room as a step up: a bigger ticket, a bigger coin on top. The $10 coin is the holders' (crowned). */
+/**
+ * Each room as a step up: free practice on the ground step (the "You" tag: everyone starts there), then the paid
+ * rooms, a bigger ticket and a bigger coin on each step. The $10 coin is the holders' (crowned).
+ */
 const STAIR: { paint: CoinPaint; mood: CoinMood; size: number }[] = [
   { paint: 'cyan', mood: 'smile', size: 58 },
   { paint: 'teal', mood: 'happy', size: 70 },
@@ -542,7 +581,7 @@ const STAIR: { paint: CoinPaint; mood: CoinMood; size: number }[] = [
 
 function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
   const t = useT();
-  const plate = usePlate(BITE_GULP_MS);
+  const plate = usePausedPlate(BITE_GULP_MS);
   const head = useReveal<HTMLDivElement>();
   const stairs = useReveal<HTMLOListElement>();
   const fee = useReveal<HTMLDivElement>();
@@ -556,7 +595,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
   return (
     <section ref={plate} className="ld-plate ld-arenas has-bite" style={biteVars(BITES.arenas)} id="arenas" aria-labelledby="ld-arenas-h">
       <BiteSeam at="arenas" />
-      <PlateLabel numeral={4} title={t('ld.ar.plate')} aside={t('ld.ar.aside')} />
+      <PlateLabel numeral={4} title={t('ld.ar.plate')} />
       <div className="ld-wrap">
         <div ref={head} className="ld-arenas__head">
           <div>
@@ -570,14 +609,33 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
           </div>
         </div>
         <ol ref={stairs} className="ld-stairs">
+          {/* free practice first, on the ground step: no ticket price, no tokens (the lobby's practice ticket) */}
+          <li className="ld-stair is-practice" style={v({ '--step': 0, '--ink-a': 'var(--linen)', '--ink-b': 'var(--linen)' })}>
+            <div className="ld-stair__coin" aria-hidden="true">
+              <span className="kb-tag ld-stair__you">{t('ld.ar.you')}</span>
+              <CoinCharacter paint="foam" mood="happy" size={48} feet ground bob />
+            </div>
+            <div className="ld-ticket">
+              <h3 className="ld-ticket__name">
+                <span className="num ld-ticket__fee">{t('ld.ar.free')}</span> <span className="ld-ticket__room">{t('ld.ar.practice')}</span>
+              </h3>
+              <span className="mono ld-ticket__stub">
+                <span className="ld-ticket__long">{t('ld.ar.practiceStub')}</span>
+                <span className="ld-ticket__short">{t('ld.ar.practiceStubShort')}</span>
+              </span>
+            </div>
+            <div className="ld-stair__step" aria-hidden="true">
+              <span className="num">01</span>
+            </div>
+          </li>
           {DEFAULT_ARENAS.map((a, i) => {
             const meta = arenaMeta(a.id);
             const look = STAIR[i % STAIR.length];
             const price = formatUsdCents(a.usdCents).replace(/\.00$/, '');
+            const step = i + 1; // the practice ticket is step 0
             return (
-              <li key={a.id} className={`ld-stair${a.holdersOnly ? ' is-holders' : ''}`} style={v({ '--step': i, '--ink-a': meta.ink, '--ink-b': meta.inkTo ?? meta.ink })}>
+              <li key={a.id} className={`ld-stair${a.holdersOnly ? ' is-holders' : ''}`} style={v({ '--step': step, '--ink-a': meta.ink, '--ink-b': meta.inkTo ?? meta.ink })}>
                 <div className="ld-stair__coin" aria-hidden="true">
-                  {i === 0 && <span className="kb-tag ld-stair__you">{t('ld.ar.you')}</span>}
                   {a.holdersOnly && (
                     <span className="ld-stair__crown">
                       <Icon name="crown" size={22} />
@@ -587,17 +645,21 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
                 </div>
                 <div className="ld-ticket">
                   <h3 className="ld-ticket__name">
-                    <span className="num ld-ticket__fee">{price}</span> <span className="ld-ticket__room">Room</span>
+                    <span className="num ld-ticket__fee">{price}</span> <span className="ld-ticket__room">{t('ld.ar.room')}</span>
                   </h3>
                   {a.holdersOnly && (
                     <p className="ld-ticket__line">
-                      <Icon name="crown" size={14} /> {t('ld.ar.holdersTag')}
+                      <Icon name="crown" size={14} /> <span className="ld-ticket__long">{t('ld.ar.holdersTag')}</span>
+                      <span className="ld-ticket__short">{t('ld.ar.holdersShort')}</span>
                     </p>
                   )}
-                  <span className="mono ld-ticket__stub">{t('ld.ar.stub')}</span>
+                  <span className="mono ld-ticket__stub">
+                    <span className="ld-ticket__long">{t('ld.ar.stub')}</span>
+                    <span className="ld-ticket__short">{t('ld.ar.stubShort')}</span>
+                  </span>
                 </div>
                 <div className="ld-stair__step" aria-hidden="true">
-                  <span className="num">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="num">{String(step + 1).padStart(2, '0')}</span>
                 </div>
               </li>
             );
@@ -607,6 +669,7 @@ function Arenas({ gameAccess }: { gameAccess: GameAccess }) {
           <div className="ld-feecard__copy">
             <h3 className="ld-feecard__t">{t('ld.ar.feeT', { fee: pct(feeBps) })}</h3>
             <p className="ld-feecard__n">{t('ld.ar.feeN')}</p>
+            <p className="ld-feecard__n">{t('ld.ar.feeHolder', { holder: configuredPerks().fee.holder })}</p>
           </div>
           <div className="ld-feecard__split">
             <p className="mono ld-feecard__cap">{t('ld.ar.feeCap')}</p>
@@ -653,7 +716,7 @@ const BUBBLES: [number, number, number, number][] = [
  * it, each with a coin that wonders until its answer opens. The scene is decoration (aria-hidden); its loops stop off
  * screen and under reduced motion.
  */
-function Faq({ handle, doors }: { handle: string; doors: Doors }) {
+function Faq({ handle, doors, gameAccess }: { handle: string; doors: Doors; gameAccess: GameAccess }) {
   const t = useT();
   const plate = usePlate(BITE_GULP_MS);
   const side = useReveal<HTMLDivElement>();
@@ -672,21 +735,37 @@ function Faq({ handle, doors }: { handle: string; doors: Doors }) {
     collab: (c: ReactNode) => <Link href="/collab">{c}</Link>,
   };
   // the team asked for the NFT's questions here (what it gives, how many, is each one different) even though the NFT
-  // section above shows them as cards. "Is the game open?" only while it is closed, the collab question only with its
-  // page; the last answer sends the visitor to the guide for every rule
+  // section above shows them as cards. The basic questions come first (open? cost? need the NFT?), then the NFT, then
+  // wallet and chain, collab and the rules. "Is the game open?" only while it is closed, "Do I need the NFT?" not while
+  // the game is open to holders only (then the answer is yes), the collab question only with its page; the last
+  // answer sends the visitor to the guide for every rule
   const perks = configuredPerks();
-  const nftVars = { supply: NFT_SUPPLY.toLocaleString('en-US'), holder: perks.fee.holder, normal: perks.fee.normal, room: perks.room ?? '', shop: perks.shopPct, extra: perks.shopExtra };
-  const asked = [1, 2, 9, 12, 10, 11, 5, 6, 7, 8].filter((n) => (n !== 9 || perks.room !== null)).filter((n) => (n !== 5 || !doors.game) && (n !== 7 || doors.collab));
+  const base = SHOP_DEFAULTS.arenaUsesPerRound;
+  const priv = perks.privateRoom;
+  const nftVars = {
+    supply: NFT_SUPPLY.toLocaleString('en-US'),
+    holder: perks.fee.holder,
+    normal: perks.fee.normal,
+    room: perks.room ?? '',
+    shop: perks.shopPct,
+    base,
+    total: base + perks.shopExtra,
+    private: priv.perk === 'free_daily' ? t('ld.faq.privFree') : t('ld.faq.privOff', { pct: priv.pct }),
+  };
+  const answer = (n: number): TKey => (n === 9 && priv.perk === 'none' ? 'ld.faq.a9none' : (`ld.faq.a${n}` as TKey));
+  const asked = [5, 6, 11, 9, 12, 10, 1, 2, 7, 8]
+    .filter((n) => ((n !== 9 && n !== 11) || perks.room !== null))
+    .filter((n) => (n !== 5 || !doors.game) && (n !== 11 || gameAccess !== 'holders') && (n !== 7 || doors.collab));
   const items: { q: string; a: ReactNode }[] = asked.map((n) => ({
     q: t(`ld.faq.q${n}` as TKey, { chain: plainChainName(activeChain().name) }),
-    a: renderRich(t(`ld.faq.a${n}` as TKey, { handle: `@${handle}`, sym: SYMBOL, chain: plainChainName(activeChain().name), ...nftVars }), tags),
+    a: renderRich(t(answer(n), { handle: `@${handle}`, sym: SYMBOL, chain: plainChainName(activeChain().name), ...nftVars }), tags),
   }));
   // re-arm when a card is remounted (its key is the question, which carries the chain's name)
   useRevealEach(list, '.ld-qa', items.map((f) => f.q).join('\n'));
   return (
     <section ref={plate} className="ld-plate ld-faq has-bite" style={biteVars(BITES.faq)} id="faq" aria-labelledby="ld-faq-h">
       <BiteSeam at="faq" />
-      <PlateLabel numeral={6} title={t('ld.faq.plate')} aside={t('ld.faq.aside')} />
+      <PlateLabel numeral={6} title={t('ld.faq.plate')} />
       <div ref={pond} className="ld-wrap ld-faq__grid">
         <div ref={side} className="ld-faq__side">
           <div>
@@ -778,7 +857,7 @@ export function Landing() {
     return () => cancelAnimationFrame(raf);
   }, []);
   return (
-    <Kb theme="paper" className="st-root ld-root">
+    <Kb theme="paper" className={`st-root ld-root${isStaticEntrance() ? ' ld-root--static' : ''}`}>
       <a className="st-skip" href="#main">
         {t('site.skip')}
       </a>
@@ -786,15 +865,15 @@ export function Landing() {
         <SeedRail />
       </SiteHeader>
       <main id="main" className="ld-main" tabIndex={-1}>
-        <PlateLabel numeral={1} title={t('ld.plate1')} aside={t('ld.plate1.aside')} className="ld-plate1" />
+        <PlateLabel numeral={1} title={t('ld.plate1')} className="ld-plate1" />
         <Hero doors={doors} gameAccess={settings.gameAccess} handle={settings.xHandle} sound={sound} />
         <Feast />
-        <Round live={doors.game && settings.gameAccess !== 'maintenance'} />
+        <Round />
         <DuskSeam />
         <Kb theme="night" className="ld-night">
           <Arenas gameAccess={doors.loaded ? settings.gameAccess : 'admins'} />
           <Nft doors={doors} />
-          <Faq handle={settings.xHandle.replace(/^@/, '')} doors={doors} />
+          <Faq handle={settings.xHandle.replace(/^@/, '')} doors={doors} gameAccess={settings.gameAccess} />
         </Kb>
       </main>
       <SiteFooter />

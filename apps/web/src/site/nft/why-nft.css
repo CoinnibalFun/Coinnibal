@@ -17,7 +17,8 @@
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  font-size: clamp(30px, 4vw, 44px);
+  /* a sub-section heading: the guide's chapter titles have the same size */
+  font-size: var(--t-h2);
   line-height: 1;
   letter-spacing: -0.02em;
   color: var(--ink);
@@ -119,9 +120,12 @@
 }
 .nf-card__t {
   grid-area: title;
-  font-size: 18px;
-  line-height: 1.25;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: var(--t-h4);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 .nf-card__n {
@@ -131,9 +135,17 @@
   color: var(--on-sticker-2);
   text-wrap: pretty;
 }
-.nf-why__note {
-  margin: 20px 0 0;
-  max-width: 70ch;
-  font-size: 14px;
-  color: var(--ink-2);
+/* two or more cards a row: the cards of a row share their three rows (picture, title, note), so every title and every
+   note of a row starts at one height (after the card's own rules, which it overrides) */
+@container (min-width: 600px) {
+  .nf-card {
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    row-gap: 8px;
+    align-items: start;
+  }
+  .nf-card__art,
+  .nf-card__big {
+    align-self: center;
+  }
 }

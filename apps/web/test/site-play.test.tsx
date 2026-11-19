@@ -23,7 +23,10 @@ describe('the /play gate', { timeout: 30_000 }, () => {
     const onAllowed = vi.fn();
     render(<PlayGate onAllowed={onAllowed} />);
     expect(await screen.findByRole('heading', { name: /The game is not open yet/ })).toBeTruthy();
-    expect(screen.getByText('The guide explains every rule.')).toBeTruthy();
+    // the launch order, in the same words as the landing's FAQ, then the guide
+    expect(screen.getByText('It opens after the token.')).toBeTruthy();
+    expect(screen.getByText('First comes the NFT mint, then the token, then the game. The guide explains every rule.')).toBeTruthy();
+    expect(document.querySelector('main .kb-plate')?.textContent).toBe('The game');
     expect(document.querySelector('main')?.textContent ?? document.body.textContent).not.toMatch(/start date|soon|until then/i);
     expect(screen.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/');
     expect(screen.getByRole('link', { name: 'Read the guide' }).getAttribute('href')).toBe('/docs');

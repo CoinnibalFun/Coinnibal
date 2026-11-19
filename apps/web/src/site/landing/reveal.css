@@ -53,6 +53,12 @@
   --bite-x: var(--bx);
   --bite-half: var(--bh);
 }
+/* a tablet: the feast bite steps right of "What is Coinnibal?" (and still clear of the hero pond's coins) */
+@media (min-width: 640px) and (max-width: 899px) {
+  .ld-plate.ld-feast {
+    --bite-x: 56%;
+  }
+}
 @media (max-width: 639px) {
   .ld-plate {
     --bite-x: var(--bxm);
@@ -67,8 +73,9 @@
 
 /* ── the bite (BiteSeam.tsx). REST STATE = the finished scar, what reduced motion sees ── */
 .ld-bite {
-  /* the dashed rule of the plate caption, where two crumbs come to rest */
-  --rule-y: 33px;
+  /* the dashed rule of the plate caption, where two crumbs come to rest: the middle of the sun tab (site.css: the
+     bar's top edge and 18 px padding, then the tab's line box, 14 px of padding and two 3 px edges) */
+  --rule-y: calc(var(--stroke) + 18px + (var(--plate-fs) * 1.05 + 20px) / 2);
   position: absolute;
   top: 0;
   left: clamp(calc(var(--bite-half) + 12px), var(--bite-x), calc(100% - var(--bite-half) - 12px));
@@ -144,7 +151,8 @@
 .ld-bite__crumb:nth-of-type(4) { --x: calc(var(--bite-half) + 20px); --y: -10px; --r: 180deg; --up: -40px; --o: 0; --k: 1; }
 @media (max-width: 639px) {
   .ld-bite {
-    --rule-y: 26px;
+    /* the phone bar: its top edge, 14 px padding, a 12 px padded tab with two 3 px edges */
+    --rule-y: calc(var(--stroke) + 14px + (var(--plate-fs) * 1.05 + 18px) / 2);
   }
   /* on a phone the resting crumbs stay inside the bite's own span, clear of the caption */
   .ld-bite__crumb:nth-of-type(1) { --x: calc(var(--bite-half) * -1 + 8px); }
@@ -279,7 +287,6 @@
   .ld-plate[data-seam='wait'] > .kb-plate::before { scale: 0 1; }
   .ld-plate[data-seam='wait'] > .kb-plate .kb-plate__title { opacity: 0; translate: -12px 0; }
   .ld-plate[data-seam='wait'] > .kb-plate .kb-plate__rule { clip-path: inset(0 100% 0 0); }
-  .ld-plate[data-seam='wait'] > .kb-plate .kb-plate__aside { opacity: 0; translate: 0 6px; }
   .ld-plate[data-seam='in'] > .kb-plate::before {
     transition: scale calc(0.64s * var(--rv-k)) var(--ease-draw);
   }
@@ -288,9 +295,6 @@
   }
   .ld-plate[data-seam='in'] > .kb-plate .kb-plate__rule {
     animation: ld-unclip calc(0.72s * var(--rv-k)) var(--ease-out) calc(var(--beat) * 2) backwards;
-  }
-  .ld-plate[data-seam='in'] > .kb-plate .kb-plate__aside {
-    transition: opacity 0.24s linear calc(var(--beat) * 5), translate 0.36s var(--ease-out) calc(var(--beat) * 5);
   }
   /* the tablecloth: Round's linen is laid left to right behind the ink roller */
   .ld-round[data-seam='wait']::before { scale: 0 1; }
@@ -404,11 +408,8 @@
       box-shadow var(--dur-state);
   }
   /* Why get the NFT (scoped: WhyNft is shared with /mint): the perk cards arrive in batches, their numbers stamp in */
-  .ld-nft__why[data-reveal='wait'] :is(.nf-why__kicker, .nf-why__note) { opacity: 0; translate: 0 var(--rv-rise); }
+  .ld-nft__why[data-reveal='wait'] .nf-why__kicker { opacity: 0; translate: 0 var(--rv-rise); }
   .ld-nft__why[data-reveal='in'] .nf-why__kicker { transition: opacity 0.24s linear, translate calc(0.5s * var(--rv-k)) var(--ease-out); }
-  .ld-nft__why[data-reveal='in'] .nf-why__note {
-    transition: opacity 0.24s linear calc(var(--beat) * 4), translate calc(0.5s * var(--rv-k)) var(--ease-out) calc(var(--beat) * 4);
-  }
   .ld-nft__why[data-reveal='wait'] .nf-why__h { opacity: 0; clip-path: inset(-0.3em -0.5em 100% -0.5em); }
   .ld-nft__why[data-reveal='in'] .nf-why__h {
     animation: ld-feed calc(0.68s * var(--rv-k)) var(--ease-paper) var(--beat) backwards, ld-fade 0.24s linear var(--beat) backwards;
@@ -471,9 +472,12 @@
   /* the SeedRail gulp */
   .ld-rail__gulp.is-gulp { animation: ld-rail-gulp 0.38s var(--ease-spring); }
   /* Plate I prints on load, while the hero sticker lands */
-  .ld-plate1 .kb-plate__title { animation: ld-in-left 0.42s var(--ease-out) 0.2s backwards; }
+  /* the title only slides (no fade): it is a large text in the first viewport, and an opacity entrance held back the
+     largest paint of a warm visit */
+  .ld-plate1 .kb-plate__title { animation: ld-slide-left 0.42s var(--ease-out) 0.2s backwards; }
   .ld-plate1 .kb-plate__rule { animation: ld-unclip 0.72s var(--ease-out) 0.27s backwards; }
-  .ld-plate1 .kb-plate__aside { animation: ld-rise 0.36s var(--ease-out) 0.55s backwards; }
+  /* the prerendered page (hydrated.ts): Plate I is printed already, like the hero card under it */
+  .ld-root--static .ld-plate1 :is(.kb-plate__title, .kb-plate__rule) { animation: none; }
 }
 
 @keyframes ld-unclip {
@@ -487,8 +491,8 @@
 @keyframes ld-fade {
   from { opacity: 0; }
 }
-@keyframes ld-in-left {
-  from { opacity: 0; translate: -12px 0; }
+@keyframes ld-slide-left {
+  from { translate: -12px 0; }
 }
 @keyframes ld-rise {
   from { opacity: 0; translate: 0 6px; }
