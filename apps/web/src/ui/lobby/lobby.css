@@ -535,13 +535,14 @@
 }
 .kl-ticket .kb-ticket__title {
   font-size: 23px;
+  /* beside the TEST badge "Test · $10 Room" takes two lines: "Test ·" over "$10 Room", never "Room" alone */
+  text-wrap: balance;
 }
+/* the meta wraps instead of losing its end ("Rookie and Pro ponds · people only" was cut to "· P…") */
 .kl-ticket .kb-ticket__meta {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 12px;
+  text-wrap: pretty;
 }
 .kl-ticket__loot {
   font-size: 12px;
@@ -568,6 +569,8 @@
   letter-spacing: 0.02em;
   text-transform: none;
   max-width: 100%;
+  /* "Joins closed · next round in 0:18" in the narrow column breaks at its dot ("in 0:18" was left alone) */
+  text-wrap: balance;
 }
 .kl-ticket__round.is-closed {
   background: var(--sun);
@@ -577,6 +580,8 @@
   letter-spacing: 0.02em;
   text-transform: none;
   color: var(--teal-ink);
+  /* the holder's line keeps "not 20%" together; the test note breaks in even lines */
+  text-wrap: balance;
 }
 .kl-ticket__flag {
   display: inline-block;

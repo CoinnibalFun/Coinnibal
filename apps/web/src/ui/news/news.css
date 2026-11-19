@@ -7,7 +7,9 @@
 .nw-page {
   max-width: 1080px;
 }
+/* four tabs: on a phone the last ones wrap onto a second row instead of scrolling out of view ("Last rounc") */
 .nw-tabs {
+  flex-wrap: wrap;
   margin-bottom: 22px;
 }
 /* the smallest phones: all three tabs in view ("Countries" was cut to "C" at the edge) */
