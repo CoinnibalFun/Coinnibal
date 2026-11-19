@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { NullChain } from '../src/chain/types';
 import { loadConfig } from '../src/config';
 import { SITE_SETTINGS_DEFAULT, type SiteSettings } from '@coinnibal/shared';
-import { acceptsEncoding, byteRange, createHttpServer, etagMatches, redactUrls } from '../src/http';
+import { acceptsEncoding, byteRange, createHttpServer, etagMatches, redactUrls, requestUrl } from '../src/http';
 
 /** The single-origin deploy (`WEB_DIST`): static files plus the SPA fallback for client routes like `/docs`. */
 describe('static web client', () => {
@@ -50,6 +50,32 @@ describe('static web client', () => {
       expect(res.headers.get('content-security-policy'), path).toContain("frame-ancestors 'none'");
       expect(await res.text(), path).toContain('<title>Coinnibal</title>');
     }
+  });
+
+  it('requestUrl: null only for a target new URL rejects', () => {
+    expect(requestUrl('//')).toBeNull();
+    expect(requestUrl('/docs?x=1')?.pathname).toBe('/docs');
+    expect(requestUrl(undefined)?.pathname).toBe('/');
+  });
+
+  it('answers a target the URL parser rejects (`//`) with a 400 instead of leaving the socket open', async () => {
+    const url = new URL(await start());
+    for (const path of ['//', '//?x=1']) {
+      const res = await new Promise<{ status: number; body: string }>((done, fail) => {
+        const r = request({ host: url.hostname, port: url.port, path, timeout: 3000 }, (m) => {
+          let body = '';
+          m.on('data', (c) => (body += c));
+          m.on('end', () => done({ status: m.statusCode ?? 0, body }));
+        });
+        r.on('timeout', () => r.destroy(new Error(`no answer for ${path}`)));
+        r.on('error', fail);
+        r.end();
+      });
+      expect(res.status, path).toBe(400);
+      expect(JSON.parse(res.body), path).toEqual({ error: 'bad_request' });
+    }
+    // a path with a double slash inside is a path, not a host: the SPA as before
+    expect((await fetch(`${url.origin}/docs//x`)).status).toBe(200);
   });
 
   it('serves hashed assets immutable and 404s missing files and API paths', async () => {
