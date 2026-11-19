@@ -372,6 +372,42 @@ body {
   color: var(--ink-2);
   font-size: var(--t-small);
 }
+/* Setup → Site pins: the .env lines and the rebuild command, to copy */
+.ad-pins__todo {
+  display: grid;
+  gap: 10px;
+}
+.ad-pins__todo > p {
+  margin: 0;
+}
+.ad-pins__steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+.ad-pins__lines {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 6px 8px 12px;
+  border: var(--stroke-sm) solid var(--sand-2);
+  border-radius: 12px;
+  background: var(--linen);
+}
+.ad-pins__lines > code {
+  flex: 1;
+  min-width: 0;
+}
+.ad-pins__line {
+  display: block;
+}
+.ad-pins__effect {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
 .ad-none {
   color: var(--ink-3);
   font-size: var(--t-small);
