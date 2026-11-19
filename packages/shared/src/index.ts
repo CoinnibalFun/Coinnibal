@@ -14,6 +14,7 @@ export * from './token';
 export * from './siwe';
 export * from './chains';
 export * from './site';
+export * from './site-pins';
 export * from './integrity';
 export * from './avatar';
 export * from './custom-rooms';

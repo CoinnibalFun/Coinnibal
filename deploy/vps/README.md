@@ -78,8 +78,8 @@ Running it again is safe.
 | `COINNIBAL_RPC_URLS` | optional: the RPCs in order, comma-separated: the Alchemy URL first, the public RPC as fallback (section 5). Unset: `https://rpc.testnet.chain.robinhood.com` |
 | `COINNIBAL_RPC_MAX_RPS` | optional: calls per second per URL, one per `COINNIBAL_RPC_URLS` entry (`25,4`); default 4 |
 | `COINNIBAL_GAME_ACCESS` | optional: `site` (the default when unset: the `/admin` → Settings switch decides), or `public`, `holders`, `admins`, `maintenance` to override that switch |
-| `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` | after the owner's deploy: the registered CoinnibalArena and CoinnibalNFT, the contracts the site trusts (below). Empty: the site signs no ticket and no mint |
-| `COINNIBAL_PIN_TOKEN` | once the game token is set on the arena: that token (empty: the site does not check the arena's token against a pin) |
+| `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT`, `COINNIBAL_PIN_TOKEN` | optional, leave empty: the site trusts the contracts the owner wallet signs in `/admin` (below). Set, a pin in the build wins over the signed one |
+| `COINNIBAL_OWNER_WALLET` | optional, leave empty: the owner wallet whose signed pins the site trusts (default `0x08b2b32E932D5f429073a441E6eFd8e3D42369b2`) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | alerts to Telegram (optional; section 7) |
 | `BACKUP_RCLONE_REMOTE` | the encrypted offsite remote, e.g. `elymum-offsite:` (optional; section 8; the name given before the rename) |
 | `GAME_WORKERS` | `5` on 8 vCPU |
@@ -102,29 +102,17 @@ them with nested interpolation (`${COINNIBAL_CHAIN_ID:-${ELYMUM_CHAIN_ID:-46630}
 `env_get_renamed` and `${COINNIBAL_X:-${ELYMUM_X:-default}}` in `lib.sh`. Renaming the keys in `.env` is optional:
 `coinnibal-compose config` shows the same values either way.
 
-**Contract pins (the site build).** The site is built with the contracts it trusts (`apps/web/src/wallet/pinned.ts`):
-`docker-compose.yml` passes `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` and `COINNIBAL_PIN_TOKEN` to the image build as
-`VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS` and `VITE_TOKEN_ADDRESS`, for the chain of `COINNIBAL_CHAIN_ID` (as
-`VITE_CHAIN_ID`). Wallets approve, pay and mint only there, whatever the server announces: a stolen admin login, or a
-server API that names other contracts, cannot point them at another contract, because a pin changes only with shell
-access to this VPS and a rebuild. The pins do not guard against someone who has that shell: the site is built and
-served on this VPS, so they could rebuild it with other pins. No chain has default pins. After the owner deploys and
-registers the contracts in `/admin` (and again once the game token is set on the arena), `/admin` → Setup → **Site
-pins** shows the lines with the registered addresses: check each one against the deploy transaction in your own wallet
-(the panel's addresses come from the server, which is what the pins guard against), set them here, then rebuild and
-restart the app:
-
-```bash
-coinnibal-compose up -d --build app
-```
-
-`update.sh` rebuilds only when the tracked branch moves, so a `.env` change alone needs this command; later builds keep
-the pins (they are read from `.env` every time). It swaps the container as soon as the image is built, which takes
-minutes, longer than the break after a bell. Once players are in the arenas, build first and swap in the break
-(section 6): `coinnibal-compose build app`, then `coinnibal-compose up -d app` in the break after a bell. Check what
-the build gets with `coinnibal-compose config | grep VITE_`.
-The same applies when moving to the mainnet: the server follows `COINNIBAL_CHAIN_ID` after `coinnibal-compose up -d
-app`, the site signs nothing there until it is rebuilt with the mainnet pins.
+**Contract pins (what the site trusts).** Wallets on the site approve, pay and mint only with the contracts the owner
+wallet signed for (`apps/web/src/wallet/pinned.ts`): after a deploy, `/admin` asks the owner for one free signed
+message naming the chain, the arena, the NFT and the token (Start → Deploy the contracts does it at its end; Setup →
+**Site pins** otherwise). The server keeps that record in `DATA_DIR/site/pins.json` and every browser checks the
+signature against the owner wallet built into the site, so a stolen admin login, or a server API that names other
+contracts, cannot point wallets at another contract. Nothing to set here and no rebuild. The pins do not guard
+against someone who has this shell: the site is built and served on this VPS. Optional override: `COINNIBAL_PIN_*`
+in `.env` pin addresses in the build itself (`docker-compose.yml` passes them as `VITE_*_ADDRESS` for the chain of
+`COINNIBAL_CHAIN_ID`); they need `coinnibal-compose up -d --build app` (once players are in the arenas: build first,
+then swap in the break after a bell, section 6). Moving to the mainnet: the owner signs the mainnet pins after the
+mainnet deploy.
 
 **Names kept from before the rename.** The server was installed under the old name, and these stay exactly as they
 are (`lib.sh` lists them): changing them moves the data. A new Docker project name means a new, empty volume (the
@@ -270,12 +258,9 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
    left out (`bash install.sh --yes --from https://<old GAME_DOMAIN>`). `--token` and `--proof` are refused. The
    leading space keeps the command out of the shell history. `coinnibal-restore --url https://<server>` takes the two
    the same way (with them on stdin, its question before it replaces a volume that holds data reads the terminal;
-   with no terminal it needs `--yes`), and both refuse a URL that is not `https://`. **It does not copy the site's
-   contract pins** (section 4: a pin changes only in this shell, never from another server's answer), so the moved
-   site signs no ticket, refund, shop payment or mint until they are back: set the `COINNIBAL_PIN_ARENA` and
-   `COINNIBAL_PIN_NFT` lines (and `COINNIBAL_PIN_TOKEN` once the game token is set) in `/opt/elymum/.env`, from your
-   password manager or `/admin` → Setup → **Site pins**, checking each address against the deploy transaction in your
-   own wallet, then run `coinnibal-compose up -d --build app`.
+   with no terminal it needs `--yes`), and both refuse a URL that is not `https://`. The owner's signed site pins
+   move with the data (`site/pins.json`). A `COINNIBAL_PIN_*` override in `.env`, if you use one, does not: set it
+   again here and run `coinnibal-compose up -d --build app`.
 
    **Behind Cloudflare** ("Cloudflare in front" below): the new server must start in Cloudflare mode, or Caddy hands
    the app Cloudflare's edge address as every player's (one set of per-IP limits for a whole Cloudflare location:
@@ -296,9 +281,9 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
 1. Pause the arena if the key may be exposed (`/admin` → Game → Pause); otherwise tickets stay safe on chain: unplayed
    ones are refunded in full by the next server, settled ones are paid, and a player can refund any ticket after 24 h.
 2. A new VPS (sections 1 to 3); stop at the settings step and put the old `.env` values back (from your password
-   manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, the site's pins
-   `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` and `COINNIBAL_PIN_TOKEN`, ...). Without the pins the new site signs no
-   ticket, refund, shop payment or mint (section 4). Behind Cloudflare also `CADDY_CONFIG=Caddyfile.cloudflare` (or
+   manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, a `COINNIBAL_PIN_*` override if you
+   use one, ...). The owner's signed site pins come back with the backup (step 3); without them the new site signs
+   no ticket, refund, shop payment or mint until the owner signs them again (section 4). Behind Cloudflare also `CADDY_CONFIG=Caddyfile.cloudflare` (or
    `--set CADDY_CONFIG=Caddyfile.cloudflare` on the install command), and "Cloudflare in front" step 8 and the step-9
    checks on the new VPS before the proxied records point at it (above).
 3. The newest backup: from the offsite copy (`rclone copy elymum-offsite:elymum-data-<newest>.tar.gz /root/`), then
@@ -322,7 +307,7 @@ All commands as root on the VPS (`sudo -i`).
 | Deploy now instead of waiting 2 minutes | `coinnibal-update` |
 | Restart the game server (in a round break) | `coinnibal-compose restart app` (any time it cashes the arenas out: prefer a break) |
 | Change a setting | `nano /opt/elymum/.env`, then `coinnibal-compose up -d app` |
-| Change a site pin (`COINNIBAL_PIN_*`) | `nano /opt/elymum/.env`, then `coinnibal-compose up -d --build app` (section 4; with players in the arenas: build first, swap in the break) |
+| Sign the site pins again | `/admin` → Setup → Site pins (no shell). A `COINNIBAL_PIN_*` override: `nano /opt/elymum/.env`, then `coinnibal-compose up -d --build app` (section 4) |
 | Backup now / log | `coinnibal-backup` / `journalctl -u elymum-backup -n 50` |
 | Restore a backup | `coinnibal-restore /opt/elymum/backups/elymum-data-YYYYmmdd-HHMM.tar.gz` |
 | Pause auto-deploy | `systemctl stop elymum-update.timer` (`start` to resume); the weekly rebuild pauses with it |

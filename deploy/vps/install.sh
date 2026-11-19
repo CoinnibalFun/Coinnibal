@@ -331,9 +331,10 @@ if [[ -n "$from_url" ]]; then
       EVM_RPC_URLS) env_set COINNIBAL_RPC_URLS "$v"; have_rpc_list=1 ;;
       EVM_RPC_URL) old_single_rpc="$v" ;;
       RPC_MAX_RPS) env_set COINNIBAL_RPC_MAX_RPS "$v" ;;
-      # never the site's contract pins (docker-compose.yml build args): a pin changes only in this shell, so a broken-into
-      # old server cannot pick the contracts the new build trusts. The server never sends them (MIGRATED in backup.ts)
-      COINNIBAL_PIN_* | ELYMUM_PIN_* | VITE_*) continue ;;
+      # never the site's contract pins or its owner wallet (docker-compose.yml build args): they change only in this
+      # shell, so a broken-into old server cannot pick what the new build trusts. The server never sends them (MIGRATED
+      # in backup.ts)
+      COINNIBAL_PIN_* | ELYMUM_PIN_* | COINNIBAL_OWNER_WALLET | VITE_*) continue ;;
       # Caddy's config (Caddyfile.cloudflare behind Cloudflare): only a file of this checkout's deploy/vps/caddy, by
       # its plain name (Caddy reads /etc/caddy/<it>; never a path out of that folder)
       CADDY_CONFIG)

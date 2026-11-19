@@ -9,6 +9,7 @@ import { describeError } from '@coinnibal/sdk';
 import { ensureChain } from '../wallet/network';
 import { connected } from '../wallet/store';
 import { NO_TEST_TOKEN_YET } from './setup';
+import { signSitePins } from './sign-pins';
 import { activeStep, arenaDeployArgs, defaultNftForm, deploySteps, loadLocalDeploys, nftDeployArgs, saveLocalDeploy, type LocalDeploys, type NftForm } from './deploy';
 import { Icon } from '../design';
 import { Addr, Advanced, Btn, Card, FormError, Input, NeedsSession, Row, useFormError, type ChainCtx } from './ui';
@@ -529,8 +530,15 @@ export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }
       call: setTokenCall(arena, token),
       ownerOf: arena,
       owner: cfg.admin,
-      note: known && token.toLowerCase() === known.toLowerCase() ? 'The token the server has registered. It can be set only once: check it against the official announcement.' : 'Not the registered token. It can be set only once: check the address against the official announcement.',
-      onDone: () => ctx.refresh(),
+      note:
+        (known && token.toLowerCase() === known.toLowerCase() ? 'The token the server has registered. It can be set only once: check it against the official announcement.' : 'Not the registered token. It can be set only once: check the address against the official announcement.') +
+        ' Then your wallet asks you to sign the site pins again (free, no transaction).',
+      onDone: async () => {
+        await ctx.refresh();
+        // the token joins the site pins: one free signature from the owner wallet
+        await signSitePins({ api: ctx.api, me: ctx.me, chainId: ctx.net.info?.id ?? null, targets: { arena, nft: ctx.net.nftAddress, token } });
+        ctx.pinsChanged?.();
+      },
     });
   };
   const run = (fn: () => Promise<void>) => {

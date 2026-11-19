@@ -5,7 +5,8 @@ import { useTokenText } from '../ui/lobby/useLobby';
 import { TOKEN_BUY_URL, tokenSteps, type TokenStepKey } from './getTokens';
 import { explorerAddress } from './links';
 import { serverChainInfo } from './network';
-import { PINS } from './pinned';
+import { useEffect, useState } from 'react';
+import { PINS, pinsFor, type BuildPins } from './pinned';
 import './get-tokens.css';
 
 const STEP_TEXT: Record<TokenStepKey, TKey> = {
@@ -24,9 +25,22 @@ const STEP_LINK: Partial<Record<TokenStepKey, TKey>> = {
 };
 
 /** The token contract a player should see in the swap: the pinned one, else (no token pin) the one the server names. */
-function tokenAddress(chainId: number | null | undefined, announced: string | null | undefined): string | null {
+function tokenAddress(chainId: number | null | undefined, announced: string | null | undefined, pins: BuildPins): string | null {
   if (chainId == null) return null;
-  return PINS.chains[chainId]?.token ?? (announced || null);
+  return pins.chains[chainId]?.token ?? (announced || null);
+}
+
+/** This site's pins of a chain (the build's until the owner's signed record is read). */
+function usePins(chainId: number | null | undefined): BuildPins {
+  const [pins, setPins] = useState<BuildPins>(PINS);
+  useEffect(() => {
+    let live = true;
+    pinsFor(chainId).then((p) => live && setPins(p), () => {});
+    return () => {
+      live = false;
+    };
+  }, [chainId]);
+  return pins;
 }
 
 /**
@@ -42,7 +56,9 @@ export function GetTokensSheet() {
   const info = serverChainInfo(chain);
   const testnet = info?.testnet ?? chain?.testnet ?? true;
   const steps = tokenSteps({ testnet, faucetUrl: chain?.faucetUrl ?? info?.faucetUrl ?? null, bridgeUrl: info?.bridgeUrl ?? null, buyUrl: TOKEN_BUY_URL });
-  const token = tokenAddress(chain?.chainId, chain?.token?.address);
+  // read only while the sheet is open
+  const pins = usePins(open ? chain?.chainId : null);
+  const token = tokenAddress(chain?.chainId, chain?.token?.address, pins);
   const tokenLink = token ? explorerAddress(token) : null;
   // an unknown network keeps the global `{chain}` (the active one), never an empty name
   const vars = { sym: tok.symbol, ...(info?.name ? { chain: info.name } : {}) };

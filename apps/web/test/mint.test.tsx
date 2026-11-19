@@ -34,7 +34,7 @@ vi.mock('../src/wallet/network', async (orig) => ({
 const nftPin = vi.hoisted(() => ({ ok: true }));
 vi.mock('../src/wallet/pinned', async (orig) => ({
   ...(await orig<typeof import('../src/wallet/pinned')>()),
-  checkNft: (_id: number | null | undefined, nft: string | null | undefined) => (nftPin.ok ? { ok: true, nft } : { ok: false, reason: 'nft_mismatch' }),
+  verifyNft: async (_id: number | null | undefined, nft: string | null | undefined) => (nftPin.ok ? { ok: true, nft } : { ok: false, reason: 'nft_mismatch' }),
 }));
 const { Mint } = await import('../src/site/mint/MintPage');
 

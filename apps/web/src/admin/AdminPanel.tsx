@@ -5,13 +5,16 @@ import type { Address, PublicClient } from 'viem';
 import { Button } from '../design';
 import type { AdminApi } from '../site/api';
 import { publicClientFor } from '../wallet/network';
+import { signedPinsFor, type SignedPins } from '../wallet/pinned';
 import { useWallet } from '../wallet/store';
 import type { ContractsRegistry, GameAccess, SiteSettings } from '@coinnibal/shared';
 import { site } from '../site/api';
 import { GameTab } from './GameTab';
-import { groupSummary, type AdminGroup } from './groups';
+import { groupSummary, isAdminView, type AdminGroup, type AdminView } from './groups';
 import { LaunchTab, type ChecklistTab } from './LaunchTab';
-import { MintTab } from './MintTab';
+import { DeployFlow } from './DeployFlow';
+import { MintSwitch, MintTab } from './MintTab';
+import { GameSwitchCard, StartScreen } from './Start';
 import { NetworkTab } from './NetworkTab';
 import { SetupTab } from './SetupTab';
 import { SummaryBar } from './SummaryBar';
@@ -22,7 +25,7 @@ import { Addr, type ChainCtx } from './ui';
 import { useAdminStatus } from './useAdminStatus';
 import './admin.css';
 
-export type ChainTab = Extract<AdminGroup, 'network' | 'setup' | 'mint' | 'game'>;
+export type ChainTab = Extract<AdminGroup, 'network' | 'setup' | 'mint' | 'game'> | AdminView;
 
 /** The runtime code hash check as a tiny verdict tag. */
 function CodeTag({ code }: { code: string | null }) {
@@ -47,14 +50,18 @@ export function AdminPanel({
   go,
   reloadNet,
   onRole,
+  token = null,
 }: {
   net: AdminNetwork;
   api: AdminApi | null;
   tab: ChainTab;
-  go: (t: ChecklistTab | 'wl') => void;
+  /** Opens a page (a drawer, a start screen action, or an old drawer id: the checklist's links). */
+  go: (t: ChecklistTab | 'wl' | string) => void;
   reloadNet: () => Promise<void>;
   /** Reports whether the connected wallet owns the registered contracts (the top bar's OWNER badge). */
   onRole?: (r: { arena: boolean | null; nft: boolean | null }) => void;
+  /** The admin session token (the start screen's feedback count). */
+  token?: string | null;
 }) {
   const me = useWallet((s) => (s.status === 'connected' ? s.address : null));
   const provider = useWallet((s) => s.current?.provider ?? null);
@@ -89,7 +96,23 @@ export function AdminPanel({
       live = false;
     };
   }, [api, tab, settingsRev]);
-  const summary = groupSummary(tab, { net, status, registry, settings: access?.settings ?? null, gameAccessEnv: access?.env ?? null });
+  // the owner's signed site pins of this chain (verified against the owner wallet this build knows)
+  const [signed, setSigned] = useState<SignedPins | null>(null);
+  const [pinsRev, setPinsRev] = useState(0);
+  useEffect(() => {
+    const id = net.info?.id;
+    if (!id) return;
+    let live = true;
+    signedPinsFor(id, { fresh: pinsRev > 0 }).then(
+      (p) => live && setSigned(p),
+      () => live && setSigned(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [net.info?.id, pinsRev]);
+  const view = isAdminView(tab);
+  const summary = view ? null : groupSummary(tab as AdminGroup, { net, status, registry, settings: access?.settings ?? null, gameAccessEnv: access?.env ?? null, signed });
   const [plan, setPlan] = useState<Plan | null>(null);
   const [log, setLog] = useState<SignedEntry[]>([]);
   const [codes, setCodes] = useState<{ arena: string | null; nft: string | null }>({ arena: null, nft: null });
@@ -116,17 +139,31 @@ export function AdminPanel({
   const nftRole = !me || !net.nftAddress || !nftOwner ? null : sameAddress(nftOwner, me);
   useEffect(() => onRole?.({ arena: arenaRole, nft: nftRole }), [onRole, arenaRole, nftRole]);
 
-  const ctx: ChainCtx = { net, status, refresh, reloadNet, me, walletChainId, client, api, open: setPlan, registry, settingsChanged: () => setSettingsRev((n) => n + 1) };
+  const ctx: ChainCtx = {
+    net,
+    status,
+    refresh,
+    reloadNet,
+    me,
+    walletChainId,
+    client,
+    api,
+    open: setPlan,
+    registry,
+    settingsChanged: () => setSettingsRev((n) => n + 1),
+    signed,
+    pinsChanged: () => setPinsRev((n) => n + 1),
+  };
 
   return (
-    <div className="ad-chain" aria-busy={loading}>
-      <SummaryBar summary={summary} />
-      {net.mainnet && (
+    <div className={`ad-chain${view ? ' ad-chain--view' : ''}`} aria-busy={loading}>
+      {summary && <SummaryBar summary={summary} />}
+      {net.mainnet && tab !== 'home' && (
         <div className="ad-mainnet" role="alert" data-testid="mainnet-banner">
           <strong>MAINNET.</strong> Every transaction signed here is final and moves real funds.
         </div>
       )}
-      {blockers.length > 0 && (
+      {blockers.length > 0 && tab !== 'home' && tab !== 'open' && (
         <div className="ad-blocked" role="alert">
           <strong>SIGNING BLOCKED.</strong>
           {blockers.map((b) => (
@@ -134,41 +171,48 @@ export function AdminPanel({
           ))}
         </div>
       )}
-      {note && <p className="ad-warn">{note}</p>}
+      {note && !view && <p className="ad-warn">{note}</p>}
       {error && !net.fake && (
         <p className="ad-err" role="alert">
           {error}
         </p>
       )}
-      <section className="ad-chainbar" aria-label="Registered contracts">
-        <dl className="ad-chainbar__list">
-          <div>
-            <dt className="mono">Chain</dt>
-            <dd className="ad-chainbar__chain">{net.info ? `${net.info.name} (${net.info.id})` : 'none'}</dd>
-          </div>
-          <div>
-            <dt className="mono">CoinnibalArena</dt>
-            <dd>
-              <Addr value={net.arenaAddress} net={net} /> <CodeTag code={codes.arena} />
-            </dd>
-          </div>
-          <div>
-            <dt className="mono">CoinnibalNFT</dt>
-            <dd>
-              <Addr value={net.nftAddress} net={net} /> <CodeTag code={codes.nft} />
-            </dd>
-          </div>
-          <div>
-            <dt className="mono">Server key</dt>
-            <dd>
-              <Addr value={net.serverKey} net={net} />
-            </dd>
-          </div>
-        </dl>
-        <Button variant="ghost" size="sm" disabled={loading} onClick={() => void refresh()} className="ad-chainbar__refresh">
-          {loading ? 'Reading…' : 'Re-read the chain'}
-        </Button>
-      </section>
+      {!view && (
+        <section className="ad-chainbar" aria-label="Registered contracts">
+          <dl className="ad-chainbar__list">
+            <div>
+              <dt className="mono">Chain</dt>
+              <dd className="ad-chainbar__chain">{net.info ? `${net.info.name} (${net.info.id})` : 'none'}</dd>
+            </div>
+            <div>
+              <dt className="mono">CoinnibalArena</dt>
+              <dd>
+                <Addr value={net.arenaAddress} net={net} /> <CodeTag code={codes.arena} />
+              </dd>
+            </div>
+            <div>
+              <dt className="mono">CoinnibalNFT</dt>
+              <dd>
+                <Addr value={net.nftAddress} net={net} /> <CodeTag code={codes.nft} />
+              </dd>
+            </div>
+            <div>
+              <dt className="mono">Server key</dt>
+              <dd>
+                <Addr value={net.serverKey} net={net} />
+              </dd>
+            </div>
+          </dl>
+          <Button variant="ghost" size="sm" disabled={loading} onClick={() => void refresh()} className="ad-chainbar__refresh">
+            {loading ? 'Reading…' : 'Re-read the chain'}
+          </Button>
+        </section>
+      )}
+
+      {tab === 'home' && <StartScreen ctx={ctx} go={go} token={token} access={access} />}
+      {tab === 'deploy' && <DeployFlow ctx={ctx} />}
+      {tab === 'open' && <GameSwitchCard ctx={ctx} />}
+      {tab === 'minting' && <MintSwitch ctx={ctx} />}
 
       {tab === 'network' && (
         <>

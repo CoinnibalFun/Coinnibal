@@ -99,7 +99,7 @@ describe('secret exports: sign the purpose-bound text, then send X-Coinnibal-Pro
     expect(api.secretProof).toHaveBeenLastCalledWith('migration');
     expect((writeText.mock.calls[0] as unknown[])[0]).toMatch(/^install --proof /);
     // the move never carries the contract pins (install.sh refuses them): the owner sets them again in the new VPS shell
-    expect(screen.getByTestId('backup-note').textContent).toMatch(/never the site pins: set those again on the new server and rebuild there/);
+    expect(screen.getByTestId('backup-note').textContent).toMatch(/the signed site pins too\)\. A COINNIBAL_PIN_\* override in \.env does not move/);
     fireEvent.click(screen.getByTestId('backup-copy'));
     await settle();
     expect(api.secretProof).toHaveBeenLastCalledWith('backup');
