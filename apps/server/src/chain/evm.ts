@@ -39,6 +39,12 @@ const REFRESH_INTERVAL_MS = 30_000;
 const SWEEP_INTERVAL_MS = 5 * 60_000;
 /** Sessions nobody plays for this long get their full entry fee back (`cancel`, no fee); `STALE_SESSION_AFTER_S` overrides it. */
 export const STALE_SESSION_AFTER_S = 15 * 60;
+/** Seat requests the server refused for its own reason are remembered this long (a ticket's whole life) ... */
+const EXCUSE_KEEP_S = 24 * 3600;
+/** ... and at most this many (oldest first). */
+const MAX_EXCUSED = 50_000;
+/** A refusal up to this long before a ticket's block time counts as after it (block times trail). */
+const EXCUSE_CLOCK_SLACK_S = 5;
 /** The arena list is re-read at most this often (settlements mark it stale; RPC errors serve the last good one). */
 export const ARENA_TTL_MS = 60_000;
 /** After a failed arena-list read the last good list is served this long before the next try. */
@@ -882,6 +888,37 @@ export class EvmChain implements ChainGateway {
   /** No-show cancels of `player` (Unix ms) since `since` (the settled log keeps 14 days). */
   noShowsSince(player: string, since: number): number[] {
     return this.settledLog.noShowsSince(player, since);
+  }
+
+  /** `player`'s latest played ticket (Unix ms; a `settle` record of the settled log, 14 days), or null. */
+  lastPlayedAt(player: string): number | null {
+    return this.settledLog.lastPlayedAt(player);
+  }
+
+  /**
+   * Seat requests the server refused for a reason of its own, by `<arenaId>:<player lower>`: the chain's clock (Unix s)
+   * of the latest. A ticket opened before then and never seated is not a no-show (`sweepStale`).
+   */
+  private readonly excused = new Map<string, number>();
+
+  /** `player` asked to sit in `arenaId` while joins were open and the server refused for its own reason (see the type). */
+  excuseNoShow(arenaId: number, player: string): void {
+    if (!isEvm(player) || !Number.isInteger(arenaId)) return;
+    const nowS = Math.floor(this.chainNow() / 1000);
+    const key = `${arenaId}:${player.toLowerCase()}`;
+    this.excused.delete(key);
+    this.excused.set(key, nowS);
+    // oldest first: entries past a ticket's longest life go, then the oldest beyond the bound
+    for (const [k, at] of this.excused) {
+      if (at >= nowS - EXCUSE_KEEP_S && this.excused.size <= MAX_EXCUSED) break;
+      this.excused.delete(k);
+    }
+  }
+
+  /** The server refused a seat request of `player` in `arenaId` for its own reason after its ticket opened (`openedAtS`). */
+  private excusedSince(arenaId: number, player: string, openedAtS: number): boolean {
+    const at = this.excused.get(`${arenaId}:${player.toLowerCase()}`);
+    return at !== undefined && at >= openedAtS - EXCUSE_CLOCK_SLACK_S;
   }
 
   /** The game token `player` holds (ledger units, rounded down): one `balanceOf` read at `normal` priority. */
@@ -1749,6 +1786,10 @@ export class EvmChain implements ChainGateway {
           const arenaOpen = !closed.all && !closed.ids.has(c.arenaId);
           if (arenaOpen && chainNowS - s.openedAt < staleAfterS) return;
           if (only.length > 0 && !only.includes(c.arenaId)) return;
+          // the player asked to sit while joins were open and the server refused for its own reason (overloaded, the
+          // journal, a re-price, the chain unreadable): not the player's doing, so not a no-show (2026-11 audit R3-M1)
+          const excused = arenaOpen && this.excusedSince(c.arenaId, c.player, s.openedAt);
+          if (excused) this.log(`chain: ${short(key)} was refused a seat by the server itself — its refund is not a no-show`);
           enqueue.push({
             kind: 'settle',
             key,
@@ -1763,7 +1804,7 @@ export class EvmChain implements ChainGateway {
             xp: 0,
             reason: 'stale',
             // never seated while its arena was open: a no-show (the join permits count them)
-            ...(arenaOpen ? { noShow: true as const } : {}),
+            ...(arenaOpen && !excused ? { noShow: true as const } : {}),
             attempts: 0,
             nextAttemptAt: now,
             createdAt: now,

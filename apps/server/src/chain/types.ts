@@ -228,6 +228,17 @@ export interface ChainGateway {
   /** Unix ms of each no-show of `player` since `since`: a ticket cancelled unseated while its arena was open. */
   noShowsSince?(player: string, since: number): number[];
   /**
+   * Unix ms of `player`'s latest played ticket (a `settle`, not a `cancel`, in the settled log: 14 days); null when it
+   * has none. A join permit's standing (`JoinPermits`).
+   */
+  lastPlayedAt?(player: string): number | null;
+  /**
+   * `player` asked to sit with its ticket of `arenaId` while joins were open, and the server refused for a reason of
+   * its own (overloaded, the journal cannot be written, a re-price, the chain could not be read): the stale sweeper
+   * does not count that ticket, if never seated, as a no-show. Absent: no such record (every unseated ticket counts).
+   */
+  excuseNoShow?(arenaId: number, player: string): void;
+  /**
    * The game token `player` holds, ledger units (rounded down; capped at the largest safe integer): one read at
    * `normal` priority. Throws `ChainBusyError` when it cannot be read. Absent when the chain is off (and on the dev
    * fake chain).

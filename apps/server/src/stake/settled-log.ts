@@ -55,6 +55,8 @@ export class SettledLog {
   private readonly byKey = new Map<string, SettledRecord>();
   /** No-show cancels by wallet (lower case): key → Unix ms. */
   private readonly noShows = new Map<string, Map<string, number>>();
+  /** The latest played ticket (`settle`) of each wallet (lower case), Unix ms; oldest-updated first. */
+  private readonly played = new Map<string, number>();
 
   constructor(
     private readonly path: string | null,
@@ -99,6 +101,13 @@ export class SettledLog {
       m.set(r.key, r.at);
       this.noShows.set(who, m);
     }
+    if (r.kind === 'settle' && r.player) {
+      const who = r.player.toLowerCase();
+      const at = Math.max(r.at, this.played.get(who) ?? -Infinity);
+      this.played.delete(who);
+      this.played.set(who, at);
+      if (this.played.size > MAX_RECORDS) this.played.delete(this.played.keys().next().value!);
+    }
     if (this.byKey.size > MAX_RECORDS) {
       const old = this.byKey.keys().next().value!;
       const gone = this.byKey.get(old);
@@ -118,6 +127,21 @@ export class SettledLog {
       else if (at < this.now() - SETTLED_KEEP_MS) m.delete(k);
     }
     return out;
+  }
+
+  /**
+   * Unix ms of `player`'s latest played ticket (a `settle` record: seated and paid out, not a `cancel`) within the last
+   * `SETTLED_KEEP_MS`; null when it has none (the join permits' standing).
+   */
+  lastPlayedAt(player: string): number | null {
+    const who = player.toLowerCase();
+    const at = this.played.get(who);
+    if (at === undefined) return null;
+    if (at < this.now() - SETTLED_KEEP_MS) {
+      this.played.delete(who);
+      return null;
+    }
+    return at;
   }
 
   private compact(): void {

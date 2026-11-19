@@ -15,17 +15,34 @@ import { Limiter } from '../net/limiter';
  *  - paid rooms are on, the arena exists and is enabled on chain, the contract is not paused, and the server does not
  *    keep the arena closed (books guard, re-price); in a holders-only arena, the wallet holds the NFT;
  *  - the wallet has no open ticket there (a ticket is resumed, never bought twice);
- *  - neither the wallet nor the network it asks from is a repeated no-show: `noShowLimit` tickets of the wallet
- *    cancelled unseated (while their arena was open) in 24 h, or 3× that many bought with permits asked from one IPv4
- *    address or IPv6 /64, or 8× from one IPv6 /48, close the permits until the oldest of them is a day old;
- *  - the networks it is asked from have fewer than their share of the arena's outstanding permits: issued there and not
- *    played yet (valid and unused, or used for a ticket that is not seated, not settled and not cancelled), at most
- *    `openPerIp` per IPv4 address (8: carrier NAT puts many players behind one), `openPerNet` per IPv6 /64 (4) and
- *    `openPerSite` per IPv6 /48 (16). Refused: `network_busy`. Without it, one /48 (or a few IPv4 addresses) could
- *    collect a permit per throwaway wallet and fill the arena's `maxSessions` with tickets nobody plays;
+ *  - the wallet is not a repeated no-show: `noShowLimit` of its tickets cancelled unseated (while their arena was
+ *    open) in 24 h close its permits until the oldest of them is a day old;
  *  - the arena's unseated tickets plus the places other new permits hold there stay under its cap (the seats a round
  *    can take, or `JOIN_PERMIT_ARENA_CAP`);
- *  - the caller's IP (and IPv6 /64 and /48) and wallet are under their request limits.
+ *  - the wallet is under its request limit.
+ *
+ * A wallet with standing (audit R3-M1) meets only those. Standing: its latest ticket of the last 14 days was played
+ * (a `settle` in the settled log, never a `cancel`) and none of its tickets was a no-show since, or it holds a Coinnibal
+ * NFT that gives no other wallet standing (one wallet per token id a day: an NFT passed from wallet to wallet gives one
+ * of them standing); either way with no no-show of its own in 24 h, and for one unplayed ticket at a time (a permit of
+ * another arena not played yet makes this one follow the rules below). It loses standing at its first no-show. So a
+ * player behind a carrier NAT, a VPN or a mobile /48 is never refused for what other wallets of that network did.
+ *
+ * A wallet without standing (a new one) also meets the network rules, which follow the network it asks from: an IPv4
+ * address or an IPv6 /64 (`net`), and its IPv4 /24 or IPv6 /48 (`site`; audit R3-M2: one cheap block of addresses is one
+ * site):
+ *  - the network is not a repeated no-show: 3× `noShowLimit` tickets bought with permits asked from one `net`, or 8×
+ *    from one `site`, cancelled unseated in 24 h close the permits asked from there until the oldest is a day old;
+ *  - the network has fewer than its share of the arena's outstanding permits: issued there and not played yet (valid
+ *    and unused, or used for a ticket that is not seated, not settled and not cancelled), plus those that bought nothing
+ *    in the last day (a dud keeps its place for a day: free permits asked again and again from one network fill only
+ *    that network's share), at most `openPerIp` per IPv4 address (8: carrier NAT puts many players behind one),
+ *    `openPerNet` per IPv6 /64 (4) and `openPerSite` per IPv4 /24 or IPv6 /48 (16). Refused: `network_busy`;
+ *  - wallets without standing together hold fewer than `freshShare` of min(cap, `maxSessions`) of the arena's
+ *    outstanding permits (half by default). Refused: `arena_busy`. However many networks they come from, new wallets
+ *    can never fill the arena: the rest stays open to players with standing;
+ *  - the wallet holds the entry fee (`no_funds`: its permit could buy nothing, and a free one must not hold a share);
+ *  - the caller's IP (and IPv6 /64, IPv4 /24, IPv6 /48) are under their request limits.
  * One live permit per wallet and arena: asking again returns the same permit while it is valid, unused and signed for
  * the arena contract in use (a new contract, registered live, starts every permit, place and share afresh).
  *
@@ -37,9 +54,10 @@ import { Limiter } from '../net/limiter';
  * read, seated or settled, or the wallet's join nonce moved (one nonce serves every arena; read at the wallet's next
  * request, and for every held place once the arena reaches its cap).
  *
- * A permit leaves its networks' share only when it is played or cannot be any more: its ticket is seated or settled
- * (a no-show included), or, read once the network is at its share (at most once per 10 s per permit), the permit is no
- * longer valid and the wallet holds no ticket there. Asking to sit, or asking again from the same wallet, frees nothing.
+ * A permit leaves its networks' share (and the new wallets') only when it is played or cannot be any more: its ticket
+ * is seated or settled (a no-show included), or, read once that share is full (once per permit after it expired), the
+ * wallet's join nonce never moved (a dud: it leaves the new wallets' share at once, its networks' a day after it was
+ * asked) or the wallet holds no ticket there. Asking to sit, or asking again from the same wallet, frees nothing.
  */
 
 export interface JoinPermitConfig {
@@ -73,8 +91,13 @@ export interface JoinPermitConfig {
   openPerIp: number;
   /** The same per IPv6 /64. 0: no limit. */
   openPerNet: number;
-  /** The same per IPv6 /48. 0: no limit. */
+  /** The same per IPv4 /24 or IPv6 /48. 0: no limit. */
   openPerSite: number;
+  /**
+   * The share of an arena's places (min(cap, `maxSessions`)) the outstanding permits of wallets without standing may
+   * hold together; at it, such a wallet gets no new permit there (`arena_busy`). 0: no limit.
+   */
+  freshShare: number;
 }
 
 export const JOIN_PERMIT_DEFAULTS: JoinPermitConfig = {
@@ -91,6 +114,9 @@ export const JOIN_PERMIT_DEFAULTS: JoinPermitConfig = {
   openPerIp: 8,
   openPerNet: 4,
   openPerSite: 16,
+  // half: a launch of new players still fills an arena within the first minutes of a round (a permit is played, seated,
+  // within about a minute, and leaves the share then), while locking players with standing out takes the other half
+  freshShare: 0.5,
 };
 
 /**
@@ -103,7 +129,7 @@ export const JOIN_PERMIT_TTL_MAX_S = JOIN_PERMIT_MAX_WINDOW_S - 300;
 const LIMIT_WINDOW_MS = 10 * 60_000;
 /** The window no-shows are counted in. */
 export const NO_SHOW_WINDOW_MS = 24 * 3600_000;
-/** No-shows per IPv4 address or IPv6 /64, and per IPv6 /48, as multiples of `noShowLimit`. */
+/** No-shows per IPv4 address or IPv6 /64, and per IPv4 /24 or IPv6 /48, as multiples of `noShowLimit`. */
 export const NET_NO_SHOW_FACTOR = 3;
 export const SITE_NO_SHOW_FACTOR = 8;
 /** A kept permit is handed out again only while it has at least this long left (the wallet needs time to sign). */
@@ -119,6 +145,15 @@ const MAX_ISSUED = 200_000;
 const MAX_NET_KEYS = 50_000;
 /** Requesters remembered per wallet, arena and nonce (a no-show of its ticket counts against each). */
 const MAX_REQUESTERS = 4;
+/** A played ticket gives its wallet standing this long (the settled log's 14 days). */
+export const PLAYED_WINDOW_MS = 14 * 24 * 3600_000;
+/** A token id gives standing to one wallet: another wallet may use it this long after that one last did. */
+export const CLAIM_MS = 24 * 3600_000;
+/** A permit that bought nothing keeps its place in its networks' shares until it is this old. */
+export const DUD_MS = 24 * 3600_000;
+const MAX_CLAIMS = 50_000;
+/** The new wallets' key in `inflight` (`<arenaId>|new`; never a network key). */
+const FRESH = 'new';
 
 export interface JoinPermitDeps {
   chain: ChainGateway;
@@ -138,6 +173,13 @@ export interface JoinPermitDeps {
   seatsPerRound: (arenaId: number) => number;
   /** Unix ms of each no-show of `wallet` (a ticket cancelled unseated while its arena was open) since `since`. */
   noShows: (wallet: string, since: number) => number[];
+  /** Unix ms of `wallet`'s latest played ticket (a `settle` of the settled log), or null. Absent: none has played. */
+  playedAt?: (wallet: string) => number | null;
+  /**
+   * The Coinnibal NFT token ids `wallet` holds (the holder index; no chain read), or null when unknown. Absent or null:
+   * no wallet has standing as a holder.
+   */
+  holderTokens?: (wallet: string) => Promise<readonly string[] | null>;
   cfg?: Partial<JoinPermitConfig>;
   /** The server clock (rate limits, held places, no-show windows). Permit deadlines use the chain's (`chainNow`). */
   now?: () => number;
@@ -157,7 +199,7 @@ export class JoinPermitFail extends Error {
   }
 }
 
-/** The network an IPv6 address is limited by (/64); null for IPv4 (one address per player there). */
+/** The network an IPv6 address is limited by (/64); null for IPv4 (an address is its own `net`). */
 export function ipv6Net(ip: string): string | null {
   const net = subnetOf(ip);
   return net.endsWith('::/64') ? net : null;
@@ -165,7 +207,9 @@ export function ipv6Net(ip: string): string | null {
 
 /**
  * Who asked for a permit, by the keys its place and no-show limits use: `net` an IPv4 address or an IPv6 /64 (one
- * provider customer usually gets a whole /64), `site` the IPv6 /48 (a larger customer's; null for IPv4).
+ * provider customer usually gets a whole /64), `site` the IPv4 /24 or the IPv6 /48 around it (a block of addresses one
+ * provider or customer hands out: a cheap VPS range, a proxy pool, a larger customer's /48). Null only for an address
+ * that is neither.
  */
 export interface Requester {
   net: string;
@@ -173,8 +217,8 @@ export interface Requester {
 }
 
 export function requesterOf(ip: string): Requester {
-  const v4 = /^(?:::ffff:)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.exec(ip);
-  if (v4) return { net: v4[1], site: null };
+  const v4 = /^(?:::ffff:)?((\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3})$/i.exec(ip);
+  if (v4) return { net: v4[1], site: `${v4[2]}.${v4[3]}.${v4[4]}.0/24` };
   const net = ipv6Net(ip);
   if (!net) return { net: ip.toLowerCase(), site: null };
   return { net, site: `${net.slice(0, -'::/64'.length).split(':').slice(0, 3).join(':')}::/48` };
@@ -228,7 +272,15 @@ interface Issued {
   deadlineS: number;
   /** It counts against the share of every network in `by`: not played, settled or found unused yet. */
   open: boolean;
-  /** Server clock (Unix ms) of the last read of its ticket at a network's share (0: never). */
+  /**
+   * Issued to a wallet with standing: it counts in no network's share and not in the new wallets' share, and it is
+   * that wallet's one unplayed ticket with standing.
+   */
+  exempt: boolean;
+  /**
+   * Server clock (Unix ms) of the last read of its ticket at a share (0: never; Infinity: its ticket was found, bought
+   * and not seated, and it is never read again).
+   */
   checkedAt: number;
 }
 
@@ -255,8 +307,17 @@ export class JoinPermits {
   private readonly openBy = new Map<string, Set<string>>();
   /** The re-read of a network's outstanding permits running now, by `<arenaId>|<requester key>`. */
   private readonly sharesChecking = new Map<string, Promise<number>>();
-  /** Permits being prepared now, by `<arenaId>|<requester key>`: they count in the share (a burst passes it together). */
+  /**
+   * Permits being prepared now, by `<arenaId>|<requester key>` (and `<arenaId>|new` for wallets without standing): they
+   * count in the share (a burst passes it together).
+   */
   private readonly inflight = new Map<string, number>();
+  /** The open records of wallets without standing, by arena: the new wallets' share of its outstanding permits. */
+  private readonly freshOpen = new Map<number, Set<string>>();
+  /** Issue times (Unix ms) of the permits that bought nothing, by `<arenaId>|<requester key>`: they keep a place a day. */
+  private readonly duds = new Map<string, number[]>();
+  /** The wallet (lower case) each NFT token id gives standing to, and when it last did (Unix ms). */
+  private readonly claims = new Map<string, { wallet: string; at: number }>();
   /** The arena contract (`<chainId>:<address>`) the permits, places and shares are for; null: none seen yet. */
   private contract: string | null = null;
 
@@ -308,6 +369,92 @@ export class JoinPermits {
   }
 
   /**
+   * `wallet`'s standing: `played` (its latest ticket of the last 14 days was played, and none was a no-show since),
+   * `holder` (it holds an NFT that gives no other wallet standing), or null; never with a no-show of its own in 24 h.
+   * Memory only (the settled log, the holder index): asked before the request limits.
+   */
+  async standing(walletIn: string): Promise<'played' | 'holder' | null> {
+    const wallet = getAddress(walletIn);
+    const now = this.now();
+    const own = this.d.noShows(wallet, now - PLAYED_WINDOW_MS);
+    const lastNoShow = own.reduce((a, b) => Math.max(a, b), -Infinity);
+    if (lastNoShow >= now - NO_SHOW_WINDOW_MS) return null;
+    const played = this.d.playedAt?.(wallet) ?? null;
+    if (played !== null && played >= now - PLAYED_WINDOW_MS && played > lastNoShow) return 'played';
+    if (!this.d.holderTokens) return null;
+    const tokens = await this.d.holderTokens(wallet).catch(() => null);
+    return tokens && tokens.length > 0 && this.claim(wallet.toLowerCase(), tokens, now) ? 'holder' : null;
+  }
+
+  /**
+   * One of `tokens` gives `wallet` standing: one it used before, else one no other wallet used in the last day (an NFT
+   * passed from wallet to wallet gives standing to one of them a day).
+   */
+  private claim(wallet: string, tokens: readonly string[], now: number): boolean {
+    let pick = tokens.find((t) => this.claims.get(t)?.wallet === wallet);
+    pick ??= tokens.find((t) => {
+      const c = this.claims.get(t);
+      return !c || c.at < now - CLAIM_MS;
+    });
+    if (pick === undefined) return false;
+    this.claims.delete(pick);
+    this.claims.set(pick, { wallet, at: now });
+    while (this.claims.size > MAX_CLAIMS) this.claims.delete(this.claims.keys().next().value!);
+    return true;
+  }
+
+  /**
+   * Another arena holds `wallet`'s unplayed ticket (or valid permit) issued with standing: standing covers one at a
+   * time, so a wallet that played once cannot hold every arena's tickets past the network rules. A permit of the
+   * current nonce that expired bought nothing, and a seated ticket is played: neither counts (and both leave).
+   */
+  private exemptElsewhere(wallet: string, arenaId: number, nonce: bigint, nowS: number): boolean {
+    for (const id of this.arenaIds) {
+      if (id === arenaId) continue;
+      const key = `${id}:${wallet}`;
+      const rec = this.issued.get(key);
+      if (!rec || !rec.open || !rec.exempt) continue;
+      if ((BigInt(rec.nonce) >= nonce && rec.deadlineS < nowS) || this.seatedIn(id).has(wallet)) {
+        this.close(key);
+        continue;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /** The no-show block of the networks `ip` is in, for a wallet without standing; throws `no_show`. */
+  private netNoShowCheck(ip: string, by: Requester, wallet: string): void {
+    const until = this.netNoShowUntil(ip);
+    if (until === null) return;
+    this.d.log?.(`permits: ${by.net}${by.site ? ` (${by.site})` : ''} has too many no-shows today — refused ${wallet}`);
+    throw new JoinPermitFail(403, 'no_show', 'Too many tickets bought from your network went back unplayed today, so new tickets pause for a while.', until);
+  }
+
+  /** The permit of `key` (`rec`) bought nothing: it keeps its place in each of its networks' shares for a day. */
+  private dud(key: string, rec: Issued): void {
+    if (rec.exempt) return;
+    const arenaId = key.slice(0, key.indexOf(':'));
+    const now = this.now();
+    for (const k of requesterKeys(rec.by)) {
+      const at = `${arenaId}|${k}`;
+      const live = this.dudTimes(at, now);
+      if (live.length === 0 && this.duds.size >= MAX_NET_KEYS) this.duds.delete(this.duds.keys().next().value!);
+      this.duds.set(at, [...live, rec.at]);
+    }
+  }
+
+  /** The issue times of the permits of `<arenaId>|<requester key>` that bought nothing, within the last day. */
+  private dudTimes(at: string, now: number): number[] {
+    const times = this.duds.get(at);
+    if (!times) return [];
+    const live = times.filter((t) => t >= now - DUD_MS);
+    if (live.length === 0) this.duds.delete(at);
+    else if (live.length < times.length) this.duds.set(at, live);
+    return live;
+  }
+
+  /**
    * An arena's unseated tickets (open on chain, not seated in a room, not being paid out), the places other new
    * permits hold there, and its cap. A permit whose ticket is seated is done (dropped here).
    */
@@ -334,8 +481,12 @@ export class JoinPermits {
       }
       held++;
     }
-    const cap = this.cfg.arenaCap > 0 ? this.cfg.arenaCap : Math.max(1, this.d.seatsPerRound(arenaId));
-    return { used: unseated + held, cap, unseated, held };
+    return { used: unseated + held, cap: this.capOf(arenaId), unseated, held };
+  }
+
+  /** An arena's cap of unseated tickets plus held places: `JOIN_PERMIT_ARENA_CAP`, else the seats a round can take. */
+  private capOf(arenaId: number): number {
+    return this.cfg.arenaCap > 0 ? this.cfg.arenaCap : Math.max(1, this.d.seatsPerRound(arenaId));
   }
 
   /** The wallets (lower case) seated in a room of `arenaId` now. */
@@ -492,24 +643,39 @@ export class JoinPermits {
 
   /**
    * Remembers who asked for a permit of `nonce` (a no-show of its ticket counts against them). A permit issued, or
-   * handed out again, is outstanding: it counts against the share of every network that asked for it.
+   * handed out again, is outstanding: it counts against the share of every network that asked for it, and (`exempt`
+   * false: a wallet without standing) in the new wallets' share. An earlier permit of the same nonce that expired
+   * bought nothing (the nonce would have moved): a dud.
    */
-  private record(key: string, permit: JoinPermit, by: Requester, held: boolean): void {
+  private record(key: string, permit: JoinPermit, by: Requester, held: boolean, exempt: boolean): void {
     const nonce = permit.nonce;
     const was = this.issued.get(key);
     const same = !!was && was.nonce === nonce;
+    if (was && same && was.open && was.deadlineS < this.chainNowS()) this.dud(key, was);
     if (was) this.close(key);
     const list = same ? was.by.filter((b) => b.net !== by.net) : [];
     list.push(by);
     this.issued.delete(key);
-    const rec: Issued = { nonce, held: (same && was.held) || held, at: this.now(), by: list.slice(-MAX_REQUESTERS), deadlineS: permit.deadline, open: true, checkedAt: 0 };
+    const rec: Issued = { nonce, held: (same && was.held) || held, at: this.now(), by: list.slice(-MAX_REQUESTERS), deadlineS: permit.deadline, open: true, exempt, checkedAt: 0 };
     this.issued.set(key, rec);
     this.index(key, rec, true);
   }
 
-  /** Adds `key` to (or removes it from) the outstanding permits of every network of `rec`. */
+  /**
+   * Adds `key` to (or removes it from) the outstanding permits of every network of `rec` and the new wallets' share of
+   * its arena (a permit issued with standing is in neither).
+   */
   private index(key: string, rec: Issued, add: boolean): void {
+    if (rec.exempt) return;
     const arenaId = key.slice(0, key.indexOf(':'));
+    const fresh = this.freshOpen.get(Number(arenaId));
+    if (add) {
+      if (fresh) fresh.add(key);
+      else this.freshOpen.set(Number(arenaId), new Set([key]));
+    } else if (fresh) {
+      fresh.delete(key);
+      if (fresh.size === 0) this.freshOpen.delete(Number(arenaId));
+    }
     for (const k of requesterKeys(rec.by)) {
       const at = `${arenaId}|${k}`;
       const set = this.openBy.get(at);
@@ -531,7 +697,10 @@ export class JoinPermits {
     this.index(key, rec, false);
   }
 
-  /** The share of an arena's outstanding permits each network of `by` may have (an IPv4 address, an IPv6 /64, a /48). */
+  /**
+   * The share of an arena's outstanding permits each network of `by` may have (an IPv4 address or an IPv6 /64, and its
+   * IPv4 /24 or IPv6 /48).
+   */
   private shares(by: Requester): { key: string; max: number }[] {
     const out: { key: string; max: number }[] = [];
     const net = by.net.endsWith('::/64') ? this.cfg.openPerNet : this.cfg.openPerIp;
@@ -557,38 +726,85 @@ export class JoinPermits {
     return n;
   }
 
-  /** The first network of `by` at its share of `arenaId`'s outstanding permits; null when every one is under it. */
+  /**
+   * The first network of `by` at its share of `arenaId`'s outstanding permits (and the permits asked from it that
+   * bought nothing in the last day); null when every one is under it.
+   */
   private fullShare(arenaId: number, by: Requester, except: string): string | null {
     const seated = this.seatedIn(arenaId);
-    return this.shares(by).find((s) => this.outstanding(arenaId, s.key, except, seated) >= s.max)?.key ?? null;
+    const now = this.now();
+    return this.shares(by).find((s) => this.outstanding(arenaId, s.key, except, seated) + this.dudTimes(`${arenaId}|${s.key}`, now).length >= s.max)?.key ?? null;
+  }
+
+  /** How many of an arena's outstanding permits the new wallets' share holds at most (Infinity: no limit). */
+  private freshCap(arena: ChainArena): number {
+    const f = this.cfg.freshShare;
+    if (!(f > 0)) return Infinity;
+    const places = Math.min(this.capOf(arena.id), arena.maxSessions > 0 ? arena.maxSessions : Infinity);
+    return Math.max(1, Math.ceil(Math.min(1, f) * places));
+  }
+
+  /** The outstanding permits of wallets without standing in `arenaId`, other than `except`'s (a seated one leaves). */
+  private freshOutstanding(arenaId: number, except: string): number {
+    let n = this.inflight.get(`${arenaId}|${FRESH}`) ?? 0;
+    const set = this.freshOpen.get(arenaId);
+    if (!set) return n;
+    const seated = this.seatedIn(arenaId);
+    for (const key of [...set]) {
+      if (key === except) continue;
+      if (seated.has(walletOf(key))) this.close(key);
+      else n++;
+    }
+    return n;
+  }
+
+  /** At a network's share: `recheckOpen` of its outstanding permits in `arenaId`. */
+  private recheckShare(arenaId: number, net: string, except: string): Promise<number> {
+    const at = `${arenaId}|${net}`;
+    return this.recheckOpen(arenaId, at, this.openBy.get(at) ?? [], except);
   }
 
   /**
-   * At a network's share: reads the ticket of each outstanding permit of `net` in `arenaId` that has expired and was
-   * not read in the last 10 s. One whose wallet holds no ticket there bought none (or its ticket is settled): it leaves
-   * the share. A permit still valid counts unread: unused, or its ticket bought a moment ago (the contract checks the
-   * deadline at the join, so an expired permit buys nothing more). Returns how many left.
+   * At a share (`at`: a network's, or the new wallets' of the arena): reads each of `keys`' outstanding permits that
+   * has expired and was not read in the last 10 s. The wallet's join nonce first: unmoved, the permit bought nothing
+   * (a dud: it leaves the new wallets' share, and keeps its place in its networks' for a day). Moved: its ticket there;
+   * none (settled, or the nonce bought a ticket elsewhere) and it leaves; one (bought, not seated) and it stays until
+   * seated or settled, never read again. So each permit is read once after it expires, however full the shares stay. A
+   * permit still valid counts unread: unused, or its ticket bought a moment ago (the contract checks the deadline at
+   * the join, so an expired permit buys nothing more). Returns how many left.
    */
-  private recheckShare(arenaId: number, net: string, except: string): Promise<number> {
-    const at = `${arenaId}|${net}`;
+  private recheckOpen(arenaId: number, at: string, keys: Iterable<string>, except: string): Promise<number> {
     const running = this.sharesChecking.get(at);
     if (running) return running;
     const chain = this.d.chain;
     const now = this.now();
     const nowS = this.chainNowS();
-    const todo: string[] = [];
-    for (const key of this.openBy.get(at) ?? []) {
+    const todo: [string, Issued][] = [];
+    for (const key of keys) {
       const rec = this.issued.get(key);
-      if (key === except || !rec || rec.deadlineS >= nowS || now - rec.checkedAt < RECHECK_MS) continue;
+      if (key === except || !rec || !rec.open || rec.deadlineS >= nowS || now - rec.checkedAt < RECHECK_MS) continue;
       rec.checkedAt = now;
-      todo.push(key);
+      todo.push([key, rec]);
     }
     if (todo.length === 0) return Promise.resolve(0);
     const hasTicket = async (wallet: string) => (chain.hasOpenTicket ? chain.hasOpenTicket(arenaId, wallet) : (await chain.getSession(arenaId, wallet)) !== null);
     const run = Promise.all(
-      todo.map(async (key) => {
+      todo.map(async ([key, rec]) => {
         try {
-          if (await hasTicket(getAddress(walletOf(key)))) return 0;
+          const wallet = getAddress(walletOf(key));
+          const nonce = chain.joinNonce ? await chain.joinNonce(wallet) : null;
+          if (this.issued.get(key) !== rec || !rec.open) return 0;
+          if (nonce !== null && nonce <= BigInt(rec.nonce)) {
+            this.dud(key, rec);
+            this.close(key);
+            return 1;
+          }
+          if (await hasTicket(wallet)) {
+            // its ticket, bought and not seated yet: it stays until seated or settled, and is never read again
+            rec.checkedAt = Infinity;
+            return 0;
+          }
+          if (this.issued.get(key) !== rec) return 0;
           this.close(key);
           return 1;
         } catch {
@@ -616,6 +832,8 @@ export class JoinPermits {
       this.holds.clear();
       this.issued.clear();
       this.openBy.clear();
+      this.freshOpen.clear();
+      this.duds.clear();
       this.arenaIds.clear();
     }
     this.contract = c;
@@ -629,12 +847,18 @@ export class JoinPermits {
     const now = this.now();
     const net = ipv6Net(ip);
     const by = requesterOf(ip);
+    // standing first (memory only): a wallet with standing is limited per wallet, never by what its network did
+    const standing = await this.standing(wallet);
     // every request counts (a kept permit handed out again too): each one may read the chain
-    const ipOk = this.ipLimit.allow(ip, now);
-    const netOk = net === null || this.netLimit.allow(net, now);
-    const siteOk = by.site === null || this.siteLimit.allow(by.site, now);
     const walletOk = this.walletLimit.allow(lower, now);
-    if (!ipOk || !netOk || !siteOk || !walletOk) throw new JoinPermitFail(429, 'rate_limited', 'Too many ticket requests. Wait a few minutes, then try again.');
+    let netsOk = true;
+    if (standing === null) {
+      const ipOk = this.ipLimit.allow(ip, now);
+      const netOk = net === null || this.netLimit.allow(net, now);
+      const siteOk = by.site === null || this.siteLimit.allow(by.site, now);
+      netsOk = ipOk && netOk && siteOk;
+    }
+    if (!netsOk || !walletOk) throw new JoinPermitFail(429, 'rate_limited', 'Too many ticket requests. Wait a few minutes, then try again.');
     if (!(await this.d.gameOpenFor(wallet).catch(() => false))) throw new JoinPermitFail(403, 'game_closed', 'The game is not open to this wallet yet.');
     if (this.d.isBanned?.(wallet)) throw new JoinPermitFail(403, 'banned', 'This wallet may not play paid rooms.');
     const chain = this.d.chain;
@@ -672,11 +896,7 @@ export class JoinPermits {
         until,
       );
     }
-    const netUntil = this.netNoShowUntil(ip);
-    if (netUntil !== null) {
-      this.d.log?.(`permits: ${by.net}${by.site ? ` (${by.site})` : ''} has too many no-shows today — refused ${wallet}`);
-      throw new JoinPermitFail(403, 'no_show', 'Too many tickets bought from your network went back unplayed today, so new tickets pause for a while.', netUntil);
-    }
+    if (standing === null) this.netNoShowCheck(ip, by, wallet);
     const key = `${arenaId}:${lower}`;
     try {
       const open = chain.hasOpenTicket ? await chain.hasOpenTicket(arenaId, wallet) : (await chain.getSession(arenaId, wallet)) !== null;
@@ -698,28 +918,43 @@ export class JoinPermits {
     this.nonceIs(lower, nonce);
     const nonceStr = nonce.toString();
     const nowS = this.chainNowS();
+    // standing covers one unplayed ticket at a time: with another arena's waiting, this one follows the network rules
+    const exempt = standing !== null && !this.exemptElsewhere(lower, arenaId, nonce, nowS);
+    if (standing !== null && !exempt) this.netNoShowCheck(ip, by, wallet);
     const kept = this.kept.get(key);
     // one live permit per wallet and arena: the same one again while it is valid, unused and signed for the arena
-    // contract in use (it holds no new place, and stays one permit in its networks' share)
+    // contract in use (it holds no new place, and stays one permit in its networks' share, as it was issued)
     if (kept && kept.permit.nonce === nonceStr && kept.permit.deadline - nowS >= REUSE_MIN_LEFT_S && signedFor(kept.permit, st)) {
-      this.record(key, kept.permit, by, false);
+      const rec = this.issued.get(key);
+      this.record(key, kept.permit, by, false, rec && rec.nonce === nonceStr ? rec.exempt : exempt);
       return kept.permit;
     }
-    // each network it is asked from has a share of the arena's outstanding permits (unused, or a ticket not played yet)
-    let full = this.fullShare(arenaId, by, key);
-    if (full !== null) {
-      const left = await Promise.all(this.shares(by).map((sh) => this.recheckShare(arenaId, sh.key, key)));
-      if (left.some((n) => n > 0)) full = this.fullShare(arenaId, by, key);
+    const reserved: string[] = [];
+    if (!exempt) {
+      // each network it is asked from has a share of the arena's outstanding permits (unused, or a ticket not played
+      // yet, and those that bought nothing in the last day); at a full one, its expired permits are read again
+      if (this.fullShare(arenaId, by, key) !== null) await Promise.all(this.shares(by).map((sh) => this.recheckShare(arenaId, sh.key, key)));
+      // and wallets without standing, from wherever, hold at most their share of the arena's places
+      const freshMax = this.freshCap(arena);
+      const freshAt = `${arenaId}|${FRESH}`;
+      if (this.freshOutstanding(arenaId, key) >= freshMax) await this.recheckOpen(arenaId, freshAt, this.freshOpen.get(arenaId) ?? [], key);
+      // decided from here to the reservation without an await: requests running meanwhile see each other
+      const full = this.fullShare(arenaId, by, key);
+      if (full !== null) {
+        this.d.log?.(`permits: ${full} has its share of arena #${arenaId}'s outstanding permits — refused ${wallet}`);
+        throw new JoinPermitFail(409, 'network_busy', 'Enough tickets for this room were asked from your network and are not played yet. Try again in a few minutes.');
+      }
+      const fresh = this.freshOutstanding(arenaId, key);
+      if (fresh >= freshMax) {
+        this.d.log?.(`permits: new wallets hold their share of arena #${arenaId} (${fresh}/${freshMax} outstanding permits) — refused ${wallet}`);
+        throw new JoinPermitFail(409, 'arena_busy', 'Many new players are buying tickets for this room right now. Try again in a minute.');
+      }
+      reserved.push(...this.shares(by).map((sh) => `${arenaId}|${sh.key}`), freshAt);
     }
-    if (full !== null) {
-      this.d.log?.(`permits: ${full} has its share of arena #${arenaId}'s outstanding permits — refused ${wallet}`);
-      throw new JoinPermitFail(409, 'network_busy', 'Enough tickets for this room were asked from your network and are not played yet. Try again in a few minutes.');
-    }
-    // counted at once, before anything is awaited: requests from the same network running meanwhile see it
-    const reserved = this.shares(by).map((sh) => `${arenaId}|${sh.key}`);
+    // counted at once, before anything is awaited
     for (const at of reserved) this.inflight.set(at, (this.inflight.get(at) ?? 0) + 1);
     try {
-      return await this.grant(wallet, arena, key, nonce, nowS, by, now);
+      return await this.grant(wallet, arena, key, nonce, nowS, by, now, exempt);
     } finally {
       for (const at of reserved) {
         const n = (this.inflight.get(at) ?? 1) - 1;
@@ -729,8 +964,8 @@ export class JoinPermits {
     }
   }
 
-  /** The arena's cap, the place the permit holds, the signature: the rest of `issue`. */
-  private async grant(wallet: string, arena: ChainArena, key: string, nonce: bigint, nowS: number, by: Requester, now: number): Promise<JoinPermit> {
+  /** The arena's cap, the entry fee of a wallet without standing, the place the permit holds, the signature. */
+  private async grant(wallet: string, arena: ChainArena, key: string, nonce: bigint, nowS: number, by: Requester, now: number, exempt: boolean): Promise<JoinPermit> {
     const arenaId = arena.id;
     const lower = wallet.toLowerCase();
     const nonceStr = nonce.toString();
@@ -742,6 +977,17 @@ export class JoinPermits {
       this.d.log?.(`permits: arena #${arenaId} at its cap (${used}/${cap} unseated tickets + held places) — refused ${wallet}`);
       throw new JoinPermitFail(409, 'arena_busy', 'This room has as many tickets waiting for a seat as a round can take. Try again in a minute.');
     }
+    // a wallet without standing holds the entry fee: its permit could buy nothing now, and a free one must not hold a
+    // share (a read that fails is busy, never "no tokens")
+    let funded: boolean | null = null;
+    if (!exempt && chain.tokenBalance) {
+      try {
+        funded = (await chain.tokenBalance(wallet)) >= arena.entryFee;
+      } catch (err) {
+        throw busy(err);
+      }
+      if (!funded) throw new JoinPermitFail(409, 'no_funds', 'This wallet does not hold the entry fee for this room yet. Get tokens first, then buy the ticket.');
+    }
     // a place for the approval and the join: the first of this nonce to hold one, a wallet that can pay, a network
     // under its share of places
     const rec = this.issued.get(key);
@@ -749,7 +995,7 @@ export class JoinPermits {
     if (this.cfg.holdS > 0 && !(rec && rec.nonce === nonceStr && rec.held)) {
       const mine = this.heldBy(by, now);
       const under = mine.net < this.cfg.holdsPerNet && (by.site === null || mine.site < this.cfg.holdsPerSite);
-      hold = under && (await this.funded(wallet, arena.entryFee));
+      hold = under && (funded ?? (await this.funded(wallet, arena.entryFee)));
     }
     const deadline = nowS + this.cfg.ttlS;
     let permit: JoinPermit;
@@ -762,7 +1008,7 @@ export class JoinPermits {
     this.kept.set(key, { permit, issuedS: nowS });
     this.holds.delete(key);
     if (hold) this.holds.set(key, { arenaId, wallet: lower, until: now + this.cfg.holdS * 1000, by, checkedAt: 0 });
-    this.record(key, permit, by, hold);
+    this.record(key, permit, by, hold, exempt);
     return permit;
   }
 }
