@@ -113,4 +113,41 @@ describe('layout css', () => {
     expect(hud).not.toMatch(/openModal\('shop'\)/);
     expect(hud).not.toMatch(/hud-shop/);
   });
+
+  it('hangs toasts over the sheets and under the connection banner, a short note on one line in a game', () => {
+    const story = sheets.find((s) => s.file.endsWith('storybook.css'))!.css;
+    const conn = sheets.find((s) => s.file.endsWith('ui/game/connection.css'))!.css;
+    const z = (css: string, sel: string) => Number(/z-index:\s*(\d+)/.exec(new RegExp(`\\n${sel.replace(/\./g, '\\.')} \\{[^}]*\\}`).exec(css)![0])![1]);
+    // the play-test's "Added: +3 Magnet, …" hung dimmed under the shop's scrim, its tape under the sheet's corner
+    expect(z(story, '.kb-toasts')).toBeGreaterThan(z(story, '.kb-sheet-layer'));
+    expect(z(story, '.kb-toasts')).toBeLessThan(z(conn, '.g-conn'));
+    // "You are invisible for 10 s." printed "s." alone on a second line over the coin
+    expect(/\n\.kb-toasts\.kb-toasts--game \{[^}]*\}/.exec(story)![0]).toMatch(/width: min\(400px,/);
+    expect(/\n\.kb-toast__title \{[^}]*\}/.exec(story)![0]).toMatch(/text-wrap: balance;/);
+    expect(/\n\.kb-receipt__title \{[^}]*\}/.exec(story)![0]).toMatch(/text-wrap: balance;/);
+  });
+
+  it('keeps the shop cart over the packs: only a pack with its note open rides above it', () => {
+    const shop = sheets.find((s) => s.file.endsWith('ui/shop/shop.css'))!.css;
+    expect(/\n\.sh-cart \{[^}]*\}/.exec(shop)![0]).toMatch(/position: sticky;[^}]*z-index: 2;/);
+    // a pack under the pointer (or with its + focused) covered the cart's total
+    expect(shop).not.toMatch(/\.sh-pack:hover|\.sh-pack:focus-within/);
+    expect(shop).toMatch(/\.sh-pack:has\(\.sh-info:hover, \.sh-info:focus-within, \.sh-info\.is-open\) \{\s*z-index: 3;/);
+  });
+
+  it('wraps the labels that carry information instead of cutting them', () => {
+    const lobby = sheets.find((s) => s.file.endsWith('ui/lobby/lobby.css'))!.css;
+    const game = sheets.find((s) => s.file.endsWith('ui/game/game.css'))!.css;
+    const news = sheets.find((s) => s.file.endsWith('ui/news/news.css'))!.css;
+    // "Rookie and Pro ponds · people only" (cut to "· P…"), a private room's "29:32 left" (cut to "29:32 L…")
+    for (const block of [/\n\.kl-ticket \.kb-ticket__meta \{[^}]*\}/.exec(lobby)![0], /\n\.g-pond__label \{[^}]*\}/.exec(game)![0]]) {
+      expect(block).not.toMatch(/text-overflow: ellipsis|white-space: nowrap/);
+      expect(block).toMatch(/text-wrap: (pretty|balance);/);
+    }
+    // the final board's kills column holds its heading (at 36 px "KILLS" ran into "PAYOUT")
+    const cols = /\n\.g-board__row\.has-value \{[^}]*grid-template-columns: ([^;]+);/.exec(game)![1].split(/\s+(?![^(]*\))/);
+    expect(Number.parseInt(cols[3], 10)).toBeGreaterThanOrEqual(44);
+    // four standings tabs: a phone wraps the last ones instead of scrolling "Last rounds" out of view
+    expect(/\n\.nw-tabs \{[^}]*\}/.exec(news)![0]).toMatch(/flex-wrap: wrap;/);
+  });
 });

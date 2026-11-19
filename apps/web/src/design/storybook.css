@@ -1103,6 +1103,8 @@ h2,
   font-size: 26px;
   line-height: 1;
   letter-spacing: -0.015em;
+  /* a title that needs two lines splits in even halves ("COINNIBAL · / 11:33 ROUND", not "ROUND" alone) */
+  text-wrap: balance;
 }
 .kb-receipt__meta {
   font-size: var(--t-micro);
@@ -1322,7 +1324,9 @@ h2,
 /* ── Toast ────────────────────────────────────────────────────────────── */
 .kb-toasts {
   position: fixed;
-  z-index: 60;
+  /* over the sheets (80): a slip often answers what was done in one ("Added", "Ticket ready"), it must not hang
+     dimmed under the scrim; under the connection banner (90), which comes first */
+  z-index: 85;
   /* below the status bar / notch, clear of a landscape phone's rounded corner */
   top: calc(18px + env(safe-area-inset-top, 0px));
   right: calc(18px + env(safe-area-inset-right, 0px));
@@ -1349,13 +1353,14 @@ h2,
     display: none;
   }
 }
-/* in a game the top-right corner belongs to the leaderboard: slips hang under the weight sticker */
+/* in a game the top-right corner belongs to the leaderboard: slips hang under the weight sticker, wide enough
+   that a power-up's note ("Limit reached for this round.") keeps one line over the coin */
 .kb-toasts.kb-toasts--game {
   top: calc(168px + env(safe-area-inset-top, 0px));
   right: auto;
   left: 50%;
   transform: translateX(-50%);
-  width: min(340px, calc(100vw - 32px));
+  width: min(400px, calc(100vw - 32px));
 }
 @media (max-width: 639px) {
   .kb-toasts {
@@ -1402,8 +1407,10 @@ h2,
   font-weight: 800;
   font-size: 18px;
   line-height: 1.15;
-  /* long errors (hashes, addresses, 16-letter names) wrap inside the slip, at most five lines */
+  /* long errors (hashes, addresses, 16-letter names) wrap inside the slip, at most five lines; a two-line note
+     breaks in even halves, never leaving "s." or "round." alone on the second */
   overflow-wrap: anywhere;
+  text-wrap: balance;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 5;
@@ -1497,6 +1504,8 @@ h2,
   font-size: var(--t-label);
   color: var(--teal-ink);
   margin-bottom: 6px;
+  /* a phone's kicker takes two lines: never "ROOM" alone under "… · $1" */
+  text-wrap: pretty;
 }
 /* a bottom sheet has a grip, not tape: its kicker lines up with the title */
 .kb-sheet.is-bottom .kb-sheet__kicker {
