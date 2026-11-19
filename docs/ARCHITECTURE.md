@@ -220,12 +220,14 @@ has more bots than its setting, nor more playing than the setting minus its peop
   5 minutes it reads ETH/USD (Hyperliquid's `allMids`) and re-prices to `MINT_USD_CENTS` when off by more than 2 %,
   only after two readings agree within 3 %, at most ±20 % per update, always inside the bounds.
 - **Sign-in (SIWE, EIP-4361):** `/api/auth/nonce` issues the message (domain = the `PUBLIC_URL` host, the server's
-  chain id); nonces are single use, 10 minutes, at most 24 unused per client and 4 per client and address (never
-  per address alone: another client's requests never evict the nonce the owner is signing); an IPv6 client counts as
+  chain id); nonces are single use, 10 minutes, at most 24 unused per client (expired ones never count) and 4 per
+  client and address (never per address alone: another client's requests never evict the nonce the owner is
+  signing); an IPv6 client counts as
   its /64 here and in every HTTP limit (`net/ip-key.ts`). An EOA signature is checked locally; the ERC-1271 / 6492
   smart-wallet check through the RPC runs within a small budget of its own (`SMART_WALLET_CHECKS`: 2 at once, 0.5 a
   second server-wide, 4 per client and 8 per IPv6 /48 in 10 minutes; a check unanswered in 10 s gives its place
-  back), only for an address that holds code or a signature with the ERC-6492 suffix (`eth_getCode` at low priority,
+  back), only for an address that holds code or a signature with the ERC-6492 or ERC-8010 suffix (a wallet not
+  deployed yet, an EIP-7702 account not delegated yet) (`eth_getCode` at low priority,
   cached, a budget of its own; an address it cannot read right now is checked anyway). A smart wallet that signed in before from the same network (an IPv4 address, an IPv6
   /48) has a reserve beside it (`SMART_WALLET_RESERVE`, kept in `DATA_DIR/auth-smart-wallets.json`), so a flood of
   garbage signatures cannot lock its owner out. Past the budget a sign-in is "busy, sign again in a moment" (no nonce

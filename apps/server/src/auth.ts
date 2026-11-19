@@ -20,7 +20,7 @@ export const MAX_NONCES = 10_000;
  * the address). Never per address alone: anyone may ask for nonces for any address, and must not evict its owner's.
  */
 export const MAX_NONCES_PER_ADDRESS = 4;
-/** Outstanding nonces per client (IP): beyond it `issueNonce` refuses (null), so one client cannot fill the pool. */
+/** Outstanding (unexpired) nonces per client (IP): beyond it `issueNonce` refuses (`NonceLimitError`), so one client cannot fill the pool. */
 export const MAX_NONCES_PER_CLIENT = 24;
 /** Wrong signatures a nonce survives; at this many it is gone (ask for a new one). */
 export const MAX_NONCE_FAILURES = 3;
@@ -44,14 +44,20 @@ export const SMART_WALLET_CHECKS = { inFlight: 2, burst: 4, perSec: 0.5, perClie
 export const SMART_WALLET_RESERVE = { inFlight: 2, burst: 4, perSec: 0.25, perPair: 4, perWallet: 8, windowMs: 10 * 60_000, ttlMs: 90 * 24 * 60 * 60_000, max: 5_000 } as const;
 /**
  * Garbage aimed at a plain account (an EOA) stays out of the smart-wallet budget: a signature without the ERC-6492
- * suffix (a wallet not deployed yet) is checked on chain only when the address holds code. The code check
- * (`eth_getCode`, low RPC priority) is cached `codeTtlMs` (no code: `noCodeTtlMs`; at most `max` addresses) and has a
- * budget of its own: `burst` then `perSec` server-wide, `perClient` per client in `windowMs`, `timeoutMs` each. Past
- * it (or unanswered), the address is taken as possibly a contract: the smart-wallet budget decides.
+ * suffix (a wallet not deployed yet) or the ERC-8010 one (an EIP-7702 account not delegated yet) is checked on chain
+ * only when the address holds code. The code check (`eth_getCode`, low RPC priority) is cached `codeTtlMs` (no code:
+ * `noCodeTtlMs`; at most `max` addresses) and has a budget of its own: `burst` then `perSec` server-wide, `perClient`
+ * per client in `windowMs`, `timeoutMs` each. Past it (or unanswered), the address is taken as possibly a contract: the
+ * smart-wallet budget decides.
  */
 export const CODE_CHECKS = { burst: 8, perSec: 1, perClient: 8, windowMs: 10 * 60_000, timeoutMs: 3_000, codeTtlMs: 60 * 60_000, noCodeTtlMs: 10 * 60_000, max: 10_000 } as const;
 /** The magic suffix of an ERC-6492 signature (a counterfactual smart wallet: deployed by the check itself). */
 const ERC6492_SUFFIX = '6492649264926492649264926492649264926492649264926492649264926492';
+/**
+ * The magic suffix of an ERC-8010 signature (ox `SignatureErc8010.magicBytes`): an EIP-7702 account (Porto-style) not
+ * delegated yet, which holds no code; viem's `verifyMessage` checks it with the delegation it carries.
+ */
+const ERC8010_SUFFIX = '8010801080108010801080108010801080108010801080108010801080108010';
 /** What a busy sign-in answers (WebSocket `rate_limited`, HTTP 429). */
 export const SIGN_IN_BUSY_MESSAGE = 'Sign-in is busy right now. Sign again in a moment.';
 
@@ -137,7 +143,7 @@ export interface IssuedNonce {
   issuedAt: string;
 }
 
-/** On-chain check for smart-wallet signatures (ERC-1271 / ERC-6492); EOAs never need it. */
+/** On-chain check for smart-wallet signatures (ERC-1271 / ERC-6492 / ERC-8010); EOAs never need it. */
 export type OnChainVerifier = (address: string, message: string, signature: string) => Promise<boolean>;
 /** Whether an address holds code (`eth_getCode`): a smart wallet, never a plain account. */
 export type CodeCheck = (address: string) => Promise<boolean>;
@@ -252,6 +258,8 @@ export class Auth {
     const checksummed = checksumAddress(address);
     if (!checksummed) throw new Error('invalid address');
     this.prune(now);
+    // the client's own expired nonces never count (a quiet server's pool is not pruned: cancelled prompts, closed pages)
+    this.dropExpired(this.byClient.get(client), now);
     if ((this.byClient.get(client)?.size ?? 0) >= MAX_NONCES_PER_CLIENT) throw new NonceLimitError();
     // one client keeps a few per address (two tabs, a retry), never thousands
     const mine = this.byClientAddress.get(`${client}|${checksummed}`);
@@ -295,6 +303,12 @@ export class Auth {
       set?.delete(nonce);
       if (set && set.size === 0) map.delete(key);
     }
+  }
+
+  /** Drops the expired nonces of one index set (a client's: at most `MAX_NONCES_PER_CLIENT` entries). */
+  private dropExpired(set: Set<string> | undefined, now: number): void {
+    if (!set) return;
+    for (const nonce of [...set]) if ((this.nonces.get(nonce)?.expires ?? -Infinity) < now) this.dropNonce(nonce);
   }
 
   /** The pool is full: the oldest nonce of the network (`group`) that holds the most goes (the globally oldest when nobody holds many). */
@@ -344,8 +358,9 @@ export class Auth {
   /**
    * `message` was signed by `address`: an EOA locally (no RPC), else a smart wallet through the chain. `from`: who
    * asked (a sign-in); its smart-wallet check runs within `SMART_WALLET_CHECKS` (or the reserve of a known smart
-   * wallet), and only for an address that may be a contract (`CODE_CHECKS`). Null: an admin's proof, which only a
-   * signed-in admin can send. Throws `SignInBusyError` when the check cannot run now.
+   * wallet), and only for an address that may be a contract (`CODE_CHECKS`) or a signature with the ERC-6492 / ERC-8010
+   * suffix. Null: an admin's proof, which only a signed-in admin can send. Throws `SignInBusyError` when the check
+   * cannot run now.
    */
   async signedBy(address: string, message: string, signature: string, from: SignInClient | null = null): Promise<boolean> {
     if (typeof signature !== 'string' || !/^0x[0-9a-fA-F]{2,4096}$/.test(signature)) return false;
@@ -355,8 +370,11 @@ export class Auth {
     const onChain = this.onChain;
     if (!onChain) return false;
     if (from === null) return onChain(a, message, signature).catch(() => false);
-    // a plain account's wrong signature never reaches the chain (a wallet not deployed yet signs with the 6492 suffix)
-    if (!signature.toLowerCase().endsWith(ERC6492_SUFFIX) && (await this.mayBeContract(a, from.client)) === false) return false;
+    // a plain account's wrong signature never reaches the chain; a wallet without code yet signs with a suffix that
+    // says so: ERC-6492 (deployed by the check itself) or ERC-8010 (an EIP-7702 delegation not made yet)
+    const sig = signature.toLowerCase();
+    const codeless = sig.endsWith(ERC6492_SUFFIX) || sig.endsWith(ERC8010_SUFFIX);
+    if (!codeless && (await this.mayBeContract(a, from.client)) === false) return false;
     const b = this.smartBudget(a, from);
     if (!b) throw new SignInBusyError();
     const ok = await this.runSmartCheck(b, () => onChain(a, message, signature));
