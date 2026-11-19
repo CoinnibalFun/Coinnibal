@@ -8,7 +8,7 @@ import { DeployTab } from '../src/admin/DeployTab';
 import { launchChecklist } from '../src/admin/LaunchTab';
 import { mainnetChecklist } from '../src/admin/NetworkTab';
 import { resolveNetwork } from '../src/admin/net';
-import { PIN_REBUILD, PIN_VPS_KEY, pinReport, pinSummary, registeredPinReport } from '../src/admin/pins';
+import { PIN_REBUILD, PIN_VPS_KEY, pinReport, pinSummary, pinTodoLine, registeredPinReport } from '../src/admin/pins';
 import { PinsCard } from '../src/admin/PinsCard';
 import { NO_TEST_TOKEN_YET } from '../src/admin/setup';
 import { SetupTab } from '../src/admin/SetupTab';
@@ -79,6 +79,12 @@ describe('site pins against the registered contracts', () => {
     expect(after.ok).toBe(false);
     expect(after.todo.map((x) => x.kind)).toEqual(['token']);
     expect(after.envLines.at(-1)).toBe(`COINNIBAL_PIN_TOKEN=${TOKEN}`);
+    // the token's name in mid-sentence is lower case; it opens a sentence only when it comes first
+    expect(pinTodoLine(after)).toBe('The game token is not pinned.');
+    const none = pinReport({ chainId: TESTNET, arena: ARENA, nft: NFT, token: TOKEN }, fresh);
+    expect(pinTodoLine(none)).toBe('CoinnibalArena is not pinned; CoinnibalNFT is not pinned; the game token is not pinned.');
+    expect(pinSummary(none)).toMatch(/^Not pinned in this build: CoinnibalArena, CoinnibalNFT, the game token\. Setup → Site pins/);
+    expect(pinTodoLine(pinReport({ chainId: TESTNET, arena: ARENA, nft: NFT, token: TOKEN }, buildPins({ arena: ARENA, nft: NFT, token: TOKEN })))).toBeNull();
     expect(PIN_REBUILD).toBe('coinnibal-compose up -d --build app');
     expect(PIN_VPS_KEY).toEqual({ arena: 'COINNIBAL_PIN_ARENA', nft: 'COINNIBAL_PIN_NFT', token: 'COINNIBAL_PIN_TOKEN' });
   });
@@ -87,6 +93,9 @@ describe('site pins against the registered contracts', () => {
     const r = pinReport({ chainId: TESTNET, arena: ARENA, nft: NFT, token: null }, buildPins({ arena: OTHER, nft: NFT }));
     expect(r.rows.find((x) => x.kind === 'arena')).toMatchObject({ state: 'differs', pinned: OTHER });
     expect(pinSummary(r)).toMatch(/^Pinned to another address: CoinnibalArena\./);
+    const token = pinReport({ chainId: TESTNET, arena: ARENA, nft: NFT, token: TOKEN }, buildPins({ arena: ARENA, nft: NFT, token: OTHER }));
+    expect(pinSummary(token)).toMatch(/^Pinned to another address: the game token\./);
+    expect(pinTodoLine(token)).toBe('The game token is pinned to another address.');
   });
 
   it('a broken pin, a build for another chain, the local node, and nothing to compare', () => {
@@ -174,6 +183,13 @@ describe('Setup → Site pins', () => {
     expect(todo.textContent).toContain(`VITE_ARENA_ADDRESS=${ARENA}`);
     expect(screen.getByText(/The game token gets its line here once it is set on the arena/)).toBeTruthy();
     expect(within(todo).getAllByRole('button', { name: /Copy the (lines|command)/ })).toHaveLength(3);
+  });
+
+  it('the token set and nothing pinned: the row label is capitalised, the red line names the token in lower case', () => {
+    ui(<PinsCard ctx={ctxOf({ status: status({ token: TOKEN }) })} pins={buildPins({})} />);
+    expect(screen.getByTestId('site-pins-todo').textContent).toContain('CoinnibalArena is not pinned; CoinnibalNFT is not pinned; the game token is not pinned.');
+    expect(screen.getByText('The game token')).toBeTruthy();
+    expect(screen.queryByText(/The game token gets its line here/)).toBeNull();
   });
 
   it('sits in Setup once the contracts are registered (this build pins nothing in tests)', () => {

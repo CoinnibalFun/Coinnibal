@@ -1,5 +1,5 @@
 import type { BuildPins } from '../wallet/pinned';
-import { PIN_BUILD_OUTSIDE, PIN_LABEL, PIN_REBUILD, chainLabel, pinEffect, registeredPinReport } from './pins';
+import { PIN_BUILD_OUTSIDE, PIN_LABEL, PIN_REBUILD, chainLabel, pinEffect, pinTodoLine, registeredPinReport } from './pins';
 import { Addr, Card, CopyButton, Row, type ChainCtx } from './ui';
 
 /** Lines to copy: one per line, with a copy button for all of them. */
@@ -29,12 +29,13 @@ export function PinsCard({ ctx, pins }: { ctx: ChainCtx; pins?: BuildPins }) {
   if (r.ok === null) return null;
   const tokenSet = r.rows.some((x) => x.kind === 'token');
   const otherBuild = r.chainId !== null && r.buildChainId !== r.chainId;
+  const todoLine = pinTodoLine(r);
   return (
     <Card
       title="Site pins"
       id="site-pins"
       kicker="The contracts the site trusts"
-      lede="Wallets on this site approve, pay and mint only with the contracts the site was built with, whatever the server announces: a stolen admin login or a broken-into server cannot point them elsewhere. So a pin changes only on the server, with a rebuild, never from this panel."
+      lede="Wallets on this site approve, pay and mint only with the contracts the site was built with, whatever the server announces: a stolen admin login, or a server API that names other contracts, cannot point them elsewhere. A pin changes only with shell access to the VPS and a rebuild, never from this panel."
     >
       <dl className="ad-kv" data-testid="site-pins">
         {r.rows.map((x) => {
@@ -57,11 +58,7 @@ export function PinsCard({ ctx, pins }: { ctx: ChainCtx; pins?: BuildPins }) {
       ) : (
         <div className="ad-pins__todo" data-testid="site-pins-todo">
           {r.invalid.length > 0 && <p className="ad-bad">{r.invalid.map((x) => `${x.env} (${x.key} on the VPS)`).join(', ')} of this build is not an address: the site signs nothing until it is fixed.</p>}
-          {r.todo.length > 0 && (
-            <p className="ad-bad">
-              {r.todo.map((x) => `${x.name} is ${x.state === 'missing' ? 'not pinned' : 'pinned to another address'}`).join('; ')}.
-            </p>
-          )}
+          {todoLine && <p className="ad-bad">{todoLine}</p>}
           {otherBuild && <p className="ad-note">This site was built for {chainLabel(r.buildChainId)}; the server is on {chainLabel(r.chainId!)}. The rebuild builds it for the server&apos;s chain.</p>}
           <p className="ad-warn">
             <strong>Check each address against the deploy transaction in your own wallet before you paste it.</strong> The addresses here come from the server, which is exactly what the pins guard against.

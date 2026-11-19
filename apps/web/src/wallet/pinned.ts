@@ -4,8 +4,9 @@ import { getAddress, isAddress, type Address, type PublicClient } from 'viem';
 
 /**
  * The contracts this build trusts, pinned per chain at build time. A player's wallet only ever approves tokens to,
- * or calls, the arena pinned here, whatever address the game server announces: a server that was broken into (or a
- * man in the middle on its API) could otherwise point every wallet at a contract that drains it.
+ * or calls, the arena pinned here, whatever address the game server announces: a server API that was broken into (or
+ * a man in the middle on it) could otherwise point every wallet at a contract that drains it. The pins do not guard
+ * against someone with the VPS shell, which builds and serves this site.
  *
  * - `VITE_ARENA_ADDRESS`, `VITE_NFT_ADDRESS`, `VITE_TOKEN_ADDRESS` pin the contracts of the build's chain
  *   (`VITE_CHAIN_ID`, default Robinhood Chain Testnet). On the VPS they come from `COINNIBAL_PIN_ARENA`,
