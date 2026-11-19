@@ -1983,7 +1983,7 @@ body {
   border: var(--stroke-xs) solid var(--outline);
   border-radius: 8px;
   background: var(--white);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2052,6 +2052,9 @@ body {
 @media (max-width: 900px) {
   .ad-rail__start {
     margin-bottom: 0;
+  }
+  .ad-body.ad-body--simple {
+    padding-top: 20px;
   }
 }
 

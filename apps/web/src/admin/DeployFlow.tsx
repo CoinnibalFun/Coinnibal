@@ -10,7 +10,7 @@ import { sendWithWallet, txErrorText, type TxPhase } from '../wallet/tx';
 import { arenaDeployArgs, defaultNftForm, loadLocalDeploys, nftDeployArgs, saveLocalDeploy, type LocalDeploys } from './deploy';
 import { deployFlowSteps, flowAsksLeft, flowContracts, nextFlowStep, type FlowStep } from './flow';
 import { chainBlockers } from './net';
-import { pinReport } from './pins';
+import { pinReport, pinsSigned } from './pins';
 import { sendPlan, type Plan } from './plan';
 import { setupSteps } from './setup';
 import { signSitePins } from './sign-pins';
@@ -71,7 +71,7 @@ export function DeployFlow({ ctx, onDone }: { ctx: ChainCtx; onDone?: () => void
     const cfg = status?.arena?.config ?? null;
     const pins = pinReport({ chainId, arena: registry?.arena?.address, nft: registry?.nft?.address, token: cfg?.token ?? null }, PINS, signed);
     const setup = status?.arena && cfg ? setupSteps({ status }, { openMint: false }) : [];
-    const steps = deployFlowSteps({ chainId, mainnet: ctx.net.mainnet, registry, local, status, setup, pinsOk: pins.ok });
+    const steps = deployFlowSteps({ chainId, mainnet: ctx.net.mainnet, registry, local, status, setup, pinsOk: pinsSigned(pins) });
     return { steps, registry, local, status };
   };
 

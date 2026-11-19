@@ -143,6 +143,14 @@ export function pinTargets(net: AdminNetwork, status: StatusSnapshot | null): { 
   return { arena: net.arenaAddress, nft: net.nftAddress, token: addr(token) };
 }
 
+/**
+ * Every registered contract is pinned to its own address: the deploy flow's last step is done. The local node's "may
+ * run unpinned" does not count here, so the flow asks for the signature there too.
+ */
+export function pinsSigned(r: PinReport): boolean {
+  return r.rows.length > 0 && r.invalid.length === 0 && r.rows.every((x) => x.state === 'match');
+}
+
 /** The checklist line's detail: what the site trusts, or what is missing and how to fix it (pure, tested). */
 export function pinSummary(r: PinReport): string {
   if (r.chainId === null) return 'No chain.';

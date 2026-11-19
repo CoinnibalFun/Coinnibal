@@ -7,7 +7,7 @@ import type { Pins } from '../wallet/pinned';
 import { loadLocalDeploys } from './deploy';
 import { deployFlowSteps } from './flow';
 import type { AdminNetwork } from './net';
-import { registeredPinReport } from './pins';
+import { pinsSigned, registeredPinReport } from './pins';
 import { setupSteps } from './setup';
 import { SwitchRow } from './GameTab';
 import { Card, FormError, type ChainCtx } from './ui';
@@ -143,7 +143,7 @@ export function StartScreen({ ctx, go, token, access }: { ctx: ChainCtx; go: (pa
     local,
     status: ctx.status,
     setup: ctx.status?.arena && cfg ? setupSteps({ status: ctx.status }, { openMint: false }) : [],
-    pinsOk: pins.ok,
+    pinsOk: pinsSigned(pins),
   });
   const input: StartInput = {
     net: ctx.net,

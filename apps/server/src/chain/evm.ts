@@ -447,7 +447,7 @@ export class EvmChain implements ChainGateway {
       this.updateStakeEnabled();
     }
     if (!this.arena) {
-      this.warn('no-arena', 'chain: waiting for contracts — no arena registered yet (deploy and register it in /admin → Setup); practice only', 30 * 60_000);
+      this.warn('no-arena', 'chain: waiting for contracts — no arena registered yet (/admin → Deploy the contracts); practice only', 30 * 60_000);
       return;
     }
     if (this.arenaCode !== 'ok') {
