@@ -8,6 +8,8 @@ import { signOut } from '../site/session';
 import { secretErrorText, walletProofSigner, withSecretProof, type ProofSigner } from './secrets';
 import { NetPill } from './NetPill';
 import type { AdminNetwork } from './net';
+import { PIN_REBUILD, registeredPinReport } from './pins';
+import type { BuildPins } from '../wallet/pinned';
 import { Addr, Btn, Card, Input, Mark, NeedsSession, Row, type ChainCtx } from './ui';
 
 /** Below this the server key gets a "fund it" hint (a settlement costs a little gas). */
@@ -63,22 +65,24 @@ export interface MainnetStep {
  * The mainnet launch, in order, with the exact steps (pure, tested). On a testnet every step is
  * still to do (they are checked once the server follows the mainnet RPC).
  */
-export function mainnetChecklist(net: AdminNetwork, status: StatusSnapshot | null): MainnetStep[] {
+export function mainnetChecklist(net: AdminNetwork, status: StatusSnapshot | null, pins?: BuildPins): MainnetStep[] {
   const on = net.mainnet;
   const a = status?.arena ?? null;
   const cfg = a?.config ?? null;
+  const pinned = registeredPinReport(net, status, pins);
   const nft = status?.nft?.state ?? null;
   const when = (v: boolean | null | undefined): boolean | null => (on ? (v ?? null) : false);
   return [
     // /opt/elymum: the live server's install directory, kept from before the rename (deploy/vps/lib.sh)
-    { id: 'rpc', label: 'Point the server at the mainnet (COINNIBAL_CHAIN_ID and COINNIBAL_RPC_URLS)', detail: '/opt/elymum/.env on the VPS → COINNIBAL_CHAIN_ID=4663 and COINNIBAL_RPC_URLS=<Alchemy URL>,https://rpc.mainnet.chain.robinhood.com, then coinnibal-compose up -d app. The server follows that chain; testnet records stay on file.', ok: on, where: 'Server' },
+    { id: 'rpc', label: 'Point the server at the mainnet (COINNIBAL_CHAIN_ID and COINNIBAL_RPC_URLS)', detail: '/opt/elymum/.env on the VPS → COINNIBAL_CHAIN_ID=4663 and COINNIBAL_RPC_URLS=<Alchemy URL>,https://rpc.mainnet.chain.robinhood.com, then coinnibal-compose up -d app. The server follows that chain; testnet records stay on file. The site keeps its testnet pins until the pin step below rebuilds it.', ok: on, where: 'Server' },
     { id: 'access', label: 'Set Game access explicitly', detail: 'The site settings carry over from testnet: check that Who may play in Game is Admins before anything else opens. The game opens last (the final step).', ok: null, where: 'Game' },
     { id: 'fund', label: `Fund the server key with ${GAS_SYMBOL}`, detail: 'It sends every settlement; a little gas lasts a long time.', ok: when(a?.serverBalance != null ? a.serverBalance >= LOW_SERVER_GAS : null), where: 'Server' },
     { id: 'arena', label: 'Deploy CoinnibalArena from the owner wallet', detail: 'Setup → the deploy wizard. No address to type; it registers with the server by itself (code hash, owner and settler checked).', ok: when(!!net.arenaAddress && a?.code === 'ok'), where: 'Setup' },
     { id: 'nft', label: 'Deploy CoinnibalNFT from the owner wallet', detail: 'Setup → the deploy wizard, right after the arena. Treasury = you, base URI = this site.', ok: when(!!net.nftAddress && status?.nft?.code === 'ok'), where: 'Setup' },
+    { id: 'pins', label: 'Pin the mainnet contracts in the site build', detail: `Setup → Site pins: check each address against the deploy transaction in your own wallet, set the COINNIBAL_PIN_* lines in /opt/elymum/.env, then ${PIN_REBUILD}. Until then the site signs nothing on the mainnet (the mint page included). Again for the token once it is set.`, ok: when(pinned.ok), where: 'Server' },
     { id: 'allowlist', label: 'Build the mainnet allowlist and publish its root', detail: 'Import the testnet holders into the WL first (Mint), then build and publish.', ok: when(nft ? nft.root !== `0x${'0'.repeat(64)}` : null), where: 'Mint' },
     { id: 'mint', label: 'Open the mint (Allowlist, then Public)', detail: 'Mint → the phase switch, with “Activate the game for holders” left unchecked. The launch order: the NFT mint, then the token, then the game.', ok: when(nft ? nft.phaseName !== 'closed' : null), where: 'Mint' },
-    { id: 'token', label: 'Set the game token on the arena', detail: 'Once the token is launched on Pons, and only the real token: Setup → Set the game token, entered by hand and typed twice. The server registers no token before the arena uses it (TOKEN_ADDRESS names one only on a server outside Docker).', ok: when(cfg ? !!cfg.token : null), where: 'Setup' },
+    { id: 'token', label: 'Set the game token on the arena', detail: `Once the token is launched on Pons, and only the real token: Setup → Set the game token, entered by hand and typed twice. The server registers no token before the arena uses it (TOKEN_ADDRESS names one only on a server outside Docker). Then pin it: COINNIBAL_PIN_TOKEN (Setup → Site pins) and ${PIN_REBUILD}.`, ok: when(cfg ? !!cfg.token : null), where: 'Setup' },
     { id: 'arenas', label: 'Finish setup: the arenas, the holder perks and the holders-only $10 Room', detail: 'Setup → Finish setup, one button: your wallet confirms each step.', ok: when(cfg ? (a?.arenas.length ?? 0) >= 4 && !!cfg.holderNft : null), where: 'Setup' },
     { id: 'game', label: 'Open the game', detail: 'Game → who may play: holders, then everyone when you are ready.', ok: null, where: 'Game' },
   ];

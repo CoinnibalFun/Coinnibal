@@ -1,5 +1,6 @@
 import { testTokenRefusal } from '@coinnibal/sdk/ops';
 import { DeployTab, RegisterExisting, SetTokenForm, TestTokenCard, registeredToken } from './DeployTab';
+import { PinsCard } from './PinsCard';
 import { QuickSetup } from './QuickSetup';
 import { setupSteps } from './setup';
 import { HolderPerksCard, HoldersOnlyCard, TestTokenAdminCard } from './SetupExtras';
@@ -26,8 +27,10 @@ export function setupLayout(ctx: Pick<ChainCtx, 'net' | 'status' | 'registry'>):
 }
 
 /**
- * `/admin → Setup`. Contracts registered: Finish setup first (every missing owner step in one go),
- * and every manual control and address override in ONE collapsed "Advanced" section at the bottom.
+ * `/admin → Setup`. Contracts registered: Finish setup first (every missing owner step in one go), the game token or
+ * TestToken card when Finish setup cannot set the token, Site pins (the site build must trust the registered
+ * contracts: the `/opt/elymum/.env` lines and the rebuild), and every manual control and address override in ONE
+ * collapsed "Advanced" section at the bottom.
  * Nothing deployed yet (a fresh chain, mainnet day): the deploy wizard, which asks for no address.
  */
 export function SetupTab({ ctx }: { ctx: ChainCtx }) {
@@ -46,6 +49,7 @@ export function SetupTab({ ctx }: { ctx: ChainCtx }) {
       <QuickSetup ctx={ctx} />
       {tokenCard && <SetTokenForm ctx={ctx} />}
       {testTokenCard && <TestTokenCard ctx={ctx} />}
+      <PinsCard ctx={ctx} />
       <Advanced title="Advanced: manual controls" testId="setup-advanced" section>
         <p className="ad-note">Finish setup does all of this for you. These are the same steps one by one, and the places to override an address.</p>
         <DeployTab ctx={ctx} advanced />

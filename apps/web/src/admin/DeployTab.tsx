@@ -8,6 +8,7 @@ import type { Address, Hash } from 'viem';
 import { describeError } from '@coinnibal/sdk';
 import { ensureChain } from '../wallet/network';
 import { connected } from '../wallet/store';
+import { NO_TEST_TOKEN_YET } from './setup';
 import { activeStep, arenaDeployArgs, defaultNftForm, deploySteps, loadLocalDeploys, nftDeployArgs, saveLocalDeploy, type LocalDeploys, type NftForm } from './deploy';
 import { Icon } from '../design';
 import { Addr, Advanced, Btn, Card, FormError, Input, NeedsSession, Row, useFormError, type ChainCtx } from './ui';
@@ -77,7 +78,13 @@ export function DeployTab({ ctx, advanced = false }: { ctx: ChainCtx; advanced?:
               id="deploy-token-note"
               kicker={kicker(n)}
               tone="quiet"
-              lede={net.mainnet ? 'The game token card above sets it: the token launched on Pons, typed twice.' : 'Finish setup (top of Setup) sets it, or the game token card in this section with one confirmation.'}
+              lede={
+                net.mainnet
+                  ? 'The game token card above sets it: the token launched on Pons, typed twice.'
+                  : status?.testToken?.address
+                    ? 'Finish setup (top of Setup) sets it, or the game token card in this section with one confirmation.'
+                    : NO_TEST_TOKEN_YET
+              }
             />
           ) : (
             <SetTokenForm ctx={ctx} kicker={kicker(n)} />
@@ -117,7 +124,7 @@ function DoneCard({ ctx }: { ctx: ChainCtx }) {
     { name: 'CoinnibalNFT', address: ctx.net.nftAddress, code: ctx.status?.nft?.code },
   ];
   return (
-    <Card title="The ring is built." id="deploy-done" kicker="All seven steps" tone="done" lede="Both contracts are live and registered, the token is set and the four arenas exist. Network (the launch checklist) shows what is left: the allowlist, the mint and who may play.">
+    <Card title="The ring is built." id="deploy-done" kicker="All seven steps" tone="done" lede="Both contracts are live and registered, the token is set and the four arenas exist. Network (the launch checklist) shows what is left: the site pins (Site pins, above), the allowlist, the mint and who may play.">
       <ul className="ad-registered">
         {rows.map((r) => (
           <li key={r.name}>
