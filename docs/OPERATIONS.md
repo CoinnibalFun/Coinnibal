@@ -147,9 +147,14 @@ public info API (`GAS_PRICE_URL`). The UI always shows the ETH amount with its U
   emblem can be passed from wallet to wallet in seconds (or flash-borrowed). So at the seat of a **holder ticket** (a
   holders-only arena, or a ticket bought at the holder fee rates) the server re-reads the holding fresh and binds the
   ticket to one of the wallet's token ids (from the NFT's `Transfer` logs, `DATA_DIR/chains/<id>/emblem-claims.json`)
-  until it is settled: a token id serves one open holder ticket at a time. An extra ticket is refused at its seat and
-  cancelled at once with its full entry fee; an emblem passed on while its ticket is open raises an integrity flag
-  (Shared device · emblem shared). The power-up holder discount and the free daily custom room go to one wallet per
+  until it is settled: a token id serves one open holder ticket at a time. A ticket whose emblem serves another
+  wallet's open ticket (passed on) is refused at its seat and cancelled at once with its full entry fee (a no-show), and
+  raises an integrity flag (Shared device · emblem shared). A ticket whose emblem still serves **its own wallet's**
+  other ticket (round 4b, R4b-M2: its last game being settled, or played in another arena now) is not cancelled: the
+  seat waits (`emblem_busy`, "press Resume again once that game is settled") and sits on the next try once that
+  settlement frees the token id; while that other ticket is seated or its settlement is in the journal (RPC back-off,
+  a death batch, a payout held for an admin) the wait is the server's, so the ticket is excused and its refund, should
+  it never sit, is no no-show. The power-up holder discount and the free daily custom room go to one wallet per
   token id per UTC day. A seated player is not removed mid-round if they transfer the emblem away (the ticket keeps
   its token id until its bell). Tickets are bought on chain, so the server cannot refuse a purchase itself.
 - **Money:** mint proceeds stay in the NFT contract until **Withdraw** sends the whole balance to the treasury.
@@ -357,8 +362,9 @@ the wallet (`no_funds`), and too many requests from one IP, IPv6 /64, IPv4 /24 o
   could not be read (`chain_busy` from the RPC, never the client's own limits) (round 4, R3-M1). An unseated ticket
   refunded **early** is a no-show the same way (round 4, R4-M1): one sent to a paid custom room of its arena that
   closed in the last hour, closes, or is in its last minute (`refundUnseated`: the full entry fee back at once instead
-  of in 15 minutes), and a holder ticket refused at its seat because its emblem was moved away or serves another open
-  ticket (unless the token index cannot confirm it). The early refund is excused only for a ticket bought for that very
+  of in 15 minutes), and a holder ticket refused at its seat because its emblem was moved away or serves another
+  wallet's open ticket (unless the token index cannot confirm it); never one whose emblem serves the wallet's own
+  other ticket (it waits, above). The early refund is excused only for a ticket bought for that very
   room: its permit was asked for the room while the room took seats, by a wallet that did not open it, the refund
   comes within 2 minutes of the ticket's opening (`ROOM_EXCUSE_S`), and the room has excused fewer refunds than it has
   seats. A free or practice room's code, and another arena's, refunds nothing (the sweeper does). `NO_SHOW_LIMIT`
@@ -427,6 +433,9 @@ costs the players, and never lock out a player with standing. Defaults, one aren
   passed from wallet to wallet buys nothing either.
 - **No-show excuses** need a refusal the server made for its own reason after the ticket was bought: an attacker can
   only earn one by overloading the whole server (which every player sees), never with its own rate limits or reads.
+  The emblem's wait (round 4b, R4b-M2) excuses a ticket only while the wallet's own other holder ticket is seated or
+  being settled: a game really played (its entry fee in play) per excuse and arena, the same price as the standing
+  that ticket gives; a claim of a ticket never seated (a seat refused after the emblem check) excuses nothing.
 - **After a restart** the network counts, shares, unused permits and NFT claims start empty (memory only); the wallets'
   no-shows and played tickets (the settled log) stay, and so does the arena's cap (its unseated tickets are read on
   chain). Tickets bought before the restart are not in the new wallets' share, so in the first stale cycle after a
