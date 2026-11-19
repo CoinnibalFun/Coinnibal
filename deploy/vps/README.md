@@ -172,19 +172,29 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
 - **In the round break.** The new image is built while the old container serves; the swap waits for the break after
   an arena bell (no live stake then: SIGTERM mid-round would cash every arena player out). `COINNIBAL_DEPLOY_NOW=1
   coinnibal-update` skips the wait for an urgent fix.
-- **Rollback.** The running image is tagged `elymum-app:previous` before every build (by the weekly refresh: once its
-  build changed the image). When the new container is not healthy (the liveness check) within 60 s, `update.sh` puts
-  the previous image and commit back at once and alerts; that commit is not retried until a newer one arrives. By
-  hand (a version that is healthy but wrong): `systemctl stop elymum-update.timer && docker tag elymum-app:previous
-  elymum-app:latest && coinnibal-compose up -d app`, and `systemctl start elymum-update.timer` once the fix is on the
-  branch (until then any newer commit would bring the fault back with it). The weekly refresh never puts the version
-  taken off back: it rebuilds only the image a deploy put in (`/var/lib/elymum/deployed-image`), skips with an alert
-  while another one runs, and is paused with auto-deploy anyway.
+- **Rollback.** Before every deploy's build the running image is tagged `elymum-app:previous` (its commit in
+  `/var/lib/elymum/previous`; `coinnibal-status` shows both): the version before the last deploy. When the new
+  container is not healthy (the liveness check) within 60 s, `update.sh` puts the previous image and commit back at
+  once and alerts; that commit is not retried until a newer one arrives. The weekly refresh keeps a rollback image of
+  its own (`elymum-app:refresh-rollback`, the build it replaces, removed once the new build is healthy) and never
+  moves `elymum-app:previous`, so after any Sunday it still holds the commit before the last deploy. By hand (a version
+  that is healthy but wrong): `systemctl stop elymum-update.timer && docker tag elymum-app:previous elymum-app:latest
+  && coinnibal-compose up -d app`, and `systemctl start elymum-update.timer` once the fix is on the branch (until then
+  any newer commit would bring the fault back with it). The weekly refresh never puts the version taken off back: it
+  rebuilds only the image a deploy put in (`/var/lib/elymum/deployed-image`), skips with an alert while another one
+  runs, and is paused with auto-deploy anyway.
 - **Caddy** reloads when its file changed (`stream_close_delay 10m` keeps the game sockets open across a reload), and
   is recreated in the round break when a newer build of its image was pulled (below). A deploy needs every image of
   `docker-compose.yml` on this host: a Caddy tag new to it (a Dependabot bump) is pulled first, and while the registry
   cannot be reached the commit waits (the running version serves on, one alert, `coinnibal-status` says WAITING) and
-  every check tries it again. A commit counts as deployed only once its app container runs.
+  every check tries it again. A commit counts as deployed only once its app container runs. After every swap (a
+  deploy's or the weekly refresh's) `update.sh` checks Caddy too: its container must run with a steady restart count
+  (5 s) and, when a request through it on this host answered before the swap, answer again
+  (`https://<GAME_DOMAIN>/api/health?live=1` resolved to 127.0.0.1). If not, Caddy's image of before goes back under
+  its tag (a broken new build is pulled and tried again at the next deploy or refresh); if Caddy is still down, the
+  whole deploy is rolled back like an unhealthy app (the image and commit of before, with their compose file and
+  Caddyfile; the commit is marked failed). An alert goes out either way, and `alert.sh` watches the Caddy container
+  every minute (section 7).
 
 ### Updates: what is automatic and what is not
 
@@ -192,8 +202,8 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
 |---|---|
 | Ubuntu's packages | unattended-upgrades, daily (Ubuntu's own origins, security included); the reboot a kernel update needs at 04:30 in a round break (`elymum-reboot.timer`) |
 | The Docker Engine (`docker-ce`, `containerd.io` with runc, the CLI, the compose and buildx plugins, from Docker's repository) | `reboot.sh` (`elymum-reboot.timer`, 04:30), when Docker's repository has a newer version: `docker-ce` and `containerd.io` in the round break, with the app stopped first; the CLI and the plugins alone at once (they restart nothing). Never unattended-upgrades: an engine update restarts every container, which mid-round would cash every arena player out |
-| The app image's base (`node:22-bookworm-slim`: Debian's and Node 22's patches) | every deploy builds with `--pull`; `elymum-refresh.timer` (Sunday 05:00) rebuilds the deployed commit even without a new one and swaps it in in the round break, only when the image changed (with the same rollback as a deploy). It never deploys a newer commit (only the auto-deploy does), and it is skipped while auto-deploy is paused or an image put back by hand runs (Rollback, above) |
-| Caddy (pinned to a patch version, `caddy:2.x.y` in `docker-compose.yml`) | the newest build of that tag is pulled on every deploy and every Sunday and swapped in in the round break; a newer Caddy version comes as a Dependabot pull request, and CI checks both Caddyfiles with it (`caddy validate`) |
+| The app image's base (`node:22-bookworm-slim`: Debian's and Node 22's patches) | every deploy builds with `--pull`; `elymum-refresh.timer` (Sunday 05:00) rebuilds the deployed commit even without a new one and swaps it in in the round break, only when the image changed (with the same rollback as a deploy, from its own `elymum-app:refresh-rollback`: `elymum-app:previous` stays the commit before the last deploy). It never deploys a newer commit (only the auto-deploy does), and it is skipped while auto-deploy is paused or an image put back by hand runs (Rollback, above) |
+| Caddy (pinned to a patch version, `caddy:2.x.y` in `docker-compose.yml`) | the newest build of that tag is pulled on every deploy and every Sunday and swapped in in the round break, and put back when it does not come up (Caddy, above); a newer Caddy version comes as a Dependabot pull request, and CI checks both Caddyfiles with it (`caddy validate`) |
 | npm dependencies, the GitHub Actions, the image tags | Dependabot pull requests, weekly (`.github/dependabot.yml`), through CI; a merged one deploys once CI passed |
 
 Not automatic: merging Dependabot's pull requests (a person reviews each), a new major version of Node or of a
@@ -208,8 +218,10 @@ reboot or engine update now).
 `elymum-alert.timer` runs `alert.sh` every minute. It posts to Telegram when the server logs a `!!!` line, when
 `/api/health` answers 503 (with the reasons: the journal cannot be written, settlements backed up or stuck, the RPC
 unreachable, the server key's gas runway under 2 days, the books guard, the server clock more than 30 s off the
-chain, a room worker down), when the gas runway is under 7 days, when a disk is over 80 % full, and when the app
-container is down. Each alert repeats at most every 30 minutes while it lasts and says "ok again" when it clears.
+chain, a room worker down), when the gas runway is under 7 days, when a disk is over 80 % full, when the app
+container is down, and when the Caddy container is not running or restarted since the minute before (a crash loop:
+with Caddy down nothing reaches the app). Each alert repeats at most every 30 minutes while it lasts and says "ok
+again" when it clears.
 
 Telegram: talk to **@BotFather** → `/newbot` → copy the token; send your bot a message, then open
 `https://api.telegram.org/bot<token>/getUpdates` and copy `chat.id`. In `.env`: `TELEGRAM_BOT_TOKEN=<token>`,
@@ -264,8 +276,20 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
    `COINNIBAL_PIN_NFT` lines (and `COINNIBAL_PIN_TOKEN` once the game token is set) in `/opt/elymum/.env`, from your
    password manager or `/admin` → Setup → **Site pins**, checking each address against the deploy transaction in your
    own wallet, then run `coinnibal-compose up -d --build app`.
+
+   **Behind Cloudflare** ("Cloudflare in front" below): the new server must start in Cloudflare mode, or Caddy hands
+   the app Cloudflare's edge address as every player's (one set of per-IP limits for a whole Cloudflare location:
+   real players refused at sign-in and at the door) and serves HTTP/3 on UDP 443 past the firewall. The old server's
+   `CADDY_CONFIG` comes with the settings when its app container has it (one started after the line was added, on a
+   version of November 2026 or later; the installer takes only `Caddyfile` or a `Caddyfile.<name>` of its own
+   `deploy/vps/caddy`). To be sure, add it to the install command yourself, after `--yes`:
+   `--set CADDY_CONFIG=Caddyfile.cloudflare` (a `--set` wins over what the old server sends). The firewall rules
+   belong to the old host and are never copied: on the new VPS, before the proxied records point at it, check
+   `grep CADDY_CONFIG /opt/elymum/.env`, then repeat "Cloudflare in front" step 8 and its step-9 checks against the
+   new address (direct requests time out, no UDP 443 listener in Caddy).
 4. **Stop the old server before the new one starts settling** (`coinnibal-compose down` there): two servers must never
-   run with the same server key. Then point DNS at the new VPS; remove `ADMIN_SECRET_EXPORT`.
+   run with the same server key. Then point DNS at the new VPS (behind Cloudflare: change the proxied records'
+   address, keep them proxied, then the step-9 checks through Cloudflare); remove `ADMIN_SECRET_EXPORT`.
 
 **The VPS died (no way to reach it).**
 
@@ -274,7 +298,9 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
 2. A new VPS (sections 1 to 3); stop at the settings step and put the old `.env` values back (from your password
    manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, the site's pins
    `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` and `COINNIBAL_PIN_TOKEN`, ...). Without the pins the new site signs no
-   ticket, refund, shop payment or mint (section 4).
+   ticket, refund, shop payment or mint (section 4). Behind Cloudflare also `CADDY_CONFIG=Caddyfile.cloudflare` (or
+   `--set CADDY_CONFIG=Caddyfile.cloudflare` on the install command), and "Cloudflare in front" step 8 and the step-9
+   checks on the new VPS before the proxied records point at it (above).
 3. The newest backup: from the offsite copy (`rclone copy elymum-offsite:elymum-data-<newest>.tar.gz /root/`), then
    `coinnibal-restore /root/elymum-data-<newest>.tar.gz`. It carries the server key, the journal (pending settlements go
    out), the contracts registry and the site data. What happened after that backup is lost: tickets settled since are
@@ -323,6 +349,10 @@ one left **DNS only** hands out the origin's address, and anyone can then go aro
    stay DNS only (Vercel has its own edge). No `AAAA` record for the VPS (the ports are published on IPv4 only). The
    VPS address was public in DNS until now, and DNS history sites keep old answers: for a door that is really shut,
    move the server to a new address once (section 9, or the provider's "new IP") and publish only proxied records.
+   A move to a new VPS keeps Cloudflare mode only as section 9 says: `--set CADDY_CONFIG=Caddyfile.cloudflare` on the
+   install command, then step 8 and the step-9 checks below again on the new VPS before the proxied records point at
+   it (the firewall rules stay behind on the old host). The provider's "new IP" keeps the host, its `.env` and its
+   rules (they match the interface, not the address): run the step-9 checks against the new address.
 3. **SSL/TLS → Overview: Full (strict)** (Caddy keeps its own certificate; Cloudflare checks it). SSL/TLS → Edge
    Certificates: minimum TLS 1.2; leave **Always Use HTTPS off** (Caddy redirects to HTTPS itself, and its
    certificate renewals answer Let's Encrypt on plain HTTP through Cloudflare).
