@@ -152,13 +152,14 @@ send twice. Open **Setup**; the wizard walks the steps and remembers where you a
    addresses in `/data/chains/<chainId>/contracts.json`. The server picks the arena up without a restart.
 
    **Pin the contracts** (not a wizard step: it needs the VPS shell). The site signs only with the arena, NFT and
-   token it was built with (`apps/web/src/wallet/pinned.ts`), whatever the server announces, so a stolen admin login
-   or a broken-into server cannot point wallets at another contract; no chain has default pins. Until the new
-   addresses are in the build, the site signs no ticket, refund or shop payment (no arena pin) and no mint (no NFT
-   pin), and the lobby says "Contract check failed". `/admin` → Setup → **Site pins** (and the line "The site trusts
-   the registered contracts" on Network's checklist) compares the build with the registered contracts and shows the
-   lines. Check each address against the deploy transaction in your own wallet (the panel's addresses come from the
-   server, which is what the pins guard against), set them in `/opt/elymum/.env`, and rebuild:
+   token it was built with (`apps/web/src/wallet/pinned.ts`), whatever the server announces, so a stolen admin login,
+   or a server API that names other contracts, cannot point wallets at another contract: a pin changes only with shell
+   access to the VPS and a rebuild. No chain has default pins. Until the new addresses are in the build, the site
+   signs no ticket, refund or shop payment (no arena pin) and no mint (no NFT pin), and the lobby says "Contract check
+   failed". `/admin` → Setup → **Site pins** (and the line "The site trusts the registered contracts" on Network's
+   checklist) compares the build with the registered contracts and shows the lines. Check each address against the
+   deploy transaction in your own wallet (the panel's addresses come from the server, which is what the pins guard
+   against), set them in `/opt/elymum/.env`, and rebuild:
 
    ```bash
    # /opt/elymum/.env: the registered addresses, as Setup → Site pins shows them

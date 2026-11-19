@@ -365,12 +365,14 @@ has more bots than its setting, nor more playing than the setting minus its peop
   the site signs no ticket, refund or shop payment, without an NFT pin no mint, and without a token pin the arena's
   token is not checked against one; the local node may run unpinned. A pin changes only with shell access to the VPS
   (or a new build) and a rebuild (`coinnibal-compose up -d --build app`), never from the admin panel, so a stolen
-  admin login or a broken-into server cannot point wallets at another contract. After the owner's deploy (and after
-  `setToken`), `/admin` → Setup → Site pins and the Network checklist line "The site trusts the registered contracts"
-  compare the build's pins with the registered contracts and show the lines to set. Moving to the mainnet needs that
-  rebuild too. Before every approval, ticket, refund and shop payment the web checks that the server's arena is the pinned one and
-  that its runtime code hash is the compiled `@coinnibal/contracts` build; the mint checks its NFT the same way. A
-  mismatch is refused with a clear error and the lobby says "Contract check failed".
+  admin login, or a server API that names other contracts, cannot point wallets at another contract. The pins do not
+  guard against someone with the VPS shell: the same server builds and serves the site, so they could rebuild it.
+  After the owner's deploy (and after `setToken`), `/admin` → Setup → Site pins and the Network checklist line "The
+  site trusts the registered contracts" compare the build's pins with the registered contracts and show the lines to
+  set. Moving to the mainnet needs that rebuild too. Before every approval, ticket, refund and shop payment the web
+  checks that the server's arena is the pinned one and that its runtime code hash is the compiled
+  `@coinnibal/contracts` build; the mint checks its NFT the same way. A mismatch is refused with a clear error and the
+  lobby says "Contract check failed".
 - **Game connection** (`src/game/net.ts`, `jitter.ts`): a watchdog drops a socket that delivered no frame and no pong
   for 4 s and reconnects (backoff 0.5 s to 8 s); while it is down a blocking banner says the coin is still in the
   arena. A close with `CLOSE_REPLACED` (4000: the same wallet's newer connection took the coin) is not reconnected:
