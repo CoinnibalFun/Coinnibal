@@ -378,7 +378,7 @@ function Plate({ children }: { children: ReactNode }) {
   const t = useT();
   return (
     <>
-      <PlateLabel numeral="IV" title={t('fc.plate')} aside="/faucet" />
+      <PlateLabel numeral="IV" title={t('fc.plate')} />
       <Kb theme="paper" className="fc-plate">
         {children}
       </Kb>

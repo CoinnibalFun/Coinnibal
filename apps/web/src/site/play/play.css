@@ -37,7 +37,8 @@
 }
 .pg-h {
   margin: 10px 0 14px;
-  font-size: clamp(36px, 4.2vw, 54px);
+  /* one size for every card page's title (closed pages, 404, /play) */
+  font-size: clamp(36px, 4.6vw, 56px);
   line-height: 1;
 }
 .pg-h em {
