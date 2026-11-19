@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 const LIGHT = [
   'src/ui/tokenText.ts',
   'src/wallet/ticket.ts',
-  // lane GUIDE's power-up key caps, once they exist
+  // the power-up glyphs (type imports only)
   'src/ui/game/boostGlyphs.ts',
 ];
 const SDK_ALLOWED = new Set(['ledgerDecimals', 'REFUND_DELAY_SECS', 'fromLedger']);
@@ -23,12 +23,17 @@ interface Imp {
   names: string[];
 }
 
+/**
+ * `import ... from 'x'`, `import 'x'` and the re-exports `export ... from 'x'`. A declaration (`export const`,
+ * `export function`) is not an import, even when a string follows it.
+ */
+const IMPORT_RE = /^\s*(?:import\s+(type\s+)?(?:([^'";]*?)\s*\bfrom\s*)?|export\s+(type\s+)?([^'";]*?)\s*\bfrom\s*)['"]([^'"]+)['"]/gm;
+
 function runtimeImports(src: string): Imp[] {
   const out: Imp[] = [];
-  const re = /^\s*(import|export)\s+(type\s+)?([^'";]*?)\s*(?:from\s*)?['"]([^'"]+)['"]/gm;
-  for (const m of src.matchAll(re)) {
-    if (m[2]) continue; // `import type` / `export type`
-    const clause = m[3].trim();
+  for (const m of src.matchAll(IMPORT_RE)) {
+    if (m[1] || m[3]) continue; // `import type` / `export type`
+    const clause = (m[2] ?? m[4] ?? '').trim();
     const names: string[] = [];
     if (!clause || /\*/.test(clause)) names.push('*');
     const braces = /\{([^}]*)\}/.exec(clause);
@@ -40,7 +45,7 @@ function runtimeImports(src: string): Imp[] {
     }
     const def = clause.replace(/\{[^}]*\}/, '').replace(/,/g, '').trim();
     if (def && def !== '*' && !def.startsWith('*')) names.push('default');
-    if (names.length) out.push({ from: m[4], names });
+    if (names.length) out.push({ from: m[5], names });
   }
   return out;
 }
@@ -49,8 +54,10 @@ describe('the modules the player guide imports stay light (no wallet layer, no e
   for (const file of LIGHT) {
     const path = join(__dirname, '..', file);
     it.skipIf(!existsSync(path))(`${file} imports nothing heavy at runtime`, () => {
-      const imps = runtimeImports(readFileSync(path, 'utf8'));
-      expect(imps.length).toBeGreaterThan(0);
+      const src = readFileSync(path, 'utf8');
+      // the scan reads a real module (a module with only type imports has no runtime import to check)
+      expect(src).toMatch(/^import\s/m);
+      const imps = runtimeImports(src);
       for (const imp of imps) {
         for (const heavy of HEAVY) expect(heavy.test(imp.from), `${file}: runtime import of ${imp.from}`).toBe(false);
         if (imp.from === '@coinnibal/sdk') for (const n of imp.names) expect(SDK_ALLOWED.has(n), `${file}: ${n} from the sdk`).toBe(true);
@@ -65,6 +72,9 @@ describe('the modules the player guide imports stay light (no wallet layer, no e
       { from: 'viem', names: ['parseUnits'] },
       { from: './x.css', names: ['*'] },
     ]);
+    // declarations are not imports, re-exports are
+    expect(runtimeImports("export const P = {\n  a: 'viem',\n};\nexport function f(x: Pick<T, 'a'>) {}")).toEqual([]);
+    expect(runtimeImports("export { a as b } from './y';\nexport type { C } from 'viem';")).toEqual([{ from: './y', names: ['a'] }]);
   });
 
   it('the guide takes its token text from the light module, and /docs does not import the lobby stylesheet', () => {
