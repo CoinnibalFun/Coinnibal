@@ -812,19 +812,91 @@ describe('standing: the network rules never refuse a player with standing (audit
     const regular = testWallet(0xbeef20);
     established(h, regular);
     const p = await h.permits.issue(regular, 1, '100.64.30.1');
-    // arena 1's permit is not played yet: arena 2 follows the network's no-show block
-    expect((await fail(h.permits.issue(regular, 2, '100.64.30.1'))).code).toBe('no_show');
-    // it bought arena 1's ticket and sits in it (played): arena 2 is open to it again
+    // arena 1's permit is not used yet: with arena 2's (the same join nonce) the two buy one ticket between them
+    expect((await h.permits.issue(regular, 2, '100.64.30.1')).nonce).toBe(p.nonce);
+    // it bought arena 1's ticket and has not played it: arena 2 follows the network's rules, and the refusal says why
     h.chain.nonces.set(regular.toLowerCase(), BigInt(p.nonce) + 1n);
+    h.chain.open.add(`1:${regular.toLowerCase()}`);
+    const e = await fail(h.permits.issue(regular, 2, '100.64.30.1'));
+    expect([e.code, e.retryAt]).toEqual(['ticket_elsewhere', undefined]);
+    expect(e.message).toMatch(/another room that is not played yet/);
+    // it sits in arena 1 (played): arena 2 is open to it again
     h.seated.add(sessionKey(1, regular, 1));
     expect((await h.permits.issue(regular, 2, '100.64.30.1')).arenaId).toBe(2);
-    // a permit of the current nonce that expired unused counts no more either
-    const other = testWallet(0xbeef21);
-    established(h, other);
-    await h.permits.issue(other, 1, '100.64.30.1');
-    expect((await fail(h.permits.issue(other, 3, '100.64.30.1'))).code).toBe('no_show');
-    h.clock.now += 11 * 60_000;
-    expect((await h.permits.issue(other, 3, '100.64.30.1')).arenaId).toBe(3);
+  });
+
+  it("the reviewer's switch (audit R4-M2 a): an arena-1 permit declined at the wallet, then arena 2: a permit at once, never a day's block", async () => {
+    const h = harness({ arenas: [arena(1, 1000), arena(2, 1000), arena(3, 1000)], cfg: { perIp: 1000 } });
+    h.seats = 300;
+    // the R3-M1 griefer: 9 no-shows from 3 throwaway wallets on the carrier NAT address
+    for (let w = 0; w < 3; w++) for (const a of [1, 2, 3]) await noShow(h, testWallet(0x7400 + w), a, '100.64.12.34');
+    const player = testWallet(0xbeef30);
+    h.played.set(player.toLowerCase(), h.clock.now - 2 * hour);
+    expect((await h.permits.issue(player, 1, '100.64.12.34')).arenaId).toBe(1);
+    // declined the wallet prompt; 30 s later it picks arena 2, and again 9 minutes later (arena 1's permit still valid)
+    h.clock.now += 30_000;
+    expect((await h.permits.issue(player, 2, '100.64.12.34')).arenaId).toBe(2);
+    h.clock.now += 9 * 60_000;
+    expect((await h.permits.issue(player, 3, '100.64.12.34')).arenaId).toBe(3);
+    // every one of them names the same nonce: one ticket at most
+    expect(new Set(h.chain.signed.filter((x) => x.player === player).map((x) => x.nonce))).toEqual(new Set([0n]));
+  });
+
+  it("the reviewer's stale record (audit R4-M2 b): an abandoned arena-1 permit never takes standing away after an arena-2 ticket was played", async () => {
+    for (const seen of [true, false]) {
+      const h = harness({ arenas: [arena(1, 1000), arena(2, 1000), arena(3, 1000)], cfg: { perIp: 1000 } });
+      h.seats = 300;
+      const ip = '100.64.12.34';
+      const player = testWallet(seen ? 0xbeef40 : 0xbeef41);
+      h.played.set(player.toLowerCase(), h.clock.now - hour);
+      // it opens arena 1's ticket sheet and declines the wallet; a minute later it buys arena 2's ticket instead
+      await h.permits.issue(player, 1, ip);
+      h.clock.now += 60_000;
+      const p2 = await h.permits.issue(player, 2, ip);
+      h.chain.nonces.set(player.toLowerCase(), BigInt(p2.nonce) + 1n);
+      h.chain.open.add(`2:${player.toLowerCase()}`);
+      const openedAtS = Math.floor(h.clock.now / 1000);
+      // it sits 11 minutes later: the arena-1 permit expired, and someone's request pruned it from the kept permits
+      h.clock.now += 11 * 60_000;
+      await h.permits.issue(testWallet(0xbbb000), 3, '192.0.2.9');
+      h.permits.ticketSeen(player, 2, null);
+      // `seen`: the gateway read its ticket and seated it; else the server never heard of the ticket (another tab)
+      if (seen) h.permits.ticketSeen(player, 2, openedAtS);
+      h.seated.add(sessionKey(2, player, 1));
+      h.clock.now += 5 * 60_000;
+      h.seated.clear();
+      h.chain.open.delete(`2:${player.toLowerCase()}`);
+      h.permits.ticketDone(player, 2, false);
+      h.played.set(player.toLowerCase(), h.clock.now);
+      // the griefer's 9 no-shows on the same address
+      for (let w = 0; w < 3; w++) for (const a of [1, 2, 3]) await noShow(h, testWallet((seen ? 0xccc010 : 0xccc020) + w), a, ip);
+      h.clock.now += hour;
+      expect(await h.permits.standing(player)).toBe('played');
+      // the address is blocked for new wallets; this player's own record is clean, so it gets its permit
+      expect((await fail(h.permits.issue(testWallet(0xddd000), 3, ip))).code).toBe('no_show');
+      expect((await h.permits.issue(player, 3, ip)).arenaId).toBe(3);
+    }
+  });
+
+  it('a ticket bought with standing and never seen by the gateway still counts once, read on chain; a busy chain answers busy', async () => {
+    const h = harness({ arenas: [arena(1, 1000), arena(2, 1000)], cfg: { perIp: 1000 } });
+    h.seats = 300;
+    for (let w = 0; w < 3; w++) for (const a of [1, 2]) await noShow(h, testWallet(0x7600 + w), a, '100.64.40.1');
+    for (let w = 0; w < 3; w++) await noShow(h, testWallet(0x7610 + w), 1, '100.64.40.1');
+    const player = testWallet(0xbeef50);
+    established(h, player);
+    const p1 = await h.permits.issue(player, 1, '100.64.40.1');
+    h.chain.nonces.set(player.toLowerCase(), BigInt(p1.nonce) + 1n);
+    h.chain.open.add(`1:${player.toLowerCase()}`);
+    // the chain cannot be read: busy, never the network's block
+    h.chain.busy = true;
+    expect((await fail(h.permits.issue(player, 2, '100.64.40.1'))).code).toBe('chain_busy');
+    h.chain.busy = false;
+    expect((await fail(h.permits.issue(player, 2, '100.64.40.1'))).code).toBe('ticket_elsewhere');
+    // the arena-1 ticket goes back (settled): its record leaves, arena 2 is exempt again
+    h.chain.open.delete(`1:${player.toLowerCase()}`);
+    h.permits.ticketDone(player, 1, false);
+    expect((await h.permits.issue(player, 2, '100.64.40.1')).arenaId).toBe(2);
   });
 });
 

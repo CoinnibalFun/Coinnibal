@@ -26,6 +26,7 @@ export function permitRefusalText(code: JoinPermitError | 'network', retryAt?: n
     case 'network_busy':
     case 'arena_busy':
     case 'no_funds':
+    case 'ticket_elsewhere':
     case 'rate_limited':
     case 'chain_busy':
     case 'unauthorized':
@@ -35,14 +36,17 @@ export function permitRefusalText(code: JoinPermitError | 'network', retryAt?: n
   }
 }
 
-/** `POST /api/arena/permit {arenaId}` with the session token. */
-export async function fetchJoinPermit(token: string, arenaId: number): Promise<PermitResult> {
+/**
+ * `POST /api/arena/permit {arenaId, room?}` with the session token. `room`: the paid custom room this ticket is for (the
+ * server checks it still takes seats, and a refund if it stops before the seat is then no "unplayed ticket").
+ */
+export async function fetchJoinPermit(token: string, arenaId: number, room: string | null = null): Promise<PermitResult> {
   let res: Response;
   try {
     res = await fetch(`${SERVER.http}/api/arena/permit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ arenaId }),
+      body: JSON.stringify(room ? { arenaId, room } : { arenaId }),
     });
   } catch {
     return { ok: false, code: 'network', text: t('tf.err.permit.failed') };

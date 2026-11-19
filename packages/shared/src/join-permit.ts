@@ -2,7 +2,8 @@
  * Join permits (CoinnibalArena v4). `join(arenaId, deadline, signature)` needs the game server's EIP-712 signature of
  * `JoinPermit(address player, uint16 arenaId, uint64 nonce, uint64 deadline)` in the arena's domain (name, version,
  * chainId, verifyingContract). `nonce` is the player's join counter on the contract (`joinNonce`), used up by the
- * join: a permit buys one ticket. The server issues one at `POST /api/arena/permit {arenaId}` (signed in) only when
+ * join: a permit buys one ticket. The server issues one at `POST /api/arena/permit {arenaId, room?}` (signed in; `room`:
+ * the code of the paid custom room the ticket is for, which must take seats now) only when
  * the game is open for the wallet, the arena is open (a holders-only arena: the wallet holds the NFT), the wallet has no
  * open ticket there and it is not a repeated no-show, and the arena is not at its cap of tickets waiting for a seat. A
  * wallet without standing (no played ticket in 14 days, no NFT of its own) must also hold the entry fee, its network
@@ -40,8 +41,10 @@ export interface JoinPermit {
  * its tickets, or of the tickets bought from its network, went back unplayed in a day (`retryAt`: Unix ms) ·
  * `network_busy` the network it is asked from (an IPv4 address or /24, an IPv6 /64 or /48) has its share of the
  * arena's permits not played yet · `arena_busy` the arena holds as many tickets waiting for a seat as a round can take,
- * or new wallets hold their share of them · `no_funds` a new wallet does not hold the entry fee · `rate_limited` ·
- * `chain_busy` the network could not be read · `unauthorized` not signed in · `bad_request`.
+ * or new wallets hold their share of them · `no_funds` a new wallet does not hold the entry fee · `ticket_elsewhere` a
+ * wallet with standing holds a ticket of another arena not played yet (standing covers one at a time) and the network
+ * rules refuse this one · `rate_limited` · `chain_busy` the network could not be read · `unauthorized` not signed in ·
+ * `bad_request`.
  */
 export type JoinPermitError =
   | 'bad_request'
@@ -57,4 +60,5 @@ export type JoinPermitError =
   | 'network_busy'
   | 'arena_busy'
   | 'no_funds'
+  | 'ticket_elsewhere'
   | 'chain_busy';

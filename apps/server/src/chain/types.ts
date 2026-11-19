@@ -239,6 +239,11 @@ export interface ChainGateway {
    */
   excuseNoShow?(arenaId: number, player: string): void;
   /**
+   * The server refused a seat request of `player` in `arenaId` for its own reason (`excuseNoShow`) at or after the
+   * ticket opened (`openedAtS`, the block time): its refund, if it is never seated, is not a no-show. Absent: never.
+   */
+  excusedSince?(arenaId: number, player: string, openedAtS: number): boolean;
+  /**
    * The game token `player` holds, ledger units (rounded down; capped at the largest safe integer): one read at
    * `normal` priority. Throws `ChainBusyError` when it cannot be read. Absent when the chain is off (and on the dev
    * fake chain).

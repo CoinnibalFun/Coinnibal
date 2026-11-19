@@ -419,6 +419,8 @@ export async function createApp(
     emblemTokens,
     flag: (c) => void integrity.raise(c),
     liveSessions: () => rooms.liveSessions(),
+    // a cancel for an emblem moved away or passed on is a no-show unless the arena takes no seat or the server owes it
+    noShow: (s) => !chain.joinsPaused?.() && rooms.arenaTakesSeats(s.arenaId) && !reprice.closedForSeats(s.arenaId) && chain.excusedSince?.(s.arenaId, s.player, s.openedAt) !== true,
     log,
   });
   // the game token was set on chain (picked up by the 30 s config watcher, no restart): attach the
@@ -454,6 +456,12 @@ export async function createApp(
       void mint.holdersCount().catch(() => 0);
       return mint.emblemTokens(wallet);
     },
+    // a ticket for a paid custom room is bound to it while it takes seats (its early refund is excused: audit R4-M1)
+    paidRoom: (arenaId, code) => {
+      const seats = rooms.paidRoomSeats(arenaId, code);
+      const view = seats === null ? null : customRooms.get(code);
+      return seats !== null && view && view.kind === 'paid' && !view.closing ? { seats, creator: view.creator } : null;
+    },
     cfg: cfg.joinPermits,
     log,
   });
@@ -478,6 +486,8 @@ export async function createApp(
   gateway.setEmblemGate((wallet, session) => emblems.seat(wallet, session));
   // a wallet sitting down with its ticket gives up the place its join permit held; a ticket read used up its permits
   gateway.setTicketSeen((wallet, arenaId, openedAtS) => permits.ticketSeen(wallet, arenaId, openedAtS));
+  // a paid room that stopped taking seats refunds the unseated ticket bought for it without a no-show (audit R4-M1)
+  gateway.setRoomExcuse((wallet, arenaId, code, openedAtS) => permits.roomExcuse(wallet, arenaId, code, openedAtS));
   chain.onSettled((e) => emblems.settled(e.key));
   const emblemTimer = setInterval(() => emblems.sweep(), 60_000);
   emblemTimer.unref();

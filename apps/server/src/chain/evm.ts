@@ -916,7 +916,7 @@ export class EvmChain implements ChainGateway {
   }
 
   /** The server refused a seat request of `player` in `arenaId` for its own reason after its ticket opened (`openedAtS`). */
-  private excusedSince(arenaId: number, player: string, openedAtS: number): boolean {
+  excusedSince(arenaId: number, player: string, openedAtS: number): boolean {
     const at = this.excused.get(`${arenaId}:${player.toLowerCase()}`);
     return at !== undefined && at >= openedAtS - EXCUSE_CLOCK_SLACK_S;
   }

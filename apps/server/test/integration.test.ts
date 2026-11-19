@@ -932,7 +932,8 @@ describe('server over websocket', () => {
     l.send({ t: 'join', room: `arena:1:${code}`, name: 'Late', skin: 0 });
     expect((await l.wait('error', 2000, (x) => x.code === 'room_closed')).message).toMatch(/last minute/);
     for (let i = 0; i < 40 && !app.journal.pending.some((p) => p.key === lateTicket.key); i++) await sleep(25);
-    expect(app.journal.pending.find((p) => p.key === lateTicket.key)).toMatchObject({ kind: 'settle', reason: 'stale', payout: 10_000_000, entryFee: 10_000_000, player: late });
+    // bought for nothing in particular (no permit asked for this room: audit R4-M1), so a no-show like the sweeper's
+    expect(app.journal.pending.find((p) => p.key === lateTicket.key)).toMatchObject({ kind: 'settle', reason: 'stale', payout: 10_000_000, entryFee: 10_000_000, player: late, noShow: true });
     expect(l.msgs.some((x) => x.t === 'joined')).toBe(false);
 
     // the room's end settles every ticket in it by the normal server path; then the paid room closes
