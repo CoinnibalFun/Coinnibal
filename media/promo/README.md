@@ -112,7 +112,10 @@ and VO cue seconds are absolute, so move them with it.
 When only the later beats change and the footage cache is gone (a new take needs a dev stack), the picture can be
 re-rendered from a beat on and the earlier part taken from the last film, decoded once into a lossless
 intermediate (mux.sh then encodes it once). The frames are deterministic, so the cut has no seam as long as the
-earlier beats and the first frame of the cut beat are unchanged (the 19.2 s cut, 19 Nov 2026):
+earlier beats and the first frame of the cut beat are unchanged (the 19.2 s cut, 19 Nov 2026). Take the earlier
+part from the last full render, not from a spliced film, so it is never encoded more than twice. When the sound has
+not changed, mux.sh's two passes can copy the audio stream of the last film (`-map 1:a -c:a copy`, without
+`-shortest`, which drops the last video frames against the copied AAC):
 
 ```bash
 SITE_HOST=coinnibal.fun node render/render.mjs --from 19.2 --to 31.8 --workers 3 --out cache/video-tail.mp4

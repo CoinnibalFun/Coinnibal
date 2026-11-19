@@ -672,7 +672,11 @@ const PERKS = [
   { a: '1 free private room a day', b: 'your friends, your rules', icon: '1/day', col: C.up, at: 5.0 },
   { a: 'NFT skin and holder badge', b: 'the gold skin for your coin', icon: null, col: C.teal, at: 6.3 },
 ];
-const PERK_Y = 330, PERK_DY = 136, PERK_W = 800, PERK_H = 108;
+// five stickers, 42 px apart, centred on the hero card (y 600); each leans a little like the hero card does, the
+// lean varied by at most 0.006 rad between neighbours (5 px at the right end of an 800 px sticker) so the gaps stay
+// even across the whole stack (opposite tilts would pinch them shut at one end)
+const PERK_Y = 316, PERK_DY = 142, PERK_W = 800, PERK_H = 100;
+const PERK_TILT = [-0.012, -0.006, -0.011, -0.005, -0.01];
 function nftCard(ctx, i, x, y, size, flip, rot = 0, lift = 0.7) {
   const sx = Math.cos(flip * Math.PI);
   ctx.save();
@@ -731,16 +735,17 @@ function sceneNft(ctx, t) {
     if (k <= 0) return;
     const s = lerp(1.5, 1, E.outBack(k, 2));
     const x = 1010, y = PERK_Y + i * PERK_DY, h2 = PERK_H / 2;
-    ctx.save(); ctx.translate(x, y); ctx.rotate(i % 2 ? 0.015 : -0.018); ctx.scale(s, s); ctx.globalAlpha = clamp(k * 3);
+    const a = PERK_TILT[i];
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(s, s); ctx.globalAlpha = clamp(k * 3);
     paperShadow(ctx, () => rrect(ctx, 0, -h2, PERK_W, PERK_H, 18), 0.6, 0.3);
     rrect(ctx, 0, -h2, PERK_W, PERK_H, 18); ctx.fillStyle = C.cream; ctx.fill(); ctx.lineWidth = 3.5; ctx.strokeStyle = C.ink; ctx.stroke();
-    ctx.fillStyle = p.col; rrect(ctx, 14, -40, 110, 80, 14); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = p.col; rrect(ctx, 14, -38, 110, 76, 14); ctx.fill(); ctx.stroke();
     if (p.icon) {
       font(ctx, p.icon.length > 3 ? 28 : 38, 800, 'display'); ctx.letterSpacing = '-0.5px'; ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(p.icon, 69, 3);
     } else {
       // the NFT skin itself: the gold emblem coin
-      ctx.save(); rrect(ctx, 14, -40, 110, 80, 14); ctx.clip();
+      ctx.save(); rrect(ctx, 14, -38, 110, 76, 14); ctx.clip();
       coin(ctx, 69, 3, { look: LOOK.emblem, r: 33, expr: 'happy', lookX: 0.4, lookY: -0.2, time: t, seed: 7 });
       ctx.restore();
     }
@@ -749,7 +754,9 @@ function sceneNft(ctx, t) {
     font(ctx, 21, 500, 'mono'); ctx.letterSpacing = '2px'; ctx.fillStyle = C.ink2;
     ctx.fillText(p.b.toUpperCase(), 150, 28);
     ctx.restore();
-    tape(ctx, x + PERK_W - 20, y - h2 + 6, 90, 30, 0.5, prog(t, at + 0.1, at + 0.3));
+    // the tape sits on the sticker's own top-right corner (it leans with it)
+    const tx = PERK_W - 20, ty = -h2 + 6;
+    tape(ctx, x + tx * Math.cos(a) - ty * Math.sin(a), y + tx * Math.sin(a) + ty * Math.cos(a), 90, 30, 0.5 + a, prog(t, at + 0.1, at + 0.3));
   });
   ctx.restore();
   const out = B.end - 0.4; // everything leaves just before the ink flood
