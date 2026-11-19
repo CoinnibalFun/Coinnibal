@@ -241,6 +241,8 @@ describe('migrationEnv', () => {
       // the VPS app reads the whole .env (env_file), the site's contract pins included: they never leave the server
       COINNIBAL_PIN_ARENA: '0x1111111111111111111111111111111111111111',
       VITE_ARENA_ADDRESS: '0x1111111111111111111111111111111111111111',
+      // Caddy's config, from the same .env: a server behind Cloudflare comes up behind it on the new host too (OPS-R3-2)
+      CADDY_CONFIG: 'Caddyfile.cloudflare',
     });
     expect(out).toEqual({
       ADMIN_WALLETS: '0xabc',
@@ -248,6 +250,7 @@ describe('migrationEnv', () => {
       SERVER_PRIVATE_KEY: 'auto',
       EVM_RPC_URL: 'https://rpc.example',
       PUBLIC_URL: 'https://coinnibal.fun',
+      CADDY_CONFIG: 'Caddyfile.cloudflare',
     });
   });
 
@@ -277,5 +280,77 @@ describe('migrationEnv', () => {
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
     expect(r.stdout.trim().split('\n')).toEqual(['ADMIN_WALLETS=0xabc', 'COINNIBAL_CHAIN_ID=46630', 'COINNIBAL_RPC_URLS=https://rpc.example']);
+  });
+
+  // OPS-R3-2: the settings step of install.sh as it runs (step 8: env.example, --set, the --from import with curl
+  // answering the old server's /api/admin/migration-env), in a scratch .env. Prints the .env it leaves.
+  function settingsStep(answer: Record<string, string>, sets: string[]): { env: Map<string, string>; out: string; err: string; status: number | null } {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+    const lines = readFileSync(join(repoRoot, 'deploy/vps/install.sh'), 'utf8').split('\n');
+    const start = lines.findIndex((l) => l.startsWith('say "8/10 Settings'));
+    const end = lines.findIndex((l, i) => i > start && /^edit_env\(\) \{/.test(l));
+    expect(start, 'the settings step of install.sh').toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const tmp = mkdtempSync(join(tmpdir(), 'coinnibal-install-env-'));
+    const answerFile = join(tmp, 'answer.json');
+    writeFileSync(answerFile, JSON.stringify({ env: answer, directUrl: null }));
+    const q = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`;
+    const script = [
+      'set -euo pipefail',
+      `cd ${q(repoRoot)}`,
+      `export COINNIBAL_ENV=${q(join(tmp, '.env'))}`,
+      '. deploy/vps/lib.sh',
+      'say() { :; }',
+      "note() { printf 'note: %s\\n' \"$*\"; }",
+      // the old server's answer, wherever curl is told to write it
+      `curl() { local o=""; while (($#)); do [[ "$1" == -o ]] && { o="$2"; shift; }; shift; done; cat ${q(answerFile)} >"$o"; }`,
+      'domain=game.example.org from_url=https://old.example restore_url=https://old.example restore_token=t restore_proof=p',
+      `sets=(${sets.map(q).join(' ')})`,
+      ...lines.slice(start, end),
+      'echo "---"',
+      'cat "$COINNIBAL_ENV"',
+    ].join('\n');
+    const r = spawnSync('bash', ['-c', script], { encoding: 'utf8' });
+    const [out, envText = ''] = r.stdout.split('\n---\n');
+    const env = new Map<string, string>();
+    for (const l of envText.split('\n')) {
+      const m = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(l);
+      if (m) env.set(m[1]!, m[2]!);
+    }
+    return { env, out: out ?? '', err: r.stderr, status: r.status };
+  }
+
+  it('install.sh --from keeps Cloudflare mode, and a --set wins over what the old server sends (OPS-R3-2)', () => {
+    const pin = '0x2222222222222222222222222222222222222222';
+    const r = settingsStep(
+      { ADMIN_WALLETS: '0xabc', CHAIN_ID: '46630', CADDY_CONFIG: 'Caddyfile.cloudflare', X_HANDLE: 'old_handle', COINNIBAL_PIN_ARENA: pin },
+      ['X_HANDLE=new_handle', 'TELEGRAM_CHAT_ID=42'],
+    );
+    expect(r.err).toBe('');
+    expect(r.status).toBe(0);
+    expect(r.env.get('CADDY_CONFIG')).toBe('Caddyfile.cloudflare');
+    expect(r.env.get('X_HANDLE')).toBe('new_handle');
+    expect(r.env.get('TELEGRAM_CHAT_ID')).toBe('42');
+    expect(r.env.get('ADMIN_WALLETS')).toBe('0xabc');
+    expect(r.env.get('COINNIBAL_CHAIN_ID')).toBe('46630');
+    expect(r.env.get('GAME_DOMAIN')).toBe('game.example.org');
+    expect(r.env.has('COINNIBAL_PIN_ARENA')).toBe(false);
+    // the owner's --set CADDY_CONFIG wins over the old server's own value
+    const own = settingsStep({ ADMIN_WALLETS: '0xabc', CADDY_CONFIG: 'Caddyfile' }, ['CADDY_CONFIG=Caddyfile.cloudflare']);
+    expect(own.status).toBe(0);
+    expect(own.env.get('CADDY_CONFIG')).toBe('Caddyfile.cloudflare');
+  });
+
+  it('install.sh --from takes CADDY_CONFIG only as a config file of its own deploy/vps/caddy (OPS-R3-2)', () => {
+    for (const bad of ['../../data/caddy/evil', '/etc/passwd', 'Caddyfile.missing', 'Caddyfile/../../x', 'caddy.json', 'Caddyfile.cloudflare;id']) {
+      const r = settingsStep({ ADMIN_WALLETS: '0xabc', CADDY_CONFIG: bad }, []);
+      expect(r.err, bad).toBe('');
+      expect(r.status, bad).toBe(0);
+      expect(r.env.has('CADDY_CONFIG'), bad).toBe(false);
+      expect(r.env.get('ADMIN_WALLETS'), bad).toBe('0xabc');
+      expect(r.out, bad).toContain('not copied');
+      expect(r.out, bad).not.toContain(bad); // an untrusted value is never echoed to the terminal
+    }
+    expect(settingsStep({ CADDY_CONFIG: 'Caddyfile' }, []).env.get('CADDY_CONFIG')).toBe('Caddyfile');
   });
 });

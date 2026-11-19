@@ -276,8 +276,20 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
    `COINNIBAL_PIN_NFT` lines (and `COINNIBAL_PIN_TOKEN` once the game token is set) in `/opt/elymum/.env`, from your
    password manager or `/admin` → Setup → **Site pins**, checking each address against the deploy transaction in your
    own wallet, then run `coinnibal-compose up -d --build app`.
+
+   **Behind Cloudflare** ("Cloudflare in front" below): the new server must start in Cloudflare mode, or Caddy hands
+   the app Cloudflare's edge address as every player's (one set of per-IP limits for a whole Cloudflare location:
+   real players refused at sign-in and at the door) and serves HTTP/3 on UDP 443 past the firewall. The old server's
+   `CADDY_CONFIG` comes with the settings when its app container has it (one started after the line was added, on a
+   version of November 2026 or later; the installer takes only `Caddyfile` or a `Caddyfile.<name>` of its own
+   `deploy/vps/caddy`). To be sure, add it to the install command yourself, after `--yes`:
+   `--set CADDY_CONFIG=Caddyfile.cloudflare` (a `--set` wins over what the old server sends). The firewall rules
+   belong to the old host and are never copied: on the new VPS, before the proxied records point at it, check
+   `grep CADDY_CONFIG /opt/elymum/.env`, then repeat "Cloudflare in front" step 8 and its step-9 checks against the
+   new address (direct requests time out, no UDP 443 listener in Caddy).
 4. **Stop the old server before the new one starts settling** (`coinnibal-compose down` there): two servers must never
-   run with the same server key. Then point DNS at the new VPS; remove `ADMIN_SECRET_EXPORT`.
+   run with the same server key. Then point DNS at the new VPS (behind Cloudflare: change the proxied records'
+   address, keep them proxied, then the step-9 checks through Cloudflare); remove `ADMIN_SECRET_EXPORT`.
 
 **The VPS died (no way to reach it).**
 
@@ -286,7 +298,9 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
 2. A new VPS (sections 1 to 3); stop at the settings step and put the old `.env` values back (from your password
    manager: `ADMIN_WALLETS`, `AUTH_SECRET`, `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, the site's pins
    `COINNIBAL_PIN_ARENA`, `COINNIBAL_PIN_NFT` and `COINNIBAL_PIN_TOKEN`, ...). Without the pins the new site signs no
-   ticket, refund, shop payment or mint (section 4).
+   ticket, refund, shop payment or mint (section 4). Behind Cloudflare also `CADDY_CONFIG=Caddyfile.cloudflare` (or
+   `--set CADDY_CONFIG=Caddyfile.cloudflare` on the install command), and "Cloudflare in front" step 8 and the step-9
+   checks on the new VPS before the proxied records point at it (above).
 3. The newest backup: from the offsite copy (`rclone copy elymum-offsite:elymum-data-<newest>.tar.gz /root/`), then
    `coinnibal-restore /root/elymum-data-<newest>.tar.gz`. It carries the server key, the journal (pending settlements go
    out), the contracts registry and the site data. What happened after that backup is lost: tickets settled since are
@@ -335,6 +349,10 @@ one left **DNS only** hands out the origin's address, and anyone can then go aro
    stay DNS only (Vercel has its own edge). No `AAAA` record for the VPS (the ports are published on IPv4 only). The
    VPS address was public in DNS until now, and DNS history sites keep old answers: for a door that is really shut,
    move the server to a new address once (section 9, or the provider's "new IP") and publish only proxied records.
+   A move to a new VPS keeps Cloudflare mode only as section 9 says: `--set CADDY_CONFIG=Caddyfile.cloudflare` on the
+   install command, then step 8 and the step-9 checks below again on the new VPS before the proxied records point at
+   it (the firewall rules stay behind on the old host). The provider's "new IP" keeps the host, its `.env` and its
+   rules (they match the interface, not the address): run the step-9 checks against the new address.
 3. **SSL/TLS → Overview: Full (strict)** (Caddy keeps its own certificate; Cloudflare checks it). SSL/TLS → Edge
    Certificates: minimum TLS 1.2; leave **Always Use HTTPS off** (Caddy redirects to HTTPS itself, and its
    certificate renewals answer Let's Encrypt on plain HTTP through Cloudflare).

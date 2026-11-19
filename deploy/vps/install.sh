@@ -8,7 +8,8 @@
 #       wallet of purpose "migration" (POST /api/admin/secret-proof, README "Moving"). Neither is ever an argument
 #       (any local user can read a command line in ps): it asks for them at hidden prompts, or reads them from stdin,
 #       one per line (the token, then the proof; /admin -> Network -> Backup & move copies the command with both).
-# Options: --domain D, --repo SSH_URL, --branch B, --set KEY=VALUE (a .env setting; repeatable),
+# Options: --domain D, --repo SSH_URL, --branch B, --set KEY=VALUE (a .env setting; repeatable; it wins over a setting
+#          --from copies),
 #          --yes (no questions; defaults or the given values; the secrets of --from are still asked when not piped in).
 # Safe to run again: every step checks what is already done. Full guide: deploy/vps/README.md.
 set -euo pipefail
@@ -306,9 +307,6 @@ else
 fi
 chmod 600 "$COINNIBAL_ENV"
 env_set GAME_DOMAIN "$domain"
-for kv in "${sets[@]}"; do
-  env_set "${kv%%=*}" "${kv#*=}"
-done
 if [[ -n "$from_url" ]]; then
   note "copying the settings from $from_url"
   envjson="$(mktemp)"
@@ -336,6 +334,14 @@ if [[ -n "$from_url" ]]; then
       # never the site's contract pins (docker-compose.yml build args): a pin changes only in this shell, so a broken-into
       # old server cannot pick the contracts the new build trusts. The server never sends them (MIGRATED in backup.ts)
       COINNIBAL_PIN_* | ELYMUM_PIN_* | VITE_*) continue ;;
+      # Caddy's config (Caddyfile.cloudflare behind Cloudflare): only a file of this checkout's deploy/vps/caddy, by
+      # its plain name (Caddy reads /etc/caddy/<it>; never a path out of that folder)
+      CADDY_CONFIG)
+        if [[ "$v" =~ ^Caddyfile(\.[A-Za-z0-9_-]+)?$ && -f "deploy/vps/caddy/$v" ]]; then
+          env_set CADDY_CONFIG "$v"
+        else
+          note "the old server's CADDY_CONFIG is not a Caddy configuration of deploy/vps/caddy; not copied (Caddyfile stays)"
+        fi ;;
       *) env_set "$k" "$v" ;;
     esac
   done < <(python3 -I -c 'import json,sys; [print(k + "\t" + str(v)) for k, v in json.load(open(sys.argv[1]))["env"].items()]' "$envjson")
@@ -351,6 +357,11 @@ if [[ -n "$from_url" ]]; then
   env_set CORS_ORIGIN "https://coinnibal.fun"
   note "settings copied ($(grep -c '=' "$COINNIBAL_ENV") lines in $COINNIBAL_ENV)"
 fi
+# --set last: the owner's own values win over the ones --from copied (--set CADDY_CONFIG=Caddyfile.cloudflare on a
+# move behind Cloudflare, README section 9)
+for kv in "${sets[@]}"; do
+  env_set "${kv%%=*}" "${kv#*=}"
+done
 edit_env() {
   echo
   echo " The settings file opens in the nano editor. Fill in the values (deploy/vps/README.md section 4:"
