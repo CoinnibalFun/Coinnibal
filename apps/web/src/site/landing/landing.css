@@ -719,10 +719,11 @@
   justify-content: space-between;
   gap: 16px;
   padding-top: 16px;
-  /* the eating rule is a sentence: body type, not a mono label */
+  /* the eating rule is a sentence: body type, not a mono label (and no one-word last line) */
   font-size: 15px;
   line-height: 1.45;
   color: var(--ink-2);
+  text-wrap: pretty;
 }
 @media (max-width: 899px) {
   .ld-feast__grid {
@@ -1624,8 +1625,9 @@
   .ld-stair.is-practice {
     grid-column: 1 / -1;
   }
+  /* one paid column wide: half the row less half the gap, and never past the paid tickets' own 230px */
   .ld-stair.is-practice .ld-ticket {
-    max-width: calc(50% - 7px);
+    max-width: min(230px, calc(50% - 7px));
   }
   .ld-stair:nth-child(even) .ld-ticket {
     transform: rotate(-1deg);
@@ -1648,6 +1650,16 @@
     padding-inline: 4px;
     letter-spacing: 0.02em;
     white-space: nowrap;
+  }
+}
+/* a small phone (157px columns at 360): the $10 ticket's "NFT holders only" pill needs the room, or it pushes the ticket
+   past its column and the stairs' right edge */
+@media (max-width: 374px) {
+  .ld-ticket {
+    padding-inline: 8px;
+  }
+  .ld-ticket__stub {
+    margin-inline: -8px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
