@@ -65,6 +65,9 @@ async function harness(env: Record<string, string> = {}, setupDir?: (dir: string
     PUBLIC_URL: 'https://coinnibal.example',
     ROUND_JOIN_CLOSE_SECONDS: '0',
     ROUND_BREAK_SECONDS: '0',
+    // every request comes from one client (127.0.0.1): a budget far above the gates tested here (the holder-read
+    // bounds per client and network are derived from it; ticket-reads.test.ts tests them)
+    RPC_MAX_RPS: '1000',
     ...env,
   } as NodeJS.ProcessEnv);
   const app = await createApp(cfg, {
@@ -505,6 +508,59 @@ describe('game gate modes', () => {
       expect(await x.app.site.gameOpenFor(wallet())).toBe(false);
     } finally {
       await x.app.close();
+    }
+  });
+});
+
+describe('holder checks past a client\'s bound: values shown are never busy, gate decisions are (R3-NET-1)', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    // the default RPC budget (4 calls/s): one client may read a holder 3.75 times a minute, in bursts of 2
+    h = await harness({ RPC_MAX_RPS: '4' });
+    h.app.contracts.set('nft', { address: NFT, txHash: null, chainId: 31337, registeredAt: 1, registeredBy: ADMIN });
+    await h.call('PUT', '/api/admin/settings', { wallet: ADMIN, body: { gameAccess: 'public' } });
+  });
+  afterAll(async () => {
+    await h.app.close();
+  });
+
+  it('profile, auth/me, the shop and a room quote answer 200 (the holder on record, else not a holder); the gate says busy', { timeout: 30_000 }, async () => {
+    // every request comes from 127.0.0.1: throwaway wallets spend its holder reads (and the server-wide burst)
+    for (let i = 0; i < 12; i++) await h.call('GET', '/api/profile', { wallet: wallet() });
+    const plain = wallet();
+    for (const path of ['/api/profile', '/api/auth/me', '/api/shop', '/api/rooms/custom/quote']) {
+      const r = await h.call('GET', path, { wallet: plain });
+      expect(r.status, path).toBe(200);
+    }
+    expect((await h.call('GET', '/api/profile', { wallet: plain })).body.holder).toBe(false);
+    expect((await h.call('GET', '/api/auth/me', { wallet: plain })).body).toEqual({ address: plain, admin: false, holder: false, canPlay: true });
+    // a holder that minted a moment ago: a refused check has the holder index read the NFT's Transfer logs (at most
+    // every HOLDERS_ON_DEMAND_MS), so it is a holder on record within seconds, though this client still may not read
+    // the chain
+    const holder = wallet();
+    h.evm.mintNft(holder);
+    await h.call('GET', '/api/profile', { wallet: holder });
+    let me: any = null;
+    for (let i = 0; i < 150 && !me?.holder; i++) {
+      await new Promise((r) => setTimeout(r, 60));
+      me = (await h.call('GET', '/api/auth/me', { wallet: holder })).body;
+    }
+    expect(me).toEqual({ address: holder, admin: false, holder: true, canPlay: true });
+    expect((await h.call('GET', '/api/profile', { wallet: holder })).body.holder).toBe(true);
+    // holders mode: who may play is a gate decision. A wallet with nothing on record hears busy (ask again), never
+    // "not a holder"; the holder on record plays; an admin never waits on it
+    await h.call('PUT', '/api/admin/settings', { wallet: ADMIN, body: { gameAccess: 'holders' } });
+    try {
+      const other = wallet();
+      expect((await h.call('GET', '/api/auth/me', { wallet: other })).body).toEqual({ address: other, admin: false, holder: false, canPlay: false, busy: true });
+      expect((await h.call('GET', '/api/auth/me', { wallet: holder })).body).toMatchObject({ holder: true, canPlay: true });
+      expect((await h.call('GET', '/api/auth/me', { wallet: ADMIN })).body).toMatchObject({ admin: true, canPlay: true });
+      // the shop and a room quote are only shown: as not a holder (403 game_closed), never 429
+      expect((await h.call('GET', '/api/shop', { wallet: other })).status).toBe(403);
+      expect((await h.call('GET', '/api/rooms/custom/quote', { wallet: other })).status).toBe(403);
+      expect((await h.call('GET', '/api/shop', { wallet: holder })).status).toBe(200);
+    } finally {
+      await h.call('PUT', '/api/admin/settings', { wallet: ADMIN, body: { gameAccess: 'public' } });
     }
   });
 });

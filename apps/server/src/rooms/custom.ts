@@ -48,9 +48,9 @@ import type { WorldShape } from './room';
 
 /** A refusal of the custom room API: HTTP status, code and a friendly message. */
 /**
- * A holder check that failed reads as "not a holder" (a free room or a discount is not given), except a busy one
- * (`ClientBudgetError`: this client may not read the chain right now): that is passed on, so the creator hears "try
- * again in a moment" instead of a price a holder would not pay.
+ * A holder check of a room's creation that failed reads as "not a holder" (a free room or a discount is not given),
+ * except a busy one (`ClientBudgetError`: this client may not read the chain right now): that is passed on, so the
+ * creator hears "try again in a moment" instead of a price a holder would not pay. (A quote is only shown: never busy.)
  */
 const holderUnknown = (err: unknown): false => {
   if (err instanceof ClientBudgetError) throw err;
@@ -635,7 +635,9 @@ export class CustomRoomService implements CustomRoomHooks {
   }
 
   async quote(wallet: string | null): Promise<CustomRoomQuote> {
-    const holder = wallet ? await this.d.isHolder(wallet).catch(holderUnknown) : false;
+    // a quote is only shown: never busy (a check this client may not make right now quotes the full price, not kept);
+    // the room's creation checks again and passes a busy check on
+    const holder = wallet ? await this.d.isHolder(wallet).catch(() => false) : false;
     const free = !!wallet && holder && this.freeAvailable(wallet, await this.tokensOf(wallet, false));
     const base = await this.basePrice();
     const target = this.payTarget();

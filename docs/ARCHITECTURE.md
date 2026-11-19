@@ -276,7 +276,10 @@ has more bots than its setting, nor more playing than the setting minus its peop
   opens it in `/admin` (Game → Who may play, or Settings). The game's quotes follow the same gate: `GET /api/shop`,
   `GET /api/rooms/custom/quote` and every `POST /api/rooms/custom*` (practice with bots included) answer 403
   `game_closed` to a wallet the game is closed for (`gameOpenFor`: only admins in `admins` and `maintenance`, holders
-  and admins in `holders`). `GET /api/site/faucet` follows the site's /faucet door (`faucetOpenFor`): open to everyone
+  and admins in `holders`; the two quotes are only shown, so a holder check this client may not make right now reads
+  as "not a holder" there, never 429, while a room's creation answers busy). `/api/auth/me` says `busy: true` (with
+  `canPlay: false`) when it cannot decide `canPlay` right now; `/play` asks again a few times before it shows the
+  holders page. `GET /api/site/faucet` follows the site's /faucet door (`faucetOpenFor`): open to everyone
   in `holders`, `public` and `maintenance`, admins only in `admins`. `POST /api/shop/buy` is never gated: a payment
   made anyway is credited or owed back.
 - **Rooms** (`rooms/manager.ts`, `rooms/room.ts`): practice ponds (Rookie and Pro leagues, 40 people), arena
@@ -389,24 +392,32 @@ has more bots than its setting, nor more playing than the setting minus its peop
   per address (an IPv6 /64) and 192 per IPv4 /24 or IPv6 /48; one wallet holds at most 3 sockets (a newer one closes its oldest
   lobby socket with `CLOSE_REPLACED`, 4000). A socket counts under the wallet whose token opened it for its whole life
   (a `logout` or a sign-in as another wallet does not free that place). A socket offering its session token as the
-  `coinnibal.auth.<token>` subprotocol (or `elymum.auth.<token>`, from a page of before the rename) takes the reserve,
+  `coinnibal.auth.<token>` subprotocol (or `elymum.auth.<token>`, from a page of before the rename) takes the reserve
+  and is never a guest, whether or not it sends `auth` (the guest share counts only sockets in the guest bounds),
   and one whose wallet holds a live coin gets in past the cap (its own upgrade budget, a margin over the address
   bounds, one slot per wallet: it takes the place of a lobby socket of that wallet, or of one whose game went silent
-  for 5 s, a dead socket; with every socket of the wallet in a live game it takes the wallet's one headroom slot, and
-  is refused once that is taken: a live game is never closed for a new tab). A socket on a headroom slot that signs
+  for 5 s, a dead socket; with every socket of the wallet in a live game it takes the wallet's one extra slot: an
+  idle guest's, the headroom, or, the headroom full, the place of a signed-in socket that has not played for 2
+  minutes; it is refused once the wallet holds that slot: a live game is never closed for a new tab). A socket on a headroom slot that signs
   out while the server is full is closed (1013). An idle lobby guest makes room near the cap; at the cap a signed-in
   socket that has not played for 2 minutes (its pings do not count), not joining and holding no live coin, makes room
   too (1013), the longest idle first. A join of the wallet
   that holds a live coin takes it over on the new socket at once and closes the old one with `CLOSE_REPLACED`. A join
   seats only the wallet that was signed in when it began. Ticket reads (`getSession`) run at `high` RPC priority
   (settlements and loot burns, `critical`, go first; holder checks and the other work clients can queue, `normal`,
-  after), shared per wallet, limited per socket, wallet, client and network (an IPv6 /48, an IPv4 /24), with a bounded
-  queue: one client holds at most 4 of its places and one network at most 8, and wallets the `Joined`-log index does
-  not know to hold an open ticket only a quarter of it. A join of a wallet the index does not know that is refused
-  for a full quarter (or finds a ticket) has the index read the new blocks at once (`refreshTicketIndex`, at most
-  every 4 s), so a ticket bought a moment ago has the whole queue at the join's next retry. Holder checks that read
-  the chain for a client are bounded per client, per network and server-wide (a quarter of `RPC_MAX_RPS`); one a
-  client may not make right now answers a "holder" on record, or "busy, try again", never "not a holder". A join
+  after), shared per wallet, limited per socket, wallet and client, with a bounded queue: one client holds at most 4
+  of its places, and wallets the `Joined`-log index does not know to hold an open ticket only a quarter of it, 8 per
+  network (an IPv6 /48, an IPv4 /24) and 120 a minute per network. A client's reads for wallets the index knows count
+  apart from its reads for free wallets, and no network bound applies to them: free wallets behind one carrier NAT or
+  in one /24 never keep a ticket holder of it out. A join of a wallet the index does not know that is refused (or
+  finds a ticket) has the index read the new blocks at once (`refreshTicketIndex`, at most every 4 s), so a ticket
+  bought a moment ago is known at the join's next retry. Holder checks that read the chain for a client use a quarter
+  of `RPC_MAX_RPS` server-wide; one client at most 1/16 of that and one network 1/8, as smooth buckets, and the
+  bucket's bottom half only for a network with no holder read lately, so a few networks cannot keep a newcomer's
+  first check out. One a client may not make right now answers the "holder" on record (a cached answer, or the
+  holder index of the NFT's `Transfer` logs, which such a refusal has read the new blocks, at most every 5 s) for a
+  gate decision, else "busy, try again", never "not a holder"; a value only shown (a profile, the shop's or a room's
+  price, the `holder` field of `/api/auth/me`) answers "not a holder" instead, not kept, never 429. A join
   waits at most 1 s for its laurel's holder check (then plays without it; a paid seat that asked for the emblem skin
   starts in a basic skin). Every send checks the
   socket's buffer (closed past 2 MiB); the heartbeat's ping carries a payload the pong must echo.
