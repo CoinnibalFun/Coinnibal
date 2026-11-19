@@ -160,7 +160,7 @@ export async function registerContract(deps: RegisterDeps, body: Record<string, 
   const txHash = body.txHash === undefined || body.txHash === null || body.txHash === '' ? null : body.txHash;
   if (txHash !== null && (typeof txHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHash))) throw bad('txHash', 'txHash must be a transaction hash (0x + 64 hex digits)');
   const { client, chainId } = deps;
-  if (!client || chainId === null) throw new SiteFail(503, 'chain_off', 'The server has no chain: its RPC did not answer or serves another chain (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker; coinnibal-compose logs app shows why).');
+  if (!client || chainId === null) throw new SiteFail(503, 'chain_off', 'The server has no chain: its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker; coinnibal-compose logs app shows why).');
   if (deps.store.overridden(k)) throw new SiteFail(409, 'wrong_state', `${k === 'arena' ? 'ARENA_ADDRESS' : k === 'nft' ? 'NFT_ADDRESS' : 'TOKEN_ADDRESS'} is set on the server: it overrides the registry.`);
 
   const code = await client.codeCheck(address, k);

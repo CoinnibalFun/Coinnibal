@@ -642,7 +642,7 @@ export function TestTokenCard({ ctx, local: given, onLocal: onGiven }: { ctx: Ch
   if (refusal) return null;
   const token = (ctx.status?.arena?.config?.token ?? registeredToken(ctx) ?? local.token?.address ?? null) as Address | null;
   return (
-    <Card title="TestToken" id="test-token" kicker="Off mainnet only" tone="quiet" lede={`A mintable ERC-20 with a faucet (1,000,000 per hour), to try the arena before the game token exists. ${testTokenArtifact.contractName} is never offered on mainnet.`}>
+    <Card title="TestToken" id="test-token" kicker="Off mainnet only" tone="quiet" lede={`A mintable ERC-20 with a faucet (by default 1,000,000 per hour), to try the arena before the game token exists. ${testTokenArtifact.contractName} is never offered on mainnet.`}>
       {token && (
         <p className="ad-inline">
           <span className="ad-registered__name">Token</span> <Addr value={token} net={ctx.net} />

@@ -33,7 +33,8 @@ Day-to-day running: [OPERATIONS.md](OPERATIONS.md) (with the step-by-step testne
    and use it (Finish setup does the token, the arenas and the perks in one go).
 8. **Open the game** (`/admin` → Game → Who may play): it starts closed (`admins`).
 
-`/admin` → **Network** shows the launch checklist live, each line with a link to the drawer that finishes it.
+`/admin` → **Network** shows the launch checklist live: a line that is not done links to the drawer that finishes it
+(the chain and the server key's gas are fixed on Network itself and on the server).
 
 ## 0. Robinhood Chain
 
@@ -151,7 +152,7 @@ send twice. Open **Setup**; the wizard walks the steps and remembers where you a
    "Arena prices in US dollars"). The lobby opens them within about a minute.
 
 **The testnet token.** On Robinhood Chain Testnet the wizard offers **Deploy TestToken** (an ERC20Burnable faucet
-token: `faucet()` gives 1,000,000 per hour, 2x for NFT holders; only its owner mints). **Finish setup** sets it as
+token: `faucet()` gives by default 1,000,000 per hour, 2x for NFT holders; only its owner mints). **Finish setup** sets it as
 the arena's token, creates the four rooms, sets the holder perks (8 % + 2 %), makes the $10 Room holders-only, makes the
 NFT the faucet's 2x and, on a testnet, calls `CoinnibalNFT.setPhase(public)`: the TEST mint opens to everyone. The
 game token itself will be launched on Pons, which exists on mainnet only (RESEARCH.md), after the NFT mint. Remember

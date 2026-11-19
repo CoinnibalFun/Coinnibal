@@ -89,7 +89,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
   switch (group) {
     case 'network': {
       if (!net.chain) return { now: 'The game server is not answering.', next: 'It retries every 5 s. If it stays down: on the server, run coinnibal-status (deploy/vps/README.md).' };
-      if (!net.info) return { now: 'The server has no chain: its RPC did not answer or serves another chain.', next: 'Check coinnibal-compose logs app on the VPS, then fix COINNIBAL_RPC_URLS in /opt/elymum/.env (EVM_RPC_URL(S) when the server runs outside Docker) and run coinnibal-compose up -d app.' };
+      if (!net.info) return { now: 'The server has no chain: its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid.', next: 'Check coinnibal-compose logs app on the VPS (its "chain:" lines say which), then fix COINNIBAL_RPC_URLS or SERVER_PRIVATE_KEY in /opt/elymum/.env (EVM_RPC_URL(S) when the server runs outside Docker) and run coinnibal-compose up -d app.' };
       const bal = a?.serverBalance ?? null;
       const now = `${chain}${status ? ` · block ${status.block.toString()}` : ''}${bal !== null ? ` · server key ${formatGasAmount(bal, 4)}` : ''}`;
       if (bal === 0n) return { now, next: `Fund the server key with ${GAS_SYMBOL}: it pays the gas of every settlement.` };

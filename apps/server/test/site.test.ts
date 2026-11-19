@@ -193,11 +193,11 @@ describe('site API', () => {
       expect((await h.call('POST', '/api/site/collab', { body: collabBody('nobody') })).status).toBe(401);
     });
 
-    it('registering a contract without a chain says where to look (the RPC, not an unset key)', async () => {
+    it('registering a contract without a chain names every cause and where to look (never "COINNIBAL_RPC_URLS is unset")', async () => {
       const r = await h.call('POST', '/api/admin/contracts', { wallet: h.admin, body: { kind: 'arena', address: wallet() } });
       expect(r.status).toBe(503);
       expect(r.body.error).toBe('chain_off');
-      expect(r.body.message).toMatch(/its RPC did not answer or serves another chain \(COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL\(S\) outside Docker; coinnibal-compose logs app shows why\)/);
+      expect(r.body.message).toMatch(/its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid \(COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL\(S\) outside Docker; coinnibal-compose logs app shows why\)/);
       expect(r.body.message).not.toMatch(/unset/);
     });
 

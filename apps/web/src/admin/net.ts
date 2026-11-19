@@ -52,7 +52,7 @@ export function chainBlockers(net: AdminNetwork, rpcChainId: number | null | und
   const out: string[] = [];
   if (net.fake) out.push('The game server runs the DEV_FAKE_CHAIN stand-in: there is no real chain to administer.');
   if (!net.chain) out.push('The game server cannot be reached, so its chain is unknown. Signing is blocked.');
-  else if (!net.info) out.push('The game server reports no chain: its RPC did not answer or serves another chain (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker; coinnibal-compose logs app shows why). Signing is blocked.');
+  else if (!net.info) out.push('The game server reports no chain: its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker; coinnibal-compose logs app shows why). Signing is blocked.');
   if (net.info && rpcChainId !== undefined && rpcChainId !== null && rpcChainId !== net.info.id) {
     out.push(`The RPC this panel reads is on chain ${rpcChainId}, but the game server is on ${net.info.name} (${net.info.id}). Signing is blocked.`);
   }

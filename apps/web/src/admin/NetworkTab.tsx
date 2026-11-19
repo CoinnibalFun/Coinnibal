@@ -72,7 +72,7 @@ export function mainnetChecklist(net: AdminNetwork, status: StatusSnapshot | nul
   return [
     // /opt/elymum: the live server's install directory, kept from before the rename (deploy/vps/lib.sh)
     { id: 'rpc', label: 'Point the server at the mainnet (COINNIBAL_CHAIN_ID and COINNIBAL_RPC_URLS)', detail: '/opt/elymum/.env on the VPS → COINNIBAL_CHAIN_ID=4663 and COINNIBAL_RPC_URLS=<Alchemy URL>,https://rpc.mainnet.chain.robinhood.com, then coinnibal-compose up -d app. The server follows that chain; testnet records stay on file.', ok: on, where: 'Server' },
-    { id: 'access', label: 'Set Game access explicitly', detail: 'The site settings carry over from testnet: check Who may play in Game (Admins or Holders) before anything else opens.', ok: null, where: 'Game' },
+    { id: 'access', label: 'Set Game access explicitly', detail: 'The site settings carry over from testnet: check that Who may play in Game is Admins before anything else opens. The game opens last (the final step).', ok: null, where: 'Game' },
     { id: 'fund', label: `Fund the server key with ${GAS_SYMBOL}`, detail: 'It sends every settlement; a little gas lasts a long time.', ok: when(a?.serverBalance != null ? a.serverBalance >= LOW_SERVER_GAS : null), where: 'Server' },
     { id: 'arena', label: 'Deploy CoinnibalArena from the owner wallet', detail: 'Setup → the deploy wizard. No address to type; it registers with the server by itself (code hash, owner and settler checked).', ok: when(!!net.arenaAddress && a?.code === 'ok'), where: 'Setup' },
     { id: 'nft', label: 'Deploy CoinnibalNFT from the owner wallet', detail: 'Setup → the deploy wizard, right after the arena. Treasury = you, base URI = this site.', ok: when(!!net.nftAddress && status?.nft?.code === 'ok'), where: 'Setup' },
@@ -162,7 +162,7 @@ export function NetworkTab({ ctx, registry }: { ctx: ChainCtx; registry: Contrac
     <div className="ad-network">
       <Card title="The chain" id="net-chain" aside={<NetPill net={net} />}>
         <dl className="ad-kv">
-          <Row label="Chain">{net.info ? <span className="num">{`${net.info.name} (${net.info.id})`}</span> : <span className="ad-bad">none: the RPC did not answer or serves another chain (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker; coinnibal-compose logs app)</span>}</Row>
+          <Row label="Chain">{net.info ? <span className="num">{`${net.info.name} (${net.info.id})`}</span> : <span className="ad-bad">none: the RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker; coinnibal-compose logs app)</span>}</Row>
           <Row label="RPC">
             {net.info?.rpcUrl ? <code className="ad-addr__v">{net.info.rpcUrl}</code> : <span className="ad-none">the wallet&apos;s own</span>}{' '}
             {health &&
