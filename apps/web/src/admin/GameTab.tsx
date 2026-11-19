@@ -134,7 +134,7 @@ function StartStopCard({ ctx }: { ctx: ChainCtx }) {
       />
       {env && (
         <p className="ad-note">
-          GAME_ACCESS={env} is set on the server: it wins over this switch.
+          GAME_ACCESS={env} is set on the server (COINNIBAL_GAME_ACCESS in /opt/elymum/.env on the VPS): it wins over this switch.
         </p>
       )}
       {arena && cfg && (

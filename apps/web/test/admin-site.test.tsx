@@ -179,6 +179,7 @@ describe('admin: site tabs (Bearer session, mocked fetch)', { timeout: 30_000 },
     restore();
     ({ calls, restore } = mockFetch({ 'GET /api/admin/settings': { settings: SETTINGS, gameAccessEnv: 'public' } }));
     ui(<SettingsTab api={api} />);
-    expect(await screen.findByText(/GAME_ACCESS=public is set on the server/)).toBeTruthy();
+    // the key the owner edits on the VPS (docker-compose.yml maps it to GAME_ACCESS), not only the server's own name
+    expect(await screen.findByText(/GAME_ACCESS=public is set on the server \(COINNIBAL_GAME_ACCESS in \/opt\/elymum\/\.env on the VPS\): it wins/)).toBeTruthy();
   });
 });

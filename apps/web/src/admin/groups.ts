@@ -123,7 +123,7 @@ export function groupSummary(group: AdminGroup, i: SummaryInput): GroupSummary {
     }
     case 'game': {
       const access = i.gameAccessEnv ?? i.settings?.gameAccess ?? null;
-      const parts = [access ? `Open to ${ACCESS[access]}${i.gameAccessEnv ? ' (GAME_ACCESS env)' : ''}` : 'Access unknown (sign in)'];
+      const parts = [access ? `Open to ${ACCESS[access]}${i.gameAccessEnv ? ' (COINNIBAL_GAME_ACCESS / GAME_ACCESS env)' : ''}` : 'Access unknown (sign in)'];
       if (cfg) parts.push(cfg.paused ? 'arena PAUSED' : 'arena taking joins');
       if (i.bots) parts.push(`${i.bots.humans} people · ${i.bots.bots} bots in ${i.bots.rooms} rooms`);
       const now = parts.join(' · ');
