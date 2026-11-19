@@ -2,7 +2,8 @@
 // Fraunces "full" carries the SOFT and WONK axes (display); DM Sans with optical sizes (body);
 // Geist Mono (every number). The latin upright Fraunces comes from design/fonts (SOFT pinned at 100, the only value
 // the site uses): imported after fontsource's faces, so it wins for latin text and the fontsource latin file is
-// never fetched; fontsource still serves latin-ext letters (player names) and the italic.
+// never fetched; fontsource still serves latin-ext letters (player names) and the italic. Last, the three upright faces
+// cut down to basic latin and punctuation (design/fonts/core.css): all a first visit of the landing draws.
 import '@fontsource-variable/fraunces/full.css';
 import '@fontsource-variable/fraunces/full-italic.css';
 import './design/fonts/fraunces-soft.css';
@@ -10,6 +11,7 @@ import '@fontsource-variable/dm-sans/opsz.css';
 import '@fontsource-variable/dm-sans/opsz-italic.css';
 import './design/fonts/dm-sans-fallback.css';
 import '@fontsource-variable/geist-mono/wght.css';
+import './design/fonts/core.css';
 import './design/tokens.css';
 import './design/storybook.css';
 import './chainText';

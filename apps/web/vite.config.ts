@@ -316,6 +316,9 @@ function viemPackageDirs(): string[] {
 }
 const VIEM_DIRS = viemPackageDirs();
 
+/** A module of the design system (src/design) other than a style sheet: no import-time side effects (light-imports test). */
+export const isPureDesignModule = (id: string): boolean => /[\\/]apps[\\/]web[\\/]src[\\/]design[\\/]/.test(id) && !/\.css(\?|$)/.test(id);
+
 export default defineConfig({
   plugins: [react(), publicUrlFiles(), sitePreloads(), prerenderLanding(), precompress()],
   server: {
@@ -337,8 +340,12 @@ export default defineConfig({
       // The workspace SDK's modules have no import-time side effects (ABIs, constants, functions):
       // marked so, a page that only needs its constants (the landing quotes fee and refund numbers)
       // does not pull in its viem-based clients. The SDK's package.json has no `sideEffects` field.
+      // The design system's components and motifs (src/design, its CSS aside) have none either: marked so, a page
+      // that imports the `design` barrel gets only the parts it uses. Unmarked, every module behind the barrel went
+      // into the chunk the landing shares with the game and the admin panel (the dialogs, sheets, toasts, tabs, form
+      // fields and receipts the landing never draws, and motion's code behind them): 9.4 KB of brotli on a first visit.
       treeshake: {
-        moduleSideEffects: (id: string) => !/[\\/]packages[\\/](sdk|contracts)[\\/]/.test(id),
+        moduleSideEffects: (id: string) => !/[\\/]packages[\\/](sdk|contracts)[\\/]/.test(id) && !isPureDesignModule(id),
       },
       output: {
         // long-term cacheable vendor chunks
