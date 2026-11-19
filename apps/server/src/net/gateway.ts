@@ -41,6 +41,18 @@ export const UPGRADES_PER_IP_PER_MIN = 60;
 export const GUEST_SHARE = 0.8;
 /** A guest with no message for this long, not playing, is idle: it is closed when a newcomer needs its slot. */
 export const IDLE_GUEST_MS = 30_000;
+/**
+ * Guests per IPv6 /48: `MAX_CONNECTIONS_PER_SUBNET` times this. A guest is bounded per address and per /64 too, but one
+ * customer's /48 holds 65536 /64s: without it one site would take the whole guest share.
+ */
+export const GUESTS_PER_WIDE_FACTOR = 2;
+/**
+ * A signed-in socket that has not played for this long (`Conn.playedAt`) and is not playing, not joining, its wallet
+ * holding no live arena coin, is idle: at the cap the longest-idle one is closed (1013) when a newcomer needs a slot.
+ * Its messages do not count (a socket that only pings keeps no place), so signed-in sockets that never play cannot
+ * hold a full server.
+ */
+export const IDLE_SIGNED_MS = 2 * 60_000;
 /** Above this share of `MAX_CONNECTIONS` the heartbeat closes guests idle for `2 × IDLE_GUEST_MS` (down to the share). */
 const IDLE_SWEEP_SHARE = 0.9;
 /** A send buffer over this (the snapshot skip of `room.ts`) at two heartbeats in a row closes the socket. */
@@ -50,9 +62,11 @@ const STAKE_HEADROOM = 0.05;
 /**
  * Signed-in sockets per IP: `MAX_CONNECTIONS_PER_IP` times this (64 by default). Far above a household, enough for a
  * carrier NAT address, and still a bound on one address that signs in with many throwaway wallets. An IPv6 client
- * counts as its /64; an IPv4 /24 and an IPv6 /48 hold at most `MAX_CONNECTIONS_PER_SUBNET` times this.
+ * counts as its /64.
  */
 export const SIGNED_PER_IP_FACTOR = 8;
+/** Signed-in sockets per IPv4 /24 and per IPv6 /48: `MAX_CONNECTIONS_PER_SUBNET` times this (192 by default). */
+export const SIGNED_PER_NET_FACTOR = 4;
 /**
  * Sockets one wallet may hold at once (a few tabs, a reconnect beside a socket the heartbeat has not dropped yet). A
  * newer one closes the wallet's oldest lobby socket with `CLOSE_REPLACED` (its page does not reconnect), so one session
@@ -190,8 +204,10 @@ export class Gateway {
     // (`elymum` to a page from before the rename)
     handleProtocols: (protocols) => (protocols.has(SUBPROTOCOL) ? SUBPROTOCOL : protocols.has(OLD_SUBPROTOCOL) ? OLD_SUBPROTOCOL : false),
   });
+  /** Guests per address, per /24 or /64 (`subnetOf`) and per IPv6 /48 (`wideNetOf`). */
   private readonly perIp = new Map<string, number>();
   private readonly perSubnet = new Map<string, number>();
+  private readonly perWide = new Map<string, number>();
   /** Signed-in sockets per network (`signedNets`: the address or IPv6 /64, its /24 or /64, an IPv6 /48). */
   private readonly signedPerNet = new Map<string, number>();
   /** Open sockets per wallet (lower case), oldest first: offered its token at the upgrade, or signed in with `auth`. */
@@ -423,9 +439,11 @@ export class Gateway {
    * One admission policy for every upgrade. Null refuses it (429); otherwise how many of the offered wallet's open
    * sockets may stay beside the new one (`addToWallet` replaces the rest; `Infinity` for a guest), and past the cap the
    * socket it takes the place of, or that it takes its wallet's one extra slot.
-   * - Guests: per IP and per subnet, at most `GUEST_SHARE` of the slots.
+   * - Guests: per IP, per subnet and per IPv6 /48, at most `GUEST_SHARE` of the slots; at the cap an idle guest makes
+   *   room, or (the guests under their share) a signed-in socket that does not play (`IDLE_SIGNED_MS`).
    * - Signed-in (a session token): `signedRoom` per address (an IPv6 /64), per /24 or /64 and per IPv6 /48; at most
-   *   `SOCKETS_PER_WALLET` per wallet; the reserve the guests leave.
+   *   `SOCKETS_PER_WALLET` per wallet; the reserve the guests leave; at the cap an idle guest or an idle signed-in
+   *   socket makes room.
    * - A live stake's reconnect: the same bounds per wallet and network (with a margin of `MAX_CONNECTIONS_PER_IP` for a
    *   carrier NAT), its own upgrade budget, and past the cap one slot per wallet: a socket of its own that does not play
    *   (or whose game went silent: a dead socket) is swapped; a live game is never closed for it: with every socket of
@@ -452,12 +470,21 @@ export class Gateway {
       if (!this.signedRoom(ip)) return null;
       const keep = SOCKETS_PER_WALLET - 1;
       const freed = Math.max(0, this.walletConns(offer.wallet).length - keep);
-      return this.rooms.conns.size - freed < max || this.evictIdleGuest(IDLE_GUEST_MS) ? { keep } : null;
+      return this.rooms.conns.size - freed < max || this.evictIdleGuest(IDLE_GUEST_MS) || this.evictIdleSigned() ? { keep } : null;
     }
-    if ((this.perIp.get(ip) ?? 0) >= this.cfg.maxConnectionsPerIp || (this.perSubnet.get(net) ?? 0) >= this.cfg.maxConnectionsPerSubnet) return null;
+    const wide = wideNetOf(ip);
+    if (
+      (this.perIp.get(ip) ?? 0) >= this.cfg.maxConnectionsPerIp ||
+      (this.perSubnet.get(net) ?? 0) >= this.cfg.maxConnectionsPerSubnet ||
+      (wide !== null && (this.perWide.get(wide) ?? 0) >= this.cfg.maxConnectionsPerSubnet * GUESTS_PER_WIDE_FACTOR)
+    )
+      return null;
     // guests use at most GUEST_SHARE of the slots; at the cap (or the guest share) an idle guest makes room
-    if (this.rooms.conns.size < max && this.guestCount() < max * GUEST_SHARE) return { keep: Infinity };
-    return this.evictIdleGuest(IDLE_GUEST_MS) ? { keep: Infinity } : null;
+    const guestsUnderShare = this.guestCount() < max * GUEST_SHARE;
+    if (this.rooms.conns.size < max && guestsUnderShare) return { keep: Infinity };
+    if (this.evictIdleGuest(IDLE_GUEST_MS)) return { keep: Infinity };
+    // a full server with the guests under their share: a signed-in socket that does not play makes room
+    return guestsUnderShare && this.evictIdleSigned() ? { keep: Infinity } : null;
   }
 
   /**
@@ -474,7 +501,7 @@ export class Gateway {
   /** The networks a signed-in socket counts in, with their bounds: its address (an IPv6 /64), its /24 or /64, an IPv6 /48. */
   private signedNets(ip: string): [key: string, limit: number][] {
     const perIp = this.cfg.maxConnectionsPerIp * SIGNED_PER_IP_FACTOR;
-    const perNet = this.cfg.maxConnectionsPerSubnet * SIGNED_PER_IP_FACTOR;
+    const perNet = this.cfg.maxConnectionsPerSubnet * SIGNED_PER_NET_FACTOR;
     const nets: [string, number][] = [
       [`ip ${rateKey(ip)}`, perIp],
       [`net ${subnetOf(ip)}`, perNet],
@@ -637,7 +664,39 @@ export class Gateway {
     return true;
   }
 
-  /** The socket stops counting in its IP's and subnet's guest limit (it signed in, or it is gone). */
+  /**
+   * Closes the signed-in socket that went longest without playing (`IDLE_SIGNED_MS`): not playing, not joining, its
+   * wallet (the one it signed in as, or whose token opened it) holding no live arena coin. False when there is none.
+   */
+  private evictIdleSigned(): boolean {
+    const now = Date.now();
+    const idle: Conn[] = [];
+    for (const c of this.rooms.conns) {
+      if ((!c.wallet && !c.countedAsSigned) || c.player?.alive || c.joining || c.ws.readyState > 1 || now - c.playedAt < IDLE_SIGNED_MS) continue;
+      idle.push(c);
+    }
+    // a live coin's wallet may be about to take it back on this socket: never that one (checked for the few first only)
+    const worst = idle
+      .sort((a, b) => a.playedAt - b.playedAt)
+      .find((c) => !(c.wallet && this.rooms.holdsLiveStake(c.wallet)) && !(c.admitSlot && this.rooms.holdsLiveStake(c.admitSlot)));
+    if (!worst) return false;
+    this.dropped.idle++;
+    // gone from the counts now: the newcomer takes its slot at once
+    this.rooms.removeConn(worst);
+    this.uncountGuest(worst);
+    this.uncountSigned(worst);
+    this.releaseAllWallets(worst);
+    worst.room?.leave(worst, 'disconnect');
+    try {
+      worst.ws.close(1013, 'idle: the server is full');
+    } catch {
+      /* already closing */
+    }
+    setTimeout(() => worst.ws.terminate(), 1_000).unref();
+    return true;
+  }
+
+  /** The socket stops counting in its IP's, subnet's and /48's guest limit (it signed in, or it is gone). */
   private uncountGuest(conn: Conn, net = subnetOf(conn.ip)): void {
     if (!conn.countedAsGuest) return;
     conn.countedAsGuest = false;
@@ -647,6 +706,11 @@ export class Gateway {
     const s = (this.perSubnet.get(net) ?? 1) - 1;
     if (s <= 0) this.perSubnet.delete(net);
     else this.perSubnet.set(net, s);
+    const wide = wideNetOf(conn.ip);
+    if (wide === null) return;
+    const w = (this.perWide.get(wide) ?? 1) - 1;
+    if (w <= 0) this.perWide.delete(wide);
+    else this.perWide.set(wide, w);
   }
 
   private onConnection(ws: WebSocket, ip: string, net = subnetOf(ip), offer: Offer | null = null, admitted: Admission = { keep: SOCKETS_PER_WALLET - 1 }): void {
@@ -670,6 +734,8 @@ export class Gateway {
     } else {
       this.perIp.set(ip, (this.perIp.get(ip) ?? 0) + 1);
       this.perSubnet.set(net, (this.perSubnet.get(net) ?? 0) + 1);
+      const wide = wideNetOf(ip);
+      if (wide !== null) this.perWide.set(wide, (this.perWide.get(wide) ?? 0) + 1);
     }
     this.rooms.addConn(conn);
     this.alive.set(ws, true);
@@ -808,7 +874,11 @@ export class Gateway {
     if (isBinary) {
       const input = decodeClientInput(toBytes(data));
       if (!input || !conn.helloed) return this.strike(conn);
-      if (conn.room) conn.room.input(conn, input);
+      if (conn.room) {
+        conn.room.input(conn, input);
+        // its coin plays: not an idle socket (`IDLE_SIGNED_MS`)
+        if (conn.player?.alive) conn.playedAt = conn.lastMsgAt;
+      }
       return;
     }
     let msg: Record<string, unknown>;
@@ -1072,6 +1142,8 @@ export class Gateway {
       }
     } finally {
       conn.joining = false;
+      // seated (a game, a reclaimed coin): the socket plays (`IDLE_SIGNED_MS`)
+      if (conn.player?.alive) conn.playedAt = Date.now();
     }
   }
 

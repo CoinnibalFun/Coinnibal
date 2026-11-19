@@ -74,7 +74,7 @@ before the rename still work: deploy/vps/README.md section 4):
 | `AUTH_SECRET` | `openssl rand -hex 32` (at least 32 bytes: the mainnet refuses to start with less, also when `CHAIN_ID` is unset and the RPC serves the mainnet), or empty for a generated one in the data volume |
 | `CORS_ORIGIN` | `https://coinnibal.fun` |
 | `PAYOUT_GUARD_MULTIPLE` | `100` (default): the payout guard of settlements without a round pool; see OPERATIONS.md, "The server key" |
-| `MAX_CONNECTIONS`, `MAX_CONNECTIONS_PER_IP`, `MAX_CONNECTIONS_PER_SUBNET` | `1500`, `8`, `48` (defaults): WebSocket caps (total, guests per IP, guests per IPv4 /24 or IPv6 /64) |
+| `MAX_CONNECTIONS`, `MAX_CONNECTIONS_PER_IP`, `MAX_CONNECTIONS_PER_SUBNET` | `1500`, `8`, `48` (defaults): WebSocket caps (total, guests per IP, guests per IPv4 /24 or IPv6 /64; an IPv6 /48 holds 2 x and 4 x the last as guests and signed-in sockets) |
 | `GAME_WORKERS` | `5` on 8 vCPU |
 | `LOAD_SHED` | on by default in production: new free games, then new sockets and arena seats wait while the server is overloaded |
 | `MINT_USD_CENTS` | `100` (the $1 target; default) |
