@@ -101,6 +101,19 @@ export function siweOrigin(cfg: ServerConfig, req: IncomingMessage, _trustProxy:
   return { domain: new URL(uri).host, uri, chainId: chainId ?? cfg.chain.chainId };
 }
 
+/**
+ * The request's URL, or null for a target `new URL` rejects (`//`: a scheme-relative URL with no host). Without this
+ * the async handler threw before it wrote anything, the rejection was only logged, and the socket hung until the
+ * client gave up.
+ */
+export function requestUrl(target: string | undefined): URL | null {
+  try {
+    return new URL(target ?? '/', 'http://localhost');
+  } catch {
+    return null;
+  }
+}
+
 function json(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(body));
@@ -411,7 +424,8 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
 
   // the request and header timeouts are enforced by a sweep every `connectionsCheckingInterval` (Node default 30 s)
   const server = createServer({ connectionsCheckingInterval: 2_000 }, async (req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    const url = requestUrl(req.url);
+    if (!url) return json(res, 400, { error: 'bad_request' });
     const allow = corsAllow(cfg.corsOrigin, req.headers.origin);
     if (allow) res.setHeader('Access-Control-Allow-Origin', allow);
     if (allow && allow !== '*') res.setHeader('Vary', 'Origin');
