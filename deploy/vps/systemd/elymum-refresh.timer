@@ -1,0 +1,12 @@
+# A unit added after the rename, under the installed prefix (elymum-*) like the other jobs (deploy/vps/lib.sh).
+[Unit]
+Description=Coinnibal: weekly rebuild of the deployed commit on the newest base images (Sunday 05:00)
+
+[Timer]
+OnCalendar=Sun *-*-* 05:00:00
+# a week missed while the server was off runs at the next boot
+Persistent=true
+RandomizedDelaySec=20min
+
+[Install]
+WantedBy=timers.target

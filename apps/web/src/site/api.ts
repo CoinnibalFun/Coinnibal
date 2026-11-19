@@ -209,19 +209,35 @@ export function encodeProof(message: string, signature: string): string {
 
 const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
+const SECRETS_END = 'COINNIBAL_SECRETS';
+
 /**
- * The one-line shell command that downloads a server backup with an admin session token and a fresh proof (pure,
- * tested): run on the new server to move the data without a laptop in between. Both are single-quoted. The proof
+ * `lines` as a quoted here-document on the command's stdin: the secrets never go on a command line, which any local
+ * user can read in ps (the shell writes a here-document to the command's stdin itself). Quoted, so nothing in it is
+ * expanded. A value holding a line break would end it early: refused.
+ */
+function onStdin(lines: string[]): string {
+  if (lines.some((l) => /[\r\n]/.test(l) || l === SECRETS_END)) throw new Error('a secret holds a line break');
+  return ` <<'${SECRETS_END}'\n${lines.join('\n')}\n${SECRETS_END}`;
+}
+
+/**
+ * The shell command that downloads a server backup with an admin session token and a fresh proof (pure, tested): run
+ * on the new server to move the data without a laptop in between. Both headers reach curl on its stdin (`-H @-`),
+ * never as arguments. The leading space keeps the command out of the shell history (Ubuntu's HISTCONTROL). The proof
  * opens one download within 10 minutes; the session lasts 2 hours at most.
  */
 export function backupCurlCommand(serverHttp: string, token: string, proof: string): string {
-  return `curl -fsS -H ${shellQuote(`Authorization: Bearer ${token}`)} -H ${shellQuote(`${PROOF_HEADER}: ${proof}`)} ${shellQuote(`${serverHttp.replace(/\/+$/, '')}/api/admin/backup`)} -o coinnibal-backup.tar.gz`;
+  return ` curl -fsS -H @- ${shellQuote(`${serverHttp.replace(/\/+$/, '')}/api/admin/backup`)} -o coinnibal-backup.tar.gz${onStdin([`Authorization: Bearer ${token}`, `${PROOF_HEADER}: ${proof}`])}`;
 }
 
-/** The whole move to a new server as one line (deploy/vps/install.sh --from): settings and data, with a `migration` proof. */
+/**
+ * The whole move to a new server in one paste (deploy/vps/install.sh --from): settings and data, with a `migration`
+ * proof. The token and the proof reach install.sh on its stdin, one per line, never as arguments.
+ */
 export function installCommand(serverHttp: string, token: string, proof: string): string {
   const raw = 'https://raw.githubusercontent.com/furkan3152/Solagel/main/deploy/vps/install.sh';
-  return `curl -fsSL ${raw} -o install.sh && sudo bash install.sh --yes --from ${shellQuote(serverHttp.replace(/\/+$/, ''))} --token ${shellQuote(token)} --proof ${shellQuote(proof)}`;
+  return ` curl -fsSL ${raw} -o install.sh && sudo bash install.sh --yes --from ${shellQuote(serverHttp.replace(/\/+$/, ''))}${onStdin([token, proof])}`;
 }
 
 export function saveBlob(blob: Blob, name: string): void {
