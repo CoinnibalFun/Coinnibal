@@ -28,10 +28,11 @@ export function setupLayout(ctx: Pick<ChainCtx, 'net' | 'status' | 'registry'>):
 
 /**
  * `/admin → Setup`. Contracts registered: Finish setup first (every missing owner step in one go), the game token or
- * TestToken card when Finish setup cannot set the token, Site pins (the site build must trust the registered
- * contracts: the `/opt/elymum/.env` lines and the rebuild), and every manual control and address override in ONE
+ * TestToken card when Finish setup cannot set the token, Site pins (the owner wallet signs the registered contracts
+ * for the site: one free signature), and every manual control and address override in ONE
  * collapsed "Advanced" section at the bottom.
- * Nothing deployed yet (a fresh chain, mainnet day): the deploy wizard, which asks for no address.
+ * Nothing deployed yet (a fresh chain, mainnet day): the deploy wizard, which asks for no address (the same steps as
+ * Start → Deploy the contracts, one by one).
  */
 export function SetupTab({ ctx }: { ctx: ChainCtx }) {
   const { registered, tokenCard, testTokenCard } = setupLayout(ctx);

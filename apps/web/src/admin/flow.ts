@@ -1,0 +1,92 @@
+import { testTokenRefusal, type StatusSnapshot } from '@coinnibal/sdk/ops';
+import type { ContractsRegistry } from '@coinnibal/shared';
+import { getAddress, isAddress, type Address } from 'viem';
+import type { LocalDeploys } from './deploy';
+import type { SetupStep } from './setup';
+
+/**
+ * "Deploy the contracts" in one flow (pure, tested): every step the server's network still needs, in order, one wallet
+ * signature each. Testnet: the TestToken (when none is registered), the arena, the NFT, registering them, setting the
+ * game token, the rooms and the NFT perks, and the site pins. Mainnet: the arena, the NFT, registering them, the NFT
+ * perks and the site pins; the game token comes later (it is launched on Pons), and the site pins are signed again then.
+ */
+export type FlowStepId = 'test-token' | 'arena' | 'nft' | 'register' | 'token' | 'setup' | 'pins';
+
+export interface FlowStep {
+  id: FlowStepId;
+  label: string;
+  /** One short line: what it does, or what was made. */
+  detail: string;
+  done: boolean;
+  /** What the wallet is asked for: a transaction (`n` of them), a free message, or nothing. */
+  ask: { kind: 'tx'; n: number } | { kind: 'message' } | { kind: 'none' };
+}
+
+export interface FlowInput {
+  /** The server's chain id (null: no chain). */
+  chainId: number | null;
+  mainnet: boolean;
+  /** The server's registered contracts. */
+  registry: ContractsRegistry | null | undefined;
+  /** What this browser deployed (kept until it is registered). */
+  local: LocalDeploys;
+  /** The chain read of the registered contracts. */
+  status: StatusSnapshot | null;
+  /** What Finish setup would still sign (`setupSteps`, without opening the mint). */
+  setup: readonly SetupStep[];
+  /** The site trusts the registered contracts (`PinReport.ok`). */
+  pinsOk: boolean | null;
+}
+
+const addr = (v: string | null | undefined): Address | null => (v && isAddress(v, { strict: false }) ? getAddress(v) : null);
+
+/** The arena, NFT and token of the flow: the registered ones, else the ones this browser deployed. */
+export function flowContracts(i: Pick<FlowInput, 'registry' | 'local' | 'status'>): { arena: Address | null; nft: Address | null; token: Address | null } {
+  return {
+    arena: addr(i.registry?.arena?.address) ?? i.local.arena?.address ?? null,
+    nft: addr(i.registry?.nft?.address) ?? i.local.nft?.address ?? null,
+    token: addr(i.status?.arena?.config?.token) ?? addr(i.registry?.token?.address) ?? addr(i.status?.testToken?.address) ?? i.local.token?.address ?? null,
+  };
+}
+
+/** The steps of this network, each done or not (pure, tested). */
+export function deployFlowSteps(i: FlowInput): FlowStep[] {
+  const c = flowContracts(i);
+  const testnet = i.chainId !== null && !testTokenRefusal(i.chainId);
+  const cfg = i.status?.arena?.config ?? null;
+  const tokenSet = !!cfg?.token;
+  const registered = { arena: !!i.registry?.arena, nft: !!i.registry?.nft, token: !!i.registry?.token || tokenSet };
+  const steps: FlowStep[] = [];
+  if (testnet) steps.push({ id: 'test-token', label: 'Deploy the test token', detail: c.token ?? 'The token the test rooms take (TEST). Testnet only.', done: !!c.token, ask: { kind: 'tx', n: 1 } });
+  steps.push(
+    { id: 'arena', label: 'Deploy the arena', detail: c.arena ?? 'It holds the ticket money and settles the rounds.', done: !!c.arena, ask: { kind: 'tx', n: 1 } },
+    { id: 'nft', label: 'Deploy the NFT', detail: c.nft ?? 'The Coinnibal NFT, 3,333 pieces.', done: !!c.nft, ask: { kind: 'tx', n: 1 } },
+    {
+      id: 'register',
+      label: 'Register them with the server',
+      detail: 'The server checks each one. No signature.',
+      done: registered.arena && registered.nft && (!testnet || registered.token),
+      ask: { kind: 'none' },
+    },
+  );
+  if (testnet) steps.push({ id: 'token', label: 'Set the game token', detail: tokenSet ? cfg!.token! : 'The test token becomes the arena’s token (once, for good).', done: tokenSet, ask: { kind: 'tx', n: 1 } });
+  // before the token is set the rooms are not known yet: the line stays open (testnet) until it is
+  const setupOpen = i.setup.length > 0 || (testnet && !tokenSet) || !cfg;
+  steps.push({
+    id: 'setup',
+    label: i.mainnet ? 'Set the NFT perks' : 'Create the rooms and the NFT perks',
+    detail: setupOpen ? (i.setup.length > 0 ? i.setup.map((s) => s.label).join(' · ') : i.mainnet ? 'The holder fee and the holders-only room.' : 'The four arenas, the holder fee, the holders-only room.') : 'All in place.',
+    done: !setupOpen,
+    ask: { kind: 'tx', n: Math.max(1, i.setup.length) },
+  });
+  steps.push({ id: 'pins', label: 'Sign the site pins', detail: 'One free message: the site may use these contracts. No transaction.', done: i.pinsOk === true, ask: { kind: 'message' } });
+  return steps;
+}
+
+/** The first step still to do (null: all done). */
+export const nextFlowStep = (steps: readonly FlowStep[]): FlowStep | null => steps.find((s) => !s.done) ?? null;
+
+/** How many wallet prompts are left (transactions and messages). */
+export function flowAsksLeft(steps: readonly FlowStep[]): number {
+  return steps.filter((s) => !s.done).reduce((n, s) => n + (s.ask.kind === 'tx' ? s.ask.n : s.ask.kind === 'message' ? 1 : 0), 0);
+}

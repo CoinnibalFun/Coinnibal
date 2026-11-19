@@ -240,6 +240,7 @@ describe('migrationEnv', () => {
       STAKE_ENABLED: 'false',
       // the VPS app reads the whole .env (env_file), the site's contract pins included: they never leave the server
       COINNIBAL_PIN_ARENA: '0x1111111111111111111111111111111111111111',
+      COINNIBAL_OWNER_WALLET: '0x1111111111111111111111111111111111111111',
       VITE_ARENA_ADDRESS: '0x1111111111111111111111111111111111111111',
       // Caddy's config, from the same .env: a server behind Cloudflare comes up behind it on the new host too (OPS-R3-2)
       CADDY_CONFIG: 'Caddyfile.cloudflare',
@@ -272,6 +273,8 @@ describe('migrationEnv', () => {
       ['COINNIBAL_PIN_NFT', pin],
       ['COINNIBAL_PIN_TOKEN', pin],
       ['ELYMUM_PIN_ARENA', pin],
+      // nor the owner wallet whose signed pins the build trusts
+      ['COINNIBAL_OWNER_WALLET', pin],
       ['VITE_ARENA_ADDRESS', pin],
       ['VITE_CHAIN_ID', '31337'],
       ['EVM_RPC_URLS', 'https://rpc.example'],

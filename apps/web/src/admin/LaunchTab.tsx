@@ -4,7 +4,7 @@ import { planDefaultArenas, type StatusSnapshot } from '@coinnibal/sdk/ops';
 import type { AllowlistStatus, MintPriceQuote, SiteCounts, SiteSettings } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Button, CoinCharacter, Counter, Stamp, type CoinMood, type CoinPaint } from '../design';
-import { GROUP_LABEL, parseAdminHash } from './groups';
+import { pageLabel, parseAdminHash } from './groups';
 import { LaunchScene, type SceneStageId } from './LaunchScene';
 import type { AdminNetwork } from './net';
 import { pinSummary, registeredPinReport } from './pins';
@@ -12,8 +12,8 @@ import { NO_TEST_TOKEN_YET } from './setup';
 import type { BuildPins, Pins } from '../wallet/pinned';
 import { Mark, type ChainCtx } from './ui';
 
-/** The drawer a line links to, by its old id (groups.ts LEGACY: deploy → Setup, arena → Game); `network`: this page, no link. */
-export type ChecklistTab = 'network' | 'deploy' | 'mint' | 'arena' | 'settings';
+/** The page a line links to (`deploy`: the deploy flow; `arena` → Game, groups.ts LEGACY); `network`: this page, no link. */
+export type ChecklistTab = 'network' | 'deploy' | 'setup' | 'mint' | 'arena' | 'settings';
 
 export interface ChecklistItem {
   id: string;
@@ -24,9 +24,9 @@ export interface ChecklistItem {
   tab: ChecklistTab;
 }
 
-/** A line's link label: the drawer its tab id opens (`deploy` → Setup, `arena` → Game), as the rail names it. */
+/** A line's link label: the page its tab id opens (`deploy` → Deploy, `arena` → Game), as the panel names it. */
 export function checklistLink(tab: ChecklistTab): string {
-  return GROUP_LABEL[parseAdminHash(`#${tab}`).group];
+  return tab === 'deploy' ? 'Deploy' : pageLabel(parseAdminHash(`#${tab}`).group);
 }
 
 /** The launch checklist, from the status read and the server's site data (pure, tested). */
@@ -59,7 +59,7 @@ export function launchChecklist(i: {
       detail: i.net.serverKey ? `${i.net.serverKey}${a?.serverBalance != null ? ` · ${formatGasAmount(a.serverBalance, 4)}` : ''}${a?.serverBalance === 0n ? ' · send it gas in Server key, above' : ''}` : 'The server publishes no key.',
       tab: 'network',
     },
-    { id: 'arena', label: 'CoinnibalArena deployed and registered', ok: !i.net.arenaAddress ? false : a ? a.code === 'ok' : null, detail: i.net.arenaAddress ? `${i.net.arenaAddress} · code ${a?.code ?? '…'}` : 'Not deployed yet: Setup.', tab: 'deploy' },
+    { id: 'arena', label: 'CoinnibalArena deployed and registered', ok: !i.net.arenaAddress ? false : a ? a.code === 'ok' : null, detail: i.net.arenaAddress ? `${i.net.arenaAddress} · code ${a?.code ?? '…'}` : 'Not deployed yet: Deploy the contracts (one flow).', tab: 'deploy' },
     {
       id: 'authority',
       label: "The arena settles with this server's key",
@@ -67,10 +67,10 @@ export function launchChecklist(i: {
       detail: cfg ? cfg.serverAuthority : '—',
       tab: 'arena',
     },
-    { id: 'nft', label: 'CoinnibalNFT deployed and registered', ok: !i.net.nftAddress ? false : n ? n.code === 'ok' : null, detail: i.net.nftAddress ? `${i.net.nftAddress} · code ${n?.code ?? '…'}` : 'Not deployed yet: Setup.', tab: 'deploy' },
+    { id: 'nft', label: 'CoinnibalNFT deployed and registered', ok: !i.net.nftAddress ? false : n ? n.code === 'ok' : null, detail: i.net.nftAddress ? `${i.net.nftAddress} · code ${n?.code ?? '…'}` : 'Not deployed yet: Deploy the contracts (one flow).', tab: 'deploy' },
     // the site signs only with the contracts the owner signed for: after a deploy (and after setToken) they are signed again
     { id: 'pins', label: 'The site trusts the registered contracts', ok: pins.ok, detail: pinSummary(pins), tab: 'deploy' },
-    { id: 'token', label: 'The game token is set', ok: cfg ? !!cfg.token : i.net.arenaAddress ? null : false, detail: cfg?.token ?? (i.net.mainnet ? 'Setup → Set the game token: the token launched on Pons, typed twice.' : (i.status?.testToken?.address ? 'Setup → Finish setup (it sets the registered TestToken).' : NO_TEST_TOKEN_YET)), tab: 'deploy' },
+    { id: 'token', label: 'The game token is set', ok: cfg ? !!cfg.token : i.net.arenaAddress ? null : false, detail: cfg?.token ?? (i.net.mainnet ? 'Setup → Set the game token: the token launched on Pons, typed twice.' : (i.status?.testToken?.address ? 'Deploy the contracts sets it (the registered TestToken).' : NO_TEST_TOKEN_YET)), tab: i.net.mainnet ? 'setup' : 'deploy' },
     { id: 'arenas', label: 'The four default arenas exist', ok: missingArenas === null ? (cfg ? false : null) : missingArenas === 0, detail: missingArenas === null ? 'Needs the token.' : `${4 - missingArenas} / 4`, tab: 'deploy' },
     {
       id: 'allowlist',

@@ -147,8 +147,8 @@ describe('the launch checklist line and the mainnet step', () => {
 
   it('the testnet token line: deploy a TestToken first while none is registered', () => {
     expect(lines().find((x) => x.id === 'token')?.detail).toBe(NO_TEST_TOKEN_YET);
-    expect(NO_TEST_TOKEN_YET).toBe('Deploy a TestToken first (the TestToken card in Setup); then Finish setup sets it, with one confirmation.');
-    expect(lines(buildPins({}), status({ testToken: TOKEN })).find((x) => x.id === 'token')?.detail).toBe('Setup → Finish setup (it sets the registered TestToken).');
+    expect(NO_TEST_TOKEN_YET).toBe('Deploy the contracts deploys a test token and sets it (by hand: the TestToken card in Setup, then Finish setup).');
+    expect(lines(buildPins({}), status({ testToken: TOKEN })).find((x) => x.id === 'token')).toMatchObject({ detail: 'Deploy the contracts sets it (the registered TestToken).', tab: 'deploy' });
   });
 
   it('the mainnet launch pins the contracts right after the deploys, before the mint', () => {

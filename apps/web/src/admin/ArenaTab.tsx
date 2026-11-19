@@ -33,7 +33,7 @@ import { useState } from 'react';
 import type { Address } from 'viem';
 import { DefaultArenas, SetTokenForm } from './DeployTab';
 import type { Plan } from './plan';
-import { Addr, Advanced, Btn, Card, FormError, Input, Row, useFormError, type ChainCtx } from './ui';
+import { Addr, Advanced, Btn, Card, FormError, Input, Row, useFormError, useOwnAddress, type ChainCtx } from './ui';
 
 /**
  * `/admin → Game → the arena contract`: its status, the settler fix when it is not this server's
@@ -390,7 +390,7 @@ function SweepCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
 function RescueCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
   const arena = ctx.net.arenaAddress!;
   const [token, setToken] = useState('');
-  const [to, setTo] = useState<string>(ctx.me ?? '');
+  const [to, setTo] = useOwnAddress(ctx.me);
   const [amount, setAmount] = useState('');
   const [err, guard] = useFormError();
   return (

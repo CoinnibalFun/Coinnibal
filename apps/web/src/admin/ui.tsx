@@ -238,6 +238,18 @@ export function Btn({
   );
 }
 
+/**
+ * An address field that starts as `initial` (else the connected wallet) and is filled with the signed-in wallet as soon
+ * as it connects, while the owner has typed nothing: the owner never types their own address.
+ */
+export function useOwnAddress(me: Address | null, initial?: string | null): [string, (v: string) => void] {
+  const [value, setValue] = useState<string>(initial ?? me ?? '');
+  useEffect(() => {
+    if (me) setValue((v) => (v.trim() ? v : me));
+  }, [me]);
+  return [value, setValue];
+}
+
 /** An inline input error kept next to a form (`AdminInputError` / `RangeError` messages). */
 export function useFormError(): [string | null, (fn: () => void) => void, (m: string | null) => void] {
   const [err, setErr] = useState<string | null>(null);

@@ -30,10 +30,32 @@ export const GROUP_LABEL: Record<AdminGroup, string> = {
   settings: 'Settings',
 };
 
+/**
+ * The start screen and its big actions, outside the drawers (`/admin` opens on `home`): a short status, then Deploy
+ * the contracts, Open or close the game, Mint, Feedback (the `feedback` drawer) and Settings (the drawer). Every
+ * drawer stays one click away under the start screen's Advanced section.
+ */
+export type AdminView = 'home' | 'deploy' | 'open' | 'minting';
+export const ADMIN_VIEWS: readonly AdminView[] = ['home', 'deploy', 'open', 'minting'];
+
+/** A page of `/admin`: the start screen, one of its actions, or a drawer. */
+export type AdminPage = AdminView | AdminGroup;
+
+export const VIEW_LABEL: Record<AdminView, string> = {
+  home: 'Start',
+  deploy: 'Deploy the contracts',
+  open: 'Open or close the game',
+  minting: 'Mint',
+};
+
+/** A page's name, as the rail or the start screen shows it. */
+export const pageLabel = (p: AdminPage): string => ((ADMIN_VIEWS as readonly string[]).includes(p) ? VIEW_LABEL[p as AdminView] : GROUP_LABEL[p as AdminGroup]);
+
+export const isAdminView = (p: string): p is AdminView => (ADMIN_VIEWS as readonly string[]).includes(p);
+
 /** Where an old drawer id (and the launch checklist's links) now lives. */
 const LEGACY: Record<string, { group: AdminGroup; sub?: CommunityTab }> = {
   launch: { group: 'network' },
-  deploy: { group: 'setup' },
   arena: { group: 'game' },
   play: { group: 'game' },
   wl: { group: 'community', sub: 'wl' },
@@ -42,18 +64,18 @@ const LEGACY: Record<string, { group: AdminGroup; sub?: CommunityTab }> = {
   integrity: { group: 'safety' },
 };
 
-/** `#community/tasks`, `#game`, old `#deploy`… → the drawer (and the Community sub-tab). Unknown → Network. */
-export function parseAdminHash(hash: string): { group: AdminGroup; sub: CommunityTab } {
+/** `#community/tasks`, `#game`, `#deploy`, old `#arena`… → the page (and the Community sub-tab). Unknown → the start screen. */
+export function parseAdminHash(hash: string): { group: AdminPage; sub: CommunityTab } {
   const [head, tail] = hash.replace(/^#/, '').split('/');
   const legacy = LEGACY[head];
   if (legacy) return { group: legacy.group, sub: legacy.sub ?? 'wl' };
-  const group = (ADMIN_GROUPS as readonly string[]).includes(head) ? (head as AdminGroup) : 'network';
+  const group: AdminPage = (ADMIN_GROUPS as readonly string[]).includes(head) ? (head as AdminGroup) : isAdminView(head) ? head : 'home';
   const sub = (COMMUNITY_TABS as readonly string[]).includes(tail) ? (tail as CommunityTab) : 'wl';
   return { group, sub };
 }
 
-export function adminHash(group: AdminGroup, sub: CommunityTab = 'wl'): string {
-  if (group === 'network') return '';
+export function adminHash(group: AdminPage, sub: CommunityTab = 'wl'): string {
+  if (group === 'home') return '';
   return group === 'community' && sub !== 'wl' ? `#community/${sub}` : `#${group}`;
 }
 
