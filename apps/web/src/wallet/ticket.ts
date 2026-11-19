@@ -263,7 +263,7 @@ export interface PendingPayout {
   /** Journal key `<arenaId>:<player lowercase>:<sessionId>`. */
   key: string;
   arenaId: number | null;
-  /** Ledger units the server is still settling. */
+  /** Ledger units the server is still settling: what reaches the wallet (the fee on profit already taken off). */
   payout: number;
 }
 

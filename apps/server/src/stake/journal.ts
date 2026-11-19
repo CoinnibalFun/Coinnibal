@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
+import type { FeeRates } from '@coinnibal/shared';
 
 /**
  * Why a ticket was settled. `round`: alive at the round end (paid arenas). `cashout` and `afk` are
@@ -25,6 +26,11 @@ export interface SettlementItem {
   payout?: number;
   /** The ticket's entry fee (ledger units), when known: what a refund after 24 h would take out of the vault. */
   entryFee?: number;
+  /**
+   * The ticket's fee rates on profit, fixed on chain at join, when known: only to show the player what reaches the
+   * wallet (`/api/pending`); the contract computes the real fee.
+   */
+  rates?: FeeRates;
   /**
    * Σ entry fees of every ticket seated in this ticket's arena instance during its round, plus loot restored into it
    * (ledger units): all the value a ticket can have taken from others. The payout guard holds a payout above it.
@@ -129,6 +135,8 @@ export interface LiveStake {
   value: number;
   /** The ticket's entry fee (ledger units); absent in older journals. */
   entryFee?: number;
+  /** The ticket's fee rates on profit (fixed at join); absent in older journals. */
+  rates?: FeeRates;
   score: number;
   kills: number;
 }
@@ -326,6 +334,7 @@ export class Journal {
       sessionId: l.sessionId,
       payout: l.value,
       ...(l.entryFee !== undefined ? { entryFee: l.entryFee } : {}),
+      ...(l.rates ? { rates: l.rates } : {}),
       score: l.score,
       kills: l.kills,
       xp: 0,

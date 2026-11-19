@@ -124,7 +124,8 @@ describe('server-key blast radius', () => {
     h.evm.arenaMap.get(1)!.vault += 2_000n * E18;
     h.evm.arenaMap.get(1)!.openSessions += 1;
     expect(await h.chain.sweepStale()).toBe(1);
-    expect(h.journal.pending[0]).toMatchObject({ kind: 'settle', key, payout: 2 * K, reason: 'round' });
+    // with the ticket's own rates, so the pending payout shown to the player is what the contract pays
+    expect(h.journal.pending[0]).toMatchObject({ kind: 'settle', key, payout: 2 * K, reason: 'round', rates: { burnBps: 1500, vaultBps: 500 } });
     expect(h.logs.join()).toMatch(/open again \(reorg\?\) — re-sending the same payout/);
     await h.chain.processPending();
     expect(calls(h.evm, 'settle')).toHaveLength(2);

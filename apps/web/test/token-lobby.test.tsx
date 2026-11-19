@@ -213,3 +213,37 @@ describe('lobby: the masthead', () => {
     expect(useUi.getState().modal).toBe('feedback');
   });
 });
+
+describe('lobby: the fee each wallet pays', () => {
+  // the arena's normal pair (15 % + 5 %) and the holder pair the owner set (8 % + 2 %); arena 4 admits holders only
+  const FEES = { burnBps: 1500, vaultBps: 500, holderBurnBps: 800, holderVaultBps: 200, holderPerks: true, paymentBurnBps: 5000, burnMode: 0 };
+  const CONFIG = { burnBps: 1500, vaultBps: 500, holderNft: '0x00000000000000000000000000000000000000aa', holderBurnBps: 800, holderVaultBps: 200, token: SET.token!.address, decimals: 18 } as never;
+  const open = (holder: boolean | null) => {
+    recv({ t: 'chain', chain: { ...SET, fees: FEES } });
+    recv({ t: 'rooms', rooms: [PRACTICE, ...ARENAS], online: 2 });
+    act(() => useChainData.setState({ config: CONFIG, holder, holdersOnly: [4] }));
+    lobby();
+  };
+  const row = (id: number) => arenaTickets().find((el) => el.getAttribute('data-kb-value') === `arena:${id}`)!;
+
+  it('without the NFT: 20 % in the header and the open rooms; the holders-only room says 10 %, behind its holders tag', () => {
+    open(false);
+    expect(screen.getByText('Fee 20% of profit')).toBeTruthy();
+    expect(row(1).textContent).toContain('Fee 20% of profit only');
+    // everyone in a holders-only room is a holder: every ticket there pays the holder rate
+    expect(row(4).textContent).toContain('Fee 10% of profit only');
+    expect(row(4).textContent).not.toContain('20%');
+    expect(within(row(4)).getByTestId('holders-only').textContent).toBe('NFT holders');
+  });
+
+  it("an NFT holder: the header and every room show the holder's 10 %", () => {
+    open(true);
+    expect(screen.getByText('Fee 10% of profit')).toBeTruthy();
+    expect(screen.queryByText('Fee 20% of profit')).toBeNull();
+    expect(row(1).textContent).toContain('Holder fee 10%, not 20%');
+    // no "not 20 %" where nobody pays 20 %
+    expect(row(4).textContent).toContain('Fee 10% of profit only');
+    expect(row(4).textContent).not.toContain('20%');
+    expect(within(row(4)).getByTestId('holders-only').textContent).toBe('NFT holders · you');
+  });
+});

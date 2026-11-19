@@ -1808,6 +1808,8 @@ export class EvmChain implements ChainGateway {
               sessionId: Number(s.id),
               payout: done.amount,
               entryFee: toLedger(s.entryFee, t.decimals, 'floor'),
+              // the ticket's own rates (a holder's pair): `/api/pending` shows what reaches the wallet
+              rates: { burnBps: s.burnBps, vaultBps: s.vaultBps },
               score: 0,
               kills: 0,
               xp: 0,

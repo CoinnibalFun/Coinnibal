@@ -4,7 +4,7 @@ import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { pipeline } from 'node:stream';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION, type SiteSettings } from '@coinnibal/shared';
+import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION, profitFee, type SiteSettings } from '@coinnibal/shared';
 import { NonceLimitError, checksumAddress, type Auth, type SiweOrigin } from './auth';
 import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
@@ -510,8 +510,9 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             }
           }
           case '/api/pending': {
-            // settlements the server still has to send for a wallet (payouts in ledger units). Finalized sessions
-            // (settled, payout waiting to be collected) live on chain; the web reads them there (getSession)
+            // settlements the server still has to send for a wallet (payouts in ledger units: what reaches the wallet,
+            // the gross less the contract's fee on its profit at the ticket's own rates, when its entry fee is known).
+            // Finalized sessions (settled, payout waiting to be collected) live on chain; the web reads them there (getSession)
             const wallet = checksumAddress(url.searchParams.get('wallet'));
             if (!wallet) return json(res, 400, { error: 'bad_request', message: 'wallet must be an EVM address (0x…)' });
             // what a wallet is owed (and when it played) is that wallet's business: its own session, or an admin's
@@ -521,7 +522,9 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             const pending = (ctx.journal?.pending ?? [])
               // loot sweeps (`kind: 'sweep'`) belong to no wallet
               .flatMap((p) =>
-                p.kind === 'settle' && p.player.toLowerCase() === wallet.toLowerCase() ? [{ key: p.key, arenaId: p.arenaId ?? null, payout: p.payout ?? 0 }] : [],
+                p.kind === 'settle' && p.player.toLowerCase() === wallet.toLowerCase()
+                  ? [{ key: p.key, arenaId: p.arenaId ?? null, payout: p.entryFee !== undefined ? profitFee(p.entryFee, p.payout ?? 0, p.rates).net : (p.payout ?? 0) }]
+                  : [],
               );
             return json(res, 200, { pending });
           }

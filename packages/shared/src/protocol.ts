@@ -2,6 +2,7 @@ import type { EatenName, ShareKind } from './share';
 import type { BoostKind, BoostRefusal, BoostState } from './boosts';
 import type { League, RoomMode } from './constants';
 import type { CustomRoomSummary } from './custom-rooms';
+import type { FeeRates } from './fees';
 
 /* ------------------------------------------------------------------ */
 /* Entity / flag enums (plain objects so they work across packages)    */
@@ -456,6 +457,8 @@ export interface DeathStats {
   gross?: number;
   /** Arena rooms: the fee on the profit the contract takes (burned + to the fee wallet; `fees.ts`). */
   cut?: number;
+  /** Arena rooms: the fee rates on profit fixed into this ticket at join (a holder's ticket has the holder pair). */
+  rates?: FeeRates;
   /** Arena rooms: value lost on death, raw token units. */
   valueLost?: number;
   /** Arena rooms: part of `valueLost` that spilled as loot (anyone may pick it up until the bell; then it is burned). */
