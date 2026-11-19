@@ -10,6 +10,7 @@ import { isLazyPage, loadPage, loadedPage, warmPage } from './pages';
 import { installChunkRecovery, PageBoundary } from './recover';
 import { isSitePath, normalizePath, usePath } from './router';
 import { setPageHead } from './seo';
+import { useClaimedTitle } from './pageTitle';
 import { loadSiteSettings } from './settings';
 import { SiteLoader } from './SiteLoader';
 import { useLocale, useT, type TKey } from '../i18n';
@@ -76,12 +77,14 @@ export function SiteApp() {
   const shut = door !== null && doors.loaded && !doors[door];
   const admin = useAdminPreview(shut);
   const closed = shut && admin === false;
+  // a page may claim its own tab title while it shows (the WL's closed card: pageTitle.ts)
+  const claimed = useClaimedTitle();
   useEffect(() => {
-    document.title = t(closed ? 'site.title.closed' : (TITLES[path] ?? (isSitePath(path) ? TITLES['/'] : 'site.nf.docTitle')));
+    document.title = t(claimed ?? (closed ? 'site.title.closed' : (TITLES[path] ?? (isSitePath(path) ? TITLES['/'] : 'site.nf.docTitle'))));
     // /wl draws its own closed card (the WL door is not a page door), but shares and searches see a closed page too
     const wlShut = path === '/wl' && doors.loaded && !doors.wl;
     setPageHead(path, !closed && !shut && !wlShut && (path === '/' || isLazyPage(path)));
-  }, [path, locale, t, closed, shut, doors.loaded, doors.wl]);
+  }, [path, locale, t, claimed, closed, shut, doors.loaded, doors.wl]);
   useEffect(() => (path === '/' && doors.mint ? warmFromLanding() : undefined), [path, doors.mint]);
   if (path === '/')
     return (
