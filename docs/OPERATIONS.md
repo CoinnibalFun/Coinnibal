@@ -282,7 +282,8 @@ first again for every new call; a resent transaction is the same signed one (sam
 own budget (`RPC_MAX_RPS`, on the VPS `COINNIBAL_RPC_MAX_RPS`, e.g. `25,4`). Concurrent reads merge into one Multicall3 call, or a deployless multicall
 on a chain without Multicall3 (the log says which), so the bell of 200 tickets reads its sessions in about 24 calls
 instead of 216. Calls wait their turn by priority: settlements and loot burns (`critical`) first, then paid joins'
-ticket reads (`high`, bounded by the front door), then holder checks, the arena list and the mint state (`normal`),
+ticket reads (`high`, bounded by the front door), then holder checks, the arena list, the mint state and the join
+permits' reads (the join nonce, an open ticket, the entry fee's balance; bounded by the permit limits) (`normal`),
 then background work (`low`: the stale sweeper, the holder index, balance checks). Set-up and checks:
 deploy/vps/README.md, "RPC". `rpc: N calls/min …` in the log, once a minute per URL, shows the traffic, the 429s and
 the calls per priority.
@@ -293,7 +294,9 @@ Every ticket needs the game server's join permit (CoinnibalArena v4): the web as
 wallet opens, and the contract refuses a `join` without the server key's signature for that wallet, arena and join
 nonce. The server refuses (and the ticket sheet says why): a game not open to the wallet (`game_closed`), a banned
 wallet, paid rooms off, an arena that is disabled, paused or kept closed (books guard, re-price), a holders-only arena
-for a wallet without the NFT (`holders_only`), a wallet with an open ticket there (it resumes it), a repeated no-show
+for a wallet without the NFT (`holders_only`; a holder check past the client's holder-read budget, with no "holder" on
+record, answers `chain_busy` instead: never a wrong "not a holder"), a wallet with an open ticket there (it resumes
+it), a repeated no-show
 (`no_show`), a network with its share of the arena's permits not played yet (`network_busy`), an arena whose unseated
 tickets plus the places held by new permits reach the seats a round can take (`arena_busy`), and too many requests
 from one IP, one IPv6 /64 or /48, or one wallet.

@@ -1,6 +1,7 @@
 import { JOIN_PERMIT_MAX_WINDOW_S, type JoinPermit, type JoinPermitError } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import { ChainBusyError, type ChainArena, type ChainGateway } from '../chain/types';
+import { CLIENT_BUSY_MESSAGE, ClientBudgetError } from '../net/client-scope';
 import { subnetOf } from '../net/ip-key';
 import { Limiter } from '../net/limiter';
 
@@ -652,9 +653,15 @@ export class JoinPermits {
     for (const a of arenas) this.arenaIds.add(a.id);
     const arena = arenas.find((a) => a.id === arenaId);
     if (!arena || !arena.enabled) throw new JoinPermitFail(409, 'arena_closed', 'This room is not open.');
-    // the contract refuses a non-holder's ticket there: no permit (it could only hold a place)
-    if (arena.holdersOnly && this.d.isHolder && !(await this.d.isHolder(wallet).catch(() => false))) {
-      throw new JoinPermitFail(403, 'holders_only', 'This room is for Coinnibal NFT holders. Get the NFT to play here.');
+    // the contract refuses a non-holder's ticket there: no permit (it could only hold a place). A holder check this
+    // client may not make right now, with no "holder" on record (`ClientBudgetError`, `site/mint.ts`), is busy: a
+    // holder is never told the room is not for them
+    if (arena.holdersOnly && this.d.isHolder) {
+      const holder = await this.d.isHolder(wallet).catch((err: unknown) => {
+        if (err instanceof ClientBudgetError) throw new JoinPermitFail(503, 'chain_busy', CLIENT_BUSY_MESSAGE);
+        return false;
+      });
+      if (!holder) throw new JoinPermitFail(403, 'holders_only', 'This room is for Coinnibal NFT holders. Get the NFT to play here.');
     }
     const until = this.noShowUntil(wallet);
     if (until !== null) {
