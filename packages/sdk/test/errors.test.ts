@@ -47,6 +47,20 @@ describe('errors', () => {
     expect(ERROR_MESSAGES.InvalidFaucet).toBeTruthy();
   });
 
+  it('decodes a custom error a node wrote into the message only (a wallet that passes no revert data on)', () => {
+    // a Hardhat node's wording, as viem wraps it for `writeContract` (the 2026-11 play-test's expired permit)
+    const hardhat = (selector: string) => `VM Exception while processing transaction: reverted with an unrecognized custom error (return data: ${selector})`;
+    const cause = new ContractFunctionRevertedError({ abi: coinnibalArenaAbi, functionName: 'join', message: `Execution reverted with reason: ${hardhat('0x1a15a3cc')}.` } as never);
+    const wrapped = new ContractFunctionExecutionError(cause, { abi: coinnibalArenaAbi, functionName: 'join', args: [1] } as never);
+    expect(describeError(wrapped)).toMatchObject({ kind: 'contract', name: 'PermitExpired', message: ERROR_MESSAGES.PermitExpired });
+    expect(describeError({ code: -32603, message: hardhat('0x096b0b8a') })).toMatchObject({ kind: 'contract', name: 'PermitTooFarAhead' });
+    // Anvil's wording; arguments decoded too
+    const withArgs = encodeErrorResult({ abi: testTokenAbi, errorName: 'FaucetCooldown', args: [1234n] });
+    expect(describeError(new Error(`execution reverted: custom error ${withArgs}`))).toMatchObject({ name: 'FaucetCooldown', args: [1234n] });
+    // data no ABI knows stays a plain revert
+    expect(describeError(new Error(hardhat('0xdeadbeef'))).kind).toBe('revert');
+  });
+
   it('classifies wallet errors', () => {
     expect(describeError({ code: 4001, message: 'User rejected the request.' }).kind).toBe('rejected');
     expect(describeError(new UserRejectedRequestError(new Error('x'))).kind).toBe('rejected');
