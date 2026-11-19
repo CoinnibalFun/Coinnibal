@@ -236,7 +236,9 @@ has more bots than its setting, nor more playing than the setting minus its peop
   join nonce moved: read at its next request and, at the cap, for every held place). **Standing:** a wallet whose
   latest ticket of the last 14 days was played (a `settle` in the settled log, `SettledLog.lastPlayedAt`) with no
   no-show since, or that holds an NFT giving no other wallet standing (one wallet per token id a day, from the holder
-  index), with no no-show of its own in 24 h, meets only those rules, for one unplayed ticket at a time. **Wallets
+  index), with no no-show of its own in 24 h, meets only those rules, for one unplayed ticket at a time (a ticket of
+  another arena bought with standing and not played yet, read once on chain, makes the next one meet the network rules
+  too, refused `ticket_elsewhere`; a permit not used yet never counts: one join nonce buys one ticket in all). **Wallets
   without standing** also meet the network rules: per IP, per IPv6 /64 and per IPv4 /24 or IPv6 /48 request limits
   (`JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`, `JOIN_PERMIT_PER_SITE`, per 10 minutes); per network and arena, a
   share of the permits not played yet (valid, or used for a ticket not seated and not settled) plus those that bought
@@ -246,7 +248,11 @@ has more bots than its setting, nor more playing than the setting minus its peop
   `arena_busy`; and they must hold the entry fee (`no_funds`). **No-shows:** a ticket the stale sweeper cancels
   unseated while its arena was open is recorded as a no-show in the settled log, unless its wallet asked to sit while
   joins were open and the server refused for its own reason (overload, the journal, a re-price, no seat, the chain
-  unreadable: `excuseNoShow`); a wallet with `NO_SHOW_LIMIT` (default 3) of them in 24 h gets no permit until the
+  unreadable: `excuseNoShow`). An unseated ticket refunded early is a no-show the same way: a paid room's code that
+  stopped taking seats (`Gateway.refundUnseated`), a holder ticket whose emblem moved (`EmblemGate`); excused only for a
+  ticket whose permit was asked for that very room (`{arenaId, room}`, bound while it took seats, not by its creator),
+  refunded within `ROOM_EXCUSE_S` (120 s) of its opening, up to the room's seats (`JoinPermits.roomExcuse`). A wallet
+  with `NO_SHOW_LIMIT` (default 3) of them in 24 h gets no permit until the
   oldest is a day old, and the refusal says when. The no-show also counts (in memory) against the networks its permit
   was asked from: 3× the limit per IPv4 address or IPv6 /64, 8× per IPv4 /24 or IPv6 /48 (wallets without standing
   only). Each refusal has its code and message (`JoinPermitError`); the ticket sheet shows it and signs nothing.
@@ -334,9 +340,10 @@ has more bots than its setting, nor more playing than the setting minus its peop
   invite-only instance of an arena on its **own clock** (`RoomOptions.ownRound`, `ownRoundAt`): one game from its
   opening to its end, no tie to the arenas' 5-minute rounds; players buy that arena's normal ticket (the creator's own
   is bought in the same creator sheet, right after the fee), joins close in its last minute, and every ticket is
-  settled at the room's end (its only bell, the normal fee on profit); it fields no bots. A ticket bought for a room
-  that ended (or is in its last minute) and never seated is cancelled at once (full entry fee back,
-  `Gateway.refundUnseated`); the 15-minute stale sweep only ever sees unseated tickets. Capacity 2 to 100. The end is announced `ROOM_CLOSE_COUNTDOWN_MS` (10 s)
+  settled at the room's end (its only bell, the normal fee on profit); it fields no bots. An unseated ticket of that
+  arena sent to a room that ended (or is in its last minute) is cancelled at once (full entry fee back,
+  `Gateway.refundUnseated`), a no-show unless it was bought for that room just now (above); a free or practice room's
+  code, or another arena's, refunds nothing; the 15-minute stale sweep only ever sees unseated tickets. Capacity 2 to 100. The end is announced `ROOM_CLOSE_COUNTDOWN_MS` (10 s)
   ahead (`closing`, repeated to late joiners); a free room then sends its final board (`roomOver`, the same
   `RoundStanding` rows as a bell's `roundOver`) before `room_closed`; a ticket room closes after its own bell at its end.
   **Practice with bots** (`POST /api/rooms/custom/practice`, `CustomRoomService.practice`): a free custom room with

@@ -34,6 +34,8 @@ export interface TicketPurchase {
   fake: boolean;
   /** The game session token: the server's join permit is asked with it (CoinnibalArena v4). */
   token: string | null;
+  /** The paid custom room this ticket is for (its code), if any: the permit is asked for that room. */
+  room?: string | null;
 }
 
 export type TicketPurchaseResult = { ok: true; hash: Hash } | { ok: false; text: string };
@@ -65,7 +67,7 @@ export async function buyTicket(p: TicketPurchase, onPhase: (step: TicketStep | 
   // the server's join permit first: its refusals (closed game, open ticket, no-shows, a full room) come before any wallet
   if (!p.token) return { ok: false, text: t('tf.err.permit.unauthorized') };
   if (useUi.getState().blockedArenas.includes(arenaId)) return failName('Maintenance');
-  const asked = await fetchJoinPermit(p.token, arenaId);
+  const asked = await fetchJoinPermit(p.token, arenaId, p.room ?? null);
   if (!asked.ok) return { ok: false, text: asked.text };
   let permit = asked.permit;
   if (p.fake) {
@@ -115,7 +117,7 @@ export async function buyTicket(p: TicketPurchase, onPhase: (step: TicketStep | 
   // a slow approval may have used up most of the permit: a fresh one (the same wallet, room and arena) before the join
   let join = plan.join;
   if (permit.deadline - Math.floor(Date.now() / 1000) < PERMIT_MIN_LEFT_S) {
-    const again = await fetchJoinPermit(p.token, arenaId);
+    const again = await fetchJoinPermit(p.token, arenaId, p.room ?? null);
     if (!again.ok) return { ok: false, text: again.text };
     if (!permitFits(again.permit, { arena, chainId: chain.chainId!, player: owner, arenaId })) return failName('ContractMismatch');
     permit = again.permit;

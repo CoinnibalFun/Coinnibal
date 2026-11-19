@@ -15,7 +15,7 @@ const FEES = { burnBps: 1500, vaultBps: 500, holderBurnBps: 800, holderVaultBps:
 const HOLDER = { burnBps: 800, vaultBps: 200 };
 const NORMAL = { burnBps: 1500, vaultBps: 500 };
 
-function setup(arenas: ChainArena[] = [{ id: 1, entryFee: 10, maxSessions: 0, openSessions: 0, enabled: true, pot: 0 }]) {
+function setup(arenas: ChainArena[] = [{ id: 1, entryFee: 10, maxSessions: 0, openSessions: 0, enabled: true, pot: 0 }], o: { noShow?: (s: ChainSession) => boolean; index?: boolean } = {}) {
   const owners = new Map<string, string>(); // token id -> wallet (lower)
   const journal = new Journal(null);
   const flags: Candidate[] = [];
@@ -30,9 +30,11 @@ function setup(arenas: ChainArena[] = [{ id: 1, entryFee: 10, maxSessions: 0, op
     journal,
     claims,
     isHolder: async (w) => tokensOf(w).length > 0,
-    emblemTokens: async (w) => tokensOf(w),
+    // `index: false`: the token index cannot tell (never read, the RPC refuses logs)
+    emblemTokens: async (w) => (o.index === false ? null : tokensOf(w)),
     flag: (c) => flags.push(c),
     liveSessions: () => live,
+    noShow: o.noShow,
     log: (m) => logs.push(m),
     now: () => now,
   });
@@ -110,6 +112,46 @@ describe('one emblem token id serves one open holder ticket', () => {
     h.live.delete(t.key);
     expect(h.gate.sweep()).toBe(1);
     expect(h.claims.ticketOf('9')).toBeNull();
+  });
+});
+
+describe('a holder ticket refused at its seat is a no-show when the player moved its emblem (audit R4-M1)', () => {
+  it('one emblem passed from wallet to wallet cannot refund unplayed holder tickets past the no-show rules', async () => {
+    const h = setup(undefined, { noShow: () => true });
+    const a = testSigner().address;
+    const b = testSigner().address;
+    const c = testSigner().address;
+    h.owners.set('7', a.toLowerCase());
+    const ta = ticket(a);
+    expect(await h.gate.seat(a, ta)).toBeNull();
+    // the emblem goes to B, which bought a holder ticket with it: refused, back in full, a no-show
+    h.owners.set('7', b.toLowerCase());
+    const tb = ticket(b);
+    expect(await h.gate.seat(b, tb)).toMatchObject({ code: 'game_closed' });
+    expect(h.journal.pending).toEqual([expect.objectContaining({ key: tb.key, reason: 'stale', noShow: true })]);
+    // then to C; B's next holder ticket finds no emblem in B's wallet: a no-show too
+    h.owners.set('7', c.toLowerCase());
+    const tb2 = { ...ticket(b), arenaId: 1 };
+    h.journal.remove(tb.key);
+    expect(await h.gate.seat(b, tb2)).toMatchObject({ message: expect.stringMatching(/needs a Coinnibal NFT/) });
+    expect(h.journal.pending).toEqual([expect.objectContaining({ key: tb2.key, reason: 'stale', payout: tb2.entryFee, noShow: true })]);
+    expect(h.logs.some((m) => /already serves/.test(m) && /a no-show/.test(m))).toBe(true);
+  });
+
+  it('never a no-show when the server cannot tell, or the arena takes no seat (or the server owes the excuse)', async () => {
+    // the token index cannot confirm that the wallet holds none (a failed `balanceOf` reads as "none")
+    const unsure = setup(undefined, { noShow: () => true, index: false });
+    const a = testSigner().address;
+    const ta = ticket(a);
+    expect(await unsure.gate.seat(a, ta)).toMatchObject({ code: 'game_closed' });
+    expect(unsure.journal.pending).toHaveLength(1);
+    expect(unsure.journal.pending[0]).not.toHaveProperty('noShow');
+    // the arena is closed or the server refused this ticket a seat before: the caller says so
+    const closed = setup(undefined, { noShow: () => false });
+    const b = testSigner().address;
+    const tb = ticket(b);
+    expect(await closed.gate.seat(b, tb)).toMatchObject({ code: 'game_closed' });
+    expect(closed.journal.pending[0]).not.toHaveProperty('noShow');
   });
 });
 

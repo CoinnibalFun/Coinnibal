@@ -343,14 +343,16 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             }
           }
           case '/api/arena/permit': {
-            // a join permit (CoinnibalArena v4): the signed-in wallet may buy one ticket of `arenaId` (stake/join-permits.ts)
+            // a join permit (CoinnibalArena v4): the signed-in wallet may buy one ticket of `arenaId`, for the paid custom
+            // room `room` when given (stake/join-permits.ts)
             if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
             if (!ctx.permits) return json(res, 503, { error: 'arenas_off', message: 'Paid rooms are not open right now.' });
             const caller = bearerWallet(ctx.auth, req);
             if (!caller) return json(res, 401, { error: 'unauthorized', message: 'Sign in with your wallet first.' });
             const body = await readSmallJson(req);
             try {
-              const permit = await ctx.permits.issue(caller, Number(body?.arenaId), ip);
+              const room = body?.room === undefined || body?.room === null ? null : body.room;
+              const permit = await ctx.permits.issue(caller, Number(body?.arenaId), ip, room as string | null);
               return json(res, 200, { permit });
             } catch (err) {
               if (!(err instanceof JoinPermitFail)) throw err;

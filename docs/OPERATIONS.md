@@ -292,8 +292,10 @@ the calls per priority.
 
 Every ticket needs the game server's join permit (CoinnibalArena v4): the web asks `POST /api/arena/permit` before the
 wallet opens, and the contract refuses a `join` without the server key's signature for that wallet, arena and join
-nonce. The server refuses (and the ticket sheet says why): a game not open to the wallet (`game_closed`), a banned
-wallet, paid rooms off, an arena that is disabled, paused or kept closed (books guard, re-price), a holders-only arena
+nonce. A ticket for a paid custom room asks for that room too (`{arenaId, room}`): the room must take seats then (else
+`arena_closed`), and the permit is bound to it (below, no-shows). The server refuses (and the ticket sheet says why): a
+game not open to the wallet (`game_closed`), a banned wallet, paid rooms off, an arena that is disabled, paused or kept
+closed (books guard, re-price), a holders-only arena
 for a wallet without the NFT (`holders_only`; a holder check past the client's holder-read budget, with no "holder" on
 record, answers `chain_busy` instead: never a wrong "not a holder"), a wallet with an open ticket there (it resumes
 it), a repeated no-show (`no_show`), an arena whose unseated tickets plus the places held by new permits reach the seats
@@ -309,9 +311,12 @@ new players"), no entry fee in the wallet (`no_funds`), and too many requests fr
   `settle` record in `chains/<id>/settled.jsonl`, never a `cancel`) and none of its tickets was a no-show since, or
   when it holds a **Coinnibal NFT** that gives no other wallet standing (one wallet per token id a day, from the
   holder index: an NFT passed from wallet to wallet gives standing to one of them); either way with no no-show of its
-  own in the last 24 h. It covers one unplayed ticket at a time (a permit of another arena not played yet makes the
-  next one follow the network rules), and the wallet loses it at its first no-show. A wallet with standing meets only
-  the per-wallet request limit, its own no-show limit and the arena's cap.
+  own in the last 24 h. It covers one unplayed ticket at a time (round 4, R4-M2): a ticket of another arena bought
+  with standing and not played yet (read once on chain) makes the next one follow the network rules, and a refusal by
+  them then says `ticket_elsewhere` ("play it first"), never the network's day-long block; a permit not used yet never
+  counts, since the wallet's join nonce buys one ticket in all arenas together. The wallet loses its standing at its
+  first no-show. A wallet with standing meets only the per-wallet request limit, its own no-show limit and the
+  arena's cap.
 - **Held places.** A permit is free, so it holds a place in that cap only briefly and only when backed: a new permit
   holds one for `JOIN_PERMIT_HOLD_S` (120 s, the approval and the join) if the wallet holds the entry fee (one
   `balanceOf` read), no earlier permit of that wallet, arena and join nonce held one, and the network it was asked from
@@ -340,7 +345,14 @@ new players"), no entry fee in the wallet (`no_funds`), and too many requests fr
   open is a no-show (`noShow` in `chains/<id>/settled.jsonl`; a closed arena's refunds are not). It is **not** one when
   its wallet asked to sit while joins were open and the server refused for a reason of its own: overloaded
   (`server_full`), the journal cannot be written, a re-price, no seat in the public arena (`room_full`), or the chain
-  could not be read (`chain_busy` from the RPC, never the client's own limits) (round 4, R3-M1). `NO_SHOW_LIMIT`
+  could not be read (`chain_busy` from the RPC, never the client's own limits) (round 4, R3-M1). An unseated ticket
+  refunded **early** is a no-show the same way (round 4, R4-M1): one sent to a paid custom room of its arena that
+  closed in the last hour, closes, or is in its last minute (`refundUnseated`: the full entry fee back at once instead
+  of in 15 minutes), and a holder ticket refused at its seat because its emblem was moved away or serves another open
+  ticket (unless the token index cannot confirm it). The early refund is excused only for a ticket bought for that very
+  room: its permit was asked for the room while the room took seats, by a wallet that did not open it, the refund
+  comes within 2 minutes of the ticket's opening (`ROOM_EXCUSE_S`), and the room has excused fewer refunds than it has
+  seats. A free or practice room's code, and another arena's, refunds nothing (the sweeper does). `NO_SHOW_LIMIT`
   (default 3) of them in 24 h and the wallet gets no permit until the oldest is a day old. For wallets without
   standing they also count against the networks the permit was asked from: 3× `NO_SHOW_LIMIT` per IPv4 address or IPv6
   /64 and 8× per IPv4 /24 or IPv6 /48 close the permits of new wallets asked from there the same way (`no_show`, "from
@@ -376,13 +388,27 @@ costs the players, and never lock out a player with standing. Defaults, one aren
   any time) and 150 wallets that each hold the entry fee while they ask. Players with standing are not affected.
 - **Players with standing kept out of one arena**: the other 150 places must come from wallets with standing, each with
   a ticket of its own really played in the last 14 days (a seat in a round: its entry fee in play, its join gas, the
-  server's settle), for one unplayed ticket at a time; each loses its standing at its first no-show and needs another
+  server's settle), for one unplayed ticket at a time (its permits for other arenas share its join nonce: they buy one
+  ticket between them); each loses its standing at its first no-show, early refunds included, and needs another
   played ticket to get it back. One cycle takes 150 such wallets beforehand; all day, about 10,800 played tickets a
   day. With NFTs: one wallet per NFT a day, so 150 NFTs per cycle and about 10,800 NFTs all day.
 - **One shared network** (a carrier NAT address, a /24, a mobile /48): its new wallets can be refused for a day by 9
   no-shows from the address (3 wallets × 3 arenas) or 24 from the /24 or /48, or by 8 (address) / 16 (/24, /48) free
   permits per arena that bought nothing. Its players with standing are never refused for it: the network's no-show
-  block, its shares and its request limits do not apply to them.
+  block, its shares and its request limits do not apply to them, whatever permits of other arenas they asked for and
+  left unused; only a ticket they bought elsewhere and have not played makes them wait (`ticket_elsewhere`) until
+  they play it.
+- **Early refunds** (round 4, R4-M1): any wallet can name a closed or closing paid room's code, so such a refund
+  counts its no-show like the sweeper's and gives an attacker nothing over it (the ticket only stops holding its place
+  sooner); a free or practice room's code, or another arena's, refunds nothing. An excused early refund needs a ticket
+  bought for that very room while it took seats, by a wallet that did not open it, refunded within 2 minutes of its
+  opening, at most the room's seats per room: a room of its own (the fee: $1.50 for 10 seats up to $8.25 for 100;
+  never refunded) buys an attacker at most its seats × 2 minutes of held places. Holding 150 places all day that way
+  (either half of an arena: an excused refund costs no standing either) takes about 108,000 tickets bought and
+  cancelled and about 1,080 rooms of 100 seats a day (about $8,900 of room fees), with every permit still under the
+  network, new-wallet and one-ticket-per-standing rules above; an NFT holder's free room of the day gives 10 such
+  excuses per NFT. An emblem moved away or passed on refunds a holder ticket only as a no-show, so one NFT
+  passed from wallet to wallet buys nothing either.
 - **No-show excuses** need a refusal the server made for its own reason after the ticket was bought: an attacker can
   only earn one by overloading the whole server (which every player sees), never with its own rate limits or reads.
 - **After a restart** the network counts, shares, duds and NFT claims start empty (memory only); the wallets'

@@ -280,6 +280,11 @@ export class Gateway {
   private emblemGate: ((wallet: string, session: ChainSession) => Promise<{ code: ErrorCode; message: string } | null>) | null = null;
   /** The join permits learn of a wallet's ticket (`JoinPermits.ticketSeen`); absent: none (bare unit tests). */
   private ticketSeen: ((wallet: string, arenaId: number, openedAtS: number | null) => void) | null = null;
+  /**
+   * Whether the early refund of a ticket, as the paid room `code` stopped taking seats, is excused
+   * (`JoinPermits.roomExcuse`: bound to that room, just bought); absent: never (bare unit tests).
+   */
+  private roomExcuse: ((wallet: string, arenaId: number, code: string, openedAtS: number) => boolean) | null = null;
 
   constructor(
     private readonly cfg: ServerConfig,
@@ -339,6 +344,11 @@ export class Gateway {
    */
   setTicketSeen(fn: ((wallet: string, arenaId: number, openedAtS: number | null) => void) | null): void {
     this.ticketSeen = fn;
+  }
+
+  /** Sets who decides whether a paid room's early refund of an unseated ticket is excused (`JoinPermits.roomExcuse`). */
+  setRoomExcuse(fn: ((wallet: string, arenaId: number, code: string, openedAtS: number) => boolean) | null): void {
+    this.roomExcuse = fn;
   }
 
   /** Sets the load shedder (see `net/shedder.ts`). */
@@ -855,7 +865,7 @@ export class Gateway {
       const own = this.rooms.roomWindow(room, now);
       if (now >= own.opensAt && now < own.joinsCloseAt) return false;
       this.error(conn, 'room_closed', now >= own.endsAt ? 'This room has ended.' : 'This room is in its last minute: joins are closed. Your unplayed ticket is refunded in full.');
-      void this.refundUnseated(conn, room.opts.stake?.arenaId ?? -1);
+      void this.refundUnseated(conn, room.opts.stake?.arenaId ?? -1, room.opts.code ?? null);
       return true;
     }
     const r = this.rooms.roundWindow(now);
@@ -869,14 +879,19 @@ export class Gateway {
   }
 
   /**
-   * The paid custom room a ticket was bought for has ended, closes, or is in its last minute (it never seats again):
-   * the wallet's open ticket of that arena goes back in full now (`cancel`: the whole entry fee, no fee) instead of
-   * waiting for the stale sweeper (15 minutes). Only a ticket that is open on chain, not finalized, not seated in
+   * The paid custom room `code` (an instance of `arenaId`) has ended, closes, or is in its last minute (it never seats
+   * again): the wallet's open ticket of that arena goes back in full now (`cancel`: the whole entry fee, no fee) instead
+   * of waiting for the stale sweeper (15 minutes). Only a ticket that is open on chain, not finalized, not seated in
    * any room and not queued: checked again synchronously right before the one journal write, so a seat that won
    * meanwhile keeps the ticket (and the chain worker drops a `cancel` of a seated ticket too). Returns whether one was
    * queued.
+   *
+   * It is a no-show like the stale sweeper's (audit R4-M1: anyone may name a closed room's code) unless the server owes
+   * the excuse: the arena takes no seat (closed, paused, re-pricing), the server refused this ticket a seat for a
+   * reason of its own (`excusedSince`), or the ticket was bought for this very room just now (`roomExcuse`: its permit
+   * was bound to the room while it took seats, not by its creator, within the room's seats).
    */
-  async refundUnseated(conn: Conn, arenaId: number): Promise<boolean> {
+  async refundUnseated(conn: Conn, arenaId: number, code: string | null): Promise<boolean> {
     const wallet = conn.wallet;
     if (!wallet || arenaId < 0 || !this.chain.stakeEnabled || !this.allowTicketRead(conn, wallet)) return false;
     let s: ChainSession | null;
@@ -890,6 +905,9 @@ export class Gateway {
     if (this.rooms.findArenaStake(arenaId, wallet) || this.rooms.liveSessions().has(key) || this.journal.pending.some((p) => p.key === key)) return false;
     if (this.journal.writeFailing) return false;
     const now = Date.now();
+    const arenaOpen = !this.chain.joinsPaused?.() && this.rooms.arenaTakesSeats(arenaId) && !this.repricing?.(arenaId);
+    const excused =
+      !arenaOpen || this.chain.excusedSince?.(arenaId, s.player, s.openedAt) === true || (code !== null && this.roomExcuse?.(s.player, arenaId, code, s.openedAt) === true);
     const item: SettlementItem = {
       kind: 'settle',
       key,
@@ -904,13 +922,15 @@ export class Gateway {
       xp: 0,
       // an unplayed ticket: the chain worker sends it as `cancel` (the full entry fee back, no fee)
       reason: 'stale',
+      // never seated while its arena took seats, and the server owes no excuse: a no-show (the join permits count it)
+      ...(excused ? {} : { noShow: true as const }),
       attempts: 0,
       nextAttemptAt: now,
       createdAt: now,
     };
     this.journal.commit({ enqueue: [item] });
     this.chain.kick();
-    this.log(`join: the paid room ${wallet} was headed for has ended; its unplayed ticket ${key} is refunded in full (cancel)`);
+    this.log(`join: the paid room ${wallet} was headed for has ended; its unplayed ticket ${key} is refunded in full (cancel${excused ? '' : ', a no-show'})`);
     return true;
   }
 
@@ -1353,8 +1373,9 @@ export class Gateway {
       if (!same()) return; // signed out (or in as another wallet) during the await
       if (pick === 'closed') {
         this.error(conn, 'room_closed', 'This room has closed.');
-        // the paid room this ticket was bought for ended (or is closing): its unseated ticket goes back in full now
-        if (code) void this.refundUnseated(conn, target.arenaId);
+        // this arena's paid room ended (or is closing): an unseated ticket goes back in full now (a no-show unless it
+        // was bought for this room just now: `refundUnseated`)
+        if (code) void this.refundUnseated(conn, target.arenaId, code);
         return;
       }
       if (pick === 'missing') {
