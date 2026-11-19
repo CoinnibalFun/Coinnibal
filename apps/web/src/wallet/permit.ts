@@ -5,17 +5,19 @@ import { serverText, t } from '../i18n';
 /**
  * The game server's permit for one arena ticket (CoinnibalArena v4: `join` needs it). Asked right before the wallet
  * opens: the server refuses a closed game, a closed room, an open ticket there, a wallet whose tickets keep going back
- * unplayed, a network with its share of the room's tickets not played yet, and a room full of tickets waiting for a
- * seat, and says why.
+ * unplayed or whose permits keep running out unused, a network with its share of the room's tickets not played yet,
+ * and a room full of tickets waiting for a seat, and says why.
  */
 export type PermitResult = { ok: true; permit: JoinPermit } | { ok: false; code: JoinPermitError | 'network'; text: string };
 
-/** The ticket sheet's text for each refusal (`tf.err.permit.*`); `no_show` names when tickets open again. */
+/** The ticket sheet's text for each refusal (`tf.err.permit.*`); `no_show` and `unused_permits` name when tickets open again. */
 export function permitRefusalText(code: JoinPermitError | 'network', retryAt?: number, fallback?: string): string {
   switch (code) {
-    case 'no_show': {
+    case 'no_show':
+    case 'unused_permits': {
       const at = retryAt ? new Date(retryAt) : null;
       const time = at ? at.toLocaleString('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+      if (code === 'unused_permits') return time ? t('tf.err.permit.unused_permits', { time }) : t('tf.err.permit.unused_permits_soon');
       return time ? t('tf.err.permit.no_show', { time }) : t('tf.err.permit.no_show_soon');
     }
     case 'game_closed':

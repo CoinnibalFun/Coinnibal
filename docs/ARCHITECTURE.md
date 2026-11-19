@@ -214,8 +214,8 @@ has more bots than its setting, nor more playing than the setting minus its peop
   `LOG_CHUNK_BLOCKS`, `RPC_MAX_RPS` (one rate or one per URL), `RPC_BURST`, `TESTNET_RPC_URL`, `GAME_WORKERS`,
   `MAX_CONNECTIONS`, `JOIN_PERMIT_TTL_S`, `JOIN_PERMIT_HOLD_S`, `JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`,
   `JOIN_PERMIT_PER_SITE`, `JOIN_PERMIT_PER_WALLET`, `JOIN_PERMIT_OPEN_PER_IP`, `JOIN_PERMIT_OPEN_PER_SUBNET`,
-  `JOIN_PERMIT_OPEN_PER_SITE`, `JOIN_PERMIT_FRESH_SHARE`, `JOIN_PERMIT_ARENA_CAP`, `NO_SHOW_LIMIT`, `DEV_FAKE_CHAIN`,
-  `DEV_FAKE_TOKEN`.
+  `JOIN_PERMIT_OPEN_PER_SITE`, `JOIN_PERMIT_FRESH_SHARE`, `JOIN_PERMIT_UNUSED_LIMIT`, `JOIN_PERMIT_ARENA_CAP`,
+  `NO_SHOW_LIMIT`, `DEV_FAKE_CHAIN`, `DEV_FAKE_TOKEN`.
 - **Contracts registry** (`site/contracts.ts`): `DATA_DIR/chains/<id>/contracts.json`, written by `POST
   /api/admin/contracts` after a deploy from `/admin`. The server checks the code hash (the bundled v4 build only;
   an arena of an earlier build reads "redeploy needed"),
@@ -241,9 +241,11 @@ has more bots than its setting, nor more playing than the setting minus its peop
   too, refused `ticket_elsewhere`; a permit not used yet never counts: one join nonce buys one ticket in all). **Wallets
   without standing** also meet the network rules: per IP, per IPv6 /64 and per IPv4 /24 or IPv6 /48 request limits
   (`JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`, `JOIN_PERMIT_PER_SITE`, per 10 minutes); per network and arena, a
-  share of the permits not played yet (valid, or used for a ticket not seated and not settled) plus those that bought
-  nothing in the last day: 8 per IPv4 address, 4 per IPv6 /64, 16 per IPv4 /24 or IPv6 /48 (`JOIN_PERMIT_OPEN_PER_*`;
-  at the share the expired permits are read once: the join nonce, then the ticket), refused `network_busy`; together,
+  share of the permits not played yet (valid, or used for a ticket not seated and not settled): 8 per IPv4 address, 4
+  per IPv6 /64, 16 per IPv4 /24 or IPv6 /48 (`JOIN_PERMIT_OPEN_PER_*`; at the share the expired permits are read once:
+  the join nonce, then the ticket; one that bought nothing leaves at once), refused `network_busy`; per wallet and
+  arena, fewer than `JOIN_PERMIT_UNUSED_LIMIT` (3) permits that ran out unused in 24 h since its last ticket (free
+  permits cycled to hold a share are bounded per identity, never per network), refused `unused_permits`; together,
   at most `JOIN_PERMIT_FRESH_SHARE` (half) of min(cap, `maxSessions`) of an arena's permits not played yet, refused
   `arena_busy`; and they must hold the entry fee (`no_funds`). **No-shows:** a ticket the stale sweeper cancels
   unseated while its arena was open is recorded as a no-show in the settled log, unless its wallet asked to sit while

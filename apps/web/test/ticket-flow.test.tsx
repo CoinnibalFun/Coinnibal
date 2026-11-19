@@ -332,7 +332,11 @@ describe('ticket flow: two prompts, progress and races', () => {
 
   it('each refusal has its own words: a network at its share of the room is told so', async () => {
     const { permitRefusalText } = await vi.importActual<typeof import('../src/wallet/permit')>('../src/wallet/permit');
-    expect(permitRefusalText('network_busy')).toMatch(/asked from your network and are not played yet\. Try again in a few minutes\. Nothing was signed\./);
+    // honest about the wait (audit R4b-M1): a network is held only while its permits are valid and its tickets unplayed
+    expect(permitRefusalText('network_busy')).toMatch(/asked from your network and are not played yet\. Places free up as they are played or run out, within half an hour: try again soon, or from another connection\. Nothing was signed\./);
+    // one wallet's own unused permits pause that wallet only, and the sheet says until when
+    expect(permitRefusalText('unused_permits', Date.UTC(2026, 10, 20, 9, 15))).toMatch(/^You asked for tickets for this room several times today and bought none, so new tickets for this room pause until .+\. A ticket bought in another room starts afresh\. Nothing was signed\.$/);
+    expect(permitRefusalText('unused_permits')).toMatch(/pause for a while\./);
     expect(permitRefusalText('arena_busy')).toMatch(/as many tickets waiting for a seat/);
     // a new wallet without the entry fee (round 4): told to get tokens, nothing signed
     expect(permitRefusalText('no_funds')).toMatch(/does not hold the entry fee for this room yet\. Get tokens first, then buy the ticket\. Nothing was signed\./);
