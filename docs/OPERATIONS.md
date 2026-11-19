@@ -270,7 +270,7 @@ the flags honest players raise (none at the defaults) and those two scripted bot
   nothing is sent and no new arena seat is taken until it can), an arena whose vault falls short, the wrong server
   authority, low gas, a fee wallet that cannot receive the token, an arena contract whose code hash differs, an RPC
   that serves another chain than `CHAIN_ID` (`!!! chain: the RPC (COINNIBAL_RPC_URLS on the VPS, …) serves chain …`,
-  or a fallback of `EVM_RPC_URLS` left out), the server clock off the chain's, an emblem seat refused.
+  or a fallback RPC left out: `… not used (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URLS outside Docker)`), the server clock off the chain's, an emblem seat refused.
   `integrity: HELD ...` means a payout waits in `/admin` → Safety.
 
 ## RPC
@@ -367,7 +367,8 @@ default.
 
 ## Deploying on Robinhood Chain Testnet
 
-Everything is done from `/admin` with the owner wallet; nothing needs a terminal once the server runs.
+Every transaction is signed in `/admin` with the owner wallet. Once the server runs, one step needs the VPS shell:
+the site's contract pins (step 5), which only a rebuild changes.
 
 1. **Server.** On the VPS nothing is needed for the chain (`COINNIBAL_CHAIN_ID` defaults to 46630 and `COINNIBAL_RPC_URLS` to the public `https://rpc.testnet.chain.robinhood.com`;
    a provider such as Alchemy is better for production), then set `SERVER_PRIVATE_KEY=auto` and `ADMIN_WALLETS`, and
@@ -385,15 +386,24 @@ Everything is done from `/admin` with the owner wallet; nothing needs a terminal
    - **CoinnibalArena v3** with the server key as server authority and the owner (or a separate wallet) as fee wallet.
      The server checks the code hash and the server authority before it registers it.
    - **CoinnibalNFT** at the USD target (`MINT_USD_CENTS`) in ETH (the wizard reads ETH/USD).
-5. **Finish setup** (one button, the remaining steps in order): set the TestToken as the arena's game token, create
+5. **Pin the contracts in the site** (the VPS shell). The site signs only with the contracts it was built with
+   (DEPLOY.md section 3, "Pin the contracts"); until the new ones are in the build it signs no ticket and no mint.
+   `/admin` → Setup → **Site pins** shows `COINNIBAL_PIN_ARENA=…` and `COINNIBAL_PIN_NFT=…` with the registered
+   addresses: check each against the deploy transaction in your own wallet, set them in `/opt/elymum/.env`, then run
+   `coinnibal-compose up -d --build app`. Network's line "The site trusts the registered contracts" turns green.
+6. **Finish setup** (one button, the remaining steps in order): set the TestToken as the arena's game token, create
    the four arenas (1,000 / 3,000 / 5,000 / 10,000: the $1 / $3 / $5 / $10 tiers at the reference price of $0.001 a
    token), the holder perks (8 % + 2 %), the $10 Room holders-only, the NFT as the faucet's 2x, and on the testnet open the mint to the public (`CoinnibalNFT.setPhase(public)`: any wallet can then mint on chain). The server picks the
-   token up within 30 s and the lobby opens the arenas without a reload.
-6. **Burn mode** (optional on the testnet): Game → the arena contract → Advanced → Fees: the probe shows the
+   token up within 30 s and the lobby opens the arenas without a reload. Then pin the token as well: Site pins now
+   shows `COINNIBAL_PIN_TOKEN=…` (the TestToken); the same check, the same rebuild. (Pinning once, after this step,
+   with all three lines also works.)
+7. **Burn mode** (optional on the testnet): Game → the arena contract → Advanced → Fees: the probe shows the
    TestToken's working `burn()`; preview mode 1 if you want `totalSupply` to fall.
-7. **Arena prices** (Game → Arena prices): set the token's USD price, save, then sync and sign (below).
-8. **Check**: Network's launch checklist shows every line green; buy a ticket from the lobby (`/play`) as the admin, play a round, see the receipt (fee on
-   profit), buy a power-up pack.
+8. **Arena prices** (Game → Arena prices): set the token's USD price, save, then sync and sign (below).
+9. **Check**: Network's launch checklist shows every line green except the WL, the allowlist root and "The game is
+   open to holders" (those wait for the WL and for you to open the game: Game → Who may play); buy a ticket from the
+   lobby (`/play`) as the admin (the site signs it once step 5's pins are in the build), play a round, see the
+   receipt (fee on profit), buy a power-up pack.
 
 The same can be scripted with the CLI (`pnpm admin help`: `deploy-test-token`, `deploy-arena`, `deploy-nft`, `set-token`, `create-arena`, `fee`,
 `burn-mode`, `payment-burn`, `holder-perks`, `status`) and a key file.
@@ -401,24 +411,29 @@ The same can be scripted with the CLI (`pnpm admin help`: `deploy-test-token`, `
 ## First deploy checklist (the COINNIBAL_* keys)
 
 The VPS deploys `main` by itself (deploy/vps/update.sh). The first deploy of the server/ops release needs no change in
-`/opt/elymum/.env`: every new key is optional, and `docker-compose.yml` fills in the live values. Check, in order:
+`/opt/elymum/.env` for the server: every new key is optional, and `docker-compose.yml` fills in the live values. The
+site's contract pins are the exception (item 2). Check, in order:
 
-1. **Nothing to add.** Unset `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `COINNIBAL_RPC_MAX_RPS` and `COINNIBAL_GAME_ACCESS` mean
+1. **Nothing to add for the server.** Unset `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `COINNIBAL_RPC_MAX_RPS` and `COINNIBAL_GAME_ACCESS` mean
    46630, `https://rpc.testnet.chain.robinhood.com`, 4 calls a second and `site`: the chain and contracts of today,
    and who may play is the `/admin` → Settings switch.
-2. **Stale keys are harmless.** `CHAIN_ID`, `EVM_RPC_URL`, `EVM_RPC_URLS`, `RPC_MAX_RPS`, `GAME_ACCESS`, `WEB_DIST`
+2. **The site's contract pins.** The site no longer trusts a built-in testnet deployment: built without
+   `COINNIBAL_PIN_ARENA` and `COINNIBAL_PIN_NFT`, it signs no ticket and no mint. Once the owner has deployed and
+   registered the contracts (DEPLOY.md section 3), Setup → Site pins shows the lines; set them, then
+   `coinnibal-compose up -d --build app`. The game stays closed (admins only) until then anyway.
+3. **Stale keys are harmless.** `CHAIN_ID`, `EVM_RPC_URL`, `EVM_RPC_URLS`, `RPC_MAX_RPS`, `GAME_ACCESS`, `WEB_DIST`
    and the Elysium-era `PUBLIC_RPC_URL`, `EXPLORER_URL`, `ARENA_ADDRESS`, `NFT_ADDRESS`, `TOKEN_ADDRESS`,
    `TESTNET_RPC_URL`, `JOURNAL_ABANDON_CONTRACT` in `.env` are always overridden. Delete them when convenient, so the
    file says what runs. If you tuned `RPC_MAX_RPS` there, copy it to `COINNIBAL_RPC_MAX_RPS`.
-3. **`AUTH_SECRET`.** Under 32 bytes the testnet server only warns (`!!! AUTH_SECRET is …`); the mainnet refuses to
+4. **`AUTH_SECRET`.** Under 32 bytes the testnet server only warns (`!!! AUTH_SECRET is …`); the mainnet refuses to
    start. Replace it with `openssl rand -hex 32` before the mainnet, or leave it empty for the generated one (every
    session then has to sign in again once).
-4. **Sign in to `/admin` again.** Admin sessions are now 2 hours and the earlier long tokens are refused on admin
+5. **Sign in to `/admin` again.** Admin sessions are now 2 hours and the earlier long tokens are refused on admin
    routes (`admin_session_expired`); players keep theirs.
-5. **After the deploy:** `coinnibal-compose config | grep -E 'CHAIN_ID|EVM_RPC|GAME_ACCESS'` shows `46630`, the testnet
+6. **After the deploy:** `coinnibal-compose config | grep -E 'CHAIN_ID|EVM_RPC|GAME_ACCESS'` shows `46630`, the testnet
    RPC and `site`; `coinnibal-status` shows `/api/health`; `/admin` → Network shows the chain, the server key's gas
    runway and the same contracts.
-6. **Logs move to journald.** `coinnibal-compose logs app` keeps working; `journalctl CONTAINER_NAME=elymum-app-1` too.
+7. **Logs move to journald.** `coinnibal-compose logs app` keeps working; `journalctl CONTAINER_NAME=elymum-app-1` too.
 
 Optional keys (all have defaults): `COINNIBAL_CHAIN_ID`, `COINNIBAL_RPC_URLS`, `COINNIBAL_RPC_MAX_RPS`, `COINNIBAL_GAME_ACCESS`,
 `COINNIBAL_WEB_DIST` (leave unset), `COINNIBAL_REQUIRE_CI` (off: without the CI marker the branch head deploys as before),
@@ -445,12 +460,16 @@ the NFT mint first, then the token, then the game.
 
 1. In `/opt/elymum/.env` set `COINNIBAL_CHAIN_ID=4663`
    and `COINNIBAL_RPC_URLS` to the Alchemy mainnet URL and the public RPC (section "RPC"), an `AUTH_SECRET` of at least 32 bytes
-   (the mainnet refuses less), keep `SERVER_PRIVATE_KEY` or rotate it, fund the server key with ETH, and restart.
+   (the mainnet refuses less), keep `SERVER_PRIVATE_KEY` or rotate it, fund the server key with ETH, and restart
+   (`coinnibal-compose up -d app`). The site keeps its testnet build, and signs nothing on the mainnet, until the
+   rebuild of step 2.
    Integrity auto-hold is on by default there, and the secret exports are off (`ADMIN_SECRET_EXPORT`). The server opens a clean state in `DATA_DIR/chains/4663/`; the testnet's records stay in
    `chains/46630/` (the Network tab lists them).
-2. Deploy CoinnibalArena v3 and CoinnibalNFT from `/admin` (no TestToken on mainnet), publish the allowlist root,
-   Sync the mint price and open the mint. Once the game token is launched on Pons (mainnet only; RESEARCH.md): set the
-   token, create the arenas, set the holder perks, then price the arenas in US dollars (set the token price → sync →
+2. Deploy CoinnibalArena v3 and CoinnibalNFT from `/admin` (no TestToken on mainnet), pin them in the site (Setup →
+   Site pins: the `COINNIBAL_PIN_ARENA` and `COINNIBAL_PIN_NFT` lines in `/opt/elymum/.env`, checked against your
+   wallet, then `coinnibal-compose up -d --build app`, which builds the site for chain 4663), publish the allowlist
+   root, Sync the mint price and open the mint. Once the game token is launched on Pons (mainnet only; RESEARCH.md): set the
+   token, pin it (`COINNIBAL_PIN_TOKEN`, the same rebuild), create the arenas, set the holder perks, then price the arenas in US dollars (set the token price → sync →
    sign, "Arena prices in US dollars"), and only then open the game. Keep burn mode 0 until the probe shows the
    token's `burn()` works.
 3. "Import testnet emblem holders" (Mint tab) reads the testnet NFT through `TESTNET_RPC_URL` (default the public

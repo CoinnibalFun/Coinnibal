@@ -333,7 +333,7 @@ the owner. Protect the server key.
 | Item | Value |
 |---|---|
 | Chain | **Robinhood Chain Testnet** (`CHAIN_ID=46630`, RPC `https://rpc.testnet.chain.robinhood.com`, explorer `https://explorer.testnet.chain.robinhood.com`), later **Robinhood Chain** (`CHAIN_ID=4663`, a provider RPC) |
-| Contracts | deployed by the owner from `/admin` → Setup and registered with the server (`DATA_DIR/chains/<id>/contracts.json`) |
+| Contracts | deployed by the owner from `/admin` → Setup and registered with the server (`DATA_DIR/chains/<id>/contracts.json`), then pinned in the site build (`COINNIBAL_PIN_*` in `/opt/elymum/.env` and a rebuild; no chain has default pins) |
 | Server key | `SERVER_PRIVATE_KEY=auto`, on the persistent disk; pays gas in ETH |
 | Admins | `ADMIN_WALLETS` = the owner's 0x address (no default) |
 | Hosting | the game server and the website in one Docker container behind Caddy on a VPS (`WEB_DIST=/app/web`; the data volume at `/data`, daily and offsite backups); Vercel only redirects the old elymum.io |
@@ -387,10 +387,11 @@ $1 mint, the old arenas, a flat 5 % fee) and **must be rewritten before they are
 | Server on the VPS (deploy/vps/README.md), `ADMIN_WALLETS`, `SERVER_PRIVATE_KEY=auto`, `COINNIBAL_RPC_URLS` (`EVM_RPC_URLS` outside Docker), Telegram alerts | owner |
 | Fund the server key with ETH | owner |
 | Testnet first: `/admin` → Setup: Arena, NFT, TestToken, Finish setup (it also opens the TEST mint to everyone; OPERATIONS.md) | owner |
-| Mainnet: `COINNIBAL_CHAIN_ID=4663` and a provider RPC first in `COINNIBAL_RPC_URLS`; deploy Arena and NFT from the owner wallet (they register themselves) | owner |
+| Pin the registered contracts in the site build, right after they are registered (and the token once it is set): Setup → Site pins shows the `COINNIBAL_PIN_*` lines; check them against your wallet, set them in `/opt/elymum/.env`, then `coinnibal-compose up -d --build app` in the VPS shell. Until then the site signs no ticket and no mint (DEPLOY.md section 3) | owner |
+| Mainnet: `COINNIBAL_CHAIN_ID=4663` and a provider RPC first in `COINNIBAL_RPC_URLS`; deploy Arena and NFT from the owner wallet (they register themselves); pin them (the same rebuild builds the site for chain 4663) | owner |
 | WL open; review WL and collabs; publish the allowlist root | owner |
 | Sync the mint price; open the mint (Allowlist, "activate the game for holders" left unchecked), later Public; optional price keeper with bounds | owner |
-| Launch the game token on Pons (mainnet only) → set it on the arena (once, typed twice) | owner |
+| Launch the game token on Pons (mainnet only) → set it on the arena (once, typed twice) → pin it (`COINNIBAL_PIN_TOKEN`, rebuild) | owner |
 | Create the four arenas and price them; the holder perks and the holders-only $10 Room | owner |
 | Open the game (`/admin` → Game → Who may play) | owner |
 | Rewrite, then re-render the films; regenerate the screenshots; upload the X art | owner |
