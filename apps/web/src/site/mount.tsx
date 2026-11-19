@@ -1,5 +1,6 @@
-import { lazy, StrictMode, Suspense, useEffect, useState, type ComponentType } from 'react';
-import { createRoot, hydrateRoot } from 'react-dom/client';
+import { lazy, startTransition, StrictMode, Suspense, useEffect, useLayoutEffect, useState, type ComponentType, type ReactNode } from 'react';
+import { createRoot, hydrateRoot, type HydrationOptions, type Root } from 'react-dom/client';
+import { setHydrating } from '../design/useMedia';
 import { AdminPreviewTag, ClosedPage } from './Closed';
 import { pageDoor, useAdminPreview, useDoors } from './doors';
 import { setStaticEntrance } from './landing/hydrated';
@@ -130,21 +131,46 @@ export function isPrerendered(root: HTMLElement): boolean {
   return first !== null && !first.classList.contains('boot') && normalizePath(location.pathname) === '/';
 }
 
+/**
+ * React takes over the painted landing as it is: the same tree as the build's render (prerender.tsx), with the same
+ * settings (the closed defaults, which the server checked against landing.json before sending the page), and the
+ * entrances in their final state (landing/hydrated.ts); every read of the window waits for the render after this.
+ *
+ * In a transition: React then hydrates in slices of a few milliseconds and lets the browser run between them, instead
+ * of one blocking task (about 320 ms on a throttled phone). The page is painted already, so nothing waits for the
+ * hydration to finish, and a tap that comes before it ends makes React finish it at once and then handle the tap.
+ */
+export function hydrateLanding(root: HTMLElement, options?: HydrationOptions): Root {
+  setStaticEntrance(true);
+  // every component of this pass reads the server's answer to its media queries (design/useMedia.ts)
+  setHydrating(true);
+  let made: Root | undefined;
+  startTransition(() => {
+    made = hydrateRoot(
+      root,
+      <StrictMode>
+        <Hydrated>
+          <SiteApp />
+        </Hydrated>
+      </StrictMode>,
+      options,
+    );
+  });
+  return made!;
+}
+
+/** The hydration's commit: from here on a component that mounts reads its media queries at once. */
+function Hydrated({ children }: { children: ReactNode }) {
+  useLayoutEffect(() => setHydrating(false), []);
+  return children;
+}
+
 /** The public site: `/`, `/mint`, `/faucet`, `/wl`, `/collab`, `/docs`. */
 export function mount(root: HTMLElement): void {
   document.documentElement.dataset.theme = 'light';
   installChunkRecovery();
   if (isPrerendered(root)) {
-    // React takes over the painted page as it is: the same tree as the build's render (prerender.tsx), with the same
-    // settings (the closed defaults, which the server checked against landing.json before sending the page), and the
-    // entrances in their final state (landing/hydrated.ts); every read of the window waits for the render after this
-    setStaticEntrance(true);
-    hydrateRoot(
-      root,
-      <StrictMode>
-        <SiteApp />
-      </StrictMode>,
-    );
+    hydrateLanding(root);
     return;
   }
   if ((location.pathname.replace(/\/+$/, '') || '/') === '/mint') {

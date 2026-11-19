@@ -1,10 +1,11 @@
 import { SITE_SETTINGS_DEFAULT } from '@coinnibal/shared';
-import { act, StrictMode } from 'react';
+import { act, StrictMode, useSyncExternalStore } from 'react';
 import { hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setStaticEntrance } from '../src/site/landing/hydrated';
-import { SiteApp } from '../src/site/mount';
+import { useT } from '../src/i18n';
+import { hydrateLanding as hydrateSite, SiteApp } from '../src/site/mount';
 import { resetServerChain } from '../src/site/serverChain';
 import { resetSiteSettings } from '../src/site/settings';
 import { TOKEN_KEY } from '../src/site/storedSession';
@@ -65,14 +66,9 @@ async function hydrateLanding(browser: () => void = () => {}) {
   const recoverable = vi.fn();
   const errors = vi.spyOn(console, 'error');
   try {
+    // the browser's own path (mount.tsx): the static-entrance flag, then the hydration in a transition
     await act(async () => {
-      root = hydrateRoot(
-        container!,
-        <StrictMode>
-          <SiteApp />
-        </StrictMode>,
-        { onRecoverableError: recoverable },
-      );
+      root = hydrateSite(container!, { onRecoverableError: recoverable });
     });
     // the effects after hydration: the settings arrive, the browser's real answers re-render
     await act(async () => {
@@ -137,5 +133,54 @@ describe('hydrating the prerendered landing', { timeout: 30_000 }, () => {
     expect(r.html).toContain('--bite-s:56px');
     expect(container!.querySelector<HTMLElement>('#feast .ld-bite')?.style.getPropertyValue('--bite-s')).toBe('40px');
     expect(container!.querySelector<HTMLElement>('.ld-hero__drop')?.style.transform).toBe('rotate(-1.6deg)');
+  });
+
+  it('no component that reads text renders twice: the server key of useT is the browser\'s', async () => {
+    // a server answer that differs from the browser's makes React render every user of the hook again, in one
+    // blocking task, right after it hydrated the page (about 100 ms on a phone for the landing)
+    let renders = 0;
+    const subscribe = () => () => {};
+    function Probe() {
+      renders++;
+      const t = useT();
+      // a second store that does differ (as a media query does on a phone): only its own component renders again
+      useSyncExternalStore(subscribe, () => 'phone', () => 'wide');
+      return <p className="probe">{t('site.skip')}</p>;
+    }
+    function Reader() {
+      renders++;
+      return <span>{useT()('site.menu.open')}</span>;
+    }
+    const html = renderToString(
+      <div>
+        <Reader />
+        <Reader />
+      </div>,
+    );
+    container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    renders = 0;
+    const recoverable = vi.fn();
+    await act(async () => {
+      root = hydrateRoot(
+        container!,
+        <div>
+          <Reader />
+          <Reader />
+        </div>,
+        { onRecoverableError: recoverable },
+      );
+    });
+    expect(recoverable).not.toHaveBeenCalled();
+    expect(renders).toBe(2);
+    // the control: a store whose server answer differs does re-render its component once
+    act(() => root?.unmount());
+    container.innerHTML = renderToString(<Probe />);
+    renders = 0;
+    await act(async () => {
+      root = hydrateRoot(container!, <Probe />, { onRecoverableError: recoverable });
+    });
+    expect(renders).toBe(2);
   });
 });

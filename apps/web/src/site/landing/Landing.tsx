@@ -73,9 +73,9 @@ const usePlate = (gulpAt: number, ref?: RefObject<HTMLElement | null>) => useRev
 
 /**
  * A plate that pauses its loops (blinking, bobbing coins, the orbit) while it is off screen: the section's ref, shared
- * with its seam reveal. Off screen the section carries `data-paused` (storybook.css stops every animation under it),
- * set without a re-render of the section. Running off-screen loops kept a phone's main thread 84-97 % busy on the
- * landing.
+ * with its seam reveal. Off screen its endless animations are paused from script (useOffscreenPausedBlock), without a
+ * re-render of the section and without restyling it. Running off-screen loops kept a phone's main thread 84-97 % busy
+ * on the landing.
  */
 function usePausedPlate(gulpAt: number): RefObject<HTMLElement | null> {
   const ref = useRef<HTMLElement | null>(null);

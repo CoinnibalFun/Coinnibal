@@ -127,9 +127,14 @@ function fnFor(k: string) {
 }
 const textKey = (): string => `${current}|${chainVars.chain}|${chainVars.ourX}`;
 
-/** React hook: `const t = useT(); t('lo.tab.play')`. Re-renders when the language or the chain changes. */
+/**
+ * React hook: `const t = useT(); t('lo.tab.play')`. Re-renders when the language or the chain changes.
+ * The server render and a browser hydrating it read the same key as the browser (the build's language, chain and
+ * handle, which the prerendered landing was rendered with): a different server answer made React re-render every
+ * component that uses `useT`, in one blocking task, right after it hydrated the landing (about 100 ms on a phone).
+ */
 export function useT(): (key: TKey, vars?: TVars) => string {
-  return fnFor(useSyncExternalStore(subscribe, textKey, () => 'en'));
+  return fnFor(useSyncExternalStore(subscribe, textKey, textKey));
 }
 
 export function useLocale(): Locale {
