@@ -63,4 +63,22 @@ describe('the SOFT-pinned Fraunces and the faces canvas text loads', () => {
     expect(css).toMatch(/font-family: 'Fraunces Variable';/);
     expect(css).toMatch(/src: url\(\.\/fraunces-latin-soft100\.woff2\)/);
   });
+
+  it('the body text has a metric-matched stand-in for DM Sans, and the hero sizes its text without ch', () => {
+    // the prerendered landing paints before DM Sans lands: the stand-in (local Arial, scaled) keeps the line breaks
+    const main = readFileSync(join(__dirname, '../src/main.tsx'), 'utf8');
+    expect(main.indexOf("import './design/fonts/dm-sans-fallback.css'")).toBeGreaterThan(main.indexOf("import '@fontsource-variable/dm-sans/opsz.css'"));
+    const css = readFileSync(join(__dirname, '../src/design/fonts/dm-sans-fallback.css'), 'utf8');
+    expect(css.match(/font-family: 'DM Sans Fallback';/g)).toHaveLength(2);
+    expect(css).toMatch(/src: local\('Arial'\)/);
+    expect(css).toMatch(/size-adjust: \d/);
+    const tokens = readFileSync(join(__dirname, '../src/design/tokens.css'), 'utf8');
+    expect(tokens).toMatch(/--font-body: 'DM Sans Variable', 'DM Sans', 'DM Sans Fallback', /);
+    // a ch is measured on whichever font draws: 44ch of the stand-in was 80 px narrower than 44ch of DM Sans
+    const landing = readFileSync(join(__dirname, '../src/site/landing/landing.css'), 'utf8');
+    for (const sel of ['.ld-hero__lede', '.ld-hero__money']) {
+      const rule = new RegExp(`\\${sel} \\{[^}]*\\}`).exec(landing)?.[0] ?? '';
+      expect(rule, sel).toMatch(/max-width: [\d.]+em;/);
+    }
+  });
 });

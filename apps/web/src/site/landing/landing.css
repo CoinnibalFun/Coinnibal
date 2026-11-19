@@ -116,7 +116,10 @@
 }
 .ld-hero__lede {
   margin: 0;
-  max-width: 44ch;
+  /* 44ch of DM Sans (its "0" is 0.686 em at this size) in em: a ch is measured on whichever font is drawing, so in
+     the prerendered first frame, before DM Sans lands, 44ch of the stand-in font was 80 px narrower and the lede took
+     a third line, then lost it at the swap */
+  max-width: 30.18em;
   font-size: 16.5px;
   color: var(--ink-2);
 }
@@ -124,7 +127,8 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  max-width: 48ch;
+  /* 48ch of DM Sans at 14 px, in em (see .ld-hero__lede) */
+  max-width: 32.83em;
   margin: 12px 0 0;
   padding: 8px 12px;
   border: 2px solid var(--outline);
