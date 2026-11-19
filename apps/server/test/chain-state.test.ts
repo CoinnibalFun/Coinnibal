@@ -51,8 +51,9 @@ async function start(dir: string, chainId: number, extra: Parameters<typeof crea
   });
   apps.push(app);
   const port = await app.listen();
-  const call = async (method: string, path: string, opts: { wallet?: string; body?: unknown } = {}) => {
+  const call = async (method: string, path: string, opts: { wallet?: string; body?: unknown; origin?: string } = {}) => {
     const headers: Record<string, string> = {};
+    if (opts.origin) headers.Origin = opts.origin;
     if (opts.wallet) headers.Authorization = `Bearer ${app.auth.issueToken(opts.wallet)}`;
     if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
     const res = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body) });
@@ -137,6 +138,12 @@ describe('chain-keyed state: the app', () => {
     expect(t.app.stateChainId).toBe(46630);
     expect(t.app.contracts.stored().arena?.address).toBe(ARENA);
     expect((await t.call('GET', '/api/site/settings')).body.settings).toMatchObject({ gameAccess: 'admins', wlOpen: false, collabOpen: false, mintOpen: false });
+    // the open-play copy of the site (OPEN_PLAY_ORIGINS) sees the game open on the testnet; the main site does not
+    expect((await t.call('GET', '/api/site/settings', { origin: 'https://coinnibal.vercel.app' })).body.settings.gameAccess).toBe('public');
+    expect((await t.call('GET', '/api/site/settings', { origin: 'https://coinnibal.fun' })).body.settings.gameAccess).toBe('admins');
+    const player = testSigner().address;
+    expect((await t.call('GET', '/api/auth/me', { wallet: player, origin: 'https://coinnibal.vercel.app' })).body.canPlay).toBe(true);
+    expect((await t.call('GET', '/api/auth/me', { wallet: player })).body.canPlay).toBe(false);
     t.app.journal.enqueue({ kind: 'sweep', key: 'sweep:x:1', arenaId: 1, roomId: 'x', round: 1, amount: 5, attempts: 0, nextAttemptAt: Date.now() + 60_000, createdAt: Date.now() });
     expect(existsSync(join(dir, 'chains', '46630', 'journal.json'))).toBe(true);
     const net = (await t.call('GET', '/api/admin/network', { wallet: ADMIN })).body;
@@ -154,6 +161,8 @@ describe('chain-keyed state: the app', () => {
     expect(m.app.contracts.stored()).toEqual({ arena: null, nft: null, token: null });
     expect(m.app.journal.pending).toHaveLength(0);
     expect((await m.call('GET', '/api/site/settings')).body.settings.gameAccess).toBe('admins');
+    // never on mainnet
+    expect((await m.call('GET', '/api/site/settings', { origin: 'https://coinnibal.vercel.app' })).body.settings.gameAccess).toBe('admins');
     const mnet = (await m.call('GET', '/api/admin/network', { wallet: ADMIN })).body;
     expect(mnet).toMatchObject({ chainId: 4663, testnet: false, contracts: [], otherChains: [46630] });
     // the testnet records are still there
