@@ -41,6 +41,11 @@
   font-size: clamp(36px, 4.6vw, 56px);
   line-height: 1;
 }
+/* each sentence of the title is its own block, so text-wrap: balance evens the lines of each one (with a <br> the
+   second sentence ended on a one-word line on phones: "It opens after the / token.") */
+.pg-h__line {
+  display: block;
+}
 .pg-h em {
   font-style: normal;
   color: var(--teal-ink);
