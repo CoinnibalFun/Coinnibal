@@ -10,7 +10,9 @@
 #                                                  that in ps)
 # Options: --yes (no questions), --no-start (leave the app stopped afterwards).
 # The archive is checked first (complete gzip, readable tar, no absolute or '..' paths). If the volume
-# already holds data, a safety backup of it is written to /opt/elymum/backups before it is replaced.
+# already holds data, a safety backup of it is written to /opt/elymum/backups before it is replaced. Before that
+# it asks (Type RESTORE) unless --yes: with the secrets on stdin the question reads the terminal, and with no
+# terminal --yes is needed (refused before anything is downloaded: a proof opens the backup once).
 set -euo pipefail
 # shellcheck source=lib.sh
 . "$(dirname "$(readlink -f "$0")")/lib.sh"
@@ -28,14 +30,20 @@ while [[ $# -gt 0 ]]; do
     --token | --proof) die "$1 is not taken on the command line (any local user can read it in ps): leave it out and paste the value at the prompt, or send the token and the proof on stdin, one per line" ;;
     --yes | -y) yes=1; shift ;;
     --no-start) start=0; shift ;;
-    -h | --help) sed -n '2,13p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
     -*) die "unknown option $1" ;;
     *) file="$1"; shift ;;
   esac
 done
 
+# where the answer to "Type RESTORE" comes from: stdin, or the terminal when stdin carries the secrets
+answer_in=/dev/stdin
 if [[ -n "$url" ]]; then
   [[ "$url" == https://* ]] || die "--url must start with https:// (the token and the proof must not travel in clear): $url"
+  if [[ ! -t 0 && "$yes" -ne 1 ]]; then
+    answer_in=/dev/tty
+    { : </dev/tty; } 2>/dev/null || die "the token and the proof on stdin with no terminal need --yes (the question before the volume is replaced reads the terminal); nothing was downloaded"
+  fi
   read_secret token "Admin session token"
   [[ -n "$token" ]] || die "a token is needed to download the backup"
   read_secret proof "Signed proof (X-Coinnibal-Proof)"
@@ -84,8 +92,9 @@ if [[ -n "$nonempty" || "$was_running" -eq 1 ]]; then
   echo "The volume $COINNIBAL_VOLUME already holds data or is in use."
   echo "It will be backed up to $COINNIBAL_BACKUPS first, then REPLACED by $file."
   if [[ "$yes" -ne 1 ]]; then
-    read -rp "Type RESTORE to continue: " answer
-    [[ "$answer" == "RESTORE" ]] || die "cancelled"
+    answer=""
+    read -rp "Type RESTORE to continue: " answer <"$answer_in" || [[ -n "$answer" ]] || die "no answer (the input ended): nothing was replaced; --yes skips the question"
+    [[ "$answer" == "RESTORE" ]] || die "cancelled: nothing was replaced"
   fi
 fi
 
