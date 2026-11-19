@@ -6,6 +6,6 @@ export { Wordmark, CoinMark, ChompMark, type WordmarkProps, type WordmarkPaint, 
 export { CoinCharacter, type CoinCharacterProps, type CoinMood, type CoinPaint } from './CoinCharacter';
 export { FoodBit, FoodScatter, type FoodBitProps, type FoodKind, type SeedPaint } from './FoodBits';
 export { ensureInkDefs, WOBBLE, WOBBLE_SOFT } from './InkDefs';
-export { useOffscreenPause } from './useOffscreenPause';
+export { useOffscreenPause, useOffscreenPausedBlock } from './useOffscreenPause';
 export { useDashCrawl, useSteppedSmil, steppedMotion } from './stepped';
 export { Laurel } from './Laurel';

@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
+/** Pauses (or resumes) the SVG SMIL timelines at or under `el`. */
+function pauseSmil(el: Element | null, paused: boolean): void {
+  const svgs: SVGSVGElement[] = el instanceof SVGSVGElement ? [el] : [...(el?.querySelectorAll('svg') ?? [])];
+  for (const s of svgs) {
+    if (typeof s.pauseAnimations !== 'function') continue;
+    if (paused) s.pauseAnimations();
+    else s.unpauseAnimations();
+  }
+}
+
 /**
  * Pauses a motif's loops while it is off screen: returns a ref and whether the
  * element is visible. Put `data-paused={!visible || undefined}` on the root;
@@ -19,13 +29,34 @@ export function useOffscreenPause<T extends Element>(): [RefObject<T | null>, bo
     return () => io.disconnect();
   }, []);
   useEffect(() => {
-    const el = ref.current;
-    const svgs: SVGSVGElement[] = el instanceof SVGSVGElement ? [el] : [...(el?.querySelectorAll('svg') ?? [])];
-    for (const s of svgs) {
-      if (typeof s.pauseAnimations !== 'function') continue;
-      if (visible) s.unpauseAnimations();
-      else s.pauseAnimations();
-    }
+    pauseSmil(ref.current, !visible);
   }, [visible]);
   return [ref, visible];
+}
+
+/**
+ * `useOffscreenPause` for a large block (a landing section) without a re-render: while the element is off screen it
+ * carries `data-paused`, set on the element itself (so do not also render a `data-paused` prop on it), and the SVG
+ * SMIL timelines under it are paused. Re-rendering a whole section each time it entered or left the screen cost long
+ * tasks while a phone scrolled.
+ */
+export function useOffscreenPausedBlock(ref: RefObject<Element | null>): void {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    let shown = true;
+    const io = new IntersectionObserver((entries) => {
+      const visible = entries[entries.length - 1].isIntersecting;
+      if (visible === shown) return;
+      shown = visible;
+      if (visible) el.removeAttribute('data-paused');
+      else el.setAttribute('data-paused', '');
+      pauseSmil(el, !visible);
+    }, { rootMargin: '120px' });
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      el.removeAttribute('data-paused');
+    };
+  }, [ref]);
 }
