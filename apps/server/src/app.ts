@@ -443,7 +443,7 @@ export async function createApp(
   // join permits (CoinnibalArena v4): who may buy a ticket, and how many may wait for a seat (stake/join-permits.ts)
   const permits = new JoinPermits({
     chain,
-    gameOpenFor: (wallet) => site.gameOpenFor(wallet, true),
+    gameOpenFor: (wallet, origin) => site.gameOpenFor(wallet, true, origin),
     isBanned: (wallet) => integrity.isBanned(wallet),
     // the owner's wallets: never refused by the network rules (stake/join-permits.ts, the invariant's rule 4)
     isAdmin: (wallet) => site.isAdmin(wallet),
@@ -480,7 +480,8 @@ export async function createApp(
   // a linked X handle rides on the coin (read from memory at the join: X is never asked then)
   gateway.setXHandles((wallet) => xLinks.links.handle(wallet));
   // who may play: `gameAccess` (setting) or `GAME_ACCESS`: admins, NFT holders + admins, or everyone
-  gateway.setGameGate((wallet, fresh) => site.gameOpenFor(wallet, fresh));
+  // (an open-play copy of the site opens it to everyone on a testnet: OPEN_PLAY_ORIGINS, the socket's Origin)
+  gateway.setGameGate((wallet, fresh, origin) => site.gameOpenFor(wallet, fresh, origin));
   // wallets the admin banned after an integrity review cannot start arena games (practice still works)
   gateway.setBanGate((wallet) => integrity.isBanned(wallet));
   // emblem holders wear a laurel and may play the emblem skin (cached holder check of the NFT)

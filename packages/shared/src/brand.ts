@@ -27,12 +27,27 @@ export const SITE_HOST_DEFAULT = 'coinnibal.fun';
 export const SITE_URL_DEFAULT = `https://${SITE_HOST_DEFAULT}`;
 
 /**
- * The brand's own site origins: coinnibal.fun (the site) and elymum.io, the domain of before the rename: the live
- * config still answers there (it redirects every path to coinnibal.fun, vercel.json), and the NFT's on-chain base URI
- * and links already posted on X point at it, so it stays on this list. A server whose `CORS_ORIGIN` is a list always
- * accepts these too, and a sign-in from one of them names that site, so both work whatever the server's `.env` says.
+ * The brand's own site origins: coinnibal.fun (the site), elymum.io, the domain of before the rename (the live
+ * config still answers there: it redirects every path to coinnibal.fun, vercel.json, and the NFT's on-chain base URI
+ * and links already posted on X point at it, so it stays on this list), and the open-play copies
+ * (`OPEN_PLAY_ORIGINS`). A server whose `CORS_ORIGIN` is a list always accepts these too, and a sign-in from one of
+ * them names that site, so they all work whatever the server's `.env` says.
  */
-export const BRAND_SITE_ORIGINS: readonly string[] = ['https://coinnibal.fun', 'https://www.coinnibal.fun', 'https://elymum.io'];
+export const BRAND_SITE_ORIGINS: readonly string[] = ['https://coinnibal.fun', 'https://www.coinnibal.fun', 'https://elymum.io', 'https://coinnibal.vercel.app'];
+
+/**
+ * Open-play copies of the site: the same web client on a free host (built from apps/web with
+ * `VITE_SERVER_URL=https://coinnibal.fun`), talking to this same server and contracts, where the game is open to
+ * everyone on a testnet whatever the admin's `gameAccess` says (the main site keeps the setting; maintenance closes
+ * them too). The browser sets `Origin`; a page cannot choose it. On the mainnet the copies follow the main site's
+ * setting.
+ */
+export const OPEN_PLAY_ORIGINS: readonly string[] = ['https://coinnibal.vercel.app'];
+
+/** Whether a request's `Origin` is one of the open-play copies. */
+export function isOpenPlayOrigin(origin: string | null | undefined): boolean {
+  return typeof origin === 'string' && OPEN_PLAY_ORIGINS.includes(origin.replace(/\/+$/, ''));
+}
 
 /** A `CORS_ORIGIN` value with the brand's site origins added (`*` and an unset value stay as they are). */
 export function withBrandOrigins(corsOrigin: string | undefined): string {

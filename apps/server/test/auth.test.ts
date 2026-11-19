@@ -158,6 +158,8 @@ describe('SIWE login message (EIP-4361)', () => {
     const moved = loadConfig({ PUBLIC_URL: 'https://coinnibal.fun' } as NodeJS.ProcessEnv);
     expect(siweOrigin(moved, { headers: { host: 'coinnibal.fun', origin: 'https://elymum.io' } } as never, false, 46630).domain).toBe('elymum.io');
     expect(siweOrigin(moved, { headers: { host: 'coinnibal.fun', origin: 'https://evil.example' } } as never, false, 46630).domain).toBe('coinnibal.fun');
+    // the open-play copy of the site (OPEN_PLAY_ORIGINS) signs in under its own name
+    expect(siweOrigin(moved, { headers: { host: 'coinnibal.fun', origin: 'https://coinnibal.vercel.app' } } as never, false, 46630)).toEqual({ domain: 'coinnibal.vercel.app', uri: 'https://coinnibal.vercel.app', chainId: 46630 });
   });
 
   it('never lets a request choose the SIWE domain outside development (Host / X-Forwarded-Host spoofing)', async () => {

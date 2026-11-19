@@ -544,6 +544,14 @@ to `game.coinnibal.fun`: an `A` record → the VPS, `GAME_DOMAIN=game.coinnibal.
 `coinnibal-compose up -d` (Caddy gets the certificate). NFT links: the metadata base URI is on chain; the redirect keeps
 the old links working, or set a new one in Admin → Mint (`setBaseURI`) unless you froze it.
 
+**The open-play copy.** `https://coinnibal.vercel.app` is the same web client on Vercel (`apps/web`, built with
+`VITE_SERVER_URL=https://coinnibal.fun`; `apps/web/vercel.json` serves the single-page app), talking to this server
+and contracts. Requests and game sockets whose `Origin` is that copy (`OPEN_PLAY_ORIGINS` in
+`packages/shared/src/brand.ts`) get `gameAccess` `public` (the settings, `/api/auth/me`, the shop, custom rooms, the
+faucet, the mint page's state, ticket permits and the WebSocket gate) while the server runs on a testnet and is not in
+maintenance; every other origin keeps the admin's setting, and on the mainnet the copy follows it too. It is a brand
+origin, so CORS allows it and a sign-in from it names its own domain.
+
 **The X handle is @coinnibalfun** (the shared default since the account went live). A data dir that still stores
 `elymumio` (or `elymum`), the defaults of before the rename, is moved to `coinnibalfun` on start, and the seeded WL
 tasks follow. To use another account: Admin → Settings → X handle (live at once), or `X_HANDLE` on the VPS as the

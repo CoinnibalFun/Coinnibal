@@ -225,8 +225,8 @@ const FRESH = 'new';
 
 export interface JoinPermitDeps {
   chain: ChainGateway;
-  /** Whether the game is open for `wallet` (`SiteApi.gameOpenFor`). */
-  gameOpenFor: (wallet: string) => Promise<boolean>;
+  /** Whether the game is open for `wallet` (`SiteApi.gameOpenFor`; `origin`: the request's page, an open-play copy). */
+  gameOpenFor: (wallet: string, origin?: string | null) => Promise<boolean>;
   /** The integrity ban list (banned wallets are never seated, so they get no ticket either). */
   isBanned?: (wallet: string) => boolean;
   /**
@@ -1056,7 +1056,7 @@ export class JoinPermits {
    * A permit for `wallet` (signed in) to buy one ticket of `arenaId`, for the paid custom room `room` when given;
    * throws `JoinPermitFail`.
    */
-  async issue(walletIn: string, arenaId: number, ip: string, room: string | null = null): Promise<JoinPermit> {
+  async issue(walletIn: string, arenaId: number, ip: string, room: string | null = null, origin: string | null = null): Promise<JoinPermit> {
     if (!Number.isInteger(arenaId) || arenaId < 1 || arenaId > 65_535) throw new JoinPermitFail(400, 'bad_request', 'arenaId must be an arena number.');
     if (room !== null && (typeof room !== 'string' || !ROOM_CODE_RE.test(room))) throw new JoinPermitFail(400, 'bad_request', 'room must be a room code.');
     const wallet = getAddress(walletIn);
@@ -1078,7 +1078,7 @@ export class JoinPermits {
       netsOk = ipOk && netOk && siteOk;
     }
     if (!netsOk || !walletOk) throw new JoinPermitFail(429, 'rate_limited', 'Too many ticket requests. Wait a few minutes, then try again.');
-    if (!(await this.d.gameOpenFor(wallet).catch(() => false))) throw new JoinPermitFail(403, 'game_closed', 'The game is not open to this wallet yet.');
+    if (!(await this.d.gameOpenFor(wallet, origin).catch(() => false))) throw new JoinPermitFail(403, 'game_closed', 'The game is not open to this wallet yet.');
     if (this.d.isBanned?.(wallet)) throw new JoinPermitFail(403, 'banned', 'This wallet may not play paid rooms.');
     const chain = this.d.chain;
     if (!chain.stakeEnabled || !chain.joinNonce || !chain.signJoinPermit) throw new JoinPermitFail(503, 'arenas_off', 'Paid rooms are not open right now.');

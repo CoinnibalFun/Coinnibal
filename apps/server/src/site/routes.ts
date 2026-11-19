@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { AdminAudit } from './audit';
 import { OLD_SECRET_PROOF_HEADER, SECRET_PROOF_HEADER, SECRET_PURPOSES, SecretProofError, SecretProofs, type SecretPurpose, type SecretRoute } from './secret-proof';
 
-import { FEEDBACK_LIMITS, ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible } from '@coinnibal/shared';
+import { FEEDBACK_LIMITS, ROBINHOOD_CHAIN_ID, ARENA_PRICING_DEFAULT, formatUsdCents, AVATAR_LIMITS, AVATAR_TYPES, PRACTICE_ROOM, BASIC_SKINS, EMBLEM_SKIN_ID, SITE_LIMITS, isAvatarId, type GameAccess, type GameServerLoad, type ProfileResponse, type SiteError, type SiteSettings, type NftCollectionAdminView, GAS_SYMBOL, siteHostOf, gameVisible, isOpenPlayOrigin, isTestChainId } from '@coinnibal/shared';
 import { SIGN_IN_BUSY_MESSAGE, SignInBusyError, checksumAddress, type Auth } from '../auth';
 import { AvatarError, avatarIdOf, sanitizeAvatar, type AvatarStore } from '../avatars';
 import { XLinkFail, type XLinkService } from '../xlink';
@@ -39,6 +39,9 @@ import { parseArtStyle } from './nft/render';
 import type { SiteStore } from './store';
 import { SiteFail, obj } from './validate';
 import { FeedbackStore, parseFeedback } from './feedback';
+
+/** A request's or a socket's `Origin` header (absent on a same-origin GET and on a server's own call). */
+type Origin = string | string[] | null | undefined;
 
 /** Admin routes whose every request (reads too) goes to the audit log: they hand out secrets. */
 const SECRET_ROUTES = new Set(['backup', 'migration-env', 'secret-proof', 'auth']);
@@ -289,9 +292,20 @@ export class SiteApi {
     return !!wallet && this.admins.has(wallet.toLowerCase());
   }
 
-  /** Who may play: `GAME_ACCESS` when set, else the admin's setting. */
-  gameAccess(): GameAccess {
-    return this.cfg.gameAccess ?? this.store.settings.gameAccess;
+  /**
+   * Who may play: `GAME_ACCESS` when set, else the admin's setting. A request or a socket from an open-play copy of the
+   * site (`OPEN_PLAY_ORIGINS`, its `Origin` header) gets `public` on a testnet, unless the server is in maintenance.
+   */
+  gameAccess(origin?: Origin): GameAccess {
+    const mode = this.cfg.gameAccess ?? this.store.settings.gameAccess;
+    return mode !== 'maintenance' && this.openPlay(origin) ? 'public' : mode;
+  }
+
+  /** Whether `origin` is an open-play copy of the site and this server runs on a testnet (never on the mainnet). */
+  private openPlay(origin: Origin): boolean {
+    if (typeof origin !== 'string' || !isOpenPlayOrigin(origin)) return false;
+    const live = this.chainId();
+    return isTestChainId(this.cfg.chain.chainId) && (live === null || isTestChainId(live));
   }
 
   /** Whether `wallet` holds a Coinnibal NFT (cached 15 s, `fresh` re-reads; false without an NFT or a chain). */
@@ -311,8 +325,8 @@ export class SiteApi {
    * Whether `wallet` may enter game rooms: admins always; NFT holders in `holders` mode; everyone in `public`.
    * `fresh`: the holder check skips its 15 s cache (the gateway asks so right before seating an arena ticket).
    */
-  async gameOpenFor(wallet: string | null | undefined, fresh = false): Promise<boolean> {
-    const mode = this.gameAccess();
+  async gameOpenFor(wallet: string | null | undefined, fresh = false, origin?: Origin): Promise<boolean> {
+    const mode = this.gameAccess(origin);
     if (mode === 'public' || this.isAdmin(wallet)) return true;
     if (mode === 'holders') return this.isHolder(wallet, fresh);
     return false;
@@ -322,8 +336,8 @@ export class SiteApi {
    * `gameOpenFor` for a value that is only shown (the shop's prices): never busy, never a chain read of its own; a
    * holder on record may, anyone else is answered as not a holder (not kept).
    */
-  async gameShownFor(wallet: string | null | undefined): Promise<boolean> {
-    const mode = this.gameAccess();
+  async gameShownFor(wallet: string | null | undefined, origin?: Origin): Promise<boolean> {
+    const mode = this.gameAccess(origin);
     if (mode === 'public' || this.isAdmin(wallet)) return true;
     if (mode === 'holders') return this.shownHolder(wallet);
     return false;
@@ -333,13 +347,13 @@ export class SiteApi {
    * Whether `wallet` may read the test-token faucet (`GET /api/site/faucet`): everyone while the game shows on the site
    * (`gameVisible`: every mode but `admins`, the rule of the site's /faucet page), else admins only.
    */
-  faucetOpenFor(wallet: string | null | undefined): boolean {
-    return gameVisible(this.gameAccess()) || this.isAdmin(wallet);
+  faucetOpenFor(wallet: string | null | undefined, origin?: Origin): boolean {
+    return gameVisible(this.gameAccess(origin)) || this.isAdmin(wallet);
   }
 
-  /** The settings everyone can read; `gameAccess` is the effective value. */
-  publicSettings(): SiteSettings {
-    return { ...this.store.settings, gameAccess: this.gameAccess() };
+  /** The settings everyone can read; `gameAccess` is the effective value (for this request's origin). */
+  publicSettings(origin?: Origin): SiteSettings {
+    return { ...this.store.settings, gameAccess: this.gameAccess(origin) };
   }
 
   private baseUrl(req: IncomingMessage): string {
@@ -415,7 +429,7 @@ export class SiteApi {
       // `canPlay` is the gate: a holder check the holder index cannot answer right now, past this client's holder
       // reads (`ClientBudgetError`), is `busy` (ask again in a moment), never a wrong "no". `holder` is only shown,
       // after it (the answer the gate just had is the one on record): never busy, never a chain read of its own
-      const canPlay = await this.gameOpenFor(wallet).catch((err: unknown) => (err instanceof ClientBudgetError ? ('busy' as const) : Promise.reject(err)));
+      const canPlay = await this.gameOpenFor(wallet, false, req.headers.origin).catch((err: unknown) => (err instanceof ClientBudgetError ? ('busy' as const) : Promise.reject(err)));
       const holder = await this.shownHolder(wallet);
       return send(res, 200, { address: wallet, admin, holder, canPlay: canPlay === true, ...(canPlay === 'busy' ? { busy: true } : {}) });
     }
@@ -450,7 +464,7 @@ export class SiteApi {
       const wallet = bearerWallet(this.auth, req);
       // the packs' prices are a quote for play: only for whoever may play now. A purchase (below) is not gated: a
       // payment someone made anyway is credited (or owed back), never kept for nothing
-      if (!(await this.gameShownFor(wallet))) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
+      if (!(await this.gameShownFor(wallet, req.headers.origin))) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
       return send(res, 200, await shop.service.view(wallet));
     }
     this.method(req, 'POST');
@@ -762,7 +776,8 @@ export class SiteApi {
     // would be refused anyway, and nobody should pay for (or spend a practice slot on) a room they cannot enter. The
     // quote is only shown (never busy: `gameShownFor`); opening one is the gate decision (busy, never a wrong "no")
     const quote = req.method === 'GET' && rest === 'quote';
-    if ((req.method === 'POST' || quote) && !(await (quote ? this.gameShownFor(bearerWallet(this.auth, req)) : this.gameOpenFor(bearerWallet(this.auth, req))))) {
+    const origin = req.headers.origin;
+    if ((req.method === 'POST' || quote) && !(await (quote ? this.gameShownFor(bearerWallet(this.auth, req), origin) : this.gameOpenFor(bearerWallet(this.auth, req), false, origin)))) {
       throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
     }
     return customRoomRoutes(
@@ -793,7 +808,7 @@ export class SiteApi {
       case 'settings':
         if (seg.length !== 1) break;
         this.method(req, 'GET');
-        return send(res, 200, { settings: this.publicSettings() });
+        return send(res, 200, { settings: this.publicSettings(req.headers.origin) });
       case 'tasks':
         if (seg.length !== 1) break;
         this.method(req, 'GET');
@@ -812,7 +827,7 @@ export class SiteApi {
         if (seg.length !== 1) break;
         this.method(req, 'GET');
         // the test-token faucet belongs to the game: hidden (like the site's /faucet page) while only admins play
-        if (!this.faucetOpenFor(bearerWallet(this.auth, req))) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
+        if (!this.faucetOpenFor(bearerWallet(this.auth, req), req.headers.origin)) throw new SiteFail(403, 'game_closed', 'The game is not open yet.');
         const faucet = this.ext.faucet ?? (this.ext.chain ? new FaucetInfo({ chain: this.ext.chain, contracts: this.ext.contracts ?? null }) : null);
         if (!faucet) throw new SiteFail(503, 'chain_off', 'The faucet is not available on this server.');
         return send(res, 200, await faucet.get());
@@ -822,7 +837,7 @@ export class SiteApi {
         if (seg.length === 1) {
           this.method(req, 'GET');
           if (!mint) throw new SiteFail(503, 'chain_off', 'The mint is not available on this server.');
-          return send(res, 200, await mint.publicState(this.gameAccess(), this.store.settings.mintOpen || this.isAdmin(bearerWallet(this.auth, req))));
+          return send(res, 200, await mint.publicState(this.gameAccess(req.headers.origin), this.store.settings.mintOpen || this.isAdmin(bearerWallet(this.auth, req))));
         }
         if (seg.length === 2 && seg[1] === 'proof') {
           this.method(req, 'GET');
