@@ -437,7 +437,8 @@ export async function createApp(
   // a linked X handle rides on the coin (read from memory at the join: X is never asked then)
   gateway.setXHandles((wallet) => xLinks.links.handle(wallet));
   // who may play: `gameAccess` (setting) or `GAME_ACCESS`: admins, NFT holders + admins, or everyone
-  gateway.setGameGate((wallet, fresh) => site.gameOpenFor(wallet, fresh));
+  // (an open-play copy of the site opens it to everyone on the testnet: OPEN_PLAY_ORIGINS)
+  gateway.setGameGate((wallet, fresh, origin) => site.gameOpenFor(wallet, fresh, origin));
   // wallets the admin banned after an integrity review cannot start arena games (practice still works)
   gateway.setBanGate((wallet) => integrity.isBanned(wallet));
   // emblem holders wear a laurel and may play the emblem skin (cached holder check of the NFT)

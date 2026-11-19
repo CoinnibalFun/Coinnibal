@@ -29,6 +29,8 @@ export class Conn implements RoomConn {
   lastCenter = { x: 0, y: 0 };
   aspect = 16 / 9;
   wallet: string | null = null;
+  /** The page's `Origin` at the upgrade (an open-play copy opens the game on the testnet); null without one. */
+  origin: string | null = null;
   /** Browser fingerprint sent with the last join (untrusted, integrity evidence only; see `isFingerprint`). */
   fp: string | null = null;
   /** The signed-in wallet's server profile (name, skin, XP); null for guests and wallets without a name. */
