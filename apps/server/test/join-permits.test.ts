@@ -21,7 +21,17 @@ import { CLIENT_BUSY_MESSAGE, ClientBudgetError } from '../src/net/client-scope'
 import { Limiter } from '../src/net/limiter';
 import { Journal } from '../src/stake/journal';
 import { SettledLog } from '../src/stake/settled-log';
-import { JOIN_PERMIT_TTL_MAX_S, JoinPermitFail, JoinPermits, NET_NO_SHOW_FACTOR, NO_SHOW_WINDOW_MS, SITE_NO_SHOW_FACTOR, requesterOf, type JoinPermitDeps } from '../src/stake/join-permits';
+import {
+  JOIN_PERMIT_TTL_MAX_S,
+  JoinPermitFail,
+  JoinPermits,
+  NET_NO_SHOW_FACTOR,
+  NO_SHOW_WINDOW_MS,
+  REFRESH_GRACE_S,
+  SITE_NO_SHOW_FACTOR,
+  requesterOf,
+  type JoinPermitDeps,
+} from '../src/stake/join-permits';
 import { ARENA, E18, FakeEvm } from './fake-evm';
 import { ArenaChain, arena, testWallet } from './helpers';
 import { testSigner } from './signers';
@@ -144,11 +154,18 @@ describe('join permits: who gets one', () => {
     // used (the nonce moved on): a new one
     h.chain.nonces.set(ALICE.toLowerCase(), 1n);
     expect((await h.permits.issue(ALICE, 1, '10.0.0.1')).nonce).toBe('1');
-    // close to its end: a new one with a full window
+    // close to its end (under 2 minutes left): signed again, but it ends with the first one's lifetime (its deadline plus
+    // 2 minutes), never a full window again (audit R4b-M1-refresh); with no room left, the same one again
     h.clock.now += 9 * 60_000;
     const late = await h.permits.issue(ALICE, 1, '10.0.0.1');
-    expect(late.deadline).toBe(Math.floor(h.clock.now / 1000) + 600);
+    expect(late.deadline).toBe(Math.floor(T0 / 1000) + 600 + REFRESH_GRACE_S);
+    expect(late.signature).not.toBe(p.signature);
+    h.clock.now += 100_000;
+    expect(await h.permits.issue(ALICE, 1, '10.0.0.1')).toEqual(late);
     expect(h.chain.signed).toHaveLength(3);
+    // once it ran out (600 + 120 s after the first), a new lifetime: a full window
+    h.clock.now += 81_000;
+    expect((await h.permits.issue(ALICE, 1, '10.0.0.1')).deadline).toBe(Math.floor(h.clock.now / 1000) + 600);
   });
 
   it('refuses a closed game, a banned wallet, paid rooms off, a closed, paused, blocked or unknown arena, and an open ticket', async () => {
@@ -1093,6 +1110,183 @@ describe('an IPv4 /24 is one site, and new wallets hold at most their share of a
   });
 });
 
+describe('the invariant of permit holds: a lifetime, one network, counted once (audit R4b-M1-refresh, round 5)', () => {
+  const target = '100.64.1.5'; // a carrier NAT address
+  const elsewhere = '198.51.100.7';
+  const code = (p: Promise<unknown>) =>
+    p.then(
+      () => 'permit',
+      (err: JoinPermitFail) => err.code,
+    );
+  /** Every `stepMs` until `untilMs` (server clock), `ws` ask again from `ipOf`; `probe` runs every hour. Returns the codes. */
+  const cycle = async (h: ReturnType<typeof harness>, ws: string[], ipOf: (i: number) => string, untilMs: number, probe: (atH: number) => Promise<void>) => {
+    const start = h.clock.now;
+    const next = ws.map((_, i) => start + 510_000 - Math.floor((i * 400_000) / ws.length));
+    let probeAt = start + 3_600_000;
+    const tally: Record<string, number> = {};
+    while (h.clock.now < untilMs) {
+      const t = Math.min(...next, probeAt);
+      h.clock.now = t;
+      for (let i = 0; i < ws.length; i++) {
+        if (next[i] !== t) continue;
+        const c = await code(h.permits.issue(ws[i], 1, ipOf(i)));
+        tally[c] = (tally[c] ?? 0) + 1;
+        next[i] = t + 510_000;
+      }
+      if (probeAt === t) {
+        await probe(Math.round((t - start) / 3_600_000));
+        probeAt = t + 3_600_000;
+      }
+    }
+    return tally;
+  };
+
+  it("rule 1, the reviewer's first case: 8 funded wallets that ask once at a carrier NAT address, then every 8.5 minutes from another, close it for 12 minutes (TTL + grace), never all day", async () => {
+    const h = harness({ arenas: [arena(1, 1000)], cfg: { perIp: 1000 } });
+    h.seats = 300;
+    const t0S = Math.floor(T0 / 1000);
+    const ws = Array.from({ length: 8 }, (_, i) => testWallet(0x9000 + i));
+    for (const w of ws) await h.permits.issue(w, 1, target);
+    let n = 0;
+    const newcomer = () => code(h.permits.issue(testWallet(0x9100 + n++), 1, target));
+    expect(await newcomer()).toBe('network_busy');
+    // 8.5 minutes on (under 2 minutes left) each asks again from elsewhere: signed again, never past its lifetime's end
+    h.clock.now = T0 + 510_000;
+    for (const w of ws) expect((await h.permits.issue(w, 1, elsewhere)).deadline).toBe(t0S + 600 + REFRESH_GRACE_S);
+    // the target stays held to the lifetime's last second, and opens the second after
+    h.clock.now = T0 + (600 + REFRESH_GRACE_S) * 1000;
+    expect(await newcomer()).toBe('network_busy');
+    h.clock.now += 1000;
+    expect(await newcomer()).toBe('permit');
+    // asked again and again for a day from elsewhere: the target is open at every hourly probe, and the wallets
+    // run into their unused limit within the hour (the first permit, its refresh, a second lifetime and its refresh)
+    const probes: string[] = [];
+    const tally = await cycle(h, ws, () => elsewhere, T0 + 22 * 3_600_000, async () => {
+      probes.push(await newcomer());
+    });
+    expect(probes).toEqual(Array(21).fill('permit'));
+    expect(tally).toEqual({ permit: 16, unused_permits: expect.any(Number) });
+  });
+
+  it("rule 2, the reviewer's second case: one wallet's permit holds places in one network only, however many it asks again from; they stay for its no-show only", async () => {
+    const logs: string[] = [];
+    const h = harness({ arenas: [arena(1, 1000)], cfg: { perIp: 1000, openPerIp: 1 }, log: (m) => logs.push(m) });
+    h.seats = 300;
+    const nets = ['100.64.1.5', '100.64.2.5', '100.64.3.5', '100.64.4.5'];
+    const w = testWallet(0x9200);
+    const p = await h.permits.issue(w, 1, nets[0]);
+    // the same permit from three more networks, 5 s apart (it holds none of their places)
+    for (const ip of nets.slice(1)) {
+      h.clock.now += 5000;
+      expect(await h.permits.issue(w, 1, ip)).toEqual(p);
+    }
+    // one place each (JOIN_PERMIT_OPEN_PER_IP 1): the first is held, the other three are free for new wallets
+    expect(await code(h.permits.issue(testWallet(0x9210), 1, nets[0]))).toBe('network_busy');
+    for (let i = 1; i < 4; i++) expect(await code(h.permits.issue(testWallet(0x9210 + i), 1, nets[i]))).toBe('permit');
+    // signed again from the fourth (now full) network: served, and it moves nothing: the first stays held to its
+    // lifetime's end, the fourth's one place is its new wallet's
+    h.clock.now = T0 + 510_000;
+    expect((await h.permits.issue(w, 1, nets[3])).deadline).toBe(p.deadline + REFRESH_GRACE_S);
+    expect(await code(h.permits.issue(testWallet(0x9220), 1, nets[0]))).toBe('network_busy');
+    h.clock.now = T0 + (600 + REFRESH_GRACE_S + 1) * 1000;
+    expect(await code(h.permits.issue(testWallet(0x9221), 1, nets[0]))).toBe('permit');
+    // its next lifetime, asked from the fourth: it counts there only (the fourth's new wallet's permit ran out too)
+    const v = testWallet(0x9230);
+    await h.permits.issue(v, 1, nets[1]);
+    expect(await code(h.permits.issue(v, 1, nets[2]))).toBe('permit');
+    expect(await code(h.permits.issue(testWallet(0x9231), 1, nets[2]))).toBe('permit');
+    // its ticket bought and never played (the stale sweeper's no-show): it counts against every network it was asked from
+    h.chain.nonces.set(v.toLowerCase(), 1n);
+    h.permits.ticketDone(v, 1, true);
+    expect(logs.at(-1)).toBe(`permits: no-show of ${v.toLowerCase()} in arena #1 counted against 100.64.2.5, 100.64.2.0/24, 100.64.3.5, 100.64.3.0/24`);
+  });
+
+  it("rule 1, the reviewer's third case: 150 funded wallets asking again and again cannot hold the new wallets' share all day", async () => {
+    const h = harness({ arenas: [arena(1, 1000)] });
+    h.seats = 300; // a share of 150
+    // 150 funded throwaway wallets, 15 on each of ten /24s, each asking again every 8.5 minutes and never buying
+    const ws = Array.from({ length: 150 }, (_, i) => testWallet(0x9300 + i));
+    const ipOf = (i: number) => `203.0.${10 + Math.floor(i / 15)}.${1 + (i % 15)}`;
+    for (let i = 0; i < 150; i++) await h.permits.issue(ws[i], 1, ipOf(i));
+    let n = 0;
+    const newcomer = (atH: number) => code(h.permits.issue(testWallet(0x9500 + n++), 1, `198.18.${atH}.9`));
+    expect(await newcomer(0)).toBe('arena_busy');
+    const probes: string[] = [];
+    const tally = await cycle(h, ws, ipOf, T0 + 20 * 3_600_000, async (atH) => {
+      probes.push(await newcomer(atH));
+    });
+    // new players from anywhere else are served at every hourly probe; each wallet got 3 permits (2 lifetimes, 1
+    // refresh in the second) after its first, then waits until its first unused one is a day old
+    expect(probes).toEqual(Array(20).fill('permit'));
+    expect(tally.permit).toBe(3 * 150);
+    expect((await fail(h.permits.issue(ws[0], 1, ipOf(0)))).retryAt).toBeGreaterThan(T0 + NO_SHOW_WINDOW_MS);
+  });
+
+  it('rule 3: a permit replaced while open counts unused once, like one that ran out; the slow-approval refresh is never refused and counts once', async () => {
+    const h = harness({ arenas: [arena(1, 1000)] });
+    h.seats = 300;
+    const w = testWallet(0x9600);
+    const first = await h.permits.issue(w, 1, target);
+    // the approval took 8 min 36 s: 84 s left, under buyTicket's PERMIT_MIN_LEFT_S (90), so the client asks again; it
+    // gets 204 s (the lifetime's end), enough for the join
+    h.clock.now = T0 + 516_000;
+    const again = await h.permits.issue(w, 1, target);
+    expect([again.nonce, again.deadline, again.deadline - Math.floor(h.clock.now / 1000)]).toEqual([first.nonce, first.deadline + REFRESH_GRACE_S, 204]);
+    // it never joins: the replaced permit and the one signed again count one each; a second lifetime is served, a
+    // third is not (3 unused: had the refresh counted twice the second would wait, had it counted none the third would
+    // be served)
+    h.clock.now = T0 + 13 * 60_000;
+    expect(await code(h.permits.issue(w, 1, target))).toBe('permit');
+    h.clock.now = T0 + 24 * 60_000;
+    const e = await fail(h.permits.issue(w, 1, target));
+    expect([e.code, e.retryAt]).toEqual(['unused_permits', T0 + NO_SHOW_WINDOW_MS]);
+    // a player at its limit, in its last lifetime, behind a full address in an arena whose new wallets' share is full:
+    // its slow-approval refresh is still served (it holds nothing new)
+    const small = harness({ arenas: [{ ...arena(1, 1000), maxSessions: 16 }], cfg: { perIp: 1000 } });
+    small.seats = 300; // a share of 8 for new wallets, 8 for the address
+    const v = testWallet(0x9700);
+    for (let i = 0; i < 2; i++) {
+      await small.permits.issue(v, 1, target);
+      small.clock.now += 11 * 60_000;
+    }
+    const last = await small.permits.issue(v, 1, target);
+    for (let i = 0; i < 7; i++) await small.permits.issue(testWallet(0x9710 + i), 1, target);
+    expect(await code(small.permits.issue(testWallet(0x9720), 1, target))).toBe('network_busy');
+    expect(await code(small.permits.issue(testWallet(0x9721), 1, elsewhere))).toBe('arena_busy');
+    small.clock.now += 516_000;
+    const refreshed = await small.permits.issue(v, 1, elsewhere);
+    expect([refreshed.nonce, refreshed.deadline]).toEqual([last.nonce, last.deadline + REFRESH_GRACE_S]);
+    // and its ticket, bought with it, starts the count afresh
+    small.chain.nonces.set(v.toLowerCase(), 1n);
+    small.clock.now += 6 * 60_000;
+    expect((await small.permits.issue(v, 1, target)).nonce).toBe('1');
+  });
+
+  it('rule 4: a player with standing, a ticket holder and the owner are never refused for what the attackers hold', async () => {
+    const admins = new Set<string>();
+    const h = harness({ arenas: [{ ...arena(1, 1000), maxSessions: 16 }], cfg: { perIp: 1000 }, isAdmin: (w) => admins.has(w.toLowerCase()) });
+    h.seats = 300;
+    // the attackers hold the address's 8 places and the new wallets' share of 8
+    for (let i = 0; i < 8; i++) await h.permits.issue(testWallet(0x9800 + i), 1, target);
+    expect(await code(h.permits.issue(testWallet(0x9810), 1, target))).toBe('network_busy');
+    expect(await code(h.permits.issue(testWallet(0x9811), 1, elsewhere))).toBe('arena_busy');
+    const regular = testWallet(0x9820);
+    established(h, regular);
+    expect((await h.permits.issue(regular, 1, target)).player).toBe(regular);
+    const holder = testWallet(0x9821);
+    h.chain.open.add(`1:${holder.toLowerCase()}`);
+    expect(await code(h.permits.issue(holder, 1, target))).toBe('session_open');
+    // the owner: an admin wallet that never played; served, and never counted against the unused limit
+    const owner = testWallet(0x9822);
+    admins.add(owner.toLowerCase());
+    for (let i = 0; i < 5; i++) {
+      expect((await h.permits.issue(owner, 1, target)).player).toBe(owner);
+      h.clock.now += 11 * 60_000;
+    }
+    expect(await code(h.permits.issue(testWallet(0x9823), 1, elsewhere))).toBe('permit');
+  });
+});
+
 describe('a new arena contract registered live (audit S16, round 3)', () => {
   it('is never handed a permit of the old contract: the permits, places and shares start afresh', async () => {
     const h = harness({ arenas: [arena(1, 1000)], cfg: { openPerIp: 2 } });
@@ -1228,6 +1422,28 @@ describe('join permits on the chain (EvmChain + the FakeEvm model of CoinnibalAr
     expect([again.lastPlayedAt(ALICE), again.lastPlayedAt(BOB)]).toEqual([T0 - 3000, null]);
     clock.now = T0 - 3000 + 14 * 24 * 3_600_000 + 1;
     expect(again.lastPlayedAt(ALICE)).toBeNull();
+  });
+
+  it("the slow-approval refresh, the reviewer's fourth case (audit R4b-M1-refresh): asked again with 84 s left, the permit signed again buys the ticket", async () => {
+    const local = { now: T0 };
+    const { evm, chain } = await evmChain({}, () => local.now);
+    evm.nowS = () => Math.floor(local.now / 1000);
+    await chain.readChainClock();
+    const alice = getAddress(testSigner().address);
+    fund(evm, alice);
+    const permits = new JoinPermits({ chain, gameOpenFor: async () => true, blocked: () => [], seatedKeys: () => new Set(), pendingKeys: () => [], seatsPerRound: () => 300, noShows: () => [], now: () => local.now });
+    const first = await permits.issue(alice, 1, '10.0.0.1');
+    // the approval took 8 min 36 s: buyTicket asks again (under its 90 s), gets one that ends with the lifetime
+    local.now += 516_000;
+    const again = await permits.issue(alice, 1, '10.0.0.1');
+    expect([again.nonce, again.deadline]).toEqual([first.nonce, first.deadline + REFRESH_GRACE_S]);
+    expect(again.signature).not.toBe(first.signature);
+    // the join a minute later (past the first one's deadline) goes through with it
+    local.now += 90_000;
+    await expect(evm.sendFrom(alice, joinCall(ARENA, 1, { deadline: BigInt(first.deadline), signature: first.signature as Hex }))).rejects.toThrow(/PermitExpired/);
+    await evm.sendFrom(alice, joinCall(ARENA, 1, { deadline: BigInt(again.deadline), signature: again.signature as Hex }));
+    expect(await chain.hasOpenTicket(1, alice)).toBe(true);
+    expect(await chain.joinNonce(alice)).toBe(1n);
   });
 
   it('a permit signed while the server clock runs 60 s ahead of the chain buys a ticket at the longest TTL; the balance read', async () => {

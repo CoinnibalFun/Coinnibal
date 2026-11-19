@@ -445,6 +445,8 @@ export async function createApp(
     chain,
     gameOpenFor: (wallet) => site.gameOpenFor(wallet, true),
     isBanned: (wallet) => integrity.isBanned(wallet),
+    // the owner's wallets: never refused by the network rules (stake/join-permits.ts, the invariant's rule 4)
+    isAdmin: (wallet) => site.isAdmin(wallet),
     isHolder: (wallet) => mint.isHolder(wallet),
     blocked: () => rooms.blockedArenas().map((b) => b.arenaId),
     seatedKeys: () => rooms.liveSessions(),

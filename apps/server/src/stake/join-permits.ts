@@ -6,6 +6,30 @@ import { subnetOf } from '../net/ip-key';
 import { Limiter } from '../net/limiter';
 
 /**
+ * THE INVARIANT OF PERMIT HOLDS (audit R4b-M1-refresh, round 5). A "place" is a count in an arena's cap, in a network's
+ * share or in the new wallets' share. Every change to this file must keep these four rules:
+ *  1. A place is held only by (a) a permit within its own lifetime, which starts at the first permit of its join nonce
+ *     (in this arena, since the wallet's last permit there ran out) and ends `ttlS` + `REFRESH_GRACE_S` later
+ *     (`Issued.endS`), or (b) a ticket that really exists on chain and is not seated or cancelled yet. Refreshing a
+ *     permit never extends its lifetime: a permit signed again is capped at `endS`, so no valid permit ever outlives the
+ *     places it holds, and only once every permit of a lifetime ran out can the next lifetime begin (through every
+ *     check below). After its lifetime a permit is read once (`recheckOpen`): its nonce unmoved, it leaves; moved, it
+ *     stays only while its ticket is found open and unseated.
+ *  2. A permit counts only in the shares of the network that asked for its lifetime's first permit (`Issued.share`),
+ *     which passed that network's share check at that moment. Whoever asks later in the lifetime gets the same permit
+ *     (or one signed again) without passing or entering a share: it is kept in `Issued.by` for no-show attribution
+ *     only, never for holds. So one wallet's permit holds one network's places, never four.
+ *  3. Every permit that ends without a ticket counts against its wallet's unused limit (`unusedLimit`), once: expired
+ *     (`ranOut`) or replaced while open (`again`). The client's slow-approval refresh (buyTicket's PERMIT_MIN_LEFT_S,
+ *     90 s) is such a replacement: it is never refused for the shares or the unused limit (it holds nothing new), and
+ *     the ticket it buys moves the nonce and starts the count afresh.
+ *  4. None of this may refuse a player with standing (never counted in a share or the unused limit), a ticket holder
+ *     (told to resume its ticket) or the owner (an admin wallet, `isAdmin`: treated like standing for every ticket;
+ *     while the game is open to admins only, no one else gets a permit at all).
+ * The simpler design, "permits hold nothing; only real unplayed tickets hold places", fails rule 1's purpose: every
+ * permit can buy a ticket until its deadline, so permits outside the shares would let any number of funded new wallets
+ * buy tickets past every share at once (audit R3-M2). So a permit holds for its lifetime, and the lifetime is bounded.
+ *
  * Join permits (CoinnibalArena v4; 2026-11 audit S16). `join` needs a short-lived EIP-712 permit signed by the server
  * key, so the server decides who may buy a ticket. Before the permit, anyone could fill an arena's `maxSessions` with
  * tickets nobody played, get every entry fee back from the stale sweeper 15 minutes later, and do it again.
@@ -28,7 +52,7 @@ import { Limiter } from '../net/limiter';
  * R4-M2: a ticket of another arena bought with standing and not played yet makes this one follow the rules below, and a
  * refusal then says `ticket_elsewhere`; a permit not used yet never counts, since one join nonce buys one ticket in
  * all). It loses standing at its first no-show. So a player behind a carrier NAT, a VPN or a mobile /48 is never refused
- * for what other wallets of that network did.
+ * for what other wallets of that network did. An admin wallet (the owner) meets only those too, for every ticket.
  *
  * A wallet without standing (a new one) also meets the network rules, which follow the network it asks from: an IPv4
  * address or an IPv6 /64 (`net`), and its IPv4 /24 or IPv6 /48 (`site`; audit R3-M2: one cheap block of addresses is one
@@ -38,21 +62,24 @@ import { Limiter } from '../net/limiter';
  *  - the network has fewer than its share of the arena's outstanding permits: issued there and not played yet (valid
  *    and unused, or used for a ticket that is not seated, not settled and not cancelled), at most `openPerIp` per IPv4
  *    address (8: carrier NAT puts many players behind one), `openPerNet` per IPv6 /64 (4) and `openPerSite` per IPv4
- *    /24 or IPv6 /48 (16). Refused: `network_busy`. A permit that bought nothing leaves the share when it runs out (at
- *    the latest once its 10 minutes are over), so whatever its wallets did, a network is never held longer than its
- *    own valid permits and unplayed tickets last (audit R4b-M1: unused permits of other wallets, an attacker's or a
- *    hesitant player's, must never close a carrier NAT or a /24 for a day);
- *  - the wallet let fewer than `unusedLimit` (3) permits of this arena run out unused in 24 h, counted since its last
- *    ticket (its join nonce moved: a ticket bought or played starts the count afresh). Refused: `unused_permits`, until
- *    the oldest of them is a day old. So free permits cycled to hold a share cost a funded wallet per `unusedLimit`
- *    permits a day (per identity, never per network), while a player who asks, leaves and comes back later is served;
+ *    /24 or IPv6 /48 (16). Refused: `network_busy`. A permit counts in the share of the network its lifetime's first
+ *    permit was asked from, and one that bought nothing leaves it when its lifetime is over (12 minutes at most), so
+ *    whatever its wallets did, a network is never held longer than its own permits' lifetimes and unplayed tickets last
+ *    (audit R4b-M1: unused permits of other wallets, an attacker's or a hesitant player's, must never close a carrier
+ *    NAT or a /24 for a day; R4b-M1-refresh: nor permits signed again, from there or from anywhere else);
+ *  - the wallet let fewer than `unusedLimit` (3) permits of this arena end unused in 24 h (run out, or replaced by one
+ *    signed again), counted since its last ticket (its join nonce moved: a ticket bought or played starts the count
+ *    afresh). Refused: `unused_permits`, until the oldest of them is a day old. So free permits cycled to hold a share
+ *    cost a funded wallet per 3 lifetimes (about half an hour) a day per arena (per identity, never per network), while
+ *    a player who asks, leaves and comes back later is served;
  *  - wallets without standing together hold fewer than `freshShare` of min(cap, `maxSessions`) of the arena's
  *    outstanding permits (half by default). Refused: `arena_busy`. However many networks they come from, new wallets
  *    can never fill the arena: the rest stays open to players with standing;
  *  - the wallet holds the entry fee (`no_funds`: its permit could buy nothing, and a free one must not hold a share);
  *  - the caller's IP (and IPv6 /64, IPv4 /24, IPv6 /48) are under their request limits.
  * One live permit per wallet and arena: asking again returns the same permit while it is valid, unused and signed for
- * the arena contract in use (a new contract, registered live, starts every permit, place and share afresh).
+ * the arena contract in use, or, with less than `REUSE_MIN_LEFT_S` left, one signed again that still ends with its
+ * lifetime (the invariant above; a new contract, registered live, starts every permit, place and share afresh).
  *
  * A ticket for a paid custom room (audit R4-M1): the request names the room, which must be an instance of that arena
  * taking seats now (else `arena_closed`), and the permit is bound to it unless the wallet opened that room. If the room
@@ -72,7 +99,7 @@ import { Limiter } from '../net/limiter';
  * is seated or settled (a no-show included), or, read once that share is full (once per permit after it expired), the
  * wallet's join nonce never moved (it ran out unused: one more of its wallet's unused permits) or the wallet holds no
  * ticket there. The wallet asking again once its permit ran out frees that one too (and counts it unused). Asking to
- * sit, or asking again while the permit is valid, frees nothing.
+ * sit, or asking again while the permit is valid, frees nothing, and holds nothing more either.
  */
 
 export interface JoinPermitConfig {
@@ -157,6 +184,11 @@ export const NET_NO_SHOW_FACTOR = 3;
 export const SITE_NO_SHOW_FACTOR = 8;
 /** A kept permit is handed out again only while it has at least this long left (the wallet needs time to sign). */
 const REUSE_MIN_LEFT_S = 120;
+/**
+ * A permit's lifetime ends this long after the deadline of its first permit (`Issued.endS`): the room a permit signed
+ * again has (the client's slow-approval refresh asks with under 90 s left and gets 2 to 4 minutes), never more.
+ */
+export const REFRESH_GRACE_S = REUSE_MIN_LEFT_S;
 /** At the cap, a held place's join nonce is read again (its ticket may be bought) at most this often; at a network's
  * share, an outstanding permit's ticket likewise. */
 const RECHECK_MS = 10_000;
@@ -197,6 +229,11 @@ export interface JoinPermitDeps {
   gameOpenFor: (wallet: string) => Promise<boolean>;
   /** The integrity ban list (banned wallets are never seated, so they get no ticket either). */
   isBanned?: (wallet: string) => boolean;
+  /**
+   * An admin wallet (`ADMIN_WALLETS`: the owner): treated like a wallet with standing, for every ticket, so no network
+   * rule ever refuses it (the invariant, rule 4). Absent: none.
+   */
+  isAdmin?: (wallet: string) => boolean;
   /** Whether `wallet` holds the Coinnibal NFT (holders-only arenas). Absent: not checked (the contract refuses). */
   isHolder?: (wallet: string) => Promise<boolean>;
   /** Arenas the server keeps closed (books guard, re-price): no ticket is sold there. */
@@ -273,8 +310,13 @@ const playerOf = (key: string): { arenaId: number; player: string } | null => {
 /** The wallet (lower case) of a permit key `<arenaId>:<wallet>`. */
 const walletOf = (key: string): string => key.slice(key.indexOf(':') + 1);
 
+/** `list` with `by` as its latest requester (one entry per network, the last `MAX_REQUESTERS`). */
+function withRequester(list: readonly Requester[], by: Requester): Requester[] {
+  return [...list.filter((b) => b.net !== by.net), by].slice(-MAX_REQUESTERS);
+}
+
 /** Every requester key (`net`, and `site` when there is one) of `by`. */
-function requesterKeys(by: readonly Requester[]): Set<string> {
+function requesterKeys(...by: Requester[]): Set<string> {
   const keys = new Set<string>();
   for (const b of by) {
     keys.add(b.net);
@@ -318,15 +360,29 @@ interface Issued {
   issuedS: number;
   /** The paid custom room the latest permit was asked for, bound to it (null: none, or its creator's own). */
   room: RoomBinding | null;
-  /** Who asked for the permits of this nonce (a no-show of the ticket bought with one counts against each). */
+  /**
+   * Who asked for the permits of this nonce: a no-show of the ticket bought with one counts against each. Attribution
+   * only, never a share (the invariant, rule 2).
+   */
   by: Requester[];
-  /** The deadline of the latest permit (Unix s, the chain's clock). */
-  deadlineS: number;
-  /** It counts against the share of every network in `by`: not played, settled or found unused yet. */
+  /**
+   * The network whose shares this permit counts in: the one its lifetime's first permit was asked from, which passed
+   * that network's share check then (rule 2).
+   */
+  share: Requester;
+  /** The latest permit of this lifetime: handed out again while valid, its deadline at most `endS`. */
+  permit: JoinPermit;
+  /**
+   * The end of this lifetime (Unix s, the chain's clock): its first permit's deadline plus `REFRESH_GRACE_S`. No permit
+   * of it is signed past it (rule 1).
+   */
+  endS: number;
+  /** It counts against `share`'s shares: not played, settled or found unused yet. */
   open: boolean;
   /**
-   * Server clock (Unix ms) of the issue of each earlier permit of this nonce that ran out unused, issued to the wallet
-   * without standing (`unusedLimit`; a day). A new nonce (a ticket bought) starts afresh.
+   * Server clock (Unix ms) of the issue of each earlier permit of this nonce that ended unused (it ran out, or one
+   * signed again replaced it), issued to the wallet without standing (`unusedLimit`; a day). A new nonce (a ticket
+   * bought) starts afresh.
    */
   unused: number[];
   /**
@@ -482,7 +538,7 @@ export class JoinPermits {
         continue;
       }
       if (BigInt(rec.nonce) >= nonce) {
-        if (rec.deadlineS < nowS) this.close(key);
+        if (rec.permit.deadline < nowS) this.close(key);
         continue;
       }
       if (rec.checkedAt !== Infinity) {
@@ -544,8 +600,13 @@ export class JoinPermits {
    * network: other wallets' unused permits must not close a shared network (audit R4b-M1).
    */
   private ranOut(key: string, rec: Issued): void {
-    if (!rec.exempt) rec.unused = [...rec.unused, rec.at].slice(-MAX_UNUSED);
+    this.countUnused(rec);
     this.close(key);
+  }
+
+  /** `rec`'s latest permit ended unused (it ran out, or one signed again replaced it): one more for its wallet (rule 3). */
+  private countUnused(rec: Issued): void {
+    if (!rec.exempt) rec.unused = [...rec.unused, rec.at].slice(-MAX_UNUSED);
   }
 
   /**
@@ -724,11 +785,7 @@ export class JoinPermits {
     const rec = this.issued.get(key);
     if (!rec) return;
     const now = this.now();
-    const keys = new Set<string>();
-    for (const by of rec.by) {
-      keys.add(by.net);
-      if (by.site !== null) keys.add(by.site);
-    }
+    const keys = requesterKeys(...rec.by);
     for (const k of keys) {
       const times = this.netTimes(k, now);
       if (times.length === 0 && this.netNoShows.size >= MAX_NET_KEYS) this.netNoShows.delete(this.netNoShows.keys().next().value!);
@@ -756,20 +813,18 @@ export class JoinPermits {
   }
 
   /**
-   * Remembers who asked for a permit of `nonce` (a no-show of its ticket counts against them). A permit issued, or
-   * handed out again, is outstanding: it counts against the share of every network that asked for it, and (`exempt`
-   * false: a wallet without standing) in the new wallets' share. An earlier permit of the same nonce that expired
-   * bought nothing (the nonce would have moved): it ran out unused, and the wallet's unused permits of that nonce carry
-   * over.
+   * A new lifetime begins with `permit`, asked from `by` (which passed its share checks): it is outstanding until
+   * `endS` (its deadline plus `REFRESH_GRACE_S`), in `by`'s shares only, and (`exempt` false: a wallet without standing)
+   * in the new wallets' share. Who asked for earlier permits of the same nonce stays for no-show attribution, and so do
+   * the wallet's unused permits of that nonce; an earlier one still open bought nothing (the nonce would have moved):
+   * it ended unused.
    */
   private record(key: string, permit: JoinPermit, by: Requester, held: boolean, exempt: boolean, room: RoomBinding | null): void {
     const nonce = permit.nonce;
     const was = this.issued.get(key);
     const same = !!was && was.nonce === nonce;
-    if (was && same && was.open && was.deadlineS < this.chainNowS()) this.ranOut(key, was);
+    if (was && same && was.open) this.ranOut(key, was);
     if (was) this.close(key);
-    const list = same ? was.by.filter((b) => b.net !== by.net) : [];
-    list.push(by);
     this.issued.delete(key);
     const rec: Issued = {
       nonce,
@@ -777,8 +832,10 @@ export class JoinPermits {
       at: this.now(),
       issuedS: this.chainNowS(),
       room,
-      by: list.slice(-MAX_REQUESTERS),
-      deadlineS: permit.deadline,
+      by: same ? withRequester(was.by, by) : [by],
+      share: by,
+      permit,
+      endS: permit.deadline + REFRESH_GRACE_S,
       open: true,
       unused: same ? was.unused : [],
       exempt,
@@ -789,8 +846,42 @@ export class JoinPermits {
   }
 
   /**
-   * Adds `key` to (or removes it from) the outstanding permits of every network of `rec` and the new wallets' share of
-   * its arena (a permit issued with standing is in neither).
+   * The wallet of `key` asks again while a permit of its lifetime `rec` is valid (the invariant, rules 1 to 3): the same
+   * permit, or, with less than `REUSE_MIN_LEFT_S` left, one signed again that runs out at the lifetime's end at the
+   * latest (`endS`: the client's slow-approval refresh). Either way it holds nothing more: no place, no share of the
+   * network asking now (kept for no-show attribution only), no later end; so it passes no share check and never meets
+   * the unused limit. The one it replaces counts as unused (a ticket bought with either moves the nonce and starts the
+   * count afresh). No room left before `endS`: the same permit, however little it has left.
+   */
+  private async again(key: string, rec: Issued, by: Requester, room: RoomBinding | null, nowS: number, now: number): Promise<JoinPermit> {
+    rec.by = withRequester(rec.by, by);
+    rec.room = room;
+    const old = rec.permit;
+    const deadline = Math.min(nowS + this.cfg.ttlS, rec.endS);
+    let permit = old;
+    if (old.deadline - nowS < REUSE_MIN_LEFT_S && deadline > old.deadline) {
+      try {
+        permit = await this.d.chain.signJoinPermit!(old.player, old.arenaId, BigInt(old.nonce), deadline);
+      } catch (err) {
+        throw busy(err);
+      }
+      // the lifetime ended meanwhile (its ticket bought or settled, a new contract): ask again
+      if (this.issued.get(key) !== rec || !rec.open) throw busy(null);
+      this.countUnused(rec);
+      rec.permit = permit;
+      this.kept.set(key, { permit, issuedS: nowS });
+    }
+    rec.at = now;
+    rec.issuedS = nowS;
+    // oldest first (the prune stops at the first record still in its day)
+    this.issued.delete(key);
+    this.issued.set(key, rec);
+    return permit;
+  }
+
+  /**
+   * Adds `key` to (or removes it from) the outstanding permits of `rec`'s network (`share`: its IPv4 address or IPv6
+   * /64, and its /24 or /48) and the new wallets' share of its arena (a permit issued with standing is in neither).
    */
   private index(key: string, rec: Issued, add: boolean): void {
     if (rec.exempt) return;
@@ -803,7 +894,7 @@ export class JoinPermits {
       fresh.delete(key);
       if (fresh.size === 0) this.freshOpen.delete(Number(arenaId));
     }
-    for (const k of requesterKeys(rec.by)) {
+    for (const k of requesterKeys(rec.share)) {
       const at = `${arenaId}|${k}`;
       const set = this.openBy.get(at);
       if (add) {
@@ -905,7 +996,7 @@ export class JoinPermits {
     const todo: [string, Issued][] = [];
     for (const key of keys) {
       const rec = this.issued.get(key);
-      if (key === except || !rec || !rec.open || rec.deadlineS >= nowS || now - rec.checkedAt < RECHECK_MS) continue;
+      if (key === except || !rec || !rec.open || rec.permit.deadline >= nowS || now - rec.checkedAt < RECHECK_MS) continue;
       rec.checkedAt = now;
       todo.push([key, rec]);
     }
@@ -973,8 +1064,10 @@ export class JoinPermits {
     const now = this.now();
     const net = ipv6Net(ip);
     const by = requesterOf(ip);
-    // standing first (memory only): a wallet with standing is limited per wallet, never by what its network did
-    const standing = await this.standing(wallet);
+    // standing first (memory only): a wallet with standing, or an admin's (the owner), is limited per wallet, never by
+    // what its network did
+    const admin = this.d.isAdmin?.(wallet) === true;
+    const standing = admin ? 'admin' : await this.standing(wallet);
     // every request counts (a kept permit handed out again too): each one may read the chain
     const walletOk = this.walletLimit.allow(lower, now);
     let netsOk = true;
@@ -1054,11 +1147,11 @@ export class JoinPermits {
     const nowS = this.chainNowS();
     // the wallet's own permit here ran out unused (its nonce never moved): it bought nothing, and leaves its shares now
     const mine = this.issued.get(key);
-    if (mine && mine.open && mine.nonce === nonceStr && mine.deadlineS < nowS) this.ranOut(key, mine);
+    if (mine && mine.open && mine.nonce === nonceStr && mine.permit.deadline < nowS) this.ranOut(key, mine);
     // standing covers one unplayed ticket at a time: with another arena's bought and not played yet, this one follows
     // the network rules, and a refusal by them says so (`ticket_elsewhere`), never the network's block
     let elsewhere = false;
-    if (standing !== null) {
+    if (standing !== null && !admin) {
       try {
         elsewhere = await this.exemptElsewhere(lower, arenaId, nonce, nowS);
       } catch (err) {
@@ -1069,14 +1162,10 @@ export class JoinPermits {
     const rule = (f: JoinPermitFail): JoinPermitFail =>
       elsewhere ? new JoinPermitFail(409, 'ticket_elsewhere', 'You hold a ticket for another room that is not played yet. Play it first, then buy this one.') : f;
     if (elsewhere) this.netNoShowCheck(ip, by, wallet, rule);
-    const kept = this.kept.get(key);
-    // one live permit per wallet and arena: the same one again while it is valid, unused and signed for the arena
-    // contract in use (it holds no new place, and stays one permit in its networks' share, as it was issued)
-    if (kept && kept.permit.nonce === nonceStr && kept.permit.deadline - nowS >= REUSE_MIN_LEFT_S && signedFor(kept.permit, st)) {
-      const rec = this.issued.get(key);
-      this.record(key, kept.permit, by, false, rec && rec.nonce === nonceStr ? rec.exempt : exempt, binding);
-      return kept.permit;
-    }
+    // one live permit per wallet and arena: while a permit of its lifetime is valid, unused and signed for the arena
+    // contract in use, that one again (or signed again, never past the lifetime's end); it holds nothing more
+    const live = this.issued.get(key);
+    if (live && live.open && live.nonce === nonceStr && live.permit.deadline >= nowS && signedFor(live.permit, st)) return this.again(key, live, by, binding, nowS, now);
     const reserved: string[] = [];
     if (!exempt) {
       // free permits cycled from one wallet: after `unusedLimit` of them ran out unused, it waits (a ticket bought starts

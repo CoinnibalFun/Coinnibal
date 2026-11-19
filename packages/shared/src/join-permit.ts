@@ -41,8 +41,8 @@ export interface JoinPermit {
  * its tickets, or of the tickets bought from its network, went back unplayed in a day (`retryAt`: Unix ms) ·
  * `network_busy` the network it is asked from (an IPv4 address or /24, an IPv6 /64 or /48) has its share of the
  * arena's permits not played yet (they free up as they are played or run out, within half an hour) · `unused_permits`
- * a wallet without standing let several permits of the arena run out unused in a day since its last ticket (`retryAt`: Unix
- * ms; a ticket bought starts afresh) · `arena_busy` the arena holds as many tickets waiting for a seat as a round can take,
+ * a wallet without standing let several permits of the arena end unused (run out, or replaced by one signed again) in a
+ * day since its last ticket (`retryAt`: Unix ms; a ticket bought starts afresh) · `arena_busy` the arena holds as many tickets waiting for a seat as a round can take,
  * or new wallets hold their share of them · `no_funds` a new wallet does not hold the entry fee · `ticket_elsewhere` a
  * wallet with standing holds a ticket of another arena not played yet (standing covers one at a time) and the network
  * rules refuse this one · `rate_limited` · `chain_busy` the network could not be read · `unauthorized` not signed in ·
