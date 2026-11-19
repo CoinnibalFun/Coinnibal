@@ -65,6 +65,8 @@ const STOP_GRACE_MS = 5_000;
 const INDEX_LOOKBACK_BLOCKS = 1_000_000n;
 /** Concurrent session reads of the stale sweeper (merged into one multicall where the RPC allows it). */
 const READ_CONCURRENCY = 40;
+/** The open-ticket index reads new `Joined` logs on demand (`refreshTicketIndex`: a fresh buyer's join) at most this often. */
+export const TICKET_INDEX_REFRESH_MS = 4_000;
 /** The confirmed settlements, cancels and loot burns (`DATA_DIR/chains/<id>/settled.jsonl`). */
 export const SETTLED_LOG_FILE = 'settled.jsonl';
 /** A held settlement's session is re-read at most this often (a player may refund it after 24 h). */
@@ -119,6 +121,8 @@ export interface EvmChainDeps {
   loops?: boolean;
   /** Receipt wait per transaction (default 90 s). */
   receiptTimeoutMs?: number;
+  /** `refreshTicketIndex` at most this often (default `TICKET_INDEX_REFRESH_MS`; wall clock). */
+  ticketIndexRefreshMs?: number;
   /**
    * The chain id the server's chain-keyed state (journal, registry) was opened for at boot
    * (`DATA_DIR/chains/<id>/`). When the RPC answers another id (or the id was unknown at boot: null),
@@ -205,6 +209,9 @@ export class EvmChain implements ChainGateway {
 
   /** Open-session index for the stale sweeper (from `Joined` logs). */
   private index: { next: bigint | null; candidates: Map<string, { arenaId: number; player: Address; sessionId: bigint }> } = { next: null, candidates: new Map() };
+  /** The on-demand scan of new `Joined` logs in flight (`refreshTicketIndex`), and when the last one started (wall clock). */
+  private indexRefresh: Promise<void> | null = null;
+  private indexRefreshAt = -Infinity;
 
   private timers: NodeJS.Timeout[] = [];
   private running: Promise<void> | null = null;
@@ -711,8 +718,9 @@ export class EvmChain implements ChainGateway {
   /**
    * Read fresh from the chain; null when there is no session. An RPC failure (after the budget's retries) throws
    * `ChainBusyError`: never "no ticket". Every caller is a client's join (or its bell or refund check), which any
-   * signed-in wallet can send: it runs at `normal` priority, so settlements and payouts (`high`) always go first, and
-   * concurrent reads of one wallet's ticket share one call.
+   * signed-in wallet can send: it runs at `high` priority, below settlements and payouts (`critical`) and above the
+   * work any client can queue in numbers (`normal`: holder checks). The gateway bounds how many wait at once
+   * (`readTicket`), and concurrent reads of one wallet's ticket share one call.
    */
   getSession(arenaId: number, player: string): Promise<ChainSession | null> {
     const key = `${this.arena ?? ''}:${arenaId}:${String(player).toLowerCase()}`;
@@ -726,11 +734,30 @@ export class EvmChain implements ChainGateway {
   /** Ticket reads in flight, per arena, arena id and wallet (`getSession`). */
   private readonly sessionReads = new Map<string, Promise<ChainSession | null>>();
 
-  /** The open-session index (`Joined` logs, refreshed by the stale sweeper) holds a ticket of this wallet in this arena. */
+  /**
+   * The open-session index (`Joined` logs, refreshed by the stale sweeper and by `refreshTicketIndex`) holds a ticket
+   * of this wallet in this arena.
+   */
   knowsOpenTicket(arenaId: number, player: string): boolean {
     const p = String(player).toLowerCase();
     for (const c of this.index.candidates.values()) if (c.arenaId === arenaId && c.player.toLowerCase() === p) return true;
     return false;
+  }
+
+  /**
+   * Brings the open-session index up to the latest block now, in the background: a join of a wallet it does not know
+   * (a ticket bought a moment ago) was refused for a full queue, or found a ticket. The stale sweeper's own scan runs
+   * every 5 minutes at `low` priority, which starves while the RPC is busy; this one runs at `high`, one at a time and
+   * at most every `TICKET_INDEX_REFRESH_MS` (one `eth_blockNumber` and one `eth_getLogs` from where the index stopped).
+   */
+  refreshTicketIndex(): void {
+    if (this.stopped || !this.client || !this.arena || !this.tokenReady || this.chainMismatch || this.indexRefresh) return;
+    const now = Date.now();
+    if (now - this.indexRefreshAt < (this.deps.ticketIndexRefreshMs ?? TICKET_INDEX_REFRESH_MS)) return;
+    this.indexRefreshAt = now;
+    this.indexRefresh = withRpcPriority('high', () => this.scanJoined())
+      .catch((err) => this.warn('index', `chain: ticket index refresh failed (${firstLine(err)})`))
+      .finally(() => (this.indexRefresh = null));
   }
 
   private async readSession(arenaId: number, player: string): Promise<ChainSession | null> {
@@ -739,7 +766,7 @@ export class EvmChain implements ChainGateway {
     const client = this.client;
     const arena = this.arena;
     try {
-      const s = await withRpcPriority('normal', () => client.session(arena, arenaId, getAddress(player)));
+      const s = await withRpcPriority('high', () => client.session(arena, arenaId, getAddress(player)));
       if (s.id === 0n || s.id > BigInt(Number.MAX_SAFE_INTEGER)) return null;
       return {
         key: sessionKey(arenaId, player, s.id),
@@ -914,8 +941,8 @@ export class EvmChain implements ChainGateway {
       do {
         this.rerun = false;
         try {
-          // settlements and loot sweeps go before every background read
-          await withRpcPriority('high', () => this.pass());
+          // settlements and loot sweeps go before every other call (paid joins' ticket reads included)
+          await withRpcPriority('critical', () => this.pass());
         } catch (err) {
           this.log(`chain: worker error: ${(err as Error).stack ?? err}`);
         }
@@ -1499,7 +1526,11 @@ export class EvmChain implements ChainGateway {
     return false;
   }
 
-  /** Scans new `Joined` logs into the open-session index (chunked; resumes where it stopped). */
+  /**
+   * Scans new `Joined` logs into the open-session index (chunked; resumes where it stopped). The sweeper's scan and an
+   * on-demand one (`refreshTicketIndex`) may overlap: the index only moves forward, and a scan that finds it ahead of
+   * itself goes on from there.
+   */
   private async scanJoined(): Promise<void> {
     const client = this.client!;
     const arena = this.arena!;
@@ -1537,7 +1568,8 @@ export class EvmChain implements ChainGateway {
       // a full-width success widens the next request (fewer calls while catching up)
       if (to - from + 1n === chunk && chunk < LOG_CHUNK_MAX) this.logChunk = chunk * 2n < LOG_CHUNK_MAX ? chunk * 2n : LOG_CHUNK_MAX;
       from = to + 1n;
-      index.next = from;
+      if (index.next !== null && index.next > from) from = index.next;
+      else index.next = from;
     }
   }
 

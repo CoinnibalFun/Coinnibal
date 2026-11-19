@@ -356,11 +356,17 @@ has more bots than its setting, nor more playing than the setting minus its peop
   socket that has not played for 2 minutes (its pings do not count), not joining and holding no live coin, makes room
   too (1013), the longest idle first. A join of the wallet
   that holds a live coin takes it over on the new socket at once and closes the old one with `CLOSE_REPLACED`. A join
-  seats only the wallet that was signed in when it began. Ticket reads (`getSession`) run at `normal` priority
-  (settlements go first), shared per wallet, limited per socket, wallet, client and IPv6 /48, with a bounded queue:
-  one client holds at most 4 of its places and one /48 at most 8, and its last quarter is kept for wallets the
-  stale sweeper's `Joined`-log index knows to hold an open ticket. A holder check a client may not make right now
-  (its budget spent, no answer cached) answers "busy, try again", never "not a holder". Every send checks the
+  seats only the wallet that was signed in when it began. Ticket reads (`getSession`) run at `high` RPC priority
+  (settlements and loot burns, `critical`, go first; holder checks and the other work clients can queue, `normal`,
+  after), shared per wallet, limited per socket, wallet, client and network (an IPv6 /48, an IPv4 /24), with a bounded
+  queue: one client holds at most 4 of its places and one network at most 8, and wallets the `Joined`-log index does
+  not know to hold an open ticket only a quarter of it. A join of a wallet the index does not know that is refused
+  for a full quarter (or finds a ticket) has the index read the new blocks at once (`refreshTicketIndex`, at most
+  every 4 s), so a ticket bought a moment ago has the whole queue at the join's next retry. Holder checks that read
+  the chain for a client are bounded per client, per network and server-wide (a quarter of `RPC_MAX_RPS`); one a
+  client may not make right now answers a "holder" on record, or "busy, try again", never "not a holder". A join
+  waits at most 1 s for its laurel's holder check (then plays without it; a paid seat that asked for the emblem skin
+  starts in a basic skin). Every send checks the
   socket's buffer (closed past 2 MiB); the heartbeat's ping carries a payload the pong must echo.
 - **Dev fake chain** (`chain/dev-fake.ts`, `DEV_FAKE_CHAIN=1` with `NODE_ENV=development` only): an in-memory chain
   with free tickets, simulated settlements and `pay`, for `pnpm demo` and the screenshot tours. It refuses to start

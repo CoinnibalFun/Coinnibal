@@ -196,6 +196,7 @@ export async function createApp(
     usdCents: cfg.mint.usdCents,
     fetchPrice,
     logChunkBlocks: cfg.chain.logChunkBlocks,
+    rpcMaxRps: cfg.chain.rpcMaxRps,
     log,
   });
   // the testnet's NFT comes from the testnet's registry (the testnet emblem import after the move to mainnet)
