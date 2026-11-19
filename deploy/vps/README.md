@@ -187,7 +187,14 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
   is recreated in the round break when a newer build of its image was pulled (below). A deploy needs every image of
   `docker-compose.yml` on this host: a Caddy tag new to it (a Dependabot bump) is pulled first, and while the registry
   cannot be reached the commit waits (the running version serves on, one alert, `coinnibal-status` says WAITING) and
-  every check tries it again. A commit counts as deployed only once its app container runs.
+  every check tries it again. A commit counts as deployed only once its app container runs. After every swap (a
+  deploy's or the weekly refresh's) `update.sh` checks Caddy too: its container must run with a steady restart count
+  (5 s) and, when a request through it on this host answered before the swap, answer again
+  (`https://<GAME_DOMAIN>/api/health?live=1` resolved to 127.0.0.1). If not, Caddy's image of before goes back under
+  its tag (a broken new build is pulled and tried again at the next deploy or refresh); if Caddy is still down, the
+  whole deploy is rolled back like an unhealthy app (the image and commit of before, with their compose file and
+  Caddyfile; the commit is marked failed). An alert goes out either way, and `alert.sh` watches the Caddy container
+  every minute (section 7).
 
 ### Updates: what is automatic and what is not
 
@@ -196,7 +203,7 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
 | Ubuntu's packages | unattended-upgrades, daily (Ubuntu's own origins, security included); the reboot a kernel update needs at 04:30 in a round break (`elymum-reboot.timer`) |
 | The Docker Engine (`docker-ce`, `containerd.io` with runc, the CLI, the compose and buildx plugins, from Docker's repository) | `reboot.sh` (`elymum-reboot.timer`, 04:30), when Docker's repository has a newer version: `docker-ce` and `containerd.io` in the round break, with the app stopped first; the CLI and the plugins alone at once (they restart nothing). Never unattended-upgrades: an engine update restarts every container, which mid-round would cash every arena player out |
 | The app image's base (`node:22-bookworm-slim`: Debian's and Node 22's patches) | every deploy builds with `--pull`; `elymum-refresh.timer` (Sunday 05:00) rebuilds the deployed commit even without a new one and swaps it in in the round break, only when the image changed (with the same rollback as a deploy, from its own `elymum-app:refresh-rollback`: `elymum-app:previous` stays the commit before the last deploy). It never deploys a newer commit (only the auto-deploy does), and it is skipped while auto-deploy is paused or an image put back by hand runs (Rollback, above) |
-| Caddy (pinned to a patch version, `caddy:2.x.y` in `docker-compose.yml`) | the newest build of that tag is pulled on every deploy and every Sunday and swapped in in the round break; a newer Caddy version comes as a Dependabot pull request, and CI checks both Caddyfiles with it (`caddy validate`) |
+| Caddy (pinned to a patch version, `caddy:2.x.y` in `docker-compose.yml`) | the newest build of that tag is pulled on every deploy and every Sunday and swapped in in the round break, and put back when it does not come up (Caddy, above); a newer Caddy version comes as a Dependabot pull request, and CI checks both Caddyfiles with it (`caddy validate`) |
 | npm dependencies, the GitHub Actions, the image tags | Dependabot pull requests, weekly (`.github/dependabot.yml`), through CI; a merged one deploys once CI passed |
 
 Not automatic: merging Dependabot's pull requests (a person reviews each), a new major version of Node or of a
@@ -211,8 +218,10 @@ reboot or engine update now).
 `elymum-alert.timer` runs `alert.sh` every minute. It posts to Telegram when the server logs a `!!!` line, when
 `/api/health` answers 503 (with the reasons: the journal cannot be written, settlements backed up or stuck, the RPC
 unreachable, the server key's gas runway under 2 days, the books guard, the server clock more than 30 s off the
-chain, a room worker down), when the gas runway is under 7 days, when a disk is over 80 % full, and when the app
-container is down. Each alert repeats at most every 30 minutes while it lasts and says "ok again" when it clears.
+chain, a room worker down), when the gas runway is under 7 days, when a disk is over 80 % full, when the app
+container is down, and when the Caddy container is not running or restarted since the minute before (a crash loop:
+with Caddy down nothing reaches the app). Each alert repeats at most every 30 minutes while it lasts and says "ok
+again" when it clears.
 
 Telegram: talk to **@BotFather** → `/newbot` → copy the token; send your bot a message, then open
 `https://api.telegram.org/bot<token>/getUpdates` and copy `chat.id`. In `.env`: `TELEGRAM_BOT_TOKEN=<token>`,

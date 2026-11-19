@@ -18,6 +18,9 @@
 # 60 s, the previous image and commit are put back at once. The weekly refresh has a rollback image of its own
 # (elymum-app:refresh-rollback, the build it replaces, removed once the new one is healthy) and never moves :previous,
 # which so stays the version before the last deploy (README "Rollback": the way back by hand).
+# Caddy: after every swap its container must run with a steady restart count and, when it answered before, answer
+# through HTTPS again. Otherwise its image of before is put back (the new build is tried again at the next pull), and
+# when that does not bring it up either, the whole deploy is rolled back as above. An alert goes out either way.
 #
 # Security fixes of the images: every build pulls the newest base image (--pull: node:22-bookworm-slim, its Debian
 # and Node patches) and the Caddy image of docker-compose.yml (a pinned patch version; Dependabot proposes newer ones,
@@ -63,6 +66,10 @@ PREVIOUS_IMAGE="${COINNIBAL_IMAGE%:*}:previous"
 # the weekly refresh's rollback target: the build it replaces (never :previous, the way back past the last deploy)
 REFRESH_ROLLBACK_IMAGE="${COINNIBAL_IMAGE%:*}:refresh-rollback"
 HEALTHY_WITHIN_S=60
+# Caddy is up once its restart count held over this many checks a second apart (a crash loop under restart:
+# unless-stopped restarts it sooner), within CADDY_UP_WITHIN_S checks (caddy_up)
+CADDY_STEADY_CHECKS=5
+CADDY_UP_WITHIN_S=30
 
 app_running() {
   [[ -n "$(dc ps --status running -q app 2>/dev/null)" ]]
@@ -87,6 +94,53 @@ wait_healthy() {
     sleep 1
   done
   echo "$status"
+}
+
+# the running Caddy container and its restart count ("<id>:<count>"; empty while none runs, between two restarts too)
+caddy_state() {
+  local cid
+  cid="$(dc ps --status running -q caddy 2>/dev/null || true)"
+  [[ -n "$cid" ]] || return 0
+  printf '%s:%s' "$cid" "$(docker inspect -f '{{.RestartCount}}' "$cid" 2>/dev/null || echo '?')"
+}
+
+# a request through Caddy on this host (HTTPS on 443, as players come in) reaches the app's liveness check. The
+# certificate is not checked: this tests that Caddy serves, not the certificate (the request never leaves the host)
+caddy_serves() {
+  local domain
+  domain="$(env_get GAME_DOMAIN)"
+  [[ -n "$domain" ]] || return 1
+  curl -fsS -k -o /dev/null --max-time 5 --resolve "$domain:443:127.0.0.1" "https://$domain/api/health?live=1" >/dev/null 2>&1
+}
+
+# Caddy is up: its container runs with the same restart count over CADDY_STEADY_CHECKS checks and, when $1 is 1 (it
+# answered before the swap), a request through it answers. Gives up after CADDY_UP_WITHIN_S checks, or twice as many
+# seconds (a probe that hangs)
+caddy_up() {
+  local served="$1" seen="" now steady=0 deadline=$((SECONDS + 2 * CADDY_UP_WITHIN_S))
+  for _ in $(seq 1 "$CADDY_UP_WITHIN_S"); do
+    ((SECONDS < deadline)) || break
+    now="$(caddy_state)"
+    if [[ -n "$now" && "$now" == "$seen" ]]; then
+      steady=$((steady + 1))
+    else
+      steady=0
+      seen="$now"
+    fi
+    if ((steady >= CADDY_STEADY_CHECKS)) && { [[ "$served" -eq 0 ]] || caddy_serves; }; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+# the Caddy image docker-compose.yml of the checkout names (caddy:<patch version>)
+caddy_ref() {
+  local ref
+  ref="$(dc config --images caddy 2>/dev/null | grep -m 1 '^caddy:' || true)"
+  [[ -n "$ref" ]] || ref="$(sed -n 's/^[[:space:]]*image:[[:space:]]*["'\'']\{0,1\}\(caddy:[^"'\''[:space:]]*\).*$/\1/p' "$COINNIBAL_COMPOSE" | head -n 1)"
+  printf '%s' "$ref"
 }
 
 # the refresh's rollback image is done with (a deploy drops one an interrupted refresh left too). Only that tag goes:
@@ -274,6 +328,14 @@ else
 fi
 git reset --hard --quiet "$remote"
 
+# Caddy as it runs before the pull: its image and the tag it was made from (put back when the swap breaks it), and its
+# restart count (the same after the build: it was up, and must be up after the swap)
+caddy_before="" caddy_before_ref=""
+caddy_before_state="$(caddy_state)"
+if [[ -n "$caddy_before_state" ]]; then
+  caddy_before="$(docker inspect -f '{{.Image}}' "${caddy_before_state%%:*}" 2>/dev/null || true)"
+  caddy_before_ref="$(docker inspect -f '{{.Config.Image}}' "${caddy_before_state%%:*}" 2>/dev/null || true)"
+fi
 # Caddy: the newest build of its pinned tag (the swap below recreates it, in the break, when the image changed). A tag
 # new to this host (a Dependabot bump) must be here before anything is built or swapped
 dc pull --quiet caddy || log "could not pull the Caddy image; the one on this host stays"
@@ -314,6 +376,15 @@ if [[ "$same" -eq 1 ]]; then
   if [[ "$app_changed" -eq 1 && -n "$before" ]]; then
     docker tag "$before" "$REFRESH_ROLLBACK_IMAGE"
   fi
+fi
+
+# Caddy was up all along (the same container and restart count as before the pull), and whether a request through
+# it answers: the swap must leave it so (an older fault is alert.sh's, not this deploy's)
+caddy_was_up=0
+caddy_served=0
+if [[ -n "$caddy_before_state" && "$(caddy_state)" == "$caddy_before_state" ]]; then
+  caddy_was_up=1
+  if caddy_serves; then caddy_served=1; fi
 fi
 
 wait_for_round_break
@@ -372,6 +443,48 @@ if [[ "$status" != "healthy" ]]; then
   fi
   [[ "$same" -eq 0 ]] || drop_refresh_rollback
   exit 0
+fi
+
+# Caddy after the swap (a new build of its tag, a new tag, a new compose file): docker compose up returns once the
+# container started, and a Caddy that then exits or crash-loops (restart: unless-stopped) takes the whole site and the
+# game down. First its image of before goes back (under the tag the checkout names: a new build that is broken is
+# tried again at the next pull), and if Caddy is still not up, the whole deploy is rolled back: the app's image of
+# before and its commit (with its compose file and Caddyfile) and Caddy's image of before
+if [[ "$caddy_was_up" -eq 1 ]] && ! caddy_up "$caddy_served"; then
+  caddy_new_ref="$(caddy_ref)"
+  caddy_new="$(image_id "$caddy_new_ref")"
+  log "CADDY DOWN after the swap (${caddy_new_ref:-?} ${caddy_new:0:19}): it does not run steadily$([[ "$caddy_served" -eq 1 ]] && echo ' or does not answer through HTTPS')"
+  caddy_fixed=0
+  if [[ -n "$caddy_before" && -n "$caddy_new_ref" && "$caddy_new" != "$caddy_before" ]]; then
+    log "putting Caddy's image of before back (${caddy_before:0:19} as $caddy_new_ref)"
+    docker tag "$caddy_before" "$caddy_new_ref"
+    dc up -d caddy || log "docker compose up of Caddy's image of before failed"
+    if caddy_up "$caddy_served"; then
+      caddy_fixed=1
+      notify "Caddy's new image ($caddy_new_ref ${caddy_new:0:19}) did not come up after the $([[ "$same" -eq 1 ]] && echo 'weekly refresh' || echo "deploy of ${remote:0:12}"); its image of before runs again, and the new one is tried again at the next pull (coinnibal-compose logs --tail 50 caddy)"
+    fi
+  fi
+  if [[ "$caddy_fixed" -eq 0 ]]; then
+    # still down: everything of before goes back
+    mark_failed
+    if [[ -n "$deployed" ]]; then git reset --hard --quiet "$deployed"; fi
+    if [[ "$app_changed" -eq 1 ]] && docker image inspect "$rollback_image" >/dev/null 2>&1; then
+      docker tag "$rollback_image" "$COINNIBAL_IMAGE"
+    fi
+    if [[ -n "$caddy_before" && -n "$caddy_before_ref" ]]; then docker tag "$caddy_before" "$caddy_before_ref"; fi
+    log "ROLLBACK: Caddy does not come up with ${remote:0:12}; putting ${deployed:0:12} back with Caddy's image of before"
+    dc up -d --remove-orphans || log "docker compose up of the previous version failed"
+    status="$(wait_healthy "$HEALTHY_WITHIN_S")"
+    caddy_now="still down"
+    if caddy_up "$caddy_served"; then caddy_now="up"; fi
+    if [[ "$same" -eq 1 ]]; then
+      notify "the weekly refresh of ${remote:0:12} was rolled back: Caddy did not come up after the swap; with the images of before the app is $status and Caddy is $caddy_now (retried next week; coinnibal-compose logs --tail 50 caddy)"
+    else
+      notify "deploy of ${remote:0:12} rolled back: Caddy did not come up after the swap; ${deployed:0:12} is back, the app is $status and Caddy is $caddy_now. It is retried when a newer commit arrives (coinnibal-compose logs --tail 50 caddy)"
+    fi
+    [[ "$same" -eq 0 ]] || drop_refresh_rollback
+    exit 0
+  fi
 fi
 
 # the Caddyfile changed: reload Caddy (no restart, certificates kept)
