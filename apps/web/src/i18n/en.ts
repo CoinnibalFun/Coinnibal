@@ -587,6 +587,7 @@ export const en = {
   'tf.err.permit.session_open': 'You already hold a ticket for this room: resume it. Nothing was signed.',
   'tf.err.permit.no_show': 'Your last tickets were bought but never played, so new tickets pause until {time}. Nothing was signed.',
   'tf.err.permit.no_show_soon': 'Your last tickets were bought but never played, so new tickets pause for a while. Nothing was signed.',
+  'tf.err.permit.network_busy': 'Enough tickets for this room were asked from your network and are not played yet. Try again in a few minutes. Nothing was signed.',
   'tf.err.permit.arena_busy': 'This room has as many tickets waiting for a seat as a round can take. Try again in a minute. Nothing was signed.',
   'tf.err.permit.rate_limited': 'Too many ticket requests. Wait a few minutes, then try again. Nothing was signed.',
   'tf.err.permit.chain_busy': 'The network is busy. Try again in a few seconds. Nothing was signed.',

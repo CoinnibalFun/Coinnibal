@@ -8,7 +8,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { joinCall, joinPermitTypedData, signJoinPermit } from '@coinnibal/sdk';
-import { JOIN_PERMIT_MAX_WINDOW_S, PROTOCOL_VERSION, type JoinPermit, type ServerMessage } from '@coinnibal/shared';
+import { JOIN_PERMIT_MAX_WINDOW_S, PROTOCOL_VERSION, type ChainStatus, type JoinPermit, type ServerMessage } from '@coinnibal/shared';
 import { getAddress, recoverTypedDataAddress, type Hex } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -41,7 +41,13 @@ class PermitChain extends ArenaChain {
   balanceReads = 0;
   /** The chain's clock (Unix ms); null: none (the permits use the server clock). */
   chainClock: (() => number) | null = null;
+  /** The arena contract in use and its chain (an admin can register another one live). */
+  arenaAddress: string = ARENA;
+  chainId = 31337;
   readonly settledFns: ((e: SettledEvent) => void)[] = [];
+  override status(): ChainStatus {
+    return { ...super.status(), chainId: this.chainId, arenaAddress: this.arenaAddress };
+  }
   async tokenBalance(player: string): Promise<number> {
     this.balanceReads++;
     if (this.busy) throw new ChainBusyError('token balance');
@@ -59,7 +65,7 @@ class PermitChain extends ArenaChain {
   }
   async signJoinPermit(player: string, arenaId: number, nonce: bigint, deadline: number): Promise<JoinPermit> {
     this.signed.push({ player, arenaId, nonce, deadline });
-    return { arena: ARENA, chainId: 31337, player: getAddress(player), arenaId, nonce: nonce.toString(), deadline, signature: `0x${(this.signed.length % 10).toString().repeat(130)}` };
+    return { arena: this.arenaAddress, chainId: this.chainId, player: getAddress(player), arenaId, nonce: nonce.toString(), deadline, signature: `0x${(this.signed.length % 10).toString().repeat(130)}` };
   }
   joinsPaused(): boolean {
     return this.paused;
@@ -215,6 +221,13 @@ describe('join permits: who gets one', () => {
     const e = await fail(v6.permits.issue(testSigner().address, 1, '2001:db8:1:2:ffff:ffff:ffff:ffff'));
     expect([e.code, e.status]).toEqual(['rate_limited', 429]);
     expect((await v6.permits.issue(testSigner().address, 1, '2001:db8:1:3::1')).arenaId).toBe(1);
+    // every /64 of one IPv6 /48 shares a limit too
+    const site = harness({ cfg: { perIp: 100, perSubnet: 100, perSite: 4, perWallet: 10 } });
+    site.seats = 100;
+    for (let i = 0; i < 4; i++) await site.permits.issue(testSigner().address, 1, `2001:db8:7:${i + 1}::1`);
+    expect((await fail(site.permits.issue(testSigner().address, 1, '2001:db8:7:ff::1'))).code).toBe('rate_limited');
+    expect((await site.permits.issue(testSigner().address, 1, '2001:db8:8:1::1')).arenaId).toBe(1);
+    expect(loadConfig({ JOIN_PERMIT_PER_SITE: '7' } as unknown as NodeJS.ProcessEnv).joinPermits.perSite).toBe(7);
     // one wallet from many addresses
     const w = harness({ cfg: { perIp: 100, perSubnet: 100, perWallet: 2 } });
     await w.permits.issue(ALICE, 1, '10.9.0.1');
@@ -226,9 +239,11 @@ describe('join permits: who gets one', () => {
 describe('a permit is free, so it holds a place only briefly and only when backed (audit S16, round 2)', () => {
   /** Wallets that hold no game token (the attacker's), and an IPv6 address in the `n`-th /64 of 2001:db8:0::/48. */
   const v6 = (n: number, host: number) => `2001:db8:0:${n.toString(16)}::${host.toString(16)}`;
+  /** The place rule alone: no share per network (tested on its own below) and no request limit per /48. */
+  const placesOnly = { openPerIp: 0, openPerNet: 0, openPerSite: 0, perSite: 100_000 };
 
   it('300 signed-in wallets without the entry fee, from ten IPv6 /64s, never push a funded player to arena_busy', async () => {
-    const h = harness({ arenas: [arena(1, 1000)] });
+    const h = harness({ arenas: [arena(1, 1000)], cfg: placesOnly });
     h.seats = 300; // the default cap: ARENA_INSTANCE_CAP 50 × 6 instances
     h.chain.balances = new Map();
     const attackers = Array.from({ length: 300 }, (_, i) => testWallet(0x1000 + i));
@@ -250,7 +265,7 @@ describe('a permit is free, so it holds a place only briefly and only when backe
   });
 
   it('funded wallets hold at most 4 places per IPv4 address or IPv6 /64 and 16 per /48, and one per wallet, arena and nonce', async () => {
-    const h = harness({ arenas: [arena(1, 1000)] });
+    const h = harness({ arenas: [arena(1, 1000)], cfg: placesOnly });
     h.seats = 300;
     // 40 funded wallets from ten /64s of one /48: 4 places per /64, 16 in the /48
     for (let i = 0; i < 40; i++) await h.permits.issue(testWallet(0x2000 + i), 1, v6(Math.floor(i / 4), (i % 4) + 1));
@@ -482,6 +497,166 @@ describe('a permit is free, so it holds a place only briefly and only when backe
     expect(p.deadline).toBe(Math.floor(T0 / 1000) + 3300);
     expect(loadConfig({ JOIN_PERMIT_TTL_S: '3600' } as unknown as NodeJS.ProcessEnv).joinPermits.ttlS).toBe(3300);
     expect(loadConfig({ JOIN_PERMIT_HOLD_S: '0' } as unknown as NodeJS.ProcessEnv).joinPermits).toMatchObject({ holdS: 0, holdsPerNet: 4, holdsPerSite: 16 });
+  });
+});
+
+describe('each network has a share of an arena\'s permits not played yet (audit S16, round 3)', () => {
+  /** The join of `w`'s permit mines: its nonce moves and its ticket is open (unseated) on chain. */
+  const buy = (h: ReturnType<typeof harness>, w: string, arenaId = 1) => {
+    const lower = w.toLowerCase();
+    h.chain.nonces.set(lower, (h.chain.nonces.get(lower) ?? 0n) + 1n);
+    h.chain.open.add(`${arenaId}:${lower}`);
+    h.chain.arenas.find((a) => a.id === arenaId)!.openSessions++;
+  };
+  /** The stale sweeper cancels `w`'s unplayed ticket (a no-show). */
+  const swept = (h: ReturnType<typeof harness>, w: string, arenaId = 1) => {
+    h.chain.open.delete(`${arenaId}:${w.toLowerCase()}`);
+    h.chain.arenas.find((a) => a.id === arenaId)!.openSessions--;
+    h.permits.ticketDone(w, arenaId, true);
+  };
+
+  it('300 funded throwaway wallets from one IPv6 /48 get 16 permits, not 300: the arena never fills (the reviewer\'s burst)', async () => {
+    const h = harness({ arenas: [arena(1, 1000)] });
+    h.seats = 300; // the default cap, and the arena's maxSessions
+    const a = h.chain.arenas[0];
+    let n = 0;
+    /**
+     * One pass: 300 fresh funded wallets over five minutes, from the ten /64s of 2001:db8:77::/48 (three addresses each),
+     * the `from`-th /64 first.
+     */
+    const pass = async (from = 0) => {
+      const got: string[] = [];
+      const refused: Record<string, number> = {};
+      for (let i = 0; i < 300; i++) {
+        const ip = `2001:db8:77:${((Math.floor(i / 30) + from) % 10).toString(16)}::${Math.floor((i % 30) / 12) + 1}`;
+        const w = testWallet(0x7000 + n++);
+        try {
+          await h.permits.issue(w, 1, ip);
+          got.push(w);
+        } catch (err) {
+          const code = (err as JoinPermitFail).code;
+          refused[code] = (refused[code] ?? 0) + 1;
+        }
+        h.clock.now += 1000;
+      }
+      return { got, refused };
+    };
+    // the /48's 60 requests per 10 minutes reach two /64s: 4 permits each, the rest wait for their network
+    const first = await pass();
+    expect(first.got).toHaveLength(8);
+    expect(first.refused).toEqual({ network_busy: 52, rate_limited: 240 });
+    // all of them join at once, and never play
+    for (const w of first.got) buy(h, w);
+    // ten minutes on (the permits expired, the request windows are new): the tickets still wait unplayed, so those two
+    // /64s get nothing (asking again with a used wallet frees nothing either) ...
+    h.clock.now += 6 * 60_000;
+    expect((await fail(h.permits.issue(first.got[0], 1, '2001:db8:77:0::1'))).code).toBe('session_open');
+    const again = await pass();
+    expect(again.got).toHaveLength(0);
+    // (the /48's 60 requests: 57 meet the full /64s, 2 more the address and /64 limits, the used wallet's 1)
+    expect(again.refused).toEqual({ network_busy: 57, rate_limited: 243 });
+    // ... and two other /64s fill the /48's share of 16
+    h.clock.now += 6 * 60_000;
+    const second = await pass(2);
+    expect(second.got).toHaveLength(8);
+    for (const w of second.got) buy(h, w);
+    expect(a.openSessions).toBe(16);
+    h.clock.now += 11 * 60_000;
+    const third = await pass(4);
+    expect(third).toEqual({ got: [], refused: { network_busy: 60, rate_limited: 240 } });
+    // a real player elsewhere is never refused: the arena holds 16 unplayed tickets of its 300
+    const player = testWallet(0xabcdef);
+    expect((await h.permits.issue(player, 1, '198.51.100.7')).player).toBe(player);
+    // the stale sweeper cancels the 16 (no-shows): the /48's share is free again, and its no-shows count
+    for (const w of [...first.got, ...second.got]) swept(h, w);
+    h.clock.now += 11 * 60_000;
+    expect((await h.permits.issue(testWallet(0x7fff0), 1, '2001:db8:77:0::1')).arenaId).toBe(1);
+  });
+
+  it('a burst of concurrent requests from one network passes its share only once', async () => {
+    const h = harness({ arenas: [arena(1, 1000)] });
+    h.seats = 300;
+    const burst = await Promise.allSettled(Array.from({ length: 12 }, (_, i) => h.permits.issue(testWallet(0x7100 + i), 1, '203.0.113.77')));
+    expect(burst.filter((r) => r.status === 'fulfilled')).toHaveLength(8);
+    const codes = burst.flatMap((r) => (r.status === 'rejected' ? [(r.reason as JoinPermitFail).code] : []));
+    expect(codes).toEqual(['network_busy', 'network_busy', 'network_busy', 'network_busy']);
+    // a /48: 16, whatever /64s the burst comes from
+    const site = await Promise.allSettled(Array.from({ length: 40 }, (_, i) => h.permits.issue(testWallet(0x7200 + i), 1, `2001:db8:78:${(i % 10).toString(16)}::1`)));
+    expect(site.filter((r) => r.status === 'fulfilled')).toHaveLength(16);
+  });
+
+  it('one IPv4 address (carrier NAT: many players) has 8 per arena; a seated, settled or unused expired permit makes room', async () => {
+    // a carrier NAT address: its request limit set high (JOIN_PERMIT_PER_IP)
+    const h = harness({ arenas: [arena(1, 1000), arena(3, 1000)], cfg: { perIp: 1000 } });
+    h.seats = 300;
+    const ip = '198.51.100.20';
+    const ws = Array.from({ length: 10 }, (_, i) => testWallet(0x7300 + i));
+    for (let i = 0; i < 8; i++) await h.permits.issue(ws[i], 1, ip);
+    const e = await fail(h.permits.issue(ws[8], 1, ip));
+    expect([e.code, e.status]).toEqual(['network_busy', 409]);
+    expect(e.message).toMatch(/your network/);
+    // another arena has its own share; a kept permit asked for again is no new one
+    expect((await h.permits.issue(ws[8], 3, ip)).arenaId).toBe(3);
+    expect((await h.permits.issue(ws[0], 1, ip)).nonce).toBe('0');
+    // ws[0] buys and is seated (played): it leaves the share
+    buy(h, ws[0]);
+    h.seated.add(sessionKey(1, ws[0], 1));
+    expect((await h.permits.issue(ws[8], 1, ip)).player).toBe(ws[8]);
+    // ws[1] buys and never plays: asking to sit (with the round closed) frees nothing
+    buy(h, ws[1]);
+    h.permits.ticketSeen(ws[1], 1, null);
+    expect((await fail(h.permits.issue(ws[9], 1, ip))).code).toBe('network_busy');
+    // ten minutes on, the unused permits expired: read once at the share, those of wallets without a ticket leave
+    let reads = 0;
+    const has = h.chain.hasOpenTicket.bind(h.chain);
+    h.chain.hasOpenTicket = async (id: number, w: string) => {
+      reads++;
+      return has(id, w);
+    };
+    h.clock.now += 11 * 60_000;
+    expect((await h.permits.issue(ws[9], 1, ip)).player).toBe(ws[9]);
+    expect(reads).toBe(1 + 8); // ws[9]'s own ticket, then those of ws[1]..ws[8]
+    // ws[1]'s ticket stays in the share until the stale sweeper settles it
+    for (let i = 0; i < 6; i++) await h.permits.issue(testWallet(0x7400 + i), 1, ip);
+    expect((await fail(h.permits.issue(testWallet(0x7406), 1, ip))).code).toBe('network_busy');
+    swept(h, ws[1]);
+    expect((await h.permits.issue(testWallet(0x7406), 1, ip)).arenaId).toBe(1);
+    // a /64 has 4; the shares can be set (0: no limit)
+    const v6 = harness({ arenas: [arena(1, 1000)] });
+    v6.seats = 300;
+    for (let i = 0; i < 4; i++) await v6.permits.issue(testWallet(0x7500 + i), 1, `2001:db8:79:1::${i + 1}`);
+    expect((await fail(v6.permits.issue(testWallet(0x7504), 1, '2001:db8:79:1::99'))).code).toBe('network_busy');
+    expect((await v6.permits.issue(testWallet(0x7505), 1, '2001:db8:79:2::1')).arenaId).toBe(1);
+    const env = loadConfig({ JOIN_PERMIT_OPEN_PER_IP: '20', JOIN_PERMIT_OPEN_PER_SUBNET: '0', JOIN_PERMIT_OPEN_PER_SITE: '5' } as unknown as NodeJS.ProcessEnv).joinPermits;
+    expect([env.openPerIp, env.openPerNet, env.openPerSite]).toEqual([20, 0, 5]);
+    expect(loadConfig({} as unknown as NodeJS.ProcessEnv).joinPermits).toMatchObject({ openPerIp: 8, openPerNet: 4, openPerSite: 16, perSite: 60 });
+  });
+});
+
+describe('a new arena contract registered live (audit S16, round 3)', () => {
+  it('is never handed a permit of the old contract: the permits, places and shares start afresh', async () => {
+    const h = harness({ arenas: [arena(1, 1000)], cfg: { openPerIp: 2 } });
+    h.seats = 300;
+    const old = await h.permits.issue(ALICE, 1, '10.0.0.1');
+    await h.permits.issue(BOB, 1, '10.0.0.1');
+    expect(old.arena).toBe(ARENA);
+    expect((await h.permits.load(1, 0)).held).toBe(2);
+    expect((await fail(h.permits.issue(testWallet(0x7600), 1, '10.0.0.1'))).code).toBe('network_busy');
+    // POST /api/admin/contracts: a new arena, its join nonces at 0 again (the old permit's nonce matches)
+    const NEXT = getAddress('0x00000000000000000000000000000000000a4e42');
+    h.chain.arenaAddress = NEXT;
+    h.clock.now += 60_000;
+    const fresh = await h.permits.issue(ALICE, 1, '10.0.0.1');
+    expect(fresh).toMatchObject({ arena: NEXT, nonce: '0', player: ALICE });
+    expect(fresh.signature).not.toBe(old.signature);
+    // the old contract's places and share are gone: only the new permit holds one, and the network has room again
+    expect((await h.permits.load(1, 0)).held).toBe(1);
+    expect((await h.permits.issue(testWallet(0x7600), 1, '10.0.0.1')).arena).toBe(NEXT);
+    // the same permit again on the same contract; a new chain (same address) is another contract
+    expect(await h.permits.issue(ALICE, 1, '10.0.0.1')).toEqual(fresh);
+    h.chain.chainId = 46630;
+    expect((await h.permits.issue(ALICE, 1, '10.0.0.1')).chainId).toBe(46630);
+    expect(h.chain.signed).toHaveLength(5);
   });
 });
 

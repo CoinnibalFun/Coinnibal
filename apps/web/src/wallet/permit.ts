@@ -5,7 +5,8 @@ import { serverText, t } from '../i18n';
 /**
  * The game server's permit for one arena ticket (CoinnibalArena v4: `join` needs it). Asked right before the wallet
  * opens: the server refuses a closed game, a closed room, an open ticket there, a wallet whose tickets keep going back
- * unplayed, and a room full of tickets waiting for a seat, and says why.
+ * unplayed, a network with its share of the room's tickets not played yet, and a room full of tickets waiting for a
+ * seat, and says why.
  */
 export type PermitResult = { ok: true; permit: JoinPermit } | { ok: false; code: JoinPermitError | 'network'; text: string };
 
@@ -22,6 +23,7 @@ export function permitRefusalText(code: JoinPermitError | 'network', retryAt?: n
     case 'arenas_off':
     case 'arena_closed':
     case 'session_open':
+    case 'network_busy':
     case 'arena_busy':
     case 'rate_limited':
     case 'chain_busy':
