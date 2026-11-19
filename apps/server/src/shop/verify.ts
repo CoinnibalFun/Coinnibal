@@ -1,4 +1,4 @@
-import type { ShopBuyError } from '@coinnibal/shared';
+import { SHOP_PAYMENT_MAX_AGE_MS, type ShopBuyError } from '@coinnibal/shared';
 import type { TokenReceipt } from '../chain/types';
 
 /** What a purchase transaction must contain. */
@@ -22,16 +22,9 @@ export interface PurchaseExpectation {
   amounts: readonly bigint[] | { minAmount: bigint };
   /** Wall clock (unix ms): with it, a payment mined more than `maxAgeMs` ago is refused (`tx_stale`). */
   now?: number;
-  /** Default `SHOP_PAYMENT_MAX_AGE_MS`. */
+  /** Default `SHOP_PAYMENT_MAX_AGE_MS` (24 h, `@coinnibal/shared`). */
   maxAgeMs?: number;
 }
-
-/**
- * Oldest payment a purchase may claim (24 h). The used-hash list lives on the server's disk: should it be
- * lost, only the payments of the last day could be credited a second time, never the whole history (and an
- * old transfer of the right amount to the sink can never be claimed as a new purchase).
- */
-export const SHOP_PAYMENT_MAX_AGE_MS = 24 * 3600_000;
 
 export type PurchaseCheck =
   | { ok: true; paid: bigint }

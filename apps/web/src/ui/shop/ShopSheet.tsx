@@ -4,7 +4,7 @@ import { Button, Chip, Sheet, shortAddress } from '../../design';
 import { useT } from '../../i18n';
 import { closeModal, openModal, toast, useUi } from '../../store';
 import { SHOP_CART_LIMITS, TOKEN_SYMBOL_DEFAULT } from '@coinnibal/shared';
-import { ShopError, buyCart, cartTotals, emptyCart, fetchShop, loadPendingClaims, settleCartClaim, settleClaim, type BuyPhase, type Cart, type PendingClaim } from '../../wallet/shop';
+import { ShopError, buyCart, cartTotals, claimBlocksBuying, emptyCart, fetchShop, loadPendingClaims, settleCartClaim, settleClaim, type BuyPhase, type Cart, type PendingClaim } from '../../wallet/shop';
 import { summaryAmount } from '../amount';
 import { BOOST_PATH } from '../game/BoostBar';
 import './shop.css';
@@ -145,11 +145,15 @@ export function ShopSheet() {
     return () => ac.abort();
   }, [open, load]);
 
-  // packs paid for earlier whose claim did not get through: each offered again (never paid twice)
+  // packs paid for earlier whose claim did not get through: each offered again (never paid twice). Only those paid on
+  // the chain the site runs on, to the arena the shop names: another network's payment can never be credited here
+  const chainId = chain?.chainId ?? null;
+  const payTo = view?.payTo ?? null;
+  const keptClaims = useCallback(() => loadPendingClaims(auth?.address, { chainId, payTo }), [auth?.address, chainId, payTo]);
   const [pending, setPending] = useState<PendingClaim[]>([]);
   useEffect(() => {
-    if (open) setPending(loadPendingClaims(auth?.address));
-  }, [open, auth?.address, buying]);
+    if (open) setPending(keptClaims());
+  }, [open, keptClaims, buying]);
   const [claiming, setClaiming] = useState(false);
   const claim = async (p: PendingClaim) => {
     if (!auth || claiming) return;
@@ -172,7 +176,7 @@ export function ShopSheet() {
       void load();
     } finally {
       setClaiming(false);
-      setPending(loadPendingClaims(auth.address));
+      setPending(keptClaims());
     }
   };
 
@@ -186,8 +190,9 @@ export function ShopSheet() {
   const totals = view ? cartTotals(view, cart) : null;
   const setQty = (kind: BoostKind, n: number) => setCart((c) => ({ ...c, [kind]: Math.max(0, Math.min(SHOP_CART_LIMITS.perKind, n)) }));
   const room = totals ? totals.packs < SHOP_CART_LIMITS.total : true;
-  // a paid claim waits: claimed first, never a second payment over it
-  const waiting = !!auth && pending.length > 0;
+  // a paid claim waits: claimed first, never a second payment over it by mistake. For its first hour: one the server
+  // still cannot credit after that (its chain never shows the payment) stays offered, but blocks no purchase
+  const waiting = !!auth && pending.some((p) => claimBlocksBuying(p));
   const buy = async () => {
     if (!view || !auth || !chain || !totals || totals.packs === 0 || waiting) return;
     setBuying({ phase: 'switching' });
