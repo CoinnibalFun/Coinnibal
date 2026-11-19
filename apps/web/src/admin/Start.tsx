@@ -182,6 +182,8 @@ export function StartScreen({ ctx, go, token, access }: { ctx: ChainCtx; go: (pa
     status: ctx.status,
     setup: ctx.status?.arena && cfg ? setupSteps({ status: ctx.status }, { openMint: false }) : [],
     pinsOk: pinsSigned(pins),
+    // a registered arena or NFT of an older version counts as not deployed: the deploy flow replaces it
+    stale: [ctx.status?.arena, ctx.status?.nft].flatMap((x) => (x && x.code !== 'ok' ? [x.address.toLowerCase()] : [])),
   });
   const input: StartInput = {
     net: ctx.net,
