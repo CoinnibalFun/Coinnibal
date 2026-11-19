@@ -64,6 +64,8 @@ export interface RoundBoardRow {
   /** A house bot (they play for the team and are tagged like in the game). */
   isBot?: boolean;
   country?: string;
+  /** The ticket's wallet (EIP-55; a person): the board marks "you" by it, never by a name. Absent on older rows. */
+  wallet?: string;
 }
 
 /** A finished arena round on the public board (`/api/leaderboard` `rounds`, newest first). */

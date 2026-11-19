@@ -74,6 +74,23 @@ describe('kill feed', () => {
     const glued = line.querySelector('.g-kill__who')!;
     expect(glued.textContent).toBe('Dime.');
   });
+
+  it('"you" is the coin the line marks as mine (by player id), never a coin that only shares my name', () => {
+    // id 1 picks "{k} had {v} for lunch."
+    act(() =>
+      useUi.setState({
+        me: { pid: 7, name: 'Coinie', skin: 1 },
+        killfeed: [
+          { id: 1, killer: 'Coinie', killerSkin: 1, victim: 'Coinie', victimSkin: 2, killerIsMe: true, victimIsMe: false, cause: 'eat', at: Date.now() },
+          { id: 5, killer: 'Coinie', killerSkin: 3, victim: 'Coinie', victimSkin: 2, cause: 'eat', at: Date.now() },
+        ],
+      }),
+    );
+    const { container } = render(<Feed narrow={false} />);
+    const lines = [...container.querySelectorAll('.g-kill')].map((l) => l.textContent);
+    expect(lines).toEqual(['you had Coinie for lunch.', 'Coinie had Coinie for lunch.']);
+    expect(container.querySelectorAll('.is-me')).toHaveLength(1);
+  });
 });
 
 describe('emoji bar', () => {
