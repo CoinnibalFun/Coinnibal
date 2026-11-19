@@ -1,13 +1,14 @@
 import { lazy, StrictMode, Suspense, useEffect, useState, type ComponentType } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, hydrateRoot } from 'react-dom/client';
 import { AdminPreviewTag, ClosedPage } from './Closed';
 import { pageDoor, useAdminPreview, useDoors } from './doors';
+import { setStaticEntrance } from './landing/hydrated';
 import { Landing } from './landing/Landing';
 import { NotFound } from './NotFound';
 import { prefetchMintState } from './mint/mintState';
 import { isLazyPage, loadPage, loadedPage, warmPage } from './pages';
 import { installChunkRecovery, PageBoundary } from './recover';
-import { isSitePath, usePath } from './router';
+import { isSitePath, normalizePath, usePath } from './router';
 import { setPageHead } from './seo';
 import { loadSiteSettings } from './settings';
 import { SiteLoader } from './SiteLoader';
@@ -117,10 +118,32 @@ export function SiteApp() {
   );
 }
 
+/**
+ * The server sent the prerendered landing (`landing.html`, written by the build: vite.config.ts `prerenderLanding`):
+ * `#root` holds the page's markup instead of the `.boot` loader. Only `/` is ever prerendered.
+ */
+export function isPrerendered(root: HTMLElement): boolean {
+  const first = root.firstElementChild;
+  return first !== null && !first.classList.contains('boot') && normalizePath(location.pathname) === '/';
+}
+
 /** The public site: `/`, `/mint`, `/faucet`, `/wl`, `/collab`, `/docs`. */
 export function mount(root: HTMLElement): void {
   document.documentElement.dataset.theme = 'light';
   installChunkRecovery();
+  if (isPrerendered(root)) {
+    // React takes over the painted page as it is: the same tree as the build's render (prerender.tsx), with the same
+    // settings (the closed defaults, which the server checked against landing.json before sending the page), and the
+    // entrances in their final state (landing/hydrated.ts); every read of the window waits for the render after this
+    setStaticEntrance(true);
+    hydrateRoot(
+      root,
+      <StrictMode>
+        <SiteApp />
+      </StrictMode>,
+    );
+    return;
+  }
   if ((location.pathname.replace(/\/+$/, '') || '/') === '/mint') {
     // an open mint page: its state, its code and its skeleton all start as soon as the settings say so
     void loadSiteSettings().then((s) => {

@@ -1,5 +1,5 @@
 import { activeChain } from '@coinnibal/shared';
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ChompMark, CoinMark, Icon, Kb, RingScene, Wordmark as InkWordmark, type IconName } from '../design';
 import { FooterLife } from './FooterLife';
 import { usePeelLetters } from './peel';
@@ -8,7 +8,7 @@ import { useServerChain } from './serverChain';
 import { plainChainName, useT, type TKey } from '../i18n';
 import { strong, T } from '../i18n/rich';
 import { DOORS_CLOSED, linkOpen, useDoors, type Doors } from './doors';
-import { siteHost, useSiteSettings, xProfile } from './settings';
+import { useSiteHost, useSiteSettings, xProfile } from './settings';
 import { readStoredSession } from './storedSession';
 import './site.css';
 
@@ -126,6 +126,15 @@ function ConnectFallback() {
   );
 }
 
+/** Another tab signed in or out (the `storage` event); this tab's own sign-in shows at the header's next render. */
+function onStorage(fn: () => void): () => void {
+  window.addEventListener('storage', fn);
+  return () => window.removeEventListener('storage', fn);
+}
+const signedIn = () => readStoredSession() !== null;
+/** The server render (the prerendered landing) has no stored session: neither has the browser's hydrating render. */
+const signedOut = () => false;
+
 export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** Extras hung under the header line (the landing's seed rail). */ children?: ReactNode }) {
   const t = useT();
   const path = usePath();
@@ -135,8 +144,11 @@ export function SiteHeader({ cta: _cta = true, children }: { cta?: boolean; /** 
   const soon = soonFor(doors);
   // one or two entries fit beside the logo on a phone too: no menu button for them
   const few = nav.length + soon.length <= 2 && !doors.game;
-  // the wallet button belongs to what needs a wallet (the game, the mint, the applications); a signed-in wallet keeps it
-  const [wallet] = useState(() => readStoredSession() !== null);
+  // the wallet button belongs to what needs a wallet (the game, the mint, the applications); a signed-in wallet keeps
+  // it. Read through useSyncExternalStore: false in the server render and while hydrating it (the HTML has no button),
+  // then the stored session, so a signed-in visitor of the prerendered landing gets the button right after hydration
+  // (read in a useState initializer, the hydrating render had a button the HTML did not, and React threw the HTML away)
+  const wallet = useSyncExternalStore(onStorage, signedIn, signedOut);
   const connect = doors.game || doors.mint || doors.wl || doors.collab || wallet;
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [path]);
@@ -261,6 +273,7 @@ export function SiteFooter() {
   // the server's chain names the network in the line below: re-render once it is in
   useServerChain();
   const doors = useDoors();
+  const host = useSiteHost();
   return (
     <Kb theme="night" paper={false} className="st-foot-kb">
     <footer className="st-foot">
@@ -284,7 +297,7 @@ export function SiteFooter() {
         </nav>
         <p className="st-foot__small mono">
           <span>Coinnibal · 2026</span>
-          <span>{siteHost()}</span>
+          <span>{host}</span>
         </p>
       </div>
       {/* the front terraces under the footer's text (in the flow, so the text never runs onto the ground) */}

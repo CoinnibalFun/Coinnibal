@@ -1,11 +1,11 @@
 import react from '@vitejs/plugin-react';
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { dirname, extname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, extname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { brotliCompress, constants as zlibConstants, gzip } from 'node:zlib';
-import { defineConfig, type Plugin } from 'vite';
+import { build, defineConfig, type Plugin } from 'vite';
 
 const gameServer = process.env.GAME_SERVER ?? 'http://127.0.0.1:8787';
 
@@ -144,6 +144,122 @@ function sitePreloads(): Plugin {
   };
 }
 
+/** What `prerender-landing` reads of the build manifest (`build.manifest`): a module's chunk, its CSS and its imports. */
+type Manifest = Record<string, { file: string; css?: string[]; imports?: string[] }>;
+
+/**
+ * The stylesheets a dynamically imported module needs (`src/site/mount.tsx`: today mount, Shell, WhyNft, Closed), in
+ * the order Vite's loader adds them to the page: the CSS of a chunk's static imports (depth first) before its own, so
+ * the cascade is the same as on a page the browser renders itself.
+ */
+export function moduleCss(manifest: Manifest, key: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const visit = (k: string) => {
+    if (seen.has(k)) return;
+    seen.add(k);
+    const m = manifest[k];
+    if (!m) throw new Error(`prerender-landing: ${k} is not in the build manifest`);
+    for (const i of m.imports ?? []) visit(i);
+    for (const c of m.css ?? []) if (!out.includes(c)) out.push(c);
+  };
+  visit(key);
+  return out;
+}
+
+/**
+ * `landing.html` from the built `index.html`: `<html data-theme="light">` (what `mount()` sets: without it a dark-mode
+ * phone gets the dark tokens outside `.kb` until the script runs), the prerendered markup in `#root` in place of the
+ * `.boot` loader, a `<link rel="stylesheet">` for each of the landing's CSS chunks (the page paints styled from its
+ * HTML; Vite's loader finds them there and does not add them again), and no `data-site-preload` tags (`site-preloads`:
+ * on a page that paints from its HTML they took bandwidth from its HTML and CSS, B12 of the speed plan).
+ */
+export function landingHtml(index: string, markup: string, css: string[], base = '/'): string {
+  const open = '<div id="root">';
+  const at = index.indexOf(open);
+  const end = index.lastIndexOf('</body>');
+  const loader = at < 0 || end < at ? '' : index.slice(at, end).trimEnd();
+  if (!loader.endsWith('</div>') || !loader.includes('class="boot"')) throw new Error('prerender-landing: index.html has no <div id="root"> with the .boot loader');
+  let html = index.slice(0, at) + open + markup + '</div>' + index.slice(at + loader.length);
+  html = html.replace(/[ \t]*<link\b[^>]*\bdata-site-preload\b[^>]*>\r?\n?/g, '');
+  if (!html.includes('<html lang="en">')) throw new Error('prerender-landing: index.html has no <html lang="en">');
+  html = html.replace('<html lang="en">', '<html lang="en" data-theme="light">');
+  const links = css
+    .map((f) => base + f)
+    .filter((href) => !html.includes(`href="${href}"`))
+    .map((href) => `    <link rel="stylesheet" crossorigin href="${href}">\n`)
+    .join('');
+  if (!html.includes('</head>')) throw new Error('prerender-landing: index.html has no </head>');
+  return html.replace('</head>', `${links}  </head>`);
+}
+
+/**
+ * Build only (S1 of the speed plan): `/` is prerendered. After the client build, bundles `src/site/landing/prerender.tsx`
+ * with `vite build --ssr` (everything bundled, so it runs from a cache directory), runs it in this Node process (no
+ * DOM) and writes:
+ * - `dist/landing.html`: index.html with the landing's markup (`landingHtml`); the browser hydrates it (`mount()`).
+ *   Its first paint is the whole first viewport, from the HTML, before any script.
+ * - `dist/landing.json`: the settings the markup assumed (`gameAccess`, `mintOpen`, `wlOpen`, `collabOpen`, `xHandle`:
+ *   the closed defaults, the build's X handle). The game server sends `landing.html` for `/` only while its live
+ *   settings equal these (apps/server/src/http.ts), else `index.html` (the page renders in the browser, as before).
+ * The manifest (`build.manifest`) is read for the CSS chunks and then removed (nothing serves it). Runs before
+ * `precompress`, which writes the `.br` / `.gz` copies of `landing.html` too.
+ */
+function prerenderLanding(): Plugin {
+  let root = '';
+  let outDir = '';
+  let mode = 'production';
+  let base = '/';
+  let ssr = false;
+  return {
+    name: 'prerender-landing',
+    apply: 'build',
+    configResolved(c) {
+      root = c.root;
+      outDir = resolve(c.root, c.build.outDir);
+      mode = c.mode;
+      base = c.base;
+      ssr = !!c.build.ssr;
+    },
+    closeBundle: {
+      sequential: true,
+      async handler() {
+        if (ssr) return;
+        const tmp = join(root, 'node_modules', '.cache', 'prerender-landing');
+        try {
+          await build({
+            configFile: false,
+            root,
+            mode,
+            base,
+            logLevel: 'warn',
+            publicDir: false,
+            plugins: [react()],
+            ssr: { noExternal: true },
+            build: {
+              ssr: 'src/site/landing/prerender.tsx',
+              outDir: tmp,
+              emptyOutDir: true,
+              target: 'node22',
+              minify: false,
+              rollupOptions: { output: { entryFileNames: 'prerender.mjs' } },
+            },
+          });
+          const entry = (await import(pathToFileURL(join(tmp, 'prerender.mjs')).href)) as typeof import('./src/site/landing/prerender');
+          const { html: markup, settings } = entry.renderLanding();
+          const manifest = JSON.parse(readFileSync(join(outDir, '.vite', 'manifest.json'), 'utf8')) as Manifest;
+          const index = readFileSync(join(outDir, 'index.html'), 'utf8');
+          writeFileSync(join(outDir, 'landing.html'), landingHtml(index, markup, moduleCss(manifest, 'src/site/mount.tsx'), base));
+          writeFileSync(join(outDir, 'landing.json'), JSON.stringify(settings) + '\n');
+        } finally {
+          rmSync(tmp, { recursive: true, force: true });
+          rmSync(join(outDir, '.vite'), { recursive: true, force: true });
+        }
+      },
+    },
+  };
+}
+
 // A web build on a separate static host (here: Vercel) must reach the game server directly: proxied API calls would
 // all come from the host's addresses (the server's per-IP limits could not tell players apart). Fail the build loudly
 // instead of shipping a site whose API calls 404. (The repository's vercel.json builds no web app any more: it only
@@ -197,7 +313,7 @@ function viemPackageDirs(): string[] {
 const VIEM_DIRS = viemPackageDirs();
 
 export default defineConfig({
-  plugins: [react(), publicUrlFiles(), sitePreloads(), precompress()],
+  plugins: [react(), publicUrlFiles(), sitePreloads(), prerenderLanding(), precompress()],
   server: {
     port: 5173,
     host: true,
@@ -210,6 +326,8 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: false,
+    // read by `prerender-landing` (the landing's CSS chunks), then removed from dist
+    manifest: true,
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
       // The workspace SDK's modules have no import-time side effects (ABIs, constants, functions):

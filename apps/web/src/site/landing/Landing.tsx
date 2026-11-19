@@ -26,7 +26,6 @@ import { em, renderRich, T } from '../../i18n/rich';
 import { FACTS } from '../../ui/docs/facts';
 import { usePeelLetters } from '../peel';
 import { Link } from '../router';
-import { useMedia } from '../../design/useMedia';
 import { useDoors, type Doors } from '../doors';
 import { SiteFooter, SiteHeader, SiteLinkButton, XIcon } from '../Shell';
 import { useSiteSettings, xProfile } from '../settings';
@@ -34,6 +33,7 @@ import { BITES, BiteSeam, biteVars } from './BiteSeam';
 import { CoinPond } from './CoinPond';
 import { DuskSeam } from './DuskSeam';
 import { GazeCoin } from './GazeCoin';
+import { isStaticEntrance } from './hydrated';
 import { NapSeam } from './NapSeam';
 import { BITE_GULP_MS, SEAL_GULP_MS, gulp, useReveal, useRevealEach } from './reveal';
 import { SealSeam } from './SealSeam';
@@ -94,15 +94,17 @@ function usePausedPlate(gulpAt: number): RefObject<HTMLElement | null> {
 function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: GameAccess; handle: string; sound: ReturnType<typeof useLandingSound> }) {
   const reduced = useReducedMotion();
   const m = useMoves();
-  // on a phone the card fills the width: a smaller tilt keeps its corners off the screen's edges
-  const phone = useMedia('(max-width: 479px)');
   const peel = usePeelLetters<HTMLHeadingElement>();
   const t = useT();
+  // the prerendered page (and the browser hydrating it) shows the card and the badge where they land: no drop, no pop
+  // (hydrated.ts). The card's tilt is -1.6 deg; on a phone landing.css turns it back to -0.8 (the card fills the width
+  // there: a smaller tilt keeps its corners off the screen's edges), in CSS so the HTML is right before any script.
+  const entrance = isStaticEntrance() ? false : 'hidden';
   return (
     <section className="ld-hero" aria-labelledby="ld-hero-title">
       <RingScene time="dawn" variant="full" animate={!reduced} className="ld-hero__ring">
         <div className="ld-hero__inner">
-          <motion.div className="ld-hero__drop" variants={m.stickerSlap} custom={phone ? -0.8 : -1.6} initial="hidden" animate="shown">
+          <motion.div className="ld-hero__drop" variants={m.stickerSlap} custom={-1.6} initial={entrance} animate="shown">
             <Sticker pad="lg" lift="lg" tape className="ld-hero__card">
               <p className="kicker ld-hero__kicker">{t('ld.hero.kicker', { chain: plainChainName(activeChain().name) })}</p>
               <h1 id="ld-hero-title" ref={peel.ref} className={`ld-hero__title ${peel.className}`}>
@@ -161,7 +163,7 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
               )}
             </Sticker>
           </motion.div>
-          <motion.div className="ld-hero__badge-wrap" variants={m.popInSolid} custom={0.5} initial="hidden" animate="shown">
+          <motion.div className="ld-hero__badge-wrap" variants={m.popInSolid} custom={0.5} initial={entrance} animate="shown">
             <Sticker tone="sun" pad="sm" tilt={4} className="ld-hero__badge">
               <span className="num ld-hero__badge-n">{String(FACTS.rules.roundMin).padStart(2, '0')}:00</span>
               <span className="mono ld-hero__badge-l">{t('ld.badge')}</span>
@@ -845,7 +847,7 @@ export function Landing() {
     return () => cancelAnimationFrame(raf);
   }, []);
   return (
-    <Kb theme="paper" className="st-root ld-root">
+    <Kb theme="paper" className={`st-root ld-root${isStaticEntrance() ? ' ld-root--static' : ''}`}>
       <a className="st-skip" href="#main">
         {t('site.skip')}
       </a>

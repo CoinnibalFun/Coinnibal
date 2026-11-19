@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { useReducedMotion } from '../../design';
+import { isStaticEntrance } from './hydrated';
 
 /**
  * The landing's one reveal engine: every plate seam, content stage and list item is armed here and played by CSS
@@ -13,6 +14,10 @@ import { useReducedMotion } from '../../design';
  *  - dwell: plays a target once any part of it has stayed on screen for 300 ms (a visitor who stops just short);
  *  - passed: finishes, without playing, a target that was jumped past (an anchor, scroll restoration).
  * Focus moving into a waiting target and `beforeprint` finish it at once. Everything plays once and never hides again.
+ *
+ * On the prerendered landing (hydrated.ts) the page was painted, whole, before any script: a target that is on screen
+ * when it is armed (at hydration, or later while it is in view) is finished at once (`set`), never hidden again.
+ * (`in` would not do: the heading's and the rule's keyframes start from hidden, so they would flash out and back.)
  */
 
 export type RevealAttr = 'data-reveal' | 'data-seam';
@@ -91,7 +96,9 @@ function ensure() {
 export function watch(el: Element, { attr = 'data-reveal', batch = false, onIn, onSet }: RevealOpts = {}): () => void {
   const was = el.getAttribute(attr);
   if (was === 'in' || was === 'set') return () => {};
-  if (typeof IntersectionObserver === 'undefined' || el.getBoundingClientRect().bottom < 0) {
+  const box = el.getBoundingClientRect();
+  // jumped past already, or (prerendered page) already painted on screen
+  if (typeof IntersectionObserver === 'undefined' || box.bottom < 0 || (isStaticEntrance() && box.top < innerHeight)) {
     el.setAttribute(attr, 'set');
     onSet?.();
     return () => {};
