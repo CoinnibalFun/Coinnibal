@@ -1,4 +1,4 @@
-import { BOOST_RULES, CellFlag, PlayerFlag, RULES, OLD_SHOP_PRICES, SHOP_DEFAULTS, TICK_MS, leapDistance, packPriceRaw, parseUsdPrice, customRoomPaymentRef, shopCartRefs, shopPaymentRef, shopPaymentRefs, type ServerMessage } from '@coinnibal/shared';
+import { BOOST_RULES, CellFlag, PlayerFlag, RULES, OLD_SHOP_PRICES, SHOP_DEFAULTS, SHOP_PAYMENT_MAX_AGE_MS, TICK_MS, leapDistance, packPriceRaw, parseUsdPrice, customRoomPaymentRef, shopCartRefs, shopPaymentRef, shopPaymentRefs, type ServerMessage } from '@coinnibal/shared';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { BotBrain } from '../src/bots/brain';
 import { mulberry32 } from '../src/game/rng';
@@ -13,7 +13,7 @@ import { Room } from '../src/rooms/room';
 import { BoostInventory } from '../src/shop/inventory';
 import { ShopFail, ShopService, type UseContext } from '../src/shop/service';
 import { ShopSettingsError, ShopSettingsStore, applyShopSettings } from '../src/shop/settings';
-import { SHOP_PAYMENT_MAX_AGE_MS, verifyPurchase } from '../src/shop/verify';
+import { verifyPurchase } from '../src/shop/verify';
 import { ArenaChain, MID_ROUND, fakeConn, roomDeps } from './helpers';
 
 const cfg = (over: Partial<WorldConfig> = {}): WorldConfig => ({

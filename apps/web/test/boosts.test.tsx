@@ -1,4 +1,4 @@
-import { BOOST_RULES, CellFlag, EntityKind, SHOP_DEFAULTS, type BoostState, type ShopView, type SnapshotData } from '@coinnibal/shared';
+import { BOOST_RULES, CellFlag, EntityKind, SHOP_DEFAULTS, SHOP_PAYMENT_MAX_AGE_MS, type BoostState, type ShopView, type SnapshotData } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { shopPatch } from '../src/admin/ShopCard';
@@ -355,6 +355,77 @@ describe('a paid pack whose claim did not get through', () => {
     const pay = screen.getByTestId('shop-pay') as HTMLButtonElement;
     expect(pay.disabled).toBe(true);
     expect(pay.textContent).toMatch(/claim your paid packs above first/);
+  });
+
+  /** The shop sheet, open for OWNER on `chain`; the server answers `buy` for every claim. */
+  const openShop = (buy: () => Response, chain = chainStatus()) => {
+    const fetchMock = vi.fn(async (url: string) => (String(url).endsWith('/api/shop/buy') ? buy() : new Response(JSON.stringify(VIEW), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+    act(() => useUi.setState({ chain, modal: 'shop', auth: { address: OWNER, token: 'tok', profile: null } }));
+    const view = render(
+      <Kb>
+        <ShopSheet />
+      </Kb>,
+    );
+    return { fetchMock, view };
+  };
+  const notVisible = () => new Response(JSON.stringify({ error: 'tx_pending', message: 'not visible yet' }), { status: 409 });
+
+  it('a claim that keeps answering tx_pending blocks "Buy all" for an hour at most, and is forgotten after a day (audit S12, round 2)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const t0 = Date.now();
+      // a payment the server's chain never shows (a reorg dropped it): every claim answers tx_pending, never final
+      savePendingClaim({ owner: OWNER, kind: 'magnet', txHash: HASH, at: t0, chainId: 46630, payTo: VIEW.payTo! });
+      const fresh = openShop(notVisible);
+      await waitFor(() => expect(screen.getByTestId('shop-claim')).toBeTruthy());
+      fireEvent.click(screen.getByTestId('shop-more-magnet'));
+      expect((screen.getByTestId('shop-pay') as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByTestId('shop-pay').textContent).toMatch(/claim your paid packs above first/);
+      fresh.view.unmount();
+      // an hour on, still not visible (the claim is kept: it is not a final refusal) ...
+      vi.setSystemTime(t0 + 3600_000 + 1);
+      vi.stubGlobal('fetch', vi.fn(async () => notVisible()));
+      await expect(settleClaim('tok', OWNER, 'magnet', HASH, { retryMs: [0] })).rejects.toMatchObject({ code: 'tx_pending' });
+      expect(loadPendingClaims(OWNER).map((c) => c.txHash)).toEqual([HASH]);
+      // ... offered still (it may yet get through), but "Buy all" pays again
+      const later = openShop(notVisible);
+      await waitFor(() => expect(screen.getByTestId('shop-claim')).toBeTruthy());
+      fireEvent.click(screen.getByTestId('shop-more-magnet'));
+      const pay = screen.getByTestId('shop-pay') as HTMLButtonElement;
+      expect(pay.disabled).toBe(false);
+      expect(pay.textContent).toMatch(/one payment for the whole cart/);
+      later.view.unmount();
+      // past the server's day (it would answer tx_stale): nothing can credit it, so it is gone
+      vi.setSystemTime(t0 + SHOP_PAYMENT_MAX_AGE_MS + 3600_000);
+      openShop(notVisible);
+      await waitFor(() => expect(screen.getByTestId('shop-pay')).toBeTruthy());
+      expect(screen.queryByTestId('shop-pending')).toBeNull();
+      expect(loadPendingClaims(OWNER)).toEqual([]);
+      expect(localStorage.getItem('coinnibal.shop.claims.v2')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a claim paid on another chain or to another arena is not offered and blocks nothing; it stays kept for it', async () => {
+    const MAINNET = 4663;
+    // paid on the testnet; the site now runs on mainnet (the storage keys are not per chain)
+    savePendingClaim({ owner: OWNER, kind: 'magnet', txHash: HASH, at: Date.now(), chainId: 46630, payTo: VIEW.payTo! });
+    savePendingClaim({ owner: OWNER, kind: 'leap', txHash: `0x${'6'.repeat(64)}`, at: Date.now(), chainId: MAINNET, payTo: '0x00000000000000000000000000000000000b0b0b' });
+    openShop(notVisible, chainStatus({ chainId: MAINNET }));
+    await waitFor(() => expect(screen.getByTestId('shop-pay')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('shop-more-magnet'));
+    expect(screen.queryByTestId('shop-pending')).toBeNull();
+    expect((screen.getByTestId('shop-pay') as HTMLButtonElement).disabled).toBe(false);
+    // both stay kept: each is offered where it was paid
+    expect(loadPendingClaims(OWNER).map((c) => c.kind)).toEqual(['magnet', 'leap']);
+    expect(loadPendingClaims(OWNER, { chainId: 46630, payTo: VIEW.payTo }).map((c) => c.kind)).toEqual(['magnet']);
+    expect(loadPendingClaims(OWNER, { chainId: MAINNET, payTo: '0x00000000000000000000000000000000000B0B0B' }).map((c) => c.kind)).toEqual(['leap']);
+    // a claim of an earlier build names neither: offered on any chain
+    localStorage.clear();
+    savePendingClaim({ owner: OWNER, kind: 'invis', txHash: HASH, at: Date.now() });
+    expect(loadPendingClaims(OWNER, { chainId: MAINNET, payTo: VIEW.payTo }).map((c) => c.kind)).toEqual(['invis']);
   });
 });
 
