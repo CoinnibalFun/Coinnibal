@@ -22,9 +22,42 @@ interface FlowRead {
   registry: ContractsRegistry | null;
   local: LocalDeploys;
   status: StatusSnapshot | null;
+  /** The arena and NFT addresses that are an older version or gone (`FlowInput.stale`). */
+  stale: readonly string[];
 }
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+
+type CodeClient = Parameters<typeof checkDeployedCode>[0];
+
+/**
+ * The registered and the locally deployed arena and NFT whose code is not this build's (an older version) or gone, lower
+ * case. A failed read counts as fine: an RPC hiccup never makes the flow deploy a contract again.
+ */
+export async function staleAddresses(client: CodeClient, registry: ContractsRegistry | null, local: LocalDeploys): Promise<string[]> {
+  const out: string[] = [];
+  for (const kind of ['arena', 'nft'] as const) {
+    const seen = new Set([registry?.[kind]?.address, local[kind]?.address].filter((a): a is string => !!a).map((a) => a.toLowerCase()));
+    for (const a of seen) {
+      const code = await checkDeployedCode(client, a as Address, kind).catch(() => 'ok' as const);
+      if (code !== 'ok') out.push(a);
+    }
+  }
+  return out;
+}
+
+/**
+ * The kinds this browser deployed that the server should register now: not registered yet, or registered as a stale
+ * contract (an older version) that the new one replaces. A stale local deploy is never registered.
+ */
+export function toRegister(r: Pick<FlowRead, 'registry' | 'local' | 'stale'>): ContractKind[] {
+  return (['token', 'arena', 'nft'] as ContractKind[]).filter((kind) => {
+    const d = r.local[kind];
+    if (!d || r.stale.includes(d.address.toLowerCase())) return false;
+    const have = r.registry?.[kind]?.address;
+    return !have || (!sameAddress(have, d.address) && r.stale.includes(have.toLowerCase()));
+  });
+}
 
 /** Why the flow cannot start (null: it can). Pure, tested. */
 export function flowRefusal(i: { me: Address | null; owner: Address | null; signedIn: boolean; blockers: readonly string[] }): string | null {
@@ -62,7 +95,9 @@ export function DeployFlow({ ctx, onDone }: { ctx: ChainCtx; onDone?: () => void
   const load = async (fresh: boolean): Promise<FlowRead> => {
     const registry = await site.contracts().catch(() => ctx.registry ?? null);
     const local = loadLocalDeploys(chainId);
-    const c = flowContracts({ registry, local, status: null });
+    // an arena or NFT of an older version (registered or deployed here) is replaced, never read or signed for
+    const stale = ctx.client ? await staleAddresses(ctx.client, registry, local) : [];
+    const c = flowContracts({ registry, local, status: null, stale });
     const testToken = !ctx.net.mainnet ? c.token : null;
     const status = ctx.client
       ? await fetchStatus(ctx.client, { arena: c.arena, nft: c.nft, testToken, account: ctx.me, chainOverrides: ctx.net.info ? { rpcUrl: ctx.net.info.rpcUrl, explorerUrl: ctx.net.info.explorerUrl } : undefined }).catch(() => null)
@@ -71,8 +106,8 @@ export function DeployFlow({ ctx, onDone }: { ctx: ChainCtx; onDone?: () => void
     const cfg = status?.arena?.config ?? null;
     const pins = pinReport({ chainId, arena: registry?.arena?.address, nft: registry?.nft?.address, token: cfg?.token ?? null }, PINS, signed);
     const setup = status?.arena && cfg ? setupSteps({ status }, { openMint: false }) : [];
-    const steps = deployFlowSteps({ chainId, mainnet: ctx.net.mainnet, registry, local, status, setup, pinsOk: pinsSigned(pins) });
-    return { steps, registry, local, status };
+    const steps = deployFlowSteps({ chainId, mainnet: ctx.net.mainnet, registry, local, status, setup, pinsOk: pinsSigned(pins), stale });
+    return { steps, registry, local, status, stale };
   };
 
   useEffect(() => {
@@ -97,12 +132,14 @@ export function DeployFlow({ ctx, onDone }: { ctx: ChainCtx; onDone?: () => void
     return res;
   };
 
-  /** Registers what this browser deployed and the server does not know yet (the code is checked first). */
-  const registerLeft = async (r: FlowRead) => {
+  /**
+   * Registers what this browser deployed and the server does not know yet, or knows as an older version (the new one
+   * replaces it). The code is checked first.
+   */
+  const registerLeft = async (r: Pick<FlowRead, 'registry' | 'local' | 'status' | 'stale'>) => {
     const api = ctx.api!;
-    for (const kind of ['token', 'arena', 'nft'] as ContractKind[]) {
-      const d = r.local[kind];
-      if (!d || r.registry?.[kind]) continue;
+    for (const kind of toRegister(r)) {
+      const d = r.local[kind]!;
       if (kind === 'token' && r.status?.arena?.config?.token) continue;
       if (ctx.client) {
         const code = await checkDeployedCode(ctx.client, d.address, kind);
@@ -114,12 +151,12 @@ export function DeployFlow({ ctx, onDone }: { ctx: ChainCtx; onDone?: () => void
   };
 
   /** Deploys one contract, remembers it in this browser, then registers it with the server. */
-  const deploy = async (kind: ContractKind, plan: Plan) => {
+  const deploy = async (kind: ContractKind, plan: Plan, stale: readonly string[]) => {
     const res = await send(plan);
     const address = res.receipt.contractAddress;
     if (!address || !chainId) throw new Error(`${plan.title}: the receipt names no new contract.`);
     const local = saveLocalDeploy(chainId, kind, { address, txHash: res.hash });
-    await registerLeft({ steps: [], registry: await site.contracts().catch(() => null), local, status: null });
+    await registerLeft({ registry: await site.contracts().catch(() => null), local, status: null, stale });
   };
 
   const runStep = async (step: FlowStep, r: FlowRead) => {
@@ -127,14 +164,14 @@ export function DeployFlow({ ctx, onDone }: { ctx: ChainCtx; onDone?: () => void
     const c = flowContracts(r);
     switch (step.id) {
       case 'test-token':
-        return deploy('token', { title: 'Deploy the test token', contract: 'TestToken', deploy: { name: 'TestToken', params: deployTestTokenParams({ owner: me }) } });
+        return deploy('token', { title: 'Deploy the test token', contract: 'TestToken', deploy: { name: 'TestToken', params: deployTestTokenParams({ owner: me }) } }, r.stale);
       case 'arena':
-        return deploy('arena', { title: 'Deploy the arena', contract: 'CoinnibalArena', deploy: { name: 'CoinnibalArena', params: deployArenaParams(arenaDeployArgs(me, ctx.net.serverKey)) } });
+        return deploy('arena', { title: 'Deploy the arena', contract: 'CoinnibalArena', deploy: { name: 'CoinnibalArena', params: deployArenaParams(arenaDeployArgs(me, ctx.net.serverKey)) } }, r.stale);
       case 'nft': {
         const quote = await ctx.api!.mintPrice().catch(() => null);
         if (!quote?.priceWei) throw new Error('The server could not price the NFT mint right now (its ETH/USD feed did not answer). Try again in a minute.');
         const args = nftDeployArgs(defaultNftForm(location.origin, quote.priceWei, me), me);
-        return deploy('nft', { title: 'Deploy the NFT', contract: 'CoinnibalNFT', deploy: { name: 'CoinnibalNFT', params: deployNftParams(args) } });
+        return deploy('nft', { title: 'Deploy the NFT', contract: 'CoinnibalNFT', deploy: { name: 'CoinnibalNFT', params: deployNftParams(args) } }, r.stale);
       }
       case 'register':
         return registerLeft(r);

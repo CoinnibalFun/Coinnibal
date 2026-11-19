@@ -21,6 +21,9 @@ const world = vi.hoisted(() => ({
   setupLeft: [] as string[],
   signed: null as null | { arena: string; nft: string; token: string | null },
   sends: [] as string[],
+  /** Addresses (lower case) whose code is an older build, and whether code reads fail. */
+  oldCode: [] as string[],
+  codeReadsFail: false,
 }));
 
 vi.mock('../src/site/api', async (orig) => {
@@ -31,7 +34,10 @@ vi.mock('@coinnibal/sdk/ops', async (orig) => {
   const real = await orig<typeof import('@coinnibal/sdk/ops')>();
   return {
     ...real,
-    checkDeployedCode: async () => 'ok',
+    checkDeployedCode: async (_c: unknown, a: string) => {
+      if (world.codeReadsFail) throw new Error('rpc down');
+      return world.oldCode.includes(a.toLowerCase()) ? 'mismatch' : 'ok';
+    },
     fetchStatus: async (_c: unknown, w: { arena?: Address | null; nft?: Address | null; testToken?: Address | null }) =>
       ({
         block: 1n,
@@ -68,8 +74,8 @@ vi.mock('../src/wallet/pinned', async (orig) => {
 });
 
 const tx = await import('../src/wallet/tx');
-const { DeployFlow, flowRefusal } = await import('../src/admin/DeployFlow');
-const { deployFlowSteps, flowAsksLeft, nextFlowStep } = await import('../src/admin/flow');
+const { DeployFlow, flowRefusal, staleAddresses, toRegister } = await import('../src/admin/DeployFlow');
+const { deployFlowSteps, flowAsksLeft, flowContracts, nextFlowStep } = await import('../src/admin/flow');
 const { startActions, startRows, StartScreen } = await import('../src/admin/Start');
 const { resolveNetwork } = await import('../src/admin/net');
 const { Kb } = await import('../src/design');
@@ -80,7 +86,7 @@ const settle = (ms = 30) => act(async () => new Promise((r) => setTimeout(r, ms)
 
 beforeEach(() => {
   localStorage.clear();
-  Object.assign(world, { registry: { arena: null, nft: null, token: null }, tokenSet: false, setupLeft: [], signed: null, sends: [] });
+  Object.assign(world, { registry: { arena: null, nft: null, token: null }, tokenSet: false, setupLeft: [], signed: null, sends: [], oldCode: [], codeReadsFail: false });
   const provider = fakeProvider({ chainId: 46630, known: [46630] });
   useWallet.setState({ status: 'connected', address: ALICE, chainId: 46630, current: detail(provider) });
 });
@@ -120,6 +126,41 @@ describe('the deploy flow plan', () => {
     expect(flowAsksLeft(all)).toBe(0);
     // the token set later (mainnet): the pins are open again
     expect(nextFlowStep(deployFlowSteps({ ...base, registry, status, setup: [], pinsOk: false }))?.id).toBe('pins');
+  });
+
+  it('replaces a registered arena of an older version: deploys a new one, registers it in its place, reads nothing from the old one', () => {
+    const OLD = '0x1F50Fe469f86eFCacDEeC25885BB519aFbAd1B9b';
+    const registry = { arena: { address: OLD }, nft: { address: NFT }, token: { address: TOKEN } } as unknown as ContractsRegistry;
+    // the old arena still answers reads, with its own token and setup left: none of it counts
+    const status = { arena: { address: OLD, code: 'mismatch', config: { token: TOKEN } } } as unknown as StatusSnapshot;
+    const stale = [OLD.toLowerCase()];
+    const steps = deployFlowSteps({ ...base, registry, status, setup: [{ label: 'Old arena call' } as never], pinsOk: false, stale });
+    expect(steps.filter((s) => s.done).map((s) => s.id)).toEqual(['test-token', 'nft']);
+    expect(nextFlowStep(steps)?.id).toBe('arena');
+    expect(steps.find((s) => s.id === 'arena')?.detail).toBe(`The registered one (${OLD}) is an older version: a new one replaces it.`);
+    expect(steps.find((s) => s.id === 'setup')?.detail).not.toMatch(/Old arena call/);
+    expect(flowContracts({ registry, local: {}, status, stale })).toEqual({ arena: null, nft: NFT, token: TOKEN });
+    // without the code check (no stale list) the old arena would be taken as deployed: the bug this guards against
+    expect(nextFlowStep(deployFlowSteps({ ...base, registry, status, setup: [], pinsOk: false }))?.id).not.toBe('arena');
+
+    // deployed here, not registered yet: the new arena is used and registered over the old one; the NFT stays
+    const local = { arena: { address: ARENA, txHash: null } };
+    const half = deployFlowSteps({ ...base, registry, local, status: null, setup: [], pinsOk: false, stale });
+    expect(half.find((s) => s.id === 'arena')?.done).toBe(true);
+    expect(nextFlowStep(half)?.id).toBe('register');
+    expect(toRegister({ registry, local, stale })).toEqual(['arena']);
+    // a healthy registered arena is never replaced, and a stale local deploy is never registered
+    expect(toRegister({ registry: { ...registry, arena: { address: ARENA } } as unknown as ContractsRegistry, local, stale: [] })).toEqual([]);
+    expect(toRegister({ registry: null, local: { arena: { address: OLD as `0x${string}`, txHash: null } }, stale })).toEqual([]);
+  });
+
+  it('finds the stale arena and NFT by their code; a failed read never counts as stale', async () => {
+    const OLD = '0x1F50Fe469f86eFCacDEeC25885BB519aFbAd1B9b';
+    const registry = { arena: { address: OLD }, nft: { address: NFT }, token: null } as unknown as ContractsRegistry;
+    world.oldCode = [OLD.toLowerCase()];
+    expect(await staleAddresses({} as never, registry, { arena: { address: ARENA, txHash: null } })).toEqual([OLD.toLowerCase()]);
+    world.codeReadsFail = true;
+    expect(await staleAddresses({} as never, registry, {})).toEqual([]);
   });
 
   it('starts only from the owner wallet, signed in, on a chain the panel can sign on', () => {
@@ -186,6 +227,48 @@ describe('the deploy flow, run', () => {
     expect(screen.getByText('Done. The contracts are live.')).toBeTruthy();
     expect(screen.getByTestId('deploy-flow-done').textContent).toContain(ARENA.slice(0, 6));
     expect(screen.queryByTestId('deploy-flow-go')).toBeNull();
+  });
+
+  it('the live case: an older arena registered, the NFT and test token current: one run deploys only a new arena and signs for it', async () => {
+    const OLD = getAddress('0x1F50Fe469f86eFCacDEeC25885BB519aFbAd1B9b');
+    world.registry = { arena: { address: OLD }, nft: { address: NFT }, token: { address: TOKEN } };
+    world.oldCode = [OLD.toLowerCase()];
+    vi.mocked(tx.sendWithWallet).mockImplementation(async (_send, opts) => {
+      opts.onPhase?.('signing');
+      const isDeploy = world.sends.length === 0;
+      world.sends.push(isDeploy ? `deploy ${ARENA}` : 'call');
+      if (!isDeploy && !world.tokenSet) world.tokenSet = true;
+      else if (!isDeploy) world.setupLeft.shift();
+      return { ok: true, hash: HASH as never, receipt: { status: 'success', contractAddress: isDeploy ? ARENA : null, logs: [] } as never };
+    });
+    const registered: string[] = [];
+    const saved: unknown[] = [];
+    const api = {
+      registerContract: vi.fn(async (b: { kind: string; address: string }) => {
+        registered.push(`${b.kind} ${b.address}`);
+        world.registry[b.kind] = { address: b.address };
+        return world.registry;
+      }),
+      savePins: vi.fn(async (r: { arena: string; nft: string; token: string | null }) => {
+        saved.push(r);
+        world.signed = { arena: r.arena, nft: r.nft, token: r.token };
+        return r;
+      }),
+      mintRefresh: async () => ({ refreshed: true }),
+    } as never;
+    world.setupLeft = ['Create Room #1'];
+    const net = resolveNetwork(chainStatus({ arenaAddress: OLD, nftAddress: NFT }));
+    ui(<DeployFlow ctx={{ net, status: null, refresh: vi.fn(async () => {}), reloadNet: vi.fn(async () => {}), me: ALICE, walletChainId: 46630, client: { getCode: async () => '0x6080' } as never, api, open: vi.fn(), registry: null, signed: null }} />);
+    await settle();
+    expect(document.querySelector('[data-step="arena"]')?.textContent).toContain('is an older version: a new one replaces it.');
+    await act(async () => {
+      screen.getByTestId('deploy-flow-go').click();
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(world.sends).toEqual([`deploy ${ARENA}`, 'call', 'call']);
+    expect(registered).toEqual([`arena ${ARENA}`]);
+    expect(saved).toEqual([expect.objectContaining({ chainId: 46630, arena: ARENA, nft: NFT, token: TOKEN })]);
+    expect(screen.getByText('Done. The contracts are live.')).toBeTruthy();
   });
 
   it('a refused step stops the flow with its reason; Continue picks up from there', async () => {
