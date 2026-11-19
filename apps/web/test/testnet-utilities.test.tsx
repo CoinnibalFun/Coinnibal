@@ -328,6 +328,8 @@ describe('admin groups', () => {
     expect(off.now).toMatch(/its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid/);
     expect(off.next).toMatch(/coinnibal-compose logs app.*COINNIBAL_RPC_URLS or SERVER_PRIVATE_KEY/);
     expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never }).next).toMatch(/open the testnet game \(Game → Who may play\)/);
+    // the override names the VPS key too (docker-compose.yml maps COINNIBAL_GAME_ACCESS to GAME_ACCESS)
+    expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never, gameAccessEnv: 'public' }).now).toMatch(/^Open to everyone \(COINNIBAL_GAME_ACCESS \/ GAME_ACCESS env\)/);
   });
 
   it('lists the mainnet launch with the server step first; nothing is ticked on testnet', () => {

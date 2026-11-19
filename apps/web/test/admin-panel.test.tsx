@@ -506,6 +506,14 @@ describe('Game: who may play', () => {
     expect(settingsChanged).toHaveBeenCalledTimes(1);
   });
 
+  it('names the key the owner edits on the VPS when the env override wins', async () => {
+    const known: Record<string, unknown> = { settings: vi.fn(async () => ({ settings: { gameAccess: 'admins' }, gameAccessEnv: 'holders' })) };
+    const api = new Proxy(known, { get: (t, k: string) => t[k] ?? (async () => Promise.reject(new Error('not in this test'))) }) as unknown as AdminApi;
+    ui(<GameTab ctx={ctxOf({ api })} />);
+    await settle();
+    expect(screen.getByText('GAME_ACCESS=holders is set on the server (COINNIBAL_GAME_ACCESS in /opt/elymum/.env on the VPS): it wins over this switch.')).toBeTruthy();
+  });
+
   it('opens the arena and, off mainnet, the test-token faucet (both hidden from visitors while only admins play)', () => {
     const view = ui(<GameTab ctx={ctxOf()} />);
     expect(screen.getByRole('link', { name: 'Open the arena as admin' }).getAttribute('href')).toBe('/play');

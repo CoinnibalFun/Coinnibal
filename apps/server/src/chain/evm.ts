@@ -329,7 +329,7 @@ export class EvmChain implements ChainGateway {
         for (const u of urls.slice(1)) {
           const id = await readChainId(u).catch(() => null);
           if (id === chainId) usable.push(u);
-          else this.log(`!!! chain: fallback RPC #${urls.indexOf(u) + 1} ${id === null ? 'does not answer' : `serves chain ${id}`} — not used (EVM_RPC_URLS)`);
+          else this.log(`!!! chain: fallback RPC #${urls.indexOf(u) + 1} ${id === null ? 'does not answer' : `serves chain ${id}`} — not used (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URLS outside Docker)`);
         }
         // concurrent eth_calls are merged into one Multicall3 call (or a deployless one where the chain has none)
         const multicall = await multicallMode(usable, chainId);
