@@ -84,3 +84,42 @@ describe('the modules the player guide imports stay light (no wallet layer, no e
     expect(readFileSync(join(__dirname, '../src/site/DocsRoute.tsx'), 'utf8')).not.toMatch(/lobby\.css/);
   });
 });
+
+describe('the design system has no import-time side effects (the build tree-shakes it per page: vite.config.ts)', () => {
+  it('every module under src/design is declarations only: no top-level call, no side-effect import but a style sheet', async () => {
+    const ts = await import('typescript');
+    const { readdirSync, statSync } = await import('node:fs');
+    const root = join(__dirname, '../src/design');
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const f of readdirSync(dir)) {
+        const p = join(dir, f);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f)) files.push(p);
+      }
+    };
+    walk(root);
+    expect(files.length).toBeGreaterThan(30);
+    const found: string[] = [];
+    for (const file of files) {
+      const sf = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+      for (const st of sf.statements) {
+        if (ts.isImportDeclaration(st)) {
+          const from = (st.moduleSpecifier as import('typescript').StringLiteral).text;
+          if (!st.importClause && !from.endsWith('.css')) found.push(`${file}: import '${from}'`);
+          continue;
+        }
+        const declaration =
+          ts.isExportDeclaration(st) || ts.isFunctionDeclaration(st) || ts.isInterfaceDeclaration(st) || ts.isTypeAliasDeclaration(st) || ts.isClassDeclaration(st) || ts.isEnumDeclaration(st) || ts.isVariableStatement(st) || ts.isModuleDeclaration(st);
+        if (!declaration) found.push(`${file}: ${st.getText().slice(0, 60)}`);
+      }
+    }
+    expect(found).toEqual([]);
+    const { isPureDesignModule } = await import('../vite.config');
+    expect(isPureDesignModule('/w/apps/web/src/design/components/Modal.tsx')).toBe(true);
+    expect(isPureDesignModule('C:\\w\\apps\\web\\src\\design\\motifs\\RingScene.tsx')).toBe(true);
+    expect(isPureDesignModule('/w/apps/web/src/design/storybook.css')).toBe(false);
+    expect(isPureDesignModule('/w/apps/web/src/design/fonts/core.css?inline')).toBe(false);
+    expect(isPureDesignModule('/w/apps/web/src/site/Shell.tsx')).toBe(false);
+  });
+});

@@ -81,4 +81,41 @@ describe('the SOFT-pinned Fraunces and the faces canvas text loads', () => {
       expect(rule, sel).toMatch(/max-width: [\d.]+em;/);
     }
   });
+
+  it('the three upright faces come cut down to basic latin and punctuation, declared after every other face', () => {
+    const main = readFileSync(join(__dirname, '../src/main.tsx'), 'utf8');
+    const core = main.indexOf("import './design/fonts/core.css'");
+    expect(core).toBeGreaterThan(-1);
+    for (const other of [
+      "import '@fontsource-variable/fraunces/full.css'",
+      "import './design/fonts/fraunces-soft.css'",
+      "import '@fontsource-variable/dm-sans/opsz.css'",
+      "import '@fontsource-variable/geist-mono/wght.css'",
+    ])
+      expect(core, other).toBeGreaterThan(main.indexOf(other));
+    const css = readFileSync(join(__dirname, '../src/design/fonts/core.css'), 'utf8');
+    const faces = [...css.matchAll(/@font-face \{([^}]*)\}/g)].map((m) => m[1]);
+    expect(faces.map((f) => /font-family: '([^']+)'/.exec(f)?.[1]).sort()).toEqual(['DM Sans Variable', 'Fraunces Variable', 'Geist Mono Variable']);
+    for (const f of faces) {
+      const range = /unicode-range: ([^;]+);/.exec(f)?.[1] ?? '';
+      expect(f).toMatch(/font-style: normal;/);
+      // basic latin, the signs the copy uses (middle dot, no-break space, minus, dashes, quotes, ellipsis), no letters
+      // with accents: those stay with the whole latin file
+      for (const cp of [0x20, 0x61, 0x7e, 0xa0, 0xb7, 0xd7, 0x2013, 0x2014, 0x2019, 0x2026, 0x2212]) expect(rangeCovers(range, cp), cp.toString(16)).toBe(true);
+      for (const cp of [0xe9, 0xf6, 0xfc, 0xe7, 0x131, 0x152]) expect(rangeCovers(range, cp), cp.toString(16)).toBe(false);
+      const file = /src: url\(\.\/([^)]+)\)/.exec(f)?.[1] ?? '';
+      expect(readFileSync(join(__dirname, '../src/design/fonts', file)).subarray(0, 4).toString('latin1'), file).toBe('wOF2');
+    }
+  });
+
+  it('nothing the site, the guide or the game says needs the whole latin files', () => {
+    // a character of the copy that only the whole latin file has would make every visit download it next to the cut
+    const css = readFileSync(join(__dirname, '../src/design/fonts/core.css'), 'utf8');
+    const core = /unicode-range: ([^;]+);/.exec(css)?.[1] ?? '';
+    const src = ['../src/i18n/en.ts', '../src/ui/docs/content.en.ts', '../src/ui/docs/facts.ts']
+      .map((f) => readFileSync(join(__dirname, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''))
+      .join('');
+    const outside = [...new Set([...src].filter((c) => rangeCovers(LATIN, c.codePointAt(0)!) && !rangeCovers(core, c.codePointAt(0)!)))];
+    expect(outside).toEqual([]);
+  });
 });
