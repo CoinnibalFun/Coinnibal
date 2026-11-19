@@ -303,7 +303,9 @@ describe('ticket flow: two prompts, progress and races', () => {
     await settle();
     expect(spies.fetchJoinPermit).toHaveBeenCalledWith('tok', 1, null);
     const permit = spies.planJoin.mock.calls[0][1].permit as { deadline: bigint; signature: string };
-    expect(permit).toEqual({ deadline: BigInt(permitOf(1).deadline), signature: permitOf(1).signature });
+    // the permit the server handed out (its deadline is read from the clock: compare with that one, not a new one)
+    const served = ((await spies.fetchJoinPermit.mock.results[0].value) as { permit: JoinPermit }).permit;
+    expect(permit).toEqual({ deadline: BigInt(served.deadline), signature: served.signature });
     expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
   });
 
