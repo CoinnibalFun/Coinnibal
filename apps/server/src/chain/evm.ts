@@ -836,6 +836,25 @@ export class EvmChain implements ChainGateway {
     return this.settledLog.noShowsSince(player, since);
   }
 
+  /** The game token `player` holds (ledger units, rounded down): one `balanceOf` read at `normal` priority. */
+  async tokenBalance(player: string): Promise<number> {
+    const client = this.client;
+    const t = this.token();
+    if (!client || !t || !isEvm(player)) throw new ChainBusyError('token balance');
+    let raw: bigint;
+    try {
+      raw = await withRpcPriority('normal', () => client.tokenBalance(t.address, getAddress(player)));
+    } catch (err) {
+      this.warn('token-balance', `chain: token balance read failed (${firstLine(err)})`);
+      throw new ChainBusyError('token balance', err);
+    }
+    try {
+      return toLedger(raw, t.decimals, 'floor');
+    } catch {
+      return Number.MAX_SAFE_INTEGER; // more than the ledger can count: plenty
+    }
+  }
+
   /** The arena list goes stale (re-read at the next ask); its value stays for RPC errors. */
   private arenasStale(): void {
     if (this.arenaCache) this.arenaCache.at = -Infinity;
@@ -1334,7 +1353,18 @@ export class EvmChain implements ChainGateway {
       this.settledLog.record({ kind: 'cancel', ...base, amount, net: amount, fee: 0, ...(item.noShow ? { noShow: true as const } : {}) });
       const collect = !ev.collected && ev.amount > 0n;
       this.log(`chain: ${collect ? 'finalized' : 'cancelled'} ${short(item.key)} (${item.reason ?? 'stale'}) · full entry fee ${this.units(amount)} → ${short(item.player)}${collect ? ' (to collect)' : ''} · ${hash}`);
-      this.emit({ key: item.key, player: getAddress(item.player), arenaId: item.arenaId, txHash: hash, payout: amount, fee: 0, net: amount, refund: true, ...(collect ? { collect: true } : {}) });
+      this.emit({
+        key: item.key,
+        player: getAddress(item.player),
+        arenaId: item.arenaId,
+        txHash: hash,
+        payout: amount,
+        fee: 0,
+        net: amount,
+        refund: true,
+        ...(collect ? { collect: true } : {}),
+        ...(item.noShow ? { noShow: true } : {}),
+      });
       return;
     }
     const payout = item.payout ?? 0;
