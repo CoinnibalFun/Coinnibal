@@ -1,5 +1,5 @@
 /**
- * Failure drills against a real ElymumArena v3 (hardhat node, blocks every 250 ms) and the real game server in a
+ * Failure drills against a real CoinnibalArena v4 (hardhat node, blocks every 250 ms) and the real game server in a
  * child process (`drill-server.ts`, NODE_ENV=production, 3 room workers, the production viem client and RPC
  * budget). DRILL_PLAYERS players buy real tickets over the four arenas, connect over WebSocket, sign in (session
  * tokens), take their seats and steer. Then one failure per drill:
@@ -25,8 +25,8 @@ import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getArena, getSession } from '@elymum/sdk';
-import { PROTOCOL_VERSION, encodeTarget } from '@elymum/shared';
+import { getArena, getSession } from '@coinnibal/sdk';
+import { PROTOCOL_VERSION, encodeTarget } from '@coinnibal/shared';
 import WebSocket from 'ws';
 import { Auth } from '../../src/auth';
 import { ChaosRpc, CLEAN } from './chaos-rpc';
@@ -250,7 +250,7 @@ async function allClosed(tickets: Ticket[]): Promise<number> {
 async function verify(tickets: Ticket[], fromBlock: bigint) {
   const settled = await hh.logs('Settled', fromBlock);
   const cancelled = await hh.logs('Cancelled', fromBlock);
-  const loot = (await hh.pub.getContractEvents({ address: hh.arena, abi: (await import('@elymum/sdk')).elymumArenaAbi, eventName: 'LootBurned', fromBlock })) as unknown as { args: { amount: bigint } }[];
+  const loot = (await hh.pub.getContractEvents({ address: hh.arena, abi: (await import('@coinnibal/sdk')).coinnibalArenaAbi, eventName: 'LootBurned', fromBlock })) as unknown as { args: { amount: bigint } }[];
   const count = new Map<string, number>();
   for (const l of [...settled, ...cancelled]) count.set(String(l.args.sessionId), (count.get(String(l.args.sessionId)) ?? 0) + 1);
   const ids = tickets.map((t) => String(t.sessionId));
@@ -330,7 +330,7 @@ function clientSummary() {
 }
 
 const results: Record<string, unknown> = {};
-let dataDir = mkdtempSync(join(tmpdir(), 'elymum-drill-'));
+let dataDir = mkdtempSync(join(tmpdir(), 'coinnibal-drill-'));
 say(`server boot: ${await startServer(dataDir)} ms`);
 
 for (const drill of DRILLS) {
@@ -367,7 +367,7 @@ for (const drill of DRILLS) {
     // a small tmpfs as DATA_DIR: stop, move the data onto it, start again
     server!.kill('SIGTERM');
     await waitExit(server!);
-    const tiny = mkdtempSync(join(tmpdir(), 'elymum-tiny-'));
+    const tiny = mkdtempSync(join(tmpdir(), 'coinnibal-tiny-'));
     execFileSync('mount', ['-t', 'tmpfs', '-o', 'size=48m', 'tmpfs', tiny]);
     execFileSync('cp', ['-a', `${dataDir}/.`, tiny]);
     dataDir = tiny;
@@ -389,9 +389,13 @@ for (const drill of DRILLS) {
     const late = players[0];
     const lateArena = late.arenaId === 1 ? 2 : 1;
     const lateWallet = hh.players[0];
-    const { joinCall, sendCall, createElymumWalletClient, viemChain } = await import('@elymum/sdk');
-    const w = createElymumWalletClient(hh.url, { account: lateWallet, chain: viemChain(31337, { rpcUrl: hh.url }), pollingInterval: 50 });
-    const h = await sendCall(w, joinCall(hh.arena, lateArena));
+    const { joinCall, sendCall, createCoinnibalWalletClient, viemChain, getJoinNonce, signJoinPermit } = await import('@coinnibal/sdk');
+    const w = createCoinnibalWalletClient(hh.url, { account: lateWallet, chain: viemChain(31337, { rpcUrl: hh.url }), pollingInterval: 50 });
+    // the server key's join permit (CoinnibalArena v4)
+    const deadline = (await hh.pub.getBlock({ blockTag: 'latest' })).timestamp + 600n;
+    const nonce = await getJoinNonce(hh.pub, hh.arena, lateWallet.address);
+    const signature = await signJoinPermit(hh.server, { chainId: 31337, arena: hh.arena, player: lateWallet.address, arenaId: lateArena, nonce, deadline });
+    const h = await sendCall(w, joinCall(hh.arena, lateArena, { deadline, signature }));
     await hh.pub.waitForTransactionReceipt({ hash: h, pollingInterval: 50 });
     const ls = await getSession(hh.pub, hh.arena, lateArena, lateWallet.address);
     late.ws?.send(JSON.stringify({ t: 'join', room: `arena:${lateArena}`, name: 'late', skin: 1 }));

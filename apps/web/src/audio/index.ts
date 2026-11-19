@@ -150,10 +150,10 @@ export function startAudio(): () => void {
     }),
   );
   if (import.meta.env.DEV) {
-    const w = window as unknown as { __elymumAudioTap?: () => MediaStream | null; __elymumAudio?: unknown };
+    const w = window as unknown as { __coinnibalAudioTap?: () => MediaStream | null; __coinnibalAudio?: unknown };
     // recording (scripts/record-walkthrough.mjs): the master output, after the limiter
-    w.__elymumAudioTap = () => mixer.tap();
-    w.__elymumAudio = { mixer, sound, music, announcer, caller };
+    w.__coinnibalAudioTap = () => mixer.tap();
+    w.__coinnibalAudio = { mixer, sound, music, announcer, caller };
   }
 
   return () => {

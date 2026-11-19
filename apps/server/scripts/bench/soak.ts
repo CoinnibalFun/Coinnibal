@@ -10,14 +10,14 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION, encodeTarget } from '@elymum/shared';
+import { PROTOCOL_VERSION, encodeTarget } from '@coinnibal/shared';
 import WebSocket from 'ws';
 import { createApp } from '../../src/app';
 import { loadConfig } from '../../src/config';
 
 const minutes = Number(process.env.SOAK_MINUTES ?? 5);
 const clients = Number(process.env.SOAK_CLIENTS ?? 40);
-const dir = mkdtempSync(join(tmpdir(), 'elymum-soak-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-soak-'));
 const cfg = loadConfig({
   NODE_ENV: 'development',
   DEV_FAKE_CHAIN: '1',

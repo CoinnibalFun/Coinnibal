@@ -1,13 +1,13 @@
 import { SiteFail } from './site/validate';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
-import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain, siteHostOf } from '@elymum/shared';
+import { LOCALNET_CHAIN_ID, NETWORKS, ROBINHOOD_CHAIN_ID, ROBINHOOD_TESTNET_CHAIN_ID, chainInfo, isTestChainId, setActiveChain, siteHostOf } from '@coinnibal/shared';
 import { chainOverridesFor } from './chain/evm';
 import type { Hex } from 'viem';
 import { Auth } from './auth';
 import { assertDevFakeChainAllowed, createChain, dataFileNames } from './chain';
 import { PriceKeeper } from './chain/price-keeper';
-import type { ChainGateway } from './chain/types';
+import { parseSessionKey, type ChainGateway } from './chain/types';
 import { checkAuthSecret, type ServerConfig } from './config';
 import { createHttpServer, publicBaseUrl, redactUrls } from './http';
 import { IntegrityService } from './integrity/service';
@@ -31,16 +31,18 @@ import { FaucetInfo } from './site/network';
 import { RoomManager } from './rooms/manager';
 import { gameLoad } from './rooms/load';
 import { CustomRoomService } from './rooms/custom';
-import { UsedPayments, devFakePaymentReader, viemPaymentReader, type PaymentReader } from './chain/payment';
+import { UsedPayments } from './chain/payment';
 import { checksumAddress } from './auth';
 import { ProfileStore } from './profiles';
 import { AvatarStore } from './avatars';
 import { XLinkService, devFakeXPicture, fakeXFetch, type XFetch } from './xlink';
 import { ContractsStore } from './site/contracts';
+import { SitePinsStore } from './site/pins';
 import { MintService, hyperliquidPrice, type PriceFetcher } from './site/mint';
 import { SiteApi, type SiteLimits } from './site/routes';
 import { SiteStore } from './site/store';
 import { Journal } from './stake/journal';
+import { JoinPermits } from './stake/join-permits';
 import { BoostInventory } from './shop/inventory';
 import { ShopService } from './shop/service';
 import { ShopSettingsStore } from './shop/settings';
@@ -71,7 +73,7 @@ export interface App {
   mint: MintService;
   /** The emblem collection: committed seed, provenance, reveal, metadata and art (`DATA_DIR/chains/<id>/nft-collection.json`). */
   nft: NftCollection;
-  /** Keeps the mint price at $1 in the gas token when the server key is the NFT's price keeper; null without a chain. */
+  /** Keeps the mint at the mint price (MINT_USD_CENTS) in the gas token when the server key is the NFT's price keeper; null without a chain. */
   priceKeeper: PriceKeeper | null;
   /** Cheat and collusion detection: telemetry, flags, bans, auto-hold (`/api/admin/integrity/*`). */
   integrity: IntegrityService;
@@ -87,6 +89,8 @@ export interface App {
   gateway: Gateway;
   /** Graceful degradation under load (active with `LOAD_SHED`, default on in production). */
   shedder: LoadShedder;
+  /** Arena join permits (`POST /api/arena/permit`, `stake/join-permits.ts`). */
+  permits: JoinPermits;
   /** Resolves once the HTTP server is listening; returns the bound port. */
   listen(): Promise<number>;
   close(): Promise<void>;
@@ -112,8 +116,6 @@ export async function createApp(
     chainId?: number | null;
     /** Holder readers per chain (default: the server's client on its own chain, `TESTNET_RPC_URL` for the testnet). */
     holderReaderFor?: (chainId: number) => HolderReader | null;
-    /** Reads custom-room payments (default: the server's RPC; the fake chain's own on `DEV_FAKE_CHAIN`); tests inject one. */
-    paymentReader?: PaymentReader | null;
     /** Wall clock of the custom rooms (Unix ms); tests inject one. */
     customNow?: () => number;
     /** "Link X": the fetch that reads X's public endpoints (tests inject a fake X). */
@@ -125,9 +127,8 @@ export async function createApp(
   // refuse a misconfigured DEV_FAKE_CHAIN before any file is opened
   assertDevFakeChainAllowed(cfg);
   // the secret signs every session token (admin sessions too): a short one can be brute-forced offline from any
-  // token. The mainnet refuses to start with one (throws); a testnet logs it
-  const weakSecret = checkAuthSecret(cfg);
-  if (weakSecret) log(`auth: ${weakSecret}`);
+  // token. The mainnet refuses to start with one (throws, also below once the RPC told its chain); a testnet logs it
+  checkAuthSecret(cfg);
   // one request budget per RPC URL for the whole process (the public RPC answers 429 above its limit)
   configureRpcBudgets({ ratePerSec: cfg.chain.rpcMaxRps, burst: cfg.chain.rpcBurst });
   // EVM_RPC_URLS: each URL its own budget (RPC_MAX_RPS may give one rate per URL: a provider allows far more than a public RPC)
@@ -135,8 +136,13 @@ export async function createApp(
   const stopRpcLog = startRpcMinuteLog(log);
   const files = dataFileNames(cfg);
   // chain-keyed state: DATA_DIR/chains/<chainId>/ (registry, journal, bot wallets, allowlist snapshots)
-  const stateChainId =
-    opts.chainId !== undefined ? opts.chainId : opts.chain ? opts.chain.status().chainId : await resolveStateChainId(cfg, { persist, log });
+  let served: number | null = null;
+  const resolve = opts.chainId === undefined && !opts.chain;
+  const stateChainId = opts.chainId !== undefined ? opts.chainId : opts.chain ? opts.chain.status().chainId : await resolveStateChainId(cfg, { persist, log, served: (id) => (served = id) });
+  // the weak-secret refusal also looks at the chain the RPC really serves (CHAIN_ID may be unset): see checkAuthSecret
+  const realChain = resolve && !cfg.devFakeChain && !!cfg.chain.rpcUrl && !!cfg.chain.serverKey;
+  const weakSecret = checkAuthSecret(cfg, [stateChainId, served], realChain && !cfg.chain.chainIdExplicit && stateChainId === null && served === null);
+  if (weakSecret) log(`auth: ${weakSecret}`);
   if (persist && stateChainId !== null) migrateLegacyState(cfg.dataDir, stateChainId, log);
   const chainState = persist ? stateDir(cfg.dataDir, stateChainId) : null;
   if (stateChainId !== null) log(`state: chain ${stateChainId} (${persist ? join(cfg.dataDir, 'chains', String(stateChainId)) : 'in memory'})`);
@@ -157,10 +163,14 @@ export async function createApp(
   const adminSet = new Set(cfg.adminWallets.map((w) => w.toLowerCase()));
   const auth = new Auth(cfg.authSecret, {
     onChain: chain.verifyMessage ? (a, m, sig) => chain.verifyMessage!(a, m, sig) : null,
+    // garbage aimed at a plain account never reaches the smart-wallet check (`CODE_CHECKS`)
+    hasCode: chain.hasCode ? (a) => chain.hasCode!(a) : null,
     // admin sessions are short (ADMIN_TOKEN_TTL_MIN) and can be revoked (POST /api/admin/auth/revoke)
     isAdmin: (w) => adminSet.has(w.toLowerCase()),
     adminTtlMs: cfg.adminTokenTtlMs,
     revocationsFile: persist ? join(cfg.dataDir, 'auth-revoked.json') : null,
+    // smart wallets that signed in, per network: their sign-in reserve survives a restart (`SMART_WALLET_RESERVE`)
+    smartWalletsFile: persist ? join(cfg.dataDir, 'auth-smart-wallets.json') : null,
     log,
   });
   const profiles = new ProfileStore(persist ? join(cfg.dataDir, files.profiles) : null, log);
@@ -190,6 +200,7 @@ export async function createApp(
     usdCents: cfg.mint.usdCents,
     fetchPrice,
     logChunkBlocks: cfg.chain.logChunkBlocks,
+    rpcMaxRps: cfg.chain.rpcMaxRps,
     log,
   });
   // the testnet's NFT comes from the testnet's registry (the testnet emblem import after the move to mainnet)
@@ -209,6 +220,7 @@ export async function createApp(
   const site = new SiteApi(cfg, auth, siteStore, opts.siteLimits, {
     chain,
     contracts,
+    pins: new SitePinsStore(persist ? cfg.dataDir : null, log),
     mint,
     nft,
     profiles,
@@ -238,7 +250,7 @@ export async function createApp(
   });
   site.setIntegrity(integrity);
   const held = journal.held().length;
-  if (held > 0) log(`integrity: ${held} settlement(s) held for admin review (/admin → Integrity)`);
+  if (held > 0) log(`integrity: ${held} settlement(s) held for admin review (/admin → Safety → Held settlements)`);
 
   // the admin's map settings per room kind (DATA_DIR/site/maps.json; taken over once from the old bots.json)
   const mapSettings = new MapSettingsStore(persist ? cfg.dataDir : null, log);
@@ -252,18 +264,20 @@ export async function createApp(
   const boostInventory = new BoostInventory(chainState ? join(chainState, files.boosts) : null, log);
   // arena tiers in US dollars and the token's USD price (DATA_DIR/chains/<id>/arena-prices.json): the owner re-prices on chain
   const arenaPrices = new ArenaPriceStore(chainState, log);
+  // what is priced in dollars (power-up packs, custom room fees) converts at the arenas' price and rounding (the manual price today)
+  const usdPrice = async () => {
+    const r = await arenaPrices.price();
+    return r.ok ? { price: r.price, usdPerToken: r.usdPerToken, sigFigs: arenaPrices.settings.sigFigs } : null;
+  };
   const shop = new ShopService({
     settings: shopSettings,
     inventory: boostInventory,
     chain,
     holder: (wallet, fresh) => mint.isHolder(wallet, fresh),
+    shownHolder: (wallet) => mint.shownHolder(wallet),
     emblemTokens,
     claims: emblemClaims,
-    // power-up packs priced in dollars convert at the arenas' price and rounding (the manual price today)
-    usdPrice: async () => {
-      const r = await arenaPrices.price();
-      return r.ok ? { price: r.price, usdPerToken: r.usdPerToken, sigFigs: arenaPrices.settings.sigFigs } : null;
-    },
+    usdPrice,
     log,
   });
   site.setShop({ service: shop, settings: shopSettings, inventory: boostInventory });
@@ -273,7 +287,7 @@ export async function createApp(
   const xLinks: XLinkService = new XLinkService({
     dataDir: persist ? cfg.dataDir : null,
     suffix: cfg.devFakeChain ? '.dev-fake' : '',
-    // the dev stack (fake chain only) may ask for a fake X: posts carry the newest code, by @elymum_fan
+    // the dev stack (fake chain only) may ask for a fake X: posts carry the newest code, by @coinnibal_fan
     ...(opts.xFetch ? { fetch: opts.xFetch } : {}),
     ...(!opts.xFetch && cfg.devFakeChain && process.env.DEV_FAKE_X === '1' ? { fetch: fakeXFetch({ text: () => `Linking my X to Coinnibal: ${xLinks.lastCode() ?? ''} ${siteHostOf(cfg.publicUrl)}`, avatar: devFakeXPicture }) } : {}),
     log,
@@ -350,24 +364,19 @@ export async function createApp(
     // "Test arenas with bots" (testnet only; DATA_DIR/site/test-arenas.json; refused and ignored on the mainnet)
     new TestArenaStore(cfg.chain.chainId, persist ? cfg.dataDir : null, log),
   );
-  // custom rooms: paid with a gas-token transfer to the treasury (checked on chain), restored after a restart
-  let paymentReader: PaymentReader | null | undefined = opts.paymentReader;
+  // custom rooms: paid in the game token with `CoinnibalArena.pay` (half burned, half to the fee wallet; the receipt
+  // checked like a power-up purchase), restored after a restart
   const customRooms = new CustomRoomService({
     rooms,
     dataDir: persist ? cfg.dataDir : null,
     suffix: cfg.devFakeChain ? '.dev-fake' : '',
     used: new UsedPayments(chainState ? join(chainState, cfg.devFakeChain ? 'room-payments.dev-fake.json' : 'room-payments.json') : null, log),
-    reader: () => {
-      if (paymentReader !== undefined) return paymentReader;
-      if (cfg.devFakeChain) return (paymentReader = devFakePaymentReader());
-      if (!chain.enabled || !cfg.chain.rpcUrl) return null;
-      return (paymentReader = viemPaymentReader(cfg.chain.rpcUrls));
-    },
-    chainId: () => chain.status().chainId,
+    chain,
+    usdPrice,
     isHolder: (wallet) => mint.isHolder(wallet),
+    shownHolder: (wallet) => mint.shownHolder(wallet),
     emblemTokens,
     claims: emblemClaims,
-    ownerWallet: checksumAddress(cfg.adminWallets[0] ?? null),
     now: opts.customNow,
     log,
   });
@@ -414,6 +423,8 @@ export async function createApp(
     emblemTokens,
     flag: (c) => void integrity.raise(c),
     liveSessions: () => rooms.liveSessions(),
+    // a cancel for an emblem moved away or passed on is a no-show unless the arena takes no seat or the server owes it
+    noShow: (s) => !chain.joinsPaused?.() && rooms.arenaTakesSeats(s.arenaId) && !reprice.closedForSeats(s.arenaId) && chain.excusedSince?.(s.arenaId, s.player, s.openedAt) !== true,
     log,
   });
   // the game token was set on chain (picked up by the 30 s config watcher, no restart): attach the
@@ -431,21 +442,59 @@ export async function createApp(
   chain.onStatusChange(showChain);
   await rooms.ensureArenaRooms();
 
-  const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, shares, priceKeeper, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
+  // join permits (CoinnibalArena v4): who may buy a ticket, and how many may wait for a seat (stake/join-permits.ts)
+  const permits = new JoinPermits({
+    chain,
+    gameOpenFor: (wallet, origin) => site.gameOpenFor(wallet, true, origin),
+    isBanned: (wallet) => integrity.isBanned(wallet),
+    // the owner's wallets: never refused by the network rules (stake/join-permits.ts, the invariant's rule 4)
+    isAdmin: (wallet) => site.isAdmin(wallet),
+    isHolder: (wallet) => mint.isHolder(wallet),
+    blocked: () => rooms.blockedArenas().map((b) => b.arenaId),
+    seatedKeys: () => rooms.liveSessions(),
+    pendingKeys: () => journal.pending.map((p) => p.key),
+    seatsPerRound: () => cfg.arenaInstanceCap * rooms.scaler.settings.maxInstances,
+    noShows: (wallet, since) => chain.noShowsSince?.(wallet, since) ?? [],
+    // standing (exempt from the network rules): a played ticket of its own in 14 days, or an NFT of its own
+    playedAt: (wallet) => chain.lastPlayedAt?.(wallet) ?? null,
+    // the holder index (no chain read here); kept warm by a low-priority catch-up at most every 2 minutes
+    holderTokens: (wallet) => {
+      void mint.holdersCount().catch(() => 0);
+      return mint.emblemTokens(wallet);
+    },
+    // a ticket for a paid custom room is bound to it while it takes seats (its early refund is excused: audit R4-M1)
+    paidRoom: (arenaId, code) => {
+      const seats = rooms.paidRoomSeats(arenaId, code);
+      const view = seats === null ? null : customRooms.get(code);
+      return seats !== null && view && view.kind === 'paid' && !view.closing ? { seats, creator: view.creator } : null;
+    },
+    cfg: cfg.joinPermits,
+    log,
+  });
+  // a settled or cancelled ticket used its permit (a no-show also counts against the networks its permit was asked from)
+  chain.onSettled((e) => {
+    const arenaId = e.arenaId ?? parseSessionKey(e.key)?.arenaId;
+    if (arenaId !== undefined) permits.ticketDone(e.player, arenaId, e.noShow === true);
+  });
+  const server = createHttpServer(cfg, { rooms, leaderboards, chain, auth, journal, site, shares, priceKeeper, permits, apiLimiter: opts.apiLimiter, startedAt: Date.now(), log });
   const gateway = new Gateway(cfg, rooms, auth, chain, journal, log);
   gateway.setProfiles(profiles);
   // a linked X handle rides on the coin (read from memory at the join: X is never asked then)
   gateway.setXHandles((wallet) => xLinks.links.handle(wallet));
   // who may play: `gameAccess` (setting) or `GAME_ACCESS`: admins, NFT holders + admins, or everyone
-  // (an open-play copy of the site opens it to everyone on the testnet: OPEN_PLAY_ORIGINS)
+  // (an open-play copy of the site opens it to everyone on a testnet: OPEN_PLAY_ORIGINS, the socket's Origin)
   gateway.setGameGate((wallet, fresh, origin) => site.gameOpenFor(wallet, fresh, origin));
   // wallets the admin banned after an integrity review cannot start arena games (practice still works)
   gateway.setBanGate((wallet) => integrity.isBanned(wallet));
   // emblem holders wear a laurel and may play the emblem skin (cached holder check of the NFT)
-  gateway.setHolderCheck((wallet) => mint.isHolder(wallet));
+  gateway.setHolderCheck((wallet, gate) => (gate ? mint.isHolder(wallet) : mint.shownHolder(wallet)));
   gateway.setRepricing((id) => reprice.closedForSeats(id));
   // holder tickets: the emblem is there at the seat (read fresh) and one token id serves one open holder ticket
   gateway.setEmblemGate((wallet, session) => emblems.seat(wallet, session));
+  // a wallet sitting down with its ticket gives up the place its join permit held; a ticket read used up its permits
+  gateway.setTicketSeen((wallet, arenaId, openedAtS) => permits.ticketSeen(wallet, arenaId, openedAtS));
+  // a paid room that stopped taking seats refunds the unseated ticket bought for it without a no-show (audit R4-M1)
+  gateway.setRoomExcuse((wallet, arenaId, code, openedAtS) => permits.roomExcuse(wallet, arenaId, code, openedAtS));
   chain.onSettled((e) => emblems.settled(e.key));
   const emblemTimer = setInterval(() => emblems.sweep(), 60_000);
   emblemTimer.unref();
@@ -487,6 +536,7 @@ export async function createApp(
     xLinks,
     gateway,
     shedder,
+    permits,
     listen: () =>
       new Promise((resolve) => {
         server.listen(cfg.port, cfg.host, () => {

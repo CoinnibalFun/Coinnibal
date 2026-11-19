@@ -1,4 +1,4 @@
-import { GAS_SYMBOL } from '@elymum/shared';
+import { GAS_SYMBOL } from '@coinnibal/shared';
 import {
   formatGasAmount,
   freezeMetadataCall,
@@ -17,13 +17,13 @@ import {
   withdrawCall,
   MINT_PHASE_NAMES,
   type MintPhaseName,
-} from '@elymum/sdk';
-import { parseAddressInput, parseGasInput, parseIntInput } from '@elymum/sdk/ops';
-import type { AllowlistStatus, GameAccess, HolderWlView, MintPriceQuote } from '@elymum/shared';
+} from '@coinnibal/sdk';
+import { parseAddressInput, parseGasInput, parseIntInput } from '@coinnibal/sdk/ops';
+import type { AllowlistStatus, GameAccess, HolderWlView, MintPriceQuote } from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { formatEther, type Address, type Hex } from 'viem';
 import { ArcGauge, GasAmount, Icon, type CoinMood } from '../design';
-import { Addr, Advanced, Btn, Card, FormError, Input, NeedsSession, Row, useFormError, type ChainCtx } from './ui';
+import { Addr, Advanced, Btn, Card, FormError, Input, NeedsSession, Row, useFormError, useOwnAddress, type ChainCtx } from './ui';
 import { readOwner, type Plan } from './plan';
 import { EmblemsCard } from './EmblemsCard';
 
@@ -43,15 +43,14 @@ export function allowlistWarnings(a: AllowlistStatus | null, onchainRoot: string
 }
 
 /**
- * `/admin → Mint`: the ElymumNFT owner's decisions (the phase switch, the price, the supply and
+ * `/admin → Mint`: the CoinnibalNFT owner's decisions (the phase switch, the price, the supply and
  * limits, withdraw), each through the transaction preview. Address fields (treasury, royalty
  * receiver, owner mint, keeper) sit under Advanced, prefilled.
  */
-export function MintTab({ ctx }: { ctx: ChainCtx }) {
+/** The registered NFT's `owner()`, re-read with every status read (the preview's owner check). */
+function useNftOwner(ctx: ChainCtx): Address | null {
   const nft = ctx.net.nftAddress;
-  const s = ctx.status?.nft?.state ?? null;
   const [nftOwner, setNftOwner] = useState<Address | null>(null);
-  const [gasUsd, setGasUsd] = useState<number | null>(null);
   useEffect(() => {
     if (!nft || !ctx.client) return;
     let live = true;
@@ -63,26 +62,18 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
       live = false;
     };
   }, [nft, ctx.client, ctx.status]);
+  return nftOwner;
+}
 
-  if (!nft) return <Card title="No NFT yet" id="mint" tone="quiet" lede="Deploy ElymumNFT first (Setup). The mint has nothing to run until then." />;
-  if (!s)
-    return (
-      <Card
-        title={ctx.status?.nft?.code === 'mismatch' ? 'That is not our NFT' : 'Reading the NFT…'}
-        id="mint"
-        tone={ctx.status?.nft?.code === 'mismatch' ? 'danger' : 'quiet'}
-        lede={ctx.status?.nft?.code === 'mismatch' ? 'The code at the registered NFT address is not the bundled ElymumNFT.' : 'One moment: asking the chain.'}
-      />
-    );
-
-  /**
-   * A plan on the NFT: owner-checked, re-reads the status after, and has the server re-read the NFT
-   * (the public mint page shows the new phase, root or price at once instead of a cached state).
-   */
-  const open = (title: string, call: Plan['call'], extra: Partial<Plan> = {}) =>
+/**
+ * A plan on the NFT: owner-checked, re-reads the status after, and has the server re-read the NFT
+ * (the public mint page shows the new phase, root or price at once instead of a cached state).
+ */
+function nftOpener(ctx: ChainCtx, nft: Address, nftOwner: Address | null): OpenFn {
+  return (title, call, extra = {}) =>
     ctx.open({
       title,
-      contract: 'ElymumNFT',
+      contract: 'CoinnibalNFT',
       call,
       ownerOf: nft,
       owner: nftOwner,
@@ -95,6 +86,43 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
         }
       },
     });
+}
+
+/** The start screen's Mint: the phase switch and the count. Every other mint control stays in the Mint drawer. */
+export function MintSwitch({ ctx }: { ctx: ChainCtx }) {
+  const nft = ctx.net.nftAddress;
+  const s = ctx.status?.nft?.state ?? null;
+  const nftOwner = useNftOwner(ctx);
+  if (!nft) return <Card title="No NFT yet" id="mint-switch" tone="quiet" lede="Deploy the contracts first (Start → Deploy the contracts)." />;
+  if (!s) return <Card title="Reading the NFT…" id="mint-switch" tone="quiet" lede="One moment: asking the chain." />;
+  return (
+    <>
+      <PhaseCard ctx={ctx} current={s.phaseName} open={nftOpener(ctx, nft, nftOwner)} simple />
+      <p className="ad-note" data-testid="mint-switch-count">
+        {s.totalSupply.toLocaleString('en-US')} of {s.maxSupply.toLocaleString('en-US')} minted.
+      </p>
+    </>
+  );
+}
+
+export function MintTab({ ctx }: { ctx: ChainCtx }) {
+  const nft = ctx.net.nftAddress;
+  const s = ctx.status?.nft?.state ?? null;
+  const nftOwner = useNftOwner(ctx);
+  const [gasUsd, setGasUsd] = useState<number | null>(null);
+
+  if (!nft) return <Card title="No NFT yet" id="mint" tone="quiet" lede="Deploy CoinnibalNFT first (Setup). The mint has nothing to run until then." />;
+  if (!s)
+    return (
+      <Card
+        title={ctx.status?.nft?.code === 'mismatch' ? 'That is not our NFT' : 'Reading the NFT…'}
+        id="mint"
+        tone={ctx.status?.nft?.code === 'mismatch' ? 'danger' : 'quiet'}
+        lede={ctx.status?.nft?.code === 'mismatch' ? 'The code at the registered NFT address is not the bundled CoinnibalNFT (the code hash differs), so the server does not use it. Redeploy CoinnibalNFT from your wallet (Setup).' : 'One moment: asking the chain.'}
+      />
+    );
+
+  const open = nftOpener(ctx, nft, nftOwner);
   const balance = ctx.status?.nft?.balance ?? 0n;
   const usdOf = (wei: bigint) => (gasUsd !== null ? (Number(wei) / 1e18) * gasUsd : null);
 
@@ -105,7 +133,7 @@ export function MintTab({ ctx }: { ctx: ChainCtx }) {
           Mint status
         </h2>
         <div className="ad-glance__gauge">
-          <ArcGauge value={s.totalSupply} max={s.maxSupply} size={150} tone="sun" caption={s.soldOut ? 'Sold out. Well done.' : `${s.maxSupply - s.totalSupply} emblems still sealed.`} />
+          <ArcGauge value={s.totalSupply} max={s.maxSupply} size={150} tone="sun" caption={s.soldOut ? 'Sold out. Well done.' : `${s.maxSupply - s.totalSupply} NFTs still sealed.`} />
         </div>
         <dl className="ad-glance__figs">
           <div>
@@ -183,20 +211,23 @@ type OpenFn = (title: string, call: Plan['call'], extra?: Partial<Plan>) => void
 const PHASE_COPY: Record<MintPhaseName, { title: string; line: string; mood: CoinMood }> = {
   closed: { title: 'Closed', line: 'Sealed. For now.', mood: 'sleepy' },
   allowlist: { title: 'Allowlist', line: 'Only wallets in the root may mint.', mood: 'smug' },
-  public: { title: 'Public', line: `Anyone with a dollar of ${GAS_SYMBOL}.`, mood: 'happy' },
+  public: { title: 'Public', line: 'Any wallet may mint.', mood: 'happy' },
 };
 
 /**
  * Whether the phase switch may also open the game to holders: only while the game is still closed to
  * everyone but the admins (never narrows "public" down to "holders"), and not when GAME_ACCESS pins it.
+ * The box starts unchecked: the launch order is the NFT mint, then the token, then the game, so the game
+ * opens last (Game → Who may play) unless the owner ticks it.
  */
 export function offerHolderAccess(access: { settings: { gameAccess: GameAccess }; gameAccessEnv?: GameAccess | null } | null): boolean {
   return !!access && !access.gameAccessEnv && access.settings.gameAccess === 'admins';
 }
 
-function PhaseCard({ ctx, current, open }: { ctx: ChainCtx; current: MintPhaseName; open: OpenFn }) {
+function PhaseCard({ ctx, current, open, simple = false }: { ctx: ChainCtx; current: MintPhaseName; open: OpenFn; simple?: boolean }) {
   const [phase, setPhase] = useState<MintPhaseName>(current === 'closed' ? 'allowlist' : current);
-  const [activate, setActivate] = useState(true);
+  // unchecked by default: the game opens last, after the token and the rooms (the launch order)
+  const [activate, setActivate] = useState(false);
   // who may play now: the holders switch is offered only while the game is admins-only
   const [access, setAccess] = useState<{ settings: { gameAccess: GameAccess }; gameAccessEnv?: GameAccess | null } | null>(null);
   useEffect(() => {
@@ -215,7 +246,16 @@ function PhaseCard({ ctx, current, open }: { ctx: ChainCtx; current: MintPhaseNa
   const offer = phase !== 'closed' && offerHolderAccess(access);
   const withAccess = offer && activate;
   return (
-    <Card title="Start / stop the mint" id="mint-phase" kicker={`Now: ${current}`} lede="Closed → Allowlist → Public. Pick one, then preview the switch. Opening the mint can open the game to holders in the same go. Visitors see the mint page only while “Mint page open” is on in Settings.">
+    <Card
+      title="Start / stop the mint"
+      id="mint-phase"
+      kicker={`Now: ${current}`}
+      lede={
+        simple
+          ? 'Closed, Allowlist or Public. Pick one; your wallet confirms the switch. Visitors see the mint page while “Mint page open” is on in Settings.'
+          : 'Closed → Allowlist → Public. Pick one, then preview the switch. Opening the mint can also open the game to holders, but the game opens last: tick that only once the token and the rooms are set. Visitors see the mint page only while “Mint page open” is on in Settings.'
+      }
+    >
       <div className="ad-switchrow" role="radiogroup" aria-label="Mint phase">
         <span className="ad-switchrow__label mono">Mint phase</span>
         <div className="ad-switchrow__segs">
@@ -234,7 +274,7 @@ function PhaseCard({ ctx, current, open }: { ctx: ChainCtx; current: MintPhaseNa
           <input type="checkbox" checked={activate} onChange={() => setActivate(!activate)} />
           <span>
             Activate the game for holders
-            <span className="ad-check__sub">Saves “Who may play: NFT holders” after the receipt.</span>
+            <span className="ad-check__sub">Saves “Who may play: NFT holders” after the receipt. Leave it unchecked until the game token and the rooms are set.</span>
           </span>
         </label>
       )}
@@ -528,7 +568,7 @@ function MetadataCard({ frozen, open, nft }: { frozen: boolean; open: OpenFn; nf
       </div>
       <div className="ad-dangerrow">
         <p>
-          <strong>Freeze the metadata.</strong> Every emblem keeps its URI forever. You will type FREEZE to confirm.
+          <strong>Freeze the metadata.</strong> Every NFT keeps its URI forever. You will type FREEZE to confirm.
         </p>
         <Btn danger icon="lock" testId="mint-freeze" onClick={() => open('Freeze the metadata forever', freezeMetadataCall(nft), { confirmText: 'FREEZE', note: 'This can never be undone.' })}>
           Freeze metadata
@@ -542,7 +582,7 @@ function MetadataCard({ frozen, open, nft }: { frozen: boolean; open: OpenFn; nf
 function RoyaltyCard({ me, open, nft, treasury }: { me: Address | null; open: OpenFn; nft: Address; treasury: Address }) {
   const [to, setTo] = useState<string>(treasury);
   const [bps, setBps] = useState('500');
-  const [t, setT] = useState<string>(treasury ?? me ?? '');
+  const [t, setT] = useOwnAddress(me, treasury);
   const [err, guard] = useFormError();
   return (
     <Card title="Royalty and treasury" id="mint-royalty" lede="ERC-2981 royalty (at most 10 %), and where withdraw() sends the proceeds.">
@@ -561,7 +601,7 @@ function RoyaltyCard({ me, open, nft, treasury }: { me: Address | null; open: Op
 }
 
 function OwnerMintCard({ me, open, nft }: { me: Address | null; open: OpenFn; nft: Address }) {
-  const [to, setTo] = useState<string>(me ?? '');
+  const [to, setTo] = useOwnAddress(me);
   const [qty, setQty] = useState('1');
   const [err, guard] = useFormError();
   return (
@@ -579,7 +619,7 @@ function OwnerMintCard({ me, open, nft }: { me: Address | null; open: OpenFn; nf
 /** "12 wallets (15 emblems) · 3 also on the WL · imported 20:15 from chain 46630". */
 export function importLine(v: HolderWlView): string {
   const c = v.counts;
-  const parts = [`${c.wallets} ${c.wallets === 1 ? 'wallet' : 'wallets'} (${c.tokens} ${c.tokens === 1 ? 'emblem' : 'emblems'})`, `${c.alsoWl} also on the WL`];
+  const parts = [`${c.wallets} ${c.wallets === 1 ? 'wallet' : 'wallets'} (${c.tokens} ${c.tokens === 1 ? 'NFT' : 'NFTs'})`, `${c.alsoWl} also on the WL`];
   if (v.importedAt) parts.push(`imported ${new Date(v.importedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}${v.importedFrom ? ` from chain ${v.importedFrom}` : ''}`);
   return parts.join(' · ');
 }
@@ -617,7 +657,7 @@ export function ImportHoldersCard({ ctx }: { ctx: ChainCtx }) {
     } catch (e) {
       const status = (e as { status?: number }).status;
       if (status === 404) setView(null);
-      else if (status === 409) setErr('There is no emblem contract on the testnet to read holders from.');
+      else if (status === 409) setErr('There is no NFT contract on the testnet to read holders from.');
       else if (status === 502 || status === 503) setErr(`The testnet did not answer: ${(e as Error).message} Try again in a minute.`);
       else setErr((e as Error).message);
     } finally {
@@ -629,8 +669,8 @@ export function ImportHoldersCard({ ctx }: { ctx: ChainCtx }) {
     <Card
       title="Import testnet holders into the WL"
       id="mint-import"
-      kicker="Testnet emblem → mainnet WL"
-      lede="Adds every wallet holding a testnet emblem to the mainnet allowlist, marked with its source. Safe to run again: it re-reads the holders and replaces the last import. Build the allowlist after it."
+      kicker="Testnet NFT → mainnet WL"
+      lede="Adds every wallet holding a testnet NFT to the mainnet allowlist, marked with its source. Safe to run again: it re-reads the holders and replaces the last import. Build the allowlist after it."
     >
       <div className="ad-actions">
         <Btn primary disabled={!ctx.api || missing || view === undefined || busy} onClick={() => void run()} testId="mint-import">

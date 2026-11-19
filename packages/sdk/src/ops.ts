@@ -4,10 +4,10 @@
  * mirror the contracts' checks, the status read, and the default-arena plan. Previews of the
  * calls come from `describeCall` (call.ts).
  *
- * Browser-safe (no Node built-ins). Imported as `@elymum/sdk/ops`; it is deliberately not
+ * Browser-safe (no Node built-ins). Imported as `@coinnibal/sdk/ops`; it is deliberately not
  * re-exported from the SDK entry point, so the game bundle does not carry the admin code.
  */
-import { arenaMeta, chainInfo, isTestChainId, type ChainInfo } from '@elymum/shared';
+import { arenaMeta, chainInfo, isTestChainId, type ChainInfo } from '@coinnibal/shared';
 import { getAddress, isAddress, type Address, type PublicClient } from 'viem';
 import {
   defaultArenaParams,
@@ -27,7 +27,7 @@ import { getCodeHash } from './chain';
 import { MAX_ARENA_SESSIONS, MAX_TOTAL_FEE_BPS, MIN_ARENA_SESSIONS } from './constants';
 import { formatBps, formatTokenAmount, isZeroAddress, parseGasAmount, parseTokenAmount, sameAddress } from './format';
 import { getMintState, type MintState } from './nft';
-import { elymumArenaArtifact, elymumNFTArtifact, testTokenArtifact } from '@elymum/contracts';
+import { coinnibalArenaArtifact, coinnibalNFTArtifact, testTokenArtifact } from '@coinnibal/contracts';
 
 export { describeCall, describeCallLine, type DescribedCall, type DescribedArg } from './call';
 
@@ -255,9 +255,9 @@ async function codeCheck(client: PublicClient, address: Address, expected: `0x${
   return h === null ? 'missing' : h === expected ? 'ok' : 'mismatch';
 }
 
-/** Checks a deployed address against a bundled artifact (`ElymumArena` v3, `ElymumNFT`, `TestToken`). */
+/** Checks a deployed address against a bundled artifact (`CoinnibalArena` v4, `CoinnibalNFT`, `TestToken`). */
 export async function checkDeployedCode(client: PublicClient, address: Address, kind: 'arena' | 'nft' | 'token'): Promise<CodeCheck> {
-  const expected = kind === 'arena' ? elymumArenaArtifact.runtimeCodeHash : kind === 'nft' ? elymumNFTArtifact.runtimeCodeHash : testTokenArtifact.runtimeCodeHash;
+  const expected = kind === 'arena' ? coinnibalArenaArtifact.runtimeCodeHash : kind === 'nft' ? coinnibalNFTArtifact.runtimeCodeHash : testTokenArtifact.runtimeCodeHash;
   return codeCheck(client, address, expected);
 }
 
@@ -293,7 +293,7 @@ export async function fetchStatus(
   }
   let nft: StatusSnapshot['nft'] = null;
   if (where.nft) {
-    const code = await codeCheck(client, where.nft, elymumNFTArtifact.runtimeCodeHash);
+    const code = await codeCheck(client, where.nft, coinnibalNFTArtifact.runtimeCodeHash);
     const state = code === 'missing' ? null : await getMintState(client, where.nft);
     nft = { address: getAddress(where.nft), code, state, balance: await client.getBalance({ address: where.nft }) };
   }

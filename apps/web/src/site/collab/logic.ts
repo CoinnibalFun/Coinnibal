@@ -3,18 +3,19 @@ import {
   COLLAB_ROLES,
   COLLAB_TYPES,
   SITE_LIMITS,
+  activeChain,
   isXStatusUrl,
   normalizeXHandle,
   type CollabApplyRequest,
   type CollabRole,
   type CollabType,
   type CollabWalletRow,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 
 import { siteHost } from '../settings';
 
 export { ROLE_LABEL, TYPE_LABEL, roleLabel, typeLabel } from './labels';
-import { intlLocale, t } from '../../i18n';
+import { intlLocale, plainChainName, t } from '../../i18n';
 
 export interface ApplyDraft {
   community: string;
@@ -165,7 +166,8 @@ export function rafflePost(community: string, spots: number | null, deadline: nu
   return [
     t('cb.post.title', { community: community || t('cb.post.ours') }),
     '',
-    spots ? t('cb.post.spotsN', { n: spots }) : t('cb.post.spots'),
+    // a visitor post names the network plainly (no "Testnet")
+    spots ? t('cb.post.spotsN', { n: spots, chain: plainChainName(activeChain().name) }) : t('cb.post.spots', { chain: plainChainName(activeChain().name) }),
     '',
     t('cb.post.enter'),
     t('cb.post.s1'),

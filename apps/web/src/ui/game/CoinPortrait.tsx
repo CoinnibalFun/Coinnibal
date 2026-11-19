@@ -1,4 +1,4 @@
-import { PICTURE_R, type CoinLook, type Expression } from '@elymum/art';
+import { PICTURE_R, type CoinLook, type Expression } from '@coinnibal/art';
 import { useEffect, useRef, useState } from 'react';
 import { useReducedMotion } from '../../design';
 import { avatars } from '../../render/avatars';

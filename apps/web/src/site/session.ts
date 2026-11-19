@@ -1,6 +1,6 @@
 import { getAddress } from 'viem';
 import { create } from 'zustand';
-import { describeError } from '@elymum/sdk';
+import { describeError } from '@coinnibal/sdk';
 import { allowedDomains, expectedLoginMessage, fetchNonce, type MessageSigner, type NonceResponse } from '../wallet/siwe';
 import { t } from '../i18n';
 import { SiteApiError, auth, onAdminSessionExpired } from './api';
@@ -8,7 +8,7 @@ import { SiteApiError, auth, onAdminSessionExpired } from './api';
 /**
  * The site's wallet session: a SIWE (EIP-4361) sign-in over HTTP (`POST /api/auth/login`), free
  * and with no transaction. The token is the game server's 24 h session token; it is kept under
- * the same key the game engine reads (`elymum.auth.v1`), so an admin who signs in on `/admin`
+ * the same key the game engine reads (`coinnibal.auth.v1`), so an admin who signs in on `/admin`
  * plays on `/play` without signing again.
  */
 export type { SiteSession } from './storedSession';

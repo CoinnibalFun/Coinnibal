@@ -1,9 +1,9 @@
 import { useId, type ReactNode } from 'react';
-import { Chip } from '../../design';
+import { Chip, Icon } from '../../design';
 import { sound } from '../../audio';
 import { APP_VERSION } from '../../config';
 import { useT, type TKey } from '../../i18n';
-import { updateSettings, useUi, type Settings } from '../../store';
+import { openModal, updateSettings, useUi, type Settings } from '../../store';
 import { MusicPicker } from './MusicPicker';
 
 type Flag = 'showNames' | 'showMass' | 'showChat' | 'showEmotes' | 'showFps';
@@ -126,6 +126,11 @@ export function SettingsPage() {
         ))}
       </div>
       <div className="gs-foot">
+        {/* the in-game settings sheet on a phone is where the Feedback key lives (the top bar keeps three keys) */}
+        <button type="button" className="kl-link mono gs-feedback" onClick={() => openModal('feedback')} data-testid="settings-feedback">
+          <Icon name="feedback" size={16} />
+          {t('gs.feedback')}
+        </button>
         <span className="gs-version mono">{t('st.version', { v: APP_VERSION })}</span>
       </div>
     </div>

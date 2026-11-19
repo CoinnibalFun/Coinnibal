@@ -1,4 +1,4 @@
-import { parseShopCartRef, shopCartRef, shopPaymentRef, type ShopView } from '@elymum/shared';
+import { parseShopCartRef, shopCartRef, shopPaymentRef, type ShopView } from '@coinnibal/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chainStatus, ONE } from './evm-helpers';
 
@@ -6,9 +6,9 @@ const spies = vi.hoisted(() => ({ sendWalletCall: vi.fn(), getAllowance: vi.fn()
 // the pin and code-hash check (pinned.test.ts): this test's arena passes unless a test says otherwise
 vi.mock('../src/wallet/pinned', async (orig) => ({ ...(await orig<typeof import('../src/wallet/pinned')>()), verifyArena: spies.verifyArena }));
 vi.mock('../src/wallet/tx', async (orig) => ({ ...(await orig<typeof import('../src/wallet/tx')>()), sendWalletCall: spies.sendWalletCall }));
-vi.mock('@elymum/sdk', async (orig) => ({ ...(await orig<typeof import('@elymum/sdk')>()), getAllowance: spies.getAllowance }));
+vi.mock('@coinnibal/sdk', async (orig) => ({ ...(await orig<typeof import('@coinnibal/sdk')>()), getAllowance: spies.getAllowance }));
 
-import { ShopError, buyCart, buyPack, cartTotals, loadPendingClaim, savePendingClaim } from '../src/wallet/shop';
+import { ShopError, buyCart, buyPack, cartTotals, loadPendingClaims, settleCartClaim } from '../src/wallet/shop';
 
 const OWNER = '0x1111111111111111111111111111111111111111';
 const ARENA = '0x00000000000000000000000000000000000a4e4a';
@@ -16,7 +16,7 @@ const TOKEN = '0x0000000000000000000000000000000000000707';
 const HASH = `0x${'4'.repeat(64)}`;
 const VIEW: ShopView = {
   open: true,
-  token: { address: TOKEN, symbol: 'tELYMUM', decimals: 18 },
+  token: { address: TOKEN, symbol: 'TEST', decimals: 18 },
   payTo: ARENA,
   burnBps: 5000,
   packs: [{ kind: 'leap', charges: 3, priceRaw: (900n * ONE).toString(), fullPriceRaw: (900n * ONE).toString(), enabled: true }],
@@ -36,10 +36,10 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
-  savePendingClaim(null);
+  localStorage.clear();
 });
 
-describe('buyPack: a power-up pack is paid with ElymumArena.pay', () => {
+describe('buyPack: a power-up pack is paid with CoinnibalArena.pay', () => {
   it('approves the arena for exactly the price when the allowance is short, then pays with the pack ref', async () => {
     spies.getAllowance.mockResolvedValue(0n);
     const r = await buyPack(VIEW, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() });
@@ -67,7 +67,7 @@ describe('buyPack: a power-up pack is paid with ElymumArena.pay', () => {
     spies.sendWalletCall.mockImplementationOnce(async () => ({ ok: false, hash: null, error: { kind: 'rejected', name: 'UserRejected', args: [], code: 4001, message: 'no' } }));
     await expect(buyPack(VIEW, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() })).rejects.toMatchObject({ code: 'rejected' });
     expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
-    expect(loadPendingClaim(OWNER)).toBeNull();
+    expect(loadPendingClaims(OWNER)).toEqual([]);
     await expect(buyPack({ ...VIEW, payTo: null }, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() })).rejects.toBeInstanceOf(ShopError);
     await expect(buyPack({ ...VIEW, open: false }, VIEW.packs[0], { token: 'tok', owner: OWNER, chain: chainStatus() })).rejects.toMatchObject({ code: 'shop_closed' });
   });
@@ -81,7 +81,7 @@ describe('buyPack: a power-up pack is paid with ElymumArena.pay', () => {
   });
 });
 
-describe('buyCart: several power-ups, one ElymumArena.pay', () => {
+describe('buyCart: several power-ups, one CoinnibalArena.pay', () => {
   const CART_VIEW: ShopView = {
     ...VIEW,
     holder: true,
@@ -112,14 +112,33 @@ describe('buyCart: several power-ups, one ElymumArena.pay', () => {
     expect(parseShopCartRef(calls[1].args[1] as string)).toEqual(cart);
     const body = JSON.parse(((fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0][1].body as string) ?? '{}');
     expect(body).toEqual({ cart, txHash: HASH });
-    expect(loadPendingClaim(OWNER)).toBeNull();
+    expect(loadPendingClaims(OWNER)).toEqual([]);
   });
 
   it('keeps a paid cart whose claim did not get through, to claim it again without paying twice', async () => {
     spies.getAllowance.mockResolvedValue(10n ** 30n);
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))));
     await expect(buyCart(CART_VIEW, cart, { token: 'tok', owner: OWNER, chain: chainStatus(), retryMs: [0] })).rejects.toBeInstanceOf(ShopError);
-    expect(loadPendingClaim(OWNER)).toMatchObject({ txHash: HASH, cart });
+    expect(loadPendingClaims(OWNER)).toMatchObject([{ txHash: HASH, cart }]);
     expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second purchase whose claim also fails is kept beside the first, never over it (audit S12)', async () => {
+    spies.getAllowance.mockResolvedValue(10n ** 30n);
+    const SECOND = `0x${'5'.repeat(64)}`;
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))));
+    await expect(buyCart(CART_VIEW, cart, { token: 'tok', owner: OWNER, chain: chainStatus(), retryMs: [0] })).rejects.toBeInstanceOf(ShopError);
+    spies.sendWalletCall.mockImplementation(async () => ({ ok: true, hash: SECOND, receipt: { status: 'success', logs: [] } }));
+    await expect(buyCart(CART_VIEW, cart, { token: 'tok', owner: OWNER, chain: chainStatus(), retryMs: [0] })).rejects.toBeInstanceOf(ShopError);
+    // another wallet of this browser buys too: its claim is its own
+    const OTHER = '0x2222222222222222222222222222222222222222';
+    await expect(buyCart(CART_VIEW, cart, { token: 'tok', owner: OTHER, chain: chainStatus(), retryMs: [0] })).rejects.toBeInstanceOf(ShopError);
+    expect(loadPendingClaims(OWNER).map((c) => c.txHash)).toEqual([HASH, SECOND]);
+    expect(loadPendingClaims(OTHER).map((c) => c.txHash)).toEqual([SECOND]);
+    // the second one is credited: only it is dropped
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(credited), { status: 200 })));
+    await settleCartClaim('tok', OWNER, cart, SECOND, { retryMs: [0] });
+    expect(loadPendingClaims(OWNER).map((c) => c.txHash)).toEqual([HASH]);
+    expect(loadPendingClaims(OTHER).map((c) => c.txHash)).toEqual([SECOND]);
   });
 });

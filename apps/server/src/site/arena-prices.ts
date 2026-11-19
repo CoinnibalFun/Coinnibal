@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ARENA_PRICING_DEFAULT, applyArenaPricing, type ArenaPricesView, type ArenaPricingSettings } from '@elymum/shared';
+import { ARENA_PRICING_DEFAULT, applyArenaPricing, type ArenaPricesView, type ArenaPricingSettings } from '@coinnibal/shared';
 import { priceSource, type TokenPriceReading } from '../chain/token-price';
 
 /**
- * The admin's arena pricing in US dollars (`@elymum/shared` `arena-pricing.ts`): the tiers ($1 / $3 / $5 / $10, the
+ * The admin's arena pricing in US dollars (`@coinnibal/shared` `arena-pricing.ts`): the tiers ($1 / $3 / $5 / $10, the
  * $10 one holders-only), the price source and the manual token price, the rounding. Kept per chain (the price belongs
  * to that chain's token): `DATA_DIR/chains/<id>/arena-prices.json`, atomic writes.
  *

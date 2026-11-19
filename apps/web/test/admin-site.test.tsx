@@ -1,9 +1,8 @@
-import type { CollabAdmin, SiteCounts, WlEntryAdmin, WlTask } from '@elymum/shared';
+import type { CollabAdmin, SiteCounts, WlEntryAdmin, WlTask } from '@coinnibal/shared';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CollabsTab } from '../src/admin/site/CollabsTab';
-import { PlayTab } from '../src/admin/site/PlayTab';
 import { SettingsTab } from '../src/admin/site/SettingsTab';
 import { TasksTab } from '../src/admin/site/TasksTab';
 import { WlTab } from '../src/admin/site/WlTab';
@@ -19,7 +18,7 @@ const wl = (id: string, xHandle: string): WlEntryAdmin => ({
   wallet: W,
   xHandle,
   status: 'pending',
-  tasks: [{ id: 'post_x', kind: 'post_x', title: 'Post about Elymum', target: null, required: true, answer: 'https://x.com/a/status/1' }],
+  tasks: [{ id: 'post_x', kind: 'post_x', title: 'Post about Coinnibal', target: null, required: true, answer: 'https://x.com/a/status/1' }],
   createdAt: 1,
   updatedAt: 1,
   note: '',
@@ -59,14 +58,6 @@ const ui = (node: ReactElement) => render(<Kb>{node}</Kb>);
 const sent = (method: string, path: string) => calls.find((c) => c.method === method && c.path === path);
 
 describe('admin: site tabs (Bearer session, mocked fetch)', { timeout: 30_000 }, () => {
-  it('Play opens /play and says whether the game is admin-only', async () => {
-    ({ calls, restore } = mockFetch({ 'GET /api/admin/settings': { settings: SETTINGS, gameAccessEnv: null } }));
-    ui(<PlayTab api={api} />);
-    expect(await screen.findByText('Admins only')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open the arena' }).getAttribute('href')).toBe('/play');
-    expect(calls[0].auth).toBe('Bearer admin-token');
-  });
-
   it('WL: counts, then approve in bulk; a row opens a detail with clickable links', async () => {
     ({ calls, restore } = mockFetch({
       'GET /api/admin/wl': { items: [wl('w1', 'alice'), wl('w2', 'bob')], total: 2, page: 1, pageSize: 50 },
@@ -109,10 +100,10 @@ describe('admin: site tabs (Bearer session, mocked fetch)', { timeout: 30_000 },
     expect(await screen.findByText('A title is required.')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Join our Discord' } });
     fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'join_link' } });
-    fireEvent.change(screen.getByLabelText('Target'), { target: { value: 'https://discord.gg/elymum' } });
+    fireEvent.change(screen.getByLabelText('Target'), { target: { value: 'https://discord.gg/coinnibal' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create task' }));
     await screen.findByText('Task created.');
-    expect(sent('POST', '/api/admin/tasks')?.body).toEqual({ kind: 'join_link', title: 'Join our Discord', body: '', target: 'https://discord.gg/elymum', required: true, enabled: true });
+    expect(sent('POST', '/api/admin/tasks')?.body).toEqual({ kind: 'join_link', title: 'Join our Discord', body: '', target: 'https://discord.gg/coinnibal', required: true, enabled: true });
     fireEvent.click(screen.getByRole('button', { name: 'Move Task a down' }));
     await waitFor(() => expect(sent('PUT', '/api/admin/tasks/order')?.body).toEqual({ ids: ['b', 'a', 't_new'] }));
   });
@@ -188,6 +179,7 @@ describe('admin: site tabs (Bearer session, mocked fetch)', { timeout: 30_000 },
     restore();
     ({ calls, restore } = mockFetch({ 'GET /api/admin/settings': { settings: SETTINGS, gameAccessEnv: 'public' } }));
     ui(<SettingsTab api={api} />);
-    expect(await screen.findByText(/GAME_ACCESS=public is set on the server/)).toBeTruthy();
+    // the key the owner edits on the VPS (docker-compose.yml maps it to GAME_ACCESS), not only the server's own name
+    expect(await screen.findByText(/GAME_ACCESS=public is set on the server \(COINNIBAL_GAME_ACCESS in \/opt\/elymum\/\.env on the VPS\): it wins/)).toBeTruthy();
   });
 });

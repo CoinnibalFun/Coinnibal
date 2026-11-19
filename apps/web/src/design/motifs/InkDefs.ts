@@ -25,6 +25,14 @@ const MARKUP = `
   <feDisplacementMap in="SourceGraphic" in2="n" scale="2.2" xChannelSelector="R" yChannelSelector="G"/>
 </filter>`;
 
+const STYLE = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none';
+
+/**
+ * The same SVG as markup: the prerendered landing ships it at the end of its `<body>` (outside `#root`), so its first
+ * paint already has the inked edges and `ensureInkDefs` finds it there.
+ */
+export const INK_DEFS_HTML = `<svg id="${ID}" aria-hidden="true" focusable="false" width="0" height="0" style="${STYLE}"><defs>${MARKUP.trim()}</defs></svg>`;
+
 export function ensureInkDefs(doc: Document | undefined = typeof document === 'undefined' ? undefined : document): void {
   if (!doc?.body || doc.getElementById(ID)) return;
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -33,7 +41,7 @@ export function ensureInkDefs(doc: Document | undefined = typeof document === 'u
   svg.setAttribute('focusable', 'false');
   svg.setAttribute('width', '0');
   svg.setAttribute('height', '0');
-  svg.setAttribute('style', 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none');
+  svg.setAttribute('style', STYLE);
   svg.innerHTML = `<defs>${MARKUP}</defs>`;
   doc.body.appendChild(svg);
 }

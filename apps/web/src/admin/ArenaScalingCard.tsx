@@ -1,4 +1,4 @@
-import { ARENA_SCALING_LIMITS, type ArenaScalingSettings, type ArenaScalingView } from '@elymum/shared';
+import { ARENA_SCALING_LIMITS, type ArenaScalingSettings, type ArenaScalingView } from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { SiteApiError } from '../site/api';
 import { SwitchRow } from './GameTab';

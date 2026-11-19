@@ -1,4 +1,4 @@
-import type { ChainStatus, RoomInfo, ServerMessage } from '@elymum/shared';
+import type { ChainStatus, RoomInfo, ServerMessage } from '@coinnibal/shared';
 import { act, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -83,7 +83,7 @@ const UNSET: ChainStatus = {
   fees: null,
   serverKey: null,
 };
-const SET: ChainStatus = { ...UNSET, arenasEnabled: true, tokenReady: true, token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$ELYMUM', decimals: 18 } };
+const SET: ChainStatus = { ...UNSET, arenasEnabled: true, tokenReady: true, token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$NIBAL', decimals: 18 } };
 
 let engine: InstanceType<typeof GameEngine>;
 
@@ -92,7 +92,7 @@ beforeEach(() => {
   vi.stubGlobal('cancelAnimationFrame', () => {});
   net.sent = [];
   // a returning player: the first-play brief does not hold the join
-  localStorage.setItem('elymum.brief', '1');
+  localStorage.setItem('coinnibal.brief', '1');
   useUi.setState({ ...ui0, screen: 'lobby', page: 'play' }, true);
   engine = new GameEngine(document.createElement('canvas'));
   setEngine(engine);
@@ -168,7 +168,7 @@ describe('lobby while the game token is not set', () => {
     // an arena can now be picked; without a wallet its button asks to connect (the path to buying)
     act(() => arenas[0].click());
     expect(cta().textContent).toContain('Connect wallet');
-    expect(cta().textContent).toContain('$1 Room · 1,000 $ELYMUM');
+    expect(cta().textContent).toContain('$1 Room · 1,000 $NIBAL');
     expect(cta().disabled).toBe(false);
   });
 });
@@ -200,5 +200,16 @@ describe('lobby: the chain cannot be read, or its contract is not trusted', () =
     recv({ t: 'rooms', rooms: [PRACTICE, { ...ARENAS[0], round: { n, endsAt: (n + 1) * roundMs, joinsCloseAt: (n + 1) * roundMs - 30_000 } }], online: 2 });
     lobby();
     expect(screen.getByText('2-minute rounds · alive at the bell? You get paid')).toBeTruthy();
+  });
+});
+
+describe('lobby: the masthead', () => {
+  it('has a Feedback key next to the other header keys that opens the Feedback sheet', () => {
+    lobby();
+    const key = screen.getByTestId('lobby-feedback');
+    expect(key.getAttribute('aria-label')).toBe('Feedback');
+    expect(key.closest('.kl-mast__right')).not.toBeNull();
+    act(() => key.click());
+    expect(useUi.getState().modal).toBe('feedback');
   });
 });

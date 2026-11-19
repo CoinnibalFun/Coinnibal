@@ -3,7 +3,7 @@
  * People count everywhere; practice bots only in a testnet test arena (tagged BOT). A split coin is one coin; the same
  * person eaten again (a rejoin, same wallet) is one entry ×2. Names are cleaned for a share card and an X post.
  */
-import { EATEN_SHOWN, ROBINHOOD_TESTNET_CHAIN_ID, TICK_MS, eatenLine, shareName, type DeathStats, type ServerMessage } from '@elymum/shared';
+import { EATEN_SHOWN, ROBINHOOD_TESTNET_CHAIN_ID, TICK_MS, eatenLine, shareName, type DeathStats, type ServerMessage } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import type { Player } from '../src/game/entities';
 import { EatenTracker } from '../src/rooms/eaten';
@@ -185,7 +185,7 @@ describe('a room feeds the eaten list into my game-over stats', () => {
 
 describe('the app: a test arena result card', () => {
   it('the bell of a test arena sends a TEST card naming the eaten bots; the game counts in no profile', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-eaten-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-eaten-'));
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, TRUST_PROXY: '0', GAME_ACCESS: 'public', NODE_ENV: 'development' } as NodeJS.ProcessEnv);
     const app = await createApp(cfg, { chain: new ArenaChain([arena(1, FEE)]), log: () => {}, persist: false });
     try {

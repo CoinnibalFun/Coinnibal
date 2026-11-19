@@ -21,8 +21,8 @@ contract TestTokenTest is Test {
     }
 
     function test_metadata() public view {
-        assertEq(t.name(), "Elymum Test Token");
-        assertEq(t.symbol(), "tELYMUM");
+        assertEq(t.name(), "Coinnibal Test Token");
+        assertEq(t.symbol(), "TEST");
         assertEq(t.decimals(), 18);
         assertEq(t.owner(), owner);
         assertEq(t.FAUCET_AMOUNT(), 1_000_000 ether);

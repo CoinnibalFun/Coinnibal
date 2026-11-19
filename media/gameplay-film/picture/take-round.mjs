@@ -38,7 +38,7 @@ let stopAll = false;
 const H = { wx: 3200, wy: 3200, big: 30, mass: 20 };
 const plan = new Map();
 const loops = [];
-const pidOf = (p) => p.ui(() => window.__elymum.useUi.getState().me?.pid);
+const pidOf = (p) => p.ui(() => window.__coinnibal.useUi.getState().me?.pid);
 const distTo = (r) => (r.pos && !r.dead ? Math.hypot(r.pos.wx - H.wx, r.pos.wy - H.wy) : Infinity);
 const leftS = async () => ((await hero.round(ARENA))?.left ?? 0) / 1000;
 let rec;
@@ -141,7 +141,7 @@ async function guard(name, fn) {
   }
 }
 const ateLil = () => hero.ui((n) => window.__events.some((e) => e.k === 'kill' && e.v?.killer === 'Daphne' && e.v?.victim === n), lil.o.name);
-const screenOf = (pos) => hero.ui((q) => window.__elymum.engine.camera.toScreen(q.wx, q.wy), pos);
+const screenOf = (pos) => hero.ui((q) => window.__coinnibal.engine.camera.toScreen(q.wx, q.wy), pos);
 
 try {
   for (const p of [hero, ...rivals]) { await p.open(); await p.login(); }
@@ -176,14 +176,14 @@ try {
   await hero.page.waitForSelector('.tf-sheet .tf-pay', { timeout: 10000 });
   rec.mark('sheet');
   await hero.wait(700);
-  await hero.ui((ms) => { if (window.__elymumChain?.fakeWallet) window.__elymumChain.fakeWallet.delayMs = ms; }, 450);
+  await hero.ui((ms) => { if (window.__coinnibalChain?.fakeWallet) window.__coinnibalChain.fakeWallet.delayMs = ms; }, 450);
   const payB = await hand.box('.tf-sheet .tf-pay');
   await hand.move(payB.x + payB.width * 0.45, payB.y + payB.height * 0.5, 700);
   await hero.wait(150);
   rec.mark('pay');
   await hand.click(null, null, 0, { before: 0 });
   hero.cur = { x: hand.x, y: hand.y };
-  await hero.page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 25000 });
+  await hero.page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 25000 });
   rec.mark('enter', { left: await leftS() });
   hero.pid = await pidOf(hero);
 
@@ -211,7 +211,7 @@ try {
 
     // ── the threat: a much bigger coin (bonk_bae if it grew, else the nearest big bot) ──
     const big = () => hero.ui((k) => {
-      const e = window.__elymum.engine, w = e.world, mine = w.myCells();
+      const e = window.__coinnibal.engine, w = e.world, mine = w.myCells();
       if (!mine.length) return null;
       const c = mine.reduce((a, b) => (b.r > a.r ? b : a));
       let best = null;
@@ -244,7 +244,7 @@ try {
       await guard('grow', () => heroWhile(200_000, forage(), async () => H.mass < (GROW_SPLIT || 140)));
       // a smaller coin in split range (nothing big near where the half lands): aim, Space, follow
       const prey = () => hero.ui(() => {
-        const e = window.__elymum.engine, w = e.world, mine = w.myCells();
+        const e = window.__coinnibal.engine, w = e.world, mine = w.myCells();
         if (mine.length !== 1) return null;
         const c = mine[0];
         let best = null;
@@ -357,7 +357,7 @@ try {
   rec.mark('final', { left: await leftS() });
   await heroWhile(70_000, safe, async () => (await hero.screen()) === 'playing', { late: false });
   stopAll = true;
-  await hero.page.waitForFunction(() => !!window.__elymum.useUi.getState().roundResult, null, { timeout: 15000 }).catch(() => log('no round result'));
+  await hero.page.waitForFunction(() => !!window.__coinnibal.useUi.getState().roundResult, null, { timeout: 15000 }).catch(() => log('no round result'));
   rec.mark('bell');
   await hero.page.waitForSelector('.g-roundover__stamp', { timeout: 25000 }).catch(() => log('no PAID stamp'));
   rec.mark('paid');

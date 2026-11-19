@@ -1,7 +1,7 @@
 # Research: Robinhood Chain and Pons
 
 Coinnibal runs on **Robinhood Chain only**: Robinhood Chain Testnet now, Robinhood Chain (mainnet) later, switched by
-`CHAIN_ID` and nothing else. This page records what the code relies on, where each value comes from, and what is
+`CHAIN_ID` (the server) and a site rebuild for that chain with its contract pins (DEPLOY.md section 5). This page records what the code relies on, where each value comes from, and what is
 still unconfirmed. Researched 2026-11-05. The values used in code are in `packages/shared/src/chains.ts`.
 
 Status labels: **confirmed** (in the chain's or the project's own documentation), **third party** (a reputable
@@ -22,7 +22,7 @@ date it).
 | Explorer (Blockscout) | `https://explorer.testnet.chain.robinhood.com` | `https://robinhoodchain.blockscout.com` (verify API at `/api`) | confirmed |
 | Sequencer feed | | `wss://feed.mainnet.chain.robinhood.com` (+ a delayed feed) | confirmed |
 | Gas token | ETH (18 decimals) | ETH (18 decimals) | confirmed |
-| Faucet | `https://faucet.testnet.chain.robinhood.com`; Alchemy's faucet gives 0.1 ETH / 24 h | none | **third party** (Arbitrum's launch post of 2026-02-11 and BitGo's docs; not on docs.robinhood.com) |
+| Faucet | `https://faucet.testnet.chain.robinhood.com`; Alchemy's faucet gives 0.1 ETH / 24 h | none | confirmed ([docs.robinhood.com/chain/connecting](https://docs.robinhood.com/chain/connecting), checked 2026-11-18); Alchemy's faucet: third party |
 | Bridge | | Arbitrum's canonical bridge `https://portal.arbitrum.io/bridge?destinationChain=robinhood-chain&sourceChain=ethereum` (deposit ~10 min, withdrawal 7 days); also Stargate, Chainlink Transporter, Relay, Across, LiFi / 0x | confirmed (bridge list), timings per Arbitrum's docs |
 | Block time | ~100 ms | ~100 ms | **third party** (GetBlock, Chainstack); not stated by Robinhood |
 | EVM version | | | **inferred**: Arbitrum Nitro runs current EVM opcodes; our contracts compile for `shanghai` (`hardhat.config.ts`), which it supports |
@@ -68,7 +68,7 @@ From Robinhood's "differences from Ethereum" page (Arbitrum Nitro behaviour):
 The game token is meant to be launched on **Pons** ([docs.ponsfamily.com](https://docs.ponsfamily.com),
 [V2 docs](https://docs.ponsfamily.com/docs/v2); [Bitquery's Pons API docs](https://docs.bitquery.io/docs/blockchain/robinhood/pons-api/);
 an explainer: [BingX, "What is Pons"](https://bingx.com/en/learn/article/what-is-pons-crypto-and-how-does-pons-robinhood-launchpad-work), third party). V2 went live on 2026-08-04, on **Robinhood Chain mainnet only** (no testnet deployment): on the testnet
-the game uses the bundled `TestToken` (ERC20Burnable; its public `faucet()` gives 1,000,000 an hour, 2,000,000 to emblem holders, and only its owner mints otherwise).
+the game uses the bundled `TestToken` (ERC20Burnable; its public `faucet()` gives by default 1,000,000 an hour, 2,000,000 to emblem holders (the owner can change the amounts and the cooldown), and only its owner mints otherwise).
 
 | Fact | Value | Status |
 |---|---|---|
@@ -89,7 +89,7 @@ V1 (legacy docs): no curve, a Uniswap V3 pool from launch. Not relevant for a ne
 
 ### What this means for the arena
 
-- **Burn mode.** `ElymumArena` burns in one of two ways: mode 0 transfers to `0x…dEaD` (works with any ERC-20),
+- **Burn mode.** `CoinnibalArena` burns in one of two ways: mode 0 transfers to `0x…dEaD` (works with any ERC-20),
   mode 1 calls the token's own `burn(uint256)` and accepts it only if the arena's balance fell by exactly the amount
   (anything else falls back to `0x…dEaD`, or reverts on a partial burn). Because a Pons token's `burn()` is not
   documented, **deploy with mode 0** and switch to mode 1 only after `/admin` shows "the token has a working burn()"
@@ -106,8 +106,10 @@ V1 (legacy docs): no curve, a Uniswap V3 pool from launch. Not relevant for a ne
    Hardhat node used in development; any other chain id is refused (server `CHAIN_ID`, the RPC's `eth_chainId`, the
    web's `VITE_CHAIN_ID`, the admin CLI).
 2. **Gas is ETH** everywhere in the copy; the network name comes from the active network (testnet or mainnet).
-3. **The $1 mint is priced in ETH** from Hyperliquid's public `allMids` (key `ETH`), with the keeper's bounds and
+3. **The mint is priced in ETH** at the USD target `MINT_USD_CENTS` (default 100 US cents) from Hyperliquid's public
+   `allMids` (key `ETH`), with the keeper's bounds and
    two-reading confirmation (OPERATIONS.md).
-4. **The faucet URL is unconfirmed**: it is overridable with `GAS_FAUCET_URL`; check it before announcing the testnet.
+4. **The faucet URL is confirmed** (docs.robinhood.com/chain/connecting, 2026-11-18); `GAS_FAUCET_URL` still
+   overrides it.
 5. **Block time ~100 ms** is not relied on: the server polls receipts and logs by time, and the log window adapts
    (`LOG_CHUNK_BLOCKS`).

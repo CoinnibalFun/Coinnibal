@@ -1,5 +1,5 @@
 /**
- * The Elymum emblem collection, generated from a collection seed (docs/NFT-DESIGN.md):
+ * The Coinnibal emblem collection, generated from a collection seed (docs/NFT-DESIGN.md):
  *
  *  1. exact tier quotas (largest remainder of `TIER_SHARE`), shuffled by the seed into the "art order";
  *  2. each slot rolls its layers from its tier's weighted pools (`choicesFor`), rerolling on a broken
@@ -87,7 +87,7 @@ export function drawGenome(r: () => number, tier: Exclude<Tier, 'Mythic'>): Geno
   return cand;
 }
 
-/** Most rerolls a slot gets before its pools are taken as exhausted (never reached at 5,000). */
+/** Most rerolls a slot gets before its pools are taken as exhausted (never reached at the collection's 3,333). */
 const MAX_REROLLS = 10_000;
 
 /** The art order: `size` unique genomes. Throws when a tier's pools cannot hold its quota. */

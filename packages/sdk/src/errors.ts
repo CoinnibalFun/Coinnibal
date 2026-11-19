@@ -1,5 +1,5 @@
-import { GAS_SYMBOL } from '@elymum/shared';
-import { elymumArenaAbi, elymumNFTAbi, testTokenAbi } from '@elymum/contracts';
+import { GAS_SYMBOL } from '@coinnibal/shared';
+import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi } from '@coinnibal/contracts';
 import { BaseError, ContractFunctionRevertedError, decodeErrorResult, type Abi, type Hex } from 'viem';
 
 type AbiError = Extract<Abi[number], { type: 'error' }>;
@@ -12,9 +12,9 @@ type AbiError = Extract<Abi[number], { type: 'error' }>;
  */
 
 /** Every custom error the SDK can decode (both contracts, the TestToken and OZ ERC-20 errors), de-duplicated by name (same-named errors have the same selector). */
-export const ELYMUM_ERRORS_ABI: readonly AbiError[] = (() => {
+export const COINNIBAL_ERRORS_ABI: readonly AbiError[] = (() => {
   const seen = new Map<string, AbiError>();
-  for (const item of [...elymumArenaAbi, ...elymumNFTAbi, ...testTokenAbi] as readonly Abi[number][]) {
+  for (const item of [...coinnibalArenaAbi, ...coinnibalNFTAbi, ...testTokenAbi] as readonly Abi[number][]) {
     if (item.type === 'error' && !seen.has(item.name)) seen.set(item.name, item as AbiError);
   }
   return [...seen.values()];
@@ -22,7 +22,7 @@ export const ELYMUM_ERRORS_ABI: readonly AbiError[] = (() => {
 
 /** Player/admin-facing text per custom error name. */
 export const ERROR_MESSAGES: Readonly<Record<string, string>> = {
-  // ElymumArena
+  // CoinnibalArena
   ZeroAddress: 'An address must not be the zero address.',
   NotServer: 'Only the game server key can do that.',
   Paused: 'Coinnibal is paused for maintenance: arena joins are closed for now.',
@@ -52,11 +52,14 @@ export const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   NativeTransferFailed: 'The gas-token transfer failed.',
   RenounceDisabled: 'Ownership cannot be renounced.',
   HoldersOnly: 'This arena is for Coinnibal NFT holders only. Mint or hold the NFT to enter.',
+  PermitExpired: 'The ticket permit expired before the ticket was bought. Nothing was charged; try again.',
+  PermitTooFarAhead: 'The ticket permit runs too far ahead of the network clock. Nothing was charged; try again.',
+  InvalidPermit: 'The game server did not sign this ticket (or the permit was used already). Nothing was charged; try again.',
   SafeERC20FailedOperation: 'The token transfer failed.',
   ReentrancyGuardReentrantCall: 'Re-entrant call refused.',
   OwnableUnauthorizedAccount: 'Only the contract owner can do that. Connect the owner wallet.',
   OwnableInvalidOwner: 'That owner address is not valid.',
-  // ElymumNFT
+  // CoinnibalNFT
   ZeroQuantity: 'Choose at least one.',
   MintClosed: 'The mint is not open.',
   NotAllowlisted: 'This wallet is not on the allowlist.',
@@ -113,11 +116,11 @@ export interface DescribeContext {
   chainName?: string;
 }
 
-/** Decodes revert data (`0x` + selector + args) against `ELYMUM_ERRORS_ABI`; null when unknown. */
+/** Decodes revert data (`0x` + selector + args) against `COINNIBAL_ERRORS_ABI`; null when unknown. */
 export function decodeRevertData(data: Hex): { name: string; args: readonly unknown[] } | null {
   if (!/^0x[0-9a-fA-F]{8}/.test(data)) return null;
   try {
-    const r = decodeErrorResult({ abi: ELYMUM_ERRORS_ABI as Abi, data });
+    const r = decodeErrorResult({ abi: COINNIBAL_ERRORS_ABI as Abi, data });
     return { name: r.errorName, args: (r.args ?? []) as readonly unknown[] };
   } catch {
     return null;

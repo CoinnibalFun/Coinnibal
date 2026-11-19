@@ -1,7 +1,7 @@
 /**
  * Money simulation: real arena rooms (`Room`, the real world physics and ledger), the real journal on disk and
  * the real settlement worker (`EvmChain`) against a chain (the TypeScript model `FakeEvm`, or a real `hardhat node`
- * with the real ElymumArena v3: `hardhatSimChain` in `money-sim-hardhat.ts`). Random joins, eats, disconnects,
+ * with the real CoinnibalArena v4: `hardhatSimChain` in `money-sim-hardhat.ts`). Random joins, eats, disconnects,
  * reconnects, unplayed tickets, loot spills, integrity holds (released or settled at 0), players whose transfers
  * fail (two-phase payouts), RPC errors, ambiguous sends, lost receipts, RPC outages, room-worker crashes and server
  * restarts (graceful and hard).
@@ -23,8 +23,8 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { computeProfitFee, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, PlayerFlag, ROBINHOOD_TESTNET_CHAIN_ID, roundAt, TEST_ARENA_ARRIVE_MS, TEST_ARENA_BOTS, testArenaRoomId, TICK_MS, type CustomDifficulty, type ServerMessage } from '@elymum/shared';
-import type { ArenaInfo, SessionInfo } from '@elymum/sdk';
+import { computeProfitFee, DEFAULT_FEE_RATES, DEFAULT_HOLDER_FEE_RATES, PlayerFlag, ROBINHOOD_TESTNET_CHAIN_ID, roundAt, TEST_ARENA_ARRIVE_MS, TEST_ARENA_BOTS, testArenaRoomId, TICK_MS, type CustomDifficulty, type ServerMessage } from '@coinnibal/shared';
+import type { ArenaInfo, SessionInfo } from '@coinnibal/sdk';
 import { getAddress, type Address } from 'viem';
 import { generatePrivateKey } from 'viem/accounts';
 import { EvmChain } from '../src/chain/evm';
@@ -50,7 +50,7 @@ export interface Closure {
 /** What the simulation needs from a chain: the server's client plus the players' side and the books. */
 export interface SimChain {
   readonly name: string;
-  /** The ElymumArena contract. */
+  /** The CoinnibalArena contract. */
   readonly arenaAddress: Address;
   /** What the game server talks to (the simulation wraps it with faults). */
   readonly client: EvmClient;
@@ -179,8 +179,12 @@ export interface SimReport {
   /** Per arena (base units): deposited, paid to players, burned (fees + loot), fees to the fee wallet, forfeited. */
   books: Record<number, { deposited: string; paidOut: string; burned: string; fees: string; vaultLeft: string; forfeited: number }>;
   faults: { rpcErrors: number; ambiguousSends: number; lostReceipts: number; outages: number; workerCrashes: number; restarts: number; hardKills: number; holds: number; released: number; zeroed: number; refusingPlayers: number; spills: number; daysPassed: number; dayRefunds: number };
-  /** The test-arena scenario: bots eaten by players (mass, no value) and stake cells eaten by bots (value spilled as loot). */
-  testArenas: { rooms: number; botsEaten: number; botSpills: number; botSpillValue: number } | null;
+  /**
+   * The test-arena scenario: bots eaten by players (mass, no value), stake cells eaten by bots (value spilled as loot)
+   * and bots that left to make room for a seated player (`botsLeft`; checked every tick: never more bots than the
+   * setting, never more playing than the setting minus the people in the room).
+   */
+  testArenas: { rooms: number; botsEaten: number; botSpills: number; botSpillValue: number; botsLeft: number } | null;
   /** Emblem holders: wallets, tickets bought, tickets settled and settled with a profit (paying the holder pair). */
   holders: { wallets: number; tickets: number; settled: number; winners: number };
   /** Settled tickets paid more than their entry fee / less than it (eaten or shrunk). */
@@ -252,7 +256,7 @@ class Faulty {
 
 function fakeConn(wallet: string): Conn {
   // a socket that always looks backed up: the rooms skip its snapshots (the simulation needs no frames)
-  const ws = { readyState: 1, bufferedAmount: 1 << 30, send(_d: unknown) {} };
+  const ws = { readyState: 1, bufferedAmount: 1 << 30, send(_d: unknown) {}, terminate() {} };
   const conn = new Conn(ws as never, '127.0.0.1');
   conn.wallet = wallet;
   // messages are not needed: drop them (the rooms send a lot)
@@ -282,7 +286,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   const passEvery = opts.passEvery ?? 6;
   const staleAfterS = opts.staleAfterS ?? 120;
   const log = opts.log ?? (() => {});
-  const dir = mkdtempSync(join(tmpdir(), 'elymum-money-sim-'));
+  const dir = mkdtempSync(join(tmpdir(), 'coinnibal-money-sim-'));
   const journalPath = join(dir, 'journal.json');
   const violations: string[] = [];
   const recent: string[] = [];
@@ -320,11 +324,12 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   const instances = opts.instances ?? 2;
   const rooms = new Map<string, Room>();
   const leaderboards = new Leaderboards(null);
-  const testBots = { botsEaten: 0, botSpills: 0, botSpillValue: 0 };
+  const testBots = { botsEaten: 0, botSpills: 0, botSpillValue: 0, botsLeft: 0 };
   /** Counts a test arena's bot figures before the room goes (crash, restart) or at the end. */
   const tallyBots = (r: Room) => {
     if (!r.opts.test) return;
     testBots.botsEaten += r.bots?.eaten ?? 0;
+    testBots.botsLeft += r.bots?.left ?? 0;
     testBots.botSpills += r.botSpills.n;
     testBots.botSpillValue += r.botSpills.value;
   };
@@ -416,7 +421,8 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
   function botEncounters(): void {
     for (const room of rooms.values()) {
       if (!room.opts.test || !room.bots || rng() > 0.05) continue;
-      const bots = [...room.bots.bots.values()].map((b) => b.player).filter((b) => b.alive && b.cells.length > 0);
+      // a leaving bot is shielded on its way out (harmless): only playing bots meet stakers
+      const bots = [...room.bots.bots.values()].filter((b) => !b.leaving).map((b) => b.player).filter((b) => b.alive && b.cells.length > 0);
       const stakers = room.ledger!.all().map((e) => room.world.players.get(e.pid)).filter((p) => !!p && p.alive && p.cells.length > 0);
       if (bots.length === 0 || stakers.length === 0) continue;
       const bot = bots[Math.floor(rng() * bots.length)];
@@ -428,6 +434,20 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
       bot.cells[0].y = big.y;
       bot.shieldUntil = 0;
       staker.shieldUntil = 0;
+    }
+  }
+
+  /**
+   * Test arenas, every tick: each person's coin takes a bot's place (never more bots in the world than the setting,
+   * never more playing than the setting minus the people), and no bot ever holds a ticket.
+   */
+  function checkBots(): void {
+    for (const room of rooms.values()) {
+      const b = room.bots;
+      if (!room.opts.test || !b) continue;
+      if (b.bots.size > b.count) violate(`${room.id}: ${b.bots.size} bots in the world, the setting is ${b.count}`);
+      if (b.size > Math.max(0, b.count - room.humanCount)) violate(`${room.id}: ${b.size} bots playing with ${room.humanCount} people (setting ${b.count})`);
+      for (const pid of b.bots.keys()) if (room.ledger!.has(pid)) violate(`${room.id}: bot ${pid} holds a ticket`);
     }
   }
 
@@ -651,6 +671,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
     }
     play();
     for (const r of rooms.values()) r.tick(TICK_MS);
+    checkBots();
     clock += TICK_MS;
 
     if (ticks % passEvery === 0) {
@@ -844,7 +865,7 @@ export async function runMoneySim(sim: SimChain, opts: SimOptions): Promise<SimR
 export const feeOf = computeProfitFee;
 
 /**
- * The simulation on `FakeEvm` (the TypeScript model of ElymumArena v3: sessions, vaults, the skip rules, two-phase
+ * The simulation on `FakeEvm` (the TypeScript model of CoinnibalArena v4: sessions, vaults, the skip rules, two-phase
  * payouts, sweep ids, the 24 h refund). Fast enough for thousands of rounds.
  */
 /** The fee pair a ticket of `wallet` must carry (`holders`: lower-case holder wallets). */
@@ -883,10 +904,16 @@ export function fakeSimChain(opts: { players: number; seed: number; arenas?: { i
     }
   }
   const minted = grant * BigInt(opts.players);
-  const join = (w: Address, arenaId: number) => ({ address: ARENA, abi: [], functionName: 'join', args: [arenaId] }) as never;
+  // the server key's join permit (the FakeEvm model of CoinnibalArena v4 checks it), then the join
+  const join = (w: Address, arenaId: number) => {
+    const deadline = BigInt(evm.nowS() + 600);
+    const nonce = evm.joinNonces.get(w.toLowerCase()) ?? 0n;
+    const signature = evm.permitSignature({ chainId: evm.chainId, arena: ARENA, player: w, arenaId, nonce, deadline });
+    return { address: ARENA, abi: [], functionName: 'join', args: [arenaId, deadline, signature] } as never;
+  };
   const refund = (arenaId: number) => ({ address: ARENA, abi: [], functionName: 'refund', args: [arenaId] }) as never;
   return {
-    name: 'FakeEvm (model of ElymumArena v3)',
+    name: 'FakeEvm (model of CoinnibalArena v4)',
     arenaAddress: ARENA,
     client: evm,
     decimals: 18,
@@ -911,7 +938,7 @@ export function fakeSimChain(opts: { players: number; seed: number; arenas?: { i
       }
     },
     async updateArena(arenaId, entryFee, enabled) {
-      // ElymumArena.updateArena: a new entry fee only while no ticket of the arena is open (ArenaBusy)
+      // CoinnibalArena.updateArena: a new entry fee only while no ticket of the arena is open (ArenaBusy)
       const a = evm.arenaMap.get(arenaId);
       if (!a || !a.exists || entryFee <= 0n) return false;
       if (entryFee !== a.entryFee && a.openSessions !== 0) return false;

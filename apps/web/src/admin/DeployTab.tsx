@@ -1,13 +1,15 @@
-import { GAS_SYMBOL } from '@elymum/shared';
-import { createArenaCall, deployArenaParams, deployNftParams, deployTestTokenParams, faucetCall, testTokenArtifact } from '@elymum/sdk';
-import { checkDeployedCode, confirmTypedAddress, planDefaultArenas, setTokenRefusal, testTokenRefusal, arenaName, fmtTok } from '@elymum/sdk/ops';
-import { setTokenCall } from '@elymum/sdk';
-import type { ContractKind } from '@elymum/shared';
+import { GAS_SYMBOL } from '@coinnibal/shared';
+import { createArenaCall, deployArenaParams, deployNftParams, deployTestTokenParams, faucetCall, testTokenArtifact } from '@coinnibal/sdk';
+import { checkDeployedCode, confirmTypedAddress, planDefaultArenas, setTokenRefusal, testTokenRefusal, arenaName, fmtTok } from '@coinnibal/sdk/ops';
+import { setTokenCall } from '@coinnibal/sdk';
+import type { ContractKind } from '@coinnibal/shared';
 import { useEffect, useRef, useState } from 'react';
 import type { Address, Hash } from 'viem';
-import { describeError } from '@elymum/sdk';
+import { describeError } from '@coinnibal/sdk';
 import { ensureChain } from '../wallet/network';
 import { connected } from '../wallet/store';
+import { NO_TEST_TOKEN_YET } from './setup';
+import { signSitePins } from './sign-pins';
 import { activeStep, arenaDeployArgs, defaultNftForm, deploySteps, loadLocalDeploys, nftDeployArgs, saveLocalDeploy, type LocalDeploys, type NftForm } from './deploy';
 import { Icon } from '../design';
 import { Addr, Advanced, Btn, Card, FormError, Input, NeedsSession, Row, useFormError, type ChainCtx } from './ui';
@@ -72,7 +74,19 @@ export function DeployTab({ ctx, advanced = false }: { ctx: ChainCtx; advanced?:
         {active === 'register' && <RegisterStep ctx={ctx} local={local} onLocal={setLocal} kicker={kicker(n)} autoErr={autoErr} />}
         {active === 'token' &&
           (advanced ? (
-            <Card title="Set the game token" id="deploy-token-note" kicker={kicker(n)} tone="quiet" lede="Finish setup (top of Setup) sets it, or the game token card in this section with one confirmation." />
+            <Card
+              title="Set the game token"
+              id="deploy-token-note"
+              kicker={kicker(n)}
+              tone="quiet"
+              lede={
+                net.mainnet
+                  ? 'The game token card above sets it: the token launched on Pons, typed twice.'
+                  : status?.testToken?.address
+                    ? 'Finish setup (top of Setup) sets it, or the game token card in this section with one confirmation.'
+                    : NO_TEST_TOKEN_YET
+              }
+            />
           ) : (
             <SetTokenForm ctx={ctx} kicker={kicker(n)} />
           ))}
@@ -107,11 +121,11 @@ function StepCrane() {
 /** Everything is deployed: the registered contracts, their explorer links and the code hash verdict. */
 function DoneCard({ ctx }: { ctx: ChainCtx }) {
   const rows: { name: string; address: string | null; code: string | undefined }[] = [
-    { name: 'ElymumArena', address: ctx.net.arenaAddress, code: ctx.status?.arena?.code },
-    { name: 'ElymumNFT', address: ctx.net.nftAddress, code: ctx.status?.nft?.code },
+    { name: 'CoinnibalArena', address: ctx.net.arenaAddress, code: ctx.status?.arena?.code },
+    { name: 'CoinnibalNFT', address: ctx.net.nftAddress, code: ctx.status?.nft?.code },
   ];
   return (
-    <Card title="The ring is built." id="deploy-done" kicker="All seven steps" tone="done" lede="Both contracts are live and registered, the token is set and the four arenas exist. Launch shows what is left: the allowlist, the mint and who may play.">
+    <Card title="The ring is built." id="deploy-done" kicker="All seven steps" tone="done" lede="Both contracts are live and registered, the token is set and the four arenas exist. Network (the launch checklist) shows what is left: the site pins (Site pins, above), the allowlist, the mint and who may play.">
       <ul className="ad-registered">
         {rows.map((r) => (
           <li key={r.name}>
@@ -236,7 +250,7 @@ function useAutoRegister(ctx: ChainCtx): string | null {
 function ArenaStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDeploys) => void; kicker: string }) {
   const [err, guard] = useFormError();
   return (
-    <Card title="Deploy ElymumArena" id="deploy-arena" kicker={kicker} lede="The arena holds the tickets, settles rounds with the server's key and keeps the fee (v2: a share of every played entry fee; unplayed tickets are refunded in full). Its constructor takes three addresses:">
+    <Card title="Deploy CoinnibalArena" id="deploy-arena" kicker={kicker} lede="The arena holds the ticket money (one vault per room) and settles rounds with the server's key. Its fee comes from profit only: 15 % burned and 5 % to the fee wallet (NFT holders 8 % + 2 %, set by Finish setup); an unplayed ticket is refunded in full. Its constructor takes three addresses:">
       <dl className="ad-kv ad-kv--args">
         <div>
           <dt className="mono">admin</dt>
@@ -266,9 +280,9 @@ function ArenaStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: Local
           guard(() => {
             const params = deployArenaParams(arenaDeployArgs(ctx.me, ctx.net.serverKey));
             ctx.open({
-              title: 'Deploy ElymumArena',
-              contract: 'ElymumArena',
-              deploy: { name: 'ElymumArena', params },
+              title: 'Deploy CoinnibalArena',
+              contract: 'CoinnibalArena',
+              deploy: { name: 'CoinnibalArena', params },
               onDone: async ({ address, hash }) => {
                 if (!address || !ctx.net.info) return;
                 onLocal(saveLocalDeploy(ctx.net.info.id, 'arena', { address, txHash: hash }));
@@ -290,7 +304,7 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
   const [form, setForm] = useState<NftForm>(() => defaultNftForm(location.origin, null, ctx.me));
   const [quote, setQuote] = useState<string | null>(null);
   const [err, guard, setErr] = useFormError();
-  // the $1 price in wei from the server (the gas token's USD price feed)
+  // the mint price (MINT_USD_CENTS) in wei from the server (the gas token's USD price feed)
   useEffect(() => {
     if (!ctx.api) return;
     let live = true;
@@ -300,7 +314,7 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
         setQuote(q.gasUsd !== null ? `${GAS_SYMBOL} = $${q.gasUsd}` : null);
         setForm((f) => (f.priceGas ? f : defaultNftForm(location.origin, q.priceWei, ctx.me)));
       },
-      (e: Error) => live && setErr(`The $1 price could not be read (${e.message}); enter a price in ${GAS_SYMBOL}.`),
+      (e: Error) => live && setErr(`The server's mint price could not be read (${e.message}); enter a price in ${GAS_SYMBOL}.`),
     );
     return () => {
       live = false;
@@ -311,10 +325,10 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
   }, [ctx.me]);
   const set = (k: keyof NftForm) => (v: string) => setForm({ ...form, [k]: v });
   return (
-    <Card title="Deploy ElymumNFT" id="deploy-nft" kicker={kicker} lede="The emblem contract. Everything below goes into its constructor; most of it can be changed later from Mint.">
+    <Card title="Deploy CoinnibalNFT" id="deploy-nft" kicker={kicker} lede="The NFT contract. Everything below goes into its constructor; most of it can be changed later from Mint.">
       <div className="ad-form ad-form--grid">
         <Input label="Max supply" value={form.maxSupply} onChange={set('maxSupply')} />
-        <Input label={`Mint price (${GAS_SYMBOL})`} suffix={GAS_SYMBOL} value={form.priceGas} onChange={set('priceGas')} hint={quote ? `$1 at ${quote}` : 'From /api/admin/mint/price'} />
+        <Input label={`Mint price (${GAS_SYMBOL})`} suffix={GAS_SYMBOL} value={form.priceGas} onChange={set('priceGas')} hint={quote ? `The server's mint target at ${quote}` : 'From /api/admin/mint/price'} />
         <Input label="Allowlist limit per wallet" value={form.wlLimit} onChange={set('wlLimit')} />
         <Input label="Public limit per wallet" value={form.publicLimit} onChange={set('publicLimit')} />
       </div>
@@ -344,9 +358,9 @@ function NftStep({ ctx, onLocal, kicker }: { ctx: ChainCtx; onLocal: (l: LocalDe
           guard(() => {
             const params = deployNftParams(nftDeployArgs(form, ctx.me));
             ctx.open({
-              title: 'Deploy ElymumNFT',
-              contract: 'ElymumNFT',
-              deploy: { name: 'ElymumNFT', params },
+              title: 'Deploy CoinnibalNFT',
+              contract: 'CoinnibalNFT',
+              deploy: { name: 'CoinnibalNFT', params },
               onDone: async ({ address, hash }) => {
                 if (!address || !ctx.net.info) return;
                 onLocal(saveLocalDeploy(ctx.net.info.id, 'nft', { address, txHash: hash }));
@@ -382,7 +396,7 @@ function RegisterStep({ ctx, local, onLocal, kicker, autoErr }: { ctx: ChainCtx;
       {todo.length === 0 && <p className="ad-note">Nothing deployed from this browser is waiting. Deploy the missing contract first.</p>}
       {todo.map((k) => (
         <p key={k} className="ad-registered__row">
-          <span className="ad-registered__name">{k === 'arena' ? 'ElymumArena' : 'ElymumNFT'}</span> <Addr value={local[k]!.address} net={ctx.net} />
+          <span className="ad-registered__name">{k === 'arena' ? 'CoinnibalArena' : 'CoinnibalNFT'}</span> <Addr value={local[k]!.address} net={ctx.net} />
         </p>
       ))}
       <div className="ad-actions">
@@ -432,7 +446,7 @@ export function RegisterExisting({ ctx }: { ctx: ChainCtx }) {
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const address = /^0x[0-9a-fA-F]{40}$/.test(text.trim()) ? (text.trim() as Address) : null;
-  const NAMES: Record<ContractKind, string> = { arena: 'ElymumArena', nft: 'ElymumNFT', token: 'Game token / TestToken' };
+  const NAMES: Record<ContractKind, string> = { arena: 'CoinnibalArena', nft: 'CoinnibalNFT', token: 'Game token / TestToken' };
   return (
     <Card title="Register a contract that is already deployed" id="deploy-register-existing" lede="Deployed it but it does not show as registered? Paste its address. The server checks the code hash, that you own it, and for the arena that the server key settles it.">
       <div className="ad-choice" role="radiogroup" aria-label="Contract">
@@ -485,9 +499,10 @@ export function registeredToken(ctx: Pick<ChainCtx, 'registry' | 'status'>): Add
 }
 
 /**
- * The set-token rail. With a token registered on the server (TOKEN_ADDRESS, or the deployed
- * TestToken) the owner only confirms it (the preview is the confirmation). A different address is
- * an override under Advanced, typed twice. It can be set only once.
+ * The set-token rail. With a token registered on the server (the deployed TestToken, or TOKEN_ADDRESS
+ * on a server outside Docker) the owner only confirms it (the preview is the confirmation). The real
+ * game token cannot be registered before the arena uses it (`registerContract`), so on the mainnet it
+ * is entered under Advanced, typed twice. It can be set only once.
  */
 export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }) {
   const [a, setA] = useState('');
@@ -511,12 +526,19 @@ export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }
     if (refusal) throw new Error(refusal);
     ctx.open({
       title: 'Set the game token (once, forever)',
-      contract: 'ElymumArena',
+      contract: 'CoinnibalArena',
       call: setTokenCall(arena, token),
       ownerOf: arena,
       owner: cfg.admin,
-      note: known && token.toLowerCase() === known.toLowerCase() ? 'The token the server has registered. It can be set only once: check it against the official announcement.' : 'Not the registered token. It can be set only once: check the address against the official announcement.',
-      onDone: () => ctx.refresh(),
+      note:
+        (known && token.toLowerCase() === known.toLowerCase() ? 'The token the server has registered. It can be set only once: check it against the official announcement.' : 'Not the registered token. It can be set only once: check the address against the official announcement.') +
+        ' Then your wallet asks you to sign the site pins again (free, no transaction).',
+      onDone: async () => {
+        await ctx.refresh();
+        // the token joins the site pins: one free signature from the owner wallet
+        await signSitePins({ api: ctx.api, me: ctx.me, chainId: ctx.net.info?.id ?? null, targets: { arena, nft: ctx.net.nftAddress, token } });
+        ctx.pinsChanged?.();
+      },
     });
   };
   const run = (fn: () => Promise<void>) => {
@@ -532,7 +554,9 @@ export function SetTokenForm({ ctx, kicker }: { ctx: ChainCtx; kicker?: string }
       lede={
         known
           ? 'The ERC-20 the arenas take. The server already knows it: check it, then confirm once in the preview. It can never be changed.'
-          : 'The ERC-20 the arenas take (the game token). The server has no game token registered yet: set TOKEN_ADDRESS on the game server and reload, and it shows up here.'
+          : ctx.net.mainnet
+            ? 'The ERC-20 the arenas take: the game token launched on Pons. The server registers no token before the arena uses it, so enter it by hand below, typed twice, and check it against the official announcement. (TOKEN_ADDRESS names it here only on a server outside Docker; the VPS setup clears that key.)'
+            : 'The ERC-20 the arenas take. No TestToken is registered yet: deploy one (Setup → TestToken) and it shows up here, to confirm once. Any other token is entered by hand below, typed twice.'
       }
     >
       {known && (
@@ -606,7 +630,7 @@ export function DefaultArenas({ ctx, kicker }: { ctx: ChainCtx; kicker?: string 
           onClick={() =>
             ctx.open({
               title: `Create arena #${next.id} ${arenaName(next.id)}`,
-              contract: 'ElymumArena',
+              contract: 'CoinnibalArena',
               call: createArenaCall(arena, next),
               ownerOf: arena,
               owner: cfg.admin,
@@ -633,7 +657,7 @@ export function TestTokenCard({ ctx, local: given, onLocal: onGiven }: { ctx: Ch
   if (refusal) return null;
   const token = (ctx.status?.arena?.config?.token ?? registeredToken(ctx) ?? local.token?.address ?? null) as Address | null;
   return (
-    <Card title="TestToken" id="test-token" kicker="Off mainnet only" tone="quiet" lede={`A mintable ERC-20 with a faucet (1,000,000 per hour), to try the arena before the game token exists. ${testTokenArtifact.contractName} is never offered on mainnet.`}>
+    <Card title="TestToken" id="test-token" kicker="Off mainnet only" tone="quiet" lede={`A mintable ERC-20 with a faucet (by default 1,000,000 per hour), to try the arena before the game token exists. ${testTokenArtifact.contractName} is never offered on mainnet.`}>
       {token && (
         <p className="ad-inline">
           <span className="ad-registered__name">Token</span> <Addr value={token} net={ctx.net} />
@@ -666,7 +690,7 @@ export function TestTokenCard({ ctx, local: given, onLocal: onGiven }: { ctx: Ch
         {token && (
           <Btn
             testId="faucet"
-            onClick={() => ctx.open({ title: 'TestToken faucet (1,000,000 to you)', contract: 'TestToken', call: faucetCall(token), onDone: () => ctx.refresh() })}
+            onClick={() => ctx.open({ title: 'TestToken faucet (one claim to your wallet; the holder amount if you hold the NFT)', contract: 'TestToken', call: faucetCall(token), onDone: () => ctx.refresh() })}
           >
             Faucet
           </Btn>

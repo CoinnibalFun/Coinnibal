@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { EMOTES, PowerUpType, activeChain, chainInfo, setActiveChain } from '@elymum/shared';
+import { EMOTES, PowerUpType, activeChain, chainInfo, setActiveChain } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { detectLocale, formatMessage, getLocale, initLocale, ourXHandle, refreshChainText, setOurXHandle, translate, X_HANDLE_BUILD, type Dict, type Locale, type TKey } from '../src/i18n';
 import { renderRich } from '../src/i18n/rich';
@@ -64,7 +64,7 @@ describe('the English string table', () => {
   });
 
   it('fills placeholders and leaves unknown keys readable', () => {
-    expect(translate('lo.onFloor', { n: '84,200', sym: '$ELYMUM' })).toBe('84,200 $ELYMUM on the floor');
+    expect(translate('lo.onFloor', { n: '84,200', sym: '$NIBAL' })).toBe('84,200 $NIBAL on the floor');
     expect(translate('nope.missing' as TKey)).toBe('nope.missing');
   });
 
@@ -116,15 +116,15 @@ describe('the English string table', () => {
 
 describe('English only', () => {
   it('boots in English and forgets a language picked before the others were removed', async () => {
-    localStorage.setItem('elymum.locale.v1', 'ru');
+    localStorage.setItem('coinnibal.locale.v1', 'ru');
     try {
       await initLocale();
       expect(getLocale()).toBe('en');
       expect(document.documentElement.lang).toBe('en');
-      expect(localStorage.getItem('elymum.locale.v1')).toBeNull();
+      expect(localStorage.getItem('coinnibal.locale.v1')).toBeNull();
       expect(detectLocale()).toBe('en');
     } finally {
-      localStorage.removeItem('elymum.locale.v1');
+      localStorage.removeItem('coinnibal.locale.v1');
     }
   });
 });
@@ -140,11 +140,11 @@ describe('{ourX}: the project X handle every string may name', () => {
     // an invalid handle is ignored
     setOurXHandle('not a handle');
     expect(ourXHandle()).toBe('@coinnibal');
-    setOurXHandle('@elymumio');
-    expect(translate('pg.follow')).toBe('Follow @elymumio');
+    setOurXHandle('@coinnibalfun');
+    expect(translate('pg.follow')).toBe('Follow @coinnibalfun');
   });
 
   it('no string writes the handle out: every language uses {ourX}', () => {
-    for (const [key, text] of Object.entries(en)) expect(`${key}: ${text}`).not.toMatch(/@elymumio/i);
+    for (const [key, text] of Object.entries(en)) expect(`${key}: ${text}`).not.toMatch(/@coinnibalfun/i);
   });
 });

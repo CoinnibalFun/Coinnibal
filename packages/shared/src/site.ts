@@ -1,10 +1,10 @@
 import type { XLinkError } from './xlink';
 
 /**
- * Elymum site: WL (allowlist) and collab applications, the NFT mint, the contracts registry and
+ * Coinnibal site: WL (allowlist) and collab applications, the NFT mint, the contracts registry and
  * player profiles. Types shared by the server (`/api/site/*`, `/api/admin/*`, `/api/profile`) and
  * the web app, plus the validation rules both apply.
- * See docs/specs/2026-10-29-elymum-on-elysium.md (section 4.4).
+ * See docs/specs/2026-10-29-elymum-on-elysium.md (section 4.4; historical).
  */
 
 /** The X account of the project (no `@`). */
@@ -157,7 +157,7 @@ export interface CollabApplyRequest {
   contactX: string;
   discord?: string;
   role: CollabRole;
-  /** A post about Elymum on the community's X (tags the project). */
+  /** A post about Coinnibal on the community's X (tags the project). */
   postUrl: string;
   about: string;
   /** Honeypot: must be absent or empty. */
@@ -275,7 +275,7 @@ export type SiteErrorCode =
   | 'not_owner'
   /** Contracts registry: the arena's server authority is not the server key. */
   | 'wrong_authority'
-  /** The server has no chain (`EVM_RPC_URL` unset) or the contract is not registered. */
+  /** The server has no chain (its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid) or the contract is not registered. */
   | 'chain_off'
   /** The upstream price feed (gas token / USD) could not be read. */
   | 'price_unavailable'
@@ -283,7 +283,7 @@ export type SiteErrorCode =
   | 'bad_image'
   /** Profile picture: an admin removed this picture; it cannot be uploaded again. */
   | 'image_blocked'
-  /** A secret export (backup, migration settings) without a fresh, purpose-bound admin signature (`X-Elymum-Proof`). */
+  /** A secret export (backup, migration settings) without a fresh, purpose-bound admin signature (`X-Coinnibal-Proof`). */
   | 'proof_required'
   /** The admin session is too old for admin routes (short-lived, revocable), or of the earlier long form: sign in again. */
   | 'admin_session_expired'
@@ -403,7 +403,7 @@ export interface ContractRegisterRequest {
 /* Mint (`/api/site/mint*`, `/api/admin/mint/*`)                        */
 /* ------------------------------------------------------------------ */
 
-/** `ElymumNFT.Phase`, in contract order (Closed = 0, Allowlist = 1, Public = 2). */
+/** `CoinnibalNFT.Phase`, in contract order (Closed = 0, Allowlist = 1, Public = 2). */
 export type MintPhase = 'closed' | 'allowlist' | 'public';
 export const MINT_PHASES: readonly MintPhase[] = ['closed', 'allowlist', 'public'];
 
@@ -411,7 +411,7 @@ export const MINT_PHASES: readonly MintPhase[] = ['closed', 'allowlist', 'public
 export const MINT_USD_CENTS_DEFAULT = 100;
 
 /**
- * `ElymumNFT.mintState()`. Wei amounts are decimal strings (JSON has no bigint);
+ * `CoinnibalNFT.mintState()`. Wei amounts are decimal strings (JSON has no bigint);
  * addresses and the root are 0x hex.
  */
 export interface MintContractState {
@@ -443,8 +443,11 @@ export interface MintState {
   gasUsd: number | null;
   /** Current mint price in USD at `gasUsd`; null when either is unknown. */
   priceUsd: number | null;
-  /** The target the price is kept at (`MINT_USD_CENTS`). */
-  targetUsdCents: number;
+  /**
+   * The target the price is kept at (`MINT_USD_CENTS`). Left out while the mint page is closed (Settings → "Mint page
+   * open" off), unless a signed-in admin asks.
+   */
+  targetUsdCents?: number;
   /** Distinct holders (wallets with `balanceOf > 0`). */
   holders: number;
   /** `totalSupply >= maxSupply`. */
@@ -551,7 +554,7 @@ export interface AdminAvatarEntry {
 }
 
 /**
- * The emblem skin: the Elymum emblem's coin face and colour as an in-game skin, unlocked for wallets
+ * The emblem skin: the Coinnibal emblem's coin face and colour as an in-game skin, unlocked for wallets
  * holding the NFT (checked by the server on `PUT /api/profile` and at every join). Outside the
  * `SKINS` table: a client renders it with its own emblem art.
  */
@@ -562,7 +565,7 @@ export interface ProfileResponse {
   profile: ProfileView;
   /** Skin ids this wallet may pick: the basic skins, plus `EMBLEM_SKIN_ID` for NFT holders. */
   skinOptions?: number[];
-  /** The wallet holds an Elymum emblem (laurel on the name tag, emblem skin). */
+  /** The wallet holds a Coinnibal emblem (laurel on the name tag, emblem skin). */
   holder?: boolean;
 }
 

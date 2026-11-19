@@ -15,7 +15,7 @@ const FEES = { burnBps: 1500, vaultBps: 500, holderBurnBps: 800, holderVaultBps:
 const HOLDER = { burnBps: 800, vaultBps: 200 };
 const NORMAL = { burnBps: 1500, vaultBps: 500 };
 
-function setup(arenas: ChainArena[] = [{ id: 1, entryFee: 10, maxSessions: 0, openSessions: 0, enabled: true, pot: 0 }]) {
+function setup(arenas: ChainArena[] = [{ id: 1, entryFee: 10, maxSessions: 0, openSessions: 0, enabled: true, pot: 0 }], o: { noShow?: (s: ChainSession) => boolean; index?: boolean } = {}) {
   const owners = new Map<string, string>(); // token id -> wallet (lower)
   const journal = new Journal(null);
   const flags: Candidate[] = [];
@@ -23,20 +23,29 @@ function setup(arenas: ChainArena[] = [{ id: 1, entryFee: 10, maxSessions: 0, op
   const live = new Set<string>();
   let now = 1_800_000_000_000;
   const claims = new EmblemClaims(null, () => {}, () => now);
-  const chain = { status: () => ({ fees: FEES }), listArenas: async () => arenas, kick: () => {} } as unknown as ChainGateway;
+  /** `excuseNoShow` calls: `<arenaId>:<player lower>` (the stale sweeper's refund of that ticket is then no no-show). */
+  const excused: string[] = [];
+  const chain = {
+    status: () => ({ fees: FEES }),
+    listArenas: async () => arenas,
+    kick: () => {},
+    excuseNoShow: (arenaId: number, player: string) => excused.push(`${arenaId}:${player.toLowerCase()}`),
+  } as unknown as ChainGateway;
   const tokensOf = (w: string) => [...owners].filter(([, o]) => o === w.toLowerCase()).map(([id]) => id);
   const gate = new EmblemGate({
     chain,
     journal,
     claims,
     isHolder: async (w) => tokensOf(w).length > 0,
-    emblemTokens: async (w) => tokensOf(w),
+    // `index: false`: the token index cannot tell (never read, the RPC refuses logs)
+    emblemTokens: async (w) => (o.index === false ? null : tokensOf(w)),
     flag: (c) => flags.push(c),
     liveSessions: () => live,
+    noShow: o.noShow,
     log: (m) => logs.push(m),
     now: () => now,
   });
-  return { owners, journal, flags, logs, live, claims, gate, tick: (ms: number) => (now += ms), tokensOf };
+  return { owners, journal, flags, logs, live, claims, gate, excused, tick: (ms: number) => (now += ms), tokensOf };
 }
 
 let seq = 1;
@@ -110,6 +119,122 @@ describe('one emblem token id serves one open holder ticket', () => {
     h.live.delete(t.key);
     expect(h.gate.sweep()).toBe(1);
     expect(h.claims.ticketOf('9')).toBeNull();
+  });
+});
+
+describe('a holder ticket refused at its seat is a no-show when the player moved its emblem (audit R4-M1)', () => {
+  it('one emblem passed from wallet to wallet cannot refund unplayed holder tickets past the no-show rules', async () => {
+    const h = setup(undefined, { noShow: () => true });
+    const a = testSigner().address;
+    const b = testSigner().address;
+    const c = testSigner().address;
+    h.owners.set('7', a.toLowerCase());
+    const ta = ticket(a);
+    expect(await h.gate.seat(a, ta)).toBeNull();
+    // the emblem goes to B, which bought a holder ticket with it: refused, back in full, a no-show
+    h.owners.set('7', b.toLowerCase());
+    const tb = ticket(b);
+    expect(await h.gate.seat(b, tb)).toMatchObject({ code: 'game_closed' });
+    expect(h.journal.pending).toEqual([expect.objectContaining({ key: tb.key, reason: 'stale', noShow: true })]);
+    // then to C; B's next holder ticket finds no emblem in B's wallet: a no-show too
+    h.owners.set('7', c.toLowerCase());
+    const tb2 = { ...ticket(b), arenaId: 1 };
+    h.journal.remove(tb.key);
+    expect(await h.gate.seat(b, tb2)).toMatchObject({ message: expect.stringMatching(/needs a Coinnibal NFT/) });
+    expect(h.journal.pending).toEqual([expect.objectContaining({ key: tb2.key, reason: 'stale', payout: tb2.entryFee, noShow: true })]);
+    expect(h.logs.some((m) => /already serves/.test(m) && /a no-show/.test(m))).toBe(true);
+  });
+
+  it('never a no-show when the server cannot tell, or the arena takes no seat (or the server owes the excuse)', async () => {
+    // the token index cannot confirm that the wallet holds none (a failed `balanceOf` reads as "none")
+    const unsure = setup(undefined, { noShow: () => true, index: false });
+    const a = testSigner().address;
+    const ta = ticket(a);
+    expect(await unsure.gate.seat(a, ta)).toMatchObject({ code: 'game_closed' });
+    expect(unsure.journal.pending).toHaveLength(1);
+    expect(unsure.journal.pending[0]).not.toHaveProperty('noShow');
+    // the arena is closed or the server refused this ticket a seat before: the caller says so
+    const closed = setup(undefined, { noShow: () => false });
+    const b = testSigner().address;
+    const tb = ticket(b);
+    expect(await closed.gate.seat(b, tb)).toMatchObject({ code: 'game_closed' });
+    expect(closed.journal.pending[0]).not.toHaveProperty('noShow');
+  });
+});
+
+describe('a holder\'s own last game still holding its emblem is no no-show (audit R4b-M2)', () => {
+  /** The bell: `t`'s coin leaves its room and its settlement waits in the journal (RPC back-off, a batch, a payout held). */
+  const bell = (h: ReturnType<typeof setup>, t: ChainSession) => {
+    h.live.delete(t.key);
+    h.journal.commit({
+      enqueue: [
+        { kind: 'settle', key: t.key, player: t.player, arenaId: t.arenaId, session: t.key, sessionId: t.id, payout: 12_000_000, entryFee: t.entryFee, score: 1, kills: 0, xp: 0, reason: 'round', attempts: 0, nextAttemptAt: 0, createdAt: 0 },
+      ],
+    });
+  };
+
+  it('one emblem, its arena-1 settlement pending: the arena-2 seat waits, the ticket is kept and excused, and seats once settled', async () => {
+    const h = setup(undefined, { noShow: () => true });
+    const a = testSigner().address;
+    h.owners.set('7', a.toLowerCase());
+    const t1 = ticket(a, HOLDER, 1);
+    expect(await h.gate.seat(a, t1)).toBeNull();
+    h.live.add(t1.key);
+    bell(h, t1);
+    h.tick(30_000);
+    const t2 = ticket(a, HOLDER, 2);
+    const refused = await h.gate.seat(a, t2);
+    expect(refused).toEqual({ code: 'emblem_busy', message: expect.stringMatching(/^Your last game \(arena #1\) is still being settled.+This ticket stays yours: try again in a moment\.$/) });
+    // nothing queued for the arena-2 ticket (no refund, no no-show), and its refund, should it never sit, is excused
+    expect(h.journal.pending.map((p) => p.key)).toEqual([t1.key]);
+    expect(h.excused).toEqual([`2:${a.toLowerCase()}`]);
+    expect(h.flags).toEqual([]);
+    expect(h.logs.some((m) => /a no-show/.test(m))).toBe(false);
+    // the arena-1 settlement is mined (its Settled event frees the emblem): the arena-2 ticket seats on the next try
+    h.journal.remove(t1.key);
+    h.gate.settled(t1.key);
+    expect(await h.gate.seat(a, t2)).toBeNull();
+    expect(h.claims.ticketOf('7')?.session).toBe(t2.key);
+  });
+
+  it('one emblem playing in arena 1 now: an arena-2 seat waits (excused); a claim of its own ticket not seated waits without the excuse', async () => {
+    const h = setup(undefined, { noShow: () => true });
+    const a = testSigner().address;
+    h.owners.set('7', a.toLowerCase());
+    const t1 = ticket(a, HOLDER, 1);
+    expect(await h.gate.seat(a, t1)).toBeNull();
+    h.live.add(t1.key);
+    const t2 = ticket(a, HOLDER, 2);
+    expect(await h.gate.seat(a, t2)).toMatchObject({ code: 'emblem_busy', message: expect.stringMatching(/serves your game in arena #1/) });
+    expect(h.excused).toEqual([`2:${a.toLowerCase()}`]);
+    expect(h.journal.pending).toEqual([]);
+    // the emblem check passed for t1 but its seat never happened (the round closed meanwhile): t3 waits, not excused,
+    // since sitting with t1 is the player's way on (and a refused seat must not buy excuses for every other arena)
+    h.live.delete(t1.key);
+    const t3 = ticket(a, HOLDER, 3);
+    expect(await h.gate.seat(a, t3)).toMatchObject({ code: 'emblem_busy', message: expect.stringMatching(/not seated yet/) });
+    expect(h.excused).toEqual([`2:${a.toLowerCase()}`]);
+    expect(h.journal.pending).toEqual([]);
+  });
+
+  it('an emblem of another wallet among the claims is still the passed-on case: a no-show', async () => {
+    const h = setup(undefined, { noShow: () => true });
+    const a = testSigner().address;
+    const b = testSigner().address;
+    h.owners.set('7', a.toLowerCase());
+    h.owners.set('8', b.toLowerCase());
+    const ta = ticket(a, HOLDER, 1);
+    const tb = ticket(b, HOLDER, 1);
+    expect(await h.gate.seat(a, ta)).toBeNull();
+    expect(await h.gate.seat(b, tb)).toBeNull();
+    bell(h, ta);
+    // B passes emblem 8 (still serving B's ticket) to A: A's next ticket finds 7 its own (settling) and 8 B's
+    h.owners.set('8', a.toLowerCase());
+    const ta2 = ticket(a, HOLDER, 2);
+    expect(await h.gate.seat(a, ta2)).toMatchObject({ code: 'game_closed' });
+    expect(h.journal.pending).toEqual([expect.objectContaining({ key: ta.key }), expect.objectContaining({ key: ta2.key, reason: 'stale', noShow: true })]);
+    expect(h.excused).toEqual([]);
+    expect(h.flags).toEqual([expect.objectContaining({ subtype: 'emblem_shared', wallets: [a.toLowerCase(), b.toLowerCase()] })]);
   });
 });
 

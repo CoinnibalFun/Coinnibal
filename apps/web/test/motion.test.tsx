@@ -94,7 +94,7 @@ describe('ticket punch', () => {
     const first = render(
       <Kb>
         <Ticket stub="10" punched>
-          Penny Pond
+          $1 Room
         </Ticket>
       </Kb>,
     );
@@ -105,7 +105,7 @@ describe('ticket punch', () => {
     render(
       <Kb>
         <Ticket stub="10" punched>
-          Penny Pond
+          $1 Room
         </Ticket>
       </Kb>,
     );

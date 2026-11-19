@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BRAND_NAME, BRAND_TAGLINE, NFT_NAME, SITE_HOST_DEFAULT, SITE_URL_DEFAULT, SITE_X_HANDLE_DEFAULT, isReservedName, sanitizeName, siteHostOf, BRAND_SITE_ORIGINS, withBrandOrigins, isOpenPlayOrigin } from '../src';
+import { BRAND_NAME, BRAND_TAGLINE, NFT_NAME, SITE_HOST_DEFAULT, SITE_URL_DEFAULT, SITE_X_HANDLE_DEFAULT, isReservedName, sanitizeName, siteHostOf, BRAND_SITE_ORIGINS, OPEN_PLAY_ORIGINS, isOpenPlayOrigin, withBrandOrigins } from '../src';
 
 describe('brand', () => {
   it('is Coinnibal, with the live domain and X handle as defaults until the new ones are live', () => {
@@ -28,14 +28,27 @@ describe('brand', () => {
   });
 
   it('adds the brand site origins to a CORS list, and leaves * and unset alone', () => {
+    // elymum.io, the domain of before the rename, stays a brand origin while the live config redirects it; the
+    // open-play copy is one too (CORS and its own sign-in domain)
+    expect(BRAND_SITE_ORIGINS).toEqual(['https://coinnibal.fun', 'https://www.coinnibal.fun', 'https://elymum.io', 'https://coinnibal.vercel.app']);
     expect(withBrandOrigins(undefined)).toBe('*');
     expect(withBrandOrigins('*')).toBe('*');
-    expect(withBrandOrigins('https://elymum.io/')).toBe('https://elymum.io,https://coinnibal.fun,https://www.coinnibal.fun,https://coinnibal.vercel.app');
+    expect(withBrandOrigins('https://coinnibal.fun/')).toBe('https://coinnibal.fun,https://www.coinnibal.fun,https://elymum.io,https://coinnibal.vercel.app');
+    expect(withBrandOrigins('https://admin.example')).toBe(['https://admin.example', ...BRAND_SITE_ORIGINS].join(','));
+    expect(withBrandOrigins('https://coinnibal.fun, https://admin.example').split(',')).toEqual(['https://coinnibal.fun', 'https://admin.example', 'https://www.coinnibal.fun', 'https://elymum.io', 'https://coinnibal.vercel.app']);
+  });
+
+  it('knows the open-play copies of the site by their exact Origin', () => {
+    expect(OPEN_PLAY_ORIGINS).toEqual(['https://coinnibal.vercel.app']);
+    for (const o of OPEN_PLAY_ORIGINS) expect(BRAND_SITE_ORIGINS).toContain(o);
     expect(isOpenPlayOrigin('https://coinnibal.vercel.app')).toBe(true);
     expect(isOpenPlayOrigin('https://coinnibal.vercel.app/')).toBe(true);
     expect(isOpenPlayOrigin('https://coinnibal.fun')).toBe(false);
+    expect(isOpenPlayOrigin('http://coinnibal.vercel.app')).toBe(false);
+    expect(isOpenPlayOrigin('https://evil-coinnibal.vercel.app')).toBe(false);
+    expect(isOpenPlayOrigin('https://coinnibal.vercel.app.evil.example')).toBe(false);
+    expect(isOpenPlayOrigin('null')).toBe(false);
     expect(isOpenPlayOrigin(undefined)).toBe(false);
-    expect(withBrandOrigins('https://admin.example')).toBe(['https://admin.example', ...BRAND_SITE_ORIGINS].join(','));
-    expect(withBrandOrigins('https://coinnibal.fun, https://elymum.io').split(',')).toEqual(['https://coinnibal.fun', 'https://elymum.io', 'https://www.coinnibal.fun', 'https://coinnibal.vercel.app']);
+    expect(isOpenPlayOrigin(null)).toBe(false);
   });
 });

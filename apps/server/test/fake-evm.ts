@@ -1,6 +1,6 @@
-import { elymumArenaAbi, elymumNFTAbi, testTokenAbi, type ArenaConfig, type ArenaInfo, type ContractCall, type MintState, type SessionInfo, type TestTokenFaucetConfig } from '@elymum/sdk';
-import { encodeErrorResult, getAddress, keccak256, toHex, type Address, type Hash, type Hex } from 'viem';
-import { computeProfitFee, ratesFor } from '@elymum/shared';
+import { coinnibalArenaAbi, coinnibalNFTAbi, testTokenAbi, type ArenaConfig, type ArenaInfo, type ContractCall, type JoinPermitFields, type MintState, type SessionInfo, type TestTokenFaucetConfig } from '@coinnibal/sdk';
+import { encodeErrorResult, encodePacked, getAddress, keccak256, toHex, type Address, type Hash, type Hex } from 'viem';
+import { computeProfitFee, ratesFor } from '@coinnibal/shared';
 import type { ArenaEvent, CodeCheck, ContractKindCode, EvmClient, JoinedLog, TransferLog, TxReceipt } from '../src/chain/evm-client';
 
 export const SERVER = getAddress('0x70997970c51812dc3a010c7d01b50e0d17dc79c8');
@@ -13,7 +13,7 @@ export const E18 = 10n ** 18n;
 const ZERO = '0x0000000000000000000000000000000000000000' as Address;
 
 /** An error shaped like a viem/RPC revert carrying a custom error of the contracts (decoded by `describeError`). */
-export function revert(name: string, args: readonly unknown[] = [], abi: readonly unknown[] = elymumArenaAbi): Error & { data: Hex } {
+export function revert(name: string, args: readonly unknown[] = [], abi: readonly unknown[] = coinnibalArenaAbi): Error & { data: Hex } {
   const data = encodeErrorResult({ abi: abi as never, errorName: name, args } as never);
   return Object.assign(new Error(`execution reverted: ${name}`), { code: 3, data });
 }
@@ -22,7 +22,7 @@ let hashSeq = 0;
 const nextHash = (): Hash => keccak256(toHex(`tx-${++hashSeq}-${Math.random()}`));
 
 /**
- * A TypeScript model of `ElymumArena` + `ElymumNFT` behind the `EvmClient` seam: sessions, vaults, the
+ * A TypeScript model of `CoinnibalArena` + `CoinnibalNFT` behind the `EvmClient` seam: sessions, vaults, the
  * skip rules of `settle`, sweep ids, `Joined` logs and receipts. Tests poke its state directly.
  */
 export class FakeEvm implements EvmClient {
@@ -78,6 +78,10 @@ export class FakeEvm implements EvmClient {
   faucet: TestTokenFaucetConfig = { address: TOKEN, owner: ADMIN, amount: 1_000_000n * E18, holderAmount: 2_000_000n * E18, cooldownSecs: 3600, holderNft: null };
   /** Every call sent by a player (`sendFrom`), with its sender. */
   sentBy: { from: Address; call: ContractCall }[] = [];
+  /** Each player's join nonce (`joinNonce`, v4), lower-case keys. */
+  joinNonces = new Map<string, bigint>();
+  /** Every join permit the server key signed (`signJoinPermit`). */
+  permitsSigned: JoinPermitFields[] = [];
   verified: { address: string; message: string; signature: string }[] = [];
 
   constructor(opts: { address?: Address; token?: Address | null; decimals?: number } = {}) {
@@ -160,7 +164,7 @@ export class FakeEvm implements EvmClient {
   }
 
   /**
-   * `ElymumArena._ratesFor`: the holder pair for a wallet holding the holder NFT (`arenaHolders`, perks on) when it
+   * `CoinnibalArena._ratesFor`: the holder pair for a wallet holding the holder NFT (`arenaHolders`, perks on) when it
    * totals less than the normal pair, else the normal pair.
    */
   ratesFor(player: string): { burnBps: number; vaultBps: number } {
@@ -284,6 +288,31 @@ export class FakeEvm implements EvmClient {
     this.receipts.set(hash, { status: 'success', blockNumber: this.block, events });
     return hash;
   }
+  /**
+   * The server key's "signature" of a join permit: a stand-in for EIP-712 (65 bytes, a hash of every field and of the
+   * signer), so `join` refuses any other player, arena, nonce, deadline, contract, chain or signer like the contract.
+   */
+  permitSignature(p: JoinPermitFields, signer: Address = this.config.serverAuthority): Hex {
+    const h = (salt: string) =>
+      keccak256(
+        encodePacked(
+          ['string', 'address', 'uint256', 'address', 'uint16', 'uint64', 'uint64', 'address'],
+          [salt, getAddress(p.arena), BigInt(p.chainId), getAddress(p.player), p.arenaId, p.nonce, BigInt(p.deadline), getAddress(signer)],
+        ),
+      ).slice(2);
+    return `0x${h('r')}${h('s')}1b`;
+  }
+
+  async joinNonce(_arena: Address, player: Address): Promise<bigint> {
+    this.check('joinNonce');
+    return this.joinNonces.get(player.toLowerCase()) ?? 0n;
+  }
+
+  async signJoinPermit(p: JoinPermitFields): Promise<Hex> {
+    this.permitsSigned.push(p);
+    return this.permitSignature(p, this.address);
+  }
+
   /** A player-side call (`approve`, `join`, `refund`) sent by `from`. */
   async sendFrom(from: Address, call: ContractCall): Promise<Hash> {
     this.check();
@@ -294,16 +323,24 @@ export class FakeEvm implements EvmClient {
       const [spender, amount] = call.args as [Address, bigint];
       this.allowances.set(`${key}:${spender.toLowerCase()}`, amount);
     } else if (call.functionName === 'join') {
-      const [arenaId] = call.args as [number];
+      const [arenaId, deadline, signature] = call.args as [number, bigint, Hex];
       const a = this.arenaMap.get(arenaId);
       if (!a || !a.exists) throw revert('UnknownArena');
       if (!a.enabled) throw revert('ArenaDisabled');
-      if (a.holdersOnly && !this.arenaHolders.has(key)) throw revert('HoldersOnly');
       if (this.sessions.has(`${arenaId}:${key}`)) throw revert('SessionExists');
+      if (a.holdersOnly && !this.arenaHolders.has(key)) throw revert('HoldersOnly');
+      // CoinnibalArena v4: the server's join permit for this player, arena and nonce, inside its window
+      const nowS = BigInt(this.nowS());
+      if (typeof deadline !== 'bigint' || nowS > deadline) throw revert('PermitExpired');
+      if (deadline > nowS + 3600n) throw revert('PermitTooFarAhead');
+      const nonce = this.joinNonces.get(key) ?? 0n;
+      const want = this.permitSignature({ chainId: this.chainId, arena: ARENA, player: from, arenaId, nonce, deadline });
+      if (signature !== want) throw revert('InvalidPermit');
       const allowance = this.allowances.get(`${key}:${ARENA.toLowerCase()}`) ?? 0n;
       if (allowance < a.entryFee || this.tokenOf(from) < a.entryFee) throw new Error('execution reverted: ERC20InsufficientAllowance/Balance');
       this.allowances.set(`${key}:${ARENA.toLowerCase()}`, allowance === (1n << 256n) - 1n ? allowance : allowance - a.entryFee);
       this.addTokens(from, -a.entryFee);
+      this.joinNonces.set(key, nonce + 1n);
       this.join(arenaId, from);
     } else if (call.functionName === 'refund') {
       const [arenaId] = call.args as [number];
@@ -315,7 +352,7 @@ export class FakeEvm implements EvmClient {
         a.owed -= s.owed;
         this.closures.push({ name: 'Collected', arenaId, player: getAddress(from), sessionId: s.id, amount: s.owed });
       } else {
-        // ElymumArena.refund: an unsettled ticket 24 h after its join pays min(entryFee, vault)
+        // CoinnibalArena.refund: an unsettled ticket 24 h after its join pays min(entryFee, vault)
         if (this.nowS() < s.openedAt + 24 * 3600) throw revert('RefundTooEarly');
         const amount = s.entryFee < a.vault ? s.entryFee : a.vault;
         a.vault -= amount;
@@ -393,8 +430,8 @@ export class FakeEvm implements EvmClient {
       this.addTokens(to, amount);
     } else if (call.functionName === 'setPrice') {
       const [wei] = call.args as [bigint];
-      if (this.mint.keeper?.toLowerCase() !== this.address.toLowerCase()) throw revert('NotPriceSetter', [], elymumNFTAbi);
-      if (this.mint.maxPrice !== 0n && (wei < this.mint.minPrice || wei > this.mint.maxPrice)) throw revert('PriceOutOfBounds', [], elymumNFTAbi);
+      if (this.mint.keeper?.toLowerCase() !== this.address.toLowerCase()) throw revert('NotPriceSetter', [], coinnibalNFTAbi);
+      if (this.mint.maxPrice !== 0n && (wei < this.mint.minPrice || wei > this.mint.maxPrice)) throw revert('PriceOutOfBounds', [], coinnibalNFTAbi);
       this.mint.price = wei;
     }
     this.sent.push(call);
@@ -403,7 +440,7 @@ export class FakeEvm implements EvmClient {
     return hash;
   }
 
-  /** ElymumArena v3's fee on the profit of a settlement (the shared fee module mirrors the contract). */
+  /** CoinnibalArena v4's fee on the profit of a settlement (the shared fee module mirrors the contract). */
   feeOf(it: { arenaId: number; player: Address; payout: bigint }): { burned: bigint; toVault: bigint; net: bigint } {
     const s = this.sessions.get(`${it.arenaId}:${it.player.toLowerCase()}`);
     if (!s || s.finalized) return { burned: 0n, toVault: 0n, net: it.payout };

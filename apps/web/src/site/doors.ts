@@ -1,4 +1,4 @@
-import { gameVisible, type SiteSettings } from '@elymum/shared';
+import { gameVisible, type SiteSettings } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { auth } from './api';
 import { useSiteSettings } from './settings';

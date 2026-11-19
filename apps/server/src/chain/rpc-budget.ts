@@ -8,9 +8,12 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  *
  * - a token bucket (`RPC_MAX_RPS` calls per second, `RPC_BURST` burst) that every JSON-RPC call goes
  *   through (a JSON-RPC batch costs one token per call in it);
- * - priorities: `high` (paid joins, settlements, loot sweeps) is served before `normal` (config, arena
- *   list, mint state) and `low` (staked-bot purchases, holder index, stale sweeper, balance checks);
- *   low-priority calls also leave a reserve of the burst untouched, so a join never waits behind a bot;
+ * - priorities: `critical` (settlements, loot sweeps: the server's own payouts) is served before `high` (a paid
+ *   join's ticket read, bounded server-wide by the gateway; the on-demand `Joined`-index refresh; the holder index
+ *   reading the new blocks for a gate decision or a holder ticket, one scan every 2 s at most), `normal` (holder
+ *   checks, bounded server-wide; config, arena list, mint state) and `low` (staked-bot purchases, holder index, stale
+ *   sweeper, balance checks); low-priority calls also leave a reserve of the burst untouched, so a join never waits
+ *   behind a bot. Work any client can trigger never runs above `high`, and only bounded work runs there;
  * - on a 429 (HTTP 429, or a JSON-RPC error with code 429 / -32005 / "rate limit"): a global cool-down
  *   (the `Retry-After` header when present, else exponential backoff with jitter), the rate is cut
  *   (multiplicative decrease, raised again slowly on success), and the request is retried in place
@@ -18,7 +21,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * - a per-method counter, logged once a minute (`rpc: N calls/min, M 429s …`).
  */
 
-export type RpcPriority = 'high' | 'normal' | 'low';
+export type RpcPriority = 'critical' | 'high' | 'normal' | 'low';
 
 const priorityStore = new AsyncLocalStorage<RpcPriority>();
 
@@ -90,8 +93,8 @@ interface Waiter {
   onAbort?: () => void;
 }
 
-const ORDER: RpcPriority[] = ['high', 'normal', 'low'];
-const DEFAULT_ATTEMPTS: Record<RpcPriority, number> = { high: 7, normal: 4, low: 2 };
+const ORDER: RpcPriority[] = ['critical', 'high', 'normal', 'low'];
+const DEFAULT_ATTEMPTS: Record<RpcPriority, number> = { critical: 7, high: 7, normal: 4, low: 2 };
 
 export class RpcBudget {
   readonly maxRate: number;
@@ -150,7 +153,7 @@ export class RpcBudget {
 
   /** Low-priority calls keep this many tokens for the others (at least one). */
   private reserveFor(p: RpcPriority): number {
-    if (p === 'high') return 0;
+    if (p === 'critical' || p === 'high') return 0;
     if (p === 'normal') return Math.min(this.burst - 1, 1);
     return Math.min(this.burst - 1, Math.max(1, Math.floor(this.burst * 0.4)));
   }
@@ -310,7 +313,7 @@ export class RpcBudget {
 }
 
 function emptyStats(): RpcMinuteStats {
-  return { calls: 0, limited: 0, byMethod: {}, byPriority: { high: 0, normal: 0, low: 0 } };
+  return { calls: 0, limited: 0, byMethod: {}, byPriority: { critical: 0, high: 0, normal: 0, low: 0 } };
 }
 
 /** The JSON-RPC methods in a request body (one per call of a batch). */
@@ -393,7 +396,7 @@ export function formatRpcMinute(s: RpcMinuteStats, extra = ''): string {
     .slice(0, 6)
     .map(([m, n]) => `${m} ${n}`)
     .join(', ');
-  const prio = `high ${s.byPriority.high} / normal ${s.byPriority.normal} / low ${s.byPriority.low}`;
+  const prio = `critical ${s.byPriority.critical} / high ${s.byPriority.high} / normal ${s.byPriority.normal} / low ${s.byPriority.low}`;
   return `rpc: ${s.calls} calls/min, ${s.limited} 429s${top ? ` · ${top}` : ''} · ${prio}${extra}`;
 }
 

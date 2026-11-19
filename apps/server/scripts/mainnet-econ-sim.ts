@@ -3,12 +3,12 @@
  * economy of 100 and 200 concurrent players, the re-pricing study and the abuse study. Prints readable tables and,
  * with `--json <file>`, writes every figure.
  *
- *   pnpm -F @elymum/server econ-sim                 # full run (several minutes)
- *   pnpm -F @elymum/server econ-sim --quick         # a short calibration (about a minute)
- *   pnpm -F @elymum/server econ-sim --price 0.00002 # another mainnet token price (USD per token)
+ *   pnpm -F @coinnibal/server econ-sim                 # full run (several minutes)
+ *   pnpm -F @coinnibal/server econ-sim --quick         # a short calibration (about a minute)
+ *   pnpm -F @coinnibal/server econ-sim --price 0.00002 # another mainnet token price (USD per token)
  */
 import { writeFileSync } from 'node:fs';
-import { DEFAULT_ARENAS, SHOP_DEFAULTS } from '@elymum/shared';
+import { DEFAULT_ARENAS, SHOP_DEFAULTS } from '@coinnibal/shared';
 import {
   ABUSE_CASES,
   ETH_USD,
@@ -54,7 +54,7 @@ for (const concurrent of [100, 200]) {
 // the emblem costs $1 and halves the fee: if every player mints one (or borrows one, see F-emblem)
 reports.push(runEconomy(cal, { ...MAINNET_DEFAULT, usdPerToken: price, name: '200 players, every player holds the emblem', concurrent: 200, holderShare: 1 }, gas));
 for (const r of reports) {
-  console.log(`\n## Economy: ${r.scenario.name}, ${r.scenario.hours} h (${r.rounds} rounds), $ELYMUM at $${r.scenario.usdPerToken}`);
+  console.log(`\n## Economy: ${r.scenario.name}, ${r.scenario.hours} h (${r.rounds} rounds), the game token at $${r.scenario.usdPerToken}`);
   console.log('arena  ticket   entry (tokens)  players  instances  tickets/day  winners  burned/day  fee wallet/day  power-ups/day (tokens)');
   for (const t of r.tiers) {
     const d = 24 / r.scenario.hours;

@@ -5,7 +5,8 @@ import { useTokenText } from '../ui/lobby/useLobby';
 import { TOKEN_BUY_URL, tokenSteps, type TokenStepKey } from './getTokens';
 import { explorerAddress } from './links';
 import { serverChainInfo } from './network';
-import { PINS } from './pinned';
+import { useEffect, useState } from 'react';
+import { PINS, pinsFor, type BuildPins } from './pinned';
 import './get-tokens.css';
 
 const STEP_TEXT: Record<TokenStepKey, TKey> = {
@@ -23,15 +24,28 @@ const STEP_LINK: Partial<Record<TokenStepKey, TKey>> = {
   buy: 'gt.link.buy',
 };
 
-/** The token contract a player should see in the swap: the pinned one (the local node: whatever the server names). */
-function tokenAddress(chainId: number | null | undefined, announced: string | null | undefined): string | null {
+/** The token contract a player should see in the swap: the pinned one, else (no token pin) the one the server names. */
+function tokenAddress(chainId: number | null | undefined, announced: string | null | undefined, pins: BuildPins): string | null {
   if (chainId == null) return null;
-  return PINS.chains[chainId]?.token ?? (announced || null);
+  return pins.chains[chainId]?.token ?? (announced || null);
+}
+
+/** This site's pins of a chain (the build's until the owner's signed record is read). */
+function usePins(chainId: number | null | undefined): BuildPins {
+  const [pins, setPins] = useState<BuildPins>(PINS);
+  useEffect(() => {
+    let live = true;
+    pinsFor(chainId).then((p) => live && setPins(p), () => {});
+    return () => {
+      live = false;
+    };
+  }, [chainId]);
+  return pins;
 }
 
 /**
- * "How to get $NIBAL" (modal `tokens`): ETH for gas, then the token (the testnet faucet page, or Pons on mainnet when
- * the build names it), then back to the ticket. Opened from the wallet sheets and from "Get $NIBAL" when a ticket
+ * "How to get tokens" (modal `tokens`): ETH for gas, then the token (the testnet faucet page, or Pons on mainnet when
+ * the build names it), then back to the ticket. Opened from the wallet sheets and from "Get tokens" when a ticket
  * costs more than the wallet holds.
  */
 export function GetTokensSheet() {
@@ -42,9 +56,12 @@ export function GetTokensSheet() {
   const info = serverChainInfo(chain);
   const testnet = info?.testnet ?? chain?.testnet ?? true;
   const steps = tokenSteps({ testnet, faucetUrl: chain?.faucetUrl ?? info?.faucetUrl ?? null, bridgeUrl: info?.bridgeUrl ?? null, buyUrl: TOKEN_BUY_URL });
-  const token = tokenAddress(chain?.chainId, chain?.token?.address);
+  // read only while the sheet is open
+  const pins = usePins(open ? chain?.chainId : null);
+  const token = tokenAddress(chain?.chainId, chain?.token?.address, pins);
   const tokenLink = token ? explorerAddress(token) : null;
-  const vars = { sym: tok.symbol, chain: info?.name ?? '' };
+  // an unknown network keeps the global `{chain}` (the active one), never an empty name
+  const vars = { sym: tok.symbol, ...(info?.name ? { chain: info.name } : {}) };
   return (
     <Sheet open={open} onClose={closeModal} closeLabel={t('gt.close')} kicker={t('gt.kicker', vars)} title={t('gt.title', vars)} className="kl-sheet gt-sheet">
       <div className="gt-body" data-testid="get-tokens">

@@ -20,7 +20,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CUSTOM_DEFAULTS, DEFAULT_ARENAS } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, DEFAULT_ARENAS } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import { createApp } from '../../src/app';
 import { loadConfig } from '../../src/config';
@@ -35,7 +35,7 @@ const PROCS = Number(process.env.LOAD_PROCS ?? Math.max(1, Math.ceil(N / 200)));
 const MIX = (process.env.LOAD_MIX ?? '35,45,10,10').split(',').map(Number);
 const here = dirname(fileURLToPath(import.meta.url));
 
-const dir = mkdtempSync(join(tmpdir(), 'elymum-load-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-load-'));
 const env: Record<string, string> = {
   NODE_ENV: 'development',
   DEV_FAKE_CHAIN: '1',

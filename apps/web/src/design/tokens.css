@@ -1,5 +1,5 @@
 /* ─────────────────────────── Ring Storybook · tokens ───────────────────────────
- * Spec §6. The Elysium ring habitat drawn like a picture book: confident ink
+ * Spec §6 (of the Elysium build). The ring habitat drawn like a picture book: confident ink
  * outlines, flat cel colour with ONE hard shadow tone per fill, die-cut sticker
  * UI with offset hard shadows. Day = the plain at dawn, night = in orbit.
  *
@@ -9,7 +9,7 @@
  *   :root[data-theme='dark'], [data-theme='night'] (on a .kb or around it),
  *   or prefers-color-scheme: dark when the root has no data-theme.
  *
- * The paint values repeat `@elymum/shared` palette.ts (ELYSIUM / SHADE).
+ * The paint values repeat `@coinnibal/shared` palette.ts (ELYSIUM / SHADE).
  * apps/web/test/palette.test.ts keeps both in step and checks every text /
  * background pair below for >= 4.5:1 (WCAG) in both themes.
  *
@@ -161,7 +161,7 @@
      back to Georgia / the system UI face, Chinese to the platform's CJK faces (nothing downloaded) */
   --font-cjk: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', 'WenQuanYi Zen Hei';
   --font-display: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', var(--font-cjk), serif;
-  --font-body: 'DM Sans Variable', 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, var(--font-cjk), sans-serif;
+  --font-body: 'DM Sans Variable', 'DM Sans', 'DM Sans Fallback', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, var(--font-cjk), sans-serif;
   --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, var(--font-cjk), monospace;
   /* Fraunces axes: SOFT 100 always; WONK only on the wordmark and one word per page */
   --fv-display: 'SOFT' 100, 'WONK' 0;

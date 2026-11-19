@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// One-command Elymum demo.
+// One-command Coinnibal demo.
 //   pnpm demo            fake chain: server (NODE_ENV=development DEV_FAKE_CHAIN=1 DEV_FAKE_TOKEN=1) + web dev server
 //                        (DEV_FAKE_TOKEN=0 pnpm demo: the game token starts unset, arenas "Opening soon";
 //                        `curl -X POST localhost:8787/api/dev/token` sets it live)
 //   pnpm demo:localnet   a real local EVM: `hardhat node` + the contracts deployed with the SDK (TestToken,
-//                        ElymumArena, ElymumNFT, token set, four arenas, mint open) + the production-built
+//                        CoinnibalArena, CoinnibalNFT, token set, four arenas, mint open) + the production-built
 //                        server on that chain (EVM_RPC_URL, SERVER_PRIVATE_KEY, ARENA_ADDRESS, NFT_ADDRESS,
 //                        ADMIN_WALLETS) + the web dev server
 // Flags: --browser  also open a Chromium with the Dev Wallet (an EIP-6963 wallet whose key stays in Node;
@@ -158,10 +158,10 @@ function openSite(data) {
 
 async function buildServer() {
   if (NO_BUILD) {
-    if (!existsSync(join(ROOT, 'apps/server/dist/index.js'))) fail('apps/server/dist/index.js is missing and --no-build was given.', 'Run: pnpm -F @elymum/server build');
+    if (!existsSync(join(ROOT, 'apps/server/dist/index.js'))) fail('apps/server/dist/index.js is missing and --no-build was given.', 'Run: pnpm -F @coinnibal/server build');
     return;
   }
-  if ((await runStep('building the game server (tsup)', 'pnpm', ['-F', '@elymum/server', 'build'])) !== 0) fail('The server build failed.', 'Run: pnpm -F @elymum/server build');
+  if ((await runStep('building the game server (tsup)', 'pnpm', ['-F', '@coinnibal/server', 'build'])) !== 0) fail('The server build failed.', 'Run: pnpm -F @coinnibal/server build');
 }
 
 async function main() {
@@ -184,7 +184,7 @@ async function main() {
     // anyone who signs in may play the demo
     serverEnv.GAME_ACCESS ??= 'public';
     openSite(data);
-    serverCmd = ['pnpm', ['-F', '@elymum/server', 'dev']];
+    serverCmd = ['pnpm', ['-F', '@coinnibal/server', 'dev']];
   } else {
     await buildServer();
     say(`starting hardhat node on 127.0.0.1:${RPC_PORT}`);
@@ -192,7 +192,7 @@ async function main() {
     try {
       node = await startHardhatNode({ port: RPC_PORT });
     } catch (e) {
-      fail(`hardhat node did not start: ${e.message}`, 'Try it by hand: pnpm -F @elymum/contracts exec hardhat node');
+      fail(`hardhat node did not start: ${e.message}`, 'Try it by hand: pnpm -F @coinnibal/contracts exec hardhat node');
     }
     const rec = { child: node, exited: false };
     node.on('exit', () => {
@@ -204,7 +204,7 @@ async function main() {
     });
     children.add(rec);
     if (shuttingDown) return;
-    say('deploying TestToken, ElymumArena and ElymumNFT with the SDK (the /admin deploy order)');
+    say('deploying TestToken, CoinnibalArena and CoinnibalNFT with the SDK (the /admin deploy order)');
     let deployed;
     try {
       // the browser talks to the web dev server (it proxies /api and /ws), so SIWE names it
@@ -227,7 +227,7 @@ async function main() {
 
   say(LOCALNET ? 'starting the game server (production build) and the web app' : 'starting the game server (fake chain) and the web app');
   start('server', serverCmd[0], serverCmd[1], { cwd: serverCwd, env: serverEnv, tagColor: '36' });
-  start('web', 'pnpm', ['-F', '@elymum/web', 'dev'], { env: { ...ENV, GAME_SERVER: `http://127.0.0.1:${SERVER_PORT}` }, tagColor: '33' });
+  start('web', 'pnpm', ['-F', '@coinnibal/web', 'dev'], { env: { ...ENV, GAME_SERVER: `http://127.0.0.1:${SERVER_PORT}` }, tagColor: '33' });
 
   const alive = () => shuttingDown;
   const okServer = await waitForHttp(`http://127.0.0.1:${SERVER_PORT}/api/health`, 90_000, alive);

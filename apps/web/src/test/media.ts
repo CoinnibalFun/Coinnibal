@@ -1,14 +1,16 @@
 // Configurable matchMedia for jsdom. Reduced motion defaults to OFF; call
 // setReducedMotion(true) in a test to exercise the instant/fade paths.
 // Listeners are notified so motion's cached preference follows the change.
+// Every other query is false unless a test names it in setMatchingQueries (a phone's width queries).
 
 type Listener = (e: MediaQueryListEvent) => void;
 
 let reduced = false;
+let matching = new Set<string>();
 const lists = new Set<{ mql: MediaQueryList; listeners: Set<Listener> }>();
 
 function evaluate(query: string): boolean {
-  return query.includes('prefers-reduced-motion') ? reduced : false;
+  return query.includes('prefers-reduced-motion') ? reduced : matching.has(query);
 }
 
 export function installMatchMedia(): void {
@@ -37,6 +39,17 @@ export function setReducedMotion(on: boolean): void {
   for (const { mql, listeners } of lists) {
     if (!mql.media.includes('prefers-reduced-motion')) continue;
     const ev = { matches: on, media: mql.media } as MediaQueryListEvent;
+    for (const l of listeners) l(ev);
+  }
+}
+
+/** The queries (other than reduced motion) that match from now on, exactly as the code asks them; [] for none. */
+export function setMatchingQueries(queries: string[]): void {
+  const before = matching;
+  matching = new Set(queries);
+  for (const { mql, listeners } of lists) {
+    if (mql.media.includes('prefers-reduced-motion') || before.has(mql.media) === matching.has(mql.media)) continue;
+    const ev = { matches: matching.has(mql.media), media: mql.media } as MediaQueryListEvent;
     for (const l of listeners) l(ev);
   }
 }

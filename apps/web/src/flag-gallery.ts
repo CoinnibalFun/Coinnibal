@@ -1,5 +1,5 @@
-import { ELYSIUM, INK, type Expression } from '@elymum/art';
-import { COUNTRY_CODES, isCountryCode } from '@elymum/shared';
+import { ELYSIUM, INK, type Expression } from '@coinnibal/art';
+import { COUNTRY_CODES, isCountryCode } from '@coinnibal/shared';
 import { drawCoinLook } from './render/coin';
 import { flagSkins } from './render/flagskin';
 import { LookCache } from './render/looks';

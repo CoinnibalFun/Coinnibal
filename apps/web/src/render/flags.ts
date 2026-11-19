@@ -1,4 +1,4 @@
-import { CARD_PAPER, INK } from '@elymum/art';
+import { CARD_PAPER, INK } from '@coinnibal/art';
 
 /**
  * Country flags without network assets or emoji (Windows Chrome draws no flag emoji): each flag is a

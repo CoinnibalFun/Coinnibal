@@ -1,4 +1,4 @@
-import { TOKEN_SYMBOL_DEFAULT, type ChainStatus } from '@elymum/shared';
+import { TOKEN_SYMBOL_DEFAULT, type ChainStatus } from '@coinnibal/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AddressChip, Button, Icon, StatusPill } from '../../design';
 import { providerSigner } from '../../wallet/siwe';

@@ -1,4 +1,4 @@
-import { DEFAULT_FEE_RATES, PlayerFlag, TICK_MS, profitFee, roundAt, type ServerMessage } from '@elymum/shared';
+import { DEFAULT_FEE_RATES, PlayerFlag, TICK_MS, profitFee, roundAt, type ServerMessage } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { NullChain } from '../src/chain/types';
 import { Leaderboards } from '../src/leaderboards';

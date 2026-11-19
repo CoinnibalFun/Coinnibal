@@ -11,7 +11,7 @@ import {
   setServerAuthorityCall,
   sweepArenaCall,
   updateArenaFrom,
-} from '@elymum/sdk';
+} from '@coinnibal/sdk';
 import {
   SWEEP_WARNING,
   arenaName,
@@ -26,14 +26,14 @@ import {
   parseTokenInput,
   sweepArenaRefusal,
   updateArenaRefusal,
-} from '@elymum/sdk/ops';
-import { sameAddress } from '@elymum/sdk';
-import { BPS, MAX_TOTAL_FEE_BPS, feeExample, GAS_SYMBOL } from '@elymum/shared';
+} from '@coinnibal/sdk/ops';
+import { sameAddress } from '@coinnibal/sdk';
+import { BPS, MAX_TOTAL_FEE_BPS, feeExample, GAS_SYMBOL } from '@coinnibal/shared';
 import { useState } from 'react';
 import type { Address } from 'viem';
 import { DefaultArenas, SetTokenForm } from './DeployTab';
 import type { Plan } from './plan';
-import { Addr, Advanced, Btn, Card, FormError, Input, Row, useFormError, type ChainCtx } from './ui';
+import { Addr, Advanced, Btn, Card, FormError, Input, Row, useFormError, useOwnAddress, type ChainCtx } from './ui';
 
 /**
  * `/admin → Game → the arena contract`: its status, the settler fix when it is not this server's
@@ -46,18 +46,18 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
   const arena = ctx.net.arenaAddress;
   const a = ctx.status?.arena ?? null;
   const cfg = a?.config ?? null;
-  if (!arena) return <Card title="No arena yet" id="arena" tone="quiet" lede="Deploy ElymumArena first (Setup)." />;
+  if (!arena) return <Card title="No arena yet" id="arena" tone="quiet" lede="Deploy CoinnibalArena first (Setup)." />;
   if (!a || !cfg)
     return (
       <Card
         title={a?.code === 'missing' || a?.code === 'mismatch' ? 'That is not our arena' : 'Reading the arena…'}
         id="arena"
         tone={a?.code === 'missing' || a?.code === 'mismatch' ? 'danger' : 'quiet'}
-        lede={a?.code === 'missing' ? 'No code at the registered arena address.' : a?.code === 'mismatch' ? 'The code at the registered address is not the bundled ElymumArena.' : 'One moment: asking the chain.'}
+        lede={a?.code === 'missing' ? 'No code at the registered arena address. The arenas stay off: redeploy CoinnibalArena from your wallet (Setup).' : a?.code === 'mismatch' ? 'The code at the registered address is not the bundled CoinnibalArena (the code hash differs), so the server does not use it and the arenas stay off. Redeploy CoinnibalArena from your wallet (Setup).' : 'One moment: asking the chain.'}
       />
     );
   const open = (title: string, call: Plan['call'], extra: Partial<Plan> = {}) =>
-    ctx.open({ title, contract: 'ElymumArena', call, ownerOf: arena, owner: cfg.admin, onDone: () => ctx.refresh(), ...extra });
+    ctx.open({ title, contract: 'CoinnibalArena', call, ownerOf: arena, owner: cfg.admin, onDone: () => ctx.refresh(), ...extra });
   const d = cfg.decimals;
   const sym = a.token?.symbol ? ` ${a.token.symbol}` : '';
   const serverMismatch = !!ctx.net.serverKey && !sameAddress(ctx.net.serverKey, cfg.serverAuthority);
@@ -92,7 +92,7 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
         <dl className="ad-kv">
           <Row label="Contract">
             <Addr value={arena} net={ctx.net} /> <span className={`ad-code mono${a.code === 'ok' ? ' is-ok' : ' is-bad'}`}>{a.code === 'ok' ? 'code hash ok' : `code ${a.code}`}</span>
-            <span className="ad-code mono is-ok">v3 · fee on profit</span>
+            <span className="ad-code mono is-ok">v4 · fee on profit · join permits</span>
           </Row>
           <Row label="Owner">
             <Addr value={cfg.admin} net={ctx.net} />
@@ -109,7 +109,7 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
             {a.serverBalance === 0n && <span className="ad-bad"> no {GAS_SYMBOL} for gas: settlements cannot be sent</span>}
             {serverMismatch && <span className="ad-bad"> not this server's key ({ctx.net.serverKey})</span>}
           </Row>
-          <Row label="Fee wallet">
+          <Row label="Fee wallet (team wallet)">
             <Addr value={cfg.feeWallet} net={ctx.net} />
             {a.token && (
               <span className="ad-role num">
@@ -123,7 +123,7 @@ export function ArenaTab({ ctx }: { ctx: ChainCtx }) {
               {cfg.burnBps} + {cfg.vaultBps} bps
             </span>{' '}
             <span className="ad-role">
-              {fmtPct(cfg.burnBps)} burned + {fmtPct(cfg.vaultBps)} to the fee wallet, of each ticket&apos;s profit only (no entry fee)
+              {fmtPct(cfg.burnBps)} burned + {fmtPct(cfg.vaultBps)} to the fee wallet, of each ticket&apos;s profit only (nothing is taken from the ticket)
             </span>
           </Row>
           <Row label="Burn mode">
@@ -253,7 +253,7 @@ function ArenaEdit({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
 }
 
 /**
- * The fee rules of the arena v3: the pair taken from a ticket's profit (burned + to the fee wallet, at most 25 %
+ * The fee rules of the arena (since v3): the pair taken from a ticket's profit (burned + to the fee wallet, at most 25 %
  * together; new tickets only), the burn mode, the burned share of a power-up payment, and the fee wallet.
  */
 function FeeCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
@@ -272,7 +272,7 @@ function FeeCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
       title="Fees"
       id="arena-config"
       kicker={`Now ${cfg.burnBps} + ${cfg.vaultBps} bps of profit`}
-      lede={`Taken from a ticket's profit only (payout above its entry fee); a loss or a break-even pays nothing and there is no entry fee. The burned share leaves the supply, the rest goes to the fee wallet. At most ${MAX_TOTAL_FEE_BPS} bps (25 %) together; new tickets only, open ones keep the rates they were bought with.`}
+      lede={`Taken from a ticket's profit only (payout above its ticket price, the contract's entry fee); a loss or a break-even pays nothing, and nothing is taken from the ticket. The burned share leaves the supply, the rest goes to the fee wallet. At most ${MAX_TOTAL_FEE_BPS} bps (25 %) together; new tickets only, open ones keep the rates they were bought with.`}
     >
       <div className="ad-form ad-form--grid">
         <Input label="Burned" suffix="bps" value={burn} onChange={setBurn} hint={`${fmtPct(rates.burnBps)} of the profit`} />
@@ -390,7 +390,7 @@ function SweepCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
 function RescueCard({ ctx, open }: { ctx: ChainCtx; open: OpenFn }) {
   const arena = ctx.net.arenaAddress!;
   const [token, setToken] = useState('');
-  const [to, setTo] = useState<string>(ctx.me ?? '');
+  const [to, setTo] = useOwnAddress(ctx.me);
   const [amount, setAmount] = useState('');
   const [err, guard] = useFormError();
   return (

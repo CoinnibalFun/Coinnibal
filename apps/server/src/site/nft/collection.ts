@@ -15,7 +15,7 @@
  *     is published, and token `t` shows art `(t - 1 + offset) mod size`. Anyone can re-run the generator and
  *     check both hashes and the offset.
  */
-import { BRAND_NAME, NFT_NAME, type NftProvenance, type NftRarityStats } from '@elymum/shared';
+import { BRAND_NAME, NFT_NAME, type NftProvenance, type NftRarityStats } from '@coinnibal/shared';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -129,7 +129,7 @@ export class NftCollection {
     }
   }
 
-  /** The art order (generated once, ~150 ms for 5,000). */
+  /** The art order (generated once, ~100 ms for the 3,333 of the collection). */
   private get genomes(): Genome[] {
     this.genomesV ??= generateCollection(this.state.seed, this.state.size);
     return this.genomesV;
@@ -269,6 +269,7 @@ function tierLine(t: Tier): string {
     case 'Legendary':
       return `A Legendary ${NFT_NAME} NFT: one of the few coins of glass, crystal and foil.`;
     case 'Mythic':
-      return `A Mythic ${NFT_NAME} NFT: one of ten one-of-a-kind coins.`;
+      // no count: 7 Mythics at 3,333 tokens, drawn from ten hand-authored 1/1s (which ones is an open owner decision)
+      return `A Mythic ${NFT_NAME} NFT: one of the one-of-a-kind coins.`;
   }
 }

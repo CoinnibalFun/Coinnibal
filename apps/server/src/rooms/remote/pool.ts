@@ -13,7 +13,7 @@ import {
   type MapScaleSettings,
   type RoomInfo,
   type RoundWindow,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import type { ChainGateway } from '../../chain/types';
 import type { Player } from '../../game/entities';
 import type { IntegrityService } from '../../integrity/service';
@@ -334,6 +334,7 @@ export class WorkerPool {
   }
 
   write(conn: Conn, binary: boolean, data: Buffer): void {
+    if (!conn.canSend()) return;
     wsOut.bytes += data.byteLength;
     wsOut.msgs++;
     conn.ws.send(data, { binary });

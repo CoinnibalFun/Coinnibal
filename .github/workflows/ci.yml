@@ -49,20 +49,20 @@ jobs:
       # runtime code hash) are committed: a contract change without a fresh export fails the diff.
       - name: Contracts (build, artifacts in sync, unit + fuzz tests)
         run: |
-          pnpm -F @elymum/contracts build
+          pnpm -F @coinnibal/contracts build
           git diff --exit-code packages/contracts/src/artifacts.ts
-          pnpm -F @elymum/contracts typecheck
-          pnpm -F @elymum/contracts test
+          pnpm -F @coinnibal/contracts typecheck
+          pnpm -F @coinnibal/contracts test
       - name: Shared
-        run: pnpm -F @elymum/shared typecheck && pnpm -F @elymum/shared test
+        run: pnpm -F @coinnibal/shared typecheck && pnpm -F @coinnibal/shared test
       - name: Art
-        run: pnpm -F @elymum/art typecheck && pnpm -F @elymum/art test
+        run: pnpm -F @coinnibal/art typecheck && pnpm -F @coinnibal/art test
       - name: SDK
-        run: pnpm -F @elymum/sdk typecheck && pnpm -F @elymum/sdk test
+        run: pnpm -F @coinnibal/sdk typecheck && pnpm -F @coinnibal/sdk test
       - name: Server
-        run: pnpm -F @elymum/server typecheck && pnpm -F @elymum/server test && pnpm -F @elymum/server test:workers && pnpm -F @elymum/server build
+        run: pnpm -F @coinnibal/server typecheck && pnpm -F @coinnibal/server test && pnpm -F @coinnibal/server test:workers && pnpm -F @coinnibal/server build
       - name: Web
-        run: pnpm -F @elymum/web typecheck && pnpm -F @elymum/web test && pnpm -F @elymum/web build
+        run: pnpm -F @coinnibal/web typecheck && pnpm -F @coinnibal/web test && pnpm -F @coinnibal/web build
 
   docker:
     name: Docker image (build only, no push)
@@ -72,14 +72,25 @@ jobs:
         with:
           persist-credentials: false
       - name: Build
-        run: docker build -t elymum:ci .
+        run: docker build -t coinnibal:ci .
+      # Both Caddy configurations against the Caddy image docker-compose.yml pins, so a Caddy bump (a Dependabot
+      # pull request) that refuses them never reaches the ci-green marker and the VPS
+      - name: Caddy configurations (caddy validate, with the pinned image)
+        run: |
+          image="$(sed -n 's/^    image: \(caddy:[^ ]*\)$/\1/p' deploy/vps/docker-compose.yml)"
+          test -n "$image"
+          for f in Caddyfile Caddyfile.cloudflare; do
+            docker run --rm -e GAME_DOMAIN=game.example.org -e SITE_DOMAIN=example.org \
+              -v "$PWD/deploy/vps/caddy:/etc/caddy:ro" "$image" caddy validate --config "/etc/caddy/$f" --adapter caddyfile
+          done
 
   # The VPS deploys only what passed: after every green run on a branch this moves the tag ci-green-<branch> to the
   # commit, and deploy/vps/update.sh deploys the newest commit it marks (a private repository's CI status is not
-  # readable from the VPS without a token; the tag comes with the same git fetch as the code).
+  # readable from the VPS without a token; the tag comes with the same git fetch as the code). Not on Dependabot's
+  # branches: no server follows them, and their runs get a read-only token (.github/dependabot.yml).
   mark-green:
     name: Mark the commit deployable (ci-green-<branch>)
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && !startsWith(github.ref, 'refs/heads/dependabot/')
     needs: [typescript, docker]
     runs-on: ubuntu-latest
     permissions:

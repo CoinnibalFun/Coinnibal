@@ -26,7 +26,7 @@ const ctx = await b.newContext(VP);
 const key = newDevKey();
 const { address } = await installEvmWallet(ctx, { privateKey: key, autoConnect: false });
 execFileSync('node', [`${ROOT}scripts/localnet-fund.mjs`, address, '1', '20000'], { stdio: 'inherit' });
-await ctx.addInitScript(() => localStorage.setItem('elymum.brief', '1'));
+await ctx.addInitScript(() => localStorage.setItem('coinnibal.brief', '1'));
 const p = await ctx.newPage();
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
@@ -40,7 +40,7 @@ const shot = async (name, full = false) => {
 };
 const ui = () =>
   p.evaluate(() => {
-    const s = window.__elymum?.useUi.getState();
+    const s = window.__coinnibal?.useUi.getState();
     return { screen: s?.screen, room: s?.room?.id ?? null, auth: !!s?.auth, toasts: (s?.toasts ?? []).map((t) => t.text), cta: document.querySelector('.kl-cta')?.textContent ?? null };
   });
 const text = (sel) => p.locator(sel).first().innerText().catch(() => null);
@@ -52,7 +52,7 @@ try {
   await shot('landing');
   // 2. the game page, guest
   await p.goto(`${BASE}/play`, { waitUntil: 'load' });
-  await p.waitForFunction(() => window.__elymum?.useUi.getState().connected, null, { timeout: 120000 });
+  await p.waitForFunction(() => window.__coinnibal?.useUi.getState().connected, null, { timeout: 120000 });
   await p.waitForTimeout(1500);
   await shot('play-guest');
   // 3. connect
@@ -61,7 +61,7 @@ try {
   await shot('connect-modal');
   note('connect-modal', { text: await text('[role="dialog"]') });
   await p.getByText('Dev Wallet').first().click();
-  await p.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 20000 }).catch(() => note('no-auth', {}));
+  await p.waitForFunction(() => !!window.__coinnibal.useUi.getState().auth, null, { timeout: 20000 }).catch(() => note('no-auth', {}));
   await p.waitForTimeout(2500);
   await shot('signed-in');
   note('signed-in', await ui());
@@ -92,7 +92,7 @@ try {
     await shot(`tx-${i}`);
     note(`tx-${i}`, { status: await text('.tf-status'), error: await text('.tf-error') });
   }
-  await p.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 60000 }).catch(() => {});
+  await p.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 60000 }).catch(() => {});
   await p.waitForTimeout(2500);
   await shot('playing');
   note('playing', await ui());

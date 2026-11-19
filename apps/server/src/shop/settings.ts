@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BOOST_KINDS, LEGACY_BOOST_KINDS, OLD_SHOP_PRICES, SHOP_DEFAULTS, SHOP_LIMITS, parseToken, type ShopSettings } from '@elymum/shared';
+import { BOOST_KINDS, LEGACY_BOOST_KINDS, OLD_SHOP_PRICES, SHOP_DEFAULTS, SHOP_LIMITS, parseToken, type ShopSettings } from '@coinnibal/shared';
 
 /** A bad admin value: `field` names it (`prices.magnet`, `arenaUsesPerRound`, …). */
 export class ShopSettingsError extends Error {
@@ -33,7 +33,7 @@ function price(x: unknown, field: string): string {
 }
 
 const KEYS = ['enabled', 'packSize', 'priceIn', 'usdCents', 'prices', 'kinds', 'holderDiscountPct', 'arenaUsesPerRound', 'holderExtraArenaUses'] as const;
-/** Fields of older files that are read and ignored (the payment split is on chain now: `ElymumArena.pay`). */
+/** Fields of older files that are read and ignored (the payment split is on chain now: `CoinnibalArena.pay`). */
 const RETIRED_KEYS = ['sink', 'treasury'] as const;
 
 /**

@@ -1,6 +1,6 @@
-import { CellFlag, ELYSIUM, PowerUpType, SKINS, getSkin } from '@elymum/shared';
+import { CellFlag, ELYSIUM, PowerUpType, SKINS, getSkin } from '@coinnibal/shared';
 import { drawCoin } from './render/coin';
-import type { Expression } from '@elymum/art';
+import type { Expression } from '@coinnibal/art';
 import { JellyBody } from './render/jelly';
 import { SpriteCache, drawSprite } from './render/sprites';
 

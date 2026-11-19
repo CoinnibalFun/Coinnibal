@@ -263,24 +263,6 @@
   margin-top: -16px;
 }
 
-/* play */
-.ad-play {
-  padding-right: 180px;
-  min-height: 200px;
-}
-.ad-play__coin {
-  position: absolute;
-  right: 28px;
-  bottom: 18px;
-}
-.ad-playbtn {
-  text-decoration: none;
-}
-.kb .ad-playbtn {
-  color: var(--ink-fixed);
-  text-decoration: none;
-}
-
 /* settings: who may play */
 .ad-access {
   margin: 0;
@@ -455,10 +437,6 @@ label.ad-cap,
   .ad-int__banform {
     grid-template-columns: 1fr;
   }
-  .ad-play {
-    padding-right: 16px;
-    padding-bottom: 150px;
-  }
   .ad-gate {
     flex-direction: column;
     align-items: flex-start;
@@ -606,4 +584,75 @@ label.ad-cap,
 .ad-note .ad-int__subtype {
   display: inline-block;
   margin: 0 4px 0 0;
+}
+
+/* ── Feedback: players' messages, newest first (plain text, kept as typed) ── */
+.ad-fb__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ad-fb__all {
+  margin-left: auto;
+}
+.ad-fb {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ad-fb__item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 2px solid var(--rule);
+  border-radius: 12px;
+  background: var(--sticker);
+}
+.ad-fb__item.is-unread {
+  border-color: var(--outline);
+  box-shadow: var(--sh-2);
+}
+.ad-fb__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  /* an address and a path read as they are */
+  text-transform: none;
+  color: var(--ink-2);
+}
+.ad-fb__dot {
+  width: 9px;
+  height: 9px;
+  margin-right: -6px;
+  border: 1.5px solid var(--outline);
+  border-radius: 50%;
+  background: var(--sun);
+}
+.ad-fb__text {
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ad-fb__item.is-unread .ad-fb__text {
+  font-weight: 600;
+}
+.ad-fb__contact {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.ad-fb__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ad-fb__more {
+  align-self: flex-start;
 }

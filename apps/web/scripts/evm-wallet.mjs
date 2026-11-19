@@ -9,7 +9,7 @@
 import { createWalletClient, defineChain, http } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
-export const DEV_WALLET_RDNS = 'xyz.elymum.devwallet';
+export const DEV_WALLET_RDNS = 'xyz.coinnibal.devwallet';
 const ICON =
   'data:image/svg+xml;base64,' +
   Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0F2A30"/><circle cx="16" cy="16" r="8" fill="#34B7DD"/></svg>').toString('base64');
@@ -44,7 +44,7 @@ export async function installEvmWallet(ctx, { privateKey = generatePrivateKey(),
     return body.result;
   };
 
-  await ctx.exposeBinding('__elymumWalletRequest', async (_src, method, params) => {
+  await ctx.exposeBinding('__coinnibalWalletRequest', async (_src, method, params) => {
     try {
       switch (method) {
         case 'eth_requestAccounts':
@@ -97,13 +97,13 @@ export async function installEvmWallet(ctx, { privateKey = generatePrivateKey(),
 
   await ctx.addInitScript(
     ({ address, icon, rdns, autoConnect }) => {
-      if (autoConnect) localStorage.setItem('elymum.wallet.v1', rdns);
+      if (autoConnect) localStorage.setItem('coinnibal.wallet.v1', rdns);
       const listeners = {};
       const emit = (ev, v) => (listeners[ev] ?? []).forEach((l) => l(v));
       const provider = {
         isDevWallet: true,
         async request({ method, params }) {
-          const r = await window.__elymumWalletRequest(method, params ?? []);
+          const r = await window.__coinnibalWalletRequest(method, params ?? []);
           if (r.error) throw Object.assign(new Error(r.error.message), { code: r.error.code });
           if (r.chainChanged) setTimeout(() => emit('chainChanged', r.chainChanged), 0);
           return r.result;
@@ -121,7 +121,7 @@ export async function installEvmWallet(ctx, { privateKey = generatePrivateKey(),
       const announce = () => window.dispatchEvent(new CustomEvent('eip6963:announceProvider', { detail: Object.freeze({ info, provider }) }));
       window.addEventListener('eip6963:requestProvider', announce);
       announce();
-      window.__elymumDevWallet = { address, provider };
+      window.__coinnibalDevWallet = { address, provider };
     },
     { address: account.address, icon: ICON, rdns: DEV_WALLET_RDNS, autoConnect },
   );
@@ -130,12 +130,12 @@ export async function installEvmWallet(ctx, { privateKey = generatePrivateKey(),
 
 /**
  * Signs in the page's game session over the WebSocket (SIWE): the nonce from the server, the
- * signature from the local account. The page must expose `window.__elymum` (dev builds).
+ * signature from the local account. The page must expose `window.__coinnibal` (dev builds).
  */
 export async function signInGame(page, base, account) {
   const res = await fetch(`${base.replace(/\/$/, '')}/api/auth/nonce?address=${account.address}`);
   const { message } = await res.json();
   const signature = await account.signMessage({ message });
-  await page.evaluate(([a, m, s]) => window.__elymum.engine.authSignature(a, m, s), [account.address, message, signature]);
-  await page.waitForFunction(() => !!window.__elymum.useUi.getState().auth, null, { timeout: 10000 });
+  await page.evaluate(([a, m, s]) => window.__coinnibal.engine.authSignature(a, m, s), [account.address, message, signature]);
+  await page.waitForFunction(() => !!window.__coinnibal.useUi.getState().auth, null, { timeout: 10000 });
 }

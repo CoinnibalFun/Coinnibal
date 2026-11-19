@@ -1,4 +1,4 @@
-import { EntityKind, PlayerFlag, encodeSnapshot, isCountryCode } from '@elymum/shared';
+import { EntityKind, PlayerFlag, encodeSnapshot, isCountryCode } from '@coinnibal/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ClientWorld } from '../src/game/state';

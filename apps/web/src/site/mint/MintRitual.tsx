@@ -1,4 +1,4 @@
-import { ELYSIUM } from '@elymum/shared';
+import { ELYSIUM } from '@coinnibal/shared';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { CoinMark, Seigaiha, useReducedMotion } from '../../design';

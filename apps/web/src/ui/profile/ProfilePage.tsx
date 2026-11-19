@@ -1,4 +1,4 @@
-import { BASIC_SKINS, EMBLEM_SKIN_ID, MAX_NAME_LENGTH, isBasicSkin, sanitizeName, shortAddress, utf8Length } from '@elymum/shared';
+import { BASIC_SKINS, EMBLEM_SKIN_ID, MAX_NAME_LENGTH, isBasicSkin, sanitizeName, shortAddress, utf8Length } from '@coinnibal/shared';
 import { useEffect, useId, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Button, Field, Icon, Seigaiha, staggerIn, useReducedMotion } from '../../design';
@@ -154,7 +154,7 @@ export function NameAndCoin() {
   // emblem holders may wear the emblem skin (the server checks the NFT on save and at every join)
   const holder = useChainData((s) => s.holder) === true;
   const skin = isBasicSkin(settings.skin) || (holder && settings.skin === EMBLEM_SKIN_ID) ? settings.skin : 0;
-  const skins = holder ? [...BASIC_SKINS, { id: EMBLEM_SKIN_ID, name: 'Emblem' }] : BASIC_SKINS;
+  const skins = holder ? [...BASIC_SKINS, { id: EMBLEM_SKIN_ID, name: 'NFT skin' }] : BASIC_SKINS;
   // the country is saved with the profile once the player picked one (the first-visit guess is not a pick)
   const country = settings.countryAuto ? undefined : settings.country || null;
   const countryDiff = country !== undefined && country !== (profile?.country ?? null);

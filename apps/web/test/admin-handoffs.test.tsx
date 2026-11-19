@@ -1,9 +1,9 @@
 /**
- * The admin side of the server work: secret exports behind a fresh, purpose-bound signature (X-Elymum-Proof), short
+ * The admin side of the server work: secret exports behind a fresh, purpose-bound signature (X-Coinnibal-Proof), short
  * revocable admin sessions, the server key's gas runway, "Re-price at next bell", USD-priced power-ups and the
  * finer integrity flag kinds.
  */
-import { SHOP_DEFAULTS, type GasRunway, type IntegrityFlag, type ShopSettings } from '@elymum/shared';
+import { SHOP_DEFAULTS, type GasRunway, type IntegrityFlag, type ShopSettings } from '@coinnibal/shared';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RepriceAtBell, repriceText } from '../src/admin/ArenaPricesCard';
@@ -19,7 +19,7 @@ import { useSession } from '../src/site/session';
 const ADMIN = '0x1111111111111111111111111111111111111111';
 const settle = () => act(async () => new Promise((r) => setTimeout(r, 20)));
 const decode = (proof: string) => JSON.parse(atob(proof.replace(/-/g, '+').replace(/_/g, '/'))) as { message: string; signature: string };
-const challenge = (purpose: string, n = 1) => ({ message: `Elymum admin: export the server secrets\n\nPurpose: ${purpose}\nNonce: ${String(n).padStart(32, '0')}`, nonce: String(n), expiresAt: Date.now() + 600_000 });
+const challenge = (purpose: string, n = 1) => ({ message: `Coinnibal admin: export the server secrets\n\nPurpose: ${purpose}\nNonce: ${String(n).padStart(32, '0')}`, nonce: String(n), expiresAt: Date.now() + 600_000 });
 
 afterEach(() => {
   cleanup();
@@ -41,7 +41,7 @@ function fakeApi(over: Partial<Record<keyof AdminApi, unknown>> = {}): AdminApi 
 }
 const ctxOf = (api: AdminApi | null) => ({ api }) as unknown as ChainCtx;
 
-describe('secret exports: sign the purpose-bound text, then send X-Elymum-Proof', () => {
+describe('secret exports: sign the purpose-bound text, then send X-Coinnibal-Proof', () => {
   it('encodes the proof as base64url JSON of {message, signature} (unicode safe)', () => {
     const p = encodeProof('Purpose: backup\nServer: é', '0xabc');
     expect(p).not.toMatch(/[+/=]/);
@@ -98,6 +98,8 @@ describe('secret exports: sign the purpose-bound text, then send X-Elymum-Proof'
     await settle();
     expect(api.secretProof).toHaveBeenLastCalledWith('migration');
     expect((writeText.mock.calls[0] as unknown[])[0]).toMatch(/^install --proof /);
+    // the move never carries the contract pins (install.sh refuses them): the owner sets them again in the new VPS shell
+    expect(screen.getByTestId('backup-note').textContent).toMatch(/the signed site pins too\)\. A COINNIBAL_PIN_\* override in \.env does not move/);
     fireEvent.click(screen.getByTestId('backup-copy'));
     await settle();
     expect(api.secretProof).toHaveBeenLastCalledWith('backup');
@@ -277,7 +279,7 @@ describe('power-ups priced in US dollars', () => {
 describe('integrity: the finer flag kinds', () => {
   it('names the subtype next to the kind', () => {
     expect(flagKindText({ kind: 'pair_transfer', subtype: 'non_aggression' } as IntegrityFlag)).toBe('Pair transfer · Non-aggression pact');
-    expect(flagKindText({ kind: 'shared_device', subtype: 'emblem_shared' } as IntegrityFlag)).toBe('Shared IP or browser · Emblem shared');
+    expect(flagKindText({ kind: 'shared_device', subtype: 'emblem_shared' } as IntegrityFlag)).toBe('Shared IP or browser · NFT shared');
     expect(flagKindText({ kind: 'eject_feed' } as IntegrityFlag)).toBe('Eject feeding');
     expect(Object.keys(SUBTYPE_LABEL).sort()).toEqual(['emblem_shared', 'fresh_feeders', 'non_aggression', 'shared_funding']);
   });

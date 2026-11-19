@@ -1,4 +1,4 @@
-import { paidRoomTarget, testArenaTarget, type CustomRoomView } from '@elymum/shared';
+import { paidRoomTarget, testArenaTarget, type CustomRoomView } from '@coinnibal/shared';
 import { engine } from '../game/instance';
 import { t } from '../i18n';
 import { toast, useUi } from '../store';
@@ -23,15 +23,20 @@ export function leavePaidSeat(): void {
   useUi.setState({ paidSeat: null });
 }
 
+/** The code of the paid room a ticket of `arenaId` is headed for (`paidSeat`), else null. */
+export function paidSeatCode(arenaId: number, now = Date.now()): string | null {
+  const seat = useUi.getState().paidSeat;
+  return seat && seat.arenaId === arenaId && seat.endsAt > now ? seat.code : null;
+}
+
 /**
  * The join target of a ticket of `arenaId`: the paid room this player is headed for, else the arena's test arena
  * when the player picked it (`testSeat`, testnet only), else the arena (quick play: an official instance).
  */
 export function arenaTarget(arenaId: number, now = Date.now()): string {
-  const s = useUi.getState();
-  const seat = s.paidSeat;
-  if (seat && seat.arenaId === arenaId && seat.endsAt > now) return paidRoomTarget(arenaId, seat.code);
-  if (s.testSeat === arenaId) return testArenaTarget(arenaId);
+  const code = paidSeatCode(arenaId, now);
+  if (code) return paidRoomTarget(arenaId, code);
+  if (useUi.getState().testSeat === arenaId) return testArenaTarget(arenaId);
   return `arena:${arenaId}`;
 }
 

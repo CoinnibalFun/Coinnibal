@@ -14,7 +14,7 @@ async function gas(hash: Hex): Promise<bigint> {
 }
 
 const token = await viem.deployContract('TestToken', [admin.account.address]);
-const arena = await viem.deployContract('ElymumArena', [
+const arena = await viem.deployContract('CoinnibalArena', [
   admin.account.address,
   server.account.address,
   feeWallet.account.address,
@@ -22,6 +22,28 @@ const arena = await viem.deployContract('ElymumArena', [
 await arena.write.setToken([token.address]);
 const FEE = parseEther('1000');
 await arena.write.createArena([1, FEE, 2000]);
+
+/** The game server's join permit (CoinnibalArena v4): the server key signs `JoinPermit` for the player's next nonce. */
+const chainId = await publicClient.getChainId();
+async function permit(player: Address, arenaId: number): Promise<readonly [bigint, Hex]> {
+  const deadline = (await publicClient.getBlock()).timestamp + 600n;
+  const nonce = (await arena.read.joinNonce([player])) as bigint;
+  const signature = await server.signTypedData({
+    account: server.account,
+    domain: { name: 'CoinnibalArena', version: '4', chainId, verifyingContract: arena.address },
+    types: {
+      JoinPermit: [
+        { name: 'player', type: 'address' },
+        { name: 'arenaId', type: 'uint16' },
+        { name: 'nonce', type: 'uint64' },
+        { name: 'deadline', type: 'uint64' },
+      ],
+    },
+    primaryType: 'JoinPermit',
+    message: { player, arenaId, nonce, deadline },
+  });
+  return [deadline, signature] as const;
+}
 
 const accounts: Address[] = [];
 for (let i = 0; i < 41; i++) {
@@ -36,7 +58,7 @@ for (const a of accounts) {
   await testClient.setBalance({ address: a, value: parseEther('10') });
   await token.write.mint([a, FEE * 10n]);
   await token.write.approve([arena.address, FEE * 10n], { account: a });
-  joinGas.push(await gas(await arena.write.join([1], { account: a })));
+  joinGas.push(await gas(await arena.write.join([1, ...(await permit(a, 1))], { account: a })));
 }
 const session = async (a: Address) => ((await arena.read.getSession([1, a])) as { id: bigint }).id;
 const settleOne = [{ arenaId: 1, player: accounts[0], sessionId: await session(accounts[0]), payout: parseEther('1500') }];
@@ -49,7 +71,7 @@ const s40 = await gas(await arena.write.settle([many], { account: server.account
 const sweep = await gas(await arena.write.sweepLoot([1, 1n, parseEther('100')], { account: server.account }));
 
 // NFT
-const nft = await viem.deployContract('ElymumNFT', [admin.account.address, 10_000, parseEther('0.03'), 2, 3, 'https://x/api/nft/', admin.account.address]);
+const nft = await viem.deployContract('CoinnibalNFT', [admin.account.address, 10_000, parseEther('0.03'), 2, 3, 'https://x/api/nft/', admin.account.address]);
 const minter = players[0].account.address;
 const leaf = (a: Address) => keccak256(keccak256(encodeAbiParameters([{ type: 'address' }], [a])));
 const other = leaf('0x0000000000000000000000000000000000001111');

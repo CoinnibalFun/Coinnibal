@@ -29,7 +29,7 @@ import {
   type WlTask,
   type WlTaskAnswer,
   BRAND_NAME,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import * as v from './validate';
 import { SiteFail, bad } from './validate';
 
@@ -37,7 +37,7 @@ import { SiteFail, bad } from './validate';
 const wkey = (w: string): string => w.toLowerCase();
 
 /**
- * Earlier defaults of the project's X handle. A stored `xHandle` equal to one of them (and not the current default:
+ * Earlier defaults of the project's X handle (the project was called Elymum until November 2026). A stored `xHandle` equal to one of them (and not the current default:
  * `X_HANDLE`, else `SITE_X_HANDLE_DEFAULT`) is switched to the default on load, and the seeded tasks' text and links that name one are rewritten to
  * the current handle (an admin-chosen handle, custom tasks and WL answers are never touched).
  */
@@ -450,7 +450,7 @@ export class SiteStore {
 
   submitWl(wallet: string, body: Record<string, unknown>): WlEntryPublic {
     v.honeypot(body);
-    if (!this.settingsV.wlOpen) throw new SiteFail(403, 'wl_closed', `Applications are closed. Follow @${this.settingsV.xHandle}.`);
+    if (!this.settingsV.wlOpen) throw new SiteFail(403, 'wl_closed', `Applications are closed. Follow @${this.settingsV.xHandle} to hear when they open again.`);
     if (this.wlByWallet.has(wkey(wallet))) throw new SiteFail(409, 'already_applied', 'This wallet already applied.');
     const xHandle = v.handle(body.xHandle, 'xHandle');
     if (this.wlByHandle.has(xHandle)) throw new SiteFail(409, 'handle_taken', 'This X handle already applied.', 'xHandle');
@@ -599,7 +599,7 @@ export class SiteStore {
   applyCollab(wallet: string, body: Record<string, unknown>): CollabPublic {
     if (!this.settingsV.collabOpen) {
       v.honeypot(body);
-      throw new SiteFail(403, 'collab_closed', 'Collab applications are closed.');
+      throw new SiteFail(403, 'collab_closed', `Collab applications are closed. Follow @${this.settingsV.xHandle} to hear when they open again.`);
     }
     const form = v.collabApply(body);
     // the same application sent twice (a double click, a retry after a lost answer): the first one stands

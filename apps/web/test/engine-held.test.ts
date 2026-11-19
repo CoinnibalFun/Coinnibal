@@ -1,4 +1,4 @@
-import type { ClientMessage, RoomInfo, ServerMessage } from '@elymum/shared';
+import type { ClientMessage, RoomInfo, ServerMessage } from '@coinnibal/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The engine without a canvas renderer or a real socket: the test drives the server side.
@@ -41,7 +41,7 @@ const { useUi } = await import('../src/store');
 
 const T = 1_800_000_000_000; // a round boundary (5-minute rounds)
 const OPENS = T + 300_000;
-const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: 'Penny Pond', width: 6400, height: 6400, players: 1, bots: 0, maxPlayers: 50, arenaId: 1, entryFee: 1, round: { n: T / 300_000, endsAt: OPENS, joinsCloseAt: OPENS - 60_000 } };
+const ARENA: RoomInfo = { id: 'arena-1-1', mode: 'arena', name: '$1 Room', width: 6400, height: 6400, players: 1, bots: 0, maxPlayers: 50, arenaId: 1, entryFee: 1, round: { n: T / 300_000, endsAt: OPENS, joinsCloseAt: OPENS - 60_000 } };
 // jsdom has no canvas: the same null it returns, without the "not implemented" warning
 HTMLCanvasElement.prototype.getContext = (() => null) as never;
 const initial = useUi.getState();
@@ -58,7 +58,7 @@ beforeEach(() => {
   vi.spyOn(Math, 'random').mockReturnValue(0.5);
   serverClock.reset();
   // a returning player: the first-play brief does not hold the join
-  localStorage.setItem('elymum.brief', '1');
+  localStorage.setItem('coinnibal.brief', '1');
   net.open = true;
   net.sent = [];
   useUi.setState({ ...initial, rooms: [ARENA], screen: 'lobby' }, true);

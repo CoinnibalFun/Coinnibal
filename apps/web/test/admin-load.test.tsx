@@ -1,4 +1,4 @@
-import type { GameServerLoad, GameThreadLoad } from '@elymum/shared';
+import type { GameServerLoad, GameThreadLoad } from '@coinnibal/shared';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LoadCard, threadHot } from '../src/admin/NetworkTab';

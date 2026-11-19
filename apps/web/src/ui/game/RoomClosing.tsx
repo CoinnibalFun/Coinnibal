@@ -1,4 +1,4 @@
-import { ROOM_CLOSE_COUNTDOWN_MS } from '@elymum/shared';
+import { ROOM_CLOSE_COUNTDOWN_MS } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Button, Sheet } from '../../design';
 import { engine } from '../../game/instance';

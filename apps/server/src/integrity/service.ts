@@ -12,7 +12,7 @@ import {
   type IntegritySettings,
   type IntegrityTransfer,
   type IntegrityWalletView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import type { Player } from '../game/entities';
 import { csv } from '../site/store';
 import type { Journal, SettlementItem } from '../stake/journal';

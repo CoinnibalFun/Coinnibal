@@ -4,12 +4,16 @@ import {
   CUSTOM_DEFAULTS,
   CUSTOM_MAP_SIZES,
   CUSTOM_MAP_WIDTH,
+  CUSTOM_REQUEST_RE,
   CUSTOM_SETTINGS_DEFAULT,
   CUSTOM_TRAPS,
   CUSTOM_TRAP_MUL,
   customCapacityChoices,
   customCapacityTiers,
+  customRoomBaseRaw,
+  customRoomCost,
   customRoomFee,
+  customRoomPaymentRef,
   customRoomPrice,
   customUsesFreeRoom,
   inviteUrl,
@@ -17,7 +21,11 @@ import {
   paidRoomTarget,
   parseInviteCode,
   parseJoinTarget,
+  parseUsdPrice,
   quotePrice,
+  shopCartRef,
+  shopPaymentRef,
+  usdToTokenRaw,
   validateCustomConfig,
 } from '../src';
 
@@ -103,7 +111,7 @@ describe('invites', () => {
     expect(parseInviteCode('ABCDEFGHJKL')).toBeNull();
     expect(parseInviteCode('ABC1EFGH')).toBeNull();
     expect(parseInviteCode(null)).toBeNull();
-    expect(inviteUrl('https://elymum.io/', 'AB2CD')).toBe('https://elymum.io/play?room=AB2CD');
+    expect(inviteUrl('https://coinnibal.fun/', 'AB2CD')).toBe('https://coinnibal.fun/play?room=AB2CD');
     expect(parseJoinTarget('private:AB2CD')).toEqual({ mode: 'private', code: 'AB2CD' });
   });
 
@@ -141,10 +149,10 @@ describe('room fee by capacity', () => {
   it('the step percent is the admin setting: 0 keeps one price, 100 doubles per tier', () => {
     expect(customRoomFee(base, 100, 0)).toBe(base);
     expect(customRoomFee(base, 25, 100)).toBe(base * 3n);
-    expect(customRoomFee(1n, 11, 50)).toBe(1n); // rounded down to the wei
+    expect(customRoomFee(1n, 11, 50)).toBe(1n); // rounded down to the base unit
   });
   it('the live price of a quote applies the fee, then the holder perk', () => {
-    const q = { priceWei: base.toString(), capacityStepPct: 50, holderPerk: 'discount' as const, holderDiscountPct: 50, holder: false, freeAvailable: false };
+    const q = { priceRaw: base.toString(), capacityStepPct: 50, holderPerk: 'discount' as const, holderDiscountPct: 50, holder: false, freeAvailable: false };
     expect(quotePrice(q, 10)).toBe(base);
     expect(quotePrice(q, 40)).toBe((base * 5n) / 2n);
     expect(quotePrice({ ...q, holder: true }, 40)).toBe((base * 5n) / 4n);
@@ -154,6 +162,48 @@ describe('room fee by capacity', () => {
     expect(quotePrice(daily, 11)).toBe((base * 3n) / 2n);
     expect(customUsesFreeRoom(daily, true, true, 10)).toBe(true);
     expect(customUsesFreeRoom(daily, true, true, 12)).toBe(false);
+  });
+  it('the quote and the server price come from one function (customRoomCost)', () => {
+    const s = { ...CUSTOM_SETTINGS_DEFAULT, holderPerk: 'discount' as const, holderDiscountPct: 30 };
+    for (const holder of [false, true])
+      for (const cap of [2, 10, 11, 37, 100]) {
+        const q = { priceRaw: base.toString(), capacityStepPct: s.capacityStepPct, holderPerk: s.holderPerk, holderDiscountPct: s.holderDiscountPct, holder, freeAvailable: false };
+        expect(quotePrice(q, cap), `${holder} ${cap}`).toBe(customRoomCost(base, s, holder, false, cap));
+        expect(customRoomCost(base, s, holder, false, cap)).toBe(customRoomPrice(customRoomFee(base, cap, s.capacityStepPct), s, holder, false, cap));
+      }
+  });
+});
+
+describe('room fee in the game token', () => {
+  const ONE = 10n ** 18n;
+  it('priced in dollars: $1.50 converted at the arenas\' token price and rounding; in tokens without a price', () => {
+    const s = CUSTOM_SETTINGS_DEFAULT;
+    // the reference price $0.001: 1,500 tokens
+    const usd = { price: parseUsdPrice('0.001'), sigFigs: 2 };
+    expect(customRoomBaseRaw(s, 18, usd)).toEqual({ raw: 1500n * ONE, usdCents: 150 });
+    // the same function the tickets use (rounded to the significant figures)
+    const odd = { price: parseUsdPrice('0.00081'), sigFigs: 2 };
+    expect(customRoomBaseRaw(s, 18, odd)).toEqual({ raw: usdToTokenRaw(150, odd.price, 18, 2), usdCents: 150 });
+    expect(customRoomBaseRaw(s, 18, odd).raw).toBe(1900n * ONE);
+    // no token price yet: the token price
+    expect(customRoomBaseRaw(s, 18, null)).toEqual({ raw: 1500n * ONE, usdCents: null });
+    // priced in tokens: the whole-token price, whatever the dollar price
+    expect(customRoomBaseRaw({ ...s, priceIn: 'token', priceTokens: '12.5' }, 18, usd)).toEqual({ raw: 125n * 10n ** 17n, usdCents: null });
+    expect(customRoomBaseRaw({ ...s, priceIn: 'token', priceTokens: '7' }, 6, null).raw).toBe(7_000_000n);
+  });
+
+  it('the payment ref names the request: ASCII coinnibal.room.<id>, never a power-up ref', () => {
+    const ref = customRoomPaymentRef('abcdefghijk23456');
+    expect(ref).toMatch(/^0x[0-9a-f]{64}$/);
+    const ascii = (ref.slice(2).match(/../g) ?? []).map((h) => String.fromCharCode(parseInt(h, 16))).join('').replace(/\0+$/, '');
+    expect(ascii).toBe('coinnibal.room.abcdefghijk23456');
+    expect(customRoomPaymentRef('abcdefghijk23457')).not.toBe(ref);
+    expect(ref).not.toBe(shopPaymentRef('magnet'));
+    expect(ref).not.toBe(shopCartRef({ magnet: 1, leap: 0, speed: 0, invis: 0 }));
+    for (const bad of ['', 'ABCDEFGHIJK23456', 'abcdefghijk2345', 'abcdefghijk234567', 'abcdefghijk2345!', 'abcdefghijk01234']) {
+      expect(CUSTOM_REQUEST_RE.test(bad), bad).toBe(false);
+      expect(() => customRoomPaymentRef(bad), bad).toThrow(TypeError);
+    }
   });
 });
 
@@ -168,8 +218,11 @@ describe('room price', () => {
     expect(customRoomPrice(price, { ...s, holderPerk: 'free_daily' }, true, false)).toBe(price);
     expect(customRoomPrice(price, { ...s, holderPerk: 'none' }, true, true)).toBe(price);
   });
-  it('defaults: 0.0005 ETH, a free room of the day for holders (50 % off when the admin picks the discount), 6 live rooms, 2 per wallet, +50 % per 10 players, rooms up to 100, 300 seats', () => {
-    expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ priceGas: '0.0005', holderPerk: 'free_daily', holderDiscountPct: 50, maxLive: 6, maxPerWallet: 2, treasury: null });
+  it('defaults: $1.50 in tokens (1,500 before a token price), a free room of the day for holders (50 % off when the admin picks the discount), 6 live rooms, 2 per wallet, +50 % per 10 players, rooms up to 100, 300 seats', () => {
+    expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ priceIn: 'usd', usdCents: 150, priceTokens: '1500', holderPerk: 'free_daily', holderDiscountPct: 50, maxLive: 6, maxPerWallet: 2 });
     expect(CUSTOM_SETTINGS_DEFAULT).toMatchObject({ capacityStepPct: 50, maxPlayers: 100, maxSeats: 300, paidRooms: true });
+    // the ETH fields are gone (rooms are paid in the game token, to the arena contract)
+    expect(CUSTOM_SETTINGS_DEFAULT).not.toHaveProperty('priceGas');
+    expect(CUSTOM_SETTINGS_DEFAULT).not.toHaveProperty('treasury');
   });
 });

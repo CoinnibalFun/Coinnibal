@@ -1,26 +1,41 @@
-import type { ChainStatus } from '@elymum/shared';
-import type { Address, Hash } from 'viem';
-import { isDevFake, loadDevFake } from '../wallet/devFakeLoader';
-import { sendWithWallet, txErrorText, type TxPhase } from '../wallet/tx';
-import { t } from '../i18n';
+import { customRoomPaymentRef, type ChainStatus, type CustomRoomQuote } from '@coinnibal/shared';
+import type { Hash } from 'viem';
+import { ShopError, payArena, type BuyPhase } from '../wallet/shop';
 
+/**
+ * `ok`: the fee was paid (`hash`). Not ok: `rejected` (the player declined in the wallet), and `hash` when the `pay` was
+ * sent but did not confirm here (a timeout, a revert): the server is asked about it all the same, never a second payment.
+ */
 export type PayResult = { ok: true; hash: Hash } | { ok: false; message: string; rejected: boolean; hash: Hash | null };
 
 /**
- * Sends the room fee: one native gas-token transfer of exactly `wei` from the connected wallet to the
- * treasury `to`, on the server's chain (the wallet is switched first), and waits for its receipt.
- * On a DEV_FAKE_CHAIN server the transfer is simulated (the server accepts the fake hash).
+ * Pays the room fee in the game token, exactly like a power-up cart (`payArena`): an `approve` of exactly `raw` when the
+ * allowance is short, then `CoinnibalArena.pay(raw, customRoomPaymentRef(request))` to the pinned arena the quote names
+ * (half burned, half to the fee wallet in that call). `request` is this room request's own id: the server opens one
+ * room for it. On a DEV_FAKE_CHAIN server the payment is simulated (the server records a fake `pay`).
  */
-export async function payRoomFee(chain: ChainStatus, to: Address, wei: bigint, onPhase: (p: TxPhase, hash?: Hash) => void): Promise<PayResult> {
-  if (isDevFake(chain)) {
-    const fake = await loadDevFake();
-    if (fake) {
-      const r = await fake.fakeGasPayment(wei, onPhase);
-      if (r.ok) return r;
-      return { ok: false, rejected: r.name === 'UserRejected', hash: null, message: r.name === 'InsufficientFunds' ? t('api.roomFunds') : t('api.payFailed') };
-    }
+export async function payRoomFee(
+  pay: NonNullable<CustomRoomQuote['pay']>,
+  raw: bigint,
+  request: string,
+  ctx: { owner: string; chain: ChainStatus; onPhase: (p: BuyPhase) => void; onStep?: (step: 'approve' | 'pay') => void },
+): Promise<PayResult> {
+  try {
+    const hash = await payArena({ token: pay.token.address, payTo: pay.payTo }, raw, customRoomPaymentRef(request), { owner: ctx.owner, chain: ctx.chain, onPhase: ctx.onPhase, onStep: ctx.onStep });
+    return { ok: true, hash: hash as Hash };
+  } catch (e) {
+    const err = e instanceof ShopError ? e : new ShopError('tx', (e as Error)?.message ?? String(e));
+    return { ok: false, rejected: err.code === 'rejected', hash: (err.txHash as Hash | null) ?? null, message: err.message };
   }
-  const res = await sendWithWallet((wallet, from) => wallet.sendTransaction({ account: from, to, value: wei, chain: wallet.chain ?? null }), { chain, onPhase });
-  if (res.ok) return { ok: true, hash: res.hash };
-  return { ok: false, rejected: res.error.kind === 'rejected', hash: res.hash, message: txErrorText(res.error) };
+}
+
+const B32 = 'abcdefghijklmnopqrstuvwxyz234567';
+
+/** A fresh room request id (`CUSTOM_REQUEST_RE`: 16 base32 characters, 80 random bits): one per room the player pays for. */
+export function newRoomRequest(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (const b of bytes) out += B32[b & 31];
+  return out;
 }

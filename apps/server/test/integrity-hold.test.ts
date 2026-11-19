@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PlayerFlag, TICK_MS, roundAt } from '@elymum/shared';
+import { PlayerFlag, TICK_MS, roundAt } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { DevFakeChain } from '../src/chain/dev-fake';
 import { NullChain } from '../src/chain/types';
@@ -36,7 +36,7 @@ const settle = (key: string, payout: number, held = true): SettlementItem => ({
 
 describe('journal holds', () => {
   it('release and settle-at-0 move nothing out of the books, and survive a restart', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-hold-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-hold-'));
     const path = join(dir, 'journal.json');
     const j = new Journal(path);
     j.commit({ enqueue: [settle('A', 500), settle('B', 700), settle('C', 900, false)] });

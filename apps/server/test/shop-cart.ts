@@ -1,8 +1,8 @@
 /**
- * The power-up cart (several power-ups, one `ElymumArena.pay`): a fixture and a randomized money conservation run,
+ * The power-up cart (several power-ups, one `CoinnibalArena.pay`): a fixture and a randomized money conservation run,
  * shared by test/shop-cart.test.ts and the money simulation suite (test/money-conservation.test.ts).
  */
-import { BOOST_KINDS, SHOP_CART_LIMITS, shopCartRef, type BoostKind } from '@elymum/shared';
+import { BOOST_KINDS, SHOP_CART_LIMITS, shopCartRef, type BoostKind } from '@coinnibal/shared';
 import { ChainBusyError, type TokenReceipt } from '../src/chain/types';
 import { mulberry32 } from '../src/game/rng';
 import { BoostInventory } from '../src/shop/inventory';
@@ -25,7 +25,7 @@ export class CartChain extends ArenaChain {
     if (this.busy) throw new ChainBusyError('test');
     return this.receipts.get(h) ?? null;
   }
-  /** Records `ElymumArena.pay(value, ref)` from `from` (the token moved to the arena, the `Paid` event). */
+  /** Records `CoinnibalArena.pay(value, ref)` from `from` (the token moved to the arena, the `Paid` event). */
   pay(h: string, from: string, value: bigint, ref: string): void {
     this.receipts.set(h, {
       status: 'success',

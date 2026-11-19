@@ -1,12 +1,12 @@
 /**
  * The long money simulation (see test/money-sim.ts): real rooms, journal and settlement worker against the
- * contract model (default) or a real hardhat node with the real ElymumArena v3 (`--hardhat`), with every fault on.
+ * contract model (default) or a real hardhat node with the real CoinnibalArena v4 (`--hardhat`), with every fault on.
  * Prints one report per seed and exits 1 on any broken invariant.
  *
- *   pnpm -F @elymum/server money-sim                          # 4 seeds x 500 rounds on the model
- *   pnpm -F @elymum/server money-sim --rounds 2000 --seeds 2
- *   pnpm -F @elymum/server money-sim --hardhat --rounds 150   # the real contract on a fresh hardhat node
- *   pnpm -F @elymum/server money-sim --test-arenas            # plus a test arena with practice bots per arena
+ *   pnpm -F @coinnibal/server money-sim                          # 4 seeds x 500 rounds on the model
+ *   pnpm -F @coinnibal/server money-sim --rounds 2000 --seeds 2
+ *   pnpm -F @coinnibal/server money-sim --hardhat --rounds 150   # the real contract on a fresh hardhat node
+ *   pnpm -F @coinnibal/server money-sim --test-arenas            # plus a test arena with practice bots per arena
  */
 import { DEFAULT_FAULTS, fakeSimChain, runMoneySim, type SimChain, type SimReport } from '../test/money-sim';
 

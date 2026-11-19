@@ -1,16 +1,16 @@
 /**
- * Gas of the server key's transactions on the real ElymumArena v3 (hardhat node): one `settle` batch of 1, 10 and
+ * Gas of the server key's transactions on the real CoinnibalArena v4 (hardhat node): one `settle` batch of 1, 10 and
  * 40 tickets (the worker's chunk size), so the server key's ETH budget can be planned:
  *   ETH per bell ~= sum over arenas of ceil(tickets / 40) batches x gas per batch x gas price (+ the L1 data fee
  *   of an Orbit chain, which this local node does not charge).
  *
  *   node --import tsx scripts/bench/settle-gas.ts      (from apps/server)
  */
-import { createElymumWalletClient, getSession, sendCall, settleCall, viemChain } from '@elymum/sdk';
+import { createCoinnibalWalletClient, getSession, sendCall, settleCall, viemChain } from '@coinnibal/sdk';
 import { startHardhatArena } from './hardhat-arena';
 
 const hh = await startHardhatArena({ players: 51 });
-const wallet = createElymumWalletClient(hh.url, { account: hh.server, chain: viemChain(31337, { rpcUrl: hh.url }), pollingInterval: 20 });
+const wallet = createCoinnibalWalletClient(hh.url, { account: hh.server, chain: viemChain(31337, { rpcUrl: hh.url }), pollingInterval: 20 });
 const out: Record<string, number> = {};
 let offset = 0;
 for (const n of [1, 10, 40]) {

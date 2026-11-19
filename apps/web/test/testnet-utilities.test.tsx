@@ -1,8 +1,8 @@
-import type { StatusSnapshot } from '@elymum/sdk/ops';
+import type { StatusSnapshot } from '@coinnibal/sdk/ops';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ARENA_SCALING_DEFAULT, ARENA_SCALING_LIMITS, TEST_ARENA_DEFAULT, type ArenaScalingView, type TestArenaView } from '@elymum/shared';
+import { ARENA_SCALING_DEFAULT, ARENA_SCALING_LIMITS, TEST_ARENA_DEFAULT, type ArenaScalingView, type TestArenaView } from '@coinnibal/shared';
 import { ArenaScalingCard, scalingPatch } from '../src/admin/ArenaScalingCard';
 import { TestArenasCard, testArenaPatch } from '../src/admin/TestArenasCard';
 import { MapsCard, mapsPatch } from '../src/admin/GameTab';
@@ -16,7 +16,7 @@ import type { ChainCtx } from '../src/admin/ui';
 import { Kb } from '../src/design';
 import { adminApi, type MapAdminView } from '../src/site/api';
 import { FaucetPage } from '../src/site/faucet/FaucetPage';
-import { claimErrorText, displaySymbol, faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
+import { TEST_SYMBOL_DEFAULT, claimErrorText, displaySymbol, faucetTokenAddress, servedConfig, faucetView, formatWait, holderMultiple, watchAssetParams, wholeTokens } from '../src/site/faucet/logic';
 import { translate, type TKey } from '../src/i18n';
 import { livePerks } from '../src/site/mint/logic';
 import { configuredPerks, perkCards } from '../src/site/nft/WhyNft';
@@ -28,6 +28,7 @@ import { resetSiteSettings } from '../src/site/settings';
 import { Feed } from '../src/ui/game/Feed';
 import { useUi } from '../src/store';
 import { buildTickets, quickPlayTarget, ticketGate, type TicketModel } from '../src/wallet/ticket';
+import { buildPins } from '../src/wallet/pinned';
 import { resetWallets } from '../src/wallet/store';
 import { ALICE, ONE, chainStatus } from './evm-helpers';
 import { SETTINGS, installDomStubs, mockFetch } from './site-helpers';
@@ -93,10 +94,12 @@ describe('fast navigation', () => {
 
 describe('the faucet', () => {
   it("names the game token by the game's display symbol, another token by its own", () => {
-    const tt = { address: '0xAbC0000000000000000000000000000000000001', symbol: 'tELYMUM' };
+    const tt = { address: '0xAbC0000000000000000000000000000000000001', symbol: 'TEST' };
     expect(displaySymbol(tt, { address: tt.address.toLowerCase(), symbol: '$NIBAL' })).toBe('$NIBAL');
-    expect(displaySymbol(tt, { address: '0x0000000000000000000000000000000000000002', symbol: '$NIBAL' })).toBe('tELYMUM');
-    expect(displaySymbol(tt, null)).toBe('tELYMUM');
+    expect(displaySymbol(tt, { address: '0x0000000000000000000000000000000000000002', symbol: '$NIBAL' })).toBe('TEST');
+    expect(displaySymbol(tt, null)).toBe('TEST');
+    // the TestToken's own symbol (ERC20("Coinnibal Test Token", "TEST")) until the chain answers
+    expect(TEST_SYMBOL_DEFAULT).toBe('TEST');
   });
 
   it('picks what to show from the chain and the token', () => {
@@ -122,7 +125,7 @@ describe('the faucet', () => {
     expect(wholeTokens(1_000_000n * ONE, 18)).toBe('1,000,000');
     expect(holderMultiple({ amount: 1_000_000n * ONE, holderAmount: 2_000_000n * ONE, holderNft: '0xnft' })).toBe(2);
     expect(holderMultiple({ amount: 1n, holderAmount: 2n, holderNft: null })).toBeNull();
-    expect(watchAssetParams('0xabc', 'tELYMUM', 18)).toEqual({ type: 'ERC20', options: { address: '0xabc', symbol: 'tELYMUM', decimals: 18 } });
+    expect(watchAssetParams('0xabc', 'TEST', 18)).toEqual({ type: 'ERC20', options: { address: '0xabc', symbol: 'TEST', decimals: 18 } });
     expect(watchAssetParams('0xabc', 'AVERYLONGSYMBOL', 18).options.symbol).toHaveLength(11);
   });
 
@@ -149,10 +152,26 @@ describe('the faucet', () => {
     expect(await screen.findByTestId('fc-no-token')).toBeTruthy();
   });
 
+  it("sends the stored session with the faucet read (while only admins play, the server answers an admin's only)", async () => {
+    localStorage.setItem('coinnibal.auth.v1', JSON.stringify({ address: '0x00000000000000000000000000000000000000Ad', token: 'admin-token', exp: Date.now() + 3_600_000 }));
+    let calls: { method: string; path: string; auth: string | null }[] = [];
+    try {
+      ({ calls, restore } = mockFetch({
+        'GET /api/config': { chain: chainStatus() },
+        'GET /api/site/faucet': { enabled: false, chainId: 46630, token: null, decimals: 18, amount: null, holderAmount: null, cooldownSecs: null, holderNft: null, gasFaucetUrl: 'https://x' },
+      }));
+      ui(<FaucetPage />);
+      expect(await screen.findByTestId('fc-no-token')).toBeTruthy();
+      expect(calls.find((c) => c.path === '/api/site/faucet')?.auth).toBe('Bearer admin-token');
+    } finally {
+      localStorage.removeItem('coinnibal.auth.v1');
+    }
+  });
+
   it('on mainnet the route says the faucet is testnet only', async () => {
     ({ restore } = mockFetch({ 'GET /api/config': { chain: chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null }) } }));
     ui(<FaucetPage />);
-    expect(await screen.findByText('Faucet is testnet only')).toBeTruthy();
+    expect(await screen.findByText('The faucet is testnet only.')).toBeTruthy();
     expect(screen.getByRole('navigation', { name: 'Site' }).textContent).not.toContain('Faucet');
   });
 
@@ -182,13 +201,13 @@ describe('why get the NFT: the holder perks', () => {
     const cards = perkCards(v, t, true);
     expect(cards.map((c) => c.id)).toEqual(['fee', 'room', 'shop', 'private', 'skin']);
     expect(cards[0].title).toBe('Lower fee: 10% instead of 20%');
-    expect(cards[0].note).toBe('We take less of your profit: 8% is burned and 2% goes to the team wallet.');
+    expect(cards[0].note).toBe('8% of your profit is burned and 2% goes to the team wallet.');
     expect(cards[1].title).toBe('$10 Room for holders');
     expect(cards[2].title).toBe('20% off power-ups');
     // a true minus sign on the figure; the skin has no figure (the card shows the holder badge's laurel)
     expect(cards[2].big).toBe('\u221220%');
     expect(cards[4]).toMatchObject({ id: 'skin', big: null });
-    expect(cards[2].note).toMatch(/1 extra power-up use in every paid round \(3 instead of 2\)/);
+    expect(cards[2].note).toBe('You can use 3 power-ups in each paid round instead of 2.');
     expect(cards[3].title).toBe('1 free private room a day');
   });
   it('takes the live shop discount and private-room perk when the server reports them; no faucet card on mainnet', () => {
@@ -274,13 +293,20 @@ const ctxOf = (over: Partial<ChainCtx> = {}): ChainCtx & { plans: Plan[] } => {
 
 describe('admin groups', () => {
   it('maps the old drawers into the groups and back to a hash', () => {
-    expect(parseAdminHash('#deploy')).toEqual({ group: 'setup', sub: 'wl' });
+    // `#deploy` is the deploy flow now; the empty hash and anything unknown open the start screen
+    expect(parseAdminHash('#deploy')).toEqual({ group: 'deploy', sub: 'wl' });
+    expect(parseAdminHash('#setup').group).toBe('setup');
+    expect(parseAdminHash('#open').group).toBe('open');
+    expect(parseAdminHash('#minting').group).toBe('minting');
+    expect(parseAdminHash('#feedback-later').group).toBe('home');
     expect(parseAdminHash('#arena').group).toBe('game');
     expect(parseAdminHash('#tasks')).toEqual({ group: 'community', sub: 'tasks' });
     expect(parseAdminHash('#community/collabs')).toEqual({ group: 'community', sub: 'collabs' });
     expect(parseAdminHash('#integrity').group).toBe('safety');
-    expect(parseAdminHash('')).toEqual({ group: 'network', sub: 'wl' });
-    expect(adminHash('network')).toBe('');
+    expect(parseAdminHash('')).toEqual({ group: 'home', sub: 'wl' });
+    expect(adminHash('home')).toBe('');
+    expect(adminHash('network')).toBe('#network');
+    expect(adminHash('deploy')).toBe('#deploy');
     expect(adminHash('community', 'tasks')).toBe('#community/tasks');
     expect(adminHash('game')).toBe('#game');
   });
@@ -290,7 +316,7 @@ describe('admin groups', () => {
     const status = { block: 12n, arena: { code: 'ok', serverBalance: 0n, config: { token: null, holderNft: null }, arenas: [] }, nft: null } as unknown as StatusSnapshot;
     expect(groupSummary('network', { net, status })).toMatchObject({ next: expect.stringMatching(/Fund the server key/) });
     expect(groupSummary('network', { net, status }).now).toMatch(/Testnet · Robinhood Chain Testnet \(46630\) · block 12/);
-    expect(groupSummary('setup', { net, status }).next).toMatch(/Deploy ElymumNFT/);
+    expect(groupSummary('setup', { net, status }).next).toMatch(/Deploy CoinnibalNFT/);
     // registered: the next step is Finish setup, never "register" or "paste an address"
     const both = resolveNetwork(chainStatus({ nftAddress: '0x0000000000000000000000000000000000000f7e' }));
     const registered = {
@@ -299,22 +325,37 @@ describe('admin groups', () => {
       nft: { address: '0x0000000000000000000000000000000000000f7e', code: 'ok', state: { phaseName: 'closed' } },
       testToken: { address: '0x0000000000000000000000000000000000007e57', faucet: { holderNft: null } },
     } as unknown as StatusSnapshot;
-    expect(groupSummary('setup', { net: both, status: registered }).next).toMatch(/^Finish setup: 9 steps left/);
+    // the site build must trust the new contracts first: the pin step, then Finish setup
+    expect(groupSummary('setup', { net: both, status: registered })).toMatchObject({ now: expect.stringMatching(/ · site pins to sign$/), next: 'Sign the site pins: Setup → Site pins (one free signature from the owner wallet).' });
+    // the owner's signed record counts as pinned
+    expect(groupSummary('setup', { net: both, status: registered, pins: buildPins({}), signed: { arena: ARENA, nft: '0x0000000000000000000000000000000000000f7e', token: null } })).toMatchObject({ now: expect.stringMatching(/ · site pins ok$/) });
+    const pinned = buildPins({ arena: ARENA, nft: '0x0000000000000000000000000000000000000f7e' });
+    expect(groupSummary('setup', { net: both, status: registered, pins: pinned })).toMatchObject({ now: expect.stringMatching(/ · site pins ok$/), next: expect.stringMatching(/^Finish setup: 9 steps left/) });
     const mainnet = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, nftAddress: '0x0000000000000000000000000000000000000f7e' }));
     const noTt = { ...registered, testToken: null } as unknown as StatusSnapshot;
-    expect(groupSummary('setup', { net: mainnet, status: noTt, registry: { token: { address: '0x0000000000000000000000000000000000007e57' } } as never }).next).toMatch(/Confirm the game token/);
-    expect(groupSummary('setup', { net: mainnet, status: noTt }).next).toMatch(/TOKEN_ADDRESS/);
+    const mainPins = buildPins({ chainId: '4663', arena: ARENA, nft: '0x0000000000000000000000000000000000000f7e' });
+    expect(groupSummary('setup', { net: mainnet, status: noTt, registry: { token: { address: '0x0000000000000000000000000000000000007e57' } } as never, pins: mainPins }).next).toMatch(/Confirm the game token/);
+    // the real token cannot be registered before the arena uses it: it is typed by hand
+    expect(groupSummary('setup', { net: mainnet, status: noTt, pins: mainPins }).next).toMatch(/enter it in Setup → Set the game token, by hand and typed twice/);
     for (const g of ['setup', 'mint', 'game', 'network'] as const) expect(groupSummary(g, { net: both, status: registered }).next ?? '').not.toMatch(/regist|paste/i);
-    expect(groupSummary('network', { net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null }).next).toMatch(/EVM_RPC_URL/);
-    expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never }).next).toMatch(/Testnet: open the game to everyone/);
+    const off = groupSummary('network', { net: resolveNetwork(chainStatus({ enabled: false, chainId: null })), status: null });
+    expect(off.now).toMatch(/its RPC did not answer, serves another chain or is not set, or SERVER_PRIVATE_KEY is empty or invalid/);
+    expect(off.next).toMatch(/coinnibal-compose logs app.*COINNIBAL_RPC_URLS or SERVER_PRIVATE_KEY/);
+    expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never }).next).toMatch(/open the testnet game \(Game → Who may play\)/);
+    // the override names the VPS key too (docker-compose.yml maps COINNIBAL_GAME_ACCESS to GAME_ACCESS)
+    expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never, gameAccessEnv: 'public' }).now).toMatch(/^Open to everyone \(COINNIBAL_GAME_ACCESS \/ GAME_ACCESS env\)/);
   });
 
   it('lists the mainnet launch with the server step first; nothing is ticked on testnet', () => {
     const steps = mainnetChecklist(resolveNetwork(chainStatus()), null);
-    expect(steps[0].label).toMatch(/Point the server at the mainnet \(ELYMUM_CHAIN_ID and ELYMUM_RPC_URLS\)/);
+    expect(steps[0].label).toMatch(/Point the server at the mainnet \(COINNIBAL_CHAIN_ID and COINNIBAL_RPC_URLS\)/);
     expect(steps.filter((s) => s.ok === true)).toHaveLength(0);
     const main = mainnetChecklist(resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null })), null);
     expect(main[0].ok).toBe(true);
+    // the game opens last: the early access step keeps it on Admins, the final step opens it
+    expect(steps.find((s) => s.id === 'access')?.detail).toMatch(/Who may play in Game is Admins/);
+    expect(steps.find((s) => s.id === 'access')?.detail).not.toMatch(/Holders/);
+    expect(steps.at(-1)?.id).toBe('game');
   });
 
   it('marks an arena holders-only through the transaction preview', () => {
@@ -349,7 +390,7 @@ describe('admin groups', () => {
     ui(<ImportHoldersCard ctx={ctxOf({ api: adminApi('t') })} />);
     await waitFor(() => expect((screen.getByTestId('mint-import') as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByTestId('mint-import'));
-    expect((await screen.findByTestId('mint-import-result')).textContent).toMatch(/^12 wallets \(15 emblems\) · 3 also on the WL · imported .* from chain 46630$/);
+    expect((await screen.findByTestId('mint-import-result')).textContent).toMatch(/^12 wallets \(15 NFTs\) · 3 also on the WL · imported .* from chain 46630$/);
     expect(body).toEqual({});
   });
 
@@ -390,7 +431,7 @@ describe('admin groups', () => {
     const table = await screen.findByTestId('maps-table');
     // people only in arenas and practice; the practice bots of a free custom room are counted apart
     expect(screen.getByText('3 people · 2 rooms · 3 practice bots')).toBeTruthy();
-    expect(document.body.textContent).toMatch(/Practice bots exist only in free custom rooms/);
+    expect(document.body.textContent).toMatch(/Practice bots play in free custom rooms .*and, on a testnet, in the test arenas/);
     // the side at 1 / 10 / 25 / 50 / 100 people, and the live room's side
     expect(table.textContent).toContain('3060 / 3600 / 4500 / 6000 / 9000');
     expect(table.textContent).toContain('3600');
@@ -455,12 +496,12 @@ describe('admin groups', () => {
     defaults: { ...TEST_ARENA_DEFAULT },
     limits: { botsMin: 3, botsMax: 20 },
     rooms: [
-      { arenaId: 1, id: 'test-1', name: 'Test · Asphodel Meadow', people: 2, bots: 10, capacity: 50, closing: false, thread: 'w0' },
-      { arenaId: 2, id: 'test-2', name: 'Test · Lethe', people: 0, bots: 10, capacity: 50, closing: true },
+      { arenaId: 1, id: 'test-1', name: 'Test · $1 Room', people: 2, bots: 8, capacity: 50, closing: false, thread: 'w0' },
+      { arenaId: 2, id: 'test-2', name: 'Test · $3 Room', people: 0, bots: 10, capacity: 50, closing: true },
     ],
   };
 
-  it('test arenas (testnet): on/off, bots per arena, difficulty and every test arena live; saves only what changed', async () => {
+  it('test arenas (testnet): on/off, the bots of an empty test arena, difficulty and every test arena live; saves only what changed', async () => {
     let put: unknown = null;
     ({ restore } = mockFetch({
       'GET /api/admin/test-arenas': TESTS,
@@ -471,12 +512,15 @@ describe('admin groups', () => {
     }));
     ui(<TestArenasCard ctx={ctxOf({ api: adminApi('t') })} />);
     const table = await screen.findByTestId('test-arenas-table');
-    expect(table.textContent).toContain('Test · Asphodel Meadow');
+    expect(table.textContent).toContain('Test · $1 Room');
     expect(table.textContent).toContain('2/50');
+    // each person takes a bot's place: the setting (10) minus the 2 people play
+    expect(table.querySelector('[data-room="test-1"]')?.textContent).toMatch(/2\/50\s*8/);
+    expect(screen.getByText(/this many bots minus the people/, { selector: '.ad-field__hint' })).toBeTruthy();
     expect(table.textContent).toContain('open · w0');
     expect(table.textContent).toContain('closing after its bell');
     expect((screen.getByTestId('test-arenas-save') as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText('Bots per test arena'), { target: { value: '6' } });
+    fireEvent.change(screen.getByLabelText('Bots in an empty test arena'), { target: { value: '6' } });
     fireEvent.click(screen.getByRole('button', { name: 'Hard' }));
     fireEvent.click(screen.getByTestId('test-arenas-save'));
     await waitFor(() => expect(put).toEqual({ bots: 6, difficulty: 'hard' }));

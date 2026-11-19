@@ -1,4 +1,4 @@
-import { arenaMeta } from '@elymum/shared';
+import { ROOM_CLOSE_COUNTDOWN_MS, arenaMeta } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Button } from '../design';
 import { useT } from '../i18n';
@@ -30,7 +30,10 @@ export function PaidSeatBanner() {
           <span className="kl-seat__left mono">{t('cr.seat.left', { n: minutes })}</span>
         </div>
         <p className="kl-owed__title">{t('cr.seat.title', { name: seat.name })}</p>
-        <p className="kl-owed__note">{t('cr.seat.note', { arena: arenaMeta(seat.arenaId).name })}</p>
+        {/* said before the ticket is paid: the room can end early, and every ticket is settled then */}
+        <p className="kl-owed__note" data-testid="paid-seat-note">
+          {t('cr.seat.note', { arena: arenaMeta(seat.arenaId).name, s: ROOM_CLOSE_COUNTDOWN_MS / 1000 })}
+        </p>
         <Button variant="ghost" size="sm" onClick={leavePaidSeat} data-testid="paid-seat-leave">
           {t('cr.seat.leave')}
         </Button>

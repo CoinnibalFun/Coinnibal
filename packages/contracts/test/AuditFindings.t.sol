@@ -2,19 +2,26 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {ElymumArena} from "../contracts/ElymumArena.sol";
-import {ElymumNFT} from "../contracts/ElymumNFT.sol";
+import {CoinnibalArena} from "../contracts/CoinnibalArena.sol";
+import {JoinPermits} from "./JoinPermits.sol";
+import {CoinnibalNFT} from "../contracts/CoinnibalNFT.sol";
 import {MockERC20, BlockingToken, FakeBurnToken} from "../contracts/test/MockTokens.sol";
 
 /// @notice Test-only: a smart-contract wallet that borrows an emblem, joins an arena and gives the emblem back,
 ///         all in one transaction (a "flash" holder). Smart wallets can sign in to the game server (ERC-1271).
 contract FlashHolderWallet {
-    function borrowJoinReturn(ElymumNFT nft, uint256 tokenId, address lender, ElymumArena arena, uint16 arenaId, MockERC20 token)
-        external
-    {
+    function borrowJoinReturn(
+        CoinnibalNFT nft,
+        uint256 tokenId,
+        address lender,
+        CoinnibalArena arena,
+        uint16 arenaId,
+        MockERC20 token,
+        JoinPermits.Permit calldata pm
+    ) external {
         nft.transferFrom(lender, address(this), tokenId);
         token.approve(address(arena), type(uint256).max);
-        arena.join(arenaId);
+        arena.join(arenaId, pm.deadline, pm.sig);
         nft.transferFrom(address(this), lender, tokenId);
     }
 }
@@ -23,8 +30,13 @@ contract FlashHolderWallet {
 ///         demonstrates a behaviour the audit report ranks as a finding, so a fix should make the matching
 ///         assertion fail (then flip the test).
 contract AuditFindingsTest is Test {
-    ElymumArena internal arena;
-    ElymumNFT internal nft;
+    /// @dev The game server's join permit (signed with the "server" test key) for `player` in `arenaId`, now.
+    function _permit(CoinnibalArena a, address player, uint16 arenaId) internal view returns (JoinPermits.Permit memory) {
+        return JoinPermits.permit(a, JoinPermits.keyOf("server"), player, arenaId);
+    }
+
+    CoinnibalArena internal arena;
+    CoinnibalNFT internal nft;
     MockERC20 internal token;
 
     address internal admin = makeAddr("admin");
@@ -42,9 +54,9 @@ contract AuditFindingsTest is Test {
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        token = new MockERC20("Elymum", "ELYMUM", 18);
-        arena = new ElymumArena(admin, server, feeWallet);
-        nft = new ElymumNFT(admin, 1_000, 0.0003 ether, 1, 1, "https://elymum.io/api/nft/", admin);
+        token = new MockERC20("Coinnibal", "COINNIBAL", 18);
+        arena = new CoinnibalArena(admin, server, feeWallet);
+        nft = new CoinnibalNFT(admin, 1_000, 0.0003 ether, 1, 1, "https://coinnibal.fun/api/nft/", admin);
         vm.startPrank(admin);
         arena.setToken(address(token));
         arena.createArena(OPEN, FEE, 300);
@@ -68,10 +80,10 @@ contract AuditFindingsTest is Test {
     function _one(uint16 id, address player, uint64 sid, uint128 payout)
         internal
         pure
-        returns (ElymumArena.Settlement[] memory items)
+        returns (CoinnibalArena.Settlement[] memory items)
     {
-        items = new ElymumArena.Settlement[](1);
-        items[0] = ElymumArena.Settlement(id, player, sid, payout);
+        items = new CoinnibalArena.Settlement[](1);
+        items[0] = CoinnibalArena.Settlement(id, player, sid, payout);
     }
 
     // ------------------------------------------------------------------------------------------------------------
@@ -83,9 +95,10 @@ contract AuditFindingsTest is Test {
     function testAudit_oneEmblemPassedAroundUnlocksManyWallets() public {
         address[3] memory ring = [alice, bob, carol];
         for (uint256 i; i < ring.length; ++i) {
+            JoinPermits.Permit memory pm2 = _permit(arena, ring[i], ISLES);
             vm.prank(ring[i]);
-            arena.join(ISLES);
-            ElymumArena.SessionView memory s = arena.getSession(ISLES, ring[i]);
+            arena.join(ISLES, pm2.deadline, pm2.sig);
+            CoinnibalArena.SessionView memory s = arena.getSession(ISLES, ring[i]);
             assertEq(s.burnBps, 800, "holder burn rate fixed in the ticket");
             assertEq(s.vaultBps, 200, "holder vault rate fixed in the ticket");
             if (i + 1 < ring.length) {
@@ -104,11 +117,12 @@ contract AuditFindingsTest is Test {
         token.mint(address(w), 100_000 ether);
         vm.prank(alice);
         nft.setApprovalForAll(address(w), true); // a lending desk / rental contract would do the same
-        w.borrowJoinReturn(nft, 1, alice, arena, ISLES, token);
+        // the server gave the wallet a permit (it signed in): the permit does not check the emblem, the contract does
+        w.borrowJoinReturn(nft, 1, alice, arena, ISLES, token, _permit(arena, address(w), ISLES));
 
         assertEq(nft.ownerOf(1), alice, "the emblem is back with its owner");
         assertEq(nft.balanceOf(address(w)), 0, "the wallet holds no emblem");
-        ElymumArena.SessionView memory s = arena.getSession(ISLES, address(w));
+        CoinnibalArena.SessionView memory s = arena.getSession(ISLES, address(w));
         assertTrue(s.id != 0, "yet it holds a holders-only ticket");
         assertEq(uint256(s.burnBps) + s.vaultBps, 1_000, "at the holder fee (10 %)");
     }
@@ -120,14 +134,18 @@ contract AuditFindingsTest is Test {
     /// @dev Worst case of a stolen server key: buy one ticket with an own wallet and settle it with the whole vault.
     ///      Every other open ticket is then skipped (vault too small) and their 24 h refund pays min(entry, 0) = 0.
     function testAudit_stolenServerKeyDrainsOpenStakes() public {
+        JoinPermits.Permit memory pm3 = _permit(arena, alice, OPEN);
         vm.prank(alice);
-        arena.join(OPEN);
+        arena.join(OPEN, pm3.deadline, pm3.sig);
+        JoinPermits.Permit memory pm4 = _permit(arena, bob, OPEN);
         vm.prank(bob);
-        arena.join(OPEN);
+        arena.join(OPEN, pm4.deadline, pm4.sig);
+        JoinPermits.Permit memory pm5 = _permit(arena, carol, OPEN);
         vm.prank(carol);
-        arena.join(OPEN);
+        arena.join(OPEN, pm5.deadline, pm5.sig);
+        JoinPermits.Permit memory pm6 = _permit(arena, mallory, OPEN);
         vm.prank(mallory);
-        arena.join(OPEN);
+        arena.join(OPEN, pm6.deadline, pm6.sig);
         uint64 sid = arena.getSession(OPEN, mallory).id;
         uint128 vault = arena.getArena(OPEN).vault;
         assertEq(vault, 4 * FEE);
@@ -147,14 +165,17 @@ contract AuditFindingsTest is Test {
         assertEq(token.balanceOf(alice), b, "alice's 24 h refund pays nothing");
     }
 
-    /// @dev The owner key is strictly stronger: it can install any server key, then do the above.
+    /// @dev The owner key is strictly stronger: it can install any server key, then do the above (the new key also
+    ///      signs the join permits from then on).
     function testAudit_ownerCanInstallAnyServerKey() public {
+        JoinPermits.Permit memory pm7 = _permit(arena, alice, OPEN);
+        vm.prank(alice);
+        arena.join(OPEN, pm7.deadline, pm7.sig);
         vm.prank(admin);
         arena.setServerAuthority(mallory);
-        vm.prank(alice);
-        arena.join(OPEN);
+        JoinPermits.Permit memory pm8 = JoinPermits.permit(arena, JoinPermits.keyOf("mallory"), mallory, OPEN);
         vm.prank(mallory);
-        arena.join(OPEN);
+        arena.join(OPEN, pm8.deadline, pm8.sig);
         uint64 sid = arena.getSession(OPEN, mallory).id;
         vm.prank(mallory);
         arena.settle(_one(OPEN, mallory, sid, 2 * FEE));
@@ -165,31 +186,51 @@ contract AuditFindingsTest is Test {
     // Griefing
     // ------------------------------------------------------------------------------------------------------------
 
-    /// @dev Filling an arena's session slots is free: an unplayed ticket is cancelled with the full entry fee back,
-    ///      so a griefer only pays gas, and can re-buy at once. One open ticket also blocks any re-pricing.
-    function testAudit_slotFillingIsFreeAndOneTicketBlocksRepricing() public {
+    /// @dev Filling an arena's session slots USED to be free: anyone could `join`, an unplayed ticket was cancelled
+    ///      with the full entry fee back, and the griefer re-bought at once. Flipped by the join permit (v4): a ticket
+    ///      needs the server's single-use permit, so a wallet the server does not let in (a closed game, a no-show
+    ///      record, an open ticket, the per-arena cap) cannot buy one, and a cancelled ticket cannot be re-bought with
+    ///      the permit that bought it. One open ticket still blocks any re-pricing (unchanged).
+    function testAudit_slotFillingNeedsAServerPermitAndOneTicketBlocksRepricing() public {
         vm.prank(admin);
         arena.updateArena(OPEN, FEE, 2, true); // the minimum slot count, to keep the repro short
+        // no permit, or one the griefer signed itself: no ticket
+        uint64 deadline = uint64(block.timestamp) + 10 minutes;
+        bytes memory own = JoinPermits.sign(JoinPermits.keyOf("mallory"), address(arena), block.chainid, mallory, OPEN, 0, deadline);
         vm.prank(mallory);
-        arena.join(OPEN);
+        vm.expectRevert(CoinnibalArena.InvalidPermit.selector);
+        arena.join(OPEN, deadline, own);
+        vm.prank(mallory);
+        vm.expectRevert(CoinnibalArena.InvalidPermit.selector);
+        arena.join(OPEN, deadline, "");
+        // with the server's permit it buys one ticket
+        JoinPermits.Permit memory pm9 = _permit(arena, mallory, OPEN);
+        vm.prank(mallory);
+        arena.join(OPEN, pm9.deadline, pm9.sig);
+        JoinPermits.Permit memory pm10 = _permit(arena, bob, OPEN);
         vm.prank(bob);
-        arena.join(OPEN);
+        arena.join(OPEN, pm10.deadline, pm10.sig);
+        JoinPermits.Permit memory pm11 = _permit(arena, carol, OPEN);
         vm.prank(carol);
-        vm.expectRevert(ElymumArena.ArenaFull.selector);
-        arena.join(OPEN);
+        vm.expectRevert(CoinnibalArena.ArenaFull.selector);
+        arena.join(OPEN, pm11.deadline, pm11.sig);
 
         // the owner cannot re-price the arena while any ticket is open
         vm.prank(admin);
-        vm.expectRevert(ElymumArena.ArenaBusy.selector);
+        vm.expectRevert(CoinnibalArena.ArenaBusy.selector);
         arena.updateArena(OPEN, 1_200 ether, 2, true);
 
-        // the stale sweeper cancels the griefer's ticket: the griefer loses nothing
+        // the stale sweeper cancels the griefer's ticket (full entry fee back)...
         uint256 before = token.balanceOf(mallory);
-        ElymumArena.SessionRef[] memory refs = new ElymumArena.SessionRef[](1);
-        refs[0] = ElymumArena.SessionRef(OPEN, mallory, arena.getSession(OPEN, mallory).id);
+        CoinnibalArena.SessionRef[] memory refs = new CoinnibalArena.SessionRef[](1);
+        refs[0] = CoinnibalArena.SessionRef(OPEN, mallory, arena.getSession(OPEN, mallory).id);
         vm.prank(server);
         arena.cancel(refs);
         assertEq(token.balanceOf(mallory) - before, FEE, "full entry fee back, no fee");
+        // ...but the permit that bought it is used: no re-buy without a new one from the server
+        vm.prank(mallory);
+        vm.expectRevert(CoinnibalArena.InvalidPermit.selector);
+        arena.join(OPEN, pm9.deadline, pm9.sig);
     }
 
     /// @dev The fee wallet's share is sent with a reverting transfer: a token that refuses the fee wallet (a
@@ -197,7 +238,7 @@ contract AuditFindingsTest is Test {
     ///      fee wallet.
     function testAudit_feeWalletTransferFailureRevertsWholeBatch() public {
         BlockingToken blk = new BlockingToken();
-        ElymumArena a = new ElymumArena(admin, server, feeWallet);
+        CoinnibalArena a = new CoinnibalArena(admin, server, feeWallet);
         vm.startPrank(admin);
         a.setToken(address(blk));
         a.createArena(OPEN, FEE, 300);
@@ -208,25 +249,27 @@ contract AuditFindingsTest is Test {
         blk.approve(address(a), type(uint256).max);
         vm.prank(bob);
         blk.approve(address(a), type(uint256).max);
+        JoinPermits.Permit memory pm12 = _permit(a, alice, OPEN);
         vm.prank(alice);
-        a.join(OPEN);
+        a.join(OPEN, pm12.deadline, pm12.sig);
+        JoinPermits.Permit memory pm13 = _permit(a, bob, OPEN);
         vm.prank(bob);
-        a.join(OPEN);
+        a.join(OPEN, pm13.deadline, pm13.sig);
         blk.setBlocked(feeWallet, true);
 
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
-        items[0] = ElymumArena.Settlement(OPEN, alice, a.getSession(OPEN, alice).id, 2 * FEE); // alice won
-        items[1] = ElymumArena.Settlement(OPEN, bob, a.getSession(OPEN, bob).id, 0); // bob lost
+        CoinnibalArena.Settlement[] memory items = new CoinnibalArena.Settlement[](2);
+        items[0] = CoinnibalArena.Settlement(OPEN, alice, a.getSession(OPEN, alice).id, 2 * FEE); // alice won
+        items[1] = CoinnibalArena.Settlement(OPEN, bob, a.getSession(OPEN, bob).id, 0); // bob lost
         vm.prank(server);
         vm.expectRevert(bytes("blocked"));
         a.settle(items);
     }
 
     /// @dev Burn mode 1 with a token whose burn() burns a different amount reverts the whole batch (BurnMismatch):
-    ///      the burn() path must be probed against the real $ELYMUM before it is turned on.
+    ///      the burn() path must be probed against the real $NIBAL before it is turned on.
     function testAudit_partialBurnRevertsWholeBatchInBurnCallMode() public {
         FakeBurnToken fk = new FakeBurnToken();
-        ElymumArena a = new ElymumArena(admin, server, feeWallet);
+        CoinnibalArena a = new CoinnibalArena(admin, server, feeWallet);
         vm.startPrank(admin);
         a.setToken(address(fk));
         a.createArena(OPEN, FEE, 300);
@@ -238,17 +281,19 @@ contract AuditFindingsTest is Test {
         fk.approve(address(a), type(uint256).max);
         vm.prank(bob);
         fk.approve(address(a), type(uint256).max);
+        JoinPermits.Permit memory pm14 = _permit(a, alice, OPEN);
         vm.prank(alice);
-        a.join(OPEN);
+        a.join(OPEN, pm14.deadline, pm14.sig);
+        JoinPermits.Permit memory pm15 = _permit(a, bob, OPEN);
         vm.prank(bob);
-        a.join(OPEN);
+        a.join(OPEN, pm15.deadline, pm15.sig);
         fk.setMode(1); // burns half
 
-        ElymumArena.Settlement[] memory items = new ElymumArena.Settlement[](2);
-        items[0] = ElymumArena.Settlement(OPEN, alice, a.getSession(OPEN, alice).id, 2 * FEE);
-        items[1] = ElymumArena.Settlement(OPEN, bob, a.getSession(OPEN, bob).id, 0);
+        CoinnibalArena.Settlement[] memory items = new CoinnibalArena.Settlement[](2);
+        items[0] = CoinnibalArena.Settlement(OPEN, alice, a.getSession(OPEN, alice).id, 2 * FEE);
+        items[1] = CoinnibalArena.Settlement(OPEN, bob, a.getSession(OPEN, bob).id, 0);
         vm.prank(server);
-        vm.expectRevert(ElymumArena.BurnMismatch.selector);
+        vm.expectRevert(CoinnibalArena.BurnMismatch.selector);
         a.settle(items);
 
         // mode 0 (0x...dEaD) settles the same batch
@@ -270,8 +315,9 @@ contract AuditFindingsTest is Test {
         // the owner and the server key have no function that calls transferFrom on a third party
         vm.prank(admin);
         arena.setPaused(false);
+        JoinPermits.Permit memory pm16 = _permit(arena, bob, OPEN);
         vm.prank(bob);
-        arena.join(OPEN);
+        arena.join(OPEN, pm16.deadline, pm16.sig);
         vm.prank(bob);
         arena.pay(1 ether, bytes32("x"));
         assertEq(token.balanceOf(alice), before, "alice's allowance was never used by someone else");

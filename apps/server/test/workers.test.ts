@@ -1,12 +1,12 @@
 /**
  * Room workers (GAME_WORKERS > 0): the rooms run in worker threads, the main thread keeps the sockets,
  * the journal and the chain. These tests drive the real app over WebSockets with two workers; the
- * whole integration suite also runs in this mode (`pnpm -F @elymum/server test:workers`).
+ * whole integration suite also runs in this mode (`pnpm -F @coinnibal/server test:workers`).
  */
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLOSE_REPLACED, PROTOCOL_VERSION, encodeTarget, roundAt, type ChainStatus, type ServerMessage } from '@elymum/shared';
+import { CLOSE_REPLACED, PROTOCOL_VERSION, TEST_ARENA_DEFAULT, encodeTarget, roundAt, type ChainStatus, type ServerMessage } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
@@ -39,7 +39,7 @@ class FakeChain implements ChainGateway {
       nftAddress: null,
       arenasEnabled: true,
       tokenReady: true,
-      token: { address: '0x0000000000000000000000000000000000000707', symbol: '$ELYMUM', decimals: 18 },
+      token: { address: '0x0000000000000000000000000000000000000707', symbol: '$NIBAL', decimals: 18 },
       fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 500, holderPerks: false, paymentBurnBps: 5000, burnMode: 0 },
       serverKey: null,
     };
@@ -159,7 +159,7 @@ const jumpTo = (at: number) => {
 };
 
 beforeAll(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'elymum-workers-'));
+  dir = mkdtempSync(join(tmpdir(), 'coinnibal-workers-'));
   const cfg = loadConfig({
     PORT: '0',
     HOST: '127.0.0.1',
@@ -273,8 +273,11 @@ describe('room workers', () => {
     b.ws.close();
   });
 
-  it('a test arena in a worker: the official ticket journaled by the main thread; a crash settles it once and the test arena reopens', async () => {
+  it('a test arena in a worker: the person takes a bot\'s place, the official ticket is journaled by the main thread; a crash settles it once and the test arena reopens', async () => {
     await until(() => !!app.rooms.get('test-1'), 8000);
+    // three bots in the empty test arena, all arrived (one by one)
+    app.rooms.testArenas.update({ bots: 3 });
+    await until(() => app.rooms.get('test-1')!.botCounts().bots === 3, 20_000);
     const w = testWallet(0xa0f1);
     const t = ticket(w);
     chain.sessions.set(`1:${w}`, t);
@@ -286,7 +289,10 @@ describe('room workers', () => {
     await until(() => app.journal.live().some((l) => l.session === t.key && l.roomId === 'test-1'));
     expect(app.rooms.findArenaStake(1, w)?.room.id).toBe('test-1');
     const room = app.rooms.get('test-1') as RemoteRoom;
-    await until(() => room.botCounts().bots > 0, 8000);
+    // the worker's room made room for the person: one bot fewer (the lobby and the admin view read it here)
+    await until(() => room.botCounts().bots === 2 && room.humanCount === 1, 8000);
+    expect(app.rooms.list().find((r) => r.id === 'test-1')).toMatchObject({ players: 1, bots: 2 });
+    expect(app.rooms.testArenaView().rooms.find((r) => r.id === 'test-1')).toMatchObject({ people: 1, bots: 2 });
 
     app.rooms.pool!.crash(room.slot.index);
     await until(() => app.journal.settlements().some((p) => p.key === t.key));
@@ -302,7 +308,8 @@ describe('room workers', () => {
     app.journal.remove(t.key);
     for (const p of [...app.journal.pending]) if (p.kind === 'sweep' && p.roomId === 'test-1') app.journal.remove(p.key);
     chain.sessions.delete(`1:${w}`);
-  }, 30_000);
+    app.rooms.testArenas.update({ bots: TEST_ARENA_DEFAULT.bots });
+  }, 60_000);
 
   it('a crashed worker: its live tickets are settled once at their journaled value, its sockets closed, the worker respawned', async () => {
     const w = testWallet(0xa003);
@@ -393,7 +400,7 @@ describe('room workers', () => {
 
 describe('room workers: shutdown', () => {
   it('a server stop settles the live tickets of every worker (an operator exit) before it returns', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-stop-'));
+    const d = mkdtempSync(join(tmpdir(), 'coinnibal-workers-stop-'));
     const ch = new FakeChain();
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
@@ -417,7 +424,7 @@ describe('room workers: shutdown', () => {
 
 describe('room workers: a hung worker', () => {
   it('is stopped by the watchdog, its tickets settled from the journal, and it comes back', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-hang-'));
+    const d = mkdtempSync(join(tmpdir(), 'coinnibal-workers-hang-'));
     const ch = new FakeChain();
     const logs: string[] = [];
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', GAME_WORKER_HANG_S: '2' } as NodeJS.ProcessEnv);
@@ -495,7 +502,7 @@ describe('room workers: the money helpers', () => {
 
 describe('room workers: practice bots', () => {
   it('a free custom room in a worker fields its practice bots; official arenas in a worker have none, test arenas do', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-bots-'));
+    const d = mkdtempSync(join(tmpdir(), 'coinnibal-workers-bots-'));
     const ch = new FakeChain();
     const cfg = loadConfig({ PORT: '0', HOST: '127.0.0.1', DATA_DIR: d, GAME_ACCESS: 'public', ROUND_BREAK_SECONDS: '0', ROUND_JOIN_CLOSE_SECONDS: '0', NODE_ENV: 'development', GAME_WORKERS: '1', TRUST_PROXY: '0' } as NodeJS.ProcessEnv);
     const a = await createApp(cfg, { chain: ch, log: () => {}, persist: true });
@@ -528,7 +535,7 @@ describe('room workers: practice bots', () => {
 
 describe('room workers: arena instance scaling', () => {
   it('an overflow instance opens on a worker; drained once empty, it closes there after its bell settled it', async () => {
-    const d = mkdtempSync(join(tmpdir(), 'elymum-workers-scale-'));
+    const d = mkdtempSync(join(tmpdir(), 'coinnibal-workers-scale-'));
     const ch = new FakeChain();
     const base = Date.now();
     let off = roundAt(base).startsAt + 2_000 - base;

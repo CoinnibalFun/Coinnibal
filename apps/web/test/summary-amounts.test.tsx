@@ -1,4 +1,4 @@
-import { RULES, formatToken, type DeathStats, type RoomInfo, type RoundInfo } from '@elymum/shared';
+import { RULES, formatToken, type DeathStats, type RoomInfo, type RoundInfo } from '@coinnibal/shared';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Chip, Kb } from '../src/design';
@@ -37,7 +37,7 @@ describe('summary amounts', () => {
   });
 
   it('the game format compacts from a billion tokens unless a caller asks for the full number', () => {
-    const tf = tokenFormat(6, '$ELYMUM');
+    const tf = tokenFormat(6, '$NIBAL');
     expect(tf.fmt(999_999_999_999_123_456)).toBe('1T');
     expect(tf.fmt(1_109_986_257_991)).toBe('1,109,986.26');
     expect(tf.fmt(999_999_999_999_123_456, { compact: false })).toBe('999,999,999,999.12');
@@ -115,7 +115,7 @@ describe('the round-over receipt with whale amounts', () => {
       expect(maxDecimals(a)).toBeLessThanOrEqual(2);
       expect(longestNumber(a)).toBeLessThanOrEqual(13);
     }
-    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('1T$ELYMUM');
+    expect(document.querySelector('.g-receipt__net')?.textContent).toBe('1T$NIBAL');
     // long names keep their full text in a tooltip
     expect(sheet.querySelector('.g-board__nm[title="MMMMMMMMMMMMMMMM"]')).toBeTruthy();
   });

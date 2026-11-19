@@ -1,4 +1,4 @@
-import { EntityKind, lootTier, type EntityRecord, type PlayerInfo, type Removal, type SnapshotData } from '@elymum/shared';
+import { EntityKind, lootTier, type EntityRecord, type PlayerInfo, type Removal, type SnapshotData } from '@coinnibal/shared';
 import type { DynamicEntity, StaticEntity } from '../game/entities';
 import type { World } from '../game/world';
 

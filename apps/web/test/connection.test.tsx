@@ -1,4 +1,4 @@
-import type { RoomInfo, ServerMessage } from '@elymum/shared';
+import type { RoomInfo, ServerMessage } from '@coinnibal/shared';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NetDown } from '../src/game/net';
@@ -60,7 +60,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
   vi.stubGlobal('requestAnimationFrame', () => 0);
   vi.stubGlobal('cancelAnimationFrame', () => {});
-  localStorage.setItem('elymum.brief', '1');
+  localStorage.setItem('coinnibal.brief', '1');
   useUi.setState({ ...ui0, screen: 'lobby' }, true);
   engine = new GameEngine(document.createElement('canvas'));
   setEngine(engine);

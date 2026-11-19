@@ -1,8 +1,10 @@
 import type { ShareService } from './site/shares';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { pipeline } from 'node:stream';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION } from '@elymum/shared';
+import { BRAND_SITE_ORIGINS, PROTOCOL_VERSION, type SiteSettings } from '@coinnibal/shared';
 import { NonceLimitError, checksumAddress, type Auth, type SiweOrigin } from './auth';
 import type { DevFakeChainActions } from './chain/dev-fake';
 import type { ChainGateway } from './chain/types';
@@ -10,11 +12,14 @@ import type { ServerConfig } from './config';
 import type { Leaderboards } from './leaderboards';
 import { healthReport } from './health';
 import { clientIp, trustProxyHops } from './net/gateway';
+import { asClient } from './net/client-scope';
+import { rateKey } from './net/ip-key';
 import { Limiter } from './net/limiter';
 import type { PriceKeeper } from './chain/price-keeper';
 import type { RoomManager } from './rooms/manager';
 import { bearerWallet, type SiteApi } from './site/routes';
 import type { Journal } from './stake/journal';
+import { JoinPermitFail, type JoinPermits } from './stake/join-permits';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -34,6 +39,8 @@ const MIME: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
   '.m4a': 'audio/mp4',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
   '.webmanifest': 'application/manifest+json',
 };
 
@@ -53,6 +60,8 @@ interface Ctx {
   shares?: ShareService;
   /** The per-IP limiter of every `/api/*` request (default 240 a minute); tests inject a larger one. */
   apiLimiter?: Limiter;
+  /** Join permits for arena tickets (`POST /api/arena/permit`). */
+  permits?: JoinPermits;
   /** Server log (unexpected errors of a request go here, never to the client). Default: console.error. */
   log?: (m: string) => void;
 }
@@ -97,6 +106,19 @@ export function siweOrigin(cfg: ServerConfig, req: IncomingMessage, _trustProxy:
   return { domain: new URL(uri).host, uri, chainId: chainId ?? cfg.chain.chainId };
 }
 
+/**
+ * The request's URL, or null for a target `new URL` rejects (`//`: a scheme-relative URL with no host). Without this
+ * the async handler threw before it wrote anything, the rejection was only logged, and the socket hung until the
+ * client gave up.
+ */
+export function requestUrl(target: string | undefined): URL | null {
+  try {
+    return new URL(target ?? '/', 'http://localhost');
+  } catch {
+    return null;
+  }
+}
+
 function json(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(body));
@@ -119,7 +141,120 @@ async function readSmallJson(req: IncomingMessage): Promise<Record<string, unkno
   }
 }
 
-function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pathname: string): boolean {
+/** The precompressed copies the web build writes next to its text files (`x.js.br`, `x.js.gz`), best first. */
+const PRECOMPRESSED = [
+  ['br', '.br'],
+  ['gzip', '.gz'],
+] as const;
+
+/** Does this `Accept-Encoding` header take `coding` (listed, or `*`, without `q=0`)? */
+export function acceptsEncoding(header: string | undefined, coding: string): boolean {
+  if (!header) return false;
+  let star = false;
+  for (const part of header.toLowerCase().split(',')) {
+    const [name, ...params] = part.split(';').map((x) => x.trim());
+    const q = params.find((p) => p.startsWith('q='));
+    const ok = q === undefined || Number(q.slice(2)) > 0;
+    if (name === coding) return ok;
+    if (name === '*') star = ok;
+  }
+  return star;
+}
+
+/**
+ * What to send for a static file: its brotli copy when the browser takes brotli, else its gzip copy, else the file
+ * itself (`encoding` null). `vary`: the file has precompressed copies, so the answer depends on Accept-Encoding.
+ */
+export function precompressed(file: string, acceptEncoding: string | undefined): { file: string; encoding: string | null; vary: boolean } {
+  let vary = false;
+  for (const [coding, ext] of PRECOMPRESSED) {
+    if (!existsSync(file + ext)) continue;
+    vary = true;
+    if (acceptsEncoding(acceptEncoding, coding)) return { file: file + ext, encoding: coding, vary };
+  }
+  return { file, encoding: null, vary };
+}
+
+/** The settings the web build prerendered `/` with (`landing.json`, next to `landing.html`): S1 of the site's speed plan. */
+const LANDING_KEYS = ['gameAccess', 'mintOpen', 'wlOpen', 'collabOpen', 'xHandle'] as const;
+type LandingSettings = Pick<SiteSettings, (typeof LANDING_KEYS)[number]>;
+
+/** A file read once and again only when it changes (its mtime or size). */
+function cachedByStat<T>(read: (file: string) => T): (file: string) => T {
+  const memo = new Map<string, { mtimeMs: number; size: number; value: T }>();
+  return (file) => {
+    const st = statSync(file);
+    const hit = memo.get(file);
+    if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.value;
+    const value = read(file);
+    memo.set(file, { mtimeMs: st.mtimeMs, size: st.size, value });
+    return value;
+  };
+}
+
+const landingJson = cachedByStat((file): LandingSettings | null => {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as LandingSettings;
+  } catch {
+    return null;
+  }
+});
+/** A content hash of a file (its ETag, before the encoding's suffix). */
+const contentHash = cachedByStat((file) => createHash('sha256').update(readFileSync(file)).digest('base64url').slice(0, 27));
+
+const sameHandle = (a: unknown, b: unknown) => typeof a === 'string' && typeof b === 'string' && a.replace(/^@/, '') === b.replace(/^@/, '');
+
+/**
+ * The file for `/`: the prerendered landing (`landing.html`) while the live site settings equal the ones it was
+ * rendered with (`landing.json`: the same game access, mint, WL and collab switches and X handle), else null (the app
+ * page, `index.html`: the browser renders `/` itself, as before). Once the owner opens a door the page must say so from
+ * its first paint, not read "Not open yet" until the settings arrive. With no site store the settings are the closed
+ * defaults the page was rendered with, so it is sent.
+ */
+export function landingPage(base: string, settings: (() => SiteSettings) | null): string | null {
+  const html = join(base, 'landing.html');
+  if (!existsSync(html)) return null;
+  if (!settings) return html;
+  const json = join(base, 'landing.json');
+  const built = existsSync(json) ? landingJson(json) : null;
+  if (!built) return null;
+  const live = settings();
+  return LANDING_KEYS.every((k) => (k === 'xHandle' ? sameHandle(live[k], built[k]) : live[k] === built[k])) ? html : null;
+}
+
+/** Does `If-None-Match` name `etag` (weak comparison, RFC 9110 13.1.2)? */
+export function etagMatches(header: string | undefined, etag: string): boolean {
+  if (!header) return false;
+  const bare = (t: string) => t.trim().replace(/^W\//, '');
+  return header.split(',').some((t) => t.trim() === '*' || bare(t) === bare(etag));
+}
+
+/**
+ * Sends the prerendered landing, or its .br / .gz copy (`sent`), with validators: it is about 290 KB (19 KB brotli)
+ * where the app page is 6 KB, so a repeat visit revalidates it instead of downloading it again. A content-hash ETag,
+ * a different one per encoding (`"<hash>"`, `"<hash>-br"`, `"<hash>-gz"`), and Last-Modified; a matching
+ * If-None-Match gets a 304 with no body. Still `no-cache`: every visit asks, because the server switches `/` to the
+ * app page as soon as a door opens (`landingPage`).
+ */
+function sendLanding(sent: { file: string; encoding: string | null }, req: IncomingMessage, res: ServerResponse, headers: Record<string, string | number>): void {
+  const suffix = sent.encoding === 'br' ? '-br' : sent.encoding === 'gzip' ? '-gz' : '';
+  const etag = `"${contentHash(sent.file)}${suffix}"`;
+  headers['ETag'] = etag;
+  headers['Last-Modified'] = statSync(sent.file).mtime.toUTCString();
+  if (etagMatches(req.headers['if-none-match'], etag)) {
+    delete headers['Content-Type'];
+    delete headers['Content-Encoding'];
+    res.writeHead(304, headers);
+    res.end();
+    return;
+  }
+  headers['Content-Length'] = statSync(sent.file).size;
+  res.writeHead(200, headers);
+  if (req.method === 'HEAD') res.end();
+  else sendFile(sent.file, res);
+}
+
+function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pathname: string, settings: (() => SiteSettings) | null = null): boolean {
   let rel: string;
   try {
     rel = decodeURIComponent(pathname);
@@ -131,14 +266,20 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
   const base = resolve(root);
   let file = normalize(join(base, rel));
   if (file !== base && !file.startsWith(base + sep)) return false;
+  let fallback = false;
+  let landing = false;
   if (!existsSync(file) || statSync(file).isDirectory()) {
     if (extname(rel)) return false;
-    file = join(base, 'index.html'); // SPA fallback
+    // `/`: the prerendered landing while the settings match it; else (and every client route) the SPA fallback
+    const page = rel === '/' ? landingPage(base, settings) : null;
+    file = page ?? join(base, 'index.html');
     if (!existsSync(file)) return false;
+    fallback = true;
+    landing = page !== null;
   }
   const ext = extname(file);
   const immutable = rel.startsWith('/assets/');
-  res.writeHead(200, {
+  const headers: Record<string, string | number> = {
     'Content-Type': MIME[ext] ?? 'application/octet-stream',
     'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
     // the web app is never framed (clickjacking of wallet actions); scripts from this origin only (Vercel's old rule,
@@ -146,10 +287,89 @@ function serveStatic(root: string, req: IncomingMessage, res: ServerResponse, pa
     'X-Frame-Options': 'DENY',
     'Content-Security-Policy': WEB_CSP,
     'Referrer-Policy': 'strict-origin-when-cross-origin',
-  });
+  };
+  // a text file the build precompressed: its .br / .gz copy, always whole (a byte range is for media and downloads)
+  const sent = precompressed(file, req.headers['accept-encoding']);
+  if (sent.vary) headers['Vary'] = 'Accept-Encoding';
+  if (sent.encoding) headers['Content-Encoding'] = sent.encoding;
+  if (landing) {
+    sendLanding(sent, req, res, headers);
+    return true;
+  }
+  if (fallback) {
+    // the app page stands in for every client route: always sent whole, never a byte range of it
+    res.writeHead(200, headers);
+    if (req.method === 'HEAD') res.end();
+    else sendFile(sent.file, res);
+    return true;
+  }
+  if (sent.vary) {
+    const stat = statSync(file);
+    headers['Last-Modified'] = stat.mtime.toUTCString();
+    headers['Content-Length'] = statSync(sent.file).size;
+    res.writeHead(200, headers);
+    if (req.method === 'HEAD') res.end();
+    else sendFile(sent.file, res);
+    return true;
+  }
+  // a real file answers one byte range: Safari and iOS play a <video> only from a server that does (they probe
+  // with `Range: bytes=0-1` first), and a download can resume
+  const stat = statSync(file);
+  const size = stat.size;
+  const lastModified = stat.mtime.toUTCString();
+  headers['Accept-Ranges'] = 'bytes';
+  headers['Last-Modified'] = lastModified;
+  // `If-Range` with any other validator than this file's date means the client's copy is stale: send it whole
+  const ifRange = req.headers['if-range'];
+  const range = ifRange === undefined || ifRange === lastModified ? byteRange(req.headers.range, size) : null;
+  if (range === 'unsatisfiable') {
+    res.writeHead(416, { ...headers, 'Content-Range': `bytes */${size}` });
+    res.end();
+    return true;
+  }
+  if (range) {
+    headers['Content-Range'] = `bytes ${range.start}-${range.end}/${size}`;
+    headers['Content-Length'] = range.end - range.start + 1;
+  } else {
+    headers['Content-Length'] = size;
+  }
+  res.writeHead(range ? 206 : 200, headers);
   if (req.method === 'HEAD') res.end();
-  else createReadStream(file).pipe(res);
+  else sendFile(file, res, range ?? undefined);
   return true;
+}
+
+/**
+ * Streams a file (or one byte range of it) to the response. pipeline() destroys both ends when the client goes away
+ * mid-transfer or the read fails, so the file descriptor is always closed and no stream error goes unhandled (with
+ * `.pipe()` an aborted download kept its descriptor open: enough of them exhaust the process's descriptors, and the
+ * next unhandled stream error crashes the server).
+ */
+function sendFile(file: string, res: ServerResponse, range?: { start: number; end: number }): void {
+  pipeline(createReadStream(file, range), res, () => {
+    /* finished, the client left, or the read failed: pipeline has already closed the file and the response */
+  });
+}
+
+/**
+ * The one byte range of a `Range` header (`bytes=a-b`, `bytes=a-`, `bytes=-n`) clamped to a file of `size` bytes;
+ * null to send the whole file (no header, another unit, several ranges, or a header that does not parse, which
+ * RFC 9110 lets a server ignore), 'unsatisfiable' for a range that starts past the end (or an empty suffix).
+ */
+export function byteRange(header: string | undefined, size: number): { start: number; end: number } | 'unsatisfiable' | null {
+  if (!header) return null;
+  const m = /^bytes=(\d{0,16})-(\d{0,16})$/.exec(header.trim());
+  if (!m || (m[1] === '' && m[2] === '')) return null;
+  if (m[1] === '') {
+    const n = Number(m[2]);
+    if (n === 0 || size === 0) return 'unsatisfiable';
+    return { start: Math.max(0, size - n), end: size - 1 };
+  }
+  const start = Number(m[1]);
+  if (start >= size) return 'unsatisfiable';
+  if (m[2] !== '' && Number(m[2]) < start) return null;
+  const end = m[2] === '' ? size - 1 : Math.min(Number(m[2]), size - 1);
+  return { start, end };
 }
 
 /**
@@ -173,7 +393,7 @@ export const WEB_CSP =
   "frame-ancestors 'none'; form-action 'self'";
 
 /**
- * Without `WEB_DIST` (production: the web app is the site's, e.g. elymum.io on Vercel) a browser that opens a page of
+ * Without `WEB_DIST` (a deploy where the web app is hosted elsewhere; the VPS serves it itself) a browser that opens a page of
  * the game server's own domain is sent to the same page on `PUBLIC_URL`, so there is one copy of the site. Null when
  * there is nothing to redirect (development, no `PUBLIC_URL`, the request is already for that host).
  */
@@ -208,8 +428,13 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
   };
 
   // the request and header timeouts are enforced by a sweep every `connectionsCheckingInterval` (Node default 30 s)
-  const server = createServer({ connectionsCheckingInterval: 2_000 }, async (req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+  const server = createServer({ connectionsCheckingInterval: 2_000 }, (req, res) => {
+    // per-client budgets deep down (holder checks) count this request's client
+    void asClient(rateKey(clientIp(req, trustProxy)), () => handleRequest(req, res));
+  });
+  const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    const url = requestUrl(req.url);
+    if (!url) return json(res, 400, { error: 'bad_request' });
     const allow = corsAllow(cfg.corsOrigin, req.headers.origin);
     if (allow) res.setHeader('Access-Control-Allow-Origin', allow);
     if (allow && allow !== '*') res.setHeader('Vary', 'Origin');
@@ -223,10 +448,13 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
       return;
     }
     const ip = clientIp(req, trustProxy);
+    // every per-client limit counts an IPv6 client as its /64 (one customer holds the whole /64); the exact address
+    // is kept for the admin audit and the logs
+    const key = rateKey(ip);
     try {
       if (url.pathname.startsWith('/api/')) {
-        if (!apiLimiter.allow(ip)) return json(res, 429, { error: 'rate_limited' });
-        if (ctx.site && (await ctx.site.handle(req, res, url, ip))) return;
+        if (!apiLimiter.allow(key)) return json(res, 429, { error: 'rate_limited' });
+        if (ctx.site && (await ctx.site.handle(req, res, url, key, ip))) return;
         switch (url.pathname) {
           case '/api/health': {
             // `?live=1`: the container's liveness check (Docker HEALTHCHECK): the process answers. A server that only
@@ -253,14 +481,32 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             return json(res, 200, body);
           }
           case '/api/auth/nonce': {
-            if (!nonceLimiter.allow(ip)) return json(res, 429, { error: 'rate_limited' });
+            if (!nonceLimiter.allow(key)) return json(res, 429, { error: 'rate_limited' });
             const address = checksumAddress(url.searchParams.get('address'));
             if (!address) return json(res, 400, { error: 'bad_request', message: 'address must be an EVM address (0x…)' });
             try {
-              return json(res, 200, ctx.auth.issueNonce(address, siweOrigin(cfg, req, trustProxy, ctx.chain.status().chainId), Date.now(), ip));
+              return json(res, 200, ctx.auth.issueNonce(address, siweOrigin(cfg, req, trustProxy, ctx.chain.status().chainId), Date.now(), key));
             } catch (err) {
               if (err instanceof NonceLimitError) return json(res, 429, { error: 'rate_limited', message: 'Too many sign-in attempts. Wait a few minutes.' });
               throw err;
+            }
+          }
+          case '/api/arena/permit': {
+            // a join permit (CoinnibalArena v4): the signed-in wallet may buy one ticket of `arenaId`, for the paid custom
+            // room `room` when given (stake/join-permits.ts)
+            if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
+            if (!ctx.permits) return json(res, 503, { error: 'arenas_off', message: 'Paid rooms are not open right now.' });
+            const caller = bearerWallet(ctx.auth, req);
+            if (!caller) return json(res, 401, { error: 'unauthorized', message: 'Sign in with your wallet first.' });
+            const body = await readSmallJson(req);
+            try {
+              const room = body?.room === undefined || body?.room === null ? null : body.room;
+              // the page's origin: an open-play copy of the site opens the game on a testnet (as on its socket)
+              const permit = await ctx.permits.issue(caller, Number(body?.arenaId), ip, room as string | null, typeof req.headers.origin === 'string' ? req.headers.origin : null);
+              return json(res, 200, { permit });
+            } catch (err) {
+              if (!(err instanceof JoinPermitFail)) throw err;
+              return json(res, err.status, { error: err.code, message: err.message, ...(err.retryAt !== undefined ? { retryAt: err.retryAt } : {}) });
             }
           }
           case '/api/pending': {
@@ -289,7 +535,7 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             return json(res, 200, { changed, chain: ctx.chain.status() });
           }
           case '/api/dev/pay': {
-            // DEV ONLY: the web's fake wallet "pays" a power-up pack (`ElymumArena.pay`); answers its fake hash
+            // DEV ONLY: the web's fake wallet "pays" a power-up pack (`CoinnibalArena.pay`); answers its fake hash
             const dev = cfg.devFakeChain ? (ctx.chain as Partial<DevFakeChainActions>) : null;
             if (!dev?.devPay) return json(res, 404, { error: 'not found' });
             if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
@@ -302,8 +548,8 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
             return json(res, 404, { error: 'not found' });
         }
       }
-      if (url.pathname.startsWith('/share/') && ctx.shares?.handle(req, res, url.pathname, ip)) return;
-      if (cfg.webDist && (req.method === 'GET' || req.method === 'HEAD') && serveStatic(cfg.webDist, req, res, url.pathname)) return;
+      if (url.pathname.startsWith('/share/') && ctx.shares?.handle(req, res, url.pathname, key)) return;
+      if (cfg.webDist && (req.method === 'GET' || req.method === 'HEAD') && serveStatic(cfg.webDist, req, res, url.pathname, ctx.site ? () => ctx.site!.publicSettings() : null)) return;
       const to = siteRedirect(cfg, req, url);
       if (to) {
         res.writeHead(301, { Location: to, 'Cache-Control': 'public, max-age=3600' });
@@ -322,7 +568,7 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
       if (!res.headersSent) json(res, 500, { error: 'internal', message: 'internal server error' });
       else res.end();
     }
-  });
+  };
   server.headersTimeout = HTTP_TIMEOUTS.headersMs;
   server.requestTimeout = HTTP_TIMEOUTS.requestMs;
   server.keepAliveTimeout = HTTP_TIMEOUTS.keepAliveMs;

@@ -1,4 +1,4 @@
-import type { ChainStatus } from '@elymum/shared';
+import type { ChainStatus } from '@coinnibal/shared';
 
 /**
  * Arena address the game server advertises in its `DEV_FAKE_CHAIN=1` mode (`ChainStatus.arenaAddress`).

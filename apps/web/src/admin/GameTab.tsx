@@ -1,5 +1,5 @@
-import { setPausedCall, updateArenaFrom } from "@elymum/sdk";
-import { arenaName } from "@elymum/sdk/ops";
+import { setPausedCall, updateArenaFrom } from "@coinnibal/sdk";
+import { arenaName } from "@coinnibal/sdk/ops";
 import {
   GAME_ACCESS_MODES,
   MAP_SCALE_FIELDS,
@@ -7,7 +7,7 @@ import {
   mapSideFor,
   type GameAccess,
   type MapScaleSettings,
-} from "@elymum/shared";
+} from "@coinnibal/shared";
 import { useCallback, useEffect, useState } from "react";
 import { SiteApiError, type MapAdminView, type MapSettingsPatch } from "../site/api";
 import { ArenaScalingCard } from "./ArenaScalingCard";
@@ -134,7 +134,7 @@ function StartStopCard({ ctx }: { ctx: ChainCtx }) {
       />
       {env && (
         <p className="ad-note">
-          GAME_ACCESS={env} is set on the server: it wins over this switch.
+          GAME_ACCESS={env} is set on the server (COINNIBAL_GAME_ACCESS in /opt/elymum/.env on the VPS): it wins over this switch.
         </p>
       )}
       {arena && cfg && (
@@ -151,7 +151,7 @@ function StartStopCard({ ctx }: { ctx: ChainCtx }) {
                 v === "paused"
                   ? "Pause the arena (no new tickets)"
                   : "Unpause the arena",
-              contract: "ElymumArena",
+              contract: "CoinnibalArena",
               call: setPausedCall(arena, v === "paused"),
               ownerOf: arena,
               owner: cfg.admin,
@@ -182,7 +182,7 @@ function StartStopCard({ ctx }: { ctx: ChainCtx }) {
               onClick={() =>
                 ctx.open({
                   title: `${x.enabled ? "Close" : "Open"} arena #${x.id} ${arenaName(x.id)}`,
-                  contract: "ElymumArena",
+                  contract: "CoinnibalArena",
                   call: updateArenaFrom(arena, x, { enabled: !x.enabled }),
                   ownerOf: arena,
                   owner: cfg.admin,
@@ -204,6 +204,14 @@ function StartStopCard({ ctx }: { ctx: ChainCtx }) {
             <span className="kb-btn__text">Open the arena as admin</span>
           </span>
         </a>
+        {/* the test-token faucet belongs to the game: hidden from visitors while only admins play, one click away here */}
+        {ctx.net.info && !ctx.net.mainnet && (
+          <a className="kb-btn kb-btn--secondary kb-btn--sm" href="/faucet" data-testid="admin-faucet-link">
+            <span className="kb-btn__label">
+              <span className="kb-btn__text">Open the test-token faucet</span>
+            </span>
+          </a>
+        )}
       </div>
     </Card>
   );
@@ -381,8 +389,9 @@ function NumCell({
 }
 
 /**
- * Game → maps: the dynamic map size per room kind and every room's live numbers. Arenas and practice ponds have
- * people only; practice bots exist only in free custom rooms (their creator turns them on).
+ * Game → maps: the dynamic map size per room kind and every room's live numbers. Official arenas and practice ponds
+ * have people only; practice bots play in free custom rooms (their creator turns them on) and, on a testnet, in the
+ * test arenas.
  */
 export function MapsCard({ ctx }: { ctx: ChainCtx }) {
   const [view, setView] = useState<MapAdminView | null>(null);
@@ -450,7 +459,7 @@ export function MapsCard({ ctx }: { ctx: ChainCtx }) {
       title="Maps"
       id="maps"
       kicker={`${people} people · ${view.rooms.length} rooms${bots ? ` · ${bots} practice bots` : ""}`}
-      lede="Arenas and practice ponds are played by people only. Practice bots exist only in free custom rooms, where the creator turns them on (count and difficulty); they are tagged BOT and carry no value."
+      lede="Official arenas and practice ponds are played by people only. Practice bots play in free custom rooms (the creator picks count and difficulty) and, on a testnet, in the test arenas (Test arenas card). They are tagged BOT and carry no value."
     >
       <MapScaleTable draft={draft} view={view} setMap={setMap} />
       {view.rooms.length > 0 && (

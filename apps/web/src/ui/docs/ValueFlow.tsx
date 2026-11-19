@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE } from '@elymum/shared';
+import { ELYSIUM, SHADE } from '@coinnibal/shared';
 import { SceneCoin, useOffscreenPause, useReducedMotion } from '../../design';
 
 const INK = ELYSIUM.abyss;

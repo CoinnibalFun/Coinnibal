@@ -1,7 +1,7 @@
 /**
  * Sign-In with Ethereum (EIP-4361) login message. The server issues the fields and the web
  * client rebuilds the message from them before asking the wallet to `personal_sign` it, so both
- * sides agree on every line. Only the fields Elymum uses are allowed (no Expiration Time,
+ * sides agree on every line. Only the fields Coinnibal uses are allowed (no Expiration Time,
  * Not Before, Request ID or Resources); the parser rejects anything else.
  *
  * The address must be EIP-55 checksummed by the caller (viem `getAddress`); this module has no
@@ -24,8 +24,8 @@ export interface SiweFields {
 
 export const SIWE_STATEMENT = 'Sign in to Coinnibal. This is free and sends no transaction.';
 /**
- * Statements of earlier builds, still accepted when a message is read back: the web (Vercel) and the game server (VPS)
- * deploy apart, so a page from before the rename may sign the old line for a while. New messages always use
+ * Statements of earlier builds, still accepted when a message is read back: a page opened before the rename (the
+ * project was called Elymum until November 2026) may sign the old line for a while. New messages always use
  * `SIWE_STATEMENT`.
  */
 export const SIWE_STATEMENTS_PREVIOUS: readonly string[] = ['Sign in to Elymum. This is free and sends no transaction.'];

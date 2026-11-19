@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { ROBINHOOD_TESTNET_CHAIN_ID, isChainId, type HolderWlEntry, type HolderWlView } from '@elymum/shared';
+import { ROBINHOOD_TESTNET_CHAIN_ID, isChainId, type HolderWlEntry, type HolderWlView } from '@coinnibal/shared';
 import { getAddress, isAddress, type Address, type Hash } from 'viem';
 import type { HolderReader } from '../chain/evm-client';
 import { SiteFail, bad } from './validate';

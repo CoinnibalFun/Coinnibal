@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type RoomInfo, type ServerMessage } from '@elymum/shared';
+import { PROTOCOL_VERSION, type RoomInfo, type ServerMessage } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';

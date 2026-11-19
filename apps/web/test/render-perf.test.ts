@@ -1,4 +1,4 @@
-import { EntityKind, PlayerFlag, encodeSnapshot, type SnapshotData } from '@elymum/shared';
+import { EntityKind, PlayerFlag, encodeSnapshot, type SnapshotData } from '@coinnibal/shared';
 import { Session } from 'node:inspector/promises';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Camera } from '../src/game/camera';

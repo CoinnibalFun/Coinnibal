@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Renders a short motion-graphics film (the mint film, Roadmap Chomp) to finished files.
 #   media/mint-film/render.sh <project-dir> <out-name> <variant:WxH:suffix> [...]
-#   e.g. media/mint-film/render.sh media/mint-film elymum-mint-film 1920x1080: 1080x1920:-vertical
+#   e.g. media/mint-film/render.sh media/mint-film coinnibal-mint-film 1920x1080: 1080x1920:-vertical
 # Steps: picture per variant (media/promo/render/render.mjs --project, 60 fps, near-lossless)
 # -> score (<project>/audio/music.py) -> mix (media/mint-film/audio/mix.py) -> -14 LUFS with the true
 # peak at or below -1.5 dBTP after AAC (media/gameplay/render/finalize.py)

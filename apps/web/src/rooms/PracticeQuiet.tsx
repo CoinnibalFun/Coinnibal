@@ -1,4 +1,4 @@
-import { PRACTICE_ROOM } from '@elymum/shared';
+import { PRACTICE_ROOM } from '@coinnibal/shared';
 import { useState } from 'react';
 import { Button, Icon } from '../design';
 import { engine } from '../game/instance';

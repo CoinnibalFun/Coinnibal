@@ -1,7 +1,7 @@
 /**
- * Elymum admin CLI (Node only, not exported from the SDK entry point).
+ * Coinnibal admin CLI (Node only, not exported from the SDK entry point).
  *
- *   pnpm -F @elymum/sdk admin <command> [options]      (or `pnpm admin <command>` at the repo root)
+ *   pnpm -F @coinnibal/sdk admin <command> [options]      (or `pnpm admin <command>` at the repo root)
  *
  * Run `pnpm admin help` for the command list. Parsing, the key loader and the status report live
  * in `admin-lib.ts`; validation and refusals in `ops.ts` (shared with the web admin panel). This
@@ -9,10 +9,10 @@
  * before it is sent, `--dry-run` stops after the preview, a mainnet needs `--mainnet` and a
  * typed confirmation, and `set-token` takes the address twice.
  */
-import { chainInfo, setActiveChain } from '@elymum/shared';
+import { chainInfo, setActiveChain } from '@coinnibal/shared';
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
-import { explorerAddressUrl, explorerTxUrl } from '@elymum/shared';
+import { explorerAddressUrl, explorerTxUrl } from '@coinnibal/shared';
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import type { Address, Chain, Hash, PublicClient, WalletClient } from 'viem';
 import {
@@ -61,7 +61,7 @@ import {
   type ArenaConfig,
 } from './arena';
 import { describeCall, sendCall, simulateCall, type ContractCall } from './call';
-import { createElymumPublicClient, createElymumWalletClient, isMainnetChain, viemChain } from './chain';
+import { createCoinnibalPublicClient, createCoinnibalWalletClient, isMainnetChain, viemChain } from './chain';
 import { BPS, MAX_TOTAL_FEE_BPS, SUGGESTED_HOLDER_BURN_BPS, SUGGESTED_HOLDER_VAULT_BPS } from './constants';
 import { describeError } from './errors';
 import { formatBps, formatGasAmount, formatTokenAmount } from './format';
@@ -171,7 +171,7 @@ async function requireArenaOwner(ctx: Ctx): Promise<ArenaConfig> {
   const arena = ctx.arena();
   const code = await checkDeployedCode(ctx.client, arena, 'arena');
   if (code === 'missing') throw new UsageError(`no contract at ARENA_ADDRESS ${arena} on chain ${ctx.chainId}`);
-  if (code === 'mismatch') console.log(`! ${arena}: code differs from the bundled ElymumArena artifact`);
+  if (code === 'mismatch') console.log(`! ${arena}: code differs from the bundled CoinnibalArena artifact`);
   const config = await getArenaConfig(ctx.client, arena);
   const refusal = ownerRefusal(config.admin, ctx.account().address, 'arena');
   if (refusal) throw new UsageError(refusal);
@@ -182,7 +182,7 @@ async function requireNftOwner(ctx: Ctx): Promise<Address> {
   const nft = ctx.nft();
   const code = await checkDeployedCode(ctx.client, nft, 'nft');
   if (code === 'missing') throw new UsageError(`no contract at NFT_ADDRESS ${nft} on chain ${ctx.chainId}`);
-  if (code === 'mismatch') console.log(`! ${nft}: code differs from the bundled ElymumNFT artifact`);
+  if (code === 'mismatch') console.log(`! ${nft}: code differs from the bundled CoinnibalNFT artifact`);
   const refusal = ownerRefusal(await getNftOwner(ctx.client, nft), ctx.account().address, 'NFT');
   if (refusal) throw new UsageError(refusal);
   return nft;
@@ -229,7 +229,7 @@ async function cmdDeployArena(ctx: Ctx): Promise<void> {
   const server = addressOpt(ctx.opts, 'server');
   if (!server) throw new UsageError('deploy-arena needs --server <address> (the game server key, shown in /admin as serverKey)');
   const feeWallet = addressOpt(ctx.opts, 'fee-wallet') ?? admin;
-  const address = await deploy(ctx, 'ElymumArena', deployArenaParams({ admin, serverAuthority: server, feeWallet }), ['admin', 'serverAuthority', 'feeWallet']);
+  const address = await deploy(ctx, 'CoinnibalArena', deployArenaParams({ admin, serverAuthority: server, feeWallet }), ['admin', 'serverAuthority', 'feeWallet']);
   if (address) {
     console.log(`  next: export ARENA_ADDRESS=${address}`);
     console.log('        register it in /admin (Deploy) so the server uses it, then set-token and create-arena --defaults');
@@ -256,7 +256,7 @@ async function cmdDeployNft(ctx: Ctx): Promise<void> {
     treasury: addressOpt(o, 'treasury') ?? owner,
   };
   console.log(`  price ${formatGasAmount(price)} per token`);
-  const address = await deploy(ctx, 'ElymumNFT', deployNftParams(args), ['owner', 'maxSupply', 'mintPrice', 'wlLimit', 'publicLimit', 'baseURI', 'treasury']);
+  const address = await deploy(ctx, 'CoinnibalNFT', deployNftParams(args), ['owner', 'maxSupply', 'mintPrice', 'wlLimit', 'publicLimit', 'baseURI', 'treasury']);
   if (address) console.log(`  next: export NFT_ADDRESS=${address}  (and register it in /admin)`);
 }
 
@@ -557,13 +557,13 @@ async function main(argv: string[]): Promise<number> {
   let url = '';
   try {
     url = str(opts, 'rpc') ?? process.env.EVM_RPC_URL ?? 'http://127.0.0.1:8545';
-    const probe = createElymumPublicClient(url);
+    const probe = createCoinnibalPublicClient(url);
     const chainId = await probe.getChainId();
     // Robinhood Chain only: an RPC of any other chain is refused here (chainInfo throws)
     const overrides = { explorerUrl: process.env.EXPLORER_URL, rpcUrl: url };
     setActiveChain(chainInfo(chainId, overrides));
     const chain = viemChain(chainId, overrides);
-    const client = createElymumPublicClient(url, chain);
+    const client = createCoinnibalPublicClient(url, chain);
     let account: PrivateKeyAccount | null = null;
     let wallet: WalletClient | null = null;
     const keySource = str(opts, 'key') ?? process.env.ADMIN_PRIVATE_KEY ?? process.env.ADMIN_KEY_FILE;
@@ -582,7 +582,7 @@ async function main(argv: string[]): Promise<number> {
         }
         return account;
       },
-      wallet: () => (wallet ??= createElymumWalletClient(url, { account: ctx.account(), chain })),
+      wallet: () => (wallet ??= createCoinnibalWalletClient(url, { account: ctx.account(), chain })),
       arena: envAddress(opts, 'arena', 'ARENA_ADDRESS'),
       nft: envAddress(opts, 'nft', 'NFT_ADDRESS'),
       confirmed: false,

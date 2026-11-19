@@ -1,5 +1,5 @@
 import { getAddress } from 'viem';
-import { RULES, roundAt, type ChainStatus, type ServerMessage } from '@elymum/shared';
+import { RULES, roundAt, type ChainStatus, type ServerMessage } from '@coinnibal/shared';
 import type { ChainArena, ChainGateway, ChainSession, ServerKeyInfo } from '../src/chain/types';
 import { Leaderboards } from '../src/leaderboards';
 import { Conn } from '../src/net/conn';
@@ -44,7 +44,7 @@ export class ArenaChain implements ChainGateway {
       nftAddress: null,
       arenasEnabled: true,
       tokenReady: true,
-      token: { address: '0x0000000000000000000000000000000000000707', symbol: '$ELYMUM', decimals: 18 },
+      token: { address: '0x0000000000000000000000000000000000000707', symbol: '$NIBAL', decimals: 18 },
       fees: { burnBps: 1500, vaultBps: 500, holderBurnBps: 1500, holderVaultBps: 500, holderPerks: false, paymentBurnBps: 5000, burnMode: 0 },
       serverKey: null,
     };
@@ -120,7 +120,7 @@ export function stakeJoin(arenaId: number, fee: number) {
 }
 
 /** The `RoomOptions.custom` of a free custom room with `bots` practice bots (tests). */
-export const freeCustom = (bots = 0): import('@elymum/shared').CustomRoomSummary => ({
+export const freeCustom = (bots = 0): import('@coinnibal/shared').CustomRoomSummary => ({
   durationMin: 30,
   mapSize: 'M',
   bots,

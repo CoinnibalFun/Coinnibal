@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Local chain for Elymum: starts `hardhat node` (chain id 31337, a local stand-in for Robinhood Chain Testnet, gas in ETH), deploys the
-// TestToken, ElymumArena and ElymumNFT with the SDK (the /admin → Deploy order), sets the token, creates
+// Local chain for Coinnibal: starts `hardhat node` (chain id 31337, a local stand-in for Robinhood Chain Testnet, gas in ETH), deploys the
+// TestToken, CoinnibalArena and CoinnibalNFT with the SDK (the /admin → Setup order), sets the token, creates
 // the four default arenas, and writes the game server's env to .localnet/server.env (addresses also in
 // .localnet/contracts.json). It keeps the node running until Ctrl+C.
 //
@@ -56,8 +56,8 @@ try {
   console.log('');
   say(`local chain ready (chain id ${out.chainId})`);
   console.log(`  TestToken     ${out.token}`);
-  console.log(`  ElymumArena   ${out.arena}`);
-  console.log(`  ElymumNFT     ${out.nft}`);
+  console.log(`  CoinnibalArena   ${out.arena}`);
+  console.log(`  CoinnibalNFT     ${out.nft}`);
   console.log(`  owner/admin   ${out.owner}   (Hardhat account #0)`);
   console.log(`  server key    ${out.server}   (Hardhat account #1)`);
   console.log(`\nGame server env (${SERVER_ENV_FILE}):\n`);

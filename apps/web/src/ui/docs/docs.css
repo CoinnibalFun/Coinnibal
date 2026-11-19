@@ -82,6 +82,35 @@
   align-items: start;
   margin-top: 40px;
 }
+/* /docs only (the site's frame; the lobby's #docs keeps its own): the title on one line from 768px, the chapters end on
+   the same right edge as the header and the top bar, and every contents entry fits on one line from 1200px */
+.st-docs .dc-page .pg-head__text {
+  max-width: none;
+}
+@media (min-width: 1100px) {
+  .st-docs .dc-body {
+    max-width: none;
+  }
+  .st-docs .dc-sec__lede {
+    max-width: 62ch;
+  }
+}
+@media (min-width: 1200px) {
+  .st-docs .dc-layout {
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  }
+}
+/* the one-column tablet layout: the contents box and the chapters reach the same right edge too (they stopped at 760px,
+   up to 133px short of the top bar at 979px); paragraphs keep their 66ch */
+@media (min-width: 760px) and (max-width: 979px) {
+  .st-docs .dc-body,
+  .st-docs .dc-toc {
+    max-width: none;
+  }
+  .st-docs .dc-sec__lede {
+    max-width: 62ch;
+  }
+}
 
 /* ── contents: a sticky cream sticker ─────────────────────────────── */
 .dc-toc {
@@ -182,6 +211,8 @@
 .dc-see {
   color: inherit;
   font-weight: 600;
+  /* a chapter's name stays whole ("Power-ups" never breaks at its hyphen) */
+  white-space: nowrap;
   text-decoration: underline 2px color-mix(in srgb, var(--teal-ink) 70%, transparent);
   text-underline-offset: 3px;
   border-radius: 3px;
@@ -205,6 +236,12 @@
 }
 .dc-sec {
   scroll-margin-top: 96px;
+}
+/* /docs: a chapter that waits for its turn (DocsPage `useLaterChapters`) is skipped by the layout while it is off
+   screen; once rendered it is the same box as without this (no margin crosses a chapter's edge) */
+.st-docs .dc-sec[data-later] {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 1400px;
 }
 .dc-sec__head {
   display: grid;
@@ -311,6 +348,13 @@
 .dc-list strong {
   font-weight: 700;
 }
+/* one kind of the item above (the two kinds of private room): indented under it, a hollow dot */
+.dc-list li.is-sub {
+  margin-left: 28px;
+}
+.dc-list li.is-sub::before {
+  background: var(--sticker);
+}
 
 /* keys */
 .dc-keys-fig {
@@ -321,11 +365,19 @@
   border-radius: var(--r-card);
   box-shadow: var(--sh-3);
 }
+/* a block's title inside a chapter (the controls, the tables, the worked example): a small heading, like the cards' */
 .dc-cap,
-.dc-table caption {
-  font-size: var(--t-label);
-  color: var(--ink-3);
+.dc-table caption,
+.dc-fee__cap {
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: var(--t-h4);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
   text-align: left;
+  text-wrap: balance;
   padding-bottom: 10px;
 }
 .dc-keys {
@@ -341,8 +393,9 @@
   font-size: 15.5px;
 }
 .dc-keys th {
-  /* as wide as the widest key, never wrapping a key inside its cap */
-  width: 1%;
+  /* never wrapping a key inside its cap; the two tables (computer, phone) share one key column, so their actions
+     start on one line (a wider key still widens it) */
+  width: 220px;
   white-space: nowrap;
   padding-right: 18px;
 }
@@ -357,6 +410,19 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--ink-3);
+}
+/* the phone's on-screen controls (`touch`): still cream pills in the game's words, not keys that press themselves */
+.dc-pill {
+  display: inline-block;
+  white-space: nowrap;
+  padding: 3px 12px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 999px;
+  background: var(--cream);
+  color: var(--ink-fixed);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 .dc-kbd {
   display: inline-block;
@@ -373,7 +439,7 @@
   text-align: center;
 }
 
-/* cards led by a key (the power-ups) */
+/* the power-up cards: each led by its in-game button picture, then how to use it on a keyboard and on a phone */
 .dc-cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -397,20 +463,57 @@
   align-items: center;
   gap: 12px;
 }
-.dc-card__head .dc-kbd {
-  animation: none;
-  min-width: 36px;
-  padding: 5px 9px;
-  font-size: 14px;
-  background: var(--sun);
+/* a power-up's picture: the in-game button's glyph (BOOST_PATH) on its tint */
+.dc-glyph {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 50%;
+  background: var(--sticker);
+  color: var(--ink-fixed);
 }
-.dc-card__title {
-  margin: 0;
+.dc-glyph svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dc-glyph.is-magnet {
+  background: #fbe3dc;
+}
+.dc-glyph.is-leap {
+  background: #dff3f9;
+}
+.dc-glyph.is-speed {
+  background: #fdf0c8;
+}
+.dc-glyph.is-invis {
+  background: #e8e1f6;
+}
+.dc-card__glyph {
+  width: 40px;
+  height: 40px;
+  border-width: var(--stroke);
+  box-shadow: var(--sh-1);
+}
+.dc-card__glyph svg {
+  width: 22px;
+  height: 22px;
+}
+.dc-card__title,
+.dc-note__title,
+.dc-compare__title {
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
   font-size: var(--t-h4);
-  line-height: 1.15;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.dc-card__title {
+  margin: 0;
 }
 .dc-card__text {
   margin: 0;
@@ -418,17 +521,105 @@
   line-height: 1.5;
   text-wrap: pretty;
 }
+/* how to use it: "Keyboard  Press [R]" and "Phone  Tap (glyph) at the bottom right" */
+.dc-card__use {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 14px;
+  margin: 2px 0 0;
+}
+.dc-card__way {
+  display: contents;
+}
+.dc-card__use dt {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.dc-card__use dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.4;
+}
+.dc-card__key {
+  min-width: 32px;
+  padding: 3px 9px;
+  font-size: 14px;
+  background: var(--sun);
+}
+.dc-kbd.dc-card__key {
+  animation: none;
+  background: var(--sun);
+}
+.dc-card__btn {
+  width: 32px;
+  height: 32px;
+}
+.dc-card__btn svg {
+  width: 18px;
+  height: 18px;
+}
 .dc-card__meta {
   margin: auto 0 0;
   padding-top: 8px;
   border-top: 2px dashed var(--rule);
-  font-size: var(--t-label);
-  color: var(--ink-3);
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+/* two cards a row: they share their rows (title, text, how to use, the ready line), so "Keyboard" and "Phone" and
+   the dashed line start at the same height in both */
+@media (min-width: 561px) {
+  .dc-card {
+    display: grid;
+    grid-row: span 4;
+    grid-template-rows: subgrid;
+    row-gap: 8px;
+    align-content: start;
+  }
 }
 @media (max-width: 560px) {
   .dc-cards {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
+  }
+}
+/* a narrow card (two a row at 700 and 1024 px, the lobby at 1024 px, a 360 px phone): "Tap (glyph) at the bottom
+   right" needs 211 px and no longer fits beside the labels' column, so each label goes above its own line. The phrase
+   stays on one line, and no label floats between two lines. The list is the container, not the card: a card with
+   size containment drops out of the shared rows above. A card narrower than 334 px (its content box under 292 px):
+   two a row, a list under 684 px; one a row, a list under 334 px */
+.dc-cards {
+  container-type: inline-size;
+}
+@media (min-width: 561px) {
+  @container (width < 684px) {
+    .dc-card__use {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 2px;
+    }
+    .dc-card__way + .dc-card__way dt {
+      margin-top: 8px;
+    }
+  }
+}
+@media (max-width: 560px) {
+  @container (width < 334px) {
+    .dc-card__use {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 2px;
+    }
+    .dc-card__way + .dc-card__way dt {
+      margin-top: 8px;
+    }
   }
 }
 
@@ -445,6 +636,11 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 15.5px;
+  /* one grid for both tables: the name column, then two equal columns compared side by side */
+  table-layout: fixed;
+}
+.dc-table thead th:first-child {
+  width: 38%;
 }
 .dc-table thead th {
   padding: 8px 10px 8px 0;
@@ -525,11 +721,16 @@
   font-size: 12px;
 }
 .dc-flow__title {
-  font-size: var(--t-label);
-  color: var(--teal-ink);
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: var(--t-h4);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
 }
 .dc-flow__text {
-  font-size: 15px;
+  font-size: 15.5px;
   line-height: 1.5;
   text-wrap: pretty;
 }
@@ -544,9 +745,13 @@
   flex-direction: column;
   gap: 12px;
 }
-.dc-fee__cap {
-  font-size: var(--t-label);
-  color: var(--ink-3);
+/* the fee paragraph beside the receipt it explains (one column on phones); the receipt keeps at least 360px, so
+   "Paid to your wallet" stays on one line */
+.dc-fee__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
+  gap: 28px;
+  align-items: center;
 }
 .dc-fee__slips {
   display: grid;
@@ -561,14 +766,19 @@
   min-width: 9ch;
   text-wrap: balance;
 }
+/* the total's leader is invisible (storybook.css), so it reserves no width: on a 360px phone the slip is 328px and
+   "Paid to your wallet" then stays on one line beside its amount */
+.dc-fee__slip .kb-receipt__line.is-strong dt::after {
+  min-width: 0;
+}
 
 /* on-chain vs server */
 .dc-compare {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
-  /* each card as tall as its own list (the short one is not stretched into an empty box) */
-  align-items: start;
+  /* the two boxes end on one line (the shorter list keeps its space at the bottom) */
+  align-items: stretch;
 }
 .dc-compare__col {
   padding: 20px 20px 22px;
@@ -585,19 +795,30 @@
   align-items: flex-start;
   gap: 8px;
   margin: 0 0 14px;
-  font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
-  font-weight: 800;
-  font-size: var(--t-h4);
-  line-height: 1.15;
 }
 .dc-compare__title .kb-icon {
   flex: none;
   margin-top: 2px;
 }
 .dc-compare .dc-list li {
-  font-size: 15px;
+  font-size: 15.5px;
   line-height: 1.5;
+}
+/* side by side, the two titles share one row: both lists start at one height even where only one title wraps (at
+   1200 px "On the server: players trust it" takes two lines and "On-chain: anyone can check" one) */
+@media (min-width: 760px) {
+  .dc-compare {
+    grid-template-rows: auto 1fr;
+  }
+  .dc-compare__col {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    row-gap: 14px;
+  }
+  .dc-compare__title {
+    margin: 0;
+  }
 }
 
 /* notes: a sticker with a stamp */
@@ -620,11 +841,6 @@
 }
 .dc-note__title {
   margin: 0 0 6px;
-  font-family: var(--font-display);
-  font-variation-settings: var(--fv-display);
-  font-weight: 800;
-  font-size: var(--t-h4);
-  line-height: 1.15;
 }
 .dc-note__text {
   margin: 0;
@@ -681,19 +897,21 @@
   color: var(--ink-2);
 }
 
-/* colophon + back to top */
+/* colophon + back to top, under the same dashed rule as each chapter's title */
 .dc-foot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px 24px;
+  padding-top: 22px;
+  border-top: 2px dashed var(--rule);
 }
 .dc-foot__text {
   margin: 0;
   max-width: 54ch;
-  font-size: 14px;
-  color: var(--ink-3);
+  font-size: 15px;
+  color: var(--ink-2);
 }
 .dc-top {
   display: inline-flex;
@@ -757,6 +975,12 @@
     border-bottom: 2px dashed var(--rule);
   }
 }
+@media (min-width: 760px) and (max-width: 979px) {
+  /* eleven chapters in two columns: the last one runs across both instead of leaving a hole */
+  .dc-toc__list li:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
 @media (max-width: 759px) {
   .dc-page .pg-head__aside {
     display: none;
@@ -785,7 +1009,8 @@
     background: none;
     color: var(--ink);
     font: inherit;
-    font-size: var(--t-label);
+    font-size: 16px;
+    font-weight: 700;
     cursor: pointer;
     border-radius: var(--r-tag);
   }
@@ -796,15 +1021,15 @@
   .dc-toc__count {
     display: grid;
     place-items: center;
-    min-width: 26px;
     height: 26px;
-    padding: 0 6px;
+    padding: 0 10px;
     border: var(--stroke-sm) solid var(--outline);
     border-radius: 13px;
     background: var(--sun);
     color: var(--ink-fixed);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
+    white-space: nowrap;
   }
   .dc-toc__chev {
     margin-left: auto;
@@ -855,6 +1080,10 @@
   }
   .dc-compare {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .dc-fee__grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
   }
   .dc-note {
     padding: 64px 18px 20px;

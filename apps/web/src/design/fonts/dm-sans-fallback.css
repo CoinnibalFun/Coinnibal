@@ -1,0 +1,34 @@
+/*
+ * The body font's stand-in while DM Sans downloads: Arial (or a metric twin: Liberation Sans, Arimo; Helvetica on a
+ * Mac), scaled and given DM Sans's vertical metrics, so text set before the web font arrives breaks into the same lines
+ * as after the swap. The prerendered landing paints before the fonts land; with the system font (Segoe UI, San
+ * Francisco, DejaVu) in that first frame the hero lede took 3 lines at 768-1440 px and 2 after the swap, and the hero
+ * card shrank by 25 px. A phone without Arial (Android: Roboto) skips these faces and keeps the next font in the stack.
+ *
+ * Widths measured in Chromium against Liberation Sans (Arial's metrics): DM Sans at opsz auto is 102.4-103.7 % as wide
+ * at 400 (the hero lede at 16.5 px: 103.6 %) and 99.0-101.5 % at 600-700 against the bold face. Vertical metrics:
+ * DM Sans ascent 0.99 em, descent 0.31 em, no line gap (the overrides are scaled by size-adjust, hence divided here).
+ * The range is DM Sans's own (its latin and latin-ext faces): any other letter keeps the system font.
+ */
+@font-face {
+  font-family: 'DM Sans Fallback';
+  font-style: normal;
+  font-weight: 100 549;
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Helvetica');
+  size-adjust: 103.5%;
+  ascent-override: 95.65%;
+  descent-override: 29.95%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2000-206F,U+20A0-20C0,U+2113,U+2122,U+2191,U+2193,U+2212,U+2215,U+2C60-2C7F,U+A720-A7FF,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans Fallback';
+  font-style: normal;
+  font-weight: 550 1000;
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Arimo-Bold'), local('Helvetica Bold'), local('Helvetica-Bold');
+  size-adjust: 100.5%;
+  ascent-override: 98.51%;
+  descent-override: 30.85%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2000-206F,U+20A0-20C0,U+2113,U+2122,U+2191,U+2193,U+2212,U+2215,U+2C60-2C7F,U+A720-A7FF,U+FEFF,U+FFFD;
+}

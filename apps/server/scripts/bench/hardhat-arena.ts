@@ -1,5 +1,5 @@
 /**
- * A real ElymumArena v3 + TestToken on a local `hardhat node` for the bell-burst and failure drills: deploys with
+ * A real CoinnibalArena v4 + TestToken on a local `hardhat node` for the bell-burst and failure drills: deploys with
  * the SDK (the /admin order), creates the four default arenas, funds `players` fresh wallets with gas
  * (`hardhat_setBalance`) and tokens, and buys tickets for them. `interval` > 0 mines a block every that many ms
  * instead of on every transaction (Robinhood Chain, an Arbitrum Orbit chain, makes blocks about every 250 ms).
@@ -11,21 +11,23 @@ import { fileURLToPath } from 'node:url';
 import {
   approveCall,
   createDefaultArenaCalls,
-  createElymumPublicClient,
-  createElymumWalletClient,
+  createCoinnibalPublicClient,
+  createCoinnibalWalletClient,
   deployArena,
   deployTestToken,
   deployedAddress,
-  elymumArenaAbi,
+  coinnibalArenaAbi,
   getArena,
+  getJoinNonce,
   getSession,
   joinCall,
   sendCall,
   setTokenCall,
+  signJoinPermit,
   testTokenMintCall,
   viemChain,
   type ContractCall,
-} from '@elymum/sdk';
+} from '@coinnibal/sdk';
 import { toHex, type Address, type Hex, type PublicClient, type WalletClient } from 'viem';
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 
@@ -65,7 +67,7 @@ export async function startHardhatArena(opts: { players: number; intervalMs?: nu
   const url = `http://127.0.0.1:${port}`;
   // the `bench` network keeps block timestamps on the real clock (several blocks a second share a timestamp, as on
   // Robinhood Chain); the default node adds a second per block, so its time would run 4x fast at 250 ms blocks
-  const child: ChildProcess = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', '--network', 'bench', 'node', '--port', String(port)], {
+  const child: ChildProcess = spawn('pnpm', ['-F', '@coinnibal/contracts', 'exec', 'hardhat', '--network', 'bench', 'node', '--port', String(port)], {
     cwd: repoRoot,
     detached: true,
     stdio: 'ignore',
@@ -90,7 +92,7 @@ export async function startHardhatArena(opts: { players: number; intervalMs?: nu
     await new Promise((r) => setTimeout(r, 300));
   }
   const chain = viemChain(31337, { rpcUrl: url });
-  const pub: PublicClient = createElymumPublicClient(url, chain, { pollingInterval: 20 });
+  const pub: PublicClient = createCoinnibalPublicClient(url, chain, { pollingInterval: 20 });
   const rpc = (method: string, params: unknown[]) => pub.request({ method: method as never, params: params as never });
   const admin = privateKeyToAccount(toHex(mnemonicToAccount(MNEMONIC, { addressIndex: 0 }).getHdKey().privateKey!));
   const serverKey = generatePrivateKey();
@@ -100,7 +102,7 @@ export async function startHardhatArena(opts: { players: number; intervalMs?: nu
   await rpc('hardhat_setBalance', [server.address, toHex(10n ** 18n)]);
   for (const p of players) await rpc('hardhat_setBalance', [p.address, gas]);
   const wallets = new Map<string, WalletClient>();
-  for (const a of [admin, ...players]) wallets.set(a.address.toLowerCase(), createElymumWalletClient(url, { account: a, chain, pollingInterval: 20 }));
+  for (const a of [admin, ...players]) wallets.set(a.address.toLowerCase(), createCoinnibalWalletClient(url, { account: a, chain, pollingInterval: 20 }));
   const send = async (from: Address, call: ContractCall): Promise<boolean> => {
     try {
       const hash = await sendCall(wallets.get(from.toLowerCase())!, call);
@@ -150,12 +152,15 @@ export async function startHardhatArena(opts: { players: number; intervalMs?: nu
         const id = arenaOf(i);
         const s = await getSession(pub, arena, id, p.address);
         if (s.id !== 0n && !s.finalized) return;
-        if (await send(p.address, joinCall(arena, id))) n++;
+        // the server key's join permit (CoinnibalArena v4), then the join
+        const deadline = (await pub.getBlock({ blockTag: 'latest' })).timestamp + 600n;
+        const signature = await signJoinPermit(server, { chainId: 31337, arena, player: p.address, arenaId: id, nonce: await getJoinNonce(pub, arena, p.address), deadline });
+        if (await send(p.address, joinCall(arena, id, { deadline, signature }))) n++;
       });
       return n;
     },
     async logs(eventName, fromBlock = 0n) {
-      return (await pub.getContractEvents({ address: arena, abi: elymumArenaAbi, eventName, fromBlock })) as unknown as { args: Record<string, unknown>; transactionHash: Hex; blockNumber: bigint }[];
+      return (await pub.getContractEvents({ address: arena, abi: coinnibalArenaAbi, eventName, fromBlock })) as unknown as { args: Record<string, unknown>; transactionHash: Hex; blockNumber: bigint }[];
     },
     nonce: (addr) => pub.getTransactionCount({ address: addr }),
     stop,

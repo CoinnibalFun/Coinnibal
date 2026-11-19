@@ -1,6 +1,6 @@
 /**
- * End-to-end check of Elymum against a real EVM (a fresh `hardhat node`) and a real game server (real
- * chain, never DEV_FAKE_CHAIN). It follows the launch order of /admin → Deploy:
+ * End-to-end check of Coinnibal against a real EVM (a fresh `hardhat node`) and a real game server (real
+ * chain, never DEV_FAKE_CHAIN). It follows the launch order of /admin → Setup:
  *
  *  1. a hardhat node starts (or `RPC_URL` points at one you run); the admin deploys the TestToken and the
  *     arena (server authority = the game server's key) WITHOUT setting the token;
@@ -15,8 +15,8 @@
  *     `txHash`), the fee wallet receives the fee on any profit, and the unplayed ticket is settled at its
  *     entry fee by the stale-session sweeper; the arena vault ends where it started (conservation).
  *
- *   pnpm -F @elymum/server e2e                 # starts hardhat node + the game server itself
- *   RPC_URL=http://127.0.0.1:8545 pnpm -F @elymum/server e2e   # use a node you started
+ *   pnpm -F @coinnibal/server e2e                 # starts hardhat node + the game server itself
+ *   RPC_URL=http://127.0.0.1:8545 pnpm -F @coinnibal/server e2e   # use a node you started
  *
  * Env: RPC_URL (default: spawn `hardhat node` on NODE_PORT, default 8545), PORT (game server, default 8787).
  */
@@ -27,8 +27,8 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createDefaultArenaCalls,
-  createElymumPublicClient,
-  createElymumWalletClient,
+  createCoinnibalPublicClient,
+  createCoinnibalWalletClient,
   deployArena,
   deployTestToken,
   deployedAddress,
@@ -43,9 +43,9 @@ import {
   sendCall,
   setTokenCall,
   type ContractCall,
-} from '@elymum/sdk';
-import { PROTOCOL_VERSION, type ChainStatus, type ServerMessage } from '@elymum/shared';
-import type { Address, PublicClient, WalletClient } from 'viem';
+} from '@coinnibal/sdk';
+import { PROTOCOL_VERSION, type ChainStatus, type ServerMessage } from '@coinnibal/shared';
+import type { Address, Hex, PublicClient, WalletClient } from 'viem';
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import WebSocket from 'ws';
 
@@ -73,7 +73,7 @@ const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`.padStart(6);
 const step = (msg: string) => console.log(`${elapsed()}  > ${msg}`);
 const ok = (msg: string) => console.log(`${elapsed()}  OK ${msg}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const tok = (raw: bigint) => `${formatTokenAmount(raw, 18)} tELYMUM`;
+const tok = (raw: bigint) => `${formatTokenAmount(raw, 18)} TEST`;
 
 class Fail extends Error {}
 function assert(cond: unknown, msg: string): asserts cond {
@@ -114,14 +114,14 @@ async function startNode(): Promise<void> {
     assert(await rpcUp(), `no EVM node answers at ${rpcUrl}`);
     return;
   }
-  const child = spawn('pnpm', ['-F', '@elymum/contracts', 'exec', 'hardhat', 'node', '--port', String(nodePort)], { cwd: ROOT, detached: true, stdio: 'ignore' });
+  const child = spawn('pnpm', ['-F', '@coinnibal/contracts', 'exec', 'hardhat', 'node', '--port', String(nodePort)], { cwd: ROOT, detached: true, stdio: 'ignore' });
   children.push(child);
   await waitUntil('the hardhat node', 60_000, rpcUp, 300);
 }
 
 /** Starts the game server (real chain, no arena address: it waits for the registry); resolves once it answers. */
 async function startServer(serverKey: string): Promise<void> {
-  dataDir = mkdtempSync(join(tmpdir(), 'elymum-e2e-'));
+  dataDir = mkdtempSync(join(tmpdir(), 'coinnibal-e2e-'));
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...ROUND_ENV,
@@ -228,8 +228,8 @@ class Player {
   }
 }
 
-/** HTTP SIWE sign-in (the site's `/api/auth/login`); returns the session token. */
-async function httpLogin(account: PrivateKeyAccount): Promise<string> {
+/** HTTP SIWE sign-in (the site's `/api/auth/login`); returns the session token (`admin`: it must be an admin's). */
+async function httpLogin(account: PrivateKeyAccount, admin = true): Promise<string> {
   const n = await getJson<{ message: string }>(`/api/auth/nonce?address=${account.address}`);
   const res = await fetch(`${httpUrl}/api/auth/login`, {
     method: 'POST',
@@ -237,8 +237,21 @@ async function httpLogin(account: PrivateKeyAccount): Promise<string> {
     body: JSON.stringify({ address: account.address, message: n.message, signature: await account.signMessage({ message: n.message }) }),
   });
   const body = (await res.json()) as { token?: string; admin?: boolean; error?: string };
-  assert(res.ok && body.token && body.admin, `admin login failed: ${JSON.stringify(body)}`);
-  return body.token;
+  assert(res.ok && body.token && (body.admin || !admin), `${admin ? 'admin ' : ''}login failed: ${JSON.stringify(body)}`);
+  return body.token!;
+}
+
+/** The game server's join permit for one ticket (`POST /api/arena/permit`, CoinnibalArena v4), signed in over HTTP. */
+async function permitFor(account: PrivateKeyAccount, arenaId: number): Promise<{ deadline: bigint; signature: Hex }> {
+  const token = await httpLogin(account, false);
+  const res = await fetch(`${httpUrl}/api/arena/permit`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ arenaId }),
+  });
+  const body = (await res.json()) as { permit?: { deadline: number; signature: string; player: string; arenaId: number }; error?: string };
+  assert(res.ok && body.permit && body.permit.player === account.address && body.permit.arenaId === arenaId, `permit refused: ${JSON.stringify(body)}`);
+  return { deadline: BigInt(body.permit!.deadline), signature: body.permit!.signature as Hex };
 }
 
 /* ── the run ─────────────────────────────────────────────────────────────── */
@@ -247,8 +260,8 @@ async function main(): Promise<void> {
   step(`EVM node at ${rpcUrl}`);
   await startNode();
   const chain = viemChain(31337, { rpcUrl });
-  client = createElymumPublicClient(rpcUrl, chain, { pollingInterval: 100 });
-  for (const a of [admin, hunter, prey, idle, feeWallet]) wallets.set(a.address, createElymumWalletClient(rpcUrl, { account: a, chain, pollingInterval: 100 }));
+  client = createCoinnibalPublicClient(rpcUrl, chain, { pollingInterval: 100 });
+  for (const a of [admin, hunter, prey, idle, feeWallet]) wallets.set(a.address, createCoinnibalWalletClient(rpcUrl, { account: a, chain, pollingInterval: 100 }));
   const serverKey = generatePrivateKey();
   const server = privateKeyToAccount(serverKey);
   // the server key pays gas in ETH
@@ -297,7 +310,8 @@ async function main(): Promise<void> {
     ['idle', idle],
   ] as const) {
     await send(acct, faucetCall(token), `${who} faucet`);
-    for (const call of (await planJoin(client, { arena, arenaId: ARENA_ID, player: acct.address, token })).calls) await send(acct, call, `${who} ${call.functionName}`);
+    const permit = await permitFor(acct, ARENA_ID);
+    for (const call of (await planJoin(client, { arena, arenaId: ARENA_ID, player: acct.address, token, permit })).calls) await send(acct, call, `${who} ${call.functionName}`);
   }
   const p = await Player.connect('prey', prey);
   await p.signIn();

@@ -1,7 +1,8 @@
 // X profile set for Coinnibal: the food chain under the ring (banner) and the chomp mark (avatar).
 // The banner keeps the night-ring look of the earlier set: the lit ring overhead, the moon, seigaiha waves and the
 // green hill, with a line of coins climbing it, each about to eat the smaller one ahead of it. No X handle is
-// written anywhere (it is not final); the site host comes from `BRAND_SITE` (default coinnibal.fun).
+// written on the art (the handle is @coinnibalfun, the account these images are for); the site host comes from
+// `BRAND_SITE` (default coinnibal.fun).
 import { C, coin, page, seigaiha, star, starfield, wordmark } from './art.mjs';
 
 const SITE = (process.env.BRAND_SITE || 'coinnibal.fun').replace(/^https?:\/\//, '').replace(/\/+$/, '');

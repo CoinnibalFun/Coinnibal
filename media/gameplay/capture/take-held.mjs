@@ -32,7 +32,7 @@ try {
   await hero.wait(2500);
   // the held banner and the row flag; the cursor rests on the banner
   await hero.hover('.kl-held, [class*="held"]', { pause: 800 }).catch(() => {});
-  await hero.page.waitForFunction(() => window.__elymum.useUi.getState().screen === 'playing', null, { timeout: 75_000 });
+  await hero.page.waitForFunction(() => window.__coinnibal.useUi.getState().screen === 'playing', null, { timeout: 75_000 });
   rec.mark('joined', { left: (await hero.round(1))?.left });
   await hero.wait(1200);
   await hero.wheel(-460, 60, 60);

@@ -1,4 +1,4 @@
-import { formatToken } from '@elymum/shared';
+import { formatToken } from '@coinnibal/shared';
 
 /**
  * Amounts in summaries (balances, receipts, HUD stickers, standings): never more than `maxFrac`

@@ -22,8 +22,8 @@ export const ARENA_META: Record<number, ArenaMeta> = {
 };
 
 /**
- * The ticket tiers, priced in US dollars (owner decision 2026-11): $1, $3, $5 and $10, the $10 arena for Elymum emblem
- * holders only. The chain stores entry fees in token units (`ElymumArena.createArena` / `updateArena`), so the admin
+ * The ticket tiers, priced in US dollars (owner decision 2026-11): $1, $3, $5 and $10, the $10 arena for Coinnibal emblem
+ * holders only. The chain stores entry fees in token units (`CoinnibalArena.createArena` / `updateArena`), so the admin
  * converts these dollar prices into token amounts at the current USD price of the token and signs the update
  * (`arena-pricing.ts`, `/admin` → Game → Arena prices).
  *

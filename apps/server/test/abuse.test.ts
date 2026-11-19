@@ -7,7 +7,7 @@ import { mkdtempSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION } from '@elymum/shared';
+import { PROTOCOL_VERSION } from '@coinnibal/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp, type App } from '../src/app';
@@ -15,7 +15,7 @@ import { NullChain } from '../src/chain/types';
 import { loadConfig } from '../src/config';
 import { HTTP_TIMEOUTS, corsAllow } from '../src/http';
 import { STRIKE_LIMIT } from '../src/net/conn';
-import { subnetOf } from '../src/net/gateway';
+import { rateKey, subnetOf, wideNetOf } from '../src/net/ip-key';
 import { LoadShedder, SHED_THRESHOLDS } from '../src/net/shedder';
 
 let app: App;
@@ -26,13 +26,13 @@ beforeAll(async () => {
   const cfg = loadConfig({
     PORT: '0',
     HOST: '127.0.0.1',
-    DATA_DIR: mkdtempSync(join(tmpdir(), 'elymum-abuse-')),
+    DATA_DIR: mkdtempSync(join(tmpdir(), 'coinnibal-abuse-')),
     GAME_ACCESS: 'public',
     NODE_ENV: 'development',
     WS_HELLO_TIMEOUT_MS: '400',
     MAX_CONNECTIONS_PER_IP: '6',
     MAX_CONNECTIONS_PER_SUBNET: '6',
-    CORS_ORIGIN: 'https://elymum.io,https://www.elymum.io',
+    CORS_ORIGIN: 'https://coinnibal.fun,https://www.coinnibal.fun',
   } as unknown as NodeJS.ProcessEnv);
   app = await createApp(cfg, { chain: new NullChain(), log: () => {}, persist: false });
   port = await app.listen();
@@ -113,6 +113,18 @@ describe('WebSocket front door', () => {
     expect(subnetOf('2001:db8::1')).toBe('2001:db8:0:0::/64');
     expect(subnetOf('2001:0db8:00aa:00bb:0000::1')).toBe('2001:db8:aa:bb::/64');
   });
+
+  it('the rate-limit key: an IPv4 address as it is, an IPv6 address as its /64; the IPv6 /48 above it', () => {
+    expect(rateKey('203.0.113.77')).toBe('203.0.113.77');
+    expect(rateKey('::ffff:203.0.113.77')).toBe('203.0.113.77');
+    // every address of one /64 is one client
+    expect(rateKey('2001:db8:aa:bb:1:2:3:4')).toBe('2001:db8:aa:bb::/64');
+    expect(rateKey('2001:DB8:AA:BB::99')).toBe('2001:db8:aa:bb::/64');
+    expect(wideNetOf('2001:db8:aa:bb:1:2:3:4')).toBe('2001:db8:aa::/48');
+    expect(wideNetOf(rateKey('2001:db8:aa:ff::1'))).toBe('2001:db8:aa::/48');
+    expect(wideNetOf('203.0.113.77')).toBeNull();
+    expect(wideNetOf('::ffff:203.0.113.77')).toBeNull();
+  });
 });
 
 describe('HTTP front door', () => {
@@ -153,10 +165,10 @@ describe('HTTP front door', () => {
 
   it('answers CORS for the allowed origins only (bearer tokens, never cookies)', async () => {
     expect(corsAllow('*', 'https://evil.example')).toBe('*');
-    expect(corsAllow('https://elymum.io, https://www.elymum.io/', 'https://www.elymum.io')).toBe('https://www.elymum.io');
-    expect(corsAllow('https://elymum.io', 'https://evil.example')).toBeNull();
-    const ok = await fetch(`http://127.0.0.1:${port}/api/health`, { headers: { Origin: 'https://elymum.io' } });
-    expect(ok.headers.get('access-control-allow-origin')).toBe('https://elymum.io');
+    expect(corsAllow('https://coinnibal.fun, https://www.coinnibal.fun/', 'https://www.coinnibal.fun')).toBe('https://www.coinnibal.fun');
+    expect(corsAllow('https://coinnibal.fun', 'https://evil.example')).toBeNull();
+    const ok = await fetch(`http://127.0.0.1:${port}/api/health`, { headers: { Origin: 'https://coinnibal.fun' } });
+    expect(ok.headers.get('access-control-allow-origin')).toBe('https://coinnibal.fun');
     expect(ok.headers.get('vary')).toMatch(/Origin/);
     const no = await fetch(`http://127.0.0.1:${port}/api/health`, { headers: { Origin: 'https://evil.example' } });
     expect(no.headers.get('access-control-allow-origin')).toBeNull();

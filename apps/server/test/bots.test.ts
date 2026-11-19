@@ -1,7 +1,7 @@
-import { CUSTOM_DEFAULTS, EntityKind, PlayerFlag, TICK_MS, VIEW, viewSize, type CustomRoomSummary } from '@elymum/shared';
+import { CUSTOM_DEFAULTS, EntityKind, PlayerFlag, TICK_MS, VIEW, canEat, viewSize, type CustomRoomSummary } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { BOT_TUNING, BotBrain, botView, levelFor } from '../src/bots/brain';
-import { BOT_RESPAWN_MS, PracticeBots } from '../src/bots/practice';
+import { BOT_LEAVE_MAX_MS, BOT_RESPAWN_MS, PracticeBots, type BotSurroundings, type PracticeBot } from '../src/bots/practice';
 import { mulberry32 } from '../src/game/rng';
 import { World, type WorldConfig } from '../src/game/world';
 import { Room } from '../src/rooms/room';
@@ -171,5 +171,148 @@ describe('practice bots play fair', () => {
     expect(food).toBeGreaterThan(0);
     // only food, coins and cacti exist on a free map: no loot
     expect([...room.world.entities.values()].some((e) => e.kind === EntityKind.Loot)).toBe(false);
+  });
+});
+
+describe('practice bots make room for people (the testnet test arenas)', () => {
+  /** `count` bots playing on a big empty map and one person in the middle (none of them shielded). */
+  function setup(count = 3, arriveMs = 0) {
+    const world = new World(emptyCfg({ width: 9000, height: 9000 }));
+    const bots = new PracticeBots(world, { count, difficulty: 'easy', makeRoom: true, arriveMs }, mulberry32(3));
+    bots.update(world.now);
+    const person = world.addPlayer({ name: 'P', skin: 0, x: 4500, y: 4500, mass: 100, spawnShield: false });
+    const list = [...bots.bots.values()];
+    for (const b of list) b.player.shieldUntil = 0;
+    return { world, bots, person, list };
+  }
+  const put = (b: PracticeBot, x: number, y: number, mass: number) => {
+    const c = b.player.cells[0];
+    c.x = x;
+    c.y = y;
+    c.setMass(mass);
+  };
+  const run = (world: World, bots: PracticeBots, around: BotSurroundings, ms: number) => {
+    const gone = [];
+    for (let t = 0; t < ms; t += TICK_MS) {
+      world.tick(TICK_MS);
+      gone.push(...bots.update(world.now, around));
+    }
+    return gone;
+  };
+
+  it('the setting is the bots of an empty room: each person takes one place, never below 0', () => {
+    const { bots } = setup(3);
+    expect(bots.size).toBe(3);
+    expect([0, 1, 2, 3, 4, 7].map((n) => bots.targetFor(n))).toEqual([3, 2, 1, 0, 0, 0]);
+    // a free custom room keeps its creator's count, people or not
+    const world = new World(emptyCfg());
+    const own = new PracticeBots(world, { count: 3, difficulty: 'easy' }, mulberry32(1));
+    expect(own.targetFor(5)).toBe(3);
+  });
+
+  it('the bot that leaves is out of the way: in no chase with a person, the farthest from the people', () => {
+    const { bots, person, list } = setup(3);
+    const [chaser, far, mid] = list;
+    put(chaser, 4700, 4500, 400); // right next to the person and able to eat it
+    put(far, 8500, 8500, 30);
+    put(mid, 6000, 4500, 30);
+    expect(canEat(400, person.totalMass())).toBe(true);
+    // somebody sees it: it swims off first (still in the world, no longer playing)
+    expect(bots.fit({ people: [person], seen: () => true })).toEqual([]);
+    expect(far.leaving).toMatchObject({ reason: 'make_room' });
+    expect(chaser.leaving).toBeUndefined();
+    expect(mid.leaving).toBeUndefined();
+    expect([bots.size, bots.leavingCount, bots.bots.size]).toEqual([2, 1, 3]);
+  });
+
+  it('every bot in a chase with a person: the smallest leaves', () => {
+    const { bots, person, list } = setup(3);
+    const [a, b, c] = list;
+    put(a, 4700, 4500, 400); // could eat the person
+    put(b, 4300, 4500, 300); // could eat the person
+    put(c, 4500, 4650, 40); // the person could eat it
+    bots.fit({ people: [person], seen: () => true });
+    expect(c.leaving).toBeTruthy();
+    expect(a.leaving ?? b.leaving).toBeUndefined();
+  });
+
+  it('a leaving bot is harmless (it eats nobody, nobody eats it) and is gone once nobody sees it, at the latest after BOT_LEAVE_MAX_MS', () => {
+    const { world, bots, person, list } = setup(1);
+    const [bot] = list;
+    put(bot, 4510, 4500, 2000); // right on top of the person: without its shield it would eat it at once
+    let seen = true;
+    const around: BotSurroundings = { people: [person], seen: () => seen };
+    bots.fit(around);
+    expect(bot.leaving).toBeTruthy();
+    expect(run(world, bots, around, 1000)).toEqual([]);
+    expect(person.alive).toBe(true);
+    expect(person.totalMass()).toBeGreaterThan(90);
+    // a big person over it cannot eat it either
+    const c = bot.player.center();
+    person.cells[0].x = c.x;
+    person.cells[0].y = c.y;
+    person.cells[0].setMass(20_000);
+    expect(run(world, bots, around, 1000)).toEqual([]);
+    expect(bot.player.alive).toBe(true);
+    // it swims off; still seen when its time is up: it goes anyway
+    const gone = run(world, bots, around, BOT_LEAVE_MAX_MS);
+    expect(gone.map((g) => [g.player.id, g.reason])).toEqual([[bot.player.id, 'make_room']]);
+    expect(world.players.has(bot.player.id)).toBe(false);
+    expect(bots.bots.size).toBe(0);
+    expect(bots.left).toBe(1);
+    // nobody sees the next one: it goes at once
+    seen = false;
+    bots.reconfigure(2, 'easy', { people: [person], seen: () => false });
+    run(world, bots, { people: [], seen: () => false }, 200);
+    expect(bots.size).toBe(2);
+    const out = bots.fit({ people: [person], seen: () => false });
+    expect(out).toHaveLength(1);
+    expect(bots.bots.size).toBe(1);
+  });
+
+  it('a person gone: the bots come back one by one with the arrival pacing, never above the setting', () => {
+    const gap = 4000;
+    const { world, bots, person } = setup(3, gap);
+    // the room fills one by one
+    run(world, bots, { people: [], seen: () => false }, 20_000);
+    expect(bots.size).toBe(3);
+    const crowd = [person, ...[1, 2, 3].map((i) => world.addPlayer({ name: `P${i}`, skin: 0, x: 1000 * i, y: 1000, mass: 100, spawnShield: false }))];
+    // four people: no bot plays (never below 0)
+    bots.fit({ people: crowd, seen: () => false });
+    expect([bots.size, bots.bots.size, bots.arriving]).toEqual([0, 0, 0]);
+    // everyone leaves: the bots come back about `gap` apart, the first about `gap` after
+    const back: number[] = [];
+    const t0 = world.now;
+    for (let t = 0; t < 30_000; t += TICK_MS) {
+      world.tick(TICK_MS);
+      const before = bots.size;
+      bots.update(world.now, { people: [], seen: () => false });
+      expect(bots.bots.size).toBeLessThanOrEqual(3);
+      if (bots.size > before) back.push(world.now - t0);
+      expect(bots.size - before).toBeLessThanOrEqual(1);
+    }
+    expect(back).toHaveLength(3);
+    expect(back[0]).toBeGreaterThanOrEqual(gap * 0.6);
+    for (let i = 1; i < back.length; i++) expect(back[i] - back[i - 1]).toBeGreaterThanOrEqual(gap * 0.6 - TICK_MS);
+  });
+
+  it('a bot on its way in is called off first (nothing leaves the world); an eaten bot does not come back while the room is full of people', () => {
+    const { world, bots, person, list } = setup(2);
+    // one bot was eaten: it waits to come back
+    world.removePlayer(list[0].player.id);
+    bots.onDeath(list[0].player.id, world.now);
+    expect([bots.size, bots.arriving]).toEqual([1, 1]);
+    // a person arrives: the comeback is called off, the playing bot stays
+    bots.fit({ people: [person], seen: () => true });
+    expect([bots.size, bots.arriving, bots.leavingCount]).toEqual([1, 0, 0]);
+    run(world, bots, { people: [person], seen: () => true }, BOT_RESPAWN_MS.max + 1000);
+    expect(bots.size).toBe(1);
+  });
+
+  it('a lower setting: the extra bots leave the same way (reason settings), the rest keep playing', () => {
+    const { bots } = setup(3);
+    const gone = bots.reconfigure(1, 'easy');
+    expect(gone.map((g) => g.reason)).toEqual(['settings', 'settings']);
+    expect([bots.size, bots.bots.size]).toEqual([1, 1]);
   });
 });

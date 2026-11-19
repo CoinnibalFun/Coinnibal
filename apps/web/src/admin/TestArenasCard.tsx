@@ -1,4 +1,4 @@
-import { CUSTOM_DIFFICULTIES, type CustomDifficulty, type TestArenaSettings, type TestArenaView } from '@elymum/shared';
+import { CUSTOM_DIFFICULTIES, type CustomDifficulty, type TestArenaSettings, type TestArenaView } from '@coinnibal/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { SiteApiError } from '../site/api';
 import { SwitchRow } from './GameTab';
@@ -17,8 +17,9 @@ const DIFFICULTY_LABEL: Record<CustomDifficulty, string> = { easy: 'Easy', mixed
 
 /**
  * Game → Test arenas (testnet): for every official arena one test arena with practice bots, on the same tickets,
- * rounds and payouts. On/off, bots per arena, difficulty and the live test arenas. On the mainnet the card only says
- * that test arenas do not exist there (the server refuses the setting).
+ * rounds and payouts. On/off, the bots of an empty test arena (every person in it takes one bot's place), difficulty
+ * and the live test arenas. On the mainnet the card only says that test arenas do not exist there (the server refuses
+ * the setting).
  */
 export function TestArenasCard({ ctx }: { ctx: ChainCtx }) {
   const [view, setView] = useState<TestArenaView | null>(null);
@@ -78,7 +79,7 @@ export function TestArenasCard({ ctx }: { ctx: ChainCtx }) {
       const v = await ctx.api!.saveTestArenas(patch);
       setView(v);
       setDraft({ ...v.settings });
-      setMsg(v.active ? 'Saved: the test arenas take it now (new bots arrive one by one).' : 'Saved: test arenas are off. Each one closes after its bell, once every ticket in it is settled.');
+      setMsg(v.active ? 'Saved: the test arenas take it now (bots arrive and leave one by one).' : 'Saved: test arenas are off. Each one closes after its bell, once every ticket in it is settled.');
     } catch (e) {
       setErr(saveErrorText(e));
     } finally {
@@ -92,7 +93,7 @@ export function TestArenasCard({ ctx }: { ctx: ChainCtx }) {
       title={title}
       id={id}
       kicker={view.active ? `${view.rooms.length} open · ${people} people` : 'off'}
-      lede="For every official arena, one test arena with practice bots: the same on-chain tickets, rounds, settlement, fee and loot burns, with bots that carry no value (eating one gives mass, never tokens). Listed after the official arenas, marked TEST; quick play never goes there; results stay off the leaderboards. Testnet only."
+      lede="For every official arena, one test arena with practice bots: the same on-chain tickets, rounds, settlement, fee and loot burns, with bots that carry no value (eating one gives mass, never tokens). Every person in a test arena takes one bot's place: a bot leaves when someone is seated and comes back, one at a time, after they are gone. Listed after the official arenas, marked TEST; quick play never goes there; results stay off the leaderboards. Testnet only."
     >
       <SwitchRow
         label="Test arenas with bots"
@@ -106,17 +107,21 @@ export function TestArenasCard({ ctx }: { ctx: ChainCtx }) {
       />
       <div className="ad-form2">
         <label className="ad-field">
-          <span className="ad-field__label mono">Bots per test arena</span>
+          <span className="ad-field__label mono">Bots in an empty test arena</span>
           <input
             className="ad-input ad-input--num num"
             type="number"
             min={botsMin}
             max={botsMax}
             value={draft.bots}
-            aria-label="Bots per test arena"
+            aria-label="Bots in an empty test arena"
             data-testid="test-arenas-bots"
+            aria-describedby="test-arenas-bots-hint"
             onChange={(e) => setDraft({ ...draft, bots: Math.max(botsMin, Math.min(botsMax, Math.floor(Number(e.target.value) || botsMin))) })}
           />
+          <span className="ad-field__hint" id="test-arenas-bots-hint">
+            With people in it, a test arena plays with this many bots minus the people (down to none).
+          </span>
         </label>
       </div>
       <SwitchRow
@@ -135,7 +140,7 @@ export function TestArenasCard({ ctx }: { ctx: ChainCtx }) {
                 People
               </th>
               <th scope="col" className="is-num">
-                Bots
+                Bots playing
               </th>
               <th scope="col">State</th>
             </tr>

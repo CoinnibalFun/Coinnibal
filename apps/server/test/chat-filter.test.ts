@@ -23,4 +23,9 @@ describe('chat filter', () => {
     expect(looksLikeScam('visit https://example.xyz')).toBe(true);
     expect(looksLikeScam('good game')).toBe(false);
   });
+
+  it('flags "send" with the game token under its names, the old one included', () => {
+    for (const t of ['send 100 coinnibal', 'send 5,000 $NIBAL now', 'send 20 nibal', 'send 100 elymum', 'send 3 $elymum']) expect(looksLikeScam(t), t).toBe(true);
+    expect(looksLikeScam('nibal to the moon')).toBe(false);
+  });
 });

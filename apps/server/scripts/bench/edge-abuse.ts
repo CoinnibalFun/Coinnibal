@@ -7,7 +7,7 @@
  * 2. many wallets from one IP: 12 signed-in wallets from one address;
  * 3. slot exhaustion: sockets that DO say hello and then idle (the 10 s hello timeout does not apply; ws answers
  *    the server's pings by itself), from 14 /24 networks x 48, until the server refuses them; then can a real
- *    player still connect (a guest, and signed in with its session token as the `elymum.auth.<token>`
+ *    player still connect (a guest, and signed in with its session token as the `coinnibal.auth.<token>`
  *    subprotocol), can a ticket holder with a live coin still resume (without and with the token), and does a guest
  *    get in once the attackers idled past IDLE_GUEST_MS? MAX_CONNECTIONS stays 600 here, as when it was measured.
  *
@@ -16,7 +16,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION } from '@elymum/shared';
+import { PROTOCOL_VERSION } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import WebSocket from 'ws';
 import { createApp } from '../../src/app';
@@ -24,7 +24,7 @@ import { loadConfig } from '../../src/config';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 process.env.TRUST_PROXY = '1';
-const dir = mkdtempSync(join(tmpdir(), 'elymum-edge-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-edge-'));
 const cfg = loadConfig({ NODE_ENV: 'development', DEV_FAKE_CHAIN: '1', DEV_FAKE_TOKEN: '1', PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, GAME_ACCESS: 'public', LOAD_SHED: '1', GAME_WORKERS: '1', MAX_CONNECTIONS: '600' } as unknown as NodeJS.ProcessEnv);
 const app = await createApp(cfg, { log: () => {} });
 const port = await app.listen();
@@ -32,7 +32,7 @@ await app.rooms.ensureArenaRooms();
 
 function open(ip: string, onMsg?: (m: { t: string; code?: string }) => void, token?: string): Promise<{ ws: WebSocket; status: 'open' | number | string; closed: Promise<number> }> {
   return new Promise((resolve) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, token ? ['elymum', `elymum.auth.${token}`] : [], { perMessageDeflate: false, headers: { 'x-forwarded-for': ip } });
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, token ? ['coinnibal', `coinnibal.auth.${token}`] : [], { perMessageDeflate: false, headers: { 'x-forwarded-for': ip } });
     const closed = new Promise<number>((r) => ws.on('close', (c) => r(c)));
     ws.on('open', () => {
       ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION }));

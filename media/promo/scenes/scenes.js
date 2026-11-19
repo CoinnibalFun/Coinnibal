@@ -162,6 +162,8 @@ window.SCENES_INIT = async () => {
   const A = window.CoinnibalArt;
   for (let i = 0; i < 8; i++) LOOK['b' + i] = A.lookForBasicSkin(i);
   LOOK.goldie = A.lookForBasicSkin(1);
+  // the NFT skin (EMBLEM_SKIN_ID, apps/web/src/render/looks.ts EMBLEM_LOOK): the gold coin, crown face, laurel
+  LOOK.emblem = { body: A.ELYSIUM.sun, overprint: A.ELYSIUM.teal, offset: { dx: 0, dy: 0 }, symbol: 'crown', eyes: 'round', mouth: 'grin', accessory: 'laurel', shade: A.shadeOf(A.ELYSIUM.sun) };
   for (const [k, v] of Object.entries(TL.beats)) B[k] = v[0];
   S.shots = {};
   S.track = {};
@@ -654,17 +656,27 @@ function sceneRound(ctx, t) {
   hud(ctx, t, 4, false, tw(t, rt(0.1), rt(0.4)));
 }
 
-/* ───────────── 6. THE NFT COLLECTION (19.2 – 24.6) ─────────────
+/* ───────────── 6. THE NFT COLLECTION (19.2 – 27.0) ─────────────
  * Twelve emblems dealt face down and flipped in a wave (their rarity tiers on the frames); they sweep into
- * a fan, one comes forward as "your" card, HOLDER is stamped on it and the perks are slapped on as stickers.
- * No price, no dates. */
+ * a fan, one comes forward as "your" card, HOLDER is stamped on it and the holder perks are slapped on as
+ * stickers, each as the voice names it. No price, no dates, no fee percentages. */
 const nt = (k) => B.nft + k;
 const GRID = { cols: 6, rows: 2, x: 190, y: 330, cw: 236, gap: 52 };
+// the holder perks as the site lists them (apps/web/src/site/nft/WhyNft.tsx, the nf.* strings; the numbers are
+// the shared defaults: the $10 holders-only arena, SHOP_DEFAULTS 20 % off and +1 use, one free private room a
+// day); the fee is "half the fee" (no percentages in the film). `at`: when the voice names it (vo-lines.json)
 const PERKS = [
-  { a: 'Half the fee', b: 'for holders', icon: '½', col: C.sun, at: 2.3 },
-  { a: 'The $10 Room', b: 'holders only', icon: '$10', col: C.blush, at: 3.05 },
-  { a: 'Cheaper power-ups', b: 'and one more a round', icon: '+1', col: C.cyan, at: 3.8 },
+  { a: 'Half the fee', b: 'on your profit', icon: '½', col: C.sun, at: 2.3 },
+  { a: '$10 Room for holders', b: 'only NFT holders can join', icon: '$10', col: C.blush, at: 2.9 },
+  { a: '20% off power-ups', b: '+1 power-up every paid round', icon: '−20%', col: C.cyan, at: 3.9 },
+  { a: '1 free private room a day', b: 'your friends, your rules', icon: '1/day', col: C.up, at: 5.0 },
+  { a: 'NFT skin and holder badge', b: 'the gold skin for your coin', icon: null, col: C.teal, at: 6.3 },
 ];
+// five stickers, 42 px apart, centred on the hero card (y 600); each leans a little like the hero card does, the
+// lean varied by at most 0.006 rad between neighbours (5 px at the right end of an 800 px sticker) so the gaps stay
+// even across the whole stack (opposite tilts would pinch them shut at one end)
+const PERK_Y = 316, PERK_DY = 142, PERK_W = 800, PERK_H = 100;
+const PERK_TILT = [-0.012, -0.006, -0.011, -0.005, -0.01];
 function nftCard(ctx, i, x, y, size, flip, rot = 0, lift = 0.7) {
   const sx = Math.cos(flip * Math.PI);
   ctx.save();
@@ -722,35 +734,46 @@ function sceneNft(ctx, t) {
     const k = prog(t, at, at + 0.22);
     if (k <= 0) return;
     const s = lerp(1.5, 1, E.outBack(k, 2));
-    const x = 1010, y = 330 + i * 160;
-    ctx.save(); ctx.translate(x, y); ctx.rotate(i % 2 ? 0.02 : -0.025); ctx.scale(s, s); ctx.globalAlpha = clamp(k * 3);
-    paperShadow(ctx, () => rrect(ctx, 0, -54, 800, 108, 18), 0.6, 0.3);
-    rrect(ctx, 0, -54, 800, 108, 18); ctx.fillStyle = C.cream; ctx.fill(); ctx.lineWidth = 3.5; ctx.strokeStyle = C.ink; ctx.stroke();
-    ctx.fillStyle = p.col; rrect(ctx, 14, -40, 110, 80, 14); ctx.fill(); ctx.stroke();
-    font(ctx, p.icon.length > 3 ? 28 : 38, 800, 'display'); ctx.letterSpacing = '-0.5px'; ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(p.icon, 69, 3);
-    ctx.textAlign = 'left';
-    font(ctx, 42, 800, 'display'); ctx.fillText(p.a, 148, -10);
-    font(ctx, 19, 500, 'mono'); ctx.letterSpacing = '2px'; ctx.fillStyle = C.ink2;
-    ctx.fillText(p.b.toUpperCase(), 150, 30);
+    const x = 1010, y = PERK_Y + i * PERK_DY, h2 = PERK_H / 2;
+    const a = PERK_TILT[i];
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(s, s); ctx.globalAlpha = clamp(k * 3);
+    paperShadow(ctx, () => rrect(ctx, 0, -h2, PERK_W, PERK_H, 18), 0.6, 0.3);
+    rrect(ctx, 0, -h2, PERK_W, PERK_H, 18); ctx.fillStyle = C.cream; ctx.fill(); ctx.lineWidth = 3.5; ctx.strokeStyle = C.ink; ctx.stroke();
+    ctx.fillStyle = p.col; rrect(ctx, 14, -38, 110, 76, 14); ctx.fill(); ctx.stroke();
+    if (p.icon) {
+      font(ctx, p.icon.length > 3 ? 28 : 38, 800, 'display'); ctx.letterSpacing = '-0.5px'; ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(p.icon, 69, 3);
+    } else {
+      // the NFT skin itself: the gold emblem coin
+      ctx.save(); rrect(ctx, 14, -38, 110, 76, 14); ctx.clip();
+      coin(ctx, 69, 3, { look: LOOK.emblem, r: 33, expr: 'happy', lookX: 0.4, lookY: -0.2, time: t, seed: 7 });
+      ctx.restore();
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = C.ink;
+    font(ctx, 42, 800, 'display'); ctx.letterSpacing = '-0.5px'; ctx.fillText(p.a, 148, -12);
+    font(ctx, 21, 500, 'mono'); ctx.letterSpacing = '2px'; ctx.fillStyle = C.ink2;
+    ctx.fillText(p.b.toUpperCase(), 150, 28);
     ctx.restore();
-    tape(ctx, x + 780, y - 48, 90, 30, 0.5, prog(t, at + 0.1, at + 0.3));
+    // the tape sits on the sticker's own top-right corner (it leans with it)
+    const tx = PERK_W - 20, ty = -h2 + 6;
+    tape(ctx, x + tx * Math.cos(a) - ty * Math.sin(a), y + tx * Math.sin(a) + ty * Math.cos(a), 90, 30, 0.5 + a, prog(t, at + 0.1, at + 0.3));
   });
   ctx.restore();
-  kicker(ctx, 'THE COINNIBAL NFT COLLECTION', 120, 110, t, nt(0.0), { out: nt(5.0) });
+  const out = B.end - 0.4; // everything leaves just before the ink flood
+  kicker(ctx, 'THE COINNIBAL NFT COLLECTION', 120, 110, t, nt(0.0), { out });
   headline(ctx, [{ text: 'Coinnibal NFTs.', at: nt(0.1) }], 120, 230, t, { size: 92, out: nt(1.5) });
   ctx.save(); ctx.globalAlpha = tw(t, nt(0.9), nt(1.15)) * (1 - tw(t, nt(1.5), nt(1.7)));
   font(ctx, 20, 500, 'mono'); ctx.letterSpacing = '3px'; ctx.fillStyle = C.ink2; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
   
   ctx.restore();
-  ctx.save(); ctx.globalAlpha = tw(t, nt(2.2), nt(2.5)) * (1 - tw(t, nt(5.0), nt(5.2)));
+  ctx.save(); ctx.globalAlpha = tw(t, nt(2.2), nt(2.5)) * (1 - tw(t, out, out + 0.2));
   font(ctx, 22, 600, 'mono'); ctx.letterSpacing = '5px'; ctx.fillStyle = C.tealInk; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillText('HOLD ONE:', 1014, 230);
+  ctx.fillText('HOLD ONE:', 1014, PERK_Y - PERK_H / 2 - 40);
   ctx.restore();
-  hud(ctx, t, 5, false, tw(t, nt(0.1), nt(0.4)) * (1 - tw(t, nt(5.0), nt(5.2))));
+  hud(ctx, t, 5, false, tw(t, nt(0.1), nt(0.4)) * (1 - tw(t, out, out + 0.2)));
 }
 
-/* ───────────── 7. END CARD (24.6 – 29.4) ───────────── */
+/* ───────────── 7. END CARD (27.0 – 31.8) ───────────── */
 const et = (k) => B.end + k;
 function sceneEnd(ctx, t) {
   nightBg(ctx, t);

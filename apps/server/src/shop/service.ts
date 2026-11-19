@@ -8,8 +8,8 @@ import {
   normalizeCart,
   packPriceRaw,
   roundSigFigs,
-  shopCartRef,
-  shopPaymentRef,
+  shopCartRefs,
+  shopPaymentRefs,
   usdToTokenRaw,
   type BoostCounts,
   type BoostKind,
@@ -21,7 +21,7 @@ import {
   type ShopPack,
   type ShopSettings,
   type ShopView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { ChainBusyError, type ChainGateway } from '../chain/types';
 import { InventoryError, type BoostInventory } from './inventory';
 import type { ShopSettingsStore } from './settings';
@@ -77,6 +77,8 @@ export interface ShopDeps {
   chain: ChainGateway;
   /** Emblem holder check (cached; `fresh` re-reads the chain). */
   holder: (wallet: string, fresh?: boolean) => Promise<boolean>;
+  /** The same for a price only shown: the answer on record, never a chain read of its own (default: `holder`, false on error). */
+  shownHolder?: (wallet: string) => Promise<boolean>;
   /** The emblem token ids a wallet owns (null: unknown); with `claims`, the discount is one wallet per token id a day. */
   emblemTokens?: (wallet: string, fresh?: boolean) => Promise<string[] | null>;
   claims?: EmblemClaims;
@@ -96,7 +98,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref?.
 
 /**
  * The power-up shop: prices and packs (`GET /api/shop`), purchase verification (`POST /api/shop/buy`: the receipt
- * of an `ElymumArena.pay` from the signed-in wallet, exactly the pack price and the pack's ref, a hash credited
+ * of an `CoinnibalArena.pay` from the signed-in wallet, exactly the pack price and the pack's ref, a hash credited
  * once; the contract burned half and sent half to the fee wallet in that call) and the in-room rules (charges,
  * cooldowns per power-up and wallet, the paid arenas' per-round cap). Bots never use bought power-ups.
  */
@@ -207,7 +209,9 @@ export class ShopService {
    * ids has not given the discount to another wallet today. `commit`: the discounted purchase happens now.
    */
   private async discountFor(wallet: string, fresh: boolean, commit = false): Promise<boolean> {
-    const holds = (await this.deps.holder(wallet).catch(() => false)) || (fresh && (await this.deps.holder(wallet, true).catch(() => false)));
+    // a price shown is never busy and spends no holder read: the answer on record (a holder not on record yet sees the
+    // full price, not kept); a discounted purchase reads the chain fresh, so a holder who paid it is credited
+    const holds = fresh ? await this.deps.holder(wallet, true).catch(() => false) : await (this.deps.shownHolder ?? ((w: string) => this.deps.holder(w)))(wallet).catch(() => false);
     if (!holds) return false;
     const claims = this.deps.claims;
     const tokens = claims && this.deps.emblemTokens ? await this.deps.emblemTokens(wallet, fresh).catch(() => null) : null;
@@ -295,7 +299,7 @@ export class ShopService {
         token: token.address,
         from: wallet,
         arena,
-        ref: shopPaymentRef(kind),
+        ref: shopPaymentRefs(kind),
         amounts: [...new Set([...fulls, ...discounts])],
         now: this.now(),
       });
@@ -324,7 +328,7 @@ export class ShopService {
   }
 
   /**
-   * `POST /api/shop/buy {cart, txHash}`: several power-ups paid with ONE `ElymumArena.pay(total, shopCartRef(cart))`.
+   * `POST /api/shop/buy {cart, txHash}`: several power-ups paid with ONE `CoinnibalArena.pay(total, shopCartRef(cart))`.
    * The payment must name exactly this cart (its ref) and pay exactly its total at one quoted price table (full, or
    * discounted for an emblem holder). The whole cart is then applied in one write (`creditCart`): every power-up that
    * is still sold gets its charges; a power-up switched off between the quote and the payment cannot be applied, and
@@ -368,7 +372,7 @@ export class ShopService {
         token: token.address,
         from: wallet,
         arena,
-        ref: shopCartRef(cart),
+        ref: shopCartRefs(cart),
         amounts: [...new Set([...fulls, ...discounts].map((x) => x.total))],
         now: this.now(),
       });

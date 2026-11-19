@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { emptyBoostCounts, migrateBoostCounts, type BoostCounts, type BoostKind } from '@elymum/shared';
+import { emptyBoostCounts, migrateBoostCounts, type BoostCounts, type BoostKind } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 
 /** One credited purchase (the audit trail and the replay guard). */

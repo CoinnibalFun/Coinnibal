@@ -1,6 +1,6 @@
-import { elymumNFTAbi } from '@elymum/sdk';
-import type { ChainStatus } from '@elymum/shared';
-import type { MintContractState, MintState } from '@elymum/shared';
+import { coinnibalNFTAbi } from '@coinnibal/sdk';
+import type { ChainStatus } from '@coinnibal/shared';
+import type { MintContractState, MintState } from '@coinnibal/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { encodeErrorResult, encodeEventTopics, padHex, type Log } from 'viem';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,7 +23,7 @@ const spies = vi.hoisted(() => ({
   fetchServerChain: vi.fn(),
   client: { getBalance: vi.fn(), estimateGas: vi.fn() },
 }));
-vi.mock('@elymum/sdk', async (orig) => ({ ...(await orig<typeof import('@elymum/sdk')>()), getMintState: spies.getMintState, getMintedBy: spies.getMintedBy }));
+vi.mock('@coinnibal/sdk', async (orig) => ({ ...(await orig<typeof import('@coinnibal/sdk')>()), getMintState: spies.getMintState, getMintedBy: spies.getMintedBy }));
 vi.mock('../src/wallet/tx', async (orig) => ({ ...(await orig<typeof import('../src/wallet/tx')>()), sendWalletCall: spies.sendWalletCall }));
 vi.mock('../src/wallet/network', async (orig) => ({
   ...(await orig<typeof import('../src/wallet/network')>()),
@@ -34,7 +34,7 @@ vi.mock('../src/wallet/network', async (orig) => ({
 const nftPin = vi.hoisted(() => ({ ok: true }));
 vi.mock('../src/wallet/pinned', async (orig) => ({
   ...(await orig<typeof import('../src/wallet/pinned')>()),
-  checkNft: (_id: number | null | undefined, nft: string | null | undefined) => (nftPin.ok ? { ok: true, nft } : { ok: false, reason: 'nft_mismatch' }),
+  verifyNft: async (_id: number | null | undefined, nft: string | null | undefined) => (nftPin.ok ? { ok: true, nft } : { ok: false, reason: 'nft_mismatch' }),
 }));
 const { Mint } = await import('../src/site/mint/MintPage');
 
@@ -45,7 +45,7 @@ const contract = (o: Partial<MintContractState> = {}): MintContractState => ({
   maxPriceWei: '0',
   keeper: '0x0000000000000000000000000000000000000000',
   merkleRoot: ROOT,
-  maxSupply: 5000,
+  maxSupply: 3333,
   totalSupply: 10,
   wlLimit: 1,
   publicLimit: 2,
@@ -71,7 +71,7 @@ const proof = (eligible: boolean, onchain = ROOT) => ({ eligible, proof: eligibl
 const transferLog = (to: string, id: bigint, from = '0x0000000000000000000000000000000000000000', address = NFT): Log =>
   ({
     address,
-    topics: encodeEventTopics({ abi: elymumNFTAbi, eventName: 'Transfer', args: { from: from as `0x${string}`, to: to as `0x${string}`, tokenId: id } }),
+    topics: encodeEventTopics({ abi: coinnibalNFTAbi, eventName: 'Transfer', args: { from: from as `0x${string}`, to: to as `0x${string}`, tokenId: id } }),
     data: '0x',
     blockHash: padHex('0x1'),
     blockNumber: 1n,
@@ -88,18 +88,18 @@ describe('mint logic', () => {
     expect(mintView(mintState(contract({ phase: 'closed' })))).toBe('closed');
     expect(mintView(mintState(contract()))).toBe('allowlist');
     expect(mintView(mintState(contract({ phase: 'public' })))).toBe('public');
-    expect(mintView(mintState(contract({ totalSupply: 5000 })))).toBe('soldout');
+    expect(mintView(mintState(contract({ totalSupply: 3333 })))).toBe('soldout');
   });
 
   it('pre-checks like the contract (mintRefusal) plus the proof and the published root', () => {
     const c = contract();
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true) })).toBeNull();
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: null })).toMatch(/checking/);
-    expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(false) })).toMatch(/not on the allowlist/);
-    expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true, `0x${'00'.repeat(32)}`) })).toMatch(/not published/);
-    expect(mintBlocker(c, { wl: 1, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true) })).toMatch(/allowlist limit is 1/);
+    expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(false) })).toMatch(/not on the WL/);
+    expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true, `0x${'00'.repeat(32)}`) })).toMatch(/the WL is not on the contract yet\. Try again soon/i);
+    expect(mintBlocker(c, { wl: 1, pub: 0 }, { kind: 'allowlist', qty: 1, proof: proof(true) })).toMatch(/WL limit is 1/);
     expect(mintBlocker(c, { wl: 0, pub: 0 }, { kind: 'public', qty: 1, proof: null })).toMatch(/public mint is not open/);
-    const pub = contract({ phase: 'public', totalSupply: 4999 });
+    const pub = contract({ phase: 'public', totalSupply: 3332 });
     expect(mintBlocker(pub, { wl: 0, pub: 0 }, { kind: 'public', qty: 2, proof: null })).toMatch(/only 1 left/);
     expect(remaining(pub, { wl: 0, pub: 0 }, 'public')).toBe(1);
     expect(remaining(contract({ phase: 'public' }), { wl: 0, pub: 1 }, 'public')).toBe(1);
@@ -160,14 +160,14 @@ describe('/mint page', { timeout: 30_000 }, () => {
   it('Allowlist: eligibility, quantity bounded by the limit, and the mint call with the proof', async () => {
     connect();
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract({ wlLimit: 2 })), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(true) }));
-    const fresh = { phase: 1, phaseName: 'allowlist', price: 31_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: ROOT, maxSupply: 5000, totalSupply: 10, wlLimit: 2, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
+    const fresh = { phase: 1, phaseName: 'allowlist', price: 31_000_000_000_000_000n, minPrice: 0n, maxPrice: 0n, keeper: null, root: ROOT, maxSupply: 3333, totalSupply: 10, wlLimit: 2, publicLimit: 2, treasury: ALICE, frozen: false, soldOut: false };
     spies.getMintState.mockResolvedValue(fresh);
     spies.sendWalletCall.mockImplementation(async (_call: unknown, opts: { onPhase?: (p: string) => void }) => {
       opts.onPhase?.('signing');
       return { ok: true, hash: `0x${'cd'.repeat(32)}`, receipt: { status: 'success', logs: [transferLog(ALICE, 11n), transferLog(ALICE, 12n)] } };
     });
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(screen.getByTestId('mt-eligibility').textContent).toMatch(/is on the allowlist\./));
+    await waitFor(() => expect(screen.getByTestId('mt-eligibility').textContent).toMatch(/is on the WL\./));
     fireEvent.click(screen.getByRole('button', { name: 'One more' }));
     expect(screen.getByRole('spinbutton', { name: 'How many NFTs' }).textContent).toBe('2');
     expect((screen.getByRole('button', { name: 'One more' }) as HTMLButtonElement).disabled).toBe(true);
@@ -185,7 +185,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
     connect();
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract()), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(false) }));
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(screen.getByTestId('mt-blocker').textContent).toMatch(/not on the allowlist/));
+    await waitFor(() => expect(screen.getByTestId('mt-blocker').textContent).toMatch(/not on the WL/));
     expect((screen.getByRole('button', { name: /^Mint/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -194,7 +194,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
     ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract()), [`GET /api/site/mint/proof?wallet=${ALICE}`]: proof(true, `0x${'00'.repeat(32)}`) }));
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(screen.getByTestId('mt-eligibility').textContent).toMatch(/not on the contract yet/));
-    expect(screen.getByTestId('mt-blocker').textContent).toMatch(/not published/);
+    expect(screen.getByTestId('mt-blocker').textContent).toMatch(/the WL is not on the contract yet\. Try again soon/i);
     expect((screen.getByRole('button', { name: /^Mint/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -210,7 +210,7 @@ describe('/mint page', { timeout: 30_000 }, () => {
   });
 
   it('Sold out, with Play for holders', async () => {
-    ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract({ totalSupply: 5000 }), { soldOut: true }) }));
+    ({ restore } = mockFetch({ 'GET /api/site/mint': mintState(contract({ totalSupply: 3333 }), { soldOut: true }) }));
     render(<Mint pollMs={0} />);
     await waitFor(() => expect(screen.getByTestId('mt-phase').textContent).toBe('Sold out'));
     expect(screen.getByRole('link', { name: 'Play' })).toBeTruthy();
@@ -236,7 +236,7 @@ const minted = (ids: bigint[]) => async (_call: unknown, opts: { onPhase?: (p: s
   return { ok: true, hash: `0x${'cd'.repeat(32)}`, receipt: { status: 'success', logs: ids.map((id) => transferLog(ALICE, id)) } };
 };
 const revert = (errorName: 'SoldOut' | 'PublicLimitExceeded') =>
-  Object.assign(new Error('execution reverted'), { code: 3, data: encodeErrorResult({ abi: elymumNFTAbi, errorName }) });
+  Object.assign(new Error('execution reverted'), { code: 3, data: encodeErrorResult({ abi: coinnibalNFTAbi, errorName }) });
 
 describe('mint logic: price copy, funds, errors', () => {
   it('tells the testnet price plainly, keeps the dollar story only within ±10 % of the target', () => {
@@ -249,6 +249,8 @@ describe('mint logic: price copy, funds, errors', () => {
     expect(priceStory(s(1.12), false)).toBe('plain');
     expect(priceStory(s(0.85), false)).toBe('plain');
     expect(priceStory(s(null), false)).toBe('plain');
+    // the server leaves the target out while the mint page is closed: the page makes no dollar claim then
+    expect(priceStory({ priceUsd: 1, chainId: 999 }, false)).toBe('plain');
   });
 
   it('formats ETH for prose', () => {
@@ -279,10 +281,12 @@ describe('/mint on the testnet (1 ETH, public, 3 per wallet)', { timeout: 30_000
   it('says the testnet price plainly, and makes no dollar claim', async () => {
     ({ restore } = mockFetch({ 'GET /api/site/mint': testnetState() }));
     render(<Mint pollMs={0} />);
-    await waitFor(() => expect(document.querySelector('.mt-lede')!.textContent).toMatch(/testnet mint: 1 ETH, paid with free test ETH/));
+    await waitFor(() => expect(document.querySelector('.mt-lede')!.textContent).toMatch(/test network\. The price is 1 ETH, and you pay with free test ETH/));
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Get the Coinnibal NFT.');
     expect(document.querySelector('.mt-page')!.textContent).not.toMatch(/\$1\b|dollar/i);
-    expect(screen.getByTestId('mt-mainnet-note').textContent).toMatch(/mainnet mint will cost much less/);
+    // no price claim about another network, and the word "testnet" is not on a visitor page
+    expect(screen.queryByTestId('mt-mainnet-note')).toBeNull();
+    { const m = document.querySelector('.mt-page')!.textContent?.match(/.{0,80}(testnet|mainnet).{0,40}/i); expect(m?.[0] ?? null).toBeNull(); }
   });
 
   it('mainnet: no dollar story, whatever the price; the card shows the price read from the contract', async () => {
@@ -503,7 +507,7 @@ describe('/mint loads fast: skeleton, kept state, early start, timeouts', { time
   });
 
   it('ignores a kept state that is unreadable or too old', () => {
-    localStorage.setItem('elymum.mint-state.v1', '{not json');
+    localStorage.setItem('coinnibal.mint-state.v1', '{not json');
     expect(readCachedMint()).toBeNull();
     writeCachedMint(mintState(contract()), Date.now() - 10 * 24 * 3600_000);
     expect(readCachedMint()).toBeNull();

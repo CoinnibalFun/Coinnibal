@@ -17,11 +17,11 @@ export interface BackupDeps {
   tar?: string;
 }
 
-/** `elymum-data-<chainId>-<YYYYmmdd-HHMMSS>.tar.gz` (UTC). */
+/** `coinnibal-data-<chainId>-<YYYYmmdd-HHMMSS>.tar.gz` (UTC). */
 export function backupFileName(chainId: number | null, now: number): string {
   const iso = new Date(now).toISOString(); // 2026-11-04T12:34:56.789Z
   const stamp = `${iso.slice(0, 10).replace(/-/g, '')}-${iso.slice(11, 19).replace(/:/g, '')}`;
-  return `elymum-data-${chainId ?? 'nochain'}-${stamp}.tar.gz`;
+  return `coinnibal-data-${chainId ?? 'nochain'}-${stamp}.tar.gz`;
 }
 
 let running = false;
@@ -117,12 +117,15 @@ export function streamBackup(_req: IncomingMessage, res: ServerResponse, wallet:
 
 /**
  * Settings a moved server needs (`GET /api/admin/migration-env`): every variable the server reads, minus
- * the ones that describe this host (port, paths, proxy hops, Node mode), which the new host sets itself.
+ * the ones that describe this host (port, paths, proxy hops, Node mode), which the new host sets itself. Also
+ * `CADDY_CONFIG` (the VPS's Caddy config, which the app gets with the whole .env): a server behind Cloudflare must
+ * come up behind it on the new host too, or Caddy hands the app Cloudflare's edge address as every player's.
+ * install.sh takes only `Caddyfile` or a `Caddyfile.<name>` of its own checkout from it.
  */
 // STAKE_ENABLED / GAME_ACCESS: the old server is switched off with these during a move; the new one must not inherit that
 const HOST_ONLY = new Set(['STAKE_ENABLED', 'GAME_ACCESS', 'HOST', 'PORT', 'DATA_DIR', 'WEB_DIST', 'NODE_ENV', 'TRUST_PROXY', 'TRUST_PROXY_HOPS', 'CORS_ORIGIN', 'GAME_DOMAIN']);
 const MIGRATED =
-  /^(ADMIN_WALLETS|AUTH_SECRET|SERVER_PRIVATE_KEY|EVM_RPC_URL|PUBLIC_RPC_URL|TESTNET_RPC_URL|PUBLIC_URL|CHAIN_ID|EXPLORER_URL|ARENA_ADDRESS|NFT_ADDRESS|TOKEN_ADDRESS|TOKEN_SYMBOL|JOURNAL_ABANDON_CONTRACT|GAME_ACCESS|X_HANDLE|STAKE_ENABLED|STAKE_ARENA_IDS|STALE_SWEEP_ACK|STALE_SESSION_AFTER_S|GAS_FAUCET_URL|GAS_PRICE_URL|MINT_USD_CENTS|LOG_CHUNK_BLOCKS|RPC_MAX_RPS|RPC_BURST|EVM_RPC_URLS|ADMIN_TOKEN_TTL_MIN|DEATH_SETTLE_BATCH_S|GAS_FLOOR_ETH|GAS_RUNWAY_WARN_DAYS|GAS_RUNWAY_CRITICAL_DAYS|HEALTH_MAX_PENDING|HEALTH_MAX_PENDING_AGE_S|PAYOUT_GUARD_MULTIPLE|GAME_WORKERS|MAX_CONNECTIONS_PER_SUBNET|ROUND_SECONDS|ROUND_JOIN_CLOSE_SECONDS|ROUND_BREAK_SECONDS|MAX_CONNECTIONS|MAX_CONNECTIONS_PER_IP|FREE_ROOM_CAPACITY|PRACTICE_CAPACITY|PRIVATE_ROOM_CAPACITY|ARENA_INSTANCE_CAP)$/;
+  /^(ADMIN_WALLETS|AUTH_SECRET|SERVER_PRIVATE_KEY|EVM_RPC_URL|PUBLIC_RPC_URL|TESTNET_RPC_URL|PUBLIC_URL|CHAIN_ID|EXPLORER_URL|ARENA_ADDRESS|NFT_ADDRESS|TOKEN_ADDRESS|TOKEN_SYMBOL|JOURNAL_ABANDON_CONTRACT|GAME_ACCESS|X_HANDLE|STAKE_ENABLED|STAKE_ARENA_IDS|STALE_SWEEP_ACK|STALE_SESSION_AFTER_S|GAS_FAUCET_URL|GAS_PRICE_URL|MINT_USD_CENTS|LOG_CHUNK_BLOCKS|RPC_MAX_RPS|RPC_BURST|EVM_RPC_URLS|ADMIN_TOKEN_TTL_MIN|DEATH_SETTLE_BATCH_S|GAS_FLOOR_ETH|GAS_RUNWAY_WARN_DAYS|GAS_RUNWAY_CRITICAL_DAYS|HEALTH_MAX_PENDING|HEALTH_MAX_PENDING_AGE_S|PAYOUT_GUARD_MULTIPLE|GAME_WORKERS|MAX_CONNECTIONS_PER_SUBNET|ROUND_SECONDS|ROUND_JOIN_CLOSE_SECONDS|ROUND_BREAK_SECONDS|MAX_CONNECTIONS|MAX_CONNECTIONS_PER_IP|FREE_ROOM_CAPACITY|PRACTICE_CAPACITY|PRIVATE_ROOM_CAPACITY|ARENA_INSTANCE_CAP|CADDY_CONFIG)$/;
 export function migrationEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {

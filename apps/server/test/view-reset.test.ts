@@ -1,4 +1,4 @@
-import { TICK_MS, decodeSnapshot, type ServerMessage } from '@elymum/shared';
+import { TICK_MS, decodeSnapshot, type ServerMessage } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { Conn } from '../src/net/conn';
 import { World } from '../src/game/world';

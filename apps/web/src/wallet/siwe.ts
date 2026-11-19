@@ -1,4 +1,4 @@
-import { SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS, parseSiweMessage, siweMessage } from '@elymum/shared';
+import { SIWE_STATEMENT, SIWE_STATEMENTS_PREVIOUS, parseSiweMessage, siweMessage } from '@coinnibal/shared';
 import { getAddress, isAddress, stringToHex, type Address, type Hex } from 'viem';
 import { SERVER } from '../config';
 import type { Eip1193Provider } from './eip6963';

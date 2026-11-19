@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAP_SCALE_DEFAULT, MAP_SCALE_FIELDS, mapScaleFieldError, type League, type MapScaleSettings, type RoomMode } from '@elymum/shared';
+import { MAP_SCALE_DEFAULT, MAP_SCALE_FIELDS, mapScaleFieldError, type League, type MapScaleSettings, type RoomMode } from '@coinnibal/shared';
 
 /**
  * The admin's dynamic map settings per room kind (`/api/admin/maps`, `DATA_DIR/site/maps.json`): on/off, `base`,

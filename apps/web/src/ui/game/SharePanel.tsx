@@ -1,4 +1,4 @@
-import { shareImagePath, shareIntentUrl, shareStandingsPath } from '@elymum/shared';
+import { shareImagePath, shareIntentUrl, shareStandingsPath } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Button, Icon } from '../../design';
 import { SERVER } from '../../config';
@@ -70,7 +70,7 @@ export async function downloadCard(path: string, filename: string): Promise<void
 export function canShareFiles(): boolean {
   try {
     if (typeof navigator === 'undefined' || typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function' || typeof File === 'undefined') return false;
-    return navigator.canShare({ files: [new File([new Uint8Array(1)], 'elymum.png', { type: 'image/png' })] });
+    return navigator.canShare({ files: [new File([new Uint8Array(1)], 'coinnibal.png', { type: 'image/png' })] });
   } catch {
     return false;
   }
@@ -138,7 +138,7 @@ export function SharePanel({ card, text, room, moments, onUse }: SharePanelProps
   const which: Pic = standings ? pic : 'result';
   const path = card ? (which === 'standings' ? shareStandingsPath(card.id) : shareImagePath(card.id)) : null;
   const picture = usePicture(path);
-  const base = `elymum-${fileSlug(room)}`;
+  const base = `coinnibal-${fileSlug(room)}`;
   const filename = `${base}-${which === 'standings' ? 'standings' : card?.dead ? 'game' : 'result'}.png`;
   const link = card ? shareUrl(card.id) : siteLink();
 

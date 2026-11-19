@@ -12,14 +12,14 @@ const head = () => ({
 
 describe('per-page head tags', () => {
   beforeEach(() => {
-    document.head.innerHTML = '<link rel="canonical" href="https://elymum.io/" /><meta property="og:url" content="https://elymum.io/" />';
+    document.head.innerHTML = '<link rel="canonical" href="https://coinnibal.fun/" /><meta property="og:url" content="https://coinnibal.fun/" />';
   });
 
   it('points canonical and og:url at the page, on the build origin', () => {
     setPageHead('/mint');
-    expect(head()).toEqual({ canon: 'https://elymum.io/mint', og: 'https://elymum.io/mint', robots: null });
+    expect(head()).toEqual({ canon: 'https://coinnibal.fun/mint', og: 'https://coinnibal.fun/mint', robots: null });
     setPageHead('/');
-    expect(head().canon).toBe('https://elymum.io/');
+    expect(head().canon).toBe('https://coinnibal.fun/');
   });
 
   it('marks the not-found page noindex, and drops it again on a real page', () => {
@@ -79,6 +79,8 @@ describe('per-page head tags', () => {
     const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8');
     const words = [...html.matchAll(/<(?:title|meta[^>]+(?:description|title)")[^>]*?(?:content="([^"]*)"|>([^<]*)<)/g)].map((m) => m[1] ?? m[2]);
     expect(words.length).toBeGreaterThan(4);
+    // Elymum / Elysium: the project's name and chain before the rename; visitor pages never say them
+    // Elymum / Elysium: the project's name and chain before the rename; visitor pages never say them
     for (const w of words) expect(w).not.toMatch(/is yours|testnet|faucet|test tokens?|\bnibal\b|Elymum|Elysium/i);
   });
 

@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fromLedger, type SessionInfo } from '@elymum/sdk';
+import { fromLedger, type SessionInfo } from '@coinnibal/sdk';
 import { generatePrivateKey } from 'viem/accounts';
 import { describe, expect, it } from 'vitest';
 import { createChain } from '../src/chain';
@@ -122,13 +122,14 @@ describe('createChain', () => {
     const logs: string[] = [];
     expect(await createChain(loadConfig({} as NodeJS.ProcessEnv), new Journal(null), (m) => logs.push(m))).toBeInstanceOf(NullChain);
     expect(await createChain(loadConfig({ EVM_RPC_URL: 'http://127.0.0.1:1' } as unknown as NodeJS.ProcessEnv), new Journal(null), () => {})).toBeInstanceOf(NullChain);
-    expect(logs.join()).toMatch(/EVM_RPC_URL and SERVER_PRIVATE_KEY/);
+    // the VPS names its RPC COINNIBAL_RPC_URLS (docker-compose.yml always sets EVM_RPC_URLS and empties EVM_RPC_URL)
+    expect(logs.join()).toContain('chain: off (set SERVER_PRIVATE_KEY and the RPC: COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker)');
     const off = new NullChain().status();
     expect(off).toMatchObject({ enabled: false, chainId: null, arenaAddress: null, nftAddress: null, tokenReady: false, token: null, serverKey: null });
   });
 
   it('picks the EVM gateway when both are set; an unusable key keeps it disabled instead of crashing', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-chain-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-chain-'));
     writeFileSync(join(dir, 'bad.key'), 'not a key');
     const logs: string[] = [];
     const chain = await createChain(config({ SERVER_PRIVATE_KEY: join(dir, 'bad.key') }), new Journal(null), (m) => logs.push(m));
@@ -175,7 +176,7 @@ describe('status and reads', () => {
     // an arena whose code is not the bundled v3 build (an old v1 / v2 deployment) keeps the arenas off
     const old = await harness({ setup: (e) => e.code.set(ARENA.toLowerCase(), 'mismatch') });
     expect(old.chain.status()).toMatchObject({ arenasEnabled: false });
-    expect(old.logs.join()).toMatch(/is not the bundled ElymumArena/);
+    expect(old.logs.join()).toMatch(/is not the bundled CoinnibalArena/);
   });
 
   it('names the Robinhood Chain network the RPC serves (EXPLORER_URL overrides its explorer); any other chain stays off', async () => {
@@ -188,10 +189,10 @@ describe('status and reads', () => {
       explorerUrl: 'https://explorer.testnet.chain.robinhood.com',
       faucetUrl: 'https://faucet.testnet.chain.robinhood.com',
     });
-    // an RPC of another chain: no arenas, and the log says Elymum runs on Robinhood Chain only
+    // an RPC of another chain: no arenas, and the log says Coinnibal runs on Robinhood Chain only
     const other = await harness({ setup: (x) => (x.chainId = 99801) });
     expect(other.chain.status()).toMatchObject({ enabled: false, chainId: null, arenasEnabled: false, chainName: 'Robinhood Chain Testnet' });
-    expect(other.logs.join('\n')).toMatch(/serves chain 99801: chain 99801 is not Robinhood Chain/);
+    expect(other.logs.join('\n')).toMatch(/!!! chain: the RPC \(COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL\(S\) outside Docker\) serves chain 99801: chain 99801 is not Robinhood Chain/);
   });
 
   it('converts 18-decimal amounts to ledger units at the boundary (vaults rounded down)', async () => {
@@ -348,7 +349,7 @@ describe('contracts and the token watcher', () => {
     const h = await harness({ setup: (e) => e.code.set(ARENA.toLowerCase(), 'mismatch') });
     expect(h.chain.tokenReady).toBe(false);
     expect(h.chain.stakeEnabled).toBe(false);
-    expect(h.logs.join()).toMatch(/is not the bundled ElymumArena/);
+    expect(h.logs.join()).toMatch(/is not the bundled CoinnibalArena/);
   });
 
   it('keeps settlements queued while the server key is not the server authority; resumes once fixed', async () => {
@@ -688,7 +689,7 @@ describe('loot sweeps (sweepLoot burns, monotonic sweep ids)', () => {
   });
 
   it('a sweep item survives a journal reload with its id; a landed sweep is never sent again', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-sweep-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-sweep-'));
     const path = join(dir, 'journal.json');
     const before = new Journal(path);
     before.enqueue(sweepItem());
@@ -930,7 +931,7 @@ describe('stale sessions (the full entry fee back: cancel)', () => {
   });
 
   it('stays off after a journal quarantine until STALE_SWEEP_ACK=1', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-quarantine-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-quarantine-'));
     const path = join(dir, 'journal.json');
     writeFileSync(path, '{broken');
     const journal = new Journal(path);

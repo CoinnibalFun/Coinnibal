@@ -1,13 +1,13 @@
 # The Coinnibal emblem collection: design, rarity and fair reveal
 
-The Coinnibal NFT ("emblems") is a 5,000-token PFP collection. Each emblem is a portrait of a Coinnibal coin creature
+The Coinnibal NFT ("emblems") is a 3,333-token PFP collection (`NFT_SUPPLY`). Each emblem is a portrait of a Coinnibal coin creature
 drawn in the game's Ring Storybook style. Traits are layered, rarity comes in five tiers, and the reveal is
 provably fair. This page covers the research behind the design, the design system, the odds, the comparison
 between the two art styles, and the commit-and-reveal flow. Researched and built 2026-11-05.
 
-Code: `apps/server/src/site/nft/` (see [Files](#files)). Previews: `pnpm -F @elymum/server nft:sheets` writes the
+Code: `apps/server/src/site/nft/` (see [Files](#files)). Previews: `pnpm -F @coinnibal/server nft:sheets` writes the
 contact sheets (`compare.png`, `vector-tiers.png`, `pixel-tiers.png`, `vector-traits.png`, `pixel-traits.png`,
-`rarity-table.png`, `unrevealed.png`) to `out/nft2/`. Distribution proof: `pnpm -F @elymum/server nft:report`.
+`rarity-table.png`, `unrevealed.png`) to `out/nft2/`. Distribution proof: `pnpm -F @coinnibal/server nft:report`.
 
 ## 1. Research
 
@@ -58,7 +58,7 @@ These are the failure modes we design against. Each one has a guard in the code.
 - `attributes` is an array of `{ trait_type, value }`. A numeric trait takes `display_type` (`number`,
   `boost_number`, `boost_percentage`, `date`) and an optional `max_value`.
 - ERC-4906 `MetadataUpdate` / `BatchMetadataUpdate` tells marketplaces to re-fetch `tokenURI`
-  ([EIP-4906](https://eips.ethereum.org/EIPS/eip-4906)). ElymumNFT emits `BatchMetadataUpdate(1, max)` from
+  ([EIP-4906](https://eips.ethereum.org/EIPS/eip-4906)). CoinnibalNFT emits `BatchMetadataUpdate(1, max)` from
   `setBaseURI`, so the reveal can be announced without a new contract.
 
 ### Fair-mint provenance
@@ -132,20 +132,25 @@ pastels.
 
 The generator does not roll tiers. It hands out exact quotas (largest remainder), shuffled by the seed:
 
-| Tier | Share | Of 5,000 |
+| Tier | Share | Of 3,333 |
 |---|---:|---:|
-| Common | 60 % | 3,000 |
-| Rare | 25 % | 1,250 |
-| Epic | 11 % | 550 |
-| Legendary | 3.8 % | 190 |
-| Mythic (1/1s) | 0.2 % | 10 |
+| Common | 60 % | 2,000 |
+| Rare | 25 % | 833 |
+| Epic | 11 % | 366 |
+| Legendary | 3.8 % | 127 |
+| Mythic (1/1s) | 0.2 % | 7 |
 
-The brief suggested Legendary 3.5 % and Mythic 0.5 %. We made the Mythics ten hand-authored, named 1/1s (25
-would no longer be landmarks) and gave the difference to Legendary.
+The brief suggested Legendary 3.5 % and Mythic 0.5 %. At 3,333 tokens 0.5 % is about 17 Mythics, too many to stay
+landmarks: the Mythic share is 0.2 % (7 tokens, each one of the hand-authored, named 1/1s below) and the difference
+went to Legendary.
 
 **The ten 1/1s:** The Sun Eater, The Abyss, The Moon Coin, The Prism, The First Coin, The Ember King, The Night
 Swimmer, The Last Bite, The Dreamer, The Old Gold. Each one has a Mythic-only material, background and effect,
 and a `One of One` attribute.
+
+At 3,333 tokens the Mythic quota is 7 (0.2 %), so only 7 of the ten hand-authored 1/1s are in the collection. The
+seed picks which 7 (a seeded shuffle of the ten, `generate.ts`); the other 3 are left out. Open owner decision: keep
+the ten-1/1 list as it is, or choose the 7 by hand (`TIER_SHARE` is unchanged either way).
 
 ### Odds per tier
 
@@ -239,7 +244,8 @@ Notes 30 %. Legendary: Flames 34, Lightning 33, Starburst 33 %. Mythic only: Cor
 | Gold Chain | – | – | 19.7 % | 25.9 % |
 
 The resulting whole-collection counts for the preview seed are in `out/nft2/rarity-table.png`. Example: Halo 0.9 %,
-Glow eyes 1.2 %, Obsidian 1.3 %, and each Mythic-only value 0.04 to 0.06 %.
+Glow eyes 1.2 %, Obsidian 1.3 %. A Mythic-only value is on at most 3 tokens of the 3,333 (0.09 %), and on none when
+the seed leaves its 1/1s out (`pnpm -F @coinnibal/server nft:report --seed <s>` gives the counts of one seed).
 
 ### Exclusion rules
 
@@ -291,7 +297,7 @@ option today. Before shipping it, its faces would need a hand-drawn pass at 2 ×
 
 ## 4. Fair mint: commit, seal, reveal
 
-No contract change is needed. ElymumNFT computes `tokenURI(id) = baseURI + id`, and its base URI points at the
+No contract change is needed. CoinnibalNFT computes `tokenURI(id) = baseURI + id`, and its base URI points at the
 server (`/api/nft/`). The server decides what each token shows, so the commit-and-reveal scheme runs server-side.
 
 1. **Commit (first boot).** The server generates a random 32-byte seed (or uses `NFT_COLLECTION_SEED`). It
@@ -317,7 +323,7 @@ server (`/api/nft/`). The server decides what each token shows, so the commit-an
    the same URI. It emits ERC-4906 `BatchMetadataUpdate`, and marketplaces re-fetch. After the reveal the image URL
    carries `?v=<block>` so caches cannot serve the sealed picture.
 6. **Verify (anyone).** Check that `sha256(seed)` equals the committed hash. Run
-   `pnpm -F @elymum/server nft:report --seed <seed>`, or `generateCollection(seed, size)`, and compare the
+   `pnpm -F @coinnibal/server nft:report --seed <seed>`, or `generateCollection(seed, size)`, and compare the
    provenance hash. Recompute the offset from the block's hash.
 
 **Why nobody can snipe a rare:**
@@ -345,7 +351,7 @@ A revealed token:
 ```json
 {
   "name": "Coinnibal No. 42",
-  "description": "A Rare Coinnibal emblem: a struck metal coin of the ring. Holders play Coinnibal, ...",
+  "description": "A Rare Coinnibal NFT: a metal coin. Holders play Coinnibal, the arena where the coins eat, on Robinhood Chain.",
   "image": "https://<site>/api/nft/42.svg?v=<revealBlock>",
   "external_url": "https://<site>",
   "background_color": "34B7DD",
@@ -358,7 +364,7 @@ A revealed token:
     { "trait_type": "Headwear", "value": "Cowboy" },
     { "trait_type": "Accessory", "value": "None" },
     { "trait_type": "Effect", "value": "Sparkles" },
-    { "display_type": "number", "trait_type": "Rarity Rank", "value": 812, "max_value": 5000 }
+    { "display_type": "number", "trait_type": "Rarity Rank", "value": 812, "max_value": 3333 }
   ]
 }
 ```

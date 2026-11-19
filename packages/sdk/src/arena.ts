@@ -1,6 +1,6 @@
-import { elymumArenaAbi, elymumArenaArtifact, testTokenAbi, testTokenArtifact } from '@elymum/contracts';
-import { DEFAULT_ARENAS, formatUsdCents, type ArenaPriceRow } from '@elymum/shared';
-import { BaseError, erc20Abi, getAddress, isAddress, type Account, type Address, type Chain, type Hash, type PublicClient, type WalletClient } from 'viem';
+import { coinnibalArenaAbi, coinnibalArenaArtifact, testTokenAbi, testTokenArtifact } from '@coinnibal/contracts';
+import { DEFAULT_ARENAS, JOIN_PERMIT_DOMAIN, formatUsdCents, type ArenaPriceRow } from '@coinnibal/shared';
+import { BaseError, erc20Abi, getAddress, isAddress, isHex, type Account, type Address, type Chain, type Hash, type Hex, type PublicClient, type WalletClient } from 'viem';
 import type { ContractCall } from './call';
 import {
   MAX_ARENA_ID,
@@ -21,14 +21,14 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
 const MAX_UINT256 = (1n << 256n) - 1n;
 
 /**
- * `ElymumArena` (v3: fee on profit, burned on chain): typed reads and call builders. Every builder validates its input like the
+ * `CoinnibalArena` (v4: fee on profit, burned on chain; `join` needs the server's permit): typed reads and call builders. Every builder validates its input like the
  * contract does (throws `RangeError` / `TypeError` before anything is signed) and returns a
  * `ContractCall` for `sendCall`, a browser wallet's `writeContract`, or a preview.
  */
 
 type ReadClient = Pick<PublicClient, 'readContract'>;
 
-export type ArenaAbi = typeof elymumArenaAbi;
+export type ArenaAbi = typeof coinnibalArenaAbi;
 export type ArenaCall = ContractCall<ArenaAbi>;
 export type Erc20Call = ContractCall<typeof erc20Abi>;
 
@@ -116,7 +116,7 @@ export interface SessionInfo {
 const nullIfZero = (a: Address): Address | null => (isZeroAddress(a) ? null : getAddress(a));
 
 export async function getArenaConfig(client: ReadClient, arena: Address): Promise<ArenaConfig> {
-  const c = await client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'config' });
+  const c = await client.readContract({ address: arena, abi: coinnibalArenaAbi, functionName: 'config' });
   return {
     address: getAddress(arena),
     admin: getAddress(c.admin),
@@ -148,14 +148,14 @@ export async function getArenaConfig(client: ReadClient, arena: Address): Promis
 }
 
 export async function getArenaIds(client: ReadClient, arena: Address): Promise<number[]> {
-  const ids = await client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'arenaIds' });
+  const ids = await client.readContract({ address: arena, abi: coinnibalArenaAbi, functionName: 'arenaIds' });
   return ids.map(Number);
 }
 
 /** An arena by id (`exists: false` when it was never created). */
 export async function getArena(client: ReadClient, arena: Address, id: number): Promise<ArenaInfo> {
   checkArenaId(id);
-  const a = await client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'getArena', args: [id] });
+  const a = await client.readContract({ address: arena, abi: coinnibalArenaAbi, functionName: 'getArena', args: [id] });
   return {
     id: Number(a.id),
     entryFee: a.entryFee,
@@ -177,7 +177,7 @@ export async function getArena(client: ReadClient, arena: Address, id: number): 
 /** A player's session in an arena (`id: 0n` when none). */
 export async function getSession(client: ReadClient, arena: Address, arenaId: number, player: Address): Promise<SessionInfo> {
   checkArenaId(arenaId);
-  const s = await client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'getSession', args: [arenaId, player] });
+  const s = await client.readContract({ address: arena, abi: coinnibalArenaAbi, functionName: 'getSession', args: [arenaId, player] });
   return {
     arenaId,
     player: getAddress(player),
@@ -199,12 +199,12 @@ export async function listArenas(client: ReadClient, arena: Address): Promise<Ar
 
 /** True when `player` holds the arena's holder NFT (false while the perks are off or when the NFT misbehaves). */
 export function isArenaHolder(client: ReadClient, arena: Address, player: Address): Promise<boolean> {
-  return client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'isHolder', args: [player] });
+  return client.readContract({ address: arena, abi: coinnibalArenaAbi, functionName: 'isHolder', args: [player] });
 }
 
 /** The fee rates a ticket bought by `player` now would get (the holder pair for holders, when lower). */
 export async function getFeeRatesFor(client: ReadClient, arena: Address, player: Address): Promise<FeeRates> {
-  const [burnBps, vaultBps] = await client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'feeRatesFor', args: [player] });
+  const [burnBps, vaultBps] = await client.readContract({ address: arena, abi: coinnibalArenaAbi, functionName: 'feeRatesFor', args: [player] });
   return { burnBps: Number(burnBps), vaultBps: Number(vaultBps) };
 }
 
@@ -214,7 +214,7 @@ export interface FeeRates {
   vaultBps: number;
 }
 
-/** The rates a ticket gets, off-chain (`ElymumArena._ratesFor`): the holder pair when the perks are on and it totals less. */
+/** The rates a ticket gets, off-chain (`CoinnibalArena._ratesFor`): the holder pair when the perks are on and it totals less. */
 export function effectiveFeeRates(
   config: Pick<ArenaConfig, 'burnBps' | 'vaultBps' | 'holderNft' | 'holderBurnBps' | 'holderVaultBps'>,
   holder: boolean,
@@ -225,15 +225,15 @@ export function effectiveFeeRates(
   return { burnBps: config.burnBps, vaultBps: config.vaultBps };
 }
 
-/** `ElymumArena.computeFees(entryFee, payout, burnBps, vaultBps)` on chain (the off-chain twin is `settlementSplit`). */
+/** `CoinnibalArena.computeFees(entryFee, payout, burnBps, vaultBps)` on chain (the off-chain twin is `settlementSplit`). */
 export async function computeFeesOnChain(client: ReadClient, arena: Address, entryFee: bigint, payout: bigint, rates: FeeRates): Promise<{ net: bigint; burned: bigint; toVault: bigint }> {
-  const [net, burned, toVault] = await client.readContract({ address: arena, abi: elymumArenaAbi, functionName: 'computeFees', args: [entryFee, payout, rates.burnBps, rates.vaultBps] });
+  const [net, burned, toVault] = await client.readContract({ address: arena, abi: coinnibalArenaAbi, functionName: 'computeFees', args: [entryFee, payout, rates.burnBps, rates.vaultBps] });
   return { net, burned, toVault };
 }
 
 /** True when `codeHash` is the bundled arena build (the only version this SDK and the server support). */
 export function isBundledArena(codeHash: string | null | undefined): boolean {
-  return !!codeHash && codeHash.toLowerCase() === elymumArenaArtifact.runtimeCodeHash.toLowerCase();
+  return !!codeHash && codeHash.toLowerCase() === coinnibalArenaArtifact.runtimeCodeHash.toLowerCase();
 }
 
 /**
@@ -311,15 +311,83 @@ export function approveCall(token: Address, spender: Address, amount: bigint): E
 /* Players                                                               */
 /* -------------------------------------------------------------------- */
 
-export function joinCall(arena: Address, arenaId: number): ArenaCall {
+/* -------------------------------------------------------------------- */
+/* Join permits (v4)                                                     */
+/* -------------------------------------------------------------------- */
+
+/**
+ * The game server's permit for one ticket: `join` checks `serverAuthority`'s EIP-712 signature of
+ * `JoinPermit(player, arenaId, nonce, deadline)` (the player's `joinNonce`, used up by the join) in the arena's domain.
+ */
+export interface JoinPermitSignature {
+  /** Unix seconds; at most `JOIN_PERMIT_MAX_WINDOW_S` after the block time it is used in. */
+  deadline: bigint | number;
+  signature: Hex;
+}
+
+/** The EIP-712 types of a join permit. */
+export const JOIN_PERMIT_TYPES = {
+  JoinPermit: [
+    { name: 'player', type: 'address' },
+    { name: 'arenaId', type: 'uint16' },
+    { name: 'nonce', type: 'uint64' },
+    { name: 'deadline', type: 'uint64' },
+  ],
+} as const;
+
+export interface JoinPermitFields {
+  chainId: number;
+  arena: Address;
+  player: Address;
+  arenaId: number;
+  nonce: bigint;
+  /** Unix seconds. */
+  deadline: bigint | number;
+}
+
+/** The typed data a join permit signs (for viem's `signTypedData` / `hashTypedData`). */
+export function joinPermitTypedData(p: JoinPermitFields) {
+  checkArenaId(p.arenaId);
+  checkAddress('arena', p.arena);
+  checkAddress('player', p.player);
+  const deadline = BigInt(p.deadline);
+  if (p.nonce < 0n || p.nonce > MAX_UINT64) throw new RangeError(`nonce must be a uint64, got ${p.nonce}`);
+  if (deadline <= 0n || deadline > MAX_UINT64) throw new RangeError(`deadline must be a uint64 > 0, got ${deadline}`);
+  return {
+    domain: { name: JOIN_PERMIT_DOMAIN.name, version: JOIN_PERMIT_DOMAIN.version, chainId: p.chainId, verifyingContract: getAddress(p.arena) },
+    types: JOIN_PERMIT_TYPES,
+    primaryType: 'JoinPermit' as const,
+    message: { player: getAddress(p.player), arenaId: p.arenaId, nonce: p.nonce, deadline },
+  };
+}
+
+/** Signs a join permit with the server key (`serverAuthority`); the game server does this, never a player. */
+export function signJoinPermit(account: { signTypedData: (t: ReturnType<typeof joinPermitTypedData>) => Promise<Hex> }, p: JoinPermitFields): Promise<Hex> {
+  return account.signTypedData(joinPermitTypedData(p));
+}
+
+/** The nonce the next join permit of `player` must name (`joinNonce`). */
+export function getJoinNonce(client: ReadClient, arena: Address, player: Address): Promise<bigint> {
+  return client.readContract({ address: arena, abi: coinnibalArenaAbi, functionName: 'joinNonce', args: [getAddress(player)] });
+}
+
+function checkPermit(permit: JoinPermitSignature): void {
+  const deadline = BigInt(permit.deadline);
+  if (deadline <= 0n || deadline > MAX_UINT64) throw new RangeError(`permit deadline must be a uint64 > 0, got ${deadline}`);
+  if (typeof permit.signature !== 'string' || !isHex(permit.signature)) throw new TypeError('permit signature must be 0x hex');
+}
+
+/** `join(arenaId, deadline, signature)`: one ticket, with the game server's permit (`JoinPermitSignature`). */
+export function joinCall(arena: Address, arenaId: number, permit: JoinPermitSignature): ArenaCall {
   checkArenaId(arenaId);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'join', args: [arenaId] };
+  checkPermit(permit);
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'join', args: [arenaId, BigInt(permit.deadline), permit.signature] };
 }
 
 /** Refund after 24 h, or collect `owed` of a finalized session. */
 export function refundCall(arena: Address, arenaId: number): ArenaCall {
   checkArenaId(arenaId);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'refund', args: [arenaId] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'refund', args: [arenaId] };
 }
 
 export interface JoinPlan {
@@ -350,13 +418,13 @@ export interface JoinPlan {
  * The ticket flow: reads the arena's entry fee, the fee rate the player will get (holder discount),
  * the player's allowance and balance, and returns `approve` (only when the allowance is short;
  * the exact entry fee, or with `approve: 'unlimited'` the largest allowance so later tickets need
- * `join` only) + `join`. Throws a `RangeError` when the arena is missing, disabled or full, the
+ * `join` only) + `join` with the game server's `permit` (`POST /api/arena/permit`). Throws a `RangeError` when the arena is missing, disabled or full, the
  * token is not set, the arena is holders-only and the player holds no emblem (message contains
  * "holders only"), or the balance is short.
  */
 export async function planJoin(
   client: ReadClient,
-  p: { arena: Address; arenaId: number; player: Address; token?: Address; approve?: 'exact' | 'unlimited' },
+  p: { arena: Address; arenaId: number; player: Address; token?: Address; approve?: 'exact' | 'unlimited'; permit: JoinPermitSignature },
 ): Promise<JoinPlan> {
   const [info, config, holder] = await Promise.all([
     getArena(client, p.arena, p.arenaId),
@@ -379,7 +447,7 @@ export async function planJoin(
   const [allowance, balance] = await Promise.all([getAllowance(client, token, p.player, p.arena), getTokenBalance(client, token, p.player)]);
   if (balance < info.entryFee) throw new RangeError(`balance too low for the ticket (need ${info.entryFee}, have ${balance} base units)`);
   const approve = allowance < info.entryFee ? approveCall(token, p.arena, p.approve === 'unlimited' ? MAX_ALLOWANCE : info.entryFee) : null;
-  const join = joinCall(p.arena, p.arenaId);
+  const join = joinCall(p.arena, p.arenaId, p.permit);
   return { entryFee: info.entryFee, ...fee, allowance, balance, approve, join, calls: approve ? [approve, join] : [join] };
 }
 
@@ -415,7 +483,7 @@ export function cancelCall(arena: Address, items: readonly SessionRef[]): ArenaC
   for (const s of items) checkSessionRef(s);
   return {
     address: arena,
-    abi: elymumArenaAbi,
+    abi: coinnibalArenaAbi,
     functionName: 'cancel',
     args: [items.map((s) => ({ arenaId: s.arenaId, player: getAddress(s.player), sessionId: s.sessionId }))],
   };
@@ -442,7 +510,7 @@ export function settleCall(arena: Address, items: readonly Settlement[]): ArenaC
   for (const s of items) checkSettlement(s);
   return {
     address: arena,
-    abi: elymumArenaAbi,
+    abi: coinnibalArenaAbi,
     functionName: 'settle',
     args: [items.map((s) => ({ arenaId: s.arenaId, player: getAddress(s.player), sessionId: s.sessionId, payout: s.payout }))],
   };
@@ -460,7 +528,7 @@ export function settleCalls(arena: Address, items: readonly Settlement[], chunk:
 export function payCall(arena: Address, amount: bigint, ref: `0x${string}`): ArenaCall {
   if (typeof amount !== 'bigint' || amount <= 0n || amount > MAX_UINT128) throw new RangeError(`payment must be a uint128 > 0, got ${amount}`);
   if (!/^0x[0-9a-fA-F]{64}$/.test(ref)) throw new TypeError(`payment ref must be 32 bytes of hex, got ${ref}`);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'pay', args: [amount, ref] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'pay', args: [amount, ref] };
 }
 
 /** Burns floor loot; `sweepId` must be larger than the arena's `lastSweepId`. */
@@ -468,7 +536,7 @@ export function sweepLootCall(arena: Address, arenaId: number, sweepId: bigint, 
   checkArenaId(arenaId);
   if (sweepId <= 0n || sweepId > MAX_UINT64) throw new RangeError(`sweepId must be a uint64 > 0, got ${sweepId}`);
   if (amount < 0n || amount > MAX_UINT128) throw new RangeError(`amount must be a uint128, got ${amount}`);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'sweepLoot', args: [arenaId, sweepId, amount] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'sweepLoot', args: [arenaId, sweepId, amount] };
 }
 
 /* -------------------------------------------------------------------- */
@@ -477,39 +545,39 @@ export function sweepLootCall(arena: Address, arenaId: number, sweepId: bigint, 
 
 export function setTokenCall(arena: Address, token: Address): ArenaCall {
   checkAddress('token', token, { nonZero: true });
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setToken', args: [getAddress(token)] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'setToken', args: [getAddress(token)] };
 }
 
 /** Fee rates on the profit of new tickets (`burnBps + vaultBps <= 2 500`). Open tickets keep theirs. */
 export function setFeeRatesCall(arena: Address, rates: FeeRates): ArenaCall {
   checkFeeRates(rates);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setFeeRates', args: [rates.burnBps, rates.vaultBps] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'setFeeRates', args: [rates.burnBps, rates.vaultBps] };
 }
 
 /** `BURN_MODE_DEAD` (0) or `BURN_MODE_CALL` (1, the token's own `burn`; see `probeBurnSupport`). */
 export function setBurnModeCall(arena: Address, mode: number): ArenaCall {
   if (mode !== 0 && mode !== BURN_MODE_CALL) throw new RangeError(`burn mode must be 0 or 1, got ${mode}`);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setBurnMode', args: [mode] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'setBurnMode', args: [mode] };
 }
 
 /** Share of every `pay` payment that is burned, in bps (0..10 000). */
 export function setPaymentBurnBpsCall(arena: Address, bps: number): ArenaCall {
   if (!Number.isInteger(bps) || bps < 0 || bps > BPS) throw new RangeError(`payment burn share must be an integer in 0..${BPS} bps, got ${bps}`);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setPaymentBurnBps', args: [bps] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'setPaymentBurnBps', args: [bps] };
 }
 
 export function setFeeWalletCall(arena: Address, wallet: Address): ArenaCall {
   checkAddress('fee wallet', wallet, { nonZero: true });
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setFeeWallet', args: [getAddress(wallet)] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'setFeeWallet', args: [getAddress(wallet)] };
 }
 
 export function setServerAuthorityCall(arena: Address, server: Address): ArenaCall {
   checkAddress('server authority', server, { nonZero: true });
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setServerAuthority', args: [getAddress(server)] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'setServerAuthority', args: [getAddress(server)] };
 }
 
 export function setPausedCall(arena: Address, paused: boolean): ArenaCall {
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setPaused', args: [paused] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'setPaused', args: [paused] };
 }
 
 export interface ArenaParams {
@@ -521,14 +589,14 @@ export interface ArenaParams {
 export function createArenaCall(arena: Address, p: ArenaParams): ArenaCall {
   checkArenaId(p.id);
   checkArenaParams(p.entryFee, p.maxSessions);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'createArena', args: [p.id, p.entryFee, p.maxSessions] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'createArena', args: [p.id, p.entryFee, p.maxSessions] };
 }
 
 /** All fields are written (the contract has no partial update); the entry fee changes only while no ticket is open. */
 export function updateArenaCall(arena: Address, p: ArenaParams & { enabled: boolean }): ArenaCall {
   checkArenaId(p.id);
   checkArenaParams(p.entryFee, p.maxSessions);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'updateArena', args: [p.id, p.entryFee, p.maxSessions, p.enabled] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'updateArena', args: [p.id, p.entryFee, p.maxSessions, p.enabled] };
 }
 
 /** `updateArena` from the current state plus a partial change. */
@@ -549,13 +617,13 @@ export function setHolderPerksCall(arena: Address, nft: Address | null, rates: F
   if (nft !== null) checkAddress('holder NFT', nft);
   checkFeeRates(rates);
   const a = nft === null ? ZERO_ADDRESS : getAddress(nft);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setHolderPerks', args: [a, rates.burnBps, rates.vaultBps] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'setHolderPerks', args: [a, rates.burnBps, rates.vaultBps] };
 }
 
 /** Marks an arena holders-only (or opens it to everyone again). Open tickets are not affected. */
 export function setArenaHoldersOnlyCall(arena: Address, id: number, holdersOnly: boolean): ArenaCall {
   checkArenaId(id);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'setArenaHoldersOnly', args: [id, holdersOnly] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'setArenaHoldersOnly', args: [id, holdersOnly] };
 }
 
 /**
@@ -580,27 +648,27 @@ export function arenaPriceSyncCalls(arena: Address, rows: readonly ArenaPriceRow
 
 export function sweepArenaCall(arena: Address, id: number): ArenaCall {
   checkArenaId(id);
-  return { address: arena, abi: elymumArenaAbi, functionName: 'sweepArena', args: [id] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'sweepArena', args: [id] };
 }
 
 /** Recovers the gas token (`token` null/zero) or a foreign ERC-20; never the game token. */
 export function rescueCall(arena: Address, p: { token: Address | null; to: Address; amount: bigint }): ArenaCall {
   checkAddress('to', p.to, { nonZero: true });
   const token = p.token ?? ZERO_ADDRESS;
-  return { address: arena, abi: elymumArenaAbi, functionName: 'rescue', args: [token, getAddress(p.to), p.amount] };
+  return { address: arena, abi: coinnibalArenaAbi, functionName: 'rescue', args: [token, getAddress(p.to), p.amount] };
 }
 
 /** Ownable2Step: starts a transfer (the new owner must `acceptOwnership`). Works for the arena and the NFT. */
 export function transferOwnershipCall(contract: Address, newOwner: Address): ArenaCall {
   checkAddress('new owner', newOwner, { nonZero: true });
-  return { address: contract, abi: elymumArenaAbi, functionName: 'transferOwnership', args: [getAddress(newOwner)] };
+  return { address: contract, abi: coinnibalArenaAbi, functionName: 'transferOwnership', args: [getAddress(newOwner)] };
 }
 
 export function acceptOwnershipCall(contract: Address): ArenaCall {
-  return { address: contract, abi: elymumArenaAbi, functionName: 'acceptOwnership', args: [] };
+  return { address: contract, abi: coinnibalArenaAbi, functionName: 'acceptOwnership', args: [] };
 }
 
-/** The four default tiers of `@elymum/shared` in base units of a token with `decimals`. */
+/** The four default tiers of `@coinnibal/shared` in base units of a token with `decimals`. */
 export function defaultArenaParams(decimals: number): ArenaParams[] {
   return DEFAULT_ARENAS.map((a) => ({ id: a.id, entryFee: BigInt(a.entryTokens) * 10n ** BigInt(decimals), maxSessions: a.maxSessions }));
 }
@@ -628,8 +696,8 @@ export function deployArenaParams(args: DeployArenaArgs) {
   checkAddress('server authority', args.serverAuthority, { nonZero: true });
   checkAddress('fee wallet', args.feeWallet, { nonZero: true });
   return {
-    abi: elymumArenaAbi,
-    bytecode: elymumArenaArtifact.bytecode,
+    abi: coinnibalArenaAbi,
+    bytecode: coinnibalArenaArtifact.bytecode,
     args: [getAddress(args.admin), getAddress(args.serverAuthority), getAddress(args.feeWallet)] as const,
   };
 }
@@ -646,7 +714,7 @@ function deploy(wallet: WalletClient, p: { abi: readonly unknown[]; bytecode: `0
   } as never);
 }
 
-/** Deploys `ElymumArena` with the bundled bytecode. Returns the transaction hash (see `deployedAddress`). */
+/** Deploys `CoinnibalArena` with the bundled bytecode. Returns the transaction hash (see `deployedAddress`). */
 export function deployArena(wallet: WalletClient, args: DeployArenaArgs, opts: DeployOpts = {}): Promise<Hash> {
   return deploy(wallet, deployArenaParams(args), opts);
 }

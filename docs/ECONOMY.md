@@ -5,19 +5,20 @@ default; the module that holds it is named so this page and the game cannot drif
 
 | What | Where |
 |---|---|
-| Fee on profit, payment split, cap | `packages/shared/src/fees.ts` (mirrors `ElymumArena` v3, `packages/contracts/contracts/ElymumArena.sol`) |
+| Fee on profit, payment split, cap | `packages/shared/src/fees.ts` (mirrors `CoinnibalArena` v4, `packages/contracts/contracts/CoinnibalArena.sol`) |
 | Arena tiers in US dollars, entry fees at the reference price | `DEFAULT_ARENAS`, `packages/shared/src/arenas.ts` |
 | USD → token conversion, rounding, the admin sync's diff | `packages/shared/src/arena-pricing.ts` (`usdToTokenRaw`, `arenaPriceDiff`) |
 | Token price source (manual; a Pons / DEX TWAP stub, not wired) | `apps/server/src/chain/token-price.ts` |
 | Power-up packs (in US cents, converted like the tickets) | `SHOP_DEFAULTS`, `packages/shared/src/boosts.ts`; `apps/server/src/shop/service.ts` |
-| Custom rooms | `CUSTOM_SETTINGS_DEFAULT`, `packages/shared/src/custom-rooms.ts` |
+| Custom rooms (in US cents, converted like the tickets; paid like a power-up pack) | `CUSTOM_SETTINGS_DEFAULT`, `customRoomCost`, `packages/shared/src/custom-rooms.ts`; `apps/server/src/rooms/custom.ts` |
 | Loot | `RULES.loot*`, `packages/shared/src/constants.ts` |
 
-The token is the game token on Robinhood Chain (launched on Pons: a fixed supply of 1,000,000,000 with no mint after
-launch; on the testnet the bundled `TestToken`). **Nothing in Coinnibal mints the game token**: the arena only holds,
+The token is the game token on Robinhood Chain (to be launched on Pons, mainnet only, after the NFT mint: a fixed
+supply of 1,000,000,000 with no mint after launch; on the testnet the bundled `TestToken`). **Nothing in Coinnibal mints the game token**: the arena only holds,
 pays out and burns tokens players brought, so every sink below shrinks circulation for good. The server key cannot
-mint either (the testnet `TestToken` is minted only by its owner and its public faucet: 1,000,000 an hour per
-wallet, 2,000,000 for emblem holders).
+mint either (the testnet `TestToken` is minted only by its owner and its public faucet: by default 1,000,000 an
+hour per wallet, 2,000,000 for emblem holders; the amounts and the cooldown are an owner setting, `/admin` → Setup →
+Advanced → TestToken faucet).
 
 ## 1. Arena tickets: priced in US dollars, paid in the token
 
@@ -26,12 +27,12 @@ Game → Arena prices):
 
 | Arena | Ticket | Who | Created at (reference price $0.001 a token) |
 |---|---|---|---|
-| #1 Asphodel Meadow | **$1** | everyone | 1,000 |
-| #2 Lethe Shore | **$3** | everyone | 3,000 |
-| #3 Golden Bough | **$5** | everyone | 5,000 |
-| #4 Isles of the Blessed | **$10** | **emblem holders only** (on chain, `setArenaHoldersOnly`) | 10,000 |
+| #1 $1 Room | **$1** | everyone | 1,000 |
+| #2 $3 Room | **$3** | everyone | 3,000 |
+| #3 $5 Room | **$5** | everyone | 5,000 |
+| #4 $10 Room | **$10** | **NFT holders only** (on chain, `setArenaHoldersOnly`) | 10,000 |
 
-- **The chain keeps entry fees in token units** (`ElymumArena.createArena` / `updateArena`). The admin turns the
+- **The chain keeps entry fees in token units** (`CoinnibalArena.createArena` / `updateArena`). The admin turns the
   dollar prices into token amounts at the token's USD price and the **owner's wallet signs** the change
   (OPERATIONS.md, "Arena prices in US dollars"). The server never holds the owner key.
 - **Price source.** `manual`: a USD price per token the admin types (the testnet default; the TestToken has no
@@ -40,17 +41,25 @@ Game → Arena prices):
 - **Rounding.** `entry = $ / price`, rounded half up to `sigFigs` significant figures (default 2: "1,200", not
   "1,234.57"), in exact integer arithmetic. At $0.00081 a token: $1 → 1,200 ($0.97), $3 → 3,700, $5 → 6,200,
   $10 → 12,000 ($9.72). Two figures keep a ticket within about 5 % of its dollar price; 3 figures within 0.5 %.
-- **The lobby** shows the dollar price with the token amount next to it ("$1 · 1,200 $NIBAL"). An arena whose
+- **The lobby** shows the dollar price with the token amount next to it ("$1 · 1,200 tokens"; the word is `TOKEN_SYMBOL`, default "tokens"). An arena whose
   entry is not the tier price at the current token price (not re-synced yet) shows its value instead ("≈ $0.81").
 - **A price change never touches a ticket already bought.** Each ticket records its entry fee at `join`
   (`Session.entryFee`); settlement, the fee on profit, cancel, the 24 h refund, the server's payout guard and its
   books all use that recorded amount, never the arena's current entry fee. On top of that the contract refuses a new
   entry fee while any ticket of that arena is open (`ArenaBusy`): an arena is re-priced between rounds.
 
-## 2. No entry fee, a fee on profit
+## 2. No fee on the ticket, a fee on profit
 
-- A ticket costs the arena's entry fee and **the whole of it goes into the arena vault**: the coin starts at the
-  entry fee. There is no entry or ticket fee.
+- A ticket costs the arena's ticket price (the contract's `entryFee`) and **the whole of it goes into the arena
+  vault**: the coin starts at the ticket price. Nothing is taken from the ticket.
+- **A ticket needs the game server's permit** (`join(arenaId, deadline, signature)`, CoinnibalArena v4): a
+  single-use signature of the server key for that wallet and arena, valid for about 10 minutes. The server gives
+  one only while the game is open for the wallet, the arena is open (a holders-only arena: to NFT holders), the
+  wallet has no open ticket there, and the arena is not full of tickets waiting for a seat. A wallet whose tickets
+  went back unplayed 3 times in a day gets no permit until the oldest of those is a day old, and so does a network
+  whose tickets went back unplayed too often (fresh wallets do not reset it). Each network (an IPv4 address, an IPv6
+  /64 or /48) may have only a few permits of an arena not played yet. The permit costs nothing and changes no price
+  or fee: it only decides who may buy, so nobody can fill an arena with tickets nobody plays.
 - Value moves between players in play (eating). At the bell every live coin is paid its value.
 - **A winning ticket pays 20 % of its profit** (profit = payout − entry fee): **15 % is burned** and **5 % goes to
   the fee wallet** (the vault of the business). Each share rounds down. **A loss or a break-even pays nothing.**
@@ -69,8 +78,9 @@ Worked examples at the defaults (`computeProfitFee`, the contract's `computeFees
 | 1,000 | 1,900 | 900 | 135 | 45 | 1,720 |
 | 1,000 | 1,000 | 0 | 0 | 0 | 1,000 |
 | 1,000 | 400 | 0 (a loss) | 0 | 0 | 400 |
-| 250,000 | 1,000,000 | 750,000 | 112,500 | 37,500 | 850,000 |
+| 1,000 | 3,000 | 2,000 | 300 | 100 | **2,600** |
 | 1,000 | 2,000 (holder, 8 % + 2 %) | 1,000 | 80 | 20 | **1,900** |
+| 1,000 | 3,000 (holder, 8 % + 2 %) | 2,000 | 160 | 40 | **2,800** |
 | 1,000 | 1,001 (holder, 8 % + 2 %) | 1 | 0 (rounds down) | 0 | 1,001 |
 
 Why on profit: arenas are zero-sum between players, so a fee on every entry would drain the table whatever anyone
@@ -82,16 +92,17 @@ settles can be refunded by its player after 24 h (the entry fee, capped by the v
 
 ## 3. Power-ups: half burned, half to the fee wallet
 
-Packs of **3 charges**, paid in the game token through `ElymumArena.pay(amount, ref)`: the contract burns
+Packs of **3 charges**, paid in the game token through `CoinnibalArena.pay(amount, ref)`: the contract burns
 **50 %** (`paymentBurnBps`, owner-settable 0 to 100 %) and sends the rest to the fee wallet in the same call. The
 shop is a cart: the player picks several packs (+/−), and one `pay(total, ref)` pays them all (the `ref` names the
-cart, `elymum.cart.…`; a single pack is `elymum.shop.<kind>`). The server credits the charges after checking the
-`Paid` event (contract, payer, cart, amount).
+cart, `coinnibal.cart.…`; a single pack is `coinnibal.shop.<kind>`; a payment made just before the rename with the
+`elymum.` prefix still counts). The server credits the charges after checking the `Paid` event (contract, payer,
+cart, amount).
 
 **Priced in US dollars** like the tickets (`priceIn: 'usd'`, the default): the server converts each pack at the same
 token price source and the same significant figures as the arena tiers (Game → Arena prices: the manual price; the
 DEX source stays a stub), so a charge stays the same share of the $1 ticket whatever the token's price. The shop shows
-both: "$0.60 · 740 $NIBAL" (at $0.00081 a token).
+both: "$0.60 · 740 tokens" (at $0.00081 a token).
 
 | Pack | Price | Holders | Per charge | vs the $1 ticket | vs the $10 ticket | In tokens at $0.001 / at $0.00081 |
 |---|---|---|---|---|---|---|
@@ -105,8 +116,15 @@ Until a token price is set (or with `priceIn: 'token'`) the packs cost their tok
 server quotes each wallet its price (`GET /api/shop`) and credits a `pay(amount, ref)` for the full price or, for a
 wallet that holds the emblem (re-read on chain), the holder price, now or as shown in the last 15 minutes (a token
 price that moved between the quote and the payment). One emblem token id gives the discount to one wallet a UTC day.
-**Paid arenas allow 2 uses per round** (3 for holders), so a big-arena player cannot buy an edge by volume; practice
-and private rooms use charges freely, with cooldowns.
+Every use spends one charge, in every room. **Paid arenas and ticket rooms allow 2 uses per round** (3 for holders), so
+a big-arena player cannot buy an edge by volume; practice ponds and free private rooms have no per-round limit, only
+the cooldowns.
+
+The quotes follow the game gate (ARCHITECTURE.md, "Who may play"): `GET /api/shop`, `GET /api/rooms/custom/quote` and
+every `POST /api/rooms/custom*` (practice with bots included) answer 403 `game_closed` to a wallet the game is closed
+for (only admins in `admins` and `maintenance`; holders and admins in `holders`). `GET /api/site/faucet` follows the
+site's /faucet door: open to everyone in `holders`, `public` and `maintenance`, only admins in `admins`.
+`POST /api/shop/buy` is never gated: a payment made anyway is credited or owed back.
 
 Pricing logic: a pack costs between 60 % and 120 % of the cheapest ticket, so in the entry arena a power-up is a
 real decision (one charge is a fifth of a ticket or more), while the per-round cap keeps the higher arenas from
@@ -118,48 +136,63 @@ Value a coin loses to something without a ticket spills on the floor as loot tha
 bell; whatever is left is burned (`sweepLoot`, with a monotonic sweep id). With people only in the arenas this is a
 safety path that rarely triggers.
 
-## 5. Custom rooms: a small fee in ETH
+## 5. Custom rooms: a small fee in the game token
 
-A signed-in wallet opens a room with its own rules for **0.0005 ETH** (about $1.50 at ETH = $3,000) up to 10
-players, +50 % per further 10 players (100 players: x5.5), paid as a plain ETH transfer to the treasury (an admin setting; unset, the
-owner, the first `ADMIN_WALLETS` wallet) and checked on chain before the room opens. Free rooms and ticket rooms pay
-the same fee. **Emblem holders open one room a day for free** (`holderPerk: free_daily`, the
-default): one room of the base size (up to 10 players) per wallet per UTC day (it renews at 00:00 UTC), enforced by
-the server and recorded in `DATA_DIR/site/custom-rooms.json` in the same write that stores the room, so a restart
-never hands out a second one. The admin can switch the perk to a discount (`holderDiscountPct`, 50 % by default) or
-off.
+A signed-in wallet opens a room with its own rules for **$1.50 in tokens** up to 10 players (`usdCents: 150`,
+converted like the tickets and the power-up packs: the token's USD price and the significant figures of Game → Arena
+prices; 1,500 tokens at the reference price of $0.001, and `priceTokens: 1500` until a token price is set), +50 % per
+further 10 players (100 players: x5.5). It is paid exactly like a power-up pack: one `pay(amount, ref)` of the arena
+contract, which **burns 50 % and sends 50 % to the team wallet** (`paymentBurnBps`, the fee wallet) in that call;
+nothing stays with the server. Free rooms and ticket rooms pay the same fee; a ticket room's players then buy the
+normal arena ticket, with the normal fee on profit.
 
-**Why ETH and not the game token**, decided on purpose and applied consistently (server, web, admin):
+The server opens a room only for a payment it checked on chain (the shop's check: the receipt succeeded, the arena's
+`Paid` event names the signed-in wallet and this room request's ref `coinnibal.room.<request>`, the token moved, the
+amount is at least the price quoted in the last 15 minutes, the payment is at most 2 hours old). A transaction and a
+wallet's room request open one room each, recorded per chain in `DATA_DIR/chains/<id>/room-payments.json` before the
+room opens, so a restart never lets one payment open two rooms and another wallet cannot use it. Before the game
+token is set on the arena (the mainnet before the token launch) a room that costs something cannot be opened; the
+free one-click "Practice with bots" rooms cost nothing and are unaffected. The quote and every room request
+follow the game gate (section 3): 403 `game_closed` to a wallet the game is closed for, practice with bots included.
 
-- It is a service fee for server capacity, not part of the game's money: it should not depend on the token's price,
-  its liquidity or whether it has launched (custom rooms work on day one, also on the testnet).
-- Every creator already holds ETH (it pays their gas); many do not hold the token (a free room is meant for friends
-  who just want to play).
-- The token's sinks come from play (profit burns, power-ups, loot), where they scale with activity; a room fee in the
-  token would add little burn and a lot of friction.
-- A **ticket room** (an invite-only instance of an arena) charges no extra token at all: its players buy the normal
-  arena ticket, and the normal fee on profit and burn apply.
+**Emblem holders open one room a day for free** (`holderPerk: free_daily`, the default): one room of the base size
+(up to 10 players) per wallet per UTC day (it renews at 00:00 UTC), with no payment at all, enforced by the server
+and recorded in `DATA_DIR/site/custom-rooms.json` in the same write that stores the room, so a restart never hands
+out a second one. The admin can switch the perk to a discount (`holderDiscountPct`, 50 % by default) or off.
 
-Practice bots exist only in **free** custom rooms (the creator turns them on: count and difficulty). They carry no
-value, never pick up loot and never use power-ups.
+**Owner decision, 18 Nov 2026: private rooms are paid in the game token, not in ETH.** 50 % of every room fee is
+burned and 50 % goes to the team wallet, exactly like power-up packs; NFT holders keep one free private room a day.
+This replaces the earlier choice of an ETH transfer to a treasury: the room fee is now one more sink of the token,
+priced in dollars like everything else the game sells, and there is no separate treasury setting (the arena's fee
+wallet receives the half that is not burned). The dollar price ($1.50) is the value the old ETH default (0.0005 ETH at
+ETH = $3,000) stood for. A settings file from before keeps loading: its ETH price and treasury are ignored.
+
+Among custom rooms, practice bots exist only in **free** ones (the creator turns them on: count and difficulty). The
+only other bots are in the testnet's test arenas (labelled TEST, no value; each person seated takes one bot's place;
+ARCHITECTURE.md, "Test arenas"). Official arenas never have bots. Bots carry no value, never pick up loot and never use
+power-ups.
 
 ## 6. The Coinnibal NFT (emblem)
 
-Minted for **$1 in ETH** (the price keeper follows ETH/USD within owner-set bounds), allowlist first, then public;
-proceeds go to the NFT treasury. What it does in the economy:
+Minted in ETH at the owner's USD target (`MINT_USD_CENTS`; `/admin` → Mint → Sync, or the price keeper within
+owner-set bounds; no visitor copy names a price or shows the target; the mint page, once open, shows the contract's
+live price in ETH), allowlist first, then public; proceeds go to the NFT treasury. The visitor
+site says the mint will be on OpenSea (only through the link the project's X account posts); how that sale and this
+contract's own phases and `/mint` page fit together is an open owner decision. What it does in the economy:
 
 - **One emblem, one perk at a time.** Every holder perk is bound to a token id of the emblem (read from its
   `Transfer` logs): a token id serves one open holder ticket (a holders-only seat or the holder fee rates) until it is
   settled, and gives the power-up discount and the free room to one wallet a UTC day. An emblem passed around (or
   borrowed for a moment) cannot serve several wallets at once: the extra ticket is refused at its seat and refunded in
-  full, and the admin sees a flag.
+  full, and the admin sees a flag. A holder's own next ticket while its last game is still being settled simply waits
+  for that settlement (never refunded, never a no-show).
 - **Access** while the game opens in phases (holders play first).
 - **Half the fee on profit:** 10 % (8 % burned + 2 % to the fee wallet) instead of 20 % (the arena's holder pair).
-- **The $10 arena is holders-only** (the Isles of the Blessed, on chain).
+- **The $10 arena is holders-only** (the $10 Room, on chain).
 - **20 % off power-ups** and **one extra power-up use per arena round**.
 - **One free custom room a day** (UTC; the admin may pick a discount instead).
 - **2x from the testnet faucet**; cosmetic only: the **emblem coin skin** and the **holder badge** (the laurel next to
-  the name in game and in the standings, the "Emblem holder" badge on the lobby's profile card).
+  the name in game and in the standings, the "NFT holder" badge on the lobby's profile card).
 
 Every one of these numbers is an admin setting: the holder pair on chain (`setHolderPerks`, owner-signed), the tiers,
 the price and the rounding (Game → Arena prices), the power-up discount (Game → Power-ups), the custom-room perk
@@ -175,8 +208,9 @@ None of these create tokens; they lower what a holder pays into the sinks.
 | Payouts | vault → players (net of the fee on profit) |
 | Fee on profit | 15 % burned, 5 % fee wallet (holders: 8 % burned, 2 % fee wallet) |
 | Power-ups | 50 % burned, 50 % fee wallet |
+| Custom rooms | 50 % burned, 50 % fee wallet (holders: one free a day) |
 | Floor loot | burned |
-| Custom rooms, NFT mint | ETH, not the token |
+| NFT mint | ETH, not the token |
 | Mint of the game token | none (fixed supply; the testnet token: its owner and its faucet only) |
 
 The arena's books are checked on chain (`balance = Σ vaults + Σ owed`; per arena: deposited = vault + paid out +
@@ -189,4 +223,3 @@ invariant tests.
   until `/admin` shows it works (docs/RESEARCH.md).
 - The Pons / DEX TWAP price source is a stub: which pool, which interface and which averaging window are not known
   until the token launches. Until it is wired the manual price is the only source, and the owner re-syncs by hand.
-- The custom room fee follows ETH; re-price it in `/admin` if ETH moves a lot.

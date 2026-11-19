@@ -2,8 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
-import { ledgerDecimals } from '@elymum/sdk';
-import { BRAND_NAME, EATEN_SHOWN, siteHostOf, PlayerFlag, SHARE_BOARD_ROWS, SHARE_ID_RE, isXHandle, SHARE_IMAGE, arenaMeta, formatToken, shareName, shortAddress, type EatenName, type RoundStanding, type ShareBoardRow, type ShareCard, type ShareKind } from '@elymum/shared';
+import { ledgerDecimals } from '@coinnibal/sdk';
+import { BRAND_NAME, EATEN_SHOWN, siteHostOf, PlayerFlag, SHARE_BOARD_ROWS, SHARE_ID_RE, isXHandle, SHARE_IMAGE, arenaMeta, formatToken, shareName, shortAddress, type EatenName, type RoundStanding, type ShareBoardRow, type ShareCard, type ShareKind } from '@coinnibal/shared';
 import { Limiter } from '../net/limiter';
 import type { PlayerLook, RoomHandle } from '../rooms/handle';
 import { renderShareCard, renderStandingsCard, shareFacts, shareHeadline } from './share-card';
@@ -44,7 +44,7 @@ export interface ShareDeps {
   dataDir: string | null;
   /** The site's public origin for the absolute card URLs (`publicBaseUrl`: `PUBLIC_URL`; never a forwarded header). */
   baseUrl: (req: IncomingMessage) => string;
-  /** The game token's decimals and symbol (for "took home 1,234.5 $NIBAL"). */
+  /** The game token's decimals and symbol (for "took home 1,234.5 tokens"). */
   token: () => { decimals: number; symbol: string } | null;
   /** "Link X": the handle is linked to a wallet right now (a card tags only such a handle; absent: never tag). */
   xLinked?: (handle: string) => boolean;
@@ -190,7 +190,7 @@ export class ShareService {
     return this.offer({ kind: o.room.opts.stake ? 'round' : 'room', ...this.base(o), mass: Math.floor(g.mass), kills: g.kills, ...this.eaten(g) });
   }
 
-  /** "1,234.5 $NIBAL" (ledger units), or undefined without the token. */
+  /** "1,234.5 tokens" (ledger units), or undefined without the token. */
   private money(v: number): string | undefined {
     const t = this.d.token();
     return t ? `${formatToken(v, ledgerDecimals(t.decimals), { maxFrac: 2 })} ${t.symbol}` : undefined;
@@ -208,7 +208,7 @@ export class ShareService {
 
   /**
    * The final standings a result card draws: the top `SHARE_BOARD_ROWS` and my own row (names cleaned, bots tagged);
-   * an arena's value at the bell formatted (never on a test arena's card: practice tokens).
+   * an arena's value at the bell formatted (never on a test arena's card: test tokens).
    */
   private board(o: ShareOrigin, rows: readonly RoundStanding[] | undefined): ShareBoardRow[] {
     if (!rows) return [];
@@ -324,7 +324,7 @@ export class ShareService {
         this.png.set(key, png);
         if (this.png.size > PNG_CACHE) this.png.delete(this.png.keys().next().value!);
       }
-      // a card never changes: CDNs (the Vercel rewrite, Cloudflare) may keep it as long as they like
+      // a card never changes: CDNs (Cloudflare) may keep it as long as they like
       res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable' });
       res.end(req.method === 'HEAD' ? undefined : png);
       return true;
@@ -345,7 +345,7 @@ export class ShareService {
 export function sharePage(card: ShareCard, origin: string): string {
   const title = `${card.test ? 'TEST · ' : ''}${card.name} · ${shareHeadline(card)} · ${BRAND_NAME}`;
   const desc = card.test
-    ? `${shareFacts(card).join(' · ')}. A testnet test arena: practice tokens, no real money.`
+    ? `${shareFacts(card).join(' · ')}. A testnet test room: test tokens, no real money.`
     : `${shareFacts(card).join(' · ')}. Coin eats coin on Robinhood Chain.`;
   const page = `${origin}/share/${card.id}`;
   const img = `${page}.png`;

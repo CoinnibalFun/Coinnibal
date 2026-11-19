@@ -1,4 +1,4 @@
-import { approveCall } from '@elymum/sdk';
+import { approveCall } from '@coinnibal/sdk';
 import { describe, expect, it } from 'vitest';
 import { sendWalletCall, txErrorText } from '../src/wallet/tx';
 import { allowanceTooHigh } from '../src/wallet/WalletModal';

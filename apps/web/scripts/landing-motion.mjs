@@ -2,8 +2,8 @@
 // Motion guard for the landing's scroll reveals (site/landing/reveal.ts + reveal.css): a Playwright check that the
 // print rhythm never gets in the way of reading. It needs a Chromium, so it is a script, not a vitest test:
 //
-//   pnpm -F @elymum/web motion:guard                                  its own stack (fake chain) on ports 8896 / 5196
-//   pnpm -F @elymum/web motion:guard -- --base http://localhost:5173  against a running dev stack
+//   pnpm -F @coinnibal/web motion:guard                                  its own stack (fake chain) on ports 8896 / 5196
+//   pnpm -F @coinnibal/web motion:guard -- --base http://localhost:5173  against a running dev stack
 //   ... --server-port 8930 --web-port 5330                            its own stack on other ports
 //   ... --perf                                                        also: 4x CPU throttle, no long task, no layout shift
 //   ... --shots DIR                                                   save the reduced-motion full pages there
@@ -45,7 +45,7 @@ const VIEWPORTS = [
 const kids = [];
 async function startStack() {
   if (await fetch(`${BASE}/api/health`).then((r) => r.ok, () => false)) throw new Error(`${BASE} already serves a stack: pass --base to use it, or pick other ports`);
-  const data = mkdtempSync(join(tmpdir(), 'elymum-motion-guard-'));
+  const data = mkdtempSync(join(tmpdir(), 'coinnibal-motion-guard-'));
   mkdirSync(join(data, 'site'), { recursive: true });
   writeFileSync(join(data, 'site/settings.json'), JSON.stringify({ wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'public', launch: 1 }));
   kids.push(

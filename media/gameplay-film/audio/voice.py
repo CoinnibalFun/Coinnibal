@@ -44,11 +44,13 @@ import dsp
 
 KSR = 24000
 # words the G2P must not guess (espeak IPA, as Kokoro expects); the media/gameplay set plus WL, NFT
+# Coinnibal: "coin" + the end of "cannibal". A reading for the synthetic voice, not one the owner recorded: check it
+# before a new take (the films of before the rename said Elymum, /ˈɛlɪməm/).
 FIXED = {
-    "@elymumio": "æt ˈɛlɪməm ˈaɪ ˈoʊ",
-    "$ELYMUM": "ˈɛlɪməm",
-    "Elymum's": "ˈɛlɪməmz",
-    "Elymum": "ˈɛlɪməm",
+    "@coinnibalfun": "æt kˈɔɪnɪbəl fˈʌn",
+    "$NIBAL": "nˈɪbəl",
+    "Coinnibal's": "kˈɔɪnɪbəlz",
+    "Coinnibal": "kˈɔɪnɪbəl",
     "Elysium's": "ɪlˈɪziəmz",
     "Elysium": "ɪlˈɪziəm",
     "HYPE": "hˈaɪp",
@@ -163,12 +165,12 @@ class Voice:
         return trim(np.asarray(x, np.float64))
 
 
-# misaki (the PyTorch Kokoro's G2P) spells some vowels with its own letters (I = aɪ, A = eɪ, O = oʊ);
+# misaki (the PyTorch Kokoro's G2P) spells some vowels with its own letters (I = aɪ, A = eɪ, O = oʊ, Y = ɔɪ);
 # custom pronunciations go inline as [word](/phonemes/), and [word](+1) raises a word's stress
 FIXED_MISAKI = {
-    "@elymumio": "æt ˈɛlɪməm ˈI ˈO",
-    "Elymum's": "ˈɛlɪməmz",
-    "Elymum": "ˈɛlɪməm",
+    "@coinnibalfun": "æt kˈYnɪbəl fˈʌn",
+    "Coinnibal's": "kˈYnɪbəlz",
+    "Coinnibal": "kˈYnɪbəl",
     "Elysium's": "ɪlˈɪziəmz",
     "Elysium": "ɪlˈɪziəm",
     "HYPE": "hˈIp",

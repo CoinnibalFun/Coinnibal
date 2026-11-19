@@ -1,4 +1,4 @@
-import { COUNTRY_CODES, isCountryCode } from '@elymum/shared';
+import { COUNTRY_CODES, isCountryCode } from '@coinnibal/shared';
 import { memo, useId, useMemo } from 'react';
 import { intlLocale, useLocale } from '../i18n';
 import { FLAG_H, FLAG_W, flagArt, type FlagOp } from '../render/flags';

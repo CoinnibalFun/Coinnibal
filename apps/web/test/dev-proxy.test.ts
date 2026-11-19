@@ -1,6 +1,6 @@
 import { createServer as createHttpServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { siweMessage } from '@elymum/shared';
+import { siweMessage } from '@coinnibal/shared';
 import { createServer, type ViteDevServer } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { expectedLoginMessage } from '../src/wallet/siwe';

@@ -1,4 +1,4 @@
-import { CONTRACT_KINDS, isTestChainId, type FaucetConfig, type NetworkContractCheck, type NetworkInfo } from '@elymum/shared';
+import { CONTRACT_KINDS, isTestChainId, type FaucetConfig, type NetworkContractCheck, type NetworkInfo } from '@coinnibal/shared';
 import type { Address } from 'viem';
 import { withTimeout } from '../chain/evm-client';
 import { isTestChain, storedChains } from '../chain/state-dir';

@@ -1,4 +1,4 @@
-import { MAP_SCALE_DEFAULT, MAP_SPACE, TICK_MS, mapSideFor, worldForSide } from '@elymum/shared';
+import { MAP_SCALE_DEFAULT, MAP_SPACE, TICK_MS, mapSideFor, worldForSide } from '@coinnibal/shared';
 import { describe, expect, it } from 'vitest';
 import { World } from '../src/game/world';
 import { runMapRoom } from './map-room';

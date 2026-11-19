@@ -53,7 +53,7 @@ export const PlayerFlag = {
   Verified: 2,
   /** Plays an arena ticket (tokens at stake). */
   Staker: 4,
-  /** The wallet holds an Elymum emblem (the name tag wears a laurel). Old clients ignore the bit. */
+  /** The wallet holds a Coinnibal emblem (the name tag wears a laurel). Old clients ignore the bit. */
   Holder: 8,
   /**
    * The player wears an uploaded profile picture (`avatar`): the wire record carries the 8-byte avatar
@@ -105,7 +105,7 @@ export interface PlayerInfo {
    */
   isBot?: boolean;
   /**
-   * The player's wallet holds an Elymum emblem (show the laurel). On the wire this is
+   * The player's wallet holds a Coinnibal emblem (show the laurel). On the wire this is
    * `PlayerFlag.Holder` in `flags`; `decodeSnapshot` sets it only when true.
    */
   holder?: boolean;
@@ -190,6 +190,7 @@ export interface RoomInfo {
   x0?: number;
   y0?: number;
   players: number;
+  /** Practice bots playing now (a test arena: fewer with every person in it, `test-arenas.ts`). */
   bots: number;
   maxPlayers: number;
   /** Arena rooms only. */
@@ -266,7 +267,7 @@ export const FINAL_STANDINGS_ROWS = 10;
 
 /**
  * Rows of the final board each player gets at an arena's bell or a custom room's end (`RoundStanding`): the whole room
- * (an arena instance holds 50 people, a custom room 20 and its bots), capped for safety; the receiver's own row is
+ * (an arena instance holds 50 people, a custom room up to 100 and its bots), capped for safety; the receiver's own row is
  * always on it.
  */
 export const FINAL_BOARD_ROWS = 120;
@@ -284,7 +285,7 @@ export interface BlockedArena {
   reason: 'vault_short' | 'repricing';
 }
 
-/** The arena contract's fee settings (`config()` of ElymumArena v3), basis points. */
+/** The arena contract's fee settings (`config()` of CoinnibalArena v3), basis points. */
 export interface ArenaFees {
   /** Share of a ticket's profit burned. */
   burnBps: number;
@@ -316,9 +317,9 @@ export interface ChainStatus {
   rpcUrl: string | null;
   /** Blockscout-style explorer base URL (`/tx/<hash>`, `/address/<addr>`); null when there is none. */
   explorerUrl: string | null;
-  /** The registered `ElymumArena` contract (0x address), null until one is deployed and registered. */
+  /** The registered `CoinnibalArena` contract (0x address), null until one is deployed and registered. */
   arenaAddress: string | null;
-  /** The registered `ElymumNFT` contract (0x address), null until one is deployed and registered. */
+  /** The registered `CoinnibalNFT` contract (0x address), null until one is deployed and registered. */
   nftAddress: string | null;
   /** Paid arenas are open for tickets (false when the chain is off, the token is not set yet or is unusable). */
   arenasEnabled: boolean;
@@ -407,7 +408,7 @@ export interface StandingRow {
   value?: number;
   isBot?: boolean;
   verified?: boolean;
-  /** Holds an Elymum emblem (laurel). */
+  /** Holds a Coinnibal emblem (laurel). */
   holder?: boolean;
   /** Profile picture id (`avatarPath(id)`); humans only. */
   avatar?: string;
@@ -641,14 +642,21 @@ export type ErrorCode =
    * The room is a paid custom room (an invite-only arena instance): it is entered with a ticket of
    * its arena (`arena:<id>:<CODE>`), not with `private:<CODE>`.
    */
-  | 'paid_room';
+  | 'paid_room'
+  /**
+   * A holder ticket's seat waits: the wallet's emblem still serves another ticket of its own (its last game being
+   * settled, or played in another arena now). The ticket is untouched (no refund): the player tries again once that
+   * game is settled.
+   */
+  | 'emblem_busy';
 
 /**
  * Refusals that reuse a code above (the client shows the code's text; the server's `message` says more):
  * - the journal cannot be written (disk full): `server_full`, no new arena seat until it can;
  * - an arena closing for a re-price at its bell (`/admin` "Re-price at next bell"): `arenas_disabled`;
- * - a holder ticket whose wallet holds no emblem now, or whose emblem already serves another open holder ticket:
- *   `game_closed` (the ticket is refunded in full).
+ * - a holder ticket whose wallet holds no emblem now, or whose emblem already serves another wallet's open holder
+ *   ticket: `game_closed` (the ticket is refunded in full). Its emblem serving the wallet's own other ticket is
+ *   `emblem_busy` (the ticket waits).
  */
 export const REFUSAL_CODES = { storage: 'server_full', repricing: 'arenas_disabled', emblem: 'game_closed' } as const satisfies Record<string, ErrorCode>;
 

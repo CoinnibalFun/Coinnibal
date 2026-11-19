@@ -1275,6 +1275,19 @@ h2,
   outline-offset: 0;
   border-radius: 12px;
 }
+.kb-tab__badge {
+  min-width: 22px;
+  padding: 1px 7px;
+  border: var(--stroke-xs, 1.5px) solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--sun);
+  color: var(--ink-fixed);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
 .kb-tab__ink {
   position: absolute;
   z-index: -1;

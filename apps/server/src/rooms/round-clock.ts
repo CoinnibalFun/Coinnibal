@@ -1,4 +1,4 @@
-import { RULES, roundAt, type RoundWindow } from '@elymum/shared';
+import { RULES, roundAt, type RoundWindow } from '@coinnibal/shared';
 
 /**
  * The one wall clock arena rounds run on (Unix ms) and the round window it implies. The room

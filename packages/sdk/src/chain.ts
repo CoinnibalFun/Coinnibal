@@ -1,4 +1,4 @@
-import { chainInfo, isTestChainId, type ChainInfo, type ChainOverrides } from '@elymum/shared';
+import { chainInfo, isTestChainId, type ChainInfo, type ChainOverrides } from '@coinnibal/shared';
 import {
   createPublicClient,
   createWalletClient,
@@ -17,7 +17,7 @@ import {
 } from 'viem';
 
 /**
- * Chains and clients. The chain registry lives in `@elymum/shared` (`chains.ts`); this module turns an entry into
+ * Chains and clients. The chain registry lives in `@coinnibal/shared` (`chains.ts`); this module turns an entry into
  * a viem `Chain` and builds clients from an RPC URL or an EIP-1193 provider (a browser wallet).
  */
 
@@ -25,7 +25,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type RpcSource = string | EIP1193Provider | { request: (args: { method: string; params?: any }) => Promise<any> };
 
-/** viem `Chain` for a resolved chain (`chainInfo(id, overrides)` from `@elymum/shared`). */
+/** viem `Chain` for a resolved chain (`chainInfo(id, overrides)` from `@coinnibal/shared`). */
 export function toViemChain(info: ChainInfo): Chain {
   return defineChain({
     id: info.id,
@@ -53,7 +53,7 @@ export function toTransport(source: RpcSource): Transport {
 }
 
 /** Read-only client. Without `chain`, chain-aware helpers read `eth_chainId` themselves. */
-export function createElymumPublicClient(source: RpcSource, chain?: Chain, opts: { pollingInterval?: number } = {}): PublicClient {
+export function createCoinnibalPublicClient(source: RpcSource, chain?: Chain, opts: { pollingInterval?: number } = {}): PublicClient {
   return createPublicClient({ chain, transport: toTransport(source), ...(opts.pollingInterval ? { pollingInterval: opts.pollingInterval } : {}) }) as PublicClient;
 }
 
@@ -61,7 +61,7 @@ export function createElymumPublicClient(source: RpcSource, chain?: Chain, opts:
  * Signing client. `account` is a local account (`privateKeyToAccount`, the CLI and the server) or
  * a JSON-RPC account address (a browser wallet: pass the provider as `source`).
  */
-export function createElymumWalletClient(source: RpcSource, opts: { account: Account | Address; chain: Chain; pollingInterval?: number }): WalletClient {
+export function createCoinnibalWalletClient(source: RpcSource, opts: { account: Account | Address; chain: Chain; pollingInterval?: number }): WalletClient {
   return createWalletClient({ account: opts.account, chain: opts.chain, transport: toTransport(source), ...(opts.pollingInterval ? { pollingInterval: opts.pollingInterval } : {}) });
 }
 

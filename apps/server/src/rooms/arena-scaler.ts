@@ -9,7 +9,7 @@ import {
   type ArenaScalingDecision,
   type ArenaScalingSettings,
   type ArenaScalingView,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import type { RoomHandle } from './handle';
 
 /**

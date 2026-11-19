@@ -21,7 +21,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_ARENAS } from '@elymum/shared';
+import { DEFAULT_ARENAS } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import { createApp } from '../../src/app';
 import { loadConfig } from '../../src/config';
@@ -39,7 +39,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const WIRE_OVERHEAD_PER_FRAME = 2 + 22 + 52;
 const MSS = 1448;
 
-const dir = mkdtempSync(join(tmpdir(), 'elymum-audit-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-audit-'));
 const env: Record<string, string> = {
   NODE_ENV: 'development',
   DEV_FAKE_CHAIN: '1',

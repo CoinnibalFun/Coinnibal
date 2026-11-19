@@ -1,5 +1,5 @@
 import { monitorEventLoopDelay, performance, type EventLoopUtilization, type IntervalHistogram } from 'node:perf_hooks';
-import type { GameServerLoad, GameThreadLoad } from '@elymum/shared';
+import type { GameServerLoad, GameThreadLoad } from '@coinnibal/shared';
 
 /** Tick time of the last few seconds: mean, p95 and max (ms). */
 export interface TickSummary {
@@ -144,7 +144,7 @@ export function gameLoad(s: ServerLoad): GameServerLoad {
 }
 
 /** Bytes and messages written to WebSockets by this process (counted where frames are sent). */
-export const wsOut = { bytes: 0, msgs: 0 };
+export const wsOut = { bytes: 0, msgs: 0, overflow: 0 };
 
 const roomStats = new WeakMap<object, TickStats>();
 

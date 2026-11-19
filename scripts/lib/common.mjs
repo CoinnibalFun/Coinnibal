@@ -33,7 +33,7 @@ export function hardhatKey(index) {
 }
 
 let sdkPromise = null;
-/** `@elymum/sdk` (TypeScript source) loaded through tsx, so plain .mjs scripts can call it. */
+/** `@coinnibal/sdk` (TypeScript source) loaded through tsx, so plain .mjs scripts can call it. */
 export function importSdk() {
   if (!sdkPromise) {
     const req = requireFrom('packages/sdk');
@@ -96,7 +96,7 @@ export async function waitForHttp(url, timeoutMs, isAborted = () => false) {
 
 /**
  * Chromium for Playwright. Order: CHROME_PATH, then Playwright's own browser cache (its normal
- * resolution, `pnpm -F @elymum/web exec playwright install chromium`).
+ * resolution, `pnpm -F @coinnibal/web exec playwright install chromium`).
  * Returns { executablePath } (undefined = let Playwright pick) or throws.
  */
 export function resolveChromium(chromium) {
@@ -113,7 +113,7 @@ export function resolveChromium(chromium) {
   }
   if (own && existsSync(own)) return { executablePath: undefined };
   throw new Error(
-    'No Chromium found. Install one with `pnpm -F @elymum/web exec playwright install chromium`, ' +
+    'No Chromium found. Install one with `pnpm -F @coinnibal/web exec playwright install chromium`, ' +
       'or point CHROME_PATH at a Chrome/Chromium binary.',
   );
 }

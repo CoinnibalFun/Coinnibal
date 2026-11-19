@@ -1,4 +1,4 @@
-import type { ChainStatus } from '@elymum/shared';
+import type { ChainStatus } from '@coinnibal/shared';
 import { getAddress, type Address } from 'viem';
 import type { Eip1193Provider, ProviderDetail } from '../src/wallet/eip6963';
 
@@ -19,7 +19,7 @@ export function chainStatus(over: Partial<ChainStatus> = {}): ChainStatus {
     nftAddress: null,
     arenasEnabled: true,
     tokenReady: true,
-    token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$ELYMUM', decimals: 18 },
+    token: { address: '0x0000000000000000000000000000000000007e57', symbol: '$NIBAL', decimals: 18 },
     fees: FEES,
     serverKey: '0x000000000000000000000000000000000000beef',
     ...over,

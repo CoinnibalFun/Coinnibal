@@ -7,9 +7,9 @@
  * **ledger units** (at most 6 decimals, see `fromLedger` / `ledgerDecimals` in the SDK); they
  * are converted with `fromLedger` before they meet a chain amount.
  */
-import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, ratesFor, totalFeeBps, type ArenaFees, type FeeRates, type RoomInfo } from '@elymum/shared';
+import { DEFAULT_ARENAS, DEFAULT_FEE_RATES, ratesFor, totalFeeBps, type ArenaFees, type FeeRates, type RoomInfo } from '@coinnibal/shared';
 import type { Address, Hex } from 'viem';
-import { REFUND_DELAY_SECS, fromLedger, type Erc20Call } from '@elymum/sdk';
+import { REFUND_DELAY_SECS, fromLedger, type Erc20Call } from '@coinnibal/sdk';
 
 /* ── the ticket calls ───────────────────────────────────────────────── */
 
@@ -359,7 +359,7 @@ export function arenaRates(server: Pick<ArenaFees, 'burnBps' | 'vaultBps'> | nul
 
 /**
  * The rates a ticket of this wallet gets (`planJoin`'s `rates`): the holder pair for emblem holders while the perks
- * are on and it totals less (`ElymumArena._ratesFor`), else the normal pair.
+ * are on and it totals less (`CoinnibalArena._ratesFor`), else the normal pair.
  */
 export function ticketRates(
   normal: FeeRates,
@@ -381,7 +381,7 @@ export function sessionsToCollect(sessions: Readonly<Record<number, OpenSession 
     .map(([id, s]) => ({ arenaId: Number(id), owed: s!.owed ?? 0n }));
 }
 
-/** Gas for `join` when the estimate cannot be read (a ticket uses about 125k, a holder's a little more). */
+/** Gas for `join` when the estimate cannot be read (a ticket with its permit uses about 165k, a holder's first one about 185k). */
 export const JOIN_GAS_FALLBACK = 260_000n;
 
 /**

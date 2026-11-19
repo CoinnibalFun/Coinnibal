@@ -1,5 +1,5 @@
-import { addEthereumChainParams, chainInfo, isTestChainId, toHexChainId, type ChainInfo, type ChainStatus } from '@elymum/shared';
-import { createElymumPublicClient, createElymumWalletClient, describeError, toViemChain } from '@elymum/sdk';
+import { addEthereumChainParams, chainInfo, isTestChainId, toHexChainId, type ChainInfo, type ChainStatus } from '@coinnibal/shared';
+import { createCoinnibalPublicClient, createCoinnibalWalletClient, describeError, toViemChain } from '@coinnibal/sdk';
 import type { Address, Chain, PublicClient, WalletClient } from 'viem';
 import { CHAIN_OVERRIDES } from '../config';
 import type { Eip1193Provider } from './eip6963';
@@ -90,10 +90,10 @@ export function publicClientFor(chain: ServerChain | null | undefined, provider?
   const rpc = CHAIN_OVERRIDES.rpcUrl ?? chain?.rpcUrl ?? null;
   if (rpc) {
     const key = `${viemChain.id}|${rpc}`;
-    if (publicCache?.key !== key) publicCache = { key, client: createElymumPublicClient(rpc, viemChain, { pollingInterval: 1_000 }) };
+    if (publicCache?.key !== key) publicCache = { key, client: createCoinnibalPublicClient(rpc, viemChain, { pollingInterval: 1_000 }) };
     return publicCache.client;
   }
-  if (provider) return createElymumPublicClient(provider, viemChain, { pollingInterval: 1_000 });
+  if (provider) return createCoinnibalPublicClient(provider, viemChain, { pollingInterval: 1_000 });
   return null;
 }
 
@@ -101,7 +101,7 @@ export function publicClientFor(chain: ServerChain | null | undefined, provider?
 export function walletClientFor(provider: Eip1193Provider, address: Address, chain: ServerChain): WalletClient {
   const viemChain = serverViemChain(chain);
   if (!viemChain) throw new WrongChainError(t('api.noChain'));
-  return createElymumWalletClient(provider, { account: address, chain: viemChain, pollingInterval: 1_000 });
+  return createCoinnibalWalletClient(provider, { account: address, chain: viemChain, pollingInterval: 1_000 });
 }
 
 /* ── the server's chain status for pages without the game store ────── */

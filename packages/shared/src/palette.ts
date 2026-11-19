@@ -9,7 +9,7 @@
  * `apps/web/test/palette.test.ts` keeps the two in step and checks every
  * text / background pair for >= 4.5:1 contrast.
  *
- * Hex values are upper case: `@elymum/art` compares inks by string.
+ * Hex values are upper case: `@coinnibal/art` compares inks by string.
  */
 
 /** The whole picture-book box of paints. Fills; small text uses the text-safe `TEXT_INKS`. */

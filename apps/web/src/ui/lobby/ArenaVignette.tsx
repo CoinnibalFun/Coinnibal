@@ -6,7 +6,8 @@ import { useOffscreenPause } from '../../design';
  * to. Asphodel Meadow's flowers sway, the Lethe flows past its shore, the Golden Bough's one
  * golden branch glints, the boats of the Isles of the Blessed bob at anchor; practice is a
  * pond with a coin paddling in it. CSS loops only (transform / opacity), paused off screen,
- * still under reduced motion (lobby.css). The picture is decoration: the pass says the name.
+ * still under reduced motion (lobby.css). The picture is decoration: the pass says the name. (The scene ids and
+ * these pictures come from the earlier arena names; the rooms are shown as the $1 to $10 Room.)
  */
 export function ArenaVignette({ arenaId }: { arenaId: number | null }) {
   const [ref, visible] = useOffscreenPause<HTMLSpanElement>();

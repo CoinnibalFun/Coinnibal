@@ -1,77 +1,77 @@
 {
   "settle_death_1": {
-    "gas": 61865,
+    "gas": 61866,
     "inputBytes": 196
   },
   "settle_death_2": {
-    "gas": 79500,
+    "gas": 79501,
     "inputBytes": 324
   },
   "settle_death_3": {
-    "gas": 99588,
+    "gas": 99589,
     "inputBytes": 452
   },
   "settle_death_5": {
-    "gas": 139764,
+    "gas": 139765,
     "inputBytes": 708
   },
   "settle_death_10": {
-    "gas": 240204,
+    "gas": 240205,
     "inputBytes": 1348
   },
   "settle_winner_1": {
-    "gas": 113855,
+    "gas": 113856,
     "inputBytes": 196
   },
   "settle_bell_1": {
-    "gas": 113843,
+    "gas": 113844,
     "inputBytes": 196
   },
   "settle_bell_2": {
-    "gas": 137902,
+    "gas": 137903,
     "inputBytes": 324
   },
   "settle_bell_5": {
-    "gas": 210233,
+    "gas": 210234,
     "inputBytes": 708
   },
   "settle_bell_10": {
-    "gas": 343586,
+    "gas": 343587,
     "inputBytes": 1348
   },
   "settle_bell_20": {
-    "gas": 613166,
+    "gas": 613167,
     "inputBytes": 2628
   },
   "settle_bell_40": {
-    "gas": 1152326,
+    "gas": 1152327,
     "inputBytes": 5188
   },
   "cancel_1": {
-    "gas": 73814,
+    "gas": 73792,
     "inputBytes": 164
   },
   "cancel_10": {
-    "gas": 272069,
+    "gas": 272052,
     "inputBytes": 1028
   },
   "sweepLoot": {
-    "gas": 85844,
+    "gas": 85933,
     "inputBytes": 100
   },
   "join_holder_arena4": {
-    "gas": 153122,
-    "inputBytes": 36
+    "gas": 182456,
+    "inputBytes": 228
   },
   "nft_transfer": {
     "gas": 54657,
     "inputBytes": 100
   },
   "join_holder_arena4_after_transfer": {
-    "gas": 136022,
-    "inputBytes": 36
+    "gas": 165368,
+    "inputBytes": 228
   },
-  "join_typical": 135539,
-  "network": "hardhat (in-process), ElymumArena v3, TestToken (OpenZeppelin ERC-20), ElymumNFT holder NFT, burn mode 0 (0x…dEaD)",
-  "measuredAt": "2026-11-06"
+  "join_typical": 164885,
+  "network": "hardhat (in-process), CoinnibalArena v4, TestToken (OpenZeppelin ERC-20), CoinnibalNFT holder NFT, burn mode 0 (0x…dEaD)",
+  "measuredAt": "2026-11-18"
 }

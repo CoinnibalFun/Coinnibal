@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Elymum alert job (elymum-alert.timer, every minute; safe to run by hand). Posts to the owner's Telegram
+# Coinnibal alert job (elymum-alert.timer, every minute; safe to run by hand). Posts to the owner's Telegram
 # (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env; without them the alerts only go to the journal) when:
 #   - the server logged a line starting with "!!!" (an unreadable journal, a vault short, no gas, a wrong server key...)
 #   - /api/health answers 503 (its reasons: the journal cannot be written, settlements backed up or stuck, the RPC
@@ -7,6 +7,7 @@
 #   - the gas runway is under 7 days (a warning)
 #   - a disk is more than 80 % full
 #   - the app container is not running, or its liveness check failed ("unhealthy")
+#   - the Caddy container (HTTPS in front of the app) is not running, or restarted since the last run (a crash loop)
 # Each alert repeats at most every 30 minutes while it lasts (a "!!!" line: once per distinct line an hour), and an
 # "ok again" follows when it clears.
 #
@@ -18,7 +19,7 @@ set -euo pipefail
 . "$(dirname "$(readlink -f "$0")")/lib.sh"
 need_root
 
-STATE_DIR="$ELYMUM_STATE/alerts"
+STATE_DIR="$COINNIBAL_STATE/alerts"
 mkdir -p "$STATE_DIR"
 now="$(date +%s)"
 REPEAT_S=1800
@@ -42,7 +43,7 @@ cid="$(dc ps -q app 2>/dev/null || true)"
 
 # --- the container: running, live
 if [[ -z "$cid" ]] || [[ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null)" != "true" ]]; then
-  raise app-down "the app container is not running (elymum-status; journalctl -u elymum-update -n 50)"
+  raise app-down "the app container is not running (coinnibal-status; journalctl -u $INSTALLED_UNIT_PREFIX-update -n 50)"
   echo 0 >"$STATE_DIR/unhealthy-runs"
 else
   clear_alert app-down "the app container runs"
@@ -97,6 +98,25 @@ except Exception: print("")' <<<"$body")"
     touch "$f"
     notify "server: !!! ${msg:0:400}"
   done < <(docker logs --since "$since" "$cid" 2>&1 | grep -F '!!!' | tail -n 20)
+fi
+
+# --- Caddy: without it nothing reaches the app (the site, the game, the sign-ins). It must run and keep its restart
+# count from one run to the next: under restart: unless-stopped a crash-looping Caddy is "running" between restarts
+ccid="$(dc ps -a -q caddy 2>/dev/null || true)"
+cstatus=""
+crestarts=""
+if [[ -n "$ccid" ]]; then
+  cstatus="$(docker inspect -f '{{.State.Status}}' "$ccid" 2>/dev/null || true)"
+  crestarts="$(docker inspect -f '{{.RestartCount}}' "$ccid" 2>/dev/null || true)"
+fi
+clast="$(cat "$STATE_DIR/caddy-restarts" 2>/dev/null || true)"
+printf '%s %s\n' "$ccid" "$crestarts" >"$STATE_DIR/caddy-restarts"
+if [[ "$cstatus" != "running" ]]; then
+  raise caddy-down "the Caddy container is ${cstatus:-missing}: the site and the game cannot be reached (coinnibal-compose logs --tail 50 caddy; coinnibal-compose up -d caddy)"
+elif [[ -n "$clast" && "${clast%% *}" == "$ccid" && "${clast#* }" != "$crestarts" ]]; then
+  raise caddy-down "the Caddy container restarted since the last check (restart count ${clast#* } -> $crestarts): a crash loop takes the site and the game down (coinnibal-compose logs --tail 50 caddy)"
+else
+  clear_alert caddy-down "the Caddy container runs"
 fi
 
 # --- disks: the root filesystem and Docker's

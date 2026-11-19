@@ -1,4 +1,4 @@
-import { CARD_PAPER, ELYSIUM, INK, TEXT_INKS } from '@elymum/art';
+import { CARD_PAPER, ELYSIUM, INK, TEXT_INKS } from '@coinnibal/art';
 import { t } from '../i18n';
 import { FlagCache } from './flags';
 

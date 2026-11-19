@@ -9,8 +9,8 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ServerMessage } from '@elymum/shared';
-import { PROTOCOL_VERSION } from '@elymum/shared';
+import type { ServerMessage } from '@coinnibal/shared';
+import { PROTOCOL_VERSION } from '@coinnibal/shared';
 import { generatePrivateKey } from 'viem/accounts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Auth } from '../src/auth';
@@ -78,7 +78,7 @@ describe('paid joins while the RPC answers 429', () => {
     (t.rooms as unknown as { arenaCache: unknown }).arenaCache = null;
     t.evm.limited.set('arenas', Infinity).set('session', Infinity).set('arena', Infinity);
     const sessionReads = t.evm.sessionReads;
-    // "Resume Golden Bough · no transaction": the same join again, from a new connection
+    // "Resume $5 Room · no transaction": the same join again, from a new connection
     const b = await t.connect(w);
     await t.send(b, { t: 'join', room: 'arena:3', name: 'Paid', skin: 0 });
     expect(errors(b)).toEqual([]);
@@ -128,6 +128,55 @@ describe('paid joins while the RPC answers 429', () => {
     expect(a.msgs.find((m) => m.t === 'joined')).toBeTruthy();
   });
 
+  it('a seat refused for the server\'s own reason (the chain unreadable, the journal, overload) excuses a no-show; its own bounds never do', async () => {
+    JOIN_CHAIN_RETRY_MS.splice(0, JOIN_CHAIN_RETRY_MS.length, 2, 2);
+    const t = await setup();
+    await t.rooms.ensureArenaRooms();
+    const excused: string[] = [];
+    const excuse = t.chain.excuseNoShow.bind(t.chain);
+    t.chain.excuseNoShow = (arenaId: number, player: string) => {
+      excused.push(`${arenaId}:${player.toLowerCase()}`);
+      excuse(arenaId, player);
+    };
+    const ticket = (w: string) => t.evm.join(3, w, { openedAt: Math.floor(t.chain.chainNow() / 1000) - 30 });
+    const ask = async (w: string) => {
+      const c = await t.connect(w);
+      await t.send(c, { t: 'join', room: 'arena:3', name: 'Paid', skin: 0 });
+      return errors(c).map((e) => e.code);
+    };
+    // the RPC refuses every ticket read: chain_busy after the retries, the server's failure
+    const rpc = testSigner().address;
+    ticket(rpc);
+    t.evm.limited.set('session', Infinity);
+    expect(await ask(rpc)).toEqual(['chain_busy', 'chain_busy']);
+    t.evm.limited.delete('session');
+    // the journal cannot be written
+    const disk = testSigner().address;
+    ticket(disk);
+    Object.defineProperty(t.journal, 'writeFailing', { get: () => true, configurable: true });
+    expect(await ask(disk)).toEqual(['server_full']);
+    delete (t.journal as unknown as { writeFailing?: boolean }).writeFailing;
+    // badly overloaded (the load shedder refuses new seats)
+    const busy = testSigner().address;
+    ticket(busy);
+    t.gateway.setShedder({ admitCritical: () => false } as never);
+    expect(await ask(busy)).toEqual(['server_full']);
+    t.gateway.setShedder(null);
+    expect(excused).toEqual([rpc, disk, busy].map((w) => `3:${w.toLowerCase()}`));
+    // the gateway's own bound on ticket reads waiting at once (a client can bring it on itself): no excuse
+    const own = testSigner().address;
+    ticket(own);
+    (t.gateway as unknown as { ticketReads: number }).ticketReads = 1_000_000;
+    expect(await ask(own)).toEqual(['chain_busy', 'chain_busy']);
+    (t.gateway as unknown as { ticketReads: number }).ticketReads = 0;
+    expect(excused).toHaveLength(3);
+    // and a seat that works records nothing
+    const fine = testSigner().address;
+    ticket(fine);
+    expect(await ask(fine)).toEqual([]);
+    expect(excused).toHaveLength(3);
+  });
+
   it('getSession throws ChainBusyError on a 429 (it never answers "no ticket"); listArenas serves the last good list', async () => {
     const t = await setup();
     const w = testSigner().address;
@@ -165,7 +214,7 @@ describe('paid joins while the RPC answers 429', () => {
   });
 
   it('a restart while rate-limited: the persisted config and arena list open the arenas, spectate creates them on demand', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'elymum-busy-'));
+    const dir = mkdtempSync(join(tmpdir(), 'coinnibal-busy-'));
     const first = await setup({ cacheDir: dir });
     expect(await first.chain.listArenas()).toHaveLength(2);
     await first.chain.stop(); // flushes the cache

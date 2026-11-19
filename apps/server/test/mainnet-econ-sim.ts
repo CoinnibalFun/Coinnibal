@@ -1,5 +1,5 @@
 /**
- * Mainnet economic simulation of Elymum (Robinhood Chain 4663, $ELYMUM from Pons, USD tiers $1 / $3 / $5 / $10 with
+ * Mainnet economic simulation of Coinnibal (Robinhood Chain 4663, $NIBAL from Pons, USD tiers $1 / $3 / $5 / $10 with
  * the $10 arena for emblem holders, 20 % fee on profit for everyone else and 10 % for holders, no bots).
  *
  * Four layers, each built on the real code and nothing invented where the code has the answer:
@@ -24,7 +24,7 @@
  *  4. **Abuse** (`abuseStudy`): feeding with fixed wallets and with fresh wallets per round, teaming, all in the real
  *     room with the real integrity detectors, against an honest control on the same seeds.
  *
- * `scripts/mainnet-econ-sim.ts` prints the report (`pnpm -F @elymum/server econ-sim`); `mainnet-econ.test.ts` runs a
+ * `scripts/mainnet-econ-sim.ts` prints the report (`pnpm -F @coinnibal/server econ-sim`); `mainnet-econ.test.ts` runs a
  * short version and the mainnet scenario of the money simulation.
  */
 import { readFileSync } from 'node:fs';
@@ -52,7 +52,7 @@ import {
   type ClientInput,
   type FeeRates,
   type IntegrityFlag,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { BotBrain, type BotLevel } from '../src/bots/brain';
 import { NullChain } from '../src/chain/types';
 import type { Player } from '../src/game/entities';
@@ -122,7 +122,7 @@ function walletOf(seat: number, round: number, rotate: boolean): string {
 }
 
 function fakeConn(wallet: string, ip: string, fp: string): Conn {
-  const ws = { readyState: 1, bufferedAmount: 1 << 30, send() {} };
+  const ws = { readyState: 1, bufferedAmount: 1 << 30, send() {}, terminate() {} };
   const conn = new Conn(ws as never, ip);
   conn.wallet = wallet;
   conn.fp = fp;

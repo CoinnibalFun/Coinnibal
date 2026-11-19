@@ -24,7 +24,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, connect as tcpConnect, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PROTOCOL_VERSION, encodeTarget } from '@elymum/shared';
+import { PROTOCOL_VERSION, encodeTarget } from '@coinnibal/shared';
 import { getAddress } from 'viem';
 import WebSocket from 'ws';
 import { createApp } from '../../src/app';
@@ -143,7 +143,7 @@ async function path(target: number, profile: { rttMs: number; loss: number }): P
 
 /* ------------------------------------------------------------ the app */
 
-const dir = mkdtempSync(join(tmpdir(), 'elymum-netem-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-netem-'));
 process.env.TRUST_PROXY = '1';
 const cfg = loadConfig({
   NODE_ENV: 'development',

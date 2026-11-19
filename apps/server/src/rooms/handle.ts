@@ -1,4 +1,4 @@
-import type { ClientInput, CustomDifficulty, MapScaleSettings, RoomInfo, ServerMessage } from '@elymum/shared';
+import type { ClientInput, CustomDifficulty, MapScaleSettings, RoomInfo, ServerMessage } from '@coinnibal/shared';
 import type { Player } from '../game/entities';
 import type { Conn } from '../net/conn';
 import type { JoinOptions, RoomOptions } from './room';

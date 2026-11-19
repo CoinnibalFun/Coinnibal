@@ -1,5 +1,18 @@
-import { approveCall, getAllowance, payCall } from '@elymum/sdk';
-import { BOOST_KINDS, shopCartRef, shopPaymentRef, type BoostCounts, type BoostKind, type ChainStatus, type ShopBuyError, type ShopBuyResult, type ShopCartResult, type ShopPack, type ShopView } from '@elymum/shared';
+import { approveCall, getAllowance, payCall } from '@coinnibal/sdk';
+import {
+  BOOST_KINDS,
+  SHOP_PAYMENT_MAX_AGE_MS,
+  shopCartRef,
+  shopPaymentRef,
+  type BoostCounts,
+  type BoostKind,
+  type ChainStatus,
+  type ShopBuyError,
+  type ShopBuyResult,
+  type ShopCartResult,
+  type ShopPack,
+  type ShopView,
+} from '@coinnibal/shared';
 import type { Address } from 'viem';
 import { SERVER } from '../config';
 import { isDevFake, loadDevFake } from './devFakeLoader';
@@ -8,10 +21,11 @@ import { verifyArena } from './pinned';
 import { connected } from './store';
 import { sendWalletCall, txErrorText, type TxPhase } from './tx';
 import { serverText, t } from '../i18n';
+import { storageKey } from '../storageKey';
 
 /**
  * The power-up shop, client side: read the packs priced for the signed-in wallet, pay a pack with
- * `ElymumArena.pay(price, shopPaymentRef(kind))` (the arena burns `paymentBurnBps` of it, 50 % by default, and
+ * `CoinnibalArena.pay(price, shopPaymentRef(kind))` (the arena burns `paymentBurnBps` of it, 50 % by default, and
  * sends the rest to its fee wallet; an `approve` of the arena comes first when the allowance is short), then hand
  * the transaction hash to the server, which checks the `Paid` event and credits the charges.
  */
@@ -115,12 +129,12 @@ export async function buyPack(
   // the tokens are spent from here on: keep the hash until the server has credited it, so a claim
   // that cannot get through now (network, a slow chain, an expired session) is tried again later
   // instead of the player paying a second time
-  savePendingClaim({ owner: ctx.owner, kind: pack.kind, txHash: hash, at: Date.now() });
+  savePendingClaim({ owner: ctx.owner, kind: pack.kind, txHash: hash, at: Date.now(), ...paidOn(ctx.chain, view) });
   return settleClaim(ctx.token, ctx.owner, pack.kind, hash);
 }
 
 /**
- * Pays a whole cart with ONE `ElymumArena.pay(total, shopCartRef(cart))` (an `approve` of exactly the total first when
+ * Pays a whole cart with ONE `CoinnibalArena.pay(total, shopCartRef(cart))` (an `approve` of exactly the total first when
  * the allowance is short), then claims it: the server applies every power-up at once. Throws `ShopError`.
  */
 export async function buyCart(
@@ -132,33 +146,53 @@ export async function buyCart(
   if (total.packs === 0) throw new ShopError('bad_request', t('api.shopRefused'));
   const hash = await payShop(view, total.raw, shopCartRef(cart), ctx);
   ctx.onPhase?.('verifying');
-  savePendingClaim({ owner: ctx.owner, kind: BOOST_KINDS.find((k) => cart[k] > 0)!, cart, txHash: hash, at: Date.now() });
+  savePendingClaim({ owner: ctx.owner, kind: BOOST_KINDS.find((k) => cart[k] > 0)!, cart, txHash: hash, at: Date.now(), ...paidOn(ctx.chain, view) });
   return settleCartClaim(ctx.token, ctx.owner, cart, hash, ctx.retryMs ? { retryMs: ctx.retryMs } : {});
 }
 
 /** Pays `amount` to the pinned arena with `ref` (approve first when short); the transaction hash. */
 async function payShop(view: ShopView, amount: bigint, ref: `0x${string}`, ctx: { owner: string; chain: ChainStatus; onPhase?: (p: BuyPhase) => void }): Promise<string> {
   if (!view.open || !view.token || !view.payTo) throw new ShopError('shop_closed', t('shop.closed'));
+  return payArena({ token: view.token.address, payTo: view.payTo }, amount, ref, ctx);
+}
+
+/**
+ * Pays `amount` of the game token with `CoinnibalArena.pay(amount, ref)` from the connected wallet: an `approve` of exactly
+ * `amount` first when the wallet's allowance for the arena is short (a ticket's larger approval covers it), then `pay`;
+ * the arena burns its `paymentBurnBps` share and sends the rest to its fee wallet in that call. Pays the PINNED arena
+ * only (the compiled code and its pinned token), never the server's word alone. In a dev build talking to a
+ * `DEV_FAKE_CHAIN` server the payment is simulated (the server records a fake `pay`). Used by the power-up shop and the
+ * custom room fee. The transaction hash; throws `ShopError` (`txHash` set when the `pay` was sent but did not confirm).
+ */
+export async function payArena(
+  target: { token: string; payTo: string },
+  amount: bigint,
+  ref: `0x${string}`,
+  ctx: { owner: string; chain: ChainStatus; onPhase?: (p: BuyPhase) => void; onStep?: (step: 'approve' | 'pay') => void },
+): Promise<string> {
   let hash: string;
   if (isDevFake(ctx.chain)) {
     const dev = await loadDevFake();
     if (!dev) throw new ShopError('tx', 'No fake chain in this build.');
+    ctx.onStep?.('pay');
     hash = await dev.fakeShopPay(ctx.owner, amount, ref, (p) => ctx.onPhase?.(p));
   } else {
-    const token = view.token.address as Address;
+    const token = target.token as Address;
     const owner = ctx.owner as Address;
     const reader = publicClientFor(ctx.chain, connected()?.provider ?? null);
     if (!reader) throw new ShopError('network', t('api.reach'));
-    // the shop pays the pinned arena only (with the compiled code, and its pinned token): never the server's word alone
-    const pin = await verifyArena(reader, ctx.chain.chainId, { arena: view.payTo, token });
+    // the payment goes to the pinned arena only (with the compiled code, and its pinned token): never the server's word alone
+    const pin = await verifyArena(reader, ctx.chain.chainId, { arena: target.payTo, token });
     if (!pin.ok) throw new ShopError(pin.reason === 'unreadable' ? 'network' : 'tx', pin.reason === 'unreadable' ? t('api.reach') : t('tf.err.ContractMismatch'));
     const arena = pin.arena;
     // an unknown allowance asks for the approval, to be safe
     const allowance = await getAllowance(reader, token, owner, arena).catch(() => 0n);
     if (allowance < amount) {
+      ctx.onStep?.('approve');
       const ok = await sendWalletCall(approveCall(token, arena, amount), { chain: ctx.chain, onPhase: (p) => ctx.onPhase?.(p) });
       if (!ok.ok) throw new ShopError(ok.error.kind === 'rejected' ? 'rejected' : 'tx', txErrorText(ok.error), null);
     }
+    ctx.onStep?.('pay');
     const res = await sendWalletCall(payCall(arena, amount, ref), { chain: ctx.chain, onPhase: (p) => ctx.onPhase?.(p) });
     if (!res.ok) throw new ShopError(res.error.kind === 'rejected' ? 'rejected' : 'tx', txErrorText(res.error), res.hash);
     hash = res.hash;
@@ -166,7 +200,7 @@ async function payShop(view: ShopView, amount: bigint, ref: `0x${string}`, ctx: 
   return hash;
 }
 
-/** A paid pack the server has not credited yet (kept in this browser, per wallet). */
+/** A paid pack the server has not credited yet (kept in this browser, per wallet and payment). */
 export interface PendingClaim {
   owner: string;
   kind: BoostKind;
@@ -174,52 +208,148 @@ export interface PendingClaim {
   cart?: Cart;
   txHash: string;
   at: number;
+  /** The chain it was paid on and the arena contract it was paid to (absent in claims of earlier builds). */
+  chainId?: number;
+  payTo?: string;
 }
 
-const CLAIM_KEY = 'elymum.shop.claim.v1';
+/** Where a payment went: the chain and the arena contract (a claim names them, so another network never shows it). */
+const paidOn = (chain: ChainStatus, view: Pick<ShopView, 'payTo'>): Pick<PendingClaim, 'chainId' | 'payTo'> => ({
+  ...(chain.chainId !== null ? { chainId: chain.chainId } : {}),
+  ...(view.payTo ? { payTo: view.payTo } : {}),
+});
+
+/**
+ * Every kept claim, of every wallet of this browser: a list keyed by wallet and transaction (2026-11 audit S12: one
+ * slot for all of them let a second purchase, or another wallet's, overwrite a payment the server never credited).
+ */
+const CLAIMS_KEY = storageKey('shop.claims.v2');
+/** The single slot of earlier builds: its claim moves into the list once. */
+const OLD_CLAIM_KEY = storageKey('shop.claim.v1');
+/**
+ * How long this browser keeps a claim the server never answered for good: the server credits a payment for a day only
+ * (`tx_stale` after `SHOP_PAYMENT_MAX_AGE_MS`), so past that (and an hour for the clocks) nothing could credit it. A
+ * claim the server can never see (a testnet payment once the site runs on mainnet, a payment a reorg dropped) is
+ * forgotten then, instead of being offered for ever.
+ */
+const CLAIM_KEEP_MS = SHOP_PAYMENT_MAX_AGE_MS + 3600_000;
+/**
+ * "Buy all" waits this long at most for a kept claim to be claimed first (so a failed claim is not paid again by
+ * mistake). One the server still does not credit after that (its chain never shows the payment, the power-up was
+ * switched off) stays offered, but no longer blocks a purchase.
+ */
+export const CLAIM_BLOCKS_MS = 3600_000;
 /** Refusals that are final for a payment (it was credited already, or it is not a valid payment). */
 const FINAL: readonly ShopBuyError[] = ['tx_used', 'tx_failed', 'no_payment', 'wrong_token', 'wrong_sender', 'wrong_recipient', 'wrong_pack', 'wrong_amount', 'tx_stale'];
 
-export function savePendingClaim(p: PendingClaim | null): void {
+const isClaim = (p: unknown): p is PendingClaim => {
+  const c = p as PendingClaim | null;
+  return (
+    !!c &&
+    typeof c === 'object' &&
+    typeof c.owner === 'string' &&
+    typeof c.txHash === 'string' &&
+    typeof c.kind === 'string' &&
+    typeof c.at === 'number' &&
+    (c.chainId === undefined || typeof c.chainId === 'number') &&
+    (c.payTo === undefined || typeof c.payTo === 'string')
+  );
+};
+const sameClaim = (owner: string, txHash: string) => (c: PendingClaim) => c.owner.toLowerCase() === owner.toLowerCase() && c.txHash.toLowerCase() === txHash.toLowerCase();
+/** Claims this page could not write (no storage, a full storage): kept for this page at least. */
+let unsaved: PendingClaim[] = [];
+
+/** Every kept claim the server could still credit (younger than `CLAIM_KEEP_MS`); older ones are forgotten here. */
+function readClaims(now = Date.now()): PendingClaim[] {
+  let list: PendingClaim[] = [];
   try {
-    if (p) localStorage.setItem(CLAIM_KEY, JSON.stringify(p));
-    else localStorage.removeItem(CLAIM_KEY);
+    const raw: unknown = JSON.parse(localStorage.getItem(CLAIMS_KEY) ?? '[]');
+    if (Array.isArray(raw)) list = raw.filter(isClaim);
   } catch {
-    /* storage unavailable: the claim lasts for this page only */
+    /* no storage, or an unreadable list */
+  }
+  for (const c of unsaved) if (!list.some(sameClaim(c.owner, c.txHash))) list.push(c);
+  const live = (c: PendingClaim) => now - c.at < CLAIM_KEEP_MS;
+  try {
+    const old: unknown = JSON.parse(localStorage.getItem(OLD_CLAIM_KEY) ?? 'null');
+    if (isClaim(old)) {
+      if (!list.some(sameClaim(old.owner, old.txHash))) list.push(old);
+      list = list.filter(live);
+      // the list first: should that fail, the old slot keeps the claim
+      if (!writeClaims(list)) return list;
+    }
+    localStorage.removeItem(OLD_CLAIM_KEY);
+  } catch {
+    /* an unreadable old slot holds nothing to keep */
+  }
+  const kept = list.filter(live);
+  if (kept.length < list.length) writeClaims(kept);
+  return kept;
+}
+
+function writeClaims(list: PendingClaim[]): boolean {
+  try {
+    if (list.length) localStorage.setItem(CLAIMS_KEY, JSON.stringify(list));
+    else localStorage.removeItem(CLAIMS_KEY);
+    unsaved = [];
+    return true;
+  } catch {
+    unsaved = list;
+    return false;
   }
 }
 
-/** The pending claim of `owner`, if one is kept. */
-export function loadPendingClaim(owner: string | null | undefined): PendingClaim | null {
-  if (!owner) return null;
-  try {
-    const p = JSON.parse(localStorage.getItem(CLAIM_KEY) ?? 'null') as PendingClaim | null;
-    return p && typeof p.txHash === 'string' && typeof p.owner === 'string' && p.owner.toLowerCase() === owner.toLowerCase() ? p : null;
-  } catch {
-    return null;
-  }
+/** Keeps a paid claim beside every other kept one (the same wallet and transaction again: replaced, never doubled). */
+export function savePendingClaim(p: PendingClaim): void {
+  writeClaims([...readClaims().filter((c) => !sameClaim(p.owner, p.txHash)(c)), p]);
 }
 
-/** Claims a paid pack; the kept hash is dropped once credited or finally refused. */
+/** Forgets exactly one kept claim: the server credited it, or refused it for good. */
+export function dropPendingClaim(owner: string, txHash: string): void {
+  const list = readClaims();
+  const next = list.filter((c) => !sameClaim(owner, txHash)(c));
+  if (next.length !== list.length) writeClaims(next);
+}
+
+/**
+ * Every claim kept for `owner` that this site can claim now, oldest first: paid on the chain it runs on, to the arena
+ * contract the shop names (`on`; a claim that names neither, from an earlier build, is offered anywhere). A claim of
+ * another chain or contract stays kept for when the site names that one again.
+ */
+export function loadPendingClaims(owner: string | null | undefined, on: { chainId?: number | null; payTo?: string | null } = {}): PendingClaim[] {
+  if (!owner) return [];
+  return readClaims()
+    .filter((c) => c.owner.toLowerCase() === owner.toLowerCase())
+    .filter((c) => c.chainId === undefined || on.chainId == null || c.chainId === on.chainId)
+    .filter((c) => c.payTo === undefined || !on.payTo || c.payTo.toLowerCase() === on.payTo.toLowerCase())
+    .sort((a, b) => a.at - b.at);
+}
+
+/** Whether a kept claim still holds "Buy all" back (claimed first): for its first hour only. */
+export function claimBlocksBuying(c: PendingClaim, now = Date.now()): boolean {
+  return now - c.at < CLAIM_BLOCKS_MS;
+}
+
+/** Claims a paid pack; this payment's kept claim (and only it) is dropped once credited or finally refused. */
 export async function settleClaim(token: string, owner: string, kind: BoostKind, txHash: string, opts: { retryMs?: readonly number[] } = {}): Promise<ShopBuyResult> {
   try {
     const r = await claimPack(token, kind, txHash, opts);
-    if (loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
+    dropPendingClaim(owner, txHash);
     return r;
   } catch (e) {
-    if (e instanceof ShopError && (FINAL as readonly string[]).includes(e.code) && loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
+    if (e instanceof ShopError && (FINAL as readonly string[]).includes(e.code)) dropPendingClaim(owner, txHash);
     throw e;
   }
 }
 
-/** Claims a paid cart; the kept hash is dropped once credited or finally refused. */
+/** Claims a paid cart; this payment's kept claim (and only it) is dropped once credited or finally refused. */
 export async function settleCartClaim(token: string, owner: string, cart: Cart, txHash: string, opts: { retryMs?: readonly number[] } = {}): Promise<ShopCartResult> {
   try {
     const r = await claimCart(token, cart, txHash, opts);
-    if (loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
+    dropPendingClaim(owner, txHash);
     return r;
   } catch (e) {
-    if (e instanceof ShopError && (FINAL as readonly string[]).includes(e.code) && loadPendingClaim(owner)?.txHash === txHash) savePendingClaim(null);
+    if (e instanceof ShopError && (FINAL as readonly string[]).includes(e.code)) dropPendingClaim(owner, txHash);
     throw e;
   }
 }

@@ -1,7 +1,7 @@
 /**
  * Bell burst: every arena rings at once and the settlement worker must pay every ticket. The real settlement
  * worker (`EvmChain`, production viem client, RPC budget at the production defaults of 4 calls/s, burst 8) talks
- * to a real ElymumArena v3 on a hardhat node through `ChaosRpc`. Per scenario: BURST_TICKETS tickets are bought
+ * to a real CoinnibalArena v4 on a hardhat node through `ChaosRpc`. Per scenario: BURST_TICKETS tickets are bought
  * over the four arenas, the bell queues one settlement per ticket at once (payouts redistribute each arena's
  * stakes: the per-arena sum equals what was deposited), and we measure until every ticket is closed on chain:
  *
@@ -19,8 +19,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getSession } from '@elymum/sdk';
-import { toLedger } from '@elymum/sdk';
+import { getSession } from '@coinnibal/sdk';
+import { toLedger } from '@coinnibal/sdk';
 import { privateKeyToAccount } from 'viem/accounts';
 import { EvmChain } from '../../src/chain/evm';
 import { configureRpcBudgets } from '../../src/chain/rpc-budget';
@@ -51,7 +51,7 @@ say(`hardhat: arena ${hh.arena}, ${TICKETS} players funded, blocks every ${BLOCK
 const chaos = new ChaosRpc(hh.url);
 const proxyUrl = await chaos.listen();
 
-const dir = mkdtempSync(join(tmpdir(), 'elymum-burst-'));
+const dir = mkdtempSync(join(tmpdir(), 'coinnibal-burst-'));
 const cfg = loadConfig({
   NODE_ENV: 'production',
   CHAIN_ID: '31337',

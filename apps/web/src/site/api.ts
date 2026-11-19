@@ -6,6 +6,7 @@ import type {
   ArenaScalingView,
   TestArenaSettings,
   TestArenaView,
+  CustomRoomAdminView,
   CustomRoomSettings,
   MapScaleSettings,
   CustomRoomView,
@@ -32,6 +33,8 @@ import type {
   ContractRegisterRequest,
   ContractsRegistry,
   FaucetConfig,
+  FeedbackEntry,
+  FeedbackList,
   HolderWlView,
   NetworkInfo,
   GameAccess,
@@ -42,12 +45,13 @@ import type {
   SiteCounts,
   SiteErrorCode,
   SiteSettings,
+  SitePinsRecord,
   WlEntryAdmin,
   WlEntryPublic,
   WlStatus,
   WlSubmitRequest,
   WlTask,
-} from '@elymum/shared';
+} from '@coinnibal/shared';
 import { SERVER } from '../config';
 import { X_HANDLE_BUILD, getLocale, t, type TKey } from '../i18n';
 
@@ -56,12 +60,8 @@ import { X_HANDLE_BUILD, getLocale, t, type TKey } from '../i18n';
  * `SiteApiError` with the server's code, its short English message and the offending field.
  */
 /** `GET /api/admin/custom-rooms`. */
-export interface CustomRoomsAdminView {
-  settings: CustomRoomSettings;
-  /** Where fees go now: the setting, else the owner wallet (first ADMIN_WALLETS entry). */
-  treasury: string | null;
-  rooms: CustomRoomView[];
-}
+/** `GET /api/admin/custom-rooms`: the settings, where fees are paid (the arena), the base price now and the live rooms. */
+export type CustomRoomsAdminView = CustomRoomAdminView;
 
 export class SiteApiError extends Error {
   constructor(
@@ -81,8 +81,8 @@ const FALLBACK: Partial<Record<SiteApiError['code'], string>> = {
   unauthorized: 'Your sign-in expired. Sign in with your wallet again.',
   forbidden: 'This wallet is not an admin.',
   rate_limited: 'Too many tries. Wait a minute and try again.',
-  wl_closed: `Applications are closed. Follow @${X_HANDLE_BUILD} for the next round.`,
-  collab_closed: `Collab applications are closed. Follow @${X_HANDLE_BUILD} for the next round.`,
+  wl_closed: `Applications are closed. Follow @${X_HANDLE_BUILD} to hear when they open again.`,
+  collab_closed: `Collab applications are closed. Follow @${X_HANDLE_BUILD} to hear when they open again.`,
   already_applied: 'This wallet has already applied.',
   handle_taken: 'This X handle has already applied.',
   collab_limit: 'This X account has already applied twice.',
@@ -95,7 +95,7 @@ const FALLBACK: Partial<Record<SiteApiError['code'], string>> = {
   code_mismatch: 'That address holds no code, or code other than the Coinnibal contract this server ships with.',
   not_owner: 'The contract owner is not the signed-in admin wallet.',
   wrong_authority: "The arena's server authority is not this server's key.",
-  chain_off: 'The server has no chain configured, or the contract is not registered.',
+  chain_off: 'The server has no chain (its RPC did not answer, serves another chain or is not set, or it has no usable server key), or the contract is not registered.',
   price_unavailable: 'The gas token price feed is unavailable right now.',
 };
 
@@ -136,7 +136,7 @@ export interface RequestOpts {
   body?: unknown;
   token?: string | null;
   signal?: AbortSignal;
-  /** Extra request headers (the secret exports' `X-Elymum-Proof`). */
+  /** Extra request headers (the secret exports' `X-Coinnibal-Proof`). */
   headers?: Record<string, string>;
 }
 
@@ -190,7 +190,7 @@ export async function downloadCsv(path: string, token: string, fallbackName: str
 }
 
 /** The header that carries a secret export's proof (`/api/admin/backup`, `/api/admin/migration-env`). */
-export const PROOF_HEADER = 'X-Elymum-Proof';
+export const PROOF_HEADER = 'X-Coinnibal-Proof';
 
 /** What the admin wallet signs to open one secret export (`POST /api/admin/secret-proof`). */
 export interface SecretProofChallenge {
@@ -202,7 +202,7 @@ export interface SecretProofChallenge {
 /** A purpose: `backup` opens one backup download; `migration` the settings and one backup (the move to a new server). */
 export type SecretPurpose = 'backup' | 'migration';
 
-/** The `X-Elymum-Proof` value: base64url of `{"message","signature"}` (pure, tested). */
+/** The `X-Coinnibal-Proof` value: base64url of `{"message","signature"}` (pure, tested). */
 export function encodeProof(message: string, signature: string): string {
   const bytes = new TextEncoder().encode(JSON.stringify({ message, signature }));
   let bin = '';
@@ -212,19 +212,35 @@ export function encodeProof(message: string, signature: string): string {
 
 const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
+const SECRETS_END = 'COINNIBAL_SECRETS';
+
 /**
- * The one-line shell command that downloads a server backup with an admin session token and a fresh proof (pure,
- * tested): run on the new server to move the data without a laptop in between. Both are single-quoted. The proof
+ * `lines` as a quoted here-document on the command's stdin: the secrets never go on a command line, which any local
+ * user can read in ps (the shell writes a here-document to the command's stdin itself). Quoted, so nothing in it is
+ * expanded. A value holding a line break would end it early: refused.
+ */
+function onStdin(lines: string[]): string {
+  if (lines.some((l) => /[\r\n]/.test(l) || l === SECRETS_END)) throw new Error('a secret holds a line break');
+  return ` <<'${SECRETS_END}'\n${lines.join('\n')}\n${SECRETS_END}`;
+}
+
+/**
+ * The shell command that downloads a server backup with an admin session token and a fresh proof (pure, tested): run
+ * on the new server to move the data without a laptop in between. Both headers reach curl on its stdin (`-H @-`),
+ * never as arguments. The leading space keeps the command out of the shell history (Ubuntu's HISTCONTROL). The proof
  * opens one download within 10 minutes; the session lasts 2 hours at most.
  */
 export function backupCurlCommand(serverHttp: string, token: string, proof: string): string {
-  return `curl -fsS -H ${shellQuote(`Authorization: Bearer ${token}`)} -H ${shellQuote(`${PROOF_HEADER}: ${proof}`)} ${shellQuote(`${serverHttp.replace(/\/+$/, '')}/api/admin/backup`)} -o elymum-backup.tar.gz`;
+  return ` curl -fsS -H @- ${shellQuote(`${serverHttp.replace(/\/+$/, '')}/api/admin/backup`)} -o coinnibal-backup.tar.gz${onStdin([`Authorization: Bearer ${token}`, `${PROOF_HEADER}: ${proof}`])}`;
 }
 
-/** The whole move to a new server as one line (deploy/vps/install.sh --from): settings and data, with a `migration` proof. */
+/**
+ * The whole move to a new server in one paste (deploy/vps/install.sh --from): settings and data, with a `migration`
+ * proof. The token and the proof reach install.sh on its stdin, one per line, never as arguments.
+ */
 export function installCommand(serverHttp: string, token: string, proof: string): string {
   const raw = 'https://raw.githubusercontent.com/furkan3152/Solagel/main/deploy/vps/install.sh';
-  return `curl -fsSL ${raw} -o install.sh && sudo bash install.sh --yes --from ${shellQuote(serverHttp.replace(/\/+$/, ''))} --token ${shellQuote(token)} --proof ${shellQuote(proof)}`;
+  return ` curl -fsSL ${raw} -o install.sh && sudo bash install.sh --yes --from ${shellQuote(serverHttp.replace(/\/+$/, ''))}${onStdin([token, proof])}`;
 }
 
 export function saveBlob(blob: Blob, name: string): void {
@@ -254,6 +270,11 @@ export interface AuthMe {
   canPlay?: boolean;
   /** The wallet holds a Coinnibal NFT (`balanceOf > 0`). */
   holder?: boolean;
+  /**
+   * The server could not check the wallet's NFT for `canPlay` right now (past its holder reads the holder index could
+   * not catch up, and it knows no answer): ask again in a moment. `canPlay` is false then, which is not a "no".
+   */
+  busy?: boolean;
 }
 
 export const auth = {
@@ -281,8 +302,11 @@ export const site = {
   mint: (signal?: AbortSignal) => request<MintState>('/api/site/mint', { signal }),
   /** `GET /api/site/mint/proof?wallet=0x…`. */
   mintProof: (wallet: string, signal?: AbortSignal) => request<MintProofResponse>(`/api/site/mint/proof${q({ wallet })}`, { signal }),
-  /** `GET /api/site/faucet`: the TestToken faucet (testnet only; amounts in base units). */
-  faucet: () => request<FaucetConfig>('/api/site/faucet'),
+  /**
+   * `GET /api/site/faucet`: the TestToken faucet (testnet only; amounts in base units). While only admins play, the
+   * server answers an admin's session only (`token`: the owner looking the page over before opening the game).
+   */
+  faucet: (token?: string | null) => request<FaucetConfig>('/api/site/faucet', { token }),
   /** `GET /api/site/contracts`: the registered contracts. */
   contracts: () => request<ContractsRegistry>('/api/site/contracts'),
 };
@@ -306,6 +330,8 @@ export function adminApi(token: string) {
     /** `gameAccessEnv`: the server's `GAME_ACCESS` override (null when unset). */
     settings: () => request<AdminSettingsResponse>('/api/admin/settings', { token }),
     saveSettings: (patch: Partial<SiteSettings>) => request<AdminSettingsResponse>('/api/admin/settings', { method: 'PUT', token, body: patch }),
+    /** `POST /api/admin/pins`: the owner's signed site pins of the server's chain (the server checks them against the registry). */
+    savePins: (record: SitePinsRecord) => request<{ record: SitePinsRecord }>('/api/admin/pins', { method: 'POST', token, body: record }).then((r) => r.record),
     /** `POST /api/admin/contracts`: the server checks the code hash, the owner and (arena) the server authority. */
     registerContract: (body: ContractRegisterRequest) => request<{ registry: ContractsRegistry } | ContractsRegistry>('/api/admin/contracts', { method: 'POST', token, body }).then(registryOf),
     clearContract: (kind: ContractKind) => request<{ registry: ContractsRegistry } | ContractsRegistry>(`/api/admin/contracts${q({ kind })}`, { method: 'DELETE', token }).then(registryOf),
@@ -314,7 +340,7 @@ export function adminApi(token: string) {
     allowlist: () => request<AllowlistStatus>('/api/admin/mint/allowlist', { token }),
     /** `POST /api/admin/mint/refresh`: the server re-reads the NFT now (after an owner transaction), for the public mint page. */
     mintRefresh: () => request<{ refreshed: boolean }>('/api/admin/mint/refresh', { method: 'POST', token, body: {} }),
-    /** `GET /api/admin/mint/price`: the gas token's USD price and the $1 price in wei. */
+    /** `GET /api/admin/mint/price`: the gas token's USD price and the mint price (MINT_USD_CENTS) in wei. */
     mintPrice: () => request<MintPriceQuote>('/api/admin/mint/price', { token }),
     tasks: () => request<{ tasks: WlTask[] }>('/api/admin/tasks', { token }).then((r) => r.tasks),
     createTask: (t: TaskInput) => request<{ task: WlTask }>('/api/admin/tasks', { method: 'POST', token, body: t }).then((r) => r.task),
@@ -326,7 +352,7 @@ export function adminApi(token: string) {
     wlStatus: (entryId: string, status: WlStatus) => request<{ entry: WlEntryAdmin }>(`/api/admin/wl/${id(entryId)}/status`, { method: 'PUT', token, body: { status } }).then((r) => r.entry),
     wlBulk: (ids: string[], status: WlStatus) => request<{ updated: number }>('/api/admin/wl/status', { method: 'POST', token, body: { ids, status } }),
     wlNote: (entryId: string, note: string) => request<{ entry: WlEntryAdmin }>(`/api/admin/wl/${id(entryId)}/note`, { method: 'PUT', token, body: { note } }).then((r) => r.entry),
-    wlCsv: (scope: 'approved' | 'all') => downloadCsv(`/api/admin/wl.csv${q({ scope })}`, token, `elymum-wl-${scope}.csv`),
+    wlCsv: (scope: 'approved' | 'all') => downloadCsv(`/api/admin/wl.csv${q({ scope })}`, token, `coinnibal-wl-${scope}.csv`),
     collabs: (p: { status?: CollabStatus | 'closed' | ''; q?: string }) => request<{ items: CollabAdmin[] }>(`/api/admin/collabs${q(p)}`, { token }).then((r) => r.items),
     collab: (cid: string) => request<{ collab: CollabAdmin }>(`/api/admin/collabs/${id(cid)}`, { token }).then((r) => r.collab),
     approveCollab: (cid: string, spots: number, deadline: number) =>
@@ -336,18 +362,24 @@ export function adminApi(token: string) {
       request<{ collab: CollabAdmin }>(`/api/admin/collabs/${id(cid)}/extend`, { method: 'POST', token, body: spots === undefined ? { deadline } : { deadline, spots } }).then((r) => r.collab),
     unlockCollab: (cid: string) => request<{ collab: CollabAdmin }>(`/api/admin/collabs/${id(cid)}/unlock`, { method: 'POST', token }).then((r) => r.collab),
     collabNote: (cid: string, note: string) => request<{ collab: CollabAdmin }>(`/api/admin/collabs/${id(cid)}/note`, { method: 'PUT', token, body: { note } }).then((r) => r.collab),
-    collabCsv: (cid: string) => downloadCsv(`/api/admin/collabs/${id(cid)}/wallets.csv`, token, `elymum-collab-${cid}.csv`),
-    allCollabsCsv: () => downloadCsv('/api/admin/collabs/wallets.csv', token, 'elymum-collab-wallets.csv'),
+    collabCsv: (cid: string) => downloadCsv(`/api/admin/collabs/${id(cid)}/wallets.csv`, token, `coinnibal-collab-${cid}.csv`),
+    allCollabsCsv: () => downloadCsv('/api/admin/collabs/wallets.csv', token, 'coinnibal-collab-wallets.csv'),
     integrity: integrityApi(token),
     /** `GET /api/admin/avatars`: players' profile pictures, newest first. */
     avatars: (limit = 200) => request<{ items: AdminAvatarEntry[]; total: number }>(`/api/admin/avatars${q({ limit })}`, { token }),
     /** `DELETE /api/admin/avatars/<wallet>`: removes (and blocks) the wallet's picture; its coin goes back to the basic skin. */
     removeAvatar: (wallet: string) => request<{ removed: string }>(`/api/admin/avatars/${id(wallet)}`, { method: 'DELETE', token }),
+    /** `GET /api/admin/feedback`: players' messages from the game page, newest first, and how many are unread. */
+    feedback: (opts: { limit?: number; offset?: number; unread?: boolean } = {}) =>
+      request<FeedbackList>(`/api/admin/feedback${q({ limit: opts.limit, offset: opts.offset, unread: opts.unread ? 1 : undefined })}`, { token }),
+    setFeedbackRead: (fid: string, read: boolean) => request<{ entry: FeedbackEntry; unread: number }>(`/api/admin/feedback/${id(fid)}`, { method: 'PUT', token, body: { read } }),
+    readAllFeedback: () => request<{ unread: number }>('/api/admin/feedback/read-all', { method: 'POST', token }),
+    deleteFeedback: (fid: string) => request<{ unread: number }>(`/api/admin/feedback/${id(fid)}`, { method: 'DELETE', token }),
     /** `GET /api/admin/arena-scaling`: the arena instance scaler's settings, every arena's instances and its decisions. */
     arenaScaling: () => request<ArenaScalingView>('/api/admin/arena-scaling', { token }),
     /** `PUT /api/admin/arena-scaling`: a partial update of the settings; answers like the GET. */
     saveArenaScaling: (patch: Partial<ArenaScalingSettings>) => request<ArenaScalingView>('/api/admin/arena-scaling', { method: 'PUT', token, body: patch }),
-    /** `GET /api/admin/test-arenas`: the testnet's test arenas (the switch, bots per arena, difficulty, every test arena now). */
+    /** `GET /api/admin/test-arenas`: the testnet's test arenas (the switch, the bots of an empty test arena, difficulty, every test arena now). */
     testArenas: () => request<TestArenaView>('/api/admin/test-arenas', { token }),
     /** `PUT /api/admin/test-arenas`: a partial update (refused on the mainnet); answers like the GET. */
     saveTestArenas: (patch: Partial<TestArenaSettings>) => request<TestArenaView>('/api/admin/test-arenas', { method: 'PUT', token, body: patch }),
@@ -355,7 +387,7 @@ export function adminApi(token: string) {
     maps: () => request<MapAdminView>('/api/admin/maps', { token }),
     /** `PUT /api/admin/maps`: a partial update (per room kind); answers like the GET. */
     saveMaps: (patch: MapSettingsPatch) => request<MapAdminView>('/api/admin/maps', { method: 'PUT', token, body: patch }),
-    /** `GET /api/admin/custom-rooms`: the custom room settings, the effective treasury and the live rooms. */
+    /** `GET /api/admin/custom-rooms`: the custom room settings, where fees are paid, the base price now and the live rooms. */
     customRooms: () => request<CustomRoomsAdminView>('/api/admin/custom-rooms', { token }),
     /** `PUT /api/admin/custom-rooms`: a partial settings update; answers like the GET. */
     saveCustomRooms: (patch: Partial<CustomRoomSettings>) => request<CustomRoomsAdminView>('/api/admin/custom-rooms', { method: 'PUT', token, body: patch }),
@@ -403,7 +435,7 @@ export function adminApi(token: string) {
     /** `POST /api/admin/secret-proof`: the text the admin wallet signs to open one secret export (10 minutes, single use). */
     secretProof: (purpose: SecretPurpose) => request<SecretProofChallenge>('/api/admin/secret-proof', { method: 'POST', token, body: { purpose } }),
     /** `GET /api/admin/backup` with a `backup` proof: a gzip tar of the server's DATA_DIR (server key and secrets included), saved as a file. */
-    backup: (proof: string) => downloadCsv('/api/admin/backup', token, 'elymum-backup.tar.gz', { [PROOF_HEADER]: proof }),
+    backup: (proof: string) => downloadCsv('/api/admin/backup', token, 'coinnibal-backup.tar.gz', { [PROOF_HEADER]: proof }),
     /** The `curl` command that downloads the same backup with this session and a `backup` proof (one download, 10 minutes). */
     backupCommand: (proof: string) => backupCurlCommand(SERVER.http, token, proof),
     /** The new-server command with a `migration` proof (the settings and one backup, 10 minutes). */
@@ -453,7 +485,7 @@ function integrityApi(token: string) {
     overview: () => request<IntegrityOverview>(base, { token }),
     scan: () => request<IntegrityOverview>(`${base}/scan`, { method: 'POST', token, body: {} }),
     flags: (f: IntegrityFilter) => request<{ flags: IntegrityFlag[] }>(`${base}/flags${q({ ...f, minScore: f.minScore ?? undefined })}`, { token }).then((r) => r.flags),
-    flagsCsv: (f: IntegrityFilter) => downloadCsv(`${base}/flags.csv${q({ ...f, minScore: f.minScore ?? undefined })}`, token, 'elymum-integrity-flags.csv'),
+    flagsCsv: (f: IntegrityFilter) => downloadCsv(`${base}/flags.csv${q({ ...f, minScore: f.minScore ?? undefined })}`, token, 'coinnibal-integrity-flags.csv'),
     setStatus: (flagId: string, status: IntegrityFlagStatus, note?: string) =>
       request<{ flag: IntegrityFlag }>(`${base}/flags/${id(flagId)}/status`, { method: 'POST', token, body: note === undefined ? { status } : { status, note } }).then((r) => r.flag),
     wallet: (wallet: string, other?: string) => request<IntegrityWalletView>(`${base}/wallet/${id(wallet)}${q({ other })}`, { token }),

@@ -8,17 +8,18 @@ import {
   SHOP_DEFAULTS,
   arenaMeta,
   feeExample,
+  type BoostKind,
   type FeeRates,
   type ProfitFee,
-} from '@elymum/shared';
-import { REFUND_DELAY_SECS } from '@elymum/sdk';
+} from '@coinnibal/shared';
+import { REFUND_DELAY_SECS } from '@coinnibal/sdk';
 import { APPROVE_DEFAULT_TICKETS, APPROVE_TICKET_CHOICES } from '../../wallet/ticket';
 
 /**
  * Every number the player guide quotes, taken from the code that enforces it, so the
- * page cannot drift from the game. Contract defaults come from `@elymum/sdk` (mirrors of
- * `packages/contracts/contracts/ElymumArena.sol`, checked against the ABI by an SDK test), gameplay from
- * `@elymum/shared` `RULES` / `CAPACITY` (server defaults; operators may change them with
+ * page cannot drift from the game. Contract defaults come from `@coinnibal/sdk` (mirrors of
+ * `packages/contracts/contracts/CoinnibalArena.sol`, checked against the ABI by an SDK test), gameplay from
+ * `@coinnibal/shared` `RULES` / `CAPACITY` (server defaults; operators may change them with
  * env vars). The few server-only timings are mirrored in `SERVER` below and checked
  * against the server source by `test/docs.test.ts`.
  */
@@ -129,18 +130,29 @@ export const FACTS: DocsFacts = {
  */
 export type DocBlock =
   | { kind: 'p'; text: string }
-  /** Bulleted list; an item may lead with a bold term. */
-  | { kind: 'list'; items: (string | { term: string; text: string })[] }
-  /** Key → action rows (controls). */
-  | { kind: 'keys'; rows: { key: string; action: string }[]; caption: string }
-  /** Small cards, each led by its key (the power-ups): a title, a line of text and a muted line (`meta`). */
-  | { kind: 'cards'; label: string; items: { key: string; title: string; text: string; meta?: string }[] }
+  /** Bulleted list; an item may lead with a bold term. `sub`: the item belongs to the one above it (indented). */
+  | { kind: 'list'; items: (string | { term: string; text: string; sub?: boolean })[] }
+  /**
+   * Key → action rows (controls). `touch`: the "keys" are the phone's on-screen controls, drawn as plain pills
+   * (they do not press themselves like the key caps).
+   */
+  | { kind: 'keys'; rows: { key: string; action: string }[]; caption: string; touch?: boolean }
+  /**
+   * The power-up cards: each led by the power-up's in-game button picture (`kind`), then a line of text, how to use it
+   * (`use`: "Keyboard: Press [R]", "Phone: Tap [picture] at the bottom right") and a muted line (`meta`).
+   */
+  | {
+      kind: 'cards';
+      label: string;
+      use: { keyboard: string; press: string; phone: string; tap: string; where: string; button: (name: string) => string };
+      items: { kind: BoostKind; key: string; title: string; text: string; meta?: string }[];
+    }
   /** Newspaper table. `stack`: on phones each row becomes a small card (a comparison with long cells). */
   | { kind: 'table'; caption: string; head: string[]; rows: string[][]; numeric?: number[]; stack?: boolean }
   /** Boxes joined by arrows: how value moves. */
   | { kind: 'flow'; label: string; steps: { title: string; text: string }[]; diagram?: { ticket: string; vault: string; wallet: string; fee: string } }
-  /** The worked payout example as a receipt (at the server's fee rate). */
-  | { kind: 'fee-example' }
+  /** The worked payout example as a receipt (at the server's fee rate), beside the paragraph that explains it (`text`). */
+  | { kind: 'fee-example'; text: string }
   /** Two columns compared side by side. */
   | { kind: 'compare'; left: { title: string; items: string[] }; right: { title: string; items: string[] } }
   /** A boxed notice; `stamp` is printed on it. */
@@ -170,6 +182,8 @@ export interface DocsContent {
   title: string;
   deck: string;
   tocLabel: string;
+  /** The phones' contents button: how many chapters there are ("11 chapters"). */
+  tocCount: (n: number) => string;
   /** The worked payout receipt (its numbers come from `payoutExample(rates)`). */
   receipt: {
     title: string;

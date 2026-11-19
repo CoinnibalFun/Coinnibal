@@ -1,4 +1,4 @@
-import type { RoomInfo } from '@elymum/shared';
+import type { RoomInfo } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Icon } from '../design';
 import { serverClock } from '../game/clock';

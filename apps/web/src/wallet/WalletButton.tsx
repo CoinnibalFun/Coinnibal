@@ -1,4 +1,4 @@
-import { shortAddress } from '@elymum/shared';
+import { shortAddress } from '@coinnibal/shared';
 import { Icon } from '../design';
 import { useT } from '../i18n';
 import { openModal, useUi } from '../store';
@@ -8,7 +8,7 @@ import { useWallet } from './store';
 
 /**
  * The wallet in the masthead: a cream sticker with a little coin, the short address over the
- * $NIBAL balance. Disconnected, it is a teal "connect" sticker (practice needs none).
+ * game token balance. Disconnected, it is a teal "connect" sticker (practice needs none).
  */
 export function WalletButton() {
   const t = useT();

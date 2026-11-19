@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { setupSteps } from '../src/admin/QuickSetup';
 
 const ARENA = '0x9bdc7dcbb3ea173e3111093a64cbe547e2f82a68';
-const NFT = '0xfd31b13e6684465a3b3161375e7f82f6a3deea11';
+const NFT = '0x0000000000000000000000000000000000000f7e';
 const TOKEN = '0xfeeb469fe3c892ebb82e44cef5f3bf1c74c11167';
 const KEY = '0xabec7B8ed9b87989106f6d0510ec9Dd9DEE0a1FC';
 
@@ -25,7 +25,7 @@ describe('finish setup', () => {
 
   it('sets the owner\'s holder pair 8 % + 2 % of profit (10 % in all), against the arena\'s normal pair', () => {
     const perks = setupSteps(ctx(), { openMint: true }).find((s) => s.id === 'perks')!;
-    expect(perks.label).toBe('Emblem holders pay 10 % of profit instead of 20 %');
+    expect(perks.label).toBe('NFT holders pay 10 % of profit instead of 20 %');
     expect(perks.call).toMatchObject({ functionName: 'setHolderPerks', args: [expect.stringMatching(/^0x/i), 800, 200] });
   });
 
@@ -50,7 +50,7 @@ describe('finish setup', () => {
     // the live testnet pair: 15 % burned, nothing to the fee wallet
     const steps = setupSteps(done(1500, 0), { openMint: true });
     expect(steps.map((s) => s.id)).toEqual(['perks']);
-    expect(steps[0].label).toBe('Emblem holders pay 10 % of profit instead of 20 %');
+    expect(steps[0].label).toBe('NFT holders pay 10 % of profit instead of 20 %');
     expect(steps[0].call).toMatchObject({ functionName: 'setHolderPerks', args: [expect.stringMatching(new RegExp(`^${NFT}$`, 'i')), 800, 200] });
     // the NFT address unknown to the status: the arena's own holder NFT is kept
     expect(setupSteps(done(800, 0, null), { openMint: true }).find((s) => s.id === 'perks')!.call).toMatchObject({ args: [expect.stringMatching(new RegExp(`^${NFT}$`, 'i')), 800, 200] });

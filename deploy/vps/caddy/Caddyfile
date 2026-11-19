@@ -1,4 +1,4 @@
-# Caddy in front of the Elymum game server.
+# Caddy in front of the Coinnibal game server.
 # - Automatic HTTPS: Caddy gets and renews a Let's Encrypt certificate for GAME_DOMAIN by itself
 #   (the DNS A record must point at this server, and ports 80 and 443 must be open).
 # - WebSockets (/ws) are proxied as is; reverse_proxy handles the upgrade.

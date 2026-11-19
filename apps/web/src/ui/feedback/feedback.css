@@ -1,0 +1,72 @@
+/* The Feedback sheet: a message box and an optional contact line, in the game's sheet style. */
+.fb-form {
+  display: grid;
+  gap: 16px;
+}
+.fb-lede {
+  margin: 0;
+  line-height: 1.5;
+}
+.fb-field__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fb-count {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+/* the message box: the field's ticket box, grown to a few lines */
+.fb-field__box {
+  align-items: stretch;
+  padding: 10px 14px;
+}
+.kb-field__input.fb-text {
+  height: auto;
+  min-height: 7.5em;
+  resize: vertical;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+/* 16 px: a phone does not zoom into the box */
+.kb-field__input.fb-contact {
+  font-size: 16px;
+}
+.fb-context {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.fb-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 2px solid var(--down-s);
+  border-radius: 10px;
+  color: var(--down-ink);
+  font-weight: 600;
+  line-height: 1.45;
+}
+.fb-thanks {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0 4px;
+}
+.fb-thanks p {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.fb-thanks__icon {
+  flex: none;
+  padding: 6px;
+  box-sizing: content-box;
+  border: 2.5px solid var(--outline);
+  border-radius: 50%;
+  background: var(--sun);
+  color: var(--ink-fixed);
+}

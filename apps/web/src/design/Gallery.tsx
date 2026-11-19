@@ -1,4 +1,4 @@
-import { ELYSIUM, SHADE, SITE_X_HANDLE_DEFAULT as X_HANDLE, type ElysiumPaint } from '@elymum/shared';
+import { ELYSIUM, NFT_SUPPLY, SHADE, SITE_X_HANDLE_DEFAULT as X_HANDLE, arenaMeta, type ElysiumPaint } from '@coinnibal/shared';
 import { motion } from 'motion/react';
 import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -13,7 +13,6 @@ import { Countdown } from './components/Countdown';
 import { Counter } from './components/Counter';
 import { Dateline } from './components/Dateline';
 import { Field } from './components/Field';
-import { GasAmount } from './components/GasAmount';
 import { InkButton } from './components/InkButton';
 import { Skeleton, StampSpinner } from './components/Loading';
 import { Modal, WalletPicker } from './components/Modal';
@@ -111,7 +110,7 @@ export function Gallery() {
   const moves = useMoves();
 
   const [tab, setTab] = useState<'feast' | 'ring' | 'ledger'>('feast');
-  const [room, setRoom] = useState<string | null>('lethe');
+  const [room, setRoom] = useState<string | null>('room-2');
   const [qty, setQty] = useState(2);
   const [minted, setMinted] = useState(2614);
   const [sheet, setSheet] = useState(false);
@@ -132,7 +131,7 @@ export function Gallery() {
   const pushToast = (tone: ToastItem['tone']) => {
     const id = ++toastId.current;
     const copy = {
-      info: { title: 'Price refreshed', message: 'ETH/USD 46.94. One emblem is still a dollar.' },
+      info: { title: 'Supply refreshed', message: '2,614 of 3,333 minted. The rest are still deciding.' },
       success: { title: 'Minted. Two of them.', message: 'They are in your wallet. Try not to eat them.' },
       error: { title: 'The wallet said no', message: 'Nothing was sent. Nothing was spent.' },
     }[tone ?? 'info'];
@@ -171,12 +170,12 @@ export function Gallery() {
               <h2 className="gal-hero__h">You are small change with a big appetite.</h2>
               <p className="gal-hero__lede">
                 Eat the food. Eat coins smaller than you. Run from the ones that are bigger. Five minutes later the bell rings and
-                whatever you&rsquo;ve swallowed is yours.
+                what you hold is paid to your wallet, less a fee on your profit.
               </p>
               <p className="gal-hero__homer">
-                <i className="quote">&ldquo;No snow is there, nor heavy storm, nor ever rain.&rdquo;</i>
+                <i className="quote">&ldquo;Eat or be eaten.&rdquo;</i>
                 <br />
-                Homer, on the Elysian plain. He didn&rsquo;t mention lunch.
+                The whole rulebook, more or less. Lunch is served.
               </p>
               <div className="gal-hero__ctas">
                 <Button variant="primary" icon="arrow">
@@ -236,9 +235,9 @@ export function Gallery() {
       <Plate n={3} title="Type, set by hand" aside="Fraunces · DM Sans · Geist Mono">
         <div className="gal-type">
           <div className="gal-type__display display">
-            One emblem.
+            One coin.
             <br />
-            One <em className="gal-type__em wonk">dollar.</em>
+            One <em className="gal-type__em wonk">bite.</em>
             <br />
             Many snacks.
           </div>
@@ -248,10 +247,10 @@ export function Gallery() {
             <h3 className="gal-type__h3">Three small chores, then the feast.</h3>
             <p className="lede">DM Sans for everything you read. The ring noticed, and so did our follower count. Copy is short, specific and a little wry.</p>
             <p className="gal-type__body">
-              Body 16/1.5. Numbers are always Geist Mono: <span className="num">0.0213 ETH</span>, <span className="num">2,614 / 5,000</span>,{' '}
+              Body 16/1.5. Numbers are always Geist Mono: <span className="num">0.0004 ETH</span> of gas, <span className="num">2,614 / 3,333</span>,{' '}
               <span className="num">0x7a3f…e91c</span>.
             </p>
-            <p className="quote gal-type__quote">&ldquo;To the Elysian plain, where life is easiest for men.&rdquo;</p>
+            <p className="quote gal-type__quote">&ldquo;Small change, big appetite.&rdquo;</p>
           </div>
         </div>
       </Plate>
@@ -356,7 +355,7 @@ export function Gallery() {
               <Button variant="ghost">Connect</Button>
             </div>
             <div className="gal-row">
-              <Button variant="primary" size="lg" sub="≈ $2.00 · max 3" icon="arrow">
+              <Button variant="primary" size="lg" sub="2 NFTs · max 3" icon="arrow">
                 Mint now
               </Button>
               <Button size="sm" lead="wallet">
@@ -415,7 +414,7 @@ export function Gallery() {
               </Tape>
             </div>
             <div className="gal-row">
-              <Chip>Asphodel</Chip>
+              <Chip>{arenaMeta(1).name}</Chip>
               <Chip tone="teal" icon="users">
                 41 in
               </Chip>
@@ -442,20 +441,20 @@ export function Gallery() {
       </Plate>
 
       {/* ── VI: the mint card ── */}
-      <Plate n={6} title="The mint, after dark" aside="ArcGauge · GasAmount · QuantityStepper · Countdown · AddressChip" className="gal-plate--mint">
+      <Plate n={6} title="The mint, after dark" aside="ArcGauge · QuantityStepper · Countdown · AddressChip" className="gal-plate--mint">
         <div className="gal-mint">
           <div className="gal-mint__copy">
-            <div className="kicker">Sealed emblems · supply 5,000</div>
+            <div className="kicker">Sealed NFTs · supply 3,333</div>
             <h2 className="gal-mint__h display">
-              One emblem.
+              One NFT.
               <br />
-              One <em>dollar.</em>
+              One <em>coin.</em>
               <br />
               Many snacks.
             </h2>
-            <p>Your emblem is your ticket to the ring. The price is pinned to a dollar and paid in ETH, so the number on the button wiggles with the market.</p>
+            <p>Every NFT is a different coin, with perks in the game. The mint page shows the price from the contract before you sign.</p>
             <div className="gal-row">
-              <Countdown seconds={2 * 86400 + 6 * 3600 + 14 * 60} label="WL window closes" />
+              <Countdown seconds={2 * 86400 + 6 * 3600 + 14 * 60} label="a sample countdown" />
               <Countdown to={deadline} label="until the bell" tone="sun" />
             </div>
           </div>
@@ -467,10 +466,9 @@ export function Gallery() {
               <span className="gal-emblem__rib display">Sealed. For now.</span>
             </div>
             <div className="gal-mint__right">
-              <ArcGauge value={minted} max={5000} caption={`${Math.round((minted / 5000) * 100)}% minted. The rest are still deciding.`} />
+              <ArcGauge value={minted} max={NFT_SUPPLY} caption={`${Math.round((minted / NFT_SUPPLY) * 100)}% minted. The rest are still deciding.`} />
               <div className="gal-mint__price">
-                <GasAmount value={0.0213} usd={1} size="lg" />
-                <div className="gal-mint__tick num">ETH/USD 46.94 · updated 4s ago · gas on Robinhood Chain, also in ETH</div>
+                <div className="gal-mint__tick num">The price comes from the contract · gas on Robinhood Chain, in ETH</div>
               </div>
               <div className="gal-mint__qty">
                 <div>
@@ -479,11 +477,13 @@ export function Gallery() {
                 </div>
                 <div className="gal-mint__tot">
                   Total
-                  <GasAmount value={0.0213 * qty} usd={qty} size="sm" stack />
+                  <span className="num">
+                    {qty} NFT{qty > 1 ? 's' : ''}
+                  </span>
                 </div>
               </div>
-              <Button variant="primary" size="lg" block onClick={() => setMinted((m) => Math.min(5000, m + qty))}>
-                Mint {qty} emblem{qty > 1 ? 's' : ''}
+              <Button variant="primary" size="lg" block onClick={() => setMinted((m) => Math.min(NFT_SUPPLY, m + qty))}>
+                Mint {qty} NFT{qty > 1 ? 's' : ''}
               </Button>
               <div className="gal-mint__wl">
                 <AddressChip address="0x7a3f9c2e1b4d5a6f708192a3b4c5d6e7f809e91c" /> <span>is on the list. Nobody&rsquo;s rushing you. Well, a little.</span>
@@ -502,7 +502,7 @@ export function Gallery() {
           <div>
             <div className="kicker">Whitelist · the ascent</div>
             <h2 className="gal-wl__h display">Three small chores, then the feast.</h2>
-            <p className="lede">Each chore lifts you one terrace up the ring. Finish all three and you get a mint spot and a boarding pass to flex with.</p>
+            <p className="lede">Each chore lifts you one terrace up the ring. Finish all three and your entry goes to review, with a boarding pass to flex with.</p>
           </div>
           <Stepper
             label="Whitelist chores"
@@ -543,7 +543,7 @@ export function Gallery() {
         <div className="gal-grid gal-grid--2">
           <TxPreview
             fn="setToken"
-            contract={{ name: 'ElymumArena', address: '0x5FbDB2315678afecb367f032d93F642f64180aa3' }}
+            contract={{ name: 'CoinnibalArena', address: '0x5FbDB2315678afecb367f032d93F642f64180aa3' }}
             args={[{ name: 'token', type: 'address', value: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' }]}
             network={{ name: 'Robinhood Chain Testnet', chainId: 46630 }}
             from="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
@@ -552,14 +552,13 @@ export function Gallery() {
           />
           <TxPreview
             fn="ownerMint"
-            contract={{ name: 'ElymumNFT', address: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' }}
+            contract={{ name: 'CoinnibalNFT', address: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' }}
             args={[
               { name: 'to', type: 'address', value: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
-              { name: 'quantity', type: 'uint256', value: '3' },
+              { name: 'qty', type: 'uint256', value: '3' },
             ]}
-            value={{ wei: 63_900_000_000_000_000n, usd: 3 }}
             network={{ name: 'Robinhood Chain', chainId: 4663, mainnet: true }}
-            note="This is mainnet. Real ETH leaves the owner wallet."
+            note="This is mainnet. The owner wallet signs it and pays only the gas."
             confirmLabel="Sign on mainnet"
             onConfirm={() => {}}
             onCancel={() => {}}
@@ -581,7 +580,7 @@ export function Gallery() {
           open={sheet}
           onClose={() => setSheet(false)}
           title="Buy this ticket?"
-          kicker="Asphodel Meadow · round 418"
+          kicker={`${arenaMeta(1).name} · round 418`}
           closeLabel="Close"
           footer={
             <>
@@ -594,7 +593,7 @@ export function Gallery() {
             </>
           }
         >
-          <p>1,000 tokens for a seat at the next round. If the round never starts, you get it back.</p>
+          <p>1,000 tokens for one coin in the next round. A ticket never settled can be refunded after 24 hours.</p>
         </Modal>
         <WalletPicker
           open={wallets}
@@ -618,22 +617,22 @@ export function Gallery() {
         <div className="gal-grid gal-grid--3">
           <Spec label="Ticket (boarding pass) in a TicketGroup">
             <TicketGroup label="Arenas" value={room} onChange={setRoom} className="gal-tickets">
-              <Ticket value="asphodel" title="Asphodel Meadow" meta="23 players · open" stub={<TicketStub value="1,000" unit="tokens" />} />
-              <Ticket value="lethe" title="Lethe Shore" meta="9 players · open" stub={<TicketStub value="10K" unit="tokens" />} />
-              <Ticket value="bough" title="Golden Bough" meta="closed till 18:00" stamp="HELD" stub={<TicketStub value="50K" unit="tokens" />} />
-              <Ticket value="isles" title="Isles of the Blessed" meta="for holders" disabled stub={<TicketStub value="250K" unit="tokens" />} />
+              <Ticket value="room-1" title={arenaMeta(1).name} meta="23 players · open" stub={<TicketStub value="1,000" unit="tokens" />} />
+              <Ticket value="room-2" title={arenaMeta(2).name} meta="9 players · open" stub={<TicketStub value="3,000" unit="tokens" />} />
+              <Ticket value="room-3" title={arenaMeta(3).name} meta="closed till 18:00" stamp="HELD" stub={<TicketStub value="5,000" unit="tokens" />} />
+              <Ticket value="room-4" title={arenaMeta(4).name} meta="NFT holders only" disabled stub={<TicketStub value="10,000" unit="tokens" />} />
             </TicketGroup>
           </Spec>
           <Spec label="Receipt (sticker report card)">
             <Receipt
-              title="Round 418, eaten"
-              meta="Lethe Shore · 5:00 · 41 coins"
+              title="Round 418, alive"
+              meta={`${arenaMeta(2).name} · 5:00 · 41 coins`}
               stamp="PAID"
               lines={[
-                { label: 'Ticket', value: '10,000' },
+                { label: 'Ticket', value: '3,000' },
                 { label: 'You ate', value: '+7,412' },
-                { label: 'House cut 5%', value: '−370', muted: true },
-                { label: 'Paid out', value: '17,042', strong: true },
+                { label: 'Fee 20% of profit', value: '−1,481', muted: true },
+                { label: 'Paid out', value: '8,931', strong: true },
               ]}
               code="0x9a4e1c"
               footer="tx 0x9a4e…1c07 · Robinhood Chain"
@@ -644,7 +643,7 @@ export function Gallery() {
               <div className="gal-counter">
                 <Counter value={minted} unit="minted" />
               </div>
-              <Field label="X handle" placeholder={X_HANDLE} prefix="@" hint="We check it once. No DMs." />
+              <Field label="X handle" placeholder={X_HANDLE} prefix="@" hint="We check it once." />
               <Field label="Token address" defaultValue="0xnope" error="That is not an address. It is a mood." />
               <Tabs
                 label="Board"
@@ -660,7 +659,7 @@ export function Gallery() {
               <TabPanel idBase="galtabs" id={tab} className="gal-tabpanel">
                 {tab === 'feast' ? 'Five minutes. Eat or be eaten.' : tab === 'ring' ? 'Four arenas on the ring.' : 'Every bite, on the books.'}
               </TabPanel>
-              <Dateline items={['Arenas open', 'Fee 5% of each entry', '42 online']} label="Today" />
+              <Dateline items={['Arenas open', 'Fee only on profit', '42 online']} label="Today" />
               <Rule label="or" />
               <Rule variant="thick" />
               <Rule variant="cut" />
@@ -670,7 +669,7 @@ export function Gallery() {
         <div className="gal-grid gal-grid--3">
           <Spec label="Toast · info / success / error">
             <div className="gal-stack">
-              <Toast tone="info" title="Price refreshed" message="ETH/USD 46.94. Still a dollar." />
+              <Toast tone="info" title="Supply refreshed" message="2,614 of 3,333 minted." />
               <Toast tone="success" title="You made the list" message="0x7a3…e91c is in. Mint opens soon." tilt={-0.6} />
               <Toast tone="error" title="Wrong network" message="Switch to Robinhood Chain and try again." onClose={() => {}} closeLabel="Dismiss" />
             </div>
@@ -692,8 +691,8 @@ export function Gallery() {
               items={[
                 { id: 'play', label: 'Play', icon: 'play' },
                 { id: 'ranks', label: 'Ranks', icon: 'trophy' },
-                { id: 'wallet', label: 'Wallet', icon: 'wallet' },
-                { id: 'me', label: 'Me', icon: 'user' },
+                { id: 'profile', label: 'Profile', icon: 'user' },
+                { id: 'docs', label: 'Guide', icon: 'docs' },
               ]}
             />
             <div className="gal-icons">
