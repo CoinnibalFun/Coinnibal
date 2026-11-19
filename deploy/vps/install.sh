@@ -393,7 +393,7 @@ fi
 dc up -d --remove-orphans
 # the commit, the image it runs on (the weekly refresh rebuilds only that one) and the time
 record_deployed "$(git rev-parse HEAD)"
-rm -f "$STATE/failed"
+rm -f "$STATE/failed" "$STATE/postponed"
 
 say "10/10 Auto-deploy, daily backups, shortcuts"
 install -m 644 deploy/vps/systemd/*.service deploy/vps/systemd/*.timer /etc/systemd/system/

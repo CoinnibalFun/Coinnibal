@@ -154,7 +154,10 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
   taken off back: it rebuilds only the image a deploy put in (`/var/lib/elymum/deployed-image`), skips with an alert
   while another one runs, and is paused with auto-deploy anyway.
 - **Caddy** reloads when its file changed (`stream_close_delay 10m` keeps the game sockets open across a reload), and
-  is recreated in the round break when a newer build of its image was pulled (below).
+  is recreated in the round break when a newer build of its image was pulled (below). A deploy needs every image of
+  `docker-compose.yml` on this host: a Caddy tag new to it (a Dependabot bump) is pulled first, and while the registry
+  cannot be reached the commit waits (the running version serves on, one alert, `coinnibal-status` says WAITING) and
+  every check tries it again. A commit counts as deployed only once its app container runs.
 
 ### Updates: what is automatic and what is not
 

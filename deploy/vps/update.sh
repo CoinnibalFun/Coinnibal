@@ -3,7 +3,9 @@
 # When the tracked branch moved on GitHub: reset to it, build the new image while the old container keeps
 # serving, then swap the container in the break after an arena bell (the server pays out live stake players on
 # SIGTERM; in the break there are none). A commit whose build fails is not retried until a newer commit arrives;
-# the old container keeps running meanwhile.
+# the old container keeps running meanwhile. A commit is recorded as deployed only once its app container runs:
+# one that needs an image this host does not have and cannot pull now (a Caddy tag Dependabot bumped, the registry
+# down) waits, the old version serving, and every check tries it again.
 #
 # Only commits CI passed: when the CI marker tag ci-green-<branch> exists (CI pushes it after every green run on
 # the branch, .github/workflows/ci.yml), the newest commit it marks is deployed, never a newer untested one.
@@ -168,7 +170,38 @@ else
 fi
 # the refresh of the deployed commit never marks it failed (a newer failed commit stays marked)
 mark_failed() {
-  [[ "$same" -eq 1 ]] || echo "$remote" >"$COINNIBAL_STATE/failed"
+  [[ "$same" -eq 1 ]] && return 0
+  echo "$remote" >"$COINNIBAL_STATE/failed"
+  rm -f "$COINNIBAL_STATE/postponed"
+}
+# the images docker-compose.yml names that are not on this host, the app's own aside (it is built here). docker
+# compose up pulls a missing one first and, with the registry unreachable, fails before it swaps anything
+missing_images() {
+  local images img out=""
+  images="$(dc config --images 2>/dev/null || true)"
+  # a compose without that flag: the image: lines of the file (literal names)
+  [[ -n "$images" ]] || images="$(sed -n 's/^[[:space:]]*image:[[:space:]]*//p' "$COINNIBAL_COMPOSE" | tr -d "\"'")"
+  for img in $images; do
+    [[ "$img" == "$COINNIBAL_IMAGE" ]] && continue
+    docker image inspect "$img" >/dev/null 2>&1 || out+="${out:+ }$img"
+  done
+  printf '%s' "$out"
+}
+# $1 (an image this deploy needs) is not on this host and cannot be pulled now: the checkout goes back to the deployed
+# commit (whose images are here) and the commit is not marked failed, so every check tries it again (one alert per
+# commit). The refresh just stops (retried next week)
+postpone() {
+  if [[ -n "$deployed" ]]; then git reset --hard --quiet "$deployed"; fi
+  if [[ "$same" -eq 1 ]]; then
+    notify "the weekly refresh of ${remote:0:12} stopped: $1 is not on this host and could not be pulled; the running version keeps serving (retried next week)"
+    exit 0
+  fi
+  log "$1 is not on this host and could not be pulled (registry unreachable?): ${remote:0:12} waits for a later check; ${deployed:0:12} keeps serving"
+  if [[ "$(cat "$COINNIBAL_STATE/postponed" 2>/dev/null)" != "$remote" ]]; then
+    echo "$remote" >"$COINNIBAL_STATE/postponed"
+    notify "deploy of ${remote:0:12} waits: $1 is not on this host and could not be pulled (registry unreachable?); ${deployed:0:12} keeps serving, and every check tries again"
+  fi
+  exit 0
 }
 # the running Caddy container is on an older image than the one its tag names now (after `dc pull caddy`)
 caddy_stale() {
@@ -230,6 +263,12 @@ else
 fi
 git reset --hard --quiet "$remote"
 
+# Caddy: the newest build of its pinned tag (the swap below recreates it, in the break, when the image changed). A tag
+# new to this host (a Dependabot bump) must be here before anything is built or swapped
+dc pull --quiet caddy || log "could not pull the Caddy image; the one on this host stays"
+missing="$(missing_images)"
+[[ -z "$missing" ]] || postpone "$missing"
+
 # the image now serving becomes the rollback target (the refresh tags it below, once its build changed the image)
 before="$(image_id "$COINNIBAL_IMAGE")"
 if [[ "$same" -eq 0 && -n "$before" ]]; then
@@ -249,8 +288,6 @@ if ! build_app; then
   notify "build failed for ${remote:0:12} ($(git log -1 --format=%s "$remote" 2>/dev/null | cut -c1-60)); the previous version keeps running"
   exit 0
 fi
-# Caddy: the newest build of its pinned tag (the swap below recreates it, in the break, when the image changed)
-dc pull --quiet caddy || log "could not pull the Caddy image; the one on this host stays"
 
 app_changed=1
 if [[ "$same" -eq 1 ]]; then
@@ -268,9 +305,29 @@ fi
 wait_for_round_break
 
 log "swapping the app container (players reconnect in a few seconds)"
+up_failed=0
 if ! dc up -d --remove-orphans; then
-  mark_failed
+  up_failed=1
   log "docker compose up failed for ${remote:0:12}"
+fi
+# The app container runs another image than the one just built: compose stopped before it swapped the app (an image
+# it could not pull, an error of the daemon). The old container serves on. Its image goes back to the tag and its
+# commit to the checkout (a later compose up, the self-heal of the 2-minute check or a restore, starts what runs), and
+# the new commit is not recorded as deployed: retried at every check when an image was missing, else when a newer
+# commit arrives (as a failed build)
+running_image="$(app_image)"
+if [[ -n "$running_image" && "$running_image" != "$(image_id "$COINNIBAL_IMAGE")" ]]; then
+  if [[ -n "$before" ]]; then docker tag "$before" "$COINNIBAL_IMAGE"; fi
+  missing="$(missing_images)"
+  [[ -z "$missing" ]] || postpone "$missing"
+  if [[ -n "$deployed" ]]; then git reset --hard --quiet "$deployed"; fi
+  if [[ "$same" -eq 1 ]]; then
+    notify "the weekly rebuild of ${remote:0:12} was not swapped in (docker compose up failed); the running version keeps serving (retried next week)"
+  else
+    mark_failed
+    notify "deploy of ${remote:0:12} failed: docker compose up did not swap the app in; ${deployed:0:12} keeps serving. It is retried when a newer commit arrives (journalctl -u $INSTALLED_UNIT_PREFIX-update)"
+  fi
+  exit 0
 fi
 
 status="$(wait_healthy "$HEALTHY_WITHIN_S")"
@@ -312,8 +369,11 @@ host_upgrade
 
 # the commit and the image now serving it (the next weekly refresh rebuilds that one only)
 record_deployed "$remote"
-[[ "$same" -eq 1 ]] || rm -f "$COINNIBAL_STATE/failed" "$COINNIBAL_STATE/waiting-ci"
+[[ "$same" -eq 1 ]] || rm -f "$COINNIBAL_STATE/failed" "$COINNIBAL_STATE/waiting-ci" "$COINNIBAL_STATE/postponed"
 log "$([[ "$same" -eq 1 ]] && echo refreshed || echo deployed) ${remote:0:12}; app is $status"
+if [[ "$up_failed" -eq 1 ]]; then
+  notify "$([[ "$same" -eq 1 ]] && echo refreshed || echo deployed) ${remote:0:12}: the app is $status, but docker compose up reported an error (Caddy? coinnibal-status, journalctl -u $INSTALLED_UNIT_PREFIX-$([[ "$same" -eq 1 ]] && echo refresh || echo update))"
+fi
 
 # keep the disk clean: dangling images of earlier builds and Caddy pulls, build cache older than a week
 # (elymum-app:previous stays)
