@@ -184,7 +184,8 @@ contract's own phases and `/mint` page fit together is an open owner decision. W
   `Transfer` logs): a token id serves one open holder ticket (a holders-only seat or the holder fee rates) until it is
   settled, and gives the power-up discount and the free room to one wallet a UTC day. An emblem passed around (or
   borrowed for a moment) cannot serve several wallets at once: the extra ticket is refused at its seat and refunded in
-  full, and the admin sees a flag.
+  full, and the admin sees a flag. A holder's own next ticket while its last game is still being settled simply waits
+  for that settlement (never refunded, never a no-show).
 - **Access** while the game opens in phases (holders play first).
 - **Half the fee on profit:** 10 % (8 % burned + 2 % to the fee wallet) instead of 20 % (the arena's holder pair).
 - **The $10 arena is holders-only** (the $10 Room, on chain).

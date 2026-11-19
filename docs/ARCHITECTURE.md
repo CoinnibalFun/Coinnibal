@@ -200,7 +200,9 @@ has more bots than its setting, nor more playing than the setting minus its peop
 - **Holder perks are bound to emblem token ids** (`site/emblem-claims.ts`, `site/emblem-gate.ts`): the contract
   checks the emblem at `join` only, so the server binds each holder ticket to a token id of its wallet (from the
   NFT's `Transfer` logs) until it is settled; one token id serves one open holder ticket, one discounted power-up
-  buyer and one free room a day. A ticket the emblem cannot serve is refused at the seat and cancelled in full.
+  buyer and one free room a day. A ticket the emblem cannot serve (gone, or serving another wallet's ticket) is refused
+  at the seat and cancelled in full; one whose emblem serves the wallet's own other ticket waits instead (`emblem_busy`,
+  kept, excused while that ticket is seated or being settled).
 - The contracts are not upgradeable and not audited.
 
 ## Server internals
@@ -251,9 +253,10 @@ has more bots than its setting, nor more playing than the setting minus its peop
   unseated while its arena was open is recorded as a no-show in the settled log, unless its wallet asked to sit while
   joins were open and the server refused for its own reason (overload, the journal, a re-price, no seat, the chain
   unreadable: `excuseNoShow`). An unseated ticket refunded early is a no-show the same way: a paid room's code that
-  stopped taking seats (`Gateway.refundUnseated`), a holder ticket whose emblem moved (`EmblemGate`); excused only for a
-  ticket whose permit was asked for that very room (`{arenaId, room}`, bound while it took seats, not by its creator),
-  refunded within `ROOM_EXCUSE_S` (120 s) of its opening, up to the room's seats (`JoinPermits.roomExcuse`). A wallet
+  stopped taking seats (`Gateway.refundUnseated`), a holder ticket whose emblem moved or serves another wallet's ticket
+  (`EmblemGate`); excused only for a ticket whose permit was asked for that very room (`{arenaId, room}`, bound while
+  it took seats, not by its creator), refunded within `ROOM_EXCUSE_S` (120 s) of its opening, up to the room's seats
+  (`JoinPermits.roomExcuse`). A wallet
   with `NO_SHOW_LIMIT` (default 3) of them in 24 h gets no permit until the
   oldest is a day old, and the refusal says when. The no-show also counts (in memory) against the networks its permit
   was asked from: 3× the limit per IPv4 address or IPv6 /64, 8× per IPv4 /24 or IPv6 /48 (wallets without standing

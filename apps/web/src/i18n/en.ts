@@ -47,6 +47,7 @@ export const en = {
   'err.game_closed': 'The game is not open to this wallet yet. Follow {ourX} for news.',
   'err.banned': 'This wallet is banned from paid rooms after an integrity review. Practice is open.',
   'err.chain_busy': 'The network is busy. Your ticket is safe: retrying, or press Resume again in a moment.',
+  'err.emblem_busy': 'Your emblem still serves another ticket of yours (one holder ticket per emblem at a time). This ticket is safe: press Resume again once that game is settled.',
 
   'tx.confirmed': 'Confirmed on {chain}',
   'tx.failed': 'Transaction failed',
