@@ -17,6 +17,7 @@ import { createApp, type App } from '../src/app';
 import { EvmChain } from '../src/chain/evm';
 import { ChainBusyError, sessionKey, type ChainArena, type ChainSession, type SettledEvent } from '../src/chain/types';
 import { loadConfig } from '../src/config';
+import { CLIENT_BUSY_MESSAGE, ClientBudgetError } from '../src/net/client-scope';
 import { Limiter } from '../src/net/limiter';
 import { Journal } from '../src/stake/journal';
 import { JOIN_PERMIT_TTL_MAX_S, JoinPermitFail, JoinPermits, NET_NO_SHOW_FACTOR, NO_SHOW_WINDOW_MS, SITE_NO_SHOW_FACTOR, requesterOf, type JoinPermitDeps } from '../src/stake/join-permits';
@@ -299,6 +300,24 @@ describe('a permit is free, so it holds a place only briefly and only when backe
     expect([e.code, e.status]).toEqual(['holders_only', 403]);
     expect(h.chain.signed).toHaveLength(0);
     h.holders.add(ALICE.toLowerCase());
+    expect((await h.permits.issue(ALICE, 4, '10.0.0.1')).arenaId).toBe(4);
+  });
+
+  it('a holders-only arena: a holder check the client may not make right now is busy, never "not a holder"', async () => {
+    // the holder reads of one client are bounded (site/mint.ts): past the bound, with no "holder" on record, the
+    // check throws ClientBudgetError. A holder asking for a permit then hears "busy", not that the room is not theirs
+    let spent = true;
+    const h = harness({
+      arenas: [{ ...arena(4, 5000), holdersOnly: true }],
+      isHolder: async () => {
+        if (spent) throw new ClientBudgetError('holder check');
+        return true;
+      },
+    });
+    const e = await fail(h.permits.issue(ALICE, 4, '10.0.0.1'));
+    expect([e.code, e.status, e.message]).toEqual(['chain_busy', 503, CLIENT_BUSY_MESSAGE]);
+    expect(h.chain.signed).toHaveLength(0);
+    spent = false;
     expect((await h.permits.issue(ALICE, 4, '10.0.0.1')).arenaId).toBe(4);
   });
 
