@@ -158,7 +158,7 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
 |---|---|
 | Ubuntu's packages | unattended-upgrades, daily (Ubuntu's own origins, security included); the reboot a kernel update needs at 04:30 in a round break (`elymum-reboot.timer`) |
 | The Docker Engine (`docker-ce`, `containerd.io` with runc, the CLI, the compose and buildx plugins, from Docker's repository) | `reboot.sh` (`elymum-reboot.timer`, 04:30), when Docker's repository has a newer version: `docker-ce` and `containerd.io` in the round break, with the app stopped first; the CLI and the plugins alone at once (they restart nothing). Never unattended-upgrades: an engine update restarts every container, which mid-round would cash every arena player out |
-| The app image's base (`node:22-bookworm-slim`: Debian's and Node 22's patches) | every deploy builds with `--pull`; `elymum-refresh.timer` (Sunday 05:00) rebuilds the deployed commit even without a new one and swaps it in in the round break, only when the image changed (with the same rollback as a deploy) |
+| The app image's base (`node:22-bookworm-slim`: Debian's and Node 22's patches) | every deploy builds with `--pull`; `elymum-refresh.timer` (Sunday 05:00) rebuilds the deployed commit even without a new one and swaps it in in the round break, only when the image changed (with the same rollback as a deploy). It never deploys a newer commit (only the auto-deploy does), and it is skipped while auto-deploy is paused |
 | Caddy (pinned to a patch version, `caddy:2.x.y` in `docker-compose.yml`) | the newest build of that tag is pulled on every deploy and every Sunday and swapped in in the round break; a newer Caddy version comes as a Dependabot pull request, and CI checks both Caddyfiles with it (`caddy validate`) |
 | npm dependencies, the GitHub Actions, the image tags | Dependabot pull requests, weekly (`.github/dependabot.yml`), through CI; a merged one deploys once CI passed |
 
@@ -166,7 +166,8 @@ Not automatic: merging Dependabot's pull requests (a person reviews each), a new
 dependency (a pull request of its own; Node majors are not proposed), Ubuntu's release upgrades (`do-release-upgrade`,
 by hand) and anything below the VPS (the provider's). Dependabot's security updates are a repository setting
 (Settings → Code security → Dependabot security updates). By hand, in the next round break: `coinnibal-update
---refresh` (the weekly rebuild now), `coinnibal-reboot` (a due reboot or engine update now).
+--refresh` (the weekly rebuild of the deployed commit now, also while auto-deploy is paused), `coinnibal-reboot` (a due
+reboot or engine update now).
 
 ## 7. Alerts and autoheal
 
@@ -255,7 +256,7 @@ All commands as root on the VPS (`sudo -i`).
 | Change a setting | `nano /opt/elymum/.env`, then `coinnibal-compose up -d app` |
 | Backup now / log | `coinnibal-backup` / `journalctl -u coinnibal-backup -n 50` |
 | Restore a backup | `coinnibal-restore /opt/elymum/backups/elymum-data-YYYYmmdd-HHMM.tar.gz` |
-| Pause auto-deploy | `systemctl stop elymum-update.timer` (`start` to resume) |
+| Pause auto-deploy | `systemctl stop elymum-update.timer` (`start` to resume); the weekly rebuild pauses with it |
 | Rebuild on the newest base images now (the weekly refresh) / its log | `coinnibal-update --refresh` / `journalctl -u elymum-refresh -n 100` |
 | Reboot for an update now, in the next round break | `coinnibal-reboot --force` (a Docker Engine update is installed first) |
 

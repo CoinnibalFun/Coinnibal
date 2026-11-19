@@ -16,8 +16,10 @@
 #
 # Security fixes of the images: every build pulls the newest base image (--pull: node:22-bookworm-slim, its Debian
 # and Node patches) and the Caddy image of docker-compose.yml (a pinned patch version; Dependabot proposes newer ones,
-# .github/dependabot.yml). `update.sh --refresh` (elymum-refresh.timer, weekly) does the same without a new commit:
-# it rebuilds the deployed commit and swaps the app and/or Caddy in the round break, only when an image changed.
+# .github/dependabot.yml). `update.sh --refresh` does the same without a new commit: it rebuilds the deployed commit,
+# never a newer one (it fetches nothing: new code comes only through this check), and swaps the app and/or Caddy in
+# the round break, only when an image changed. elymum-refresh.timer runs it weekly with --scheduled: then it is
+# skipped while auto-deploy is paused (elymum-update.timer stopped); by hand it always runs.
 # Output goes to journald: journalctl -u elymum-update -n 100 (the refresh: -u elymum-refresh)
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -25,11 +27,15 @@ set -euo pipefail
 need_root
 
 refresh=0
-case "${1:-}" in
-  "") ;;
-  --refresh) refresh=1 ;;
-  *) die "unknown argument: $1 (update.sh, or update.sh --refresh)" ;;
-esac
+scheduled=0
+for arg in "$@"; do
+  case "$arg" in
+    --refresh) refresh=1 ;;
+    --scheduled) scheduled=1 ;;
+    *) die "unknown argument: $arg (update.sh, or update.sh --refresh)" ;;
+  esac
+done
+[[ "$scheduled" -eq 0 || "$refresh" -eq 1 ]] || die "--scheduled goes with --refresh (elymum-refresh.service)"
 
 mkdir -p "$COINNIBAL_STATE" "$(dirname "$COINNIBAL_LOCK")"
 exec 9>"$COINNIBAL_LOCK"
@@ -104,46 +110,47 @@ host_upgrade() {
   host_journald
 }
 
-# nothing can be deployed now: the check ends here, but the weekly refresh still rebuilds the deployed commit
-no_deploy() {
-  [[ "$refresh" -eq 1 ]] || exit 0
-  remote="$(cat "$COINNIBAL_STATE/deployed" 2>/dev/null || true)"
-}
-
-if ! timeout 120 git fetch --quiet origin "$branch" "+refs/tags/ci-green-$branch:refs/tags/ci-green-$branch" 2>/dev/null; then
-  if ! timeout 120 git fetch --quiet origin "$branch"; then
-    log "git fetch failed (network or deploy key); will retry at the next check"
-    [[ "$refresh" -eq 1 ]] || exit 0
-  fi
-fi
-head="$(git rev-parse "origin/$branch")"
-remote="$head"
-if green="$(git rev-parse -q --verify "refs/tags/ci-green-$branch^{commit}" 2>/dev/null)"; then
-  # the newest commit CI passed on the branch (the marker can be ahead of a fetch race: then the head is green)
-  if git merge-base --is-ancestor "$green" "$head" 2>/dev/null; then
-    remote="$green"
-  elif git merge-base --is-ancestor "$head" "$green" 2>/dev/null; then
-    remote="$head"
-  else
-    log "the CI marker ci-green-$branch is not on $branch; nothing is deployed until CI passes on it"
-    no_deploy
-  fi
-elif [[ "$(env_get_renamed REQUIRE_CI)" == "1" ]]; then
-  log "COINNIBAL_REQUIRE_CI=1 and no CI marker ci-green-$branch: not deploying ${head:0:12} (see README \"Deploys\")"
-  no_deploy
-fi
 deployed="$(cat "$COINNIBAL_STATE/deployed" 2>/dev/null || true)"
 failed="$(cat "$COINNIBAL_STATE/failed" 2>/dev/null || true)"
 
-# same=1: the weekly refresh of the deployed commit (no newer deployable commit). A newer one deploys as usual.
+# same=1: the refresh, of the deployed commit only. A newer commit, CI-green or not, is this check's alone, so a paused
+# auto-deploy keeps it off the server: the refresh fetches nothing and builds what runs now.
 same=0
-if [[ "$refresh" -eq 1 ]] && [[ "$remote" == "$deployed" || "$remote" == "$failed" ]]; then
+if [[ "$refresh" -eq 1 ]]; then
   [[ -n "$deployed" ]] || {
     log "nothing deployed yet; no refresh"
     exit 0
   }
+  # the lock is held: a reboot.sh that paused the timers for an engine upgrade has started them again
+  if [[ "$scheduled" -eq 1 ]] && ! systemctl is-active --quiet "$INSTALLED_UNIT_PREFIX-update.timer" 2>/dev/null; then
+    log "auto-deploy is paused ($INSTALLED_UNIT_PREFIX-update.timer stopped), and the weekly rebuild with it; by hand: coinnibal-update --refresh"
+    exit 0
+  fi
   remote="$deployed"
   same=1
+else
+  if ! timeout 120 git fetch --quiet origin "$branch" "+refs/tags/ci-green-$branch:refs/tags/ci-green-$branch" 2>/dev/null; then
+    if ! timeout 120 git fetch --quiet origin "$branch"; then
+      log "git fetch failed (network or deploy key); will retry at the next check"
+      exit 0
+    fi
+  fi
+  head="$(git rev-parse "origin/$branch")"
+  remote="$head"
+  if green="$(git rev-parse -q --verify "refs/tags/ci-green-$branch^{commit}" 2>/dev/null)"; then
+    # the newest commit CI passed on the branch (the marker can be ahead of a fetch race: then the head is green)
+    if git merge-base --is-ancestor "$green" "$head" 2>/dev/null; then
+      remote="$green"
+    elif git merge-base --is-ancestor "$head" "$green" 2>/dev/null; then
+      remote="$head"
+    else
+      log "the CI marker ci-green-$branch is not on $branch; nothing is deployed until CI passes on it"
+      exit 0
+    fi
+  elif [[ "$(env_get_renamed REQUIRE_CI)" == "1" ]]; then
+    log "COINNIBAL_REQUIRE_CI=1 and no CI marker ci-green-$branch: not deploying ${head:0:12} (see README \"Deploys\")"
+    exit 0
+  fi
 fi
 # the refresh of the deployed commit never marks it failed (a newer failed commit stays marked)
 mark_failed() {
