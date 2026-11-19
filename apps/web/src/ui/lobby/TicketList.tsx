@@ -78,6 +78,8 @@ export function TicketList({
   const feeLine = mine.discount
     ? t('lo.feeLineHolder', { fee: bpsToPercent(totalFeeBps(mine.rates)), std: bpsToPercent(totalFeeBps(normal)) })
     : t('lo.feeLine', { fee: bpsToPercent(totalFeeBps(normal)) });
+  // a holders-only room seats holders only: every ticket there has the holder rates, whoever looks at the list
+  const holdersFeeLine = t('lo.feeLine', { fee: bpsToPercent(totalFeeBps(ticketRates(normal, config, true).rates)) });
 
   const count = (n: number, one: 'lo.humans1' | 'lo.bots1', many: 'lo.humans' | 'lo.bots') => (n === 1 ? t(one) : t(many, { n }));
 
@@ -172,7 +174,7 @@ export function TicketList({
               </span>
             )}
             {!practice && !closed && <RoundLine arenaId={tk.arenaId!} />}
-            {!practice && !soon && <span className={`kl-ticket__fee mono${mine.discount ? ' is-holder' : ''}`}>{feeLine}</span>}
+            {!practice && !soon && <span className={`kl-ticket__fee mono${mine.discount ? ' is-holder' : ''}`}>{tk.holdersOnly ? holdersFeeLine : feeLine}</span>}
             {test && <span className="kl-ticket__fee kl-ticket__testnote mono">{t('lo.testNote')}</span>}
             {practice && <span className="kl-ticket__fee mono">{t('lo.practiceNote')}</span>}
           </span>

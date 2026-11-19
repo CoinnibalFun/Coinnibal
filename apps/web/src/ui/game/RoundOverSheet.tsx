@@ -10,7 +10,7 @@ import { engine } from '../../game/instance';
 import { roundStartLabel } from '../../game/round';
 import { useChainData } from '../../wallet/chain';
 import { isFakeHash } from '../../wallet/devFake';
-import { arenaRates, ledgerToBase } from '../../wallet/ticket';
+import { arenaRates, ledgerToBase, ticketRates } from '../../wallet/ticket';
 import { PRICE_STALE_HOURS, usdQuote } from '../../wallet/usdPrice';
 import { announce, sound } from '../../audio';
 import { useT } from '../../i18n';
@@ -48,8 +48,8 @@ export function settlementFor<T extends { session: string | null }>(settled: T |
 /**
  * "Round over", the landing report: the bell rang while my coin was alive, so the till is paid.
  * After a beat (the bell wave over the frozen world) the report flies out of the worth sticker: the
- * till, the fee on its profit and what was paid (an estimate until `settled` arrives, then a PAID
- * stamp and the transaction link), my place and the room's whole board at the bell (`FinalBoard`, the same board a custom
+ * ticket price, the till, its profit, the fee on that profit and what was paid (an estimate until `settled` arrives,
+ * then a PAID stamp and the transaction link), my place and the room's whole board at the bell (`FinalBoard`, the same board a custom
  * room shows at its end: value, mass and kills). "Next round"
  * goes back to the lobby with this arena's ticket ready to buy.
  *
@@ -69,6 +69,8 @@ export function RoundOverSheet() {
   const serverFees = useUi((s) => s.chain?.fees ?? null);
   // the rates fixed into this ticket at join (its session), else the live rates
   const session = useChainData((s) => (ticket?.arenaId != null ? (s.sessions[ticket.arenaId] ?? null) : null));
+  const holder = useChainData((s) => s.holder);
+  const holdersOnly = useChainData((s) => ticket?.arenaId != null && s.holdersOnly.includes(ticket.arenaId));
   const over = useUi((s) => s.screen === 'roundover' && s.roundResult !== null);
   const reduced = useReducedMotion();
   const exit = res?.kind === 'exit';
@@ -120,12 +122,19 @@ export function RoundOverSheet() {
   // the till at the bell: the server's `stats.gross` when a fee was due, else what it paid (no fee)
   const gross = res?.stats?.gross ?? res?.payout ?? 0;
   const entry = ticket?.entryFee ?? room?.entryFee ?? 0;
-  const rates = session && session.id > 0n ? { burnBps: session.burnBps, vaultBps: session.vaultBps } : arenaRates(serverFees, config);
+  // the ticket's own rates: the server's copy of its session (the result), the session read here, else the live rates
+  // this wallet's ticket gets (a holder's, and every ticket of a holders-only room, at the holder pair)
+  const rates =
+    res?.stats?.rates ??
+    (session && session.id > 0n ? { burnBps: session.burnBps, vaultBps: session.vaultBps } : ticketRates(arenaRates(serverFees, config), config, holder === true || holdersOnly).rates);
   const n = receiptNumbers(gross, entry, rates, settled);
   const roundTime = res?.round != null ? roundStartLabel(res.round, room?.round) : '';
   const approx = n.final ? '' : `${t('gr.estimate')} `;
   const lines: ReceiptLine[] = [
+    // the ticket price and the profit over it: the fee line below is the rate times that profit (none without one)
+    { label: t('gr.ticket'), value: tf.fmt(entry) },
     { label: t('gr.till'), value: tf.fmt(gross) },
+    { label: t('gr.profit'), value: tf.fmt(Math.max(0, n.gain)), muted: true },
     {
       label: <>{t('gr.fee', { pct: n.pct.toLocaleString('en-US', { maximumFractionDigits: 2 }) })}</>,
       // the fee on profit (burned + to the fee wallet); a ticket that did not win pays none
