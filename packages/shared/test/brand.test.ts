@@ -24,7 +24,7 @@ describe('brand', () => {
   it('player names cannot pose as the game, old name or new', () => {
     for (const n of ['Coinnibal', 'COINNIBAL Support', 'c.o.i.n.n.i.b.a.l', 'C0innibal', 'Elymum', 'E1ymum']) expect(isReservedName(n)).toBe(true);
     expect(isReservedName('Coin Nibbler')).toBe(false);
-    expect(sanitizeName('Coinnibal')).toBe('Coinie');
+    expect(sanitizeName('Coinnibal', 'Coinie-0a1b')).toBe('Coinie-0a1b');
   });
 
   it('adds the brand site origins to a CORS list, and leaves * and unset alone', () => {
