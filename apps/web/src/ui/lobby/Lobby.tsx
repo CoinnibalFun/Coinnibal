@@ -33,7 +33,7 @@ import { arenaRates, sessionsToCollect, type TicketKey } from '../../wallet/tick
 import { useChainData } from '../../wallet/chain';
 import { GetTokensLink } from '../../wallet/GetTokensLink';
 import { WalletButton } from '../../wallet/WalletButton';
-import { BOOST_PATH } from '../game/BoostBar';
+import { BOOST_PATH } from '../game/boostGlyphs';
 import { goPage, openModal, updateSettings, useUi, type LobbyPage } from '../../store';
 import { DocsPage } from '../docs/DocsPage';
 import { Leaderboards } from '../news/Leaderboards';
