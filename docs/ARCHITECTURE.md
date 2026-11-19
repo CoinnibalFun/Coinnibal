@@ -214,7 +214,8 @@ has more bots than its setting, nor more playing than the setting minus its peop
   `LOG_CHUNK_BLOCKS`, `RPC_MAX_RPS` (one rate or one per URL), `RPC_BURST`, `TESTNET_RPC_URL`, `GAME_WORKERS`,
   `MAX_CONNECTIONS`, `JOIN_PERMIT_TTL_S`, `JOIN_PERMIT_HOLD_S`, `JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`,
   `JOIN_PERMIT_PER_SITE`, `JOIN_PERMIT_PER_WALLET`, `JOIN_PERMIT_OPEN_PER_IP`, `JOIN_PERMIT_OPEN_PER_SUBNET`,
-  `JOIN_PERMIT_OPEN_PER_SITE`, `JOIN_PERMIT_ARENA_CAP`, `NO_SHOW_LIMIT`, `DEV_FAKE_CHAIN`, `DEV_FAKE_TOKEN`.
+  `JOIN_PERMIT_OPEN_PER_SITE`, `JOIN_PERMIT_FRESH_SHARE`, `JOIN_PERMIT_ARENA_CAP`, `NO_SHOW_LIMIT`, `DEV_FAKE_CHAIN`,
+  `DEV_FAKE_TOKEN`.
 - **Contracts registry** (`site/contracts.ts`): `DATA_DIR/chains/<id>/contracts.json`, written by `POST
   /api/admin/contracts` after a deploy from `/admin`. The server checks the code hash (the bundled v4 build only;
   an arena of an earlier build reads "redeploy needed"),
@@ -226,23 +227,37 @@ has more bots than its setting, nor more playing than the setting minus its peop
   (books guard, re-price), a holders-only arena only to a wallet with the NFT, and only when the wallet holds no open
   ticket there. One live permit per wallet and arena (asking again returns the same one while it is valid, unused and
   signed for the arena contract in use: a contract registered live starts the permits, places and shares afresh).
-  Limits: per IP, per IPv6 /64 and /48, and per wallet (`JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`,
-  `JOIN_PERMIT_PER_SITE`, `JOIN_PERMIT_PER_WALLET`, per 10 minutes); per network and arena, a share of the permits
-  not played yet (valid, or used for a ticket not seated and not settled): 8 per IPv4 address, 4 per IPv6 /64, 16 per
-  /48 (`JOIN_PERMIT_OPEN_PER_*`; at the share the tickets of its expired permits are read and those without one
-  leave), refused `network_busy`; per arena, unseated tickets (open on chain, not seated, not being paid
-  out) plus the places held by new permits stay under the seats a round can take (`ARENA_INSTANCE_CAP` × the scaler's
-  max instances, or `JOIN_PERMIT_ARENA_CAP`). A permit is free, so it holds a place only for `JOIN_PERMIT_HOLD_S`
-  (120 s), only when the wallet holds the entry fee, once per wallet, arena and join nonce, and at most 4 per IPv4
-  address or IPv6 /64 and 16 per /48; the place goes as soon as the permit is used (the gateway hears the wallet ask
-  to sit or reads its ticket, the ticket settles, or the wallet's join nonce moved: read at its next request and, at
-  the cap, for every held place). **No-shows:** a ticket the stale sweeper cancels unseated while its arena was open
-  is recorded as a no-show in the settled log; a wallet with `NO_SHOW_LIMIT` (default 3) of them in 24 h gets no
-  permit until the oldest is a day old, and the refusal says when. The no-show also counts (in memory) against the
-  networks its permit was asked from: 3× the limit per IPv4 address or IPv6 /64, 8× per /48. Each refusal has its
-  code and message (`JoinPermitError`); the ticket sheet shows it and signs nothing. Permits last
-  `JOIN_PERMIT_TTL_S` (default 600 s, at most 3300, the deadline on the chain's clock); the web asks again after a
-  slow approval.
+  Every wallet: at most `JOIN_PERMIT_PER_WALLET` requests per 10 minutes; per arena, unseated tickets (open on chain,
+  not seated, not being paid out) plus the places held by new permits stay under the seats a round can take
+  (`ARENA_INSTANCE_CAP` × the scaler's max instances, or `JOIN_PERMIT_ARENA_CAP`). A permit is free, so it holds a
+  place only for `JOIN_PERMIT_HOLD_S` (120 s), only when the wallet holds the entry fee, once per wallet, arena and
+  join nonce, and at most 4 per IPv4 address or IPv6 /64 and 16 per IPv4 /24 or IPv6 /48; the place goes as soon as
+  the permit is used (the gateway hears the wallet ask to sit or reads its ticket, the ticket settles, or the wallet's
+  join nonce moved: read at its next request and, at the cap, for every held place). **Standing:** a wallet whose
+  latest ticket of the last 14 days was played (a `settle` in the settled log, `SettledLog.lastPlayedAt`) with no
+  no-show since, or that holds an NFT giving no other wallet standing (one wallet per token id a day, from the holder
+  index), with no no-show of its own in 24 h, meets only those rules, for one unplayed ticket at a time (a ticket of
+  another arena bought with standing and not played yet, read once on chain, makes the next one meet the network rules
+  too, refused `ticket_elsewhere`; a permit not used yet never counts: one join nonce buys one ticket in all). **Wallets
+  without standing** also meet the network rules: per IP, per IPv6 /64 and per IPv4 /24 or IPv6 /48 request limits
+  (`JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`, `JOIN_PERMIT_PER_SITE`, per 10 minutes); per network and arena, a
+  share of the permits not played yet (valid, or used for a ticket not seated and not settled) plus those that bought
+  nothing in the last day: 8 per IPv4 address, 4 per IPv6 /64, 16 per IPv4 /24 or IPv6 /48 (`JOIN_PERMIT_OPEN_PER_*`;
+  at the share the expired permits are read once: the join nonce, then the ticket), refused `network_busy`; together,
+  at most `JOIN_PERMIT_FRESH_SHARE` (half) of min(cap, `maxSessions`) of an arena's permits not played yet, refused
+  `arena_busy`; and they must hold the entry fee (`no_funds`). **No-shows:** a ticket the stale sweeper cancels
+  unseated while its arena was open is recorded as a no-show in the settled log, unless its wallet asked to sit while
+  joins were open and the server refused for its own reason (overload, the journal, a re-price, no seat, the chain
+  unreadable: `excuseNoShow`). An unseated ticket refunded early is a no-show the same way: a paid room's code that
+  stopped taking seats (`Gateway.refundUnseated`), a holder ticket whose emblem moved (`EmblemGate`); excused only for a
+  ticket whose permit was asked for that very room (`{arenaId, room}`, bound while it took seats, not by its creator),
+  refunded within `ROOM_EXCUSE_S` (120 s) of its opening, up to the room's seats (`JoinPermits.roomExcuse`). A wallet
+  with `NO_SHOW_LIMIT` (default 3) of them in 24 h gets no permit until the
+  oldest is a day old, and the refusal says when. The no-show also counts (in memory) against the networks its permit
+  was asked from: 3× the limit per IPv4 address or IPv6 /64, 8× per IPv4 /24 or IPv6 /48 (wallets without standing
+  only). Each refusal has its code and message (`JoinPermitError`); the ticket sheet shows it and signs nothing.
+  Permits last `JOIN_PERMIT_TTL_S` (default 600 s, at most 3300, the deadline on the chain's clock); the web asks again
+  after a slow approval.
 - **Chain gateway** (`chain/evm.ts`, `chain/evm-client.ts`): reads `config()` every 30 s (token, fee rates, burn
   mode, holder perks) and pushes `chain` to every client when it changes; lists arenas; runs the settlement worker
   (batches, read-back reconciliation, backoff), the loot burn with a monotonic `sweepId` kept in the journal, and
@@ -328,9 +343,10 @@ has more bots than its setting, nor more playing than the setting minus its peop
   invite-only instance of an arena on its **own clock** (`RoomOptions.ownRound`, `ownRoundAt`): one game from its
   opening to its end, no tie to the arenas' 5-minute rounds; players buy that arena's normal ticket (the creator's own
   is bought in the same creator sheet, right after the fee), joins close in its last minute, and every ticket is
-  settled at the room's end (its only bell, the normal fee on profit); it fields no bots. A ticket bought for a room
-  that ended (or is in its last minute) and never seated is cancelled at once (full entry fee back,
-  `Gateway.refundUnseated`); the 15-minute stale sweep only ever sees unseated tickets. Capacity 2 to 100. The end is announced `ROOM_CLOSE_COUNTDOWN_MS` (10 s)
+  settled at the room's end (its only bell, the normal fee on profit); it fields no bots. An unseated ticket of that
+  arena sent to a room that ended (or is in its last minute) is cancelled at once (full entry fee back,
+  `Gateway.refundUnseated`), a no-show unless it was bought for that room just now (above); a free or practice room's
+  code, or another arena's, refunds nothing; the 15-minute stale sweep only ever sees unseated tickets. Capacity 2 to 100. The end is announced `ROOM_CLOSE_COUNTDOWN_MS` (10 s)
   ahead (`closing`, repeated to late joiners); a free room then sends its final board (`roomOver`, the same
   `RoundStanding` rows as a bell's `roundOver`) before `room_closed`; a ticket room closes after its own bell at its end.
   **Practice with bots** (`POST /api/rooms/custom/practice`, `CustomRoomService.practice`): a free custom room with

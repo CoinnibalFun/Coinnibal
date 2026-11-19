@@ -301,10 +301,20 @@ describe('ticket flow: two prompts, progress and races', () => {
     open(PENNY);
     act(() => screen.getByRole('button', { name: /Pay 1,000 \$NIBAL/ }).click());
     await settle();
-    expect(spies.fetchJoinPermit).toHaveBeenCalledWith('tok', 1);
+    expect(spies.fetchJoinPermit).toHaveBeenCalledWith('tok', 1, null);
     const permit = spies.planJoin.mock.calls[0][1].permit as { deadline: bigint; signature: string };
     expect(permit).toEqual({ deadline: BigInt(permitOf(1).deadline), signature: permitOf(1).signature });
     expect(spies.sendWalletCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('a ticket headed for a paid room asks the permit for that room (audit R4-M1: its refund, should the room close first, is no no-show)', async () => {
+    useChainData.setState({ allowance: 5000n * ONE });
+    spies.planJoin.mockImplementation(async () => ({ entryFee: 1000n * ONE, allowance: 5000n * ONE, balance: 12_450n * ONE, approve: null, join: joinCall, calls: [joinCall] }));
+    useUi.setState({ paidSeat: { code: 'AB2CD', arenaId: 1, name: 'Friday Pond', endsAt: Date.now() + 20 * 60_000 } });
+    open(PENNY);
+    act(() => screen.getByRole('button', { name: /Pay 1,000 \$NIBAL/ }).click());
+    await settle();
+    expect(spies.fetchJoinPermit).toHaveBeenCalledWith('tok', 1, 'AB2CD');
   });
 
   it('a refused permit says why and signs nothing (no-shows, an open ticket, a full room)', async () => {
@@ -324,6 +334,10 @@ describe('ticket flow: two prompts, progress and races', () => {
     const { permitRefusalText } = await vi.importActual<typeof import('../src/wallet/permit')>('../src/wallet/permit');
     expect(permitRefusalText('network_busy')).toMatch(/asked from your network and are not played yet\. Try again in a few minutes\. Nothing was signed\./);
     expect(permitRefusalText('arena_busy')).toMatch(/as many tickets waiting for a seat/);
+    // a new wallet without the entry fee (round 4): told to get tokens, nothing signed
+    expect(permitRefusalText('no_funds')).toMatch(/does not hold the entry fee for this room yet\. Get tokens first, then buy the ticket\. Nothing was signed\./);
+    // standing covers one unplayed ticket at a time (audit R4-M2): the other ticket is named, never a day's block
+    expect(permitRefusalText('ticket_elsewhere')).toBe('You hold a ticket for another room that is not played yet. Play it first, then buy this one. Nothing was signed.');
   });
 
   it('a permit for another wallet, room or arena signs nothing', async () => {
