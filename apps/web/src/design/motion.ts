@@ -1,5 +1,6 @@
-import { useReducedMotion as useMotionReducedMotion, type Transition, type Variants } from 'motion/react';
+import type { Transition, Variants } from 'motion/react';
 import { DUR, EASE } from './curves';
+import { useMedia } from './useMedia';
 
 /**
  * Motion rules (spec §6.6, Ring Storybook):
@@ -174,12 +175,14 @@ const INSTANT: Transition = { duration: 0 };
 const FADE: Transition = { duration: 0.12, ease: 'linear' };
 
 /**
- * The single source of truth for reduced motion in the design system. Wraps
- * motion's hook (which follows `prefers-reduced-motion`) so every component
- * asks the same question.
+ * The single source of truth for reduced motion in the design system: `prefers-reduced-motion`, so every component
+ * asks the same question (motion's `MotionConfig reducedMotion="user"` in `Kb` follows the same setting). A media
+ * query through `useSyncExternalStore` (`useMedia`), not motion's own hook: that one reads the setting in its first
+ * render, so a browser with reduced motion hydrating the prerendered landing rendered something else than the
+ * server's HTML. Here the server and the hydrating render read `false`, then React re-renders with the real answer.
  */
 export function useReducedMotion(): boolean {
-  return useMotionReducedMotion() ?? false;
+  return useMedia('(prefers-reduced-motion: reduce)');
 }
 
 /**

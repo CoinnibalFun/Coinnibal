@@ -476,6 +476,8 @@
      largest paint of a warm visit */
   .ld-plate1 .kb-plate__title { animation: ld-slide-left 0.42s var(--ease-out) 0.2s backwards; }
   .ld-plate1 .kb-plate__rule { animation: ld-unclip 0.72s var(--ease-out) 0.27s backwards; }
+  /* the prerendered page (hydrated.ts): Plate I is printed already, like the hero card under it */
+  .ld-root--static .ld-plate1 :is(.kb-plate__title, .kb-plate__rule) { animation: none; }
 }
 
 @keyframes ld-unclip {

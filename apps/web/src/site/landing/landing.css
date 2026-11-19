@@ -507,6 +507,12 @@
   .ld-hero__ctas .kb-btn {
     flex: 1 1 auto;
   }
+  /* the card fills the width here: half its tilt (-1.6 + 0.8 = -0.8 deg) keeps its corners off the screen's edges.
+     The `rotate` property adds to the tilt motion writes into `transform`; in CSS, so the prerendered page has it
+     before any script (Landing.tsx Hero) */
+  .ld-hero__drop {
+    rotate: 0.8deg;
+  }
 }
 
 /* ── II · the feast ──────────────────────────────────────────────────── */
