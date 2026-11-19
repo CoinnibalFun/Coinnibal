@@ -157,6 +157,12 @@ pays its last ticket in about 17 s instead of 65 s (`scripts/bench/bell-burst.ts
   through git) and deploys the newest commit it marks. A commit pushed while CI runs waits (`journalctl -u
   elymum-update` says so). Without the tag (CI never ran the job yet) the branch head is deployed as before;
   `COINNIBAL_REQUIRE_CI=1` in `.env` refuses that.
+- **When CI cannot run** (GitHub Actions stopped for the account, for example a payment problem: the job fails in a
+  few seconds with no runner and the annotation "The job was not started because recent account payments have
+  failed..."), nothing new is deployed: the VPS keeps the last green commit. To deploy the branch head anyway, after
+  checking it yourself (`pnpm check:fast` on that commit), run as root on the VPS: `cd /opt/elymum && git fetch origin
+  main && git reset --hard origin/main && deploy/vps/compose.sh up -d --build`. `update.sh` leaves it in place (the
+  deployed commit it remembers is still the green one) and deploys normally again once CI marks a newer commit.
 - **In the round break.** The new image is built while the old container serves; the swap waits for the break after
   an arena bell (no live stake then: SIGTERM mid-round would cash every arena player out). `COINNIBAL_DEPLOY_NOW=1
   coinnibal-update` skips the wait for an urgent fix.
