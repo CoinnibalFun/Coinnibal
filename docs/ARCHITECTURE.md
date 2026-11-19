@@ -228,7 +228,14 @@ has more bots than its setting, nor more playing than the setting minus its peop
   that is not banned, for an arena that exists, is enabled and not paused, and that the server does not keep closed
   (books guard, re-price), a holders-only arena only to a wallet with the NFT, and only when the wallet holds no open
   ticket there. One live permit per wallet and arena (asking again returns the same one while it is valid, unused and
-  signed for the arena contract in use: a contract registered live starts the permits, places and shares afresh).
+  signed for the arena contract in use, or with under 2 minutes left one signed again that still ends with its
+  lifetime; a contract registered live starts the permits, places and shares afresh). **The invariant of permit
+  holds** (round 5, written at the top of the file): a place is held only by a permit within its lifetime (its first
+  permit's TTL plus a 2-minute grace, `REFRESH_GRACE_S`; signing again never extends it) or by a ticket really open on
+  chain and not seated; a permit counts in the share of the one network its lifetime's first permit was asked from
+  (later requesters only for no-show attribution); every permit that ends unused, run out or replaced, counts once
+  against its wallet's unused limit; and none of it refuses a player with standing, a ticket holder or an admin
+  wallet (the owner).
   Every wallet: at most `JOIN_PERMIT_PER_WALLET` requests per 10 minutes; per arena, unseated tickets (open on chain,
   not seated, not being paid out) plus the places held by new permits stay under the seats a round can take
   (`ARENA_INSTANCE_CAP` × the scaler's max instances, or `JOIN_PERMIT_ARENA_CAP`). A permit is free, so it holds a
@@ -238,16 +245,19 @@ has more bots than its setting, nor more playing than the setting minus its peop
   join nonce moved: read at its next request and, at the cap, for every held place). **Standing:** a wallet whose
   latest ticket of the last 14 days was played (a `settle` in the settled log, `SettledLog.lastPlayedAt`) with no
   no-show since, or that holds an NFT giving no other wallet standing (one wallet per token id a day, from the holder
-  index), with no no-show of its own in 24 h, meets only those rules, for one unplayed ticket at a time (a ticket of
+  index), with no no-show of its own in 24 h, meets only those rules (so does an admin wallet, for every ticket), for one
+  unplayed ticket at a time (a ticket of
   another arena bought with standing and not played yet, read once on chain, makes the next one meet the network rules
   too, refused `ticket_elsewhere`; a permit not used yet never counts: one join nonce buys one ticket in all). **Wallets
   without standing** also meet the network rules: per IP, per IPv6 /64 and per IPv4 /24 or IPv6 /48 request limits
   (`JOIN_PERMIT_PER_IP`, `JOIN_PERMIT_PER_SUBNET`, `JOIN_PERMIT_PER_SITE`, per 10 minutes); per network and arena, a
-  share of the permits not played yet (valid, or used for a ticket not seated and not settled): 8 per IPv4 address, 4
-  per IPv6 /64, 16 per IPv4 /24 or IPv6 /48 (`JOIN_PERMIT_OPEN_PER_*`; at the share the expired permits are read once:
-  the join nonce, then the ticket; one that bought nothing leaves at once), refused `network_busy`; per wallet and
-  arena, fewer than `JOIN_PERMIT_UNUSED_LIMIT` (3) permits that ran out unused in 24 h since its last ticket (free
-  permits cycled to hold a share are bounded per identity, never per network), refused `unused_permits`; together,
+  share of the permits not played yet (within their lifetime, or used for a ticket not seated and not settled): 8 per
+  IPv4 address, 4 per IPv6 /64, 16 per IPv4 /24 or IPv6 /48 (`JOIN_PERMIT_OPEN_PER_*`; at the share the permits past
+  their lifetime are read once: the join nonce, then the ticket; one that bought nothing leaves at once), refused
+  `network_busy`; per wallet and arena, fewer than `JOIN_PERMIT_UNUSED_LIMIT` (3) permits that ended unused (ran out,
+  or were replaced by one signed again) in 24 h since its last ticket (free permits cycled to hold a share are bounded
+  per identity, never per network: about half an hour of places per wallet, arena and day), refused
+  `unused_permits`; together,
   at most `JOIN_PERMIT_FRESH_SHARE` (half) of min(cap, `maxSessions`) of an arena's permits not played yet, refused
   `arena_busy`; and they must hold the entry fee (`no_funds`). **No-shows:** a ticket the stale sweeper cancels
   unseated while its arena was open is recorded as a no-show in the settled log, unless its wallet asked to sit while

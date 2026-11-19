@@ -307,9 +307,10 @@ never a wrong "not a holder"), a wallet with an open ticket there (it resumes it
 arena whose unseated tickets plus the places held by new permits reach the seats a round can take (`arena_busy`), and
 too many requests from one wallet. A wallet **without standing** (below) is also refused for its network: a network
 that is a repeated no-show (`no_show`, "from your network"), one with its share of the arena's permits not played yet
-(`network_busy`, "places free up within half an hour"), a wallet that let 3 permits of the arena run out unused that
-day (`unused_permits`), new wallets holding their share of the arena (`arena_busy`, "many new players"), no entry fee in
-the wallet (`no_funds`), and too many requests from one IP, IPv6 /64, IPv4 /24 or IPv6 /48.
+(`network_busy`, "places free up within half an hour"), a wallet that let 3 permits of the arena end unused that day
+(run out, or replaced by one signed again: `unused_permits`), new wallets holding their share of the arena
+(`arena_busy`, "many new players"), no entry fee in the wallet (`no_funds`), and too many requests from one IP, IPv6
+/64, IPv4 /24 or IPv6 /48.
 
 - **Standing** (round 4, R3-M1). The network rules exist because fresh wallets cost nothing; they must never refuse a
   real player because of what other wallets on the same carrier NAT, VPN exit, iCloud Private Relay or WARP egress,
@@ -322,7 +323,7 @@ the wallet (`no_funds`), and too many requests from one IP, IPv6 /64, IPv4 /24 o
   them then says `ticket_elsewhere` ("play it first"), never the network's day-long block; a permit not used yet never
   counts, since the wallet's join nonce buys one ticket in all arenas together. The wallet loses its standing at its
   first no-show. A wallet with standing meets only the per-wallet request limit, its own no-show limit and the
-  arena's cap.
+  arena's cap. So does an admin wallet (`ADMIN_WALLETS`, the owner), for every ticket, with or without standing.
 - **Held places.** A permit is free, so it holds a place in that cap only briefly and only when backed: a new permit
   holds one for `JOIN_PERMIT_HOLD_S` (120 s, the approval and the join) if the wallet holds the entry fee (one
   `balanceOf` read), no earlier permit of that wallet, arena and join nonce held one, and the network it was asked from
@@ -333,20 +334,36 @@ the wallet (`no_funds`), and too many requests from one IP, IPv6 /64, IPv4 /24 o
 - **A share per network** (wallets without standing). Each network has a share of an arena's permits not played yet
   (issued and valid, or used for a ticket that is not seated and not settled): 8 per IPv4 address (carrier NAT puts
   many players behind one), 4 per IPv6 /64, 16 per IPv4 /24 or IPv6 /48 (round 4, R3-M2: one cheap block of IPv4
-  addresses is one network, like a /48). A permit that **bought nothing** (expired with the wallet's join nonce
-  unmoved) leaves the share once it runs out (round 4b, R4b-M1: it no longer keeps its place for a day, which let one
-  funded wallet, or 8 hesitant players, close a carrier NAT address or a /24 to new players for a day). So a network
-  is held only while its permits are valid (10 minutes) and its tickets unplayed (until seated, or the stale sweeper's
-  refund): places free up within half an hour, and `network_busy` says so. At a full share the server reads each
-  expired permit once (the join nonce, then the ticket); a seated or settled ticket leaves the share at once. Asking to
-  sit, or asking again while the permit is valid, frees nothing. A new arena contract registered in `/admin` starts
-  the permits, places and shares afresh (no permit of the old contract is handed out again).
-- **Unused permits** (wallets without standing; round 4b, R4b-M1). Free permits cycled to hold a share are bounded per
-  wallet, never per network: a wallet that let `JOIN_PERMIT_UNUSED_LIMIT` (3) permits of one arena run out unused in
-  24 h, counted since its last ticket, gets no new permit there until the first of them is a day old
-  (`unused_permits`, with the time). A player who asks, declines in the wallet or goes away, and comes back later is
-  served; a ticket bought, in any arena (its join nonce moves), starts the count afresh, and a player with standing is
-  never counted. Another wallet's unused permits never refuse anyone.
+  addresses is one network, like a /48). **A permit holds only for its lifetime, in one network** (round 5,
+  R4b-M1-refresh; the invariant at the top of `stake/join-permits.ts`): a lifetime starts with a wallet's first permit
+  of its join nonce in that arena and ends 2 minutes after that permit's deadline (`REFRESH_GRACE_S`: 12 minutes at
+  the default TTL). Asked again while it is valid, the wallet gets the same permit, or with under 2 minutes left one
+  signed again that ends with the lifetime, never later (the ticket sheet's slow-approval refresh); only once every
+  permit of a lifetime ran out does the next one start, through every check again. It counts in the share of the
+  network its lifetime's first permit was asked from (which passed that share's check then), never in another: a
+  wallet asking again from other networks holds none of their places (they are kept only to count its ticket's
+  no-show against them). Before round 5 a permit signed again kept its place without end and carried earlier
+  networks along, so 8 funded wallets that asked once at a carrier NAT address held it all day from anywhere, and
+  one set held 4 addresses. A permit that **bought nothing** (its lifetime over, the wallet's join nonce unmoved)
+  leaves the share then (round 4b, R4b-M1: it no longer keeps its place for a day, which let one funded wallet, or 8
+  hesitant players, close a carrier NAT address or a /24 to new players for a day). So a network is held only while
+  its permits' lifetimes last (12 minutes) and its tickets are unplayed (until seated, or the stale sweeper's refund):
+  places free up within half an hour, and `network_busy` says so. At a full share the server reads each permit past
+  its lifetime once (the join nonce, then the ticket); a seated or settled ticket leaves the share at once. Asking to
+  sit, or asking again while the permit is valid, frees nothing and holds nothing more. A new arena contract
+  registered in `/admin` starts the permits, places and shares afresh (no permit of the old contract is handed out
+  again).
+- **Unused permits** (wallets without standing; round 4b, R4b-M1; round 5). Free permits cycled to hold a share are
+  bounded per wallet, never per network: a wallet that let `JOIN_PERMIT_UNUSED_LIMIT` (3) permits of one arena end
+  unused in 24 h, counted since its last ticket, gets no new permit there until the first of them is a day old
+  (`unused_permits`, with the time). Every permit that ends without a ticket counts once: one that ran out, and one
+  replaced by a permit signed again while it was valid (round 5: before, a permit signed again with under 2 minutes
+  left was never counted, so asking every 8.5 minutes held a place without end). So a wallet holds a place in one
+  arena for at most 3 lifetimes a day, 32 minutes (3 × 10 minutes, plus one refresh's 2). The slow-approval refresh
+  is never refused for it (it holds nothing new) and counts once; the ticket it buys starts the count afresh. A player
+  who asks, declines in the wallet or goes away, and comes back later is served; a ticket bought, in any arena (its
+  join nonce moves), starts the count afresh, and a player with standing is never counted. Another wallet's unused
+  permits never refuse anyone.
 - **The new wallets' share** (round 4, R3-M2). Wallets without standing together hold at most
   `JOIN_PERMIT_FRESH_SHARE` (0.5) of min(the arena's cap, its `maxSessions`) of the arena's permits not played yet
   (150 of 300 by default), from however many networks they come; past it a new wallet hears "many new players are
@@ -384,8 +401,9 @@ the wallet (`no_funds`), and too many requests from one IP, IPv6 /64, IPv4 /24 o
   wallet and arena in 24 h; 0 = off); `JOIN_PERMIT_ARENA_CAP` (0: `ARENA_INSTANCE_CAP` × the arena scaler's max
   instances), `NO_SHOW_LIMIT` (3; 0 = off).
 - **A new server key** (`setServerAuthority`) voids every permit the old key signed; players simply ask again.
-- A refused permit costs the player nothing: nothing is signed. A permit that runs out during a slow approval is asked
-  again before the join.
+- A refused permit costs the player nothing: nothing is signed. A permit with under 90 s left after a slow approval is
+  asked again before the join: signed again, it gets 2 to 4 minutes (its lifetime's end) and counts once as unused
+  (the ticket it buys starts the count afresh); one that already ran out is a new permit.
 
 ### Security notes: what an attacker can still do with permits (residual bounds)
 
@@ -399,11 +417,13 @@ costs the players, and never lock out a player with standing. Defaults, one aren
   the server's 10,800 cancels), 3,600 wallets and 450 /24s a day, with 150 entry fees locked at any time (refunded).
   Players with standing keep the other 150 places.
 - **New players kept out with free permits** (funded wallets that never join, no transaction at all): a permit holds
-  the share for its 10 minutes, and each wallet gets 3 of them a day per arena that buy nothing (`unused_permits`).
-  Keeping 150 valid permits of one arena all day takes about 7,200 funded wallets a day (150 × 144 ten-minute slots /
-  3; the same wallets can do it once more in each other arena; each holds the entry fee while it asks, so one fee moved
-  from wallet to wallet costs a token transfer per wallet), from at least 10 /24s or /48s at any time (16 each).
-  Players with standing are not affected.
+  the share for its lifetime (12 minutes at most, however often it is asked for again), and every permit that ends
+  unused, run out or replaced, is one of the 3 a wallet gets a day per arena (`unused_permits`): one wallet holds one
+  place of an arena for 32 minutes a day at most. Keeping the 150 places of one arena all day takes about 6,750 funded
+  wallets a day (150 × 1,440 minutes / 32; the same wallets can do it once more in each other arena; each holds the
+  entry fee when each of its lifetimes starts, so one fee moved from wallet to wallet costs a token transfer per
+  wallet), from at least 10 /24s or /48s at any time (16 each). Checked with the round-5 PoC: 150 wallets asking every
+  8.5 minutes held the share for about half an hour, then waited a day. Players with standing are not affected.
 - **Players with standing kept out of one arena**: the other 150 places must come from wallets with standing, each with
   a ticket of its own really played in the last 14 days (a seat in a round: its entry fee in play, its join gas, the
   server's settle), for one unplayed ticket at a time (its permits for other arenas share its join nonce: they buy one
@@ -411,12 +431,18 @@ costs the players, and never lock out a player with standing. Defaults, one aren
   played ticket to get it back. One cycle takes 150 such wallets beforehand; all day, about 10,800 played tickets a
   day. With NFTs: one wallet per NFT a day, so 150 NFTs per cycle and about 10,800 NFTs all day.
 - **One shared network** (a carrier NAT address, a /24, a mobile /48): its new wallets can be refused for a day by 9
-  no-shows from the address (3 wallets × 3 arenas) or 24 from the /24 or /48: tickets really bought (the entry fee
-  locked until the refund, the join gas) and never played. Free permits hold it only while they are valid: 8 (address)
-  / 16 (/24, /48) per arena at a time, each gone within 10 minutes, and one funded wallet holds one place per arena at
-  most (its live permit). Keeping one address closed to new wallets in one arena all day takes 8 funded wallets every
-  30 minutes, about 384 a day (768 for a /24 or /48), asking from that very network; ordinary players who leave a
-  permit unused (they declined in the wallet, had no gas, came back later) never close it. Its players with standing
+  no-shows of tickets whose permits were asked from the address (3 wallets × 3 arenas; a no-show counts against every
+  network its wallet asked from for that ticket, up to 4) or 24 from the /24 or /48: tickets really bought (the entry
+  fee locked until the refund, the join gas) and never played. Free permits hold it only for their lifetimes: 8
+  (address) / 4 (IPv6 /64) / 16 (/24, /48) per arena at a time, each gone within 12 minutes of the permit that began
+  it, and one funded wallet holds one place of one network per arena at most (its live permit, in the network its
+  lifetime began in: asking again from elsewhere carries no network along). Keeping one address closed to new wallets
+  in one arena all day takes 8 places × 1,440 minutes / 32 minutes per wallet, about 360 funded wallets a day (720 for
+  a /24 or /48, 180 for an IPv6 /64), each asking from that very network at the start of each of its lifetimes;
+  checked with the round-5 PoCs: 8 wallets that ask once at a carrier NAT address and then every 8.5 minutes from
+  elsewhere close it for 12 minutes, and asking first from 4 addresses holds only the first. A ticket bought starts a
+  wallet's count afresh, but each is one of its 3 no-shows a day and one of the network's 9. Ordinary players who leave
+  a permit unused (they declined in the wallet, had no gas, came back later) never close it. Its players with standing
   are never refused for it: the network's no-show block, its shares and its request limits do not apply to them,
   whatever permits of other arenas they asked for and left unused; only a ticket they bought elsewhere and have not
   played makes them wait (`ticket_elsewhere`) until they play it.

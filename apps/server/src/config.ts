@@ -45,8 +45,9 @@ export interface ServerConfig {
    * per 10 min), `JOIN_PERMIT_OPEN_PER_IP` / `_SUBNET` / `_SITE` (an arena's permits not played yet asked from one
    * IPv4 address / IPv6 /64 / IPv4 /24 or IPv6 /48: 8 / 4 / 16, 0 = no limit), `JOIN_PERMIT_FRESH_SHARE` (the share of
    * an arena's places, min(cap, maxSessions), wallets without standing may hold together; default 0.5, 0 = no limit),
-   * `JOIN_PERMIT_UNUSED_LIMIT` (permits of one arena a wallet without standing lets run out unused in 24 h, since its
-   * last ticket, before it gets no new one there until the oldest is a day old; default 3, 0 = off),
+   * `JOIN_PERMIT_UNUSED_LIMIT` (permits of one arena a wallet without standing lets end unused in 24 h, run out or
+   * replaced by one signed again, since its last ticket, before it gets no new one there until the oldest is a day old;
+   * default 3, 0 = off),
    * `JOIN_PERMIT_ARENA_CAP` (unseated tickets + places held by new permits per arena; 0 = the seats a round can take:
    * `ARENA_INSTANCE_CAP` × the scaler's max instances), `JOIN_PERMIT_HOLD_S` (how long a new permit holds a place;
    * default 120, 0 = never) and `NO_SHOW_LIMIT` (tickets gone back unplayed in 24 h before a wallet gets no permit; 3×
