@@ -163,6 +163,16 @@ export interface ChainGateway {
    */
   getSession(arenaId: number, player: string): Promise<ChainSession | null>;
   /**
+   * Whether the server already knows that this wallet holds an open ticket of the arena (the `Joined` log index of the
+   * stale sweeper; no RPC call). False is "not known", never "no ticket". Absent: never known.
+   */
+  knowsOpenTicket?(arenaId: number, player: string): boolean;
+  /**
+   * Reads new `Joined` logs into that index now, in the background (coalesced, a few seconds apart at most): a join of
+   * a wallet it does not know was refused for a full queue, or found a ticket. Absent: the index is the sweeper's only.
+   */
+  refreshTicketIndex?(): void;
+  /**
    * On-chain arenas; cached unless `fresh` (a re-read that bypasses the cache). When the RPC fails the
    * last good list is served (stale); `ChainBusyError` only when no list was ever read.
    */
@@ -184,6 +194,8 @@ export interface ChainGateway {
    * chain is off; EOA signatures are checked without it.
    */
   verifyMessage?(address: string, message: string, signature: string): Promise<boolean>;
+  /** Whether the address holds code (one `eth_getCode` at low priority): a sign-in's smart-wallet check is worth it. */
+  hasCode?(address: string): Promise<boolean>;
   /** The EVM access (the site reads the NFT and checks registered contracts through it); absent or null when off. */
   evm?(): EvmClient | null;
   /** Re-reads the registry and the arena config now (after a registry change). */

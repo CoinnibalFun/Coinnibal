@@ -198,7 +198,7 @@ has more bots than its setting, nor more playing than the setting minus its peop
 
 - **Config** (`config.ts`; every variable in `apps/server/.env.example`): `CHAIN_ID`, `EVM_RPC_URLS` /
   `EVM_RPC_URL`, `PUBLIC_RPC_URL`, `EXPLORER_URL`, `GAS_FAUCET_URL`, `ARENA_ADDRESS`, `NFT_ADDRESS`, `TOKEN_ADDRESS`,
-  `SERVER_PRIVATE_KEY` (`auto` | 0x hex | a file path), `ADMIN_WALLETS`, `AUTH_SECRET` (32+ bytes on the mainnet),
+  `SERVER_PRIVATE_KEY` (`auto` | 0x hex | a file path), `ADMIN_WALLETS`, `AUTH_SECRET` (32+ bytes on the mainnet: `CHAIN_ID` 4663 or an RPC that serves it),
   `ADMIN_TOKEN_TTL_MIN`, `ADMIN_SECRET_EXPORT`, `GAME_ACCESS`, `MINT_USD_CENTS`, `GAS_PRICE_URL`, `TOKEN_SYMBOL`,
   `STAKE_ENABLED`, `STAKE_ARENA_IDS`, `STALE_SESSION_AFTER_S`, `DEATH_SETTLE_BATCH_S`, `PAYOUT_GUARD_MULTIPLE`,
   `GAS_FLOOR_ETH`, `GAS_RUNWAY_WARN_DAYS`, `GAS_RUNWAY_CRITICAL_DAYS`, `HEALTH_MAX_PENDING`, `HEALTH_MAX_PENDING_AGE_S`,
@@ -221,8 +221,18 @@ has more bots than its setting, nor more playing than the setting minus its peop
   5 minutes it reads ETH/USD (Hyperliquid's `allMids`) and re-prices to `MINT_USD_CENTS` when off by more than 2 %,
   only after two readings agree within 3 %, at most ±20 % per update, always inside the bounds.
 - **Sign-in (SIWE, EIP-4361):** `/api/auth/nonce` issues the message (domain = the `PUBLIC_URL` host, the server's
-  chain id); nonces are single use, 10 minutes, at most 24 unused per IP and 4 per address. ERC-1271 / 6492 smart
-  wallets are verified through the RPC. Session tokens carry their issue time; an admin wallet's last
+  chain id); nonces are single use, 10 minutes, at most 24 unused per client (expired ones never count) and 4 per
+  client and address (never per address alone: another client's requests never evict the nonce the owner is
+  signing); an IPv6 client counts as
+  its /64 here and in every HTTP limit (`net/ip-key.ts`). An EOA signature is checked locally; the ERC-1271 / 6492
+  smart-wallet check through the RPC runs within a small budget of its own (`SMART_WALLET_CHECKS`: 2 at once, 0.5 a
+  second server-wide, 4 per client and 8 per IPv6 /48 in 10 minutes; a check unanswered in 10 s gives its place
+  back), only for an address that holds code or a signature with the ERC-6492 or ERC-8010 suffix (a wallet not
+  deployed yet, an EIP-7702 account not delegated yet) (`eth_getCode` at low priority,
+  cached, a budget of its own; an address it cannot read right now is checked anyway). A smart wallet that signed in before from the same network (an IPv4 address, an IPv6
+  /48) has a reserve beside it (`SMART_WALLET_RESERVE`, kept in `DATA_DIR/auth-smart-wallets.json`), so a flood of
+  garbage signatures cannot lock its owner out. Past the budget a sign-in is "busy, sign again in a moment" (no nonce
+  failure counted). Session tokens carry their issue time; an admin wallet's last
   `ADMIN_TOKEN_TTL_MIN` (2 h), are never extended, and can be revoked (`POST /api/admin/auth/revoke`). The secret
   exports (backup, migration settings) need a fresh purpose-bound signature (`site/secret-proof.ts`).
 - **Who may play** (`gameAccess`: `admins` | `holders` | `public` | `maintenance`; `GAME_ACCESS` overrides):
@@ -339,12 +349,32 @@ has more bots than its setting, nor more playing than the setting minus its peop
   admin's), `/api/profile`, the site API `/api/site/*` and the admin API `/api/admin/*` (`/api/admin/reprice`:
   "Re-price at next bell", `site/reprice.ts`). With `WEB_DIST` the server also serves the web build (strict CSP);
   without it, in production, a page of its own domain redirects to `PUBLIC_URL`.
-- **Front door** (`net/gateway.ts`): guests hold at most 80 % of `MAX_CONNECTIONS` and are limited per IP and per
-  subnet; a signed-in socket leaves its IP's guest count (carrier NAT, up to 64 per IP); a socket offering its
-  session token as the `coinnibal.auth.<token>` subprotocol (or `elymum.auth.<token>`, from a page of before the rename)
-  takes the reserve, and one whose wallet holds a live coin
-  always gets in; an idle lobby guest makes room near the cap. A join of the wallet that holds a live coin takes it
-  over on the new socket at once and closes the old one with `CLOSE_REPLACED` (4000).
+- **Front door** (`net/gateway.ts`, one admission policy): guests hold at most 80 % of `MAX_CONNECTIONS` and are
+  limited per IP, per subnet and per IPv6 /48; a signed-in socket leaves its IP's guest count (carrier NAT), up to 64
+  per address (an IPv6 /64) and 192 per IPv4 /24 or IPv6 /48; one wallet holds at most 3 sockets (a newer one closes its oldest
+  lobby socket with `CLOSE_REPLACED`, 4000). A socket counts under the wallet whose token opened it for its whole life
+  (a `logout` or a sign-in as another wallet does not free that place). A socket offering its session token as the
+  `coinnibal.auth.<token>` subprotocol (or `elymum.auth.<token>`, from a page of before the rename) takes the reserve,
+  and one whose wallet holds a live coin gets in past the cap (its own upgrade budget, a margin over the address
+  bounds, one slot per wallet: it takes the place of a lobby socket of that wallet, or of one whose game went silent
+  for 5 s, a dead socket; with every socket of the wallet in a live game it takes the wallet's one headroom slot, and
+  is refused once that is taken: a live game is never closed for a new tab). A socket on a headroom slot that signs
+  out while the server is full is closed (1013). An idle lobby guest makes room near the cap; at the cap a signed-in
+  socket that has not played for 2 minutes (its pings do not count), not joining and holding no live coin, makes room
+  too (1013), the longest idle first. A join of the wallet
+  that holds a live coin takes it over on the new socket at once and closes the old one with `CLOSE_REPLACED`. A join
+  seats only the wallet that was signed in when it began. Ticket reads (`getSession`) run at `high` RPC priority
+  (settlements and loot burns, `critical`, go first; holder checks and the other work clients can queue, `normal`,
+  after), shared per wallet, limited per socket, wallet, client and network (an IPv6 /48, an IPv4 /24), with a bounded
+  queue: one client holds at most 4 of its places and one network at most 8, and wallets the `Joined`-log index does
+  not know to hold an open ticket only a quarter of it. A join of a wallet the index does not know that is refused
+  for a full quarter (or finds a ticket) has the index read the new blocks at once (`refreshTicketIndex`, at most
+  every 4 s), so a ticket bought a moment ago has the whole queue at the join's next retry. Holder checks that read
+  the chain for a client are bounded per client, per network and server-wide (a quarter of `RPC_MAX_RPS`); one a
+  client may not make right now answers a "holder" on record, or "busy, try again", never "not a holder". A join
+  waits at most 1 s for its laurel's holder check (then plays without it; a paid seat that asked for the emblem skin
+  starts in a basic skin). Every send checks the
+  socket's buffer (closed past 2 MiB); the heartbeat's ping carries a payload the pong must echo.
 - **Dev fake chain** (`chain/dev-fake.ts`, `DEV_FAKE_CHAIN=1` with `NODE_ENV=development` only): an in-memory chain
   with free tickets, simulated settlements and `pay`, for `pnpm demo` and the screenshot tours. It refuses to start
   next to `EVM_RPC_URL` or `SERVER_PRIVATE_KEY`.

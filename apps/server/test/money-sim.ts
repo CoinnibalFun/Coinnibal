@@ -256,7 +256,7 @@ class Faulty {
 
 function fakeConn(wallet: string): Conn {
   // a socket that always looks backed up: the rooms skip its snapshots (the simulation needs no frames)
-  const ws = { readyState: 1, bufferedAmount: 1 << 30, send(_d: unknown) {} };
+  const ws = { readyState: 1, bufferedAmount: 1 << 30, send(_d: unknown) {}, terminate() {} };
   const conn = new Conn(ws as never, '127.0.0.1');
   conn.wallet = wallet;
   // messages are not needed: drop them (the rooms send a lot)

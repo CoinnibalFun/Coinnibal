@@ -97,12 +97,19 @@ export function rememberedChainId(dataDir: string, rpcUrl: string): number | nul
  */
 export async function resolveStateChainId(
   cfg: ServerConfig,
-  opts: { persist: boolean; log: (m: string) => void; readId?: (rpcUrl: string) => Promise<number> },
+  opts: {
+    persist: boolean;
+    log: (m: string) => void;
+    readId?: (rpcUrl: string) => Promise<number>;
+    /** Told the chain id the RPC answered (`eth_chainId`), whatever this returns (the weak-secret refusal reads it). */
+    served?: (id: number) => void;
+  },
 ): Promise<number | null> {
   if (cfg.devFakeChain || !cfg.chain.rpcUrl || !cfg.chain.serverKey) return null;
   const rpcUrl = cfg.chain.rpcUrl;
   try {
     const id = await (opts.readId ?? readChainId)(rpcUrl);
+    opts.served?.(id);
     if (!isSupportedChainId(id)) {
       opts.log(`!!! chain: the RPC (COINNIBAL_RPC_URLS on the VPS, EVM_RPC_URL(S) outside Docker) serves chain ${id}: ${unsupportedChainMessage(id)}. Arena money stays OFF`);
       return null;
