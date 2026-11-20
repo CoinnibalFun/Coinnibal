@@ -152,9 +152,10 @@ Off chain (the server; tests in `apps/server/test`):
     DISABLED`).
 13. **One arena contract per journal:** while the journal owes money on an arena contract the server refuses to
     switch to another one (`POST /api/admin/contracts` answers 409 `wrong_state`).
-14. **Stale tickets:** a ticket nobody played for `STALE_SESSION_AFTER_S` (15 min, on the chain's clock: the latest
-    block's timestamp) is cancelled (full entry fee back); in an arena that is disabled, paused or closing for a
-    re-price, at once. While a quarantined journal (`journal.json.corrupt-*`) exists the stale sweeper stays off.
+14. **Stale tickets:** a ticket nobody played for `STALE_SESSION_AFTER_S` (15 min, on the chain's clock: the server's,
+    corrected where the blocks read prove it off) is cancelled (full entry fee back); in an arena that is disabled,
+    paused or closing for a re-price, at once. While a quarantined journal (`journal.json.corrupt-*`) exists the stale
+    sweeper stays off.
 15. **Guards before money leaves:** nothing is sent while the journal cannot be written (a settlement sent from
     memory alone would not survive a crash together with the change that matched it); a payout above its round's pool
     (`roundPool`: the entry fees seated in its instance that round) is held (without a pool: above
@@ -279,7 +280,8 @@ has more bots than its setting, nor more playing than the setting minus its peop
   the stale sweeper (`cancel`). Reads go through one request budget per RPC URL (`rpc-budget.ts`) and a viem fallback
   over `EVM_RPC_URLS`; concurrent `eth_call`s merge into one Multicall3 call, or a deployless multicall where the chain
   has none (probed at start). Eaten tickets (payout 0) wait `DEATH_SETTLE_BATCH_S` (6 s) to go out in one batch. The
-  chain's clock (the latest block's timestamp) measures ticket ages; a server clock more than 30 s off is logged. Gas
+  chain's clock measures ticket ages and permit deadlines: the server's, corrected only where the blocks read prove it
+  off (an idle chain's latest block can be minutes old); a server clock more than 30 s off is logged. Gas
   is ETH, paid by the server key; its runway at the last day's spend (`chain/gas-runway.ts`) is in `/admin` and
   `/api/health` (warning under 7 days, alert under 2).
 - **Price keeper** (`chain/price-keeper.ts`): when the server key is the NFT's `priceKeeper` with bounds set, every

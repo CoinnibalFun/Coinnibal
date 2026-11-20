@@ -200,12 +200,12 @@
   font-size: 17px;
   letter-spacing: -0.01em;
 }
+/* the tag wraps instead of losing its end: a private room's time left beside the code key reads "Private room ·"
+   over "29:32 left" (no word alone on the second line) */
 .g-pond__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 12px;
   color: var(--ink-3);
+  text-wrap: pretty;
 }
 .g-pond__code {
   flex: none;
@@ -1346,8 +1346,10 @@
 .g-hud.is-narrow .g-pond__label {
   font-size: 12px;
 }
-/* "Until the bell" keeps one line at the 12 px floor (tighter tracking; a longer translation still wraps) */
-.g-hud.is-narrow .g-round__label {
+/* "Until the bell" and "Practice · no bell" keep one line at the 12 px floor (tighter tracking; a longer translation
+   still wraps) */
+.g-hud.is-narrow .g-round__label,
+.g-hud.is-narrow .g-pond__label {
   letter-spacing: 0.02em;
 }
 .g-hud.is-narrow .g-pond__name {
@@ -1771,9 +1773,12 @@
   border-bottom: 2px dashed var(--rule);
   font-size: 15px;
 }
+/* the kills column as wide as its heading, and a wider gap between the numbers: at 36 px "KILLS" ran into
+   "PAYOUT", and a row read "1 2,000T" as one figure */
 .g-board__head.has-value,
 .g-board__row.has-value {
-  grid-template-columns: 28px minmax(0, 1fr) 58px 36px minmax(46px, auto);
+  grid-template-columns: 28px minmax(0, 1fr) 58px 44px minmax(46px, auto);
+  column-gap: 12px;
 }
 .g-board__head {
   padding: 0 4px;

@@ -208,8 +208,12 @@ describe('ticket confirm sheet', () => {
     view.unmount();
     act(() => useUi.setState({ chain: chainStatus() }));
     useChainData.setState({ holder: true, config: { ...config(), holderBurnBps: 1500, holderVaultBps: 0 } });
-    open(PENNY);
+    const holder = open(PENNY);
     expect(within(screen.getByRole('dialog')).getByText('15% · on profit only · fixed for this ticket · 15% burned · 0% to the team wallet · holder rate, not 20%')).toBeTruthy();
+    holder.unmount();
+    // a holders-only room: every ticket there has the holder rate, so there is no "not 20 %" to compare with
+    open({ ...PENNY, holdersOnly: true });
+    expect(within(screen.getByRole('dialog')).getByText('15% · on profit only · fixed for this ticket · 15% burned · 0% to the team wallet')).toBeTruthy();
   });
 
   it('a ticket headed for a private ticket room says, before it is paid, that the room can end early', () => {
@@ -386,6 +390,22 @@ describe('ticket flow: two prompts, progress and races', () => {
     act(() => screen.getByRole('button', { name: 'Try again' }).click());
     await settle();
     expect(spies.planJoin).toHaveBeenCalledTimes(2);
+  });
+
+  it('a join refused for an expired permit says so, and "Try again" asks the server for a permit again and joins with that one', async () => {
+    useChainData.setState({ allowance: 5000n * ONE });
+    spies.planJoin.mockImplementation(async () => ({ entryFee: 1000n * ONE, allowance: 5000n * ONE, balance: 12_450n * ONE, approve: null, join: joinCall, calls: [joinCall] }));
+    spies.fetchJoinPermit.mockImplementationOnce(async (_t: string, arenaId: number) => ({ ok: true, permit: permitOf(arenaId, { signature: `0x${'01'.repeat(65)}` }) }));
+    spies.sendWalletCall.mockImplementationOnce(async () => ({ ok: false, hash: null, error: { kind: 'contract', name: 'PermitExpired', args: [], code: null, message: 'expired' } }));
+    open(PENNY);
+    act(() => screen.getByRole('button', { name: /^Pay / }).click());
+    await settle();
+    expect(screen.getByRole('alert').textContent).toMatch(/The ticket permit ran out before the ticket went through\. Nothing was charged; try again\./);
+    act(() => screen.getByRole('button', { name: 'Try again' }).click());
+    await settle();
+    expect(spies.fetchJoinPermit).toHaveBeenCalledTimes(2);
+    expect(spies.planJoin.mock.calls.map((c) => (c[1].permit as { signature: string }).signature)).toEqual([`0x${'01'.repeat(65)}`, permitOf(1).signature]);
+    expect(spies.sendWalletCall).toHaveBeenCalledTimes(2);
   });
 
   it('re-reads the config right before the wallet and refuses changed fee rates', async () => {

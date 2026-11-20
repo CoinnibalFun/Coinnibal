@@ -250,12 +250,12 @@ export interface ChainGateway {
    */
   tokenBalance?(player: string): Promise<number>;
   /**
-   * The chain's clock (Unix ms): the local clock corrected by the last latest-block timestamp read. Ticket ages
-   * (the stale sweeper, the 6 h cap) are measured with it: a server clock that drifts never cancels a fresh ticket.
-   * Absent (the chain off, tests): the local clock.
+   * The chain's clock (Unix ms): the local clock, corrected where the latest blocks read prove it off (an idle chain's
+   * old latest block proves no skew). Ticket ages (the stale sweeper, the 6 h cap) and permit deadlines are measured
+   * with it: a server clock that drifts never cancels a fresh ticket. Absent (the chain off, tests): the local clock.
    */
   chainNow?(): number;
-  /** How far the server clock is from the chain's (ms, local − chain); null until a block time was read. */
+  /** How far the blocks read prove the server clock off the chain's (ms, local − chain); null until a block time was read. */
   clockSkewMs?(): number | null;
   start(): Promise<void>;
   stop(): Promise<void>;

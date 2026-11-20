@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { setupSteps } from '../src/admin/QuickSetup';
+import { faucetTokenToRegister } from '../src/admin/setup';
 
 const ARENA = '0x9bdc7dcbb3ea173e3111093a64cbe547e2f82a68';
 const NFT = '0x0000000000000000000000000000000000000f7e';
@@ -60,5 +61,27 @@ describe('finish setup', () => {
 
   it('never opens the mint on mainnet', () => {
     expect(setupSteps(ctx(), { openMint: false }).map((s) => s.id)).not.toContain('mint');
+  });
+});
+
+describe('the faucet token', () => {
+  const status = (token: string | null) => ({ arena: { address: ARENA, config: { token } } }) as never;
+  const registry = (token: string | null) => ({ arena: { address: ARENA }, nft: { address: NFT }, token: token ? { address: token } : null }) as never;
+
+  it('on a testnet, the arena\'s game token must be the one registered with the server: /faucet hands out that one', () => {
+    // the token set on chain, the registry without it (a chain deployed outside the panel): register it
+    expect(faucetTokenToRegister({ testnet: true, status: status(TOKEN), registry: registry(null) })).toBe('0xFEeB469fE3c892ebb82e44cef5f3bf1C74C11167');
+    // another token registered: the faucet would hand out that one
+    expect(faucetTokenToRegister({ testnet: true, status: status(TOKEN), registry: registry(NFT) })?.toLowerCase()).toBe(TOKEN);
+    // registered (any letter case): nothing to do
+    expect(faucetTokenToRegister({ testnet: true, status: status(TOKEN), registry: registry(TOKEN.toUpperCase().replace('0X', '0x')) })).toBeNull();
+  });
+
+  it('nothing before the token is set, on mainnet, or while the registry is not read', () => {
+    expect(faucetTokenToRegister({ testnet: true, status: status(null), registry: registry(null) })).toBeNull();
+    expect(faucetTokenToRegister({ testnet: false, status: status(TOKEN), registry: registry(null) })).toBeNull();
+    expect(faucetTokenToRegister({ testnet: true, status: status(TOKEN), registry: null })).toBeNull();
+    expect(faucetTokenToRegister({ testnet: true, status: status(TOKEN), registry: undefined })).toBeNull();
+    expect(faucetTokenToRegister({ testnet: true, status: null, registry: registry(null) })).toBeNull();
   });
 });

@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 // Local chain for Coinnibal: starts `hardhat node` (chain id 31337, a local stand-in for Robinhood Chain Testnet, gas in ETH), deploys the
-// TestToken, CoinnibalArena and CoinnibalNFT with the SDK (the /admin → Setup order), sets the token, creates
-// the four default arenas, and writes the game server's env to .localnet/server.env (addresses also in
-// .localnet/contracts.json). It keeps the node running until Ctrl+C.
+// TestToken, CoinnibalArena and CoinnibalNFT with the SDK (the /admin → Deploy the contracts order), sets the token,
+// creates the four default arenas, sets the NFT perks, registers the TestToken with the game server (its registry in
+// .localnet/server-data: the faucet hands it out) and writes the game server's env to .localnet/server.env (addresses
+// also in .localnet/contracts.json). It keeps the node running until Ctrl+C.
 //
 //   node scripts/localnet.mjs                 start the node, deploy, keep running
-//   node scripts/localnet.mjs --no-token      deploy but leave the token unset (like a fresh deploy)
+//   node scripts/localnet.mjs --no-token      deploy but leave the token unset and the perks off (like a fresh deploy)
 //   node scripts/localnet.mjs --open-mint     also open the NFT mint to the public
 //   node scripts/localnet.mjs --deploy-only   deploy to a node that is already running (RPC_URL), then exit
 //
 // Env: RPC_PORT (default 8545), RPC_URL (with --deploy-only), PUBLIC_URL (default http://localhost:5173).
-// Then run the server with that env, e.g.
+// Then run the server with that env and that DATA_DIR (a server already running reads the registry again on restart), e.g.
 //   cd apps/server && env $(cat ../../.localnet/server.env | xargs) NODE_ENV=production DATA_DIR=../../.localnet/server-data npx tsx src/index.ts
 // or simply use `pnpm demo:localnet`, which does all of it. Fund a wallet: node scripts/localnet-fund.mjs <0x...>
 import { LOCALNET_RPC_PORT } from './lib/common.mjs';
-import { SERVER_ENV_FILE, deployLocalnet, rpcUrlFor, startHardhatNode } from './lib/localnet.mjs';
+import { SERVER_DATA_DIR, SERVER_ENV_FILE, deployLocalnet, rpcUrlFor, startHardhatNode } from './lib/localnet.mjs';
 
 const argv = process.argv.slice(2);
 const KNOWN = new Set(['--no-token', '--open-mint', '--deploy-only', '--help', '-h']);
@@ -62,6 +63,7 @@ try {
   console.log(`  server key    ${out.server}   (Hardhat account #1)`);
   console.log(`\nGame server env (${SERVER_ENV_FILE}):\n`);
   for (const [k, v] of Object.entries(out.env)) console.log(`  ${k}=${k === 'SERVER_PRIVATE_KEY' ? `${v.slice(0, 10)}... (Hardhat #1, local only)` : v}`);
+  console.log(`\nGame server DATA_DIR: ${SERVER_DATA_DIR} (its registry holds the TestToken: the faucet hands it out)`);
   console.log('');
   if (!node) process.exit(0);
   say('the node keeps running; Ctrl+C stops it');

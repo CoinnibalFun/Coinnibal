@@ -108,9 +108,9 @@
 .sh-pack {
   position: relative;
 }
-/* the open note rides above the next card */
-.sh-pack:hover,
-.sh-pack:focus-within {
+/* the open note rides above the next card (and the cart); a pack under the pointer or with its + focused stays
+   under the cart that sticks to the sheet's bottom edge */
+.sh-pack:has(.sh-info:hover, .sh-info:focus-within, .sh-info.is-open) {
   z-index: 3;
 }
 /* what a power-up does: a small "i" on the icon's top corner that opens a note on hover / focus / tap */

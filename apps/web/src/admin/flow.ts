@@ -2,7 +2,7 @@ import { testTokenRefusal, type StatusSnapshot } from '@coinnibal/sdk/ops';
 import type { ContractsRegistry } from '@coinnibal/shared';
 import { getAddress, isAddress, type Address } from 'viem';
 import type { LocalDeploys } from './deploy';
-import type { SetupStep } from './setup';
+import { faucetTokenToRegister, type SetupStep } from './setup';
 
 /**
  * "Deploy the contracts" in one flow (pure, tested): every step the server's network still needs, in order, one wallet
@@ -77,7 +77,10 @@ export function deployFlowSteps(i: FlowInput): FlowStep[] {
   const testnet = i.chainId !== null && !testTokenRefusal(i.chainId);
   const cfg = liveArena(i)?.config ?? null;
   const tokenSet = !!cfg?.token;
-  const registered = { arena: !!usable(i.stale, i.registry?.arena?.address), nft: !!usable(i.stale, i.registry?.nft?.address), token: !!i.registry?.token || tokenSet };
+  // the faucet hands out the token registered with the server, not the arena's: on a testnet the game token is registered
+  // too (never a stale arena's token)
+  const faucetToken = faucetTokenToRegister({ testnet, status: liveArena(i) ? i.status : null, registry: i.registry });
+  const registered = { arena: !!usable(i.stale, i.registry?.arena?.address), nft: !!usable(i.stale, i.registry?.nft?.address), token: (!!i.registry?.token || tokenSet) && !faucetToken };
   const old = { arena: replaces(i, 'arena'), nft: replaces(i, 'nft') };
   const fresh = (kind: 'arena' | 'nft', what: string) => (old[kind] ? `The registered one (${old[kind]}) is an older version: a new one replaces it.` : what);
   const steps: FlowStep[] = [];
@@ -88,7 +91,7 @@ export function deployFlowSteps(i: FlowInput): FlowStep[] {
     {
       id: 'register',
       label: 'Register them with the server',
-      detail: 'The server checks each one. No signature.',
+      detail: faucetToken ? 'The faucet hands out the token the server knows: the game token joins them. No signature.' : 'The server checks each one. No signature.',
       done: registered.arena && registered.nft && (!testnet || registered.token),
       ask: { kind: 'none' },
     },

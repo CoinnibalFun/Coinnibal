@@ -100,6 +100,9 @@ export interface KillItem {
   /** BOT tags. */
   killerIsBot?: boolean;
   victimIsBot?: boolean;
+  /** The killer / the victim is my coin (by player id when the line came in): the feed prints "you" for it. */
+  killerIsMe?: boolean;
+  victimIsMe?: boolean;
   at: number;
 }
 

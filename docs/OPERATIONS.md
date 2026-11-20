@@ -268,8 +268,10 @@ the flags honest players raise (none at the defaults) and those two scripted bot
   `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`; without them the alerts go to the journal only) on a `!!!` log line, a 503 and its
   reasons, a gas runway under 7 days, a disk over 80 %, the container down; it restarts an app whose liveness check
   failed 3 minutes in a row (deploy/vps/README.md, "Alerts and autoheal").
-- **Clock:** ticket ages (the 15-minute stale limit, the 6-hour cap) are measured on the chain's clock (the latest
-  block's timestamp), never the server's; `!!! clock: the server clock is N s ahead of the chain` means NTP is off.
+- **Clock:** ticket ages (the 15-minute stale limit, the 6-hour cap) and permit deadlines are measured on the chain's
+  clock: the server's, corrected only where the blocks read prove it off (the chain makes a block only for a
+  transaction, so its latest block can be minutes old); `!!! clock: the server clock is N s ahead of the chain` means
+  NTP is off.
 - `GET /api/config`: the chain (`chainId`, `chainName`, `testnet`, `faucetUrl`, `explorerUrl`), the arena and NFT
   addresses, `tokenReady`, the token, `fees` (the fee pair on profit, the holder pair, the payment burn share, the
   burn mode), `serverKey`.

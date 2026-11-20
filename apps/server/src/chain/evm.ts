@@ -190,8 +190,15 @@ export class EvmChain implements ChainGateway {
   private chainMismatch = false;
   /** How concurrent reads are merged (null: an injected client). */
   multicall: MulticallMode | null = null;
-  /** Chain time − local time (ms), from the last latest-block read; null until one was read. */
+  /** Chain time − local time (ms) in use (`readChainClock`); null until a block was read. */
   private chainOffsetMs: number | null = null;
+  /**
+   * What the latest-block reads prove about chain time − local time (ms): at least `lo`, at most `hi` (null: no upper
+   * bound yet); and the block the last read found latest, with when that read began (local clock).
+   */
+  private clockProof: { lo: number; hi: number | null; block: bigint; readAt: number } | null = null;
+  /** The latest-block read in flight (callers share it, so the reads are compared in order). */
+  private clockRead: Promise<void> | null = null;
   /** The server key's balance samples and runway. */
   private readonly runway: GasRunwayTracker;
   /** When the RPC last answered (Unix ms, local clock); null: never. */
@@ -581,29 +588,58 @@ export class EvmChain implements ChainGateway {
   }
 
   /**
-   * The chain's clock (Unix ms): local time corrected by the last block timestamp read. Block timestamps have whole
-   * seconds and trail by up to a block: good to about a second, far inside the minutes ticket ages are measured in.
+   * The chain's clock (Unix ms): local time, corrected only where the blocks read prove it off (`readChainClock`). Block
+   * timestamps have whole seconds: good to about a second, far inside the minutes ticket ages are measured in.
    */
   chainNow(): number {
     return this.now() + (this.chainOffsetMs ?? 0);
   }
 
-  /** Local − chain clock (ms); null until a block time was read. */
+  /** Local − chain clock (ms), as far as the blocks read prove it (0: they prove none); null until a block was read. */
   clockSkewMs(): number | null {
-    return this.chainOffsetMs === null ? null : -this.chainOffsetMs;
+    return this.chainOffsetMs === null ? null : 0 - this.chainOffsetMs;
   }
 
-  /** Reads the latest block's timestamp (the chain's clock); warns when the server clock is more than 30 s off. */
-  async readChainClock(): Promise<void> {
+  /**
+   * Reads the latest block: what it proves about the chain's clock; warns when it proves the server clock more than 30 s
+   * off. The chain makes a block only for a transaction (Arbitrum Orbit chains like Robinhood Chain, an automining
+   * Hardhat node), so the latest one can be minutes old: its timestamp is a lower bound of the chain's time, never the
+   * time itself (2026-11 play-test: after 12 idle minutes every permit was signed already expired, `PermitExpired`).
+   * Read at local time t, a block proves chain − local ≥ its timestamp − t. A block past the one the previous read found
+   * latest was made after that read began (t0): chain − local ≤ its timestamp + 1 s (whole seconds) − t0. The offset in
+   * use is none (the host runs NTP) while the proof allows it, to its second; else the lower bound, the freshest block's
+   * time (the upper one is only as close as the time between two reads). So an idle chain never moves the clock, and a
+   * server clock really off is still corrected.
+   */
+  readChainClock(): Promise<void> {
+    this.clockRead ??= this.readClockNow().finally(() => (this.clockRead = null));
+    return this.clockRead;
+  }
+
+  private async readClockNow(): Promise<void> {
     const client = this.client;
     if (!client?.latestBlock) return;
     try {
       const t0 = this.now();
       const b = await withRpcPriority('low', () => client.latestBlock!());
-      this.rpcOkAt = this.now();
-      const local = Math.round((t0 + this.now()) / 2);
-      // the block was made up to a second before it was read: its timestamp is the chain's time then
-      this.chainOffsetMs = b.timestamp * 1000 - local;
+      const t1 = this.now();
+      this.rpcOkAt = t1;
+      const ts = b.timestamp * 1000;
+      const was = this.clockProof;
+      // the block existed by t1: the chain's clock was at its timestamp at least
+      let lo = ts - t1;
+      // made after the previous read began, before the chain's clock reached its timestamp's next second
+      let hi = was && b.number > was.block ? ts + 1000 - was.readAt : null;
+      // the local clock was set back between the two reads: that bound compares two different clocks
+      if (hi !== null && hi < lo) hi = null;
+      // what earlier reads proved holds while this read agrees with it; an earlier block (another node, a new chain) or
+      // a contradiction (a clock was set since) leaves this read's proof alone
+      if (was && b.number >= was.block && was.lo <= (hi ?? Infinity) && lo <= (was.hi ?? Infinity)) {
+        lo = Math.max(lo, was.lo);
+        hi = hi === null ? was.hi : was.hi === null ? hi : Math.min(hi, was.hi);
+      }
+      this.clockProof = { lo, hi, block: b.number, readAt: t0 };
+      this.chainOffsetMs = hi !== null && hi < -1000 ? lo : Math.max(lo, 0);
       const skew = -this.chainOffsetMs;
       if (Math.abs(skew) > CLOCK_SKEW_ALERT_MS) {
         this.warn('clock', `!!! clock: the server clock is ${Math.round(skew / 1000)} s ${skew > 0 ? 'ahead of' : 'behind'} the chain (block ${b.number}) — ticket ages use the chain's time; fix NTP on the host (timedatectl)`, 10 * 60_000);
@@ -1711,8 +1747,8 @@ export class EvmChain implements ChainGateway {
       this.warn('sweep', `chain: stale-session scan failed (${firstLine(err)})`);
       return 0;
     }
-    // ticket ages are measured on the chain's clock (the latest block), never the server's: a server clock that runs
-    // fast must not cancel a ticket its player is about to seat
+    // ticket ages are measured on the chain's clock (`chainNow`: the server's as far as the blocks prove it right): a
+    // server clock that runs fast must not cancel a ticket its player is about to seat
     await this.readChainClock();
     const chainNowS = this.chainNow() / 1000;
     const closed = await this.closedArenas();
@@ -1772,6 +1808,8 @@ export class EvmChain implements ChainGateway {
               sessionId: Number(s.id),
               payout: done.amount,
               entryFee: toLedger(s.entryFee, t.decimals, 'floor'),
+              // the ticket's own rates (a holder's pair): `/api/pending` shows what reaches the wallet
+              rates: { burnBps: s.burnBps, vaultBps: s.vaultBps },
               score: 0,
               kills: 0,
               xp: 0,

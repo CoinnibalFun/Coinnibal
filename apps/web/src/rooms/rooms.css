@@ -159,6 +159,9 @@
   background: var(--paper);
   color: var(--ink);
   font-size: var(--t-small);
+  /* the link as it is (mono's capitals printed "HTTP://…/PLAY?ROOM="), and more of it in view */
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 /* the lobby card (under the departures board) */

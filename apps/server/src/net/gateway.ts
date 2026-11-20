@@ -10,6 +10,7 @@ import {
   EMBLEM_SKIN_ID,
   clamp,
   decodeClientInput,
+  defaultName,
   isBasicSkin,
   isCountryCode,
   isFingerprint,
@@ -1176,7 +1177,9 @@ export class Gateway {
         this.error(conn, 'skin_locked', wantsEmblem ? 'The NFT skin is for Coinnibal NFT holders.' : 'That skin is locked.');
         return;
       }
-      let name = sanitizeName(msg.name);
+      // no name, or none usable: "Coinie" and a tag of the wallet (the name the client sends for it) or, for a guest,
+      // of this connection (`defaultName`), so players who set no name never become one "Coinie"
+      let name = sanitizeName(msg.name, defaultName(wallet ?? `conn:${conn.id}`));
       let flags = holder ? PlayerFlag.Holder : 0;
       if (conn.profile) {
         name = sanitizeName(conn.profile.name, name);
@@ -1580,6 +1583,9 @@ export class Gateway {
           // the coin starts at the ticket's value: entry − fee on a fee-on-entry arena (v2), the entry fee on v1
           value: session.value,
           openedAt: session.openedAt,
+          // the fee rates fixed into the ticket at join (a holder's are the holder pair): the round result shows the
+          // fee the contract takes, not the default one
+          ...(session.rates ? { rates: session.rates } : {}),
         },
       });
     }
