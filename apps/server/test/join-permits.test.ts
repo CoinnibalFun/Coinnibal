@@ -1315,13 +1315,13 @@ describe('a new arena contract registered live (audit S16, round 3)', () => {
 });
 
 describe('join permits on the chain (EvmChain + the FakeEvm model of CoinnibalArena v4)', () => {
-  async function evmChain(env: Record<string, string> = {}, now: () => number = () => T0) {
+  async function evmChain(env: Record<string, string> = {}, now: () => number = () => T0, logs: string[] = []) {
     const evm = new FakeEvm();
     evm.addArena(1, 1_000n);
     evm.nowS = () => Math.floor(T0 / 1000);
     const cfg = loadConfig({ EVM_RPC_URL: 'http://127.0.0.1:1', SERVER_PRIVATE_KEY: generatePrivateKey(), STALE_SESSION_AFTER_S: '60', ...env } as unknown as NodeJS.ProcessEnv);
     const journal = new Journal(null);
-    const chain = new EvmChain(cfg, journal, () => {}, { client: evm, contracts: () => ({ arena: ARENA, nft: null }), loops: false, now, receiptTimeoutMs: 10 });
+    const chain = new EvmChain(cfg, journal, (m) => logs.push(m), { client: evm, contracts: () => ({ arena: ARENA, nft: null }), loops: false, now, receiptTimeoutMs: 10 });
     chain.setLiveSessionProvider(() => new Set());
     await chain.start();
     return { evm, chain, journal };
@@ -1451,6 +1451,11 @@ describe('join permits on the chain (EvmChain + the FakeEvm model of CoinnibalAr
     const local = { now: T0 + 60_000 };
     const { evm, chain } = await evmChain({}, () => local.now);
     await chain.readChainClock();
+    // one block alone proves no skew: it may just be a minute old (an idle chain)
+    expect(chain.clockSkewMs()).toBe(0);
+    // a block made since the last read proves it: at T0 on the chain, a minute ago on this server
+    evm.block += 1n;
+    await chain.readChainClock();
     expect(chain.clockSkewMs()).toBe(60_000);
     const alice = getAddress(testSigner().address);
     fund(evm, alice);
@@ -1470,6 +1475,89 @@ describe('join permits on the chain (EvmChain + the FakeEvm model of CoinnibalAr
     const p = await permits.issue(alice, 1, '10.0.0.1');
     expect(p.deadline).toBe(Math.floor(T0 / 1000) + JOIN_PERMIT_TTL_MAX_S);
     expect((await permits.load(1, 0)).held).toBe(1);
+    await evm.sendFrom(alice, joinCall(ARENA, 1, { deadline: BigInt(p.deadline), signature: p.signature as Hex }));
+    expect(await chain.hasOpenTicket(1, alice)).toBe(true);
+  });
+
+  const permitsOn = (chain: EvmChain, local: { now: number }) =>
+    new JoinPermits({ chain, gameOpenFor: async () => true, blocked: () => [], seatedKeys: () => new Set(), pendingKeys: () => [], seatsPerRound: () => 300, noShows: () => [], now: () => local.now });
+
+  it('an idle chain (its latest block 12 minutes old, the server clock right): the permit ends the TTL after the real time and buys the ticket; no clock alarm (2026-11 play-test)', async () => {
+    // the chain makes a block only for a transaction (Robinhood Chain, an automining Hardhat node): its latest is from
+    // T0, and the server's clock (right) reads 12 minutes later
+    const local = { now: T0 + 12 * 60_000 };
+    const logs: string[] = [];
+    const { evm, chain } = await evmChain({}, () => local.now, logs);
+    await chain.readChainClock();
+    expect(chain.clockSkewMs()).toBe(0);
+    expect(chain.chainNow()).toBe(local.now);
+    const alice = getAddress(testSigner().address);
+    fund(evm, alice);
+    const permits = permitsOn(chain, local);
+    expect(permits.config.ttlS).toBe(600);
+    // the TTL after the real time: one that ends 600 s after the latest block's time ran out 2 minutes before it was signed
+    const first = await permits.issue(alice, 1, '10.0.0.1');
+    expect(first.deadline).toBe(Math.floor(local.now / 1000) + 600);
+    // the wallet is slow (11 minutes, the chain still idle): that permit ran out, and asked again it is not handed out again
+    local.now += 11 * 60_000;
+    await chain.readChainClock();
+    const p = await permits.issue(alice, 1, '10.0.0.1');
+    expect(p.nonce).toBe(first.nonce);
+    expect(p.deadline).toBe(Math.floor(local.now / 1000) + 600);
+    // the join makes the next block at the real time (5 s of wallet later)
+    local.now += 5_000;
+    const joinedS = Math.floor(local.now / 1000);
+    evm.nowS = () => joinedS;
+    await expect(evm.sendFrom(alice, joinCall(ARENA, 1, { deadline: BigInt(first.deadline), signature: first.signature as Hex }))).rejects.toThrow(/PermitExpired/);
+    await evm.sendFrom(alice, joinCall(ARENA, 1, { deadline: BigInt(p.deadline), signature: p.signature as Hex }));
+    expect(await chain.hasOpenTicket(1, alice)).toBe(true);
+    // an hour of idle chain after it: the ticket is an hour old (never seated: stale), still no skew and no alarm
+    local.now += 3600_000;
+    expect(await chain.sweepStale()).toBe(1);
+    expect(chain.clockSkewMs()).toBe(0);
+    expect(logs.filter((l) => l.includes('clock:'))).toEqual([]);
+  });
+
+  it('a fresh block proves the server clock 16 minutes fast: corrected (the permit ends the TTL after the chain time), and still after 20 idle minutes', async () => {
+    // the chain's clock is T0; the server's runs 16 minutes fast
+    const local = { now: T0 + 16 * 60_000 };
+    const logs: string[] = [];
+    const { evm, chain } = await evmChain({}, () => local.now, logs);
+    // a block made since the first read, at T0
+    evm.block += 1n;
+    await chain.readChainClock();
+    expect(chain.clockSkewMs()).toBe(16 * 60_000);
+    expect(chain.chainNow()).toBe(T0);
+    expect(logs.some((l) => l.startsWith('!!! clock: the server clock is 960 s ahead of the chain'))).toBe(true);
+    const alice = getAddress(testSigner().address);
+    fund(evm, alice);
+    const permits = permitsOn(chain, local);
+    const p = await permits.issue(alice, 1, '10.0.0.1');
+    expect(p.deadline).toBe(Math.floor(T0 / 1000) + 600);
+    evm.nowS = () => Math.floor(T0 / 1000) + 5;
+    await evm.sendFrom(alice, joinCall(ARENA, 1, { deadline: BigInt(p.deadline), signature: p.signature as Hex }));
+    // 20 minutes of idle chain: the ticket's block is the latest, its time proves nothing new, the correction stays
+    local.now += 20 * 60_000;
+    await chain.readChainClock();
+    expect(chain.clockSkewMs()).toBe(16 * 60_000);
+    expect(chain.chainNow()).toBe(T0 + 20 * 60_000);
+  });
+
+  it('a fresh block proves the server clock 15 minutes slow: corrected at once, and still after 20 idle minutes', async () => {
+    // the chain's clock is T0 (its latest block made just now); the server's runs 15 minutes slow
+    const local = { now: T0 - 15 * 60_000 };
+    const { evm, chain } = await evmChain({}, () => local.now);
+    await chain.readChainClock();
+    expect(chain.clockSkewMs()).toBe(-15 * 60_000);
+    expect(chain.chainNow()).toBe(T0);
+    local.now += 20 * 60_000;
+    await chain.readChainClock();
+    expect(chain.chainNow()).toBe(T0 + 20 * 60_000);
+    const alice = getAddress(testSigner().address);
+    fund(evm, alice);
+    const p = await permitsOn(chain, local).issue(alice, 1, '10.0.0.1');
+    expect(p.deadline).toBe(Math.floor(T0 / 1000) + 20 * 60 + 600);
+    evm.nowS = () => Math.floor(T0 / 1000) + 20 * 60 + 5;
     await evm.sendFrom(alice, joinCall(ARENA, 1, { deadline: BigInt(p.deadline), signature: p.signature as Hex }));
     expect(await chain.hasOpenTicket(1, alice)).toBe(true);
   });

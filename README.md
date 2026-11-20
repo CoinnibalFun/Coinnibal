@@ -143,11 +143,12 @@ node scripts/localnet-fund.mjs 0xYourAddress     # 10 ETH + 100,000 test tokens
 ```
 
 `demo:localnet` starts `hardhat node` (chain id 31337), deploys `TestToken`, `CoinnibalArena` and
-`CoinnibalNFT` from Hardhat account #0 (the owner and admin), sets the token, creates the four arenas,
-opens the mint and runs the built server with `EVM_RPC_URL`, `SERVER_PRIVATE_KEY` (Hardhat account #1),
-`ARENA_ADDRESS`, `NFT_ADDRESS` and `ADMIN_WALLETS`. To run the chain alone: `pnpm localnet`
-(`--no-token` stops before `setToken`, like a fresh deploy); the server env is written to
-`.localnet/server.env`.
+`CoinnibalNFT` from Hardhat account #0 (the owner and admin), sets the token, creates the four arenas, sets the
+NFT perks (the faucet's 2x, the holder fee, the $10 Room holders-only), opens the mint and runs the built server
+with `EVM_RPC_URL`, `SERVER_PRIVATE_KEY` (Hardhat account #1), `ARENA_ADDRESS`, `NFT_ADDRESS` and `ADMIN_WALLETS`.
+The TestToken is registered with the server like the deploy flow does it (its registry in `.localnet/server-data`,
+the `DATA_DIR`): the faucet hands it out. To run the chain alone: `pnpm localnet` (`--no-token` stops before
+`setToken`, like a fresh deploy); the server env is written to `.localnet/server.env`.
 
 ### Tests
 

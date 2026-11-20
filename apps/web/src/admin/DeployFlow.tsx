@@ -12,7 +12,7 @@ import { deployFlowSteps, flowAsksLeft, flowContracts, nextFlowStep, type FlowSt
 import { chainBlockers } from './net';
 import { pinReport, pinsSigned } from './pins';
 import { sendPlan, type Plan } from './plan';
-import { setupSteps } from './setup';
+import { faucetTokenToRegister, setupSteps } from './setup';
 import { signSitePins } from './sign-pins';
 import { Addr, Btn, Card, FormError, type ChainCtx } from './ui';
 
@@ -134,7 +134,8 @@ export function DeployFlow({ ctx, onDone }: { ctx: ChainCtx; onDone?: () => void
 
   /**
    * Registers what this browser deployed and the server does not know yet, or knows as an older version (the new one
-   * replaces it). The code is checked first.
+   * replaces it), then, on a testnet, the arena's game token when the server does not know it (the faucet hands out the
+   * registered token; the server checks it is the owner's TestToken or the arena's token). The code is checked first.
    */
   const registerLeft = async (r: Pick<FlowRead, 'registry' | 'local' | 'status' | 'stale'>) => {
     const api = ctx.api!;
@@ -147,6 +148,8 @@ export function DeployFlow({ ctx, onDone }: { ctx: ChainCtx; onDone?: () => void
       }
       await api.registerContract({ kind, address: d.address, txHash: d.txHash });
     }
+    const gameToken = faucetTokenToRegister({ testnet: !!ctx.net.info && !ctx.net.mainnet, status: r.status, registry: r.registry });
+    if (gameToken) await api.registerContract({ kind: 'token', address: gameToken, txHash: sameAddress(r.local.token?.address, gameToken) ? (r.local.token?.txHash ?? null) : null });
     await cur().reloadNet();
   };
 

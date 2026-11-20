@@ -782,6 +782,7 @@ export class Room implements RoomHandle {
         arenaId: e.arenaId,
         value: e.value,
         entryFee: e.entryFee,
+        ...(e.rates ? { rates: e.rates } : {}),
         score: Math.floor(p?.stats.maxMass ?? 0),
         kills: p?.stats.playersEaten ?? 0,
       };
@@ -899,6 +900,7 @@ export class Room implements RoomHandle {
       // the settlement carries the gross value; the arena contract takes the fee on the profit (`fees.ts`)
       const fee = profitFee(entry.entryFee, entry.value, entry.rates);
       stats.payout = fee.net;
+      if (entry.rates) stats.rates = { ...entry.rates };
       if (fee.fee > 0) {
         stats.gross = fee.payout;
         stats.cut = fee.fee;
@@ -985,7 +987,7 @@ export class Room implements RoomHandle {
   private endRound(round: number): void {
     const ledger = this.ledger!;
     // standings at the bell: every ticket by value, ties: bigger mass first
-    const holders: { pid: number; value: number }[] = ledger.all().map((e) => ({ pid: e.pid, value: e.value }));
+    const holders: { pid: number; value: number; player: string }[] = ledger.all().map((e) => ({ pid: e.pid, value: e.value, player: e.player }));
     const ranked = holders
       .map((e) => ({ e, p: this.world.players.get(e.pid) }))
       .sort((a, b) => b.e.value - a.e.value || (b.p?.totalMass() ?? 0) - (a.p?.totalMass() ?? 0));
@@ -1005,6 +1007,7 @@ export class Room implements RoomHandle {
           value: e.value,
           skin: p?.skin ?? 0,
           ...(p?.country ? { country: p.country } : {}),
+          wallet: e.player,
         })),
       });
     }
@@ -1178,6 +1181,8 @@ export class Room implements RoomHandle {
         killerSkin: k.killer?.skin ?? 0,
         victim: k.victim.name,
         victimSkin: k.victim.skin,
+        ...(k.killer ? { killerPid: k.killer.id } : {}),
+        victimPid: k.victim.id,
         cause: k.cause === 'virus' ? 'virus' : 'eat',
         ...(k.killer?.isBot ? { killerIsBot: true } : {}),
         ...(k.victim.isBot ? { victimIsBot: true } : {}),
@@ -1485,6 +1490,7 @@ function settlementOf(
     sessionId: entry.sessionId,
     payout: entry.value,
     entryFee: entry.entryFee,
+    ...(entry.rates ? { rates: entry.rates } : {}),
     ...(o.roundPool !== undefined && o.roundPool > 0 ? { roundPool: o.roundPool } : {}),
     score: o.score,
     kills: o.kills,

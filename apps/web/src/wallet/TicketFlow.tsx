@@ -455,7 +455,8 @@ export function TicketFlow({ open, mode, ticket, onClose }: { open: boolean; mod
             <Line
               label={t('tf.fee')}
               value={
-                holderRate.discount
+                // a holders-only room has no other rate: nobody there pays the normal one
+                holderRate.discount && !ticket.holdersOnly
                   ? `${feeText(v.rates)} · ${t('tf.feeHolder', { std: bpsToPercent(totalFeeBps(normal)) })}`
                   : feeText(v.rates)
               }

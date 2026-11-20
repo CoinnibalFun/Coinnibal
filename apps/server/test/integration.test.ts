@@ -431,6 +431,29 @@ describe('server over websocket', () => {
     c.close();
   }, 15_000);
 
+  it("a holder's ticket: the bell's result and the pending payout take the fee at the ticket's own rates, as the contract does", async () => {
+    const player = newWallet();
+    // a holder's ticket (8 % + 2 % fixed at join) worth twice its 10.0 price at the bell: 10.0 profit, 1.0 fee
+    const ticket = session(player, { id: 77, value: 20_000_000, rates: { burnBps: 800, vaultBps: 200 } });
+    chain.sessions.set(`1:${player}`, ticket);
+    const c = await signedIn(player);
+    c.send({ t: 'join', room: 'arena:1', name: 'Holder', skin: 0 });
+    await c.wait('joined');
+    jumpTo(roundAt(serverNow()).endsAt);
+    const over = await c.wait('roundOver', 3000);
+    // the contract pays 19.0 (not 18.0 at the default 20 %)
+    expect(over.payout).toBe(19_000_000);
+    expect(over.stats).toMatchObject({ payout: 19_000_000, gross: 20_000_000, cut: 1_000_000, rates: { burnBps: 800, vaultBps: 200 } });
+    const item = app.journal.pending.find((p) => p.key === ticket.key);
+    expect(item).toMatchObject({ kind: 'settle', payout: 20_000_000, entryFee: 10_000_000, rates: { burnBps: 800, vaultBps: 200 } });
+    // the lobby's "payout on the way" is what reaches the wallet
+    const res = (await (await fetch(`http://127.0.0.1:${port}/api/pending?wallet=${player}`, { headers: { Authorization: `Bearer ${app.auth.issueToken(player)}` } })).json()) as unknown;
+    expect(res).toEqual({ pending: [{ key: ticket.key, arenaId: 1, payout: 19_000_000 }] });
+    app.journal.remove(ticket.key);
+    chain.sessions.delete(`1:${player}`);
+    c.close();
+  }, 15_000);
+
   it('holders gate: every arena seat re-checks the gate uncached (an NFT passed on since the lobby check)', async () => {
     const player = newWallet();
     chain.sessions.set(`1:${player}`, session(player, { id: 41 }));

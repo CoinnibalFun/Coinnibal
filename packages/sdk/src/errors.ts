@@ -158,6 +158,14 @@ function findRevertData(err: unknown): Hex | null {
   return null;
 }
 
+/**
+ * Revert data a node wrote into its message only ("reverted with an unrecognized custom error (return data: 0x…)" from
+ * Hardhat, "custom error 0x…" from Anvil): what a wallet that passes only the message on leaves of it.
+ */
+function revertDataInText(text: string): Hex | null {
+  return (/(?:return data|custom error):?\s*(0x[0-9a-fA-F]{8,})/i.exec(text)?.[1] as Hex | undefined) ?? null;
+}
+
 function textOf(err: unknown): string {
   if (err instanceof BaseError) return `${err.shortMessage}\n${err.details ?? ''}\n${err.message}`;
   if (err instanceof Error) return err.message;
@@ -201,7 +209,8 @@ export function describeError(err: unknown, ctx: DescribeContext = {}): Describe
     }
   }
   const data = findRevertData(err);
-  const decoded = data ? decodeRevertData(data) : null;
+  const inText = revertDataInText(text);
+  const decoded = (data ? decodeRevertData(data) : null) ?? (inText ? decodeRevertData(inText) : null);
   if (decoded) return out('contract', errorMessage(decoded.name), decoded.name, decoded.args);
 
   if (has('InsufficientFundsError') || /insufficient funds|doesn't have enough funds|exceeds the balance of the account/i.test(text)) {

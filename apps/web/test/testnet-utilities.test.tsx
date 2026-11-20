@@ -346,6 +346,38 @@ describe('admin groups', () => {
     expect(groupSummary('game', { net, status, settings: { gameAccess: 'admins' } as never, gameAccessEnv: 'public' }).now).toMatch(/^Open to everyone \(COINNIBAL_GAME_ACCESS \/ GAME_ACCESS env\)/);
   });
 
+  it('Setup is never "done" on a testnet while the faucet waits for the game token: Finish setup registers it', () => {
+    const NFT = '0x0000000000000000000000000000000000000f7e';
+    const TOKEN = '0x0000000000000000000000000000000000007e57';
+    const net = resolveNetwork(chainStatus({ nftAddress: NFT }));
+    // everything done on chain (the token, the four arenas, the holder perks, the $10 Room, the faucet's 2x, the open mint)
+    const status = {
+      block: 12n,
+      arena: {
+        address: ARENA,
+        code: 'ok',
+        serverBalance: 1n,
+        config: { admin: ALICE, serverAuthority: '0x000000000000000000000000000000000000bEEF', token: TOKEN, burnBps: 1500, vaultBps: 500, holderNft: NFT, holderBurnBps: 800, holderVaultBps: 200 },
+        token: { decimals: 18 },
+        arenas: [1, 2, 3, 4].map((id) => ({ id, exists: true, holdersOnly: id === 4 })),
+      },
+      nft: { address: NFT, code: 'ok', state: { phaseName: 'public' } },
+      testToken: { address: TOKEN, code: 'ok', faucet: { holderNft: NFT } },
+    } as unknown as StatusSnapshot;
+    const pins = buildPins({ arena: ARENA, nft: NFT, token: TOKEN });
+    const registry = (token: string | null) => ({ arena: { address: ARENA }, nft: { address: NFT }, token: token ? { address: token } : null }) as never;
+    const waiting = groupSummary('setup', { net, status, pins, registry: registry(null) });
+    expect(waiting.now).toMatch(/ · faucet not ready · site pins ok$/);
+    // one button, never "register" (the panel does it)
+    expect(waiting.next).toBe('Finish setup: 1 step left, one button.');
+    expect(groupSummary('setup', { net, status, pins, registry: registry(TOKEN) })).toEqual({ now: expect.stringMatching(/ · faucet ok · site pins ok$/), next: null });
+    // the registry not read yet: nothing claimed; mainnet has no faucet
+    expect(groupSummary('setup', { net, status, pins })).toEqual({ now: expect.not.stringMatching(/faucet/), next: null });
+    const mainnet = resolveNetwork(chainStatus({ chainId: 4663, chainName: 'Robinhood Chain', testnet: false, faucetUrl: null, nftAddress: NFT }));
+    const mainPins = buildPins({ chainId: '4663', arena: ARENA, nft: NFT, token: TOKEN });
+    expect(groupSummary('setup', { net: mainnet, status: { ...status, testToken: null } as never, pins: mainPins, registry: registry(null) })).toEqual({ now: expect.not.stringMatching(/faucet/), next: null });
+  });
+
   it('lists the mainnet launch with the server step first; nothing is ticked on testnet', () => {
     const steps = mainnetChecklist(resolveNetwork(chainStatus()), null);
     expect(steps[0].label).toMatch(/Point the server at the mainnet \(COINNIBAL_CHAIN_ID and COINNIBAL_RPC_URLS\)/);

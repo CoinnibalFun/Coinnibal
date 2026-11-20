@@ -6,6 +6,7 @@ import {
   EMOTE_BAR,
   emoteEmoji,
   SKINS,
+  defaultName,
   getSkin,
   isBasicSkin,
   sanitizeChat,
@@ -55,19 +56,40 @@ describe('skin catalog', () => {
 });
 
 describe('text sanitizing', () => {
+  const FALLBACK = defaultName('0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed');
+
   it('cleans names', () => {
-    expect(sanitizeName('  hello   world  ')).toBe('hello world');
-    expect(sanitizeName('‮evil\u0000')).toBe('evil');
-    expect(sanitizeName('')).toBe('Coinie');
-    expect(sanitizeName(42)).toBe('Coinie');
-    expect(sanitizeName('abcdefghijklmnopqrstuvwxyz')).toHaveLength(16);
-    expect(sanitizeName('🚀'.repeat(20))).toBe('🚀'.repeat(16));
+    expect(sanitizeName('  hello   world  ', FALLBACK)).toBe('hello world');
+    expect(sanitizeName('‮evil\u0000', FALLBACK)).toBe('evil');
+    expect(sanitizeName('', FALLBACK)).toBe(FALLBACK);
+    expect(sanitizeName(42, FALLBACK)).toBe(FALLBACK);
+    expect(sanitizeName('abcdefghijklmnopqrstuvwxyz', FALLBACK)).toHaveLength(16);
+    expect(sanitizeName('🚀'.repeat(20), FALLBACK)).toBe('🚀'.repeat(16));
   });
 
   it('blank-looking names fall back (Hangul fillers, braille blank, joiners)', () => {
-    expect(sanitizeName('ㅤㅤㅤ')).toBe('Coinie');
-    expect(sanitizeName('⠀ᅟᅠﾠ͏᠎؜')).toBe('Coinie');
-    expect(sanitizeName('aㅤb')).toBe('ab');
+    expect(sanitizeName('ㅤㅤㅤ', FALLBACK)).toBe(FALLBACK);
+    expect(sanitizeName('⠀ᅟᅠﾠ͏᠎؜', FALLBACK)).toBe(FALLBACK);
+    expect(sanitizeName('aㅤb', FALLBACK)).toBe('ab');
+  });
+
+  it('a player who set no name is "Coinie" and a tag of their own seed: stable, told apart, a valid name as it is', () => {
+    const w = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed';
+    expect(defaultName(w)).toMatch(/^Coinie-[0-9a-f]{4}$/);
+    // the same wallet in any case is the same name (the client sends the checksummed address, the server may hold either)
+    expect(defaultName(w.toLowerCase())).toBe(defaultName(w));
+    expect(defaultName(w)).toBe(FALLBACK);
+    // different players: different names, never one "Coinie" for everybody
+    const wallets = Array.from({ length: 200 }, (_, i) => `0x${(i + 1).toString(16).padStart(40, '0')}`);
+    expect(new Set(wallets.map(defaultName)).size).toBeGreaterThanOrEqual(199);
+    expect(defaultName('conn:1')).not.toBe(defaultName('conn:2'));
+    // every name of that form passes the name rules untouched (hex tags: never reserved, within the length limit)
+    const bad: string[] = [];
+    for (let tag = 0; tag < 0x10000; tag++) {
+      const name = `Coinie-${tag.toString(16).padStart(4, '0')}`;
+      if (sanitizeName(name, '') !== name) bad.push(name);
+    }
+    expect(bad).toEqual([]);
   });
 
   it('cleans chat', () => {
