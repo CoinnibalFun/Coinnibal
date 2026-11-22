@@ -209,15 +209,19 @@
   font-size: var(--t-micro);
 }
 
-/* the Appetizer's order slip (appetizer/AppetizerSlip.tsx): a kitchen chit taped up under the round sticker, the coin
-   waiting on its plate. Its sheet loads on the first hover, focus or touch. */
+/* the Appetizer's order slip (appetizer/AppetizerSlip.tsx): a big kitchen chit taped up under the round sticker, the
+   coin waiting on its plate, "Early cards are out". Everything inside is sized off the slip's own width (container
+   units), so the one chit reads the same from 240 px to 384 px wide. A slow wiggle and a shine sweep every few seconds
+   (transform only; none with reduced motion). Its sheet loads on the first hover, focus or touch. */
 .ld-ap {
   position: absolute;
   right: max(var(--gutter), calc(50% - 656px + var(--gutter)));
   top: 236px;
   z-index: 3;
-  width: 252px;
+  /* the room right of the hero card (573 px) from 900 px up, at most 384 px */
+  width: clamp(240px, calc(100vw - 2 * var(--gutter) - 610px), 384px);
   rotate: 2deg;
+  container-type: inline-size;
   /* `/#appetizer` lands it below the sticky header */
   scroll-margin-top: calc(var(--ld-head-h) + 24px);
 }
@@ -225,29 +229,30 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: clamp(10px, 4.4cqi, 18px);
   width: 100%;
   margin: 0;
-  padding: 16px 14px 14px 12px;
+  padding: clamp(18px, 6cqi, 24px) clamp(14px, 5cqi, 22px) clamp(16px, 5.4cqi, 22px) clamp(12px, 4.2cqi, 18px);
   border: var(--stroke) solid var(--outline);
-  border-radius: 6px 6px 16px 16px;
+  border-radius: 8px 8px 20px 20px;
   /* the chit's perforated head: a dotted line under the tape */
   background-image: radial-gradient(circle at 4px 4px, var(--sand-2) 1.6px, transparent 2px);
   background-size: 9px 9px;
   background-repeat: repeat-x;
-  background-position: 6px 6px;
+  background-position: 6px 7px;
   background-color: var(--cream);
   color: var(--ink-fixed);
-  box-shadow: var(--sh-4);
+  box-shadow: var(--sh-5);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transform-origin: 50% 0;
   transition:
     transform 0.22s var(--ease-spring),
     box-shadow 0.22s var(--ease-out);
 }
 .ld-ap__slip:hover {
-  transform: translate(-1px, -3px) rotate(-1.2deg);
+  transform: translate(-1px, -4px) rotate(-1.2deg);
   box-shadow: var(--sh-5);
 }
 .ld-ap__slip:active {
@@ -259,32 +264,54 @@
   outline-offset: 4px;
 }
 .ld-ap__tape {
-  top: -13px;
+  top: -15px;
   left: 50%;
-  margin-left: -36px;
+  margin-left: -48px;
+}
+/* the shine: a light band that sweeps across the chit, clipped to it */
+.ld-ap__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ld-ap__shine::before {
+  content: '';
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 34%;
+  background: linear-gradient(100deg, transparent 0 20%, rgb(255 255 255 / 0.75) 50%, transparent 80% 100%);
+  transform: translateX(-160%) skewX(-16deg);
 }
 /* a little plate with a blue rim line, the coin on it */
 .ld-ap__plate {
   flex: none;
   display: grid;
   place-items: center;
-  width: 66px;
-  height: 66px;
+  width: clamp(60px, 26cqi, 100px);
+  height: clamp(60px, 26cqi, 100px);
   border: var(--stroke-sm) solid var(--outline);
   border-radius: 50%;
   background: radial-gradient(circle, #fff 0 54%, var(--sand-2) 54% 57%, #fff 57% 76%, var(--cyan) 76% 81%, #fff 81%);
 }
 .ld-ap__plate > * {
-  margin-top: -14px;
+  margin-top: -18%;
+  width: 80% !important;
+  height: auto !important;
 }
 .ld-ap__text {
   display: grid;
-  gap: 3px;
+  justify-items: start;
+  gap: clamp(3px, 1.2cqi, 6px);
   min-width: 0;
 }
 .ld-ap__kicker {
-  font-size: var(--t-micro);
-  letter-spacing: 0.08em;
+  font-size: clamp(11px, 3.4cqi, 13px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--down-ink);
 }
@@ -292,65 +319,109 @@
   font-family: var(--font-display);
   font-variation-settings: var(--fv-display);
   font-weight: 800;
-  font-size: 20px;
-  line-height: 1.08;
-  letter-spacing: -0.01em;
+  font-size: clamp(20px, 8.2cqi, 32px);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
   text-wrap: balance;
 }
+/* the call: a sun pill, the arrow nudging right */
 .ld-ap__cta {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  margin-top: 3px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--teal-ink);
+  gap: 6px;
+  margin-top: clamp(4px, 1.6cqi, 8px);
+  padding: clamp(5px, 1.8cqi, 8px) clamp(10px, 4cqi, 16px);
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: var(--r-pill);
+  background: var(--sun);
+  box-shadow: var(--sh-2);
+  font-size: clamp(13px, 4.4cqi, 17px);
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: #04181c;
 }
-.ld-ap__cta > span {
-  text-decoration: underline 2px var(--sun);
-  text-underline-offset: 4px;
+@media (prefers-reduced-motion: no-preference) {
+  .ld-ap__slip {
+    animation: ld-ap-wiggle 6s var(--ease-out) 2.4s infinite;
+  }
+  .ld-ap__shine::before {
+    animation: ld-ap-shine 6s var(--ease-out) 2.4s infinite;
+  }
+  .ld-ap__cta svg {
+    animation: ld-ap-nudge 6s var(--ease-out) 2.4s infinite;
+  }
+  .ld-ap__slip:hover,
+  .ld-ap__slip:hover .ld-ap__shine::before,
+  .ld-ap__slip:hover .ld-ap__cta svg {
+    animation-play-state: paused;
+  }
 }
-/* below 900 px the hero is one column: the slip sits under the card, beside the round sticker */
+/* one wiggle and one shine at the start of every 6 s, still the rest of the time */
+@keyframes ld-ap-wiggle {
+  0%,
+  16%,
+  100% {
+    rotate: 0deg;
+  }
+  3% {
+    rotate: -2.6deg;
+  }
+  6% {
+    rotate: 2.2deg;
+  }
+  9% {
+    rotate: -1.3deg;
+  }
+  12% {
+    rotate: 0.6deg;
+  }
+}
+@keyframes ld-ap-shine {
+  0%,
+  4% {
+    transform: translateX(-160%) skewX(-16deg);
+  }
+  22%,
+  100% {
+    transform: translateX(420%) skewX(-16deg);
+  }
+}
+@keyframes ld-ap-nudge {
+  0%,
+  10%,
+  22%,
+  100% {
+    transform: none;
+  }
+  14%,
+  18% {
+    transform: translateX(4px);
+  }
+}
+/* below 900 px the hero is one column: the slip is a card as wide as the hero card, under it, the round sticker
+   beside its foot (a phone: pinned on its corner) */
 @media (max-width: 899px) {
   .ld-ap {
     position: relative;
     right: auto;
     top: auto;
-    align-self: flex-start;
-    width: min(300px, calc(100% - 170px));
-    /* below it, clear room for the sound button the hero pins over the pond */
-    margin: -62px 0 44px 6px;
-    rotate: -1.6deg;
+    order: 1;
+    width: min(100%, 560px);
+    margin: 26px 0 0;
+    rotate: -1deg;
   }
 }
 @media (max-width: 479px) {
   .ld-ap {
-    width: calc(100% - 148px);
-    margin: -58px 0 44px 0;
-  }
-  /* the tape over the plate, clear of the kicker */
-  .ld-ap__tape {
-    left: 14px;
-    margin-left: 0;
+    margin-top: 22px;
   }
   .ld-ap__slip {
-    gap: 8px;
-    padding: 14px 10px 12px 8px;
+    padding-right: 18px;
+    padding-bottom: 40px;
   }
-  .ld-ap__plate {
-    width: 52px;
-    height: 52px;
-  }
-  .ld-ap__title {
-    font-size: 17px;
-  }
-}
-@media (max-width: 379px) {
-  .ld-ap__plate {
-    display: none;
-  }
-  .ld-ap__slip {
-    padding-left: 14px;
+  .ld-hero__inner > .ld-hero__badge-wrap {
+    margin-top: -40px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -633,7 +704,10 @@
     right: auto;
     top: auto;
     align-self: flex-end;
-    margin: -18px 6px 0 0;
+    /* after the Appetizer's slip when there is one (it comes first: `order`), pinned on its corner; below it, room
+       for the sound button the hero pins over the pond */
+    order: 2;
+    margin: -30px 10px 44px 0;
   }
   .ld-sound {
     right: auto;

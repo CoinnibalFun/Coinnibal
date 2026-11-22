@@ -375,6 +375,39 @@ function napkin(ctx: CanvasRenderingContext2D, r: number): void {
   ctx.restore();
 }
 
+/**
+ * The "EARLY CARD" tag on the menu's top line: ink caps on a sun pill with an ink edge and a hard shadow, its text's
+ * baseline at `baseline`, starting at `x`. Returns its width.
+ */
+function earlyTag(ctx: CanvasRenderingContext2D, x: number, baseline: number, fonts: AppetizerFonts): number {
+  const size = 24;
+  ctx.font = `800 ${size}px ${fonts.mono}`;
+  const text = 'EARLY CARD';
+  const gap = size * 0.12;
+  const w = [...text].reduce((s, c) => s + ctx.measureText(c).width + gap, -gap) + 36;
+  const h = 42;
+  const top = baseline - size * 0.74 - (h - size * 0.74) / 2;
+  ctx.save();
+  ctx.translate(x, top);
+  ctx.rotate(-0.03);
+  roundRect(ctx, 4, 5, w, h, h / 2);
+  ctx.fillStyle = INK;
+  ctx.fill();
+  roundRect(ctx, 0, 0, w, h, h / 2);
+  ctx.fillStyle = ELYSIUM.sun;
+  ctx.fill();
+  ctx.lineWidth = 3.5;
+  ctx.strokeStyle = INK;
+  ctx.stroke();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(x, top);
+  ctx.rotate(-0.03);
+  caps(ctx, text, 18, (h + size * 0.74) / 2, size, INK, fonts.mono, 'left', 800);
+  ctx.restore();
+  return w;
+}
+
 /** The red SERVED stamp, centred at (x, y): a rubber stamp's double frame, pressed at `scale` (1 = landed). */
 function servedStamp(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, fonts: AppetizerFonts): void {
   ctx.save();
@@ -395,7 +428,7 @@ function servedStamp(ctx: CanvasRenderingContext2D, x: number, y: number, scale:
   ctx.textAlign = 'center';
   ctx.fillText('SERVED', 0, 19);
   caps(ctx, 'Coinnibal kitchen', 0, -27, 14, RED_INK, fonts.mono, 'center', 700);
-  caps(ctx, 'First bite', 0, 40, 14, RED_INK, fonts.mono, 'center', 700);
+  caps(ctx, 'Early card', 0, 40, 14, RED_INK, fonts.mono, 'center', 700);
   ctx.restore();
 }
 
@@ -490,7 +523,10 @@ export function drawAppetizerCard(ctx: CanvasRenderingContext2D, card: Appetizer
 
   const L = X + 62;
   const R = X + CW - 62;
-  caps(ctx, 'Coinnibal · Tonight’s menu', L, Y + 82, 19, TEAL_INK, fonts.mono);
+  // the card's kind, said first and loud: the house, then a sun tag "EARLY CARD"
+  const LY = Y + 82;
+  const house = caps(ctx, 'Coinnibal ·', L, LY, 20, TEAL_INK, fonts.mono, 'left', 700);
+  earlyTag(ctx, L + house + 14, LY, fonts);
 
   // the dish
   ctx.font = `800 ${fit(ctx, 'The Appetizer', 800, fonts.display, 80, R - L)}px ${fonts.display}`;

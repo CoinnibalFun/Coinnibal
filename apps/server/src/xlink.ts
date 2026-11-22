@@ -87,7 +87,30 @@ export interface XPost {
   avatarUrl: string | null;
   /** Unix ms from the answer (`created_at`), when it carried one. */
   createdAt: number | null;
+  /**
+   * The links in the post as X expanded them (the text carries `t.co` links only): the syndication answer's
+   * `entities.urls[].expanded_url` and its link card's URL. Null when the answer had no expanded links (oEmbed).
+   */
+  urls: string[] | null;
 }
+
+/** The expanded links of a syndication answer (`entities.urls`, the link card), at most 20. */
+function expandedUrls(j: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const add = (v: unknown) => {
+    if (typeof v === 'string' && v.length <= 2000 && out.length < 20) out.push(v);
+  };
+  const ents = j.entities as { urls?: unknown } | null | undefined;
+  if (ents && Array.isArray(ents.urls)) for (const u of ents.urls) if (u && typeof u === 'object') add((u as Record<string, unknown>).expanded_url);
+  const card = j.card as { url?: unknown; binding_values?: { card_url?: { string_value?: unknown } } } | null | undefined;
+  if (card && typeof card === 'object') {
+    add(card.url);
+    add(card.binding_values?.card_url?.string_value);
+  }
+  return out;
+}
+
+export type XPostRead = { ok: true; post: XPost } | { ok: false; why: 'not_found' | 'down' };
 
 /** Biggest account picture taken (bytes) and the types taken. */
 export const X_AVATAR_MAX_BYTES = 200 * 1024;
@@ -370,7 +393,7 @@ export interface XLinkDeps {
   oembedUrl?: string;
 }
 
-type Read = { ok: true; post: XPost } | { ok: false; why: 'not_found' | 'down' };
+type Read = XPostRead;
 
 export class XLinkService {
   readonly links: XLinkStore;
@@ -582,6 +605,7 @@ export class XLinkService {
           name: cleanXName(user.name),
           avatarUrl: xAvatarUrl(user.profile_image_url_https),
           createdAt: Number.isFinite(created) ? created : null,
+          urls: expandedUrls(j),
         },
       };
     } catch (err) {
@@ -602,7 +626,7 @@ export class XLinkService {
       if (!m) return { ok: false, why: 'down' };
       // the quote must be of this very post
       if (!new RegExp(`/status/${id}(?:[?"/]|$)`).test(j.html)) return { ok: false, why: 'not_found' };
-      return { ok: true, post: { id, text: oembedText(j.html), handle: m[1], userId: null, name: cleanXName(j.author_name), avatarUrl: null, createdAt: null } };
+      return { ok: true, post: { id, text: oembedText(j.html), handle: m[1], userId: null, name: cleanXName(j.author_name), avatarUrl: null, createdAt: null, urls: null } };
     } catch (err) {
       this.log(`x-links: oEmbed read of ${id} failed (${(err as Error).message})`);
       return { ok: false, why: 'down' };

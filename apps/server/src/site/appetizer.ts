@@ -14,8 +14,10 @@ import {
   type AppetizerCard,
   type AppetizerEntry,
   type AppetizerList,
+  type AppetizerPostResponse,
   type AppetizerResponse,
 } from '@coinnibal/shared';
+import type { XPost, XPostRead } from '../xlink';
 import { Limiter } from '../net/limiter';
 import { renderAppetizerCard } from './share-card';
 import { csv } from './store';
@@ -23,7 +25,9 @@ import { SiteFail, obj } from './validate';
 
 /**
  * The Appetizer (`packages/shared/src/appetizer.ts`): an early card a visitor claims on the landing page with a wallet
- * and an X handle. Kept in `DATA_DIR/site/appetizers.json` (the whole list, written to a temp file and renamed, a
+ * and an X handle, once they say they follow the project's X account (`followed: true`, on trust: there is no X API
+ * here, as the WL's `follow_x` task). The post link that completes a card is read back from X's public embed
+ * endpoints (`XLinkService.readPost`, no key): by the card's handle, carrying the card's link. Kept in `DATA_DIR/site/appetizers.json` (the whole list, written to a temp file and renamed, a
  * moment after a change and on `flush`), served at `/appetizer/<code>` (a page with the Open Graph / Twitter tags) and
  * `/appetizer/<code>.png` (the card, rendered once and cached). Nothing public ever carries the wallet: the page, the
  * image and the claim's answer show the number and the handle only; the wallet is for the admin's list and CSV.
@@ -62,6 +66,18 @@ export function claimHandle(v: unknown): string {
   return h.toLowerCase() === lower ? h : lower;
 }
 
+/** The claim's follow: `true` only; a 400 `follow_required` otherwise. */
+export function claimFollowed(v: unknown): true {
+  if (v !== true) throw new SiteFail(400, 'follow_required', 'Follow the project on X first: the card needs the follow.', 'followed');
+  return true;
+}
+
+/** Whether post `p` carries card `code`'s link: its code in the text or in a link X expanded (the share page's path). */
+export function postCarriesCard(p: Pick<XPost, 'text' | 'urls'>, code: string): boolean {
+  const re = new RegExp(`(?:^|[^A-Za-z0-9])${code}(?![A-Za-z0-9])`);
+  return [p.text, ...(p.urls ?? [])].some((s) => re.test(s));
+}
+
 /** A post link, normalised to `https://x.com/<handle>/status/<id>`, with its author; null when it is not one. */
 export function parsePostUrl(v: unknown): { url: string; author: string } | null {
   if (typeof v !== 'string') return null;
@@ -88,6 +104,10 @@ function entryOf(v: unknown): AppetizerEntry | null {
     wallet: getAddress(e.wallet),
     post: post ? post.url : null,
     postedAt: post && typeof e.postedAt === 'number' ? e.postedAt : null,
+    postVerified: !!post && e.postVerified === true,
+    likedAt: typeof e.likedAt === 'number' && Number.isFinite(e.likedAt) ? e.likedAt : null,
+    // cards from before the follow was asked have none
+    followedAt: typeof e.followedAt === 'number' && Number.isFinite(e.followedAt) ? e.followedAt : null,
     views: typeof e.views === 'number' && Number.isFinite(e.views) && e.views > 0 ? Math.floor(e.views) : 0,
   };
 }
@@ -104,6 +124,8 @@ export interface AppetizerDeps {
   /** Post links one IP may send (default 30 an hour). */
   postIp?: Limiter;
   kept?: number;
+  /** Reads a post from X (`XLinkService.readPost`); without it every post link is kept unchecked. */
+  readPost?: ((id: string) => Promise<XPostRead>) | null;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -126,6 +148,7 @@ export class AppetizerService {
   private readonly claimIp: Limiter;
   private readonly postIp: Limiter;
   private readonly kept: number;
+  private readPost: ((id: string) => Promise<XPostRead>) | null;
   private readonly now: () => number;
   private readonly log: (m: string) => void;
 
@@ -133,9 +156,15 @@ export class AppetizerService {
     this.claimIp = d.claimIp ?? new Limiter(APPETIZER_LIMITS.perIpHour, 60 * 60_000);
     this.postIp = d.postIp ?? new Limiter(30, 60 * 60_000);
     this.kept = d.kept ?? APPETIZER_LIMITS.kept;
+    this.readPost = d.readPost ?? null;
     this.now = d.now ?? Date.now;
     this.log = d.log ?? (() => {});
     this.load();
+  }
+
+  /** The X reader for post links (set once "Link X" is up). */
+  setPostReader(fn: ((id: string) => Promise<XPostRead>) | null): void {
+    this.readPost = fn;
   }
 
   // ---------- persistence ----------
@@ -208,7 +237,7 @@ export class AppetizerService {
    * wallet alone must not reveal who holds it), a 409 `handle_taken` when another wallet holds the handle, else a new
    * card with the next number.
    */
-  claim(wallet: string, handle: string): AppetizerResponse {
+  claim(wallet: string, handle: string, liked = false): AppetizerResponse {
     const mine = this.byWallet.get(wallet.toLowerCase());
     if (mine) {
       if (mine.handle.toLowerCase() !== handle.toLowerCase()) throw new SiteFail(409, 'wallet_taken', 'This wallet already has its card, under another X handle.', 'wallet');
@@ -216,22 +245,56 @@ export class AppetizerService {
     }
     if (this.byHandle.has(handle.toLowerCase())) throw new SiteFail(409, 'handle_taken', 'This X handle already has its card.', 'handle');
     if (this.cards.length >= this.kept) throw new SiteFail(403, 'closed', 'Every card has been handed out.');
-    const e: AppetizerEntry = { code: this.newCode(), no: this.next++, handle, at: this.now(), wallet, post: null, postedAt: null, views: 0 };
+    const at = this.now();
+    // the claim itself says the visitor follows (`claimFollowed`): its moment is the claim's
+    const e: AppetizerEntry = { code: this.newCode(), no: this.next++, handle, at, wallet, post: null, postedAt: null, postVerified: false, followedAt: at, likedAt: liked ? at : null, views: 0 };
     this.index(e);
     this.changed();
     return { card: publicCard(e), existing: false };
   }
 
-  /** The X post that shared card `code`: its author must be the card's handle. */
-  setPost(code: string, raw: unknown): void {
+  /**
+   * The X post that shared card `code`: its author must be the card's handle, and X must show it carrying the card's
+   * link. X down (or only its oEmbed answering, which has no expanded links) keeps the link unchecked
+   * (`verified: false`) rather than block the visitor; X saying there is no such post, or the post not carrying the
+   * card, refuses it (422 `post_unverified`).
+   */
+  async setPost(code: string, raw: unknown): Promise<AppetizerPostResponse> {
     const e = this.find(code);
     const post = parsePostUrl(raw);
     if (!post) throw new SiteFail(400, 'bad_post', 'That is not a link to a post on X (https://x.com/<handle>/status/<number>).', 'url');
     if (post.author.toLowerCase() !== e.handle.toLowerCase()) throw new SiteFail(400, 'bad_post', `That post is not by @${e.handle}.`, 'url');
-    if (e.post === post.url) return;
-    e.post = post.url;
-    e.postedAt = this.now();
-    this.changed();
+    if (e.post === post.url && e.postVerified) return { ok: true, verified: true };
+    const verified = await this.checkPost(e, post.url);
+    // the card may have gone while X was read
+    if (this.byCode.get(code) !== e) throw new SiteFail(404, 'not_found', 'No such card.');
+    if (e.post !== post.url || e.postVerified !== verified) {
+      e.post = post.url;
+      e.postedAt = this.now();
+      e.postVerified = verified;
+      this.changed();
+    }
+    return { ok: true, verified };
+  }
+
+  /** True: X shows the post by the card's handle carrying its link; false: X could not tell (kept unchecked). */
+  private async checkPost(e: AppetizerEntry, url: string): Promise<boolean> {
+    if (!this.readPost) return false;
+    const id = /\/status\/(\d+)$/.exec(url)![1];
+    const read = await this.readPost(id);
+    if (!read.ok) {
+      if (read.why === 'down') {
+        this.log(`appetizer: X did not answer for card No. ${appetizerNo(e.no)}; its post link is kept unchecked`);
+        return false;
+      }
+      throw new SiteFail(422, 'post_unverified', 'X shows no public post at that link. Is your account public?', 'url');
+    }
+    const p = read.post;
+    if (p.handle.toLowerCase() !== e.handle.toLowerCase()) throw new SiteFail(400, 'bad_post', `That post is not by @${e.handle}.`, 'url');
+    if (postCarriesCard(p, e.code)) return true;
+    // oEmbed shows links as t.co only: the card's link may be behind one
+    if (p.urls === null && /t\.co\//i.test(p.text)) return false;
+    throw new SiteFail(422, 'post_unverified', 'That post does not carry your card. Post it with the button above, then paste that link.', 'url');
   }
 
   private find(code: string): AppetizerEntry {
@@ -248,12 +311,13 @@ export class AppetizerService {
 
   // ---------- the routes ----------
 
-  /** `POST /api/appetizer {wallet, handle}`; `open`: `SiteSettings.appetizerOpen`. */
+  /** `POST /api/appetizer {wallet, handle, followed: true}`; `open`: `SiteSettings.appetizerOpen`. */
   async claimRoute(req: IncomingMessage, res: ServerResponse, ip: string, open: boolean, read: (req: IncomingMessage, limit: number) => Promise<unknown>, send: (res: ServerResponse, status: number, body: unknown) => void): Promise<void> {
     if (!open) throw new SiteFail(403, 'closed', 'Cards are not being handed out right now.');
     if (!this.claimIp.allow(ip)) throw new SiteFail(429, 'rate_limited', 'Too many cards from here in the last hour. Try again later.');
     const body = obj(await read(req, APPETIZER_LIMITS.bodyBytes));
-    const r = this.claim(claimWallet(body.wallet), claimHandle(body.handle));
+    claimFollowed(body.followed);
+    const r = this.claim(claimWallet(body.wallet), claimHandle(body.handle), body.liked === true);
     if (!r.existing) this.log(`appetizer: card No. ${appetizerNo(r.card.no)} claimed`);
     send(res, r.existing ? 200 : 201, r);
   }
@@ -263,14 +327,16 @@ export class AppetizerService {
     if (!this.postIp.allow(ip)) throw new SiteFail(429, 'rate_limited', 'Too many links from here in the last hour. Try again later.');
     this.find(code);
     const body = obj(await read(req, APPETIZER_LIMITS.bodyBytes));
-    this.setPost(code, body.url);
-    send(res, 200, { ok: true });
+    send(res, 200, await this.setPost(code, body.url));
   }
 
   // ---------- the admin's side ----------
 
-  /** Newest first: at most `limit` (≤ `pageMax`) from `offset`; `q` keeps the cards whose handle or wallet contains it. */
-  list(opts: { offset?: number; limit?: number; q?: string | null } = {}): AppetizerList {
+  /**
+   * Newest first: at most `limit` (≤ `pageMax`) from `offset`; `q` keeps the cards whose handle or wallet contains it,
+   * `complete` those with (true) or without (false) a post link.
+   */
+  list(opts: { offset?: number; limit?: number; q?: string | null; complete?: boolean | null } = {}): AppetizerList {
     const limit = Math.min(APPETIZER_LIMITS.pageMax, Math.max(1, Math.floor(opts.limit ?? 100) || 100));
     const offset = Math.max(0, Math.floor(opts.offset ?? 0) || 0);
     const q = (opts.q ?? '').trim().replace(/^@/, '').toLowerCase();
@@ -279,10 +345,11 @@ export class AppetizerService {
     for (let i = this.cards.length - 1; i >= 0 && items.length < limit; i--) {
       const e = this.cards[i];
       if (q && !e.handle.toLowerCase().includes(q) && !e.wallet.toLowerCase().includes(q)) continue;
+      if (typeof opts.complete === 'boolean' && opts.complete !== !!e.post) continue;
       if (skipped++ < offset) continue;
       items.push({ ...e });
     }
-    return { items, total: this.cards.length, posted: this.posted() };
+    return { items, total: this.cards.length, posted: this.posted(), verified: this.verified() };
   }
 
   posted(): number {
@@ -291,13 +358,26 @@ export class AppetizerService {
     return n;
   }
 
+  verified(): number {
+    let n = 0;
+    for (const e of this.cards) if (e.post && e.postVerified) n++;
+    return n;
+  }
+
   get total(): number {
     return this.cards.length;
   }
 
-  /** Every card, in claim order: no., handle, wallet, claimed (ISO), post, views. */
+  /**
+   * Every card, in claim order: no., handle, wallet, claimed, followed and liked (ISO, empty when not asked), post,
+   * post_verified (yes / no, empty without a post), complete (yes / no: a post link is in), views.
+   */
   csv(): string {
-    return csv([['no', 'handle', 'wallet', 'claimed', 'post', 'views'], ...this.cards.map((e) => [e.no, e.handle, e.wallet, new Date(e.at).toISOString(), e.post ?? '', e.views])]);
+    const iso = (t: number | null) => (t === null ? '' : new Date(t).toISOString());
+    return csv([
+      ['no', 'handle', 'wallet', 'claimed', 'followed', 'liked', 'post', 'post_verified', 'complete', 'views'],
+      ...this.cards.map((e) => [e.no, e.handle, e.wallet, iso(e.at), iso(e.followedAt), iso(e.likedAt), e.post ?? '', e.post ? (e.postVerified ? 'yes' : 'no') : '', e.post ? 'yes' : 'no', e.views]),
+    ]);
   }
 
   /** Deletes card `code` (its number is not handed out again; its handle and wallet may claim anew). */
@@ -386,8 +466,8 @@ export class AppetizerService {
 
 /** The share page: the Open Graph and Twitter card tags (X shows the card), then on to the landing's card stand. */
 export function appetizerPage(card: AppetizerCard, origin: string): string {
-  const title = `Appetizer No. ${appetizerNo(card.no)} · @${card.handle}`;
-  const desc = `${BRAND_NAME}: coins eating coins.`;
+  const title = `Early card · The Appetizer No. ${appetizerNo(card.no)} · @${card.handle}`;
+  const desc = `A ${BRAND_NAME} early card for early fans. Coins eating coins.`;
   const page = `${origin}${appetizerPath(card.code)}`;
   const img = `${page}.png`;
   const landing = `${origin}/#appetizer`;
@@ -417,7 +497,7 @@ export function appetizerPage(card: AppetizerCard, origin: string): string {
 </head>
 <body>
 <img src="${esc(appetizerPath(card.code))}.png" width="${APPETIZER_IMAGE.width}" height="${APPETIZER_IMAGE.height}" alt="${esc(title)}">
-<a href="${esc(landing)}">Get your own card</a>
+<a href="${esc(landing)}">Get your own early card</a>
 </body>
 </html>
 `;

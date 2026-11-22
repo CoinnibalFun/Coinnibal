@@ -57,6 +57,13 @@ describe('drawAppetizerCard', () => {
     }
   });
 
+  it('says it is an early card: a sun tag on the top line of the menu', () => {
+    const { ctx } = draw(SHORT);
+    const at = (x: number, y: number) => ctx.getImageData(x, y, 1, 1).data;
+    // inside the tag, left of its text
+    expect(near(at(302, 120), hex(ELYSIUM.sun), 16)).toBe(true);
+  });
+
   it('lays the menu card on the tablecloth: cream stock on the left, the cloth in the corners', () => {
     const { ctx } = draw(SHORT);
     const at = (x: number, y: number) => ctx.getImageData(x, y, 1, 1).data;

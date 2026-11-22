@@ -46,7 +46,8 @@ describe('site helpers', () => {
 
   it('defaults: WL open, collab closed, game for admins only, X handle coinnibalfun', () => {
     expect(SITE_X_HANDLE_DEFAULT).toBe('coinnibalfun');
-    expect(SITE_SETTINGS_DEFAULT).toEqual({ wlOpen: false, collabOpen: false, appetizerOpen: true, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null });
+    expect(SITE_SETTINGS_DEFAULT).toEqual({ wlOpen: false, collabOpen: false, appetizerOpen: true, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null, appetizerPostUrl: 'https://x.com/Coinnibalfun/status/2123416055406354866' });
+    expect(isXStatusUrl(SITE_SETTINGS_DEFAULT.appetizerPostUrl)).toBe(true);
   });
 
   it('knows the game access modes', () => {
