@@ -92,7 +92,7 @@ describe('who I ate, on the round-over sheet and in the X post', () => {
     expect(chip.querySelector('.g-eaten__tag')?.textContent).toBe('BOT');
     const text = textOf(screen.getByTestId('share-x'))!;
     expect(text).toContain('Botty (BOT)');
-    expect(SHARE_VARIANTS.resultAte.some((k) => text.startsWith(t(k, { rank: 1, n: 2, room: '$1 Room', names: 'Botty (BOT)' })))).toBe(true);
+    expect(SHARE_VARIANTS.resultAte.some((k) => text.startsWith(t(k, { rank: 1, n: 2, room: 'Test · $1 Room', names: 'Botty (BOT)' })))).toBe(true);
     expect(text).toContain('(TEST: testnet test room, no real money)');
   });
 
