@@ -38,7 +38,11 @@ describe('VITE_SERVER_URL (web and game server on different origins)', () => {
     expect(api.backupCommand('pr00f')).toBe(
       " curl -fsS -H @- 'https://game.coinnibal.fun/api/admin/backup' -o coinnibal-backup.tar.gz <<'COINNIBAL_SECRETS'\nAuthorization: Bearer tok.en\nX-Coinnibal-Proof: pr00f\nCOINNIBAL_SECRETS",
     );
-    expect(api.installCommand('pr00f')).toMatch(/install\.sh --yes --from 'https:\/\/game\.coinnibal\.fun' <<'COINNIBAL_SECRETS'\ntok\.en\npr00f\nCOINNIBAL_SECRETS$/);
+    // install.sh comes from the game server itself (the admin token on curl's stdin), then runs with the token and proof
+    const install = api.installCommand('pr00f');
+    expect(install).toContain("'https://game.coinnibal.fun/api/admin/install.sh'");
+    expect(install).toMatch(/install\.sh --yes --from 'https:\/\/game\.coinnibal\.fun' <<'COINNIBAL_SECRETS'\n/);
+    expect(install).toMatch(/\ntok\.en\npr00f\nCOINNIBAL_SECRETS$/);
   });
 
   it('loads profile pictures from the game server', async () => {
