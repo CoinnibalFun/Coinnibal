@@ -209,6 +209,158 @@
   font-size: var(--t-micro);
 }
 
+/* the Appetizer's order slip (appetizer/AppetizerSlip.tsx): a kitchen chit taped up under the round sticker, the coin
+   waiting on its plate. Its sheet loads on the first hover, focus or touch. */
+.ld-ap {
+  position: absolute;
+  right: max(var(--gutter), calc(50% - 656px + var(--gutter)));
+  top: 236px;
+  z-index: 3;
+  width: 252px;
+  rotate: 2deg;
+  /* `/#appetizer` lands it below the sticky header */
+  scroll-margin-top: calc(var(--ld-head-h) + 24px);
+}
+.ld-ap__slip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 16px 14px 14px 12px;
+  border: var(--stroke) solid var(--outline);
+  border-radius: 6px 6px 16px 16px;
+  /* the chit's perforated head: a dotted line under the tape */
+  background-image: radial-gradient(circle at 4px 4px, var(--sand-2) 1.6px, transparent 2px);
+  background-size: 9px 9px;
+  background-repeat: repeat-x;
+  background-position: 6px 6px;
+  background-color: var(--cream);
+  color: var(--ink-fixed);
+  box-shadow: var(--sh-4);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.22s var(--ease-spring),
+    box-shadow 0.22s var(--ease-out);
+}
+.ld-ap__slip:hover {
+  transform: translate(-1px, -3px) rotate(-1.2deg);
+  box-shadow: var(--sh-5);
+}
+.ld-ap__slip:active {
+  transform: translate(3px, 3px);
+  box-shadow: var(--sh-press);
+}
+.ld-ap__slip:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 4px;
+}
+.ld-ap__tape {
+  top: -13px;
+  left: 50%;
+  margin-left: -36px;
+}
+/* a little plate with a blue rim line, the coin on it */
+.ld-ap__plate {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  border: var(--stroke-sm) solid var(--outline);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 54%, var(--sand-2) 54% 57%, #fff 57% 76%, var(--cyan) 76% 81%, #fff 81%);
+}
+.ld-ap__plate > * {
+  margin-top: -14px;
+}
+.ld-ap__text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.ld-ap__kicker {
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--down-ink);
+}
+.ld-ap__title {
+  font-family: var(--font-display);
+  font-variation-settings: var(--fv-display);
+  font-weight: 800;
+  font-size: 20px;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.ld-ap__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--teal-ink);
+}
+.ld-ap__cta > span {
+  text-decoration: underline 2px var(--sun);
+  text-underline-offset: 4px;
+}
+/* below 900 px the hero is one column: the slip sits under the card, beside the round sticker */
+@media (max-width: 899px) {
+  .ld-ap {
+    position: relative;
+    right: auto;
+    top: auto;
+    align-self: flex-start;
+    width: min(300px, calc(100% - 170px));
+    /* below it, clear room for the sound button the hero pins over the pond */
+    margin: -62px 0 44px 6px;
+    rotate: -1.6deg;
+  }
+}
+@media (max-width: 479px) {
+  .ld-ap {
+    width: calc(100% - 148px);
+    margin: -58px 0 44px 0;
+  }
+  /* the tape over the plate, clear of the kicker */
+  .ld-ap__tape {
+    left: 14px;
+    margin-left: 0;
+  }
+  .ld-ap__slip {
+    gap: 8px;
+    padding: 14px 10px 12px 8px;
+  }
+  .ld-ap__plate {
+    width: 52px;
+    height: 52px;
+  }
+  .ld-ap__title {
+    font-size: 17px;
+  }
+}
+@media (max-width: 379px) {
+  .ld-ap__plate {
+    display: none;
+  }
+  .ld-ap__slip {
+    padding-left: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-ap__slip,
+  .ld-ap__slip:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
 /* the pond on the front terrace */
 .ld-pond {
   position: absolute;
