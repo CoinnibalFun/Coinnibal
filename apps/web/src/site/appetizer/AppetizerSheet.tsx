@@ -121,6 +121,13 @@ function useWide(): boolean {
 type Errors = { wallet?: string; handle?: string; form?: string };
 
 /** `https://x.com/intent/follow?screen_name=<handle>`: X's follow button for the project's account. */
+/** The id of an X post link (`…/status/<id>`), or null. */
+const postId = (url: string): string | null => /\/status\/(\d+)/.exec(url)?.[1] ?? null;
+/** X's like dialog for our post (falls back to the post itself). */
+export const likeIntent = (url: string): string => (postId(url) ? `https://x.com/intent/like?tweet_id=${postId(url)}` : url);
+/** X's composer, replying to our post (falls back to the post itself). */
+export const replyIntent = (url: string): string => (postId(url) ? `https://x.com/intent/tweet?in_reply_to=${postId(url)}` : url);
+
 export const followIntent = (xHandle: string): string => `https://x.com/intent/follow?screen_name=${encodeURIComponent(xHandle.replace(/^@/, ''))}`;
 
 /**
@@ -305,9 +312,15 @@ function Order({
         {likeStep && (
           <Step n={2} done={liked} title={t('ld.ap.s.like')} hint={t('ld.ap.s.likeHint')} testId="ap-step-like">
             {!wide && <PostBox url={postUrl} xHandle={xHandle} onOpen={like} compact />}
-            <StepLink href={postUrl} done={liked} onOpen={like} testId="ap-like">
+            <StepLink href={likeIntent(postUrl)} done={liked} onOpen={like} testId="ap-like">
               {t('ld.ap.like')}
             </StepLink>
+            <a className="kb-btn kb-btn--secondary kb-btn--sm ap-step__reply" href={replyIntent(postUrl)} target="_blank" rel="noreferrer" data-testid="ap-reply">
+              <XIcon size={16} />
+              <span className="kb-btn__label">
+                <span className="kb-btn__text">{t('ld.ap.reply')}</span>
+              </span>
+            </a>
           </Step>
         )}
         <Step n={orderN} done={false} title={t('ld.ap.s.order')}>
@@ -414,7 +427,7 @@ function Served({
   const no = String(card.no).padStart(4, '0');
   const handle = `@${card.handle}`;
   const link = shareLink(card.code);
-  const postText = `${t('ld.ap.postText')}\n${link}`;
+  const postText = `${t('ld.ap.postText', { ourX })}\n${link}`;
   const postX = (
     <a className="kb-btn kb-btn--primary kb-btn--md ap-post__x" href={xIntent(postText)} target="_blank" rel="noreferrer" data-testid="ap-post-x">
       <XIcon size={18} />

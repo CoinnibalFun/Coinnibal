@@ -119,7 +119,9 @@ describe('the Appetizer on the landing', { timeout: 30_000 }, () => {
     const m = serve(true, () => ({ card: CARD, existing: false }), {}, { appetizerPostUrl: OUR_POST, launchPostUrl: 'https://x.com/coinnibalfun/status/1' });
     const dialog = await openSheet();
     const like = within(dialog).getByTestId('ap-like');
-    expect(like.getAttribute('href')).toBe(OUR_POST);
+    // X's own like dialog and reply composer for our post
+    expect(like.getAttribute('href')).toBe('https://x.com/intent/like?tweet_id=2123416055406354866');
+    expect(within(dialog).getByTestId('ap-reply').getAttribute('href')).toBe('https://x.com/intent/tweet?in_reply_to=2123416055406354866');
     expect(within(dialog).getByText('Like and comment on our post')).toBeTruthy();
     follow(dialog);
     await waitFor(() => expect(within(dialog).getByTestId('ap-step-follow').className).toContain('is-done'));
@@ -230,7 +232,7 @@ describe('the Appetizer on the landing', { timeout: 30_000 }, () => {
     expect(within(dialog).getByLabelText("Paste your post's link (required)")).toBeTruthy();
     const x = within(dialog).getByTestId('ap-post-x').getAttribute('href') ?? '';
     const text = new URL(x).searchParams.get('text') ?? '';
-    expect(text).toBe(`The Appetizer is out \u{1F37D}\u{FE0F}\nGrabbed my seat before the coinnibals showed up \u{1FA99}\nhttps://${location.host}/appetizer/${CARD.code}`);
+    expect(text).toBe(`The Appetizer is out \u{1F37D}\u{FE0F} @coinnibalfun\nGrabbed my seat before the coinnibals showed up \u{1FA99}\nhttps://${location.host}/appetizer/${CARD.code}`);
     // post and paste in one place: the key that writes the post sits in the link's own form, the hint under the field
     const form = within(dialog).getByTestId('ap-post-x').closest('form')!;
     expect(form).toBeTruthy();
