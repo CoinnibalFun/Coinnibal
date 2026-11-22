@@ -806,9 +806,10 @@ describe('server over websocket', () => {
     expect('hasPass' in joined).toBe(false);
     if (!WORKERS) {
       const p = app.rooms.rooms.get(joined.room.id)!.world.players.get(joined.playerId)!;
-      // no Pass power: everyone starts at the same mass (a Pass used to add 15 %)
+      // no Pass power: everyone starts at the same mass (a Pass used to add 15 %). The coin may already have
+      // eaten a pellet it spawned on (20 → 22 seen in CI), so the bound sits just under the old Pass's +15 %
       expect(p.totalMass()).toBeGreaterThan(RULES.startMass * 0.9);
-      expect(p.totalMass()).toBeLessThan(RULES.startMass * 1.1);
+      expect(p.totalMass()).toBeLessThan(RULES.startMass * 1.15);
     }
     await sleep(200);
     expect(playerInfo(c, joined.playerId)).toMatchObject({ skin: 2, name: 'Gold' });
