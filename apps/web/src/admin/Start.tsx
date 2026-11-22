@@ -15,7 +15,7 @@ import { Card, FormError, type ChainCtx } from './ui';
 export type StartTone = 'ok' | 'todo' | 'off' | 'unknown';
 
 export interface StartRow {
-  id: 'network' | 'contracts' | 'game' | 'mint' | 'feedback' | 'community';
+  id: 'network' | 'contracts' | 'game' | 'mint' | 'feedback' | 'community' | 'appetizers';
   label: string;
   value: string;
   tone: StartTone;
@@ -34,6 +34,8 @@ export interface StartInput {
   feedback: number | null | undefined;
   /** The WL and collab forms (null: not signed in or not read yet). */
   community?: StartCommunity | null;
+  /** The Appetizer cards handed out and posted (null: not signed in; undefined: this server has no such route). */
+  appetizers?: { total: number; posted: number } | null;
   /** Deploy steps left (`deployFlowSteps`). */
   deployLeft: number;
   /** Nothing is deployed yet. */
@@ -55,7 +57,7 @@ const GAME_NOW: Record<GameAccess, { value: string; tone: StartTone }> = {
   maintenance: { value: 'Down for maintenance.', tone: 'todo' },
 };
 
-/** The start screen's six status lines (pure, tested). */
+/** The start screen's status lines (pure, tested). */
 export function startRows(i: StartInput): StartRow[] {
   const { net } = i;
   const network: StartRow = !net.chain
@@ -100,7 +102,14 @@ export function startRows(i: StartInput): StartRow[] {
         value: `WL ${c.wlOpen ? 'open' : 'closed'} · ${c.wlWaiting} waiting. Collabs ${c.collabOpen ? 'open' : 'closed'} · ${c.collabWaiting} waiting.`,
         tone: c.wlWaiting + c.collabWaiting > 0 ? 'todo' : c.wlOpen || c.collabOpen ? 'ok' : 'off',
       };
-  return [network, contracts, game, mint, feedback, community];
+  const a = i.appetizers;
+  const appetizers: StartRow =
+    a === undefined
+      ? { id: 'appetizers', label: 'Appetizers', value: 'Not on this server yet.', tone: 'off' }
+      : a === null
+        ? { id: 'appetizers', label: 'Appetizers', value: 'Sign in to see.', tone: 'unknown' }
+        : { id: 'appetizers', label: 'Appetizers', value: `${a.total.toLocaleString('en-US')} card${a.total === 1 ? '' : 's'} · ${a.posted.toLocaleString('en-US')} posted.`, tone: a.total > 0 ? 'ok' : 'off' };
+  return [network, contracts, game, mint, feedback, community, appetizers];
 }
 
 export interface StartAction {
@@ -140,6 +149,16 @@ async function communityNow(token: string): Promise<StartCommunity | null> {
   }
 }
 
+/** `GET /api/admin/appetizers`'s totals: undefined when this server has no such route, null on another error. */
+async function appetizersNow(token: string): Promise<{ total: number; posted: number } | null | undefined> {
+  try {
+    const r = await request<{ total?: unknown; posted?: unknown }>('/api/admin/appetizers?limit=1', { token });
+    return typeof r.total === 'number' && typeof r.posted === 'number' ? { total: r.total, posted: r.posted } : null;
+  } catch (err) {
+    return err instanceof SiteApiError && (err.status === 404 || err.code === 'not_found') ? undefined : null;
+  }
+}
+
 async function feedbackWaiting(token: string): Promise<number | null | undefined> {
   try {
     const r = await request<{ unread?: unknown }>('/api/admin/feedback', { token });
@@ -158,13 +177,16 @@ const TONE_WORD: Record<StartTone, string> = { ok: 'ok', todo: 'to do', off: 'of
 export function StartScreen({ ctx, go, token, access }: { ctx: ChainCtx; go: (page: string) => void; token: string | null; access: { settings: { gameAccess: GameAccess }; env: GameAccess | null } | null }) {
   const [feedback, setFeedback] = useState<number | null | undefined>(null);
   const [community, setCommunity] = useState<StartCommunity | null>(null);
+  const [appetizers, setAppetizers] = useState<{ total: number; posted: number } | null | undefined>(null);
   useEffect(() => {
     if (!token) {
       setCommunity(null);
+      setAppetizers(null);
       return setFeedback(null);
     }
     let live = true;
     void feedbackWaiting(token).then((n) => live && setFeedback(n));
+    void appetizersNow(token).then((n) => live && setAppetizers(n));
     void communityNow(token).then((c) => live && setCommunity(c));
     return () => {
       live = false;
@@ -199,6 +221,7 @@ export function StartScreen({ ctx, go, token, access }: { ctx: ChainCtx; go: (pa
     accessEnv: access?.env ?? null,
     feedback: token ? feedback : null,
     community: token ? community : null,
+    appetizers: token ? appetizers : null,
     deployLeft: steps.filter((s) => !s.done).length,
     fresh: !ctx.net.arenaAddress && !ctx.net.nftAddress && !local.arena && !local.nft,
   };

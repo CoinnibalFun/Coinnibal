@@ -34,6 +34,8 @@ export interface SiteSettings {
   wlOpen: boolean;
   /** Collab applications accepted (the landing's Collab button reads it). */
   collabOpen: boolean;
+  /** Appetizer cards handed out (`appetizer.ts`; the landing's card stand reads it). */
+  appetizerOpen: boolean;
   /** Visitors see the mint page (and every link to it). */
   mintOpen: boolean;
   /** Who may play (server `GAME_ACCESS` overrides it). */
@@ -47,6 +49,7 @@ export interface SiteSettings {
 export const SITE_SETTINGS_DEFAULT: SiteSettings = {
   wlOpen: false,
   collabOpen: false,
+  appetizerOpen: true,
   mintOpen: false,
   gameAccess: GAME_ACCESS_DEFAULT,
   xHandle: SITE_X_HANDLE_DEFAULT,

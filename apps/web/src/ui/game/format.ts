@@ -1,5 +1,5 @@
 import { ledgerDecimals } from '@coinnibal/sdk';
-import { TOKEN_SYMBOL_DEFAULT, arenaMeta, formatToken, type RoomInfo } from '@coinnibal/shared';
+import { TOKEN_SYMBOL_DEFAULT, arenaMeta, formatToken, testArenaName, type RoomInfo } from '@coinnibal/shared';
 import { useUi } from '../../store';
 
 export interface TokenFormat {
@@ -76,7 +76,8 @@ export function roomName(room: RoomInfo | null): string {
     return `${LEAGUES[room.league]}${n ? ` #${n}` : ''}`;
   }
   if (room.mode === 'arena' && room.arenaId !== undefined) {
-    const name = arenaMeta(room.arenaId).name;
+    // a test room (bots, testnet) says so wherever its name shows: "Test · $1 Room", as in the lobby
+    const name = room.test ? testArenaName(arenaMeta(room.arenaId).name) : arenaMeta(room.arenaId).name;
     return room.instance && room.instance > 1 ? `${name} · ${room.instance}` : name;
   }
   return room.name;

@@ -1,4 +1,5 @@
 import type {
+  AppetizerList,
   ArenaPricingSettings,
   NftCollectionAdminView,
   NftProvenance,
@@ -54,6 +55,8 @@ import type {
 } from '@coinnibal/shared';
 import { SERVER } from '../config';
 import { X_HANDLE_BUILD, getLocale, t, type TKey } from '../i18n';
+// the visitor's Appetizer routes (`site.appetizer`)
+import type { AppetizerPostRequest, AppetizerRequest, AppetizerResponse } from '@coinnibal/shared';
 
 /**
  * The site API (`/api/site/*`, `/api/admin/*`, `/api/auth/*`). Every error is a
@@ -213,15 +216,21 @@ export function encodeProof(message: string, signature: string): string {
 const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 const SECRETS_END = 'COINNIBAL_SECRETS';
+const AUTH_END = 'COINNIBAL_AUTH';
+
+/** A value holding a line break, or a here-document's end line, would end it early: refused. */
+function stdinLines(lines: string[]): string {
+  if (lines.some((l) => /[\r\n]/.test(l) || l === SECRETS_END || l === AUTH_END)) throw new Error('a secret holds a line break');
+  return lines.join('\n');
+}
 
 /**
  * `lines` as a quoted here-document on the command's stdin: the secrets never go on a command line, which any local
  * user can read in ps (the shell writes a here-document to the command's stdin itself). Quoted, so nothing in it is
- * expanded. A value holding a line break would end it early: refused.
+ * expanded.
  */
 function onStdin(lines: string[]): string {
-  if (lines.some((l) => /[\r\n]/.test(l) || l === SECRETS_END)) throw new Error('a secret holds a line break');
-  return ` <<'${SECRETS_END}'\n${lines.join('\n')}\n${SECRETS_END}`;
+  return ` <<'${SECRETS_END}'\n${stdinLines(lines)}\n${SECRETS_END}`;
 }
 
 /**
@@ -236,11 +245,19 @@ export function backupCurlCommand(serverHttp: string, token: string, proof: stri
 
 /**
  * The whole move to a new server in one paste (deploy/vps/install.sh --from): settings and data, with a `migration`
- * proof. The token and the proof reach install.sh on its stdin, one per line, never as arguments.
+ * proof. install.sh comes from the old server itself (`GET /api/admin/install.sh` with this admin session: the
+ * repository is private, and this bundle never names it), then runs. Two quoted here-documents on one line, read in
+ * order: the `Authorization` header for curl (`-H @-`), then the token and the proof for install.sh, one per line.
+ * None of them is ever an argument.
  */
 export function installCommand(serverHttp: string, token: string, proof: string): string {
-  const raw = 'https://raw.githubusercontent.com/furkan3152/Solagel/main/deploy/vps/install.sh';
-  return ` curl -fsSL ${raw} -o install.sh && sudo bash install.sh --yes --from ${shellQuote(serverHttp.replace(/\/+$/, ''))}${onStdin([token, proof])}`;
+  const base = serverHttp.replace(/\/+$/, '');
+  const auth = stdinLines([`Authorization: Bearer ${token}`]);
+  const secrets = stdinLines([token, proof]);
+  return (
+    ` curl -fsS -H @- ${shellQuote(`${base}/api/admin/install.sh`)} -o install.sh <<'${AUTH_END}' && sudo bash install.sh --yes --from ${shellQuote(base)} <<'${SECRETS_END}'\n` +
+    `${auth}\n${AUTH_END}\n${secrets}\n${SECRETS_END}`
+  );
 }
 
 export function saveBlob(blob: Blob, name: string): void {
@@ -309,6 +326,16 @@ export const site = {
   faucet: (token?: string | null) => request<FaucetConfig>('/api/site/faucet', { token }),
   /** `GET /api/site/contracts`: the registered contracts. */
   contracts: () => request<ContractsRegistry>('/api/site/contracts'),
+  /**
+   * The Appetizer (`appetizer.ts` in shared): `claim` hands a card to a wallet and an X handle (the answer never
+   * carries the wallet); `post` records the link of the X post that shared it. Errors carry the server's
+   * `AppetizerError` as `code` (`closed`, `bad_wallet`, `bad_handle`, `handle_taken`, `bad_post`, `rate_limited`).
+   */
+  appetizer: {
+    claim: (body: AppetizerRequest) => request<AppetizerResponse>('/api/appetizer', { method: 'POST', body }),
+    post: (code: string, url: string) =>
+      request<{ ok: true }>(`/api/appetizer/${encodeURIComponent(code)}/post`, { method: 'POST', body: { url } satisfies AppetizerPostRequest }),
+  },
 };
 
 /* ── admin ────────────────────────────────────────────────────────── */
@@ -375,6 +402,15 @@ export function adminApi(token: string) {
     setFeedbackRead: (fid: string, read: boolean) => request<{ entry: FeedbackEntry; unread: number }>(`/api/admin/feedback/${id(fid)}`, { method: 'PUT', token, body: { read } }),
     readAllFeedback: () => request<{ unread: number }>('/api/admin/feedback/read-all', { method: 'POST', token }),
     deleteFeedback: (fid: string) => request<{ unread: number }>(`/api/admin/feedback/${id(fid)}`, { method: 'DELETE', token }),
+    /** The Appetizer cards (admin only; the visitor's claim and post link are `site.appetizer`). */
+    appetizers: {
+      /** `GET /api/admin/appetizers`: newest first (`q`: a handle or a wallet, any part), with the totals. */
+      list: (opts: { offset?: number; limit?: number; q?: string } = {}) => request<AppetizerList>(`/api/admin/appetizers${q({ offset: opts.offset, limit: opts.limit, q: opts.q })}`, { token }),
+      /** `GET /api/admin/appetizers.csv`: every card (no., handle, wallet, claimed, post, views). */
+      csv: () => downloadCsv('/api/admin/appetizers.csv', token, 'coinnibal-appetizers.csv'),
+      /** `DELETE /api/admin/appetizers/<code>`: removes one card. */
+      remove: (code: string) => request<{ ok: true; total: number; posted: number }>(`/api/admin/appetizers/${id(code)}`, { method: 'DELETE', token }),
+    },
     /** `GET /api/admin/arena-scaling`: the arena instance scaler's settings, every arena's instances and its decisions. */
     arenaScaling: () => request<ArenaScalingView>('/api/admin/arena-scaling', { token }),
     /** `PUT /api/admin/arena-scaling`: a partial update of the settings; answers like the GET. */

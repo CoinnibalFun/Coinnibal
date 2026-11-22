@@ -29,6 +29,7 @@ import { Link } from '../router';
 import { useDoors, type Doors } from '../doors';
 import { SiteFooter, SiteHeader, SiteLinkButton, XIcon } from '../Shell';
 import { useSiteSettings, xProfile } from '../settings';
+import { AppetizerSlip } from '../appetizer/AppetizerSlip';
 import { BITES, BiteSeam, biteVars } from './BiteSeam';
 import { CoinPond } from './CoinPond';
 import { DuskSeam } from './DuskSeam';
@@ -91,7 +92,20 @@ function usePausedPlate(gulpAt: number): RefObject<HTMLElement | null> {
  * (the guide), then the NFT's perks and the project's X account; "Join the WL", Collab and Play come back as the
  * admin opens them. Nothing here points at a closed page.
  */
-function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: GameAccess; handle: string; sound: ReturnType<typeof useLandingSound> }) {
+function Hero({
+  doors,
+  gameAccess,
+  handle,
+  sound,
+  appetizer,
+}: {
+  doors: Doors;
+  gameAccess: GameAccess;
+  handle: string;
+  sound: ReturnType<typeof useLandingSound>;
+  /** The Appetizer's slip: shown while `appetizerOpen`; `ready` once the server's settings are in. */
+  appetizer: { open: boolean; ready: boolean };
+}) {
   const reduced = useReducedMotion();
   const m = useMoves();
   const peel = usePeelLetters<HTMLHeadingElement>();
@@ -178,6 +192,8 @@ function Hero({ doors, gameAccess, handle, sound }: { doors: Doors; gameAccess: 
               <span className="mono ld-hero__badge-l">{t('ld.badge')}</span>
             </Sticker>
           </motion.div>
+          {/* the Appetizer's order slip: under the round sticker on a wide screen, beside it under the card on a phone */}
+          {appetizer.open && <AppetizerSlip ready={appetizer.ready} xHandle={handle} />}
         </div>
         <CoinPond still={reduced} events={{ onEat: sound.chomp }} />
         {/* both hints are in the HTML; CSS shows the mouse one where the pointer is a mouse, and neither with reduced
@@ -844,7 +860,7 @@ function Faq({ handle, doors, gameAccess }: { handle: string; doors: Doors; game
 
 /** `/`: the landing, from day into night. It links only to what the admin has opened (`useDoors`). */
 export function Landing() {
-  const { settings } = useSiteSettings();
+  const { settings, loaded } = useSiteSettings();
   const doors = useDoors();
   const sound = useLandingSound();
   const t = useT();
@@ -866,7 +882,7 @@ export function Landing() {
       </SiteHeader>
       <main id="main" className="ld-main" tabIndex={-1}>
         <PlateLabel numeral={1} title={t('ld.plate1')} className="ld-plate1" />
-        <Hero doors={doors} gameAccess={settings.gameAccess} handle={settings.xHandle} sound={sound} />
+        <Hero doors={doors} gameAccess={settings.gameAccess} handle={settings.xHandle} sound={sound} appetizer={{ open: settings.appetizerOpen, ready: loaded }} />
         <Feast />
         <Round />
         <DuskSeam />

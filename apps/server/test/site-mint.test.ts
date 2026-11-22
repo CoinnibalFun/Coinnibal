@@ -822,7 +822,7 @@ describe('X handle migration (previous default @elymum → @elymumio → @coinni
     seed(dir, { wlOpen: true, collabOpen: false, gameAccess: 'holders', xHandle: 'elymum', launchPostUrl: null, launch: 1 });
     const logs: string[] = [];
     const s = new SiteStore(dir, { log: (m) => logs.push(m) });
-    expect(s.settings).toEqual({ wlOpen: true, collabOpen: false, mintOpen: false, gameAccess: 'holders', xHandle: 'coinnibalfun', launchPostUrl: null });
+    expect(s.settings).toEqual({ wlOpen: true, collabOpen: false, appetizerOpen: true, mintOpen: false, gameAccess: 'holders', xHandle: 'coinnibalfun', launchPostUrl: null });
     expect(JSON.parse(readFileSync(join(dir, SITE_FILES.settings), 'utf8')).xHandle).toBe('coinnibalfun');
     const [follow, postX, engage, custom] = s.tasks;
     // the seeded tasks keep their admin edits (enabled: false) and get the new handle

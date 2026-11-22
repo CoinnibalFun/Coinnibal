@@ -176,7 +176,7 @@ export function precompressed(file: string, acceptEncoding: string | undefined):
 }
 
 /** The settings the web build prerendered `/` with (`landing.json`, next to `landing.html`): S1 of the site's speed plan. */
-const LANDING_KEYS = ['gameAccess', 'mintOpen', 'wlOpen', 'collabOpen', 'xHandle'] as const;
+const LANDING_KEYS = ['gameAccess', 'mintOpen', 'wlOpen', 'collabOpen', 'appetizerOpen', 'xHandle'] as const;
 type LandingSettings = Pick<SiteSettings, (typeof LANDING_KEYS)[number]>;
 
 /** A file read once and again only when it changes (its mtime or size). */
@@ -206,7 +206,7 @@ const sameHandle = (a: unknown, b: unknown) => typeof a === 'string' && typeof b
 
 /**
  * The file for `/`: the prerendered landing (`landing.html`) while the live site settings equal the ones it was
- * rendered with (`landing.json`: the same game access, mint, WL and collab switches and X handle), else null (the app
+ * rendered with (`landing.json`: the same game access, mint, WL, collab and appetizer switches and X handle), else null (the app
  * page, `index.html`: the browser renders `/` itself, as before). Once the owner opens a door the page must say so from
  * its first paint, not read "Not open yet" until the settings arrive. With no site store the settings are the closed
  * defaults the page was rendered with, so it is sent.
@@ -401,7 +401,7 @@ export function siteRedirect(cfg: Pick<ServerConfig, 'webDist' | 'publicUrl' | '
   if (cfg.webDist || !cfg.publicUrl || cfg.nodeEnv !== 'production') return null;
   if (req.method !== 'GET' && req.method !== 'HEAD') return null;
   const p = url.pathname;
-  if (p.startsWith('/api/') || p === '/ws' || p.startsWith('/share/')) return null;
+  if (p.startsWith('/api/') || p === '/ws' || p.startsWith('/share/') || p.startsWith('/appetizer/')) return null;
   const site = new URL(cfg.publicUrl);
   if (req.headers.host && req.headers.host.toLowerCase() === site.host.toLowerCase()) return null;
   return `${site.origin}${p}${url.search}`;
@@ -552,6 +552,8 @@ export function createHttpServer(cfg: ServerConfig, ctx: Ctx): Server {
         }
       }
       if (url.pathname.startsWith('/share/') && ctx.shares?.handle(req, res, url.pathname, key)) return;
+      // the Appetizer's share page and card image (`/appetizer/<code>`, `/appetizer/<code>.png`)
+      if (url.pathname.startsWith('/appetizer/') && ctx.site?.appetizers.handle(req, res, url.pathname, key)) return;
       if (cfg.webDist && (req.method === 'GET' || req.method === 'HEAD') && serveStatic(cfg.webDist, req, res, url.pathname, ctx.site ? () => ctx.site!.publicSettings() : null)) return;
       const to = siteRedirect(cfg, req, url);
       if (to) {
