@@ -54,13 +54,16 @@ sudo -i
 bash /home/<user>/install.sh
 ```
 
-It asks for the domain (`GAME_DOMAIN`, section 2), the repository (an SSH URL for the private repository: it makes a
-read-only **deploy key** and shows the steps to add it on GitHub) and the branch. Then it updates Ubuntu, installs
+It asks for the domain (`GAME_DOMAIN`, section 2), the repository (the SSH URL of the private repository, default
+`git@github.com:furkan3152/Solagel.git`: it makes a read-only **deploy key** and shows the steps to add it on GitHub;
+an `https://` URL cannot clone a private repository) and the branch. Then it updates Ubuntu, installs
 Docker, automatic security updates of Ubuntu's packages (no automatic reboot; the rest: section 6, "Updates"), the
 firewall, fail2ban, a persistent journal, network tuning, downloads the code to `/opt/elymum`, opens
 `/opt/elymum/.env` in nano (section 4), builds and starts the server, installs the timers and the commands (section
 10) and waits for `https://<GAME_DOMAIN>/api/health?live=1`.
-Running it again is safe.
+Running it again is safe. A server installed while the repository was public may still fetch over `https://`: run
+the installer again (it sets the SSH URL and shows its deploy key), or add `/root/.ssh/elymum_deploy.pub` as a deploy
+key and `git -C /opt/elymum remote set-url origin git@github.com:furkan3152/Solagel.git`.
 
 ## 4. Settings (`/opt/elymum/.env`)
 
@@ -251,7 +254,11 @@ for 10 minutes (and on the mainnet `ADMIN_SECRET_EXPORT=1` on the old server for
    admin session token, `POST /api/admin/secret-proof {"purpose":"migration"}`, sign the returned `message` with the
    admin wallet (`personal_sign`), and base64url-encode `{"message":"...","signature":"0x..."}`: that is the proof.
 3. On the new VPS (sections 1 to 3; the installer takes the old server's settings itself). Paste the
-   "Copy new-server command" of `/admin` → Network → Backup & move, or by hand:
+   "Copy new-server command" of `/admin` → Network → Backup & move: it downloads `install.sh` from the old server
+   (`GET /api/admin/install.sh`, the admin session on curl's stdin; the repository is private and the site never names
+   it) and runs it. The new server's deploy key is new: the installer shows it and waits at the terminal until it is
+   added on GitHub (Settings → Deploy keys, read-only; remove the old server's key once it is gone). By hand, with
+   `install.sh` copied over (section 3):
    ```bash
     bash install.sh --yes --from https://<old GAME_DOMAIN> <<'COINNIBAL_SECRETS'
    <admin session token>

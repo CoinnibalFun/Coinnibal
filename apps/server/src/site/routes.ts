@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { AdminAudit } from './audit';
@@ -22,6 +23,7 @@ import { ShopFail, type ShopService } from '../shop/service';
 import { ShopSettingsError, type ShopSettingsStore } from '../shop/settings';
 import type { BoostInventory } from '../shop/inventory';
 import { migrationEnv, streamBackup } from './backup';
+import { findInstallScript } from './install-script';
 import { ArenaScalingFail, type ArenaScaler } from '../rooms/arena-scaler';
 import type { RoomManager } from '../rooms/manager';
 import { TestArenaFail } from '../rooms/test-arenas';
@@ -1099,6 +1101,18 @@ export class SiteApi {
         if (!this.backups.allow(wallet.toLowerCase())) throw new SiteFail(429, 'rate_limited', 'Too many backups in the last hour. Try again later.');
         await this.secretGate(req, wallet, 'backup');
         return streamBackup(req, res, wallet, { dataDir: this.ext.dataDir ?? null, chainId: this.chainId(), flush: () => this.flushAll?.(), log: this.ext.log });
+      }
+      case 'install.sh': {
+        // the VPS installer for the "Copy new-server command" (its curl sends this session on stdin): the repository
+        // is private, and the web bundle never names it. Not a secret (no proof needed): the same file as the code's
+        if (seg.length !== 1) break;
+        this.method(req, 'GET');
+        const file = findInstallScript();
+        if (!file) throw new SiteFail(404, 'not_found', 'This server has no copy of deploy/vps/install.sh.');
+        const body = await readFile(file);
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="install.sh"', 'Cache-Control': 'no-store' });
+        res.end(body);
+        return;
       }
       case 'migration-env': {
         // the server's own settings (secrets included) for the one-command move to a new server

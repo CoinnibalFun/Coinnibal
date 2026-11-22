@@ -213,15 +213,21 @@ export function encodeProof(message: string, signature: string): string {
 const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 const SECRETS_END = 'COINNIBAL_SECRETS';
+const AUTH_END = 'COINNIBAL_AUTH';
+
+/** A value holding a line break, or a here-document's end line, would end it early: refused. */
+function stdinLines(lines: string[]): string {
+  if (lines.some((l) => /[\r\n]/.test(l) || l === SECRETS_END || l === AUTH_END)) throw new Error('a secret holds a line break');
+  return lines.join('\n');
+}
 
 /**
  * `lines` as a quoted here-document on the command's stdin: the secrets never go on a command line, which any local
  * user can read in ps (the shell writes a here-document to the command's stdin itself). Quoted, so nothing in it is
- * expanded. A value holding a line break would end it early: refused.
+ * expanded.
  */
 function onStdin(lines: string[]): string {
-  if (lines.some((l) => /[\r\n]/.test(l) || l === SECRETS_END)) throw new Error('a secret holds a line break');
-  return ` <<'${SECRETS_END}'\n${lines.join('\n')}\n${SECRETS_END}`;
+  return ` <<'${SECRETS_END}'\n${stdinLines(lines)}\n${SECRETS_END}`;
 }
 
 /**
@@ -236,11 +242,19 @@ export function backupCurlCommand(serverHttp: string, token: string, proof: stri
 
 /**
  * The whole move to a new server in one paste (deploy/vps/install.sh --from): settings and data, with a `migration`
- * proof. The token and the proof reach install.sh on its stdin, one per line, never as arguments.
+ * proof. install.sh comes from the old server itself (`GET /api/admin/install.sh` with this admin session: the
+ * repository is private, and this bundle never names it), then runs. Two quoted here-documents on one line, read in
+ * order: the `Authorization` header for curl (`-H @-`), then the token and the proof for install.sh, one per line.
+ * None of them is ever an argument.
  */
 export function installCommand(serverHttp: string, token: string, proof: string): string {
-  const raw = 'https://raw.githubusercontent.com/furkan3152/Solagel/main/deploy/vps/install.sh';
-  return ` curl -fsSL ${raw} -o install.sh && sudo bash install.sh --yes --from ${shellQuote(serverHttp.replace(/\/+$/, ''))}${onStdin([token, proof])}`;
+  const base = serverHttp.replace(/\/+$/, '');
+  const auth = stdinLines([`Authorization: Bearer ${token}`]);
+  const secrets = stdinLines([token, proof]);
+  return (
+    ` curl -fsS -H @- ${shellQuote(`${base}/api/admin/install.sh`)} -o install.sh <<'${AUTH_END}' && sudo bash install.sh --yes --from ${shellQuote(base)} <<'${SECRETS_END}'\n` +
+    `${auth}\n${AUTH_END}\n${secrets}\n${SECRETS_END}`
+  );
 }
 
 export function saveBlob(blob: Blob, name: string): void {
