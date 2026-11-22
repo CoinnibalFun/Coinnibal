@@ -12,6 +12,7 @@ rendered in the repository; the outputs go to `out/videos/` (gitignored).
 | `gameplay-film/` | The narrated gameplay film (about 120 s, home page into a live round): script, voice-actor page, cue timeline, Kokoro or human voice with a humanising post chain, synthesised storybook score and sfx, mixer |
 | `mint-film/` | The NFT announcement, WL → Mint → Play (it also holds the NFT kit `scenes/nft.js` and the short-film mixer) |
 | `roadmap-chomp/` | 14 s music-only loop: the coin eats WL OPEN, MINT, GAME LIVE |
+| `appetizer-served/` | 13 s music-only launch film for The Appetizer early card: the bell, the cards dealt, the cloche, "Appetizers are served." (current copy) |
 
 ## Before the next render (the films of the Elysium build)
 
