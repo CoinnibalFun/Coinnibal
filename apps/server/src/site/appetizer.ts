@@ -14,6 +14,8 @@ import {
   type AppetizerCard,
   type AppetizerEntry,
   type AppetizerList,
+  type AppetizerOurPost,
+  type AppetizerOurPostResponse,
   type AppetizerPostResponse,
   type AppetizerResponse,
 } from '@coinnibal/shared';
@@ -40,6 +42,9 @@ const RENDERS_PER_MIN = 30;
 /** Renders a minute for the whole server (as the share cards: a crowd of IPs cannot turn drawing into a CPU flood). */
 const RENDERS_PER_MIN_ALL = 120;
 const PNG_CACHE = 256;
+/** Our X post is read from X at most this often for the sheet's box; a failed read is tried again sooner. */
+const OUR_POST_TTL_MS = 10 * 60_000;
+const OUR_POST_RETRY_MS = 60_000;
 /** `https://(www.|mobile.)(x|twitter).com/<handle>/status/<id>`, a query string or a fragment allowed (dropped). */
 const POST_RE = /^https:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d{1,25})\/?(?:[?#].*)?$/i;
 
@@ -149,6 +154,9 @@ export class AppetizerService {
   private readonly postIp: Limiter;
   private readonly kept: number;
   private readPost: ((id: string) => Promise<XPostRead>) | null;
+  /** Our post as last read from X (`ourPost`), and the read under way. */
+  private ours: { url: string; view: AppetizerOurPost | null; until: number } | null = null;
+  private oursLoading: { url: string; p: Promise<AppetizerOurPost | null> } | null = null;
   private readonly now: () => number;
   private readonly log: (m: string) => void;
 
@@ -165,6 +173,7 @@ export class AppetizerService {
   /** The X reader for post links (set once "Link X" is up). */
   setPostReader(fn: ((id: string) => Promise<XPostRead>) | null): void {
     this.readPost = fn;
+    this.ours = null;
   }
 
   // ---------- persistence ----------
@@ -294,7 +303,49 @@ export class AppetizerService {
     if (postCarriesCard(p, e.code)) return true;
     // oEmbed shows links as t.co only: the card's link may be behind one
     if (p.urls === null && /t\.co\//i.test(p.text)) return false;
-    throw new SiteFail(422, 'post_unverified', 'That post does not carry your card. Post it with the button above, then paste that link.', 'url');
+    throw new SiteFail(422, 'post_unverified', 'That post does not carry your card. Post it with the "Post on X" button, then paste that link.', 'url');
+  }
+
+  /**
+   * Our X post (`appetizerPostUrl`, only that one) as the sheet's box shows it: read from X at most once every
+   * `OUR_POST_TTL_MS` (a failed read is tried again after `OUR_POST_RETRY_MS`), visitors sharing one read. Null while
+   * no post is set, no X reader is up, or X cannot show it.
+   */
+  async ourPost(url: string | null): Promise<AppetizerOurPost | null> {
+    const post = parsePostUrl(url);
+    if (!post || !this.readPost) return null;
+    const now = this.now();
+    const c = this.ours;
+    if (c && c.url === post.url && now < c.until) return c.view;
+    if (this.oursLoading?.url === post.url) return this.oursLoading.p;
+    const read = this.readPost;
+    const p = (async () => {
+      let view: AppetizerOurPost | null = null;
+      try {
+        const r = await read(/\/status\/(\d+)$/.exec(post.url)![1]);
+        if (r.ok) {
+          const v = r.post.view ?? { text: r.post.text, photo: null };
+          view = { url: post.url, handle: r.post.handle, name: r.post.name || r.post.handle, avatar: r.post.avatarUrl, text: v.text, photo: v.photo, at: r.post.createdAt };
+        }
+      } catch (err) {
+        this.log(`appetizer: our post could not be read (${(err as Error).message})`);
+      }
+      this.ours = { url: post.url, view, until: this.now() + (view ? OUR_POST_TTL_MS : OUR_POST_RETRY_MS) };
+      return view;
+    })();
+    this.oursLoading = { url: post.url, p };
+    try {
+      return await p;
+    } finally {
+      if (this.oursLoading?.p === p) this.oursLoading = null;
+    }
+  }
+
+  /** `GET /api/appetizer/post`: our post for the sheet's box (`AppetizerOurPostResponse`), cached a few minutes by browsers too. */
+  async ourPostRoute(res: ServerResponse, url: string | null, head: boolean): Promise<void> {
+    const body: AppetizerOurPostResponse = { post: await this.ourPost(url) };
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
+    res.end(head ? undefined : JSON.stringify(body));
   }
 
   private find(code: string): AppetizerEntry {
@@ -466,8 +517,9 @@ export class AppetizerService {
 
 /** The share page: the Open Graph and Twitter card tags (X shows the card), then on to the landing's card stand. */
 export function appetizerPage(card: AppetizerCard, origin: string): string {
-  const title = `Early card · The Appetizer No. ${appetizerNo(card.no)} · @${card.handle}`;
-  const desc = `A ${BRAND_NAME} early card for early fans. Coins eating coins.`;
+  // in step with the post the sheet writes (`ld.ap.postText`): "The Appetizer is out", a seat before the coinnibals
+  const title = `The Appetizer is out · Early card No. ${appetizerNo(card.no)} · @${card.handle}`;
+  const desc = `Grabbed my seat before the coinnibals showed up. A ${BRAND_NAME} early card for early fans.`;
   const page = `${origin}${appetizerPath(card.code)}`;
   const img = `${page}.png`;
   const landing = `${origin}/#appetizer`;
