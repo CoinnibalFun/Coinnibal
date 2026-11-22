@@ -54,6 +54,8 @@ import type {
 } from '@coinnibal/shared';
 import { SERVER } from '../config';
 import { X_HANDLE_BUILD, getLocale, t, type TKey } from '../i18n';
+// the visitor's Appetizer routes (`site.appetizer`)
+import type { AppetizerPostRequest, AppetizerRequest, AppetizerResponse } from '@coinnibal/shared';
 
 /**
  * The site API (`/api/site/*`, `/api/admin/*`, `/api/auth/*`). Every error is a
@@ -309,6 +311,16 @@ export const site = {
   faucet: (token?: string | null) => request<FaucetConfig>('/api/site/faucet', { token }),
   /** `GET /api/site/contracts`: the registered contracts. */
   contracts: () => request<ContractsRegistry>('/api/site/contracts'),
+  /**
+   * The Appetizer (`appetizer.ts` in shared): `claim` hands a card to a wallet and an X handle (the answer never
+   * carries the wallet); `post` records the link of the X post that shared it. Errors carry the server's
+   * `AppetizerError` as `code` (`closed`, `bad_wallet`, `bad_handle`, `handle_taken`, `bad_post`, `rate_limited`).
+   */
+  appetizer: {
+    claim: (body: AppetizerRequest) => request<AppetizerResponse>('/api/appetizer', { method: 'POST', body }),
+    post: (code: string, url: string) =>
+      request<{ ok: true }>(`/api/appetizer/${encodeURIComponent(code)}/post`, { method: 'POST', body: { url } satisfies AppetizerPostRequest }),
+  },
 };
 
 /* ── admin ────────────────────────────────────────────────────────── */

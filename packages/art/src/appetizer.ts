@@ -555,7 +555,7 @@ export function drawAppetizerCard(ctx: CanvasRenderingContext2D, card: Appetizer
 
   // the stamp, pressed over the corner of the details
   const ss = opts.stamp ?? 1;
-  if (served && ss > 0) servedStamp(ctx, R - 98, Y + CH - 88, ss * 0.92, fonts);
+  if (served && ss > 0) servedStamp(ctx, R - 88, Y + CH - 80, ss * 0.92, fonts);
   ctx.restore(); // the card's tilt
 
   // the tape that holds the menu to the table
