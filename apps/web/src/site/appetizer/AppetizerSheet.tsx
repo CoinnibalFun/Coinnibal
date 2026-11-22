@@ -7,6 +7,7 @@ import { useT } from '../../i18n';
 import { SiteApiError, saveBlob, site } from '../api';
 import { XIcon } from '../Shell';
 import { siteHost, xIntent } from '../settings';
+import { PostBox } from './PostBox';
 import { saveAppetizer, saveStep, useAppetizerStep, useStoredAppetizer, type StoredAppetizer } from './stored';
 import './appetizer.css';
 
@@ -101,6 +102,22 @@ function CardCanvas({ card, label, serve = false }: { card: AppetizerCardArt; la
   );
 }
 
+/** Wide enough for the checklist and our post side by side (below it, the post sits inside step 2). */
+const WIDE = '(min-width: 960px)';
+
+function useWide(): boolean {
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.matchMedia?.(WIDE).matches === true);
+  useEffect(() => {
+    const m = window.matchMedia?.(WIDE);
+    if (!m) return;
+    const on = () => setWide(m.matches);
+    on();
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return wide;
+}
+
 type Errors = { wallet?: string; handle?: string; form?: string };
 
 /** `https://x.com/intent/follow?screen_name=<handle>`: X's follow button for the project's account. */
@@ -110,7 +127,8 @@ export const followIntent = (xHandle: string): string => `https://x.com/intent/f
  * The Appetizer sheet (lazy, from AppetizerSlip): a short checklist. 1 follow the project on X, 2 like and comment on
  * our X post (`SiteSettings.appetizerPostUrl`; hidden while it is null), 3 wallet and handle (the card drawn live as the handle is
  * typed), then the served card and 4 its post on X with the post's link (required: the card is complete once the link
- * is in). The follow and the like are on trust (no X API): their buttons must have been clicked, which this browser
+ * is in). With our post set, the post itself is shown in a box (`PostBox`): beside the checklist on wide screens, inside
+ * step 2 on narrower ones. The follow and the like are on trust (no X API): their buttons must have been clicked, which this browser
  * remembers.
  */
 export default function AppetizerSheet({ open, onClose, xHandle, postUrl }: { open: boolean; onClose: () => void; xHandle: string; postUrl: string | null }) {
@@ -120,11 +138,13 @@ export default function AppetizerSheet({ open, onClose, xHandle, postUrl }: { op
   const [claimed, setClaimed] = useState<{ card: StoredAppetizer; existing: boolean; fresh: boolean } | null>(null);
   const card = claimed?.card ?? kept;
   const ourX = `@${xHandle.replace(/^@/, '')}`;
+  const wide = useWide();
+  const twoCols = !card && !!postUrl && wide;
   return (
     <Sheet
       open={open}
       onClose={onClose}
-      className="ap-sheet"
+      className={`ap-sheet${twoCols ? ' ap-sheet--cols' : ''}${card ? ' ap-sheet--served' : ''}`}
       kicker={card ? (card.posted ? t('ld.ap.completeKicker') : t('ld.ap.servedKicker')) : t('ld.ap.kicker')}
       title={card ? t('ld.ap.servedTitle') : t('ld.ap.title')}
       closeLabel={t('ld.ap.close')}
@@ -147,6 +167,7 @@ export default function AppetizerSheet({ open, onClose, xHandle, postUrl }: { op
           ourX={ourX}
           xHandle={xHandle}
           postUrl={postUrl}
+          wide={twoCols}
           onServed={(c, existing) => {
             saveAppetizer(c);
             setClaimed({ card: c, existing, fresh: true });
@@ -198,7 +219,20 @@ function StepLink({ href, done, onOpen, children, testId }: { href: string; done
   );
 }
 
-function Order({ ourX, xHandle, postUrl, onServed }: { ourX: string; xHandle: string; postUrl: string | null; onServed: (card: StoredAppetizer, existing: boolean) => void }) {
+function Order({
+  ourX,
+  xHandle,
+  postUrl,
+  wide,
+  onServed,
+}: {
+  ourX: string;
+  xHandle: string;
+  postUrl: string | null;
+  /** Our post beside the checklist (else inside step 2). */
+  wide: boolean;
+  onServed: (card: StoredAppetizer, existing: boolean) => void;
+}) {
   const t = useT();
   const formId = useId();
   const followed = useAppetizerStep('followed');
@@ -255,8 +289,9 @@ function Order({ ourX, xHandle, postUrl, onServed }: { ourX: string; xHandle: st
   const now = check();
   const live = shown({ wallet: errors.wallet ?? now.wallet, handle: errors.handle ?? now.handle });
   const orderN = likeStep ? 3 : 2;
-  return (
-    <form id={formId} className="ap-order" onSubmit={(e) => void submit(e)} noValidate>
+  const like = () => saveStep('liked');
+  const main = (
+    <>
       <p className="ap-lede ap-lede--early" data-testid="ap-lede">
         {t('ld.ap.lede')}
       </p>
@@ -269,7 +304,8 @@ function Order({ ourX, xHandle, postUrl, onServed }: { ourX: string; xHandle: st
         </Step>
         {likeStep && (
           <Step n={2} done={liked} title={t('ld.ap.s.like')} hint={t('ld.ap.s.likeHint')} testId="ap-step-like">
-            <StepLink href={postUrl} done={liked} onOpen={() => saveStep('liked')} testId="ap-like">
+            {!wide && <PostBox url={postUrl} xHandle={xHandle} onOpen={like} compact />}
+            <StepLink href={postUrl} done={liked} onOpen={like} testId="ap-like">
               {t('ld.ap.like')}
             </StepLink>
           </Step>
@@ -326,6 +362,20 @@ function Order({ ourX, xHandle, postUrl, onServed }: { ourX: string; xHandle: st
           <span>{errors.form}</span>
         </p>
       )}
+    </>
+  );
+  return (
+    <form id={formId} className="ap-order" onSubmit={(e) => void submit(e)} noValidate>
+      {wide && postUrl ? (
+        <div className="ap-cols">
+          <div className="ap-cols__main">{main}</div>
+          <aside className="ap-cols__post">
+            <PostBox url={postUrl} xHandle={xHandle} onOpen={like} />
+          </aside>
+        </div>
+      ) : (
+        main
+      )}
       {/* held at the foot of the sheet while the form scrolls under it */}
       <div className="ap-serve-bar">
         {!ready && !closed && (
@@ -364,7 +414,15 @@ function Served({
   const no = String(card.no).padStart(4, '0');
   const handle = `@${card.handle}`;
   const link = shareLink(card.code);
-  const postText = `${t('ld.ap.postText', { ourX, no })}\n${link}`;
+  const postText = `${t('ld.ap.postText')}\n${link}`;
+  const postX = (
+    <a className="kb-btn kb-btn--primary kb-btn--md ap-post__x" href={xIntent(postText)} target="_blank" rel="noreferrer" data-testid="ap-post-x">
+      <XIcon size={18} />
+      <span className="kb-btn__label">
+        <span className="kb-btn__text">{t('ld.ap.postX')}</span>
+      </span>
+    </a>
+  );
   const [url, setUrl] = useState('');
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -421,30 +479,22 @@ function Served({
       </p>
       <ol className="ap-steps" start={step}>
         <Step n={step} done={!!card.posted} title={t('ld.ap.s.post')} testId="ap-step-post">
-          <div className="ap-share">
-            <a className="kb-btn kb-btn--primary kb-btn--md" href={xIntent(postText)} target="_blank" rel="noreferrer" data-testid="ap-post-x">
-              <span className="kb-btn__label">
-                <span className="kb-btn__text">{t('ld.ap.postX')}</span>
-              </span>
-              <Icon name="share" size={20} className="kb-btn__icon" />
-            </a>
-            <Button variant="secondary" icon="download" onClick={download}>
-              {t('ld.ap.download')}
-            </Button>
-          </div>
-          <p className="ap-link mono" data-testid="ap-share-link">
-            {link.replace(/^https:\/\//, '')}
-          </p>
           {card.posted ? (
-            <p className="ap-thanks" role="status">
-              <Icon name="check" size={18} />
-              <span>{verified === false ? t('ld.ap.thanksUnchecked') : t('ld.ap.thanks')}</span>
-            </p>
+            <>
+              <p className="ap-thanks" role="status">
+                <Icon name="check" size={18} />
+                <span>{verified === false ? t('ld.ap.thanksUnchecked') : t('ld.ap.thanks')}</span>
+              </p>
+              <div className="ap-share">{postX}</div>
+            </>
           ) : (
+            // post, then paste, in one row: the composer opens in a new tab with the card's link in the text
             <form className="ap-post" onSubmit={(e) => void sendLink(e)} noValidate>
+              {postX}
               <Field
+                className="ap-post__field"
                 label={t('ld.ap.link')}
-                hint={t('ld.ap.linkHint', { handle: card.handle })}
+                hint={t('ld.ap.linkHint')}
                 error={error}
                 value={url}
                 inputMode="url"
@@ -458,11 +508,20 @@ function Served({
                   setError(undefined);
                 }}
               />
-              <Button type="submit" variant="teal" loading={busy} disabled={!url.trim()}>
+              <Button type="submit" variant="teal" loading={busy} disabled={!url.trim()} className="ap-post__save">
                 {t('ld.ap.linkSave')}
               </Button>
             </form>
           )}
+          <div className="ap-cardlink">
+            <span className="ap-link mono" data-testid="ap-share-link">
+              {link.replace(/^https:\/\//, '')}
+            </span>
+            <button type="button" className="ap-download" onClick={download}>
+              <Icon name="download" size={16} />
+              {t('ld.ap.download')}
+            </button>
+          </div>
         </Step>
       </ol>
       <button type="button" className="ap-forget" onClick={onForget}>
