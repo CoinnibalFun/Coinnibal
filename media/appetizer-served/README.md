@@ -6,12 +6,13 @@ their own coin on a plate, a numbered order, the SERVED stamp). One teal gingham
 
 | Time | Beat |
 | --- | --- |
-| 0.0 | **Order up.** A brass desk bell pops onto the table and rings twice (0.5, 0.75): DING! A menu slip drops in and is taped down: "Coinnibal kitchen · Now serving / The Appetizer / Your early Coinnibal card". |
+| 0.0 | **Order up.** A brass desk bell pops onto the table and rings twice (0.5, 0.75): DING! A menu slip drops in and is taped down: "Now serving · Early cards / The Appetizer / Your Coinnibal early card". |
 | 2.0 | **The deal.** Real Appetizer cards are dealt onto the table, each with its own guest and coin: No. 0001 @coinnibalfun, 0002 @nibble_queen, 0003 @coin_chef (2.0, 2.75, 3.5), then faster (quarters from 4.0, eighths from 5.0) up to No. 0038, a pile of orders. A sun strip on top: "Early cards, coming right up". |
-| 6.0 | **The cloche.** The pile is swept off; one more card slides in big: "Table for @you", No. 0042, its plate under a silver cloche ("Your table is ready" in the square and vertical cuts). The cloche rattles and lifts (7.0) with steam and sparkles: the coin in its gingham napkin looks up, blinks, beams; the SERVED stamp thumps onto the card (8.0) and the coin grins. |
-| 9.5 | **End card.** The card steps aside for the menu panel: the wordmark, "Appetizers are served.", "Grab yours at" the site's host (`SITE_HOST`, the `PUBLIC_URL` host; default coinnibal.fun), @coinnibalfun. |
+| 6.0 | **The cloche.** The pile is swept off; one more card slides in big: "Table for @you", No. 0042, its plate under a silver cloche ("Your early card is ready" in the square and vertical cuts). The cloche rattles and lifts (7.0) with steam and sparkles: the coin in its gingham napkin looks up, blinks, beams; the SERVED stamp thumps onto the card (8.0) and the coin grins. |
+| 9.5 | **End card.** The card steps aside for the menu panel: the wordmark, "Appetizers are served.", "Follow @coinnibalfun" (X's mark), "Grab your early card at" the site's host (`SITE_HOST`, the `PUBLIC_URL` host; default coinnibal.fun). The square cut puts the wordmark and the follow in the panel's foot row. |
 
-The handles are made up (apart from @coinnibalfun). Copy rules: no ticker, no prices, nothing the card gives.
+The handles are made up (apart from @coinnibalfun). Copy rules: say "early card" plainly (the card art carries an
+EARLY CARD tag); no ticker, no prices, nothing the card gives.
 
 Every card is the real one: `drawAppetizerCard` of `packages/art` (bundled with the coins by `build-art.mjs` into
 `cache/art.js`), drawn with the card's own Fraunces cut (the wght file the server's share image uses). The dealt
