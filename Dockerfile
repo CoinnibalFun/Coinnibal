@@ -62,6 +62,8 @@ COPY --from=build /out/package.json ./package.json
 COPY --from=build /out/node_modules ./node_modules
 COPY --from=build /app/apps/server/dist ./dist
 COPY --from=build /app/apps/web/dist ./web
+# the VPS installer, served to admins for the move to a new server (GET /api/admin/install.sh: the repository is private)
+COPY deploy/vps/install.sh ./deploy/vps/install.sh
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh && mkdir -p /data && chown -R node:node /data
 VOLUME ["/data"]
