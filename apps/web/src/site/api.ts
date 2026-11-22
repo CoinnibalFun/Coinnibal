@@ -56,7 +56,7 @@ import type {
 import { SERVER } from '../config';
 import { X_HANDLE_BUILD, getLocale, t, type TKey } from '../i18n';
 // the visitor's Appetizer routes (`site.appetizer`)
-import type { AppetizerPostRequest, AppetizerPostResponse, AppetizerRequest, AppetizerResponse } from '@coinnibal/shared';
+import type { AppetizerOurPostResponse, AppetizerPostRequest, AppetizerPostResponse, AppetizerRequest, AppetizerResponse } from '@coinnibal/shared';
 
 /**
  * The site API (`/api/site/*`, `/api/admin/*`, `/api/auth/*`). Every error is a
@@ -336,6 +336,8 @@ export const site = {
     claim: (body: AppetizerRequest) => request<AppetizerResponse>('/api/appetizer', { method: 'POST', body }),
     post: (code: string, url: string) =>
       request<AppetizerPostResponse>(`/api/appetizer/${encodeURIComponent(code)}/post`, { method: 'POST', body: { url } satisfies AppetizerPostRequest }),
+    /** `GET /api/appetizer/post`: our X post (`appetizerPostUrl`) for the sheet's box; `post: null` when X cannot show it. */
+    ourPost: () => request<AppetizerOurPostResponse>('/api/appetizer/post'),
   },
 };
 
