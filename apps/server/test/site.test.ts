@@ -213,8 +213,8 @@ describe('site API', () => {
     it('serves the defaults; the launch-post task opens when the link is set', async () => {
       const s = await h.call('GET', '/api/site/settings');
       // the harness opened the WL; a fresh server has everything closed
-      expect(s.body.settings).toEqual({ wlOpen: true, collabOpen: false, appetizerOpen: true, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null });
-      expect(new SiteStore(null).settings).toEqual({ wlOpen: false, collabOpen: false, appetizerOpen: true, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null });
+      expect(s.body.settings).toEqual({ wlOpen: true, collabOpen: false, appetizerOpen: true, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null, appetizerPostUrl: 'https://x.com/Coinnibalfun/status/2123416055406354866' });
+      expect(new SiteStore(null).settings).toEqual({ wlOpen: false, collabOpen: false, appetizerOpen: true, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibalfun', launchPostUrl: null, appetizerPostUrl: 'https://x.com/Coinnibalfun/status/2123416055406354866' });
       // the mint page switch: a boolean like the other two
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { mintOpen: 'yes' } })).body.field).toBe('mintOpen');
       expect((await h.call('PUT', '/api/admin/settings', { wallet: h.admin, body: { mintOpen: true } })).body.settings.mintOpen).toBe(true);
@@ -603,7 +603,7 @@ describe('site API', () => {
       writeFileSync(join(dir, SITE_FILES.settings), JSON.stringify({ wlOpen: true, collabOpen: true, gameAccess: 'public', xHandle: 'coinnibal', launchPostUrl: 'https://x.com/coinnibal/status/42' }));
       const logs: string[] = [];
       const a = new SiteStore(dir, { log: (m) => logs.push(m) });
-      expect(a.settings).toEqual({ wlOpen: false, collabOpen: false, appetizerOpen: true, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibal', launchPostUrl: 'https://x.com/coinnibal/status/42' });
+      expect(a.settings).toEqual({ wlOpen: false, collabOpen: false, appetizerOpen: true, mintOpen: false, gameAccess: 'admins', xHandle: 'coinnibal', launchPostUrl: 'https://x.com/coinnibal/status/42', appetizerPostUrl: 'https://x.com/Coinnibalfun/status/2123416055406354866' });
       expect(logs.filter((m) => /public launch/.test(m))).toHaveLength(1);
       const onDisk = () => JSON.parse(readFileSync(join(dir, SITE_FILES.settings), 'utf8'));
       expect(onDisk()).toMatchObject({ launch: SETTINGS_LAUNCH, wlOpen: false, gameAccess: 'admins' });

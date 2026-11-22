@@ -85,4 +85,4 @@ export function installDomStubs(): void {
   Element.prototype.scrollIntoView = () => {};
 }
 
-export const SETTINGS = { wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'admins' as const, xHandle: 'coinnibalfun', launchPostUrl: null };
+export const SETTINGS = { wlOpen: true, collabOpen: true, mintOpen: true, gameAccess: 'admins' as const, xHandle: 'coinnibalfun', launchPostUrl: null, appetizerPostUrl: null as string | null };

@@ -44,7 +44,15 @@ export interface SiteSettings {
   xHandle: string;
   /** The pinned launch post the `engage_x` task points at; null until it is live. */
   launchPostUrl: string | null;
+  /**
+   * The X post the Appetizer's "like and comment" step opens (`appetizer.ts`): an x.com / twitter.com status link;
+   * null hides the step. Defaults to the project's first post (`APPETIZER_POST_URL_DEFAULT`).
+   */
+  appetizerPostUrl: string | null;
 }
+
+/** The project's first X post: the Appetizer's "like and comment" step until the admin sets another (or none). */
+export const APPETIZER_POST_URL_DEFAULT = 'https://x.com/Coinnibalfun/status/2123416055406354866';
 
 export const SITE_SETTINGS_DEFAULT: SiteSettings = {
   wlOpen: false,
@@ -54,6 +62,7 @@ export const SITE_SETTINGS_DEFAULT: SiteSettings = {
   gameAccess: GAME_ACCESS_DEFAULT,
   xHandle: SITE_X_HANDLE_DEFAULT,
   launchPostUrl: null,
+  appetizerPostUrl: APPETIZER_POST_URL_DEFAULT,
 };
 
 export type WlTaskKind = 'follow_x' | 'post_x' | 'engage_x' | 'join_link' | 'text' | 'wallet';

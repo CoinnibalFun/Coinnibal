@@ -1,15 +1,22 @@
 /**
- * The Appetizer: an early card a visitor claims on the landing page before anything else opens. They give a wallet
- * address and their X handle and get a numbered card (the handle only: the wallet is never shown, drawn or shared) to
- * post on X. It is not the WL: separate store, separate routes, separate admin view.
+ * The Appetizer: an early card a visitor claims on the landing page before anything else opens. A short checklist:
+ * follow the project's X account (required; there is no X API for it, so the follow is on trust, as the WL's
+ * `follow_x` task), like and comment on our X post (`SiteSettings.appetizerPostUrl`; the step is shown only while it
+ * is set, also on trust), give a wallet address and their X handle and get a numbered card (the handle only: the
+ * wallet is never shown, drawn or shared), then post the card on X and send the post's link (required: a card counts
+ * once its post link is in; the server reads the post from X's public embed endpoints). It is not the WL: separate
+ * store, separate routes, separate admin view.
  *
  * Routes:
  * - `POST /api/appetizer` (`AppetizerRequest`) → `AppetizerResponse`. 403 `closed` while `SiteSettings.appetizerOpen`
- *   is off; 400 `bad_wallet` / `bad_handle`; 409 `handle_taken` (the handle already holds a card for another wallet);
+ *   is off; 400 `follow_required` (no `followed: true`) / `bad_wallet` / `bad_handle`; 409 `handle_taken` (the handle already holds a card for another wallet);
  *   429 when an IP sends too many. The same wallet with the same handle returns its card
  *   (`existing: true`); with another handle, 409 `wallet_taken` (a wallet alone never reveals its handle).
- * - `POST /api/appetizer/<code>/post` (`AppetizerPostRequest`) → `{ ok: true }`: the link of the X post that shared
- *   the card (its author must be the card's handle); 400 `bad_post`.
+ * - `POST /api/appetizer/<code>/post` (`AppetizerPostRequest`) → `AppetizerPostResponse`: the link of the X post that
+ *   shared the card. 400 `bad_post` (not a post link, or its author is not the card's handle); 422 `post_unverified`
+ *   (X has no public post there, or the post does not carry the card's link `/appetizer/<code>`). When X cannot be
+ *   reached, or only answers without expanded links, the link is kept anyway with `verified: false` (the visitor is
+ *   not blocked; the admin checks those by hand); `x_unreachable` is reserved for a future strict mode and not sent.
  * - `GET /appetizer/<code>`: the share page (Open Graph / Twitter `summary_large_image` tags, the card as its image)
  *   that sends a person on to the landing page; `GET /appetizer/<code>.png`: the card, `APPETIZER_IMAGE` px.
  * - Admin (session): `GET /api/admin/appetizers?offset&limit` → `AppetizerList` (newest first);
@@ -35,7 +42,7 @@ export const APPETIZER_IMAGE = { width: 1200, height: 675 } as const;
 /** A card's code: its share link (`/appetizer/<code>`). */
 export const APPETIZER_CODE_RE = /^[A-Za-z0-9]{10}$/;
 
-export type AppetizerError = 'closed' | 'bad_wallet' | 'bad_handle' | 'handle_taken' | 'wallet_taken' | 'bad_post' | 'not_found' | 'rate_limited';
+export type AppetizerError = 'closed' | 'follow_required' | 'post_unverified' | 'x_unreachable' | 'bad_wallet' | 'bad_handle' | 'handle_taken' | 'wallet_taken' | 'bad_post' | 'not_found' | 'rate_limited';
 
 /** `POST /api/appetizer`. */
 export interface AppetizerRequest {
@@ -43,6 +50,13 @@ export interface AppetizerRequest {
   wallet: string;
   /** The X handle, with or without `@` (normalised by `normalizeXHandle`). */
   handle: string;
+  /** The visitor says they follow the project's X account (they opened the follow intent): required. */
+  followed: true;
+  /**
+   * The visitor opened our X post to like and comment on it: sent when that step was shown (the server does not
+   * require it: the admin may set the post while a visitor's sheet is open).
+   */
+  liked?: boolean;
 }
 
 /** A card as anyone may see it: never the wallet. */
@@ -68,6 +82,12 @@ export interface AppetizerPostRequest {
   url: string;
 }
 
+export interface AppetizerPostResponse {
+  ok: true;
+  /** X showed the post, by the card's handle, carrying the card's link; false: kept unchecked (X did not answer). */
+  verified: boolean;
+}
+
 /** One card as the admin reads it. */
 export interface AppetizerEntry extends AppetizerCard {
   /** EIP-55. */
@@ -75,6 +95,12 @@ export interface AppetizerEntry extends AppetizerCard {
   /** The X post that shared it (normalised `https://x.com/<handle>/status/<id>`), null until given. */
   post: string | null;
   postedAt: number | null;
+  /** Unix ms, when the visitor said they liked and commented on our X post (the claim); null when not asked. */
+  likedAt: number | null;
+  /** Whether X showed the post carrying the card's link (false while there is no post, or it was kept unchecked). */
+  postVerified: boolean;
+  /** Unix ms, when the visitor said they follow the project's X account (the claim); null on cards from before that was asked. */
+  followedAt: number | null;
   /** How many times the share image was fetched (X fetches it as a post is written). */
   views: number;
 }
@@ -83,8 +109,10 @@ export interface AppetizerEntry extends AppetizerCard {
 export interface AppetizerList {
   items: AppetizerEntry[];
   total: number;
-  /** Cards with a post link. */
+  /** Cards with a post link (complete). */
   posted: number;
+  /** Cards whose post X showed carrying the card's link. */
+  verified: number;
 }
 
 /** The share page of a card. */
