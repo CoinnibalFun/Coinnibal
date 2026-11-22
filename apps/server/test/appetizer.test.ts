@@ -93,10 +93,15 @@ describe('the Appetizer: claims, post links, the share page and the admin list',
     expect(b.body.card).toMatchObject({ no: 2, handle: 'CoinFan' });
   });
 
-  it('gives a wallet its own card again, whatever handle it sends', async () => {
+  it('gives a wallet its own card again only with its own handle (a wallet alone never reveals its handle)', async () => {
+    const again = await claim(h, alice, first.card.handle.toUpperCase());
+    expect(again.status).toBe(200);
+    expect(again.body).toEqual({ card: first.card, existing: true });
     const r = await claim(h, alice, 'someone_else');
-    expect(r.status).toBe(200);
-    expect(r.body).toEqual({ card: first.card, existing: true });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toBe('wallet_taken');
+    expect(r.text).not.toContain(first.card.handle);
+    expect(r.text).not.toContain(first.card.code);
   });
 
   it('refuses a handle another wallet holds (any case, @ or link)', async () => {
