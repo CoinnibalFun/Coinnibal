@@ -13,7 +13,7 @@ import { SETTINGS, installDomStubs, mockFetch, type Call } from './site-helpers'
 const api = adminApi('admin-token');
 const W1 = '0xAbCdEf0123456789aBcDeF0123456789AbCdEf01';
 const W2 = '0x1111111111111111111111111111111111111111';
-const card = (over: Partial<AppetizerEntry>): AppetizerEntry => ({ code: 'AAAAAAAAAA', no: 1, handle: 'Nibbler_01', at: Date.UTC(2026, 10, 20, 12), wallet: W1, post: null, postedAt: null, views: 0, ...over });
+const card = (over: Partial<AppetizerEntry>): AppetizerEntry => ({ code: 'AAAAAAAAAA', no: 1, handle: 'Nibbler_01', at: Date.UTC(2026, 10, 20, 12), wallet: W1, post: null, postedAt: null, postVerified: false, followedAt: Date.UTC(2026, 10, 20, 12), likedAt: null, views: 0, ...over });
 
 let restore = () => {};
 let calls: Call[] = [];
@@ -26,20 +26,28 @@ afterEach(() => {
 const ui = (el: ReactElement) => render(<Kb>{el}</Kb>);
 
 describe('admin: the Appetizers drawer', () => {
-  it('lists the cards newest first: number, handle link, full wallet with copy, claimed, post, views, and the totals', async () => {
-    const items = [card({ code: 'BBBBBBBBBB', no: 2, handle: 'CoinFan', wallet: W2, post: 'https://x.com/CoinFan/status/42', postedAt: 2, views: 7 }), card({})];
-    ({ calls, restore } = mockFetch({ 'GET /api/admin/appetizers': { items, total: 2, posted: 1 } }));
+  it('lists the cards newest first: number, handle link, full wallet with copy, claimed, followed, post, verified, views, and the totals', async () => {
+    const items = [
+      card({ code: 'BBBBBBBBBB', no: 2, handle: 'CoinFan', wallet: W2, post: 'https://x.com/CoinFan/status/42', postedAt: 2, postVerified: true, likedAt: Date.UTC(2026, 10, 20, 12), views: 7 }),
+      card({ followedAt: null }),
+      card({ code: 'DDDDDDDDDD', no: 3, handle: 'Unchecked', wallet: W2, post: 'https://x.com/Unchecked/status/43', postedAt: 3 }),
+    ];
+    ({ calls, restore } = mockFetch({ 'GET /api/admin/appetizers': { items, total: 3, posted: 2, verified: 1 } }));
     ui(<AppetizersTab api={api} />);
     const rows = await screen.findAllByTestId('admin-appetizer-row');
-    expect(rows).toHaveLength(2);
-    expect(screen.getByTestId('admin-appetizers-totals').textContent).toBe('2 cards · 1 posted');
+    expect(rows).toHaveLength(3);
+    expect(screen.getByTestId('admin-appetizers-totals').textContent).toBe('3 cards · 2 complete · 1 verified');
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['No.', 'Handle', 'Wallet', 'Claimed', 'Followed', 'Liked', 'Post', 'Verified', 'Views', 'Delete']);
+    expect(within(rows[0]).getByText('✓ verified')).toBeTruthy();
+    expect(within(rows[2]).getByText('unverified')).toBeTruthy();
+    // a card from before the follow was asked: no date
+    expect(within(rows[1]).getAllByText('—')).toHaveLength(4);
     expect(within(rows[0]).getByText('0002')).toBeTruthy();
     expect(within(rows[0]).getByRole('link', { name: '@CoinFan' }).getAttribute('href')).toBe('https://x.com/CoinFan');
     expect(within(rows[0]).getByText(W2)).toBeTruthy();
     expect(within(rows[0]).getByRole('link', { name: 'Post' }).getAttribute('href')).toBe('https://x.com/CoinFan/status/42');
     expect(within(rows[0]).getByText('7')).toBeTruthy();
     expect(within(rows[1]).getByText(W1)).toBeTruthy();
-    expect(within(rows[1]).getByText('—')).toBeTruthy();
     expect(within(rows[1]).queryByRole('link', { name: 'Post' })).toBeNull();
     expect(calls[0]).toMatchObject({ path: '/api/admin/appetizers?offset=0&limit=100', auth: 'Bearer admin-token' });
 
@@ -60,10 +68,23 @@ describe('admin: the Appetizers drawer', () => {
     expect(calls.at(-1)!.path).toBe('/api/admin/appetizers?offset=0&limit=100&q=coin');
   });
 
+  it('filters complete cards (a post link in) or the ones not posted yet, on the server', async () => {
+    ({ calls, restore } = mockFetch({
+      'GET /api/admin/appetizers': (c: Call) => ({ items: c.path.includes('complete=1') ? [card({ post: 'https://x.com/Nibbler_01/status/1', postVerified: true })] : [card({}), card({ code: 'CCCCCCCCCC', no: 2 })], total: 2, posted: 1, verified: 1 }),
+    }));
+    ui(<AppetizersTab api={api} />);
+    expect(await screen.findAllByTestId('admin-appetizer-row')).toHaveLength(2);
+    fireEvent.change(screen.getByTestId('admin-appetizers-filter'), { target: { value: 'complete' } });
+    await waitFor(() => expect(screen.getAllByTestId('admin-appetizer-row')).toHaveLength(1));
+    expect(calls.at(-1)!.path).toBe('/api/admin/appetizers?offset=0&limit=100&complete=1');
+    fireEvent.change(screen.getByTestId('admin-appetizers-filter'), { target: { value: 'open' } });
+    await waitFor(() => expect(calls.at(-1)!.path).toBe('/api/admin/appetizers?offset=0&limit=100&complete=0'));
+  });
+
   it('deletes a card after a confirm, and not without one', async () => {
     ({ calls, restore } = mockFetch({
-      'GET /api/admin/appetizers': { items: [card({ code: 'BBBBBBBBBB', no: 2 }), card({})], total: 2, posted: 0 },
-      'DELETE /api/admin/appetizers/AAAAAAAAAA': { ok: true, total: 1, posted: 0 },
+      'GET /api/admin/appetizers': { items: [card({ code: 'BBBBBBBBBB', no: 2 }), card({})], total: 2, posted: 0, verified: 0 },
+      'DELETE /api/admin/appetizers/AAAAAAAAAA': { ok: true, total: 1, posted: 0, verified: 0 },
     }));
     const confirm = vi.fn(() => false);
     vi.stubGlobal('confirm', confirm);
@@ -76,13 +97,13 @@ describe('admin: the Appetizers drawer', () => {
     fireEvent.click(within(rows[1]).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(screen.getAllByTestId('admin-appetizer-row')).toHaveLength(1));
     expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/admin/appetizers/AAAAAAAAAA')).toBe(true);
-    expect(screen.getByTestId('admin-appetizers-totals').textContent).toBe('1 card · 0 posted');
+    expect(screen.getByTestId('admin-appetizers-totals').textContent).toBe('1 card · 0 complete · 0 verified');
   });
 
   it('exports the CSV with the admin session', async () => {
     ({ calls, restore } = mockFetch({
       'GET /api/admin/appetizers': { items: [], total: 0, posted: 0 },
-      'GET /api/admin/appetizers.csv': () => new Response('no,handle,wallet,claimed,post,views\r\n', { status: 200, headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="coinnibal-appetizers-2026-11-22.csv"' } }),
+      'GET /api/admin/appetizers.csv': () => new Response('no,handle,wallet,claimed,followed,liked,post,post_verified,complete,views\r\n', { status: 200, headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="coinnibal-appetizers-2026-11-22.csv"' } }),
     }));
     const createObjectURL = vi.fn(() => 'blob:x');
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }));
@@ -119,5 +140,24 @@ describe('admin: the Appetizers drawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
     await screen.findByText('Settings saved.');
     expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ appetizerOpen: false });
+  });
+
+  it('Settings: the post to like and comment on, checked as an X post link; emptied, it is saved as null', async () => {
+    const live = { ...SETTINGS, appetizerOpen: true, appetizerPostUrl: 'https://x.com/Coinnibalfun/status/2123416055406354866' };
+    ({ calls, restore } = mockFetch({
+      'GET /api/admin/settings': { settings: live, gameAccessEnv: null },
+      'PUT /api/admin/settings': (c: Call) => ({ settings: { ...live, ...(c.body as object) }, gameAccessEnv: null }),
+    }));
+    ui(<SettingsTab api={api} />);
+    const field = (await screen.findByLabelText(/the post to like and comment on/)) as HTMLInputElement;
+    expect(field.value).toBe('https://x.com/Coinnibalfun/status/2123416055406354866');
+    fireEvent.change(field, { target: { value: 'https://example.com/nope' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    expect(await screen.findByText(/Not a link to an X post/)).toBeTruthy();
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+    fireEvent.change(field, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await screen.findByText('Settings saved.');
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ appetizerPostUrl: null });
   });
 });

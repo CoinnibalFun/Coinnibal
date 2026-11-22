@@ -104,7 +104,7 @@ function Hero({
   handle: string;
   sound: ReturnType<typeof useLandingSound>;
   /** The Appetizer's slip: shown while `appetizerOpen`; `ready` once the server's settings are in. */
-  appetizer: { open: boolean; ready: boolean };
+  appetizer: { open: boolean; ready: boolean; postUrl: string | null };
 }) {
   const reduced = useReducedMotion();
   const m = useMoves();
@@ -193,7 +193,7 @@ function Hero({
             </Sticker>
           </motion.div>
           {/* the Appetizer's order slip: under the round sticker on a wide screen, beside it under the card on a phone */}
-          {appetizer.open && <AppetizerSlip ready={appetizer.ready} xHandle={handle} />}
+          {appetizer.open && <AppetizerSlip ready={appetizer.ready} xHandle={handle} postUrl={appetizer.postUrl} />}
         </div>
         <CoinPond still={reduced} events={{ onEat: sound.chomp }} />
         {/* both hints are in the HTML; CSS shows the mouse one where the pointer is a mouse, and neither with reduced
@@ -882,7 +882,7 @@ export function Landing() {
       </SiteHeader>
       <main id="main" className="ld-main" tabIndex={-1}>
         <PlateLabel numeral={1} title={t('ld.plate1')} className="ld-plate1" />
-        <Hero doors={doors} gameAccess={settings.gameAccess} handle={settings.xHandle} sound={sound} appetizer={{ open: settings.appetizerOpen, ready: loaded }} />
+        <Hero doors={doors} gameAccess={settings.gameAccess} handle={settings.xHandle} sound={sound} appetizer={{ open: settings.appetizerOpen, ready: loaded, postUrl: settings.appetizerPostUrl }} />
         <Feast />
         <Round />
         <DuskSeam />

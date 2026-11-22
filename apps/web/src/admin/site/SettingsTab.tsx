@@ -1,4 +1,4 @@
-import { GAME_ACCESS_MODES, normalizeXHandle, type GameAccess, type SiteSettings } from '@coinnibal/shared';
+import { GAME_ACCESS_MODES, isXStatusUrl, normalizeXHandle, type GameAccess, type SiteSettings } from '@coinnibal/shared';
 import { useEffect, useState } from 'react';
 import { Field, InkButton, StampSpinner } from '../../design';
 import { errText, useFlash, type TabProps } from './common';
@@ -20,6 +20,7 @@ export function SettingsTab({ api, onSiteChange }: TabProps) {
   const [env, setEnv] = useState<GameAccess | null>(null);
   const [busy, setBusy] = useState(false);
   const [handleErr, setHandleErr] = useState<string | null>(null);
+  const [postErr, setPostErr] = useState<string | null>(null);
   const [flashNode, flash] = useFlash();
 
   useEffect(() => {
@@ -44,12 +45,18 @@ export function SettingsTab({ api, onSiteChange }: TabProps) {
       setHandleErr('Not an X handle (1 to 15 letters, numbers or underscores).');
       return;
     }
+    const post = (draft.appetizerPostUrl ?? '').trim();
+    if (post && !isXStatusUrl(post)) {
+      setPostErr('Not a link to an X post (https://x.com/<handle>/status/<number>).');
+      return;
+    }
     setBusy(true);
     try {
       const patch: Partial<SiteSettings> = {};
       for (const k of DOORS) if (draft[k] !== saved[k]) patch[k] = draft[k];
       if (draft.gameAccess !== saved.gameAccess) patch.gameAccess = draft.gameAccess;
       if (h !== saved.xHandle) patch.xHandle = h;
+      if ((post || null) !== saved.appetizerPostUrl) patch.appetizerPostUrl = post || null;
       const r = await api.saveSettings(patch);
       setSaved(r.settings);
       setDraft(r.settings);
@@ -106,6 +113,20 @@ export function SettingsTab({ api, onSiteChange }: TabProps) {
       {switchRow('wlOpen', 'WL applications open', 'On: visitors can apply on /wl. Off: no new entries; someone who applied before can still sign in on /wl to see their status. The WL tab keeps working.')}
       {switchRow('collabOpen', 'Collab applications open', 'On: communities can apply on /collab. Off: /collab says “not open yet”. The Collabs tab keeps working.')}
       {switchRow('appetizerOpen', 'Appetizer cards open', 'On: visitors can claim an early card on the landing page. Off: no new cards; cards already out keep their pages. The Appetizers drawer keeps working.')}
+      <Field
+        label="Appetizer: the post to like and comment on"
+        hint="Step 2 of the early card's checklist opens this X post. Empty: the step is hidden."
+        value={draft.appetizerPostUrl ?? ''}
+        placeholder="https://x.com/…/status/…"
+        inputMode="url"
+        autoComplete="off"
+        spellCheck={false}
+        onChange={(e) => {
+          setDraft({ ...draft, appetizerPostUrl: e.target.value });
+          setPostErr(null);
+        }}
+        error={postErr ?? undefined}
+      />
       <h3 className="ad-h3">X account</h3>
       <Field
         label="X handle"
