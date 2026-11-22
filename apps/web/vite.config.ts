@@ -201,7 +201,7 @@ export function landingHtml(index: string, markup: string, css: string[], base =
  * DOM) and writes:
  * - `dist/landing.html`: index.html with the landing's markup (`landingHtml`); the browser hydrates it (`mount()`).
  *   Its first paint is the whole first viewport, from the HTML, before any script.
- * - `dist/landing.json`: the settings the markup assumed (`gameAccess`, `mintOpen`, `wlOpen`, `collabOpen`, `xHandle`:
+ * - `dist/landing.json`: the settings the markup assumed (`gameAccess`, `mintOpen`, `wlOpen`, `collabOpen`, `appetizerOpen`, `xHandle`:
  *   the closed defaults, the build's X handle). The game server sends `landing.html` for `/` only while its live
  *   settings equal these (apps/server/src/http.ts), else `index.html` (the page renders in the browser, as before).
  * The manifest (`build.manifest`) is read for the CSS chunks and then removed (nothing serves it). Runs before
@@ -284,6 +284,8 @@ export function gameServerProxy(target: string) {
     '/api': { target, changeOrigin: false },
     // "Share on X" cards (`/share/<id>` and its image) are served by the game server
     '/share': { target, changeOrigin: false },
+    // the Appetizer's share page and card image (`/appetizer/<code>`, `.png`), served by the game server too
+    '^/appetizer/': { target, changeOrigin: false },
     '/ws': { target: target.replace(/^http/, 'ws'), ws: true, changeOrigin: true },
   };
 }
