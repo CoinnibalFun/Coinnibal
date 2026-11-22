@@ -13,7 +13,7 @@ import { FALLBACK } from '../settings';
 import { setStaticEntrance } from './hydrated';
 
 /** The settings the page is rendered with (`dist/landing.json`): the server sends the page only while its own match. */
-export type LandingSettings = Pick<SiteSettings, 'gameAccess' | 'mintOpen' | 'wlOpen' | 'collabOpen' | 'xHandle'>;
+export type LandingSettings = Pick<SiteSettings, 'gameAccess' | 'mintOpen' | 'wlOpen' | 'collabOpen' | 'xHandle' | 'appetizerOpen'>;
 
 /**
  * The landing's markup (the inside of `#root`), the settings it assumed: the closed defaults with the build's X
@@ -29,6 +29,6 @@ export function renderLanding(): { html: string; settings: LandingSettings; body
       <SiteApp />
     </StrictMode>,
   );
-  const { gameAccess, mintOpen, wlOpen, collabOpen, xHandle } = FALLBACK;
-  return { html, settings: { gameAccess, mintOpen, wlOpen, collabOpen, xHandle }, bodyEnd: INK_DEFS_HTML };
+  const { gameAccess, mintOpen, wlOpen, collabOpen, xHandle, appetizerOpen } = FALLBACK;
+  return { html, settings: { gameAccess, mintOpen, wlOpen, collabOpen, xHandle, appetizerOpen }, bodyEnd: INK_DEFS_HTML };
 }
